@@ -87,8 +87,11 @@ void SVGOut::OpenFile( const std::string &filename )
 
 /******************************************************************************/
 
-void SVGOut::CloseFile()
+void SVGOut::Finalize()
 {
+  // Idempotent by construction: m_pageInProgress is cleared as the group is
+  // closed, so a second call adds nothing to m_buf and the document bytes are
+  // the same however many times Serialize() and CloseFile() run.
   if (m_pageInProgress) {
     m_buf << "</g>\n";
     m_pageInProgress = false;
@@ -98,6 +101,29 @@ void SVGOut::CloseFile()
     fprintf(stderr,"WARNING - SVG group levels not closed.\n");
   if (m_GroupLevel < 0)
     fprintf(stderr,"WARNING - Too many SVG group levels closed.\n");
+}
+
+/******************************************************************************/
+
+// Every byte the SVG writer emits is produced here (#2116). The body was
+// already accumulated in the m_buf ostringstream; only the header and footer
+// used to go straight to the std::ofstream, which is what kept this layer off
+// limits to a harness.
+void SVGOut::Serialize( std::ostream &out )
+{
+  Finalize();
+  WriteHeader(out);
+  out << m_buf.str();
+  WriteFooter(out);
+}
+
+/******************************************************************************/
+
+void SVGOut::CloseFile()
+{
+  // Runs whether or not a file was ever opened, exactly as this function's
+  // first half always did.
+  Finalize();
 
   if (!m_filename.empty()) {
     if (m_pageCount > 0) {

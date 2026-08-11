@@ -1998,6 +1998,85 @@ function(iccdev_add_iccviz_pdf_axis_test)
   endif()
 endfunction()
 
+# Guards the Mini{PDF,SVG,TIFF} serialization seam added for #2116.
+#
+# The three iccviz tests above all stop at the data layer or drive the whole CLI;
+# nothing exercised the byte-generating layer in isolation, and nothing could,
+# because the only entry to it was a CLI function that derives every output path
+# from the input path.  #2116 split out PDFWriter::Serialize(ostream&),
+# SVGOut::Serialize(ostream&) and a WriteTIFF overload taking an already-open
+# FILE*; this test asserts the split is behaviour-preserving (each writer emits
+# identical bytes through the stream path and the file path), and drives the
+# TIFF writer with the real engine's rasters so its IFD layout and offset
+# arithmetic execute -- under the sanitizer lanes, for the first time.
+#
+# It also pins the raster geometry contract that keeps that arithmetic in range.
+# MiniTIFF.cpp does check its stream-derived quantities (ftell failure, strip
+# offsets past UINT32_MAX, a short fwrite), but not the geometry handed to it:
+# width/height/channels/depth are guarded only by assert()s that a default
+# Release build compiles out.  The guards that make them safe live in
+# buildClutRaster (IccVizModel.cpp) instead, so the invariant spans two files
+# and was written down in neither.
+#
+# The Mini* writers are not in any library: they are listed directly in the
+# iccProfileVisualizePlot executable, so this test compiles the same three
+# translation units.  Deliberately the Tools/CmdLine/IccProfilePlot copy -- there
+# is a second, diverged copy under Tools/CmdLine/IccProfileVisualize that also
+# ships, and this test says nothing about it (#2116 records that split).
+# IccVizEngine supplies IccVizModel.cpp plus the engine include directory (#1975).
+function(iccdev_add_iccviz_writer_serialization_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+  if(NOT TARGET IccVizEngine)
+    return()
+  endif()
+
+  set(_viz_writer_dir "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccProfilePlot")
+  iccdev_add_regression_executable(iccVizWriterSerializationTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/iccviz-writer-serialization.cpp"
+    "${_viz_writer_dir}/MiniPDF.cpp"
+    "${_viz_writer_dir}/MiniSVG.cpp"
+    "${_viz_writer_dir}/MiniTIFF.cpp"
+  )
+  target_compile_features(iccVizWriterSerializationTest PRIVATE cxx_std_17)
+  # Name the writer directory explicitly rather than relying on IccVizEngine's
+  # interface include path to supply Mini*.hpp.  The two happen to be the same
+  # directory today, but the sources above are pinned to this copy by absolute
+  # path, and the other copy has no Serialize declaration -- so if the engine's
+  # include dir ever moved, the headers and the sources could silently come from
+  # different copies.
+  target_include_directories(iccVizWriterSerializationTest PRIVATE "${_viz_writer_dir}")
+  target_link_libraries(iccVizWriterSerializationTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB} IccVizEngine)
+  add_dependencies(check iccVizWriterSerializationTest)
+
+  add_test(
+    NAME iccdev.iccviz-writer-serialization
+    COMMAND "$<TARGET_FILE:iccVizWriterSerializationTest>"
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+      "${ICCDEV_TEST_OUTDIR}/iccviz-writer-serialization"
+  )
+  set_tests_properties(iccdev.iccviz-writer-serialization PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofileplot;viz;pdf;svg;tiff;issue-2116;regression"
+  )
+  if(WIN32)
+    set(_iccviz_writer_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccVizWriterSerializationTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccviz_writer_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.iccviz-writer-serialization PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccviz_writer_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards the IccVizModel CLUT->raster lattice walk against heap-buffer-overflow
 # reads (#1548): buildClutRaster() derived its tile-packing geometry
 # (tiles/tileWidth/tileHeight strides) from the grid arrangement, NOT from the
@@ -4496,6 +4575,7 @@ if(WIN32)
   iccdev_add_iccviz_metrics_test()
   iccdev_add_iccviz_degenerate_test()
   iccdev_add_iccviz_pdf_axis_test()
+  iccdev_add_iccviz_writer_serialization_test()
   iccdev_add_iccprofileplot_clut_oob_test()
   iccdev_add_iccprofileplot_pdf_leak_test()
   iccdev_add_iccprofileplot_exitcode_test()
@@ -4769,6 +4849,7 @@ iccdev_add_dpcc_pcc_replacement_test()
 iccdev_add_iccviz_metrics_test()
 iccdev_add_iccviz_degenerate_test()
 iccdev_add_iccviz_pdf_axis_test()
+iccdev_add_iccviz_writer_serialization_test()
 iccdev_add_iccprofileplot_clut_oob_test()
 iccdev_add_iccprofileplot_pdf_leak_test()
 iccdev_add_iccprofileplot_exitcode_test()

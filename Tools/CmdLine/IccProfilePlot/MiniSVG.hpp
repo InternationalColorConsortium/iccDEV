@@ -150,6 +150,30 @@ public:
   void OpenFile( const std::string &filename );
   void CloseFile();
 
+  // Close the page group still open and report unbalanced StartGroup/EndGroup
+  // pairs.  This was the first half of CloseFile(), which ran it whether or not
+  // a file was ever opened; it is separate now so Serialize() gets the same
+  // well-formed document without going through the file path (#2116).
+  //
+  // Idempotent as far as the document is concerned: closing the page group
+  // clears m_pageInProgress, so repeated calls add nothing to the body and
+  // every serialization of the same writer yields the same bytes.  An
+  // unbalanced-group warning is re-emitted per call; it reports a caller error
+  // and carries no document state.
+  void Finalize();
+
+  // Write the complete SVG document to `out` -- header, accumulated body,
+  // footer -- with no filesystem access.  CloseFile() is the file-writing
+  // wrapper around this call (#2116).
+  //
+  // Does NOT apply CloseFile's skip-empty-document policy: CloseFile writes no
+  // file when PageCount() == 0, whereas this always emits a document -- and for
+  // a pageless writer WriteHeader computes height = m_pageHeight * 0, giving a
+  // degenerate <svg height="0">.  A caller that wants the file-path behaviour
+  // checks PageCount() first; keeping the policy out of here is what makes this
+  // a plain serializer.
+  void Serialize( std::ostream &out );
+
 public:
 
   void AddCircle( float radius, float xCenter, float yCenter, bool isFilled ) {

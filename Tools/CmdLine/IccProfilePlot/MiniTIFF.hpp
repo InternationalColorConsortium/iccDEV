@@ -137,6 +137,37 @@ enum {
 bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *buffer,
                 size_t width, size_t height, int channels, int depth );
 
+// Same writer against an already-open binary stream. Every byte of the IFD
+// layout and all of the offset/strip arithmetic lives here; the name-taking
+// overload above is now a thin open/close wrapper around it.
+//
+// Ownership of `outfile` stays with the caller: this function never closes it,
+// on success or on any failure path, so a test or fuzz harness can drive the
+// whole layout against tmpfile() and then read the bytes back. `diagName` only
+// labels the stderr diagnostics -- it is never opened -- so a harness can pass
+// any string it likes.
+//
+// PRECONDITION: the stream must be positioned at offset 0, and it is checked.
+// The layout constants are absolute from the start of the file, so appending a
+// second image to one stream would produce a TIFF whose offsets are short by
+// the entry position -- and would do it silently, since the ftell-based backfill
+// would still land correctly. One image per stream.
+//
+// Split out because the arithmetic here is profile-controlled (the dimensions
+// come straight from a CLUT via iccviz::RenderRaster) yet nothing downstream of
+// RenderRaster was reachable without writing files derived from the input path
+// (#2116).
+//
+// Note which quantities are checked and which are not. The stream-derived ones
+// are: ftell failure, strip offsets past UINT32_MAX and a short fwrite all
+// return false. The caller-supplied geometry is not -- width, height, channels
+// and depth size every row and strip below with no returning check, guarded
+// only by assert()s that a default Release build (-DNDEBUG) compiles out. The
+// contract that keeps them in range is the caller's to hold, not this
+// function's; iccviz::buildClutRaster is what holds it today.
+bool WriteTIFF( FILE *outfile, const std::string &diagName, float dpi, int color_model,
+                uint8_t *buffer, size_t width, size_t height, int channels, int depth );
+
 /******************************************************************************/
 
 #endif /* MiniTIFF_hpp */

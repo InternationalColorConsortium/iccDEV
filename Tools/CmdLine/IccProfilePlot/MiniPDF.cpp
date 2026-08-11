@@ -162,6 +162,21 @@ void PDFWriter::OpenFile( const std::string &filename, float widthPt, float heig
 
 /******************************************************************************/
 
+// Serialize the document into `out`. Every byte the PDF writer emits is
+// produced here, so this is also the hermetic entry a test or fuzz harness
+// drives (#2116) -- see the declaration in MiniPDF.hpp for why it is split out.
+// Object cleanup stays in CloseFile: the objects must survive this call so it
+// can be repeated, and the caller may still add pages afterwards.
+void PDFWriter::Serialize( std::ostream &out )
+{
+  WriteHeader(out);
+  WriteObjects(out);
+  WriteXRefs(out);
+  WriteFooter(out);
+}
+
+/******************************************************************************/
+
 void PDFWriter::CloseFile()
 {
   if (!m_filename.empty()) {
@@ -169,10 +184,10 @@ void PDFWriter::CloseFile()
         try  {
           std::ostringstream out;
           out.exceptions(std::ios::badbit | std::ios::failbit);
-          WriteHeader(out);
-          WriteObjects(out);
-          WriteXRefs(out);
-          WriteFooter(out);
+          // The four Write* calls this replaced now live in Serialize(); the
+          // exception mask above is still set here, because catching is this
+          // function's job and not Serialize's.
+          Serialize(out);
 
           // PDF export paths are intentional caller-selected output files after regular-file validation.
 

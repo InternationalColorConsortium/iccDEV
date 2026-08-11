@@ -210,12 +210,61 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
         size_t width, size_t height, int channels, int depth )
 {
   FILE *outfile = NULL;
-  bool writeFailed = false;
 
   // see if we can create or update this filename
   outfile = icOpenWriteBinaryFile(name.c_str());
   if(outfile==NULL) {
     fprintf(stderr,"Could not create output file %s\n", name.c_str());
+    return false;
+  }
+
+  // The stream overload owns none of the file's lifetime, so closing it is this
+  // wrapper's job on every path -- including the failure paths, which used to
+  // fclose() inline before the split (#2116).
+  bool wroteOk = WriteTIFF( outfile, name, dpi, color_model, buffer,
+                            width, height, channels, depth );
+
+  bool closedOk = icFlushAndClose(outfile);
+
+  // Report the close failure only when the write itself succeeded. Every inner
+  // failure path is reached with ferror() already set, and icFlushAndClose
+  // treats ferror as failure, so reporting unconditionally would print a
+  // second, redundant line after every real write error -- where the pre-split
+  // code called a bare fclose() and printed only the specific message. Keeping
+  // the condition here is what makes this split stderr-identical on the failure
+  // paths as well as the success path.
+  if (!closedOk && wroteOk) {
+    fprintf(stderr, "ERROR: fclose failed for %s\n", name.c_str() );
+    return false;
+  }
+
+  return wroteOk && closedOk;
+}
+
+/******************************************************************************/
+
+/// Write the image buffer as a TIFF into an already-open binary stream.
+/// See MiniTIFF.hpp: the stream is NOT closed here, on any path.
+bool WriteTIFF( FILE *outfile, const std::string &name, float dpi, int color_model,
+        uint8_t *buffer, size_t width, size_t height, int channels, int depth )
+{
+  bool writeFailed = false;
+
+  if (outfile == NULL)
+    return false;
+
+  // The stream must start at offset 0. Every layout constant below is absolute
+  // from the start of the FILE, not relative to where writing began: the header
+  // hard-codes 8 as the first-IFD offset, and for the single-strip case the
+  // STRIPOFFSETS tag is written from the computed pixelData_offset rather than
+  // from the ftell-derived stripStart. Appending to a non-empty stream would
+  // therefore emit a TIFF whose offsets are all short by the entry position --
+  // and silently, because the ftell-based backfill further down still lands in
+  // the right place, so nothing here would return false. Refuse instead.
+  long startPos = ftell( outfile );
+  if (startPos != 0) {
+    fprintf(stderr, "ERROR: TIFF writer requires a stream positioned at 0 (%s)\n",
+            name.c_str() );
     return false;
   }
 
@@ -235,7 +284,6 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
   // check for early failure
   if (writeFailed || ferror(outfile)) {
     fprintf(stderr, "ERROR: I/O error writing TIFF header to %s\n", name.c_str() );
-    fclose(outfile);
     return false;
   }
 
@@ -302,7 +350,6 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
   long byteCountOffset = ftell( outfile );
   if (byteCountOffset < 0) {
     fprintf(stderr, "ERROR: TIFF ftell failed\n");
-    (void)fclose(outfile);
     return false;
   }
   if (stripCount > 1)
@@ -372,7 +419,6 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
   // check again after writing the tag directory
   if (writeFailed || ferror(outfile)) {
     fprintf(stderr, "ERROR: I/O error writing TIFF directory to %s\n", name.c_str() );
-    fclose(outfile);
     return false;
   }
 
@@ -399,21 +445,18 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
     long stripStart = ftell( outfile );
     if (stripStart < 0 || (unsigned long)stripStart > UINT32_MAX) {
       fprintf(stderr, "ERROR: TIFF strip offset exceeds 32-bit range\n");
-      fclose(outfile);
       return false;
     }
 
     size_t pixelBytes = (size_t)width * (size_t)channels * (size_t)(depth/8);
     if (fwrite( buffer + offset, pixelBytes, rowCount, outfile ) != rowCount) {
       fprintf(stderr, "ERROR: TIFF failed to write pixel data\n");
-      fclose(outfile);
       return false;
     }
 
     long stripEnd = ftell( outfile );
     if (stripEnd < 0 || (unsigned long)stripEnd > UINT32_MAX) {
       fprintf(stderr, "ERROR: TIFF strip end offset exceeds 32-bit range\n");
-      fclose(outfile);
       return false;
     }
     stripOffsetList[strip] = uint32_t(stripStart);
@@ -439,15 +482,11 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
 
   if (writeFailed || ferror(outfile)) {
     fprintf(stderr, "ERROR: I/O error writing TIFF data to %s\n", name.c_str() );
-    fclose(outfile);
     return false;
   }
 
-  if (!icFlushAndClose(outfile)) {
-    fprintf(stderr, "ERROR: fclose failed for %s\n", name.c_str() );
-    return false;
-  }
-
+  // No close here: the stream belongs to the caller (see MiniTIFF.hpp). The
+  // name-taking overload flushes and closes it for the CLI path.
   return true;
 }
 
