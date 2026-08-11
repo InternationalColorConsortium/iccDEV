@@ -1116,15 +1116,21 @@ const icChar *icGetSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, bool b
 
 const icChar *icGetSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig)
 {
-  int i, j=-1;
+  int i;
   icUInt32Number sig=nSig;
   bool bGetHexVal = false;
 
+  // A signature that is entirely zero keeps the "NULL" display convention.  It is
+  // not round-trip safe either -- icGetSigVal("NULL") packs the ASCII bytes into
+  // 0x4E554C4C -- but that case is handled at the call sites, which write an empty
+  // value for zero and rely on the readers mapping empty text back to zero
+  // (#1356, #1361, #1843).  Only the partially-zero signatures below are the
+  // formatter's own problem.
   if (!nSig) {
     strcpy(pBuf, "NULL");
     return pBuf;
   }
-  
+
   if (bufSize < 5 || bufSize > 65535) {
     // this is caused by bad parameters, usually with bufSize replaced by the sig
     strcpy(pBuf, "BADP");
@@ -1133,10 +1139,17 @@ const icChar *icGetSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig)
 
   for (i=0; i<4; i++) {
     icUInt8Number c = (icUInt8Number)(sig >> (24-(i*8)));
+    // A zero byte has no four-character text form: it terminates the C string this
+    // loop is filling.  The previous condition only demanded the "%08Xh" escape for
+    // a zero *followed* by a non-zero byte, so a signature whose zeros were all
+    // trailing was truncated instead -- 'DUP\0' (0x44555000) was written as "DUP",
+    // and icGetSigVal() right-pads a three-character signature with a space, giving
+    // back 'DUP ' (0x44555020).  Since IccProfileXml.cpp and IccProfileJson.cpp
+    // serialize tag-table identifiers through this helper, that silently rewrote
+    // six of the registered tag signatures on every XML or JSON round trip.  Any
+    // zero byte now takes the hex form, which icGetSigVal() parses back exactly
+    // (issue #2097).
     if (!c) {
-      j=i;
-    }
-    else if (j!=-1) {
       bGetHexVal = true;
     }
     else if (!isprint(c) || c==':' || c > 126) {
@@ -1259,16 +1272,17 @@ const icChar *icGetColorSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig
     default:
       {
 
-        int i, j=-1;
+        int i;
         icUInt8Number c;
         bool bGetHexVal = false;
 
         for (i=0; i<4; i++) {
           c=(icUInt8Number)(sig>>(24-i*8));
+          // Same trailing-zero truncation icGetSigStr() carried, and this function is
+          // likewise a serialization writer -- it renders <DataColourSpace>, <PCS> and
+          // <MCS> for both text formats -- so a colour space whose low bytes are zero
+          // has to reach the reversible hex form here too (issue #2097).
           if (!c) {
-            j=i;
-          }
-          else if (j!=-1) {
             bGetHexVal = true;
           }
           else if (!isprint(c) || c==':' || c > 126) {

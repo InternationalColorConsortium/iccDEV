@@ -5714,6 +5714,25 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1843-zero-signature-roundtrip-regression.sh"
 )
 
+# #2097: the same three tests above all concern a signature that is zero in all
+# four bytes, which the call sites can (and now do) special-case.  This one is the
+# case no call-site guard reaches: a signature whose zeros are only trailing.
+# icGetSigStr() demanded its "%08Xh" escape for a zero *followed* by a non-zero
+# byte, so 'DUP\0' took the four-character path and the zero terminated the C
+# string -- "DUP", which icGetSigVal() pads back to 'DUP '.  Six registered tag
+# signatures were rewritten by every XML or JSON round trip.  Nothing in the
+# validator notices, since the corrupted value is unregistered rather than
+# malformed, so the assertions are byte comparisons plus one anti-overfit check
+# that printable signatures are still written as readable text.
+# Plain functional test -- skips cleanly if the tools/fixtures are absent.
+iccdev_add_script_test(
+  iccdev.issue-2097-nul-signature-roundtrip
+  90
+  "iccdev;xml;json;signature;roundtrip;issue-2097;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2097-nul-signature-roundtrip-regression.sh"
+)
+
 # #1355 - matrix/TRC (PCSXYZ) profiles must round-trip near-exactly. Guards the
 # two CMM/eval fixes (ConnectFirst actual->internal XYZ rescale; native-PCS
 # round-trip connection): iccRoundTrip RT1 mean dE was ~20 before, ~0 after.
