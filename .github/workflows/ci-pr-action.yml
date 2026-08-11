@@ -133,6 +133,7 @@ jobs:
           # Use the base commit SHA to ensure we fetch the exact trusted version.
           ref: ${{ github.event.pull_request.base.sha || 'master' }}
           path: base
+          sparse-checkout: .github/scripts
           fetch-depth: 1
           persist-credentials: false
 
@@ -168,6 +169,7 @@ jobs:
 
           git config --add safe.directory "$PWD"
           unset GITHUB_TOKEN || true
+          source "$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
 
           ci_scope="${CI_SCOPE:-auto}"
           head_sha="${PR_HEAD_SHA}"
@@ -196,23 +198,33 @@ jobs:
             local container_changed="$6"
             local docs_only="$7"
 
-            {
-              printf 'src_changed=%s\n' "$run_full"
-              printf 'ci_scope=%s\n' "$ci_scope"
-              printf 'source_changed=%s\n' "$source_changed"
-              printf 'build_config_changed=%s\n' "$build_config_changed"
-              printf 'testing_changed=%s\n' "$testing_changed"
-              printf 'ci_changed=%s\n' "$ci_changed"
-              printf 'container_changed=%s\n' "$container_changed"
-              printf 'docs_only=%s\n' "$docs_only"
-              printf 'fast_lane=%s\n' "$fast_lane"
-              printf 'include_windows=%s\n' "$include_windows"
-              printf 'ctest_recent_limit=%s\n' "$ctest_recent_limit"
-              printf 'warning_policy=%s\n' "$warning_policy"
-              printf 'target_sha=%s\n' "$head_sha"
-              printf 'target_repository=%s\n' "$target_repository"
-              printf 'pr_number=%s\n' "$pr_number"
-          } >> "$GITHUB_OUTPUT"  # elements-sanitized
+            write_github_output() {
+              local key="$1"
+              local value="$2"
+
+              if [[ "$value" == *$'\r'* || "$value" == *$'\n'* ]]; then
+                echo "Invalid multiline value for output: $key" >&2
+                exit 1
+              fi
+
+              printf '%s=%s\n' "$key" "$(sanitize_line "$value")" >> "$GITHUB_OUTPUT"
+            }
+
+            write_github_output src_changed "$run_full"
+            write_github_output ci_scope "$ci_scope"
+            write_github_output source_changed "$source_changed"
+            write_github_output build_config_changed "$build_config_changed"
+            write_github_output testing_changed "$testing_changed"
+            write_github_output ci_changed "$ci_changed"
+            write_github_output container_changed "$container_changed"
+            write_github_output docs_only "$docs_only"
+            write_github_output fast_lane "$fast_lane"
+            write_github_output include_windows "$include_windows"
+            write_github_output ctest_recent_limit "$ctest_recent_limit"
+            write_github_output warning_policy "$warning_policy"
+            write_github_output target_sha "$head_sha"
+            write_github_output target_repository "$target_repository"
+            write_github_output pr_number "$pr_number"
           }
 
           is_trusted_maintainer() {

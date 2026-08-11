@@ -119,9 +119,9 @@ workflow-only changes receive the preflight and workflow-security gates.
 Dispatch `ci_scope=full` explicitly for a long-cycle matrix. For the shortest
 same-repository PR lane, provide an open `pr_number`, choose
 `ci_scope=fast-lane`, and set `ctest_recent_limit`, `include_windows`,
-`include_docker`, and `warning_policy` on that dispatch. Fast lane defaults to
-the latest registered CTest, strict warning failure, and no Windows or Docker
-jobs.
+and `warning_policy` on that dispatch. Fast lane defaults to the latest
+registered CTest and strict warning failure. Windows is opt-in; Docker
+verification runs only when the pull request changes the container surface.
 
 On `ci-qa-pr-docker-testing`, Docker PR verification is advisory so branch QA
 can continue while container and third-party action pins are refreshed. If the
@@ -138,7 +138,6 @@ fail-closed policy:
 | Required context | Purpose |
 |------------------|---------|
 | `PR Summary` | Aggregates orchestration prerequisites and every selected build/test lane. |
-| `Init PR Build Matrix` | Validates mode inputs, image tags, matrices, and maintainer controls. |
 | `Risk Analysis Gate / Workflow Security Audit` | Enforces Linux workflow and container security canaries. |
 | `Risk Analysis Gate / Windows Security Audit (PowerShell)` | Enforces PowerShell and Windows workflow security canaries. |
 | `WASM Release Build + Parity` | Required separately on `master` because it is outside `ci-pr-action`. |
@@ -149,7 +148,7 @@ covered by `PR Summary`. The summary must treat failed or cancelled detection,
 setup, and input-validation prerequisites as failures; only intentionally
 skipped mode-specific jobs are acceptable.
 
-The active `ci-qa-flags` ruleset requires the four `ci-pr-action` contexts.
+The active `ci-qa-flags` ruleset requires the three `ci-pr-action` contexts.
 `ci-pr-action` therefore runs for pull requests targeting either `master` or
 `ci-qa-flags`. WASM parity remains a `master`-only required context.
 

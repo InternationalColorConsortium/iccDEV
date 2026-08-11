@@ -337,13 +337,12 @@ gh workflow run ci-pr-action.yml \
   -f ci_scope=full
 ```
 
-The full long cycle runs the Unix GCC/Clang Release and Debug matrix, the
-regression-container GCC 15.2 strict Release LTO build, GCC 15.2 ASAN+UBSAN tool
-tests, Windows, and Docker verification. Pull request events and Web UI
-dispatches default to `auto`: source, build, test, and container changes select
-the full matrix, while workflow-only changes use the preflight and
-workflow-security gates. Dispatch `full` explicitly when a long-cycle matrix is
-needed.
+The full long cycle runs the GCC 15.2 strict Release LTO build, GCC 15.2
+ASAN+UBSAN tool tests, and Windows validation. Docker verification runs only
+for container changes. Pull request events and Web UI dispatches default to
+`auto`: source, build, test, and container changes select the full validation
+set, while workflow-only changes use the preflight and workflow-security gates.
+Dispatch `full` explicitly when the full validation set is needed.
 
 For the fastest same-repository PR lane, provide the open PR number:
 
@@ -358,8 +357,8 @@ gh workflow run ci-pr-action.yml \
 Fast lane uses the regression container for exact GCC 15.2, runs strict Release
 LTO plus the GCC 15.2 ASAN+UBSAN Release tool lane, and limits CTest to the most
 recent registered test by default. Windows is opt-in through the Web UI or CLI
-`include_windows` input. Docker is opt-in through the Web UI or CLI
-`include_docker` input.
+`include_windows` input. Docker verification runs automatically only when the
+pull request changes the container surface.
 
 Watch the run:
 
@@ -414,9 +413,9 @@ does not replace the required `ci-qa-flags` update and hosted validation.
 
 Repository rules intentionally differ by branch:
 
-- `master` requires the stable PR aggregate, matrix initialization, both risk
+- `master` requires the stable PR aggregate, PR validation, both risk
   audits, and WASM parity.
-- `ci-qa-flags` requires the stable PR aggregate, matrix initialization, and
+- `ci-qa-flags` requires the stable PR aggregate, PR validation, and
   both risk audits.
 - `ci-qa-pr-docker-testing` permits direct maintainer iteration but requires
   signed commits and linear fast-forward history, and blocks force pushes and
