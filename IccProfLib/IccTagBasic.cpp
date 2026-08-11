@@ -4297,10 +4297,31 @@ icValidateStatus CIccTagXYZ::Validate(std::string sigPath, std::string &sReport,
  */
 CIccTagChromaticity::CIccTagChromaticity(int nSize/*=3*/)
 {
-  m_nChannels = nSize;
-  if (m_nChannels <3)
+  // The allocation has to be at least as long as the channel count advertises,
+  // because that count is what every reader indexes by: Describe and Write walk
+  // m_xy up to m_nChannels, the copy constructor memcpy's that many entries, and
+  // Validate compares three of them. The count was clamped up to three while the
+  // caller's raw nSize was still what got allocated, so CIccTagChromaticity(1)
+  // was a three-channel tag over a one-entry array -- the same out-of-bounds
+  // shape as #2094, reached through the public constructor rather than through a
+  // parsed tag. Raising the *allocation* to the same floor fixes that and leaves
+  // every nSize >= 3 allocating exactly what it did before, including the
+  // out-of-range ones: the icUInt16Number assignment can only drop the count
+  // below what was allocated, never lift it above.
+  int nAlloc = (nSize < 3) ? 3 : nSize;
+
+  m_nChannels = (icUInt16Number)nAlloc;
+  if (m_nChannels < 3)
     m_nChannels = 3;
-  m_xy = (icChromaticityNumber*)calloc(nSize, sizeof(icChromaticityNumber));
+
+  // Not set anywhere else on this path: Read() overwrites it, but the XML and
+  // JSON parsers only assign it when their colorant field is present, so without
+  // this the tag's colorant encoding could be read indeterminate (CWE-457).
+  m_nColorantType = 0;
+
+  m_xy = (icChromaticityNumber*)calloc(nAlloc, sizeof(icChromaticityNumber));
+  if (!m_xy)
+    m_nChannels = 0;   // keep the count inside the allocation if it failed
 }
 
 
@@ -4318,9 +4339,18 @@ CIccTagChromaticity::CIccTagChromaticity(const CIccTagChromaticity &ITCh)
 {
   m_nChannels = ITCh.m_nChannels;
 
+  // m_nColorantType was left out of the copy, so a copied tag carried an
+  // indeterminate colorant encoding (CWE-457) -- the same oversight #2000 fixed
+  // in CIccTagCicp's copy constructor, except that here operator= below dropped
+  // it too. It is the value Validate switches on and the value Write emits, and
+  // NewCopy() is this constructor, so every profile copy went through it.
+  m_nColorantType = ITCh.m_nColorantType;
+
   m_xy = (icChromaticityNumber*)calloc(m_nChannels, sizeof(icChromaticityNumber));
   if (m_xy)
     memcpy(m_xy, ITCh.m_xy, sizeof(icChromaticityNumber)*m_nChannels);
+  else
+    m_nChannels = 0;   // keep the count honest if the allocation failed
 }
 
 
@@ -4340,11 +4370,14 @@ CIccTagChromaticity &CIccTagChromaticity::operator=(const CIccTagChromaticity &C
     return *this;
 
   m_nChannels = ChromTag.m_nChannels;
+  m_nColorantType = ChromTag.m_nColorantType;   // see the copy constructor above
 
   free(m_xy);
   m_xy = (icChromaticityNumber*)calloc(m_nChannels, sizeof(icChromaticityNumber));
   if (m_xy)
     memcpy(m_xy, ChromTag.m_xy, sizeof(icChromaticityNumber)*m_nChannels);
+  else
+    m_nChannels = 0;   // keep the count honest if the allocation failed
 
   return *this;  
 }
@@ -4549,11 +4582,44 @@ icValidateStatus CIccTagChromaticity::Validate(std::string sigPath, std::string 
 
   if (m_nColorantType) {
 
+    // Every case of the switch below compares three fixed xy pairs, so it may
+    // only run once the tag is known to carry three of them. The channel count
+    // was checked here already but the result was only reported, not acted on:
+    // validation fell through into m_xy[1] and m_xy[2] on a tag whose array
+    // holds fewer entries, which is a heap out-of-bounds read (#2094, CWE-125).
+    // All three readers reach it -- Read() sizes the array from the tag's
+    // declared *size*, requiring only that the declared channel count not exceed
+    // it; the XML parser sizes it from the number of <Channel> elements; and the
+    // JSON parser from the length of the "channels" array -- so a 20-byte
+    // chromaticityTag, or one <Channel>, or one "channels" entry, is enough.
+    // Reporting the count as a critical error and returning is what the check
+    // was already asking for: a colorant encoding cannot be checked against a
+    // tag that does not carry the three channels the encoding is defined over.
+    // The one thing it gives up is that a short tag which *also* names an
+    // unrecognised encoding now stops here instead of additionally reporting
+    // "Invalid colorant type encoding" from the default case below. The verdict
+    // is unchanged -- a critical error either way -- and keeping that second
+    // line would mean wrapping each of the four `a || b || c` comparison chains
+    // in a guard, where && binding tighter than || makes it easy to write one
+    // that still reads m_xy. One exit is the safer shape for a memory fix.
     if (m_nChannels!=3) {
       sReport += icMsgValidateCriticalError;
       sReport += sSigPathName;
       sReport += " - Number of device channels must be three.\n";
-      rv = icMaxStatus(rv, icValidateCriticalError);
+      return icMaxStatus(rv, icValidateCriticalError);
+    }
+
+    // Belt and braces on the pointer as well as the count. Both constructors,
+    // operator= and SetSize() now zero m_nChannels when their allocation fails,
+    // so a three-channel tag with a null array should not arise -- but the count
+    // and the pointer are separate members, and this function's own guard is all
+    // that stands in front of the four comparisons below, so it checks what it
+    // is about to dereference rather than inferring it.
+    if (!m_xy) {
+      sReport += icMsgValidateCriticalError;
+      sReport += sSigPathName;
+      sReport += " - Chromaticity data is missing.\n";
+      return icMaxStatus(rv, icValidateCriticalError);
     }
 
     switch(m_nColorantType) {

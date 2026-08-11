@@ -1083,6 +1083,52 @@ function(iccdev_add_getvalues_nstart_test)
   endif()
 endfunction()
 
+# #2094: CIccTagChromaticity::Validate() reported a channel count other than
+# three as a critical error and then walked into the colorant-encoding switch
+# anyway, comparing m_xy[0..2] against three fixed xy pairs on a tag whose array
+# is shorter -- a heap out-of-bounds read (CWE-125) reachable from all three
+# readers, since Read() sizes the array from the tag's declared size, the XML
+# parser from the number of <Channel> elements and the JSON parser from the
+# length of the "channels" array. No chromaticityTag exists anywhere in the
+# corpus in any format, so no path had coverage. Also pins
+# the constructor invariant (the count was clamped to three while the raw nSize
+# was allocated) and the colorant encoding surviving a copy, which neither the
+# copy constructor nor operator= carried across. Header + IccProfLib only.
+function(iccdev_add_chromaticity_validate_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccChromaticityValidateTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/chromaticity-validate-oob.cpp"
+  )
+  target_link_libraries(iccChromaticityValidateTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccChromaticityValidateTest)
+
+  add_test(
+    NAME iccdev.chromaticity-validate-oob
+    COMMAND "$<TARGET_FILE:iccChromaticityValidateTest>"
+  )
+  set_tests_properties(iccdev.chromaticity-validate-oob PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;tag;chromaticity;security;issue-2094;regression"
+  )
+  if(WIN32)
+    set(_chromaticity_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccChromaticityValidateTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _chromaticity_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.chromaticity-validate-oob PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_chromaticity_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2000: CIccTagCicp's copy constructor had an empty body and a commented-out
 # parameter (/* ITXYZ */, copy-paste residue from CIccTagXYZ), so the four
 # icUInt8Number members -- which have no in-class initialiser -- were left
@@ -4429,6 +4475,7 @@ if(WIN32)
   iccdev_add_reflectance_observer_illum_range_test()
   iccdev_add_colorimetry_methods_test()
   iccdev_add_getvalues_nstart_test()
+  iccdev_add_chromaticity_validate_test()
   iccdev_add_cicp_copy_ctor_test()
   iccdev_add_pawg_c5_cicp_test()
   iccdev_add_gamut_xform_semantics_test()
@@ -4701,6 +4748,7 @@ iccdev_add_xform_abstorel_adjust_test()
 iccdev_add_reflectance_observer_illum_range_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
+iccdev_add_chromaticity_validate_test()
 iccdev_add_cicp_copy_ctor_test()
 iccdev_add_pawg_c5_cicp_test()
 iccdev_add_gamut_xform_semantics_test()

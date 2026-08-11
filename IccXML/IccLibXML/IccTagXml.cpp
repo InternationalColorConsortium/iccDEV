@@ -1334,7 +1334,12 @@ bool CIccTagXmlChromaticity::ParseXml(xmlNode *pNode, std::string & /*parseStr*/
 
   if (n) {
     icUInt32Number i;
-    SetSize(n);
+
+    // SetSize() zeroes m_nChannels and returns false when it cannot allocate,
+    // so ignoring the result left the loop below writing m_xy[0..n-1] through
+    // a null pointer. It is the only sizing call on this path (#2094).
+    if (!SetSize(n))
+      return false;
 
     for (i=0; pNode; pNode=pNode->next) {
       if (pNode->type == XML_ELEMENT_NODE &&
