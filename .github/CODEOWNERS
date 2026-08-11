@@ -18,6 +18,9 @@
 # GitHub configuration, Actions workflows & PR automation
 /.github/** @xsscx @ChrisCoxArt @dwtza
 
+# CI regression tests
+/.github/ci/regression/ @xsscx @ChrisCoxArt @colourbill-ctrl
+
 # High-risk GitHub automation and governance paths
 /.github/workflows/** @dwtza @maxderhak @ChrisCoxArt @xsscx
 /.github/actions/** @dwtza @maxderhak @ChrisCoxArt @xsscx
