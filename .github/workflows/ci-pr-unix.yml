@@ -111,6 +111,7 @@ jobs:
       - name: Check out Repository
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
+          # preflight: allow-codeql-actions reason=readonly-build-target-checkout
           ref: ${{ inputs.target-sha || github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
           persist-credentials: false
@@ -118,6 +119,7 @@ jobs:
       - name: Check out trusted sanitizer helper
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
+          # preflight: allow-codeql-actions reason=trusted-base-sanitizer-checkout
           ref: ${{ github.event.pull_request.base.sha || 'master' }}
           path: .trusted-workflow
           sparse-checkout: .github/scripts

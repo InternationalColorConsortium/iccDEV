@@ -72,6 +72,9 @@ Every edited workflow `run:` block must keep these properties:
 - `pull_request` workflows that build PR code must source `.github/scripts`
   helpers and sanitizers from a trusted base checkout, not from PR-controlled
   content, unless a test-only exception is explicitly marked for preflight.
+- Runner-reduction changes must preserve trusted-base sanitizer sourcing,
+  sanitize every `GITHUB_OUTPUT` value, and retain path-gated validation for
+  container changes.
 
 For reusable governance coverage, call
 `.github/workflows/ci-pr-risk-security-analysis.yml` instead of duplicating the
@@ -142,18 +145,16 @@ maintainer branch and must be included in the hosted validation report.
 
 Branch protection should require stable aggregate contexts, not conditional
 lane job names. `PR Summary` must aggregate orchestration prerequisites and all
-selected full, fast-lane, auto, governance, or docs jobs. Keep the two risk
-audit contexts and `Init PR Build Matrix` independently required. Require WASM
-parity separately on `master`, where that workflow runs outside the
+selected full, fast-lane, auto, governance, docs, and path-gated jobs. Do not
+require removed lane names or initialization jobs as branch contexts. Require
+WASM parity separately on `master`, where that workflow runs outside the
 orchestrator. See `docs/label-system.md` for the current context list.
 
-On the `ci-qa-pr-docker-testing` branch, Docker PR verification is advisory.
-Keep the workflow running to completion even when the Docker lane fails, report
-overall PR orchestration success when the required non-Docker gates pass, and
-use the `bump-sha-pins` label plus the summary note to route follow-up work for
-pinned GitHub Action, Docker, or container SHA updates. Do not treat that
-advisory result as container verification; rerun the Docker lane after the pins
-are updated.
+When `container_changed` is true, `ci-pr-action` selects the read-only Docker
+PR verification lane and `PR Summary` requires its result. The lane is skipped
+for other changes to conserve runners. Do not treat a skipped lane as container
+verification; rerun it after any Dockerfile, container image, or container
+workflow update.
 
 The Docker PR lane consumes the published
 `ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest` image as a

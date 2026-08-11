@@ -36,7 +36,9 @@ For EVERY `run:` step in the workflow, verify:
 
 ### 3. Sanitizer Loaded
 - [ ] PR workflows source sanitizers from a trusted base checkout, not PR content
-- [ ] `source "$TRUSTED_SCRIPTS/sanitize-sed.sh"` (bash) with inline fallback
+- [ ] The trusted base checkout is sparse and pins the base SHA before the
+      sanitizer is sourced
+- [ ] `source "$TRUSTED_SCRIPTS/sanitize-sed.sh"` (bash)
 - [ ] `. "$env:TRUSTED_SCRIPTS\sanitize.ps1"` (PowerShell)
 
 ### 4. Expression Injection
@@ -51,7 +53,8 @@ For EVERY `run:` step in the workflow, verify:
 
 ### 5. Output Sanitization
 - [ ] All `GITHUB_STEP_SUMMARY` writes use `sanitize_line`/`Sanitize-Line`
-- [ ] All `GITHUB_OUTPUT` writes use `sanitize_ref`/`Sanitize-Ref` for refs
+- [ ] All `GITHUB_OUTPUT` values use `sanitize_line`/`Sanitize-Line`, or
+      `sanitize_ref`/`Sanitize-Ref` when the value is a ref
 - [ ] Multiline content iterated line-by-line (not passed as single argument)
 
 ### 6. Permissions
@@ -69,6 +72,8 @@ For EVERY `run:` step in the workflow, verify:
 - [ ] Container changes have runtime smoke and image/config scan evidence
 - [ ] Push triggers, PR verification, reusable workflow calls, and manual
       dispatches test the same changed helper behavior where practical
+- [ ] Runner-reduction changes retain a read-only Docker verification lane for
+      `container_changed` paths, and aggregate it into the PR status when run
 - [ ] Branch-specific publish or promotion logic has matching branch triggers
       and documentation
 - [ ] Documented container commands work from a fresh checkout or clean

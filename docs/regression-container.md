@@ -168,9 +168,11 @@ docker run --rm -v "$WORKTREE:/workspace/review:ro" "$IMAGE" bash -lc '
 '
 ```
 
-The Docker PR verification job pulls the published `latest` maintainer image
-instead of rebuilding `Dockerfile.ci-regression` for each PR. It mounts the PR
-tree read-only, copies it to container-local scratch space for writable CTest
+The Docker PR verification job runs only when `ci-pr-action` detects container
+changes, avoiding a Docker runner for unrelated pull requests. It pulls the
+published `latest` maintainer image instead of rebuilding
+`Dockerfile.ci-regression` for each selected PR. It mounts the PR tree
+read-only, copies it to container-local scratch space for writable CTest
 fixtures, then builds the configured tool and test target set with strict Clang
 sanitizers. Its routine PR CTest envelope excludes the separately labelled
 `slow` and `calculator` suites:
