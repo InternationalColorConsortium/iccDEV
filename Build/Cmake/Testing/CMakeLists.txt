@@ -469,6 +469,50 @@ function(iccdev_add_embedio_read8_bounds_test)
   endif()
 endfunction()
 
+# Guards the ownership/ordering invariants that wxProfileDump's "open embedded
+# profile in its own window" feature depends on (ReadAll() before NewCopy(),
+# a populated copy after, and the copy outliving the profile it was copied
+# from). See the long comment at the top of
+# .github/ci/regression/embedded-profile-readall-copy.cpp for the full story.
+# This test links IccProfLib alone and calls functions only (no exported
+# library data), so ${TARGET_LIB_ICCPROFLIB} is correct here -- see the
+# variable's own comment above for when ICCDEV_TEST_LIB_ICCPROFLIB is needed
+# instead.
+function(iccdev_add_embedded_profile_readall_copy_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccEmbeddedProfileReadAllCopyTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/embedded-profile-readall-copy.cpp"
+  )
+  target_link_libraries(iccEmbeddedProfileReadAllCopyTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccEmbeddedProfileReadAllCopyTest)
+
+  add_test(
+    NAME iccdev.embedded-profile-readall-copy
+    COMMAND "$<TARGET_FILE:iccEmbeddedProfileReadAllCopyTest>"
+  )
+  set_tests_properties(iccdev.embedded-profile-readall-copy PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;iccprofLib;embedded-profile;wxProfileDump;regression"
+  )
+  if(WIN32)
+    set(_embedded_profile_readall_copy_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccEmbeddedProfileReadAllCopyTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _embedded_profile_readall_copy_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.embedded-profile-readall-copy PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_embedded_profile_readall_copy_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_tag_layout_shared_data_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -4555,6 +4599,7 @@ if(WIN32)
   iccdev_add_cmmsearch_rebegin_test()
   iccdev_add_ndlut_input_channel_mismatch_test()
   iccdev_add_embedio_read8_bounds_test()
+  iccdev_add_embedded_profile_readall_copy_test()
   iccdev_add_fileio_getlength_position_test()
   iccdev_add_profile_write_failure_test()
   iccdev_add_fileio_seek_tell_test()
@@ -4831,6 +4876,7 @@ iccdev_add_cmmsearch_init_pcc_test()
 iccdev_add_cmmsearch_rebegin_test()
 iccdev_add_ndlut_input_channel_mismatch_test()
 iccdev_add_embedio_read8_bounds_test()
+iccdev_add_embedded_profile_readall_copy_test()
 iccdev_add_fileio_getlength_position_test()
 iccdev_add_profile_write_failure_test()
 iccdev_add_fileio_seek_tell_test()
