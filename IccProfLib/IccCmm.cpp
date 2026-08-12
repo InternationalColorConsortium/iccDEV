@@ -6957,6 +6957,57 @@ icStatusCMM CIccXformNDLut::Begin()
   if (csOutChannels != m_pTag->OutputChannels())
     return icCmmStatInvalidLut;
 
+  // CWE-125: the input half of the same check. Apply() copies InputChannels()
+  // floats out of SrcPixel, but that buffer is sized from the profile, not from
+  // the tag: CIccApplyCmm::InitPixel() takes the max of GetNumSrcSamples() and
+  // GetNumDstSamples() across the chain (floored at 16), and the first xform in a
+  // chain is handed the application's own buffer. A tag declaring more input
+  // channels than the profile's source space therefore reads past the end of it.
+  //
+  // Compare against GetNumSrcSamples() rather than against the tag's own
+  // GetCsInput(): that is precisely the quantity InitPixel() sizes the buffer
+  // from, so it stays correct where the two disagree - and they do disagree,
+  // because the tag is not always the profile's own. NDLut is reached from three
+  // sites: the no-tag CIccXform::Create() overload (the default: arm of its switch
+  // on m_Header.colorSpace), the tag-explicit CIccXform::Create() overload behind
+  // the public CIccCmm::AddXform(CIccProfile*, CIccTag*, ...), and
+  // CIccXformMpe::Create(). At the tag-explicit one the caller chooses the tag,
+  // and its m_csInput records whatever stamped it, so a BToAn tag handed in as an
+  // input xform matches its own InputChannels() while SrcPixel is still sized from
+  // m_Header.colorSpace. Checking the tag against itself would pass that case and
+  // leave the over-read intact.
+  //
+  // Only the ND path needs this stated at all: CIccXform3DLut::Begin() and
+  // CIccXform4DLut::Begin() pin InputChannels() to the 3 and 4 their Apply()
+  // reads, while this one takes a variable count from the tag. (The guard above
+  // already refuses 3 and 4 here, so a 3-channel space that routes to ND for want
+  // of being enumerated in those switches, icSigDevLabData say, never reaches
+  // this check.)
+  //
+  // That asymmetry has a history worth recording, because it looks accidental and
+  // is not: 48a53197 ("Fix: SBO in CIccXform3DLut::Apply()", #655) added the
+  // output check above to all three LUT xforms in a single patch. In 3DLut and
+  // 4DLut the guard immediately above already pinned the input side, so the
+  // output half was all those two needed; NDLut's guard only rejects 3 and 4, so
+  // the same patch left it with a checked output and an unchecked input.
+  //
+  // This is not a new rule: CIccMBB::Validate() already reports the same
+  // disagreement as "Incorrect number of input channels", a critical error, by
+  // comparing m_nInput against icGetSpaceSamples(pProfile->m_Header.colorSpace)
+  // for exactly these tags. The apply path simply never consulted it, so a
+  // profile the validator rejects could still be driven through Apply().
+  //
+  // Nor does CIccCmm::Begin()'s own guard cover it, though its comment ("Make
+  // sure the input channel and first transform input counts match. Otherwise
+  // we'll have a heap overflow during Apply.") describes this hazard exactly.
+  // That guard compares GetSourceSamples() against the first xform's
+  // GetNumSrcSamples(), and both of those derive from m_Header.colorSpace, so it
+  // is header-to-header and structurally cannot see a tag that disagrees with
+  // the header. The tag's own count is only visible here. (#2119)
+  icUInt16Number nSrcSamples = GetNumSrcSamples();
+  if (nSrcSamples != m_pTag->InputChannels())
+    return icCmmStatInvalidLut;
+
   m_nNumInput = m_pTag->m_nInput;
 
   // CWE-400/CWE-834: m_nNumInput is a copy of the tag's icUInt8Number input channel

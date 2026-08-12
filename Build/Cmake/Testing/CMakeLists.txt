@@ -294,6 +294,56 @@ function(iccdev_add_cmmsearch_init_pcc_test)
   endforeach()
 endfunction()
 
+function(iccdev_add_ndlut_input_channel_mismatch_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccNDLutInputChannelMismatchTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/ndlut-input-channel-mismatch.cpp"
+  )
+  target_link_libraries(iccNDLutInputChannelMismatchTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+
+  add_dependencies(check iccNDLutInputChannelMismatchTest)
+
+  # No fixture argument: the test builds all three profiles in memory.  The AFL
+  # input that reported #2119 is a 164 KB 13-channel profile with one mutated
+  # header byte, which is both larger than the CFL/AFL smoke seed caps would keep
+  # and far more profile than the assertion needs.
+  if(WIN32)
+    add_test(
+      NAME iccdev.ndlut-input-channel-mismatch
+      COMMAND "$<TARGET_FILE:iccNDLutInputChannelMismatchTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.ndlut-input-channel-mismatch
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccNDLutInputChannelMismatchTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.ndlut-input-channel-mismatch PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;cmm;regression"
+  )
+  if(WIN32)
+    set(_ndlut_input_channel_mismatch_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccNDLutInputChannelMismatchTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _ndlut_input_channel_mismatch_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.ndlut-input-channel-mismatch PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_ndlut_input_channel_mismatch_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_cmmsearch_rebegin_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -4503,6 +4553,7 @@ if(WIN32)
   iccdev_add_iccconnect_config_parser_test()
   iccdev_add_cmmsearch_init_pcc_test()
   iccdev_add_cmmsearch_rebegin_test()
+  iccdev_add_ndlut_input_channel_mismatch_test()
   iccdev_add_embedio_read8_bounds_test()
   iccdev_add_fileio_getlength_position_test()
   iccdev_add_profile_write_failure_test()
@@ -4778,6 +4829,7 @@ iccdev_add_iccconnect_thread_test()
 iccdev_add_iccconnect_config_parser_test()
 iccdev_add_cmmsearch_init_pcc_test()
 iccdev_add_cmmsearch_rebegin_test()
+iccdev_add_ndlut_input_channel_mismatch_test()
 iccdev_add_embedio_read8_bounds_test()
 iccdev_add_fileio_getlength_position_test()
 iccdev_add_profile_write_failure_test()
