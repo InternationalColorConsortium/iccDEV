@@ -101,6 +101,8 @@ public:
 
   virtual bool ReadAll();
 
+  virtual void DetachIO();
+
   virtual bool Write(CIccIO *pIO);
 
   virtual void Describe(std::string &sDescription, int nVerboseness);

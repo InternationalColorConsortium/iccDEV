@@ -302,6 +302,52 @@ bool CIccTagEmbeddedProfile::ReadAll()
 
 /**
 ****************************************************************************
+* Name: CIccTagEmbedProfile::DetachIO
+*
+* Purpose: Releases the inner profile's hold on its parent's IO once this
+*  tag's owning profile detaches from its own IO.
+*
+* CIccTagEmbeddedProfile::Read() (above) can leave m_pProfile attached to a
+* CIccEmbedIO that wraps the IO object passed in by the profile that read
+* this tag (the "parent"). CIccProfile::Detach() (IccProfile.cpp) calls
+* DetachIO() on every one of its loaded tags before deleting its own IO; the
+* base CIccTag::DetachIO() is an empty virtual, so without this override the
+* inner profile kept reporting HasIO()==true over an IO the parent had just
+* freed. This override calls the inner profile's own Detach(), which is safe
+* precisely because the caller (CIccProfile::Detach()) runs it before
+* deleting the parent's IO -- the inner's CIccEmbedIO is released while what
+* it wraps is still alive.
+*
+* Cascade and its recursion depth: CIccProfile::Detach() loops over *its*
+* loaded tags calling DetachIO(), so if m_pProfile itself holds a loaded
+* CIccTagEmbeddedProfile (a nested embedded profile), that tag's DetachIO()
+* runs too, and so on. The recursion depth this can reach is bounded by how
+* deep the *loaded* tag tree is, not by how deeply the file nests embedded
+* profiles: a lazily-opened profile has nothing loaded below the tag entries
+* it was asked for (e.g. via FindTag()/FindAllTags()), so a one-level load
+* only ever recurses one level here. Building a deeply loaded tree at all
+* requires a caller who already paid ReadTags()' recursive cost to build it,
+* and ~CIccTagEmbeddedProfile's `delete m_pProfile` already recurses the same
+* way when that tree is torn down -- this does not introduce any new
+* unbounded recursion.
+*
+* This is deliberately destructive to anything the inner profile had not yet
+* loaded: once its IO is gone, tags it has not read can never be read. That
+* is what detaching means -- a caller that wants the inner profile's contents
+* must load them first (e.g. via FindAllTags()) before detaching the outer
+* profile. DetachIO() must not read anything to compensate; doing so would
+* reintroduce the unbounded ReadAll()-style descent this branch removed.
+*****************************************************************************
+*/
+void CIccTagEmbeddedProfile::DetachIO()
+{
+  if (m_pProfile)
+    m_pProfile->Detach();
+}
+
+
+/**
+****************************************************************************
 * Name: CIccTagEmbedProfile::Write
 *
 * Purpose: Write an unknown tag to a file

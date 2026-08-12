@@ -529,6 +529,61 @@ function(iccdev_add_embedded_profile_onelevel_load_test)
   endif()
 endfunction()
 
+# Guards CIccTagEmbeddedProfile::DetachIO() (IccProfLib/IccTagEmbedIcc.h/.cpp).
+# CIccProfile::Detach() (IccProfLib/IccProfile.cpp) calls pTag->DetachIO() on
+# every one of its loaded tags before freeing its own IO, but the base
+# CIccTag::DetachIO() (IccProfLib/IccTagBasic.h) is an empty virtual that
+# nothing overrode -- CIccTagEmbeddedProfile included. An embedded profile's
+# inner CIccProfile can hold a CIccEmbedIO wrapping its PARENT's IO
+# (CIccTagEmbeddedProfile::Read, IccProfLib/IccTagEmbedIcc.cpp), so detaching
+# the outer profile left the inner one still reporting HasIO()==true over IO
+# the outer had just deleted -- any later tag load on it read through freed
+# memory. The test builds a 2-level nested embedded profile in memory
+# (pTop -> pMid -> pLeaf), loads pMid's copyrightTag and its own
+# embeddedV5ProfileTag (reaching pLeaf) before detaching pTop, and asserts:
+# pMid and pLeaf both report HasIO()==false afterwards (the fix, and its
+# 2-level cascade); a still-unloaded tag on either (pMid's luminanceTag,
+# pLeaf's copyrightTag) comes back NULL/false rather than succeeding through
+# freed memory; and pMid's already-loaded copyrightTag survives the detach
+# with its original text intact. No corpus fixture -- entirely in-memory --
+# so this cannot be silently disabled by a missing fixture.
+function(iccdev_add_embedded_profile_detachio_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccEmbeddedProfileDetachIoTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/embedded-profile-detachio.cpp"
+  )
+  target_link_libraries(iccEmbeddedProfileDetachIoTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccEmbeddedProfileDetachIoTest)
+
+  add_test(
+    NAME iccdev.embedded-profile-detachio
+    COMMAND
+      "$<TARGET_FILE:iccEmbeddedProfileDetachIoTest>"
+      "${ICCDEV_TEST_OUTDIR}/embedded-profile-detachio-scratch.icc"
+  )
+  set_tests_properties(iccdev.embedded-profile-detachio PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;iccprofLib;embedded-profile;detachio;regression"
+  )
+  if(WIN32)
+    set(_embedded_profile_detachio_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccEmbeddedProfileDetachIoTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _embedded_profile_detachio_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.embedded-profile-detachio PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_embedded_profile_detachio_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_tag_layout_shared_data_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -4616,6 +4671,7 @@ if(WIN32)
   iccdev_add_ndlut_input_channel_mismatch_test()
   iccdev_add_embedio_read8_bounds_test()
   iccdev_add_embedded_profile_onelevel_load_test()
+  iccdev_add_embedded_profile_detachio_test()
   iccdev_add_fileio_getlength_position_test()
   iccdev_add_profile_write_failure_test()
   iccdev_add_fileio_seek_tell_test()
@@ -4893,6 +4949,7 @@ iccdev_add_cmmsearch_rebegin_test()
 iccdev_add_ndlut_input_channel_mismatch_test()
 iccdev_add_embedio_read8_bounds_test()
 iccdev_add_embedded_profile_onelevel_load_test()
+iccdev_add_embedded_profile_detachio_test()
 iccdev_add_fileio_getlength_position_test()
 iccdev_add_profile_write_failure_test()
 iccdev_add_fileio_seek_tell_test()
