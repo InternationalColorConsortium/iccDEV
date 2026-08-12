@@ -1260,7 +1260,16 @@ endfunction()
 # corpus in any format, so no path had coverage. Also pins
 # the constructor invariant (the count was clamped to three while the raw nSize
 # was allocated) and the colorant encoding surviving a copy, which neither the
-# copy constructor nor operator= carried across. Header + IccProfLib only.
+# copy constructor nor operator= carried across.
+#
+# #2106 adds the read path the same tag reaches that state through. Read() cross
+# -checked the declared channel count against one derived from the tag-table
+# size and then sized the tag from the derived figure, discarding the count it
+# had just validated against -- so a three-channel tag inside a 92-byte element
+# became ten channels, and Write() re-emitted ten, persisting the rewrite for
+# anything that round-tripped the profile. CIccTagNamedColor2::Read resolves the
+# same two-source situation the other way, using its size-derived count only as
+# a capacity guard. Header + IccProfLib only.
 function(iccdev_add_chromaticity_validate_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -1279,7 +1288,7 @@ function(iccdev_add_chromaticity_validate_test)
   set_tests_properties(iccdev.chromaticity-validate-oob PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     TIMEOUT 60
-    LABELS "iccdev;tag;chromaticity;security;issue-2094;regression"
+    LABELS "iccdev;tag;chromaticity;security;issue-2094;issue-2106;regression"
   )
   if(WIN32)
     set(_chromaticity_windows_env_mods

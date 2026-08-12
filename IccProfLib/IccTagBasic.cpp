@@ -4437,19 +4437,51 @@ bool CIccTagChromaticity::Read(icUInt32Number size, CIccIO *pIO)
     return false;
 
   icUInt32Number nNum = (size-3*sizeof(icUInt32Number)) / sizeof(icChromaticityNumber);
-  icUInt32Number nNum32 = (nNum*sizeof(icChromaticityNumber)) / sizeof(icU16Fixed16Number);
 
   if (nNum < nChannels)
     return false;
 
-  // SetSize casts from icUInt32Number down to icUInt16Number. Check for overflow
-  if (nNum > (icUInt16Number)nNum)
+  // The element carries the channel count twice: declared in bytes 8-9, and
+  // implied by the tag-table size nNum is derived from. The guard above is a
+  // capacity check -- it establishes that the element is large enough to hold
+  // what it declares -- and the declared count is what the tag then is, so
+  // nNum has no further part to play. Sizing from nNum instead discarded the
+  // count that had just been validated against: a tag declaring three channels
+  // inside a 92-byte element became a ten-channel tag, and because Write()
+  // emits m_nChannels the rewrite was persisted by anything that round-tripped
+  // the profile rather than merely misreported in memory. With no colorant
+  // encoding claimed, Validate() reports nothing at all, so it was silent from
+  // end to end (#2106; the out-of-bounds read that surfaced this tag was #2094).
+  //
+  // CIccTagNamedColor2::Read faces the same two-source situation and resolves
+  // it this way already -- a size-derived nCount used only as a capacity guard,
+  // then SetSize() on the declared count and exactly that many entries read --
+  // so this is the sibling's shape, not a new rule. The capacity guard above is
+  // unchanged, so an element long enough for its declared count still parses;
+  // trailing bytes are now ignored rather than adopted as channels. 12 + 8n is a
+  // multiple of four for every n, so a conforming element never needs padding,
+  // and the floor division already absorbed any run shorter than one eight-byte
+  // pair, which is why padding cannot be mistaken for a channel either way.
+  //
+  // One shape does stop parsing, deliberately: an element declaring zero
+  // channels. It used to take however many pairs its length implied -- the
+  // fabrication this change exists to stop -- and a chromaticityType carrying no
+  // chromaticity has nothing for the count to mean. Rejecting it here states
+  // that, rather than leaving it to fall out of SetSize(0), where icRealloc()
+  // treats a zero size as a free and returns NULL.
+  //
+  // The overflow check that stood here guarded a cast of nNum down to
+  // icUInt16Number for SetSize(). nChannels was read as an icUInt16Number, so
+  // there is no longer a narrowing conversion for it to protect.
+  if (!nChannels)
     return false;
 
-  if (!SetSize((icUInt16Number)nNum))
+  icUInt32Number nChannels32 = (nChannels*sizeof(icChromaticityNumber)) / sizeof(icU16Fixed16Number);
+
+  if (!SetSize(nChannels))
     return false;
 
-  if (pIO->Read32(&m_xy[0], nNum32) != nNum32 )
+  if (pIO->Read32(&m_xy[0], nChannels32) != nChannels32 )
     return false;
 
   return true;

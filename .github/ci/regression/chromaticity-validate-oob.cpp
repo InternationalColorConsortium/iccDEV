@@ -64,12 +64,24 @@
 // a compiler-inserted check would catch. Neither is the whole case for its
 // defect; the reasoning above is.
 //
+// Levels 9 to 13 cover the remaining #2106 punch-list item: Read() derived the
+// channel count from the tag's *size* and discarded the count the tag declares.
+// See the note above readHonoursTheDeclaredCount() for why that is this tag
+// disagreeing with its sibling rather than a specification question. Measured
+// the same way: against the unfixed library levels 9, 10 and 13 fail (5
+// assertions -- both oversized elements report ten channels and re-emit ten on
+// a Write() round trip, and the zero-channel element parses instead of being
+// rejected), while 11 and 12 pass, so those two are controls rather than
+// coverage. Level 13 is the only acceptance change in the set.
+//
 // Exit code 0 = pass, 1 = a case regressed.
 #include "IccTagBasic.h"
+#include "IccIO.h"
 #include "IccUtil.h"
 
 #include <cstdio>
 #include <string>
+#include <vector>
 
 static int g_failures = 0;
 
@@ -94,6 +106,14 @@ static void expect(const char *szCase, bool bOk, const char *szWhat)
 
   printf("FAIL [%s]: %s\n", szCase, szWhat);
   g_failures++;
+}
+
+// Same, for the levels below that must stop rather than go on to dereference
+// what the failed step was supposed to have produced.
+static bool expectTrue(const char *szCase, bool bOk, const char *szWhat)
+{
+  expect(szCase, bOk, szWhat);
+  return bOk;
 }
 
 // Same, for the copy levels: what a lost m_nColorantType reads back as is
@@ -149,6 +169,133 @@ static void shortTagStopsAtTheCountError(icUInt16Number nChannels)
          "validation status is icValidateCriticalError");
   expect(szCase, !contains(report, kDataMsg),
          "the colorant-encoding comparison did not run past the end of the array");
+}
+
+// -- Levels 9 to 12: the declared channel count, on the binary read path. ------
+
+static void put32(std::vector<icUInt8Number> &b, icUInt32Number v)
+{
+  b.push_back((icUInt8Number)(v >> 24));
+  b.push_back((icUInt8Number)(v >> 16));
+  b.push_back((icUInt8Number)(v >> 8));
+  b.push_back((icUInt8Number)(v));
+}
+
+static void put16(std::vector<icUInt8Number> &b, icUInt16Number v)
+{
+  b.push_back((icUInt8Number)(v >> 8));
+  b.push_back((icUInt8Number)(v));
+}
+
+// A chromaticityType tag declaring nDeclared channels while carrying nPairs xy
+// pairs, plus nPad trailing bytes. The three are independent here precisely so
+// the count, the payload and the padding can be made to disagree.
+static std::vector<icUInt8Number> buildChrmTag(icUInt16Number nDeclared,
+                                               icUInt16Number nColorantType,
+                                               unsigned nPairs, unsigned nPad)
+{
+  std::vector<icUInt8Number> b;
+  put32(b, 0x6368726DU);          // 'chrm'
+  put32(b, 0);                    // reserved
+  put16(b, nDeclared);
+  put16(b, nColorantType);
+
+  for (unsigned i = 0; i < nPairs; i++) {
+    double x = i < 3 ? kItu[i][0] : 0.5;
+    double y = i < 3 ? kItu[i][1] : 0.5;
+    put32(b, icDtoUF((icFloatNumber)x));
+    put32(b, icDtoUF((icFloatNumber)y));
+  }
+
+  for (unsigned i = 0; i < nPad; i++)
+    b.push_back(0);
+
+  return b;
+}
+
+// The count a Write() round trip puts back on the wire, read straight out of
+// the serialised bytes at offset 8 rather than off the object, since the point
+// of these levels is what a profile carries after iccDEV has handled it.
+static bool writtenChannelCount(CIccTagChromaticity &tag, icUInt16Number &nOut)
+{
+  CIccMemIO out;
+  if (!out.Alloc(12 + 8 * (size_t)tag.GetSize() + 16, true))
+    return false;
+
+  if (!tag.Write(&out))
+    return false;
+
+  icUInt8Number *p = out.GetData();
+  nOut = (icUInt16Number)((p[8] << 8) | p[9]);
+  return true;
+}
+
+// Levels 9 to 12 -- Read() must size the tag from the count the tag declares,
+// not from its byte length.
+//
+// chromaticityType carries both a declared channel count (bytes 8-9) and, in
+// the tag table, a size. Read() cross-checked them the way its sibling does --
+//
+//   icUInt32Number nNum = (size - 12) / sizeof(icChromaticityNumber);
+//   if (nNum < nChannels)
+//     return false;
+//
+// -- and then sized the tag from nNum, the *size-derived* figure, discarding
+// the declared nChannels it had just validated against. CIccTagNamedColor2::Read
+// (IccTagBasic.cpp:3330) faces the identical situation and resolves it the other
+// way: it computes a size-derived nCount, uses it only as a capacity guard
+// (`if (nCount < nNum) return false;`), then calls SetSize(nNum, nCoords) on the
+// declared count and reads exactly that many entries. Chromaticity performed the
+// same guard and then took the other branch.
+//
+// The consequence is not confined to memory. Write() emits m_nChannels, so a tag
+// declaring three channels inside a 92-byte element was not merely reported as
+// ten channels -- it was *re-emitted* as ten, and any tool that round-trips the
+// profile persisted the rewrite. Where no colorant encoding is claimed,
+// Validate() returns icValidateOK with an empty report (level 5 above), so the
+// mutation was silent end to end.
+//
+// Levels 11 and 12 are the controls that make the fix a narrowing and not a
+// change of acceptance: an element too short for its declared count is still
+// rejected, and one carrying trailing padding still parses. Padding cannot be
+// mistaken for a channel in either direction -- 12 + 8n is a multiple of four
+// for every n, so a conforming element never needs padding, and the floor
+// division absorbs any run shorter than a whole eight-byte pair regardless.
+static void readHonoursTheDeclaredCount(const char *szCase,
+                                        icUInt16Number nDeclared,
+                                        icUInt16Number nColorantType,
+                                        unsigned nPairs, unsigned nPad,
+                                        bool bExpectRead,
+                                        const char *szRejectWhat = NULL)
+{
+  std::vector<icUInt8Number> bytes =
+    buildChrmTag(nDeclared, nColorantType, nPairs, nPad);
+
+  CIccMemIO io;
+  if (!io.Attach(&bytes[0], bytes.size())) {
+    expect(szCase, false, "the byte stream could be attached for reading");
+    return;
+  }
+
+  CIccTagChromaticity tag;
+  bool bRead = tag.Read((icUInt32Number)bytes.size(), &io);
+
+  if (!bExpectRead) {
+    expect(szCase, !bRead, szRejectWhat ? szRejectWhat : "the element is rejected");
+    return;
+  }
+
+  if (!expectTrue(szCase, bRead, "the element parses"))
+    return;
+
+  expectColorant(szCase, (icUInt16Number)tag.GetSize(), nDeclared,
+                 "the tag reports the channel count it declared");
+
+  icUInt16Number nWritten = 0;
+  if (expectTrue(szCase, writtenChannelCount(tag, nWritten),
+                 "the tag serialises back out"))
+    expectColorant(szCase, nWritten, nDeclared,
+                   "and a Write() round trip re-emits the declared count");
 }
 
 int main()
@@ -275,6 +422,35 @@ int main()
     expectColorant("default-ctor", tag.m_nColorantType, icColorantUnknown,
                    "the colorant encoding defaults to none rather than being left unset");
   }
+
+  // Level 9 -- the defect. Three channels declared, ten pairs' worth of element.
+  readHonoursTheDeclaredCount("read-oversized-itu", 3, icColorantITU, 10, 0, true);
+
+  // Level 10 -- the same element with no colorant encoding claimed, which is
+  // where the rewrite is silent: level 5 shows Validate() says nothing here, so
+  // nothing between reading and writing the profile reports the changed count.
+  readHonoursTheDeclaredCount("read-oversized-no-colorant", 3, icColorantUnknown,
+                              10, 0, true);
+
+  // Level 11 -- control. An element carrying fewer pairs than it declares must
+  // still be rejected outright; that capacity guard is what keeps the read of
+  // m_xy in bounds and it is not what these levels change.
+  readHonoursTheDeclaredCount("read-undersized", 10, icColorantITU, 3, 0, false,
+                              "an element too short for its declared count is rejected");
+
+  // Level 12 -- control. A conforming element that carries trailing padding must
+  // still parse, and at its declared count, or the change would be a narrowing
+  // of what iccDEV accepts rather than a correction of what it reports.
+  readHonoursTheDeclaredCount("read-padded", 3, icColorantITU, 3, 4, true);
+
+  // Level 13 -- the one shape that is now rejected on purpose. An element
+  // declaring no channels used to take however many pairs its length implied,
+  // which is the fabrication these levels exist to stop; a chromaticityType
+  // carrying no chromaticity leaves the count nothing to mean. This level is
+  // the record that the rejection is intended, since it is the only acceptance
+  // change in the set and it does not follow from the capacity guard.
+  readHonoursTheDeclaredCount("read-zero-declared", 0, icColorantITU, 3, 0, false,
+                              "an element declaring no channels is rejected");
 
   if (g_failures) {
     printf("%d case(s) regressed\n", g_failures);
