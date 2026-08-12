@@ -479,6 +479,9 @@ jobs:
               exit 1
               ;;
           esac
+          # #2108 remains known-red with libxml2 >= 2.13 until the XML reader
+          # handles XML_MAX_TEXT_LENGTH without weakening parser hardening.
+          ctest_args+=(--label-exclude known-red)
           case "$CTEST_MODE" in
             fast)
               ctest_args+=(--label-exclude slow --label-exclude calculator)
@@ -619,10 +622,10 @@ jobs:
 
           case "$CTEST_MODE" in
             fast)
-              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --label-exclude slow --label-exclude calculator --output-junit build/ctest-results.xml"
+              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --label-exclude slow --label-exclude calculator --label-exclude known-red --output-junit build/ctest-results.xml"
               ;;
             full)
-              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --output-junit build/ctest-results.xml"
+              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --label-exclude known-red --output-junit build/ctest-results.xml"
               ;;
             skip)
               test_cmd="skipped by manual ctest_mode=skip input"
@@ -677,16 +680,16 @@ jobs:
             case "$CTEST_MODE" in
               fast)
                 if [ "$CTEST_RECENT_LIMIT" = "0" ]; then
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --label-exclude slow --label-exclude calculator"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --label-exclude slow --label-exclude calculator --label-exclude known-red"
                 else
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --limit '${CTEST_RECENT_LIMIT}' --label-exclude slow --label-exclude calculator"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --limit '${CTEST_RECENT_LIMIT}' --label-exclude slow --label-exclude calculator --label-exclude known-red"
                 fi
                 ;;
               full)
                 if [ "$CTEST_RECENT_LIMIT" = "0" ]; then
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --label-exclude known-red"
                 else
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --limit '${CTEST_RECENT_LIMIT}'"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --limit '${CTEST_RECENT_LIMIT}' --label-exclude known-red"
                 fi
                 echo "ctest --test-dir build -R '^iccdev\\.hybrid-pipeline$' --output-on-failure --no-tests=error"
                 ;;

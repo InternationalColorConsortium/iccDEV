@@ -64,6 +64,11 @@ For EVERY `run:` step in the workflow, verify:
 ### 7. Concurrency
 - [ ] `concurrency:` group defined for PR/push workflows
 - [ ] `cancel-in-progress: true` for PR workflows
+- [ ] Workflows accepting both `pull_request` and `workflow_dispatch` include
+      `${{ github.event_name }}` in their concurrency key, so a manual dispatch
+      cannot cancel a same-branch PR run
+- [ ] Callable workflow callers and callees use separate, event-qualified
+      groups when their work must not supersede each other
 
 ### 8. Docker and Container Security
 - [ ] Dockerfiles use digest-pinned `FROM` references
@@ -90,6 +95,13 @@ For EVERY `run:` step in the workflow, verify:
 - [ ] Install/uninstall logs checked for duplicate manifest paths and missing files
 - [ ] Package-manager and cache warnings classified as fixed, deferred, or baseline
 - [ ] Matrix smoke-test skips reviewed for missing coverage
+
+### 11. Comprehensive Matrix Coverage
+- [ ] The comprehensive matrix calls MSVC, ClangCL, and MinGW UCRT64 Windows
+      coverage.
+- [ ] One Unix and one Windows lane run complete CTest with
+      `--no-tests=error`; documented `known-red` tests are explicitly excluded.
+- [ ] The Windows full CTest lane treats compiler warnings as errors.
 
 ## Running the Audit
 

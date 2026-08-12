@@ -53,6 +53,9 @@ when practical.
 - Windows full builds include focused executable regressions, batch-backed
   suites, dump/profile smoke coverage, shared-export coverage, and PAWG report
   coverage.
+- The comprehensive build matrix must retain MSVC, ClangCL, and MinGW UCRT64
+  coverage, plus a separate MSVC full CTest gate with warnings treated as
+  errors. Unix must likewise retain the full strict CTest gate.
 - Use `rg "Total Tests:|currently register|ci[-]tool[-]tests[.]yml" docs .github`
   before PR handoff to catch stale count and workflow-name references.
 - Generated-profile count changes must update every explicit assertion source,
@@ -88,6 +91,11 @@ when practical.
   execution, sanitizer checks, or packaging verification.
 - Use least-privilege permissions and credential cleanup.
 - Sanitize all `GITHUB_STEP_SUMMARY` and `GITHUB_OUTPUT` writes.
+- Check out the base ref's `.github/scripts` sparsely and source its sanitizer
+  helpers for every workflow that executes PR-controlled source.
+- Include `github.event_name` in concurrency keys for workflows that accept
+  both PR and manual-dispatch events, so a manual lane cannot cancel its PR
+  counterpart.
 - Trigger shared-concurrency workflows sequentially to avoid canceling your own
   run. Use `ci-pr-action` for normal maintainer validation and
   `ci-regression-checks` through that orchestrator for ASAN/UBSAN CTest coverage.

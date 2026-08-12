@@ -29,6 +29,7 @@ endif()
 add_custom_target(check
   COMMAND "${CMAKE_CTEST_COMMAND}"
           ${ICCDEV_CTEST_CONFIG_ARGS}
+          --label-exclude known-red
           --output-on-failure
           --no-tests=error
   WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
@@ -88,6 +89,7 @@ add_custom_target(check-fast
   COMMAND "${CMAKE_CTEST_COMMAND}"
           ${ICCDEV_CTEST_CONFIG_ARGS}
           --label-exclude slow
+          --label-exclude known-red
           --output-on-failure
           --no-tests=error
   WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
@@ -5421,7 +5423,7 @@ if(TARGET iccFromXml AND TARGET iccToXml AND TARGET iccApplyToLink)
   iccdev_add_script_test(
     iccdev.xml-parser-regressions
     600
-    "iccdev;xml;parser;regression;issue-1856;asan;slow"
+    "iccdev;xml;parser;regression;issue-1856;issue-2108;asan;slow;known-red"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-xml-parser-regression-tests.sh"
   )

@@ -45,7 +45,7 @@ on:
     - cron: '0 6 * * 1'
   workflow_dispatch:
 concurrency:
-  group: "codeql-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}"
+  group: "codeql-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}"
   cancel-in-progress: true
 
 jobs:

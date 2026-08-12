@@ -87,7 +87,7 @@ on:
           - fail
 
 concurrency:
-  group: "ci-pr-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}"
+  group: "ci-pr-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}"
   cancel-in-progress: true
 
 env:
