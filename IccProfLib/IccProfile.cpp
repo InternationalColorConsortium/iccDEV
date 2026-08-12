@@ -802,27 +802,39 @@ void CIccProfile::CopyAttach(CIccProfile* pProfile, bool bSharedIO)
 
 /**
 ******************************************************************************
-* Name: CIccProfile::ReadTags
-* 
-* Purpose: This will read the all the tags from the IO object into the
-*  CIccProfile object. The IO object must have been attached before
-*		calling this function.
-* 
-* Return: 
-*  true - CIccProfile object now contains all tag data,
-*  false - No IO object attached or tags cannot be read.
+* Name: CIccProfile::loadTags
+*
+* Purpose: Shared implementation behind ReadTags() and FindAllTags(). Resolves
+*  the IO to use (m_pAttachIO, or the passed profile's if it has one),
+*  short-circuits when there is no IO (successful iff every tag is already
+*  loaded), and otherwise saves the IO position, loops LoadTag over m_Tags,
+*  and restores the position on every path.
+*
+* Args:
+*  pProfile - profile whose m_pAttachIO should be preferred, or NULL to use
+*   this object's own m_pAttachIO,
+*  bReadAll - passed through to LoadTag(); true recursively pulls the whole
+*   nested tree of embedded profiles, false loads one level and never descends,
+*  bStopOnError - if true, abort and return false as soon as one LoadTag call
+*   fails (ReadTags' behavior); if false, attempt every tag regardless of
+*   earlier failures (FindAllTags' behavior).
+*
+* Return:
+*  true - every tag was already loaded or was successfully loaded by this call,
+*  false - no IO object attached and not all tags loaded, or (per bStopOnError)
+*   at least one tag failed to load, or the IO position could not be restored.
 *******************************************************************************
 */
-bool CIccProfile::ReadTags(CIccProfile* pProfile)
+bool CIccProfile::loadTags(CIccProfile *pProfile, bool bReadAll, bool bStopOnError)
 {
 	CIccIO *pIO = m_pAttachIO;
-	
+
 	if (pProfile && pProfile->m_pAttachIO) {
 		pIO = pProfile->m_pAttachIO;
 	}
 
   TagEntryList::iterator i;
-  //If there is no IO handle then ReadTags is successful if they have all been
+  //If there is no IO handle then loading is successful if they have all been
   //loaded in
   if (!pIO) {
     for (i = m_Tags.begin(); i != m_Tags.end(); i++) {
@@ -837,14 +849,58 @@ bool CIccProfile::ReadTags(CIccProfile* pProfile)
   if (pos < 0)
     return false;
 
+  bool bAllOk = true;
 	for (i=m_Tags.begin(); i!=m_Tags.end(); i++) {
-		if (!LoadTag((IccTagEntry*)&(i->TagInfo), pIO, true)) {
-			pIO->Seek(pos, icSeekSet);
-			return false;
+		if (!LoadTag((IccTagEntry*)&(i->TagInfo), pIO, bReadAll)) {
+			if (bStopOnError) {
+				pIO->Seek(pos, icSeekSet);
+				return false;
+			}
+			bAllOk = false;
 		}
 	}
 
-	return pIO->Seek(pos, icSeekSet) >= 0;
+	return pIO->Seek(pos, icSeekSet) >= 0 && bAllOk;
+}
+
+/**
+******************************************************************************
+* Name: CIccProfile::ReadTags
+*
+* Purpose: This will read the all the tags from the IO object into the
+*  CIccProfile object. The IO object must have been attached before
+*		calling this function.
+*
+* Return:
+*  true - CIccProfile object now contains all tag data,
+*  false - No IO object attached or tags cannot be read.
+*******************************************************************************
+*/
+bool CIccProfile::ReadTags(CIccProfile* pProfile)
+{
+	return loadTags(pProfile, true, true);
+}
+
+/**
+******************************************************************************
+* Name: CIccProfile::FindAllTags
+*
+* Purpose: Loads every tag in m_Tags one level deep, using this object's own
+*  attached IO. Never descends into nested embedded profiles (unlike
+*  ReadTags(), which recursively pulls the whole nested tree). Unlike
+*  ReadTags(), a single unreadable tag does not abort the rest: every tag is
+*  attempted regardless of earlier failures, so one malformed tag costs only
+*  its own entry.
+*
+* Return:
+*  true - every tag loaded successfully,
+*  false - no IO object attached and not all tags loaded, or at least one tag
+*   failed to load. Either way, every tag was attempted.
+*******************************************************************************
+*/
+bool CIccProfile::FindAllTags()
+{
+	return loadTags(NULL, false, false);
 }
 
 /**

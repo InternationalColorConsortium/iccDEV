@@ -744,26 +744,22 @@ void MyChild::OnTagClicked(wxListEvent& event)
         CIccProfile *pInner = pEmbed->GetProfile();
 
         if (pInner) {
-            // Load one level of the embedded profile, tag by tag.  FindTag goes
-            // through LoadTag with bReadAll=false, so a nested embedded profile
-            // is attached but not descended into.  ReadAll() would pull the
-            // whole nested tree at O(depth^2.7) -- a crafted profile wedges the
-            // UI for minutes -- and the depth guard in
-            // CIccTagEmbeddedProfile::Read does not bound that path.  Loading
-            // per tag also means one unreadable tag costs only its own row
-            // instead of the whole window.
-            std::vector<icTagSignature> sigs;
-            TagEntryList::iterator i;
-            for (i = pInner->m_Tags.begin(); i != pInner->m_Tags.end(); ++i)
-                sigs.push_back((icTagSignature)i->TagInfo.sig);
-
-            for (size_t n = 0; n < sigs.size(); n++)
-                (void)pInner->FindTag(sigs[n]);
+            // Load one level of the embedded profile.  FindAllTags() loads with
+            // bReadAll=false, so a nested embedded profile is attached but not
+            // descended into.  ReadAll() would pull the whole nested tree at
+            // O(depth^2.7) with the depth guard in CIccTagEmbeddedProfile::Read
+            // not bounding that path -- measured at 14 s to freeze the UI for a
+            // 90 KB crafted profile, and over ten minutes for a 359 KB one.
+            // FindAllTags() also attempts every tag regardless of earlier
+            // failures, so one unreadable tag costs only its own row instead of
+            // the whole window.
+            pInner->FindAllTags();
 
             // A profile nested two levels down is reached through an already
             // copied profile, which carries no IO, so nothing loads here.  Show
             // the tag dump rather than a window with an empty tag list.
             int nLoaded = 0;
+            TagEntryList::iterator i;
             for (i = pInner->m_Tags.begin(); i != pInner->m_Tags.end(); ++i) {
                 if (i->pTag)
                     nLoaded++;
@@ -773,7 +769,12 @@ void MyChild::OnTagClicked(wxListEvent& event)
                 CIccProfile *pCopy = pInner->NewCopy();
 
                 if (pCopy) {
-                    my_frame->ShowProfile(pCopy, GetTitle() + _T(" [embedded]"), wxEmptyString);
+                    CIccInfo Fmt;
+                    wxString sTagSignature = Fmt.GetTagSigName(tagSig);
+                    wxString sBracket = sTagSignature.IsEmpty()
+                        ? wxString(_T("[embedded]"))
+                        : (_T("[") + sTagSignature + _T("]"));
+                    my_frame->ShowProfile(pCopy, GetTitle() + _T(" ") + sBracket, wxEmptyString);
                     return;
                 }
             }

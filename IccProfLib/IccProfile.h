@@ -167,6 +167,8 @@ public:
   bool DeleteTag(icSignature sig);
   CIccMemIO* GetTagIO(icSignature sig); //caller should delete returned result
 	bool ReadTags(CIccProfile* pProfile); // will read in all the tags using the IO of the passed profile
+	bool FindAllTags(); // will load every tag one level deep (no descent into nested embedded profiles),
+	                     // attempting all of them even if some fail; returns true iff all succeeded
 
   bool Attach(CIccIO *pIO, bool bUseSubProfile=false);
   bool Detach();
@@ -230,6 +232,11 @@ protected:
   IccTagEntry* GetTag(CIccTag *pTag) const;
   bool ReadBasic(CIccIO *pIO);
   bool LoadTag(IccTagEntry *pTagEntry, CIccIO *pIO, bool bReadAll=false);
+  // Shared body for ReadTags()/FindAllTags(): resolves the IO to use, short-circuits
+  // when there is no IO, saves/restores the IO position around the load loop, and
+  // either aborts on the first LoadTag failure (bStopOnError) or attempts every tag
+  // regardless of earlier failures.
+  bool loadTags(CIccProfile *pProfile, bool bReadAll, bool bStopOnError);
   bool DetachTag(CIccTag *pTag);
 
   CIccIO* ConnectSubProfile(CIccIO *pIO, bool bOwnIO) const;
