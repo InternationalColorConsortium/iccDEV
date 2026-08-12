@@ -5,7 +5,7 @@
 #                 All rights reserved.
 #                 https://color.org
 #
-# Intent: Manual CFL smoke fuzzing for core iccDEV command-line tools.
+# Intent: Manual CFL smoke fuzzing for core iccDEV interfaces.
 #
 ###############################################################
 
@@ -31,9 +31,9 @@ permissions:
         default: ''
         type: string
       cfl_targets:
-        description: 'Comma-separated CFL targets: dump,toxml,fromxml,tojson,fromjson,roundtrip'
+        description: 'CFL targets: dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize'
         required: true
-        default: dump,toxml,fromxml,tojson,fromjson,roundtrip
+        default: dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize
         type: string
       duration_seconds:
         description: 'LibFuzzer seconds per target, 1-3600; total selected runtime <= 5400'
@@ -68,7 +68,7 @@ permissions:
       cfl_targets:
         description: 'Comma-separated CFL targets'
         required: false
-        default: dump,toxml,fromxml,tojson,fromjson,roundtrip
+        default: dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize
         type: string
       duration_seconds:
         description: 'LibFuzzer seconds per target, 1-3600; total selected runtime <= 5400'
@@ -106,7 +106,7 @@ jobs:
         shell: bash --noprofile --norc {0}
     env:
       BASH_ENV: /dev/null
-      ICCDEV_CFL_TARGETS_INPUT: ${{ inputs.cfl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip' }}
+      ICCDEV_CFL_TARGETS_INPUT: ${{ inputs.cfl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize' }}
       ICCDEV_CFL_SECONDS_INPUT: ${{ inputs.duration_seconds || '30' }}
       ICCDEV_CFL_PATCH_MODE_INPUT: ${{ inputs.patch_mode || 'all' }}
       TARGET_REF_INPUT: ${{ inputs.target_ref || github.ref }}
@@ -181,7 +181,7 @@ jobs:
         working-directory: target
         env:
           BASH_ENV: /dev/null
-          ICCDEV_CFL_TARGETS: ${{ inputs.cfl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip' }}
+          ICCDEV_CFL_TARGETS: ${{ inputs.cfl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize' }}
           ICCDEV_CFL_SECONDS: ${{ inputs.duration_seconds || '30' }}
           ICCDEV_CFL_APPLY_PATCHES: ${{ (inputs.patch_mode || 'all') == 'all' && '1' || '0' }}
           ICCDEV_FUZZ_PATCH_APPLICATOR: ${{ github.workspace }}/workflow-scripts/.github/scripts/iccdev-apply-fuzz-patches.sh

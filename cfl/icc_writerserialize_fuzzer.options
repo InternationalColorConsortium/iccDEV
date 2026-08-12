@@ -1,0 +1,6 @@
+[libfuzzer]
+max_len = 262144
+timeout = 30
+rss_limit_mb = 4096
+detect_leaks = 0
+use_value_profile = 1

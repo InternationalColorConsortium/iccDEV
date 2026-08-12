@@ -29,7 +29,7 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
 
    ```bash
    .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 30000
-   cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip --seconds 30
+   cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize --seconds 30
    ```
 
 4. When changing AFL++ bootstrap behavior, validate the regression-container
@@ -75,9 +75,18 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
   `cmplog-routines-pass.so`. Avoid broad AFL++ targets that enter optional GCC
   plugin or Nyx paths.
 - Keep the target allow-list inside `.github/scripts/iccdev-afl-smoke.sh`.
-- Keep core onboarding focused on
-  `dump,toxml,fromxml,tojson,fromjson,roundtrip` until those AFL/CFL lanes are
-  stable.
+- Keep the two lanes' target sets distinct. AFL onboarding stays
+  `dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube` (the allow-list
+  above); CFL adds the two in-process targets,
+  `dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize`.
+  `profilevisualize` and `writerserialize` are CFL-only and are rejected by the
+  AFL runner. The first six CFL
+  targets remain CLI-fidelity wrappers. Build `profilevisualize` and
+  `writerserialize` in-process through public headers, with the engine sources
+  in separate translation units; never include a CLI implementation or call
+  `processLuts()` from either harness. `writerserialize` also links
+  `Mini{PDF,SVG,TIFF}.cpp` to reach the serialization entries (#2116), and
+  needs a corpus that still contains a CLUT seed (#2120).
 - Use `.github/ci/fuzz-patches/afl` and `.github/ci/fuzz-patches/cfl` for
   maintainer-local patch stacks when `--patches` is requested.
 - Keep `ci-docker.yml` push paths and regression-image verification in sync

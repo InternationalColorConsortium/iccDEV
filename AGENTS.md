@@ -47,6 +47,34 @@ shares one source of truth. Update rules here, not in the mirrors.
 | Python/Cython debug | `.github/prompts/debug-python-bindings.prompt.md` |
 | Documentation maintenance | `docs/documentation-maintenance.md` |
 
+## CFL Harness Scope
+
+Keep the six command-line CFL targets as filesystem-backed CLI wrappers. The
+in-process targets are the intentional exceptions: consume only public headers,
+compile the engine sources as separate translation units, and never include a
+CLI implementation or call `processLuts()`.
+
+| target | consumes | covers |
+| --- | --- | --- |
+| `icc_profilevisualize_fuzzer` | `IccVizModel.hpp` | the data-first model: `Enumerate`, `RenderGraph`, `RenderRaster` |
+| `icc_writerserialize_fuzzer` | `MiniPDF.hpp`, `MiniSVG.hpp`, `MiniTIFF.hpp` | the serialization layer the model feeds (#2116) |
+
+Keep them separate rather than folding serialization into the model target, so
+a crash stays attributable to one layer.
+
+An in-process target that needs a CLUT raster also needs a corpus that still
+contains one. `max_seed_bytes` and libFuzzer's `max_len` both removed the only
+CLUT-bearing seed at their old defaults (#2120), which left such a target
+reporting runs, coverage and a clean exit while never executing the layer it
+exists to cover. Both defaults now admit it, and dropping a seed committed
+under `.github/ci/test-data` is a hard error rather than a silent prune. Raise
+`max_len` alongside the cap when adding a target that consumes large structured
+inputs — they are independent gates. Validate with
+
+```bash
+cfl/build.sh --targets profilevisualize,writerserialize --seconds 30
+```
+
 ## WASM Scope
 
 WASM now ships as a staged Node/npm-style module package. Do not expect or

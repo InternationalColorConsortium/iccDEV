@@ -315,7 +315,7 @@ Run the current core CFL smoke:
 ```bash
 cfl/build.sh \
   --patches \
-  --targets dump,toxml,fromxml,tojson,fromjson,roundtrip \
+  --targets dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize \
   --seconds 30
 ```
 
