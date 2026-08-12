@@ -170,8 +170,9 @@ public:
 	bool FindAllTags(); // will load every not-yet-loaded tag one level deep (no descent into nested
 	                    // embedded profiles, and no revisiting of an already-loaded entry), attempting
 	                    // every remaining tag even if some fail; returns true iff all succeeded, and
-	                    // false if there was no IO to load from and something was still unloaded, or
-	                    // if any load attempted here failed
+	                    // false if there was no IO to load from and something was still unloaded, if
+	                    // any load attempted here failed, or if the IO position could not be read
+	                    // or restored
 
   bool Attach(CIccIO *pIO, bool bUseSubProfile=false);
   bool Detach();

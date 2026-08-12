@@ -337,6 +337,14 @@ bool CIccTagEmbeddedProfile::ReadAll()
 * must load them first (e.g. via FindAllTags()) before detaching the outer
 * profile. DetachIO() must not read anything to compensate; doing so would
 * reintroduce the unbounded ReadAll()-style descent this branch removed.
+*
+* Note this detaches the inner profile whatever the origin of its IO, not only
+* a parent-derived CIccEmbedIO. A profile handed to SetProfile() with its own
+* independently opened IO is detached too. That is safe -- such a profile owns
+* that IO and Detach() frees it correctly -- and it is consistent with this tag
+* owning m_pProfile outright, but it does mean a caller cannot keep a
+* separately-attached inner profile readable across the owning profile's
+* Detach().
 *****************************************************************************
 */
 void CIccTagEmbeddedProfile::DetachIO()

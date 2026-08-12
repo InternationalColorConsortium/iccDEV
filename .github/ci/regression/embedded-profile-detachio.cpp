@@ -281,9 +281,17 @@ int main(int argc, char **argv)
 
   // --- Assertion 2: no crash, no bogus success reading afterwards. ---
   // pMid's luminanceTag was never loaded, and pMid now has no IO -- FindTag()
-  // must return NULL (short-circuit in CIccProfile::FindTag(IccTagEntry&):
-  // "if (!entry.pTag && m_pAttachIO) LoadTag(...)"), not read through the
-  // freed parent IO the CIccEmbedIO used to wrap.
+  // must return NULL via the short-circuit in CIccProfile::FindTag(IccTagEntry&):
+  // "if (!entry.pTag && m_pAttachIO) LoadTag(...)".
+  //
+  // Note what these two checks do and do not prove.  They lock in the correct
+  // post-fix behavior: no IO left, so nothing is attempted and nothing bogusly
+  // succeeds.  They do NOT by themselves prove the absence of a read through
+  // freed memory -- without the DetachIO() override, pMid still has a live-looking
+  // m_pAttachIO and these checks pass by luck, reading through the freed parent
+  // IO (undefined behavior that happened to yield NULL).  Assertion 1's
+  // HasIO()==false check is what actually catches that, and the sanitizer CI legs
+  // are what would surface the read itself.
   CIccTag *pMidLumiAfter = pMidProfile->FindTag(icSigLuminanceTag);
   check(pMidLumiAfter == NULL,
         "NO BOGUS SUCCESS: FindTag() on pMid's still-unloaded luminanceTag returns NULL after the detach");
