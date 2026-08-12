@@ -167,8 +167,11 @@ public:
   bool DeleteTag(icSignature sig);
   CIccMemIO* GetTagIO(icSignature sig); //caller should delete returned result
 	bool ReadTags(CIccProfile* pProfile); // will read in all the tags using the IO of the passed profile
-	bool FindAllTags(); // will load every tag one level deep (no descent into nested embedded profiles),
-	                     // attempting all of them even if some fail; returns true iff all succeeded
+	bool FindAllTags(); // will load every not-yet-loaded tag one level deep (no descent into nested
+	                    // embedded profiles, and no revisiting of an already-loaded entry), attempting
+	                    // every remaining tag even if some fail; returns true iff all succeeded, and
+	                    // false if there was no IO to load from and something was still unloaded, or
+	                    // if any load attempted here failed
 
   bool Attach(CIccIO *pIO, bool bUseSubProfile=false);
   bool Detach();
@@ -232,11 +235,37 @@ protected:
   IccTagEntry* GetTag(CIccTag *pTag) const;
   bool ReadBasic(CIccIO *pIO);
   bool LoadTag(IccTagEntry *pTagEntry, CIccIO *pIO, bool bReadAll=false);
+
+  // Selects loadTags()'s shared-loop behavior. Kept as a named enum rather than a
+  // second or third bool: LoadTag()'s "already loaded" branch calls
+  // CIccTag::ReadAll() unconditionally, ignoring the bReadAll argument entirely
+  // (IccProfLib/IccProfile.cpp, CIccProfile::LoadTag: "if (pTagEntry->pTag) return
+  // pTagEntry->pTag->ReadAll();"). For a loaded CIccTagEmbeddedProfile entry that
+  // recurses into the embedded profile's full tree. So "revisit an already-loaded
+  // entry, or skip it" is a real third axis, independent of bReadAll -- folding it
+  // into bReadAll (or adding a fourth bool) is exactly how this bug would recur.
+  enum IccLoadTagsMode
+  {
+    // ReadTags(): bReadAll=true, abort on the first failed LoadTag, and revisit
+    // (ReadAll()) an already-loaded entry -- required so a partially-loaded tree
+    // (e.g. one Attach()ed but not yet read) gets completed on a later call.
+    icLoadTagsFull,
+
+    // FindAllTags(): bReadAll=false, never abort, and never revisit an
+    // already-loaded entry. At one level, an entry that already carries a tag
+    // object is fully satisfied -- there is nothing left to do for it -- and
+    // revisiting it would recurse into a nested embedded profile via
+    // CIccTag::ReadAll(), which is exactly the unbounded descent this exists to
+    // avoid (e.g. a second call after the first already loaded every entry).
+    icLoadTagsShallow
+  };
+
   // Shared body for ReadTags()/FindAllTags(): resolves the IO to use, short-circuits
   // when there is no IO, saves/restores the IO position around the load loop, and
-  // either aborts on the first LoadTag failure (bStopOnError) or attempts every tag
+  // (per mode) either aborts on the first LoadTag failure and revisits already-loaded
+  // entries, or skips already-loaded entries and attempts every remaining tag
   // regardless of earlier failures.
-  bool loadTags(CIccProfile *pProfile, bool bReadAll, bool bStopOnError);
+  bool loadTags(CIccProfile *pProfile, IccLoadTagsMode mode);
   bool DetachTag(CIccTag *pTag);
 
   CIccIO* ConnectSubProfile(CIccIO *pIO, bool bOwnIO) const;

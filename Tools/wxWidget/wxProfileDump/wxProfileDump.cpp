@@ -769,11 +769,12 @@ void MyChild::OnTagClicked(wxListEvent& event)
                 CIccProfile *pCopy = pInner->NewCopy();
 
                 if (pCopy) {
+                    // GetTagSigName() falls back to GetUnknownName() for a signature it
+                    // does not recognize, which always yields a non-empty "Unknown '...'"
+                    // string -- there is no empty-string case to guard against here.
                     CIccInfo Fmt;
                     wxString sTagSignature = Fmt.GetTagSigName(tagSig);
-                    wxString sBracket = sTagSignature.IsEmpty()
-                        ? wxString(_T("[embedded]"))
-                        : (_T("[") + sTagSignature + _T("]"));
+                    wxString sBracket = _T("[") + sTagSignature + _T("]");
                     my_frame->ShowProfile(pCopy, GetTitle() + _T(" ") + sBracket, wxEmptyString);
                     return;
                 }
