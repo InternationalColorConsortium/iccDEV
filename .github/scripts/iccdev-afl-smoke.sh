@@ -27,7 +27,24 @@ build_dir="${AFL_BUILD_DIR:-$repo_root/build-afl-smoke}"
 work_dir="${AFL_WORK_DIR:-$repo_root/.afl-smoke}"
 build_type="${AFL_BUILD_TYPE:-Debug}"
 exec_timeout_ms="${AFL_EXEC_TIMEOUT_MS:-30000}"
-max_seed_bytes="${AFL_MAX_SEED_BYTES:-49152}"
+# Raised from 49152 to admit the whole committed seed corpus, matching
+# cfl/build.sh after #2120. Exactly one committed seed exceeds the old default --
+# .github/ci/test-data/fuzz-clut-hbo-69197729.icc at 61,015 bytes -- so every AFL
+# smoke run staged that file and then deleted it again before fuzzing.
+#
+# What the loss costs the seven fork/exec CLI targets here is NOT measured. #2120
+# measured it for the in-process CFL writer targets -- 1 of 11 seeds reaches
+# RenderRaster and it was the pruned one -- and deliberately did not extend the
+# claim to the CLI wrappers, which consume a profile differently. The reason to
+# raise the cap is narrower: the seed is a deliberate regression artifact -- added
+# by #1517 alongside the tool it exercises, and named as a CLUT heap-buffer-overflow
+# reproducer -- and a cap that quietly removes one turns a coverage decision into an
+# accident. AFL_MAX_SEED_BYTES still lowers the cap per-run, but only as far as the
+# largest committed seed: below that, prune_large_seeds refuses the run instead of
+# dropping the seed, so a lane that genuinely wants smaller inputs has to remove the
+# seed deliberately. That refusal is the explicit decision #2120 asked for, which is
+# why this knob is not a free dial downwards.
+max_seed_bytes="${AFL_MAX_SEED_BYTES:-262144}"
 skip_build=0
 apply_patches="${ICCDEV_AFL_APPLY_PATCHES:-0}"
 patch_dir="${ICCDEV_AFL_PATCH_DIR:-$repo_root/.github/ci/fuzz-patches/afl}"
@@ -252,11 +269,19 @@ fi
 seed_root="$work_dir/seeds"
 seed_inventory_tsv="$work_dir/seed-inventory.tsv"
 skipped_seeds_tsv="$work_dir/skipped-seeds.tsv"
+committed_test_data="$repo_root/.github/ci/test-data"
+committed_afl_cube="$repo_root/.github/ci/afl-seeds/cube"
+# Every committed root the staging below draws from. prune_large_seeds resolves a
+# staged seed back through this same list, so a root added here is protected there in
+# the same edit. Keeping the two apart is how the guard would fail open -- silently
+# back to the old rm, which is the regression #2120 exists to prevent.
+committed_seed_roots=("$committed_test_data" "$committed_afl_cube")
+
 mkdir -p "$seed_root/icc" "$seed_root/xml" "$seed_root/json" "$seed_root/cube"
-cp "$repo_root"/.github/ci/test-data/*.icc "$seed_root/icc/"
-cp "$repo_root"/.github/ci/test-data/*.xml "$seed_root/xml/" 2>/dev/null || true
-cp "$repo_root"/.github/ci/test-data/test-identity.cube "$seed_root/cube/"
-cp "$repo_root"/.github/ci/afl-seeds/cube/*.cube "$seed_root/cube/"
+cp "$committed_test_data"/*.icc "$seed_root/icc/"
+cp "$committed_test_data"/*.xml "$seed_root/xml/" 2>/dev/null || true
+cp "$committed_test_data/test-identity.cube" "$seed_root/cube/"
+cp "$committed_afl_cube"/*.cube "$seed_root/cube/"
 
 if [ -x "$build_dir/Tools/IccToXml/iccToXml" ]; then
     first_icc="$(find "$seed_root/icc" -maxdepth 1 -type f -name '*.icc' | sort | head -n 1)"
@@ -280,17 +305,64 @@ fi
 printf 'kind\tsize\tfile\n' > "$seed_inventory_tsv"
 printf 'kind\tsize\tfile\treason\n' > "$skipped_seeds_tsv"
 
+# Report the committed source of a staged seed, if it has one, walking the same
+# committed_seed_roots the staging above copied from. Everything else in the seed
+# tree is generated per run -- generated-from-seed.{xml,json} and the
+# minimal.{xml,json} fallbacks -- and only the committed ones are protected below,
+# which is why this resolves a real path rather than returning a flag: the error
+# names the file a maintainer would have to act on.
+committed_seed_source() {
+    local base="$1"
+    local root=""
+
+    for root in "${committed_seed_roots[@]}"; do
+        if [ -f "$root/$base" ]; then
+            printf '%s\n' "$root/$base"
+            return 0
+        fi
+    done
+    return 1
+}
+
 prune_large_seeds() {
     local kind="$1"
     local dir="$2"
     local file=""
     local size=""
+    local committed_source=""
 
     [ -d "$dir" ] || return 0
     while IFS= read -r -d '' file; do
         size="$(stat -c '%s' "$file")"
         printf '%s\t%s\t%s\n' "$kind" "$size" "$file" >> "$seed_inventory_tsv"
         if [ "$size" -gt "$max_seed_bytes" ]; then
+            # A seed committed under .github/ci is a deliberate regression
+            # artifact, not corpus bloat: dropping one removes whatever defect
+            # class it was added to cover while the run still reports execs and a
+            # clean exit. #2120 is exactly that -- the corpus's only CLUT seed was
+            # staged and deleted on every run for as long as the cap sat below it,
+            # traced only by the TSV line below and the summary it feeds.
+            #
+            # So committed seeds are never pruned, they are a hard error, as in
+            # cfl/build.sh. Adding an oversized regression seed now forces an
+            # explicit decision about the cap. Generated seeds still prune
+            # silently, which is what the cap is for.
+            if committed_source="$(committed_seed_source "$(basename "$file")")"; then
+                # Record it before refusing. ci-afl-smoke.yml summarizes this TSV
+                # under "Seed Size Review" with if: always(), so without a row here
+                # an aborted run reports "No oversized AFL smoke seeds were skipped."
+                # -- the reassuring branch -- on the very run an oversized seed
+                # stopped, leaving the reason only in the raw step log.
+                printf '%s\t%s\t%s\tcommitted-oversized-hard-error\n' "$kind" "$size" "$file" >> "$skipped_seeds_tsv"
+                echo "ERROR: committed seed exceeds AFL_MAX_SEED_BYTES and would be dropped:" >&2
+                echo "       $committed_source is $size bytes, cap is $max_seed_bytes" >&2
+                echo "       Raise AFL_MAX_SEED_BYTES, or remove the seed deliberately (#2120)." >&2
+                # exit 2, not 1: this script already spells configuration rejection
+                # as 2 (the argument checks above, the unsupported-target case below),
+                # and 1 is what a real fuzzing failure returns. A caller can then tell
+                # "nothing was fuzzed, the cap is wrong" from "AFL found something".
+                exit 2
+            fi
             printf '%s\t%s\t%s\tlarger-than-%s-bytes\n' "$kind" "$size" "$file" "$max_seed_bytes" >> "$skipped_seeds_tsv"
             rm -f -- "$file"
         fi
