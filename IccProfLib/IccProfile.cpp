@@ -918,10 +918,11 @@ bool CIccProfile::ReadTags(CIccProfile* pProfile)
 *  tag costs only its own entry.
 *
 * Return:
-*  true - every tag was already loaded or was successfully loaded by this call,
-*  false - if there was no IO to load from, true iff every tag was already
-*   loaded; otherwise, true iff every not-yet-loaded tag loaded successfully
-*   (false if at least one attempted load failed).
+*  true - every tag is loaded: either they all already were, or every load
+*   attempted by this call succeeded.
+*  false - there was no IO to load from and at least one tag was still
+*   unloaded, or at least one load attempted by this call failed.  Tags that
+*   did load are loaded either way.
 *******************************************************************************
 */
 bool CIccProfile::FindAllTags()
