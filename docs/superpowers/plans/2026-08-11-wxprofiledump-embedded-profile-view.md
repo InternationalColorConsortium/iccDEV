@@ -4,7 +4,7 @@
 
 **Goal:** Make double-clicking an `embeddedV5ProfileTag` in wxProfileDump open the embedded profile in a normal profile window instead of a text dump of the tag.
 
-**Architecture:** Split the window-creation half of `MyFrame::OpenFile` into a reusable `MyFrame::ShowProfile`, hide the two file-path-dependent buttons when a window has no path, and branch in `MyChild::OnTagClicked` on `icSigEmbeddedProfileType` to `ReadAll()` + `NewCopy()` the embedded profile and hand the copy to `ShowProfile`.
+**Architecture:** Split the window-creation half of `MyFrame::OpenFile` into a reusable `MyFrame::ShowProfile`, hide the two file-path-dependent buttons when a window has no path, and branch in `MyChild::OnTagClicked` on `icSigEmbeddedProfileType` to load the embedded profile and hand a copy to `ShowProfile`. Task 3 first did this with `ReadAll()` + `NewCopy()`; Task 4 replaced `ReadAll()` with a one-level per-tag `FindTag` load after measurement showed `ReadAll()` was unbounded in nesting depth (see Task 4).
 
 **Tech Stack:** C++, wxWidgets 3.3 (MSW), IccProfLib, CMake + MSVC (multi-config).
 
@@ -12,14 +12,24 @@
 
 ## Global Constraints
 
-- Only two files change: `Tools/wxWidget/wxProfileDump/wxProfileDump.cpp` and
-  `Tools/wxWidget/wxProfileDump/wxProfileDump.h`. No changes to `IccProfLib`.
-- **wxProfileDump has no automated test harness.** The CMake target
-  `iccDumpProfileGui` builds a `WIN32_EXECUTABLE` GUI app with no test
-  registration in `Build/Cmake/Testing/CMakeLists.txt`. There is no way to write
-  a failing unit test first for these changes. Every task is therefore verified
-  by (a) a clean compile and (b) explicit manual GUI steps. Do not invent a test
-  framework for this tool as part of this work.
+- `IccProfLib` is not modified by this work. The wxProfileDump-side changes
+  (Task 3, then Task 4) are deliberately scoped to stop `wxProfileDump` from
+  reaching the unbounded `ReadAll()` path rather than fixing the depth guard
+  gap inside `IccProfLib` itself; that gap is left open on purpose.
+- **wxProfileDump's window-opening behavior has no automated GUI test
+  harness.** The CMake target `iccDumpProfileGui` builds a `WIN32_EXECUTABLE`
+  GUI app with no test registration in `Build/Cmake/Testing/CMakeLists.txt`,
+  and there is no way to write a failing unit test first for the window
+  itself. Task 3 and Task 4 are therefore verified by (a) a clean compile and
+  (b) explicit manual GUI steps. This does not mean no automated coverage is
+  possible at all: a headless regression test in `.github/ci/regression/`
+  that exercises the `IccProfLib` invariants those GUI changes depend on
+  (tag-loading order, copy independence, one-level-only loading) is in scope
+  and is what Task 4 adds.
+- The plan's manual-GUI-check steps below (Task 1 Step 4, Task 2 Step 3, Task
+  3 Steps 4-5) reference `Testing/hybrid/BeyondRGB.icc`. That file is
+  untracked and present only on the author's machine -- it is not a repo
+  fixture anyone else can rely on to reproduce those steps.
 - Build command (from repo root), used unchanged in every task:
   `cmake --build out/vs2022-x64 --target iccDumpProfileGui --config Release`
   Binary lands at `out/vs2022-x64/bin/Release/iccDumpProfileGui.exe`.
@@ -286,11 +296,29 @@ Library facts this task depends on, all verified against the current tree:
   `wxProfileDump.cpp` does not currently include.
 - `CIccTagEmbeddedProfile::Read` (`IccProfLib/IccTagEmbedIcc.cpp:257`) `Attach`es
   rather than reads when the parent profile has IO, so the embedded profile's
-  tags are unread until `ReadAll()` (line 294) pulls them through.
+  tags are unread until something pulls them through.
 - `CIccProfile::NewCopy()` (`IccProfLib/IccProfile.h:152`) forwards to the copy
   constructor at `IccProfLib/IccProfile.cpp:130`, which deep-copies every
   *loaded* tag and sets `entry.pTag = NULL` for tag table entries with no loaded
-  tag. Hence `ReadAll()` must run first.
+  tag. Hence the tags must be loaded before `NewCopy()`.
+- **Load one level with `FindTag`, not the whole tree with `ReadAll()`.**
+  `CIccTagEmbeddedProfile::ReadAll()` recursively pulls every nested embedded
+  profile, and the depth guard in `CIccTagEmbeddedProfile::Read`
+  (`IccProfLib/IccTagEmbedIcc.cpp:218`) does not bound that path: `LoadTag`
+  (`IccProfLib/IccProfile.cpp:1431-1441`) lets `Read()` return -- destroying
+  its guard -- before calling `ReadAll()`, so the guard unwinds at every level
+  while the C++ stack keeps growing. Measured cost is roughly `O(depth^2.7)`:
+  a 90 KB crafted profile (depth 250) freezes the GUI for 2.3s, and a 359 KB
+  one (depth 2000) for over ten minutes, with no progress indicator and no
+  cancel -- reachable by design, since this tool exists to inspect untrusted
+  profiles. `CIccProfile::FindTag` (`IccProfLib/IccProfile.cpp:436`) goes
+  through `LoadTag` with `bReadAll=false` instead, loading one level and never
+  entering the recursive descent; cost is flat in depth (86ms at depth 2000).
+  **This task's own commit (below) still uses `ReadAll()`; Task 4 replaces it
+  with the one-level `FindTag` load described here after this cost was
+  measured post-hoc. See Task 4 for the actual code and the accepted
+  trade-off (a profile nested two levels deep falls back to the tag dump
+  instead of opening a second window).**
 - `my_frame` is the file-scope `MyFrame*` at `wxProfileDump.cpp:129`, already
   used as the `MyChild` parent inside `ShowProfile`.
 
@@ -374,7 +402,9 @@ With the same build:
    dump appears, unchanged.
 2. In the embedded window, double-click one of its tag rows. Expected: a text
    dump of that tag appears (or, if that profile nests another embedded
-   profile, a further profile window).
+   profile, a further profile window). **Superseded by Task 4**: with the
+   one-level load, a profile nested two levels deep no longer opens a window
+   here -- it shows the tag dump instead. See Task 4's accepted trade-off.
 3. With the embedded window still open, close the outer `BeyondRGB` window
    first. Then scroll the embedded window's tag list, double-click a tag in it,
    close the dump, and close the embedded window. Expected: no crash and no

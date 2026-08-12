@@ -31,21 +31,43 @@ profile in a normal profile window.
 
 ## Library constraints
 
-Two facts about `IccProfLib` shape the design:
+Three facts about `IccProfLib` shape the design:
 
 1. **Embedded profiles are lazily read.** When the outer profile is opened from
    a file, `CIccTagEmbeddedProfile::Read` (`IccProfLib/IccTagEmbedIcc.cpp:257`)
    takes the `pProfile->HasIO()` branch and `Attach`es the embedded profile to a
    `CIccEmbedIO` wrapping the parent's IO rather than reading its tags. The
-   embedded profile is therefore not usable standalone until
-   `CIccTagEmbeddedProfile::ReadAll()` has pulled its tags through that IO.
+   embedded profile is therefore not usable standalone until its tags have been
+   pulled through that IO.
 
 2. **`CIccProfile`'s copy constructor deep-copies only loaded tags.**
    `CIccProfile::CIccProfile(const CIccProfile&)` (`IccProfLib/IccProfile.cpp:130`)
    copies each entry in `m_TagVals` via `NewCopy()`, and sets `entry.pTag = NULL`
-   for any tag table entry with no corresponding loaded tag. So `ReadAll()` must
-   precede `NewCopy()`, or the copy comes back with an intact tag table and no
-   tag data.
+   for any tag table entry with no corresponding loaded tag. So the tags must be
+   loaded before `NewCopy()`, or the copy comes back with an intact tag table
+   and no tag data.
+
+3. **`ReadAll()` is unbounded, and the depth guard does not cover it.**
+   `CIccTagEmbeddedProfile::ReadAll()` (`IccProfLib/IccTagEmbedIcc.cpp:294`)
+   recursively pulls the entire nested tree of embedded profiles. The depth
+   guard (`EmbedDepthGuard`) lives in `CIccTagEmbeddedProfile::Read`
+   (`IccProfLib/IccTagEmbedIcc.cpp:218`), not in `ReadAll`. In `LoadTag`
+   (`IccProfLib/IccProfile.cpp:1431-1441`), `pTag->Read(...)` **returns** --
+   destroying its guard -- before `pTag->ReadAll()` is called, so the guard's
+   counter unwinds at every level while the C++ stack keeps growing. Measured:
+   `ReadAll()` at nesting depth 9 returns `TRUE` even though
+   `kMaxEmbeddedProfileDepth` is 8; depth 1000 also succeeds. The cost grows
+   roughly as `O(depth^2.7)` with nothing bounding it: a 90 KB crafted profile
+   (depth 250) freezes the GUI for 2.3s, depth 1000 (180 KB) for 95.7s, and
+   depth 2000 (359 KB) for over ten minutes -- with no progress indicator and
+   no cancel. `wxProfileDump` exists to inspect profiles that are not trusted,
+   so this is reachable by design, not just a theoretical concern.
+
+   `CIccProfile::FindTag` (`IccProfLib/IccProfile.cpp:436`) goes through
+   `LoadTag` with `bReadAll=false`, so it loads **one level** and never enters
+   the recursive descent. Its cost is flat in nesting depth (86ms at depth
+   2000 in the same measurement), and the depth guard becomes irrelevant to
+   this path rather than needing a fix.
 
 ## Design
 
@@ -81,30 +103,54 @@ against an in-memory `CIccProfile` is out of scope.
 
 ### 3. Branch in `MyChild::OnTagClicked`
 
-When the activated tag is an embedded profile, open it as a profile instead of
-dumping it:
+When the activated tag is an embedded profile, load it one level (per tag, via
+`FindTag`, not `ReadAll()`) and open it as a profile instead of dumping it:
 
 ```
 pTag = m_pIcc->FindTag(tagSig)
 if pTag and pTag->GetType() == icSigEmbeddedProfileType:
     pEmbedTag = static_cast<CIccTagEmbeddedProfile*>(pTag)
-    pEmbedTag->ReadAll()
-    if pEmbedTag->GetProfile():
-        pCopy = pEmbedTag->GetProfile()->NewCopy()
-        if pCopy:
-            my_frame->ShowProfile(pCopy, GetTitle() + " [embedded]", wxEmptyString)
-            return
+    pInner = pEmbedTag->GetProfile()
+    if pInner:
+        sigs = [entry.TagInfo.sig for entry in pInner->m_Tags]   // collect first
+        for sig in sigs:
+            pInner->FindTag(sig)                                 // then load, one level
+
+        nLoaded = count of pInner->m_Tags entries with pTag != NULL
+        if nLoaded:
+            pCopy = pInner->NewCopy()
+            if pCopy:
+                my_frame->ShowProfile(pCopy, GetTitle() + " [embedded]", wxEmptyString)
+                return
 // fall through to the existing MyTagDialog dump
 ```
+
+Signatures are collected into a vector before any `FindTag` call, rather than
+calling `FindTag` while iterating `m_Tags` directly, because `LoadTag` mutates
+`m_Tags` entries in place.
 
 `my_frame` is the existing file-scope `MyFrame*` in `wxProfileDump.cpp` that
 `OpenFile` already uses as the `MyChild` parent, so no new plumbing from child
 to parent frame is needed.
 
-If the tag holds no profile, if `ReadAll()` fails, or if `NewCopy()` returns
-NULL, control falls through to the existing `MyTagDialog`. A malformed embedded
-tag therefore remains inspectable as a text dump rather than producing an error
-box.
+If the tag holds no profile, if the per-tag load leaves `nLoaded == 0`, or if
+`NewCopy()` returns NULL, control falls through to the existing `MyTagDialog`.
+A malformed embedded tag therefore remains inspectable as a text dump rather
+than producing an error box.
+
+**Accepted trade-off: a profile nested two levels deep shows the dump, not a
+window.** Loading one level leaves any embeddedV5ProfileTag *nested inside*
+`pInner` attached but unread. `NewCopy()` then copies that nested tag with no
+loaded tags and `m_pAttachIO = NULL`, so there is nothing to populate a second
+window from -- `nLoaded` for that nested profile is 0. Rather than open an
+empty window, `OnTagClicked` falls through to `MyTagDialog` for that case.
+`CIccTagEmbeddedProfile::Describe` (`IccProfLib/IccTagEmbedIcc.cpp:372`) reads
+`m_pProfile->m_Header` and the tag table directly and does not need loaded
+tags, so the dump still works. The user experience is: the first level opens a
+real profile window; deeper levels show the dump they would have gotten before
+this feature existed. Nothing regresses and no empty window is ever shown.
+Re-plumbing window ownership so a deeper level can open its own window is a
+separate decision, out of scope here.
 
 Requires including `IccTagEmbedIcc.h` in `wxProfileDump.cpp`.
 
@@ -116,15 +162,29 @@ The new window displays a deep copy, not the tag's profile. Consequences:
   `delete m_pIcc`. No double free with the tag's own `delete m_pProfile`.
 - The parent window may be closed while the embedded view is open. The copy has
   no dependency on the parent profile or its IO.
-- Nested embedded profiles work without further change: the new window's tag
-  list uses the same `MyChild::OnTagClicked` handler.
+- A nested embedded profile *one level down* opens a window the same way,
+  through the same `MyChild::OnTagClicked` handler. A profile nested *two*
+  levels down does not: see the accepted trade-off in §3. It is reached
+  through an already-copied profile with no IO, so nothing loads for it, and
+  it falls through to the tag dump instead.
 
 The cost is one profile's worth of duplicated memory per opened embedded view,
 which is negligible for this tool.
 
 ## Testing
 
-wxProfileDump has no automated test harness, so verification is manual:
+wxProfileDump itself has no automated GUI test harness, so the window-opening
+behavior is still verified manually. The library-level invariants the GUI
+relies on -- that a copy taken before any load carries an intact tag table
+with unloaded (`pTag == NULL`) entries, that the one-level `FindTag` load
+populates a copy, that the copy is independent of its parent, that the load
+never descends past one level, and that the `nLoaded == 0` condition driving
+the second-level dump fallback actually occurs -- are covered by a headless
+regression test,
+`.github/ci/regression/embedded-profile-onelevel-load.cpp`, registered in
+`Build/Cmake/Testing/CMakeLists.txt` as `iccdev.embedded-profile-onelevel-load`.
+
+Manual verification:
 
 1. Open a profile containing an `embeddedV5` tag. Double-click that tag.
    The header fields and tag list of the embedded profile populate, and the
@@ -135,6 +195,10 @@ wxProfileDump has no automated test harness, so verification is manual:
    interact with and close the embedded window. No crash.
 4. Open a plain (non-embedded) profile from a file and confirm the header, tag
    list, `Validate Profile`, and `Round Trip Report` behave as before.
+5. Double-click a tag row inside the embedded window that itself holds a
+   further-nested `embeddedV5` tag. Confirm the text dump appears (not a
+   window with an empty tag list), and that the dump's content is a
+   reasonable rendering of that nested profile's header and tag table.
 
 ## Out of scope
 

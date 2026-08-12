@@ -741,23 +741,44 @@ void MyChild::OnTagClicked(wxListEvent& event)
     // text dump of the tag, so give it a window of its own.
     if (pTag && pTag->GetType() == icSigEmbeddedProfileType) {
         CIccTagEmbeddedProfile *pEmbed = (CIccTagEmbeddedProfile*)pTag;
+        CIccProfile *pInner = pEmbed->GetProfile();
 
-        // When the outer profile came from a file the embedded profile is only
-        // attached to that file's IO, so its tags have to be pulled in before
-        // the copy below - a copy only carries tags that are already loaded.
-        if (pEmbed->ReadAll() && pEmbed->GetProfile()) {
-            // The new window owns and frees whatever profile it is given, and
-            // the tag owns its own, so hand over an independent deep copy.
-            // This also lets this window be closed while that one stays open.
-            CIccProfile *pCopy = pEmbed->GetProfile()->NewCopy();
+        if (pInner) {
+            // Load one level of the embedded profile, tag by tag.  FindTag goes
+            // through LoadTag with bReadAll=false, so a nested embedded profile
+            // is attached but not descended into.  ReadAll() would pull the
+            // whole nested tree at O(depth^2.7) -- a crafted profile wedges the
+            // UI for minutes -- and the depth guard in
+            // CIccTagEmbeddedProfile::Read does not bound that path.  Loading
+            // per tag also means one unreadable tag costs only its own row
+            // instead of the whole window.
+            std::vector<icTagSignature> sigs;
+            TagEntryList::iterator i;
+            for (i = pInner->m_Tags.begin(); i != pInner->m_Tags.end(); ++i)
+                sigs.push_back((icTagSignature)i->TagInfo.sig);
 
-            if (pCopy) {
-                my_frame->ShowProfile(pCopy, GetTitle() + _T(" [embedded]"), wxEmptyString);
-                return;
+            for (size_t n = 0; n < sigs.size(); n++)
+                (void)pInner->FindTag(sigs[n]);
+
+            // A profile nested two levels down is reached through an already
+            // copied profile, which carries no IO, so nothing loads here.  Show
+            // the tag dump rather than a window with an empty tag list.
+            int nLoaded = 0;
+            for (i = pInner->m_Tags.begin(); i != pInner->m_Tags.end(); ++i) {
+                if (i->pTag)
+                    nLoaded++;
+            }
+
+            if (nLoaded) {
+                CIccProfile *pCopy = pInner->NewCopy();
+
+                if (pCopy) {
+                    my_frame->ShowProfile(pCopy, GetTitle() + _T(" [embedded]"), wxEmptyString);
+                    return;
+                }
             }
         }
-        // Anything went wrong - fall through to the tag dump, which at least
-        // shows what is there.
+        // Nothing loadable, or the copy failed - fall through to the tag dump.
     }
 
     MyTagDialog dialog(this, m_pIcc, tagSig, pTag);
