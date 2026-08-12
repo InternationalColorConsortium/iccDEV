@@ -6187,6 +6187,24 @@ if(TARGET iccApplySearch)
    )
 endif()
 
+# The iccApplyProfiles third of the same family (#2126). Both of its usages
+# dropped trailing arguments and still exited 0, but by different routes: "-cfg"
+# ignored any tail, while the positional usage ignored only an odd leftover token
+# because CIccCfgProfileSequence::fromArgs() consumes the profile group in pairs.
+# Timeout matches the two siblings: although every case here runs a real TIFF
+# transform rather than a text data file, the fixture is an 8x8 image and the
+# whole script measured under 1s against an ASAN+UBSAN build, so it needs no
+# larger budget than they do.
+if(TARGET iccApplyProfiles)
+  iccdev_add_script_test(
+    iccdev.applyprofiles-cli-args
+    120
+    "iccdev;cmm;config;cli;security;issue-1674;issue-2126;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applyprofiles-cli-args-regression.sh"
+   )
+endif()
+
 # Legacy v2 namedColor2Type stores each rootName in a fixed 32-byte field. A
 # malformed profile can fill all 32 bytes without a NUL terminator; the reader
 # must force termination before iccApplyNamedCmm echoes the selected name. The

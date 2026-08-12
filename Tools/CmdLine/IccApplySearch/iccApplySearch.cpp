@@ -78,6 +78,7 @@
 #include "IccSearch.h"
 #include "IccConnect.h"
 #include "../IccCmdLineUtil.h"
+#include <cstdlib>  // EXIT_FAILURE, used by the -cfg argument guard added in #2075
 #include <memory>
 #include <vector>
 #if !defined(_WIN32)
