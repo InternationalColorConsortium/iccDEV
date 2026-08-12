@@ -354,6 +354,143 @@ PY
 oversize_document
 
 ###############################################################################
+# 4. A refused array allocation must not be written through (issue #2106)
+###############################################################################
+#
+# CIccTagXYZ::SetSize refuses more than 65536 entries, and on that path it frees
+# the array, sets the pointer to NULL and returns false. CIccTagXmlXYZ::ParseXml
+# ignored the result and wrote m_XYZ[0..n-1] anyway, so a document holding one
+# entry more than the cap segfaulted iccFromXml. Nothing about it is exotic: the
+# fixture below is ordinary well-formed XML, under 3 MB, that violates no parser
+# limit -- which is why it belongs beside the hardening cases above rather than
+# among them. Neither libxml2 nor the document-size bound stops it.
+#
+# The assertion is not "exit non-zero". Every fixture in this script exits
+# non-zero, and a process killed inside ParseXml exits non-zero too. It is that
+# iccFromXml reaches its OWN error path and names the tag it could not parse:
+# that line is printed by the caller after ParseXml returns, so a crash cannot
+# produce it. Measured before the fix, the log was empty and the shell reported
+# signal 11.
+
+echo "=== Array sizing refusals are not written through ==="
+
+# Kept in step with CIccTagXYZ::SetSize in IccProfLib/IccTagBasic.cpp. A build
+# that retunes the cap makes the over-cap fixture parse successfully, which is
+# reported as a skip below rather than as a failure.
+XYZ_MAX_ENTRIES="${ICC_XYZ_MAX_ENTRIES:-65536}"
+
+# The diagnostic CIccProfileXml prints when a tag's ParseXml returns false.
+XYZ_TAG_DIAG='Unable to Parse .*XYZType.* Tag'
+
+write_xyz_document() {
+  python3 - "$1" "$2" <<'PY'
+import sys
+path, n = sys.argv[1], int(sys.argv[2])
+with open(path, "w") as f:
+    f.write('<IccProfile>\n  <Header>\n'
+            '    <ProfileVersion>4.30</ProfileVersion>\n'
+            '    <ProfileDeviceClass>mntr</ProfileDeviceClass>\n'
+            '    <DataColourSpace>RGB </DataColourSpace>\n'
+            '    <PCS>XYZ </PCS>\n'
+            '    <RenderingIntent>Perceptual</RenderingIntent>\n'
+            '    <PCSIlluminant>\n'
+            '      <XYZNumber X="0.9642" Y="1.0" Z="0.8249"/>\n'
+            '    </PCSIlluminant>\n'
+            '  </Header>\n  <Tags>\n    <XYZType>\n'
+            '      <TagSignature>wtpt</TagSignature>\n')
+    f.write('      <XYZNumber X="0.5" Y="0.5" Z="0.5"/>\n' * n)
+    f.write('    </XYZType>\n  </Tags>\n</IccProfile>\n')
+PY
+}
+
+xyz_array_over_cap() {
+  local name="xml-xyz-array-over-cap-not-written-through"
+  local file="$OUTDIR/xyz-over-cap.xml"
+  local logfile="$OUTDIR/${name}.log"
+  local status
+
+  if [ ! -x "$FROMXML" ]; then
+    skip "$name" "iccFromXml not built"
+    return
+  fi
+
+  write_xyz_document "$file" $((XYZ_MAX_ENTRIES + 1))
+
+  "$FROMXML" "$file" "$OUTDIR/${name}.icc" >"$logfile" 2>&1
+  status=$?
+
+  # An accepted document means the compiled cap is not the one this case was
+  # written against, so it is testing nothing. Report that rather than a
+  # failure -- a reverted fix crashes here, it does not succeed.
+  if [ "$status" -eq 0 ]; then
+    skip "$name" "$((XYZ_MAX_ENTRIES + 1)) entries were accepted; the ${XYZ_MAX_ENTRIES}-entry cap has moved"
+    rm -f "$file"
+    return
+  fi
+
+  if ! grep -qE "$XYZ_TAG_DIAG" "$logfile"; then
+    if [ "$status" -ge 128 ]; then
+      fail "$name" "iccFromXml was killed by signal $((status - 128)) writing through a refused allocation"
+    else
+      fail "$name" "iccFromXml exited $status without reporting the tag it could not parse"
+    fi
+    rm -f "$file"
+    return
+  fi
+  check_sanitizers "$name" "$logfile" || { rm -f "$file"; return; }
+  pass "$name ($((XYZ_MAX_ENTRIES + 1)) entries refused at the tag, process intact)"
+  rm -f "$file"
+}
+
+# The control for the case above. Without it, a change that made every XYZType
+# tag fail to parse would leave the over-cap case passing while the tag stopped
+# working entirely. This asserts the fixture sits exactly on the boundary: one
+# entry fewer and the same tag must still parse.
+xyz_array_at_cap() {
+  local name="xml-xyz-array-at-cap-still-parses"
+  local file="$OUTDIR/xyz-at-cap.xml"
+  local logfile="$OUTDIR/${name}.log"
+
+  if [ ! -x "$FROMXML" ]; then
+    skip "$name" "iccFromXml not built"
+    return
+  fi
+
+  write_xyz_document "$file" "$XYZ_MAX_ENTRIES"
+
+  # Exit status is deliberately not asserted: this fixture is a structurally
+  # incomplete profile, so what iccFromXml returns for it is a question about its
+  # validation policy, not about the tag. The tag is what is under test.
+  "$FROMXML" "$file" "$OUTDIR/${name}.icc" >"$logfile" 2>&1
+
+  if grep -qE "$XYZ_TAG_DIAG" "$logfile"; then
+    fail "$name" "the tag was refused at exactly $XYZ_MAX_ENTRIES entries, so the over-cap case proves nothing"
+    rm -f "$file"
+    return
+  fi
+
+  # The absence of the diagnostic cannot carry this on its own. If some later
+  # change made iccFromXml give up earlier -- refusing the document while reading
+  # the header, say -- the diagnostic would never be printed, this control would
+  # stay green, and the over-cap case would silently lose the pairing that is the
+  # only reason this control exists. So require positive evidence that the tool
+  # got far enough to emit a profile. A validation policy that stops writing one
+  # for this fixture turns this red, which is the correct outcome: the control is
+  # no longer controlling anything and needs re-examining, not passing quietly.
+  if [ ! -s "$OUTDIR/${name}.icc" ]; then
+    fail "$name" "iccFromXml wrote no profile, so nothing proves it reached the tag at all"
+    rm -f "$file"
+    return
+  fi
+  check_sanitizers "$name" "$logfile" || { rm -f "$file"; return; }
+  pass "$name ($XYZ_MAX_ENTRIES entries parsed, profile written)"
+  rm -f "$file"
+}
+
+xyz_array_over_cap
+xyz_array_at_cap
+
+###############################################################################
 
 echo
 echo "=== Summary ==="
