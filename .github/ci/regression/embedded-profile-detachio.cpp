@@ -1,3 +1,7 @@
+// Copyright (c) 2026 The International Color Consortium. All rights reserved.
+// Licensed under the BSD 3-Clause "New" or "Revised" License; see the ICC
+// Software License in the repository root and CONTRIBUTING.md.
+//
 // Regression test for CIccTagEmbeddedProfile::DetachIO() (IccProfLib/IccTagEmbedIcc.h/.cpp).
 //
 // The bug: CIccProfile::Detach() (IccProfLib/IccProfile.cpp:750-773) calls

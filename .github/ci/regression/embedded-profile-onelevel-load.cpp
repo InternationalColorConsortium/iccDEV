@@ -1,3 +1,7 @@
+// Copyright (c) 2026 The International Color Consortium. All rights reserved.
+// Licensed under the BSD 3-Clause "New" or "Revised" License; see the ICC
+// Software License in the repository root and CONTRIBUTING.md.
+//
 // Regression test for the one-level per-tag load that
 // MyChild::OnTagClicked (Tools/wxWidget/wxProfileDump/wxProfileDump.cpp) uses
 // to open an embeddedV5ProfileTag ('ICC5', tag type 'ICCp') in its own
