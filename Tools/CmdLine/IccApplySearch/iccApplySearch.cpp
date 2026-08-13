@@ -447,7 +447,16 @@ int main(int argc, const char* argv[])
     else if (SrcspaceSig == icSigLabPcsData)
       SrcspaceSig = icSigDevLabData;
 
-    if (srcEncoding == icEncodeFloat)
+    // #2150: the iccApplyNamedCmm counterpart of this carve-out, with the same
+    // reasoning -- once the remap above has rewritten the PCS signature to a
+    // device one, ToInternalEncoding() applies the device default:'s 0.0-1.0
+    // clip to its float AND percent cases, so all three encodings whose PCS
+    // range exceeds 0.0-1.0 have to be named here (icEncodeUnitFloat has been
+    // an exact synonym of icEncodeFloat in both PCS arms since #2146; percent
+    // is the same range x100). Fixed here as well as there because the two
+    // tools carry independent copies of this block, not a shared helper.
+    if (srcEncoding == icEncodeFloat || srcEncoding == icEncodeUnitFloat ||
+        srcEncoding == icEncodePercent)
       bClip = false;
   }
 
