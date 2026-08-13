@@ -1639,6 +1639,7 @@ public:
   'Lab '
     icEncodeValue: 0.0 <= L <= 100.0; -128.0 <= a,b <= 127.0
     icEncodeFloat: 0.0 <= L,a,b <= 1.0 - ICC PCS encoding (See ICC Specification)
+    icEncodeUnitFloat: accepted as a synonym of icEncodeFloat (#2146)
     icEncode8BIt: ICC 8 bit Lab Encoding - See ICC Specification
     icEncode16Bit: ICC 16 bit V4 Lab Encoding - See ICC Specification
     icEncode16BitV2: ICC 16 bit V2 Lab Encoding - See ICC Specification
@@ -1647,8 +1648,20 @@ public:
     icEncodeValue: 0.0 <= X,Y,Z < 1.999969482421875
     icEncodePercent: 0.0 <= X,Y,Z < 199.9969482421875
     icEncodeFloat: 0.0 <= L,a,b <= 1.0 - ICC PCS encoding (See ICC Specification
+    icEncodeUnitFloat: accepted as a synonym of icEncodeFloat (#2146). Note the
+      name: this is the PCS encoding, whose external range runs to ~2.0, and
+      neither converter clips it. Only the device spaces above take the 0.0-1.0
+      reading and clip to it.
     icEncode16Bit: ICC 16 bit XYZ Encoding - (icU1Fixed15) See ICC Specification
     icEncode16BitV2: ICC 16 bit XYZ Encoding - (icU1Fixed15) See ICC Specification
+
+  This table lists the encodings each space accepts, not a per-direction
+  contract: ToInternalEncoding() and FromInternalEncoding() do not accept
+  identical sets for every space. They agree for the two PCS spaces above --
+  which is what #2146 restored, icEncodeUnitFloat having been absent from the
+  source side only -- but not everywhere; a device space, for instance, accepts
+  icEncodeValue as a destination while rejecting it as a source unless the
+  space is CLR. Check the relevant switch when the direction matters.
  **************************************************************************
 */
 

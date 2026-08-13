@@ -224,8 +224,11 @@ void Usage()
   // regression greps for that exact line to prove a rejection happened, and
   // printing it here would let usage output satisfy those greps. For the same
   // reason the table is described as listing the per-space sets rather than
-  // "the full set" -- it omits icEncodeUnitFloat for 'Lab '/'XYZ ' and carries
-  // no source/destination axis, so it is a pointer, not a promise.
+  // "the full set" -- it carries no source/destination axis, and the two
+  // converters do not accept identical sets for every space, so it is a
+  // pointer, not a promise. (It also omitted icEncodeUnitFloat for the two PCS
+  // spaces when this note was written; #2146 fixed the source side that
+  // omission described and brought the table into line.)
   printf("    Not every encoding is valid for every colour space: a 'Lab '\n");
   printf("    destination refuses icEncodePercent and an 'XYZ ' destination\n");
   printf("    refuses icEncode8Bit, each rejected when the data is converted\n");

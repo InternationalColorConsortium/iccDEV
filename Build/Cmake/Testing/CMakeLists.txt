@@ -296,6 +296,56 @@ function(iccdev_add_cmmsearch_init_pcc_test)
   endforeach()
 endfunction()
 
+function(iccdev_add_pcs_unitfloat_source_encoding_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPcsUnitFloatSourceEncodingTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pcs-unitfloat-source-encoding.cpp"
+  )
+  target_link_libraries(iccPcsUnitFloatSourceEncodingTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+
+  add_dependencies(check iccPcsUnitFloatSourceEncodingTest)
+
+  # No fixture and no profile: the assertions call the two static encoding
+  # converters directly, so nothing is read from disk and the whole test is a
+  # few dozen scalar conversions. The 120 timeout matches its siblings rather
+  # than reflecting any measured need.
+  if(WIN32)
+    add_test(
+      NAME iccdev.pcs-unitfloat-source-encoding
+      COMMAND "$<TARGET_FILE:iccPcsUnitFloatSourceEncodingTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.pcs-unitfloat-source-encoding
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccPcsUnitFloatSourceEncodingTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.pcs-unitfloat-source-encoding PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;cmm;encoding;issue-2146;regression"
+  )
+  if(WIN32)
+    set(_pcs_unitfloat_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPcsUnitFloatSourceEncodingTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pcs_unitfloat_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pcs-unitfloat-source-encoding PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pcs_unitfloat_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_ndlut_input_channel_mismatch_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -4680,6 +4730,7 @@ if(WIN32)
   iccdev_add_cmmsearch_init_pcc_test()
   iccdev_add_cmmsearch_rebegin_test()
   iccdev_add_ndlut_input_channel_mismatch_test()
+  iccdev_add_pcs_unitfloat_source_encoding_test()
   iccdev_add_embedio_read8_bounds_test()
   iccdev_add_embedded_profile_onelevel_load_test()
   iccdev_add_embedded_profile_detachio_test()
@@ -4958,6 +5009,7 @@ iccdev_add_iccconnect_config_parser_test()
 iccdev_add_cmmsearch_init_pcc_test()
 iccdev_add_cmmsearch_rebegin_test()
 iccdev_add_ndlut_input_channel_mismatch_test()
+iccdev_add_pcs_unitfloat_source_encoding_test()
 iccdev_add_embedio_read8_bounds_test()
 iccdev_add_embedded_profile_onelevel_load_test()
 iccdev_add_embedded_profile_detachio_test()

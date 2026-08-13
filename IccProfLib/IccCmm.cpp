@@ -9922,6 +9922,14 @@ icStatusCMM CIccCmm::ToInternalEncoding(icColorSpaceSignature nSpace, icFloatCol
             icLabToPcs(pInput);
             break;
           }
+        // #2146: icEncodeUnitFloat was absent here while FromInternalEncoding's
+        // icSigLabData branch pairs it with icEncodeFloat, so the library wrote
+        // Lab data it then refused to read back. Paired identically rather than
+        // given a clipping body of its own: the destination side applies no
+        // clip on this path, and matching it exactly is what restores the round
+        // trip. Lab float already IS the internal PCS encoding, so like
+        // icEncodeFloat this converts nothing.
+        case icEncodeUnitFloat:
         case icEncodeFloat:
           {
             break;
@@ -9977,6 +9985,12 @@ icStatusCMM CIccCmm::ToInternalEncoding(icColorSpaceSignature nSpace, icFloatCol
             icXyzToPcs(pInput);
             break;
           }
+        // #2146: the icSigLabData counterpart above, for the other PCS. Also
+        // deliberately unclipped: icXyzFromPcs scales by 65535/32768, so the
+        // external XYZ float range runs to ~2.0 and clipping a source to
+        // 0.0-1.0 here would discard legitimate values rather than harden
+        // anything.
+        case icEncodeUnitFloat:
         case icEncodeFloat:
           {
             icXyzToPcs(pInput);
