@@ -41,9 +41,9 @@ permissions:
         default: '30'
         type: string
       patch_mode:
-        description: 'Patch stack mode'
+        description: 'Patch stack mode; all requires patches in the target checkout'
         required: true
-        default: all
+        default: none
         type: choice
         options:
           - all
@@ -76,9 +76,9 @@ permissions:
         default: '30'
         type: string
       patch_mode:
-        description: 'Patch stack mode: all or none'
+        description: 'Patch stack mode; all requires patches in the target checkout'
         required: false
-        default: all
+        default: none
         type: string
       regression_image_tag:
         description: 'Trusted regression container tag'

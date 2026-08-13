@@ -33,9 +33,9 @@ docker image inspect "$IMAGE" \
 
 The regression image intentionally contains an unpatched upstream checkout.
 Its AFL/CFL compilers and helper commands support smoke and build validation;
-the checked-in fuzz patch stacks are applied only by the dedicated AFL/CFL
-workflows or a source checkout that contains `.github/ci/fuzz-patches/`. Do not
-make generic Docker PR verification require embedded patch-checker scripts.
+external, maintainer-supplied fuzz patch stacks can be applied only from a
+source checkout that contains them. Do not make generic Docker PR verification
+require embedded patch-checker scripts.
 
 ## Basic Use
 
@@ -299,17 +299,16 @@ Inspect the fuzzing environment:
 iccdev-fuzz-env
 ```
 
-Validate AFL/CFL patch stacks from a source checkout that includes them:
+Validate a maintainer-supplied AFL/CFL patch stack from its source checkout:
 
 ```bash
 .github/scripts/check-fuzz-patches.sh
 ```
 
-Run a short patched AFL smoke from the image checkout:
+Run a short unpatched AFL smoke from the image checkout:
 
 ```bash
 .github/scripts/iccdev-afl-smoke.sh \
-  --patches \
   --seconds 10 \
   --targets dump \
   --exec-timeout-ms 30000
@@ -319,7 +318,6 @@ Run the current core CFL smoke:
 
 ```bash
 cfl/build.sh \
-  --patches \
   --targets dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize \
   --seconds 30
 ```
