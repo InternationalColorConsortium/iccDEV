@@ -122,6 +122,7 @@ jobs:
               -DVCPKG_MANIFEST_MODE=OFF \
               -DVCPKG_INSTALLED_DIR="$VCPKG_INSTALLED_DIR" \
               -DVCPKG_TARGET_TRIPLET="$VCPKG_TRIPLET" \
+              -DENABLE_WXWIDGETS=OFF \
               -DENABLE_CPACK_PACKAGING=ON
             cmake --build "$build_dir" --parallel "$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)"
             (
@@ -265,6 +266,7 @@ jobs:
               -DVCPKG_MANIFEST_MODE=OFF `
               -DVCPKG_INSTALLED_DIR="$env:VCPKG_INSTALLED_DIR" `
               -DVCPKG_TARGET_TRIPLET="$env:VCPKG_TRIPLET" `
+              -DENABLE_WXWIDGETS=OFF `
               -DENABLE_CPACK_PACKAGING=ON
             if ($LASTEXITCODE -ne 0) {
               throw "CMake configure failed for $buildType"
