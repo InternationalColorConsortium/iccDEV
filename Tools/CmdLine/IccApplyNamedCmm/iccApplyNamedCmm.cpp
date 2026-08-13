@@ -213,6 +213,25 @@ void Usage()
   printf("    5 - icEncode16Bit\n");
   printf("    6 - icEncode16BitV2\n\n");
 
+  // #2124: this list read as though all seven selectors were always available,
+  // so a Lab destination refusing icEncodePercent looked like a broken encoding
+  // rather than a documented restriction. The valid set is per colour space --
+  // the icFloatColorEncoding table in IccCmm.h, which the
+  // ToInternalEncoding()/FromInternalEncoding() switches implement. Naming the
+  // two exclusions the reference profiles actually hit keeps the note short.
+  //
+  // Deliberately does NOT quote the run-time diagnostic verbatim: the argument
+  // regression greps for that exact line to prove a rejection happened, and
+  // printing it here would let usage output satisfy those greps. For the same
+  // reason the table is described as listing the per-space sets rather than
+  // "the full set" -- it omits icEncodeUnitFloat for 'Lab '/'XYZ ' and carries
+  // no source/destination axis, so it is a pointer, not a promise.
+  printf("    Not every encoding is valid for every colour space: a 'Lab '\n");
+  printf("    destination refuses icEncodePercent and an 'XYZ ' destination\n");
+  printf("    refuses icEncode8Bit, each rejected when the data is converted\n");
+  printf("    rather than here. IccCmm.h's icFloatColorEncoding table lists\n");
+  printf("    the per-space encodings.\n\n");
+
   printf("    FmtPrecision - formatting for # of digits after decimal (default=4)\n");
   printf("    FmtDigits - formatting for total # of digits (default=5+FmtPrecision)\n\n");
 

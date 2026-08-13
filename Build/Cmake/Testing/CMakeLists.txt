@@ -6163,10 +6163,16 @@ if(TARGET iccApplyNamedCmm)
   # exiting 0. Pins rejection of both, alongside the encoding, interpolation,
   # intent and -ENV forms that were already strict, so a later relaxation of any
   # of them is caught here.
+  #
+  # #2124 adds the encoding-contract half: final_data_encoding is validated per
+  # colour space, so the script pins a Lab and an XYZ destination against each
+  # other. Both profiles it uses are tracked, so this still needs no fixture
+  # dependency and the timeout is unchanged -- the added cases run the same
+  # 16-row rgb8bit.txt transform the existing ones already do.
   iccdev_add_script_test(
     iccdev.applynamedcmm-cli-args
     120
-    "iccdev;cmm;config;cli;security;issue-1674;regression"
+    "iccdev;cmm;config;cli;security;issue-1674;issue-2124;regression"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh"
    )
