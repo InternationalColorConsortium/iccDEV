@@ -353,6 +353,84 @@ See `.github/ci/regression/README.md` for the test-side rules and
 `iccdev.proflib-exported-data-linkage`, which pins both the linkage and the
 literal values that dependent tests hard-code.
 
+## Namespace wrapping (known defect)
+
+`ENABLE_USEICCDEVNAMESPACE` defaults to `OFF`
+(`Build/Cmake/CMakeLists.txt:565`). **Turning it `ON` does not produce a
+library.** Configure succeeds and prints `>>> Namespace wrapping enabled
+(iccDEV)`, then `IccProfLib2` fails to compile; no tool or test is reached.
+This is tracked as #2152 and is documented here because the option looks
+supported at configure time.
+
+```bash
+cmake -S Build/Cmake -B build-ns -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release \
+  -DENABLE_USEICCDEVNAMESPACE=ON -DENABLE_TOOLS=OFF -DENABLE_TESTS=OFF \
+  -DENABLE_WXWIDGETS=OFF -DENABLE_SHARED_LIBS=ON -DENABLE_STATIC_LIBS=OFF
+cmake --build build-ns -j4
+# Clang 18.1.3: 70 errors, first at IccProfLib/IccCAM.cpp:81:
+#   use of undeclared identifier 'CIccCamConverter';
+#   did you mean 'iccDEV::CIccCamConverter'?
+# GCC 13.3.0: 925 errors, same first site:
+#   'CIccCamConverter' has not been declared
+```
+
+The two error counts are for the same tree and the same first failure. Take
+that as a warning about counts: the number depends on how far a compiler
+carries on after the first unresolved scope, so it measures diagnostic
+recovery, not how much work is left.
+
+The option is not broken so much as **half-applied**. It defines
+`USEICCDEVNAMESPACE=1` (`Build/Cmake/CMakeLists.txt:709-711`), which opens
+`namespace iccDEV` in `IccProfLib/IccProfLibConf.h:67` and closes it at `:200`.
+Every other file must opt in with its own `#ifdef USEICCDEVNAMESPACE` block,
+and many never did:
+
+| Location | Files with no guard |
+|----------|---------------------|
+| `IccProfLib/*.cpp` | 16 of 39 |
+| `IccProfLib/*.h` | 13 of 47 |
+| `IccXML/IccLibXML/*.cpp` | 2 of 7 |
+| `IccXML/IccLibXML/*.h` | 4 of 8 |
+| `IccConnect/IccLibConnect` | none - fully guarded |
+
+So a header that wraps declares `iccDEV::CIccFoo` while its unwrapped `.cpp`
+defines a global `CIccFoo`, and the definition matches no declaration.
+`IccCAM.h` (guards at `:74` and `:159`) against `IccCAM.cpp` (zero occurrences)
+is the cleanest instance, and is where the build stops first. The build never
+reaches `IccXML`, whose own gaps are listed above for completeness.
+
+Finishing the rollout would be a per-file decision, not a sweep, and the
+per-file question is open rather than settled. Not every unguarded header wants
+the guard: `IccProfLibVer.h` holds a single version macro, and
+`icProfileHeader.h` holds the on-disk ICC structures and signature enums in
+deliberately C-style form. Whether headers of that kind stay outside the
+namespace by design is part of what #2152 asks.
+
+Two traps are worth knowing before spending time here:
+
+> **A single-header syntax probe will not scope this.** `IccCmm.h` *has* the
+> guard, yet `clang++ -fsyntax-only -DUSEICCDEVNAMESPACE=1` on a file that
+> includes only it still errors, because it pulls in unguarded siblings such as
+> `IccTagEmbedIcc.h`. Such a probe reflects the include graph, not the work
+> remaining. Only a full library build says anything trustworthy.
+
+> **This is not the same defect as the export-annotation gap** described in the
+> section above, even though #176 is titled `Known Defect |
+> ENABLE_USEICCDEVNAMESPACE=ON`. That issue's body is about the vcpkg port
+> building static libraries only and shared builds failing for want of symbol
+> exports, and the #764/#784/#823/#966/#1193 history sits with it on the shared
+> library and visibility side. Namespace scoping is a separate incomplete
+> rollout that fails under both Clang and GCC on Linux before any linking
+> happens. Both are incomplete; they are unrelated defects.
+
+Test sources are written as though the option worked: 25 of the 91 regression
+sources under `.github/ci/regression/` carry `#ifdef USEICCDEVNAMESPACE`
+blocks, as does all of `IccConnect`. Those paths are currently unexercised,
+since no build can enable them.
+
+Measured on `master` `054eb006`, Ubuntu 24.04 (WSL2), Unix Makefiles, Release,
+with both Clang 18.1.3 and GCC 13.3.0.
+
 ## Instrumentation Builds
 
 Use CMake options instead of hand-written sanitizer flags. Clean the cache when
