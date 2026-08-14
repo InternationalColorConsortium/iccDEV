@@ -69,7 +69,7 @@
 #include <vector>
 #include <cmath>
 #include "MiniPDF.hpp"
-#include "../IccCmdLineUtil.h"
+#include "IccCmdLineUtil.h"
 
 
 /******************************************************************************/

@@ -84,7 +84,7 @@
 #include <string>
 #include <vector>
 #include <fstream>
-#include "../IccCmdLineUtil.h"
+#include "IccCmdLineUtil.h"
 #if defined(_WIN32)
   #include <winsock2.h>
 #else

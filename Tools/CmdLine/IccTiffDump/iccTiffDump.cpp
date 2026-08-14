@@ -77,7 +77,7 @@
 #include "IccProfLibVer.h"
 #include "IccApplyBPC.h"
 #include "TiffImg.h"
-#include "../IccCmdLineUtil.h"
+#include "IccCmdLineUtil.h"
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/stat.h>

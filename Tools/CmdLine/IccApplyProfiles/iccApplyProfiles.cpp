@@ -81,7 +81,7 @@
 #include "TiffImg.h"
 #include "IccProfLibVer.h"
 #include "IccLibConnectVer.h"
-#include "../IccCmdLineUtil.h"
+#include "IccCmdLineUtil.h"
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/stat.h>

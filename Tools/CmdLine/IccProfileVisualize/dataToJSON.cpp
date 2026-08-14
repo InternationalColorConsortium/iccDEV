@@ -68,7 +68,7 @@
 #include <fstream>
 #include <sstream>
 #include <iomanip>
-#include "../IccCmdLineUtil.h"
+#include "IccCmdLineUtil.h"
 #include "vizShared.hpp"
 #include "errorLog.hpp"
 #include "dataModel.hpp"

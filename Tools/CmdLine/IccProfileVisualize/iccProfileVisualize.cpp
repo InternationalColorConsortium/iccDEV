@@ -76,7 +76,7 @@
 #include "IccTag.h"
 #include "IccUtil.h"
 #include "IccProfLibVer.h"
-#include "../IccCmdLineUtil.h"
+#include "IccCmdLineUtil.h"
 #include "vizShared.hpp"
 #include "MiniTIFF.hpp"
 #include "spectralLocus.hpp"

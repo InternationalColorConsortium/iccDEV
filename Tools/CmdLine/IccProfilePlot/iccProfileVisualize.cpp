@@ -76,7 +76,7 @@
 #include "IccTag.h"
 #include "IccUtil.h"
 #include "IccProfLibVer.h"
-#include "../IccCmdLineUtil.h"
+#include "IccCmdLineUtil.h"
 #include "MiniTIFF.hpp"
 #include "MiniSVG.hpp"
 #include "MiniPDF.hpp"

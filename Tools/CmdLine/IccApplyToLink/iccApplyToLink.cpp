@@ -88,7 +88,7 @@
 #include "IccTagLut.h"
 #include "IccTagMPE.h"
 #include "IccMpeBasic.h"
-#include "../IccCmdLineUtil.h"
+#include "IccCmdLineUtil.h"
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/stat.h>

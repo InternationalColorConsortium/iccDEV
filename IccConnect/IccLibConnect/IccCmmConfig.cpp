@@ -76,7 +76,7 @@
 #include <fstream>
 #include <cstring>
 #include <new>
-#include "../../Tools/CmdLine/IccCmdLineUtil.h" // this should probably move into the ProfLib directory
+#include "IccCmdLineUtil.h" // relocated into IccProfLib per #2154; was ../../Tools/CmdLine
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/stat.h>

@@ -66,6 +66,9 @@ SET( HEADERS_PUBLIC
   ${SRC_PATH}/IccProfLib/IccArrayBasic.h
   ${SRC_PATH}/IccProfLib/IccArrayFactory.h
   ${SRC_PATH}/IccProfLib/IccCAM.h
+  # Issue #2154: relocated from Tools/CmdLine so IccConnect stops reaching across
+  # the tree for it. Header-only (all inline), so no CFILES entry and no export.
+  ${SRC_PATH}/IccProfLib/IccCmdLineUtil.h
   ${SRC_PATH}/IccProfLib/IccCmm.h
   ${SRC_PATH}/IccProfLib/IccCmmThread.h
   ${SRC_PATH}/IccProfLib/IccColorimetry.h
