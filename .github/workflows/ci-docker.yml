@@ -377,20 +377,6 @@ jobs:
             exit 1
           fi
 
-      - name: Reclaim workspace before image scan
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-
-          docker buildx prune --all --force
-          docker image prune --force
-          docker system df
-          df -h "${RUNNER_TEMP:-/tmp}"
-
       - name: Verify tools
         env:
           BASH_ENV: /dev/null
@@ -718,6 +704,20 @@ jobs:
             ctest --test-dir "$ICCDEV_BUILD_DIR" --output-on-failure --label-exclude slow --no-tests=error
           '
 
+      - name: Reclaim workspace before image scan
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          docker buildx prune --all --force
+          docker image prune --force
+          docker system df
+          df -h "${RUNNER_TEMP:-/tmp}"
+
       - name: Scan test image
         env:
           BASH_ENV: /dev/null
@@ -729,6 +729,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
           if [ "$PUBLISH_IMAGE" = "true" ]; then
             TEST_IMAGE="${IMAGE_REF}"
             docker pull "${IMAGE_REF}"
