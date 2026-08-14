@@ -155,6 +155,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -283,6 +284,7 @@ jobs:
         if: always()
         env:
           BASH_ENV: /dev/null
+        # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
         run: |
           # shellcheck shell=bash
           # shellcheck disable=SC2129
@@ -397,6 +399,7 @@ jobs:
         if: always()
         env:
           BASH_ENV: /dev/null
+        # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
         run: |
           # shellcheck shell=bash
           # shellcheck disable=SC2129
@@ -468,6 +471,7 @@ jobs:
         if: always()
         env:
           BASH_ENV: /dev/null
+        # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
         run: |
           # shellcheck shell=bash
           # shellcheck disable=SC2129
@@ -563,6 +567,7 @@ jobs:
         if: always()
         env:
           BASH_ENV: /dev/null
+        # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
         run: |
           # shellcheck shell=bash
           # shellcheck disable=SC2129
@@ -696,6 +701,7 @@ jobs:
         if: always()
         env:
           BASH_ENV: /dev/null
+        # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
         run: |
           # shellcheck shell=bash
           # shellcheck disable=SC2129
@@ -843,6 +849,7 @@ jobs:
         if: always()
         env:
           BASH_ENV: /dev/null
+        # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
         run: |
           # shellcheck shell=bash
           # shellcheck disable=SC2001,SC2016,SC2034,SC2129
@@ -920,6 +927,7 @@ jobs:
         if: always()
         env:
           BASH_ENV: /dev/null
+        # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
         run: |
           # shellcheck shell=bash
           # shellcheck disable=SC2129
@@ -1049,6 +1057,7 @@ jobs:
         if: always()
         env:
           BASH_ENV: /dev/null
+        # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
         run: |
           # shellcheck shell=bash
           # shellcheck disable=SC2129
@@ -1270,6 +1279,7 @@ jobs:
         if: always()
         env:
           BASH_ENV: /dev/null
+        # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
         run: |
           # shellcheck shell=bash
           set -euo pipefail
@@ -1414,6 +1424,7 @@ jobs:
         if: always()
         env:
           BASH_ENV: /dev/null
+        # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -1564,6 +1575,7 @@ jobs:
         if: always()
         env:
           BASH_ENV: /dev/null
+        # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -1795,6 +1807,7 @@ jobs:
         if: always()
         env:
           BASH_ENV: /dev/null
+        # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -2026,6 +2039,7 @@ jobs:
           BASH_ENV: /dev/null
           PR_HEAD_REF: ${{ github.head_ref }}
           PR_BASE_REF: ${{ github.base_ref }}
+        # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -2158,6 +2172,7 @@ jobs:
         if: always()
         env:
           BASH_ENV: /dev/null
+        # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -2270,6 +2285,7 @@ jobs:
         if: always() && (github.event_name == 'pull_request' || inputs.fail_on_findings == true)
         env:
           BASH_ENV: /dev/null
+        # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -2482,6 +2498,7 @@ jobs:
         if: always()
         env:
           BASH_ENV: /dev/null
+        # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
         run: |
           set -euo pipefail
           git config --global credential.helper ""

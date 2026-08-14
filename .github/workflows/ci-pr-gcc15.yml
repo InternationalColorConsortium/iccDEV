@@ -63,6 +63,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           TARGET_SHA: ${{ inputs.target-sha }}
+        # preflight: allow-codeql-actions reason=readonly-build-target-checkout
         run: |
           set -euo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -81,6 +82,7 @@ jobs:
           BASH_ENV: /dev/null
           CC: gcc
           CXX: g++
+        # preflight: allow-codeql-actions reason=readonly-build-target-checkout
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -105,6 +107,7 @@ jobs:
       - name: Build with zero warnings
         env:
           BASH_ENV: /dev/null
+        # preflight: allow-codeql-actions reason=readonly-build-target-checkout
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -120,6 +123,7 @@ jobs:
       - name: Smoke Release LTO tools
         env:
           BASH_ENV: /dev/null
+        # preflight: allow-codeql-actions reason=readonly-build-target-checkout
         run: |
           set -euo pipefail
           git config --global credential.helper ""
