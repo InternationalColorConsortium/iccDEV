@@ -78,6 +78,7 @@ LABEL org.opencontainers.image.title="iccDEV MCP Runtime" \
 # Ubuntu package versions intentionally track security updates from the
 # digest-pinned base image repository.
 # hadolint ignore=DL3008
+# Pebble is inherited from the Ubuntu base but unused by this runtime image.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     libc6 \
@@ -99,6 +100,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         exit 1; \
       }; \
     done \
+ && rm -f /usr/bin/pebble \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/iccdev /opt/iccdev

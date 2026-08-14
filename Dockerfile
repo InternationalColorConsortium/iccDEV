@@ -80,6 +80,7 @@ LABEL org.opencontainers.image.title="iccDEV Build Container" \
       org.opencontainers.image.source="https://github.com/InternationalColorConsortium/iccDEV"
 
 # Package versions are pinned to the digest-pinned Ubuntu base validated on master.
+# Pebble is inherited from the Ubuntu base but unused by this runtime image.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libc6=2.43-2ubuntu2.3 \
     libxml2-16=2.15.2+dfsg-0.1ubuntu0.1 \
@@ -93,6 +94,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl-provider-legacy=3.5.5-1ubuntu3.3 \
     zlib1g=1:1.3.dfsg+really1.3.1-1ubuntu3 \
     python3=3.14.3-0ubuntu2 \
+ && rm -f /usr/bin/pebble \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/iccdev/Build /opt/iccdev/Build
