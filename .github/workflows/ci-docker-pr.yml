@@ -98,9 +98,9 @@ jobs:
       BASH_ENV: /dev/null
       TARGET_SHA: ${{ inputs.target_sha }}
       WARNING_POLICY: ${{ inputs.warning_policy || 'fail' }}
-      # Pin the published unpatched regression environment. Fuzz patch stacks
-      # are applied only by their dedicated AFL/CFL workflows.
-      TEST_IMAGE: ghcr.io/internationalcolorconsortium/iccdev-ci-regression@sha256:c516759b5245c6299afcd873e3fc7eb31c8a2fbcecc1d470b1bafe393f652fcb
+      # Pull the current published unpatched regression environment. Fuzz patch
+      # stacks are applied only by their dedicated AFL/CFL workflows.
+      TEST_IMAGE: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest
 
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
