@@ -128,9 +128,9 @@ static bool slurpStream(FILE *f, std::vector<unsigned char> &out)
 // in-memory path produced.
 //
 // This is the one place platform differences reach this test, and it is not
-// optional. PDFWriter::CloseFile writes through icOpenRegularWriteTextFile,
-// i.e. fopen(name, "wt") (IccCmdLineUtil.h:240), and SVGOut::CloseFile uses a
-// default-mode std::ofstream: both are TEXT streams, so a Windows CRT expands
+// optional. PDFWriter::CloseFile and SVGOut::CloseFile both write through
+// icOpenRegularWriteTextFile, i.e. fopen(name, "wt") (IccCmdLineUtil.h:240):
+// both are TEXT streams, so a Windows CRT expands
 // every '\n' to "\r\n" on the way out, while Serialize() writes to an
 // ostringstream that expands nothing. Comparing raw bytes would report a size
 // difference that is the platform's line-ending policy rather than a

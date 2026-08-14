@@ -262,4 +262,37 @@ inline bool icFlushAndClose(FILE* f)
 
 /******************************************************************************/
 
+// Write a whole document through an ALREADY-VALIDATED handle, then close it.
+//
+// Why this exists (#2154): icOpenRegularWriteFile() above earns its guarantee by
+// fstat()ing the descriptor it actually opened, not the path it was given. That
+// guarantee lives in the returned FILE* and nowhere else -- so a caller that
+// closes the handle and then reopens the same *path* through another stream has
+// thrown the check away and reintroduced the race it just paid for. Passing the
+// handle straight to this function is what keeps the validated object and the
+// written object the same object.
+//
+// The body mirrors the WritePdfTextFile() copies in MiniPDF.cpp, which already
+// do exactly this correctly; those are two more members of the duplicated
+// open/close helper family #2154 tracks, and they can collapse onto this one.
+inline bool icWriteAndClose(FILE* f, const std::string& text)
+{
+  bool failed = false;
+
+  if (!f)
+    return false;
+
+  if (!text.empty() && fwrite(text.data(), 1, text.size(), f) != text.size())
+    failed = true;
+
+  // icFlushAndClose() reports the deferred write errors that fwrite() can hide
+  // behind a full stdio buffer, so its verdict is part of the result.
+  if (!icFlushAndClose(f))
+    failed = true;
+
+  return !failed;
+}
+
+/******************************************************************************/
+
 #endif

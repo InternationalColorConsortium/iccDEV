@@ -174,6 +174,18 @@ public:
   // a plain serializer.
   void Serialize( std::ostream &out );
 
+private:
+
+  // The one place the document bytes are produced.  Serialize() and CloseFile()
+  // both route through this, so the file path and the stream path cannot drift
+  // -- adding a DOCTYPE or a comment here reaches both by construction (#2154).
+  //
+  // Finalize() is deliberately the caller's job rather than this function's:
+  // that is what lets CloseFile() finalize once at its top, whether or not a
+  // file was ever opened, and still serialize without re-emitting Finalize's
+  // unbalanced-group warnings.
+  void SerializeFinalized( std::ostream &out );
+
 public:
 
   void AddCircle( float radius, float xCenter, float yCenter, bool isFilled ) {
