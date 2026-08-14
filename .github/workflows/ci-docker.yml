@@ -356,6 +356,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
           if [ "$PUBLISH_IMAGE" = "true" ]; then
             TEST_IMAGE="${IMAGE_REF}"
             docker pull "${IMAGE_REF}"
