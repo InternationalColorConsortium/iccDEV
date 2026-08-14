@@ -390,36 +390,6 @@ jobs:
           docker system df
           df -h "${RUNNER_TEMP:-/tmp}"
 
-      - name: Scan test image
-        env:
-          BASH_ENV: /dev/null
-          MATRIX_VARIANT: ${{ matrix.variant }}
-          TRIVY_IMAGE: aquasec/trivy@sha256:5c59e08f980b5d4d503329773480fcea2c9bdad7e381d846fbf9f2ecb8050f6b
-          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
-          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          if [ "$PUBLISH_IMAGE" = "true" ]; then
-            TEST_IMAGE="${IMAGE_REF}"
-            docker pull "${IMAGE_REF}"
-          else
-            TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
-          fi
-          TRIVY_CACHE="${RUNNER_TEMP:-/tmp}/trivy-image-cache-${MATRIX_VARIANT}"
-          rm -rf "$TRIVY_CACHE"
-          mkdir -p "$TRIVY_CACHE"
-          trivy_args=(image --scanners 'vuln,secret' --severity 'HIGH,CRITICAL' --exit-code 1)
-          if [ "$MATRIX_VARIANT" = "regression" ]; then
-            trivy_args+=(--ignore-unfixed)
-          fi
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$TRIVY_CACHE":/root/.cache/ \
-            "$TRIVY_IMAGE" \
-            "${trivy_args[@]}" "$TEST_IMAGE"
-
       - name: Verify tools
         env:
           BASH_ENV: /dev/null
@@ -746,6 +716,36 @@ jobs:
             ctest --test-dir "$ICCDEV_BUILD_DIR" -N --no-tests=error
             ctest --test-dir "$ICCDEV_BUILD_DIR" --output-on-failure --label-exclude slow --no-tests=error
           '
+
+      - name: Scan test image
+        env:
+          BASH_ENV: /dev/null
+          MATRIX_VARIANT: ${{ matrix.variant }}
+          TRIVY_IMAGE: aquasec/trivy@sha256:5c59e08f980b5d4d503329773480fcea2c9bdad7e381d846fbf9f2ecb8050f6b
+          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
+          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          if [ "$PUBLISH_IMAGE" = "true" ]; then
+            TEST_IMAGE="${IMAGE_REF}"
+            docker pull "${IMAGE_REF}"
+          else
+            TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
+          fi
+          TRIVY_CACHE="${RUNNER_TEMP:-/tmp}/trivy-image-cache-${MATRIX_VARIANT}"
+          rm -rf "$TRIVY_CACHE"
+          mkdir -p "$TRIVY_CACHE"
+          trivy_args=(image --scanners 'vuln,secret' --severity 'HIGH,CRITICAL' --exit-code 1)
+          if [ "$MATRIX_VARIANT" = "regression" ]; then
+            trivy_args+=(--ignore-unfixed)
+          fi
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$TRIVY_CACHE":/root/.cache/ \
+            "$TRIVY_IMAGE" \
+            "${trivy_args[@]}" "$TEST_IMAGE"
 
       - name: Cleanup
         if: always()
