@@ -386,7 +386,7 @@ jobs:
               }
             ],
             "overrides": [
-              { "name": "iccdev", "version": "2.3.2.2" }
+              { "name": "iccdev", "version": "2.3.2.3" }
             ]
           }
           "@ | Set-Content "$testDir\vcpkg.json" -Encoding UTF8

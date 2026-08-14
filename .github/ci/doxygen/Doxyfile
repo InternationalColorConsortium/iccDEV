@@ -10,7 +10,7 @@
 # client-side search, and source browsing.
 
 PROJECT_NAME           = "iccDEV"
-PROJECT_NUMBER         = "2.3.2.2"
+PROJECT_NUMBER         = "2.3.2.3"
 PROJECT_BRIEF          = "ICC Color Profile Library - ProfLib, XML, JSON, Connect, CLI, Winnt Tools, and Examples"
 OUTPUT_DIRECTORY       = docs/generated
 HTML_OUTPUT            = html
