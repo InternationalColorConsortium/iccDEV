@@ -1481,10 +1481,13 @@ run_s3_header_signature_tests() {
 
   # 'none' (0x6E6F6E65) is a pervasive "no manufacturer" placeholder (AdobeRGB1998,
   # ROMM-RGB, ...). It is neither zero nor registered, so S3 still WARNs per
-  # section 7.2.17, but with softened wording flagging it as a known placeholder
-  # rather than suspect data (issue #1459).
+  # section 7.2.17, but with softened wording rather than presenting it as suspect
+  # data. The ICC ruled on issue #1472 that the specification requires the zero
+  # signature here, so 'none' can never be registered: the detail must NOT offer
+  # it as a pending registration ("not yet in the registry"), which is what this
+  # needle pins.
   run_s3_header_signature_case "manufacturer-none-placeholder-warn" \
-    "6e6f6e65" "00000000" "WARN" "known 'no manufacturer' placeholder"
+    "6e6f6e65" "00000000" "WARN" "so 'none' is not registrable"
 
   # 'ICC ' (0x49434320) is used by the ICC's own reference profiles (and the
   # iccDEV regression fixtures). Still WARNs (not in the Manufacturer Signatures

@@ -353,22 +353,33 @@ bool IsRegisteredManufacturerOrZero(uint32_t sig)
   return sig == 0 || FindRegisteredManufacturer(sig) != NULL;
 }
 
-// Some signatures are pervasive conventions that are not (yet) in the
-// Manufacturer Signatures registry and are not the zero signature, so they still
-// fail the strict ICC.1:2022-05 section 7.2.17 check and warrant a WARN -- but
-// they are well-understood placeholders rather than malformed/unknown 4CCs, so
-// S3 reports them with softened wording and they are tracked for ICC registry
-// submission (issue #1459 Segment A) rather than presented as suspect data:
-//   'none' (0x6E6F6E65) -- explicit "no manufacturer" placeholder
+// Some signatures are pervasive conventions that are not the zero signature, so
+// they still fail the strict ICC.1:2022-05 section 7.2.17 check and warrant a
+// WARN -- but they are well-understood 4CCs rather than malformed/unknown data,
+// so S3 reports them with softened wording rather than presenting them as
+// suspect. The two differ in whether ICC registration is even possible, so each
+// carries its own complete explanation instead of a shared "not yet in the
+// registry" suffix (ICC ruling on issue #1472, 2026-07-24):
+//   'none' (0x6E6F6E65) -- "no manufacturer" placeholder. NOT registrable: the
+//                          ICC ruled that the specification requires the zero
+//                          signature here, so 'none' is a producer error, not a
+//                          registration that is pending. Saying "not yet in the
+//                          registry" would wrongly imply it is on its way in.
 //   'ICC ' (0x49434320) -- the International Color Consortium's own reference
-//                          profiles (also used by the iccDEV regression fixtures)
+//                          profiles (also used by the iccDEV regression
+//                          fixtures). Registration is undecided rather than
+//                          refused, so "not yet" is accurate here.
+// Returns the entire parenthetical body, so a caller must not append a registry
+// snapshot reference of its own.
 const char *KnownUnregisteredConventionNote(uint32_t sig)
 {
   switch (sig) {
   case 0x6E6F6E65:  // 'none'
-    return "known 'no manufacturer' placeholder";
+    return "\"no manufacturer\" placeholder; ICC.1:2022-05 section 7.2.17 requires the "
+           "zero signature (00h) here, so 'none' is not registrable";
   case 0x49434320:  // 'ICC '
-    return "International Color Consortium reference-profile signature";
+    return "International Color Consortium reference-profile signature, not yet in "
+           "Manufacturer Signatures registry snapshot " ICCPAWG_REGISTRY_SNAPSHOT_DATE;
   default:
     return NULL;
   }
@@ -376,6 +387,9 @@ const char *KnownUnregisteredConventionNote(uint32_t sig)
 
 // Append the per-field "(<sig> ...)" explanation for an unregistered manufacturer
 // or creator signature, softening the wording for the known conventions above.
+// A known-convention note supplies the whole explanation (the registrable and
+// non-registrable cases need different ones), so only the generic case appends
+// the registry snapshot reference.
 void AppendUnregisteredSigDetail(std::ostringstream &detail, uint32_t sig)
 {
   if (!IsZeroOrPrintable(sig)) {
@@ -384,13 +398,13 @@ void AppendUnregisteredSigDetail(std::ostringstream &detail, uint32_t sig)
   const char *note = KnownUnregisteredConventionNote(sig);
   detail << " (" << SigString(sig) << " ";
   if (note) {
-    detail << note << ", not yet in";
+    detail << note;
   }
   else {
-    detail << "not in";
+    detail << "not in Manufacturer Signatures registry snapshot "
+           << ICCPAWG_REGISTRY_SNAPSHOT_DATE;
   }
-  detail << " Manufacturer Signatures registry snapshot "
-         << ICCPAWG_REGISTRY_SNAPSHOT_DATE << ")";
+  detail << ")";
 }
 
 std::string HeaderSignatureDetail(const RawProfile &raw,

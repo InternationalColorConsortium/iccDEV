@@ -148,7 +148,7 @@ corpus with the #1459-fixed tool:
 |-----------|-------|-------------|---------|--------|
 | `XRCM` | `0x5852434D` | 16 | CRPC2..7 / GRACoL2013 / SWOP2013 / APTEC | submit to ICC |
 | `ICC ` | `0x49434320` | 23 | ICC reference profiles (sRGB_D65_*), iccDEV fixtures | register/clarify consortium sig |
-| `none` | `0x6E6F6E65` | 25 | AdobeRGB1998, ROMM-RGB, sRGB displayclass | policy: sanction placeholder vs. require zero |
+| `none` | `0x6E6F6E65` | 25 | AdobeRGB1998, ROMM-RGB, sRGB displayclass | **ruled 2026-07-24 (#1472): spec says `00h`, not registrable** |
 | `LOGO` | `0x4C4F474F` | 2 | MCPPiPF5000Glossy | investigate/submit |
 | `ccox` | `0x63636F78` | 1 | corpus | investigate/submit (likely CHROMiX) |
 
@@ -161,6 +161,13 @@ distinct unregistered one.)
 to identify them as known placeholders/consortium signatures rather than suspect
 data - but the verdict stays WARN and nothing is silently accepted. The other
 sigs keep the plain "not in Manufacturer Signatures registry" wording.
+
+**Amended 2026-07-24 by the ICC ruling on #1472:** the two softened cases are no
+longer worded alike, because they differ in whether registration is even possible.
+`'none'` is **not registrable** (the spec requires `00h`), so its detail states that
+and must not say "not yet in the registry", which would imply a pending submission.
+`'ICC '` is undecided rather than refused, so it keeps the "not yet in ... snapshot"
+wording. Each case therefore supplies its own complete parenthetical.
 
 ---
 
