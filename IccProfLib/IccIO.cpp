@@ -554,8 +554,17 @@ bool CIccFileIO::Open(const icChar *szFilename, const icChar *szAttr)
   }
 #endif
 
-  if (m_fFile)
+  // Detach the closed stream before any path that can return without
+  // reassigning m_fFile.  The regular-file check below returns early, so
+  // leaving the stale pointer in place would hand the destructor -- and every
+  // other member -- a FILE* that fclose() has already freed.  The wide-char
+  // overload and Attach() below keep the bare fclose() because nothing can
+  // return between it and their own assignment; add this line there too if
+  // that ever stops being true.
+  if (m_fFile) {
     fclose(m_fFile);
+    m_fFile = NULL;
+  }
 
 #if !defined(_WIN32) && !defined(WIN32)
   if (icFileModeCanWrite(szAttr)) {

@@ -2629,6 +2629,55 @@ function(iccdev_add_fileio_seek_tell_test)
   endif()
 endfunction()
 
+# Guards the reopen half of #1940. CIccFileIO::Open fclose()s the stream it is
+# already holding without nulling m_fFile, which only stayed safe while the
+# fopen() assignment was the next statement. #1204 put the POSIX regular-file
+# check in between, so a refused write-mode reopen returns with a freed FILE*
+# still attached: plain builds segfault in the next fread(), sanitizer builds
+# reach the following Close() and report a double-free. That check is compiled
+# out on Windows, so the test exits 77 there and SKIP_RETURN_CODE turns it into
+# a ctest Skipped instead of a false pass. Core IccProfLib only.
+function(iccdev_add_fileio_reopen_nonregular_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccFileIoReopenNonRegularTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/fileio-reopen-nonregular.cpp"
+  )
+  target_link_libraries(iccFileIoReopenNonRegularTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccFileIoReopenNonRegularTest)
+
+  add_test(
+    NAME iccdev.fileio-reopen-nonregular
+    COMMAND
+      "$<TARGET_FILE:iccFileIoReopenNonRegularTest>"
+  )
+  set_tests_properties(iccdev.fileio-reopen-nonregular PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    SKIP_RETURN_CODE 77
+    LABELS "iccdev;fileio;issue-1940;regression"
+  )
+  if(WIN32)
+    set(_fileio_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccFileIoReopenNonRegularTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _fileio_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.fileio-reopen-nonregular PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_fileio_windows_env_mods}"
+    )
+  else()
+    set_tests_properties(iccdev.fileio-reopen-nonregular PROPERTIES
+      ENVIRONMENT "${ICCDEV_TEST_ENV}"
+    )
+  endif()
+endfunction()
+
 # Guards the strict-aliasing fix in CIccIO::Write16/Write32/Write64 (#1948).
 # Those writers used to load the caller's buffer through the wide integer type,
 # which is undefined behaviour when the buffer holds floats -- as it does on
@@ -4737,6 +4786,7 @@ if(WIN32)
   iccdev_add_fileio_getlength_position_test()
   iccdev_add_profile_write_failure_test()
   iccdev_add_fileio_seek_tell_test()
+  iccdev_add_fileio_reopen_nonregular_test()
   iccdev_add_iccio_write_float_aliasing_test()
   iccdev_add_tagdata_zlib_roundtrip_test()
   iccdev_add_ziputf8_settext_contract_test()
@@ -5016,6 +5066,7 @@ iccdev_add_embedded_profile_detachio_test()
 iccdev_add_fileio_getlength_position_test()
 iccdev_add_profile_write_failure_test()
 iccdev_add_fileio_seek_tell_test()
+iccdev_add_fileio_reopen_nonregular_test()
 iccdev_add_iccio_write_float_aliasing_test()
 iccdev_add_tagdata_zlib_roundtrip_test()
 iccdev_add_ziputf8_settext_contract_test()
