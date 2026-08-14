@@ -5531,11 +5531,23 @@ set_tests_properties(iccdev.pcc-zero-illuminant-regressions PROPERTIES
 # problem with XML_PARSE_HUGE turns this test red instead of quietly widening
 # what the parser accepts. Builds the fixture link with iccApplyToLink, so it
 # needs the generated profiles.
+#
+# The known-red label is deliberately absent (#2160): it was added while the
+# large-CLUT round trip could not pass against libxml2 >= 2.13, and the writer
+# now bounds each text node, so the quarantine no longer describes anything
+# true. Where that matters is ci-iccdev-tool-tests.yml run with ctest_mode=full
+# and the local check target; both exclude known-red and neither excludes slow.
+#
+# It does NOT put this test on the pull_request path: ci-pr-action.yml pins
+# ctest_mode=fast, which drops it on the slow label, and the Windows legs never
+# register it at all because the if(WIN32) branch above returns before the bash
+# script tests. Measured on dispatched run 31852372579 -- the case does not
+# execute on any PR leg. Widening that is a separate question from this fix.
 if(TARGET iccFromXml AND TARGET iccToXml AND TARGET iccApplyToLink)
   iccdev_add_script_test(
     iccdev.xml-parser-regressions
     600
-    "iccdev;xml;parser;regression;issue-1856;issue-2108;asan;slow;known-red"
+    "iccdev;xml;parser;regression;issue-1856;issue-2108;issue-2160;asan;slow"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-xml-parser-regression-tests.sh"
   )

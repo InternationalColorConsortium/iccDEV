@@ -7,9 +7,9 @@
 # directions, which is why they share a script:
 #
 #   1. iccDEV must be able to read back the XML it just wrote. A profile whose
-#      CLUT serialises to a single text node larger than libxml2's
-#      XML_MAX_TEXT_LENGTH (10 MB) used to be refused on read, so iccToXml
-#      could emit a document iccFromXml then rejected.
+#      CLUT serialises past libxml2's XML_MAX_TEXT_LENGTH (10 MB) must be split
+#      into bounded text nodes, so iccToXml never emits a document iccFromXml
+#      rejects.
 #
 #   2. Relaxing that must not widen what the parser accepts: the nesting-depth
 #      and name-length caps have to stay armed. The hardening cases below fail
@@ -35,12 +35,10 @@
 #      bound below already does. A silent NULL is indistinguishable here from
 #      "parsed fine, but is not a profile".
 #
-#   b. Case 1's mechanism no longer holds on current libxml2. v2.13.0 moved the
-#      XML_MAX_TEXT_LENGTH check into xmlSAX2Text ("SAX2: Enforce size limit in
-#      xmlSAX2Text with XML_PARSE_HUGE"), so it applies however the input is
-#      delivered and parsing from a buffer no longer avoids it. Case 1 therefore
-#      fails against libxml2 >= 2.13 and is expected to keep failing until the
-#      reader is fixed, which is the other half of #2108.
+#   b. libxml2 v2.13.0 moved the XML_MAX_TEXT_LENGTH check into xmlSAX2Text
+#      ("SAX2: Enforce size limit in xmlSAX2Text with XML_PARSE_HUGE"), so the
+#      writer splits CLUT rows into text nodes below that cap rather than
+#      weakening the reader with XML_PARSE_HUGE.
 #
 # Environment variables:
 #   ICCDEV_TOOLS_DIR   -- path to Build/Tools or build/Tools
@@ -103,7 +101,7 @@ check_sanitizers() {
 }
 
 ###############################################################################
-# 1. Round-trip a profile whose XML carries a text node over the streaming cap
+# 1. Round-trip a profile whose XML exceeds the text-node cap
 ###############################################################################
 
 echo "=== Large text node round-trip (issue #1856) ==="
@@ -126,9 +124,8 @@ roundtrip_large_text_node() {
     return
   fi
 
-  # A grid-33 CMYK->RGB device link is the cheapest way to get a CLUT that
-  # serialises past the 10 MB text-node limit: 33^4 grid points x 3 channels
-  # is ~21 MB of whitespace-separated values in one element.
+  # A grid-33 CMYK->RGB device link is the cheapest way to get a CLUT whose
+  # numeric text exceeds 10 MB: 33^4 grid points x 3 channels is ~21 MB.
   if ! "$APPLYTOLINK" "$link" 0 33 0 "issue 1856 regression" 0 1 1 1 \
        "$src" 1 "$dst" 1 >"$logfile" 2>&1; then
     fail "$name" "iccApplyToLink failed to build the fixture link"
@@ -140,23 +137,46 @@ roundtrip_large_text_node() {
     return
   fi
 
-  # Confirm the fixture actually exercises the limit. If a future change to the
-  # writer shortens the node below the cap this test would silently stop
-  # testing anything, so treat that as a skip with the measured size.
-  local longest
-  longest="$(python3 - "$xml" <<'PY'
+  # Confirm the fixture exercises the limit while the writer keeps every text
+  # node under it. If the document becomes small, the fixture no longer covers
+  # the boundary; if a node exceeds the cap, current libxml2 rejects it.
+  # Assign in a separate statement from the command substitution so the exit
+  # status checked is python's and not the local builtin's -- otherwise a failed
+  # measurement yields empty values and reports as a skip with a blank size,
+  # silently retiring the one case that pins the boundary.
+  local measured total longest splits
+  if ! measured="$(python3 - "$xml" <<'PY'
 import re, sys
 data = open(sys.argv[1], "rb").read()
-print(max((len(m.group(1)) for m in re.finditer(rb">([^<]*)<", data)), default=0))
+nodes = [len(m.group(1)) for m in re.finditer(rb">([^<]*)<", data)]
+print(sum(nodes), max(nodes, default=0), data.count(b"<!-- TableData continuation -->"))
 PY
-)"
-  if [ -z "$longest" ] || [ "$longest" -le "$XML_MAX_TEXT_LENGTH" ]; then
-    skip "$name" "longest text node ${longest:-unknown} bytes does not exceed $XML_MAX_TEXT_LENGTH"
+)"; then
+    fail "$name" "could not measure the text nodes in $xml"
+    return
+  fi
+  read -r total longest splits <<<"$measured"
+
+  if [ -z "$total" ] || [ "$total" -le "$XML_MAX_TEXT_LENGTH" ]; then
+    skip "$name" "total CLUT text ${total:-unknown} bytes does not exceed $XML_MAX_TEXT_LENGTH"
+    return
+  fi
+  if [ -z "$longest" ] || [ "$longest" -gt "$XML_MAX_TEXT_LENGTH" ]; then
+    fail "$name" "longest text node ${longest:-unknown} bytes exceeds $XML_MAX_TEXT_LENGTH"
+    return
+  fi
+  # The size bounds above are necessary but not sufficient: "total" counts every
+  # indent and every unrelated element's text, so on its own it does not prove
+  # the CLUT approached the cap. Requiring the writer to have actually split
+  # ties the case to the mechanism under test, so removing the split turns this
+  # red here rather than only at the iccFromXml call below.
+  if [ -z "$splits" ] || [ "$splits" -lt 1 ]; then
+    fail "$name" "writer emitted no text-node split for ${total} bytes of CLUT text"
     return
   fi
 
   if ! "$FROMXML" "$xml" "$back" >>"$logfile" 2>&1; then
-    fail "$name" "iccFromXml refused a ${longest}-byte text node it had just written"
+    fail "$name" "iccFromXml refused ${total} bytes of CLUT text split into ${longest}-byte nodes"
     return
   fi
   check_sanitizers "$name" "$logfile" || return
@@ -175,7 +195,7 @@ def norm(path):
 sys.exit(0 if norm(sys.argv[1]) == norm(sys.argv[2]) else 1)
 PY
   then
-    pass "$name (${longest} byte text node, round-trip byte-identical)"
+    pass "$name (${total} bytes across ${splits} split(s), longest node ${longest} bytes, round-trip byte-identical)"
   else
     fail "$name" "round-trip profile differs from the original"
   fi
