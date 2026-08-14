@@ -200,6 +200,8 @@ jobs:
     name: MATLAB Docker interoperability
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      ICCDEV_IMAGE: ghcr.io/internationalcolorconsortium/iccdev:latest
 
     steps:
       - name: Checkout repository
@@ -227,8 +229,6 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
-          ICCDEV_IMAGE: >-
-            ghcr.io/internationalcolorconsortium/iccdev@sha256:7cc0354c9a37671a681f20df9cdc164bd4859c7ccb40e50d60ffa510fcb2d628
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -240,9 +240,6 @@ jobs:
       - name: Validate published container from MATLAB
         # matlab-actions/run-command v3
         uses: matlab-actions/run-command@75644028e1e2aa374bbfdc968a65718a178cc264
-        env:
-          ICCDEV_IMAGE: >-
-            ghcr.io/internationalcolorconsortium/iccdev@sha256:7cc0354c9a37671a681f20df9cdc164bd4859c7ccb40e50d60ffa510fcb2d628
         with:
           command: >-
             addpath('matlab');
