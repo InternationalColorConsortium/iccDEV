@@ -5630,6 +5630,14 @@ iccdev_add_script_test(
 )
 
 iccdev_add_script_test(
+  iccdev.issue-2162-jpegdump-read-error
+  60
+  "iccdev;tools;jpegdump;issue-2162;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2162-jpegdump-read-error.sh"
+)
+
+iccdev_add_script_test(
   iccdev.issue-1168-pawg-calculator-hbo
   120
   "iccdev;tools;pawg;calculator;asan;regression"

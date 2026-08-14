@@ -398,6 +398,16 @@ bool InjectIccIntoJpeg(const char* inputPath, const char* iccPath, const char* o
             safe_exit("Failed to write JPEG output.");
     }
 
+    // The loop above ends on n == 0, which fread reports for BOTH end-of-file
+    // and a read error -- the return value alone cannot tell them apart, so the
+    // error indicator has to be consulted separately (#2162).  Without this the
+    // copy stopped silently on an I/O error part-way through the image data:
+    // the output JPEG was left truncated with no EOI marker, yet this function
+    // returned true and the tool reported "successfully injected" and exited 0.
+    // Every fwrite above is already checked; this gives the read side parity.
+    if (ferror(in))
+        safe_exit("Failed to read JPEG input.");
+
     fclose(in);
     if (!icFlushAndClose(out))
         safe_exit("Failed to close output JPEG file.");
