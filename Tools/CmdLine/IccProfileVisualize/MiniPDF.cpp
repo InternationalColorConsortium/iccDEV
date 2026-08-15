@@ -99,24 +99,6 @@ std::ostream& operator<<( std::ostream &os, const RGB8Color &col )
 
 /******************************************************************************/
 
-static bool WritePdfTextFile(FILE* outFile, const std::string& text)
-{
-  bool failed = false;
-
-  if (!outFile)
-    return false;
-
-  if (!text.empty() && fwrite(text.data(), 1, text.size(), outFile) != text.size())
-    failed = true;
-
-  if (!icFlushAndClose(outFile))
-    failed = true;
-
-  return !failed;
-}
-
-/******************************************************************************/
-
 // very approximate, not using real font metrics
 float PDFEstimateStringWidth( const std::string &str, float textSizePts )
 {
@@ -385,7 +367,10 @@ void PDFWriter::CloseFile()
 
           // codeql[cpp/path-injection]
           FILE* outFile = icOpenRegularWriteTextFile(m_filename.c_str());
-          if (!WritePdfTextFile(outFile, out.str())) {
+          // icWriteAndClose() writes through the handle icOpenRegularWriteTextFile()
+          // just validated, then closes it (#2154). It replaced a byte-identical
+          // private WritePdfTextFile() copy that lived here.
+          if (!icWriteAndClose(outFile, out.str())) {
             LogAnError(stderr, "PDF writing error in '%s': unable to open regular output file\n", m_filename.c_str());
             m_filename.clear();
             return;

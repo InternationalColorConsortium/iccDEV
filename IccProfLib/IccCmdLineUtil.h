@@ -272,9 +272,9 @@ inline bool icFlushAndClose(FILE* f)
 // handle straight to this function is what keeps the validated object and the
 // written object the same object.
 //
-// The body mirrors the WritePdfTextFile() copies in MiniPDF.cpp, which already
-// do exactly this correctly; those are two more members of the duplicated
-// open/close helper family #2154 tracks, and they can collapse onto this one.
+// The body came from the WritePdfTextFile() copies in MiniPDF.cpp, which already
+// did exactly this correctly. Both of those were members of the duplicated
+// open/close helper family #2154 tracks, and both now call this function instead.
 inline bool icWriteAndClose(FILE* f, const std::string& text)
 {
   bool failed = false;
