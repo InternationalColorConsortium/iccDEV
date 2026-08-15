@@ -636,6 +636,61 @@ function(iccdev_add_embedded_profile_detachio_test)
   endif()
 endfunction()
 
+# Issue #2128: the two CIccProfile release paths that skipped the DetachIO()
+# notification the sibling test above depends on. CIccProfile::Detach()
+# (IccProfLib/IccProfile.cpp) notified tags only in its owning branch, and
+# CIccProfile::CopyAttach(nullptr) notified nothing at all -- so an embedded
+# profile loaded through a borrowed IO was left reporting HasIO()==true over
+# an IO its parent had released. CopyAttach() is the path the library actually
+# exercises (IccProfLib/IccCmm.cpp borrows the caller's IO with
+# CopyAttach(&Profile, true) and returns it with CopyAttach(nullptr)), so a fix
+# confined to Detach() would not have reached it. Cleanup() also left
+# m_bSharedIO set after clearing m_pAttachIO, leaving a reused profile where
+# Detach() took the shared branch and returned true having done nothing.
+# The test drives both release paths against an in-memory fixture and asserts:
+# the inner profile reports HasIO()==false afterwards (the fix, on each path
+# independently); a tag loaded before the release keeps its data; a tag never
+# loaded comes back NULL rather than reading through the released IO; the
+# LENDER still has usable IO afterwards (borrowed IO is dropped, never deleted
+# -- this is what catches the shared branch being folded into the owning one);
+# and Detach() on a reused, formerly-shared profile now returns false. No
+# corpus fixture -- entirely in-memory -- so this cannot be silently disabled
+# by a missing fixture.
+function(iccdev_add_profile_shared_io_detach_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccProfileSharedIoDetachTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/profile-shared-io-detach.cpp"
+  )
+  target_link_libraries(iccProfileSharedIoDetachTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccProfileSharedIoDetachTest)
+
+  add_test(
+    NAME iccdev.profile-shared-io-detach
+    COMMAND "$<TARGET_FILE:iccProfileSharedIoDetachTest>"
+  )
+  set_tests_properties(iccdev.profile-shared-io-detach PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;iccprofLib;embedded-profile;shared-io;issue-2128;regression"
+  )
+  if(WIN32)
+    set(_profile_shared_io_detach_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccProfileSharedIoDetachTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _profile_shared_io_detach_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.profile-shared-io-detach PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_profile_shared_io_detach_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_tag_layout_shared_data_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -4783,6 +4838,7 @@ if(WIN32)
   iccdev_add_embedio_read8_bounds_test()
   iccdev_add_embedded_profile_onelevel_load_test()
   iccdev_add_embedded_profile_detachio_test()
+  iccdev_add_profile_shared_io_detach_test()
   iccdev_add_fileio_getlength_position_test()
   iccdev_add_profile_write_failure_test()
   iccdev_add_fileio_seek_tell_test()
@@ -5063,6 +5119,7 @@ iccdev_add_pcs_unitfloat_source_encoding_test()
 iccdev_add_embedio_read8_bounds_test()
 iccdev_add_embedded_profile_onelevel_load_test()
 iccdev_add_embedded_profile_detachio_test()
+iccdev_add_profile_shared_io_detach_test()
 iccdev_add_fileio_getlength_position_test()
 iccdev_add_profile_write_failure_test()
 iccdev_add_fileio_seek_tell_test()
@@ -5531,11 +5588,23 @@ set_tests_properties(iccdev.pcc-zero-illuminant-regressions PROPERTIES
 # problem with XML_PARSE_HUGE turns this test red instead of quietly widening
 # what the parser accepts. Builds the fixture link with iccApplyToLink, so it
 # needs the generated profiles.
+#
+# The known-red label is deliberately absent (#2160): it was added while the
+# large-CLUT round trip could not pass against libxml2 >= 2.13, and the writer
+# now bounds each text node, so the quarantine no longer describes anything
+# true. Where that matters is ci-iccdev-tool-tests.yml run with ctest_mode=full
+# and the local check target; both exclude known-red and neither excludes slow.
+#
+# It does NOT put this test on the pull_request path: ci-pr-action.yml pins
+# ctest_mode=fast, which drops it on the slow label, and the Windows legs never
+# register it at all because the if(WIN32) branch above returns before the bash
+# script tests. Measured on dispatched run 31852372579 -- the case does not
+# execute on any PR leg. Widening that is a separate question from this fix.
 if(TARGET iccFromXml AND TARGET iccToXml AND TARGET iccApplyToLink)
   iccdev_add_script_test(
     iccdev.xml-parser-regressions
     600
-    "iccdev;xml;parser;regression;issue-1856;issue-2108;asan;slow;known-red"
+    "iccdev;xml;parser;regression;issue-1856;issue-2108;issue-2160;asan;slow"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-xml-parser-regression-tests.sh"
   )

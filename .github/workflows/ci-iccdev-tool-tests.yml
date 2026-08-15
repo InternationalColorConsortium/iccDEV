@@ -479,8 +479,11 @@ jobs:
               exit 1
               ;;
           esac
-          # #2108 remains known-red with libxml2 >= 2.13 until the XML reader
-          # handles XML_MAX_TEXT_LENGTH without weakening parser hardening.
+          # Generic escape hatch for tests quarantined as known failures. No
+          # test carries the label today: #2108 held it until #2160 bounded the
+          # emitted XML text nodes, and iccdev.xml-parser-regressions now runs
+          # here. Kept so a future quarantine needs no workflow edit -- but a
+          # test added to it stops being covered, so label sparingly.
           ctest_args+=(--label-exclude known-red)
           case "$CTEST_MODE" in
             fast)

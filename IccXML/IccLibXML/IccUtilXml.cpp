@@ -275,9 +275,10 @@ public:
     int i;
     const size_t bufSize = 128;
     char buf[bufSize];
+    std::string row;
 
     if (!(m_nCurPixel % m_nPixelsPerRow))
-      *m_xml += m_blanks;
+      row += m_blanks;
 
     switch(m_nType) {
       case icConvert8Bit:
@@ -290,7 +291,7 @@ public:
           if (!(v >= 0.0)) v = 0.0;
           else if (v > 1.0) v = 1.0;
           snprintf(buf, bufSize, " %3d", (icUInt8Number)(v*255.0 + 0.5));
-          *m_xml += buf;
+          row += buf;
         }
         break;
       case icConvert16Bit:
@@ -299,21 +300,46 @@ public:
           if (!(v >= 0.0)) v = 0.0;
           else if (v > 1.0) v = 1.0;
           snprintf(buf, bufSize, " %5d", (icUInt16Number)(v*65535.0 + 0.5));
-          *m_xml += buf;
+          row += buf;
         }
         break;
       case icConvertFloat:
       default:
         for (i=0; i<m_nSamples; i++) {
           snprintf(buf, bufSize, " %13.8f", pData[i]);
-          *m_xml += buf;
+          row += buf;
         }
         break;
     }
     m_nCurPixel++;
     if (!(m_nCurPixel % m_nPixelsPerRow)) {
-      *m_xml += "\n";
+      row += "\n";
     }
+
+    // libxml2 2.13.0 moved the XML_MAX_TEXT_LENGTH check into xmlSAX2Text, so
+    // a CLUT whose values exceed 10 MB in one text node is refused on read even
+    // though the document as a whole is bounded. Break the run into separate
+    // text nodes with a comment between them; the reader joins the text
+    // siblings and skips the comment when rebuilding the array.
+    //
+    // The decision is driven by the byte count alone, and is taken BEFORE this
+    // pixel is appended. Both details are load bearing:
+    //   - Gating it on a row boundary would never fire for a CLUT with one
+    //     input dimension, because Init() leaves NumPoints() == GridPoints[0]
+    //     == nPixelsPerRow (IccTagLut.cpp), i.e. the whole table is a single
+    //     row -- exactly the profile shape this is meant to bound.
+    //   - Deciding first keeps the invariant node <= kMaxTextNodeBytes. Testing
+    //     after the append would let a node reach the threshold plus a whole
+    //     pixel, and snprintf caps a sample at bufSize, so a wide float row is
+    //     not negligible against the margin below the cap.
+    // The split therefore lands between pixels rather than between rows.
+    static const size_t kMaxTextNodeBytes = 8ULL * 1024 * 1024;
+    if (m_nTextNodeBytes && m_nTextNodeBytes + row.size() > kMaxTextNodeBytes) {
+      *m_xml += m_blanks + "<!-- TableData continuation -->\n";
+      m_nTextNodeBytes = 0;
+    }
+    *m_xml += row;
+    m_nTextNodeBytes += row.size();
   }
 
   void Finish()
@@ -329,6 +355,7 @@ public:
   icUInt16Number m_nSamples;
   icUInt8Number m_nPixelsPerRow;
   icUInt32Number m_nCurPixel;
+  size_t m_nTextNodeBytes = 0;
 };
 
 bool icCLUTDataToXml(std::string &xml, CIccCLUT *pCLUT, icConvertType nType, std::string blanks, 
@@ -533,18 +560,19 @@ bool icXmlValidateFileCount(size_t value, icUInt32Number &count, std::string &pa
 
 xmlDoc *icXmlReadFileBounded(const char *szFilename, int nOptions, std::string *parseStr)
 {
-  // libxml2's streaming reader hands character data to the tree builder in
-  // successive chunks, and the append path that joins those chunks is where
-  // XML_MAX_TEXT_LENGTH (10 MB) is enforced. A profile whose CLUT serialises
-  // to a larger single text node is therefore refused on read even though
-  // iccToXml had just written it - issue #1856. Parsing one contiguous buffer
-  // never takes that append path, so the round trip holds without
-  // XML_PARSE_HUGE, which would additionally have disabled the nesting-depth
-  // and name-length caps for every input.
+  // Reading the whole document into one buffer replaces libxml2's per-node
+  // XML_MAX_TEXT_LENGTH (10 MB) with a whole-document bound, which is the
+  // stricter promise: it limits total parsed size instead of the size of any
+  // one node, and the streamed path applies no document bound at all. Doing it
+  // here also avoids XML_PARSE_HUGE, which would have disabled the
+  // nesting-depth and name-length caps for every input - issue #1856.
   //
-  // What the per-node cap gave up is replaced by a whole-document bound, which
-  // is the stricter promise: it limits total parsed size instead of the size of
-  // any one node, and today the streamed path applies no document bound at all.
+  // It does NOT, however, exempt a large text node from the cap. That was the
+  // original claim here and it is wrong for libxml2 >= 2.13: v2.13.0 moved the
+  // check into xmlSAX2Text, so it applies however the input is delivered - see
+  // issue #2108. What keeps a large CLUT round-tripping is the writer bounding
+  // the text nodes it emits (CIccDumpXmlCLUT::PixelOp, issue #2160), not
+  // anything this function does.
   if (!szFilename || !*szFilename)
     return NULL;
 
@@ -735,17 +763,36 @@ bool CIccXmlArrayType<T, Tsig>::ParseArray(xmlNode *pNode)
     return ParseArray(m_pBuf, m_nSize, pNode);
   }
 
-  for ( ;pNode && pNode->type!= XML_TEXT_NODE; pNode=pNode->next);
+  for ( ;pNode && pNode->type!= XML_TEXT_NODE && pNode->type!= XML_CDATA_SECTION_NODE; pNode=pNode->next);
 
   if (!pNode || !pNode->content)
     return false;
 
-  n = ParseTextCount((const char*)pNode->content);
+  // The CLUT writer splits data that would exceed XML_MAX_TEXT_LENGTH into
+  // several text nodes separated by a comment (CIccDumpXmlCLUT::PixelOp), so
+  // one array's values can arrive as a run of siblings; step over the
+  // separators and concatenate. Stop at anything that is not text, CDATA or a
+  // comment rather than refusing the array outright: callers such as the three
+  // CIccTagXmlNamedColor2 device-coord branches ignore this return value and
+  // read GetSize(), so turning an odd-but-parseable node list into an empty
+  // array would silently drop data instead of reporting an error.
+  std::string text;
+  for (xmlNode *pText = pNode; pText; pText = pText->next) {
+    if (pText->type == XML_COMMENT_NODE)
+      continue;
+    if ((pText->type != XML_TEXT_NODE && pText->type != XML_CDATA_SECTION_NODE) ||
+        !pText->content) {
+      break;
+    }
+    text += (const char*)pText->content;
+  }
+
+  n = ParseTextCount(text.c_str());
 
   if (!n || !SetSize(n))
     return false;
 
-  return ParseArray(m_pBuf, m_nSize, pNode);
+  return ParseText(m_pBuf, m_nSize, text.c_str()) == m_nSize;
 }
 
 template <class T, icTagTypeSignature Tsig>
@@ -766,10 +813,27 @@ bool CIccXmlArrayType<T, Tsig>::ParseTextArray(const char *szText)
 template <class T, icTagTypeSignature Tsig>
 bool CIccXmlArrayType<T, Tsig>::ParseTextArray(xmlNode *pNode)
 {
-  if (pNode->children && pNode->children->type==XML_TEXT_NODE) {
-    return ParseTextArray((const char*)pNode->children->content);
+  // Same split-aware join as ParseArray above: the element may hold several
+  // text children with comment separators between them, so the first child
+  // alone is no longer necessarily the whole array. Stops at the first child
+  // that is not text, CDATA or a comment, which leaves the previous behaviour
+  // (first child must be text, or the array is refused) intact.
+  std::string text;
+
+  if (!pNode)
+    return false;
+
+  for (xmlNode *child = pNode->children; child; child = child->next) {
+    if (child->type == XML_COMMENT_NODE)
+      continue;
+    if ((child->type != XML_TEXT_NODE && child->type != XML_CDATA_SECTION_NODE) ||
+        !child->content) {
+      break;
+    }
+    text += (const char*)child->content;
   }
-  return false;
+
+  return !text.empty() && ParseTextArray(text.c_str());
 }
 
 template <class T, icTagTypeSignature Tsig>

@@ -259,8 +259,22 @@ void CIccProfile::Cleanup()
     delete m_pAttachIO;
   }
   m_pAttachIO = nullptr;
+  //Clearing m_pAttachIO without clearing m_bSharedIO left a formerly-shared
+  //profile claiming to share an IO it no longer has. Detach() then took its
+  //shared branch and reported true having done nothing, and with the tag
+  //notification below hoisted above that branch, the stale flag would decide
+  //which release path a reused profile takes. Restoring the flag to its
+  //constructor default on release is the same rule CIccXform::DetachAll()
+  //(IccCmm.cpp) follows for m_bOwnsProfile. operator= needs no separate reset
+  //- it calls Cleanup() before copying anything.
+  m_bSharedIO = false;
 
   TagPtrList::iterator i;
+
+  //Tags are destroyed below, so they need no DetachIO() notification here:
+  //~CIccTagEmbeddedProfile deletes its inner profile outright. Deleting
+  //m_pAttachIO first is safe because the inner profile's CIccEmbedIO was
+  //attached with bOwnIO false, so releasing it never touches what it wrapped.
 
   for (i=m_TagVals.begin(); i!=m_TagVals.end(); i++) {
     delete i->ptr;
@@ -729,6 +743,15 @@ bool CIccProfile::Attach(CIccIO *pIO, bool bUseSubProfile/*=false*/)
     }
   }
 
+  //Attach() takes ownership - Cleanup() deletes m_pAttachIO unless the profile
+  //is marked as sharing it - so the sharing flag has to be cleared here too,
+  //not just in Cleanup(). Attach() only calls Cleanup() when tags are already
+  //present, so a profile that had borrowed an IO (CopyAttach(p, true)) and was
+  //then attached to one of its own kept the flag set and never freed the IO it
+  //now owned. Confirmed as a 48-byte LeakSanitizer leak before this line.
+  //Same rule as CIccXform::DetachAll() (IccCmm.cpp) restoring m_bOwnsProfile:
+  //taking or releasing a resource resets the flag that says who owns it.
+  m_bSharedIO = false;
   m_pAttachIO = pIO;
 
   return true;
@@ -749,27 +772,50 @@ bool CIccProfile::Attach(CIccIO *pIO, bool bUseSubProfile/*=false*/)
 */
 bool CIccProfile::Detach()
 {
-  if (m_pAttachIO && !m_bSharedIO) {
-    TagEntryList::iterator i;
+  //Reproduces the previous return contract exactly, so that the notification
+  //loop can be hoisted above the branch split below: the only case that
+  //returned false was neither owning nor sharing an IO. Owning returned true,
+  //and sharing returned true whether or not m_pAttachIO was set.
+  if (!m_pAttachIO && !m_bSharedIO)
+    return false;
 
-    for (i = m_Tags.begin(); i != m_Tags.end(); i++) {
-      if (i->pTag)
-        i->pTag->DetachIO();
-    }
+  //Notify before either release. A tag holding IO derived from this profile's
+  //IO - today only CIccTagEmbeddedProfile, whose inner profile is attached to
+  //a CIccEmbedIO wrapping this IO - was left advertising HasIO() true over a
+  //released IO when the shared branch ran, because that branch never reached
+  //this loop.
+  //
+  //The child is released whether this profile owns the IO or borrowed it,
+  //which is what the library already does elsewhere: CIccXform::DetachAll()
+  //(IccCmm.cpp) drops m_pProfile regardless of m_bOwnsProfile, and
+  //CIccFileIO::Detach() (IccIO.cpp) drops a borrowed FILE* outright. The
+  //sharing flag governs who deletes, not whether a borrower may keep reading -
+  //see ShareProfile()'s "so it won't be deleted" (IccCmm.h/IccCmm.cpp) - and
+  //the borrowed IO is still dropped rather than deleted below. A borrower has
+  //no way to observe when the lender closes what it lent.
+  //
+  //Running the loop while the IO is still alive is what makes the inner
+  //profile's own Detach() safe; see CIccTagEmbeddedProfile::DetachIO().
+  TagEntryList::iterator i;
 
-    delete m_pAttachIO;
-
-    m_pAttachIO = NULL;
-    return true;
+  for (i = m_Tags.begin(); i != m_Tags.end(); i++) {
+    if (i->pTag)
+      i->pTag->DetachIO();
   }
-  else if (m_bSharedIO) {
+
+  if (m_bSharedIO) {
+    //Borrowed IO belongs to the profile that lent it, so it is dropped, never
+    //deleted.
     m_pAttachIO = NULL;
     m_bSharedIO = false;
 
     return true;
   }
 
-  return false;
+  delete m_pAttachIO;
+
+  m_pAttachIO = NULL;
+  return true;
 }
 
 
@@ -791,6 +837,20 @@ bool CIccProfile::Detach()
 void CIccProfile::CopyAttach(CIccProfile* pProfile, bool bSharedIO)
 {
   if (!pProfile) {
+    //This is the release path the library actually exercises - IccCmm.cpp
+    //borrows the caller's IO with CopyAttach(&Profile, true) and gives it
+    //back with CopyAttach(nullptr) - yet it dropped the IO without telling
+    //the tags, so a fix confined to Detach() would never reach it. Notify on
+    //the same terms Detach() does, while the borrowed IO is still alive.
+    if (m_pAttachIO || m_bSharedIO) {
+      TagEntryList::iterator i;
+
+      for (i = m_Tags.begin(); i != m_Tags.end(); i++) {
+        if (i->pTag)
+          i->pTag->DetachIO();
+      }
+    }
+
     m_pAttachIO = nullptr;
     m_bSharedIO = false;
   }
