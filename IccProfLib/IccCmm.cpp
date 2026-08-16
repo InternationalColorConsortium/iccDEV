@@ -3362,10 +3362,30 @@ icStatusCMM CIccPcsXform::pushXYZConvert(CIccXform *pFromXform, CIccXform *pToXf
         if (pElem->GetType()==icSigMatrixElemType) {
           CIccMpeMatrix *pMatElem = (CIccMpeMatrix*)pElem;
 
-          icFloatNumber *pMat = pMatElem->GetMatrix();
-          icFloatNumber *pOffset = pMatElem->GetConstants();
+          const icFloatNumber *pMat = pMatElem->GetMatrix();
+          const icFloatNumber *pOffset = pMatElem->GetConstants();
+          icUInt16Number inChannels = pMatElem->NumInputChannels();
+          icUInt16Number outChannels = pMatElem->NumOutputChannels();
 
-          if (pMat && (!pOffset || (pOffset[0]==0.0 && pOffset[1]==0.0 && pOffset[2]==0.0))) {
+          // The guard above checks the containing MPE's channel counts, not this
+          // element's, and the two can disagree in a profile that Validate()
+          // rejects but nothing here re-checks. CIccMpeMatrix::SetSize allocates
+          // inChannels*outChannels matrix entries and outChannels constants, so a
+          // 1x1 element leaves pOffset[1..2] and 8 of the 9 copied matrix entries
+          // out of bounds (#2175). PR #632 added this same guard to the
+          // standardToCustomPcc arm below; this arm was missed.
+          bool offsetsZero = true;
+          if (pOffset) {
+            for (int i = 0; i < outChannels; ++i) {
+              if (pOffset[i] != 0.0) {
+                offsetsZero = false;
+                break;
+              }
+            }
+          }
+
+          // make sure the matrix is the expected size and offsets are zero
+          if (pMat && (inChannels == 3) && (outChannels == 3) && (!pOffset || offsetsZero) ) {
             CIccPcsStepMatrix *pStepMtx = new (std::nothrow) CIccPcsStepMatrix(3, 3);
 
             if (pStepMtx ) {

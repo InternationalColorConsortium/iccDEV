@@ -2104,6 +2104,41 @@ function(iccdev_add_unsupported_profile_class_test)
   endif()
 endfunction()
 
+function(iccdev_add_pcs_xyzconvert_matrix_channels_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPcsXyzConvertMatrixChannelsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pcs-xyzconvert-matrix-channels.cpp"
+  )
+  target_link_libraries(iccPcsXyzConvertMatrixChannelsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPcsXyzConvertMatrixChannelsTest)
+
+  add_test(
+    NAME iccdev.pcs-xyzconvert-matrix-channels
+    COMMAND "$<TARGET_FILE:iccPcsXyzConvertMatrixChannelsTest>"
+  )
+  set_tests_properties(iccdev.pcs-xyzconvert-matrix-channels PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;cmm;pcc;security;issue-2175;regression"
+  )
+  if(WIN32)
+    set(_pcsxyz_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPcsXyzConvertMatrixChannelsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pcsxyz_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pcs-xyzconvert-matrix-channels PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pcsxyz_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_dpcc_pcc_replacement_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -4908,6 +4943,7 @@ if(WIN32)
   iccdev_add_extended_device_colorspace_test()
   iccdev_add_unsupported_profile_class_test()
   iccdev_add_dpcc_pcc_replacement_test()
+  iccdev_add_pcs_xyzconvert_matrix_channels_test()
   iccdev_add_iccviz_metrics_test()
   iccdev_add_iccviz_degenerate_test()
   iccdev_add_iccviz_pdf_axis_test()
@@ -5188,6 +5224,7 @@ iccdev_add_utf8_textarray_test()
 iccdev_add_extended_device_colorspace_test()
 iccdev_add_unsupported_profile_class_test()
 iccdev_add_dpcc_pcc_replacement_test()
+iccdev_add_pcs_xyzconvert_matrix_channels_test()
 iccdev_add_iccviz_metrics_test()
 iccdev_add_iccviz_degenerate_test()
 iccdev_add_iccviz_pdf_axis_test()
