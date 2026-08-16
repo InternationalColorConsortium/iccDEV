@@ -52,6 +52,7 @@ tables.
 | `iccApplyProfiles` | Apply a profile chain to a TIFF image. |
 | `iccApplySearch` | Apply a profile sequence using inverse search. |
 | `iccApplyToLink` | Create DeviceLink profiles or `.cube` LUTs from profile sequences. |
+| [iccApply visual lanes](iccapply/README.md) | Interactive argv, CMM, and output flow references for the four iccApply tools. |
 | `iccDumpProfile` | Dump and validate ICC profile structure. |
 | `iccRoundTrip` | Evaluate round-trip profile behavior. |
 | `iccSpecSepToTiff` | Combine spectral separation TIFFs. |

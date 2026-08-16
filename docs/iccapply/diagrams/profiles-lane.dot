@@ -1,0 +1,21 @@
+digraph profiles_lane {
+  graph [rankdir=LR, bgcolor="transparent", fontname="Helvetica"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fillcolor="#e8f1fb"];
+  edge [fontname="Helvetica"];
+  entry [label="argc / argv", fillcolor="#fff2cc"];
+  threads [label="optional -threads N"];
+  cfg [label="-cfg file\nexact reduced argc", fillcolor="#d9ead3"];
+  direct [label="optional -exportcfg file\nCIccCfgImageApply"];
+  sequence [label="CIccCfgProfileSequence\nfull remainder required"];
+  tiff [label="Open TIFF\nread metadata/profile"];
+  cmm [label="CreateStandard\nthreaded CMM"];
+  output [label="Convert pixels\nwrite TIFF", fillcolor="#d9ead3"];
+  reject [label="reject", fillcolor="#f4cccc"];
+  entry -> threads;
+  threads -> cfg [label="-cfg"];
+  threads -> direct [label="direct"];
+  cfg -> tiff;
+  direct -> sequence -> tiff;
+  sequence -> reject [label="remainder"];
+  tiff -> cmm -> output;
+}

@@ -3,10 +3,11 @@
 # Dependabot Configuration
 # https://docs.github.com/en/code-security/dependabot
 #
-# Keeps GitHub Actions and other dependencies up to date.
+# Keeps GitHub Actions and Docker base-image dependencies up to date.
 #
 ###############################################################
 
+---
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -19,6 +20,20 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
+    commit-message:
+      prefix: "ci"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    cooldown:
+      default-days: 7
+    labels:
+      - "dependencies"
+      - "docker"
     commit-message:
       prefix: "ci"
     open-pull-requests-limit: 5

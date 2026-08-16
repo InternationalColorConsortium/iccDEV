@@ -1585,13 +1585,24 @@ jobs:
           fi
           test -f docs/generated/html/inherits.html
           test -f docs/generated/html/iis-isapi_8openapi_8yaml_source.html
-          if find docs/generated/html -maxdepth 1 \
-            \( -name 'namespaceanonymous*' -o -name 'structanonymous*' -o -name 'classanonymous*' \) \
-            | grep -q .; then
+          test -f docs/generated/html/iccapply_overview.html
+          test -f docs/generated/html/profiles_lane.html
+          test -f docs/generated/html/namedcmm_lane.html
+          test -f docs/generated/html/search_lane.html
+          test -f docs/generated/html/tolink_lane.html
+          test -f docs/generated/html/dot_profiles-lane.svg
+          test -f docs/generated/html/dot_namedcmm-lane.svg
+          test -f docs/generated/html/dot_search-lane.svg
+          test -f docs/generated/html/dot_tolink-lane.svg
+          test -f docs/generated/html/icc__apply__qa__suite_8sh_source.html
+          grep -q 'iccApply visual lanes' docs/generated/html/index.html
+          if compgen -G 'docs/generated/html/namespaceanonymous*' >/dev/null ||
+             compgen -G 'docs/generated/html/structanonymous*' >/dev/null ||
+             compgen -G 'docs/generated/html/classanonymous*' >/dev/null; then
             echo "::error::Anonymous namespace pages leaked into generated HTML"
             exit 1
           fi
-          if grep -R "namespaceanonymous" -l docs/generated/html | grep -q .; then
+          if grep -R -l -m 1 "namespaceanonymous" docs/generated/html >/dev/null; then
             echo "::error::Anonymous namespace references leaked into generated HTML"
             exit 1
           fi
@@ -1634,7 +1645,8 @@ jobs:
             echo "CLI tools including IccPawgReport and"
             echo "IccProfileVisualize, Winnt tools including"
             echo "IccIisIsapi and its OpenAPI contract,"
-            echo "wxWidget tools, hello-iccdev, docs, and Testing notes."
+            echo "wxWidget tools, hello-iccdev, docs, Testing notes,"
+            echo "and iccApply command-line lane references."
             echo ""
             echo "**Visual aids**: Interactive SVG (pan/zoom),"
             echo "class hierarchy browser, call/caller graphs,"

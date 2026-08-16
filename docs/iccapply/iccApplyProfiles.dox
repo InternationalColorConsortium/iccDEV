@@ -1,0 +1,62 @@
+/**
+\page profiles_lane iccApplyProfiles: TIFF standard-CMM lane
+
+\tableofcontents
+
+\section profiles_contract Input forms and argv ownership
+
+This tool converts a source TIFF to a destination TIFF through a standard
+profile sequence.
+
+| Form | Token shape |
+|---|---|
+| JSON | `iccApplyProfiles [-threads N] -cfg config_file` |
+| Direct | `iccApplyProfiles [-threads N] [-exportcfg config_file] src_tiff dst_tiff encoding compression planar embed interpolation profile intent ...` |
+
+`-threads N` is parsed before either form. It accepts 0 through 1024; zero
+requests hardware concurrency and one requests a single worker. The tool then
+advances its local `argv` and reduces `argc` by two, so `-cfg file` must be
+the exactly three remaining tokens: program name, `-cfg`, and file.
+
+\dotfile profiles-lane.dot "iccApplyProfiles parser and TIFF transform lane"
+
+The direct form first removes the program name, then optionally consumes
+`-exportcfg file`. `CIccCfgImageApply::fromArgs()` owns the fixed TIFF output
+group; `CIccCfgProfileSequence::fromArgs()` owns the remaining profile group.
+The final consumed count must equal the offered profile remainder. An odd
+trailing direct-mode token is rejected rather than ignored.
+
+\section profiles_options Direct configuration group
+
+| Field | Accepted selector | Meaning |
+|---|---|---|
+| `src_tiff`, `dst_tiff` | paths | Input and created output TIFF files. |
+| `encoding` | 0, 1, 2, 3 | Preserve source, 8-bit, 16-bit, or float output samples. |
+| `compression` | 0, 1 | No compression or LZW compression. |
+| `planar` | 0, 1 | Contiguous or separate TIFF planes. |
+| `embed` | 0, 1 | Do not embed an ICC profile, or embed the final ICC profile. |
+| `interpolation` | 0, 1 | Linear or tetrahedral interpolation. |
+| profile sequence | pairs with optional `-ENV:sig value` and `-PCC file` | Standard CMM transforms and connection conditions. |
+
+The rendering-intent selector supports the documented base, transform,
+preview, gamut, BPC, BDRF, and MCS values printed by `Usage()`. Add 1000 for
+luminance-based PCS adjustment and 10000 to use a V5 sub-profile where present.
+
+\section profiles_runtime Transform and output behavior
+
+The tool opens the source TIFF, accepts source 8-bit, 16-bit, or 32-bit float
+samples, derives or validates the destination bit depth, and obtains any
+embedded source profile. An empty first profile file path requests that
+embedded profile. It then calls `CIccConnectCmm::CreateStandard()` with the
+profile sequence, optional embedded profile, and requested thread count.
+
+For every image row and pixel group, the tool converts source samples to
+internal representation, applies the CMM, converts to the chosen destination
+representation, and writes the configured TIFF layout.
+
+\section profiles_qa QA example
+
+`iccApplyProfiles-quick-check.sh` verifies each output encoding selector,
+JSON export/replay, exact `-cfg` and direct-argument rejection, and a
+single-threaded path. It uses checked-in TIFF and ICC fixtures.
+*/

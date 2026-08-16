@@ -1,0 +1,48 @@
+/**
+\page search_lane iccApplySearch: constrained Search-CMM lane
+
+\tableofcontents
+
+\section search_contract Input forms and sequence constraint
+
+`iccApplySearch` applies a Search CMM to color data.
+
+| Form | Token shape |
+|---|---|
+| JSON | `iccApplySearch -cfg config_file` |
+| Direct | `iccApplySearch [-exportcfg file|-exportcfganddata file] [-debugcalc] data encoding interpolation search-sequence` |
+
+The JSON lane requires exactly `-cfg file`; surplus tokens fail rather than
+silently disappear. The direct lane removes `argv[0]`, consumes optional
+export and debugging prefixes, then uses `CIccCfgDataApply::fromArgs()` followed
+by `CIccCfgSearchApply::fromArgs()`. After either lane, the sequence must
+contain exactly two or three profiles.
+
+\dotfile search-lane.dot "iccApplySearch configuration, sequence, and output lane"
+
+\section search_options Controls and data formats
+
+| Control | Values or form | Effect |
+|---|---|---|
+| Export | `-exportcfg file`, `-exportcfganddata file` | Emit a JSON configuration, optionally including color data. |
+| Debug | `-debugcalc` | Preserve calculator trace records in the output data. |
+| Final encoding | 0 through 6 with optional precision and digits | Value, percent, unit float, float, 8-bit, 16-bit, or V2 16-bit plus formatting. |
+| Interpolation | 0 or 1 | Linear or tetrahedral. |
+| Search profiles | profile/intents with optional `-ENV:` controls | Defines the two- or three-profile search sequence. |
+
+Configuration input can supply inline JSON color data, an external JSON color
+data file, IT8 data, or legacy data. Direct mode requires legacy input data.
+Output can be legacy, JSON color data, or IT8.
+
+\section search_pcs PCS source encoding branch
+
+Once `CIccConnectCmm::CreateSearch()` establishes the source space, a PCS
+input is remapped to the corresponding device signature for conversion. The
+wide PCS encodings float, unit-float, and percent disable clipping before
+`ToInternalEncoding()`.
+
+\section search_qa QA example
+
+`iccApplySearch-quick-check.sh` covers each final encoding, both interpolation
+modes, base intents, JSON export/replay, and invalid argument rejection.
+*/
