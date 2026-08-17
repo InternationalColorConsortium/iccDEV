@@ -976,7 +976,21 @@ bool CIccProfile::loadTags(CIccProfile *pProfile, IccLoadTagsMode mode)
 */
 bool CIccProfile::ReadTags(CIccProfile* pProfile)
 {
-	return loadTags(pProfile, icLoadTagsFull);
+  static thread_local unsigned int readTagsDepth = 0;
+  static const unsigned int maxReadTagsDepth = 8;
+
+  if (readTagsDepth >= maxReadTagsDepth)
+    return false;
+
+  class ReadTagsDepthGuard {
+  public:
+    ReadTagsDepthGuard(unsigned int &depth) : m_depth(depth) { m_depth++; }
+    ~ReadTagsDepthGuard() { m_depth--; }
+  private:
+    unsigned int &m_depth;
+  } depthGuard(readTagsDepth);
+
+  return loadTags(pProfile, icLoadTagsFull);
 }
 
 /**

@@ -993,7 +993,7 @@ else
 fi
 
 if [ -f "$REPO_ROOT/.github/ci/test-data/spectral/spec_1" ]; then
-  run_expect_exit "tdump-06b" "Reject ICC export when TIFF has no profile" 255 \
+  run_expect_exit "tdump-06b" "Reject ICC export when TIFF has no profile" 1 \
     "$TIFFDUMP" "$REPO_ROOT/.github/ci/test-data/spectral/spec_1" "$OUTDIR/tiff_no_profile.icc"
 else
   skip_test "tdump-06b" "Reject ICC export when TIFF has no profile" "no-profile TIFF fixture unavailable"
@@ -1059,7 +1059,7 @@ newline.icc"
       "$tool" "$odd" "$dst" > "$log" 2>&1
       [ -s "$dst" ]
       grep -Fq "Filename:          $outdir/name_with_\\nnewline.tif" "$log"
-      grep -Fq "Profile extracted to: $outdir/export_with_\\nnewline.icc" "$log"
+      grep -Fq "Profile extracted byte-for-byte to: $outdir/export_with_\\nnewline.icc" "$log"
     ' _ "$ICCDEV_TESTING/hybrid/Data/TShirtDesignKW.tif" "$TIFFDUMP" "$OUTDIR"
 else
   skip_test "tdump-08" "Escape controlled ICC description text" "TShirtDesignKW TIFF fixture unavailable"
