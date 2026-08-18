@@ -13,6 +13,12 @@ function result = audit_pawg_q1(profile_path, varargin)
 %     result = iccdev.qa.audit_pawg_q1(profile_path);
 %     assert(result.passed);
 %
+%   Example from the repository root:
+%     profile_path = fullfile('Testing', 'sRGB_v4_ICC_preference.icc');
+%     setenv('ICCDEV_BUILD_DIR', fullfile(pwd, 'msvc'));
+%     result = iccdev.qa.audit_pawg_q1(profile_path);
+%     assert(result.passed);
+%
 % Copyright (c) International Color Consortium.
 % BSD 3-Clause License. See LICENSE.md for details.
 
