@@ -22,6 +22,15 @@ Extract an embedded ICC profile:
 iccTiffDump image.tif embedded.icc
 ```
 
+Extraction copies the TIFF ICC profile field byte-for-byte before profile
+parsing and validation. This preserves malformed profiles for diagnostics and
+does not rewrite tag offsets, padding, or the profile ID. A later parse or
+validation failure is still reported with a nonzero exit status, but does not
+remove the extracted forensic artifact. Output is written to a sibling
+temporary file and atomically renamed only after the complete write succeeds.
+Existing regular files may be replaced atomically; device files, directories,
+and symbolic links are rejected as extraction destinations.
+
 The no-argument form is a help/syntax path and exits successfully. Other
 malformed invocations fail: extra trailing arguments are rejected, missing input
 files fail, and export requests fail when the TIFF has no embedded ICC profile.

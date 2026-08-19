@@ -13,7 +13,9 @@ To build from source, see: [Build documentation](docs/build.md)
 
 API docs:
 [API reference](Tools/Winnt/IccIisIsapi/api.md) ·
-[OpenAPI starter](Tools/Winnt/IccIisIsapi/iis-isapi.openapi.yaml)
+[OpenAPI starter](Tools/Winnt/IccIisIsapi/iis-isapi.openapi.yaml) ·
+[CLI tool reference](docs/tools-cli-reference.md) ·
+[iccApply visual lanes](docs/iccapply/README.md)
 
 ## Introduction
 

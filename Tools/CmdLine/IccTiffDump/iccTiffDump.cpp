@@ -70,6 +70,7 @@
 
 
 #include <cstdio>
+#include <cerrno>
 #include <string>
 #include "IccCmm.h"
 #include "IccUtil.h"
@@ -82,6 +83,12 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#else
+#include <fcntl.h>
+#include <io.h>
+#include <process.h>
+#include <sys/stat.h>
+#include <windows.h>
 #endif
 
 typedef struct {
@@ -121,6 +128,106 @@ const char* GetId(unsigned long nId, IdList* pIdList)
 {
   for (;pIdList->nId != nId && pIdList->nId != UNKNOWNID; pIdList++);
   return pIdList->szName;
+}
+
+static bool IsRegularOutputDestination(const char* szFname)
+{
+  if (!szFname || !szFname[0])
+    return false;
+
+#if defined(_WIN32)
+  DWORD attributes = GetFileAttributesA(szFname);
+  if (attributes != INVALID_FILE_ATTRIBUTES) {
+    const DWORD rejectedAttributes = FILE_ATTRIBUTE_DEVICE |
+                                     FILE_ATTRIBUTE_DIRECTORY |
+                                     FILE_ATTRIBUTE_REPARSE_POINT;
+    return !(attributes & rejectedAttributes);
+  }
+  DWORD error = GetLastError();
+  return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND;
+#else
+  struct stat st;
+  if (lstat(szFname, &st) == 0)
+    return S_ISREG(st.st_mode);
+  return errno == ENOENT;
+#endif
+}
+
+static bool WriteEmbeddedIccProfile(const char* szFname,
+                                    const unsigned char *pProfMem,
+                                    unsigned int nLen)
+{
+  if (!pProfMem || !nLen || !IsRegularOutputDestination(szFname))
+    return false;
+
+  std::string tempName;
+  FILE *fp = NULL;
+  int fd = -1;
+  unsigned int attempt;
+
+  for (attempt = 0; attempt < 100; attempt++) {
+    char suffix[64];
+#if defined(_WIN32)
+    snprintf(suffix, sizeof(suffix), ".tmp-%ld-%u", (long)_getpid(), attempt);
+    tempName = std::string(szFname) + suffix;
+    fd = _open(tempName.c_str(), _O_WRONLY | _O_CREAT | _O_EXCL | _O_BINARY,
+               _S_IREAD | _S_IWRITE);
+    if (fd >= 0)
+      fp = _fdopen(fd, "wb");
+#else
+    snprintf(suffix, sizeof(suffix), ".tmp-%ld-%u", (long)getpid(), attempt);
+    tempName = std::string(szFname) + suffix;
+    fd = open(tempName.c_str(), O_WRONLY | O_CREAT | O_EXCL,
+              S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (fd >= 0)
+      fp = fdopen(fd, "wb");
+#endif
+    if (fp)
+      break;
+    if (fd >= 0) {
+#if defined(_WIN32)
+      _close(fd);
+#else
+      close(fd);
+#endif
+      remove(tempName.c_str());
+      return false;
+    }
+    if (errno != EEXIST)
+      return false;
+  }
+
+  if (!fp)
+    return false;
+
+  bool failed = fwrite(pProfMem, 1, nLen, fp) != nLen;
+  if (!icFlushAndClose(fp))
+    failed = true;
+
+  if (failed) {
+    remove(tempName.c_str());
+    return false;
+  }
+
+  if (!IsRegularOutputDestination(szFname)) {
+    remove(tempName.c_str());
+    return false;
+  }
+
+#if defined(_WIN32)
+  if (!MoveFileExA(tempName.c_str(), szFname,
+                   MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+    remove(tempName.c_str());
+    return false;
+  }
+#else
+  if (rename(tempName.c_str(), szFname) != 0) {
+    remove(tempName.c_str());
+    return false;
+  }
+#endif
+
+  return true;
 }
 
 void Usage() 
@@ -248,15 +355,15 @@ int main(int argc, icChar* argv[])
   }
   else if (argc > 3) {
     Usage();
-    return -1;
+    return 1;
   }
 
   std::string srcName = icSanitizeConsoleText(argv[1]);
 
   CTiffImg SrcImg;
   if (!SrcImg.Open(argv[1])) {
-    printf("\nFile [%s] cannot be opened.\n", srcName.c_str());
-    return -1;
+    fprintf(stderr, "\nFile [%s] cannot be opened.\n", srcName.c_str());
+    return 1;
   }
 
   printf("-------------------->Tiff Image Dump<---------------------------\n");
@@ -281,50 +388,50 @@ int main(int argc, icChar* argv[])
   unsigned int nLen = 0;
   if (SrcImg.GetIccProfile(pProfMem, nLen)) {
     printf("Profile:           Embedded\n");
+    fflush(stdout);
+
+    if (argc > 2) {
+      std::string dstName = icSanitizeConsoleText(argv[2]);
+      if (!WriteEmbeddedIccProfile(argv[2], pProfMem, nLen)) {
+        fprintf(stderr, "\nUnable to extract profile to: %s\n", dstName.c_str());
+        SrcImg.Close();
+        return 1;
+      }
+      printf("\nProfile extracted byte-for-byte to: %s\n", dstName.c_str());
+      fflush(stdout);
+    }
 
     // Profile description and metadata
     CIccProfile *pProfile = OpenIccProfile(pProfMem, nLen);
     if (!pProfile) {
-      printf("\nUnable to open embedded ICC profile\n");
-      SrcImg.Close();
-      return 1;
-    }
-
-    std::string validateReport;
-    if (!pProfile->ReadTags(pProfile)) {
-      printf("\nUnable to read embedded ICC profile\n");
-      delete pProfile;
-      SrcImg.Close();
-      return 1;
-    }
-    else if (pProfile->Validate(validateReport) > icValidateWarning) {
-      printf("\nEmbedded ICC profile violates the ICC specification:\n%s",
-             validateReport.c_str());
-      delete pProfile;
+      fprintf(stderr, "\nUnable to open embedded ICC profile\n");
       SrcImg.Close();
       return 1;
     }
 
     DumpProfileInfo(pProfile, " ");
-    if (argc > 2) {
-      std::string dstName = icSanitizeConsoleText(argv[2]);
-      if (SaveIccProfile(argv[2], pProfile)) {
-        printf("\nProfile extracted to: %s\n", dstName.c_str());
-      }
-      else {
-        printf("\nUnable to extract profile\n");
-        delete pProfile;
-        SrcImg.Close();
-        return -1;
-      }
+
+    std::string validateReport;
+    if (!pProfile->ReadTags(pProfile)) {
+      fprintf(stderr, "\nUnable to read embedded ICC profile\n");
+      delete pProfile;
+      SrcImg.Close();
+      return 1;
+    }
+    else if (pProfile->Validate(validateReport) > icValidateWarning) {
+      fprintf(stderr, "\nEmbedded ICC profile violates the ICC specification:\n%s",
+              validateReport.c_str());
+      delete pProfile;
+      SrcImg.Close();
+      return 1;
     }
     delete pProfile;
   } else {
     printf("Profile:           None\n");
     if (argc > 2) {
-      printf("\nNo embedded ICC profile to extract\n");
+      fprintf(stderr, "\nNo embedded ICC profile to extract\n");
       SrcImg.Close();
-      return -1;
+      return 1;
     }
   }
 

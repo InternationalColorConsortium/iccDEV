@@ -796,11 +796,20 @@ bool CIccProfile::Detach()
   //
   //Running the loop while the IO is still alive is what makes the inner
   //profile's own Detach() safe; see CIccTagEmbeddedProfile::DetachIO().
-  TagEntryList::iterator i;
+  //
+  //Gated on m_pAttachIO, not on m_bSharedIO: CopyAttach(p, true) where p had
+  //no IO leaves this profile flagged as sharing with nothing attached, and
+  //there is then no IO being released for a tag to be holding a view of.
+  //Notifying anyway would tear down an inner profile that SetProfile() gave
+  //its own independently attached IO - DetachIO() detaches whatever the origin
+  //of that IO - which the pre-fix shared branch never did.
+  if (m_pAttachIO) {
+    TagEntryList::iterator i;
 
-  for (i = m_Tags.begin(); i != m_Tags.end(); i++) {
-    if (i->pTag)
-      i->pTag->DetachIO();
+    for (i = m_Tags.begin(); i != m_Tags.end(); i++) {
+      if (i->pTag)
+        i->pTag->DetachIO();
+    }
   }
 
   if (m_bSharedIO) {
@@ -841,8 +850,10 @@ void CIccProfile::CopyAttach(CIccProfile* pProfile, bool bSharedIO)
     //borrows the caller's IO with CopyAttach(&Profile, true) and gives it
     //back with CopyAttach(nullptr) - yet it dropped the IO without telling
     //the tags, so a fix confined to Detach() would never reach it. Notify on
-    //the same terms Detach() does, while the borrowed IO is still alive.
-    if (m_pAttachIO || m_bSharedIO) {
+    //the same terms Detach() does, while the borrowed IO is still alive, and
+    //gated on m_pAttachIO for the same reason: with nothing attached there is
+    //no released IO for a tag to be holding a view of.
+    if (m_pAttachIO) {
       TagEntryList::iterator i;
 
       for (i = m_Tags.begin(); i != m_Tags.end(); i++) {
@@ -851,6 +862,12 @@ void CIccProfile::CopyAttach(CIccProfile* pProfile, bool bSharedIO)
       }
     }
 
+    //Note this drops m_pAttachIO without deleting it even when this profile
+    //owned it, so a caller doing Attach(io) then CopyAttach(nullptr) leaks io;
+    //the else branch below has the same gap when it overwrites a live IO.
+    //Pre-existing and left alone deliberately - making either path delete would
+    //change what CopyAttach() means for existing callers, which is a separate
+    //decision from the tag notification added above.
     m_pAttachIO = nullptr;
     m_bSharedIO = false;
   }
@@ -959,7 +976,21 @@ bool CIccProfile::loadTags(CIccProfile *pProfile, IccLoadTagsMode mode)
 */
 bool CIccProfile::ReadTags(CIccProfile* pProfile)
 {
-	return loadTags(pProfile, icLoadTagsFull);
+  static thread_local unsigned int readTagsDepth = 0;
+  static const unsigned int maxReadTagsDepth = 8;
+
+  if (readTagsDepth >= maxReadTagsDepth)
+    return false;
+
+  class ReadTagsDepthGuard {
+  public:
+    ReadTagsDepthGuard(unsigned int &depth) : m_depth(depth) { m_depth++; }
+    ~ReadTagsDepthGuard() { m_depth--; }
+  private:
+    unsigned int &m_depth;
+  } depthGuard(readTagsDepth);
+
+  return loadTags(pProfile, icLoadTagsFull);
 }
 
 /**
@@ -1010,8 +1041,24 @@ bool CIccProfile::FindAllTags()
  */
 bool CIccProfile::Read(CIccIO *pIO, bool bUseSubProfile/*=false*/)
 {
-  if (m_Tags.size())
+  //Cleanup() releases IO left over from a previous use, but it only runs when
+  //tags are present. A profile that borrowed an IO before it had any tags
+  //(CopyAttach(p, true)) therefore carried that borrowed pointer into this
+  //read, where HasIO() reporting true makes CIccTagEmbeddedProfile::Read()
+  //take its deferred branch and attach an inner profile over pIO - an IO this
+  //call's caller owns and typically destroys on return, leaving the inner
+  //profile dangling. Release it here on the same ownership terms Cleanup()
+  //uses. Attach() carries the same guard and clears the flag where it takes
+  //ownership.
+  if (m_Tags.size()) {
     Cleanup();
+  }
+  else {
+    if (!m_bSharedIO)
+      delete m_pAttachIO;
+    m_pAttachIO = nullptr;
+    m_bSharedIO = false;
+  }
 
   if (!ReadBasic(pIO)) {
     Cleanup();
@@ -1074,8 +1121,17 @@ icValidateStatus CIccProfile::ReadValidate(CIccIO *pIO, std::string &sReport)
 {
   icValidateStatus rv = icValidateOK;
 
-  if (m_Tags.size())
+  //Same stale-borrowed-IO release as Read() above - this entry point carries
+  //the identical tags-only Cleanup() guard.
+  if (m_Tags.size()) {
     Cleanup();
+  }
+  else {
+    if (!m_bSharedIO)
+      delete m_pAttachIO;
+    m_pAttachIO = nullptr;
+    m_bSharedIO = false;
+  }
 
   if (!ReadBasic(pIO)) {
     sReport += icMsgValidateCriticalError;

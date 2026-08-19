@@ -1,6 +1,6 @@
 # Building iccDEV
 
-iccDEV requires C++17, CMake 3.18 or newer, and the image/XML/JSON dependencies
+iccDEV requires C++17, CMake 3.23 or newer, and the image/XML/JSON dependencies
 listed below. Maintainer-level sanitizer, Docker, and CMake policy details live in
 `.github/instructions/build-system.instructions.md`.
 
@@ -18,7 +18,7 @@ listed below. Maintainer-level sanitizer, Docker, and CMake policy details live 
 |----------|----------|
 | Ubuntu | `libpng-dev libjpeg-dev libtiff-dev libxml2-dev zlib1g-dev libwxgtk3.2-dev libwxgtk-media3.2-dev libwxgtk-webview3.2-dev wx-common wx3.2-headers nlohmann-json3-dev cmake make ninja-build` |
 | macOS | `libpng jpeg-turbo libtiff libxml2 zlib wxwidgets nlohmann-json` |
-| Windows | MSVC 2022 with vcpkg-managed `libpng`, `libjpeg-turbo`, `libtiff`, `libxml2`, `zlib`, `wxwidgets`, `nlohmann-json` |
+| Windows | MSVC 2022 or 2026 with vcpkg-managed `libpng`, `libjpeg-turbo`, `libtiff`, `libxml2`, `zlib`, `wxwidgets`, `nlohmann-json` |
 
 Thread support is provided by the platform C/C++ runtime and CMake's
 `Threads::Threads` imported target; no separate Ubuntu package is required.
@@ -58,6 +58,10 @@ cd iccdev
 cmake --preset macos-xcode -S Build/Cmake -B out/macos-xcode
 cmake --build out/macos-xcode --config Release -j"$(sysctl -n hw.ncpu)"
 ```
+
+Always provide `-S Build/Cmake` and an isolated `-B out/macos-xcode`
+directory. Configuring in the repository root is rejected to keep generated
+Xcode files out of the source tree.
 
 To open the generated project:
 
@@ -115,6 +119,21 @@ cmake --build out/vs2022-clangcl-x64 --config Release -- /m /maxcpucount
 
 The ClangCL preset uses the same `out\vs2022-clangcl-x64\bin\Release` runtime
 layout as the MSVC preset.
+
+## Windows MSVC 2026
+
+The `vs2026-x64` preset targets the Visual Studio 18 2026 generator and v145
+toolset while preserving the VS 2022 preset's vcpkg and runtime layout. CMake
+3.23 or newer is required for the preset schema. Set `VCPKG_ROOT` to the
+Visual Studio 2026 vcpkg installation before configuring:
+
+```cmd
+git clone https://github.com/InternationalColorConsortium/iccDEV.git iccdev
+cd iccdev
+set "VCPKG_ROOT=C:\Program Files\Microsoft Visual Studio\2026\Community\VC\vcpkg"
+cmake --preset vs2026-x64 -S Build/Cmake -B out/vs2026-x64
+cmake --build out/vs2026-x64 --config Release -- /m /maxcpucount
+```
 
 ## Windows MinGW UCRT64
 

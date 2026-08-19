@@ -28,11 +28,13 @@ INPUT                  = README.md \
                          Tools/wxWidget \
                          examples/hello-iccdev/hello-iccdev.cpp \
                          docs \
+                         .github/ci/quality-assurance/scripts \
                          Testing/Readme.md
 USE_MDFILE_AS_MAINPAGE = README.md
-FILE_PATTERNS          = *.h *.h.in *.hpp *.c *.cc *.cpp *.cxx *.md *.yaml *.yml
+FILE_PATTERNS          = *.h *.h.in *.hpp *.c *.cc *.cpp *.cxx *.md *.dox *.dot *.sh *.yaml *.yml
 RECURSIVE              = YES
 EXCLUDE                = docs/generated \
+                         docs/Testing/test-json-tools.sh \
                          IccProfLib/registry/README.md \
                          Tools/Winnt/IccDEVCmm/README.md \
                          Build \
@@ -133,6 +135,7 @@ GRAPHICAL_HIERARCHY    = YES
 DIRECTORY_GRAPH        = YES
 DOT_IMAGE_FORMAT       = svg
 INTERACTIVE_SVG        = YES
+DOTFILE_DIRS           = docs/iccapply/diagrams
 DOT_GRAPH_MAX_NODES    = 1000
 MAX_DOT_GRAPH_DEPTH    = 0
 DOT_MULTI_TARGETS      = YES

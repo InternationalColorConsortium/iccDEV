@@ -55,6 +55,18 @@
       "displayName": "Windows ClangCL (VS2022) QA flags"
     },
     {
+      "name": "vs2026-x64",
+      "inherits": "vs2022-x64",
+      "displayName": "Windows MSVC (VS2026)",
+      "description": "Builds with the Visual Studio 2026 generator and v145 toolset for machines that have the VS2026 build tools but not the VS2022 v143 component.",
+      "generator": "Visual Studio 18 2026"
+    },
+    {
+      "name": "vs2026-x64-qa-flags",
+      "inherits": ["vs2026-x64", "qa-flags-base"],
+      "displayName": "Windows MSVC (VS2026) QA flags"
+    },
+    {
       "name": "mingw-ucrt64-base",
       "inherits": "default-base",
       "hidden": true,

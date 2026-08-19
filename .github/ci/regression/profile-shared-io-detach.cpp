@@ -65,6 +65,16 @@
 //      alone and NOT closed by fixing Cleanup(). Observed by counting the
 //      IO's destructor, not by leak detection, so it bites under CI's
 //      detect_leaks=0 sanitizer legs.
+//   8. NO RELEASE, NO NOTIFY: the notification is gated on m_pAttachIO, not on
+//      m_bSharedIO. Borrowing from a profile that holds no IO leaves this one
+//      flagged as sharing with nothing attached; releasing then frees nothing,
+//      so an inner profile carrying its own independently attached IO must be
+//      left alone. Guards the hoisted loop against over-reaching.
+//   9. READ CLEARS STALE IO: Read()/ReadValidate() carry the same tags-only
+//      Cleanup() guard, so a profile that borrowed an IO before it had tags
+//      carried that pointer through the read. HasIO() then lied, which makes
+//      CIccTagEmbeddedProfile::Read() defer to it and attach an inner profile
+//      over an IO the Read() caller owns and destroys on return.
 //
 // Entirely in-memory -- no corpus fixture, so this test cannot be silently
 // skipped by a missing or unbuilt fixture.
@@ -188,11 +198,12 @@ static void checkSharedRelease(bool bUseDetach)
   }
 
   CIccProfile lender;
-  if (!lender.Attach(pSource.release())) {
+  if (!lender.Attach(pSource.get())) {
     std::printf("FAIL: [%s] lender profile would not attach\n", szPath);
     g_failures++;
     return;
   }
+  pSource.release(); // Attach() took ownership only now that it succeeded
 
   std::unique_ptr<CIccProfile> pBorrower(lender.NewCopy());
   pBorrower->CopyAttach(&lender, true);
@@ -307,11 +318,12 @@ static void checkSharedFlagHygiene()
   }
 
   CIccProfile lender;
-  if (!lender.Attach(pSource.release())) {
+  if (!lender.Attach(pSource.get())) {
     std::printf("FAIL: [hygiene] lender profile would not attach\n");
     g_failures++;
     return;
   }
+  pSource.release(); // Attach() took ownership only now that it succeeded
 
   CIccProfile borrower;
   borrower.CopyAttach(&lender, true);
@@ -356,11 +368,12 @@ static void checkAttachClearsSharedFlag()
   }
 
   CIccProfile lender;
-  if (!lender.Attach(pSource.release())) {
+  if (!lender.Attach(pSource.get())) {
     std::printf("FAIL: [attach-owns] lender profile would not attach\n");
     g_failures++;
     return;
   }
+  pSource.release(); // Attach() took ownership only now that it succeeded
 
   g_nOwnedIoDestroyed = 0;
   {
@@ -382,6 +395,7 @@ static void checkAttachClearsSharedFlag()
     if (!p.Attach(pOwned)) {
       std::printf("FAIL: [attach-owns] profile would not attach the owned IO\n");
       g_failures++;
+      delete pOwned; // Attach() only takes ownership on success
       return;
     }
     // p leaves scope here: Cleanup() must delete the IO it now owns.
@@ -392,6 +406,108 @@ static void checkAttachClearsSharedFlag()
         "frees that IO at destruction (it used to keep the sharing flag set and leak it)");
 
   check(lender.HasIO(), "[attach-owns] lender still reports HasIO()==true");
+}
+
+// Assertion 8. The notification is gated on m_pAttachIO, not m_bSharedIO.
+// CopyAttach(p, true) where p holds no IO leaves this profile flagged as
+// sharing with nothing attached; releasing then frees nothing, so there is no
+// parent-derived view for a tag to be holding. Notifying anyway would detach an
+// inner profile that SetProfile() gave its own independently attached IO --
+// CIccTagEmbeddedProfile::DetachIO() releases the inner profile whatever the
+// origin of its IO -- which the pre-fix shared branch never did. Guards against
+// the hoisted loop over-reaching.
+static void checkNoReleaseNoNotify()
+{
+  CIccMemIO innerBytes;
+  if (!writeFixture(innerBytes)) {
+    std::printf("FAIL: [no-release] could not build the in-memory fixture\n");
+    g_failures++;
+    return;
+  }
+
+  // An inner profile holding IO of its own, not derived from any parent.
+  std::unique_ptr<CIccProfile> pInner(new CIccProfile());
+  std::unique_ptr<CIccMemIO> pInnerIO(new CIccMemIO);
+  if (!pInnerIO->Attach(innerBytes.GetData(), innerBytes.GetLength(), false) ||
+      !pInner->Attach(pInnerIO.get())) {
+    std::printf("FAIL: [no-release] inner profile would not attach its own IO\n");
+    g_failures++;
+    return;
+  }
+  pInnerIO.release(); // Attach() took ownership only now that it succeeded
+
+  CIccProfile *pInnerRaw = pInner.get();
+  CIccProfile outer;
+  initHeader(&outer);
+  CIccTagEmbeddedProfile *pEmbed = new CIccTagEmbeddedProfile();
+  pEmbed->SetProfile(pInner.release()); // takes ownership
+  if (!outer.AttachTag(icSigEmbeddedV5ProfileTag, pEmbed)) {
+    std::printf("FAIL: [no-release] could not attach the embedded tag\n");
+    g_failures++;
+    delete pEmbed;
+    return;
+  }
+
+  // Borrow from a profile that has no IO: flagged shared, nothing attached.
+  CIccProfile lenderWithoutIo;
+  outer.CopyAttach(&lenderWithoutIo, true);
+  check(!outer.HasIO(), "[no-release] borrowing from an IO-less profile leaves nothing attached");
+  check(pInnerRaw->HasIO(), "[no-release] inner profile holds its own IO before the release");
+
+  check(outer.Detach(), "[no-release] Detach() still reports true on the shared branch");
+  check(pInnerRaw->HasIO(),
+        "NO RELEASE, NO NOTIFY: releasing a profile that had nothing attached leaves an inner "
+        "profile's own independently attached IO alone");
+}
+
+// Assertion 9. Read() and ReadValidate() carry the same tags-only Cleanup()
+// guard Attach() does, so a profile that borrowed an IO before it had tags
+// carried that borrowed pointer straight through the read. HasIO() then lied,
+// which is what makes CIccTagEmbeddedProfile::Read() defer to it and attach an
+// inner profile over an IO the Read() caller owns and destroys on return.
+// Read() loads eagerly and attaches nothing, so HasIO() must be false after it.
+static void checkReadClearsStaleBorrowedIo()
+{
+  CIccMemIO written;
+  if (!writeFixture(written)) {
+    std::printf("FAIL: [read-stale] could not build the in-memory fixture\n");
+    g_failures++;
+    return;
+  }
+
+  std::unique_ptr<CIccMemIO> pSource(new CIccMemIO);
+  if (!pSource->Attach(written.GetData(), written.GetLength(), false)) {
+    std::printf("FAIL: [read-stale] could not attach the fixture bytes\n");
+    g_failures++;
+    return;
+  }
+
+  CIccProfile lender;
+  if (!lender.Attach(pSource.get())) {
+    std::printf("FAIL: [read-stale] lender profile would not attach\n");
+    g_failures++;
+    return;
+  }
+  pSource.release(); // Attach() took ownership only now that it succeeded
+
+  CIccProfile p;
+  p.CopyAttach(&lender, true);
+  check(p.HasIO() && p.m_Tags.empty(),
+        "[read-stale] borrower holds the shared IO and has no tags (so Read() skips Cleanup())");
+
+  CIccMemIO readFrom;
+  if (!readFrom.Attach(written.GetData(), written.GetLength(), false)) {
+    std::printf("FAIL: [read-stale] could not attach the read source\n");
+    g_failures++;
+    return;
+  }
+
+  check(p.Read(&readFrom), "[read-stale] Read() succeeds");
+  check(!p.HasIO(),
+        "READ CLEARS STALE IO: a profile that borrowed an IO before it had tags reports "
+        "HasIO()==false after Read(), which loads eagerly and attaches nothing");
+
+  check(lender.HasIO(), "[read-stale] lender still reports HasIO()==true");
 }
 
 int main()
@@ -407,6 +523,12 @@ int main()
 
   std::printf("\n--- Attach() clears the sharing flag ---\n");
   checkAttachClearsSharedFlag();
+
+  std::printf("\n--- releasing nothing notifies nobody ---\n");
+  checkNoReleaseNoNotify();
+
+  std::printf("\n--- Read() clears a stale borrowed IO ---\n");
+  checkReadClearsStaleBorrowedIo();
 
   if (g_failures) {
     std::printf("\n%d check(s) FAILED\n", g_failures);
