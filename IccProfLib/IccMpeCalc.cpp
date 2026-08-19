@@ -2903,7 +2903,13 @@ bool CIccFuncTokenizer::GetEnvSig(icSigCmmEnvVar &envSig)
 
     for (i=1; i<=4 && i<l-1; i++) {
       sig <<= 8;
-      sig |= szToken[i];
+      // Read the token byte through icUInt8Number: szToken is a char*, and char is
+      // signed on the usual targets, so a byte >= 0x80 sign-extends to 0xFFFFFFxx and
+      // the OR sets every bit already accumulated. "env(am<CF><8A>)" and
+      // "env(am<CE><8A>)" both collapsed to 0xFFFFFF8A, losing the leading characters
+      // and aliasing two distinct environment variables onto one signature (#2196).
+      // GetSig() above reads its token through an unsigned char* for the same reason.
+      sig |= (icUInt8Number)szToken[i];
     }
 
     for (;i<=4; i++) {
