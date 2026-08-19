@@ -1,6 +1,6 @@
 # Building iccDEV
 
-iccDEV requires C++17, CMake 3.18 or newer, and the image/XML/JSON dependencies
+iccDEV requires C++17, CMake 3.23 or newer, and the image/XML/JSON dependencies
 listed below. Maintainer-level sanitizer, Docker, and CMake policy details live in
 `.github/instructions/build-system.instructions.md`.
 
@@ -123,11 +123,14 @@ layout as the MSVC preset.
 ## Windows MSVC 2026
 
 The `vs2026-x64` preset targets the Visual Studio 18 2026 generator and v145
-toolset while preserving the VS 2022 preset's vcpkg and runtime layout:
+toolset while preserving the VS 2022 preset's vcpkg and runtime layout. CMake
+3.23 or newer is required for the preset schema. Set `VCPKG_ROOT` to the
+Visual Studio 2026 vcpkg installation before configuring:
 
 ```cmd
 git clone https://github.com/InternationalColorConsortium/iccDEV.git iccdev
 cd iccdev
+set "VCPKG_ROOT=C:\Program Files\Microsoft Visual Studio\2026\Community\VC\vcpkg"
 cmake --preset vs2026-x64 -S Build/Cmake -B out/vs2026-x64
 cmake --build out/vs2026-x64 --config Release -- /m /maxcpucount
 ```
