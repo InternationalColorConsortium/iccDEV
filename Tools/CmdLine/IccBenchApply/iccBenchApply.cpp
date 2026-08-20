@@ -86,6 +86,7 @@
 
 static icUInt32Number g_nPixels  = 1048576;
 static int            g_nRepeats = 7;
+static bool           g_bPerXform = false;
 
 static void Usage()
 {
@@ -97,6 +98,7 @@ static void Usage()
          " (as iccApplyToLink)\n\n");
   printf("  -pixels N          pixels per buffer      (default 1048576)\n");
   printf("  -repeats N         timed repeats per case (default 7)\n");
+  printf("  -perxform          per-xform breakdown, including PCS steps\n");
   printf("\nNo timing threshold is ever asserted. This tool records.\n");
 }
 
@@ -187,6 +189,10 @@ int main(int argc, const char *argv[])
       }
       g_nRepeats = n;
       nArg += 2;
+    }
+    else if (!stricmp(argv[nArg], "-perxform")) {
+      g_bPerXform = true;
+      nArg++;
     }
     else {
       printf("Unknown option '%s'\n", argv[nArg]);
@@ -319,6 +325,77 @@ int main(int argc, const char *argv[])
          "case", "Mpx/s", "min", "max", "checksum");
   printf("  %-20s %9.2f %9.2f %9.2f  0x%08x\n",
          "chain", st.medianMpxPerSec, st.minMpxPerSec, st.maxMpxPerSec, sum);
+
+  if (g_bPerXform) {
+    printf("\n  per-xform breakdown:\n");
+    printf("  %3s %-12s %9s %7s\n", "#", "type", "Mpx/s", "share");
+
+    // Two buffers, ping-ponged: each xform reads what the previous produced.
+    // Sized to the widest sample count any stage uses, so no stage can write
+    // past the end of a buffer sized for a narrower neighbour.
+    icUInt16Number nMax = nSrc > nDst ? nSrc : nDst;
+    for (size_t i = 0; i < reporter.m_xforms.size(); i++) {
+      const icUInt16Number n = reporter.m_xforms[i]->GetNumDstSamples();
+      if (n > nMax)
+        nMax = n;
+    }
+
+    std::vector<icFloatNumber> a((size_t)g_nPixels * nMax);
+    std::vector<icFloatNumber> b((size_t)g_nPixels * nMax);
+    icBenchFill(a.data(), g_nPixels, nSrc, 20260820u);
+
+    std::vector<double> secs;
+    std::vector<std::string> names;
+    icFloatNumber *pIn = a.data(), *pOut = b.data();
+
+    for (size_t i = 0; i < reporter.m_xforms.size(); i++) {
+      CIccXform *pXform = reporter.m_xforms[i];
+      const char *szType = XformTypeName(pXform->GetXformType());
+
+      icStatusCMM xstat = icCmmStatOk;
+      CIccApplyXform *pApply = pXform->GetNewApply(xstat);
+      if (!pApply || xstat != icCmmStatOk) {
+        printf("  %3d %-12s   (no apply object; skipped)\n", (int)i, szType);
+        delete pApply;
+        continue;
+      }
+
+      const icUInt16Number nIn  = pXform->GetNumSrcSamples();
+      const icUInt16Number nOut = pXform->GetNumDstSamples();
+
+      const BenchStats xs = icBenchRun(
+        [&]() {
+          const icFloatNumber *s = pIn;
+          icFloatNumber *d = pOut;
+          for (icUInt32Number k = 0; k < g_nPixels; k++, s += nIn, d += nOut)
+            pXform->Apply(pApply, d, s);
+        },
+        g_nPixels, g_nRepeats);
+
+      secs.push_back(xs.medianMpxPerSec > 0.0 ? 1.0 / xs.medianMpxPerSec : 0.0);
+      names.push_back(szType);
+      printf("  %3d %-12s %9.2f\n", (int)i, szType, xs.medianMpxPerSec);
+
+      delete pApply;
+      icFloatNumber *t = pIn; pIn = pOut; pOut = t;
+    }
+
+    double total = 0.0;
+    for (size_t i = 0; i < secs.size(); i++)
+      total += secs[i];
+    if (total > 0.0) {
+      printf("\n  shares: ");
+      for (size_t i = 0; i < secs.size(); i++)
+        printf("%s%s %.0f%%", i ? ", " : "", names[i].c_str(),
+               100.0 * secs[i] / total);
+      printf("\n");
+    }
+
+    printf("\n  note: per-xform timing defeats the chunked-apply cache locality\n"
+           "        that the chain number measures (IccCmm.cpp:8671), so these\n"
+           "        rows sum to more than it. They are for attribution, not a\n"
+           "        decomposition of the chain figure.\n");
+  }
 
   return 0;
 }
