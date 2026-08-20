@@ -102,6 +102,10 @@ CIccApplyMpe::CIccApplyMpe(CIccMultiProcessElement *pElem)
 {
   m_pElem = pElem;
   m_pApplyTag = NULL;
+
+  // Resolved here rather than per pixel; see IsAcsElem(). An element's ACS-ness
+  // is fixed once the list is read, so this is a load-time property.
+  m_bIsAcs = pElem ? pElem->IsAcs() : false;
 }
 
 
@@ -1547,9 +1551,17 @@ void CIccTagMultiProcessElement::Apply(CIccApplyTagMpe *pApply, icFloatNumber *p
     pApplyBuf->Switch();
 
     while (next != pApply->end()) {
-      CIccMultiProcessElement *pElem = i->ptr->GetElem();
-
-      if (!pElem->IsAcs()) {
+      // Cached at apply-object construction; this used to be GetElem() plus a
+      // virtual IsAcs() for every middle element of every pixel, paid whether or
+      // not the chain contains any ACS element at all.
+      //
+      // The apply list itself is deliberately left intact rather than having ACS
+      // elements filtered out of it: Apply() only skips them in the middle of the
+      // chain, so a first or last ACS element is applied, and omitting them would
+      // change which element occupies those positions. No profile in the corpus
+      // has an ACS element and no test exercises CIccMpeAcs, so that change could
+      // not have been verified.
+      if (!i->ptr->IsAcsElem()) {
         i->ptr->Apply(pApplyBuf->GetDstBuf(), pApplyBuf->GetSrcBuf());
 
 #ifdef DEBUG_MPE_APPLY
