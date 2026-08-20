@@ -356,14 +356,34 @@ All Begin-time precomputation must be idempotent, per constraint 6.
   that motivated it.
 - **The oracle is sensitive to FP reassociation.** Documented in the Readme;
   comparisons are only valid across builds with matching compiler flags.
-- **`lut-nd-6ch` may exercise `Interp6d` rather than the `InterpND` default
-  path.** `CIccCLUT` dispatches 5 and 6 input channels to dedicated routines, so
-  a true `InterpND` case needs ≥7 channels. `private/Turquoise-...-Orange_output`
-  is 7CLR but untracked. Resolve during implementation: either find a tracked
-  ≥7-channel source or note the gap in the Readme rather than claiming coverage
-  the table does not have.
+- **The oracle cannot catch a wrong hoist in code no case reaches.** The
+  pathological input row narrows this, but coverage is bounded by the case table;
+  see the accepted gap below.
+
+## Accepted gaps
+
+**`InterpND` has no coverage, and will not get any in this harness.**
+`CIccCLUT` dispatches 5- and 6-channel input to the dedicated `Interp5d` and
+`Interp6d` routines, so `lut-nd-6ch` exercises `Interp6d` and never reaches the
+`InterpND` default path. A true `InterpND` case needs a ≥7-channel source. The
+only 7CLR profile in the tree, `private/Turquoise-Magenta-Yellow-Violet-Green-
+Blue-Orange_output.icc`, is untracked, and sourcing or authoring a tracked
+7-channel profile is deferred to a separate future effort.
+
+Two consequences to carry forward, rather than rediscover:
+
+1. `lut-nd-6ch` is named for what it measures — `Interp6d` — and the Readme and
+   the case table must not imply `InterpND` coverage. Findings A2 and A3 concern
+   `InterpND` specifically.
+2. Branch 3 therefore lands A2 and A3 **without throughput evidence**. Both are
+   still supportable: A2 is a textual duplicate of bounds `CIccCLUT::Begin()`
+   already asserts (`IccProfLib/IccTagLut.cpp:2430,2450` versus `:3480,3487`),
+   and A3 is primarily a correctness fix — it converts silent truncation of a
+   >16-channel N-D LUT into an explicit `icCmmStatInvalidLut` — with the removed
+   per-pixel clamps a secondary benefit. The checksum oracle still covers them
+   for equivalence via `Interp5d`/`Interp6d` and the shared `CIccXformNDLut`
+   entry path. This should be stated in those PRs rather than left implicit.
 
 ## Open items
 
-None blocking. The `InterpND` coverage question above is scoped as an
-implementation decision with a documented fallback.
+None blocking.
