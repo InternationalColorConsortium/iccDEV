@@ -81,6 +81,8 @@
 #include "IccCmmThread.h"
 #include "IccDefs.h"
 #include "IccProfLibVer.h"
+#include "IccProfile.h"
+#include "IccTagLut.h"
 #include "IccUtil.h"
 
 #include "BenchTimer.h"
@@ -88,6 +90,7 @@
 static icUInt32Number   g_nPixels   = 1048576;
 static int              g_nRepeats  = 7;
 static bool             g_bPerXform = false;
+static bool             g_bLeaf     = false;
 static std::vector<int> g_threads;
 
 static void Usage()
@@ -101,6 +104,8 @@ static void Usage()
   printf("  -pixels N          pixels per buffer      (default 1048576)\n");
   printf("  -repeats N         timed repeats per case (default 7)\n");
   printf("  -perxform          per-xform breakdown, including PCS steps\n");
+  printf("  -leaf              isolated hot leaf functions\n");
+  printf("  -threads L         comma list of thread counts, e.g. 1,2,8\n");
   printf("\nNo timing threshold is ever asserted. This tool records.\n");
 }
 
@@ -241,6 +246,104 @@ static bool RunThreadSweep(CIccCmm &cmm, const std::vector<int> &threads,
   return bOk;
 }
 
+// Times the hot leaf functions in isolation.
+//
+// Reported in Mval/s, not Mpx/s, and printed under its own heading: these
+// numbers are not comparable to the chain figure. Isolation changes cache
+// behaviour, so a win measured here may not survive in a real chain -- which is
+// exactly why the chain tier exists. This tier answers "did the change to this
+// function work", not "does it matter".
+static void RunLeaf(const char *szProfilePath)
+{
+  CIccProfile *pProfile = ReadIccProfile(szProfilePath);
+  if (!pProfile) {
+    printf("  (leaf: cannot read '%s')\n", szProfilePath);
+    return;
+  }
+
+  printf("\n  isolated leaf functions (%s):\n", szProfilePath);
+  printf("  %-28s %9s\n", "function", "Mval/s");
+
+  // A2B0 is where a LUT-based profile keeps its device-to-PCS transform.
+  CIccTag *pTag = pProfile->FindTag(icSigAToB0Tag);
+  CIccMBB *pMBB = NULL;
+  if (pTag) {
+    switch (pTag->GetType()) {
+      case icSigLut8Type:
+      case icSigLut16Type:
+      case icSigLutAtoBType:
+        pMBB = (CIccMBB *)pTag;
+        break;
+      default:
+        break;
+    }
+  }
+
+  if (!pMBB) {
+    printf("  (no A2B0 LUT tag; nothing to time)\n");
+    delete pProfile;
+    return;
+  }
+
+  // No pMBB->Begin() here: CIccMBB does not declare Begin() and neither does
+  // CIccTag, so that call would not compile. The curve and the CLUT each carry
+  // their own Begin() and are initialised individually below -- which is all
+  // this tier needs, since it drives them directly rather than through the tag.
+
+  LPIccCurve *pCurves = pMBB->GetCurvesA();
+  if (pCurves && pCurves[0]) {
+    CIccCurve *pCurve = pCurves[0];
+    pCurve->Begin();
+
+    std::vector<icFloatNumber> vals(g_nPixels);
+    icBenchFill(vals.data(), g_nPixels, 1, 20260820u);
+    volatile icFloatNumber sink = 0;
+
+    const BenchStats cs = icBenchRun(
+      [&]() {
+        icFloatNumber acc = 0;
+        for (icUInt32Number k = 0; k < g_nPixels; k++)
+          acc += pCurve->Apply(vals[k]);
+        sink = acc;   // consume, so the loop is not elided
+      },
+      g_nPixels, g_nRepeats);
+    (void)sink;
+
+    printf("  %-28s %9.2f\n", "CIccCurve::Apply", cs.medianMpxPerSec);
+  }
+
+  CIccCLUT *pCLUT = pMBB->GetCLUT();
+  if (pCLUT && pMBB->InputChannels() == 3) {
+    pCLUT->Begin();
+
+    const icUInt16Number nOut = pMBB->OutputChannels();
+    std::vector<icFloatNumber> in((size_t)g_nPixels * 3);
+    std::vector<icFloatNumber> out((size_t)g_nPixels * nOut);
+    icBenchFill(in.data(), g_nPixels, 3, 20260820u);
+
+    const BenchStats t3 = icBenchRun(
+      [&]() {
+        for (icUInt32Number k = 0; k < g_nPixels; k++)
+          pCLUT->Interp3dTetra(&out[(size_t)k * nOut], &in[(size_t)k * 3]);
+      },
+      g_nPixels, g_nRepeats);
+    printf("  %-28s %9.2f\n", "CIccCLUT::Interp3dTetra", t3.medianMpxPerSec);
+
+    const BenchStats l3 = icBenchRun(
+      [&]() {
+        for (icUInt32Number k = 0; k < g_nPixels; k++)
+          pCLUT->Interp3d(&out[(size_t)k * nOut], &in[(size_t)k * 3]);
+      },
+      g_nPixels, g_nRepeats);
+    printf("  %-28s %9.2f\n", "CIccCLUT::Interp3d", l3.medianMpxPerSec);
+  }
+
+  printf("  note: isolated figures are not comparable to the chain number;\n"
+         "        isolation changes cache behaviour.\n");
+
+  delete pProfile;
+}
+
 int main(int argc, const char *argv[])
 {
   if (argc < 3) {
@@ -271,6 +374,10 @@ int main(int argc, const char *argv[])
     }
     else if (!stricmp(argv[nArg], "-perxform")) {
       g_bPerXform = true;
+      nArg++;
+    }
+    else if (!stricmp(argv[nArg], "-leaf")) {
+      g_bLeaf = true;
       nArg++;
     }
     else if (!stricmp(argv[nArg], "-threads")) {
@@ -322,6 +429,7 @@ int main(int argc, const char *argv[])
 
   CIccCmm theCmm(icSigUnknownData, icSigUnknownData, true);
   int nProfiles = 0;
+  std::string sFirstProfile;
 
   while (nArg < argc) {
     const char *szProfile = argv[nArg];
@@ -382,6 +490,8 @@ int main(int argc, const char *argv[])
              szProfile, CIccCmm::GetStatusText(stat));
       return 1;
     }
+    if (sFirstProfile.empty())
+      sFirstProfile = szProfile;
     nProfiles++;
   }
 
@@ -490,6 +600,9 @@ int main(int argc, const char *argv[])
            "        rows sum to more than it. They are for attribution, not a\n"
            "        decomposition of the chain figure.\n");
   }
+
+  if (g_bLeaf)
+    RunLeaf(sFirstProfile.c_str());
 
   // A checksum that moved with the thread count is a correctness failure, so it
   // has to reach the exit code -- the CTest registration asserts on nothing else.
