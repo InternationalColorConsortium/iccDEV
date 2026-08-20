@@ -102,10 +102,16 @@
 //   lut-3d-tetra  3DLut -> PCS -> 3DLut
 //   spectral-6ch  Mpe -> PCS -> 3DLut
 //   monochrome    Monochrome -> MatrixTRC          (no PCS step: XYZ both sides)
+//   mono-lab      Monochrome -> PCS -> 3DLut        (Lab PCS: reaches XyzToLab)
 //   mpe-calc      Mpe -> PCS -> Mpe
 //   mpe-tonemap   Mpe -> Mpe                       (no PCS step)
 //   pcs-rel       3DLut -> PCS -> Mpe
 //   pcs-abs       3DLut -> PCS -> Mpe               (absolute intent)
+//
+// monochrome and mono-lab differ only in the PCS encoding of the source
+// profile, and both are needed: CIccXformMonochrome::Apply takes a different
+// branch for a Lab PCS, and only that branch reaches XyzToLab and its three cube
+// roots. With the XYZ fixture alone, a change to that branch is unmeasured.
 //
 // spectral-6ch is deliberately NOT called lut-nd. SixChanCameraRef is MPE-based,
 // so it resolves to an Mpe xform and never reaches CIccXformNDLut: Interp5d,
@@ -121,6 +127,7 @@ static const struct {
   { "lut-3d-tetra", 1, "V2/v2RgbLut8.icc:1|V2/v2CmykLut16.icc:1" },
   { "spectral-6ch", 1, "SpecRef/SixChanCameraRef.icc:1|V2/v2CmykLut16.icc:1" },
   { "monochrome",   1, "V2/v2GrayTRC.icc:1|V2/v2RgbMatrixTRC.icc:1" },
+  { "mono-lab",     1, "V2/v2GrayTRCLab.icc:1|V2/v2CmykLut16.icc:1" },
   { "mpe-calc",     1, "Calc/srgbCalcTest.icc:1|ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc:1" },
   { "mpe-tonemap",  1, "Display/Rec2100HlgFull.icc:1|ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc:1" },
   { "pcs-rel",      1, "V2/v2RgbLut8.icc:1|ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc:1" },

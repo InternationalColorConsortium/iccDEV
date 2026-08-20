@@ -4849,10 +4849,11 @@ if(WIN32)
       # Validate the disposable Windows Testing tree by artifact count. The
       # batch file echoes commands through cmd.exe, and tool stdout can be lost
       # in that layer even when profiles are generated successfully.
-      # 134 since Testing/V2/v2GrayTRC.xml was added: it is the only source in
-      # the tree that produces a CIccXformMonochrome. Bump this with any
-      # change to the number of profiles CreateAllProfiles.bat generates.
-      EXPECTED_GENERATED_PROFILE_COUNT 134
+      # 135 since Testing/V2/v2GrayTRC{,Lab}.xml were added: they are the only
+      # sources in the tree that produce a CIccXformMonochrome, one per PCS
+      # encoding. Bump this with any change to the number of profiles
+      # CreateAllProfiles.bat generates.
+      EXPECTED_GENERATED_PROFILE_COUNT 135
     )
     set_tests_properties(iccdev.windows-create-profiles PROPERTIES
       FIXTURES_SETUP iccdev_profiles

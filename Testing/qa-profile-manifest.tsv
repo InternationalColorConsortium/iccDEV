@@ -244,6 +244,7 @@ SpecRef/argbRef.icc	compatibility	warning	0	none	generated	-	baselined: spectral
 SpecRef/srgbRef.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 V2/v2CmykLut16.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 V2/v2GrayTRC.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+V2/v2GrayTRCLab.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 V2/v2RgbLut8.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 V2/v2RgbMatrixTRC.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 mcs/17ChanWithSpots-MVIS.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
