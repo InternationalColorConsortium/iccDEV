@@ -30,7 +30,7 @@ on:
       os-list:
         description: "List of operating systems"
         required: false
-        default: '["ubuntu-latest", "macos-latest"]'
+        default: '["ubuntu-24.04", "macos-latest"]'
         type: string
       build-types:
         description: "Build types"
@@ -94,14 +94,38 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJson(inputs.os-list || '["ubuntu-latest", "macos-latest"]') }}
+        os: ${{ fromJson(inputs.os-list || '["ubuntu-24.04", "macos-latest"]') }}
         compiler: ${{ fromJson(inputs.compilers || '["gcc", "clang"]') }}
         build_type: ${{ fromJson(inputs.build-types || '["Release", "Debug"]') }}
         exclude:
           - os: macos-latest
             compiler: gcc
+          - os: macos-latest
+            compiler: gcc-15
+          - os: macos-latest
+            compiler: clang-22
+          - os: ubuntu-24.04
+            compiler: clang
 
     steps:
+      - name: Check out Repository
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          # preflight: allow-codeql-actions reason=readonly-build-target-checkout
+          ref: ${{ inputs.target-sha || github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check out trusted sanitizer helper
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          # preflight: allow-codeql-actions reason=trusted-base-sanitizer-checkout
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
+          path: .trusted-workflow
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Validate matrix inputs
         shell: bash --noprofile --norc {0}
         env:
@@ -114,30 +138,24 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
 
           OS="${MATRIX_OS}"
           COMP="${MATRIX_COMPILER}"
           BT="${MATRIX_BUILD_TYPE}"
 
           case "$OS" in
-            ubuntu-latest|ubuntu-24.04|macos-latest) ;;
-            *) echo "ERROR: invalid matrix.os: '$OS'. Allowed: ubuntu-latest, ubuntu-24.04, macos-latest"; exit 1 ;;
+            ubuntu-24.04|macos-latest) ;;
+            *) echo "ERROR: invalid matrix.os: '$OS'. Allowed: ubuntu-24.04, macos-latest"; exit 1 ;;
           esac
           case "$COMP" in
-            gcc|clang) ;;
-            *) echo "ERROR: invalid compiler: '$COMP'. Allowed: gcc, clang"; exit 1 ;;
+            gcc|gcc-15|clang|clang-22) ;;
+            *) echo "ERROR: invalid compiler: '$COMP'. Allowed: gcc, gcc-15, clang, clang-22"; exit 1 ;;
           esac
           case "$BT" in
             Release|Debug) ;;
             *) echo "ERROR: invalid build type: '$BT'. Allowed: Release, Debug"; exit 1 ;;
           esac
-
-      - name: Check out Repository
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
-        with:
-          ref: ${{ inputs.target-sha || github.event.pull_request.head.sha || github.ref }}
-          fetch-depth: 0
-          persist-credentials: false
 
       - name: Print the PR Branch Details
         shell: bash --noprofile --norc {0}
@@ -156,7 +174,7 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
           safe_event="$(sanitize_line "${PR_EVENT_NAME}")"
           safe_base="$(sanitize_ref "${PR_BASE_REF}")"
           safe_head="$(sanitize_ref "${PR_HEAD_REF}")"
@@ -190,19 +208,51 @@ jobs:
         env:
           BASH_ENV: /dev/null
           COMPILER_VERSION: ${{ inputs.compiler-version || 'system' }}
+          MATRIX_COMPILER: ${{ matrix.compiler }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
+          case "$MATRIX_COMPILER" in
+            gcc-15)
+              sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
+              ;;
+            clang-22)
+              llvm_key="$RUNNER_TEMP/llvm-snapshot.gpg.key"
+              llvm_keyring="$RUNNER_TEMP/llvm-snapshot.gpg"
+              curl --fail --location --silent --show-error \
+                https://apt.llvm.org/llvm-snapshot.gpg.key \
+                --output "$llvm_key"
+              gpg --show-keys --with-colons "$llvm_key" > "$RUNNER_TEMP/llvm-key-info"
+              llvm_fingerprint="$(awk -F: '$1 == "fpr" {print $10; exit}' "$RUNNER_TEMP/llvm-key-info")"
+              if [ "$llvm_fingerprint" != "6084F3CF814B57C1CF12EFD515CF4D18AF4F7421" ]; then
+                echo "Unexpected LLVM APT key fingerprint: $llvm_fingerprint" >&2
+                exit 1
+              fi
+              gpg --dearmor --output "$llvm_keyring" "$llvm_key"
+              sudo install -m 0644 "$llvm_keyring" /usr/share/keyrings/llvm-snapshot.gpg
+              printf '%s\n' \
+                'deb [signed-by=/usr/share/keyrings/llvm-snapshot.gpg] https://apt.llvm.org/noble/ llvm-toolchain-noble-22 main' |
+                sudo tee /etc/apt/sources.list.d/llvm-toolchain-22.list >/dev/null
+              ;;
+          esac
           bash .github/scripts/ci-safe-apt-update.sh
           packages=(
-            build-essential cmake gcc g++ clang clang-tools \
+            build-essential cmake \
             libpng-dev libxml2-dev libtiff-dev \
             nlohmann-json3-dev libwxgtk3.2-dev wx-common \
-            python3 python3-pip curl git llvm
+            python3 python3-pip curl git
           )
-          if [ "$COMPILER_VERSION" = "gcc-15" ]; then
+          case "$MATRIX_COMPILER" in
+            gcc-15) packages+=(gcc-15 g++-15) ;;
+            clang-22) packages+=(clang-22 clang-tools-22 llvm-22) ;;
+            gcc) packages+=(gcc g++) ;;
+            clang) packages+=(clang clang-tools llvm) ;;
+            *) echo "ERROR: invalid compiler: '$MATRIX_COMPILER'"; exit 1 ;;
+          esac
+          if [ "$COMPILER_VERSION" = "gcc-15" ] && [ "$MATRIX_COMPILER" = "gcc" ]; then
             packages+=(gcc-15 g++-15)
           fi
           sudo apt-get install -y "${packages[@]}"
@@ -217,6 +267,7 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
           brew install cmake llvm wxwidgets libpng libtiff libxml2 nlohmann-json jpeg-turbo
 
       - name: Set Compiler Environment Variables
@@ -230,6 +281,7 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
           case "$COMPILER_VERSION" in
             system|gcc-15) ;;
             *) echo "::error title=Invalid compiler version::${COMPILER_VERSION}"; exit 1 ;;
@@ -258,6 +310,7 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
           echo "Configuring CMake project..."
           mkdir -p Build
           cd Build
@@ -275,22 +328,37 @@ jobs:
         env:
           BASH_ENV: /dev/null
           MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
+          MATRIX_COMPILER: ${{ matrix.compiler }}
           WARNING_POLICY: ${{ inputs.warning-policy || 'warn' }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
           echo "Start build..."
           cd Build
           echo "Compiler: $CC ($($CC --version | head -n 1))"
           echo "CMake build type: ${MATRIX_BUILD_TYPE}"
           jobs="$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)"
           make -j"$jobs" 2>&1 | tee build.log
-          WARNING_COUNT=$(grep -cE 'warning:' build.log || true)
+          grep -E 'warning:' build.log > all-warnings.log || true
+          if [ "$MATRIX_COMPILER" = "gcc-15" ]; then
+            # GCC 15 emits this false positive from libstdc++ internals.
+            gcc15_false_positive='^/usr/include/c\+\+/15/.*warning: potential null pointer dereference \[-Wnull-dereference\]$|^cc1plus: warning: null pointer dereference \[-Wnull-dereference\]$'
+            grep -Ev "$gcc15_false_positive" all-warnings.log > actionable-warnings.log || true
+            SUPPRESSED_WARNING_COUNT=$(grep -Ec "$gcc15_false_positive" all-warnings.log || true)
+          else
+            cp all-warnings.log actionable-warnings.log
+            SUPPRESSED_WARNING_COUNT=0
+          fi
+          WARNING_COUNT=$(grep -c . actionable-warnings.log || true)
+          if [ "$SUPPRESSED_WARNING_COUNT" -gt 0 ]; then
+            echo "[INFO] Suppressed ${SUPPRESSED_WARNING_COUNT} known GCC 15 libstdc++ false-positive warning(s)"
+          fi
           if [ "$WARNING_COUNT" -gt 0 ]; then
             echo "::warning title=Compiler Warnings::${WARNING_COUNT} warning(s) detected"
-            grep -E 'warning:' build.log | sort -u | sed -n '1,20p'
+            sort -u actionable-warnings.log | sed -n '1,20p'
             if [ "$WARNING_POLICY" = "fail" ]; then
               echo "::error title=Compiler Warnings::warning-policy=fail rejected ${WARNING_COUNT} warning(s)"
               exit 1
@@ -308,6 +376,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
           BITCODE_FOUND=0
           STATIC_POSTFIX=""
           if [ "$MATRIX_BUILD_TYPE" = "Debug" ]; then
@@ -351,6 +420,7 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
           echo "Creating profiles..."
           cd Testing
           echo "=== Updating PATH ==="
@@ -403,13 +473,11 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          # Use canonical sanitization from .github/scripts/sanitize-sed.sh
-          if [ ! -r .github/scripts/sanitize-sed.sh ]; then
-            echo "ERROR: .github/scripts/sanitize-sed.sh not found or not readable" >&2
+          if [ ! -r .trusted-workflow/.github/scripts/sanitize-sed.sh ]; then
+            echo "ERROR: trusted sanitizer helper not found or not readable" >&2
             exit 1
           fi
-          # shellcheck disable=SC1091
-          source .github/scripts/sanitize-sed.sh
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
           SANITIZED_OS=$(sanitize_line "${MATRIX_OS}")
           SANITIZED_COMPILER=$(sanitize_line "${MATRIX_COMPILER}")
           SANITIZED_BUILD_TYPE=$(sanitize_line "${MATRIX_BUILD_TYPE}")

@@ -30,30 +30,13 @@ for tool in clang clang++ clang-21 clang++-21 llvm-symbolizer afl-fuzz afl-showm
 done
 printf '\n'
 
-printf '%s\n' 'Patch stacks:'
-for mode in afl cfl; do
-  patch_dir="$root/.github/ci/fuzz-patches/$mode"
-  if [ -d "$patch_dir" ]; then
-    count="$(find "$patch_dir" -maxdepth 1 -type f -name '*.patch' 2>/dev/null | wc -l | sed 's/[[:space:]]//g')"
-    printf '  %-16s %s patch(es) in %s\n' "$mode" "$count" "$patch_dir"
-  else
-    printf '  %-16s missing: %s\n' "$mode" "$patch_dir"
-  fi
-done
-printf '\n'
-
-checker="$root/.github/scripts/check-fuzz-patches.sh"
-if [ -x "$checker" ]; then
-  printf 'Patch checker: %s\n' "$checker"
-else
-  printf 'Patch checker: missing or not executable: %s\n' "$checker"
-fi
+printf '%s\n' 'Source mode: upstream checkout without local patches'
+printf 'Source revision: %s\n' "${ICCDEV_SOURCE_REVISION:-unknown}"
 printf '\n'
 
 printf '%s\n' 'Examples:'
-printf '%s\n' '  .github/scripts/check-fuzz-patches.sh'
-printf '%s\n' '  .github/scripts/iccdev-afl-smoke.sh --patches --seconds 10 --targets dump'
-printf '%s\n' '  cfl/build.sh --patches --targets dump,toxml,fromxml,tojson,fromjson,roundtrip --seconds 30'
+printf '%s\n' '  .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump'
+printf '%s\n' '  cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip --seconds 30'
 printf '\n'
 
 printf '%s\n' 'Note: ci-afl-smoke rebuilds AFL++ dev wrappers against LLVM 22 before'

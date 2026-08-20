@@ -67,7 +67,7 @@
 #include <cmath>
 #include <memory>
 #include <limits>
-#include "../IccCmdLineUtil.h"
+#include "IccCmdLineUtil.h"
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/stat.h>

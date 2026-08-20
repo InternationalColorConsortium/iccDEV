@@ -21,7 +21,7 @@ zero nor present in the Manufacturer Signatures registry snapshot (2026-06-20):
 |-----------|-----|-------------|--------------------|-------------|
 | `XRCM` | `0x5852434D` | 16 | `CGATS21_CRPC2..7`, `GRACoL2013*`, `SWOP2013C3_CRPC5`, `APTEC_PC1x_*` | **Submit** — creator of the entire ICC CRPC/GRACoL/SWOP/APTEC characterization-profile family; clearly an ICC/X-Rite production signature missing from the public list |
 | `ICC ` | `0x49434320` | 23 | `sRGB_D65_colorimetric`, `sRGB_D65_MAT` (and iccDEV regression fixtures) | **Clarify/Register** — the ICC's own reference-profile signature. Registry lists `SICC` and `iccd` for the consortium but not `'ICC '`. Either register `'ICC '` or document the canonical consortium signature |
-| `none` | `0x6E6F6E65` | 25 | `AdobeRGB1998`, `ISO22028-2_ROMM-RGB`, `sRGB_v4_ICC_preference_displayclass` | **Policy** — pervasive "no manufacturer" placeholder. Decide whether the registry/spec should bless `'none'` as a sanctioned placeholder (equivalent to zero) or whether producers should emit zero |
+| `none` | `0x6E6F6E65` | 25 | `AdobeRGB1998`, `ISO22028-2_ROMM-RGB`, `sRGB_v4_ICC_preference_displayclass` | **RULED 2026-07-24 (issue #1472) — not registrable.** The ICC ruled that the specification requires `00h` here, so `'none'` is a producer error rather than a placeholder awaiting registration. S3 still WARNs, and its detail must not describe `'none'` as "not yet" registered |
 | `LOGO` | `0x4C4F474F` | 2 | `MCPPiPF5000Glossy` | **Investigate/Submit** — likely Logo/GretagMacbeth-era tooling; confirm owner and submit |
 | `ccox` | `0x63636F78` | 1 | (corpus) | **Investigate/Submit** — probably CHROMiX (registry has `CMiX` `0x434D6958`); confirm and submit or map |
 
@@ -39,7 +39,9 @@ maintainers; tracked in `PERMISSIVENESS_DELTAS.md` §B as an IccProfLib change):
 1. Register `XRCM` (and confirm its owner — X-Rite production?) so the ICC's own
    published CRPC/GRACoL/SWOP/APTEC profiles validate cleanly.
 2. Register or canonically document the `'ICC '` consortium signature.
-3. Decide policy on the `'none'` placeholder (sanction vs. recommend zero).
+3. ~~Decide policy on the `'none'` placeholder (sanction vs. recommend zero).~~
+   **Answered 2026-07-24 (issue #1472): the specification says `00h`, so `'none'`
+   is not registrable and producers should emit the zero signature.**
 4. Confirm and register `LOGO` and `ccox` (or provide the correct mappings).
 
 ## What the code does in the meantime

@@ -63,8 +63,8 @@ cmake --build unix
 ### Output
 
 ```
-IccProfLib version: 2.3.2.2+<sha>
-IccLibXML  version: 2.3.2.2+<sha>
+IccProfLib version: 2.3.2.3+<sha>
+IccLibXML  version: 2.3.2.3+<sha>
 Profile spec ver:  4.00
 
 XML round-trip OK (786 bytes)

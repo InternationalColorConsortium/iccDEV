@@ -107,8 +107,10 @@ static const size_t icXmlMaxTextFileBytes = 256ULL * 1024 * 1024;
 // the caller owns the document and releases it with xmlFreeDoc. nOptions is
 // passed to libxml2 unchanged, so the caller keeps control of the parser flags.
 // The implementation comment explains why the buffer rather than the file is
-// what gets parsed - it is what lets a large CLUT round-trip without
-// XML_PARSE_HUGE. Diagnostics are appended to parseStr when one is supplied.
+// what gets parsed: it trades libxml2's per-node cap for a whole-document
+// bound without resorting to XML_PARSE_HUGE. It is NOT what lets a large CLUT
+// round-trip - the writer bounding its own text nodes is (issue #2160).
+// Diagnostics are appended to parseStr when one is supplied.
 xmlDoc *icXmlReadFileBounded(const char *szFilename, int nOptions, std::string *parseStr = NULL);
 
 #define icXmlStrCmp(x, y) strcmp((const char *)(x), (const char*)(y))

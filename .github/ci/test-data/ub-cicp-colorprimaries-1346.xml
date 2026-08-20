@@ -219,7 +219,11 @@
 	</XYZArrayType> </mediaWhitePointTag>
 
     <cicpTag> <cicpType>
-      <cicpFields ColorPrimaries="-1" TransferCharacteristics="18" MatrixCoefficients="0" VideoFullRangeFlag="1"/>
+      <!-- ColorPrimaries="-1" is this PoC's deliberate defect (#1346). Everything
+           else has to stay a faithful copy of the BT2100PQFullScene donor, so
+           TransferCharacteristics tracks the donor's correction to 16, ST 2084
+           (PQ), per ITU-T H.273 Table 3. Nothing in the regression reads it. -->
+      <cicpFields ColorPrimaries="-1" TransferCharacteristics="16" MatrixCoefficients="0" VideoFullRangeFlag="1"/>
     </cicpType> </cicpTag>
 
 	<copyrightTag> <multiLocalizedUnicodeType>

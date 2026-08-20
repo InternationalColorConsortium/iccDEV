@@ -25,17 +25,64 @@ predicate isNarrowCountType(Type t) {
   t.getName().regexpMatch("(?i).*(char|short|byte|u?int(8|16)|icUInt(8|16)Number|icInt(8|16)Number).*")
 }
 
+predicate accessesField(Expr e, Field field) {
+  e.getAChild*().(FieldAccess).getTarget() = field
+}
+
+/**
+ * Holds if `condition` compares `field` directly against the size of a
+ * container - `field > v.size()`, `s.length() < field`, and so on.
+ *
+ * Clamping a loop bound to the size of the container the loop indexes is the
+ * strongest form of the check available, and strictly stronger than comparing
+ * against a hard-coded ceiling: it cannot drift when the container changes.
+ * It carries none of the tokens the text regex below looks for, though, so
+ * without this predicate such a clamp is invisible and the loop is reported as
+ * unbounded. That produced alerts #2344-#2348 on IccProfLib/IccCmmSearch.cpp,
+ * where `m_nCostApply` is clamped against three `std::vector::size()` values
+ * before use and every one of the five reports was a false positive.
+ *
+ * Matched structurally - the field on one side of a comparison, the size call
+ * on the other - rather than by widening the text regex again. A regex that
+ * merely looked for "size" anywhere in the guard would also accept a guard
+ * about some unrelated container, and text-matching is already what has made
+ * the predicate below brittle (see its macro-expansion note).
+ */
+predicate comparesFieldAgainstContainerSize(Expr condition, Field field) {
+  // RelationalOperation, deliberately not ComparisonOperation: the latter is
+  // also the superclass of EqualityOperation, so `if (m_nCount == v.size())`
+  // - a test, not a clamp, and no bound in either direction - would satisfy
+  // this and silence every loop over the field in the whole declaring type.
+  exists(RelationalOperation cmp, FunctionCall sizeCall |
+    cmp = condition.getAChild*() and
+    sizeCall.getTarget() instanceof MemberFunction and
+    sizeCall.getTarget().getName().regexpMatch("(?i)^(size|length)$")
+  |
+    accessesField(cmp.getLeftOperand(), field) and
+    sizeCall = cmp.getRightOperand().getAChild*()
+    or
+    accessesField(cmp.getRightOperand(), field) and
+    sizeCall = cmp.getLeftOperand().getAChild*()
+  )
+}
+
 predicate conditionMentionsFieldAndBound(Expr condition, Field field) {
-  condition.getAChild*().(FieldAccess).getTarget() = field and
-  // Match a guard that names a recognised upper bound. NOTE: object-like macros
-  // (e.g. #define MAX_CALC_ELEMENTS 65536) are expanded before CodeQL builds the
-  // AST, so a guard written `field >= MAX_CALC_ELEMENTS` presents here as the
-  // literal `65536`, never the macro spelling. The bare value must therefore be
-  // listed alongside the macro name. Includes the concrete caps used across the
-  // library: 65536 (MAX_CALC_ELEMENTS) and 16777215/0xffffff (the 24-bit array
-  // serialization cap) in addition to the previously-listed 4096/65535.
-  condition.getAChild*().toString().regexpMatch(
-    "(?i).*(max|limit|bound|INT_MAX|icMaxEnum|4096|65535|65536|16777215|0xffffff|MAX_CALC_ELEMENTS|kMax).*"
+  accessesField(condition, field) and
+  (
+    // Match a guard that names a recognised upper bound. NOTE: object-like macros
+    // (e.g. #define MAX_CALC_ELEMENTS 65536) are expanded before CodeQL builds the
+    // AST, so a guard written `field >= MAX_CALC_ELEMENTS` presents here as the
+    // literal `65536`, never the macro spelling. The bare value must therefore be
+    // listed alongside the macro name. Includes the concrete caps used across the
+    // library: 65536 (MAX_CALC_ELEMENTS) and 16777215/0xffffff (the 24-bit array
+    // serialization cap) in addition to the previously-listed 4096/65535.
+    condition.getAChild*().toString().regexpMatch(
+      "(?i).*(max|limit|bound|INT_MAX|icMaxEnum|4096|65535|65536|16777215|0xffffff|MAX_CALC_ELEMENTS|kMax).*"
+    )
+    or
+    // ...or a clamp against the size of the container being walked, which names
+    // no bound at all yet bounds the loop more tightly than any constant can.
+    comparesFieldAgainstContainerSize(condition, field)
   )
 }
 
@@ -51,7 +98,17 @@ predicate hasSetupBoundGuardInSameType(Field field) {
   exists(IfStmt guard, Function setup |
     setup = guard.getEnclosingFunction() and
     setup.getDeclaringType() = field.getDeclaringType() and
-    setup.getName().regexpMatch("(?i).*(open|create|init|read|validate|load|parse|set).*") and
+    (
+      // A constructor is the commonest place in this codebase to establish a
+      // field invariant, and it is the one function whose name can never match
+      // the list below - getName() returns the class name. Excluding it defeats
+      // this predicate's own purpose, and did: the clamp behind alerts
+      // #2345-#2348 sits in CIccApplyCmmSearch's constructor, so every loop
+      // reading the field from another method was reported as unguarded.
+      setup instanceof Constructor
+      or
+      setup.getName().regexpMatch("(?i).*(open|create|init|read|validate|load|parse|set).*")
+    ) and
     conditionMentionsFieldAndBound(guard.getCondition(), field)
   )
 }

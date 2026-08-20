@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Well-formed XML that is not a usable RelaxNG grammar: <define> is
+     referenced nowhere and no <start> is given, so xmlRelaxNGParse fails to
+     compile it and returns NULL. Drives the LoadXml exit where the parser
+     context exists but the schema does not. -->
+<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <define name="orphan"><empty/></define>
+</grammar>

@@ -23,6 +23,10 @@ on:
         description: "Python version"
         type: string
         default: "3.12"
+      strict-warnings:
+        description: "Enable strict compiler warnings for the full CTest lane"
+        type: boolean
+        default: false
 
 jobs:
   build-test:
@@ -41,6 +45,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
+          persist-credentials: false
+
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
+          path: .trusted-workflow
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
           persist-credentials: false
 
       - name: Set up Python
@@ -85,6 +98,7 @@ jobs:
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
           POWERSHELL_UPDATECHECK: Off
+          STRICT_WARNINGS: ${{ inputs.strict-warnings && 'ON' || 'OFF' }}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
@@ -103,6 +117,7 @@ jobs:
             -DVCPKG_MANIFEST_MODE=OFF `
             -DENABLE_TOOLS=ON `
             -DENABLE_TESTS=ON `
+            -DCMAKE_COMPILE_WARNING_AS_ERROR=$env:STRICT_WARNINGS `
             -Wno-dev
           if ($LASTEXITCODE -ne 0) {
             throw "CMake configure failed with exit code $LASTEXITCODE"
@@ -154,6 +169,7 @@ jobs:
 
           Write-Host "Running CTest suites..."
           ctest --test-dir out\vs2022-vcpkg -C Release `
+            --label-exclude known-red `
             --output-on-failure `
             --no-tests=error `
             --output-junit "out\vs2022-vcpkg\Testing\ci\ctest-results.xml"
@@ -398,17 +414,7 @@ jobs:
             Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
           }
 
-          # --- Load sanitizer (source sanitize.ps1 with inline fallback) ---
-          if (Test-Path ".github/scripts/sanitize.ps1") {
-            . .github/scripts/sanitize.ps1
-          } else {
-            function Sanitize-Line ([string]$s) {
-              $s = $s -replace '&','&amp;'
-              $s = $s -replace '<','&lt;'
-              $s = $s -replace '>','&gt;'
-              return $s
-            }
-          }
+          . .trusted-workflow\.github\scripts\sanitize.ps1
 
           try {
             $profileItems = @(

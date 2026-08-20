@@ -1399,6 +1399,17 @@ bool CIccTagZipUtf8Text::Read(icUInt32Number size, CIccIO *pIO)
 
   icUChar *pBuf = AllocBuffer(nSize);
 
+  // #1743 again, at the call site that fix did not reach. AllocBuffer() returns NULL
+  // for two unrelated reasons -- a legitimate zero-size request, and a failed
+  // malloc/icRealloc -- so NULL on its own cannot be treated as an error. A non-zero
+  // nSize with a NULL buffer is unambiguously the allocation failure: the guarded copy
+  // below is then skipped and the tag is left empty (m_pZipBuf NULL, m_nBufSize 0),
+  // but the function still reported success. That is the same silent data loss as
+  // #1521 and #1743, here on the read path, where it turns a truncated allocation into
+  // a profile that loads with a silently empty text tag.
+  if (nSize && !pBuf)
+    return false;
+
   if (m_nBufSize && pBuf) {
     if (pIO->Read8(pBuf, m_nBufSize) != m_nBufSize) {
       return false;
@@ -1508,6 +1519,22 @@ bool CIccTagZipUtf8Text::GetText(std::string &str) const
   memset(&zstr, 0, sizeof(zstr));
   icUtf8Vector buf(32767, 0);
 
+  // Remember how much of str belongs to the caller, so a failed decode can hand back
+  // exactly what it was given. The loop below appends each inflated chunk to str and
+  // can then return false from inside the loop when inflate() rejects a later chunk --
+  // which left the caller holding a partial decode alongside a false return, while the
+  // no-zlib path a few lines above clears str before failing. The two configurations
+  // disagreed about what str means on failure: cleared in one, partially written in
+  // the other. Truncating back to nOrigSize on the failure path makes the failure
+  // atomic and makes both agree that false leaves nothing appended.
+  //
+  // Rewinding rather than inflating into a scratch string is deliberate. There is no
+  // bound on how much this can inflate -- the decompression cap is a separate open
+  // question -- so buffering the whole decode before handing it over would double peak
+  // memory for a hostile ratio, and would add a full copy to the success path that the
+  // existing in-place append does not pay.
+  const size_t nOrigSize = str.size();
+
   zstat = inflateInit(&zstr);
 
   if (zstat != Z_OK) {
@@ -1544,6 +1571,10 @@ bool CIccTagZipUtf8Text::GetText(std::string &str) const
     zstat = inflate(&zstr, Z_SYNC_FLUSH);
 
     if (zstat != Z_OK && zstat != Z_STREAM_END) {
+      // The only failure return that can be reached with chunks already appended, so
+      // the only one that has to rewind. The two earlier exits above run before the
+      // loop and leave str untouched by construction.
+      str.resize(nOrigSize);
       inflateEnd(&zstr);
       return false;
     }
@@ -4266,10 +4297,31 @@ icValidateStatus CIccTagXYZ::Validate(std::string sigPath, std::string &sReport,
  */
 CIccTagChromaticity::CIccTagChromaticity(int nSize/*=3*/)
 {
-  m_nChannels = nSize;
-  if (m_nChannels <3)
+  // The allocation has to be at least as long as the channel count advertises,
+  // because that count is what every reader indexes by: Describe and Write walk
+  // m_xy up to m_nChannels, the copy constructor memcpy's that many entries, and
+  // Validate compares three of them. The count was clamped up to three while the
+  // caller's raw nSize was still what got allocated, so CIccTagChromaticity(1)
+  // was a three-channel tag over a one-entry array -- the same out-of-bounds
+  // shape as #2094, reached through the public constructor rather than through a
+  // parsed tag. Raising the *allocation* to the same floor fixes that and leaves
+  // every nSize >= 3 allocating exactly what it did before, including the
+  // out-of-range ones: the icUInt16Number assignment can only drop the count
+  // below what was allocated, never lift it above.
+  int nAlloc = (nSize < 3) ? 3 : nSize;
+
+  m_nChannels = (icUInt16Number)nAlloc;
+  if (m_nChannels < 3)
     m_nChannels = 3;
-  m_xy = (icChromaticityNumber*)calloc(nSize, sizeof(icChromaticityNumber));
+
+  // Not set anywhere else on this path: Read() overwrites it, but the XML and
+  // JSON parsers only assign it when their colorant field is present, so without
+  // this the tag's colorant encoding could be read indeterminate (CWE-457).
+  m_nColorantType = 0;
+
+  m_xy = (icChromaticityNumber*)calloc(nAlloc, sizeof(icChromaticityNumber));
+  if (!m_xy)
+    m_nChannels = 0;   // keep the count inside the allocation if it failed
 }
 
 
@@ -4287,9 +4339,18 @@ CIccTagChromaticity::CIccTagChromaticity(const CIccTagChromaticity &ITCh)
 {
   m_nChannels = ITCh.m_nChannels;
 
+  // m_nColorantType was left out of the copy, so a copied tag carried an
+  // indeterminate colorant encoding (CWE-457) -- the same oversight #2000 fixed
+  // in CIccTagCicp's copy constructor, except that here operator= below dropped
+  // it too. It is the value Validate switches on and the value Write emits, and
+  // NewCopy() is this constructor, so every profile copy went through it.
+  m_nColorantType = ITCh.m_nColorantType;
+
   m_xy = (icChromaticityNumber*)calloc(m_nChannels, sizeof(icChromaticityNumber));
   if (m_xy)
     memcpy(m_xy, ITCh.m_xy, sizeof(icChromaticityNumber)*m_nChannels);
+  else
+    m_nChannels = 0;   // keep the count honest if the allocation failed
 }
 
 
@@ -4309,11 +4370,14 @@ CIccTagChromaticity &CIccTagChromaticity::operator=(const CIccTagChromaticity &C
     return *this;
 
   m_nChannels = ChromTag.m_nChannels;
+  m_nColorantType = ChromTag.m_nColorantType;   // see the copy constructor above
 
   free(m_xy);
   m_xy = (icChromaticityNumber*)calloc(m_nChannels, sizeof(icChromaticityNumber));
   if (m_xy)
     memcpy(m_xy, ChromTag.m_xy, sizeof(icChromaticityNumber)*m_nChannels);
+  else
+    m_nChannels = 0;   // keep the count honest if the allocation failed
 
   return *this;  
 }
@@ -4373,19 +4437,51 @@ bool CIccTagChromaticity::Read(icUInt32Number size, CIccIO *pIO)
     return false;
 
   icUInt32Number nNum = (size-3*sizeof(icUInt32Number)) / sizeof(icChromaticityNumber);
-  icUInt32Number nNum32 = (nNum*sizeof(icChromaticityNumber)) / sizeof(icU16Fixed16Number);
 
   if (nNum < nChannels)
     return false;
 
-  // SetSize casts from icUInt32Number down to icUInt16Number. Check for overflow
-  if (nNum > (icUInt16Number)nNum)
+  // The element carries the channel count twice: declared in bytes 8-9, and
+  // implied by the tag-table size nNum is derived from. The guard above is a
+  // capacity check -- it establishes that the element is large enough to hold
+  // what it declares -- and the declared count is what the tag then is, so
+  // nNum has no further part to play. Sizing from nNum instead discarded the
+  // count that had just been validated against: a tag declaring three channels
+  // inside a 92-byte element became a ten-channel tag, and because Write()
+  // emits m_nChannels the rewrite was persisted by anything that round-tripped
+  // the profile rather than merely misreported in memory. With no colorant
+  // encoding claimed, Validate() reports nothing at all, so it was silent from
+  // end to end (#2106; the out-of-bounds read that surfaced this tag was #2094).
+  //
+  // CIccTagNamedColor2::Read faces the same two-source situation and resolves
+  // it this way already -- a size-derived nCount used only as a capacity guard,
+  // then SetSize() on the declared count and exactly that many entries read --
+  // so this is the sibling's shape, not a new rule. The capacity guard above is
+  // unchanged, so an element long enough for its declared count still parses;
+  // trailing bytes are now ignored rather than adopted as channels. 12 + 8n is a
+  // multiple of four for every n, so a conforming element never needs padding,
+  // and the floor division already absorbed any run shorter than one eight-byte
+  // pair, which is why padding cannot be mistaken for a channel either way.
+  //
+  // One shape does stop parsing, deliberately: an element declaring zero
+  // channels. It used to take however many pairs its length implied -- the
+  // fabrication this change exists to stop -- and a chromaticityType carrying no
+  // chromaticity has nothing for the count to mean. Rejecting it here states
+  // that, rather than leaving it to fall out of SetSize(0), where icRealloc()
+  // treats a zero size as a free and returns NULL.
+  //
+  // The overflow check that stood here guarded a cast of nNum down to
+  // icUInt16Number for SetSize(). nChannels was read as an icUInt16Number, so
+  // there is no longer a narrowing conversion for it to protect.
+  if (!nChannels)
     return false;
 
-  if (!SetSize((icUInt16Number)nNum))
+  icUInt32Number nChannels32 = (nChannels*sizeof(icChromaticityNumber)) / sizeof(icU16Fixed16Number);
+
+  if (!SetSize(nChannels))
     return false;
 
-  if (pIO->Read32(&m_xy[0], nNum32) != nNum32 )
+  if (pIO->Read32(&m_xy[0], nChannels32) != nChannels32 )
     return false;
 
   return true;
@@ -4518,11 +4614,44 @@ icValidateStatus CIccTagChromaticity::Validate(std::string sigPath, std::string 
 
   if (m_nColorantType) {
 
+    // Every case of the switch below compares three fixed xy pairs, so it may
+    // only run once the tag is known to carry three of them. The channel count
+    // was checked here already but the result was only reported, not acted on:
+    // validation fell through into m_xy[1] and m_xy[2] on a tag whose array
+    // holds fewer entries, which is a heap out-of-bounds read (#2094, CWE-125).
+    // All three readers reach it -- Read() sizes the array from the tag's
+    // declared *size*, requiring only that the declared channel count not exceed
+    // it; the XML parser sizes it from the number of <Channel> elements; and the
+    // JSON parser from the length of the "channels" array -- so a 20-byte
+    // chromaticityTag, or one <Channel>, or one "channels" entry, is enough.
+    // Reporting the count as a critical error and returning is what the check
+    // was already asking for: a colorant encoding cannot be checked against a
+    // tag that does not carry the three channels the encoding is defined over.
+    // The one thing it gives up is that a short tag which *also* names an
+    // unrecognised encoding now stops here instead of additionally reporting
+    // "Invalid colorant type encoding" from the default case below. The verdict
+    // is unchanged -- a critical error either way -- and keeping that second
+    // line would mean wrapping each of the four `a || b || c` comparison chains
+    // in a guard, where && binding tighter than || makes it easy to write one
+    // that still reads m_xy. One exit is the safer shape for a memory fix.
     if (m_nChannels!=3) {
       sReport += icMsgValidateCriticalError;
       sReport += sSigPathName;
       sReport += " - Number of device channels must be three.\n";
-      rv = icMaxStatus(rv, icValidateCriticalError);
+      return icMaxStatus(rv, icValidateCriticalError);
+    }
+
+    // Belt and braces on the pointer as well as the count. Both constructors,
+    // operator= and SetSize() now zero m_nChannels when their allocation fails,
+    // so a three-channel tag with a null array should not arise -- but the count
+    // and the pointer are separate members, and this function's own guard is all
+    // that stands in front of the four comparisons below, so it checks what it
+    // is about to dereference rather than inferring it.
+    if (!m_xy) {
+      sReport += icMsgValidateCriticalError;
+      sReport += sSigPathName;
+      sReport += " - Chromaticity data is missing.\n";
+      return icMaxStatus(rv, icValidateCriticalError);
     }
 
     switch(m_nColorantType) {
@@ -4618,7 +4747,8 @@ CIccTagCicp::CIccTagCicp()
  *
  * Purpose: Copy Constructor
  *
- *  The body was empty, so every copy of a cicpTag came out with all four
+ *  Fixed on master as #2000; this branch reached the same defect from clause
+ *  8.10. The body was empty, so every copy of a cicpTag came out with all four
  *  fields *uninitialized* - the default constructor is not delegated to, and
  *  the members are plain icUInt8Numbers with no initialiser of their own.
  *  NewCopy() is this constructor, and CIccProfile's own copy constructor
@@ -4639,6 +4769,10 @@ CIccTagCicp::CIccTagCicp()
  */
 CIccTagCicp::CIccTagCicp(const CIccTagCicp& ITCICP)
 {
+  // #2000. The parameter had been commented out as /* ITXYZ */ - copy-paste
+  // residue from CIccTagXYZ's copy constructor above - which is how the empty
+  // body went unnoticed. Copying the four members matches operator= just
+  // below, which had it right all along.
   m_nColorPrimaries = ITCICP.m_nColorPrimaries;
   m_nTransferCharacteristics = ITCICP.m_nTransferCharacteristics;
   m_nMatrixCoefficients = ITCICP.m_nMatrixCoefficients;

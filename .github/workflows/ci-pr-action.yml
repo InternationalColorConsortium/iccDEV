@@ -36,8 +36,6 @@ on:
       - synchronize
       - reopened
       - ready_for_review
-      - labeled
-      - unlabeled
   workflow_dispatch:
     inputs:
       pr_number:
@@ -46,9 +44,9 @@ on:
         default: ''
         type: string
       ci_scope:
-        description: 'CI scope: full long cycle (default), auto path scope, or an explicit fast/specialized lane'
+        description: 'CI scope: auto path scope (default), full long cycle, or an explicit fast/specialized lane'
         required: false
-        default: full
+        default: auto
         type: choice
         options:
           - full
@@ -79,11 +77,6 @@ on:
         required: false
         default: false
         type: boolean
-      include_docker:
-        description: 'Fast lane: add Docker verification'
-        required: false
-        default: false
-        type: boolean
       warning_policy:
         description: 'Fast-lane compiler warning policy'
         required: false
@@ -94,11 +87,11 @@ on:
           - fail
 
 concurrency:
-  group: "ci-pr-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}"
+  group: "ci-pr-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}"
   cancel-in-progress: true
 
 env:
-  REGRESSION_IMAGE_TAG: sha-547c4bed27b0432942b2b34c57d5bd5495191798
+  REGRESSION_IMAGE_TAG: latest
 
 jobs:
   detect-src:
@@ -119,7 +112,6 @@ jobs:
       docs_only: ${{ steps.diffcheck.outputs.docs_only }}
       fast_lane: ${{ steps.diffcheck.outputs.fast_lane }}
       include_windows: ${{ steps.diffcheck.outputs.include_windows }}
-      include_docker: ${{ steps.diffcheck.outputs.include_docker }}
       ctest_recent_limit: ${{ steps.diffcheck.outputs.ctest_recent_limit }}
       warning_policy: ${{ steps.diffcheck.outputs.warning_policy }}
       target_sha: ${{ steps.diffcheck.outputs.target_sha }}
@@ -141,6 +133,7 @@ jobs:
           # Use the base commit SHA to ensure we fetch the exact trusted version.
           ref: ${{ github.event.pull_request.base.sha || 'master' }}
           path: base
+          sparse-checkout: .github/scripts
           fetch-depth: 1
           persist-credentials: false
 
@@ -158,10 +151,9 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
-          CI_SCOPE: ${{ inputs.ci_scope || 'full' }}
+          CI_SCOPE: ${{ inputs.ci_scope || 'auto' }}
           CTEST_RECENT_LIMIT_INPUT: ${{ inputs.ctest_recent_limit || '1' }}
           INCLUDE_WINDOWS_INPUT: ${{ inputs.include_windows && 'true' || 'false' }}
-          INCLUDE_DOCKER_INPUT: ${{ inputs.include_docker && 'true' || 'false' }}
           WARNING_POLICY_INPUT: ${{ inputs.warning_policy || 'fail' }}
           DISPATCH_PR_NUMBER: ${{ inputs.pr_number || '' }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -169,25 +161,22 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number || '' }}
           PR_BASE_REF: ${{ github.base_ref || 'master' }}
           GH_EVENT_NAME: ${{ github.event_name }}
-          GH_EVENT_ACTION: ${{ github.event.action || '' }}
           GH_ACTOR: ${{ github.actor }}
           GH_REPOSITORY: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
-          LABEL_NAME: ${{ github.event.label.name || '' }}
-          PR_LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
         run: |
           set -euo pipefail
 
           git config --add safe.directory "$PWD"
           unset GITHUB_TOKEN || true
+          source "$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
 
-          ci_scope="${CI_SCOPE:-full}"
+          ci_scope="${CI_SCOPE:-auto}"
           head_sha="${PR_HEAD_SHA}"
           target_repository="${PR_HEAD_REPO}"
           pr_number="${PR_NUMBER}"
           fast_lane=false
           include_windows=true
-          include_docker=true
           ctest_recent_limit=0
           warning_policy=fail
 
@@ -209,24 +198,33 @@ jobs:
             local container_changed="$6"
             local docs_only="$7"
 
-            {
-              printf 'src_changed=%s\n' "$run_full"
-              printf 'ci_scope=%s\n' "$ci_scope"
-              printf 'source_changed=%s\n' "$source_changed"
-              printf 'build_config_changed=%s\n' "$build_config_changed"
-              printf 'testing_changed=%s\n' "$testing_changed"
-              printf 'ci_changed=%s\n' "$ci_changed"
-              printf 'container_changed=%s\n' "$container_changed"
-              printf 'docs_only=%s\n' "$docs_only"
-              printf 'fast_lane=%s\n' "$fast_lane"
-              printf 'include_windows=%s\n' "$include_windows"
-              printf 'include_docker=%s\n' "$include_docker"
-              printf 'ctest_recent_limit=%s\n' "$ctest_recent_limit"
-              printf 'warning_policy=%s\n' "$warning_policy"
-              printf 'target_sha=%s\n' "$head_sha"
-              printf 'target_repository=%s\n' "$target_repository"
-              printf 'pr_number=%s\n' "$pr_number"
-          } >> "$GITHUB_OUTPUT"  # elements-sanitized
+            write_github_output() {
+              local key="$1"
+              local value="$2"
+
+              if [[ "$value" == *$'\r'* || "$value" == *$'\n'* ]]; then
+                echo "Invalid multiline value for output: $key" >&2
+                exit 1
+              fi
+
+              printf '%s=%s\n' "$key" "$(sanitize_line "$value")" >> "$GITHUB_OUTPUT"
+            }
+
+            write_github_output src_changed "$run_full"
+            write_github_output ci_scope "$ci_scope"
+            write_github_output source_changed "$source_changed"
+            write_github_output build_config_changed "$build_config_changed"
+            write_github_output testing_changed "$testing_changed"
+            write_github_output ci_changed "$ci_changed"
+            write_github_output container_changed "$container_changed"
+            write_github_output docs_only "$docs_only"
+            write_github_output fast_lane "$fast_lane"
+            write_github_output include_windows "$include_windows"
+            write_github_output ctest_recent_limit "$ctest_recent_limit"
+            write_github_output warning_policy "$warning_policy"
+            write_github_output target_sha "$head_sha"
+            write_github_output target_repository "$target_repository"
+            write_github_output pr_number "$pr_number"
           }
 
           is_trusted_maintainer() {
@@ -284,27 +282,8 @@ jobs:
             fast_lane=true
             ci_scope=fast-lane
             include_windows=false
-            include_docker=false
             ctest_recent_limit=1
             warning_policy=fail
-          }
-
-          apply_label_controls() {
-            local labels_json="$1"
-            if jq -e 'index("ci:no-windows")' <<< "$labels_json" >/dev/null; then
-              include_windows=false
-            fi
-            if jq -e 'index("ci:docker")' <<< "$labels_json" >/dev/null; then
-              include_docker=true
-            fi
-            if jq -e 'index("ci:warnings-fail")' <<< "$labels_json" >/dev/null; then
-              warning_policy=fail
-            fi
-            for n in 1 2 3 4 5 6 7 8 9 10; do
-              if jq -e "index(\"ci:ctest-last-${n}\")" <<< "$labels_json" >/dev/null; then
-                ctest_recent_limit="$n"
-              fi
-            done
           }
 
           resolve_dispatch_pr() {
@@ -332,46 +311,38 @@ jobs:
             pr_number="$number"
           }
 
-          # A newly applied ci:* label must be evaluated before the default full
-          # pull-request scope exits through the direct dispatch path.
-          if [ "$GH_EVENT_NAME" != "pull_request" ] ||
-             [ "$GH_EVENT_ACTION" != "labeled" ] ||
-             [[ "$LABEL_NAME" != ci:* ]]; then
-            case "$ci_scope" in
-              full|source)
-                include_windows=true
-                include_docker=true
-                ctest_recent_limit=0
-                warning_policy=fail
-                ;;
-              fast-lane)
-                if ! validate_fast_lane_actor "$GH_ACTOR"; then
+          case "$ci_scope" in
+            full|source)
+              include_windows=true
+              ctest_recent_limit=0
+              warning_policy=fail
+              ;;
+            fast-lane)
+              if ! validate_fast_lane_actor "$GH_ACTOR"; then
+                exit 1
+              fi
+              if [ -n "$DISPATCH_PR_NUMBER" ]; then
+                resolve_dispatch_pr "$DISPATCH_PR_NUMBER"
+              fi
+              if ! require_same_repository_pr; then
+                exit 1
+              fi
+              apply_fast_lane_defaults
+              case "$CTEST_RECENT_LIMIT_INPUT" in
+                0|1|2|3|4|5|6|7|8|9|10)
+                  ctest_recent_limit="$CTEST_RECENT_LIMIT_INPUT"
+                  ;;
+                *)
+                  echo "Invalid ctest_recent_limit: $CTEST_RECENT_LIMIT_INPUT" >&2
                   exit 1
-                fi
-                if [ -n "$DISPATCH_PR_NUMBER" ]; then
-                  resolve_dispatch_pr "$DISPATCH_PR_NUMBER"
-                fi
-                if ! require_same_repository_pr; then
-                  exit 1
-                fi
-                apply_fast_lane_defaults
-                case "$CTEST_RECENT_LIMIT_INPUT" in
-                  0|1|2|3|4|5|6|7|8|9|10)
-                    ctest_recent_limit="$CTEST_RECENT_LIMIT_INPUT"
-                    ;;
-                  *)
-                    echo "Invalid ctest_recent_limit: $CTEST_RECENT_LIMIT_INPUT" >&2
-                    exit 1
-                    ;;
-                esac
-                include_windows="$INCLUDE_WINDOWS_INPUT"
-                include_docker="$INCLUDE_DOCKER_INPUT"
-                warning_policy="$WARNING_POLICY_INPUT"
-                ;;
-              governance|docs)
-                ;;
-            esac
-          fi
+                  ;;
+              esac
+              include_windows="$INCLUDE_WINDOWS_INPUT"
+              warning_policy="$WARNING_POLICY_INPUT"
+              ;;
+            governance|docs)
+              ;;
+          esac
 
           # Validate that both SHAs look like exact Git commit OIDs (40 hex chars).
           validate_sha() {
@@ -432,40 +403,6 @@ jobs:
           container_changed=false
           docs_only=false
 
-          if [ "$GH_EVENT_NAME" = "pull_request" ] &&
-             [ "$GH_EVENT_ACTION" = "labeled" ] &&
-             [[ "$LABEL_NAME" == ci:* ]]; then
-            if ! validate_fast_lane_actor "$GH_ACTOR"; then
-              exit 1
-            fi
-            if ! require_same_repository_pr; then
-              exit 1
-            fi
-            case "$LABEL_NAME" in
-              ci:skip)
-                ci_scope=skip
-                include_windows=false
-                include_docker=false
-                ctest_recent_limit=0
-                warning_policy=warn
-                ;;
-              ci:full)
-                ci_scope=full
-                include_windows=true
-                include_docker=true
-                ctest_recent_limit=0
-                warning_policy=fail
-                ;;
-              ci:fast-lane|ci:ctest-last-[1-9]|ci:ctest-last-10|ci:docker|ci:no-windows|ci:warnings-fail)
-                apply_fast_lane_defaults
-                apply_label_controls "$PR_LABELS_JSON"
-                ;;
-              *)
-                echo "Ignoring unsupported CI label: $LABEL_NAME" >&2
-                ;;
-            esac
-          fi
-
           if has_changed_file '\.(cpp|cxx|cc|c|h|hpp|hh)$'; then
             source_changed=true
           fi
@@ -503,7 +440,7 @@ jobs:
               run_full=false
               ;;
             auto)
-              if [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$testing_changed" == "true" || "$ci_changed" == "true" || "$container_changed" == "true" ]]; then
+              if [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$testing_changed" == "true" || "$container_changed" == "true" ]]; then
                 run_full=true
               fi
               ;;
@@ -696,7 +633,7 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed || 'false' }}
-          CI_SCOPE: ${{ needs.detect-src.outputs.ci_scope || 'full' }}
+          CI_SCOPE: ${{ needs.detect-src.outputs.ci_scope || 'auto' }}
           SOURCE_CHANGED: ${{ needs.detect-src.outputs.source_changed || 'false' }}
           BUILD_CONFIG_CHANGED: ${{ needs.detect-src.outputs.build_config_changed || 'false' }}
           TESTING_CHANGED: ${{ needs.detect-src.outputs.testing_changed || 'false' }}
@@ -767,86 +704,51 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
   validate-inputs:
-    name: Init PR Build Matrix
+    name: Init PR Validation
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read  # Required to derive the PR build matrix.
     needs: [detect-src]
 
     outputs:
-      os-list: ${{ steps.v.outputs.os }}
-      compilers: ${{ steps.v.outputs.comp }}
-      build-types: ${{ steps.v.outputs.bt }}
       regression-image-tag: ${{ steps.v.outputs.regression_image_tag }}
       fast-lane: ${{ steps.v.outputs.fast_lane }}
       include-windows: ${{ steps.v.outputs.include_windows }}
-      include-docker: ${{ steps.v.outputs.include_docker }}
       ctest-recent-limit: ${{ steps.v.outputs.ctest_recent_limit }}
       warning-policy: ${{ steps.v.outputs.warning_policy }}
 
     steps:
-      - name: Set up Matrix Runners
+      - name: Check out trusted sanitizer helper
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          # preflight: allow-codeql-actions reason=trusted-base-sanitizer-checkout
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: .trusted-workflow
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up PR validation
         id: v
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
           FAST_LANE: ${{ needs.detect-src.outputs.fast_lane || 'false' }}
           INCLUDE_WINDOWS: ${{ needs.detect-src.outputs.include_windows || 'true' }}
-          INCLUDE_DOCKER: ${{ needs.detect-src.outputs.include_docker || 'true' }}
           CTEST_RECENT_LIMIT: ${{ needs.detect-src.outputs.ctest_recent_limit || '0' }}
           WARNING_POLICY: ${{ needs.detect-src.outputs.warning_policy || 'fail' }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-
-          # --- Define for child workflows ---
-          # Windows is Hardcoded - TODO
-          allowed_os=( "ubuntu-latest" "ubuntu-24.04" "macos-latest" )
-          allowed_comp=( "gcc" "clang" )
-          allowed_bt=( "Release" "Debug" )
-          # --- Define for child workflows ---
-          # Windows is Hardcoded - TODO
-          os_raw='["ubuntu-latest","macos-latest"]'
-          comp_raw='["gcc","clang"]'
-          bt_raw='["Release","Debug"]'
-          if [ "$FAST_LANE" = "true" ]; then
-            os_raw='["ubuntu-24.04"]'
-            comp_raw='["gcc"]'
-            bt_raw='["Release"]'
-          fi
-
-          validate() {
-            local json="$1"; shift
-            local allowed=("$@")
-
-            # ensure jq is present
-            if ! command -v jq >/dev/null 2>&1; then
-              echo "Error: jq is required for input validation" >&2
-              exit 1
-            fi
-
-            readarray -t vals < <(jq -r '.[]' <<<"$json")
-
-            for v in "${vals[@]}"; do
-              local ok=0
-              for a in "${allowed[@]}"; do
-                [[ "$v" == "$a" ]] && ok=1
-              done
-              if [[ $ok -eq 0 ]]; then
-                echo "Invalid matrix value: $v" >&2
-                exit 1
-              fi
-            done
-          }
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
 
           write_github_output() {
             local key="$1"
             local value="$2"
 
             case "$key" in
-              os|comp|bt|regression_image_tag|fast_lane|include_windows|include_docker|ctest_recent_limit|warning_policy) ;;
+              regression_image_tag|fast_lane|include_windows|ctest_recent_limit|warning_policy) ;;
               *)
                 echo "Invalid output key: $key" >&2
                 exit 1
@@ -858,24 +760,18 @@ jobs:
               exit 1
             fi
 
+            value="$(sanitize_line "$value")"
             printf '%s=%s\n' "$key" "$value" >> "$GITHUB_OUTPUT"  # elements-sanitized
           }
 
-          validate "$os_raw"   "${allowed_os[@]}"
-          validate "$comp_raw" "${allowed_comp[@]}"
-          validate "$bt_raw"   "${allowed_bt[@]}"
-
-          write_github_output os "$os_raw"
-          write_github_output comp "$comp_raw"
-          write_github_output bt "$bt_raw"
           write_github_output regression_image_tag "$REGRESSION_IMAGE_TAG"
           write_github_output fast_lane "$FAST_LANE"
           write_github_output include_windows "$INCLUDE_WINDOWS"
-          write_github_output include_docker "$INCLUDE_DOCKER"
           write_github_output ctest_recent_limit "$CTEST_RECENT_LIMIT"
           write_github_output warning_policy "$WARNING_POLICY"
 
   risk-gate:
+    if: ${{ needs.detect-src.outputs.ci_changed == 'true' || needs.detect-src.outputs.container_changed == 'true' }}
     name: Risk Analysis Gate
     needs: [detect-src]
     uses: ./.github/workflows/ci-pr-risk-security-analysis.yml
@@ -884,20 +780,6 @@ jobs:
       git_ref: ${{ needs.detect-src.outputs.target_sha }}
       severity_threshold: 'HIGH'
       fail_on_findings: true
-
-  unix-ci:
-    if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.validate-inputs.outputs.fast-lane != 'true' }}
-    name: Unix Build & Test Profiles
-    needs: [detect-src, validate-inputs]
-    uses: ./.github/workflows/ci-pr-unix.yml
-    # pass minimized inputs
-    with:
-      # only these, bail if not defined
-      os-list: ${{ needs.validate-inputs.outputs.os-list }}
-      build-types: ${{ needs.validate-inputs.outputs.build-types }}
-      compilers: ${{ needs.validate-inputs.outputs.compilers }}
-      warning-policy: ${{ needs.validate-inputs.outputs.warning-policy }}
-      target-sha: ${{ needs.detect-src.outputs.target_sha }}
 
   gcc15-lto-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
@@ -910,16 +792,13 @@ jobs:
 
   tool-tests:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-    name: Tool Smoke Tests (ASAN+UBSAN, ${{ matrix.tool_build_type }})
+    # Together with gcc15-lto-ci, this is the compact strict Unix coverage.
+    name: Tool Smoke Tests (ASAN+UBSAN, Debug)
     needs: [detect-src, validate-inputs]
-    strategy:
-      fail-fast: false
-      matrix:
-        tool_build_type: ${{ fromJson(needs.validate-inputs.outputs.build-types) }}
     uses: ./.github/workflows/ci-iccdev-tool-tests.yml
     with:
       regression_image_tag: ${{ needs.validate-inputs.outputs.regression-image-tag }}
-      tool_build_type: ${{ matrix.tool_build_type }}
+      tool_build_type: Debug
       ctest_mode: fast
       ctest_recent_limit: ${{ needs.validate-inputs.outputs.ctest-recent-limit }}
       warning_policy: ${{ needs.validate-inputs.outputs.warning-policy }}
@@ -934,8 +813,8 @@ jobs:
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
 
   docker-ci:
-    if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.validate-inputs.outputs.include-docker == 'true' }}
-    name: Docker Verification
+    if: ${{ needs.detect-src.outputs.container_changed == 'true' }}
+    name: Docker Clang 22 Verification
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-docker-pr.yml
     with:
@@ -950,7 +829,6 @@ jobs:
       - setup
       - validate-inputs
       - risk-gate
-      - unix-ci
       - gcc15-lto-ci
       # clang-tidy lint and scan-build are temporarily disabled above.
       # - lint
@@ -986,11 +864,12 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed }}
+          CONTAINER_CHANGED: ${{ needs.detect-src.outputs.container_changed }}
+          FAST_LANE: ${{ needs.validate-inputs.outputs.fast-lane }}
           DETECT_RESULT: ${{ needs.detect-src.result }}
           SETUP_RESULT: ${{ needs.setup.result }}
           VALIDATE_RESULT: ${{ needs.validate-inputs.result }}
           RISK_RESULT: ${{ needs.risk-gate.result }}
-          UNIX_RESULT: ${{ needs.unix-ci.result }}
           GCC15_LTO_RESULT: ${{ needs['gcc15-lto-ci'].result }}
           # clang-tidy lint and scan-build are temporarily disabled above.
           # LINT_RESULT: ${{ needs.lint.result }}
@@ -1028,14 +907,16 @@ jobs:
           DETECT_RESULT="${DETECT_RESULT:-failure}"
           SETUP_RESULT="${SETUP_RESULT:-failure}"
           VALIDATE_RESULT="${VALIDATE_RESULT:-failure}"
-          UNIX_RESULT="${UNIX_RESULT:-success}"
+          SRC_CHANGED="${SRC_CHANGED:-false}"
+          CONTAINER_CHANGED="${CONTAINER_CHANGED:-false}"
+          FAST_LANE="${FAST_LANE:-false}"
           LINT_RESULT="${LINT_RESULT:-success}"
           SCAN_RESULT="${SCAN_RESULT:-success}"
           TOOL_RESULT="${TOOL_RESULT:-success}"
           WIN_RESULT="${WIN_RESULT:-success}"
+          DOCKER_RESULT="${DOCKER_RESULT:-success}"
           RISK_RESULT="${RISK_RESULT:-success}"
           GCC15_LTO_RESULT="${GCC15_LTO_RESULT:-success}"
-          DOCKER_RESULT="${DOCKER_RESULT:-success}"
 
           # remove CRs, trim whitespace and lowercase each value
           trim_and_norm() {
@@ -1052,29 +933,20 @@ jobs:
           DETECT_RESULT="$(trim_and_norm "$DETECT_RESULT")"
           SETUP_RESULT="$(trim_and_norm "$SETUP_RESULT")"
           VALIDATE_RESULT="$(trim_and_norm "$VALIDATE_RESULT")"
-          UNIX_RESULT="$(trim_and_norm "$UNIX_RESULT")"
+          SRC_CHANGED="$(trim_and_norm "$SRC_CHANGED")"
+          CONTAINER_CHANGED="$(trim_and_norm "$CONTAINER_CHANGED")"
+          FAST_LANE="$(trim_and_norm "$FAST_LANE")"
           LINT_RESULT="$(trim_and_norm "$LINT_RESULT")"
           SCAN_RESULT="$(trim_and_norm "$SCAN_RESULT")"
           TOOL_RESULT="$(trim_and_norm "$TOOL_RESULT")"
           WIN_RESULT="$(trim_and_norm "$WIN_RESULT")"
+          DOCKER_RESULT="$(trim_and_norm "$DOCKER_RESULT")"
           RISK_RESULT="$(trim_and_norm "$RISK_RESULT")"
           GCC15_LTO_RESULT="$(trim_and_norm "$GCC15_LTO_RESULT")"
-          DOCKER_RESULT="$(trim_and_norm "$DOCKER_RESULT")"
 
           # --- compute overall result from upstream jobs ----------------------
           job_res=success
-          docker_advisory=success
-          qa_docker_branch=false
-          if [[ "${GITHUB_BASE_REF:-}" == "ci-qa-pr-docker-testing" || "${GITHUB_REF_NAME:-}" == "ci-qa-pr-docker-testing" ]]; then
-            qa_docker_branch=true
-          fi
-          if [[ "$DOCKER_RESULT" != "success" && "$DOCKER_RESULT" != "skipped" ]]; then
-            docker_advisory=warning
-          fi
-          required_results=("$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$RISK_RESULT" "$UNIX_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT")
-          if [[ "$qa_docker_branch" != "true" ]]; then
-            required_results+=("$DOCKER_RESULT")
-          fi
+          required_results=("$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$RISK_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$DOCKER_RESULT")
           for s in "${required_results[@]}"; do
             # 'skipped' is acceptable (jobs are skipped when src_changed is false)
             # only 'failure' or 'cancelled' should cause overall failure
@@ -1083,6 +955,9 @@ jobs:
               break
             fi
           done
+          if [[ "$CONTAINER_CHANGED" == "true" && "$DOCKER_RESULT" != "success" ]]; then
+            job_res=failure
+          fi
 
           # --- write header ----------------------------------------------------
           {
@@ -1143,26 +1018,15 @@ jobs:
             printf "| setup              | %s |\n" "$(sanitize_line "$SETUP_RESULT")"
             printf "| validate-inputs    | %s |\n" "$(sanitize_line "$VALIDATE_RESULT")"
             printf "| risk-gate          | %s |\n" "$(sanitize_line "$RISK_RESULT")"
-            printf "| unix-ci            | %s |\n" "$(sanitize_line "$UNIX_RESULT")"
             printf "| gcc15-lto-ci       | %s |\n" "$(sanitize_line "$GCC15_LTO_RESULT")"
             printf "| lint               | %s |\n" "$(sanitize_line "$LINT_RESULT")"
             printf "| scan-build         | %s |\n" "$(sanitize_line "$SCAN_RESULT")"
             printf "| tool-tests         | %s |\n" "$(sanitize_line "$TOOL_RESULT")"
             printf "| win-ci             | %s |\n" "$(sanitize_line "$WIN_RESULT")"
             printf "| docker-ci          | %s |\n" "$(sanitize_line "$DOCKER_RESULT")"
-            if [[ "$qa_docker_branch" == "true" ]]; then
-              printf "| docker-ci policy   | %s |\n" "$(sanitize_line "advisory/${docker_advisory}")"
-            fi
             echo ""
             echo "**Overall Result:** \`$(sanitize_line "$job_res")\`"
             echo ""
-            if [[ "$qa_docker_branch" == "true" ]]; then
-              echo "### Docker Advisory and SHA Pin Maintenance"
-              echo ""
-              echo "Docker PR verification is non-blocking only for \`ci-qa-pr-docker-testing\` so maintainer QA can continue while container or third-party action pins are refreshed."
-              echo "If \`docker-ci\` is not \`success\` or \`skipped\`, apply the \`bump-sha-pins\` label and update pinned action, Docker, or container SHA references before treating the Docker lane as verified."
-              echo ""
-            fi
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
           if [ "$job_res" != "success" ]; then

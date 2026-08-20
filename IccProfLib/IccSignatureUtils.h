@@ -153,7 +153,29 @@ inline bool IsSpaceSpectralPCS(icColorSpaceSignature sig)
 // TRACE_LOG(msg, ...)  - logs message and trace together
 // -----------------------------------------------------------------------------
 
-#ifdef __linux__
+// backtrace()/backtrace_symbols_fd() and the <execinfo.h> that declares them are a
+// glibc extension, not a Linux one. musl does not ship the header at all, so on
+// Alpine and other musl targets __linux__ is defined and the include below fails
+// outright -- a hard compile error rather than a missing feature. Probe for the
+// header instead of inferring it from the kernel, and fall through to the same
+// no-op definitions the non-Linux branch already provides when it is absent.
+//
+// This is preventive rather than a fix for an observed break: no translation unit in
+// the tree includes IccSignatureUtils.h today, and TRACE_CALLER/TRACE_LOG have no
+// callers, so nothing currently compiles the include. It becomes a real musl build
+// failure the moment anything does -- which is exactly what happens on ci-qa-flags,
+// where IccUtil.cpp picks the header up.
+//
+// __has_include is standard from C++17, which this project requires; the
+// defined(__has_include) test costs nothing and keeps the header usable if it is ever
+// pulled into a C or pre-C++17 consumer.
+#if defined(__linux__) && defined(__has_include)
+  #if __has_include(<execinfo.h>)
+    #define ICC_HAS_EXECINFO 1
+  #endif
+#endif
+
+#ifdef ICC_HAS_EXECINFO
   #include <execinfo.h>
   #define TRACE_CALLER() \
     do { \

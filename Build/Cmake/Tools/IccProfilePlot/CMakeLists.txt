@@ -1,7 +1,9 @@
 SET( SRC_PATH ../../../.. )
+# IccVizModel.cpp and the IccProfilePlot include directory are not listed here:
+# both arrive through the IccVizEngine INTERFACE target declared in the parent
+# CMakeLists (#1975).  Only this tool's own sources belong in this list.
 SET( SOURCES
-  ${SRC_PATH}/Tools/CmdLine/IccProfilePlot/iccProfilePlot.cpp
-  ${SRC_PATH}/Tools/CmdLine/IccProfilePlot/IccVizModel.cpp )
+  ${SRC_PATH}/Tools/CmdLine/IccProfilePlot/iccProfilePlot.cpp )
 SET( TARGET_NAME iccProfilePlot )
 SET( ICC_PLOT_LINK_LIB ${TARGET_LIB_ICCPROFLIB} )
 
@@ -13,11 +15,9 @@ ENDIF()
 
 ADD_EXECUTABLE( ${TARGET_NAME} ${SOURCES} )
 
-# IccVizModel.hpp / IccVizMath.hpp / spectralLocus.hpp live alongside the sources.
-TARGET_INCLUDE_DIRECTORIES( ${TARGET_NAME} PRIVATE
-  ${SRC_PATH}/Tools/CmdLine/IccProfilePlot )
-
-TARGET_LINK_LIBRARIES( ${TARGET_NAME} ${ICC_PLOT_LINK_LIB} )
+# IccVizEngine carries IccVizModel.cpp plus the include directory that makes
+# IccVizModel.hpp / IccVizMath.hpp / spectralLocus.hpp reachable.
+TARGET_LINK_LIBRARIES( ${TARGET_NAME} ${ICC_PLOT_LINK_LIB} IccVizEngine )
 IF(ENABLE_INSTALL_RIM)
   INSTALL (TARGETS ${TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
 ENDIF(ENABLE_INSTALL_RIM)
@@ -29,16 +29,14 @@ SET( VIZ_SOURCES
   ${SRC_PATH}/Tools/CmdLine/IccProfilePlot/iccProfileVisualize.cpp
   ${SRC_PATH}/Tools/CmdLine/IccProfilePlot/MiniPDF.cpp
   ${SRC_PATH}/Tools/CmdLine/IccProfilePlot/MiniSVG.cpp
-  ${SRC_PATH}/Tools/CmdLine/IccProfilePlot/MiniTIFF.cpp
-  ${SRC_PATH}/Tools/CmdLine/IccProfilePlot/IccVizModel.cpp )
+  ${SRC_PATH}/Tools/CmdLine/IccProfilePlot/MiniTIFF.cpp )
 SET( VIZ_TARGET_NAME iccProfileVisualizePlot )
 
 ADD_EXECUTABLE( ${VIZ_TARGET_NAME} ${VIZ_SOURCES} )
 
-TARGET_INCLUDE_DIRECTORIES( ${VIZ_TARGET_NAME} PRIVATE
-  ${SRC_PATH}/Tools/CmdLine/IccProfilePlot )
-
-TARGET_LINK_LIBRARIES( ${VIZ_TARGET_NAME} ${ICC_PLOT_LINK_LIB} )
+# The Mini* writers stay listed above: they are this tool's rendering back end,
+# not part of the engine, and no other consumer compiles them.
+TARGET_LINK_LIBRARIES( ${VIZ_TARGET_NAME} ${ICC_PLOT_LINK_LIB} IccVizEngine )
 IF(ENABLE_INSTALL_RIM)
   INSTALL (TARGETS ${VIZ_TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
 ENDIF(ENABLE_INSTALL_RIM)

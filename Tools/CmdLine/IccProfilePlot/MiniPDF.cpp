@@ -69,7 +69,7 @@
 #include <vector>
 #include <cmath>
 #include "MiniPDF.hpp"
-#include "../IccCmdLineUtil.h"
+#include "IccCmdLineUtil.h"
 
 
 /******************************************************************************/
@@ -78,22 +78,6 @@ std::ostream& operator<<( std::ostream &os, const Rect2D &r )
 {
   // llx lly urx ury
   return os << r.left << " " << r.bottom << " " << r.right << " " << r.top;
-}
-
-static bool WritePdfTextFile(FILE* outFile, const std::string& text)
-{
-  bool failed = false;
-
-  if (!outFile)
-    return false;
-
-  if (!text.empty() && fwrite(text.data(), 1, text.size(), outFile) != text.size())
-    failed = true;
-
-  if (!icFlushAndClose(outFile))
-    failed = true;
-
-  return !failed;
 }
 
 /******************************************************************************/
@@ -162,6 +146,21 @@ void PDFWriter::OpenFile( const std::string &filename, float widthPt, float heig
 
 /******************************************************************************/
 
+// Serialize the document into `out`. Every byte the PDF writer emits is
+// produced here, so this is also the hermetic entry a test or fuzz harness
+// drives (#2116) -- see the declaration in MiniPDF.hpp for why it is split out.
+// Object cleanup stays in CloseFile: the objects must survive this call so it
+// can be repeated, and the caller may still add pages afterwards.
+void PDFWriter::Serialize( std::ostream &out )
+{
+  WriteHeader(out);
+  WriteObjects(out);
+  WriteXRefs(out);
+  WriteFooter(out);
+}
+
+/******************************************************************************/
+
 void PDFWriter::CloseFile()
 {
   if (!m_filename.empty()) {
@@ -169,16 +168,19 @@ void PDFWriter::CloseFile()
         try  {
           std::ostringstream out;
           out.exceptions(std::ios::badbit | std::ios::failbit);
-          WriteHeader(out);
-          WriteObjects(out);
-          WriteXRefs(out);
-          WriteFooter(out);
+          // The four Write* calls this replaced now live in Serialize(); the
+          // exception mask above is still set here, because catching is this
+          // function's job and not Serialize's.
+          Serialize(out);
 
           // PDF export paths are intentional caller-selected output files after regular-file validation.
 
           // codeql[cpp/path-injection]
           FILE* outFile = icOpenRegularWriteTextFile(m_filename.c_str());
-          if (!WritePdfTextFile(outFile, out.str())) {
+          // icWriteAndClose() writes through the handle icOpenRegularWriteTextFile()
+          // just validated, then closes it (#2154). It replaced a byte-identical
+          // private WritePdfTextFile() copy that lived here.
+          if (!icWriteAndClose(outFile, out.str())) {
             fprintf(stderr, "PDF writing error in '%s': unable to open regular output file\n", m_filename.c_str());
             // Fall through (don't early-return) so the shared object-cleanup loop
             // at the end still frees every PDFObject on this failure path (#1547).

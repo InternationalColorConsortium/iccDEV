@@ -83,7 +83,7 @@
 #include "IccMpeBasic.h"
 #include "IccProfLibVer.h"
 #include "IccUtil.h"
-#include "../IccCmdLineUtil.h"
+#include "IccCmdLineUtil.h"
 
 class CubeFile
 {

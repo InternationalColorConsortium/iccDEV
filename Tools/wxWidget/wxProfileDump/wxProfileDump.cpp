@@ -70,6 +70,7 @@ Copyright:  (c) see ICC Software License
 // ---------------------------------------------------------------------------
 #include "IccProfile.h"
 #include "IccTag.h"
+#include "IccTagEmbedIcc.h"
 #include "IccUtil.h"
 #include "IccEval.h"
 #include "IccPrmg.h"
@@ -319,10 +320,18 @@ void MyFrame::OpenFile(wxString profilePath)
 
   wxGetApp().m_history.AddFileToHistory(profilePath);
 
-  // Make another frame, containing a canvas
-  MyChild *subframe = new MyChild(my_frame, profileTitle, pIcc, profilePath);
+  ShowProfile(pIcc, profileTitle, profilePath);
+}
 
-  subframe->SetTitle(profileTitle);
+// Builds and shows an MDI window for an already-loaded profile.  Takes
+// ownership of pIcc.  A profile that did not come from a file on disk (an
+// embedded profile, for example) passes wxEmptyString as profilePath.
+void MyFrame::ShowProfile(CIccProfile *pIcc, const wxString &title, const wxString &profilePath)
+{
+  // Make another frame, containing a canvas
+  MyChild *subframe = new MyChild(my_frame, title, pIcc, profilePath);
+
+  subframe->SetTitle(title);
 
   // Give it an icon
 #ifdef __WXMSW__
@@ -497,10 +506,14 @@ MyChild::MyChild(wxMDIParentFrame *parent, const wxString& title, CIccProfile *p
 	sizerTop->Add(sizerBox, wxSizerFlags().Expand().Border(wxALL, 5));
 
 	wxSizer *sizerBtn = new wxBoxSizer(wxHORIZONTAL);
-    if (IsRoundTripable(pIcc)) {
-  		sizerBtn->Add(new wxButton(m_panel, ID_ROUND_TRIP, _("&Round Trip Report")), wxSizerFlags().Border(wxRIGHT, 5));
+    // Both reports re-read the profile from disk by path rather than using
+    // m_pIcc, so neither is available for a profile shown without a path.
+    if (!profilePath.IsEmpty()) {
+        if (IsRoundTripable(pIcc)) {
+  		    sizerBtn->Add(new wxButton(m_panel, ID_ROUND_TRIP, _("&Round Trip Report")), wxSizerFlags().Border(wxRIGHT, 5));
+        }
+        sizerBtn->Add(new wxButton(m_panel, ID_VALIDATE_PROFILE, _("&Validate Profile")), wxSizerFlags().Border(wxRIGHT, 5));
     }
-    sizerBtn->Add(new wxButton(m_panel, ID_VALIDATE_PROFILE, _("&Validate Profile")), wxSizerFlags().Border(wxRIGHT, 5));
 
 	sizerTop->Add(sizerBtn, wxSizerFlags().Right());
 
@@ -723,6 +736,52 @@ void MyChild::OnTagClicked(wxListEvent& event)
 {
     icTagSignature tagSig = (icTagSignature)event.GetData();
 	CIccTag *pTag = m_pIcc->FindTag(tagSig);
+
+    // An embedded profile is far more useful shown as a profile than as a flat
+    // text dump of the tag, so give it a window of its own.
+    if (pTag && pTag->GetType() == icSigEmbeddedProfileType) {
+        CIccTagEmbeddedProfile *pEmbed = (CIccTagEmbeddedProfile*)pTag;
+        CIccProfile *pInner = pEmbed->GetProfile();
+
+        if (pInner) {
+            // Load one level of the embedded profile.  FindAllTags() loads with
+            // bReadAll=false, so a nested embedded profile is attached but not
+            // descended into.  ReadAll() would pull the whole nested tree at
+            // O(depth^2.7) with the depth guard in CIccTagEmbeddedProfile::Read
+            // not bounding that path -- measured at 14 s to freeze the UI for a
+            // 90 KB crafted profile, and over ten minutes for a 359 KB one.
+            // FindAllTags() also attempts every tag regardless of earlier
+            // failures, so one unreadable tag costs only its own row instead of
+            // the whole window.
+            pInner->FindAllTags();
+
+            // A profile nested two levels down is reached through an already
+            // copied profile, which carries no IO, so nothing loads here.  Show
+            // the tag dump rather than a window with an empty tag list.
+            int nLoaded = 0;
+            TagEntryList::iterator i;
+            for (i = pInner->m_Tags.begin(); i != pInner->m_Tags.end(); ++i) {
+                if (i->pTag)
+                    nLoaded++;
+            }
+
+            if (nLoaded) {
+                CIccProfile *pCopy = pInner->NewCopy();
+
+                if (pCopy) {
+                    // GetTagSigName() falls back to GetUnknownName() for a signature it
+                    // does not recognize, which always yields a non-empty "Unknown '...'"
+                    // string -- there is no empty-string case to guard against here.
+                    CIccInfo Fmt;
+                    wxString sTagSignature = Fmt.GetTagSigName(tagSig);
+                    wxString sBracket = _T("[") + sTagSignature + _T("]");
+                    my_frame->ShowProfile(pCopy, GetTitle() + _T(" ") + sBracket, wxEmptyString);
+                    return;
+                }
+            }
+        }
+        // Nothing loadable, or the copy failed - fall through to the tag dump.
+    }
 
     MyTagDialog dialog(this, m_pIcc, tagSig, pTag);
 

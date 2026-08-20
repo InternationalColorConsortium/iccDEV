@@ -14,8 +14,9 @@ function build_mex(varargin)
 % BSD 3-Clause License. See LICENSE.md for details.
 
   p = inputParser;
-  addParameter(p, 'BuildDir', '', @ischar);
-  addParameter(p, 'Debug', false, @islogical);
+  addParameter(p, 'BuildDir', '', @is_text_scalar);
+  addParameter(p, 'Debug', false, ...
+    @(value) islogical(value) && isscalar(value));
   parse(p, varargin{:});
 
   thisDir  = fileparts(mfilename('fullpath'));
@@ -24,7 +25,7 @@ function build_mex(varargin)
   inclDir  = fullfile(repoRoot, 'IccProfLib');
 
   % Find build directory
-  buildDir = p.Results.BuildDir;
+  buildDir = char(p.Results.BuildDir);
   if isempty(buildDir)
     buildDir = getenv('ICCDEV_BUILD_DIR');
   end
@@ -105,8 +106,13 @@ function build_mex(varargin)
   fprintf('  Include: %s\n', inclDir);
   fprintf('  Library: %s in %s\n', libName, libDir);
 
+  [dependencyArgs, runtimeFiles] = find_optional_dependencies( ...
+    buildDir, libName, p.Results.Debug);
+  for i = 1:numel(dependencyArgs)
+    fprintf('  Dependency: %s\n', dependencyArgs{i});
+  end
+
   % Build MEX arguments
-  cxxFlags = {};
   if exist('OCTAVE_VERSION', 'builtin')
     cxxFlags = {'-std=c++17'};
   elseif ispc()
@@ -119,7 +125,6 @@ function build_mex(varargin)
     cxxFlags{end+1} = '-g';
   end
 
-  outDir = thisDir;
   if exist('OCTAVE_VERSION', 'builtin')
     % Octave: place MEX alongside +iccdev/ directory (private/ not resolved)
     outDir = thisDir;
@@ -135,7 +140,8 @@ function build_mex(varargin)
     cxxFlags, ...
     {['-I' inclDir]}, ...
     {['-L' libDir]}, ...
-    {['-l' libName]}
+    {['-l' libName]}, ...
+    dependencyArgs
   ];
 
   fprintf('  Output:  %s\n', outDir);
@@ -151,7 +157,103 @@ function build_mex(varargin)
     mex(args{:});
   end
 
+  for i = 1:numel(runtimeFiles)
+    copyfile(runtimeFiles{i}, outDir, 'f');
+    fprintf('  Runtime: %s\n', runtimeFiles{i});
+  end
+
   fprintf('Build complete. Add %s to your MATLAB path.\n', thisDir);
+end
+
+function [linkArgs, runtimeFiles] = find_optional_dependencies( ...
+    buildDir, libName, debugBuild)
+  linkArgs = {};
+  runtimeFiles = {};
+
+  if isempty(strfind(libName, '-static')) %#ok<STREMP>
+    return;
+  end
+
+  cachePath = fullfile(buildDir, 'CMakeCache.txt');
+  if ~exist(cachePath, 'file')
+    return;
+  end
+
+  cacheText = fileread(cachePath);
+  if isempty(regexp(cacheText, '(?m)^ICC_USE_ZLIB:BOOL=ON\s*$', 'once'))
+    return;
+  end
+
+  if ~ispc()
+    linkArgs = {'-lz'};
+    return;
+  end
+
+  triplet = 'x64-windows';
+  tripletMatch = regexp(cacheText, ...
+    '(?m)^VCPKG_TARGET_TRIPLET:[^=]*=([^\r\n]+)\s*$', 'tokens', 'once');
+  if ~isempty(tripletMatch)
+    triplet = strtrim(tripletMatch{1});
+  end
+  cachedInstalledRoot = '';
+  installedMatch = regexp(cacheText, ...
+    '(?m)^VCPKG_INSTALLED_DIR:[^=]*=([^\r\n]+)\s*$', 'tokens', 'once');
+  if ~isempty(installedMatch)
+    cachedInstalledRoot = strtrim(installedMatch{1});
+  end
+  installedRoot = iccdev.qa.select_vcpkg_installed_root( ...
+    buildDir, cachedInstalledRoot, triplet);
+  tripletRoot = fullfile(installedRoot, triplet);
+  staticTriplet = ~isempty(strfind(triplet, '-static')); %#ok<STREMP>
+  if debugBuild
+    libraryCandidates = {
+      fullfile(tripletRoot, 'debug', 'lib', 'zd.lib')
+      fullfile(tripletRoot, 'debug', 'lib', 'zlibd.lib')
+      fullfile(tripletRoot, 'debug', 'lib', 'zlibstaticd.lib')
+    };
+    runtimeCandidates = {
+      fullfile(tripletRoot, 'debug', 'bin', 'zd.dll')
+      fullfile(tripletRoot, 'debug', 'bin', 'z.dll')
+      fullfile(tripletRoot, 'debug', 'bin', 'zlibd1.dll')
+    };
+  else
+    libraryCandidates = {
+      fullfile(tripletRoot, 'lib', 'z.lib')
+      fullfile(tripletRoot, 'lib', 'zlib.lib')
+      fullfile(tripletRoot, 'lib', 'zlibstatic.lib')
+    };
+    runtimeCandidates = {
+      fullfile(tripletRoot, 'bin', 'z.dll')
+      fullfile(tripletRoot, 'bin', 'zlib1.dll')
+    };
+  end
+
+  zlibLibrary = first_existing_file(libraryCandidates);
+  if isempty(zlibLibrary)
+    error('iccdev:zlibNotFound', ...
+      ['IccProfLib2-static was built with ICC_USE_ZLIB=ON, but its zlib ' ...
+       'import library was not found under %s.'], tripletRoot);
+  end
+  linkArgs = {zlibLibrary};
+
+  zlibRuntime = first_existing_file(runtimeCandidates);
+  if ~isempty(zlibRuntime)
+    runtimeFiles = {zlibRuntime};
+  elseif ~staticTriplet
+    error('iccdev:zlibRuntimeNotFound', ...
+      ['The dynamic vcpkg triplet %s requires a zlib runtime DLL, but no ' ...
+       'supported DLL name was found under %s.'], triplet, tripletRoot);
+  end
+end
+
+function path = first_existing_file(candidates)
+  path = '';
+  for i = 1:numel(candidates)
+    if exist(candidates{i}, 'file')
+      path = candidates{i};
+      return;
+    end
+  end
 end
 
 function found = has_library(searchDirs, libNames)
@@ -177,4 +279,9 @@ function found = has_library(searchDirs, libNames)
       end
     end
   end
+end
+
+function valid = is_text_scalar(value)
+  valid = (ischar(value) && (isempty(value) || size(value, 1) == 1)) || ...
+    (isa(value, 'string') && isscalar(value));
 end

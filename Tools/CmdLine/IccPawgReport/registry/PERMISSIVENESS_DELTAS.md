@@ -83,6 +83,41 @@ still warns.
 **Permissiveness direction:** this is a targeted correction for registered CMM
 signatures. Unknown or unregistered CMM signatures still warn.
 
+### B5. Two more value/comment mismatches - the issue-2098 change
+
+B3 was not the only instance of its class. Decoding every `0x`-literal signature
+enum in `icProfileHeader.h` against its own quoted comment (437 enums) found two
+further CMM rows whose value disagreed with the comment and with the registry:
+
+- `icSigLogoSync` held `0x44676F53` (ASCII `DgoS`); registry: `LgoS = 0x4C676F53`
+  (GretagMacbeth).
+- `icSigKonicaMinolta` held `0x4D434D44` (ASCII `MCMD`); registry:
+  `MCML = 0x4D434D4C` (Konica Minolta). That line also carried an inline question
+  - "actually this is 'MCMD' - which is right? Sent email to Dr. Phil Green" -
+  which the live registry answers.
+
+Both were corrected the same way as B3: the value changed, the comment's
+registered string kept. Re-verified against registry.color.org/cmm-signatures on
+2026-08-11.
+
+A third row, `icSigVivo`, needed no value change - `0x7669766F` is correct - but
+its comment read `'VIVO'`. Corrected to `'vivo'`. Note the **manufacturer**
+registry separately lists Vivo as `VIVO = 0x5649564F`; that is a different
+registry and a different header field, so the two do not conflict, and only the
+lower-case spelling applies to the CMM enum.
+
+**Permissiveness direction:** two-way, and this is the point. Before the change a
+profile carrying the *registered* `LgoS`/`MCML` was reported "Unregistered CMM
+signature", while one carrying the unregistered `DgoS`/`MCMD` validated clean and
+was given the registered CMM's name. Both directions are now pinned by
+`iccdev.cmm-registry-allowlist`, which drives the allow-list with literal
+registered hex plus `static_assert`s on the enum constants - the pre-existing
+checks in that test reach the allow-list through enum *names* and so could not
+detect a wrong value.
+
+No corpus impact: all 105 tracked `.icc`/`.icm` profiles were scanned and none
+carry any of the four values.
+
 ---
 
 ## C. Private tag-signature ranges - refreshed (data only)
@@ -113,7 +148,7 @@ corpus with the #1459-fixed tool:
 |-----------|-------|-------------|---------|--------|
 | `XRCM` | `0x5852434D` | 16 | CRPC2..7 / GRACoL2013 / SWOP2013 / APTEC | submit to ICC |
 | `ICC ` | `0x49434320` | 23 | ICC reference profiles (sRGB_D65_*), iccDEV fixtures | register/clarify consortium sig |
-| `none` | `0x6E6F6E65` | 25 | AdobeRGB1998, ROMM-RGB, sRGB displayclass | policy: sanction placeholder vs. require zero |
+| `none` | `0x6E6F6E65` | 25 | AdobeRGB1998, ROMM-RGB, sRGB displayclass | **ruled 2026-07-24 (#1472): spec says `00h`, not registrable** |
 | `LOGO` | `0x4C4F474F` | 2 | MCPPiPF5000Glossy | investigate/submit |
 | `ccox` | `0x63636F78` | 1 | corpus | investigate/submit (likely CHROMiX) |
 
@@ -126,6 +161,13 @@ distinct unregistered one.)
 to identify them as known placeholders/consortium signatures rather than suspect
 data - but the verdict stays WARN and nothing is silently accepted. The other
 sigs keep the plain "not in Manufacturer Signatures registry" wording.
+
+**Amended 2026-07-24 by the ICC ruling on #1472:** the two softened cases are no
+longer worded alike, because they differ in whether registration is even possible.
+`'none'` is **not registrable** (the spec requires `00h`), so its detail states that
+and must not say "not yet in the registry", which would imply a pending submission.
+`'ICC '` is undecided rather than refused, so it keeps the "not yet in ... snapshot"
+wording. Each case therefore supplies its own complete parenthetical.
 
 ---
 

@@ -260,8 +260,22 @@ void CIccProfile::Cleanup()
     delete m_pAttachIO;
   }
   m_pAttachIO = nullptr;
+  //Clearing m_pAttachIO without clearing m_bSharedIO left a formerly-shared
+  //profile claiming to share an IO it no longer has. Detach() then took its
+  //shared branch and reported true having done nothing, and with the tag
+  //notification below hoisted above that branch, the stale flag would decide
+  //which release path a reused profile takes. Restoring the flag to its
+  //constructor default on release is the same rule CIccXform::DetachAll()
+  //(IccCmm.cpp) follows for m_bOwnsProfile. operator= needs no separate reset
+  //- it calls Cleanup() before copying anything.
+  m_bSharedIO = false;
 
   TagPtrList::iterator i;
+
+  //Tags are destroyed below, so they need no DetachIO() notification here:
+  //~CIccTagEmbeddedProfile deletes its inner profile outright. Deleting
+  //m_pAttachIO first is safe because the inner profile's CIccEmbedIO was
+  //attached with bOwnIO false, so releasing it never touches what it wrapped.
 
   for (i=m_TagVals.begin(); i!=m_TagVals.end(); i++) {
     delete i->ptr;
@@ -730,6 +744,15 @@ bool CIccProfile::Attach(CIccIO *pIO, bool bUseSubProfile/*=false*/)
     }
   }
 
+  //Attach() takes ownership - Cleanup() deletes m_pAttachIO unless the profile
+  //is marked as sharing it - so the sharing flag has to be cleared here too,
+  //not just in Cleanup(). Attach() only calls Cleanup() when tags are already
+  //present, so a profile that had borrowed an IO (CopyAttach(p, true)) and was
+  //then attached to one of its own kept the flag set and never freed the IO it
+  //now owned. Confirmed as a 48-byte LeakSanitizer leak before this line.
+  //Same rule as CIccXform::DetachAll() (IccCmm.cpp) restoring m_bOwnsProfile:
+  //taking or releasing a resource resets the flag that says who owns it.
+  m_bSharedIO = false;
   m_pAttachIO = pIO;
 
   return true;
@@ -750,27 +773,59 @@ bool CIccProfile::Attach(CIccIO *pIO, bool bUseSubProfile/*=false*/)
 */
 bool CIccProfile::Detach()
 {
-  if (m_pAttachIO && !m_bSharedIO) {
+  //Reproduces the previous return contract exactly, so that the notification
+  //loop can be hoisted above the branch split below: the only case that
+  //returned false was neither owning nor sharing an IO. Owning returned true,
+  //and sharing returned true whether or not m_pAttachIO was set.
+  if (!m_pAttachIO && !m_bSharedIO)
+    return false;
+
+  //Notify before either release. A tag holding IO derived from this profile's
+  //IO - today only CIccTagEmbeddedProfile, whose inner profile is attached to
+  //a CIccEmbedIO wrapping this IO - was left advertising HasIO() true over a
+  //released IO when the shared branch ran, because that branch never reached
+  //this loop.
+  //
+  //The child is released whether this profile owns the IO or borrowed it,
+  //which is what the library already does elsewhere: CIccXform::DetachAll()
+  //(IccCmm.cpp) drops m_pProfile regardless of m_bOwnsProfile, and
+  //CIccFileIO::Detach() (IccIO.cpp) drops a borrowed FILE* outright. The
+  //sharing flag governs who deletes, not whether a borrower may keep reading -
+  //see ShareProfile()'s "so it won't be deleted" (IccCmm.h/IccCmm.cpp) - and
+  //the borrowed IO is still dropped rather than deleted below. A borrower has
+  //no way to observe when the lender closes what it lent.
+  //
+  //Running the loop while the IO is still alive is what makes the inner
+  //profile's own Detach() safe; see CIccTagEmbeddedProfile::DetachIO().
+  //
+  //Gated on m_pAttachIO, not on m_bSharedIO: CopyAttach(p, true) where p had
+  //no IO leaves this profile flagged as sharing with nothing attached, and
+  //there is then no IO being released for a tag to be holding a view of.
+  //Notifying anyway would tear down an inner profile that SetProfile() gave
+  //its own independently attached IO - DetachIO() detaches whatever the origin
+  //of that IO - which the pre-fix shared branch never did.
+  if (m_pAttachIO) {
     TagEntryList::iterator i;
 
     for (i = m_Tags.begin(); i != m_Tags.end(); i++) {
       if (i->pTag)
         i->pTag->DetachIO();
     }
-
-    delete m_pAttachIO;
-
-    m_pAttachIO = NULL;
-    return true;
   }
-  else if (m_bSharedIO) {
+
+  if (m_bSharedIO) {
+    //Borrowed IO belongs to the profile that lent it, so it is dropped, never
+    //deleted.
     m_pAttachIO = NULL;
     m_bSharedIO = false;
 
     return true;
   }
 
-  return false;
+  delete m_pAttachIO;
+
+  m_pAttachIO = NULL;
+  return true;
 }
 
 
@@ -792,6 +847,28 @@ bool CIccProfile::Detach()
 void CIccProfile::CopyAttach(CIccProfile* pProfile, bool bSharedIO)
 {
   if (!pProfile) {
+    //This is the release path the library actually exercises - IccCmm.cpp
+    //borrows the caller's IO with CopyAttach(&Profile, true) and gives it
+    //back with CopyAttach(nullptr) - yet it dropped the IO without telling
+    //the tags, so a fix confined to Detach() would never reach it. Notify on
+    //the same terms Detach() does, while the borrowed IO is still alive, and
+    //gated on m_pAttachIO for the same reason: with nothing attached there is
+    //no released IO for a tag to be holding a view of.
+    if (m_pAttachIO) {
+      TagEntryList::iterator i;
+
+      for (i = m_Tags.begin(); i != m_Tags.end(); i++) {
+        if (i->pTag)
+          i->pTag->DetachIO();
+      }
+    }
+
+    //Note this drops m_pAttachIO without deleting it even when this profile
+    //owned it, so a caller doing Attach(io) then CopyAttach(nullptr) leaks io;
+    //the else branch below has the same gap when it overwrites a live IO.
+    //Pre-existing and left alone deliberately - making either path delete would
+    //change what CopyAttach() means for existing callers, which is a separate
+    //decision from the tag notification added above.
     m_pAttachIO = nullptr;
     m_bSharedIO = false;
   }
@@ -803,27 +880,47 @@ void CIccProfile::CopyAttach(CIccProfile* pProfile, bool bSharedIO)
 
 /**
 ******************************************************************************
-* Name: CIccProfile::ReadTags
-* 
-* Purpose: This will read the all the tags from the IO object into the
-*  CIccProfile object. The IO object must have been attached before
-*		calling this function.
-* 
-* Return: 
-*  true - CIccProfile object now contains all tag data,
-*  false - No IO object attached or tags cannot be read.
+* Name: CIccProfile::loadTags
+*
+* Purpose: Shared implementation behind ReadTags() and FindAllTags(). Resolves
+*  the IO to use (m_pAttachIO, or the passed profile's if it has one),
+*  short-circuits when there is no IO (successful iff every tag is already
+*  loaded), and otherwise saves the IO position, loops LoadTag over m_Tags,
+*  and restores the position on every path.
+*
+* Args:
+*  pProfile - profile whose m_pAttachIO should be preferred, or NULL to use
+*   this object's own m_pAttachIO,
+*  mode - icLoadTagsFull: pass bReadAll=true to LoadTag() (recursively pulling
+*   the whole nested tree of embedded profiles), abort and return false as soon
+*   as one LoadTag call fails, and revisit (i.e. call LoadTag(), which for an
+*   already-loaded entry means CIccTag::ReadAll()) an entry that already
+*   carries a tag object -- ReadTags()' behavior.
+*   icLoadTagsShallow: pass bReadAll=false, never abort, and skip an entry that
+*   already carries a tag object entirely rather than revisiting it -- at one
+*   level such an entry is already fully satisfied, and LoadTag()'s
+*   already-loaded branch calls CIccTag::ReadAll() unconditionally regardless
+*   of bReadAll, so revisiting it would still recurse into a nested embedded
+*   profile's full tree -- FindAllTags()' behavior.
+*
+* Return:
+*  true - every tag was already loaded or was successfully loaded by this call,
+*  false - no IO object attached and something was still unloaded, or (in
+*   icLoadTagsFull mode) a LoadTag call failed, or (in icLoadTagsShallow mode)
+*   at least one attempted LoadTag call failed, or the IO position could not be
+*   restored.
 *******************************************************************************
 */
-bool CIccProfile::ReadTags(CIccProfile* pProfile)
+bool CIccProfile::loadTags(CIccProfile *pProfile, IccLoadTagsMode mode)
 {
 	CIccIO *pIO = m_pAttachIO;
-	
+
 	if (pProfile && pProfile->m_pAttachIO) {
 		pIO = pProfile->m_pAttachIO;
 	}
 
   TagEntryList::iterator i;
-  //If there is no IO handle then ReadTags is successful if they have all been
+  //If there is no IO handle then loading is successful if they have all been
   //loaded in
   if (!pIO) {
     for (i = m_Tags.begin(); i != m_Tags.end(); i++) {
@@ -838,14 +935,92 @@ bool CIccProfile::ReadTags(CIccProfile* pProfile)
   if (pos < 0)
     return false;
 
+  const bool bReadAll = (mode == icLoadTagsFull);
+  const bool bStopOnError = (mode == icLoadTagsFull);
+  const bool bSkipLoaded = (mode == icLoadTagsShallow);
+
+  bool bAllOk = true;
 	for (i=m_Tags.begin(); i!=m_Tags.end(); i++) {
-		if (!LoadTag((IccTagEntry*)&(i->TagInfo), pIO, true)) {
-			pIO->Seek(pos, icSeekSet);
-			return false;
+		if (bSkipLoaded && i->pTag) {
+			// Already satisfied at one level -- do NOT call LoadTag() here. Its
+			// already-loaded branch would call CIccTag::ReadAll() unconditionally,
+			// which for a loaded CIccTagEmbeddedProfile entry recurses into the
+			// nested profile's full tree regardless of bReadAll. This is what makes
+			// a second FindAllTags() call on an already-loaded profile safe.
+			continue;
+		}
+
+		if (!LoadTag((IccTagEntry*)&(i->TagInfo), pIO, bReadAll)) {
+			if (bStopOnError) {
+				pIO->Seek(pos, icSeekSet);
+				return false;
+			}
+			bAllOk = false;
 		}
 	}
 
-	return pIO->Seek(pos, icSeekSet) >= 0;
+	return pIO->Seek(pos, icSeekSet) >= 0 && bAllOk;
+}
+
+/**
+******************************************************************************
+* Name: CIccProfile::ReadTags
+*
+* Purpose: This will read the all the tags from the IO object into the
+*  CIccProfile object. The IO object must have been attached before
+*		calling this function.
+*
+* Return:
+*  true - CIccProfile object now contains all tag data,
+*  false - No IO object attached or tags cannot be read.
+*******************************************************************************
+*/
+bool CIccProfile::ReadTags(CIccProfile* pProfile)
+{
+  static thread_local unsigned int readTagsDepth = 0;
+  static const unsigned int maxReadTagsDepth = 8;
+
+  if (readTagsDepth >= maxReadTagsDepth)
+    return false;
+
+  class ReadTagsDepthGuard {
+  public:
+    ReadTagsDepthGuard(unsigned int &depth) : m_depth(depth) { m_depth++; }
+    ~ReadTagsDepthGuard() { m_depth--; }
+  private:
+    unsigned int &m_depth;
+  } depthGuard(readTagsDepth);
+
+  return loadTags(pProfile, icLoadTagsFull);
+}
+
+/**
+******************************************************************************
+* Name: CIccProfile::FindAllTags
+*
+* Purpose: Loads every not-yet-loaded tag in m_Tags one level deep, using this
+*  object's own attached IO. Never descends into nested embedded profiles
+*  (unlike ReadTags(), which recursively pulls the whole nested tree), and
+*  never revisits an entry that already carries a tag object -- an
+*  already-loaded entry is left exactly as it is, so a second call on an
+*  already-fully-loaded profile does nothing (in particular, it does not
+*  descend into a nested embedded profile the first call merely attached).
+*  Unlike ReadTags(), a single unreadable tag does not abort the rest: every
+*  remaining tag is attempted regardless of earlier failures, so one malformed
+*  tag costs only its own entry.
+*
+* Return:
+*  true - every tag is loaded: either they all already were, or every load
+*   attempted by this call succeeded.
+*  false - there was no IO to load from and at least one tag was still
+*   unloaded, or at least one load attempted by this call failed, or the IO
+*   position could not be read or restored.  Tags that did load are loaded
+*   either way.
+*******************************************************************************
+*/
+bool CIccProfile::FindAllTags()
+{
+	return loadTags(NULL, icLoadTagsShallow);
 }
 
 /**
@@ -867,8 +1042,24 @@ bool CIccProfile::ReadTags(CIccProfile* pProfile)
  */
 bool CIccProfile::Read(CIccIO *pIO, bool bUseSubProfile/*=false*/)
 {
-  if (m_Tags.size())
+  //Cleanup() releases IO left over from a previous use, but it only runs when
+  //tags are present. A profile that borrowed an IO before it had any tags
+  //(CopyAttach(p, true)) therefore carried that borrowed pointer into this
+  //read, where HasIO() reporting true makes CIccTagEmbeddedProfile::Read()
+  //take its deferred branch and attach an inner profile over pIO - an IO this
+  //call's caller owns and typically destroys on return, leaving the inner
+  //profile dangling. Release it here on the same ownership terms Cleanup()
+  //uses. Attach() carries the same guard and clears the flag where it takes
+  //ownership.
+  if (m_Tags.size()) {
     Cleanup();
+  }
+  else {
+    if (!m_bSharedIO)
+      delete m_pAttachIO;
+    m_pAttachIO = nullptr;
+    m_bSharedIO = false;
+  }
 
   if (!ReadBasic(pIO)) {
     Cleanup();
@@ -931,8 +1122,17 @@ icValidateStatus CIccProfile::ReadValidate(CIccIO *pIO, std::string &sReport)
 {
   icValidateStatus rv = icValidateOK;
 
-  if (m_Tags.size())
+  //Same stale-borrowed-IO release as Read() above - this entry point carries
+  //the identical tags-only Cleanup() guard.
+  if (m_Tags.size()) {
     Cleanup();
+  }
+  else {
+    if (!m_bSharedIO)
+      delete m_pAttachIO;
+    m_pAttachIO = nullptr;
+    m_bSharedIO = false;
+  }
 
   if (!ReadBasic(pIO)) {
     sReport += icMsgValidateCriticalError;

@@ -1,6 +1,6 @@
 # Building iccDEV
 
-iccDEV requires C++17, CMake 3.18 or newer, and the image/XML/JSON dependencies
+iccDEV requires C++17, CMake 3.23 or newer, and the image/XML/JSON dependencies
 listed below. Maintainer-level sanitizer, Docker, and CMake policy details live in
 `.github/instructions/build-system.instructions.md`.
 
@@ -18,7 +18,7 @@ listed below. Maintainer-level sanitizer, Docker, and CMake policy details live 
 |----------|----------|
 | Ubuntu | `libpng-dev libjpeg-dev libtiff-dev libxml2-dev zlib1g-dev libwxgtk3.2-dev libwxgtk-media3.2-dev libwxgtk-webview3.2-dev wx-common wx3.2-headers nlohmann-json3-dev cmake make ninja-build` |
 | macOS | `libpng jpeg-turbo libtiff libxml2 zlib wxwidgets nlohmann-json` |
-| Windows | MSVC 2022 with vcpkg-managed `libpng`, `libjpeg-turbo`, `libtiff`, `libxml2`, `zlib`, `wxwidgets`, `nlohmann-json` |
+| Windows | MSVC 2022 or 2026 with vcpkg-managed `libpng`, `libjpeg-turbo`, `libtiff`, `libxml2`, `zlib`, `wxwidgets`, `nlohmann-json` |
 
 Thread support is provided by the platform C/C++ runtime and CMake's
 `Threads::Threads` imported target; no separate Ubuntu package is required.
@@ -58,6 +58,10 @@ cd iccdev
 cmake --preset macos-xcode -S Build/Cmake -B out/macos-xcode
 cmake --build out/macos-xcode --config Release -j"$(sysctl -n hw.ncpu)"
 ```
+
+Always provide `-S Build/Cmake` and an isolated `-B out/macos-xcode`
+directory. Configuring in the repository root is rejected to keep generated
+Xcode files out of the source tree.
 
 To open the generated project:
 
@@ -115,6 +119,21 @@ cmake --build out/vs2022-clangcl-x64 --config Release -- /m /maxcpucount
 
 The ClangCL preset uses the same `out\vs2022-clangcl-x64\bin\Release` runtime
 layout as the MSVC preset.
+
+## Windows MSVC 2026
+
+The `vs2026-x64` preset targets the Visual Studio 18 2026 generator and v145
+toolset while preserving the VS 2022 preset's vcpkg and runtime layout. CMake
+3.23 or newer is required for the preset schema. Set `VCPKG_ROOT` to the
+Visual Studio 2026 vcpkg installation before configuring:
+
+```cmd
+git clone https://github.com/InternationalColorConsortium/iccDEV.git iccdev
+cd iccdev
+set "VCPKG_ROOT=C:\Program Files\Microsoft Visual Studio\2026\Community\VC\vcpkg"
+cmake --preset vs2026-x64 -S Build/Cmake -B out/vs2026-x64
+cmake --build out/vs2026-x64 --config Release -- /m /maxcpucount
+```
 
 ## Windows MinGW UCRT64
 
@@ -353,6 +372,84 @@ See `.github/ci/regression/README.md` for the test-side rules and
 `iccdev.proflib-exported-data-linkage`, which pins both the linkage and the
 literal values that dependent tests hard-code.
 
+## Namespace wrapping (known defect)
+
+`ENABLE_USEICCDEVNAMESPACE` defaults to `OFF`
+(`Build/Cmake/CMakeLists.txt:565`). **Turning it `ON` does not produce a
+library.** Configure succeeds and prints `>>> Namespace wrapping enabled
+(iccDEV)`, then `IccProfLib2` fails to compile; no tool or test is reached.
+This is tracked as #2152 and is documented here because the option looks
+supported at configure time.
+
+```bash
+cmake -S Build/Cmake -B build-ns -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release \
+  -DENABLE_USEICCDEVNAMESPACE=ON -DENABLE_TOOLS=OFF -DENABLE_TESTS=OFF \
+  -DENABLE_WXWIDGETS=OFF -DENABLE_SHARED_LIBS=ON -DENABLE_STATIC_LIBS=OFF
+cmake --build build-ns -j4
+# Clang 18.1.3: 70 errors, first at IccProfLib/IccCAM.cpp:81:
+#   use of undeclared identifier 'CIccCamConverter';
+#   did you mean 'iccDEV::CIccCamConverter'?
+# GCC 13.3.0: 925 errors, same first site:
+#   'CIccCamConverter' has not been declared
+```
+
+The two error counts are for the same tree and the same first failure. Take
+that as a warning about counts: the number depends on how far a compiler
+carries on after the first unresolved scope, so it measures diagnostic
+recovery, not how much work is left.
+
+The option is not broken so much as **half-applied**. It defines
+`USEICCDEVNAMESPACE=1` (`Build/Cmake/CMakeLists.txt:709-711`), which opens
+`namespace iccDEV` in `IccProfLib/IccProfLibConf.h:67` and closes it at `:200`.
+Every other file must opt in with its own `#ifdef USEICCDEVNAMESPACE` block,
+and many never did:
+
+| Location | Files with no guard |
+|----------|---------------------|
+| `IccProfLib/*.cpp` | 16 of 39 |
+| `IccProfLib/*.h` | 13 of 47 |
+| `IccXML/IccLibXML/*.cpp` | 2 of 7 |
+| `IccXML/IccLibXML/*.h` | 4 of 8 |
+| `IccConnect/IccLibConnect` | none - fully guarded |
+
+So a header that wraps declares `iccDEV::CIccFoo` while its unwrapped `.cpp`
+defines a global `CIccFoo`, and the definition matches no declaration.
+`IccCAM.h` (guards at `:74` and `:159`) against `IccCAM.cpp` (zero occurrences)
+is the cleanest instance, and is where the build stops first. The build never
+reaches `IccXML`, whose own gaps are listed above for completeness.
+
+Finishing the rollout would be a per-file decision, not a sweep, and the
+per-file question is open rather than settled. Not every unguarded header wants
+the guard: `IccProfLibVer.h` holds a single version macro, and
+`icProfileHeader.h` holds the on-disk ICC structures and signature enums in
+deliberately C-style form. Whether headers of that kind stay outside the
+namespace by design is part of what #2152 asks.
+
+Two traps are worth knowing before spending time here:
+
+> **A single-header syntax probe will not scope this.** `IccCmm.h` *has* the
+> guard, yet `clang++ -fsyntax-only -DUSEICCDEVNAMESPACE=1` on a file that
+> includes only it still errors, because it pulls in unguarded siblings such as
+> `IccTagEmbedIcc.h`. Such a probe reflects the include graph, not the work
+> remaining. Only a full library build says anything trustworthy.
+
+> **This is not the same defect as the export-annotation gap** described in the
+> section above, even though #176 is titled `Known Defect |
+> ENABLE_USEICCDEVNAMESPACE=ON`. That issue's body is about the vcpkg port
+> building static libraries only and shared builds failing for want of symbol
+> exports, and the #764/#784/#823/#966/#1193 history sits with it on the shared
+> library and visibility side. Namespace scoping is a separate incomplete
+> rollout that fails under both Clang and GCC on Linux before any linking
+> happens. Both are incomplete; they are unrelated defects.
+
+Test sources are written as though the option worked: 25 of the 91 regression
+sources under `.github/ci/regression/` carry `#ifdef USEICCDEVNAMESPACE`
+blocks, as does all of `IccConnect`. Those paths are currently unexercised,
+since no build can enable them.
+
+Measured on `master` `054eb006`, Ubuntu 24.04 (WSL2), Unix Makefiles, Release,
+with both Clang 18.1.3 and GCC 13.3.0.
+
 ## Instrumentation Builds
 
 Use CMake options instead of hand-written sanitizer flags. Clean the cache when
@@ -407,7 +504,6 @@ should change container package pins, published image tags, or GHCR workflows.
 | File | Maintainer purpose | Publish/validation path |
 |------|--------------------|-------------------------|
 | `Dockerfile` | Ubuntu release/runtime image for `ghcr.io/internationalcolorconsortium/iccdev`. | Validate with a local Docker build and tool smoke test before maintainer publishing. |
-| `Dockerfile.nixos` | NixOS/scratch runtime image and dependency-closure check. | Validate locally with a Docker build, runtime closure check, and secret scan before maintainer publishing. |
 | `Dockerfile.ci-regression` | Pinned Ubuntu maintainer image for `ci-regression-checks`, with Clang/LLVM 22 defaults, GCC 15.2+, sanitizer, debugger, fuzzing, git, curl, and GitHub CLI tooling. | Validate locally with a no-cache Docker build and toolchain smoke tests before maintainer publishing; AFL wrapper changes also need the `docs/afl-fuzzing.md` container bootstrap probe; consumer workflows select the published tag. |
 
 Before using a branch-specific regression image, maintainers should publish it

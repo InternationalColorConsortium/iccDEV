@@ -277,6 +277,26 @@ public:
   void OpenFile( const std::string &filename, float pageWidth, float pageHeight );
   void CloseFile();
 
+  // Write the complete PDF document to `out` -- header, object graph, xref
+  // offset table, trailer -- with no filesystem access, and WITHOUT freeing the
+  // object list (CloseFile still owns that).  CloseFile() is the file-writing
+  // wrapper around this call.
+  //
+  // Split out so the byte-generating layer has a hermetic entry: everything
+  // downstream of iccviz::RenderGraph -- the object offsets recorded in
+  // WriteObjects, the fixed-width xref table, the page tree -- was unreachable
+  // from a test or fuzz harness while it was buried inside a function that
+  // opens a file derived from the input path (#2116).
+  //
+  // Deliberately free of CloseFile's two policies, so it stays a serializer and
+  // nothing else:
+  //   * it does not catch -- a caller wanting CloseFile's behaviour sets
+  //     out.exceptions(badbit | failbit) and handles the throw itself;
+  //   * it does not skip empty documents. CloseFile writes no file when
+  //     PageCount() == 0; Serialize always emits a document, pages or not, so a
+  //     caller that wants the file-path behaviour checks PageCount() first.
+  void Serialize( std::ostream &out );
+
 public:
 
   void AddXObject( const Rect2D &bounds, std::string &content, std::string name,

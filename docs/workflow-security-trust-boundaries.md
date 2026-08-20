@@ -29,7 +29,7 @@ flowchart LR
 ## Clean Preflight Sentinels
 
 ```text
-workflow files: 21
+workflow files: 33
 cache publish canaries: 0
 artifact intake canaries: 0
 artifact publish canaries: 0

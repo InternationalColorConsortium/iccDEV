@@ -6,8 +6,6 @@
 | **Homebrew** | `brew install iccdev` |
 | **Docker Pull** | `docker pull ghcr.io/internationalcolorconsortium/iccdev:latest` |
 | **Docker Run** | `docker run -it ghcr.io/internationalcolorconsortium/iccdev:latest` |
-| **NixOS Pull** | `docker pull ghcr.io/internationalcolorconsortium/iccdev-nixos:latest` |
-| **NixOS Run** | `docker run -it ghcr.io/internationalcolorconsortium/iccdev-nixos:latest` |
 
 ## Docker Quick Verification
 

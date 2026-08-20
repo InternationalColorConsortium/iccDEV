@@ -15,6 +15,8 @@ Use this prompt when reviewing or changing the iccDEV label system.
 - Treat labels as maintainer-owned infrastructure.
 - Keep `.github/labels.yml` as the canonical inventory.
 - Keep `.github/labeler.yml` limited to deterministic path and branch rules.
+- Add scope labels to `.github/labels.yml` before issue-text or path automation;
+  retain manual deletion after checking open label consumers.
 - Do not infer severity or exploitability from issue or PR wording without
   maintainer review.
 - Preserve `passed`, `failed`, and `pending` as mutually exclusive CI status

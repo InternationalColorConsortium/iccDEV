@@ -68,7 +68,7 @@
 #include "IccVizModel.hpp"
 #include "IccProfile.h"
 #include "IccProfLibVer.h"
-#include "../IccCmdLineUtil.h"   // icOpenRegularWriteBinaryFile — safe output open
+#include "IccCmdLineUtil.h"   // icOpenRegularWriteBinaryFile — safe output open
 
 #include <cmath>
 #include <cstdio>

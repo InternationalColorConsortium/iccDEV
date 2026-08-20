@@ -53,6 +53,9 @@ when practical.
 - Windows full builds include focused executable regressions, batch-backed
   suites, dump/profile smoke coverage, shared-export coverage, and PAWG report
   coverage.
+- The comprehensive build matrix must retain MSVC, ClangCL, and MinGW UCRT64
+  coverage, plus a separate MSVC full CTest gate with warnings treated as
+  errors. Unix must likewise retain the full strict CTest gate.
 - Use `rg "Total Tests:|currently register|ci[-]tool[-]tests[.]yml" docs .github`
   before PR handoff to catch stale count and workflow-name references.
 - Generated-profile count changes must update every explicit assertion source,
@@ -71,10 +74,12 @@ when practical.
 ## Workflow Rules
 
 - Follow `.github/instructions/workflow-governance.instructions.md`.
-- Treat `ci-pr-action` `full` as the normal long-cycle maintainer gate. It runs
+- Treat `ci-pr-action` `full` as the explicit long-cycle maintainer gate. It runs
   Unix GCC/Clang Release and Debug builds, exact GCC 15.2 strict Release LTO in
   the regression container, GCC 15.2 ASAN+UBSAN tool tests, Windows, and Docker.
-- Use `ci_scope=auto` only for intentional path-scoped selection.
+- `ci_scope=auto` is the default. It selects the full matrix for source, build,
+  test, and container changes; workflow-only changes run the preflight and
+  workflow-security gates.
 - Use `ci_scope=fast-lane` for the exact GCC 15.2 Release LTO and ASAN+UBSAN
   Release tool lanes. Fast lane defaults to the latest CTest with Windows and
   Docker disabled; add them only when the change needs those surfaces.
@@ -86,6 +91,11 @@ when practical.
   execution, sanitizer checks, or packaging verification.
 - Use least-privilege permissions and credential cleanup.
 - Sanitize all `GITHUB_STEP_SUMMARY` and `GITHUB_OUTPUT` writes.
+- Check out the base ref's `.github/scripts` sparsely and source its sanitizer
+  helpers for every workflow that executes PR-controlled source.
+- Include `github.event_name` in concurrency keys for workflows that accept
+  both PR and manual-dispatch events, so a manual lane cannot cancel its PR
+  counterpart.
 - Trigger shared-concurrency workflows sequentially to avoid canceling your own
   run. Use `ci-pr-action` for normal maintainer validation and
   `ci-regression-checks` through that orchestrator for ASAN/UBSAN CTest coverage.

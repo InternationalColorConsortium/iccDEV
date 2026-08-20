@@ -1,0 +1,54 @@
+/**
+\page tolink_lane iccApplyToLink: sampled DeviceLink and Cube lane
+
+\tableofcontents
+
+\section tolink_contract Positional argv contract
+
+This tool has one direct positional form:
+
+`iccApplyToLink dst_link link_type lut_size option title range_min range_max first_transform interp profile intent ...`
+
+The first ten process tokens include the executable and the nine fixed fields.
+Every remaining token belongs to profile/intent pairs, with `-ENV:sig value`
+and `-PCC file` participating in that pair-shaped sequence. An odd remainder
+is rejected before a writer or CMM is created.
+
+\dotfile tolink-lane.dot "iccApplyToLink validation, CMM sampling, and writer lane"
+
+\section tolink_options Fixed fields
+
+| Position | Allowed value | Meaning |
+|---|---|---|
+| `dst_link` | output path | ICC DeviceLink profile or text Cube LUT to create. |
+| `link_type` | 0, 1 | DeviceLink or `.cube` text file. |
+| `lut_size` | integer 2 through 255 | Grid entries along each source dimension. |
+| `option`, DeviceLink | 0, 1 | ICC V4 16-bit table or V5 profile. |
+| `option`, Cube | integer 0 through 20 | Decimal precision for Cube entries. |
+| `title` | text | Output description. |
+| `range_min`, `range_max` | finite floats, min less than max | Input domain sampled by every grid axis. |
+| `first_transform` | 0, 1 | Destination or source transform from the first profile. |
+| `interp` | 0, 1 | Linear or tetrahedral interpolation. |
+
+The range is not an output clipping range. Node zero samples `range_min` and
+the final node samples `range_max`. A non-default range requires V5 or Cube:
+V4 DeviceLinks cannot declare that altered input domain.
+
+\section tolink_runtime Sampling and safety gates
+
+The tool parses every fixed field before building the CMM. It adds profiles to
+`CIccCmm`, applies environment and PCC controls, and calls `Begin()`. After
+the CMM supplies source/destination spaces and channel counts,
+`IccLinkGridFits()` proves both node count and node-count-times-destination
+channels fit the CLUT representation. Only then does the selected writer
+allocate a CLUT.
+
+The generation loop walks the n-dimensional grid, maps each index to the
+validated input range, calls `CIccCmm::Apply()`, and sends the destination
+pixel to either `CDevLinkWriter` or `CCubeWriter`.
+
+\section tolink_qa QA example
+
+`iccApplyToLink-quick-check.sh` checks DeviceLink and Cube output plus type,
+LUT-size, range, option, transform, and interpolation rejection boundaries.
+*/

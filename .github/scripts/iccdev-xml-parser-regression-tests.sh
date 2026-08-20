@@ -7,18 +7,38 @@
 # directions, which is why they share a script:
 #
 #   1. iccDEV must be able to read back the XML it just wrote. A profile whose
-#      CLUT serialises to a single text node larger than libxml2's
-#      XML_MAX_TEXT_LENGTH (10 MB) used to be refused on read, so iccToXml
-#      could emit a document iccFromXml then rejected.
+#      CLUT serialises past libxml2's XML_MAX_TEXT_LENGTH (10 MB) must be split
+#      into bounded text nodes, so iccToXml never emits a document iccFromXml
+#      rejects.
 #
-#   2. Relaxing that must not have been done with XML_PARSE_HUGE, which would
-#      also have disabled the nesting-depth and name-length caps for every
-#      input. The hardening cases below fail if someone later reaches for that
-#      flag to solve a size problem.
+#   2. Relaxing that must not widen what the parser accepts: the nesting-depth
+#      and name-length caps have to stay armed. The hardening cases below fail
+#      if a later change lets either of them go.
 #
-# The fix reads the document into one contiguous buffer and parses that, which
-# avoids the streaming reader's per-node accumulation limit, and bounds the
-# whole document instead (icXmlMaxTextFileBytes).
+# The fix for 1 reads the document into one contiguous buffer and parses that,
+# and bounds the whole document instead (icXmlMaxTextFileBytes).
+#
+# Issue #2108, part 1 of 2 -- the harness only; the reader is not changed here.
+#
+# Two separate things were wrong with the hardening half above.
+#
+#   a. It asserted only that iccFromXml exited non-zero. None of its fixtures is
+#      a valid ICC profile, so every one of them exits non-zero whatever the
+#      parser did -- a well-formed <IccProfile></IccProfile> exits non-zero too.
+#      Measured: with XML_PARSE_HUGE applied to the reader and the depth and
+#      name caps therefore off, this script still reported 5/5 passed and exit
+#      0, which is precisely the regression case 2 was written to catch.
+#
+#      So a refusal now has to be attributable to the parser. That puts one
+#      requirement on the reader: when it refuses a document itself rather than
+#      letting libxml2 refuse it, it has to say so, the way the document-size
+#      bound below already does. A silent NULL is indistinguishable here from
+#      "parsed fine, but is not a profile".
+#
+#   b. libxml2 v2.13.0 moved the XML_MAX_TEXT_LENGTH check into xmlSAX2Text
+#      ("SAX2: Enforce size limit in xmlSAX2Text with XML_PARSE_HUGE"), so the
+#      writer splits CLUT rows into text nodes below that cap rather than
+#      weakening the reader with XML_PARSE_HUGE.
 #
 # Environment variables:
 #   ICCDEV_TOOLS_DIR   -- path to Build/Tools or build/Tools
@@ -81,7 +101,7 @@ check_sanitizers() {
 }
 
 ###############################################################################
-# 1. Round-trip a profile whose XML carries a text node over the streaming cap
+# 1. Round-trip a profile whose XML exceeds the text-node cap
 ###############################################################################
 
 echo "=== Large text node round-trip (issue #1856) ==="
@@ -104,9 +124,8 @@ roundtrip_large_text_node() {
     return
   fi
 
-  # A grid-33 CMYK->RGB device link is the cheapest way to get a CLUT that
-  # serialises past the 10 MB text-node limit: 33^4 grid points x 3 channels
-  # is ~21 MB of whitespace-separated values in one element.
+  # A grid-33 CMYK->RGB device link is the cheapest way to get a CLUT whose
+  # numeric text exceeds 10 MB: 33^4 grid points x 3 channels is ~21 MB.
   if ! "$APPLYTOLINK" "$link" 0 33 0 "issue 1856 regression" 0 1 1 1 \
        "$src" 1 "$dst" 1 >"$logfile" 2>&1; then
     fail "$name" "iccApplyToLink failed to build the fixture link"
@@ -118,23 +137,46 @@ roundtrip_large_text_node() {
     return
   fi
 
-  # Confirm the fixture actually exercises the limit. If a future change to the
-  # writer shortens the node below the cap this test would silently stop
-  # testing anything, so treat that as a skip with the measured size.
-  local longest
-  longest="$(python3 - "$xml" <<'PY'
+  # Confirm the fixture exercises the limit while the writer keeps every text
+  # node under it. If the document becomes small, the fixture no longer covers
+  # the boundary; if a node exceeds the cap, current libxml2 rejects it.
+  # Assign in a separate statement from the command substitution so the exit
+  # status checked is python's and not the local builtin's -- otherwise a failed
+  # measurement yields empty values and reports as a skip with a blank size,
+  # silently retiring the one case that pins the boundary.
+  local measured total longest splits
+  if ! measured="$(python3 - "$xml" <<'PY'
 import re, sys
 data = open(sys.argv[1], "rb").read()
-print(max((len(m.group(1)) for m in re.finditer(rb">([^<]*)<", data)), default=0))
+nodes = [len(m.group(1)) for m in re.finditer(rb">([^<]*)<", data)]
+print(sum(nodes), max(nodes, default=0), data.count(b"<!-- TableData continuation -->"))
 PY
-)"
-  if [ -z "$longest" ] || [ "$longest" -le "$XML_MAX_TEXT_LENGTH" ]; then
-    skip "$name" "longest text node ${longest:-unknown} bytes does not exceed $XML_MAX_TEXT_LENGTH"
+)"; then
+    fail "$name" "could not measure the text nodes in $xml"
+    return
+  fi
+  read -r total longest splits <<<"$measured"
+
+  if [ -z "$total" ] || [ "$total" -le "$XML_MAX_TEXT_LENGTH" ]; then
+    skip "$name" "total CLUT text ${total:-unknown} bytes does not exceed $XML_MAX_TEXT_LENGTH"
+    return
+  fi
+  if [ -z "$longest" ] || [ "$longest" -gt "$XML_MAX_TEXT_LENGTH" ]; then
+    fail "$name" "longest text node ${longest:-unknown} bytes exceeds $XML_MAX_TEXT_LENGTH"
+    return
+  fi
+  # The size bounds above are necessary but not sufficient: "total" counts every
+  # indent and every unrelated element's text, so on its own it does not prove
+  # the CLUT approached the cap. Requiring the writer to have actually split
+  # ties the case to the mechanism under test, so removing the split turns this
+  # red here rather than only at the iccFromXml call below.
+  if [ -z "$splits" ] || [ "$splits" -lt 1 ]; then
+    fail "$name" "writer emitted no text-node split for ${total} bytes of CLUT text"
     return
   fi
 
   if ! "$FROMXML" "$xml" "$back" >>"$logfile" 2>&1; then
-    fail "$name" "iccFromXml refused a ${longest}-byte text node it had just written"
+    fail "$name" "iccFromXml refused ${total} bytes of CLUT text split into ${longest}-byte nodes"
     return
   fi
   check_sanitizers "$name" "$logfile" || return
@@ -153,7 +195,7 @@ def norm(path):
 sys.exit(0 if norm(sys.argv[1]) == norm(sys.argv[2]) else 1)
 PY
   then
-    pass "$name (${longest} byte text node, round-trip byte-identical)"
+    pass "$name (${total} bytes across ${splits} split(s), longest node ${longest} bytes, round-trip byte-identical)"
   else
     fail "$name" "round-trip profile differs from the original"
   fi
@@ -170,8 +212,49 @@ roundtrip_large_text_node
 
 echo "=== Parser hardening still armed ==="
 
+# A parser-level refusal, as opposed to "this parsed but is not a profile".
+# libxml2 prefixes its own diagnostics with "parser error", which covers the
+# cases it refuses on its own. The second alternative is for a reader that stops
+# the parse itself: xmlStopParser sets no message, so a reader that enforces a
+# limit in its own SAX callbacks has to append one, and this is the text it is
+# expected to use.
+PARSER_DIAG='parser error|exceeds the parser'"'"'s nesting-depth or name-length limit'
+
+# Proves the assertion in reject_case() is worth something: a well-formed
+# document that violates no parser limit must be refused WITHOUT any parser
+# diagnostic, because it fails later as an invalid profile. If this ever starts
+# emitting one, every reject_case below has stopped discriminating.
+control_no_parser_diagnostic() {
+  local name="xml-control-wellformed-no-parser-error"
+  local file="$OUTDIR/control.xml"
+  local logfile="$OUTDIR/${name}.log"
+
+  if [ ! -x "$FROMXML" ]; then
+    skip "$name" "iccFromXml not built"
+    return
+  fi
+
+  printf '<IccProfile></IccProfile>' >"$file"
+
+  if "$FROMXML" "$file" "$OUTDIR/${name}.icc" >"$logfile" 2>&1; then
+    fail "$name" "an empty IccProfile document was accepted as a profile"
+    return
+  fi
+  if grep -qE "$PARSER_DIAG" "$logfile"; then
+    fail "$name" "a well-formed document produced a parser diagnostic"
+    return
+  fi
+  check_sanitizers "$name" "$logfile" || return
+  pass "$name (refused as a profile, not by the parser)"
+}
+
+# $4 selects how strictly the refusal is checked:
+#   parser -- a parser-level diagnostic is required (the caps XML_PARSE_HUGE
+#             raises, which is what this script exists to pin)
+#   exit   -- exit status only, for a property the parser owns across every
+#             supported libxml2 and which no iccDEV parser flag can change
 reject_case() {
-  local name="$1" file="$2" why="$3"
+  local name="$1" file="$2" why="$3" strictness="${4:-parser}"
   local logfile="$OUTDIR/${name}.log"
 
   if [ ! -x "$FROMXML" ]; then
@@ -183,9 +266,17 @@ reject_case() {
     fail "$name" "$why was accepted"
     return
   fi
+  # Exit status alone cannot carry this: none of these fixtures is a valid
+  # profile, so iccFromXml fails on them either way. The parser has to say so.
+  if [ "$strictness" = "parser" ] && ! grep -qE "$PARSER_DIAG" "$logfile"; then
+    fail "$name" "$why was refused as an invalid profile, not by the parser"
+    return
+  fi
   check_sanitizers "$name" "$logfile" || return
   pass "$name ($why refused)"
 }
+
+control_no_parser_diagnostic
 
 # Nesting past libxml2's 256-level default depth cap.
 python3 - "$OUTDIR/deep.xml" <<'PY'
@@ -215,7 +306,17 @@ open(sys.argv[1], "w").write(
     '<!ENTITY f "&e;&e;&e;&e;&e;&e;&e;&e;&e;&e;">\n'
     ']>\n<IccProfile>&f;</IccProfile>\n')
 PY
-reject_case "xml-reject-entity-amplification" "$OUTDIR/laughs.xml" "a billion-laughs document"
+#
+# Checked on exit status only, deliberately. Measured against libxml2 2.9.14,
+# 2.13.8 and 2.15.2, this document's fate does not depend on XML_PARSE_HUGE on
+# any of them: 2.13 and 2.15 refuse it either way, and 2.9 accepts it either
+# way, because without XML_PARSE_NOENT -- which iccDEV does not set -- entity
+# content is not expanded and older libxml2 does not account for it. So this is
+# a property libxml2 owns and no parser flag of ours moves, and requiring a
+# parser diagnostic here would only encode the linked libxml2's version. Kept as
+# a coverage case; tightening it needs a decision on the minimum supported
+# libxml2 rather than a change to this script.
+reject_case "xml-reject-entity-amplification" "$OUTDIR/laughs.xml" "a billion-laughs document" exit
 
 ###############################################################################
 # 3. The whole-document bound replaces the per-node one
@@ -271,6 +372,143 @@ PY
 }
 
 oversize_document
+
+###############################################################################
+# 4. A refused array allocation must not be written through (issue #2106)
+###############################################################################
+#
+# CIccTagXYZ::SetSize refuses more than 65536 entries, and on that path it frees
+# the array, sets the pointer to NULL and returns false. CIccTagXmlXYZ::ParseXml
+# ignored the result and wrote m_XYZ[0..n-1] anyway, so a document holding one
+# entry more than the cap segfaulted iccFromXml. Nothing about it is exotic: the
+# fixture below is ordinary well-formed XML, under 3 MB, that violates no parser
+# limit -- which is why it belongs beside the hardening cases above rather than
+# among them. Neither libxml2 nor the document-size bound stops it.
+#
+# The assertion is not "exit non-zero". Every fixture in this script exits
+# non-zero, and a process killed inside ParseXml exits non-zero too. It is that
+# iccFromXml reaches its OWN error path and names the tag it could not parse:
+# that line is printed by the caller after ParseXml returns, so a crash cannot
+# produce it. Measured before the fix, the log was empty and the shell reported
+# signal 11.
+
+echo "=== Array sizing refusals are not written through ==="
+
+# Kept in step with CIccTagXYZ::SetSize in IccProfLib/IccTagBasic.cpp. A build
+# that retunes the cap makes the over-cap fixture parse successfully, which is
+# reported as a skip below rather than as a failure.
+XYZ_MAX_ENTRIES="${ICC_XYZ_MAX_ENTRIES:-65536}"
+
+# The diagnostic CIccProfileXml prints when a tag's ParseXml returns false.
+XYZ_TAG_DIAG='Unable to Parse .*XYZType.* Tag'
+
+write_xyz_document() {
+  python3 - "$1" "$2" <<'PY'
+import sys
+path, n = sys.argv[1], int(sys.argv[2])
+with open(path, "w") as f:
+    f.write('<IccProfile>\n  <Header>\n'
+            '    <ProfileVersion>4.30</ProfileVersion>\n'
+            '    <ProfileDeviceClass>mntr</ProfileDeviceClass>\n'
+            '    <DataColourSpace>RGB </DataColourSpace>\n'
+            '    <PCS>XYZ </PCS>\n'
+            '    <RenderingIntent>Perceptual</RenderingIntent>\n'
+            '    <PCSIlluminant>\n'
+            '      <XYZNumber X="0.9642" Y="1.0" Z="0.8249"/>\n'
+            '    </PCSIlluminant>\n'
+            '  </Header>\n  <Tags>\n    <XYZType>\n'
+            '      <TagSignature>wtpt</TagSignature>\n')
+    f.write('      <XYZNumber X="0.5" Y="0.5" Z="0.5"/>\n' * n)
+    f.write('    </XYZType>\n  </Tags>\n</IccProfile>\n')
+PY
+}
+
+xyz_array_over_cap() {
+  local name="xml-xyz-array-over-cap-not-written-through"
+  local file="$OUTDIR/xyz-over-cap.xml"
+  local logfile="$OUTDIR/${name}.log"
+  local status
+
+  if [ ! -x "$FROMXML" ]; then
+    skip "$name" "iccFromXml not built"
+    return
+  fi
+
+  write_xyz_document "$file" $((XYZ_MAX_ENTRIES + 1))
+
+  "$FROMXML" "$file" "$OUTDIR/${name}.icc" >"$logfile" 2>&1
+  status=$?
+
+  # An accepted document means the compiled cap is not the one this case was
+  # written against, so it is testing nothing. Report that rather than a
+  # failure -- a reverted fix crashes here, it does not succeed.
+  if [ "$status" -eq 0 ]; then
+    skip "$name" "$((XYZ_MAX_ENTRIES + 1)) entries were accepted; the ${XYZ_MAX_ENTRIES}-entry cap has moved"
+    rm -f "$file"
+    return
+  fi
+
+  if ! grep -qE "$XYZ_TAG_DIAG" "$logfile"; then
+    if [ "$status" -ge 128 ]; then
+      fail "$name" "iccFromXml was killed by signal $((status - 128)) writing through a refused allocation"
+    else
+      fail "$name" "iccFromXml exited $status without reporting the tag it could not parse"
+    fi
+    rm -f "$file"
+    return
+  fi
+  check_sanitizers "$name" "$logfile" || { rm -f "$file"; return; }
+  pass "$name ($((XYZ_MAX_ENTRIES + 1)) entries refused at the tag, process intact)"
+  rm -f "$file"
+}
+
+# The control for the case above. Without it, a change that made every XYZType
+# tag fail to parse would leave the over-cap case passing while the tag stopped
+# working entirely. This asserts the fixture sits exactly on the boundary: one
+# entry fewer and the same tag must still parse.
+xyz_array_at_cap() {
+  local name="xml-xyz-array-at-cap-still-parses"
+  local file="$OUTDIR/xyz-at-cap.xml"
+  local logfile="$OUTDIR/${name}.log"
+
+  if [ ! -x "$FROMXML" ]; then
+    skip "$name" "iccFromXml not built"
+    return
+  fi
+
+  write_xyz_document "$file" "$XYZ_MAX_ENTRIES"
+
+  # Exit status is deliberately not asserted: this fixture is a structurally
+  # incomplete profile, so what iccFromXml returns for it is a question about its
+  # validation policy, not about the tag. The tag is what is under test.
+  "$FROMXML" "$file" "$OUTDIR/${name}.icc" >"$logfile" 2>&1
+
+  if grep -qE "$XYZ_TAG_DIAG" "$logfile"; then
+    fail "$name" "the tag was refused at exactly $XYZ_MAX_ENTRIES entries, so the over-cap case proves nothing"
+    rm -f "$file"
+    return
+  fi
+
+  # The absence of the diagnostic cannot carry this on its own. If some later
+  # change made iccFromXml give up earlier -- refusing the document while reading
+  # the header, say -- the diagnostic would never be printed, this control would
+  # stay green, and the over-cap case would silently lose the pairing that is the
+  # only reason this control exists. So require positive evidence that the tool
+  # got far enough to emit a profile. A validation policy that stops writing one
+  # for this fixture turns this red, which is the correct outcome: the control is
+  # no longer controlling anything and needs re-examining, not passing quietly.
+  if [ ! -s "$OUTDIR/${name}.icc" ]; then
+    fail "$name" "iccFromXml wrote no profile, so nothing proves it reached the tag at all"
+    rm -f "$file"
+    return
+  fi
+  check_sanitizers "$name" "$logfile" || { rm -f "$file"; return; }
+  pass "$name ($XYZ_MAX_ENTRIES entries parsed, profile written)"
+  rm -f "$file"
+}
+
+xyz_array_over_cap
+xyz_array_at_cap
 
 ###############################################################################
 

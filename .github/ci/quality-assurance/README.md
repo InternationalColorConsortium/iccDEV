@@ -25,8 +25,8 @@ cd ../Testing/hybrid
 ./BuildAndTest.sh
 ```
 
-Run all commands below from `Testing/hybrid`. The scripts will use build-tree
-tool paths when they are available.
+Run the suite and mutation drivers below from `Testing/hybrid`. The scripts
+use build-tree tool paths when they are available.
 
 ## Quick smoke
 
@@ -35,8 +35,26 @@ tool paths when they are available.
 ```
 
 The suite runs a small smoke across all four apply tools and scans logs for
-sanitizer signatures. It exits nonzero if any tool command fails, if generated
-config replay fails, or if sanitizer output is detected.
+sanitizer signatures. It exits nonzero if any tool command fails or sanitizer
+output is detected.
+
+## Focused quick checks
+
+Run these checks from the repository root after building the tools. Set
+`ICCDEV_BUILD_DIR` when the build directory is not `Build/`; set
+`ICCDEV_ROOT` when invoking a copied script outside the checkout.
+
+```sh
+.github/ci/quality-assurance/scripts/iccApplyProfiles-quick-check.sh
+.github/ci/quality-assurance/scripts/iccApplyNamedCmm-quick-check.sh
+.github/ci/quality-assurance/scripts/iccApplySearch-quick-check.sh
+.github/ci/quality-assurance/scripts/iccApplyToLink-quick-check.sh
+```
+
+The focused checks use checked-in fixtures and validate representative success,
+configuration export/replay, and argument-rejection paths. They write logs and
+temporary outputs under a fresh `QA_OUTDIR` unless that environment variable is
+set.
 
 ## Per-tool drivers
 

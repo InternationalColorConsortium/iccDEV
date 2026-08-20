@@ -77,7 +77,8 @@
 #include "IccLibConnectVer.h"
 #include "IccSearch.h"
 #include "IccConnect.h"
-#include "../IccCmdLineUtil.h"
+#include "IccCmdLineUtil.h"
+#include <cstdlib>  // EXIT_FAILURE, used by the -cfg argument guard added in #2075
 #include <memory>
 #include <vector>
 #if !defined(_WIN32)
@@ -255,6 +256,19 @@ int main(int argc, const char* argv[])
   CIccCfgColorData cfgData;
 
   if (!stricmp(argv[1], "-cfg")) {
+    // Usage 1 is exactly "-cfg <path>"; every setting comes from the JSON file, so
+    // there is nothing a further argument could mean. Anything beyond argv[2] was
+    // silently discarded, and the run then reported success, so a caller could not
+    // tell an honoured argument list from an ignored one. That is the same defect
+    // #1674 fixed in the sibling tool, where iccApplyNamedCmm grew this identical
+    // argc guard (#1906); iccApplySearch shares the "-cfg" usage but never got it.
+    // The minargs test above has already established argc >= 3, so argv[2] is
+    // readable here and only a longer list can reach this branch.
+    if (argc != 3) {
+      printf("Unexpected extra arguments for -cfg\n");
+      return EXIT_FAILURE;
+    }
+
     json cfg;
     if (!loadJsonFrom(cfg, argv[2]) || !cfg.is_object()) {
       printf("Unable to read configuration from '%s'\n", argv[2]);
@@ -433,7 +447,16 @@ int main(int argc, const char* argv[])
     else if (SrcspaceSig == icSigLabPcsData)
       SrcspaceSig = icSigDevLabData;
 
-    if (srcEncoding == icEncodeFloat)
+    // #2150: the iccApplyNamedCmm counterpart of this carve-out, with the same
+    // reasoning -- once the remap above has rewritten the PCS signature to a
+    // device one, ToInternalEncoding() applies the device default:'s 0.0-1.0
+    // clip to its float AND percent cases, so all three encodings whose PCS
+    // range exceeds 0.0-1.0 have to be named here (icEncodeUnitFloat has been
+    // an exact synonym of icEncodeFloat in both PCS arms since #2146; percent
+    // is the same range x100). Fixed here as well as there because the two
+    // tools carry independent copies of this block, not a shared helper.
+    if (srcEncoding == icEncodeFloat || srcEncoding == icEncodeUnitFloat ||
+        srcEncoding == icEncodePercent)
       bClip = false;
   }
 

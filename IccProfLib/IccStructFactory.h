@@ -76,6 +76,14 @@
 #include "IccDefs.h"
 #include <memory>
 #include <list>
+// This header declares four std::string parameters (GetStructSigName and
+// DoGetStructSigName, on both the factory interface and the creator) but never included
+// <string>, so it was not self-contained: it compiled only where an earlier include had
+// already supplied std::string. libstdc++ does so transitively, which hid it; MSVC does
+// not, and a translation unit that includes this header first failed with C2039
+// "'string': is not a member of 'std'" -- after which every one of those declarations is
+// malformed and the arity is misreported. Found from the Windows leg of #2028.
+#include <string>
 
 //CIccProcessStruct factory support
 #ifdef USEICCDEVNAMESPACE

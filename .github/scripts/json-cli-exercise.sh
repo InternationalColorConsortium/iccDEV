@@ -1121,12 +1121,17 @@ elif [ "$rc" -eq 0 ]; then PASS=$((PASS+1)); echo "[PASS] #$TOTAL profiles cli: 
 else FAIL=$((FAIL+1)); echo "[FAIL] #$TOTAL profiles cli: 16bit (exit=$rc)"; fi
 
 # 24d: Float output
+# icEncodeFloat is selector 3, not 4.  The 4 here came from the iccApplyProfiles
+# usage text, which advertised "4 - icEncodeFloat" from 1f0a9dd2 until #1996
+# corrected it; the selector switch used to answer every out-of-range value with
+# 8 bit and exit 0, so this case reported [PASS] while quietly measuring the same
+# 8-bit path as 24b.  Since #1996 it is refused outright and the case fails (#2052).
 TOTAL=$((TOTAL+1))
-output=$("$PROFILES" "$TEST_DATA_DIR/rgb-4x4-8bit.tif" "/tmp/cli-tiff-float.tif" 4 0 0 0 1 "Testing/Display/sRGB_D65_MAT.icc" 1 2>&1)
+output=$("$PROFILES" "$TEST_DATA_DIR/rgb-4x4-8bit.tif" "/tmp/cli-tiff-float.tif" 3 0 0 0 1 "Testing/Display/sRGB_D65_MAT.icc" 1 2>&1)
 rc=$?
 asan_hit=$(echo "$output" | grep -c 'AddressSanitizer\|runtime error:' || true)
 if [ "$asan_hit" -gt 0 ]; then ASAN=$((ASAN+1)); echo "[ASAN] #$TOTAL profiles cli: float (exit=$rc)"
-elif [ "$rc" -eq 0 ]; then PASS=$((PASS+1)); echo "[PASS] #$TOTAL profiles cli: float enc(4) (exit=$rc)"
+elif [ "$rc" -eq 0 ]; then PASS=$((PASS+1)); echo "[PASS] #$TOTAL profiles cli: float enc(3) (exit=$rc)"
 else FAIL=$((FAIL+1)); echo "[FAIL] #$TOTAL profiles cli: float (exit=$rc)"; fi
 
 # 24e: LZW compression + embed ICC
@@ -1148,8 +1153,9 @@ elif [ "$rc" -eq 0 ]; then PASS=$((PASS+1)); echo "[PASS] #$TOTAL profiles cli: 
 else FAIL=$((FAIL+1)); echo "[FAIL] #$TOTAL profiles cli: lin+abs (exit=$rc)"; fi
 
 # 24g: 16-bit source TIFF -> float output
+# Selector 3, for the same reason as 24d above.
 TOTAL=$((TOTAL+1))
-output=$("$PROFILES" "$(tif_path rgb-4x4-16bit.tif)" "/tmp/cli-tiff-16to-float.tif" 4 0 0 1 1 "Testing/Display/sRGB_D65_MAT.icc" 1 2>&1)
+output=$("$PROFILES" "$(tif_path rgb-4x4-16bit.tif)" "/tmp/cli-tiff-16to-float.tif" 3 0 0 1 1 "Testing/Display/sRGB_D65_MAT.icc" 1 2>&1)
 rc=$?
 asan_hit=$(echo "$output" | grep -c 'AddressSanitizer\|runtime error:' || true)
 if [ "$asan_hit" -gt 0 ]; then ASAN=$((ASAN+1)); echo "[ASAN] #$TOTAL profiles cli: 16->float (exit=$rc)"
@@ -1296,5 +1302,26 @@ rm -f /tmp/test-enc-*.json /tmp/test-prec-*.json /tmp/test-dig-*.json \
       /tmp/test-srcfile-*.json /tmp/test-external-data.* /tmp/json-test-output.txt \
       /tmp/test-cli-data.txt /tmp/test-cli-8bit.txt /tmp/test-cli-16bit.txt \
       /tmp/test-real-tiff-*.json /tmp/json-tiff-*.tif /tmp/cli-tiff-*.tif 2>/dev/null
+
+# Everything above only *counts* outcomes.  Until now the script ended in an
+# unconditional `exit 0`, so the summary was advisory and iccdev.json-cli-exercise
+# reported [PASS] with failures still on the board -- which is how the two stale
+# encoding-selector [FAIL] lines recorded in #2052 survived a full CI cycle
+# without ever reddening the test that produced them.  Honour the tally instead.
+#
+# ASAN is counted in its own bucket rather than as a failure because a sanitizer
+# hit is not a wrong exit status, but it is at least as fatal: this test carries
+# the `asan` label and is run against instrumented builds, so treat both as red.
+#
+# One consequence is deliberate.  The CTest declares FIXTURES_REQUIRED
+# iccdev_profiles, and the cases below reference generated profiles such as
+# Testing/Display/sRGB_D65_MAT.icc by relative path.  Run standalone against a
+# tree where that fixture has never executed, 74 of the 125 cases fail on the
+# missing profiles and this script now exits non-zero.  That is the correct
+# signal -- a run that measured nothing should not report success -- and it is
+# why the exit status keys off the tally rather than off the last command.
+if [ "$FAIL" -gt 0 ] || [ "$ASAN" -gt 0 ]; then
+  exit 1
+fi
 
 exit 0

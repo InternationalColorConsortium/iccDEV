@@ -17,6 +17,7 @@ where it belongs.
 | Focused reusable regression scripts | `.github/scripts/` | Scripted checks shared by one or more workflows. |
 | Regression PoC inventory | `.github/ci/regression/README.md` | Maps regression inputs and scripts to issues. |
 | Tool test gate | `.github/workflows/ci-iccdev-tool-tests.yml` | ASAN/UBSAN tool coverage, JSON gates, regression scripts, and broad generated-profile CLI coverage. |
+| MATLAB Windows gate | `.github/workflows/ci-matlab.yml` | PowerShell-native MSVC build, MATLAB MEX QA, native focused regressions, and Docker interoperability. |
 | CTest registration | `Build/Cmake/Testing/CMakeLists.txt` | CTest names, labels, fixtures, timeouts, and check target. |
 | CTest process guide | `docs/ctest.md` | Local commands, registered suites, and add-test workflow. |
 | Maintainer CI skill | `.github/skills/maintainer-ci-ctest/SKILL.md` | Repeatable maintainer workflow for CI, CTest, CPack, sanitizer, and release gates. |
@@ -24,7 +25,7 @@ where it belongs.
 | Workflow rules | `.github/instructions/workflow-governance.instructions.md` | Shell hardening, output sanitization, and injection prevention. |
 | Workflow trust boundaries | `docs/workflow-security-trust-boundaries.md` | Trusted-base helper model, PR workflow canaries, and visual review aids. |
 | Testing rules | `.github/instructions/testing.instructions.md` | Test directories, script expectations, and regression flow. |
-| Maintainer Dockerfiles | `Dockerfile`, `Dockerfile.nixos`, `Dockerfile.mcp`, `Dockerfile.ci-regression` | Release/runtime images and pinned CI dependency images. |
+| Maintainer Dockerfiles | `Dockerfile`, `Dockerfile.mcp`, `Dockerfile.ci-regression` | Release/runtime images and pinned CI dependency images. |
 
 ## When to Add a Script
 
@@ -71,6 +72,9 @@ Every edited workflow `run:` block must keep these properties:
 - `pull_request` workflows that build PR code must source `.github/scripts`
   helpers and sanitizers from a trusted base checkout, not from PR-controlled
   content, unless a test-only exception is explicitly marked for preflight.
+- Runner-reduction changes must preserve trusted-base sanitizer sourcing,
+  sanitize every `GITHUB_OUTPUT` value, and retain path-gated validation for
+  container changes.
 
 For reusable governance coverage, call
 `.github/workflows/ci-pr-risk-security-analysis.yml` instead of duplicating the
@@ -112,8 +116,9 @@ requesting review, check the PR against this list:
 - Keep push, pull-request, reusable, and manual-dispatch validation paths
   equivalent for the changed surface. If a workflow tests a helper on push,
   the PR fast lane should test the same helper or document why it cannot.
-- Keep branch triggers and publish conditions aligned. If workflow logic names
-  `ci-qa-pr-docker-testing`, the push trigger and docs must name it too.
+- Keep branch triggers and publish conditions aligned. The
+  `ci-qa-pr-docker-testing` Docker publication path is manual; do not add it to
+  a broad push trigger merely because related workflow logic names the branch.
 - Keep Docker and regression-container docs reproducible from a fresh checkout
   or clean container. Fetch branch refs explicitly and avoid relying on local
   remote-tracking state, generated files, or preexisting host permissions.
@@ -140,18 +145,16 @@ maintainer branch and must be included in the hosted validation report.
 
 Branch protection should require stable aggregate contexts, not conditional
 lane job names. `PR Summary` must aggregate orchestration prerequisites and all
-selected full, fast-lane, auto, governance, or docs jobs. Keep the two risk
-audit contexts and `Init PR Build Matrix` independently required. Require WASM
-parity separately on `master`, where that workflow runs outside the
+selected full, fast-lane, auto, governance, docs, and path-gated jobs. Do not
+require removed lane names or initialization jobs as branch contexts. Require
+WASM parity separately on `master`, where that workflow runs outside the
 orchestrator. See `docs/label-system.md` for the current context list.
 
-On the `ci-qa-pr-docker-testing` branch, Docker PR verification is advisory.
-Keep the workflow running to completion even when the Docker lane fails, report
-overall PR orchestration success when the required non-Docker gates pass, and
-use the `bump-sha-pins` label plus the summary note to route follow-up work for
-pinned GitHub Action, Docker, or container SHA updates. Do not treat that
-advisory result as container verification; rerun the Docker lane after the pins
-are updated.
+When `container_changed` is true, `ci-pr-action` selects the read-only Docker
+PR verification lane and `PR Summary` requires its result. The lane is skipped
+for other changes to conserve runners. Do not treat a skipped lane as container
+verification; rerun it after any Dockerfile, container image, or container
+workflow update.
 
 The Docker PR lane consumes the published
 `ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest` image as a
@@ -249,7 +252,6 @@ separate from general source changes when practical.
 | File | Owner intent | Required local checks |
 |------|--------------|-----------------------|
 | `Dockerfile` | Ubuntu release/runtime image for the published `iccdev` container. | Build locally, run at least one installed tool, and check the healthcheck target. |
-| `Dockerfile.nixos` | NixOS/scratch runtime image and closure minimization. | Build locally, run one tool, and confirm closure/secret checks remain active. |
 | `Dockerfile.ci-regression` | Maintainer image for ASAN/UBSAN CTest, fuzzing, review, and hybrid timing gates. | Run a no-cache build and smoke `git`, `gh`, `curl`, `clang`, `clang++`, `gcc`, `g++`, `lldb`, `gdb`, `cmake`, `afl-fuzz`, `afl-showmap`, `iccdev-fuzz-env`, libFuzzer compilation, and `/usr/bin/time`; AFL wrapper changes also need the container bootstrap probe in `docs/afl-fuzzing.md`. |
 
 For `Dockerfile.ci-regression` publishing:

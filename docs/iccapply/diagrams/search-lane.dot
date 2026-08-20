@@ -1,0 +1,20 @@
+digraph search_lane {
+  graph [rankdir=LR, bgcolor="transparent", fontname="Helvetica"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fillcolor="#e8f1fb"];
+  edge [fontname="Helvetica"];
+  entry [label="argc / argv", fillcolor="#fff2cc"];
+  cfg [label="-cfg file\nexact argc", fillcolor="#d9ead3"];
+  direct [label="optional export / debug\nCIccCfgDataApply"];
+  sequence [label="CIccCfgSearchApply\n2 or 3 profiles"];
+  cmm [label="CreateSearch"];
+  pcs [label="PCS remap:\nwide encodings disable clipping"];
+  apply [label="Apply each color record"];
+  output [label="legacy, JSON,\nor IT8 output", fillcolor="#d9ead3"];
+  reject [label="reject", fillcolor="#f4cccc"];
+  entry -> cfg [label="-cfg"];
+  entry -> direct [label="direct"];
+  cfg -> sequence;
+  direct -> sequence;
+  sequence -> reject [label="not 2 / 3"];
+  sequence -> cmm -> pcs -> apply -> output;
+}

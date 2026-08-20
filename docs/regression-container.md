@@ -31,6 +31,12 @@ docker image inspect "$IMAGE" \
   --format '{{index .RepoDigests 0}} revision={{index .Config.Labels "org.opencontainers.image.revision"}}'
 ```
 
+The regression image intentionally contains an unpatched upstream checkout.
+Its AFL/CFL compilers and helper commands support smoke and build validation;
+external, maintainer-supplied fuzz patch stacks can be applied only from a
+source checkout that contains them. Do not make generic Docker PR verification
+require embedded patch-checker scripts.
+
 ## Basic Use
 
 Start a disposable interactive shell:
@@ -168,9 +174,11 @@ docker run --rm -v "$WORKTREE:/workspace/review:ro" "$IMAGE" bash -lc '
 '
 ```
 
-The Docker PR verification job pulls the published `latest` maintainer image
-instead of rebuilding `Dockerfile.ci-regression` for each PR. It mounts the PR
-tree read-only, copies it to container-local scratch space for writable CTest
+The Docker PR verification job runs only when `ci-pr-action` detects container
+changes, avoiding a Docker runner for unrelated pull requests. It pulls the
+published `latest` maintainer image instead of rebuilding
+`Dockerfile.ci-regression` for each selected PR. It mounts the PR tree
+read-only, copies it to container-local scratch space for writable CTest
 fixtures, then builds the configured tool and test target set with strict Clang
 sanitizers. Its routine PR CTest envelope excludes the separately labelled
 `slow` and `calculator` suites:
@@ -291,18 +299,16 @@ Inspect the fuzzing environment:
 iccdev-fuzz-env
 ```
 
-Validate that the AFL/CFL local patch stacks match the checked-out source and
-workflow applicator semantics:
+Validate a maintainer-supplied AFL/CFL patch stack from its source checkout:
 
 ```bash
 .github/scripts/check-fuzz-patches.sh
 ```
 
-Run a short patched AFL smoke from the image checkout:
+Run a short unpatched AFL smoke from the image checkout:
 
 ```bash
 .github/scripts/iccdev-afl-smoke.sh \
-  --patches \
   --seconds 10 \
   --targets dump \
   --exec-timeout-ms 30000
@@ -312,8 +318,7 @@ Run the current core CFL smoke:
 
 ```bash
 cfl/build.sh \
-  --patches \
-  --targets dump,toxml,fromxml,tojson,fromjson,roundtrip \
+  --targets dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize \
   --seconds 30
 ```
 
@@ -335,11 +340,12 @@ gh workflow run ci-pr-action.yml \
   -f ci_scope=full
 ```
 
-The default long cycle runs the Unix GCC/Clang Release and Debug matrix, the
-regression-container GCC 15.2 strict Release LTO build, GCC 15.2 ASAN+UBSAN tool
-tests, Windows, and Docker verification. Pull request events and Web UI
-dispatches also default to `full`. Use `auto` only when path-scoped selection is
-intentional.
+The full long cycle runs the GCC 15.2 strict Release LTO build, GCC 15.2
+ASAN+UBSAN tool tests, and Windows validation. Docker verification runs only
+for container changes. Pull request events and Web UI dispatches default to
+`auto`: source, build, test, and container changes select the full validation
+set, while workflow-only changes use the preflight and workflow-security gates.
+Dispatch `full` explicitly when the full validation set is needed.
 
 For the fastest same-repository PR lane, provide the open PR number:
 
@@ -354,8 +360,8 @@ gh workflow run ci-pr-action.yml \
 Fast lane uses the regression container for exact GCC 15.2, runs strict Release
 LTO plus the GCC 15.2 ASAN+UBSAN Release tool lane, and limits CTest to the most
 recent registered test by default. Windows is opt-in through the Web UI or CLI
-`include_windows` input. Docker is opt-in through the Web UI or CLI
-`include_docker` input, or the `ci:docker` maintainer label.
+`include_windows` input. Docker verification runs automatically only when the
+pull request changes the container surface.
 
 Watch the run:
 
@@ -404,15 +410,15 @@ git diff --name-status \
   'Dockerfile*' '**/Dockerfile*'
 ```
 
-Carry applicable fixes for `Dockerfile`, `Dockerfile.nixos`, `Dockerfile.mcp`,
-and `Dockerfile.ci-regression` to both branches. A successful testing-branch
-image does not replace the required `ci-qa-flags` update and hosted validation.
+Carry applicable fixes for `Dockerfile`, `Dockerfile.mcp`, and
+`Dockerfile.ci-regression` to both branches. A successful testing-branch image
+does not replace the required `ci-qa-flags` update and hosted validation.
 
 Repository rules intentionally differ by branch:
 
-- `master` requires the stable PR aggregate, matrix initialization, both risk
+- `master` requires the stable PR aggregate, PR validation, both risk
   audits, and WASM parity.
-- `ci-qa-flags` requires the stable PR aggregate, matrix initialization, and
+- `ci-qa-flags` requires the stable PR aggregate, PR validation, and
   both risk audits.
 - `ci-qa-pr-docker-testing` permits direct maintainer iteration but requires
   signed commits and linear fast-forward history, and blocks force pushes and

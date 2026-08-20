@@ -1,0 +1,20 @@
+digraph namedcmm_lane {
+  graph [rankdir=LR, bgcolor="transparent", fontname="Helvetica"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fillcolor="#e8f1fb"];
+  edge [fontname="Helvetica"];
+  entry [label="argc / argv", fillcolor="#fff2cc"];
+  cfg [label="-cfg file\nexact argc", fillcolor="#d9ead3"];
+  direct [label="optional export / debug\nCIccCfgDataApply"];
+  profiles [label="CIccCfgProfileSequence\nfull remainder required"];
+  named [label="CreateNamed\ninput-profile decision"];
+  pcs [label="PCS remap:\nwide encodings disable clipping"];
+  apply [label="Named or numeric\nCMM apply"];
+  output [label="legacy, JSON,\nor IT8 output", fillcolor="#d9ead3"];
+  reject [label="reject", fillcolor="#f4cccc"];
+  entry -> cfg [label="-cfg"];
+  entry -> direct [label="direct"];
+  cfg -> named;
+  direct -> profiles -> named;
+  profiles -> reject [label="remainder"];
+  named -> pcs -> apply -> output;
+}

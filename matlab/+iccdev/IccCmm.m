@@ -123,4 +123,15 @@ classdef IccCmm < handle
       tf = obj.Handle ~= uint64(0);
     end
   end
+
+  methods (Static, Hidden)
+    function varargout = call_mex_for_test(varargin)
+      %CALL_MEX_FOR_TEST Allow tests to exercise private native lifecycle checks.
+      if nargout > 0
+        [varargout{1:nargout}] = icc_mex(varargin{:});
+      else
+        icc_mex(varargin{:});
+      end
+    end
+  end
 end

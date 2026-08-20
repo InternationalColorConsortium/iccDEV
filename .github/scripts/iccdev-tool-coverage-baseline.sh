@@ -886,7 +886,11 @@ echo ""
 echo "--- 8. iccApplyProfiles ---"
 APPLYPROF="$TOOLS/IccApplyProfiles/iccApplyProfiles"
 
-# dst_encoding: 0=same, 1=8bit, 2=16bit, 4=float
+# dst_encoding: 0=same, 1=8bit, 2=16bit, 3=float
+# (#1996: this line and apply-03 below said 4 for float, copied from the tool's own
+#  usage text, which was wrong from 1f0a9dd2 onwards.  4 fell into the parser's
+#  shared default label and produced an 8-bit file, so the "8bit->float" case was
+#  recorded as a PASS while measuring the 8-bit path a second time.)
 # dst_compress: 0=none, 1=LZW
 # dst_planar: 0=contig, 1=separate
 # dst_embed: 0=no, 1=embed
@@ -899,7 +903,7 @@ if [ -f "$TIFF_8BIT" ]; then
     "$APPLYPROF" "$TIFF_8BIT" "$OUTDIR/applied_16bit.tiff" 2 1 0 0 0 "$SRGB" 1
 
   run_test "apply-03" "TIFF 8bit->float sRGB perceptual" \
-    "$APPLYPROF" "$TIFF_8BIT" "$OUTDIR/applied_float.tiff" 4 0 0 0 0 "$SRGB" 0
+    "$APPLYPROF" "$TIFF_8BIT" "$OUTDIR/applied_float.tiff" 3 0 0 0 0 "$SRGB" 0
 
   run_test "apply-04" "TIFF 8bit with embedded ICC" \
     "$APPLYPROF" "$TIFF_8BIT" "$OUTDIR/applied_embed.tiff" 0 0 0 1 0 "$SRGB" 1
@@ -989,7 +993,7 @@ else
 fi
 
 if [ -f "$REPO_ROOT/.github/ci/test-data/spectral/spec_1" ]; then
-  run_expect_exit "tdump-06b" "Reject ICC export when TIFF has no profile" 255 \
+  run_expect_exit "tdump-06b" "Reject ICC export when TIFF has no profile" 1 \
     "$TIFFDUMP" "$REPO_ROOT/.github/ci/test-data/spectral/spec_1" "$OUTDIR/tiff_no_profile.icc"
 else
   skip_test "tdump-06b" "Reject ICC export when TIFF has no profile" "no-profile TIFF fixture unavailable"
@@ -1055,7 +1059,7 @@ newline.icc"
       "$tool" "$odd" "$dst" > "$log" 2>&1
       [ -s "$dst" ]
       grep -Fq "Filename:          $outdir/name_with_\\nnewline.tif" "$log"
-      grep -Fq "Profile extracted to: $outdir/export_with_\\nnewline.icc" "$log"
+      grep -Fq "Profile extracted byte-for-byte to: $outdir/export_with_\\nnewline.icc" "$log"
     ' _ "$ICCDEV_TESTING/hybrid/Data/TShirtDesignKW.tif" "$TIFFDUMP" "$OUTDIR"
 else
   skip_test "tdump-08" "Escape controlled ICC description text" "TShirtDesignKW TIFF fixture unavailable"

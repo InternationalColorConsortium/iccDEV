@@ -1275,7 +1275,18 @@ bool CIccTagXmlXYZ::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
 
   if (n) {
     icUInt32Number i;
-    SetSize(n);
+
+    // The sibling of the chromaticity fix below (#2094), but reachable from the
+    // document rather than only from an allocation failure: CIccTagXYZ::SetSize
+    // caps the array at 65536 entries, and over that cap it frees m_XYZ, sets it
+    // to NULL and returns false. Ignoring the result left the loop writing
+    // m_XYZ[0..n-1] through that null pointer, so a document carrying 65537
+    // <XYZNumber> elements -- about 2.8 MB of XML, nothing exotic -- was enough
+    // to take iccFromXml down. n is non-zero here by the enclosing test, so the
+    // icRealloc(p, 0) case that makes a false return legitimate elsewhere in
+    // this file cannot arise (#2106).
+    if (!SetSize(n))
+      return false;
 
     for (i=0; pNode; pNode=pNode->next) {
       if (pNode->type == XML_ELEMENT_NODE &&
@@ -1334,7 +1345,12 @@ bool CIccTagXmlChromaticity::ParseXml(xmlNode *pNode, std::string & /*parseStr*/
 
   if (n) {
     icUInt32Number i;
-    SetSize(n);
+
+    // SetSize() zeroes m_nChannels and returns false when it cannot allocate,
+    // so ignoring the result left the loop below writing m_xy[0..n-1] through
+    // a null pointer. It is the only sizing call on this path (#2094).
+    if (!SetSize(n))
+      return false;
 
     for (i=0; pNode; pNode=pNode->next) {
       if (pNode->type == XML_ELEMENT_NODE &&
@@ -2063,7 +2079,15 @@ bool CIccTagXmlFixedNum<T, Tsig>::ParseXml(xmlNode *pNode, std::string & /*parse
   icUInt32Number i, n = a.GetSize();
   icFloatNumber *buf = a.GetBuf();
 
-  this->SetSize(n);
+  // Same shape as the XYZ array above (#2106): the loop indexes m_Num[0..n-1]
+  // unconditionally, so a SetSize() that returned false -- which leaves m_Num
+  // NULL and m_nSize 0 -- would be written through. CIccTagFixedNum::SetSize
+  // carries no entry cap, so unlike the XYZ case this is reachable only on
+  // allocation failure; it is checked because the write below cannot tell the
+  // difference. The GetSize() test above guarantees n is non-zero, so the
+  // icRealloc(p, 0) path that makes a false return legitimate cannot arise.
+  if (!this->SetSize(n))
+    return false;
 
   for (i=0; i<n; i++) {
     if (Tsig==icSigS15Fixed16ArrayType) {
@@ -2165,7 +2189,10 @@ bool CIccTagXmlNum<T, A, Tsig>::ParseXml(xmlNode *pNode, std::string & /*parseSt
   icUInt32Number i, n = a.GetSize();
   T *buf = a.GetBuf();
 
-  this->SetSize(n);
+  // As in CIccTagXmlFixedNum::ParseXml above (#2106): unchecked sizing in front
+  // of an unconditional m_Num[0..n-1] write. n is non-zero by the GetSize() test.
+  if (!this->SetSize(n))
+    return false;
 
   for (i=0; i<n; i++) {
     this->m_Num[i] = buf[i];
@@ -2393,7 +2420,13 @@ bool CIccTagXmlFloatNum<T, A, Tsig>::ParseXml(xmlNode *pNode, std::string &parse
   icUInt32Number i, n = a.GetSize();
   T *buf = a.GetBuf();
 
-  this->SetSize(n);
+  // Third instance of the pattern in this file (#2106). Two paths reach here: the
+  // inline array branch, where n is non-zero by the GetSize() test in the else
+  // clause, and the Format="text" branch, which falls through after its own
+  // ParseTextArray/GetSize test. The remaining file-format branches size and read
+  // their own buffers and return directly without reaching this point.
+  if (!this->SetSize(n))
+    return false;
 
   for (i=0; i<n; i++) {
     this->m_Num[i] = buf[i];
@@ -2563,6 +2596,17 @@ bool CIccTagXmlTagData::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
     icUInt32Number nSize = icXmlGetHexDataSize((const char *)pNode->children->content);
     SetSize(nSize, false);
     if (nSize) {
+      // SetSize cannot be checked here the way the four array parsers above are:
+      // a fresh CIccTagData is constructed with m_nSize == 1, so SetSize(0) for an
+      // empty <Data/> reaches icRealloc(p, 0), which frees and returns NULL, and
+      // reports failure for an entirely legal document. The write still has to be
+      // guarded, because on a genuine allocation failure m_pData is left NULL and
+      // icXmlGetHexData dereferences it without checking. Guarding the pointer
+      // rather than the return covers both, and matches what
+      // CIccTagXmlColorantOrder below already does (#2106).
+      if (!m_pData)
+        return false;
+
       icXmlGetHexData(m_pData, (const char*)pNode->children->content, nSize);
     }
 
@@ -2680,11 +2724,18 @@ bool CIccTagXmlColorantTable::ParseXml(xmlNode *pNode, std::string & /*parseStr*
 
     if (n) {
       icUInt32Number i;
-      SetSize(n);
+
+      // Fourth instance of the pattern fixed above (#2106): m_pData[i].name is
+      // strncpy'd unconditionally, and CIccTagColorantTable::SetSize leaves
+      // m_pData NULL and m_nCount 0 when the reallocation fails. n is non-zero by
+      // the enclosing test, so the icRealloc(p, 0) case that makes a false return
+      // legitimate in CIccTagXmlTagData above cannot arise here.
+      if (!SetSize(n))
+        return false;
 
       for (i=0; pNode; pNode=pNode->next) {
         if (pNode->type == XML_ELEMENT_NODE &&
-          !icXmlStrCmp(pNode->name, "Colorant") && 
+          !icXmlStrCmp(pNode->name, "Colorant") &&
           i<n) {
             std::string str;
             const icChar *name = icXmlAttrValue(pNode, "Name");
@@ -3549,7 +3600,23 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
           }
 
           else {
-            SetSize(data.GetSize());
+            // CIccTagCurve::SetSize() answers a request above its 65536-entry cap
+            // by freeing the table, setting m_nSize to 0 and returning true, so
+            // the return value alone does not say whether the size was honoured.
+            // GetData(0) then hands back NULL and the loop below writes
+            // data.GetSize() floats through it.  The three inline-curve branches
+            // further down this same function already test m_nSize against the
+            // requested size for exactly this reason; these File=/Format="text"
+            // branches never did, and are still the 2015 import code.  Match them,
+            // and release the buffer and the file this branch owns and they do not.
+            if (!SetSize(data.GetSize()) || m_nSize != data.GetSize()) {
+              parseStr += "Curve in '";
+              parseStr += filename;
+              parseStr += "' has more entries than a curveType can hold.\n";
+              delete[] buf;
+              delete file;
+              return false;
+            }
             icUInt8Number *src = data.GetBuf();
             icFloatNumber *dst = GetData(0);
 
@@ -3587,7 +3654,16 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
           }
 
           else {
-            SetSize(data.GetSize());
+            // See the lut8 branch above: an over-cap SetSize() reports success
+            // with m_Curve NULL, and this is the loop that writes through it.
+            if (!SetSize(data.GetSize()) || m_nSize != data.GetSize()) {
+              parseStr += "Curve in '";
+              parseStr += filename;
+              parseStr += "' has more entries than a curveType can hold.\n";
+              delete[] buf;
+              delete file;
+              return false;
+            }
 
             icUInt16Number *src = data.GetBuf();
             icFloatNumber *dst = GetData(0);
@@ -3620,9 +3696,18 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
           }
 
           else {
-            SetSize(data.GetSize());
+            // See the lut8 branch above: an over-cap SetSize() reports success
+            // with m_Curve NULL, and this is the loop that writes through it.
+            if (!SetSize(data.GetSize()) || m_nSize != data.GetSize()) {
+              parseStr += "Curve in '";
+              parseStr += filename;
+              parseStr += "' has more entries than a curveType can hold.\n";
+              delete[] buf;
+              delete file;
+              return false;
+            }
             icFloatNumber *src = data.GetBuf();
-            icFloatNumber *dst = GetData(0);          
+            icFloatNumber *dst = GetData(0);
 
             icUInt32Number i;
             for (i=0; i<data.GetSize(); i++) {
@@ -3663,10 +3748,15 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
             return false;
           }
           icFloatNumber *dst =  GetData(0);
+          // The !SetSize(num) test above catches a genuine allocation failure, so
+          // the only way to reach here with a NULL table is the over-cap refusal,
+          // which returns true after emptying the curve.  The message used to say
+          // "Curve data allocation failed", which describes the one case this
+          // branch cannot see; nothing failed to allocate, the size was refused.
           if (num && !dst) {
-            parseStr += "Curve data allocation failed for '";
+            parseStr += "Curve in '";
             parseStr += filename;
-            parseStr += "'.\n";
+            parseStr += "' has more entries than a curveType can hold.\n";
             delete file;
             return false;
           }
@@ -3704,9 +3794,9 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
           }
           icFloatNumber *dst = GetData(0);
           if (num && !dst) {
-            parseStr += "Curve data allocation failed for '";
+            parseStr += "Curve in '";
             parseStr += filename;
-            parseStr += "'.\n";
+            parseStr += "' has more entries than a curveType can hold.\n";
             delete file;
             return false;
           }
@@ -3753,9 +3843,9 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
           }
           icFloatNumber *dst = GetData(0);
           if (num && !dst) {
-            parseStr += "Curve data allocation failed for '";
+            parseStr += "Curve in '";
             parseStr += filename;
-            parseStr += "'.\n";
+            parseStr += "' has more entries than a curveType can hold.\n";
             delete file;
             return false;
           }

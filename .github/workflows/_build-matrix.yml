@@ -1,0 +1,323 @@
+###############################################################
+#
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Callable CI build matrix with governed Unix and Windows gates.
+#
+###############################################################
+
+name: "CI Build Matrix (Callable)"
+
+permissions:
+  contents: read
+  packages: read
+  pull-requests: read
+
+on:
+  workflow_call:
+    inputs:
+      report-title:
+        description: "Title for the sanitized final summary"
+        required: false
+        type: string
+        default: "Build Matrix Results"
+      include-windows:
+        description: "Include the Windows reusable build and test gate"
+        required: false
+        type: boolean
+        default: true
+      ctest-mode:
+        description: "CTest mode: fast, full, or skip"
+        required: false
+        type: string
+        default: "fast"
+      ctest-recent-limit:
+        description: "Run only the last N selected CTests; 0 runs all"
+        required: false
+        type: string
+        default: "0"
+      tool-build-type:
+        description: "Build type for the reusable CTest tool suite"
+        required: false
+        type: string
+        default: "Debug"
+      run-hybrid-timing:
+        description: "Run the optional iccApplyProfiles hybrid timing matrix"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: "build-matrix-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  standard-builds:
+    name: "Standard ${{ matrix.os }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    uses: ./.github/workflows/_build-test-unix.yml
+    with:
+      os: ${{ matrix.os }}
+      python-version: "3.12"
+      run-full-tests: ${{ matrix.os == 'ubuntu-latest' }}
+
+  sanitizer-builds:
+    name: "Sanitizer ${{ matrix.name }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: asan
+            options: "-DENABLE_ASAN=ON"
+          - name: ubsan
+            options: "-DENABLE_UBSAN=ON"
+          - name: asan-ubsan
+            options: "-DENABLE_ASAN=ON -DENABLE_UBSAN=ON"
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    steps:
+      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
+          path: .trusted-workflow
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+      # preflight: allow-package-install reason=build-matrix-sanitizer-dependencies
+      - name: Build and test sanitizer configuration
+        env:
+          BASH_ENV: /dev/null
+          MATRIX_NAME: ${{ matrix.name }}
+          MATRIX_OPTIONS: ${{ matrix.options }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake clang libjpeg-dev libpng-dev libtiff-dev libxml2-dev nlohmann-json3-dev
+          read -r -a cmake_options <<< "$MATRIX_OPTIONS"
+          cmake -S Build/Cmake -B "out/${MATRIX_NAME}" \
+            -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_TESTS=ON "${cmake_options[@]}"
+          cmake --build "out/${MATRIX_NAME}" --parallel "$(nproc)"
+          cmake --build "out/${MATRIX_NAME}" --target build-test-binaries --parallel "$(nproc)"
+          ctest --test-dir "out/${MATRIX_NAME}" \
+            -R '^iccdev\.iccconnect-threaded-cmm$' --output-on-failure --no-tests=error
+
+  option-matrix:
+    name: "Option ${{ matrix.name }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: coverage
+            options: "-DENABLE_COVERAGE=ON"
+          - name: asserts
+            options: "-DICC_ENABLE_ASSERTS=ON"
+          - name: trace-nan
+            options: "-DICC_TRACE_NAN_ENABLED=ON"
+          - name: shared-only
+            options: "-DENABLE_SHARED_LIBS=ON -DENABLE_STATIC_LIBS=OFF"
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    steps:
+      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
+          path: .trusted-workflow
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+      # preflight: allow-package-install reason=build-matrix-option-dependencies
+      - name: Configure and build option
+        env:
+          BASH_ENV: /dev/null
+          MATRIX_OPTIONS: ${{ matrix.options }}
+          MATRIX_NAME: ${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake clang libjpeg-dev libpng-dev libtiff-dev libxml2-dev nlohmann-json3-dev
+          read -r -a cmake_options <<< "$MATRIX_OPTIONS"
+          cmake -S Build/Cmake -B "out/option-${MATRIX_NAME}" \
+            -DCMAKE_BUILD_TYPE=Release -DENABLE_TOOLS=ON "${cmake_options[@]}"
+          cmake --build "out/option-${MATRIX_NAME}" --parallel "$(nproc)"
+
+  windows-toolchains:
+    if: inputs['include-windows']
+    uses: ./.github/workflows/ci-pr-win.yml
+    with:
+      target_sha: ${{ github.sha }}
+
+  windows-full-ctest:
+    if: inputs['include-windows']
+    uses: ./.github/workflows/_build-test-windows.yml
+    with:
+      python-version: "3.12"
+      strict-warnings: true
+
+  ctest-tool-gate:
+    uses: ./.github/workflows/ci-iccdev-tool-tests.yml
+    with:
+      ctest_mode: ${{ inputs['ctest-mode'] }}
+      ctest_recent_limit: ${{ inputs['ctest-recent-limit'] }}
+      tool_build_type: ${{ inputs['tool-build-type'] }}
+      run_hybrid_timing: ${{ inputs['run-hybrid-timing'] }}
+
+  version-header-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    steps:
+      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
+          path: .trusted-workflow
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+      # preflight: allow-package-install reason=build-matrix-header-dependencies
+      - name: Generate version headers
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake clang libjpeg-dev libpng-dev libtiff-dev libxml2-dev nlohmann-json3-dev
+          cmake -S Build/Cmake -B out/version-headers -DCMAKE_BUILD_TYPE=Release -DENABLE_TOOLS=ON
+          cmake --build out/version-headers --parallel "$(nproc)"
+          test -f out/version-headers/IccProfLib/IccProfLibVer.h
+
+  clean-rebuild-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    steps:
+      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
+          path: .trusted-workflow
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+      # preflight: allow-package-install reason=build-matrix-clean-rebuild-dependencies
+      - name: Build, clean, and rebuild
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake clang libjpeg-dev libpng-dev libtiff-dev libxml2-dev nlohmann-json3-dev
+          cmake -S Build/Cmake -B out/clean-rebuild -DCMAKE_BUILD_TYPE=Release -DENABLE_TOOLS=ON
+          cmake --build out/clean-rebuild --parallel "$(nproc)"
+          cmake --build out/clean-rebuild --target clean
+          cmake --build out/clean-rebuild --parallel "$(nproc)"
+
+  final-summary:
+    if: always()
+    needs:
+      - standard-builds
+      - sanitizer-builds
+      - option-matrix
+      - windows-toolchains
+      - windows-full-ctest
+      - ctest-tool-gate
+      - version-header-test
+      - clean-rebuild-test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    steps:
+      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
+          path: .trusted-workflow
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Write sanitized result summary
+        env:
+          BASH_ENV: /dev/null
+          REPORT_TITLE: ${{ inputs['report-title'] }}
+          STANDARD_RESULT: ${{ needs.standard-builds.result }}
+          SANITIZER_RESULT: ${{ needs.sanitizer-builds.result }}
+          OPTION_RESULT: ${{ needs.option-matrix.result }}
+          WINDOWS_TOOLCHAINS_RESULT: ${{ needs.windows-toolchains.result }}
+          WINDOWS_CTEST_RESULT: ${{ needs.windows-full-ctest.result }}
+          CTEST_RESULT: ${{ needs.ctest-tool-gate.result }}
+          VERSION_RESULT: ${{ needs.version-header-test.result }}
+          CLEAN_RESULT: ${{ needs.clean-rebuild-test.result }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
+          write_summary_line() {
+            sanitize_print "$1" >> "$GITHUB_STEP_SUMMARY"
+          }
+          write_summary_line "# ${REPORT_TITLE}"
+          write_summary_line ""
+          write_summary_line "| Lane | Result |"
+          write_summary_line "|---|---|"
+          for result in \
+            "Standard builds:${STANDARD_RESULT}" \
+            "Sanitizer builds:${SANITIZER_RESULT}" \
+            "Option matrix:${OPTION_RESULT}" \
+            "Windows toolchains:${WINDOWS_TOOLCHAINS_RESULT}" \
+            "Windows full CTest:${WINDOWS_CTEST_RESULT}" \
+            "CTest tool gate:${CTEST_RESULT}" \
+            "Version headers:${VERSION_RESULT}" \
+            "Clean rebuild:${CLEAN_RESULT}"; do
+            lane="${result%%:*}"
+            status="${result#*:}"
+            write_summary_line "| ${lane} | ${status} |"
+          done

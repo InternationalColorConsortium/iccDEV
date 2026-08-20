@@ -2756,6 +2756,11 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
             /*Get the root element node */
             root_element = xmlDocGetRootElement(doc);
             if (strcmp((icChar*)root_element->name, "IccCalcImport")) {
+              /* #1999: the import loop owns doc from the read above until the
+               * xmlFreeDoc below, so rejecting the file here has to release
+               * it first - this return used to drop the document, leaking a
+               * whole parsed DOM per malformed import. */
+              xmlFreeDoc(doc);
               parseStr += "Invalid calc element import file '" + file + "'\n";
               return false;
             }

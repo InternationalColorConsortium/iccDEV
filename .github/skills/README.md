@@ -13,6 +13,7 @@ long command references.
 | `json-config-regression` | Editing JSON/profile config parsing or tests. |
 | `maintainer-ci-ctest` | Updating maintainer-owned CI, CTest, CPack, sanitizer, workflow, or release gates. |
 | `maintainer-label-system` | Maintaining label taxonomy, path labeler rules, issue triage, PR status labels, and CodeQL label routing. |
+| `matlab-bindings-test` | Building and validating the MATLAB MEX gateway, profiles, examples, dependencies, and lifecycle tests. |
 | `regression-container-maintainer` | Using the published maintainer container for smoke tests, PR validation, issue reproduction, sanitizer review, and CI handoff. |
 | `regression-workflow-governance` | Adding regression gates or updating tool-test workflows. |
 | `vcpkg-export-consumer-debug` | Fixing vcpkg, install/export, uninstall, or packaged consumer CI failures. |

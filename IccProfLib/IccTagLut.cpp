@@ -275,6 +275,16 @@ bool CIccTagCurve::Read(icUInt32Number size, CIccIO *pIO)
   if (headerSize + (icUInt64Number)nSize * sizeof(icUInt16Number) > size)
     return false;
 
+  // #2006: this is the sole file-driven path that can hand SetSize() a count
+  // above MAX_CURVE_ENTRIES -- lut8Type's tables are fixed at 256 entries, and
+  // lut16Type's counts are uInt16 and already rejected above 4096 by
+  // CIccTagLut16::Read, so only curveType's uInt32 count reaches the cap.  Now
+  // that SetSize() reports a refusal as false, this pre-existing check is what
+  // rejects such a tag.  It previously returned true with the table freed, and
+  // the `if (m_nSize)` below then skipped the sample read, so an over-cap
+  // curveType loaded as a silent identity curve and its samples were dropped
+  // with no error anywhere.  A declared count of 0 still succeeds: that is
+  // ICC.1 10.6's identity encoding, not a malformed tag.
   if (!SetSize(nSize, icInitNone))
     return false;
 
@@ -360,11 +370,10 @@ void CIccTagCurve::Describe(std::string &sDescription, int nVerboseness)
     if (nVerboseness > 75) {
       sDescription += "IN OUT\n";
 
-      // CWE-400/834: SetSize() caps m_nSize at nMaxCurveEntries and allocates
-      // m_Curve to match; assert that bound locally so the table walk has an
-      // explicit limit.
-      const icUInt32Number nMaxCurveEntries = 65536;
-      if (m_nSize > nMaxCurveEntries)
+      // CWE-400/834: SetSize() refuses a request above MAX_CURVE_ENTRIES and
+      // allocates m_Curve to match whatever it did accept; assert that bound
+      // locally so the table walk has an explicit limit.
+      if (m_nSize > MAX_CURVE_ENTRIES)
         return;
 
       for (icUInt32Number i=0; i<m_nSize; i++) {
@@ -432,11 +441,10 @@ void CIccTagCurve::DumpLut(std::string &sDescription, const icChar *szName,
 
       sDescription.reserve(sDescription.size() + m_nSize * 20);
 
-      // CWE-400/834: SetSize() caps m_nSize at nMaxCurveEntries and allocates
-      // m_Curve to match; assert that bound locally so the table walk has an
-      // explicit limit.
-      const icUInt32Number nMaxCurveEntries = 65536;
-      if (m_nSize > nMaxCurveEntries)
+      // CWE-400/834: SetSize() refuses a request above MAX_CURVE_ENTRIES and
+      // allocates m_Curve to match whatever it did accept; assert that bound
+      // locally so the table walk has an explicit limit.
+      if (m_nSize > MAX_CURVE_ENTRIES)
         return;
 
       for (i=0; i<(int)m_nSize; i++) {
@@ -480,12 +488,35 @@ bool CIccTagCurve::SetSize(icUInt32Number nSize, icTagCurveSizeInit nSizeOpt/*=i
   if (nSize==m_nSize)
     return true;
 
-  // set upper limit of 65536 table entries, to help catch errors
-  if (!nSize || nSize > 65536) {
+  // Emptying the curve is a success, not a refusal: a zero-entry curveType is
+  // ICC.1 10.6's own encoding of the identity, and nine call sites use SetSize(0)
+  // to mean "discard this table".  m_nMaxIndex is cleared with it -- Begin()
+  // recomputes it, but Apply() and Find() read it directly, so leaving the
+  // previous table's maximum index behind alongside a NULL m_Curve is a
+  // combination no caller should be able to observe.
+  if (!nSize) {
     free(m_Curve);
     m_Curve = NULL;
     m_nSize = 0;
+    m_nMaxIndex = 0;
     return true;
+  }
+  // #2006: a request above the cap is a refusal, and is now reported as one.
+  // It previously shared the branch above and inherited the `return true` that
+  // branch had earned for emptying the curve, so the return value could not
+  // distinguish "emptied" from "refused".  Eleven places in IccXML and IccJSON
+  // ended up defending against that on their own -- eight compare m_nSize with
+  // the size they asked for, three null-check the data pointer instead -- and
+  // three of those eight only gained the guard in #2008, having written the
+  // parsed samples through the NULL m_Curve this branch left behind.
+  //
+  // The existing table is deliberately left intact: a refused resize is a no-op
+  // rather than destructive, so SetSize(1024) followed by a refused
+  // SetSize(70000) no longer silently discards the 1024 entries.  Every caller
+  // that passes a non-literal size checks the return value (audited for #2006),
+  // so no caller is left writing into a table shorter than it expects.
+  else if (nSize > MAX_CURVE_ENTRIES) {
+    return false;
   }
   else {
     if (!m_Curve)
@@ -585,11 +616,10 @@ bool CIccTagCurve::IsIdentity()
     return  IsUnity(icFloatNumber(m_Curve[0]*65535.0/256.0));
   }
 
-  // CWE-400/834: SetSize() caps m_nSize at nMaxCurveEntries and allocates m_Curve
-  // to match; assert that bound locally so the table walk has an explicit upper
-  // limit.
-  const icUInt32Number nMaxCurveEntries = 65536;
-  if (m_nSize > nMaxCurveEntries)
+  // CWE-400/834: SetSize() refuses a request above MAX_CURVE_ENTRIES and allocates
+  // m_Curve to match whatever it did accept; assert that bound locally so the
+  // table walk has an explicit upper limit.
+  if (m_nSize > MAX_CURVE_ENTRIES)
     return false;
 
   icUInt32Number i;

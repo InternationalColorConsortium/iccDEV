@@ -270,14 +270,21 @@ The matching CFL smoke entry point is `cfl/build.sh` and the manual
 cfl/build.sh --seconds 30
 
 gh workflow run ci-cfl-smoke.yml \
-  -f cfl_targets=dump,toxml,fromxml,tojson,fromjson,roundtrip \
+  -f cfl_targets=dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize \
   -f duration_seconds=30
 ```
 
-The current CFL harnesses are conservative CLI-fidelity wrappers: libFuzzer
-writes each input to a temporary file and replays the matching sanitized iccDEV
-tool. This keeps the branch stable while deeper in-process harnesses are
-reviewed separately.
+The six command-line CFL harnesses are conservative CLI-fidelity wrappers:
+libFuzzer writes each input to a temporary file and replays the matching
+sanitized iccDEV tool. `profilevisualize` and `writerserialize` are in-process
+harnesses. Both parse the input from memory and consume only public headers,
+with the engine sources compiled as separate translation units:
+`profilevisualize` stops at the `IccVizModel.hpp` data API, and
+`writerserialize` carries the rendered result on into `Mini{PDF,SVG,TIFF}`,
+which is where the byte-level layout and offset arithmetic live (#2116).
+
+Both need a CLUT-bearing seed to reach the raster path at all, and the seed
+caps remove the only one at their defaults — see #2120.
 
 CFL smoke duration is wall-clock seconds per selected target, implemented with
 LibFuzzer `-max_total_time`. It is not an iteration or execution count.

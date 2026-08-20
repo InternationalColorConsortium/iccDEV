@@ -1116,15 +1116,21 @@ const icChar *icGetSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, bool b
 
 const icChar *icGetSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig)
 {
-  int i, j=-1;
+  int i;
   icUInt32Number sig=nSig;
   bool bGetHexVal = false;
 
+  // A signature that is entirely zero keeps the "NULL" display convention.  It is
+  // not round-trip safe either -- icGetSigVal("NULL") packs the ASCII bytes into
+  // 0x4E554C4C -- but that case is handled at the call sites, which write an empty
+  // value for zero and rely on the readers mapping empty text back to zero
+  // (#1356, #1361, #1843).  Only the partially-zero signatures below are the
+  // formatter's own problem.
   if (!nSig) {
     strcpy(pBuf, "NULL");
     return pBuf;
   }
-  
+
   if (bufSize < 5 || bufSize > 65535) {
     // this is caused by bad parameters, usually with bufSize replaced by the sig
     strcpy(pBuf, "BADP");
@@ -1133,10 +1139,17 @@ const icChar *icGetSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig)
 
   for (i=0; i<4; i++) {
     icUInt8Number c = (icUInt8Number)(sig >> (24-(i*8)));
+    // A zero byte has no four-character text form: it terminates the C string this
+    // loop is filling.  The previous condition only demanded the "%08Xh" escape for
+    // a zero *followed* by a non-zero byte, so a signature whose zeros were all
+    // trailing was truncated instead -- 'DUP\0' (0x44555000) was written as "DUP",
+    // and icGetSigVal() right-pads a three-character signature with a space, giving
+    // back 'DUP ' (0x44555020).  Since IccProfileXml.cpp and IccProfileJson.cpp
+    // serialize tag-table identifiers through this helper, that silently rewrote
+    // six of the registered tag signatures on every XML or JSON round trip.  Any
+    // zero byte now takes the hex form, which icGetSigVal() parses back exactly
+    // (issue #2097).
     if (!c) {
-      j=i;
-    }
-    else if (j!=-1) {
       bGetHexVal = true;
     }
     else if (!isprint(c) || c==':' || c > 126) {
@@ -1177,6 +1190,12 @@ const icChar *icGetColorSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, b
     case icSigRadiantSpectralData:
     case icSigBiSpectralReflectanceData:
     case icSigSparseMatrixReflectanceData:
+    // The material connection space encodes its channel count in the low half of
+    // the signature exactly as the families above do ("mc" + count), and
+    // icNumColorSpaceChannels() already decodes it. Omitting it here sent every MCS
+    // signature to the default branch below, which cannot render the count bytes as
+    // text -- 0x6D630004 printed as 'mc??' = 6D630004 rather than "mc0004".
+    case icSigSrcMCSChannelData:
 
       pBuf[0]='\"';
       pBuf[1] = (icUInt8Number)(sig>>24);
@@ -1237,6 +1256,13 @@ const icChar *icGetColorSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig
     case icSigRadiantSpectralData:
     case icSigBiSpectralReflectanceData:
     case icSigSparseMatrixReflectanceData:
+    // Same omission as icGetColorSig() above, but this function is also the XML and
+    // JSON header writer for <MCS> (IccProfileXml.cpp, IccProfileJson.cpp), so the
+    // fallback leaked into serialized profiles as "6D630004h" where every sibling
+    // space writes its readable "mc0004" form. The value survived either way --
+    // icGetSigVal() parses the 9-character hex escape back to the same signature --
+    // so this is a legibility fix, not a round-trip repair.
+    case icSigSrcMCSChannelData:
 
       pBuf[0] = (icUInt8Number)(sig>>24);
       pBuf[1] = (icUInt8Number)(sig>>16);
@@ -1246,16 +1272,17 @@ const icChar *icGetColorSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig
     default:
       {
 
-        int i, j=-1;
+        int i;
         icUInt8Number c;
         bool bGetHexVal = false;
 
         for (i=0; i<4; i++) {
           c=(icUInt8Number)(sig>>(24-i*8));
+          // Same trailing-zero truncation icGetSigStr() carried, and this function is
+          // likewise a serialization writer -- it renders <DataColourSpace>, <PCS> and
+          // <MCS> for both text formats -- so a colour space whose low bytes are zero
+          // has to reach the reversible hex form here too (issue #2097).
           if (!c) {
-            j=i;
-          }
-          else if (j!=-1) {
             bGetHexVal = true;
           }
           else if (!isprint(c) || c==':' || c > 126) {
@@ -1863,6 +1890,16 @@ const icChar *CIccInfo::GetColorSpaceSigName(icColorSpaceSignature sig)
 
     case icSigSparseMatrixReflectanceData:
       snprintf(m_szStr, m_bufSize, "0x%04XChannelSparseMatrixReflectanceData", (unsigned int) icNumColorSpaceChannels(sig));
+      return m_szStr;
+
+    // Without this case an MCS signature reached the default below, which reports
+    // icGetSpaceSamples() through a "0x%X" conversion -- so a 4-channel MCS space
+    // printed as "0x4ColorData", both naming it as though it were a plain colour
+    // space and dropping the zero padding every case above emits. Named here in the
+    // sibling form so iccDumpProfile's "MCS Color Space:" line identifies the space
+    // it is labelling.
+    case icSigSrcMCSChannelData:
+      snprintf(m_szStr, m_bufSize, "0x%04XChannelMCSData", (unsigned int) icNumColorSpaceChannels(sig));
       return m_szStr;
 
     default:
@@ -2733,14 +2770,40 @@ icValidateStatus CIccInfo::CheckData(std::string &sReport, const icDateTimeNumbe
   return rv;
 }
 
+// The only caller is CIccTagSpectralViewingConditions::Validate, which applies this
+// to illuminantXYZ and to surroundXYZ.  Both fields carry absolute luminance in
+// cd/m^2, so a Y of 1 is the signature of a producer that wrote chromaticity-
+// normalized values instead -- normalizing divides every component by Y, which is
+// what leaves Y at exactly 1.
+//
+// The test cannot be made exact, and that is a property of the data rather than of
+// this implementation: a normalized XYZ and a genuine 1 cd/m^2 XYZ are the same
+// three numbers.  Testing/Display carries the proof as a fixture pair --
+// sRGB_D65_MAT-300lx.xml is 300 x (0.9504, 1.0, 1.0889) and sRGB_D65_MAT.xml is that
+// same triple at Y = 1, which is simultaneously the normalized form and a legal
+// 1 cd/m^2 dark surround.  Surrounds do live down there; the BT.2100 fixtures in
+// this corpus use 5 cd/m^2.  So the finding is reported as a possibility rather
+// than an assertion, and stays at Warning: no value of Y on its own proves the tag
+// wrong.  Proving it wrong needs context this function is not given -- see #1811 for
+// the corpus population where illuminantXYZ and surroundXYZ disagree on units.
 icValidateStatus CIccInfo::CheckLuminance(std::string &sReport, const icFloatXYZNumber &XYZ, std::string sDesc/*=""*/)
 {
   icValidateStatus rv = icValidateOK;
 
+  // An absolute +/-0.01 window, not a relative one.  The comment added here with the
+  // diagnostic said it "brackets exactly [0.99, 1.01]"; #2043 showed that to be wrong
+  // in both directions, so it is restated rather than repeated.  The comparison is
+  // strict, so in exact arithmetic the window is the OPEN interval (0.99, 1.01) and a
+  // Y of exactly 0.99 falls outside it.  XYZ.Y is an icFloatNumber, though, and the
+  // comparison promotes it to double: float(0.99) is 0.99000000953674316, which is
+  // greater than 0.99 and therefore lands inside.  The effective edge is up to one
+  // float ULP beyond the nominal one on each side; the CTest pins that directly.
+  // Kept as it was -- widening it would start reaching into the physical range, where
+  // the 5 cd/m^2 surrounds this corpus already uses would begin to trip it.
   if (fabs(XYZ.Y - 1.0) < 0.01) {
     sReport += icMsgValidateWarning;
     sReport += sDesc;
-    sReport += " - XYZNumber appears to be normalized! Y value should reflect absolute luminance.\n";
+    sReport += " - XYZNumber Y is possibly normalized; Y should carry absolute luminance in cd/m^2.\n";
     rv = icValidateWarning;
   }
 

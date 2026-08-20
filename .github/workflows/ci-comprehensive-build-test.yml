@@ -1,0 +1,54 @@
+###############################################################
+#
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Manual caller for the governed comprehensive build matrix.
+#
+###############################################################
+
+name: "CI Comprehensive Build and Test"
+
+permissions:
+  contents: read
+  pull-requests: read
+  packages: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      ctest-mode:
+        description: "CTest mode: fast, full, or skip"
+        required: false
+        default: "full"
+        type: choice
+        options: [fast, full, skip]
+      ctest-recent-limit:
+        description: "Run only the last N selected CTests; 0 runs all"
+        required: false
+        default: "0"
+        type: choice
+        options: ["0", "1", "2", "3", "4", "5", "10"]
+      tool-build-type:
+        description: "Build type for the reusable CTest tool suite"
+        required: false
+        default: "Debug"
+        type: choice
+        options: [Debug, Release]
+      run-hybrid-timing:
+        description: "Run optional iccApplyProfiles hybrid timing"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build-matrix:
+    uses: ./.github/workflows/_build-matrix.yml
+    with:
+      report-title: "Comprehensive Build and Test Results"
+      include-windows: true
+      ctest-mode: ${{ inputs['ctest-mode'] }}
+      ctest-recent-limit: ${{ inputs['ctest-recent-limit'] }}
+      tool-build-type: ${{ inputs['tool-build-type'] }}
+      run-hybrid-timing: ${{ inputs['run-hybrid-timing'] }}

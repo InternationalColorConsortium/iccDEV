@@ -68,7 +68,7 @@
 #include <vector>
 #include <cmath>
 #include "MiniSVG.hpp"
-#include "../IccCmdLineUtil.h"
+#include "IccCmdLineUtil.h"
 #include "errorLog.hpp"
 
 /******************************************************************************/

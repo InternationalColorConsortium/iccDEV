@@ -38,9 +38,20 @@ version. For Clang/LLVM 22, build AFL++ `dev` with `CC=clang-22`,
 `afl-showmap`, `afl-cc`, `afl-compiler-rt.o`,
 `SanitizerCoveragePCGUARD.so`, and `cmplog-routines-pass.so`.
 
-The current core onboarding target set is
-`dump,toxml,fromxml,tojson,fromjson,roundtrip`. Stabilize those targets before
-adding more command-line tools.
+The target sets differ per lane, and are not interchangeable.
+
+- **AFL** accepts `dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube` — see
+  the allow-list in `.github/scripts/iccdev-afl-smoke.sh`.
+- **CFL** accepts
+  `dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize`.
+
+The two in-process targets are CFL-only; passing them to the AFL lane is an
+error. The first six CFL
+targets are command-line wrappers. `profilevisualize` and `writerserialize` are
+in-process public-API harnesses: compile the engine sources separately, include
+only public headers, and do not include a CLI implementation or call
+`processLuts()`. `writerserialize` additionally links `Mini{PDF,SVG,TIFF}.cpp`,
+whose serialization entries are not reachable through `IccVizModel` alone.
 
 Manual dispatches should expose the same operator controls on AFL and CFL:
 `target_ref` for a branch, tag, or ref, optional `target_sha` for a full
@@ -78,7 +89,7 @@ shellcheck .github/scripts/iccdev-afl-smoke.sh
 actionlint .github/workflows/ci-afl-smoke.yml
 yamllint -d '{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable}}' .github/workflows/ci-afl-smoke.yml
 .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 30000
-cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip --seconds 30
+cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize --seconds 30
 ```
 
 Run `.github/scripts/preflight-safety-checks.sh --require-tools` before pushing

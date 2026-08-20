@@ -90,7 +90,7 @@
 #include "IccUtil.h"
 #include "IccDefs.h"
 #include "IccProfLibVer.h"
-#include "../IccCmdLineUtil.h"
+#include "IccCmdLineUtil.h"
 #include <zlib.h>
 #if !defined(_WIN32)
 #include <fcntl.h>

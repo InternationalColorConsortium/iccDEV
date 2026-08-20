@@ -5,7 +5,7 @@
 #                 All rights reserved.
 #                 https://color.org
 #
-# Intent: ci-docker (unified Ubuntu, NixOS, and regression images)
+# Intent: ci-docker (Ubuntu and regression images)
 #
 #
 ###############################################################
@@ -21,15 +21,18 @@ name: ci-docker
 permissions:
   contents: read
 
+env:
+  PUBLISH_IMAGE: >-
+    ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' ||
+    (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/ci-qa-pr-docker-testing') }}
+
 'on':
   push:
     branches:
       - master
       - ci-qa-flags
-      - ci-qa-pr-docker-testing
     paths:
       - "Dockerfile"
-      - "Dockerfile.nixos"
       - "Dockerfile.ci-regression"
       - "Dockerfile.mcp"
       - ".dockerignore"
@@ -107,14 +110,6 @@ jobs:
             workdir: /opt/iccdev
             tools_dir: /opt/iccdev/Build/Tools
             run_shell: bash
-          - variant: nixos
-            runner: ubuntu-latest
-            image: iccdev-nixos
-            dockerfile: Dockerfile.nixos
-            suffix: "-nixos"
-            workdir: /workspace/iccDEV
-            tools_dir: /workspace/iccDEV/Build/Tools
-            run_shell: sh
           - variant: regression
             runner: ubuntu-24.04
             image: iccdev-ci-regression
@@ -170,7 +165,7 @@ jobs:
             echo "Invalid repository owner for image name" >&2
             exit 1
           fi
-          if [[ ! "$MATRIX_IMAGE" =~ ^iccdev(-nixos|-ci-regression|-mcp)?$ ]]; then
+          if [[ ! "$MATRIX_IMAGE" =~ ^iccdev(-ci-regression|-mcp)?$ ]]; then
             echo "Invalid Docker image name" >&2
             exit 1
           fi
@@ -194,11 +189,11 @@ jobs:
             type=raw,value=latest,enable=${{ matrix.variant != 'regression' && github.ref == 'refs/heads/master' }}
             type=sha,format=long,enable=${{ matrix.variant == 'regression' }}
             type=ref,event=branch,enable=${{ matrix.variant == 'regression' }}
-            type=raw,value=run-${{ github.run_id }}-${{ github.run_attempt }},enable=${{ matrix.variant == 'regression' }}
+            type=raw,value=run-${{ github.run_id }},enable=${{ matrix.variant == 'regression' }}
 
       - name: Log in to GHCR
-        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
-        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c  # v4.5.2
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -215,17 +210,17 @@ jobs:
           pull: true
           build-args: |
             GIT_COMMIT=${{ github.sha }}
-          load: ${{ !(github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing') }}
-          push: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
-          provenance: ${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing') && 'mode=max' || 'false' }}
-          sbom: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+          load: ${{ env.PUBLISH_IMAGE != 'true' }}
+          push: ${{ env.PUBLISH_IMAGE == 'true' }}
+          provenance: ${{ env.PUBLISH_IMAGE == 'true' && 'mode=max' || 'false' }}
+          sbom: ${{ env.PUBLISH_IMAGE == 'true' }}
           labels: |
             ${{ steps.meta.outputs.labels }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.ref.name=${{ github.ref_name }}
 
       - name: Generate SBOM
-        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0
         with:
           image: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
@@ -233,7 +228,7 @@ jobs:
           output-file: sbom.spdx.json
 
       - name: Measure SBOM attestation size
-        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
         id: sbom-size
         env:
           BASH_ENV: /dev/null
@@ -275,24 +270,54 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: Attest build provenance
-        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373  # v4.1.1
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.build-push.outputs.digest }}
           push-to-registry: true
 
       - name: Attest SBOM
-        if: ${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing') && steps.sbom-size.outputs.attestable == 'true' }}
-        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6  # v4.2.0
+        if: ${{ env.PUBLISH_IMAGE == 'true' && steps.sbom-size.outputs.attestable == 'true' }}
+        id: attest-sbom
+        # Rekor's transparency-log endpoint can time out after the image is published.
+        # A retry below preserves a hard failure if the service remains unavailable.
+        continue-on-error: true
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.build-push.outputs.digest }}
           sbom-path: sbom.spdx.json
           push-to-registry: true
 
+      - name: Retry SBOM attestation
+        if: ${{ steps.attest-sbom.outcome == 'failure' }}
+        id: retry-attest-sbom
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.build-push.outputs.digest }}
+          sbom-path: sbom.spdx.json
+          push-to-registry: true
+
+      - name: Require SBOM attestation
+        if: ${{ always() && steps.attest-sbom.outcome == 'failure' }}
+        env:
+          BASH_ENV: /dev/null
+          RETRY_OUTCOME: ${{ steps.retry-attest-sbom.outcome }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          if [ "$RETRY_OUTCOME" != "success" ]; then
+            echo "::error::SBOM attestation failed after retry"
+            exit 1
+          fi
+
       - name: Upload SBOM
-        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: iccdev${{ matrix.suffix }}-sbom
@@ -305,7 +330,7 @@ jobs:
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
           MATRIX_VARIANT: ${{ matrix.variant }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -325,12 +350,13 @@ jobs:
           EXPECTED_SHA: ${{ github.sha }}
           EXPECTED_REF_NAME: ${{ github.ref_name }}
           MATRIX_VARIANT: ${{ matrix.variant }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
           if [ "$PUBLISH_IMAGE" = "true" ]; then
             TEST_IMAGE="${IMAGE_REF}"
             docker pull "${IMAGE_REF}"
@@ -351,87 +377,6 @@ jobs:
             exit 1
           fi
 
-      - name: Reclaim workspace before image scan
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-
-          docker buildx prune --all --force
-          docker image prune --force
-          docker system df
-          df -h "${RUNNER_TEMP:-/tmp}"
-
-      - name: Scan test image
-        env:
-          BASH_ENV: /dev/null
-          MATRIX_VARIANT: ${{ matrix.variant }}
-          TRIVY_IMAGE: aquasec/trivy@sha256:5c59e08f980b5d4d503329773480fcea2c9bdad7e381d846fbf9f2ecb8050f6b
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
-          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          if [ "$PUBLISH_IMAGE" = "true" ]; then
-            TEST_IMAGE="${IMAGE_REF}"
-            docker pull "${IMAGE_REF}"
-          else
-            TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
-          fi
-          TRIVY_CACHE="${RUNNER_TEMP:-/tmp}/trivy-image-cache-${MATRIX_VARIANT}"
-          rm -rf "$TRIVY_CACHE"
-          mkdir -p "$TRIVY_CACHE"
-          trivy_args=(image --scanners 'vuln,secret' --severity 'HIGH,CRITICAL' --exit-code 1)
-          if [ "$MATRIX_VARIANT" = "regression" ]; then
-            trivy_args+=(--ignore-unfixed)
-          fi
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$TRIVY_CACHE":/root/.cache/ \
-            "$TRIVY_IMAGE" \
-            "${trivy_args[@]}" "$TEST_IMAGE"
-
-      - name: Verify NixOS image hygiene
-        if: matrix.variant == 'nixos'
-        env:
-          BASH_ENV: /dev/null
-          MATRIX_VARIANT: ${{ matrix.variant }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
-
-          SOURCE_HITS=$(docker run --rm "$TEST_IMAGE" sh -c \
-            "find /nix/store -maxdepth 1 -name '*-source' -type d | wc -l")
-          if [ "$SOURCE_HITS" -ne 0 ]; then
-            echo "::error::NixOS image contains /nix/store/*-source paths"
-            exit 1
-          fi
-
-          KEY_HITS=$(docker run --rm "$TEST_IMAGE" sh -c "
-            grep -RIlE 'BEGIN .*PRIVATE KEY|BEGIN OPENSSH PRIVATE KEY' \
-              /nix/store /workspace/iccDEV 2>/dev/null | wc -l
-          ")
-          if [ "$KEY_HITS" -ne 0 ]; then
-            echo "::error::NixOS image contains private-key material"
-            exit 1
-          fi
-
-          CHANNEL_HITS=$(docker run --rm "$TEST_IMAGE" sh -c "
-            find /nix/store -maxdepth 1 \
-              \( -name '*-channel-*' -o -name '*manifest.nix' \) \
-              -print 2>/dev/null | wc -l
-          ")
-          if [ "$CHANNEL_HITS" -ne 0 ]; then
-            echo "::error::NixOS image contains channel/profile source artifacts"
-            exit 1
-          fi
-
       - name: Verify tools
         env:
           BASH_ENV: /dev/null
@@ -439,7 +384,7 @@ jobs:
           MATRIX_WORKDIR: ${{ matrix.workdir }}
           MATRIX_TOOLS_DIR: ${{ matrix.tools_dir }}
           MATRIX_SHELL: ${{ matrix.run_shell }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
@@ -484,7 +429,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           MATRIX_VARIANT: ${{ matrix.variant }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
@@ -537,7 +482,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           MATRIX_VARIANT: ${{ matrix.variant }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
@@ -575,7 +520,7 @@ jobs:
           MATRIX_VARIANT: ${{ matrix.variant }}
           MATRIX_WORKDIR: ${{ matrix.workdir }}
           MATRIX_SHELL: ${{ matrix.run_shell }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
@@ -613,7 +558,7 @@ jobs:
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
           EXPECTED_REF_NAME: ${{ github.ref_name }}
           EXPECTED_SHA: ${{ github.sha }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -645,9 +590,6 @@ jobs:
             command -v clang-tidy cppcheck scan-build valgrind gdb gdbserver lldb lld ld.lld lcov gcovr jq curl shellcheck
             command -v llvm-cov llvm-profdata file strace
             command -v iccdev-fuzz-env
-            test -x .github/scripts/check-fuzz-patches.sh
-            test -x .github/scripts/iccdev-apply-fuzz-patches.sh
-            test -x .github/scripts/iccdev-fuzz-patch-check-tests.sh
             test -x .github/scripts/iccdev-afl-smoke.sh
             git --version | sed -n "1p"
             gh --version | sed -n "1p"
@@ -667,14 +609,10 @@ jobs:
             afl-fuzz -V 1 2>&1 | sed -n "1p" || true
             fuzz_env_output="$(iccdev-fuzz-env)"
             sed -n "1,40p" <<< "$fuzz_env_output"
-            if ! grep -q "^Patch checker: " <<< "$fuzz_env_output" || grep -q "missing or not executable" <<< "$fuzz_env_output"; then
-              echo "ERROR: iccdev-fuzz-env did not report an executable patch checker" >&2
+            if ! grep -q "^Source mode: upstream checkout without local patches$" <<< "$fuzz_env_output"; then
+              echo "ERROR: iccdev-fuzz-env did not report the unpatched source mode" >&2
               exit 1
             fi
-            .github/scripts/iccdev-fuzz-patch-check-tests.sh
-            .github/scripts/check-fuzz-patches.sh
-            .github/scripts/iccdev-apply-fuzz-patches.sh --mode afl --dry-run --strict
-            .github/scripts/iccdev-apply-fuzz-patches.sh --mode cfl --dry-run --strict
             /usr/bin/time --version | sed -n "1p"
             clang --version | grep -q "clang version 22\\."
             clang++ --version | grep -q "clang version 22\\."
@@ -747,18 +685,12 @@ jobs:
             for d in "$ICCDEV_BUILD_DIR"/Tools/*; do
               [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
             done
-            printf "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n" \
-              "unsigned-integer-overflow:*/IccMD5.cpp" \
-              "shift-base:*/IccMD5.cpp" \
-              "shift-exponent:*/IccMD5.cpp" \
-              "# Recoverable runtime UBSAN noise from libstdc++ implementation internals." \
-              "# Fatal IntegerSanitizer builds require the compile-time ignorelist instead." \
-              "unsigned-integer-overflow:*/include/c++/*/bits/basic_string.h" \
-              "unsigned-integer-overflow:*/include/c++/*/bits/basic_string.tcc" \
-              "unsigned-integer-overflow:*/include/c++/*/bits/stl_bvector.h" \
-              "unsigned-integer-overflow:*/include/c++/*/bits/stl_uninitialized.h" \
-              "unsigned-integer-overflow:*/include/c++/*/bits/vector.tcc" \
-              "unsigned-integer-overflow:*/include/c++/*/ext/string_conversions.h" > silence.txt
+            # Testing/silence.txt is tracked and already holds this exact list,
+            # so assert it is present rather than rewriting it. The same list
+            # used to be maintained by hand in three places and the copy in
+            # docker/iccdev-generate-profiles.sh had already drifted two entries
+            # short of the tracked one.
+            test -r ./silence.txt
             test -x ./CreateAllProfiles.sh
             test -x ./RunTests.sh
             test -x ./HDR/mkprofiles.sh
@@ -771,6 +703,51 @@ jobs:
             ctest --test-dir "$ICCDEV_BUILD_DIR" -N --no-tests=error
             ctest --test-dir "$ICCDEV_BUILD_DIR" --output-on-failure --label-exclude slow --no-tests=error
           '
+
+      - name: Reclaim workspace before image scan
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          docker buildx prune --all --force
+          docker image prune --force
+          docker system df
+          df -h "${RUNNER_TEMP:-/tmp}"
+
+      - name: Scan test image
+        env:
+          BASH_ENV: /dev/null
+          MATRIX_VARIANT: ${{ matrix.variant }}
+          TRIVY_IMAGE: aquasec/trivy@sha256:5c59e08f980b5d4d503329773480fcea2c9bdad7e381d846fbf9f2ecb8050f6b
+          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
+          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          if [ "$PUBLISH_IMAGE" = "true" ]; then
+            TEST_IMAGE="${IMAGE_REF}"
+            docker pull "${IMAGE_REF}"
+          else
+            TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
+          fi
+          TRIVY_CACHE="${RUNNER_TEMP:-/tmp}/trivy-image-cache-${MATRIX_VARIANT}"
+          rm -rf "$TRIVY_CACHE"
+          mkdir -p "$TRIVY_CACHE"
+          trivy_args=(image --scanners 'vuln,secret' --severity 'HIGH,CRITICAL' --exit-code 1)
+          if [ "$MATRIX_VARIANT" = "regression" ]; then
+            trivy_args+=(--ignore-unfixed)
+          fi
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$TRIVY_CACHE":/root/.cache/ \
+            "$TRIVY_IMAGE" \
+            "${trivy_args[@]}" "$TEST_IMAGE"
 
       - name: Cleanup
         if: always()
@@ -789,8 +766,9 @@ jobs:
     needs: build
     if: >-
       github.ref == 'refs/heads/master' ||
-      (github.ref == 'refs/heads/ci-qa-pr-docker-testing' &&
-      inputs.publish-regression-latest == true)
+      (github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/ci-qa-pr-docker-testing' &&
+      inputs['publish-regression-latest'] == true)
     environment: ghcr-publish
     permissions:
       contents: read
@@ -811,7 +789,7 @@ jobs:
 
       # preflight: allow-token-exposure reason=ghcr-verified-regression-promotion
       - name: Log in to GHCR
-        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c  # v4.5.2
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -821,7 +799,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           SOURCE_REPOSITORY: ghcr.io/internationalcolorconsortium/iccdev-ci-regression
-          SOURCE_TAG: run-${{ github.run_id }}-${{ github.run_attempt }}
+          SOURCE_TAG: run-${{ github.run_id }}
           TARGET_IMAGE: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest
         run: |
           set -euo pipefail
@@ -910,14 +888,14 @@ jobs:
     name: "Prune old container versions"
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing'
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/ci-qa-pr-docker-testing')
     environment: ghcr-publish
     permissions:
       contents: read  # Required for the trusted workflow helper checkout.
       packages: write  # Required to delete old GHCR package versions.
     strategy:
       matrix:
-        package: [iccdev, iccdev-nixos, iccdev-ci-regression, iccdev-mcp]
+        package: [iccdev, iccdev-ci-regression, iccdev-mcp]
     steps:
       - name: Checkout trusted workflow helpers
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)

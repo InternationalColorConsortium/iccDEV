@@ -7,6 +7,7 @@ working with ICC.1 and ICC.2/iccMAX color profiles.
 
 - [Install](install.md): package and container quickstart
 - [Build](build.md): build from source on Linux, macOS, and Windows
+- [MATLAB bindings and QA](matlab-bindings.md): Windows MEX build, profiles, tests, examples, and WSL2 boundaries
 - [Python packaging release](python-packaging-release.md): Python PR, merge, and production PyPI release steps
 - [CTest tool suites](ctest.md): local CTest commands, registered suites, and add-test process
 - [CLI tool reference](tools-cli-reference.md): command-line tool summary and shared options
@@ -51,6 +52,7 @@ tables.
 | `iccApplyProfiles` | Apply a profile chain to a TIFF image. |
 | `iccApplySearch` | Apply a profile sequence using inverse search. |
 | `iccApplyToLink` | Create DeviceLink profiles or `.cube` LUTs from profile sequences. |
+| [iccApply visual lanes](iccapply/README.md) | Interactive argv, CMM, and output flow references for the four iccApply tools. |
 | `iccDumpProfile` | Dump and validate ICC profile structure. |
 | `iccRoundTrip` | Evaluate round-trip profile behavior. |
 | `iccSpecSepToTiff` | Combine spectral separation TIFFs. |

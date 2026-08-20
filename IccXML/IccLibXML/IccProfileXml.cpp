@@ -1060,30 +1060,57 @@ bool CIccProfileXml::LoadXml(const char *szFilename, const char *szRelaxNGDir, s
     return false;
 
   if (szRelaxNGDir && szRelaxNGDir[0]) {
-    xmlRelaxNGParserCtxt* rlxParser;
-    
-    rlxParser = xmlRelaxNGNewParserCtxt (szRelaxNGDir);
+    /* #1999: each libxml2 object created below has its own free function, and
+     * none of them used to be called on any path: this block was four bare
+     * "return false" statements and a fall-through that freed nothing, so a
+     * schema-validating run leaked the parser context, the compiled schema
+     * and the validation context whether validation passed or failed.
+     * bValid records the outcome so the cleanup runs once on the way out
+     * instead of being repeated at each exit.
+     *
+     * Ordering matters: the schema returned by xmlRelaxNGParse outlives its
+     * parser context, and the validation context refers to the schema, so
+     * they are released innermost-first.
+     */
+    bool bValid = false;
+    xmlRelaxNGParserCtxt* rlxParser = xmlRelaxNGNewParserCtxt(szRelaxNGDir);
 
     //validate the xml file
-    if (rlxParser){
-	    xmlRelaxNG* relaxNG = xmlRelaxNGParse(rlxParser);
-	    if (relaxNG){
-		    xmlRelaxNGValidCtxt* validCtxt = xmlRelaxNGNewValidCtxt(relaxNG);
-		    if (validCtxt){
-			    int result = xmlRelaxNGValidateDoc(validCtxt, doc);
-			    if (result != 0){
-				    printf("\nError: %d: '%s' is an invalid XML file.\n", result, szFilename);
-				    return false;
-			    }
-		    }
-		    else
-		      return false;
-	    }
-	    else
-		  return false;		  
+    if (rlxParser) {
+      xmlRelaxNG* relaxNG = xmlRelaxNGParse(rlxParser);
+
+      if (relaxNG) {
+        xmlRelaxNGValidCtxt* validCtxt = xmlRelaxNGNewValidCtxt(relaxNG);
+
+        if (validCtxt) {
+          int result = xmlRelaxNGValidateDoc(validCtxt, doc);
+
+          if (result != 0)
+            printf("\nError: %d: '%s' is an invalid XML file.\n", result, szFilename);
+          else
+            bValid = true;
+
+          xmlRelaxNGFreeValidCtxt(validCtxt);
+        }
+
+        xmlRelaxNGFree(relaxNG);
+      }
+
+      xmlRelaxNGFreeParserCtxt(rlxParser);
     }
-    else
-	    return false;  
+
+    /* Same rejection as before for a schema that will not load, will not
+     * compile, or that the document fails - only now the document goes back
+     * with it. icXmlReadFileBounded hands ownership of doc to this function
+     * (see IccUtilXml.h) and the sole xmlFreeDoc was past the tail of the
+     * function, so these exits used to walk away from it. LSan does not
+     * flag that one as leaked - the block stays reachable from libxml2 - so
+     * this is an ownership fix rather than a measured leak, unlike the
+     * RelaxNG objects above. */
+    if (!bValid) {
+      xmlFreeDoc(doc);
+      return false;
+    }
   }
    
   /* parseStr was bound and cleared before the parse above, so that a size

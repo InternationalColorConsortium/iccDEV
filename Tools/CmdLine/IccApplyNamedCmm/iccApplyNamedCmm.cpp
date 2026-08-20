@@ -78,7 +78,7 @@
 #include "IccProfLibVer.h"
 #include "IccLibConnectVer.h"
 #include "IccConnect.h"
-#include "../IccCmdLineUtil.h"
+#include "IccCmdLineUtil.h"
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -212,6 +212,28 @@ void Usage()
   printf("    4 - icEncode8Bit\n");
   printf("    5 - icEncode16Bit\n");
   printf("    6 - icEncode16BitV2\n\n");
+
+  // #2124: this list read as though all seven selectors were always available,
+  // so a Lab destination refusing icEncodePercent looked like a broken encoding
+  // rather than a documented restriction. The valid set is per colour space --
+  // the icFloatColorEncoding table in IccCmm.h, which the
+  // ToInternalEncoding()/FromInternalEncoding() switches implement. Naming the
+  // two exclusions the reference profiles actually hit keeps the note short.
+  //
+  // Deliberately does NOT quote the run-time diagnostic verbatim: the argument
+  // regression greps for that exact line to prove a rejection happened, and
+  // printing it here would let usage output satisfy those greps. For the same
+  // reason the table is described as listing the per-space sets rather than
+  // "the full set" -- it carries no source/destination axis, and the two
+  // converters do not accept identical sets for every space, so it is a
+  // pointer, not a promise. (It also omitted icEncodeUnitFloat for the two PCS
+  // spaces when this note was written; #2146 fixed the source side that
+  // omission described and brought the table into line.)
+  printf("    Not every encoding is valid for every colour space: a 'Lab '\n");
+  printf("    destination refuses icEncodePercent and an 'XYZ ' destination\n");
+  printf("    refuses icEncode8Bit, each rejected when the data is converted\n");
+  printf("    rather than here. IccCmm.h's icFloatColorEncoding table lists\n");
+  printf("    the per-space encodings.\n\n");
 
   printf("    FmtPrecision - formatting for # of digits after decimal (default=4)\n");
   printf("    FmtDigits - formatting for total # of digits (default=5+FmtPrecision)\n\n");
@@ -481,7 +503,31 @@ int main(int argc, const char* argv[])
     else if (SrcspaceSig == icSigLabPcsData)
       SrcspaceSig = icSigDevLabData;
 
-    if (srcEncoding == icEncodeFloat)
+    // #2150: the remap above has just rewritten a PCS signature to a device
+    // one, so the value no longer meets ToInternalEncoding()'s 'XYZ '/'Lab '
+    // arms -- it meets the shared device default:, whose float and percent
+    // cases both clip to 0.0-1.0 whenever bClip. So this carve-out has to name
+    // every encoding whose PCS range exceeds 0.0-1.0, which is three, not one:
+    //
+    //   icEncodeFloat      external PCS range ~0.0-2.0
+    //   icEncodeUnitFloat  an exact synonym of it in both PCS arms since #2146
+    //   icEncodePercent    the same range x100, i.e. ~0.0-200.0 ('XYZ ' only)
+    //
+    // icXyzFromPcs scales by 65535/32768, which is where the ~2.0 comes from --
+    // so each of these clips discards legitimate values rather than hardening
+    // anything. That is the reasoning that kept the library's own PCS arms
+    // unclipped, and it applies unchanged once the signature has been remapped
+    // for the transform's benefit: the 'XYZ ' arm's percent case does not clip
+    // either.
+    //
+    // Naming only icEncodeFloat left the selector, and nothing else, deciding
+    // whether the data survived -- and in both cases the tool refused to read
+    // back what it had just written:
+    //
+    //   internal 0.9 -> unitFloat 1.79997 -> read back 1.0  (was 0.9)
+    //   internal 0.9 -> percent 179.9879  -> read back 1.0  (was 0.9)
+    if (srcEncoding == icEncodeFloat || srcEncoding == icEncodeUnitFloat ||
+        srcEncoding == icEncodePercent)
       bClip = false;
   }
 

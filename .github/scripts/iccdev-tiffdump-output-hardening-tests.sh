@@ -8,6 +8,7 @@ TOOLS="${ICCDEV_TOOLS_DIR:-$REPO_ROOT/Build/Tools}"
 ICCDEV_TESTING="${ICCDEV_TESTING_DIR:-$REPO_ROOT/Testing}"
 OUTDIR="${ICCDEV_TEST_OUTDIR:-/tmp/iccdev-tiffdump-output-hardening}"
 TIFFDUMP="$TOOLS/IccTiffDump/iccTiffDump"
+TOXML="$TOOLS/IccToXml/iccToXml"
 
 mkdir -p "$OUTDIR"
 
@@ -75,7 +76,7 @@ newline.icc"
   "$TIFFDUMP" "$SAMPLE_TIFF" "$dst" > "$log" 2>&1
 
   [ -s "$dst" ] || return 1
-  grep -Fq 'Profile extracted to: '"$OUTDIR"'/export_with_\nnewline.icc' "$log"
+  grep -Fq 'Profile extracted byte-for-byte to: '"$OUTDIR"'/export_with_\nnewline.icc' "$log"
 }
 
 test_extra_arg_rejected() {
@@ -106,8 +107,9 @@ test_missing_embedded_profile_export_rejected() {
 }
 
 # ---------------------------------------------------------------------------
-# #1380: palette photometric must be reported (not silently "Min Is White"), and
-# a parsed embedded ICC that fails conformance must be rejected, not rewritten.
+# #1380: palette photometric must be reported (not silently "Min Is White").
+# Nonconformant embedded bytes must remain available as forensic artifacts even
+# when parsing or validation returns a failure status.
 # ---------------------------------------------------------------------------
 PYTHON="$(command -v python3 || true)"
 
@@ -197,6 +199,34 @@ path.write_bytes(d)
 PY
 }
 
+generate_nested_icc() {
+  # Build an ICC.2 profile with $2 nested embeddedV5ProfileTag entries. Each
+  # level is structurally small, so depth rather than payload size drives the
+  # parser path under test.
+  "$PYTHON" - "$1" "$2" <<'PY'
+import pathlib, struct, sys
+path = pathlib.Path(sys.argv[1]); depth = int(sys.argv[2])
+
+def header(size):
+    h = bytearray(128)
+    struct.pack_into(">I", h, 0, size)
+    h[8:12] = b"\x05\0\0\0"
+    h[12:16] = b"mntr"
+    h[16:20] = b"RGB "
+    h[20:24] = b"XYZ "
+    h[36:40] = b"acsp"
+    return h
+
+profile = header(132) + struct.pack(">I", 0)
+for _ in range(depth):
+    tag = b"ICCp" + b"\0\0\0\0" + profile
+    size = 144 + len(tag)
+    profile = (header(size) + struct.pack(">I", 1) + b"ICC5" +
+               struct.pack(">II", 144, len(tag)) + tag)
+path.write_bytes(profile)
+PY
+}
+
 test_palette_photometric_report() {
   [ -n "$PYTHON" ] || { echo "    [SKIP] python3 unavailable"; return 0; }
   local pal="$OUTDIR/palette.tif"
@@ -216,7 +246,7 @@ test_defaulted_packbits_gray_loads() {
   grep -Eq 'Compression:[[:space:]]+PackBits' "$log"
 }
 
-test_noncompliant_embedded_icc_rejected() {
+test_noncompliant_embedded_icc_preserved() {
   [ -n "$PYTHON" ] || { echo "    [SKIP] python3 unavailable"; return 0; }
   local srgb="$ICCDEV_TESTING/sRGB_v4_ICC_preference.icc"
   [ -f "$srgb" ] || { echo "    [SKIP] missing $srgb"; return 0; }
@@ -244,10 +274,11 @@ PY
   "$TIFFDUMP" "$tif" "$out" > "$export_log" 2>&1 || status=$?
   [ "$status" -ge 1 ] && [ "$status" -le 127 ] || return 1
   grep -Fq "violates the ICC specification" "$export_log" || return 1
-  [ ! -e "$out" ]   # must NOT have written the non-conformant profile (#1380)
+  grep -Fq "Profile extracted byte-for-byte" "$export_log" || return 1
+  cmp -s "$bad" "$out"
 }
 
-test_malformed_embedded_icc_rejected() {
+test_malformed_embedded_icc_preserved() {
   [ -n "$PYTHON" ] || { echo "    [SKIP] python3 unavailable"; return 0; }
   local bad="$OUTDIR/malformed.icc"
   local tif="$OUTDIR/rgb-malformed-icc.tif"
@@ -271,7 +302,45 @@ PY
   "$TIFFDUMP" "$tif" "$out" > "$export_log" 2>&1 || status=$?
   [ "$status" -ge 1 ] && [ "$status" -le 127 ] || return 1
   grep -Fq "Unable to open embedded ICC profile" "$export_log" || return 1
-  [ ! -e "$out" ]
+  grep -Fq "Profile extracted byte-for-byte" "$export_log" || return 1
+  cmp -s "$bad" "$out"
+}
+
+test_nested_embedded_icc_is_bounded_and_preserved() {
+  [ -n "$PYTHON" ] || { echo "    [SKIP] python3 unavailable"; return 0; }
+  local nested="$OUTDIR/nested-depth-512.icc"
+  local tif="$OUTDIR/nested-depth-512.tif"
+  local out="$OUTDIR/extracted-nested-depth-512.icc"
+  local log="$OUTDIR/tiffdump-nested-depth-512.log"
+  local status=0
+
+  generate_nested_icc "$nested" 512 || return 1
+  generate_tiff_with_icc "$tif" "$nested" || return 1
+  rm -f "$out"
+
+  timeout 10 "$TIFFDUMP" "$tif" "$out" > "$log" 2>&1 || status=$?
+  [ "$status" -ne 124 ] || { echo "    iccTiffDump timed out"; return 1; }
+  [ "$status" -ge 1 ] && [ "$status" -le 127 ] || return 1
+  grep -Fq "Profile extracted byte-for-byte" "$log" || return 1
+  grep -Fq "Subprofile recursion halted" "$log" || return 1
+  cmp -s "$nested" "$out"
+}
+
+test_recursive_full_tag_read_is_bounded() {
+  [ -n "$PYTHON" ] || { echo "    [SKIP] python3 unavailable"; return 0; }
+  [ -x "$TOXML" ] || { echo "    [SKIP] missing executable: $TOXML"; return 0; }
+  local nested="$OUTDIR/readtags-nested-depth-512.icc"
+  local xml="$OUTDIR/readtags-nested-depth-512.xml"
+  local log="$OUTDIR/readtags-nested-depth-512.log"
+  local status=0
+
+  generate_nested_icc "$nested" 512 || return 1
+  rm -f "$xml"
+
+  timeout 10 "$TOXML" "$nested" "$xml" > "$log" 2>&1 || status=$?
+  [ "$status" -ne 124 ] || { echo "    iccToXml timed out"; return 1; }
+  [ "$status" -ge 1 ] && [ "$status" -le 127 ] || return 1
+  grep -Fq "Unable to read" "$log"
 }
 
 echo "=== iccTiffDump output hardening regression ==="
@@ -282,8 +351,10 @@ run_ok "tiffdump-extra-arg-reject" test_extra_arg_rejected
 run_ok "tiffdump-no-profile-export-reject" test_missing_embedded_profile_export_rejected
 run_ok "tiffdump-palette-photometric-report" test_palette_photometric_report
 run_ok "tiffdump-defaulted-packbits-gray-load" test_defaulted_packbits_gray_loads
-run_ok "tiffdump-noncompliant-embedded-icc-reject" test_noncompliant_embedded_icc_rejected
-run_ok "tiffdump-malformed-embedded-icc-reject" test_malformed_embedded_icc_rejected
+run_ok "tiffdump-noncompliant-embedded-icc-preserve" test_noncompliant_embedded_icc_preserved
+run_ok "tiffdump-malformed-embedded-icc-preserve" test_malformed_embedded_icc_preserved
+run_ok "tiffdump-nested-embedded-icc-bounded-preserve" test_nested_embedded_icc_is_bounded_and_preserved
+run_ok "embedded-profile-full-tag-read-bounded" test_recursive_full_tag_read_is_bounded
 
 echo "iccTiffDump output hardening regression: $pass passed, $fail failed, $((pass + fail)) total"
 

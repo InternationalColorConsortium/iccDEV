@@ -134,6 +134,52 @@ run_valid_calc_apply() {
     return
   fi
 
+  # srgbCalcTest.xml is a self-reporting harness, not just a profile that has to
+  # parse. Its MainFunction stores 86 constant-valued assertion verdicts in temp
+  # registers -- including the only fJab/tJab numeric checks in the tree, at
+  # tput(13) and tput(14) -- and gates its own output on their total:
+  #
+  #     tget(0,46) tget(46,46) sum(92) 92 eq
+  #     if { ...real sRGB transform... out(0,3) } else { 0 0 0 out(0,3) }
+  #
+  # The window summed is 92 registers, not 92 assertions: the other six are
+  # seeded to a literal 1 by tput(0,3) and tsav(4,3), so they pad the target
+  # without testing anything. Either way one false verdict drops the sum below
+  # 92 and takes the else branch.
+  #
+  # So a failed assertion is reported as an all-zero conversion, NOT as a
+  # non-zero exit status. Everything above this point checks parse success, exit
+  # status and sanitizer output, all of which stay clean when the calculator
+  # computes the wrong colour, so those verdicts were being discarded. Reading
+  # the output back is what turns them into a CI signal.
+  #
+  # The two inputs in srgbCalcTest.txt are 255,255,255 and 128,128,128 -- white
+  # and mid grey. Neither converts to an all-zero XYZ through this pipeline, so
+  # the sentinel is unambiguous and cannot fire on a legitimate result.
+  local data_rows=0
+  local zero_rows=0
+  while IFS= read -r line; do
+    data_rows=$((data_rows + 1))
+    # iccApplyNamedCmm separates the converted triplet from the echoed source
+    # sample with a tab, so the captured field keeps a trailing tab; the final
+    # [[:space:]]* is what lets the anchor match it.
+    if printf '%s\n' "$line" | grep -qE '^[[:space:]]*0\.0+[[:space:]]+0\.0+[[:space:]]+0\.0+[[:space:]]*$'; then
+      zero_rows=$((zero_rows + 1))
+    fi
+  done < <(sed -n 's/^\(.*\);.*$/\1/p' "$apply_log" | grep -E '[0-9]')
+
+  if [ "$data_rows" -eq 0 ]; then
+    fail_case "$name" "no converted data rows in apply output"
+    sed -n '1,20p' "$apply_log"
+    return
+  fi
+  if [ "$zero_rows" -ne 0 ]; then
+    fail_case "$name" \
+      "calculator self-test failed: $zero_rows/$data_rows rows are the all-zero sentinel (one of the 86 tput assertion verdicts did not hold)"
+    sed -n '1,30p' "$apply_log"
+    return
+  fi
+
   pass_case "$name"
 }
 

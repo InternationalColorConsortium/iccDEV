@@ -76,7 +76,7 @@
 #include "IccProfLibVer.h"
 #include "IccProfile.h"
 #include "IccUtil.h"
-#include "../IccCmdLineUtil.h"
+#include "IccCmdLineUtil.h"
 
 static void usage()
 {

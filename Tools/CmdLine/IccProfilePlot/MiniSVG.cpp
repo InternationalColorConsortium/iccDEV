@@ -68,7 +68,7 @@
 #include <vector>
 #include <cmath>
 #include "MiniSVG.hpp"
-#include "../IccCmdLineUtil.h"
+#include "IccCmdLineUtil.h"
 
 /******************************************************************************/
 
@@ -87,8 +87,11 @@ void SVGOut::OpenFile( const std::string &filename )
 
 /******************************************************************************/
 
-void SVGOut::CloseFile()
+void SVGOut::Finalize()
 {
+  // Idempotent by construction: m_pageInProgress is cleared as the group is
+  // closed, so a second call adds nothing to m_buf and the document bytes are
+  // the same however many times Serialize() and CloseFile() run.
   if (m_pageInProgress) {
     m_buf << "</g>\n";
     m_pageInProgress = false;
@@ -98,24 +101,77 @@ void SVGOut::CloseFile()
     fprintf(stderr,"WARNING - SVG group levels not closed.\n");
   if (m_GroupLevel < 0)
     fprintf(stderr,"WARNING - Too many SVG group levels closed.\n");
+}
+
+/******************************************************************************/
+
+// The public stream entry point (#2116): finalize, then emit. Every byte comes
+// from SerializeFinalized() below, which CloseFile() also calls, so the stream
+// path and the file path cannot produce different documents (#2154). The body
+// was already accumulated in the m_buf ostringstream; before #2116 the header
+// and footer went straight to a std::ofstream, which is what kept this layer
+// off limits to a harness.
+void SVGOut::Serialize( std::ostream &out )
+{
+  Finalize();
+  SerializeFinalized(out);
+}
+
+/******************************************************************************/
+
+void SVGOut::SerializeFinalized( std::ostream &out )
+{
+  WriteHeader(out);
+  out << m_buf.str();
+  WriteFooter(out);
+}
+
+/******************************************************************************/
+
+void SVGOut::CloseFile()
+{
+  // Runs whether or not a file was ever opened, exactly as this function's
+  // first half always did.
+  Finalize();
 
   if (!m_filename.empty()) {
     if (m_pageCount > 0) {
       try  {
-        FILE* checkFile = icOpenRegularWriteTextFile(m_filename.c_str());
-        if (!checkFile || !icFlushAndClose(checkFile)) {
+        // Produce the whole document BEFORE anything is opened.  The scope
+        // releases the stringstream and its buffer while no descriptor exists,
+        // so an allocation failure on a dense multi-MB plot cannot unwind past
+        // an open handle -- and only `text` is still resident during the write.
+        std::string text;
+        {
+          std::ostringstream doc;
+          doc.exceptions(std::ios::badbit | std::ios::failbit);
+          SerializeFinalized(doc);
+          text = doc.str();
+        }
+
+        // Write through the handle the regular-file check validated (#2154).
+        // This used to open the file with icOpenRegularWriteTextFile(),
+        // immediately close it, and then reopen the same *path* with a
+        // std::ofstream -- so the check ran against a descriptor that was
+        // discarded, and the stream actually written was never checked at all.
+        // Anything that replaced the path between the close and the reopen with
+        // a non-regular file (a FIFO, a device node, or a symlink to either)
+        // was then written to unchecked.
+        FILE* outFile = icOpenRegularWriteTextFile(m_filename.c_str());
+        if (!outFile) {
+          // Kept distinct from the write failure below: a refused open is the
+          // regular-file guard doing its job, which is a different diagnosis
+          // from a write that started and then failed (ENOSPC, EIO).
           fprintf(stderr, "SVG writing error in '%s': unable to open regular output file\n", m_filename.c_str());
           m_filename.clear();
           return;
         }
 
-        std::ofstream out;
-        out.exceptions(std::ios::badbit | std::ios::failbit);
-        out.open(m_filename);
-        WriteHeader(out);
-        out << m_buf.str();
-        WriteFooter(out);
-        out.close();
+        if (!icWriteAndClose(outFile, text)) {
+          fprintf(stderr, "SVG writing error in '%s': unable to write regular output file\n", m_filename.c_str());
+          m_filename.clear();
+          return;
+        }
       }
       catch (const std::exception& e) {
         fprintf(stderr, "SVG writing error in '%s': '%s'\n", m_filename.c_str(), e.what() );

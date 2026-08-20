@@ -170,6 +170,18 @@ JSON:
           - '.github/scripts/*json*'
           - '.github/workflows/ci-json-roundtrip.yml'
 
+Python:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'python/**'
+          - '**/*.py'
+          - '**/*.pyx'
+          - '**/*.pxd'
+          - 'pyproject.toml'
+          - 'setup.py'
+          - 'setup.cfg'
+          - 'requirements*.txt'
+
 Windows:
   - changed-files:
       - any-glob-to-any-file:

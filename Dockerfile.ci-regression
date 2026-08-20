@@ -8,7 +8,7 @@
 #
 ###############################################################
 
-FROM ubuntu:26.04@sha256:fed6ddb82c61194e1814e93b59cfcb6759e5aa33c4e41bb3782313c2386ed6df
+FROM ubuntu:26.04@sha256:678c6550cc43645e08669028bc177f50be4e7c5b8cca677067b1914d4afc7a03
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -22,6 +22,7 @@ LABEL org.opencontainers.image.title="iccDEV CI Regression Dependencies" \
       org.opencontainers.image.vendor="International Color Consortium" \
       org.opencontainers.image.source="https://github.com/InternationalColorConsortium/iccDEV"
 
+# Pebble is inherited from the Ubuntu base but unused by the regression image.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
     afl++=4.33c-1.1ubuntu1 \
@@ -80,6 +81,7 @@ RUN apt-get update \
     wx-common=3.2.9+dfsg-1 \
     yamllint=1.37.1-1 \
     zlib1g-dev=1:1.3.dfsg+really1.3.1-1ubuntu3 \
+ && rm -f /usr/bin/pebble \
  && rm -rf /var/lib/apt/lists/*
 
 RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-22 100 \
@@ -116,10 +118,10 @@ RUN python3 -m venv /opt/iccdev-spectral-preview \
  && /opt/iccdev-spectral-preview/bin/python -m pip install \
       --only-binary=:all: \
       --no-cache-dir \
-      'numpy==2.4.2' \
-      'tifffile==2026.2.24' \
+      'numpy==2.5.2' \
+      'tifffile==2026.8.16' \
       'pillow==12.3.0' \
-      'imagecodecs==2026.6.6' \
+      'imagecodecs==2026.8.16' \
       --quiet \
  && /opt/iccdev-spectral-preview/bin/python -m pip check \
  && /opt/iccdev-spectral-preview/bin/python -c 'import imagecodecs,numpy,PIL,tifffile; print(f"imagecodecs {imagecodecs.__version__}"); print(f"numpy {numpy.__version__}"); print(f"pillow {PIL.__version__}"); print(f"tifffile {tifffile.__version__}")' \
@@ -128,8 +130,8 @@ RUN python3 -m venv /opt/iccdev-spectral-preview \
       /opt/iccdev-spectral-preview/lib/python*/site-packages/pip \
       /opt/iccdev-spectral-preview/lib/python*/site-packages/pip-*.dist-info
 
-RUN hadolint_version="2.14.0" \
- && hadolint_sha256="6bf226944684f56c84dd014e8b979d27425c0148f61b3bd99bcc6f39e9dc5a47" \
+RUN hadolint_version="2.15.1" \
+ && hadolint_sha256="c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507" \
  && curl -fsSLo /tmp/hadolint \
       "https://github.com/hadolint/hadolint/releases/download/v${hadolint_version}/hadolint-linux-x86_64" \
  && printf '%s  %s\n' "$hadolint_sha256" /tmp/hadolint | sha256sum -c - \
@@ -146,7 +148,7 @@ RUN python3 -m venv /opt/iccdev-workflow-qa \
  && /opt/iccdev-workflow-qa/bin/python -m pip install \
       --only-binary=:all: \
       --no-cache-dir \
-      'zizmor==1.26.1' \
+      'zizmor==1.29.0' \
       --quiet \
  && /opt/iccdev-workflow-qa/bin/python -m pip check \
  && ln -s /opt/iccdev-workflow-qa/bin/zizmor /usr/local/bin/zizmor \
@@ -251,7 +253,7 @@ RUN chmod 0755 /usr/local/bin/iccdev-banner \
  && chown iccdev-ci:iccdev-ci /workspace/.bashrc
 
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
-  CMD clang --version >/dev/null && cmake --version >/dev/null && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null && test -x /workspace/iccDEV/.github/scripts/check-fuzz-patches.sh || exit 1
+  CMD clang --version >/dev/null && cmake --version >/dev/null && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null || exit 1
 
 LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 ENV ICCDEV_SOURCE_REVISION="${GIT_COMMIT}"

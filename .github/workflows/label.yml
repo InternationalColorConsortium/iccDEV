@@ -127,6 +127,9 @@ jobs:
           if grep -Eq 'json|cfg|roundtrip|round-trip' <<< "$text"; then
             add_labels+=("JSON")
           fi
+          if grep -Eq 'python|cython|pypi|pip|setuptools|wheel' <<< "$text"; then
+            add_labels+=("Python")
+          fi
           if [[ -z "$body_compact" || ${#body_compact} -lt 40 ]]; then
             add_labels+=("requires:more-information")
             issue_notes+=("Please add a concise description of the issue, the exact command or workflow used, the expected result, and the actual result.")

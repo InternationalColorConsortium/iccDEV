@@ -219,7 +219,10 @@
 	</XYZArrayType> </mediaWhitePointTag>
 
     <cicpTag> <cicpType>
-      <cicpFields ColorPrimaries="9" TransferCharacteristics="18" MatrixCoefficients="0" VideoFullRangeFlag="1"/>
+      <!-- ITU-T H.273 Table 3: 16 is SMPTE ST 2084 (PQ), which is the transfer
+           function the FormulaSegments above actually encode. 18 is ARIB STD-B67
+           (HLG) and belongs to the BT2100Hlg* fixtures, not to this one. -->
+      <cicpFields ColorPrimaries="9" TransferCharacteristics="16" MatrixCoefficients="0" VideoFullRangeFlag="1"/>
     </cicpType> </cicpTag>
 
 	<copyrightTag> <multiLocalizedUnicodeType>

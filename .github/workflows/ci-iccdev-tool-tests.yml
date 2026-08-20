@@ -310,7 +310,7 @@ jobs:
 
           warning_probe="${RUNNER_TEMP:-/tmp}/icc-warning-policy.cpp"
           {
-            printf '%s\n' '#include "Tools/CmdLine/IccCmdLineUtil.h"'
+            printf '%s\n' '#include "IccProfLib/IccCmdLineUtil.h"'
             printf '%s\n' 'int main() { return 0; }'
           } > "$warning_probe"
 
@@ -479,6 +479,12 @@ jobs:
               exit 1
               ;;
           esac
+          # Generic escape hatch for tests quarantined as known failures. No
+          # test carries the label today: #2108 held it until #2160 bounded the
+          # emitted XML text nodes, and iccdev.xml-parser-regressions now runs
+          # here. Kept so a future quarantine needs no workflow edit -- but a
+          # test added to it stops being covered, so label sparingly.
+          ctest_args+=(--label-exclude known-red)
           case "$CTEST_MODE" in
             fast)
               ctest_args+=(--label-exclude slow --label-exclude calculator)
@@ -619,10 +625,10 @@ jobs:
 
           case "$CTEST_MODE" in
             fast)
-              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --label-exclude slow --label-exclude calculator --output-junit build/ctest-results.xml"
+              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --label-exclude slow --label-exclude calculator --label-exclude known-red --output-junit build/ctest-results.xml"
               ;;
             full)
-              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --output-junit build/ctest-results.xml"
+              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --label-exclude known-red --output-junit build/ctest-results.xml"
               ;;
             skip)
               test_cmd="skipped by manual ctest_mode=skip input"
@@ -677,16 +683,16 @@ jobs:
             case "$CTEST_MODE" in
               fast)
                 if [ "$CTEST_RECENT_LIMIT" = "0" ]; then
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --label-exclude slow --label-exclude calculator"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --label-exclude slow --label-exclude calculator --label-exclude known-red"
                 else
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --limit '${CTEST_RECENT_LIMIT}' --label-exclude slow --label-exclude calculator"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --limit '${CTEST_RECENT_LIMIT}' --label-exclude slow --label-exclude calculator --label-exclude known-red"
                 fi
                 ;;
               full)
                 if [ "$CTEST_RECENT_LIMIT" = "0" ]; then
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --label-exclude known-red"
                 else
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --limit '${CTEST_RECENT_LIMIT}'"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --limit '${CTEST_RECENT_LIMIT}' --label-exclude known-red"
                 fi
                 echo "ctest --test-dir build -R '^iccdev\\.hybrid-pipeline$' --output-on-failure --no-tests=error"
                 ;;

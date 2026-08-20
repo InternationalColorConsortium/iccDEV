@@ -170,6 +170,76 @@ int main()
                       "data apply rejects out-of-range digits");
   }
 
+  // #1996: the destination sample encoding is a positional selector where 0 means
+  // "same as source" and 1..3 are 8 bit / 16 bit / float.  All four must survive
+  // the round trip, because the selector numbering is what the usage text quotes.
+  {
+    CIccCfgImageApply image;
+    const char* args[] = { "src.tif", "dst.tif", "0", "1", "0", "1" };
+    failures += check(image.fromArgs(args, 6, true) == 6 &&
+                        image.m_dstEncoding == icEncodeUnknown,
+                      "image apply maps encoding 0 to same-as-source");
+  }
+
+  {
+    CIccCfgImageApply image;
+    const char* args[] = { "src.tif", "dst.tif", "1", "1", "0", "1" };
+    failures += check(image.fromArgs(args, 6, true) == 6 &&
+                        image.m_dstEncoding == icEncode8Bit,
+                      "image apply maps encoding 1 to 8 bit");
+  }
+
+  {
+    CIccCfgImageApply image;
+    const char* args[] = { "src.tif", "dst.tif", "2", "1", "0", "1" };
+    failures += check(image.fromArgs(args, 6, true) == 6 &&
+                        image.m_dstEncoding == icEncode16Bit,
+                      "image apply maps encoding 2 to 16 bit");
+  }
+
+  {
+    CIccCfgImageApply image;
+    const char* args[] = { "src.tif", "dst.tif", "3", "1", "0", "1" };
+    failures += check(image.fromArgs(args, 6, true) == 6 &&
+                        image.m_dstEncoding == icEncodeFloat,
+                      "image apply maps encoding 3 to float");
+  }
+
+  // #1996: the switch shared its default label with case 1, so 4 -- the value the
+  // usage text wrongly advertised for float -- was accepted as 8 bit and the run
+  // exited 0.  This is the case that fails on the unfixed parser: it returned 6
+  // with m_dstEncoding == icEncode8Bit rather than refusing the argument.
+  {
+    CIccCfgImageApply image;
+    const char* args[] = { "src.tif", "dst.tif", "4", "1", "0", "1" };
+    failures += check(image.fromArgs(args, 6, true) == 0,
+                      "image apply rejects out-of-range encoding selector");
+  }
+
+  {
+    CIccCfgImageApply image;
+    const char* args[] = { "src.tif", "dst.tif", "3junk", "1", "0", "1" };
+    failures += check(image.fromArgs(args, 6, true) == 0,
+                      "image apply rejects trailing encoding junk");
+  }
+
+  // #1996: the three flags were read with bare atoi() as well, so a typo parsed
+  // as 0 and was indistinguishable from an explicit "off".  Any non-zero integer
+  // still means true, so only unparseable text is refused.
+  {
+    CIccCfgImageApply image;
+    const char* args[] = { "src.tif", "dst.tif", "1", "yes", "0", "1" };
+    failures += check(image.fromArgs(args, 6, true) == 0,
+                      "image apply rejects non-numeric compression flag");
+  }
+
+  {
+    CIccCfgImageApply image;
+    const char* args[] = { "src.tif", "dst.tif", "1", "1", "0", "" };
+    failures += check(image.fromArgs(args, 6, true) == 0,
+                      "image apply rejects empty embed-icc flag");
+  }
+
   {
     CIccCfgProfile profile;
     failures += check(!profile.fromJson("{\"iccFile\":\"profile.icc\",\"transform\":\"missing\"}", true),

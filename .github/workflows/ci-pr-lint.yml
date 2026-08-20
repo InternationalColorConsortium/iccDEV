@@ -73,7 +73,7 @@ on:
         type: boolean
 
 concurrency:
-  group: "ci-pr-lint-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}"
+  group: "ci-pr-lint-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}"
   cancel-in-progress: true
 
 jobs:

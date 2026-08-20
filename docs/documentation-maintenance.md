@@ -10,6 +10,7 @@ point to deeper references.
 |-------|------------------|
 | User install and packaging | `docs/install.md` |
 | User build instructions | `docs/build.md` |
+| MATLAB bindings and Windows PowerShell setup | `docs/matlab-bindings.md` |
 | CTest tool suites and add-test process | `docs/ctest.md` |
 | CLI tools and shared option tables | `docs/tools-cli-reference.md` |
 | JSON workflow | `docs/iccjson.md` |
@@ -25,6 +26,7 @@ point to deeper references.
 | CodeQL queries | `.github/codeql-queries/README.md` |
 | Security issue format | `.github/prompts/SECURITY_ISSUE_FORMAT.md` |
 | Agent routing | `.github/copilot-instructions.md` |
+| Agent instructions | `AGENTS.md` (canonical); root `CLAUDE.md` and `GEMINI.md` mirror it |
 | Build and sanitizer policy | `.github/instructions/build-system.instructions.md` |
 | Test and regression policy | `.github/instructions/testing.instructions.md` |
 | Workflow hardening | `.github/instructions/workflow-governance.instructions.md` |
@@ -47,6 +49,8 @@ point to deeper references.
 - Keep prompts operational; move long reference material into a named reference
   file when it is reused by templates or prompts.
 - Do not add generated artifacts, logs, crash files, or local environment paths.
+- When editing `AGENTS.md`, keep the root `CLAUDE.md` and `GEMINI.md` mirrors in
+  sync; they should only route back to `AGENTS.md`, never duplicate its rules.
 
 ## Validation
 

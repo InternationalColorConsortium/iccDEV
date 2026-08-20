@@ -1,0 +1,52 @@
+/**
+\page namedcmm_lane iccApplyNamedCmm: named-color and numeric-data lane
+
+\tableofcontents
+
+\section namedcmm_contract Input forms and argv ownership
+
+This tool applies a named-color CMM to legacy, JSON, or IT8 color data.
+
+| Form | Token shape |
+|---|---|
+| JSON | `iccApplyNamedCmm -cfg config_file` |
+| Direct | `iccApplyNamedCmm [-exportcfg file|-exportcfganddata file] [-debugcalc] data encoding interpolation profile intent ...` |
+
+The JSON lane uses the entry array unchanged and accepts exactly three tokens.
+The direct lane removes the executable token, then consumes export and
+debugging prefixes before `CIccCfgDataApply::fromArgs()` owns the data group.
+`CIccCfgProfileSequence::fromArgs()` owns the transform group. Its consumed
+count must equal the remaining `argc`; a surplus direct token is a failure,
+not a successful partial command.
+
+\dotfile namedcmm-lane.dot "iccApplyNamedCmm data, named-color, and CMM lanes"
+
+\section namedcmm_options Data and transform controls
+
+| Control | Values or form | Effect |
+|---|---|---|
+| Export | `-exportcfg file`, `-exportcfganddata file` | Export the resolved configuration; the latter also embeds input color data. |
+| Debug | `-debugcalc` | Attach calculator-operation log information to output data. |
+| Data encoding | `encoding[:precision[:digits]]` | Select final output encoding and formatting. |
+| Encoding selector | 0 through 6 | Value, percent, unit float, float, 8-bit, 16-bit, or V2 16-bit. |
+| Interpolation | 0 or 1 | Linear or tetrahedral. |
+| Sequence modifiers | `-ENV:name value`, `-PCC file` | CMM environment and profile connection conditions for profile pairs. |
+
+The source and destination may be numeric color samples or named colors. If a
+named CMM reports `icSigNamedData` at either end, the tool forces the matching
+encoding to `icEncodeValue` and follows the name/value conversion path.
+
+\section namedcmm_pcs Input-profile PCS preservation
+
+After `CIccConnectCmm::CreateNamed()` succeeds, the tool decides whether the
+first profile is an input profile. When that path exposes a PCS source, it
+remaps the signature to a device signature before `ToInternalEncoding()`.
+For float, unit-float, and percent inputs it sets `bClip` false, preserving
+valid wide PCS values.
+
+\section namedcmm_qa QA example
+
+`iccApplyNamedCmm-quick-check.sh` exercises numeric output, calculator
+debugging, profile sequence modifiers, JSON export/replay, and exact argument
+rejection using repository fixtures.
+*/

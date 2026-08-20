@@ -366,16 +366,52 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
       return false;
     }
 
-    m_nStripSize = (unsigned int)TIFFStripSize(m_hTif);
-    m_nBytesPerStripLine = m_nWidth * m_nBytesPerSample;
+    // TIFFStripSize() returns a signed 64-bit tmsize_t, and the products below are
+    // computed from a width that comes straight out of the source image header. Open()
+    // already routes the identical arithmetic through calcBytesPerLine() (:471, :489)
+    // and checkedUInt32(); Create() did the same sums raw, so the write path had no
+    // guard where the read path had one.
+    //
+    // The wrap is reachable rather than theoretical. Create() runs before any pixel data
+    // is read (iccApplyProfiles.cpp:508), so a source TIFF only has to *declare* a large
+    // ImageWidth -- it needs no matching pixel data on disk. A width of 3e8 with a
+    // 20-channel separated destination makes m_nBytesPerLine 6e9, which wraps to ~1.7e9,
+    // while the strip allocation below asks for the true 6 GB and *succeeds* under Linux
+    // overcommit -- so Create() returned true carrying a bytes-per-line far smaller than
+    // a row. The caller then sizes its destination row buffer from exactly that value
+    // (iccApplyProfiles.cpp:539) and writes a full row through it. The big allocation is
+    // therefore not the accidental guard it looks like; measured, unfixed Create()
+    // returns true for that shape.
+    tmsize_t stripSize = TIFFStripSize(m_hTif);
+    if (stripSize <= 0 ||
+        !checkedUInt32(static_cast<icUInt64Number>(stripSize), m_nStripSize) ||
+        !checkedUInt32Product(m_nWidth, m_nBytesPerSample, m_nBytesPerStripLine)) {
+      Close();
+      return false;
+    }
 
     if (m_nStripSize!=m_nBytesPerStripLine) {
       Close();
       return false;
     }
-    m_nBytesPerLine = m_nWidth * m_nBytesPerSample * m_nSamples;
 
-    m_pStripBuf = static_cast<unsigned char*>(malloc((size_t)m_nStripSize*m_nStripSamples));
+    // calcBytesPerLine() rather than repeating the product: it is what Open() uses, and
+    // with the nBPS % 8 rejection above it computes exactly m_nWidth * m_nBytesPerSample
+    // * m_nSamples -- the same number, in 64 bits, refused when it will not fit.
+    if (!calcBytesPerLine(m_nWidth, m_nBitsPerSample, m_nSamples, m_nBytesPerLine)) {
+      Close();
+      return false;
+    }
+
+    // Sized in 32 bits and rejected on overflow rather than left to malloc: relying on a
+    // >4 GiB request failing is exactly what does not hold under overcommit.
+    unsigned int nStripBufSize = 0;
+    if (!checkedUInt32Product(m_nStripSize, m_nStripSamples, nStripBufSize)) {
+      Close();
+      return false;
+    }
+
+    m_pStripBuf = static_cast<unsigned char*>(malloc((size_t)nStripBufSize));
 
     if (m_nRowsPerStrip == 0 || !m_pStripBuf) {
       Close();
@@ -384,7 +420,17 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
     m_nStripsPerSample = m_nHeight / m_nRowsPerStrip;
   }
   else {
-    m_nBytesPerLine = m_nStripSize = (unsigned int)TIFFStripSize(m_hTif);
+    // Same narrowing as the separated branch above: tmsize_t is signed and 64-bit, so a
+    // C cast can both truncate a large strip size and turn a libtiff error return into a
+    // very large unsigned one. m_nBytesPerLine feeds the caller's row-buffer allocation,
+    // so a wrong value here is the same class of defect on the contiguous path.
+    tmsize_t stripSize = TIFFStripSize(m_hTif);
+    if (stripSize <= 0 ||
+        !checkedUInt32(static_cast<icUInt64Number>(stripSize), m_nStripSize)) {
+      Close();
+      return false;
+    }
+    m_nBytesPerLine = m_nStripSize;
     m_nStripSamples = 1;
   }
 
