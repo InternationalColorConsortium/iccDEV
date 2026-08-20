@@ -72,6 +72,7 @@
 
 #include "IccJsonUtil.h"
 #include "IccUtil.h"
+#include "IccCmdLineUtil.h" // shared regular-file open/close helpers (#2154)
 #include <cmath>
 #include <cstdio>
 #include <limits>
@@ -95,51 +96,6 @@
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
 #endif
-
-static FILE* icOpenWriteBinaryFile(const char* szFname)
-{
-  if (!szFname || !szFname[0])
-    return stdout;
-
-#if defined(_WIN32)
-  return fopen(szFname, "wb");
-#else
-  struct stat st;
-  if (stat(szFname, &st) == 0 && !S_ISREG(st.st_mode))
-    return nullptr;
-
-  int fd = open(szFname, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-  if (fd < 0)
-    return nullptr;
-
-  if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
-    close(fd);
-    return nullptr;
-  }
-
-  FILE* f = fdopen(fd, "wb");
-  if (!f)
-    close(fd);
-
-  return f;
-#endif
-}
-
-static bool icCloseWriteBinaryFile(FILE* f)
-{
-  if (!f)
-    return false;
-
-  bool failed = (fflush(f) != 0) || (ferror(f) != 0);
-
-  if (f == stdout)
-    return !failed;
-
-  if (fclose(f) != 0)
-    failed = true;
-
-  return !failed;
-}
 
 template <typename T>
  std::string arrayToJson(T* a, int nCount)
@@ -540,7 +496,7 @@ bool saveJsonAs(const json& j, const char* szFname, int indent)
 
   FILE* f;
 
-  f = icOpenWriteBinaryFile(szFname);
+  f = icOpenRegularWriteBinaryFile(szFname);
 
   if (f) {
     std::string str = j.dump(indent);
@@ -548,7 +504,7 @@ bool saveJsonAs(const json& j, const char* szFname, int indent)
     if (fwrite(str.c_str(), 1, str.size(), f) == str.size())
       rv = true;
 
-    if (!icCloseWriteBinaryFile(f))
+    if (!icFlushAndClose(f))
       rv = false;
   }
 

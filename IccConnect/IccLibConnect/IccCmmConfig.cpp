@@ -92,51 +92,6 @@ static bool icWriteString(FILE* f, const std::string& out)
   return out.empty() || fwrite(out.c_str(), 1, out.size(), f) == out.size();
 }
 
-static FILE* icOpenWriteTextFile(const char* filename)
-{
-  if (!filename || !filename[0])
-    return stdout;
-
-#if defined(_WIN32)
-  return fopen(filename, "wt");
-#else
-  struct stat st;
-  if (stat(filename, &st) == 0 && !S_ISREG(st.st_mode))
-    return nullptr;
-
-  int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-  if (fd < 0)
-    return nullptr;
-
-  if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
-    close(fd);
-    return nullptr;
-  }
-
-  FILE* f = fdopen(fd, "w");
-  if (!f)
-    close(fd);
-
-  return f;
-#endif
-}
-
-static bool icCloseWriteTextFile(FILE* f)
-{
-  if (!f)
-    return false;
-
-  bool failed = (fflush(f) != 0) || (ferror(f) != 0);
-
-  if (f == stdout)
-    return !failed;
-
-  if (fclose(f) != 0)
-    failed = true;
-
-  return !failed;
-}
-
 static bool icFormatFloatValue(char* buf, size_t bufSize, int nDigits, int nPrecision, icFloatNumber v)
 {
   int n;
@@ -2250,7 +2205,14 @@ bool CIccCfgColorData::toLegacy(const char* filename, const CIccCfgProfileArray 
   if (nDigits > 20) nDigits = 20;
   if (nPrecision > 20) nPrecision = 20;
 
-  f = icOpenWriteTextFile(filename);
+  // Shared helper from IccCmdLineUtil.h (#2154), replacing a private copy that
+  // differed only in its POSIX mode string: the copy passed "w" to fdopen, this
+  // passes "wt". Inert -- POSIX has no text/binary distinction and glibc, musl
+  // and the BSD/bionic __sflags lineage all ignore an unknown mode letter.
+  // Deliberately NOT icOpenRegularWriteFile(filename, "w"), which would match
+  // POSIX exactly but drop the explicit "wt" the copy used on Windows, leaving
+  // text mode dependent on _fmode -- a global an embedding application can set.
+  f = icOpenRegularWriteTextFile(filename);
 
   if (!f)
     return false;
@@ -2339,7 +2301,7 @@ bool CIccCfgColorData::toLegacy(const char* filename, const CIccCfgProfileArray 
     fprintf(f, "\n");
   }
 
-  if (!icCloseWriteTextFile(f))
+  if (!icFlushAndClose(f))
     return false;
 
   return true;
@@ -2512,7 +2474,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
   if (!nFields)
     return false;
 
-  f = icOpenWriteTextFile(filename);
+  f = icOpenRegularWriteTextFile(filename);
 
   if (!f)
     return false;
@@ -2600,7 +2562,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
   }
   fprintf(f, "END_DATA\n");
 
-  if (!icCloseWriteTextFile(f))
+  if (!icFlushAndClose(f))
     return false;
 
   return true;
