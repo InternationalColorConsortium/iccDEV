@@ -90,10 +90,10 @@
 namespace iccDEV {
 #endif
 
-ICCPROFLIB_API const char *icMsgValidateWarning = "Warning! - ";
-ICCPROFLIB_API const char *icMsgValidateNonCompliant = "NonCompliant! - ";
-ICCPROFLIB_API const char *icMsgValidateCriticalError = "Error! - ";
-ICCPROFLIB_API const char* icMsgValidateInformation = "Information - ";
+ICCPROFLIB_DATA_API const char *icMsgValidateWarning = "Warning! - ";
+ICCPROFLIB_DATA_API const char *icMsgValidateNonCompliant = "NonCompliant! - ";
+ICCPROFLIB_DATA_API const char *icMsgValidateCriticalError = "Error! - ";
+ICCPROFLIB_DATA_API const char* icMsgValidateInformation = "Information - ";
 
 
 /**
@@ -815,8 +815,8 @@ icFloatNumber icU8toAB(icUInt8Number num)
   return (icFloatNumber)num - 128.0f;
 }
 
-ICCPROFLIB_API icFloatNumber icD50XYZ[3] = { 0.9642f, 1.0000f, 0.8249f };
-ICCPROFLIB_API icFloatNumber icD50XYZxx[3] = { 96.42f, 100.00f, 82.49f };
+ICCPROFLIB_DATA_API icFloatNumber icD50XYZ[3] = { 0.9642f, 1.0000f, 0.8249f };
+ICCPROFLIB_DATA_API icFloatNumber icD50XYZxx[3] = { 96.42f, 100.00f, 82.49f };
 
 static icFloatNumber icSafeXYZRatio(icFloatNumber value, icFloatNumber white)
 {

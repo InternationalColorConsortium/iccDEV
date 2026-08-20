@@ -183,6 +183,20 @@ IF(ENABLE_SHARED_LIBS)
   if(NOT MSVC)
     target_compile_definitions(${TARGET_NAME} PRIVATE ICCPROFLIBDLL_EXPORTS)
   endif()
+
+  # Exported global DATA (#2154, from #1888). WINDOWS_EXPORT_ALL_SYMBOLS below
+  # auto-exports functions but not data, so the eight ICCPROFLIB_DATA_API globals
+  # need real dllexport here and real dllimport in consumers. Kept separate from
+  # ICCPROFLIBDLL_EXPORTS so this does not flip the ~308 incomplete
+  # ICCPROFLIB_API annotations and change how every class and function exports.
+  #
+  # PRIVATE for the export side; INTERFACE for the import side so anything
+  # linking THIS shared target -- in-tree tools and find_package() consumers
+  # alike -- sees __declspec(dllimport). The static target deliberately gets
+  # neither, since a static consumer must keep a plain extern.
+  target_compile_definitions(${TARGET_NAME}
+    PRIVATE   ICCPROFLIBDLL_DATA_EXPORTS
+    INTERFACE ICCPROFLIBDLL_DATA_IMPORTS)
   if(ICC_USE_ZLIB)
     target_compile_definitions(${TARGET_NAME} PUBLIC ICC_USE_ZLIB=1)
   endif()

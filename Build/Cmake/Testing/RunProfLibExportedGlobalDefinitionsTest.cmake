@@ -22,8 +22,9 @@
 # So this audit derives the list from the headers instead of restating it:
 #
 #   1. scan the given headers for exported-global declarations, accepting both
-#      macro orderings in use -- `ICCPROFLIB_API extern <type> <name>;` (the
-#      eight live globals) and `extern ICCPROFLIB_API <type> <name>;` (which is
+#      macro orderings in use -- `ICCPROFLIB_DATA_API extern <type> <name>;` (the
+#      eight live globals, moved off ICCPROFLIB_API by #2154 so they can carry
+#      real dllexport/dllimport) and `extern ICCPROFLIB_API <type> <name>;` (which is
 #      how icInfo was spelled, and is itself a sign it was never touched when
 #      the others were);
 #   2. read the symbol table of the library those headers describe;
@@ -75,7 +76,7 @@ foreach(_header IN LISTS HEADERS)
   get_filename_component(_header_name "${_header}" NAME)
 
   foreach(_line IN LISTS _lines)
-    if(NOT _line MATCHES "^[ \t]*(ICCPROFLIB_API[ \t]+extern|extern[ \t]+ICCPROFLIB_API)[ \t]+(.+)$")
+    if(NOT _line MATCHES "^[ \t]*(ICCPROFLIB_API[ \t]+extern|ICCPROFLIB_DATA_API[ \t]+extern|extern[ \t]+ICCPROFLIB_API|extern[ \t]+ICCPROFLIB_DATA_API)[ \t]+(.+)$")
       continue()
     endif()
     set(_decl "${CMAKE_MATCH_2}")
@@ -217,7 +218,7 @@ if(_missing)
   string(REPLACE ";" "\n  " _missing_text "${_missing}")
   message(FATAL_ERROR
     "[proflib-exported-global-definitions] FAIL: the following global(s) are "
-    "declared ICCPROFLIB_API extern in the public headers but defined nowhere "
+    "declared ICCPROFLIB_API/ICCPROFLIB_DATA_API extern in the public headers but defined nowhere "
     "in ${LIBRARY}:\n  ${_missing_text}\n"
     "Any consumer that references one gets an unresolved external on every "
     "platform. Either define it in the corresponding .cpp or remove the "

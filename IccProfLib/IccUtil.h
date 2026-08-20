@@ -135,8 +135,8 @@ ICCPROFLIB_API icFloatNumber icU8toAB(icUInt8Number num);
 
 // Exported DATA: not linkable from outside the library on Windows shared
 // builds. See the note beside icMsgValidateWarning below and #1888.
-ICCPROFLIB_API extern icFloatNumber icD50XYZ[3];
-ICCPROFLIB_API extern icFloatNumber icD50XYZxx[3];
+ICCPROFLIB_DATA_API extern icFloatNumber icD50XYZ[3];
+ICCPROFLIB_DATA_API extern icFloatNumber icD50XYZxx[3];
 
 ICCPROFLIB_API void icNormXYZ(icFloatNumber *XYZ, icFloatNumber *WhiteXYZ=NULL);
 ICCPROFLIB_API void icDeNormXYZ(icFloatNumber *XYZ, icFloatNumber *WhiteXYZ=NULL);
@@ -211,10 +211,10 @@ ICCPROFLIB_API icUInt8Number icGetStorageTypeBytes(icUInt16Number nStorageType);
 // they also link IccXML. The literals are pinned by
 // .github/ci/regression/proflib-exported-data-linkage.cpp -- update it if these
 // strings change.
-ICCPROFLIB_API extern const char *icMsgValidateWarning;
-ICCPROFLIB_API extern const char *icMsgValidateNonCompliant;
-ICCPROFLIB_API extern const char *icMsgValidateCriticalError;
-ICCPROFLIB_API extern const char* icMsgValidateInformation;
+ICCPROFLIB_DATA_API extern const char *icMsgValidateWarning;
+ICCPROFLIB_DATA_API extern const char *icMsgValidateNonCompliant;
+ICCPROFLIB_DATA_API extern const char *icMsgValidateCriticalError;
+ICCPROFLIB_DATA_API extern const char* icMsgValidateInformation;
 
 #ifdef ICC_BYTE_ORDER_LITTLE_ENDIAN
 inline void icSwab16Ptr(void *pVoid)

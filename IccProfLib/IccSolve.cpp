@@ -137,7 +137,7 @@ public:
 CIccEigenMatrixSolver g_EigenSolver;
 
 //Define the global g_pIccMatrixSolver variable pointer
-ICCPROFLIB_API IIccMatrixSolver *g_pIccMatrixSolver = &g_EigenSolver;
+ICCPROFLIB_DATA_API IIccMatrixSolver *g_pIccMatrixSolver = &g_EigenSolver;
 
 #else
 
@@ -183,7 +183,7 @@ public:
 CIccSimpleMatrixSolver g_SimpleSolver;
 
 //Define the global g_pIccMatrixSolver variable pointer
-ICCPROFLIB_API IIccMatrixSolver *g_pIccMatrixSolver = &g_SimpleSolver;
+ICCPROFLIB_DATA_API IIccMatrixSolver *g_pIccMatrixSolver = &g_SimpleSolver;
 
 #endif
 
@@ -256,7 +256,7 @@ public:
 CIccSimpleMatrixInverter g_SimpleInverter;
 
 //Define the global g_pIccMatrixSolver variable pointer
-ICCPROFLIB_API IIccMatrixInverter *g_pIccMatrixInverter = &g_SimpleInverter;
+ICCPROFLIB_DATA_API IIccMatrixInverter *g_pIccMatrixInverter = &g_SimpleInverter;
 
 
 

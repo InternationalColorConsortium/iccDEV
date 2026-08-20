@@ -118,7 +118,7 @@ public:
 // installing its own solver against IccProfLib2.dll gets LNK2019. Prefer the
 // IccSetMatrixSolver() setter below, which is a function and therefore links
 // normally. See #1888.
-ICCPROFLIB_API extern IIccMatrixSolver *g_pIccMatrixSolver;
+ICCPROFLIB_DATA_API extern IIccMatrixSolver *g_pIccMatrixSolver;
 
 /**
 ****************************************************************************
@@ -182,7 +182,7 @@ public:
 */
 // Exported DATA: not linkable from outside the library on Windows shared
 // builds; prefer IccSetMatrixInverter(). See g_pIccMatrixSolver above and #1888.
-ICCPROFLIB_API extern IIccMatrixInverter *g_pIccMatrixInverter;
+ICCPROFLIB_DATA_API extern IIccMatrixInverter *g_pIccMatrixInverter;
 
 /**
 ****************************************************************************
