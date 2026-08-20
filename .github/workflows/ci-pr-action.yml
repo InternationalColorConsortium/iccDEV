@@ -113,6 +113,7 @@ jobs:
       fast_lane: ${{ steps.diffcheck.outputs.fast_lane }}
       include_windows: ${{ steps.diffcheck.outputs.include_windows }}
       ctest_recent_limit: ${{ steps.diffcheck.outputs.ctest_recent_limit }}
+      ctest_mode: ${{ steps.diffcheck.outputs.ctest_mode }}
       warning_policy: ${{ steps.diffcheck.outputs.warning_policy }}
       target_sha: ${{ steps.diffcheck.outputs.target_sha }}
       target_repository: ${{ steps.diffcheck.outputs.target_repository }}
@@ -179,6 +180,11 @@ jobs:
           include_windows=true
           ctest_recent_limit=0
           warning_policy=fail
+          # Default to the same full CTest surface ci-regression-checks runs,
+          # so a scope resolving ctest_recent_limit=0 ("run all selected
+          # tests") does not silently diverge by excluding slow/calculator
+          # labels. Only the fast-lane scope narrows this below.
+          ctest_mode=full
 
           case "$ci_scope" in
             auto|full|source|governance|docs|fast-lane)
@@ -221,6 +227,7 @@ jobs:
             write_github_output fast_lane "$fast_lane"
             write_github_output include_windows "$include_windows"
             write_github_output ctest_recent_limit "$ctest_recent_limit"
+            write_github_output ctest_mode "$ctest_mode"
             write_github_output warning_policy "$warning_policy"
             write_github_output target_sha "$head_sha"
             write_github_output target_repository "$target_repository"
@@ -283,6 +290,7 @@ jobs:
             ci_scope=fast-lane
             include_windows=false
             ctest_recent_limit=1
+            ctest_mode=fast
             warning_policy=fail
           }
 
@@ -315,6 +323,7 @@ jobs:
             full|source)
               include_windows=true
               ctest_recent_limit=0
+              ctest_mode=full
               warning_policy=fail
               ;;
             fast-lane)
@@ -715,6 +724,7 @@ jobs:
       fast-lane: ${{ steps.v.outputs.fast_lane }}
       include-windows: ${{ steps.v.outputs.include_windows }}
       ctest-recent-limit: ${{ steps.v.outputs.ctest_recent_limit }}
+      ctest-mode: ${{ steps.v.outputs.ctest_mode }}
       warning-policy: ${{ steps.v.outputs.warning_policy }}
 
     steps:
@@ -736,6 +746,7 @@ jobs:
           FAST_LANE: ${{ needs.detect-src.outputs.fast_lane || 'false' }}
           INCLUDE_WINDOWS: ${{ needs.detect-src.outputs.include_windows || 'true' }}
           CTEST_RECENT_LIMIT: ${{ needs.detect-src.outputs.ctest_recent_limit || '0' }}
+          CTEST_MODE: ${{ needs.detect-src.outputs.ctest_mode || 'full' }}
           WARNING_POLICY: ${{ needs.detect-src.outputs.warning_policy || 'fail' }}
         run: |
           set -euo pipefail
@@ -748,7 +759,7 @@ jobs:
             local value="$2"
 
             case "$key" in
-              regression_image_tag|fast_lane|include_windows|ctest_recent_limit|warning_policy) ;;
+              regression_image_tag|fast_lane|include_windows|ctest_recent_limit|ctest_mode|warning_policy) ;;
               *)
                 echo "Invalid output key: $key" >&2
                 exit 1
@@ -768,6 +779,7 @@ jobs:
           write_github_output fast_lane "$FAST_LANE"
           write_github_output include_windows "$INCLUDE_WINDOWS"
           write_github_output ctest_recent_limit "$CTEST_RECENT_LIMIT"
+          write_github_output ctest_mode "$CTEST_MODE"
           write_github_output warning_policy "$WARNING_POLICY"
 
   risk-gate:
@@ -799,7 +811,7 @@ jobs:
     with:
       regression_image_tag: ${{ needs.validate-inputs.outputs.regression-image-tag }}
       tool_build_type: Debug
-      ctest_mode: fast
+      ctest_mode: ${{ needs.validate-inputs.outputs.ctest-mode }}
       ctest_recent_limit: ${{ needs.validate-inputs.outputs.ctest-recent-limit }}
       warning_policy: ${{ needs.validate-inputs.outputs.warning-policy }}
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
