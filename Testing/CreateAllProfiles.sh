@@ -298,10 +298,16 @@ echo "====================== V2 =========================="
 
 # Issue #1883: before these, the corpus held no ICC v2 profile at all -- a clean
 # checkout's 210 profiles are 208 v5 and 2 v4, with no 'mft2' or 'mft1' tag
-# anywhere -- so the v2 legacy Lab encoding path was exercised by nothing. These three cover
+# anywhere -- so the v2 legacy Lab encoding path was exercised by nothing. These four cover
 # the v2 shapes that path depends on: lut16Type ('mft2', which is what selects
-# UseLegacyPCS), lut8Type ('mft1'), and the matrix/TRC form most real v2 display
-# profiles take.
+# UseLegacyPCS), lut8Type ('mft1'), the matrix/TRC form most real v2 display
+# profiles take, and grayTRC ('kTRC').
+#
+# The last was added because no profile in the tree produced a
+# CIccXformMonochrome at all, so that xform's apply path was exercised by
+# nothing. Display/GrayGSDF is the only other Gray profile and it is link class
+# with GRAY for both device space and PCS, so it builds a devicelink and never
+# reaches the monochrome xform.
 cd V2
 find . -iname "*\.icc" -delete
 if [ "$1" != "clean" ]
@@ -310,6 +316,7 @@ then
 	iccFromXml v2CmykLut16.xml   v2CmykLut16.icc
 	iccFromXml v2RgbLut8.xml     v2RgbLut8.icc
 	iccFromXml v2RgbMatrixTRC.xml v2RgbMatrixTRC.icc
+	iccFromXml v2GrayTRC.xml     v2GrayTRC.icc
 	set +x
 fi
 cd ..

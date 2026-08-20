@@ -265,6 +265,7 @@ goto end_V2
 iccFromXml v2CmykLut16.xml v2CmykLut16.icc
 iccFromXml v2RgbLut8.xml v2RgbLut8.icc
 iccFromXml v2RgbMatrixTRC.xml v2RgbMatrixTRC.icc
+iccFromXml v2GrayTRC.xml v2GrayTRC.icc
 @echo off
 :end_V2
 
