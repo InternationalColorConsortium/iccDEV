@@ -142,18 +142,33 @@ inline icUInt32Number icBenchChecksum(const icFloatNumber *pData, size_t nFloats
   return h;
 }
 
-// Deterministic fill. Rows 0..n-2 are in-gamut; the final row is pathological.
+/// Number of trailing rows icBenchFill reserves for pathological values.
+static const icUInt32Number kBenchPathologicalRows = 5;
+
+// Deterministic fill. The last kBenchPathologicalRows rows are pathological, one
+// value per row, filling every channel.
 //
-// The pathological row is deliberate. Several of the checks this harness exists
-// to measure concern clamping and non-finite handling -- ClutUnitClip, the
-// isfinite tests in the interpolators and the sampled curves. A happy-path-only
-// buffer would leave them unexercised, and would let a wrong hoist pass the
-// checksum oracle unnoticed.
+// The pathological rows are deliberate. Several of the checks this harness exists
+// to measure concern clamping and non-finite handling -- the clamp in the CLUT
+// interpolators, the isfinite tests in the sampled curves. A happy-path-only
+// buffer would leave them unexercised and let a wrong change pass the checksum
+// oracle unnoticed.
+//
+// One value per row, rather than a single row cycling through the values by
+// channel index. The cycling version had a real blind spot: it placed +Inf only
+// at channel index 4, so no profile with fewer than five input channels ever saw
+// one. That hid a deliberate change to +Inf handling in the CLUT clamp -- the
+// only profiles in the corpus that install the affected clip path are
+// three-channel, and the only >=5-channel case has no CLUT element at all, so
+// every checksum was unchanged and the change looked verified when it was
+// simply untested.
 inline void icBenchFill(icFloatNumber *pBuf, icUInt32Number nPixels,
                         icUInt16Number nSamples, icUInt32Number nSeed)
 {
   icUInt32Number state = nSeed ? nSeed : 1u;
-  const icUInt32Number nNormal = nPixels ? nPixels - 1 : 0;
+  const icUInt32Number nPath   = nPixels < kBenchPathologicalRows
+                                   ? nPixels : kBenchPathologicalRows;
+  const icUInt32Number nNormal = nPixels - nPath;
 
   for (icUInt32Number i = 0; i < nNormal; i++) {
     for (icUInt16Number s = 0; s < nSamples; s++) {
@@ -163,21 +178,21 @@ inline void icBenchFill(icFloatNumber *pBuf, icUInt32Number nPixels,
     }
   }
 
-  if (nPixels) {
-    static const icFloatNumber pathological[6] = {
-      (icFloatNumber)-1.0,
-      (icFloatNumber) 2.0,
-      (icFloatNumber) 0.0,
-      (icFloatNumber) 1.0,
-      std::numeric_limits<icFloatNumber>::infinity(),
-      -std::numeric_limits<icFloatNumber>::infinity(),
-    };
-    icFloatNumber *pLast = pBuf + (size_t)nNormal * nSamples;
-    for (icUInt16Number s = 0; s < nSamples; s++) {
-      pLast[s] = (s == nSamples - 1)
-                   ? std::numeric_limits<icFloatNumber>::quiet_NaN()
-                   : pathological[s % 6];
-    }
+  const icFloatNumber inf = std::numeric_limits<icFloatNumber>::infinity();
+  const icFloatNumber pathological[kBenchPathologicalRows] = {
+    (icFloatNumber)-1.0,                                    // below range
+    (icFloatNumber) 2.0,                                    // above range
+    inf,
+    -inf,
+    std::numeric_limits<icFloatNumber>::quiet_NaN(),
+  };
+
+  // Fill from the end, so a tiny buffer still gets the most interesting values.
+  for (icUInt32Number r = 0; r < nPath; r++) {
+    icFloatNumber *pRow = pBuf + (size_t)(nPixels - 1 - r) * nSamples;
+    const icFloatNumber v = pathological[kBenchPathologicalRows - 1 - r];
+    for (icUInt16Number s = 0; s < nSamples; s++)
+      pRow[s] = v;
   }
 }
 

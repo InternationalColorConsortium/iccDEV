@@ -4718,6 +4718,47 @@ function(iccdev_add_zip_utf8_text_zlib_test)
   endif()
 endfunction()
 
+# Pins CIccCLUT's grid-coordinate clamp semantics, in particular that +Inf
+# saturates to the top of the grid on both the default and the former NoClip
+# path. Those two disagreed about +Inf before the clamp was inlined -- one
+# saturated high, the other collapsed to zero.
+#
+# This needs its own test because the change is invisible to everything else:
+# the throughput harness reported no checksum movement on any case even with
+# +Inf on every channel, since the only corpus profiles that install the NoClip
+# path are three-channel and the only wider profile has no CLUT element.
+if(TARGET ${TARGET_LIB_ICCPROFLIB})
+  iccdev_add_regression_executable(iccClutGridClampTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/clut-grid-clamp-inf.cpp"
+  )
+  target_link_libraries(iccClutGridClampTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccClutGridClampTest)
+
+  add_test(
+    NAME iccdev.clut-grid-clamp-inf
+    COMMAND "$<TARGET_FILE:iccClutGridClampTest>"
+  )
+  set_tests_properties(iccdev.clut-grid-clamp-inf PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;iccprofLib;clut;clamp;regression"
+  )
+  if(WIN32)
+    set(_clutclamp_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccClutGridClampTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _clutclamp_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.clut-grid-clamp-inf PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_clutclamp_windows_env_mods}"
+    )
+  endif()
+endif()
+
+
 # Throughput harness for the IccProfLib apply paths (iccBenchApply).
 #
 # NOTE: this must stay ABOVE the if(WIN32) branch immediately below. That branch

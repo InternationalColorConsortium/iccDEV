@@ -1731,8 +1731,52 @@ static icFloatNumber ClutUnitClip(icFloatNumber v)
     return 0;
   else if (v>1.0)
     return 1.0;
- 
+
   return v;
+}
+
+/**
+****************************************************************************
+* Name: icClutGridClamp
+*
+* Purpose: Scales a source component into grid units and clamps it to [0, mx].
+*
+*  Replaces the m_UnitClipFunc indirect call that every Interp* function used to
+*  make once per input channel per pixel, together with the isfinite and range
+*  tests that followed it. Those did the same work twice: ClutUnitClip mapped NaN
+*  to 0 and clamped to [0,1], and the interpolator then re-tested isfinite and
+*  clamped to [0,mx]. Clamping to [0,mx] after the multiply subsumes clamping to
+*  [0,1] before it, and the indirect call was what stopped the whole sequence
+*  vectorizing.
+*
+*  Exactly equivalent to the former ClutUnitClip path for every input:
+*
+*     v        old (ClutUnitClip)          new
+*     0.5      0.5 -> 0.5*mx              0.5*mx
+*     1.5      clipped to 1.0 -> mx       1.5*mx > mx -> mx
+*    -0.5      clipped to 0   -> 0        negative -> 0
+*     NaN      isnan -> 0     -> 0        !(NaN > 0) is true -> 0
+*    +Inf      clipped to 1.0 -> mx       Inf > mx -> mx
+*    -Inf      clipped to 0   -> 0        !(-Inf > 0) -> 0
+*
+*  It DELIBERATELY CHANGES the former NoClip path for +Inf only. NoClip passed the
+*  value through, so +Inf reached the isfinite test and produced 0 -- the opposite
+*  end of the grid from what the default path produced for the same input. The two
+*  paths now agree that +Inf saturates high. Every other input, including NaN and
+*  -Inf, is unchanged on both paths.
+*****************************************************************************
+*/
+static inline icFloatNumber icClutGridClamp(icFloatNumber v, icUInt8Number mx)
+{
+  const icFloatNumber fmx = (icFloatNumber)mx;
+  const icFloatNumber x = v * fmx;
+
+  if (!(x > 0.0f))    // comparison is false for NaN, so NaN and -Inf land here
+    return 0.0f;
+  if (x > fmx)
+    return fmx;
+
+  return x;
 }
 
 /**
@@ -2644,17 +2688,7 @@ void CIccCLUT::Interp1d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
 {
   icUInt8Number mx = m_MaxGridPoint[0];
 
-  icFloatNumber x = m_UnitClipFunc(srcPixel[0]) * mx;
-  
-  // m_UnitClipFunc points to NoClip
-  if (!std::isfinite(x))
-    x = 0.0f;
-    
-  if (x < 0.0f)
-    x = 0.0f;
-
-  if (x > mx)
-    x = mx;
+  icFloatNumber x = icClutGridClamp(srcPixel[0], mx);
 
   icUInt32Number ix = (icUInt32Number)x;
 
@@ -2699,25 +2733,10 @@ void CIccCLUT::Interp2d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icUInt8Number mx = m_MaxGridPoint[0];
   icUInt8Number my = m_MaxGridPoint[1];
 
-  // The UnitClip function pointer is calling "NoClip", but now removes NaN and Inf
-  icFloatNumber x = m_UnitClipFunc(srcPixel[0]) * mx;
-  icFloatNumber y = m_UnitClipFunc(srcPixel[1]) * my;
-  
-  // m_UnitClipFunc points to NoClip
-  if (!std::isfinite(x))
-    x = 0.0f;
-  if (!std::isfinite(y))
-    y = 0.0f;
-    
-  if (x < 0.0f)
-    x = 0.0f;
-  if (y < 0.0f)
-    y = 0.0f;
-
-  if (x > mx)
-    x = mx;
-  if (y > my)
-    y = my;
+  // See icClutGridClamp: scales into grid units and clamps, replacing the former
+  // m_UnitClipFunc call plus the isfinite and range tests that followed it.
+  icFloatNumber x = icClutGridClamp(srcPixel[0], mx);
+  icFloatNumber y = icClutGridClamp(srcPixel[1], my);
 
   icUInt32Number ix = (icUInt32Number)x;
   icUInt32Number iy = (icUInt32Number)y;
@@ -2781,31 +2800,11 @@ void CIccCLUT::Interp3dTetra(icFloatNumber *destPixel, const icFloatNumber *srcP
   icUInt8Number my = m_MaxGridPoint[1];
   icUInt8Number mz = m_MaxGridPoint[2];
 
-  icFloatNumber x = m_UnitClipFunc(srcPixel[0]) * mx;
-  icFloatNumber y = m_UnitClipFunc(srcPixel[1]) * my;
-  icFloatNumber z = m_UnitClipFunc(srcPixel[2]) * mz;
-  
-  // m_UnitClipFunc points to NoClip, so no actual clipping is done
-  if (!std::isfinite(x))
-    x = 0.0f;
-  if (!std::isfinite(y))
-    y = 0.0f;
-  if (!std::isfinite(z))
-    z = 0.0f;
-
-  if (x < 0.0f)
-    x = 0.0f;
-  if (y < 0.0f)
-    y = 0.0f;
-  if (z < 0.0f)
-    z = 0.0f;
-
-  if (x > mx)
-    x = mx;
-  if (y > my)
-    y = my;
-  if (z > mz)
-    z = mz;
+  // See icClutGridClamp: scales into grid units and clamps, replacing the former
+  // m_UnitClipFunc call plus the isfinite and range tests that followed it.
+  icFloatNumber x = icClutGridClamp(srcPixel[0], mx);
+  icFloatNumber y = icClutGridClamp(srcPixel[1], my);
+  icFloatNumber z = icClutGridClamp(srcPixel[2], mz);
 
   icUInt32Number ix = (icUInt32Number)x;
   icUInt32Number iy = (icUInt32Number)y;
@@ -2889,31 +2888,11 @@ void CIccCLUT::Interp3d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icUInt8Number my = m_MaxGridPoint[1];
   icUInt8Number mz = m_MaxGridPoint[2];
 
-  icFloatNumber x = m_UnitClipFunc(srcPixel[0]) * mx;
-  icFloatNumber y = m_UnitClipFunc(srcPixel[1]) * my;
-  icFloatNumber z = m_UnitClipFunc(srcPixel[2]) * mz;
-  
-  // m_UnitClipFunc points to NoClip, so no actual clipping is done
-  if (!std::isfinite(x))
-    x = 0.0f;
-  if (!std::isfinite(y))
-    y = 0.0f;
-  if (!std::isfinite(z))
-    z = 0.0f;
-    
-  if (x < 0.0f)
-    x = 0.0f;
-  if (y < 0.0f)
-    y = 0.0f;
-  if (z < 0.0f)
-    z = 0.0f;
-
-  if (x > mx)
-    x = mx;
-  if (y > my)
-    y = my;
-  if (z > mz)
-    z = mz;
+  // See icClutGridClamp: scales into grid units and clamps, replacing the former
+  // m_UnitClipFunc call plus the isfinite and range tests that followed it.
+  icFloatNumber x = icClutGridClamp(srcPixel[0], mx);
+  icFloatNumber y = icClutGridClamp(srcPixel[1], my);
+  icFloatNumber z = icClutGridClamp(srcPixel[2], mz);
 
   icUInt32Number ix = (icUInt32Number)x;
   icUInt32Number iy = (icUInt32Number)y;
@@ -3016,38 +2995,12 @@ void CIccCLUT::Interp4d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icUInt8Number my = m_MaxGridPoint[2];
   icUInt8Number mz = m_MaxGridPoint[3];
 
-  icFloatNumber w = m_UnitClipFunc(srcPixel[0]) * mw;
-  icFloatNumber x = m_UnitClipFunc(srcPixel[1]) * mx;
-  icFloatNumber y = m_UnitClipFunc(srcPixel[2]) * my;
-  icFloatNumber z = m_UnitClipFunc(srcPixel[3]) * mz;
-  
-  // m_UnitClipFunc points to NoClip
-  if (!std::isfinite(w))
-    w = 0.0f;
-  if (!std::isfinite(x))
-    x = 0.0f;
-  if (!std::isfinite(y))
-    y = 0.0f;
-  if (!std::isfinite(z))
-    z = 0.0f;
-    
-  if (w < 0.0f)
-    w = 0.0f;
-  if (x < 0.0f)
-    x = 0.0f;
-  if (y < 0.0f)
-    y = 0.0f;
-  if (z < 0.0f)
-    z = 0.0f;
-
-  if (x > mx)
-    x = mx;
-  if (y > my)
-    y = my;
-  if (z > mz)
-    z = mz;
-  if (w > mw)
-    w = mw;
+  // See icClutGridClamp: scales into grid units and clamps, replacing the former
+  // m_UnitClipFunc call plus the isfinite and range tests that followed it.
+  icFloatNumber w = icClutGridClamp(srcPixel[0], mw);
+  icFloatNumber x = icClutGridClamp(srcPixel[1], mx);
+  icFloatNumber y = icClutGridClamp(srcPixel[2], my);
+  icFloatNumber z = icClutGridClamp(srcPixel[3], mz);
 
   icUInt32Number iw = (icUInt32Number)w;
   icUInt32Number ix = (icUInt32Number)x;
@@ -3131,45 +3084,16 @@ void CIccCLUT::Interp5d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icUInt8Number m3 = m_MaxGridPoint[3];
   icUInt8Number m4 = m_MaxGridPoint[4];
 
-  icFloatNumber g0 = m_UnitClipFunc(srcPixel[0]) * m0;
-  icFloatNumber g1 = m_UnitClipFunc(srcPixel[1]) * m1;
-  icFloatNumber g2 = m_UnitClipFunc(srcPixel[2]) * m2;
-  icFloatNumber g3 = m_UnitClipFunc(srcPixel[3]) * m3;
-  icFloatNumber g4 = m_UnitClipFunc(srcPixel[4]) * m4;
-  
-  // m_UnitClipFunc points to NoClip
-  if (!std::isfinite(g0))
-    g0 = 0.0f;
-  if (!std::isfinite(g1))
-    g1 = 0.0f;
-  if (!std::isfinite(g2))
-    g2 = 0.0f;
-  if (!std::isfinite(g3))
-    g3 = 0.0f;
-  if (!std::isfinite(g4))
-    g4 = 0.0f;
+  // See icClutGridClamp: scales into grid units and clamps, replacing the former
+  // m_UnitClipFunc call plus the isfinite and range tests that followed it. The
+  // g5 guard added for #1504 is subsumed -- the helper treats every channel
+  // identically, so no channel can be left without one.
 
-  if (g0 < 0.0f)
-    g0 = 0.0f;
-  if (g1 < 0.0f)
-    g1 = 0.0f;
-  if (g2 < 0.0f)
-    g2 = 0.0f;
-  if (g3 < 0.0f)
-    g3 = 0.0f;
-  if (g4 < 0.0f)
-    g4 = 0.0f;
-    
-  if (g0 > m0)
-    g0 = m0;
-  if (g1 > m1)
-    g1 = m1;
-  if (g2 > m2)
-    g2 = m2;
-  if (g3 > m3)
-    g3 = m3;
-  if (g4 > m4)
-    g4 = m4;
+  icFloatNumber g0 = icClutGridClamp(srcPixel[0], m0);
+  icFloatNumber g1 = icClutGridClamp(srcPixel[1], m1);
+  icFloatNumber g2 = icClutGridClamp(srcPixel[2], m2);
+  icFloatNumber g3 = icClutGridClamp(srcPixel[3], m3);
+  icFloatNumber g4 = icClutGridClamp(srcPixel[4], m4);
 
   icUInt32Number ig0 = (icUInt32Number)g0;
   icUInt32Number ig1 = (icUInt32Number)g1;
@@ -3278,57 +3202,17 @@ void CIccCLUT::Interp6d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icUInt8Number m4 = m_MaxGridPoint[4];
   icUInt8Number m5 = m_MaxGridPoint[5];
 
-  icFloatNumber g0 = m_UnitClipFunc(srcPixel[0]) * m0;
-  icFloatNumber g1 = m_UnitClipFunc(srcPixel[1]) * m1;
-  icFloatNumber g2 = m_UnitClipFunc(srcPixel[2]) * m2;
-  icFloatNumber g3 = m_UnitClipFunc(srcPixel[3]) * m3;
-  icFloatNumber g4 = m_UnitClipFunc(srcPixel[4]) * m4;
-  icFloatNumber g5 = m_UnitClipFunc(srcPixel[5]) * m5;
-  
-  // m_UnitClipFunc points to NoClip
-  if (!std::isfinite(g0))
-    g0 = 0.0f;
-  if (!std::isfinite(g1))
-    g1 = 0.0f;
-  if (!std::isfinite(g2))
-    g2 = 0.0f;
-  if (!std::isfinite(g3))
-    g3 = 0.0f;
-  if (!std::isfinite(g4))
-    g4 = 0.0f;
-  // g5 needs the same NaN/Inf guard as g0..g4: the < 0 and > m5 clamps below
-  // cannot catch a non-finite value (NaN compares false against both bounds),
-  // so without this an Inf/NaN srcPixel[5] would reach the (icUInt32Number)g5
-  // cast unguarded -- undefined behaviour. (g0..g4 were guarded here; g5 was
-  // missed when this finiteness block was added.)
-  if (!std::isfinite(g5))
-    g5 = 0.0f;
+  // See icClutGridClamp: scales into grid units and clamps, replacing the former
+  // m_UnitClipFunc call plus the isfinite and range tests that followed it. The
+  // g5 guard added for #1504 is subsumed -- the helper treats every channel
+  // identically, so no channel can be left without one.
 
-  if (g0 < 0.0f)
-    g0 = 0.0f;
-  if (g1 < 0.0f)
-    g1 = 0.0f;
-  if (g2 < 0.0f)
-    g2 = 0.0f;
-  if (g3 < 0.0f)
-    g3 = 0.0f;
-  if (g4 < 0.0f)
-    g4 = 0.0f;
-  if (g5 < 0.0f)
-    g5 = 0.0f;
-
-  if (g0 > m0)
-    g0 = m0;
-  if (g1 > m1)
-    g1 = m1;
-  if (g2 > m2)
-    g2 = m2;
-  if (g3 > m3)
-    g3 = m3;
-  if (g4 > m4)
-    g4 = m4;
-  if (g5 > m5)
-    g5 = m5;
+  icFloatNumber g0 = icClutGridClamp(srcPixel[0], m0);
+  icFloatNumber g1 = icClutGridClamp(srcPixel[1], m1);
+  icFloatNumber g2 = icClutGridClamp(srcPixel[2], m2);
+  icFloatNumber g3 = icClutGridClamp(srcPixel[3], m3);
+  icFloatNumber g4 = icClutGridClamp(srcPixel[4], m4);
+  icFloatNumber g5 = icClutGridClamp(srcPixel[5], m5);
 
   icUInt32Number ig0 = (icUInt32Number)g0;
   icUInt32Number ig1 = (icUInt32Number)g1;
@@ -3488,13 +3372,9 @@ void CIccCLUT::InterpND(icFloatNumber *destPixel, const icFloatNumber *srcPixel,
     return;
 
   for (i=0; i<m_nInput; i++) {
-    g[i] = m_UnitClipFunc(srcPixel[i]) * m_MaxGridPoint[i];
-    if (!std::isfinite(g[i]))
-      g[i] = 0.0;
-    if (g[i] < 0)
-      g[i] = 0.0;
-    if (g[i] > m_MaxGridPoint[i])
-      g[i] = m_MaxGridPoint[i];
+    // See icClutGridClamp: scales into grid units and clamps, replacing the
+    // former m_UnitClipFunc call plus the isfinite and range tests.
+    g[i] = icClutGridClamp(srcPixel[i], m_MaxGridPoint[i]);
     ig[i] = (icUInt32Number)g[i];
     s[m_nInput-1-i] = g[i] - ig[i];
     if (ig[i]==m_MaxGridPoint[i]) {

@@ -389,6 +389,14 @@ public:
   void Iterate(IIccCLUTExec* pExec);
   icValidateStatus Validate(std::string sigPath, std::string &sReport, const CIccProfile* pProfile=NULL)  const;
 
+  /// Retained for source compatibility; has no effect.
+  ///
+  /// The Interp* functions now clamp inline via icClutGridClamp rather than
+  /// calling through a function pointer, and they do so uniformly -- the former
+  /// ClutUnitClip and NoClip behaviours are unified, differing only in that
+  /// +Inf now saturates to the top of the grid on both paths instead of
+  /// collapsing to the bottom on the NoClip one. The stored pointer is kept so
+  /// existing callers still compile, but nothing reads it.
   void SetClipFunc(icCLUTCLIPFUNC ClipFunc) { m_UnitClipFunc = ClipFunc; }
 
   icUInt8Number GetPrecision() { return m_nPrecision; }
