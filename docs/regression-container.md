@@ -425,6 +425,43 @@ Repository rules intentionally differ by branch:
   deletion. Its hosted `ci-pr-action` and `ci-docker` runs are dispatched after
   the push rather than configured as pre-push required contexts.
 
+## Apt Package Version Drift (ci-docker Failures)
+
+`Dockerfile` and `Dockerfile.ci-regression` pin exact `apt-get install`
+`package=version` strings against the digest-pinned Ubuntu base image so
+builds stay reproducible. The Ubuntu 26.04 apt archive still republishes point
+releases for the same base digest (for example a `-3ubuntu4` package becoming
+`-3ubuntu5`, or a `build-essential` metapackage gaining a distro revision
+suffix), and a stale pin then fails `apt-get install` with
+`E: Unable to satisfy dependencies` or `E: Version '<pinned>' for '<pkg>' was
+not found`, which surfaces as a `ci-docker` job failure with exit code `100`.
+
+Diagnose and fix a drifted pin:
+
+```bash
+# 1. Reproduce locally against the exact pinned base digest.
+docker build -f Dockerfile -t iccdev-local-ubuntu-test .
+docker build -f Dockerfile.ci-regression -t iccdev-local-regression-test .
+
+# 2. Regenerate current candidate versions for every pinned package in a
+#    disposable container from the same base digest (replace PKGS with the
+#    package list from the failing Dockerfile).
+docker run --rm ubuntu:26.04@sha256:<digest> bash -c '
+  apt-get update -qq
+  for p in PKGS; do
+    v=$(apt-cache policy "$p" | awk "/Candidate:/{print \$2}")
+    echo "$p=$v"
+  done'
+```
+
+Update only the packages whose candidate version differs from the pin; do not
+relax exact pins to unpinned installs. Apply the same pin fix consistently
+across every maintained container file that shares the pin (`Dockerfile` and
+`Dockerfile.ci-regression`; `Dockerfile.mcp` intentionally tracks unpinned
+security updates and is unaffected), confirm with a clean local `docker build`,
+then carry the fix to other maintained branches per the branch-parity step
+above only when a maintainer has requested that branch be updated.
+
 ## Maintainer Report
 
 Report:
