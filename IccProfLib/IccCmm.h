@@ -371,6 +371,7 @@ public:
 //forward reference to CIccXform used by CIccApplyXform
 class CIccApplyXform;
 class CIccMatrixMath;
+class CIccSparseMatrix;   // held by CIccPcsStepSparseMatrix; defined in IccSparseMatrix.h
 
 /**
  **************************************************************************
@@ -661,6 +662,14 @@ public:
   virtual icPcsStepType GetType() { return icPcsStepUnknown; }
 
   virtual CIccApplyPcsStep *GetNewApply();
+
+  /// Called once by CIccPcsXform::Begin() before any Apply(), after the step list
+  /// is fully built by Connect()/Optimize(). Steps that can precompute invariant
+  /// state do it here rather than lazily on first Apply(): Apply() is const and
+  /// runs concurrently on every worker thread, so a lazy initialisation would be
+  /// a data race. Must be idempotent -- Begin() can be reached more than once.
+  /// Return false to fail the enclosing transform.
+  virtual bool BeginStep() { return true; }
 
   virtual ~CIccPcsStep() {}
   virtual void Apply(CIccApplyPcsStep *pApply, icFloatNumber *pDst, const icFloatNumber *pSrc) const=0;
@@ -1037,6 +1046,8 @@ public:
   virtual icUInt16Number GetSrcChannels() const { return m_nCols; }
   virtual icUInt16Number GetDstChannels() const { return m_nRows; }
 
+  virtual bool BeginStep();
+
   icFloatNumber *data() { return m_vals;}
   const icFloatNumber *data() const { return m_vals;}
 
@@ -1047,6 +1058,11 @@ protected:
   icUInt16Number m_nRows, m_nCols, m_nChannels;
   icUInt32Number m_nBytesPerMatrix;
   icFloatNumber *m_vals;
+
+  /// Built once by BeginStep() from m_vals; read-only in Apply(). Lives on the
+  /// step rather than in a per-apply object because it is immutable after
+  /// BeginStep() and MultiplyVector() is const, so all threads share one.
+  CIccSparseMatrix *m_pMtx;
 
 };
 
@@ -1117,7 +1133,7 @@ public:
   icStatusCMM ConnectFirst(CIccXform* pToXform, icColorSpaceSignature srcSpace);
   icStatusCMM ConnectLast(CIccXform* pFromXform, icColorSpaceSignature dstSpace);
 
-  virtual icStatusCMM Begin() { return icCmmStatOk; }
+  virtual icStatusCMM Begin();
 
   virtual CIccApplyXform *GetNewApply(icStatusCMM &status);  //Must be called after Begin
 

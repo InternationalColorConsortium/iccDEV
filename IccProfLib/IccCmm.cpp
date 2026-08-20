@@ -2843,7 +2843,35 @@ icStatusCMM CIccPcsXform::ConnectLast(CIccXform* pFromXform, icColorSpaceSignatu
  **************************************************************************
  * Name: CIccPcsXform::Optimize
  * 
- * Purpose: 
+ * Purpose:
+ *  Gives each step in the chain its one chance to precompute invariant state.
+ *
+ *  Runs after Connect()/Optimize() have finished building the list and before
+ *  GetNewApply(), so a step can build immutable data here and treat it as
+ *  read-only in Apply(). Doing that work lazily on first Apply() instead would
+ *  be a data race: Apply() is const and runs concurrently on every worker
+ *  thread of a CIccThreadedCmm.
+ **************************************************************************
+ */
+icStatusCMM CIccPcsXform::Begin()
+{
+  if (m_list) {
+    CIccPcsStepList::iterator i;
+
+    for (i = m_list->begin(); i != m_list->end(); i++) {
+      if (i->ptr && !i->ptr->BeginStep())
+        return icCmmStatInvalidLut;
+    }
+  }
+
+  return icCmmStatOk;
+}
+
+/**
+**************************************************************************
+ * Name: CIccPcsXform::Optimize
+ *
+ * Purpose:
  *  Analyzes and concatenates/removes transforms in pcs transformation chain
  **************************************************************************
  */
@@ -5415,20 +5443,55 @@ CIccPcsStepSparseMatrix::CIccPcsStepSparseMatrix(icUInt16Number nRows, icUInt16N
   m_nBytesPerMatrix = nBytesPerMatrix;
   m_nChannels = 0;
   m_vals = new icFloatNumber[m_nBytesPerMatrix/sizeof(icFloatNumber)];
+  m_pMtx = NULL;   // built by BeginStep(), once m_vals has been populated
 }
 
 
 /**
 **************************************************************************
 * Name: CIccPcsStepSparseMatrix::~CIccPcsStepSparseMatrix
-* 
-* Purpose: 
+*
+* Purpose:
 *  Destructor
 **************************************************************************
 */
 CIccPcsStepSparseMatrix::~CIccPcsStepSparseMatrix()
 {
+  delete m_pMtx;
   delete [] m_vals;
+}
+
+
+/**
+**************************************************************************
+* Name: CIccPcsStepSparseMatrix::BeginStep
+*
+* Purpose:
+*  Builds the sparse matrix wrapper once, before any Apply().
+*
+*  The matrix is parsed from m_vals, which is fixed by the time the step list is
+*  built, so the CIccSparseMatrix it produces is identical for every pixel.
+*  Apply() used to construct one per pixel with bInitFromData=true, and
+*  CIccSparseMatrix::Init() (IccSparseMatrix.cpp:145) unconditionally deletes and
+*  re-news its m_Data accessor -- so that was a heap allocation and free on every
+*  pixel, plus a dimension re-parse and the 4096-dimension bounds test.
+*
+*  It is held on the step rather than in a CIccApplyPcsStep because it is
+*  immutable from here on and MultiplyVector() is const, so every thread can
+*  share the one instance. Contrast CIccPcsStepSrcSparseMatrix, whose matrix
+*  wraps per-pixel source data and therefore cannot be shared.
+**************************************************************************
+*/
+bool CIccPcsStepSparseMatrix::BeginStep()
+{
+  // Idempotent: BeginStep() can be reached more than once, and rebuilding from
+  // the same m_vals yields the same matrix.
+  delete m_pMtx;
+
+  m_pMtx = new (std::nothrow) CIccSparseMatrix((icUInt8Number*)m_vals,
+                                               m_nBytesPerMatrix,
+                                               icSparseMatrixFloatNum, true);
+  return m_pMtx != NULL;
 }
 
 
@@ -5443,9 +5506,10 @@ CIccPcsStepSparseMatrix::~CIccPcsStepSparseMatrix()
 */
 void CIccPcsStepSparseMatrix::Apply(CIccApplyPcsStep * /* pApply */, icFloatNumber *pDst, const icFloatNumber *pSrc) const
 {
-  CIccSparseMatrix mtx((icUInt8Number*)m_vals, m_nBytesPerMatrix, icSparseMatrixFloatNum, true);
-
-  mtx.MultiplyVector(pDst, pSrc);
+  // Matrix built once in BeginStep(). This used to construct a CIccSparseMatrix
+  // here, which allocated and freed on every pixel -- see BeginStep().
+  if (m_pMtx)
+    m_pMtx->MultiplyVector(pDst, pSrc);
 }
 
 
