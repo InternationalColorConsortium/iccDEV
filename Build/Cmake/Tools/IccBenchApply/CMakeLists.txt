@@ -15,6 +15,7 @@ IF(NOT TARGET iccBenchApply)
   SET(SRC_PATH ../../../..)
   SET(SOURCES
     ${SRC_PATH}/Tools/CmdLine/IccBenchApply/iccBenchApply.cpp
+    ${SRC_PATH}/Tools/CmdLine/IccBenchApply/BenchCases.cpp
   )
   SET(TARGET_NAME iccBenchApply)
 

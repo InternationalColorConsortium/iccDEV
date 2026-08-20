@@ -85,6 +85,7 @@
 #include "IccTagLut.h"
 #include "IccUtil.h"
 
+#include "BenchCases.h"
 #include "BenchTimer.h"
 
 static icUInt32Number   g_nPixels   = 1048576;
@@ -92,6 +93,8 @@ static int              g_nRepeats  = 7;
 static bool             g_bPerXform = false;
 static bool             g_bLeaf     = false;
 static std::vector<int> g_threads;
+static bool             g_bSuite    = false;
+static bool             g_bCsv      = false;
 
 static void Usage()
 {
@@ -106,6 +109,8 @@ static void Usage()
   printf("  -perxform          per-xform breakdown, including PCS steps\n");
   printf("  -leaf              isolated hot leaf functions\n");
   printf("  -threads L         comma list of thread counts, e.g. 1,2,8\n");
+  printf("  -suite             run the built-in case table, ignoring any chain\n");
+  printf("  -csv               machine-readable output\n");
   printf("\nNo timing threshold is ever asserted. This tool records.\n");
 }
 
@@ -130,6 +135,27 @@ static bool ParseIntArg(const char *arg, int minValue, int maxValue, int &value)
 
   value = (int)parsed;
   return true;
+}
+
+// Decodes one encoded rendering intent the way iccApplyToLink.cpp:1054-1059 does,
+// so a chain given to this tool and the same chain given to that one resolve
+// identically. Returns false when the decoded intent is out of range.
+static bool DecodeIntent(int nEncoded, int &nIntent, int &nType,
+                         bool &bUseSubProfile, bool &bUseD2BxB2DxTags)
+{
+  bUseSubProfile = (nEncoded / 1000) > 0;
+  nIntent = nEncoded % 1000;
+  nIntent = nIntent % 100;
+  nType   = abs(nIntent) / 10;
+  nIntent = nIntent % 10;
+
+  bUseD2BxB2DxTags = true;
+  if (nType == 1) {
+    nType = 0;
+    bUseD2BxB2DxTags = false;
+  }
+
+  return nIntent >= (int)icPerceptual && nIntent <= (int)icAbsoluteColorimetric;
 }
 
 // Names for the icXformType values in IccCmm.h:177-187. PCS is named explicitly
@@ -232,10 +258,17 @@ static bool RunThreadSweep(CIccCmm &cmm, const std::vector<int> &threads,
     if (!bMatch)
       bOk = false;
 
-    printf("  %-16s t=%-4d %9.2f %7.2fx  0x%08x  %s\n",
-           i ? "" : szCaseName, n, st.medianMpxPerSec,
-           rateFirst > 0.0 ? st.medianMpxPerSec / rateFirst : 0.0,
-           sum, bMatch ? "OK" : "CHECKSUM MISMATCH");
+    if (g_bCsv) {
+      printf("%s,%d,%.3f,%.3f,%.3f,0x%08x,%s\n",
+             szCaseName, n, st.medianMpxPerSec, st.minMpxPerSec,
+             st.maxMpxPerSec, sum, bMatch ? "ok" : "checksum-mismatch");
+    }
+    else {
+      printf("  %-16s t=%-4d %9.2f %7.2fx  0x%08x  %s\n",
+             i ? "" : szCaseName, n, st.medianMpxPerSec,
+             rateFirst > 0.0 ? st.medianMpxPerSec / rateFirst : 0.0,
+             sum, bMatch ? "OK" : "CHECKSUM MISMATCH");
+    }
   }
 
   if (!bOk) {
@@ -344,6 +377,144 @@ static void RunLeaf(const char *szProfilePath)
   delete pProfile;
 }
 
+// Runs the built-in table.
+//
+// A case whose profile is missing is a SKIP with a reason, not a failure: a build
+// configured without ENABLE_ICCXML never generates most of the corpus, and the
+// cases whose profiles are tracked should still run there. An explicit chain on
+// the command line is held to a stricter standard and fails loudly instead.
+static int RunSuite()
+{
+  const std::vector<BenchCase> &cases = icBenchBuiltinCases();
+  bool bAllOk = true;
+  int  nRan = 0, nSkipped = 0;
+
+  if (g_bCsv)
+    printf("case,threads,mpx_per_sec,min,max,checksum,status\n");
+  else
+    printf("\n  %-16s %-6s %9s %8s  %-10s %s\n",
+           "case", "thr", "Mpx/s", "scale", "checksum", "status");
+
+  for (size_t c = 0; c < cases.size(); c++) {
+    const BenchCase &bc = cases[c];
+
+    std::vector<std::string> resolved;
+    bool bHaveAll = true;
+    std::string sMissing;
+
+    for (size_t i = 0; i < bc.chain.size(); i++) {
+      std::string abs;
+      if (!icBenchResolveProfile(bc.chain[i].profile, abs)) {
+        bHaveAll = false;
+        sMissing = bc.chain[i].profile;
+        break;
+      }
+      resolved.push_back(abs);
+    }
+
+    if (!bHaveAll) {
+      if (g_bCsv)
+        printf("%s,,,,,,skip-missing-profile\n", bc.name.c_str());
+      else
+        printf("  %-16s SKIP   %s not found\n", bc.name.c_str(),
+               sMissing.c_str());
+      nSkipped++;
+      continue;
+    }
+
+    CIccCmm theCmm(icSigUnknownData, icSigUnknownData, true);
+    bool bBuilt = true;
+
+    for (size_t i = 0; i < bc.chain.size(); i++) {
+      int nIntent, nType;
+      bool bSub, bD2B;
+      if (!DecodeIntent(bc.chain[i].encodedIntent, nIntent, nType, bSub, bD2B)) {
+        printf("  %-16s SKIP   bad encoded intent %d\n",
+               bc.name.c_str(), bc.chain[i].encodedIntent);
+        bBuilt = false;
+        break;
+      }
+
+      icStatusCMM stat = theCmm.AddXform(resolved[i].c_str(),
+                                         (icRenderingIntent)nIntent,
+                                         bc.interpolation ? icInterpTetrahedral
+                                                          : icInterpLinear,
+                                         NULL, (icXformLutType)nType,
+                                         bD2B, NULL, bSub);
+      if (stat != icCmmStatOk) {
+        if (g_bCsv)
+          printf("%s,,,,,,skip-addxform\n", bc.name.c_str());
+        else
+          printf("  %-16s SKIP   AddXform(%s): %s\n", bc.name.c_str(),
+                 bc.chain[i].profile.c_str(), CIccCmm::GetStatusText(stat));
+        bBuilt = false;
+        break;
+      }
+    }
+
+    if (!bBuilt) {
+      nSkipped++;
+      continue;
+    }
+
+    icStatusCMM stat = theCmm.Begin();
+    if (stat != icCmmStatOk) {
+      if (g_bCsv)
+        printf("%s,,,,,,skip-begin\n", bc.name.c_str());
+      else
+        printf("  %-16s SKIP   Begin(): %s\n", bc.name.c_str(),
+               CIccCmm::GetStatusText(stat));
+      nSkipped++;
+      continue;
+    }
+
+    if (!RunThreadSweep(theCmm, g_threads, bc.name.c_str()))
+      bAllOk = false;
+    nRan++;
+
+    // CIccCmm::Begin() returns early when m_pApply is set -- the idempotency
+    // contract e4e05c3a restored for #1940. The optimisation branches add
+    // Begin()-time precomputation, so a second Begin() must stay a no-op in both
+    // status and output. Checked on one representative case rather than all
+    // eight, because it costs a full extra apply pass.
+    if (bc.name == "lut-3d-tetra") {
+      const icUInt16Number nS = theCmm.GetSourceSamples();
+      const icUInt16Number nD = theCmm.GetDestSamples();
+      std::vector<icFloatNumber> src((size_t)g_nPixels * nS);
+      std::vector<icFloatNumber> dst((size_t)g_nPixels * nD);
+      icBenchFill(src.data(), g_nPixels, nS, 20260820u);
+
+      theCmm.Apply(dst.data(), src.data(), g_nPixels);
+      const icUInt32Number sumBefore = icBenchChecksum(dst.data(), dst.size());
+
+      const icStatusCMM again = theCmm.Begin();
+      if (again != icCmmStatOk) {
+        printf("  FAIL: second Begin() on %s reported %s, expected icCmmStatOk\n",
+               bc.name.c_str(), CIccCmm::GetStatusText(again));
+        bAllOk = false;
+      }
+      else {
+        theCmm.Apply(dst.data(), src.data(), g_nPixels);
+        if (icBenchChecksum(dst.data(), dst.size()) != sumBefore) {
+          printf("  FAIL: second Begin() on %s changed the output\n",
+                 bc.name.c_str());
+          bAllOk = false;
+        }
+        else if (!g_bCsv) {
+          printf("  %-16s begin-reentry   OK (status and checksum unchanged)\n",
+                 bc.name.c_str());
+        }
+      }
+    }
+  }
+
+  if (!g_bCsv)
+    printf("\n  %d case(s) measured, %d skipped.%s\n", nRan, nSkipped,
+           bAllOk ? "" : "  SOME CASES FAILED.");
+
+  return bAllOk ? 0 : 1;
+}
+
 int main(int argc, const char *argv[])
 {
   if (argc < 3) {
@@ -380,6 +551,14 @@ int main(int argc, const char *argv[])
       g_bLeaf = true;
       nArg++;
     }
+    else if (!stricmp(argv[nArg], "-suite")) {
+      g_bSuite = true;
+      nArg++;
+    }
+    else if (!stricmp(argv[nArg], "-csv")) {
+      g_bCsv = true;
+      nArg++;
+    }
     else if (!stricmp(argv[nArg], "-threads")) {
       if (nArg + 1 >= argc) {
         printf("-threads needs a comma-separated list, e.g. 1,2,8\n");
@@ -414,6 +593,13 @@ int main(int argc, const char *argv[])
     }
   }
 
+  if (g_threads.empty())
+    g_threads.push_back(1);
+
+  // -suite ignores any chain arguments, as documented: the table is the input.
+  if (g_bSuite)
+    return RunSuite();
+
   int nInterp;
   if (nArg >= argc || !ParseIntArg(argv[nArg], 0, 1, nInterp)) {
     printf("Invalid interpolation: expected 0 (linear) or 1 (tetrahedral)\n");
@@ -447,20 +633,10 @@ int main(int argc, const char *argv[])
     }
     nArg += 2;
 
-    // Same decode as iccApplyToLink.cpp:1054-1059.
-    bool bUseSubProfile = (nEncoded / 1000) > 0;
-    int nIntent = nEncoded % 1000;
-    nIntent = nIntent % 100;
-    int nType = abs(nIntent) / 10;
-    nIntent = nIntent % 10;
-
-    bool bUseD2BxB2DxTags = true;
-    if (nType == 1) {
-      nType = 0;
-      bUseD2BxB2DxTags = false;
-    }
-
-    if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric) {
+    int nIntent, nType;
+    bool bUseSubProfile, bUseD2BxB2DxTags;
+    if (!DecodeIntent(nEncoded, nIntent, nType,
+                      bUseSubProfile, bUseD2BxB2DxTags)) {
       printf("Invalid rendering intent '%s': decoded intent out of range\n",
              argv[nArg - 1]);
       return 1;
@@ -522,9 +698,6 @@ int main(int argc, const char *argv[])
            " nothing to measure\n", (int)nSrc, (int)nDst);
     return 1;
   }
-
-  if (g_threads.empty())
-    g_threads.push_back(1);
 
   printf("\n  %-16s %-6s %9s %8s  %-10s %s\n",
          "case", "thr", "Mpx/s", "scale", "checksum", "status");
