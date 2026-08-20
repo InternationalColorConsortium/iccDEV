@@ -1278,6 +1278,11 @@ protected:
 
   virtual bool HasPerceptualHandling() { return false; }
 
+	/// Perceptual reference white in this profile's PCS encoding, computed once
+	/// by Begin(). Apply() rebuilt it on every pixel from compile-time constants.
+	/// Immutable after Begin(), so shared safely across threads.
+	icFloatNumber m_PcsWhite[3];
+
 	CIccCurve *m_Curve;
 	CIccCurve *GetCurve(icSignature sig) const;
 	CIccCurve *GetInvCurve(icSignature sig) const;

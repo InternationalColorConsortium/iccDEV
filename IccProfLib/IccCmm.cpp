@@ -5675,6 +5675,29 @@ icStatusCMM CIccXformMonochrome::Begin()
 		m_ApplyCurvePtr = m_Curve;
 	}
 
+	// Apply() used to rebuild this on every pixel, in both directions, from
+	// compile-time constants: icXyzToPcs plus, for a Lab PCS, XyzToLab and its
+	// three cube roots, behind a virtual UseLegacyPCS() call. Nothing in it
+	// depends on the source colour, and both m_pProfile->m_Header.pcs and
+	// UseLegacyPCS() are fixed by the time Begin() runs.
+	//
+	// Idempotent: recomputing from the same constants yields the same values, so
+	// reaching Begin() a second time is harmless.
+	m_PcsWhite[0] = icFloatNumber(icPerceptualRefWhiteX);
+	m_PcsWhite[1] = icFloatNumber(icPerceptualRefWhiteY);
+	m_PcsWhite[2] = icFloatNumber(icPerceptualRefWhiteZ);
+
+	icXyzToPcs(m_PcsWhite);
+
+	if (m_pProfile->m_Header.pcs==icSigLabData) {
+		if (UseLegacyPCS()) {
+			CIccPCSUtil::XyzToLab2(m_PcsWhite, m_PcsWhite, true);
+		}
+		else {
+			CIccPCSUtil::XyzToLab(m_PcsWhite, m_PcsWhite, true);
+		}
+	}
+
 	return icCmmStatOk;
 }
 
@@ -5698,6 +5721,9 @@ void CIccXformMonochrome::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel,
   if (m_bSrcPcsConversion)
 	  SrcPixel = CheckSrcAbs(pApply, SrcPixel);
 
+	// m_PcsWhite is computed once in Begin(). Both branches below used to rebuild
+	// it here on every pixel -- icXyzToPcs, and for a Lab PCS XyzToLab's three
+	// cube roots behind a virtual UseLegacyPCS() call -- entirely from constants.
 	if (m_bInput) {
 		Pixel[0] = SrcPixel[0];
 
@@ -5705,43 +5731,24 @@ void CIccXformMonochrome::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel,
 			Pixel[0] = m_ApplyCurvePtr->Apply(Pixel[0]);
 		}
 
-		DstPixel[0] = icFloatNumber(icPerceptualRefWhiteX); 
-		DstPixel[1] = icFloatNumber(icPerceptualRefWhiteY);
-		DstPixel[2] = icFloatNumber(icPerceptualRefWhiteZ);
-
-		icXyzToPcs(DstPixel);
-
-		if (m_pProfile->m_Header.pcs==icSigLabData) {
-			if (UseLegacyPCS()) {
-				CIccPCSUtil::XyzToLab2(DstPixel, DstPixel, true);
-			}
-			else {
-				CIccPCSUtil::XyzToLab(DstPixel, DstPixel, true);
-			}
-		}
-
-		DstPixel[0] *= Pixel[0];
-		DstPixel[1] *= Pixel[0];
-		DstPixel[2] *= Pixel[0];
+		DstPixel[0] = m_PcsWhite[0] * Pixel[0];
+		DstPixel[1] = m_PcsWhite[1] * Pixel[0];
+		DstPixel[2] = m_PcsWhite[2] * Pixel[0];
 	}
 	else {
-		Pixel[0] = icFloatNumber(icPerceptualRefWhiteX); 
-		Pixel[1] = icFloatNumber(icPerceptualRefWhiteY);
-		Pixel[2] = icFloatNumber(icPerceptualRefWhiteZ);
-
-		icXyzToPcs(Pixel);
-
+		// The divide is kept rather than turned into a precomputed reciprocal:
+		// x/w and x*(1/w) are not bit-identical, and the cube roots hoisted above
+		// dominate a single division. Preserving exact output keeps the harness
+		// checksum usable as a strict equality oracle for the rest of this branch.
+		//
+		// The header test selects which source component to read rather than
+		// computing anything, so it stays; folding it into another member would
+		// buy nothing measurable.
 		if (m_pProfile->m_Header.pcs==icSigLabData) {
-			if (UseLegacyPCS()) {
-				CIccPCSUtil::XyzToLab2(Pixel, Pixel, true);
-			}
-			else {
-				CIccPCSUtil::XyzToLab(Pixel, Pixel, true);
-			}
-			DstPixel[0] = SrcPixel[0]/Pixel[0];
+			DstPixel[0] = SrcPixel[0]/m_PcsWhite[0];
 		}
 		else {
-			DstPixel[0] = SrcPixel[1]/Pixel[1];
+			DstPixel[0] = SrcPixel[1]/m_PcsWhite[1];
 		}
 
 		if (m_ApplyCurvePtr) {
