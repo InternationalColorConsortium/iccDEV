@@ -78,15 +78,17 @@
 #include <vector>
 
 #include "IccCmm.h"
+#include "IccCmmThread.h"
 #include "IccDefs.h"
 #include "IccProfLibVer.h"
 #include "IccUtil.h"
 
 #include "BenchTimer.h"
 
-static icUInt32Number g_nPixels  = 1048576;
-static int            g_nRepeats = 7;
-static bool           g_bPerXform = false;
+static icUInt32Number   g_nPixels   = 1048576;
+static int              g_nRepeats  = 7;
+static bool             g_bPerXform = false;
+static std::vector<int> g_threads;
 
 static void Usage()
 {
@@ -162,6 +164,83 @@ public:
   std::vector<CIccXform *> m_xforms;
 };
 
+// Runs the chain at each requested thread count.
+//
+// The checksum must be identical at every count. That is the assertion, not a
+// nicety: it is what catches precomputed state parked on a shared CIccXform or
+// CIccPcsStep when it belonged in the per-thread apply object. A hoist that
+// looks correct single-threaded and races under load fails here.
+//
+// Returns false if any count disagreed with the first.
+static bool RunThreadSweep(CIccCmm &cmm, const std::vector<int> &threads,
+                           const char *szCaseName)
+{
+  const icUInt16Number nSrc = cmm.GetSourceSamples();
+  const icUInt16Number nDst = cmm.GetDestSamples();
+
+  std::vector<icFloatNumber> src((size_t)g_nPixels * nSrc);
+  std::vector<icFloatNumber> dst((size_t)g_nPixels * nDst);
+  icBenchFill(src.data(), g_nPixels, nSrc, 20260820u);
+
+  bool bOk = true;
+  icUInt32Number sumFirst = 0;
+  double rateFirst = 0.0;
+  bool bHaveFirst = false;
+
+  for (size_t i = 0; i < threads.size(); i++) {
+    const int n = threads[i];
+
+    BenchStats st;
+    icUInt32Number sum;
+
+    if (n == 1) {
+      st = icBenchRun(
+        [&]() { cmm.Apply(dst.data(), src.data(), g_nPixels); },
+        g_nPixels, g_nRepeats);
+      sum = icBenchChecksum(dst.data(), dst.size());
+    }
+    else {
+      // bDeleteCmm=false because this tool owns theCmm and reuses it across
+      // every thread count. ~CIccThreadedCmm does "if (m_bDeleteCmm) delete
+      // m_pCmm" (IccCmmThread.cpp:256-260), so passing true would free the CMM
+      // after the first threaded iteration and the next one would use freed
+      // memory.
+      CIccThreadedCmm *pT = CIccThreadedCmm::Attach(&cmm, n, false);
+      if (!pT) {
+        printf("  %-16s t=%-4d  (Attach failed; skipped)\n", szCaseName, n);
+        continue;
+      }
+      st = icBenchRun(
+        [&]() { pT->Apply(dst.data(), src.data(), g_nPixels); },
+        g_nPixels, g_nRepeats);
+      sum = icBenchChecksum(dst.data(), dst.size());
+      delete pT;
+    }
+
+    if (!bHaveFirst) {
+      sumFirst   = sum;
+      rateFirst  = st.medianMpxPerSec;
+      bHaveFirst = true;
+    }
+
+    const bool bMatch = (sum == sumFirst);
+    if (!bMatch)
+      bOk = false;
+
+    printf("  %-16s t=%-4d %9.2f %7.2fx  0x%08x  %s\n",
+           i ? "" : szCaseName, n, st.medianMpxPerSec,
+           rateFirst > 0.0 ? st.medianMpxPerSec / rateFirst : 0.0,
+           sum, bMatch ? "OK" : "CHECKSUM MISMATCH");
+  }
+
+  if (!bOk) {
+    printf("\n  FAIL: %s produced different output at different thread counts.\n"
+           "        Per-thread state is being shared. This is a correctness\n"
+           "        defect, not a performance one.\n", szCaseName);
+  }
+  return bOk;
+}
+
 int main(int argc, const char *argv[])
 {
   if (argc < 3) {
@@ -193,6 +272,33 @@ int main(int argc, const char *argv[])
     else if (!stricmp(argv[nArg], "-perxform")) {
       g_bPerXform = true;
       nArg++;
+    }
+    else if (!stricmp(argv[nArg], "-threads")) {
+      if (nArg + 1 >= argc) {
+        printf("-threads needs a comma-separated list, e.g. 1,2,8\n");
+        return 1;
+      }
+      g_threads.clear();
+      const char *p = argv[nArg + 1];
+      std::string tok;
+      while (true) {
+        if (*p == ',' || *p == '\0') {
+          int n;
+          if (!ParseIntArg(tok.c_str(), 1, 1024, n)) {
+            printf("Invalid thread count '%s': expected 1..1024\n", tok.c_str());
+            return 1;
+          }
+          g_threads.push_back(n);
+          tok.clear();
+          if (!*p)
+            break;
+        }
+        else {
+          tok.push_back(*p);
+        }
+        p++;
+      }
+      nArg += 2;
     }
     else {
       printf("Unknown option '%s'\n", argv[nArg]);
@@ -307,24 +413,12 @@ int main(int argc, const char *argv[])
     return 1;
   }
 
-  // std::vector rather than new[]: these buffers are large enough that
-  // allocation failure is a real outcome, and a throwing allocation here must
-  // not leak the other one.
-  std::vector<icFloatNumber> src((size_t)g_nPixels * nSrc);
-  std::vector<icFloatNumber> dst((size_t)g_nPixels * nDst);
+  if (g_threads.empty())
+    g_threads.push_back(1);
 
-  icBenchFill(src.data(), g_nPixels, nSrc, 20260820u);
-
-  const BenchStats st = icBenchRun(
-    [&]() { theCmm.Apply(dst.data(), src.data(), g_nPixels); },
-    g_nPixels, g_nRepeats);
-
-  const icUInt32Number sum = icBenchChecksum(dst.data(), dst.size());
-
-  printf("\n  %-20s %9s %9s %9s  %-10s\n",
-         "case", "Mpx/s", "min", "max", "checksum");
-  printf("  %-20s %9.2f %9.2f %9.2f  0x%08x\n",
-         "chain", st.medianMpxPerSec, st.minMpxPerSec, st.maxMpxPerSec, sum);
+  printf("\n  %-16s %-6s %9s %8s  %-10s %s\n",
+         "case", "thr", "Mpx/s", "scale", "checksum", "status");
+  const bool bSweepOk = RunThreadSweep(theCmm, g_threads, "chain");
 
   if (g_bPerXform) {
     printf("\n  per-xform breakdown:\n");
@@ -397,5 +491,7 @@ int main(int argc, const char *argv[])
            "        decomposition of the chain figure.\n");
   }
 
-  return 0;
+  // A checksum that moved with the thread count is a correctness failure, so it
+  // has to reach the exit code -- the CTest registration asserts on nothing else.
+  return bSweepOk ? 0 : 1;
 }
