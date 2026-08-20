@@ -148,9 +148,9 @@ jobs:
           TARGET_SHA: ${{ inputs.target_sha }}
         run: |
           set -euo pipefail
-          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           case "$TARGET_SHA" in
             *[!0-9a-fA-F]*)
               echo "ERROR: invalid target SHA: $(sanitize_line "$TARGET_SHA")" >&2

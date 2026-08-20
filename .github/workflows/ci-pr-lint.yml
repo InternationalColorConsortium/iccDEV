@@ -113,9 +113,9 @@ jobs:
       - name: Validate lint inputs
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
           # shellcheck disable=SC1091
           source trusted/.github/scripts/sanitize-sed.sh
 
@@ -150,9 +150,9 @@ jobs:
       - name: Install lint dependencies
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
           # shellcheck disable=SC1091
           source trusted/.github/scripts/sanitize-sed.sh
 
@@ -182,9 +182,9 @@ jobs:
           PR_BASE_REF: ${{ github.base_ref || 'master' }}
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
           # shellcheck disable=SC1091
           source trusted/.github/scripts/sanitize-sed.sh
 
@@ -237,9 +237,9 @@ jobs:
           CXX: clang++
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
           # shellcheck disable=SC1091
           source trusted/.github/scripts/sanitize-sed.sh
 
@@ -263,9 +263,9 @@ jobs:
         if: steps.files.outputs.file_count != '0' && env.RUN_CPPCHECK_INPUT == 'true'
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
           # shellcheck disable=SC1091
           source trusted/.github/scripts/sanitize-sed.sh
 
@@ -306,9 +306,9 @@ jobs:
         if: steps.files.outputs.file_count != '0' && env.RUN_CLANG_TIDY_INPUT == 'true'
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
           # shellcheck disable=SC1091
           source trusted/.github/scripts/sanitize-sed.sh
 
@@ -333,9 +333,9 @@ jobs:
           SELECTED_LINT_SCOPE: ${{ steps.files.outputs.lint_scope || 'unknown' }}
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
           # shellcheck disable=SC1091
           source trusted/.github/scripts/sanitize-sed.sh
 

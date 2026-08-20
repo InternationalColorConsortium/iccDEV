@@ -66,9 +66,9 @@ jobs:
         # preflight: allow-codeql-actions reason=readonly-build-target-checkout
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           source "$GITHUB_WORKSPACE/trusted-base/.github/scripts/sanitize-sed.sh"
 
           test "$(git rev-parse HEAD)" = "$TARGET_SHA"

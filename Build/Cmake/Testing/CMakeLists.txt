@@ -3936,6 +3936,41 @@ function(iccdev_add_mpexml_unknown_reserved_test)
   endif()
 endfunction()
 
+function(iccdev_add_calc_envsig_sign_extension_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCalcEnvSigSignExtensionTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/calc-envsig-sign-extension.cpp"
+  )
+  target_link_libraries(iccCalcEnvSigSignExtensionTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccCalcEnvSigSignExtensionTest)
+
+  add_test(
+    NAME iccdev.calc-envsig-sign-extension
+    COMMAND "$<TARGET_FILE:iccCalcEnvSigSignExtensionTest>"
+  )
+  set_tests_properties(iccdev.calc-envsig-sign-extension PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;calculator;issue-2196;regression"
+  )
+  if(WIN32)
+    set(_calc_envsig_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCalcEnvSigSignExtensionTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _calc_envsig_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.calc-envsig-sign-extension PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_calc_envsig_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1888: proves a regression executable can link an exported IccProfLib global
 # *variable*. WINDOWS_EXPORT_ALL_SYMBOLS exports functions but not data, so on a
 # Windows shared build this only links via ${ICCDEV_TEST_LIB_ICCPROFLIB}; if that
@@ -4897,6 +4932,7 @@ if(WIN32)
   iccdev_add_signature_utils_contract_test()
   iccdev_add_tiff_create_overflow_test()
   iccdev_add_mpexml_unknown_reserved_test()
+  iccdev_add_calc_envsig_sign_extension_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
   iccdev_add_json_bcd_version_test()
@@ -5179,6 +5215,7 @@ iccdev_add_mcs_colorspace_name_test()
 iccdev_add_signature_utils_contract_test()
 iccdev_add_tiff_create_overflow_test()
 iccdev_add_mpexml_unknown_reserved_test()
+iccdev_add_calc_envsig_sign_extension_test()
 iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_proflib_exported_global_definitions_test()
 iccdev_add_json_bcd_version_test()

@@ -388,9 +388,9 @@ jobs:
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
-          source .github/scripts/sanitize-sed.sh
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
           if [ "$PUBLISH_IMAGE" = "true" ]; then
             TEST_IMAGE="${IMAGE_REF}"
             docker pull "${IMAGE_REF}"
@@ -486,9 +486,9 @@ jobs:
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
-          source .github/scripts/sanitize-sed.sh
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
           if [ "$PUBLISH_IMAGE" = "true" ]; then
             TEST_IMAGE="${IMAGE_REF}"
             docker pull "${IMAGE_REF}"
@@ -524,9 +524,9 @@ jobs:
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
-          source .github/scripts/sanitize-sed.sh
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
           if [ "$PUBLISH_IMAGE" = "true" ]; then
             TEST_IMAGE="${IMAGE_REF}"
             docker pull "${IMAGE_REF}"
@@ -586,6 +586,8 @@ jobs:
 
           docker run --rm "$TEST_IMAGE" bash -lc '
             set -euo pipefail
+            git config --global credential.helper ""
+            unset GITHUB_TOKEN || true
             command -v git gh clang clang++ gcc g++ cmake make realpath afl-fuzz afl-showmap llvm-symbolizer
             command -v clang-tidy cppcheck scan-build valgrind gdb gdbserver lldb lld ld.lld lcov gcovr jq curl shellcheck
             command -v llvm-cov llvm-profdata file strace
@@ -643,6 +645,8 @@ jobs:
 
           docker run --rm "$TEST_IMAGE" bash -lc '
             set -euo pipefail
+            git config --global credential.helper ""
+            unset GITHUB_TOKEN || true
             test "$PWD" = /workspace/iccDEV
             test -d .git
             test -f IccProfLib/IccProfile.cpp
@@ -912,6 +916,7 @@ jobs:
         run: |
           set -euo pipefail
           git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           source .github/scripts/sanitize-sed.sh
 
           ORG="InternationalColorConsortium"

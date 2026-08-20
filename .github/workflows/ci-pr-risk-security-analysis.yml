@@ -112,6 +112,7 @@ jobs:
       ANALYSIS_TARGET: ${{ github.event.pull_request.number && 'Pull request' || inputs.analysis_target || 'Current branch workflows' }}
       PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number || '' }}
       GIT_REF: ${{ github.event.pull_request.head.sha || inputs.git_ref || github.ref }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
       SEVERITY_THRESHOLD: ${{ inputs.severity_threshold || 'HIGH' }}
       FAIL_ON_FINDINGS: ${{ github.event_name == 'pull_request' && 'true' || inputs.fail_on_findings && 'true' || 'false' }}
       SCAN_ROOT: ${{ github.workspace }}/target
@@ -457,6 +458,78 @@ jobs:
           echo "[HIGH] Absolute cache policy violation detected" >> "$RISK_REPORT_PATH"
           echo "" >> "$RISK_REPORT_PATH"
           echo "<details><summary>Cache policy findings</summary>" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
+          while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            echo "- \`$(sanitize_line "$line")\`" >> "$RISK_REPORT_PATH"
+          done < "$policy_log"
+          echo "" >> "$RISK_REPORT_PATH"
+          echo "</details>" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
+          exit 1
+
+      - name: "1c. Bash Prologue Governance Audit"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+        # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          cd "$SCAN_ROOT"
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          if [[ -f "$SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            sanitize_line() { printf '%s' "$1"; }
+          fi
+
+          echo "## 1c. Bash Prologue Governance Audit" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
+
+          checker="$TRUSTED_SCRIPTS/check-workflow-bash-prologue.py"
+          if [ ! -x "$checker" ]; then
+            echo "[WARN] Trusted base lacks the Bash prologue checker; enforcement begins after this bootstrap change merges." >> "$RISK_REPORT_PATH"
+            exit 0
+          fi
+
+          mapfile -t workflow_files < <(
+            find .github/workflows -maxdepth 1 -type f \
+              \( -name '*.yml' -o -name '*.yaml' \) | sort
+          )
+          if [ "${#workflow_files[@]}" -eq 0 ]; then
+            echo "[HIGH] Bash prologue policy violation: no workflow files found" >> "$RISK_REPORT_PATH"
+            exit 1
+          fi
+
+          mapfile -t changed_workflows < <(
+            git diff --name-only --diff-filter=ACMRT "$BASE_SHA"...HEAD -- .github/workflows |
+              awk '/\.ya?ml$/'
+          )
+          if [ "${#changed_workflows[@]}" -eq 0 ]; then
+            echo "[OK] No changed workflow files require Bash prologue validation" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
+            exit 0
+          fi
+
+          policy_log="$(mktemp)"
+          set +e
+          python3 "$checker" --changed --base "$BASE_SHA" "${changed_workflows[@]}" >"$policy_log" 2>&1
+          policy_status=$?
+          set -e
+
+          if [ "$policy_status" -eq 0 ]; then
+            echo "[OK] All Bash workflow steps have the required security prologue" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
+            exit 0
+          fi
+
+          echo "[HIGH] Bash prologue policy violation detected" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
+          echo "<details><summary>Bash prologue findings</summary>" >> "$RISK_REPORT_PATH"
           echo "" >> "$RISK_REPORT_PATH"
           while IFS= read -r line; do
             [ -n "$line" ] || continue

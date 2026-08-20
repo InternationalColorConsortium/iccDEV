@@ -15,6 +15,7 @@ REMOTE_URL="${2:-}"
 NULL_SHA="0000000000000000000000000000000000000000"
 
 WARNINGS=()
+REQUIRES_PREFLIGHT=0
 
 warn() {
   WARNINGS+=("$1")
@@ -127,7 +128,26 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   if [ -n "$maintainer_changes" ]; then
     warn "Push changes maintainer-owned infrastructure paths; confirm reviewer coverage."
   fi
+
+  if git diff --quiet "$review_range" -- \
+    '.github/workflows/**' \
+    '.github/scripts/**' \
+    '.githooks/**' \
+    'Dockerfile' \
+    'Dockerfile.*'; then
+    :
+  else
+    REQUIRES_PREFLIGHT=1
+  fi
 done
+
+if [ "$REQUIRES_PREFLIGHT" -eq 1 ]; then
+  echo "Running required pre-push security gate for workflow, hook, script, or container changes." >&2
+  if ! .github/scripts/preflight-safety-checks.sh --require-tools; then
+    echo "[FAIL] Pre-push security gate failed." >&2
+    exit 1
+  fi
+fi
 
 if [ "${#WARNINGS[@]}" -eq 0 ]; then
   exit 0

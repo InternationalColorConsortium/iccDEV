@@ -16,7 +16,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Package versions are pinned to the digest-pinned Ubuntu base validated on master.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-    build-essential=12.12ubuntu2 \
+    build-essential=12.12ubuntu2.26.04.2 \
     cmake=4.2.3-2ubuntu2 \
     gcc=4:15.2.0-5ubuntu1 \
     g++=4:15.2.0-5ubuntu1 \
@@ -26,7 +26,7 @@ RUN apt-get update \
     libxml2-16=2.15.2+dfsg-0.1ubuntu0.1 \
     libxml2-dev=2.15.2+dfsg-0.1ubuntu0.1 \
     nlohmann-json3-dev=3.12.0.really.3.12.0.really.3.11.3-3build1 \
-    libtiff-dev=4.7.0-3ubuntu4 \
+    libtiff-dev=4.7.0-3ubuntu5 \
     libjpeg-dev=8c-2ubuntu12 \
     libpng-dev=1.6.57-1 \
     zlib1g-dev=1:1.3.dfsg+really1.3.1-1ubuntu3 \
@@ -84,7 +84,7 @@ LABEL org.opencontainers.image.title="iccDEV Build Container" \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libc6=2.43-2ubuntu2.3 \
     libxml2-16=2.15.2+dfsg-0.1ubuntu0.1 \
-    libtiff6=4.7.0-3ubuntu4 \
+    libtiff6=4.7.0-3ubuntu5 \
     libjpeg8=8c-2ubuntu12 \
     libpng16-16t64=1.6.57-1 \
     libasan8=16-20260322-1ubuntu1 \
