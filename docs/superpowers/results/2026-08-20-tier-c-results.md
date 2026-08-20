@@ -48,6 +48,40 @@ the value of each change, not measures of it.
 | C1 sparse PCS matrix built once | kept | **no coverage exists** |
 | C2 monochrome reference white | kept | **+5.7% / +6.5%** |
 | C3 MPE PCS encodings cached | **reverted** | **−4.9%, consistent** |
+| C4 ACS flag cached on apply object | kept | 0, below noise |
+| C5 AdjustPCS dispatch cached | **not attempted** | predicted ~0 |
+| C6 CLUT clip call removed | kept | **+29% … +38%** |
+| C7 XYZ-to-Lab reciprocals | **reverted** | +1.8%, moved output |
+| C8 observer flags / named-colour dispatch | **not attempted** | predicted ~0 |
+
+### The pattern, which contradicts the audit's premise
+
+The audit assumed per-pixel invariant recomputation is waste worth removing. That
+turns out to be true only when the recomputation is **expensive**:
+
+| change | what it removed per pixel | measured |
+|---|---|---|
+| C6 | an indirect call plus duplicated arithmetic, per channel | **+29-38%** |
+| C2 | three stores, `icXyzToPcs`, and on the Lab path three cube roots | **+6%** |
+| C7 | three divisions and six comparisons | **+1.8%** |
+| C4 | two calls, one virtual | **0** |
+| C3 | a virtual call and two integer comparisons | **−5%** |
+
+Replacing three *divisions* with three multiplications bought 1.8%, which says
+the PCS step is dominated by `icCubeth`'s cube roots rather than by the
+arithmetic around them. Below roughly that level of saving, hoisting stops paying
+and can lose: a cached member is a load from wherever the compiler puts it, while
+the expression it replaced was often reading data the surrounding apply path had
+already pulled into cache.
+
+C5 and C8 were **not attempted** on that basis. C5 replaces two virtual
+`UseLegacyPCS()` calls and a header dereference with a member load -- the same
+shape as C3, which regressed -- against a measured headroom of about 1.4% between
+`pcs-rel` and `pcs-abs`. C8's observer half replaces two bit-tests with two bool
+loads, smaller again; its named-colour half is not covered by any benchmark case,
+and after C1 and C7 the standard on this branch is not to land unmeasurable
+changes that carry risk. Both are recorded here rather than implemented, so the
+reasoning survives even though the code does not.
 
 ### C1 -- build the sparse PCS matrix once instead of per pixel
 
@@ -138,3 +172,67 @@ assumed from a member's type or name. `CIccCmm::Begin()` does substantial work
 both before and after the per-xform loop, so any candidate for caching needs its
 write-ordering checked against that sequence specifically. This applies directly
 to the remaining tasks that plan to cache flags on `CIccXform`.
+
+
+### C4 -- cache the ACS flag on the apply object
+
+`CIccTagMultiProcessElement::Apply`'s middle loop called `GetElem()` and then the
+virtual `IsAcs()` for every middle element of every pixel -- paid by every MPE
+chain of three or more elements whether or not it contains an ACS element.
+Resolved once when the apply object is constructed.
+
+**Deliberately not implemented as planned.** The plan proposed filtering ACS
+elements out of the apply list. `Apply()` only skips them in the *middle* of the
+chain, so a first or last ACS element is applied, and `CIccMpeAcs::Apply` is a
+`memcpy` the buffer plumbing depends on -- removing entries would change which
+element occupies those positions. No profile in the corpus has an ACS element and
+no test exercises `CIccMpeAcs`, so that could not have been verified. Caching the
+flag gets the same saving with list structure byte-identical.
+
+No measurable effect: two A/B runs disagreed on the sign for every case, and the
+first was uniformly negative including `monochrome`, which contains no MPE
+element at all. Kept because it is strictly less work with no behaviour risk.
+
+### C6 -- clamp CLUT grid coordinates inline
+
+The largest win in the branch, and the one case where the audit's reasoning held.
+Every `Interp*` function called `m_UnitClipFunc` per input channel per pixel and
+then repeated the work with `isfinite` and a range clamp.
+
+| case | change | CLUT in chain |
+|---|---|---|
+| `lut-3d-tetra` | **+31% … +38%** | two |
+| `mono-lab` | **+29% … +42%** | one |
+| `pcs-rel` / `pcs-abs` | +6% … +8% | one |
+| `spectral-6ch` | +6% … +7% | one, small share |
+| `matrix-trc`, `monochrome` | ~0 | **none** (controls) |
+| `mpe-calc` | ~0 | interpreter-bound at 0.14 Mpx/s |
+
+The two CLUT-free chains reading ~0 across runs is what makes the large numbers
+credible rather than drift.
+
+**Two coverage holes surfaced here.** The deliberate `+Inf` semantic change --
+unifying the former `ClutUnitClip` and `NoClip` paths, which disagreed at
+opposite ends of the grid -- moved **no checksum on any case**, even with `+Inf`
+on every channel. The only corpus profiles installing the `NoClip` path are
+three-channel, and the only wider profile has no CLUT element. It is now pinned
+by `.github/ci/regression/clut-grid-clamp-inf.cpp`, verified to fail on exactly
+one check against the previous library.
+
+The harness input buffer was also wrong, and not only for this change: it wrote
+`pathological[s % 6]`, placing `+Inf` at channel index 4 alone, so no profile
+with fewer than five input channels ever received one -- most of the corpus. It
+now uses one pathological row per value, each filling every channel.
+
+### C7 -- XYZ-to-Lab reciprocals (REVERTED)
+
+Implemented as a public `icXYZtoLabRecip` overload plus `icXYZWhiteRecip`, with
+the reciprocals held next to `m_xyzWhite` so they share an already-hot cache
+line. `spectral-6ch`, the only case that exercises `CIccPcsStepXYZToLab`, gained
+**+1.8%** -- inside the noise floor -- while its checksum moved, because `x/w`
+and `x*(1/w)` are not bit-identical.
+
+Reverted: it cost bit-exactness and new public API surface for no measurable
+gain. The narrower variant the plan offered as a fallback -- keep the division,
+hoist only the six comparisons -- was not pursued either, since it saves strictly
+less than the 1.8% already shown to be unmeasurable.
