@@ -114,17 +114,23 @@ typedef struct {
 /**
  * How a profile relates to the HDR Profile sub-class of clause 8.10.
  *
- * The distinction matters because the clause's own definition is otherwise
- * circular: an HDR Profile is required to carry a cicpTag whose
- * TransferCharacteristics is 8, 16 or 18, so a profile that gets that field
- * wrong is not an HDR Profile and the rule can never be violated. The
- * "intended" state is the non-circular hook - a profile that carries HDR
- * machinery (a tone-mapping descriptor, or HDR metadata) without satisfying
- * 8.10.1 is asserting HDR semantics it does not qualify for, and that is what
- * a validator can usefully report.
+ * 8.10.1 states the relation in its own words: "An HDR Profile is a sub-class
+ * of the three-component matrix-based Input or Display profile defined in 8.3.3
+ * and 8.4.3". It then states four conditions for membership of that sub-class -
+ * profile format version 4.5.0.0, the matrix-based RGB Input or Display
+ * structure, a cicpTag, and a TransferCharacteristics of 8, 16 or 18 - and they
+ * are DEFINITIONAL, not conformance requirements. A profile that misses one is
+ * not an HDR Profile; it remains the Input or Display profile 8.10.1 names as
+ * the parent, and nothing is wrong with it. A matrix/TRC profile whose cicpTag
+ * says TransferCharacteristics 13, for instance, is an ordinary Display profile
+ * that happens to carry a cicpTag - not a broken HDR Profile.
+ *
+ * Nothing in this API, in CIccProfile::CheckHdrProfile(), or in the PAWG report
+ * reports non-membership as an error or a warning. The most that is ever said
+ * is what a profile IS.
  */
 typedef enum {
-  /** No HDR Profile content and no HDR-specific evidence. */
+  /** No HDR Profile content and no HDR-related content. */
   icHdrProfileNone = 0,
 
   /** Satisfies clause 8.10.1 in full: version 4.5.0.0, RGB, Input or Display,
@@ -132,9 +138,11 @@ typedef enum {
    * in {8, 16, 18}. */
   icHdrProfileConforming = 1,
 
-  /** Carries HDR-specific content - a HAGC tag, or HDR Image / HDR Display
-   * metadata - but does not satisfy 8.10.1. */
-  icHdrProfileIntended = 2,
+  /** Not an HDR Profile, but carrying HDR-related content: a HAGC tag, HDR
+   * Image / HDR Display metadata, or a cicpTag declaring the PQ or HLG
+   * transfer. Purely descriptive - it exists so a report can say what the
+   * profile is, and carries no verdict of any kind. */
+  icHdrProfileHdrContent = 2,
 } icHdrProfileClass;
 
 /**
@@ -159,22 +167,26 @@ typedef enum {
  *  Reads the HDR Image and HDR Display entries of clauses 8.10.4 and 8.10.5
  *  out of a profile's metadataTag.
  *
- *  REGISTRY CAVEAT, and the reason this class exists at all. Both clauses say
- *  the ICC dictType Metadata Registry "is the authoritative source for the
- *  names, encodings and semantics of each entry" and that "those definitions
- *  are not reproduced in this amendment". That registry is not in hand. So
- *  the key names below, and every value encoding this class parses, are
- *  reconstructions - they are what the amendment's prose and the equivalent
- *  video-standard metadata imply, not what a normative document states.
+ *  Both clauses make the ICC dictType Metadata Registry "the authoritative
+ *  source for the names, encodings and semantics of each entry". The four
+ *  HDR Image entries this class reads - CRWL, CLL, MDCV, CCV - are registered
+ *  (HDR Image category, Apple Inc., 2025-06-04) and are read on the field
+ *  lists their Value columns give. The dictType definition posted alongside
+ *  the registry fixes the storage: name and value strings are UTF-16BE
+ *  Unicode, not NULL terminated.
  *
- *  Everything that depends on the reconstruction is therefore isolated here,
- *  one function per key, each documenting exactly what it assumes and
- *  returning false rather than a guess when the value does not match. Callers
- *  can tell "absent" from "present but not understood" (see
- *  HasUnparsedEntries()), and no validation diagnostic anywhere is raised on
- *  the strength of a parse this class performed - only informational output.
- *  When the registry becomes available, the assumptions to re-check are the
- *  ones marked ASSUMED in IccHdrProfile.cpp.
+ *  The three HDR Display entries - DERH, DCV, DRWL - are not registered.
+ *  Clause 8.10.5 is not yet accepted, so the registry correctly carries no
+ *  HDR Display category; their names and shapes are read from 8.10.5 itself,
+ *  DCV on the shape of its registered sibling MDCV.
+ *
+ *  One thing the registry does not state is what separates the fields of a
+ *  multi-value entry, so any of space, tab, comma or semicolon is accepted,
+ *  and a value whose field count is wrong is reported as unparsed rather than
+ *  read as its first few fields. Callers can tell "absent" from "present but
+ *  not understood" (see HasUnparsedEntries()), and no validation diagnostic
+ *  anywhere is raised on the strength of a parse this class performed - only
+ *  informational output.
  ***********************************************************************
  */
 class ICCPROFLIB_API CIccHdrMetadataReader
@@ -202,12 +214,15 @@ public:
   bool HasContentLightLevel() const { return m_bHasCll; }
   icFloatNumber GetMaxContentLightLevel() const { return m_maxCll; }
   icFloatNumber GetMaxFrameAverageLightLevel() const { return m_maxFall; }
+  bool ContentLightLevelPrimariesResolved() const { return m_bCllPrimariesResolved; }
+  const icCicpPrimaries &GetContentLightLevelPrimaries() const { return m_cllPrimaries; }
 
   /** MDCV, Mastering Display Colour Volume: primaries plus a luminance range. */
   bool HasMasteringDisplayColourVolume() const { return m_bHasMdcv; }
   const icCicpPrimaries &GetMasteringPrimaries() const { return m_mdcvPrimaries; }
   icFloatNumber GetMasteringMaxLuminance() const { return m_mdcvMaxLuminance; }
   icFloatNumber GetMasteringMinLuminance() const { return m_mdcvMinLuminance; }
+  bool MasteringPrimariesResolved() const { return m_bMdcvPrimariesResolved; }
 
   /** CCV, Content Colour Volume. Retained as its raw string only: unlike the
    * others its shape has no unambiguous counterpart to reconstruct from, so
@@ -231,6 +246,7 @@ public:
   const icCicpPrimaries &GetDisplayPrimaries() const { return m_dcvPrimaries; }
   icFloatNumber GetDisplayMaxLuminance() const { return m_dcvMaxLuminance; }
   icFloatNumber GetDisplayMinLuminance() const { return m_dcvMinLuminance; }
+  bool DisplayPrimariesResolved() const { return m_bDcvPrimariesResolved; }
 
   /**
    * Resolve the scalar display headroom by the precedence of clause 8.10.5.
@@ -253,11 +269,18 @@ public:
 
 protected:
   bool m_bHasCrwl, m_bHasCll, m_bHasMdcv, m_bHasCcv;
+
+  /* A registry primaries code of 2 means "not expressible in ITU-T H.273; use
+   * the containing profile's own tags", and unassigned codes name nothing at
+   * all. Either way no chromaticities are resolved, and a caller must not read
+   * the primaries struct without checking. */
+  bool m_bCllPrimariesResolved, m_bMdcvPrimariesResolved, m_bDcvPrimariesResolved;
   bool m_bHasDerh, m_bHasDrwl, m_bHasDcv;
   bool m_bUnparsed;
 
   icFloatNumber m_crwl;
   icFloatNumber m_maxCll, m_maxFall;
+  icCicpPrimaries m_cllPrimaries;
   icCicpPrimaries m_mdcvPrimaries;
   icFloatNumber m_mdcvMaxLuminance, m_mdcvMinLuminance;
   std::string m_ccvRaw;

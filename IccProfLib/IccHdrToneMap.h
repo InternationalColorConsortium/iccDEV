@@ -183,16 +183,25 @@ ICCPROFLIB_API icFloatNumber icHlgOotfGain(icFloatNumber sceneLuminance, icFloat
  *  which is why it is a member here rather than a caller's concern.
  *
  *  PROPOSAL-ISSUE HDR-01 (design-level; the highest-value item in the set) --
- *  clause 8.10.2 never states where the conversion between those two
- *  conventions happens.  Step a) leaves PQ as a fraction of 10 000 cd/m2 and
- *  HLG scene-referred; step c)'s matrix columns and the HAGC control-point X
- *  coordinates both expect reference-white-relative light (the HAGC encoding
- *  caps X at 64.0, six stops over reference white, so it is plainly not a
- *  fraction of 10 000 cd/m2); step b) mentions the CRWL of 8.10.4 only as
- *  something that "may inform" the operator.  A literal reading evaluates the
- *  gain curve at an abscissa wrong by 10 000 / CRWL, about 49x by default,
- *  producing a smooth and uniformly wrong image that nothing detects.  This
- *  class owns the conversion so that the ruling has one place to live.
+ *  clause 8.10.2 states one normalisation in step a) and depends on the
+ *  opposite one in NOTE 6, and only the second can be right.  Step a) leaves
+ *  PQ as a fraction of 10 000 cd/m2; NOTE 6 permits an identity operator and
+ *  says the chain then "reduces to the conventional matrix/TRC transform of
+ *  Annex F.3" with PCSXYZ that "can exceed the conventional SDR range".  With
+ *  an identity operator the chain is step a) -> matrix and nothing else, so
+ *  step a) as written puts diffuse white at 203/10 000 = 0.0203 and the whole
+ *  image about fifty times BELOW the SDR range rather than above it.  Under
+ *  reference-white-relative light diffuse white is 1.0 and the 10 000 cd/m2
+ *  peak is 49.26, which is what NOTE 6, Annex F.3 and ICC.1's own note on a
+ *  media white point Y above 1.0 all describe.
+ *
+ *  The HAGC encoding corroborates it - control-point X caps at 64.0, six stops
+ *  over reference white, so it is plainly not a fraction of 10 000 cd/m2 -
+ *  though HAGC delegates the curve's domain to SMPTE ST 2094-50 and does not
+ *  state it directly.  A literal reading of step a) evaluates the gain curve at
+ *  an abscissa wrong by 10 000 / CRWL, about 49x by default, producing a smooth
+ *  and uniformly wrong image that nothing detects.  This class owns the
+ *  conversion so that the ruling has one place to live.
  *
  *  PROPOSAL-ISSUE WP-03 (design-level) -- the A2B0 white paper describes the
  *  HLG A curve as the BT.2100 EOTF "with the system gamma included", which

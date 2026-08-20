@@ -1,21 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  NEGATIVE FIXTURE. Do not "fix" the TransferCharacteristics value below.
+  CLASSIFICATION FIXTURE. Do not "fix" the TransferCharacteristics value below,
+  and note that despite the file name nothing about this profile is invalid.
 
-  This profile carries a HAGC tone-mapping descriptor (clause 8.10.3 a), so it
-  is asserting the HDR Profile mechanism of clause 8.10. Its cicpTag then
-  declares TransferCharacteristics 13 (IEC 61966-2-1 sRGB), which clause 8.10.1
-  forbids: "Other values of TransferCharacteristics shall not be used in an HDR
-  Profile", the permitted set being 8 (Linear), 16 (PQ) and 18 (HLG).
+  A three-component matrix-based RGB Display profile at version 4.5.0.0,
+  carrying a HAGC tone-mapping descriptor and a cicpTag that declares
+  TransferCharacteristics 13 (IEC 61966-2-1 sRGB). Clause 8.10.1 admits only
+  8 (Linear), 16 (PQ) and 18 (HLG), so this profile is NOT of the clause 8.10
+  HDR Profile sub-class.
 
-  This is the case that makes the clause's definition non-circular. An HDR
-  Profile is defined as carrying a cicpTag with one of those three values, so a
-  profile that gets the field wrong is, read literally, simply not an HDR
-  Profile and violates nothing. The HAGC tag is the independent evidence of HDR
-  intent that lets a validator say the value is wrong rather than say nothing.
+  That is the whole point of the fixture. Clause 8.10.1's conditions are
+  definitional - they say which profiles are HDR Profiles, not what a profile
+  must do - so missing one is not a violation. This is a perfectly valid ICC
+  Display profile that happens to carry a cicpTag and a HAGC tag, both of which
+  are legal optional tags of its class. It pins the rule that neither
+  CIccProfile::Validate() nor the PAWG report may report anything against it.
 
-  Expected: iccFromXml saves the profile, and iccDumpProfile -v reports
-    "HDR: cicp TransferCharacteristics is 13"
+  (The HAGC tag is what makes the profile HDR-RELATED enough for the PAWG report
+  to open its HDR section at all and state the classification. It is not
+  evidence of a defect.)
+
+  Expected: iccFromXml saves the profile; iccDumpProfile -v reports the profile
+  as valid; iccPawgReport prints H1 as N/A and no other H item.
   See Testing/expected-invalid-fromxml.tsv.
 -->
 <IccProfile>

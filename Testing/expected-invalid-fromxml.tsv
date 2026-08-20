@@ -5,8 +5,7 @@
 #
 # Keep this manifest narrow. New diagnostics should fail CI until a maintainer
 # either fixes the fixture/tool behavior or classifies the profile here.
-HdrInvalidTransfer	invalid-saved	TransferCharacteristics is 13	HDR Profile negative fixture: clause 8.10.1 permits only TransferCharacteristics 8, 16 or 18
-HdrMissingBToA0	invalid-saved	without its paired BToA0Tag	HDR Profile negative fixture: clause 8.10.3 c) requires the BToAx pair whenever an AToBx tag is present
+HdrMissingBToA0	invalid-saved	without its paired BToA0Tag	HDR Profile negative fixture: clause 8.10.6 requires the BToAx pair when a Display RGB HDR Profile contains an AToBx tag
 HagcInvalidXOrder	invalid-saved	not strictly increasing	headroomAdaptiveGainCurveTag negative fixture: control point X values must be strictly increasing or the gain evaluator's segment parameter divides by zero
 calcUnderStack_*	parse-fail	Unable to parse element of type CIccMpeXmlCalculator	calculator under-stack negative profiles intentionally reject invalid stack operations
 uio-CIccCalculatorFunc-CheckUnderflowOverflow-IccMpeCalc_cpp-Line4238	parse-fail	Unable to Parse	calculator underflow/overflow fixture intentionally emits malformed unknown-element XML

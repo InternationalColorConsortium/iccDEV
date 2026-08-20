@@ -756,14 +756,15 @@ public:
      * A-curve section says "Any CMM consuming the tag must therefore apply the
      * inverse, x -> x^5, between the A-curve output and the CLUT lookup;
      * equivalently, the CLUT must be sampled in the same fifth-root domain".
-     * Those two are not equivalent and only the second is available: a v4
-     * lutAToBType runs A-curves -> CLUT with no stage in between, and the
+     * Those two are not equivalent and only the second is available: the
+     * lutAToBType grammar of ICC.1 10.12 runs A-curves -> CLUT with no stage in
+     * between, so no field of a conformant profile can ask for the x^5, and the
      * paper's own audience is legacy CMMs that do nothing but follow the tag.
-     * So the undo happens HERE, at sampling time, and the tag we emit needs
+     * So the undo happens HERE, at sampling time, and the tag we emit asks
      * nothing of the CMM.  Sampling the CLUT on linear coordinates instead --
-     * the reading the first clause invites -- leaves every conformant CMM
-     * indexing a linear grid with fifth-root coordinates, worst in the shadows,
-     * with no symptom but a wrong image. */
+     * the reading the first clause invites -- leaves anything that follows the
+     * tag as 10.12 defines it indexing a linear grid with fifth-root
+     * coordinates, worst in the shadows, with no symptom but a wrong image. */
     for (i = 0; i < 3; i++) {
       // Undo the A curves' fifth root, so that the coordinate is once again
       // the peak-normalised linear value the curve was sampled from.

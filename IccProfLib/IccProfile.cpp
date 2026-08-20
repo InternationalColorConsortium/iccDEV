@@ -2547,11 +2547,11 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
       // Gated at 4.4 rather than at 4.5, matching the cicpTag above. The HAGC
       // amendment describes itself as adding "an optional version 4 tag" and
       // supersedes the adaptiveGainCurveTag that shipped in 4.4; it never ties
-      // itself to 4.5. It is the HDR *Profile* class of clause 8.10.1 that
-      // requires 4.5.0.0, and that requirement belongs in CheckHdrProfile()
-      // where it can be reported with the clause it comes from. Failing here
-      // instead would make every 4.4 profile carrying a HAGC tag non-compliant
-      // on tag-type grounds, which the tag's own amendment does not say.
+      // itself to 4.5. Version 4.5.0.0 is one of clause 8.10.1's conditions for
+      // being an HDR Profile, which is a question of classification and not of
+      // conformance - a 4.4 profile carrying a HAGC tag is simply not an HDR
+      // Profile. Failing here would make it non-compliant on tag-type grounds,
+      // which the tag's own amendment does not say.
       else if (m_Header.version < icVersionNumberV4_4 || m_Header.version==icVersionNumberV5)
         return false;
 
@@ -3398,30 +3398,25 @@ icValidateStatus CIccProfile::CheckTagLayout(CIccIO *pIO, std::string &sReport) 
 *
 * Purpose: Apply the rules of ICC.1 clause 8.10 (HDR Profiles) to this profile.
 *
-*  PROPOSAL-ISSUE HDR-02 (design-level) -- see icGetHdrProfileInfo(). The
-*  clause as written gives a validator nothing to test, and the intended/
-*  conforming split below is this implementation's answer to that, not
-*  something the amendment asks for.
+*  Clause 8.10.1's four conditions - version 4.5.0.0, a three-component
+*  matrix-based RGB Input or Display profile, a cicpTag, and a
+*  TransferCharacteristics of 8, 16 or 18 - are DEFINITIONAL. They say which
+*  profiles are HDR Profiles; they are not requirements a profile can fail.
+*  A matrix/TRC profile whose cicpTag says TransferCharacteristics 13 is an
+*  ordinary Display profile that carries a cicpTag, and it is a perfectly valid
+*  ICC profile. Reporting an error or a warning against it would be inventing a
+*  defect, so nothing here does. Non-membership produces no message at all.
 *
-*  Clause 8.10.1's definition of an HDR Profile is self-satisfying: it requires
-*  a cicpTag whose TransferCharacteristics is 8, 16 or 18, so a profile that
-*  puts anything else there simply is not an HDR Profile and the rule can never
-*  be broken. Checking the definition against itself would report nothing.
+*  What is left for this function is the one requirement clause 8.10 places on
+*  a profile that IS an HDR Profile and that ICC.1's other checks do not
+*  already cover: the AToBx / BToAx pairing rule of 8.10.6. Every other "shall"
+*  in clause 8.10 is either one of the membership conditions above or is
+*  addressed to the consuming CMM (8.10.2's derivation of the operator, 8.10.4
+*  and 8.10.5's "shall be made available", the 203 cd/m^2 default), and none of
+*  those is testable against a file.
 *
-*  What a validator can usefully report is the *intended* case - a profile that
-*  carries HDR-specific content it is not qualified to carry. The only two
-*  unambiguous signals of that intent inside the profile are a tone-mapping
-*  descriptor that exists solely for HDR (the HAGC tag, clause 8.10.3 a) and
-*  the HDR Image / HDR Display metadataTag entries of 8.10.4 and 8.10.5.
-*  icGetHdrProfileInfo() draws exactly that line, and everything below is
-*  reported only for a profile on the intended side of it - which is why a
-*  plain SDR display profile that happens to declare 4.5 draws nothing here.
-*
-*  Levels are set by what the amendment's text actually says, not by how
-*  serious the defect feels:
-*   - "shall" in clause 8.10.1 or 8.10.6 -> NonCompliant
-*   - a requirement of the HDR Profile class that the HAGC amendment itself
-*     does not impose on the HAGC tag -> Warning
+*  Levels follow the amendment's own wording: the pairing rule is a "shall" in
+*  8.10.6, so it is NonCompliant.
 *
 * Args:
 *  sReport = String to add report information to
@@ -3438,90 +3433,47 @@ icValidateStatus CIccProfile::CheckHdrProfile(std::string &sReport) const
   if (!icGetHdrProfileInfo(this, info))
     return rv;
 
-  if (info.nClass == icHdrProfileNone)
+  /* Only an HDR Profile is subject to clause 8.10's requirements. A profile
+   * that carries HDR-related content without meeting 8.10.1 belongs to some
+   * other class and is judged by that class's rules, which the rest of
+   * Validate() already applies. */
+  if (info.nClass != icHdrProfileConforming)
     return rv;
 
-  const size_t bufSize = 256;
-  icChar buf[bufSize];
-
-  /* The block below applies only to the intended case. A conforming HDR
-   * Profile satisfies every one of these requirements by definition - that is
-   * what makes it conforming - so testing them against it would be testing the
-   * classifier, not the profile. The pairing rule after the block is different
-   * and deliberately outside it: it is not part of the 8.10.1 definition, so a
-   * fully conforming HDR Profile can still break it. */
-  if (info.nClass == icHdrProfileIntended) {
-
-  /* Clause 8.10.1: an HDR Profile "shall contain a cicpTag". The HAGC
-   * amendment places no such requirement on the HAGC tag itself, so a profile
-   * carrying HAGC without a cicpTag violates nothing it was written against -
-   * but its gain curve still cannot be applied, because the curve operates on
-   * display-linear values and nothing else in the profile says which EOTF
-   * produces them. Warning, with the clause named, rather than NonCompliant. */
-  if (!info.bHasCicp) {
-    sReport += icMsgValidateWarning;
-    sReport += "HDR: profile carries HDR content but no cicpTag; clause 8.10.1 requires one for an\n"
-               "  HDR Profile, and without it the transfer characteristic the tone-mapping step\n"
-               "  operates on is undetermined.\n";
-    rv = icMaxStatus(rv, icValidateWarning);
-  }
-  else if (!info.bTransferIsHdr) {
-    /* Clause 8.10.1: "Other values of TransferCharacteristics shall not be
-     * used in an HDR Profile." The profile carries an HDR tone-mapping
-     * descriptor, so it is asserting the HDR Profile mechanism. */
-    snprintf(buf, bufSize,
-             "HDR: cicp TransferCharacteristics is %u; clause 8.10.1 permits only 8 (Linear),\n"
-             "  16 (PQ) or 18 (HLG) in an HDR Profile.\n",
-             info.nTransferCharacteristics);
-    sReport += icMsgValidateNonCompliant;
-    sReport += buf;
-    rv = icMaxStatus(rv, icValidateNonCompliant);
-  }
-
-  /* PROPOSAL-ISSUE HDR-04 / WP-04 (sequencing artifact across the set) -- the
-   * HAGC amendment (2026-04-28) calls its tag "an optional version 4 tag", the
-   * A2B0 white paper (2026-05-17) writes header version 4.4, and clause 8.10.1
-   * (2026-07-13) then requires 4.5.0.0. The three documents were written in that
-   * order and have not been reconciled, so a 4.4 profile carrying HDR content is
-   * conforming to the document it was authored against. Warning, not
-   * non-compliance, until the set agrees.
+  /* Clause 8.10.6: "When a Display RGB HDR Profile contains an AToBxTag (see
+   * 9.2.1), the corresponding BToAxTag (see 9.2.5) shall also be present."
    *
-   * Clause 8.10.1 and 4.7: an HDR Profile "shall encode a profile format
-   * version of 4.5.0.0". Warning for the same reason as the cicpTag above -
-   * the HAGC tag's own amendment calls it "an optional version 4 tag" and does
-   * not require 4.5, so a 4.4 profile carrying one is not violating the
-   * document it was authored against. */
-  if (!info.bVersion4_5) {
-    sReport += icMsgValidateWarning;
-    sReport += "HDR: profile carries HDR content but does not declare version 4.5.0.0, which\n"
-               "  clause 8.10.1 requires of an HDR Profile.\n";
-    rv = icMaxStatus(rv, icValidateWarning);
-  }
+   * Not already covered: the Display branch of CheckRequiredTags() tests A2B0
+   * and B2A0 only as a *pair* against the matrix/TRC alternative, so a profile
+   * with A2B0, no B2A0 and a complete matrix/TRC set passes it without
+   * comment. Scoped to the Display class and swept over all three x, both as
+   * the clause states it - an Input HDR Profile is outside the sentence, and
+   * the rule is not specific to x = 0. */
+  if (m_Header.deviceClass == icSigDisplayClass) {
+    static const struct {
+      icTagSignature aToB;
+      icTagSignature bToA;
+      const icChar  *szIndex;
+    } pairs[] = {
+      { icSigAToB0Tag, icSigBToA0Tag, "0" },
+      { icSigAToB1Tag, icSigBToA1Tag, "1" },
+      { icSigAToB2Tag, icSigBToA2Tag, "2" },
+    };
+    const size_t bufSize = 256;
+    icChar buf[bufSize];
+    size_t i;
 
-  /* Clause 8.10.6: "The data colour space in the profile header shall be RGB.
-   * The profile class shall be Input or Display", plus the three-component
-   * matrix-based tag set of 8.3.3 / 8.4.3. CheckTagExclusion() already covers
-   * the colour space and class for a profile carrying the HAGC tag; what is
-   * left for here is a profile that is RGB Input/Display but LUT-based. */
-  if (!info.bRgbMatrixBased) {
-    sReport += icMsgValidateNonCompliant;
-    sReport += "HDR: clause 8.10.6 requires an RGB HDR Profile to be three-component matrix-based\n"
-               "  (RGB, Input or Display class, with the three matrix column and TRC tags).\n";
-    rv = icMaxStatus(rv, icValidateNonCompliant);
-  }
-
-  } /* end of the intended-only block */
-
-  /* Clause 8.10.3 c) and 8.10.6: "Whenever an AToBxTag is present, its paired
-   * BToAxTag shall also be present." This is not already covered: the Display
-   * branch of CheckRequiredTags() tests A2B0 and B2A0 only as a *pair* against
-   * the matrix/TRC alternative, so a profile with A2B0, no B2A0 and a complete
-   * matrix/TRC set passes it without comment. */
-  if (info.bHasAToB0 && !info.bHasBToA0) {
-    sReport += icMsgValidateNonCompliant;
-    sReport += "HDR: AToB0Tag present without its paired BToA0Tag; clause 8.10.3 c) requires the\n"
-               "  pair whenever an AToBxTag is present.\n";
-    rv = icMaxStatus(rv, icValidateNonCompliant);
+    for (i = 0; i < sizeof(pairs) / sizeof(pairs[0]); i++) {
+      if (IsTagPresent(pairs[i].aToB) && !IsTagPresent(pairs[i].bToA)) {
+        snprintf(buf, bufSize,
+                 "HDR: AToB%sTag present without its paired BToA%sTag; clause 8.10.6 requires the\n"
+                 "  pair when a Display RGB HDR Profile contains an AToBxTag.\n",
+                 pairs[i].szIndex, pairs[i].szIndex);
+        sReport += icMsgValidateNonCompliant;
+        sReport += buf;
+        rv = icMaxStatus(rv, icValidateNonCompliant);
+      }
+    }
   }
 
   return rv;

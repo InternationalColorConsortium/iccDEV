@@ -9,7 +9,8 @@
   test that needs a specific byte pattern rather than a specific curve. Neither
   can be expressed by <HagcMetadata>.
 
-  The five bytes here are the shortest well formed block the format admits:
+  The twenty-one bytes here are the shortest well formed block the format
+  admits:
 
     00  Application Version 0, Minimum Application Version 0, reserved 0
     00  Custom HDR Reference White flag 0, Headroom Adaptive Tone Map flag 0,
@@ -18,14 +19,20 @@
     00 00  Baseline HDR Headroom 0
     00  Reference White Tone Mapping flag 0, count of alternate images 0,
         chromaticities mode 0 (BT.709), neither sharing flag
+    00 x16  Table 2 bytes k+4 to k+19, the array of 8 custom chromaticity
+        values. Present whatever the mode: Table 2 marks its one conditional
+        field "(if k != 0)" and puts no condition on this row, so the layout is
+        fixed and only the MEANING of these bytes varies. In mode 0 the
+        primaries come from the named ITU-T H.273 entry and these carry
+        nothing.
 
   A count of zero is meaningful rather than empty: proposal 1.2.2.6 says no tone
   mapping is to be performed and the baseline image should be clamped to the
   target colour volume. It is also the one shape in which the tag carries no
   alternate image records at all, so it is the boundary of the record loop.
 
-  The block is five bytes, which is not a multiple of four. The tag pads itself
-  to 20 bytes total (12 byte header, 5 byte block, 3 null pad) rather than
+  The block is twenty-one bytes, which is not a multiple of four. The tag pads
+  itself to 36 bytes total (12 byte header, 21 byte block, 3 null pad) rather than
   leaving the alignment to the profile writer, because CIccProfile records a
   tag's size before calling Align32() and annex 1 note 2 requires the recorded
   length to be a multiple of four.
@@ -90,7 +97,7 @@
 
     <headroomAdaptiveGainCurveTag> <headroomAdaptiveGainCurveType>
       <HexData>
-       0000000000
+       000000000000000000000000000000000000000000
       </HexData>
     </headroomAdaptiveGainCurveType> </headroomAdaptiveGainCurveTag>
 

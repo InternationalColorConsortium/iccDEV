@@ -550,11 +550,12 @@ static bool icUseHdrToneMapPath(CIccProfile *pProfile, bool bInput,
   if (!icGetHdrProfileInfo(pProfile, info))
     return false;
 
-  // Only a profile that satisfies clause 8.10.1 in full.  icHdrProfileIntended
-  // is not enough: a profile carrying HDR machinery without the version, the
-  // matrix-based RGB structure or a conforming cicpTag has no defined chain to
-  // augment, and running one anyway would render it differently from every
-  // conforming implementation - which would refuse it outright.
+  // Only a profile that satisfies clause 8.10.1 in full.  icHdrProfileHdrContent
+  // is not enough: a profile carrying HDR-related content without the version,
+  // the matrix-based RGB structure or a cicpTag naming a permitted transfer is
+  // not an HDR Profile at all, so clause 8.10.2 gives it no tone-mapping step
+  // to insert.  Augmenting its chain anyway would render it unlike every other
+  // implementation, which follows the class it actually belongs to.
   if (info.nClass != icHdrProfileConforming)
     return false;
 

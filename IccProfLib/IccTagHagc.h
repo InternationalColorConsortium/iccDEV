@@ -339,8 +339,11 @@ public:
    * stay per alternate. */
   bool m_bCommonCurveParameters;
 
-  /** Custom chromaticities [xR yR xG yG xB yB xW yW], meaningful only when
-   * m_nChromaticitiesMode == icHagcChromaticitiesCustom. */
+  /** Custom chromaticities [xR yR xG yG xB yB xW yW] from Table 2 bytes
+   * k+4 to k+19. Those sixteen bytes are always present - the block has a
+   * fixed layout - but they carry a value only when m_nChromaticitiesMode is
+   * icHagcChromaticitiesCustom. In every other mode the primaries come from
+   * the ITU-T H.273 entry that 0.1.2.7 names, and this array reads zero. */
   icFloatNumber m_chromaticities[8];
 
   /* --- Diagnostics recorded during Unpack(), reported by Validate() --- */

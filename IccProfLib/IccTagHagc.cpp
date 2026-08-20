@@ -622,24 +622,26 @@ bool icHagcMetadata::UnpackFields(const icUInt8Number *pData, icUInt32Number nSi
   m_bCommonComponentMixing = bCommonMixing;
   m_bCommonCurveParameters = bCommonCurve;
 
-  /* PROPOSAL-ISSUE HAGC-01 (draft text; reads as an editing artifact) -- Table 2
-   * lists the 16-byte custom chromaticity array unconditionally while 1.2.2.7
-   * defines it only for mode 3.  The tag is variable length, so the two
-   * readings desynchronise every later record by sixteen bytes.  Resolved here
-   * as present if and only if mode 3.
-   *
-   * Table 2, bytes k+4 to k+19.  The table lists the array unconditionally but
-   * 1.2.2.7 defines its contents only for mode 3, and for modes 0 to 2 the
-   * chromaticities are fully determined by the named H.273 entry, so there is
-   * nothing for sixteen bytes to carry.  Reading them only for mode 3 is the
-   * only interpretation under which a mode 0 tag has a self consistent length. */
-  if (m_nChromaticitiesMode == icHagcChromaticitiesCustom) {
-    for (i = 0; i < 8; i++) {
-      if (!r.ReadU16(u))
-        return false;
-      m_chromaticities[i] = icHagcDecodeScaled50k(u);
-    }
+  /* Table 2, bytes k+4 to k+19: always present, whatever the mode.  Table 2
+   * marks its one conditional field explicitly - the Custom HDR Reference White
+   * is "1 to 2 (if k != 0)", and k carries the shift into every later offset -
+   * and it puts no such condition on this row.  So the global parameter block
+   * has a fixed layout, and 0.1.2.7 governs only what the sixteen bytes MEAN:
+   * in mode 3 they are the custom chromaticities, and in modes 0 to 2 the
+   * primaries come from the named ITU-T H.273 entry instead and the bytes carry
+   * nothing.  Reading them unconditionally is what keeps this decoder in step
+   * with the record that follows. */
+  for (i = 0; i < 8; i++) {
+    if (!r.ReadU16(u))
+      return false;
+    m_chromaticities[i] = icHagcDecodeScaled50k(u);
   }
+
+  /* Outside mode 3 the sixteen bytes have no defined content, so nothing is
+   * carried forward from them: the chromaticities of modes 0 to 2 come from
+   * H.273 and a decoded value here would only invite a caller to use it. */
+  if (m_nChromaticitiesMode != icHagcChromaticitiesCustom)
+    memset(m_chromaticities, 0, sizeof(m_chromaticities));
 
   /* Table 3, once per alternate image */
   for (i = 0; i < (int)m_nAlternates; i++) {
@@ -803,9 +805,13 @@ bool icHagcMetadata::Pack(std::vector<icUInt8Number> &buf) const
   w.WriteFlag(m_bCommonComponentMixing);
   w.WriteFlag(m_bCommonCurveParameters);
 
-  if (m_nChromaticitiesMode == icHagcChromaticitiesCustom) {
-    for (i = 0; i < 8; i++)
-      w.WriteU16(icHagcEncodeScaled50k(m_chromaticities[i]));
+  /* Always sixteen bytes - see the note on the matching read.  Outside mode 3
+   * the field has no defined content, and zero is the only value that cannot be
+   * mistaken for a chromaticity by a reader that ignores the mode. */
+  for (i = 0; i < 8; i++) {
+    w.WriteU16(m_nChromaticitiesMode == icHagcChromaticitiesCustom
+                 ? icHagcEncodeScaled50k(m_chromaticities[i])
+                 : (icUInt16Number)0);
   }
 
   for (i = 0; i < (int)m_nAlternates; i++) {
@@ -1570,19 +1576,18 @@ icValidateStatus CIccTagHagc::Validate(std::string sigPath, std::string &sReport
     rv = icMaxStatus(rv, icValidateNonCompliant);
   }
 
-  /* PROPOSAL-ISSUE HAGC-02 (draft text; a field may have been dropped in
-   * revision) -- the proposal requires the tag to indicate whether the curve is
-   * image-specific, but no field in Tables 1 to 3 carries that indication, so
-   * the 1.1 requirement below cannot be tested.  Resolved here by not checking
-   * it at all rather than by guessing.
+  /* Nothing here checks whether the curve is image-specific, and nothing should.
+   * The indication is not in Tables 1 to 3 - it is the profile header flags of
+   * ICC.1:2022 Table 21, bit 0 "Embedded profile" and bit 1 "Profile cannot be
+   * used independently of the embedded colour data", which proposal 1.1 requires
+   * to be set when the curve is image-specific.  The HDR Profiles amendment
+   * reads it the same way, calling it "the embedded/cannot-be-used-independently
+   * flag handling defined for HAGC".
    *
-   * Proposal 1.1 also requires the embedded and not-independent header flags
-   * to be set when the curve is image-specific.  That condition is deliberately
-   * not checked: the proposal's summary says the tag "shall indicate whether
-   * the included Headroom Adaptive Gain Curve is image-specific", but no field
-   * in Tables 1 to 3 carries that indication, so a decoder cannot tell the two
-   * cases apart.  Guessing either way would produce a diagnostic that is wrong
-   * for half the corpus.  See docs/notes for the proposal feedback item. */
+   * Those flags are the author's declaration rather than a fact derivable from
+   * the tag, so there is no second source to cross-check them against: a profile
+   * with bit 1 clear has declared the curve reusable across images, and that is
+   * always self-consistent.  A diagnostic here would have nothing to compare. */
 
   return rv;
 }

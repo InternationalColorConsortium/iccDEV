@@ -125,8 +125,8 @@ class CIccCurve;
  * L^(1/icHdrBakeCurveExponent) and the CLUT raises its input coordinate back
  * to that power.
  *
- * PROPOSAL-ISSUE WP-01 (draft text; plausibly an editing artifact, but it must
- * be resolved either way) -- the white paper's step 1 normalises L "so that the
+ * PROPOSAL-ISSUE WP-01 (plausibly an editing artifact, but it must be resolved
+ * either way) -- the white paper's step 1 normalises L "so that the
  * reference-white luminance equals 1.0", and its A-curve section then justifies
  * the fifth root by saying a 16-bit curveType "cannot represent values outside
  * [0,1]".  The two cannot both hold: under reference-white normalisation PQ's
@@ -150,12 +150,17 @@ class CIccCurve;
  * CIccCreateHdrXformHint uses: 1.0, i.e. a display whose peak luminance is
  * the HDR reference white.
  *
- * PROPOSAL-ISSUE HDR-03 (design-level; a decision the group has not taken) --
- * 8.10.6 strongly recommends the AToB0/BToA0 fallback pair but never says what
- * it should contain, and NOTE 5 puts H_target outside the profile, so a
- * consumer of a baked tag cannot recover the headroom it was baked at.  Two
- * conforming authors can therefore ship fallbacks differing by stops.  Fixed
- * here at 1.0 for the encoding reason below.
+ * 1.0 is what clause 8.10.6 requires, not a choice this implementation made.
+ * Including the AToB0Tag/BToA0Tag pair is only strongly recommended, but the
+ * clause is normative about its content once it is there: "When included, the
+ * AToB0Tag shall carry an HDR-to-SDR tone mapping (i.e. its target headroom
+ * shall be equal to 1.0)".  HAGC section 2 independently describes the same
+ * construction as "target headroom of 0 stop", which is the same value.
+ *
+ * NOTE 5 keeps H_target out of the profile, so nothing in a baked tag records
+ * the headroom it was built at and no consumer can read it back.  That costs
+ * nothing here precisely because 8.10.6 fixes the value: a consumer does not
+ * need to recover what the clause already determines.
  *
  * This is not a parameter and should not become one.  A baked CLUT's samples
  * are unsigned 16-bit and so cannot carry a value above 1.0, which is exactly
@@ -186,13 +191,16 @@ typedef enum {
    * of the sub-class it conforms to. */
   icHdrBakeVersionKeep = 0,
 
-  /** PROPOSAL-ISSUE WP-04 (sequencing artifact) -- the white paper (2026-05-17)
-   * writes header version 4.4, and clause 8.10.1 (2026-07-13) later made
-   * 4.5.0.0 a requirement of the class, so following the paper strips a
-   * conforming profile of the classification the amendment gives it.  The
-   * paper's own parenthetical "(or 4.5 after acceptance...)" shows it tracking a
-   * target that had not landed.  The set needs reconciling; until then this is
-   * opt-in and the default leaves the version alone.
+  /** PROPOSAL-ISSUE WP-04 (an item against the paper) -- ICC White Paper #62
+   * (produced 2026-08-05) writes header version 4.4, and clause 8.10.1
+   * (2026-07-13) had already made 4.5.0.0 a requirement of the class, so
+   * following the paper strips a conforming profile of the classification the
+   * amendment gives it.  The paper's own parenthetical "(or 4.5 after
+   * acceptance...)" reads as speculative about an amendment that existed three
+   * weeks before the paper was produced, and it names the wrong document: the
+   * HAGC tag proposal changes no version, the HDR Profiles amendment does.  The
+   * set needs reconciling; until then this is opt-in and the default leaves the
+   * version alone.
    *
    * Set the header to 4.4.0.0, as the white paper's "Tag assembly and
    * profile patching" does, for consumers that reject a version they do not

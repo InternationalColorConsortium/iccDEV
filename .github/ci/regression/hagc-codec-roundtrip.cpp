@@ -288,6 +288,12 @@ std::vector<icUInt8Number> makeMinimalBlock(bool bCustomWhite, icUInt16Number nW
   v.push_back((icUInt8Number)(nBaseline >> 8));
   v.push_back((icUInt8Number)(nBaseline & 0xff));
   v.push_back(0x00);                                   // no ref-white TM, 0 alternates
+  // Table 2 bytes k+4 to k+19. Present whatever the Gain Curve Chromaticities
+  // Mode: the table marks its one conditional field with "(if k != 0)" and puts
+  // no condition on this row, so the block has a fixed layout and only the
+  // MEANING of these bytes varies with the mode.
+  for (int i = 0; i < 16; i++)
+    v.push_back(0x00);
   return v;
 }
 
@@ -346,6 +352,8 @@ std::vector<icUInt8Number> makeOnePointBlock(icUInt16Number nX, icUInt16Number n
   v.push_back(0x00); v.push_back(0x00);     // baseline headroom = 0
   v.push_back(0x10);                        // 0 001 00 0 0: no ref-white TM, 1 alternate,
                                             // BT.709 chromaticities, neither common flag
+  for (int c = 0; c < 16; c++)              // Table 2 k+4..k+19: always present, and
+    v.push_back(0x00);                      // carrying nothing outside mode 3
   v.push_back(0x27); v.push_back(0x10);     // alternate headroom = 10000 -> 1.0
   v.push_back(0x40);                        // mixing type 1, no coefficient flags
   v.push_back(0x00);                        // last index 0, PCHIP off, reserved 0
@@ -474,7 +482,9 @@ void testMalformed()
   // cursor mid record, so the whole block has to be refused.
   for (int n = 5; n <= 7; n++) {
     std::vector<icUInt8Number> bad = makeMinimalBlock(false, 0, 0);
-    bad[bad.size() - 1] = (icUInt8Number)(n << 4);
+    // Byte k+3 is the count/mode/flags byte; the 16-byte chromaticity field of
+    // Table 2 follows it, so it is not the last byte of the block.
+    bad[bad.size() - 17] = (icUInt8Number)(n << 4);
     icHagcMetadata t;
     if (t.Unpack(&bad[0], (icUInt32Number)bad.size())) {
       printf("FAIL: alternate count %d was accepted\n", n);

@@ -274,7 +274,7 @@ bool icGetProfilePrimaries(const CIccProfile *pProfile, icCicpPrimaries &primari
   if (!pProfile)
     return false;
 
-  /* PROPOSAL-ISSUE CICP-02 (structural; the fix is two sentences already
+  /* PROPOSAL-ISSUE BALLOT-02 (structural; the fix is two sentences already
    * drafted) -- clause 4.1 of the CICP amendment scopes this to three-component
    * matrix-based profiles: without all three matrix column tags the value 2
    * keeps its original "unknown" meaning and there is nothing to recover.  But
@@ -290,7 +290,7 @@ bool icGetProfilePrimaries(const CIccProfile *pProfile, icCicpPrimaries &primari
       !icHdrGetXyzTag(pProfile, icSigMediaWhitePointTag, white))
     return false;
 
-  /* PROPOSAL-ISSUE CICP-01 (design-level; one sentence would close it) -- the
+  /* PROPOSAL-ISSUE BALLOT-01 (design-level; one sentence would close it) -- the
    * amendment's NOTE 1 delegates the chromaticAdaptationTag relationship to
    * ICC.1 9.2.15 / 9.2.36 / Annex F.3 and does not state the direction, but
    * those clauses describe the forward relationship while this derivation needs
@@ -398,22 +398,21 @@ const icChar *icGetHdrTransferName(icUInt8Number nTransferCharacteristics)
  * ===========================================================================
  * HDR Image and HDR Display metadata (clauses 8.10.4 and 8.10.5)
  *
- * PROPOSAL-ISSUE HDR-05 (external dependency, blocking) -- 8.10.4 and 8.10.5
- * make the ICC dictType Metadata Registry authoritative for these key names and
- * their encodings, and the registry is not supplied with the amendment.  Every
- * ASSUMED marker below is therefore a reconstruction, and none of them feeds a
- * diagnostic: an assumed key name must not produce a validation message about
- * someone else's profile.
+ * The four HDR Image entries are taken from the ICC dictType Metadata Registry
+ * (HDR Image category, registered by Apple Inc. 2025-06-04), which 8.10.4 names
+ * as authoritative: CRWL, CLL, MDCV and CCV, with the field lists each entry's
+ * Value column gives.  Those are read facts, not reconstructions.
  *
- * Every ASSUMED marker below flags a reconstruction that the ICC dictType
- * Metadata Registry - which the amendment names as authoritative and does not
- * reproduce - must be checked against.
+ * The three HDR Display entries - DERH, DCV, DRWL - are not registered: they
+ * belong to clause 8.10.5, which is not yet accepted, so the registry correctly
+ * carries no HDR Display category.  Their names and shapes are read from 8.10.5
+ * itself.  None of them feeds a diagnostic: an entry that is not registered must
+ * not produce a validation message about someone else's profile.
  * ===========================================================================
  */
 
-/* ASSUMED: the registered key names. The amendment's prose names the entries
- * only by their expansions ("Content HDR Reference White Luminance") and by
- * these abbreviations in the precedence list of 8.10.5. */
+/* HDR Image: names as registered.  HDR Display: names as clause 8.10.5 uses
+ * them in its precedence list, pending registration. */
 static const char *kIccHdrKeyCrwl = "CRWL";   /* Content HDR Reference White Luminance */
 static const char *kIccHdrKeyCll  = "CLL";    /* Content Light Level */
 static const char *kIccHdrKeyMdcv = "MDCV";   /* Mastering Display Colour Volume */
@@ -523,53 +522,57 @@ static bool icHdrGetDictValue(const CIccTagDict *pDict, const char *szKey,
 
 /**
  ****************************************************************************
- * Name: icHdrParseColourVolume
+ * Name: icHdrParseRegistryVolume
  *
- * Purpose: Parse a colour-volume entry (MDCV or DCV) into primaries plus a
- *  luminance range.
+ * Purpose: Parse an HDR Image value of the form "<luminance>{n} <primaries>":
+ *  n floating point fields followed by an 8-bit ITU-T H.273 ColourPrimaries
+ *  code, which is the shape the ICC dictType Metadata Registry gives these
+ *  entries.
  *
- *  ASSUMED: ten values in SMPTE ST 2086 order -
- *    xR yR xG yG xB yB xW yW maxLuminance minLuminance
- *  with chromaticities as plain decimals in [0, 1] and luminances in cd/m^2.
+ *    MDCV  max luminance, min luminance, primaries
+ *    CLL   max light level, average light level, primaries
  *
- *  This is the single most speculative parse in the file, which is why it is
- *  one isolated function. ST 2086 is the shape "Mastering Display Colour
- *  Volume" denotes everywhere it appears in the video standards the amendment
- *  draws on, and clause 8.10.5 describes the Display Colour Volume entry as
- *  carrying exactly "its colour volume (maximum and minimum luminance and
- *  primaries)" - the same eight-plus-two fields. But ST 2086 encodes those
- *  fields as scaled integers in a binary payload, and dictType values are
- *  text, so the *textual* representation here is a reconstruction on top of a
- *  reconstruction. Nothing in this build raises a validation diagnostic from
- *  it; it feeds Describe()-style output and the 8.10.5 b)/c) headroom
- *  derivations, and a value that does not match this shape is reported as
- *  unparsed rather than guessed at.
+ *  8.10.5's DCV is described in the same terms as MDCV - "its colour volume
+ *  (maximum and minimum luminance and primaries)" - and is read on that shape
+ *  pending its registration.
+ *
+ *  Two registry semantics are carried through rather than rejected. A
+ *  luminance of 0.0 means the author did not know the value, so it is stored
+ *  as given and callers that divide by it test it first. A primaries code of 2
+ *  means the primaries are not expressible in H.273 and are instead given by
+ *  the tags of the profile containing the metadata, so no chromaticities are
+ *  resolved for it and the caller is told so.
  *****************************************************************************
  */
-static bool icHdrParseColourVolume(const std::string &s, icCicpPrimaries &primaries,
-                                   icFloatNumber &maxLuminance, icFloatNumber &minLuminance)
+static bool icHdrParseRegistryVolume(const std::string &s, int nLums, double *pLums,
+                                     icCicpPrimaries &primaries, bool &bPrimariesResolved)
 {
-  double v[10];
-  if (!icHdrParseNumbers(s, v, 10))
+  double v[4];
+  int i;
+
+  bPrimariesResolved = false;
+  memset(&primaries, 0, sizeof(primaries));
+
+  if (nLums < 1 || nLums > 3)
     return false;
 
-  int i;
-  for (i = 0; i < 8; i++) {
-    if (v[i] < 0.0 || v[i] > 1.0)
+  if (!icHdrParseNumbers(s, v, nLums + 1))
+    return false;
+
+  for (i = 0; i < nLums; i++) {
+    /* Negated so a NaN, which every ordered comparison accepts, is refused. */
+    if (!(v[i] >= 0.0))
       return false;
+    pLums[i] = v[i];
   }
 
-  /* A colour volume whose maximum is at or below its minimum describes no
-   * volume at all, and 8.10.5 b) would divide by it. */
-  if (!(v[8] > 0.0) || v[9] < 0.0 || !(v[8] > v[9]))
+  /* The last field is a code point, not a chromaticity: it has to be a whole
+   * number in 8-bit range or the value is not of this shape at all. */
+  if (!(v[nLums] >= 0.0) || v[nLums] > 255.0 ||
+      v[nLums] != (double)(icUInt8Number)v[nLums])
     return false;
 
-  primaries.xRed   = (icFloatNumber)v[0];  primaries.yRed   = (icFloatNumber)v[1];
-  primaries.xGreen = (icFloatNumber)v[2];  primaries.yGreen = (icFloatNumber)v[3];
-  primaries.xBlue  = (icFloatNumber)v[4];  primaries.yBlue  = (icFloatNumber)v[5];
-  primaries.xWhite = (icFloatNumber)v[6];  primaries.yWhite = (icFloatNumber)v[7];
-  maxLuminance = (icFloatNumber)v[8];
-  minLuminance = (icFloatNumber)v[9];
+  bPrimariesResolved = icGetCicpPrimaries((icUInt8Number)v[nLums], primaries);
   return true;
 }
 
@@ -582,6 +585,7 @@ CIccHdrMetadataReader::CIccHdrMetadataReader()
 {
   m_bHasCrwl = m_bHasCll = m_bHasMdcv = m_bHasCcv = false;
   m_bHasDerh = m_bHasDrwl = m_bHasDcv = false;
+  m_bCllPrimariesResolved = m_bMdcvPrimariesResolved = m_bDcvPrimariesResolved = false;
   m_bUnparsed = false;
 
   m_crwl = (icFloatNumber)icHdrDefaultContentReferenceWhite;
@@ -590,6 +594,7 @@ CIccHdrMetadataReader::CIccHdrMetadataReader()
   m_derh = m_drwl = 0.0f;
   m_dcvMaxLuminance = m_dcvMinLuminance = 0.0f;
 
+  memset(&m_cllPrimaries, 0, sizeof(m_cllPrimaries));
   memset(&m_mdcvPrimaries, 0, sizeof(m_mdcvPrimaries));
   memset(&m_dcvPrimaries, 0, sizeof(m_dcvPrimaries));
 }
@@ -636,13 +641,15 @@ bool CIccHdrMetadataReader::Read(const CIccProfile *pProfile)
     }
   }
 
-  /* ASSUMED: two decimals, MaxCLL then MaxFALL, both in cd/m^2 - the pair
-   * "Content Light Level" denotes in the video standards. */
+  /* CLL as registered: maximum and average light level, computed per
+   * CTA-861.3-A Annex A, then the primaries code. */
   bParseable = false;
   if (icHdrGetDictValue(pDict, kIccHdrKeyCll, value, bParseable)) {
-    if (bParseable && icHdrParseNumbers(value, v, 2) && v[0] >= 0.0 && v[1] >= 0.0) {
-      m_maxCll = (icFloatNumber)v[0];
-      m_maxFall = (icFloatNumber)v[1];
+    double lums[2];
+    if (bParseable && icHdrParseRegistryVolume(value, 2, lums, m_cllPrimaries,
+                                               m_bCllPrimariesResolved)) {
+      m_maxCll = (icFloatNumber)lums[0];
+      m_maxFall = (icFloatNumber)lums[1];
       m_bHasCll = true;
     }
     else {
@@ -650,10 +657,14 @@ bool CIccHdrMetadataReader::Read(const CIccProfile *pProfile)
     }
   }
 
+  /* MDCV as registered: maximum and minimum luminance, then the primaries. */
   bParseable = false;
   if (icHdrGetDictValue(pDict, kIccHdrKeyMdcv, value, bParseable)) {
-    if (bParseable && icHdrParseColourVolume(value, m_mdcvPrimaries,
-                                             m_mdcvMaxLuminance, m_mdcvMinLuminance)) {
+    double lums[2];
+    if (bParseable && icHdrParseRegistryVolume(value, 2, lums, m_mdcvPrimaries,
+                                               m_bMdcvPrimariesResolved)) {
+      m_mdcvMaxLuminance = (icFloatNumber)lums[0];
+      m_mdcvMinLuminance = (icFloatNumber)lums[1];
       m_bHasMdcv = true;
     }
     else {
@@ -661,9 +672,6 @@ bool CIccHdrMetadataReader::Read(const CIccProfile *pProfile)
     }
   }
 
-  /* Retained raw. Content Colour Volume has no single reconstructable shape:
-   * the ST 2094 family defines several, and picking one would be a guess
-   * rather than the informed reconstruction the other entries get. */
   bParseable = false;
   if (icHdrGetDictValue(pDict, kIccHdrKeyCcv, value, bParseable)) {
     m_bHasCcv = true;
@@ -701,10 +709,16 @@ bool CIccHdrMetadataReader::Read(const CIccProfile *pProfile)
     }
   }
 
+  /* DCV is not registered. 8.10.5 describes it in the same terms as MDCV -
+   * maximum and minimum luminance and primaries - so it is read on the
+   * registered sibling's shape. */
   bParseable = false;
   if (icHdrGetDictValue(pDict, kIccHdrKeyDcv, value, bParseable)) {
-    if (bParseable && icHdrParseColourVolume(value, m_dcvPrimaries,
-                                             m_dcvMaxLuminance, m_dcvMinLuminance)) {
+    double lums[2];
+    if (bParseable && icHdrParseRegistryVolume(value, 2, lums, m_dcvPrimaries,
+                                               m_bDcvPrimariesResolved)) {
+      m_dcvMaxLuminance = (icFloatNumber)lums[0];
+      m_dcvMinLuminance = (icFloatNumber)lums[1];
       m_bHasDcv = true;
     }
     else {
@@ -838,9 +852,17 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
 
   info.bRgbMatrixBased = icHdrIsRgbMatrixBased(pProfile);
 
-  /* "4.5.0.0 or later within v4". Comparing the whole version word rather
-   * than the minor nibble alone keeps a v5 profile - which is a different
-   * major version with its own tag model - out of the HDR Profile class. */
+  /* "4.5.0.0 or later within v4", not equality with 4.5.0.0.  An amendment is
+   * one link in a chain of amendments against the base major version, and what
+   * it introduces is available at its own version and at every higher one, so
+   * a profile encoding 4.6.0.0 may use everything defined at 4.5.0.0 - clause
+   * 8.10 included.  An author encodes the version of the specification it
+   * authored against; a consumer therefore has to accept that version or any
+   * higher one within the major version.
+   *
+   * Comparing the whole version word rather than the minor nibble alone keeps
+   * a v5 profile - a different major version with its own tag model - out of
+   * the HDR Profile sub-class. */
   info.bVersion4_5 = (pProfile->m_Header.version >= icVersionNumberV4_5 &&
                       pProfile->m_Header.version < icVersionNumberV5);
 
@@ -898,23 +920,27 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
                                                      info.primaries, &info.bPrimariesFromProfile);
   }
 
-  /* PROPOSAL-ISSUE HDR-02 (design-level) -- 8.10.1 says an HDR Profile's
-   * TransferCharacteristics "shall be" 16, 18 or 8 and that other values
-   * "shall not be used in an HDR Profile", while NOTE 3 makes the conforming
-   * cicpTag the sole thing that distinguishes the class.  The prohibition is
-   * therefore unviolatable: a profile with any other value is not an HDR
-   * Profile rather than a non-conforming one, so no validator can report it.
-   * icHdrProfileIntended below is the non-circular hook that lets a profile
-   * plainly authored as HDR, but mistyped, still be reported.
+  /* Classification.  The conforming test is the full set of 8.10.1 membership
+   * conditions, and 8.10.1 states them together: the class sentence, the
+   * version sentence, and the cicpTag requirement with its permitted transfer
+   * values.  NOTE 3's "sole tag-level requirement" is scoped to TAGS, which is
+   * why the version is a second, independent marker rather than a redundant
+   * one.
    *
-   * Classification. The conforming test is the full set of 8.10.1
-   * requirements; the intended test is the non-circular hook described in the
-   * header - HDR-specific content without the qualification to carry it. */
+   * Missing a condition is not a defect and is never reported as one - see the
+   * icHdrProfileClass comment in the header.  The second state below exists
+   * only so a report can describe what the profile is.  A HAGC tag, HDR
+   * metadata, or a cicpTag declaring PQ or HLG is HDR-related content whatever
+   * class the profile turns out to belong to.  Linear (8) is deliberately not
+   * a signal on its own: it is as common in SDR workflows as in HDR ones, and
+   * treating it as one would open an HDR section on ordinary profiles. */
   if (info.bRgbMatrixBased && info.bVersion4_5 && info.bHasCicp && info.bTransferIsHdr) {
     info.nClass = icHdrProfileConforming;
   }
-  else if (info.bHasHagc || (bHasMeta && meta.HasAnyHdrEntry())) {
-    info.nClass = icHdrProfileIntended;
+  else if (info.bHasHagc || (bHasMeta && meta.HasAnyHdrEntry()) ||
+           (info.bHasCicp && (info.nTransferCharacteristics == icCicpTransferPQ ||
+                              info.nTransferCharacteristics == icCicpTransferHLG))) {
+    info.nClass = icHdrProfileHdrContent;
   }
 
   return true;

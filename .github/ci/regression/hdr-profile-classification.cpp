@@ -228,16 +228,24 @@ void testDisplayMetadata()
   check(meta.HasContentReferenceWhite(), "CRWL present");
   checkClose(meta.GetContentReferenceWhite(), 203.0, 1e-4, "CRWL value");
 
+  // The registered shapes: CLL and MDCV each carry two floating point fields
+  // then an 8-bit ITU-T H.273 ColourPrimaries code, not a chromaticity list.
   check(meta.HasContentLightLevel(), "CLL present");
   checkClose(meta.GetMaxContentLightLevel(), 1000.0, 1e-4, "MaxCLL");
   checkClose(meta.GetMaxFrameAverageLightLevel(), 400.0, 1e-4, "MaxFALL");
+  check(meta.ContentLightLevelPrimariesResolved(), "CLL primaries code resolved");
+  checkClose(meta.GetContentLightLevelPrimaries().xRed, 0.708, 1e-5,
+             "CLL primaries code 9 is BT.2020");
 
   check(meta.HasMasteringDisplayColourVolume(), "MDCV present");
-  checkClose(meta.GetMasteringPrimaries().xRed, 0.708, 1e-5, "MDCV red x is BT.2020");
+  check(meta.MasteringPrimariesResolved(), "MDCV primaries code resolved");
+  checkClose(meta.GetMasteringPrimaries().xRed, 0.708, 1e-5, "MDCV code 9 is BT.2020");
   checkClose(meta.GetMasteringMaxLuminance(), 1000.0, 1e-4, "MDCV max luminance");
+  checkClose(meta.GetMasteringMinLuminance(), 0.005, 1e-6, "MDCV min luminance");
 
   check(meta.HasDisplayColourVolume(), "DCV present");
-  checkClose(meta.GetDisplayPrimaries().xRed, 0.640, 1e-5, "DCV red x is BT.709");
+  check(meta.DisplayPrimariesResolved(), "DCV primaries code resolved");
+  checkClose(meta.GetDisplayPrimaries().xRed, 0.640, 1e-5, "DCV code 1 is BT.709");
   checkClose(meta.GetDisplayMaxLuminance(), 1000.0, 1e-4, "DCV max luminance");
 
   check(meta.HasDisplayReferenceWhite(), "DRWL present");
@@ -295,27 +303,32 @@ void testClassification()
     delete pProfile;
   }
 
-  // TransferCharacteristics 13 with a HAGC tag present: the profile asserts HDR
-  // machinery it does not qualify for, so it is "intended" rather than
-  // conforming - which is what makes the TC rule reportable at all.
+  // TransferCharacteristics 13 with a HAGC tag present.  Clause 8.10.1's
+  // conditions are definitional: this profile is simply not an HDR Profile.  It
+  // is a valid ICC Display profile carrying two legal optional tags, so nothing
+  // may be reported against it.  The classification is descriptive only.
   pProfile = openFixture("HdrInvalidTransfer.icc");
   if (pProfile) {
-    check(icGetHdrProfileInfo(pProfile, info), "info resolved for the bad-transfer fixture");
-    check(info.nClass == icHdrProfileIntended, "bad TransferCharacteristics is 'intended', not conforming");
+    check(icGetHdrProfileInfo(pProfile, info), "info resolved for the sRGB-transfer fixture");
+    check(info.nClass == icHdrProfileHdrContent,
+          "TransferCharacteristics 13 is HDR-related content, not an HDR Profile");
     check(info.bHasCicp, "cicp present");
-    check(!info.bTransferIsHdr, "TransferCharacteristics 13 is not an HDR transfer");
-    check(info.nTransferCharacteristics == 13, "the offending value is reported as-is");
+    check(!info.bTransferIsHdr, "TransferCharacteristics 13 is not one of 8, 16 or 18");
+    check(info.nTransferCharacteristics == 13, "the value is reported as-is");
 
     std::string report;
     icValidateStatus rv = pProfile->Validate(report);
-    check(rv >= icValidateNonCompliant, "the bad transfer validates non-compliant");
-    check(report.find("TransferCharacteristics is 13") != std::string::npos,
-          "the report names the offending value");
+    check(rv < icValidateWarning,
+          "not being an HDR Profile is not a defect and draws no diagnostic");
+    check(report.find("TransferCharacteristics") == std::string::npos,
+          "no message is emitted about a membership condition");
+    check(report.find("HDR:") == std::string::npos,
+          "clause 8.10 says nothing about a profile outside the sub-class");
     delete pProfile;
   }
 
-  // A conforming HDR Profile can still break the pairing rule of 8.10.3 c),
-  // which is why that check sits outside the conforming/intended split.
+  // An HDR Profile can still break the pairing rule of 8.10.6, which is the one
+  // requirement of clause 8.10 that a member of the sub-class can actually fail.
   pProfile = openFixture("HdrMissingBToA0.icc");
   if (pProfile) {
     check(icGetHdrProfileInfo(pProfile, info), "info resolved for the unpaired fixture");

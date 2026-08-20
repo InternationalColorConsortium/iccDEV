@@ -159,8 +159,12 @@ foreach(_id H1 H2 H3 H4 H5 H6 H7 H8)
 endforeach()
 iccdev_expect("${_hagc}" "\\[OK[ \t]*\\][ \t]+H1[ \t]"
   "a conforming HDR Profile was not classified OK at H1")
-iccdev_expect("${_hagc}" "conforming HDR Profile"
-  "H1 did not name the conforming classification")
+# "meets clause 8.10.1" rather than "conforming": 8.10.1's conditions are the
+# membership test, and a profile that meets them can still break 8.10.6's
+# pairing rule (case 6 below, where H1 is OK and H6 FAILs).  Calling H1
+# "conforming" would overstate what the item has established.
+iccdev_expect("${_hagc}" "HDR Profile: meets clause 8\\.10\\.1"
+  "H1 did not state that the profile meets the clause 8.10.1 membership conditions")
 iccdev_expect("${_hagc}" "\\[OK[ \t]*\\][ \t]+H4[ \t]"
   "H4 did not accept TransferCharacteristics 16")
 iccdev_expect("${_hagc}" "8\\.10\\.3 a\\): headroomAdaptiveGainCurveTag"
@@ -188,29 +192,40 @@ iccdev_expect("${_meta}" "\\[OK[ \t]*\\][ \t]+H8[ \t]"
   "H8 did not resolve a display headroom from the HDR Display entries")
 iccdev_expect("${_meta}" "8\\.10\\.5 a\\)"
   "H8 did not report DERH as the rule that fired; NOTE 13 makes the provenance normative")
-iccdev_expect("${_meta}" "reconstructed dictType encoding"
-  "a metadataTag-derived value was presented without the registry caveat")
+iccdev_expect("${_meta}" "no HDR Display category until the amendment is accepted"
+  "an unregistered HDR Display value was presented without its caveat")
+iccdev_expect_not("${_meta}" "Content HDR Reference White Luminance entry \\["
+  "a registered HDR Image value was presented with a caveat it does not need")
 
-# --- 5. The intended case: H1 WARN, and the violation lands on H4 -------------
+# --- 5. Outside the sub-class: H1 is N/A, descriptive, and stands alone -------
+# Clause 8.10.1's conditions are definitional, so a profile that misses one is a
+# valid ICC profile of another class and nothing may be reported against it.
+# H1 states the classification; H2 onward have no subject and must not print.
 iccdev_run_pawg("${ICCDEV_HDR_DIR}/HdrInvalidTransfer.icc" _bad_tc)
-iccdev_expect("${_bad_tc}" "\\[WARN[ \t]*\\][ \t]+H1[ \t]"
-  "an intended-but-not-conforming HDR Profile was not flagged at H1")
-iccdev_expect("${_bad_tc}" "INTENDED rather than a conforming HDR Profile"
-  "H1 did not name the intended classification")
-iccdev_expect("${_bad_tc}" "\\[FAIL[ \t]*\\][ \t]+H4[ \t]"
-  "H4 accepted a TransferCharacteristics outside {8, 16, 18}")
+iccdev_expect("${_bad_tc}" "\\[N/A[ \t]*\\][ \t]+H1[ \t]"
+  "a profile outside the clause 8.10 sub-class was not reported as N/A at H1")
+iccdev_expect("${_bad_tc}" "not of the clause 8\\.10 HDR Profile sub-class"
+  "H1 did not state the classification")
+iccdev_expect("${_bad_tc}" "classification, not a finding"
+  "H1 did not make clear that non-membership is not a defect")
+iccdev_expect_not("${_bad_tc}" "\\[FAIL[ \t]*\\][ \t]+H[0-9]"
+  "a membership condition was reported as a failure")
+iccdev_expect_not("${_bad_tc}" "\\[WARN[ \t]*\\][ \t]+H[0-9]"
+  "a membership condition was reported as a warning")
+iccdev_expect_not("${_bad_tc}" "[ \t]+H[2-8][ \t]"
+  "an HDR Profile question was asked of a profile outside the sub-class")
 # The C3 attribution fix: the clause-8.10 text must no longer be quoted under
 # the tag-type question.  The verdict there is intentionally left alone.
 iccdev_expect_not("${_bad_tc}" "C3[^\n]*\n[ \t]*[^\n]*clause 8\\.10\\.1 permits only"
   "C3 still quotes an HDR finding under its tag-type title")
 
-# --- 6. The 8.10.3 c) pairing rule, which a conforming profile can still break -
+# --- 6. The 8.10.6 pairing rule, the one shall an HDR Profile can break -------
 iccdev_run_pawg("${ICCDEV_HDR_DIR}/HdrMissingBToA0.icc" _unpaired)
 iccdev_expect("${_unpaired}" "\\[OK[ \t]*\\][ \t]+H1[ \t]"
-  "the pairing violation was folded into the H1 classification; 8.10.3 c) sits outside 8.10.1")
+  "the pairing violation was folded into the H1 classification; 8.10.6 sits outside 8.10.1")
 iccdev_expect("${_unpaired}" "\\[FAIL[ \t]*\\][ \t]+H6[ \t]"
   "H6 did not fail an AToB0Tag with no paired BToA0Tag")
-iccdev_expect_not("${_unpaired}" "C3[^\n]*\n[ \t]*[^\n]*clause 8\\.10\\.3 c\\) requires the pair"
+iccdev_expect_not("${_unpaired}" "C3[^\n]*\n[ \t]*[^\n]*clause 8\\.10\\.6 requires the pair"
   "C3 still quotes the HDR pairing finding under its tag-type title")
 
 message(STATUS "${ICCDEV_TEST_NAME} completed successfully")

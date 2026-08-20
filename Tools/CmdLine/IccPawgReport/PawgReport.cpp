@@ -2006,19 +2006,26 @@ PawgVerdict QualityCharacterization(CIccProfile *pIcc, std::string &detail)
 // at all, so they could never appear in a validation report.  What the library
 // and this section share is the resolution, not the reporting.
 //
-// For a profile that is not an HDR Profile the section is ABSENT rather than
-// eight NOT RUN items: eight per-profile placeholders would change the item
+// For a profile with no HDR-related content at all the section is ABSENT rather
+// than eight NOT RUN items: eight per-profile placeholders would change the item
 // count and summary of every existing SDR report to say nothing, and a consumer
 // that sees no H items has been told the same thing more cheaply.
+//
+// For a profile that carries HDR-related content but is not an HDR Profile, only
+// H1 prints, as N/A. Clause 8.10.1's conditions are definitional - they say
+// which profiles are HDR Profiles, not what a profile must do - so missing one
+// is not a failure and this report never states it as one. H1 says what the
+// profile is; H2 onward have no subject and are not emitted.
 
-// H7 and H8 read values out of the metadataTag, whose key names and value
-// encodings CIccHdrMetadataReader *reconstructs* -- the ICC dictType Metadata
-// Registry that clauses 8.10.4 and 8.10.5 name as authoritative is not yet
-// published (see the REGISTRY CAVEAT on that class).  A number derived that way
-// is not a settled fact, and the item says so rather than letting it stand.
+// H7 and H8 read values out of the metadataTag.  The HDR Image entries H7 uses
+// are registered, so nothing needs saying about them.  The HDR Display entries
+// H8 uses -- DERH, DCV, DRWL -- are not: clause 8.10.5 is not yet accepted, so
+// the registry correctly carries no HDR Display category and their shapes are
+// read from 8.10.5 itself.  A number derived that way is not yet a settled
+// fact, and the item says so rather than letting it stand.
 const char *kHdrRegistryCaveat =
-  " [read through a reconstructed dictType encoding; the ICC dictType Metadata "
-  "Registry that clauses 8.10.4/8.10.5 make authoritative is not yet published]";
+  " [DERH/DCV/DRWL are read as clause 8.10.5 describes them; the ICC dictType "
+  "Metadata Registry has no HDR Display category until the amendment is accepted]";
 
 std::string HdrPrimariesText(const icCicpPrimaries &p)
 {
@@ -2071,122 +2078,93 @@ void AddHdrItems(std::vector<PawgItem> &items, CIccProfile *pIcc)
   CIccInfo iccInfo;
   char buf[512];
 
-  // --- H1: the classification -----------------------------------------------
-  // "Intended" is the non-circular hook CheckHdrProfile() documents: clause
-  // 8.10.1's definition is self-satisfying, so the only thing a report can
-  // usefully flag is a profile carrying HDR machinery it does not qualify to
-  // carry.  WARN rather than FAIL because the individual unmet conditions carry
-  // their own verdicts in H2 to H4, at the levels the clause's own wording sets.
+  // --- H1: the classification ------------------------------------------------
+  // A pure classification statement.  Clause 8.10.1's four conditions are
+  // definitional, so a profile that misses one is not a deficient HDR Profile
+  // - it is a valid ICC profile of whatever class it does belong to, and this
+  // report has nothing to hold against it.  The verdict for that case is
+  // therefore N/A, not WARN: the clause-8.10 questions do not apply to it.
+  // The item says what the profile IS and stops there.
   {
     std::ostringstream oss;
     if (info.nClass == icHdrProfileConforming) {
-      oss << "conforming HDR Profile: satisfies clause 8.10.1 in full - version 4.5.0.0 or later, "
+      oss << "HDR Profile: meets clause 8.10.1 - version 4.5.0.0 or later, "
           << "RGB " << (pIcc->m_Header.deviceClass == icSigInputClass ? "Input" : "Display")
           << " class, three-component matrix-based, cicpTag TransferCharacteristics="
           << HdrTransferText(info.nTransferCharacteristics);
     }
     else {
-      oss << "HDR content present (";
+      // Lead with what the profile is, and name the HDR-related content only
+      // as the reason this section printed at all.
+      oss << (pIcc->m_Header.deviceClass == icSigInputClass ? "Input" : "Display")
+          << " profile, "
+          << (info.bRgbMatrixBased ? "three-component matrix-based"
+                                   : "not three-component matrix-based RGB")
+          << ", version " << iccInfo.GetVersionName(pIcc->m_Header.version)
+          << "; not of the clause 8.10 HDR Profile sub-class. Carries ";
+      std::vector<std::string> carried;
       if (info.bHasHagc) {
-        oss << "headroomAdaptiveGainCurveTag";
-        if (meta.HasAnyHdrEntry()) {
-          oss << ", ";
-        }
+        carried.push_back("a headroomAdaptiveGainCurveTag");
       }
       if (meta.HasAnyHdrEntry()) {
-        oss << "HDR Image/Display metadataTag entries";
+        carried.push_back("HDR Image/Display metadataTag entries");
       }
-      oss << ") but clause 8.10.1 is not satisfied, so this is an INTENDED rather than a "
-             "conforming HDR Profile; unmet: ";
-      std::vector<std::string> unmet;
-      if (!info.bVersion4_5) {
-        unmet.push_back("version is not 4.5.0.0 or later within v4");
+      if (info.bHasCicp) {
+        carried.push_back("a cicpTag with TransferCharacteristics=" +
+                          HdrTransferText(info.nTransferCharacteristics));
       }
-      if (!info.bHasCicp) {
-        unmet.push_back("no cicpTag");
+      for (size_t i = 0; i < carried.size(); ++i) {
+        oss << (i ? ", " : "") << carried[i];
       }
-      else if (!info.bTransferIsHdr) {
-        unmet.push_back("cicp TransferCharacteristics " +
-                        HdrTransferText(info.nTransferCharacteristics) + " is not 8, 16 or 18");
-      }
-      if (!info.bRgbMatrixBased) {
-        unmet.push_back("not RGB Input/Display three-component matrix-based");
-      }
-      for (size_t i = 0; i < unmet.size(); ++i) {
-        oss << (i ? "; " : "") << unmet[i];
-      }
+      oss << ". This is a classification, not a finding: clause 8.10.1's conditions define "
+             "which profiles are HDR Profiles rather than stating requirements a profile can "
+             "fail, so nothing here is reported against it.";
     }
     AddItem(items, "H1",
-            "Is this a profile of the HDR Profile sub-class of ICC.1 clause 8.10, and does it meet the class definition in full?",
-            info.nClass == icHdrProfileConforming ? PawgVerdict::Ok : PawgVerdict::Warn,
+            "Is this a profile of the HDR Profile sub-class of ICC.1 clause 8.10?",
+            info.nClass == icHdrProfileConforming ? PawgVerdict::Ok
+                                                  : PawgVerdict::NotApplicable,
             oss.str());
   }
 
-  // --- H2: the version requirement ------------------------------------------
-  // WARN, not FAIL, and for a documented reason: the HAGC amendment calls its
-  // tag "an optional version 4 tag" and imposes no 4.5 requirement, so a 4.4
-  // profile carrying HDR content conforms to the document it was authored
-  // against.  This mirrors CheckHdrProfile()'s level for the same rule.
-  {
-    std::snprintf(buf, sizeof(buf), "profile version is %s",
-                  iccInfo.GetVersionName(pIcc->m_Header.version));
-    std::string detail = buf;
-    detail += info.bVersion4_5
-        ? "; clause 8.10.1's 4.5.0.0 requirement is met"
-        : "; clause 8.10.1 requires 4.5.0.0 of an HDR Profile - reported as a warning because the "
-          "HAGC amendment calls its tag an optional version 4 tag and does not itself require 4.5";
-    AddItem(items, "H2",
-            "Does the profile declare the version 4.5.0.0 that clause 8.10.1 requires of an HDR Profile?",
-            info.bVersion4_5 ? PawgVerdict::Ok : PawgVerdict::Warn,
-            detail);
+  // Everything from H2 down asks a question about an HDR Profile.  For a
+  // profile outside the sub-class those questions have no subject, and
+  // answering them anyway - even as N/A - would read as a list of things the
+  // profile had failed to be.  H1 has already said what it is.
+  if (info.nClass != icHdrProfileConforming) {
+    return;
   }
 
-  // --- H3: the cicpTag requirement ------------------------------------------
+  // --- H2, H3, H4: the conditions of 8.10.1 that this profile meets ---------
+  // Reached only for a profile that is already in the sub-class, so each of
+  // these is satisfied by definition and can only be OK.  They are kept as
+  // separate items because the *values* are what a reader wants - which
+  // version, which primaries code, which transfer - not because a verdict is
+  // in doubt.  Failing branches were removed with the withdrawal of the
+  // reading that a non-member could "fail" a membership condition.
   {
-    std::string detail;
-    if (info.bHasCicp) {
-      std::snprintf(buf, sizeof(buf),
-                    "cicpTag present: ColourPrimaries=%u, TransferCharacteristics=%s",
-                    (unsigned)info.nColourPrimaries,
-                    HdrTransferText(info.nTransferCharacteristics).c_str());
-      detail = buf;
-    }
-    else {
-      // Warning rather than non-compliance for the same reason as H2: nothing
-      // the HAGC tag was authored against requires a cicpTag.  The consequence
-      // is still stated, because it is the reason the rule exists.
-      detail = "no cicpTag; clause 8.10.1 requires one of an HDR Profile, and without it the "
-               "transfer characteristic the tone-mapping step of 8.10.2 operates on is undetermined";
-    }
+    std::snprintf(buf, sizeof(buf), "profile version is %s; clause 8.10.1's 4.5.0.0 condition is met",
+                  iccInfo.GetVersionName(pIcc->m_Header.version));
+    AddItem(items, "H2",
+            "Which profile format version does this HDR Profile declare?",
+            PawgVerdict::Ok, buf);
+  }
+
+  {
+    std::snprintf(buf, sizeof(buf),
+                  "cicpTag present: ColourPrimaries=%u, TransferCharacteristics=%s",
+                  (unsigned)info.nColourPrimaries,
+                  HdrTransferText(info.nTransferCharacteristics).c_str());
     AddItem(items, "H3",
             "Does the profile carry the cicpTag that clause 8.10.1 requires of an HDR Profile?",
-            info.bHasCicp ? PawgVerdict::Ok : PawgVerdict::Warn,
-            detail);
+            PawgVerdict::Ok, buf);
   }
 
-  // --- H4: the permitted transfer characteristics ---------------------------
-  // FAIL here is reachable only for an intended HDR Profile: a conforming one
-  // has an in-range value by definition, which is what makes it conforming.
   {
-    PawgVerdict verdict;
-    std::string detail;
-    if (!info.bHasCicp) {
-      verdict = PawgVerdict::NotRun;
-      detail = "no cicpTag to read the field from (see H3)";
-    }
-    else if (info.bTransferIsHdr) {
-      verdict = PawgVerdict::Ok;
-      detail = "TransferCharacteristics=" + HdrTransferText(info.nTransferCharacteristics);
-    }
-    else {
-      verdict = PawgVerdict::Fail;
-      detail = "TransferCharacteristics=" + HdrTransferText(info.nTransferCharacteristics) +
-               "; clause 8.10.1 permits only 8 (Linear), 16 (PQ) or 18 (HLG) in an HDR Profile "
-               "and states that other values shall not be used";
-    }
     AddItem(items, "H4",
-            "Is the cicp TransferCharacteristics one an HDR Profile may use - 8 (Linear), 16 (PQ) or 18 (HLG)?",
-            verdict, detail);
+            "Which of the transfer characteristics of clause 8.10.1 - 8 (Linear), 16 (PQ) or 18 (HLG) - does this HDR Profile use?",
+            PawgVerdict::Ok,
+            "TransferCharacteristics=" + HdrTransferText(info.nTransferCharacteristics));
   }
 
   // --- H5: source primaries -------------------------------------------------
@@ -2223,17 +2201,18 @@ void AddHdrItems(std::vector<PawgItem> &items, CIccProfile *pIcc)
   }
 
   // --- H6: tone-mapping descriptor ------------------------------------------
-  // The pairing rule is tested first and unconditionally: clause 8.10.3 c) sits
-  // outside the 8.10.1 definition, so a fully conforming HDR Profile can still
-  // break it -- which is why CheckHdrProfile() keeps it outside its own
-  // intended-only block too.
+  // The pairing rule is tested first: it is the one requirement of clause 8.10
+  // that an HDR Profile can actually fail.  It sits outside 8.10.1's membership
+  // conditions - "When a Display RGB HDR Profile contains an AToBxTag, the
+  // corresponding BToAxTag shall also be present" (8.10.6) - so a profile that
+  // is squarely in the sub-class can still break it.
   {
     PawgVerdict verdict;
     std::string detail;
     if (info.bHasAToB0 && !info.bHasBToA0) {
       verdict = PawgVerdict::Fail;
-      detail = "AToB0Tag present without its paired BToA0Tag; clause 8.10.3 c) requires the pair "
-               "whenever an AToBxTag is present";
+      detail = "AToB0Tag present without its paired BToA0Tag; clause 8.10.6 requires the pair "
+               "when a Display RGB HDR Profile contains an AToBxTag";
     }
     else if (info.bHasHagc) {
       verdict = PawgVerdict::Ok;
@@ -2291,19 +2270,18 @@ void AddHdrItems(std::vector<PawgItem> &items, CIccProfile *pIcc)
                       ", stated by the profile, but its two carriers DISAGREE: the metadataTag "
                       "CRWL entry says %.4g cd/m^2. The headroomAdaptiveGainCurveTag value is "
                       "used because the gain curve in that tag was authored against it", crwl);
-        oss << buf << kHdrRegistryCaveat;
+        oss << buf;
       }
       else {
         oss << ", stated by the profile; the headroomAdaptiveGainCurveTag and the metadataTag "
-               "CRWL entry agree" << kHdrRegistryCaveat;
+               "CRWL entry agree";
       }
     }
     else if (info.bHasHagc) {
       oss << ", stated by the profile's headroomAdaptiveGainCurveTag";
     }
     else {
-      oss << ", stated by the profile's metadataTag Content HDR Reference White Luminance entry"
-          << kHdrRegistryCaveat;
+      oss << ", stated by the profile's metadataTag Content HDR Reference White Luminance entry";
     }
     AddItem(items, "H7",
             "Where did the content HDR reference white come from - the profile, or clause 8.10.4's 203 cd/m^2 default?",

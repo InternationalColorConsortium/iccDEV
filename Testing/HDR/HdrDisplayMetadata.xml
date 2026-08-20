@@ -23,12 +23,13 @@
   value returns 4.926 here; a correct one returns 4.0 and reports that rule a)
   produced it.
 
-  REGISTRY CAVEAT: the ICC dictType Metadata Registry defines the names and
-  encodings of these entries and is not reproduced in the amendment, so the
-  key names and the value syntax below are reconstructions. See the ASSUMED
-  markers in IccProfLib/IccHdrProfile.cpp. This fixture pins the behaviour of
-  the reader against those assumptions; if the registry contradicts them, the
-  fixture changes with the parser.
+  ENTRY SHAPES: the four HDR Image entries follow the ICC dictType Metadata
+  Registry (HDR Image category, registered 2025-06-04). CRWL is one floating
+  point number; CLL is maximum and average light level then an 8-bit ITU-T
+  H.273 primaries code; MDCV is maximum and minimum luminance then the same
+  primaries code. DERH, DCV and DRWL are not registered - clause 8.10.5 is not
+  yet accepted - so they are written as 8.10.5 describes them, with DCV on the
+  shape of its registered sibling MDCV. 9 is BT.2020, 1 is BT.709.
 -->
 <IccProfile>
   <Header>
@@ -96,11 +97,11 @@
 
     <metaDataTag> <dictType>
       <DictEntry Name="CRWL" Value="203.0"/>
-      <DictEntry Name="CLL" Value="1000.0 400.0"/>
-      <DictEntry Name="MDCV" Value="0.708 0.292 0.170 0.797 0.131 0.046 0.3127 0.3290 1000.0 0.005"/>
+      <DictEntry Name="CLL" Value="1000.0 400.0 9"/>
+      <DictEntry Name="MDCV" Value="1000.0 0.005 9"/>
       <DictEntry Name="DERH" Value="4.0"/>
       <DictEntry Name="DRWL" Value="203.0"/>
-      <DictEntry Name="DCV" Value="0.640 0.330 0.300 0.600 0.150 0.060 0.3127 0.3290 1000.0 0.005"/>
+      <DictEntry Name="DCV" Value="1000.0 0.005 1"/>
     </dictType> </metaDataTag>
 
     <profileDescriptionTag> <multiLocalizedUnicodeType>
