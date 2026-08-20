@@ -81,6 +81,7 @@
 #include <vector>
 #include <memory>
 #include <limits>
+#include <new>
 #include <string>
 #include "IccCmm.h"
 #include "IccUtil.h"
@@ -337,6 +338,19 @@ static bool readValidateProfile(const char *profilePath,
 
 //===================================================
 
+// Once Create() has opened the output, every later failure path leaves a
+// partially written TIFF behind.  Create() truncates any existing file, so a
+// run that failed part way through also replaced a previously good output with
+// an unreadable stub that still looked like a result.  Discard the incomplete
+// file so a failed conversion leaves no output rather than a corrupt one.
+static void discardPartialOutput(CTiffImg &outfile, const char *path)
+{
+  outfile.Close();
+  remove(path);
+}
+
+//===================================================
+
 int main(int argc, char* argv[]) {
   const int minargs = 8; // argc = 8 without profile, 9 with profile
   
@@ -452,6 +466,17 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
+  // The MinIsWhite inversion below is a per-byte XOR with 0xff, which is only
+  // meaningful for integer samples.  Applying it to IEEE floats rewrites the
+  // sign and exponent instead of the sample value: 0.25 (0x3E800000) becomes
+  // 0xC17FFFFF (-15.999999) and 0.0 becomes a NaN.  The tool nevertheless
+  // reported success, so a float MinIsWhite input was silently converted to
+  // garbage.  Refuse the combination rather than emit corrupt samples.
+  if (invert && f->GetSampleFormat() == SAMPLEFORMAT_IEEEFP) {
+    printf("Floating point MinIsWhite input cannot be inverted: %s\n", argv[4]);
+    return -1;
+  }
+
   if (f->GetBitsPerSample() % 8) {
     printf("Input bits per sample must be byte aligned: %u\n", f->GetBitsPerSample());
     return -1;
@@ -470,8 +495,18 @@ int main(int argc, char* argv[]) {
   }
   
   // use unique_ptr to automatically free the buffers
-  std::unique_ptr<icUInt8Number[]> inbufffer( new icUInt8Number[ inputSize ] );
-  std::unique_ptr<icUInt8Number[]> outbuffer( new icUInt8Number[ outSize ] );
+  // The row buffers are sized from the input geometry, so a small crafted TIFF
+  // can request gigabytes: a 250-byte file declaring a 500,000,000-pixel wide
+  // float row asks for 2GB here.  Throwing new turned that into an unhandled
+  // std::bad_alloc and the tool died with SIGABRT (signal 6) instead of
+  // reporting the problem, so allocate without throwing and fail like every
+  // other input error.
+  std::unique_ptr<icUInt8Number[]> inbufffer( new (std::nothrow) icUInt8Number[ inputSize ] );
+  std::unique_ptr<icUInt8Number[]> outbuffer( new (std::nothrow) icUInt8Number[ outSize ] );
+  if (!inbufffer || !outbuffer) {
+    printf("Cannot allocate image row buffers of %zu and %zu bytes\n", inputSize, outSize);
+    return -1;
+  }
   icUInt8Number *inbuf = inbufffer.get();
   icUInt8Number *outbuf = outbuffer.get();
 
@@ -493,15 +528,36 @@ int main(int argc, char* argv[]) {
 
   CTiffImg outfile;
   unsigned int nExtraSamples = nSamples > 1 ? (unsigned int)nSamples - 1 : 0;
+
+  // Create() truncates the destination the moment its TIFFOpen(...,"w")
+  // succeeds, but it also refuses some requests before opening anything (an
+  // unsupported compression/sample-size pair, a destination that is not a
+  // regular file).  Removing unconditionally on failure would therefore delete
+  // a pre-existing file this run never touched, so only discard an output that
+  // did not exist beforehand.
+  bool outputExisted = false;
+  {
+    // Probed with CIccFileIO to match readValidateProfile() above; a bare
+    // fopen() here would add another MSVC C4996 deprecation to the surface
+    // #2171 is already tracking.
+    CIccFileIO existing;
+    outputExisted = existing.Open(argv[1], "rb");
+    if (outputExisted)
+      existing.Close();
+  }
+
   if (!outfile.Create(argv[1], f->GetWidth(), f->GetHeight(), f->GetBitsPerSample(), PHOTO_MINISBLACK,
                      (unsigned int)nSamples, nExtraSamples, xRes, yRes, bCompress, bSep)) {
     printf("Unable to create %s\n", argv[1]);
+    if (!outputExisted)
+      remove(argv[1]);
     return -1;
   }
 
   if (destProfile) {
     if (!outfile.SetIccProfile( destProfile.get(), (unsigned int)destProfileLength )) {
       printf("Unable to embed ICC profile in %s\n", argv[1]);
+      discardPartialOutput(outfile, argv[1]);
       return -1;
     }
   }
@@ -512,9 +568,10 @@ int main(int argc, char* argv[]) {
       sptr = inbuf + j*bytePerLine;
       if (!infile[j].ReadLine(sptr)) {
         printf("Error reading line %u of file %zu\n", i, j);
+        discardPartialOutput(outfile, argv[1]);
         return -1;
       }
-      if (invert) {     // NOTE - this will not work for floating point data, but that should never be inverted anyway
+      if (invert) {     // float samples are rejected above, so this XOR only ever sees integer data
         for (size_t k=0; k<bytePerLine; k++) {
           sptr[k] ^= 0xff;
         }
@@ -530,6 +587,7 @@ int main(int argc, char* argv[]) {
     }
     if (!outfile.WriteLine(outbuf)) {
       printf("Error writing line %d\n", i);
+      discardPartialOutput(outfile, argv[1]);
       return -1;
     }
   }
