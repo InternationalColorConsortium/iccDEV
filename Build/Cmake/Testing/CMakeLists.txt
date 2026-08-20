@@ -4943,6 +4943,37 @@ if(WIN32)
     add_dependencies(check IccProfLib2)
   endif()
 
+  # #2154: the DLL-side counterpart to iccdev.proflib-exported-data-linkage.
+  # That test links IccProfLib2-static on Windows precisely to sidestep the
+  # exported-data problem, so it passes whether or not the eight globals carry a
+  # working dllexport/dllimport. This one links the DLL and therefore fails if
+  # the ICCPROFLIB_DATA_API annotation is lost. Out-of-tree by necessity: a link
+  # error in a target built here would fail the build rather than a test.
+  if(ENABLE_SHARED_LIBS AND TARGET IccProfLib2)
+    add_test(
+      NAME iccdev.proflib-exported-data-dll-linkage
+      COMMAND
+        "${CMAKE_COMMAND}"
+        "-DICCDEV_TEST_NAME=iccdev.proflib-exported-data-dll-linkage"
+        "-DICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/iccdev-proflib-exported-data-dll-linkage"
+        "-DICCDEV_REPO_ROOT=${ICCDEV_REPO_ROOT}"
+        "-DICCDEV_BUILD_DIR=${CMAKE_BINARY_DIR}"
+        "-DICCDEV_CONFIG=$<CONFIG>"
+        "-DICCDEV_ICCPROFLIB_DLL=$<TARGET_FILE:IccProfLib2>"
+        "-DICCDEV_ICCPROFLIB_IMPLIB=$<TARGET_LINKER_FILE:IccProfLib2>"
+        "-DICCDEV_GENERATOR=${CMAKE_GENERATOR}"
+        "-DICCDEV_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+        "-DICCDEV_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunWindowsExportedDataLinkageTest.cmake"
+    )
+    set_tests_properties(iccdev.proflib-exported-data-dll-linkage PROPERTIES
+      WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+      TIMEOUT 180
+      LABELS "iccdev;windows;shared;linkage;issue-1888;issue-2154;regression"
+    )
+    add_dependencies(check IccProfLib2)
+  endif()
+
   if(ENABLE_SHARED_LIBS AND TARGET IccJSON2)
     add_test(
       NAME iccdev.issue-1009-iccjson-profilejson-export
