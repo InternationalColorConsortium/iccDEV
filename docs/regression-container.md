@@ -433,7 +433,7 @@ builds stay reproducible. The Ubuntu 26.04 apt archive still republishes point
 releases for the same base digest (for example a `-3ubuntu4` package becoming
 `-3ubuntu5`, or a `build-essential` metapackage gaining a distro revision
 suffix), and a stale pin then fails `apt-get install` with
-`E: Unable to satisfy dependencies` or `E: Version '<pinned>' for '<pkg>' was
+`E: Unable to satisfy dependencies` or `E: Version 'PINNED_VERSION' for 'PACKAGE' was
 not found`, which surfaces as a `ci-docker` job failure with exit code `100`.
 
 Diagnose and fix a drifted pin:
