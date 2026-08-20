@@ -4718,6 +4718,68 @@ function(iccdev_add_zip_utf8_text_zlib_test)
   endif()
 endfunction()
 
+# Throughput harness for the IccProfLib apply paths (iccBenchApply).
+#
+# NOTE: this must stay ABOVE the if(WIN32) branch immediately below. That branch
+# registers the Windows test set and then return()s, so anything placed after it
+# never runs on Windows. This block handles WIN32 itself.
+#
+# Records; never asserts a timing threshold. Shared CI runners vary 20-30%
+# between runs on the same commit, so a threshold would flake without catching
+# anything a local run would not. The test passes when every case either
+# measured or reported SKIP, and fails only on a real defect: a checksum that
+# moved between thread counts, or a second Begin() that changed the output.
+#
+# The 'slow' label puts it on the existing opt-out path rather than inventing
+# one: check-fast excludes 'slow' while check excludes only 'known-red', so the
+# full suite runs it and the fast loop does not.
+#
+# ENVIRONMENT hands the tool both profile roots. iccdev.create-profiles writes
+# generated profiles into the source tree while iccdev.windows-create-profiles
+# writes them into the build tree, and the tool resolves against both rather
+# than assuming a platform.
+if(TARGET iccBenchApply)
+  add_dependencies(build-test-binaries iccBenchApply)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.apply-throughput
+      COMMAND "$<TARGET_FILE:iccBenchApply>" -suite -csv -pixels 65536 -repeats 3
+    )
+  else()
+    add_test(
+      NAME iccdev.apply-throughput
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccBenchApply>" -suite -csv -pixels 65536 -repeats 3
+    )
+  endif()
+
+  set_tests_properties(iccdev.apply-throughput PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 300
+    LABELS "iccdev;iccprofLib;benchmark;throughput;slow"
+    FIXTURES_REQUIRED iccdev_profiles
+    ENVIRONMENT "ICCDEV_BENCH_SOURCE_ROOT=${ICCDEV_REPO_ROOT};ICCDEV_BENCH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
+  )
+
+  if(WIN32)
+    set(_bench_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccBenchApply>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _bench_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.apply-throughput PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_bench_windows_env_mods}"
+    )
+  endif()
+endif()
+
+
 if(WIN32)
   function(iccdev_add_windows_batch_test NAME TIMEOUT LABELS SCRIPT)
     set(_one_value_args
@@ -4787,7 +4849,10 @@ if(WIN32)
       # Validate the disposable Windows Testing tree by artifact count. The
       # batch file echoes commands through cmd.exe, and tool stdout can be lost
       # in that layer even when profiles are generated successfully.
-      EXPECTED_GENERATED_PROFILE_COUNT 133
+      # 134 since Testing/V2/v2GrayTRC.xml was added: it is the only source in
+      # the tree that produces a CIccXformMonochrome. Bump this with any
+      # change to the number of profiles CreateAllProfiles.bat generates.
+      EXPECTED_GENERATED_PROFILE_COUNT 134
     )
     set_tests_properties(iccdev.windows-create-profiles PROPERTIES
       FIXTURES_SETUP iccdev_profiles
