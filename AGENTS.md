@@ -29,6 +29,7 @@ shares one source of truth. Update rules here, not in the mirrors.
 | Regression bisect workflow | `.github/prompts/bisect-regression.prompt.md` |
 | Maintainer regression container | `docs/regression-container.md` |
 | Regression container prompt | `.github/prompts/regression-container-maintainer.prompt.md` |
+| Maintainer CTest selection and CI budget | `.github/skills/maintainer-ci-ctest/SKILL.md` |
 | Security repro | `.github/prompts/reproduce-security-issue.prompt.md` |
 | Issue filing format | `.github/prompts/file-security-issue.prompt.md` |
 | Library hardening | `.github/instructions/icc-library-code.instructions.md` |
@@ -69,7 +70,7 @@ reporting runs, coverage and a clean exit while never executing the layer it
 exists to cover. Both defaults now admit it, and dropping a seed committed
 under `.github/ci/test-data` is a hard error rather than a silent prune. Raise
 `max_len` alongside the cap when adding a target that consumes large structured
-inputs — they are independent gates. Validate with
+inputs -- they are independent gates. Validate with
 
 ```bash
 cfl/build.sh --targets profilevisualize,writerserialize --seconds 30

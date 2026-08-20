@@ -829,8 +829,7 @@ static bool ParseIntArg(const char *arg, int minValue, int maxValue, int &value)
   parsed = strtol(arg, &end, 10);
 
   if (errno == ERANGE || end == arg || *end != '\0' ||
-      parsed < minValue || parsed > maxValue ||
-      parsed < INT_MIN || parsed > INT_MAX) {
+      parsed < minValue || parsed > maxValue) {
     return false;
   }
 

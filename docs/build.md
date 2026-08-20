@@ -287,14 +287,17 @@ The helper defaults to user-space samples, DWARF call graphs, a higher sample
 frequency, and a minimum sample threshold so short or kernel-heavy captures do
 not produce misleading SVGs with large `unknown` blocks.
 
-The reusable tool-test workflow can also run opt-in all-tool profiling. Dispatch
-`ci-pr-action` with `run_tool_flamegraphs=true` to include the sanitized
-FlameGraph manifest in the job summary. Each profiled tool records status,
-sample count, unknown folded-frame count, SVG availability, and skip reason.
-On successful runs, the workflow uploads an `iccdev-developer-report-<BuildType>`
-artifact with `index.html`, CTest outputs, QA target-flag evidence, hybrid timing
-data when requested, and FlameGraph data/SVGs when profiling was enabled. The
-artifact upload uses the reviewed sanitized developer-report governance exception.
+The reusable `ci-regression-checks` workflow can also run opt-in all-tool
+profiling. Dispatch it with `run_tool_flamegraphs=true`; optionally set
+`flamegraph_repeat` and `flamegraph_timeout` for the capture envelope. On a
+successful run, download `iccdev-developer-report-<BuildType>` and open its root
+`index.html`: it embeds the FlameGraph dashboard when profiling was requested.
+Each manifest row records status, sample count, unknown folded-frame count, SVG
+availability, and a skip or failure reason. A runner without usable `perf`
+truthfully produces `SKIP` or `PERF_FAIL` rows and no SVGs; it is not a visual
+capture. The artifact also contains CTest outputs, QA target-flag evidence,
+optional hybrid timing data, and all FlameGraph capture data. The artifact
+upload uses the reviewed sanitized developer-report governance exception.
 
 ```cmd
 set VCPKG_ROOT=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\vcpkg

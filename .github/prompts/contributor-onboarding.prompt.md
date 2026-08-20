@@ -42,7 +42,7 @@ iccDEV/
 ├── ports/iccdev/          — vcpkg overlay port (portfile.cmake, vcpkg.json)
 ├── docs/                  — index.md, build.md, install.md
 ├── .github/
-│   ├── workflows/         — 17 CI workflows
+│   ├── workflows/         — CI workflows
 │   ├── scripts/           — sanitize-sed.sh, sanitize.ps1
 │   ├── instructions/      — Auto-loaded copilot instructions
 │   └── prompts/           — Reusable task prompts
@@ -124,7 +124,7 @@ that define complex color transforms. Each `CIccMultiProcessElement` has
 3. **Test**: `cd Testing && ./CreateAllProfiles.sh && ./RunTests.sh`
 4. **Sanitizer check**: rebuild with `-DENABLE_SANITIZERS=ON`, re-run tests
 5. **Push and PR**: target `master`, clear description, reference any issues
-6. **CI gates**: all 5 PR workflows must pass (action, unix, unix-sb, win, lint)
+6. **CI gates**: all required PR checks must pass
 7. **Review**: requires Committer approval. Sign the CLA if first contribution.
 
 ## Coding Standards

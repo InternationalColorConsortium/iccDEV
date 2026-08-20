@@ -114,8 +114,8 @@ static void Usage()
   printf("\nNo timing threshold is ever asserted. This tool records.\n");
 }
 
-// Verbatim from iccApplyToLink.cpp:820 -- same parsing contract, so the two
-// tools accept and reject exactly the same argument strings.
+// Shares iccApplyToLink.cpp's parsing contract, so the two tools accept and
+// reject exactly the same argument strings.
 static bool ParseIntArg(const char *arg, int minValue, int maxValue, int &value)
 {
   char *end = NULL;
@@ -128,8 +128,7 @@ static bool ParseIntArg(const char *arg, int minValue, int maxValue, int &value)
   parsed = strtol(arg, &end, 10);
 
   if (errno == ERANGE || end == arg || *end != '\0' ||
-      parsed < minValue || parsed > maxValue ||
-      parsed < INT_MIN || parsed > INT_MAX) {
+      parsed < minValue || parsed > maxValue) {
     return false;
   }
 

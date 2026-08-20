@@ -1,0 +1,336 @@
+###############################################################
+#
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: Maintainer replay for the iccBenchApply throughput regression.
+#
+###############################################################
+
+name: "ci-apply-throughput-regression"
+
+permissions:
+  contents: read
+  packages: read
+
+'on':
+  workflow_dispatch:
+    inputs:
+      target_ref:
+        description: 'Branch, tag, or ref containing iccBenchApply'
+        required: true
+        default: ci-qa-pr-docker-testing
+        type: string
+      cmake_build_type:
+        description: 'CMake build type'
+        required: true
+        default: Debug
+        type: choice
+        options:
+          - Debug
+          - Release
+          - RelWithDebInfo
+          - MinSizeRel
+      regression_image_tag:
+        description: 'Trusted regression container tag'
+        required: true
+        default: master
+        type: string
+
+concurrency:
+  group: >-
+    apply-throughput-repro-${{ github.workflow }}-${{ inputs.target_ref || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apply-throughput:
+    name: "iccBenchApply throughput regression"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    container:
+      image: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${{ inputs.regression_image_tag || 'master' }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 0
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+      BUILD_TYPE_INPUT: ${{ inputs.cmake_build_type || 'Debug' }}
+      TARGET_REF_INPUT: ${{ inputs.target_ref || github.ref }}
+      TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
+
+    steps:
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: trusted
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout iccDEV
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ inputs.target_ref || github.ref }}
+          path: target
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Report regression scope
+        working-directory: target
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+
+          target_sha="$(git rev-parse --verify HEAD)"
+          safe_target_ref="$(sanitize_ref "$TARGET_REF_INPUT")"
+          plan_url="https://github.com/InternationalColorConsortium/iccDEV/blob/${target_sha}/docs/superpowers/plans/2026-08-20-apply-throughput-harness.md"
+          design_url="https://github.com/InternationalColorConsortium/iccDEV/blob/${target_sha}/docs/superpowers/specs/2026-08-20-apply-throughput-harness-design.md"
+
+          echo "========== Entering iccBenchApply throughput regression replay =========="
+          {
+            echo "## iccBenchApply Throughput Regression"
+            echo ""
+            echo "### Branch and #2207 Change Summary"
+            echo "- Requested ref: \`${safe_target_ref}\`"
+            echo "- Checked out HEAD: \`${target_sha}\`"
+            echo "- Build type: \`$(sanitize_line "$BUILD_TYPE_INPUT")\`"
+            echo ""
+            echo "### Change Under Replay"
+            echo "- #2207 adds \`iccBenchApply\`, an apply-path throughput harness."
+            echo "- [Implementation plan](${plan_url})"
+            echo "- [Design specification](${design_url}) defines its record-only CI contract."
+            echo "- Builds test binaries, prepares \`iccdev_profiles\`, then runs \`iccdev.apply-throughput\`."
+            echo "- The 1, 2, and 8-thread replay requires a stable checksum for every suite case."
+            echo "- Mpx/s is record-only; correctness checks cover checksum and idempotent \`Begin()\`."
+            echo ""
+            echo "### Required Output Signals"
+            echo "- \`iccdev.create-profiles ... Passed\` confirms generated profile setup."
+            echo "- \`iccdev.apply-throughput ... Passed\` confirms the #2207 regression executed."
+            echo "- \`100% tests passed, 0 tests failed\` confirms the CTest result."
+            echo "- 24 CSV rows ending in \`,ok\` confirm 8 suite cases at each of 1, 2, and 8 threads."
+            echo "- \`CHECKSUM MISMATCH\`, \`SOME CASES FAILED\`, and \`FAIL:\` must be absent."
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+      - name: Build iccBenchApply and test dependencies
+        working-directory: target
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          git config --global --add safe.directory "$PWD"
+
+          case "$BUILD_TYPE_INPUT" in
+            Debug|Release|RelWithDebInfo|MinSizeRel)
+              ;;
+            *)
+              echo "ERROR: unsupported CMake build type: $(sanitize_line "$BUILD_TYPE_INPUT")" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "Target ref: $(sanitize_line "$TARGET_REF_INPUT")"
+          echo "CMake build type: $(sanitize_line "$BUILD_TYPE_INPUT")"
+          cmake -S Build/Cmake -B Build/apply-throughput-repro \
+            -DCMAKE_BUILD_TYPE="$BUILD_TYPE_INPUT" \
+            -DENABLE_TOOLS=ON \
+            -DENABLE_TESTS=ON \
+            -DENABLE_WXWIDGETS=OFF \
+            -DENABLE_IMAGE_TOOLS=OFF
+          cmake --build Build/apply-throughput-repro \
+            --target build-test-binaries \
+            --parallel "$(nproc)"
+
+      - name: Run iccBenchApply regression
+        working-directory: target
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          test_log="Build/apply-throughput-repro/iccdev.apply-throughput.log"
+          threaded_log="Build/apply-throughput-repro/iccdev.apply-throughput-threaded.log"
+          ctest --test-dir Build/apply-throughput-repro \
+            --output-on-failure \
+            --no-tests=error \
+            -V \
+            -R '^iccdev\.apply-throughput$' | tee "$test_log"
+
+          ICCDEV_BENCH_SOURCE_ROOT="$PWD" \
+            ICCDEV_BENCH_BUILD_ROOT="$PWD/Build/apply-throughput-repro" \
+            Build/apply-throughput-repro/Tools/IccBenchApply/iccBenchApply \
+              -suite -csv -pixels 65536 -repeats 3 -threads 1,2,8 | tee "$threaded_log"
+
+          if ! grep -qE 'Test +#[0-9]+: iccdev.create-profiles.*Passed' "$test_log"; then
+            echo "[FAIL] Missing successful iccdev.create-profiles fixture signal" >&2
+            exit 1
+          fi
+          if ! grep -qE 'Test +#[0-9]+: iccdev.apply-throughput.*Passed' "$test_log"; then
+            echo "[FAIL] Missing successful iccdev.apply-throughput regression signal" >&2
+            exit 1
+          fi
+          if ! grep -q '100% tests passed, 0 tests failed' "$test_log"; then
+            echo "[FAIL] Missing complete CTest success signal" >&2
+            exit 1
+          fi
+          if ! awk -F, '
+            BEGIN {
+              required[1] = required[2] = required[8] = 1
+            }
+            NR == 1 {
+              if ($0 != "case,threads,mpx_per_sec,min,max,checksum,status") {
+                invalid = 1
+              }
+              next
+            }
+            $2 !~ /^(1|2|8)$/ || $7 != "ok" {
+              invalid = 1
+            }
+            seen[$1] && checksum[$1] != $6 {
+              invalid = 1
+            }
+            {
+              pair = $1 SUBSEP $2
+              if (pairs[pair]++) {
+                invalid = 1
+              }
+              checksum[$1] = $6
+              if (!seen[$1]++) {
+                case_count++
+              }
+              count++
+            }
+            END {
+              for (case_name in seen) {
+                for (thread in required) {
+                  if (!(case_name SUBSEP thread in pairs)) {
+                    invalid = 1
+                  }
+                }
+              }
+              exit invalid || count != 24 || case_count != 8 ? 1 : 0
+            }
+          ' "$threaded_log"; then
+            echo "[FAIL] Missing or inconsistent 1,2,8-thread CSV replay signal" >&2
+            exit 1
+          fi
+          if grep -qE 'CHECKSUM MISMATCH|SOME CASES FAILED|FAIL:' "$test_log" "$threaded_log"; then
+            echo "[FAIL] iccBenchApply reported a correctness failure" >&2
+            exit 1
+          fi
+          echo "[OK] Verified fixture, CTest, and 1,2,8-thread checksum signals"
+
+      - name: Report replay result
+        if: ${{ always() }}
+        working-directory: target
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+
+          test_log="Build/apply-throughput-repro/iccdev.apply-throughput.log"
+          threaded_log="Build/apply-throughput-repro/iccdev.apply-throughput-threaded.log"
+          fixture_signal="FAIL"
+          regression_signal="FAIL"
+          ctest_signal="FAIL"
+          threaded_signal="FAIL"
+          checksum_signal="FAIL"
+          overall_signal="FAIL"
+
+          if [ -f "$test_log" ]; then
+            if grep -qE 'Test +#[0-9]+: iccdev.create-profiles.*Passed' "$test_log"; then
+              fixture_signal="PASS"
+            fi
+            if grep -qE 'Test +#[0-9]+: iccdev.apply-throughput.*Passed' "$test_log"; then
+              regression_signal="PASS"
+            fi
+            if grep -q '100% tests passed, 0 tests failed' "$test_log"; then
+              ctest_signal="PASS"
+            fi
+          fi
+          if [ -f "$threaded_log" ] && awk -F, '
+            BEGIN {
+              required[1] = required[2] = required[8] = 1
+            }
+            NR == 1 {
+              if ($0 != "case,threads,mpx_per_sec,min,max,checksum,status") {
+                invalid = 1
+              }
+              next
+            }
+            $2 !~ /^(1|2|8)$/ || $7 != "ok" {
+              invalid = 1
+            }
+            seen[$1] && checksum[$1] != $6 {
+              invalid = 1
+            }
+            {
+              pair = $1 SUBSEP $2
+              if (pairs[pair]++) {
+                invalid = 1
+              }
+              checksum[$1] = $6
+              if (!seen[$1]++) {
+                case_count++
+              }
+              count++
+            }
+            END {
+              for (case_name in seen) {
+                for (thread in required) {
+                  if (!(case_name SUBSEP thread in pairs)) {
+                    invalid = 1
+                  }
+                }
+              }
+              exit invalid || count != 24 || case_count != 8 ? 1 : 0
+            }
+          ' "$threaded_log"; then
+            threaded_signal="PASS"
+          fi
+          if [ -f "$test_log" ] && [ -f "$threaded_log" ] && \
+             ! grep -qE 'CHECKSUM MISMATCH|SOME CASES FAILED|FAIL:' "$test_log" "$threaded_log"; then
+            checksum_signal="PASS"
+          fi
+
+          if [ "$fixture_signal" = "PASS" ] && \
+             [ "$regression_signal" = "PASS" ] && \
+             [ "$ctest_signal" = "PASS" ] && \
+             [ "$threaded_signal" = "PASS" ] && \
+             [ "$checksum_signal" = "PASS" ]; then
+            overall_signal="PASS"
+          fi
+
+          echo "========== Exiting iccBenchApply throughput regression replay: ${overall_signal} =========="
+          {
+            echo ""
+            echo "### Output Signal Summary"
+            echo ""
+            echo "| Signal | Result |"
+            echo "|--------|--------|"
+            echo "| Generated profile fixture | ${fixture_signal} |"
+            echo "| #2207 throughput regression | ${regression_signal} |"
+            echo "| CTest aggregate | ${ctest_signal} |"
+            echo "| 8 cases x 3 thread counts, CSV status ok | ${threaded_signal} |"
+            echo "| No correctness-failure marker | ${checksum_signal} |"
+            echo ""
+            echo "**Overall replay signal**: ${overall_signal}"
+            echo ""
+            echo "Mpx/s values are observations only; they are not a performance threshold."
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

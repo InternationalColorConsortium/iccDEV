@@ -54,6 +54,21 @@ on:
         required: false
         default: false
         type: boolean
+      run_tool_flamegraphs:
+        description: 'Capture opt-in all-tool FlameGraph dashboards'
+        required: false
+        default: false
+        type: boolean
+      flamegraph_repeat:
+        description: 'Command repetitions per tool for FlameGraph capture'
+        required: false
+        default: '3'
+        type: string
+      flamegraph_timeout:
+        description: 'Timeout in seconds per FlameGraph tool capture'
+        required: false
+        default: '30'
+        type: string
       tool_build_type:
         description: 'Build type for the reusable CTest tool suite'
         required: false
@@ -69,6 +84,11 @@ on:
         required: false
         default: '0'
         type: string
+      exclude_extended_pr_tests:
+        description: 'Exclude the pr-extended CTest label'
+        required: false
+        default: false
+        type: boolean
       warning_policy:
         description: 'Compiler warning policy: warn or fail'
         required: false
@@ -146,6 +166,21 @@ on:
         required: false
         default: false
         type: boolean
+      run_tool_flamegraphs:
+        description: 'Capture opt-in all-tool FlameGraph dashboards'
+        required: false
+        default: false
+        type: boolean
+      flamegraph_repeat:
+        description: 'Command repetitions per tool for FlameGraph capture'
+        required: false
+        default: '3'
+        type: string
+      flamegraph_timeout:
+        description: 'Timeout in seconds per FlameGraph tool capture'
+        required: false
+        default: '30'
+        type: string
       tool_build_type:
         description: 'Build type for the CTest tool suite'
         required: true
@@ -252,6 +287,7 @@ jobs:
       TOOL_BUILD_TYPE: ${{ inputs.tool_build_type || 'Debug' }}
       CTEST_MODE: ${{ inputs.ctest_mode || 'fast' }}
       CTEST_RECENT_LIMIT: ${{ inputs.ctest_recent_limit || '0' }}
+      EXCLUDE_EXTENDED_PR_TESTS: ${{ inputs.exclude_extended_pr_tests && 'true' || 'false' }}
       WARNING_POLICY: ${{ inputs.warning_policy || 'warn' }}
       BUILD_DIR: build
       SPECTRAL_PREVIEW_VENV: /tmp/iccdev-spectral-preview-venv
@@ -485,6 +521,17 @@ jobs:
           # here. Kept so a future quarantine needs no workflow edit -- but a
           # test added to it stops being covered, so label sparingly.
           ctest_args+=(--label-exclude known-red)
+          case "$EXCLUDE_EXTENDED_PR_TESTS" in
+            true)
+              ctest_args+=(--label-exclude pr-extended)
+              ;;
+            false)
+              ;;
+            *)
+              echo "::error title=Invalid extended PR test exclusion::${EXCLUDE_EXTENDED_PR_TESTS}"
+              exit 1
+              ;;
+          esac
           case "$CTEST_MODE" in
             fast)
               ctest_args+=(--label-exclude slow --label-exclude calculator)
@@ -498,6 +545,69 @@ jobs:
           esac
 
           python3 .github/scripts/run-recent-ctests.py "${ctest_args[@]}"
+
+      - name: Capture all-tool FlameGraphs
+        if: ${{ inputs.run_tool_flamegraphs }}
+        env:
+          BASH_ENV: /dev/null
+          FLAMEGRAPH_REPEAT_INPUT: ${{ inputs.flamegraph_repeat || '3' }}
+          FLAMEGRAPH_TIMEOUT_INPUT: ${{ inputs.flamegraph_timeout || '30' }}
+          FLAMEGRAPH_COMMIT: 41fee1f99f9276008b7cd112fca19dc3ea84ac32
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          # shellcheck disable=SC1090
+          source "$SANITIZER"
+
+          case "$FLAMEGRAPH_REPEAT_INPUT" in
+            ''|*[!0-9]*|0)
+              echo "ERROR: invalid FlameGraph repeat count: $(sanitize_line "$FLAMEGRAPH_REPEAT_INPUT")" >&2
+              exit 1
+              ;;
+          esac
+          case "$FLAMEGRAPH_TIMEOUT_INPUT" in
+            ''|*[!0-9]*|0)
+              echo "ERROR: invalid FlameGraph timeout: $(sanitize_line "$FLAMEGRAPH_TIMEOUT_INPUT")" >&2
+              exit 1
+              ;;
+          esac
+
+          # preflight: allow-package-install reason=flamegraph-perf-capture
+          if ! command -v perf >/dev/null 2>&1; then
+            apt-get -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 update -qq
+            apt-get install -y -qq --no-install-recommends \
+              linux-tools-common \
+              linux-tools-generic
+          fi
+
+          flamegraph_dir="${RUNNER_TEMP}/FlameGraph"
+          flamegraph_out="${BUILD_DIR}/Testing/ctest-output/tool-flamegraphs"
+          git init -q "$flamegraph_dir"
+          git -C "$flamegraph_dir" remote add origin https://github.com/brendangregg/FlameGraph.git
+          git -C "$flamegraph_dir" fetch -q --depth 1 origin "$FLAMEGRAPH_COMMIT"
+          git -C "$flamegraph_dir" checkout -q --detach FETCH_HEAD
+          if [ "$(git -C "$flamegraph_dir" rev-parse HEAD)" != "$FLAMEGRAPH_COMMIT" ]; then
+            echo "ERROR: FlameGraph checkout did not resolve the pinned commit" >&2
+            exit 1
+          fi
+
+          ICCDEV_TOOLS_DIR="$GITHUB_WORKSPACE/${BUILD_DIR}/Tools" \
+          ICCDEV_TESTING_DIR="$GITHUB_WORKSPACE/Testing" \
+          ICCDEV_FLAMEGRAPH_OUTDIR="$flamegraph_out" \
+          ICCDEV_FLAMEGRAPH_DIR="$flamegraph_dir" \
+          ICCDEV_FLAMEGRAPH_REPEAT="$FLAMEGRAPH_REPEAT_INPUT" \
+          ICCDEV_FLAMEGRAPH_TIMEOUT="$FLAMEGRAPH_TIMEOUT_INPUT" \
+            .github/scripts/iccdev-tool-flamegraphs.sh
+
+          manifest="${flamegraph_out}/manifest.tsv"
+          test -s "$manifest"
+          profiled_count="$(awk -F'\t' 'NR > 1 && $2 == "PROFILED" { count++ } END { print count + 0 }' "$manifest")"
+          svg_count="$(find "$flamegraph_out" -type f -name flamegraph.svg | wc -l)"
+          echo "FlameGraph profiled tools: $(sanitize_line "$profiled_count")"
+          echo "FlameGraph SVGs: $(sanitize_line "$svg_count")"
 
       - name: Run hybrid iccApplyProfiles timing matrix
         if: ${{ inputs.run_hybrid_timing }}
@@ -637,6 +747,9 @@ jobs:
               test_cmd="invalid ctest_mode=${CTEST_MODE}"
               ;;
           esac
+          if [ "$EXCLUDE_EXTENDED_PR_TESTS" = "true" ]; then
+            test_cmd="${test_cmd} --label-exclude pr-extended"
+          fi
           if [ "$CTEST_RECENT_LIMIT" != "0" ]; then
             test_cmd="${test_cmd} --limit ${CTEST_RECENT_LIMIT}"
           fi
@@ -665,6 +778,7 @@ jobs:
             echo "| Commit | $(sanitize_line "$(git log --oneline -1 | tr -cd '[:print:]')") |"
             echo "| CTest mode | \`${CTEST_MODE}\` |"
             echo "| CTest recent limit | \`${CTEST_RECENT_LIMIT}\` |"
+            echo "| Extended PR tests | \`${EXCLUDE_EXTENDED_PR_TESTS}\` |"
             echo "| Warning policy | \`${WARNING_POLICY}\` |"
             echo "| Test command | \`${test_cmd}\` |"
             echo ""
@@ -848,6 +962,9 @@ jobs:
             "${BUILD_DIR}/Testing/ctest-output/iccdev-applytolink-nan-sixchan-debug" \
             "${data_dir}/iccdev-applytolink-nan-sixchan-debug"
           copy_dir_if_present \
+            "${BUILD_DIR}/Testing/ctest-output/tool-flamegraphs" \
+            "${data_dir}/tool-flamegraphs"
+          copy_dir_if_present \
             "${BUILD_DIR}/Testing/ctest-output/hybrid-applyprofiles-timing" \
             "${data_dir}/hybrid-applyprofiles-timing"
           copy_dir_if_present \
@@ -873,7 +990,7 @@ jobs:
             printf '%s' 'margin:1rem 0}th,td{border:1px solid #ddd;padding:.45rem;'
             printf '%s' 'text-align:left}th{background:#f4f6f8}code{background:#f4f6f8;'
             printf '%s' 'padding:.1rem .25rem}.pass{color:#116329}.warn{color:#9a6700}'
-            printf '%s\n' '.fail{color:#b42318}</style>'
+            printf '%s\n' '.fail{color:#b42318}.flamegraph-dashboard{border:1px solid #d0d7de;border-radius:.5rem;width:100%;height:44rem}</style>'
             printf '%s\n' '</head><body>'
             printf '<h1>iccDEV Developer Report</h1>\n'
             printf '<table><tr><th>Component</th><th>Value</th></tr>\n'
@@ -881,6 +998,17 @@ jobs:
             printf '<tr><td>Commit</td><td><code>%s</code></td></tr>\n' "$(escape_html "$(git rev-parse --short HEAD)")"
             printf '<tr><td>Run</td><td><code>%s</code></td></tr>\n' "$(escape_html "${GITHUB_RUN_ID:-local}")"
             printf '</table>\n'
+
+            flamegraph_dashboard="${data_dir}/tool-flamegraphs/index.html"
+            if [ -f "$flamegraph_dashboard" ]; then
+              flamegraph_rel="${flamegraph_dashboard#"$report_dir"/}"
+              printf '<h2>FlameGraph Dashboard</h2>\n'
+              printf '%s\n' '<p>Visual call-stack analysis is the primary view. Sample counts indicate capture quality, not performance thresholds.</p>'
+              printf '<iframe class="flamegraph-dashboard" src="%s" title="iccDEV FlameGraph Dashboard"></iframe>\n' \
+                "$(escape_html "$flamegraph_rel")"
+              printf '<p><a href="%s">Open the interactive FlameGraph dashboard</a></p>\n' \
+                "$(escape_html "$flamegraph_rel")"
+            fi
 
             qa_summary="${data_dir}/iccdev-qa-target-flags/summary.tsv"
             if [ -f "$qa_summary" ]; then

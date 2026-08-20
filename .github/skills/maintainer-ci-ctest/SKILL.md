@@ -77,6 +77,10 @@ when practical.
 - Treat `ci-pr-action` `full` as the explicit long-cycle maintainer gate. It runs
   Unix GCC/Clang Release and Debug builds, exact GCC 15.2 strict Release LTO in
   the regression container, GCC 15.2 ASAN+UBSAN tool tests, Windows, and Docker.
+  Its tool-test caller excludes only the `pr-extended` CTests
+  (`iccdev.hybrid-pipeline`, `iccdev.json-sort-regression`, and
+  `iccdev.issue-1781-applytolink-qa-matrix`) to stay within the PR runtime
+  budget; `ci-regression-checks` continues to run them.
 - `ci_scope=auto` is the default. It selects the full matrix for source, build,
   test, and container changes; workflow-only changes run the preflight and
   workflow-security gates.

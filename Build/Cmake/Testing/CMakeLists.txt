@@ -5495,7 +5495,7 @@ if(ICCDEV_HAS_JSON_RUNTIME_CONFIG_TOOLS AND ICCDEV_HAS_JSON_TOOLS)
   iccdev_add_script_test(
     iccdev.hybrid-pipeline
     900
-    "iccdev;tools;hybrid;asan;regression;slow"
+    "iccdev;tools;hybrid;asan;regression;slow;pr-extended"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-hybrid-pipeline-tests.sh"
   )
@@ -5704,7 +5704,7 @@ if(ICCDEV_HAS_JSON_TOOLS)
   iccdev_add_script_test(
     iccdev.json-sort-regression
     300
-    "iccdev;json;sort;regression;issue-1920;asan;slow"
+    "iccdev;json;sort;regression;issue-1920;asan;slow;pr-extended"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-json-sort-regression.sh"
   )
@@ -6687,7 +6687,7 @@ iccdev_add_script_test(
 iccdev_add_script_test(
   iccdev.issue-1781-applytolink-qa-matrix
   300
-  "iccdev;tools;applytolink;security;issue-1781;regression;slow"
+  "iccdev;tools;applytolink;security;issue-1781;regression;slow;pr-extended"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1781-applytolink-qa-matrix.sh"
 )

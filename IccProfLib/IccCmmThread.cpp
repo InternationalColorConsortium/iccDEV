@@ -300,6 +300,7 @@ CIccThreadedCmm* CIccThreadedCmm::Attach(CIccCmm *pCmm, int nThreads, bool bDele
   }
 
   CIccThreadedCmm *rv = new CIccThreadedCmm();
+  // The caller transfers ownership, or retains pCmm until rv is destroyed.
   rv->m_pCmm       = pCmm;
   rv->m_nThreads   = nActual;
   rv->m_bDeleteCmm = bDeleteCmm;

@@ -181,10 +181,8 @@ jobs:
           include_windows=true
           ctest_recent_limit=0
           warning_policy=fail
-          # Default to the same full CTest surface ci-regression-checks runs,
-          # so a scope resolving ctest_recent_limit=0 ("run all selected
-          # tests") does not silently diverge by excluding slow/calculator
-          # labels. Only the fast-lane scope narrows this below.
+          # Default to the full PR CTest surface. The three pr-extended tests
+          # are deferred only by the PR caller and remain in regression runs.
           ctest_mode=full
 
           case "$ci_scope" in
@@ -816,6 +814,7 @@ jobs:
       tool_build_type: Debug
       ctest_mode: ${{ needs.validate-inputs.outputs.ctest-mode }}
       ctest_recent_limit: ${{ needs.validate-inputs.outputs.ctest-recent-limit }}
+      exclude_extended_pr_tests: true
       warning_policy: ${{ needs.validate-inputs.outputs.warning-policy }}
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
 

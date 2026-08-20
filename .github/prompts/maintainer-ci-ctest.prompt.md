@@ -38,7 +38,10 @@ Choose the smallest gate that proves the behavior:
 
 - `ci-pr-action` full: explicit long-cycle Unix GCC/Clang Release and Debug,
   exact GCC 15.2 strict Release LTO, GCC 15.2 ASAN+UBSAN tool tests, Windows,
-  and Docker verification.
+  and Docker verification. Its tool-test caller excludes only the
+  `pr-extended` CTests (`hybrid-pipeline`, `json-sort-regression`, and the
+  issue-1781 `iccApplyToLink` QA matrix); they remain enabled in
+  `ci-regression-checks`.
 - `ci-pr-action` fast lane: exact GCC 15.2 strict Release LTO plus GCC 15.2
   ASAN+UBSAN Release tool validation, latest CTest by default, with Windows and
   Docker opt-in.

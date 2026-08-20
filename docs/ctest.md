@@ -201,6 +201,14 @@ target runs with `--label-exclude slow`; run full CTest or the hybrid gate
 explicitly when the slow and calculator suites are in scope:
 `ctest --test-dir build -R '^iccdev\.hybrid-pipeline$' --output-on-failure`.
 
+The normal `ci-pr-action` full lane additionally excludes the `pr-extended`
+label to keep its average runtime in the 8-12 minute envelope. That label is
+limited to `iccdev.hybrid-pipeline`, `iccdev.json-sort-regression`, and
+`iccdev.issue-1781-applytolink-qa-matrix`; all other slow tests remain in the
+PR lane. `ci-regression-checks` leaves the label enabled, so these three tests
+remain covered by the full regression surface. Run any deferred test directly
+when the change affects it.
+
 Use a standalone CTest row for focused crash regressions that need clear
 maintainer visibility in CTest output. For example,
 `iccdev.specsep-tiff-geometry-regression` generates a malformed TIFF under
