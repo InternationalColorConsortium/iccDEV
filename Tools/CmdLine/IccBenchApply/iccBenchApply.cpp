@@ -82,6 +82,8 @@
 #include "IccProfLibVer.h"
 #include "IccUtil.h"
 
+#include "BenchTimer.h"
+
 static icUInt32Number g_nPixels  = 1048576;
 static int            g_nRepeats = 7;
 
@@ -289,6 +291,34 @@ int main(int argc, const char *argv[])
     printf("  %2d  %-12s\n", (int)i,
            XformTypeName(reporter.m_xforms[i]->GetXformType()));
   }
+
+  const icUInt16Number nSrc = theCmm.GetSourceSamples();
+  const icUInt16Number nDst = theCmm.GetDestSamples();
+
+  if (!nSrc || !nDst) {
+    printf("Chain reports %d source and %d destination samples;"
+           " nothing to measure\n", (int)nSrc, (int)nDst);
+    return 1;
+  }
+
+  // std::vector rather than new[]: these buffers are large enough that
+  // allocation failure is a real outcome, and a throwing allocation here must
+  // not leak the other one.
+  std::vector<icFloatNumber> src((size_t)g_nPixels * nSrc);
+  std::vector<icFloatNumber> dst((size_t)g_nPixels * nDst);
+
+  icBenchFill(src.data(), g_nPixels, nSrc, 20260820u);
+
+  const BenchStats st = icBenchRun(
+    [&]() { theCmm.Apply(dst.data(), src.data(), g_nPixels); },
+    g_nPixels, g_nRepeats);
+
+  const icUInt32Number sum = icBenchChecksum(dst.data(), dst.size());
+
+  printf("\n  %-20s %9s %9s %9s  %-10s\n",
+         "case", "Mpx/s", "min", "max", "checksum");
+  printf("  %-20s %9.2f %9.2f %9.2f  0x%08x\n",
+         "chain", st.medianMpxPerSec, st.minMpxPerSec, st.maxMpxPerSec, sum);
 
   return 0;
 }
