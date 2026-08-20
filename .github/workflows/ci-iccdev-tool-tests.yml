@@ -271,9 +271,9 @@ jobs:
           WORKFLOW_SHA: ${{ inputs.target_sha || github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           echo "Ref:    ${WORKFLOW_REF}"
           echo "Commit: ${WORKFLOW_SHA}"
           actual_sha="$(git rev-parse HEAD)"
@@ -956,9 +956,9 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           bash .github/scripts/ci-safe-apt-update.sh
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake \

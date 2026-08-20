@@ -39,6 +39,10 @@ run: |
   source .github/scripts/sanitize-sed.sh
 ```
 
+The blocking pre-flight and risk gates enforce the first three lines of this
+prologue in order for every new or modified Bash `run:` block. The sanitizer
+remains mandatory before writing to `GITHUB_STEP_SUMMARY` or `GITHUB_OUTPUT`.
+
 PowerShell-only workflows and jobs do not need `BASH_ENV`. Use an explicit
 PowerShell shell on each step or `defaults.run.shell` at job/workflow scope.
 

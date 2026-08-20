@@ -68,9 +68,9 @@ jobs:
           GH_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
 
           .github/scripts/sync-labels.sh
 
@@ -84,8 +84,9 @@ jobs:
           EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
 
           EVENT_PR="${EVENT_PR_NUMBER}"
 
@@ -143,8 +144,9 @@ jobs:
           PR_LIST: ${{ steps.pr_list.outputs.prs }}
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
 
           RESULTS_FILE=$(mktemp)
           PROCESSED=0
@@ -319,9 +321,9 @@ jobs:
           PRS_LABELED: ${{ steps.process.outputs.labeled || '0' }}
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
 
           SANITIZER=".github/scripts/sanitize-sed.sh"
           if [[ -f "$SANITIZER" ]]; then

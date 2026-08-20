@@ -223,6 +223,8 @@ jobs:
       - name: Install clang and build dependencies
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           apt-get update -qq
           # llvm-N is not optional padding: it carries llvm-ar and llvm-ranlib,
           # and without them CMake's check_ipo_supported probe fails to archive

@@ -144,8 +144,9 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
 
       - name: Check for source changes
         id: diffcheck
@@ -167,9 +168,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-
-          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
           source "$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
 
           ci_scope="${CI_SCOPE:-auto}"
@@ -477,9 +478,9 @@ jobs:
           DOCS_ONLY: ${{ steps.diffcheck.outputs.docs_only }}
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
 
           # --- load trusted canonical sanitizers from the checked-out base ---
           TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
@@ -587,8 +588,9 @@ jobs:
           DOCS_ONLY: ${{ needs.detect-src.outputs.docs_only }}
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
           # Load canonical sanitizers from trusted checkout
           TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
           if [[ -f "$TRUSTED_SANITIZER" ]]; then
@@ -651,9 +653,10 @@ jobs:
           DOCS_ONLY: ${{ needs.detect-src.outputs.docs_only || 'false' }}
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
 
           git config --add safe.directory "$PWD"
-          git config --global credential.helper ""
 
           # load trusted canonical sanitizers
           TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
@@ -893,8 +896,9 @@ jobs:
           DOCKER_RESULT: ${{ needs['docker-ci'].result }}
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
 
           # load canonical sanitizers from trusted checkout
           TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"

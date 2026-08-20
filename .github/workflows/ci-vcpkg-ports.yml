@@ -65,9 +65,9 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --global --add safe.directory "$PWD"
           # Pin vcpkg to builtin-baseline from vcpkg.json for reproducibility
           git clone https://github.com/microsoft/vcpkg.git "$RUNNER_TEMP/vcpkg"
           git -C "$RUNNER_TEMP/vcpkg" checkout eae1680538b86f962455c27abca2aad0dc304a4d
@@ -101,9 +101,9 @@ jobs:
           VCPKG_KEEP_ENV_VARS: VCPKG_ICCDEV_SOURCE
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --global --add safe.directory "$PWD"
           TRIPLET="$([ "$RUNNER_OS" = "macOS" ] && echo "arm64-osx" || echo "x64-linux")"
           if [ "$RUNNER_OS" = "Linux" ]; then
             export VCPKG_FORCE_SYSTEM_BINARIES=1
@@ -176,9 +176,9 @@ jobs:
           RUNNER_OS: ${{ runner.os }}
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --global --add safe.directory "$PWD"
           # Load sanitizers from trusted base checkout.
           if [ -f "$TRUSTED_SCRIPTS/sanitize-sed.sh" ]; then
             # shellcheck disable=SC1090

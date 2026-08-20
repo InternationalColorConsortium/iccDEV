@@ -96,6 +96,13 @@ run_workflow_cache_policy() {
   .github/scripts/check-workflow-cache-policy.sh .github/workflows
 }
 
+run_workflow_bash_prologue_policy() {
+  python3 .github/scripts/check-workflow-bash-prologue.py \
+    --changed \
+    --base "$base_ref" \
+    "${workflow_files[@]}"
+}
+
 workflow_trigger_names() {
   local wf="$1"
   python3 - "$wf" <<'PY'
@@ -997,6 +1004,8 @@ for path in sys.argv[1:]:
     print(f"[OK] {path}")
 PY
 
+  run_check "workflow Bash prologue policy" run_workflow_bash_prologue_policy
+
   if command -v actionlint >/dev/null 2>&1; then
     run_check "actionlint" actionlint -no-color "${workflow_files[@]}"
   else
@@ -1027,6 +1036,13 @@ PY
 else
   echo "[SKIP] No changed workflow files"
   echo ""
+fi
+
+if [ -f .github/scripts/check-workflow-bash-prologue.py ]; then
+  run_check "workflow Bash prologue checker fixtures" \
+    python3 .github/scripts/check-workflow-bash-prologue.py --self-test
+else
+  skip_or_fail "check-workflow-bash-prologue.py"
 fi
 
 if [ "${#script_files[@]}" -gt 0 ]; then

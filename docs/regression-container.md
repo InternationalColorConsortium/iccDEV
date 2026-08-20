@@ -440,13 +440,14 @@ Diagnose and fix a drifted pin:
 
 ```bash
 # 1. Reproduce locally against the exact pinned base digest.
-docker build -f Dockerfile -t iccdev-local-ubuntu-test .
-docker build -f Dockerfile.ci-regression -t iccdev-local-regression-test .
+docker build --no-cache -f Dockerfile -t iccdev-local-ubuntu-test .
+docker build --no-cache -f Dockerfile.ci-regression -t iccdev-local-regression-test .
 
 # 2. Regenerate current candidate versions for every pinned package in a
 #    disposable container from the same base digest (replace PKGS with the
 #    package list from the failing Dockerfile).
 docker run --rm ubuntu:26.04@sha256:<digest> bash -c '
+  set -euo pipefail
   apt-get update -qq
   for p in PKGS; do
     v=$(apt-cache policy "$p" | awk "/Candidate:/{print \$2}")

@@ -179,9 +179,9 @@ jobs:
           TARGET_SHA: ${{ inputs.target_sha }}
         run: |
           set -euo pipefail
-          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           case "$TARGET_SHA" in
             *[!0-9a-fA-F]*)
               echo "ERROR: invalid target SHA: $(sanitize_line "$TARGET_SHA")" >&2
@@ -214,9 +214,9 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --global --add safe.directory "$PWD"
           source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           echo "AFL targets: $(sanitize_line "$ICCDEV_AFL_TARGETS_INPUT")"
           echo "AFL seconds: $(sanitize_line "$ICCDEV_AFL_SECONDS_INPUT")"

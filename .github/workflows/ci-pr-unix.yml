@@ -135,9 +135,9 @@ jobs:
           MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           source .trusted-workflow/.github/scripts/sanitize-sed.sh
 
           OS="${MATRIX_OS}"
@@ -171,9 +171,9 @@ jobs:
           PR_OS: ${{ matrix.os }}
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
           source .trusted-workflow/.github/scripts/sanitize-sed.sh
           safe_event="$(sanitize_line "${PR_EVENT_NAME}")"
           safe_base="$(sanitize_ref "${PR_BASE_REF}")"
@@ -211,9 +211,9 @@ jobs:
           MATRIX_COMPILER: ${{ matrix.compiler }}
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
           source .trusted-workflow/.github/scripts/sanitize-sed.sh
           case "$MATRIX_COMPILER" in
             gcc-15)
@@ -264,9 +264,9 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
           source .trusted-workflow/.github/scripts/sanitize-sed.sh
           brew install cmake llvm wxwidgets libpng libtiff libxml2 nlohmann-json jpeg-turbo
 
@@ -278,9 +278,9 @@ jobs:
           COMPILER_VERSION: ${{ inputs.compiler-version || 'system' }}
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
           source .trusted-workflow/.github/scripts/sanitize-sed.sh
           case "$COMPILER_VERSION" in
             system|gcc-15) ;;
@@ -307,9 +307,9 @@ jobs:
           ENABLE_LTO: ${{ inputs.enable-lto && 'ON' || 'OFF' }}
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
           source .trusted-workflow/.github/scripts/sanitize-sed.sh
           echo "Configuring CMake project..."
           mkdir -p Build
@@ -332,9 +332,9 @@ jobs:
           WARNING_POLICY: ${{ inputs.warning-policy || 'warn' }}
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
           source .trusted-workflow/.github/scripts/sanitize-sed.sh
           echo "Start build..."
           cd Build
@@ -417,9 +417,9 @@ jobs:
           PROFILE_TEST_MODE: ${{ inputs.profile-test-mode || 'full' }}
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
           source .trusted-workflow/.github/scripts/sanitize-sed.sh
           echo "Creating profiles..."
           cd Testing
@@ -470,9 +470,9 @@ jobs:
           WARNING_POLICY: ${{ inputs.warning-policy || 'warn' }}
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
           if [ ! -r .trusted-workflow/.github/scripts/sanitize-sed.sh ]; then
             echo "ERROR: trusted sanitizer helper not found or not readable" >&2
             exit 1

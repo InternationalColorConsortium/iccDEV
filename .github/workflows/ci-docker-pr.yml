@@ -57,9 +57,9 @@ jobs:
           TARGET_SHA: ${{ inputs.target_sha }}
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
           case "$TARGET_SHA" in
             *[!0-9a-fA-F]*)
@@ -113,9 +113,9 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
           case "$TARGET_SHA" in
             *[!0-9a-fA-F]*)
@@ -161,6 +161,8 @@ jobs:
 
           docker run --rm "$TEST_IMAGE" bash -lc '
             set -euo pipefail
+            git config --global credential.helper ""
+            unset GITHUB_TOKEN || true
             command -v git gh clang clang++ gcc g++ cmake make realpath llvm-symbolizer
             command -v afl-fuzz afl-showmap iccdev-fuzz-env
             command -v jq curl shellcheck llvm-cov llvm-profdata file
@@ -216,6 +218,8 @@ jobs:
             -e "WARNING_POLICY=${WARNING_POLICY}" \
             "$TEST_IMAGE" bash -lc '
               set -euo pipefail
+              git config --global credential.helper ""
+              unset GITHUB_TOKEN || true
               work="$(mktemp -d)"
               source_dir="$work/iccDEV"
               mkdir -p "$source_dir"
