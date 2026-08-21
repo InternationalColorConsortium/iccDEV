@@ -465,9 +465,10 @@ jobs:
             docs_only=true
           fi
 
-          if [[ "$source_changed" == "true" ||
-                "$build_config_changed" == "true" ||
-                "$testing_changed" == "true" ]]; then
+          # Compiler and CTest jobs run only for native source edits. CMake,
+          # fixture, workflow, and documentation-only PRs do not need a native
+          # build to validate their changed surface.
+          if [[ "$source_changed" == "true" ]]; then
             native_changed=true
           fi
 
