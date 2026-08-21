@@ -454,7 +454,9 @@ jobs:
             ci_changed=true
           fi
 
-          if has_changed_file '^Dockerfile(\..*)?$|^\.dockerignore$|^(docker|python|iccdev-mcp)/'; then
+          # Docker CI is reserved for Dockerfiles and their support scripts.
+          # MCP and Python source have dedicated lightweight validation lanes.
+          if has_changed_file '^Dockerfile(\..*)?$|^\.dockerignore$|^docker/|^iccdev-mcp/docker/'; then
             container_changed=true
           fi
 
