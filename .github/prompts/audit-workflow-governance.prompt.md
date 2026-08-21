@@ -102,6 +102,8 @@ For EVERY `run:` step in the workflow, verify:
 - [ ] One Unix and one Windows lane run complete CTest with
       `--no-tests=error`; documented `known-red` tests are explicitly excluded.
 - [ ] The Windows full CTest lane treats compiler warnings as errors.
+- [ ] PowerShell expected-failure probes explicitly `exit 0` after validating
+      the expected native failure so stale `$LASTEXITCODE` cannot fail the step.
 
 ## Running the Audit
 

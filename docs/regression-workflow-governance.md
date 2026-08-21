@@ -132,6 +132,9 @@ requesting review, check the PR against this list:
   numeric strings with leading zeroes.
 - Keep bounded jobs actually bounded. Runtime maxima must fit the job timeout
   after multiplying by target count and build/setup time.
+- End PowerShell expected-failure probes with `exit 0` after all assertions
+  pass. A handled native failure leaves `$LASTEXITCODE` nonzero and otherwise
+  makes the workflow step fail after printing a success message.
 - Do not leave temporary clones, generated profiles, crash artifacts, or other
   local proof material behind unless the PR intentionally adds test fixtures.
 - For AFL/CFL and Docker changes, probe both the advertised user path and the

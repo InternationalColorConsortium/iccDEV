@@ -130,6 +130,7 @@ jobs:
 
           '[BEFORE] colon-separated ASAN_OPTIONS failed as expected'
           Get-Content -LiteralPath $log
+          exit 0
 
       - name: Before fix - MSVC LeakSanitizer test mode is unsupported
         working-directory: target
@@ -159,6 +160,7 @@ jobs:
 
           '[BEFORE] MSVC detect_leaks=1 failed as expected'
           Get-Content -LiteralPath $log
+          exit 0
 
       - name: After fix - full Windows ASAN CTest script passes
         working-directory: target

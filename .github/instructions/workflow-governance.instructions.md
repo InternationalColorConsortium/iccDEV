@@ -61,6 +61,11 @@ run: |
   . .github/scripts/sanitize.ps1
 ```
 
+Expected-failure probes must explicitly terminate successfully after validating
+the expected nonzero native exit. PowerShell preserves `$LASTEXITCODE`, so a
+step can print its success message and still fail when the shell exits. End
+such a probe with `exit 0` only after its exit-code and output assertions pass.
+
 ## Injection Prevention
 
 Never place `${{ }}` expressions directly in shell code. Pass expression values
