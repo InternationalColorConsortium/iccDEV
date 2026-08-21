@@ -18,6 +18,7 @@ long command references.
 | `regression-workflow-governance` | Adding regression gates or updating tool-test workflows. |
 | `vcpkg-export-consumer-debug` | Fixing vcpkg, install/export, uninstall, or packaged consumer CI failures. |
 | `version-bump` | Updating iccDEV release version references. |
+| `avx2-clut-diagnostics` | Debugging AVX2 CLUT dispatch, collecting trace evidence, and preparing a performance handoff. |
 
 Prompts remain better for one-off drafting. Skills are better for repeatable
 multi-step repository workflows.

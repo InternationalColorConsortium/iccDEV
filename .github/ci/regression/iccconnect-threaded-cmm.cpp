@@ -98,7 +98,7 @@ int main(int argc, char** argv)
     return 1;
   }
 
-  const icUInt32Number nPixels = 8;
+  const icUInt32Number nPixels = 1024;
   std::vector<icFloatNumber> src = MakeZeroVector(nPixels * nSrcSamples);
   std::vector<icFloatNumber> scalarDst = MakeZeroVector(nPixels * nDstSamples);
   std::vector<icFloatNumber> threadedDst = MakeZeroVector(nPixels * nDstSamples);
@@ -114,9 +114,11 @@ int main(int argc, char** argv)
     std::fprintf(stderr, "scalar multi-pixel apply failed\n");
     return 1;
   }
-  if (pThreadedCmm->Apply(threadedDst.data(), src.data(), nPixels) != icCmmStatOk) {
-    std::fprintf(stderr, "threaded multi-pixel apply failed\n");
-    return 1;
+  for (int pass = 0; pass < 8; pass++) {
+    if (pThreadedCmm->Apply(threadedDst.data(), src.data(), nPixels) != icCmmStatOk) {
+      std::fprintf(stderr, "threaded multi-pixel apply failed on pass %d\n", pass);
+      return 1;
+    }
   }
 
   for (size_t i = 0; i < scalarDst.size(); ++i) {

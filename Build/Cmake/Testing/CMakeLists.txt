@@ -63,12 +63,11 @@ endfunction()
 add_custom_target(check-fast
   COMMAND "${CMAKE_CTEST_COMMAND}"
           ${ICCDEV_CTEST_CONFIG_ARGS}
-          --label-exclude slow
-          --label-exclude known-red
+          --label-exclude "slow|known-red"
           --output-on-failure
           --no-tests=error
   WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
-  COMMENT "Run iccDEV CTest suite excluding slow tests"
+  COMMENT "Run iccDEV CTest suite excluding slow and known-red tests"
   VERBATIM
 )
 add_dependencies(check-fast build-test-binaries)
@@ -5184,6 +5183,45 @@ if(WIN32)
   iccdev_add_windows_iccdevcmm_smoke_test()
   iccdev_add_zip_utf8_text_zlib_test()
 
+  if(TARGET iccFromXml AND TARGET iccDumpProfile AND TARGET iccApplyNamedCmm)
+    add_test(
+      NAME iccdev.clut-eight-output-regression
+      COMMAND
+        "${CMAKE_COMMAND}"
+        "-DICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/iccdev-clut-eight-output-regression"
+        "-DICCDEV_FROM_XML=$<TARGET_FILE:iccFromXml>"
+        "-DICCDEV_DUMP_PROFILE=$<TARGET_FILE:iccDumpProfile>"
+        "-DICCDEV_APPLY_NAMED_CMM=$<TARGET_FILE:iccApplyNamedCmm>"
+        "-DICCDEV_FIXTURE_XML_8=${ICCDEV_TESTING_DIR}/CLUT/avx2-3d-8-output.xml"
+        "-DICCDEV_FIXTURE_XML_9=${ICCDEV_TESTING_DIR}/CLUT/avx2-3d-9-output.xml"
+        "-DICCDEV_FIXTURE_XML_11=${ICCDEV_TESTING_DIR}/CLUT/avx2-3d-11-output.xml"
+        "-DICCDEV_FIXTURE_XML_14=${ICCDEV_TESTING_DIR}/CLUT/avx2-3d-14-output.xml"
+        "-DICCDEV_FIXTURE_XML_15=${ICCDEV_TESTING_DIR}/CLUT/avx2-3d-15-output.xml"
+        "-DICCDEV_FIXTURE_INPUT=${ICCDEV_TESTING_DIR}/CLUT/avx2-3d-8-output.txt"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunClutEightOutputRegression.cmake"
+    )
+    set_tests_properties(iccdev.clut-eight-output-regression PROPERTIES
+      WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+      TIMEOUT 60
+      LABELS "iccdev;clut;high-channel;regression"
+    )
+    if(WIN32)
+      set(_clut_windows_env_mods
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccFromXml>"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccDumpProfile>"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccApplyNamedCmm>"
+      )
+      foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+        list(APPEND _clut_windows_env_mods
+          "PATH=path_list_prepend:${_runtime_path}")
+      endforeach()
+      set_tests_properties(iccdev.clut-eight-output-regression PROPERTIES
+        ENVIRONMENT_MODIFICATION "${_clut_windows_env_mods}"
+      )
+    endif()
+    add_dependencies(check iccFromXml iccDumpProfile iccApplyNamedCmm)
+  endif()
+
   return()
 endif()
 
@@ -5485,6 +5523,16 @@ function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
     LABELS "${LABELS}"
   )
 endfunction()
+
+if(TARGET iccFromXml AND TARGET iccDumpProfile AND TARGET iccApplyNamedCmm)
+  iccdev_add_script_test(
+    iccdev.clut-eight-output-regression
+    60
+    "iccdev;clut;high-channel;regression;sanitizer"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-clut-eight-output-regression-tests.sh"
+  )
+endif()
 
 iccdev_add_script_test(
   iccdev.create-profiles

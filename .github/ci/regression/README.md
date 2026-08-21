@@ -44,6 +44,7 @@ Test 18 (Regression Bisect).
 
 | Script | Issue | Bug | Check |
 |--------|-------|-----|-------|
+| `.github/scripts/iccdev-windows-clut-avx2-benchmark.ps1` | AVX2 CLUT performance follow-up | Process-level timing hid compiler- and tail-specific regressions in the opt-in AVX2 path | Compiles the in-process `clut-avx2-benchmark.cpp` helper against separate baseline and AVX2 Windows builds, alternates execution order, covers 8-16 outputs, and records median throughput plus bit-exact per-lane parity |
 | `.github/scripts/iccdev-mluc-setter-regression-tests.sh` | #928 | `multiLocalizedUnicodeType` setters included safety terminators in serialized `mluc` string lengths | Rebuilds `sRGB_D65_MAT.icc` and `NamedColor.icc` from XML and verifies canonical `desc`/`mluc` sizes |
 | `.github/scripts/iccdev-mluc-read-utf16-regression-tests.sh` | #928 follow-up | `multiLocalizedUnicodeType` reader accepted malformed record lengths, string offsets, and UTF-16 surrogate data | Mutates `sRGB_D65_MAT.icc` in `/tmp` and verifies malformed `mluc` records are rejected without sanitizer findings |
 | `.github/scripts/iccdev-pcc-zero-illuminant-regression-tests.sh` | #958 | Non-standard PCC viewing-condition illuminant XYZ with zero Y divided by zero or fell back to D50 | Compiles a small PCC helper and verifies zero-Y custom illuminants are rejected without sanitizer findings or D50 substitution |

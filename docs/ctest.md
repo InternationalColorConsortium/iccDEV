@@ -199,7 +199,8 @@ appearance state regressions without committing generated profiles.
 integration test as a separate `slow` CTest label. The maintainer `check` target
 runs the full suite, including `slow`. Routine CI tool sweeps use the fast lane
 with `--label-exclude slow --label-exclude calculator`, and the `check-fast`
-target runs with `--label-exclude slow`; run full CTest or the hybrid gate
+target excludes `slow` and `known-red` with one label regular expression. Run
+full CTest or the hybrid gate
 explicitly when the slow and calculator suites are in scope:
 `ctest --test-dir build -R '^iccdev\.hybrid-pipeline$' --output-on-failure`.
 

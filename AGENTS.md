@@ -23,6 +23,7 @@ shares one source of truth. Update rules here, not in the mirrors.
 | Need | File |
 |------|------|
 | Build, test, style, CI | `.github/copilot-instructions.md` |
+| AVX2 CLUT diagnostics and optimization handoff | `docs/avx2-clut-diagnostics.md` |
 | Pull request preparation and handoff | `docs/pre-pr-security-cycle.md` |
 | Pre-PR security skill | `.github/skills/pre-pr-security-cycle/SKILL.md` |
 | Pre-PR security prompt | `.github/prompts/pre-pr-security-cycle.prompt.md` |
@@ -82,3 +83,17 @@ WASM now ships as a staged Node/npm-style module package. Do not expect or
 restore legacy `wasm/*.html`, `wasm/*.css`, or `wasm/*.js` browser UI assets.
 Use `.github/skills/wasm-build-test/SKILL.md` for the current module smoke and
 profile parity checks.
+
+## AVX2 CLUT Diagnostics
+
+Use `vs2022-clangcl-x64-avx2-diagnostics` for a Windows source-level AVX2
+debugging session. It enables `ICC_AVX2_CLUT_DEBUG`, which traces runtime
+dispatch and kernel inputs through `IccSignatureUtils.h`. Do not use the
+diagnostic preset for throughput comparisons; use the matching
+`vs2022-clangcl-x64-avx2-qa-flags` build for measurements. The focused
+regression is `iccdev.clut-eight-output-regression`.
+Use `.github/scripts/iccdev-windows-clut-avx2-benchmark.ps1` for interleaved
+Release comparisons across 8-16 outputs. Windows AVX2 is a ClangCL path;
+native MSVC intentionally retains SSE2 after measured AVX2 regressions.
+Runtime AVX2 dispatch is limited to 15 outputs. Require
+`output_vector_match=True` for every benchmark row.
