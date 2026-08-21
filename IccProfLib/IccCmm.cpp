@@ -6455,6 +6455,11 @@ CIccXform3DLut::~CIccXform3DLut()
     }
   }
 
+  // Apply() zero-fills its scratch pixel above channel 3 only when nothing
+  // downstream will write those channels. Interp3d and Interp3dTetra write all
+  // m_nOutput channels on every path, so with a CLUT present the fill is dead.
+  m_bNeedScratchInit = (m_pTag->m_CLUT == NULL);
+
   return icCmmStatOk;
 }
 
@@ -6482,10 +6487,15 @@ void CIccXform3DLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
   Pixel[0] = SrcPixel[0];
   Pixel[1] = SrcPixel[1];
   Pixel[2] = SrcPixel[2];
-  
-  // make sure all output pixel values are initialized, just in case
-  for (i = 3; i < m_pTag->m_nOutput; ++i) {
-     Pixel[i] = 0.0;
+
+  // Only when nothing downstream will write these channels. With a CLUT present
+  // Interp3d/Interp3dTetra write all m_nOutput channels on every path, so this
+  // fill is dead -- and it ran unconditionally, on every pixel. Decided in
+  // Begin(); the original comment was "just in case", which is the case.
+  if (m_bNeedScratchInit) {
+    for (i = 3; i < m_pTag->m_nOutput; ++i) {
+      Pixel[i] = 0.0;
+    }
   }
 
   if (m_pTag->m_bInputMatrix) {
