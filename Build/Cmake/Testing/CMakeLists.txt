@@ -4771,6 +4771,31 @@ endfunction()
 # loops, so the unfixed code fails by TIMEOUT; the value checks additionally
 # confirm the reduction matches an independently computed fmod, and that the
 # NaN/infinity/L-range rejections are unchanged. IccProfLib only.
+function(iccdev_add_qa_evidence_helpers_test)
+  # Header-only: IccCmdLineUtil.h is all inline, so this links no library and
+  # needs no Windows runtime PATH entries.  It is therefore platform-agnostic
+  # and registers on both the WIN32 and non-WIN32 paths below -- the omission
+  # #2237 fixed for two other tests.
+  iccdev_add_regression_executable(iccQaEvidenceHelpersTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/qa-evidence-helpers.cpp"
+  )
+  target_compile_features(iccQaEvidenceHelpersTest PRIVATE cxx_std_17)
+  target_include_directories(iccQaEvidenceHelpersTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  add_dependencies(check iccQaEvidenceHelpersTest)
+
+  add_test(
+    NAME iccdev.qa-evidence-helpers
+    COMMAND "$<TARGET_FILE:iccQaEvidenceHelpersTest>"
+  )
+  set_tests_properties(iccdev.qa-evidence-helpers PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;qa-flags;issue-1853;regression"
+  )
+endfunction()
+
 function(iccdev_add_prmg_hue_normalization_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -5324,6 +5349,7 @@ if(WIN32)
   iccdev_add_applytolink_invalid_arg_test()
   iccdev_add_applytolink_v4_missing_desc_test()
   iccdev_add_prmg_hue_normalization_test()
+  iccdev_add_qa_evidence_helpers_test()
   iccdev_add_windows_iccdevcmm_smoke_test()
   iccdev_add_zip_utf8_text_zlib_test()
 
@@ -5623,6 +5649,7 @@ iccdev_add_iccprofileplot_clut_oob_test()
 iccdev_add_iccprofileplot_pdf_leak_test()
 iccdev_add_iccprofileplot_exitcode_test()
 iccdev_add_prmg_hue_normalization_test()
+iccdev_add_qa_evidence_helpers_test()
 iccdev_add_zip_utf8_text_zlib_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
