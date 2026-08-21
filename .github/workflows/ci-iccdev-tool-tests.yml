@@ -694,6 +694,7 @@ jobs:
           ICC_PAWG_REPORT="$GITHUB_WORKSPACE/${BUILD_DIR}/Tools/IccPawgReport/iccPawgReport" \
           ICC_DUMP_PROFILE="$GITHUB_WORKSPACE/${BUILD_DIR}/Tools/IccDumpProfile/iccDumpProfile" \
           ICC_ROUND_TRIP="$GITHUB_WORKSPACE/${BUILD_DIR}/Tools/IccRoundTrip/iccRoundTrip" \
+          ICCDEV_TOOLS_DIR="$GITHUB_WORKSPACE/${BUILD_DIR}/Tools" \
             .github/scripts/iccdev-registry-profile-qa.sh "${args[@]}"
 
       - name: Generate summary

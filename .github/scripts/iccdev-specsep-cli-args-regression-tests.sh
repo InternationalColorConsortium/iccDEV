@@ -98,7 +98,16 @@ run_expect_success() {
     return
   fi
 
-  pass_case "$name" "created output TIFF"
+  for expected in "Output:" "Size:" "BitsPerSample:" "SamplesPerPixel:" \
+                  "Planar:" "Compression:" "Profile:" "Image successfully written!"; do
+    if ! grep -Fq "$expected" "$log" 2>/dev/null; then
+      fail_case "$name" "success output missing summary field: $expected"
+      sed -n '1,80p' "$log"
+      return
+    fi
+  done
+
+  pass_case "$name" "created output TIFF: $out"
 }
 
 run_expect_reject() {
@@ -155,6 +164,31 @@ check_tiffinfo_contains() {
   if ! grep -Fq "$expected" "$log" 2>/dev/null; then
     fail_case "$name" "tiffinfo output missing: $expected"
     sed -n '1,80p' "$log"
+    return 1
+  fi
+
+  return 0
+}
+
+check_tiff_data_contains() {
+  local name="$1"
+  local file="$2"
+  local expected="$3"
+  local log="$OUTDIR/$name.tiffdata"
+
+  if ! command -v tiffinfo >/dev/null 2>&1; then
+    return 0
+  fi
+
+  tiffinfo -d "$file" > "$log" 2>&1 || {
+    fail_case "$name" "tiffinfo could not decode output pixels"
+    sed -n '1,80p' "$log"
+    return 1
+  }
+
+  if ! grep -Fq "$expected" "$log" 2>/dev/null; then
+    fail_case "$name" "decoded TIFF data missing channel order: $expected"
+    sed -n '1,120p' "$log"
     return 1
   fi
 
@@ -250,6 +284,18 @@ run_expect_success \
   "$OUTDIR/fast-separate.tif" \
   0 1 "$SPECTRAL_PREFIX" 1 10 1
 check_tiffinfo_contains "specsep-fast-separate-planes" "$OUTDIR/fast-separate.tif" "Planar Configuration: separate image planes"
+
+run_expect_success \
+  "specsep-channel-order-ascending" \
+  "$OUTDIR/channel-order-ascending.tif" \
+  0 0 "$SPECTRAL_PREFIX" 1 3 1
+check_tiff_data_contains "specsep-channel-order-ascending" "$OUTDIR/channel-order-ascending.tif" "99 19 32 33 cb 4c"
+
+run_expect_success \
+  "specsep-channel-order-descending" \
+  "$OUTDIR/channel-order-descending.tif" \
+  0 0 "$SPECTRAL_PREFIX" 3 1 -1
+check_tiff_data_contains "specsep-channel-order-descending" "$OUTDIR/channel-order-descending.tif" "cb 4c 32 33 99 19"
 
 if prepare_spectral_profile; then
   run_expect_success \

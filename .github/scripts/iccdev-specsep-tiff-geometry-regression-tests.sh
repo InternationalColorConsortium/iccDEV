@@ -38,6 +38,7 @@ MALFORMED_FILE="$MALFORMED_DIR/spec_3"
 PACKED_DIR="$OUTDIR/specsep-packed"
 PACKED_FILE="$PACKED_DIR/spec_1"
 VALID_DIR="$OUTDIR/specsep-valid"
+CENTIMETER_DIR="$OUTDIR/specsep-centimeter"
 PALETTE_DIR="$OUTDIR/specsep-palette"
 FLOAT_DIR="$OUTDIR/specsep-float-miniswhite"
 OVERSIZE_DIR="$OUTDIR/specsep-oversized-row"
@@ -128,12 +129,13 @@ generate_single_channel_tiff() {
   local height="$3"
   local bps="$4"
   local fill="${5:-170}"
+  local resolution_unit="${6:-2}"
 
   if ! command -v python3 >/dev/null 2>&1; then
     return 1
   fi
 
-  python3 - "$path" "$width" "$height" "$bps" "$fill" <<'PY'
+  python3 - "$path" "$width" "$height" "$bps" "$fill" "$resolution_unit" <<'PY'
 import pathlib
 import struct
 import sys
@@ -143,6 +145,7 @@ width = int(sys.argv[2])
 height = int(sys.argv[3])
 bps = int(sys.argv[4])
 fill = int(sys.argv[5]) & 0xff
+resolution_unit = int(sys.argv[6])
 path.parent.mkdir(parents=True, exist_ok=True)
 
 bits = width * height * bps
@@ -171,7 +174,7 @@ add_entry(277, 3, 1, 1)
 add_entry(278, 4, 1, 1)
 add_entry(279, 4, 1, len(pixel_data))
 add_entry(284, 3, 1, 1)
-add_entry(296, 3, 1, 2)
+add_entry(296, 3, 1, resolution_unit)
 entries.sort()
 
 data = bytearray(b"II" + struct.pack("<H", 42) + struct.pack("<I", ifd_offset))
@@ -199,6 +202,12 @@ generate_valid_descending_inputs() {
     generate_single_channel_tiff "$VALID_DIR/spec_3" 2 1 8 51
 }
 
+generate_centimeter_inputs() {
+  generate_single_channel_tiff "$CENTIMETER_DIR/spec_1" 2 1 8 17 3 &&
+    generate_single_channel_tiff "$CENTIMETER_DIR/spec_2" 2 1 8 34 3 &&
+    generate_single_channel_tiff "$CENTIMETER_DIR/spec_3" 2 1 8 51 3
+}
+
 check_sanitizers() {
   local name="$1"
   local logfile="$2"
@@ -214,6 +223,103 @@ check_sanitizers() {
   fi
 
   return 0
+}
+
+run_specsep_resolution_unit_preserve() {
+  local name="specsep-resolution-unit-preserve"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$LOGFILE" "$OUTPUT_TIFF"
+
+  if ! generate_centimeter_inputs; then
+    fail_case "$name" "centimeter TIFF generation failed"
+    return
+  fi
+
+  timeout 60 "$SPECSEP" "$OUTPUT_TIFF" 0 0 "$CENTIMETER_DIR/spec_" 1 3 1 > "$LOGFILE" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$LOGFILE"; then
+    sed -n '1,40p' "$LOGFILE"
+    return
+  fi
+
+  if [ "$exit_code" -ne 0 ]; then
+    fail_case "$name" "expected successful conversion, got exit=$exit_code"
+    sed -n '1,40p' "$LOGFILE"
+    return
+  fi
+
+  if ! python3 - "$OUTPUT_TIFF" <<'PY'
+import struct
+import sys
+
+with open(sys.argv[1], "rb") as stream:
+    data = stream.read()
+
+if data[:2] != b"II":
+    raise SystemExit(1)
+ifd_offset = struct.unpack_from("<I", data, 4)[0]
+entry_count = struct.unpack_from("<H", data, ifd_offset)[0]
+for index in range(entry_count):
+    offset = ifd_offset + 2 + index * 12
+    tag, tag_type, count = struct.unpack_from("<HHI", data, offset)
+    if tag == 296 and tag_type == 3 and count == 1:
+        raise SystemExit(0 if struct.unpack_from("<H", data, offset + 8)[0] == 3 else 1)
+raise SystemExit(1)
+PY
+  then
+    fail_case "$name" "output did not preserve ResolutionUnit=centimeter"
+    return
+  fi
+
+  pass_case "$name" "preserved ResolutionUnit=centimeter in $OUTPUT_TIFF"
+}
+
+# The generated truncation cases below are 2x1 single-row files.  This one is a
+# checked-in 64x64 single-strip TIFF with a bogus StripByteCounts, written by
+# tifffile: libtiff recomputes the count from ImageLength, then the strip read
+# comes up short mid-conversion.  That reaches ReadLine()'s failure path after
+# the output has already been created, which the small generated files cannot
+# do, and it is the only consumer of the checked-in specsep-truncated fixture.
+run_specsep_checked_in_truncated_reject() {
+  local name="specsep-checked-in-truncated-reject"
+  local fixture_dir="$REPO_ROOT/.github/ci/test-data/specsep-truncated"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$LOGFILE" "$OUTPUT_TIFF"
+
+  if [ ! -s "$fixture_dir/spec_1" ]; then
+    fail_case "$name" "missing checked-in fixture: $fixture_dir/spec_1"
+    return
+  fi
+
+  timeout 60 "$SPECSEP" "$OUTPUT_TIFF" 0 0 "$fixture_dir/spec_" 1 1 1 > "$LOGFILE" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$LOGFILE"; then
+    sed -n '1,40p' "$LOGFILE"
+    return
+  fi
+
+  if [ "$exit_code" -ne 255 ]; then
+    fail_case "$name" "expected graceful reject exit=255, got exit=$exit_code"
+    sed -n '1,40p' "$LOGFILE"
+    return
+  fi
+
+  if ! grep -Fq "Error reading line" "$LOGFILE" 2>/dev/null; then
+    fail_case "$name" "missing short-read diagnostic"
+    sed -n '1,40p' "$LOGFILE"
+    return
+  fi
+
+  if [ -e "$OUTPUT_TIFF" ]; then
+    fail_case "$name" "partial output left behind after a short strip read"
+    return
+  fi
+
+  pass_case "$name" "short strip read rejected and the partial output discarded"
 }
 
 run_specsep_geometry_reject() {
@@ -751,6 +857,8 @@ run_specsep_create_failure_preserves_existing_output() {
 }
 
 echo "=== iccSpecSepToTiff malformed TIFF geometry regression ==="
+run_specsep_resolution_unit_preserve
+run_specsep_checked_in_truncated_reject
 run_specsep_geometry_reject
 run_specsep_packed_bps_reject
 run_specsep_descending_range_accept
