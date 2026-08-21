@@ -61,6 +61,7 @@ correct profile or transform results.
    - issue #1475 source-table parsing or legacy/registry D50 disagreement
    - disagreement between the MATLAB issue #1475 model and
      `iccdev.colorimetry-methods`
+   - issue #1475 direct-sum or TN-06 weighting-control disagreement
    - Docker daemon, image, mount, or output-contract error
 
 6. For luminance normalization failures, separate the two validation layers:
@@ -118,8 +119,13 @@ correct profile or transform results.
    2.20703125. The MATLAB layer decodes the bytes independently; the native
    CTest is authoritative for what `Describe()` prints and what `ToJson()`
    emits.
-8. For issue #1475 failures, run the independent source-table model and native
-   reduction contract separately:
+8. For issue #1475 or TN-06 colorimetry failures, run both
+   `test_colorimetry_issue_1475` and `iccdev.colorimetry-methods`. Distinguish
+   direct 10 nm decimation from a complete 10 nm weighting operator derived
+   from the same 5 nm data. The weighting control must preserve a perfect
+   diffuser; do not generalize that white-point result to non-flat spectra.
+   On Windows, use PowerShell, set `$Build = Join-Path $Repo 'msvc'`, build
+   `iccColorimetryMethodsTest`, and run:
 
    ```matlab
    test_colorimetry_issue_1475();
@@ -137,6 +143,8 @@ correct profile or transform results.
    Preserve `IccProfLib/IccTagBasic.cpp` and
    `IccProfLib/IccColorimetry.cpp` in release artifacts because the MATLAB
    model parses those checked-in tables directly.
+   Never present shell `export` as MATLAB or Windows syntax. Use MATLAB
+   `setenv` or PowerShell `$env:NAME = value`.
 9. Fix the root cause and add the nearest MATLAB or native regression.
    PAWG Q1 changes must run both `test_pawg_q1` and
    `iccdev.pawg-q1-quality-contract`.

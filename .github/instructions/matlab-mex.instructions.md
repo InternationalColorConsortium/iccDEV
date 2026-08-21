@@ -201,8 +201,8 @@ precision. The native CTest calls `CIccInfo::CheckLuminance` and pins its
 warning status, message, nominal `0.99`/`1.01` endpoints, adjacent float
 values, and physical Y values 5, 300, and 500.
 
-For issue #1475 spectral colorimetry, run both the independent MATLAB model and
-the native reduction-method contract:
+For issue #1475 and TN-06 tristimulus QA, run both the independent MATLAB model
+and the native reduction-method contract:
 
 ```matlab
 test_colorimetry_issue_1475();
@@ -211,11 +211,22 @@ run(fullfile(repo_root, 'matlab', 'examples', ...
 ```
 
 ```powershell
-cmake --build $Build --config Release --target iccColorimetryMethodsTest
-ctest --test-dir $Build -C Release `
-  -R '^iccdev\.colorimetry-methods$' `
-  --output-on-failure --no-tests=error
+$Repo = (git rev-parse --show-toplevel).Trim()
+$Build = Join-Path $Repo 'msvc'
+cmake --build $Build --config Release --target iccColorimetryMethodsTest -- /m
+$ColorimetryTestArgs = @(
+  '--test-dir', $Build
+  '-C', 'Release'
+  '-R', '^iccdev\.colorimetry-methods$'
+  '--output-on-failure'
+  '--no-tests=error'
+)
+ctest @ColorimetryTestArgs
 ```
+
+Shell `export` is valid only in explicitly labelled Unix shell examples. In
+MATLAB use `setenv('ICCDEV_BUILD_DIR', build_dir)`; in Windows PowerShell use
+`$env:ICCDEV_BUILD_DIR = $Build`.
 
 ## Dependencies
 

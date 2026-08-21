@@ -102,7 +102,11 @@ profiles, examples, and native handle lifecycle behavior.
    `Testing/sRGB_v4_ICC_preference.icc` fixture so hosted QA does not depend on
    generated profiles. Both implementations must reject grids above the shared
    two-million-sample budget before allocation or iteration.
-10. For issue #1475 spectral colorimetry, run both validation layers:
+10. For issue #1475 or TN-06 tristimulus work, run both validation layers.
+    Require the same-data 10 nm weighting control to reproduce the built-in
+    5 nm D50/1931 perfect-diffuser white. Keep direct 10 nm decimation as a
+    separate control, and do not generalize a perfect-diffuser result to
+    non-flat spectra.
 
     ```matlab
     test_colorimetry_issue_1475();
@@ -111,7 +115,9 @@ profiles, examples, and native handle lifecycle behavior.
     ```
 
     ```powershell
-    cmake --build $Build --config Release --target iccColorimetryMethodsTest
+    $Repo = (git rev-parse --show-toplevel).Trim()
+    $Build = Join-Path $Repo 'msvc'
+    cmake --build $Build --config Release --target iccColorimetryMethodsTest -- /m
     ctest --test-dir $Build -C Release `
       -R '^iccdev\.colorimetry-methods$' `
       --output-on-failure --no-tests=error
@@ -119,6 +125,8 @@ profiles, examples, and native handle lifecycle behavior.
 
     The MATLAB layer reads the checked-in source tables independently. The
     native CTest is authoritative for the compiled reduction methods.
+    Never present shell `export` as MATLAB or Windows syntax. MATLAB uses
+    `setenv`, and PowerShell uses `$env:NAME = value`.
 11. Run:
 
    ```matlab

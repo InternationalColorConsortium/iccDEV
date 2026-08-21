@@ -26,7 +26,9 @@ for i = 1:numel(candidates)
 end
 if isempty(profilePath)
   error('iccdev:exampleProfileNotFound', ...
-    'No bundled display profile found. Run Testing/CreateAllProfiles.sh first.');
+    ['No bundled display profile found. On Windows, run ' ...
+     '.\CreateAllProfiles.bat from Testing in PowerShell; on Unix, run ' ...
+     './CreateAllProfiles.sh from Testing.']);
 end
 
 fprintf('=== iccdev MATLAB Example: Read Profile ===\n\n');

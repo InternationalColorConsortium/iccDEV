@@ -101,7 +101,7 @@ fprintf('Version: %s\n', hdr.versionString);
 fprintf('Color space: %s\n', iccdev.sig_to_str(uint32(hdr.colorSpace)));
 p.close();
 
-% Color transform
+% Checked-in self-transform smoke
 cmm = iccdev.IccCmm();
 cmm.attach(profile_path, 'intent', iccdev.RenderingIntent.Perceptual);
 cmm.attach(profile_path);
@@ -274,6 +274,8 @@ build_mex('BuildDir', fullfile(repo_root, 'build-matlab-full'));
 
 ### GNU Octave
 
+The following `export` is Unix shell syntax:
+
 ```bash
 export ICCDEV_BUILD_DIR="$PWD/build-matlab-full"
 octave --eval "addpath('matlab'); build_mex();"
@@ -414,19 +416,42 @@ run(fullfile(repo_root, 'matlab', 'examples', ...
   'colorimetry_issue_1475.m'));
 ```
 
+On Windows, build and run the compiled control from 64-bit PowerShell. The
+local Windows build root is always `repo\msvc`:
+
+```powershell
+$Repo = (git rev-parse --show-toplevel).Trim()
+$Build = Join-Path $Repo 'msvc'
+cmake --build $Build --config Release --target iccColorimetryMethodsTest -- /m
+$ColorimetryTestArgs = @(
+  '--test-dir', $Build
+  '-C', 'Release'
+  '-R', '^iccdev\.colorimetry-methods$'
+  '--output-on-failure'
+  '--no-tests=error'
+)
+ctest @ColorimetryTestArgs
+```
+
 The MATLAB check parses the tables directly from `IccTagBasic.cpp` and
 `IccColorimetry.cpp`. For a perfect diffuser under D50 with the CIE 1931
 2-degree observer, the legacy path produces `Z=0.824679094` while the registry
 table produces `Z=0.825128117`, a gap of `-0.000449`.
 
-That gap is a difference in the illuminant *data*, not in how it is integrated:
+The decisive control derives a complete 10 nm weighting operator from the same
+legacy 5 nm SPD and CMFs. It reproduces the 5 nm perfect-diffuser white to
+floating-point precision. Directly re-summing every second sample instead moves
+`Z` by `-0.000622`; that is a different coarse-grid algorithm, not the weighting
+method recommended by TN-06.
 
-- **Not the reduction method.** `iccdev.colorimetry-methods` asserts
-  `DirectSum == Weighting == SpragueTo1nm` to `TOL_EXACT` on a common grid, so a
-  weighting table is not intrinsically closer to CIE than a direct sum.
-- **Not the sample grid.** Re-summing the same legacy data on the 10 nm subgrid
-  moves `Z` by `-0.000622` -- larger than the gap and opposite in sign. The
-  check computes this as `grid_effect` and asserts it.
+For this white-point comparison, the remaining gap is therefore in the source
+tables, not the 10 nm weighting representation. This conclusion does not
+generalize to non-flat measured spectra, where the choice of reduction method
+remains material.
+
+The report labels the decimal-literal source model separately from the
+compiled-float model. Registry float32 literal rounding changes a channel by
+less than `7e-9`; the native CTest remains authoritative for compiled behavior.
 
 Which path is "closer" is a choice of reference, so the check pins both
 directions: against CIE 15 (`Z=0.82521`) the registry table wins

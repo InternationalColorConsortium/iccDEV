@@ -13,24 +13,35 @@ fprintf('=== iccdev MATLAB QA: Issue #1475 Colorimetry ===\n\n');
 fprintf('Perfect diffuser, D50 / CIE 1931 2-degree observer:\n');
 fprintf('  Legacy 5 nm direct sum: X=%.9f Y=%.9f Z=%.9f\n', ...
   result.legacy_xyz);
-fprintf('  Registry 10 nm table:   X=%.9f Y=%.9f Z=%.9f\n', ...
+fprintf('  Legacy-derived 10 nm weights: X=%.9f Y=%.9f Z=%.9f\n', ...
+  result.legacy_weighted10_xyz);
+fprintf('  Registry source literals: X=%.9f Y=%.9f Z=%.9f\n', ...
   result.registry_xyz);
+fprintf('  Registry compiled float:  X=%.9f Y=%.9f Z=%.9f\n', ...
+  result.registry_runtime_xyz);
+fprintf('  Float - source literals: dX=%+.3e dY=%+.3e dZ=%+.3e\n', ...
+  result.registry_runtime_xyz - result.registry_xyz);
 fprintf('  Legacy - registry:      dX=%+.9f dY=%+.9f dZ=%+.9f\n', ...
   result.delta_xyz);
 
-% The gap is not a reduction-method artifact and not a sampling artifact. The
-% method axis is pinned by the native iccdev.colorimetry-methods CTest, which
-% asserts DirectSum == Weighting == SpragueTo1nm to TOL_EXACT on a common grid.
-% The sampling axis is measured right here: re-summing the SAME legacy data at
-% 10 nm moves Z further than the whole gap, and the other way.
-fprintf('\nControl - same data, same method, 10 nm subgrid:\n');
+% The complete 10 nm operator is the decisive control: it changes the
+% representation while holding the source data fixed, and preserves a constant
+% perfect diffuser exactly. Directly decimating the color-stimulus products is
+% intentionally shown separately because it is not the weighting method TN-06
+% recommends for coarse measurements.
+fprintf('\nControls using the same legacy SPD and CMFs:\n');
+fprintf('  Weighted 10 nm - 5 nm: dX=%+.3e dY=%+.3e dZ=%+.3e\n', ...
+  result.weighted_control_error);
 fprintf('  Legacy at 10 nm:        X=%.9f Y=%.9f Z=%.9f\n', ...
   result.legacy10_xyz);
 fprintf('  Grid effect on Z:       %+.9f  (gap to explain: %+.9f)\n', ...
   result.grid_effect, -result.delta_xyz(3));
-fprintf('  Sampling moves Z by %.1f%% of the gap, opposite in sign, so the\n', ...
+fprintf('  Direct decimation moves Z by %.1f%% of the gap, opposite in sign.\n', ...
   100 * abs(result.grid_effect) / abs(result.delta_xyz(3)));
-fprintf('  difference lives in the illuminant data, not in the integration.\n');
+fprintf('  The weighted control preserves white, so this white-point difference\n');
+fprintf('  lives in the source tables, not the 10 nm weighting representation.\n');
+fprintf('  This does not generalize to non-flat spectra, where TN-06 weighting\n');
+fprintf('  guidance remains material.\n');
 
 % Which path is "closer" is a choice of reference, not a measure of accuracy.
 fprintf('\nAgainst the two references in the tree:\n');

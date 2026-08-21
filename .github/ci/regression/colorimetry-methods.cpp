@@ -394,6 +394,58 @@ void testStandardAccessors()
       check(std::fabs((double)xyz[2] - 0.8249) < 2e-3, "D50 anchor: Z ~ 0.8249", std::fabs((double)xyz[2] - 0.8249));
     }
   }
+
+  // E7: isolate method and grid with the real built-in D50/1931 data. A direct
+  // 10 nm sum decimates the color-stimulus products and therefore differs from
+  // the 5 nm result. Weighting and Sprague operators derived from the same 5 nm
+  // tables reconstruct a constant perfect diffuser and preserve its white point.
+  // This is the relevant control when comparing the legacy data with a published
+  // 10 nm weighting table; it must not be generalized to non-flat spectra.
+  {
+    const icSpectralRange coarseR = makeRange(380, 780, 41);
+    icSpectralRange fineR;
+    const icFloatNumber *obs = icGetStandardObserver(icStdObs1931TwoDegrees, fineR);
+    std::vector<icFloatNumber> fineWhite = makeFilled(fineR.steps, (icFloatNumber)1.0);
+    std::vector<icFloatNumber> coarseWhite = makeFilled(coarseR.steps, (icFloatNumber)1.0);
+    icFloatNumber fine[3] = { 0, 0, 0 };
+    icFloatNumber coarse[3][3] = { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } };
+    const icXYZCalcMethod methods[3] =
+      { icXYZCalcDirectSum, icXYZCalcWeighting, icXYZCalcSpragueTo1nm };
+    bool ready = obs != NULL;
+
+    CIccColorimetricCalculator fineCalc;
+    ready = ready
+         && fineCalc.SetStandardObserver(icStdObs1931TwoDegrees)
+         && fineCalc.SetStandardIlluminant(icIlluminantD50)
+         && fineCalc.Prepare(fineR, icXYZCalcDirectSum)
+         && fineCalc.ReflectanceToXYZ(&fineWhite[0], fine);
+
+    for (int m = 0; ready && m < 3; m++) {
+      CIccColorimetricCalculator calc;
+      ready = calc.SetStandardObserver(icStdObs1931TwoDegrees)
+           && calc.SetStandardIlluminant(icIlluminantD50)
+           && calc.Prepare(coarseR, methods[m])
+           && calc.ReflectanceToXYZ(&coarseWhite[0], coarse[m]);
+    }
+    check(ready, "D50 method/grid controls prepared", 0.0);
+    if (ready) {
+      std::printf("[colorimetry-methods] D50 Z: 5nm-direct=%.9f 10nm-direct=%.9f 10nm-weighting=%.9f 10nm-Sprague=%.9f\n",
+                  (double)fine[2], (double)coarse[0][2],
+                  (double)coarse[1][2], (double)coarse[2][2]);
+      check(std::fabs((double)coarse[0][2] - (double)fine[2]) > 5e-4,
+            "D50 control: direct 10 nm sum differs from 5 nm",
+            std::fabs((double)coarse[0][2] - (double)fine[2]));
+      for (int m = 1; m < 3; m++) {
+        double err = 0.0;
+        for (int c = 0; c < 3; c++)
+          err = std::max(err, std::fabs((double)coarse[m][c] - (double)fine[c]));
+        check(err < 2e-6,
+              m == 1 ? "D50 control: 10 nm weighting preserves white"
+                     : "D50 control: 10 nm Sprague preserves white",
+              err);
+      }
+    }
+  }
 }
 
 // ---- Part F: baked-in registry weighting tables --------------------------------
