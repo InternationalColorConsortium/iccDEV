@@ -136,6 +136,11 @@ before running the suite.
 | `iccdev.specsep-tiff-geometry-regression` | `.github/scripts/iccdev-specsep-tiff-geometry-regression-tests.sh` |
 | `iccdev.tiff-resolution-unit-regression` | `.github/scripts/iccdev-tiff-resolution-unit-regression-tests.sh` |
 | `iccdev.tiff-separated-strips` | `.github/ci/regression/tiff-separated-strips.cpp` |
+| `iccdev.specsep-usage-exit-code-regression` | `.github/scripts/iccdev-issue-1514-specsep-usage-exit-code-regression-tests.sh` |
+| `iccdev.specsep-cli-args-regression` | `.github/scripts/iccdev-specsep-cli-args-regression-tests.sh` |
+| `iccdev.specsep-corpus-matrix` | `.github/scripts/iccdev-specsep-corpus-matrix.sh` |
+| `iccdev.specsep-profile-sweep` | `.github/scripts/iccdev-specsep-profile-sweep.sh` |
+| `iccdev.specsep-profile-sweep-accept` | `.github/scripts/iccdev-specsep-profile-sweep.sh` (`--channels 3`) |
 | `iccdev.dump-profile-header-regression` | `.github/scripts/iccdev-dump-profile-header-regression-tests.sh` |
 | `iccdev.basic-string-regressions` | `.github/scripts/iccdev-basic-string-regression-tests.sh` |
 | `iccdev.pawg-report-regressions` | `.github/scripts/iccdev-pawg-report-regression-tests.sh` |

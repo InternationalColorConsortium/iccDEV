@@ -142,6 +142,7 @@ Key safety rules:
 |------|-------|
 | Documentation maintenance | `.github/skills/docs-maintenance/SKILL.md` |
 | Sanitizer reproduction | `.github/skills/sanitizer-repro/SKILL.md` |
+| iccSpecSepToTiff QA | `.github/skills/specsep-qa/SKILL.md` |
 | JSON/config regressions | `.github/skills/json-config-regression/SKILL.md` |
 | Regression workflow governance | `.github/skills/regression-workflow-governance/SKILL.md` |
 | Regression container maintainer | `.github/skills/regression-container-maintainer/SKILL.md` |

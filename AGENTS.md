@@ -31,6 +31,7 @@ shares one source of truth. Update rules here, not in the mirrors.
 | Regression container prompt | `.github/prompts/regression-container-maintainer.prompt.md` |
 | Maintainer CTest selection and CI budget | `.github/skills/maintainer-ci-ctest/SKILL.md` |
 | Security repro | `.github/prompts/reproduce-security-issue.prompt.md` |
+| iccSpecSepToTiff QA | `.github/skills/specsep-qa/SKILL.md` |
 | Issue filing format | `.github/prompts/file-security-issue.prompt.md` |
 | Library hardening | `.github/instructions/icc-library-code.instructions.md` |
 | Workflow hardening | `.github/instructions/workflow-governance.instructions.md` |

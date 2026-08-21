@@ -57,6 +57,21 @@ non-spectral profiles must have a data color-space sample count equal to
 `SamplesPerPixel`. Non-ICC bytes, empty files, non-compliant profiles, and
 sample-count mismatches are rejected.
 
+Sweep the optional profile argument across a directory while holding the
+checked-in separation inputs constant:
+
+```bash
+ICCDEV_TOOLS_DIR="$PWD/Build/Tools" \
+  .github/scripts/iccdev-specsep-profile-sweep.sh \
+  --profile-dir /path/to/profiles --channels 3
+```
+
+`--channels` sets how many inputs are combined, and therefore the sample count a
+profile must match to be embedded; it defaults to 8. An incompatible profile is
+an expected rejection only when the tool emits a profile diagnostic and leaves no
+output TIFF. Timeouts, sanitizer findings, unexplained exits, and incomplete
+successes fail the sweep.
+
 ## Text Data Encoding Values
 
 These values are used by `iccApplyNamedCmm` and `iccApplySearch`.

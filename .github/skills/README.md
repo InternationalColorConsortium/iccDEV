@@ -10,6 +10,7 @@ long command references.
 | `docs-maintenance` | Reducing documentation noise or reorganizing docs. |
 | `pre-pr-security-cycle` | Running the maintainer pre-PR secure loop: code, build/test, SAST/CodeQL, sanitizer/DAST-style checks, fix, repeat, handoff. |
 | `sanitizer-repro` | Reproducing ASAN/UBSAN findings or security advisories. |
+| `specsep-qa` | Running or diagnosing the repository-owned `iccSpecSepToTiff` QA suites and fixtures. |
 | `json-config-regression` | Editing JSON/profile config parsing or tests. |
 | `maintainer-ci-ctest` | Updating maintainer-owned CI, CTest, CPack, sanitizer, workflow, or release gates. |
 | `maintainer-label-system` | Maintaining label taxonomy, path labeler rules, issue triage, PR status labels, and CodeQL label routing. |

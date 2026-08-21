@@ -16,7 +16,7 @@ profile compatibility reporting.
 | `.github/scripts/icc-pawg-qa-scan.sh` | `iccPawgReport` | text, JSON, eager-read, JSON eager-read |
 | `.github/scripts/icc-dumpprofile-qa-scan.sh` | `iccDumpProfile` | basic, validate, verbosity, tag, `ALL`, read, diagnostic read |
 | `.github/scripts/icc-roundtrip-qa-scan.sh` | `iccRoundTrip` | intents 0-3 with LUT and MPE modes |
-| `.github/scripts/iccdev-registry-profile-qa.sh` | registry runner | PAWG text, dump validate-all, roundtrip intent 1 |
+| `.github/scripts/iccdev-registry-profile-qa.sh` | registry runner | PAWG text, dump validate-all, roundtrip intent 1, SpecSep optional-profile sweep |
 
 Each tool scanner writes:
 
@@ -142,8 +142,14 @@ Run the default CI-sized sweep:
 
 This downloads the listed ICC registry and malformed-security profiles, records
 `download-manifest.tsv`, scans `.icc` files, and writes a top-level
-`summary.md`. The APTEC characterization `.txt` sidecar is downloaded and hashed
-for provenance, but the ICC command-line tools scan only `.icc` files.
+`summary.md`. The SpecSep lane exercises the optional profile argument against
+fixed checked-in inputs. It runs at the sweep's default eight channels, so a
+profile is embedded only when its sample count is eight; anything else is a
+clean rejection with no partial TIFF, and the sweep says so when it accepted
+nothing. This runner does not expose the sweep's `--channels`, so to aim the
+sample count at a particular corpus run
+`.github/scripts/iccdev-specsep-profile-sweep.sh` directly. The APTEC characterization `.txt` sidecar is downloaded and
+hashed for provenance, but the ICC command-line tools scan only `.icc` files.
 
 Use a bounded smoke test during workflow bring-up:
 
@@ -164,8 +170,9 @@ Use a previously downloaded directory for no-network reruns:
 ```
 
 Use `--full-matrix` only for scheduled or manual jobs. It multiplies each ICC
-file by every tool variant and can be much slower than the default CI smoke
-matrix.
+file by every PAWG, DumpProfile, and RoundTrip variant and can be much slower
+than the default CI smoke matrix. The SpecSep lane always runs one fixed-input
+case per selected profile.
 
 ## CI wiring
 

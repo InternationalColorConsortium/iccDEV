@@ -71,6 +71,7 @@ Use `.github/ci/regression/README.md` as the canonical catalog and naming guide.
 
 Script-based gates live in `.github/scripts/`, including:
 
+- `iccdev-specsep-qa.sh` (runs the complete SpecSep script suite)
 - `iccdev-json-parser-regression-tests.sh`
 - `iccdev-json-cfg-tests.sh`
 - `iccdev-stdobserver-regression-tests.sh`
@@ -88,6 +89,13 @@ Script-based gates live in `.github/scripts/`, including:
 
 When adding a new regression input, add the matching script or workflow assertion
 in the same change.
+
+The SpecSep wrapper preflights the checked-in sequences under
+`.github/ci/test-data/spectral/`, `.github/ci/test-data/specsep-harvest/`, and
+`.github/ci/test-data/specsep-truncated/`, then runs the CLI argument, TIFF
+geometry, usage/metadata, and numbered-fixture matrix suites plus both
+optional-profile sweeps. It is independent of the caller's current directory;
+set `ICCDEV_TOOLS_DIR` when the build is not under `Build/Tools`.
 
 ## Test Profile Directories
 

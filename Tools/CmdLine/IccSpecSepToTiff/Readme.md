@@ -117,6 +117,52 @@ There is no additional tool-specific cap on image dimensions, total pixels, or
 prefix length. Allocation failures and arithmetic overflow fail the conversion
 instead of producing a partial output.
 
+## Maintainer QA
+
+After building the tools, run the complete checked-in QA surface from any
+directory:
+
+```sh
+ICCDEV_TOOLS_DIR=/path/to/iccDEV/Build/Tools \
+  /path/to/iccDEV/.github/scripts/iccdev-specsep-qa.sh
+```
+
+The wrapper verifies the repository fixtures and runs the CLI argument, TIFF
+geometry, usage/metadata, and numbered-fixture matrix suites plus both
+optional-profile sweeps. Generated TIFFs and logs stay outside the source tree
+under `ICCDEV_TEST_OUTDIR`.
+
+To exercise the optional `profile` argument against an external or downloaded
+profile directory:
+
+```sh
+ICCDEV_TOOLS_DIR=/path/to/iccDEV/Build/Tools \
+  /path/to/iccDEV/.github/scripts/iccdev-specsep-profile-sweep.sh \
+  --profile-dir /path/to/profiles --channels 3
+```
+
+A profile is embedded only when its sample count equals `--channels`, so set
+that to a value the corpus carries; otherwise every profile is a clean rejection
+and the sweep reports that it accepted nothing. Compatible profiles must be
+embedded in a nonempty TIFF; incompatible or non-conformant profiles must be
+rejected with a profile diagnostic and no partial output.
+
+For a bounded matrix covering compression, planar layout, range order, bit
+depth, photometric conversion, optional profile embedding, rejection paths, and
+exact output pixels and tags:
+
+```sh
+ICCDEV_TOOLS_DIR=/path/to/iccDEV/Build/Tools \
+  /path/to/iccDEV/.github/scripts/iccdev-specsep-campaign.sh --seconds 300
+```
+
+The campaign requires Python `numpy`, `tifffile`, and `imagecodecs`. Its
+`--seconds` value buys repetition rather than coverage: the case set is
+deterministic, so a longer run is a soak that surfaces nondeterminism, not a
+wider matrix. It keeps its summary, generated inputs and TIFFs, and independent
+`iccTiffDump`/`tiffinfo` inspections under `ICCDEV_TEST_OUTDIR`. Functional
+failures and specification-audit findings both produce a nonzero exit.
+
 ## See Also
 
 - [CLI tool reference](../../../docs/tools-cli-reference.md)
