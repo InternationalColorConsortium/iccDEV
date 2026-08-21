@@ -259,7 +259,17 @@ unified `bin` runtime directory and falls back to the older per-tool
 Windows CTest wrappers collect build-tree DLL directories plus runtime
 dependency directories from `CMakeCache.txt`, including `CMAKE_PREFIX_PATH`,
 vcpkg installed triplets, compiler `bin` directories, and common dependency
-library prefixes. MSVC builds also add the matching Debug CRT redistributable
+library prefixes. Per-configuration trees are covered on both counts: vcpkg
+keeps release DLLs in `<installed>/<triplet>/bin` and debug DLLs in
+`<installed>/<triplet>/debug/bin`, and the collector adds both, ordering the one
+matching `ICCDEV_CONFIG` (or the cache's `CMAKE_BUILD_TYPE`) first. That ordering
+is applied per prefix -- to `CMAKE_PREFIX_PATH` entries and dependency library
+prefixes as well as to the vcpkg tree -- because the first matching directory on
+`PATH` is the one the loader binds, and both trees spell the DLL identically. Dependency
+library cache entries are read per configuration too, so the
+`optimized;<path>;debug;<path>` form a multi-config generator stores in
+`LIBXML2_LIBRARY` or `ZLIB_LIBRARY` contributes its `bin` prefixes instead of
+being discarded whole. MSVC builds also add the matching Debug CRT redistributable
 directory when it is present, so Debug helper binaries and DLLs can run on CI
 machines that do not have `msvcp140d.dll` or `vcruntime140d.dll` on the system
 `PATH`. This keeps CTest execution independent of a developer's interactive
@@ -268,6 +278,15 @@ Debug CRT by building a bounded runtime `PATH` from tool, DLL, vcpkg, MSVC CRT,
 and Windows system directories.
 MinGW builds still need the UCRT64 `bin` directory on the invoking shell `PATH`
 because GCC launches runtime-dependent compiler subprocesses during the build.
+
+`iccdev.windows-runtime-paths`
+(`Build/Cmake/Testing/RunWindowsRuntimePathsTest.cmake`) covers that collector
+against synthetic `CMakeCache.txt` fixtures, asserting both vcpkg configuration
+trees, the per-configuration ordering, and the `optimized;...;debug;...`
+library-cache form. It is registered on every platform rather than only on
+Windows: the effect of a miss is Windows-only -- an out-of-tree consumer fails
+to load with `0xc0000135`, `STATUS_DLL_NOT_FOUND`, which names no DLL -- but the
+cause is cache parsing, so it reproduces anywhere and needs no build products.
 
 Windows MSVC AddressSanitizer uses comma-separated `ASAN_OPTIONS`
 (`detect_leaks=0,halt_on_error=1`) and does not support LeakSanitizer

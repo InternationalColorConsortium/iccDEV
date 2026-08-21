@@ -42,11 +42,12 @@
 # test the system copy and pass no matter what this build tree contains.
 
 # The tree's own collector for Windows runtime dependency directories. It reads
-# the parent CMakeCache.txt for CMAKE_PREFIX_PATH, the vcpkg installed triplet,
-# the compiler/CRT directories and the prefixes behind LIBXML2_LIBRARY /
-# ZLIB_LIBRARY and friends. Reusing it rather than hand-rolling a PATH is what
-# three sibling Windows tests already do -- and hand-rolling is precisely how
-# this test first failed on Windows with 0xc0000135 (STATUS_DLL_NOT_FOUND): the
+# the parent CMakeCache.txt for CMAKE_PREFIX_PATH, both of vcpkg's
+# per-configuration installed trees, the compiler/CRT directories and the
+# prefixes behind LIBXML2_LIBRARY / ZLIB_LIBRARY and friends. Reusing it rather
+# than hand-rolling a PATH is what three sibling Windows tests already do -- and
+# hand-rolling is precisely how this test first failed on Windows with
+# 0xc0000135 (STATUS_DLL_NOT_FOUND): the
 # staged prefix carries the iccDEV DLLs but nothing tells the loader where
 # libxml2/iconv/zlib live, which under a vcpkg debug build is
 # <installed>/<triplet>/debug/bin.
@@ -457,47 +458,11 @@ function(_run_consumer _label _src_dir _build_dir _prefix _extra_args _out_ok)
     # Staged prefix first (the package under test), then everything the parent
     # build resolved its own dependencies from.
     set(_win_path "${_prefix}/bin;${_prefix}/lib")
+    # The collector reads ICCDEV_CONFIG from this script's scope, so the vcpkg
+    # debug tree that an out-of-tree consumer needs on the Debug leg is ordered
+    # ahead of the release one. This test used to carry its own copy of that
+    # logic; the shared helper owns it now.
     iccdev_collect_cache_runtime_path_entries(_runtime_entries "${ICCDEV_BUILD_DIR}")
-
-    # vcpkg keeps per-configuration DLLs in SEPARATE trees -- release in
-    # <installed>/<triplet>/bin, debug in <installed>/<triplet>/debug/bin -- and
-    # the shared collector only knows the release one. In-tree Windows tests do
-    # not notice, because StageWindowsRuntime.cmake copies the dependency DLLs
-    # next to the binaries it stages; an out-of-tree consumer gets no such copy
-    # and fails to LOAD with 0xc0000135 (STATUS_DLL_NOT_FOUND) on a Debug leg.
-    # The collector's ZLIB_LIBRARY/LIBXML2_LIBRARY fallback cannot cover it
-    # either: under a multi-config generator those cache values are the list
-    # "optimized;<path>;debug;<path>", which no EXISTS test matches.
-    foreach(_vcpkg_cache_name VCPKG_INSTALLED_DIR _VCPKG_INSTALLED_DIR)
-      iccdev_read_cache_value(_vcpkg_installed "${ICCDEV_BUILD_DIR}" "${_vcpkg_cache_name}")
-      if(NOT "${_vcpkg_installed}" STREQUAL "")
-        break()
-      endif()
-    endforeach()
-    iccdev_read_cache_value(_vcpkg_triplet "${ICCDEV_BUILD_DIR}" VCPKG_TARGET_TRIPLET)
-    if(NOT "${_vcpkg_installed}" STREQUAL "" AND NOT "${_vcpkg_triplet}" STREQUAL "")
-      set(_vcpkg_root "${_vcpkg_installed}/${_vcpkg_triplet}")
-      if(ICCDEV_CONFIG MATCHES "[Dd]ebug")
-        iccdev_add_existing_path_entry(_runtime_entries "${_vcpkg_root}/debug/bin")
-      endif()
-      iccdev_add_existing_path_entry(_runtime_entries "${_vcpkg_root}/bin")
-    endif()
-
-    # Last resort, and independent of any cache spelling: any <...>/debug/lib or
-    # <...>/lib directory the parent linked against has its DLLs in the sibling
-    # bin/. Derived from the per-configuration halves of the library cache
-    # entries, so the "optimized;...;debug;..." form is handled.
-    foreach(_lib_cache_name LIBXML2_LIBRARY ZLIB_LIBRARY TIFF_LIBRARY
-                            PNG_LIBRARY JPEG_LIBRARY)
-      iccdev_read_cache_value(_lib_value "${ICCDEV_BUILD_DIR}" "${_lib_cache_name}")
-      foreach(_lib_entry IN LISTS _lib_value)
-        if(EXISTS "${_lib_entry}" AND NOT IS_DIRECTORY "${_lib_entry}")
-          get_filename_component(_lib_dir "${_lib_entry}" DIRECTORY)
-          get_filename_component(_lib_prefix "${_lib_dir}/.." ABSOLUTE)
-          iccdev_add_existing_path_entry(_runtime_entries "${_lib_prefix}/bin")
-        endif()
-      endforeach()
-    endforeach()
 
     foreach(_entry IN LISTS _runtime_entries)
       set(_win_path "${_win_path};${_entry}")

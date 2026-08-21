@@ -4235,6 +4235,32 @@ function(iccdev_add_installed_package_consumer_test)
   )
 endfunction()
 
+# #2154: coverage for the collector behind every Windows runtime PATH in this
+# tree, Build/Cmake/Testing/WindowsRuntimePaths.cmake, which had none.
+#
+# It is registered on EVERY platform, not behind if(WIN32). The two defects it
+# pins only bite on Windows -- an out-of-tree consumer that finds no libxml2 or
+# zlib dies at load with 0xc0000135, STATUS_DLL_NOT_FOUND, which names no DLL --
+# but their cause is CMakeCache.txt parsing, so a synthetic cache reproduces
+# them anywhere. Discovering a cache-parsing bug on the Windows Debug leg costs
+# a full CI round trip per attempt; discovering it here costs under a second.
+# The test needs no targets, no build products and no bash: it writes its own
+# cache fixtures and calls the collector directly.
+function(iccdev_add_windows_runtime_paths_test)
+  add_test(
+    NAME iccdev.windows-runtime-paths
+    COMMAND "${CMAKE_COMMAND}"
+      "-DICCDEV_TEST_NAME=iccdev.windows-runtime-paths"
+      "-DICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/iccdev-windows-runtime-paths"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunWindowsRuntimePathsTest.cmake"
+  )
+  set_tests_properties(iccdev.windows-runtime-paths PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;cmake;windows;runtime-path;issue-2154;regression"
+  )
+endfunction()
+
 # #1830: the JSON BCD version parser used atoi() per component, which accepts a
 # leading '-'; "-1" produced 0xFFFFFFFF and wrapped both the "<< 8" in
 # icJsonParseBCDVersionStr and the caller's "<< 16" (UBSan: "left shift of
@@ -5242,6 +5268,7 @@ if(WIN32)
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
   iccdev_add_installed_package_consumer_test()
+  iccdev_add_windows_runtime_paths_test()
   iccdev_add_json_bcd_version_test()
   iccdev_add_json_writer_move_test()
   iccdev_add_json_fixednum_size_cap_test()
@@ -5302,6 +5329,11 @@ if(WIN32)
 
   return()
 endif()
+
+# Registered above the bash gate on purpose. This test runs cmake -P against
+# synthetic CMakeCache.txt fixtures -- no bash, no tools, no build products --
+# and the collector it covers is used by builds that have no bash either.
+iccdev_add_windows_runtime_paths_test()
 
 if(NOT BASH_EXECUTABLE)
   message(WARNING "bash not found; iccDEV CTest script tests are disabled.")
