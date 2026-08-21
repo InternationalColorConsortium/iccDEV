@@ -221,7 +221,7 @@ jobs:
                   }
                 }
               }
-              exit invalid || count != 27 || case_count != 9 ? 1 : 0
+              exit (invalid || count != 27 || case_count != 9) ? 1 : 0
             }
           ' "$threaded_log"; then
             echo "[FAIL] Missing or inconsistent 1,2,8-thread CSV replay signal" >&2
@@ -299,7 +299,7 @@ jobs:
                   }
                 }
               }
-              exit invalid || count != 27 || case_count != 9 ? 1 : 0
+              exit (invalid || count != 27 || case_count != 9) ? 1 : 0
             }
           ' "$threaded_log"; then
             threaded_signal="PASS"
