@@ -333,7 +333,7 @@ observer must be `spac` class.
 |----------|-------|
 | **MCP Tool** | `spec_sep_to_tiff` |
 | **CLI Binary** | `iccSpecSepToTiff` |
-| **Syntax** | `iccSpecSepToTiff output compress sep fmt start end incr {profile}` |
+| **Syntax** | `iccSpecSepToTiff output compress sep infile_prefix start end incr {profile}` |
 | **MCP Args** | `config_args` (list) |
 | **Exit Codes** | `0` success, `255` file/format error |
 
@@ -342,8 +342,10 @@ spectral TIFF. Input files must be MINISBLACK, 1 sample/pixel, 8-16 bit,
 identical dimensions.
 
 ```bash
-# Merge 81 channels (380-780nm, 5nm steps)
-iccSpecSepToTiff out.tiff 0 0 "spec_%06d.tiff" 380 780 5
+# Merge 81 channels (380-780nm, 5nm steps) from inputs named spec_380 .. spec_780
+# infile_prefix is a literal prefix, not a printf format string: the channel
+# number is appended and nothing can follow it, so inputs carry no extension
+iccSpecSepToTiff out.tiff 0 0 "spec_" 380 780 5
 ```
 
 ---
