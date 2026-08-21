@@ -3757,6 +3757,74 @@ function(iccdev_add_tiff_create_overflow_test)
   endif()
 endfunction()
 
+# #2228: separated (PLANARCONFIG_SEPARATE) strip handling. CTiffImg advanced each
+# decoded plane by one row while the deplaning loop strides by a whole strip, and
+# sized the strip buffer from the interleaved row width so the allocation grew with
+# the square of SamplesPerPixel. Like iccdev.tiff-create-overflow, this compiles
+# TiffImg.cpp directly because CTiffImg is tool code rather than part of IccProfLib.
+function(iccdev_add_tiff_separated_strips_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+  if(NOT TARGET TIFF::TIFF AND NOT TIFF_LIBRARY)
+    find_package(TIFF QUIET)
+  endif()
+  if(TARGET TIFF::TIFF)
+    set(_tiff_lib TIFF::TIFF)
+  elseif(TIFF_LIBRARY)
+    set(_tiff_lib ${TIFF_LIBRARY})
+  else()
+    message(STATUS "iccdev.tiff-separated-strips: libtiff not found, test skipped")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccTiffSeparatedStripsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/tiff-separated-strips.cpp"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccApplyProfiles/TiffImg.cpp"
+  )
+  target_compile_features(iccTiffSeparatedStripsTest PRIVATE cxx_std_17)
+  target_include_directories(iccTiffSeparatedStripsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccApplyProfiles"
+  )
+  target_link_libraries(iccTiffSeparatedStripsTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB} ${_tiff_lib})
+  add_dependencies(check iccTiffSeparatedStripsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.tiff-separated-strips
+      COMMAND "$<TARGET_FILE:iccTiffSeparatedStripsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.tiff-separated-strips
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccTiffSeparatedStripsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.tiff-separated-strips PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 120
+    LABELS "iccdev;tools;tiff;spectral;regression"
+  )
+  if(WIN32)
+    set(_tiffseparated_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccTiffSeparatedStripsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _tiffseparated_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.tiff-separated-strips PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_tiffseparated_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_signature_utils_contract_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -5053,6 +5121,7 @@ if(WIN32)
   iccdev_add_mcs_colorspace_name_test()
   iccdev_add_signature_utils_contract_test()
   iccdev_add_tiff_create_overflow_test()
+  iccdev_add_tiff_separated_strips_test()
   iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_calc_envsig_sign_extension_test()
   iccdev_add_proflib_exported_data_linkage_test()
@@ -5336,6 +5405,7 @@ iccdev_add_struct_name_spelling_test()
 iccdev_add_mcs_colorspace_name_test()
 iccdev_add_signature_utils_contract_test()
 iccdev_add_tiff_create_overflow_test()
+iccdev_add_tiff_separated_strips_test()
 iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_calc_envsig_sign_extension_test()
 iccdev_add_proflib_exported_data_linkage_test()

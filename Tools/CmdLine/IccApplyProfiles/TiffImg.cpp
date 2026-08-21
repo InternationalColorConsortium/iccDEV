@@ -574,8 +574,15 @@ bool CTiffImg::Open(const char *szFname)
   
   // Just in case we had to recalc the strip byte count,
   //   it is safer to have the buffer too large than too small.
+  // For separated data a strip holds one plane, not a full interleaved row, and
+  // the buffer below already multiplies by m_nStripSamples. Using the interleaved
+  // width here counted the samples a second time, growing the allocation with the
+  // square of SamplesPerPixel; the phantom product also overflowed the 32-bit
+  // check and rejected large but valid spectral images (#2228).
   unsigned int minStripSize = 0;
-  if (!checkedUInt32Product(m_nRowsPerStrip, m_nBytesPerLine, minStripSize)) {
+  const unsigned int nMinBytesPerStripLine = m_nStripSamples > 1 ? m_nBytesPerStripLine
+                                                                 : m_nBytesPerLine;
+  if (!checkedUInt32Product(m_nRowsPerStrip, nMinBytesPerStripLine, minStripSize)) {
     Close();
     return false;
   }
@@ -620,7 +627,11 @@ bool CTiffImg::ReadLine(unsigned char *pBuf)
           return false;
         }
         nStripOffset += m_nStripsPerSample;
-        pos += m_nBytesPerStripLine;
+        // Each decoded plane occupies a whole m_nStripSize slot: the deplaning
+        // loop below and WriteLine() both stride by m_nStripSize. Advancing by a
+        // single row left every plane after the first at the wrong offset, so the
+        // deplaned pixels came from unwritten buffer space (#2228).
+        pos += m_nStripSize;
       }
     }
     else if (TIFFReadEncodedStrip(m_hTif, m_nCurStrip, m_pStripBuf, m_nStripSize) < 0) {
