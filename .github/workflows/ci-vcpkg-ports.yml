@@ -21,12 +21,10 @@ on:
     branches: [master]
     paths:
       - 'ports/**'
-      - '.github/workflows/ci-vcpkg-ports.yml'
   pull_request:
     branches: [master]
     paths:
       - 'ports/**'
-      - '.github/workflows/ci-vcpkg-ports.yml'
 permissions:
   contents: read
 
