@@ -114,6 +114,17 @@ IdList photo_types[] = {
   {UNKNOWNID,        "Unknown"},
 };
 
+// TIFFTAG_RESOLUTIONUNIT was never reported, so every image was printed as though its
+// resolution were counted in inches.  A centimetre-based file therefore read as 2.54x
+// its real physical size and the label actively contradicted the file (#2220).  The
+// inch wording is kept verbatim so existing output and any log grep for it still match.
+IdList resolution_units[] = {
+  {RESUNIT_NONE,       "(relative, no absolute unit)"},
+  {RESUNIT_INCH,       "pixels per/inch"},
+  {RESUNIT_CENTIMETER, "pixels per/centimeter"},
+  {UNKNOWNID,          "pixels per/unrecognized unit"},
+};
+
 IdList compression_types[] = {
   {COMPRESSION_NONE,         "None"},
   {COMPRESSION_LZW,          "LZW"},
@@ -368,9 +379,19 @@ int main(int argc, icChar* argv[])
 
   printf("-------------------->Tiff Image Dump<---------------------------\n");
   printf("Filename:          %s\n", srcName.c_str());
-  printf("Size:              (%d x %d) pixels, (%.2lf\" x %.2lf\")\n",
-    SrcImg.GetWidth(), SrcImg.GetHeight(),
-    SrcImg.GetWidthIn(), SrcImg.GetHeightIn());
+  // A physical size only exists when RESOLUTIONUNIT names an absolute unit; under
+  // RESUNIT_NONE the resolution values fix an aspect ratio and nothing else, so
+  // GetWidthIn()/GetHeightIn() report 0 and printing inches would invent a measurement
+  // the file never made.  They also convert from centimetres now, which the bare
+  // division they used to do did not (#2220).
+  const double dWidthIn = SrcImg.GetWidthIn();
+  const double dHeightIn = SrcImg.GetHeightIn();
+  if (dWidthIn > 0.0 && dHeightIn > 0.0)
+    printf("Size:              (%d x %d) pixels, (%.2lf\" x %.2lf\")\n",
+      SrcImg.GetWidth(), SrcImg.GetHeight(), dWidthIn, dHeightIn);
+  else
+    printf("Size:              (%d x %d) pixels\n",
+      SrcImg.GetWidth(), SrcImg.GetHeight());
   printf("Planar:            %s\n", GetId(SrcImg.GetPlanar(), planar_types));
   printf("BitsPerSample:     %d (%s)\n", SrcImg.GetBitsPerSample(),
             GetSampleFormatDescription( SrcImg.GetSampleFormat()) );
@@ -381,7 +402,8 @@ int main(int argc, icChar* argv[])
     printf("ExtraSamples:      %d\n", nExtra);
   printf("Photometric:       %s\n", GetId(SrcImg.GetPhoto(), photo_types));
   printf("BytesPerLine:      %d\n", SrcImg.GetBytesPerLine());
-  printf("Resolution:        (%lf x %lf) pixels per/inch\n", SrcImg.GetXRes(), SrcImg.GetYRes());
+  printf("Resolution:        (%lf x %lf) %s\n", SrcImg.GetXRes(), SrcImg.GetYRes(),
+    GetId(SrcImg.GetResolutionUnit(), resolution_units));
   printf("Compression:       %s\n", GetId(SrcImg.GetCompress(), compression_types));
 
   unsigned char *pProfMem = nullptr;

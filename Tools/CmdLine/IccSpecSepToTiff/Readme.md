@@ -46,8 +46,15 @@ single-channel TIFF inputs.
 
 ## Input and Output Notes
 
-- Input TIFFs must have identical dimensions, resolution, sample format,
-  photometric interpretation, and `BitsPerSample`.
+- Input TIFFs must have identical dimensions, resolution, resolution unit,
+  sample format, photometric interpretation, and `BitsPerSample`. The unit is
+  part of the resolution: 300 pixels/inch and 300 pixels/cm are the same two
+  numbers describing images of different physical size.
+- The output carries the inputs' `ResolutionUnit`, and their `XResolution` and
+  `YResolution` with them. Two long-standing substitutions can still make the
+  output resolution values differ from the input's, both in the unit the input
+  declared: an absent or non-positive resolution becomes 96 when the input is
+  read, and a resolution below 1 that survives that becomes 72.
 - Each input TIFF must have exactly one sample per pixel.
 - Photometric interpretation must be `MINISBLACK` or `MINISWHITE`; palette,
   RGB, CMYK, and unknown photometrics are rejected.

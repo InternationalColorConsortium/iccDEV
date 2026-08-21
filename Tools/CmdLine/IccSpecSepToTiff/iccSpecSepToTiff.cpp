@@ -439,12 +439,17 @@ int main(int argc, char* argv[]) {
       return -1;
     }
 
+    // The resolution unit belongs in this check alongside the resolution values it
+    // qualifies: 300 pixels/inch and 300 pixels/cm are the same two numbers describing
+    // images of different physical size, so comparing only GetXRes()/GetYRes() accepted
+    // a channel set that does not actually share a format (#2220).
     if (i && (infile[i].GetWidth() != infile[0].GetWidth() ||
       infile[i].GetHeight() != infile[0].GetHeight() ||
       infile[i].GetBitsPerSample() != infile[0].GetBitsPerSample() ||
       infile[i].GetPhoto() != infile[0].GetPhoto() ||
       infile[i].GetXRes() != infile[0].GetXRes() ||
-      infile[i].GetYRes() != infile[0].GetYRes())) {
+      infile[i].GetYRes() != infile[0].GetYRes() ||
+      infile[i].GetResolutionUnit() != infile[0].GetResolutionUnit())) {
         printf("input %s does not have same format as other files\n", filename.c_str());
         return -1;
     }
@@ -546,8 +551,13 @@ int main(int argc, char* argv[]) {
       existing.Close();
   }
 
+  // xRes/yRes above are copied straight from the input, so the input's unit has to be
+  // carried across with them.  Leaving it to default meant a centimetre-based source
+  // produced an output with no RESOLUTIONUNIT tag at all, which every reader takes as
+  // inches -- the same numbers, a physical size 2.54x off (#2220).
   if (!outfile.Create(argv[1], f->GetWidth(), f->GetHeight(), f->GetBitsPerSample(), PHOTO_MINISBLACK,
-                     (unsigned int)nSamples, nExtraSamples, xRes, yRes, bCompress, bSep)) {
+                     (unsigned int)nSamples, nExtraSamples, xRes, yRes, bCompress, bSep,
+                     f->GetResolutionUnit())) {
     printf("Unable to create %s\n", argv[1]);
     if (!outputExisted)
       remove(argv[1]);

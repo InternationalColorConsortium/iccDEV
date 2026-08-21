@@ -167,6 +167,7 @@ CTiffImg::CTiffImg()
     m_nCompress(0),
     m_nSampleFormat(SAMPLEFORMAT_UINT),
     m_nOrientation(ORIENTATION_TOPLEFT),
+    m_nResolutionUnit(RESUNIT_INCH),
     m_fXRes(0.0f),
     m_fYRes(0.0f),
     m_nBytesPerLine(0),
@@ -230,6 +231,7 @@ void CTiffImg::Close()
   m_nCompress = 0;
   m_nSampleFormat = SAMPLEFORMAT_UINT;
   m_nOrientation = ORIENTATION_TOPLEFT;
+  m_nResolutionUnit = RESUNIT_INCH;
   m_fXRes = 0.0f;
   m_fYRes = 0.0f;
   m_nBytesPerLine = 0;
@@ -246,7 +248,8 @@ void CTiffImg::Close()
 
 bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHeight,
               unsigned int nBPS, unsigned int nPhoto, unsigned int nSamples, unsigned int nExtraSamples,
-              float fXRes, float fYRes, bool bCompress, bool bSep)
+              float fXRes, float fYRes, bool bCompress, bool bSep,
+              unsigned int nResolutionUnit)
 {
   Close();
   m_bRead = false;
@@ -260,6 +263,18 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   if (nSamples == 0 || nSamples > kMaxTiffSamples || nExtraSamples > nSamples)
     return false;
 
+  // RESUNIT_NONE/INCH/CENTIMETER are the only units TIFF 6.0 defines, so anything else
+  // cannot be written faithfully.  Refuse rather than write a file whose stated unit
+  // disagrees with what the caller asked for -- silently dropping the request is the
+  // very defect #2220 reports.  Neither tool caller can reach this in practice: their
+  // unit comes back out of Open(), and libtiff rejects an out-of-range RESOLUTIONUNIT
+  // while reading the directory ("Bad value 7 for \"ResolutionUnit\" tag") and leaves
+  // the defaulted RESUNIT_INCH in place, so measured input can only yield a legal
+  // value.  The guard is for direct callers of this public API.
+  if (nResolutionUnit != RESUNIT_NONE && nResolutionUnit != RESUNIT_INCH &&
+      nResolutionUnit != RESUNIT_CENTIMETER)
+    return false;
+
   m_nWidth = nWidth;
   m_nHeight = nHeight;
   m_nBitsPerSample = (icUInt16Number)nBPS;
@@ -271,6 +286,7 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   m_nPlanar = bSep ? PLANARCONFIG_SEPARATE : PLANARCONFIG_CONTIG;
   m_nCompress = bCompress ? COMPRESSION_LZW : COMPRESSION_NONE;
   m_nSampleFormat = SAMPLEFORMAT_UINT;
+  m_nResolutionUnit = (icUInt16Number)nResolutionUnit;
   
   // fix up some common errors from malformed TIFF files (which could cause errors down the line)
   if (m_fXRes <= 0.0)
@@ -342,8 +358,23 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   TIFFSetField(m_hTif, TIFFTAG_ROWSPERSTRIP, m_nRowsPerStrip);
   TIFFSetField(m_hTif, TIFFTAG_COMPRESSION, m_nCompress);
   TIFFSetField(m_hTif, TIFFTAG_ORIENTATION, m_nOrientation);
-  TIFFSetField(m_hTif, TIFFTAG_XRESOLUTION, fXRes);
-  TIFFSetField(m_hTif, TIFFTAG_YRESOLUTION, fYRes);
+  // Written unconditionally, next to the values it qualifies.  libtiff omits the tag
+  // unless it is set and readers then fall back to their own default, so an output
+  // converted from a centimetre-based source came out silently claiming inches and
+  // its physical size shifted by 2.54x (#2220).  Stating the unit even when it is
+  // RESUNIT_INCH costs one IFD entry and makes the file say what it means instead of
+  // depending on the reader agreeing about the default.
+  TIFFSetField(m_hTif, TIFFTAG_RESOLUTIONUNIT, m_nResolutionUnit);
+  // m_fXRes/m_fYRes, not the raw parameters: a non-positive resolution was clamped to
+  // 96 above, and writing the unclamped argument put the file at odds with the object
+  // that produced it -- GetXRes() answered 96 while the file declared 0.  Harmless
+  // while the unit was absent; now that an authoritative RESUNIT_INCH is written beside
+  // them, the file would assert "0 pixels per inch".  Same class as #2220 itself, so it
+  // is corrected here.  Neither tool caller is affected: iccSpecSepToTiff substitutes
+  // its own value below 1, and iccApplyProfiles takes an already-clamped resolution out
+  // of Open(), so for both m_fXRes == fXRes.
+  TIFFSetField(m_hTif, TIFFTAG_XRESOLUTION, m_fXRes);
+  TIFFSetField(m_hTif, TIFFTAG_YRESOLUTION, m_fYRes);
   if (bCompress) {
     if (m_nBitsPerSample >= 32) {
       TIFFSetField(m_hTif, TIFFTAG_PREDICTOR, PREDICTOR_FLOATINGPOINT);
@@ -463,6 +494,9 @@ bool CTiffImg::Open(const char *szFname)
   TIFFGetFieldDefaulted(m_hTif, TIFFTAG_SAMPLEFORMAT, &m_nSampleFormat);
   TIFFGetFieldDefaulted(m_hTif, TIFFTAG_ROWSPERSTRIP, &m_nRowsPerStrip);
   TIFFGetFieldDefaulted(m_hTif, TIFFTAG_ORIENTATION, &m_nOrientation);
+  // Defaulted rather than plain Get: an absent RESOLUTIONUNIT means inches per TIFF
+  // 6.0, and libtiff supplies that, so this yields a usable unit for every input.
+  TIFFGetFieldDefaulted(m_hTif, TIFFTAG_RESOLUTIONUNIT, &m_nResolutionUnit);
   TIFFGetField(m_hTif, TIFFTAG_XRESOLUTION, &m_fXRes);
   TIFFGetField(m_hTif, TIFFTAG_YRESOLUTION, &m_fYRes);
   TIFFGetFieldDefaulted(m_hTif, TIFFTAG_COMPRESSION, &m_nCompress);

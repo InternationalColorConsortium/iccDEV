@@ -5510,6 +5510,20 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-specsep-cli-args-regression-tests.sh"
 )
 
+# TIFFTAG_RESOLUTIONUNIT lives in shared CTiffImg code, so it is covered per caller:
+# iccSpecSepToTiff and iccApplyProfiles both write through the same Create(), and
+# iccTiffDump reads the same member back (#2220).  Guarded on all three targets
+# because the cases are not independent of any one of them.
+if(TARGET iccSpecSepToTiff AND TARGET iccApplyProfiles AND TARGET iccTiffDump)
+  iccdev_add_script_test(
+    iccdev.tiff-resolution-unit-regression
+    120
+    "iccdev;tools;tiff;resolution;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-tiff-resolution-unit-regression-tests.sh"
+  )
+endif()
+
 iccdev_add_script_test(
   iccdev.dump-profile-header-regression
   120

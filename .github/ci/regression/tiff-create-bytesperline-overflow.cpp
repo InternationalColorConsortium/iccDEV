@@ -31,6 +31,15 @@
 // That is why case 2 exists: it overflows bytes-per-line while keeping every allocation
 // tiny, so nothing but the range check can reject it.
 //
+// ALSO COVERED HERE (#2220): Create()'s nResolutionUnit parameter. It belongs with the
+// cases above rather than in a binary of its own because it is the same contract on the
+// same entry point -- what Create() refuses, and what it must still accept -- and neither
+// tool caller can reach the rejection: their unit comes back out of Open(), and libtiff
+// discards an out-of-range RESOLUTIONUNIT while reading the directory, leaving the
+// defaulted RESUNIT_INCH behind. Calling Create() directly is the only way to exercise it.
+// End-to-end propagation through the three tools is covered by
+// .github/scripts/iccdev-tiff-resolution-unit-regression-tests.sh.
+//
 // Returns 0 on success; the number of failed assertions otherwise (each printed).
 
 #include "TiffImg.h"
@@ -120,6 +129,93 @@ int main()
             "separated GetBytesPerLine() is the true row size");
     }
     img.Close();
+    cleanup();
+  }
+
+  // --- 5. An out-of-range ResolutionUnit must be refused rather than written as a unit
+  // the file cannot express. TIFF 6.0 defines only NONE, INCH and CENTIMETER.
+  {
+    CTiffImg img;
+    const bool ok = img.Create(kOutPath, 64u, 4u, 8u, PHOTO_MINISBLACK, 3u, 0u,
+                               72.0f, 72.0f, false, /*bSep=*/false,
+                               /*nResolutionUnit=*/7u);
+    check(!ok, "Create() rejects an out-of-range ResolutionUnit");
+    img.Close();
+    cleanup();
+  }
+
+  // --- 6. Each unit TIFF does define must still be accepted and reported back, so case 5
+  // is not simply refusing every value. The default is checked too: it is what every
+  // caller that omits the parameter gets, and it must stay RESUNIT_INCH.
+  {
+    const unsigned int units[] = { RESUNIT_NONE, RESUNIT_INCH, RESUNIT_CENTIMETER };
+    for (unsigned int unit : units) {
+      CTiffImg img;
+      const bool ok = img.Create(kOutPath, 64u, 4u, 8u, PHOTO_MINISBLACK, 3u, 0u,
+                                 72.0f, 72.0f, false, /*bSep=*/false, unit);
+      check(ok, "Create() accepts a ResolutionUnit TIFF defines");
+      if (ok)
+        check(img.GetResolutionUnit() == unit,
+              "GetResolutionUnit() reports the unit Create() was given");
+      img.Close();
+      cleanup();
+    }
+
+    CTiffImg img;
+    const bool ok = img.Create(kOutPath, 64u, 4u, 8u, PHOTO_MINISBLACK, 3u, 0u,
+                               72.0f, 72.0f, false, /*bSep=*/false);
+    check(ok, "Create() still accepts the call shape that omits the unit");
+    if (ok)
+      check(img.GetResolutionUnit() == RESUNIT_INCH,
+            "an omitted ResolutionUnit still defaults to inches");
+    img.Close();
+    cleanup();
+  }
+
+  // --- 7. Create() clamps a non-positive resolution to 96 and must write the value it
+  // adopted, not the argument it rejected. Writing the raw argument left the file
+  // declaring 0 while the object reported 96 -- and with a ResolutionUnit now written
+  // beside it, that file asserts "0 pixels per inch". Read back through Open() so the
+  // assertion is on what reached the file rather than on a member.
+  {
+    CTiffImg img;
+    const bool ok = img.Create(kOutPath, 64u, 4u, 8u, PHOTO_MINISBLACK, 3u, 0u,
+                               /*fXRes=*/0.0f, /*fYRes=*/0.0f, false, /*bSep=*/false);
+    check(ok, "Create() accepts a non-positive resolution and clamps it");
+
+    // Rows have to be written before Close(), or the directory carries no StripOffsets
+    // and the file cannot be reopened. Asserting on img.GetXRes() instead would be
+    // vacuous: that member held the clamped 96 before this fix as well -- the defect was
+    // only ever in what reached the file.
+    if (ok) {
+      unsigned char row[64u * 3u] = { 0 };
+      for (unsigned int line = 0; line < 4u; line++)
+        check(img.WriteLine(row), "the clamped-resolution image accepts a row");
+    }
+    img.Close();
+
+    // Read the tags back with libtiff rather than CTiffImg::Open(). Open() applies the
+    // very same non-positive-resolution fix-up, so it reports 96 whatever the file says
+    // and an assertion routed through it passes against the defect -- measured, not
+    // assumed. Plain TIFFGetField reports what is actually stored.
+    if (ok) {
+      TIFF *raw = TIFFOpen(kOutPath, "r");
+      check(raw != NULL, "the clamped-resolution file reopens");
+      if (raw) {
+        float fFileXRes = 0.0f;
+        float fFileYRes = 0.0f;
+        uint16_t nFileUnit = 0;
+        check(TIFFGetField(raw, TIFFTAG_XRESOLUTION, &fFileXRes) == 1 &&
+              TIFFGetField(raw, TIFFTAG_YRESOLUTION, &fFileYRes) == 1,
+              "the clamped-resolution file carries both resolution tags");
+        check(fFileXRes == 96.0f && fFileYRes == 96.0f,
+              "the file carries the clamped resolution Create() adopted");
+        check(TIFFGetField(raw, TIFFTAG_RESOLUTIONUNIT, &nFileUnit) == 1 &&
+              nFileUnit == RESUNIT_INCH,
+              "the clamped-resolution file states its unit");
+        TIFFClose(raw);
+      }
+    }
     cleanup();
   }
 

@@ -541,7 +541,11 @@ int main(int argc, const char** argv)
   unsigned long dbpp = (nDestSamples * dbps  + 7)/ 8;
 
   //Open up output image using information from SrcImg and theCmm
-  if (!DstImg.Create(cfgApply.m_dstImgFile.c_str(), SrcImg.GetWidth(), SrcImg.GetHeight(), dbps, photo, nDestSamples, nExtraSamples, SrcImg.GetXRes(), SrcImg.GetYRes(), bCompress, bSeparation)) {
+  // GetXRes()/GetYRes() are taken from the source, so its RESOLUTIONUNIT has to come
+  // with them; without it a centimetre-based source produced an inch-defaulted output
+  // and the physical size shifted by 2.54x.  Same defect as iccSpecSepToTiff, because
+  // both tools reach it through the same shared CTiffImg::Create() (#2220).
+  if (!DstImg.Create(cfgApply.m_dstImgFile.c_str(), SrcImg.GetWidth(), SrcImg.GetHeight(), dbps, photo, nDestSamples, nExtraSamples, SrcImg.GetXRes(), SrcImg.GetYRes(), bCompress, bSeparation, SrcImg.GetResolutionUnit())) {
     printf("Unable to create Tiff file - '%s'\n", cfgApply.m_dstImgFile.c_str());
     return -1;
   }

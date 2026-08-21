@@ -54,6 +54,12 @@ Practical consequences:
   the ICC profile (set `dstEmbedIcc: true` in the JSON config) so the
   reverse chain can recover the values.
 
+## Resolution
+
+The destination TIFF carries the source's `XResolution`, `YResolution` and
+`ResolutionUnit`. The unit tag is always written, so the output states its unit
+rather than relying on the reader defaulting an absent tag to inches.
+
 ## See Also
 
 - [CLI tool reference](../../../docs/tools-cli-reference.md)

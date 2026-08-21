@@ -134,6 +134,7 @@ before running the suite.
 | `iccdev.hybrid-pipeline` | `.github/scripts/iccdev-hybrid-pipeline-tests.sh` |
 | `iccdev.searchvec-uio-regression` | `.github/scripts/iccdev-searchvec-uio-regression.sh` |
 | `iccdev.specsep-tiff-geometry-regression` | `.github/scripts/iccdev-specsep-tiff-geometry-regression-tests.sh` |
+| `iccdev.tiff-resolution-unit-regression` | `.github/scripts/iccdev-tiff-resolution-unit-regression-tests.sh` |
 | `iccdev.dump-profile-header-regression` | `.github/scripts/iccdev-dump-profile-header-regression-tests.sh` |
 | `iccdev.basic-string-regressions` | `.github/scripts/iccdev-basic-string-regression-tests.sh` |
 | `iccdev.pawg-report-regressions` | `.github/scripts/iccdev-pawg-report-regression-tests.sh` |
