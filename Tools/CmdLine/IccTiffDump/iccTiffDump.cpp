@@ -286,7 +286,11 @@ static void EmitWriteEvidenceJson(const char* tiffPath, const char* outputPath,
   printf("\"tool\":\"iccTiffDump\",");
   printf("\"input\":\"%s\",", icJsonEscape(tiffPath).c_str());
   printf("\"output\":\"%s\",", icJsonEscape(outputPath).c_str());
-  printf("\"qaFlags\":[\"ICCDEV_FLAG_WRITE\"],");
+  // ICCDEV_FLAG_WRITE asserts that a profile was written out.  Emitting it
+  // unconditionally also claimed it for `iccTiffDump --evidence-json in.tif`,
+  // which names no output and writes nothing, so anything counting the flag
+  // across an evidence corpus over-reported.
+  printf("\"qaFlags\":[%s],", hasOutputDigest ? "\"ICCDEV_FLAG_WRITE\"" : "");
   if (hasOutputDigest)
     printf("\"outputDigest\":\"%s\",", outputDigest.c_str());
   else
@@ -505,7 +509,11 @@ int main(int argc, icChar* argv[])
         SrcImg.Close();
         return 1;
       }
-      extractedProfileId = GetProfileId(argv[2]);
+      // Only the evidence path consumes this, and it costs a second complete
+      // CIccProfile parse of the file just written, so it stays inside the
+      // guard rather than running on every ordinary extraction.
+      if (bEvidenceJson)
+        extractedProfileId = GetProfileId(argv[2]);
       if (!bEvidenceJson) {
         printf("\nProfile extracted byte-for-byte to: %s\n", dstName.c_str());
         fflush(stdout);
@@ -520,8 +528,9 @@ int main(int argc, icChar* argv[])
       return 1;
     }
 
-    embeddedProfileId = GetProfileId(pProfile);
-    if (!bEvidenceJson)
+    if (bEvidenceJson)
+      embeddedProfileId = GetProfileId(pProfile);
+    else
       DumpProfileInfo(pProfile, " ");
 
     std::string validateReport;

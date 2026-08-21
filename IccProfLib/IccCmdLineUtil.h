@@ -213,6 +213,64 @@ inline std::string icSanitizeFileName(const std::string& text)
 
 /******************************************************************************/
 
+// Length of the well-formed UTF-8 sequence starting at p, or 0 if p does not
+// start one.  This is Unicode 15.0 table 3-7 verbatim, so it rejects the things
+// a naive "0xC0-0xFF starts a sequence" test lets through: over-long encodings,
+// UTF-16 surrogates (ED A0..BF), and anything above U+10FFFF.
+inline size_t icUtf8SequenceLength(const unsigned char* p)
+{
+  const unsigned char c = p[0];
+
+  if (c < 0x80)
+    return 1;
+
+  // A continuation byte or an over-long lead (C0/C1) cannot start a sequence.
+  if (c < 0xc2)
+    return 0;
+
+  if (c <= 0xdf)
+    return (p[1] >= 0x80 && p[1] <= 0xbf) ? 2 : 0;
+
+  if (c <= 0xef) {
+    const unsigned char lo = (c == 0xe0) ? 0xa0 : 0x80;   // no over-long
+    const unsigned char hi = (c == 0xed) ? 0x9f : 0xbf;   // no surrogates
+    if (p[1] < lo || p[1] > hi)
+      return 0;
+    return (p[2] >= 0x80 && p[2] <= 0xbf) ? 3 : 0;
+  }
+
+  if (c <= 0xf4) {
+    const unsigned char lo = (c == 0xf0) ? 0x90 : 0x80;   // no over-long
+    const unsigned char hi = (c == 0xf4) ? 0x8f : 0xbf;   // no > U+10FFFF
+    if (p[1] < lo || p[1] > hi)
+      return 0;
+    if (p[2] < 0x80 || p[2] > 0xbf)
+      return 0;
+    return (p[3] >= 0x80 && p[3] <= 0xbf) ? 4 : 0;
+  }
+
+  return 0;
+}
+
+// Escape a string for use as a JSON string value.
+//
+// Bytes at or above 0x80 are passed through when, and only when, they form a
+// well-formed UTF-8 sequence.  Both halves of that rule are load-bearing (#1853):
+//
+//   - Escaping them as \u00XX, which PawgReport.cpp used to do, reads a UTF-8
+//     byte as if it were a code point.  U+00E9 is the two bytes C3 A9, which
+//     come out as \u00c3\u00a9 -- the two code points U+00C3 U+00A9 -- so
+//     "cafe" with an acute e reads back with two wrong characters in its place.
+//     The document is valid JSON and the text in it is wrong.
+//   - Passing them through unconditionally is no better.  A JSON text must be
+//     valid UTF-8 (RFC 8259 section 8.1), and these strings include paths taken
+//     straight from argv, which on POSIX are byte strings that need not be UTF-8
+//     at all.  A Latin-1 filename would put a lone 0xE9 inside a string and the
+//     document would not decode.
+//
+// A byte that is not part of a well-formed sequence is therefore replaced with
+// U+FFFD.  Substituting \u00XX instead would assert the byte was Latin-1, which
+// is a guess; U+FFFD records that the input was not text, which is the fact.
 inline std::string icJsonEscape(const char* szText)
 {
   static const char hex[] = "0123456789abcdef";
@@ -221,41 +279,69 @@ inline std::string icJsonEscape(const char* szText)
   if (!szText)
     return result;
 
-  for (const unsigned char *p = (const unsigned char*)szText; *p; p++) {
+  for (const unsigned char *p = (const unsigned char*)szText; *p; ) {
     unsigned char ch = *p;
+
     switch (ch) {
     case '"':
       result += "\\\"";
-      break;
+      p++;
+      continue;
     case '\\':
       result += "\\\\";
-      break;
+      p++;
+      continue;
     case '\b':
       result += "\\b";
-      break;
+      p++;
+      continue;
     case '\f':
       result += "\\f";
-      break;
+      p++;
+      continue;
     case '\n':
       result += "\\n";
-      break;
+      p++;
+      continue;
     case '\r':
       result += "\\r";
-      break;
+      p++;
+      continue;
     case '\t':
       result += "\\t";
-      break;
+      p++;
+      continue;
     default:
-      if (ch < 0x20) {
-        result += "\\u00";
-        result += hex[(ch >> 4) & 0xf];
-        result += hex[ch & 0xf];
-      }
-      else {
-        result += (char)ch;
-      }
       break;
     }
+
+    if (ch < 0x20) {
+      result += "\\u00";
+      result += hex[(ch >> 4) & 0xf];
+      result += hex[ch & 0xf];
+      p++;
+      continue;
+    }
+
+    if (ch < 0x80) {
+      result += (char)ch;
+      p++;
+      continue;
+    }
+
+    // icUtf8SequenceLength() reads up to three bytes past p.  That is safe here
+    // because it stops at the first byte outside the continuation range, and the
+    // terminating NUL is outside it -- a truncated sequence at the end of the
+    // string returns 0 rather than reading past the terminator.
+    size_t len = icUtf8SequenceLength(p);
+    if (!len) {
+      result += "\\ufffd";
+      p++;
+      continue;
+    }
+
+    result.append((const char*)p, len);
+    p += len;
   }
 
   return result;

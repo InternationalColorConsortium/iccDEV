@@ -73,7 +73,12 @@
 
 static void printUsage()
 {
+#if defined(ICCDEV_ENABLE_QA_FLAGS)
   printf("Usage: iccPawgReport {--json} {--qa-flags --evidence-json} profile\n");
+#else
+  // The default build rejects both flags, so the synopsis must not offer them.
+  printf("Usage: iccPawgReport {--json} profile\n");
+#endif
   printf("\nEmits an ICC PAWG profile assessment checklist report aligned with\n");
   printf("https://www.color.org/profiles/assessment/index.xalter\n");
   printf("  --json   Emit machine-readable JSON evidence instead of text\n");

@@ -277,7 +277,11 @@ run_evidence() {
         printf '%s\n' "$(sanitize_line "$line")" >&2
       done <"$stderr_path"
     fi
-    exit "$status"
+    # Not `exit "$status"`.  The negative controls expect a NONZERO status, so
+    # exiting with the observed one turned the case they exist to catch -- the
+    # tool starting to report success for an unloadable profile -- into
+    # `exit 0`, and CTest read the whole run as PASS.
+    exit 1
   fi
 
   python3 -m json.tool "$stdout_path" >/dev/null
@@ -307,7 +311,11 @@ run_command() {
         printf '%s\n' "$(sanitize_line "$line")" >&2
       done <"$stderr_path"
     fi
-    exit "$status"
+    # Not `exit "$status"`.  The negative controls expect a NONZERO status, so
+    # exiting with the observed one turned the case they exist to catch -- the
+    # tool starting to report success for an unloadable profile -- into
+    # `exit 0`, and CTest read the whole run as PASS.
+    exit 1
   fi
 }
 

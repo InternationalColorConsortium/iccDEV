@@ -85,9 +85,40 @@ int main()
   expect("json control set", icJsonEscape("\b\f\n\r\t"), "\\b\\f\\n\\r\\t");
   expect("json other control byte", icJsonEscape("\x01"), "\\u0001");
 
-  // UTF-8 passes through byte for byte. Escaping these as \u00XX would emit the
-  // code points U+00C3 U+00A9 instead of U+00E9 -- the #1853 mojibake.
+  // Well-formed UTF-8 passes through byte for byte. Escaping these as \u00XX
+  // would emit the code points U+00C3 U+00A9 instead of U+00E9 -- the #1853
+  // mojibake -- so this case is that bug turned into an assertion.
   expect("json utf-8 passthrough", icJsonEscape("caf\xc3\xa9"), "caf\xc3\xa9");
+  expect("json utf-8 3-byte", icJsonEscape("\xe2\x82\xac"), "\xe2\x82\xac");
+  expect("json utf-8 4-byte", icJsonEscape("\xf0\x9f\x8e\xa8"), "\xf0\x9f\x8e\xa8");
+
+  // A JSON text must be valid UTF-8 (RFC 8259 8.1), and these strings carry
+  // paths straight from argv, which on POSIX need not be UTF-8 at all. Passing
+  // a stray byte through would produce a document that will not decode, so
+  // anything that is not part of a well-formed sequence becomes U+FFFD.
+  // U+FFFD is emitted as the \ufffd escape rather than as its three UTF-8
+  // bytes, which keeps the whole document pure ASCII and therefore decodable
+  // whatever encoding a consumer assumes.
+  const char *kRepl = "\\ufffd";
+  expect("json lone latin-1 byte", icJsonEscape("caf\xe9.icc"),
+         std::string("caf") + kRepl + ".icc");
+  expect("json lone continuation", icJsonEscape("\xa9"), kRepl);
+  expect("json truncated 2-byte", icJsonEscape("\xc3"), kRepl);
+  expect("json truncated 3-byte", icJsonEscape("\xe2\x82"),
+         std::string(kRepl) + kRepl);
+
+  // The three malformations a naive "0xC0-0xFF starts a sequence" test lets
+  // through, all of which Unicode 15.0 table 3-7 rejects.
+  expect("json over-long two-byte", icJsonEscape("\xc0\xaf"),
+         std::string(kRepl) + kRepl);
+  expect("json utf-16 surrogate", icJsonEscape("\xed\xa0\x80"),
+         std::string(kRepl) + kRepl + kRepl);
+  expect("json above U+10FFFF", icJsonEscape("\xf5\x80\x80\x80"),
+         std::string(kRepl) + kRepl + kRepl + kRepl);
+
+  // Resynchronisation: a bad byte must not eat the good text after it.
+  expect("json resync after bad byte", icJsonEscape("\xffok"),
+         std::string(kRepl) + "ok");
 
   // Both overloads must agree, since callers mix them freely.
   expect("json std::string overload", icJsonEscape(std::string("a\"b")), "a\\\"b");

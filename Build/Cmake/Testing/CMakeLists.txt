@@ -5761,7 +5761,15 @@ endif()
 # already reference this test by name, so it is registered under the same gate
 # that compiles the --evidence-json code into the tools.  Registering it
 # unconditionally would fail every default build, where the flags do not exist.
-if(ICCDEV_ENABLE_QA_FLAGS)
+# The script hard-requires nine tools and its find_tool() exits 1 rather than
+# skipping when one is missing, so a QA-flags build without ENABLE_ICCXML or
+# ENABLE_ICCJSON would register a test that dies at tool discovery.
+if(ICCDEV_ENABLE_QA_FLAGS
+   AND TARGET iccDumpProfile AND TARGET iccPawgReport
+   AND TARGET iccApplyNamedCmm AND TARGET iccTiffDump
+   AND TARGET iccToXml AND TARGET iccFromXml
+   AND TARGET iccToJson AND TARGET iccFromJson
+   AND TARGET iccRoundTrip)
   iccdev_add_script_test(
     iccdev.qa-target-flags
     120

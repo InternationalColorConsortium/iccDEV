@@ -234,7 +234,12 @@ static int EmitQaEvidenceJson(const char *profilePath, CIccProfile *pIcc,
   printf("\"schema\":\"%s\",", kQaEvidenceSchema);
   printf("\"tool\":\"iccDumpProfile\",");
   printf("\"profile\":\"%s\",", icJsonEscape(profilePath).c_str());
-  printf("\"loadMode\":\"%s\",", bUseRead ? "ReadIccProfile" : "OpenIccProfile");
+  // -v does not load through either of these: it routes through
+  // ValidateIccProfile() and ignores bUseRead entirely, so reporting
+  // "OpenIccProfile" there named a function the run never called.
+  printf("\"loadMode\":\"%s\",",
+         bDumpValidation ? "ValidateIccProfile" :
+         (bUseRead ? "ReadIccProfile" : "OpenIccProfile"));
   printf("\"validationRequested\":%s,", bDumpValidation ? "true" : "false");
   printf("\"validationStatus\":\"%s\",", ValidationStatusName(nStatus));
   printf("\"verbosity\":%d,", verbosity);
@@ -391,7 +396,12 @@ bool DumpTagEntry(CIccProfile *pIcc, IccTagEntry &entry, int nVerboseness)
 
 void printUsage(void)
 {
+#if defined(ICCDEV_ENABLE_QA_FLAGS)
     printf("Usage: iccDumpProfile {-v} {int} {--diag} {--read} {--qa-flags} {--evidence-json} profile {tagId to dump/\"ALL\"}\n");
+#else
+    // The default build rejects both flags, so the synopsis must not offer them.
+    printf("Usage: iccDumpProfile {-v} {int} {--diag} {--read} profile {tagId to dump/\"ALL\"}\n");
+#endif
     printf("\nThe -v option causes profile validation to be performed.\n"
            "The optional integer parameter specifies verboseness of output (1-100, default=100).\n"
            "  --diag   Enable diagnostic mode (size checks, load tracing to stderr)\n"

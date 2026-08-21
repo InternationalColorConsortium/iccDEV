@@ -200,9 +200,9 @@ void Usage()
 {
   printf("iccApplyNamedCmm built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
 
-  printf("Usage 1: iccApplyNamedCmm -cfg config_file_path\n");
+  printf("Usage 1: iccApplyNamedCmm {--evidence-json} -cfg config_file_path\n");
   printf("  Where config_file_path is a json formatted ICC profile application configuration file\n\n");
-  printf("Usage 2: iccApplyNamedCmm {--evidence-json} (-exportcfg/-exportcfganddata config_file_path} {-debugcalc} data_file_path final_data_encoding{:FmtPrecision{:FmtDigits}} interpolation {{-ENV:Name value} profile_file_path Rendering_intent {-PCC connection_conditions_path}}\n\n");
+  printf("Usage 2: iccApplyNamedCmm (-exportcfg/-exportcfganddata config_file_path} {-debugcalc} data_file_path final_data_encoding{:FmtPrecision{:FmtDigits}} interpolation {{-ENV:Name value} profile_file_path Rendering_intent {-PCC connection_conditions_path}}\n\n");
   
   printf("  For final_data_encoding:\n");
   printf("    0 - icEncodeValue (converts to/from lab encoding when samples=3)\n");
@@ -498,6 +498,21 @@ int main(int argc, const char* argv[])
       }
     }
   }
+  // Usage 2 has no destination file -- CIccCfgDataApply::fromArgs clears
+  // m_dstFile unconditionally -- and icOpenRegularWriteFile() returns stdout
+  // for an empty name.  The transformed dataset would therefore go to the same
+  // stream as the evidence: --evidence-json there emitted colour data with a
+  // JSON object stapled to the end, which no parser accepts, and an
+  // outputDigest that was always null.  --evidence-json is a -cfg-with-dstFile
+  // mode, the only form docs/tools-cli-reference.md shows.  Checked here, where
+  // both config paths join, so the refusal costs no transform and writes
+  // nothing.
+  if (bEvidenceJson && cfgApply.m_dstFile.empty()) {
+    fprintf(stderr, "--evidence-json requires a configuration with dstFile set:"
+                    " the transform output would share stdout with the evidence\n");
+    return EXIT_FAILURE;
+  }
+
   LogDebuggerPtr pDebugger;
   
   if (cfgApply.m_debugCalc) {
@@ -784,6 +799,7 @@ int main(int argc, const char* argv[])
     EmitTransformEvidenceJson(cfgApply.m_srcFile.c_str(), profilePath,
                               cfgApply.m_dstFile.c_str());
   }
+
 
   delete pMruCmm;
 
