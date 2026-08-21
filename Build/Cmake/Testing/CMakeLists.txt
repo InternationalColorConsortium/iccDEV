@@ -5709,38 +5709,45 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-specsep-cli-args-regression-tests.sh"
 )
 
-iccdev_add_script_test(
-  iccdev.specsep-corpus-matrix
-  180
-  "iccdev;specsep;tiff;corpus;matrix;regression;asan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-specsep-corpus-matrix.sh"
-)
+# Guarded on the target, like iccdev.tiff-resolution-unit-regression below.
+# Both scripts exit 2 when iccSpecSepToTiff is missing rather than skipping the
+# way the older sibling suites do, so an unguarded registration turns a
+# tools-off configure red instead of simply not offering the tests.
+if(TARGET iccSpecSepToTiff)
+  iccdev_add_script_test(
+    iccdev.specsep-corpus-matrix
+    180
+    "iccdev;specsep;tiff;corpus;matrix;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-specsep-corpus-matrix.sh"
+  )
 
-# The sweep only reaches its accept path when a profile's sample count matches
-# the generated TIFF, so it is registered twice rather than once.  CalcTest is 80
-# deliberately broken profiles at the default 8 channels -- rejection only -- and
-# a single run against it would be green while never once embedding a profile.
-# Testing/ holds exactly one .icc at depth 1, the 3-channel sRGB v4 preference
-# profile, so the second registration covers acceptance for the cost of one file.
-iccdev_add_script_test(
-  iccdev.specsep-profile-sweep
-  300
-  "iccdev;specsep;tiff;profile;sweep;regression;asan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-specsep-profile-sweep.sh"
-  --profile-dir "${ICCDEV_REPO_ROOT}/Testing/CalcTest"
-)
+  # The sweep only reaches its accept path when a profile's sample count matches
+  # the generated TIFF, so it is registered twice rather than once.  CalcTest is
+  # 80 deliberately broken profiles at the default 8 channels -- rejection only
+  # -- and a single run against it would be green while never once embedding a
+  # profile.  Testing/ holds exactly one .icc at depth 1, the 3-channel sRGB v4
+  # preference profile, so the second registration covers acceptance for the
+  # cost of one file.
+  iccdev_add_script_test(
+    iccdev.specsep-profile-sweep
+    300
+    "iccdev;specsep;tiff;profile;sweep;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-specsep-profile-sweep.sh"
+    --profile-dir "${ICCDEV_REPO_ROOT}/Testing/CalcTest"
+  )
 
-iccdev_add_script_test(
-  iccdev.specsep-profile-sweep-accept
-  120
-  "iccdev;specsep;tiff;profile;sweep;regression;asan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-specsep-profile-sweep.sh"
-  --profile-dir "${ICCDEV_REPO_ROOT}/Testing"
-  --channels 3
-)
+  iccdev_add_script_test(
+    iccdev.specsep-profile-sweep-accept
+    120
+    "iccdev;specsep;tiff;profile;sweep;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-specsep-profile-sweep.sh"
+    --profile-dir "${ICCDEV_REPO_ROOT}/Testing"
+    --channels 3
+  )
+endif()
 
 # TIFFTAG_RESOLUTIONUNIT lives in shared CTiffImg code, so it is covered per caller:
 # iccSpecSepToTiff and iccApplyProfiles both write through the same Create(), and

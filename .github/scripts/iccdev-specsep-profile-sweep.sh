@@ -56,9 +56,16 @@ MAX_PROFILES=0
 # accept path at all: the checked-in .icc corpus is 1/3/4-channel, so the
 # default 8 can only ever produce rejections.
 CHANNELS=8
+# Statuses that make this script exit nonzero.  Strict by default: the
+# registered CTests run against checked-in, known-good corpora where any
+# unexpected result is a regression.  iccdev-registry-profile-qa.sh forwards
+# its own --fail-on here, because that corpus deliberately contains malformed
+# profiles and CI runs it with a narrower policy.
+FAIL_ON="ALL"
 
 usage() {
-  echo "Usage: $0 [--profile-dir DIR] [--max-profiles N] [--channels N]"
+  echo "Usage: $0 [--profile-dir DIR] [--max-profiles N] [--channels N] [--fail-on LIST]"
+  echo "  --fail-on: ALL (default), or a comma-separated subset of CRASH,TIMEOUT,QA-ISSUE"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -76,6 +83,11 @@ while [ "$#" -gt 0 ]; do
     --channels)
       [ "$#" -ge 2 ] || { echo "Missing value for --channels" >&2; exit 2; }
       CHANNELS="$2"
+      shift 2
+      ;;
+    --fail-on)
+      [ "$#" -ge 2 ] || { echo "Missing value for --fail-on" >&2; exit 2; }
+      FAIL_ON="$2"
       shift 2
       ;;
     -h|--help)
@@ -141,11 +153,36 @@ if [ "${#PROFILES[@]}" -eq 0 ]; then
   exit 2
 fi
 
+status_is_fail_on() {
+  local status="$1" item
+  [ "$FAIL_ON" = "ALL" ] && return 0
+  IFS=',' read -r -a _fail_on_items <<<"$FAIL_ON"
+  for item in "${_fail_on_items[@]}"; do
+    [ "$item" = "$status" ] && return 0
+  done
+  return 1
+}
+
+# The tool escapes every byte >= 0x7f as \xNN before echoing a path
+# (icSanitizeConsoleText), so requiring the raw path in the log turns a perfectly
+# clean rejection into a FAIL for any profile whose path is not pure ASCII --
+# and arbitrary downloaded corpora are this sweep's headline use.  Only apply
+# that clause when the path can actually appear verbatim.
+path_is_printable_ascii() {
+  case "$1" in
+    *[!\ -~]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
 total=0
 accepted=0
 expected_reject=0
 failed=0
 sanitizer=0
+crash=0
+timeout_count=0
+qa_issue=0
 
 for profile in "${PROFILES[@]}"; do
   if [ "$MAX_PROFILES" -gt 0 ] && [ "$total" -ge "$MAX_PROFILES" ]; then
@@ -165,31 +202,55 @@ for profile in "${PROFILES[@]}"; do
 
   sed "s|^|[$profile_name] |" "$log"
 
+  names_the_profile=1
+  if path_is_printable_ascii "$profile"; then
+    grep -Fq "$profile" "$log" || names_the_profile=0
+  fi
+
+  status=""
+  detail=""
   if grep -Eq \
     'ERROR: AddressSanitizer|LeakSanitizer: detected memory leaks|runtime error:' \
     "$log"; then
     sanitizer=$((sanitizer + 1))
-    failed=$((failed + 1))
-    echo "[$profile_name] FAIL: sanitizer diagnostic"
+    status="CRASH"
+    detail="sanitizer diagnostic"
+  elif [ "$rc" -eq 124 ]; then
+    status="TIMEOUT"
+    detail="timeout after $TIMEOUT_SECONDS seconds"
+  elif [ "$rc" -ge 128 ] && [ "$rc" -le 192 ]; then
+    status="CRASH"
+    detail="died from signal $((rc - 128))"
   elif [ "$rc" -eq 0 ]; then
     if [ -s "$output" ] && grep -Eq '^Profile:[[:space:]]+embedded$' "$log"; then
       accepted=$((accepted + 1))
       echo "[$profile_name] ACCEPT"
     else
-      failed=$((failed + 1))
-      echo "[$profile_name] FAIL: success did not produce an embedded-profile TIFF"
+      status="QA-ISSUE"
+      detail="success did not produce an embedded-profile TIFF"
     fi
   elif { [ "$rc" -eq 1 ] || [ "$rc" -eq 255 ]; } && \
-       grep -Eqi 'profile' "$log" && grep -Fq "$profile" "$log" && \
+       grep -Eqi 'profile' "$log" && [ "$names_the_profile" -eq 1 ] && \
        [ ! -e "$output" ]; then
     expected_reject=$((expected_reject + 1))
     echo "[$profile_name] EXPECTED_REJECT"
-  elif [ "$rc" -eq 124 ]; then
-    failed=$((failed + 1))
-    echo "[$profile_name] FAIL: timeout after $TIMEOUT_SECONDS seconds"
   else
-    failed=$((failed + 1))
-    echo "[$profile_name] FAIL: exit=$rc output_exists=$(test -e "$output" && echo yes || echo no)"
+    status="QA-ISSUE"
+    detail="exit=$rc output_exists=$(test -e "$output" && echo yes || echo no)"
+  fi
+
+  if [ -n "$status" ]; then
+    case "$status" in
+      CRASH) crash=$((crash + 1)) ;;
+      TIMEOUT) timeout_count=$((timeout_count + 1)) ;;
+      QA-ISSUE) qa_issue=$((qa_issue + 1)) ;;
+    esac
+    if status_is_fail_on "$status"; then
+      failed=$((failed + 1))
+      echo "[$profile_name] FAIL($status): $detail"
+    else
+      echo "[$profile_name] $status (tolerated by --fail-on $FAIL_ON): $detail"
+    fi
   fi
 done
 
@@ -203,6 +264,8 @@ fi
 
 printf 'SpecSep profile sweep: %d profiles, %d accepted, %d expected rejects, %d failed, %d sanitizer findings\n' \
   "$total" "$accepted" "$expected_reject" "$failed" "$sanitizer"
+printf 'SpecSep profile sweep statuses: CRASH=%d TIMEOUT=%d QA-ISSUE=%d fail_on=%s\n' \
+  "$crash" "$timeout_count" "$qa_issue" "$FAIL_ON"
 printf 'Generated TIFFs and logs: %s\n' "$OUTDIR"
 
 if [ "$failed" -ne 0 ]; then

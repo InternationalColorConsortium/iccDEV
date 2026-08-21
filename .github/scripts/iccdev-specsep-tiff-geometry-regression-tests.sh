@@ -232,6 +232,12 @@ run_specsep_resolution_unit_preserve() {
   TOTAL=$((TOTAL + 1))
   rm -f "$LOGFILE" "$OUTPUT_TIFF"
 
+  if [ ! -x "$SPECSEP" ]; then
+    fail_case "$name" "missing executable: $SPECSEP"
+    return
+  fi
+
+
   if ! generate_centimeter_inputs; then
     fail_case "$name" "centimeter TIFF generation failed"
     return
@@ -289,6 +295,11 @@ run_specsep_checked_in_truncated_reject() {
 
   TOTAL=$((TOTAL + 1))
   rm -f "$LOGFILE" "$OUTPUT_TIFF"
+
+  if [ ! -x "$SPECSEP" ]; then
+    fail_case "$name" "missing executable: $SPECSEP"
+    return
+  fi
 
   if [ ! -s "$fixture_dir/spec_1" ]; then
     fail_case "$name" "missing checked-in fixture: $fixture_dir/spec_1"

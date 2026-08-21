@@ -145,7 +145,11 @@ run_scan pawg "$SCRIPT_DIR/icc-pawg-qa-scan.sh" text || status=1
 run_scan dumpprofile "$SCRIPT_DIR/icc-dumpprofile-qa-scan.sh" validate-all || status=1
 run_scan roundtrip "$SCRIPT_DIR/icc-roundtrip-qa-scan.sh" intent-1 || status=1
 
-specsep_args=(--profile-dir "$PROFILE_DIR")
+# --fail-on, like run_scan above: this corpus deliberately contains malformed
+# profiles, and CI runs the whole job with --fail-on CRASH,TIMEOUT.  Without
+# forwarding it, an ordinary validation rejection in this lane failed a job the
+# other three lanes were told to tolerate.
+specsep_args=(--profile-dir "$PROFILE_DIR" --fail-on "$FAIL_ON")
 if [[ "$MAX_PROFILES" -gt 0 ]]; then
   specsep_args+=(--max-profiles "$MAX_PROFILES")
 fi

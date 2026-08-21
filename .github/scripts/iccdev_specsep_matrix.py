@@ -281,9 +281,15 @@ class Campaign:
                 and all(int(value) == 0 for value in page.extrasamples),
                 "x-resolution": abs(float(x_resolution) - 144.0) < 0.001,
                 "y-resolution": abs(float(y_resolution) - 96.0) < 0.001,
-                "resolution-unit": resolution_unit is None
-                or int(resolution_unit.value) == 2,
-                "orientation": orientation is None or int(orientation.value) == 1,
+                # `is not None and`, not `is None or`: TiffImg.cpp writes both
+                # tags unconditionally, and an absent ResolutionUnit is exactly
+                # the #2220 defect this check exists to catch -- the tolerant
+                # form passed in precisely that case.  Matches the
+                # rows-per-strip check below.
+                "resolution-unit": resolution_unit is not None
+                and int(resolution_unit.value) == 2,
+                "orientation": orientation is not None
+                and int(orientation.value) == 1,
                 "rows-per-strip": rows_per_strip is not None
                 and int(rows_per_strip.value) == 1,
                 "predictor": (int(predictor.value) if predictor else 1)
@@ -350,9 +356,13 @@ class Campaign:
 
     def run_reject(self, name, arguments, expected):
         output = pathlib.Path(arguments[0]) if arguments else None
-        preexisting = output is not None and (output.exists() or output.is_symlink())
         if output and output.exists() and output.is_file() and not output.is_symlink():
             output.unlink()
+        # Probed after the unlink, not before: a reject that wrongly left a file
+        # behind would otherwise mark itself "preexisting" on the next soak
+        # iteration and disable the no-output assertion for the rest of the run.
+        # A directory target is preexisting by nature and never removable here.
+        preexisting = output is not None and (output.exists() or output.is_symlink())
         result, sanitizer = self.command(arguments)
         passed = (
             sanitizer is None
