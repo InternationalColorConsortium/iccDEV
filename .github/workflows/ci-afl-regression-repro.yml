@@ -117,7 +117,7 @@ jobs:
             echo "- \`iccdev.create-profiles ... Passed\` confirms generated profile setup."
             echo "- \`iccdev.apply-throughput ... Passed\` confirms the #2207 regression executed."
             echo "- \`100% tests passed, 0 tests failed\` confirms the CTest result."
-            echo "- 24 CSV rows ending in \`,ok\` confirm 8 suite cases at each of 1, 2, and 8 threads."
+            echo "- 27 CSV rows ending in \`,ok\` confirm 9 suite cases at each of 1, 2, and 8 threads."
             echo "- \`CHECKSUM MISMATCH\`, \`SOME CASES FAILED\`, and \`FAIL:\` must be absent."
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
@@ -299,7 +299,7 @@ jobs:
                   }
                 }
               }
-              exit invalid || count != 24 || case_count != 8 ? 1 : 0
+              exit invalid || count != 27 || case_count != 9 ? 1 : 0
             }
           ' "$threaded_log"; then
             threaded_signal="PASS"
@@ -327,10 +327,14 @@ jobs:
             echo "| Generated profile fixture | ${fixture_signal} |"
             echo "| #2207 throughput regression | ${regression_signal} |"
             echo "| CTest aggregate | ${ctest_signal} |"
-            echo "| 8 cases x 3 thread counts, CSV status ok | ${threaded_signal} |"
+            echo "| 9 cases x 3 thread counts, CSV status ok | ${threaded_signal} |"
             echo "| No correctness-failure marker | ${checksum_signal} |"
             echo ""
             echo "**Overall replay signal**: ${overall_signal}"
             echo ""
             echo "Mpx/s values are observations only; they are not a performance threshold."
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+          if [ "$overall_signal" != "PASS" ]; then
+            exit 1
+          fi
