@@ -5308,6 +5308,13 @@ if(NOT BASH_EXECUTABLE)
   return()
 endif()
 
+# Registered here as well as inside the if(WIN32) branch above.  That branch ends in
+# return(), so its call list and this one are mutually exclusive rather than duplicated:
+# a function called only up there runs on Windows and nowhere else (#2237).  Nothing in
+# iccdev_add_applytolink_invalid_arg_test() is Windows-specific -- it drives the same
+# iccApplyToLink binary as the v4_missing_desc sibling directly below, which has always
+# been called from both places.
+iccdev_add_applytolink_invalid_arg_test()
 iccdev_add_applytolink_v4_missing_desc_test()
 
 set(ICCDEV_TIMEOUT_COMPAT_DIR "")
@@ -5542,6 +5549,11 @@ iccdev_add_tag_layout_shared_data_test()
 iccdev_add_pawg_q2_tonecurves_test()
 iccdev_add_pawg_q4_characterization_test()
 iccdev_add_pawg_q4_xyz_pcs_decode_test()
+# Same single-call-site omission as iccdev_add_applytolink_invalid_arg_test() above: this
+# was reachable only through the if(WIN32) branch, so the platform-agnostic encoding
+# round trip it pins never ran on Linux or macOS (#2237).  The function already does its
+# own if(WIN32) PATH handling, so calling it unconditionally is safe on every platform.
+iccdev_add_tointernal_fixedint_roundtrip_test()
 iccdev_add_pawg_q1q3_relative_intent_test()
 iccdev_add_cmm_registry_allowlist_test()
 iccdev_add_mpecalc_matrix_overflow_test()
