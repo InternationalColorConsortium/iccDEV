@@ -29,9 +29,42 @@
 # ----- Phase 1: Try CONFIG mode (preferred) -----
 find_package(RefIccMAX CONFIG QUIET)
 
-if(RefIccMAX_FOUND)
+# Accept CONFIG mode only if it actually produced the imported target this
+# module documents. RefIccMAX_FOUND on its own is not that proof: CMake sets it
+# for any RefIccMAXConfig.cmake it loads, and every iccDEV before #712
+# (2026-03-24) shipped a config that predates the target-based package -- it
+# sets REFICCMAX_* variables and defines no RefIccMAX::* targets at all. A 2.3.1
+# install of exactly that shape is what turned this up. One of those left on the search path
+# (a stale system or package-manager prefix) wins Phase 1 over a correct newer
+# install, and returning on the flag alone then hands the caller a "found"
+# package whose every documented target_link_libraries(RefIccMAX::IccProfLib2)
+# line fails at configure time. Fall through to the manual search instead,
+# which builds the targets itself. examples/hello-iccdev/CMakeLists.txt already
+# works around this downstream; the module has to do it too (#2154).
+if(RefIccMAX_FOUND AND (TARGET RefIccMAX::IccProfLib2 OR
+                        TARGET RefIccMAX::IccProfLib2-static))
   # CONFIG already created targets and set variables - nothing more to do
   return()
+endif()
+
+if(RefIccMAX_FOUND)
+  message(STATUS
+    "FindRefIccMAX: ignoring CONFIG package at ${RefIccMAX_DIR} -- it defines "
+    "no RefIccMAX::IccProfLib2 target; falling back to manual discovery")
+  # RefIccMAX_DIR is deliberately left alone. Clearing it would not blacklist
+  # anything -- the next find_package(... CONFIG) just re-runs the search and
+  # finds the same config again -- while it WOULD discard a hint the user set
+  # with -DRefIccMAX_DIR=..., which Phase 2 reads below and which would then be
+  # gone from the cache on every later configure.
+  set(RefIccMAX_FOUND FALSE)
+  set(REFICCMAX_FOUND FALSE)
+  # The rejected config's variables are still live in this scope. REFICCMAX_
+  # INCLUDE_DIRS and REFICCMAX_LIBRARIES are rebuilt unconditionally further
+  # down, but REFICCMAX_VERSION is only overwritten if IccProfLibVer.h is found
+  # and parses -- otherwise find_package_handle_standard_args would report the
+  # DISCARDED package's version for the manually discovered install, and a
+  # find_package(RefIccMAX 2.4 MODULE) would fail against a stale 2.3.1.
+  unset(REFICCMAX_VERSION)
 endif()
 
 # ----- Phase 2: Manual search fallback -----
@@ -66,28 +99,34 @@ find_path(REFICCMAX_ICCXML_INCLUDE_DIR
     IccXML/IccLibXML
 )
 
-# Find shared libraries
+# Find shared libraries.
+#
+# The "d"-suffixed spellings are the same libraries from a Debug install:
+# Build/Cmake/CMakeLists.txt sets CMAKE_DEBUG_POSTFIX "d", so a Debug build
+# installs IccProfLib2d.lib / libIccProfLib2d.so and this module found NOTHING
+# against it -- on every platform, not just Windows. Release names are listed
+# first so a prefix carrying both still resolves to the release library.
 find_library(REFICCMAX_ICCPROFLIB_LIBRARY
-  NAMES IccProfLib2
+  NAMES IccProfLib2 IccProfLib2d
   HINTS ${_hints}
   PATH_SUFFIXES lib lib64
 )
 
 find_library(REFICCMAX_ICCXML_LIBRARY
-  NAMES IccXML2
+  NAMES IccXML2 IccXML2d
   HINTS ${_hints}
   PATH_SUFFIXES lib lib64
 )
 
 # Find static libraries
 find_library(REFICCMAX_ICCPROFLIB_STATIC_LIBRARY
-  NAMES IccProfLib2-static
+  NAMES IccProfLib2-static IccProfLib2-staticd
   HINTS ${_hints}
   PATH_SUFFIXES lib lib64
 )
 
 find_library(REFICCMAX_ICCXML_STATIC_LIBRARY
-  NAMES IccXML2-static
+  NAMES IccXML2-static IccXML2-staticd
   HINTS ${_hints}
   PATH_SUFFIXES lib lib64
 )
@@ -103,7 +142,23 @@ if(REFICCMAX_ICCPROFLIB_INCLUDE_DIR)
   endif()
 endif()
 
-# Standard find_package handling
+# Standard find_package handling.
+#
+# REFICCMAX_ICCPROFLIB_LIBRARY is the SHARED library on purpose: this module
+# reports not-found for a static-only install rather than half-supporting one.
+# A static archive exports none of its own dependencies, so the consumer has to
+# repeat them -- ICC_USE_ZLIB decides whether zlib is among them, ENABLE_ICCXML
+# decides libxml2, and a hand-written find module cannot see which options the
+# install was built with. Accepting the static archive here gets as far as a
+# "DSO missing from command line" link failure on zlib instead of a clean
+# not-found. Consume a static-only install through CONFIG mode, whose exported
+# targets are generated from the build that produced them and carry exactly the
+# right dependencies; that is the path ports/iccdev takes (#176, #2154).
+#
+# The -static targets below are still created whenever the archives sit next to
+# the shared libraries. It is only the "Static-only installs still need generic
+# target names" fallback that this makes unreachable: reaching it requires
+# RefIccMAX::IccProfLib2 to be absent, and FPHSA has already failed by then.
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(RefIccMAX
   REQUIRED_VARS REFICCMAX_ICCPROFLIB_INCLUDE_DIR REFICCMAX_ICCPROFLIB_LIBRARY
@@ -120,6 +175,20 @@ if(RefIccMAX_FOUND)
   # IccXML2 needs libxml2 for transitive linking
   find_package(LibXml2 QUIET)
   find_package(Threads REQUIRED)
+
+  # Prefer the imported target over ${LIBXML2_LIBRARIES}. The installed
+  # IccProfileXml.h includes <libxml/parser.h>, so the dependency has to carry
+  # libxml2's INCLUDE directories as well as its link line -- and a raw library
+  # path carries none. LibXml2::LibXml2 does (FindLibXml2 has defined it since
+  # CMake 3.12); without it every consumer reaching IccXML2 through this module
+  # fails to compile on the first IccXML header, while the CONFIG-mode package
+  # builds fine because its exported target links LibXml2::LibXml2 (#2154).
+  set(_reficcmax_libxml2 "")
+  if(TARGET LibXml2::LibXml2)
+    set(_reficcmax_libxml2 LibXml2::LibXml2)
+  elseif(LIBXML2_LIBRARIES)
+    set(_reficcmax_libxml2 ${LIBXML2_LIBRARIES})
+  endif()
 
   # ---- Create IMPORTED targets ----
 
@@ -163,12 +232,16 @@ if(RefIccMAX_FOUND)
     if(TARGET RefIccMAX::IccProfLib2)
       list(APPEND _xml_deps RefIccMAX::IccProfLib2)
     endif()
-    if(LIBXML2_LIBRARIES)
-      list(APPEND _xml_deps ${LIBXML2_LIBRARIES})
+    if(_reficcmax_libxml2)
+      list(APPEND _xml_deps ${_reficcmax_libxml2})
+    endif()
+    set(_xml_incs "${REFICCMAX_ICCXML_INCLUDE_DIR}")
+    if(NOT TARGET LibXml2::LibXml2 AND LIBXML2_INCLUDE_DIR)
+      list(APPEND _xml_incs "${LIBXML2_INCLUDE_DIR}")
     endif()
     set_target_properties(RefIccMAX::IccXML2 PROPERTIES
       IMPORTED_LOCATION "${REFICCMAX_ICCXML_LIBRARY}"
-      INTERFACE_INCLUDE_DIRECTORIES "${REFICCMAX_ICCXML_INCLUDE_DIR}"
+      INTERFACE_INCLUDE_DIRECTORIES "${_xml_incs}"
       INTERFACE_LINK_LIBRARIES "${_xml_deps}"
       INTERFACE_COMPILE_FEATURES "cxx_std_17"
     )
@@ -183,12 +256,16 @@ if(RefIccMAX_FOUND)
     elseif(TARGET RefIccMAX::IccProfLib2)
       list(APPEND _xml_static_deps RefIccMAX::IccProfLib2)
     endif()
-    if(LIBXML2_LIBRARIES)
-      list(APPEND _xml_static_deps ${LIBXML2_LIBRARIES})
+    if(_reficcmax_libxml2)
+      list(APPEND _xml_static_deps ${_reficcmax_libxml2})
+    endif()
+    set(_xml_static_incs "${REFICCMAX_ICCXML_INCLUDE_DIR}")
+    if(NOT TARGET LibXml2::LibXml2 AND LIBXML2_INCLUDE_DIR)
+      list(APPEND _xml_static_incs "${LIBXML2_INCLUDE_DIR}")
     endif()
     set_target_properties(RefIccMAX::IccXML2-static PROPERTIES
       IMPORTED_LOCATION "${REFICCMAX_ICCXML_STATIC_LIBRARY}"
-      INTERFACE_INCLUDE_DIRECTORIES "${REFICCMAX_ICCXML_INCLUDE_DIR}"
+      INTERFACE_INCLUDE_DIRECTORIES "${_xml_static_incs}"
       INTERFACE_LINK_LIBRARIES "${_xml_static_deps}"
       INTERFACE_COMPILE_FEATURES "cxx_std_17"
     )

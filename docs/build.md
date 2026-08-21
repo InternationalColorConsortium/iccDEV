@@ -390,6 +390,22 @@ platforms) pins the linkage and the literal values, while
 **out of tree** at test time and reports a lost annotation as a single failing
 test with the `LNK2019` in its log.
 
+A third test, `iccdev.installed-package-consumer`, covers the same annotation
+one step further out — on the *installed* package rather than the build tree.
+It stages an install into a temporary prefix and then builds and runs three
+consumers against it: `find_package(RefIccMAX CONFIG)`, `find_package(RefIccMAX
+MODULE)` through `FindRefIccMAX.cmake`, and `examples/hello-iccdev` itself. A
+fourth arm repeats MODULE mode with a target-less `RefIccMAXConfig.cmake`
+planted earlier on `CMAKE_PREFIX_PATH`, the shape every install before #712 has.
+Each
+arm pins the library it resolved back to the staged prefix, so a machine with
+iccDEV installed system-wide cannot quietly satisfy the test with that copy
+instead. The MODULE arm additionally asserts the imported target still carries
+`ICCPROFLIBDLL_DATA_IMPORTS`, which no compile or link step would notice off
+Windows because `IccProfLibConf.h`'s non-PC branch never reads the macro. The
+arms are skipped, with a logged reason, on sanitizer builds (the out-of-tree
+consumers are not instrumented) and the MODULE arms on static-only builds.
+
 `IccUtil.h` also declared `icInfo` until #1897, but that one had no definition
 anywhere in the tree and so failed to link on every platform — a dangling
 declaration rather than an export problem. It is gone; construct a `CIccInfo`
@@ -582,3 +598,11 @@ For a complete consuming-project example, see the
 find_package(RefIccMAX CONFIG REQUIRED)
 target_link_libraries(my_target PRIVATE RefIccMAX::IccProfLib2-static)
 ```
+
+Use `CONFIG` mode for a static-only install, as above.
+`Build/Cmake/Modules/FindRefIccMAX.cmake` reports not-found for one on purpose:
+a static archive carries none of its own dependencies, and which ones the
+consumer has to repeat depends on the options the install was built with
+(`ICC_USE_ZLIB`, `ENABLE_ICCXML`) — something a hand-written find module cannot
+see. The `CONFIG` package is generated from the build that produced it and
+carries them exactly.

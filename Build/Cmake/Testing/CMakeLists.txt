@@ -4120,6 +4120,121 @@ function(iccdev_add_proflib_exported_global_definitions_test)
   )
 endfunction()
 
+# #2154 item 3: the installed find_package() surface, exercised by real consumers.
+#
+# Nothing in CI ran `cmake --install` before this test, and nothing built
+# examples/hello-iccdev at all -- the only find_package(RefIccMAX) in CI is
+# ci-vcpkg-ports.yml, CONFIG mode against a port that forces
+# -DENABLE_SHARED_LIBS=OFF. Every consumer path onto a SHARED install was
+# therefore unguarded, which is how two FindRefIccMAX.cmake defects survived:
+# neither is reachable from inside the build tree, only from a consumer of the
+# installed prefix.
+#
+# Runs everywhere rather than being gated to one platform. The staged prefix is
+# the same on all of them, and the Windows leg additionally covers the dllimport
+# annotation the package has to carry INTERFACE for the eight
+# ICCPROFLIB_DATA_API globals (#1888) -- the module-mode half of which is
+# invisible off Windows, since IccProfLibConf.h's non-PC branch never reads the
+# macro. The check target gains the library targets because the test stages the
+# install from their build artefacts; it deliberately does NOT depend on the
+# command-line tools, and stages by component so a tool that was never built
+# cannot be reported as a broken package.
+function(iccdev_add_installed_package_consumer_test)
+  if(NOT ENABLE_INSTALL_RIM)
+    message(STATUS
+      "ENABLE_INSTALL_RIM is off - skipping iccdev.installed-package-consumer")
+    return()
+  endif()
+
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    message(STATUS
+      "IccProfLib/IccXML not both built - skipping iccdev.installed-package-consumer")
+    return()
+  endif()
+
+  # The consumers are configured and compiled out of tree at test time, so they
+  # carry none of this build's sanitizer flags. Linking a clean executable
+  # against an instrumented shared library is not merely unmeasured, it aborts:
+  # ASan refuses to start unless its runtime comes first in the initial library
+  # list. Reproducing the parent's full sanitizer configuration inside a nested
+  # configure would be its own source of false reds, and nothing about package
+  # consumability is sanitizer-specific -- the ordinary legs cover it.
+  # Every option that feeds SANITIZER_LIST, not just the well-known five:
+  # ENABLE_INTEGER_SANITIZER alone leaves the libraries built with
+  # -fno-sanitize-recover=integer, so an unsigned overflow inside library code
+  # aborts the uninstrumented consumer and reports as a packaging failure.
+  if(ENABLE_SANITIZERS OR ENABLE_ASAN OR ENABLE_UBSAN OR ENABLE_TSAN OR
+     ENABLE_MSAN OR ENABLE_LSAN OR ENABLE_FUZZING OR
+     ENABLE_INTEGER_SANITIZER OR ENABLE_FLOAT_SANITIZER)
+    message(STATUS
+      "sanitizer build - skipping iccdev.installed-package-consumer "
+      "(out-of-tree consumers are not instrumented)")
+    return()
+  endif()
+
+  # Library directories whose runtime component the test stages. Tools are
+  # excluded on purpose; see the comment above.
+  set(_lib_subdirs IccProfLib IccXML)
+  if(TARGET "${TARGET_LIB_ICCJSON}")
+    list(APPEND _lib_subdirs IccJSON)
+  endif()
+  if(TARGET "${TARGET_LIB_ICCCONNECT}")
+    list(APPEND _lib_subdirs IccConnect)
+  endif()
+
+  # Everything the "dev" and "runtime" component installs read, so that
+  # `cmake --build . --target check` produces a stageable tree. The static
+  # archives are in the dev component, so they are needed even though the
+  # consumers link the shared libraries.
+  foreach(_dep IccProfLib2 IccProfLib2-static IccXML2 IccXML2-static
+                IccJSON2 IccJSON2-static IccConnect2 IccConnect2-static)
+    if(TARGET ${_dep})
+      # A static-only configuration aliases IccProfLib2 onto IccProfLib2-static,
+      # and add_dependencies() on an ALIAS is a hard CMake error, so resolve
+      # through the alias rather than trusting the name.
+      get_target_property(_dep_alias ${_dep} ALIASED_TARGET)
+      if(_dep_alias)
+        add_dependencies(check ${_dep_alias})
+      else()
+        add_dependencies(check ${_dep})
+      endif()
+    endif()
+  endforeach()
+
+  add_test(
+    NAME iccdev.installed-package-consumer
+    COMMAND "${CMAKE_COMMAND}"
+      "-DICCDEV_TEST_NAME=iccdev.installed-package-consumer"
+      "-DICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/iccdev-installed-package-consumer"
+      "-DICCDEV_REPO_ROOT=${ICCDEV_REPO_ROOT}"
+      "-DICCDEV_BUILD_DIR=${CMAKE_BINARY_DIR}"
+      "-DICCDEV_CONFIG=$<CONFIG>"
+      "-DICCDEV_GENERATOR=${CMAKE_GENERATOR}"
+      "-DICCDEV_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+      # Without the toolset the ClangCL leg would configure its consumer against
+      # the default v143 while passing it a clang-cl CMAKE_CXX_COMPILER, so the
+      # consumer and the libraries it links come from different compilers.
+      "-DICCDEV_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
+      "-DICCDEV_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+      "-DICCDEV_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}"
+      "-DICCDEV_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
+      "-DICCDEV_VCPKG_TRIPLET=${VCPKG_TARGET_TRIPLET}"
+      "-DICCDEV_LIB_SUBDIRS=${_lib_subdirs}"
+      "-DICCDEV_HAVE_SHARED=${ENABLE_SHARED_LIBS}"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunInstalledPackageConsumerTest.cmake"
+  )
+  # Generous because the test performs three nested configure+build cycles on
+  # top of staging two prefixes; a cold MSVC configure alone can take a minute.
+  set_tests_properties(iccdev.installed-package-consumer PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 900
+    # Four nested configure+build cycles; running them against a runner already
+    # saturated by ctest -j is the likeliest way to spend that timeout.
+    RUN_SERIAL TRUE
+    LABELS "iccdev;install;package;find-package;consumer;issue-2154;regression"
+  )
+endfunction()
+
 # #1830: the JSON BCD version parser used atoi() per component, which accepts a
 # leading '-'; "-1" produced 0xFFFFFFFF and wrapped both the "<< 8" in
 # icJsonParseBCDVersionStr and the caller's "<< 16" (UBSan: "left shift of
@@ -5126,6 +5241,7 @@ if(WIN32)
   iccdev_add_calc_envsig_sign_extension_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
+  iccdev_add_installed_package_consumer_test()
   iccdev_add_json_bcd_version_test()
   iccdev_add_json_writer_move_test()
   iccdev_add_json_fixednum_size_cap_test()
@@ -5410,6 +5526,7 @@ iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_calc_envsig_sign_extension_test()
 iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_proflib_exported_global_definitions_test()
+iccdev_add_installed_package_consumer_test()
 iccdev_add_json_bcd_version_test()
 iccdev_add_json_writer_move_test()
 iccdev_add_json_fixednum_size_cap_test()

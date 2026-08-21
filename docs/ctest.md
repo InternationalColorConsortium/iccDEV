@@ -241,6 +241,7 @@ Windows full tool builds register these tests when all targets are available:
 | `iccdev.windows-pawg-report-smoke` | `Build/Cmake/Testing/RunWindowsPawgReportSmokeTest.cmake` |
 | `iccdev.issue-987-shared-mpe-export` | `Build/Cmake/Testing/RunWindowsSharedExportTest.cmake` |
 | `iccdev.issue-1009-iccjson-profilejson-export` | `Build/Cmake/Testing/RunWindowsIccJsonExportTest.cmake` |
+| `iccdev.installed-package-consumer` | `Build/Cmake/Testing/RunInstalledPackageConsumerTest.cmake` |
 
 The batch-backed Windows tests run through
 `Build/Cmake/Testing/RunWindowsBatchTest.cmake`. The wrapper copies `Testing/`
@@ -299,6 +300,25 @@ through, and deletes a two-profile RGB transform without registering the CMM
 globally. `iccdev.issue-1009-iccjson-profilejson-export` checks that
 `IccJSON2.dll` exports `CIccProfileJson::~CIccProfileJson` for MSVC ABI
 consumers.
+
+`iccdev.installed-package-consumer` runs on every platform and covers the
+*installed* package rather than the build tree. It stages an install into a
+temporary prefix -- component `dev` tree-wide, then component `runtime` per
+library directory, so a command-line tool that was never built cannot be
+reported as a broken package -- checks the installed header and CMake package
+surface, then builds and runs three consumers against it:
+`find_package(RefIccMAX CONFIG)`, `find_package(RefIccMAX MODULE)` through
+`Build/Cmake/Modules/FindRefIccMAX.cmake`, and `examples/hello-iccdev` as
+shipped. A fourth arm repeats MODULE mode with a target-less
+`RefIccMAXConfig.cmake` planted earlier on `CMAKE_PREFIX_PATH`, the shape a
+pre-2.3.2 install has. Each arm pins the library it resolved back to the staged
+prefix, so an iccDEV installed elsewhere on the machine cannot satisfy the test
+in place of this build tree. Unlike the Windows consumers above, this one is
+skipped -- with a logged reason -- on sanitizer builds rather than inheriting
+the parent settings: its consumers are separate CMake projects, and an
+uninstrumented executable cannot load an ASan-instrumented library. The
+MODULE-mode arms are likewise skipped on static-only builds, where
+`FindRefIccMAX.cmake` reports not-found by design.
 
 ## Fixtures and Logs
 
