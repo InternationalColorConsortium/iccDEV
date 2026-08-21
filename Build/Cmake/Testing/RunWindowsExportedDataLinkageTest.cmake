@@ -33,6 +33,7 @@ set(_required_vars
   ICCDEV_ICCPROFLIB_DLL
   ICCDEV_ICCPROFLIB_IMPLIB
   ICCDEV_GENERATOR
+  ICCDEV_ENABLE_ASAN
 )
 
 foreach(_required_var IN LISTS _required_vars)
@@ -87,6 +88,19 @@ set_target_properties(IccProfLib2Runtime PROPERTIES
 add_executable(iccdev-exported-data-consumer iccdev-exported-data-consumer.cpp)
 target_compile_features(iccdev-exported-data-consumer PRIVATE cxx_std_17)
 target_link_libraries(iccdev-exported-data-consumer PRIVATE IccProfLib2Runtime)
+if(ICCDEV_ENABLE_ASAN)
+  if(MSVC)
+    target_compile_options(iccdev-exported-data-consumer PRIVATE /fsanitize=address)
+  else()
+    target_compile_options(iccdev-exported-data-consumer PRIVATE -fsanitize=address)
+    target_link_options(iccdev-exported-data-consumer PRIVATE -fsanitize=address)
+  endif()
+endif()
+if(MSVC AND DEFINED ICCDEV_MSVC_RUNTIME_LIBRARY AND
+   NOT "${ICCDEV_MSVC_RUNTIME_LIBRARY}" STREQUAL "")
+  set_property(TARGET iccdev-exported-data-consumer PROPERTY
+    MSVC_RUNTIME_LIBRARY "${ICCDEV_MSVC_RUNTIME_LIBRARY}")
+endif()
 
 add_custom_command(TARGET iccdev-exported-data-consumer POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -167,12 +181,18 @@ set(_configure_args
   "-DICCDEV_BUILD_DIR=${ICCDEV_BUILD_DIR}"
   "-DICCPROFLIB_IMPLIB=${ICCDEV_ICCPROFLIB_IMPLIB}"
   "-DICCPROFLIB_DLL=${ICCDEV_ICCPROFLIB_DLL}"
+  "-DICCDEV_ENABLE_ASAN=${ICCDEV_ENABLE_ASAN}"
 )
 if(DEFINED ICCDEV_GENERATOR_PLATFORM AND NOT "${ICCDEV_GENERATOR_PLATFORM}" STREQUAL "")
   list(APPEND _configure_args -A "${ICCDEV_GENERATOR_PLATFORM}")
 endif()
 if(DEFINED ICCDEV_CXX_COMPILER AND NOT "${ICCDEV_CXX_COMPILER}" STREQUAL "")
   list(APPEND _configure_args "-DCMAKE_CXX_COMPILER=${ICCDEV_CXX_COMPILER}")
+endif()
+if(DEFINED ICCDEV_MSVC_RUNTIME_LIBRARY AND
+   NOT "${ICCDEV_MSVC_RUNTIME_LIBRARY}" STREQUAL "")
+  list(APPEND _configure_args
+    "-DICCDEV_MSVC_RUNTIME_LIBRARY=${ICCDEV_MSVC_RUNTIME_LIBRARY}")
 endif()
 if(NOT ICCDEV_GENERATOR MATCHES "Visual Studio|Xcode|Multi-Config")
   list(APPEND _configure_args "-DCMAKE_BUILD_TYPE=${ICCDEV_CONFIG}")
@@ -248,7 +268,11 @@ if(NOT EXISTS "${_consumer_exe}")
 endif()
 
 if(NOT _consumer_result EQUAL 0)
-  message(FATAL_ERROR "Consumer exited with ${_consumer_result}; see ${_log_file}")
+  message(FATAL_ERROR
+    "Consumer exited with ${_consumer_result}.\n"
+    "stdout:\n${_consumer_stdout}\n"
+    "stderr:\n${_consumer_stderr}\n"
+    "See ${_log_file}")
 endif()
 
 if(NOT _consumer_stdout MATCHES "all 8 globals linked and matched")

@@ -4930,6 +4930,14 @@ if(WIN32)
     add_dependencies(check iccPawgReport)
   endif()
 
+  # The two shared-library checks below configure consumers outside this CMake
+  # tree. Propagate the parent ASan mode and CRT selection so those executables
+  # load an instrumented IccProfLib2.dll with the same runtime contract.
+  set(_iccdev_windows_consumer_asan OFF)
+  if(ENABLE_ASAN OR ENABLE_SANITIZERS)
+    set(_iccdev_windows_consumer_asan ON)
+  endif()
+
   if(ENABLE_SHARED_LIBS AND TARGET IccProfLib2)
     add_test(
       NAME iccdev.issue-987-shared-mpe-export
@@ -4946,6 +4954,8 @@ if(WIN32)
         "-DICCDEV_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
         "-DICCDEV_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
         "-DICCDEV_CXX_COMPILER_ID=${CMAKE_CXX_COMPILER_ID}"
+        "-DICCDEV_ENABLE_ASAN=${_iccdev_windows_consumer_asan}"
+        "-DICCDEV_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}"
         "-DICCDEV_OBJDUMP=${CMAKE_OBJDUMP}"
         -P "${CMAKE_CURRENT_LIST_DIR}/RunWindowsSharedExportTest.cmake"
     )
@@ -4978,6 +4988,8 @@ if(WIN32)
         "-DICCDEV_GENERATOR=${CMAKE_GENERATOR}"
         "-DICCDEV_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
         "-DICCDEV_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+        "-DICCDEV_ENABLE_ASAN=${_iccdev_windows_consumer_asan}"
+        "-DICCDEV_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}"
         -P "${CMAKE_CURRENT_LIST_DIR}/RunWindowsExportedDataLinkageTest.cmake"
     )
     set_tests_properties(iccdev.proflib-exported-data-dll-linkage PROPERTIES

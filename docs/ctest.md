@@ -288,7 +288,10 @@ and header/file-size diagnostic. `iccdev.issue-987-shared-mpe-export` is a
 focused Windows shared-library regression for MSVC and MinGW. It checks that
 `IccProfLib2.dll` exports `CIccTagMultiProcessElement::NumElements` with
 `dumpbin` or `objdump`, then builds and runs a small consumer against the
-build-tree DLL and import library. `iccdev.windows-iccdevcmm-smoke` loads the
+build-tree DLL and import library. In an AddressSanitizer build, this consumer
+and the exported-data DLL consumer inherit the parent ASan and MSVC runtime
+settings so the executable and instrumented DLL share one runtime contract.
+`iccdev.windows-iccdevcmm-smoke` loads the
 Windows ICM CMM DLL directly, verifies the required `CM*` exports and `ICCD`
 CMM identity, validates `sRGB_v4_ICC_preference.icc`, then creates, translates
 through, and deletes a two-profile RGB transform without registering the CMM
