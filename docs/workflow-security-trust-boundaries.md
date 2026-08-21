@@ -24,7 +24,7 @@ flowchart LR
 | PR code | Build/test with read-only credentials and `persist-credentials: false`. |
 | Helpers | Source `.github/scripts` and sanitizers from `${{ github.event.pull_request.base.sha || github.sha }}`, not the PR checkout. |
 | Privileged automation | `pull_request_target`, releases, package pruning, and labelers must not execute PR-head content before mutation. |
-| Fork PRs | `ci-pr-action` and `ci-json-roundtrip` run only for same-repository heads. `ci-matlab` is intentionally manual-dispatch only, so it has no fork-PR execution path. Do not request Copilot code review; fork automation and agent-policy changes are handled by the trusted-base `Fork Automation Gate`. |
+| Fork PRs | `ci-pr-action` and `ci-json-roundtrip` run only for same-repository heads. `ci-matlab` is intentionally manual-dispatch only, so it has no fork-PR execution path. Fork automation and agent-policy changes are handled by the trusted-base `Fork Automation Gate`. |
 | Exceptions | Mark reviewed exceptions with `preflight: allow-* reason=<short-reason>` so maintainers see them in logs and summaries. |
 
 ## Fork Automation Boundary
@@ -45,11 +45,9 @@ trigger, so its Windows MATLAB job is excluded from the fork-PR guard finding.
 Renames are checked at both paths, and PRs beyond GitHub's 3,000-file
 enumeration limit fail closed.
 
-GitHub-hosted Copilot code review reads instruction and skill content from the
-PR head. The gate cannot make it load the trusted base or stop it after a review
-is requested. Do not request, approve, or rely on Copilot review for fork PRs.
-Repository administrators must exclude forks from automatic Copilot review
-where GitHub supports that configuration.
+Treat instruction and skill content from fork PR heads as untrusted review
+guidance. The gate protects protected-path changes but does not make external
+review systems load the trusted base.
 
 Repository Actions settings must keep the approval policy at **all external
 contributors**. Do not approve a fork workflow run after the `Governance`

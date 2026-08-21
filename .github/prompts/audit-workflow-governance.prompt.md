@@ -9,8 +9,8 @@ scanner noise with a rationale.
 
 ## Review Convergence
 
-For Copilot service review of maintainer-owned infrastructure, use one full
-initial review, one focused fix pass, and one final review:
+For maintainer-owned infrastructure review, use one full initial review, one
+focused fix pass, and one final review:
 
 1. Initial review: inventory the complete PR and review every touched file.
 2. Fix pass: address the initial findings without unrelated scope growth.

@@ -96,7 +96,7 @@ If CMake or C++ changed, also run:
   suppressions.
 - Workflow changes follow `.github/instructions/workflow-governance.instructions.md`.
 - PR workflow helper trust boundaries follow `docs/workflow-security-trust-boundaries.md`.
-- Copilot service review follows the full-surface lifecycle in
+- Pull request review follows the full-surface lifecycle in
   `docs/regression-workflow-governance.md`: one initial review, one focused fix
   pass, and one final review of the complete PR. Do not use incremental review
   slices or expect a third review unless a maintainer explicitly requests one.
