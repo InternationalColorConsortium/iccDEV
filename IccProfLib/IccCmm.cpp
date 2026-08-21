@@ -7139,8 +7139,20 @@ icStatusCMM CIccXformNDLut::Begin()
   // m_nInput/m_nOutput). Assert that bound explicitly and reject an out-of-range
   // count as an invalid LUT so the per-channel curve walks can never be driven past
   // those arrays even if the count reached this object corrupted.
-  const int kMaxLutInputChannels = 256;
-  if (m_nNumInput < 0 || m_nNumInput >= kMaxLutInputChannels)
+  // Bound is 16, not 256. Apply() copies the source into a fixed icFloatNumber
+  // Pixel[16], so a tag declaring more input channels than that cannot be applied
+  // correctly no matter what: the previous 256 bound let such a tag through and
+  // Apply() then clamped the count to 16 per pixel, silently truncating the
+  // transform rather than reporting it. Refusing it here removes both per-pixel
+  // clamps and turns quiet wrong colour into icCmmStatInvalidLut.
+  //
+  // 16 is also the ceiling the format allows: icMaxChannels, which CIccCLUT::Init
+  // enforces on load (see the CWE-674 note at IccTagLut.cpp:2182).
+  const int kMaxLutInputChannels = 16;
+  if (m_nNumInput < 0 || m_nNumInput > kMaxLutInputChannels)
+    return icCmmStatInvalidLut;
+
+  if (m_pTag->m_nOutput > kMaxLutInputChannels)
     return icCmmStatInvalidLut;
 
   m_ApplyCurvePtrA = m_ApplyCurvePtrB = m_ApplyCurvePtrM = NULL;
@@ -7343,8 +7355,8 @@ void CIccXformNDLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
   if (m_bSrcPcsConversion)
     SrcPixel = CheckSrcAbs(pApply, SrcPixel);
 
-  // Prevent array bounds overflow - Pixel has 16 elements
-  int nInput = (m_nNumInput > 16) ? 16 : m_nNumInput;
+  // No clamp: Begin() refuses m_nNumInput above 16, which is what Pixel[] holds.
+  const int nInput = m_nNumInput;
 
   for (i=0; i<nInput; i++)
     Pixel[i] = SrcPixel[i];
@@ -7420,7 +7432,8 @@ void CIccXformNDLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
     }
   }
 
-  int nOutput = (m_pTag->m_nOutput > 16) ? 16 : m_pTag->m_nOutput;
+  // No clamp: Begin() refuses m_pTag->m_nOutput above 16 for the same reason.
+  const int nOutput = m_pTag->m_nOutput;
   for (i=0; i<nOutput; i++) {
     DstPixel[i] = Pixel[i];
   }
