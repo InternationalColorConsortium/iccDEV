@@ -241,10 +241,83 @@ static bool WriteEmbeddedIccProfile(const char* szFname,
   return true;
 }
 
-void Usage() 
+void Usage()
 {
   printf("iccTiffDump built with IccProfLib version " ICCPROFLIBVER "\n\n");
-  printf("Usage: iccTiffDump tiff_file {exported_icc_file}\n\n");
+  printf("Usage: iccTiffDump {--evidence-json} tiff_file {exported_icc_file}\n\n");
+}
+
+static std::string GetProfileId(CIccProfile* pProfile)
+{
+  if (!pProfile)
+    return std::string();
+
+  CIccInfo Fmt;
+  if (Fmt.IsProfileIDCalculated(&pProfile->m_Header.profileID))
+    return Fmt.GetProfileID(&pProfile->m_Header.profileID);
+
+  return std::string();
+}
+
+static std::string GetProfileId(const char* profilePath)
+{
+  if (!profilePath || !profilePath[0])
+    return std::string();
+
+  CIccProfile* pProfile = OpenIccProfile(profilePath);
+  if (!pProfile)
+    return std::string();
+
+  std::string id = GetProfileId(pProfile);
+  delete pProfile;
+  return id;
+}
+
+static void EmitWriteEvidenceJson(const char* tiffPath, const char* outputPath,
+                                  const std::string& embeddedProfileId,
+                                  const std::string& extractedProfileId)
+{
+  std::string outputDigest;
+  bool hasOutputDigest = outputPath && outputPath[0] &&
+    icSha256File(outputPath, outputDigest);
+
+  printf("{");
+  printf("\"schema\":\"iccdev-qa-evidence/v1\",");
+  printf("\"tool\":\"iccTiffDump\",");
+  printf("\"input\":\"%s\",", icJsonEscape(tiffPath).c_str());
+  printf("\"output\":\"%s\",", icJsonEscape(outputPath).c_str());
+  printf("\"qaFlags\":[\"ICCDEV_FLAG_WRITE\"],");
+  if (hasOutputDigest)
+    printf("\"outputDigest\":\"%s\",", outputDigest.c_str());
+  else
+    printf("\"outputDigest\":null,");
+  if (!embeddedProfileId.empty())
+    printf("\"embeddedProfileId\":\"%s\",", icJsonEscape(embeddedProfileId).c_str());
+  else
+    printf("\"embeddedProfileId\":null,");
+  if (!extractedProfileId.empty())
+    printf("\"extractedProfileId\":\"%s\",", icJsonEscape(extractedProfileId).c_str());
+  else
+    printf("\"extractedProfileId\":null,");
+
+  // ICCDEV_FLAG_WRITE carries its evidence in a nested object named for the
+  // flag, the same shape iccApplyNamedCmm uses for ICCDEV_FLAG_TRANSFORM.  The
+  // flat copies above stay for readers that index the document by bare key.
+  // "write" closes the object, so its last member takes no separator.
+  printf("\"write\":{");
+  if (hasOutputDigest)
+    printf("\"outputDigest\":\"%s\",", outputDigest.c_str());
+  else
+    printf("\"outputDigest\":null,");
+  if (!embeddedProfileId.empty())
+    printf("\"embeddedProfileId\":\"%s\",", icJsonEscape(embeddedProfileId).c_str());
+  else
+    printf("\"embeddedProfileId\":null,");
+  if (!extractedProfileId.empty())
+    printf("\"extractedProfileId\":\"%s\"", icJsonEscape(extractedProfileId).c_str());
+  else
+    printf("\"extractedProfileId\":null");
+  printf("}}\n");
 }
 
 void DumpProfileInfo(CIccProfile* pProfile, std::string prefix, int level = 1)
@@ -360,6 +433,13 @@ const char *GetSampleFormatDescription( unsigned int format )
 int main(int argc, icChar* argv[])
 {
   int minargs = 1;
+  bool bEvidenceJson = false;
+
+  if (argc > 1 && !stricmp(argv[1], "--evidence-json")) {
+    bEvidenceJson = true;
+    argv++;
+    argc--;
+  }
   if (argc <= minargs) {
     Usage();
     return 0;
@@ -377,6 +457,7 @@ int main(int argc, icChar* argv[])
     return 1;
   }
 
+  if (!bEvidenceJson) {
   printf("-------------------->Tiff Image Dump<---------------------------\n");
   printf("Filename:          %s\n", srcName.c_str());
   // A physical size only exists when RESOLUTIONUNIT names an absolute unit; under
@@ -405,12 +486,17 @@ int main(int argc, icChar* argv[])
   printf("Resolution:        (%lf x %lf) %s\n", SrcImg.GetXRes(), SrcImg.GetYRes(),
     GetId(SrcImg.GetResolutionUnit(), resolution_units));
   printf("Compression:       %s\n", GetId(SrcImg.GetCompress(), compression_types));
+  }
 
   unsigned char *pProfMem = nullptr;
   unsigned int nLen = 0;
+  std::string embeddedProfileId;
+  std::string extractedProfileId;
   if (SrcImg.GetIccProfile(pProfMem, nLen)) {
-    printf("Profile:           Embedded\n");
-    fflush(stdout);
+    if (!bEvidenceJson) {
+      printf("Profile:           Embedded\n");
+      fflush(stdout);
+    }
 
     if (argc > 2) {
       std::string dstName = icSanitizeConsoleText(argv[2]);
@@ -419,8 +505,11 @@ int main(int argc, icChar* argv[])
         SrcImg.Close();
         return 1;
       }
-      printf("\nProfile extracted byte-for-byte to: %s\n", dstName.c_str());
-      fflush(stdout);
+      extractedProfileId = GetProfileId(argv[2]);
+      if (!bEvidenceJson) {
+        printf("\nProfile extracted byte-for-byte to: %s\n", dstName.c_str());
+        fflush(stdout);
+      }
     }
 
     // Profile description and metadata
@@ -431,7 +520,9 @@ int main(int argc, icChar* argv[])
       return 1;
     }
 
-    DumpProfileInfo(pProfile, " ");
+    embeddedProfileId = GetProfileId(pProfile);
+    if (!bEvidenceJson)
+      DumpProfileInfo(pProfile, " ");
 
     std::string validateReport;
     if (!pProfile->ReadTags(pProfile)) {
@@ -449,13 +540,19 @@ int main(int argc, icChar* argv[])
     }
     delete pProfile;
   } else {
-    printf("Profile:           None\n");
+    if (!bEvidenceJson)
+      printf("Profile:           None\n");
     if (argc > 2) {
-      fprintf(stderr, "\nNo embedded ICC profile to extract\n");
+      fprintf(stderr, bEvidenceJson ? "No embedded ICC profile to extract\n" :
+              "\nNo embedded ICC profile to extract\n");
       SrcImg.Close();
       return 1;
     }
   }
+
+  if (bEvidenceJson)
+    EmitWriteEvidenceJson(argv[1], argc > 2 ? argv[2] : "",
+                          embeddedProfileId, extractedProfileId);
 
   SrcImg.Close();
   return 0;

@@ -5729,6 +5729,21 @@ if(TARGET iccFromXml AND TARGET iccApplyNamedCmm AND TARGET iccApplySearch)
   )
 endif()
 
+# Maintainer QA evidence CLI (#1853).  The ICCDEV_ENABLE_QA_FLAGS option, the
+# *-qa-flags CMake presets, the CI lanes that set it, and docs/build.md all
+# already reference this test by name, so it is registered under the same gate
+# that compiles the --evidence-json code into the tools.  Registering it
+# unconditionally would fail every default build, where the flags do not exist.
+if(ICCDEV_ENABLE_QA_FLAGS)
+  iccdev_add_script_test(
+    iccdev.qa-target-flags
+    120
+    "iccdev;qa-flags;issue-1853;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-qa-target-flags.sh"
+  )
+endif()
+
 iccdev_add_script_test(
   iccdev.specsep-tiff-geometry-regression
   120
