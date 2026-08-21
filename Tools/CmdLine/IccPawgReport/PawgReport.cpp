@@ -71,6 +71,7 @@
 #include <string>
 #include <vector>
 
+#include "IccCmdLineUtil.h"
 #include "IccProfile.h"
 #include "IccMpeCalc.h"
 #include "IccTag.h"
@@ -2251,47 +2252,6 @@ const char *SectionName(char prefix)
   }
 }
 
-std::string JsonEscape(const std::string &s)
-{
-  std::ostringstream oss;
-  for (size_t i = 0; i < s.size(); i++) {
-    unsigned char ch = static_cast<unsigned char>(s[i]);
-    switch (ch) {
-      case '\\':
-        oss << "\\\\";
-        break;
-      case '"':
-        oss << "\\\"";
-        break;
-      case '\b':
-        oss << "\\b";
-        break;
-      case '\f':
-        oss << "\\f";
-        break;
-      case '\n':
-        oss << "\\n";
-        break;
-      case '\r':
-        oss << "\\r";
-        break;
-      case '\t':
-        oss << "\\t";
-        break;
-      default:
-        if (ch < 0x20 || ch > 0x7e) {
-          char buf[8];
-          std::snprintf(buf, sizeof(buf), "\\u%04x", ch);
-          oss << buf;
-        }
-        else {
-          oss << (char)ch;
-        }
-        break;
-    }
-  }
-  return oss.str();
-}
 
 void PrintJsonReport(const char *szFilename, const RawProfile &raw,
                      CIccProfile *pIcc, const std::vector<PawgItem> &items)
@@ -2300,7 +2260,7 @@ void PrintJsonReport(const char *szFilename, const RawProfile &raw,
   printf("  \"tool\": \"iccPawgReport\",\n");
   printf("  \"iccpProfileLibVersion\": \"" ICCPROFLIBVER "\",\n");
   printf("  \"profile\": \"%s\",\n",
-         JsonEscape(szFilename ? szFilename : "(null)").c_str());
+         icJsonEscape(szFilename ? szFilename : "(null)").c_str());
   printf("  \"sizeBytes\": %zu,\n", raw.data.size());
   printf("  \"load\": \"%s\",\n",
          pIcc ? "parsed by IccProfLib" : "raw checks only; IccProfLib parse failed");
@@ -2325,8 +2285,8 @@ void PrintJsonReport(const char *szFilename, const RawProfile &raw,
            item.id,
            SectionName(item.id[0]),
            VerdictText(item.verdict),
-           JsonEscape(item.title).c_str(),
-           JsonEscape(item.detail).c_str(),
+           icJsonEscape(item.title).c_str(),
+           icJsonEscape(item.detail).c_str(),
            i + 1 == items.size() ? "" : ",");
   }
   printf("  ]\n");
@@ -2389,7 +2349,7 @@ int DumpPawgQaEvidence(const char *szFilename)
   printf("{");
   printf("\"schema\":\"iccdev-qa-evidence/v1\",");
   printf("\"tool\":\"iccPawgReport\",");
-  printf("\"profile\":\"%s\",", JsonEscape(szFilename ? szFilename : "").c_str());
+  printf("\"profile\":\"%s\",", icJsonEscape(szFilename ? szFilename : "").c_str());
   printf("\"validationStatus\":\"%s\",", ValidationStatusName(status));
   printf("\"loaded\":%s,", loaded ? "true" : "false");
   if (loaded) {

@@ -110,37 +110,6 @@ static const unsigned char kQaControlledBytes[] = {
   0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41
 };
 
-static std::string JsonEscape(const char *sz)
-{
-  std::string out;
-  if (!sz)
-    return out;
-
-  for (const unsigned char *p = (const unsigned char*)sz; *p; ++p) {
-    switch (*p) {
-    case '\\': out += "\\\\"; break;
-    case '"': out += "\\\""; break;
-    case '\b': out += "\\b"; break;
-    case '\f': out += "\\f"; break;
-    case '\n': out += "\\n"; break;
-    case '\r': out += "\\r"; break;
-    case '\t': out += "\\t"; break;
-    default:
-      if (*p < 0x20) {
-        char buf[8];
-        snprintf(buf, sizeof(buf), "\\u%04x", (unsigned int)*p);
-        out += buf;
-      }
-      else {
-        out += (char)*p;
-      }
-      break;
-    }
-  }
-
-  return out;
-}
-
 static const char *ValidationStatusName(icValidateStatus nStatus)
 {
   switch (nStatus) {
@@ -237,7 +206,7 @@ static void EmitQaValidationTagTable(CIccProfile *pIcc, bool bDumpValidation)
     for (it = pIcc->m_Tags.begin(); it != pIcc->m_Tags.end(); ++it) {
       printf("%s{\"signature\":\"%s\",\"offset\":%u,\"size\":%u}",
              wroteTag ? "," : "",
-             JsonEscape(icGetSig(buf, bufSize, it->TagInfo.sig)).c_str(),
+             icJsonEscape(icGetSig(buf, bufSize, it->TagInfo.sig)).c_str(),
              (unsigned int)it->TagInfo.offset,
              (unsigned int)it->TagInfo.size);
       wroteTag = true;
@@ -264,7 +233,7 @@ static int EmitQaEvidenceJson(const char *profilePath, CIccProfile *pIcc,
   printf("{");
   printf("\"schema\":\"%s\",", kQaEvidenceSchema);
   printf("\"tool\":\"iccDumpProfile\",");
-  printf("\"profile\":\"%s\",", JsonEscape(profilePath).c_str());
+  printf("\"profile\":\"%s\",", icJsonEscape(profilePath).c_str());
   printf("\"loadMode\":\"%s\",", bUseRead ? "ReadIccProfile" : "OpenIccProfile");
   printf("\"validationRequested\":%s,", bDumpValidation ? "true" : "false");
   printf("\"validationStatus\":\"%s\",", ValidationStatusName(nStatus));
@@ -275,7 +244,7 @@ static int EmitQaEvidenceJson(const char *profilePath, CIccProfile *pIcc,
     icHeader *pHdr = &pIcc->m_Header;
     printf("\"profileSize\":%u,", (unsigned int)pHdr->size);
     if (Fmt.IsProfileIDCalculated(&pHdr->profileID))
-      printf("\"profileId\":\"%s\",", JsonEscape(Fmt.GetProfileID(&pHdr->profileID)).c_str());
+      printf("\"profileId\":\"%s\",", icJsonEscape(Fmt.GetProfileID(&pHdr->profileID)).c_str());
     else
       printf("\"profileId\":null,");
     printf("\"tagCount\":%u,", (unsigned int)pIcc->m_Tags.size());
@@ -310,7 +279,7 @@ static int EmitQaEvidenceJson(const char *profilePath, CIccProfile *pIcc,
            (unsigned int)payloadOffset, (unsigned int)payloadSize, kQaPayloadMarker);
     printf("\"controlledPattern\":\"%s\"", bHasControlledBytes ? "0x41414141" : "");
     if (!qaNonce.empty())
-      printf(",\"nonce\":\"%s\"", JsonEscape(qaNonce.c_str()).c_str());
+      printf(",\"nonce\":\"%s\"", icJsonEscape(qaNonce.c_str()).c_str());
     printf("}");
   }
 
@@ -617,8 +586,8 @@ int main(int argc, char* argv[])
 #if defined(ICCDEV_ENABLE_QA_FLAGS)
   // --evidence-json is the only evidence mode iccDumpProfile has, so it turns
   // --qa-flags on by itself.  Rejecting --qa-flags on its own is what stops the
-  // flag from being decorative: it was parsed, consumed and then thrown away
-  // with a (void) cast, so `--qa-flags profile.icc` silently produced an
+  // flag from being decorative: it used to be parsed, consumed and then thrown
+  // away with a (void) cast, so `--qa-flags profile.icc` silently produced an
   // ordinary text dump and exit 0.  iccPawgReport rejects the same combination.
   if (bQaFlags && !bEvidenceJson) {
     fprintf(stderr, "--qa-flags requires --evidence-json for iccDumpProfile\n");
