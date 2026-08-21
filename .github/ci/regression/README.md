@@ -30,11 +30,12 @@ Test 18 (Regression Bisect).
 | `iccdev.mpe-empty-identity` | #1809 | `CIccTagMultiProcessElement::Validate()` raised `icValidateWarning` for a zero-element tag with equal input and output channel counts, although `Read()`/`Write()`/`Begin()`/`Apply()` all define that shape as the identity transform; 79 reference profiles under `Testing/` (148 messages) sat in the warning cohort as a result | Validates a zero-element tag through a Lab/Lab profile and asserts the equal-channel case is `icValidateOK` reported at information level, the unequal-channel case stays a critical error, and the runtime behaviour that justifies the split (`Begin()` true / `Apply()` identity for equal channels, `Begin()` false for unequal) |
 | `iccdev.xml-curve-oversize-file` | #2006 | `CIccTagCurve::SetSize()` refuses a request above its 65536-entry cap by freeing the table, setting `m_nSize` to 0 and returning `true`; the three `File=`/`Format="text"` branches of `CIccTagXmlCurve::ParseXml` checked neither the return nor the resulting size and wrote the parsed samples through `GetData(0)`, which is NULL once the table has been freed — a hand-authored profile with a 65537-entry curve table took `iccFromXml` down with SIGSEGV | Generates the table and document in a build-tree scratch directory (the `File=` attribute resolves relative to the working directory and `IccXmlIsPathSafe` rejects absolute paths), then asserts the over-cap curve is refused with a parse message, a curve of exactly 65536 entries still parses, and the same values authored inline are refused too — the branch guarded since #1158 |
 | `iccdev.mpexml-unknown-reserved` | #1886 | `CIccMpeXmlUnknown::ToXml()` formatted the `Reserved` attribute into `line` but appended `buf`, which still held the element's type signature, so the value was dropped and the signature was injected into the attribute list before the start tag closed — the emitted document did not parse; `ParseXml()` had never read `Reserved` back either | Drives the writer on an element carrying a non-zero `Reserved`, parsing the output with libxml2 rather than grepping it (the defect produced text a substring check would accept), and asserts the value survives a parse/write round-trip, an out-of-range value is refused, and a document without the attribute still reads as zero |
-| `iccdev.proflib-exported-data-linkage` | #1888 | Exported IccProfLib global *variables* could not be linked from a regression executable on Windows shared builds — `WINDOWS_EXPORT_ALL_SYMBOLS` exports functions but not data, so the first test to reference `icMsgValidate*` failed with LNK2019 on the Windows leg alone | Links the exported globals through `${ICCDEV_TEST_LIB_ICCPROFLIB}` so the Windows leg fails here if that fallback is dropped, and pins all eight exported globals — the four report prefixes, both D50 arrays and both solver pointers — so a change to any of them fails here rather than leaving the tests that keep hard-coded copies (`mpe-empty-identity.cpp`, `pawg-q4-xyz-pcs-decode.cpp`) quietly asserting stale text. A ninth declaration, `icInfo`, was excluded here because it had no definition anywhere in the tree; #1897 removed it, and `iccdev.proflib-exported-global-definitions` now guards against another appearing |
+| `iccdev.proflib-exported-data-linkage` | #1888 | Exported IccProfLib global *variables* could not be linked from a regression executable on Windows shared builds — `WINDOWS_EXPORT_ALL_SYMBOLS` exports functions but not data, so the first test to reference `icMsgValidate*` failed with LNK2019 on the Windows leg alone | Links the exported globals through `${TARGET_LIB_ICCPROFLIB}`, so on Windows the link itself asserts that the `ICCPROFLIB_DATA_API` annotation added in #2219 still holds, and pins all eight exported globals — the four report prefixes, both D50 arrays and both solver pointers — so a change to any of them fails here rather than leaving the tests that keep hard-coded copies (`mpe-empty-identity.cpp`, `pawg-q4-xyz-pcs-decode.cpp`) quietly asserting stale text. A ninth declaration, `icInfo`, was excluded here because it had no definition anywhere in the tree; #1897 removed it, and `iccdev.proflib-exported-global-definitions` now guards against another appearing |
 | `iccdev.pcc-reflectance-observer-range` | #1853 | `IIccProfileConnectionConditions::getReflectanceObserver()` applied the illuminant to the combined observer/range-map matrix, which is `rangeRef.steps` wide, rather than to the observer matrix, which is as wide as the illuminant SPD is long — so a reflectance range finer than the illuminant read past the end of the SPD (CWE-125) and every mapped range weighted the reflectance axis instead of the wavelength axis; `Mult()` returns a new matrix without consuming its operands, so the observer matrix also leaked on every mapped range, and `CIccProfile::calcMediaWhiteXYZ()` dereferenced the result without a NULL check | Pins the physical invariant that resampling a flat unit reflectance over the same wavelength span must not move the white point, comparing a matched grid against coarser and finer grids and against hand-computed XYZ; the finer grid runs first so a sanitizer build reports the overflow rather than exiting on the value mismatch, and the no-viewing-conditions case exercises the NULL fall-through |
 | `iccdev.iccviz-pdf-axis-labels` | #1712, #1777 | `DrawAxisPDF` axis-label and custom start/mid/end tick parameterization could regress silently; the CLI also confirmed nothing on a successful run | Runs `iccProfileVisualizePlot` on `sRGB_v4_ICC_preference.icc` in a freshly recreated scratch dir and asserts the emitted LUT PDF carries the axis titles plus the default (`50%`/`100%`) vs reversed (`100`/`50`) tick operators, and that the run prints a success line naming the written PDF (#1777) |
 | `iccdev.v2-legacy-pcs` | #1883 | ICC v2 encodes 16-bit PCS Lab over 0..0xff00 rather than 0..0xffff, and `CIccXform::AdjustPCS` plus the PCS step `CIccCmm::Begin()` splices onto a legacy transform select that encoding on `UseLegacyPCS()`. A clean checkout's `Testing/` corpus is 210 profiles — 208 v5 and 2 v4 — with no v2 profile at all and 0 `mft2`, 0 `mft1` tags, so every `UseLegacyPCS()==true` branch was unreachable from CI | Builds a v2 `mft2` and a v4 `mAB ` profile over identical CLUT content in memory and drives both through `CIccCmm`, asserting the neutral chroma channels come back scaled by exactly 65535/65280 and paper-white L\* expands past 1.0. Also pins the predicate per tag class (`mft2`/`ncl2` true, `mft1`/`mAB `/`mBA ` false) and that `Lab2ToLab4`/`Lab4ToLab2` are exact inverses. Needs no fixture, so a corpus change cannot silently disable it |
 | `iccdev.v2-xml-fixtures` | #1883 | `Testing/**/*.icc` is gitignored, so the tracked artifact for the new v2 corpus entries is `Testing/V2/*.xml` and the profiles are generated from them by `CreateAllProfiles.sh`. Nothing pinned that those sources stay v2: a fixture that drifted to v4 would keep parsing and validating while quietly restoring the original coverage gap | Parses each fixture through the same `CIccProfileXml::LoadXml` path `iccFromXml` uses and asserts the header is still 2.x, the `AToB0Tag` still carries the type the fixture exists to provide (`mft2`, `mft1`, or none for matrix/TRC), and the profile still validates with no critical error |
+| `iccdev.proflib-exported-data-dll-linkage` | #2154 | The workaround for #1888 was to avoid the DLL — three tools and `iccdev.proflib-exported-data-linkage` linked `IccProfLib2-static` on Windows shared builds — so nothing exercised data linkage against `IccProfLib2.dll` at all and the defect could neither fail nor be shown fixed | Configures and compiles a consumer **out of tree** at test time against the built DLL and its import library, with `ICCPROFLIBDLL_DATA_IMPORTS` only, exactly as a `find_package()` consumer receives it. References all eight globals and checks their values, so a lost `ICCPROFLIB_DATA_API` annotation surfaces as one failing test naming the `LNK2019` rather than taking the Windows build down. Out of tree by necessity: a link error in a target the main tree builds fails the BUILD, not a test. Windows shared builds only |
 | `iccdev.proflib-exported-global-definitions` | #1897 | `IccUtil.h` declared `extern ICCPROFLIB_API CIccInfo icInfo;` from the 2015 import and nothing ever defined it. Nothing in-tree referenced it either, so no build ever attempted to resolve the symbol and CI stayed green for ten years while the public header promised a global that no consumer could link on any platform | Derives the list of exported globals from the headers rather than restating it — every `ICCPROFLIB_API extern` declaration in `IccUtil.h` and `IccSolve.h`, in both macro orderings — reads the built library's symbol table with `nm`, and fails naming any declared global the library does not define. Refuses to report success if the header scan finds fewer than 8 declarations or if the control symbol `icMsgValidateWarning` is absent, so a broken scan cannot pass vacuously. Skipped where `nm` is unavailable (MSVC); a missing definition is missing on every platform, so the Linux and macOS legs cover it |
 | `iccdev.struct-name-spelling` | #2028 | `g_icStructNames` listed `icSigBRDFStruct` and `icSigColorantInfoStruct` twice each with the wrong spelling first, and `GetStructSigName` returns the first match — so `brdfTransfromStructure` and `colorantInfoStruct` were published while the second entry for the same signature was reachable only on read. For `brdf` that broke JSON round-tripping outright: `CIccTagJsonStruct::ToJson` writes `GetDisplayName()`, which has always returned the correct `brdfTransformStructure`, and `ParseJson` reads back through this table, so the string iccDEV emitted matched neither entry — `sigStruct` stayed 0, `SetTagStructType` was never called, nothing was appended to `parseStr`, and the tag was rewritten as `privateStruct` with signature `NULL` while `iccFromJson` reported "Profile parsed and saved correctly". XML broke too and louder: `ToXml` emits the same display name as the element name, and `ParseXml`'s `<StructureSignature>` fallback is a form only hand-authored documents carry, so it could not fire — `Unable to find StructureSignature` and the whole document refused to load. Neither had a fixture: there is no BRDF struct tag anywhere in `Testing/` in either format, the three `<StructureSignature>brdf` references all sitting inside commented-out examples | Asserts the corrected name is the one published, that both legacy `brdf` spellings and `colorantInfoStruct` still resolve through the read-only `g_icAltStructNames` without ever being emitted again, and — the check nothing else made — that the factory table and `GetDisplayName()` agree and round-trip for **every** struct signature, not just the two corrected. Controls cover the six siblings that already agreed, an unknown name, and the empty string |
 | `iccdev.chromaticity-validate-oob` | #2094, #2106 | `CIccTagChromaticity::Validate()` checked that the tag carries three channels, reported anything else as a critical error, and then fell through into the colorant-encoding switch anyway — which compares `m_xy[0]`, `m_xy[1]` and `m_xy[2]` against three fixed xy pairs. On a shorter tag that is a 4-byte heap read past the end of the array (CWE-125); ASan puts it at `IccTagBasic.cpp:4563`, 0 bytes after the 8-byte region `SetSize()` allocated at `IccTagBasic.cpp:4514`. All three readers produce such a tag: `Read()` sizes the array from the tag's declared *size* — `nNum = (size - 12) / 8`, with the declared channel count only required not to exceed it and then discarded by `SetSize(nNum)`; `CIccTagXmlChromaticity::ParseXml()` sizes it from the number of `<Channel>` elements; and `CIccTagJsonChromaticity::ParseJson()` from the length of the `channels` array. So a 20-byte `chromaticityTag`, one `<Channel>`, or one `channels` entry is enough. Two more defects in the same class sit behind it — the constructor clamped the channel *count* up to three while allocating the caller's raw `nSize`, so `CIccTagChromaticity(1)` was a three-channel tag over a one-entry array before anything was parsed, and neither the copy constructor nor `operator=` copied `m_nColorantType` while the default constructor never initialised it (CWE-457, the #2000 defect in another tag), so a copied tag switched on an indeterminate encoding. No `chromaticityTag` exists anywhere in the corpus — not in the 208 tracked XML documents, the 105 tracked `.icc` files, or the 254 profiles `CreateAllProfiles.sh` generates under `Testing/` — so none of it had coverage | Validates one- and two-channel tags carrying the *correct* ITU values for the entries they do have — so the encoding mismatch can only be reported by reading entries that are not there — and asserts the count error is raised and the comparison does not run. Controls pin that a conforming three-channel ITU tag still validates OK, that wrong values in a full-length tag are still reported non-compliant (or the fix would "work" by disabling the check), and that a short tag claiming no encoding is still left alone. Also pins the constructor invariant and the encoding surviving copy construction, `NewCopy()` and `operator=`, with a non-zero fixture: measured against the unfixed library the lost member reads back as 0, which an `icColorantUnknown` fixture would have accepted. Levels 9-13 cover the #2106 punch-list item on the same tag's read path: `Read()` sized the tag from the tag-table size rather than from the channel count the element declares, so a three-channel tag inside a 92-byte element became a ten-channel tag and `Write()` re-emitted ten, persisting the rewrite for anything that round-tripped the profile — and with no colorant encoding claimed `Validate()` reports nothing, so it was silent end to end. `CIccTagNamedColor2::Read` faces the same two-source situation and uses its size-derived count only as a capacity guard. Controls pin that an element too short for its declared count is still rejected and that a padded element still parses at its declared count; a further level pins the one deliberate acceptance change, an element declaring zero channels |
@@ -64,18 +65,20 @@ Test 18 (Regression Bisect).
 | `.github/workflows/ci-pr-win.yml` | MinGW toolchain | Keep normal Windows PR CI from regressing MinGW CMake/tool support | Runs a UCRT64 MinGW Release static build and the full registered MinGW CTest set, including `iccdev.windows-icc-dump-profile-smoke` and `iccdev.iccconnect-threaded-cmm` |
 | `.github/workflows/ci-pr-win.yml` | #1025, #1036 | Keep Windows ClangCL warning output focused on source signal instead of known CRT/deprecation noise | Runs the ClangCL smoke build with ClangCL-only noise-control flags, classifies warning categories, and uploads sanitized warning logs |
 
-## Referencing exported IccProfLib globals (#1888)
+## Referencing exported IccProfLib globals (#1888, fixed in #2219)
 
-A test may call any exported IccProfLib **function** freely. Referencing an
-exported global **variable** is different, and gets it wrong on Windows only.
+A test may reference any exported IccProfLib **function or global variable**
+freely: link `${TARGET_LIB_ICCPROFLIB}` and include the header. Nothing special
+is required. The rest of this section is why that sentence is short, and what to
+do if a Windows leg ever contradicts it.
 
 On a Windows shared build the library is `IccProfLib2.dll`, exported by CMake's
 `WINDOWS_EXPORT_ALL_SYMBOLS` rather than by `__declspec` annotations — MSVC is
 deliberately excluded from the `ICCPROFLIBDLL_EXPORTS` definition, a decision
 taken in #764. That mechanism auto-exports functions but **not global data**, and
-IccProfLib carries no `dllexport`/`dllimport` on its variables. A test compiling
-with `ICCPROFLIB_API` empty therefore emits a direct data reference with no
-`__imp_` indirection, and the link fails:
+IccProfLib carried no `dllexport`/`dllimport` on its variables. A test compiling
+with `ICCPROFLIB_API` empty therefore emitted a direct data reference with no
+`__imp_` indirection, and the link failed:
 
 ```
 mpe-empty-identity.obj : error LNK2019: unresolved external symbol
@@ -83,10 +86,19 @@ mpe-empty-identity.obj : error LNK2019: unresolved external symbol
 fatal error LNK1120: 3 unresolved externals
 ```
 
-Linux and macOS have no import-library model, so **a green local pre-flight will
-not catch this** — only the Windows CI leg will.
+Linux and macOS have no import-library model, so **a green local pre-flight
+would not have caught it** — only the Windows CI leg did.
 
-The eight affected symbols:
+#2219 fixed it. The eight globals carry `ICCPROFLIB_DATA_API` — a macro kept
+separate from `ICCPROFLIB_API` so real `dllexport`/`dllimport` could be added
+without flipping the ~308 incomplete `ICCPROFLIB_API` annotations. The shared
+target defines `ICCPROFLIBDLL_DATA_EXPORTS` `PRIVATE` and
+`ICCPROFLIBDLL_DATA_IMPORTS` `INTERFACE`, so linking it is all a consumer needs
+to do. #2154 then retired the workarounds this section used to prescribe: the
+`${ICCDEV_TEST_LIB_ICCPROFLIB}` indirection is gone, and the three tools that
+linked `IccProfLib2-static` on Windows link the DLL like everything else.
+
+The eight symbols:
 
 | Symbol | Header |
 |---|---|
@@ -102,27 +114,24 @@ construct a `CIccInfo` where one is needed. `iccdev.proflib-exported-global-defi
 audits the headers against the built library so another one cannot appear
 unnoticed.
 
-Choose by what else the test links:
+Two CTests hold the fix in place, and they fail differently on purpose:
 
-- **IccProfLib only** — link `${ICCDEV_TEST_LIB_ICCPROFLIB}` instead of
-  `${TARGET_LIB_ICCPROFLIB}`. It resolves to the static library on Windows shared
-  builds, the same fallback `iccDumpProfile`, `iccProfilePlot` and
-  `wxProfileDump` already use.
-- **Also links IccXML or IccJson** — you cannot use that fallback. Those
-  libraries link `${TARGET_LIB_ICCPROFLIB}` `PUBLIC`, so pulling in the static
-  IccProfLib as well would load the library twice in one process, once inside
-  the DLL and once in the executable, giving two copies of its globals. Assert on
-  literal values instead. The tests in that position today are
-  `json-sparsematrix-huaf.cpp`, `xml-writer-graceful-degrade.cpp` and
-  `json-bcd-version-parse.cpp`.
+- `iccdev.proflib-exported-data-linkage` — in-tree, every platform. References
+  all eight globals and pins their values. On Windows its **link** is the
+  assertion, which means a lost annotation takes the whole build down rather
+  than turning one test red.
+- `iccdev.proflib-exported-data-dll-linkage` — Windows shared builds. Configures
+  and compiles a consumer **out of tree** at test time against the built DLL and
+  its import library, so the same loss surfaces as one failing test with the
+  `LNK2019` in its log. An in-tree target could never express that.
 
-`mpe-empty-identity.cpp` and `pawg-q4-xyz-pcs-decode.cpp` also assert on
-literals, but **not** for that reason — both link IccProfLib alone, so either
-could take the fallback. They were written before `${ICCDEV_TEST_LIB_ICCPROFLIB}`
-existed (#1887 landed hours ahead of #1894), which left hard-coding as the only
-way past the LNK2019 at the time. `mpe-empty-identity.cpp` records a second
-reason that still holds: the literal text is what a log scan greps for, so
-pinning it catches a rename that reading the global would hide.
+Several tests still assert on hard-coded copies of these values rather than
+reading the globals. `json-sparsematrix-huaf.cpp`, `xml-writer-graceful-degrade.cpp`
+and `json-bcd-version-parse.cpp` co-link IccXML or IccJson;
+`mpe-empty-identity.cpp` and `pawg-q4-xyz-pcs-decode.cpp` were written before the
+fix. `mpe-empty-identity.cpp` records a reason that still holds either way: the
+literal text is what a log scan greps for, so pinning it catches a rename that
+reading the global would hide.
 
 Literals copied out of the library drift silently, so
 `iccdev.proflib-exported-data-linkage` pins the real globals. If it fails after a

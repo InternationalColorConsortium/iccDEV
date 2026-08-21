@@ -124,12 +124,23 @@ if(RefIccMAX_FOUND)
   # ---- Create IMPORTED targets ----
 
   # IccProfLib2 (shared)
+  #
+  # ICCPROFLIBDLL_DATA_IMPORTS matches what the CONFIG-mode package carries: the
+  # shared IccProfLib target sets it INTERFACE, so a consumer sees __declspec(
+  # dllimport) on the eight ICCPROFLIB_DATA_API globals (#2154, from #1888).
+  # Without it a Windows consumer that reaches iccDEV through THIS module rather
+  # than through install(EXPORT) compiles with the macro empty, emits a direct
+  # data reference with no __imp_ indirection, and still gets LNK2019 -- the one
+  # remaining way to hit the defect #2219 fixed. Deliberately not set on the
+  # -static target below, which must keep a plain extern. Inert off Windows:
+  # IccProfLibConf.h's non-PC branch does not read this macro.
   if(REFICCMAX_ICCPROFLIB_LIBRARY AND NOT TARGET RefIccMAX::IccProfLib2)
     add_library(RefIccMAX::IccProfLib2 UNKNOWN IMPORTED)
     set_target_properties(RefIccMAX::IccProfLib2 PROPERTIES
       IMPORTED_LOCATION "${REFICCMAX_ICCPROFLIB_LIBRARY}"
       INTERFACE_INCLUDE_DIRECTORIES "${REFICCMAX_ICCPROFLIB_INCLUDE_DIR}"
       INTERFACE_LINK_LIBRARIES "Threads::Threads"
+      INTERFACE_COMPILE_DEFINITIONS "ICCPROFLIBDLL_DATA_IMPORTS"
       INTERFACE_COMPILE_FEATURES "cxx_std_17"
     )
   endif()

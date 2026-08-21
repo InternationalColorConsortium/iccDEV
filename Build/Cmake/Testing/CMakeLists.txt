@@ -50,40 +50,15 @@ function(iccdev_add_regression_executable TARGET_NAME)
   add_dependencies(build-test-binaries "${TARGET_NAME}")
 endfunction()
 
-# Link target for regression executables that reference an exported IccProfLib
-# global *variable* rather than only its functions (#1888).
-#
-# On a Windows shared build the library is IccProfLib2.dll, exported by CMake's
-# WINDOWS_EXPORT_ALL_SYMBOLS rather than by __declspec annotations: MSVC is
-# deliberately excluded from the ICCPROFLIBDLL_EXPORTS definition in
-# Build/Cmake/IccProfLib/CMakeLists.txt, a decision made in #764 and recorded in
-# the comment there. WINDOWS_EXPORT_ALL_SYMBOLS auto-exports functions; global
-# data still needs explicit dllexport/dllimport, which IccProfLib does not carry.
-# A consumer compiling with ICCPROFLIB_API empty therefore emits a direct data
-# reference with no __imp_ indirection and fails to link (LNK2019/LNK2001), while
-# every function in the same header thunks normally. Linux and macOS are immune,
-# so a green local pre-flight says nothing about this.
-#
-# The three tools with the same problem already resolve it this way -- see
-# Build/Cmake/Tools/{IccDumpProfile,IccProfilePlot,wxProfileDump}/CMakeLists.txt.
-#
-# USE THIS ONLY FOR TESTS THAT LINK IccProfLib ALONE. IccXML2 and IccJson link
-# ${TARGET_LIB_ICCPROFLIB} PUBLIC, so a test that links one of those *and* the
-# static IccProfLib pulls the library into the process twice -- once inside the
-# DLL, once in the executable -- giving two copies of its globals. Tests that
-# link IccXML/IccJson must keep using ${TARGET_LIB_ICCPROFLIB} and must not
-# reference exported library data at all; assert on literal values instead, as
-# .github/ci/regression/{json-sparsematrix-huaf,xml-writer-graceful-degrade,
-# json-bcd-version-parse}.cpp do -- those three are the tests that actually link
-# one of the two libraries. mpe-empty-identity.cpp and pawg-q4-xyz-pcs-decode.cpp
-# also hard-code literals, but they link IccProfLib alone and simply predate this
-# variable; they are eligible for it, not barred from it.
-if(WIN32 AND ENABLE_SHARED_LIBS AND TARGET IccProfLib2-static)
-  set(ICCDEV_TEST_LIB_ICCPROFLIB IccProfLib2-static)
-else()
-  set(ICCDEV_TEST_LIB_ICCPROFLIB ${TARGET_LIB_ICCPROFLIB})
-endif()
-message(STATUS "ICCDEV_TEST_LIB_ICCPROFLIB  = ${ICCDEV_TEST_LIB_ICCPROFLIB}")
+# Regression executables link ${TARGET_LIB_ICCPROFLIB}, functions and exported
+# global data alike. There used to be a second link target here,
+# ${ICCDEV_TEST_LIB_ICCPROFLIB}, which resolved to IccProfLib2-static on Windows
+# shared builds because WINDOWS_EXPORT_ALL_SYMBOLS auto-exports functions but not
+# data (#1888): a test referencing icMsgValidateWarning or icD50XYZ emitted a
+# direct data reference with no __imp_ indirection and failed with LNK2019. #2219
+# gave those eight globals real dllexport/dllimport via ICCPROFLIB_DATA_API, so
+# #2154 retired the fallback here and in the three tools that carried the same
+# workaround. See docs/build.md, "Exported global data".
 
 add_custom_target(check-fast
   COMMAND "${CMAKE_CTEST_COMMAND}"
@@ -527,10 +502,7 @@ endfunction()
 # copied from, the load never descending past one level, and the nLoaded==0
 # condition that drives the second-level dump fallback). See the long comment
 # at the top of .github/ci/regression/embedded-profile-onelevel-load.cpp for
-# the full story. This test links IccProfLib alone and calls functions only
-# (no exported library data), so ${TARGET_LIB_ICCPROFLIB} is correct here --
-# see the variable's own comment above for when ICCDEV_TEST_LIB_ICCPROFLIB is
-# needed instead.
+# the full story. This test links IccProfLib alone and calls functions only.
 #
 # Most of what this test checks is an in-memory nested profile built and
 # saved to a scratch file at runtime (path passed as argv[1]), so it needs no
@@ -774,14 +746,14 @@ function(iccdev_add_pawg_q4_xyz_pcs_decode_test)
 endfunction()
 
 function(iccdev_add_tointernal_fixedint_roundtrip_test)
-  if(NOT TARGET "${ICCDEV_TEST_LIB_ICCPROFLIB}")
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
   endif()
 
   iccdev_add_regression_executable(iccToInternalFixedIntRoundtripTest
     "${ICCDEV_REPO_ROOT}/.github/ci/regression/tointernal-fixedint-roundtrip.cpp"
   )
-  target_link_libraries(iccToInternalFixedIntRoundtripTest PRIVATE ${ICCDEV_TEST_LIB_ICCPROFLIB})
+  target_link_libraries(iccToInternalFixedIntRoundtripTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
   add_dependencies(check iccToInternalFixedIntRoundtripTest)
 
   add_test(
@@ -796,7 +768,7 @@ function(iccdev_add_tointernal_fixedint_roundtrip_test)
   if(WIN32)
     set(_tointernal_env_mods
       "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccToInternalFixedIntRoundtripTest>"
-      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${ICCDEV_TEST_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
     )
     foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
       list(APPEND _tointernal_env_mods
@@ -3972,14 +3944,16 @@ function(iccdev_add_calc_envsig_sign_extension_test)
 endfunction()
 
 # #1888: proves a regression executable can link an exported IccProfLib global
-# *variable*. WINDOWS_EXPORT_ALL_SYMBOLS exports functions but not data, so on a
-# Windows shared build this only links via ${ICCDEV_TEST_LIB_ICCPROFLIB}; if that
-# fallback is dropped the Windows leg fails here rather than in whichever new
-# test next reaches for library data. Also pins the values that the tests which
-# cannot link these symbols -- anything co-linking IccXML -- hard-code instead.
-# Links IccProfLib only, by design: co-linking IccXML would load IccProfLib twice.
+# *variable*. WINDOWS_EXPORT_ALL_SYMBOLS exports functions but not data, so until
+# #2219 gave the eight globals ICCPROFLIB_DATA_API this linked on a Windows shared
+# build only by falling back to IccProfLib2-static. That fallback is retired
+# (#2154): the test now links the DLL like every other, and if the annotation is
+# lost the Windows leg fails at BUILD time here -- while
+# iccdev.proflib-exported-data-dll-linkage, which builds its consumer out of tree,
+# reports the same loss as a test failure. Also pins the values that tests which
+# read no library data hard-code instead.
 function(iccdev_add_proflib_exported_data_linkage_test)
-  if(NOT TARGET "${ICCDEV_TEST_LIB_ICCPROFLIB}")
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
   endif()
 
@@ -3991,7 +3965,7 @@ function(iccdev_add_proflib_exported_data_linkage_test)
     "${ICCDEV_REPO_ROOT}/IccProfLib"
   )
   target_link_libraries(iccProfLibExportedDataLinkageTest PRIVATE
-    ${ICCDEV_TEST_LIB_ICCPROFLIB})
+    ${TARGET_LIB_ICCPROFLIB})
   add_dependencies(check iccProfLibExportedDataLinkageTest)
 
   add_test(
@@ -4006,7 +3980,7 @@ function(iccdev_add_proflib_exported_data_linkage_test)
   if(WIN32)
     set(_exported_data_windows_env_mods
       "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccProfLibExportedDataLinkageTest>"
-      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${ICCDEV_TEST_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
     )
     foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
       list(APPEND _exported_data_windows_env_mods
@@ -4288,8 +4262,7 @@ endfunction()
 # legacy transform. This test builds both a v2 'mft2' and a v4 'mAB ' profile
 # over identical CLUT content in memory and asserts the two disagree by exactly
 # the 65535/65280 factor, so it cannot be disabled by a corpus change. Links
-# IccProfLib alone and references no exported library data, so it is eligible for
-# ${ICCDEV_TEST_LIB_ICCPROFLIB}.
+# IccProfLib alone and references no exported library data.
 function(iccdev_add_v2_legacy_pcs_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -4302,7 +4275,7 @@ function(iccdev_add_v2_legacy_pcs_test)
   target_include_directories(iccV2LegacyPcsTest PRIVATE
     "${ICCDEV_REPO_ROOT}/IccProfLib"
   )
-  target_link_libraries(iccV2LegacyPcsTest PRIVATE ${ICCDEV_TEST_LIB_ICCPROFLIB})
+  target_link_libraries(iccV2LegacyPcsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
   add_dependencies(check iccV2LegacyPcsTest)
 
   if(WIN32)
@@ -4346,8 +4319,7 @@ endfunction()
 # declares a 2.x header, still carries the LUT type it exists to provide, and
 # still validates without a critical error -- a fixture that silently drifted to
 # v4 would otherwise restore the original coverage gap while looking healthy.
-# Needs IccXML (CIccProfileXml) + IccProfLib; skipped where IccXML is not built,
-# and barred from ${ICCDEV_TEST_LIB_ICCPROFLIB} because it co-links IccXML.
+# Needs IccXML (CIccProfileXml) + IccProfLib; skipped where IccXML is not built.
 function(iccdev_add_v2_xml_fixtures_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
     return()
@@ -4986,11 +4958,11 @@ if(WIN32)
   endif()
 
   # #2154: the DLL-side counterpart to iccdev.proflib-exported-data-linkage.
-  # That test links IccProfLib2-static on Windows precisely to sidestep the
-  # exported-data problem, so it passes whether or not the eight globals carry a
-  # working dllexport/dllimport. This one links the DLL and therefore fails if
-  # the ICCPROFLIB_DATA_API annotation is lost. Out-of-tree by necessity: a link
-  # error in a target built here would fail the build rather than a test.
+  # Both now link the DLL, but they fail differently, which is why both stay: an
+  # in-tree target that cannot link takes the BUILD down, so it can never be
+  # expressed as a red test. This one configures and compiles its consumer out of
+  # tree at test time, so a lost ICCPROFLIB_DATA_API annotation surfaces as a
+  # single failing test with the LNK2019 in its log.
   if(ENABLE_SHARED_LIBS AND TARGET IccProfLib2)
     add_test(
       NAME iccdev.proflib-exported-data-dll-linkage

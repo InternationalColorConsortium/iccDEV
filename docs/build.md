@@ -335,45 +335,77 @@ That arrangement dates from #764, and the same file records why hidden visibilit
 is not used on GCC/Clang — `ICCPROFLIB_API` annotations are incomplete
 (~308 partial uses across 43 headers) and `IccXML` has none at all.
 
-One consequence is worth knowing before it costs a CI round (#1888):
+### Exported global data (#1888, fixed in #2219)
+
+One consequence of that arrangement cost several CI rounds before it was fixed:
 
 > `WINDOWS_EXPORT_ALL_SYMBOLS` auto-exports **functions**. Exported global
-> **variables** still require explicit `dllexport`/`dllimport`, which IccProfLib
-> does not carry. Referencing one from outside the library fails to link on
+> **variables** still require explicit `dllexport`/`dllimport`. IccProfLib
+> carried none, so referencing one from outside the library failed to link on
 > Windows shared builds with `LNK2019`/`LNK1120`, while every function in the
-> same header links normally.
+> same header linked normally.
 
-Linux and macOS have no import-library model and are unaffected, so this never
-appears in a local pre-flight on those platforms.
+Linux and macOS have no import-library model and were never affected, so this
+never appeared in a local pre-flight on those platforms.
 
-Affected symbols are `g_pIccMatrixSolver` and `g_pIccMatrixInverter`
+Eight globals are involved: `g_pIccMatrixSolver` and `g_pIccMatrixInverter`
 (`IccSolve.h`), and `icD50XYZ`, `icD50XYZxx` and the four `icMsgValidate*`
-message prefixes (`IccUtil.h`). Each declaration carries a note. `IccUtil.h` also
-declared `icInfo` until #1897, but that one had no definition anywhere in the tree
-and so failed to link on every platform — a dangling declaration rather than an
-export problem. It is gone; construct a `CIccInfo` where one is needed. The
-`iccdev.proflib-exported-global-definitions` CTest now checks every
-`ICCPROFLIB_API extern` declaration in these headers against the built library's
-symbol table, so a declaration added without a definition fails CI rather than
-reaching a consumer.
+message prefixes (`IccUtil.h`). They now carry `ICCPROFLIB_DATA_API`, a macro
+kept deliberately separate from `ICCPROFLIB_API` so real `dllexport`/`dllimport`
+could be added without flipping the ~308 incomplete `ICCPROFLIB_API` annotations
+and changing how every class and function is exported. The shared IccProfLib
+target defines `ICCPROFLIBDLL_DATA_EXPORTS` `PRIVATE` and
+`ICCPROFLIBDLL_DATA_IMPORTS` `INTERFACE`, so anything linking it — in-tree tools
+and `find_package()` consumers alike — sees `dllimport`. The static target
+deliberately gets neither and keeps a plain `extern`.
 
-Existing consumers handle it in one of two ways:
+Nothing special is needed to consume these symbols now. Link
+`RefIccMAX::IccProfLib2` and reference them; the workarounds the tree used to
+carry are gone (#2154):
 
-- **Tools** link `IccProfLib2-static` on Windows shared builds — see
-  `Build/Cmake/Tools/{IccDumpProfile,IccProfilePlot,wxProfileDump}/CMakeLists.txt`.
-  Regression executables get the same fallback through
-  `${ICCDEV_TEST_LIB_ICCPROFLIB}`.
-- **Consumers that also link `IccXML`/`IccJson`** cannot use that fallback, since
-  those libraries link `IccProfLib` `PUBLIC` and the static copy would load the
-  library twice in one process. They avoid the symbol and use literal values.
+- **Tools** — `iccDumpProfile`, `iccProfilePlot` and `wxProfileDump` linked
+  `IccProfLib2-static` on Windows shared builds; all three now link
+  `${TARGET_LIB_ICCPROFLIB}` on every platform.
+- **Regression executables** — the `${ICCDEV_TEST_LIB_ICCPROFLIB}` indirection
+  that applied the same fallback is retired; tests link
+  `${TARGET_LIB_ICCPROFLIB}` directly.
+- **Consumers that also link `IccXML`/`IccJson`** could never use that fallback
+  anyway, since those libraries link `IccProfLib` `PUBLIC` and a static copy
+  would load the library twice in one process. That constraint is moot now.
 
-Prefer the setter functions where they exist: `IccSetMatrixSolver()` and
-`IccSetMatrixInverter()` are functions, so they link normally and are the
-supported way to install a custom solver against the DLL.
+One case still needs a line of CMake: a **hand-built imported target**, which
+inherits nothing. `install(EXPORT)` carries the `INTERFACE` definition, and
+`Build/Cmake/Modules/FindRefIccMAX.cmake` and `examples/hello-iccdev` set it
+explicitly for the same reason — but a consumer that constructs its own
+`IMPORTED` target from a found library path must add
+`INTERFACE_COMPILE_DEFINITIONS "ICCPROFLIBDLL_DATA_IMPORTS"` to it, on the
+shared target only. Without it the macro compiles empty and Windows is back to
+`LNK2019`.
 
-See `.github/ci/regression/README.md` for the test-side rules and
-`iccdev.proflib-exported-data-linkage`, which pins both the linkage and the
-literal values that dependent tests hard-code.
+Two CTests hold the fix in place, and they fail differently on purpose. An
+in-tree target that cannot link takes the whole Windows build down rather than
+turning one test red, so `iccdev.proflib-exported-data-linkage` (in-tree, all
+platforms) pins the linkage and the literal values, while
+`iccdev.proflib-exported-data-dll-linkage` configures and compiles a consumer
+**out of tree** at test time and reports a lost annotation as a single failing
+test with the `LNK2019` in its log.
+
+`IccUtil.h` also declared `icInfo` until #1897, but that one had no definition
+anywhere in the tree and so failed to link on every platform — a dangling
+declaration rather than an export problem. It is gone; construct a `CIccInfo`
+where one is needed. The `iccdev.proflib-exported-global-definitions` CTest
+checks every `ICCPROFLIB_API extern` **and** `ICCPROFLIB_DATA_API extern`
+declaration in these headers — in both macro orderings — against the built
+library's symbol table, so a declaration added without a definition fails CI
+rather than reaching a consumer. Annotate a new exported *variable*
+`ICCPROFLIB_DATA_API`, not `ICCPROFLIB_API`: both are audited, but only the
+first exports data on Windows.
+
+`IccSetMatrixSolver()` and `IccSetMatrixInverter()` remain the supported way to
+install a custom solver: they are functions, and they do not depend on the
+caller writing through an imported pointer.
+
+See `.github/ci/regression/README.md` for the test-side rules.
 
 ## Namespace wrapping (known defect)
 

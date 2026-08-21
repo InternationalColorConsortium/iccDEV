@@ -158,11 +158,16 @@ if(NOT RefIccMAX_FOUND)
     message(STATUS "  IccProfLib2: ${ICCPROFLIB2_LIB}")
     message(STATUS "  IccXML2:     ${ICCXML2_LIB}")
 
-    # Create IMPORTED targets to keep target_link_libraries clean
+    # Create IMPORTED targets to keep target_link_libraries clean.
+    # ICCPROFLIBDLL_DATA_IMPORTS reproduces what the shared IccProfLib target
+    # carries INTERFACE, so the eight ICCPROFLIB_DATA_API globals are seen as
+    # dllimport here too; hand-built imported targets do not inherit it, and
+    # without it a Windows consumer referencing one gets LNK2019 (#2154, #1888).
     add_library(RefIccMAX::IccProfLib2 UNKNOWN IMPORTED)
     set_target_properties(RefIccMAX::IccProfLib2 PROPERTIES
         IMPORTED_LOCATION "${ICCPROFLIB2_LIB}"
         INTERFACE_INCLUDE_DIRECTORIES "${ICCDEV_ROOT}/IccProfLib;${ICCDEV_BUILD_DIR}/IccProfLib"
+        INTERFACE_COMPILE_DEFINITIONS "ICCPROFLIBDLL_DATA_IMPORTS"
     )
 
     add_library(RefIccMAX::IccXML2 UNKNOWN IMPORTED)

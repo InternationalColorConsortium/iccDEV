@@ -9,10 +9,13 @@
 # consumer of IccProfLib2.dll referencing one of them failed to link with
 # LNK2019/LNK2001 while every function in the same header thunked normally.
 #
-# The tree's existing answer is to avoid the DLL: three tools and
-# iccdev.proflib-exported-data-linkage link IccProfLib2-static on Windows shared
-# builds instead. That workaround means no test exercised data linkage against
-# the DLL at all, so the defect could neither fail nor be shown fixed.
+# The tree's answer used to be to avoid the DLL: three tools and
+# iccdev.proflib-exported-data-linkage linked IccProfLib2-static on Windows
+# shared builds instead. That workaround meant no test exercised data linkage
+# against the DLL at all, so the defect could neither fail nor be shown fixed.
+# It was retired once this test proved the annotation works; all four now link
+# the DLL, and this test remains the one that fails as a TEST rather than a
+# build when the annotation is lost.
 #
 # This builds the consumer OUT OF TREE, configured and compiled at test time.
 # That is deliberate and is the only shape that works: a link error in a target
