@@ -32,14 +32,12 @@ on:
   pull_request:
     branches: [master]
     paths:
-      - '.github/scripts/iccdev-mluc-iso-code-regression-tests.sh'
-      - '.github/scripts/iccdev-stdobserver-regression-tests.sh'
-      - '.github/workflows/ci-json-roundtrip.yml'
-      - 'IccJSON/**'
-      - 'IccProfLib/**'
-      - 'IccXML/**'
-      - 'Build/Cmake/CMakeLists.txt'
-      - 'Build/Cmake/Testing/CMakeLists.txt'
+      - 'IccJSON/**/*.cpp'
+      - 'IccJSON/**/*.h'
+      - 'IccProfLib/**/*.cpp'
+      - 'IccProfLib/**/*.h'
+      - 'IccXML/**/*.cpp'
+      - 'IccXML/**/*.h'
   workflow_dispatch:
 
 jobs:
