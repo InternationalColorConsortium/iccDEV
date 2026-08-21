@@ -14,37 +14,6 @@ permissions:
   contents: read
 
 on:
-  push:
-    branches:
-      - master
-      - ci-qa-matlab-examples
-      - ci-qa-matlab-examples-gamma
-      - ci-qa-matlab-windows-powershell
-    paths:
-      - ".github/workflows/ci-matlab.yml"
-      - "Build/Cmake/**"
-      - "IccProfLib/**"
-      - "**/*.m"
-      - "matlab/**"
-      - "Testing/Display/sRGB_D65_MAT.xml"
-      - "Testing/Display/sRGB_D65_MAT-300lx.xml"
-      - "Testing/Display/sRGB_D65_MAT-500lx.xml"
-      - "Testing/HDR/BT2100PQFullDisplay.xml"
-      - "Testing/sRGB_v4_ICC_preference.icc"
-  pull_request:
-    branches:
-      - master
-    paths:
-      - ".github/workflows/ci-matlab.yml"
-      - "Build/Cmake/**"
-      - "IccProfLib/**"
-      - "**/*.m"
-      - "matlab/**"
-      - "Testing/Display/sRGB_D65_MAT.xml"
-      - "Testing/Display/sRGB_D65_MAT-300lx.xml"
-      - "Testing/Display/sRGB_D65_MAT-500lx.xml"
-      - "Testing/HDR/BT2100PQFullDisplay.xml"
-      - "Testing/sRGB_v4_ICC_preference.icc"
   workflow_dispatch:
 
 concurrency:

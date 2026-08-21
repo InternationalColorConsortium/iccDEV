@@ -213,6 +213,7 @@ Labels:
           - '.github/workflows/pr-labeler.yml'
           - '.github/workflows/sync-labels.yml'
           - '.github/workflows/update-labels.yml'
+          - '.github/workflows/ci-fork-automation-gate.yml'
           - '.github/scripts/sync-labels.sh'
           - 'docs/label-system.md'
           - '.github/skills/maintainer-label-system/**'

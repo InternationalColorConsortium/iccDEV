@@ -5957,7 +5957,7 @@ if(ICCDEV_HAS_JSON_TOOLS)
   iccdev_add_script_test(
     iccdev.json-parser-regressions
     300
-    "iccdev;json;parser;regression;asan"
+    "iccdev;json;parser;regression;asan;slow;pr-extended"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-json-parser-regression-tests.sh"
   )

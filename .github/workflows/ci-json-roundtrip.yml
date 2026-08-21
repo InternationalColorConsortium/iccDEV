@@ -29,17 +29,6 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  push:
-    branches: [master]
-    paths:
-      - '.github/scripts/iccdev-mluc-iso-code-regression-tests.sh'
-      - '.github/scripts/iccdev-stdobserver-regression-tests.sh'
-      - '.github/workflows/ci-json-roundtrip.yml'
-      - 'IccJSON/**'
-      - 'IccProfLib/**'
-      - 'IccXML/**'
-      - 'Build/Cmake/CMakeLists.txt'
-      - 'Build/Cmake/Testing/CMakeLists.txt'
   pull_request:
     branches: [master]
     paths:
@@ -51,9 +40,11 @@ on:
       - 'IccXML/**'
       - 'Build/Cmake/CMakeLists.txt'
       - 'Build/Cmake/Testing/CMakeLists.txt'
+  workflow_dispatch:
 
 jobs:
   json-roundtrip:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: JSON round-trip regression
     runs-on: ubuntu-latest
     timeout-minutes: 20

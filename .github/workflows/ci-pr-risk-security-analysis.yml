@@ -47,6 +47,11 @@ on:
         required: false
         type: boolean
         default: false
+      run_windows_audit:
+        description: 'Run the PowerShell-specific workflow audit'
+        required: false
+        type: boolean
+        default: true
   # checkov:skip=CKV_GHA_7: Maintainer-only manual dispatch uses constrained inputs for targeted risk scans.
   workflow_dispatch:
     inputs:
@@ -84,6 +89,11 @@ on:
         required: false
         type: boolean
         default: false
+      run_windows_audit:
+        description: 'Run the PowerShell-specific workflow audit'
+        required: false
+        type: boolean
+        default: true
 
 concurrency:
   group: >-
@@ -2700,6 +2710,7 @@ jobs:
   # Job 2: Windows PowerShell Workflow Security Audit
   ###########################################################################
   windows-security-audit:
+    if: ${{ inputs.run_windows_audit != false }}
     name: "Windows Security Audit (PowerShell)"
     runs-on: windows-2025-vs2026
     timeout-minutes: 15

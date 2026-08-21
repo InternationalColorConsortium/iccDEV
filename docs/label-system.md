@@ -14,6 +14,7 @@ readiness.
 | `.github/scripts/sync-labels.sh` | Local and CI label synchronization helper. |
 | `.github/workflows/sync-labels.yml` | Applies `.github/labels.yml` on `master` or manual dispatch. |
 | `.github/workflows/pr-labeler.yml` | Applies path labels to pull requests. |
+| `.github/workflows/ci-fork-automation-gate.yml` | Fails protected automation changes from forks and applies `Governance`. |
 | `.github/workflows/label.yml` | Adds first-pass issue triage labels and welcome guidance. |
 | `.github/workflows/update-labels.yml` | Adds PR CI status labels: `passed`, `failed`, `pending`, `Merge Ready`. |
 | `.github/workflows/ci-codeql-security.yml` | Runs full CodeQL when the `codeql-ready` label is applied. |
@@ -82,6 +83,19 @@ changed-files-labels-limit: 14
 Maintainers can add labels manually when a large tree-wide change intentionally
 spans many components.
 
+### Fork Automation Review
+
+`ci-fork-automation-gate.yml` uses `pull_request_target` only to inspect fork
+PR file names through the GitHub API. It checks out trusted base helpers, never
+checks out or executes fork content, and applies the existing `Governance`
+label before failing when a fork changes workflows, scripts, hooks, Docker
+files, or build configuration. The workflow does not close pull requests.
+
+Normal PR build jobs are restricted to same-repository heads. Repository
+Actions settings must require approval for all external contributors, and
+maintainers must not approve a fork workflow after the `Governance` label is
+applied until the protected-path change has been reviewed.
+
 ### Issue Triage
 
 `label.yml` runs on issue open, edit, and reopen events. It syncs the repository
@@ -121,7 +135,7 @@ same-repository PR lane, provide an open `pr_number`, choose
 `ci_scope=fast-lane`, and set `ctest_recent_limit`, `include_windows`,
 and `warning_policy` on that dispatch. Fast lane defaults to the latest
 registered CTest and strict warning failure. Windows is opt-in; Docker
-verification runs only when the pull request changes the container surface.
+verification is scheduled when the pull request changes the container surface.
 
 Manual dispatches use an event-qualified concurrency group. A dispatch on an
 open PR therefore does not cancel that PR's `pull_request` run; inspect the

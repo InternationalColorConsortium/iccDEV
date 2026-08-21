@@ -26,10 +26,6 @@ permissions:
   contents: read
 
 on:
-  workflow_call:
-  push:
-    branches:
-      - master
   workflow_dispatch:
 
 concurrency:

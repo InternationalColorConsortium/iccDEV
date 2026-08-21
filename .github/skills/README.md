@@ -9,6 +9,8 @@ long command references.
 | `afl-smoke` | Running or updating the manual AFL++ smoke workflow, seeds, and maintainer documentation. |
 | `docs-maintenance` | Reducing documentation noise or reorganizing docs. |
 | `pre-pr-security-cycle` | Running the maintainer pre-PR secure loop: code, build/test, SAST/CodeQL, sanitizer/DAST-style checks, fix, repeat, handoff. |
+| `code-review` | Reviewing pull requests with changed-line evidence and without duplicate or speculative findings. |
+| `stacked-pr-fast-lane` | Managing related short-window PR stacks and guarded maintainer fast-lane validation. |
 | `sanitizer-repro` | Reproducing ASAN/UBSAN findings or security advisories. |
 | `specsep-qa` | Running or diagnosing the repository-owned `iccSpecSepToTiff` QA suites and fixtures. |
 | `json-config-regression` | Editing JSON/profile config parsing or tests. |

@@ -95,6 +95,7 @@ env:
 
 jobs:
   detect-src:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Welcome to iccDEV
     runs-on: ubuntu-latest
     permissions:
@@ -110,6 +111,10 @@ jobs:
       ci_changed: ${{ steps.diffcheck.outputs.ci_changed }}
       container_changed: ${{ steps.diffcheck.outputs.container_changed }}
       docs_only: ${{ steps.diffcheck.outputs.docs_only }}
+      native_changed: ${{ steps.diffcheck.outputs.native_changed }}
+      risk_required: ${{ steps.diffcheck.outputs.risk_required }}
+      run_windows_risk: ${{ steps.diffcheck.outputs.run_windows_risk }}
+      example_consumer_changed: ${{ steps.diffcheck.outputs.example_consumer_changed }}
       fast_lane: ${{ steps.diffcheck.outputs.fast_lane }}
       include_windows: ${{ steps.diffcheck.outputs.include_windows }}
       ctest_recent_limit: ${{ steps.diffcheck.outputs.ctest_recent_limit }}
@@ -160,6 +165,7 @@ jobs:
           DISPATCH_PR_NUMBER: ${{ inputs.pr_number || '' }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login || github.actor }}
           PR_NUMBER: ${{ github.event.pull_request.number || '' }}
           PR_BASE_REF: ${{ github.base_ref || 'master' }}
           GH_EVENT_NAME: ${{ github.event_name }}
@@ -181,7 +187,7 @@ jobs:
           include_windows=true
           ctest_recent_limit=0
           warning_policy=fail
-          # Default to the full PR CTest surface. The three pr-extended tests
+          # Default to the full PR CTest surface. The pr-extended tests
           # are deferred only by the PR caller and remain in regression runs.
           ctest_mode=full
 
@@ -202,6 +208,10 @@ jobs:
             local ci_changed="$5"
             local container_changed="$6"
             local docs_only="$7"
+            local native_changed="$8"
+            local risk_required="$9"
+            local run_windows_risk="${10}"
+            local example_consumer_changed="${11}"
 
             write_github_output() {
               local key="$1"
@@ -223,6 +233,10 @@ jobs:
             write_github_output ci_changed "$ci_changed"
             write_github_output container_changed "$container_changed"
             write_github_output docs_only "$docs_only"
+            write_github_output native_changed "$native_changed"
+            write_github_output risk_required "$risk_required"
+            write_github_output run_windows_risk "$run_windows_risk"
+            write_github_output example_consumer_changed "$example_consumer_changed"
             write_github_output fast_lane "$fast_lane"
             write_github_output include_windows "$include_windows"
             write_github_output ctest_recent_limit "$ctest_recent_limit"
@@ -250,9 +264,12 @@ jobs:
             if [ -z "${GH_TOKEN:-}" ]; then
               return 1
             fi
-            permission="$(gh api \
+            if ! permission="$(gh api \
               "repos/${GH_REPOSITORY}/collaborators/${actor}/permission" \
-              --jq '.permission' 2>/dev/null || true)"
+              --jq '.permission')"; then
+              echo "Unable to determine repository permission for ${actor}" >&2
+              return 2
+            fi
             case "$permission" in
               admin|maintain|write)
                 return 0
@@ -367,7 +384,7 @@ jobs:
 
           if ! validate_sha "$head_sha"; then
             echo "Warning: invalid or missing head commit sha; assuming source changed for safety" >&2
-            write_scope_outputs true true true true false false false
+            write_scope_outputs true true true true false false false true true true true
             exit 0
           fi
 
@@ -379,7 +396,7 @@ jobs:
               ;;
             *)
               echo "Ref blocked or unsupported: $base_ref" >&2
-              write_scope_outputs false false false false false false false
+              write_scope_outputs false false false false false false false false false false false
               exit 0
               ;;
           esac
@@ -393,7 +410,7 @@ jobs:
           # Check if merge base exists before running diff
           if ! git merge-base "origin/${base_ref}" HEAD >/dev/null 2>&1; then
             echo "Warning: no merge base found; assuming source changed for safety" >&2
-            write_scope_outputs true true true true false false false
+            write_scope_outputs true true true true false false false true true true true
             exit 0
           fi
 
@@ -404,12 +421,22 @@ jobs:
             grep -Eiq "$pattern" <<< "$changed_files"
           }
 
+          requires_windows_risk_audit() {
+            # The Windows audit scans the full workflow tree, so any changed
+            # workflow can add or alter PowerShell use without a filename allowlist.
+            has_changed_file '(^|/)[^/]+\.ps1$|^\.github/workflows/[^/]+\.ya?ml$'
+          }
+
           source_changed=false
           build_config_changed=false
           testing_changed=false
           ci_changed=false
           container_changed=false
           docs_only=false
+          native_changed=false
+          risk_required=false
+          run_windows_risk=false
+          example_consumer_changed=false
 
           if has_changed_file '\.(cpp|cxx|cc|c|h|hpp|hh)$'; then
             source_changed=true
@@ -423,7 +450,7 @@ jobs:
             testing_changed=true
           fi
 
-          if has_changed_file '^\.github/(workflows|scripts|actions|codeql-queries)/'; then
+          if has_changed_file '^\.github/(workflows|scripts|actions|codeql-queries)/|^\.githooks/'; then
             ci_changed=true
           fi
 
@@ -436,6 +463,34 @@ jobs:
           if [[ -n "$changed_files" ]] &&
              ! grep -Eiv "$docs_pattern" <<< "$changed_files" >/dev/null; then
             docs_only=true
+          fi
+
+          if [[ "$source_changed" == "true" ||
+                "$build_config_changed" == "true" ||
+                "$testing_changed" == "true" ]]; then
+            native_changed=true
+          fi
+
+          if has_changed_file '^(examples/hello-iccdev/|IccProfLib/|IccXML/|IccJSON/|IccConnect/|Build/Cmake/(CMakeLists\.txt|IccProfLib/|IccXML/|IccJSON/|IccConnect/|RefIccMAX))'; then
+            example_consumer_changed=true
+          fi
+
+          if [ "$target_repository" != "$GH_REPOSITORY" ]; then
+            risk_required=true
+            run_windows_risk=true
+          elif [[ "$ci_changed" == "true" || "$container_changed" == "true" ]]; then
+            permission_status=0
+            actor_has_write_permission "$PR_AUTHOR" || permission_status=$?
+            if [ "$permission_status" -eq 0 ]; then
+              risk_required=true
+              if requires_windows_risk_audit; then
+                run_windows_risk=true
+              fi
+            elif [ "$permission_status" -eq 2 ]; then
+              echo "Unable to verify PR author permission; scheduling risk analysis fail closed" >&2
+              risk_required=true
+              run_windows_risk=true
+            fi
           fi
 
           # Keep execution scope separate from the factual diff classification.
@@ -454,7 +509,7 @@ jobs:
               ;;
           esac
 
-          write_scope_outputs "$run_full" "$source_changed" "$build_config_changed" "$testing_changed" "$ci_changed" "$container_changed" "$docs_only"
+          write_scope_outputs "$run_full" "$source_changed" "$build_config_changed" "$testing_changed" "$ci_changed" "$container_changed" "$docs_only" "$native_changed" "$risk_required" "$run_windows_risk" "$example_consumer_changed"
 
       - name: Generate Summary
         shell: bash --noprofile --norc {0}
@@ -784,7 +839,7 @@ jobs:
           write_github_output warning_policy "$WARNING_POLICY"
 
   risk-gate:
-    if: ${{ needs.detect-src.outputs.ci_changed == 'true' || needs.detect-src.outputs.container_changed == 'true' }}
+    if: ${{ needs.detect-src.outputs.risk_required == 'true' }}
     name: Risk Analysis Gate
     needs: [detect-src]
     uses: ./.github/workflows/ci-pr-risk-security-analysis.yml
@@ -793,9 +848,10 @@ jobs:
       git_ref: ${{ needs.detect-src.outputs.target_sha }}
       severity_threshold: 'HIGH'
       fail_on_findings: true
+      run_windows_audit: ${{ needs.detect-src.outputs.run_windows_risk == 'true' }}
 
   gcc15-lto-ci:
-    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    if: ${{ needs.detect-src.outputs.native_changed == 'true' }}
     name: GCC 15.2 Strict Release LTO
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-gcc15.yml
@@ -804,7 +860,7 @@ jobs:
       target-sha: ${{ needs.detect-src.outputs.target_sha }}
 
   tool-tests:
-    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    if: ${{ needs.detect-src.outputs.native_changed == 'true' }}
     # Together with gcc15-lto-ci, this is the compact strict Unix coverage.
     name: Tool Smoke Tests (ASAN+UBSAN, Debug)
     needs: [detect-src, validate-inputs]
@@ -819,12 +875,121 @@ jobs:
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
 
   win-ci:
-    if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.validate-inputs.outputs.include-windows == 'true' }}
+    if: ${{ needs.detect-src.outputs.native_changed == 'true' && needs.validate-inputs.outputs.include-windows == 'true' }}
     name: Windows Build & Test Profiles
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-win.yml
     with:
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
+
+  macos-release-lto:
+    if: ${{ needs.detect-src.outputs.native_changed == 'true' && needs.detect-src.outputs.ci_scope != 'fast-lane' }}
+    name: macOS Clang Release LTO
+    needs: [detect-src, validate-inputs]
+    uses: ./.github/workflows/ci-pr-unix.yml
+    with:
+      os-list: '["macos-latest"]'
+      build-types: '["Release"]'
+      compilers: '["clang"]'
+      enable-lto: true
+      warning-policy: ${{ needs.validate-inputs.outputs.warning-policy }}
+      profile-test-mode: smoke
+      target-sha: ${{ needs.detect-src.outputs.target_sha }}
+
+  macos-debug:
+    if: ${{ needs.detect-src.outputs.native_changed == 'true' && needs.detect-src.outputs.ci_scope != 'fast-lane' }}
+    name: macOS Clang Debug
+    needs: [detect-src, validate-inputs]
+    uses: ./.github/workflows/ci-pr-unix.yml
+    with:
+      os-list: '["macos-latest"]'
+      build-types: '["Debug"]'
+      compilers: '["clang"]'
+      enable-lto: false
+      warning-policy: ${{ needs.validate-inputs.outputs.warning-policy }}
+      profile-test-mode: smoke
+      target-sha: ${{ needs.detect-src.outputs.target_sha }}
+
+  example-project:
+    if: ${{ needs.detect-src.outputs.example_consumer_changed == 'true' }}
+    name: Example Consumer Project
+    needs: [detect-src]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout consumer source
+        # preflight: allow-codeql-actions reason=readonly-build-target-checkout
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ needs.detect-src.outputs.target_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout trusted sanitizer helper
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
+          path: trusted-base
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install consumer build dependencies
+        # preflight: allow-codeql-actions reason=readonly-build-target-checkout
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source trusted-base/.github/scripts/sanitize-sed.sh
+          # preflight: allow-package-install reason=consumer-build-dependencies
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cmake libjpeg-dev libpng-dev libtiff-dev \
+            libxml2-dev nlohmann-json3-dev
+
+      - name: Build exported libraries
+        # preflight: allow-codeql-actions reason=readonly-build-target-checkout
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          TARGET_SHA: ${{ needs.detect-src.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source trusted-base/.github/scripts/sanitize-sed.sh
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          cmake -S Build/Cmake -B build-consumer-libraries \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_TESTS=OFF \
+            -DENABLE_TOOLS=OFF \
+            -DENABLE_WXWIDGETS=OFF
+          cmake --build build-consumer-libraries --parallel "$(nproc)" \
+            --target IccProfLib2 IccXML2 IccJSON2
+
+      - name: Build and run example consumer
+        # preflight: allow-codeql-actions reason=readonly-build-target-checkout
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source trusted-base/.github/scripts/sanitize-sed.sh
+          cmake -S examples/hello-iccdev -B build-example-consumer \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DICCDEV_BUILD_DIR="$GITHUB_WORKSPACE/build-consumer-libraries"
+          cmake --build build-example-consumer --parallel "$(nproc)"
+          export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/build-consumer-libraries/IccProfLib"
+          LD_LIBRARY_PATH+=":$GITHUB_WORKSPACE/build-consumer-libraries/IccXML"
+          LD_LIBRARY_PATH+=":$GITHUB_WORKSPACE/build-consumer-libraries/IccJSON"
+          output="$(./build-example-consumer/hello-iccdev 2>&1)"
+          printf '%s\n' "$output"
+          grep -Fq 'XML round-trip OK' <<< "$output"
+          grep -Fq 'Hello, iccDEV!' <<< "$output"
 
   docker-ci:
     if: ${{ needs.detect-src.outputs.container_changed == 'true' }}
@@ -849,8 +1014,11 @@ jobs:
       # - scan-build
       - tool-tests
       - win-ci
+      - macos-release-lto
+      - macos-debug
+      - example-project
       - docker-ci
-    if: always()
+    if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     steps:
       - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
@@ -892,6 +1060,9 @@ jobs:
           SCAN_RESULT: skipped
           TOOL_RESULT: ${{ needs['tool-tests'].result }}
           WIN_RESULT: ${{ needs['win-ci'].result }}
+          MACOS_RELEASE_LTO_RESULT: ${{ needs['macos-release-lto'].result }}
+          MACOS_DEBUG_RESULT: ${{ needs['macos-debug'].result }}
+          EXAMPLE_RESULT: ${{ needs['example-project'].result }}
           DOCKER_RESULT: ${{ needs['docker-ci'].result }}
         run: |
           set -euo pipefail
@@ -929,6 +1100,9 @@ jobs:
           SCAN_RESULT="${SCAN_RESULT:-success}"
           TOOL_RESULT="${TOOL_RESULT:-success}"
           WIN_RESULT="${WIN_RESULT:-success}"
+          MACOS_RELEASE_LTO_RESULT="${MACOS_RELEASE_LTO_RESULT:-success}"
+          MACOS_DEBUG_RESULT="${MACOS_DEBUG_RESULT:-success}"
+          EXAMPLE_RESULT="${EXAMPLE_RESULT:-success}"
           DOCKER_RESULT="${DOCKER_RESULT:-success}"
           RISK_RESULT="${RISK_RESULT:-success}"
           GCC15_LTO_RESULT="${GCC15_LTO_RESULT:-success}"
@@ -955,13 +1129,16 @@ jobs:
           SCAN_RESULT="$(trim_and_norm "$SCAN_RESULT")"
           TOOL_RESULT="$(trim_and_norm "$TOOL_RESULT")"
           WIN_RESULT="$(trim_and_norm "$WIN_RESULT")"
+          MACOS_RELEASE_LTO_RESULT="$(trim_and_norm "$MACOS_RELEASE_LTO_RESULT")"
+          MACOS_DEBUG_RESULT="$(trim_and_norm "$MACOS_DEBUG_RESULT")"
+          EXAMPLE_RESULT="$(trim_and_norm "$EXAMPLE_RESULT")"
           DOCKER_RESULT="$(trim_and_norm "$DOCKER_RESULT")"
           RISK_RESULT="$(trim_and_norm "$RISK_RESULT")"
           GCC15_LTO_RESULT="$(trim_and_norm "$GCC15_LTO_RESULT")"
 
           # --- compute overall result from upstream jobs ----------------------
           job_res=success
-          required_results=("$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$RISK_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$DOCKER_RESULT")
+          required_results=("$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$RISK_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$MACOS_RELEASE_LTO_RESULT" "$MACOS_DEBUG_RESULT" "$EXAMPLE_RESULT" "$DOCKER_RESULT")
           for s in "${required_results[@]}"; do
             # 'skipped' is acceptable (jobs are skipped when src_changed is false)
             # only 'failure' or 'cancelled' should cause overall failure
@@ -1038,6 +1215,9 @@ jobs:
             printf "| scan-build         | %s |\n" "$(sanitize_line "$SCAN_RESULT")"
             printf "| tool-tests         | %s |\n" "$(sanitize_line "$TOOL_RESULT")"
             printf "| win-ci             | %s |\n" "$(sanitize_line "$WIN_RESULT")"
+            printf "| macos-release-lto  | %s |\n" "$(sanitize_line "$MACOS_RELEASE_LTO_RESULT")"
+            printf "| macos-debug        | %s |\n" "$(sanitize_line "$MACOS_DEBUG_RESULT")"
+            printf "| example-project    | %s |\n" "$(sanitize_line "$EXAMPLE_RESULT")"
             printf "| docker-ci          | %s |\n" "$(sanitize_line "$DOCKER_RESULT")"
             echo ""
             echo "**Overall Result:** \`$(sanitize_line "$job_res")\`"

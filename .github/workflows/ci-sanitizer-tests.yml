@@ -49,6 +49,7 @@ concurrency:
 
 jobs:
   bash-tests:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Bash Sanitizer Tests
     runs-on: ubuntu-latest
 
@@ -238,6 +239,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
   powershell-tests:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: PowerShell Sanitizer Tests
     runs-on: windows-2025-vs2026
 

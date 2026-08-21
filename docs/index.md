@@ -54,12 +54,16 @@ tables.
 | `iccApplyToLink` | Create DeviceLink profiles or `.cube` LUTs from profile sequences. |
 | \ref iccapply_overview "iccApply visual lanes" | Interactive argv, CMM, and output flow references for the four iccApply tools. |
 | `iccDumpProfile` | Dump and validate ICC profile structure. |
+| `iccPawgReport` | Generate PAWG security, conformance, and quality assessment reports. |
 | `iccRoundTrip` | Evaluate round-trip profile behavior. |
 | `iccSpecSepToTiff` | Combine spectral separation TIFFs. |
 | `iccTiffDump`, `iccPngDump`, `iccJpegDump` | Inspect image metadata and embedded ICC profiles. |
 | `iccV5DspObsToV4Dsp` | Convert v5 display/observer profiles to v4 display profiles. |
 | `iccFromCube` | Convert `.cube` 3D LUTs to ICC.2 DeviceLink profiles. |
+| `iccBenchApply` | Measure profile-chain apply throughput and emit deterministic checksums. |
+| `iccProfilePlot` | Enumerate and render profile visualizations as JSON graph or raster data. |
 | `iccProfileVisualize` | Convert profile LUT data to images and PDF graphs. |
+| `iccProfileVisualizePlot` | Render data-first profile visualizations to PDF and TIFF artifacts. |
 | `wxProfileDump` | wxWidgets GUI profile inspector. |
 
 ## Example iccMAX Profiles

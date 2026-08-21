@@ -39,6 +39,7 @@ concurrency:
 
 jobs:
   python-package:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: "Python package and REST tests"
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -91,6 +92,7 @@ jobs:
           ls -l /tmp/iccdev-mcp-wheel
 
   dockerfile:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: "Regression Dockerfile syntax"
     runs-on: ubuntu-latest
     timeout-minutes: 10

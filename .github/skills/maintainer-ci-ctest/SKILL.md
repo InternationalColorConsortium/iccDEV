@@ -77,16 +77,15 @@ when practical.
 - Treat `ci-pr-action` `full` as the explicit long-cycle maintainer gate. It runs
   Unix GCC/Clang Release and Debug builds, exact GCC 15.2 strict Release LTO in
   the regression container, GCC 15.2 ASAN+UBSAN tool tests, Windows, and Docker.
-  Its tool-test caller excludes only the `pr-extended` CTests
-  (`iccdev.hybrid-pipeline`, `iccdev.json-sort-regression`, and
-  `iccdev.issue-1781-applytolink-qa-matrix`) to stay within the PR runtime
-  budget; `ci-regression-checks` continues to run them.
+  Its tool-test caller excludes the `pr-extended` CTest label to stay within
+  the PR runtime budget; `ci-regression-checks` continues to run the labelled
+  tests.
 - `ci_scope=auto` is the default. It selects the full matrix for source, build,
   test, and container changes; workflow-only changes run the preflight and
   workflow-security gates.
 - Use `ci_scope=fast-lane` for the exact GCC 15.2 Release LTO and ASAN+UBSAN
-  Release tool lanes. Fast lane defaults to the latest CTest with Windows and
-  Docker disabled; add them only when the change needs those surfaces.
+  Release tool lanes. Fast lane defaults to the latest CTest with Windows
+  disabled; Docker runs when the PR changes the container surface.
 - On `ci-qa-pr-docker-testing`, Docker PR verification is advisory. Let the
   orchestrator continue when that lane fails, mark the run for
   `bump-sha-pins`, update pinned action or container SHAs, and rerun Docker

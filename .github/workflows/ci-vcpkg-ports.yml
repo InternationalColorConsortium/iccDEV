@@ -39,6 +39,7 @@ concurrency:
 
 jobs:
   vcpkg-overlay-test:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: "vcpkg overlay - ${{ matrix.os }}"
     runs-on: ${{ matrix.os }}
     permissions:
@@ -326,6 +327,7 @@ jobs:
           Write-Host "All verification checks passed [OK]"
   # Manifest mode test (VS-bundled vcpkg)
   vcpkg-manifest-test:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: "vcpkg manifest - windows-2022"
     runs-on: windows-2022
     permissions:

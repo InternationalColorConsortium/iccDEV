@@ -26,6 +26,9 @@ shares one source of truth. Update rules here, not in the mirrors.
 | Pull request preparation and handoff | `docs/pre-pr-security-cycle.md` |
 | Pre-PR security skill | `.github/skills/pre-pr-security-cycle/SKILL.md` |
 | Pre-PR security prompt | `.github/prompts/pre-pr-security-cycle.prompt.md` |
+| Stacked PR and fast-lane workflow | `.github/skills/stacked-pr-fast-lane/SKILL.md` |
+| Focused pull request review | `.github/skills/code-review/SKILL.md` |
+| Code-review bug hunting | `.github/prompts/code-review-hunting.prompt.md` |
 | Regression bisect workflow | `.github/prompts/bisect-regression.prompt.md` |
 | Maintainer regression container | `docs/regression-container.md` |
 | Regression container prompt | `.github/prompts/regression-container-maintainer.prompt.md` |

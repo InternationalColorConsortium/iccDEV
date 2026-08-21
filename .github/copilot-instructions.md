@@ -89,6 +89,61 @@ use `.github/skills/regression-container-maintainer/SKILL.md` and
   `ci-preflight-safety`, or `ci-pr-risk-security-analysis` checks are pending,
   skipped unexpectedly, or failing.
 
+## Stacked PRs and Fast Lane
+
+When related work will create multiple PRs in a rolling 24-hour period, prefer
+one linear `gh stack` stack over independent PRs. Keep one reviewable concern
+per layer and use separate stacks for unrelated work.
+
+- Before stack work, update the local extension with
+  `gh extension upgrade gh-stack`; use the locally installed `gh-stack` agent
+  skill and `.github/skills/stacked-pr-fast-lane/SKILL.md`.
+- Use `gh stack view --json` to inspect stack state and `gh stack sync --remote
+  origin` before handoff or after a remote/base change. Do not manually rebase
+  or push an individual stack layer.
+- Use the maintainer-only fast lane only for an open same-repository PR. It is
+  not available to forks and does not replace the required PR gates.
+- Agents may prepare the focused fast-lane command and collect its run ID;
+  a maintainer with repository permission must choose and dispatch it. Run
+  shared-concurrency fast lanes one at a time.
+
+## Code Review Churn Controls
+
+For same-repository pull request review, use
+`.github/skills/code-review/SKILL.md`. Copilot code review reads instructions
+and skills from the PR head branch. This lets same-repository changes test
+review policy, but makes fork-head agent configuration untrusted.
+
+Never request, approve, or rely on Copilot code review for a fork PR. A
+workflow cannot make GitHub-hosted review load base-branch instructions instead
+of fork-head instructions. Repository administrators must exclude forks from
+automatic Copilot review where supported; otherwise maintainers must not add
+Copilot as a reviewer on fork PRs.
+
+- Read `AGENTS.md`, this file, and matching path-specific instructions before
+  reviewing the changed surface.
+- Report only a changed-line regression with a concrete correctness, security,
+  compatibility, or maintainability impact. Do not report pre-existing code
+  unless the change makes it newly reachable or materially worsens it.
+- Verify each finding with the smallest relevant evidence before commenting.
+  Avoid speculative concerns, style-only comments, duplicate findings, and
+  generic requests for broader tests when focused validation covers the diff.
+- Use one comment for one root cause. State the affected path, triggering
+  condition, and the smallest safe remediation.
+- Review each head SHA once. For a later PR update, review only the changed
+  delta and do not re-post prior findings, summaries, or resolved concerns
+  unless the update reintroduces the defect.
+- Conserve maintainer attention: prioritize a small set of high-confidence,
+  actionable findings over exhaustive comment volume. No comment is better
+  than a low-value concern.
+- For workflow changes, use the trusted workflow/static-analysis guidance.
+  Consider YAML parsing, `actionlint`, `yamllint`, `zizmor`, and CodeQL Actions
+  results as applicable; do not duplicate a confirmed automated finding without
+  additional impact or remediation context.
+- Use repository MCP context or agent skills only when relevant to the changed
+  surface; do not invent a tool dependency or repeat information already in
+  repository instructions.
+
 ## iccdev-mcp Review Notes
 
 - Keep user-facing MCP setup docs task-oriented; put reviewer and agent guidance
@@ -147,6 +202,8 @@ Key safety rules:
 | Regression workflow governance | `.github/skills/regression-workflow-governance/SKILL.md` |
 | Regression container maintainer | `.github/skills/regression-container-maintainer/SKILL.md` |
 | Pre-PR security cycle | `.github/skills/pre-pr-security-cycle/SKILL.md` |
+| Focused pull request review | `.github/skills/code-review/SKILL.md` |
+| Stacked PR and fast-lane workflow | `.github/skills/stacked-pr-fast-lane/SKILL.md` |
 | Maintainer label system | `.github/skills/maintainer-label-system/SKILL.md` |
 | Version bump | `.github/skills/version-bump/SKILL.md` |
 | Python bindings tests | `.github/skills/python-bindings-test/SKILL.md` |

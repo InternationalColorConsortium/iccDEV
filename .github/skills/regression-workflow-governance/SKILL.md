@@ -96,10 +96,10 @@ If CMake or C++ changed, also run:
   suppressions.
 - Workflow changes follow `.github/instructions/workflow-governance.instructions.md`.
 - PR workflow helper trust boundaries follow `docs/workflow-security-trust-boundaries.md`.
-- Copilot service review follows the three-review convergence rule in
-  `docs/regression-workflow-governance.md`: first review inventories the whole
-  PR, second review checks only fixes, and third review says `Ok to Merge` or
-  `Please Request Maintainer Review`.
+- Copilot service review follows the full-surface lifecycle in
+  `docs/regression-workflow-governance.md`: one initial review, one focused fix
+  pass, and one final review of the complete PR. Do not use incremental review
+  slices or expect a third review unless a maintainer explicitly requests one.
 - The PR was checked against the repeat-review findings in
   `docs/regression-workflow-governance.md`: scope split, script headers,
   trigger parity, trusted-base helpers, exact SHA validation, input rejection,

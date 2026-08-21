@@ -4,6 +4,12 @@ MCP tool to iccDEV CLI binary mapping. Each MCP tool wraps a CLI binary
 via `subprocess.run()` with path validation, timeout enforcement, and
 structured output.
 
+This reference covers only the 17 CLI-backed MCP tools. The built
+`iccBenchApply`, `iccProfilePlot`, `iccProfileVisualize`, and
+`iccProfileVisualizePlot` executables have no MCP wrappers, so do not add them
+to an MCP server `tools` allowlist. See the repository
+[CLI tool reference](../../docs/tools-cli-reference.md) to run them directly.
+
 ## Environment Setup
 
 ```bash

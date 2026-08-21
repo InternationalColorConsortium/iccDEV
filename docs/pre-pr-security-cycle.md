@@ -29,10 +29,29 @@ the smallest useful evidence.
      packaging changes.
 5. Fix every confirmed issue and repeat the relevant checks until the same
    command set is clean.
-6. Run the repeat-review avoidance checklist for the changed surface.
+6. Run the repeat-review avoidance checklist for the changed surface, then use
+   one full initial review, one focused fix pass, and one final full-PR review.
+   Do not split review into incremental slices or expect a third review.
    See `docs/regression-workflow-governance.md` ("Recent maintainer PRs...") for the canonical checklist.
 7. Produce a golfed handoff: branch, commit, changed surface, command results,
    hosted run IDs, known skips or deferred items, and merge-readiness signal.
+
+## Stacked PR and Fast-Lane Handoff
+
+For related changes that require multiple PRs within a rolling 24-hour period,
+use `.github/skills/stacked-pr-fast-lane/SKILL.md`. Keep each layer focused,
+synchronize the stack before handoff, and report the stack order with each PR's
+head SHA. Fast lane is a maintainer-only, same-repository PR accelerator; it
+does not replace the required PR gates or permit fork validation.
+
+## Fork Copilot Review Boundary
+
+Do not request, approve, or rely on Copilot code review for a fork PR. GitHub
+reads custom instructions, agent instructions, and skills from the PR head, so
+fork-authored agent configuration is untrusted. Before reviewing
+same-repository agent-policy changes, confirm the Fork Automation Gate protects
+the current and previous paths and that the related trust-boundary documentation
+remains accurate.
 
 ## SAST, DAST, and CodeQL Boundaries
 

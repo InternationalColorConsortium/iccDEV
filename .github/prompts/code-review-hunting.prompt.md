@@ -4,6 +4,25 @@ Systematic code review workflow for finding security bugs in iccDEV.
 Based on analysis of 80+ upstream issues and 19 findings from manual
 code review (April 2026).
 
+## Review Churn Controls
+
+Before reporting a finding, confirm that it is introduced by the reviewed diff
+or that the diff makes a pre-existing condition newly reachable. Report only a
+concrete, reproducible correctness or security impact. Do not file style-only,
+speculative, duplicate, or broad-test comments when focused evidence is
+available.
+
+Use one finding per root cause. Include the changed file and line, triggering
+condition, impact, and smallest safe remediation. Read `AGENTS.md`,
+`.github/copilot-instructions.md`, matching path instructions, and
+`.github/skills/code-review/SKILL.md` before reviewing.
+
+Use one full initial review, one focused fix pass, and one final review. Both
+reviews must cover the complete PR surface, including every touched file and
+the cumulative diff; do not review incremental slices. The final review should
+conclude the lifecycle, so a third review is not expected unless a maintainer
+explicitly requests one. Prefer no comment to low-value review volume.
+
 ## 4-Category Hunt
 
 ### Category 1: Serialization Mismatch (CWE-345)

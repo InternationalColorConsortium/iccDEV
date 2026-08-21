@@ -24,23 +24,50 @@ flowchart LR
 | PR code | Build/test with read-only credentials and `persist-credentials: false`. |
 | Helpers | Source `.github/scripts` and sanitizers from `${{ github.event.pull_request.base.sha || github.sha }}`, not the PR checkout. |
 | Privileged automation | `pull_request_target`, releases, package pruning, and labelers must not execute PR-head content before mutation. |
+| Fork PRs | `ci-pr-action` and `ci-json-roundtrip` run only for same-repository heads. `ci-matlab` is intentionally manual-dispatch only, so it has no fork-PR execution path. Do not request Copilot code review; fork automation and agent-policy changes are handled by the trusted-base `Fork Automation Gate`. |
 | Exceptions | Mark reviewed exceptions with `preflight: allow-* reason=<short-reason>` so maintainers see them in logs and summaries. |
 
-## Clean Preflight Sentinels
+## Fork Automation Boundary
 
-```text
-workflow files: 33
-cache publish canaries: 0
-artifact intake canaries: 0
-artifact publish canaries: 0
-untrusted PR artifact canaries: 0
-auth/accounting canaries: 0
-PR-controlled script execution canaries: 0
-GitHub token format canaries: 0
-CodeQL Actions findings: 0
-CodeQL Python findings: 0
-failures: 0
+`ci-fork-automation-gate.yml` runs on `pull_request_target`, checks out only
+the base commit's sanitizer helpers, and obtains changed file names through the
+GitHub API. It never checks out, sources, or executes fork content.
+
+For a fork PR, changes to workflows, repository scripts, actions, hooks,
+Docker files, root `docker/`, `iccdev-mcp/docker/`, CMake/build configuration,
+any `CMakeLists.txt` or `.cmake` file, root `scripts/`, or agent-policy surfaces
+fail the gate and receive the existing `Governance` label. Agent-policy surfaces
+are `.github/copilot-instructions.md`, `.github/instructions/**`,
+`.github/skills/**`, `.github/prompts/**`, `.github/agents/**`, `.agents/**`,
+and every `AGENTS.md`, `CLAUDE.md`, or `GEMINI.md`. The guarded PR jobs above
+do not execute fork code. `ci-matlab` intentionally has no `pull_request`
+trigger, so its Windows MATLAB job is excluded from the fork-PR guard finding.
+Renames are checked at both paths, and PRs beyond GitHub's 3,000-file
+enumeration limit fail closed.
+
+GitHub-hosted Copilot code review reads instruction and skill content from the
+PR head. The gate cannot make it load the trusted base or stop it after a review
+is requested. Do not request, approve, or rely on Copilot review for fork PRs.
+Repository administrators must exclude forks from automatic Copilot review
+where GitHub supports that configuration.
+
+Repository Actions settings must keep the approval policy at **all external
+contributors**. Do not approve a fork workflow run after the `Governance`
+label is applied; the label requires maintainer review of the protected-path
+change.
+
+## Clean Preflight Expectations
+
+Enumerate the current workflow surface instead of recording a branch-local
+count:
+
+```bash
+find .github/workflows -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) \
+  -printf '%P\n' | LC_ALL=C sort
 ```
+
+A clean preflight reports no cache, artifact, authentication, PR-script, token,
+or CodeQL canaries, and no failures.
 
 Reviewed exceptions should appear as:
 
@@ -48,8 +75,7 @@ Reviewed exceptions should appear as:
 [OK] ... reviewed ... exception reason=<short-reason>
 ```
 
-The workflow-file count is a branch-local sentinel. Update it when adding or
-removing files under `.github/workflows/`.
+Rerun the enumeration after adding or removing files under `.github/workflows/`.
 
 ## Commands
 

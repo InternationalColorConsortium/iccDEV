@@ -226,6 +226,14 @@ iccdev-mcp --transport sse --port 8080
 | `spec_sep_to_tiff` | iccSpecSepToTiff | Spectral separation |
 | `apply_search` | iccApplySearch | Search-based transform |
 
+### CLI-Only Tools (Not MCP-Exposed)
+
+The following built iccDEV executables do not have MCP wrappers and must not
+be added to an MCP server `tools` allowlist: `iccBenchApply`, `iccProfilePlot`,
+`iccProfileVisualize`, and `iccProfileVisualizePlot`. Use them directly from
+the command line; see the repository
+[CLI tool reference](../docs/tools-cli-reference.md) for their interfaces.
+
 ### Utility (2)
 
 | Tool | Description |

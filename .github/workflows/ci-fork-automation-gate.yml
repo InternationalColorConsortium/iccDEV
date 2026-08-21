@@ -1,0 +1,130 @@
+###############################################################
+#
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: Reject fork changes to maintainer-owned automation and agent policy.
+#
+###############################################################
+
+name: Fork Automation Gate
+
+on:
+  # zizmor: ignore[dangerous-triggers] metadata-only fork gate; never checks out PR head
+  pull_request_target:
+    branches:
+      - master
+      - ci-qa-flags
+      - ci-qa-pr-docker-testing
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-automation-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  reject-fork-automation:
+    name: Reject Fork Automation Changes
+    if: github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write  # Required to apply the existing Governance label.
+
+    steps:
+      - name: Checkout trusted sanitizer helper
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Reject protected fork paths
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          # preflight: allow-token-exposure reason=trusted-fork-governance-label
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source trusted/.github/scripts/sanitize-sed.sh
+
+          reject_fork_automation() {
+            local reason="$1"
+
+            gh api --method POST \
+              "repos/${GH_REPOSITORY}/issues/${PR_NUMBER}/labels" \
+              -f 'labels[]=Governance' >/dev/null
+
+            {
+              echo "## Fork Automation Gate"
+              echo ""
+              echo "[FAIL] $(sanitize_line "$reason")"
+              echo ""
+              echo "The \`Governance\` label was applied for maintainer review."
+            } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+            exit 1
+          }
+
+          changed_file_count="$(gh api "repos/${GH_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.changed_files')"
+          if [[ ! "$changed_file_count" =~ ^[0-9]+$ ]]; then
+            reject_fork_automation "Unable to determine the fork PR changed-file count."
+          fi
+          if [ "$changed_file_count" -gt 3000 ]; then
+            reject_fork_automation "Fork PR exceeds the 3,000-file API enumeration limit."
+          fi
+
+          if ! changed_files_output="$(gh api --paginate \
+            "repos/${GH_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100" \
+            --jq '.[] | .filename, (.previous_filename // empty)')"; then
+            reject_fork_automation "Unable to enumerate the fork PR changed files."
+          fi
+
+          changed_files=()
+          if [ -n "$changed_files_output" ]; then
+            mapfile -t changed_files <<< "$changed_files_output"
+          fi
+
+          protected_paths=()
+          protected_pattern='^(\.github/(workflows|scripts|actions|codeql-queries|instructions|skills|prompts|agents)/|\.github/copilot-instructions\.md$|\.agents/|(.*/)?(AGENTS|CLAUDE|GEMINI)\.md$|\.githooks/|Dockerfile(\..*)?$|\.dockerignore$|Build/Cmake/|cmake/|scripts/|docker/|iccdev-mcp/docker/)|(^|/)(CMakeLists\.txt|[^/]+\.cmake)$'
+          for changed_file in "${changed_files[@]}"; do
+            if [[ "$changed_file" =~ $protected_pattern ]]; then
+              protected_paths+=("$changed_file")
+            fi
+          done
+
+          if [ "${#protected_paths[@]}" -eq 0 ]; then
+            echo "[OK] Fork PR does not modify protected maintainer-owned paths"
+            exit 0
+          fi
+
+          gh api --method POST \
+            "repos/${GH_REPOSITORY}/issues/${PR_NUMBER}/labels" \
+            -f 'labels[]=Governance' >/dev/null
+
+          {
+            echo "## Fork Automation Gate"
+            echo ""
+            echo "[FAIL] Fork PRs cannot modify protected maintainer-owned paths."
+            echo ""
+            echo "The \`Governance\` label was applied for maintainer review."
+            echo ""
+            echo "Protected paths:"
+            for protected_path in "${protected_paths[@]}"; do
+              echo "- \`$(sanitize_line "$protected_path")\`"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+          exit 1

@@ -9,16 +9,17 @@ scanner noise with a rationale.
 
 ## Review Convergence
 
-For Copilot service review of maintainer-owned infrastructure, use at most
-three reviews unless a maintainer requests another pass:
+For Copilot service review of maintainer-owned infrastructure, use one full
+initial review, one focused fix pass, and one final review:
 
-1. First review: inventory the complete PR and review every touched file.
-2. Second review: focus only on the first-review fixes. Do not grow scope.
-3. Third review: conclude with `Ok to Merge` or
+1. Initial review: inventory the complete PR and review every touched file.
+2. Fix pass: address the initial findings without unrelated scope growth.
+3. Final review: review the complete PR surface again, including the cumulative
+   diff and fix pass, then conclude with `Ok to Merge` or
    `Please Request Maintainer Review`.
 
-After the third review, Copilot is out of the review loop until requested by a
-maintainer.
+Do not use incremental review slices. The final review should conclude the
+lifecycle, so a third review is not expected unless a maintainer requests one.
 
 ## Audit Checklist
 

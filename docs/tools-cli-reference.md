@@ -13,7 +13,9 @@ single index for common command shapes and shared option tables.
 | `iccFromJson` | Convert JSON to ICC binary | `iccFromJson input.json output.icc` |
 | `iccDumpProfile` | Dump and validate ICC profile contents | `iccDumpProfile -v profile.icc ALL` |
 | `iccDumpProfile` | Emit gated QA evidence flags | `iccDumpProfile --qa-flags --evidence-json --diag -v 100 profile.icc` |
+| `iccProfilePlot` | Emit data-first profile graphs and CLUT rasters | `iccProfilePlot profile.icc list` |
 | `iccProfileVisualize` | Dump profile LUT data as images and PDF graphs | `iccProfileVisualize profile.icc` |
+| `iccProfileVisualizePlot` | Render profile visualizations to PDF and TIFF | `iccProfileVisualizePlot profile.icc` |
 
 ## Applying Profiles
 
@@ -44,6 +46,7 @@ its destination transform.
 | `iccSpecSepToTiff` | Combine spectral separation TIFFs | `iccSpecSepToTiff output.tif 0 0 spectral/spec_ 1 10 1` |
 | `iccV5DspObsToV4Dsp` | Convert v5 display/observer profiles to v4 display | `iccV5DspObsToV4Dsp display.icc observer.icc output.icc` |
 | `iccFromCube` | Convert `.cube` 3D LUT to ICC.2 DeviceLink | `iccFromCube input.cube output.icc` |
+| `iccBenchApply` | Measure profile-chain apply throughput and checksums | `iccBenchApply -suite -csv -threads 1,2,8` |
 
 `iccSpecSepToTiff` treats the input argument as a filename prefix and appends
 each channel number from `start` through `end`. For a single input named

@@ -90,21 +90,20 @@ scanner noise with a clear rationale.
 ## Pull Request Review Convergence
 
 Maintainer-owned infrastructure reviews must converge instead of repeatedly
-expanding scope. Use this direct three-review loop for Copilot service reviews
-unless a maintainer explicitly requests more review:
+expanding scope. Use one full initial review, one focused fix pass, and one
+final review unless a maintainer explicitly requests more review:
 
-1. First review: perform the complete inventory of the pull request and review
-   every touched file. This should be the broadest review.
-2. Second review: review only the first-review fixes. Do not add new files,
-   functions, enums, templates, or unrelated scope unless the fix itself
-   requires it.
-3. Third review: conclude with either `Ok to Merge` or
+1. Initial review: inventory the complete pull request and review every touched
+   file. This is the broadest review.
+2. Fix pass: address the initial findings without unrelated scope growth unless
+   a fix itself requires it.
+3. Final review: review the complete PR surface again, including the cumulative
+   diff and fix pass, then conclude with `Ok to Merge` or
    `Please Request Maintainer Review`.
 
-After the third Copilot service review, Copilot is out of the review loop until
-a maintainer requests another review. Later review comments should be resolved
-by maintainers or by targeted follow-up work against explicit maintainer
-requests.
+Do not split either review into incremental slices. The final review should
+conclude the lifecycle, so a third review is not expected unless a maintainer
+explicitly requests one.
 
 Recent maintainer PRs show the same avoidable review findings recurring. Before
 requesting review, check the PR against this list:
