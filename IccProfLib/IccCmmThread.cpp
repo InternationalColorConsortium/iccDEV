@@ -59,12 +59,17 @@
 
 #include "IccCmmThread.h"
 #include <algorithm>
-#include <future>
+#include <condition_variable>
+#include <mutex>
 #include <new>
+#include <system_error>
 #include <thread>
 
 
 static const int kIccMaxCmmThreads = 256;
+static const icUInt32Number kIccSmallApplyPixels = 1024;
+static const icUInt32Number kIccSmallApplyPixelsPerThread = 256;
+static const icUInt32Number kIccBulkApplyPixelsPerThread = 128;
 
 static int icResolveCmmThreadCount(int nThreads)
 {
@@ -77,6 +82,165 @@ static int icResolveCmmThreadCount(int nThreads)
 
   return std::min(nActual, kIccMaxCmmThreads);
 }
+
+struct CIccApplyThreadedCmmTask
+{
+  CIccApplyCmm *m_worker;
+  icFloatNumber *m_dst;
+  const icFloatNumber *m_src;
+  icUInt32Number m_count;
+  icStatusCMM m_status;
+};
+
+class CIccApplyThreadedCmmPool
+{
+public:
+  CIccApplyThreadedCmmPool()
+  {
+    m_jobHead = 0;
+    m_jobCount = 0;
+    m_pending = 0;
+    m_stop = false;
+  }
+
+  ~CIccApplyThreadedCmmPool()
+  {
+    {
+      std::lock_guard<std::mutex> lock(m_mutex);
+      m_stop = true;
+    }
+    m_jobReady.notify_all();
+
+    for (std::thread &worker : m_threads) {
+      if (worker.joinable())
+        worker.join();
+    }
+  }
+
+  bool Init(int nThreads)
+  {
+    try {
+      m_tasks.resize((size_t)std::max(0, nThreads - 1));
+      m_jobs.resize(m_tasks.size());
+      m_threads.reserve((size_t)std::max(0, nThreads - 1));
+    }
+    catch (const std::bad_alloc &) {
+      return false;
+    }
+
+    return true;
+  }
+
+  icStatusCMM Apply(std::vector<CIccApplyCmm*> &workers,
+                    icFloatNumber *dstPixel, const icFloatNumber *srcPixel,
+                    icUInt32Number nPixels, int nActive,
+                    int nSrcSamples, int nDstSamples)
+  {
+    if (!EnsureWorkerThreads(nActive - 1))
+      return icCmmStatAllocErr;
+
+    icUInt32Number base = nPixels / (icUInt32Number)nActive;
+    icUInt32Number extra = nPixels % (icUInt32Number)nActive;
+    icUInt32Number offset = 0;
+
+    for (int t = 0; t < nActive - 1; t++) {
+      icUInt32Number count = base + (t < (int)extra ? 1u : 0u);
+      CIccApplyThreadedCmmTask &task = m_tasks[(size_t)t];
+      task.m_worker = workers[(size_t)t];
+      task.m_dst = dstPixel + offset * nDstSamples;
+      task.m_src = srcPixel + offset * nSrcSamples;
+      task.m_count = count;
+      task.m_status = icCmmStatOk;
+      offset += count;
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(m_mutex);
+      m_jobHead = 0;
+      m_jobCount = (size_t)nActive - 1;
+      m_pending = m_jobCount;
+      for (size_t i = 0; i < m_jobCount; i++)
+        m_jobs[i] = i;
+    }
+
+    for (int i = 0; i < nActive - 1; i++)
+      m_jobReady.notify_one();
+
+    icStatusCMM rv = workers[(size_t)nActive - 1]->Apply(
+      dstPixel + offset * nDstSamples,
+      srcPixel + offset * nSrcSamples,
+      nPixels - offset);
+
+    {
+      std::unique_lock<std::mutex> lock(m_mutex);
+      m_jobDone.wait(lock, [this]() { return m_pending == 0; });
+    }
+
+    for (int i = 0; i < nActive - 1; i++) {
+      const CIccApplyThreadedCmmTask &task = m_tasks[(size_t)i];
+      if (rv == icCmmStatOk && task.m_status != icCmmStatOk)
+        rv = task.m_status;
+    }
+
+    return rv;
+  }
+
+private:
+  bool EnsureWorkerThreads(int nThreads)
+  {
+    try {
+      while ((int)m_threads.size() < nThreads)
+        m_threads.push_back(std::thread(&CIccApplyThreadedCmmPool::WorkerLoop, this));
+    }
+    catch (const std::system_error &) {
+      return false;
+    }
+
+    return true;
+  }
+
+  void WorkerLoop()
+  {
+    while (true) {
+      size_t job = 0;
+      CIccApplyThreadedCmmTask *task = NULL;
+
+      {
+        std::unique_lock<std::mutex> lock(m_mutex);
+        m_jobReady.wait(lock, [this]() { return m_stop || m_jobCount != 0; });
+        if (m_stop)
+          return;
+
+        job = m_jobs[m_jobHead];
+        m_jobHead++;
+        m_jobCount--;
+        task = &m_tasks[job];
+      }
+
+      icStatusCMM status = task->m_worker->Apply(task->m_dst, task->m_src,
+                                                 task->m_count);
+
+      {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        task->m_status = status;
+        m_pending--;
+        if (!m_pending)
+          m_jobDone.notify_one();
+      }
+    }
+  }
+
+  std::vector<std::thread> m_threads;
+  std::vector<CIccApplyThreadedCmmTask> m_tasks;
+  std::vector<size_t> m_jobs;
+  size_t m_jobHead;
+  size_t m_jobCount;
+  size_t m_pending;
+  bool m_stop;
+  std::mutex m_mutex;
+  std::condition_variable m_jobReady;
+  std::condition_variable m_jobDone;
+};
 
 
 //===========================================================================
@@ -92,6 +256,8 @@ static int icResolveCmmThreadCount(int nThreads)
  */
 CIccApplyThreadedCmm::CIccApplyThreadedCmm(CIccCmm *pCmm) : CIccApplyCmm(pCmm)
 {
+  m_pool = NULL;
+  m_baseCmm = NULL;
   m_nThreads = 1;
 }
 
@@ -103,6 +269,8 @@ CIccApplyThreadedCmm::CIccApplyThreadedCmm(CIccCmm *pCmm) : CIccApplyCmm(pCmm)
  */
 CIccApplyThreadedCmm::~CIccApplyThreadedCmm()
 {
+  delete m_pool;
+
   for (CIccApplyCmm *p : m_workers)
     delete p;
 }
@@ -128,18 +296,40 @@ bool CIccApplyThreadedCmm::Init(CIccCmm *pCmm, int nThreads)
     return false;
   }
 
-  m_workers.clear();
-  m_workers.reserve((size_t)m_nThreads);
+  m_baseCmm = pCmm;
+  try {
+    m_workers.clear();
+    m_workers.reserve((size_t)m_nThreads);
+  }
+  catch (const std::bad_alloc &) {
+    return false;
+  }
 
-  for (int i = 0; i < m_nThreads; i++) {
+  if (!EnsureWorkers(1))
+    return false;
+
+  m_pool = new (std::nothrow) CIccApplyThreadedCmmPool();
+  if (!m_pool || !m_pool->Init(m_nThreads)) {
+    delete m_pool;
+    m_pool = NULL;
+    return false;
+  }
+
+  return true;
+}
+
+bool CIccApplyThreadedCmm::EnsureWorkers(int nWorkers)
+{
+  while ((int)m_workers.size() < nWorkers) {
     icStatusCMM status;
-    CIccApplyCmm* pWorker = pCmm->GetNewApplyCmm(status);
-    if (!pWorker || status != icCmmStatOk) {
-      delete pWorker;
+    CIccApplyCmm *worker = m_baseCmm->GetNewApplyCmm(status);
+    if (!worker || status != icCmmStatOk) {
+      delete worker;
       return false;
     }
-    m_workers.push_back(pWorker);
+    m_workers.push_back(worker);
   }
+
   return true;
 }
 
@@ -162,12 +352,11 @@ icStatusCMM CIccApplyThreadedCmm::Apply(icFloatNumber *DstPixel, const icFloatNu
  * Name: CIccApplyThreadedCmm::Apply (multi-pixel)
  *
  * Purpose:
- *  Partitions nPixels into up to m_nThreads contiguous strips and
- *  processes each strip on a separate thread.  The final strip is run on
- *  the calling thread to overlap its work with the async launches.
+ *  Partitions nPixels into contiguous strips and processes them through
+ *  persistent worker threads. The final strip runs on the calling thread.
  *
- *  Strips differ in size by at most one pixel (remainder pixels are
- *  distributed one each to the first strips).
+ *  The requested thread count is a maximum. Short calls use coarser strips
+ *  than bulk calls so synchronization does not overwhelm transform work.
  *
  * Args:
  *  DstPixel - output buffer (must be large enough for nPixels * dstSamples)
@@ -184,48 +373,22 @@ icStatusCMM CIccApplyThreadedCmm::Apply(icFloatNumber *DstPixel, const icFloatNu
   int nSrcSamples = m_pCmm->GetSourceSamples();
   int nDstSamples = m_pCmm->GetDestSamples();
 
-  // Cap active thread count to actual pixel count
-  int nActive = std::min((int)nPixels, m_nThreads);
+  icUInt32Number pixelsPerThread = nPixels < kIccSmallApplyPixels
+                                    ? kIccSmallApplyPixelsPerThread
+                                    : kIccBulkApplyPixelsPerThread;
+  icUInt32Number usefulThreads = nPixels / pixelsPerThread;
+  if (nPixels % pixelsPerThread)
+    usefulThreads++;
+  int nActive = std::min(m_nThreads, (int)usefulThreads);
 
   if (nActive <= 1)
     return m_workers[0]->Apply(DstPixel, SrcPixel, nPixels);
 
-  icUInt32Number base  = nPixels / nActive;
-  icUInt32Number extra = nPixels % nActive;  // first `extra` strips get one more pixel
+  if (!EnsureWorkers(nActive))
+    return icCmmStatAllocErr;
 
-  // Launch nActive-1 async strips; the last strip runs on the calling thread.
-  std::vector<std::future<icStatusCMM>> futures;
-  futures.reserve(nActive - 1);
-
-  icUInt32Number offset = 0;
-  for (int t = 0; t < nActive - 1; t++) {
-    icUInt32Number count      = base + (t < (int)extra ? 1u : 0u);
-    icFloatNumber *pDst       = DstPixel + offset * nDstSamples;
-    const icFloatNumber *pSrc = SrcPixel + offset * nSrcSamples;
-    CIccApplyCmm *pWorker     = m_workers[t];
-
-    futures.push_back(std::async(std::launch::async,
-      [pWorker, pDst, pSrc, count]() {
-        return pWorker->Apply(pDst, pSrc, count);
-      }));
-
-    offset += count;
-  }
-
-  // Last strip on calling thread using workers[nActive-1]
-  icStatusCMM rv = m_workers[nActive - 1]->Apply(
-    DstPixel + offset * nDstSamples,
-    SrcPixel + offset * nSrcSamples,
-    nPixels - offset);
-
-  // Collect async results; preserve first non-OK status
-  for (auto &f : futures) {
-    icStatusCMM r = f.get();
-    if (rv == icCmmStatOk && r != icCmmStatOk)
-      rv = r;
-  }
-
-  return rv;
+  return m_pool->Apply(m_workers, DstPixel, SrcPixel, nPixels, nActive,
+                       nSrcSamples, nDstSamples);
 }
 
 

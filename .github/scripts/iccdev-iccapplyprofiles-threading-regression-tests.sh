@@ -10,8 +10,8 @@
 #   -threads  N   wrapper with N workers (default N=4 here)
 #
 # Catches partitioning regressions in CIccApplyThreadedCmm::Apply()'s strip
-# split / async-launch / last-strip-on-caller logic, and any future ownership
-# regression in CIccConnectCmm threaded initialization.
+# split / persistent-worker / last-strip-on-caller logic, and any future
+# ownership regression in CIccConnectCmm threaded initialization.
 #
 # Input: a deterministic 512x512 sRGB TIFF generated on the fly so this test
 # does not depend on a checked-in image with a specific colour space. Python 3

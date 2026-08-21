@@ -643,6 +643,7 @@ jobs:
            '-DENABLE_TOOLS=ON',
            '-DENABLE_CMM_TOOLS=ON',
            '-DENABLE_TESTS=ON',
+           '-DICCDEV_ENABLE_AVX2=ON',
            '-Wno-dev'
           ) $configureLog
           Invoke-NativeLogged cmake @(

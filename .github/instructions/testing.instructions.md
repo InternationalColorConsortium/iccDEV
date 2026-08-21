@@ -43,10 +43,19 @@ profile write failure regressions, two batch-backed suites through
 `Build/Cmake/Testing/RunWindowsBatchTest.cmake`, the
 iccDumpProfile smoke suite, the IccDEVCmm DLL smoke suite, the issue-987 shared
 export suite, the issue-1009 IccJson export suite, and the PAWG report smoke
-suite. Windows
+suite. They also register `iccdev.clut-eight-output-regression` through the
+native `RunClutEightOutputRegression.cmake` runner; do not rely on the Unix
+shell runner for this test because the Windows CTest branch returns before
+script-test registration. Windows
 feature-disabled builds register the subset whose targets are available. The
 Windows batch wrapper runs scripts from a disposable copy of `Testing/` under
 the build tree and must not dirty the source `Testing/` directory.
+
+AVX2 CLUT performance is not asserted by CTest. After the focused correctness
+test passes, use `.github/scripts/iccdev-windows-clut-avx2-benchmark.ps1` with
+separate baseline and AVX2 Release build directories. The helper alternates
+execution order, covers output counts 8-16, and verifies bit-exact output
+parity for every lane.
 
 Windows CTest wrappers source runtime DLL directories from `CMakeCache.txt`
 through `Build/Cmake/Testing/WindowsRuntimePaths.cmake`. Keep that helper in

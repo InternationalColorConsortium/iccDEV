@@ -538,11 +538,21 @@ if(ICC_JSON_ORDERED AND _ICC_JSON_ORDERED_DEFAULT)
 endif()
 option(ICC_TRACE_NAN_ENABLED      "Enable tracing NaN inputs in debug builds"           OFF)
 option(ICC_CLUT_DEBUG             "Enable CLUT debugging support"                       OFF)
+option(ICC_AVX2_CLUT_DEBUG        "Enable AVX2 CLUT dispatch and timing diagnostics"    OFF)
 option(ICC_ENABLE_ASSERTS         "Enable ICC_ASSERT traps and debug assertions"        OFF)
 option(ICC_LOG_SAFE               "Enable ICC_LOG_SAFE_VAL bounds-checked logging"      OFF)
 option(ICC_VERBOSE_CALC_APPLY     "Enable verbose CIccMpeCalculator Apply debugging"    OFF)
 option(ICC_USE_ZLIB               "Enable zlib-backed compressed ICC text tags"         ON)
 option(ICCDEV_ENABLE_QA_FLAGS     "Enable opt-in maintainer QA evidence options"        OFF)
+option(ICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS
+  "Suppress Microsoft CRT compatibility warnings in scoped comparison builds"
+  OFF)
+option(ICCDEV_ENABLE_AVX2
+  "Build runtime-dispatched AVX2 CLUT interpolation on supported x86-64 toolchains"
+  OFF)
+option(ICCDEV_ENABLE_AVX512
+  "Build runtime-dispatched AVX-512 CLUT interpolation on supported x86-64 toolchains"
+  OFF)
 option(ENABLE_SANITIZERS          "Enable runtime sanitizers (ASan, UBSan, etc.)"       OFF)
 option(ENABLE_ASAN                "Enable AddressSanitizer only"                        OFF)
 option(ENABLE_FUZZING             "Enable libFuzzer harnesses (Clang only)"             OFF)
@@ -736,6 +746,12 @@ if(ICCDEV_ENABLE_QA_FLAGS)
   add_compile_definitions(ICCDEV_ENABLE_QA_FLAGS=1)
 endif()
 
+if(ICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS AND MSVC)
+  add_compile_definitions(
+    _CRT_NONSTDC_NO_WARNINGS
+    _CRT_SECURE_NO_WARNINGS)
+endif()
+
 # ----------------------------------------------------------------------
 # Build Status Output
 # ----------------------------------------------------------------------
@@ -753,11 +769,15 @@ message(STATUS "ENABLE_IIS_TOOLS           = ${ENABLE_IIS_TOOLS}")
 message(STATUS "ICCDEV_WINDOWS_UNIFIED_RUNTIME = ${ICCDEV_WINDOWS_UNIFIED_RUNTIME}")
 message(STATUS "ICC_TRACE_NAN_ENABLED      = ${ICC_TRACE_NAN_ENABLED}")
 message(STATUS "ICC_CLUT_DEBUG             = ${ICC_CLUT_DEBUG}")
+message(STATUS "ICC_AVX2_CLUT_DEBUG        = ${ICC_AVX2_CLUT_DEBUG}")
 message(STATUS "ICC_ENABLE_ASSERTS         = ${ICC_ENABLE_ASSERTS}")
 message(STATUS "ICC_LOG_SAFE               = ${ICC_LOG_SAFE}")
 message(STATUS "ICC_VERBOSE_CALC_APPLY     = ${ICC_VERBOSE_CALC_APPLY}")
 message(STATUS "ICC_USE_ZLIB               = ${ICC_USE_ZLIB}")
 message(STATUS "ICCDEV_ENABLE_QA_FLAGS     = ${ICCDEV_ENABLE_QA_FLAGS}")
+message(STATUS "ICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS = ${ICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS}")
+message(STATUS "ICCDEV_ENABLE_AVX2         = ${ICCDEV_ENABLE_AVX2}")
+message(STATUS "ICCDEV_ENABLE_AVX512       = ${ICCDEV_ENABLE_AVX512}")
 message(STATUS "ENABLE_SANITIZERS          = ${ENABLE_SANITIZERS}")
 message(STATUS "ENABLE_ASAN                = ${ENABLE_ASAN}")
 message(STATUS "ENABLE_UBSAN               = ${ENABLE_UBSAN}")

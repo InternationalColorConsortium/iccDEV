@@ -2,7 +2,7 @@
 
 `CIccThreadedCmm` is a decorator over an existing `CIccCmm` that runs
 multi-pixel `Apply()` calls in parallel by splitting the pixel buffer into
-contiguous strips and processing each strip on its own worker. It lives in
+contiguous strips and processing them through persistent workers. It lives in
 [IccProfLib/IccCmmThread.h](../IccProfLib/IccCmmThread.h) and is part of
 `IccProfLib2`.
 
@@ -16,8 +16,10 @@ internal.
 - The wrapped CMM has already been fully configured (`AddXform` + `Begin()`).
 - Single-pixel `Apply()` does not benefit; it is forwarded to one worker.
 
-Threading is unhelpful (and skipped automatically) when `nPixels` is smaller
-than the requested thread count.
+The requested thread count is a maximum. Calls below 1024 pixels use no more
+than one active worker per 256 pixels; larger calls use one per 128 pixels.
+This keeps short TIFF rows from paying more synchronization overhead than
+transform work while retaining host-wide parallelism for wide rows.
 
 ## Construction Model
 
@@ -56,11 +58,12 @@ delete tcmm;   // deletes the wrapped cmm when bDeleteCmm=true
 
 `CIccApplyThreadedCmm::Apply(dst, src, nPixels)` does the following:
 
-1. Caps the active worker count at `min(nPixels, nThreads)`.
+1. Caps active workers by call size: one per 256 pixels below 1024 pixels,
+   otherwise one per 128 pixels, never exceeding `nThreads`.
 2. Splits the buffer into `nActive` contiguous strips, with the first
    `nPixels % nActive` strips receiving one extra pixel.
-3. Launches `nActive - 1` strips via `std::async(std::launch::async)`; runs
-   the final strip on the calling thread to overlap with the launches.
+3. Queues `nActive - 1` strips to persistent worker threads; runs the final
+   strip on the calling thread.
 4. Collects results and returns the first non-OK status, if any.
 
 `Apply(dst, src)` (single pixel) is forwarded to worker `[0]` without any
@@ -102,9 +105,26 @@ iccApplyProfiles -threads N -cfg config.json
 | omitted | Defaults to `nThreads = 1` (no wrapper; underlying CMM is used directly). |
 | `-threads 0` | Use `std::thread::hardware_concurrency()`, capped at `CIccThreadedCmm::GetMaxThreads()`. |
 | `-threads 1` | No threaded wrapper. |
-| `-threads N` (N > 1) | Use exactly `N` workers, up to `CIccThreadedCmm::GetMaxThreads()`. |
+| `-threads N` (N > 1) | Allow up to `N` workers, subject to the per-call workload cap. |
 
 The flag is parsed before `-cfg`, so it must come first.
+
+## TIFF Performance Benchmark
+
+Use the cross-platform benchmark helper to compare `-threads 1`, `2`, and `0`
+with interleaved runs and bit-identical output checks:
+
+```bash
+python3 .github/scripts/iccdev-iccapplyprofiles-threading-benchmark.py \
+  --build-dir out/clut-portable \
+  --output out/iccapplyprofiles-threading.tsv
+```
+
+On Windows, pass a Release Visual Studio build directory such as
+`out/windows-thread-baseline`. Keep the build type, compiler, profile chain,
+storage location, and image sizes identical when comparing revisions. TIFF
+decode and encode remain serial, so report results by image size rather than
+assuming that host-max threads must win every workload.
 
 ## Failure Modes
 

@@ -84,6 +84,16 @@
 #ifdef ICC_USE_SSE2
   #include <emmintrin.h>
 #endif
+#if (defined(ICC_USE_AVX2) || defined(ICC_USE_AVX512)) && defined(_MSC_VER)
+  #include <intrin.h>
+#endif
+#ifdef ICC_USE_AVX512
+  #include "IccTagLutAvx512.h"
+#endif
+#ifdef ICC_USE_AVX2
+  #include "IccTagLutAvx2.h"
+#endif
+#include "IccSignatureUtils.h"
 #include "IccTag.h"
 #include "IccUtil.h"
 #include "IccProfile.h"
@@ -91,6 +101,59 @@
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
+#endif
+
+#ifdef ICC_USE_AVX2
+static inline bool iccUseAvx2ClutOutput(int outputChannels)
+{
+  return outputChannels == 15;
+}
+
+#if defined(_MSC_VER)
+  #define ICC_CLUT_NOINLINE __declspec(noinline)
+#else
+  #define ICC_CLUT_NOINLINE __attribute__((noinline))
+#endif
+
+static ICC_CLUT_NOINLINE bool iccTryInterp3dAvx2(
+  icFloatNumber *destPixel, const icFloatNumber *data,
+  const icUInt32Number offsets[8], const icFloatNumber weights[8],
+  int outputChannels)
+{
+  static const bool hasAvx2 = []() {
+#if defined(_MSC_VER)
+    int cpuid[4];
+    __cpuidex(cpuid, 0, 0);
+    if (cpuid[0] < 7)
+      return false;
+
+    __cpuidex(cpuid, 1, 0);
+    if (!(cpuid[2] & (1 << 27)) || !(cpuid[2] & (1 << 28)))
+      return false;
+    if ((_xgetbv(0) & 0x6) != 0x6)
+      return false;
+
+    __cpuidex(cpuid, 7, 0);
+    return (cpuid[1] & (1 << 5)) != 0;
+#elif defined(__i386__) || defined(__x86_64__)
+    __builtin_cpu_init();
+    return __builtin_cpu_supports("avx2");
+#else
+    return false;
+#endif
+  }();
+
+  ICC_AVX2_CLUT_TRACE_DISPATCH(
+    hasAvx2, hasAvx2, outputChannels, data,
+    hasAvx2 ? offsets : NULL, hasAvx2 ? weights : NULL);
+  if (!hasAvx2)
+    return false;
+
+  iccCLUTInterp3dAvx2(destPixel, data, offsets, weights, outputChannels);
+  return true;
+}
+
+#undef ICC_CLUT_NOINLINE
 #endif
 
 /**
@@ -2933,6 +2996,50 @@ void CIccCLUT::Interp3d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   dF5 =  s* nt*  u;
   dF6 =  s*  t* nu;
   dF7 =  s*  t*  u;
+
+#ifdef ICC_USE_AVX512
+  static const bool hasAvx512 = []() {
+#if defined(_MSC_VER)
+    int cpuid[4];
+    __cpuidex(cpuid, 0, 0);
+    if (cpuid[0] < 7)
+      return false;
+
+    __cpuidex(cpuid, 1, 0);
+    if (!(cpuid[2] & (1 << 27)) || !(cpuid[2] & (1 << 28)))
+      return false;
+    if ((_xgetbv(0) & 0xe6) != 0xe6)
+      return false;
+
+    __cpuidex(cpuid, 7, 0);
+    return (cpuid[1] & (1 << 16)) != 0;
+#elif defined(__i386__) || defined(__x86_64__)
+    __builtin_cpu_init();
+    return __builtin_cpu_supports("avx512f");
+#else
+    return false;
+#endif
+  }();
+
+  if (hasAvx512 && m_nOutput >= 8 && m_nOutput <= 16) {
+    const icUInt32Number offsets[] = {n000, n001, n010, n011,
+                                      n100, n101, n110, n111};
+    const icFloatNumber weights[] = {dF0, dF1, dF2, dF3, dF4, dF5, dF6, dF7};
+    iccCLUTInterp3dAvx512(destPixel, p, offsets, weights, (int)m_nOutput);
+    return;
+  }
+#endif
+
+#ifdef ICC_USE_AVX2
+  if (iccUseAvx2ClutOutput((int)m_nOutput)) {
+    const icUInt32Number offsets[] = {n000, n001, n010, n011,
+                                      n100, n101, n110, n111};
+    const icFloatNumber weights[] = {dF0, dF1, dF2, dF3, dF4, dF5, dF6, dF7};
+    if (iccTryInterp3dAvx2(
+          destPixel, p, offsets, weights, (int)m_nOutput))
+      return;
+  }
+#endif
 
 #ifdef ICC_USE_SSE2
   const int nOutputLimit = (int)m_nOutput;

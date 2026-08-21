@@ -60,6 +60,77 @@ SET( CFILES
     ${SRC_PATH}/IccProfLib/IccWrapper.cpp
    )
 
+function(iccdev_check_cxx_compiler_flag FLAG RESULT_VAR)
+  include(CheckCXXCompilerFlag)
+  set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+  check_cxx_compiler_flag("${FLAG}" "${RESULT_VAR}")
+endfunction()
+
+set(ICCDEV_AVX2_SOURCE "${SRC_PATH}/IccProfLib/IccTagLutAvx2.cpp")
+set(ICCDEV_AVX2_ENABLED OFF)
+if(ICCDEV_ENABLE_AVX2)
+  string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _iccdev_processor)
+  if(MSVC AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(STATUS
+      "[SKIP] ICCDEV_ENABLE_AVX2 is disabled for native MSVC because measured CLUT throughput is slower than the SSE2 fallback; use ClangCL")
+  elseif(CMAKE_SIZEOF_VOID_P EQUAL 8
+      AND _iccdev_processor MATCHES "^(amd64|x86_64|x64)$")
+    if(MSVC)
+      set(_iccdev_avx2_flag "/arch:AVX2")
+    else()
+      set(_iccdev_avx2_flag "-mavx2")
+    endif()
+    iccdev_check_cxx_compiler_flag(
+      "${_iccdev_avx2_flag}" ICCDEV_COMPILER_SUPPORTS_AVX2)
+    if(ICCDEV_COMPILER_SUPPORTS_AVX2)
+      list(APPEND CFILES "${ICCDEV_AVX2_SOURCE}")
+      set_source_files_properties("${ICCDEV_AVX2_SOURCE}"
+        PROPERTIES COMPILE_OPTIONS "${_iccdev_avx2_flag}")
+      set(ICCDEV_AVX2_ENABLED ON)
+      message(STATUS "AVX2 CLUT interpolation enabled with ${_iccdev_avx2_flag}")
+    else()
+      message(WARNING
+        "ICCDEV_ENABLE_AVX2 was requested, but ${CMAKE_CXX_COMPILER} does not support ${_iccdev_avx2_flag}")
+    endif()
+  else()
+    message(WARNING
+      "ICCDEV_ENABLE_AVX2 was requested for unsupported target architecture '${CMAKE_SYSTEM_PROCESSOR}'")
+  endif()
+endif()
+set(ICCDEV_AVX2_EFFECTIVE "${ICCDEV_AVX2_ENABLED}" CACHE INTERNAL
+  "Whether the AVX2 CLUT implementation is compiled" FORCE)
+
+set(ICCDEV_AVX512_SOURCE "${SRC_PATH}/IccProfLib/IccTagLutAvx512.cpp")
+set(ICCDEV_AVX512_ENABLED OFF)
+if(ICCDEV_ENABLE_AVX512)
+  string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _iccdev_processor)
+  if(CMAKE_SIZEOF_VOID_P EQUAL 8
+      AND _iccdev_processor MATCHES "^(amd64|x86_64|x64)$")
+    if(MSVC)
+      set(_iccdev_avx512_flag "/arch:AVX512")
+    else()
+      set(_iccdev_avx512_flag "-mavx512f")
+    endif()
+    iccdev_check_cxx_compiler_flag(
+      "${_iccdev_avx512_flag}" ICCDEV_COMPILER_SUPPORTS_AVX512)
+    if(ICCDEV_COMPILER_SUPPORTS_AVX512)
+      list(APPEND CFILES "${ICCDEV_AVX512_SOURCE}")
+      set_source_files_properties("${ICCDEV_AVX512_SOURCE}"
+        PROPERTIES COMPILE_OPTIONS "${_iccdev_avx512_flag}")
+      set(ICCDEV_AVX512_ENABLED ON)
+      message(STATUS "AVX-512 CLUT interpolation enabled with ${_iccdev_avx512_flag}")
+    else()
+      message(WARNING
+        "ICCDEV_ENABLE_AVX512 was requested, but ${CMAKE_CXX_COMPILER} does not support ${_iccdev_avx512_flag}")
+    endif()
+  else()
+    message(WARNING
+      "ICCDEV_ENABLE_AVX512 was requested for unsupported target architecture '${CMAKE_SYSTEM_PROCESSOR}'")
+  endif()
+endif()
+set(ICCDEV_AVX512_EFFECTIVE "${ICCDEV_AVX512_ENABLED}" CACHE INTERNAL
+  "Whether the AVX-512 CLUT implementation is compiled" FORCE)
+
 # Public headers - defined unconditionally for target_sources / install
 SET( HEADERS_PUBLIC
   ${SRC_PATH}/IccProfLib/IccApplyBPC.h
@@ -214,6 +285,15 @@ IF(ENABLE_SHARED_LIBS)
 
   # Enforce C++17 standard per-target
   target_compile_features(${TARGET_NAME} PUBLIC cxx_std_17)
+  if(ICCDEV_AVX2_ENABLED)
+    target_compile_definitions(${TARGET_NAME} PRIVATE ICC_USE_AVX2=1)
+  endif()
+  if(ICC_AVX2_CLUT_DEBUG)
+    target_compile_definitions(${TARGET_NAME} PRIVATE ICC_AVX2_CLUT_DEBUG=1)
+  endif()
+  if(ICCDEV_AVX512_ENABLED)
+    target_compile_definitions(${TARGET_NAME} PRIVATE ICC_USE_AVX512=1)
+  endif()
 
   # PUBLIC include dirs - propagate to consumers via target_link_libraries()
   # Build dir FIRST so generated IccProfLibVer.h (with git hash) wins over source tree copy
@@ -248,6 +328,15 @@ IF(ENABLE_STATIC_LIBS)
 
   # Enforce C++17 standard per-target
   target_compile_features(${TARGET_NAME}-static PUBLIC cxx_std_17)
+  if(ICCDEV_AVX2_ENABLED)
+    target_compile_definitions(${TARGET_NAME}-static PRIVATE ICC_USE_AVX2=1)
+  endif()
+  if(ICC_AVX2_CLUT_DEBUG)
+    target_compile_definitions(${TARGET_NAME}-static PRIVATE ICC_AVX2_CLUT_DEBUG=1)
+  endif()
+  if(ICCDEV_AVX512_ENABLED)
+    target_compile_definitions(${TARGET_NAME}-static PRIVATE ICC_USE_AVX512=1)
+  endif()
   if(ICC_USE_ZLIB)
     target_compile_definitions(${TARGET_NAME}-static PUBLIC ICC_USE_ZLIB=1)
   endif()

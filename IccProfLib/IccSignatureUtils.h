@@ -90,6 +90,9 @@ Copyright:  (c) see Software License
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
+#ifdef ICC_AVX2_CLUT_DEBUG
+  #include <chrono>
+#endif
 
 
 #ifndef icSigSpectralPcsData
@@ -237,9 +240,86 @@ inline bool IsSpaceSpectralPCS(icColorSpaceSignature sig)
   #define ICC_LOG_SAFE_VAL(name, idx, basePtr, limit) ((void)0)
 #endif
 
+  // -----------------------------------------------------------------------------
+  // AVX2 CLUT DEBUG TRACEPOINTS
+  //
+  // Define ICC_AVX2_CLUT_DEBUG to log dispatch decisions and per-kernel timing.
+  // IccTraceAvx2ClutDispatch() and IccTraceAvx2ClutKernel() are intentional
+  // source-level breakpoints for inspecting the CLUT's offsets and weights.
+  // The helpers and all call sites compile out in normal builds.
+  // -----------------------------------------------------------------------------
 
-///////////////////////////////////////////////////////////////////////////////
-// FUNCTION: ColorSpaceSignatureToStr
+  #ifdef ICC_AVX2_CLUT_DEBUG
+  struct IccAvx2ClutTraceData {
+    bool cpuSupportsAvx2;
+    bool selected;
+    int outputChannels;
+    const void *data;
+    const icUInt32Number *offsets;
+    const icFloatNumber *weights;
+  };
+
+  inline void IccTraceAvx2ClutDispatch(const IccAvx2ClutTraceData &trace)
+  {
+    ICC_LOG_INFO(
+      "AVX2 CLUT dispatch: selected=%d cpu=%d outputs=%d data=%p offsets=[%u,%u,%u,%u,%u,%u,%u,%u]",
+      trace.selected, trace.cpuSupportsAvx2, trace.outputChannels, trace.data,
+      trace.offsets ? trace.offsets[0] : 0, trace.offsets ? trace.offsets[1] : 0,
+      trace.offsets ? trace.offsets[2] : 0, trace.offsets ? trace.offsets[3] : 0,
+      trace.offsets ? trace.offsets[4] : 0, trace.offsets ? trace.offsets[5] : 0,
+      trace.offsets ? trace.offsets[6] : 0, trace.offsets ? trace.offsets[7] : 0);
+  }
+
+  inline void IccTraceAvx2ClutKernel(const IccAvx2ClutTraceData &trace,
+                                     long long elapsedNanoseconds)
+  {
+    const int vectorOutputs = (trace.outputChannels / 8) * 8;
+    const int maskedOutputs = trace.outputChannels - vectorOutputs;
+    ICC_LOG_INFO(
+      "AVX2 CLUT kernel: outputs=%d vector_outputs=%d masked_outputs=%d elapsed_ns=%lld weights=[%.8g,%.8g,%.8g,%.8g,%.8g,%.8g,%.8g,%.8g]",
+      trace.outputChannels, vectorOutputs, maskedOutputs,
+      elapsedNanoseconds, trace.weights[0], trace.weights[1], trace.weights[2],
+      trace.weights[3], trace.weights[4], trace.weights[5], trace.weights[6],
+      trace.weights[7]);
+  }
+
+  class IccAvx2ClutTimer {
+  public:
+    explicit IccAvx2ClutTimer(const IccAvx2ClutTraceData &trace)
+      : m_trace(trace), m_start(std::chrono::steady_clock::now())
+    {
+    }
+
+    ~IccAvx2ClutTimer()
+    {
+      const long long elapsedNanoseconds =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+          std::chrono::steady_clock::now() - m_start).count();
+      IccTraceAvx2ClutKernel(m_trace, elapsedNanoseconds);
+    }
+
+  private:
+    const IccAvx2ClutTraceData &m_trace;
+    std::chrono::steady_clock::time_point m_start;
+  };
+
+  #define ICC_AVX2_CLUT_TRACE_DISPATCH(cpuSupportsAvx2, selected, outputChannels, data, offsets, weights) \
+    do { \
+      const IccAvx2ClutTraceData trace = {cpuSupportsAvx2, selected, outputChannels, data, offsets, weights}; \
+      IccTraceAvx2ClutDispatch(trace); \
+    } while(0)
+
+  #define ICC_AVX2_CLUT_TRACE_KERNEL(outputChannels, data, offsets, weights) \
+    const IccAvx2ClutTraceData iccAvx2ClutTrace = {true, true, outputChannels, data, offsets, weights}; \
+    IccAvx2ClutTimer iccAvx2ClutTimer(iccAvx2ClutTrace)
+  #else
+  #define ICC_AVX2_CLUT_TRACE_DISPATCH(cpuSupportsAvx2, selected, outputChannels, data, offsets, weights) ((void)0)
+  #define ICC_AVX2_CLUT_TRACE_KERNEL(outputChannels, data, offsets, weights) ((void)0)
+  #endif
+
+
+  ///////////////////////////////////////////////////////////////////////////////
+  // FUNCTION: ColorSpaceSignatureToStr
 //
 // PURPOSE:
 //   Converts a 32-bit ICC color space signature (icUInt32Number) into a

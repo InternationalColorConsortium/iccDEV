@@ -104,6 +104,13 @@ Preset equivalents live in `Build/Cmake/CMakePresets.json`:
 | `linux-clang-profiling` | gprof/perf `-pg` profiling |
 | `macos-clang-sanitizers` | macOS ASan + UBSan + IntSan + float checks |
 | `macos-clang-guard-malloc` | macOS Debug tool build for libgmalloc |
+| `vs2022-clangcl-x64-avx2-qa-flags` | Windows ClangCL QA build with runtime-dispatched AVX2 CLUT interpolation |
+| `vs2022-clangcl-x64-avx2-diagnostics` | Windows ClangCL AVX2 build with dispatch, kernel-input, and timing tracepoints |
+| `vs2022-clangcl-x64-avx512-qa-flags` | Windows ClangCL QA build with AVX-512, AVX2, and scalar/SSE CLUT fallbacks |
+| `vs2022-clangcl-x64-clut-baseline-qa-flags` | Matching Windows ClangCL CLUT baseline with legacy CRT compatibility warnings suppressed |
+| `linux-clang-clut-baseline-qa-flags` | Linux/WSL2 Clang Release baseline for CLUT ISA comparisons |
+| `linux-clang-clut-avx2-qa-flags` | Linux/WSL2 Clang Release build with runtime-dispatched AVX2 CLUT interpolation |
+| `linux-clang-clut-avx512-qa-flags` | Linux/WSL2 Clang Release build with AVX-512, AVX2, and scalar/SSE fallbacks |
 
 Example:
 
@@ -111,6 +118,22 @@ Example:
 cmake --preset linux-clang-sanitizers -S Build/Cmake -B out/linux-clang-sanitizers
 cmake --build out/linux-clang-sanitizers -j"$(nproc)"
 ```
+
+The AVX2 and AVX-512 presets are opt-in QA configurations. Their ISA-specific
+translation units use scoped compiler flags; do not apply `/arch:AVX2`,
+`/arch:AVX512`, `-mavx2`, or `-mavx512f` globally. Runtime selection must keep
+the CPUID and XGETBV checks in `CIccCLUT::Interp3d()`. Compiler-flag probes use
+compile-only static-library checks so sanitizer link settings cannot produce a
+false unsupported result. On Linux, enable `ICCDEV_ENABLE_AVX2` and
+`ICCDEV_ENABLE_AVX512` directly; AVX-512 does not implicitly enable AVX2.
+`ICC_AVX2_CLUT_DEBUG` is diagnostic-only: it logs dispatch selection, corner
+offsets, interpolation weights, and per-kernel elapsed time through
+`IccSignatureUtils.h`. Keep it `OFF` for performance measurements and release
+builds.
+Windows AVX2 is enabled with ClangCL. Native MSVC reports a configure-time
+skip and retains SSE2 because the measured MSVC AVX2 path was slower. Recheck
+that decision only with the interleaved
+`.github/scripts/iccdev-windows-clut-avx2-benchmark.ps1` helper.
 
 On macOS, use GuardMalloc separately from sanitizer builds:
 

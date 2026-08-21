@@ -68,6 +68,14 @@ use `.github/skills/regression-container-maintainer/SKILL.md` and
 - Workflow governance: `.github/instructions/workflow-governance.instructions.md`
 - Windows session helper: dot-source `.\.github\scripts\icc-session.ps1`, then
   run `icc-session` to create the next `DD-mmm-YYYY-NNN` workspace directory.
+- AVX2 CLUT debugging and optimization handoff:
+  `docs/avx2-clut-diagnostics.md`, with
+  `vs2022-clangcl-x64-avx2-diagnostics` for tracepoints and
+  `vs2022-clangcl-x64-avx2-qa-flags` for measurements. Use
+  `.github/scripts/iccdev-windows-clut-avx2-benchmark.ps1` for interleaved
+  8-16-output comparisons, and require `output_vector_match=True` for every
+  row; AVX2 dispatch is limited to 15 outputs, and native MSVC intentionally
+  retains SSE2.
 
 ## Pull Requests
 
@@ -190,6 +198,7 @@ Key safety rules:
 | Debug MATLAB bindings | `.github/prompts/debug-matlab-bindings.prompt.md` |
 | Debug WASM build | `.github/prompts/debug-wasm-build.prompt.md` |
 | iccSpecSepToTiff QA | `.github/prompts/specsep-qa.prompt.md` |
+| AVX2 CLUT diagnostics | `.github/prompts/avx2-clut-diagnostics.prompt.md` |
 | IIS ISAPI endpoint QA | `.github/prompts/iis-isapi-qa.prompt.md` |
 | Version bump | `.github/prompts/version-bump.prompt.md` |
 
@@ -215,6 +224,7 @@ Key safety rules:
 | Python bindings tests | `.github/skills/python-bindings-test/SKILL.md` |
 | MATLAB bindings tests | `.github/skills/matlab-bindings-test/SKILL.md` |
 | WASM build tests | `.github/skills/wasm-build-test/SKILL.md` |
+| AVX2 CLUT diagnostics | `.github/skills/avx2-clut-diagnostics/SKILL.md` |
 
 ## WASM Notes
 

@@ -24,6 +24,7 @@ long command references.
 | `vcpkg-export-consumer-debug` | Fixing vcpkg, install/export, uninstall, or packaged consumer CI failures. |
 | `version-bump` | Updating iccDEV release version references. |
 | `wasm-build-test` | Building and validating the staged WASM Node/npm-style module package. |
+| `avx2-clut-diagnostics` | Debugging AVX2 CLUT dispatch, collecting trace evidence, and preparing a performance handoff. |
 
 Prompts remain better for one-off drafting. Skills are better for repeatable
 multi-step repository workflows.
