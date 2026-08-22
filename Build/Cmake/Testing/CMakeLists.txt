@@ -4973,9 +4973,17 @@ endif()
 #
 # Records; never asserts a timing threshold. Shared CI runners vary 20-30%
 # between runs on the same commit, so a threshold would flake without catching
-# anything a local run would not. The test passes when every case either
-# measured or reported SKIP, and fails only on a real defect: a checksum that
-# moved between thread counts, or a second Begin() that changed the output.
+# anything a local run would not. The test fails on a real defect: a checksum
+# that moved between thread counts, a second Begin() that changed the output,
+# or -- since #2254 -- a run in which no case was measured at all.
+#
+# That last clause is the anti-vacuity guard, and it is not theoretical. Before
+# #2254 the tool exited 0 after printing "0 case(s) measured, 9 skipped", so
+# this test passed unchanged against a build whose profile fixture produced
+# nothing. iccdev.bench-apply-empty-suite below is its negative control: it
+# points the roots at a directory with no Testing/ tree and requires the
+# failure, so a regression that restores the old exit status turns that test
+# red rather than quietly re-hollowing this one.
 #
 # The 'slow' label puts it on the existing opt-out path rather than inventing
 # one: check-fast excludes 'slow' while check excludes only 'known-red', so the
@@ -4985,31 +4993,62 @@ endif()
 # generated profiles into the source tree while iccdev.windows-create-profiles
 # writes them into the build tree, and the tool resolves against both rather
 # than assuming a platform.
+#
+# #2254 corrected the second root. It was ${CMAKE_BINARY_DIR}, which resolved
+# nothing on any platform: iccdev.windows-create-profiles does not generate into
+# <build>/Testing -- that is the CTest scratch directory -- but into
+# ${ICCDEV_TEST_OUTDIR}/windows-testing, a copy of the source Testing/ tree that
+# it then fills with 135 profiles (see the WIN32 branch below and
+# RunWindowsBatchTest.cmake:184-194). All nine cases open a generated profile
+# first -- the table's one tracked profile is never the first in its chain -- so
+# on Windows every case SKIPped and this test passed in 0.01
+# seconds without measuring anything -- visible in run 32563985818, where the
+# fixture that produced the profiles it never found took 6.62 seconds. That
+# directory is already a Testing tree rather than a directory containing one,
+# which is why icBenchResolveProfile now tries each root both ways.
+#
+# On POSIX the new value simply does not exist and the source root answers, as
+# it always did.
+#
+# #2254: the two tests that DRIVE the suite are gated on iccFromXml, because
+# without it there is no corpus and no fixture to build one. The Windows
+# fixture is registered only inside if(TARGET iccFromXml) (see
+# iccdev.windows-create-profiles below), and every one of the nine cases opens a
+# generated profile first, so on a configuration such as the mingw-core-x64
+# preset -- ENABLE_ICCXML=OFF with ENABLE_TESTS=ON and ENABLE_TOOLS=ON -- the
+# suite can only ever measure zero. Before this change that was a silent pass;
+# with the exit status corrected it would be a red leg reporting a configuration
+# choice as a defect. Not registering a test that cannot measure is the honest
+# reading of both. The argument-handling tests below are NOT gated: they exit
+# before a profile is opened, and iccdev.bench-apply-empty-suite asserts the
+# absence of a corpus, so it needs one least of all.
 if(TARGET iccBenchApply)
   add_dependencies(build-test-binaries iccBenchApply)
 
-  if(WIN32)
-    add_test(
-      NAME iccdev.apply-throughput
-      COMMAND "$<TARGET_FILE:iccBenchApply>" -suite -csv -pixels 65536 -repeats 3
-    )
-  else()
-    add_test(
-      NAME iccdev.apply-throughput
-      COMMAND
-        "${CMAKE_COMMAND}" -E env
-        ${ICCDEV_TEST_ENV}
-        "$<TARGET_FILE:iccBenchApply>" -suite -csv -pixels 65536 -repeats 3
+  if(TARGET iccFromXml)
+    if(WIN32)
+      add_test(
+        NAME iccdev.apply-throughput
+        COMMAND "$<TARGET_FILE:iccBenchApply>" -suite -csv -pixels 65536 -repeats 3
+      )
+    else()
+      add_test(
+        NAME iccdev.apply-throughput
+        COMMAND
+          "${CMAKE_COMMAND}" -E env
+          ${ICCDEV_TEST_ENV}
+          "$<TARGET_FILE:iccBenchApply>" -suite -csv -pixels 65536 -repeats 3
+      )
+    endif()
+
+    set_tests_properties(iccdev.apply-throughput PROPERTIES
+      WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+      TIMEOUT 300
+      LABELS "iccdev;iccprofLib;benchmark;throughput;slow"
+      FIXTURES_REQUIRED iccdev_profiles
+      ENVIRONMENT "ICCDEV_BENCH_SOURCE_ROOT=${ICCDEV_REPO_ROOT};ICCDEV_BENCH_BUILD_ROOT=${ICCDEV_TEST_OUTDIR}/windows-testing"
     )
   endif()
-
-  set_tests_properties(iccdev.apply-throughput PROPERTIES
-    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
-    TIMEOUT 300
-    LABELS "iccdev;iccprofLib;benchmark;throughput;slow"
-    FIXTURES_REQUIRED iccdev_profiles
-    ENVIRONMENT "ICCDEV_BENCH_SOURCE_ROOT=${ICCDEV_REPO_ROOT};ICCDEV_BENCH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
-  )
 
   # #2250: iccBenchApply read the -PCC profile and never deleted it. The CMM does
   # not take ownership -- CIccXform::Create stores it as the bare
@@ -5065,6 +5104,149 @@ if(TARGET iccBenchApply)
     LABELS "iccdev;iccprofLib;benchmark;throughput;pcc;leak;issue-2250;regression"
   )
 
+  # -------------------------------------------------------------------------
+  # #2254: the iccBenchApply command-line contract.
+  #
+  # A QA pass over the tool's invocations found three ways to ask for something
+  # and be told nothing, plus the exit status that made the benchmark above
+  # vacuous. Each of the four tests below pins one of them, and each fails
+  # against the tool as it stood at 0964739d:
+  #
+  #   arity-floor           an argc floor of 3 rejected every two-argument
+  #                         invocation, including `iccBenchApply -suite` -- the
+  #                         spelling the Readme and docs/tools-cli-reference.md
+  #                         both give as the way to run the table. Callers
+  #                         padded it with a stray trailing token, which is how
+  #                         the next defect went unnoticed.
+  #
+  #                         This is asserted through `iccBenchApply 1` rather
+  #                         than through `-suite` itself, for a reason worth
+  #                         stating: the floor is an argc test, so any
+  #                         two-argument form exercises the same branch, and
+  #                         `-suite` on its own has no way to be made cheap. It
+  #                         takes the default 1048576-pixel, 7-repeat budget,
+  #                         which on the slow build that prompted #2254 ran for
+  #                         over 25 minutes in a single case. Registering that
+  #                         as a CTest would import the exact runtime this issue
+  #                         is about. `1` reaches the floor in microseconds and
+  #                         discriminates on the message: before the fix the
+  #                         tool printed the usage text, after it the chain
+  #                         error the argument actually earns.
+  #   suite-rejects-chain   `-suite 1 <profile> 10002` ran the built-in table,
+  #                         silently discarded the profile and the intent, and
+  #                         exited 0.
+  #   suite-rejects-perxform  RunSuite reads neither g_bPerXform nor g_bLeaf, so
+  #                         both options were accepted and dropped.
+  #   empty-suite           every case SKIPping still exited 0. This is the
+  #                         negative control for iccdev.apply-throughput: it
+  #                         gives the tool roots with no Testing/ tree, so all
+  #                         nine cases must SKIP and the run must fail.
+  #
+  # These are argument-handling assertions, not benchmarks. Three of the four
+  # exit before any profile is opened, so they need no fixture and no timing
+  # budget; only suite-standalone measures, and it does so at 4096 pixels and a
+  # single repeat.
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bench-empty-root")
+
+  add_test(
+    NAME iccdev.bench-apply-arity-floor
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=1"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=No profiles given"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-arity-floor PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;issue-2254;regression"
+  )
+
+  add_test(
+    NAME iccdev.bench-apply-suite-rejects-chain
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;-suite;1;Testing/sRGB_v4_ICC_preference.icc;10002"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=takes no chain"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-suite-rejects-chain PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;issue-2254;regression"
+  )
+
+  add_test(
+    NAME iccdev.bench-apply-suite-rejects-perxform
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;-perxform;-suite"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=has no effect with -suite"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-suite-rejects-perxform PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;issue-2254;regression"
+  )
+
+  # The positive counterpart to iccdev.bench-apply-empty-suite below, and the
+  # regression test for the resolver change: run from inside a Testing tree with
+  # no ICCDEV_BENCH_* set at all, so both roots default to "." and only the
+  # direct form can resolve anything. Before #2254 this measured zero cases --
+  # it is the invocation from the QA report, `cd Testing && iccBenchApply
+  # -suite` -- and it is the same code path that makes the Windows profile tree
+  # reachable, so the two platforms pin each other here rather than each relying
+  # on a leg the other does not run.
+  # Gated with iccdev.apply-throughput, and for a second reason as well: on
+  # Windows this working directory is created by iccdev.windows-create-profiles,
+  # which is itself inside if(TARGET iccFromXml). Registered unconditionally,
+  # the test would fail with "Unable to find working directory" on a no-XML
+  # Windows configure -- a message about the fixture, not about the CLI contract
+  # the test exists to pin.
+  if(TARGET iccFromXml)
+    if(WIN32)
+      set(_bench_testing_cwd "${ICCDEV_TEST_OUTDIR}/windows-testing")
+    else()
+      set(_bench_testing_cwd "${ICCDEV_REPO_ROOT}/Testing")
+    endif()
+
+    add_test(
+      NAME iccdev.bench-apply-testing-cwd
+      COMMAND "${CMAKE_COMMAND}"
+        "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+        "-DTOOL_ARGS=-pixels;4096;-repeats;1;-suite"
+        "-DEXPECT_EXIT=zero"
+        "-DEXPECT_MATCH=[1-9][0-9]* case\\(s\\) measured"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+    )
+    set_tests_properties(iccdev.bench-apply-testing-cwd PROPERTIES
+      WORKING_DIRECTORY "${_bench_testing_cwd}"
+      TIMEOUT 300
+      LABELS "iccdev;iccprofLib;benchmark;cli;issue-2254;regression"
+      FIXTURES_REQUIRED iccdev_profiles
+    )
+  endif()
+
+  add_test(
+    NAME iccdev.bench-apply-empty-suite
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;-suite"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=no benchmark cases were measured"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-empty-suite PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;issue-2254;regression"
+    ENVIRONMENT "ICCDEV_BENCH_SOURCE_ROOT=${CMAKE_CURRENT_BINARY_DIR}/bench-empty-root;ICCDEV_BENCH_BUILD_ROOT=${CMAKE_CURRENT_BINARY_DIR}/bench-empty-root"
+  )
+
   if(WIN32)
     set(_bench_windows_env_mods
       "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccBenchApply>"
@@ -5074,12 +5256,34 @@ if(TARGET iccBenchApply)
       list(APPEND _bench_windows_env_mods
         "PATH=path_list_prepend:${_runtime_path}")
     endforeach()
-    set_tests_properties(iccdev.apply-throughput PROPERTIES
-      ENVIRONMENT_MODIFICATION "${_bench_windows_env_mods}"
-    )
-    set_tests_properties(iccdev.apply-throughput-pcc PROPERTIES
-      ENVIRONMENT_MODIFICATION "${_bench_windows_env_mods}"
-    )
+    # Only the tests that were actually registered: set_tests_properties on an
+    # unknown name is a hard configure error, and the two suite-driving tests
+    # are gated on iccFromXml above.
+    set(_bench_env_mod_tests
+      iccdev.apply-throughput-pcc
+      iccdev.bench-apply-arity-floor
+      iccdev.bench-apply-suite-rejects-chain
+      iccdev.bench-apply-suite-rejects-perxform
+      iccdev.bench-apply-empty-suite)
+    if(TARGET iccFromXml)
+      list(APPEND _bench_env_mod_tests
+        iccdev.apply-throughput
+        iccdev.bench-apply-testing-cwd)
+    endif()
+    # #2254: the CLI-contract tests reach the tool through cmake -P, and a child
+    # process inherits the PATH the test process was given, so they need the
+    # same runtime paths. Without this they would fail on Windows for want of
+    # IccProfLib2.dll, and the three that assert a nonzero exit would have
+    # passed for exactly that wrong reason -- STATUS_DLL_NOT_FOUND is an
+    # ordinary nonzero status, not a launch failure the wrapper can spot. What
+    # keeps that honest is the wrapper's mandatory EXPECT_MATCH on every
+    # negative test; the paths are what make the tests measure the tool rather
+    # than the loader.
+    foreach(_bench_cli_test IN LISTS _bench_env_mod_tests)
+      set_tests_properties(${_bench_cli_test} PROPERTIES
+        ENVIRONMENT_MODIFICATION "${_bench_windows_env_mods}"
+      )
+    endforeach()
   endif()
 endif()
 

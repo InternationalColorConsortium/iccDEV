@@ -111,7 +111,7 @@ static void Usage()
   printf("  -perxform          per-xform breakdown, including PCS steps\n");
   printf("  -leaf              isolated hot leaf functions\n");
   printf("  -threads L         comma list of thread counts, e.g. 1,2,8\n");
-  printf("  -suite             run the built-in case table, ignoring any chain\n");
+  printf("  -suite             run the built-in case table; takes no chain\n");
   printf("  -csv               machine-readable output\n");
   printf("\nNo timing threshold is ever asserted. This tool records.\n");
 }
@@ -225,6 +225,30 @@ static bool RunThreadSweep(CIccCmm &cmm, const std::vector<int> &threads,
     BenchStats st;
     icUInt32Number sum;
 
+    // #2254: emit the row's identity BEFORE the measurement, not after it. The
+    // suite's per-case cost spans two orders of magnitude at a fixed pixel
+    // budget -- 33.77 Mpx/s for monochrome against 0.18 for mpe-calc on the same
+    // host -- so on a slow or instrumented build one case can run for tens of
+    // minutes. With nothing on stdout until it finished, that was reported as a
+    // hang: the last line printed was the previous case, and the running one was
+    // invisible. The completed row is byte-identical to before; only the moment
+    // the first half of it appears has changed. CSV is untouched, since a
+    // half-written record is not a record.
+    if (g_bCsv) {
+      // CSV cannot carry a half-written row, so the progress goes to stderr --
+      // the same channel the empty-suite diagnostic uses, and for the same
+      // reason. CI drives the suite with -csv, which is precisely where a case
+      // that runs for tens of minutes is least visible, so gating the progress
+      // on !g_bCsv would have left the reported symptom in place exactly where
+      // it was reported from.
+      fprintf(stderr, "running %s t=%d\n", szCaseName, n);
+      fflush(stderr);
+    }
+    else {
+      printf("  %-16s t=%-4d ", i ? "" : szCaseName, n);
+      fflush(stdout);
+    }
+
     if (n == 1) {
       st = icBenchRun(
         [&]() { cmm.Apply(dst.data(), src.data(), g_nPixels); },
@@ -238,8 +262,15 @@ static bool RunThreadSweep(CIccCmm &cmm, const std::vector<int> &threads,
       // after the first threaded iteration and the next one would use freed
       // memory.
       CIccThreadedCmm *pT = CIccThreadedCmm::Attach(&cmm, n, false);
+      // The CSV arm is new with #2254. This branch used to print the human row
+      // unconditionally, so an Attach failure under -csv injected a padded text
+      // line into the middle of the record stream. Reporting it as a record
+      // keeps the file parseable and keeps the failure visible.
       if (!pT) {
-        printf("  %-16s t=%-4d  (Attach failed; skipped)\n", szCaseName, n);
+        if (g_bCsv)
+          printf("%s,%d,,,,,attach-failed\n", szCaseName, n);
+        else
+          printf(" (Attach failed; skipped)\n");
         continue;
       }
       st = icBenchRun(
@@ -265,8 +296,7 @@ static bool RunThreadSweep(CIccCmm &cmm, const std::vector<int> &threads,
              st.maxMpxPerSec, sum, bMatch ? "ok" : "checksum-mismatch");
     }
     else {
-      printf("  %-16s t=%-4d %9.2f %7.2fx  0x%08x  %s\n",
-             i ? "" : szCaseName, n, st.medianMpxPerSec,
+      printf("%9.2f %7.2fx  0x%08x  %s\n", st.medianMpxPerSec,
              rateFirst > 0.0 ? st.medianMpxPerSec / rateFirst : 0.0,
              sum, bMatch ? "OK" : "CHECKSUM MISMATCH");
     }
@@ -380,10 +410,19 @@ static void RunLeaf(const char *szProfilePath)
 
 // Runs the built-in table.
 //
-// A case whose profile is missing is a SKIP with a reason, not a failure: a build
-// configured without ENABLE_ICCXML never generates most of the corpus, and the
-// cases whose profiles are tracked should still run there. An explicit chain on
-// the command line is held to a stricter standard and fails loudly instead.
+// A case whose profile is missing is a SKIP with a reason, not a failure, so a
+// corpus that is short one profile still measures the rest. #2254 corrected the
+// scope of that tolerance: it used to extend to a run in which NOTHING
+// measured, and the original note here claimed "the cases whose profiles are
+// tracked should still run" on a build configured without ENABLE_ICCXML. That
+// set is empty. All nine cases open a generated profile FIRST -- the only
+// tracked profile in the table, ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc,
+// is never first -- so without the corpus generator the suite measures zero
+// cases, every time. Tolerating that made the exit status say "pass" for a run
+// that did nothing. Zero measured is now a failure, and the CTests that drive
+// the suite are registered only where a profile-generating target exists. An
+// explicit chain on the command line is held to a stricter standard still, and
+// fails loudly on the first profile it cannot open.
 static int RunSuite()
 {
   const std::vector<BenchCase> &cases = icBenchBuiltinCases();
@@ -513,12 +552,51 @@ static int RunSuite()
     printf("\n  %d case(s) measured, %d skipped.%s\n", nRan, nSkipped,
            bAllOk ? "" : "  SOME CASES FAILED.");
 
+  // #2254: measuring nothing is a failure, not a pass. Every case SKIPs when the
+  // profile roots are wrong -- running from Testing/ is enough, because the
+  // roots default to "." and the tool then looks for ./Testing/Testing/... -- and
+  // the old exit status made that indistinguishable from a clean run. That also
+  // made iccdev.apply-throughput vacuous: it drives this function and asserts
+  // only the exit code, so a build whose profile fixture produced nothing still
+  // reported a passing benchmark. Individual SKIPs stay tolerated; a case that
+  // cannot resolve on one platform is expected. Zero of nine is not.
+  if (!nRan) {
+    // stderr, unlike every other diagnostic in this file, because this one is
+    // the only one that can be reached with -csv in effect: stdout is then a
+    // record stream and a paragraph of prose in the middle of it is not
+    // parseable. Flush stdout first so the two streams keep the order they were
+    // written in when both land in one log.
+    fflush(stdout);
+    fprintf(stderr,
+            "FAIL: no benchmark cases were measured. All %d were skipped.\n"
+            "      Each of ICCDEV_BENCH_SOURCE_ROOT and ICCDEV_BENCH_BUILD_ROOT\n"
+            "      (both defaulting to \".\") is tried as a directory holding a\n"
+            "      Testing/ tree and as a Testing tree itself, so run this from\n"
+            "      the repository root or from Testing/, or set those roots.\n"
+            "      Generated profiles come from the create-profiles fixture.\n",
+            nSkipped);
+    return 1;
+  }
+
   return bAllOk ? 0 : 1;
 }
 
 int main(int argc, const char *argv[])
 {
-  if (argc < 3) {
+  // #2254: this floor was 3, which rejected every two-argument invocation --
+  // `iccBenchApply -suite` among them, the shortest and most obvious way to ask
+  // for the built-in table. The chain needs two arguments and -suite needs
+  // none, so an argc floor cannot express the requirement for both; the real
+  // per-mode checks are below, where the mode is known. An invocation with no
+  // arguments at all is still just the usage text.
+  //
+  // Worth being exact about what this did and did not break: the Readme's
+  // examples all carried enough options to clear the floor, so nothing
+  // documented was failing. The cost was that the natural spelling did not
+  // work, and callers padded it with a stray trailing token instead -- which is
+  // how the silent chain-discard below went unnoticed. The bare form is now an
+  // example, because it now runs.
+  if (argc < 2) {
     Usage();
     return 1;
   }
@@ -597,7 +675,29 @@ int main(int argc, const char *argv[])
   if (g_threads.empty())
     g_threads.push_back(1);
 
-  // -suite ignores any chain arguments, as documented: the table is the input.
+  // #2254: -suite used to ignore trailing arguments outright, which is how a QA
+  // run of `iccBenchApply -suite 1 sRGB_v4_ICC_preference.icc 10002` produced
+  // the built-in table and never touched that profile or that intent. Silently
+  // discarding a chain the caller spelled out in full is worse than refusing it,
+  // so refuse it and name what was dropped. Now that the argc floor above lets
+  // `-suite` stand alone, there is a correct spelling to point at.
+  if (g_bSuite && nArg < argc) {
+    printf("-suite runs the built-in case table and takes no chain;"
+           " '%s' and everything after it would be ignored.\n"
+           "Drop them, or drop -suite to benchmark that chain.\n", argv[nArg]);
+    return 1;
+  }
+
+  // Same reason, different argument: RunSuite reads neither g_bPerXform nor
+  // g_bLeaf, so both were accepted and dropped. A caller who asked for a
+  // breakdown and got a plain table has no way to tell it was refused.
+  if (g_bSuite && (g_bPerXform || g_bLeaf)) {
+    printf("%s has no effect with -suite: the built-in table reports"
+           " whole-chain throughput only.\n",
+           g_bPerXform ? "-perxform" : "-leaf");
+    return 1;
+  }
+
   if (g_bSuite)
     return RunSuite();
 

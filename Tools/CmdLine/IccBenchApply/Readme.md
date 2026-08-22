@@ -27,7 +27,7 @@ way.
 | `-threads L` | comma list of thread counts, e.g. `1,2,8` (default `1`) |
 | `-perxform` | per-xform breakdown, including PCS steps |
 | `-leaf` | isolated hot leaf functions |
-| `-suite` | run the built-in case table, ignoring any chain arguments |
+| `-suite` | run the built-in case table; takes no chain arguments |
 | `-csv` | machine-readable output |
 
 Examples:
@@ -36,9 +36,20 @@ Examples:
 # one chain, per-xform breakdown
 iccBenchApply -perxform 1 Testing/V2/v2RgbLut8.icc 1 Testing/V2/v2CmykLut16.icc 1
 
+# the built-in table
+iccBenchApply -suite
+
 # the built-in table at three thread counts, as CSV
 iccBenchApply -suite -csv -threads 1,2,8
+
+# the built-in table, bounded for a quick check
+iccBenchApply -suite -pixels 65536 -repeats 3
 ```
+
+`-suite` and a chain are alternatives, not a chain with a default. Passing both
+is refused rather than silently resolved in favour of the table, and `-perxform`
+and `-leaf` are refused with `-suite` because the table reports whole-chain
+throughput only. Anything the tool will not act on, it says so about.
 
 The chain is a repeating trailing group, which is what makes non-round-tripping
 profiles usable: an input-only profile such as `SpecRef/SixChanCameraRef.icc` or
@@ -130,9 +141,48 @@ and NaN — because several of the clamp and non-finite paths worth measuring wo
 otherwise never execute, and a happy-path-only buffer would let an incorrect
 change pass the checksum oracle unnoticed.
 
+## Runtime, and what looks like a hang
+
+The suite gives every case the same pixel budget, and the cases do not cost the
+same per pixel. On one Release host the spread across the table was `monochrome`
+at 33.77 Mpx/s against `mpe-calc` at 0.18 -- a factor of about 190 -- so at the
+default 1048576 pixels and 7 repeats, `mpe-calc` alone accounts for most of the
+run. On a debug or sanitizer build, where every case is slower again by an order
+of magnitude, that single case can run for tens of minutes.
+
+That is slow, not stuck. Each row's case name and thread count are printed and
+flushed before the measurement starts, so the case in progress is always the one
+named last. Under `-csv` that notice goes to stderr instead -- `running <case>
+t=<n>` -- because a record stream cannot carry a half-written row; stdout stays
+exactly the CSV a parser expects. Use `-pixels` to bound a run; the registered
+`iccdev.apply-throughput` test uses `-pixels 65536 -repeats 3`.
+
+## Exit status
+
+Zero when every measured case agreed with itself across thread counts and across
+a second `Begin()`. Nonzero on a checksum that moved, on an argument the tool
+will not act on, and -- since #2254 -- when the run measured no cases at all.
+Individual `SKIP`s are tolerated, because a case that cannot resolve on one
+platform is expected; nine of nine is not a benchmark, it is a misconfiguration,
+and it used to exit zero.
+
 ## Profile path resolution
 
 `-suite` resolves each Testing-relative path against two roots, in order:
 `ICCDEV_BENCH_SOURCE_ROOT` then `ICCDEV_BENCH_BUILD_ROOT`, defaulting to `.`.
 Both are needed because the POSIX profile fixture writes generated profiles into
-the source tree while the Windows fixture writes them into the build tree.
+the source tree while the Windows fixture writes them into its own work
+directory.
+
+Each root is tried two ways -- as a directory that *contains* `Testing/`, and as
+a `Testing` tree itself -- so `iccBenchApply -suite` works from the repository
+root and from inside `Testing/`, and a fixture directory that is already a
+Testing tree can be named directly. The containing form is tried first, so a
+repository root resolves exactly as it always did.
+
+Note that all nine cases open a *generated* profile first. The one tracked
+profile in the table, `ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc`, is never
+first in its chain, so without the `create-profiles` fixture having run every
+case reports `SKIP` and the run fails; see **Exit status** above. The two
+registered tests that drive the suite are therefore only registered where a
+profile-generating target exists.

@@ -161,6 +161,28 @@ static void EnsureRoots()
 // source tree on POSIX and iccdev.windows-create-profiles writes them into the
 // build tree (see the note at Build/Cmake/Testing/CMakeLists.txt:1746), so a
 // single hardcoded root works on exactly one platform.
+// #2254: each root is tried two ways -- as a directory that CONTAINS Testing/,
+// and as a Testing tree itself. One hardcoded "/Testing/" segment was wrong for
+// both platforms in different ways.
+//
+// On Windows the generated profiles do not live under <build>/Testing at all.
+// iccdev.windows-create-profiles copies the source Testing/ tree to
+// ${ICCDEV_TEST_OUTDIR}/windows-testing and generates its 135 profiles there
+// (Build/Cmake/Testing/CMakeLists.txt:5238, RunWindowsBatchTest.cmake:184-194),
+// so with ICCDEV_BENCH_BUILD_ROOT=${CMAKE_BINARY_DIR} the probe looked in
+// <build>/Testing -- the CTest scratch directory -- and missed all nine cases.
+// iccdev.apply-throughput has therefore been passing on every Windows leg
+// without measuring anything: 0.01s on run 32563985818, against 6.62s for the
+// fixture that generated the profiles it never found. A directory that is
+// already a Testing tree can now be named directly.
+//
+// On POSIX the same second form fixes the other reported case: running the tool
+// from inside Testing/, where the default root of "." made every path resolve
+// as ./Testing/Testing/<rel> and all nine cases SKIP.
+//
+// The forms are ordered containing-root first so that a repository root keeps
+// resolving exactly as it did; the direct form is only reached when the first
+// misses.
 bool icBenchResolveProfile(const std::string &rel, std::string &abs)
 {
   EnsureRoots();
@@ -169,12 +191,16 @@ bool icBenchResolveProfile(const std::string &rel, std::string &abs)
   for (int i = 0; i < 2; i++) {
     if (roots[i]->empty())
       continue;
-    std::string cand = *roots[i] + "/Testing/" + rel;
-    FILE *f = fopen(cand.c_str(), "rb");
-    if (f) {
-      fclose(f);
-      abs = cand;
-      return true;
+
+    const std::string cands[2] = { *roots[i] + "/Testing/" + rel,
+                                   *roots[i] + "/" + rel };
+    for (int j = 0; j < 2; j++) {
+      FILE *f = fopen(cands[j].c_str(), "rb");
+      if (f) {
+        fclose(f);
+        abs = cands[j];
+        return true;
+      }
     }
   }
   return false;
