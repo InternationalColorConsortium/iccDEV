@@ -268,6 +268,92 @@ jobs:
           Write-Host "========= Building iccDEV ... ================`n"
           cmake --build build -- /m /maxcpucount
 
+      - name: Validate IIS PAWG assessment surface
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+          . .github/scripts/sanitize.ps1
+
+          $binDir = (Resolve-Path 'Build\Cmake\build\bin\Debug').Path
+          $iisDll = Join-Path $binDir 'iccIisIsapi.dll'
+          $iisSmoke = Join-Path $binDir 'iccIisIsapiSmoke.exe'
+          $pawg = Join-Path $binDir 'iccPawgReport.exe'
+          $sample = (Resolve-Path 'Testing\sRGB_v4_ICC_preference.icc').Path
+          $endpointPage = Join-Path $binDir 'endpoints.html'
+          $errorPage = Join-Path $binDir 'error.html'
+          $landingScript = Join-Path $binDir 'index.js'
+          $siteScript = Join-Path $binDir 'site.js'
+          $webConfig = Join-Path $binDir 'web.config'
+          $endpointQa = 'Tools\Winnt\IccIisIsapi\Test-IccIisIsapiEndpoints.ps1'
+
+          foreach ($required in @(
+            $iisDll,
+            $iisSmoke,
+            $pawg,
+            $endpointPage,
+            $errorPage,
+            $landingScript,
+            $siteScript,
+            $webConfig,
+            $endpointQa
+          )) {
+            if (-not (Test-Path -LiteralPath $required)) {
+              throw "Required IIS PAWG artifact missing: $(Sanitize-Line $required)"
+            }
+          }
+
+          & $iisSmoke $iisDll
+          if ($LASTEXITCODE -ne 0) {
+            throw "iccIisIsapiSmoke failed with exit code $LASTEXITCODE"
+          }
+
+          $pawgOutput = (& $pawg $sample 2>&1) -join "`n"
+          $pawgExit = $LASTEXITCODE
+          if ($pawgExit -notin 0, 1) {
+            throw "iccPawgReport failed with exit code $pawgExit"
+          }
+          if ($pawgOutput -notmatch 'ICC PROFILE ASSESSMENT REPORT') {
+            throw "iccPawgReport output omitted the assessment report header"
+          }
+
+          $pageText = Get-Content -LiteralPath $endpointPage -Raw
+          $landingScriptText = Get-Content -LiteralPath $landingScript -Raw
+          $siteScriptText = Get-Content -LiteralPath $siteScript -Raw
+          $webConfigText = Get-Content -LiteralPath $webConfig -Raw
+          if ($pageText -notmatch 'Analyze An ICC Profile' -or
+              $landingScriptText -notmatch 'loadEndpoint' -or
+              $siteScriptText -notmatch 'Download assessment report' -or
+              $siteScriptText -notmatch 'X-ICCDEV-Request' -or
+              $webConfigText -notmatch 'frame-ancestors' -or
+              $webConfigText -notmatch "style-src-attr 'none'" -or
+              $webConfigText -notmatch 'errorMode="Custom"' -or
+              $webConfigText -match "'unsafe-inline'") {
+            throw "Built endpoint page omitted the PAWG user interface"
+          }
+
+          $tokens = $null
+          $parseErrors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            $endpointQa,
+            [ref]$tokens,
+            [ref]$parseErrors
+          )
+          if ($parseErrors.Count -ne 0) {
+            throw "Endpoint QA script failed PowerShell parsing"
+          }
+
+          Sanitize-Print "[OK] IIS PAWG build, smoke, UI, and QA script checks passed"
+
       - name: Run batch profile creation routines
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:

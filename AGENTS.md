@@ -33,8 +33,12 @@ shares one source of truth. Update rules here, not in the mirrors.
 | Maintainer regression container | `docs/regression-container.md` |
 | Regression container prompt | `.github/prompts/regression-container-maintainer.prompt.md` |
 | Maintainer CTest selection and CI budget | `.github/skills/maintainer-ci-ctest/SKILL.md` |
+| New CLI tool onboarding | `.github/prompts/add-new-tool.prompt.md` |
+| Contributor onboarding | `.github/prompts/contributor-onboarding.prompt.md` |
+| Apply-path throughput benchmark | `Tools/CmdLine/IccBenchApply/Readme.md` |
 | Security repro | `.github/prompts/reproduce-security-issue.prompt.md` |
 | iccSpecSepToTiff QA | `.github/skills/specsep-qa/SKILL.md` |
+| IIS ISAPI endpoint QA | `.github/skills/iis-isapi-qa/SKILL.md` |
 | Issue filing format | `.github/prompts/file-security-issue.prompt.md` |
 | Library hardening | `.github/instructions/icc-library-code.instructions.md` |
 | Workflow hardening | `.github/instructions/workflow-governance.instructions.md` |

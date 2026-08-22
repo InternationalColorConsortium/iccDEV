@@ -1,5 +1,6 @@
 #include <httpext.h>
 #include <windows.h>
+#include <bcrypt.h>
 
 #ifdef max
 #undef max
@@ -9,6 +10,10 @@
 #endif
 
 #include <algorithm>
+#include <array>
+#include <atomic>
+#include <chrono>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -34,6 +39,7 @@
 #endif
 
 using iccIsapi::GetLastErrorString;
+using iccIsapi::GetServerVariableString;
 using iccIsapi::HtmlEscape;
 using iccIsapi::IsMethod;
 using iccIsapi::JsonEscape;
@@ -41,7 +47,10 @@ using iccIsapi::ReadRequestBody;
 using iccIsapi::SanitizeFilename;
 using iccIsapi::SanitizeErrorMessage;
 using iccIsapi::Send400;
+using iccIsapi::Send403;
 using iccIsapi::Send405;
+using iccIsapi::Send415;
+using iccIsapi::Send429;
 using iccIsapi::Send500;
 using iccIsapi::SendResponse;
 using iccIsapi::TruncateForBrowser;
@@ -53,6 +62,11 @@ namespace {
 constexpr char kExtensionDescription[] = "iccDEV IIS ISAPI shared-library sample";
 constexpr DWORD kToolTimeoutMs = 30000;
 constexpr size_t kMaxUploadBytes = 16 * 1024 * 1024;
+constexpr size_t kMaxConcurrentToolRequests = 4;
+constexpr size_t kMaxPersistedWorkspaces = 100;
+constexpr auto kWorkspaceRetention = std::chrono::hours(24);
+
+std::atomic<size_t> gActiveToolRequests{0};
 
 struct ToolResult {
   std::string name;
@@ -98,21 +112,100 @@ std::filesystem::path GetModuleDirectory()
   return std::filesystem::path(path).parent_path();
 }
 
+void CleanupWorkspaces(const std::filesystem::path& base)
+{
+  using WorkspaceEntry =
+      std::pair<std::filesystem::file_time_type, std::filesystem::path>;
+  std::vector<WorkspaceEntry> workspaces;
+  const auto cutoff = std::filesystem::file_time_type::clock::now() -
+                      kWorkspaceRetention;
+  std::error_code ec;
+
+  for (std::filesystem::directory_iterator it(base, ec), end;
+       !ec && it != end;
+       it.increment(ec)) {
+    const std::filesystem::directory_entry& entry = *it;
+    if (entry.is_symlink(ec) || !entry.is_directory(ec)) {
+      ec.clear();
+      continue;
+    }
+
+    const std::string name = entry.path().filename().string();
+    const bool capabilityName =
+        name.size() == 32 &&
+        std::all_of(name.begin(), name.end(), [](unsigned char ch) {
+          return std::isxdigit(ch) != 0;
+        });
+    if (!capabilityName) {
+      std::filesystem::remove_all(entry.path(), ec);
+      ec.clear();
+      continue;
+    }
+
+    const auto modified = entry.last_write_time(ec);
+    if (ec) {
+      ec.clear();
+      continue;
+    }
+
+    if (modified < cutoff) {
+      std::filesystem::remove_all(entry.path(), ec);
+      ec.clear();
+      continue;
+    }
+
+    workspaces.emplace_back(modified, entry.path());
+  }
+
+  std::sort(workspaces.begin(),
+            workspaces.end(),
+            [](const WorkspaceEntry& lhs, const WorkspaceEntry& rhs) {
+              return lhs.first < rhs.first;
+            });
+
+  while (workspaces.size() >= kMaxPersistedWorkspaces) {
+    std::filesystem::remove_all(workspaces.front().second, ec);
+    ec.clear();
+    workspaces.erase(workspaces.begin());
+  }
+}
+
 std::filesystem::path CreateTempDirectory()
 {
   const std::filesystem::path base = GetModuleDirectory() / "_tool-work";
   std::filesystem::create_directories(base);
+  CleanupWorkspaces(base);
 
-  char tempFile[MAX_PATH]{};
-  const UINT result = GetTempFileNameA(base.string().c_str(), "iis", 0, tempFile);
-  if (!result) {
-    throw std::runtime_error("Unable to create temporary workspace: " + GetLastErrorString(GetLastError()));
+  constexpr char kHexDigits[] = "0123456789abcdef";
+  for (size_t attempt = 0; attempt < 8; attempt++) {
+    std::array<unsigned char, 16> randomBytes{};
+    const NTSTATUS status = BCryptGenRandom(
+        nullptr,
+        randomBytes.data(),
+        static_cast<ULONG>(randomBytes.size()),
+        BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+    if (status != 0) {
+      throw std::runtime_error("Unable to create a workspace identifier.");
+    }
+
+    std::string workspaceName;
+    workspaceName.reserve(randomBytes.size() * 2);
+    for (const unsigned char value : randomBytes) {
+      workspaceName.push_back(kHexDigits[value >> 4]);
+      workspaceName.push_back(kHexDigits[value & 0x0f]);
+    }
+
+    const std::filesystem::path tempPath = base / workspaceName;
+    std::error_code ec;
+    if (std::filesystem::create_directory(tempPath, ec)) {
+      return tempPath;
+    }
+    if (ec) {
+      throw std::runtime_error("Unable to create a workspace directory.");
+    }
   }
 
-  std::filesystem::path tempPath(tempFile);
-  std::filesystem::remove(tempPath);
-  std::filesystem::create_directories(tempPath);
-  return tempPath;
+  throw std::runtime_error("Unable to allocate a unique workspace identifier.");
 }
 
 void WriteBinaryFile(const std::filesystem::path& path, const std::vector<unsigned char>& data)
@@ -163,13 +256,102 @@ std::string BuildPublicUrl(const std::filesystem::path& path, bool directory = f
     return std::string();
   }
 
-  std::string url = "./";
+  std::string url = "/";
   url += relative.generic_string();
   if (directory && !url.empty() && url.back() != '/') {
     url.push_back('/');
   }
   return url;
 }
+
+std::string BuildUploadFilename(const std::string& filename,
+                                const std::string& inputKind)
+{
+  const bool isXml = inputKind == "xml";
+  const char* fallback = isXml ? "upload.xml" : "upload.icc";
+  std::string safe = SanitizeFilename(filename, fallback);
+  std::string stem = std::filesystem::path(safe).stem().string();
+  if (stem.empty()) {
+    stem = "upload";
+  }
+  return stem + (isXml ? ".xml" : ".icc");
+}
+
+bool EqualsCaseInsensitive(std::string lhs, std::string rhs)
+{
+  const auto lower = [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  };
+  std::transform(lhs.begin(), lhs.end(), lhs.begin(), lower);
+  std::transform(rhs.begin(), rhs.end(), rhs.begin(), lower);
+  return lhs == rhs;
+}
+
+bool StartsWithContentType(const std::string& value,
+                           const std::string& expected)
+{
+  const size_t separator = value.find(';');
+  std::string mediaType = value.substr(0, separator);
+  while (!mediaType.empty() &&
+         std::isspace(static_cast<unsigned char>(mediaType.back()))) {
+    mediaType.pop_back();
+  }
+  size_t start = 0;
+  while (start < mediaType.size() &&
+         std::isspace(static_cast<unsigned char>(mediaType[start]))) {
+    ++start;
+  }
+  return EqualsCaseInsensitive(mediaType.substr(start), expected);
+}
+
+bool ContainsDoctype(const std::vector<unsigned char>& body)
+{
+  static const std::string marker = "<!doctype";
+  if (body.size() < marker.size()) {
+    return false;
+  }
+
+  return std::search(body.begin(),
+                     body.end(),
+                     marker.begin(),
+                     marker.end(),
+                     [](unsigned char lhs, char rhs) {
+                       return std::tolower(lhs) ==
+                              std::tolower(static_cast<unsigned char>(rhs));
+                     }) != body.end();
+}
+
+class ToolRequestGuard {
+public:
+  ToolRequestGuard()
+  {
+    size_t active = gActiveToolRequests.load(std::memory_order_relaxed);
+    while (active < kMaxConcurrentToolRequests) {
+      if (gActiveToolRequests.compare_exchange_weak(active,
+                                                    active + 1,
+                                                    std::memory_order_acquire,
+                                                    std::memory_order_relaxed)) {
+        acquired_ = true;
+        break;
+      }
+    }
+  }
+
+  ~ToolRequestGuard()
+  {
+    if (acquired_) {
+      gActiveToolRequests.fetch_sub(1, std::memory_order_release);
+    }
+  }
+
+  bool Acquired() const
+  {
+    return acquired_;
+  }
+
+private:
+  bool acquired_ = false;
+};
 
 ProcessResult RunProcess(const std::filesystem::path& exePath,
                          const std::vector<std::string>& args,
@@ -272,6 +454,46 @@ ToolResult MakeSkippedTool(const std::string& name, const std::string& note)
   return result;
 }
 
+ToolResult RunPawgReport(const std::filesystem::path& pawgExe,
+                         const std::filesystem::path& profilePath,
+                         const std::filesystem::path& workspace)
+{
+  if (!std::filesystem::exists(pawgExe)) {
+    return MakeSkippedTool("iccPawgReport",
+                           "Skipped because iccPawgReport.exe is not installed.");
+  }
+
+  ToolResult report;
+  report.name = "iccPawgReport";
+  report.command = "iccPawgReport \"" + profilePath.filename().string() + "\"";
+  const ProcessResult process =
+      RunProcess(pawgExe, { profilePath.filename().string() }, workspace);
+  report.exitCode = static_cast<int>(process.exitCode);
+  report.ok = process.launched && !process.timedOut &&
+              (report.exitCode == 0 || report.exitCode == 1);
+  if (process.timedOut) {
+    report.note = "Timed out while assessing the profile.";
+  }
+  else if (process.launched && report.exitCode == 1) {
+    report.note = "Assessment completed with one or more PAWG findings.";
+  }
+  report.output = TruncateForBrowser(process.output.empty()
+                                       ? "No report output."
+                                       : process.output);
+  AttachProcessLog(report, process);
+
+  if (process.launched && !process.output.empty()) {
+    const std::filesystem::path reportPath = workspace / "icc-pawg-report.txt";
+    WriteTextFile(reportPath, process.output);
+    report.artifactName = reportPath.filename().string();
+    report.artifactBytes = std::filesystem::file_size(reportPath);
+    report.artifactUrl = BuildPublicUrl(reportPath);
+    report.artifactPreview = report.output;
+  }
+
+  return report;
+}
+
 std::string BuildToolJson(const std::string& inputKind,
                           const std::string& filename,
                           size_t bytes,
@@ -298,7 +520,6 @@ std::string BuildToolJson(const std::string& inputKind,
     }
     json << "{";
     json << "\"name\":\"" << JsonEscape(tool.name) << "\",";
-    json << "\"command\":\"" << JsonEscape(tool.command) << "\",";
     json << "\"exit_code\":" << tool.exitCode << ",";
     json << "\"ok\":" << (tool.ok ? "true" : "false") << ",";
     json << "\"skipped\":" << (tool.skipped ? "true" : "false") << ",";
@@ -318,11 +539,10 @@ std::string BuildToolJson(const std::string& inputKind,
   return json.str();
 }
 
-/// Run the core ICC tools (iccDumpProfile, iccToXml, iccFromXml, iccRoundTrip,
-/// and optionally iccToJson/iccFromJson) against an uploaded file.  Each tool
-/// is executed as a child process with a timeout of kToolTimeoutMs.  Returns a
-/// vector of ToolResult with exit codes, captured stdout, log paths, and
-/// generated artifact metadata.
+/// Run the ICC conversion, assessment, dump, and round-trip tools against an
+/// uploaded file. Each tool is executed as a child process with a timeout of
+/// kToolTimeoutMs. Returns a vector of ToolResult with exit codes, captured
+/// stdout, log paths, and generated artifact metadata.
 std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
                                     const std::string& inputKind,
                                     const std::string& filename,
@@ -332,13 +552,13 @@ std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
   const std::filesystem::path dumpExe = binDir / "iccDumpProfile.exe";
   const std::filesystem::path toXmlExe = binDir / "iccToXml.exe";
   const std::filesystem::path fromXmlExe = binDir / "iccFromXml.exe";
+  const std::filesystem::path pawgExe = binDir / "iccPawgReport.exe";
   const std::filesystem::path roundTripExe = binDir / "iccRoundTrip.exe";
   const std::filesystem::path toJsonExe = binDir / "iccToJson.exe";
   const std::filesystem::path fromJsonExe = binDir / "iccFromJson.exe";
 
   const bool inputIsXml = inputKind == "xml";
-  const std::string safeFilename = SanitizeFilename(filename,
-                                                    inputIsXml ? "upload.xml" : "upload.icc");
+  const std::string safeFilename = BuildUploadFilename(filename, inputKind);
   const std::filesystem::path uploadedPath = workspace / safeFilename;
   WriteBinaryFile(uploadedPath, body);
 
@@ -351,7 +571,8 @@ std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
     toXml.name = "iccToXml";
     toXml.command = "iccToXml \"" + uploadedPath.filename().string() + "\" \"" + generatedXml.filename().string() + "\"";
     const ProcessResult toXmlProcess = RunProcess(toXmlExe,
-                                                  { uploadedPath.string(), generatedXml.string() },
+                                                  { uploadedPath.filename().string(),
+                                                    generatedXml.filename().string() },
                                                   workspace);
     toXml.exitCode = static_cast<int>(toXmlProcess.exitCode);
     toXml.ok = toXmlProcess.launched && !toXmlProcess.timedOut && toXml.exitCode == 0;
@@ -371,7 +592,8 @@ std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
       fromXml.name = "iccFromXml";
       fromXml.command = "iccFromXml \"" + generatedXml.filename().string() + "\" \"" + generatedIcc.filename().string() + "\"";
       const ProcessResult fromXmlProcess = RunProcess(fromXmlExe,
-                                                      { generatedXml.string(), generatedIcc.string() },
+                                                      { generatedXml.filename().string(),
+                                                        generatedIcc.filename().string() },
                                                       workspace);
       fromXml.exitCode = static_cast<int>(fromXmlProcess.exitCode);
       fromXml.ok = fromXmlProcess.launched && !fromXmlProcess.timedOut && fromXml.exitCode == 0;
@@ -394,7 +616,9 @@ std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
     dumpProfile.name = "iccDumpProfile";
     dumpProfile.command = "iccDumpProfile 100 \"" + uploadedPath.filename().string() + "\" ALL";
     const ProcessResult dumpProcess = RunProcess(dumpExe,
-                                                 { "100", uploadedPath.string(), "ALL" },
+                                                 { "100",
+                                                   uploadedPath.filename().string(),
+                                                   "ALL" },
                                                  workspace);
     dumpProfile.exitCode = static_cast<int>(dumpProcess.exitCode);
     dumpProfile.ok = dumpProcess.launched && !dumpProcess.timedOut && dumpProfile.exitCode == 0;
@@ -403,11 +627,13 @@ std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
     AttachProcessLog(dumpProfile, dumpProcess);
     results.push_back(dumpProfile);
 
+    results.push_back(RunPawgReport(pawgExe, uploadedPath, workspace));
+
     ToolResult roundTrip;
     roundTrip.name = "iccRoundTrip";
     roundTrip.command = "iccRoundTrip \"" + uploadedPath.filename().string() + "\"";
     const ProcessResult roundTripProcess = RunProcess(roundTripExe,
-                                                      { uploadedPath.string() },
+                                                      { uploadedPath.filename().string() },
                                                       workspace);
     roundTrip.exitCode = static_cast<int>(roundTripProcess.exitCode);
     roundTrip.ok = roundTripProcess.launched && !roundTripProcess.timedOut && roundTrip.exitCode == 0;
@@ -423,7 +649,8 @@ std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
       toJson.name = "iccToJson";
       toJson.command = "iccToJson \"" + uploadedPath.filename().string() + "\" \"" + generatedJson.filename().string() + "\"";
       const ProcessResult toJsonProcess = RunProcess(toJsonExe,
-                                                     { uploadedPath.string(), generatedJson.string() },
+                                                     { uploadedPath.filename().string(),
+                                                       generatedJson.filename().string() },
                                                      workspace);
       toJson.exitCode = static_cast<int>(toJsonProcess.exitCode);
       toJson.ok = toJsonProcess.launched && !toJsonProcess.timedOut && toJson.exitCode == 0;
@@ -444,7 +671,8 @@ std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
         fromJson.name = "iccFromJson";
         fromJson.command = "iccFromJson \"" + generatedJson.filename().string() + "\" \"" + generatedFromJson.filename().string() + "\"";
         const ProcessResult fromJsonProcess = RunProcess(fromJsonExe,
-                                                         { generatedJson.string(), generatedFromJson.string() },
+                                                         { generatedJson.filename().string(),
+                                                           generatedFromJson.filename().string() },
                                                          workspace);
         fromJson.exitCode = static_cast<int>(fromJsonProcess.exitCode);
         fromJson.ok = fromJsonProcess.launched && !fromJsonProcess.timedOut && fromJson.exitCode == 0;
@@ -469,7 +697,8 @@ std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
     fromXml.name = "iccFromXml";
     fromXml.command = "iccFromXml \"" + uploadedPath.filename().string() + "\" \"" + generatedIcc.filename().string() + "\"";
     const ProcessResult fromXmlProcess = RunProcess(fromXmlExe,
-                                                    { uploadedPath.string(), generatedIcc.string() },
+                                                    { uploadedPath.filename().string(),
+                                                      generatedIcc.filename().string() },
                                                     workspace);
     fromXml.exitCode = static_cast<int>(fromXmlProcess.exitCode);
     fromXml.ok = fromXmlProcess.launched && !fromXmlProcess.timedOut && fromXml.exitCode == 0;
@@ -485,6 +714,7 @@ std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
 
     if (!std::filesystem::exists(generatedIcc)) {
       results.push_back(MakeSkippedTool("iccDumpProfile", "Skipped because iccFromXml did not create an ICC file."));
+      results.push_back(MakeSkippedTool("iccPawgReport", "Skipped because iccFromXml did not create an ICC file."));
       results.push_back(MakeSkippedTool("iccToXml", "Skipped because iccFromXml did not create an ICC file."));
       results.push_back(MakeSkippedTool("iccRoundTrip", "Skipped because iccFromXml did not create an ICC file."));
       return results;
@@ -494,7 +724,9 @@ std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
     dumpProfile.name = "iccDumpProfile";
     dumpProfile.command = "iccDumpProfile 100 \"" + generatedIcc.filename().string() + "\" ALL";
     const ProcessResult dumpProcess = RunProcess(dumpExe,
-                                                 { "100", generatedIcc.string(), "ALL" },
+                                                 { "100",
+                                                   generatedIcc.filename().string(),
+                                                   "ALL" },
                                                  workspace);
     dumpProfile.exitCode = static_cast<int>(dumpProcess.exitCode);
     dumpProfile.ok = dumpProcess.launched && !dumpProcess.timedOut && dumpProfile.exitCode == 0;
@@ -503,11 +735,14 @@ std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
     AttachProcessLog(dumpProfile, dumpProcess);
     results.push_back(dumpProfile);
 
+    results.push_back(RunPawgReport(pawgExe, generatedIcc, workspace));
+
     ToolResult toXml;
     toXml.name = "iccToXml";
     toXml.command = "iccToXml \"" + generatedIcc.filename().string() + "\" \"" + generatedXml.filename().string() + "\"";
     const ProcessResult toXmlProcess = RunProcess(toXmlExe,
-                                                  { generatedIcc.string(), generatedXml.string() },
+                                                  { generatedIcc.filename().string(),
+                                                    generatedXml.filename().string() },
                                                   workspace);
     toXml.exitCode = static_cast<int>(toXmlProcess.exitCode);
     toXml.ok = toXmlProcess.launched && !toXmlProcess.timedOut && toXml.exitCode == 0;
@@ -526,7 +761,7 @@ std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
     roundTrip.name = "iccRoundTrip";
     roundTrip.command = "iccRoundTrip \"" + generatedIcc.filename().string() + "\"";
     const ProcessResult roundTripProcess = RunProcess(roundTripExe,
-                                                      { generatedIcc.string() },
+                                                      { generatedIcc.filename().string() },
                                                       workspace);
     roundTrip.exitCode = static_cast<int>(roundTripProcess.exitCode);
     roundTrip.ok = roundTripProcess.launched && !roundTripProcess.timedOut && roundTrip.exitCode == 0;
@@ -542,7 +777,8 @@ std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
       toJson.name = "iccToJson";
       toJson.command = "iccToJson \"" + generatedIcc.filename().string() + "\" \"" + generatedJson.filename().string() + "\"";
       const ProcessResult toJsonProcess = RunProcess(toJsonExe,
-                                                     { generatedIcc.string(), generatedJson.string() },
+                                                     { generatedIcc.filename().string(),
+                                                       generatedJson.filename().string() },
                                                      workspace);
       toJson.exitCode = static_cast<int>(toJsonProcess.exitCode);
       toJson.ok = toJsonProcess.launched && !toJsonProcess.timedOut && toJson.exitCode == 0;
@@ -614,7 +850,6 @@ void WriteWorkspaceIndex(const std::filesystem::path& workspace,
          << "    <h2>" << HtmlEscape(tool.name) << "</h2>\n"
          << "    <p><span class=\"status " << statusClass << "\">" << statusText << "</span></p>\n"
          << "    <dl>\n"
-         << "      <dt>Command</dt><dd><code>" << HtmlEscape(tool.command.empty() ? "n/a" : tool.command) << "</code></dd>\n"
          << "      <dt>Exit code</dt><dd>" << tool.exitCode << "</dd>\n";
 
     if (!tool.note.empty()) {
@@ -645,7 +880,8 @@ void WriteWorkspaceIndex(const std::filesystem::path& workspace,
   WriteTextFile(workspace / "index.html", html.str());
 }
 
-void WriteWorkspaceRootIndex(const std::filesystem::path& workspaceRoot)
+[[maybe_unused]] void WriteWorkspaceRootIndex(
+    const std::filesystem::path& workspaceRoot)
 {
   using WorkspaceEntry = std::pair<std::filesystem::file_time_type, std::string>;
   std::vector<WorkspaceEntry> workspaces;
@@ -751,23 +987,25 @@ std::string BuildToolSuiteResponse(LPEXTENSION_CONTROL_BLOCK ecb)
     throw std::runtime_error("Missing extension control block.");
   }
 
-  const std::string inputKind = [&]() {
-    const std::string value = GetQueryValue(ecb->lpszQueryString, "input");
-    return value == "xml" ? std::string("xml") : std::string("icc");
-  }();
+  const std::string inputKind = GetQueryValue(ecb->lpszQueryString, "input");
+  if (inputKind != "icc" && inputKind != "xml") {
+    throw std::runtime_error("The input query parameter must be 'icc' or 'xml'.");
+  }
 
   const std::string filename = GetQueryValue(ecb->lpszQueryString, "filename");
   const std::vector<unsigned char> body = ReadRequestBody(ecb, kMaxUploadBytes);
   if (body.empty()) {
     throw std::runtime_error("No upload body or upload exceeds the 16 MB limit.");
   }
+  if (inputKind == "xml" && ContainsDoctype(body)) {
+    throw std::runtime_error("DOCTYPE declarations are not accepted for XML uploads.");
+  }
 
   const std::filesystem::path tempDir = CreateTempDirectory();
   try {
-    const std::string safeFilename = SanitizeFilename(filename, inputKind == "xml" ? "upload.xml" : "upload.icc");
+    const std::string safeFilename = BuildUploadFilename(filename, inputKind);
     const std::vector<ToolResult> tools = RunTopTools(tempDir, inputKind, filename, body);
     WriteWorkspaceIndex(tempDir, inputKind, safeFilename, body.size(), tools);
-    WriteWorkspaceRootIndex(tempDir.parent_path());
     return BuildToolJson(inputKind,
                          safeFilename,
                          body.size(),
@@ -802,11 +1040,7 @@ std::string BuildPlainTextBody()
   xmlProfile.ToXml(xml);
 
   std::ostringstream oss;
-  oss << "IccProfLib version: " << ICCPROFLIBVER << "\r\n"
-      << "IccLibXML version: " << ICCLIBXMLVER << "\r\n"
-#ifdef USE_ICCJSON
-      << "IccLibJSON version: " << ICCLIBJSONVER << "\r\n"
-#endif
+  oss << "iccDEV IIS service\r\n"
       << "Profile spec ver: " << info.GetVersionName(profile.m_Header.version) << "\r\n"
       << "XML payload bytes: " << xml.size() << "\r\n"
       << "Hello from iccDEV IIS ISAPI!\r\n";
@@ -836,10 +1070,7 @@ std::string BuildJsonBody()
 
   std::ostringstream js;
   js << "{";
-  js << "\"iccProfLib_version\":\"" << JsonEscape(ICCPROFLIBVER) << "\",";
-  js << "\"iccLibXML_version\":\"" << JsonEscape(ICCLIBXMLVER) << "\",";
 #ifdef USE_ICCJSON
-  js << "\"iccLibJSON_version\":\"" << JsonEscape(ICCLIBJSONVER) << "\",";
   // Real symbol reference into IccJSON2.dll so MSVC retains the import
   // (issue #823: ci-shared-exports asserts iccIisIsapi.dll depends on
   // IccJSON2*.dll).
@@ -914,7 +1145,6 @@ std::string BuildFromJsonBody()
   std::ostringstream js;
   js << "{";
   js << "\"endpoint\":\"fromjson\",";
-  js << "\"iccLibJSON_version\":\"" << JsonEscape(ICCLIBJSONVER) << "\",";
   js << "\"json_payload_bytes\":" << jsonOut.size() << ",";
   js << "\"roundtrip_parsed\":" << (parsedOk ? "true" : "false") << ",";
   if (!parseStatus.empty()) {
@@ -954,12 +1184,71 @@ DWORD WINAPI HttpExtensionProc(LPEXTENSION_CONTROL_BLOCK ecb)
   const bool isPost = ecb->lpszMethod && std::strcmp(ecb->lpszMethod, "POST") == 0;
 
   try {
-    if (QueryHasValue(ecb->lpszQueryString, "mode", "tools")) {
+    const std::string query =
+        ecb->lpszQueryString ? ecb->lpszQueryString : "";
+    if (query.find("%00") != std::string::npos) {
+      return Send400(ecb, "Invalid request.")
+        ? HSE_STATUS_SUCCESS
+        : HSE_STATUS_ERROR;
+    }
+
+    const std::string mode = GetQueryValue(ecb->lpszQueryString, "mode");
+    const std::string format = GetQueryValue(ecb->lpszQueryString, "format");
+    if (!mode.empty() && !format.empty()) {
+      return Send400(ecb, "Invalid request.")
+        ? HSE_STATUS_SUCCESS
+        : HSE_STATUS_ERROR;
+    }
+
+    if (mode == "tools") {
       if (!isPost) {
-        return Send405(ecb, "POST", "Tool mode requires HTTP POST.")
+        return Send405(ecb, "POST", "Method not allowed.")
           ? HSE_STATUS_SUCCESS
           : HSE_STATUS_ERROR;
       }
+
+      if (GetServerVariableString(ecb, "HTTP_X_ICCDEV_REQUEST") != "1") {
+        return Send403(ecb, "Tool request rejected.")
+          ? HSE_STATUS_SUCCESS
+          : HSE_STATUS_ERROR;
+      }
+
+      const std::string fetchSite =
+          GetServerVariableString(ecb, "HTTP_SEC_FETCH_SITE");
+      if (EqualsCaseInsensitive(fetchSite, "cross-site")) {
+        return Send403(ecb, "Tool request rejected.")
+          ? HSE_STATUS_SUCCESS
+          : HSE_STATUS_ERROR;
+      }
+
+      const std::string inputKind =
+          GetQueryValue(ecb->lpszQueryString, "input");
+      if (inputKind != "icc" && inputKind != "xml") {
+        return Send400(ecb, "Invalid request.")
+          ? HSE_STATUS_SUCCESS
+          : HSE_STATUS_ERROR;
+      }
+      const std::string contentType =
+          GetServerVariableString(ecb, "CONTENT_TYPE");
+      const bool contentTypeAccepted =
+          (inputKind == "icc" &&
+           StartsWithContentType(contentType, "application/octet-stream")) ||
+          (inputKind == "xml" &&
+           (StartsWithContentType(contentType, "application/xml") ||
+            StartsWithContentType(contentType, "text/xml")));
+      if (!contentTypeAccepted) {
+        return Send415(ecb, "Unsupported media type.")
+          ? HSE_STATUS_SUCCESS
+          : HSE_STATUS_ERROR;
+      }
+
+      ToolRequestGuard requestGuard;
+      if (!requestGuard.Acquired()) {
+        return Send429(ecb, "Service busy.")
+          ? HSE_STATUS_SUCCESS
+          : HSE_STATUS_ERROR;
+      }
+
       return SendResponse(ecb,
                           "200 OK",
                           "application/json; charset=utf-8",
@@ -969,43 +1258,55 @@ DWORD WINAPI HttpExtensionProc(LPEXTENSION_CONTROL_BLOCK ecb)
     }
 
     if (!isGet) {
-      return Send405(ecb, "GET", "This endpoint accepts GET only.")
+      return Send405(ecb, "GET", "Method not allowed.")
         ? HSE_STATUS_SUCCESS
         : HSE_STATUS_ERROR;
     }
 
-    if (QueryHasValue(ecb->lpszQueryString, "mode", "health")) {
+    if (mode == "health") {
       return SendResponse(ecb, "200 OK", "text/plain; charset=utf-8", "ok\r\n")
         ? HSE_STATUS_SUCCESS
         : HSE_STATUS_ERROR;
     }
 
-    if (QueryHasValue(ecb->lpszQueryString, "format", "xml")) {
+    if (!mode.empty()) {
+      return Send400(ecb, "Invalid request.")
+        ? HSE_STATUS_SUCCESS
+        : HSE_STATUS_ERROR;
+    }
+
+    if (format == "xml") {
       return SendResponse(ecb, "200 OK", "application/xml; charset=utf-8", BuildXmlBody())
         ? HSE_STATUS_SUCCESS
         : HSE_STATUS_ERROR;
     }
 
-    if (QueryHasValue(ecb->lpszQueryString, "format", "json")) {
+    if (format == "json") {
       return SendResponse(ecb, "200 OK", "application/json; charset=utf-8", BuildJsonBody())
         ? HSE_STATUS_SUCCESS
         : HSE_STATUS_ERROR;
     }
 
 #ifdef USE_ICCJSON
-    if (QueryHasValue(ecb->lpszQueryString, "format", "fromjson")) {
+    if (format == "fromjson") {
       return SendResponse(ecb, "200 OK", "application/json; charset=utf-8", BuildFromJsonBody())
         ? HSE_STATUS_SUCCESS
         : HSE_STATUS_ERROR;
     }
 #endif
 
+    if (!format.empty()) {
+      return Send400(ecb, "Invalid request.")
+        ? HSE_STATUS_SUCCESS
+        : HSE_STATUS_ERROR;
+    }
+
     return SendResponse(ecb, "200 OK", "text/plain; charset=utf-8", BuildPlainTextBody())
       ? HSE_STATUS_SUCCESS
       : HSE_STATUS_ERROR;
   }
-  catch (const std::exception& ex) {
-    Send400(ecb, SanitizeErrorMessage(ex.what()));
+  catch (const std::exception&) {
+    Send400(ecb, "Request processing failed.");
     SetLastError(ERROR_INVALID_DATA);
     return HSE_STATUS_ERROR;
   }

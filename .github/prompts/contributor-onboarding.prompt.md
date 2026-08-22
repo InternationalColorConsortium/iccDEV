@@ -5,53 +5,57 @@ build setup, PR workflow, and key concepts.
 
 ## Repository Map
 
-```
+```text
 iccDEV/
-├── IccProfLib/           83K LOC — Core ICC profile library (C++17)
-│   ├── IccProfile.h/cpp  — CIccProfile: read, write, validate profiles
-│   ├── IccCmm.h/cpp      — CIccCmm: Color Management Module pipeline
-│   ├── IccTagBasic.h/cpp  — 40+ CIccTag subclasses (all tag types)
-│   ├── IccTagLut.h/cpp    — LUT/CLUT/curve tags
-│   ├── IccMpeBasic.h/cpp  — Multi-Processing Elements (MPE)
-│   ├── IccMpeCalc.h/cpp   — Calculator elements (operators, variables)
-│   ├── IccIO.h/cpp        — Binary I/O abstraction
-│   └── IccUtil.h/cpp      — Utility functions, fixed-point math
-│
-├── IccXML/               14K LOC — XML serialization extension
-│   ├── IccLibXML/         — CIccProfileXml, CIccTagXml* (libxml2-based)
-│   └── CmdLine/           — IccToXml and IccFromXml source
-│
-├── Tools/CmdLine/         9K LOC — 13 CLI tools
-│   ├── IccDumpProfile/    — Profile structure dump + validation
-│   ├── IccToXml/          — Binary ICC → XML conversion
-│   ├── IccFromXml/        — XML → Binary ICC conversion
-│   ├── IccRoundTrip/      — A2B/B2A round-trip evaluation
-│   ├── IccApplyNamedCmm/  — Named color CMM application
-│   ├── IccApplyProfiles/  — Multi-profile color transform
-│   ├── IccApplySearch/    — Profile search/optimization
-│   ├── IccApplyToLink/    — DeviceLink profile creation
-│   ├── IccFromCube/       — .cube LUT → ICC profile
-│   ├── IccTiffDump/       — TIFF ICC profile extraction
-│   ├── IccJpegDump/       — JPEG ICC profile extraction
-│   ├── IccPngDump/        — PNG ICC profile extraction
-│   ├── IccSpecSepToTiff/  — Spectral separation → TIFF
-│   └── IccV5DspObsToV4Dsp/ — v5 Display → v4 conversion
-│
-├── Build/Cmake/           — CMakeLists.txt + CMakePresets.json
-├── Testing/               — 14 test profile directories + scripts
-├── ports/iccdev/          — vcpkg overlay port (portfile.cmake, vcpkg.json)
-├── docs/                  — index.md, build.md, install.md
-├── .github/
-│   ├── workflows/         — CI workflows
-│   ├── scripts/           — sanitize-sed.sh, sanitize.ps1
-│   ├── instructions/      — Auto-loaded copilot instructions
-│   └── prompts/           — Reusable task prompts
-└── README.md              — Quickstart (Homebrew, NPM, Docker, source)
+|-- IccProfLib/           83K LOC - Core ICC profile library (C++17)
+|   |-- IccProfile.h/cpp  - CIccProfile: read, write, validate profiles
+|   |-- IccCmm.h/cpp      - CIccCmm: Color Management Module pipeline
+|   |-- IccTagBasic.h/cpp - 40+ CIccTag subclasses (all tag types)
+|   |-- IccTagLut.h/cpp   - LUT/CLUT/curve tags
+|   |-- IccMpeBasic.h/cpp - Multi-Processing Elements (MPE)
+|   |-- IccMpeCalc.h/cpp  - Calculator elements (operators, variables)
+|   |-- IccIO.h/cpp       - Binary I/O abstraction
+|   `-- IccUtil.h/cpp     - Utility functions, fixed-point math
+|
+|-- IccXML/               14K LOC - XML serialization extension
+|   |-- IccLibXML/        - CIccProfileXml, CIccTagXml* (libxml2-based)
+|   `-- CmdLine/          - IccToXml and IccFromXml source
+|
+|-- Tools/CmdLine/        - 16 CLI tool source directories
+|   |-- IccDumpProfile/   - Profile structure dump + validation
+|   |-- IccRoundTrip/     - A2B/B2A round-trip evaluation
+|   |-- IccApplyNamedCmm/ - Named color CMM application
+|   |-- IccApplyProfiles/ - Multi-profile color transform
+|   |-- IccApplySearch/   - Profile search/optimization
+|   |-- IccApplyToLink/   - DeviceLink profile creation
+|   |-- IccBenchApply/    - Apply-path throughput + checksums
+|   |-- IccFromCube/      - .cube LUT to ICC profile
+|   |-- IccTiffDump/      - TIFF ICC profile extraction
+|   |-- IccJpegDump/      - JPEG ICC profile extraction
+|   |-- IccPngDump/       - PNG ICC profile extraction
+|   |-- IccPawgReport/    - PAWG conformance + security report
+|   |-- IccProfilePlot/   - Data-first profile visualization
+|   |-- IccProfileVisualize/ - PDF/TIFF profile visualization
+|   |-- IccSpecSepToTiff/ - Spectral separation to TIFF
+|   `-- IccV5DspObsToV4Dsp/ - v5 Display to v4 conversion
+|
+|-- Build/Cmake/          - CMakeLists.txt + CMakePresets.json
+|-- Testing/              - Test profile directories + scripts
+|-- ports/iccdev/         - vcpkg overlay port
+|-- docs/                 - User and maintainer documentation
+|-- .github/
+|   |-- workflows/        - CI workflows
+|   |-- scripts/          - Maintainer and sanitization scripts
+|   |-- instructions/     - Auto-loaded Copilot instructions
+|   |-- prompts/          - Reusable task prompts
+|   `-- skills/           - Repeatable agent workflows
+`-- README.md             - Quickstart
 ```
 
 ## First Build
 
 ### Linux/macOS
+
 ```bash
 # Install dependencies
 sudo apt install -y libpng-dev libjpeg-dev libtiff-dev libxml2-dev \
@@ -70,6 +74,7 @@ LD_LIBRARY_PATH=IccProfLib:IccXML \
 ```
 
 ### Windows
+
 ```powershell
 vcpkg integrate install && vcpkg install
 cmake --preset vs2022-x64 -S Build/Cmake -B build
@@ -93,26 +98,32 @@ LD_LIBRARY_PATH=../Build/IccProfLib:../Build/IccXML \
 ## Key Concepts
 
 ### CIccProfile
+
 The central class. Reads/writes binary ICC profiles. Tag access via
 `FindTag(icSigXxx)` returns `CIccTag*` subclasses.
 
 ### CIccCmm (Color Management Module)
+
 Pipeline for applying color transforms. Add profiles with `AddXform()`,
 call `Begin()`, then `Apply()` per pixel.
 
 ### CIccTag Hierarchy
+
 40+ tag type classes inheriting from `CIccTag`. Each implements:
-- `Read(CIccIO*)` — parse from binary
-- `Write(CIccIO*)` — serialize to binary
-- `Describe(std::string&)` — human-readable dump
-- `Validate(...)` — structural validation
+
+- `Read(CIccIO*)` - parse from binary
+- `Write(CIccIO*)` - serialize to binary
+- `Describe(std::string&)` - human-readable dump
+- `Validate(...)` - structural validation
 
 ### XML Round-Trip
+
 `CIccProfileXml::SaveXml()` and `CIccProfileXml::LoadXml()` convert between
 binary ICC and XML. This is the foundation for test profile generation
-(XML → binary via `iccFromXml`).
+(XML to binary via `iccFromXml`).
 
 ### Multi-Processing Elements (MPE)
+
 v5/iccMAX extension. Chain of elements (curves, matrices, CLUTs, calculators)
 that define complex color transforms. Each `CIccMultiProcessElement` has
 `Begin()` and `Apply()` methods.
@@ -138,16 +149,18 @@ that define complex color transforms. Each `CIccMultiProcessElement` has
 ## Sanitizer Compatibility
 
 When writing new code, ensure it works under:
+
 - **ASan**: No heap-buffer-overflow, use-after-free, double-free
 - **UBSan**: No signed overflow, enum out-of-range, NaN-to-int casts
 - **TSan**: No data races (if threading is involved)
 - **MSan**: No uninitialized memory reads
 
 Common pitfalls:
-- `new T[fileSize]` without bounds check → ASan heap-buffer-overflow
-- `(int)floatValue` without NaN/Inf check → UBSan
-- `strlen(fixedBuffer)` without null termination → ASan read overflow
-- `offset + size` integer overflow → missed bounds check
+
+- `new T[fileSize]` without bounds check -> ASan heap-buffer-overflow
+- `(int)floatValue` without NaN/Inf check -> UBSan
+- `strlen(fixedBuffer)` without null termination -> ASan read overflow
+- `offset + size` integer overflow -> missed bounds check
 
 ## Key Documentation
 
@@ -156,8 +169,9 @@ Common pitfalls:
 | Build instructions | `docs/build.md` |
 | Installation methods | `docs/install.md` |
 | Project overview (all tools) | `docs/index.md` |
+| CLI tool reference | `docs/tools-cli-reference.md` |
 | vcpkg port reference | `.github/instructions/vcpkg-port.instructions.md` |
 | ICC specification reference | `.github/instructions/icc-specification.instructions.md` |
-| CMake options | `.github/copilot-instructions.md` → CMake Options table |
+| CMake options | `.github/instructions/build-system.instructions.md` |
 | Workflow governance | `.github/instructions/workflow-governance.instructions.md` |
 | Security advisories | `github.com/InternationalColorConsortium/iccDEV/security/advisories` |

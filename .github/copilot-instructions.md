@@ -174,7 +174,12 @@ Key safety rules:
 | Code review hunting | `.github/prompts/code-review-hunting.prompt.md` |
 | Reduce documentation noise | `.github/prompts/reduce-doc-noise.prompt.md` |
 | Build/test/coverage | `.github/prompts/build-and-test.prompt.md` |
+| Add a CLI tool | `.github/prompts/add-new-tool.prompt.md` |
+| Contributor onboarding | `.github/prompts/contributor-onboarding.prompt.md` |
+| Cross-platform CI | `.github/prompts/cross-platform-ci.prompt.md` |
 | Regression workflow gate | `.github/prompts/add-regression-workflow.prompt.md` |
+| Maintainer AFL smoke | `.github/prompts/maintainer-afl-smoke.prompt.md` |
+| Maintainer CTest selection | `.github/prompts/maintainer-ci-ctest.prompt.md` |
 | Maintainer regression container | `.github/prompts/regression-container-maintainer.prompt.md` |
 | Workflow governance audit | `.github/prompts/audit-workflow-governance.prompt.md` |
 | Pre-PR security cycle | `.github/prompts/pre-pr-security-cycle.prompt.md` |
@@ -184,21 +189,28 @@ Key safety rules:
 | Debug Python/Cython bindings | `.github/prompts/debug-python-bindings.prompt.md` |
 | Debug MATLAB bindings | `.github/prompts/debug-matlab-bindings.prompt.md` |
 | Debug WASM build | `.github/prompts/debug-wasm-build.prompt.md` |
+| iccSpecSepToTiff QA | `.github/prompts/specsep-qa.prompt.md` |
+| IIS ISAPI endpoint QA | `.github/prompts/iis-isapi-qa.prompt.md` |
+| Version bump | `.github/prompts/version-bump.prompt.md` |
 
 ## Skills
 
 | Task | Skill |
 |------|-------|
 | Documentation maintenance | `.github/skills/docs-maintenance/SKILL.md` |
+| AFL smoke workflow | `.github/skills/afl-smoke/SKILL.md` |
 | Sanitizer reproduction | `.github/skills/sanitizer-repro/SKILL.md` |
 | iccSpecSepToTiff QA | `.github/skills/specsep-qa/SKILL.md` |
+| IIS ISAPI endpoint QA | `.github/skills/iis-isapi-qa/SKILL.md` |
 | JSON/config regressions | `.github/skills/json-config-regression/SKILL.md` |
 | Regression workflow governance | `.github/skills/regression-workflow-governance/SKILL.md` |
 | Regression container maintainer | `.github/skills/regression-container-maintainer/SKILL.md` |
+| Maintainer CI and CTest | `.github/skills/maintainer-ci-ctest/SKILL.md` |
 | Pre-PR security cycle | `.github/skills/pre-pr-security-cycle/SKILL.md` |
 | Focused pull request review | `.github/skills/code-review/SKILL.md` |
 | Stacked PR and fast-lane workflow | `.github/skills/stacked-pr-fast-lane/SKILL.md` |
 | Maintainer label system | `.github/skills/maintainer-label-system/SKILL.md` |
+| vcpkg exported-consumer debug | `.github/skills/vcpkg-export-consumer-debug/SKILL.md` |
 | Version bump | `.github/skills/version-bump/SKILL.md` |
 | Python bindings tests | `.github/skills/python-bindings-test/SKILL.md` |
 | MATLAB bindings tests | `.github/skills/matlab-bindings-test/SKILL.md` |

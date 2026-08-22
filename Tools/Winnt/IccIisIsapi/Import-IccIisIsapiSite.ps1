@@ -51,11 +51,14 @@ are met:
 .PARAMETER Port
   HTTP port to bind. Defaults to 18081.
 
+.PARAMETER BindAddress
+  IP address to bind. Defaults to loopback-only 127.0.0.1.
+
 .PARAMETER PoolName
   IIS application pool name. Defaults to '<SiteName>-Pool'.
 
 .PARAMETER SkipIISSetup
-  Extract files only — do not configure IIS.
+  Extract files only -- do not configure IIS.
 
 .EXAMPLE
   .\Import-IccIisIsapiSite.ps1 -PackageZip iccDLL-Server-package.zip
@@ -74,6 +77,8 @@ param(
 
   [int]$Port = 18081,
 
+  [string]$BindAddress = "127.0.0.1",
+
   [string]$PoolName = "",
 
   [switch]$SkipIISSetup
@@ -83,7 +88,7 @@ $ErrorActionPreference = 'Stop'
 
 if (-not $PoolName) { $PoolName = "$SiteName-Pool" }
 
-# ── Validate package ─────────────────────────────────────────────────────────
+# -- Validate package ---------------------------------------------------------
 if (-not (Test-Path $PackageZip)) {
   throw "Package not found: $PackageZip"
 }
@@ -91,11 +96,11 @@ if (-not (Test-Path $PackageZip)) {
 Write-Host "=== Import-IccIisIsapiSite ===" -ForegroundColor Cyan
 Write-Host "Package:     $PackageZip"
 Write-Host "Destination: $DestinationRoot"
-Write-Host "Site:        $SiteName (port $Port)"
+Write-Host "Site:        $SiteName ($BindAddress`:$Port)"
 
-# ── Extract ──────────────────────────────────────────────────────────────────
+# -- Extract ------------------------------------------------------------------
 if (Test-Path $DestinationRoot) {
-  Write-Host "Destination exists — updating files in place" -ForegroundColor Yellow
+  Write-Host "Destination exists -- updating files in place" -ForegroundColor Yellow
 } else {
   New-Item -ItemType Directory -Path $DestinationRoot -Force | Out-Null
 }
@@ -104,21 +109,32 @@ Expand-Archive -Path $PackageZip -DestinationPath $DestinationRoot -Force
 $fileCount = (Get-ChildItem $DestinationRoot -Recurse -File).Count
 Write-Host "Extracted $fileCount files to $DestinationRoot"
 
-# ── Verify critical files ────────────────────────────────────────────────────
+# -- Verify critical files ----------------------------------------------------
 $dllPath = Join-Path $DestinationRoot "iccIisIsapi.dll"
 if (-not (Test-Path $dllPath)) {
   throw "CRITICAL: iccIisIsapi.dll not found after extraction."
 }
-
-$requiredExes = @("iccToXml.exe", "iccFromXml.exe", "iccDumpProfile.exe", "iccRoundTrip.exe")
-foreach ($exe in $requiredExes) {
-  $exePath = Join-Path $DestinationRoot $exe
-  if (-not (Test-Path $exePath)) {
-    Write-Warning "Tool executable not found: $exe — tool endpoints may fail."
+foreach ($requiredWebFile in @('index.html', 'index.js', 'endpoints.html', 'error.html', 'site.js', 'sanitize.js', 'web.config')) {
+  if (-not (Test-Path (Join-Path $DestinationRoot $requiredWebFile))) {
+    throw "CRITICAL: Required IIS web artifact missing after extraction: $requiredWebFile"
   }
 }
 
-# ── Read manifest ────────────────────────────────────────────────────────────
+$requiredExes = @(
+  "iccToXml.exe",
+  "iccFromXml.exe",
+  "iccDumpProfile.exe",
+  "iccPawgReport.exe",
+  "iccRoundTrip.exe"
+)
+foreach ($exe in $requiredExes) {
+  $exePath = Join-Path $DestinationRoot $exe
+  if (-not (Test-Path $exePath)) {
+    Write-Warning "Tool executable not found: $exe -- tool endpoints may fail."
+  }
+}
+
+# -- Read manifest ------------------------------------------------------------
 $manifestPath = Join-Path $DestinationRoot "manifest.json"
 if (Test-Path $manifestPath) {
   $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
@@ -131,14 +147,14 @@ if ($SkipIISSetup) {
   exit 0
 }
 
-# ── Require admin ─────────────────────────────────────────────────────────────
+# -- Require admin -------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
   [Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
   throw "IIS configuration requires administrator privileges. Re-run as admin."
 }
 
-# ── Configure IIS ─────────────────────────────────────────────────────────────
+# -- Configure IIS -------------------------------------------------------------
 $appcmd = "$env:SystemRoot\system32\inetsrv\appcmd.exe"
 if (-not (Test-Path $appcmd)) {
   throw "appcmd.exe not found. Is IIS installed?"
@@ -160,17 +176,19 @@ if (-not $poolExists) {
 $siteExists = & $appcmd list site /name:"$SiteName" 2>$null
 if (-not $siteExists) {
   & $appcmd add site /name:"$SiteName" /physicalPath:"$DestinationRoot" `
-    /bindings:"http/*:${Port}:" 2>$null
+    /bindings:"http/${BindAddress}:${Port}:" 2>$null
   Write-Host "  Created site: $SiteName on port $Port"
 } else {
   & $appcmd set site /site.name:"$SiteName" /physicalPath:"$DestinationRoot" 2>$null
   Write-Host "  Updated site root: $DestinationRoot"
 }
 & $appcmd set site /site.name:"$SiteName" /[path='/'].applicationPool:"$PoolName" 2>$null
+& $appcmd set config "$SiteName" -section:system.webServer/serverRuntime `
+  /appConcurrentRequestLimit:64 /commit:apphost 2>$null
 
 # Handler mapping
 & $appcmd set config "$SiteName" /section:handlers `
-  /+"[name='iccIisIsapi',path='iccIisIsapi.dll',verb='*',modules='IsapiModule',scriptProcessor='$dllPath',resourceType='Unspecified']" `
+  /+"[name='iccIisIsapi',path='iccIisIsapi.dll',verb='*',modules='IsapiModule',scriptProcessor='$dllPath',resourceType='File',requireAccess='Execute',allowPathInfo='True']" `
   /commit:apphost 2>$null
 Write-Host "  Handler mapped: iccIisIsapi.dll"
 
@@ -185,7 +203,7 @@ Write-Host "  ISAPI restriction: allowed"
 & $appcmd start site /site.name:"$SiteName" 2>$null
 Write-Host "  Site started" -ForegroundColor Green
 
-# ── Verify ───────────────────────────────────────────────────────────────────
+# -- Verify -------------------------------------------------------------------
 Write-Host "`nVerifying..." -ForegroundColor Cyan
 Start-Sleep -Seconds 2
 
@@ -198,7 +216,7 @@ $endpoints = @(
 $allOk = $true
 foreach ($ep in $endpoints) {
   try {
-    $r = Invoke-WebRequest -Uri "http://localhost:$Port$($ep.Path)" -UseBasicParsing -TimeoutSec 10
+    $r = Invoke-WebRequest -Uri "http://${BindAddress}:$Port$($ep.Path)" -UseBasicParsing -TimeoutSec 10
     $mark = if ($r.StatusCode -eq $ep.Expect) { "PASS" } else { "FAIL"; $allOk = $false }
     Write-Host "  [$mark] $($ep.Label): $($r.StatusCode)"
   } catch {
@@ -209,9 +227,9 @@ foreach ($ep in $endpoints) {
 
 if ($allOk) {
   Write-Host "`nDeployment successful!" -ForegroundColor Green
-  Write-Host "  Site URL:      http://localhost:$Port/"
-  Write-Host "  Tool console:  http://localhost:$Port/endpoints.html"
-  Write-Host "  Health check:  http://localhost:$Port/iccIisIsapi.dll?mode=health"
+  Write-Host "  Site URL:      http://${BindAddress}:$Port/"
+  Write-Host "  Tool console:  http://${BindAddress}:$Port/endpoints.html"
+  Write-Host "  Health check:  http://${BindAddress}:$Port/iccIisIsapi.dll?mode=health"
 } else {
   Write-Host "`nDeployment completed with warnings. Check IIS event logs." -ForegroundColor Yellow
 }

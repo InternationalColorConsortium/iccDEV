@@ -11,12 +11,12 @@
  *  headers, Content-Length, and error formatting are applied uniformly.
  *
  *  Security headers applied to every response:
- *    Cache-Control: no-store             — prevent caching of dynamic content
- *    X-Content-Type-Options: nosniff     — prevent MIME-type sniffing (CWE-79)
- *    X-Frame-Options: DENY               — prevent clickjacking
- *    Content-Security-Policy             — restrict resource loading
- *    Referrer-Policy: no-referrer        — prevent referrer leakage
- *    Content-Length                       — explicit body size
+ *    Cache-Control: no-store             - prevent caching of dynamic content
+ *    X-Content-Type-Options: nosniff     - prevent MIME-type sniffing (CWE-79)
+ *    X-Frame-Options: DENY               - prevent clickjacking
+ *    Content-Security-Policy             - restrict resource loading
+ *    Referrer-Policy: no-referrer        - prevent referrer leakage
+ *    Content-Length                      - explicit body size
  */
 
 /*
@@ -84,6 +84,18 @@ bool Send405(LPEXTENSION_CONTROL_BLOCK ecb,
 bool Send400(LPEXTENSION_CONTROL_BLOCK ecb,
              const std::string& rawMessage);
 
+/// Send a 403 Forbidden with a sanitized JSON error body.
+bool Send403(LPEXTENSION_CONTROL_BLOCK ecb,
+             const std::string& rawMessage);
+
+/// Send a 415 Unsupported Media Type with a sanitized JSON error body.
+bool Send415(LPEXTENSION_CONTROL_BLOCK ecb,
+             const std::string& rawMessage);
+
+/// Send a 429 Too Many Requests with a sanitized JSON error body.
+bool Send429(LPEXTENSION_CONTROL_BLOCK ecb,
+             const std::string& rawMessage);
+
 /// Send a 500 Internal Server Error with a generic JSON body.
 /// Never exposes internal details to the client.
 bool Send500(LPEXTENSION_CONTROL_BLOCK ecb);
@@ -101,6 +113,10 @@ inline bool IsMethod(LPEXTENSION_CONTROL_BLOCK ecb, const char* method)
 /// Returns empty vector if maxBytes is exceeded BEFORE allocation (CWE-789).
 std::vector<unsigned char> ReadRequestBody(LPEXTENSION_CONTROL_BLOCK ecb,
                                            size_t maxBytes);
+
+/// Read an IIS server variable. Returns an empty string when unavailable.
+std::string GetServerVariableString(LPEXTENSION_CONTROL_BLOCK ecb,
+                                    const char* name);
 
 }  // namespace iccIsapi
 

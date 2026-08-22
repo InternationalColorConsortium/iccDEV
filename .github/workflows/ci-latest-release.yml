@@ -774,6 +774,51 @@ jobs:
             if (Test-Path $iisInstaller) {
               Copy-Item -Path $iisInstaller -Destination $stage -Force
             }
+
+            foreach ($requiredIisFile in @(
+              'endpoints.html',
+              'error.html',
+              'index.js',
+              'site.js',
+              'web.config',
+              'iis-isapi.openapi.yaml',
+              'Test-IccIisIsapiEndpoints.ps1'
+            )) {
+              $requiredIisPath = Join-Path $iisDst $requiredIisFile
+              if (-not (Test-Path -LiteralPath $requiredIisPath)) {
+                throw "Required staged IIS artifact missing: $requiredIisFile"
+              }
+            }
+
+            $stagedEndpointPage = Get-Content `
+              -LiteralPath (Join-Path $iisDst 'endpoints.html') `
+              -Raw
+            if ($stagedEndpointPage -notmatch 'Analyze An ICC Profile') {
+              throw "Staged IIS endpoint page omitted the PAWG assessment UI"
+            }
+            $stagedSiteScript = Get-Content `
+              -LiteralPath (Join-Path $iisDst 'site.js') `
+              -Raw
+            $stagedWebConfig = Get-Content `
+              -LiteralPath (Join-Path $iisDst 'web.config') `
+              -Raw
+            if ($stagedSiteScript -notmatch 'X-ICCDEV-Request' -or
+                $stagedWebConfig -notmatch 'frame-ancestors' -or
+                $stagedWebConfig -notmatch "style-src-attr 'none'" -or
+                $stagedWebConfig -notmatch 'errorMode="Custom"' -or
+                $stagedWebConfig -match "'unsafe-inline'") {
+              throw "Staged IIS package omitted request or response hardening"
+            }
+          }
+
+          foreach ($requiredIisBinary in @(
+            'iccIisIsapi.dll',
+            'iccIisIsapiSmoke.exe',
+            'iccPawgReport.exe'
+          )) {
+            if (-not (Test-Path -LiteralPath (Join-Path $stage $requiredIisBinary))) {
+              throw "Required staged IIS binary missing: $requiredIisBinary"
+            }
           }
           # 6. Generate path.bat helper script
           @'

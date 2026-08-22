@@ -99,7 +99,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function createToolLink(href, label) {
     const link = document.createElement("a");
-    // Sanitize href from server JSON — block javascript:/data: schemes
+    // Sanitize href from server JSON -- block javascript:/data: schemes
     // and strip fragment payloads that could enable DOM-XSS.
     const safeHref = typeof iccSanitize !== "undefined"
       ? iccSanitize.sanitizeUri(href)
@@ -110,6 +110,13 @@ document.addEventListener("DOMContentLoaded", () => {
     link.rel = "noreferrer noopener";
     link.className = "tool-link";
     return link;
+  }
+
+  function getToolDisplayName(name) {
+    if (name === "iccPawgReport") {
+      return "Profile Assessment Report";
+    }
+    return name;
   }
 
   function renderToolResults(payload) {
@@ -151,7 +158,7 @@ document.addEventListener("DOMContentLoaded", () => {
       summaryLinks.appendChild(createToolLink(payload.input.url, "Open uploaded input"));
     }
     if (payload.workspace_url) {
-      summaryLinks.appendChild(createToolLink(payload.workspace_url, "Open workspace directory"));
+      summaryLinks.appendChild(createToolLink(payload.workspace_url, "Open this workspace"));
     }
     if (summaryLinks.childElementCount) {
       summary.appendChild(summaryLinks);
@@ -163,14 +170,20 @@ document.addEventListener("DOMContentLoaded", () => {
       block.className = "tool-result " + (tool.skipped ? "skipped" : (tool.ok ? "ok" : "fail"));
 
       const heading = document.createElement("h3");
-      heading.textContent = tool.name;
+      heading.textContent = getToolDisplayName(tool.name);
       block.appendChild(heading);
+
+      if (tool.name === "iccPawgReport") {
+        const explanation = document.createElement("p");
+        explanation.textContent =
+          "Security, conformance, and quality checks from the ICC Profile Assessment Working Group checklist.";
+        block.appendChild(explanation);
+      }
 
       const meta = document.createElement("dl");
       meta.className = "tool-meta";
       createToolMetaItem(meta, "Status", tool.skipped ? "Skipped" : (tool.ok ? "Succeeded" : "Failed"));
       createToolMetaItem(meta, "Exit code", String(tool.exit_code));
-      createToolMetaItem(meta, "Command", tool.command || "n/a");
       if (tool.note) {
         createToolMetaItem(meta, "Note", tool.note);
       }
@@ -187,7 +200,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const links = document.createElement("div");
       links.className = "tool-links";
       if (tool.artifact_url) {
-        links.appendChild(createToolLink(tool.artifact_url, "Open artifact"));
+        links.appendChild(createToolLink(
+          tool.artifact_url,
+          tool.name === "iccPawgReport" ? "Download assessment report" : "Open artifact"
+        ));
       }
       if (tool.log_url) {
         links.appendChild(createToolLink(tool.log_url, "Open log"));
@@ -237,7 +253,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (toolStatus) {
         toolStatus.className = "status-chip";
-        toolStatus.textContent = "Running top 4 tools";
+        toolStatus.textContent = "Analyzing profile";
       }
       if (toolResults) {
         toolResults.textContent = "";
@@ -248,7 +264,8 @@ document.addEventListener("DOMContentLoaded", () => {
           method: "POST",
           headers: {
             "Accept": "application/json",
-            "Content-Type": kind === "xml" ? "application/xml" : "application/octet-stream"
+            "Content-Type": kind === "xml" ? "application/xml" : "application/octet-stream",
+            "X-ICCDEV-Request": "1"
           },
           body: file
         });

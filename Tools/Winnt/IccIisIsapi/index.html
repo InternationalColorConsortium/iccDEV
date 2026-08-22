@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
   <title>iccDEV IIS Shared Library Demo</title>
   <style>
     :root {
@@ -300,75 +301,23 @@
           <li>The IIS site root can stay locked down. Directory browsing remains off.</li>
           <li><code>index.html</code> becomes the default document, which avoids <code>HTTP 403.14</code> at the site root.</li>
           <li>The native endpoint still lives at <code>iccIisIsapi.dll</code>, so existing monitoring and smoke checks stay simple.</li>
-          <li>The browser tool console can upload ICC or XML input and run <code>iccToXml</code>, <code>iccFromXml</code>, <code>iccDumpProfile</code>, and <code>iccRoundTrip</code> on the server.</li>
+          <li>The browser tool console can upload ICC or XML input, run a PAWG profile assessment, and provide downloadable reports and conversion artifacts.</li>
         </ul>
       </section>
 
       <section>
         <h2>Quick tests</h2>
         <div class="command-list">
-          <code>curl.exe http://localhost:18081/iccIisIsapi.dll?mode=health</code>
-          <code>curl.exe http://localhost:18081/iccIisIsapi.dll</code>
-          <code>curl.exe http://localhost:18081/iccIisIsapi.dll?format=xml</code>
-          <code>Open http://localhost:18081/endpoints.html to upload an ICC or XML file.</code>
+          <code>GET ./iccIisIsapi.dll?mode=health</code>
+          <code>GET ./iccIisIsapi.dll</code>
+          <code>GET ./iccIisIsapi.dll?format=xml</code>
+          <code>Open ./endpoints.html to analyze an ICC or XML file.</code>
         </div>
       </section>
     </div>
   </main>
 
   <script src="./sanitize.js"></script>
-  <script>
-    const resultUrl = document.getElementById("result-url");
-    const resultCode = document.getElementById("result-code");
-    const resultType = document.getElementById("result-type");
-    const resultBody = document.getElementById("result-body");
-    const liveStatus = document.getElementById("live-status");
-
-    async function loadEndpoint(relativeUrl) {
-      // Sanitize URL: strip fragment, reject non-http(s) schemes (DOM-XSS defense)
-      const safeUrl = typeof iccSanitize !== "undefined"
-        ? iccSanitize.sanitizeUri(relativeUrl)
-        : relativeUrl;
-      if (!safeUrl) {
-        resultBody.textContent = "Blocked: unsafe URL";
-        return;
-      }
-      const absoluteUrl = new URL(safeUrl, window.location.href).toString();
-      resultUrl.textContent = "URL: " + absoluteUrl;
-      resultCode.textContent = "Status: loading";
-      resultType.textContent = "Content-Type: pending";
-      resultBody.textContent = "Loading " + absoluteUrl + " ...";
-      liveStatus.className = "status";
-      liveStatus.lastElementChild.textContent = "Request in flight.";
-
-      try {
-        const response = await fetch(relativeUrl, {
-          headers: {
-            "Accept": "text/plain, application/xml, text/xml;q=0.9, */*;q=0.8"
-          }
-        });
-        const body = await response.text();
-        resultCode.textContent = "Status: " + response.status + " " + response.statusText;
-        resultType.textContent = "Content-Type: " + (response.headers.get("content-type") || "n/a");
-        resultBody.textContent = body;
-        liveStatus.className = response.ok ? "status ok" : "status fail";
-        liveStatus.lastElementChild.textContent = response.ok
-          ? "Request completed successfully."
-          : "Request returned an error.";
-      } catch (error) {
-        resultCode.textContent = "Status: fetch failed";
-        resultType.textContent = "Content-Type: n/a";
-        resultBody.textContent = String(error);
-        liveStatus.className = "status fail";
-        liveStatus.lastElementChild.textContent = "Browser fetch failed.";
-      }
-    }
-
-    document.getElementById("load-summary").addEventListener("click", () => loadEndpoint("./iccIisIsapi.dll"));
-    document.getElementById("load-health").addEventListener("click", () => loadEndpoint("./iccIisIsapi.dll?mode=health"));
-    document.getElementById("load-xml").addEventListener("click", () => loadEndpoint("./iccIisIsapi.dll?format=xml"));
-
-    loadEndpoint("./iccIisIsapi.dll");
-  </script>
+  <script src="./index.js"></script>
 </body>
 </html>

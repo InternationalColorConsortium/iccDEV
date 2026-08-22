@@ -14,13 +14,16 @@ long command references.
 | `sanitizer-repro` | Reproducing ASAN/UBSAN findings or security advisories. |
 | `specsep-qa` | Running or diagnosing the repository-owned `iccSpecSepToTiff` QA suites and fixtures. |
 | `json-config-regression` | Editing JSON/profile config parsing or tests. |
+| `iis-isapi-qa` | Building, deploying, and validating the Windows IIS ISAPI HTTP and browser assessment surface. |
 | `maintainer-ci-ctest` | Updating maintainer-owned CI, CTest, CPack, sanitizer, workflow, or release gates. |
 | `maintainer-label-system` | Maintaining label taxonomy, path labeler rules, issue triage, PR status labels, and CodeQL label routing. |
 | `matlab-bindings-test` | Building and validating the MATLAB MEX gateway, profiles, examples, dependencies, and lifecycle tests. |
+| `python-bindings-test` | Building and validating the Python/Cython bindings and package-facing tests. |
 | `regression-container-maintainer` | Using the published maintainer container for smoke tests, PR validation, issue reproduction, sanitizer review, and CI handoff. |
 | `regression-workflow-governance` | Adding regression gates or updating tool-test workflows. |
 | `vcpkg-export-consumer-debug` | Fixing vcpkg, install/export, uninstall, or packaged consumer CI failures. |
 | `version-bump` | Updating iccDEV release version references. |
+| `wasm-build-test` | Building and validating the staged WASM Node/npm-style module package. |
 
 Prompts remain better for one-off drafting. Skills are better for repeatable
 multi-step repository workflows.

@@ -37,7 +37,7 @@ are met:
 .DESCRIPTION
   Collects all DLLs, EXEs, HTML/JS/CSS, assets, and configuration files from
   a build output or install directory into a self-contained ZIP that can be
-  deployed on any Windows machine with IIS installed — no build tools required.
+  deployed on any Windows machine with IIS installed - no build tools required.
 
   Use Import-IccIisIsapiSite.ps1 to deploy the resulting package.
 
@@ -51,7 +51,7 @@ are met:
 
 .PARAMETER IncludeToolWork
   If set, includes existing _tool-work/ contents in the package.
-  Default: $false (empty _tool-work/index.html only).
+  Default: $false (empty _tool-work directory only).
 
 .EXAMPLE
   .\Export-IccIisIsapiSite.ps1 -SourceRoot out\debug\Tools\IccIisIsapi\Debug
@@ -70,17 +70,22 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# ── Validate source ──────────────────────────────────────────────────────────
+# Validate source
 $SourceRoot = (Resolve-Path $SourceRoot).Path
 $dll = Join-Path $SourceRoot "iccIisIsapi.dll"
 if (-not (Test-Path $dll)) {
   throw "iccIisIsapi.dll not found in '$SourceRoot'. Build first or specify the correct -SourceRoot."
 }
+foreach ($requiredWebFile in @('index.html', 'index.js', 'endpoints.html', 'error.html', 'site.js', 'sanitize.js', 'web.config')) {
+  if (-not (Test-Path (Join-Path $SourceRoot $requiredWebFile))) {
+    throw "Required IIS web artifact missing: $requiredWebFile"
+  }
+}
 
 Write-Host "=== Export-IccIisIsapiSite ===" -ForegroundColor Cyan
 Write-Host "Source: $SourceRoot"
 
-# ── Collect files ────────────────────────────────────────────────────────────
+# Collect files
 $staging = Join-Path ([System.IO.Path]::GetTempPath()) "iccDLL-export-$([guid]::NewGuid().ToString('N').Substring(0,8))"
 New-Item -ItemType Directory -Path $staging -Force | Out-Null
 
@@ -117,15 +122,9 @@ if (Test-Path $assetsDir) {
   Write-Host "  Assets: $assetCount files"
 }
 
-# _tool-work/index.html (always include the landing page)
 $twSrc = Join-Path $SourceRoot "_tool-work"
 $twDest = Join-Path $staging "_tool-work"
 New-Item -ItemType Directory -Path $twDest -Force | Out-Null
-$twIndex = Join-Path $twSrc "index.html"
-if (Test-Path $twIndex) {
-  Copy-Item $twIndex (Join-Path $twDest "index.html") -Force
-  Write-Host "  _tool-work/index.html"
-}
 
 if ($IncludeToolWork -and (Test-Path $twSrc)) {
   Copy-Item "$twSrc\*" $twDest -Recurse -Force -ErrorAction SilentlyContinue
@@ -143,7 +142,7 @@ foreach ($ps1 in @("Install-IccIisIsapiSite.ps1", "Uninstall-IccIisIsapiSite.ps1
   }
 }
 
-# ── Create manifest ──────────────────────────────────────────────────────────
+# Create manifest
 $manifest = @{
   exported   = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
   source     = $SourceRoot
@@ -154,7 +153,7 @@ $manifest = @{
 $manifest | ConvertTo-Json -Depth 2 | Set-Content (Join-Path $staging "manifest.json") -Encoding UTF8
 Write-Host "  Manifest: manifest.json"
 
-# ── Compress ─────────────────────────────────────────────────────────────────
+# Compress
 if (Test-Path $OutputZip) { Remove-Item $OutputZip -Force }
 Compress-Archive -Path "$staging\*" -DestinationPath $OutputZip -CompressionLevel Optimal
 $zipSize = (Get-Item $OutputZip).Length
@@ -163,7 +162,7 @@ $zipMB = [Math]::Round($zipSize / 1MB, 1)
 Write-Host ""
 Write-Host "Package created: $OutputZip ($zipMB MB, $($manifest.file_count) files)" -ForegroundColor Green
 
-# ── Cleanup staging ──────────────────────────────────────────────────────────
+# Cleanup staging
 Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
 
 Write-Host @"

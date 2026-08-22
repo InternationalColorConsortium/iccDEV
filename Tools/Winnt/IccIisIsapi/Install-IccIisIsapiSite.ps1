@@ -58,6 +58,7 @@ param(
   [string]$SiteName = 'iccDLL Server',
   [string]$PoolName,
   [int]$Port = 18081,
+  [string]$BindAddress = '127.0.0.1',
   [string]$HostHeader = '',
   [ValidateSet('Install', 'Build')]
   [string]$Layout = 'Install',
@@ -109,9 +110,10 @@ $SiteRoot = (Resolve-Path $SiteRoot).Path
 $dllPath = Join-Path $SiteRoot 'iccIisIsapi.dll'
 $smokePath = Join-Path $SiteRoot 'iccIisIsapiSmoke.exe'
 $indexPath = Join-Path $SiteRoot 'index.html'
+$indexScriptPath = Join-Path $SiteRoot 'index.js'
 $webConfigPath = Join-Path $SiteRoot 'web.config'
 
-foreach ($requiredPath in @($dllPath, $smokePath, $indexPath, $webConfigPath)) {
+foreach ($requiredPath in @($dllPath, $smokePath, $indexPath, $indexScriptPath, $webConfigPath)) {
   if (-not (Test-Path $requiredPath)) {
     throw "Required IIS sample artifact missing: $requiredPath"
   }
@@ -161,8 +163,16 @@ function Test-AppCmdExists {
   return $text -match [Regex]::Escape($MatchText)
 }
 
-$bindingInfo = "*:${Port}:$HostHeader"
-$baseUrlHost = if ($HostHeader) { $HostHeader } else { 'localhost' }
+$bindingInfo = "${BindAddress}:${Port}:$HostHeader"
+$baseUrlHost = if ($HostHeader) {
+  $HostHeader
+}
+elseif ($BindAddress -and $BindAddress -ne '*') {
+  $BindAddress
+}
+else {
+  'localhost'
+}
 $baseUrl = "http://${baseUrlHost}:$Port/"
 
 if (-not (Test-AppCmdExists -Arguments @('list', 'apppool', "/name:$PoolName") -MatchText $PoolName)) {
@@ -185,7 +195,7 @@ else {
 }
 
 Invoke-AppCmd -Arguments @('set', 'app', "$SiteName/", "/applicationPool:$PoolName") | Out-Null
-Invoke-AppCmd -Arguments @('set', 'config', $SiteName, '-section:system.webServer/serverRuntime', '/appConcurrentRequestLimit:5000', '/commit:apphost') | Out-Null
+Invoke-AppCmd -Arguments @('set', 'config', $SiteName, '-section:system.webServer/serverRuntime', '/appConcurrentRequestLimit:64', '/commit:apphost') | Out-Null
 Invoke-AppCmd -Arguments @('set', 'config', $SiteName, '-section:system.webServer/handlers', '/accessPolicy:Read,Script,Execute', '/commit:apphost') | Out-Null
 
 $handlerList = Invoke-AppCmd -Arguments @('list', 'config', $SiteName, '-section:system.webServer/handlers')
@@ -195,7 +205,7 @@ if ($handlerText -match 'name="iccIisIsapi"' -or $handlerText -match 'name=''icc
 }
 Invoke-AppCmd -Arguments @(
   'set', 'config', $SiteName, '-section:system.webServer/handlers',
-  "/+[name='iccIisIsapi',path='iccIisIsapi.dll',verb='GET,HEAD,POST',modules='IsapiModule',scriptProcessor='$dllPath',resourceType='File',requireAccess='Execute',allowPathInfo='True']",
+  "/+[name='iccIisIsapi',path='iccIisIsapi.dll',verb='*',modules='IsapiModule',scriptProcessor='$dllPath',resourceType='File',requireAccess='Execute',allowPathInfo='True']",
   '/commit:apphost'
 ) | Out-Null
 
@@ -242,7 +252,10 @@ $verification = [ordered]@{
 
 if ($SampleIccPath) {
   $uploadUrl = $baseUrl + 'iccIisIsapi.dll?mode=tools&input=icc&filename=sample.icc'
-  $headers = @{ Accept = 'application/json' }
+  $headers = @{
+    Accept = 'application/json'
+    'X-ICCDEV-Request' = '1'
+  }
   $uploadResponse = Invoke-WebRequest -Uri $uploadUrl -Method Post -Headers $headers -InFile $SampleIccPath -ContentType 'application/octet-stream' -UseBasicParsing -TimeoutSec 120
   if ($uploadResponse.StatusCode -ne 200) {
     throw "Upload verification failed for $uploadUrl"

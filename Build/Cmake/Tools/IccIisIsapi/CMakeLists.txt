@@ -7,15 +7,14 @@ set(SRC_ROOT "${CMAKE_SOURCE_DIR}/../..")
 set(WINNT_ROOT "${SRC_ROOT}/Tools/Winnt/IccIisIsapi")
 set(IIS_SAMPLE_SITE_FILES
   "${WINNT_ROOT}/index.html"
-  "${WINNT_ROOT}/index2.html"
+  "${WINNT_ROOT}/index.js"
   "${WINNT_ROOT}/endpoints.html"
-  "${WINNT_ROOT}/integration.html"
+  "${WINNT_ROOT}/error.html"
   "${WINNT_ROOT}/site.css"
   "${WINNT_ROOT}/site.js"
   "${WINNT_ROOT}/sanitize.js"
   "${WINNT_ROOT}/web.config"
 )
-set(IIS_SAMPLE_TOOL_WORK_INDEX "${WINNT_ROOT}/tool-work-index.html")
 set(IIS_SAMPLE_ASSET_DIR "${WINNT_ROOT}/assets")
 if(NOT WIN32)
   return()
@@ -37,7 +36,7 @@ add_library(iccIisIsapi SHARED
 )
 target_compile_features(iccIisIsapi PRIVATE cxx_std_17)
 target_include_directories(iccIisIsapi PRIVATE "${WINNT_ROOT}")
-target_link_libraries(iccIisIsapi PRIVATE IccProfLib2 IccXML2)
+target_link_libraries(iccIisIsapi PRIVATE IccProfLib2 IccXML2 Bcrypt)
 if(ENABLE_ICCJSON)
   if(NOT TARGET IccJSON2)
     message(FATAL_ERROR
@@ -70,9 +69,6 @@ if(WIN32)
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       ${IIS_SAMPLE_SITE_FILES}
       $<TARGET_FILE_DIR:iccIisIsapi>
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "${IIS_SAMPLE_TOOL_WORK_INDEX}"
-      "$<TARGET_FILE_DIR:iccIisIsapi>/_tool-work/index.html"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
       "${IIS_SAMPLE_ASSET_DIR}"
       "$<TARGET_FILE_DIR:iccIisIsapi>/assets"
@@ -90,10 +86,6 @@ if(ENABLE_INSTALL_RIM)
   install(FILES ${IIS_SAMPLE_SITE_FILES}
     DESTINATION ${CMAKE_INSTALL_BINDIR}
     COMPONENT ${ICCDEV_RUNTIME_COMPONENT})
-  install(FILES "${IIS_SAMPLE_TOOL_WORK_INDEX}"
-    DESTINATION "${CMAKE_INSTALL_BINDIR}/_tool-work"
-    RENAME index.html
-    COMPONENT ${ICCDEV_RUNTIME_COMPONENT})
   install(DIRECTORY "${IIS_SAMPLE_ASSET_DIR}/"
     DESTINATION "${CMAKE_INSTALL_BINDIR}/assets"
     COMPONENT ${ICCDEV_RUNTIME_COMPONENT})
@@ -106,6 +98,8 @@ if(ENABLE_INSTALL_RIM)
   install(FILES
       "${WINNT_ROOT}/Export-IccIisIsapiSite.ps1"
       "${WINNT_ROOT}/Import-IccIisIsapiSite.ps1"
+      "${WINNT_ROOT}/Stress-IccIisIsapi.ps1"
+      "${WINNT_ROOT}/Test-IccIisIsapiEndpoints.ps1"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/iccdev
     COMPONENT ${ICCDEV_RUNTIME_COMPONENT})
   install(FILES
@@ -125,6 +119,9 @@ add_executable(iccIisIsapiSmoke
 )
 target_compile_features(iccIisIsapiSmoke PRIVATE cxx_std_17)
 add_dependencies(iccIisIsapiSmoke iccIisIsapi)
+if(TARGET iccPawgReport)
+  add_dependencies(iccIisIsapiSmoke iccPawgReport)
+endif()
 set_target_properties(iccIisIsapiSmoke PROPERTIES
   OUTPUT_NAME "iccIisIsapiSmoke"
   DEBUG_POSTFIX ""

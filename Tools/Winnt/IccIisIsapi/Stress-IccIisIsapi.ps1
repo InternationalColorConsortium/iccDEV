@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
   Concurrent load & stress test for iccIisIsapi.dll on IIS.
 
@@ -11,7 +11,7 @@
     4. 405 enforcement (wrong method)  - POST to GET-only, GET to POST-only
     5. File upload (POST /tools)       - concurrent uploads with fuzz vectors
     6. Query string injection          - XSS / SQLi / path traversal in params
-    7. Oversized requests              - body > 10MB
+    7. Oversized requests              - body > 16MB
     8. Malformed Content-Type          - unusual MIME types
     9. Rapid reconnect                 - connection churn
    10. URI scheme injection            - javascript:/data: in query params
@@ -65,6 +65,9 @@ function Test-Endpoint {
     [int]$TimeoutSec = 10
   )
   try {
+    if ($Method -eq 'POST' -and -not $Headers.ContainsKey('X-ICCDEV-Request')) {
+      $Headers['X-ICCDEV-Request'] = '1'
+    }
     $params = @{
       Uri              = $Url
       Method           = $Method
@@ -335,7 +338,7 @@ $uriResults = $uriPayloads | ForEach-Object -Parallel {
   $payload = $_
   $encoded = [System.Uri]::EscapeDataString($payload)
   try {
-    $r = Invoke-WebRequest -Uri "$dll`?mode=tools&input=icc&filename=$encoded" -Method POST -UseBasicParsing -TimeoutSec 5 -Body ([byte[]](0x00, 0x00, 0x00, 0x00)) -ContentType 'application/octet-stream'
+    $r = Invoke-WebRequest -Uri "$dll`?mode=tools&input=icc&filename=$encoded" -Method POST -Headers @{ 'X-ICCDEV-Request' = '1' } -UseBasicParsing -TimeoutSec 5 -Body ([byte[]](0x00, 0x00, 0x00, 0x00)) -ContentType 'application/octet-stream'
     $body = $r.Content
     [PSCustomObject]@{ Payload = $payload; Status = $r.StatusCode; HasScheme = ($body -match 'javascript:|data:|vbscript:') }
   } catch {
@@ -351,9 +354,9 @@ Write-Host "  Scheme leak in response: $schemeLeaks" -ForegroundColor $(if ($sch
 # Phase 7: Oversized request body (DoS resistance)
 # ---------------------------------------------------------------------------
 
-Write-Phase "7/10 - Oversized request body (11 MB)"
+Write-Phase "7/10 - Oversized request body (17 MB)"
 
-$bigBody = [byte[]]::new(11 * 1024 * 1024)
+$bigBody = [byte[]]::new(17 * 1024 * 1024)
 [System.Random]::new(42).NextBytes($bigBody)
 $oversizeResult = Test-Endpoint -Url "$dll`?mode=tools&input=icc&filename=huge.icc" -Method POST -Body ([System.Text.Encoding]::ASCII.GetString($bigBody)) -ContentType 'application/octet-stream' -TimeoutSec 15
 Write-Host "  Status: $($oversizeResult.Status) (expect 400 or connection reset)"
@@ -393,11 +396,14 @@ $churnResults = 1..$Concurrency | ForEach-Object -Parallel {
   $sw = [System.Diagnostics.Stopwatch]::StartNew()
   while ($sw.Elapsed.TotalSeconds -lt $using:Duration) {
     try {
-      # Force new connection each time
-      $wc = [System.Net.WebClient]::new()
-      $wc.Headers.Add('Connection', 'close')
-      $null = $wc.DownloadString("$dll`?mode=health")
-      $ok++; $wc.Dispose()
+      $r = Invoke-WebRequest `
+        -Uri "$dll`?mode=health" `
+        -UseBasicParsing `
+        -DisableKeepAlive `
+        -TimeoutSec 5
+      if ($r.StatusCode -eq 200) {
+        $ok++
+      }
     } catch { }
     $count++
   }
@@ -446,7 +452,10 @@ Write-Host "XSS reflected: $reflectedCount / $($xssPayloads.Count)"
 Write-Host "URI scheme leak: $schemeLeaks / $($uriPayloads.Count)"
 Write-Host "Reconnect churn: $churnTotal connections, $($churnTotal - $churnOk) failures"
 
-if ($reflectedCount -gt 0 -or $schemeLeaks -gt 0) {
+if ($totalFail -gt 0 -or
+    $reflectedCount -gt 0 -or
+    $schemeLeaks -gt 0 -or
+    $churnOk -ne $churnTotal) {
   Write-Host "`n*** SECURITY ISSUES FOUND ***" -ForegroundColor Red
   exit 1
 }

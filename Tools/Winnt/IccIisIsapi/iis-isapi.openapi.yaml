@@ -5,17 +5,19 @@ info:
   description: |
     Starter OpenAPI document for the Windows IIS sample implemented by
     iccIisIsapi.dll. This captures the current HTTP surface, including the
-    persisted _tool-work artifact model.
+    capability-style, non-enumerated _tool-work artifact model.
 servers:
   - url: http://localhost:18081
 paths:
   /iccIisIsapi.dll:
     get:
-      summary: Query the health, summary, or XML response
+      summary: Query the health, summary, XML, or JSON response
       description: |
         Without query parameters this returns the plain-text summary response.
         With mode=health it returns plain-text `ok`.
         With format=xml it returns a minimal ICC XML document.
+        With format=json it returns structured endpoint metadata.
+        With format=fromjson it exercises the optional JSON round trip.
       parameters:
         - in: query
           name: mode
@@ -29,8 +31,8 @@ paths:
           required: false
           schema:
             type: string
-            enum: [xml]
-          description: Use `xml` for the generated XML response.
+            enum: [xml, json, fromjson]
+          description: Select a documented structured response.
       responses:
         '200':
           description: Successful summary, health, or XML response.
@@ -45,8 +47,7 @@ paths:
                 summary:
                   summary: Default summary
                   value: |
-                    IccProfLib version: 2.3.2.3+<sha>
-                    IccLibXML version: 2.3.2.3+<sha>
+                    iccDEV IIS service
                     Profile spec ver: 4.00
                     XML payload bytes: 786
                     Hello from iccDEV IIS ISAPI!
@@ -60,12 +61,22 @@ paths:
                     <?xml version="1.0" encoding="UTF-8"?>
                     <IccProfile />
     post:
-      summary: Upload ICC or XML input and run the top four IIS-exposed tools
+      summary: Upload ICC or XML input and run the IIS tool pipeline
       description: |
-        Runs iccToXml, iccFromXml, iccDumpProfile, and iccRoundTrip. The request
-        succeeds at the HTTP level when the upload is accepted and processed,
-        even if one or more wrapped tools fail.
+        Runs iccToXml, iccFromXml, iccDumpProfile, iccPawgReport, and
+        iccRoundTrip. The request also runs iccToJson and iccFromJson when
+        those optional binaries are installed. The PAWG output is persisted as
+        a downloadable text report. The request succeeds at the HTTP level when
+        the upload is accepted and processed, even if one or more wrapped tools
+        report findings or fail.
       parameters:
+        - in: header
+          name: X-ICCDEV-Request
+          required: true
+          schema:
+            type: string
+            const: '1'
+          description: Required cross-site request defense for tool execution.
         - in: query
           name: mode
           required: true
@@ -83,7 +94,7 @@ paths:
           required: false
           schema:
             type: string
-          description: Optional client-supplied filename used for persisted metadata.
+          description: Optional client-supplied base name. The server forces `.icc` or `.xml`.
       requestBody:
         required: true
         content:
@@ -110,6 +121,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing request marker or cross-site request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Request media type does not match the selected input kind.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Four analysis requests are already active.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Unhandled extension failure.
           content:
@@ -118,14 +147,11 @@ paths:
                 type: string
   /_tool-work/:
     get:
-      summary: Tool workspace root landing page
+      summary: Denied tool workspace root
+      description: Directory browsing and root metadata disclosure are disabled.
       responses:
-        '200':
-          description: HTML landing page for the workspace root.
-          content:
-            text/html:
-              schema:
-                type: string
+        '403':
+          description: Directory browsing is forbidden.
   /_tool-work/{jobId}/:
     get:
       summary: Per-request workspace manifest page
@@ -135,6 +161,8 @@ paths:
           required: true
           schema:
             type: string
+            pattern: '^[0-9a-f]{32}$'
+          description: 128-bit identifier from the Windows system cryptographic RNG.
       responses:
         '200':
           description: HTML page for a persisted tool run workspace.
@@ -168,9 +196,6 @@ paths:
               schema:
                 type: string
             text/xml:
-              schema:
-                type: string
-            text/html:
               schema:
                 type: string
 components:
@@ -216,7 +241,6 @@ components:
       type: object
       required:
         - name
-        - command
         - exit_code
         - ok
         - skipped
@@ -231,8 +255,6 @@ components:
         - artifact_preview
       properties:
         name:
-          type: string
-        command:
           type: string
         exit_code:
           type: integer
