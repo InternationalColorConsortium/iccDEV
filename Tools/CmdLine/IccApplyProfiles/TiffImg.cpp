@@ -75,7 +75,39 @@
 #include <limits>
 #include "TiffImg.h"
 
-#if !defined(_WIN32)
+// The output-destination check below needs GetFileAttributesA() on Windows and
+// lstat()/errno on POSIX (#2242).  <windows.h> is pulled in here, in the shared
+// TU, rather than in either tool: iccSpecSepToTiff and iccApplyProfiles both
+// reach the destination through this file's CTiffImg::Create(), so a tool-local
+// copy would harden one caller and leave the other.
+//
+// NOMINMAX alone is NOT sufficient here, and getting this wrong breaks the
+// build rather than the behaviour.  <windows.h> defines min()/max() as
+// function-like macros, and this TU already used three names they capture --
+// kMaxTiffSamples and checkedUInt32's std::numeric_limits<>::max() below, and
+// the std::max() in Open()'s strip sizing.  The guard only suppresses them if
+// it is seen before the FIRST inclusion of <windows.h>, and that can arrive
+// transitively through "TiffImg.h" above, at which point the #define lands too
+// late and the include guard makes our own #include a no-op.  MSVC then reports
+// C4003 "not enough arguments for function-like macro invocation 'max'" plus
+// C2589/C2059 at each of the three sites.  Undefining the macros after the
+// include is what actually guarantees it -- the same belt-and-braces pairing
+// used at IccXML/IccLibXML/IccUtilXml.cpp:75-88, which needs it for the same
+// reason.  (IccProfLib/IccTagBasic.cpp:1669 solves the same collision the other
+// way, by writing the call as "(std::numeric_limits<T>::max)()".)
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#ifdef max
+#undef max
+#endif
+#ifdef min
+#undef min
+#endif
+#else
+#include <cerrno>
 #include <sys/stat.h>
 #endif
 
@@ -118,14 +150,127 @@ bool checkedUInt32Product(unsigned int a, unsigned int b, unsigned int &result)
   return checkedUInt32(static_cast<icUInt64Number>(a) * b, result);
 }
 
+#if defined(_WIN32)
+// Win32 resolves the reserved DOS device names (CON, PRN, AUX, NUL, COM1-9,
+// LPT1-9) anywhere on a path, with any extension and with trailing spaces
+// ignored -- "NUL", "NUL.tif" and "dir\\NUL " all open the null device rather
+// than creating a file.  GetFileAttributesA() reports INVALID_FILE_ATTRIBUTES
+// for them, which the caller below would otherwise read as "nothing there yet,
+// go ahead", so the name has to be rejected before the attribute query.  This
+// is the Windows counterpart of the POSIX S_ISREG() arm refusing /dev/null.
+bool isWindowsDevicePath(const char *path)
+{
+  const char *name = path;
+
+  // "C:NUL" is drive-*relative*: it names NUL in the current directory of drive
+  // C:, and Win32 resolves it to the null device just as "NUL" does.  The
+  // basename scan below stops at ':', so with the drive prefix left on, the
+  // scan ends at length 1 and the device name is never compared -- the path
+  // would be approved and written to the null device.  Strip the prefix first.
+  if (name[0] && name[1] == ':' &&
+      ((name[0] >= 'A' && name[0] <= 'Z') || (name[0] >= 'a' && name[0] <= 'z')))
+    name += 2;
+
+  for (const char *p = name; *p; p++) {
+    if (*p == '\\' || *p == '/')
+      name = p + 1;
+  }
+
+  size_t length = 0;
+  while (name[length] && name[length] != '.' && name[length] != ':')
+    length++;
+  while (length && name[length - 1] == ' ')
+    length--;
+
+  switch (length) {
+  case 3:
+    return (_strnicmp(name, "CON", 3) == 0 ||
+            _strnicmp(name, "PRN", 3) == 0 ||
+            _strnicmp(name, "AUX", 3) == 0 ||
+            _strnicmp(name, "NUL", 3) == 0);
+  case 4:
+    return name[3] >= '1' && name[3] <= '9' &&
+           (_strnicmp(name, "COM", 3) == 0 ||
+            _strnicmp(name, "LPT", 3) == 0);
+  // CONIN$/CONOUT$ are reserved console devices too, and match neither of the
+  // length-3/4 forms above.
+  case 6:
+    return _strnicmp(name, "CONIN$", 6) == 0;
+  case 7:
+    return _strnicmp(name, "CONOUT$", 7) == 0;
+  default:
+    return false;
+  }
+}
+#endif
+
+// Decide whether TIFFOpen(szFname, "w") may be allowed to truncate szFname.
+//
+// The check already refused a directory, a FIFO and a device, but it used
+// stat(), which follows symbolic links -- so a destination that was a symlink
+// to a regular file was approved and the *link target* was truncated and
+// rewritten (#2242).  lstat() inspects the link itself, so a symlink is no
+// longer a regular file and is refused, whether or not its target exists.
+//
+// Any stat() failure previously meant "permit".  Only ENOENT means the path is
+// genuinely free, so that is the only failure that still permits; anything else
+// (EACCES, ENOTDIR, ELOOP on an intermediate component) is refused here instead
+// of being handed to TIFFOpen().
+//
+// Scope, measured rather than assumed: relative to the previous behaviour this
+// changes symlink destinations only.  Absent, regular, directory, FIFO and
+// device destinations all resolve exactly as before.  A *hard* link is still
+// accepted -- it is indistinguishable from the regular file it is a name for --
+// and the lstat()/TIFFOpen() pair is still two syscalls, so a destination that
+// is replaced between them is not covered.  Both limits are recorded in the
+// tool Readmes; neither is a regression introduced here.
 bool canCreateRegularOutput(const char* szFname)
 {
+  // TIFFOpen() survives a null path (libtiff reports "Bad address"), so this is
+  // a diagnostic tidy-up rather than a crash fix: it lets the caller fail with
+  // the destination message instead of a libtiff errno string.
+  if (!szFname || !szFname[0])
+    return false;
+
 #if defined(_WIN32)
-  return true;
+  if (isWindowsDevicePath(szFname))
+    return false;
+
+  DWORD attributes = GetFileAttributesA(szFname);
+  if (attributes == INVALID_FILE_ATTRIBUTES) {
+    DWORD error = GetLastError();
+    return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND;
+  }
+
+  // Refusing every reparse point is too broad.  FILE_ATTRIBUTE_REPARSE_POINT is
+  // also set on OneDrive Files On-Demand placeholders (IO_REPARSE_TAG_CLOUD*),
+  // Windows dedup stubs (IO_REPARSE_TAG_DEDUP) and WOF-compressed files -- all
+  // ordinary files that happen to be backed indirectly, and all of which the
+  // tool wrote to happily before this change.  Only *name surrogates*
+  // (IO_REPARSE_TAG_SYMLINK and IO_REPARSE_TAG_MOUNT_POINT) redirect the write
+  // to another path, which is what #2242 is about, so discriminate on the
+  // reparse tag rather than on the attribute bit.  The tag is only reachable
+  // through FindFirstFileA's dwReserved0; szFname cannot contain a wildcard
+  // here, because GetFileAttributesA above would have failed with
+  // ERROR_INVALID_NAME and returned already.
+  if (attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+    WIN32_FIND_DATAA findData;
+    HANDLE hFind = FindFirstFileA(szFname, &findData);
+    if (hFind == INVALID_HANDLE_VALUE)
+      return false;
+
+    DWORD reparseTag = findData.dwReserved0;
+    FindClose(hFind);
+
+    if (IsReparseTagNameSurrogate(reparseTag))
+      return false;
+  }
+
+  return (attributes & (FILE_ATTRIBUTE_DEVICE | FILE_ATTRIBUTE_DIRECTORY)) == 0;
 #else
   struct stat st;
-  if (stat(szFname, &st) != 0)
-    return true;
+  if (lstat(szFname, &st) != 0)
+    return errno == ENOENT;
 
   return S_ISREG(st.st_mode);
 #endif
@@ -156,6 +301,7 @@ bool calcBytesPerLine(unsigned int width, unsigned int bitsPerSample,
 CTiffImg::CTiffImg()
   : m_hTif(NULL),
     m_bRead(false),
+    m_bOutputOpened(false),
     m_nWidth(0),
     m_nHeight(0),
     m_nBitsPerSample(0),
@@ -219,6 +365,16 @@ void CTiffImg::Close()
   }
 
   // Reset all remaining members to their ctor-initialized values (ctor order).
+  //
+  // m_bOutputOpened is the one deliberate exception to the #1429 "every member"
+  // rule above, and it is an exception because Create() calls Close() itself:
+  // both of Create()'s post-TIFFOpen failure arms (the EXTRASAMPLES calloc and
+  // the TIFFSetField that follows it) close the handle and return false with a
+  // truncated file already on disk.  Clearing the flag here would therefore
+  // report "we never opened the output" to the caller in precisely the case
+  // where a stub of ours exists to discard.  The flag records the outcome of
+  // the last Create()/Open() call rather than the state of the handle, so it is
+  // reset by those two entry points instead (#2242).
   m_bRead = false;
   m_nWidth = 0;
   m_nHeight = 0;
@@ -253,6 +409,7 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
 {
   Close();
   m_bRead = false;
+  m_bOutputOpened = false;
 
   if (nBPS % 8)
     return false;
@@ -323,9 +480,19 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   }
 
   if (!canCreateRegularOutput(szFname)) {
-    TIFFError(szFname,"Output image must be a regular file");
+    TIFFError(szFname,"Output image must be a regular non-symlink file");
     return false;
   }
+
+  // Set before the call, not after it: TIFFOpen(..., "w") open()s with
+  // O_CREAT|O_TRUNC and only then builds the TIFF structure, so a failure
+  // inside libtiff (an allocation failure in TIFFClientOpen) returns NULL with
+  // the destination already created and truncated.  Measured with libtiff's
+  // internal allocation forced to fail: "TIFFClientOpenExt: Out of memory
+  // (TIFF structure)", TIFFOpen NULL, and a 0-byte stub left on disk.  Setting
+  // the flag after the null check below would report "we never opened the
+  // output" for exactly that stub and leak it past the caller's cleanup.
+  m_bOutputOpened = true;
 
   m_hTif = TIFFOpen(szFname, "w");
   if (!m_hTif) {
@@ -472,6 +639,7 @@ bool CTiffImg::Open(const char *szFname)
 {
   Close();
   m_bRead = true;
+  m_bOutputOpened = false;
 
   m_hTif = TIFFOpen(szFname, "r");
   if (!m_hTif) {

@@ -60,6 +60,22 @@ The destination TIFF carries the source's `XResolution`, `YResolution` and
 `ResolutionUnit`. The unit tag is always written, so the output states its unit
 rather than relying on the reader defaulting an absent tag to inches.
 
+## Output Destination Safety
+
+The destination must be a regular non-symlink file when it already exists.
+Directories, devices, POSIX symlinks, and Windows reparse points are rejected
+before libtiff opens the destination. Naming a symlink as the output is
+therefore an error rather than a write through to its target; point the tool at
+the target path directly.
+
+Two limits are deliberate rather than oversights:
+
+- A **hard** link is accepted. It is another name for the regular file it links
+  to, and nothing in the file's metadata distinguishes it from the original.
+- The destination is checked and then opened, so a path swapped between those
+  two steps is not covered. The check guards against writing through a symlink
+  that is already there, not against a race for the path.
+
 ## See Also
 
 - [CLI tool reference](../../../docs/tools-cli-reference.md)

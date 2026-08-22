@@ -660,6 +660,15 @@ int main(int argc, char* argv[]) {
   // regular file).  Removing unconditionally on failure would therefore delete
   // a pre-existing file this run never touched, so only discard an output that
   // did not exist beforehand.
+  //
+  // outputExisted alone is not sufficient once Create() refuses symlinks
+  // (#2242).  A *dangling* symlink reads as "did not exist" here -- the probe
+  // below opens the link's target, which is missing -- so the !outputExisted
+  // arm on its own would remove() the link that Create() had just declined to
+  // touch.  Measured: with the lstat() change but without WasOutputOpened(),
+  // a dangling-symlink destination is correctly refused and then deleted.
+  // Gating on "did TIFFOpen() actually run" is what keeps the refusal
+  // non-destructive, so both halves of this guard are load-bearing.
   bool outputExisted = false;
   {
     // Probed with CIccFileIO to match readValidateProfile() above; a bare
@@ -679,7 +688,7 @@ int main(int argc, char* argv[]) {
                      (unsigned int)nSamples, nExtraSamples, xRes, yRes, bCompress, bSep,
                      f->GetResolutionUnit())) {
     fprintf(stderr, "Unable to create %s\n", icSanitizeConsoleText(argv[1]).c_str());
-    if (!outputExisted)
+    if (!outputExisted && outfile.WasOutputOpened())
       remove(argv[1]);
     return -1;
   }

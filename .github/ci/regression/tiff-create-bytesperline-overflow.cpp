@@ -46,6 +46,14 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 namespace {
 
@@ -60,10 +68,65 @@ void check(bool ok, const char *what)
 }
 
 const char *kOutPath = "tiff-create-overflow-should-not-exist.tif";
+const char *kSymlinkPath = "tiff-create-symlink-output.tif";
+const char *kSymlinkTarget = "tiff-create-symlink-target.txt";
 
 void cleanup()
 {
   std::remove(kOutPath);
+}
+
+void cleanupSymlinkTest()
+{
+  std::remove(kSymlinkPath);
+  std::remove(kSymlinkTarget);
+}
+
+bool createOutputSymlink()
+{
+#if defined(_WIN32)
+  return CreateSymbolicLinkA(kSymlinkPath, kSymlinkTarget, 0) != 0;
+#else
+  return symlink(kSymlinkTarget, kSymlinkPath) == 0;
+#endif
+}
+
+bool outputIsSymlink()
+{
+#if defined(_WIN32)
+  DWORD attributes = GetFileAttributesA(kSymlinkPath);
+  return attributes != INVALID_FILE_ATTRIBUTES &&
+         (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+#else
+  struct stat st;
+  return lstat(kSymlinkPath, &st) == 0 && S_ISLNK(st.st_mode);
+#endif
+}
+
+bool targetContentIsOriginal()
+{
+  char content[64] = {};
+  std::FILE *file = std::fopen(kSymlinkTarget, "rb");
+  if (!file)
+    return false;
+
+  size_t count = std::fread(content, 1, sizeof(content) - 1, file);
+  std::fclose(file);
+  return count == std::strlen("IMPORTANT ORIGINAL CONTENT\n") &&
+         std::strcmp(content, "IMPORTANT ORIGINAL CONTENT\n") == 0;
+}
+
+bool writeOriginalTarget()
+{
+  std::FILE *file = std::fopen(kSymlinkTarget, "wb");
+  if (!file)
+    return false;
+
+  const char *content = "IMPORTANT ORIGINAL CONTENT\n";
+  bool ok = std::fwrite(content, 1, std::strlen(content), file) ==
+            std::strlen(content);
+  std::fclose(file);
+  return ok;
 }
 
 // Create() with parameters whose bytes-per-line overflows unsigned int must fail.
@@ -217,6 +280,64 @@ int main()
       }
     }
     cleanup();
+  }
+
+  // --- 8. CTiffImg is shared by iccSpecSepToTiff and iccApplyProfiles. A
+  // symlink destination must be rejected before TIFFOpen("w") follows it and
+  // truncates its target. Keep the check here at the shared Create() boundary
+  // rather than duplicating it in either caller.
+  //
+  // Red/green: against the pre-fix TiffImg.cpp two of the three assertions
+  // below fail -- Create() returns true and the target comes back holding a
+  // TIFF header instead of its original bytes. The third ("leaves the rejected
+  // symlink intact") passes either way, because the pre-fix path wrote through
+  // the link rather than unlinking it; it is here to pin that refusing the
+  // destination stays non-destructive, not to detect the original defect.
+  {
+    cleanupSymlinkTest();
+    check(writeOriginalTarget(), "created the symlink regression target");
+    if (createOutputSymlink()) {
+      CTiffImg img;
+      const bool ok = img.Create(kSymlinkPath, 64u, 4u, 8u, PHOTO_MINISBLACK,
+                                 3u, 0u, 72.0f, 72.0f);
+      check(!ok, "Create() rejects a symlink output destination");
+      img.Close();
+      check(outputIsSymlink(), "Create() leaves the rejected symlink intact");
+      check(targetContentIsOriginal(),
+            "Create() leaves the rejected symlink target unchanged");
+    }
+    else {
+      std::printf("[tiff-create-overflow] SKIP: cannot create file symlink\n");
+    }
+    cleanupSymlinkTest();
+  }
+
+  // --- 9. A device is not a regular output destination.
+  //
+  // The POSIX arm of this case passes against the pre-fix TiffImg.cpp too --
+  // stat() already reported /dev/null as non-regular, so this is regression
+  // coverage for behaviour that must survive the lstat() switch, not evidence
+  // of the defect. The genuinely new coverage is the Windows arm: "NUL" and
+  // "NUL.tif" are reserved DOS device names that GetFileAttributesA() reports
+  // as INVALID_FILE_ATTRIBUTES, which the old `return true;` Windows stub
+  // accepted outright.
+  {
+#if defined(_WIN32)
+    // "C:NUL" is drive-relative and resolves to the null device just as "NUL"
+    // does; it is listed because the basename scan stops at ':' and an earlier
+    // revision of the name check therefore missed it. "CONIN$" matches neither
+    // the 3- nor the 4-character reserved-name form.
+    const char *devicePaths[] = { "NUL", "NUL.tif", "C:NUL", "CONIN$" };
+#else
+    const char *devicePaths[] = { "/dev/null" };
+#endif
+    for (const char *devicePath : devicePaths) {
+      CTiffImg img;
+      const bool ok = img.Create(devicePath, 64u, 4u, 8u, PHOTO_MINISBLACK,
+                                 3u, 0u, 72.0f, 72.0f);
+      check(!ok, "Create() rejects a device output destination");
+      img.Close();
+    }
   }
 
   if (g_fail)

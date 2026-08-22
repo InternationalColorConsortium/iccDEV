@@ -333,6 +333,84 @@ run_specsep_checked_in_truncated_reject() {
   pass_case "$name" "short strip read rejected and the partial output discarded"
 }
 
+run_specsep_symlink_output_reject() {
+  local name="specsep-symlink-output-reject"
+  local fixture_dir="$REPO_ROOT/.github/ci/test-data/spectral"
+  local target="$OUTDIR/specsep-symlink-target.txt"
+  local link="$OUTDIR/specsep-symlink-output.tif"
+  local expected="IMPORTANT ORIGINAL CONTENT"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$target" "$link" "$LOGFILE"
+
+  if [ ! -x "$SPECSEP" ]; then
+    fail_case "$name" "missing executable: $SPECSEP"
+    return
+  fi
+
+  if [ ! -s "$fixture_dir/spec_1" ]; then
+    fail_case "$name" "missing checked-in fixture: $fixture_dir/spec_1"
+    return
+  fi
+
+  if ! ln -s "$target" "$link" 2>/dev/null; then
+    skip_case "$name" "file symlinks are unavailable"
+    return
+  fi
+  printf '%s\n' "$expected" > "$target"
+
+  timeout 60 "$SPECSEP" "$link" 0 0 "$fixture_dir/spec_" 1 3 1 > "$LOGFILE" 2>&1 || exit_code=$?
+
+  # The reject path still runs the tool, so a recoverable sanitizer report under
+  # halt_on_error=0 would leave exit=255 and the expected diagnostic intact and
+  # the case would pass with a finding sitting in the log.  Match the sibling
+  # reject cases and fail on it.
+  if ! check_sanitizers "$name" "$LOGFILE"; then
+    sed -n '1,40p' "$LOGFILE"
+    return
+  fi
+
+  if [ "$exit_code" -ne 255 ]; then
+    fail_case "$name" "expected symlink rejection exit=255, got exit=$exit_code"
+    sed -n '1,40p' "$LOGFILE"
+    return
+  fi
+
+  if ! grep -Fq "regular non-symlink file" "$LOGFILE" 2>/dev/null; then
+    fail_case "$name" "missing symlink output diagnostic"
+    sed -n '1,40p' "$LOGFILE"
+    return
+  fi
+
+  if [ ! -L "$link" ]; then
+    fail_case "$name" "rejected output symlink was removed"
+    return
+  fi
+
+  if [ "$(cat "$target")" != "$expected" ]; then
+    fail_case "$name" "rejected output symlink target was modified"
+    return
+  fi
+
+  rm -f "$target"
+  exit_code=0
+  timeout 60 "$SPECSEP" "$link" 0 0 "$fixture_dir/spec_" 1 3 1 > "$LOGFILE" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$LOGFILE"; then
+    sed -n '1,40p' "$LOGFILE"
+    return
+  fi
+
+  if [ "$exit_code" -ne 255 ] || [ ! -L "$link" ]; then
+    fail_case "$name" "rejected dangling output symlink was modified or removed"
+    sed -n '1,40p' "$LOGFILE"
+    return
+  fi
+
+  pass_case "$name" "valid and dangling output symlinks were left intact"
+}
+
 run_specsep_geometry_reject() {
   local name="specsep-tiff-geometry-reject"
   local exit_code=0
@@ -870,6 +948,7 @@ run_specsep_create_failure_preserves_existing_output() {
 echo "=== iccSpecSepToTiff malformed TIFF geometry regression ==="
 run_specsep_resolution_unit_preserve
 run_specsep_checked_in_truncated_reject
+run_specsep_symlink_output_reject
 run_specsep_geometry_reject
 run_specsep_packed_bps_reject
 run_specsep_descending_range_accept

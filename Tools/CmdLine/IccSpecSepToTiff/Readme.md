@@ -86,11 +86,14 @@ single-channel TIFF inputs.
 - Output uses explicit `ExtraSamples` metadata for every sample beyond the
   first. Very high channel-count spectral TIFFs can be valid but may exceed
   limits in display tools such as ImageMagick.
-- On POSIX, an existing output destination must be a regular file; a directory
-  or device is rejected before anything is written. If profile embedding,
-  reading, or writing fails after the output was created, the incomplete output
-  is removed, and a failed create removes the stub only when the destination did
-  not already exist.
+- An existing output destination must be a regular non-symlink file. Directories,
+  devices, POSIX symlinks, and Windows reparse points are rejected before
+  anything is written; a hard link is accepted, being another name for a regular
+  file. If profile embedding, reading, or writing fails after the output was
+  created, the incomplete output is removed, and a failed create removes the stub
+  only when the destination did not already exist *and* this run had actually
+  opened it -- a refused destination, including a dangling symlink, is left
+  exactly as it was found.
 - A successful conversion reports the accepted profile, if any, followed by the
   output path, dimensions, bit depth, sample count, planar configuration,
   compression, and embedded-profile state. Nothing is written to standard output

@@ -114,6 +114,14 @@ public:
               float fXRes, float fYRes, bool bCompress=true, bool bSep=false,
               unsigned int nResolutionUnit=RESUNIT_INCH);
   bool Open(const char *szFname);
+  // True once this object's Create() got past TIFFOpen(..., "w") -- i.e. the
+  // destination was actually created or truncated by this run.  A caller that
+  // discards a failed output needs this to tell "Create() refused the path and
+  // touched nothing" from "Create() opened the path and then failed", because
+  // only the second case leaves something of ours to remove (#2242).  Reset by
+  // Create() and Open(), and deliberately NOT cleared by Close(), so it stays
+  // readable on the failure path after Create() has closed the handle.
+  bool WasOutputOpened() const { return m_bOutputOpened; }
 
   bool ReadLine(unsigned char *pBuf);
   bool WriteLine(unsigned char *pBuf);
@@ -169,6 +177,7 @@ protected:
 
   TIFF *m_hTif;
   bool m_bRead;
+  bool m_bOutputOpened;
 
   unsigned int m_nWidth;
   unsigned int m_nHeight;
