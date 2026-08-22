@@ -111,6 +111,18 @@ parsed by the shared `CIccCfgProfile::fromArgs` is:
 | `+1000000` | NamedColor over-black (`icSigNmclSpectralOverBlackMbr`, `'spcb'`) |
 | `+2000000` | NamedColor over-gray (`icSigNmclSpectralOverGrayMbr`, `'spcg'`) |
 
+Each column is an independent field: `+100000` no longer implies `+10000`, and
+`+10000` never implied `+100000`. The millions column accepts only the two
+overprint values above -- the members are mutually exclusive, so a combined
+`+3000000` is refused rather than decoded as over-white -- and the whole code
+must be non-negative (#2190).
+
+`+100000` is currently recorded in the configuration but not acted on: no
+`AddXform` overload takes an HToS argument, and `CheckPCSRangeConversions()`
+injects the HToS transform whenever the tag is present, regardless of the flag.
+It is accepted and round-trips through the JSON config, but selects nothing
+(#2190).
+
 The over-black / over-gray flags only affect chains that include a v5
 NamedColor profile. JSON callers prefer the `transform` field values,
 which combine an output-side stem (`named` / `namedColorimetric` /

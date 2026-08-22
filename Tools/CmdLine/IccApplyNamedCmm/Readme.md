@@ -86,6 +86,11 @@ named color, differing in PCS-side stem:
 iccApplyNamedCmm <data> 0 1 Named/NamedColor.icc 1000003
 ```
 
+The two overprint codes are alternatives, not bits: over-black and
+over-gray name mutually exclusive array members, so `+3000000` is
+refused rather than treated as a request for both (it used to decode
+as plain over-white and exit 0 -- #2190).
+
 If the profile lacks the requested array member for any named color the
 apply hits, `Apply` fails with `icCmmStatBadTintXform` rather than
 silently falling back to a different member; this surfaces the

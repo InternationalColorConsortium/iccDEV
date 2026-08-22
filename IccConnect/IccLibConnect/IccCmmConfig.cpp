@@ -1078,24 +1078,54 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
       if (!icParseIntArg(args[1], nIntent) || nIntent == INT_MIN)
         return 0;
 
+      // A negative code is not a documented form, but it was accepted whenever
+      // the units digit was zero: nType takes abs() while the intent digit does
+      // not, and -110 % 10 is 0, so "-110" decoded exactly like "110" -- and the
+      // sign silently took the overprint field with it, because -1000110 / 1000000
+      // is -1, which matched neither over-black nor over-gray.  #1400 added the
+      // range checks below to reject invalid codes; this is the case they cannot
+      // see, because by the time they run the value has already lost the sign
+      // (#2190).
+      if (nIntent < 0)
+        return 0;
+
       pProf->m_useD2BxB2Dx = true;
       // Overprint variant for NamedColor xforms is encoded as the millions
       // digit of the intent code:
       //   +1000000 -> icNamedColorOverBlack (spcb)
       //   +2000000 -> icNamedColorOverGray  (spcg)
-      // Anything else leaves the default icNamedColorOverWhite (spec).
+      // Any other value in that column is refused rather than decoded as the
+      // default icNamedColorOverWhite (spec).  The two array members are
+      // mutually exclusive, so "+3000000" cannot mean both; answering it with
+      // neither handed a caller who asked for an overprint a plain over-white
+      // transform and exit 0, and the same silence swallowed "+9000000" and
+      // every larger typo (#2190).
       // Strip the field before the existing decimal-coded flags are read.
       {
         int overprintCode = nIntent / 1000000;
-        if (overprintCode == 1)
+        if (overprintCode == 0)
+          pProf->m_nOverprint = icNamedColorOverWhite;
+        else if (overprintCode == 1)
           pProf->m_nOverprint = icNamedColorOverBlack;
         else if (overprintCode == 2)
           pProf->m_nOverprint = icNamedColorOverGray;
         else
-          pProf->m_nOverprint = icNamedColorOverWhite;
+          return 0;
         nIntent = nIntent % 1000000;
       }
+      // Recorded, but nothing downstream consumes it: m_useHToS reaches only
+      // toJson(), CIccCmm::AddXform() has no HToS parameter, and
+      // CheckPCSRangeConversions() injects the HToS transform whenever the tag
+      // is present regardless of any flag.  Left as-is here -- wiring it
+      // through is a library API change, not part of this decode fix (#2190).
       pProf->m_useHToS = (nIntent / 100000) != 0;
+      // Strip the HToS digit before the V5 sub-profile digit is read.  Without
+      // this the "/ 10000" below still sees the hundred-thousands column, so any
+      // code carrying +100000 forced m_useV5SubProfile true as well and there was
+      // no way to ask for HToS alone -- the two flags are documented as
+      // independent.  The -INIT decode further down already strips at this width
+      // for exactly this reason (#2190).
+      nIntent = nIntent % 100000;
       pProf->m_useV5SubProfile = (nIntent / 10000) != 0;
       nIntent = nIntent % 10000;
       pProf->m_adjustPcsLuminance = nIntent / 1000 != 0;
@@ -1320,24 +1350,54 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
       if (!icParseIntArg(args[1], nIntent) || nIntent == INT_MIN)
         return 0;
 
+      // A negative code is not a documented form, but it was accepted whenever
+      // the units digit was zero: nType takes abs() while the intent digit does
+      // not, and -110 % 10 is 0, so "-110" decoded exactly like "110" -- and the
+      // sign silently took the overprint field with it, because -1000110 / 1000000
+      // is -1, which matched neither over-black nor over-gray.  #1400 added the
+      // range checks below to reject invalid codes; this is the case they cannot
+      // see, because by the time they run the value has already lost the sign
+      // (#2190).
+      if (nIntent < 0)
+        return 0;
+
       pProf->m_useD2BxB2Dx = true;
       // Overprint variant for NamedColor xforms is encoded as the millions
       // digit of the intent code:
       //   +1000000 -> icNamedColorOverBlack (spcb)
       //   +2000000 -> icNamedColorOverGray  (spcg)
-      // Anything else leaves the default icNamedColorOverWhite (spec).
+      // Any other value in that column is refused rather than decoded as the
+      // default icNamedColorOverWhite (spec).  The two array members are
+      // mutually exclusive, so "+3000000" cannot mean both; answering it with
+      // neither handed a caller who asked for an overprint a plain over-white
+      // transform and exit 0, and the same silence swallowed "+9000000" and
+      // every larger typo (#2190).
       // Strip the field before the existing decimal-coded flags are read.
       {
         int overprintCode = nIntent / 1000000;
-        if (overprintCode == 1)
+        if (overprintCode == 0)
+          pProf->m_nOverprint = icNamedColorOverWhite;
+        else if (overprintCode == 1)
           pProf->m_nOverprint = icNamedColorOverBlack;
         else if (overprintCode == 2)
           pProf->m_nOverprint = icNamedColorOverGray;
         else
-          pProf->m_nOverprint = icNamedColorOverWhite;
+          return 0;
         nIntent = nIntent % 1000000;
       }
+      // Recorded, but nothing downstream consumes it: m_useHToS reaches only
+      // toJson(), CIccCmm::AddXform() has no HToS parameter, and
+      // CheckPCSRangeConversions() injects the HToS transform whenever the tag
+      // is present regardless of any flag.  Left as-is here -- wiring it
+      // through is a library API change, not part of this decode fix (#2190).
       pProf->m_useHToS = (nIntent / 100000) != 0;
+      // Strip the HToS digit before the V5 sub-profile digit is read.  Without
+      // this the "/ 10000" below still sees the hundred-thousands column, so any
+      // code carrying +100000 forced m_useV5SubProfile true as well and there was
+      // no way to ask for HToS alone -- the two flags are documented as
+      // independent.  The -INIT decode further down already strips at this width
+      // for exactly this reason (#2190).
+      nIntent = nIntent % 100000;
       pProf->m_useV5SubProfile = (nIntent / 10000) != 0;
       nIntent = nIntent % 10000;
       pProf->m_adjustPcsLuminance = nIntent / 1000 != 0;
@@ -1391,10 +1451,24 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
     if (!icParseIntArg(args[1], nIntent) || nIntent == INT_MIN)
       return 0;
 
+    // Same sign gap as the two profile decodes above: abs() on the type digit
+    // let a negative code through whenever the units digit was zero (#2190).
+    if (nIntent < 0)
+      return 0;
+
     m_bInitialized = true;
 
     m_useD2BxB2DxInitial = true;
-    nIntent = nIntent % 100000;
+    // -INIT carries no overprint and no HToS field -- there is no
+    // m_nOverprintInitial or m_useHToSInitial for them to land in -- so a code
+    // reaching into those columns is refused rather than masked off.  Masking
+    // is what "% 100000" used to do here, and once the two profile decodes
+    // above started refusing an unrecognised overprint column it left the same
+    // value answered two different ways inside one command line: "<profile>
+    // 3000000" was rejected while "-INIT 3000000" silently ran a plain
+    // perceptual initial transform and exited 0 (#2190).
+    if (nIntent >= 100000)
+      return 0;
     m_useV5SubProfileInitial = (nIntent / 10000) != 0;
     nIntent = nIntent % 10000;
     m_adjustPcsLuminanceInitial = nIntent / 1000 != 0;

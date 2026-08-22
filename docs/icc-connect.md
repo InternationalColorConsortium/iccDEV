@@ -161,7 +161,12 @@ The two axes combine into the following set of JSON `transform` values:
 The legacy argv form (`CIccCfgProfileSequence::fromArgs`) carries only
 the overprint axis, in the millions digit of the intent code:
 `intent + 1000000` -> over-black; `intent + 2000000` -> over-gray;
-anything else stays at over-white. The output-side axis is JSON-only.
+absent -> over-white. Any other value in that column is refused --
+over-black and over-gray name mutually exclusive array members, so
+`+3000000` cannot request both, and decoding it as over-white answered
+a caller who asked for an overprint with a transform that had none
+(#2190). The intent code must also be non-negative. The output-side
+axis is JSON-only.
 
 If the profile lacks the requested array member for any named color
 encountered during apply (output-side stem or overprint suffix), `Apply`

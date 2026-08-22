@@ -7280,10 +7280,16 @@ if(TARGET iccApplyNamedCmm)
   # other. Both profiles it uses are tracked, so this still needs no fixture
   # dependency and the timeout is unchanged -- the added cases run the same
   # 16-row rgb8bit.txt transform the existing ones already do.
+  #
+  # #2190 adds the intent-code half. Its flag cases assert the decoded
+  # configuration through -exportcfg instead of the exit status, because the
+  # defects they pin all exited 0: +100000 silently forced the V5 sub-profile
+  # flag on with HToS, and an unrecognised overprint column silently decoded as
+  # over-white. Exit status is only load-bearing for the rejection cases.
   iccdev_add_script_test(
     iccdev.applynamedcmm-cli-args
     120
-    "iccdev;cmm;config;cli;security;issue-1674;issue-2124;regression"
+    "iccdev;cmm;config;cli;security;issue-1674;issue-2124;issue-2190;regression"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh"
    )
@@ -7298,7 +7304,7 @@ if(TARGET iccApplySearch)
   iccdev_add_script_test(
     iccdev.applysearch-cli-args
     120
-    "iccdev;cmm;config;cli;security;issue-1674;issue-1853;regression"
+    "iccdev;cmm;config;cli;security;issue-1674;issue-1853;issue-2190;regression"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applysearch-cli-args-regression.sh"
    )

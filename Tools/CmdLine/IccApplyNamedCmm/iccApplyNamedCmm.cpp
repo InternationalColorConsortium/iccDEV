@@ -263,6 +263,11 @@ void Usage()
   printf("  +100000 - Use HToS tag if present\n");
   printf(" +1000000 - NamedColor over black (icSigNmclSpectralOverBlackMbr 'spcb')\n");
   printf(" +2000000 - NamedColor over gray  (icSigNmclSpectralOverGrayMbr 'spcg')\n");
+  // The two overprint codes read as additive flags, and #2190 was filed by a
+  // caller who combined them. They select mutually exclusive array members, so
+  // say here that only one may be given rather than let "+3000000" look legal.
+  printf("            (over black and over gray are alternatives, not flags:\n");
+  printf("             only one of +1000000 / +2000000 may be given)\n");
 }
 
 static std::string GetProfileId(const char* profilePath)
