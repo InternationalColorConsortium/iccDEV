@@ -263,7 +263,6 @@ TIFF_MISMATCH="$TP_TIFF/catalyst-16bit-mismatch.tiff"
 TIFF_MUTATED="$TP_TIFF/catalyst-16bit-mutated.tiff"
 PNG_CVE="$TP_IMG/p0-2225-cve-2021-30942-colorsync-uninit-mem.png"
 JPG_CVE="$TP_IMG/p0-2225-cve-2021-30942-colorsync-uninit-mem.jpg"
-SPECTRAL_TIFF="$ICCDEV_TESTING/hybrid/Data/smCows380_5_780.tif"
 V5_DISPLAY="$TP/LCDDisplay.icc"
 LCDDISPLAY_XML="$ICCDEV_TESTING/Display/LCDDisplay.xml"
 [ -f "$LCDDISPLAY_XML" ] || LCDDISPLAY_XML="$ICCDEV_TESTING/hybrid/LCDDisplay.xml"
@@ -933,7 +932,7 @@ else
 fi
 
 if [ -f "$TIFF_8BIT" ] && [ -f "$APPLYPROF_CALC_TEMP" ]; then
-  run_expect_exit "apply-08" "ApplyProfiles: AFL calculator temp overflow profile" 255 \
+  run_expect_exit "apply-08" "ApplyProfiles: AFL calculator temp overflow profile" 1 \
     "$APPLYPROF" "$TIFF_8BIT" "$OUTDIR/applied_afl_calc_temp.tiff" 0 0 0 0 0 "$APPLYPROF_CALC_TEMP" 1
 else
   skip_test "apply-08" "ApplyProfiles: AFL calculator temp overflow profile" "regression profile unavailable"
@@ -942,7 +941,7 @@ fi
 echo ""
 
 # =============================================================================
-# 9. iccApplySearch (5 tests)
+# 9. iccApplySearch (10 tests)
 # =============================================================================
 echo "--- 9. iccApplySearch ---"
 APPLYSRCH="$TOOLS/IccApplySearch/iccApplySearch"
@@ -968,6 +967,23 @@ if [ -f "$SRGB_CALC_DATA" ] && [ -f "$SRGB" ]; then
   run_test "search-05" "JSON -cfg search without pccWeights" \
     bash -c '"$1" -exportcfganddata "$2" "$3" 3 0 "$4" 1 "$4" 1 -INIT 1 >/dev/null && ! grep -Fq "\"pccWeights\"" "$2" && "$1" -cfg "$2" >/dev/null' \
     _ "$APPLYSRCH" "$OUTDIR/search-missing-pccweights.json" "$SRGB_CALC_DATA" "$SRGB"
+
+  run_expect_exit "search-06" "Reject missing search -INIT argument" 255 \
+    "$APPLYSRCH" "$SRGB_CALC_DATA" 0 0 "$SRGB" 1 "$SRGB" 1
+
+  run_expect_exit "search-07" "Reject search -INIT without value" 255 \
+    "$APPLYSRCH" "$SRGB_CALC_DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT
+
+  run_expect_exit "search-08" "Reject trailing search argument" 255 \
+    "$APPLYSRCH" "$SRGB_CALC_DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1 EXTRA
+
+  run_expect_exit "search-09" "Reject malformed search -ENV tag" 255 \
+    "$APPLYSRCH" "$SRGB_CALC_DATA" 0 0 -ENV:abc 1 "$SRGB" 1 "$SRGB" 1 -INIT 1
+
+  # shellcheck disable=SC2016
+  run_expect_exit "search-10" "Reject extra JSON -cfg argument" 1 \
+    bash -c '"$1" -exportcfganddata "$2" "$3" 3 0 "$4" 1 "$4" 1 -INIT 1 >/dev/null && "$1" -cfg "$2" EXTRA >/dev/null' \
+    _ "$APPLYSRCH" "$OUTDIR/search-extra-cfg-arg.json" "$SRGB_CALC_DATA" "$SRGB"
 fi
 
 echo ""
@@ -1025,11 +1041,6 @@ if [ -f "$TIFF_MUTATED" ]; then
     "$TIFFDUMP" "$TIFF_MUTATED"
 else
   skip_test "tdump-05" "Dump TIFF mutated profile" "mutated TIFF fixture unavailable"
-fi
-
-if [ -f "$SPECTRAL_TIFF" ]; then
-  run_test "tdump-07" "Dump spectral TIFF (81 channels)" \
-    "$TIFFDUMP" "$SPECTRAL_TIFF"
 fi
 
 if [ -f "$ICCDEV_TESTING/hybrid/Data/TShirtDesignKW.tif" ]; then

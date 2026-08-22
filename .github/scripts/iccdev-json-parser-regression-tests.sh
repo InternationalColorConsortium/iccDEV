@@ -619,6 +619,11 @@ write("utf16-short-text", {
     "text": "AA"
 })
 
+write("ziputf8-compresseddata-truncated", {
+    "type": "utf8ZipType",
+    "compressedData": "789c4bcecf"
+})
+
 def write_tag_entry(name, entry):
     doc = copy.deepcopy(base)
     doc["IccProfile"]["Tags"].append(entry)
@@ -682,6 +687,22 @@ if count != 1:
     raise SystemExit("No profileDescriptionTag found for private type mutation")
 pathlib.Path(dst_path).write_text(text, encoding="utf-8")
 ' "$XML_PROFILE" "$XML_EMPTY_PRIVATE_TYPE"
+
+XML_ZIPUTF8_COMPRESSEDDATA_TRUNCATED="$OUTDIR/xml-ziputf8-compresseddata-truncated.xml"
+python3 -c '
+import pathlib
+import re
+import sys
+
+src_path, dst_path = sys.argv[1:3]
+text = pathlib.Path(src_path).read_text(encoding="utf-8")
+pattern = re.compile(r"<profileDescriptionTag>.*?</profileDescriptionTag>", re.S)
+replacement = "<profileDescriptionTag> <utf8ZipType><HexCompressedData>789c4bcecf</HexCompressedData></utf8ZipType> </profileDescriptionTag>"
+text, count = pattern.subn(replacement, text, count=1)
+if count != 1:
+    raise SystemExit("No profileDescriptionTag found for compressed data mutation")
+pathlib.Path(dst_path).write_text(text, encoding="utf-8")
+' "$XML_PROFILE" "$XML_ZIPUTF8_COMPRESSEDDATA_TRUNCATED"
 
 TEXT_INVALID_ASCII="$OUTDIR/text-invalid-ascii.icc"
 python3 -c '
@@ -864,8 +885,10 @@ run_reject_test "responsecurve-count-overflow" "$OUTDIR/responsecurve-count-over
 run_reject_test "responsecurve-devicecode-overflow" "$OUTDIR/responsecurve-devicecode-overflow.json" "Invalid Measurement DeviceCode in ResponseCurveSet16"
 run_reject_test "responsecurve-devicecode-negative" "$OUTDIR/responsecurve-devicecode-negative.json" "Invalid Measurement DeviceCode in ResponseCurveSet16"
 run_reject_test "struct-empty-member-name" "$OUTDIR/struct-empty-member-name.json" "MemberTag entry has empty name"
+run_reject_test "ziputf8-compresseddata-truncated" "$OUTDIR/ziputf8-compresseddata-truncated.json" "Invalid compressedData zlib stream in compressed tag"
 run_xml_reject_test "xml-matrix-huge-channels" "$XML_MATRIX_HUGE" "Invalid InputChannels or OutputChannels In MatrixElement"
 run_xml_reject_test "xml-empty-private-type" "$XML_EMPTY_PRIVATE_TYPE" "Invalid private tag type attribute"
+run_xml_reject_test "xml-ziputf8-compresseddata-truncated" "$XML_ZIPUTF8_COMPRESSEDDATA_TRUNCATED" "Invalid HexCompressedData zlib stream in compressed tag"
 run_tojson_valid_json_test "text-invalid-ascii-tojson" "$TEXT_INVALID_ASCII"
 run_tojson_success_test "namedcolor-invalid-ascii-tojson" "$NAMED_INVALID_ASCII"
 run_large_indented_roundtrip_test "CMYK-W_Overprint_Profile.xml"
@@ -897,10 +920,16 @@ find_library_file() {
 
 cat > "$HELPER_SRC" <<'CPP'
 #include "IccCmmConfig.h"
+#include "IccCmmThread.h"
 #include "IccJsonUtil.h"
 
 #include <cmath>
 #include <iostream>
+
+int CIccThreadedCmm::GetMaxThreads()
+{
+  return 256;
+}
 
 int main()
 {

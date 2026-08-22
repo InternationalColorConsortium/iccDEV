@@ -14,7 +14,7 @@
 #   HYBRID_TIMING_AFFINITY  -- optional taskset CPU list, e.g. 0-15
 #   HYBRID_TIMING_CASES     -- comma-separated cmykw,kw-mcs, default both
 #   HYBRID_TIMING_BAND_ROWS -- optional ICC_APPLY_PROFILES_BAND_ROWS value
-#   HYBRID_TIMING_INSTRUMENT -- set to 1 for apply/thread timing lines
+#   HYBRID_TIMING_INSTRUMENT -- set to 1 for apply-loop timing lines
 ###############################################################################
 
 set -euo pipefail
@@ -132,7 +132,10 @@ fi
 
 mkdir -p "$OUTDIR"
 SUMMARY="$OUTDIR/hybrid-applyprofiles-timing.tsv"
-printf 'case\tthreads\tcommand\tstatus\telapsed_s\tuser_s\tsystem_s\tmax_rss_kb\tminor_faults\tvoluntary_ctx\tinvoluntary_ctx\tlog\n' > "$SUMMARY"
+printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  case threads command status elapsed_s loop_ms apply_ms apply_pct \
+  apply_calls async_launches user_s system_s max_rss_kb minor_faults \
+  voluntary_ctx involuntary_ctx log > "$SUMMARY"
 
 IFS=, read -r -a TIMING_VARIANTS <<< "$THREADS_CSV"
 IFS=, read -r -a TIMING_CASES <<< "$CASES_CSV"
@@ -169,6 +172,15 @@ time_value()
   awk -v pat="$pattern" 'index($0, pat) == 1 { print substr($0, length(pat) + 1) }' "$file" | tail -n 1
 }
 
+timing_value()
+{
+  local label="$1"
+  local file="$2"
+  awk -v label="[TIMING] ${label}: " '
+    index($0, label) == 1 { print substr($0, length(label) + 1) }
+  ' "$file" | tail -n 1
+}
+
 run_case()
 {
   local label="$1"
@@ -194,7 +206,6 @@ run_case()
     cd "$case_dir/testing/hybrid"
     if [ "$INSTRUMENT" -eq 1 ]; then
       export ICC_APPLY_PROFILES_TIMING=1
-      export ICC_CMM_THREAD_TIMING=1
     fi
     if [ -n "$BAND_ROWS" ]; then
       export ICC_APPLY_PROFILES_BAND_ROWS="$BAND_ROWS"
@@ -224,6 +235,11 @@ run_case()
   local minor_faults
   local voluntary_ctx
   local involuntary_ctx
+  local loop_ms
+  local apply_ms
+  local apply_pct
+  local apply_calls
+  local async_launches
 
   elapsed="$(time_value elapsed_s= "$time_log")"
   user_time="$(time_value user_s= "$time_log")"
@@ -232,11 +248,18 @@ run_case()
   minor_faults="$(time_value minor_faults= "$time_log")"
   voluntary_ctx="$(time_value voluntary_ctx= "$time_log")"
   involuntary_ctx="$(time_value involuntary_ctx= "$time_log")"
+  loop_ms="$(timing_value "Loop ms" "$log")"
+  apply_ms="$(timing_value "Apply ms" "$log")"
+  apply_pct="$(timing_value "Apply pct" "$log")"
+  apply_calls="$(timing_value "Apply calls" "$log")"
+  async_launches="$(timing_value "Async launches" "$log")"
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$label" "$threads" "$command_name" "$status" "${elapsed:-n/a}" \
-    "${user_time:-n/a}" "${system_time:-n/a}" "$max_rss" "$minor_faults" \
-    "$voluntary_ctx" "$involuntary_ctx" "$log" >> "$SUMMARY"
+    "${loop_ms:-n/a}" "${apply_ms:-n/a}" "${apply_pct:-n/a}" \
+    "${apply_calls:-n/a}" "${async_launches:-n/a}" "${user_time:-n/a}" \
+    "${system_time:-n/a}" "$max_rss" "$minor_faults" "$voluntary_ctx" \
+    "$involuntary_ctx" "$log" >> "$SUMMARY"
 
   if [ "$status" -ne 0 ]; then
     if [ "$status" -eq 124 ]; then
