@@ -81,6 +81,26 @@
 
 #include "IccDefs.h"
 
+// icBenchChecksum and icBenchFill below are both defined over modular 32-bit
+// arithmetic: the wraparound is the algorithm, not an accident of a too-small
+// type. Unsigned overflow is well defined in C++, so this is not undefined
+// behaviour -- but UBSan's -fsanitize=integer group flags every wrap as
+// suspicious, and the sanitizer presets build with -fno-sanitize-recover=integer,
+// so the first LCG step exits the process before a single benchmark row prints.
+//
+// Annotating the two functions states the intent where it is true, rather than
+// laundering the wrap through a 64-bit multiply and a truncating cast: that
+// spelling computes the identical value but reads as if the width mattered.
+// IccProfLib/IccMD5.cpp:32 already solves the identical problem this way, for
+// the same reason -- named narrowly here, so the rest of the integer group
+// (implicit truncation and sign change) keeps checking these two functions.
+#if defined(__clang__)
+#define ICC_BENCH_NO_SANITIZE \
+  __attribute__((no_sanitize("unsigned-integer-overflow")))
+#else
+#define ICC_BENCH_NO_SANITIZE
+#endif
+
 struct BenchStats {
   double medianMpxPerSec;
   double minMpxPerSec;
@@ -130,6 +150,7 @@ inline BenchStats icBenchRun(const std::function<void()> &fn,
 // reassociation, so a checksum only compares meaningfully between builds made
 // with the same compiler flags. Readme.md states this.
 inline icUInt32Number icBenchChecksum(const icFloatNumber *pData, size_t nFloats)
+  ICC_BENCH_NO_SANITIZE
 {
   const unsigned char *p = (const unsigned char *)pData;
   const size_t nBytes = nFloats * sizeof(icFloatNumber);
@@ -164,6 +185,7 @@ static const icUInt32Number kBenchPathologicalRows = 5;
 // simply untested.
 inline void icBenchFill(icFloatNumber *pBuf, icUInt32Number nPixels,
                         icUInt16Number nSamples, icUInt32Number nSeed)
+  ICC_BENCH_NO_SANITIZE
 {
   icUInt32Number state = nSeed ? nSeed : 1u;
   const icUInt32Number nPath   = nPixels < kBenchPathologicalRows

@@ -74,7 +74,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "IccCmm.h"
@@ -612,6 +614,16 @@ int main(int argc, const char *argv[])
     return 1;
   }
 
+  // A -PCC profile is not owned by the CMM: CIccXform::Create stores it as the
+  // bare m_pConnectionConditions pointer (IccCmm.cpp:1239) and ~CIccXform never
+  // deletes it, so the caller both owns it and must keep it alive for as long as
+  // the xforms can dereference it. Holding the profiles here does both. Declared
+  // ahead of theCmm so that the CMM -- and every xform holding one of these
+  // pointers -- is destroyed first. iccApplyToLink keeps the same contract with
+  // its pccList (#1336); iccBenchApply was the one -PCC caller that dropped it,
+  // leaking the whole profile object graph on every run that passed one (#2250).
+  std::vector<std::unique_ptr<CIccProfile>> pccProfiles;
+
   CIccCmm theCmm(icSigUnknownData, icSigUnknownData, true);
   int nProfiles = 0;
   std::string sFirstProfile;
@@ -641,9 +653,9 @@ int main(int argc, const char *argv[])
       return 1;
     }
 
-    CIccProfile *pPccProfile = NULL;
+    std::unique_ptr<CIccProfile> pPccProfile;
     if (nArg + 1 < argc && !stricmp(argv[nArg], "-PCC")) {
-      pPccProfile = ReadIccProfile(argv[nArg + 1]);
+      pPccProfile.reset(ReadIccProfile(argv[nArg + 1]));
       if (!pPccProfile) {
         printf("Unable to read PCC profile '%s'\n", argv[nArg + 1]);
         return 1;
@@ -655,7 +667,7 @@ int main(int argc, const char *argv[])
                                        (icRenderingIntent)nIntent,
                                        nInterp ? icInterpTetrahedral
                                                : icInterpLinear,
-                                       pPccProfile,
+                                       pPccProfile.get(),
                                        (icXformLutType)nType,
                                        bUseD2BxB2DxTags,
                                        NULL,
@@ -665,6 +677,8 @@ int main(int argc, const char *argv[])
              szProfile, CIccCmm::GetStatusText(stat));
       return 1;
     }
+    if (pPccProfile)
+      pccProfiles.push_back(std::move(pPccProfile));
     if (sFirstProfile.empty())
       sFirstProfile = szProfile;
     nProfiles++;
