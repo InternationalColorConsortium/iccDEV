@@ -632,8 +632,17 @@ int main(int argc, char* argv[])
         return -1;
       }
     }
-    else if (argv[nArg] == endptr) {
-        verbosity = 100;
+    else {
+      // The token was not accepted as a verbosity argument, so it is the profile
+      // filename and the documented default (usage text: "default=100") applies.
+      //
+      // Restoring here rather than under the old `argv[nArg] == endptr` test matters
+      // because strtol() has ALREADY overwritten verbosity by this point. That test
+      // only fired when strtol consumed nothing at all, so a filename that merely
+      // starts with digits kept the parsed value: "123.icc" -- the very case the
+      // comment above exists to support -- left verbosity at 123, outside the
+      // documented 1-100 range, and "50test.icc" left it at 50.
+      verbosity = 100;
     }
 
     pIcc = ValidateIccProfile(argv[nArg], sReport, nStatus);
@@ -654,6 +663,26 @@ int main(int argc, char* argv[])
         printUsage();
         return -1;
       }
+    }
+    else {
+      // #2248: this branch had no counterpart to the -v branch's recovery, so an
+      // ordinary filename left verbosity at whatever strtol() returned -- 0 for a
+      // name with no leading digit. The documented default is 100, so every plain
+      // `iccDumpProfile <file>` ran at minimum verbosity instead of maximum, and the
+      // two branches disagreed about what "no integer given" means. Same restoration
+      // as above, for the same reason.
+      //
+      // This is the branch that carries the output-volume change, and it is large:
+      // the gates that newly open are the `nVerboseness > 50` / `> 75` CLUT and
+      // curve dumps in IccTagLut.cpp, IccTagMPE.cpp and IccMpeACS.cpp. Measured
+      // across Testing/, `<file> ALL` grows about 6x in total bytes; the worst
+      // single profile, Testing/hybrid/ICC/CMYK_Hybrid_Profile.icc, goes from 133
+      // lines / 0.02 s to 517455 lines / 0.53 s. That is the documented behaviour
+      // rather than a regression, but the callers that pipe `ALL` through a
+      // per-profile `timeout` -- _build-test-unix.yml and iccdev-fuzz-triage.sh,
+      // at 30 s and 20 s -- lost roughly an order of magnitude of headroom, so a
+      // future profile larger than that one is where this would first bite.
+      verbosity = 100;
     }
 
     pIcc = bUseRead ? ReadIccProfile(argv[nArg]) : OpenIccProfile(argv[nArg]);

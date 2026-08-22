@@ -5288,6 +5288,145 @@ if(TARGET iccBenchApply)
 endif()
 
 
+# #2248: iccDumpProfile's verbosity default, on both argument paths.
+#
+# The usage text says the integer parameter is optional with "default=100", and
+# verbosity is initialised to 100 -- but both branches then run strtol() over the
+# next argument to support a profile whose name starts with a digit ("123.icc"),
+# and assign the result unconditionally. When that token is NOT a verbosity
+# argument the parsed value was left in place, so the default never held:
+#
+#   iccDumpProfile profile.icc     verbosity 0        (strtol returns 0)
+#   iccDumpProfile 123.icc         verbosity 123      (outside the documented 1-100)
+#   iccDumpProfile 50test.icc      verbosity 50
+#
+# The -v branch carried a partial recovery, `else if (argv[nArg] == endptr)`, which
+# only fired when strtol consumed nothing at all -- so `-v 123.icc` was wrong there
+# too, and mirroring that branch into the other one would have fixed the first case
+# and left the other two. The fix restores the default across the whole reject path,
+# in both branches, which is what these four tests pin.
+#
+# Like the iccBenchApply block above, this MUST stay above the if(WIN32) branch
+# that follows: that branch return()s, so a registration placed after it never
+# reaches a Windows leg. This is #2237 verbatim, and the argv handling under test
+# is exactly the kind of thing that platform would be expected to cover.
+#
+# These run from a directory holding copies of a corpus profile under digit-led
+# names, because the defect is a property of the ARGUMENT text: an absolute path
+# begins with '/', strtol consumes nothing, and the interesting cases cannot arise.
+if(TARGET iccDumpProfile)
+  set(_dumpcli_dir "${CMAKE_CURRENT_BINARY_DIR}/dumpprofile-cli")
+  file(MAKE_DIRECTORY "${_dumpcli_dir}")
+  foreach(_dumpcli_name "123.icc" "50test.icc" "plain.icc")
+    configure_file(
+      "${ICCDEV_REPO_ROOT}/Testing/sRGB_v4_ICC_preference.icc"
+      "${_dumpcli_dir}/${_dumpcli_name}"
+      COPYONLY
+    )
+  endforeach()
+
+  # The filed defect: an ordinary filename, no -v, no integer.
+  add_test(
+    NAME iccdev.dumpprofile-verbosity-default
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccDumpProfile>"
+      "-DTOOL_ARGS=--diag;plain.icc"
+      "-DWORKDIR=${_dumpcli_dir}"
+      "-DEXPECT_MATCH=Verbosity: 100[^0-9]"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunDumpProfileCliTest.cmake"
+  )
+
+  # A name that merely STARTS with digits. strtol consumes "123" and stops at '.',
+  # so the -v branch's endptr test never fired: this is the case that separates
+  # restoring the reject path from mirroring that branch, and it is the documented
+  # "123.icc" support case the code comment exists for.
+  add_test(
+    NAME iccdev.dumpprofile-verbosity-digit-filename
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccDumpProfile>"
+      "-DTOOL_ARGS=--diag;123.icc"
+      "-DWORKDIR=${_dumpcli_dir}"
+      "-DEXPECT_MATCH=Verbosity: 100[^0-9]"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunDumpProfileCliTest.cmake"
+  )
+
+  # The same shape on the validation branch, the one that had the partial recovery.
+  add_test(
+    NAME iccdev.dumpprofile-verbosity-digit-filename-validate
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccDumpProfile>"
+      "-DTOOL_ARGS=--diag;-v;50test.icc"
+      "-DWORKDIR=${_dumpcli_dir}"
+      "-DEXPECT_MATCH=Verbosity: 100[^0-9]"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunDumpProfileCliTest.cmake"
+  )
+
+  # The controls that keep the three above honest. Restoring the default must not
+  # become "always 100": an explicit integer still has to win, so these go red
+  # against a fix that hardcodes the default instead of restoring it only when the
+  # token was rejected.
+  #
+  # There are two of them because there are two accept paths, and a control on one
+  # says nothing about the other. Measured: hardcoding `verbosity = 100` in the -v
+  # branch's accept path leaves all four of the other tests green while
+  # `iccDumpProfile -v 7 profile.icc` silently runs at 100. That is the same
+  # per-branch reasoning the fix itself rests on, applied to the tests.
+  add_test(
+    NAME iccdev.dumpprofile-verbosity-explicit-wins
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccDumpProfile>"
+      "-DTOOL_ARGS=--diag;7;plain.icc"
+      "-DWORKDIR=${_dumpcli_dir}"
+      "-DEXPECT_MATCH=Verbosity: 7[^0-9]"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunDumpProfileCliTest.cmake"
+  )
+
+  add_test(
+    NAME iccdev.dumpprofile-verbosity-explicit-wins-validate
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccDumpProfile>"
+      "-DTOOL_ARGS=--diag;-v;7;plain.icc"
+      "-DWORKDIR=${_dumpcli_dir}"
+      "-DEXPECT_MATCH=Verbosity: 7[^0-9]"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunDumpProfileCliTest.cmake"
+  )
+
+  set(_dumpcli_tests
+    iccdev.dumpprofile-verbosity-default
+    iccdev.dumpprofile-verbosity-digit-filename
+    iccdev.dumpprofile-verbosity-digit-filename-validate
+    iccdev.dumpprofile-verbosity-explicit-wins
+    iccdev.dumpprofile-verbosity-explicit-wins-validate)
+
+  foreach(_dumpcli_test IN LISTS _dumpcli_tests)
+    set_tests_properties(${_dumpcli_test} PROPERTIES
+      TIMEOUT 120
+      LABELS "iccdev;tools;dumpprofile;cli;issue-2248;regression"
+    )
+  endforeach()
+
+  if(WIN32)
+    # Same reasoning as the iccBenchApply CLI tests above: the tool is reached
+    # through cmake -P, so it needs the runtime paths on PATH or it dies for want
+    # of IccProfLib2.dll. These all assert exit 0, so a missing DLL turns them red
+    # rather than green -- but red for the loader, not for the verbosity contract.
+    set(_dumpcli_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccDumpProfile>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _dumpcli_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    foreach(_dumpcli_test IN LISTS _dumpcli_tests)
+      set_tests_properties(${_dumpcli_test} PROPERTIES
+        ENVIRONMENT_MODIFICATION "${_dumpcli_windows_env_mods}"
+      )
+    endforeach()
+  endif()
+endif()
+
+
 if(WIN32)
   function(iccdev_add_windows_batch_test NAME TIMEOUT LABELS SCRIPT)
     set(_one_value_args
