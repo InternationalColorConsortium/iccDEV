@@ -3535,7 +3535,9 @@ function(iccdev_add_tagdata_zlib_roundtrip_test)
   endif()
 endfunction()
 
-# CIccTagZipUtf8Text::SetText() success/failure contract (#1743). SetText() used to
+# CIccTagZipUtf8Text::SetText() success/failure contract (#1743), plus
+# decompression ceiling coverage for over-expanded zipUtf8Text streams (#1723).
+# SetText() used to
 # return true even when AllocBuffer() failed, so a caller could not tell "text
 # stored" from "nothing stored"; the copy was also bounded by (int)m_nBufSize,
 # narrowing an icUInt32Number to int. Pins the invariant a true return implies a
@@ -3569,7 +3571,7 @@ function(iccdev_add_ziputf8_settext_contract_test)
   set_tests_properties(iccdev.ziputf8-settext-contract PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
     TIMEOUT 60
-    LABELS "iccdev;tag;zlib;compression;issue-1743;regression"
+    LABELS "iccdev;tag;zlib;compression;cwe-400;issue-1723;issue-1743;regression"
   )
   if(WIN32)
     set(_ziputf8_settext_windows_env_mods
@@ -8158,6 +8160,17 @@ if(TARGET iccApplyProfiles)
     SKIP_RETURN_CODE 77
   )
 
+  iccdev_add_script_test(
+    iccdev.applyprofiles-spectral-pcs-regression
+    180
+    "iccdev;tools;applyprofiles;spectral;asan;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applyprofiles-spectral-pcs-regression.sh"
+  )
+  set_tests_properties(iccdev.applyprofiles-spectral-pcs-regression PROPERTIES
+    FIXTURES_REQUIRED iccdev_profiles
+    SKIP_RETURN_CODE 77
+  )
 endif()
 
 iccdev_add_script_test(

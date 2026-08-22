@@ -36,11 +36,20 @@ find_library_file() {
   local dir="$1"
   local base="$2"
 
-  find "$dir" -maxdepth 1 \( \
-      -name "lib${base}*.so" -o \
-      -name "lib${base}*.dylib" -o \
-      -name "lib${base}*.a" \
-    \) -print 2>/dev/null | sort | head -n 1
+  for candidate in \
+      "$dir/lib${base}d.so" \
+      "$dir/lib${base}d.so."* \
+      "$dir/lib${base}.so" \
+      "$dir/lib${base}.so."* \
+      "$dir/lib${base}d.dylib" \
+      "$dir/lib${base}.dylib" \
+      "$dir/lib${base}-staticd.a" \
+      "$dir/lib${base}-static.a"; do
+    if [ -f "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return
+    fi
+  done
 }
 
 echo "=== namedColor2 apply regression ==="

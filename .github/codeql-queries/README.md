@@ -1,8 +1,9 @@
 # iccDEV CodeQL Queries
 
 iccDEV includes custom CodeQL queries for ICC-specific C/C++ security patterns.
-They complement GitHub's standard `cpp-security-and-quality` suite. The
-`iccdev-mcp/` subdirectory contains Python queries for the MCP REST/API package.
+The CodeQL security workflow uploads their SARIF to GitHub code scanning under
+the `iccdev-custom-security` category. The `iccdev-mcp/` subdirectory contains
+Python queries for the MCP REST/API package.
 
 ## Query Summary
 
@@ -105,3 +106,5 @@ still be reported.
 
 Standard-suite findings such as CLI path input or intentional float comparisons
 may be informational rather than vulnerabilities; triage them in context.
+New custom queries must demonstrate useful results against the relevant
+pre-fix and fixed revisions before they are added to the uploaded suite.
