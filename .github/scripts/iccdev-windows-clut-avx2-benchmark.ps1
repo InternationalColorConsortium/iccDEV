@@ -8,7 +8,7 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$Avx2BuildDir,
 
-  [ValidateSet('Release', 'Debug')]
+  [ValidateSet('Release')]
   [string]$Configuration = 'Release',
 
   [ValidateRange(1, 1000000000)]
@@ -109,6 +109,7 @@ function Resolve-Build {
     SourceDir = $sourceDir
     Avx2Effective = Read-CMakeCacheValue $cache 'ICCDEV_AVX2_EFFECTIVE'
     Avx512Effective = Read-CMakeCacheValue $cache 'ICCDEV_AVX512_EFFECTIVE'
+    Avx2Debug = Read-CMakeCacheValue $cache 'ICC_AVX2_CLUT_DEBUG'
     Generator = Read-CMakeCacheValue $cache 'CMAKE_GENERATOR'
     GeneratorInstance = Read-CMakeCacheValue $cache 'CMAKE_GENERATOR_INSTANCE'
     GeneratorPlatform = Read-CMakeCacheValue $cache 'CMAKE_GENERATOR_PLATFORM'
@@ -130,6 +131,9 @@ if ($builds[0].Avx2Effective -ne 'OFF' -or
 if ($builds[1].Avx2Effective -ne 'ON' -or
     $builds[1].Avx512Effective -ne 'OFF') {
   throw 'AVX2 build must have AVX2 enabled and AVX-512 disabled'
+}
+if ($builds[0].Avx2Debug -ne 'OFF' -or $builds[1].Avx2Debug -ne 'OFF') {
+  throw 'Baseline and AVX2 builds must disable ICC_AVX2_CLUT_DEBUG'
 }
 if ($builds[0].SourceDir -ine $builds[1].SourceDir) {
   throw 'Baseline and AVX2 builds must use the same source tree'

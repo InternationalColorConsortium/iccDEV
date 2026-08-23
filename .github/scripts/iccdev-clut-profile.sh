@@ -33,6 +33,14 @@ if [ ! -f "$build_dir/CTestTestfile.cmake" ]; then
     echo "BUILD_DIR does not contain a configured CTest tree: $build_dir" >&2
     exit 2
 fi
+build_type="$(awk -F= '$1 == "CMAKE_BUILD_TYPE:STRING" { print $2; exit }' \
+    "$build_dir/CMakeCache.txt")"
+avx2_debug="$(awk -F= '$1 == "ICC_AVX2_CLUT_DEBUG:BOOL" { print $2; exit }' \
+    "$build_dir/CMakeCache.txt")"
+if [ "$build_type" != "Release" ] || [ "$avx2_debug" != "OFF" ]; then
+    echo "BUILD_DIR must be Release with ICC_AVX2_CLUT_DEBUG=OFF: $build_dir" >&2
+    exit 2
+fi
 perf_monitoring="$(awk -F= '
     $1 == "ICCDEV_ENABLE_PERF_MONITORING:BOOL" { print $2; exit }
 ' "$build_dir/CMakeCache.txt")"

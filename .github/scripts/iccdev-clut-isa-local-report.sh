@@ -81,6 +81,8 @@ require_variant()
     local avx512
     local avx2_effective
     local avx512_effective
+    local avx2_debug
+    local build_type
     local listing
 
     if [ ! -f "$build_dir/CMakeCache.txt" ]; then
@@ -92,6 +94,8 @@ require_variant()
     avx512="$(cache_value "$build_dir" ICCDEV_ENABLE_AVX512)"
     avx2_effective="$(cache_value "$build_dir" ICCDEV_AVX2_EFFECTIVE)"
     avx512_effective="$(cache_value "$build_dir" ICCDEV_AVX512_EFFECTIVE)"
+    avx2_debug="$(cache_value "$build_dir" ICC_AVX2_CLUT_DEBUG)"
+    build_type="$(cache_value "$build_dir" CMAKE_BUILD_TYPE)"
     if [ "$avx2" != "$expected_avx2" ] || [ "$avx512" != "$expected_avx512" ]; then
         echo "$label has ICCDEV_ENABLE_AVX2=$avx2 and ICCDEV_ENABLE_AVX512=$avx512; expected $expected_avx2/$expected_avx512" >&2
         exit 1
@@ -99,6 +103,10 @@ require_variant()
     if [ "$avx2_effective" != "$expected_avx2" ] ||
        [ "$avx512_effective" != "$expected_avx512" ]; then
         echo "$label requested AVX2/AVX-512=$avx2/$avx512 but compiled $avx2_effective/$avx512_effective" >&2
+        exit 1
+    fi
+    if [ "$build_type" != "Release" ] || [ "$avx2_debug" != "OFF" ]; then
+        echo "$label must be Release with ICC_AVX2_CLUT_DEBUG=OFF" >&2
         exit 1
     fi
 
