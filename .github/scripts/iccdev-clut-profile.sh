@@ -33,6 +33,13 @@ if [ ! -f "$build_dir/CTestTestfile.cmake" ]; then
     echo "BUILD_DIR does not contain a configured CTest tree: $build_dir" >&2
     exit 2
 fi
+perf_monitoring="$(awk -F= '
+    $1 == "ICCDEV_ENABLE_PERF_MONITORING:BOOL" { print $2; exit }
+' "$build_dir/CMakeCache.txt")"
+if [ "$perf_monitoring" != "ON" ]; then
+    echo "BUILD_DIR must enable ICCDEV_ENABLE_PERF_MONITORING: $build_dir" >&2
+    exit 2
+fi
 if [ -e "$output_dir" ]; then
     echo "OUTPUT_DIR already exists: $output_dir" >&2
     exit 2
@@ -112,6 +119,10 @@ context-switches,cpu-migrations \
     if [ "$status" -ne 0 ]; then
         echo "[FAIL] focused CLUT regression failed in run $run; log retained at $log_file" >&2
         exit "$status"
+    fi
+    if [ ! -s "$telemetry_file" ]; then
+        echo "[FAIL] telemetry was not produced in run $run: $telemetry_file" >&2
+        exit 1
     fi
 done
 

@@ -67,6 +67,20 @@ Remove-Item env:INCLUDE, env:LIB, env:LIBPATH -ErrorAction SilentlyContinue
 try {
   . $devShell -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
 
+function Read-CMakeCacheValue {
+  param(
+    [string]$CachePath,
+    [string]$Name
+  )
+
+  $pattern = '^' + [regex]::Escape($Name) + ':[^=]+='
+  $line = Select-String -Path $CachePath -Pattern $pattern
+  if (-not $line -or $line.Count -ne 1) {
+    throw "CMake cache is missing unique metadata '$Name': $CachePath"
+  }
+  ($line.Line -split '=', 2)[1]
+}
+
 function Resolve-Build {
   param(
     [string]$Label,
@@ -83,21 +97,22 @@ function Resolve-Build {
     throw "$Label build is incomplete: $resolved"
   }
 
-  $sourceDirLine = Select-String -Path $cache -Pattern '^RefIccMAX_SOURCE_DIR:STATIC='
-  $toolsetLine = Select-String -Path $cache -Pattern '^CMAKE_GENERATOR_TOOLSET:INTERNAL='
-  if (-not $sourceDirLine -or -not $toolsetLine) {
-    throw "$Label build cache is missing source or compiler metadata"
-  }
-
-  $cmakeSourceDir = ($sourceDirLine.Line -split '=', 2)[1]
+  $cmakeSourceDir = Read-CMakeCacheValue $cache 'RefIccMAX_SOURCE_DIR'
   $sourceDir = Split-Path -Parent (Split-Path -Parent $cmakeSourceDir)
-  $toolset = ($toolsetLine.Line -split '=', 2)[1]
+  $toolset = Read-CMakeCacheValue $cache 'CMAKE_GENERATOR_TOOLSET'
   [pscustomobject]@{
     Label = $Label
     BuildDir = $resolved
     BinDir = $binDir
     Library = $library
     SourceDir = $sourceDir
+    Avx2Effective = Read-CMakeCacheValue $cache 'ICCDEV_AVX2_EFFECTIVE'
+    Avx512Effective = Read-CMakeCacheValue $cache 'ICCDEV_AVX512_EFFECTIVE'
+    Generator = Read-CMakeCacheValue $cache 'CMAKE_GENERATOR'
+    GeneratorInstance = Read-CMakeCacheValue $cache 'CMAKE_GENERATOR_INSTANCE'
+    GeneratorPlatform = Read-CMakeCacheValue $cache 'CMAKE_GENERATOR_PLATFORM'
+    GeneratorToolset = $toolset
+    CompilerArchiver = Read-CMakeCacheValue $cache 'CMAKE_CXX_COMPILER_AR'
     Compiler = if ($toolset -eq 'ClangCL') { 'clang-cl.exe' } else { 'cl.exe' }
   }
 }
@@ -106,6 +121,28 @@ $builds = @(
   Resolve-Build -Label 'baseline' -BuildDir $BaselineBuildDir
   Resolve-Build -Label 'avx2' -BuildDir $Avx2BuildDir
 )
+
+if ($builds[0].Avx2Effective -ne 'OFF' -or
+    $builds[0].Avx512Effective -ne 'OFF') {
+  throw 'Baseline build must have AVX2 and AVX-512 disabled'
+}
+if ($builds[1].Avx2Effective -ne 'ON' -or
+    $builds[1].Avx512Effective -ne 'OFF') {
+  throw 'AVX2 build must have AVX2 enabled and AVX-512 disabled'
+}
+if ($builds[0].SourceDir -ine $builds[1].SourceDir) {
+  throw 'Baseline and AVX2 builds must use the same source tree'
+}
+foreach ($property in @(
+    'Generator',
+    'GeneratorInstance',
+    'GeneratorPlatform',
+    'GeneratorToolset',
+    'CompilerArchiver')) {
+  if ($builds[0].$property -ine $builds[1].$property) {
+    throw "Baseline and AVX2 build metadata differ: $property"
+  }
+}
 
 $executables = @{}
 foreach ($build in $builds) {

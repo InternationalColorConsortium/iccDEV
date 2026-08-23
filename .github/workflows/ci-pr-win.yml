@@ -65,6 +65,15 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
+          path: .trusted-workflow
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Harden Environment and Validate Inputs
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
@@ -144,7 +153,7 @@ jobs:
           Write-Host "========================================" -ForegroundColor Cyan
           Write-Host ""
           # Source the sanitization functions
-          . .github/scripts/sanitize.ps1
+          . .trusted-workflow\.github\scripts\sanitize.ps1
           # Quick validation tests
           $unicodeInput = "Hello " + [char]0x4E16 + [char]0x754C
           $tests = @(
