@@ -309,7 +309,16 @@ bool CIccApplyThreadedCmm::Init(CIccCmm *pCmm, int nThreads)
   if (!EnsureWorkers(1))
     return false;
 
-  m_pool = new (std::nothrow) CIccApplyThreadedCmmPool();
+  try {
+    m_pool = new (std::nothrow) CIccApplyThreadedCmmPool();
+  }
+  catch (const std::bad_alloc &) {
+    return false;
+  }
+  catch (const std::system_error &) {
+    return false;
+  }
+
   if (!m_pool || !m_pool->Init(m_nThreads)) {
     delete m_pool;
     m_pool = NULL;

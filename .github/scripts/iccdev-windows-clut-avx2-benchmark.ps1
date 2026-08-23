@@ -157,6 +157,14 @@ foreach ($build in $builds) {
   $executables[$build.Label] = $exe
 }
 
+$hostProbe = & $executables.avx2 15 1 1 $AffinityCpu
+if ($LASTEXITCODE -ne 0) {
+  throw 'AVX2 host capability probe failed'
+}
+if ($hostProbe -notmatch 'host_avx2=1') {
+  throw 'The benchmark host does not expose AVX2 runtime support'
+}
+
 $comparison = foreach ($outputs in 8..16) {
   $samples = @{
     baseline = [Collections.Generic.List[double]]::new()

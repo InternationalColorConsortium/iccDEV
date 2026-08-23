@@ -127,8 +127,11 @@ context-switches,cpu-migrations \
 done
 
 if command -v strace >/dev/null 2>&1; then
-    strace -f -c -o "$output_dir/strace-summary.txt" \
-        "${runner[@]}" "${ctest_command[@]}" > "$output_dir/strace.log" 2>&1
+    if ! strace -f -c -o "$output_dir/strace-summary.txt" \
+        "${runner[@]}" "${ctest_command[@]}" > "$output_dir/strace.log" 2>&1; then
+        printf '[WARN] strace installed but unusable; see strace.log\n' \
+            >> "$output_dir/strace-summary.txt"
+    fi
 else
     printf 'strace unavailable\n' > "$output_dir/strace-summary.txt"
 fi

@@ -160,6 +160,39 @@ function(iccdev_add_iccconnect_thread_test)
   endif()
 endfunction()
 
+function(iccdev_add_clut_avx512_sixteen_output_test)
+  if(NOT ICCDEV_AVX512_EFFECTIVE)
+    return()
+  endif()
+
+  set(_avx512_source
+    "${ICCDEV_REPO_ROOT}/IccProfLib/IccTagLutAvx512.cpp")
+  iccdev_add_regression_executable(iccClutAvx512SixteenOutputTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/clut-avx512-sixteen-output.cpp"
+    "${_avx512_source}"
+  )
+  target_compile_features(iccClutAvx512SixteenOutputTest PRIVATE cxx_std_17)
+  target_include_directories(iccClutAvx512SixteenOutputTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib")
+  if(MSVC)
+    set_source_files_properties("${_avx512_source}"
+      PROPERTIES COMPILE_OPTIONS "/arch:AVX512")
+  else()
+    set_source_files_properties("${_avx512_source}"
+      PROPERTIES COMPILE_OPTIONS "-mavx512f")
+  endif()
+
+  add_test(
+    NAME iccdev.clut-avx512-sixteen-output
+    COMMAND "$<TARGET_FILE:iccClutAvx512SixteenOutputTest>"
+  )
+  set_tests_properties(iccdev.clut-avx512-sixteen-output PROPERTIES
+    SKIP_RETURN_CODE 77
+    TIMEOUT 30
+    LABELS "iccdev;clut;avx512;regression"
+  )
+endfunction()
+
 function(iccdev_add_iccconnect_config_parser_test)
   if(NOT DEFINED TARGET_LIB_ICCCONNECT OR NOT TARGET "${TARGET_LIB_ICCCONNECT}")
     return()
@@ -5849,6 +5882,7 @@ if(WIN32)
   endif()
 
   iccdev_add_iccconnect_thread_test()
+  iccdev_add_clut_avx512_sixteen_output_test()
   iccdev_add_iccconnect_config_parser_test()
   iccdev_add_cmmsearch_init_pcc_test()
   iccdev_add_cmmsearch_rebegin_test()
@@ -6189,6 +6223,7 @@ set(ICCDEV_TEST_ENV
 )
 
 iccdev_add_iccconnect_thread_test()
+iccdev_add_clut_avx512_sixteen_output_test()
 iccdev_add_iccconnect_config_parser_test()
 iccdev_add_cmmsearch_init_pcc_test()
 iccdev_add_cmmsearch_rebegin_test()

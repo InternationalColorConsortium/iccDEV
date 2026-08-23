@@ -17,6 +17,7 @@
  */
 
 #include <windows.h>
+#include <intrin.h>
 
 #include <algorithm>
 #include <chrono>
@@ -27,6 +28,23 @@
 #include <vector>
 
 #include "IccTagLut.h"
+
+static bool hostSupportsAvx2()
+{
+  int cpuid[4];
+  __cpuidex(cpuid, 0, 0);
+  if (cpuid[0] < 7)
+    return false;
+
+  __cpuidex(cpuid, 1, 0);
+  if (!(cpuid[2] & (1 << 27)) || !(cpuid[2] & (1 << 28)))
+    return false;
+  if ((_xgetbv(0) & 0x6) != 0x6)
+    return false;
+
+  __cpuidex(cpuid, 7, 0);
+  return (cpuid[1] & (1 << 5)) != 0;
+}
 
 int main(int argc, char **argv)
 {
@@ -76,9 +94,9 @@ int main(int argc, char **argv)
   for (int i = 0; i < outputs; i++)
     checksum += dst[i];
   std::printf(
-      "outputs=%d iterations=%d repetitions=%d affinity_cpu=%d median_ns=%.3f calls_per_s=%.3f checksum=%.6f outputs_hex=",
-      outputs, iterations, repetitions, affinityCpu, median,
-      1000000000.0 / median, checksum);
+      "outputs=%d iterations=%d repetitions=%d affinity_cpu=%d host_avx2=%d median_ns=%.3f calls_per_s=%.3f checksum=%.6f outputs_hex=",
+      outputs, iterations, repetitions, affinityCpu,
+      hostSupportsAvx2() ? 1 : 0, median, 1000000000.0 / median, checksum);
   for (int i = 0; i < outputs; i++) {
     std::uint32_t bits;
     std::memcpy(&bits, &dst[i], sizeof(bits));
