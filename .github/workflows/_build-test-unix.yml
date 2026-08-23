@@ -324,7 +324,7 @@ jobs:
             echo "WARN: RunTests.sh exited $rc"
           }
 
-      - name: Run CalcTest/checkInvalidProfiles.sh
+      - name: Run CalcTest/runtests.sh
         if: ${{ inputs.run-full-tests }}
         env:
           BASH_ENV: /dev/null
@@ -346,9 +346,9 @@ jobs:
           export LD_LIBRARY_PATH="${WORKSPACE_DIR}/Build/IccProfLib:${WORKSPACE_DIR}/Build/IccXML"
 
           cd "${WORKSPACE_DIR}/Testing/CalcTest"
-          sh checkInvalidProfiles.sh 2>&1 | tee "$LOGDIR/checkInvalidProfiles.log" || {
+          sh runtests.sh 2>&1 | tee "$LOGDIR/calc-runtests.log" || {
             rc=$?
-            echo "WARN: checkInvalidProfiles.sh exited $rc"
+            echo "WARN: CalcTest/runtests.sh exited $rc"
           }
 
       # ---------------------------------------------------------------

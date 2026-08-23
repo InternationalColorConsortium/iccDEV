@@ -291,7 +291,7 @@ jobs:
           if (Test-Path Env:GITHUB_TOKEN) {
             Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
           }
-          . .github/scripts/sanitize.ps1
+          . .trusted-workflow\.github\scripts\sanitize.ps1
 
           $binDir = (Resolve-Path 'Build\Cmake\build\bin\Debug').Path
           $iisDll = Join-Path $binDir 'iccIisIsapi.dll'
@@ -377,7 +377,7 @@ jobs:
           if (Test-Path Env:GITHUB_TOKEN) {
             Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
           }
-          . .github/scripts/sanitize.ps1
+          . .trusted-workflow\.github\scripts\sanitize.ps1
 
           function Resolve-ExistingPath([string] $Path) {
             if (-not (Test-Path -LiteralPath $Path)) {
@@ -606,7 +606,7 @@ jobs:
           if (Test-Path Env:GITHUB_TOKEN) {
             Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
           }
-          . .github/scripts/sanitize.ps1
+          . .trusted-workflow\.github\scripts\sanitize.ps1
           if (-not $env:VCPKG_INSTALLATION_ROOT) {
             throw 'VCPKG_INSTALLATION_ROOT is not set on this runner'
           }
@@ -749,7 +749,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
-          . .github/scripts/sanitize.ps1
+          . .trusted-workflow\.github\scripts\sanitize.ps1
           $summaryLines = @(
            '### Windows ClangCL smoke',
            '',
@@ -782,9 +782,9 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
-          # Use canonical sanitization from .github/scripts/sanitize.ps1
+          # Use canonical sanitization from the trusted base checkout.
           # PowerShell dot-sourcing: loads the script into the current scope
-          . .github/scripts/sanitize.ps1
+          . .trusted-workflow\.github\scripts\sanitize.ps1
           "## CMake Windows Build Summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "Repository: $(Sanitize-Line $env:GH_REPOSITORY)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append

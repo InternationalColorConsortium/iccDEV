@@ -155,7 +155,10 @@ awk -F '\t' '
                 if (values[j] < values[i]) {
                     value = values[i]; values[i] = values[j]; values[j] = value
                 }
-        median = values[int((count + 1) / 2)]
+        if (count % 2)
+            median = values[int((count + 1) / 2)]
+        else
+            median = (values[count / 2] + values[count / 2 + 1]) / 2
         p95 = values[int((count * 95 + 99) / 100)]
         printf "samples=%d\nmedian_elapsed_s=%s\np95_elapsed_s=%s\n", count, median, p95
     }' "$samples_file" > "$output_dir/summary.txt"

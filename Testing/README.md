@@ -190,6 +190,16 @@ generated profiles can contain time-dependent creation data and profile IDs.
 `expected_status` and `expected_exit` remain separate because noncompliant
 profiles can still return exit status zero.
 
+The CTest `iccdev.qa-profile-manifest` enforces the manifest. To deliberately
+re-baseline it after an intended verdict change, run:
+
+```sh
+.github/scripts/iccdev-qa-profile-manifest.sh generate
+```
+
+Review the resulting diff; it is the list of profiles whose validation outcome
+changed.
+
 ## Exit Status and Safe Use
 
 An exit status of zero means the invoked script completed its intended lane.

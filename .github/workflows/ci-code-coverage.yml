@@ -312,7 +312,7 @@ jobs:
           run_stub_script run-tests sh RunTests.sh
           run_stub_script hdr-mkprofiles sh -c 'cd HDR && sh mkprofiles.sh'
           run_stub_script hybrid-build-and-test sh -c 'cd hybrid && sh BuildAndTest.sh'
-          run_stub_script calc-invalid-profiles sh -c 'cd CalcTest && sh checkInvalidProfiles.sh'
+          run_stub_script calc-tests sh -c 'cd CalcTest && sh runtests.sh'
           run_stub_script mcs-updateprev sh -c 'cd mcs && sh updateprev.sh'
           run_stub_script mcs-updateprev-bkgd sh -c 'cd mcs && sh updateprevWithBkgd.sh'
 

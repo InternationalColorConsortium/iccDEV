@@ -448,7 +448,7 @@ jobs:
           sh BuildAndTest.sh
           cd ..
           cd CalcTest
-          sh checkInvalidProfiles.sh
+          sh runtests.sh
           cd ..
           cd mcs
           sh updateprev.sh
