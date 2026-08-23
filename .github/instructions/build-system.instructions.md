@@ -32,11 +32,12 @@ User-facing build details live in `docs/build.md`.
 
 `ICCDEV_ENABLE_STRICT_WARNINGS` defaults to `ON`; pass
 `-DICCDEV_ENABLE_STRICT_WARNINGS=OFF` only when collecting non-blocking
-diagnostic evidence. For CMake 4.4 and newer, keep `CMP0218` set to `NEW` and
-configure command deprecation reporting with
-`cmake_diagnostic(SET CMD_DEPRECATED WARN)`. Older CMake releases use
-`CMAKE_WARN_DEPRECATED`. Do not set the legacy variable as a non-cache value
-under `CMP0218 NEW`, because CMake ignores it and emits a policy warning.
+diagnostic evidence. When CMake exposes both `CMP0218` and
+`cmake_diagnostic`, keep the policy set to `NEW` and configure command
+deprecation reporting with `cmake_diagnostic(SET CMD_DEPRECATED WARN)`.
+Otherwise use `CMAKE_WARN_DEPRECATED`. Do not set the legacy variable as a
+non-cache value under `CMP0218 NEW`, because CMake ignores it and emits a
+policy warning.
 
 ## Sanitizer Options
 

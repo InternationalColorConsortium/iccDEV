@@ -42,7 +42,7 @@ cmake_minimum_required(VERSION 3.18...3.29)
 # cmake_policy(SET CMP0156 NEW)  # Allow ALIAS targets for link dependencies
 
 # CMake 4.4+ manages deprecation messages through diagnostic categories.
-if(POLICY CMP0218)
+if(POLICY CMP0218 AND COMMAND cmake_diagnostic)
   cmake_policy(SET CMP0218 NEW)
   cmake_diagnostic(SET CMD_DEPRECATED WARN)
 else()
