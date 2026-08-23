@@ -1,3 +1,6 @@
+# Copyright (c) 2026 The International Color Consortium. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+
 param(
   [string]$BuildDir = 'out\windows-msvc-release-report',
   [string]$Preset = 'vs2022-x64',

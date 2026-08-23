@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 The International Color Consortium. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+#
 # Markdown backticks in report printf format strings are intentionally literal.
 # shellcheck disable=SC2016
 ###############################################################################

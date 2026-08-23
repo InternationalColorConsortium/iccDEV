@@ -316,6 +316,7 @@ if(NOT _result EQUAL 0)
     message(FATAL_ERROR
       "${ICCDEV_TEST_NAME} exited with ${_result}; failing commands:\n"
       "  ${_failure_summary}\n"
+      "Captured output:\n${_combined_output}\n"
       "Full output: ${_log_file}")
   endif()
   message(FATAL_ERROR "${ICCDEV_TEST_NAME} exited with ${_result}; see ${_log_file}")

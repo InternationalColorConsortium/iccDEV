@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 The International Color Consortium. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+#
 ###############################################################################
 # Collect repeatable CLUT timing, hardware-counter, syscall, and stack data.
 ###############################################################################

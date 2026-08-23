@@ -1,3 +1,6 @@
+# Copyright (c) 2026 The International Color Consortium. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+
 param(
   [Parameter(Mandatory = $true)]
   [string]$BaselineBuildDir,

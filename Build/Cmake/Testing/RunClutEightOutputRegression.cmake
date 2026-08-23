@@ -2,6 +2,7 @@
 # Native high-output 3D CLUT regression
 # Copyright (c) 2026 The International Color Consortium.
 #                                        All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
 #################################################################################
 
 set(_required_vars

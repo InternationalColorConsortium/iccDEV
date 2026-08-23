@@ -376,7 +376,7 @@ inline void IccPerfRecordThreadedCmm(icUInt32Number pixels, int activeWorkers)
   g_iccPerfStats.threadedCalls.fetch_add(1, std::memory_order_relaxed);
   g_iccPerfStats.threadedPixels.fetch_add(pixels, std::memory_order_relaxed);
   g_iccPerfStats.threadedWorkerStrips.fetch_add(
-    static_cast<unsigned long long>(activeWorkers), std::memory_order_relaxed);
+    static_cast<unsigned long long>(activeWorkers - 1), std::memory_order_relaxed);
   g_iccPerfStats.threadedActiveWorkers.fetch_add(
     static_cast<unsigned long long>(activeWorkers), std::memory_order_relaxed);
 }
