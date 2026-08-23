@@ -98,41 +98,52 @@ Write-Host "Package:     $PackageZip"
 Write-Host "Destination: $DestinationRoot"
 Write-Host "Site:        $SiteName ($BindAddress`:$Port)"
 
-# -- Extract ------------------------------------------------------------------
-if (Test-Path $DestinationRoot) {
-  Write-Host "Destination exists -- updating files in place" -ForegroundColor Yellow
-} else {
-  New-Item -ItemType Directory -Path $DestinationRoot -Force | Out-Null
+# -- Validate and extract -----------------------------------------------------
+$stagingRoot = Join-Path ([IO.Path]::GetTempPath()) ("icc-iis-import-" + [guid]::NewGuid().ToString("N"))
+try {
+  New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
+  Expand-Archive -Path $PackageZip -DestinationPath $stagingRoot -Force
+
+  $packageDllPath = Join-Path $stagingRoot "iccIisIsapi.dll"
+  if (-not (Test-Path $packageDllPath -PathType Leaf)) {
+    throw "CRITICAL: iccIisIsapi.dll not found in package."
+  }
+  foreach ($requiredWebFile in @('index.html', 'index.js', 'endpoints.html', 'error.html', 'site.js', 'sanitize.js', 'web.config')) {
+    if (-not (Test-Path (Join-Path $stagingRoot $requiredWebFile) -PathType Leaf)) {
+      throw "CRITICAL: Required IIS web artifact missing from package: $requiredWebFile"
+    }
+  }
+
+  $requiredExes = @(
+    "iccToXml.exe",
+    "iccFromXml.exe",
+    "iccDumpProfile.exe",
+    "iccPawgReport.exe",
+    "iccRoundTrip.exe"
+  )
+  foreach ($exe in $requiredExes) {
+    if (-not (Test-Path (Join-Path $stagingRoot $exe) -PathType Leaf)) {
+      throw "CRITICAL: Required tool executable missing from package: $exe"
+    }
+  }
+
+  if (Test-Path $DestinationRoot) {
+    Write-Host "Destination exists -- updating files in place" -ForegroundColor Yellow
+  } else {
+    New-Item -ItemType Directory -Path $DestinationRoot -Force | Out-Null
+  }
+
+  Get-ChildItem $stagingRoot -Force | ForEach-Object {
+    Copy-Item $_.FullName $DestinationRoot -Recurse -Force
+  }
+  $fileCount = (Get-ChildItem $stagingRoot -Recurse -File).Count
+  Write-Host "Extracted $fileCount package files to $DestinationRoot"
+} finally {
+  if (Test-Path $stagingRoot) {
+    Remove-Item $stagingRoot -Recurse -Force
+  }
 }
-
-Expand-Archive -Path $PackageZip -DestinationPath $DestinationRoot -Force
-$fileCount = (Get-ChildItem $DestinationRoot -Recurse -File).Count
-Write-Host "Extracted $fileCount files to $DestinationRoot"
-
-# -- Verify critical files ----------------------------------------------------
 $dllPath = Join-Path $DestinationRoot "iccIisIsapi.dll"
-if (-not (Test-Path $dllPath)) {
-  throw "CRITICAL: iccIisIsapi.dll not found after extraction."
-}
-foreach ($requiredWebFile in @('index.html', 'index.js', 'endpoints.html', 'error.html', 'site.js', 'sanitize.js', 'web.config')) {
-  if (-not (Test-Path (Join-Path $DestinationRoot $requiredWebFile))) {
-    throw "CRITICAL: Required IIS web artifact missing after extraction: $requiredWebFile"
-  }
-}
-
-$requiredExes = @(
-  "iccToXml.exe",
-  "iccFromXml.exe",
-  "iccDumpProfile.exe",
-  "iccPawgReport.exe",
-  "iccRoundTrip.exe"
-)
-foreach ($exe in $requiredExes) {
-  $exePath = Join-Path $DestinationRoot $exe
-  if (-not (Test-Path $exePath)) {
-    Write-Warning "Tool executable not found: $exe -- tool endpoints may fail."
-  }
-}
 
 # -- Read manifest ------------------------------------------------------------
 $manifestPath = Join-Path $DestinationRoot "manifest.json"

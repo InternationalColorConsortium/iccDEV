@@ -14,4 +14,4 @@ iccRoundTrip
 ## See Also
 
 - [CLI tool reference](../../../docs/tools-cli-reference.md)
-- [Testing profiles](../../../Testing/README.md)
+- [Testing profiles](https://github.com/InternationalColorConsortium/iccDEV/blob/master/Testing/README.md)

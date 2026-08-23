@@ -41,8 +41,13 @@ cmake_minimum_required(VERSION 3.18...3.29)
 # cmake_policy(SET CMP0112 NEW)  # Respect parent scope in script mode
 # cmake_policy(SET CMP0156 NEW)  # Allow ALIAS targets for link dependencies
 
-# Emit warnings on deprecated or legacy CMake features
-set(CMAKE_WARN_DEPRECATED TRUE)
+# CMake 4.4+ manages deprecation messages through diagnostic categories.
+if(POLICY CMP0218)
+  cmake_policy(SET CMP0218 NEW)
+  cmake_diagnostic(SET CMD_DEPRECATED WARN)
+else()
+  set(CMAKE_WARN_DEPRECATED TRUE)
+endif()
 
 # Optional: clean up obsolete warnings (only enable if really needed)
 # set(CMAKE_POLICY_WARNING_CMP0012 TRUE)
@@ -544,6 +549,9 @@ option(ICC_LOG_SAFE               "Enable ICC_LOG_SAFE_VAL bounds-checked loggin
 option(ICC_VERBOSE_CALC_APPLY     "Enable verbose CIccMpeCalculator Apply debugging"    OFF)
 option(ICC_USE_ZLIB               "Enable zlib-backed compressed ICC text tags"         ON)
 option(ICCDEV_ENABLE_QA_FLAGS     "Enable opt-in maintainer QA evidence options"        OFF)
+option(ICCDEV_ENABLE_STRICT_WARNINGS
+  "Enable the compiler-specific strict warning tier on supported toolchains"
+  ON)
 option(ICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS
   "Suppress Microsoft CRT compatibility warnings in scoped comparison builds"
   OFF)
@@ -778,6 +786,7 @@ message(STATUS "ICC_LOG_SAFE               = ${ICC_LOG_SAFE}")
 message(STATUS "ICC_VERBOSE_CALC_APPLY     = ${ICC_VERBOSE_CALC_APPLY}")
 message(STATUS "ICC_USE_ZLIB               = ${ICC_USE_ZLIB}")
 message(STATUS "ICCDEV_ENABLE_QA_FLAGS     = ${ICCDEV_ENABLE_QA_FLAGS}")
+message(STATUS "ICCDEV_ENABLE_STRICT_WARNINGS = ${ICCDEV_ENABLE_STRICT_WARNINGS}")
 message(STATUS "ICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS = ${ICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS}")
 message(STATUS "ICCDEV_ENABLE_AVX2         = ${ICCDEV_ENABLE_AVX2}")
 message(STATUS "ICCDEV_ENABLE_AVX512       = ${ICCDEV_ENABLE_AVX512}")
@@ -1368,7 +1377,7 @@ if(APPLE)
   elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS "14.0")
     set(_iccdev_strict_capable TRUE)
   endif()
-  if(_iccdev_strict_capable)
+  if(ICCDEV_ENABLE_STRICT_WARNINGS AND _iccdev_strict_capable)
     add_compile_options(
       -Werror=uninitialized
       -Wshadow
@@ -1377,8 +1386,10 @@ if(APPLE)
       -Wpointer-arith
     )
     message(STATUS "macOS: strict warnings ENABLED (${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION})")
-  else()
+  elseif(ICCDEV_ENABLE_STRICT_WARNINGS)
     message(STATUS "macOS: strict warnings DISABLED -- ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION} below floor (GCC 15 / Clang 14). Base hardening still active.")
+  else()
+    message(STATUS "macOS: strict warnings DISABLED by ICCDEV_ENABLE_STRICT_WARNINGS=OFF. Base hardening still active.")
   endif()
 
   _iccdev_configure_fortify_source("macOS")
@@ -1416,7 +1427,7 @@ elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
   elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS "14.0")
     set(_iccdev_strict_capable TRUE)
   endif()
-  if(_iccdev_strict_capable)
+  if(ICCDEV_ENABLE_STRICT_WARNINGS AND _iccdev_strict_capable)
     add_compile_options(
       -Werror=uninitialized
       -Wshadow
@@ -1428,8 +1439,10 @@ elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
       add_compile_options(-Wlogical-op)
     endif()
     message(STATUS "Linux: strict warnings ENABLED (${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION})")
-  else()
+  elseif(ICCDEV_ENABLE_STRICT_WARNINGS)
     message(STATUS "Linux: strict warnings DISABLED -- ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION} below floor (GCC 15 / Clang 14). Base hardening still active. Upgrade to match CI diagnostics.")
+  else()
+    message(STATUS "Linux: strict warnings DISABLED by ICCDEV_ENABLE_STRICT_WARNINGS=OFF. Base hardening still active.")
   endif()
 
   # Opt-in: Effective C++ ruleset (currently ~3000 sites; multi-PR cleanup)
@@ -1469,7 +1482,9 @@ elseif(EMSCRIPTEN)
   )
 
   # Strict tier (Emscripten ships clang; gate on Clang 14+ for parity with Linux/macOS)
-  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS "14.0")
+  if(ICCDEV_ENABLE_STRICT_WARNINGS
+     AND CMAKE_CXX_COMPILER_ID MATCHES "Clang"
+     AND NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS "14.0")
     add_compile_options(
       -Werror=uninitialized
       -Wshadow
@@ -1478,8 +1493,10 @@ elseif(EMSCRIPTEN)
       -Wpointer-arith
     )
     message(STATUS "Emscripten: strict warnings ENABLED (${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION})")
-  else()
+  elseif(ICCDEV_ENABLE_STRICT_WARNINGS)
     message(STATUS "Emscripten: strict warnings DISABLED -- ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION} below floor (Clang 14).")
+  else()
+    message(STATUS "Emscripten: strict warnings DISABLED by ICCDEV_ENABLE_STRICT_WARNINGS=OFF.")
   endif()
 
   message(STATUS "Emscripten build: Warning flags applied (no ELF hardening).")

@@ -187,7 +187,7 @@ finally {
 - `Tools/Winnt/IccIisIsapi/IccIsapiHttp.h/.cpp` -- HTTP response helpers with security headers
 - `Tools/Winnt/IccIisIsapi/sanitize.js` -- Client-side DOM-XSS prevention
 - `Tools/Winnt/IccIisIsapi/IccIsapiFuzzTest.cpp` -- Fuzz test harness
-- `Tools/Winnt/IccIisIsapi/Stress-IccIisIsapi.ps1` -- 10-phase concurrent stress test
+- `Tools/Winnt/IccIisIsapi/Stress-IccIisIsapi.ps1` -- PowerShell 7+ 10-phase concurrent stress test
 - `Tools/Winnt/IccIisIsapi/Test-IccIisIsapiEndpoints.ps1` -- live HTTP endpoint and PAWG report QA
 - `Tools/Winnt/IccIisIsapi/Install-IccIisIsapiSite.ps1` -- IIS site installer
 - `Tools/Winnt/IccIisIsapi/Uninstall-IccIisIsapiSite.ps1` -- IIS site uninstaller
@@ -221,3 +221,17 @@ download link, and no console errors.
 The installer binds to `127.0.0.1` by default. Use `-BindAddress` only when a
 reviewed deployment intentionally needs a non-loopback interface, and add TLS
 before sending profiles over an untrusted network.
+
+Run the concurrent stress test with PowerShell 7 or later:
+
+```powershell
+pwsh -File .\Tools\Winnt\IccIisIsapi\Stress-IccIisIsapi.ps1 `
+  -BaseUrl http://localhost:18081 `
+  -Concurrency 20 `
+  -Duration 10
+```
+
+Package imports are validated in a clean staging directory before deployment
+and fail closed when any documented runtime tool is absent, including
+`iccPawgReport.exe`; a partially functional tool endpoint deployment is not
+accepted.

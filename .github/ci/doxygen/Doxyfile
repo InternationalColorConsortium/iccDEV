@@ -4,7 +4,7 @@
 # including IccProfLib, IccXML, IccJSON/IccLibJSON, IccConnect/IccLibConnect,
 # command-line tools such as IccPawgReport and IccProfileVisualize, Winnt tools
 # such as IccIisIsapi and its OpenAPI contract, the hello-iccdev example app
-# source, and Testing docs.
+# source, and developer documentation.
 # Visual aids include interactive SVG call/caller graphs, class hierarchy,
 # collaboration diagrams, include graphs, directory graphs, treeview navigation,
 # client-side search, and source browsing.
@@ -28,8 +28,7 @@ INPUT                  = README.md \
                          Tools/wxWidget \
                          examples/hello-iccdev/hello-iccdev.cpp \
                          docs \
-                         .github/ci/quality-assurance/scripts \
-                         Testing/README.md
+                         .github/ci/quality-assurance/scripts
 USE_MDFILE_AS_MAINPAGE = README.md
 FILE_PATTERNS          = *.h *.h.in *.hpp *.c *.cc *.cpp *.cxx *.md *.dox *.dot *.sh *.yaml *.yml
 RECURSIVE              = YES

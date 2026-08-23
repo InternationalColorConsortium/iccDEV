@@ -79,7 +79,7 @@ XML files under `Testing/` can be converted into example ICC profiles with
 | [`PCC`](../Testing/PCC) | Profile Connection Condition examples. |
 | [`SpecRef`](../Testing/SpecRef) | Spectral reflectance PCS examples. |
 
-See [`Testing/README.md`](../Testing/README.md) for the full profile directory
+See [`Testing/README.md`](https://github.com/InternationalColorConsortium/iccDEV/blob/master/Testing/README.md) for the full profile directory
 overview.
 
 ## Examples

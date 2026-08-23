@@ -450,3 +450,4 @@ jobs:
           } catch {
             Write-Warning "Unable to generate Windows build summary: $($_.Exception.Message)"
           }
+          exit 0

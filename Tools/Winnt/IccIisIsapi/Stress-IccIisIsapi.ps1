@@ -4,7 +4,8 @@
 
 .DESCRIPTION
   Launches multiple parallel sessions hitting every endpoint with normal and
-  malicious payloads.  Tests:
+  malicious payloads. Requires PowerShell 7 or later because the concurrent
+  phases use ForEach-Object -Parallel. Tests:
     1. Health endpoint (GET)           - high concurrency, rapid fire
     2. Summary endpoint (GET)          - concurrent reads
     3. XML mode endpoint (GET)         - concurrent reads
@@ -32,7 +33,7 @@
   Path to a valid .icc file for upload tests
 
 .EXAMPLE
-  .\Stress-IccIisIsapi.ps1 -BaseUrl http://localhost:18081 -FuzzDir E:\xss\fuzz -Concurrency 50
+  pwsh -File .\Stress-IccIisIsapi.ps1 -BaseUrl http://localhost:18081 -FuzzDir E:\xss\fuzz -Concurrency 50
 #>
 
 [CmdletBinding()]
@@ -43,6 +44,10 @@ param(
   [int]   $Duration    = 10,
   [string]$ProfilePath = ''
 )
+
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+  throw "Stress-IccIisIsapi.ps1 requires PowerShell 7 or later. Run it with pwsh."
+}
 
 $ErrorActionPreference = 'Continue'
 $dll = "$BaseUrl/iccIisIsapi.dll"
