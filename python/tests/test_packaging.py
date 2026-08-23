@@ -1,4 +1,9 @@
-"""Packaging configuration regression tests."""
+"""
+test_packaging.py - Packaging configuration regression tests.
+
+Copyright (c) International Color Consortium.
+BSD 3-Clause License. See LICENSE.md for details.
+"""
 
 import runpy
 import sys
@@ -49,3 +54,20 @@ def test_unix_prebuilt_static_library_links_zlib(monkeypatch, tmp_path):
     extension = captured["ext_modules"][0]
 
     assert extension.libraries == ["IccProfLib2-static", "z"]
+
+
+def test_unix_prebuilt_static_library_honors_zlib_off(monkeypatch, tmp_path):
+    build_dir = tmp_path / "build"
+    library_dir = build_dir / "IccProfLib"
+    library_dir.mkdir(parents=True)
+    (library_dir / "libIccProfLib2-static.a").write_bytes(b"")
+    (build_dir / "CMakeCache.txt").write_text(
+        "ICC_USE_ZLIB:BOOL=OFF\n",
+        encoding="ascii",
+    )
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    _namespace, captured = _load_setup(monkeypatch, build_dir)
+    extension = captured["ext_modules"][0]
+
+    assert extension.libraries == ["IccProfLib2-static"]

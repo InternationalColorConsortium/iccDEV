@@ -138,6 +138,22 @@ def _read_cmake_cache_value(build_dir, key):
     return None
 
 
+def _read_cmake_cache_bool(build_dir, key):
+    value = _read_cmake_cache_value(build_dir, key)
+    if value is None:
+        return None
+    return value.strip().upper() not in {
+        "",
+        "0",
+        "FALSE",
+        "IGNORE",
+        "N",
+        "NO",
+        "NOTFOUND",
+        "OFF",
+    }
+
+
 def _candidate_vcpkg_lib_dirs(build_dir):
     roots = []
     installed_dir = _read_cmake_cache_value(build_dir, "VCPKG_INSTALLED_DIR")
@@ -321,21 +337,22 @@ if PREBUILT_LIBRARY:
     # Developer / CI mode: link against the pre-built static library
     libraries = [PREBUILT_LIBRARY]
     LIB_DIRS = [PREBUILT_LIB_DIR]
-    if sys.platform == "win32":
-        zlib_library = _find_zlib_library(BUILD_DIR)
-        if zlib_library:
-            prebuilt_extra_link_args.append(zlib_library)
-            zlib_runtime_dll = _find_zlib_runtime_dll(BUILD_DIR)
-            if zlib_runtime_dll:
-                prebuilt_runtime_dlls.append(zlib_runtime_dll)
+    if _read_cmake_cache_bool(BUILD_DIR, "ICC_USE_ZLIB") is not False:
+        if sys.platform == "win32":
+            zlib_library = _find_zlib_library(BUILD_DIR)
+            if zlib_library:
+                prebuilt_extra_link_args.append(zlib_library)
+                zlib_runtime_dll = _find_zlib_runtime_dll(BUILD_DIR)
+                if zlib_runtime_dll:
+                    prebuilt_runtime_dlls.append(zlib_runtime_dll)
+            else:
+                libraries.append("zlib")
+                LIB_DIRS.extend(_candidate_zlib_lib_dirs(BUILD_DIR))
+                zlib_runtime_dll = _find_zlib_runtime_dll(BUILD_DIR)
+                if zlib_runtime_dll:
+                    prebuilt_runtime_dlls.append(zlib_runtime_dll)
         else:
-            libraries.append("zlib")
-            LIB_DIRS.extend(_candidate_zlib_lib_dirs(BUILD_DIR))
-            zlib_runtime_dll = _find_zlib_runtime_dll(BUILD_DIR)
-            if zlib_runtime_dll:
-                prebuilt_runtime_dlls.append(zlib_runtime_dll)
-    else:
-        libraries.append("z")
+            libraries.append("z")
     # IccWrapper.cpp is part of IccProfLib2 in current CMake builds.
     extra_sources = []
 else:
