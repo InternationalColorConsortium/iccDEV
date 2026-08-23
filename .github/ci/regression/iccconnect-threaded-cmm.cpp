@@ -46,7 +46,7 @@ int main(int argc, char** argv)
   std::unique_ptr<CIccConnectCmm> scalar(
     CIccConnectCmm::CreateStandard(profiles, nullptr, 0, 1));
   std::unique_ptr<CIccConnectCmm> threaded(
-    CIccConnectCmm::CreateStandard(profiles, nullptr, 0, 2));
+    CIccConnectCmm::CreateStandard(profiles, nullptr, 0, 4));
 
   if (!scalar || !scalar->GetCmm()) {
     std::fprintf(stderr, "failed to create scalar IccConnect CMM\n");

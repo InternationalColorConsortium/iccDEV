@@ -103,7 +103,7 @@ require_variant()
     fi
 
     listing="$(ctest --test-dir "$build_dir" -N -R "^${test_name}$" --no-tests=error)"
-    if ! printf '%s\n' "$listing" | grep -q "$test_name"; then
+    if ! grep -q "$test_name" <<< "$listing"; then
         echo "$label does not register $test_name" >&2
         exit 1
     fi

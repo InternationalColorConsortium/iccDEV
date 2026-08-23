@@ -18,7 +18,8 @@ param(
   [int]$Repetitions = 7,
 
   [ValidateRange(0, 63)]
-  [int]$AffinityCpu = [math]::Max(1, [Environment]::ProcessorCount - 2),
+  [int]$AffinityCpu = [math]::Min(
+    63, [math]::Max(0, [Environment]::ProcessorCount - 2)),
 
   [string]$OutputPath = 'clut-avx2-benchmark.tsv'
 )

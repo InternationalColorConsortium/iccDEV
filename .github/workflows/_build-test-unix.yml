@@ -346,10 +346,7 @@ jobs:
           export LD_LIBRARY_PATH="${WORKSPACE_DIR}/Build/IccProfLib:${WORKSPACE_DIR}/Build/IccXML"
 
           cd "${WORKSPACE_DIR}/Testing/CalcTest"
-          sh runtests.sh 2>&1 | tee "$LOGDIR/calc-runtests.log" || {
-            rc=$?
-            echo "WARN: CalcTest/runtests.sh exited $rc"
-          }
+          sh runtests.sh 2>&1 | tee "$LOGDIR/calc-runtests.log"
 
       # ---------------------------------------------------------------
       # Phase 6: Tool parity -- sweep all profiles (full tests only)
