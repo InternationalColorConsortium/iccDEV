@@ -12,7 +12,7 @@ Install modes
 
 The build auto-detects whether IccProfLib2 is pre-built or needs to be
 compiled from bundled sources.  Set ICCDEV_BUILD_DIR to point at an
-existing build tree if you want to link against it; otherwise all 36
+existing build tree if you want to link against it; otherwise the portable
 IccProfLib .cpp files are compiled as part of the extension.
 """
 
@@ -82,10 +82,14 @@ def _remove_empty_dir(path):
 
 
 def _iccproflib_cpp_sources(src_dir):
+    optional_simd_sources = {
+        "IccTagLutAvx2.cpp",
+        "IccTagLutAvx512.cpp",
+    }
     return sorted(
         _relpath(os.path.join(src_dir, f))
         for f in os.listdir(src_dir)
-        if f.endswith(".cpp")
+        if f.endswith(".cpp") and f not in optional_simd_sources
     )
 
 
@@ -330,6 +334,8 @@ if PREBUILT_LIBRARY:
             zlib_runtime_dll = _find_zlib_runtime_dll(BUILD_DIR)
             if zlib_runtime_dll:
                 prebuilt_runtime_dlls.append(zlib_runtime_dll)
+    else:
+        libraries.append("z")
     # IccWrapper.cpp is part of IccProfLib2 in current CMake builds.
     extra_sources = []
 else:

@@ -266,8 +266,10 @@ system searches common CMake layouts under `Build/` and `out/`, including:
 - `out/ninja-vcpkg-debug/IccProfLib`
 - `out/ninja-vcpkg-release/IccProfLib`
 
-If no pre-built static library is found, the extension compiles vendored
-IccProfLib sources inline.
+If no pre-built static library is found, the extension compiles the portable
+vendored IccProfLib sources inline. The optional AVX2 and AVX-512 translation
+units remain CMake-managed because they require architecture-specific compiler
+flags and are not valid in universal or non-x86 source builds.
 
 ## Wheel Compatibility Policy
 
