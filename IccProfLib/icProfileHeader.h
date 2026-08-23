@@ -112,7 +112,10 @@ bgCurve->curve[i] = 255 - (icUInt16Number)i;
  */
 
 
-/***************************************************************** 
+/* Opens with a space before its asterisk run on purpose: Doxygen 1.15 and later
+   would otherwise read the TeX-style double-backtick quoting in the licence text
+   below as a Markdown code span that never closes. Wording unchanged (#2211). */
+/* ****************************************************************
  Copyright (c) 2002  Heidelberger Druckmaschinen AG 
 
  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
