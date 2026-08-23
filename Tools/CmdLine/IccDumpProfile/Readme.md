@@ -42,4 +42,4 @@ evidence to the GitHub Actions job summary.
 ## See Also
 
 - [CLI tool reference](../../../docs/tools-cli-reference.md)
-- [Testing instructions](../../../Testing/Readme.md)
+- [Testing instructions](../../../Testing/README.md)

@@ -207,8 +207,8 @@ jobs:
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
           find Build/IccConnect -type l -name '*.so*' \
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
-          # 3. Copy Testing/Readme.md, LICENSE.md and docs/
-          cp Testing/Readme.md  "$stage/"
+          # 3. Copy Testing/README.md, LICENSE.md and docs/
+          cp Testing/README.md  "$stage/"
           cp LICENSE.md "$stage/"
           cp -a docs    "$stage/docs"
           # 4. Generate path.sh helper script (POSIX-compatible, resolves from script location)
@@ -389,8 +389,8 @@ jobs:
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
           find Build/IccConnect -type l -name '*.dylib' \
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
-          # 3. Copy Testing/Readme.md, LICENSE.md and docs/
-          cp Testing/Readme.md  "$stage/"
+          # 3. Copy Testing/README.md, LICENSE.md and docs/
+          cp Testing/README.md  "$stage/"
           cp LICENSE.md "$stage/"
           cp -a docs    "$stage/docs"
           # 4. Generate path.sh helper script (POSIX-compatible, resolves from script location)
@@ -687,8 +687,8 @@ jobs:
               throw "Required staged Windows runtime artifact missing: $required"
             }
           }
-          # 3. Copy Testing/Readme.md, LICENSE.md and docs/
-          Copy-Item -Path "Testing/Readme.md"  -Destination $stage -Force
+          # 3. Copy Testing/README.md, LICENSE.md and docs/
+          Copy-Item -Path "Testing/README.md"  -Destination $stage -Force
           Copy-Item -Path "LICENSE.md" -Destination $stage -Force
           Copy-Item -Path "docs"       -Destination "$stage/docs" -Recurse -Force
           # 4. Copy the complete MATLAB source tree and the MEX/runtime files

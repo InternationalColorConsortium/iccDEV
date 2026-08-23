@@ -126,6 +126,6 @@ ICS look as though no tint had been supplied.
 ## See Also
 
 - [CLI tool reference](../../../docs/tools-cli-reference.md)
-- [Testing profiles](../../../Testing/Readme.md)
+- [Testing profiles](../../../Testing/README.md)
 - [IccConnect library](../../../docs/icc-connect.md) — JSON-driven setup
   used by the `-cfg` form.

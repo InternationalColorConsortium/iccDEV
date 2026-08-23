@@ -598,10 +598,17 @@ jobs:
             Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
           }
           . .github/scripts/sanitize.ps1
-          $env:VCPKG_ROOT = $env:GITHUB_WORKSPACE
+          if (-not $env:VCPKG_INSTALLATION_ROOT) {
+            throw 'VCPKG_INSTALLATION_ROOT is not set on this runner'
+          }
+          $env:VCPKG_ROOT = $env:VCPKG_INSTALLATION_ROOT
+          $cmakeArgs = @(
+            '-DVCPKG_MANIFEST_MODE=OFF'
+            "-DVCPKG_INSTALLED_DIR=$env:GITHUB_WORKSPACE\installed"
+          )
           .\.github\scripts\iccdev-windows-release-report.ps1 `
             -BuildDir out\windows-msvc-release-report `
-            -CMakeConfigureArguments '-DVCPKG_MANIFEST_MODE=OFF' `
+            -CMakeConfigureArguments $cmakeArgs `
             -Threads '1,2,4,8,16'
           Get-Content out\windows-msvc-release-report\reports\windows-release-report.md |
             ForEach-Object { Sanitize-Print $_ } |
@@ -611,8 +618,6 @@ jobs:
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
           POWERSHELL_UPDATECHECK: Off
-          CLANGCL_C_FLAGS: /D_CRT_SECURE_NO_WARNINGS /clang:-Wno-deprecated-declarations
-          CLANGCL_CXX_FLAGS: /D_CRT_SECURE_NO_WARNINGS /clang:-Wno-deprecated-declarations
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
@@ -643,14 +648,6 @@ jobs:
           }
           New-Item -ItemType Directory -Force -Path $buildDir | Out-Null
 
-          $expectedNoisePolicy = '/D_CRT_SECURE_NO_WARNINGS /clang:-Wno-deprecated-declarations'
-          if ($env:CLANGCL_C_FLAGS -ne $expectedNoisePolicy) {
-           throw 'Unexpected ClangCL C warning policy'
-          }
-          if ($env:CLANGCL_CXX_FLAGS -ne $expectedNoisePolicy) {
-           throw 'Unexpected ClangCL CXX warning policy'
-          }
-
           $configureLog = Join-Path $buildDir 'clangcl-configure.log'
           $buildLog = Join-Path $buildDir 'clangcl-build.log'
           $checkLog = Join-Path $buildDir 'clangcl-check.log'
@@ -663,11 +660,10 @@ jobs:
            '-T', 'ClangCL',
            '-DCMAKE_TOOLCHAIN_FILE=..\..\scripts\buildsystems\vcpkg.cmake',
            '-DVCPKG_MANIFEST_MODE=OFF',
-           "-DCMAKE_C_FLAGS=$env:CLANGCL_C_FLAGS",
-           "-DCMAKE_CXX_FLAGS=$env:CLANGCL_CXX_FLAGS",
            '-DENABLE_TOOLS=ON',
            '-DENABLE_CMM_TOOLS=ON',
            '-DENABLE_TESTS=ON',
+           '-DICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS=ON',
            '-DICCDEV_ENABLE_AVX2=ON',
            '-Wno-dev'
           ) $configureLog

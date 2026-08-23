@@ -2,6 +2,7 @@
 #################################################################################
 # CalcTest/runtests.sh | iccDEV Project
 # Copyright (C) 2024-2026 The International Color Consortium.
+# SPDX-License-Identifier: BSD-3-Clause
 #                                        All rights reserved.
 #
 # Intent: Validate Calculator MPE rejection and valid execution cases.

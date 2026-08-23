@@ -29,7 +29,7 @@ INPUT                  = README.md \
                          examples/hello-iccdev/hello-iccdev.cpp \
                          docs \
                          .github/ci/quality-assurance/scripts \
-                         Testing/Readme.md
+                         Testing/README.md
 USE_MDFILE_AS_MAINPAGE = README.md
 FILE_PATTERNS          = *.h *.h.in *.hpp *.c *.cc *.cpp *.cxx *.md *.dox *.dot *.sh *.yaml *.yml
 RECURSIVE              = YES

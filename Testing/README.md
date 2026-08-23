@@ -149,6 +149,47 @@ They create `ICC/`, `Results/`, and `config/`, then execute these phases:
 The generated TIFFs and JSON configuration exports are intentional local
 artifacts. Do not treat their presence as profile fixtures or commit them.
 
+## Profile Directory Reference
+
+- [`Calc`](Calc) demonstrates modeling with Calculator
+  MultiProcessElements. `srgbCalcTest` exercises all specified calculator
+  operations.
+- [`Display`](Display) demonstrates spectral display modeling with observers
+  selected at startup.
+- [`Encoding`](Encoding) contains three-channel encoding-class profiles,
+  including name-only and fully specified variants.
+- [`Named`](Named) contains named-color profiles with tints, spectral
+  reflectance, fluorescence, and sparse notation.
+- [`PCC`](PCC) contains abstract Profile Connection Condition profiles for
+  multiple observers, illuminants, and colorimetric intents.
+- [`SpecRef`](SpecRef) contains profiles that convert and manipulate spectral
+  reflectance, including six-channel abridged spectral encodings.
+
+## CI Round-Trip Classification
+
+The Linux CI sweep separates clean reconstruction from expected negative
+fixtures during `iccFromXml` XML-to-ICC round-trip testing.
+
+- Clean profiles must reconstruct and save without validation errors.
+- Known invalid fixtures are listed in `expected-invalid-fromxml.tsv`.
+- New parse failures, sanitizer findings, or unclassified validation
+  diagnostics fail CI until fixed or classified.
+
+`qa-profile-manifest.tsv` records the expected validation verdict for every
+profile:
+
+| Suite | Expected status | Rule |
+| --- | --- | --- |
+| `positive` | `valid` | Must validate clean; any new diagnostic is a regression. |
+| `compatibility` | `warning` | A known diagnostic is baselined; escalation fails. |
+| `negative` | `critical` | Rejection is expected; acceptance is a failure. |
+
+A sanitizer finding or fatal signal fails every suite, including negative
+fixtures. Stable SHA-256 values are recorded only for tracked profiles because
+generated profiles can contain time-dependent creation data and profile IDs.
+`expected_status` and `expected_exit` remain separate because noncompliant
+profiles can still return exit status zero.
+
 ## Exit Status and Safe Use
 
 An exit status of zero means the invoked script completed its intended lane.
