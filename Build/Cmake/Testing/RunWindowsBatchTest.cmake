@@ -1,5 +1,9 @@
 # Run one legacy Windows batch test through CTest and validate its output.
 
+if(POLICY CMP0007)
+  cmake_policy(SET CMP0007 NEW)
+endif()
+
 set(_required_vars
   ICCDEV_TEST_NAME
   ICCDEV_TESTING_DIR
@@ -305,6 +309,15 @@ if(_source_status_available)
 endif()
 
 if(NOT _result EQUAL 0)
+  string(REGEX MATCHALL "[^\r\n]*\\[FAIL\\][^\r\n]*"
+    _failure_lines "${_combined_output}")
+  if(_failure_lines)
+    list(JOIN _failure_lines "\n  " _failure_summary)
+    message(FATAL_ERROR
+      "${ICCDEV_TEST_NAME} exited with ${_result}; failing commands:\n"
+      "  ${_failure_summary}\n"
+      "Full output: ${_log_file}")
+  endif()
   message(FATAL_ERROR "${ICCDEV_TEST_NAME} exited with ${_result}; see ${_log_file}")
 endif()
 

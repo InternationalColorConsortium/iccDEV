@@ -105,6 +105,38 @@ Windows presets place iccDEV `.exe` and `.dll` runtime artifacts together under
 example `out\vs2022-x64\bin\Release\iccToXml.exe`; no manual PATH update is
 required for iccDEV project DLLs.
 
+For a reproducible Release build and `iccBenchApply` performance report, run:
+
+```powershell
+.\.github\scripts\iccdev-windows-release-report.ps1 `
+  -BuildDir out\windows-msvc-release-report `
+  -Threads '1,2,4,8,16'
+```
+
+The script records host and Visual Studio details, configure and build timing,
+compiler warnings, project artifact counts and size, profile-generation time,
+and the `iccBenchApply` suite's median/minimum/maximum throughput and scaling.
+It writes JSON, Markdown, raw benchmark CSV, and command logs under the build
+directory's `reports` folder. Use an otherwise idle machine for comparisons;
+the report records results but does not assert a performance threshold.
+If application-control policy blocks locally built unsigned executables or
+dependencies, run the report on an approved Windows build host or CI runner;
+do not disable the machine policy. `-ProfileRoot` can reuse a Testing tree
+generated elsewhere, but it cannot bypass executable-signing policy.
+
+Windows filesystems are case-insensitive by default, while the repository has
+legacy paths that differ only by case. For a genuinely clean Git checkout, use
+WSL2 storage rather than `/mnt/c` or `/mnt/e`, and preserve LF line endings:
+
+```bash
+git config --global core.autocrlf false
+git clone https://github.com/InternationalColorConsortium/iccDEV.git
+```
+
+Keep Windows build output on a native Windows volume when measuring MSVC or
+ClangCL; the WSL2 checkout recommendation is for collision-free Git and Unix
+script work, not for benchmarking through a network-mounted source tree.
+
 ## Windows ClangCL
 
 Use the Visual Studio LLVM toolset with the same vcpkg-managed dependencies as

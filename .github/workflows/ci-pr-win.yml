@@ -582,6 +582,31 @@ jobs:
             --config Debug `
             --selection-output build\recent-ctests.txt
 
+      - name: Run Windows Release performance report
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          # preflight: allow-pr-script-execution reason=exercise Windows Release report
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+          . .github/scripts/sanitize.ps1
+          $env:VCPKG_ROOT = $env:GITHUB_WORKSPACE
+          .\.github\scripts\iccdev-windows-release-report.ps1 `
+            -BuildDir out\windows-msvc-release-report `
+            -CMakeConfigureArguments '-DVCPKG_MANIFEST_MODE=OFF' `
+            -Threads '1,2,4,8,16'
+          Get-Content out\windows-msvc-release-report\reports\windows-release-report.md |
+            ForEach-Object { Sanitize-Print $_ } |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
       - name: Run ClangCL build and CTest check
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
