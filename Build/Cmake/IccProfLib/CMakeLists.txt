@@ -104,7 +104,10 @@ set(ICCDEV_AVX512_SOURCE "${SRC_PATH}/IccProfLib/IccTagLutAvx512.cpp")
 set(ICCDEV_AVX512_ENABLED OFF)
 if(ICCDEV_ENABLE_AVX512)
   string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _iccdev_processor)
-  if(CMAKE_SIZEOF_VOID_P EQUAL 8
+  if(MSVC AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(STATUS
+      "[SKIP] ICCDEV_ENABLE_AVX512 is disabled for native MSVC; use ClangCL")
+  elseif(CMAKE_SIZEOF_VOID_P EQUAL 8
       AND _iccdev_processor MATCHES "^(amd64|x86_64|x64)$")
     if(MSVC)
       set(_iccdev_avx512_flag "/arch:AVX512")

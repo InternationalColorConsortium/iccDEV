@@ -754,7 +754,7 @@ jobs:
            '### Windows ClangCL smoke',
            '',
            '- Generator: ``Visual Studio 17 2022 -T ClangCL``',
-           '- Warning policy: ``_CRT_SECURE_NO_WARNINGS`` plus ``-Wno-deprecated-declarations``',
+           '- Warning policy: ``_CRT_SECURE_NO_WARNINGS`` via ``ICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS``',
            '- Build scope: ``full configured command-line project plus Windows CMM DLL``',
            '- Build type: ``Debug``',
            '- CTest: ``all registered Windows suites``',
