@@ -183,7 +183,7 @@ fi
     printf '## Scope\n\n'
     printf 'This report executes `%s` against independently configured builds.\n' \
         "$test_name"
-    printf 'The regression covers eight- and nine-output AVX2 fallbacks plus an eleven-output full vector and masked tail; AVX-512 may select its own eligible paths.\n\n'
+    printf 'The regression covers 8-, 9-, and 11-output AVX2 fallbacks plus the 15-output AVX2 full vector and masked tail; AVX-512 may select its own eligible paths.\n\n'
     printf '## Environment\n\n'
     printf '| Field | Value |\n|---|---|\n'
     printf '| Kernel | `%s` |\n' "$(uname -srmo)"
@@ -195,12 +195,12 @@ fi
     printf '\n## Build and Functional Coverage\n\n'
     printf '| Variant | Build configuration | Focused regression | Median end-to-end time (s) |\n'
     printf '|---|---|---|---:|\n'
-    printf '| Portable | `%s` | 8-, 9-, and 11-output scalar/SSE fallback | %s |\n' \
+    printf '| Portable | `%s` | 8-, 9-, 11-, and 15-output scalar/SSE fallback | %s |\n' \
         "$(cache_summary "$portable_build")" "$(median_seconds portable)"
-    printf '| AVX2 | `%s` | 8- and 9-output fallback; 11-output vector plus masked tail | %s |\n' \
+    printf '| AVX2 | `%s` | 8-, 9-, and 11-output fallback; 15-output vector plus masked tail | %s |\n' \
         "$(cache_summary "$avx2_build")" "$(median_seconds avx2)"
     if [ -n "$avx512_build" ]; then
-        printf '| AVX-512 | `%s` | 8-, 9-, and 11-output eligible paths | %s |\n' \
+        printf '| AVX-512 | `%s` | 8-, 9-, 11-, and 15-output eligible paths | %s |\n' \
             "$(cache_summary "$avx512_build")" "$(median_seconds avx512)"
     fi
     printf '\n## Timing Samples\n\n'
