@@ -1149,8 +1149,13 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
         break;
       }
       
-      // pin decoded values to valid range
-      if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric)
+      // Pin the decoded values to their valid range.  Only the upper bound can
+      // fire here: a negative code is refused at the top of this decode (#2190),
+      // and the lower half never covered that case in the first place -- by the
+      // time it runs "% 10" has dropped the sign, which is exactly how "-110"
+      // reached this point as 0.  Testing it left a comparison that is always
+      // false (CodeQL cpp/constant-comparison #2359).
+      if (nIntent > (int)icAbsoluteColorimetric)
         return 0;
       
       if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
@@ -1414,8 +1419,13 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
         nType = icXformLutColor;
       }
       
-      // pin decoded values to valid range
-      if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric)
+      // Pin the decoded values to their valid range.  Only the upper bound can
+      // fire here: a negative code is refused at the top of this decode (#2190),
+      // and the lower half never covered that case in the first place -- by the
+      // time it runs "% 10" has dropped the sign, which is exactly how "-110"
+      // reached this point as 0.  Testing it left a comparison that is always
+      // false (CodeQL cpp/constant-comparison #2357).
+      if (nIntent > (int)icAbsoluteColorimetric)
         return 0;
       
       if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
@@ -1484,8 +1494,13 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
       nType = icXformLutColor;
     }
       
-    // pin decoded values to valid range
-    if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric)
+    // Pin the decoded values to their valid range.  Only the upper bound can
+    // fire here: a negative code is refused at the top of this decode (#2190),
+    // and the lower half never covered that case in the first place -- by the
+    // time it runs "% 10" has dropped the sign, which is exactly how "-110"
+    // reached this point as 0.  Testing it left a comparison that is always
+    // false (CodeQL cpp/constant-comparison #2358).
+    if (nIntent > (int)icAbsoluteColorimetric)
       return 0;
       
     if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
