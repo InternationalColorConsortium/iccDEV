@@ -312,9 +312,6 @@ bool CIccApplyThreadedCmm::Init(CIccCmm *pCmm, int nThreads)
   try {
     m_pool = new (std::nothrow) CIccApplyThreadedCmmPool();
   }
-  catch (const std::bad_alloc &) {
-    return false;
-  }
   catch (const std::system_error &) {
     return false;
   }

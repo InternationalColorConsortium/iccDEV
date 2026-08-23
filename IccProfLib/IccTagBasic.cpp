@@ -1528,12 +1528,11 @@ bool CIccTagZipUtf8Text::GetText(std::string &str) const
   // the other. Truncating back to nOrigSize on the failure path makes the failure
   // atomic and makes both agree that false leaves nothing appended.
   //
-  // Rewinding rather than inflating into a scratch string is deliberate. There is no
-  // bound on how much this can inflate -- the decompression cap is a separate open
-  // question -- so buffering the whole decode before handing it over would double peak
-  // memory for a hostile ratio, and would add a full copy to the success path that the
-  // existing in-place append does not pay.
+  // Rewinding rather than inflating into a scratch string avoids doubling peak memory
+  // while preserving the caller's original contents on failure.
   const size_t nOrigSize = str.size();
+  const size_t nMaxInflatedBytes = 0x01000000;
+  size_t nInflatedBytes = 0;
 
   zstat = inflateInit(&zstr);
 
@@ -1580,6 +1579,12 @@ bool CIccTagZipUtf8Text::GetText(std::string &str) const
     }
 
     n = (unsigned int)buf.size() - zstr.avail_out;
+    if (n > nMaxInflatedBytes - nInflatedBytes) {
+      str.resize(nOrigSize);
+      inflateEnd(&zstr);
+      return false;
+    }
+    nInflatedBytes += n;
 
     // Append the inflated bytes wholesale. The previous per-byte `str += buf[i]`
     // implicitly converted each icUtf8Vector element (unsigned char) to

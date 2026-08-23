@@ -4,10 +4,14 @@ import runpy
 import sys
 from pathlib import Path
 
-import setuptools
+import pytest
 
 
 def _load_setup(monkeypatch, build_dir):
+    setuptools = pytest.importorskip(
+        "setuptools",
+        reason="packaging configuration tests require build dependencies",
+    )
     captured = {}
 
     def capture_setup(**kwargs):
