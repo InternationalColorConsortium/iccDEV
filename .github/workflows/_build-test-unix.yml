@@ -1045,7 +1045,7 @@ jobs:
               "mcs-updateprev:mcs-updateprev.log:MCS updateprev" \
               "mcs-withBkgd:mcs-updateprevWithBkgd.log:MCS updateprevWithBkgd" \
               "RunTests:RunTests.log:iccDEV test suite" \
-              "CalcTest:checkInvalidProfiles.log:CalcTest invalid profiles"
+              "CalcTest:calc-runtests.log:CalcTest full wrapper"
             do
               IFS=':' read -r phase logfile desc <<< "$item"
               if [ -f "$LOGDIR/$logfile" ]; then

@@ -125,12 +125,12 @@ cpu_has_flag()
 }
 
 avx2_coverage='AVX2-eligible 15-output vector plus masked tail'
-avx512_coverage='AVX-512-eligible 8- through 16-output paths'
+avx512_coverage='AVX-512-eligible 8-, 9-, 11-, 14-, and 15-output paths'
 if cpu_has_flag avx2; then
     avx2_coverage='runtime AVX2 15-output vector plus masked tail'
 fi
 if cpu_has_flag avx512f; then
-    avx512_coverage='runtime AVX-512 8- through 16-output paths'
+    avx512_coverage='runtime AVX-512 8-, 9-, 11-, 14-, and 15-output paths'
 fi
 
 median_seconds()
@@ -207,7 +207,7 @@ fi
     printf '## Scope\n\n'
     printf 'This report executes `%s` against independently configured builds.\n' \
         "$test_name"
-    printf 'The regression covers 8-, 9-, 11-, and 14-output fallbacks plus 15-output AVX2 and 8- through 16-output AVX-512 eligible paths. Runtime ISA claims below require the corresponding host CPU flag.\n\n'
+    printf 'The regression covers 8-, 9-, 11-, and 14-output fallbacks plus the 15-output AVX2 path and those same five AVX-512-eligible widths. This timing report does not run the separate 16-output AVX-512 parity CTest. Runtime ISA claims below require the corresponding host CPU flag.\n\n'
     printf '## Environment\n\n'
     printf '| Field | Value |\n|---|---|\n'
     printf '| Kernel | `%s` |\n' "$(uname -srmo)"
