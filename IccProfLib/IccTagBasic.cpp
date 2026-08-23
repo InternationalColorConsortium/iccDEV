@@ -1531,6 +1531,8 @@ bool CIccTagZipUtf8Text::GetText(std::string &str) const
   // Rewinding rather than inflating into a scratch string avoids doubling peak memory
   // while preserving the caller's original contents on failure.
   const size_t nOrigSize = str.size();
+  // Text tags are human-readable metadata, so 16 MiB already exceeds legitimate
+  // content while bounding hostile expansion more tightly than binary dataType tags.
   const size_t nMaxInflatedBytes = 0x01000000;
   size_t nInflatedBytes = 0;
 

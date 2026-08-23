@@ -140,7 +140,11 @@ try {
   Write-Host "Extracted $fileCount package files to $DestinationRoot"
 } finally {
   if (Test-Path $stagingRoot) {
-    Remove-Item $stagingRoot -Recurse -Force
+    try {
+      Remove-Item $stagingRoot -Recurse -Force -ErrorAction Stop
+    } catch {
+      Write-Warning "Failed to remove package staging directory '$stagingRoot': $($_.Exception.Message)"
+    }
   }
 }
 $dllPath = Join-Path $DestinationRoot "iccIisIsapi.dll"
