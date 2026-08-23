@@ -272,7 +272,7 @@ $report = [ordered]@{
   }
 }
 
-$report | ConvertTo-Json -Depth 8 | Set-Content -Encoding ascii $jsonReport
+$report | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8NoBOM $jsonReport
 
 $markdown = [Collections.Generic.List[string]]::new()
 $markdown.Add('# Windows Release Performance Report')
@@ -317,7 +317,7 @@ foreach ($row in $benchmarkSummary) {
 }
 $markdown.Add('')
 $markdown.Add("Raw CSV: ``$benchmarkCsv``")
-$markdown | Set-Content -Encoding ascii $markdownReport
+$markdown | Set-Content -Encoding utf8NoBOM $markdownReport
 
 Write-Output "[PASS] JSON report: $jsonReport"
 Write-Output "[PASS] Markdown report: $markdownReport"

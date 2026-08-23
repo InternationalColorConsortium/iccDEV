@@ -7,11 +7,11 @@
 ###############################################################################
 #
 # Converts the checked-in ICC v5 fixtures, validates them, and applies their 3D
-# CLUTs. The eight-, nine-, and eleven-output cases cover scalar/SSE fallback
-# in AVX2 builds and eligible AVX-512 widths. The fifteen-output case covers
-# the AVX2 full vector plus masked tail and is also AVX-512 eligible. Portable
-# builds retain the same expected scalar/SSE results. Each grid point is
-# distinct so the expected vectors also check corner offsets and weights.
+# CLUTs. The eight-, nine-, eleven-, and fourteen-output cases cover scalar/SSE
+# fallback in AVX2 builds and eligible AVX-512 widths. The fifteen-output case
+# covers the AVX2 full vector plus masked tail and is also AVX-512 eligible.
+# Portable builds retain the same expected scalar/SSE results. Each grid point
+# is distinct so the expected vectors also check corner offsets and weights.
 ###############################################################################
 
 set -euo pipefail
@@ -110,6 +110,9 @@ run_case \
 run_case \
     "avx2-3d-11-output" \
     "0\\.2200 +0\\.2300 +0\\.2400 +0\\.2500 +0\\.2600 +0\\.2700 +0\\.2800 +0\\.2900 +0\\.3000 +0\\.3100 +0\\.3200"
+run_case \
+    "avx2-3d-14-output" \
+    "0\\.2200 +0\\.2300 +0\\.2400 +0\\.2500 +0\\.2600 +0\\.2700 +0\\.2800 +0\\.2900 +0\\.3000 +0\\.3100 +0\\.3200 +0\\.3300 +0\\.3400 +0\\.3500"
 run_case \
     "avx2-3d-15-output" \
     "0\\.2200 +0\\.2300 +0\\.2400 +0\\.2500 +0\\.2600 +0\\.2700 +0\\.2800 +0\\.2900 +0\\.3000 +0\\.3100 +0\\.3200 +0\\.3300 +0\\.3400 +0\\.3500 +0\\.3600"
