@@ -144,19 +144,50 @@ static bool ParseIntArg(const char *arg, int minValue, int maxValue, int &value)
 static bool DecodeIntent(int nEncoded, int &nIntent, int &nType,
                          bool &bUseSubProfile, bool &bUseD2BxB2DxTags)
 {
+  // Assigned before the guard below so every return path leaves the caller with
+  // defined values.  The early return is new, and both current callers treat
+  // false as fatal without reading these -- but the function used to promise
+  // that all four were written, and a later caller would inherit uninitialised
+  // locals with nothing to warn it (#2268).
+  nIntent = 0;
+  nType = 0;
+  bUseSubProfile = false;
+  bUseD2BxB2DxTags = true;
+
+  // A negative code is not a documented form, and the column arithmetic below
+  // cannot refuse one: nType takes abs() while the intent digit does not, so
+  // -110 % 10 is 0 and "-110" resolved exactly like "110".  The return test at
+  // the bottom runs after the sign is already gone, which is why "-3" was
+  // refused and "-10" was not.  Guarding here rather than at the caller keeps
+  // the built-in -suite table held to the same rule as the command line, and
+  // matches the guard iccApplyToLink grew in the same change (#2268, #2190).
+  //
+  // The sign rule is the only part of this decode that is now known to match
+  // that tool column for column.  Two others do NOT: the hundreds column is
+  // read there as a luminance-matching request and is discarded here, and a
+  // tens digit of 4 selects black-point compensation there while reaching
+  // AddXform() as icXformLutBPC here.  Do not widen the equivalence claim
+  // above without closing those.
+  if (nEncoded < 0)
+    return false;
+
   bUseSubProfile = (nEncoded / 1000) > 0;
   nIntent = nEncoded % 1000;
   nIntent = nIntent % 100;
   nType   = abs(nIntent) / 10;
   nIntent = nIntent % 10;
 
-  bUseD2BxB2DxTags = true;
   if (nType == 1) {
     nType = 0;
     bUseD2BxB2DxTags = false;
   }
 
-  return nIntent >= (int)icPerceptual && nIntent <= (int)icAbsoluteColorimetric;
+  // Only the upper bound is testable.  nIntent is "% 100" then "% 10" of a
+  // value already refused if negative, so it is 0..9 and icPerceptual is 0 --
+  // a ">= icPerceptual" term would be constantly true.  Same dead comparison
+  // CodeQL raised as #2357/#2358/#2359 against IccCmmConfig.cpp once #2261 put
+  // the sign guard in front of it (#2268).
+  return nIntent <= (int)icAbsoluteColorimetric;
 }
 
 // Names for the icXformType values in IccCmm.h:177-187. PCS is named explicitly
@@ -748,8 +779,18 @@ int main(int argc, const char *argv[])
     bool bUseSubProfile, bUseD2BxB2DxTags;
     if (!DecodeIntent(nEncoded, nIntent, nType,
                       bUseSubProfile, bUseD2BxB2DxTags)) {
-      printf("Invalid rendering intent '%s': decoded intent out of range\n",
-             argv[nArg - 1]);
+      // Two distinct rejections share one gate, so name which one fired.  The
+      // sign case is the whole point of the guard: "-10" used to be accepted
+      // and resolve as "10", so reporting it as an out-of-range decoded intent
+      // would describe a digit the caller can see is in range (#2268).
+      if (nEncoded < 0) {
+        printf("Invalid rendering intent '%s': a negative intent code is not a"
+               " valid form\n", argv[nArg - 1]);
+      }
+      else {
+        printf("Invalid rendering intent '%s': decoded intent out of range\n",
+               argv[nArg - 1]);
+      }
       return 1;
     }
 

@@ -2575,6 +2575,130 @@ function(iccdev_add_applytolink_invalid_arg_test)
   endif()
 endfunction()
 
+# #2268: iccApplyToLink accepted a negative rendering-intent code.
+#
+# The decode at iccApplyToLink.cpp splits one integer into decimal columns, and
+# it takes abs() on the transform-type digit but not on the intent digit. A
+# negative code whose units digit is zero therefore survived every check: "-10"
+# and "-110" reached the range test at the bottom carrying an intent of 0, and
+# produced device links byte-identical to "10" and "110". Only a non-zero units
+# digit -- "-3" -- was ever refused, which is why the gap read as covered.
+#
+# The same guard lands in iccBenchApply::DecodeIntent(), whose comment states it
+# decodes "the way iccApplyToLink.cpp does, so a chain given to this tool and the
+# same chain given to that one resolve identically". The pair below and the
+# iccdev.bench-apply-negative-intent-* pair above assert that sentence: same
+# code, both tools, same verdict. Fixing one alone is what would break it.
+#
+# Driven through RunBenchApplyCliTest.cmake rather than WILL_FAIL because a bare
+# nonzero exit does not distinguish this refusal from a crash or a missing
+# runtime library -- the wrapper makes the message assertion mandatory. That
+# matters more here than usual: the sibling iccdev.applytolink-invalid-decoded-intent
+# below is a WILL_FAIL test, so a message-blind assertion is exactly the coverage
+# this family already had and the reason the sign case went unnoticed.
+#
+# iccdev.applytolink-valid-intent-code is the positive control, and it is not
+# optional: a guard that refused every code would satisfy both negative tests.
+function(iccdev_add_applytolink_negative_intent_tests)
+  if(NOT TARGET iccApplyToLink)
+    return()
+  endif()
+
+  add_dependencies(check iccApplyToLink)
+  add_dependencies(check-fast iccApplyToLink)
+
+  set(_applytolink_intent_tests "")
+
+  # "-10" is the pair for "10" and "-110" the pair for "110". On the FIXED tree
+  # the two negatives reach the same branch -- the guard fires immediately after
+  # ParseIntArg, before any % or abs() arithmetic -- so the second is not extra
+  # branch coverage. It is kept because it is a second independent red probe
+  # against the unfixed tool, where the two took genuinely different routes
+  # through the column decode ("-110" also set the luminance flag via
+  # nLuminance = -1) and both still produced output.
+  # Spelled out rather than looped because foreach() flattens a "name;code"
+  # element into two iterations, so the pairing would not survive the loop.
+  add_test(
+    NAME iccdev.applytolink-negative-intent-code
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccApplyToLink>"
+      "-DLABEL=applytolink-cli"
+      "-DTOOL_ARGS=${ICCDEV_TEST_OUTDIR}/applytolink-negative-intent-code.icc;0;2;1;NegativeIntent;0;1;0;0;${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc;-10"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=a negative intent code is not a valid form"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  list(APPEND _applytolink_intent_tests iccdev.applytolink-negative-intent-code)
+
+  add_test(
+    NAME iccdev.applytolink-negative-intent-code-typed
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccApplyToLink>"
+      "-DLABEL=applytolink-cli"
+      "-DTOOL_ARGS=${ICCDEV_TEST_OUTDIR}/applytolink-negative-intent-code-typed.icc;0;2;1;NegativeIntent;0;1;0;0;${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc;-110"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=a negative intent code is not a valid form"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  list(APPEND _applytolink_intent_tests iccdev.applytolink-negative-intent-code-typed)
+
+  # Same command line, same columns, only the sign removed. "LUT successfully
+  # written" is asserted rather than the exit status alone so this stays a
+  # statement about the tool doing the work, not merely about it not failing.
+  add_test(
+    NAME iccdev.applytolink-valid-intent-code
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccApplyToLink>"
+      "-DLABEL=applytolink-cli"
+      "-DTOOL_ARGS=${ICCDEV_TEST_OUTDIR}/applytolink-valid-intent-code.icc;0;2;1;ValidIntent;0;1;0;0;${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc;10"
+      "-DEXPECT_EXIT=zero"
+      "-DEXPECT_MATCH=LUT successfully written"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  list(APPEND _applytolink_intent_tests iccdev.applytolink-valid-intent-code)
+
+  # The second positive control, and it earns its place: with only "10" a guard
+  # mis-written as "nIntent < 0 || nIntent >= 100" would satisfy every other test
+  # here. "110" is the smallest accepted code that reaches past the tens column.
+  add_test(
+    NAME iccdev.applytolink-valid-intent-code-typed
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccApplyToLink>"
+      "-DLABEL=applytolink-cli"
+      "-DTOOL_ARGS=${ICCDEV_TEST_OUTDIR}/applytolink-valid-intent-code-typed.icc;0;2;1;ValidIntent;0;1;0;0;${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc;110"
+      "-DEXPECT_EXIT=zero"
+      "-DEXPECT_MATCH=LUT successfully written"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  list(APPEND _applytolink_intent_tests iccdev.applytolink-valid-intent-code-typed)
+
+  set_tests_properties(${_applytolink_intent_tests} PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;tools;applytolink;cli;exitcode;issue-2268;regression"
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+
+  if(WIN32)
+    # The tool is reached through cmake -P, and the child inherits this test
+    # process's PATH, so it needs the same runtime paths as every other
+    # iccApplyToLink test. Without them the two negative tests would pass on
+    # Windows for want of IccProfLib2.dll -- STATUS_DLL_NOT_FOUND is an ordinary
+    # nonzero exit -- and the positive control is what would catch it.
+    set(_applytolink_intent_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccApplyToLink>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _applytolink_intent_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(${_applytolink_intent_tests} PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_applytolink_intent_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_applytolink_v4_missing_desc_test)
   if(NOT TARGET iccApplyToLink)
     return()
@@ -5247,6 +5371,73 @@ if(TARGET iccBenchApply)
     ENVIRONMENT "ICCDEV_BENCH_SOURCE_ROOT=${CMAKE_CURRENT_BINARY_DIR}/bench-empty-root;ICCDEV_BENCH_BUILD_ROOT=${CMAKE_CURRENT_BINARY_DIR}/bench-empty-root"
   )
 
+  # #2268: the sign column, on the tool that documents itself as decoding the
+  # same way iccApplyToLink does.
+  #
+  # DecodeIntent() takes abs() on the transform-type digit and not on the intent
+  # digit, so "-10" resolved exactly like "10" and ran a full benchmark. "-3" was
+  # refused, which is what made the gap look covered. The guard sits inside
+  # DecodeIntent() rather than at the caller so the built-in -suite table is held
+  # to the same rule as the command line; the table itself carries only :1 and :3
+  # today, so nothing there changes.
+  #
+  # Paired with iccdev.applytolink-negative-intent-code below: the two tools must
+  # answer one code the same way, which is the equivalence DecodeIntent()'s own
+  # comment claims. -pixels/-repeats are pinned low because the positive control
+  # measures for real, and the two negative cases exit before a profile is opened.
+  add_test(
+    NAME iccdev.bench-apply-negative-intent-code
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;1;Testing/sRGB_v4_ICC_preference.icc;-10"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=a negative intent code is not a valid form"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-negative-intent-code PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;issue-2268;regression"
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+
+  # Positive control for the guard above: same command line, sign removed. Without
+  # it a DecodeIntent() that returned false unconditionally would pass the
+  # negative test and prove nothing.
+  add_test(
+    NAME iccdev.bench-apply-valid-intent-code
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;1;Testing/sRGB_v4_ICC_preference.icc;10"
+      "-DEXPECT_EXIT=zero"
+      "-DEXPECT_MATCH=chain: 1 profile"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-valid-intent-code PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;issue-2268;regression"
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+
+  # Same reason as the iccApplyToLink twin: "10" alone cannot tell a correct
+  # guard from one mis-written as "nEncoded < 0 || nEncoded >= 100".
+  add_test(
+    NAME iccdev.bench-apply-valid-intent-code-typed
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;1;Testing/sRGB_v4_ICC_preference.icc;110"
+      "-DEXPECT_EXIT=zero"
+      "-DEXPECT_MATCH=chain: 1 profile"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-valid-intent-code-typed PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;issue-2268;regression"
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+
   if(WIN32)
     set(_bench_windows_env_mods
       "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccBenchApply>"
@@ -5264,7 +5455,10 @@ if(TARGET iccBenchApply)
       iccdev.bench-apply-arity-floor
       iccdev.bench-apply-suite-rejects-chain
       iccdev.bench-apply-suite-rejects-perxform
-      iccdev.bench-apply-empty-suite)
+      iccdev.bench-apply-empty-suite
+      iccdev.bench-apply-negative-intent-code
+      iccdev.bench-apply-valid-intent-code
+      iccdev.bench-apply-valid-intent-code-typed)
     if(TARGET iccFromXml)
       list(APPEND _bench_env_mod_tests
         iccdev.apply-throughput
@@ -5747,6 +5941,7 @@ if(WIN32)
   iccdev_add_iccprofileplot_pdf_leak_test()
   iccdev_add_iccprofileplot_exitcode_test()
   iccdev_add_applytolink_invalid_arg_test()
+  iccdev_add_applytolink_negative_intent_tests()
   iccdev_add_applytolink_v4_missing_desc_test()
   iccdev_add_prmg_hue_normalization_test()
   iccdev_add_qa_evidence_helpers_test()
@@ -5773,6 +5968,7 @@ endif()
 # iccApplyToLink binary as the v4_missing_desc sibling directly below, which has always
 # been called from both places.
 iccdev_add_applytolink_invalid_arg_test()
+iccdev_add_applytolink_negative_intent_tests()
 iccdev_add_applytolink_v4_missing_desc_test()
 
 set(ICCDEV_TIMEOUT_COMPAT_DIR "")

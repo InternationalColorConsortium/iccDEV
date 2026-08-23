@@ -1050,6 +1050,20 @@ int main(int argc, icChar* argv[])
         releasePccList(pccList);
         return 1;
       }
+      // A negative code is not a documented form, but it was accepted whenever
+      // the units digit was zero: nType below takes abs() while the intent digit
+      // does not, and -110 % 10 is 0, so "-110" decoded exactly like "110" and
+      // wrote a byte-identical device link.  The range test further down cannot
+      // see it -- by the time it runs the value has already lost the sign, which
+      // is why only "-3" and other non-zero units digits were ever refused.
+      // Same gap and same remedy as CIccCfgProfileSequence::fromArgs()
+      // (IccCmmConfig.cpp, #2190); refused here so the two tools agree (#2268).
+      if (nIntent < 0) {
+        printf("Invalid rendering intent '%s': a negative intent code is not a"
+               " valid form\n", argv[nCount+1]);
+        releasePccList(pccList);
+        return 1;
+      }
       bUseSubProfile = (nIntent / 1000) > 0;
       nIntent = nIntent % 1000;
       nLuminance = nIntent / 100;
@@ -1073,7 +1087,14 @@ int main(int argc, icChar* argv[])
         break;
       }
       
-      if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric) {
+      // Only the upper bound is testable here.  nIntent is "value % 10" of a
+      // value the guard above has already refused if negative, so it is 0..9 --
+      // icPerceptual is 0, and a "nIntent < icPerceptual" term would be
+      // constantly false.  That is the same dead comparison CodeQL raised as
+      // #2357/#2358/#2359 against IccCmmConfig.cpp once #2261 added the sign
+      // guard there, removed in #2267; adding the guard here without removing
+      // this term would file the alert a second time (#2268).
+      if (nIntent > (int)icAbsoluteColorimetric) {
         printf("Invalid rendering intent '%s': decoded intent is out of range\n", argv[nCount+1]);
         releasePccList(pccList);
         return 1;
@@ -1110,7 +1131,11 @@ int main(int argc, icChar* argv[])
 
       //Read profile from path and add it to theCmm
       CIccProfile* pXformProfile = ReadIccProfile(argv[nCount], bUseSubProfile); //We need all tags in profile for providing information to link
-      stat = theCmm.AddXform(pXformProfile, nIntent<0 ? icUnknownIntent : (icRenderingIntent)nIntent, nInterp, pPccProfile,
+      // No negative test here: nIntent reached this point through the sign guard
+      // and the range check above, so it is 0..3 and the icUnknownIntent arm
+      // this used to carry could never be taken.  Kept as a plain cast rather
+      // than a dead ternary for the reason given at the range check (#2268).
+      stat = theCmm.AddXform(pXformProfile, (icRenderingIntent)nIntent, nInterp, pPccProfile,
                               (icXformLutType)nType, bUseD2BxB2DxTags, &Hint);
       if (stat) {
         // AddXform can fail for reasons that have nothing to do with the

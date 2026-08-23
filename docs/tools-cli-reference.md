@@ -123,6 +123,23 @@ injects the HToS transform whenever the tag is present, regardless of the flag.
 It is accepted and round-trips through the JSON config, but selects nothing
 (#2190).
 
+`iccApplyToLink` and `iccBenchApply` do not reach that shared parser. Each
+carries its own decode of a smaller set of columns, and the weights differ by a
+decade: in `iccApplyToLink` the tens digit is the transform-lookup type, `+100`
+is luminance matching and `+1000` selects the V5 sub-profile.
+
+The non-negative rule above holds in all three decodes, but it reached the two
+tools separately (#2268) -- before that a negative code whose units digit was
+zero, such as `-10`, was accepted by them and produced the same output as its
+positive twin.
+
+The sign rule is the only column the two tools are known to share. `iccBenchApply`
+discards the hundreds column rather than reading it as a luminance request, and
+passes a tens digit of `4` straight through as `icXformLutBPC` instead of mapping
+it to a black-point-compensation hint -- so `iccBenchApply <profile> 40` fails with
+`Invalid Look-Up Table type` where `iccApplyToLink <profile> 40` succeeds. See
+[`Tools/CmdLine/IccBenchApply/Readme.md`](../Tools/CmdLine/IccBenchApply/Readme.md).
+
 The over-black / over-gray flags only affect chains that include a v5
 NamedColor profile. JSON callers prefer the `transform` field values,
 which combine an output-side stem (`named` / `namedColorimetric` /

@@ -16,9 +16,22 @@ iccBenchApply {options} interpolation {profile_path rendering_intent {-PCC pcc_p
 ```
 
 `interpolation` is `0` for linear or `1` for tetrahedral. `rendering_intent`
-takes `0..3` plus the `+1000` / `+10000` modifiers, decoded exactly as
-`iccApplyToLink` decodes them, so a chain given to either tool resolves the same
-way.
+takes `0..3` plus the `+1000` / `+10000` modifiers, and a negative code is
+rejected here exactly as `iccApplyToLink` rejects it — the column arithmetic
+drops the sign, so `-10` used to resolve as `10` in both tools (#2268).
+
+The decode is **not** otherwise identical to `iccApplyToLink`'s, despite what
+this file said before #2268. Two columns diverge, so a chain given to the two
+tools does not always resolve the same way:
+
+| column | `iccApplyToLink` | `iccBenchApply` |
+|---|---|---|
+| `+100` | read as a luminance-matching request (`CIccLuminanceMatchingHint`) | discarded — the hundreds column is never read |
+| tens digit `4` | mapped to lookup type `0` plus a black-point-compensation hint | passed through as `icXformLutBPC`, which `AddXform` refuses with `Invalid Look-Up Table type` |
+
+So `iccBenchApply … profile.icc 40` fails where `iccApplyToLink … profile.icc 40`
+succeeds. Use this tool to time the plain intent and sub-profile columns; it
+cannot currently time a BPC or luminance-matched chain.
 
 | option | effect |
 |---|---|

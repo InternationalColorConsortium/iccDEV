@@ -28,6 +28,7 @@ Key arguments:
 | `option` with `link_type=1` | Digits of precision for `.cube` output, from `0` through `20`. |
 | `first_transform` | `0` uses the destination transform from the first profile; `1` uses the source transform from the first profile. |
 | `interp` | `0` linear interpolation; `1` tetrahedral interpolation. |
+| `rendering_intent` | Base intent `0`-`3` plus decimal-coded modifiers, read as independent columns: the tens digit is the transform-lookup type (`icXformLutType`, reachable values `0`-`9`; `+10` drops the D2Bx/B2Dx tags and `+40` adds black-point compensation), `+100` requests luminance matching, and `+1000` uses a V5 sub-profile if present. A negative code is rejected (#2268). |
 
 For a CMYK output profile to RGB color-space profile chain, use the first
 profile as a source transform and write a DeviceLink profile:
