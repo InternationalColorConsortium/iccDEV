@@ -15,17 +15,24 @@ browser assessment surface.
 
 1. Confirm the worktree and build identify the target commit.
 2. Read `Tools/Winnt/IccIisIsapi/isapi-instructions.md` and `api.md`.
-3. Build the complete `install` target, not only the IIS DLL.
-4. Run `iccIisIsapiSmoke.exe`.
-5. Install an isolated IIS site with `Install-IccIisIsapiSite.ps1`.
-6. Run `Test-IccIisIsapiEndpoints.ps1`.
-7. In a browser, exercise summary, health, XML, profile upload, PAWG report
+3. Use PowerShell 7 or later (`pwsh`) for stress validation.
+4. Build the complete `install` target, not only the IIS DLL.
+5. Export the site package, then import it with
+   `Import-IccIisIsapiSite.ps1`. Verify package contents in clean staging
+   before deployment; missing web files or wrapped executables, including
+   `iccPawgReport.exe`, must fail without modifying the destination.
+6. Repeat the incomplete-package check against a destination containing stale
+   tools to prove stale files cannot satisfy validation.
+7. Run `iccIisIsapiSmoke.exe`.
+8. Install an isolated IIS site with `Install-IccIisIsapiSite.ps1`.
+9. Run `Test-IccIisIsapiEndpoints.ps1`.
+10. In a browser, exercise summary, health, XML, profile upload, PAWG report
    display, report download, and workspace navigation.
-8. Inspect browser console and network errors.
-9. Verify invalid input kinds return HTTP 400, oversized bodies are rejected,
+11. Inspect browser console and network errors.
+12. Verify invalid input kinds return HTTP 400, oversized bodies are rejected,
    unsafe filenames are forced to `.icc`/`.xml`, and unsupported methods
    return 405.
-10. Verify missing request headers return 403, wrong media types return 415,
+13. Verify missing request headers return 403, wrong media types return 415,
     cross-site requests return 403, XML `DOCTYPE` returns 400, workspace IDs
     contain 128 cryptographically random bits, the workspace root returns 403
     or 404, artifact links do not duplicate paths, static responses
@@ -35,7 +42,8 @@ browser assessment surface.
     leak HTTP.sys product headers, and tool output exposes neither absolute
     paths nor child-process command lines. Include encoded slash and backslash
     probes and reject reflection of attacker-controlled path text.
-11. Remove the temporary IIS site and app pool.
+14. Run `Stress-IccIisIsapi.ps1` with `pwsh`, then remove the temporary IIS
+    site and app pool.
 
 Report endpoint status codes, tool exit classifications, report and workspace
 URLs, browser errors, and any skipped checks. Do not call exit code 1 from

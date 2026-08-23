@@ -20,26 +20,32 @@ HTTP contract, deployment scripts, or browser console.
 
 1. Read `../../../Tools/Winnt/IccIisIsapi/isapi-instructions.md` and
    `../../../Tools/Winnt/IccIisIsapi/api.md`.
-2. Configure a Windows shared-library build with IIS tools, tests, and tools
+2. Confirm PowerShell 7 or later is available as `pwsh`; the stress script uses
+   `ForEach-Object -Parallel`.
+3. Configure a Windows shared-library build with IIS tools, tests, and tools
    enabled.
-3. Build the `install` target so the site root contains every runtime library
+4. Build the `install` target so the site root contains every runtime library
    and wrapped executable.
-4. Run `iccIisIsapiSmoke.exe` against `iccIisIsapi.dll`.
-5. Install an isolated IIS site on a non-default port.
-6. Run `Test-IccIisIsapiEndpoints.ps1` with a tracked ICC profile.
-7. Open `endpoints.html` in a browser and verify:
+5. Export and import a package. Import validation must use clean staging and
+   reject missing web files or executables, including `iccPawgReport.exe`,
+   before changing the destination. Repeat with stale destination tools.
+6. Run `iccIisIsapiSmoke.exe` against `iccIisIsapi.dll`.
+7. Install an isolated IIS site on a non-default port.
+8. Run `Test-IccIisIsapiEndpoints.ps1` with a tracked ICC profile.
+9. Open `endpoints.html` in a browser and verify:
    - summary, health, and XML buttons render successful responses;
    - the profile upload form uses plain user-facing language;
    - the Profile Assessment Report is visible and downloadable;
    - workspace and artifact links open;
    - the console has no JavaScript or missing-resource errors.
-8. Test malformed input kinds, oversized uploads, unsafe filenames, and method
+10. Test malformed input kinds, oversized uploads, unsafe filenames, and method
    rejection. Also test missing `X-ICCDEV-Request`, incorrect media types,
    cross-site requests, XML `DOCTYPE`, workspace enumeration, active-content
    upload extensions, internal path disclosure, and response security headers.
    Reject CSP containing `unsafe-inline`; require blocked style attributes and
    exact SHA-256 hashes for retained inline stylesheet blocks.
-9. Remove the temporary site and app pool.
+11. Run `Stress-IccIisIsapi.ps1` with `pwsh`, then remove the temporary site
+    and app pool.
 
 ## Required behavior
 
@@ -60,6 +66,9 @@ HTTP contract, deployment scripts, or browser console.
   output.
 - Treat `iccPawgReport` exit code 1 as a completed assessment with findings,
   not a process crash.
+- Treat every packaged wrapped executable, including `iccPawgReport.exe`, as
+  required. Validate the extracted package itself, never a merged destination
+  that may contain stale tools.
 - Persist the PAWG output as `icc-pawg-report.txt`.
 - Sanitize filenames, JSON, HTML, browser links, and error messages.
 - Keep child-process arguments workspace-relative so output does not disclose
