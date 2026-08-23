@@ -5,22 +5,12 @@
 #
 # Keep this manifest narrow. New diagnostics should fail CI until a maintainer
 # either fixes the fixture/tool behavior or classifies the profile here.
+#
+# Narrow means every entry earns its place: the glob has to match a profile the
+# ubuntu-latest sweep actually produces (that is the only leg with
+# run-full-tests), and the fragment has to be text IccProfLib can emit -- the
+# classifier greps for it literally. An entry that fails either test silently
+# pre-approves its whole glob for a regression it can never match.
 calcUnderStack_*	parse-fail	Unable to parse element of type CIccMpeXmlCalculator	calculator under-stack negative profiles intentionally reject invalid stack operations
 uio-CIccCalculatorFunc-CheckUnderflowOverflow-IccMpeCalc_cpp-Line4238	parse-fail	Unable to Parse	calculator underflow/overflow fixture intentionally emits malformed unknown-element XML
 calcOverMem_*	invalid-saved	accesses illegal temporary channels	calculator over-memory negative profiles intentionally validate illegal temporary channel access
-Spec*	invalid-saved	Invalid pcs color space	iccMAX spectral fixtures round-trip with NULL PCS and missing colorimetric critical tags
-Ref*	invalid-saved	Invalid pcs color space	iccMAX spectral reference fixtures round-trip with NULL PCS diagnostics
-argbRef	invalid-saved	Invalid pcs color space	iccMAX spectral reference fixture round-trips with NULL PCS diagnostics
-srgbRef	invalid-saved	Invalid pcs color space	iccMAX spectral reference fixture round-trips with NULL PCS diagnostics
-MultSpectralRGB	invalid-saved	Invalid pcs color space	multispectral RGB fixture round-trips with NULL PCS diagnostics
-CMYK_Hybrid_Profile	invalid-saved	Media white point tag missing	hybrid spectral fixture is tracked as expected-invalid after XML reconstruction
-ElevenChanKubelkaMunk	invalid-saved	Invalid pcs color space	spectral calculator fixture round-trips with NULL PCS diagnostics
-FluorescentNamedColor	invalid-saved	Unknown color space	named-color spectral fixture round-trips with NULL PCS diagnostics
-NamedColor	invalid-saved	Unknown color space	named-color spectral fixture round-trips with NULL PCS diagnostics
-SparseMatrixNamedColor	invalid-saved	Unknown color space	named-color sparse matrix fixture round-trips with NULL PCS diagnostics
-*SelectMID	invalid-saved	Invalid PCS designator for MultiplexIdentificationClass	MCS multiplex identification fixtures are tracked negative conformance vectors
-*Select-MID	invalid-saved	Invalid PCS designator for MultiplexIdentificationClass	MCS multiplex identification fixtures are tracked negative conformance vectors
-*-Mid_Overprint	invalid-saved	Invalid PCS designator for MultiplexIdentificationClass	overprint multiplex identification fixtures are tracked negative conformance vectors
-ISO22028-Encoded*	invalid-saved	Encoding Class has non-zero Header	encoding-class fixtures preserve non-zero reserved header diagnostics
-sRgbEncoding*	invalid-saved	Encoding Class has non-zero Header	encoding-class fixtures preserve non-zero reserved header diagnostics
-LCDDisplayCat8Obs	invalid-saved	Negative Z value	display category-eight observer fixture has tracked red colorant diagnostics

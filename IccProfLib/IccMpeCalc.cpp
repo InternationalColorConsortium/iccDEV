@@ -1963,7 +1963,25 @@ void SIccCalcOp::Describe(std::string &desc, int /* nVerboseness */)
 
     case icSigRotateLeftOp:       
     case icSigRotateRightOp:
-      snprintf(buf, bufSize, "(%d,%d)", data.select.v1, data.select.v2);
+      // The formatted operand was never appended, so rotl/rotr described
+      // themselves bare no matter what they held.  Re-reading that text gives
+      // GetIndex() nothing to parse, so it applies the (1,1) defaults it then
+      // subtracts back off and both selectors land on 0 -- silently rewriting
+      // rotl(3,2) as rotl(1,1).  Exec() uses v1 as the rotate count and v2 as
+      // the offset, so that changes the transform; where the original count
+      // exceeded the stack it also erased the underflow that made the profile
+      // invalid.  Emit both selectors biased by the same one GetIndex() removes,
+      // and omit what the defaults already supply so unindexed ops are unchanged.
+      if (!data.select.v2) {
+        if (data.select.v1) {
+          snprintf(buf, bufSize, "(%d)", data.select.v1+1);
+          desc += buf;
+        }
+      }
+      else {
+        snprintf(buf, bufSize, "(%d,%d)", data.select.v1+1, data.select.v2+1);
+        desc += buf;
+      }
       break;
 
     case icSigCopyOp:             

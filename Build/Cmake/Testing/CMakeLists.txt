@@ -995,6 +995,48 @@ function(iccdev_add_pawg_q1q3_relative_intent_test)
   endif()
 endfunction()
 
+# Guards the rotl/rotr operand that SIccCalcOp::Describe dropped (#2265):
+# the icSigRotateLeftOp/icSigRotateRightOp arm formatted its selectors and then
+# broke without appending them, so the ops described themselves bare and a
+# re-read fell back on GetIndex()'s (1,1) defaults -- zeroing the rotate count
+# and offset.  An iccToXml -> iccFromXml round trip therefore rewrote the
+# transform, and erased the stack underflow that made calcUnderStack_rotl.icc
+# and _rotr.icc invalid.  The test asserts Describe(SetFunction(text)) == text.
+function(iccdev_add_mpecalc_rotate_operand_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMpeCalcRotateOperandTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/mpecalc-rotate-operand-roundtrip.cpp"
+  )
+  target_link_libraries(iccMpeCalcRotateOperandTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccMpeCalcRotateOperandTest)
+
+  add_test(
+    NAME iccdev.mpecalc-rotate-operand-roundtrip
+    COMMAND "$<TARGET_FILE:iccMpeCalcRotateOperandTest>"
+  )
+  set_tests_properties(iccdev.mpecalc-rotate-operand-roundtrip PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 25
+    LABELS "iccdev;mpe;calc;xml;regression"
+  )
+  if(WIN32)
+    set(_mpecalc_rotate_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMpeCalcRotateOperandTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _mpecalc_rotate_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.mpecalc-rotate-operand-roundtrip PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_mpecalc_rotate_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards the calc-element matrix-size integer overflow (#1447 Solve / #1448
 # Transpose): CIccOpDefTranspose/Solve::Exec computed `int nSize = r*c` with r,c
 # each up to 65536, overflowing int and slipping past the size guard into a bad
@@ -5940,6 +5982,7 @@ if(WIN32)
   iccdev_add_pawg_q1q3_relative_intent_test()
   iccdev_add_cmm_registry_allowlist_test()
   iccdev_add_mpecalc_matrix_overflow_test()
+  iccdev_add_mpecalc_rotate_operand_test()
   iccdev_add_sparsematrix_set_roundtrip_test()
   iccdev_add_cmmsearch_namedcolor_ownership_test()
   iccdev_add_xform_create_tag_ownership_test()
@@ -6284,6 +6327,7 @@ iccdev_add_tointernal_fixedint_roundtrip_test()
 iccdev_add_pawg_q1q3_relative_intent_test()
 iccdev_add_cmm_registry_allowlist_test()
 iccdev_add_mpecalc_matrix_overflow_test()
+iccdev_add_mpecalc_rotate_operand_test()
 iccdev_add_sparsematrix_set_roundtrip_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_xform_create_tag_ownership_test()
