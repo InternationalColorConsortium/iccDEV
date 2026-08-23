@@ -1,4 +1,9 @@
 @echo off
+where iccDumpProfile >nul 2>nul
+@if NOT "%ERRORLEVEL%"=="0" (
+  @echo iccDumpProfile not found
+  @exit /b 1
+)
 iccDumpProfile -v calcOverMem_tget.icc > report.txt
 @if "%ERRORLEVEL%"=="0" goto incorrect
 

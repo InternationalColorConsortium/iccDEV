@@ -8,6 +8,7 @@
 #
 # Intent: iccDEV CICD
 #################################################################################
+set -e
 
 # Auto-source path.sh if present (sets PATH and LD_LIBRARY_PATH/DYLD_LIBRARY_PATH)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

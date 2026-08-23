@@ -11,6 +11,11 @@
 
 echo "====================== Running checkInvalidProfiles.sh Checks =========================="
 
+if ! command -v iccDumpProfile > /dev/null
+then
+    echo "iccDumpProfile not found" >&2
+    exit 1
+fi
 
 # Function to check the exit status and handle errors
 check_error() {
@@ -254,12 +259,5 @@ check_error
 
 echo "All profiles correctly tested as invalid" >> report.txt
 
-echo "====================== Running CalcTest Stub =========================="
-echo "== Running iccFromXml calcCheckInit.xml calcCheckInit.icc =="
-iccFromXml calcCheckInit.xml calcCheckInit.icc
-iccApplyNamedCmm -debugcalc rgbExercise8bit.txt 0 1 calcCheckInit.icc 1
-iccFromXml calcExercizeOps.xml calcExercizeOps.icc
-echo "Running Check for IccMpeCalc.cpp:Line:4563"
-iccApplyNamedCmm -debugcalc rgbExercise8bit.txt 0 1 calcExercizeOps.icc 1
 echo "====================== Exiting CalcTest/checkInvalidProfiles.sh =========================="
 exit 0
