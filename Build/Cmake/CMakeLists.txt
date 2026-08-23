@@ -553,6 +553,9 @@ option(ICCDEV_ENABLE_AVX2
 option(ICCDEV_ENABLE_AVX512
   "Build runtime-dispatched AVX-512 CLUT interpolation on supported x86-64 toolchains"
   OFF)
+option(ICCDEV_ENABLE_PERF_MONITORING
+  "Build opt-in aggregate CLUT and threaded-CMM performance telemetry"
+  OFF)
 option(ENABLE_SANITIZERS          "Enable runtime sanitizers (ASan, UBSan, etc.)"       OFF)
 option(ENABLE_ASAN                "Enable AddressSanitizer only"                        OFF)
 option(ENABLE_FUZZING             "Enable libFuzzer harnesses (Clang only)"             OFF)

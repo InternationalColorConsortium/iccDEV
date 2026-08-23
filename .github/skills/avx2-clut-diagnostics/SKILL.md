@@ -69,10 +69,26 @@ Measure output counts 8 through 16. Windows AVX2 measurements use ClangCL;
 native MSVC remains on SSE2 because its AVX2 implementation regressed.
 Require `output_vector_match=True` for every result row.
 
+On Linux, make a separate Release monitoring build with
+`-DICCDEV_ENABLE_PERF_MONITORING=ON`. Then collect a pinned timing distribution,
+hardware counters, syscall summary, and optional FlameGraph inputs:
+
+```bash
+ICCDEV_CLUT_PROFILE_AFFINITY=0 \
+ICCDEV_CLUT_PROFILE_RUNS=21 \
+ICCDEV_CLUT_PROFILE_FLAMEGRAPH=1 \
+FLAMEGRAPH_DIR=/path/to/FlameGraph \
+./.github/scripts/iccdev-clut-profile.sh out/clut-avx2 out/clut-profile
+```
+
+The script preserves a telemetry file per measured CTest run. Do not enable
+`ICC_AVX2_CLUT_DEBUG`, coverage, or strace while comparing cycle counts.
+
 ## Handoff
 
 Provide the branch and commit, target CPU, compiler, diagnostic trace summary,
-debug and release validation results, measurement command, and any pending
+debug and release validation results, measurement command, p50/p95 timing,
+telemetry, perf, syscall, and FlameGraph artifacts, and any pending
 Windows-specific investigation.
 
 ## Reference

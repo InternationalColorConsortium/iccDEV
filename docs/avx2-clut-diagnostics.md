@@ -56,6 +56,42 @@ kernel-only benchmark: profile conversion, validation, CMM setup, and process
 startup are included. Use a diagnostic build to prove dispatch, and establish
 an isolated kernel benchmark before claiming an ISA throughput improvement.
 
+## Performance Telemetry and Profiler Capture
+
+Configure a separate release build with
+`-DICCDEV_ENABLE_PERF_MONITORING=ON` to collect aggregate, opt-in library
+telemetry. The library remains silent unless `ICC_PERF_STATS_FILE` names a
+report file. The report records CLUT calls by scalar/SSE2/AVX2/AVX-512 path,
+output-channel counts, aggregate CLUT elapsed nanoseconds, and threaded-CMM
+call, pixel, strip, and active-worker totals. Each process appends one report
+block, so a CTest run preserves its child-process telemetry in one file.
+
+On Linux, capture the focused regression in a fresh output directory:
+
+```bash
+ICCDEV_CLUT_PROFILE_AFFINITY=0 \
+ICCDEV_CLUT_PROFILE_RUNS=21 \
+ICCDEV_CLUT_PROFILE_FLAMEGRAPH=1 \
+FLAMEGRAPH_DIR=/path/to/FlameGraph \
+./.github/scripts/iccdev-clut-profile.sh out/clut-avx2 out/clut-profile
+```
+
+The report includes per-run wall/user/system time and RSS, median and p95
+elapsed time, `perf stat` counters when permitted by the host, a `strace -f -c`
+summary when available, and optional `perf.data`, folded stacks, and an SVG
+flamegraph. `perf` hardware counters may be unavailable when
+`kernel.perf_event_paranoid` disallows them; this is reported rather than
+treated as a correctness failure. Do not use `strace`, source coverage, or
+debug logging when collecting cycle or throughput comparisons.
+
+For source coverage, configure an independent
+`linux-clang-coverage` build and run the same focused CTest. Export
+`llvm-profdata` and `llvm-cov` reports separately; coverage instrumentation
+changes generated code and must never be compared with release timing data.
+On macOS, use DTrace only for scheduler/syscall evidence on hosts where policy
+permits it; use Instruments for CPU samples. On Windows, use ETW/WPA rather
+than DTrace.
+
 ### Cascade Lake Linux Validation
 
 The Linux matrix was run on an Intel Xeon Silver 4216 (Cascade Lake), which
@@ -176,6 +212,8 @@ Record the following with each optimization attempt:
 
 The reference Windows investigation is recorded in
 `avx2-clut-windows-performance.md`.
+The initial Linux profiling baseline is recorded in
+`avx2-clut-linux-performance.md`.
 
 Use `.github/prompts/avx2-clut-diagnostics.prompt.md` for one-off work and
 `.github/skills/avx2-clut-diagnostics/SKILL.md` for the repeatable workflow.

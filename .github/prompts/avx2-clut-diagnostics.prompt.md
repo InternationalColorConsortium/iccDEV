@@ -39,9 +39,15 @@ Set source breakpoints in `IccTraceAvx2ClutDispatch()` and
 8. Treat native MSVC as SSE-only unless new measurements demonstrate a
    repeatable improvement; the supported Windows AVX2 measurement compiler is
    ClangCL.
+9. On Linux, configure a separate Release build with
+   `-DICCDEV_ENABLE_PERF_MONITORING=ON`, then collect at least 21 pinned
+   samples with `.github/scripts/iccdev-clut-profile.sh`. Preserve its timing,
+   `perf stat`, syscall, and optional FlameGraph artifacts; never compare
+   coverage- or trace-instrumented results with release timings.
 
 ## Handoff
 
 Record the branch, commit, compiler, CPU model, build preset, test command,
-trace summary, benchmark command, and the bit-exact output-vector comparison
-in the handoff. See `docs/avx2-clut-diagnostics.md` for the complete checklist.
+trace summary, benchmark command, p50/p95 timing, counter artifacts, and the
+bit-exact output-vector comparison in the handoff. See
+`docs/avx2-clut-diagnostics.md` for the complete checklist.

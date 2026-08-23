@@ -2947,6 +2947,7 @@ void CIccCLUT::Interp3dTetra(icFloatNumber *destPixel, const icFloatNumber *srcP
  */
 void CIccCLUT::Interp3d(icFloatNumber *destPixel, const icFloatNumber *srcPixel) const
 {
+  ICC_PERF_CLUT_SCOPE((int)m_nOutput);
   icUInt8Number mx = m_MaxGridPoint[0];
   icUInt8Number my = m_MaxGridPoint[1];
   icUInt8Number mz = m_MaxGridPoint[2];
@@ -3025,6 +3026,7 @@ void CIccCLUT::Interp3d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
     const icUInt32Number offsets[] = {n000, n001, n010, n011,
                                       n100, n101, n110, n111};
     const icFloatNumber weights[] = {dF0, dF1, dF2, dF3, dF4, dF5, dF6, dF7};
+    ICC_PERF_CLUT_PATH(icPerfClutAvx512);
     iccCLUTInterp3dAvx512(destPixel, p, offsets, weights, (int)m_nOutput);
     return;
   }
@@ -3036,14 +3038,17 @@ void CIccCLUT::Interp3d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
                                       n100, n101, n110, n111};
     const icFloatNumber weights[] = {dF0, dF1, dF2, dF3, dF4, dF5, dF6, dF7};
     if (iccTryInterp3dAvx2(
-          destPixel, p, offsets, weights, (int)m_nOutput))
+          destPixel, p, offsets, weights, (int)m_nOutput)) {
+      ICC_PERF_CLUT_PATH(icPerfClutAvx2);
       return;
+    }
   }
 #endif
 
 #ifdef ICC_USE_SSE2
   const int nOutputLimit = (int)m_nOutput;
   if (nOutputLimit >= 4) {
+    ICC_PERF_CLUT_PATH(icPerfClutSse2);
     __m128 vF0 = _mm_set1_ps(dF0), vF1 = _mm_set1_ps(dF1);
     __m128 vF2 = _mm_set1_ps(dF2), vF3 = _mm_set1_ps(dF3);
     __m128 vF4 = _mm_set1_ps(dF4), vF5 = _mm_set1_ps(dF5);

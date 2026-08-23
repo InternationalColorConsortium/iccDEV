@@ -58,6 +58,7 @@
  */
 
 #include "IccCmmThread.h"
+#include "IccSignatureUtils.h"
 #include <algorithm>
 #include <condition_variable>
 #include <mutex>
@@ -387,6 +388,7 @@ icStatusCMM CIccApplyThreadedCmm::Apply(icFloatNumber *DstPixel, const icFloatNu
   if (!EnsureWorkers(nActive))
     return icCmmStatAllocErr;
 
+  ICC_PERF_THREADED_CMM(nPixels, nActive);
   return m_pool->Apply(m_workers, DstPixel, SrcPixel, nPixels, nActive,
                        nSrcSamples, nDstSamples);
 }

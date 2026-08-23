@@ -105,3 +105,10 @@ Release comparisons across 8-16 outputs. Windows AVX2 is a ClangCL path;
 native MSVC intentionally retains SSE2 after measured AVX2 regressions.
 Runtime AVX2 dispatch is limited to 15 outputs. Require
 `output_vector_match=True` for every benchmark row.
+
+For Linux evidence collection, configure a separate Release build with
+`ICCDEV_ENABLE_PERF_MONITORING=ON` and use
+`.github/scripts/iccdev-clut-profile.sh`. The script writes timing
+distributions, hardware-counter CSVs, syscall summaries, and optional
+FlameGraph inputs; keep profiling and source-coverage builds separate from
+release measurements.
