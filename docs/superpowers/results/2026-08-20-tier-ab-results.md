@@ -61,36 +61,61 @@ those fixtures use `curveType` with a single u8Fixed8 entry, so every call took
 the gamma path that was re-decoding `m_Curve[0]` *and* computing an `nIndex` it
 then discarded. Nothing else on this branch is individually resolvable.
 
-## A1 and A2 were not done, and must not be
+## A1 and A2 were not done, and were correct not to be here
 
-An earlier draft of this document described these as bounds "duplicated from
-`Begin()`", and justified leaving them on cost grounds: removing them needs
-`CIccCLUT::Begin()` to be able to refuse, it returns `void`, and widening it to
-`bool` means touching ten call sites of a public API for two comparisons that
-tier C showed measure nothing.
+Two drafts of this section have now been wrong in opposite directions, and the
+reason is worth recording, because both errors came from reasoning about
+reachability without measuring it.
 
-**That framing is wrong. They are not duplicates -- they are the only guard that
-works,** and removing them would open a hole rather than tidy one. The chain
-above them leaks at every step:
+The first draft called these bounds "duplicated from `Begin()`" and justified
+leaving them on cost grounds. The second called them **"the only guard that
+works"** on the strength of a chain of unchecked returns leading from
+`CIccMpeSpectralCLUT::Read` down to the interpolators.
 
-- `CIccMpeSpectralCLUT::Read` reads `m_nInputChannels` as a 16-bit value from the
-  profile and validates only `< 1`. There is no upper bound, and the value is then
-  narrowed to `icUInt8Number` when the CLUT is constructed, so a declared 17 stays
-  17 and a declared 256 becomes 0. `CIccMpeCLUT::Read` in `IccMpeBasic.cpp` does
-  bound it; the spectral path appears not to.
-- `CIccCLUT::Init` rejects `m_nInput > 16` and returns false, but six of its eight
-  call sites discard the return. Only the two lut8/lut16 read paths check it.
-- `CIccCLUT::Begin` bails with a bare `return;` on the same condition, before
-  filling `m_MaxGridPoint`, setting `m_nNodes`, or allocating `m_nOffset`, leaving
-  the object unusable with no way for any of its nine callers to know.
+The chain was real, and every link in it was described accurately. Its
+*conclusion* was not. That was established by probing the library rather than
+reading it, in the branch that fixed the underlying defect
+(`fix/clut-channel-count-validation`):
 
-So the per-pixel `if (m_nInput > 16) return;` in `InterpND`, and the matching
-`m_nOutput` guard in `Interp3dTetra`, are what actually stop a malformed CLUT
-reaching the interpolation. They are load-bearing.
+- **`m_nInput > 16` never reached a CLUT through any read path.** Both element
+  readers follow the discarded `Init()` with `pData = m_pCLUT->GetData(0); if
+  (!pData) return false;`. `Init()` returns before the `delete[]`/reallocation
+  when it refuses, the constructor had already set `m_pData` to NULL, and
+  `GetData(0)` is `&m_pData[0]`. So the dropped return was caught by accident.
+  Declared counts of 17, 255, 256 and 272 all made `Read()` return false.
+- Which means the per-pixel `if (m_nInput > 16) return;` in `InterpND` and the
+  `m_nOutput` guard in `Interp3dTetra` were **not reachable from a malformed
+  profile either**. They were neither duplicates nor load-bearing. They were
+  unreachable, and the honest reason to leave them alone was that no one had
+  established which.
+- The defect that *was* reachable is the narrowing cast's **truncation**, not its
+  overflow: a declared 257 became a one-dimensional CLUT under an element still
+  reporting 257 input channels, and 259/260/272 did the same onto 3, 4 and 16.
+- `CIccCLUT::Init` had six of **ten** call sites discarding its return, not six of
+  eight. `CIccMpeExtCLUT::Read` and `CIccCLUT::Read` check it too.
 
-They can only be retired after the read-path bound and the discarded `Init()`
-returns are fixed, and that is a correctness change that does not belong in a
-performance branch. It is being handled separately.
+The fix landed on that branch: the count is bounded before the cast in every
+parser (`Read`, `icCLutFromXml`, `icCLUTFromJson`), all ten `Init()` returns are
+acted on, `CIccCLUT::Begin()` returns `bool` and refuses a CLUT that `Init()`
+never made usable, and the MPE `Begin()` overrides check the element's declared
+count against its CLUT's dimensionality.
+
+**With that in place the per-pixel guards became retireable** -- not because they
+were duplicates, but because the invariant they were the last expression of is
+now established once, at `Begin()`, on every construction path. They have since
+been retired there, as a correctness change rather than a performance one: tier C
+measured them at nothing, and one of the two turned out to be a defect. The
+`m_nOutput > 16` test in `Interp3dTetra` was justified on the claim that "valid
+LUT profiles cap output channels at <=16", which is false -- `m_nOutput` is an
+`icUInt16Number` precisely because MPE CLUT elements need more, and every sibling
+interpolator writes `m_nOutput` values unbounded. For a legal 3-input CLUT with
+>=17 outputs it returned without writing anything at all.
+
+The lasting point for this document: A1/A2 were correctly left out of a
+performance branch, but the reasoning offered for that in both earlier drafts was
+guesswork. "This guard is load-bearing" and "this guard is redundant" are the
+same claim about reachability, and neither is knowable by reading the call chain
+alone.
 
 ## Tier B has essentially nothing to offer
 
