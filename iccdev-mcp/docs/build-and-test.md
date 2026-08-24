@@ -183,15 +183,13 @@ export ICCDEV_PROFILE_DIRS=/path/to/custom/profiles
 
 ### Docker Runtime
 
-The regression Docker image includes the Python MCP package, REST dependencies,
-iccDEV CLI tools, runtime libraries, maintainer utilities, and `Testing/`
-profiles. Use it when you want the MCP server without a local CMake tool build.
+The unified `iccdev` image includes the Python MCP package, REST dependencies,
+CLI tools, runtime libraries, maintainer utilities, and `Testing/` profiles.
+Use it when you want the MCP server without a local CMake tool build.
 
-The Docker workflow publishes branch and immutable tags from `master` and
-`ci-qa-flags`, and from the protected `ci-qa-pr-docker-testing` branch through a
-manual dispatch. It promotes the verified regression digest to `latest` only
-after all required image checks succeed. Other feature branches build and smoke
-test locally on the runner without pushing or attesting images.
+`ci-docker` publishes `latest` and an immutable SHA tag from `master`; a `v*`
+release also publishes its release tag. Branch and workflow-run tags are not
+published.
 
 ```bash
 # MCP stdio mode

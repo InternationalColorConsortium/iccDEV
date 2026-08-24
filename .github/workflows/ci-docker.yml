@@ -252,6 +252,46 @@ jobs:
           format: spdx-json
           output-file: sbom.spdx.json
 
+      - name: Measure SBOM attestation size
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
+        id: sbom-size
+        env:
+          BASH_ENV: /dev/null
+          MAX_ATTEST_BYTES: "16777216"
+          SBOM_PATH: sbom.spdx.json
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          if [ ! -f "$SBOM_PATH" ]; then
+            echo "::error::SBOM file missing: $SBOM_PATH"
+            exit 1
+          fi
+
+          sbom_bytes="$(wc -c < "$SBOM_PATH" | tr -d ' ')"
+          case "$sbom_bytes" in
+            ''|*[!0-9]*)
+              echo "::error::Invalid SBOM byte count: $sbom_bytes"
+              exit 1
+              ;;
+          esac
+
+          echo "bytes=$sbom_bytes" >> "$GITHUB_OUTPUT"  # elements-sanitized
+          if [ "$sbom_bytes" -le "$MAX_ATTEST_BYTES" ]; then
+            echo "attestable=true" >> "$GITHUB_OUTPUT"  # elements-sanitized
+          else
+            echo "attestable=false" >> "$GITHUB_OUTPUT"  # elements-sanitized
+            echo "::notice title=SBOM Attestation Skipped::SBOM is ${sbom_bytes} bytes, above ${MAX_ATTEST_BYTES}"
+          fi
+
+          {
+            echo "### SBOM Attestation Size"
+            echo "- Bytes: $(sanitize_line "$sbom_bytes")"
+            echo "- Limit: $(sanitize_line "$MAX_ATTEST_BYTES")"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
       - name: Attest build provenance
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
@@ -261,13 +301,42 @@ jobs:
           push-to-registry: true
 
       - name: Attest SBOM
-        if: ${{ env.PUBLISH_IMAGE == 'true' }}
+        if: ${{ env.PUBLISH_IMAGE == 'true' && steps.sbom-size.outputs.attestable == 'true' }}
+        id: attest-sbom
+        # Rekor's transparency-log endpoint can time out after image publication.
+        # Retrying preserves a hard failure when the service remains unavailable.
+        continue-on-error: true
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.build-push.outputs.digest }}
           sbom-path: sbom.spdx.json
           push-to-registry: true
+
+      - name: Retry SBOM attestation
+        if: ${{ steps.attest-sbom.outcome == 'failure' }}
+        id: retry-attest-sbom
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.build-push.outputs.digest }}
+          sbom-path: sbom.spdx.json
+          push-to-registry: true
+
+      - name: Require SBOM attestation
+        if: ${{ always() && steps.attest-sbom.outcome == 'failure' }}
+        env:
+          BASH_ENV: /dev/null
+          RETRY_OUTCOME: ${{ steps.retry-attest-sbom.outcome }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          if [ "$RETRY_OUTCOME" != "success" ]; then
+            echo "::error::SBOM attestation failed after retry"
+            exit 1
+          fi
 
       - name: Upload SBOM
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
