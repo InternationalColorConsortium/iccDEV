@@ -1,7 +1,7 @@
 /** @file
 File:       IccJsonTypes.h
 
-Contains:   Shared JSON type aliases.
+Contains:   Compatibility forwarding header for the JSON type aliases.
 
 Version:    V1
 
@@ -57,36 +57,13 @@ Copyright:  (c) see Software License
  *
  */
 
-#ifndef _ICCJSONTYPES_H
-#define _ICCJSONTYPES_H
+#ifndef _ICCPROFLIB_JSON_TYPES_H
+#define _ICCPROFLIB_JSON_TYPES_H
 
-#include <functional>
-#include <nlohmann/json.hpp>
-
-#ifndef ICC_JSON_ORDERED
-#include <unordered_map>
-#endif
-
-namespace iccJson {
-
-#ifdef ICC_JSON_ORDERED
-
-using json = nlohmann::ordered_json;
-
+#if __has_include("../IccJSON/IccLibJSON/IccJsonTypes.h")
+#include "../IccJSON/IccLibJSON/IccJsonTypes.h"
 #else
-
-template <class Key, class T, class IgnoredLess, class Allocator>
-struct unordered_map : public std::unordered_map<Key, T, std::hash<Key>, std::equal_to<Key>, Allocator>
-{
-  using base = std::unordered_map<Key, T, std::hash<Key>, std::equal_to<Key>, Allocator>;
-  using key_compare = IgnoredLess;
-  using base::base;
-};
-
-using json = nlohmann::basic_json<unordered_map>;
-
+#include "../IccJSON2/IccJsonTypes.h"
 #endif
-
-} // namespace iccJson
 
 #endif

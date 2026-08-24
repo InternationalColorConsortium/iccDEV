@@ -388,7 +388,7 @@ jobs:
 
           if ! validate_sha "$head_sha" || ! validate_sha "$base_sha"; then
             echo "Warning: invalid or missing PR commit SHA; assuming source changed for safety" >&2
-            write_scope_outputs true true true true false false false true true true true
+            write_scope_outputs true true true true false true false true true true true
             exit 0
           fi
 
@@ -414,7 +414,7 @@ jobs:
           # Check if merge base exists before running diff
           if ! git merge-base "origin/${base_ref}" HEAD >/dev/null 2>&1; then
             echo "Warning: no merge base found; assuming source changed for safety" >&2
-            write_scope_outputs true true true true false false false true true true true
+            write_scope_outputs true true true true false true false true true true true
             exit 0
           fi
 

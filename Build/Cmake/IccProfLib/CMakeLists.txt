@@ -151,6 +151,7 @@ SET( HEADERS_PUBLIC
   ${SRC_PATH}/IccProfLib/IccEnvVar.h
   ${SRC_PATH}/IccProfLib/IccEval.h
   ${SRC_PATH}/IccProfLib/IccIO.h
+  ${SRC_PATH}/IccProfLib/IccJsonTypes.h
   ${SRC_PATH}/IccProfLib/IccMatrixMath.h
   ${SRC_PATH}/IccProfLib/IccMpeACS.h
   ${SRC_PATH}/IccProfLib/IccMpeBasic.h

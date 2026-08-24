@@ -254,15 +254,18 @@ endif()
 # Checked before any consumer runs so that a missing header is reported as a
 # missing header rather than as a compile error three layers down.
 set(_incdir "${_prefix_config}/include/RefIccMAX/IccProfLib2")
+set(_json_incdir "${_prefix_config}/include/RefIccMAX/IccJSON2")
 set(_required_files
   "${_incdir}/IccProfile.h"
   "${_incdir}/IccUtil.h"
+  "${_incdir}/IccJsonTypes.h"
   "${_incdir}/IccProfLibConf.h"
   "${_incdir}/IccFileUtil.h"
   "${_incdir}/IccCmdLineUtil.h"
   # Generated at build time from the version + git hash (#823), so its absence
   # means the generated-header install rule regressed, not the static list.
   "${_incdir}/IccProfLibVer.h"
+  "${_json_incdir}/IccJsonTypes.h"
 )
 foreach(_required_file IN LISTS _required_files)
   if(NOT EXISTS "${_required_file}")
@@ -334,6 +337,11 @@ set(_consumer_source "\
 #include \"IccUtil.h\"\n\
 #include \"IccCmdLineUtil.h\"\n\
 #include \"IccProfileXml.h\"\n\
+#ifdef ICCDEV_INSTALLED_JSON_CONNECT\n\
+#include \"IccJsonTypes.h\"\n\
+#include \"IccProfileJson.h\"\n\
+#include \"IccConnect.h\"\n\
+#endif\n\
 \n\
 #include <cmath>\n\
 #include <cstdio>\n\
@@ -379,6 +387,21 @@ int main()\n\
     std::fprintf(stderr, \"FAIL ToXml returned false\\n\");\n\
     ++failures;\n\
   }\n\
+\n\
+\n\
+#ifdef ICCDEV_INSTALLED_JSON_CONNECT\n\
+  IccJson json = IccJson::object();\n\
+  if (!json.is_object()) {\n\
+    std::fprintf(stderr, \"FAIL IccJsonTypes\\n\");\n\
+    ++failures;\n\
+  }\n\
+  auto create_standard = &CIccConnectCmm::CreateStandard;\n\
+  if (!create_standard) {\n\
+    std::fprintf(stderr, \"FAIL CIccConnectCmm::CreateStandard\\n\");\n\
+    ++failures;\n\
+  }\n\
+\n\
+#endif\n\
 \n\
   if (failures) {\n\
     std::fprintf(stderr, \"installed-consumer: %d failure(s)\\n\", failures);\n\
@@ -578,8 +601,10 @@ endif()
 message(STATUS "ICCDEV_RESOLVED_LIB=${_loc}")
 add_executable(iccdev-installed-consumer consumer.cpp)
 target_compile_features(iccdev-installed-consumer PRIVATE cxx_std_17)
+target_compile_definitions(iccdev-installed-consumer PRIVATE ICCDEV_INSTALLED_JSON_CONNECT=1)
 target_link_libraries(iccdev-installed-consumer PRIVATE
-  RefIccMAX::IccProfLib2 RefIccMAX::IccXML2)
+  RefIccMAX::IccProfLib2 RefIccMAX::IccXML2 RefIccMAX::IccJSON2
+  RefIccMAX::IccConnect2)
 ]=])
 
 _run_consumer("CONFIG mode" "${_config_src}" "${_work_root}/build-config"
