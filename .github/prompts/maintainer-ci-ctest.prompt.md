@@ -67,7 +67,7 @@ Choose the smallest gate that proves the behavior:
 - Update `docs/regression-workflow-governance.md` for workflow process changes.
 - Update `docs/build.md` and `docs/regression-workflow-governance.md` when
   changing maintainer Dockerfiles, container dependencies, GHCR publish flow, or
-  pinned regression image digests.
+  pinned unified image digests.
 - Update `.github/skills/README.md` or a skill when the process becomes a
   repeatable maintainer workflow.
 - For registry QA workflow runs, preserve `summary.md`, `results.tsv`, and
@@ -75,10 +75,8 @@ Choose the smallest gate that proves the behavior:
   log excerpts by default; rerun with `registry_qa_log_tail_lines=0` only when
   complete raw per-tool logs are required. Preserve downloaded registry profile
   payloads in developer reports so failing inputs remain available for review.
-- On `ci-qa-pr-docker-testing`, Docker PR verification is advisory. If it fails,
-  keep the orchestrator result successful when required non-Docker gates pass,
-  add `bump-sha-pins`, update pinned action or container SHAs, and rerun Docker
-  before claiming the container lane is verified.
+- Container changes require the Docker PR verification lane. Do not claim the
+  container surface is verified until its local image build and hosted lane pass.
 - When adding cases inside an existing script-backed suite, document that the
   CTest suite count is unchanged and validate both direct script execution and
   the CTest wrapper.

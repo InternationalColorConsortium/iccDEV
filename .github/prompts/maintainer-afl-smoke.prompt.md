@@ -61,7 +61,7 @@ PRs, and `none` when comparing raw branch behavior.
 Expose CFL runtime as seconds per target, not LibFuzzer iteration or execution
 counts, so the manual UI matches AFL's duration model.
 
-The regression image packages the compiler runtime needed by its packaged
+The unified image packages the compiler runtime needed by its packaged
 AFL++ wrapper for short local smoke checks. The AFL workflow should still
 rebuild and probe AFL++ wrappers against the selected LLVM major version. Avoid
 broad AFL++ `source-only` or full LLVM builds in the smoke workflow when they
@@ -100,7 +100,7 @@ bootstrap probe documented in `docs/afl-fuzzing.md`.
 
 When changing fuzz patch stacks, the patch checker, the patch applicator, or
 `cfl/` build behavior, verify that `.github/workflows/ci-docker.yml` still
-rebuilds and tests the regression image for those paths.
+rebuilds and tests the unified image for those paths.
 
 ## Handoff
 

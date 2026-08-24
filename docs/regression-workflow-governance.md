@@ -108,9 +108,9 @@ requesting review, check the PR against this list:
 - Keep push, pull-request, reusable, and manual-dispatch validation paths
   equivalent for the changed surface. If a workflow tests a helper on push,
   the PR fast lane should test the same helper or document why it cannot.
-- Keep branch triggers and publish conditions aligned. The
-  `ci-qa-pr-docker-testing` Docker publication path is manual; do not add it to
-  a broad push trigger merely because related workflow logic names the branch.
+- Keep branch triggers and publish conditions aligned. `ci-docker` publishes
+  the canonical image only from `master` and release tags; do not add
+  branch-specific or variant image tags.
 - Keep Docker and regression-container docs reproducible from a fresh checkout
   or clean container. Fetch branch refs explicitly and avoid relying on local
   remote-tracking state, generated files, or preexisting host permissions.
@@ -133,10 +133,10 @@ requesting review, check the PR against this list:
   CI path: wrapper compile probes, patch-stack checks, dry-run patch
   application, `iccdev-fuzz-env`, and container healthcheck semantics.
 
-For every `Dockerfile*` change, compare `ci-qa-pr-docker-testing` with
-`ci-qa-flags` and carry applicable fixes to both branches. The testing branch is
-the container proving ground; `ci-qa-flags` remains a required synchronized
-maintainer branch and must be included in the hosted validation report.
+For every `Dockerfile` change, validate the one canonical image locally and
+through `ci-docker` on `master`. Keep its `latest`, immutable full-SHA, and
+release-tag behavior consistent; do not restore variant Dockerfiles or
+branch-specific image publication.
 
 Branch protection should require stable aggregate contexts, not conditional
 lane job names. `PR Summary` must aggregate orchestration prerequisites and all
@@ -153,10 +153,11 @@ workflow update.
 
 The Docker PR lane consumes the published
 `ghcr.io/internationalcolorconsortium/iccdev:latest` image as a
-maintainer-controlled build cache. It must report the resolved digest, bind the
-checked-out PR tree read-only, copy it to container-local scratch space, and
-build and run the fast CTest envelope there. Do not rebuild the regression image
-per PR; image rebuilds and publishing belong to `ci-docker`.
+maintainer-controlled build cache. It must pull and report the resolved digest,
+then rebuild the checked-out PR Dockerfile with that image as `--cache-from`.
+The resulting image is local to the job: it must bind the checked-out PR tree
+read-only, copy it to container-local scratch space, and build and run the fast
+CTest envelope there. Only `ci-docker` publishes images.
 
 Local review should include YAML parsing, `actionlint`, `yamllint`, direct
 `${{ }}` interpolation scans for `run:` blocks, Dockerfile base/remote-exec

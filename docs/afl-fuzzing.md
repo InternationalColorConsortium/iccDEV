@@ -36,7 +36,7 @@ development headers when the published image does not already contain them,
 puts the freshly built AFL++ checkout first in `PATH`, and builds iccDEV with
 `afl-clang-fast`.
 
-The regression image keeps the packaged `afl-clang-fast` wrapper usable for
+The unified image keeps the packaged `afl-clang-fast` wrapper usable for
 short local smoke checks by installing its matching compiler runtime. For CI,
 use the rebuilt wrapper path and explicitly probe it against the same LLVM
 major version as `clang-22`. Known-good AFL wrapper checks compile both C and
@@ -182,7 +182,7 @@ cmake --build build-clang-normal --target iccApplyNamedCmm -j"$(nproc)"
 ```
 
 For Docker parity with CI, mount the checkout and run the same smoke checks in
-the regression image:
+the unified image:
 
 ```bash
 docker run --rm -v "$PWD":/work -w /work \
@@ -206,7 +206,7 @@ target, and replay a representative input. Keep the removal only when the report
 does not return or when the returned report now has a project-owned fix.
 
 Local container bootstrap check, useful before changing the workflow or the
-regression image:
+unified image:
 
 ```bash
 docker run --rm --user 0 ghcr.io/internationalcolorconsortium/iccdev:latest bash -lc '

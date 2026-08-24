@@ -66,8 +66,8 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
   them.
 - Keep CI AFL++ tooling sourced from
   `https://github.com/AFLplusplus/AFLplusplus/tree/dev` and rebuilt against
-  the regression container's Clang/LLVM major version.
-- The regression image packages the compiler runtime needed by its packaged
+  the unified image's Clang/LLVM major version.
+- The unified image packages the compiler runtime needed by its packaged
   `afl-clang-fast` for short local smoke checks. The AFL workflow must still
   rebuild and probe AFL++ wrappers against the selected LLVM version.
 - Keep the workflow bootstrap narrow: build `afl-fuzz`, `afl-showmap`,

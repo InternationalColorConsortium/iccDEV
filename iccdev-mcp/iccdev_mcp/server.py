@@ -21,9 +21,14 @@ from pathlib import Path
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.server import Settings as FastMCPSettings
 
 from iccdev_mcp import __version__, cli_tools
 from iccdev_mcp.profiles import list_profiles, resolve_profile_path
+
+# MCP 1.x's generic lifespan annotation needs resolution before pydantic-settings
+# reads environment sources on Python 3.14.
+FastMCPSettings.model_rebuild()
 
 mcp = FastMCP(
     "iccdev-mcp",

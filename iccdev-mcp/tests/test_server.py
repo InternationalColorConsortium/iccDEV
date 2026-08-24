@@ -181,6 +181,13 @@ class TestServerImport:
         assert mcp is not None
         assert callable(main)
 
+    def test_fastmcp_settings_are_resolved(self):
+        from iccdev_mcp.server import mcp
+        from mcp.server.fastmcp.server import Settings as FastMCPSettings
+
+        assert mcp is not None
+        assert FastMCPSettings.__pydantic_complete__
+
     def test_server_has_tools(self):
         from iccdev_mcp import __version__
         from iccdev_mcp.server import mcp
