@@ -13,6 +13,7 @@ shares one source of truth. Update rules here, not in the mirrors.
 
 - Check `git --no-pager status --short --branch` before edits.
 - Prefer focused changes with exact repros and regression coverage.
+- Keep documentation links Doxygen-safe: if a Markdown link points outside the Doxygen INPUT tree, use an explicit HTML anchor instead of a Markdown reference so generated docs stay warning-free.
 - Use 2-space C++ indentation, K&R braces, `m_` members, and return-value errors.
 - Exit 1-127 is graceful failure. Exit 128+ is signal termination.
 - Use sanitizer builds for bug hunting; see `.github/instructions/build-system.instructions.md`.

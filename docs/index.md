@@ -11,7 +11,7 @@ working with ICC.1 and ICC.2/iccMAX color profiles.
 - [Python packaging release](python-packaging-release.md): Python PR, merge, and production PyPI release steps
 - [CTest tool suites](ctest.md): local CTest commands, registered suites, and add-test process
 - [C validation API](c-api-validation.md): C-only in-memory profile validation and runtime loading
-- [C validation example](../examples/c-validation-dlopen/README.md): C99 `dlopen` consumer and expected output
+- <a href="../examples/c-validation-dlopen/README.md">C validation example</a>: C99 `dlopen` consumer and expected output
 - [CLI tool reference](tools-cli-reference.md): command-line tool summary and shared options
 - [IccJSON guide](iccjson.md): JSON conversion workflow
 - [ICC JSON tag reference](iccjson-tag-types.md): detailed JSON tag examples

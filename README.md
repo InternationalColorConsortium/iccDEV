@@ -15,7 +15,7 @@ API docs:
 [API reference](Tools/Winnt/IccIisIsapi/api.md) ·
 [OpenAPI starter](Tools/Winnt/IccIisIsapi/iis-isapi.openapi.yaml) ·
 [C validation API](docs/c-api-validation.md) ·
-[Python bindings](python/README.md) ·
+<a href="python/README.md">Python bindings</a> ·
 [CLI tool reference](docs/tools-cli-reference.md) ·
 [iccApply visual lanes](docs/iccapply/README.md)
 

@@ -54,6 +54,11 @@ point to deeper references.
 - Remove duplicate explanations after preserving any unique details.
 - Keep prompts operational; move long reference material into a named reference
   file when it is reused by templates or prompts.
+- Keep Doxygen-friendly Markdown links within the documented INPUT tree. When a
+  reference points outside Doxygen's scanned sources (for example a repo-root
+  `python/README.md` or an `examples/.../README.md` page), prefer an explicit
+  HTML anchor like `<a href="../python/README.md">python/README.md</a>` to keep
+  the generated docs warning-free without changing the rendered link target.
 - Do not add generated artifacts, logs, crash files, or local environment paths.
 - Follow `.gitattributes`: use LF for documentation, prompts, skills, MATLAB,
   CMake, YAML/JSON, Dockerfiles, and Unix scripts; preserve CRLF for

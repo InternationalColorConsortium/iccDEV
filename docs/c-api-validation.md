@@ -57,7 +57,8 @@ print(result.report or "none")
 ```
 
 Use `validate_profile(bytes)` for an in-memory buffer. See
-[`python/README.md`](../python/README.md) for installation and package testing.
+<a href="../python/README.md"><code>python/README.md</code></a> for installation
+and package testing.
 
 ## Example and Review
 

@@ -27,8 +27,12 @@ documentation for accuracy.
    `repo\msvc` build root, MATLAB `setenv`, real `Testing/...` smoke profiles,
    and the PAWG tool, native contract target, and staged support-file list.
 5. Replace repeated detail with links to canonical sources.
-6. Delete duplicate files only after moving unique content elsewhere.
-7. Run whitespace, local-link, ASCII, line-ending, and stale-reference checks.
+6. Keep Doxygen-friendly links within the scanned INPUT tree; for repo-root or
+   example links that do not exist under Doxygen's configured input, use an
+   explicit HTML anchor (`<a href="...">...`) instead of a Markdown link that
+   triggers warning-only docs failures.
+7. Delete duplicate files only after moving unique content elsewhere.
+8. Run whitespace, local-link, ASCII, line-ending, and stale-reference checks.
    Require LF for documentation, prompts, skills, MATLAB, CMake, YAML/JSON,
    Dockerfiles, and Unix scripts; preserve CRLF for `.ps1`, `.bat`, and `.cmd`.
 
