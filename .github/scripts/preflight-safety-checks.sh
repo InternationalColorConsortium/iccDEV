@@ -105,10 +105,15 @@ run_workflow_cache_policy() {
 }
 
 run_workflow_bash_prologue_policy() {
-  python3 .github/scripts/check-workflow-bash-prologue.py \
-    --changed \
-    --base "$base_ref" \
-    "${workflow_files[@]}"
+  if [ "$base_ref_available" -eq 1 ]; then
+    python3 .github/scripts/check-workflow-bash-prologue.py \
+      --changed \
+      --base "$base_ref" \
+      "${workflow_files[@]}"
+  else
+    python3 .github/scripts/check-workflow-bash-prologue.py \
+      "${workflow_files[@]}"
+  fi
 }
 
 workflow_trigger_names() {
@@ -942,6 +947,7 @@ docker_files=()
 changed_files=()
 deleted_workflow_files=()
 base_ref="${PREFLIGHT_BASE_REF:-origin/master}"
+base_ref_available=0
 scan_paths=(.github .githooks Dockerfile 'Dockerfile.*' .dockerignore)
 if [ "$FAST_SCOPE" = "matlab" ]; then
   scan_paths=(
@@ -950,6 +956,7 @@ if [ "$FAST_SCOPE" = "matlab" ]; then
   )
 fi
 if git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
+  base_ref_available=1
   while IFS= read -r file; do
     changed_files+=("$file")
   done < <(git diff --name-only --diff-filter=ACMRT "$base_ref"...HEAD -- \
@@ -998,8 +1005,13 @@ while IFS= read -r file; do
 done < <(printf '%s\n' "${changed_files[@]}" | awk 'NF && !seen[$0]++')
 
 if [ "$FAST_LANE" -eq 1 ]; then
-  if [ "${#deleted_workflow_files[@]}" -gt 0 ]; then
-    echo "[WARN] Workflow deletion detected; scanning all remaining workflows" >&2
+  if [ "${#deleted_workflow_files[@]}" -gt 0 ] ||
+    { [ "$FAST_SCOPE" = "matlab" ] && [ "$base_ref_available" -eq 0 ]; }; then
+    if [ "${#deleted_workflow_files[@]}" -gt 0 ]; then
+      echo "[WARN] Workflow deletion detected; scanning all remaining workflows" >&2
+    else
+      echo "[WARN] Workflow base is unavailable; scanning all remaining workflows" >&2
+    fi
     while IFS= read -r file; do
       workflow_files+=("$file")
     done < <(
