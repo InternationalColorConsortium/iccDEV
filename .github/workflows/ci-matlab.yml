@@ -206,7 +206,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      ICCDEV_IMAGE: ghcr.io/internationalcolorconsortium/iccdev@sha256:2f4230308320b60106c2675b2c50aa7c22e0b50fe56045080ce480c6232b2672
+      ICCDEV_IMAGE_REPOSITORY: ghcr.io/internationalcolorconsortium/iccdev
+      ICCDEV_IMAGE_DIGEST: sha256:2f4230308320b60106c2675b2c50aa7c22e0b50fe56045080ce480c6232b2672
 
     steps:
       - name: Checkout repository
@@ -240,7 +241,7 @@ jobs:
           unset GITHUB_TOKEN || true
           source .trusted-helpers/.github/scripts/sanitize-sed.sh
 
-          docker pull "${ICCDEV_IMAGE}"
+          docker pull "${ICCDEV_IMAGE_REPOSITORY}@${ICCDEV_IMAGE_DIGEST}"
 
       - name: Validate published container from MATLAB
         # matlab-actions/run-command v3
@@ -248,5 +249,5 @@ jobs:
         with:
           command: >-
             addpath('matlab');
-            run_docker_qa(getenv('ICCDEV_IMAGE'))
+            run_docker_qa(strcat(getenv('ICCDEV_IMAGE_REPOSITORY'), '@', getenv('ICCDEV_IMAGE_DIGEST')))
           generate-summary: false

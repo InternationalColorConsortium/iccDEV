@@ -17,11 +17,13 @@ condition, impact, and smallest safe remediation. Read `AGENTS.md`,
 `.github/copilot-instructions.md`, matching path instructions, and
 `.github/skills/code-review/SKILL.md` before reviewing.
 
-Use one full initial review, one focused fix pass, and one final review. Both
-reviews must cover the complete PR surface, including every touched file and
-the cumulative diff; do not review incremental slices. The final review should
-conclude the lifecycle, so a third review is not expected unless a maintainer
-explicitly requests one. Prefer no comment to low-value review volume.
+Review only a frozen head that has passed
+`docs/governance/UPSTREAM_PR_READINESS.md`. Review the complete PR surface and
+cumulative diff, not incremental slices. A request for changes returns the
+branch to branch-only grooming; re-review only after the readiness evidence is
+renewed. If a re-review finds an issue in unchanged code, stop serial automated
+review and require maintainer direction. Prefer no comment to low-value review
+volume.
 
 ## 4-Category Hunt
 

@@ -31,7 +31,11 @@ updating, or merging an iccDEV PR.
    - CTest, sanitizer, CLI smoke, Docker runtime/image scan or healthcheck,
      WASM parity, release assets, or vcpkg consumer smoke as appropriate.
 5. Fix confirmed findings and repeat only affected checks.
-6. Prepare a golfed handoff with commands, run IDs, sentinels, and known skips.
+6. Freeze the head and record the readiness evidence required by
+   `docs/governance/UPSTREAM_PR_READINESS.md` before requesting review. If a
+   re-review finds an issue in unchanged code, stop serial automated review and
+   return to branch-only grooming.
+7. Prepare a golfed handoff with commands, run IDs, sentinels, and known skips.
 
 ## Handoff Format
 

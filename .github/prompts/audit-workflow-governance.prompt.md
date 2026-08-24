@@ -9,17 +9,12 @@ scanner noise with a rationale.
 
 ## Review Convergence
 
-For maintainer-owned infrastructure review, use one full initial review, one
-focused fix pass, and one final review:
-
-1. Initial review: inventory the complete PR and review every touched file.
-2. Fix pass: address the initial findings without unrelated scope growth.
-3. Final review: review the complete PR surface again, including the cumulative
-   diff and fix pass, then conclude with `Ok to Merge` or
-   `Please Request Maintainer Review`.
-
-Do not use incremental review slices. The final review should conclude the
-lifecycle, so a third review is not expected unless a maintainer requests one.
+Review only a frozen head that passes
+`docs/governance/UPSTREAM_PR_READINESS.md`. Review the complete PR and
+cumulative diff, not incremental slices. A requested change returns the branch
+to branch-only grooming; renew the readiness evidence before a complete
+re-review. If a re-review finds an issue in unchanged code, stop serial
+automated review and require maintainer direction.
 
 ## Audit Checklist
 

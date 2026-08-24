@@ -86,6 +86,10 @@ use `.github/skills/regression-container-maintainer/SKILL.md` and
   `docs/pre-pr-security-cycle.md`,
   `.github/skills/pre-pr-security-cycle/SKILL.md`, and
   `.github/prompts/pre-pr-security-cycle.prompt.md`.
+- Before creating, reopening, or requesting review on a PR, satisfy
+  `docs/governance/UPSTREAM_PR_READINESS.md` and use
+  `.github/skills/upstream-pr-readiness/SKILL.md`. A branch push, CI request,
+  or review request is not PR-creation authorization.
 - Run the smallest complete validation for the changed surface. For workflow,
   Docker, release, CMake, parser, or security automation changes, follow the
   additional checks required by the path-specific instructions and pre-PR
@@ -99,9 +103,10 @@ use `.github/skills/regression-container-maintainer/SKILL.md` and
 
 ## Stacked PRs and Fast Lane
 
-When related work will create multiple PRs in a rolling 24-hour period, prefer
-one linear `gh stack` stack over independent PRs. Keep one reviewable concern
-per layer and use separate stacks for unrelated work.
+Use a stacked PR only when a maintainer explicitly requests one. A single
+independent PR is the default because stack rebases multiply CI and review
+churn. Keep one reviewable concern per layer and use separate stacks for
+unrelated work.
 
 - Before stack work, update the local extension with
   `gh extension upgrade gh-stack`; use the locally installed `gh-stack` agent
@@ -135,6 +140,10 @@ agent-policy surfaces.
 - Review each head SHA once. For a later PR update, review only the changed
   delta and do not re-post prior findings, summaries, or resolved concerns
   unless the update reintroduces the defect.
+- Request review only after the head is frozen and the readiness evidence is
+  current. If a re-review finds a missed issue in unchanged code, stop serial
+  automated review and return the branch to grooming until a maintainer directs
+  the next step.
 - Conserve maintainer attention: prioritize a small set of high-confidence,
   actionable findings over exhaustive comment volume. No comment is better
   than a low-value concern.
@@ -201,6 +210,7 @@ Key safety rules:
 | AVX2 CLUT diagnostics | `.github/prompts/avx2-clut-diagnostics.prompt.md` |
 | IIS ISAPI endpoint QA | `.github/prompts/iis-isapi-qa.prompt.md` |
 | Version bump | `.github/prompts/version-bump.prompt.md` |
+| Upstream PR readiness | `.github/prompts/upstream-pr-readiness.prompt.md` |
 
 ## Skills
 
@@ -218,6 +228,7 @@ Key safety rules:
 | Pre-PR security cycle | `.github/skills/pre-pr-security-cycle/SKILL.md` |
 | Focused pull request review | `.github/skills/code-review/SKILL.md` |
 | Stacked PR and fast-lane workflow | `.github/skills/stacked-pr-fast-lane/SKILL.md` |
+| Upstream PR readiness | `.github/skills/upstream-pr-readiness/SKILL.md` |
 | Maintainer label system | `.github/skills/maintainer-label-system/SKILL.md` |
 | vcpkg exported-consumer debug | `.github/skills/vcpkg-export-consumer-debug/SKILL.md` |
 | Version bump | `.github/skills/version-bump/SKILL.md` |

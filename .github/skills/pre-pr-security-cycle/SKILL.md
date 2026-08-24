@@ -41,7 +41,9 @@ security automation.
    surface.
 5. Fix confirmed findings.
 6. Repeat only the checks affected by the fix.
-7. Prepare a concise handoff.
+7. Freeze the head and record the evidence in
+   `docs/governance/UPSTREAM_PR_READINESS.md` before requesting review.
+8. Prepare a concise handoff.
 
 ## SAST Selection
 
@@ -105,6 +107,7 @@ Prefer a short human-golfed report over raw logs.
 - `../../../docs/ctest.md`
 - `../../../docs/codeql.md`
 - `../../../docs/regression-workflow-governance.md`
+- `../../../docs/governance/UPSTREAM_PR_READINESS.md`
 - `../../prompts/pre-pr-security-cycle.prompt.md`
 - `../../prompts/audit-workflow-governance.prompt.md`
 - `../../prompts/build-and-test.prompt.md`

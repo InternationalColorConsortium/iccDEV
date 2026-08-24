@@ -29,10 +29,12 @@ the smallest useful evidence.
      packaging changes.
 5. Fix every confirmed issue and repeat the relevant checks until the same
    command set is clean.
-6. Run the repeat-review avoidance checklist for the changed surface, then use
-   one full initial review, one focused fix pass, and one final full-PR review.
-   Do not split review into incremental slices or expect a third review.
-   See `docs/regression-workflow-governance.md` ("Recent maintainer PRs...") for the canonical checklist.
+6. Freeze the head, record the readiness evidence in
+   `docs/governance/UPSTREAM_PR_READINESS.md`, and request one complete review
+   of the cumulative diff. Resolve requested changes branch-only and renew the
+   evidence before a complete re-review. If that re-review finds an issue in
+   unchanged code, stop serial automated review and return to branch-only
+   grooming until a maintainer directs otherwise.
 7. Produce a golfed handoff: branch, commit, changed surface, command results,
    hosted run IDs, known skips or deferred items, and merge-readiness signal.
 

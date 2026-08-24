@@ -90,20 +90,13 @@ scanner noise with a clear rationale.
 ## Pull Request Review Convergence
 
 Maintainer-owned infrastructure reviews must converge instead of repeatedly
-expanding scope. Use one full initial review, one focused fix pass, and one
-final review unless a maintainer explicitly requests more review:
-
-1. Initial review: inventory the complete pull request and review every touched
-   file. This is the broadest review.
-2. Fix pass: address the initial findings without unrelated scope growth unless
-   a fix itself requires it.
-3. Final review: review the complete PR surface again, including the cumulative
-   diff and fix pass, then conclude with `Ok to Merge` or
-   `Please Request Maintainer Review`.
-
-Do not split either review into incremental slices. The final review should
-conclude the lifecycle, so a third review is not expected unless a maintainer
-explicitly requests one.
+expanding scope. Before requesting review, freeze the head and pass the
+readiness gate in `docs/governance/UPSTREAM_PR_READINESS.md`. Review the
+complete pull request and cumulative diff, not incremental slices. A requested
+change returns the branch to branch-only grooming: repair the findings, renew
+the readiness evidence, then request one complete re-review when a maintainer
+needs it. If that re-review identifies a missed issue in unchanged code, stop
+serial automated review and require maintainer direction before continuing.
 
 Recent maintainer PRs show the same avoidable review findings recurring. Before
 requesting review, check the PR against this list:
