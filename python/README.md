@@ -6,6 +6,7 @@ ICC color profile library, built with [Cython](https://cython.org/).
 ## Features
 
 - **Read ICC profiles** - open and inspect ICC v2/v4/v5 (iccMAX) profile headers
+- **In-memory validation** - validate bytes or files with native status and report
 - **Color transforms** - build multi-profile CMM pipelines and apply pixel transforms
 - **Thread-safe apply** - create per-thread apply handles for concurrent use
 - **NumPy zero-copy** - `apply_ndarray()` for high-performance bulk transforms
@@ -94,6 +95,8 @@ with iccdev.IccProfile("sRGB.icc") as profile:
 # Convenience functions
 p = iccdev.open_profile("sRGB.icc")      # lazy open
 p = iccdev.read_profile("sRGB.icc")      # full read
+validation = iccdev.validate_profile_file("sRGB.icc")
+print(validation.status.name, validation.report)
 
 # Apply a color transform
 with iccdev.IccCmm() as cmm:
@@ -185,6 +188,8 @@ except iccdev.IccCmmError as exc:
 | `sig_to_str(sig)` | Convert 4-byte ICC signature to ASCII string |
 | `open_profile(path)` | Open profile lazily (shortcut for `IccProfile(path)`) |
 | `read_profile(path)` | Read profile fully into memory |
+| `validate_profile(bytes)` | Validate ICC bytes and return status plus report |
+| `validate_profile_file(path)` | Validate an ICC file and return status plus report |
 | `icc_to_xml(profile)` | Convert ICC path or bytes to XML text using `iccToXml` |
 | `icc_from_xml(xml)` | Convert XML text/path/bytes to ICC profile bytes using `iccFromXml` |
 | `icc_to_json(profile)` | Convert ICC path or bytes to JSON text using `iccToJson` |

@@ -7,16 +7,20 @@
 
 This module provides the import surface expected by the MCP server without
 requiring an unpublished external ``iccdev`` wheel. It parses ICC headers
-directly and provides deterministic identity transforms for REST/MCP smoke
-testing of Python-native endpoints.
+directly, provides deterministic identity transforms for REST/MCP smoke
+testing, and dynamically loads the public C validation ABI when available.
 """
 
 from __future__ import annotations
 
+import ctypes
 from dataclasses import asdict, dataclass
 from enum import IntEnum
+from functools import lru_cache
+import os
 from pathlib import Path
 import struct
+from typing import NamedTuple
 
 _HEADER_SIZE = 128
 
@@ -44,6 +48,105 @@ class RenderingIntent(IntEnum):
 class Interpolation(IntEnum):
     Linear = 0
     Tetrahedral = 1
+
+
+class ValidationStatus(IntEnum):
+    OK = 0
+    WARNING = 1
+    NON_COMPLIANT = 2
+    CRITICAL_ERROR = 3
+    INVALID_ARGUMENT = 4
+    INTERNAL_ERROR = 5
+
+
+class ValidationResult(NamedTuple):
+    status: ValidationStatus
+    report: str
+
+
+def _validation_library_path() -> Path:
+    """Find a shared IccProfLib containing the public validation ABI."""
+    configured = os.environ.get("ICCDEV_VALIDATION_LIBRARY")
+    if configured:
+        path = Path(configured)
+        if path.is_file():
+            return path
+        raise RuntimeError(
+            "ICCDEV_VALIDATION_LIBRARY does not name a shared IccProfLib"
+        )
+
+    build_dir = os.environ.get("ICCDEV_BUILD_DIR")
+    if build_dir:
+        library_dir = Path(build_dir) / "IccProfLib"
+        for pattern in ("libIccProfLib2*.so*", "libIccProfLib2*.dylib", "IccProfLib2*.dll"):
+            matches = sorted(path for path in library_dir.glob(pattern) if path.is_file())
+            if matches:
+                return matches[0]
+
+    raise RuntimeError(
+        "Native validation requires ICCDEV_VALIDATION_LIBRARY or "
+        "ICCDEV_BUILD_DIR pointing to a shared IccProfLib build"
+    )
+
+
+@lru_cache(maxsize=None)
+def _validation_function(library_path: str):
+    """Load the C ABI once per resolved shared-library path."""
+    try:
+        function = ctypes.CDLL(library_path).icc_validate_profile
+    except OSError as exc:
+        raise RuntimeError(f"Unable to load IccProfLib: {exc}") from exc
+    except AttributeError as exc:
+        raise RuntimeError(
+            "IccProfLib does not export icc_validate_profile"
+        ) from exc
+
+    function.argtypes = (
+        ctypes.c_void_p,
+        ctypes.c_size_t,
+        ctypes.c_void_p,
+        ctypes.c_size_t,
+    )
+    function.restype = ctypes.c_int
+    return function
+
+
+def native_validation_available() -> bool:
+    """Return whether the public C validation ABI can be loaded."""
+    try:
+        _validation_function(str(_validation_library_path()))
+    except RuntimeError:
+        return False
+    return True
+
+
+def validate_profile(profile: bytes | bytearray | memoryview) -> ValidationResult:
+    """Validate bytes through the public in-process C validation ABI."""
+    if not isinstance(profile, (bytes, bytearray, memoryview)):
+        raise TypeError("profile must be bytes, bytearray, or memoryview")
+
+    profile_data = bytes(profile)
+    data_buffer = ctypes.create_string_buffer(profile_data) if profile_data else None
+    report_buffer = ctypes.create_string_buffer(8192)
+    status = _validation_function(str(_validation_library_path()))(
+        ctypes.cast(data_buffer, ctypes.c_void_p) if data_buffer else None,
+        len(profile_data),
+        report_buffer,
+        len(report_buffer),
+    )
+    try:
+        validation_status = ValidationStatus(status)
+    except ValueError:
+        validation_status = ValidationStatus.INTERNAL_ERROR
+    return ValidationResult(
+        validation_status,
+        report_buffer.value.decode("utf-8", errors="replace"),
+    )
+
+
+def validate_profile_file(path: str | Path) -> ValidationResult:
+    """Read a profile and validate it through :func:`validate_profile`."""
+    return validate_profile(Path(path).read_bytes())
 
 
 class ColorSpace(IntEnum):

@@ -3,7 +3,7 @@
 MCP server for ICC color profile tools from the International Color
 Consortium's RefIccMAX (iccDEV) library.
 
-Exposes 25 tools to AI assistants (Claude, Copilot, Cursor) via the
+Exposes 26 tools to AI assistants (Claude, Copilot, Cursor) via the
 Model Context Protocol, covering profile inspection, color transforms,
 and format conversion for ICC v2/v4 and iccMAX v5 profiles.
 
@@ -27,16 +27,18 @@ built iccDEV toolchain:
 pip install iccdev-mcp
 ```
 
-For full functionality with the pip-installed package, the 6 Python-native
-tools are included in the `iccdev-mcp` wheel and the 17 CLI-backed tools
-require iccDEV CLI binaries. Build iccDEV locally or set `ICCDEV_TOOLS_DIR` to
-an existing tool build. The REST health endpoint reports the bundled Python API
-and CLI discovery separately, so incomplete local CLI builds are visible at
-startup.
+For full functionality with the pip-installed package, six Python-native tools
+are included in the `iccdev-mcp` wheel. The `validate_profile` tool dynamically
+loads the public C validation ABI, so it also needs a shared IccProfLib build.
+The 17 CLI-backed tools require iccDEV CLI binaries. Build iccDEV locally or
+set `ICCDEV_TOOLS_DIR` and `ICCDEV_BUILD_DIR` to an existing build. The REST
+health endpoint reports the bundled Python API and CLI discovery separately, so
+incomplete local builds are visible at startup.
 
 ```bash
 # Point to compiled iccDEV tools
 export ICCDEV_TOOLS_DIR=/path/to/iccDEV/Build/Tools
+export ICCDEV_BUILD_DIR=/path/to/iccDEV/Build
 ```
 
 
@@ -68,7 +70,7 @@ docker run --rm -p 127.0.0.1:8080:8080 \
 ```
 
 Open <http://127.0.0.1:8080/> for the bundled REST dashboard. The dashboard
-groups the 25 MCP-backed API routes, shows REST-only utility routes such as
+groups the 26 MCP-backed API routes, shows REST-only utility routes such as
 file browsing and upload, and runs tools without requiring a separate client.
 
 Supported container modes are `mcp`/`stdio`, `rest`/`api`, `sse`, and
@@ -155,6 +157,7 @@ Add this repository MCP configuration under
       "tools": [
         "inspect_header",
         "profile_summary",
+        "validate_profile",
         "color_transform",
         "roundtrip_delta",
         "icc_sig_to_str",
@@ -193,12 +196,13 @@ iccdev-mcp --transport sse --port 8080
 
 ## Tools
 
-### Python-Native (6) -- always available
+### Python-Native (7)
 
 | Tool | Description |
 |------|-------------|
 | `inspect_header` | ICC profile header (22 fields + 6 computed names) |
 | `profile_summary` | Compact profile classification and routing metadata |
+| `validate_profile` | In-memory validation status and report from the native C API; requires a shared IccProfLib build |
 | `color_transform` | Multi-profile color transform via CMM |
 | `roundtrip_delta` | Round-trip fidelity measurement (delta-E) |
 | `icc_sig_to_str` | 4-byte ICC signature to string |
@@ -243,7 +247,7 @@ the command line; see the repository
 
 The REST dashboard at `/` and `/ui` provides Testing/ directory and filename
 selectors for ICC, XML, JSON, TIFF, JPEG, PNG, and cube inputs. `/api/tools`
-returns the stable 25-tool MCP inventory and separately lists REST-only utility
+returns the stable 26-tool MCP inventory and separately lists REST-only utility
 routes (`/api/tools`, `/api/files`, and `/api/upload`). Core CLI-backed forms
 expose documented options for `iccDumpProfile` validation/verbosity/tag
 selection, `iccPawgReport` profile assessment, `iccRoundTrip` intent/MPE
@@ -254,6 +258,8 @@ selection, and `iccApplyProfiles` structured or raw `-cfg` argument mode.
 | Variable | Description |
 |----------|-------------|
 | `ICCDEV_TOOLS_DIR` | Path to iccDEV CLI tool binaries |
+| `ICCDEV_BUILD_DIR` | CMake build root containing the shared IccProfLib validation ABI |
+| `ICCDEV_VALIDATION_LIBRARY` | Explicit shared IccProfLib path; overrides `ICCDEV_BUILD_DIR` |
 | `ICCDEV_TESTING_DIR` | Path to iccDEV Testing/ profiles directory |
 | `ICCDEV_PROFILE_DIRS` | Additional profile search directories (colon-separated) |
 

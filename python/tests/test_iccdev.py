@@ -22,7 +22,8 @@ try:
         IccProfileHeader,
         ColorSpace, ProfileClass, RenderingIntent, Intent,
         Interpolation, LutType, CmmStatus,
-        sig_to_str, open_profile, read_profile,
+        ValidationResult, ValidationStatus,
+        sig_to_str, open_profile, read_profile, validate_profile, validate_profile_file,
     )
     HAS_ICCDEV = True
 except ImportError:
@@ -113,6 +114,36 @@ class TestUtilities:
 
         assert callable(cli.find_tool)
         assert callable(cli.icc_to_xml)
+
+
+class TestValidation:
+    def test_status_values(self):
+        assert ValidationStatus.OK == 0
+        assert ValidationStatus.CRITICAL_ERROR == 3
+        assert ValidationStatus.INVALID_ARGUMENT == 4
+
+    def test_rejects_empty_input(self):
+        result = validate_profile(b"")
+        assert isinstance(result, ValidationResult)
+        assert result.status is ValidationStatus.INVALID_ARGUMENT
+        assert result.report
+
+    def test_rejects_malformed_input(self):
+        result = validate_profile(b"\x00\x01\x02\x03")
+        assert result.status is ValidationStatus.CRITICAL_ERROR
+        assert result.report
+
+    def test_validates_profile_bytes_and_file(self):
+        path = find_test_profile("sRGB_v4_ICC_preference.icc")
+        if path is None:
+            pytest.skip("No tracked sRGB ICC profile found")
+
+        with open(path, "rb") as profile_file:
+            bytes_result = validate_profile(profile_file.read())
+        file_result = validate_profile_file(path)
+
+        assert bytes_result.status in (ValidationStatus.OK, ValidationStatus.WARNING)
+        assert file_result == bytes_result
 
 
 # ---------------------------------------------------------------------------

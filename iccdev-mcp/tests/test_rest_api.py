@@ -7,6 +7,7 @@ import re
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -75,7 +76,7 @@ class TestWebUi(unittest.TestCase):
         html = resp.text
         for tool in [
             "inspect_header", "profile_summary", "color_transform", "roundtrip_delta",
-            "sig_to_str", "enum_spaces", "profiles", "dump_profile", "pawg_report",
+            "validate_profile", "sig_to_str", "enum_spaces", "profiles", "dump_profile", "pawg_report",
             "to_xml", "from_xml", "to_json", "from_json", "roundtrip",
             "tiff_dump", "jpeg_dump", "png_dump", "from_cube",
             "apply_profiles", "apply_named_cmm", "create_link",
@@ -109,7 +110,7 @@ class TestHealthEndpoints(unittest.TestCase):
         self.assertEqual(data["server"], "iccdev-mcp")
         self.assertTrue(data["python_api_available"])
         self.assertIn("cli_tools", data)
-        self.assertEqual(data["tools_count"], 25)
+        self.assertEqual(data["tools_count"], 26)
 
     def test_health_has_version(self):
         from iccdev_mcp import __version__
@@ -123,7 +124,7 @@ class TestHealthEndpoints(unittest.TestCase):
         data = resp.json()
         self.assertIn("tools", data)
         self.assertIn("count", data)
-        self.assertEqual(data["count"], 25)
+        self.assertEqual(data["count"], 26)
         self.assertEqual(data["count"], len(data["tools"]))
         self.assertIn("rest_utility_routes", data)
         self.assertEqual(
@@ -134,6 +135,7 @@ class TestHealthEndpoints(unittest.TestCase):
         self.assertIn("round_trip_test", names)
         self.assertIn("pawg_report", names)
         self.assertIn("profile_summary", names)
+        self.assertIn("validate_profile", names)
         utility_names = {route["name"] for route in data["rest_utility_routes"]}
         self.assertIn("upload_file", utility_names)
         self.assertIn("list_files", utility_names)
@@ -323,6 +325,46 @@ class TestNativeToolEndpoints(unittest.TestCase):
         resp = self.client.get("/api/profile-summary?path=../../etc/passwd")
         self.assertEqual(resp.status_code, 400)
         self.assertIn("traversal", resp.json()["error"])
+
+    def test_validate_profile_missing_path(self):
+        resp = self.client.get("/api/validate-profile")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("error", resp.json())
+
+    def test_validate_profile_rejects_traversal_as_client_error(self):
+        resp = self.client.get("/api/validate-profile?path=../../etc/passwd")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("traversal", resp.json()["error"])
+
+    def test_validate_profile_returns_native_result(self):
+        import iccdev
+        if not iccdev.native_validation_available():
+            self.skipTest("Native C validation ABI is not available")
+        profiles = self.client.get("/api/profiles").json()["profiles"]
+        if not profiles:
+            self.skipTest("No test profiles available")
+
+        resp = self.client.get(
+            "/api/validate-profile",
+            params={"path": profiles[0]["path"]},
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn(data["status_name"], {"OK", "WARNING"})
+        self.assertIn(data["status"], {0, 1})
+        self.assertIsInstance(data["report"], str)
+
+    def test_validate_profile_reports_missing_native_abi(self):
+        with patch(
+            "iccdev_mcp.server.validate_profile",
+            side_effect=RuntimeError("Native validation is unavailable"),
+        ):
+            resp = self.client.get(
+                "/api/validate-profile",
+                params={"path": "sRGB_v4_ICC_preference.icc"},
+            )
+        self.assertEqual(resp.status_code, 503)
+        self.assertIn("unavailable", resp.json()["error"])
 
     def test_sig_to_str_missing_param(self):
         resp = self.client.get("/api/sig-to-str")

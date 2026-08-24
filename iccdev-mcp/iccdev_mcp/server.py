@@ -4,10 +4,10 @@
 # BSD 3-Clause License. See LICENSE.md for details.
 
 """
-FastMCP server exposing 25 tools for ICC color profile operations.
+FastMCP server exposing 26 tools for ICC color profile operations.
 
-Phase 1 (Python-native): inspect_header, profile_summary, color_transform,
-    roundtrip_delta, sig_to_str, enum_spaces
+Phase 1 (Python-native): inspect_header, profile_summary, validate_profile,
+    color_transform, roundtrip_delta, sig_to_str, enum_spaces
 Phase 2 (subprocess): 17 CLI tool wrappers (see cli_tools.py)
 """
 
@@ -163,7 +163,37 @@ def profile_summary(path: str) -> dict:
 
 
 # -------------------------------------------------------------------------
-# Tool 3: color_transform
+# Tool 3: validate_profile
+# -------------------------------------------------------------------------
+
+@mcp.tool()
+def validate_profile(path: str) -> dict:
+    """Validate an ICC profile in memory through the native C validation API.
+
+    This does not invoke an iccDEV command-line tool. A non-OK status is a
+    validation result, not an MCP transport failure.
+
+    Args:
+        path: ICC profile path (absolute, relative, or filename to search).
+
+    Returns:
+        Dict with the resolved file path, numeric status, status name, and
+        native validation report.
+    """
+    import iccdev
+
+    resolved = resolve_profile_path(path)
+    result = iccdev.validate_profile_file(str(resolved))
+    return {
+        "file_path": str(resolved),
+        "status": int(result.status),
+        "status_name": result.status.name,
+        "report": result.report,
+    }
+
+
+# -------------------------------------------------------------------------
+# Tool 4: color_transform
 # -------------------------------------------------------------------------
 
 @mcp.tool()
@@ -240,7 +270,7 @@ def color_transform(
 
 
 # -------------------------------------------------------------------------
-# Tool 4: roundtrip_delta
+# Tool 5: roundtrip_delta
 # -------------------------------------------------------------------------
 
 @mcp.tool()
@@ -329,7 +359,7 @@ def roundtrip_delta(
 
 
 # -------------------------------------------------------------------------
-# Tool 5: sig_to_str
+# Tool 6: sig_to_str
 # -------------------------------------------------------------------------
 
 @mcp.tool()
@@ -357,7 +387,7 @@ def icc_sig_to_str(signature: int) -> dict:
 
 
 # -------------------------------------------------------------------------
-# Tool 6: enum_spaces
+# Tool 7: enum_spaces
 # -------------------------------------------------------------------------
 
 @mcp.tool()
@@ -386,7 +416,7 @@ def enum_spaces() -> dict:
 
 
 # -------------------------------------------------------------------------
-# Tool 7: list_available_profiles
+# Tool 8: list_available_profiles
 # -------------------------------------------------------------------------
 
 @mcp.tool()
@@ -423,6 +453,14 @@ def health_check() -> dict:
         Dict with 'status', 'python_api', 'cli_tools', 'profile_count'.
     """
     python_ok = _check_iccdev()
+    validation_ok = False
+    if python_ok:
+        import iccdev
+        validation_ok = getattr(
+            iccdev,
+            "native_validation_available",
+            lambda: hasattr(iccdev, "validate_profile_file"),
+        )()
     profiles = list_profiles()
 
     # Check CLI tools availability
@@ -432,7 +470,7 @@ def health_check() -> dict:
     except ImportError:
         cli_status = {"available": [], "missing": [], "tools_dir": None}
 
-    native_count = 6 if python_ok else 0
+    native_count = 7 if validation_ok else (6 if python_ok else 0)
     cli_count = len(cli_status.get("available", []))
 
     return {
@@ -441,6 +479,9 @@ def health_check() -> dict:
         "python_api": {
             "available": python_ok,
             "tools": native_count,
+        },
+        "validation_api": {
+            "available": validation_ok,
         },
         "cli_tools": cli_status,
         "total_tools": native_count + cli_count + 2,  # +health +list
