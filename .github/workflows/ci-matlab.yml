@@ -17,9 +17,6 @@ on:
   push:
     branches:
       - master
-      - ci-qa-matlab-examples
-      - ci-qa-matlab-examples-gamma
-      - ci-qa-matlab-windows-powershell
     paths:
       - ".github/workflows/ci-matlab.yml"
       - "Build/Cmake/**"
@@ -209,7 +206,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      ICCDEV_IMAGE: ghcr.io/internationalcolorconsortium/iccdev:latest
+      ICCDEV_IMAGE: ghcr.io/internationalcolorconsortium/iccdev@sha256:2f4230308320b60106c2675b2c50aa7c22e0b50fe56045080ce480c6232b2672
 
     steps:
       - name: Checkout repository

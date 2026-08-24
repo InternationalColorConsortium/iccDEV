@@ -144,6 +144,7 @@ before running the suite.
 | `iccdev.dump-profile-header-regression` | `.github/scripts/iccdev-dump-profile-header-regression-tests.sh` |
 | `iccdev.basic-string-regressions` | `.github/scripts/iccdev-basic-string-regression-tests.sh` |
 | `iccdev.pawg-report-regressions` | `.github/scripts/iccdev-pawg-report-regression-tests.sh` |
+| `iccdev.pawg-q1-quality-contract` | `.github/ci/regression/pawg-q1-quality-contract.cpp` |
 | `iccdev.json-cfg` | `.github/scripts/iccdev-json-cfg-tests.sh` |
 | `iccdev.json-cli-exercise` | `.github/scripts/json-cli-exercise.sh` |
 | `iccdev.json-parser-regressions` | `.github/scripts/iccdev-json-parser-regression-tests.sh` |
@@ -194,6 +195,9 @@ must reject invalid numeric fields before conversion without sanitizer findings.
 checks the 32-item PAWG report structure, verifies summary counts against the
 rendered item lines, runs malformed and malware-signature dynamic inputs, and
 fails on sanitizer findings.
+
+`iccdev.pawg-q1-quality-contract` validates the PAWG Q1 sample budget,
+CIEDE2000 reference vectors, and Gray/RGB/CMYK round-trip model selection.
 
 `iccdev.cam-degenerate-regressions` compiles a small helper from
 `.github/ci/regression/cam-degenerate.cpp` and exercises degenerate CAM forward

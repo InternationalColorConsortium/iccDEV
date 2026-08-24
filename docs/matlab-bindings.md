@@ -213,10 +213,10 @@ addpath(fullfile(repo_root, 'matlab', 'tests'));
 build_dir = getenv('ICCDEV_BUILD_DIR');
 assert(~isempty(build_dir) && exist(build_dir, 'dir') == 7, ...
   'Set ICCDEV_BUILD_DIR to a configured iccDEV build directory.');
-assert(isfile(fullfile(build_dir, 'bin', 'Release', ...
-  'iccProfilePlot.exe')), 'Build iccProfilePlot before MATLAB QA.');
-assert(isfile(fullfile(build_dir, 'bin', 'Release', ...
-  'iccPawgReport.exe')), 'Build iccPawgReport before MATLAB QA.');
+assert(exist(fullfile(build_dir, 'bin', 'Release', ...
+  'iccProfilePlot.exe'), 'file') == 2, 'Build iccProfilePlot before MATLAB QA.');
+assert(exist(fullfile(build_dir, 'bin', 'Release', ...
+  'iccPawgReport.exe'), 'file') == 2, 'Build iccPawgReport before MATLAB QA.');
 
 test_pawg_q1();
 run_local_qa();
@@ -300,7 +300,8 @@ build explicitly.
 round-trip CIEDE2000 averages and maxima over transforms supplied by the shared
 IccProfLib CMM, applies the native
 `OK`/`WARN`/`FAIL` thresholds, and compares the result with the Q1 item from
-`iccPawgReport --json`:
+`iccPawgReport --json`. It supports profiles whose native Q1 evaluator selects
+the general `CIccCmm profile transform` model:
 
 ```matlab
 profile_path = fullfile(repo_root, 'Testing', ...
@@ -582,7 +583,7 @@ process.
 Download the image:
 
 ```powershell
-docker pull ghcr.io/internationalcolorconsortium/iccdev:latest
+docker pull ghcr.io/internationalcolorconsortium/iccdev@sha256:2f4230308320b60106c2675b2c50aa7c22e0b50fe56045080ce480c6232b2672
 ```
 
 Run the MATLAB validation:
@@ -622,8 +623,8 @@ disables container networking, drops Linux capabilities, enables
 an immutable SHA-256 digest.
 
 The output contract is recorded in
-`matlab/tests/fixtures/docker_expected.txt`. Hosted CI uses a digest-pinned
-image; interactive local use defaults to `latest`.
+`matlab/tests/fixtures/docker_expected.txt`. Hosted CI and interactive local use
+the same digest-pinned image by default.
 
 ## Troubleshooting
 
@@ -658,7 +659,7 @@ image; interactive local use defaults to `latest`.
 ## Hosted Workflow
 
 `.github/workflows/ci-matlab.yml` runs for MATLAB-related pull requests to
-`master`, selected MATLAB QA branches, and manual dispatch. It uses read-only
+`master` and manual dispatch. It uses read-only
 permissions, trusted-base sanitizer helpers, SHA-pinned actions, a focused
 dependency-free MATLAB calculation stage, native luminance and colorimetry
 CTests, the native PAWG Q1 quality-contract CTest, the MATLAB/native structured

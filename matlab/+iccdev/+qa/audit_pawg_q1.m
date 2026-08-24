@@ -4,6 +4,8 @@ function result = audit_pawg_q1(profile_path, varargin)
 %   result = iccdev.qa.audit_pawg_q1(profile_path)
 %   result = iccdev.qa.audit_pawg_q1(profile_path, 'BuildDir', build_dir)
 %   result = iccdev.qa.audit_pawg_q1(profile_path, 'PawgTool', tool_path)
+%   The audit supports profiles whose native Q1 evaluator selects the general
+%   CIccCmm profile-transform model.
 %
 %   Example from the repository root:
 %     profile_path = fullfile('Testing', 'sRGB_v4_ICC_preference.icc');
@@ -34,6 +36,14 @@ function result = audit_pawg_q1(profile_path, varargin)
       'Q1 requires Lab or XYZ PCS, not %s.', iccdev.sig_to_str(pcs));
   end
   clear cleanup_profile;
+
+  tool_path = find_pawg_tool(options.BuildDir, options.PawgTool);
+  native = run_native_q1(tool_path, profile_path);
+  if ~strcmp(native.model, 'CIccCmm profile transform')
+    error('iccdev:pawgQ1UnsupportedNativeModel', ...
+      'Q1 audit requires CIccCmm profile transform; native model is %s.', ...
+      native.model);
+  end
 
   grid_size = 9;
   if device_channels >= 4
@@ -74,8 +84,6 @@ function result = audit_pawg_q1(profile_path, varargin)
     'secondMaximum', max(second));
   calculated.verdict = q1_verdict(calculated);
 
-  tool_path = find_pawg_tool(options.BuildDir, options.PawgTool);
-  native = run_native_q1(tool_path, profile_path);
   deltas = struct( ...
     'firstAverage', calculated.firstAverage - native.firstAverage, ...
     'firstMaximum', calculated.firstMaximum - native.firstMaximum, ...

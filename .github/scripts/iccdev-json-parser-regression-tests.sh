@@ -439,7 +439,7 @@ PROFILE=""
 for candidate in \
   "$TESTING_DIR/Display/sRGB_D65_MAT.icc" \
   "$TESTING_DIR/sRGB_v4_ICC_preference.icc" \
-  "$TESTING_DIR/Display/sRGB_D65_MAT-500lx.icc"; do
+  "$TESTING_DIR/Display/sRGB_D65_MAT-500cdm2.icc"; do
   if [ -f "$candidate" ]; then
     PROFILE="$candidate"
     break
