@@ -29,7 +29,7 @@ documentation for accuracy.
 5. Replace repeated detail with links to canonical sources.
 6. Keep Doxygen-friendly links within the scanned INPUT tree; for repo-root or
    example links that do not exist under Doxygen's configured input, use an
-   explicit HTML anchor (`<a href="...">...`) instead of a Markdown link that
+   explicit HTML anchor (`<a href="...">...</a>`) instead of a Markdown link that
    triggers warning-only docs failures.
 7. Delete duplicate files only after moving unique content elsewhere.
 8. Run whitespace, local-link, ASCII, line-ending, and stale-reference checks.
