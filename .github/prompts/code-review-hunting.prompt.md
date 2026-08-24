@@ -25,6 +25,10 @@ renewed. If a re-review finds an issue in unchanged code, stop serial automated
 review and require maintainer direction. Prefer no comment to low-value review
 volume.
 
+For every new or relocated C/C++ source or header, verify the complete ICC
+Software License block is retained. A missing, abbreviated, or placeholder
+block is a blocking changed-line defect.
+
 ## 4-Category Hunt
 
 ### Category 1: Serialization Mismatch (CWE-345)

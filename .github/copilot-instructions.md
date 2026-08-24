@@ -139,6 +139,8 @@ agent-policy surfaces.
   compatibility, or maintainability impact. Do not report pre-existing code
   unless the change makes it newly reachable or materially worsens it.
 - Verify each finding with the smallest relevant evidence before commenting.
+- Treat a missing, abbreviated, or placeholder ICC Software License block in a
+  new or relocated C/C++ source/header as a blocking changed-line finding.
   Avoid speculative concerns, style-only comments, duplicate findings, and
   generic requests for broader tests when focused validation covers the diff.
 - Use one comment for one root cause. State the affected path, triggering

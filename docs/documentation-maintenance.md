@@ -60,6 +60,9 @@ point to deeper references.
   HTML anchor like `<a href="../python/README.md">python/README.md</a>` to keep
   the generated docs warning-free without changing the rendered link target.
 - Do not add generated artifacts, logs, crash files, or local environment paths.
+- New or relocated C/C++ sources and headers must retain the complete ICC
+  Software License block from an adjacent established file. Do not use
+  abbreviated or placeholder license text; review this before handoff.
 - Follow `.gitattributes`: use LF for documentation, prompts, skills, MATLAB,
   CMake, YAML/JSON, Dockerfiles, and Unix scripts; preserve CRLF for
   Windows-native PowerShell, batch, and command scripts.

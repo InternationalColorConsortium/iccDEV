@@ -21,7 +21,8 @@ Create `Tools/CmdLine/IccNewTool/iccNewTool.cpp`:
  * Copyright (c) 2024-2026 The International Color Consortium.
  *                           All rights reserved.
  *
- * [BSD 3-Clause license text]
+ * Copy the complete ICC Software License block from an adjacent existing
+ * C++ source file. Do not use an abbreviated or placeholder license banner.
  */
 
 #include <cstdio>

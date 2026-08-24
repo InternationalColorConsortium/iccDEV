@@ -18,6 +18,9 @@ shares one source of truth. Update rules here, not in the mirrors.
 - Exit 1-127 is graceful failure. Exit 128+ is signal termination.
 - Use sanitizer builds for bug hunting; see `.github/instructions/build-system.instructions.md`.
 - Add the nearest regression test for behavior fixes.
+- Every new or relocated C/C++ source or header must retain the complete ICC
+  Software License block used by adjacent files; abbreviated, placeholder, or
+  omitted license text is a blocking defect.
 - For MCP runtime checks, validate every Docker image variant against its
   discovered capabilities. Do not hard-code a total tool count.
 

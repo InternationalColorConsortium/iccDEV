@@ -68,9 +68,12 @@ small set of high-confidence, actionable findings over low-value comments.
    `yamllint`, `zizmor`, CodeQL Actions, and trust-boundary checks.
 4. For parser and input-handling changes, use the nearest regression and
    sanitizer coverage.
-5. Report at most one finding per root cause with file/line, trigger, impact,
+5. For new or relocated C/C++ sources and headers, compare the complete ICC
+   Software License block with an adjacent established file; report a missing,
+   abbreviated, or placeholder block as a blocking finding.
+6. Report at most one finding per root cause with file/line, trigger, impact,
    and smallest safe remediation.
-6. State explicitly when no actionable findings remain.
+7. State explicitly when no actionable findings remain.
 
 ## References
 
