@@ -61,6 +61,8 @@ set(_required_vars
   ICCDEV_CONFIG
   ICCDEV_GENERATOR
   ICCDEV_LIB_SUBDIRS
+  ICCDEV_HAVE_JSON
+  ICCDEV_HAVE_CONNECT
 )
 
 foreach(_required_var IN LISTS _required_vars)
@@ -265,8 +267,10 @@ set(_required_files
   # Generated at build time from the version + git hash (#823), so its absence
   # means the generated-header install rule regressed, not the static list.
   "${_incdir}/IccProfLibVer.h"
-  "${_json_incdir}/IccJsonTypes.h"
 )
+if(ICCDEV_HAVE_JSON)
+  list(APPEND _required_files "${_json_incdir}/IccJsonTypes.h")
+endif()
 foreach(_required_file IN LISTS _required_files)
   if(NOT EXISTS "${_required_file}")
     _fail("Installed package is missing ${_required_file}")
@@ -336,10 +340,12 @@ set(_consumer_source "\
 #include \"IccProfile.h\"\n\
 #include \"IccUtil.h\"\n\
 #include \"IccCmdLineUtil.h\"\n\
-#include \"IccProfileXml.h\"\n\
-#ifdef ICCDEV_INSTALLED_JSON_CONNECT\n\
 #include \"IccJsonTypes.h\"\n\
+#include \"IccProfileXml.h\"\n\
+#ifdef ICCDEV_INSTALLED_JSON\n\
 #include \"IccProfileJson.h\"\n\
+#endif\n\
+#ifdef ICCDEV_INSTALLED_CONNECT\n\
 #include \"IccConnect.h\"\n\
 #endif\n\
 \n\
@@ -389,12 +395,14 @@ int main()\n\
   }\n\
 \n\
 \n\
-#ifdef ICCDEV_INSTALLED_JSON_CONNECT\n\
+#ifdef ICCDEV_INSTALLED_JSON\n\
   IccJson json = IccJson::object();\n\
   if (!json.is_object()) {\n\
     std::fprintf(stderr, \"FAIL IccJsonTypes\\n\");\n\
     ++failures;\n\
   }\n\
+#endif\n\
+#ifdef ICCDEV_INSTALLED_CONNECT\n\
   auto create_standard = &CIccConnectCmm::CreateStandard;\n\
   if (!create_standard) {\n\
     std::fprintf(stderr, \"FAIL CIccConnectCmm::CreateStandard\\n\");\n\
@@ -601,11 +609,21 @@ endif()
 message(STATUS "ICCDEV_RESOLVED_LIB=${_loc}")
 add_executable(iccdev-installed-consumer consumer.cpp)
 target_compile_features(iccdev-installed-consumer PRIVATE cxx_std_17)
-target_compile_definitions(iccdev-installed-consumer PRIVATE ICCDEV_INSTALLED_JSON_CONNECT=1)
 target_link_libraries(iccdev-installed-consumer PRIVATE
-  RefIccMAX::IccProfLib2 RefIccMAX::IccXML2 RefIccMAX::IccJSON2
-  RefIccMAX::IccConnect2)
+  RefIccMAX::IccProfLib2 RefIccMAX::IccXML2)
 ]=])
+if(ICCDEV_HAVE_JSON)
+  file(APPEND "${_config_src}/CMakeLists.txt" [=[
+target_compile_definitions(iccdev-installed-consumer PRIVATE ICCDEV_INSTALLED_JSON=1)
+target_link_libraries(iccdev-installed-consumer PRIVATE RefIccMAX::IccJSON2)
+]=])
+endif()
+if(ICCDEV_HAVE_CONNECT)
+  file(APPEND "${_config_src}/CMakeLists.txt" [=[
+target_compile_definitions(iccdev-installed-consumer PRIVATE ICCDEV_INSTALLED_CONNECT=1)
+target_link_libraries(iccdev-installed-consumer PRIVATE RefIccMAX::IccConnect2)
+]=])
+endif()
 
 _run_consumer("CONFIG mode" "${_config_src}" "${_work_root}/build-config"
   "${_prefix_config}" "-DRefIccMAX_DIR=${_package_dir}" _config_error)

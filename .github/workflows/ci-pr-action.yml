@@ -132,6 +132,86 @@ jobs:
           # Disable unsafe fetch options
           persist-credentials: false
 
+      - name: Resolve workflow-dispatch PR
+        id: dispatch-pr
+        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          escape_html() {
+            local value="$1"
+            value="${value//&/&amp;}"
+            value="${value//</&lt;}"
+            value="${value//>/&gt;}"
+            value="${value//\"/&quot;}"
+            value="${value//\'/&#39;}"
+            printf '%s' "$value"
+          }
+          sanitize_line() { escape_html "$1"; }
+
+          if [[ ! "$DISPATCH_PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+            echo "workflow_dispatch fast lane requires numeric pr_number" >&2
+            exit 1
+          fi
+
+          pr_json="$(gh api "repos/${GH_REPOSITORY}/pulls/${DISPATCH_PR_NUMBER}")"
+          if [ "$(jq -r '.state' <<< "$pr_json")" != "open" ]; then
+            echo "workflow_dispatch target PR is not open: $DISPATCH_PR_NUMBER" >&2
+            exit 1
+          fi
+
+          base_ref="$(jq -r '.base.ref' <<< "$pr_json")"
+          case "$base_ref" in
+            master|ci-qa-flags|ci-qa-pr-docker-testing)
+              ;;
+            *)
+              echo "workflow_dispatch target PR uses an unsupported base: $DISPATCH_PR_NUMBER" >&2
+              exit 1
+              ;;
+          esac
+
+          base_sha="$(jq -r '.base.sha' <<< "$pr_json")"
+          head_sha="$(jq -r '.head.sha' <<< "$pr_json")"
+          target_repository="$(jq -r '.head.repo.full_name' <<< "$pr_json")"
+          if [ "$target_repository" != "$GH_REPOSITORY" ]; then
+            echo "workflow_dispatch fast lane requires a same-repository PR" >&2
+            exit 1
+          fi
+          for sha in "$base_sha" "$head_sha"; do
+            if [[ ! "$sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              echo "workflow_dispatch target PR returned an invalid commit SHA" >&2
+              exit 1
+            fi
+          done
+
+          {
+            printf 'base_ref=%s\n' "$(sanitize_line "$base_ref")"
+            printf 'base_sha=%s\n' "$(sanitize_line "$base_sha")"
+            printf 'head_sha=%s\n' "$(sanitize_line "$head_sha")"
+            printf 'target_repository=%s\n' "$(sanitize_line "$target_repository")"
+          } >> "$GITHUB_OUTPUT"  # elements-sanitized
+
+      - name: Checkout workflow-dispatch PR head
+        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          DISPATCH_HEAD_SHA: ${{ steps.dispatch-pr.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git -c protocol.version=2 fetch --no-tags origin "$DISPATCH_HEAD_SHA" --depth=50
+          git checkout --detach "$DISPATCH_HEAD_SHA"
+
       # Checkout the trusted base commit into a separate path so we do not
       # source code from the PR workspace (untrusted).
       - name: Checkout base commit (trusted sanitizers)
@@ -143,6 +223,19 @@ jobs:
           sparse-checkout: .github/scripts
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Checkout resolved workflow-dispatch base
+        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          DISPATCH_BASE_SHA: ${{ steps.dispatch-pr.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git -C base -c protocol.version=2 fetch --no-tags origin "$DISPATCH_BASE_SHA" --depth=1
+          git -C base checkout --detach "$DISPATCH_BASE_SHA"
 
       - name: Configure Git Environment
         shell: bash --noprofile --norc {0}
@@ -169,6 +262,10 @@ jobs:
           PR_AUTHOR: ${{ github.event.pull_request.user.login || github.actor }}
           PR_NUMBER: ${{ github.event.pull_request.number || '' }}
           PR_BASE_REF: ${{ github.base_ref || 'master' }}
+          DISPATCH_BASE_REF: ${{ steps.dispatch-pr.outputs.base_ref || '' }}
+          DISPATCH_BASE_SHA: ${{ steps.dispatch-pr.outputs.base_sha || '' }}
+          DISPATCH_HEAD_SHA: ${{ steps.dispatch-pr.outputs.head_sha || '' }}
+          DISPATCH_TARGET_REPOSITORY: ${{ steps.dispatch-pr.outputs.target_repository || '' }}
           GH_EVENT_NAME: ${{ github.event_name }}
           GH_ACTOR: ${{ github.actor }}
           GH_REPOSITORY: ${{ github.repository }}
@@ -315,28 +412,19 @@ jobs:
 
           resolve_dispatch_pr() {
             local number="$1"
-            local pr_json
             if [[ ! "$number" =~ ^[1-9][0-9]*$ ]]; then
               echo "workflow_dispatch fast lane requires numeric pr_number" >&2
               return 1
             fi
-            pr_json="$(gh api "repos/${GH_REPOSITORY}/pulls/${number}")"
-            if [ "$(jq -r '.state' <<< "$pr_json")" != "open" ]; then
-              echo "workflow_dispatch target PR is not open: $number" >&2
+            if [[ -z "$DISPATCH_BASE_REF" || -z "$DISPATCH_BASE_SHA" ||
+                  -z "$DISPATCH_HEAD_SHA" || -z "$DISPATCH_TARGET_REPOSITORY" ]]; then
+              echo "workflow_dispatch PR metadata was not resolved" >&2
               return 1
             fi
-            case "$(jq -r '.base.ref' <<< "$pr_json")" in
-              master|ci-qa-flags|ci-qa-pr-docker-testing)
-                ;;
-              *)
-                echo "workflow_dispatch target PR uses an unsupported base: $number" >&2
-                return 1
-                ;;
-            esac
-            head_sha="$(jq -r '.head.sha' <<< "$pr_json")"
-            base_sha="$(jq -r '.base.sha' <<< "$pr_json")"
-            dispatch_base_ref="$(jq -r '.base.ref' <<< "$pr_json")"
-            target_repository="$(jq -r '.head.repo.full_name' <<< "$pr_json")"
+            head_sha="$DISPATCH_HEAD_SHA"
+            base_sha="$DISPATCH_BASE_SHA"
+            dispatch_base_ref="$DISPATCH_BASE_REF"
+            target_repository="$DISPATCH_TARGET_REPOSITORY"
             pr_number="$number"
           }
 
@@ -628,6 +716,19 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Checkout resolved workflow-dispatch base
+        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          BASE_SHA: ${{ needs.detect-src.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git -C base -c protocol.version=2 fetch --no-tags origin "$BASE_SHA" --depth=1
+          git -C base checkout --detach "$BASE_SHA"
+
       - name: Print PR Details
         shell: bash --noprofile --norc {0}
         env:
@@ -801,6 +902,19 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Checkout resolved workflow-dispatch base
+        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          BASE_SHA: ${{ needs.detect-src.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git -C .trusted-workflow -c protocol.version=2 fetch --no-tags origin "$BASE_SHA" --depth=1
+          git -C .trusted-workflow checkout --detach "$BASE_SHA"
+
       - name: Set up PR validation
         id: v
         shell: bash --noprofile --norc {0}
@@ -941,6 +1055,19 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Checkout resolved workflow-dispatch base
+        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          BASE_SHA: ${{ needs.detect-src.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git -C trusted-base -c protocol.version=2 fetch --no-tags origin "$BASE_SHA" --depth=1
+          git -C trusted-base checkout --detach "$BASE_SHA"
+
       - name: Install consumer build dependencies
         # preflight: allow-codeql-actions reason=readonly-build-target-checkout
         shell: bash --noprofile --norc {0}
@@ -1040,6 +1167,19 @@ jobs:
           path: base
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Checkout resolved workflow-dispatch base
+        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          BASE_SHA: ${{ needs.detect-src.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git -C base -c protocol.version=2 fetch --no-tags origin "$BASE_SHA" --depth=1
+          git -C base checkout --detach "$BASE_SHA"
 
       - name: PR Details
         shell: bash --noprofile --norc {0}

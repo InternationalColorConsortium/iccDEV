@@ -62,8 +62,37 @@ Copyright:  (c) see Software License
 
 #if __has_include("../IccJSON/IccLibJSON/IccJsonTypes.h")
 #include "../IccJSON/IccLibJSON/IccJsonTypes.h"
-#else
+#elif __has_include("../IccJSON2/IccJsonTypes.h")
 #include "../IccJSON2/IccJsonTypes.h"
+#else
+#include <functional>
+#include <nlohmann/json.hpp>
+
+#ifndef ICC_JSON_ORDERED
+#include <unordered_map>
+#endif
+
+namespace iccJson {
+
+#ifdef ICC_JSON_ORDERED
+
+using json = nlohmann::ordered_json;
+
+#else
+
+template <class Key, class T, class IgnoredLess, class Allocator>
+struct unordered_map : public std::unordered_map<Key, T, std::hash<Key>, std::equal_to<Key>, Allocator>
+{
+  using base = std::unordered_map<Key, T, std::hash<Key>, std::equal_to<Key>, Allocator>;
+  using key_compare = IgnoredLess;
+  using base::base;
+};
+
+using json = nlohmann::basic_json<unordered_map>;
+
+#endif
+
+} // namespace iccJson
 #endif
 
 #endif

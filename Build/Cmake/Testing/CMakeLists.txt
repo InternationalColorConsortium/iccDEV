@@ -4485,11 +4485,15 @@ function(iccdev_add_installed_package_consumer_test)
   # Library directories whose runtime component the test stages. Tools are
   # excluded on purpose; see the comment above.
   set(_lib_subdirs IccProfLib IccXML)
+  set(_have_json FALSE)
+  set(_have_connect FALSE)
   if(TARGET "${TARGET_LIB_ICCJSON}")
     list(APPEND _lib_subdirs IccJSON)
+    set(_have_json TRUE)
   endif()
   if(TARGET "${TARGET_LIB_ICCCONNECT}")
     list(APPEND _lib_subdirs IccConnect)
+    set(_have_connect TRUE)
   endif()
 
   # Everything the "dev" and "runtime" component installs read, so that
@@ -4531,6 +4535,8 @@ function(iccdev_add_installed_package_consumer_test)
       "-DICCDEV_VCPKG_TRIPLET=${VCPKG_TARGET_TRIPLET}"
       "-DICCDEV_LIB_SUBDIRS=${_lib_subdirs}"
       "-DICCDEV_HAVE_SHARED=${ENABLE_SHARED_LIBS}"
+      "-DICCDEV_HAVE_JSON=${_have_json}"
+      "-DICCDEV_HAVE_CONNECT=${_have_connect}"
       -P "${CMAKE_CURRENT_LIST_DIR}/RunInstalledPackageConsumerTest.cmake"
   )
   # Generous because the test performs three nested configure+build cycles on
