@@ -335,6 +335,7 @@ jobs:
             esac
             head_sha="$(jq -r '.head.sha' <<< "$pr_json")"
             base_sha="$(jq -r '.base.sha' <<< "$pr_json")"
+            dispatch_base_ref="$(jq -r '.base.ref' <<< "$pr_json")"
             target_repository="$(jq -r '.head.repo.full_name' <<< "$pr_json")"
             pr_number="$number"
           }
@@ -392,7 +393,7 @@ jobs:
             exit 0
           fi
 
-          base_ref="${PR_BASE_REF}"
+          base_ref="${dispatch_base_ref:-$PR_BASE_REF}"
 
           # Avoid fetching refs from user-controllable inputs like ($base_ref)
           case "$base_ref" in
