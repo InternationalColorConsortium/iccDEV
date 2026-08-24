@@ -597,7 +597,18 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
         // lives in DToBx tags regardless of how the caller set bUseD2BTags. Opening
         // that path here lets icXformLutColor + a spectral source profile resolve
         // without the caller having to set useD2BxB2Dx explicitly.
-        if (bUseD2BTags || pProfile->m_Header.spectralPCS) {
+        //
+        // "Spectral-only" is the !pcs test, not the bare spectralPCS test that
+        // stood here: ICC.2:2023 lets a profile carry an independent colorimetric
+        // PCS as well, and for those the caller's opt-out has to be honoured.
+        // CIccCmm::AddXform already draws the line that way -- its nDstSpace
+        // selection reads (bUseD2BxB2DxTags || !m_Header.pcs) -- so without this
+        // term the two disagree: AddXform records the 3-sample XYZ connection
+        // while Create hands back a DToBx transform emitting spectralPCS samples,
+        // and CIccCmm::Begin() then rejects the chain with icCmmStatBadSpaceLink.
+        // Measured on SixChanInputRef (AToB3 6->3, DToB3 6->36) with the D2B
+        // opt-out intents 11 and 13 (#1982).
+        if (bUseD2BTags || (pProfile->m_Header.spectralPCS && !pProfile->m_Header.pcs)) {
           if (nLutType != icXformLutColorimetric &&
               (pProfile->m_Header.spectralPCS || pProfile->m_Header.version >= icVersionNumberV5)) {
             pTag = pProfile->FindTag(icSigDToB0Tag + nTagIntent);
@@ -736,7 +747,16 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
 
         // Spectral-only destination profiles only carry BToDx tags; let icXformLutColor
         // resolve them without requiring the caller to set useD2BxB2Dx.
-        if (bUseD2BTags || (nLutType != icXformLutColorimetric && pProfile->m_Header.spectralPCS)) {
+        //
+        // Same !pcs correction as the bInput branch above, and it has to land in
+        // the same commit: the two mis-selections currently cancel out.  A chain
+        // whose source and destination are both dual-PCS resolves today because
+        // both ends silently take the spectral route, so fixing only the input
+        // side leaves the destination on BToDx and turns a working link into
+        // icCmmStatUnsupportedPcsLink.  Measured with SixChanInputRef into
+        // SixChanCameraRef under the opt-out intents (#1982).
+        if (bUseD2BTags || (nLutType != icXformLutColorimetric &&
+                            pProfile->m_Header.spectralPCS && !pProfile->m_Header.pcs)) {
           pTag = pProfile->FindTag(icSigBToD0Tag + nTagIntent);
 
           //Additional precedence not prescribed by the v4 ICC Specification

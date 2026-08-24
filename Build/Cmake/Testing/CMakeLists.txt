@@ -6793,6 +6793,26 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1337-checkpcsconnections-regression.sh"
 )
 
+# Guards dual-PCS transform selection in CIccXform::Create (#1982).  The D2B/B2D
+# opt-out intents must select the colorimetric AToBx/BToAx transforms rather than
+# the fixture's spectral DToBx/BToDx ones.  Covers both directions: the source
+# side is checked by exit status and link shape, the destination side by
+# requiring the opt-out and opt-in links to differ (they are byte-identical when
+# the opt-out is ignored, so an exit-status check alone would be vacuous there).
+iccdev_add_script_test(
+  iccdev.issue-1982-dual-pcs-selection-regression
+  120
+  "iccdev;tools;cmm;applytolink;issue-1982;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1982-dual-pcs-selection-regression.sh"
+)
+# The script exits 77 when iccFromXml/iccApplyToLink/iccDumpProfile are absent
+# (a build without ENABLE_ICCXML, or a Windows checkout where the tools are
+# .exe).  Without this the skip would be reported as a green pass.
+set_tests_properties(iccdev.issue-1982-dual-pcs-selection-regression PROPERTIES
+  SKIP_RETURN_CODE 77
+)
+
 # CI debug helper for the NaN/SixChanInputRef iccApplyToLink PoC.  It preserves
 # the original master heap-buffer-overflow replay with extra signature/register
 # logging and now expects the NaN range to fail closed before CMM/LUT generation.
