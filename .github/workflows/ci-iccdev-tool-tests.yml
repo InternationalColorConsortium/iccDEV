@@ -132,7 +132,7 @@ on:
   workflow_dispatch:
     inputs:
       regression_image_tag:
-        description: 'Trusted regression container tag'
+        description: 'Trusted unified image tag'
         required: false
         default: latest
         type: string

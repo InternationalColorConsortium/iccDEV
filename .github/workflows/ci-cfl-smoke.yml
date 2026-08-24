@@ -23,7 +23,7 @@ permissions:
       target_ref:
         description: 'Branch, tag, or ref to check out before optional target_sha'
         required: true
-        default: latest
+        default: master
         type: string
       target_sha:
         description: 'Optional full 40-character commit SHA to check out'

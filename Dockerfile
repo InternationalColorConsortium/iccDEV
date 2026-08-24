@@ -22,7 +22,7 @@ LABEL org.opencontainers.image.title="iccDEV" \
       org.opencontainers.image.vendor="International Color Consortium" \
       org.opencontainers.image.source="https://github.com/InternationalColorConsortium/iccDEV"
 
-# Pebble is inherited from the Ubuntu base but unused by the regression image.
+# Pebble is inherited from the Ubuntu base but unused by the unified image.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
     afl++=4.33c-1.1ubuntu1 \
