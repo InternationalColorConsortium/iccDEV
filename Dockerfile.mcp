@@ -50,13 +50,14 @@ RUN python3 -m venv /opt/iccdev-mcp-venv \
       'pip>=25.1.1' \
       'setuptools>=78.1.1' \
       'msgpack>=1.2.1' \
+ && /opt/iccdev-mcp-venv/bin/python -m pip install --no-cache-dir \
+      "/opt/iccdev/iccdev-mcp[rest]" \
  && ICCDEV_BUILD_DIR=/opt/iccdev/Build \
     /opt/iccdev-mcp-venv/bin/python -m pip install --no-cache-dir \
       /opt/iccdev/python \
-      "/opt/iccdev/iccdev-mcp[rest]" \
  && /opt/iccdev-mcp-venv/bin/python -m pip check \
  && ICCDEV_BUILD_DIR=/opt/iccdev/Build /opt/iccdev-mcp-venv/bin/python -c \
-      'import iccdev; result = iccdev.validate_profile_file("/opt/iccdev/Testing/sRGB_v4_ICC_preference.icc"); assert result.status in (iccdev.ValidationStatus.OK, iccdev.ValidationStatus.WARNING); print(f"validation: {result.status.name}")' \
+      'import iccdev; import iccdev._iccdev; result = iccdev.validate_profile_file("/opt/iccdev/Testing/sRGB_v4_ICC_preference.icc"); assert result.status in (iccdev.ValidationStatus.OK, iccdev.ValidationStatus.WARNING); print(f"validation: {result.status.name}")' \
  && rm -rf \
       /opt/iccdev-mcp-venv/bin/pip* \
       /opt/iccdev-mcp-venv/lib/python*/site-packages/pip \
