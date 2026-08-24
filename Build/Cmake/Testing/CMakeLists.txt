@@ -995,6 +995,47 @@ function(iccdev_add_pawg_q1q3_relative_intent_test)
   endif()
 endfunction()
 
+# Guards PAWG Q1 metric bounds and model selection.  The MATLAB QA workflow
+# builds this target directly, so register it with both CTest and the check
+# aggregate to keep the native contract available on every platform.
+function(iccdev_add_pawg_q1_quality_contract_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPawgQ1QualityContractTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pawg-q1-quality-contract.cpp"
+  )
+  target_include_directories(iccPawgQ1QualityContractTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport"
+  )
+  target_link_libraries(iccPawgQ1QualityContractTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPawgQ1QualityContractTest)
+
+  add_test(
+    NAME iccdev.pawg-q1-quality-contract
+    COMMAND "$<TARGET_FILE:iccPawgQ1QualityContractTest>"
+  )
+  set_tests_properties(iccdev.pawg-q1-quality-contract PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;pawg;quality;issue-1475;regression"
+  )
+  if(WIN32)
+    set(_pawg_q1_quality_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPawgQ1QualityContractTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pawg_q1_quality_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pawg-q1-quality-contract PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pawg_q1_quality_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards the rotl/rotr operand that SIccCalcOp::Describe dropped (#2265):
 # the icSigRotateLeftOp/icSigRotateRightOp arm formatted its selectors and then
 # broke without appending them, so the ops described themselves bare and a
@@ -5980,6 +6021,7 @@ if(WIN32)
   iccdev_add_pawg_q4_xyz_pcs_decode_test()
   iccdev_add_tointernal_fixedint_roundtrip_test()
   iccdev_add_pawg_q1q3_relative_intent_test()
+  iccdev_add_pawg_q1_quality_contract_test()
   iccdev_add_cmm_registry_allowlist_test()
   iccdev_add_mpecalc_matrix_overflow_test()
   iccdev_add_mpecalc_rotate_operand_test()
@@ -6325,6 +6367,7 @@ iccdev_add_pawg_q4_xyz_pcs_decode_test()
 # own if(WIN32) PATH handling, so calling it unconditionally is safe on every platform.
 iccdev_add_tointernal_fixedint_roundtrip_test()
 iccdev_add_pawg_q1q3_relative_intent_test()
+iccdev_add_pawg_q1_quality_contract_test()
 iccdev_add_cmm_registry_allowlist_test()
 iccdev_add_mpecalc_matrix_overflow_test()
 iccdev_add_mpecalc_rotate_operand_test()
