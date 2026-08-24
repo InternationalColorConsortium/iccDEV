@@ -36,11 +36,12 @@ development headers when the published image does not already contain them,
 puts the freshly built AFL++ checkout first in `PATH`, and builds iccDEV with
 `afl-clang-fast`.
 
-The unified image keeps the packaged `afl-clang-fast` wrapper usable for
-short local smoke checks by installing its matching compiler runtime. For CI,
-use the rebuilt wrapper path and explicitly probe it against the same LLVM
-major version as `clang-22`. Known-good AFL wrapper checks compile both C and
-C++ probes with:
+The unified image keeps the packaged `afl-clang-fast` wrapper usable for short
+local smoke checks. Its packaged LLVM plugin targets Clang 21, so use
+`AFL_CC=clang-21` and `AFL_CXX=clang++-21` for that path. The AFL smoke workflow
+rebuilds AFL++ against Clang 22; use the rebuilt wrapper path and explicitly
+probe it with Clang 22. Known-good rebuilt-wrapper checks compile both C and C++
+probes with:
 
 ```bash
 AFL_PATH=/path/to/AFLplusplus AFL_CC=clang-22 AFL_CXX=clang++-22 \

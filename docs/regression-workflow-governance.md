@@ -151,13 +151,10 @@ for other changes to conserve runners. Do not treat a skipped lane as container
 verification; rerun it after any Dockerfile, container image, or container
 workflow update.
 
-The Docker PR lane consumes the published
-`ghcr.io/internationalcolorconsortium/iccdev:latest` image as a
-maintainer-controlled build cache. It must pull and report the resolved digest,
-then rebuild the checked-out PR Dockerfile without a workflow cache.
-The resulting image is local to the job: it must bind the checked-out PR tree
-read-only, copy it to container-local scratch space, and build and run the fast
-CTest envelope there. Only `ci-docker` publishes images.
+The Docker PR lane builds the exact checked-out PR Dockerfile without a workflow
+cache. The resulting image is local to the job: it must bind the checked-out PR
+tree read-only, copy it to container-local scratch space, and build and run the
+fast CTest envelope there. Only `ci-docker` publishes images.
 
 Local review should include YAML parsing, `actionlint`, `yamllint`, direct
 `${{ }}` interpolation scans for `run:` blocks, Dockerfile base/remote-exec

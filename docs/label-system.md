@@ -180,8 +180,8 @@ contexts before a direct maintainer push. It requires signed commits, linear
 fast-forward history, and deletion protection; maintainers dispatch
 `ci-pr-action` and `ci-docker` immediately after pushing the testing branch.
 Pull requests targeting `ci-qa-pr-docker-testing` also run `ci-pr-action`; its
-Docker PR lane is required for container-surface changes and records the
-resolved published-image cache digest in the workflow log.
+Docker PR lane is required for same-repository container-surface changes and
+builds the exact PR revision into a job-local image.
 
 ### CodeQL Ready
 

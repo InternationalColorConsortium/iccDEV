@@ -326,7 +326,7 @@ jobs:
               return 1
             fi
             case "$(jq -r '.base.ref' <<< "$pr_json")" in
-              master|ci-qa-flags)
+              master|ci-qa-flags|ci-qa-pr-docker-testing)
                 ;;
               *)
                 echo "workflow_dispatch target PR uses an unsupported base: $number" >&2
@@ -396,7 +396,7 @@ jobs:
 
           # Avoid fetching refs from user-controllable inputs like ($base_ref)
           case "$base_ref" in
-            master|ci-qa-flags)
+            master|ci-qa-flags|ci-qa-pr-docker-testing)
               ;;
             *)
               echo "Ref blocked or unsupported: $base_ref" >&2
@@ -998,7 +998,7 @@ jobs:
           grep -Fq 'Hello, iccDEV!' <<< "$output"
 
   docker-ci:
-    if: ${{ needs.detect-src.outputs.container_changed == 'true' }}
+    if: ${{ needs.detect-src.outputs.container_changed == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     name: Docker Clang 22 Verification
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-docker-pr.yml
