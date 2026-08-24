@@ -13,10 +13,16 @@ reference profiles, the MCP runtime, and the maintainer compiler and QA tools.
 | `latest` | Current image from `master`; convenient but mutable. |
 | `sha-<40-character-commit>` | Immutable CI and investigation reference. |
 | `v<release>` | Immutable released image. |
+| Existing legacy tags | Retained temporarily for continuity; unsupported for new use. |
 
 Use `latest` only to start interactive work. Record the resolved digest and
 source revision in a report; use the SHA tag whenever another person or CI job
 must reproduce the result.
+
+Existing short-SHA, branch, and image-variant tags remain available only to
+avoid breaking current users during the consolidation transition. Do not create,
+recommend, or depend on new legacy tags. Re-evaluate their retention and
+removal through a separately announced tag-management change.
 
 ```bash
 IMAGE=ghcr.io/internationalcolorconsortium/iccdev:latest
@@ -93,8 +99,10 @@ docker run --rm iccdev:local bash -lc '
 `ci-docker` publishes only the canonical package: `master` adds `latest` and
 the immutable SHA tag; a `v*` ref adds its release tag and immutable SHA tag.
 Do not publish branch, run, image-variant, or legacy-package tags. The workflow
-creates one SBOM artifact and one provenance/SBOM attestation set for the
-canonical digest.
+always creates an SBOM artifact and provenance attestation for the canonical
+digest. Its SBOM attestation is emitted only when the SBOM is at most 16 MiB;
+larger SBOMs remain available as artifacts and the workflow reports the skipped
+attestation.
 
 For detailed regression gate policy, use
 `docs/regression-workflow-governance.md`. For MCP developer setup, use

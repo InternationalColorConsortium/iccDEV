@@ -44,8 +44,10 @@ Canonical guide: `docs/regression-container.md`
 12. Save evidence outside the disposable container.
 13. If CI is requested, use the PR trigger or explicitly dispatch
     `ci-pr-action.yml`; do not assume a branch push triggers it.
-14. Use only `latest`, immutable SHA, or release tags; do not create branch,
-    run, or image-variant tags.
+14. Use only `latest`, immutable SHA, or release tags. Existing legacy tags are
+    continuity-only; do not create, recommend, or depend on branch, run, or
+    image-variant tags. Require a separate tag-management decision before
+    removing a legacy tag.
 15. Include the canonical image digest and hosted run in the handoff.
 
 For AFL/CFL work, keep the review scope narrow: these helpers are experimental

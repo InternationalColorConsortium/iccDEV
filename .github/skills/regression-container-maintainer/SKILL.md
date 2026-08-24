@@ -54,8 +54,10 @@ Use this skill for repeatable maintainer operations in
 12. Scan logs for compiler warnings, ASAN, UBSAN, and signal termination.
 13. Trigger `ci-pr-action.yml` explicitly for a pre-PR branch; a push alone does
     not trigger that workflow.
-14. Use only `latest`, immutable SHA, or release tags. Do not introduce branch,
-    run, or image-variant tags.
+14. Use only `latest`, immutable SHA, or release tags. Existing legacy tags are
+    continuity-only; do not introduce, recommend, or depend on branch, run, or
+    image-variant tags. Require a separate tag-management decision before
+    removing a legacy tag.
 15. Confirm the canonical image digest and hosted validation explicitly.
 16. Report exact image tag, digest, source revision, commands, results, evidence,
     and workflow URLs.
