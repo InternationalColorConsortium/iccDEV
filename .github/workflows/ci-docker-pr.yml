@@ -221,6 +221,11 @@ jobs:
           unset GITHUB_TOKEN || true
           source .trusted-workflow/.github/scripts/sanitize-sed.sh
 
+          # The trusted checkout is needed only to load this sanitizer. Remove
+          # it so the Docker context and later read-only source mount are clean.
+          rm -rf "$GITHUB_WORKSPACE/.trusted-workflow"
+          test ! -e "$GITHUB_WORKSPACE/.trusted-workflow"
+
           docker build \
             --cache-from "$CACHE_IMAGE" \
             --build-arg "GIT_COMMIT=$TARGET_SHA" \
@@ -264,6 +269,8 @@ jobs:
             test "${CXX}" = clang++
             printf "int main(void) { return 0; }\n" > /tmp/afl-probe.c
             printf "int main(void) { return 0; }\n" > /tmp/afl-probe.cpp
+            # The packaged AFL LLVM plugin targets LLVM 21; retain
+            # Clang 22 as the image default and pair this probe to LLVM 21.
             AFL_CC=clang-21 AFL_CXX=clang++-21 afl-clang-fast -c /tmp/afl-probe.c -o /tmp/afl-probe.o
             AFL_CC=clang-21 AFL_CXX=clang++-21 afl-clang-fast++ -c /tmp/afl-probe.cpp -o /tmp/afl-probexx.o
             printf "#include <stddef.h>\n#include <stdint.h>\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t*, size_t){return 0;}\n" > /tmp/cfl-smoke.cpp

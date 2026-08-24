@@ -247,7 +247,7 @@ separate from general source changes when practical.
 
 | File | Owner intent | Required local checks |
 |------|--------------|-----------------------|
-| `Dockerfile` | Unified image for runtime tools, MCP, ASAN/UBSAN CTest, fuzzing, review, and hybrid timing gates. | Run a no-cache build and smoke `git`, `gh`, `curl`, `clang`, `clang++`, `gcc`, `g++`, `lldb`, `gdb`, `cmake`, `afl-fuzz`, `afl-showmap`, `iccdev-fuzz-env`, MCP initialization, libFuzzer compilation, and `/usr/bin/time`; AFL wrapper changes also need the container bootstrap probe in `docs/afl-fuzzing.md`. |
+| `Dockerfile` | Unified image for runtime tools, MCP, ASAN/UBSAN CTest, fuzzing, review, and hybrid timing gates. Clang 22 is the default toolchain; the packaged AFL++ LLVM plugin is paired with Clang 21. | Run a no-cache build and smoke `git`, `gh`, `curl`, `clang`, `clang++`, `gcc`, `g++`, `lldb`, `gdb`, `cmake`, `afl-fuzz`, `afl-showmap`, `iccdev-fuzz-env`, MCP initialization, libFuzzer compilation, and `/usr/bin/time`; AFL wrapper changes also need the container bootstrap probe in `docs/afl-fuzzing.md`. |
 
 For unified `Dockerfile` publishing:
 

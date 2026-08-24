@@ -5,6 +5,8 @@ CLI tools, MCP, maintainer reproduction, sanitizer testing, AFL/CFL smoke work,
 and CI parity. It contains the unpatched source checkout at
 `/workspace/iccDEV`, its configured build at `/workspace/build`, the generated
 reference profiles, the MCP runtime, and the maintainer compiler and QA tools.
+Clang 22 is the default compiler; the packaged AFL++ LLVM plugin uses the
+included Clang 21 pair for compatible instrumentation.
 
 ## Tags
 
@@ -98,11 +100,11 @@ docker run --rm iccdev:local bash -lc '
 
 `ci-docker` publishes only the canonical package: `master` adds `latest` and
 the immutable SHA tag; a `v*` ref adds its release tag and immutable SHA tag.
-Do not publish branch, run, image-variant, or legacy-package tags. The workflow
-always creates an SBOM artifact and provenance attestation for the canonical
-digest. Its SBOM attestation is emitted only when the SBOM is at most 16 MiB;
-larger SBOMs remain available as artifacts and the workflow reports the skipped
-attestation.
+Do not publish branch, run, image-variant, or legacy-package tags. Publishing
+runs always create an SBOM artifact and provenance attestation for the
+canonical digest. Its SBOM attestation is emitted only when the SBOM is at most
+16 MiB; larger SBOMs remain available as artifacts and the workflow reports
+the skipped attestation.
 
 For detailed regression gate policy, use
 `docs/regression-workflow-governance.md`. For MCP developer setup, use

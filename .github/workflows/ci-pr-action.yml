@@ -121,6 +121,7 @@ jobs:
       ctest_mode: ${{ steps.diffcheck.outputs.ctest_mode }}
       warning_policy: ${{ steps.diffcheck.outputs.warning_policy }}
       target_sha: ${{ steps.diffcheck.outputs.target_sha }}
+      base_sha: ${{ steps.diffcheck.outputs.base_sha }}
       target_repository: ${{ steps.diffcheck.outputs.target_repository }}
       pr_number: ${{ steps.diffcheck.outputs.pr_number }}
 
@@ -164,6 +165,7 @@ jobs:
           WARNING_POLICY_INPUT: ${{ inputs.warning_policy || 'fail' }}
           DISPATCH_PR_NUMBER: ${{ inputs.pr_number || '' }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login || github.actor }}
           PR_NUMBER: ${{ github.event.pull_request.number || '' }}
@@ -181,6 +183,7 @@ jobs:
 
           ci_scope="${CI_SCOPE:-auto}"
           head_sha="${PR_HEAD_SHA}"
+          base_sha="${PR_BASE_SHA}"
           target_repository="${PR_HEAD_REPO}"
           pr_number="${PR_NUMBER}"
           fast_lane=false
@@ -243,6 +246,7 @@ jobs:
             write_github_output ctest_mode "$ctest_mode"
             write_github_output warning_policy "$warning_policy"
             write_github_output target_sha "$head_sha"
+            write_github_output base_sha "$base_sha"
             write_github_output target_repository "$target_repository"
             write_github_output pr_number "$pr_number"
           }
@@ -331,6 +335,7 @@ jobs:
                 ;;
             esac
             head_sha="$(jq -r '.head.sha' <<< "$pr_json")"
+            base_sha="$(jq -r '.base.sha' <<< "$pr_json")"
             target_repository="$(jq -r '.head.repo.full_name' <<< "$pr_json")"
             pr_number="$number"
           }
@@ -382,8 +387,8 @@ jobs:
             return 0
           }
 
-          if ! validate_sha "$head_sha"; then
-            echo "Warning: invalid or missing head commit sha; assuming source changed for safety" >&2
+          if ! validate_sha "$head_sha" || ! validate_sha "$base_sha"; then
+            echo "Warning: invalid or missing PR commit SHA; assuming source changed for safety" >&2
             write_scope_outputs true true true true false false false true true true true
             exit 0
           fi
@@ -455,7 +460,7 @@ jobs:
           fi
 
           # Docker CI covers every input packaged into the unified image.
-          if has_changed_file '^Dockerfile(\..*)?$|^\.dockerignore$|^docker/|^iccdev-mcp/|^\.github/workflows/ci-docker-pr\.yml$'; then
+          if has_changed_file '^Dockerfile(\..*)?$|^\.dockerignore$|^docker/|^iccdev-mcp/|^Build/|^IccConnect/|^IccJSON/|^IccProfLib/|^IccXML/|^Testing/|^Tools/|^cfl/|^python/|^\.github/scripts/preflight-safety-checks\.sh$|^\.github/workflows/ci-docker(-pr)?\.yml$'; then
             container_changed=true
           fi
 
@@ -999,7 +1004,7 @@ jobs:
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-docker-pr.yml
     with:
-      base_sha: ${{ github.event.pull_request.base.sha || github.sha }}
+      base_sha: ${{ needs.detect-src.outputs.base_sha }}
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
       warning_policy: ${{ needs.validate-inputs.outputs.warning-policy }}
 

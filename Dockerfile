@@ -30,6 +30,7 @@ RUN apt-get update \
     binutils=2.46-3ubuntu2 \
     build-essential=12.12ubuntu2.26.04.2 \
     ca-certificates=20260601~26.04.1 \
+    clang-21=1:21.1.8-6ubuntu1 \
     clang-22=1:22.1.2-1ubuntu1 \
     clang-tidy-22=1:22.1.2-1ubuntu1 \
     clang-tools-22=1:22.1.2-1ubuntu1 \
