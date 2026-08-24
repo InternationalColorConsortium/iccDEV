@@ -477,7 +477,7 @@ jobs:
           health = health_check()
           assert version("iccdev-mcp") == __version__
           assert health["version"] == __version__
-          assert health["total_tools"] == 25
+          assert health["total_tools"] == 26
           assert len(health["cli_tools"]["available"]) == 17
           assert health["profile_count"] > 0
           '
