@@ -689,6 +689,7 @@ inline bool measure_cmm_round_trip(CIccProfile *pIcc,
     reason = "CIccCmm round-trip sample grid exceeds quality metric budget";
     return false;
   }
+  (void)sampleCount;
 
   CIccCmm forward(colorSpace, pcs, true);
   CIccCmm reverse(pcs, colorSpace, false);
@@ -1193,6 +1194,7 @@ inline bool measure_classic_lut_round_trip(CIccProfile *pIcc,
     reason = std::string(pairLabel) + " sample grid exceeds quality metric budget";
     return false;
   }
+  (void)sampleCount;
 
   std::array<icFloatNumber, 16> device0{};
   std::array<icFloatNumber, 16> pcs1{};
