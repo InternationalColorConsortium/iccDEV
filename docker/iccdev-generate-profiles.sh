@@ -20,7 +20,7 @@ done
 # -fsanitize=undefined. The unified Dockerfile builds clang with
 # ENABLE_SANITIZERS=ON, which CMake expands to include integer.
 #
-# The runtime list is appropriate because ci-regression passes
+# The runtime list is appropriate because the unified Dockerfile enables
 # SANITIZER_RECOVER=ON, allowing the suppressions to apply.
 #
 # Reading the file also stops this script overwriting a tracked source file as a

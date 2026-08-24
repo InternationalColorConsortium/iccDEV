@@ -59,7 +59,7 @@ WORKTREE=/path/to/iccDEV
 docker run --rm -v "$WORKTREE:/src:ro" "$IMAGE" bash -lc '
   set -euo pipefail
   work="$(mktemp -d)"
-  cp -a /src/. "$work/iccDEV"
+  cp -a --no-preserve=ownership /src/. "$work/iccDEV"
   cmake -S "$work/iccDEV/Build/Cmake" -B "$work/build" \
     -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang \
     -DCMAKE_CXX_COMPILER=clang++ -DENABLE_ASAN=ON -DENABLE_UBSAN=ON \
