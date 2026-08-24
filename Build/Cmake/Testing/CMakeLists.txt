@@ -5813,6 +5813,54 @@ if(TARGET iccDumpProfile)
   endif()
 endif()
 
+function(iccdev_add_spectral_clut_channel_count_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSpectralClutChannelCountTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/spectral-clut-channel-count-bound.cpp"
+  )
+  target_link_libraries(iccSpectralClutChannelCountTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+
+  add_dependencies(check iccSpectralClutChannelCountTest)
+
+  # No fixture argument: the test builds the MPE element bodies in memory. The
+  # channel counts that matter (257, 259, 260, 272) are single 16-bit fields, so a
+  # tracked profile would carry nothing the buffers here do not say more directly.
+  if(WIN32)
+    add_test(
+      NAME iccdev.spectral-clut-channel-count-bound
+      COMMAND "$<TARGET_FILE:iccSpectralClutChannelCountTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.spectral-clut-channel-count-bound
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccSpectralClutChannelCountTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.spectral-clut-channel-count-bound PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;mpe;spectral;clut;security;regression"
+  )
+  if(WIN32)
+    set(_spectral_clut_channel_count_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSpectralClutChannelCountTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _spectral_clut_channel_count_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.spectral-clut-channel-count-bound PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_spectral_clut_channel_count_windows_env_mods}"
+    )
+  endif()
+endfunction()
 
 if(WIN32)
   function(iccdev_add_windows_batch_test NAME TIMEOUT LABELS SCRIPT)
@@ -6143,6 +6191,7 @@ if(WIN32)
   iccdev_add_qa_evidence_helpers_test()
   iccdev_add_windows_iccdevcmm_smoke_test()
   iccdev_add_zip_utf8_text_zlib_test()
+  iccdev_add_spectral_clut_channel_count_test()
 
   if(TARGET iccFromXml AND TARGET iccDumpProfile AND TARGET iccApplyNamedCmm)
     add_test(
@@ -6485,6 +6534,7 @@ iccdev_add_iccprofileplot_exitcode_test()
 iccdev_add_prmg_hue_normalization_test()
 iccdev_add_qa_evidence_helpers_test()
 iccdev_add_zip_utf8_text_zlib_test()
+iccdev_add_spectral_clut_channel_count_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")

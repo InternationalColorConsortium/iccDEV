@@ -5709,7 +5709,12 @@ bool CIccMpeCLUT::Read(icUInt32Number size, CIccIO *pIO)
 
   m_pCLUT->SetClipFunc(NoClip);
 
-  m_pCLUT->Init(gridPoints);
+  // The GetData(0) check below turns a refused Init() into a failed Read() only
+  // because Init() leaves m_pData NULL and GetData(0) is &m_pData[0]. State the
+  // rejection where it happens instead of relying on that; CIccMpeExtCLUT::Read
+  // further down this file already does.
+  if (!m_pCLUT->Init(gridPoints))
+    return false;
 
   icFloatNumber *pData = m_pCLUT->GetData(0);
 

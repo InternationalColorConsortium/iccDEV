@@ -4365,7 +4365,8 @@ CIccMatrix* CIccMBB::NewMatrix()
  * Args:
  *  pGridPoints = number of grid points in the CLUT
  *
- * Return: Pointer to the CIccCLUT object
+ * Return: Pointer to the CIccCLUT object, or NULL if the CLUT could not be
+ *  initialized for this object's channel counts and the requested grid.
  *****************************************************************************
  */
 CIccCLUT* CIccMBB::NewCLUT(icUInt8Number *pGridPoints, icUInt8Number nPrecision/*=2*/)
@@ -4375,7 +4376,19 @@ CIccCLUT* CIccMBB::NewCLUT(icUInt8Number *pGridPoints, icUInt8Number nPrecision/
 
   m_CLUT = new CIccCLUT(m_nInput, m_nOutput, nPrecision);
 
-  m_CLUT->Init(pGridPoints);
+  // Init() refuses an input count outside 1..16, a grid granularity below 2, and
+  // any grid whose node count overflows 32 bits. Its result was dropped here and
+  // the CLUT handed back regardless, so callers received an object with
+  // m_pData NULL that nothing distinguished from a working one -- GetData(0)
+  // returned NULL and was written through (#1781). iccApplyToLink works around
+  // this by constructing the CLUT itself and calling SetCLUT(); it should not
+  // have to. Report the failure the way the return type always implied, and drop
+  // the CLUT rather than leaving the tag owning an unusable one.
+  if (!m_CLUT->Init(pGridPoints)) {
+    delete m_CLUT;
+    m_CLUT = NULL;
+    return NULL;
+  }
 
   return m_CLUT;
 }
@@ -4415,7 +4428,8 @@ CIccCLUT *CIccMBB::SetCLUT(CIccCLUT *clut)
  * Args:
  *  nGridPoints = number of grid points in the CLUT
  *
- * Return: Pointer to the CIccCLUT object
+ * Return: Pointer to the CIccCLUT object, or NULL if the CLUT could not be
+ *  initialized for this object's channel counts and the requested grid.
  *****************************************************************************
  */
 CIccCLUT* CIccMBB::NewCLUT(icUInt8Number nGridPoints, icUInt8Number nPrecision/*=2*/)
@@ -4425,7 +4439,13 @@ CIccCLUT* CIccMBB::NewCLUT(icUInt8Number nGridPoints, icUInt8Number nPrecision/*
 
   m_CLUT = new CIccCLUT(m_nInput, m_nOutput, nPrecision);
 
-  m_CLUT->Init(nGridPoints);
+  // See the pGridPoints overload above: Init()'s refusal was dropped and the
+  // uninitialized CLUT returned as though it were usable.
+  if (!m_CLUT->Init(nGridPoints)) {
+    delete m_CLUT;
+    m_CLUT = NULL;
+    return NULL;
+  }
 
   return m_CLUT;
 }
