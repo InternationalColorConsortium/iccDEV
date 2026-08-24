@@ -14,6 +14,12 @@ function plots = plot(profile_path, varargin)
 % Copyright (c) International Color Consortium.
 % BSD 3-Clause License. See LICENSE.md for details.
 
+  if nargin < 1
+    error('iccdev:plotProfileRequired', ...
+      ['Provide an ICC profile path. Example: ' ...
+       'plots = iccdev.plot(profile_path, ''Visible'', ''off'');']);
+  end
+
   p = inputParser;
   addRequired(p, 'profile_path', @is_text_scalar);
   addParameter(p, 'Visible', 'on', @is_on_off);

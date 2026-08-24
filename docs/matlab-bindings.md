@@ -164,6 +164,9 @@ repository-relative support paths used by QA and examples:
 - `iccPawgReport.exe` at the bundle root for MATLAB/native Q1 comparison.
 - `matlab/+iccdev/+qa/audit_pawg_q1.m`, its calculation helpers, and
   `matlab/tests/test_pawg_q1.m`.
+- `matlab/tests/test_usage_guidance.m` and
+  `matlab/tests/fixtures/default_usage_examples.txt` for actionable default
+  command errors.
 - `.github/ci/regression/gamma-2.20703125.icc` for gamma QA.
 - `IccProfLib/IccTagBasic.cpp` and `IccProfLib/IccColorimetry.cpp` for the
   independent issue #1475 table check.
@@ -234,6 +237,90 @@ setenv('ICCDEV_BUILD_DIR', fullfile(repo_root, 'msvc'));
 
 Shell `export` is Unix-shell syntax and must not be entered in MATLAB or
 PowerShell.
+
+### Interactive API smoke examples
+
+Package names alone are not a universal smoke test. `iccdev.RenderingIntent`
+and `iccdev.Interpolation` display their constants directly. Constructors and
+functions that require arguments return an actionable error with a working
+example when invoked without them.
+
+Start from the repository root with the MATLAB package on the path:
+
+```matlab
+repo_root = pwd;
+if exist(fullfile(repo_root, 'Build', 'Cmake'), 'dir') ~= 7
+  repo_root = fileparts(repo_root);
+end
+assert(exist(fullfile(repo_root, 'Build', 'Cmake'), 'dir') == 7);
+cd(repo_root);
+addpath(fullfile(repo_root, 'matlab'));
+addpath(fullfile(repo_root, 'matlab', 'tests'));
+
+profile_path = fullfile(repo_root, 'Testing', ...
+  'sRGB_v4_ICC_preference.icc');
+assert(exist(profile_path, 'file') == 2);
+```
+
+Inspect the enum constants:
+
+```matlab
+iccdev.RenderingIntent
+iccdev.Interpolation
+```
+
+Open and inspect a profile:
+
+```matlab
+profile = iccdev.IccProfile(profile_path);
+header = profile.header();
+disp(header.versionString);
+disp(iccdev.sig_to_str(uint32(header.colorSpace)));
+profile.close();
+```
+
+Create an `IccApply` handle through an initialized `IccCmm`. Do not call
+`iccdev.IccApply` directly; its constructor is internal to `get_apply()`:
+
+```matlab
+cmm = iccdev.IccCmm();
+cmm.attach(profile_path, ...
+  'intent', iccdev.RenderingIntent.Perceptual, ...
+  'interp', iccdev.Interpolation.Linear);
+cmm.attach(profile_path);
+cmm.begin();
+
+apply_handle = cmm.get_apply();
+result = apply_handle.apply([0.5 0.3 0.1]);
+disp(result);
+
+apply_handle.close();
+cmm.close();
+```
+
+Convert a known ICC signature:
+
+```matlab
+rgb_signature = uint32(hex2dec('52474220'));
+disp(iccdev.sig_to_str(rgb_signature));
+```
+
+Render the profile graphs without leaving figures open:
+
+```matlab
+plots = iccdev.plot(profile_path, 'Visible', 'off');
+disp({plots.title});
+close([plots.figure]);
+```
+
+Run the focused and complete automated checks:
+
+```matlab
+test_usage_guidance();
+test_plot();
+summary = test_iccdev();
+assert(summary.failed == 0 && summary.skipped == 0);
+```
 
 ## Profiles
 
@@ -583,7 +670,7 @@ process.
 Download the image:
 
 ```powershell
-docker pull ghcr.io/internationalcolorconsortium/iccdev@sha256:2f4230308320b60106c2675b2c50aa7c22e0b50fe56045080ce480c6232b2672
+docker pull ghcr.io/internationalcolorconsortium/iccdev@sha256:0a54b8ad1ca73e294ecf9c71323e6385c8812945c6ca3b40ba98d9f82b89c0fc
 ```
 
 Run the MATLAB validation:

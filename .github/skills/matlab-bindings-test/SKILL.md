@@ -138,6 +138,7 @@ profiles, examples, and native handle lifecycle behavior.
    cd(repo_root);
    addpath(fullfile(repo_root, 'matlab'));
    addpath(fullfile(repo_root, 'matlab', 'tests'));
+   test_usage_guidance();
    test_iccdev();
    run_local_qa();
    test_add_docker_path();
@@ -185,6 +186,8 @@ profiles, examples, and native handle lifecycle behavior.
     staged bundle to contain `iccPawgReport.exe`,
     `matlab/+iccdev/+qa/audit_pawg_q1.m`, `bounded_grid.m`,
     `delta_e_2000.m`, `pcs_to_lab.m`, `matlab/tests/test_pawg_q1.m`, and
+    `matlab/tests/test_usage_guidance.m`,
+    `matlab/tests/fixtures/default_usage_examples.txt`, and
     `Testing/sRGB_v4_ICC_preference.icc`. Add the staged bundle root to the
     MATLAB process `PATH` before `run_local_qa()`.
 
@@ -203,6 +206,8 @@ profiles, examples, and native handle lifecycle behavior.
   mounts, no container network, and an immutable digest in hosted CI.
 - Keep MATLAB Project metadata local and ignored.
 - Close native handles before `clear mex`.
+- Public entry points that require arguments must return an actionable
+  `iccdev:*Required` error with a working example when invoked bare.
 
 ## Completion Evidence
 

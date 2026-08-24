@@ -33,6 +33,11 @@ classdef IccProfile < handle
       %   p = iccdev.IccProfile(filename)
       %   p = iccdev.IccProfile(filename, 'lazy', true)
       %   p = iccdev.IccProfile(filename, 'lazy', false)
+      if nargin < 1
+        error('iccdev:profilePathRequired', ...
+          ['Provide an ICC profile path. Example: ' ...
+           'profile = iccdev.IccProfile(profile_path);']);
+      end
       lazy = true;
       for k = 1:2:numel(varargin)
         if strcmpi(varargin{k}, 'lazy')

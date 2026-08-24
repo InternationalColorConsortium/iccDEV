@@ -121,11 +121,11 @@ cmm.close();
 
 ### Classes
 
-| Class | Description |
-|-------|-------------|
-| `iccdev.IccProfile` | Read/open ICC profiles, inspect header |
-| `iccdev.IccCmm` | Color Management Module - build & apply transforms |
-| `iccdev.IccApply` | Thread-safe per-thread apply handle |
+| Class or constructor | Description |
+|----------------------|-------------|
+| `iccdev.IccProfile(profile_path, ...)` | Open an ICC profile and inspect its header |
+| `iccdev.IccCmm()` | Build and apply a multi-profile transform |
+| `cmm.get_apply()` | Create an `iccdev.IccApply` thread-safe handle; do not construct it directly |
 
 ### Constants
 
@@ -151,6 +151,14 @@ cmm.close();
 | `run_local_qa()` | Run local MEX regression and stress checks |
 | `run_gamma_qa()` | Verify issue #815 curveType u8Fixed8 gamma decoding |
 | `run_docker_qa(image)` | Validate the published container and output contract |
+
+Constructors and functions require the arguments shown above. Only enum classes
+such as `iccdev.RenderingIntent` and `iccdev.Interpolation` are intended to be
+entered by name for direct display. Missing required arguments produce an
+actionable error containing a working invocation. See the verified
+[interactive API smoke examples](../docs/matlab-bindings.md#interactive-api-smoke-examples)
+for complete commands covering profiles, CMM transforms, `IccApply`,
+signatures, and plots.
 
 ### iccdev.IccProfile
 

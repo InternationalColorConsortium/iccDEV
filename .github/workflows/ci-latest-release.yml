@@ -730,6 +730,8 @@ jobs:
             'matlab\+iccdev\+qa\delta_e_2000.m',
             'matlab\+iccdev\+qa\pcs_to_lab.m',
             'matlab\tests\test_pawg_q1.m',
+            'matlab\tests\test_usage_guidance.m',
+            'matlab\tests\fixtures\default_usage_examples.txt',
             'matlab\tests\test_luminance_normalization.m',
             'matlab\tests\test_colorimetry_issue_1475.m',
             'matlab\examples\gamma_curve.m',
@@ -881,6 +883,7 @@ jobs:
             addpath(matlab_dir);
             addpath(fullfile(matlab_dir, 'tests'));
             setenv('PATH', [stage pathsep getenv('PATH')]);
+            test_usage_guidance();
             test_luminance_normalization();
             test_colorimetry_issue_1475();
             qa_output = evalc('run_local_qa()');
@@ -1821,6 +1824,8 @@ jobs:
             "matlab/+iccdev/+qa/delta_e_2000.m"
             "matlab/+iccdev/+qa/pcs_to_lab.m"
             "matlab/tests/test_pawg_q1.m"
+            "matlab/tests/test_usage_guidance.m"
+            "matlab/tests/fixtures/default_usage_examples.txt"
             "matlab/tests/test_luminance_normalization.m"
             "matlab/tests/test_colorimetry_issue_1475.m"
             "matlab/examples/gamma_curve.m"

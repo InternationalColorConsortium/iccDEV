@@ -21,6 +21,11 @@ classdef IccApply < handle
   methods
     function obj = IccApply(cmm, srcCh, dstCh)
       %ICCAPPLY Create from a CMM object (internal use - call IccCmm.get_apply).
+      if nargin < 3
+        error('iccdev:applyFactoryRequired', ...
+          ['Create apply handles from an initialized CMM. Example: ' ...
+           'apply_handle = cmm.get_apply();']);
+      end
       if ~isa(cmm, 'iccdev.IccCmm') || ~cmm.is_valid()
         error('iccdev:invalidCmm', 'Parent CMM is closed or invalid.');
       end

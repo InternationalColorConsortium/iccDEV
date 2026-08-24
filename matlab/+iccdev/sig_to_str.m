@@ -6,6 +6,12 @@ function s = sig_to_str(sig)
   % Copyright (c) International Color Consortium.
   % BSD 3-Clause License. See LICENSE.md for details.
 
+  if nargin < 1
+    error('iccdev:signatureRequired', ...
+      ['Provide a 4-byte ICC signature. Example: ' ...
+       'iccdev.sig_to_str(uint32(hex2dec(''52474220'')));']);
+  end
+
   sig = uint32(sig);
   bytes = [
     bitand(bitshift(sig, -24), 255), ...

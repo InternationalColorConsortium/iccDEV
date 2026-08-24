@@ -19,6 +19,10 @@ on:
       - master
     paths:
       - ".github/workflows/ci-matlab.yml"
+      - ".github/instructions/matlab-mex.instructions.md"
+      - ".github/prompts/debug-matlab-bindings.prompt.md"
+      - ".github/skills/matlab-bindings-test/**"
+      - "docs/matlab-bindings.md"
       - "Build/Cmake/**"
       - "IccProfLib/**"
       - "Tools/CmdLine/IccPawgReport/**"
@@ -36,6 +40,10 @@ on:
       - master
     paths:
       - ".github/workflows/ci-matlab.yml"
+      - ".github/instructions/matlab-mex.instructions.md"
+      - ".github/prompts/debug-matlab-bindings.prompt.md"
+      - ".github/skills/matlab-bindings-test/**"
+      - "docs/matlab-bindings.md"
       - "Build/Cmake/**"
       - "IccProfLib/**"
       - "Tools/CmdLine/IccPawgReport/**"
@@ -146,6 +154,7 @@ jobs:
             'iccProfilePlot'
             'iccPawgReport'
             'iccPawgQ1QualityContractTest'
+            'iccCurveGammaU8Fixed8Test'
             'iccLuminanceNormalizationTest'
             'iccColorimetryMethodsTest'
             '--parallel'
@@ -155,7 +164,7 @@ jobs:
             throw "Native regression test build failed with exit code $LASTEXITCODE"
           }
 
-      - name: Run native luminance and colorimetry regressions
+      - name: Run native MATLAB regressions
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
           POWERSHELL_UPDATECHECK: Off
@@ -169,8 +178,15 @@ jobs:
           }
           . .trusted-helpers/.github/scripts/sanitize.ps1
 
+          $nativeRegressionPattern = (
+            '^iccdev\.(' +
+            'curve-gamma-u8fixed8|' +
+            'luminance-normalization|' +
+            'colorimetry-methods|' +
+            'pawg-q1-quality-contract)$'
+          )
           ctest --test-dir out\matlab -C Release `
-            -R '^iccdev\.(luminance-normalization|colorimetry-methods|pawg-q1-quality-contract)$' `
+            -R $nativeRegressionPattern `
             --output-on-failure `
             --no-tests=error
           if ($LASTEXITCODE -ne 0) {
@@ -193,6 +209,7 @@ jobs:
           command: >-
             addpath('matlab');
             addpath(fullfile('matlab', 'tests'));
+            test_usage_guidance();
             run_local_qa();
             test_add_docker_path();
             test_plot();
@@ -207,7 +224,7 @@ jobs:
     timeout-minutes: 30
     env:
       ICCDEV_IMAGE_REPOSITORY: ghcr.io/internationalcolorconsortium/iccdev
-      ICCDEV_IMAGE_DIGEST: sha256:2f4230308320b60106c2675b2c50aa7c22e0b50fe56045080ce480c6232b2672
+      ICCDEV_IMAGE_DIGEST: sha256:0a54b8ad1ca73e294ecf9c71323e6385c8812945c6ca3b40ba98d9f82b89c0fc
 
     steps:
       - name: Checkout repository

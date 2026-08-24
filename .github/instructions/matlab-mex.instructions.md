@@ -48,6 +48,8 @@ matlab/
     test_luminance_normalization.m # Dependency-free issue #1811 check
     test_colorimetry_issue_1475.m  # Dependency-free issue #1475 check
     test_pawg_q1.m             # MATLAB/native PAWG Q1 agreement
+    test_usage_guidance.m      # Actionable missing-argument usage examples
+    fixtures/default_usage_examples.txt # Expected identifiers and commands
   README.md               # Usage documentation
 ```
 
@@ -152,9 +154,15 @@ For the extended local smoke and stress checks:
 addpath('matlab');
 run_local_qa();
 run_gamma_qa();
+test_usage_guidance();
 test_add_docker_path();
 test_plot();
 ```
+
+Public constructors and functions that require arguments must reject a bare
+invocation with a stable `iccdev:*Required` identifier and a working example.
+Keep `test_usage_guidance.m` and its fixture synchronized when adding or
+renaming a public entry point.
 
 For MATLAB-only workflow or documentation iteration, use
 `.github/scripts/preflight-safety-checks.sh --fast-lane=matlab` and the focused

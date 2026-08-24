@@ -56,6 +56,8 @@ correct profile or transform results.
    - stale loaded MEX
    - missing generated profiles
    - CMM input shape or lifecycle error
+   - missing-argument errors that omit the correct constructor or function
+     example
    - issue #1811 fixture normalization or float-window mismatch
    - disagreement between the MATLAB model and native `CheckLuminance`
    - issue #1475 source-table parsing or legacy/registry D50 disagreement
@@ -151,7 +153,8 @@ correct profile or transform results.
 10. Before interactive MATLAB Desktop validation, derive `repo_root` from either
    the repository root or its `matlab` subdirectory, then add the package and
    tests using absolute paths. Do not assume `pwd` is the repository root.
-11. Run `test_iccdev`, `test_pawg_q1`, `test_colorimetry_issue_1475`,
+11. Run `test_usage_guidance`, `test_iccdev`, `test_pawg_q1`,
+    `test_colorimetry_issue_1475`,
     `run_local_qa`, `run_gamma_qa`,
     `test_plot`, `run_docker_qa`, and all examples. If Docker Desktop is running
     but MATLAB reports that `docker` is not recognized, call
@@ -161,6 +164,8 @@ correct profile or transform results.
     require zero skipped groups when Docker is available.
     Runnable smoke examples must use checked-in or generated `Testing/...`
     profiles, not `sRGB.icc`, `input.icc`, or `output.icc` placeholders.
+    Bare public entry points that require arguments must fail with a stable
+    `iccdev:*Required` identifier and a working invocation.
 12. Preserve unrelated generated files and report exact validation results.
 13. Review staged and untracked files for credentials, licenses, tokens,
     personal data, and local MATLAB Project metadata before any push.

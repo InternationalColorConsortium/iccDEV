@@ -11,7 +11,8 @@ function docker_dir = add_docker_path(docker_dir)
 
   if nargin ~= 1 || ~is_text_scalar(docker_dir)
     error('iccdev:dockerPathRequired', ...
-      'Provide one Docker CLI directory.');
+      ['Provide one Docker CLI directory. Example: ' ...
+       'add_docker_path(docker_cli_directory);']);
   end
 
   docker_dir = char(docker_dir);

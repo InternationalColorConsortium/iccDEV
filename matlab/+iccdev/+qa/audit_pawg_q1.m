@@ -16,6 +16,12 @@ function result = audit_pawg_q1(profile_path, varargin)
 % Copyright (c) International Color Consortium.
 % BSD 3-Clause License. See LICENSE.md for details.
 
+  if nargin < 1
+    error('iccdev:pawgQ1ProfileRequired', ...
+      ['Provide an ICC profile path. Example: ' ...
+       'result = iccdev.qa.audit_pawg_q1(profile_path);']);
+  end
+
   options = parse_options(varargin{:});
   profile_path = canonical_file(profile_path, ...
     'iccdev:pawgQ1ProfileNotFound', 'ICC profile');

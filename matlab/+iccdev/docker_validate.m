@@ -4,6 +4,12 @@ function result = docker_validate(profile_path, varargin)
 % Copyright (c) International Color Consortium.
 % BSD 3-Clause License. See LICENSE.md for details.
 
+  if nargin < 1
+    error('iccdev:dockerProfileRequired', ...
+      ['Provide an ICC profile path. Example: ' ...
+       'result = iccdev.docker_validate(profile_path);']);
+  end
+
   p = inputParser;
   addRequired(p, 'profile_path', @docker_is_text_scalar);
   addParameter(p, 'Image', ...

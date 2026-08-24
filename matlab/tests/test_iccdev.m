@@ -33,6 +33,8 @@ function summary = test_iccdev()
     'issue #1475 colorimetry math', nPass, nFail);
   [nPass, nFail] = run_test(@test_build_mex_dependency_paths, ...
     'build dependency path selection', nPass, nFail);
+  [nPass, nFail] = run_test(@test_usage_guidance, ...
+    'default usage guidance', nPass, nFail);
 
   % --- Profile tests (need test profiles) ---
   profilePath = find_test_profile();
