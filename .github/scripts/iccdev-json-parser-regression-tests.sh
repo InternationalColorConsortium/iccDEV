@@ -904,6 +904,7 @@ else
     -I"$REPO_ROOT" \
     -I"$REPO_ROOT/IccProfLib" \
     -I"$REPO_ROOT/IccXML/IccLibXML" \
+    -I"$REPO_ROOT/IccJSON/IccLibJSON" \
     -I"$REPO_ROOT/IccConnect/IccLibConnect" \
     "$HELPER_SRC" \
     "$REPO_ROOT/IccConnect/IccLibConnect/IccCmmConfig.cpp" \
