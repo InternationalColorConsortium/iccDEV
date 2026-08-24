@@ -253,7 +253,7 @@ For additions:
 
    ```bash
    docker run --rm -v "$PWD":/work -w /work \
-     ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master \
+     ghcr.io/internationalcolorconsortium/iccdev:latest \
      bash -lc '
        CC=gcc CXX=g++ cmake -S Build/Cmake -B /tmp/iccdev-gcc-normal \
          -DENABLE_TOOLS=ON -DENABLE_TESTS=OFF -DENABLE_IMAGE_TOOLS=OFF \

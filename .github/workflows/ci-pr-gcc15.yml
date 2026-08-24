@@ -17,7 +17,7 @@ on:
   workflow_call:
     inputs:
       regression-image-tag:
-        description: "Published iccdev-ci-regression image tag"
+        description: "Published unified iccdev image tag"
         required: true
         type: string
       target-sha:
@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     container:
-      image: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${{ inputs.regression-image-tag }}
+      image: ghcr.io/internationalcolorconsortium/iccdev:${{ inputs.regression-image-tag }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}

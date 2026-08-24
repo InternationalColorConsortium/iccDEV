@@ -8,7 +8,7 @@ command-line tools.
 - Workflow: `.github/workflows/ci-afl-smoke.yml`
 - Driver: `.github/scripts/iccdev-afl-smoke.sh`
 - AFL++ source: `https://github.com/AFLplusplus/AFLplusplus/tree/dev`
-- Container: `ghcr.io/internationalcolorconsortium/iccdev-ci-regression`
+- Container: `ghcr.io/internationalcolorconsortium/iccdev`
 - Container workflow: `.github/workflows/ci-docker.yml`
 - Seeds: `.github/ci/test-data/` and `.github/ci/afl-seeds/`
 - Local patch stacks: `.github/ci/fuzz-patches/afl` and

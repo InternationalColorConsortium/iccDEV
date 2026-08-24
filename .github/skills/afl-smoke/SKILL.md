@@ -36,7 +36,7 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
    path with root inside the image:
 
    ```bash
-   docker run --rm --user 0 ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master bash -lc '
+   docker run --rm --user 0 ghcr.io/internationalcolorconsortium/iccdev:latest bash -lc '
    set -euo pipefail
    apt-get -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 update -qq
    apt-get install -y -qq --no-install-recommends llvm-22-dev zlib1g-dev >/tmp/apt-install.log

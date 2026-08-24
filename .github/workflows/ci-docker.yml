@@ -5,67 +5,50 @@
 #                 All rights reserved.
 #                 https://color.org
 #
-# Intent: ci-docker (Ubuntu and regression images)
+# Intent: Build, validate, and publish the unified iccDEV image.
 #
-#
-###############################################################
-# Intent: Build and publish iccDEV Docker containers
 ###############################################################
 
 name: ci-docker
-
-# Existing pinned SHAs and command strings intentionally exceed line length.
-# Keep this yamllint disable local to this workflow.
-# yamllint disable rule:line-length
 
 permissions:
   contents: read
 
 env:
   PUBLISH_IMAGE: >-
-    ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' ||
-    (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/ci-qa-pr-docker-testing') }}
+    ${{ github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v') }}
 
 'on':
   push:
     branches:
       - master
-      - ci-qa-flags
+    tags:
+      - 'v*'
     paths:
-      - "Dockerfile"
-      - "Dockerfile.ci-regression"
-      - "Dockerfile.mcp"
-      - ".dockerignore"
-      - "IccProfLib/IccCValidation.h"
-      - "IccProfLib/IccWrapper.cpp"
-      - ".github/ci/regression/c-validation-dlopen.c"
-      - "Build/Cmake/Testing/CMakeLists.txt"
-      - ".github/ci/fuzz-patches/**"
-      - ".github/scripts/check-fuzz-patches.sh"
-      - ".github/scripts/iccdev-afl-smoke.sh"
-      - ".github/scripts/iccdev-apply-fuzz-patches.sh"
-      - ".github/scripts/iccdev-fuzz-patch-check-tests.sh"
-      - "iccdev-mcp/**"
-      - "cfl/**"
-      - "docker/**"
-      - "python/**"
-      - ".github/scripts/preflight-safety-checks.sh"
-      - ".github/workflows/ci-docker.yml"
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'docker/**'
+      - 'iccdev-mcp/docker/**'
+      - 'Build/**'
+      - 'IccConnect/**'
+      - 'IccJSON/**'
+      - 'IccProfLib/**'
+      - 'IccXML/**'
+      - 'Testing/**'
+      - 'Tools/**'
+      - 'cfl/**'
+      - 'python/**'
+      - '.github/scripts/preflight-safety-checks.sh'
+      - '.github/workflows/ci-docker.yml'
   workflow_dispatch:
-    inputs:
-      publish-regression-latest:
-        description: "Publish iccdev-ci-regression:latest from the protected Docker testing branch"
-        required: false
-        default: false
-        type: boolean
 
 concurrency:
-  group: "docker-${{ github.workflow }}-${{ github.ref_name }}"
+  group: docker-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   cache-policy:
-    name: "Validate workflow cache policy"
+    name: Validate workflow cache policy
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -78,7 +61,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Assert no GitHub Actions cache primitives
+      - name: Check cache policy
         env:
           BASH_ENV: /dev/null
         run: |
@@ -88,49 +71,20 @@ jobs:
           .github/scripts/check-workflow-cache-policy.sh .github/workflows/ci-docker.yml
 
   build:
-    name: "Docker (${{ matrix.variant }})"
+    name: Build and validate unified image
     needs: cache-policy
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     permissions:
       contents: read
-      packages: write  # Required to publish GHCR images.
-      id-token: write  # Required for artifact attestation identity.
-      attestations: write  # Required to publish build provenance.
-      artifact-metadata: write  # Required for artifact metadata storage records.
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     environment: ghcr-publish
     defaults:
       run:
         shell: bash --noprofile --norc {0}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - variant: ubuntu
-            runner: ubuntu-latest
-            image: iccdev
-            dockerfile: Dockerfile
-            suffix: ""
-            workdir: /opt/iccdev
-            tools_dir: /opt/iccdev/Build/Tools
-            run_shell: bash
-          - variant: regression
-            runner: ubuntu-24.04
-            image: iccdev-ci-regression
-            dockerfile: Dockerfile.ci-regression
-            suffix: "-ci-regression"
-            workdir: /workspace/iccDEV
-            tools_dir: /workspace/build/Tools
-            run_shell: bash
-          - variant: mcp
-            runner: ubuntu-latest
-            image: iccdev-mcp
-            dockerfile: Dockerfile.mcp
-            suffix: "-mcp"
-            workdir: /opt/iccdev
-            tools_dir: /opt/iccdev/Build/Tools
-            run_shell: bash
-
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
@@ -145,19 +99,12 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          actual_sha="$(git rev-parse HEAD)"
-          if [ "$actual_sha" != "$EXPECTED_SHA" ]; then
-            echo "::error::Checkout SHA mismatch: $actual_sha != $EXPECTED_SHA"
-            exit 1
-          fi
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
-          echo "Building Docker images from ${EXPECTED_SHA}"
-
-      - name: Lowercase image name
+      - name: Set canonical image name
         id: image
         env:
           BASH_ENV: /dev/null
-          MATRIX_IMAGE: ${{ matrix.image }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -169,32 +116,23 @@ jobs:
             echo "Invalid repository owner for image name" >&2
             exit 1
           fi
-          if [[ ! "$MATRIX_IMAGE" =~ ^iccdev(-ci-regression|-mcp)?$ ]]; then
-            echo "Invalid Docker image name" >&2
-            exit 1
-          fi
-
-          printf 'name=ghcr.io/%s/%s\n' \
-            "$(sanitize_line "$owner")" \
-            "$(sanitize_line "$MATRIX_IMAGE")" >> "$GITHUB_OUTPUT"
+          printf 'name=ghcr.io/%s/iccdev\n' "$(sanitize_line "$owner")" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
         with:
           cache-binary: false
 
-      - name: Docker meta
+      - name: Docker metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
         with:
           images: ${{ steps.image.outputs.name }}
           tags: |
-            type=sha,enable=${{ matrix.variant != 'regression' }}
-            type=ref,event=branch,enable=${{ matrix.variant != 'regression' && github.ref == 'refs/heads/ci-qa-flags' }}
-            type=raw,value=latest,enable=${{ matrix.variant != 'regression' && github.ref == 'refs/heads/master' }}
-            type=sha,format=long,enable=${{ matrix.variant == 'regression' }}
-            type=ref,event=branch,enable=${{ matrix.variant == 'regression' }}
-            type=raw,value=run-${{ github.run_id }},enable=${{ matrix.variant == 'regression' }}
+            type=sha,format=long
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+            type=ref,event=tag
 
+      # preflight: allow-token-exposure reason=publish-unified-iccdev-image
       - name: Log in to GHCR
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
@@ -203,12 +141,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and publish
         id: build-push
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
         with:
           context: .
-          file: ./${{ matrix.dockerfile }}
+          file: ./Dockerfile
           tags: ${{ steps.meta.outputs.tags }}
           no-cache: true
           pull: true
@@ -223,6 +161,89 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.ref.name=${{ github.ref_name }}
 
+      - name: Select test image
+        id: test-image
+        env:
+          BASH_ENV: /dev/null
+          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
+          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          if [ "$PUBLISH_IMAGE" = true ]; then
+            docker pull "$IMAGE_REF"
+            test_image="$IMAGE_REF"
+          else
+            test_image="$(sed -n '1p' <<< "$IMAGE_TAGS")"
+          fi
+          printf 'image=%s\n' "$(sanitize_line "$test_image")" >> "$GITHUB_OUTPUT"
+
+      - name: Verify unified image
+        env:
+          BASH_ENV: /dev/null
+          TEST_IMAGE: ${{ steps.test-image.outputs.image }}
+          EXPECTED_SHA: ${{ github.sha }}
+          EXPECTED_REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          image_revision="$(docker image inspect "$TEST_IMAGE" \
+            --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+          image_ref_name="$(docker image inspect "$TEST_IMAGE" \
+            --format '{{ index .Config.Labels "org.opencontainers.image.ref.name" }}')"
+          test "$image_revision" = "$EXPECTED_SHA"
+          test "$image_ref_name" = "$EXPECTED_REF_NAME"
+          docker run --rm "$TEST_IMAGE" bash -lc '
+            set -euo pipefail
+            command -v git gh clang clang++ gcc g++ cmake afl-fuzz llvm-symbolizer
+            command -v iccDumpProfile iccdev-fuzz-env iccdev-mcp iccdev-mcp-rest
+            test "$PWD" = /workspace/iccDEV
+            test -d .git
+            test -d "$ICCDEV_BUILD_DIR"
+            test -d "$ICCDEV_TOOLS_DIR"
+            test -f Testing/sRGB_v4_ICC_preference.icc
+            iccDumpProfile -v Testing/sRGB_v4_ICC_preference.icc >/dev/null
+            ctest --test-dir "$ICCDEV_BUILD_DIR" -N --no-tests=error >/dev/null
+          '
+
+      - name: Verify MCP runtime
+        env:
+          BASH_ENV: /dev/null
+          TEST_IMAGE: ${{ steps.test-image.outputs.image }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          help_output="$(docker run --rm \
+            --entrypoint /usr/local/bin/iccdev-mcp-entrypoint "$TEST_IMAGE" --help)"
+          grep -q '^usage: iccdev-mcp ' <<< "$help_output"
+          initialize_request='{"jsonrpc":"2.0","id":1,"method":"initialize",'
+          initialize_request+='"params":{"protocolVersion":"2025-06-18","capabilities":{},'
+          initialize_request+='"clientInfo":{"name":"ci","version":"1.0"}}}'
+          initialize_response="$(printf '%s\n' "$initialize_request" | \
+            timeout 30 docker run --rm -i --entrypoint iccdev-mcp "$TEST_IMAGE")"
+          python3 -c '
+          import json
+          import sys
+          response = json.loads(sys.stdin.readline())
+          assert response["result"]["serverInfo"]["name"] == "iccdev-mcp"
+          ' <<< "$initialize_response"
+          docker run --rm --entrypoint python "$TEST_IMAGE" -c '
+          from iccdev_mcp.cli_tools import TOOL_BINARIES
+          from iccdev_mcp.server import health_check
+          health = health_check()
+          assert health["python_api"]["available"]
+          assert set(health["cli_tools"]["available"]) == set(TOOL_BINARIES)
+          assert not health["cli_tools"]["missing"]
+          '
+
       - name: Generate SBOM
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0
@@ -230,48 +251,6 @@ jobs:
           image: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
           format: spdx-json
           output-file: sbom.spdx.json
-
-      - name: Measure SBOM attestation size
-        if: ${{ env.PUBLISH_IMAGE == 'true' }}
-        id: sbom-size
-        env:
-          BASH_ENV: /dev/null
-          MATRIX_VARIANT: ${{ matrix.variant }}
-          MAX_ATTEST_BYTES: "16777216"
-          SBOM_PATH: sbom.spdx.json
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-
-          if [ ! -f "$SBOM_PATH" ]; then
-            echo "::error::SBOM file missing: $SBOM_PATH"
-            exit 1
-          fi
-
-          sbom_bytes="$(wc -c < "$SBOM_PATH" | tr -d ' ')"
-          case "$sbom_bytes" in
-            ''|*[!0-9]*)
-              echo "::error::Invalid SBOM byte count: $sbom_bytes"
-              exit 1
-              ;;
-          esac
-
-          echo "bytes=$sbom_bytes" >> "$GITHUB_OUTPUT"  # elements-sanitized
-          if [ "$sbom_bytes" -le "$MAX_ATTEST_BYTES" ]; then
-            echo "attestable=true" >> "$GITHUB_OUTPUT"  # elements-sanitized
-          else
-            echo "attestable=false" >> "$GITHUB_OUTPUT"  # elements-sanitized
-            echo "::notice title=SBOM Attestation Skipped::SBOM is ${sbom_bytes} bytes, above ${MAX_ATTEST_BYTES}"
-          fi
-
-          {
-            echo "### SBOM Attestation Size"
-            echo "- Variant: $(sanitize_line "$MATRIX_VARIANT")"
-            echo "- Bytes: $(sanitize_line "$sbom_bytes")"
-            echo "- Limit: $(sanitize_line "$MAX_ATTEST_BYTES")"
-          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: Attest build provenance
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
@@ -282,739 +261,19 @@ jobs:
           push-to-registry: true
 
       - name: Attest SBOM
-        if: ${{ env.PUBLISH_IMAGE == 'true' && steps.sbom-size.outputs.attestable == 'true' }}
-        id: attest-sbom
-        # Rekor's transparency-log endpoint can time out after the image is published.
-        # A retry below preserves a hard failure if the service remains unavailable.
-        continue-on-error: true
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.build-push.outputs.digest }}
           sbom-path: sbom.spdx.json
           push-to-registry: true
-
-      - name: Retry SBOM attestation
-        if: ${{ steps.attest-sbom.outcome == 'failure' }}
-        id: retry-attest-sbom
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
-        with:
-          subject-name: ${{ steps.image.outputs.name }}
-          subject-digest: ${{ steps.build-push.outputs.digest }}
-          sbom-path: sbom.spdx.json
-          push-to-registry: true
-
-      - name: Require SBOM attestation
-        if: ${{ always() && steps.attest-sbom.outcome == 'failure' }}
-        env:
-          BASH_ENV: /dev/null
-          RETRY_OUTCOME: ${{ steps.retry-attest-sbom.outcome }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-
-          if [ "$RETRY_OUTCOME" != "success" ]; then
-            echo "::error::SBOM attestation failed after retry"
-            exit 1
-          fi
 
       - name: Upload SBOM
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: iccdev${{ matrix.suffix }}-sbom
+          name: iccdev-sbom
           path: sbom.spdx.json
           retention-days: 90
-
-      - name: Load test image
-        env:
-          BASH_ENV: /dev/null
-          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
-          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
-          MATRIX_VARIANT: ${{ matrix.variant }}
-          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-          if [ "$PUBLISH_IMAGE" = "true" ]; then
-            docker pull "${IMAGE_REF}"
-            TEST_IMAGE="${IMAGE_REF}"
-          else
-            TEST_IMAGE="$(printf '%s\n' "$IMAGE_TAGS" | sed -n '1p')"
-          fi
-          docker tag "${TEST_IMAGE}" "iccdev-${MATRIX_VARIANT}-test:latest"
-
-      - name: Verify image source labels
-        env:
-          BASH_ENV: /dev/null
-          EXPECTED_SHA: ${{ github.sha }}
-          EXPECTED_REF_NAME: ${{ github.ref_name }}
-          MATRIX_VARIANT: ${{ matrix.variant }}
-          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
-          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-          if [ "$PUBLISH_IMAGE" = "true" ]; then
-            TEST_IMAGE="${IMAGE_REF}"
-            docker pull "${IMAGE_REF}"
-          else
-            TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
-          fi
-
-          image_sha="$(docker image inspect "$TEST_IMAGE" \
-            --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
-          image_ref_label="$(docker image inspect "$TEST_IMAGE" \
-            --format '{{ index .Config.Labels "org.opencontainers.image.ref.name" }}')"
-          if [ "$image_sha" != "$EXPECTED_SHA" ]; then
-            echo "::error::Image revision mismatch: $image_sha != $EXPECTED_SHA"
-            exit 1
-          fi
-          if [ "$image_ref_label" != "$EXPECTED_REF_NAME" ]; then
-            echo "::error::Image ref mismatch: $image_ref_label != $EXPECTED_REF_NAME"
-            exit 1
-          fi
-
-      - name: Verify tools
-        env:
-          BASH_ENV: /dev/null
-          MATRIX_VARIANT: ${{ matrix.variant }}
-          MATRIX_WORKDIR: ${{ matrix.workdir }}
-          MATRIX_TOOLS_DIR: ${{ matrix.tools_dir }}
-          MATRIX_SHELL: ${{ matrix.run_shell }}
-          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
-          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-          if [ "$PUBLISH_IMAGE" = "true" ]; then
-            TEST_IMAGE="${IMAGE_REF}"
-            docker pull "${IMAGE_REF}"
-          else
-            TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
-          fi
-          SAFE_VARIANT="$(sanitize_line "$MATRIX_VARIANT")"
-          TOOL_COUNT=$(docker run --rm "$TEST_IMAGE" "${MATRIX_SHELL}" -c \
-            "find ${MATRIX_TOOLS_DIR} -type f -executable | wc -l")
-          echo "Tools built: $TOOL_COUNT"
-          if [ "$TOOL_COUNT" -lt 12 ]; then
-            echo "::error::Expected at least 12 tools, found $TOOL_COUNT"
-            exit 1
-          fi
-          TOOL_SMOKE=$(docker run --rm "$TEST_IMAGE" "${MATRIX_SHELL}" -c \
-            "${MATRIX_TOOLS_DIR}/IccDumpProfile/iccDumpProfile 2>&1 || true")
-          if ! grep -qiE 'Usage:|IccProfLib' <<< "$TOOL_SMOKE"; then
-            echo "::error::Tool smoke test failed -- runtime library issue"
-            echo "$TOOL_SMOKE"
-            exit 1
-          fi
-          {
-            echo "### Build Results (${SAFE_VARIANT})"
-            echo "- Tools: $(sanitize_line "$TOOL_COUNT")"
-            echo "- Runtime deps: All resolved"
-            echo '```'
-            TOOL_LIST=$(docker run --rm "$TEST_IMAGE" "${MATRIX_SHELL}" -c \
-              "find ${MATRIX_TOOLS_DIR} -type f -executable -exec basename {} \; | sort")
-            sanitize_print "$TOOL_LIST"
-            echo ''
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"  # sanitize_print
-
-      - name: Test MCP runtime
-        if: matrix.variant == 'mcp' || matrix.variant == 'regression'
-        env:
-          BASH_ENV: /dev/null
-          MATRIX_VARIANT: ${{ matrix.variant }}
-          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
-          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-          if [ "$PUBLISH_IMAGE" = "true" ]; then
-            TEST_IMAGE="${IMAGE_REF}"
-            docker pull "${IMAGE_REF}"
-          else
-            TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
-          fi
-
-          HELP_OUTPUT="$(docker run --rm \
-            --entrypoint /usr/local/bin/iccdev-mcp-entrypoint \
-            "$TEST_IMAGE" --help)"
-          if ! grep -q '^usage: iccdev-mcp ' <<< "$HELP_OUTPUT"; then
-            echo "::error::MCP entrypoint help did not show iccdev-mcp usage"
-            exit 1
-          fi
-
-          EXPECTED_VERSION="$(docker run --rm --entrypoint python "$TEST_IMAGE" \
-            -c 'from importlib.metadata import version; print(version("iccdev-mcp"))')"
-          INIT_REQUEST='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1.0"}}}'
-          INIT_RESPONSE="$(printf '%s\n' "$INIT_REQUEST" | timeout 30 \
-            docker run --rm -i --entrypoint iccdev-mcp "$TEST_IMAGE")"
-          EXPECTED_VERSION="$EXPECTED_VERSION" python3 -c '
-          import json
-          import os
-          import sys
-          response = json.loads(sys.stdin.readline())
-          server = response["result"]["serverInfo"]
-          assert server["name"] == "iccdev-mcp"
-          assert server["version"] == os.environ["EXPECTED_VERSION"]
-          ' <<< "$INIT_RESPONSE"
-
-          docker run --rm --entrypoint python "$TEST_IMAGE" -c '
-          from importlib.metadata import version
-          from iccdev_mcp import __version__
-          from iccdev_mcp.cli_tools import TOOL_BINARIES
-          from iccdev_mcp.server import health_check
-          health = health_check()
-          assert version("iccdev-mcp") == __version__
-          assert health["version"] == __version__
-          assert health["python_api"]["available"]
-          assert health["python_api"]["tools"] > 0
-          assert set(health["cli_tools"]["available"]) == set(TOOL_BINARIES)
-          assert not health["cli_tools"]["missing"]
-          assert health["profile_count"] > 0
-          '
-
-      - name: Test tool execution
-        env:
-          BASH_ENV: /dev/null
-          MATRIX_VARIANT: ${{ matrix.variant }}
-          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
-          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-          if [ "$PUBLISH_IMAGE" = "true" ]; then
-            TEST_IMAGE="${IMAGE_REF}"
-            docker pull "${IMAGE_REF}"
-          else
-            TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
-          fi
-          SAFE_VARIANT="$(sanitize_line "$MATRIX_VARIANT")"
-          FAILURES=0
-          echo "### Tool Tests (${SAFE_VARIANT})" >> "$GITHUB_STEP_SUMMARY"  # sanitize_line
-          for tool in iccToXml iccFromXml iccToJson iccFromJson iccDumpProfile iccPawgReport iccRoundTrip; do
-            SAFE_TOOL="$(sanitize_line "$tool")"
-            OUT=$(docker run --rm "$TEST_IMAGE" "$tool" 2>&1 || true)
-            if grep -qiE "Usage:|IccProfLib" <<< "$OUT"; then
-              echo "[OK] $SAFE_TOOL" >> "$GITHUB_STEP_SUMMARY"  # sanitize_line
-            else
-              echo "::error::Tool test failed: $tool"
-              echo "[FAIL] $SAFE_TOOL" >> "$GITHUB_STEP_SUMMARY"  # sanitize_line
-              FAILURES=$((FAILURES + 1))
-            fi
-          done
-          if [ "$FAILURES" -gt 0 ]; then
-            echo "::error::$FAILURES tool test(s) failed"
-            exit 1
-          fi
-
-      - name: Test iccToXml profile conversion
-        env:
-          BASH_ENV: /dev/null
-          MATRIX_VARIANT: ${{ matrix.variant }}
-          MATRIX_WORKDIR: ${{ matrix.workdir }}
-          MATRIX_SHELL: ${{ matrix.run_shell }}
-          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
-          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-          if [ "$PUBLISH_IMAGE" = "true" ]; then
-            TEST_IMAGE="${IMAGE_REF}"
-            docker pull "${IMAGE_REF}"
-          else
-            TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
-          fi
-          SAFE_VARIANT="$(sanitize_line "$MATRIX_VARIANT")"
-          echo "### iccToXml Conversion (${SAFE_VARIANT})" >> "$GITHUB_STEP_SUMMARY"  # sanitize_line
-          docker run --rm "$TEST_IMAGE" "${MATRIX_SHELL}" -c "
-            cd ${MATRIX_WORKDIR}
-            iccToXml Testing/sRGB_v4_ICC_preference.icc /tmp/sRGB_v4.xml
-            test -s /tmp/sRGB_v4.xml || { echo 'ERROR: output XML is empty'; exit 1; }
-            ls -lh /tmp/sRGB_v4.xml
-            echo '=== First 20 lines of XML output ==='
-            sed -n '1,20p' /tmp/sRGB_v4.xml
-          " 2>&1 | tee /tmp/iccToXml-output.txt
-          {
-            echo '```'
-            sanitize_print "$(cat /tmp/iccToXml-output.txt)"
-            echo ''
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"  # sanitize_print
-
-      - name: Verify regression image
-        if: matrix.variant == 'regression'
-        env:
-          BASH_ENV: /dev/null
-          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
-          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
-          EXPECTED_REF_NAME: ${{ github.ref_name }}
-          EXPECTED_SHA: ${{ github.sha }}
-          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-
-          if [ "$PUBLISH_IMAGE" = "true" ]; then
-            docker pull "$IMAGE_REF"
-            TEST_IMAGE="$IMAGE_REF"
-          else
-            TEST_IMAGE="$(printf '%s\n' "$IMAGE_TAGS" | sed -n '1p')"
-          fi
-
-          image_sha="$(docker image inspect "$TEST_IMAGE" \
-            --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
-          image_ref_label="$(docker image inspect "$TEST_IMAGE" \
-            --format '{{ index .Config.Labels "org.opencontainers.image.ref.name" }}')"
-          if [ "$image_sha" != "$EXPECTED_SHA" ]; then
-            echo "::error::Image revision mismatch: $image_sha != $EXPECTED_SHA"
-            exit 1
-          fi
-          if [ "$image_ref_label" != "$EXPECTED_REF_NAME" ]; then
-            echo "::error::Image ref mismatch: $image_ref_label != $EXPECTED_REF_NAME"
-            exit 1
-          fi
-
-          docker run --rm "$TEST_IMAGE" bash -lc '
-            set -euo pipefail
-            git config --global credential.helper ""
-            unset GITHUB_TOKEN || true
-            command -v git gh clang clang++ gcc g++ cmake make realpath afl-fuzz afl-showmap llvm-symbolizer
-            command -v clang-tidy cppcheck scan-build valgrind gdb gdbserver lldb lld ld.lld lcov gcovr jq curl shellcheck
-            command -v llvm-cov llvm-profdata file strace
-            command -v iccdev-fuzz-env
-            test -x .github/scripts/iccdev-afl-smoke.sh
-            git --version | sed -n "1p"
-            gh --version | sed -n "1p"
-            curl --version | sed -n "1p"
-            clang --version | sed -n "1p"
-            clang++ --version | sed -n "1p"
-            clang-tidy --version | sed -n "1p"
-            lldb --version | sed -n "1p"
-            ld.lld --version | sed -n "1p"
-            llvm-cov --version | sed -n "1p"
-            llvm-profdata --version | sed -n "1p"
-            gdb --version | sed -n "1p"
-            gdbserver --version | sed -n "1p"
-            gcc --version | sed -n "1p"
-            g++ --version | sed -n "1p"
-            cmake --version | sed -n "1p"
-            afl-fuzz -V 1 2>&1 | sed -n "1p" || true
-            fuzz_env_output="$(iccdev-fuzz-env)"
-            sed -n "1,40p" <<< "$fuzz_env_output"
-            if ! grep -q "^Source mode: upstream checkout without local patches$" <<< "$fuzz_env_output"; then
-              echo "ERROR: iccdev-fuzz-env did not report the unpatched source mode" >&2
-              exit 1
-            fi
-            /usr/bin/time --version | sed -n "1p"
-            clang --version | grep -q "clang version 22\\."
-            clang++ --version | grep -q "clang version 22\\."
-            clang-tidy --version | grep -q "LLVM version 22\\."
-            lldb --version | grep -q "lldb version 22\\."
-            ld.lld --version | grep -q "LLD 22\\."
-            llvm-cov --version | grep -q "LLVM version 22\\."
-            llvm-profdata --version | grep -q "LLVM version 22\\."
-            gcc --version | grep -q " 15\\."
-            g++ --version | grep -q " 15\\."
-            test "${CC}" = clang
-            test "${CXX}" = clang++
-            printf "int main(void) { return 0; }\n" > /tmp/afl-probe.c
-            printf "int main(void) { return 0; }\n" > /tmp/afl-probe.cpp
-            AFL_CC=clang-21 AFL_CXX=clang++-21 afl-clang-fast -c /tmp/afl-probe.c -o /tmp/afl-probe.o
-            AFL_CC=clang-21 AFL_CXX=clang++-21 afl-clang-fast++ -c /tmp/afl-probe.cpp -o /tmp/afl-probexx.o
-            printf "int main(void){return 0;}\n" > /tmp/asan-smoke.c
-            clang -fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound \
-              -fno-omit-frame-pointer -g -O0 /tmp/asan-smoke.c -o /tmp/asan-smoke
-            /tmp/asan-smoke
-            printf "#include <stddef.h>\n#include <stdint.h>\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t*, size_t){return 0;}\n" > /tmp/cfl-smoke.cpp
-            clang++ -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -g -O1 \
-              /tmp/cfl-smoke.cpp -o /tmp/cfl-smoke
-            /tmp/cfl-smoke -max_total_time=1
-            gcc -Wall -Wextra -Werror /tmp/asan-smoke.c -o /tmp/gcc-warning-smoke
-            /tmp/gcc-warning-smoke
-          '
-
-          docker run --rm "$TEST_IMAGE" bash -lc '
-            set -euo pipefail
-            git config --global credential.helper ""
-            unset GITHUB_TOKEN || true
-            test "$PWD" = /workspace/iccDEV
-            test -d .git
-            test -f IccProfLib/IccProfile.cpp
-            git remote get-url origin
-            test "$(git remote get-url --push origin)" = "https://github.com/InternationalColorConsortium/iccDEV.git"
-            command -v iccDumpProfile
-            test -d "$ICCDEV_BUILD_DIR"
-            cmake --build "$ICCDEV_BUILD_DIR" --target iccDumpProfile --parallel "$(nproc)"
-            git branch && echo "---"
-            if git rev-parse --verify HEAD >/dev/null 2>&1; then
-              git log --oneline -1
-            else
-              echo "Synthetic Docker source tree has no local commits"
-            fi
-            git status --short | sed -n "1,20p"
-            git fetch --dry-run origin
-            banner="$(/usr/local/bin/iccdev-banner)"
-            grep -q "Reference ICC profiles present:" <<< "$banner"
-            grep -q "AFL/CFL helper:" <<< "$banner"
-            work="$(mktemp -d)"
-            cd "$work"
-            SAN_FLAGS="-fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound"
-            export CFLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0"
-            export CXXFLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0"
-            export LDFLAGS="$SAN_FLAGS"
-            CC=clang CXX=clang++ cmake /workspace/iccDEV/Build/Cmake \
-              -DCMAKE_BUILD_TYPE=Debug \
-              -DCMAKE_C_COMPILER=clang \
-              -DCMAKE_CXX_COMPILER=clang++ \
-              -DCMAKE_C_FLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0" \
-              -DCMAKE_CXX_FLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0 -std=c++17" \
-              -DENABLE_ASAN=ON \
-              -DENABLE_UBSAN=ON \
-              -DENABLE_INTEGER_SANITIZER=ON \
-              -DENABLE_FLOAT_SANITIZER=ON \
-              -DENABLE_TOOLS=ON
-            make -j"$(nproc)" iccDumpProfile
-            cd /workspace/iccDEV/Testing/
-            echo "=== Updating PATH ==="
-            for d in "$ICCDEV_BUILD_DIR"/Tools/*; do
-              [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
-            done
-            # Testing/silence.txt is tracked and already holds this exact list,
-            # so assert it is present rather than rewriting it. The same list
-            # used to be maintained by hand in three places and the copy in
-            # docker/iccdev-generate-profiles.sh had already drifted two entries
-            # short of the tracked one.
-            test -r ./silence.txt
-            test -x ./CreateAllProfiles.sh
-            test -x ./RunTests.sh
-            test -x ./HDR/mkprofiles.sh
-            test -x ./Display/RunProtoTests.sh
-            test -x ./hybrid/BuildAndTest.sh
-            test -x ./CalcTest/checkInvalidProfiles.sh
-            test -x ./mcs/updateprev.sh
-            test -x ./mcs/updateprevWithBkgd.sh
-            cmake --build "$ICCDEV_BUILD_DIR" --target build-test-binaries --parallel "$(nproc)"
-            ctest --test-dir "$ICCDEV_BUILD_DIR" -N --no-tests=error
-            ctest --test-dir "$ICCDEV_BUILD_DIR" --output-on-failure --label-exclude slow --no-tests=error
-          '
-
-      - name: Reclaim workspace before image scan
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-
-          docker buildx prune --all --force
-          docker image prune --force
-          docker system df
-          df -h "${RUNNER_TEMP:-/tmp}"
-
-      - name: Scan test image
-        env:
-          BASH_ENV: /dev/null
-          MATRIX_VARIANT: ${{ matrix.variant }}
-          TRIVY_IMAGE: aquasec/trivy@sha256:5c59e08f980b5d4d503329773480fcea2c9bdad7e381d846fbf9f2ecb8050f6b
-          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
-          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-          if [ "$PUBLISH_IMAGE" = "true" ]; then
-            TEST_IMAGE="${IMAGE_REF}"
-            docker pull "${IMAGE_REF}"
-          else
-            TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
-          fi
-          TRIVY_CACHE="${RUNNER_TEMP:-/tmp}/trivy-image-cache-${MATRIX_VARIANT}"
-          rm -rf "$TRIVY_CACHE"
-          mkdir -p "$TRIVY_CACHE"
-          trivy_args=(image --scanners 'vuln,secret' --severity 'HIGH,CRITICAL' --exit-code 1)
-          if [ "$MATRIX_VARIANT" = "regression" ]; then
-            trivy_args+=(--ignore-unfixed)
-          fi
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$TRIVY_CACHE":/root/.cache/ \
-            "$TRIVY_IMAGE" \
-            "${trivy_args[@]}" "$TEST_IMAGE"
-
-      - name: Cleanup
-        if: always()
-        env:
-          BASH_ENV: /dev/null
-          MATRIX_VARIANT: ${{ matrix.variant }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          docker rmi "iccdev-${MATRIX_VARIANT}-test:latest" || true
-
-  promote-regression-latest:
-    name: "Promote verified regression latest"
-    runs-on: ubuntu-latest
-    needs: build
-    if: >-
-      github.ref == 'refs/heads/master' ||
-      (github.event_name == 'workflow_dispatch' &&
-      github.ref == 'refs/heads/ci-qa-pr-docker-testing' &&
-      inputs['publish-regression-latest'] == true)
-    environment: ghcr-publish
-    permissions:
-      contents: read
-      packages: write  # Required to promote the verified GHCR image.
-    defaults:
-      run:
-        shell: bash --noprofile --norc {0}
-    steps:
-      - name: Checkout trusted workflow helpers
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
-        with:
-          cache-binary: false
-
-      # preflight: allow-token-exposure reason=ghcr-verified-regression-promotion
-      - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Promote verified digest to latest
-        env:
-          BASH_ENV: /dev/null
-          SOURCE_REPOSITORY: ghcr.io/internationalcolorconsortium/iccdev-ci-regression
-          SOURCE_TAG: run-${{ github.run_id }}
-          TARGET_IMAGE: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-
-          resolve_image_digest() {
-            local image="$1"
-            local label="$2"
-            local attempt=""
-            local digest=""
-            local inspect_log=""
-
-            inspect_log="$(mktemp)"
-            for attempt in 1 2 3 4 5; do
-              if docker buildx imagetools inspect "$image" > "$inspect_log" 2>&1; then
-                digest="$(awk '$1 == "Digest:" { print $2; exit }' "$inspect_log")"
-                if [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-                  rm -f "$inspect_log"
-                  printf '%s\n' "$digest"
-                  return 0
-                fi
-              fi
-
-              if [ "$attempt" -lt 5 ]; then
-                echo "::notice::Waiting for ${label} image digest: $(sanitize_line "$image")" >&2
-                sleep $((attempt * 10))
-              fi
-            done
-
-            echo "::error::Unable to resolve ${label} image digest: $(sanitize_line "$image")" >&2
-            if [ -s "$inspect_log" ]; then
-              while IFS= read -r line; do
-                echo "::error::$(sanitize_line "$line")" >&2
-              done < "$inspect_log"
-            fi
-            rm -f "$inspect_log"
-            return 1
-          }
-
-          wait_for_image_digest_match() {
-            local image="$1"
-            local expected_digest="$2"
-            local label="$3"
-            local attempt=""
-            local digest=""
-
-            for attempt in 1 2 3 4 5; do
-              digest="$(resolve_image_digest "$image" "$label")"
-              if [ "$digest" = "$expected_digest" ]; then
-                printf '%s\n' "$digest"
-                return 0
-              fi
-
-              if [ "$attempt" -lt 5 ]; then
-                echo "::notice::Waiting for ${label} digest to match verified source" >&2
-                echo "::notice::Current ${label} digest: $(sanitize_line "$digest")" >&2
-                echo "::notice::Expected ${label} digest: $(sanitize_line "$expected_digest")" >&2
-                sleep $((attempt * 10))
-              fi
-            done
-
-            echo "::error::Promoted latest digest mismatch" >&2
-            echo "::error::Current ${label} digest: $(sanitize_line "$digest")" >&2
-            echo "::error::Expected ${label} digest: $(sanitize_line "$expected_digest")" >&2
-            return 1
-          }
-
-          source_image="${SOURCE_REPOSITORY}:${SOURCE_TAG}"
-          source_digest="$(resolve_image_digest "$source_image" "verified regression")"
-
-          source_ref="${SOURCE_REPOSITORY}@${source_digest}"
-          docker buildx imagetools create \
-            --prefer-index=false \
-            --tag "$TARGET_IMAGE" \
-            "$source_ref"
-
-          target_digest="$(wait_for_image_digest_match "$TARGET_IMAGE" "$source_digest" "promoted latest")"
-
-          printf 'Promoted verified regression image %s to latest digest %s\n' \
-            "$(sanitize_line "$source_digest")" \
-            "$(sanitize_line "$target_digest")"
-
-  prune:
-    name: "Prune old container versions"
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/ci-qa-pr-docker-testing')
-    environment: ghcr-publish
-    permissions:
-      contents: read  # Required for the trusted workflow helper checkout.
-      packages: write  # Required to delete old GHCR package versions.
-    strategy:
-      matrix:
-        package: [iccdev, iccdev-ci-regression, iccdev-mcp]
-    steps:
-      - name: Checkout trusted workflow helpers
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      # preflight: allow-token-exposure reason=ghcr-package-prune
-      - name: Delete old package versions
-        env:
-          BASH_ENV: /dev/null
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MATRIX_PACKAGE: ${{ matrix.package }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-
-          ORG="InternationalColorConsortium"
-          CUTOFF=$(date -u -d '3 days ago' +%Y-%m-%dT%H:%M:%SZ)
-          KEEP_RECENT=10
-          DELETE_LIMIT=50
-
-          echo "Pruning ${MATRIX_PACKAGE} versions older than ${CUTOFF}; keeping ${KEEP_RECENT} newest non-protected versions; deleting up to ${DELETE_LIMIT}"
-
-          pages_file="/tmp/prune-version-pages.json"
-          rm -f "$pages_file"
-          for attempt in 1 2 3; do
-            if gh api --paginate --slurp \
-                "/orgs/${ORG}/packages/container/${MATRIX_PACKAGE}/versions" \
-                > "$pages_file" &&
-              jq -e 'type == "array" and all(.[]; type == "array")' \
-                "$pages_file" >/dev/null; then
-              break
-            fi
-            rm -f "$pages_file"
-            if [ "$attempt" -eq 3 ]; then
-              echo "::error::Unable to list valid package versions after ${attempt} attempts"
-              exit 1
-            fi
-            sleep $((attempt * 5))
-          done
-
-          jq -r --arg cutoff "${CUTOFF}" --argjson keep_recent "${KEEP_RECENT}" '
-            add
-            | sort_by(.created_at)
-            | reverse
-            | map(. + {
-                tags: (.metadata.container.tags // []),
-                protected: (
-                  (.metadata.container.tags // []) as $tags
-                  | any(
-                      [ "latest", "master", "ci-qa-flags", "ci-qa-pr-docker-testing" ][];
-                      . as $protected_tag | $tags | index($protected_tag)
-                    )
-                )
-              })
-            | [ .[] | select(.protected | not) ] as $candidates
-            | $candidates[$keep_recent:]
-            | .[]
-            | select(.created_at < $cutoff)
-            | .id
-          ' "$pages_file" > /tmp/prune-all-ids.txt
-          sed -n "1,${DELETE_LIMIT}p" /tmp/prune-all-ids.txt > /tmp/prune-ids.txt
-
-          TOTAL=$(wc -l < /tmp/prune-ids.txt | tr -d ' ')
-          CANDIDATES=$(wc -l < /tmp/prune-all-ids.txt | tr -d ' ')
-          if [ "${TOTAL}" -eq 0 ]; then
-            echo "No versions to prune"
-            rm -f "$pages_file" /tmp/prune-ids.txt /tmp/prune-all-ids.txt
-            exit 0
-          fi
-
-          echo "Found ${CANDIDATES} versions to prune; deleting ${TOTAL} this run"
-          DELETED=0
-          SKIPPED=0
-          FAILED=0
-          while IFS= read -r vid; do
-            response="/tmp/prune-response-${vid}.json"
-            status=$(curl -sS --retry 3 --retry-delay 2 --retry-all-errors \
-              -o "${response}" -w "%{http_code}" \
-              -X DELETE \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/orgs/${ORG}/packages/container/${MATRIX_PACKAGE}/versions/${vid}") || status="curl-failed"
-            if [ "${status}" = "204" ]; then
-              DELETED=$((DELETED + 1))
-              rm -f "${response}"
-            elif [ "${status}" = "404" ] &&
-              grep -q '"message"[[:space:]]*:[[:space:]]*"Package not found."' "${response}"; then
-              echo "::notice::Skipping ${MATRIX_PACKAGE} version ${vid}: package version is not deletable with this workflow token"
-              rm -f "${response}"
-              SKIPPED=$((SKIPPED + 1))
-            else
-              echo "::warning::Failed to delete ${MATRIX_PACKAGE} version ${vid}: HTTP ${status}"
-              if [ -s "${response}" ]; then
-                jq -r '.message // .' "${response}" 2>/dev/null | sed -n '1,5p' || sed -n '1,5p' "${response}"
-              fi
-              rm -f "${response}"
-              FAILED=$((FAILED + 1))
-            fi
-          done < /tmp/prune-ids.txt
-
-          echo "Pruned ${DELETED}/${TOTAL} old versions (${SKIPPED} skipped, ${FAILED} failed)"
-          rm -f "$pages_file" /tmp/prune-ids.txt /tmp/prune-all-ids.txt
-          if [ "${FAILED}" -ne 0 ]; then
-            echo "::error::${FAILED} package version delete request(s) failed"
-            exit 1
-          fi
+          if-no-files-found: error

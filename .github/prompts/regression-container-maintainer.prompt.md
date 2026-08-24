@@ -1,7 +1,7 @@
-# Maintainer Regression Container Task
+# Unified iccDEV Container Task
 
 Use this prompt to run a repeatable maintainer investigation in
-`iccdev-ci-regression`.
+`iccdev`.
 
 Canonical guide: `docs/regression-container.md`
 
@@ -44,13 +44,9 @@ Canonical guide: `docs/regression-container.md`
 12. Save evidence outside the disposable container.
 13. If CI is requested, use the PR trigger or explicitly dispatch
     `ci-pr-action.yml`; do not assume a branch push triggers it.
-14. Diff all `Dockerfile*` files between `ci-qa-pr-docker-testing` and
-    `ci-qa-flags`, then carry applicable fixes and validation to both branches.
-15. Include the `ci-qa-flags` commit and hosted run in the handoff.
-16. Promote the verified immutable digest to `latest` only after all image smoke
-    tests and regression CTest checks succeed: from `master`, or with the
-    explicit `publish-regression-latest=true` dispatch on the protected
-    Docker-testing branch.
+14. Use only `latest`, immutable SHA, or release tags; do not create branch,
+    run, or image-variant tags.
+15. Include the canonical image digest and hosted run in the handoff.
 
 For AFL/CFL work, keep the review scope narrow: these helpers are experimental
 maintainer workflows and local validation patch stacks. They should support

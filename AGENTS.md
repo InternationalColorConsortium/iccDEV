@@ -34,7 +34,7 @@ shares one source of truth. Update rules here, not in the mirrors.
 | Focused pull request review | `.github/skills/code-review/SKILL.md` |
 | Code-review bug hunting | `.github/prompts/code-review-hunting.prompt.md` |
 | Regression bisect workflow | `.github/prompts/bisect-regression.prompt.md` |
-| Maintainer regression container | `docs/regression-container.md` |
+| Unified maintainer container | `docs/regression-container.md` |
 | Regression container prompt | `.github/prompts/regression-container-maintainer.prompt.md` |
 | Maintainer CTest selection and CI budget | `.github/skills/maintainer-ci-ctest/SKILL.md` |
 | New CLI tool onboarding | `.github/prompts/add-new-tool.prompt.md` |

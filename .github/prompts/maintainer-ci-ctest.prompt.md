@@ -120,7 +120,7 @@ docker build -t iccdev-container-check -f <Dockerfile> .
 docker run --rm iccdev-container-check <smoke-command>
 ```
 
-For `Dockerfile.ci-regression`, use a no-cache build and smoke `clang`,
+For the unified `Dockerfile`, use a no-cache build and smoke `clang`,
 `clang++`, `gcc`, `g++`, `cmake`, `afl-fuzz`, and `/usr/bin/time`. If the image must be published,
 publish through the maintainer-controlled container release path, then pass the
 published branch or SHA tag to `ci-iccdev-tool-tests.yml`.

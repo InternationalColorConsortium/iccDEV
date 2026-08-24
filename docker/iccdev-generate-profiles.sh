@@ -17,15 +17,14 @@ done
 #
 # Those entries only matter where the integer sanitizer is on, because
 # unsigned-integer-overflow belongs to -fsanitize=integer and not to
-# -fsanitize=undefined. Dockerfile.ci-regression builds clang with
-# ENABLE_SANITIZERS=ON, which CMake expands to include integer; the plain
-# Dockerfile is exempt because it is gcc and CMake skips IntSan there.
+# -fsanitize=undefined. The unified Dockerfile builds clang with
+# ENABLE_SANITIZERS=ON, which CMake expands to include integer.
 #
 # The runtime list is appropriate because ci-regression passes
 # SANITIZER_RECOVER=ON, allowing the suppressions to apply.
 #
 # Reading the file also stops this script overwriting a tracked source file as a
-# side effect, which Dockerfile.ci-regression previously had to undo.
+# side effect, which the unified Dockerfile corrects after profile generation.
 silence_file="$PWD/silence.txt"
 if [ ! -r "$silence_file" ]; then
   echo "ERROR: UBSAN suppression list not found: $silence_file" >&2

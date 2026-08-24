@@ -186,7 +186,7 @@ the regression image:
 
 ```bash
 docker run --rm -v "$PWD":/work -w /work \
-  ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master \
+  ghcr.io/internationalcolorconsortium/iccdev:latest \
   bash -lc '
     CC=gcc CXX=g++ cmake -S Build/Cmake -B /tmp/iccdev-gcc-normal \
       -DENABLE_TOOLS=ON -DENABLE_TESTS=OFF -DENABLE_IMAGE_TOOLS=OFF \
@@ -209,7 +209,7 @@ Local container bootstrap check, useful before changing the workflow or the
 regression image:
 
 ```bash
-docker run --rm --user 0 ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master bash -lc '
+docker run --rm --user 0 ghcr.io/internationalcolorconsortium/iccdev:latest bash -lc '
 set -euo pipefail
 apt-get -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 update -qq
 apt-get install -y -qq --no-install-recommends llvm-22-dev zlib1g-dev >/tmp/apt-install.log

@@ -19,7 +19,7 @@ on:
       - master
       - ci-qa-mcp-server
     paths:
-      - "Dockerfile.ci-regression"
+      - "Dockerfile"
       - "iccdev-mcp/**"
       - ".github/codeql-queries/iccdev-mcp/**"
       - ".github/workflows/ci-mcp-server.yml"
@@ -27,7 +27,7 @@ on:
     branches:
       - master
     paths:
-      - "Dockerfile.ci-regression"
+      - "Dockerfile"
       - "iccdev-mcp/**"
       - ".github/codeql-queries/iccdev-mcp/**"
       - ".github/workflows/ci-mcp-server.yml"
@@ -93,7 +93,7 @@ jobs:
 
   dockerfile:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    name: "Regression Dockerfile syntax"
+    name: "Unified Dockerfile syntax"
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -107,7 +107,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Validate regression Dockerfile parses
+      - name: Validate unified Dockerfile parses
         env:
           BASH_ENV: /dev/null
           DOCKER_BUILDKIT: "1"
@@ -115,4 +115,4 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          docker build --check -f Dockerfile.ci-regression .
+          docker build --check -f Dockerfile .

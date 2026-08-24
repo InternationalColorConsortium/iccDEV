@@ -17,13 +17,12 @@ clients can derive its dynamic `total_tools` value without numeric assumptions.
 
 ## Install
 
-For the lowest-friction setup, use the iccDEV regression Docker image. It
-includes the MCP server, REST dependencies, all required iccDEV CLI tools,
-runtime libraries, maintainer utilities, and `Testing/` profiles, so no local
-iccDEV build is required.
+For the lowest-friction setup, use the unified iccDEV Docker image. It includes
+the MCP server, REST dependencies, CLI tools, runtime libraries, maintainer
+utilities, and `Testing/` profiles, so no local iccDEV build is required.
 
 ```bash
-docker run --rm -i ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest \
+docker run --rm -i ghcr.io/internationalcolorconsortium/iccdev:latest \
   iccdev-mcp-entrypoint mcp
 ```
 
@@ -53,26 +52,16 @@ export ICCDEV_BUILD_DIR=/path/to/iccDEV/Build
 
 ### Docker
 
-The regression image includes the Python package, REST dependencies, iccDEV
-CLI tools, runtime libraries, maintainer utilities, and `Testing/` profiles.
-It is the lowest-friction way to use CLI-backed MCP tools without building
-iccDEV locally.
-
-The Docker workflow publishes branch and immutable tags from `master` and
-`ci-qa-flags`, and from the protected `ci-qa-pr-docker-testing` branch through a
-manual dispatch. It promotes the verified regression digest to `latest` after
-successful `master` checks, or after an explicit protected Docker-testing
-branch promotion. Other feature branches build and smoke test locally on the
-runner without publishing to GHCR.
+The unified image uses a shell default. Start an MCP transport explicitly:
 
 ```bash
 # MCP stdio mode
-docker run --rm -i ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest \
+docker run --rm -i ghcr.io/internationalcolorconsortium/iccdev:latest \
   iccdev-mcp-entrypoint mcp
 
 # REST API mode on http://127.0.0.1:8080
 docker run --rm -p 127.0.0.1:8080:8080 \
-  ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest \
+  ghcr.io/internationalcolorconsortium/iccdev:latest \
   iccdev-mcp-entrypoint rest
 ```
 
@@ -98,16 +87,16 @@ Mount additional profiles read-only and list them through
 docker run --rm -p 127.0.0.1:8080:8080 \
   -v "$PWD/profiles:/profiles:ro" \
   -e ICCDEV_PROFILE_DIRS=/profiles \
-  ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest \
+  ghcr.io/internationalcolorconsortium/iccdev:latest \
   iccdev-mcp-entrypoint rest
 ```
 
 Local build and smoke test:
 
 ```bash
-docker build -t iccdev-ci-regression:mcp-local -f Dockerfile.ci-regression .
+docker build -t iccdev:mcp-local -f Dockerfile .
 docker run --rm -p 127.0.0.1:8080:8080 \
-  iccdev-ci-regression:mcp-local iccdev-mcp-entrypoint rest
+  iccdev:mcp-local iccdev-mcp-entrypoint rest
 curl -fsS http://127.0.0.1:8080/api/health
 curl -fsS http://127.0.0.1:8080/api/tools
 # Optional REST dashboard in a browser

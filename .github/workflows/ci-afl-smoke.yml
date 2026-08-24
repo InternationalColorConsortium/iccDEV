@@ -25,7 +25,7 @@ permissions:
       target_ref:
         description: 'Branch, tag, or ref to check out before optional target_sha'
         required: true
-        default: master
+        default: latest
         type: string
       target_sha:
         description: 'Optional full 40-character commit SHA to check out'
@@ -66,9 +66,9 @@ permissions:
           - all
           - none
       regression_image_tag:
-        description: 'Trusted regression container tag'
+        description: 'Trusted unified image tag'
         required: false
-        default: master
+        default: latest
         type: string
   workflow_call:
     inputs:
@@ -108,9 +108,9 @@ permissions:
         default: none
         type: string
       regression_image_tag:
-        description: 'Trusted regression container tag'
+        description: 'Trusted unified image tag'
         required: false
-        default: master
+        default: latest
         type: string
 
 concurrency:
@@ -123,7 +123,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     container:
-      image: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${{ inputs.regression_image_tag || 'master' }}
+      image: ghcr.io/internationalcolorconsortium/iccdev:${{ inputs.regression_image_tag || 'latest' }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}

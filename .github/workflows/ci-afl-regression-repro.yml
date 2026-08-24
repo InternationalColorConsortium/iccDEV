@@ -33,9 +33,9 @@ permissions:
           - RelWithDebInfo
           - MinSizeRel
       regression_image_tag:
-        description: 'Trusted regression container tag'
+        description: 'Trusted unified image tag'
         required: true
-        default: master
+        default: latest
         type: string
 
 concurrency:
@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     container:
-      image: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${{ inputs.regression_image_tag || 'master' }}
+      image: ghcr.io/internationalcolorconsortium/iccdev:${{ inputs.regression_image_tag || 'latest' }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}

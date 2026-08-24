@@ -31,9 +31,9 @@ permissions:
         default: master
         type: string
       regression_image_tag:
-        description: 'Trusted regression container tag for Linux comparison'
+        description: 'Trusted unified image tag for Linux comparison'
         required: false
-        default: master
+        default: latest
         type: string
       sweep_ref:
         description: >-
@@ -56,8 +56,8 @@ jobs:
     timeout-minutes: 90
     container:
       image: >-
-        ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${{
-        inputs.regression_image_tag || 'master' }}
+        ghcr.io/internationalcolorconsortium/iccdev:${{
+        inputs.regression_image_tag || 'latest' }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}

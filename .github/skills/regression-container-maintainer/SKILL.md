@@ -1,7 +1,7 @@
 ---
 name: regression-container-maintainer
 description: >
-  Use the published iccDEV regression container for maintainer smoke testing,
+  Use the published unified iccDEV container for maintainer smoke testing,
   pull request validation, issue reproduction, sanitizer review, and CI handoff.
 allowed-tools:
   - bash
@@ -13,10 +13,10 @@ allowed-tools:
   - shell(gh:*)
 ---
 
-# Regression Container Maintainer
+# Unified Container Maintainer
 
 Use this skill for repeatable maintainer operations in
-`ghcr.io/internationalcolorconsortium/iccdev-ci-regression`.
+`ghcr.io/internationalcolorconsortium/iccdev`.
 
 ## Required Inputs
 
@@ -54,14 +54,10 @@ Use this skill for repeatable maintainer operations in
 12. Scan logs for compiler warnings, ASAN, UBSAN, and signal termination.
 13. Trigger `ci-pr-action.yml` explicitly for a pre-PR branch; a push alone does
     not trigger that workflow.
-14. Compare all `Dockerfile*` files between `ci-qa-pr-docker-testing` and
-    `ci-qa-flags`; carry every applicable container fix to both branches.
-15. Confirm the `ci-qa-flags` branch update and hosted validation explicitly.
-16. Promote the verified immutable digest to `latest` only after all image smoke
-    tests and regression CTest checks succeed: automatically from `master`, or
-    explicitly from the protected Docker-testing branch with
-    `publish-regression-latest=true`. Never promote it from other branches.
-17. Report exact image tag, digest, source revision, commands, results, evidence,
+14. Use only `latest`, immutable SHA, or release tags. Do not introduce branch,
+    run, or image-variant tags.
+15. Confirm the canonical image digest and hosted validation explicitly.
+16. Report exact image tag, digest, source revision, commands, results, evidence,
     and workflow URLs.
 
 ## Safety Gates

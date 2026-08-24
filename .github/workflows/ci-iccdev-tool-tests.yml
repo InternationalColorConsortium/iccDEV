@@ -100,9 +100,9 @@ on:
         default: ''
         type: string
       regression_image_tag:
-        description: 'Trusted regression container tag'
+        description: 'Trusted unified image tag'
         required: false
-        default: master
+        default: latest
         type: string
       run_registry_qa:
         description: 'Run ICC profile registry command-line QA scan'
@@ -134,7 +134,7 @@ on:
       regression_image_tag:
         description: 'Trusted regression container tag'
         required: false
-        default: master
+        default: latest
         type: string
       run_hybrid_timing:
         description: 'Run the hybrid iccApplyProfiles timing matrix'
@@ -271,7 +271,7 @@ jobs:
     name: "iccDEV Tools - GCC Strict ASAN+UBSAN (${{ inputs.tool_build_type || 'Debug' }})"
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${{ inputs.regression_image_tag || 'master' }}
+      image: ghcr.io/internationalcolorconsortium/iccdev:${{ inputs.regression_image_tag || 'latest' }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -283,7 +283,7 @@ jobs:
 
     env:
       BASH_ENV: /dev/null
-      REGRESSION_IMAGE_TAG: ${{ inputs.regression_image_tag || 'master' }}
+      REGRESSION_IMAGE_TAG: ${{ inputs.regression_image_tag || 'latest' }}
       TOOL_BUILD_TYPE: ${{ inputs.tool_build_type || 'Debug' }}
       CTEST_MODE: ${{ inputs.ctest_mode || 'fast' }}
       CTEST_RECENT_LIMIT: ${{ inputs.ctest_recent_limit || '0' }}
@@ -762,7 +762,7 @@ jobs:
           registry_qa_summary="${registry_qa_dir}/summary.md"
           applytolink_debug_dir="${BUILD_DIR}/Testing/ctest-output/iccdev-applytolink-nan-sixchan-debug"
           applytolink_stack_report="${applytolink_debug_dir}/stack-analysis.txt"
-          container_ref="ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${REGRESSION_IMAGE_TAG}"
+          container_ref="ghcr.io/internationalcolorconsortium/iccdev:${REGRESSION_IMAGE_TAG}"
 
           {
             echo "### iccDEV CTest Tool Suites"

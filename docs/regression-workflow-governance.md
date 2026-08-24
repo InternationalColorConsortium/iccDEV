@@ -25,7 +25,7 @@ where it belongs.
 | Workflow rules | `.github/instructions/workflow-governance.instructions.md` | Shell hardening, output sanitization, and injection prevention. |
 | Workflow trust boundaries | `docs/workflow-security-trust-boundaries.md` | Trusted-base helper model, PR workflow canaries, and visual review aids. |
 | Testing rules | `.github/instructions/testing.instructions.md` | Test directories, script expectations, and regression flow. |
-| Maintainer Dockerfiles | `Dockerfile`, `Dockerfile.mcp`, `Dockerfile.ci-regression` | Release/runtime images and pinned CI dependency images. |
+| Unified Dockerfile | `Dockerfile` | Published runtime, MCP, and pinned CI dependency image. |
 
 ## When to Add a Script
 
@@ -152,7 +152,7 @@ verification; rerun it after any Dockerfile, container image, or container
 workflow update.
 
 The Docker PR lane consumes the published
-`ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest` image as a
+`ghcr.io/internationalcolorconsortium/iccdev:latest` image as a
 maintainer-controlled build cache. It must report the resolved digest, bind the
 checked-out PR tree read-only, copy it to container-local scratch space, and
 build and run the fast CTest envelope there. Do not rebuild the regression image
@@ -246,22 +246,20 @@ separate from general source changes when practical.
 
 | File | Owner intent | Required local checks |
 |------|--------------|-----------------------|
-| `Dockerfile` | Ubuntu release/runtime image for the published `iccdev` container. | Build locally, run at least one installed tool, and check the healthcheck target. |
-| `Dockerfile.ci-regression` | Maintainer image for ASAN/UBSAN CTest, fuzzing, review, and hybrid timing gates. | Run a no-cache build and smoke `git`, `gh`, `curl`, `clang`, `clang++`, `gcc`, `g++`, `lldb`, `gdb`, `cmake`, `afl-fuzz`, `afl-showmap`, `iccdev-fuzz-env`, libFuzzer compilation, and `/usr/bin/time`; AFL wrapper changes also need the container bootstrap probe in `docs/afl-fuzzing.md`. |
+| `Dockerfile` | Unified image for runtime tools, MCP, ASAN/UBSAN CTest, fuzzing, review, and hybrid timing gates. | Run a no-cache build and smoke `git`, `gh`, `curl`, `clang`, `clang++`, `gcc`, `g++`, `lldb`, `gdb`, `cmake`, `afl-fuzz`, `afl-showmap`, `iccdev-fuzz-env`, MCP initialization, libFuzzer compilation, and `/usr/bin/time`; AFL wrapper changes also need the container bootstrap probe in `docs/afl-fuzzing.md`. |
 
-For `Dockerfile.ci-regression` publishing:
+For unified `Dockerfile` publishing:
 
 1. Build and smoke the target image locally with no cache.
 2. Publish through the maintainer-controlled container release path.
-3. Record the published branch tag, immutable SHA tag, digest, and source
-   revision from the release output.
-4. Promote `latest` only after all image smoke tests and regression CTest checks
-   succeed, then confirm it resolves to the same immutable digest after a
-   `master` publication or an explicit protected Docker-testing branch
-   promotion.
+3. Record the published immutable SHA tag, digest, and source revision from the
+   release output.
+4. Publish `latest` only from `master` after all image smoke tests and
+   regression CTest checks succeed, then confirm it resolves to the immutable
+   digest.
 5. Pass the immutable SHA tag to `ci-iccdev-tool-tests.yml` and rerun the
    regression gate.
-6. Remove temporary branch-specific inputs after the branch is no longer needed.
+6. Do not create branch-specific or run-specific image tags.
 
 For day-to-day image use, PR checkout, issue reproduction, evidence handling,
 and CI dispatch commands, use
