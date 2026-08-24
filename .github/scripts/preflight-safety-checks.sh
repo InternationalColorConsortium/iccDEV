@@ -940,6 +940,7 @@ script_files=()
 python_files=()
 docker_files=()
 changed_files=()
+deleted_workflow_files=()
 base_ref="${PREFLIGHT_BASE_REF:-origin/master}"
 scan_paths=(.github .githooks Dockerfile 'Dockerfile.*' .dockerignore)
 if [ "$FAST_SCOPE" = "matlab" ]; then
@@ -961,6 +962,15 @@ if git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
     changed_files+=("$file")
   done < <(git diff --name-only --diff-filter=ACMRT -- \
     "${scan_paths[@]}" | sort)
+  while IFS= read -r file; do
+    deleted_workflow_files+=("$file")
+  done < <(git diff --name-only --diff-filter=D "$base_ref"...HEAD -- .github/workflows | sort)
+  while IFS= read -r file; do
+    deleted_workflow_files+=("$file")
+  done < <(git diff --cached --name-only --diff-filter=D -- .github/workflows | sort)
+  while IFS= read -r file; do
+    deleted_workflow_files+=("$file")
+  done < <(git diff --name-only --diff-filter=D -- .github/workflows | sort)
   while IFS= read -r file; do
     changed_files+=("$file")
   done < <(git ls-files --others --exclude-standard -- \
@@ -988,13 +998,24 @@ while IFS= read -r file; do
 done < <(printf '%s\n' "${changed_files[@]}" | awk 'NF && !seen[$0]++')
 
 if [ "$FAST_LANE" -eq 1 ]; then
-  for file in "${unique_changed_files[@]}"; do
-    case "$file" in
-      .github/workflows/*.yml|.github/workflows/*.yaml)
-        workflow_files+=("$file")
-        ;;
-    esac
-  done
+  if [ "${#deleted_workflow_files[@]}" -gt 0 ]; then
+    echo "[WARN] Workflow deletion detected; scanning all remaining workflows" >&2
+    while IFS= read -r file; do
+      workflow_files+=("$file")
+    done < <(
+      find .github/workflows -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null |
+        sed 's#^\./##' |
+        sort
+    )
+  else
+    for file in "${unique_changed_files[@]}"; do
+      case "$file" in
+        .github/workflows/*.yml|.github/workflows/*.yaml)
+          workflow_files+=("$file")
+          ;;
+      esac
+    done
+  fi
 else
   while IFS= read -r file; do
     workflow_files+=("$file")
