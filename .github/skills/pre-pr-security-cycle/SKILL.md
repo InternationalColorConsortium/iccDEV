@@ -80,6 +80,9 @@ Choose the smallest dynamic check that proves the changed behavior:
 - ASAN/UBSAN/IntSan command for parser or untrusted input changes.
 - Docker runtime smoke and image vulnerability/secret scan for container
   changes.
+- MCP runtime changes must validate every affected Docker image variant. Assert
+  that discovered CLI tools match `TOOL_BINARIES` and inspect optional-capability
+  flags; do not use a fixed health-tool count shared across variants.
 - Dockerfile checks must not be advisory-only when container files changed:
   run `hadolint` and Trivy config, then build, scan, or smoke the affected image
   when practical.

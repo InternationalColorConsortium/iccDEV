@@ -176,6 +176,9 @@ agent-policy surfaces.
   arrive as either 4-character strings or raw 32-bit integers, so both forms need
   test coverage.
 - Dashboard changes should preserve stale-output reset when switching tools.
+- MCP health reports currently available capabilities, which can differ between
+  container variants when an optional native ABI is unavailable. Validate the
+  discovered CLI registry and capability flags; do not hard-code tool totals.
 
 Key safety rules:
 

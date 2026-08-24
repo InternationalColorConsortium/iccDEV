@@ -30,6 +30,9 @@ updating, or merging an iccDEV PR.
 4. Run dynamic checks:
    - CTest, sanitizer, CLI smoke, Docker runtime/image scan or healthcheck,
      WASM parity, release assets, or vcpkg consumer smoke as appropriate.
+   - MCP runtime changes: validate every affected Docker image variant. Compare
+     discovered CLI tools against `TOOL_BINARIES` and inspect capability flags;
+     never assert one fixed health-tool total across variants.
 5. Fix confirmed findings and repeat only affected checks.
 6. Freeze the head and record the readiness evidence required by
    `docs/governance/UPSTREAM_PR_READINESS.md` before requesting review. If a

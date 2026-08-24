@@ -220,6 +220,25 @@ curl -fsS http://127.0.0.1:8080/api/tools
 The container entrypoint accepts `mcp`/`stdio`, `rest`/`api`, `sse`, and
 `streamable-http`/`http` modes.
 
+### Validate Runtime Capabilities
+
+The static MCP inventory has 26 tools, while `health_check` reports the tools
+available in a specific runtime. An image without the optional native
+validation ABI can correctly report fewer available tools. Validate discovered
+capabilities instead of a fixed total:
+
+```bash
+docker run --rm --entrypoint python iccdev-ci-regression:mcp-local -c '
+from iccdev_mcp.cli_tools import TOOL_BINARIES
+from iccdev_mcp.server import health_check
+health = health_check()
+assert set(health["cli_tools"]["available"]) == set(TOOL_BINARIES)
+assert not health["cli_tools"]["missing"]
+assert health["python_api"]["available"]
+print(health)
+'
+```
+
 ### MCP Mode (stdio)
 
 ```bash

@@ -473,12 +473,15 @@ jobs:
           docker run --rm --entrypoint python "$TEST_IMAGE" -c '
           from importlib.metadata import version
           from iccdev_mcp import __version__
+          from iccdev_mcp.cli_tools import TOOL_BINARIES
           from iccdev_mcp.server import health_check
           health = health_check()
           assert version("iccdev-mcp") == __version__
           assert health["version"] == __version__
-          assert health["total_tools"] == 26
-          assert len(health["cli_tools"]["available"]) == 17
+          assert health["python_api"]["available"]
+          assert health["python_api"]["tools"] > 0
+          assert set(health["cli_tools"]["available"]) == set(TOOL_BINARIES)
+          assert not health["cli_tools"]["missing"]
           assert health["profile_count"] > 0
           '
 
