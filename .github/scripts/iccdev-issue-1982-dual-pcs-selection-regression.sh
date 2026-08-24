@@ -112,15 +112,114 @@ done
 sanitizer_check()
 {
   # $1 = log file, $2 = context for the failure message
-  if grep -Eq "AddressSanitizer:|runtime error:|UndefinedBehaviorSanitizer" "$1"; then
+  #
+  # LeakSanitizer/MemorySanitizer and DEADLYSIGNAL are in the alternation because
+  # dump_tool() below has to tolerate 254 and 255 (they are validation verdicts),
+  # so for the iccDumpProfile logs this regex is the only thing that can catch a
+  # finding which still exits with one of those codes.  Every other status is
+  # rejected there, so LSan's 23 and ASan's default 1 are caught either way.
+  # ICCDEV_TEST_ENV sets detect_leaks=0, but the script is runnable standalone
+  # against an ASan build, where LSan is on by default.  This is a
+  # superset of the alternation the sibling harnesses use: theirs is anchored on
+  # "ERROR: AddressSanitizer", which misses "SUMMARY: AddressSanitizer:" lines,
+  # and only two of them carry MemorySanitizer.  DEADLYSIGNAL is kept for parity
+  # with the family even though ASan prints it as "AddressSanitizer: DEADLYSIGNAL"
+  # and the first alternative already matches that.
+  if grep -Eq "AddressSanitizer:|LeakSanitizer:|MemorySanitizer:|runtime error:|UndefinedBehaviorSanitizer|DEADLYSIGNAL" "$1"; then
     fail "sanitizer finding $2; see $1"
   fi
 }
 
-# No ASAN_OPTIONS/UBSAN_OPTIONS override here on purpose.  ICCDEV_TEST_ENV
-# already sets halt_on_error=0 for both, which is what keeps sanitizer_check()
-# reachable: with halt_on_error=1 a report aborts the tool, the "|| fail" on the
-# invocation fires first, and the finding is reported as a tool failure instead.
+# No ASAN_OPTIONS/UBSAN_OPTIONS override here on purpose: ICCDEV_TEST_ENV already
+# sets halt_on_error=0 for both.  That does NOT by itself keep the screen
+# reachable -- see run_tool() below for why the log has to be screened before the
+# status is judged regardless of halt_on_error.
+
+# Single choke point for every tool invocation (#2293).  Previously only the two
+# iccApplyToLink calls were screened; the iccFromXml and iccDumpProfile logs were
+# not, and the dump calls had no status check at all.  Routing every invocation
+# through one function is what stops a later call site from reintroducing that.
+#
+# The log is screened BEFORE the status is judged, and the order is load-bearing.
+# halt_on_error=0 only keeps a tool alive when the build can recover, and nothing
+# in this tree passes -fsanitize-recover=address: Build/Cmake/CMakeLists.txt:977
+# adds -fno-sanitize-recover= for UBSan/integer/float only, and SANITIZER_RECOVER
+# defaults OFF (:584).  So an ASan finding always aborts and arrives WITH a
+# non-zero status, and only the UBSan patterns are reachable while still exiting
+# zero -- in the one lane that sets SANITIZER_RECOVER=ON
+# (ci-iccdev-tool-tests.yml:434).  Checking the status first would report every
+# ASan abort as a plain tool failure and never reach the screen, so both orders
+# stay red but only this one names the sanitizer.
+run_tool()
+{
+  # $1 = log file, $2 = context for the failure messages, $3.. = command
+  local log="$1" ctx="$2" rc=0
+  shift 2
+  "$@" >"$log" 2>&1 || rc=$?
+  sanitizer_check "$log" "in $ctx"
+  [ "$rc" -eq 0 ] || fail "$ctx failed (exit $rc); see $log"
+}
+
+# iccDumpProfile needs its own variant because its exit code is a VALIDATION
+# VERDICT, not a success flag: with -v the tool ends "return nValid", which is 0
+# for OK/warning/noncompliant, -1 (255) for icValidateCriticalError and -2 (254)
+# for an unknown status.  The four device links this test generates already
+# validate as noncompliant ("Profile violates ICC
+# specification for version 5.00") -- the last severity that still maps to 0 --
+# so a plain "|| fail" would turn any future validation tightening into a phantom
+# #1982 regression while the D2B/B2D selection this test guards was intact.  The
+# same asymmetry is documented in iccdev-qa-profile-manifest.sh:197-207 and
+# Build/Cmake/Testing/CMakeLists.txt:6538.
+#
+# The "-v 100" on these dumps is deliberate and is what makes the tolerance below
+# necessary at all: none of the grep pins read the validation report, so dropping
+# -v would let every dump use run_tool() and delete this whole variant.  It is
+# kept because this test carries the "asan" label and CIccProfile::Validate()
+# walks every tag in the profile -- measured, it is the only thing separating the
+# 165-line -v dump from the 160-line plain one -- so dropping it would shrink the
+# code actually executed under the sanitizer, which is the coverage #2293 exists
+# to protect.  The verdict tolerance is the price of that surface.
+#
+# Tolerating a verdict has to be an ALLOW-list, not a blacklist, because the tool
+# has more non-verdict exits than verdicts: 1 from the QA-flag argument paths
+# (iccDumpProfile.cpp:582, :604), -1 (255) from three usage paths (:617, :632,
+# :664), 253 from a failed dump write (:1010 when DumpTagEntry fails mid-"ALL",
+# :1053 when WriteStringToStdout fails), and any death by signal.  253 in
+# particular truncates the log, which matters most in Part 2 where the assertion
+# is that the two normalized chain dumps DIFFER: a truncation hitting one arm and
+# not the other would make them differ for a reason unrelated to tag selection.
+#
+# 255 is genuinely ambiguous and needs TWO log pins, because three different
+# things produce it.  It is icValidateCriticalError; :703-706 forces that same
+# verdict when the profile cannot be parsed at all; and the three usage paths
+# (:617, :632, :664) return -1 for a bad invocation.  The two failure modes are
+# separated from the verdict only by the log:
+#
+#   - a bad invocation prints "Usage:" and returns BEFORE the version banner at
+#     :703, so requiring the banner catches it;
+#   - an unparseable profile prints the banner and then "Unable to parse".
+#
+# Without both pins, a dump that never ran surfaces downstream as "fixture no
+# longer exposes an XYZ PCS" -- blaming the fixture for a tool-output failure,
+# which is the mislabeling this whole variant exists to avoid.
+# What otherwise asserts the dump is real is the grep pins at each call site.
+dump_tool()
+{
+  # $1 = log file, $2 = context for the failure messages, $3.. = command
+  local log="$1" ctx="$2" rc=0
+  shift 2
+  "$@" >"$log" 2>&1 || rc=$?
+  sanitizer_check "$log" "in $ctx"
+  case "$rc" in
+    0|254|255) ;;
+    *) fail "$ctx failed (exit $rc); see $log" ;;
+  esac
+  grep -q "^Built with IccProfLib version" "$log" ||
+    fail "$ctx produced no dump (bad invocation?); see $log"
+  if grep -q "Unable to parse" "$log"; then
+    fail "$ctx could not parse its input; see $log"
+  fi
+}
 
 ###############################################################################
 # Part 1 -- dual-PCS source profile keeps its colorimetric AToBx transform
@@ -130,9 +229,10 @@ src_xml="$repo_root/Testing/SpecRef/SixChanInputRef.xml"
 src_icc="$outdir/SixChanInputRef.icc"
 [ -f "$src_xml" ] || fail "missing fixture: $src_xml"
 
-"$from_xml" "$src_xml" "$src_icc" >"$outdir/fromxml-input.log" 2>&1 ||
-  fail "iccFromXml failed on $src_xml; see $outdir/fromxml-input.log"
-"$dump_profile" -v 100 "$src_icc" ALL >"$outdir/input.log" 2>&1
+run_tool "$outdir/fromxml-input.log" "iccFromXml on $src_xml" \
+  "$from_xml" "$src_xml" "$src_icc"
+dump_tool "$outdir/input.log" "iccDumpProfile on $src_icc" \
+  "$dump_profile" -v 100 "$src_icc" ALL
 
 # Anti-vacuity pins: if the fixture ever loses the dual PCS or either transform
 # the assertions below would still "pass" while testing nothing.
@@ -152,13 +252,15 @@ for intent in 11 13; do
   log="$outdir/applytolink-$intent.log"
   rm -f "$link_icc"
 
-  "$apply_to_link" "$link_icc" 0 2 1 Issue1982 0 1 1 0 \
-      "$src_icc" "$intent" >"$log" 2>&1 ||
-    fail "iccApplyToLink failed for source intent $intent; see $log"
+  run_tool "$log" "iccApplyToLink for source intent $intent" \
+    "$apply_to_link" "$link_icc" 0 2 1 Issue1982 0 1 1 0 "$src_icc" "$intent"
 
-  sanitizer_check "$log" "for source intent $intent"
+  # Same guard Part 2 carries: without it a tool that exits 0 without writing the
+  # link is reported by the pins below as fixture drift, not as a tool failure.
+  [ -f "$link_icc" ] || fail "source intent $intent wrote no device link"
 
-  "$dump_profile" -v 100 "$link_icc" ALL >"$outdir/link-$intent.log" 2>&1
+  dump_tool "$outdir/link-$intent.log" "iccDumpProfile on $link_icc" \
+    "$dump_profile" -v 100 "$link_icc" ALL
   grep -Eq "PCS Color Space:[[:space:]]+XYZData" "$outdir/link-$intent.log" ||
     fail "source intent $intent did not produce XYZ PCS output"
   grep -Eq "MPE Element Chain: 1 elements, 6->3 channels" "$outdir/link-$intent.log" ||
@@ -175,9 +277,10 @@ dst_xml="$repo_root/Testing/SpecRef/SixChanCameraRef.xml"
 dst_icc="$outdir/SixChanCameraRef.icc"
 [ -f "$dst_xml" ] || fail "missing fixture: $dst_xml"
 
-"$from_xml" "$dst_xml" "$dst_icc" >"$outdir/fromxml-dest.log" 2>&1 ||
-  fail "iccFromXml failed on $dst_xml; see $outdir/fromxml-dest.log"
-"$dump_profile" -v 100 "$dst_icc" ALL >"$outdir/dest.log" 2>&1
+run_tool "$outdir/fromxml-dest.log" "iccFromXml on $dst_xml" \
+  "$from_xml" "$dst_xml" "$dst_icc"
+dump_tool "$outdir/dest.log" "iccDumpProfile on $dst_icc" \
+  "$dump_profile" -v 100 "$dst_icc" ALL
 
 # The whole point of this fixture is that BOTH reverse tags exist, so the
 # colorimetric route is available and the choice between them is real.
@@ -203,18 +306,17 @@ for intent in 11 1; do
   log="$outdir/applytolink-chain-$intent.log"
   rm -f "$link_icc" "$outdir/chain-link-$intent.norm"
 
-  "$apply_to_link" "$link_icc" 0 3 1 Issue1982 0 1 1 0 \
-      "$src_icc" "$intent" "$dst_icc" "$intent" >"$log" 2>&1 ||
-    fail "iccApplyToLink failed for chain intent $intent; see $log"
-
-  sanitizer_check "$log" "for chain intent $intent"
+  run_tool "$log" "iccApplyToLink for chain intent $intent" \
+    "$apply_to_link" "$link_icc" 0 3 1 Issue1982 0 1 1 0 \
+    "$src_icc" "$intent" "$dst_icc" "$intent"
 
   # Both arms must actually have produced a link.  Without this the comparison
   # below would "differ" simply because one dump is an open failure message,
   # and the test would pass against an unfixed library.
   [ -f "$link_icc" ] || fail "chain intent $intent wrote no device link"
 
-  "$dump_profile" -v 100 "$link_icc" ALL >"$outdir/chain-link-$intent.log" 2>&1
+  dump_tool "$outdir/chain-link-$intent.log" "iccDumpProfile on $link_icc" \
+    "$dump_profile" -v 100 "$link_icc" ALL
   normalize "$outdir/chain-link-$intent.log" "$outdir/chain-link-$intent.norm"
   grep -Eq "MPE Element Chain" "$outdir/chain-link-$intent.norm" ||
     fail "chain intent $intent produced a dump with no transform chain in it"
