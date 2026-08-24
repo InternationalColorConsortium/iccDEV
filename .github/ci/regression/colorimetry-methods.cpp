@@ -403,22 +403,24 @@ void testStandardAccessors()
   // 10 nm weighting table; it must not be generalized to non-flat spectra.
   {
     const icSpectralRange coarseR = makeRange(380, 780, 41);
-    icSpectralRange fineR;
+    icSpectralRange fineR = {};
     const icFloatNumber *obs = icGetStandardObserver(icStdObs1931TwoDegrees, fineR);
-    std::vector<icFloatNumber> fineWhite = makeFilled(fineR.steps, (icFloatNumber)1.0);
+    bool ready = obs != NULL && fineR.steps > 0;
+    std::vector<icFloatNumber> fineWhite;
+    if (ready)
+      fineWhite = makeFilled(fineR.steps, (icFloatNumber)1.0);
     std::vector<icFloatNumber> coarseWhite = makeFilled(coarseR.steps, (icFloatNumber)1.0);
     icFloatNumber fine[3] = { 0, 0, 0 };
     icFloatNumber coarse[3][3] = { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } };
     const icXYZCalcMethod methods[3] =
       { icXYZCalcDirectSum, icXYZCalcWeighting, icXYZCalcSpragueTo1nm };
-    bool ready = obs != NULL;
 
     CIccColorimetricCalculator fineCalc;
     ready = ready
          && fineCalc.SetStandardObserver(icStdObs1931TwoDegrees)
          && fineCalc.SetStandardIlluminant(icIlluminantD50)
          && fineCalc.Prepare(fineR, icXYZCalcDirectSum)
-         && fineCalc.ReflectanceToXYZ(&fineWhite[0], fine);
+         && fineCalc.ReflectanceToXYZ(fineWhite.data(), fine);
 
     for (int m = 0; ready && m < 3; m++) {
       CIccColorimetricCalculator calc;
