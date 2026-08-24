@@ -27,6 +27,7 @@ INPUT                  = README.md \
                          Tools/Winnt/IccIisIsapi/iis-isapi.openapi.yaml \
                          Tools/wxWidget \
                          examples/hello-iccdev/hello-iccdev.cpp \
+                         examples/c-validation-dlopen/main.c \
                          docs \
                          .github/ci/quality-assurance/scripts
 USE_MDFILE_AS_MAINPAGE = README.md

@@ -42,6 +42,23 @@ ctest --test-dir build -R '^iccdev\.c-validation-dlopen$' --output-on-failure --
 Runtime loading requires a shared build. Static-library consumers can call the
 same C API directly after linking the static IccProfLib target.
 
+## Python binding
+
+The `iccdev` Python package calls this same in-process C API; it does not run a
+command-line validator. It returns a structured status and report so malformed
+profiles remain validation results rather than Python binding exceptions:
+
+```python
+import iccdev
+
+result = iccdev.validate_profile_file("profile.icc")
+print(result.status.name)
+print(result.report or "none")
+```
+
+Use `validate_profile(bytes)` for an in-memory buffer. See
+[`python/README.md`](../python/README.md) for installation and package testing.
+
 ## Example and Review
 
 `examples/c-validation-dlopen/` is a standalone C99 program that demonstrates
