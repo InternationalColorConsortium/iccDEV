@@ -436,7 +436,6 @@ jobs:
           echo "## 1b. Absolute Cache Policy Audit" >> "$RISK_REPORT_PATH"
           echo "" >> "$RISK_REPORT_PATH"
           echo "Actions cache and mutable build cache are banned for all workflows." >> "$RISK_REPORT_PATH"
-          echo "The canonical publisher may export one exact \`cache-to: type=inline\` entry." >> "$RISK_REPORT_PATH"
           echo "" >> "$RISK_REPORT_PATH"
 
           mapfile -t workflow_files < <(
@@ -453,27 +452,6 @@ jobs:
             echo "[HIGH] Absolute cache policy violation: cache policy helper missing" >> "$RISK_REPORT_PATH"
             exit 1
           fi
-
-          inline_cache_workflow=".github/workflows/ci-docker.yml"
-          inline_cache_line='^[[:space:]]*cache-to:[[:space:]]*type=inline[[:space:]]*$'
-          mapfile -t inline_cache_matches < <(grep -nE "$inline_cache_line" "$inline_cache_workflow" || true)
-          if [ "${#inline_cache_matches[@]}" -ne 1 ]; then
-            echo "[HIGH] Canonical inline cache exception is missing or duplicated" >> "$RISK_REPORT_PATH"
-            exit 1
-          fi
-
-          # Scan a temporary copy with only the reviewed inline export removed.
-          # The trusted helper therefore continues to reject every other cache
-          # primitive in the PR-controlled workflow set.
-          scan_dir="$(mktemp -d)"
-          trap 'rm -rf "$scan_dir"' EXIT
-          cp "$inline_cache_workflow" "$scan_dir/ci-docker.yml"
-          sed -i -E "/$inline_cache_line/d" "$scan_dir/ci-docker.yml"
-          for index in "${!workflow_files[@]}"; do
-            if [ "${workflow_files[index]}" = "$inline_cache_workflow" ]; then
-              workflow_files[index]="$scan_dir/ci-docker.yml"
-            fi
-          done
 
           policy_log="$(mktemp)"
           set +e
@@ -1259,10 +1237,6 @@ jobs:
 
           for index, line in enumerate(lines, start=1):
               code = line.split("#", 1)[0]
-              if path.name == "ci-docker.yml" and re.fullmatch(
-                  r"\s*cache-to:\s*type=inline\s*", code
-              ):
-                  continue
               if re.search(r"uses:\s*actions/cache@", code):
                   findings.append(f"{path.name}:{index}: actions/cache")
               if re.search(r"uses:\s*msys2/setup-msys2@", code):
@@ -3502,9 +3476,6 @@ jobs:
             $lines = @($content -split "`r?`n")
             for ($i = 0; $i -lt $lines.Count; $i++) {
               $code = ($lines[$i] -split '#', 2)[0]
-              if ($wf.Name -eq "ci-docker.yml" -and $code -match '^\s*cache-to:\s*type=inline\s*$') {
-                continue
-              }
               if ($code -match 'uses:\s*actions/cache@') {
                 $cacheBoundaryGaps++
                 $report += "[HIGH] Workflow cache prohibited: ``$(Sanitize-Line "$($wf.Name):$($i + 1): actions/cache")``"

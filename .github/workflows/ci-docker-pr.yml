@@ -222,7 +222,7 @@ jobs:
             set -euo pipefail
             git config --global credential.helper ""
             unset GITHUB_TOKEN || true
-            command -v git gh clang clang++ gcc g++ cmake make realpath llvm-symbolizer
+            command -v git gh clang clang++ gcc g++ cmake make realpath llvm-symbolizer iccdev-mcp
             command -v afl-fuzz afl-showmap iccdev-fuzz-env
             command -v jq curl shellcheck llvm-cov llvm-profdata file
             test -x .github/scripts/iccdev-afl-smoke.sh
@@ -244,6 +244,7 @@ jobs:
             g++ --version | grep -q " 15\\."
             test "${CC}" = clang
             test "${CXX}" = clang++
+            iccdev-mcp --help >/dev/null
             printf "int main(void) { return 0; }\n" > /tmp/afl-probe.c
             printf "int main(void) { return 0; }\n" > /tmp/afl-probe.cpp
             # The packaged AFL LLVM plugin targets LLVM 21; retain

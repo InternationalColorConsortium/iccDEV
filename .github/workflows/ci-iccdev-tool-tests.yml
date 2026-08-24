@@ -354,7 +354,10 @@ jobs:
           g++ -std=c++17 \
             -Wall -Wextra -Wtype-limits -Wattributes \
             -Werror=type-limits -Werror=attributes \
-            -fsyntax-only -I "$GITHUB_WORKSPACE" "$warning_probe"
+            -fsyntax-only \
+            -I "$GITHUB_WORKSPACE" \
+            -I "$GITHUB_WORKSPACE/IccProfLib" \
+            "$warning_probe"
 
           clang_cxx=""
           if command -v clang++-18 >/dev/null 2>&1; then
@@ -370,7 +373,10 @@ jobs:
               -Wunknown-attributes -Wignored-attributes \
               -Werror=tautological-type-limit-compare \
               -Werror=unknown-attributes -Werror=ignored-attributes \
-              -fsyntax-only -I "$GITHUB_WORKSPACE" "$warning_probe"
+              -fsyntax-only \
+              -I "$GITHUB_WORKSPACE" \
+              -I "$GITHUB_WORKSPACE/IccProfLib" \
+              "$warning_probe"
           else
             echo "[WARN] clang++ not present in pinned regression image; GCC strict canary passed"
           fi

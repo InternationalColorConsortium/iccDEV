@@ -141,6 +141,7 @@ SET( HEADERS_PUBLIC
   ${SRC_PATH}/IccProfLib/IccArrayFactory.h
   ${SRC_PATH}/IccProfLib/IccCAM.h
   ${SRC_PATH}/IccProfLib/IccCValidation.h
+  ${SRC_PATH}/IccProfLib/IccFileUtil.h
   ${SRC_PATH}/IccProfLib/IccCmm.h
   ${SRC_PATH}/IccProfLib/IccCmmThread.h
   ${SRC_PATH}/IccProfLib/IccColorimetry.h
@@ -182,6 +183,7 @@ SET( HEADERS_PUBLIC
   ${SRC_PATH}/IccProfLib/IccSearch.h
   ${SRC_PATH}/IccProfLib/IccCmmSearch.h
   ${SRC_PATH}/IccProfLib/icProfileHeader.h
+  ${SRC_PATH}/Tools/CmdLine/IccCmdLineUtil.h
 )
 
 IF(ENABLE_INSTALL_RIM)

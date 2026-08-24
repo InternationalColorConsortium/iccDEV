@@ -258,6 +258,8 @@ set(_required_files
   "${_incdir}/IccProfile.h"
   "${_incdir}/IccUtil.h"
   "${_incdir}/IccProfLibConf.h"
+  "${_incdir}/IccFileUtil.h"
+  "${_incdir}/IccCmdLineUtil.h"
   # Generated at build time from the version + git hash (#823), so its absence
   # means the generated-header install rule regressed, not the static list.
   "${_incdir}/IccProfLibVer.h"
