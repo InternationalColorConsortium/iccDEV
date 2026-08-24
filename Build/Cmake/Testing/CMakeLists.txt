@@ -5862,6 +5862,49 @@ function(iccdev_add_spectral_clut_channel_count_test)
   endif()
 endfunction()
 
+function(iccdev_add_spectral_clut_xml_channel_mismatch_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSpectralClutXmlChannelMismatchTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/spectral-clut-xml-channel-mismatch.cpp"
+  )
+  target_compile_features(iccSpectralClutXmlChannelMismatchTest PRIVATE cxx_std_17)
+  target_include_directories(iccSpectralClutXmlChannelMismatchTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccSpectralClutXmlChannelMismatchTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccSpectralClutXmlChannelMismatchTest)
+
+  add_test(
+    NAME iccdev.spectral-clut-xml-channel-mismatch
+    COMMAND "$<TARGET_FILE:iccSpectralClutXmlChannelMismatchTest>"
+  )
+  set_tests_properties(iccdev.spectral-clut-xml-channel-mismatch PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;xml;mpe;spectral;clut;security;regression"
+  )
+  if(WIN32)
+    set(_spectral_clut_xml_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSpectralClutXmlChannelMismatchTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _spectral_clut_xml_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.spectral-clut-xml-channel-mismatch PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_spectral_clut_xml_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 if(WIN32)
   function(iccdev_add_windows_batch_test NAME TIMEOUT LABELS SCRIPT)
     set(_one_value_args
@@ -6192,6 +6235,7 @@ if(WIN32)
   iccdev_add_windows_iccdevcmm_smoke_test()
   iccdev_add_zip_utf8_text_zlib_test()
   iccdev_add_spectral_clut_channel_count_test()
+  iccdev_add_spectral_clut_xml_channel_mismatch_test()
 
   if(TARGET iccFromXml AND TARGET iccDumpProfile AND TARGET iccApplyNamedCmm)
     add_test(
@@ -6535,6 +6579,7 @@ iccdev_add_prmg_hue_normalization_test()
 iccdev_add_qa_evidence_helpers_test()
 iccdev_add_zip_utf8_text_zlib_test()
 iccdev_add_spectral_clut_channel_count_test()
+iccdev_add_spectral_clut_xml_channel_mismatch_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")

@@ -1470,6 +1470,18 @@ bool CIccMpeEmissionCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElement
   if (!m_pCLUT || !m_pWhite || m_pCLUT->GetOutputChannels()!=m_Range.steps || m_nOutputChannels!=3)
     return false;
 
+  // The element's declared input channel count and the dimensionality of the
+  // CLUT backing it must agree. Read() now bounds the count before the narrowing
+  // cast that builds the CLUT, but Read() is not the only constructor: the XML
+  // parser sets m_nInputChannels straight from the InputChannels attribute
+  // (capped at 0xFFFF by icXmlParseChannels) and then lets icCLutFromXml()
+  // narrow the same value to icUInt8Number independently, so a declared 257
+  // yields a one-dimensional CLUT under an element still claiming 257. Checking
+  // it here covers every route in, because Begin() is what the apply path calls
+  // whatever built the object.
+  if (m_pCLUT->GetInputDim() != m_nInputChannels)
+    return false;
+
   switch (m_nInputChannels) {
   case 1:
     m_interpType = ic1dInterp;
@@ -1556,7 +1568,8 @@ bool CIccMpeEmissionCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElement
     pDst += m_nOutputChannels;
   }
 
-  m_pApplyCLUT->Begin();
+  if (!m_pApplyCLUT->Begin())
+    return false;
 
   return true;
 }
@@ -1577,6 +1590,18 @@ bool CIccMpeReflectanceCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElem
   if (!m_pCLUT || !m_pWhite ||
       m_Range.steps < 2 || m_Range.start >= m_Range.end ||
       m_pCLUT->GetOutputChannels()!=m_Range.steps || m_nOutputChannels!=3)
+    return false;
+
+  // The element's declared input channel count and the dimensionality of the
+  // CLUT backing it must agree. Read() now bounds the count before the narrowing
+  // cast that builds the CLUT, but Read() is not the only constructor: the XML
+  // parser sets m_nInputChannels straight from the InputChannels attribute
+  // (capped at 0xFFFF by icXmlParseChannels) and then lets icCLutFromXml()
+  // narrow the same value to icUInt8Number independently, so a declared 257
+  // yields a one-dimensional CLUT under an element still claiming 257. Checking
+  // it here covers every route in, because Begin() is what the apply path calls
+  // whatever built the object.
+  if (m_pCLUT->GetInputDim() != m_nInputChannels)
     return false;
 
   switch (m_nInputChannels) {
@@ -1736,7 +1761,8 @@ bool CIccMpeReflectanceCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElem
   if (pApplyMtx!=&observer)
     delete pApplyMtx;
 
-  m_pApplyCLUT->Begin();
+  if (!m_pApplyCLUT->Begin())
+    return false;
 
   return true;
 }

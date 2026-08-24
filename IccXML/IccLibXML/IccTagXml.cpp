@@ -4134,6 +4134,20 @@ CIccCLUT *icCLutFromXml(xmlNode *pNode, int nIn, int nOut, icConvertType nType, 
   if (nType == icConvert8Bit)
     nPrecision = 1;  
 
+  // nIn arrives as the caller's declared input channel count and is narrowed to
+  // icUInt8Number here. The callers do not bound it to what a CIccCLUT can
+  // hold: icXmlParseChannels caps at kIccXmlMaxChannels (0xFFFF), so a
+  // declared 257 would silently become a one-dimensional CLUT while the element
+  // that asked for it goes on reporting 257 input channels, and 259/272 land on
+  // 3 and 16 the same way. Counts above 16 are refused outright rather than
+  // truncated -- CIccCLUT::Init() would reject them anyway, so nothing valid is
+  // lost, and refusing here keeps the element's count and its CLUT in agreement
+  // instead of leaving the disagreement for the apply path to catch.
+  if (nIn < 1 || nIn > 16 || nOut < 1) {
+    parseStr += "Error! - InputChannels must be between 1 and 16 for a CLUT.\n";
+    return NULL;
+  }
+
   icUInt8Number nInput = (icUInt8Number)nIn;
   icUInt16Number nOutput = (icUInt16Number)nOut;
 

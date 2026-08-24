@@ -2528,14 +2528,28 @@ void CIccCLUT::DumpLut(IDescribeSink &sink, const icChar *szName,
  *
  *****************************************************************************
  */
-void CIccCLUT::Begin()
+bool CIccCLUT::Begin()
 {
   int i;
-  // CWE-400/834: m_nInput indexes the fixed 16-entry m_GridPoints/m_MaxGridPoint/
-  // m_nPower arrays and drives m_nNodes = (1<<m_nInput). Init() already rejects
-  // m_nInput>16 on load; assert the bound locally so it is explicit at point of use.
-  if (m_nInput > 16)
-    return;
+
+  // Init() is what establishes every quantity below: the grid, the data buffer,
+  // and the input count itself. It refuses an m_nInput outside 1..16, a grid
+  // granularity below 2, and any grid whose size overflows 32 bits, and it
+  // leaves m_pData NULL when it does. That NULL is the one reliable signal that
+  // this object was never made usable, and it is the state a CLUT built outside
+  // the profile reader can be left in -- icCLutFromXml() and icCLUTFromJson()
+  // construct a CIccCLUT directly from a parsed channel count, and the public
+  // constructor plus a skipped or failed Init() reaches it too. Refuse here so
+  // an uninitialized CLUT cannot be handed to the interpolators.
+  if (!m_pData)
+    return false;
+
+  // m_nInput indexes the fixed 16-entry m_GridPoints/m_MaxGridPoint/m_nPower
+  // arrays and drives m_nNodes = (1<<m_nInput) (CWE-400/834). Init() rejects
+  // m_nInput>16, so a CLUT holding data cannot be over the bound; keep the
+  // check so the limit is explicit at the point the arrays are indexed.
+  if (m_nInput < 1 || m_nInput > 16)
+    return false;
   for (i=0; i<m_nInput; i++) {
     m_MaxGridPoint[i] = m_GridPoints[i] - 1;
   }
@@ -2555,7 +2569,7 @@ void CIccCLUT::Begin()
   // bound on the field so the offset-table walks below have an explicit upper limit
   // a corrupted CLUT cannot exceed. Value-preserving: a valid m_nNodes is <= 65536.
   if (m_nNodes > 65536)
-    return;
+    return false;
 
   if (m_nInput==1) {
     m_nOffset[0] = n000 = 0;
@@ -2719,6 +2733,8 @@ void CIccCLUT::Begin()
       }
     }
   }
+
+  return true;
 }
 
 

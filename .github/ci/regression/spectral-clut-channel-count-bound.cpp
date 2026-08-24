@@ -156,6 +156,38 @@ ReadResult readEmissionCLUT(std::vector<icUInt8Number> &body)
 // A generous payload: 16 grid points ^ a few dims, times steps, times 4 bytes.
 const size_t kBigPayload = 4u * 1024u * 1024u;
 
+// m_nInputChannels is protected on CIccMultiProcessElement. Deriving is how a
+// test reaches it without widening the library's interface for a test's benefit
+// -- the same approach mpexml-unknown-reserved.cpp takes for m_nReserved.
+//
+// This models a state no reader produces any more but that the object model
+// still permits: an element whose declared channel count disagrees with the
+// CLUT behind it. All three parsers that could reach it now bound the count
+// (Read() here, icCLutFromXml() in IccTagXml.cpp, icCLUTFromJson() in
+// IccTagJson.cpp), so the check in Begin() is the backstop for anything that
+// builds an element some other way -- including callers of the public API,
+// which is what IccProfLib exposes these classes as.
+//
+// CIccMpeCLUT is the element used rather than one of the spectral pair, because
+// its Begin() ignores pMPE entirely (the parameter is commented out in the
+// definition) and so returns a verdict on the CLUT alone. The spectral
+// overrides reach for the enclosing tag's applied PCC once their channel checks
+// pass, so removing the guard under test would make them fault on a NULL tag
+// instead of returning -- a failure, but an unreadable one. All three carry the
+// same comparison; this asserts it where the answer is a clean bool.
+class MismatchedCLUT : public CIccMpeCLUT
+{
+public:
+  // Attach a CLUT of one dimensionality while declaring another, exactly as the
+  // narrowing cast used to do on its own. SetCLUT() derives m_nInputChannels
+  // from the CLUT, so the declared count is overwritten afterwards.
+  void setMismatch(CIccCLUT *pCLUT, icUInt16Number nDeclaredInputChannels)
+  {
+    SetCLUT(pCLUT);
+    m_nInputChannels = nDeclaredInputChannels;
+  }
+};
+
 } // namespace
 
 int main()
@@ -287,6 +319,56 @@ int main()
       check(pCLUT->GetData(0) != NULL, "valid NewCLUT() CLUT has storage");
       check(pCLUT->NumPoints() == 9u * 9u * 9u, "valid NewCLUT() CLUT has 9^3 points");
     }
+  }
+
+  // ---- Begin() must refuse a count that disagrees with its CLUT -------------
+  //
+  // The backstop for every construction route that is not Read(). Begin() is
+  // what the apply path calls whatever built the element, so a disagreement has
+  // to be caught here if it was not prevented earlier. The XML parser used to
+  // produce exactly this state (see spectral-clut-xml-channel-mismatch.cpp);
+  // now nothing does, which is precisely why the guard needs its own coverage
+  // rather than relying on a parser to reach it.
+  //
+  {
+    // A well-formed 3-dimensional CLUT: 2 grid points per dimension, 3 outputs.
+    CIccCLUT *pCLUT = new CIccCLUT((icUInt8Number)3, (icUInt16Number)3, 4);
+    check(pCLUT->Init((icUInt8Number)2), "helper CLUT initializes");
+
+    MismatchedCLUT elem;
+    elem.setMismatch(pCLUT, /*declared*/259);   // 259 & 0xFF == 3
+
+    check(elem.NumInputChannels() == 259, "helper declares 259 input channels");
+    check(elem.GetCLUT() != NULL && elem.GetCLUT()->GetInputDim() == 3,
+          "helper's CLUT is three-dimensional");
+    check(!elem.Begin(icElemInterpLinear, NULL),
+          "Begin() refuses declared 259 over a three-dimensional CLUT");
+  }
+
+  // The control: an element whose counts agree must still begin. Without it the
+  // assertion above could be satisfied by a Begin() that refuses everything.
+  {
+    CIccCLUT *pCLUT = new CIccCLUT((icUInt8Number)3, (icUInt16Number)3, 4);
+    pCLUT->Init((icUInt8Number)2);
+
+    MismatchedCLUT elem;
+    elem.setMismatch(pCLUT, /*declared*/3);
+
+    check(elem.Begin(icElemInterpLinear, NULL),
+          "Begin() accepts an element whose count matches its CLUT");
+  }
+
+  // And a CLUT that Init() never made usable must be refused by Begin() even
+  // when the counts agree -- this is what CIccCLUT::Begin() returning bool
+  // buys, and the state a caller reaches by skipping Init() altogether.
+  {
+    CIccCLUT *pCLUT = new CIccCLUT((icUInt8Number)3, (icUInt16Number)3, 4);
+    // Deliberately no Init().
+    MismatchedCLUT elem;
+    elem.setMismatch(pCLUT, /*declared*/3);
+
+    check(!elem.Begin(icElemInterpLinear, NULL),
+          "Begin() refuses a CLUT that was never Init()ed");
   }
 
   if (g_fail) {

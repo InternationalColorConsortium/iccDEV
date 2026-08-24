@@ -373,7 +373,11 @@ public:
   icUInt32Number GetOffset(int index) const { return m_nOffset ? m_nOffset[index] : 0; }
 
 
-  void Begin();
+  //! Prepare the CLUT for Apply(). Returns false if the object is not in a
+  //! usable state -- most importantly if Init() was never called or refused,
+  //! which leaves no data behind the grid the interpolators would walk. Callers
+  //! on an apply path must not proceed when this returns false.
+  bool Begin();
 
   CIccApplyCLUT* GetNewApply();
 
