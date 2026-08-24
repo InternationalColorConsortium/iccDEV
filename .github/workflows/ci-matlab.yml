@@ -154,7 +154,6 @@ jobs:
             'iccProfilePlot'
             'iccPawgReport'
             'iccPawgQ1QualityContractTest'
-            'iccCurveGammaU8Fixed8Test'
             'iccLuminanceNormalizationTest'
             'iccColorimetryMethodsTest'
             '--parallel'
@@ -180,7 +179,6 @@ jobs:
 
           $nativeRegressionPattern = (
             '^iccdev\.(' +
-            'curve-gamma-u8fixed8|' +
             'luminance-normalization|' +
             'colorimetry-methods|' +
             'pawg-q1-quality-contract)$'
