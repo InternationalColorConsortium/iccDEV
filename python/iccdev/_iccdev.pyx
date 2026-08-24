@@ -175,6 +175,14 @@ class ValidationStatus(enum.IntEnum):
 ValidationResult = namedtuple('ValidationResult', ['status', 'report'])
 
 
+def _validation_status_from_code(int status):
+    """Map a native validation status, handling ABI-version mismatches."""
+    try:
+        return ValidationStatus(status)
+    except ValueError:
+        return ValidationStatus.INTERNAL_ERROR
+
+
 # ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
@@ -281,7 +289,7 @@ def validate_profile(profile):
     status = cicc.icc_validate_profile(
         profile_data, len(profile_bytes), report, sizeof(report))
     return ValidationResult(
-        ValidationStatus(status),
+        _validation_status_from_code(<int>status),
         (<bytes>report).decode('utf-8', errors='replace'),
     )
 

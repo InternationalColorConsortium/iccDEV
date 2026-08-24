@@ -27,7 +27,7 @@ built iccDEV toolchain:
 pip install iccdev-mcp
 ```
 
-For full functionality with the pip-installed package, six Python-native tools
+For full functionality with the pip-installed package, seven Python-native tools
 are included in the `iccdev-mcp` wheel. The `validate_profile` tool dynamically
 loads the public C validation ABI, so it also needs a shared IccProfLib build.
 The 17 CLI-backed tools require iccDEV CLI binaries. Build iccDEV locally or

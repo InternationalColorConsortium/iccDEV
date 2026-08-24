@@ -122,6 +122,11 @@ class TestValidation:
         assert ValidationStatus.CRITICAL_ERROR == 3
         assert ValidationStatus.INVALID_ARGUMENT == 4
 
+    def test_unknown_status_falls_back_to_internal_error(self):
+        from iccdev._iccdev import _validation_status_from_code
+
+        assert _validation_status_from_code(999) is ValidationStatus.INTERNAL_ERROR
+
     def test_rejects_empty_input(self):
         result = validate_profile(b"")
         assert isinstance(result, ValidationResult)

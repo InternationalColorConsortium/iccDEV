@@ -4,6 +4,8 @@
 # while exposing standard CMake/CTest labels, timeouts, fixtures, and a check
 # target for local and CI use.
 
+include(CheckCCompilerFlag)
+
 find_program(BASH_EXECUTABLE bash)
 
 get_filename_component(ICCDEV_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
@@ -123,9 +125,17 @@ if(ENABLE_SHARED_LIBS AND TARGET "${TARGET_LIB_ICCPROFLIB}")
   # Pattern initialization caught the prior probe of an unwritten report byte.
   # Keep the consumer in that mode where Clang provides it.
   if(CMAKE_C_COMPILER_ID MATCHES "Clang")
-    target_compile_options(iccCValidationDlopenTest PRIVATE
-      -ftrivial-auto-var-init=pattern
+    set(CMAKE_REQUIRED_FLAGS "-Werror=unused-command-line-argument")
+    check_c_compiler_flag(
+      "-ftrivial-auto-var-init=pattern"
+      ICCDEV_HAVE_PATTERN_AUTO_VAR_INIT
     )
+    unset(CMAKE_REQUIRED_FLAGS)
+    if(ICCDEV_HAVE_PATTERN_AUTO_VAR_INIT)
+      target_compile_options(iccCValidationDlopenTest PRIVATE
+        -ftrivial-auto-var-init=pattern
+      )
+    endif()
   endif()
   target_include_directories(iccCValidationDlopenTest PRIVATE
     "${ICCDEV_REPO_ROOT}/IccProfLib"
