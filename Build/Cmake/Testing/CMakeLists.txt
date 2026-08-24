@@ -120,6 +120,13 @@ if(ENABLE_SHARED_LIBS AND TARGET "${TARGET_LIB_ICCPROFLIB}")
     C_STANDARD 99
     C_STANDARD_REQUIRED ON
   )
+  # Pattern initialization caught the prior probe of an unwritten report byte.
+  # Keep the consumer in that mode where Clang provides it.
+  if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+    target_compile_options(iccCValidationDlopenTest PRIVATE
+      -ftrivial-auto-var-init=pattern
+    )
+  endif()
   target_include_directories(iccCValidationDlopenTest PRIVATE
     "${ICCDEV_REPO_ROOT}/IccProfLib"
   )
