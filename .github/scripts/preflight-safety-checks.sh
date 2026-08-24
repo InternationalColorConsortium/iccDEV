@@ -522,8 +522,6 @@ for path in sys.argv[1:]:
             if uses.startswith("docker/build-push-action@"):
                 for key in ("cache-from", "cache-to"):
                     cache_value = str(block.get(key, "")).strip()
-                    if Path(path).name == "ci-docker.yml" and key == "cache-to" and cache_value == "type=inline":
-                        continue
                     if cache_value:
                         print(f"[FAIL] {label}: Docker Buildx {key} is prohibited",
                               file=sys.stderr)

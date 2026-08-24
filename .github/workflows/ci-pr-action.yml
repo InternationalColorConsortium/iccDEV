@@ -165,7 +165,6 @@ jobs:
           WARNING_POLICY_INPUT: ${{ inputs.warning_policy || 'fail' }}
           DISPATCH_PR_NUMBER: ${{ inputs.pr_number || '' }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login || github.actor }}
           PR_NUMBER: ${{ github.event.pull_request.number || '' }}
@@ -183,7 +182,7 @@ jobs:
 
           ci_scope="${CI_SCOPE:-auto}"
           head_sha="${PR_HEAD_SHA}"
-          base_sha="${PR_BASE_SHA}"
+          base_sha="$(git -C "$GITHUB_WORKSPACE/base" rev-parse HEAD)"
           target_repository="${PR_HEAD_REPO}"
           pr_number="${PR_NUMBER}"
           fast_lane=false
@@ -459,8 +458,8 @@ jobs:
             ci_changed=true
           fi
 
-          # Docker CI covers every input packaged into the unified image.
-          if has_changed_file '^Dockerfile(\..*)?$|^\.dockerignore$|^docker/|^iccdev-mcp/|^Build/|^IccConnect/|^IccJSON/|^IccProfLib/|^IccXML/|^Testing/|^Tools/|^cfl/|^python/|^\.github/scripts/preflight-safety-checks\.sh$|^\.github/workflows/ci-docker(-pr)?\.yml$'; then
+          # Dockerfile copies the complete non-ignored checkout.
+          if [[ -n "$changed_files" ]]; then
             container_changed=true
           fi
 

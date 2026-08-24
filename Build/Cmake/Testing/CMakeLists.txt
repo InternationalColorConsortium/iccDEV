@@ -5092,6 +5092,7 @@ function(iccdev_add_qa_evidence_helpers_test)
   target_compile_features(iccQaEvidenceHelpersTest PRIVATE cxx_std_17)
   target_include_directories(iccQaEvidenceHelpersTest PRIVATE
     "${ICCDEV_REPO_ROOT}/IccProfLib"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine"
   )
   add_dependencies(check iccQaEvidenceHelpersTest)
 

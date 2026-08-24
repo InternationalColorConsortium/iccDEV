@@ -60,7 +60,7 @@ jobs:
       - name: Check out trusted workflow helpers
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
-          ref: ${{ inputs.base_sha }}
+          ref: ${{ github.event.pull_request.base.sha || inputs.base_sha }}
           path: .trusted-workflow
           sparse-checkout: .github/scripts
           fetch-depth: 1
@@ -69,7 +69,7 @@ jobs:
       - name: Check out target SHA
         env:
           BASH_ENV: /dev/null
-          BASE_SHA: ${{ inputs.base_sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base_sha }}
           TARGET_SHA: ${{ inputs.target_sha }}
         run: |
           set -euo pipefail
@@ -138,7 +138,7 @@ jobs:
       - name: Check out trusted workflow helpers
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
-          ref: ${{ inputs.base_sha }}
+          ref: ${{ github.event.pull_request.base.sha || inputs.base_sha }}
           path: .trusted-workflow
           sparse-checkout: .github/scripts
           fetch-depth: 1
@@ -147,7 +147,7 @@ jobs:
       - name: Verify checked out PR SHA
         env:
           BASH_ENV: /dev/null
-          BASE_SHA: ${{ inputs.base_sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base_sha }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -187,33 +187,11 @@ jobs:
           fi
 
       # preflight: allow-codeql-actions reason=trusted-base-sanitizer
-      - name: Pull published unified image cache
-        id: cache-image
-        env:
-          BASH_ENV: /dev/null
-          CACHE_IMAGE: ghcr.io/internationalcolorconsortium/iccdev:latest
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .trusted-workflow/.github/scripts/sanitize-sed.sh
-
-          docker pull "$CACHE_IMAGE"
-          cache_digest="$(docker image inspect "$CACHE_IMAGE" \
-            --format '{{index .RepoDigests 0}}')"
-          test -n "$cache_digest"
-          printf 'Using published cache image: %s\n' \
-            "$(sanitize_line "$cache_digest")"
-          printf 'image=%s\n' "$(sanitize_line "$CACHE_IMAGE")" >> "$GITHUB_OUTPUT"
-          printf 'digest=%s\n' "$(sanitize_line "$cache_digest")" >> "$GITHUB_OUTPUT"
-
-      # preflight: allow-codeql-actions reason=trusted-base-sanitizer
       # preflight: allow-pr-script-execution reason=build-same-repository-container-pr
       - name: Build unified PR image
         id: image
         env:
           BASH_ENV: /dev/null
-          CACHE_IMAGE: ${{ steps.cache-image.outputs.image }}
           TEST_IMAGE: iccdev-pr:${{ inputs.target_sha }}
         run: |
           set -euo pipefail
@@ -227,7 +205,6 @@ jobs:
           test ! -e "$GITHUB_WORKSPACE/.trusted-workflow"
 
           docker build \
-            --cache-from "$CACHE_IMAGE" \
             --build-arg "GIT_COMMIT=$TARGET_SHA" \
             -t "$TEST_IMAGE" .
           printf 'image=%s\n' "$(sanitize_line "$TEST_IMAGE")" >> "$GITHUB_OUTPUT"

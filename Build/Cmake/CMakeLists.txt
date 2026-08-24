@@ -1774,6 +1774,8 @@ target_link_libraries(IccVizEngine INTERFACE IccVizEngineHeaders)
 target_sources(IccVizEngine INTERFACE "${ICCDEV_ICCVIZ_DIR}/IccVizModel.cpp")
 
 IF(ENABLE_TOOLS)
+  include_directories(${TOP_SOURCE_DIR}/Tools/CmdLine)
+
   # Add XML-related tools
   IF(ENABLE_ICCXML)
     ADD_SUBDIRECTORY(Tools/IccFromXml)

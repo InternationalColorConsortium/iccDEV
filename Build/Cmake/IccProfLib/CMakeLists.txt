@@ -141,9 +141,6 @@ SET( HEADERS_PUBLIC
   ${SRC_PATH}/IccProfLib/IccArrayFactory.h
   ${SRC_PATH}/IccProfLib/IccCAM.h
   ${SRC_PATH}/IccProfLib/IccCValidation.h
-  # Issue #2154: relocated from Tools/CmdLine so IccConnect stops reaching across
-  # the tree for it. Header-only (all inline), so no CFILES entry and no export.
-  ${SRC_PATH}/IccProfLib/IccCmdLineUtil.h
   ${SRC_PATH}/IccProfLib/IccCmm.h
   ${SRC_PATH}/IccProfLib/IccCmmThread.h
   ${SRC_PATH}/IccProfLib/IccColorimetry.h
@@ -153,7 +150,6 @@ SET( HEADERS_PUBLIC
   ${SRC_PATH}/IccProfLib/IccEnvVar.h
   ${SRC_PATH}/IccProfLib/IccEval.h
   ${SRC_PATH}/IccProfLib/IccIO.h
-  ${SRC_PATH}/IccProfLib/IccJsonTypes.h
   ${SRC_PATH}/IccProfLib/IccMatrixMath.h
   ${SRC_PATH}/IccProfLib/IccMpeACS.h
   ${SRC_PATH}/IccProfLib/IccMpeBasic.h

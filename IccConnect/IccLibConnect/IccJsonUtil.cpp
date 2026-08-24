@@ -72,7 +72,7 @@
 
 #include "IccJsonUtil.h"
 #include "IccUtil.h"
-#include "IccCmdLineUtil.h" // shared regular-file open/close helpers (#2154)
+#include "IccFileUtil.h"
 #include <cmath>
 #include <cstdio>
 #include <limits>

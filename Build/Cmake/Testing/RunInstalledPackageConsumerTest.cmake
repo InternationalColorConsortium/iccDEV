@@ -261,10 +261,6 @@ set(_required_files
   # Generated at build time from the version + git hash (#823), so its absence
   # means the generated-header install rule regressed, not the static list.
   "${_incdir}/IccProfLibVer.h"
-  # Relocated out of Tools/CmdLine by #2154. It is header-only and has no
-  # exported symbol, so an install-rule omission would be invisible to every
-  # in-tree consumer -- this is the only thing that would notice.
-  "${_incdir}/IccCmdLineUtil.h"
 )
 foreach(_required_file IN LISTS _required_files)
   if(NOT EXISTS "${_required_file}")

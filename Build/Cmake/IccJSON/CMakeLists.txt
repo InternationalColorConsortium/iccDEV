@@ -24,6 +24,7 @@ IF(ENABLE_INSTALL_RIM)
   SET( HEADERS_PUBLIC
         ${SRC_PATH}/IccJSON/IccLibJSON/IccIoJson.h
         ${SRC_PATH}/IccJSON/IccLibJSON/IccJsonConfig.h
+        ${SRC_PATH}/IccJSON/IccLibJSON/IccJsonTypes.h
         ${SRC_PATH}/IccJSON/IccLibJSON/IccMpeJson.h
         ${SRC_PATH}/IccJSON/IccLibJSON/IccMpeJsonFactory.h
         ${SRC_PATH}/IccJSON/IccLibJSON/IccProfileJson.h

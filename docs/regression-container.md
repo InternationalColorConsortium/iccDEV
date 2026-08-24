@@ -101,10 +101,10 @@ docker run --rm iccdev:local bash -lc '
 `ci-docker` publishes only the canonical package: `master` adds `latest` and
 the immutable SHA tag; a `v*` ref adds its release tag and immutable SHA tag.
 Do not publish branch, run, image-variant, or legacy-package tags. Publishing
-runs always create an SBOM artifact and provenance attestation for the
-canonical digest. Its SBOM attestation is emitted only when the SBOM is at most
+runs create BuildKit SBOM and provenance attestations for the canonical digest.
+The separate GitHub SBOM attestation is emitted only when the SBOM is at most
 16 MiB; larger SBOMs remain available as artifacts and the workflow reports
-the skipped attestation.
+that GitHub attestation as skipped.
 
 For detailed regression gate policy, use
 `docs/regression-workflow-governance.md`. For MCP developer setup, use

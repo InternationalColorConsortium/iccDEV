@@ -346,7 +346,7 @@ jobs:
 
           warning_probe="${RUNNER_TEMP:-/tmp}/icc-warning-policy.cpp"
           {
-            printf '%s\n' '#include "IccProfLib/IccCmdLineUtil.h"'
+            printf '%s\n' '#include "Tools/CmdLine/IccCmdLineUtil.h"'
             printf '%s\n' 'int main() { return 0; }'
           } > "$warning_probe"
 

@@ -90,9 +90,6 @@ for number, code, lines in code_lines(workflow):
         window = step_window(lines, number - 1)
         if not re.search(r"(?m)^\s+cache:\s*(false|0|no|off)\s*$", window, re.I):
             print(f"{number}: msys2/setup-msys2 cache not disabled")
-    if (workflow.name == "ci-docker.yml"
-            and re.match(r"cache-to:\s*type=inline\s*$", stripped, re.I)):
-        continue
     if re.match(r"cache-(from|to):\s*\S", stripped, re.I):
         print(f"{number}: {stripped}")
     if re.match(r"(cache-dependency-path|restore-keys|save-always):\s*\S", stripped, re.I):
