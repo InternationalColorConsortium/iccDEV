@@ -11,6 +11,8 @@ The static MCP inventory has 26 tools, but `health_check` reports tools
 available in the running environment. Optional native capabilities can differ
 between container variants, so clients and CI must inspect capability flags and
 the discovered CLI inventory rather than assume a fixed health-tool total.
+The response includes the available native, CLI, and service inventories so
+clients can derive its dynamic `total_tools` value without numeric assumptions.
 
 
 ## Install

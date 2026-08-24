@@ -295,7 +295,14 @@ class TestNativeTools:
         assert result["status"] == "ok"
         assert result["version"] == __version__
         assert result["python_api"]["available"] is True
-        assert result["python_api"]["tools"] > 0
+        assert result["python_api"]["tools"] == len(
+            result["python_api"]["available_tools"]
+        )
+        assert result["total_tools"] == (
+            len(result["python_api"]["available_tools"])
+            + len(result["cli_tools"]["available"])
+            + len(result["service_tools"])
+        )
 
 
 @pytest.mark.skipif(not HAS_ICCDEV, reason="iccdev not installed")

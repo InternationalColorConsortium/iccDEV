@@ -7,14 +7,7 @@ from the iccdev-mcp server's subprocess-based tool execution.
 
 1. **Check runtime inventory**
    ```bash
-   python3 -c '
-   from iccdev_mcp.cli_tools import TOOL_BINARIES
-   from iccdev_mcp.server import health_check
-   health = health_check()
-   assert set(health["cli_tools"]["available"]) == set(TOOL_BINARIES)
-   assert not health["cli_tools"]["missing"]
-   print(health)
-   '
+   python3 -c 'from iccdev_mcp.cli_tools import TOOL_BINARIES; from iccdev_mcp.server import health_check; health = health_check(); assert set(health["cli_tools"]["available"]) == set(TOOL_BINARIES); assert not health["cli_tools"]["missing"]; print(health)'
    ```
 
 2. **Check binary availability**

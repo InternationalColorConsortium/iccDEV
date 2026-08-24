@@ -103,6 +103,8 @@ class TestHealthEndpoints(unittest.TestCase):
         self.client = _make_client()
 
     def test_health_returns_ok(self):
+        from iccdev_mcp.rest_api import API_TOOLS
+
         resp = self.client.get("/api/health")
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
@@ -110,7 +112,7 @@ class TestHealthEndpoints(unittest.TestCase):
         self.assertEqual(data["server"], "iccdev-mcp")
         self.assertTrue(data["python_api_available"])
         self.assertIn("cli_tools", data)
-        self.assertGreater(data["tools_count"], 0)
+        self.assertEqual(data["tools_count"], len(API_TOOLS))
 
     def test_health_has_version(self):
         from iccdev_mcp import __version__
@@ -119,11 +121,14 @@ class TestHealthEndpoints(unittest.TestCase):
         self.assertEqual(data["version"], __version__)
 
     def test_tools_list(self):
+        from iccdev_mcp.rest_api import API_TOOLS
+
         resp = self.client.get("/api/tools")
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertIn("tools", data)
         self.assertIn("count", data)
+        self.assertEqual(data["count"], len(API_TOOLS))
         self.assertEqual(data["count"], len(data["tools"]))
         self.assertIn("rest_utility_routes", data)
         self.assertEqual(

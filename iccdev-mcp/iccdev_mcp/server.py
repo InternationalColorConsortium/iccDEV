@@ -37,6 +37,17 @@ mcp = FastMCP(
 # application version explicitly so MCP initialize does not report the SDK version.
 mcp._mcp_server.version = __version__
 
+_NATIVE_TOOL_NAMES = (
+    "inspect_header",
+    "profile_summary",
+    "color_transform",
+    "roundtrip_delta",
+    "icc_sig_to_str",
+    "enum_spaces",
+)
+_VALIDATION_TOOL_NAMES = ("validate_profile",)
+_SERVICE_TOOL_NAMES = ("health_check", "list_available_profiles")
+
 
 def _check_iccdev():
     """Verify iccdev is importable; raise clear error if not."""
@@ -450,7 +461,7 @@ def health_check() -> dict:
     and how many profiles are accessible.
 
     Returns:
-        Dict with 'status', 'python_api', 'cli_tools', 'profile_count'.
+        Dict with dynamic native, CLI, and service tool inventories.
     """
     python_ok = _check_iccdev()
     validation_ok = False
@@ -470,21 +481,29 @@ def health_check() -> dict:
     except ImportError:
         cli_status = {"available": [], "missing": [], "tools_dir": None}
 
-    native_count = 7 if validation_ok else (6 if python_ok else 0)
-    cli_count = len(cli_status.get("available", []))
+    native_tools = list(_NATIVE_TOOL_NAMES) if python_ok else []
+    if validation_ok:
+        native_tools.extend(_VALIDATION_TOOL_NAMES)
+    available_cli_tools = cli_status.get("available", [])
 
     return {
         "status": "ok",
         "version": __version__,
         "python_api": {
             "available": python_ok,
-            "tools": native_count,
+            "tools": len(native_tools),
+            "available_tools": native_tools,
         },
         "validation_api": {
             "available": validation_ok,
         },
         "cli_tools": cli_status,
-        "total_tools": native_count + cli_count + 2,  # +health +list
+        "service_tools": list(_SERVICE_TOOL_NAMES),
+        "total_tools": (
+            len(native_tools)
+            + len(available_cli_tools)
+            + len(_SERVICE_TOOL_NAMES)
+        ),
         "profile_count": len(profiles),
     }
 
