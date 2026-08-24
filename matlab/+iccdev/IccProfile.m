@@ -1,14 +1,17 @@
 classdef IccProfile < handle
   %ICCPROFILE Read and inspect ICC color profiles.
   %
-  %   p = iccdev.IccProfile('sRGB.icc')
-  %   p = iccdev.IccProfile('sRGB.icc', 'lazy', false)
+  %   repo_root = fileparts(fileparts(which('build_mex')));
+  %   profile_path = fullfile(repo_root, 'Testing', ...
+  %     'sRGB_v4_ICC_preference.icc');
+  %   p = iccdev.IccProfile(profile_path)
+  %   p = iccdev.IccProfile(profile_path, 'lazy', false)
   %   h = p.header();
   %   disp(h.versionString)
   %   p.close();
   %
   %   % Context-manager pattern:
-  %   p = iccdev.IccProfile('sRGB.icc');
+  %   p = iccdev.IccProfile(profile_path);
   %   c = onCleanup(@() p.close());
   %   disp(p.header())
   %

@@ -4,15 +4,26 @@
 
 ## Usage
 
-```sh
-iccPawgReport profile.icc
-iccPawgReport --json profile.icc
-iccPawgReport --qa-flags --evidence-json profile.icc
+From PowerShell at the repository root with the documented `repo\msvc` build:
+
+```powershell
+$Profile = Join-Path $PWD 'Testing\sRGB_v4_ICC_preference.icc'
+& '.\msvc\bin\Release\iccPawgReport.exe' $Profile
+& '.\msvc\bin\Release\iccPawgReport.exe' --json $Profile
+& '.\msvc\bin\Release\iccPawgReport.exe' --qa-flags --evidence-json $Profile
+```
+
+From a Unix shell with the tool on `PATH`:
+
+```bash
+iccPawgReport Testing/sRGB_v4_ICC_preference.icc
+iccPawgReport --json Testing/sRGB_v4_ICC_preference.icc
+iccPawgReport --qa-flags --evidence-json Testing/sRGB_v4_ICC_preference.icc
 ```
 
 Options:
 
-- `--json` out instead of text report
+- `--json` outputs JSON instead of the text report
 - `--qa-flags --evidence-json` emits schema-versioned load and validation
   evidence when built with `ICCDEV_ENABLE_QA_FLAGS=ON`
 
@@ -46,6 +57,11 @@ Security checks cover the PAWG goals for channel counts, 128-byte header encodin
 Conformance checks cover tag value encoding, `cprt`/`desc` text encoding, allowed tag types, required tags for profile class, unexpected additional tags, private-tag registration and documentation status, undocumented private-tag identification, profile-class and data-colour-space consistency, header conformance, profile-version/tag consistency, media white point encoding, reserved header bytes, and four-byte tag boundaries.
 
 Quality checks report first and second round-trip CIEDE2000 differences, curve invertibility, transform smoothness metrics, and characterization-data CIEDE2000 differences when the profile contains enough supported data.
+
+The JSON Q1 item includes structured, unrounded sample count, model, first-pass
+and second-pass average and maximum CIEDE2000 metrics, and the final verdict.
+MATLAB QA compares these fields through `iccdev.qa.audit_pawg_q1`; build the
+`iccPawgReport` and `iccPawgQ1QualityContractTest` targets for that workflow.
 
 ## Notes
 - ICC PAWG checklist is a guide and not an exhaustive list

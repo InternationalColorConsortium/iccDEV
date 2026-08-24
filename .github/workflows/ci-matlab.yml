@@ -14,6 +14,41 @@ permissions:
   contents: read
 
 on:
+  push:
+    branches:
+      - master
+      - ci-qa-matlab-examples
+      - ci-qa-matlab-examples-gamma
+      - ci-qa-matlab-windows-powershell
+    paths:
+      - ".github/workflows/ci-matlab.yml"
+      - "Build/Cmake/**"
+      - "IccProfLib/**"
+      - "Tools/CmdLine/IccPawgReport/**"
+      - ".github/ci/regression/pawg-q1-quality-contract.cpp"
+      - "**/*.m"
+      - "matlab/**"
+      - "Testing/Display/sRGB_D65_MAT.xml"
+      - "Testing/Display/sRGB_D65_MAT-300cdm2.xml"
+      - "Testing/Display/sRGB_D65_MAT-500cdm2.xml"
+      - "Testing/HDR/BT2100PQFullDisplay.xml"
+      - "Testing/sRGB_v4_ICC_preference.icc"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/ci-matlab.yml"
+      - "Build/Cmake/**"
+      - "IccProfLib/**"
+      - "Tools/CmdLine/IccPawgReport/**"
+      - ".github/ci/regression/pawg-q1-quality-contract.cpp"
+      - "**/*.m"
+      - "matlab/**"
+      - "Testing/Display/sRGB_D65_MAT.xml"
+      - "Testing/Display/sRGB_D65_MAT-300cdm2.xml"
+      - "Testing/Display/sRGB_D65_MAT-500cdm2.xml"
+      - "Testing/HDR/BT2100PQFullDisplay.xml"
+      - "Testing/sRGB_v4_ICC_preference.icc"
   workflow_dispatch:
 
 concurrency:
@@ -110,6 +145,8 @@ jobs:
             '--target'
             'IccProfLib2-static'
             'iccProfilePlot'
+            'iccPawgReport'
+            'iccPawgQ1QualityContractTest'
             'iccLuminanceNormalizationTest'
             'iccColorimetryMethodsTest'
             '--parallel'
@@ -134,7 +171,7 @@ jobs:
           . .trusted-helpers/.github/scripts/sanitize.ps1
 
           ctest --test-dir out\matlab -C Release `
-            -R '^iccdev\.(luminance-normalization|colorimetry-methods)$' `
+            -R '^iccdev\.(luminance-normalization|colorimetry-methods|pawg-q1-quality-contract)$' `
             --output-on-failure `
             --no-tests=error
           if ($LASTEXITCODE -ne 0) {

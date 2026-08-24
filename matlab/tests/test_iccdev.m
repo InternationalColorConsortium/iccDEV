@@ -1,4 +1,4 @@
-function test_iccdev()
+function summary = test_iccdev()
 %TEST_ICCDEV Comprehensive test suite for iccdev MATLAB/Octave bindings.
 %
 %   test_iccdev()
@@ -84,6 +84,8 @@ function test_iccdev()
 
   fprintf('\n=== Results: %d passed, %d failed, %d skipped ===\n', ...
     nPass, nFail, nSkip);
+  summary = struct('passed', nPass, 'failed', nFail, 'skipped', nSkip, ...
+    'skippedGroups', {skipped});
   if nSkip > 0
     % Name them again at the end. A skip scrolls past in the middle of a long
     % run, and the count alone does not say what stopped running.

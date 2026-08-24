@@ -41,8 +41,9 @@ its destination transform.
 | `iccTiffDump` | Inspect TIFF metadata and embedded ICC | `iccTiffDump image.tif` |
 | `iccPngDump` | Inspect PNG metadata and embedded ICC | `iccPngDump image.png` |
 | `iccJpegDump` | Inspect JPEG metadata and embedded ICC | `iccJpegDump image.jpg` |
-| `iccPawgReport` | Emit an ICC PAWG profile assessment checklist report for security, conformance, and quality review | `iccPawgReport profile.icc` |
-| `iccPawgReport` | Emit gated QA evidence flags | `iccPawgReport --qa-flags --evidence-json profile.icc` |
+| `iccPawgReport` | Emit an ICC PAWG profile assessment checklist report for security, conformance, and quality review | `iccPawgReport Testing/sRGB_v4_ICC_preference.icc` |
+| `iccPawgReport` | Emit machine-readable assessment results; Q1 includes structured, unrounded round-trip metrics | `iccPawgReport --json Testing/sRGB_v4_ICC_preference.icc` |
+| `iccPawgReport` | Emit gated QA evidence flags | `iccPawgReport --qa-flags --evidence-json Testing/sRGB_v4_ICC_preference.icc` |
 | `iccSpecSepToTiff` | Combine spectral separation TIFFs | `iccSpecSepToTiff output.tif 0 0 spectral/spec_ 1 10 1` |
 | `iccV5DspObsToV4Dsp` | Convert v5 display/observer profiles to v4 display | `iccV5DspObsToV4Dsp display.icc observer.icc output.icc` |
 | `iccFromCube` | Convert `.cube` 3D LUT to ICC.2 DeviceLink | `iccFromCube input.cube output.icc` |
@@ -162,7 +163,7 @@ harness because a crashing process cannot reliably emit its own final JSON.
 
 ```sh
 iccDumpProfile --qa-flags --evidence-json --diag -v 100 profile.icc
-iccPawgReport --qa-flags --evidence-json profile.icc
+iccPawgReport --qa-flags --evidence-json Testing/sRGB_v4_ICC_preference.icc
 iccApplyNamedCmm --evidence-json -cfg apply-config-with-dstFile.json
 iccTiffDump --evidence-json image.tif extracted.icc
 ```

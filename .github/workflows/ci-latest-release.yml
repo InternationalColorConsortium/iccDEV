@@ -682,7 +682,11 @@ jobs:
           Get-ChildItem -Path $runtimeDir -File |
             Where-Object { $_.Extension -in '.exe','.dll','.lib','.exp' } |
             ForEach-Object { Copy-Item $_.FullName -Destination $stage -Force }
-          foreach ($required in @('iccDumpProfile.exe', 'IccProfLib2.dll')) {
+          foreach ($required in @(
+            'iccDumpProfile.exe',
+            'iccPawgReport.exe',
+            'IccProfLib2.dll'
+          )) {
             if (-not (Test-Path (Join-Path $stage $required))) {
               throw "Required staged Windows runtime artifact missing: $required"
             }
@@ -704,10 +708,10 @@ jobs:
             -Destination "$stage/Testing/Display/sRGB_v4_ICC_preference.icc" -Force
           Copy-Item -Path "Testing/Display/sRGB_D65_MAT.xml" `
             -Destination "$stage/Testing/Display/sRGB_D65_MAT.xml" -Force
-          Copy-Item -Path "Testing/Display/sRGB_D65_MAT-300lx.xml" `
-            -Destination "$stage/Testing/Display/sRGB_D65_MAT-300lx.xml" -Force
-          Copy-Item -Path "Testing/Display/sRGB_D65_MAT-500lx.xml" `
-            -Destination "$stage/Testing/Display/sRGB_D65_MAT-500lx.xml" -Force
+          Copy-Item -Path "Testing/Display/sRGB_D65_MAT-300cdm2.xml" `
+            -Destination "$stage/Testing/Display/sRGB_D65_MAT-300cdm2.xml" -Force
+          Copy-Item -Path "Testing/Display/sRGB_D65_MAT-500cdm2.xml" `
+            -Destination "$stage/Testing/Display/sRGB_D65_MAT-500cdm2.xml" -Force
           Copy-Item -Path "Testing/HDR/BT2100PQFullDisplay.xml" `
             -Destination "$stage/Testing/HDR/BT2100PQFullDisplay.xml" -Force
           Copy-Item -Path "IccProfLib/IccTagBasic.cpp" `
@@ -721,6 +725,11 @@ jobs:
             'matlab\run_local_qa.m',
             'matlab\run_gamma_qa.m',
             'matlab\run_docker_qa.m',
+            'matlab\+iccdev\+qa\audit_pawg_q1.m',
+            'matlab\+iccdev\+qa\bounded_grid.m',
+            'matlab\+iccdev\+qa\delta_e_2000.m',
+            'matlab\+iccdev\+qa\pcs_to_lab.m',
+            'matlab\tests\test_pawg_q1.m',
             'matlab\tests\test_luminance_normalization.m',
             'matlab\tests\test_colorimetry_issue_1475.m',
             'matlab\examples\gamma_curve.m',
@@ -730,8 +739,8 @@ jobs:
             'Testing\sRGB_v4_ICC_preference.icc',
             'Testing\Display\sRGB_v4_ICC_preference.icc',
             'Testing\Display\sRGB_D65_MAT.xml',
-            'Testing\Display\sRGB_D65_MAT-300lx.xml',
-            'Testing\Display\sRGB_D65_MAT-500lx.xml',
+            'Testing\Display\sRGB_D65_MAT-300cdm2.xml',
+            'Testing\Display\sRGB_D65_MAT-500cdm2.xml',
             'Testing\HDR\BT2100PQFullDisplay.xml',
             'IccProfLib\IccTagBasic.cpp',
             'IccProfLib\IccColorimetry.cpp',
@@ -871,6 +880,7 @@ jobs:
             matlab_dir = fullfile(stage, 'matlab');
             addpath(matlab_dir);
             addpath(fullfile(matlab_dir, 'tests'));
+            setenv('PATH', [stage pathsep getenv('PATH')]);
             test_luminance_normalization();
             test_colorimetry_issue_1475();
             qa_output = evalc('run_local_qa()');
@@ -1801,10 +1811,16 @@ jobs:
 
           windows_bundle_root="artifacts/iccdev-windows-msvc/iccDEV-Testing"
           matlab_required=(
+            "iccPawgReport.exe"
             "matlab/+iccdev/private/icc_mex.mexw64"
             "matlab/run_local_qa.m"
             "matlab/run_gamma_qa.m"
             "matlab/run_docker_qa.m"
+            "matlab/+iccdev/+qa/audit_pawg_q1.m"
+            "matlab/+iccdev/+qa/bounded_grid.m"
+            "matlab/+iccdev/+qa/delta_e_2000.m"
+            "matlab/+iccdev/+qa/pcs_to_lab.m"
+            "matlab/tests/test_pawg_q1.m"
             "matlab/tests/test_luminance_normalization.m"
             "matlab/tests/test_colorimetry_issue_1475.m"
             "matlab/examples/gamma_curve.m"
@@ -1814,8 +1830,8 @@ jobs:
             "Testing/sRGB_v4_ICC_preference.icc"
             "Testing/Display/sRGB_v4_ICC_preference.icc"
             "Testing/Display/sRGB_D65_MAT.xml"
-            "Testing/Display/sRGB_D65_MAT-300lx.xml"
-            "Testing/Display/sRGB_D65_MAT-500lx.xml"
+            "Testing/Display/sRGB_D65_MAT-300cdm2.xml"
+            "Testing/Display/sRGB_D65_MAT-500cdm2.xml"
             "Testing/HDR/BT2100PQFullDisplay.xml"
             "IccProfLib/IccTagBasic.cpp"
             "IccProfLib/IccColorimetry.cpp"

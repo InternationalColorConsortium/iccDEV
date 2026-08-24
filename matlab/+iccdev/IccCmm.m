@@ -1,9 +1,12 @@
 classdef IccCmm < handle
   %ICCCMM ICC Color Management Module - multi-profile transform pipeline.
   %
+  %   repo_root = fileparts(fileparts(which('build_mex')));
+  %   profile_path = fullfile(repo_root, 'Testing', ...
+  %     'sRGB_v4_ICC_preference.icc');
   %   cmm = iccdev.IccCmm();
-  %   cmm.attach('input.icc');
-  %   cmm.attach('output.icc');
+  %   cmm.attach(profile_path);
+  %   cmm.attach(profile_path);
   %   cmm.begin();
   %   result = cmm.apply([0.5 0.3 0.1]);
   %   cmm.close();

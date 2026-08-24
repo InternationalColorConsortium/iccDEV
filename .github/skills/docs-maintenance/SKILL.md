@@ -23,9 +23,14 @@ documentation for accuracy.
 3. Inventory duplicated or stale content before editing.
 4. Preserve exact commands, paths, CMake options, executable names, and safety
    requirements.
+   For Windows MATLAB documentation, preserve PowerShell syntax, the
+   `repo\msvc` build root, MATLAB `setenv`, real `Testing/...` smoke profiles,
+   and the PAWG tool, native contract target, and staged support-file list.
 5. Replace repeated detail with links to canonical sources.
 6. Delete duplicate files only after moving unique content elsewhere.
-7. Run whitespace, local-link, ASCII, and stale-reference checks.
+7. Run whitespace, local-link, ASCII, line-ending, and stale-reference checks.
+   Require LF for documentation, prompts, skills, MATLAB, CMake, YAML/JSON,
+   Dockerfiles, and Unix scripts; preserve CRLF for `.ps1`, `.bat`, and `.cmd`.
 
 ## Harvest Rules
 

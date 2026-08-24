@@ -25,8 +25,8 @@ REM calcVars.xml is not a standalone XML file
 
 cd ..\CalcTest
 if not "%1"=="clean" goto do_CalcTest
-REM cannot delete *.icc as many are non-XML test files
-REM del /F/Q *.icc 2>NUL:
+REM Keep the committed non-XML fixtures and remove only generated outputs.
+del /F/Q calcCheckInit.icc calcExercizeOps.icc 2>NUL:
 goto end_CalcTest
 :do_CalcTest
 @echo on
@@ -60,8 +60,8 @@ iccFromXml Rec2020rgbSpectral.xml Rec2020rgbSpectral.icc
 iccFromXml Rec2100HlgFull.xml Rec2100HlgFull.icc
 iccFromXml Rec2100HlgNarrow.xml Rec2100HlgNarrow.icc
 iccFromXml RgbGSDF.xml RgbGSDF.icc
-iccFromXml sRGB_D65_MAT-300lx.xml sRGB_D65_MAT-300lx.icc
-iccFromXml sRGB_D65_MAT-500lx.xml sRGB_D65_MAT-500lx.icc
+iccFromXml sRGB_D65_MAT-300cdm2.xml sRGB_D65_MAT-300cdm2.icc
+iccFromXml sRGB_D65_MAT-500cdm2.xml sRGB_D65_MAT-500cdm2.icc
 iccFromXml sRGB_D65_MAT.xml       sRGB_D65_MAT.icc
 iccFromXml sRGB_D65_colorimetric.xml sRGB_D65_colorimetric.icc
 @echo off

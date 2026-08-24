@@ -137,6 +137,8 @@ struct PawgItem {
   const char *title;
   PawgVerdict verdict;
   std::string detail;
+  bool hasRoundTripMetrics = false;
+  iccquality::RoundTripMetrics roundTripMetrics;
 };
 
 struct RuleTable {
@@ -1759,12 +1761,13 @@ const char *VerdictText(PawgVerdict verdict)
 void AddItem(std::vector<PawgItem> &items, const char *id, const char *title,
              PawgVerdict verdict, const std::string &detail)
 {
-  items.push_back(PawgItem{id, title, verdict, detail});
+  items.push_back(PawgItem{id, title, verdict, detail, false, {}});
 }
 
 bool QualityMetricNotApplicable(const std::string &reason)
 {
   return reason.find("requires bounded device channels and Lab/XYZ PCS") != std::string::npos ||
+         reason.find("sample grid exceeds quality metric budget") != std::string::npos ||
          reason.find("requires Lab or XYZ PCS") != std::string::npos ||
          reason.find("Invalid profile") != std::string::npos ||
          reason.find("Invalid profile transform") != std::string::npos ||
@@ -1774,7 +1777,8 @@ bool QualityMetricNotApplicable(const std::string &reason)
          reason.find("No supported forward transform for smoothness analysis") != std::string::npos;
 }
 
-PawgVerdict QualityRoundTrip(CIccProfile *pIcc, std::string &detail)
+PawgVerdict QualityRoundTrip(CIccProfile *pIcc, std::string &detail,
+                             iccquality::RoundTripMetrics *outMetrics = nullptr)
 {
   if (!pIcc) {
     detail = "profile did not load";
@@ -1786,6 +1790,9 @@ PawgVerdict QualityRoundTrip(CIccProfile *pIcc, std::string &detail)
   if (!iccquality::measure_round_trip(pIcc, metrics, reason)) {
     detail = reason.empty() ? "no supported round-trip transform pair present" : reason;
     return QualityMetricNotApplicable(detail) ? PawgVerdict::NotApplicable : PawgVerdict::Gap;
+  }
+  if (outMetrics) {
+    *outMetrics = metrics;
   }
 
   char buf[256];
@@ -2194,11 +2201,16 @@ std::vector<PawgItem> EvaluatePawg(const RawProfile &raw, CIccProfile *pIcc)
                          : "one or more tag offsets or padded ends are misaligned");
 
   std::string q1Detail;
-  PawgVerdict q1 = QualityRoundTrip(pIcc, q1Detail);
+  iccquality::RoundTripMetrics q1Metrics;
+  PawgVerdict q1 = QualityRoundTrip(pIcc, q1Detail, &q1Metrics);
   AddItem(items, "Q1",
           "First and second round trip average and maximum differences in CIEDE2000",
           q1,
           q1Detail);
+  if (q1Metrics.measured) {
+    items.back().hasRoundTripMetrics = true;
+    items.back().roundTripMetrics = q1Metrics;
+  }
 
   std::string q2Detail;
   PawgVerdict q2 = QualityCurveInvertibility(pIcc, q2Detail);
@@ -2281,13 +2293,28 @@ void PrintJsonReport(const char *szFilename, const RawProfile &raw,
   printf("  \"items\": [\n");
   for (size_t i = 0; i < items.size(); ++i) {
     const PawgItem &item = items[i];
-    printf("    {\"id\":\"%s\",\"section\":\"%s\",\"verdict\":\"%s\",\"title\":\"%s\",\"detail\":\"%s\"}%s\n",
+    printf("    {\"id\":\"%s\",\"section\":\"%s\",\"verdict\":\"%s\",\"title\":\"%s\",\"detail\":\"%s\"",
            item.id,
            SectionName(item.id[0]),
            VerdictText(item.verdict),
            icJsonEscape(item.title).c_str(),
-           icJsonEscape(item.detail).c_str(),
-           i + 1 == items.size() ? "" : ",");
+           icJsonEscape(item.detail).c_str());
+    if (item.hasRoundTripMetrics) {
+      const iccquality::RoundTripMetrics &metrics = item.roundTripMetrics;
+      printf(",\"metrics\":{\"model\":\"%s\",\"samples\":%d,"
+             "\"first\":{\"average\":%.17g,\"maximum\":%.17g},"
+             "\"second\":{\"average\":%.17g,\"maximum\":%.17g}}",
+             icJsonEscape(metrics.model).c_str(),
+             metrics.samples,
+             metrics.avgFirstDe00,
+             metrics.maxFirstDe00,
+             metrics.avgSecondDe00,
+             metrics.maxSecondDe00);
+    }
+    else {
+      printf(",\"metrics\":null");
+    }
+    printf("}%s\n", i + 1 == items.size() ? "" : ",");
   }
   printf("  ]\n");
   printf("}\n");

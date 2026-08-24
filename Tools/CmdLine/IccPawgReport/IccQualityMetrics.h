@@ -86,6 +86,7 @@ namespace iccquality {
 /// Maximum channel count for fixed-size stack arrays in quality metrics.
 /// All std::array<icFloatNumber, 16> buffers depend on this bound.
 constexpr int kMaxQualityChannels = 16;
+constexpr size_t kMaxQualitySamples = 2000000;
 constexpr double kPi = 3.141592653589793238462643383279502884;
 constexpr double kDegToRad = kPi / 180.0;
 
@@ -341,6 +342,23 @@ inline void visit_bounded_grid_points_impl(int axis,
         static_cast<icFloatNumber>(i / static_cast<double>(grid - 1));
     visit_bounded_grid_points_impl(axis + 1, channels, grid, device, fn);
   }
+}
+
+inline bool bounded_grid_sample_count(int channels, size_t &samples) {
+  if (channels < 1 || channels > kMaxQualityChannels) {
+    return false;
+  }
+
+  const size_t grid = channels >= 4 ? 5u : 9u;
+  samples = 1;
+  for (int i = 0; i < channels; ++i) {
+    if (samples > kMaxQualitySamples / grid) {
+      samples = 0;
+      return false;
+    }
+    samples *= grid;
+  }
+  return true;
 }
 
 template <typename Fn>
@@ -663,6 +681,12 @@ inline bool measure_cmm_round_trip(CIccProfile *pIcc,
   }
   if (!has_standard_cmm_round_trip_candidate(pIcc)) {
     reason = "No supported round-trip transform pair present";
+    return false;
+  }
+
+  size_t sampleCount = 0;
+  if (!bounded_grid_sample_count(deviceChannels, sampleCount)) {
+    reason = "CIccCmm round-trip sample grid exceeds quality metric budget";
     return false;
   }
 
@@ -1161,6 +1185,12 @@ inline bool measure_classic_lut_round_trip(CIccProfile *pIcc,
       forward.inputChannels != reverse.outputChannels ||
       forward.outputChannels != reverse.inputChannels) {
     reason = std::string(pairLabel) + " channel mismatch prevents bounded round-trip";
+    return false;
+  }
+
+  size_t sampleCount = 0;
+  if (!bounded_grid_sample_count(forward.inputChannels, sampleCount)) {
+    reason = std::string(pairLabel) + " sample grid exceeds quality metric budget";
     return false;
   }
 

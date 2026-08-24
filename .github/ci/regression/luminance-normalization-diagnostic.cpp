@@ -13,8 +13,8 @@
     arbitrary spread -- Testing/Display carries the same profile at each of them:
 
         sRGB_D65_MAT.xml        X=0.9504    Y=1.0    Z=1.0889
-        sRGB_D65_MAT-300lx.xml  X=285.12    Y=300    Z=326.67   ( = 300 x the above )
-        sRGB_D65_MAT-500lx.xml  X=475.20    Y=500    Z=544.45   ( = 500 x the above )
+        sRGB_D65_MAT-300cdm2.xml  X=285.12  Y=300  Z=326.67  ( = 300 x the above )
+        sRGB_D65_MAT-500cdm2.xml  X=475.20  Y=500  Z=544.45  ( = 500 x the above )
 
     which is also why value 1 is the interesting one.  Scaling the 300 cd/m^2
     fixture down to 1 cd/m^2 reproduces the normalized fixture exactly, so the two

@@ -52,8 +52,8 @@ if result.closer_to_icc_pcs
 else
   pcsWinner = 'registry';
 end
-fprintf('  Closer to CIE 15:            %s\n', cieWinner);
-fprintf('  Closer to the ICC PCS white: %s\n', pcsWinner);
+fprintf('  Closer in Z to CIE 15:            %s\n', cieWinner);
+fprintf('  Closer in Z to the ICC PCS white: %s\n', pcsWinner);
 
 fprintf('\nThe registry table is reachable through IccColorimetry, but no CMM or\n');
 fprintf('tool path consumes it yet - CIccColorimetricCalculator is referenced\n');

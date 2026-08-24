@@ -99,12 +99,40 @@ if ($LASTEXITCODE -ne 0) {
 $BuildArgs = @(
   '--build', $Build
   '--config', 'Release'
-  '--target', 'IccProfLib2-static', 'iccProfilePlot'
+  '--target', 'IccProfLib2-static', 'iccProfilePlot', 'iccPawgReport',
+    'iccPawgQ1QualityContractTest'
   '--', '/m'
 )
 cmake @BuildArgs
 if ($LASTEXITCODE -ne 0) {
-  throw "Release library build failed with exit code $LASTEXITCODE."
+  throw "Required MATLAB targets failed with exit code $LASTEXITCODE."
+}
+
+$PlotTool = Join-Path $Build 'bin\Release\iccProfilePlot.exe'
+$PawgTool = Join-Path $Build 'bin\Release\iccPawgReport.exe'
+foreach ($RequiredTool in @($PlotTool, $PawgTool)) {
+  if (-not (Test-Path $RequiredTool -PathType Leaf)) {
+    throw "Required MATLAB QA tool was not built: $RequiredTool"
+  }
+}
+```
+
+The preceding target list is the minimum for MEX, plotting, PAWG Q1 audit
+interoperability, and native Q1 contract evidence. Do not remove
+`iccPawgReport`: `run_local_qa()` invokes `test_pawg_q1()`, which requires that
+executable.
+To build every enabled Windows library, tool, and helper instead:
+
+```powershell
+$AllBuildArgs = @(
+  '--build', $Build
+  '--config', 'Release'
+  '--target', 'ALL_BUILD'
+  '--', '/m'
+)
+cmake @AllBuildArgs
+if ($LASTEXITCODE -ne 0) {
+  throw "Complete Windows build failed with exit code $LASTEXITCODE."
 }
 ```
 
@@ -133,6 +161,9 @@ tree, the R2026a MEX gateway, and its zlib runtime. It also preserves the
 repository-relative support paths used by QA and examples:
 
 - `Testing/` for profile and luminance fixtures.
+- `iccPawgReport.exe` at the bundle root for MATLAB/native Q1 comparison.
+- `matlab/+iccdev/+qa/audit_pawg_q1.m`, its calculation helpers, and
+  `matlab/tests/test_pawg_q1.m`.
 - `.github/ci/regression/gamma-2.20703125.icc` for gamma QA.
 - `IccProfLib/IccTagBasic.cpp` and `IccProfLib/IccColorimetry.cpp` for the
   independent issue #1475 table check.
@@ -162,6 +193,48 @@ if ($MatlabPathEntries -notcontains $MatlabDir) {
 
 Fully restart MATLAB Desktop after changing user environment variables.
 
+### MATLAB Desktop validation session
+
+MATLAB Desktop can start in either the repository root or its `matlab`
+subdirectory. Use this self-locating setup before running QA:
+
+```matlab
+repo_root = pwd;
+if exist(fullfile(repo_root, 'Build', 'Cmake'), 'dir') ~= 7
+  repo_root = fileparts(repo_root);
+end
+assert(exist(fullfile(repo_root, 'Build', 'Cmake'), 'dir') == 7, ...
+  'Start MATLAB in the iccDEV repository root or matlab subdirectory.');
+cd(repo_root);
+
+addpath(fullfile(repo_root, 'matlab'));
+addpath(fullfile(repo_root, 'matlab', 'tests'));
+
+build_dir = getenv('ICCDEV_BUILD_DIR');
+assert(~isempty(build_dir) && exist(build_dir, 'dir') == 7, ...
+  'Set ICCDEV_BUILD_DIR to a configured iccDEV build directory.');
+assert(isfile(fullfile(build_dir, 'bin', 'Release', ...
+  'iccProfilePlot.exe')), 'Build iccProfilePlot before MATLAB QA.');
+assert(isfile(fullfile(build_dir, 'bin', 'Release', ...
+  'iccPawgReport.exe')), 'Build iccPawgReport before MATLAB QA.');
+
+test_pawg_q1();
+run_local_qa();
+test_add_docker_path();
+test_plot();
+```
+
+The Windows setup above persists `ICCDEV_BUILD_DIR`; use `setenv` only when
+selecting a different configured build for the current MATLAB process.
+For example:
+
+```matlab
+setenv('ICCDEV_BUILD_DIR', fullfile(repo_root, 'msvc'));
+```
+
+Shell `export` is Unix-shell syntax and must not be entered in MATLAB or
+PowerShell.
+
 ## Profiles
 
 The regression suite can use profiles generated under `Testing/Display`.
@@ -175,6 +248,26 @@ The minimum display set includes:
 - `sRGB_D65_MAT.icc`
 - `sRGB_D65_colorimetric.icc`
 - `LCDDisplay.icc`
+
+On Windows, generate the complete corpus from PowerShell without relying on the
+caller's working directory:
+
+```powershell
+$env:PATH = (Join-Path $Build 'bin\Release') +
+  [IO.Path]::PathSeparator + $env:PATH
+Push-Location (Join-Path $Repo 'Testing')
+try {
+  & '.\CreateAllProfiles.bat'
+  if ($LASTEXITCODE -ne 0) {
+    throw "Profile generation failed with exit code $LASTEXITCODE."
+  }
+} finally {
+  Pop-Location
+}
+```
+
+`CreateAllProfiles.bat clean` removes only generated outputs and preserves
+committed negative-test fixtures. The complete corpus contains 213 profiles.
 
 ## Profile Plotting
 
@@ -201,7 +294,63 @@ The tool is discovered through `ICCDEV_BUILD_DIR`, common repository build
 directories, or `PATH`. Pass `BuildDir` or `PlotTool` when selecting another
 build explicitly.
 
+## PAWG Check Q1 Audit
+
+`iccdev.qa.audit_pawg_q1` independently calculates the first and second
+round-trip CIEDE2000 averages and maxima over transforms supplied by the shared
+IccProfLib CMM, applies the native
+`OK`/`WARN`/`FAIL` thresholds, and compares the result with the Q1 item from
+`iccPawgReport --json`:
+
+```matlab
+profile_path = fullfile(repo_root, 'Testing', ...
+  'sRGB_v4_ICC_preference.icc');
+result = iccdev.qa.audit_pawg_q1(profile_path);
+assert(result.passed);
+```
+
+The MATLAB path uses the same device grid, relative-colorimetric
+intent, linear interpolation, colorimetric LUT selection, and disabled D2B/B2D
+selection as the native general CMM evaluator. Both implementations reject a
+grid above two million samples before allocation or iteration. MATLAB
+independently decodes the PCS, computes CIEDE2000, and checks the native
+structured, unrounded JSON metrics, sample count, model, and verdict.
+`test_pawg_q1` also pins published CIEDE2000 reference vectors, Lab and XYZ PCS
+decoding, and Gray/RGB/CMYK grid sizes. The native
+`iccdev.pawg-q1-quality-contract` CTest covers the classic LUT, matrix/TRC, and
+general CMM evaluators over Lab and XYZ PCS.
+
+ICC.1 defines the PCS encodings and rendering intents used by this check, but
+does not define the PAWG Q1 grid or the `OK`/`WARN`/`FAIL` thresholds. Those
+values remain PAWG assessment policy implemented by `iccPawgReport`, rather
+than ICC profile-format conformance requirements.
+
+`iccPawgReport` is discovered through `ICCDEV_BUILD_DIR`, common build
+directories, or `PATH`; use `BuildDir` or `PawgTool` to select it explicitly.
+
+Run the native Q1 contract from PowerShell:
+
+```powershell
+cmake --build $Build --config Release `
+  --target iccPawgQ1QualityContractTest -- /m
+ctest --test-dir $Build -C Release `
+  -R '^iccdev\.pawg-q1-quality-contract$' `
+  --output-on-failure --no-tests=error
+```
+
 ## Validation
+
+For a complete Windows build, first build the CTest helpers and run the native
+suite. The Windows profile fixture uses a disposable copy of `Testing/`, so it
+does not modify the generated profiles used by MATLAB Desktop:
+
+```powershell
+cmake --build $Build --config Release --target build-test-binaries -- /m
+ctest --test-dir $Build -C Release --output-on-failure --no-tests=error
+if ($LASTEXITCODE -ne 0) {
+  throw "Windows CTest failed with exit code $LASTEXITCODE."
+}
+```
 
 Run the focused suite:
 
@@ -210,6 +359,7 @@ repo_root = fileparts(fileparts(which('build_mex')));
 addpath(fullfile(repo_root, 'matlab'));
 addpath(fullfile(repo_root, 'matlab', 'tests'));
 test_iccdev();
+test_pawg_q1();
 ```
 
 Run the extended local QA entry point:
@@ -447,12 +597,21 @@ run(fullfile(repo_root, 'matlab', 'examples', 'docker_interop.m'));
 If MATLAB Desktop does not inherit the Docker CLI directory:
 
 ```matlab
+docker_cli_directory = uigetdir('', 'Select the directory containing the Docker CLI');
+assert(~isequal(docker_cli_directory, 0), 'Docker CLI directory selection was cancelled.');
 add_docker_path(docker_cli_directory);
+
+[status, output] = system('docker version');
+disp(output);
+assert(status == 0, 'Docker Desktop is not available.');
+
+run_docker_qa();
+run_local_qa();
 ```
 
-The directory must contain `docker.exe` on Windows or `docker` elsewhere. The
-helper updates only the current MATLAB process and does not execute Docker or
-QA.
+The selected directory must contain `docker.exe` on Windows or `docker`
+elsewhere. The helper updates only the current MATLAB process. A successful
+final `run_local_qa` should report zero failed and zero skipped groups.
 
 `iccdev.docker_validate` mounts only the selected profile file read-only,
 disables container networking, drops Linux capabilities, enables
@@ -485,11 +644,13 @@ image; interactive local use defaults to `latest`.
 - [ ] `IccProfLib2-static` builds in Release mode.
 - [ ] `build_mex` completes without unresolved dependencies.
 - [ ] `test_iccdev` passes without skipped CMM tests.
+- [ ] `test_pawg_q1` agrees with native `iccPawgReport --json` Q1 output.
 - [ ] `run_local_qa` passes.
 - [ ] All documented examples complete.
 - [ ] `run_gamma_qa` decodes all three TRC tags as gamma 2.20703125.
 - [ ] Issue #1475 MATLAB QA reproduces the legacy and registry D50 XYZ values.
 - [ ] Native luminance and colorimetry CTests pass.
+- [ ] Native and MATLAB PAWG Q1 contract tests pass.
 - [ ] `run_docker_qa` passes when Docker is available.
 - [ ] Rebuild works after `clear classes` and `clear mex`.
 - [ ] Modified `.m` and Markdown files remain ASCII.
@@ -500,5 +661,7 @@ image; interactive local use defaults to `latest`.
 `master`, selected MATLAB QA branches, and manual dispatch. It uses read-only
 permissions, trusted-base sanitizer helpers, SHA-pinned actions, a focused
 dependency-free MATLAB calculation stage, native luminance and colorimetry
-CTests, checked-in profiles, a digest-pinned container interoperability job,
-and no cache or artifact publication.
+CTests, the native PAWG Q1 quality-contract CTest, the MATLAB/native structured
+Q1 comparison over a checked-in profile, a
+digest-pinned container interoperability job, and no cache or artifact
+publication.

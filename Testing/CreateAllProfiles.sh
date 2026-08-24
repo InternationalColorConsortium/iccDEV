@@ -60,10 +60,14 @@ fi
 echo "====================== CalcTest =========================="
 
 cd ../CalcTest
+if [ "$1" = "clean" ]
+then
+	rm -f calcCheckInit.icc calcExercizeOps.icc
+fi
 if [ "$1" != "clean" ]
 then
 	set -x
-	# cannot delete *.icc as many are non-XML test files
+	# Keep the committed non-XML fixtures and replace only generated outputs.
 	iccFromXml calcCheckInit.xml   calcCheckInit.icc
 	iccFromXml calcExercizeOps.xml calcExercizeOps.icc
 	set +x
@@ -96,8 +100,8 @@ then
 	iccFromXml Rec2100HlgFull.xml Rec2100HlgFull.icc
 	iccFromXml Rec2100HlgNarrow.xml Rec2100HlgNarrow.icc
 	iccFromXml RgbGSDF.xml RgbGSDF.icc
-	iccFromXml sRGB_D65_MAT-300lx.xml sRGB_D65_MAT-300lx.icc
-	iccFromXml sRGB_D65_MAT-500lx.xml sRGB_D65_MAT-500lx.icc
+	iccFromXml sRGB_D65_MAT-300cdm2.xml sRGB_D65_MAT-300cdm2.icc
+	iccFromXml sRGB_D65_MAT-500cdm2.xml sRGB_D65_MAT-500cdm2.icc
 	iccFromXml sRGB_D65_MAT.xml       sRGB_D65_MAT.icc
 	iccFromXml sRGB_D65_colorimetric.xml sRGB_D65_colorimetric.icc
 	set +x

@@ -64,6 +64,8 @@ Developer Defs.props
 
 #build files
 out/*
+/msvc/
+/build-matlab-full/
 
 # CMake generated files
 CMakeCache.txt
