@@ -454,9 +454,8 @@ jobs:
             ci_changed=true
           fi
 
-          # Docker CI is reserved for Dockerfiles and their support scripts.
-          # MCP and Python source have dedicated lightweight validation lanes.
-          if has_changed_file '^Dockerfile(\..*)?$|^\.dockerignore$|^docker/|^iccdev-mcp/docker/'; then
+          # Docker CI covers every input packaged into the unified image.
+          if has_changed_file '^Dockerfile(\..*)?$|^\.dockerignore$|^docker/|^iccdev-mcp/|^\.github/workflows/ci-docker-pr\.yml$'; then
             container_changed=true
           fi
 
@@ -1000,6 +999,7 @@ jobs:
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-docker-pr.yml
     with:
+      base_sha: ${{ github.event.pull_request.base.sha || github.sha }}
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
       warning_policy: ${{ needs.validate-inputs.outputs.warning-policy }}
 

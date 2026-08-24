@@ -28,7 +28,7 @@ env:
       - 'Dockerfile'
       - '.dockerignore'
       - 'docker/**'
-      - 'iccdev-mcp/docker/**'
+      - 'iccdev-mcp/**'
       - 'Build/**'
       - 'IccConnect/**'
       - 'IccJSON/**'
@@ -154,6 +154,7 @@ jobs:
             GIT_COMMIT=${{ github.sha }}
           load: ${{ env.PUBLISH_IMAGE != 'true' }}
           push: ${{ env.PUBLISH_IMAGE == 'true' }}
+          cache-to: type=inline
           provenance: ${{ env.PUBLISH_IMAGE == 'true' && 'mode=max' || 'false' }}
           sbom: ${{ env.PUBLISH_IMAGE == 'true' }}
           labels: |

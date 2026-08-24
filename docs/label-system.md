@@ -146,11 +146,11 @@ Fuzzers)` (without Windows). Both callers use `_build-matrix.yml`, which
 centralizes the current reusable Unix and Windows gates plus focused sanitizer,
 option, version-header, and clean-rebuild lanes.
 
-On `ci-qa-pr-docker-testing`, Docker PR verification is advisory so branch QA
-can continue while container and third-party action pins are refreshed. If the
-summary reports a non-success `docker-ci` result, add `bump-sha-pins`, update
-the pinned GitHub Action, Docker, or container SHA references, and rerun the
-Docker lane before treating the container check as verified.
+Docker PR verification is required whenever the container surface changes,
+including the unified Dockerfile, packaged MCP source, or
+`ci-docker-pr.yml`. `PR Summary` fails a non-success `docker-ci` result for
+those changes; update the pinned GitHub Action, Docker, or container SHA
+references and rerun the lane before treating the container check as verified.
 
 ### Required Check Policy
 
@@ -180,8 +180,8 @@ contexts before a direct maintainer push. It requires signed commits, linear
 fast-forward history, and deletion protection; maintainers dispatch
 `ci-pr-action` and `ci-docker` immediately after pushing the testing branch.
 Pull requests targeting `ci-qa-pr-docker-testing` also run `ci-pr-action`; its
-Docker PR lane is non-blocking but records SHA-pin maintenance guidance in the
-workflow summary.
+Docker PR lane is required for container-surface changes and records the
+resolved published-image cache digest in the workflow log.
 
 ### CodeQL Ready
 

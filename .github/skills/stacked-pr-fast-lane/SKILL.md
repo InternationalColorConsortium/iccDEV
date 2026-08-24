@@ -92,9 +92,10 @@ gh run watch <run-id> --repo InternationalColorConsortium/iccDEV --exit-status
 ```
 
 Trigger shared-concurrency runs sequentially. Add Windows only when the change
-needs that surface. Docker is scheduled for container changes and is advisory on
-`ci-qa-pr-docker-testing`. Escalate to `ci_scope=full` when the changed surface
-or merge policy requires the long cycle.
+needs that surface. Docker is required for container-surface changes, including
+the unified Dockerfile, packaged MCP source, and `ci-docker-pr.yml`. Escalate
+to `ci_scope=full` when the changed surface or merge policy requires the long
+cycle.
 
 ## References
 

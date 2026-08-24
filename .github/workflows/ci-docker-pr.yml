@@ -22,6 +22,10 @@ permissions:
 'on':
   workflow_call:
     inputs:
+      base_sha:
+        description: 'Exact trusted base SHA for workflow helpers'
+        required: true
+        type: string
       target_sha:
         description: 'Exact PR head SHA to verify'
         required: true
@@ -46,20 +50,44 @@ jobs:
       run:
         shell: bash --noprofile --norc {0}
     steps:
+      # preflight: allow-codeql-actions reason=readonly-pr-workflow-checkout
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           persist-credentials: false
           fetch-depth: 1
 
+      # preflight: allow-codeql-actions reason=trusted-base-workflow-checkout
+      - name: Check out trusted workflow helpers
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ inputs.base_sha }}
+          path: .trusted-workflow
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Check out target SHA
         env:
           BASH_ENV: /dev/null
+          BASE_SHA: ${{ inputs.base_sha }}
           TARGET_SHA: ${{ inputs.target_sha }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          case "$BASE_SHA" in
+            *[!0-9a-fA-F]*)
+              echo "::error title=Invalid base SHA::${BASE_SHA}"
+              exit 1
+              ;;
+          esac
+          if [ "${#BASE_SHA}" -ne 40 ] ||
+             [ "$(git -C .trusted-workflow rev-parse HEAD)" != "$BASE_SHA" ]; then
+            echo "::error title=Trusted base SHA mismatch"
+            exit 1
+          fi
 
           case "$TARGET_SHA" in
             *[!0-9a-fA-F]*)
@@ -81,7 +109,8 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          .github/scripts/check-workflow-cache-policy.sh .github/workflows/ci-docker-pr.yml
+          .trusted-workflow/.github/scripts/check-workflow-cache-policy.sh \
+            .github/workflows/ci-docker-pr.yml
 
   pr-regression-verify:
     name: "Docker PR regression verification"
@@ -99,19 +128,43 @@ jobs:
       WARNING_POLICY: ${{ inputs.warning_policy || 'fail' }}
 
     steps:
+      # preflight: allow-codeql-actions reason=readonly-pr-workflow-checkout
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           persist-credentials: false
           fetch-depth: 1
 
+      # preflight: allow-codeql-actions reason=trusted-base-workflow-checkout
+      - name: Check out trusted workflow helpers
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ inputs.base_sha }}
+          path: .trusted-workflow
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Verify checked out PR SHA
         env:
           BASH_ENV: /dev/null
+          BASE_SHA: ${{ inputs.base_sha }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          case "$BASE_SHA" in
+            *[!0-9a-fA-F]*)
+              echo "::error title=Invalid base SHA::${BASE_SHA}"
+              exit 1
+              ;;
+          esac
+          if [ "${#BASE_SHA}" -ne 40 ] ||
+             [ "$(git -C .trusted-workflow rev-parse HEAD)" != "$BASE_SHA" ]; then
+            echo "::error title=Trusted base SHA mismatch"
+            exit 1
+          fi
 
           case "$TARGET_SHA" in
             *[!0-9a-fA-F]*)
@@ -133,6 +186,7 @@ jobs:
             exit 1
           fi
 
+      # preflight: allow-codeql-actions reason=trusted-base-sanitizer
       - name: Pull published unified image cache
         id: cache-image
         env:
@@ -142,7 +196,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
 
           docker pull "$CACHE_IMAGE"
           cache_digest="$(docker image inspect "$CACHE_IMAGE" \
@@ -153,6 +207,7 @@ jobs:
           printf 'image=%s\n' "$(sanitize_line "$CACHE_IMAGE")" >> "$GITHUB_OUTPUT"
           printf 'digest=%s\n' "$(sanitize_line "$cache_digest")" >> "$GITHUB_OUTPUT"
 
+      # preflight: allow-codeql-actions reason=trusted-base-sanitizer
       # preflight: allow-pr-script-execution reason=build-same-repository-container-pr
       - name: Build unified PR image
         id: image
@@ -164,7 +219,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
 
           docker build \
             --cache-from "$CACHE_IMAGE" \
