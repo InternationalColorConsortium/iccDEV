@@ -228,6 +228,12 @@ RUN rm -rf .git \
 
 RUN cmake --build /workspace/build --target build-test-binaries --parallel "$(nproc)"
 
+# Regression helpers are EXCLUDE_FROM_ALL, so this has to follow
+# build-test-binaries: before it the executable does not exist and ctest
+# fails the image build with "Unable to find executable" (#2276).
+RUN ctest --test-dir /workspace/build -R '^iccdev\.c-validation-dlopen$' \
+    --output-on-failure --no-tests=error
+
 WORKDIR /workspace/iccDEV/Testing
 RUN iccdev-generate-profiles /workspace/build/Tools
 RUN git checkout -- silence.txt \

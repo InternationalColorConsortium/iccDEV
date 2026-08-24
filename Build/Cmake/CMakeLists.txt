@@ -1364,7 +1364,10 @@ if(APPLE)
     -Wformat-security
     -Wimplicit-fallthrough
     -Wsign-compare
-    -Wnon-virtual-dtor
+    # C++-only: GCC rejects it outright on a C translation unit
+    # ("valid for C++/ObjC++ but not for C"), which -Werror turns into a
+    # hard error and CI's zero-warning grep fails on regardless (#2276).
+    $<$<COMPILE_LANGUAGE:CXX>:-Wnon-virtual-dtor>
     -Wuninitialized
     -fstack-protector-strong
   )
@@ -1408,7 +1411,10 @@ elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
     -Wformat-security
     -Wimplicit-fallthrough
     -Wsign-compare
-    -Wnon-virtual-dtor
+    # C++-only: GCC rejects it outright on a C translation unit
+    # ("valid for C++/ObjC++ but not for C"), which -Werror turns into a
+    # hard error and CI's zero-warning grep fails on regardless (#2276).
+    $<$<COMPILE_LANGUAGE:CXX>:-Wnon-virtual-dtor>
     -Wuninitialized
   )
   # Hardening flags probed individually: constrained toolchains (e.g. Clang 11
@@ -1477,7 +1483,10 @@ elseif(EMSCRIPTEN)
     -Wformat-security
     -Wimplicit-fallthrough
     -Wsign-compare
-    -Wnon-virtual-dtor
+    # C++-only: GCC rejects it outright on a C translation unit
+    # ("valid for C++/ObjC++ but not for C"), which -Werror turns into a
+    # hard error and CI's zero-warning grep fails on regardless (#2276).
+    $<$<COMPILE_LANGUAGE:CXX>:-Wnon-virtual-dtor>
     -Wuninitialized
   )
 

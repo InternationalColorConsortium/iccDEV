@@ -109,6 +109,60 @@ if(TARGET iccDescribeSinkTest)
   add_dependencies(build-test-binaries iccDescribeSinkTest)
 endif()
 
+# Issue #2276: this compiles a C-only consumer against IccCValidation.h and
+# resolves the entry point at runtime. Linking the helper to IccProfLib would
+# hide both C++ name mangling and accidental C++ dependencies in the header.
+if(ENABLE_SHARED_LIBS AND TARGET "${TARGET_LIB_ICCPROFLIB}")
+  iccdev_add_regression_executable(iccCValidationDlopenTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/c-validation-dlopen.c"
+  )
+  set_target_properties(iccCValidationDlopenTest PROPERTIES
+    C_STANDARD 99
+    C_STANDARD_REQUIRED ON
+  )
+  target_include_directories(iccCValidationDlopenTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  # CMAKE_DL_LIBS is empty where dlopen lives in libc (musl, FreeBSD), so this
+  # needs no platform guard; a literal -ldl fails to link on those.
+  target_link_libraries(iccCValidationDlopenTest PRIVATE ${CMAKE_DL_LIBS})
+  # The test loads the library instead of linking it, so CMake cannot infer the
+  # edge: without this, building only this target leaves nothing to dlopen and
+  # the documented build-then-ctest sequence fails (#2276).
+  add_dependencies(iccCValidationDlopenTest "${TARGET_LIB_ICCPROFLIB}")
+  add_dependencies(check iccCValidationDlopenTest)
+
+  add_test(
+    NAME iccdev.c-validation-dlopen
+    COMMAND
+      "$<TARGET_FILE:iccCValidationDlopenTest>"
+      "$<TARGET_FILE:${TARGET_LIB_ICCPROFLIB}>"
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+  )
+  set_tests_properties(iccdev.c-validation-dlopen PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;c-api;dlopen;issue-2276;regression"
+  )
+  # LoadLibraryA resolves the DLL's own imports (zlib1.dll via ICC_USE_ZLIB)
+  # through the executable directory and PATH, which only happens to work while
+  # ICCDEV_WINDOWS_UNIFIED_RUNTIME stages them together. Same treatment as the
+  # sibling tests above.
+  if(WIN32)
+    set(_c_validation_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCValidationDlopenTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _c_validation_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.c-validation-dlopen PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_c_validation_windows_env_mods}"
+    )
+  endif()
+endif()
+
 function(iccdev_add_iccconnect_thread_test)
   if(NOT DEFINED TARGET_LIB_ICCCONNECT OR NOT TARGET "${TARGET_LIB_ICCCONNECT}")
     return()

@@ -140,6 +140,7 @@ SET( HEADERS_PUBLIC
   ${SRC_PATH}/IccProfLib/IccArrayBasic.h
   ${SRC_PATH}/IccProfLib/IccArrayFactory.h
   ${SRC_PATH}/IccProfLib/IccCAM.h
+  ${SRC_PATH}/IccProfLib/IccCValidation.h
   # Issue #2154: relocated from Tools/CmdLine so IccConnect stops reaching across
   # the tree for it. Header-only (all inline), so no CFILES entry and no export.
   ${SRC_PATH}/IccProfLib/IccCmdLineUtil.h
@@ -257,6 +258,9 @@ IF(ENABLE_SHARED_LIBS)
   if(NOT MSVC)
     target_compile_definitions(${TARGET_NAME} PRIVATE ICCPROFLIBDLL_EXPORTS)
   endif()
+  target_compile_definitions(${TARGET_NAME}
+    PRIVATE ICC_C_API_EXPORTS
+    INTERFACE ICC_C_API_IMPORTS)
 
   # Exported global DATA (#2154, from #1888). WINDOWS_EXPORT_ALL_SYMBOLS below
   # auto-exports functions but not data, so the eight ICCPROFLIB_DATA_API globals
