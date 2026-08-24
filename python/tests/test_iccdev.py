@@ -131,12 +131,14 @@ class TestValidation:
         result = validate_profile(b"")
         assert isinstance(result, ValidationResult)
         assert result.status is ValidationStatus.INVALID_ARGUMENT
-        assert result.report
+        assert isinstance(result.report, str)
+        assert "\0" not in result.report
 
     def test_rejects_malformed_input(self):
         result = validate_profile(b"\x00\x01\x02\x03")
         assert result.status is ValidationStatus.CRITICAL_ERROR
-        assert result.report
+        assert isinstance(result.report, str)
+        assert "\0" not in result.report
 
     def test_validates_profile_bytes_and_file(self):
         path = find_test_profile("sRGB_v4_ICC_preference.icc")

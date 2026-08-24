@@ -18,7 +18,7 @@ Provides:
 
 from libc.stdlib cimport malloc, free
 from libc.string cimport memset, memcpy
-from cpython.bytes cimport PyBytes_AsString
+from cpython.bytes cimport PyBytes_AsString, PyBytes_FromStringAndSize
 
 cimport iccdev.cicc_wrapper as cicc
 
@@ -271,6 +271,7 @@ def validate_profile(profile):
     raising an exception.
     """
     cdef bytes profile_bytes
+    cdef bytes report_bytes
     cdef const unsigned char *profile_data
     cdef char report[8192]
     cdef cicc.icc_validation_status status
@@ -288,9 +289,10 @@ def validate_profile(profile):
     profile_data = <const unsigned char *>PyBytes_AsString(profile_bytes)
     status = cicc.icc_validate_profile(
         profile_data, len(profile_bytes), report, sizeof(report))
+    report_bytes = PyBytes_FromStringAndSize(report, sizeof(report))
     return ValidationResult(
         _validation_status_from_code(<int>status),
-        (<bytes>report).decode('utf-8', errors='replace'),
+        report_bytes.split(b'\0', 1)[0].decode('utf-8', errors='replace'),
     )
 
 
