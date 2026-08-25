@@ -1038,6 +1038,26 @@ bool CIccMpeSpectralCLUT::Read(icUInt32Number size, CIccIO *pIO)
   if (m_nInputChannels < 1 || m_nOutputChannels < 1)
     return false;
 
+  // m_nInputChannels is a 16-bit field taken straight from the profile, and it
+  // is narrowed to icUInt8Number when the CLUT is constructed below. The bound
+  // that matters here is therefore not only CIccCLUT's 16-input maximum but the
+  // cast: a declared 256 truncates to 0 and a declared 257 truncates to 1, so
+  // the count this element reports through NumInputChannels() stops describing
+  // the CLUT that backs it. The out-of-range values are already refused, if only
+  // by accident -- Init() below rejects an m_nInput of 0 or >16, leaves m_pData
+  // NULL, and the GetData(0) check that follows turns that into a failed Read.
+  // The truncating ones are not: 257 produces a readable element advertising 257
+  // input channels over a one-dimensional CLUT, and because
+  // icNumColorSpaceChannels() is the low 16 bits of the colour space signature,
+  // a header can declare a 257-channel N-channel space and satisfy the
+  // inputSamples == NumInputChannels() equality in CIccXformMpe::Begin. The
+  // element then applies, reading channel 0 and silently discarding the other
+  // 256. Bound the field before the cast, as CIccMpeCLUT::Read (IccMpeBasic.cpp)
+  // and CIccMpeExtCLUT::Read already do, so the count and the CLUT cannot
+  // disagree.
+  if (m_nInputChannels > 16)
+    return false;
+
   if (!pIO->Read32(&m_flags))
     return false;
 
@@ -1070,7 +1090,13 @@ bool CIccMpeSpectralCLUT::Read(icUInt32Number size, CIccIO *pIO)
   if (!nBytesPerSample)
     return false;
 
-  m_pCLUT->Init(gridPoints, size - headerSize, nBytesPerSample);
+  // The GetData(0) check below has been catching this failure by side effect --
+  // Init() leaves m_pData NULL when it refuses, and GetData(0) is &m_pData[0].
+  // Say it directly, so the rejection does not depend on GetData()'s current
+  // shape, and so the reason a malformed CLUT is refused appears at the point of
+  // refusal. CIccMpeExtCLUT::Read in IccMpeBasic.cpp already reads this way.
+  if (!m_pCLUT->Init(gridPoints, size - headerSize, nBytesPerSample))
+    return false;
 
   icFloatNumber *pData = m_pCLUT->GetData(0);
 
@@ -1444,6 +1470,18 @@ bool CIccMpeEmissionCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElement
   if (!m_pCLUT || !m_pWhite || m_pCLUT->GetOutputChannels()!=m_Range.steps || m_nOutputChannels!=3)
     return false;
 
+  // The element's declared input channel count and the dimensionality of the
+  // CLUT backing it must agree. Read() now bounds the count before the narrowing
+  // cast that builds the CLUT, but Read() is not the only constructor: the XML
+  // parser sets m_nInputChannels straight from the InputChannels attribute
+  // (capped at 0xFFFF by icXmlParseChannels) and then lets icCLutFromXml()
+  // narrow the same value to icUInt8Number independently, so a declared 257
+  // yields a one-dimensional CLUT under an element still claiming 257. Checking
+  // it here covers every route in, because Begin() is what the apply path calls
+  // whatever built the object.
+  if (m_pCLUT->GetInputDim() != m_nInputChannels)
+    return false;
+
   switch (m_nInputChannels) {
   case 1:
     m_interpType = ic1dInterp;
@@ -1493,10 +1531,21 @@ bool CIccMpeEmissionCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElement
   }
 
   m_pApplyCLUT->SetClipFunc(NoClip);
-  m_pApplyCLUT->Init(m_pCLUT->GridPointArray());
+
+  // Unlike the Read() path, nothing here checks the pointers Init() is
+  // responsible for: pDst below is used as the destination of the VectorMult()
+  // loop without a NULL test, so a refused Init() writes through NULL on the
+  // first node rather than failing. The apply CLUT is built at the same
+  // dimensionality and grid as m_pCLUT, so an Init() that refuses here means the
+  // two have diverged; refusing Begin() is the only correct answer.
+  if (!m_pApplyCLUT->Init(m_pCLUT->GridPointArray()))
+    return false;
 
   icFloatNumber *pSrc = m_pCLUT->GetData(0);
   icFloatNumber *pDst = m_pApplyCLUT->GetData(0);
+
+  if (!pSrc || !pDst)
+    return false;
 
   icFloatNumber xyzW[3];
   icUInt32Number i;
@@ -1519,7 +1568,8 @@ bool CIccMpeEmissionCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElement
     pDst += m_nOutputChannels;
   }
 
-  m_pApplyCLUT->Begin();
+  if (!m_pApplyCLUT->Begin())
+    return false;
 
   return true;
 }
@@ -1540,6 +1590,18 @@ bool CIccMpeReflectanceCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElem
   if (!m_pCLUT || !m_pWhite ||
       m_Range.steps < 2 || m_Range.start >= m_Range.end ||
       m_pCLUT->GetOutputChannels()!=m_Range.steps || m_nOutputChannels!=3)
+    return false;
+
+  // The element's declared input channel count and the dimensionality of the
+  // CLUT backing it must agree. Read() now bounds the count before the narrowing
+  // cast that builds the CLUT, but Read() is not the only constructor: the XML
+  // parser sets m_nInputChannels straight from the InputChannels attribute
+  // (capped at 0xFFFF by icXmlParseChannels) and then lets icCLutFromXml()
+  // narrow the same value to icUInt8Number independently, so a declared 257
+  // yields a one-dimensional CLUT under an element still claiming 257. Checking
+  // it here covers every route in, because Begin() is what the apply path calls
+  // whatever built the object.
+  if (m_pCLUT->GetInputDim() != m_nInputChannels)
     return false;
 
   switch (m_nInputChannels) {
@@ -1643,10 +1705,24 @@ bool CIccMpeReflectanceCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElem
   }
 
   m_pApplyCLUT->SetClipFunc(NoClip);
-  m_pApplyCLUT->Init(m_pCLUT->GridPointArray());
+
+  // As in CIccMpeEmissionCLUT::Begin above: pDst is written through without a
+  // NULL test, so Init()'s refusal has to stop us here. pApplyMtx is this
+  // function's to release on every exit once it is not the stack observer.
+  if (!m_pApplyCLUT->Init(m_pCLUT->GridPointArray())) {
+    if (pApplyMtx!=&observer)
+      delete pApplyMtx;
+    return false;
+  }
 
   icFloatNumber *pSrc = m_pCLUT->GetData(0);
   icFloatNumber *pDst = m_pApplyCLUT->GetData(0);
+
+  if (!pSrc || !pDst) {
+    if (pApplyMtx!=&observer)
+      delete pApplyMtx;
+    return false;
+  }
 
   icFloatNumber xyzW[3];
 
@@ -1685,7 +1761,8 @@ bool CIccMpeReflectanceCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElem
   if (pApplyMtx!=&observer)
     delete pApplyMtx;
 
-  m_pApplyCLUT->Begin();
+  if (!m_pApplyCLUT->Begin())
+    return false;
 
   return true;
 }

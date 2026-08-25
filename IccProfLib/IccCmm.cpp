@@ -6364,7 +6364,10 @@ CIccXform3DLut::~CIccXform3DLut()
     }
 
     if (m_pTag->m_CLUT) {
-      m_pTag->m_CLUT->Begin();
+      // Begin() refuses a CLUT that Init() never made usable -- reachable when
+      // the tag was built by a parser rather than read from a profile.
+      if (!m_pTag->m_CLUT->Begin())
+        return icCmmStatInvalidLut;
     }
 
     if (m_pTag->m_CurvesA) {
@@ -6397,7 +6400,10 @@ CIccXform3DLut::~CIccXform3DLut()
     }
 
     if (m_pTag->m_CLUT) {
-      m_pTag->m_CLUT->Begin();
+      // Begin() refuses a CLUT that Init() never made usable -- reachable when
+      // the tag was built by a parser rather than read from a profile.
+      if (!m_pTag->m_CLUT->Begin())
+        return icCmmStatInvalidLut;
     }
 
     if (m_pTag->m_CurvesM) {
@@ -6732,7 +6738,10 @@ icStatusCMM CIccXform4DLut::Begin()
     }
 
     if (m_pTag->m_CLUT) {
-      m_pTag->m_CLUT->Begin();
+      // Begin() refuses a CLUT that Init() never made usable -- reachable when
+      // the tag was built by a parser rather than read from a profile.
+      if (!m_pTag->m_CLUT->Begin())
+        return icCmmStatInvalidLut;
     }
 
     if (m_pTag->m_CurvesA) {
@@ -6768,7 +6777,10 @@ icStatusCMM CIccXform4DLut::Begin()
     }
 
     if (m_pTag->m_CLUT) {
-      m_pTag->m_CLUT->Begin();
+      // Begin() refuses a CLUT that Init() never made usable -- reachable when
+      // the tag was built by a parser rather than read from a profile.
+      if (!m_pTag->m_CLUT->Begin())
+        return icCmmStatInvalidLut;
     }
 
     if (m_pTag->m_CurvesM) {
@@ -7158,7 +7170,10 @@ icStatusCMM CIccXformNDLut::Begin()
     }
 
     if (m_pTag->m_CLUT) {
-      m_pTag->m_CLUT->Begin();
+      // Begin() refuses a CLUT that Init() never made usable -- reachable when
+      // the tag was built by a parser rather than read from a profile.
+      if (!m_pTag->m_CLUT->Begin())
+        return icCmmStatInvalidLut;
     }
 
     if (m_pTag->m_CurvesA) {
@@ -7202,7 +7217,10 @@ icStatusCMM CIccXformNDLut::Begin()
     }
 
     if (m_pTag->m_CLUT) {
-      m_pTag->m_CLUT->Begin();
+      // Begin() refuses a CLUT that Init() never made usable -- reachable when
+      // the tag was built by a parser rather than read from a profile.
+      if (!m_pTag->m_CLUT->Begin())
+        return icCmmStatInvalidLut;
     }
 
     if (m_pTag->m_CurvesM) {

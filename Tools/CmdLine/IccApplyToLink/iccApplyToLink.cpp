@@ -572,14 +572,15 @@ public:
       for (icUInt16Number i = 0; i < nDstSamples; i++) {
         pCurves[i] = new CIccTagCurve();
       }
-      // CIccMBB::NewCLUT() calls CIccCLUT::Init() but discards its result and
-      // returns the CLUT either way, so a grid Init refused arrived here as a
+      // CIccMBB::NewCLUT() used to call CIccCLUT::Init() and return the CLUT
+      // whether or not it succeeded, so a grid Init refused arrived here as a
       // CLUT with m_pData NULL and m_nNumPoints already committed: GetData(0)
       // gave a NULL write target that setNextNode()'s countdown guard did not
-      // stop, and the first node memcpy'd to address zero (#1781). Build and
-      // initialize the CLUT explicitly -- as the V5 branch above already does
-      // -- so Init()'s result is visible here, then hand it over with
-      // SetCLUT(), which is what NewCLUT() would have done internally.
+      // stop, and the first node memcpy'd to address zero (#1781). NewCLUT() now
+      // returns NULL in that case, but this branch keeps building and
+      // initializing the CLUT explicitly -- as the V5 branch above already does
+      // -- because that is what lets the failure be reported with the grid size
+      // and channel counts that caused it, rather than as a bare NULL.
       CIccCLUT* pCLUT = new CIccCLUT((icUInt8Number)nSrcSamples, (icUInt8Number)nDstSamples);
       if (!pCLUT->Init(m_grid)) {
         printf("Unable to allocate a %d-point CLUT for %u source and %u destination channels\n",

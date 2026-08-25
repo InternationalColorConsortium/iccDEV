@@ -373,7 +373,11 @@ public:
   icUInt32Number GetOffset(int index) const { return m_nOffset ? m_nOffset[index] : 0; }
 
 
-  void Begin();
+  //! Prepare the CLUT for Apply(). Returns false if the object is not in a
+  //! usable state -- most importantly if Init() was never called or refused,
+  //! which leaves no data behind the grid the interpolators would walk. Callers
+  //! on an apply path must not proceed when this returns false.
+  bool Begin();
 
   CIccApplyCLUT* GetNewApply();
 
@@ -474,7 +478,12 @@ public:
   bool SwapMBCurves() const { return m_bUseMCurvesAsBCurves; }
 
   void Cleanup();
-  void Init(icUInt8Number nInputChannels, icUInt8Number nOutputChannels);
+
+  //! Set the channel counts everything else in this object is sized from.
+  //! Returns false, changing nothing, if either count is outside 1..16 -- the
+  //! bound CIccCLUT::Init() and the lut read paths already impose. Callers on a
+  //! load or parse path must not proceed when this returns false.
+  bool Init(icUInt8Number nInputChannels, icUInt8Number nOutputChannels);
 
   icUInt8Number InputChannels() const { return m_nInput; }
   icUInt8Number OutputChannels() const { return m_nOutput; }

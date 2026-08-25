@@ -5709,7 +5709,12 @@ bool CIccMpeCLUT::Read(icUInt32Number size, CIccIO *pIO)
 
   m_pCLUT->SetClipFunc(NoClip);
 
-  m_pCLUT->Init(gridPoints);
+  // The GetData(0) check below turns a refused Init() into a failed Read() only
+  // because Init() leaves m_pData NULL and GetData(0) is &m_pData[0]. State the
+  // rejection where it happens instead of relying on that; CIccMpeExtCLUT::Read
+  // further down this file already does.
+  if (!m_pCLUT->Init(gridPoints))
+    return false;
 
   icFloatNumber *pData = m_pCLUT->GetData(0);
 
@@ -5788,7 +5793,20 @@ bool CIccMpeCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElement * /* pM
   if (!m_pCLUT)
     return false;
 
-  m_pCLUT->Begin();
+  // m_interpType is chosen from m_nInputChannels below, but every interpolator
+  // it selects walks the CLUT's own m_nInput. The two are only guaranteed equal
+  // when the element came from Read(), which bounds the count before narrowing
+  // it to the CLUT's icUInt8Number. An element built by a parser sets
+  // m_nInputChannels from its own source and lets the same narrowing happen
+  // separately when it constructs the CLUT, so a declared 257 could leave a
+  // one-dimensional CLUT under an element claiming 257 channels. Compare them
+  // here, where every apply path passes regardless of how the element was
+  // built.
+  if (m_pCLUT->GetInputDim() != m_nInputChannels)
+    return false;
+
+  if (!m_pCLUT->Begin())
+    return false;
 
   switch (m_nInputChannels) {
   case 1:
