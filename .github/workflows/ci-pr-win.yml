@@ -242,7 +242,7 @@ jobs:
           ) -join '/'
           Start-BitsTransfer -Source $depsUrl -Destination "deps.zip"
           Write-Host "========= Extracting Dependencies ...    ================`n"
-          tar -xf deps.zip
+          Expand-Archive -LiteralPath 'deps.zip' -DestinationPath . -Force
       - name: CMake Configure
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
@@ -746,7 +746,7 @@ jobs:
           if ($actualDigest -ne $env:ICCDEV_VCPKG_EXPORT_SHA256) {
             throw "vcpkg export digest mismatch: $actualDigest"
           }
-          tar -xf deps.zip
+          Expand-Archive -LiteralPath 'deps.zip' -DestinationPath . -Force
 
       - name: Run ClangCL build and CTest check
         env:
@@ -1007,7 +1007,7 @@ jobs:
           if ($actualDigest -ne $env:ICCDEV_VCPKG_EXPORT_SHA256) {
             throw "vcpkg export digest mismatch: $actualDigest"
           }
-          tar -xf deps.zip
+          Expand-Archive -LiteralPath 'deps.zip' -DestinationPath . -Force
 
       - name: Run Windows Release performance report
         env:
