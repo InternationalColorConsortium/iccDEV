@@ -634,6 +634,8 @@ jobs:
     name: Windows ClangCL build and test
     runs-on: windows-latest
     timeout-minutes: 20
+    env:
+      ICCDEV_VCPKG_EXPORT_SHA256: f8c70cb22dfe1ec379549a66a66473ad5f4f1fbe27c2b7340d69112c606a52ff
     defaults:
       run:
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
@@ -740,6 +742,10 @@ jobs:
             'v2.3.1/vcpkg-exported-deps.zip'
           ) -join '/'
           Start-BitsTransfer -Source $depsUrl -Destination 'deps.zip'
+          $actualDigest = (Get-FileHash -LiteralPath 'deps.zip' -Algorithm SHA256).Hash
+          if ($actualDigest -ne $env:ICCDEV_VCPKG_EXPORT_SHA256) {
+            throw "vcpkg export digest mismatch: $actualDigest"
+          }
           tar -xf deps.zip
 
       - name: Run ClangCL build and CTest check

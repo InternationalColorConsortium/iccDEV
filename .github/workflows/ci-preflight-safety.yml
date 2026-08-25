@@ -325,6 +325,7 @@ jobs:
           exit "$failures"
 
       - name: Run Doxygen documentation check
+        if: env.PREFLIGHT_TRUST_MODE == 'bootstrap-inline'
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -333,6 +334,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source ../trusted/.github/scripts/sanitize-sed.sh
 
           output_dir="$(mktemp -d "${RUNNER_TEMP}/iccdev-doxygen.XXXXXX")"
           trap 'rm -rf "$output_dir"' EXIT
@@ -340,7 +342,7 @@ jobs:
             "OUTPUT_DIRECTORY=$output_dir" \
             "WARN_LOGFILE=$output_dir/doxygen-warnings.log"
           if [ -s "$output_dir/doxygen-warnings.log" ]; then
-            cat "$output_dir/doxygen-warnings.log"
+            sanitize_print "$(cat "$output_dir/doxygen-warnings.log")"
             exit 1
           fi
 
