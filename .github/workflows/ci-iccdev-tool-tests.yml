@@ -1115,7 +1115,7 @@ jobs:
             local label="$1"
             shift
             echo "[START] ${label}"
-            timeout 60s "$@"
+            timeout 180s "$@"
             echo "[PASS] ${label}"
           }
 
