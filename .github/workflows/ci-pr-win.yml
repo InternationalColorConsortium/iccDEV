@@ -264,7 +264,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" `
             -DVCPKG_MANIFEST_MODE=OFF `
             -DCMAKE_BUILD_TYPE=Debug `
-            -Wno-author
+            -Wno-dev
 
       - name: Build iccDEV
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
@@ -711,14 +711,14 @@ jobs:
           # --- Harden Git configuration ---
           git config --global credential.helper ""
           git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
-          # --- PATH hardening: limit to trusted tool locations ---
+          # --- PATH hardening: prioritize trusted tool locations ---
           $trustedPath = @(
             "$env:SystemRoot\system32",
             "$env:SystemRoot",
             "$env:ProgramFiles\Git\bin",
             "$env:ProgramFiles\PowerShell\7"
           ) -join ';'
-          $env:PATH = $trustedPath
+          $env:PATH = "$trustedPath;$env:PATH"
           Write-Host "Finished Harden Environment and Validate Inputs" -ForegroundColor Green
 
       - name: Setup MSBuild
@@ -797,7 +797,7 @@ jobs:
             '-DENABLE_TESTS=ON',
             '-DICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS=ON',
             '-DICCDEV_ENABLE_AVX2=ON',
-            '-Wno-author'
+            '-Wno-dev'
           ) $configureLog
           Invoke-NativeLogged cmake @(
             '--build', $buildDir,
