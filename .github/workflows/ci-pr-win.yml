@@ -264,7 +264,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" `
             -DVCPKG_MANIFEST_MODE=OFF `
             -DCMAKE_BUILD_TYPE=Debug `
-            -Wno-dev
+            -Wno-author
 
       - name: Build iccDEV
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
@@ -781,7 +781,7 @@ jobs:
           Invoke-NativeLogged cmake @(
             '-S', 'Build\Cmake',
             '-B', $buildDir,
-            '-G', 'Visual Studio 17 2022',
+            '-G', 'Visual Studio 18 2026',
             '-A', 'x64',
             '-T', 'ClangCL',
             '-DCMAKE_TOOLCHAIN_FILE=..\..\scripts\buildsystems\vcpkg.cmake',
@@ -791,7 +791,7 @@ jobs:
             '-DENABLE_TESTS=ON',
             '-DICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS=ON',
             '-DICCDEV_ENABLE_AVX2=ON',
-            '-Wno-dev'
+            '-Wno-author'
           ) $configureLog
           Invoke-NativeLogged cmake @(
             '--build', $buildDir,
@@ -874,7 +874,7 @@ jobs:
           $summaryLines = @(
             '### Windows ClangCL smoke',
             '',
-            '- Generator: ``Visual Studio 17 2022 -T ClangCL``',
+            '- Generator: ``Visual Studio 18 2026 -T ClangCL``',
             '- Warning policy: ``_CRT_SECURE_NO_WARNINGS`` via ``ICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS``',
             '- Build scope: ``full configured command-line project plus Windows CMM DLL``',
             '- Build type: ``Debug``',
@@ -1022,6 +1022,7 @@ jobs:
           )
           .\.github\scripts\iccdev-windows-release-report.ps1 `
             -BuildDir out\windows-msvc-release-report `
+            -Preset vs2026-x64 `
             -CMakeConfigureArguments $cmakeArgs `
             -Threads '1,2,4,8,16'
           Get-Content out\windows-msvc-release-report\reports\windows-release-report.md |
