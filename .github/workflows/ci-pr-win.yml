@@ -34,6 +34,13 @@ on:
         required: false
         default: ""
         type: string
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: "Exact commit SHA to check out (defaults to the selected ref)"
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: pr-win-${{ github.event.pull_request.number || github.ref }}
