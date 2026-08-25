@@ -17,18 +17,22 @@ correct profile or transform results.
    as MATLAB or Windows syntax.
 3. Inspect the selected CMake build's configuration, library configuration,
    `ICC_USE_ZLIB`, and vcpkg triplet. Confirm the minimum Release build includes
-   `IccProfLib2-static`, `iccProfilePlot`, and `iccPawgReport`, then verify
-   `$Build\bin\Release\iccPawgReport.exe` exists before running
-   `run_local_qa()`.
+   `IccProfLib2-static`, `IccJSON2-static`, `iccToJson`, `iccFromJson`,
+   `iccProfilePlot`, and `iccPawgReport`, then verify
+   `$Build\bin\Release\iccToJson.exe`, `iccFromJson.exe`, and
+   `iccPawgReport.exe` exist before running `run_local_qa()`.
 4. Reproduce with the smallest exact command:
 
    ```powershell
    $Repo = (git rev-parse --show-toplevel).Trim()
    $Build = Join-Path $Repo 'msvc'
    cmake --build $Build --config Release `
-     --target IccProfLib2-static iccProfilePlot iccPawgReport `
+     --target IccProfLib2-static IccJSON2-static iccToJson iccFromJson `
+       iccProfilePlot iccPawgReport `
        iccPawgQ1QualityContractTest -- /m
    foreach ($RequiredTool in @(
+     (Join-Path $Build 'bin\Release\iccToJson.exe'),
+     (Join-Path $Build 'bin\Release\iccFromJson.exe'),
      (Join-Path $Build 'bin\Release\iccProfilePlot.exe'),
      (Join-Path $Build 'bin\Release\iccPawgReport.exe')
    )) {
@@ -53,6 +57,10 @@ correct profile or transform results.
      or malformed Q1 JSON
    - PAWG Q1 sample-budget rejection or model/metric disagreement
    - invalid visualization JSON or MATLAB graph rendering
+   - missing `iccToJson`/`iccFromJson`, non-byte-exact ICC.1/v4 or ICC.2/v5
+     JSON round trips, invalid profile structure or Profile ID
+   - `lutType` values 11 through 13 rejected by the MEX argument gate, or
+     values above `icXformLutMaximum` accepted
    - stale loaded MEX
    - missing generated profiles
    - CMM input shape or lifecycle error
@@ -153,7 +161,8 @@ correct profile or transform results.
 10. Before interactive MATLAB Desktop validation, derive `repo_root` from either
    the repository root or its `matlab` subdirectory, then add the package and
    tests using absolute paths. Do not assume `pwd` is the repository root.
-11. Run `test_usage_guidance`, `test_iccdev`, `test_pawg_q1`,
+11. Run `test_usage_guidance`, `test_json_bindings`, `test_iccdev`,
+    `test_pawg_q1`,
     `test_colorimetry_issue_1475`,
     `run_local_qa`, `run_gamma_qa`,
     `test_plot`, `run_docker_qa`, and all examples. If Docker Desktop is running

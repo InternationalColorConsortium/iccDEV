@@ -41,6 +41,7 @@ classdef IccCmm < handle
       %ATTACH Attach an ICC profile to the pipeline.
       %   cmm.attach('profile.icc')
       %   cmm.attach('profile.icc', 'intent', 0, 'interp', 1)
+      %   cmm.attach('profile.icc', 'luttype', 0)  % valid range: 0..13
       intent  = int32(0);
       interp  = int32(0);
       lutType = int32(0);

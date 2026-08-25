@@ -684,6 +684,8 @@ jobs:
             ForEach-Object { Copy-Item $_.FullName -Destination $stage -Force }
           foreach ($required in @(
             'iccDumpProfile.exe',
+            'iccToJson.exe',
+            'iccFromJson.exe',
             'iccPawgReport.exe',
             'IccProfLib2.dll'
           )) {
@@ -700,12 +702,15 @@ jobs:
           Copy-Item -Path "matlab" -Destination "$stage/matlab" -Recurse -Force
           New-Item -ItemType Directory -Force `
             -Path "$stage/Testing/Display", "$stage/Testing/HDR", `
+              "$stage/Testing/ApplyDataFiles/test-profiles", `
               "$stage/IccProfLib", "$stage/.github/ci/regression" |
             Out-Null
           Copy-Item -Path "Testing/sRGB_v4_ICC_preference.icc" `
             -Destination "$stage/Testing/sRGB_v4_ICC_preference.icc" -Force
           Copy-Item -Path "Testing/sRGB_v4_ICC_preference.icc" `
             -Destination "$stage/Testing/Display/sRGB_v4_ICC_preference.icc" -Force
+          Copy-Item -Path "Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc" `
+            -Destination "$stage/Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc" -Force
           Copy-Item -Path "Testing/Display/sRGB_D65_MAT.xml" `
             -Destination "$stage/Testing/Display/sRGB_D65_MAT.xml" -Force
           Copy-Item -Path "Testing/Display/sRGB_D65_MAT-300cdm2.xml" `
@@ -730,6 +735,8 @@ jobs:
             'matlab\+iccdev\+qa\delta_e_2000.m',
             'matlab\+iccdev\+qa\pcs_to_lab.m',
             'matlab\tests\test_pawg_q1.m',
+            'matlab\tests\test_json_bindings.m',
+            'matlab\tests\test_lut_type_range.m',
             'matlab\tests\test_usage_guidance.m',
             'matlab\tests\fixtures\default_usage_examples.txt',
             'matlab\tests\test_luminance_normalization.m',
@@ -740,6 +747,7 @@ jobs:
             'matlab\examples\docker_interop.m',
             'Testing\sRGB_v4_ICC_preference.icc',
             'Testing\Display\sRGB_v4_ICC_preference.icc',
+            'Testing\ApplyDataFiles\test-profiles\sRGB_D65_MAT.icc',
             'Testing\Display\sRGB_D65_MAT.xml',
             'Testing\Display\sRGB_D65_MAT-300cdm2.xml',
             'Testing\Display\sRGB_D65_MAT-500cdm2.xml',
@@ -884,6 +892,8 @@ jobs:
             addpath(fullfile(matlab_dir, 'tests'));
             setenv('PATH', [stage pathsep getenv('PATH')]);
             test_usage_guidance();
+            test_json_bindings();
+            test_lut_type_range();
             test_luminance_normalization();
             test_colorimetry_issue_1475();
             qa_output = evalc('run_local_qa()');
@@ -1814,6 +1824,8 @@ jobs:
 
           windows_bundle_root="artifacts/iccdev-windows-msvc/iccDEV-Testing"
           matlab_required=(
+            "iccToJson.exe"
+            "iccFromJson.exe"
             "iccPawgReport.exe"
             "matlab/+iccdev/private/icc_mex.mexw64"
             "matlab/run_local_qa.m"
@@ -1824,6 +1836,8 @@ jobs:
             "matlab/+iccdev/+qa/delta_e_2000.m"
             "matlab/+iccdev/+qa/pcs_to_lab.m"
             "matlab/tests/test_pawg_q1.m"
+            "matlab/tests/test_json_bindings.m"
+            "matlab/tests/test_lut_type_range.m"
             "matlab/tests/test_usage_guidance.m"
             "matlab/tests/fixtures/default_usage_examples.txt"
             "matlab/tests/test_luminance_normalization.m"
@@ -1834,6 +1848,7 @@ jobs:
             "matlab/examples/docker_interop.m"
             "Testing/sRGB_v4_ICC_preference.icc"
             "Testing/Display/sRGB_v4_ICC_preference.icc"
+            "Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc"
             "Testing/Display/sRGB_D65_MAT.xml"
             "Testing/Display/sRGB_D65_MAT-300cdm2.xml"
             "Testing/Display/sRGB_D65_MAT-500cdm2.xml"

@@ -22,7 +22,10 @@ the smallest useful evidence.
      hosted `ci-codeql-security` workflow when local CodeQL is not practical;
    - Dockerfile or container edits: `hadolint`, Trivy config, image
      vulnerability/secret scan, and runtime or healthcheck smoke validation;
-   - security-sensitive code paths: `code-review-hunting.prompt.md`.
+   - security-sensitive code paths: `code-review-hunting.prompt.md`;
+   - MATLAB MEX or wrapper edits:
+     `.github/instructions/matlab-code-review.instructions.md` and the
+     focused MATLAB checks in `docs/matlab-bindings.md`.
 4. Run dynamic or sanitizer checks for the changed surface:
    - ASAN/UBSAN/IntSan builds for parser, profile, or tool changes;
    - CTest profile gates for generated profile behavior;

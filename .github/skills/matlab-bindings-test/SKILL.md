@@ -28,14 +28,17 @@ profiles, examples, and native handle lifecycle behavior.
    $BuildArgs = @(
      '--build', $Build
      '--config', 'Release'
-     '--target', 'IccProfLib2-static', 'iccProfilePlot', 'iccPawgReport',
+     '--target', 'IccProfLib2-static', 'IccJSON2-static', 'iccToJson',
+     'iccFromJson', 'iccProfilePlot', 'iccPawgReport',
      'iccPawgQ1QualityContractTest'
      '--', '/m'
    )
    cmake @BuildArgs
+   $ToJsonTool = Join-Path $Build 'bin\Release\iccToJson.exe'
+   $FromJsonTool = Join-Path $Build 'bin\Release\iccFromJson.exe'
    $PlotTool = Join-Path $Build 'bin\Release\iccProfilePlot.exe'
    $PawgTool = Join-Path $Build 'bin\Release\iccPawgReport.exe'
-   foreach ($RequiredTool in @($PlotTool, $PawgTool)) {
+   foreach ($RequiredTool in @($ToJsonTool, $FromJsonTool, $PlotTool, $PawgTool)) {
      if (-not (Test-Path $RequiredTool -PathType Leaf)) {
        throw "Required MATLAB QA tool was not built: $RequiredTool"
      }
@@ -43,9 +46,9 @@ profiles, examples, and native handle lifecycle behavior.
    ```
 
    When the request covers the complete Windows deliverable, build
-   `ALL_BUILD` rather than stopping at the minimum MEX and plotting targets.
-   Keep `iccPawgReport` in the minimum target list because `run_local_qa()`
-   invokes `test_pawg_q1()`.
+   `ALL_BUILD` rather than stopping at the minimum MEX and QA targets. Keep
+   `iccToJson`, `iccFromJson`, and `iccPawgReport` in the minimum target list:
+   `test_json_bindings()` and `run_local_qa()` invoke them.
 5. Build the MEX gateway:
 
    ```powershell
@@ -139,6 +142,8 @@ profiles, examples, and native handle lifecycle behavior.
    addpath(fullfile(repo_root, 'matlab'));
    addpath(fullfile(repo_root, 'matlab', 'tests'));
    test_usage_guidance();
+   test_json_bindings();
+   test_lut_type_range();
    test_iccdev();
    run_local_qa();
    test_add_docker_path();
@@ -183,12 +188,16 @@ profiles, examples, and native handle lifecycle behavior.
     used by the colorimetry check at their repository-relative paths. Require
     zero skipped test groups before publishing unless Docker interoperability
     is the sole skip because the pinned image is unavailable. Require the
-    staged bundle to contain `iccPawgReport.exe`,
+    staged bundle to contain `iccToJson.exe`, `iccFromJson.exe`,
+    `iccPawgReport.exe`, `matlab/tests/test_json_bindings.m`,
+    `matlab/tests/test_lut_type_range.m`,
     `matlab/+iccdev/+qa/audit_pawg_q1.m`, `bounded_grid.m`,
     `delta_e_2000.m`, `pcs_to_lab.m`, `matlab/tests/test_pawg_q1.m`, and
     `matlab/tests/test_usage_guidance.m`,
     `matlab/tests/fixtures/default_usage_examples.txt`, and
-    `Testing/sRGB_v4_ICC_preference.icc`. Add the staged bundle root to the
+    `Testing/sRGB_v4_ICC_preference.icc` plus
+    `Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc`. Add the staged
+    bundle root to the
     MATLAB process `PATH` before `run_local_qa()`.
 
 ## Failure Rules
@@ -216,8 +225,14 @@ profiles, examples, and native handle lifecycle behavior.
 - MEX output path and dependency paths.
 - Generated profile count and full Windows CTest result.
 - Exact MATLAB test result.
+- ICC.1/v4 and ICC.2/v5 byte-exact IccJSON round trips, version-aware binary
+  structure and Profile ID checks, and malformed-input
+  `iccdev:jsonCommandFailed` behavior.
+- IccProfLib `icXformLutType` values 11 through 13 accepted by the gateway and
+  value 14 rejected as `iccdev:badArgs`.
 - PAWG Q1 MATLAB/native metric and verdict agreement.
-- PAWG tool and MATLAB Q1 support-file presence in staged release artifacts.
+- JSON tools/test and PAWG tool/support-file presence in staged release
+  artifacts.
 - Issue #1811 fixture normalization error and warning-window values, when in scope.
 - Native `iccdev.luminance-normalization` CTest result, when in scope.
 - Issue #1475 MATLAB result and native `iccdev.colorimetry-methods` CTest result.

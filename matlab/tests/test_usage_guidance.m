@@ -39,6 +39,10 @@ function invoke_without_arguments(name)
       iccdev.IccApply();
     case 'plot'
       iccdev.plot();
+    case 'to_json'
+      iccdev.to_json();
+    case 'from_json'
+      iccdev.from_json();
     case 'sig_to_str'
       iccdev.sig_to_str();
     case 'docker_validate'

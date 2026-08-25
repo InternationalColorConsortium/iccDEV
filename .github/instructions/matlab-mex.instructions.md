@@ -10,6 +10,9 @@ MATLAB/Octave interface to IccProfLib via a single MEX gateway binary.
 An OOP wrapper layer in the `+iccdev` package namespace provides
 MATLAB-idiomatic classes on top of the MEX function calls.
 
+For Copilot review criteria, use the concise companion file
+`matlab-code-review.instructions.md`; keep implementation conventions here.
+
 ## File Structure
 
 ```
@@ -261,10 +264,18 @@ MATLAB use `setenv('ICCDEV_BUILD_DIR', build_dir)`; in Windows PowerShell use
   MATLAB must calculate PCS decoding, CIEDE2000, aggregation, and verdicts
   independently rather than using native metrics as its result. Both paths use
   IccProfLib CMM transforms and must reject grids above the shared sample budget.
-- Windows release artifacts must retain `iccPawgReport.exe`,
+- `iccdev.to_json` and `iccdev.from_json` require a Java-enabled runtime plus
+  the `iccToJson` and `iccFromJson` executables. Build and stage both tools
+  before running `test_json_bindings`; do not add the package `private/`
+  directory to MATLAB's global path to reach the process bridge.
+- Windows release artifacts must retain `iccToJson.exe`, `iccFromJson.exe`,
+  `iccPawgReport.exe`, `matlab/tests/test_json_bindings.m`,
+  `matlab/tests/test_lut_type_range.m`,
   `matlab/+iccdev/+qa/audit_pawg_q1.m`, its three calculation helpers,
   `matlab/tests/test_pawg_q1.m`, and
-  `Testing/sRGB_v4_ICC_preference.icc`. Staged QA must put the bundle root on
+  `Testing/sRGB_v4_ICC_preference.icc` plus
+  `Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc`. Staged QA must put
+  the bundle root on
   MATLAB's `PATH` before `run_local_qa()` so the flat packaged tool is found.
 - MATLAB Desktop can start in the repository root or `matlab/`. Derive the root
   by checking for `Build/Cmake`; do not blindly append another `matlab` segment
