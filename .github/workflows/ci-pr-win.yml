@@ -775,6 +775,7 @@ jobs:
           }
 
           $buildDir = 'Build\Cmake\build-clangcl-pr-smoke'
+          $toolchainFile = Join-Path $env:GITHUB_WORKSPACE 'scripts\buildsystems\vcpkg.cmake'
           if (Test-Path -LiteralPath $buildDir) {
             Remove-Item -Recurse -Force -LiteralPath $buildDir
           }
@@ -790,7 +791,7 @@ jobs:
             '-G', 'Visual Studio 18 2026',
             '-A', 'x64',
             '-T', 'ClangCL',
-            '-DCMAKE_TOOLCHAIN_FILE=..\..\scripts\buildsystems\vcpkg.cmake',
+            "-DCMAKE_TOOLCHAIN_FILE=$toolchainFile",
             '-DVCPKG_MANIFEST_MODE=OFF',
             '-DENABLE_TOOLS=ON',
             '-DENABLE_CMM_TOOLS=ON',

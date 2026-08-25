@@ -336,7 +336,7 @@ jobs:
           unset GITHUB_TOKEN || true
           source ../trusted/.github/scripts/sanitize-sed.sh
 
-          output_dir="$(mktemp -d "${RUNNER_TEMP}/iccdev-doxygen.XXXXXX")"
+          output_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/iccdev-doxygen.XXXXXX")"
           trap 'rm -rf "$output_dir"' EXIT
           doxygen_status=0
           doxygen .github/ci/doxygen/Doxyfile \
