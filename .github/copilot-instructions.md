@@ -36,6 +36,11 @@ This repository uses all three GitHub custom-instruction types:
 Keep agent rules in `AGENTS.md`, not in the mirrors. See
 https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions
 
+For documentation edits, run `doxygen .github/ci/doxygen/Doxyfile` before
+handoff and require `docs/generated/doxygen-warnings.log` to be empty. Keep
+Markdown links inside the Doxygen INPUT tree; use explicit HTML anchors for
+outside-tree references. Never commit generated Doxygen output or warning logs.
+
 Copilot code review reads repository-wide instructions, the nearest applicable
 `AGENTS.md`, path-specific instructions, and relevant skills from the PR head
 branch. Keep review criteria in those canonical files so instruction changes

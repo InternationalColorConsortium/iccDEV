@@ -123,6 +123,7 @@ Add the same to `Testing/RunTests.bat` for Windows.
 - Add tool description and example to `docs/tools-cli-reference.md`
 - Confirm `.github/ci/doxygen/Doxyfile` includes Markdown so `Tools/CmdLine/*/Readme.md` files are generated
 - Keep tool and reference links Doxygen-safe: if a link points outside the Doxygen INPUT tree, use an explicit HTML anchor (`<a href="...">...</a>`) instead of a Markdown link that will trigger warning-only docs failures
+- Run `doxygen .github/ci/doxygen/Doxyfile` and require an empty `docs/generated/doxygen-warnings.log`; do not add generated Doxygen output or warning logs
 - Add tool description to `docs/index.md` under "Tools based upon these libraries"
 - Add to `docs/install.md` Docker examples if applicable
 - Update `.github/prompts/contributor-onboarding.prompt.md` when the repository map changes

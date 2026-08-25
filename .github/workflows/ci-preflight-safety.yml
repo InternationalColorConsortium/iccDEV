@@ -20,6 +20,9 @@ on:
     paths:
       - '.github/**'
       - '.githooks/**'
+      - 'AGENTS.md'
+      - 'README.md'
+      - 'docs/**'
       - 'Dockerfile'
       - 'Dockerfile.*'
       - '.dockerignore'
@@ -29,6 +32,9 @@ on:
     paths:
       - '.github/**'
       - '.githooks/**'
+      - 'AGENTS.md'
+      - 'README.md'
+      - 'docs/**'
       - 'Dockerfile'
       - 'Dockerfile.*'
       - '.dockerignore'
@@ -87,7 +93,7 @@ jobs:
           source trusted/.github/scripts/sanitize-sed.sh
 
           sudo apt-get update -qq
-          sudo apt-get install -y -qq shellcheck
+          sudo apt-get install -y -qq doxygen graphviz shellcheck
 
           python3 -m venv /tmp/iccdev-preflight
           /tmp/iccdev-preflight/bin/python -m pip install --upgrade pip --quiet
@@ -317,6 +323,30 @@ jobs:
           fi
 
           exit "$failures"
+
+      - name: Run Doxygen documentation check
+        if: env.PREFLIGHT_TRUST_MODE == 'bootstrap-inline'
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        working-directory: target
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source ../trusted/.github/scripts/sanitize-sed.sh
+
+          output_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/iccdev-doxygen.XXXXXX")"
+          trap 'rm -rf "$output_dir"' EXIT
+          doxygen_status=0
+          doxygen .github/ci/doxygen/Doxyfile \
+            "OUTPUT_DIRECTORY=$output_dir" \
+            "WARN_LOGFILE=$output_dir/doxygen-warnings.log" || doxygen_status=$?
+          if [ -s "$output_dir/doxygen-warnings.log" ]; then
+            sanitize_print "$(cat "$output_dir/doxygen-warnings.log")"
+            exit 1
+          fi
+          exit "$doxygen_status"
 
       - name: Write pre-flight summary
         if: always()
