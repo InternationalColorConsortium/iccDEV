@@ -73,6 +73,25 @@ iccFromJson input.json output.icc
 iccDumpProfile output.icc
 ```
 
+### MATLAB bindings
+
+The MATLAB package provides shell-free wrappers around the same tools after
+`iccToJson` and `iccFromJson` have been built. Add `matlab/` to the MATLAB path,
+then use `iccdev.to_json` to obtain UTF-8 JSON text and `iccdev.from_json` to
+return a `uint8` ICC byte column:
+
+```matlab
+json_text = iccdev.to_json(fullfile('Testing', ...
+  'sRGB_v4_ICC_preference.icc'));
+profile_bytes = iccdev.from_json(json_text);
+```
+
+`from_json` also accepts an existing JSON file path. Both wrappers require a
+Java-enabled MATLAB or Octave runtime, preserve native parser diagnostics, and
+do not produce ICC bytes after a failed conversion. See
+[MATLAB bindings and QA](matlab-bindings.md) for the Release build targets and
+the `test_json_bindings` round-trip coverage.
+
 ## JSON Structure
 
 Every JSON profile is wrapped in a top-level `IccProfile` object:

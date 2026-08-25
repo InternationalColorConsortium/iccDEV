@@ -25,6 +25,9 @@ on:
       - "docs/matlab-bindings.md"
       - "Build/Cmake/**"
       - "IccProfLib/**"
+      - "IccJSON/**"
+      - "Tools/CmdLine/IccToJson/**"
+      - "Tools/CmdLine/IccFromJson/**"
       - "Tools/CmdLine/IccPawgReport/**"
       - ".github/ci/regression/luminance-normalization-diagnostic.cpp"
       - ".github/ci/regression/pawg-q1-quality-contract.cpp"
@@ -35,6 +38,7 @@ on:
       - "Testing/Display/sRGB_D65_MAT-500cdm2.xml"
       - "Testing/HDR/BT2100PQFullDisplay.xml"
       - "Testing/sRGB_v4_ICC_preference.icc"
+      - "Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc"
   pull_request:
     branches:
       - master
@@ -46,6 +50,9 @@ on:
       - "docs/matlab-bindings.md"
       - "Build/Cmake/**"
       - "IccProfLib/**"
+      - "IccJSON/**"
+      - "Tools/CmdLine/IccToJson/**"
+      - "Tools/CmdLine/IccFromJson/**"
       - "Tools/CmdLine/IccPawgReport/**"
       - ".github/ci/regression/luminance-normalization-diagnostic.cpp"
       - ".github/ci/regression/pawg-q1-quality-contract.cpp"
@@ -56,6 +63,7 @@ on:
       - "Testing/Display/sRGB_D65_MAT-500cdm2.xml"
       - "Testing/HDR/BT2100PQFullDisplay.xml"
       - "Testing/sRGB_v4_ICC_preference.icc"
+      - "Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc"
   workflow_dispatch:
 
 concurrency:
@@ -67,6 +75,10 @@ jobs:
     name: Windows MATLAB MEX
     runs-on: windows-2022
     timeout-minutes: 45
+    env:
+      ICCDEV_VCPKG_EXPORT_URL: >-
+        https://github.com/InternationalColorConsortium/iccDEV/releases/download/v2.3.1/vcpkg-exported-deps.zip
+      ICCDEV_VCPKG_EXPORT_SHA256: f8c70cb22dfe1ec379549a66a66473ad5f4f1fbe27c2b7340d69112c606a52ff
     defaults:
       run:
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
@@ -108,7 +120,7 @@ jobs:
             run(fullfile('matlab', 'examples', 'colorimetry_issue_1475.m'))
           generate-summary: false
 
-      - name: Configure and build IccProfLib
+      - name: Fetch pinned vcpkg dependencies
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
           POWERSHELL_UPDATECHECK: Off
@@ -123,18 +135,56 @@ jobs:
           }
           . .trusted-helpers/.github/scripts/sanitize.ps1
 
+          $archive = Join-Path $env:RUNNER_TEMP 'vcpkg-exported-deps.zip'
+          Invoke-WebRequest -Uri $env:ICCDEV_VCPKG_EXPORT_URL -OutFile $archive
+          $actualDigest = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
+          if ($actualDigest -ne $env:ICCDEV_VCPKG_EXPORT_SHA256) {
+            throw "vcpkg export digest mismatch: $actualDigest"
+          }
+          tar -xf $archive -C $env:GITHUB_WORKSPACE
+          if ($LASTEXITCODE -ne 0) {
+            throw "vcpkg export extraction failed with exit code $LASTEXITCODE"
+          }
+          Remove-Item -LiteralPath $archive -Force
+
+          $toolchain = Join-Path $env:GITHUB_WORKSPACE `
+            'scripts\buildsystems\vcpkg.cmake'
+          if (-not (Test-Path $toolchain -PathType Leaf)) {
+            throw "Exported vcpkg CMake toolchain not found: $toolchain"
+          }
+
+      - name: Configure and build current iccDEV source
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+          . .trusted-helpers/.github/scripts/sanitize.ps1
+
+          $toolchain = Join-Path $env:GITHUB_WORKSPACE `
+            'scripts\buildsystems\vcpkg.cmake'
           $configureArgs = @(
             '-S', 'Build\Cmake'
             '-B', 'out\matlab'
             '-G', 'Visual Studio 17 2022'
             '-A', 'x64'
+            "-DCMAKE_TOOLCHAIN_FILE=$toolchain"
+            '-DVCPKG_TARGET_TRIPLET=x64-windows'
+            '-DVCPKG_MANIFEST_MODE=OFF'
             '-DENABLE_TESTS=ON'
             '-DENABLE_TOOLS=ON'
             '-DENABLE_WXWIDGETS=OFF'
             '-DENABLE_SHARED_LIBS=OFF'
             '-DENABLE_STATIC_LIBS=ON'
             '-DENABLE_ICCXML=OFF'
-            '-DENABLE_ICCJSON=OFF'
+            '-DENABLE_ICCJSON=ON'
             '-DENABLE_IMAGE_TOOLS=OFF'
             '-DENABLE_CMM_TOOLS=OFF'
             '-DENABLE_IIS_TOOLS=OFF'
@@ -151,6 +201,9 @@ jobs:
             '--config', 'Release'
             '--target'
             'IccProfLib2-static'
+            'IccJSON2-static'
+            'iccToJson'
+            'iccFromJson'
             'iccProfilePlot'
             'iccPawgReport'
             'iccPawgQ1QualityContractTest'
@@ -208,6 +261,8 @@ jobs:
             addpath('matlab');
             addpath(fullfile('matlab', 'tests'));
             test_usage_guidance();
+            test_json_bindings();
+            test_lut_type_range();
             run_local_qa();
             test_add_docker_path();
             test_plot();

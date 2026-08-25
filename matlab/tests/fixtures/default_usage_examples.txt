@@ -1,6 +1,8 @@
 IccProfile|iccdev:profilePathRequired|iccdev.IccProfile(profile_path)
 IccApply|iccdev:applyFactoryRequired|cmm.get_apply()
 plot|iccdev:plotProfileRequired|plots = iccdev.plot(profile_path, 'Visible', 'off');
+to_json|iccdev:jsonProfileRequired|json_text = iccdev.to_json(profile_path);
+from_json|iccdev:jsonInputRequired|profile_bytes = iccdev.from_json(json_text);
 sig_to_str|iccdev:signatureRequired|iccdev.sig_to_str(uint32(hex2dec('52474220')));
 docker_validate|iccdev:dockerProfileRequired|iccdev.docker_validate(profile_path)
 audit_pawg_q1|iccdev:pawgQ1ProfileRequired|iccdev.qa.audit_pawg_q1(profile_path)

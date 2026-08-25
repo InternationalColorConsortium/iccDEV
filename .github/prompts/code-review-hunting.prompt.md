@@ -29,6 +29,23 @@ For every new or relocated C/C++ source or header, verify the complete ICC
 Software License block is retained. A missing, abbreviated, or placeholder
 block is a blocking changed-line defect.
 
+## MATLAB MEX Review Pass
+
+For `matlab/**` changes, read
+`.github/instructions/matlab-code-review.instructions.md` before reporting.
+Verify:
+
+1. MEX actions reject wrong argument counts, MATLAB types, scalar shapes, enum
+   boundaries, and stale native handles before conversion or dereference.
+2. MATLAB wrappers close temporary files, file handles, Java streams, and
+   native handles on both success and failure.
+3. Public required-argument functions retain actionable `iccdev:*Required`
+   errors and matching `test_usage_guidance` fixtures.
+4. Tool wrappers use Java `ProcessBuilder` argument lists, surface nonzero
+   native diagnostics, and never return failed output as success.
+5. A new native tool dependency is wired through focused tests, Release build
+   targets, CI, staged artifacts, and MATLAB documentation.
+
 ## 4-Category Hunt
 
 ### Category 1: Serialization Mismatch (CWE-345)

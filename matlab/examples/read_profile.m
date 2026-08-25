@@ -51,7 +51,11 @@ fprintf('Illuminant:   X=%.4f Y=%.4f Z=%.4f\n', ...
 fprintf('Date:         %04d-%02d-%02d %02d:%02d:%02d\n', ...
   hdr.dateYear, hdr.dateMonth, hdr.dateDay, ...
   hdr.dateHours, hdr.dateMinutes, hdr.dateSeconds);
-fprintf('Profile ID:   %s\n', sprintf('%02x', hdr.profileId));
+if all(hdr.profileId == 0)
+  fprintf('Profile ID:   (not calculated)\n');
+else
+  fprintf('Profile ID:   %s\n', sprintf('%02x', hdr.profileId));
+end
 
 p.close();
 fprintf('\nDone.\n');

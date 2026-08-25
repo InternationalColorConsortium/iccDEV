@@ -18,6 +18,7 @@ commands here.
 | `ports/**` | `instructions/vcpkg-port.instructions.md` | vcpkg overlay port and CI |
 | `python/**` | `instructions/python-bindings.instructions.md` | Cython build, tests, and `ICCDEV_BUILD_DIR` |
 | `matlab/**` | `instructions/matlab-mex.instructions.md` | MEX gateway, OOP layer, and `build_mex.m` |
+| `matlab/**` | `instructions/matlab-code-review.instructions.md` | Focused MATLAB MEX review checks |
 | `Tools/Winnt/IccIisIsapi/**` | `Tools/Winnt/IccIisIsapi/isapi-instructions.md` | IIS ISAPI setup and hardening |
 
 ## Agent Instructions
@@ -162,6 +163,10 @@ agent-policy surfaces.
 - Use repository MCP context or agent skills only when relevant to the changed
   surface; do not invent a tool dependency or repeat information already in
   repository instructions.
+- For `matlab/**`, apply
+  `.github/instructions/matlab-code-review.instructions.md` before reporting a
+  finding. Verify the MEX boundary, wrapper cleanup, native-tool invocation,
+  focused regression, and dependent Release/CI/documentation surfaces.
 
 ## iccdev-mcp Review Notes
 

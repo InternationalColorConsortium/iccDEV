@@ -44,8 +44,11 @@ function summary = test_iccdev()
     [nPass, nFail] = run_test(@() test_profile_read_vs_open(profilePath), 'Read vs Open', nPass, nFail);
     [nPass, nFail] = run_test(@() test_profile_header_fields(profilePath), 'Header fields', nPass, nFail);
     [nPass, nFail] = run_test(@() test_profile_double_close(profilePath), 'Double close safety', nPass, nFail);
+    [nPass, nFail] = run_test(@test_lut_type_range, ...
+      'iccMAX LUT type range', nPass, nFail);
+    [nPass, nFail] = run_test(@test_json_bindings, 'IccJSON conversion', nPass, nFail);
   else
-    [nSkip, skipped] = note_skip('Profile open/header/read/fields/double-close', ...
+    [nSkip, skipped] = note_skip('Profile open/header/read/fields/double-close/IccJSON', ...
       'no test profile found', nSkip, skipped);
   end
 

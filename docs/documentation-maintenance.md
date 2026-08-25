@@ -11,7 +11,8 @@ point to deeper references.
 | User install and packaging | `docs/install.md` |
 | User build instructions | `docs/build.md` |
 | MATLAB bindings and Windows PowerShell setup | `docs/matlab-bindings.md` |
-| MATLAB PAWG Q1 runtime, native contract, and release support files | `docs/matlab-bindings.md` and `.github/skills/matlab-bindings-test/SKILL.md` |
+| MATLAB MEX code review | `.github/instructions/matlab-code-review.instructions.md` and `.github/skills/code-review/SKILL.md` |
+| MATLAB IccJSON conversion, PAWG Q1 runtime, native contract, and release support files | `docs/matlab-bindings.md`, `docs/iccjson.md`, and `.github/skills/matlab-bindings-test/SKILL.md` |
 | CTest tool suites and add-test process | `docs/ctest.md` |
 | CLI tools and shared option tables | `docs/tools-cli-reference.md` |
 | JSON workflow | `docs/iccjson.md` |
@@ -83,11 +84,15 @@ the pull request head branch, so instruction changes can be reviewed in the
 same PR. Keep review guidance actionable and scoped to the owning surface.
 Copilot submits advisory `Comment` reviews rather than approvals or requests
 for changes, so it does not replace required human review or branch protection.
+Use `matlab-code-review.instructions.md` for concise MATLAB MEX review checks;
+keep implementation rules in `matlab-mex.instructions.md` and broader review
+process in `.github/skills/code-review/SKILL.md`.
 
 References:
 
 - <https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions>
 - <https://docs.github.com/en/copilot/how-tos/use-copilot-agents/request-a-code-review/use-code-review>
+- <https://docs.github.com/en/copilot/tutorials/customize-code-review>
 
 ## Validation
 

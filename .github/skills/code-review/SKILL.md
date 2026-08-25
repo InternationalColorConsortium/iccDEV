@@ -32,6 +32,10 @@ changes to those surfaces.
    surrounding code.
 3. Select the smallest relevant repository skill, prompt, MCP context, or
    static analysis. Use MCP tools only when they directly reduce uncertainty.
+4. For `matlab/**`, read
+   `../../instructions/matlab-code-review.instructions.md` with
+   `../../instructions/matlab-mex.instructions.md` before inspecting wrapper
+   or MEX changes.
 
 ## Finding Standard
 
@@ -71,9 +75,12 @@ small set of high-confidence, actionable findings over low-value comments.
 5. For new or relocated C/C++ sources and headers, compare the complete ICC
    Software License block with an adjacent established file; report a missing,
    abbreviated, or placeholder block as a blocking finding.
-6. Report at most one finding per root cause with file/line, trigger, impact,
+6. For MATLAB changes, check the MEX argument and handle boundary, public API
+   usage guidance, wrapper cleanup, native-tool status handling, and any
+   Release, CI, or documentation dependency added by the diff.
+7. Report at most one finding per root cause with file/line, trigger, impact,
    and smallest safe remediation.
-7. State explicitly when no actionable findings remain.
+8. State explicitly when no actionable findings remain.
 
 ## References
 

@@ -99,7 +99,8 @@ if ($LASTEXITCODE -ne 0) {
 $BuildArgs = @(
   '--build', $Build
   '--config', 'Release'
-  '--target', 'IccProfLib2-static', 'iccProfilePlot', 'iccPawgReport',
+  '--target', 'IccProfLib2-static', 'IccJSON2-static', 'iccToJson',
+    'iccFromJson', 'iccProfilePlot', 'iccPawgReport',
     'iccPawgQ1QualityContractTest'
   '--', '/m'
 )
@@ -117,8 +118,8 @@ foreach ($RequiredTool in @($PlotTool, $PawgTool)) {
 }
 ```
 
-The preceding target list is the minimum for MEX, plotting, PAWG Q1 audit
-interoperability, and native Q1 contract evidence. Do not remove
+The preceding target list is the minimum for MEX, IccJSON conversion, plotting,
+PAWG Q1 audit interoperability, and native Q1 contract evidence. Do not remove
 `iccPawgReport`: `run_local_qa()` invokes `test_pawg_q1()`, which requires that
 executable.
 To build every enabled Windows library, tool, and helper instead:
@@ -161,9 +162,17 @@ tree, the R2026a MEX gateway, and its zlib runtime. It also preserves the
 repository-relative support paths used by QA and examples:
 
 - `Testing/` for profile and luminance fixtures.
+- `Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc` for ICC.2/v5
+  IccJSON structure coverage.
+- `iccToJson.exe` and `iccFromJson.exe` at the bundle root for IccJSON
+  conversion.
 - `iccPawgReport.exe` at the bundle root for MATLAB/native Q1 comparison.
 - `matlab/+iccdev/+qa/audit_pawg_q1.m`, its calculation helpers, and
   `matlab/tests/test_pawg_q1.m`.
+- `matlab/tests/test_json_bindings.m` for ICC-to-JSON-to-ICC round-trip and
+  malformed-input coverage.
+- `matlab/tests/test_lut_type_range.m` for the complete IccProfLib
+  `icXformLutType` boundary.
 - `matlab/tests/test_usage_guidance.m` and
   `matlab/tests/fixtures/default_usage_examples.txt` for actionable default
   command errors.
@@ -220,7 +229,14 @@ assert(exist(fullfile(build_dir, 'bin', 'Release', ...
   'iccProfilePlot.exe'), 'file') == 2, 'Build iccProfilePlot before MATLAB QA.');
 assert(exist(fullfile(build_dir, 'bin', 'Release', ...
   'iccPawgReport.exe'), 'file') == 2, 'Build iccPawgReport before MATLAB QA.');
+assert(exist(fullfile(build_dir, 'bin', 'Release', ...
+  'iccToJson.exe'), 'file') == 2, 'Build iccToJson before MATLAB QA.');
+assert(exist(fullfile(build_dir, 'bin', 'Release', ...
+  'iccFromJson.exe'), 'file') == 2, 'Build iccFromJson before MATLAB QA.');
 
+test_usage_guidance();
+test_json_bindings();
+test_lut_type_range();
 test_pawg_q1();
 run_local_qa();
 test_add_docker_path();
@@ -237,6 +253,19 @@ setenv('ICCDEV_BUILD_DIR', fullfile(repo_root, 'msvc'));
 
 Shell `export` is Unix-shell syntax and must not be entered in MATLAB or
 PowerShell.
+
+### IccJSON specification QA scope
+
+`test_json_bindings` covers both ICC.1/v4 and ICC.2/v5 checked-in profiles. It
+validates the binary container requirements from ICC.1:2022 clauses 7.2 and
+7.3 and the corresponding ICC.2:2023 clauses: exact profile size, `acsp`,
+BCD version encoding, version-aware reserved fields, date/time ranges,
+tag-table bounds and uniqueness, four-byte tag alignment, shared data ranges,
+non-overlap, contiguous padding, and Profile ID MD5 when present.
+
+This focused test does not claim complete profile conformance. Required tags,
+class-specific constraints, and every tag-type payload remain the
+responsibility of the native validation and dedicated conformance tooling.
 
 ### Interactive API smoke examples
 
@@ -748,8 +777,9 @@ the same digest-pinned image by default.
 `.github/workflows/ci-matlab.yml` runs for MATLAB-related pull requests to
 `master` and manual dispatch. It uses read-only
 permissions, trusted-base sanitizer helpers, SHA-pinned actions, a focused
-dependency-free MATLAB calculation stage, native luminance and colorimetry
-CTests, the native PAWG Q1 quality-contract CTest, the MATLAB/native structured
-Q1 comparison over a checked-in profile, a
+dependency-free MATLAB calculation stage, the checksum-verified v2.3.1 vcpkg
+dependency export, current-source native luminance and colorimetry CTests, the
+native PAWG Q1 quality-contract CTest, the MATLAB/native structured Q1
+comparison over a checked-in profile, a
 digest-pinned container interoperability job, and no cache or artifact
 publication.
