@@ -13,7 +13,12 @@ shares one source of truth. Update rules here, not in the mirrors.
 
 - Check `git --no-pager status --short --branch` before edits.
 - Prefer focused changes with exact repros and regression coverage.
-- Keep documentation links Doxygen-safe: if a Markdown link points outside the Doxygen INPUT tree, use an explicit HTML anchor instead of a Markdown reference so generated docs stay warning-free.
+- Keep documentation links Doxygen-safe: if a Markdown link points outside the
+  Doxygen INPUT tree, use an explicit HTML anchor instead of a Markdown reference
+  so generated docs stay warning-free. Before handing off documentation changes,
+  run `doxygen .github/ci/doxygen/Doxyfile` and require an empty
+  `docs/generated/doxygen-warnings.log`; do not add generated Doxygen output to
+  the repository.
 - Use 2-space C++ indentation, K&R braces, `m_` members, and return-value errors.
 - Exit 1-127 is graceful failure. Exit 128+ is signal termination.
 - Use sanitizer builds for bug hunting; see `.github/instructions/build-system.instructions.md`.

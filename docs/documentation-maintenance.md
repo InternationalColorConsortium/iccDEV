@@ -60,6 +60,8 @@ point to deeper references.
   `python/README.md` or an `examples/.../README.md` page), prefer an explicit
   HTML anchor like `<a href="../python/README.md">python/README.md</a>` to keep
   the generated docs warning-free without changing the rendered link target.
+- Run `doxygen .github/ci/doxygen/Doxyfile` for documentation changes and
+  require `docs/generated/doxygen-warnings.log` to be empty before handoff.
 - Do not add generated artifacts, logs, crash files, or local environment paths.
 - New or relocated C/C++ sources and headers must retain the complete ICC
   Software License block from an adjacent established file. Do not use

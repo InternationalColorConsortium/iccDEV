@@ -133,6 +133,13 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     '.github/workflows/**' \
     '.github/scripts/**' \
     '.githooks/**' \
+    '.github/ci/doxygen/**' \
+    '.github/copilot-instructions.md' \
+    '.github/prompts/**' \
+    '.github/skills/**' \
+    'AGENTS.md' \
+    'README.md' \
+    'docs/**' \
     'Dockerfile' \
     'Dockerfile.*'; then
     :
