@@ -135,14 +135,14 @@ jobs:
          # --- Harden Git configuration ---
          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
          git config --global credential.helper ""
-         # --- PATH hardening: limit to trusted tool locations ---
+         # --- PATH hardening: prioritize trusted tool locations ---
          $trustedPath = @(
              "$env:SystemRoot\system32",
              "$env:SystemRoot",
              "$env:ProgramFiles\Git\bin",
              "$env:ProgramFiles\PowerShell\7"
          ) -join ';'
-         $env:PATH = $trustedPath
+         $env:PATH = "$trustedPath;$env:PATH"
          Write-Host "Finished Harden Environment and Validate Inputs" -ForegroundColor Green
 
       - name: Test Sanitization Functions
@@ -895,6 +895,8 @@ jobs:
     name: Windows Release performance report
     runs-on: windows-latest
     timeout-minutes: 20
+    env:
+      ICCDEV_VCPKG_EXPORT_SHA256: f8c70cb22dfe1ec379549a66a66473ad5f4f1fbe27c2b7340d69112c606a52ff
     defaults:
       run:
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
@@ -970,14 +972,14 @@ jobs:
           # --- Harden Git configuration ---
           git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
           git config --global credential.helper ""
-          # --- PATH hardening: limit to trusted tool locations ---
+          # --- PATH hardening: prioritize trusted tool locations ---
           $trustedPath = @(
             "$env:SystemRoot\system32",
             "$env:SystemRoot",
             "$env:ProgramFiles\Git\bin",
             "$env:ProgramFiles\PowerShell\7"
           ) -join ';'
-          $env:PATH = $trustedPath
+          $env:PATH = "$trustedPath;$env:PATH"
           Write-Host "Finished Harden Environment and Validate Inputs" -ForegroundColor Green
 
       - name: Setup MSBuild
@@ -1001,6 +1003,10 @@ jobs:
             'v2.3.1/vcpkg-exported-deps.zip'
           ) -join '/'
           Start-BitsTransfer -Source $depsUrl -Destination 'deps.zip'
+          $actualDigest = (Get-FileHash -LiteralPath 'deps.zip' -Algorithm SHA256).Hash
+          if ($actualDigest -ne $env:ICCDEV_VCPKG_EXPORT_SHA256) {
+            throw "vcpkg export digest mismatch: $actualDigest"
+          }
           tar -xf deps.zip
 
       - name: Run Windows Release performance report
