@@ -1262,6 +1262,13 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
 
     rv->SetParams(pProfile, bInput, nIntent, nTagIntent, bUseSpectralPCS, nInterp, pHintManager, bAbsToRel, nMCS);
 
+    // Record the flag as it stands *here*, after the icXformLutSpectral and
+    // icXformLutColorimetric adjustments above rewrote it, so it names the tag
+    // family the selection code actually walked rather than what the caller
+    // asked for.  CIccApplyBPC reads it back to build its black-point
+    // transforms from the same family.
+    rv->SetUseD2BTags(bUseD2BTags);
+
     // The icXformLutGamut case above forced bInput false to walk the gamt tag
     // in its stored B-to-A direction.  Record that this is a gamut xform so the
     // reported destination stays icSigGamutData rather than the device space.
@@ -1402,6 +1409,11 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
       rv->m_pConnectionConditions = pProfile;
 
     rv->SetParams(pProfile, bInput, nIntent, nTagIntent, bUseSpectralPCS, nInterp, pHintManager, bAbsToRel, nMCS);
+
+    // No SetUseD2BTags() here: this overload is handed the tag outright, so
+    // there is no tag-family selection to record and no way for CIccApplyBPC
+    // to reproduce the caller's choice by rebuilding a cmm from the profile.
+    // m_bUseD2BTags keeps its constructor default of false.
   }
   else if (bOwnsProfile) {
     // No xform was built for this profile/tag combination; pProfile never
@@ -8279,6 +8291,10 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
 
   if (rv) {
     rv->SetParams(pProfile, bInput, nIntent, nTagIntent, bUseSpectralPCS, nInterp, pHintManager, bAbsToRel);
+
+    // bUseDToB is this overload's equivalent of CIccXform::Create()'s
+    // bUseD2BTags; record it for the same reason.
+    rv->SetUseD2BTags(bUseDToB);
 
     // Same reasoning as the icXformLutGamut case in CIccXform::Create(): this
     // overload has no in-tree caller, but it is public API and its gamut case
