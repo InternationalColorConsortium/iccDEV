@@ -5862,6 +5862,55 @@ function(iccdev_add_spectral_clut_channel_count_test)
   endif()
 endfunction()
 
+function(iccdev_add_clut_apply_guard_retirement_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccClutApplyGuardRetirementTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/clut-apply-guard-retirement.cpp"
+  )
+  target_link_libraries(iccClutApplyGuardRetirementTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+
+  add_dependencies(check iccClutApplyGuardRetirementTest)
+
+  # No fixture: every CLUT here is built in memory. The output counts that matter
+  # (17, 20) exceed what any tracked profile carries, which is why the defect in
+  # Interp3dTetra survived so long.
+  if(WIN32)
+    add_test(
+      NAME iccdev.clut-apply-guard-retirement
+      COMMAND "$<TARGET_FILE:iccClutApplyGuardRetirementTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.clut-apply-guard-retirement
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccClutApplyGuardRetirementTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.clut-apply-guard-retirement PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;clut;cmm;apply;regression"
+  )
+  if(WIN32)
+    set(_clut_apply_guard_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccClutApplyGuardRetirementTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _clut_apply_guard_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.clut-apply-guard-retirement PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_clut_apply_guard_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_spectral_clut_xml_channel_mismatch_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
     return()
@@ -6236,6 +6285,7 @@ if(WIN32)
   iccdev_add_zip_utf8_text_zlib_test()
   iccdev_add_spectral_clut_channel_count_test()
   iccdev_add_spectral_clut_xml_channel_mismatch_test()
+  iccdev_add_clut_apply_guard_retirement_test()
 
   if(TARGET iccFromXml AND TARGET iccDumpProfile AND TARGET iccApplyNamedCmm)
     add_test(
@@ -6580,6 +6630,7 @@ iccdev_add_qa_evidence_helpers_test()
 iccdev_add_zip_utf8_text_zlib_test()
 iccdev_add_spectral_clut_channel_count_test()
 iccdev_add_spectral_clut_xml_channel_mismatch_test()
+iccdev_add_clut_apply_guard_retirement_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")

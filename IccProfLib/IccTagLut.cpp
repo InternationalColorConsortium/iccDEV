@@ -2870,11 +2870,32 @@ void CIccCLUT::Interp2d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
  */
 void CIccCLUT::Interp3dTetra(icFloatNumber *destPixel, const icFloatNumber *srcPixel) const
 {
-  // CWE-400/834: m_nOutput controls the destPixel write loop below. Valid LUT
-  // profiles cap output channels at <=16 (the read path rejects larger); guard
-  // locally so the bound is explicit even if the field is corrupted in memory.
-  if (m_nOutput > 16)
-    return;
+  // NOTE FOR ANYONE ADDING A BOUNDS CHECK HERE -- please don't; this one was a
+  // defect.
+  //
+  // "if (m_nOutput > 16) return;" used to stand here, described as bounding the
+  // destPixel write loop below on the grounds that "valid LUT profiles cap
+  // output channels at <=16". They do not, and this was the only interpolator
+  // that believed it. Interp1d, Interp2d, Interp3d, Interp4d, Interp5d and
+  // Interp6d all write m_nOutput values with no such bound, and m_nOutput is an
+  // icUInt16Number precisely because MPE CLUT elements need more than 16 --
+  // CIccMpeCLUT::Read bounds m_nInputChannels at 16 but deliberately leaves
+  // m_nOutputChannels unbounded, and a spectral CLUT's output count is its
+  // spectral step count.
+  //
+  // So for a perfectly legal 3-input CLUT with 17 or more outputs, this returned
+  // without writing anything: destPixel was left holding whatever the caller had
+  // in it, and only when the tetrahedral path was selected. Interp3d, reached
+  // from the same element under icElemInterpLinear, produced correct values for
+  // the identical CLUT. Measured before removal, at 3 inputs and 0.5 in each
+  // channel: nOut=16 gave 0.250 from both routines; nOut=17 and nOut=20 gave
+  // 0.250 from Interp3d and an untouched destination from Interp3dTetra.
+  //
+  // destPixel is sized by the caller from the same channel count this loop
+  // walks -- m_nBufChannels in the MPE pipeline, GetNumDstSamples() for a LUT
+  // xform, both pinned to the tag's output count at Begin() -- so the write is
+  // in bounds for any m_nOutput the object can legitimately carry, exactly as it
+  // is in the six sibling routines.
   icUInt8Number mx = m_MaxGridPoint[0];
   icUInt8Number my = m_MaxGridPoint[1];
   icUInt8Number mz = m_MaxGridPoint[2];
@@ -3486,18 +3507,37 @@ void CIccCLUT::InterpND(icFloatNumber *destPixel, const icFloatNumber *srcPixel,
   icFloatNumber* s = pApply->m_s;
   icUInt32Number* ig = pApply->m_ig;
 
-  // CWE-400/834: m_nInput drives the grid loop below and m_nNodes = (1<<m_nInput)
-  // used for the df[] loop. Input channels are capped at <=16 by Init() on load;
-  // guard locally so both bounds are explicit at point of use.
-  if (m_nInput > 16)
-    return;
-
-  // CWE-400/CWE-834: m_nNodes == (1<<m_nInput) and indexes the fixed df[]/m_nOffset
-  // arrays; assert the derived upper bound (m_nInput<=16 => m_nNodes<=65536) on the
-  // field itself so the node walks below have an explicit limit.
-  const icUInt32Number nMaxNodes = 65536;
-  if (m_nNodes > nMaxNodes)
-    return;
+  // NOTE FOR ANYONE ADDING A BOUNDS CHECK HERE -- please don't; put it in
+  // Begin().
+  //
+  // Two per-pixel guards used to stand at this point: "if (m_nInput > 16)
+  // return;" and "if (m_nNodes > 65536) return;". Both are gone deliberately.
+  //
+  // m_nInput indexes the fixed 16-entry m_GridPoints/m_MaxGridPoint/m_nPower
+  // arrays and drives m_nNodes = (1<<m_nInput), which indexes df[] and
+  // m_nOffset. Those bounds still matter -- they are just no longer this
+  // function's to assert. Begin() establishes both: it refuses an m_nInput
+  // outside 1..16 and refuses a CLUT whose Init() never allocated m_pData, it
+  // returns bool rather than leaving the object half-configured, and all nine of
+  // its callers act on the result up through CIccCmm::Begin(), which aborts the
+  // chain on the first failure. So Apply() cannot be reached with either bound
+  // violated, and re-testing them per pixel could only re-confirm what Begin()
+  // proved.
+  //
+  // The history is worth knowing, because these lines have twice been reasoned
+  // about incorrectly. They were called "duplicated from Begin()" and, later,
+  // "the only guard that works" -- both by tracing the call chain rather than
+  // probing it, and neither was true at the time. Before Begin() could refuse,
+  // m_nInput > 16 was already unreachable here: the element readers turned a
+  // failed Init() into a failed Read() through their GetData(0) NULL checks,
+  // because Init() leaves m_pData NULL when it refuses and GetData(0) is
+  // &m_pData[0]. The guards were unreachable, not load-bearing.
+  //
+  // Note also what they never did: nothing here protected the failure that
+  // actually crashes an un-Begin()'d CLUT, which is a NULL m_nOffset and an
+  // uninitialized m_MaxGridPoint, regardless of the channel count.
+  // Begin()-before-Apply() is the precondition that matters, and it is now a
+  // checked one.
 
   for (i=0; i<m_nInput; i++) {
     // See icClutGridClamp: scales into grid units and clamps, replacing the
