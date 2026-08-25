@@ -3842,19 +3842,27 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
   os.pixel = pApply->GetInput();
   os.output = pApply->GetOutput();
   os.nOps = nOps;
-  
-  // Defensive measure - this happens only in overflow/underflow situations.
-  // But it can happen from multiple calling locations, and it isn't easy to check them all.
-  if (nOps > 0x80000000UL)
-    return false;
+
+  // Read the debugger hook once. It is a file-static pointer, so the compiler
+  // must otherwise reload it after every Exec() that might have stored to it --
+  // twice per opcode per pixel, in the tightest loop in the library. It cannot
+  // legitimately change mid-apply: IIccCalcDebugger::SetDebugger is a setup call.
+  IIccCalcDebugger * const pDebugger = g_pDebugger;
+
+  // The former "if (nOps > 0x80000000UL) return false;" guard is gone. Read()
+  // rejects m_nOps at or above MAX_CALC_ELEMENTS (65536, IccMpeCalc.h:107) and
+  // sizes m_Op[] to the accepted count, and every recursive call below passes a
+  // sub-range of that, so the bound was unreachable by four orders of magnitude.
+  // It also fired once per recursion, not once per apply, so nested conditionals
+  // multiplied it.
 
   icUInt32Number pc = 0;
   while (pc < os.nOps) {
     os.idx = pc;
     op = &ops[os.idx];
 
-    if (g_pDebugger)
-      g_pDebugger->BeforeOp(op, os, ops);
+    if (pDebugger)
+      pDebugger->BeforeOp(op, os, ops);
 
     if (op->sig==icSigIfOp) {
       icFloatNumber a1;
@@ -3994,12 +4002,14 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
         return false;
     }
 
-    if (g_pDebugger) {
-      g_pDebugger->AfterOp(op, os, ops);
+    if (pDebugger) {
+      pDebugger->AfterOp(op, os, ops);
     }
 
-    if (!icCalcAddUInt32(os.idx, 1, pc))
-      return false;
+    // Plain increment: os.idx is bounded by nOps, which Read() caps at
+    // MAX_CALC_ELEMENTS, so the checked add could not overflow. It ran once per
+    // opcode per pixel to prove that.
+    pc = os.idx + 1;
   }
   return true;
 }

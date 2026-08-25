@@ -678,17 +678,13 @@ bool CIccMpeEmissionMatrix::Begin(icElemInterp /* nInterp */, CIccTagMultiProces
  ******************************************************************************/
 void CIccMpeEmissionMatrix::Apply(CIccApplyMpe * /* pApply */, icFloatNumber *dstPixel, const icFloatNumber *srcPixel) const
 {
-  if (m_pApplyMtx) {
-    m_pApplyMtx->VectorMult(dstPixel, srcPixel);
-    dstPixel[0] += m_xyzOffset[0];
-    dstPixel[1] += m_xyzOffset[1];
-    dstPixel[2] += m_xyzOffset[2];
-  }
-  else {
-    dstPixel[0] = 0;
-    dstPixel[1] = 0;
-    dstPixel[2] = 0;
-  }
+  // No null test: Begin() returns false when m_pApplyMtx could not be built, and
+  // an element whose Begin() failed is never applied. The former else branch
+  // zeroed the output for a state that cannot reach here.
+  m_pApplyMtx->VectorMult(dstPixel, srcPixel);
+  dstPixel[0] += m_xyzOffset[0];
+  dstPixel[1] += m_xyzOffset[1];
+  dstPixel[2] += m_xyzOffset[2];
 }
 
 
@@ -761,18 +757,12 @@ bool CIccMpeInvEmissionMatrix::Begin(icElemInterp /* nInterp */, CIccTagMultiPro
  ******************************************************************************/
 void CIccMpeInvEmissionMatrix::Apply(CIccApplyMpe * /* pApply */, icFloatNumber *dstPixel, const icFloatNumber *srcPixel) const
 {
-  if (m_pApplyMtx) {
-    icFloatNumber xyz[3];
-    xyz[0] = srcPixel[0] - m_xyzOffset[0];
-    xyz[1] = srcPixel[1] - m_xyzOffset[1];
-    xyz[2] = srcPixel[2] - m_xyzOffset[2];
-    m_pApplyMtx->VectorMult(dstPixel, xyz);
-  }
-  else {
-    dstPixel[0] = 0;
-    dstPixel[1] = 0;
-    dstPixel[2] = 0;
-  }
+  // No null test, for the same reason as CIccMpeEmissionMatrix::Apply above.
+  icFloatNumber xyz[3];
+  xyz[0] = srcPixel[0] - m_xyzOffset[0];
+  xyz[1] = srcPixel[1] - m_xyzOffset[1];
+  xyz[2] = srcPixel[2] - m_xyzOffset[2];
+  m_pApplyMtx->VectorMult(dstPixel, xyz);
 }
 
 /**

@@ -709,6 +709,27 @@ bool CIccTagCurve::IsIdentity()
 *  
 *****************************************************************************
 */
+/**
+****************************************************************************
+* Name: CIccTagCurve::Begin
+*
+* Purpose: Precomputes what Apply() would otherwise rederive per call.
+*
+*  m_nMaxIndex is the table's top index. m_fGamma decodes the single-entry form,
+*  where m_Curve[0] is a u8Fixed8Number holding the gamma: Apply() used to redo
+*  that decode on every call before handing the result to pow().
+*****************************************************************************
+*/
+void CIccTagCurve::Begin()
+{
+  m_nMaxIndex = m_nSize ? (icUInt16Number)(m_nSize - 1) : 0;
+
+  //Convert 0.0 to 1.0 float to 16bit and then convert from u8Fixed8Number
+  m_fGamma = (m_nSize == 1 && m_Curve)
+               ? (icFloatNumber)(m_Curve[0] * 65535.0 / 256.0)
+               : (icFloatNumber)1.0;
+}
+
 icFloatNumber CIccTagCurve::Apply(icFloatNumber v) const
 {
   if (std::isnan(v))
@@ -718,16 +739,19 @@ icFloatNumber CIccTagCurve::Apply(icFloatNumber v) const
   else if(v<0.0) v = 0.0;
   else if(v>1.0) v = 1.0;
 
-  icUInt32Number nIndex = static_cast<icUInt32Number>(v * m_nMaxIndex);
-
+  // The two degenerate table sizes are tested before nIndex is computed. They
+  // were tested after, so every call through a gamma curve or an empty curve
+  // paid a multiply and a cast whose result it then discarded.
   if (!m_nSize) {
     return v;
   }
   if (m_nSize==1) {
-    //Convert 0.0 to 1.0 float to 16bit and then convert from u8Fixed8Number
-    icFloatNumber dGamma = (icFloatNumber)(m_Curve[0] * 65535.0 / 256.0);
-    return (icFloatNumber)pow(v, dGamma);
+    // Gamma decoded once in Begin(); this rebuilt it from m_Curve[0] per call.
+    return (icFloatNumber)pow(v, m_fGamma);
   }
+
+  icUInt32Number nIndex = static_cast<icUInt32Number>(v * m_nMaxIndex);
+
   if (nIndex == m_nMaxIndex) {
     return m_Curve[nIndex];
   }
@@ -1925,6 +1949,7 @@ CIccCLUT::CIccCLUT(icUInt8Number nInputChannels, icUInt16Number nOutputChannels,
   memset(&m_nReserved2, 0 , sizeof(m_nReserved2));
 
   m_UnitClipFunc = ClutUnitClip;
+  m_nMaxDataOffset2d = 0;   // set by Begin() for the 2-input case
 }
 
 
@@ -1960,6 +1985,7 @@ CIccCLUT::CIccCLUT(const CIccCLUT &ICLUT)
   memcpy(m_pData, ICLUT.m_pData, num*sizeof(icFloatNumber));
 
   m_UnitClipFunc = ICLUT.m_UnitClipFunc;
+  m_nMaxDataOffset2d = ICLUT.m_nMaxDataOffset2d;
 }
 
 
@@ -1998,6 +2024,7 @@ CIccCLUT &CIccCLUT::operator=(const CIccCLUT &CLUTTag)
   memcpy(m_pData, CLUTTag.m_pData, num*sizeof(icFloatNumber));
 
   m_UnitClipFunc = CLUTTag.m_UnitClipFunc;
+  m_nMaxDataOffset2d = CLUTTag.m_nMaxDataOffset2d;
 
   return *this;
 }
@@ -2580,6 +2607,10 @@ bool CIccCLUT::Begin()
     m_nOffset[1] = n001 = m_DimSize[0];
     m_nOffset[2] = n010 = m_DimSize[1];
     m_nOffset[3] = n011 = n001 + n010;
+
+    // Ceiling for Interp2d's offset clamp; see there. Depends only on values
+    // fixed by this point, so Interp2d no longer recomputes it per pixel.
+    m_nMaxDataOffset2d = (int)NumPoints()*(int)m_nOutput - ((int)m_nOutput + (int)n011);
   }
   else if (m_nInput==3) {
     m_nOffset[0] = n000 = 0;

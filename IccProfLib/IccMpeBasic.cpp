@@ -1216,8 +1216,11 @@ icFloatNumber CIccSampledCurveSegment::Apply(icFloatNumber v) const
   else if (v>m_endPoint)
     v=m_endPoint;
 
+  // No isfinite guard: v is clamped into [m_startPoint, m_endPoint] above, and
+  // Begin() refuses a zero span (m_endPoint-m_startPoint == 0.0 returns false),
+  // so pos cannot be non-finite. The clamps stay -- they bound the index.
   icFloatNumber pos = (v-m_startPoint)/m_range * m_last;
-  if (!std::isfinite(pos) || pos<0.0f)
+  if (pos<0.0f)
     pos=0.0f;
   else if (pos>m_last)
     pos=m_last;
@@ -1843,8 +1846,10 @@ icFloatNumber CIccSingleSampledCurve::Apply(icFloatNumber v) const
     return m_hiSlope * v + m_hiIntercept;
   }
 
+  // No isfinite guard: v is inside [m_firstEntry, m_lastEntry] on this path, and
+  // Begin() refuses m_range == 0 and m_last == 0, so pos cannot be non-finite.
   icFloatNumber pos = (v-m_firstEntry)/m_range * m_last;
-  if (!std::isfinite(pos) || pos<0.0f)
+  if (pos<0.0f)
     pos=0.0f;
   else if (pos>m_last)
     pos=m_last;
@@ -2487,8 +2492,10 @@ icFloatNumber CIccSampledCalculatorCurve::Apply(icFloatNumber v) const
     return m_hiSlope * v + m_hiIntercept;
   }
 
+  // No isfinite guard: same argument as CIccSingleSampledCurve::Apply -- v is
+  // inside the sampled range here and Begin() refuses a zero range.
   icFloatNumber pos = (v - m_firstEntry) / m_range * m_last;
-  if (!std::isfinite(pos) || pos<0.0f)
+  if (pos<0.0f)
     pos=0.0f;
   else if (pos>m_last)
     pos=m_last;
@@ -4217,11 +4224,11 @@ bool CIccToneMapFunc::Begin()
 
 icFloatNumber CIccToneMapFunc::Apply(icFloatNumber lumValue, icFloatNumber pixelValue) const
 {
-  if (!m_nFunctionType && m_params) {
-    return m_params[0] * lumValue * (pixelValue + m_params[1]) + m_params[2];
-  }
-
-  return 0;
+  // No function-type or null-parameter test: Begin() returns false unless
+  // m_nFunctionType is 0 and m_params is non-null with at least NumArgs()
+  // entries, and a tone map whose Begin() failed is never applied. This ran once
+  // per output channel per pixel to re-establish both.
+  return m_params[0] * lumValue * (pixelValue + m_params[1]) + m_params[2];
 }
 
 icValidateStatus CIccToneMapFunc::Validate(std::string& sReport, int /* nVerboseness */) const
@@ -6400,11 +6407,18 @@ bool CIccMpeCAM::Write(CIccIO *pIO)
 
 bool CIccMpeCAM::Begin(icElemInterp /* nInterp */, CIccTagMultiProcessElement * /* pMPE */ )
 {
-  if (m_pCAM) {
-    icFloatNumber surround = m_pCAM->GetParameter_C();
-    return std::isfinite((double)surround) && surround >= 0.0f && surround <= 1.0f;
-  }
-  return false;
+  if (!m_pCAM)
+    return false;
+
+  // Moved here from CIccMpeJabToXYZ::Apply and CIccMpeXYZToJab::Apply, which each
+  // re-tested it on every pixel. Both convert through a three-component CAM, so
+  // any other channel count is an element this class cannot apply; refusing it
+  // here is what lets Apply() run unguarded.
+  if (m_nInputChannels != 3 || m_nOutputChannels != 3)
+    return false;
+
+  icFloatNumber surround = m_pCAM->GetParameter_C();
+  return std::isfinite((double)surround) && surround >= 0.0f && surround <= 1.0f;
 }
 
 void CIccMpeCAM::SetCAM(CIccCamConverter *pCAM)
@@ -6532,16 +6546,10 @@ CIccMpeJabToXYZ::~CIccMpeJabToXYZ()
 
 void CIccMpeJabToXYZ::Apply(CIccApplyMpe * /* pApply */, icFloatNumber *dstPixel, const icFloatNumber *srcPixel) const
 {
-  if (!dstPixel || !srcPixel)
-    return;
-
-  if (!m_pCAM || m_nInputChannels != 3 || m_nOutputChannels != 3) {
-    if (m_nOutputChannels > 0 && m_nOutputChannels <= 3) {
-      memset(dstPixel, 0, m_nOutputChannels * sizeof(icFloatNumber));
-    }
-    return;
-  }
-
+  // No guards: CIccMpeCAM::Begin() refuses a null m_pCAM and a channel count
+  // other than 3, and an element whose Begin() failed is never applied. The
+  // buffers come from the caller's own storage, so they cannot be null. All of
+  // this was re-established on every pixel.
   m_pCAM->JabToXYZ(srcPixel, dstPixel, 1);
 }
 
@@ -6598,16 +6606,10 @@ CIccMpeXYZToJab::~CIccMpeXYZToJab()
 
 void CIccMpeXYZToJab::Apply(CIccApplyMpe * /* pApply */, icFloatNumber *dstPixel, const icFloatNumber *srcPixel) const
 {
-  if (!dstPixel || !srcPixel)
-    return;
-
-  if (!m_pCAM || m_nInputChannels != 3 || m_nOutputChannels != 3) {
-    if (m_nOutputChannels > 0 && m_nOutputChannels <= 3) {
-      memset(dstPixel, 0, m_nOutputChannels * sizeof(icFloatNumber));
-    }
-    return;
-  }
-
+  // No guards: CIccMpeCAM::Begin() refuses a null m_pCAM and a channel count
+  // other than 3, and an element whose Begin() failed is never applied. The
+  // buffers come from the caller's own storage, so they cannot be null. All of
+  // this was re-established on every pixel.
   m_pCAM->XYZToJab(srcPixel, dstPixel, 1);
 }
 

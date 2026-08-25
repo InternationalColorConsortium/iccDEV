@@ -6455,6 +6455,11 @@ CIccXform3DLut::~CIccXform3DLut()
     }
   }
 
+  // Apply() zero-fills its scratch pixel above channel 3 only when nothing
+  // downstream will write those channels. Interp3d and Interp3dTetra write all
+  // m_nOutput channels on every path, so with a CLUT present the fill is dead.
+  m_bNeedScratchInit = (m_pTag->m_CLUT == NULL);
+
   return icCmmStatOk;
 }
 
@@ -6482,10 +6487,15 @@ void CIccXform3DLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
   Pixel[0] = SrcPixel[0];
   Pixel[1] = SrcPixel[1];
   Pixel[2] = SrcPixel[2];
-  
-  // make sure all output pixel values are initialized, just in case
-  for (i = 3; i < m_pTag->m_nOutput; ++i) {
-     Pixel[i] = 0.0;
+
+  // Only when nothing downstream will write these channels. With a CLUT present
+  // Interp3d/Interp3dTetra write all m_nOutput channels on every path, so this
+  // fill is dead -- and it ran unconditionally, on every pixel. Decided in
+  // Begin(); the original comment was "just in case", which is the case.
+  if (m_bNeedScratchInit) {
+    for (i = 3; i < m_pTag->m_nOutput; ++i) {
+      Pixel[i] = 0.0;
+    }
   }
 
   if (m_pTag->m_bInputMatrix) {
@@ -7139,8 +7149,20 @@ icStatusCMM CIccXformNDLut::Begin()
   // m_nInput/m_nOutput). Assert that bound explicitly and reject an out-of-range
   // count as an invalid LUT so the per-channel curve walks can never be driven past
   // those arrays even if the count reached this object corrupted.
-  const int kMaxLutInputChannels = 256;
-  if (m_nNumInput < 0 || m_nNumInput >= kMaxLutInputChannels)
+  // Bound is 16, not 256. Apply() copies the source into a fixed icFloatNumber
+  // Pixel[16], so a tag declaring more input channels than that cannot be applied
+  // correctly no matter what: the previous 256 bound let such a tag through and
+  // Apply() then clamped the count to 16 per pixel, silently truncating the
+  // transform rather than reporting it. Refusing it here removes both per-pixel
+  // clamps and turns quiet wrong colour into icCmmStatInvalidLut.
+  //
+  // 16 is also the ceiling the format allows: icMaxChannels, which CIccCLUT::Init
+  // enforces on load (see the CWE-674 note at IccTagLut.cpp:2182).
+  const int kMaxLutInputChannels = 16;
+  if (m_nNumInput < 0 || m_nNumInput > kMaxLutInputChannels)
+    return icCmmStatInvalidLut;
+
+  if (m_pTag->m_nOutput > kMaxLutInputChannels)
     return icCmmStatInvalidLut;
 
   m_ApplyCurvePtrA = m_ApplyCurvePtrB = m_ApplyCurvePtrM = NULL;
@@ -7343,8 +7365,8 @@ void CIccXformNDLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
   if (m_bSrcPcsConversion)
     SrcPixel = CheckSrcAbs(pApply, SrcPixel);
 
-  // Prevent array bounds overflow - Pixel has 16 elements
-  int nInput = (m_nNumInput > 16) ? 16 : m_nNumInput;
+  // No clamp: Begin() refuses m_nNumInput above 16, which is what Pixel[] holds.
+  const int nInput = m_nNumInput;
 
   for (i=0; i<nInput; i++)
     Pixel[i] = SrcPixel[i];
@@ -7420,7 +7442,8 @@ void CIccXformNDLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
     }
   }
 
-  int nOutput = (m_pTag->m_nOutput > 16) ? 16 : m_pTag->m_nOutput;
+  // No clamp: Begin() refuses m_pTag->m_nOutput above 16 for the same reason.
+  const int nOutput = m_pTag->m_nOutput;
   for (i=0; i<nOutput; i++) {
     DstPixel[i] = Pixel[i];
   }

@@ -1356,6 +1356,11 @@ public:
   virtual LPIccCurve* ExtractInputCurves();
   virtual LPIccCurve* ExtractOutputCurves();
 protected:
+  /// Whether Apply() must zero its scratch pixel above channel 3. Set by Begin().
+  /// When a CLUT is present, Interp3d/Interp3dTetra write all m_nOutput channels
+  /// on every path, so the fill is dead; Apply() ran it unconditionally.
+  bool m_bNeedScratchInit;
+
 
   const CIccMBB *m_pTag;
 

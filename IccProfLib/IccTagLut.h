@@ -159,7 +159,7 @@ public:
   bool SetSize(icUInt32Number nSize, icTagCurveSizeInit nSizeOpt=icInitZero);
   bool SetGamma(icFloatNumber gamma);
 
-  virtual void Begin() {m_nMaxIndex = m_nSize ? (icUInt16Number)(m_nSize - 1) : 0;}
+  virtual void Begin();
   virtual icFloatNumber Apply(icFloatNumber v) const;
   virtual icValidateStatus Validate(std::string sigPath, std::string &sReport, const CIccProfile* pProfile=NULL) const;
   virtual bool IsIdentity();
@@ -168,6 +168,10 @@ protected:
   icFloatNumber *m_Curve;
   icUInt32Number m_nSize;
   icUInt16Number m_nMaxIndex;
+
+  /// Gamma for the single-entry form, decoded once by Begin(). Apply() rebuilt it
+  /// from m_Curve[0] on every call before handing it to pow().
+  icFloatNumber m_fGamma;
 };
 
 /**
@@ -419,6 +423,11 @@ protected:
   void SubIterate(IIccCLUTExec* pExec, icUInt8Number nIndex, icUInt32Number nPos);
 
   icCLUTCLIPFUNC m_UnitClipFunc;
+
+  /// Ceiling for Interp2d's offset clamp, computed in Begin() from values fixed
+  /// by then. Interp2d recomputed it from NumPoints(), m_nOutput and n011 on
+  /// every pixel.
+  int m_nMaxDataOffset2d;
 
   icUInt8Number m_nReserved2[3];
   
