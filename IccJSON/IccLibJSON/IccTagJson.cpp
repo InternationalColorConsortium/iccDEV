@@ -2582,7 +2582,13 @@ static bool icMBBFromJson(CIccMBB *pMBB, const IccJson &j, icConvertType nType, 
     parseStr += "Missing or invalid inputChannels/outputChannels in LUT\n";
     return false;
   }
-  pMBB->Init((icUInt8Number)nIn, (icUInt8Number)nOut);
+  // Bounded at 15 by the check above, so this cannot fail today -- checked for
+  // the same reason as the XML parser's equivalent: the bound and the Init() that
+  // relies on it are in different places.
+  if (!pMBB->Init((icUInt8Number)nIn, (icUInt8Number)nOut)) {
+    parseStr += "Invalid inputChannels/outputChannels in LUT\n";
+    return false;
+  }
 
   // aCurves
   if (jsonExistsField(j, "aCurves") && j["aCurves"].is_array()) {

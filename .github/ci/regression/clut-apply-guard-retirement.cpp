@@ -42,6 +42,13 @@
 //    the refusing, and testNDInterpolatesAcrossTheOldThreshold() pins that the
 //    N-D path still computes correctly either side of it.
 //
+// 3. CIccMBB::Init()/Cleanup() -- the same shape one level up. Cleanup()
+//    clamped its delete loops at 16 to stop a "corrupted channel count" walking
+//    past the curve-pointer arrays, but NewCurvesA/B/M allocate those arrays to
+//    the very counts being clamped, so the clamp could only leak. Init() now
+//    bounds both counts and Cleanup() frees what was allocated. See
+//    testMBBInitBoundsItsChannelCounts().
+//
 // Deliberately NOT covered here: CIccXformNDLut's two per-pixel min-with-16
 // clamps. Those are finding A3 on the perf/hoist-hardening-guards branch, which
 // tightens the same Begin() bound from 256 to 16 and removes them with A/B
@@ -223,6 +230,52 @@ void testBeginRefusesWhatTheGuardsCaught()
   }
 }
 
+// CIccMBB::Init() is the same shape of contract one level up: it sets the two
+// counts everything else in the object is sized from, so it is where their bound
+// belongs.
+//
+// Cleanup() used to clamp its delete loops to 16 "so a corrupted channel count
+// can never walk past the allocation". That reasoning is inverted -- the arrays
+// are allocated to those very counts by NewCurvesA/B/M, so a count above 16 does
+// not overrun anything; the clamp leaked entries 16..n-1, silently, from a
+// destructor. Init() now refuses counts outside 1..16 and Cleanup() frees exactly
+// what was allocated.
+//
+// The refusal is the testable half. The leak itself is not directly observable
+// without a sanitizer, but it is unreachable once Init() cannot record an
+// out-of-range count in the first place -- which is the point of fixing it there
+// rather than in the loop.
+void testMBBInitBoundsItsChannelCounts()
+{
+  // Above the bound: refused, and the object is left untouched rather than
+  // half-torn-down, because Init() checks before it calls Cleanup().
+  {
+    CIccTagLutAtoB lut;
+    check(lut.Init(3, 3), "CIccMBB::Init accepts 3x3");
+    check(lut.NewCurvesA() != NULL, "3x3 MBB allocates A curves");
+
+    check(!lut.Init(17, 3), "CIccMBB::Init refuses 17 input channels");
+    check(!lut.Init(3, 17), "CIccMBB::Init refuses 17 output channels");
+    check(!lut.Init(0, 3), "CIccMBB::Init refuses 0 input channels");
+    check(!lut.Init(3, 0), "CIccMBB::Init refuses 0 output channels");
+
+    check(lut.InputChannels() == 3 && lut.OutputChannels() == 3,
+          "a refused CIccMBB::Init leaves the counts unchanged");
+    check(lut.GetCurvesA() != NULL,
+          "a refused CIccMBB::Init does not tear down the object");
+  }
+
+  // At the bound: 16 is accepted, so the check is a bound and not an off-by-one.
+  {
+    CIccTagLutAtoB lut;
+    check(lut.Init(16, 16), "CIccMBB::Init accepts 16x16");
+    check(lut.NewCurvesA() != NULL, "16x16 MBB allocates A curves");
+    check(lut.NewCurvesB() != NULL, "16x16 MBB allocates B curves");
+    check(lut.NewCurvesM() != NULL, "16x16 MBB allocates M curves");
+    // Destruction here exercises Cleanup() over the full 16 without the clamp.
+  }
+}
+
 } // namespace
 
 int main()
@@ -237,6 +290,7 @@ int main()
 
   testNDInterpolatesAcrossTheOldThreshold();
   testBeginRefusesWhatTheGuardsCaught();
+  testMBBInitBoundsItsChannelCounts();
 
   if (g_fail) {
     std::fprintf(stderr, "[clut-apply-guards] %d assertion(s) failed\n", g_fail);

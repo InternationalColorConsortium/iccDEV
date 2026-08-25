@@ -4682,7 +4682,14 @@ bool icMBBFromXml(CIccMBB *pMBB, xmlNode *pNode, icConvertType nType, std::strin
   if (nIn < 1 || nOut < 1)
     return false;
 
-  pMBB->Init(nIn, nOut);
+  // The parse above already caps both counts at 15, so this cannot fail today.
+  // Check it anyway: the cap lives in a different function from the Init() that
+  // depends on it, and a future relaxation there should surface here rather than
+  // silently produce an MBB whose curve arrays disagree with its channel counts.
+  if (!pMBB->Init((icUInt8Number)nIn, (icUInt8Number)nOut)) {
+    parseStr += "Error! - Invalid InputChannels or OutputChannels for a LUT tag.\n";
+    return false;
+  }
 
   for (; pNode; pNode = pNode->next) {
     if (pNode->type == XML_ELEMENT_NODE) {

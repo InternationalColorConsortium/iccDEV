@@ -3841,11 +3841,26 @@ void CIccMBB::Cleanup()
 {
   int i;
 
-  // CWE-400/834: the curve-pointer arrays are allocated to m_nInput/m_nOutput at
-  // load (both capped at <=16 by the lut tag read path). Clamp the delete loops to
-  // the array bound so a corrupted channel count can never walk past the allocation.
-  int nIn  = (m_nInput  > 16) ? 16 : m_nInput;
-  int nOut = (m_nOutput > 16) ? 16 : m_nOutput;
+  // These loops must mirror NewCurvesA/B/M exactly, because those are what
+  // allocated the arrays: A takes !IsInputB() ? m_nInput : m_nOutput, M and B
+  // take IsInputMatrix() ? m_nInput : m_nOutput, and IsInputB() is defined as
+  // IsInputMatrix(), so each branch below frees the same count its allocator
+  // used.
+  //
+  // They used to be clamped to 16 "so a corrupted channel count can never walk
+  // past the allocation". That reasoning is inverted: the arrays are sized by the
+  // very counts being clamped, so a count above 16 does not overrun the
+  // allocation -- clamping *leaks* the entries from 16 upward, silently, in a
+  // destructor. And a count below the allocation cannot happen, because nothing
+  // mutates m_nInput/m_nOutput between NewCurves* and Cleanup() except Init(),
+  // which calls Cleanup() first.
+  //
+  // The bound belongs where the count is established, and now is: Init() refuses
+  // anything outside 1..16, matching CIccCLUT::Init() and the guarantee
+  // CIccCLUT::Begin() relies on. So these loops trust their counts, exactly as
+  // the interpolators trust what Begin() established.
+  int nIn  = m_nInput;
+  int nOut = m_nOutput;
 
   if (IsInputMatrix()) {
     if (m_CurvesB) {
@@ -3918,11 +3933,32 @@ void CIccMBB::Cleanup()
  *  nOutputChannels = number of output channels
  *****************************************************************************
  */
-void CIccMBB::Init(icUInt8Number nInputChannels, icUInt8Number nOutputChannels)
+bool CIccMBB::Init(icUInt8Number nInputChannels, icUInt8Number nOutputChannels)
 {
+  // Establish the bound here, where the counts are set, rather than re-testing it
+  // in the loops that consume them. Everything downstream sizes itself from these
+  // two numbers -- NewCurvesA/B/M allocate arrays of them, Cleanup() frees the
+  // same counts, and SetCLUT() requires a CIccCLUT whose own dimensionality
+  // matches m_nInput, which CIccCLUT::Init() independently caps at 16. Sixteen is
+  // therefore the bound the whole object already depends on; it just was not
+  // stated anywhere, so Cleanup() clamped defensively and leaked instead.
+  //
+  // Nothing loaded from a profile is newly refused: the mAB, lut8 and lut16 read
+  // paths all reject counts above 15 before they get here, and both the XML and
+  // JSON MBB parsers bound theirs at 15 as well. What this catches is a direct
+  // caller of the public API -- the same door CIccCLUT::Init() and
+  // CIccCLUT::Begin() are guarding.
+  //
+  // Checked before Cleanup(), so a refused call leaves the object exactly as it
+  // was rather than half-torn-down.
+  if (nInputChannels < 1 || nInputChannels > 16 ||
+      nOutputChannels < 1 || nOutputChannels > 16)
+    return false;
+
   Cleanup();
   m_nInput = nInputChannels;
   m_nOutput = nOutputChannels;
+  return true;
 }
 
 /**
