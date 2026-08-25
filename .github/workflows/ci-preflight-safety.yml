@@ -338,13 +338,15 @@ jobs:
 
           output_dir="$(mktemp -d "${RUNNER_TEMP}/iccdev-doxygen.XXXXXX")"
           trap 'rm -rf "$output_dir"' EXIT
+          doxygen_status=0
           doxygen .github/ci/doxygen/Doxyfile \
             "OUTPUT_DIRECTORY=$output_dir" \
-            "WARN_LOGFILE=$output_dir/doxygen-warnings.log"
+            "WARN_LOGFILE=$output_dir/doxygen-warnings.log" || doxygen_status=$?
           if [ -s "$output_dir/doxygen-warnings.log" ]; then
             sanitize_print "$(cat "$output_dir/doxygen-warnings.log")"
             exit 1
           fi
+          exit "$doxygen_status"
 
       - name: Write pre-flight summary
         if: always()

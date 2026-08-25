@@ -37,7 +37,7 @@ on:
   workflow_dispatch:
     inputs:
       target_sha:
-        description: "Exact commit SHA to check out (defaults to the selected ref)"
+        description: "Git ref or exact commit SHA to check out (defaults to the selected ref)"
         required: false
         default: ""
         type: string
