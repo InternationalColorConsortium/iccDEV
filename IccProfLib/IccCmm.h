@@ -441,6 +441,10 @@ public:
   /// flag the !m_bInput branches of GetDstSpace()/GetNumDstSamples() would
   /// report the profile's device space instead of the single gamut channel.
   void SetGamutXform() { m_bGamutXform = true; }
+  /// Records which tag family Create() resolved this xform through: true for
+  /// the DToBx/BToDx MPE tags, false for the AToBx/BToAx colorimetric ones.
+  /// Only Create() should call this.
+  void SetUseD2BTags(bool bUseD2BTags) { m_bUseD2BTags = bUseD2BTags; }
 
   virtual icStatusCMM Begin();
 
@@ -467,6 +471,13 @@ public:
   
   ///Checks if the profile is to be used as input profile
   bool IsInput() const { return m_bInput; }
+
+  /// True when this xform was resolved through the DToBx/BToDx MPE tags rather
+  /// than the AToBx/BToAx colorimetric ones.  CIccApplyBPC needs it so its
+  /// black-point transforms select the same tag family the xform itself uses;
+  /// a caller that opts out of the MPE tags for the xform but computes black
+  /// through them gets a black point from a pipeline it never applies.
+  bool UseD2BTags() const { return m_bUseD2BTags; }
 
   virtual bool IsLateBinding() const { return false; }
   virtual IIccProfileConnectionConditions *GetProfileCC() const { return m_pProfile; }

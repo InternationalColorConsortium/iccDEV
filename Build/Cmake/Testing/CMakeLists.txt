@@ -1354,6 +1354,48 @@ function(iccdev_add_xform_create_tag_ownership_test)
   endif()
 endfunction()
 
+# CIccApplyBPC rebuilds its own cmm objects to find the black point, and used to
+# choose the tag family by profile version instead of asking the xform it is
+# adjusting.  A v4 profile carrying both BToA0 and BToD0 therefore had black
+# measured through the MPE tag even when the caller passed
+# bUseD2BxB2DxTags=false, so the scale and offset came from a pipeline the
+# transform never applies.  Only the B-side is affected -- Create()'s input
+# branch gates DToBx on spectralPCS or v5.  Header + IccProfLib only.
+function(iccdev_add_bpc_d2b_tag_family_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccBpcD2bTagFamilyTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/bpc-d2b-tag-family.cpp"
+  )
+  target_link_libraries(iccBpcD2bTagFamilyTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccBpcD2bTagFamilyTest)
+
+  add_test(
+    NAME iccdev.bpc-d2b-tag-family
+    COMMAND "$<TARGET_FILE:iccBpcD2bTagFamilyTest>"
+  )
+  set_tests_properties(iccdev.bpc-d2b-tag-family PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;cmm;xform;bpc;regression"
+  )
+  if(WIN32)
+    set(_bpc_d2b_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccBpcD2bTagFamilyTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _bpc_d2b_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.bpc-d2b-tag-family PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_bpc_d2b_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_xform_abstorel_adjust_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -6247,6 +6289,7 @@ if(WIN32)
   iccdev_add_cmmsearch_namedcolor_ownership_test()
   iccdev_add_xform_create_tag_ownership_test()
   iccdev_add_xform_abstorel_adjust_test()
+  iccdev_add_bpc_d2b_tag_family_test()
   iccdev_add_reflectance_observer_illum_range_test()
   iccdev_add_colorimetry_methods_test()
   iccdev_add_getvalues_nstart_test()
@@ -6596,6 +6639,7 @@ iccdev_add_sparsematrix_set_roundtrip_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_xform_create_tag_ownership_test()
 iccdev_add_xform_abstorel_adjust_test()
+iccdev_add_bpc_d2b_tag_family_test()
 iccdev_add_reflectance_observer_illum_range_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
