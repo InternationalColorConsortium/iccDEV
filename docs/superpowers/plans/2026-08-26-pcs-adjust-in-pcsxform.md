@@ -956,7 +956,7 @@ Keep `bool NeedAdjustPCS() { return m_bAdjustPCS; }`.
 
 - [ ] **Step 3: Remove the flag clearing from `CheckPCSConnections()`**
 
-In `IccProfLib/IccCmm.cpp`, delete the three `SetSrcPCSConversion(false)` / `SetDstPCSConversion(false)` pairs — the two added in Task 4 at the edges and the interior pair at what was line 9607. Replace the interior pair with a comment so the next reader knows why nothing is set:
+In `IccProfLib/IccCmm.cpp`, delete **all four** `SetSrcPCSConversion(false)` / `SetDstPCSConversion(false)` calls: the single leading-edge call and the single trailing-edge call added by Task 4, plus the interior pair at what was line 9607. Step 2 deletes the setters from the header, so a leftover call is a compile error rather than a silent bug. Replace the interior pair with a comment so the next reader knows why nothing is set:
 
 ```cpp
         // No handover needed: CIccPcsXform performs every PCS adjustment, and
@@ -1036,9 +1036,13 @@ git commit -m "refactor: retire the in-xform PCS adjustment path"
 
 ---
 
-### Task 6: Pin the XYZ-PCS clipping delta
+### Task 6: Pin XYZ-PCS behavior and record the clip's real reach
 
-`AdjustPCS()` ends with `CIccPCSUtil::NegClip` on each component when the PCS is XYZ (guarded by `SAMPLEICC_NOCLIPLABTOXYZ`). The pushed `CIccPcsStep` chain is pure affine and does not clamp. Per spec R8 no clip step is added — a non-affine step in the middle would block the cancellation this refactor exists to enable. This task makes the resulting delta explicit and reviewed rather than silent.
+`AdjustPCS()` ends with `CIccPCSUtil::NegClip` on each component when the PCS is XYZ (guarded by `SAMPLEICC_NOCLIPLABTOXYZ`). The pushed `CIccPcsStep` chain is pure affine and does not clamp. Per spec R8 no clip step is added — a non-affine step in the middle would block the cancellation this refactor exists to enable.
+
+**Scope correction from the pre-flight scan (Ruling 2).** That clip is only reachable when the affine can drive a non-negative input negative, which requires a *negative* offset. The built-in adjustments cannot produce one: the absolute-intent path sets `m_PCSOffset` to all zeros with a positive scale, and the v2-perceptual path sets a positive offset. A negative offset arises only from an `IIccAdjustPCSXform` hint with `Scale > 1` — which is `CIccApplyBPC`, and Task 7 measures that path directly.
+
+So this task does **not** try to demonstrate a clipping delta on the built-in adjustments; there isn't one to demonstrate. It asserts that an XYZ-PCS chain still applies its adjustment after the move, and records the reachability finding in the design note so R8's real blast radius is on paper. Do not add an assertion claiming a negative-XYZ delta — it would not fire, and a test that cannot fail is worse than no test.
 
 **Files:**
 - Modify: `.github/ci/regression/pcs-adjust-placement.cpp`
@@ -1178,6 +1182,13 @@ negative XYZ component that used to be forced to zero now survives. A clip step
 was considered and rejected: a non-affine step between the two adjustments would
 block the cancellation this design exists to enable.
 
+That clamp was reachable only through an `IIccAdjustPCSXform` hint whose `Scale`
+exceeds 1, because only a negative offset can drive a non-negative input
+negative. The built-in adjustments never produce one -- the absolute-intent path
+uses a zero offset with a positive scale, and the v2-perceptual path uses a
+positive offset. `CIccApplyBPC` is the hint that can, so BPC on an XYZ-PCS
+profile is the whole of the exposure.
+
 ## What did not change
 
 A `PCS -> device -> PCS` round trip is not exact. The two adjustments bracket
@@ -1234,25 +1245,32 @@ echo "$SCRATCH"
 
 Keep `$SCRATCH` for the rest of this task. `Testing/CMYK-3DLUTs/CMYK-3DLUTs.icc` is the fixture; it is a v5 CMYK output profile with a Lab PCS, so intent `40` exercises BPC and `41` exercises BPC on relative.
 
-- [ ] **Step 2: Capture baseline output from `master` in a worktree**
+- [ ] **Step 2: Capture baseline output from `master`**
 
-The branch stays intact; the baseline gets its own checkout and its own build tree.
+Use the tracked `Testing/iccApplyNamedCmm.exe`. Per pre-flight Ruling 3, it was built at `96507a4`, and every commit between there and `master` (`68b1b6f2`) is CI-only — labeler, Docker/vcpkg validation, iccSpecSepToTiff validation, LTO link time. None touches IccProfLib, so it is a valid master-behavior baseline. Confirm that before trusting it:
+
+```bash
+git --no-pager log --stat 96507a4..master -- IccProfLib/ IccConnect/   # expect no output
+./Testing/iccApplyNamedCmm.exe 2>&1 | head -1                          # expect "+96507a4"
+
+for INTENT in 40 41; do
+  ./Testing/iccApplyNamedCmm.exe "$SCRATCH/cmyk-probe.txt" 1:8:14 1 \
+    Testing/CMYK-3DLUTs/CMYK-3DLUTs.icc $INTENT \
+    Testing/CMYK-3DLUTs/CMYK-3DLUTs.icc $INTENT > "$SCRATCH/bpc-baseline-$INTENT.txt"
+done
+```
+
+If the first command prints anything, the assumption is falsified — fall back to a worktree build:
 
 ```bash
 git worktree add ../iccdev-master-baseline master
 cmake -S ../iccdev-master-baseline/Build/Cmake -B ../iccdev-master-baseline/out/baseline \
   -DCMAKE_BUILD_TYPE=Release -DENABLE_TOOLS=ON -DCMAKE_TOOLCHAIN_FILE=
 cmake --build ../iccdev-master-baseline/out/baseline --target iccApplyNamedCmm -j
-
-BASE=../iccdev-master-baseline/out/baseline/bin/iccApplyNamedCmm
-for INTENT in 40 41; do
-  "$BASE" "$SCRATCH/cmyk-probe.txt" 1:8:14 1 \
-    Testing/CMYK-3DLUTs/CMYK-3DLUTs.icc $INTENT \
-    Testing/CMYK-3DLUTs/CMYK-3DLUTs.icc $INTENT > "$SCRATCH/bpc-baseline-$INTENT.txt"
-done
+find ../iccdev-master-baseline/out/baseline -name 'iccApplyNamedCmm*' -type f
 ```
 
-If the executable lands elsewhere, find it with `find ../iccdev-master-baseline/out/baseline -name 'iccApplyNamedCmm*' -type f`.
+and remove the worktree with `git worktree remove --force ../iccdev-master-baseline` when done.
 
 - [ ] **Step 3: Capture the same output on this branch and diff**
 
