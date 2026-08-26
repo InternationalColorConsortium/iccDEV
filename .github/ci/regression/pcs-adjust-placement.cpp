@@ -504,6 +504,69 @@ static void namedColorAdjustPredicatesRequireAnActualPcsSide()
   delete pInXform;
 }
 
+// The override's extra term is !IsSpaceSpectralPCS(...), which only differs
+// from a bare IsSrcPCS()/IsDestPCS() check when the side actually *is* a PCS,
+// just a spectral one (IsSpacePCS() = IsSpaceColorimetricPCS() ||
+// IsSpaceSpectralPCS(), IccCmm.cpp:118). The CMYK case above never reaches
+// that: CMYK makes IsSrcPCS()/IsDestPCS() false on its own, so the spectral
+// term is redundant there and deleting it would not be caught. This case
+// forces IsSrcPCS()/IsDestPCS() true via a spectral PCS signature, so only
+// the spectral term can still make the predicate false.
+static void namedColorAdjustPredicatesExcludeSpectralPcs()
+{
+  CIccProfile *pOutProfile = new CIccProfile();
+  buildV2CmykOutputProfile(*pOutProfile);
+  CIccTagNamedColor2 *pOutTag = new CIccTagNamedColor2(1, 4);
+  pOutProfile->AttachTag(icSigNamedColor2Tag, pOutTag);
+
+  CIccProfile *pInProfile = new CIccProfile();
+  buildV2CmykOutputProfile(*pInProfile);
+  CIccTagNamedColor2 *pInTag = new CIccTagNamedColor2(1, 4);
+  pInProfile->AttachTag(icSigNamedColor2Tag, pInTag);
+
+  CIccXform *pOutXform = CIccXform::Create(pOutProfile, /*bInput=*/false, icPerceptual,
+                                            icInterpTetrahedral, NULL, icXformLutNamedColor);
+  CIccXform *pInXform  = CIccXform::Create(pInProfile,  /*bInput=*/true,  icPerceptual,
+                                            icInterpTetrahedral, NULL, icXformLutNamedColor);
+  check(pOutXform != NULL && pInXform != NULL, "named color spectral: xforms created");
+  if (!pOutXform || !pInXform) { delete pOutXform; delete pInXform; return; }
+
+  // CIccXform::Create() pointed the tag's PCS at the profile's colorimetric
+  // Lab PCS; repoint it at a spectral PCS signature. IsSrcPCS()/IsDestPCS()
+  // compare m_nSrcSpace/m_nDestSpace against GetPCS() for a tag-backed xform,
+  // so this makes that comparison land on a PCS that is spectral.
+  pOutTag->SetColorSpaces(icSigReflectanceSpectralPcsData, icSigCmykData);
+  pInTag->SetColorSpaces(icSigReflectanceSpectralPcsData, icSigCmykData);
+
+  CIccXformNamedColor *pOutNC = (CIccXformNamedColor*)pOutXform;
+  CIccXformNamedColor *pInNC  = (CIccXformNamedColor*)pInXform;
+  pOutNC->SetSrcSpace(icSigReflectanceSpectralPcsData);
+  pOutNC->SetDestSpace(icSigCmykData);
+  pInNC->SetSrcSpace(icSigCmykData);
+  pInNC->SetDestSpace(icSigReflectanceSpectralPcsData);
+
+  check(pOutXform->Begin() == icCmmStatOk, "named color spectral: output-side Begin");
+  check(pInXform->Begin() == icCmmStatOk, "named color spectral: input-side Begin");
+
+  check(pOutXform->NeedAdjustPCS(), "named color spectral: v2 perceptual output needs an adjust (base)");
+  check(pInXform->NeedAdjustPCS(), "named color spectral: v2 perceptual input needs an adjust (base)");
+
+  // The PCS term alone would pass: the source/destination side really is
+  // the tag's PCS now, just a spectral one -- this is what distinguishes
+  // this case from namedColorAdjustPredicatesRequireAnActualPcsSide() above.
+  check(pOutNC->IsSrcPCS(), "named color spectral: source side is reported as PCS");
+  check(pInNC->IsDestPCS(), "named color spectral: destination side is reported as PCS");
+
+  // Only the !IsSpaceSpectralPCS(...) term can make these false now.
+  check(!pOutXform->NeedsSrcPcsAdjust(),
+        "named color spectral: spectral PCS source excluded from adjustment");
+  check(!pInXform->NeedsDstPcsAdjust(),
+        "named color spectral: spectral PCS destination excluded from adjustment");
+
+  delete pOutXform;
+  delete pInXform;
+}
+
 int main(int /*argc*/, char ** /*argv*/)
 {
   adjustmentIsLargerThanTheToleranceBand();
@@ -520,6 +583,7 @@ int main(int /*argc*/, char ** /*argv*/)
   perSideAdjustPredicatesFollowDirection();
   perSideAdjustPredicatesAreOffWhenNothingToAdjust();
   namedColorAdjustPredicatesRequireAnActualPcsSide();
+  namedColorAdjustPredicatesExcludeSpectralPcs();
 
   if (g_failures) {
     std::printf("\n%d check(s) failed\n", g_failures);
