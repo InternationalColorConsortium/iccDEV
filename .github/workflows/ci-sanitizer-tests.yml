@@ -27,14 +27,6 @@ env:
   TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
 
 on:
-  push:
-    branches: [master]
-    paths:
-      - '.github/scripts/sanitize-sed.sh'
-      - '.github/scripts/sanitize.ps1'
-      - '.github/tests/**'
-      - '.github/workflows/ci-sanitizer-tests.yml'
-
   pull_request:
     branches: [master]
     paths:

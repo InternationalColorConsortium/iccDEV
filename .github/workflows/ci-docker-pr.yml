@@ -35,6 +35,10 @@ permissions:
         required: false
         default: fail
         type: string
+      build_pr_image:
+        description: 'Build the PR image instead of using a trusted master base image'
+        required: true
+        type: boolean
 
 concurrency:
   group: "docker-pr-${{ github.workflow }}-${{ inputs.target_sha }}"
@@ -125,6 +129,8 @@ jobs:
     env:
       BASH_ENV: /dev/null
       TARGET_SHA: ${{ inputs.target_sha }}
+      BASE_SHA: ${{ inputs.base_sha }}
+      TEST_IMAGE: iccdev-pr:${{ inputs.target_sha }}
       WARNING_POLICY: ${{ inputs.warning_policy || 'fail' }}
 
     steps:
@@ -189,14 +195,16 @@ jobs:
       # preflight: allow-codeql-actions reason=trusted-base-sanitizer
       # preflight: allow-pr-script-execution reason=build-same-repository-container-pr
       - name: Build unified PR image
-        id: image
+        if: ${{ inputs.build_pr_image }}
         env:
           BASH_ENV: /dev/null
-          TEST_IMAGE: iccdev-pr:${{ inputs.target_sha }}
+          BUILD_LOG: ${{ runner.temp }}/iccdev-docker-build.log
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          install -m 0644 .trusted-workflow/.github/scripts/sanitize-sed.sh \
+            "$RUNNER_TEMP/sanitize-sed.sh"
           source .trusted-workflow/.github/scripts/sanitize-sed.sh
 
           # The trusted checkout is needed only to load this sanitizer. Remove
@@ -204,15 +212,97 @@ jobs:
           rm -rf "$GITHUB_WORKSPACE/.trusted-workflow"
           test ! -e "$GITHUB_WORKSPACE/.trusted-workflow"
 
+          set +e
           docker build \
             --build-arg "GIT_COMMIT=$TARGET_SHA" \
-            -t "$TEST_IMAGE" .
-          printf 'image=%s\n' "$(sanitize_line "$TEST_IMAGE")" >> "$GITHUB_OUTPUT"
+            -t "$TEST_IMAGE" . 2>&1 | tee "$BUILD_LOG"
+          pipeline_status=("${PIPESTATUS[@]}")
+          set -e
+          if [ "${pipeline_status[0]}" -ne 0 ]; then
+            exit "${pipeline_status[0]}"
+          fi
+          if [ "${pipeline_status[1]}" -ne 0 ]; then
+            echo "ERROR: unable to save Docker build log: $BUILD_LOG" >&2
+            exit "${pipeline_status[1]}"
+          fi
+
+      - name: Pull trusted base image
+        if: ${{ !inputs.build_pr_image }}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          base_image="ghcr.io/${owner}/iccdev:sha-${BASE_SHA}"
+          docker pull "$base_image"
+          docker tag "$base_image" "$TEST_IMAGE"
+
+          image_revision="$(docker image inspect "$TEST_IMAGE" \
+            --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+          if [ "$image_revision" != "$BASE_SHA" ]; then
+            echo "ERROR: base image revision mismatch: $image_revision != $BASE_SHA" >&2
+            exit 1
+          fi
+
+      - name: Summarize unified image build failure
+        if: ${{ failure() && inputs.build_pr_image }}
+        env:
+          BASH_ENV: /dev/null
+          BUILD_LOG: ${{ runner.temp }}/iccdev-docker-build.log
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          if [ -r "$RUNNER_TEMP/sanitize-sed.sh" ]; then
+            source "$RUNNER_TEMP/sanitize-sed.sh"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}"
+              s="${s//</&lt;}"
+              s="${s//>/&gt;}"
+              s="${s//\"/&quot;}"
+              s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() {
+              escape_html "$1"
+            }
+          fi
+
+          diagnosis='Review the Docker build log and repair the failing stage before rerunning.'
+          required_action='Update the Dockerfile, CMake configuration, or image dependency identified by the first failed build stage.'
+          if grep -q 'Could NOT find Threads' "$BUILD_LOG"; then
+            diagnosis='CMake could not compile or link its pthread probe inside the Docker build stage.'
+            required_action='Update the Dockerfile build-stage compiler or linker flags so Clang can compile and link with -pthread.'
+          elif grep -qE 'Could NOT find (ZLIB|LibXml2|JPEG|PNG|TIFF)' "$BUILD_LOG"; then
+            diagnosis='A required native dependency was unavailable to CMake inside the Docker build stage.'
+            required_action='Update the Dockerfile package installation for the missing development dependency.'
+          elif grep -q 'Configuring incomplete, errors occurred' "$BUILD_LOG"; then
+            diagnosis='CMake configuration failed before compilation started.'
+            required_action='Address the first CMake configuration error shown in the Docker build log.'
+          fi
+
+          {
+            sanitize_line '## Unified Docker Image Build Failure'
+            echo ''
+            sanitize_line 'The image build failed before the regression tests ran.'
+            echo ''
+            sanitize_line '| Signal | Required follow-up |'
+            echo ''
+            sanitize_line '| --- | --- |'
+            echo ''
+            printf '| %s | %s |\n' "$(sanitize_line "$diagnosis")" "$(sanitize_line "$required_action")"
+            sanitize_line "Inspect the \`Build unified PR image\` log for the first failing Dockerfile stage and rerun after that target is addressed."
+            echo ''
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: Verify unified image toolchain
         env:
           BASH_ENV: /dev/null
-          TEST_IMAGE: ${{ steps.image.outputs.image }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -260,7 +350,6 @@ jobs:
       - name: Build and test PR tree inside unified image
         env:
           BASH_ENV: /dev/null
-          TEST_IMAGE: ${{ steps.image.outputs.image }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""

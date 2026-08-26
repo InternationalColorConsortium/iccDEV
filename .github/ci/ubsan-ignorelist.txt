@@ -28,3 +28,6 @@ src:*/include/c++/*/ext/string_conversions.h
 
 [unsigned-shift-base]
 fun:*MD5Transform*
+
+# Apple libc++ hashes through intentional unsigned left-shift wrapping.
+src:*/include/c++/v1/__functional/hash.h

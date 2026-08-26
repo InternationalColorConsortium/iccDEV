@@ -6536,6 +6536,17 @@ if(ICCDEV_NLOHMANN_INCLUDE_DIR)
   set(ICCDEV_TEST_INCLUDE_ENV "CPATH=${ICCDEV_NLOHMANN_INCLUDE_DIR}:$ENV{CPATH}")
 endif()
 
+set(ICCDEV_UBSAN_OPTIONS "halt_on_error=0,print_stacktrace=1")
+if(NOT WIN32)
+  get_filename_component(ICCDEV_UBSAN_SUPPRESSIONS
+                         "${CMAKE_CURRENT_LIST_DIR}/../../../Testing/silence.txt"
+                         ABSOLUTE)
+  if(EXISTS "${ICCDEV_UBSAN_SUPPRESSIONS}")
+    string(APPEND ICCDEV_UBSAN_OPTIONS
+           ":suppressions=${ICCDEV_UBSAN_SUPPRESSIONS}")
+  endif()
+endif()
+
 set(ICCDEV_TEST_ENV
   "PATH=${ICCDEV_TOOL_PATH}:$ENV{PATH}"
   "LD_LIBRARY_PATH=${ICCDEV_SHARED_LIBRARY_PATH}:$ENV{LD_LIBRARY_PATH}"
@@ -6545,7 +6556,7 @@ set(ICCDEV_TEST_ENV
   "CC=${CMAKE_C_COMPILER}"
   "CXX=${CMAKE_CXX_COMPILER}"
   "ASAN_OPTIONS=halt_on_error=0,detect_leaks=0"
-  "UBSAN_OPTIONS=halt_on_error=0,print_stacktrace=1"
+  "UBSAN_OPTIONS=${ICCDEV_UBSAN_OPTIONS}"
   # print_stacktrace=1 above makes every sanitizer report symbolize its stack.
   # llvm-symbolizer consults DEBUGINFOD_URLS while doing so, and the regression
   # container inherits Ubuntu's default (https://debuginfod.ubuntu.com) because

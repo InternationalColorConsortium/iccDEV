@@ -43,37 +43,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: read
       pull-requests: write  # Required to update PR status labels.
       statuses: read  # Required to evaluate legacy commit statuses.
       checks: read  # Required to evaluate GitHub Actions check runs.
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
-        with:
-          ref: ${{ github.event.pull_request.base.sha || github.sha }}
-          sparse-checkout: |
-            .github/labels.yml
-            .github/scripts
-          persist-credentials: false
-
-      # preflight: allow-token-exposure reason=pr-label-maintenance
-      # preflight: allow-pr-script-execution reason=trusted-base-label-script
-      - name: Ensure repository labels exist
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-          GH_TOKEN: ${{ github.token }}
-          GH_REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          git config --add safe.directory "$PWD"
-
-          .github/scripts/sync-labels.sh
-
       # preflight: allow-token-exposure reason=pr-status-query
       - name: Build PR list
         id: pr_list

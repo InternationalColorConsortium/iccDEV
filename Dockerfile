@@ -111,6 +111,11 @@ ENV CC=clang \
     ICCDEV_IMAGE_PULL="docker pull ghcr.io/internationalcolorconsortium/iccdev:latest" \
     PATH="/opt/iccdev-mcp/bin:${PATH}"
 
+RUN groupadd --system iccdev-ci \
+ && useradd --system --gid iccdev-ci --home-dir /workspace --create-home --shell /bin/bash iccdev-ci
+
+COPY --chown=iccdev-ci:iccdev-ci requirements /workspace/iccDEV/requirements
+
 RUN python3 -m venv /opt/iccdev-spectral-preview \
  && /opt/iccdev-spectral-preview/bin/python -m pip install \
       --upgrade \
@@ -120,10 +125,7 @@ RUN python3 -m venv /opt/iccdev-spectral-preview \
  && /opt/iccdev-spectral-preview/bin/python -m pip install \
       --only-binary=:all: \
       --no-cache-dir \
-      'numpy==2.5.2' \
-      'tifffile==2026.8.16' \
-      'pillow==12.3.0' \
-      'imagecodecs==2026.8.16' \
+      -r /workspace/iccDEV/requirements/docker-spectral-preview.txt \
       --quiet \
  && /opt/iccdev-spectral-preview/bin/python -m pip check \
  && /opt/iccdev-spectral-preview/bin/python -c 'import imagecodecs,numpy,PIL,tifffile; print(f"imagecodecs {imagecodecs.__version__}"); print(f"numpy {numpy.__version__}"); print(f"pillow {PIL.__version__}"); print(f"tifffile {tifffile.__version__}")' \
@@ -150,7 +152,7 @@ RUN python3 -m venv /opt/iccdev-workflow-qa \
  && /opt/iccdev-workflow-qa/bin/python -m pip install \
       --only-binary=:all: \
       --no-cache-dir \
-      'zizmor==1.29.0' \
+      -r /workspace/iccDEV/requirements/docker-workflow-qa.txt \
       --quiet \
  && /opt/iccdev-workflow-qa/bin/python -m pip check \
  && ln -s /opt/iccdev-workflow-qa/bin/zizmor /usr/local/bin/zizmor \
@@ -160,9 +162,6 @@ RUN python3 -m venv /opt/iccdev-workflow-qa \
       /opt/iccdev-workflow-qa/bin/pip* \
       /opt/iccdev-workflow-qa/lib/python*/site-packages/pip \
       /opt/iccdev-workflow-qa/lib/python*/site-packages/pip-*.dist-info
-
-RUN groupadd --system iccdev-ci \
- && useradd --system --gid iccdev-ci --home-dir /workspace --create-home --shell /bin/bash iccdev-ci
 
 COPY --chown=iccdev-ci:iccdev-ci . /workspace/iccDEV
 COPY --chmod=0755 docker/iccdev-banner.sh /usr/local/bin/iccdev-banner

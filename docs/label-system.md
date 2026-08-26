@@ -9,9 +9,11 @@ readiness.
 
 | File | Purpose |
 |------|---------|
-| `.github/labels.yml` | Canonical label names, colors, and descriptions. |
+| `.github/labels.yml` | Managed label names, colors, and descriptions. |
 | `.github/labeler.yml` | Deterministic pull request path-to-label rules. |
 | `.github/scripts/sync-labels.sh` | Local and CI label synchronization helper. |
+| `docs/label-inventory-audit.md` | Managed-versus-legacy inventory and API-write record. |
+| `.github/agents/maintainer-label-triage.agent.md` | Read-only label-system audit. |
 | `.github/workflows/sync-labels.yml` | Applies `.github/labels.yml` on `master` or manual dispatch. |
 | `.github/workflows/pr-labeler.yml` | Applies path labels to pull requests. |
 | `.github/workflows/ci-fork-automation-gate.yml` | Fails protected automation changes from forks and applies `Governance`. |
@@ -35,6 +37,21 @@ them. New workflow or status labels should be lower-case hyphenated, except
 when matching an established GitHub convention or existing repository label.
 New area labels should match the current Title Case scope style.
 
+## Inventory and API Budget
+
+`.github/labels.yml` is the managed manifest, not a destructive declaration of
+every live GitHub label. The repository retains legacy labels while open issues,
+open PRs, workflows, prompts, or documentation still use them. Do not attach an
+undeclared legacy label to new automation; either add it to the managed manifest
+or complete an intentional migration.
+
+Record a live-versus-managed inventory before a taxonomy change using
+`docs/label-inventory-audit.md`. Label synchronization first fetches the live
+inventory and updates only missing or drifted managed labels. Issue triage does
+not synchronize the taxonomy: it only applies labels that the taxonomy-sync
+workflow has already provisioned. Batch taxonomy edits in one change to avoid
+repeated label API writes.
+
 ## Workflow Behavior
 
 ### Label Sync
@@ -48,9 +65,10 @@ script, and calls:
 .github/scripts/sync-labels.sh
 ```
 
-The script creates missing labels and updates existing color or description
-metadata. It does not delete labels. Retire labels manually only after checking
-open issues, open PRs, workflow references, prompts, and documentation.
+The script creates missing labels and updates only changed color or description
+metadata after reading the live inventory. It does not delete labels. Retire
+labels manually only after checking open issues, open PRs, workflow references,
+prompts, and documentation.
 
 For local validation without mutating GitHub:
 
@@ -98,25 +116,27 @@ applied until the protected-path change has been reviewed.
 
 ### Issue Triage
 
-`label.yml` runs on issue open, edit, and reopen events. It syncs the repository
-label inventory, then adds `needs-triage` and lightweight issue-kind and scope
-labels from the issue title and body, including `Python` for Python, Cython,
-PyPI, pip, setuptools, or wheel reports. It may also add `needs-repro` or
+`label.yml` runs on issue open, edit, and reopen events. It adds
+`needs-triage` and lightweight issue-kind and scope labels from the issue title
+and body, including `Python` for Python, Cython, PyPI, pip, setuptools, or
+wheel reports. It may also add `needs-repro` or
 `requires:more-information` when a report is too short, contains a placeholder,
 or describes a crash without a reproducible input or command.
 
 The triage workflow is a routing aid, not a maintainer decision. Maintainers may
 adjust or remove labels after reviewing reproductions, security impact, and
 required test coverage. Label sync creates missing labels and updates the color
-or description of labels declared in `.github/labels.yml`; retiring a label is
-manual and must follow the deletion review in the maintainer change process.
+or description of managed labels declared in `.github/labels.yml`; retiring a
+label is manual and must follow the deletion review in the maintainer change
+process.
 
 ### PR CI Status Labels
 
 `update-labels.yml` evaluates open PRs on schedule, PR events, and manual
 dispatch. It keeps `passed`, `failed`, and `pending` mutually exclusive. It adds
 `Merge Ready` only when CI is successful, the PR is not draft, the merge state is
-clean, and the review decision is approved.
+clean, and the review decision is approved. It does not synchronize the label
+manifest; the dedicated taxonomy-sync workflow provisions managed labels.
 
 Do not use these status labels as the only merge gate. Branch protection and
 required checks remain authoritative.
@@ -194,7 +214,8 @@ and the fast preflight checks are not enough.
 
 1. Add or edit labels in `.github/labels.yml` first.
 2. Add `.github/labeler.yml` path rules only for deterministic scope labels.
-3. Update this guide, `.github/skills/maintainer-label-system/SKILL.md`, or
+3. Update this guide, `docs/label-inventory-audit.md`,
+   `.github/skills/maintainer-label-system/SKILL.md`, or
    `.github/prompts/maintainer-label-triage.prompt.md` when policy changes.
 4. Validate locally:
 

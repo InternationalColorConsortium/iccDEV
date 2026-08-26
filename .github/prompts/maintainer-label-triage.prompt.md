@@ -13,7 +13,8 @@ Use this prompt when reviewing or changing the iccDEV label system.
 ## Review Rules
 
 - Treat labels as maintainer-owned infrastructure.
-- Keep `.github/labels.yml` as the canonical inventory.
+- Treat `.github/labels.yml` as the managed manifest; inventory legacy live
+  labels before any migration and do not delete them implicitly.
 - Keep `.github/labeler.yml` limited to deterministic path and branch rules.
 - Add scope labels to `.github/labels.yml` before issue-text or path automation;
   retain manual deletion after checking open label consumers.
@@ -26,6 +27,9 @@ Use this prompt when reviewing or changing the iccDEV label system.
 - Do not checkout or execute PR-controlled content from `pull_request_target`.
 - Require an explicit `zizmor` rationale when retaining `pull_request_target`
   for metadata-only label automation.
+- Keep issue triage and PR-status labeling independent of taxonomy
+  synchronization. Sync must fetch the live inventory once and update only
+  missing or drifted managed labels.
 
 ## Output
 
@@ -34,6 +38,7 @@ Use this prompt when reviewing or changing the iccDEV label system.
 3. Workflow permission or trigger changes.
 4. Validation commands run and their results.
 5. Any labels that need manual migration or deletion after merge.
+6. Managed-versus-legacy inventory and expected label API writes.
 
 ## Validation Commands
 
@@ -48,4 +53,5 @@ git diff --check
 ```
 
 See `docs/label-system.md` and
+`docs/label-inventory-audit.md` and
 `.github/skills/maintainer-label-system/SKILL.md` for the maintainer workflow.

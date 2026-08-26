@@ -34,10 +34,12 @@ updating, or merging an iccDEV PR.
      discovered CLI tools against `TOOL_BINARIES` and inspect capability flags;
      never assert one fixed health-tool total across variants.
 5. Fix confirmed findings and repeat only affected checks.
-6. Freeze the head and record the readiness evidence required by
-   `docs/governance/UPSTREAM_PR_READINESS.md` before requesting review. If a
-   re-review finds an issue in unchanged code, stop serial automated review and
-   return to branch-only grooming.
+6. Freeze the head and record the readiness evidence and `base...HEAD` contract
+   matrix required by `docs/governance/UPSTREAM_PR_READINESS.md` before
+   requesting review. The matrix maps each changed cross-cutting surface to its
+   producer, consumer, build/runtime behavior, toolchain or platform boundary,
+   CI trigger, dependency owner, and evidence. If a re-review finds any new
+   blocker, stop serial automated review and return to branch-only grooming.
 7. Prepare a golfed handoff with commands, run IDs, sentinels, and known skips.
 
 ## Handoff Format

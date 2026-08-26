@@ -13,7 +13,7 @@ Review only a frozen head that passes
 `docs/governance/UPSTREAM_PR_READINESS.md`. Review the complete PR and
 cumulative diff, not incremental slices. A requested change returns the branch
 to branch-only grooming; renew the readiness evidence before a complete
-re-review. If a re-review finds an issue in unchanged code, stop serial
+re-review. If a re-review finds any new blocker, including one in the repair, stop serial
 automated review and require maintainer direction.
 
 ## Audit Checklist
@@ -82,6 +82,9 @@ For EVERY `run:` step in the workflow, verify:
 
 ### 9. Review-Churn Prevention
 - [ ] Review the repeat-review avoidance checklist for the changed surface (canonical: `docs/regression-workflow-governance.md`, section "Recent maintainer PRs...").
+- [ ] Contract matrix maps every changed workflow, helper, Dockerfile, manifest,
+      and dependency updater to its consumer, failure path, trigger, and local
+      evidence before the first review.
 
 ### 10. Full Run Log Audit
 - [ ] Full log archive downloaded with `gh api /repos/OWNER/REPO/actions/runs/RUN_ID/logs`
