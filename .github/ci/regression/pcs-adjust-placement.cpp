@@ -68,6 +68,7 @@
     oracle and would fail on correct code.
 */
 
+#include "IccArrayBasic.h"
 #include "IccCmm.h"
 #include "IccDefs.h"
 #include "IccProfile.h"
@@ -504,67 +505,97 @@ static void namedColorAdjustPredicatesRequireAnActualPcsSide()
   delete pInXform;
 }
 
-// The override's extra term is !IsSpaceSpectralPCS(...), which only differs
-// from a bare IsSrcPCS()/IsDestPCS() check when the side actually *is* a PCS,
-// just a spectral one (IsSpacePCS() = IsSpaceColorimetricPCS() ||
-// IsSpaceSpectralPCS(), IccCmm.cpp:118). The CMYK case above never reaches
-// that: CMYK makes IsSrcPCS()/IsDestPCS() false on its own, so the spectral
-// term is redundant there and deleting it would not be caught. This case
-// forces IsSrcPCS()/IsDestPCS() true via a spectral PCS signature, so only
-// the spectral term can still make the predicate false.
+// Pins the *composition* of the override, not a reachable production chain.
+//
+// The spectral term (!IsSpaceSpectralPCS(...)) only differs from a bare
+// IsSrcPCS()/IsDestPCS() check when the side actually *is* a PCS, just a
+// spectral one. That combination is reachable only through the m_pArray
+// path: IsSrcPCS()/IsDestPCS() are IsSpacePCS(m_nSrcSpace/m_nDestSpace)
+// there (IccCmm.cpp:7944-7975), which is true for a spectral signature
+// regardless of what any specific array is configured with. On the m_pTag
+// path IsSrcPCS()/IsDestPCS() are signature equality against the tag's own
+// GetPCS(), and a CIccTagNamedColor2's PCS cannot legally be spectral --
+// CIccXform::Create() always sets it from the profile's m_Header.pcs, and
+// CIccProfile rejects a spectral m_Header.pcs for any non-DeviceLink
+// profile. (An earlier version of this test forced the tag's PCS to a
+// spectral signature directly via SetColorSpaces(), bypassing that
+// rejection -- that passed, but only by putting the object in a state the
+// library itself can never construct, so it was not real coverage.)
+//
+// Building a fully populated CIccArrayNamedColor (a tag-array profile with
+// named-colour structs and spectral members) just to reach the array path
+// honestly is out of proportion to what is being pinned here. This test
+// double instead gives CIccXformNamedColor a real, but empty and never
+// Begin()'d, CIccArrayNamedColor -- enough for the *real*, unmodified
+// IsSrcPCS()/IsDestPCS() to route through the array branch, since that
+// branch only null-checks m_pArray and never reads its contents.
+// IsSrcPCS()/IsDestPCS() are not virtual, so overriding them in a
+// subclass (as first proposed) would not affect NeedsSrcPcsAdjust()'s
+// call to them -- that call resolves statically to
+// CIccXformNamedColor::IsSrcPCS() regardless of the dynamic type, since
+// non-virtual calls from within a base class member function are bound at
+// compile time, not through the vtable. Begin() *is* virtual, so it is
+// overridden here to skip CIccXformNamedColor::Begin()'s array tail (which
+// would call the synthetic array's own Begin() and dereference a null tag
+// array); everything NeedsSrcPcsAdjust()/NeedsDstPcsAdjust() depend on
+// (m_bAdjustPCS, m_bInput) is set by the inherited CIccXform::Begin() alone.
+class SpectralSideNamedColor : public CIccXformNamedColor
+{
+public:
+  SpectralSideNamedColor() : CIccXformNamedColor(NULL, icSigLabData, icSigCmykData)
+  {
+    m_pArray = new CIccArrayNamedColor();
+  }
+  virtual ~SpectralSideNamedColor() { delete m_pArray; m_pArray = NULL; }
+
+  virtual icStatusCMM Begin() { return CIccXform::Begin(); }
+};
+
 static void namedColorAdjustPredicatesExcludeSpectralPcs()
 {
+  SpectralSideNamedColor outDouble;
+  SpectralSideNamedColor inDouble;
+
   CIccProfile *pOutProfile = new CIccProfile();
   buildV2CmykOutputProfile(*pOutProfile);
-  CIccTagNamedColor2 *pOutTag = new CIccTagNamedColor2(1, 4);
-  pOutProfile->AttachTag(icSigNamedColor2Tag, pOutTag);
-
   CIccProfile *pInProfile = new CIccProfile();
   buildV2CmykOutputProfile(*pInProfile);
-  CIccTagNamedColor2 *pInTag = new CIccTagNamedColor2(1, 4);
-  pInProfile->AttachTag(icSigNamedColor2Tag, pInTag);
 
-  CIccXform *pOutXform = CIccXform::Create(pOutProfile, /*bInput=*/false, icPerceptual,
-                                            icInterpTetrahedral, NULL, icXformLutNamedColor);
-  CIccXform *pInXform  = CIccXform::Create(pInProfile,  /*bInput=*/true,  icPerceptual,
-                                            icInterpTetrahedral, NULL, icXformLutNamedColor);
-  check(pOutXform != NULL && pInXform != NULL, "named color spectral: xforms created");
-  if (!pOutXform || !pInXform) { delete pOutXform; delete pInXform; return; }
+  // Mirrors what CIccXform::Create() does for a real xform (profile,
+  // direction, intent); each double takes ownership of its profile, same
+  // as a normally created xform would.
+  outDouble.SetParams(pOutProfile, /*bInput=*/false, icPerceptual, icPerceptual,
+                       false, icInterpTetrahedral);
+  inDouble.SetParams(pInProfile,  /*bInput=*/true,  icPerceptual, icPerceptual,
+                      false, icInterpTetrahedral);
 
-  // CIccXform::Create() pointed the tag's PCS at the profile's colorimetric
-  // Lab PCS; repoint it at a spectral PCS signature. IsSrcPCS()/IsDestPCS()
-  // compare m_nSrcSpace/m_nDestSpace against GetPCS() for a tag-backed xform,
-  // so this makes that comparison land on a PCS that is spectral.
-  pOutTag->SetColorSpaces(icSigReflectanceSpectralPcsData, icSigCmykData);
-  pInTag->SetColorSpaces(icSigReflectanceSpectralPcsData, icSigCmykData);
+  // m_pArray is set, so SetSrcSpace()/SetDestSpace() accept the spectral
+  // signature as-is (IccCmm.cpp:7880-7935: the PCS/device/named validation
+  // there applies only to the m_pTag case).
+  outDouble.SetSrcSpace(icSigReflectanceSpectralPcsData);
+  outDouble.SetDestSpace(icSigCmykData);
+  inDouble.SetSrcSpace(icSigCmykData);
+  inDouble.SetDestSpace(icSigReflectanceSpectralPcsData);
 
-  CIccXformNamedColor *pOutNC = (CIccXformNamedColor*)pOutXform;
-  CIccXformNamedColor *pInNC  = (CIccXformNamedColor*)pInXform;
-  pOutNC->SetSrcSpace(icSigReflectanceSpectralPcsData);
-  pOutNC->SetDestSpace(icSigCmykData);
-  pInNC->SetSrcSpace(icSigCmykData);
-  pInNC->SetDestSpace(icSigReflectanceSpectralPcsData);
+  check(outDouble.Begin() == icCmmStatOk, "named color spectral: output-side Begin");
+  check(inDouble.Begin() == icCmmStatOk, "named color spectral: input-side Begin");
 
-  check(pOutXform->Begin() == icCmmStatOk, "named color spectral: output-side Begin");
-  check(pInXform->Begin() == icCmmStatOk, "named color spectral: input-side Begin");
+  check(outDouble.NeedAdjustPCS(), "named color spectral: v2 perceptual output needs an adjust (base)");
+  check(inDouble.NeedAdjustPCS(), "named color spectral: v2 perceptual input needs an adjust (base)");
 
-  check(pOutXform->NeedAdjustPCS(), "named color spectral: v2 perceptual output needs an adjust (base)");
-  check(pInXform->NeedAdjustPCS(), "named color spectral: v2 perceptual input needs an adjust (base)");
-
-  // The PCS term alone would pass: the source/destination side really is
-  // the tag's PCS now, just a spectral one -- this is what distinguishes
-  // this case from namedColorAdjustPredicatesRequireAnActualPcsSide() above.
-  check(pOutNC->IsSrcPCS(), "named color spectral: source side is reported as PCS");
-  check(pInNC->IsDestPCS(), "named color spectral: destination side is reported as PCS");
+  // The PCS term alone would pass: IsSrcPCS()/IsDestPCS() report true for
+  // the spectral signature via the real m_pArray-path formula. This is
+  // what pairs the case, per the coordinator's requirement: without this,
+  // the case below would not distinguish the spectral term from the PCS
+  // term.
+  check(outDouble.IsSrcPCS(), "named color spectral: source side is reported as PCS");
+  check(inDouble.IsDestPCS(), "named color spectral: destination side is reported as PCS");
 
   // Only the !IsSpaceSpectralPCS(...) term can make these false now.
-  check(!pOutXform->NeedsSrcPcsAdjust(),
+  check(!outDouble.NeedsSrcPcsAdjust(),
         "named color spectral: spectral PCS source excluded from adjustment");
-  check(!pInXform->NeedsDstPcsAdjust(),
+  check(!inDouble.NeedsDstPcsAdjust(),
         "named color spectral: spectral PCS destination excluded from adjustment");
-
-  delete pOutXform;
-  delete pInXform;
 }
 
 int main(int /*argc*/, char ** /*argv*/)
