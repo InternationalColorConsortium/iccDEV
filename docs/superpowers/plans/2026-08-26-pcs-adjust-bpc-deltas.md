@@ -55,37 +55,28 @@ This prints nothing, so `96507a4` is a valid stand-in for current
 **Confirmation the branch binary genuinely loads the rebuilt DLL** (not a
 stale copy). Both exes report the same embedded version string (the exe
 itself was not rebuilt, only the DLL — the version string is baked into the
-exe at `96507a4` for both copies since neither exe was relinked):
+exe at `96507a4` for both copies since neither exe was relinked), so the
+banner alone cannot distinguish them:
 
 ```
 iccApplyNamedCmm built with IccProfLib version 2.3.2.3+96507a4, IccLibConnect Version 2.3.2.3+96507a4
 ```
 
-To confirm the *behavior*, not just the version string, both binaries were
-run against a known-affected path — a v2 CMYK output profile
-(`f:/thrivedev/profiles/defaultcmyk.icc`, outside the repo) forward-applied
-with intent 0 (perceptual, no BPC) on the probe data below:
-
-```
-$ ./Testing/iccApplyNamedCmm.exe <probe> 0:10:16 1 f:/thrivedev/profiles/defaultcmyk.icc 0
-   ...
-    35.0224876404     3.7147521973     2.3942565918 ; 50 50 50 50
-    58.1666755676   -38.2570037842   -51.6071166992 ; 100 0 0 0
-
-$ ./out/vs2022-x64/bin/Release/iccApplyNamedCmm.exe <probe> 0:10:16 1 f:/thrivedev/profiles/defaultcmyk.icc 0
-   ...
-    35.0224838257     3.7147674561     2.3942565918 ; 50 50 50 50
-    58.1666755676   -38.2569732666   -51.6071472168 ; 100 0 0 0
-```
-
-Row-by-row deltas here are on the order of 1e-5 in Lab (e.g. `35.0224876404`
-vs `35.0224838257`, `-38.2570037842` vs `-38.2569732666`). This proves the
-branch `IccProfLib2.dll` is genuinely running branch behavior and is not a
-stale copy of master's — **but it does not, by itself, prove anything about
-`CIccApplyBPC`**: this call uses intent `0`, with no `+40` BPC flag, so it
-never enters `IccApplyBPC.cpp`. This check establishes the DLL is live;
-the "Liveness verification" section below separately establishes the BPC
-code path specifically is live.
+An earlier revision of this document tried to settle that with a
+differentiation probe against a v2 CMYK profile living outside the repo at
+a machine-local path. Review correctly flagged that as irreproducible —
+nobody else could re-run it — and, separately, redundant: it exercised a
+plain forward apply with no BPC flag, so it never entered
+`IccApplyBPC.cpp` and could not speak to the code path this document is
+actually about. It has been removed. As a same-shape in-repo substitute,
+`Testing/V2/v2CmykLut16.icc` forward-applied at intent `0` (no BPC) was
+tried and came back byte-identical between the two binaries — evidence
+that a plain, non-BPC forward apply is not a reliable place to look for
+this refactor's effect on this particular profile, not evidence that the
+DLL is stale (the "Liveness verification" section below independently
+rules out staleness for the actual code path under test, `IccApplyBPC.cpp`,
+using only in-repo fixtures and no unverifiable claim). DLL liveness for
+the code path this document reports on is established there, not here.
 
 ## Probe data
 
@@ -169,9 +160,9 @@ ADJUSTPCS-PROBE bInput=0 intent=1 isV2=1 adjustPCS=1 scale=1.003485,1.003485,1.0
 intent-41 case, the same numbers reappearing via the *absolute*-adjustment
 branch instead). The moved code is unambiguously live for this fixture at
 both intents. This directly satisfies the requirement to prove the path is
-live before trusting a null result, and it does so more strongly than the
-`defaultcmyk.icc` differentiation check above, since it runs through
-`CIccApplyBPC.cpp` itself rather than a plain forward apply.
+live before trusting a null result, and it is the load-bearing liveness
+evidence for this document: it runs through `CIccApplyBPC.cpp` itself,
+which the removed external differentiation probe never did.
 
 **A correction to the original review's static claim, made for the
 secondary fixture below:** the same probe was also run against
@@ -349,25 +340,21 @@ scale/offset on multiple edges inside `CIccApplyBPC::pixelXfm()` /
 `getBlackXfm()` for both fixtures, at both intents.
 
 The correct mechanism, to the extent this measurement can establish it, is
-about *where the perturbation goes*, not *whether it exists*. The
-differentiation check (`defaultcmyk.icc`, plain single-xform forward apply,
-no BPC) shows that this exact class of adjustment — the same
-`scale=0.996515,0.996527,0.996521 offset=0.001680,0.001737,0.001435` values
-reappear verbatim in the `v2CmykLut16.icc` probe above — does perturb output
-by ~1e-5 in Lab when the adjusted pixel flows straight through to a printed
-result. But it does not perturb output uniformly: even in that plain-apply
-case, 3 of the 5 probe rows landed on identical output regardless, only 2
-differed. Inside `CIccApplyBPC`, the adjusted PCS value instead feeds a
-black-point *estimation* procedure — `calcSrcBlackPoint()` /
-`calcDstBlackPoint()` explicitly clip the estimated L* to 50 and route
-through 16-bit `lut16Type` (`v2CmykLut16.icc`) or CLUT (`CMYK-3DLUTs.icc`)
-tetrahedral interpolation twice (forward and reverse) before the estimate
-is used at all. Both of those steps (the clip and the LUT interpolation's
-own discretization) sit downstream of the relocated adjustment and are
-coarser than the sub-1e-5 perturbation the relocation introduces, which is
-consistent with — though this measurement does not prove it is *caused
-by* — the perturbation not surfacing in the final black-point estimate or
-the final round-tripped CMYK values at 8-decimal print precision for these
+about *where the perturbation goes*, not *whether it exists*. Inside
+`CIccApplyBPC`, the adjusted PCS value (real, non-identity scale/offset —
+see the liveness probe above) feeds a black-point *estimation* procedure —
+`calcSrcBlackPoint()` / `calcDstBlackPoint()` explicitly clip the estimated
+L* to 50 and route through 16-bit `lut16Type` (`v2CmykLut16.icc`) or CLUT
+(`CMYK-3DLUTs.icc`) tetrahedral interpolation twice (forward and reverse)
+before the estimate is used at all. Both of those steps (the clip and the
+LUT interpolation's own discretization) sit downstream of the relocated
+adjustment. This measurement cannot establish the exact size of whatever
+sub-print-precision perturbation the relocation introduces at the point
+the adjustment is applied, only that the clip and double LUT interpolation
+downstream of it are coarser operations that a small perturbation could
+plausibly be absorbed by — consistent with, though not proof of, why it
+does not surface in the final black-point estimate or the final
+round-tripped CMYK values at 8-decimal print precision for these
 particular profiles and probe rows. This is a substantively different, and
 more defensible, claim than the original document's "the adjustment was
 identity, so there was nothing to perturb" — that explanation is now known
