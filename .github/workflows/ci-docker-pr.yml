@@ -193,6 +193,20 @@ jobs:
           fi
 
       # preflight: allow-codeql-actions reason=trusted-base-sanitizer
+      - name: Stage trusted sanitizer and remove helper checkout
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          install -m 0644 .trusted-workflow/.github/scripts/sanitize-sed.sh \
+            "$RUNNER_TEMP/sanitize-sed.sh"
+          rm -rf "$GITHUB_WORKSPACE/.trusted-workflow"
+          test ! -e "$GITHUB_WORKSPACE/.trusted-workflow"
+
+      # preflight: allow-codeql-actions reason=trusted-base-sanitizer
       # preflight: allow-pr-script-execution reason=build-same-repository-container-pr
       - name: Build unified PR image
         if: ${{ inputs.build_pr_image }}
@@ -203,14 +217,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          install -m 0644 .trusted-workflow/.github/scripts/sanitize-sed.sh \
-            "$RUNNER_TEMP/sanitize-sed.sh"
-          source .trusted-workflow/.github/scripts/sanitize-sed.sh
-
-          # The trusted checkout is needed only to load this sanitizer. Remove
-          # it so the Docker context and later read-only source mount are clean.
-          rm -rf "$GITHUB_WORKSPACE/.trusted-workflow"
-          test ! -e "$GITHUB_WORKSPACE/.trusted-workflow"
+          source "$RUNNER_TEMP/sanitize-sed.sh"
 
           set +e
           docker build \
