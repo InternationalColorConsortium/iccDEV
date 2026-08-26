@@ -55,7 +55,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           GH_TOKEN: ${{ github.token }}
-          GH_REPOSITORY: ${{ github.repository }}
+          GH_REPO: ${{ github.repository }}
           EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
@@ -90,7 +90,7 @@ jobs:
             echo "Processing PR from event: #$EVENT_PR"
           else
             # Schedule / dispatch with no number -> scan all open PRs
-            OPEN_PRS=$(gh pr list --state open --json number -q '.[].number' | tr '\n' ' ' | sed 's/[[:space:]]*$//')
+            OPEN_PRS=$(gh pr list --repo "$GH_REPO" --state open --json number -q '.[].number' | tr '\n' ' ' | sed 's/[[:space:]]*$//')
             if [[ ! "$OPEN_PRS" =~ ^[0-9[:space:]]*$ ]]; then
               echo "Invalid PR list returned by gh" >&2
               exit 1
@@ -150,14 +150,14 @@ jobs:
 
             # Validate PR belongs to this repo (not a cross-repo fork PR)
             local is_cross
-            is_cross=$(gh pr view "$pr" --json isCrossRepository -q .isCrossRepository 2>/dev/null || echo "true")
+            is_cross=$(gh pr view "$pr" --repo "$GH_REPO" --json isCrossRepository -q .isCrossRepository 2>/dev/null || echo "true")
             if [[ "$is_cross" == "true" ]]; then
               echo "$pr|skipped|Cross-repository PR" >> "$RESULTS_FILE"
               return
             fi
 
             local head
-            head=$(gh pr view "$pr" --json headRefOid -q .headRefOid 2>/dev/null || echo "")
+            head=$(gh pr view "$pr" --repo "$GH_REPO" --json headRefOid -q .headRefOid 2>/dev/null || echo "")
             if [[ -z "$head" ]]; then
               echo "$pr|skipped|Could not determine HEAD SHA" >> "$RESULTS_FILE"
               return
@@ -174,7 +174,7 @@ jobs:
             fi
 
             local readiness_data is_draft merge_state review_decision
-            readiness_data=$(gh pr view "$pr" \
+            readiness_data=$(gh pr view "$pr" --repo "$GH_REPO" \
               --json isDraft,mergeStateStatus,reviewDecision \
               --jq '"\(.isDraft)|\(.mergeStateStatus // "UNKNOWN")|\(.reviewDecision // "UNKNOWN")"' 2>/dev/null || echo "true|UNKNOWN|UNKNOWN")
             is_draft="${readiness_data%%|*}"
@@ -235,13 +235,13 @@ jobs:
             case "$combined" in
               success)
                 if [[ "$merge_ready" == "true" ]]; then
-                  gh pr edit "$pr" \
+                  gh pr edit "$pr" --repo "$GH_REPO" \
                     --add-label "passed,Merge Ready" \
                     --remove-label "failed,pending" \
                     2>/dev/null || true
                   added="passed,Merge Ready"; removed="failed,pending"
                 else
-                  gh pr edit "$pr" \
+                  gh pr edit "$pr" --repo "$GH_REPO" \
                     --add-label "passed" \
                     --remove-label "failed,pending,Merge Ready" \
                     2>/dev/null || true
@@ -249,14 +249,14 @@ jobs:
                 fi
                 ;;
               failure|error)
-                gh pr edit "$pr" \
+                gh pr edit "$pr" --repo "$GH_REPO" \
                   --add-label "failed" \
                   --remove-label "passed,pending,Merge Ready" \
                   2>/dev/null || true
                 added="failed"; removed="passed,pending,Merge Ready"
                 ;;
               pending)
-                gh pr edit "$pr" \
+                gh pr edit "$pr" --repo "$GH_REPO" \
                   --add-label "pending" \
                   --remove-label "passed,failed,Merge Ready" \
                   2>/dev/null || true
