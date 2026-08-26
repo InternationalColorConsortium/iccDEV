@@ -61,7 +61,6 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          git config --add safe.directory "$PWD"
 
           EVENT_PR="${EVENT_PR_NUMBER}"
 
@@ -121,7 +120,6 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          git config --add safe.directory "$PWD"
 
           RESULTS_FILE=$(mktemp)
           PROCESSED=0
@@ -298,7 +296,6 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          git config --add safe.directory "$PWD"
 
           SANITIZER=".github/scripts/sanitize-sed.sh"
           if [[ -f "$SANITIZER" ]]; then
