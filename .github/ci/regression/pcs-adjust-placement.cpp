@@ -1581,6 +1581,52 @@ static void xyzPcsChainStillAdjusts()
               (double)relative[0], (double)relative[1], (double)relative[2]);
 }
 
+// The coordinator's reviewer found the same exposure the named-colour cache
+// refresh closed, one level up: CIccXform::SetParams() is public,
+// non-virtual, and reassigns m_pProfile/m_bInput/m_bUseSpectralPCS -- exactly
+// what the *base* GetSrcSpace()/GetDstSpace() compute from, and exactly what
+// the port cache captures. Same "public API, no in-tree caller after
+// Begin()" shape as CIccXformNamedColor's setters had, but wider: it reaches
+// every xform type that uses the base accessors, not just named colour.
+//
+// Uses a real, in-tree spectral MPE xform (via makeSpectralXform(), the same
+// helper the S1-S8 cases above use) rather than a test double. That choice
+// matters for the direction: CIccXformMpe::NeedsDstPcsAdjust() ANDs the base
+// (cached) term with only an intent/tag-mismatch term, not a fresh spectral
+// recheck like CIccXformNamedColor's override -- so unlike the named-colour
+// case, nothing here masks a stale cache in either direction, and either
+// direction of the move would have exposed this.
+static void setParamsRefreshesCacheAfterBegin()
+{
+  // bInputProfile=true, bAbsTag=false, bAbsIntent=true: an absolute-intent
+  // request against a relative D2B tag, so Begin() sets m_bAdjustPCS, and the
+  // destination is spectral, so NeedsDstPcsAdjust() should be excluded.
+  CIccXform *pXform = makeSpectralXform(true, /*bAbsTag=*/false, /*bAbsIntent=*/true,
+                                        icSigReflectanceSpectralData, /*bWhitePoint=*/true);
+  check(pXform != NULL, "SetParams cache refresh: xform created");
+  if (!pXform) return;
+
+  check(pXform->NeedAdjustPCS(), "SetParams cache refresh: needs an adjust (base)");
+  check(!pXform->NeedsDstPcsAdjust(),
+        "SetParams cache refresh: spectral destination excluded before the move");
+
+  // Simulates an out-of-tree caller re-invoking the public SetParams() on an
+  // already-Begin()'d xform, moving bUseSpectralPCS from true to false.
+  // GetDstSpace() now reports the profile's colorimetric PCS (Lab) instead of
+  // the spectral one -- same profile, same direction, same intents; only the
+  // flag selecting between GetDstSpace()'s two branches changes. Without the
+  // refresh inside SetParams(), the cache would still say "spectral" and this
+  // would stay wrongly excluded.
+  CIccProfile *pProfile = pXform->GetProfilePtr();
+  pXform->SetParams(pProfile, /*bInput=*/true, icAbsoluteColorimetric, icRelativeColorimetric,
+                    /*bUseSpectralPCS=*/false, icInterpLinear);
+
+  check(pXform->NeedsDstPcsAdjust(),
+        "SetParams cache refresh: colorimetric destination adjusts after the move, not stale");
+
+  delete pXform;
+}
+
 int main(int /*argc*/, char ** /*argv*/)
 {
   adjustmentIsLargerThanTheToleranceBand();
@@ -1642,6 +1688,7 @@ int main(int /*argc*/, char ** /*argv*/)
   spectralSampleCountMismatchIsRejected();
 
   xyzPcsChainStillAdjusts();
+  setParamsRefreshesCacheAfterBegin();
 
   if (g_failures) {
     std::printf("\n%d check(s) failed\n", g_failures);

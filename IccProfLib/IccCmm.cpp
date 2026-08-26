@@ -1455,6 +1455,13 @@ void CIccXform::SetParams(CIccProfile *pProfile, bool bInput, icRenderingIntent 
   m_nMCS = nMCS;
   m_bLuminanceMatching = false;
 
+  // m_pProfile, m_bInput and m_bUseSpectralPCS above are exactly the fields
+  // the base GetSrcSpace()/GetDstSpace() compute from (m_bGamutXform and
+  // m_bPcsAdjustXform are the other two, refreshed by their own setters).
+  // Called on an already-constructed xform in every in-tree caller -- see
+  // refreshPcsPortCache()'s declaration in IccCmm.h.
+  refreshPcsPortCache();
+
   if (pHintManager) {
     IIccCreateXformHint *pHint=NULL;
 
@@ -1547,6 +1554,23 @@ bool CIccXform::CheckForInvalidPCSScale() const
 
 /**
  **************************************************************************
+ * Name: CIccXform::refreshPcsPortCache
+ *
+ * Purpose:
+ *  Recomputes m_bSrcSpectralPCS/m_bDstSpectralPCS from
+ *  IsSpaceSpectralPCS(GetSrcSpace())/IsSpaceSpectralPCS(GetDstSpace()). See
+ *  the declaration in IccCmm.h for the full list of call sites and why
+ *  virtual dispatch here is safe at every one of them.
+ **************************************************************************
+ */
+void CIccXform::refreshPcsPortCache()
+{
+  m_bSrcSpectralPCS = IsSpaceSpectralPCS(GetSrcSpace());
+  m_bDstSpectralPCS = IsSpaceSpectralPCS(GetDstSpace());
+}
+
+/**
+ **************************************************************************
  * Name: CIccXform::Begin
  * 
  * Purpose: 
@@ -1558,17 +1582,13 @@ bool CIccXform::CheckForInvalidPCSScale() const
  */
 icStatusCMM CIccXform::Begin()
 {
-  // Cache each port's spectral-ness once. GetSrcSpace()/GetDstSpace() are
-  // virtual and, on the base implementation, walk into the profile header;
-  // NeedsSrcPcsAdjust()/NeedsDstPcsAdjust() used to call them on every pixel
-  // Check*Abs() touches. By the time Begin() runs, every setter that can move
-  // a port's space (SetSrcSpace()/SetDestSpace() on CIccXformNamedColor,
-  // SetGamutXform(), SetPcsAdjustXform()) has already been called, and every
-  // derived Begin() override calls CIccXform::Begin() first -- so this is the
-  // one point where the answer is both known and stable for the xform's
-  // lifetime.
-  m_bSrcSpectralPCS = IsSpaceSpectralPCS(GetSrcSpace());
-  m_bDstSpectralPCS = IsSpaceSpectralPCS(GetDstSpace());
+  // Refresh the port-spectral-ness cache unconditionally: whatever moved a
+  // port's space since the last refresh (SetParams(), SetGamutXform(),
+  // SetPcsAdjustXform(), or a CIccXformNamedColor SetSrcSpace()/
+  // SetDestSpace()), Begin() is the point every derived Begin() override
+  // reaches (each calls CIccXform::Begin() first) before Apply() can read
+  // the cache through NeedsSrcPcsAdjust()/NeedsDstPcsAdjust().
+  refreshPcsPortCache();
 
   IIccProfileConnectionConditions *pCond = GetConnectionConditions();
 
@@ -8228,15 +8248,13 @@ icStatusCMM CIccXformNamedColor::SetSrcSpace(icColorSpaceSignature nSrcSpace)
 
   m_nSrcSpace = nSrcSpace;
 
-  // Refresh the cache CIccXform::Begin() fills, computing the exact same
-  // thing Begin() would compute for this object: GetSrcSpace() is overridden
-  // on this class to return m_nSrcSpace directly, so IsSpaceSpectralPCS() of
-  // the value just assigned IS IsSpaceSpectralPCS(GetSrcSpace()). Needed
-  // because SetSrcSpace() is public API with no in-tree caller guaranteeing
-  // it only runs before Begin(); without this, a caller that moves the
-  // source space after Begin() would silently desync the cache from the
-  // real source space -- no assertion, no error, wrong colour.
-  m_bSrcSpectralPCS = IsSpaceSpectralPCS(m_nSrcSpace);
+  // Refresh the port cache CIccXform's other setters also refresh (see
+  // refreshPcsPortCache()'s declaration in IccCmm.h): SetSrcSpace() is
+  // public API with no in-tree caller guaranteeing it only runs before
+  // Begin(), and without this a caller that moves the source space after
+  // Begin() would silently desync the cache from the real source space --
+  // no assertion, no error, wrong colour.
+  refreshPcsPortCache();
 
   return icCmmStatOk;
 }
@@ -8273,10 +8291,9 @@ icStatusCMM CIccXformNamedColor::SetDestSpace(icColorSpaceSignature nDestSpace)
 
   m_nDestSpace = nDestSpace;
 
-  // Refresh the cache the same way SetSrcSpace() does above, and for the same
-  // reason: GetDstSpace() is overridden here to return m_nDestSpace directly,
-  // so this is exactly IsSpaceSpectralPCS(GetDstSpace()) for this object.
-  m_bDstSpectralPCS = IsSpaceSpectralPCS(m_nDestSpace);
+  // Refresh the port cache, same as SetSrcSpace() above and for the same
+  // reason.
+  refreshPcsPortCache();
 
   return icCmmStatOk;
 }

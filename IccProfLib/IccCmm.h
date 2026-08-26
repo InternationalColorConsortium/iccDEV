@@ -435,12 +435,18 @@ public:
 
   //ShareProfile should only be called when the profile is shared between transforms 
   void ShareProfile() { m_bOwnsProfile = false; } 
-  void SetPcsAdjustXform() { m_bPcsAdjustXform = true; }
+  /// Sets the flag, then refreshes the port-spectral-ness cache (see
+  /// refreshPcsPortCache() below): this flag is one of the inputs
+  /// GetSrcSpace() branches on, so the cache has to be recomputed after it
+  /// changes.
+  void SetPcsAdjustXform() { m_bPcsAdjustXform = true; refreshPcsPortCache(); }
   /// Marks this xform as the gamut check for its profile.  The gamt tag is
   /// B-to-A shaped, so Create() traverses it with bInput false; without this
   /// flag the !m_bInput branches of GetDstSpace()/GetNumDstSamples() would
   /// report the profile's device space instead of the single gamut channel.
-  void SetGamutXform() { m_bGamutXform = true; }
+  /// Refreshes the port cache afterward for the same reason SetPcsAdjustXform()
+  /// does: this flag is one of GetDstSpace()'s inputs.
+  void SetGamutXform() { m_bGamutXform = true; refreshPcsPortCache(); }
   /// Records which tag family Create() resolved this xform through: true for
   /// the DToBx/BToDx MPE tags, false for the AToBx/BToAx colorimetric ones.
   /// Only Create() should call this.
@@ -580,7 +586,32 @@ protected:
 	void AdjustPCS(icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const;
 
   bool CheckForInvalidPCSScale() const;
-  
+
+  /// Recomputes m_bSrcSpectralPCS/m_bDstSpectralPCS from
+  /// IsSpaceSpectralPCS(GetSrcSpace())/IsSpaceSpectralPCS(GetDstSpace()).
+  /// Call this from every place that can move one of this xform's ports
+  /// after construction -- Begin(), SetParams(), SetGamutXform(),
+  /// SetPcsAdjustXform(), and CIccXformNamedColor::SetSrcSpace()/
+  /// SetDestSpace() all do. One computation, audited call sites, instead of
+  /// each caller re-deriving the same two lines (which is how the
+  /// CIccXformNamedColor setters looked before this helper existed, and
+  /// which is exactly the shape that let SetParams() go unrefreshed and
+  /// stay unrefreshed across two review rounds).
+  ///
+  /// Dispatches virtually through GetSrcSpace()/GetDstSpace(), so it must
+  /// never run before the most-derived constructor has finished -- a virtual
+  /// call during construction resolves to the class under construction, not
+  /// any further-derived override, and CIccXform::GetSrcSpace()'s base
+  /// implementation dereferences m_pProfile, which is still NULL at that
+  /// point. Every call site above runs on an already-constructed object:
+  /// SetParams() is called from CIccXform::Create() only after `new` has
+  /// returned (IccCmm.cpp, the three Create() overloads), never from a
+  /// constructor; SetGamutXform()/SetPcsAdjustXform() are likewise called
+  /// from Create()/CheckPCSRangeConversions() on an already-returned xform;
+  /// and CIccXformNamedColor's constructor sets m_nSrcSpace/m_nDestSpace
+  /// directly rather than through SetSrcSpace()/SetDestSpace().
+  void refreshPcsPortCache();
+
   virtual bool HasPerceptualHandling() { return true; }
 
   CIccProfile *m_pProfile;
@@ -616,29 +647,16 @@ protected:
 	icFloatNumber m_PCSScale[3]; // scale and offset for PCS adjustment in XYZ
 	icFloatNumber m_PCSOffset[3];
 
-  // Filled by CIccXform::Begin() from IsSpaceSpectralPCS(GetSrcSpace())/
-  // IsSpaceSpectralPCS(GetDstSpace()); NeedsSrcPcsAdjust()/NeedsDstPcsAdjust()
-  // read these instead of re-deriving the answer from a virtual GetSrcSpace()/
-  // GetDstSpace() call on every pixel Check*Abs() touches.
-  //
-  // SetGamutXform() and SetPcsAdjustXform() only ever run before Begin() (both
-  // are called from within Create()/CheckPCSRangeConversions(), before the
-  // xform's first Begin()), so Begin()'s fill is the only write those two
-  // need. SetSrcSpace()/SetDestSpace() on CIccXformNamedColor are different:
-  // they are public API with no in-tree caller, so nothing stops an
-  // out-of-tree caller from moving a port's space after Begin() has already
-  // filled this cache from the old one. Before this cache existed that was
-  // harmless -- the predicates read GetSrcSpace()/GetDstSpace() live, so any
-  // call ordering got the current answer. Caching turned that into a silent
-  // desync: the wrong conversion would apply and nothing would report it. So
-  // CIccXformNamedColor::SetSrcSpace()/SetDestSpace() also refresh their half
-  // of this cache directly, right after moving m_nSrcSpace/m_nDestSpace, using
-  // the same IsSpaceSpectralPCS() call on the value just assigned -- which is
-  // exactly IsSpaceSpectralPCS(GetSrcSpace())/IsSpaceSpectralPCS(GetDstSpace())
-  // for that class, since its GetSrcSpace()/GetDstSpace() overrides return
-  // m_nSrcSpace/m_nDestSpace directly. That makes the cache correct regardless
-  // of call ordering, rather than resting on a contract ("call this only
-  // before Begin()") that the public API cannot enforce.
+  // NeedsSrcPcsAdjust()/NeedsDstPcsAdjust() read these instead of
+  // re-deriving the answer from a virtual GetSrcSpace()/GetDstSpace() call
+  // (which, on the base implementation, walks the profile header) on every
+  // pixel Check*Abs() touches. Kept correct by refreshPcsPortCache() above,
+  // called from every site that can move a port after construction --
+  // rather than by each such site recomputing IsSpaceSpectralPCS() itself,
+  // which is how a first fix here (Begin() only) and a second fix (Begin()
+  // plus the two CIccXformNamedColor setters) both still left SetParams()
+  // stale before this helper existed. See refreshPcsPortCache()'s comment
+  // for the full call-site list and why virtual dispatch is safe there.
   bool m_bSrcSpectralPCS;
   bool m_bDstSpectralPCS;
 
