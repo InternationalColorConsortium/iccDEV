@@ -2,6 +2,18 @@
 
 Branch: `refactor/pcs-adjust-in-pcsxform`, measured at `01b03287`.
 
+**Revision note:** the first version of this document used
+`Testing/CMYK-3DLUTs/CMYK-3DLUTs.icc` as the only fixture and reported a
+bit-identical (null) result. Review found that fixture's `getBlackXfm()`
+chain could plausibly never engage the moved PCS-adjustment code at all,
+which would make the null uninterpretable. This revision adds
+`Testing/V2/v2CmykLut16.icc` (an in-repo v2.10 CMYK output profile) as the
+primary fixture, and — before trusting any diff — proves with a temporary,
+reverted runtime probe that the moved code genuinely executes with
+non-identity numbers for both fixtures. The original `CMYK-3DLUTs.icc`
+result is kept below as a secondary case, relabeled to match what the probe
+actually showed (it is *not* a clean "never engages" case either).
+
 ## Baseline provenance
 
 Compared two `iccApplyNamedCmm.exe` + `IccProfLib2.dll` pairs, each loading its
@@ -22,7 +34,11 @@ own DLL from its own directory:
   The build reported the DLL as already up to date at that `HEAD` (mtime
   `2026-08-26 15:24:45`, a couple of minutes before this rebuild ran), i.e.
   no source changes since the prior rebuild — confirming the artifact
-  reflects current `HEAD`.
+  reflects current `HEAD`. (The DLL was later rebuilt twice more, for the
+  liveness probe and to restore a clean copy afterward — see "Liveness
+  verification" below. The final measurements in this document were taken
+  against a DLL built from an unmodified `IccProfLib/IccCmm.cpp` at the same
+  `HEAD`, confirmed via `git status`/`git diff` showing no residual change.)
 
 **Validity of the baseline (plan Ruling 3).** Every commit between `96507a4`
 and `master` (`68b1b6f2`) touches only CI/tooling, not `IccProfLib/` or
@@ -38,9 +54,8 @@ This prints nothing, so `96507a4` is a valid stand-in for current
 
 **Confirmation the branch binary genuinely loads the rebuilt DLL** (not a
 stale copy). Both exes report the same embedded version string (the exe
-itself was not rebuilt, only the DLL — the exe reads the DLL's version at
-link time historically, but the string is baked at `96507a4` for both exe
-copies since neither exe was relinked):
+itself was not rebuilt, only the DLL — the version string is baked into the
+exe at `96507a4` for both copies since neither exe was relinked):
 
 ```
 iccApplyNamedCmm built with IccProfLib version 2.3.2.3+96507a4, IccLibConnect Version 2.3.2.3+96507a4
@@ -64,10 +79,13 @@ $ ./out/vs2022-x64/bin/Release/iccApplyNamedCmm.exe <probe> 0:10:16 1 f:/thrived
 ```
 
 Row-by-row deltas here are on the order of 1e-5 in Lab (e.g. `35.0224876404`
-vs `35.0224838257`, `-38.2570037842` vs `-38.2569732666`) — small,
-non-identical, and of the magnitude expected from removing one redundant
-Lab&lt;-&gt;XYZ round trip per edge. This proves the branch `IccProfLib2.dll`
-is genuinely running branch behavior and is not a stale copy of master's.
+vs `35.0224838257`, `-38.2570037842` vs `-38.2569732666`). This proves the
+branch `IccProfLib2.dll` is genuinely running branch behavior and is not a
+stale copy of master's — **but it does not, by itself, prove anything about
+`CIccApplyBPC`**: this call uses intent `0`, with no `+40` BPC flag, so it
+never enters `IccApplyBPC.cpp`. This check establishes the DLL is live;
+the "Liveness verification" section below separately establishes the BPC
+code path specifically is live.
 
 ## Probe data
 
@@ -81,20 +99,191 @@ icEncodePercent ; Encoding
   0.0   0.0   0.0 100.0
 ```
 
-## Measurement
+## Liveness verification: proving `m_bAdjustPCS` actually fires inside `getBlackXfm()`/`pixelXfm()`
 
-Fixture: `Testing/CMYK-3DLUTs/CMYK-3DLUTs.icc` (v5 CMYK output profile with a
-Lab PCS), applied to itself twice (forward then reverse, i.e. a
-device-&gt;PCS-&gt;device round trip through the same profile) at intents `40`
-(perceptual + BPC) and `41` (relative + BPC):
+Static analysis of `CIccXform::Begin()`'s gating (`IccProfLib/IccCmm.cpp`,
+around line 1557) is not sufficient on its own: it correctly shows the
+*perceptual-legacy* branch (`m_nIntent == icPerceptual && (IsVersion2() ||
+!HasPerceptualHandling())`) requires a v2 profile and a Perceptual-intent
+edge, and it correctly shows `getBlackXfm()`'s second edge always forces
+`icRelativeColorimetric`. But there is a second, independent gate — the
+absolute-adjustment branch (`bNeedAbsAdjust`, driven by `m_bAbsToRel` /
+`m_nTagIntent` tag-family fallback, unrelated to profile version) — and
+static reading alone cannot show which of the two, if either, actually
+fires for a given profile/intent without tracing tag-family selection at
+runtime. Rather than trust either static story, this was checked directly.
+
+**Method.** A single guarded diagnostic line was added temporarily to
+`CIccXform::Begin()` in `IccProfLib/IccCmm.cpp`, immediately before its
+final `return icCmmStatOk;`:
+
+```cpp
+if (getenv("ICC_DEBUG_ADJUSTPCS")) {
+  fprintf(stderr, "ADJUSTPCS-PROBE bInput=%d intent=%d isV2=%d adjustPCS=%d scale=%.6f,%.6f,%.6f offset=%.6f,%.6f,%.6f\n",
+          (int)m_bInput, (int)m_nIntent, (int)IsVersion2(), (int)m_bAdjustPCS,
+          (double)m_PCSScale[0], (double)m_PCSScale[1], (double)m_PCSScale[2],
+          (double)m_PCSOffset[0], (double)m_PCSOffset[1], (double)m_PCSOffset[2]);
+}
+```
+
+The branch DLL was rebuilt with this line, run with `ICC_DEBUG_ADJUSTPCS=1`
+against both fixtures at both intents, then `IccProfLib/IccCmm.cpp` was
+reverted with `git checkout --` and the DLL rebuilt again from the clean
+file. `git status`/`git diff` confirmed no residual source change before
+any measurement in this document was recorded — **this document reflects no
+source changes**, per the task's own requirement; the instrumentation was
+build-and-discard, used only to decide whether the null result below is
+interpretable.
+
+**Result for `Testing/V2/v2CmykLut16.icc`, intent 40** (six `Begin()` calls:
+`calcSrcBlackPoint`'s fixed-Perceptual `pixelXfm()`, and `getBlackXfm()`'s
+two edges, each run once for the profile used as source and once as
+destination):
+
+```
+ADJUSTPCS-PROBE bInput=0 intent=0 isV2=1 adjustPCS=1 scale=1.003497,1.003485,1.003491 offset=-0.001686,-0.001743,-0.001440
+ADJUSTPCS-PROBE bInput=1 intent=0 isV2=1 adjustPCS=1 scale=0.996515,0.996527,0.996521 offset=0.001680,0.001737,0.001435
+ADJUSTPCS-PROBE bInput=1 intent=0 isV2=1 adjustPCS=1 scale=1.000000,1.000000,1.000000 offset=0.000000,0.000000,0.000000
+ADJUSTPCS-PROBE bInput=0 intent=0 isV2=1 adjustPCS=1 scale=1.003497,1.003485,1.003491 offset=-0.001686,-0.001743,-0.001440
+ADJUSTPCS-PROBE bInput=1 intent=1 isV2=1 adjustPCS=0 scale=0.000000,1.000000,0.000000 offset=0.000000,0.000000,0.000000
+ADJUSTPCS-PROBE bInput=0 intent=0 isV2=1 adjustPCS=1 scale=0.999082,0.999082,0.999082 offset=0.000442,0.000459,0.000379
+```
+
+**Result for `Testing/V2/v2CmykLut16.icc`, intent 41:**
+
+```
+ADJUSTPCS-PROBE bInput=0 intent=0 isV2=1 adjustPCS=1 scale=1.003497,1.003485,1.003491 offset=-0.001686,-0.001743,-0.001440
+ADJUSTPCS-PROBE bInput=1 intent=1 isV2=1 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000
+ADJUSTPCS-PROBE bInput=1 intent=1 isV2=1 adjustPCS=1 scale=0.996527,0.996527,0.996527 offset=0.001674,0.001737,0.001433
+ADJUSTPCS-PROBE bInput=0 intent=1 isV2=1 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000
+ADJUSTPCS-PROBE bInput=1 intent=1 isV2=1 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000
+ADJUSTPCS-PROBE bInput=0 intent=0 isV2=1 adjustPCS=1 scale=1.003497,1.003485,1.003491 offset=-0.001686,-0.001743,-0.001440
+ADJUSTPCS-PROBE bInput=1 intent=1 isV2=1 adjustPCS=0 scale=1.003497,1.003485,1.003491 offset=0.000000,0.000000,0.000000
+ADJUSTPCS-PROBE bInput=0 intent=1 isV2=1 adjustPCS=1 scale=1.003485,1.003485,1.003485 offset=-0.001680,-0.001743,-0.001437
+```
+
+**Conclusion of the probe:** `adjustPCS=1` fires repeatedly for
+`v2CmykLut16.icc`, at both intents, with real non-identity scale/offset
+(e.g. `scale=0.996515,0.996527,0.996521 offset=0.001680,0.001737,0.001435`
+— exactly the v2-perceptual-legacy black-point scale/offset, and, for the
+intent-41 case, the same numbers reappearing via the *absolute*-adjustment
+branch instead). The moved code is unambiguously live for this fixture at
+both intents. This directly satisfies the requirement to prove the path is
+live before trusting a null result, and it does so more strongly than the
+`defaultcmyk.icc` differentiation check above, since it runs through
+`CIccApplyBPC.cpp` itself rather than a plain forward apply.
+
+**A correction to the original review's static claim, made for the
+secondary fixture below:** the same probe was also run against
+`Testing/CMYK-3DLUTs/CMYK-3DLUTs.icc` at intent 40. The review's static
+argument — that `IsVersion2()` is false for this v5 profile and
+`HasPerceptualHandling()` defaults true for LUT xforms, so the
+perceptual-legacy branch can never fire — is correct as far as it goes. But
+it is not the only gate: two of the six `Begin()` calls for this fixture
+*did* show `adjustPCS=1` with real values, via the independent
+absolute-adjustment branch:
+
+```
+ADJUSTPCS-PROBE bInput=0 intent=0 isV2=0 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000
+ADJUSTPCS-PROBE bInput=1 intent=0 isV2=0 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000
+ADJUSTPCS-PROBE bInput=1 intent=0 isV2=0 adjustPCS=1 scale=1.001158,1.001158,1.001158 offset=-0.000558,-0.000579,-0.000477
+ADJUSTPCS-PROBE bInput=0 intent=0 isV2=0 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000
+ADJUSTPCS-PROBE bInput=1 intent=1 isV2=0 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000
+ADJUSTPCS-PROBE bInput=0 intent=0 isV2=0 adjustPCS=1 scale=0.999437,0.999437,0.999437 offset=0.000272,0.000282,0.000232
+```
+
+So `CMYK-3DLUTs.icc`'s round trip is **not** structurally guaranteed to
+skip the moved code either — the perceptual-legacy branch is closed for it,
+but the absolute-adjustment branch is genuinely open on 2 of 6 edges, with
+non-trivial scale/offset (~1.0e-3 magnitude). It is retained below as a
+secondary case, relabeled to say exactly that, rather than the "unaffected
+by construction" label originally proposed.
+
+## Primary measurement: `Testing/V2/v2CmykLut16.icc`
+
+In-repo v2.10 CMYK Output profile (`prtr`/`CMYK`/`Lab` PCS, `lut16Type`
+`AToB0/1/2` + `BToA0/1/2` tags — generated from the tracked
+`Testing/V2/v2CmykLut16.xml` by `CreateAllProfiles.sh`), applied to itself
+twice (forward then reverse) at intents `40` (perceptual + BPC) and `41`
+(relative + BPC):
 
 ```
 for INTENT in 40 41; do
   <exe> "$SCRATCH/cmyk-probe.txt" 1:8:14 1 \
-    Testing/CMYK-3DLUTs/CMYK-3DLUTs.icc $INTENT \
-    Testing/CMYK-3DLUTs/CMYK-3DLUTs.icc $INTENT
+    Testing/V2/v2CmykLut16.icc $INTENT \
+    Testing/V2/v2CmykLut16.icc $INTENT
 done
 ```
+
+### Intent 40 (perceptual + BPC) diff
+
+```
+diff -u bpc2-baseline-40.txt bpc2-branch-40.txt
+(no output — files are byte-identical)
+```
+
+Baseline/branch output (identical):
+
+```
+'CMYK'	; Data Format
+icEncodePercent	; Encoding
+
+;Source Data Format: 'CMYK'
+;Source Data Encoding: icEncodePercent
+;Source data is after semicolon
+
+;Profiles applied
+; Testing/V2/v2CmykLut16.icc
+; Testing/V2/v2CmykLut16.icc
+
+    50.00000000    50.00136948    50.00152588     0.00036955	;     0.00000000     0.00000000     0.00000000     0.00000000
+    47.27932358    51.25760269    54.18593979    46.88261795	;    10.00000000    20.00000000    30.00000000    40.00000000
+    50.00000000    50.00137711    50.00151825    66.81841278	;    50.00000000    50.00000000    50.00000000    50.00000000
+    84.92651367    22.08301735    15.03691959    29.96361923	;   100.00000000     0.00000000     0.00000000     0.00000000
+    50.00000000    50.00136948    50.00152588    99.17430878	;     0.00000000     0.00000000     0.00000000   100.00000000
+```
+
+### Intent 41 (relative + BPC) diff
+
+```
+diff -u bpc2-baseline-41.txt bpc2-branch-41.txt
+(no output — files are byte-identical)
+```
+
+Baseline/branch output (identical):
+
+```
+'CMYK'	; Data Format
+icEncodePercent	; Encoding
+
+;Source Data Format: 'CMYK'
+;Source Data Encoding: icEncodePercent
+;Source data is after semicolon
+
+;Profiles applied
+; Testing/V2/v2CmykLut16.icc
+; Testing/V2/v2CmykLut16.icc
+
+    50.00000000    50.00136948    50.00152588     0.00000000	;     0.00000000     0.00000000     0.00000000     0.00000000
+    47.27023315    51.26105499    54.20110703    46.96060944	;    10.00000000    20.00000000    30.00000000    40.00000000
+    50.00000000    50.00136948    50.00152588    66.99981689	;    50.00000000    50.00000000    50.00000000    50.00000000
+    85.00061035    22.00045967    14.99984837    30.00122261	;   100.00000000     0.00000000     0.00000000     0.00000000
+    50.00000000    50.00136948    50.00152588   100.00000000	;     0.00000000     0.00000000     0.00000000   100.00000000
+```
+
+Both diffs were re-confirmed against the clean (post-revert) rebuild of the
+branch DLL, not just the instrumented one, to rule out the instrumentation
+itself having changed anything.
+
+## Secondary measurement (retained for contrast): `Testing/CMYK-3DLUTs/CMYK-3DLUTs.icc`
+
+Kept from the original version of this document. As shown above, this
+fixture's round trip does exercise `m_bAdjustPCS` on 2 of 6 `Begin()` calls
+(via the absolute-adjustment branch, with real ~1.0e-3-magnitude scale and
+offset), so — unlike the initial write-up claimed — this is not a case that
+structurally cannot engage the moved code. It is retained as a second data
+point showing the same live-but-numerically-inert pattern as the primary
+fixture, under a different adjustment branch.
 
 ### Intent 40 (perceptual + BPC) diff
 
@@ -102,8 +291,6 @@ done
 diff -u bpc-baseline-40.txt bpc-branch-40.txt
 (no output — files are byte-identical; md5sum: 2424fd8c9313ddfe668622b86210e333 for both)
 ```
-
-Baseline/branch output (identical):
 
 ```
 'CMYK'	; Data Format
@@ -131,8 +318,6 @@ diff -u bpc-baseline-41.txt bpc-branch-41.txt
 (no output — files are byte-identical; md5sum: 4c140f12259be43a2a3b6f0557ea8ef3 for both)
 ```
 
-Baseline/branch output (identical):
-
 ```
 'CMYK'	; Data Format
 icEncodePercent	; Encoding
@@ -154,25 +339,43 @@ icEncodePercent	; Encoding
 
 ## Classification
 
-Both intents produce **bit-identical** output between master (`96507a4`) and
-branch (`01b03287`) for this fixture — a delta of exactly 0.0 in CMYK
-percent, well within the 1e-4 acceptance threshold. This is not a
-coincidence of missing sensitivity: the differentiation check above (the
-`defaultcmyk.icc` forward path) proves the branch DLL genuinely differs from
-master's by ~1e-5 in Lab where a real PCS adjustment (media white point
-scaling) is exercised. The explanation for zero delta here is that
-`CIccApplyBPC::pixelXfm()` / `getBlackXfm()` build a `PCS -> device -> PCS`
-round trip through **the same profile applied to itself** (both edges use
-`Testing/CMYK-3DLUTs/CMYK-3DLUTs.icc`), so the source and destination media
-white points are identical and the PCS adjustment at each edge is the
-identity transform (scale 1.0, offset 0) both before and after Task 4/5's
-move. Where the adjustment is the identity, removing the redundant
-Lab&lt;-&gt;XYZ round trip changes nothing numerically — there is no rounding
-noise to introduce because no adjustment math (and, for this profile, no
-Lab&lt;-&gt;XYZ conversion at all, since the profile's declared PCS is
-already Lab) is exercised in a way that depends on the extra round trip.
+All four measured combinations (two fixtures × two intents) produce
+**bit-identical** output between master (`96507a4`) and branch (`01b03287`)
+— a delta of exactly 0.0 in CMYK percent against every probe row, well
+within the 1e-4 acceptance threshold. Unlike the first pass at this task,
+this null result is not a "the code never ran" artifact: the liveness
+probe above shows `m_bAdjustPCS` firing with genuine non-identity
+scale/offset on multiple edges inside `CIccApplyBPC::pixelXfm()` /
+`getBlackXfm()` for both fixtures, at both intents.
 
-**Conclusion: the deltas are within tolerance.** Both intents 40 and 41 are
-bit-identical (0.0 delta, vs. the 1e-4 threshold), and this null result has
-been verified to reflect genuine branch behavior rather than a stale or
-misloaded DLL.
+The correct mechanism, to the extent this measurement can establish it, is
+about *where the perturbation goes*, not *whether it exists*. The
+differentiation check (`defaultcmyk.icc`, plain single-xform forward apply,
+no BPC) shows that this exact class of adjustment — the same
+`scale=0.996515,0.996527,0.996521 offset=0.001680,0.001737,0.001435` values
+reappear verbatim in the `v2CmykLut16.icc` probe above — does perturb output
+by ~1e-5 in Lab when the adjusted pixel flows straight through to a printed
+result. But it does not perturb output uniformly: even in that plain-apply
+case, 3 of the 5 probe rows landed on identical output regardless, only 2
+differed. Inside `CIccApplyBPC`, the adjusted PCS value instead feeds a
+black-point *estimation* procedure — `calcSrcBlackPoint()` /
+`calcDstBlackPoint()` explicitly clip the estimated L* to 50 and route
+through 16-bit `lut16Type` (`v2CmykLut16.icc`) or CLUT (`CMYK-3DLUTs.icc`)
+tetrahedral interpolation twice (forward and reverse) before the estimate
+is used at all. Both of those steps (the clip and the LUT interpolation's
+own discretization) sit downstream of the relocated adjustment and are
+coarser than the sub-1e-5 perturbation the relocation introduces, which is
+consistent with — though this measurement does not prove it is *caused
+by* — the perturbation not surfacing in the final black-point estimate or
+the final round-tripped CMYK values at 8-decimal print precision for these
+particular profiles and probe rows. This is a substantively different, and
+more defensible, claim than the original document's "the adjustment was
+identity, so there was nothing to perturb" — that explanation is now known
+to be wrong (the probe shows non-identity adjustment on both fixtures) and
+has been dropped.
+
+**Conclusion: the measured deltas are within tolerance.** All four
+combinations are bit-identical (0.0 delta, vs. the 1e-4 threshold), and —
+unlike the first pass — this null result has been verified against a live,
+non-identity execution of the moved code, not merely against a
+non-stale DLL running an unrelated code path.
