@@ -84,8 +84,10 @@ single-channel TIFF inputs.
   byte-aligned sample size accepted by the TIFF helper. LZW compression is
   limited to 8-, 16-, or 32-bit samples.
 - Output uses explicit `ExtraSamples` metadata for every sample beyond the
-  first. Very high channel-count spectral TIFFs can be valid but may exceed
-  limits in display tools such as ImageMagick.
+  first. Each is `EXTRASAMPLE_UNSPECIFIED` (TIFF value 0), identifying it as
+  auxiliary spectral data rather than associated or unassociated alpha. Very
+  high channel-count spectral TIFFs can be valid but may exceed limits in
+  display tools such as ImageMagick.
 - An existing output destination must be a regular non-symlink file. Directories,
   devices, POSIX symlinks, and Windows reparse points are rejected before
   anything is written; a hard link is accepted, being another name for a regular
