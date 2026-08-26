@@ -278,6 +278,12 @@ static bool validateProfileSampleCompatibility(const CIccProfile *profile,
     return false;
 
   const icHeader &header = profile->m_Header;
+  if (header.deviceClass == icSigLinkClass) {
+    fprintf(stderr, "Profile %s is a DeviceLink profile and cannot be embedded in a TIFF image.\n",
+            icSanitizeConsoleText(profilePath).c_str());
+    return false;
+  }
+
   char colorSpace[64];
   char pcs[64];
   char spectralPcs[64];
@@ -286,18 +292,24 @@ static bool validateProfileSampleCompatibility(const CIccProfile *profile,
   sigToText(header.pcs, pcs, sizeof(pcs));
   sigToText(header.spectralPCS, spectralPcs, sizeof(spectralPcs));
 
-  if (header.spectralPCS != icSigNoSpectralData) {
+  // The TIFF samples are the profile's A-side data colour space.  spectralPCS
+  // describes its connection space and therefore must not select the TIFF
+  // sample count, except for an ICC.2 abstract profile with no data space.
+  bool abstractSpectralProfile =
+      header.deviceClass == icSigAbstractClass &&
+      header.colorSpace == icSigNoColorData;
+  if (abstractSpectralProfile) {
     icUInt32Number spectralSamples = icGetSpaceSamples((icColorSpaceSignature)header.spectralPCS);
 
     if (!spectralSamples || spectralSamples != nSamples) {
-      fprintf(stderr, "Profile %s spectral PCS samples (%u, %s) do not match TIFF SamplesPerPixel (%zu).\n",
+      fprintf(stderr, "Abstract spectral profile %s spectral PCS samples (%u, %s) do not match TIFF SamplesPerPixel (%zu).\n",
               icSanitizeConsoleText(profilePath).c_str(),
               (unsigned int)spectralSamples, spectralPcs, nSamples);
       return false;
     }
 
     if (!header.spectralRange.steps || header.spectralRange.steps != nSamples) {
-      fprintf(stderr, "Profile %s spectral PCS range steps (%u) do not match TIFF SamplesPerPixel (%zu).\n",
+      fprintf(stderr, "Abstract spectral profile %s spectral PCS range steps (%u) do not match TIFF SamplesPerPixel (%zu).\n",
               icSanitizeConsoleText(profilePath).c_str(),
               (unsigned int)header.spectralRange.steps, nSamples);
       return false;
@@ -310,7 +322,7 @@ static bool validateProfileSampleCompatibility(const CIccProfile *profile,
     return true;
   }
 
-  icUInt32Number dataSamples = profile->GetSpaceSamples();
+  icUInt32Number dataSamples = icGetSpaceSamples((icColorSpaceSignature)header.colorSpace);
   if (!dataSamples || dataSamples != nSamples) {
     fprintf(stderr, "Profile %s data color-space samples (%u, %s) do not match TIFF SamplesPerPixel (%zu).\n",
             icSanitizeConsoleText(profilePath).c_str(),
@@ -319,8 +331,8 @@ static bool validateProfileSampleCompatibility(const CIccProfile *profile,
   }
 
   formatAcceptedSummary(acceptedSummary,
-                        "ICC profile accepted: %s, status=conformant, data=%s, PCS=%s, TIFFSamples=%zu",
-                        icSanitizeConsoleText(profilePath).c_str(), colorSpace, pcs, nSamples);
+                        "ICC profile accepted: %s, status=conformant, data=%s, PCS=%s, spectralPCS=%s, TIFFSamples=%zu",
+                        icSanitizeConsoleText(profilePath).c_str(), colorSpace, pcs, spectralPcs, nSamples);
   return true;
 }
 
