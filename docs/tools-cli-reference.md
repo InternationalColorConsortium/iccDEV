@@ -54,6 +54,10 @@ each channel number from `start` through `end`. For a single input named
 `spec_3`, pass prefix `spec_` with `start=3` and `end=3`. The prefix is literal,
 not a `printf` pattern: `spec_%03d.tif` opens `spec_%03d.tif1`, not `spec_001.tif`.
 
+Run `.github/scripts/iccdev-specsep-corpus-matrix.sh` to exercise every
+checked-in numbered spectral fixture as a one-channel output under all
+compression and planar layouts, with TIFF metadata validation.
+
 When `{profile}` is provided, the file is parsed and validated as an ICC profile
 before any output is written. ICC.2 spectral PCS profiles must have spectral PCS
 channels and spectral range steps equal to the generated TIFF `SamplesPerPixel`;

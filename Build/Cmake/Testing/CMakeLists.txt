@@ -6892,6 +6892,14 @@ if(TARGET iccSpecSepToTiff AND TARGET iccApplyProfiles AND TARGET iccTiffDump)
 endif()
 
 iccdev_add_script_test(
+  iccdev.specsep-corpus-matrix
+  120
+  "iccdev;specsep;tiff;corpus;compression;planar;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-specsep-corpus-matrix.sh"
+)
+
+iccdev_add_script_test(
   iccdev.dump-profile-header-regression
   120
   "iccdev;dump;profile;header;regression;asan"
