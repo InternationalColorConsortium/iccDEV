@@ -145,6 +145,33 @@ run_expect_reject() {
   pass_case "$name" "rejected malformed arguments"
 }
 
+run_expect_version() {
+  local name="specsep-version"
+  local log="$OUTDIR/$name.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$log"
+
+  timeout 60 "$SPECSEP" --version > "$log" 2>&1 || exit_code=$?
+
+  check_sanitizers "$name" "$log" || return
+
+  if [ "$exit_code" -ne 0 ]; then
+    fail_case "$name" "expected success, got exit=$exit_code"
+    sed -n '1,40p' "$log"
+    return
+  fi
+
+  if ! grep -Eq '^iccSpecSepToTiff [0-9]' "$log" 2>/dev/null; then
+    fail_case "$name" "version output did not identify the tool and version"
+    sed -n '1,40p' "$log"
+    return
+  fi
+
+  pass_case "$name" "reported tool version"
+}
+
 check_tiffinfo_contains() {
   local name="$1"
   local file="$2"
@@ -265,12 +292,21 @@ if [ ! -x "$SPECSEP" ]; then
   exit 0
 fi
 
+run_expect_version
+
 run_expect_success \
   "specsep-harvest-gray300-no-profile" \
   "$OUTDIR/harvest-gray300-no-profile.tif" \
   0 0 "$HARVEST_PREFIX" 1 8 1
 check_tiffinfo_contains "specsep-harvest-gray300-no-profile" "$OUTDIR/harvest-gray300-no-profile.tif" "Samples/Pixel: 8" &&
   check_tiffinfo_contains "specsep-harvest-gray300-no-profile" "$OUTDIR/harvest-gray300-no-profile.tif" "Image Width: 300 Image Length: 300"
+
+run_expect_success \
+  "specsep-spectral-ten-band-data-cube" \
+  "$OUTDIR/spectral-ten-band-data-cube.tif" \
+  0 0 "$SPECTRAL_PREFIX" 1 10 1
+check_tiffinfo_contains "specsep-spectral-ten-band-data-cube" "$OUTDIR/spectral-ten-band-data-cube.tif" "Extra Samples: 9<unspecified, unspecified, unspecified, unspecified, unspecified, unspecified, unspecified, unspecified, unspecified>" &&
+  check_tiff_data_contains "specsep-spectral-ten-band-data-cube" "$OUTDIR/spectral-ten-band-data-cube.tif" "99 19 32 33 cb 4c 64 66 fd 7f 96 99 2f b3 c8 cc 61 e6 fa ff"
 
 run_expect_success \
   "specsep-srgb-profile-matching-3ch" \
