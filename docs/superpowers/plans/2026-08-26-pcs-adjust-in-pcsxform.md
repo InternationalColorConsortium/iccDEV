@@ -888,11 +888,11 @@ With every adjustment now owned by a `CIccPcsXform`, the 16 guarded call sites a
 >
 > No fixture in the suite is spectral, so **nothing would fail** if this adjustment were deleted.
 >
-> **Required first step of this task:** write a test that constructs this case and pins whether the adjustment happens today.
-> - **If it is live: STOP and report.** Do not delete the path for it. Whether a spectral pixel should receive an XYZ media-white scale and offset on its first three samples is a colour-science question for the repository owner, and the spec's non-goals explicitly exclude "changing what any adjustment computes". Deleting it would be a behaviour change wearing a refactor's clothes.
-> - **If it is provably unreachable:** proceed with the deletion and record the proof in the task report.
+> **UPDATE — the precondition has been discharged.** The case was live. The repository owner ruled on the correct behaviour, and [the spectral PCS white-point conversion](2026-08-26-spectral-pcs-white-point-conversion.md) implemented it across commits `21333dc5`, `1516fcce`, `769a34b3` and `0b8b5e9e`. Its requirement S5 makes the base `NeedsSrcPcsAdjust()`/`NeedsDstPcsAdjust()` return false at a spectral port, so `AdjustPCS()` no longer fires there at all, and the conversion is pushed as `CIccPcsStep`s instead.
 >
-> Task 3 already had to add `!IsSpaceSpectralPCS(...)` to the `CIccXformNamedColor` overrides for the same underlying reason, which is independent evidence that the base predicates do not cover spectral ports.
+> **This task is therefore unblocked — but re-verify rather than assume.** Before deleting anything, establish by test that no in-`Apply()` adjustment remains reachable for any port type, spectral or colorimetric. The flipped pin in `.github/ci/regression/pcs-adjust-placement.cpp` covers the spectral trailing edge; satisfy yourself about the rest. If any path is still live, stop and report exactly as the original precondition demanded.
+>
+> One known gap that is **not** a blocker for this task: a spectral chain *edge* currently gets no conversion, because `CheckPCSConnections()`'s edge blocks gate on `IsSpaceColorimetricPCS()` and a spectral port never satisfies that. That is an open decision for the repository owner and is independent of these deletions — the in-`Apply()` path is not what would serve that case.
 
 **Files:**
 - Modify: `IccProfLib/IccCmm.cpp` (16 call sites at lines 5753, 5791, 6081, 6123, 6496, 6579, 6877, 6937, 7377, 7463, 7701, 7740, 7826, 7855, 8536, 8582; `CIccXform::CIccXform` at 458-459; `CIccCmm::Begin()`; `CIccNamedColorCmm::Begin()`; `CheckPCSConnections()`)
