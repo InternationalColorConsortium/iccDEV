@@ -598,6 +598,80 @@ static void namedColorAdjustPredicatesExcludeSpectralPcs()
         "named color spectral: spectral PCS destination excluded from adjustment");
 }
 
+// Reaching into the built chain is the only way to assert *where* the
+// adjustment happens. m_Xforms is protected on CIccCmm, so subclass it.
+//
+// Note these methods are non-const: NeedAdjustPCS() and friends are non-const
+// members of CIccXform.
+class CmmProbe : public CIccCmm
+{
+public:
+  CmmProbe(icColorSpaceSignature nSrc, icColorSpaceSignature nDst, bool bInput)
+    : CIccCmm(nSrc, nDst, bInput) {}
+
+  // Device xforms that need an adjustment and have NOT handed it over.
+  //
+  // "Handed over" means CheckPCSConnections() cleared the xform's conversion
+  // flag, which is precisely what the flag-based NeedAdjustSrcPCS() /
+  // NeedAdjustDstPCS() report: they are m_bAdjustPCS && !m_b*PcsConversion, so
+  // true means "the CIccPcsXform owns this side". An xform that needs an
+  // adjustment but reports neither is still doing it inside Apply().
+  //
+  // Task 5 deletes those two predicates; this method is rewritten there.
+  int unhandedAdjustCount()
+  {
+    int n = 0;
+    for (CIccXformList::iterator i = m_Xforms->begin(); i != m_Xforms->end(); i++) {
+      if (i->ptr->GetXformType() == icXformTypePCS)
+        continue;
+      if (!i->ptr->NeedAdjustPCS())
+        continue;
+      if (!i->ptr->NeedAdjustSrcPCS() && !i->ptr->NeedAdjustDstPCS())
+        n++;
+    }
+    return n;
+  }
+
+  int pcsXformCount()
+  {
+    int n = 0;
+    for (CIccXformList::iterator i = m_Xforms->begin(); i != m_Xforms->end(); i++) {
+      if (i->ptr->GetXformType() == icXformTypePCS)
+        n++;
+    }
+    return n;
+  }
+
+  int adjustingXformCount()
+  {
+    int n = 0;
+    for (CIccXformList::iterator i = m_Xforms->begin(); i != m_Xforms->end(); i++) {
+      if (i->ptr->GetXformType() != icXformTypePCS && i->ptr->NeedAdjustPCS())
+        n++;
+    }
+    return n;
+  }
+};
+
+// The core claim of this refactor, asserted structurally rather than
+// numerically: after Begin(), no device xform is left holding an adjustment.
+static void noXformPerformsItsOwnAdjustment(icColorSpaceSignature nSrc,
+                                            icColorSpaceSignature nDst,
+                                            bool bInput,
+                                            const char *label)
+{
+  CIccProfile v2;
+  buildV2CmykOutputProfile(v2);
+
+  CmmProbe cmm(nSrc, nDst, bInput);
+  check(cmm.AddXform(v2, icPerceptual) == icCmmStatOk, "placement: AddXform");
+  check(cmm.Begin() == icCmmStatOk, "placement: Begin");
+  check(cmm.adjustingXformCount() >= 1,
+        "placement: the fixture really does need an adjustment");
+  check(cmm.pcsXformCount() >= 1, "placement: a CIccPcsXform was inserted");
+  check(cmm.unhandedAdjustCount() == 0, label);
+}
+
 int main(int /*argc*/, char ** /*argv*/)
 {
   adjustmentIsLargerThanTheToleranceBand();
@@ -615,6 +689,11 @@ int main(int /*argc*/, char ** /*argv*/)
   perSideAdjustPredicatesAreOffWhenNothingToAdjust();
   namedColorAdjustPredicatesRequireAnActualPcsSide();
   namedColorAdjustPredicatesExcludeSpectralPcs();
+
+  noXformPerformsItsOwnAdjustment(icSigCmykData, icSigLabData, true,
+      "trailing PCS edge: the device xform no longer adjusts, the PcsXform does");
+  noXformPerformsItsOwnAdjustment(icSigLabData, icSigCmykData, false,
+      "leading PCS edge: the device xform no longer adjusts, the PcsXform does");
 
   if (g_failures) {
     std::printf("\n%d check(s) failed\n", g_failures);

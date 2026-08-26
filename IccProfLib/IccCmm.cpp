@@ -2346,14 +2346,14 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
               pushLab2ToXyz(pFromXform->m_pConnectionConditions);
             else
               pushLabToXyz(pFromXform->m_pConnectionConditions);
-            if (pFromXform->NeedAdjustDstPCS()) {
+            if (pFromXform->NeedsDstPcsAdjust()) {
               pushScale3(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]);
               pushOffset3(pFromXform->m_PCSOffset[0], pFromXform->m_PCSOffset[1], pFromXform->m_PCSOffset[2]);
             }
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2372,14 +2372,14 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
               pushLab2ToXyz(pFromXform->m_pConnectionConditions);
             else
               pushLabToXyz(pFromXform->m_pConnectionConditions);
-            if (pFromXform->NeedAdjustDstPCS()) {
+            if (pFromXform->NeedsDstPcsAdjust()) {
               pushScale3(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]);
               pushOffset3(pFromXform->m_PCSOffset[0], pFromXform->m_PCSOffset[1], pFromXform->m_PCSOffset[2]);
             }
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2405,14 +2405,14 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
         switch (m_dstSpace) {
           case icSigLabPcsData:
             pushXyzInToXyz();
-            if (pFromXform->NeedAdjustDstPCS()) {
+            if (pFromXform->NeedsDstPcsAdjust()) {
               pushScale3(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]);
               pushOffset3(pFromXform->m_PCSOffset[0], pFromXform->m_PCSOffset[1], pFromXform->m_PCSOffset[2]);
             }
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2428,14 +2428,14 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
 
           case icSigXYZPcsData:
             pushXyzInToXyz();
-            if (pFromXform->NeedAdjustDstPCS()) {
+            if (pFromXform->NeedsDstPcsAdjust()) {
               pushScale3(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]);
               pushOffset3(pFromXform->m_PCSOffset[0], pFromXform->m_PCSOffset[1], pFromXform->m_PCSOffset[2]);
             }
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2466,7 +2466,7 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2487,7 +2487,7 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2535,7 +2535,7 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2556,7 +2556,7 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2601,7 +2601,7 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2622,7 +2622,7 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2725,7 +2725,7 @@ icStatusCMM CIccPcsXform::ConnectFirst(CIccXform* pToXform, icColorSpaceSignatur
 
   if (srcSpace == icSigXYZData) {
     pushXyzInToXyz();
-    if (pToXform->NeedAdjustSrcPCS()) {
+    if (pToXform->NeedsSrcPcsAdjust()) {
       pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
       pushOffset3(pToXform->m_PCSOffset[0], pToXform->m_PCSOffset[1], pToXform->m_PCSOffset[2]);
     }
@@ -2751,13 +2751,13 @@ icStatusCMM CIccPcsXform::ConnectFirst(CIccXform* pToXform, icColorSpaceSignatur
       // ~2x too large (65535/32768) and the Lab->device direction (e.g. round-trip
       // evaluation through a matrix/TRC display profile) is grossly wrong.
       pushLabToXyz(pToXform->m_pConnectionConditions);
-      if (pToXform->NeedAdjustSrcPCS()) {
+      if (pToXform->NeedsSrcPcsAdjust()) {
         pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
         pushOffset3(pToXform->m_PCSOffset[0], pToXform->m_PCSOffset[1], pToXform->m_PCSOffset[2]);
       }
       pushXyzToXyzIn();
     }
-    else if (pToXform->NeedAdjustSrcPCS()) {
+    else if (pToXform->NeedsSrcPcsAdjust()) {
       pushLabToXyz(pToXform->m_pConnectionConditions);
       pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
       pushOffset3(pToXform->m_PCSOffset[0], pToXform->m_PCSOffset[1], pToXform->m_PCSOffset[2]);
@@ -2828,12 +2828,28 @@ icStatusCMM CIccPcsXform::ConnectLast(CIccXform* pFromXform, icColorSpaceSignatu
     m_dstSpace = icGetColorSpaceType(m_dstSpace);
   m_nDstSamples = (icUInt16Number)icGetSpaceSamples(m_dstSpace);
 
-  if (pFromXform->NeedAdjustDstPCS() && IsSpaceColorimetricPCS(dstSpace)) {
+  if (pFromXform->NeedsDstPcsAdjust() && IsSpaceColorimetricPCS(dstSpace)) {
     if (srcSpace == icSigLabData) {
       if (pFromXform->UseLegacyPCS())
         pushLab2ToXyz(pFromXform->m_pConnectionConditions);
       else
         pushLabToXyz(pFromXform->m_pConnectionConditions);
+    }
+    else if (srcSpace == icSigXYZData) {
+      // pFromXform's own Apply() emits *internal* XYZ at its dst port (e.g.
+      // CIccXformMatrixTRC's XYZScale(), CIccXform3DLut's raw LUT samples --
+      // both pre-scaled by 32768/65535 per the internal-PCS-XYZ convention),
+      // and m_PCSScale/m_PCSOffset are computed in that same domain (see
+      // CIccXform::Begin(), whose v2-perceptual offset is explicitly
+      // pre-scaled to internal units). pushScale3()/pushOffset3() below,
+      // like every other push* helper in this file, operate on *actual* XYZ
+      // (pushLabToXyz()'s own doc comment says as much), so bring the pixel
+      // into that domain first, exactly as the srcSpace==icSigLabData branch
+      // above does via its own actual-XYZ-producing conversion. Without this,
+      // the unconditional pushXyzToXyzIn() below re-scales an already-internal
+      // pixel a second time, halving the result again (xform-abstorel-adjust,
+      // pawg-q4-xyz-pcs-decode).
+      pushXyzInToXyz();
     }
 
     pushScale3(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]);
@@ -9616,6 +9632,10 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
         return icCmmStatAllocErr;
       }
 
+      // The CIccPcsXform now owns the source-side adjustment, exactly as the
+      // interior loop below hands over an interior one.
+      last->ptr->SetSrcPCSConversion(false);
+
       rv = pPcs->ConnectFirst(last->ptr, GetSourceSpace());
 
       if (rv != icCmmStatOk && rv != icCmmStatIdentityXform) {
@@ -9686,6 +9706,10 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
       if (!pPcs) {
         return icCmmStatAllocErr;
       }
+
+      // The CIccPcsXform now owns the destination-side adjustment.
+      last->ptr->SetDstPCSConversion(false);
+
       rv = pPcs->ConnectLast(last->ptr, GetDestSpace());
 
       if (rv != icCmmStatOk && rv != icCmmStatIdentityXform) {
