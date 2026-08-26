@@ -312,12 +312,12 @@ static void trailingEdgeAdjustmentApplies(icRenderingIntent nIntent,
 // trailingEdgeAdjustmentApplies() but reversed -- the CMM's *source* is PCS
 // and the v2 profile runs in the output (PCS->device) direction, so this
 // exercises ConnectFirst()'s adjust branches. Those were dead code before
-// this task (NeedAdjustSrcPCS() was flag-gated false for a sole leading
-// xform) exactly as ConnectLast()'s were, and ConnectLast()'s counterpart
+// this task (a sole leading xform never reached ConnectFirst()'s adjust
+// branches) exactly as ConnectLast()'s were, and ConnectLast()'s counterpart
 // hid a real domain bug once it went live; this is the numeric insurance
 // pcsXformCount()/adjustingXformCount() alone (see
-// noXformPerformsItsOwnAdjustment()) cannot provide, since a cleared flag
-// plus an identity ConnectFirst() would still read as "handed over" there.
+// noXformPerformsItsOwnAdjustment()) cannot provide, since a structural count
+// plus an identity ConnectFirst() would still read as correctly placed there.
 //
 // pcsIn is deliberately an arbitrary, generic PCS pixel -- it does not need
 // to correspond to any particular color, only to be a well-formed point in
@@ -452,10 +452,6 @@ static void connectReportsIdentityWhenAdjustmentsCancel()
   pFrom->Begin();
   pTo->Begin();
 
-  // This is what CheckPCSConnections() does before calling Connect().
-  pFrom->SetDstPCSConversion(false);
-  pTo->SetSrcPCSConversion(false);
-
   CIccPcsXform pcs;
   const icStatusCMM rv = pcs.Connect(pFrom, pTo);
   check(rv == icCmmStatIdentityXform,
@@ -465,8 +461,9 @@ static void connectReportsIdentityWhenAdjustmentsCancel()
   delete pTo;
 }
 
-// The predicates must reproduce exactly what CheckSrcAbs/CheckDstAbs test:
-// source side only for output xforms, destination side only for input xforms.
+// The predicates must reproduce exactly what the retired CheckSrcAbs() /
+// CheckDstAbs() tested: source side only for output xforms, destination side
+// only for input xforms.
 // An abstract-class xform has PCS on both sides but must still adjust on
 // exactly one, and this is the assertion that pins it.
 static void perSideAdjustPredicatesFollowDirection()
@@ -728,16 +725,23 @@ public:
   CmmProbe(icColorSpaceSignature nSrc, icColorSpaceSignature nDst, bool bInput)
     : CIccCmm(nSrc, nDst, bInput) {}
 
-  // Device xforms that need an adjustment and have NOT handed it over.
+  // Device xforms whose PCS adjustment is inert: Begin() computed one
+  // (NeedAdjustPCS()) but neither port asks for it, so nothing anywhere
+  // applies it.
   //
-  // "Handed over" means CheckPCSConnections() cleared the xform's conversion
-  // flag, which is precisely what the flag-based NeedAdjustSrcPCS() /
-  // NeedAdjustDstPCS() report: they are m_bAdjustPCS && !m_b*PcsConversion, so
-  // true means "the CIccPcsXform owns this side". An xform that needs an
-  // adjustment but reports neither is still doing it inside Apply().
-  //
-  // Task 5 deletes those two predicates; this method is rewritten there.
-  int unhandedAdjustCount()
+  // This used to count xforms that had not "handed over" their adjustment to
+  // a CIccPcsXform, read off the flag-based NeedAdjustSrcPCS() /
+  // NeedAdjustDstPCS(). Task 5 deleted the in-xform adjustment path along
+  // with those two predicates, so "handed over" is no longer a state an xform
+  // can be in -- CIccPcsXform is the only thing that adjusts. What is still
+  // worth counting is the remaining oddity: NeedsSrcPcsAdjust() and
+  // NeedsDstPcsAdjust() are the two questions CIccPcsXform::Connect*() asks,
+  // so an xform answering "no" to both while still reporting NeedAdjustPCS()
+  // has an adjustment that no CIccPcsXform will ever pick up. That is exactly
+  // and only what a spectral PCS port is left in (its conversion is the
+  // element-wise spectral white point one instead), and it must never be what
+  // a colorimetric port is left in.
+  int inertAdjustCount()
   {
     int n = 0;
     for (CIccXformList::iterator i = m_Xforms->begin(); i != m_Xforms->end(); i++) {
@@ -745,7 +749,7 @@ public:
         continue;
       if (!i->ptr->NeedAdjustPCS())
         continue;
-      if (!i->ptr->NeedAdjustSrcPCS() && !i->ptr->NeedAdjustDstPCS())
+      if (!i->ptr->NeedsSrcPcsAdjust() && !i->ptr->NeedsDstPcsAdjust())
         n++;
     }
     return n;
@@ -788,7 +792,7 @@ static void noXformPerformsItsOwnAdjustment(icColorSpaceSignature nSrc,
   check(cmm.adjustingXformCount() >= 1,
         "placement: the fixture really does need an adjustment");
   check(cmm.pcsXformCount() >= 1, "placement: a CIccPcsXform was inserted");
-  check(cmm.unhandedAdjustCount() == 0, label);
+  check(cmm.inertAdjustCount() == 0, label);
 }
 
 
@@ -916,8 +920,8 @@ static void spectralTrailingEdgeNoLongerAdjustsInsideApply()
         "spectral probe: the spectral xform still carries a PCS adjustment");
   check(cmm.pcsXformCount() == 0,
         "spectral probe: no CIccPcsXform is inserted at the spectral edge");
-  check(cmm.unhandedAdjustCount() == 1,
-        "spectral probe: the adjustment was never handed over to a CIccPcsXform");
+  check(cmm.inertAdjustCount() == 1,
+        "spectral probe: the xform's XYZ adjustment is inert at a spectral port");
 
   icFloatNumber src[3] = { 0.20f, 0.40f, 0.60f };
   icFloatNumber dst[kSpectralSamples];

@@ -2,11 +2,16 @@
 
 On a colorimetric PCS, every PCS adjustment -- absolute-colorimetric
 media-white scaling, the v2-perceptual black point shift, and
-`IIccAdjustPCSXform` hints such as BPC -- is performed by `CIccPcsXform`;
-`CheckPCSConnections()` clears the flags that used to route the same work
-through `CIccXform::Apply()`. The old `CheckSrcAbs()`/`CheckDstAbs()` call
-sites are still in the tree (see "Deprecated" below) and, on the one PCS
-shape those flags don't reach, still run for real (see "Known gap" below).
+`IIccAdjustPCSXform` hints such as BPC -- is performed by `CIccPcsXform`.
+`CIccXform::Apply()` performs none: the guarded `CheckSrcAbs()`/`CheckDstAbs()`
+call sites are gone, along with the `m_bSrcPcsConversion`/`m_bDstPcsConversion`
+flags that used to route work through them. The three helpers themselves are
+retained but deprecated (see "Deprecated" below).
+
+On a spectral PCS the XYZ media-white adjustment does not apply at all;
+`NeedsSrcPcsAdjust()`/`NeedsDstPcsAdjust()` answer false there and
+`CIccPcsXform` pushes an element-wise spectral white point conversion instead.
+See `docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md`.
 
 ## Where each adjustment lands
 
@@ -54,59 +59,41 @@ affects `CIccApplyBPC`'s black-point probes, which build exactly that shape.
 
 ## Deprecated
 
-`CIccXform::CheckSrcAbs()`, `CheckDstAbs()` and `AdjustPCS()` are still called
-from `CIccXform::Apply()` -- every xform implementation in `IccCmm.cpp` guards
-a `CheckSrcAbs()`/`CheckDstAbs()` call on its `m_bSrcPcsConversion`/
-`m_bDstPcsConversion` flags. `CheckPCSConnections()` clears those flags on the
-xform once it hands the same adjustment to a `CIccPcsXform`, so on a
-colorimetric PCS the old call sites go quiet rather than double-applying.
-Retiring the call sites outright is a separate, currently halted task (see
-"Known gap" below for the one case where the flag is never cleared and the
-old path still fires for real).
+`CIccXform::CheckSrcAbs()`, `CheckDstAbs()` and `AdjustPCS()` are no longer
+called from anywhere in `IccProfLib`. They are `protected` rather than private,
+so a third-party `CIccXform` subclass may call them from its own `Apply()`;
+they are kept for that reason alone. Such a subclass now applies the adjustment
+**twice** -- `CIccPcsXform` has already performed it at the connection -- and
+should stop calling them.
 
 `bUsePCSConversions` on `CIccCmm::Begin()`, `CIccNamedColorCmm::Begin()` and
-`CheckPCSConnections()` still has an effect, but only at interior PCS
-connections -- the leading- and trailing-edge blocks don't consult it at all.
-Passing `true` keeps an interior connection's old `CheckSrcAbs()`/
-`CheckDstAbs()` path live instead of folding it into a `CIccPcsXform`. No
-caller in this tree passes `true`, so in practice every chain gets the
-`CIccPcsXform` path regardless.
+`CheckPCSConnections()` is ignored. It used to select the in-xform path at an
+interior PCS connection; there is no such path any more, so the interior
+`CIccPcsXform` is now built unconditionally for colorimetric PCS links. The
+parameter is retained for source compatibility. No caller in this tree ever
+passed `true`.
 
 ## Known gap: spectral PCS at a chain edge
 
-`CIccXform::GetDstSpace()` reports a spectral signature when
-`m_bUseSpectralPCS` and the profile declares a `spectralPCS`, but
-`CheckPCSConnections()`'s two edge blocks gate on `IsSpaceColorimetricPCS()`,
-so they never hand the adjustment over at a spectral edge. Meanwhile
-`CIccXform::Begin()` sets `m_bAdjustPCS` from `m_Header.pcs`, which stays Lab
-or XYZ on a v5 spectral profile. A v5 spectral profile applied at absolute
-colorimetric intent therefore still runs `AdjustPCS()` inside `Apply()`, which
-applies an XYZ media-white scale and offset to the first three samples of the
-spectral vector and leaves the rest untouched.
+A spectral **interior** connection is handled: `CIccPcsXform::Connect()` pushes
+the element-wise spectral white point conversion on whichever side owes it.
 
-The interior connection path does not handle spectral correctly either --
-it drops the adjustment instead of exposing it. All six spectral-source
-branches of `CIccPcsXform::Connect()` (`IccProfLib/IccCmm.cpp:2469, 2490,
-2538, 2559, 2604, 2625`) push only `pToXform->NeedsSrcPcsAdjust()`; there is
-no `pFromXform->NeedsDstPcsAdjust()` push anywhere in the spectral region.
-Meanwhile the interior loop in `CheckPCSConnections()` clears **both**
-`m_bSrcPcsConversion` and `m_bDstPcsConversion` before calling `Connect()`,
-for a spectral interior connection exactly as it does for a colorimetric
-one (the loop's guard condition explicitly includes
-`IsSpaceSpectralPCS(...)`). So at an interior spectral connection the
-from-side adjustment is silenced in `Apply()` by the cleared flag and never
-picked up by `Connect()` -- it is **dropped**, not applied.
+A spectral **chain edge** is not. `CIccCmm::CheckPCSConnections()`'s two edge
+blocks gate on `IsSpaceColorimetricPCS()`, and a spectral signature never
+satisfies that, so no `CIccPcsXform` is built at a spectral edge and
+`ConnectFirst()`/`ConnectLast()`'s own spectral branches never get to run. A
+chain that begins or ends on a spectral PCS therefore gets no white point
+conversion at that edge.
 
-The two spectral cases are therefore asymmetric: at a spectral chain edge
-the adjustment **fires** (inside `Apply()`, because the flag there is never
-cleared); at a spectral interior connection it is **dropped** (the flag is
-cleared, but `Connect()` never pushes the from-side step). Neither is
-"handling spectral correctly," and the asymmetry is itself evidence that
-the edge behavior is accidental rather than intended: nothing in the design
-motivates firing at one spectral shape and dropping the same adjustment at
-another. This is pinned by
-`spectralTrailingEdgeStillAdjustsInsideApply()` in
-`.github/ci/regression/pcs-adjust-placement.cpp`; both the edge-fires and
-interior-drops behavior are unchanged from `master` -- this is pre-existing,
-not a regression introduced by this branch -- and are awaiting a decision
-from the repository owner.
+Nothing silently mangles the pixel there any more: the XYZ media-white
+adjustment that used to fire inside `Apply()` at such an edge is gone with the
+rest of the in-xform path, and `NeedsSrcPcsAdjust()`/`NeedsDstPcsAdjust()`
+answer false at a spectral port regardless. The chain simply carries the tag's
+own absolute-ness through unchanged. `spectralTrailingEdgeNoLongerAdjustsInsideApply()`
+in `.github/ci/regression/pcs-adjust-placement.cpp` pins that, and
+`CmmProbe::inertAdjustCount()` records the residue: the xform still reports
+`NeedAdjustPCS()`, but neither port asks for the adjustment, so no
+`CIccPcsXform` will ever pick it up.
+
+Whether the edge blocks should be widened to cover spectral ports is an open
+decision for the repository owner.

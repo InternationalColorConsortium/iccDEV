@@ -457,8 +457,6 @@ CIccXform::CIccXform()
   m_bAbsToRel = false;
   m_nMCS = icNoMCS;
   m_bUseSpectralPCS = false;
-  m_bSrcPcsConversion = true;
-  m_bDstPcsConversion = true;
   m_pConnectionConditions = NULL;
   m_bDeleteEnvLooup = true;
   m_pCmmEnvVarLookup = NULL;
@@ -1575,9 +1573,11 @@ void CIccXform::refreshPcsPortCache()
  * 
  * Purpose: 
  *  This function will be called before the xform is applied.  Derived objects
- *  should also call this base class function to initialize for Absolute Colorimetric
- *  Intent handling which is performed through the use of the CheckSrcAbs and
- *  CheckDstAbs functions.
+ *  should also call this base class function to initialize for Absolute
+ *  Colorimetric Intent handling.  The adjustment itself is performed by the
+ *  CIccPcsXform that CIccCmm::CheckPCSConnections() places at the connection;
+ *  what this sets up (m_bAdjustPCS, m_PCSScale, m_PCSOffset) is what
+ *  NeedsSrcPcsAdjust()/NeedsDstPcsAdjust() report and CIccPcsXform reads.
  **************************************************************************
  */
 icStatusCMM CIccXform::Begin()
@@ -1837,8 +1837,8 @@ void CIccXform::AdjustPCS(icFloatNumber *DstPixel, const icFloatNumber *SrcPixel
  *
  * Purpose:
  *  Reports whether the XYZ PCS adjustment applies to values entering this
- *  xform.  This is the exact condition CheckSrcAbs() runs on, named so that
- *  CIccPcsXform::Connect()/ConnectFirst() can ask it at Begin() time.
+ *  xform, so that CIccPcsXform::Connect()/ConnectFirst() can ask it at
+ *  Begin() time and push the matching steps.
  *
  *  The spectral term is the substance: AdjustPCS() scales DstPixel[0..2] by
  *  m_PCSScale, i.e. it reads the first three samples of the pixel as X, Y and
@@ -1860,8 +1860,7 @@ bool CIccXform::NeedsSrcPcsAdjust() const
  * Name: CIccXform::NeedsDstPcsAdjust
  *
  * Purpose:
- *  The destination-side mirror of NeedsSrcPcsAdjust() above, and the exact
- *  condition CheckDstAbs() runs on.
+ *  The destination-side mirror of NeedsSrcPcsAdjust() above.
  **************************************************************************
  */
 bool CIccXform::NeedsDstPcsAdjust() const
@@ -1874,9 +1873,12 @@ bool CIccXform::NeedsDstPcsAdjust() const
  * Name: CIccXform::CheckSrcAbs
  * 
  * Purpose: 
- *  This function will be called by a derived CIccXform object's Apply() function
- *  BEFORE the actual xform is performed to take care of Absolute to Relative
- *  adjustments needed by the xform (IE the PCS is always version 4 relative).
+ *  Deprecated -- see the declaration in IccCmm.h.  No Apply() in IccProfLib
+ *  calls this any more; CIccPcsXform performs every PCS adjustment.  It is
+ *  retained for third-party CIccXform subclasses that call it from their own
+ *  Apply() BEFORE the actual xform is performed, to take care of Absolute to
+ *  Relative adjustments (IE the PCS is always version 4 relative).  Such a
+ *  subclass now applies the adjustment twice and should stop calling this.
  * 
  * Args: 
  *  Pixel = src pixel data (will not be modified)
@@ -1889,12 +1891,8 @@ const icFloatNumber *CIccXform::CheckSrcAbs(CIccApplyXform *pApply, const icFloa
 {
   // Dispatches virtually so a derived override's extra condition
   // (CIccXformMpe's B2D3/D2B3 test, CIccXformNamedColor's colorimetric/
-  // spectral split) is honoured here too. This is behaviourally identical to
-  // calling the base predicate directly: every derived Apply() already
-  // enforces that same extra condition at this call site before reaching
-  // CheckSrcAbs(), and boolean AND is idempotent, so nothing is applied
-  // twice. Dispatching virtually is what keeps a future override's narrower
-  // predicate honoured even if its call site's guard were ever missed.
+  // spectral split) is honoured here too -- the only guard left now that no
+  // Apply() in IccProfLib calls this.
   if (NeedsSrcPcsAdjust()) {
     icFloatNumber *pAbsLab = pApply->m_AbsLab;
     AdjustPCS(pAbsLab, Pixel);
@@ -1909,9 +1907,12 @@ const icFloatNumber *CIccXform::CheckSrcAbs(CIccApplyXform *pApply, const icFloa
  * Name: CIccXform::CheckDstAbs
  * 
  * Purpose: 
- *  This function will be called by a derived CIccXform object's Apply() function
- *  AFTER the actual xform is performed to take care of Absolute to Relative
- *  adjustments needed by the xform (IE the PCS is always version 4 relative).
+ *  Deprecated -- see the declaration in IccCmm.h.  No Apply() in IccProfLib
+ *  calls this any more; CIccPcsXform performs every PCS adjustment.  It is
+ *  retained for third-party CIccXform subclasses that call it from their own
+ *  Apply() AFTER the actual xform is performed, to take care of Absolute to
+ *  Relative adjustments (IE the PCS is always version 4 relative).  Such a
+ *  subclass now applies the adjustment twice and should stop calling this.
  * 
  * Args: 
  *  Pixel = source pixel data which will be modified
@@ -3931,9 +3932,9 @@ icStatusCMM CIccPcsXform::pushSpecToRange(const icSpectralRange &srcRange, const
  *
  *      relative = absolute / white          absolute = relative * white
  *
- *  This is the spectral counterpart of the XYZ media-white adjustment that
- *  CheckSrcAbs()/CheckDstAbs() perform on a colorimetric PCS port, and it
- *  replaces that adjustment at a spectral port entirely -- see
+ *  This is the spectral counterpart of the XYZ media-white adjustment
+ *  CIccPcsXform pushes on a colorimetric PCS port, and it replaces that
+ *  adjustment at a spectral port entirely -- see
  *  CIccXform::NeedsSrcPcsAdjust() and
  *  docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md.
  *
@@ -3955,8 +3956,8 @@ icStatusCMM CIccPcsXform::pushSpectralWhitePointConvert(const CIccXform *pXform,
   if (!pXform || !pXform->m_pProfile)
     return icCmmStatOk;
 
-  // Structural half of the direction rule, mirroring CheckDstAbs()/CheckSrcAbs()
-  // and the predicates named after them: only an input (device->PCS) xform
+  // Structural half of the direction rule, mirroring
+  // NeedsDstPcsAdjust()/NeedsSrcPcsAdjust(): only an input (device->PCS) xform
   // converts on its destination port, only an output (PCS->device) xform
   // converts on its source port.
   if (bDstPort != pXform->m_bInput)
@@ -6103,9 +6104,6 @@ void CIccXformMonochrome::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel,
 {
 	icFloatNumber Pixel[3];
   
-  if (m_bSrcPcsConversion)
-	  SrcPixel = CheckSrcAbs(pApply, SrcPixel);
-
 	// m_PcsWhite is computed once in Begin(). Both branches below used to rebuild
 	// it here on every pixel -- icXyzToPcs, and for a Lab PCS XyzToLab's three
 	// cube roots behind a virtual UseLegacyPCS() call -- entirely from constants.
@@ -6140,9 +6138,6 @@ void CIccXformMonochrome::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel,
 			DstPixel[0] = m_ApplyCurvePtr->Apply(DstPixel[0]);
 		}
 	}
-
-  if (m_bDstPcsConversion)
-	  CheckDstAbs(DstPixel);
 }
 
 /**
@@ -6431,9 +6426,6 @@ void CIccXformMatrixTRC::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, 
 {
   icFloatNumber Pixel[3];
 
-  if (m_bSrcPcsConversion)
-    SrcPixel = CheckSrcAbs(pApply, SrcPixel);
-
   Pixel[0] = SrcPixel[0];
   Pixel[1] = SrcPixel[1];
   Pixel[2] = SrcPixel[2];
@@ -6472,9 +6464,6 @@ void CIccXformMatrixTRC::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, 
       DstPixel[2] = (icFloatNumber)(m_e[6] * X + m_e[7] * Y + m_e[8] * Z);
     }
   }
-
-  if (m_bDstPcsConversion)
-    CheckDstAbs(DstPixel);
 }
 
 /**
@@ -6846,9 +6835,6 @@ void CIccXform3DLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
   icFloatNumber Pixel[16];
   int i;
 
-  if (m_bSrcPcsConversion)
-    SrcPixel = CheckSrcAbs(pApply, SrcPixel);
-
   Pixel[0] = SrcPixel[0];
   Pixel[1] = SrcPixel[1];
   Pixel[2] = SrcPixel[2];
@@ -6928,9 +6914,6 @@ void CIccXform3DLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
   for (i=0; i<m_pTag->m_nOutput; i++) {
     DstPixel[i] = Pixel[i];
   }
-
-  if (m_bDstPcsConversion)
-    CheckDstAbs(DstPixel);
 }
 
 /**
@@ -7227,9 +7210,6 @@ void CIccXform4DLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
   icFloatNumber Pixel[16];
   int i;
 
-  if (m_bSrcPcsConversion)
-    SrcPixel = CheckSrcAbs(pApply, SrcPixel);
-
   Pixel[0] = SrcPixel[0];
   Pixel[1] = SrcPixel[1];
   Pixel[2] = SrcPixel[2];
@@ -7286,9 +7266,6 @@ void CIccXform4DLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
   for (i=0; i<m_pTag->m_nOutput; i++) {
     DstPixel[i] = Pixel[i];
   }
-
-  if (m_bDstPcsConversion)
-    CheckDstAbs(DstPixel);
 }
 
 /**
@@ -7727,9 +7704,6 @@ void CIccXformNDLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
   icFloatNumber Pixel[16] = {0};
   int i;
 
-  if (m_bSrcPcsConversion)
-    SrcPixel = CheckSrcAbs(pApply, SrcPixel);
-
   // No clamp: Begin() refuses m_nNumInput above 16, which is what Pixel[] holds.
   const int nInput = m_nNumInput;
 
@@ -7812,9 +7786,6 @@ void CIccXformNDLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
   for (i=0; i<nOutput; i++) {
     DstPixel[i] = Pixel[i];
   }
-
-  if (m_bDstPcsConversion)
-    CheckDstAbs(DstPixel);
 }
 
 /**
@@ -8051,9 +8022,6 @@ icStatusCMM CIccXformNamedColor::Apply(CIccApplyXform* pApply, icChar *DstColorN
           return icCmmStatColorNotFound;
       }
       else {
-        if (m_bSrcPcsConversion)
-          SrcPixel = CheckSrcAbs(pApply, SrcPixel);
-
         icFloatNumber pix[3];
         memcpy(pix, SrcPixel, 3*sizeof(icFloatNumber));
 
@@ -8090,9 +8058,6 @@ icStatusCMM CIccXformNamedColor::Apply(CIccApplyXform* pApply, icChar *DstColorN
     icInt32Number j;
 
     if (IsSrcPCS()) {
-      if (m_bSrcPcsConversion)
-        SrcPixel = CheckSrcAbs(pApply, SrcPixel);
-
       for(i=0; i<3; i++)
         PCSPix[i] = SrcPixel[i];
 
@@ -8176,8 +8141,6 @@ icStatusCMM CIccXformNamedColor::Apply(CIccApplyXform*  /* pApply */, icFloatNum
         else {
           icXyzToPcs(DstPixel);
         }
-        if (m_bDstPcsConversion)
-          CheckDstAbs(DstPixel);
       }
     }
     else {
@@ -8205,8 +8168,6 @@ icStatusCMM CIccXformNamedColor::Apply(CIccApplyXform*  /* pApply */, icFloatNum
       else {
         memcpy(DstPixel, pTag->GetEntry(j)->pcsCoords, 3*sizeof(icFloatNumber));
       }
-      if (m_bDstPcsConversion)
-        CheckDstAbs(DstPixel);
     }
     else {
       j = pTag->FindColor(SrcColorName);
@@ -8346,9 +8307,9 @@ bool CIccXformNamedColor::IsDestPCS() const
  * 
  * Purpose: 
  *  True when this xform's PCS adjustment applies to values entering it.
- *  Mirrors the guard around CheckSrcAbs() in Apply(): the source side must
- *  actually be a colorimetric PCS -- a spectral PCS source is matched
- *  against spectral data and never reaches CheckSrcAbs()/AdjustPCS().
+ *  Mirrors the guard that used to sit around CheckSrcAbs() in Apply(): the
+ *  source side must actually be a colorimetric PCS -- a spectral PCS source
+ *  is matched against spectral data and takes no XYZ media-white adjustment.
  **************************************************************************
  */
 bool CIccXformNamedColor::NeedsSrcPcsAdjust() const
@@ -8362,9 +8323,10 @@ bool CIccXformNamedColor::NeedsSrcPcsAdjust() const
  * 
  * Purpose: 
  *  True when this xform's PCS adjustment applies to values leaving it.
- *  Mirrors the guard around CheckDstAbs() in Apply(): the destination side
- *  must actually be a colorimetric PCS -- a spectral PCS destination takes
- *  the spectral-tint path instead and never reaches CheckDstAbs()/AdjustPCS().
+ *  Mirrors the guard that used to sit around CheckDstAbs() in Apply(): the
+ *  destination side must actually be a colorimetric PCS -- a spectral PCS
+ *  destination takes the spectral-tint path instead and takes no XYZ
+ *  media-white adjustment.
  **************************************************************************
  */
 bool CIccXformNamedColor::NeedsDstPcsAdjust() const
@@ -8844,9 +8806,9 @@ void CIccXformMpe::SetAppliedCC(IIccProfileConnectionConditions *pPCC)
 * 
 * Purpose: 
 *  This function will be called before the xform is applied.  Derived objects
-*  should also call the base class function to initialize for Absolute Colorimetric
-*  Intent handling which is performed through the use of the CheckSrcAbs and
-*  CheckDstAbs functions.
+*  should also call this base class function to initialize for Absolute
+*  Colorimetric Intent handling.  The adjustment itself is performed by the
+*  CIccPcsXform that CIccCmm::CheckPCSConnections() places at the connection.
 **************************************************************************
 */
 icStatusCMM CIccXformMpe::Begin()
@@ -8930,11 +8892,6 @@ void CIccXformMpe::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, const 
 
   icFloatNumber temp[3];
   if (!m_bInput || m_bPcsAdjustXform) { //PCS comming in?
-    if (m_nIntent != icAbsoluteColorimetric || m_nIntent != m_nTagIntent) {  //B2D3 tags don't need abs conversion
-      if (m_bSrcPcsConversion)
-        SrcPixel = CheckSrcAbs(pApply, SrcPixel);
-    }
-
     //Since MPE tags use "real" values for PCS we need to convert from 
     //internal encoding used by IccProfLib
     switch (GetSrcSpace()) {
@@ -8974,11 +8931,6 @@ void CIccXformMpe::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, const 
 
       default:
         break;
-    }
-
-    if (m_nIntent != icAbsoluteColorimetric || m_nIntent != m_nTagIntent) { //D2B3 tags don't need abs conversion
-      if (m_bDstPcsConversion)
-        CheckDstAbs(DstPixel);
     }
   }
 }
@@ -9956,6 +9908,8 @@ icStatusCMM CIccCmm::AddXform(CIccXform* pXform)
 
 icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
 {
+  (void)bUsePCSConversions;  // see header: retained for source compatibility
+
   icStatusCMM rv = icCmmStatOk;
 
   CIccXformList::iterator last, next;
@@ -9981,10 +9935,6 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
         return icCmmStatAllocErr;
       }
 
-      // The CIccPcsXform now owns the source-side adjustment, exactly as the
-      // interior loop below hands over an interior one.
-      last->ptr->SetSrcPCSConversion(false);
-
       rv = pPcs->ConnectFirst(last->ptr, GetSourceSpace());
 
       if (rv != icCmmStatOk && rv != icCmmStatIdentityXform) {
@@ -10008,10 +9958,9 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
     for (;next!=m_Xforms->end(); last=next, next++) {
       if ((last->ptr->IsInput() && last->ptr->IsMCS() && next->ptr->IsMCS()) ||
           (IsSpaceSpectralPCS(last->ptr->GetDstSpace()) || IsSpaceSpectralPCS(next->ptr->GetSrcSpace())) ||
-          (!bUsePCSConversions && 
-           (IsSpaceColorimetricPCS(last->ptr->GetDstSpace()) || IsSpaceColorimetricPCS(next->ptr->GetSrcSpace())))) {
-        last->ptr->SetDstPCSConversion(false);
-        next->ptr->SetSrcPCSConversion(false);
+          IsSpaceColorimetricPCS(last->ptr->GetDstSpace()) || IsSpaceColorimetricPCS(next->ptr->GetSrcSpace())) {
+        // No handover needed: CIccPcsXform performs every PCS adjustment, and
+        // CIccXform::Apply() performs none.
         CIccPcsXform *pPcs = new (std::nothrow) CIccPcsXform();
 
         if (!pPcs) {
@@ -10055,9 +10004,6 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
       if (!pPcs) {
         return icCmmStatAllocErr;
       }
-
-      // The CIccPcsXform now owns the destination-side adjustment.
-      last->ptr->SetDstPCSConversion(false);
 
       rv = pPcs->ConnectLast(last->ptr, GetDestSpace());
 

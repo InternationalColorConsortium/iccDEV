@@ -516,23 +516,16 @@ public:
 	icRenderingIntent GetIntent() const { return m_nIntent; }
   icXformInterp GetInterp() const { return m_nInterp; }
 
-  void SetSrcPCSConversion(bool bPcsConvert) { m_bSrcPcsConversion = bPcsConvert; }
-  void SetDstPCSConversion(bool bPcsConvert) { m_bDstPcsConversion = bPcsConvert; }
+  /// True when this xform carries a PCS adjustment at all. CIccPcsXform is
+  /// what performs it; CheckPCSConnections() reads this to decide whether a
+  /// chain edge needs a CIccPcsXform even when the spaces already match.
   bool NeedAdjustPCS() { return m_bAdjustPCS; }
-  /// NeedAdjustSrcPCS()/NeedAdjustDstPCS() (below) have zero callers left in
-  /// IccProfLib -- CIccPcsXform::Connect()/ConnectFirst()/ConnectLast() were
-  /// switched to NeedsSrcPcsAdjust()/NeedsDstPcsAdjust() further down. The
-  /// only remaining caller is the regression test's CmmProbe. See
-  /// docs/pcs-adjustment-placement.md for why these flag-based predicates are
-  /// still here rather than deleted.
-  bool NeedAdjustSrcPCS() { return m_bAdjustPCS && !m_bSrcPcsConversion; }
-  bool NeedAdjustDstPCS() { return m_bAdjustPCS && !m_bDstPcsConversion; }
 
   /// True when this xform's PCS adjustment applies to values entering it.
-  /// Mirrors the condition inside CheckSrcAbs(): only an output (PCS->device)
-  /// xform adjusts on the way in. Virtual so subclasses whose Apply() carried
-  /// extra conditions can answer at Begin() time, which is when
-  /// CIccPcsXform::Connect() has to decide whether to push the steps.
+  /// Only an output (PCS->device) xform adjusts on the way in. Virtual so
+  /// subclasses whose Apply() carried extra conditions can answer at Begin()
+  /// time, which is when CIccPcsXform::Connect() has to decide whether to
+  /// push the steps.
   ///
   /// Answers false at a spectral PCS port. The adjustment these gate is the
   /// XYZ media-white one, and AdjustPCS() implements it by treating the first
@@ -542,10 +535,10 @@ public:
   /// docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md.
   ///
   /// Reads m_bSrcSpectralPCS rather than calling the virtual GetSrcSpace()
-  /// itself: GetSrcSpace() walks into the profile header, and CheckSrcAbs()
-  /// calls this once per pixel whenever the adjustment fires. Begin() fills
-  /// the cache once, from the same GetSrcSpace() this predicate used to call
-  /// directly.
+  /// itself: GetSrcSpace() walks into the profile header, and this predicate
+  /// is asked once per port per Begin() -- and, for the deprecated
+  /// CheckSrcAbs(), once per pixel. Begin() fills the cache once, from the
+  /// same GetSrcSpace() this predicate used to call directly.
   ///
   /// Defined out of line in IccCmm.cpp for the same reason the
   /// CIccXformNamedColor overrides below are: the IsSpaceSpectralPCS() needed
@@ -555,10 +548,9 @@ public:
   virtual bool NeedsSrcPcsAdjust() const;
 
   /// True when this xform's PCS adjustment applies to values leaving it.
-  /// Mirrors the condition inside CheckDstAbs(): only an input (device->PCS)
-  /// xform adjusts on the way out. Excludes a spectral PCS port and reads the
-  /// m_bDstSpectralPCS cache for the reasons given on NeedsSrcPcsAdjust()
-  /// above.
+  /// Only an input (device->PCS) xform adjusts on the way out. Excludes a
+  /// spectral PCS port and reads the m_bDstSpectralPCS cache for the
+  /// reasons given on NeedsSrcPcsAdjust() above.
   virtual bool NeedsDstPcsAdjust() const;
 
   bool LuminanceMatching() { return m_bLuminanceMatching; }
@@ -574,13 +566,13 @@ public:
 protected:
   //Called by derived classes to initialize Base
 
-  // A third-party CIccXform subclass that calls these directly from its own
-  // Apply() will double-apply the adjustment at a colorimetric PCS edge: on
-  // that path CheckPCSConnections() has already handed the same adjustment to
-  // a CIccPcsXform and cleared m_bSrcPcsConversion/m_bDstPcsConversion, but a
-  // subclass calling CheckSrcAbs()/CheckDstAbs()/AdjustPCS() unconditionally
-  // (rather than gating on those flags the way every in-tree Apply() does)
-  // bypasses that suppression. See docs/pcs-adjustment-placement.md.
+  /// Deprecated. CIccPcsXform performs all PCS adjustments as of the
+  /// CheckSrcAbs()/CheckDstAbs() retirement; no Apply() in IccProfLib calls
+  /// these any more. They are retained because they are protected and a
+  /// third-party CIccXform subclass may call them from its own Apply().
+  /// Such a subclass now applies the adjustment twice -- CIccPcsXform has
+  /// already performed it at the connection -- and should stop calling them.
+  /// See docs/pcs-adjustment-placement.md.
   const icFloatNumber *CheckSrcAbs(CIccApplyXform *pApply, const icFloatNumber *Pixel) const;
   void CheckDstAbs(icFloatNumber *Pixel) const;
 	void AdjustPCS(icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const;
@@ -631,16 +623,6 @@ protected:
   icMCSConnectionType m_nMCS;
   bool m_bLuminanceMatching;
   
-  // Despite the name, not temporary: CheckPCSConnections() clears these
-  // whenever a CIccPcsXform takes over the adjustment -- at every colorimetric
-  // PCS edge and at every interior connection, colorimetric or spectral. It
-  // is never cleared at a spectral PCS edge (the edge blocks gate on
-  // IsSpaceColorimetricPCS() and skip spectral ports outright), which is the
-  // load-bearing mechanism keeping the in-Apply() path genuinely live there.
-  // See "Known gap" in docs/pcs-adjustment-placement.md.
-  bool m_bSrcPcsConversion;
-  bool m_bDstPcsConversion;
-
 	// track PCS adjustments
 	IIccAdjustPCSXform* m_pAdjustPCS;
 	bool m_bAdjustPCS;
@@ -1631,7 +1613,7 @@ public:
 
   /// Named-colour lookups take a PCS adjustment only when the side in question
   /// really is a colorimetric PCS. A spectral PCS is matched against spectral
-  /// data and never reaches AdjustPCS().
+  /// data and takes no XYZ media-white adjustment.
   ///
   /// Defined out of line in IccCmm.cpp deliberately: the IsSpaceSpectralPCS()
   /// these need is the file-local one there, which tests the five spectral PCS
@@ -1950,6 +1932,9 @@ public:
   virtual icStatusCMM AddXform(CIccXform* pXform); //note pXform will be owned by the CMM
 
   //The Begin function should be called before Apply or GetNewApplyCmm()
+  /// bUsePCSConversions is ignored. It used to select an in-xform adjustment
+  /// path that no longer exists; CIccPcsXform performs every PCS adjustment.
+  /// The parameter is retained for source compatibility.
   virtual icStatusCMM Begin(bool bAllocNewApply=true, bool bUsePcsConversion=false);
 
   //Get an additional Apply cmm object to apply pixels with.  The Apply object should be deleted by the caller.
@@ -2033,6 +2018,9 @@ protected:
   void SetLateBindingCC();
 
   icStatusCMM CheckPCSRangeConversions();
+  /// bUsePCSConversions is ignored. It used to select an in-xform adjustment
+  /// path that no longer exists; CIccPcsXform performs every PCS adjustment.
+  /// The parameter is retained for source compatibility.
   icStatusCMM CheckPCSConnections(bool bUsePCSConversions=false);
 
   CIccApplyCmm *m_pApply;
@@ -2119,6 +2107,9 @@ public:
 
   ///Must be called before calling Apply() or GetNewApply()
   //The Begin function should be called before Apply or GetNewApplyCmm()
+  /// bUsePCSConversions is ignored. It used to select an in-xform adjustment
+  /// path that no longer exists; CIccPcsXform performs every PCS adjustment.
+  /// The parameter is retained for source compatibility.
   virtual icStatusCMM Begin(bool bAllocNewApply=true, bool bUsePcsConversion=false);
 
   virtual CIccApplyCmm *GetNewApplyCmm(icStatusCMM &status); 
