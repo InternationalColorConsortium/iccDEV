@@ -515,6 +515,19 @@ public:
   bool NeedAdjustPCS() { return m_bAdjustPCS; }
   bool NeedAdjustSrcPCS() { return m_bAdjustPCS && !m_bSrcPcsConversion; }
   bool NeedAdjustDstPCS() { return m_bAdjustPCS && !m_bDstPcsConversion; }
+
+  /// True when this xform's PCS adjustment applies to values entering it.
+  /// Mirrors the condition inside CheckSrcAbs(): only an output (PCS->device)
+  /// xform adjusts on the way in. Virtual so subclasses whose Apply() carried
+  /// extra conditions can answer at Begin() time, which is when
+  /// CIccPcsXform::Connect() has to decide whether to push the steps.
+  virtual bool NeedsSrcPcsAdjust() const { return m_bAdjustPCS && !m_bInput; }
+
+  /// True when this xform's PCS adjustment applies to values leaving it.
+  /// Mirrors the condition inside CheckDstAbs(): only an input (device->PCS)
+  /// xform adjusts on the way out.
+  virtual bool NeedsDstPcsAdjust() const { return m_bAdjustPCS && m_bInput; }
+
   bool LuminanceMatching() { return m_bLuminanceMatching; }
 
   virtual IIccProfileConnectionConditions *GetConnectionConditions() const { return m_pConnectionConditions; }
@@ -1587,6 +1600,20 @@ public:
   virtual LPIccCurve* ExtractOutputCurves() {return NULL;}
 
   virtual bool NoClipPCS() const { return true; }
+
+  /// B2D3/D2B3 tags are already absolute, so they take no PCS adjustment.
+  /// This condition used to live inside Apply(); CIccPcsXform::Connect() needs
+  /// the answer at Begin() time instead.
+  virtual bool NeedsSrcPcsAdjust() const
+  {
+    return CIccXform::NeedsSrcPcsAdjust() &&
+           (m_nIntent != icAbsoluteColorimetric || m_nIntent != m_nTagIntent);
+  }
+  virtual bool NeedsDstPcsAdjust() const
+  {
+    return CIccXform::NeedsDstPcsAdjust() &&
+           (m_nIntent != icAbsoluteColorimetric || m_nIntent != m_nTagIntent);
+  }
 
   virtual bool IsLateBinding() const;
   virtual bool IsLateBindingReflectance() const;

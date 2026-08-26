@@ -397,6 +397,61 @@ static void connectReportsIdentityWhenAdjustmentsCancel()
   delete pTo;
 }
 
+// The predicates must reproduce exactly what CheckSrcAbs/CheckDstAbs test:
+// source side only for output xforms, destination side only for input xforms.
+// An abstract-class xform has PCS on both sides but must still adjust on
+// exactly one, and this is the assertion that pins it.
+static void perSideAdjustPredicatesFollowDirection()
+{
+  CIccProfile *pIn  = new CIccProfile();
+  CIccProfile *pOut = new CIccProfile();
+  buildV2CmykOutputProfile(*pIn);
+  buildV2CmykOutputProfile(*pOut);
+
+  CIccXform *pInput  = CIccXform::Create(pIn,  true,  icPerceptual, icInterpTetrahedral);
+  CIccXform *pOutput = CIccXform::Create(pOut, false, icPerceptual, icInterpTetrahedral);
+  check(pInput != NULL && pOutput != NULL, "predicates: xforms created");
+  if (!pInput || !pOutput) { delete pInput; delete pOutput; return; }
+
+  pInput->Begin();
+  pOutput->Begin();
+
+  check(pInput->NeedAdjustPCS(), "predicates: v2 perceptual input xform needs an adjust");
+  check(pOutput->NeedAdjustPCS(), "predicates: v2 perceptual output xform needs an adjust");
+
+  check(!pInput->NeedsSrcPcsAdjust(),
+        "predicates: an input xform never adjusts on its source side");
+  check(pInput->NeedsDstPcsAdjust(),
+        "predicates: an input xform adjusts on its destination side");
+
+  check(pOutput->NeedsSrcPcsAdjust(),
+        "predicates: an output xform adjusts on its source side");
+  check(!pOutput->NeedsDstPcsAdjust(),
+        "predicates: an output xform never adjusts on its destination side");
+
+  delete pInput;
+  delete pOutput;
+}
+
+// A v4 profile has HasPerceptualHandling(), so perceptual sets no adjustment at
+// all. Guards against a predicate that returns true unconditionally.
+static void perSideAdjustPredicatesAreOffWhenNothingToAdjust()
+{
+  CIccProfile *pOut = new CIccProfile();
+  buildV4CmykOutputProfile(*pOut);
+
+  CIccXform *pOutput = CIccXform::Create(pOut, false, icPerceptual, icInterpTetrahedral);
+  check(pOutput != NULL, "predicates: v4 xform created");
+  if (!pOutput) return;
+  pOutput->Begin();
+
+  check(!pOutput->NeedAdjustPCS(), "predicates: v4 perceptual needs no adjust");
+  check(!pOutput->NeedsSrcPcsAdjust(), "predicates: v4 perceptual source side off");
+  check(!pOutput->NeedsDstPcsAdjust(), "predicates: v4 perceptual destination side off");
+
+  delete pOutput;
+}
+
 int main(int /*argc*/, char ** /*argv*/)
 {
   adjustmentIsLargerThanTheToleranceBand();
@@ -409,6 +464,9 @@ int main(int /*argc*/, char ** /*argv*/)
 
   interiorAdjustmentsCancel();
   connectReportsIdentityWhenAdjustmentsCancel();
+
+  perSideAdjustPredicatesFollowDirection();
+  perSideAdjustPredicatesAreOffWhenNothingToAdjust();
 
   if (g_failures) {
     std::printf("\n%d check(s) failed\n", g_failures);
