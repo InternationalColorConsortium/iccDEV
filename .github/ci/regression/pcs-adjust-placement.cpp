@@ -264,9 +264,13 @@ static void adjustmentIsLargerThanTheToleranceBand()
         "v2 perceptual adjustment is at least 100x the 1e-5 tolerance band");
 }
 
-// Trailing PCS edge: CMYK -> Lab, one profile.
+// Trailing PCS edge: CMYK -> Lab, one profile. Only ever called with an
+// intent that is expected to move the PCS result relative to the unadjusted
+// relative-colorimetric reference -- see relativeIntentTakesNoAdjustment()
+// below for the case where no movement is expected, which needs a structural
+// check instead of a numeric one (a numeric "did not move" comparison against
+// a reference built from the *same* intent is not falsifiable: see Finding 1).
 static void trailingEdgeAdjustmentApplies(icRenderingIntent nIntent,
-                                          bool bExpectAdjust,
                                           const char *label)
 {
   CIccProfile v2;
@@ -291,10 +295,35 @@ static void trailingEdgeAdjustmentApplies(icRenderingIntent nIntent,
   }
 
   const bool moved = !closeRel(withIntent[0], relative[0], kTol);
-  if (bExpectAdjust)
-    check(moved, label);
-  else
-    check(!moved, label);
+  check(moved, label);
+}
+
+// Negative control for the whole file. The three numeric cases above all
+// compare an adjusted result against a relative-intent reference and assume
+// that reference carries no adjustment; this proves it structurally instead
+// of assuming it, by asking the xform itself rather than diffing two applies.
+//
+// A numeric "relative result equals a second relative result" comparison
+// would be unconditionally true regardless of library behaviour -- including
+// if the library erroneously started adjusting relative intent, since the
+// same adjustment would land identically on both sides of that comparison
+// and cancel out of the diff. NeedAdjustPCS() has no such blind spot: it
+// fails the moment relative intent sets m_bAdjustPCS for any reason.
+static void relativeIntentTakesNoAdjustment()
+{
+  CIccProfile *pProfile = new CIccProfile();
+  buildV2CmykOutputProfile(*pProfile);
+
+  // CIccXform::Create takes ownership of the profile it is given.
+  CIccXform *pXform = CIccXform::Create(pProfile, true, icRelativeColorimetric, icInterpTetrahedral);
+  check(pXform != NULL, "relative: xform created");
+  if (!pXform) return;
+
+  check(pXform->Begin() == icCmmStatOk, "relative: Begin");
+  check(!pXform->NeedAdjustPCS(),
+        "trailing edge: relative intent takes no PCS adjustment (structural)");
+
+  delete pXform;
 }
 
 // Interior PCS connection: CMYK -> Lab -> CMYK, two profiles, same intent both
@@ -372,12 +401,11 @@ int main(int /*argc*/, char ** /*argv*/)
 {
   adjustmentIsLargerThanTheToleranceBand();
 
-  trailingEdgeAdjustmentApplies(icPerceptual, true,
+  trailingEdgeAdjustmentApplies(icPerceptual,
       "trailing edge: v2 perceptual result differs from the unadjusted reference");
-  trailingEdgeAdjustmentApplies(icAbsoluteColorimetric, true,
+  trailingEdgeAdjustmentApplies(icAbsoluteColorimetric,
       "trailing edge: absolute result differs from the unadjusted reference");
-  trailingEdgeAdjustmentApplies(icRelativeColorimetric, false,
-      "trailing edge: relative result is the unadjusted reference");
+  relativeIntentTakesNoAdjustment();
 
   interiorAdjustmentsCancel();
   connectReportsIdentityWhenAdjustmentsCancel();
