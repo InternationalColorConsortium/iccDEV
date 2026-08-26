@@ -878,6 +878,22 @@ git commit -m "refactor: CIccPcsXform performs PCS adjustments at chain edges to
 
 With every adjustment now owned by a `CIccPcsXform`, the 16 guarded call sites are dead. Remove them and the machinery that fed them.
 
+> **PRECONDITION — established by Task 4's review, must be settled before any deletion.**
+>
+> Task 4's stated postcondition — "after `Begin()`, no xform reports both `NeedAdjustPCS()` and an uncleared conversion flag" — does **not** hold for spectral-PCS ports, and this task is written assuming it does.
+>
+> `CIccXform::GetDstSpace()` returns a *spectral* signature when `m_bUseSpectralPCS && m_pProfile->m_Header.spectralPCS` ([IccCmm.cpp:1878-1882](../../../IccProfLib/IccCmm.cpp#L1878-L1882)), but `CheckPCSConnections()`'s edge blocks gate on `IsSpaceColorimetricPCS(GetDstSpace())` (:9628, :9703). Meanwhile `CIccXform::Begin()` sets `m_bAdjustPCS` from `m_pProfile->m_Header.pcs` — which stays Lab/XYZ on a v5 spectral profile — with no spectral exclusion (:1611-1615, :1645-1648). So such an xform keeps `m_bAdjustPCS` true **and** both conversion flags set, and still performs the adjustment inside `Apply()` today.
+>
+> Reachability, narrowed: absolute intent only (a v5 profile is not `IsVersion2()` and does have `HasPerceptualHandling()`, so the perceptual path cannot fire), media white ≠ illuminant, xform at a chain edge, and for `CIccXformMpe` additionally `m_nTagIntent != icAbsoluteColorimetric`. A v5 spectral profile applied at absolute intent is a real configuration.
+>
+> No fixture in the suite is spectral, so **nothing would fail** if this adjustment were deleted.
+>
+> **Required first step of this task:** write a test that constructs this case and pins whether the adjustment happens today.
+> - **If it is live: STOP and report.** Do not delete the path for it. Whether a spectral pixel should receive an XYZ media-white scale and offset on its first three samples is a colour-science question for the repository owner, and the spec's non-goals explicitly exclude "changing what any adjustment computes". Deleting it would be a behaviour change wearing a refactor's clothes.
+> - **If it is provably unreachable:** proceed with the deletion and record the proof in the task report.
+>
+> Task 3 already had to add `!IsSpaceSpectralPCS(...)` to the `CIccXformNamedColor` overrides for the same underlying reason, which is independent evidence that the base predicates do not cover spectral ports.
+
 **Files:**
 - Modify: `IccProfLib/IccCmm.cpp` (16 call sites at lines 5753, 5791, 6081, 6123, 6496, 6579, 6877, 6937, 7377, 7463, 7701, 7740, 7826, 7855, 8536, 8582; `CIccXform::CIccXform` at 458-459; `CIccCmm::Begin()`; `CIccNamedColorCmm::Begin()`; `CheckPCSConnections()`)
 - Modify: `IccProfLib/IccCmm.h` (lines 513-517, 556-558, 530-533)
