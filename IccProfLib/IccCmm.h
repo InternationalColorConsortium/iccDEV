@@ -513,6 +513,12 @@ public:
   void SetSrcPCSConversion(bool bPcsConvert) { m_bSrcPcsConversion = bPcsConvert; }
   void SetDstPCSConversion(bool bPcsConvert) { m_bDstPcsConversion = bPcsConvert; }
   bool NeedAdjustPCS() { return m_bAdjustPCS; }
+  /// NeedAdjustSrcPCS()/NeedAdjustDstPCS() (below) have zero callers left in
+  /// IccProfLib -- CIccPcsXform::Connect()/ConnectFirst()/ConnectLast() were
+  /// switched to NeedsSrcPcsAdjust()/NeedsDstPcsAdjust() further down. The
+  /// only remaining caller is the regression test's CmmProbe. See
+  /// docs/pcs-adjustment-placement.md for why these flag-based predicates are
+  /// still here rather than deleted.
   bool NeedAdjustSrcPCS() { return m_bAdjustPCS && !m_bSrcPcsConversion; }
   bool NeedAdjustDstPCS() { return m_bAdjustPCS && !m_bDstPcsConversion; }
 
@@ -541,6 +547,13 @@ public:
 protected:
   //Called by derived classes to initialize Base
 
+  // A third-party CIccXform subclass that calls these directly from its own
+  // Apply() will double-apply the adjustment at a colorimetric PCS edge: on
+  // that path CheckPCSConnections() has already handed the same adjustment to
+  // a CIccPcsXform and cleared m_bSrcPcsConversion/m_bDstPcsConversion, but a
+  // subclass calling CheckSrcAbs()/CheckDstAbs()/AdjustPCS() unconditionally
+  // (rather than gating on those flags the way every in-tree Apply() does)
+  // bypasses that suppression. See docs/pcs-adjustment-placement.md.
   const icFloatNumber *CheckSrcAbs(CIccApplyXform *pApply, const icFloatNumber *Pixel) const;
   void CheckDstAbs(icFloatNumber *Pixel) const;
 	void AdjustPCS(icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const;
@@ -566,7 +579,13 @@ protected:
   icMCSConnectionType m_nMCS;
   bool m_bLuminanceMatching;
   
-  //Temporary field
+  // Despite the name, not temporary: CheckPCSConnections() clears these
+  // whenever a CIccPcsXform takes over the adjustment -- at every colorimetric
+  // PCS edge and at every interior connection, colorimetric or spectral. It
+  // is never cleared at a spectral PCS edge (the edge blocks gate on
+  // IsSpaceColorimetricPCS() and skip spectral ports outright), which is the
+  // load-bearing mechanism keeping the in-Apply() path genuinely live there.
+  // See "Known gap" in docs/pcs-adjustment-placement.md.
   bool m_bSrcPcsConversion;
   bool m_bDstPcsConversion;
 

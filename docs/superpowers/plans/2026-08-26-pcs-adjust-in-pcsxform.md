@@ -711,7 +711,7 @@ git commit -m "feat: add per-side virtual PCS adjust predicates answerable at Be
 
 This is the behavior flip. `CheckPCSConnections()` clears the suppression flag on the first and last xforms the same way it already does for interior pairs, and the `Connect*` guards switch to the Task 3 predicates so those branches finally run.
 
-Both halves must land together. Clearing the flags without switching the guards drops the adjustment; switching the guards without clearing the flags applies it twice.
+Both halves must land together. Switching the guards without clearing the flags applies the adjustment twice: `Apply()` still fires because the flag stays true, and `Connect*()` also pushes because the Task 3 predicates (`NeedsSrcPcsAdjust()`/`NeedsDstPcsAdjust()`) are not flag-based. The converse is not symmetric: clearing the flags without switching the guards does not drop the adjustment. `Apply()` goes quiet because the flag it checks directly is now false, but the *old*, unswitched `Connect*()` guard (`NeedAdjustDstPCS()` = `m_bAdjustPCS && !m_bDstPcsConversion`) flips to true precisely because that flag is now false -- so `Connect*()` still pushes, and the adjustment is applied once, just relocated a task early. Only the twice-applied direction is a real hazard from doing the halves out of order.
 
 **Files:**
 - Modify: `IccProfLib/IccCmm.cpp` — 15 guard sites (lines 2349, 2356, 2375, 2382, 2408, 2415, 2431, 2438, 2469, 2490, 2538, 2559, 2604, 2625 in `Connect()`; 2728, 2754, 2760 in `ConnectFirst()`; 2831 in `ConnectLast()`), plus the two edge blocks in `CheckPCSConnections()`

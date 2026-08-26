@@ -38,6 +38,7 @@ point to deeper references.
 | Maintainer label workflow | `.github/skills/maintainer-label-system/SKILL.md` and `.github/prompts/maintainer-label-triage.prompt.md` |
 | IIS sample setup | `Tools/Winnt/IccIisIsapi/isapi-instructions.md` |
 | IIS API reference | `Tools/Winnt/IccIisIsapi/api.md` |
+| PCS adjustment placement (`CIccPcsXform` refactor) | `docs/pcs-adjustment-placement.md` |
 
 ## Editing Checklist
 

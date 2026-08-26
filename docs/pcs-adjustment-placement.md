@@ -82,8 +82,31 @@ so they never hand the adjustment over at a spectral edge. Meanwhile
 or XYZ on a v5 spectral profile. A v5 spectral profile applied at absolute
 colorimetric intent therefore still runs `AdjustPCS()` inside `Apply()`, which
 applies an XYZ media-white scale and offset to the first three samples of the
-spectral vector and leaves the rest untouched. The interior connection path
-does handle spectral correctly; only the edges are exposed. This is pinned by
+spectral vector and leaves the rest untouched.
+
+The interior connection path does not handle spectral correctly either --
+it drops the adjustment instead of exposing it. All six spectral-source
+branches of `CIccPcsXform::Connect()` (`IccProfLib/IccCmm.cpp:2469, 2490,
+2538, 2559, 2604, 2625`) push only `pToXform->NeedsSrcPcsAdjust()`; there is
+no `pFromXform->NeedsDstPcsAdjust()` push anywhere in the spectral region.
+Meanwhile the interior loop in `CheckPCSConnections()` clears **both**
+`m_bSrcPcsConversion` and `m_bDstPcsConversion` before calling `Connect()`,
+for a spectral interior connection exactly as it does for a colorimetric
+one (the loop's guard condition explicitly includes
+`IsSpaceSpectralPCS(...)`). So at an interior spectral connection the
+from-side adjustment is silenced in `Apply()` by the cleared flag and never
+picked up by `Connect()` -- it is **dropped**, not applied.
+
+The two spectral cases are therefore asymmetric: at a spectral chain edge
+the adjustment **fires** (inside `Apply()`, because the flag there is never
+cleared); at a spectral interior connection it is **dropped** (the flag is
+cleared, but `Connect()` never pushes the from-side step). Neither is
+"handling spectral correctly," and the asymmetry is itself evidence that
+the edge behavior is accidental rather than intended: nothing in the design
+motivates firing at one spectral shape and dropping the same adjustment at
+another. This is pinned by
 `spectralTrailingEdgeStillAdjustsInsideApply()` in
-`.github/ci/regression/pcs-adjust-placement.cpp` and is awaiting a decision
+`.github/ci/regression/pcs-adjust-placement.cpp`; both the edge-fires and
+interior-drops behavior are unchanged from `master` -- this is pre-existing,
+not a regression introduced by this branch -- and are awaiting a decision
 from the repository owner.

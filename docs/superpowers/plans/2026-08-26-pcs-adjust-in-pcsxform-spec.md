@@ -4,6 +4,13 @@
 **Date:** 2026-08-26
 **Branch:** `refactor/pcs-adjust-in-pcsxform`
 
+> **Halt note:** R5-R7 below are written in the imperative but were not all
+> carried out. Task 5 (the deletions R5/R6 describe) is halted pending a
+> repository-owner decision, and R7's "documented as ignored" claim is also
+> not what shipped. See the contract matrix in
+> `docs/superpowers/plans/2026-08-26-pcs-adjust-bpc-deltas.md` ("Corrected
+> contract matrix") for what is actually true of the tree today.
+
 ## Problem
 
 A PCS adjustment (absolute-colorimetric media-white scaling, the v2-perceptual

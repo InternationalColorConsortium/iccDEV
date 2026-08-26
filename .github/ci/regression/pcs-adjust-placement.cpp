@@ -260,6 +260,12 @@ void buildV4CmykOutputProfile(CIccProfile &p)
 
 // The size of the adjustment is the whole oracle: if it is smaller than the
 // tolerance band, every other assertion in this file is vacuous.
+//
+// This check is a compile-time constant fold against today's
+// icPerceptualRefBlack*/icPerceptualRefWhite* values -- it cannot fail as
+// the code stands. That is intentional: it is a tripwire for anyone who
+// changes those reference constants, not a runtime behavior assertion. Do
+// not flag it as an unfailable/dead assertion in a later sweep.
 static void adjustmentIsLargerThanTheToleranceBand()
 {
   const double perceptualScale = 1.0 - icPerceptualRefBlackY / icPerceptualRefWhiteY;
@@ -787,8 +793,8 @@ static CIccTagMultiProcessElement *makeConstantSpectralD2B()
 
 static icColorSpaceSignature spectralSig()
 {
-  return (icColorSpaceSignature)icNColorSpaceSig(icSigReflectanceSpectralData,
-                                                 kSpectralSamples);
+  // icNColorSpaceSig() already casts to icColorSpaceSignature.
+  return icNColorSpaceSig(icSigReflectanceSpectralData, kSpectralSamples);
 }
 
 static bool buildV5SpectralInputProfile(CIccProfile &p)
@@ -798,7 +804,7 @@ static bool buildV5SpectralInputProfile(CIccProfile &p)
   p.m_Header.colorSpace = icSigRgbData;
   p.m_Header.pcs = icSigLabData;          // colorimetric PCS still declared
   p.m_Header.version = icVersionNumberV5;
-  p.m_Header.spectralPCS = (icColorSpaceSignature)spectralSig();
+  p.m_Header.spectralPCS = spectralSig();  // spectralSig() already returns icColorSpaceSignature
   p.m_Header.spectralRange.start = icRange380nm;
   p.m_Header.spectralRange.end = icRange780nm;
   p.m_Header.spectralRange.steps = kSpectralSamples;

@@ -126,32 +126,79 @@ source changes**, per the task's own requirement; the instrumentation was
 build-and-discard, used only to decide whether the null result below is
 interpretable.
 
+**Line labels.** The format above has no call-site field, so the lines
+below were attributed after the fact from `bInput`/`intent` and the
+resulting `scale`/`offset` values, cross-checked against
+`IccProfLib/IccApplyBPC.cpp`. Four call sites feed `CIccXform::Begin()` in
+this configuration, each with a `(bInput, intent)` fingerprint:
+
+| Label | Call site | `bInput` | `intent` |
+|---|---|---|---|
+| `A` | `calcSrcBlackPoint()`'s fixed-`icPerceptual` `pixelXfm()` (`IccApplyBPC.cpp:310`, PCS -> device) | 0 | 0 (always, hard-coded) |
+| `B` | `calcSrcBlackPoint()`'s device -> PCS `pixelXfm()` at the xform's actual intent (`:356`) | 1 | the calling xform's own intent |
+| `C` | `getBlackXfm()`'s first edge, PCS -> device at `nIntent` (`:611`) | 0 | `nIntent` passed to `getBlackXfm()` |
+| `D` | `getBlackXfm()`'s second edge, device -> PCS, forced `icRelativeColorimetric` (`:626`) | 1 | 1 (always, hard-coded) |
+
+`A` and `C` share a fingerprint whenever `nIntent` is `icPerceptual` (both
+`(0, 0)`); `B` and `D` share one whenever the calling xform's intent is
+`icRelativeColorimetric` (both `(1, 1)`). Where two call sites collide,
+identical output values mean they hit the same `Begin()` branch (the
+branch result is a pure function of `bInput`/`intent`/`IsVersion2()`, not
+of which call site reached it) — this is corroborated below, not merely
+assumed. A tagged re-run (add a `site=` field to the `fprintf`) would
+remove the need for this reconstruction; that is the recommended fix if
+this probe is ever repeated.
+
 **Result for `Testing/V2/v2CmykLut16.icc`, intent 40** (six `Begin()` calls:
 `calcSrcBlackPoint`'s fixed-Perceptual `pixelXfm()`, and `getBlackXfm()`'s
 two edges, each run once for the profile used as source and once as
 destination):
 
 ```
-ADJUSTPCS-PROBE bInput=0 intent=0 isV2=1 adjustPCS=1 scale=1.003497,1.003485,1.003491 offset=-0.001686,-0.001743,-0.001440
-ADJUSTPCS-PROBE bInput=1 intent=0 isV2=1 adjustPCS=1 scale=0.996515,0.996527,0.996521 offset=0.001680,0.001737,0.001435
-ADJUSTPCS-PROBE bInput=1 intent=0 isV2=1 adjustPCS=1 scale=1.000000,1.000000,1.000000 offset=0.000000,0.000000,0.000000
-ADJUSTPCS-PROBE bInput=0 intent=0 isV2=1 adjustPCS=1 scale=1.003497,1.003485,1.003491 offset=-0.001686,-0.001743,-0.001440
-ADJUSTPCS-PROBE bInput=1 intent=1 isV2=1 adjustPCS=0 scale=0.000000,1.000000,0.000000 offset=0.000000,0.000000,0.000000
-ADJUSTPCS-PROBE bInput=0 intent=0 isV2=1 adjustPCS=1 scale=0.999082,0.999082,0.999082 offset=0.000442,0.000459,0.000379
+ADJUSTPCS-PROBE bInput=0 intent=0 isV2=1 adjustPCS=1 scale=1.003497,1.003485,1.003491 offset=-0.001686,-0.001743,-0.001440   # A or C (fingerprint collision; value matches the v2-perceptual-legacy branch)
+ADJUSTPCS-PROBE bInput=1 intent=0 isV2=1 adjustPCS=1 scale=0.996515,0.996527,0.996521 offset=0.001680,0.001737,0.001435   # B (unique fingerprint at this test intent)
+ADJUSTPCS-PROBE bInput=1 intent=0 isV2=1 adjustPCS=1 scale=1.000000,1.000000,1.000000 offset=0.000000,0.000000,0.000000   # same (bInput,intent) as the line above but a different value -> a second, distinct call reaching (1,0); not accounted for by the A/B/C/D model below (see note)
+ADJUSTPCS-PROBE bInput=0 intent=0 isV2=1 adjustPCS=1 scale=1.003497,1.003485,1.003491 offset=-0.001686,-0.001743,-0.001440   # A or C (the other of the pair on line 1)
+ADJUSTPCS-PROBE bInput=1 intent=1 isV2=1 adjustPCS=0 scale=0.000000,1.000000,0.000000 offset=0.000000,0.000000,0.000000   # D (unique fingerprint: bInput=1, intent=1 forced-relative; adjustPCS=0 so scale/offset are unused here)
+ADJUSTPCS-PROBE bInput=0 intent=0 isV2=1 adjustPCS=1 scale=0.999082,0.999082,0.999082 offset=0.000442,0.000459,0.000379   # third (0,0) line with yet another distinct value -> not accounted for by the A/B/C/D model below (see note)
 ```
+
+Only four call sites (`A`, `B`, `C`, `D`) are identified above, but six
+lines are present: this block has one extra `(0,0)`-fingerprint line and
+one extra `(1,0)`-fingerprint line beyond what `A`+`B`+`C`+`D` predict for
+a Perceptual-intent run (`calcDstBlackPoint()`'s nested `calcSrcBlackPoint()`
+call is gated on `nIntent==icRelativeColorimetric` at `IccApplyBPC.cpp:437`,
+which is false here). The same surplus, in the same shape, recurs in the
+secondary-fixture block below at the same intent, so it is a reproducible
+pattern rather than fixture-specific noise — but this document cannot
+pin down its exact source from static reading, exactly the situation
+"Liveness verification" above says static reading cannot resolve. A tagged
+re-run would settle it.
 
 **Result for `Testing/V2/v2CmykLut16.icc`, intent 41:**
 
 ```
-ADJUSTPCS-PROBE bInput=0 intent=0 isV2=1 adjustPCS=1 scale=1.003497,1.003485,1.003491 offset=-0.001686,-0.001743,-0.001440
-ADJUSTPCS-PROBE bInput=1 intent=1 isV2=1 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000
-ADJUSTPCS-PROBE bInput=1 intent=1 isV2=1 adjustPCS=1 scale=0.996527,0.996527,0.996527 offset=0.001674,0.001737,0.001433
-ADJUSTPCS-PROBE bInput=0 intent=1 isV2=1 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000
-ADJUSTPCS-PROBE bInput=1 intent=1 isV2=1 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000
-ADJUSTPCS-PROBE bInput=0 intent=0 isV2=1 adjustPCS=1 scale=1.003497,1.003485,1.003491 offset=-0.001686,-0.001743,-0.001440
-ADJUSTPCS-PROBE bInput=1 intent=1 isV2=1 adjustPCS=0 scale=1.003497,1.003485,1.003491 offset=0.000000,0.000000,0.000000
-ADJUSTPCS-PROBE bInput=0 intent=1 isV2=1 adjustPCS=1 scale=1.003485,1.003485,1.003485 offset=-0.001680,-0.001743,-0.001437
+ADJUSTPCS-PROBE bInput=0 intent=0 isV2=1 adjustPCS=1 scale=1.003497,1.003485,1.003491 offset=-0.001686,-0.001743,-0.001440   # A (xform1's calcSrcBlackPoint; fixed-Perceptual, unique here since C now reports intent=1)
+ADJUSTPCS-PROBE bInput=1 intent=1 isV2=1 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000   # B, B' or D (three-way fingerprint collision at (1,1); adjustPCS=0 so unused
+ADJUSTPCS-PROBE bInput=1 intent=1 isV2=1 adjustPCS=1 scale=0.996527,0.996527,0.996527 offset=0.001674,0.001737,0.001433   # B, B' or D -- non-identity v2-perceptual-legacy-shaped value
+ADJUSTPCS-PROBE bInput=0 intent=1 isV2=1 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000   # C (unique fingerprint: bInput=0, intent=1 -- getBlackXfm's first edge at this test's relative intent)
+ADJUSTPCS-PROBE bInput=1 intent=1 isV2=1 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000   # B, B' or D
+ADJUSTPCS-PROBE bInput=0 intent=0 isV2=1 adjustPCS=1 scale=1.003497,1.003485,1.003491 offset=-0.001686,-0.001743,-0.001440   # A (the second calcSrcBlackPoint invocation -- see note)
+ADJUSTPCS-PROBE bInput=1 intent=1 isV2=1 adjustPCS=0 scale=1.003497,1.003485,1.003491 offset=0.000000,0.000000,0.000000   # B, B' or D
+ADJUSTPCS-PROBE bInput=0 intent=1 isV2=1 adjustPCS=1 scale=1.003485,1.003485,1.003485 offset=-0.001680,-0.001743,-0.001437   # C
 ```
+
+Unlike the intent-40 block, this one is fully explained: at relative
+intent, `calcDstBlackPoint()`'s nested `calcSrcBlackPoint()` call (gated on
+`nIntent==icRelativeColorimetric`, true here) fires a *second*
+`calcSrcBlackPoint` invocation (`A`, `B` again), on top of the xform1
+invocation and `getBlackXfm()`'s two edges. The fingerprint multiset is
+`(0,0)` x2 (`A` twice), `(1,1)` x3 (`B` twice plus `D` once), `(0,1)` x1
+(`C` once) = six lines, matching exactly. `B`, the repeated `B`, and `D`
+cannot be told apart by fingerprint alone -- only by value, and here two of
+the three collapse to the identical zero/identity result, which does not
+distinguish them either; this is the concrete case the recommended `site=`
+tag would resolve.
 
 **Conclusion of the probe:** `adjustPCS=1` fires repeatedly for
 `v2CmykLut16.icc`, at both intents, with real non-identity scale/offset
@@ -175,13 +222,20 @@ it is not the only gate: two of the six `Begin()` calls for this fixture
 absolute-adjustment branch:
 
 ```
-ADJUSTPCS-PROBE bInput=0 intent=0 isV2=0 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000
-ADJUSTPCS-PROBE bInput=1 intent=0 isV2=0 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000
-ADJUSTPCS-PROBE bInput=1 intent=0 isV2=0 adjustPCS=1 scale=1.001158,1.001158,1.001158 offset=-0.000558,-0.000579,-0.000477
-ADJUSTPCS-PROBE bInput=0 intent=0 isV2=0 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000
-ADJUSTPCS-PROBE bInput=1 intent=1 isV2=0 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000
-ADJUSTPCS-PROBE bInput=0 intent=0 isV2=0 adjustPCS=1 scale=0.999437,0.999437,0.999437 offset=0.000272,0.000282,0.000232
+ADJUSTPCS-PROBE bInput=0 intent=0 isV2=0 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000   # A or C fingerprint (0,0); adjustPCS=0 here, unlike the v2 fixture, since IsVersion2()=0 closes the perceptual-legacy branch
+ADJUSTPCS-PROBE bInput=1 intent=0 isV2=0 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000   # B fingerprint (1,0); adjustPCS=0
+ADJUSTPCS-PROBE bInput=1 intent=0 isV2=0 adjustPCS=1 scale=1.001158,1.001158,1.001158 offset=-0.000558,-0.000579,-0.000477   # second (1,0) line, non-identity via the absolute-adjustment branch (bNeedAbsAdjust) -- same unexplained-surplus shape as the primary fixture's intent-40 block
+ADJUSTPCS-PROBE bInput=0 intent=0 isV2=0 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000   # A or C fingerprint (0,0) (the other of the pair on line 1)
+ADJUSTPCS-PROBE bInput=1 intent=1 isV2=0 adjustPCS=0 scale=0.000000,0.000000,0.000000 offset=0.000000,0.000000,0.000000   # D fingerprint (1,1), forced-relative edge; adjustPCS=0
+ADJUSTPCS-PROBE bInput=0 intent=0 isV2=0 adjustPCS=1 scale=0.999437,0.999437,0.999437 offset=0.000272,0.000282,0.000232   # third (0,0) line, non-identity via the absolute-adjustment branch -- same surplus shape again
 ```
+
+The fingerprint multiset here is identical in shape to the primary
+fixture's intent-40 block: `(0,0)` x3, `(1,0)` x2, `(1,1)` x1. The two
+"extra" lines beyond the four-call-site model are exactly where the
+absolute-adjustment branch (`bNeedAbsAdjust`) shows real, non-identity
+scale/offset, which is the point of this secondary measurement — but their
+exact call-site attribution has the same open question noted above.
 
 So `CMYK-3DLUTs.icc`'s round trip is **not** structurally guaranteed to
 skip the moved code either — the perceptual-legacy branch is closed for it,
@@ -339,23 +393,40 @@ probe above shows `m_bAdjustPCS` firing with genuine non-identity
 scale/offset on multiple edges inside `CIccApplyBPC::pixelXfm()` /
 `getBlackXfm()` for both fixtures, at both intents.
 
-The correct mechanism, to the extent this measurement can establish it, is
-about *where the perturbation goes*, not *whether it exists*. Inside
-`CIccApplyBPC`, the adjusted PCS value (real, non-identity scale/offset —
-see the liveness probe above) feeds a black-point *estimation* procedure —
-`calcSrcBlackPoint()` / `calcDstBlackPoint()` explicitly clip the estimated
-L* to 50 and route through 16-bit `lut16Type` (`v2CmykLut16.icc`) or CLUT
-(`CMYK-3DLUTs.icc`) tetrahedral interpolation twice (forward and reverse)
-before the estimate is used at all. Both of those steps (the clip and the
-LUT interpolation's own discretization) sit downstream of the relocated
-adjustment. This measurement cannot establish the exact size of whatever
-sub-print-precision perturbation the relocation introduces at the point
-the adjustment is applied, only that the clip and double LUT interpolation
-downstream of it are coarser operations that a small perturbation could
-plausibly be absorbed by — consistent with, though not proof of, why it
-does not surface in the final black-point estimate or the final
-round-tripped CMYK values at 8-decimal print precision for these
-particular profiles and probe rows. This is a substantively different, and
+There is a stronger, structural explanation, not just the downstream-coarseness
+argument below, and it should be stated first: the measured chain itself —
+`CMYK -> Lab -> CMYK`, two device-class profiles round-tripped through an
+interior PCS connection — has **no PCS edge at all**. Both of the outer
+CMM's boundaries (`GetSourceSpace()`/`GetDestSpace()`) are `icSigCmykData`;
+the PCS only appears at the *interior* connection between the two xforms,
+and interior connections were already routed through `CIccPcsXform::Connect()`
+before this branch — that code path is unchanged by this branch (Task 4
+only moved the *leading/trailing edge* adjustment into `CIccPcsXform`;
+see `docs/pcs-adjustment-placement.md`). So the outer chain this document
+measures is a configuration this branch cannot touch, by construction, and
+a byte-identical result for it is not a coincidence needing an explanation
+at all.
+
+The only places in this measurement where a genuine chain edge exists are
+`CIccApplyBPC`'s own internal probe chains, confirmed against
+`IccProfLib/IccApplyBPC.cpp`: `pixelXfm()` builds a single-xform
+`CIccCmm(SrcSpace, icSigUnknownData, ...)` that is PCS on one side and
+device on the other (an edge), and `getBlackXfm()` builds a two-xform
+`PCS -> device -> PCS` round trip (an edge at *both* ends) — exactly the
+shape this branch's Task 4 changes. The liveness probe above shows real,
+non-identity scale/offset moving through those edges. But their output
+feeds a black-point *estimation*, not the pixel path directly:
+`calcSrcBlackPoint()` (`IccApplyBPC.cpp:368-370`) explicitly clips the
+estimated L* to 50 before converting back to XYZ, and both
+`calcSrcBlackPoint()`/`calcDstBlackPoint()` route the probe pixel through
+16-bit `lut16Type` (`v2CmykLut16.icc`) or CLUT (`CMYK-3DLUTs.icc`)
+tetrahedral interpolation twice (once per edge of the round trip) before
+the estimate is used at all. An L*-clip and two rounds of 16-bit LUT
+quantization are far coarser than a ~1e-7-relative re-association delta,
+so a perturbation at the edge has a concrete, named mechanism for being
+absorbed before it ever reaches an 8-decimal-print-precision comparison —
+this is a positive account of why the null is expected, not merely a
+tolerance argument. This is a substantively different, and
 more defensible, claim than the original document's "the adjustment was
 identity, so there was nothing to perturb" — that explanation is now known
 to be wrong (the probe shows non-identity adjustment on both fixtures) and
