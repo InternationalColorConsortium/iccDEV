@@ -9572,7 +9572,11 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
     next++;
 
     icColorSpaceSignature lastSpace = last->ptr->GetSrcSpace();
-    if (!last->ptr->IsInput() && IsSpaceColorimetricPCS(lastSpace) && (GetSourceSpace() !=lastSpace || last->ptr->UseLegacyPCS())) {
+    // NeedAdjustPCS() mirrors the trailing-edge condition below. Without it a
+    // chain whose source PCS already matches the profile's gets no leading edge
+    // xform, leaving nowhere to put a source-side PCS adjustment.
+    if (!last->ptr->IsInput() && IsSpaceColorimetricPCS(lastSpace) &&
+        (last->ptr->NeedAdjustPCS() || GetSourceSpace() != lastSpace || last->ptr->UseLegacyPCS())) {
       CIccPcsXform* pPcs = new (std::nothrow) CIccPcsXform();
 
       if (!pPcs) {
