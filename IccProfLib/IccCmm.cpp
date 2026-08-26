@@ -452,6 +452,8 @@ CIccXform::CIccXform()
   m_nIntent = icUnknownIntent;
   m_pAdjustPCS = NULL;
   m_bAdjustPCS = false;
+  m_bSrcSpectralPCS = false;
+  m_bDstSpectralPCS = false;
   m_bAbsToRel = false;
   m_nMCS = icNoMCS;
   m_bUseSpectralPCS = false;
@@ -1556,6 +1558,18 @@ bool CIccXform::CheckForInvalidPCSScale() const
  */
 icStatusCMM CIccXform::Begin()
 {
+  // Cache each port's spectral-ness once. GetSrcSpace()/GetDstSpace() are
+  // virtual and, on the base implementation, walk into the profile header;
+  // NeedsSrcPcsAdjust()/NeedsDstPcsAdjust() used to call them on every pixel
+  // Check*Abs() touches. By the time Begin() runs, every setter that can move
+  // a port's space (SetSrcSpace()/SetDestSpace() on CIccXformNamedColor,
+  // SetGamutXform(), SetPcsAdjustXform()) has already been called, and every
+  // derived Begin() override calls CIccXform::Begin() first -- so this is the
+  // one point where the answer is both known and stable for the xform's
+  // lifetime.
+  m_bSrcSpectralPCS = IsSpaceSpectralPCS(GetSrcSpace());
+  m_bDstSpectralPCS = IsSpaceSpectralPCS(GetDstSpace());
+
   IIccProfileConnectionConditions *pCond = GetConnectionConditions();
 
   icFloatNumber mediaXYZ[3];
@@ -1818,7 +1832,7 @@ void CIccXform::AdjustPCS(icFloatNumber *DstPixel, const icFloatNumber *SrcPixel
  */
 bool CIccXform::NeedsSrcPcsAdjust() const
 {
-  return m_bAdjustPCS && !m_bInput && !IsSpaceSpectralPCS(GetSrcSpace());
+  return m_bAdjustPCS && !m_bInput && !m_bSrcSpectralPCS;
 }
 
 /**
@@ -1832,7 +1846,7 @@ bool CIccXform::NeedsSrcPcsAdjust() const
  */
 bool CIccXform::NeedsDstPcsAdjust() const
 {
-  return m_bAdjustPCS && m_bInput && !IsSpaceSpectralPCS(GetDstSpace());
+  return m_bAdjustPCS && m_bInput && !m_bDstSpectralPCS;
 }
 
 /**
@@ -1853,15 +1867,17 @@ bool CIccXform::NeedsDstPcsAdjust() const
  */
 const icFloatNumber *CIccXform::CheckSrcAbs(CIccApplyXform *pApply, const icFloatNumber *Pixel) const
 {
-  // Deliberately the base predicate, called qualified rather than virtually.
-  // It is the same (m_bAdjustPCS && !m_bInput) test this function has always
-  // run, now carrying the spectral-port exclusion.  Every derived override
-  // narrows it further, but each derived Apply() already applies its own extra
-  // condition at this call site, so dispatching virtually here would apply
-  // those conditions twice and change behaviour beyond the spectral exclusion.
-	if (CIccXform::NeedsSrcPcsAdjust()) {
+  // Dispatches virtually so a derived override's extra condition
+  // (CIccXformMpe's B2D3/D2B3 test, CIccXformNamedColor's colorimetric/
+  // spectral split) is honoured here too. This is behaviourally identical to
+  // calling the base predicate directly: every derived Apply() already
+  // enforces that same extra condition at this call site before reaching
+  // CheckSrcAbs(), and boolean AND is idempotent, so nothing is applied
+  // twice. Dispatching virtually is what keeps a future override's narrower
+  // predicate honoured even if its call site's guard were ever missed.
+  if (NeedsSrcPcsAdjust()) {
     icFloatNumber *pAbsLab = pApply->m_AbsLab;
-		AdjustPCS(pAbsLab, Pixel);
+    AdjustPCS(pAbsLab, Pixel);
     return pAbsLab;
   }
 
@@ -1884,9 +1900,9 @@ const icFloatNumber *CIccXform::CheckSrcAbs(CIccApplyXform *pApply, const icFloa
  */
 void CIccXform::CheckDstAbs(icFloatNumber *Pixel) const
 {
-  // Qualified, not virtual -- see the note in CheckSrcAbs() above.
-	if (CIccXform::NeedsDstPcsAdjust()) {
-		AdjustPCS(Pixel, Pixel);
+  // Dispatches virtually -- see the note in CheckSrcAbs() above.
+  if (NeedsDstPcsAdjust()) {
+    AdjustPCS(Pixel, Pixel);
   }
 }
         
@@ -2738,9 +2754,11 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             }
             // To-side conversion, last: the vector is now in the destination
             // profile's range and has to leave this connection in the
-            // absolute-ness that profile's tag family expects.  Reciprocal of
-            // the from-side push above, so a matched pair folds away in
-            // Optimize().
+            // absolute-ness that profile's tag family expects. Unlike the
+            // colorimetric-source branches above, this source branch pushes
+            // no from-side spectral white point conversion (see the comment
+            // at the top of this case), so there is no matching push for this
+            // one to fold against in Optimize().
             if ((stat=pushSpectralWhitePointConvert(pToXform, false, m_nDstSamples))!=icCmmStatOk) {
               return stat;
             }
@@ -2750,15 +2768,17 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             if ((stat=pushBiRef2Rad(pFromXform->m_pProfile, pFromXform->m_pConnectionConditions))!=icCmmStatOk) {
               return stat;
             }
-            if ((stat=pushSpecToRange(pFromXform->m_pProfile->m_Header.spectralRange, 
+            if ((stat=pushSpecToRange(pFromXform->m_pProfile->m_Header.spectralRange,
                             pToXform->m_pProfile->m_Header.spectralRange))!=icCmmStatOk) {
               return stat;
             }
             // To-side conversion, last: the vector is now in the destination
             // profile's range and has to leave this connection in the
-            // absolute-ness that profile's tag family expects.  Reciprocal of
-            // the from-side push above, so a matched pair folds away in
-            // Optimize().
+            // absolute-ness that profile's tag family expects. Unlike the
+            // colorimetric-source branches above, this source branch pushes
+            // no from-side spectral white point conversion (see the comment
+            // at the top of this case), so there is no matching push for this
+            // one to fold against in Optimize().
             if ((stat=pushSpectralWhitePointConvert(pToXform, false, m_nDstSamples))!=icCmmStatOk) {
               return stat;
             }
@@ -3957,17 +3977,30 @@ icStatusCMM CIccPcsXform::pushSpectralWhitePointConvert(const CIccXform *pXform,
 
   // A profile can disagree with itself about how many samples its spectral
   // vector holds -- Testing/Display/LaserProjector.icc declares a 401-channel
-  // radiant signature alongside a 31-step range.  The scale has to match the
-  // pixel the step will run on, and there is no way to tell which of the
-  // disagreeing numbers the producer meant, so refuse rather than truncate or
-  // pad.  nPortSamples is the authority: it is what the neighbouring xforms
-  // report and what CIccApplyCmm sizes its pixel buffers from.
+  // radiant signature alongside a 31-step range.  nSamples below is what
+  // actually gets allocated and pushed (see pushScale() at the end of this
+  // function): it is the profile's own statement of its spectral channel
+  // count, read from the same spectralPCS signature icSpectralPcsMatchesRange()
+  // already checks against spectralRange.steps for the three plain-spectrum
+  // types -- calling it here instead of re-deriving the same comparison keeps
+  // that invariant stated in one place. Connect() already calls it on both
+  // connected profiles before ever reaching this helper; ConnectFirst() and
+  // ConnectLast() do not, so the call here is load-bearing for those two.
+  //
+  // nSamples != nPortSamples below is defensive, not load-bearing: nPortSamples
+  // is what the neighbouring xforms report and what CIccApplyCmm sizes its
+  // pixel buffers from, but at every one of this function's nine call sites it
+  // traces back to GetNumSrcSamples()/GetNumDstSamples() on this same pXform,
+  // which for a spectral port resolves to icGetSpaceSamples() on this same
+  // spectralPCS signature -- the identical quantity nSamples is computed from
+  // two lines below. The two cannot actually disagree; refusing rather than
+  // truncating or padding is only in case that ever stops being true.
   const icUInt32Number nSamples =
     icGetSpaceSamples((icColorSpaceSignature)pProfile->m_Header.spectralPCS);
 
   if (!nSamples ||
       nSamples != (icUInt32Number)nPortSamples ||
-      nSamples != (icUInt32Number)pProfile->m_Header.spectralRange.steps ||
+      !icSpectralPcsMatchesRange(pProfile->m_Header) ||
       pNumTag->GetNumValues() < nSamples)
     return icCmmStatInvalidProfile;
 

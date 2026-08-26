@@ -535,6 +535,12 @@ public:
   /// spectral white point conversion instead; see
   /// docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md.
   ///
+  /// Reads m_bSrcSpectralPCS rather than calling the virtual GetSrcSpace()
+  /// itself: GetSrcSpace() walks into the profile header, and CheckSrcAbs()
+  /// calls this once per pixel whenever the adjustment fires. Begin() fills
+  /// the cache once, from the same GetSrcSpace() this predicate used to call
+  /// directly.
+  ///
   /// Defined out of line in IccCmm.cpp for the same reason the
   /// CIccXformNamedColor overrides below are: the IsSpaceSpectralPCS() needed
   /// here is the file-local one there, and IccSignatureUtils.h declares a
@@ -544,8 +550,9 @@ public:
 
   /// True when this xform's PCS adjustment applies to values leaving it.
   /// Mirrors the condition inside CheckDstAbs(): only an input (device->PCS)
-  /// xform adjusts on the way out. Excludes a spectral PCS port for the reason
-  /// given on NeedsSrcPcsAdjust() above.
+  /// xform adjusts on the way out. Excludes a spectral PCS port and reads the
+  /// m_bDstSpectralPCS cache for the reasons given on NeedsSrcPcsAdjust()
+  /// above.
   virtual bool NeedsDstPcsAdjust() const;
 
   bool LuminanceMatching() { return m_bLuminanceMatching; }
@@ -608,6 +615,18 @@ protected:
 	bool m_bAdjustPCS;
 	icFloatNumber m_PCSScale[3]; // scale and offset for PCS adjustment in XYZ
 	icFloatNumber m_PCSOffset[3];
+
+  // Filled once by CIccXform::Begin() from IsSpaceSpectralPCS(GetSrcSpace())/
+  // IsSpaceSpectralPCS(GetDstSpace()); NeedsSrcPcsAdjust()/NeedsDstPcsAdjust()
+  // read these instead of re-deriving the answer from a virtual GetSrcSpace()/
+  // GetDstSpace() call on every pixel Check*Abs() touches. Safe to fill once:
+  // every setter that can move a port's space (SetSrcSpace()/SetDestSpace()
+  // on CIccXformNamedColor, SetGamutXform(), SetPcsAdjustXform()) is called
+  // before Begin() runs on this xform, and every derived Begin() override
+  // calls CIccXform::Begin() first, before anything that could change the
+  // answer.
+  bool m_bSrcSpectralPCS;
+  bool m_bDstSpectralPCS;
 
   IIccProfileConnectionConditions *m_pConnectionConditions;
 

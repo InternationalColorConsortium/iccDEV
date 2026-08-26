@@ -836,10 +836,15 @@ static bool buildV5SpectralInputProfile(CIccProfile &p)
 // docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md
 // authorises stopping the XYZ path at a spectral port.
 //
-// This fixture carries no icSigSpectralWhitePointTag, so S7 ("missing white
-// point means no conversion") applies and the correct answer here is that all
-// six samples come through the pipeline untouched. The cases further down
-// assert what happens when a white point IS present.
+// This fixture carries no icSigSpectralWhitePointTag, but that is not why all
+// six samples come through the pipeline untouched: CheckPCSConnections() gates
+// both chain-edge blocks on IsSpaceColorimetricPCS(), so no CIccPcsXform is
+// built at this spectral edge at all -- asserted directly three lines below by
+// pcsXformCount() == 0. Adding a white point tag to this fixture would not
+// change the result; S7 ("missing white point means no conversion") never
+// gets a chance to run here because nothing reaches pushSpectralWhitePointConvert()
+// on this path. The cases further down build a real CIccPcsXform (via
+// Connect()/ConnectFirst()/ConnectLast() directly) and assert S7 there.
 static void spectralTrailingEdgeNoLongerAdjustsInsideApply()
 {
   CIccProfile *pICC = new CIccProfile;
@@ -1238,6 +1243,15 @@ static void spectralConversionFollowsTheIntentTable()
 // nothing at all (which is what it did before this change), so it is paired
 // here with the same connection between two profiles carrying *different*
 // spectral white points: there the pair must survive as the residual ratio.
+//
+// Substitution being made: the spec's test-strategy item 2 asked for "returns
+// the original spectrum to within the band"; this asserts icCmmStatIdentityXform
+// instead of applying the connection and comparing spectra. Defensible rather
+// than a gap -- an empty step list has nothing to apply that could return
+// anything other than the original spectrum unchanged, and the actual
+// multiply/divide arithmetic is already covered numerically by
+// spectralConversionFollowsTheIntentTable() above and by the mismatched-white
+// case below.
 static void spectralInteriorConnectionFolds()
 {
   {
