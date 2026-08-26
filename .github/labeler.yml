@@ -216,8 +216,10 @@ Labels:
           - '.github/workflows/ci-fork-automation-gate.yml'
           - '.github/scripts/sync-labels.sh'
           - 'docs/label-system.md'
+          - 'docs/label-inventory-audit.md'
           - '.github/skills/maintainer-label-system/**'
           - '.github/prompts/maintainer-label-triage.prompt.md'
+          - '.github/agents/maintainer-label-triage.agent.md'
 
 vcpkg:
   - changed-files:

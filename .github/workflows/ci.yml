@@ -51,7 +51,7 @@ jobs:
             triplet: arm64-osx
     env:
       BASH_ENV: /dev/null
-      VCPKG_BASELINE: eae1680538b86f962455c27abca2aad0dc304a4d
+      VCPKG_BASELINE: 00c6c71d9744ea2e5ce60fbe9a04b1699ddb03bc
       VCPKG_TRIPLET: ${{ matrix.triplet }}
       PLATFORM_ID: ${{ matrix.platform }}
 
@@ -183,7 +183,7 @@ jobs:
     env:
       POWERSHELL_TELEMETRY_OPTOUT: 1
       POWERSHELL_UPDATECHECK: Off
-      VCPKG_BASELINE: eae1680538b86f962455c27abca2aad0dc304a4d
+      VCPKG_BASELINE: 00c6c71d9744ea2e5ce60fbe9a04b1699ddb03bc
       VCPKG_TRIPLET: x64-windows
       PLATFORM_ID: windows-x64
 

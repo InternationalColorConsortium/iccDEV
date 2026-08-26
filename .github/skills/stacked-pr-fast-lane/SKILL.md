@@ -93,9 +93,12 @@ gh run watch <run-id> --repo InternationalColorConsortium/iccDEV --exit-status
 
 Trigger shared-concurrency runs sequentially. Add Windows only when the change
 needs that surface. Docker is required for container-surface changes, including
-the unified Dockerfile, packaged MCP source, and `ci-docker-pr.yml`. Escalate
-to `ci_scope=full` when the changed surface or merge policy requires the long
-cycle.
+the unified Dockerfile, packaged MCP source, and `ci-docker-pr.yml`. For
+source, CMake, and test-only changes targeting `master`, the Docker lane uses
+the dynamically detected base-SHA image and builds the mounted PR tree; no
+image SHA is hardcoded. Docker-definition changes and non-`master` base
+branches build the exact PR image. Escalate to `ci_scope=full` when the changed
+surface or merge policy requires the long cycle.
 
 ## References
 

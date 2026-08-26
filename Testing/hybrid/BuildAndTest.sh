@@ -10,6 +10,12 @@
 #################################################################################
 set -eu
 
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+SILENCE_FILE="$SCRIPT_DIR/../silence.txt"
+if [ -r "$SILENCE_FILE" ]; then
+  export UBSAN_OPTIONS="${UBSAN_OPTIONS:+${UBSAN_OPTIONS}:}suppressions=$SILENCE_FILE"
+fi
+
 mkdir -p ICC Results config
 
 echo "========== Phase 1: Build ICC profiles from XML sources =========="

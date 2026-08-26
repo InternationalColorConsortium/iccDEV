@@ -41,9 +41,15 @@ security automation.
    surface.
 5. Fix confirmed findings.
 6. Repeat only the checks affected by the fix.
-7. Freeze the head and record the evidence in
-   `docs/governance/UPSTREAM_PR_READINESS.md` before requesting review.
-8. Prepare a concise handoff.
+7. Freeze the head and record the evidence and `base...HEAD` contract matrix in
+   `docs/governance/UPSTREAM_PR_READINESS.md` before requesting review. Map
+   each changed cross-cutting surface to its producer, consumer, build/runtime
+   behavior, platform or toolchain boundary, CI trigger, dependency owner, and
+   local evidence.
+8. If a re-review finds any new blocker, including one in the repair, stop
+   serial review and return to branch-only grooming until a maintainer directs
+   the next step.
+9. Prepare a concise handoff.
 
 For focused local iteration, run
 `.github/scripts/preflight-safety-checks.sh --fast-lane=matlab` for MATLAB-only

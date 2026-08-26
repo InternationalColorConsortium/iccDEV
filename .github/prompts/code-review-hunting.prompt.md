@@ -19,11 +19,14 @@ condition, impact, and smallest safe remediation. Read `AGENTS.md`,
 
 Review only a frozen head that has passed
 `docs/governance/UPSTREAM_PR_READINESS.md`. Review the complete PR surface and
-cumulative diff, not incremental slices. A request for changes returns the
-branch to branch-only grooming; re-review only after the readiness evidence is
-renewed. If a re-review finds an issue in unchanged code, stop serial automated
-review and require maintainer direction. Prefer no comment to low-value review
-volume.
+cumulative diff, not incremental slices. Before reviewing, record a
+`base...HEAD` contract matrix mapping each changed cross-cutting surface to its
+producer, consumer, build/runtime behavior, platform or toolchain boundary, CI
+trigger, dependency owner, and local evidence. A request for changes returns
+the branch to branch-only grooming; re-review only after readiness evidence and
+the complete contract matrix are renewed. If a re-review finds any new blocker,
+including in the repair, stop serial automated review and require maintainer
+direction. Prefer no comment to low-value review volume.
 
 For every new or relocated C/C++ source or header, verify the complete ICC
 Software License block is retained. A missing, abbreviated, or placeholder

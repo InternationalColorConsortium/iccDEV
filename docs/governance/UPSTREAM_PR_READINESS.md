@@ -33,11 +33,17 @@ All items must pass before an authorized PR is opened or a review is requested:
 6. The complete applicable test suite passes locally.
 7. Positive and negative configuration cases pass, including Debug/Release,
    compiler, sanitizer, diagnostics, runtime CPU dispatch, and fallback paths.
-8. Generated artifacts are removed or intentionally documented.
-9. Active and suppressed automated-review findings are inspected together.
-10. Documentation and reported evidence describe actual runtime behavior, not
+8. A `base...HEAD` contract matrix covers every changed cross-cutting surface:
+   producer, consumer, build/runtime behavior, supported toolchain or platform,
+   CI trigger, dependency owner, and local evidence. Compiler-specific defaults
+   and explicit overrides are both validated; runtime suppression syntax is
+   verified by the runtime rather than inferred from compile-time categories.
+9. Generated artifacts are removed or intentionally documented.
+10. Active and suppressed automated-review findings are inspected together,
+    including review summaries because suppressed findings may have no thread.
+11. Documentation and reported evidence describe actual runtime behavior, not
     only compile-time eligibility.
-11. The user explicitly authorizes PR creation.
+12. The user explicitly authorizes PR creation.
 
 Any incomplete item means the branch remains branch-only.
 
@@ -46,9 +52,11 @@ Any incomplete item means the branch remains branch-only.
 Automated review is a final verification gate, not the implementation loop.
 
 - Request one complete review of the frozen head and cumulative diff.
-- Resolve its findings branch-only, repeat the readiness gate, then request one
-  complete re-review only when a maintainer needs it.
-- If that re-review identifies a missed issue in unchanged code, stop.
+- Resolve its findings branch-only, repeat the readiness gate and complete
+  contract matrix, then request one complete re-review only when a maintainer
+  needs it.
+- If that re-review identifies any new blocker, including one in the repair,
+  stop.
 - Return to branch-only grooming and perform a complete diff/configuration
   audit. Do not request another automated review without maintainer direction.
 
@@ -64,7 +72,8 @@ merge commits: none
 build: command and result
 tests: command, pass count, skip count
 negative tests: cases and results
-active and suppressed findings: checked
+contract matrix: changed surface, producer, consumer, boundary, and evidence
+review inventory: review IDs plus active and suppressed findings from threads and summaries
 scope documentation: checked
 readiness: PASS or FAIL
 ```

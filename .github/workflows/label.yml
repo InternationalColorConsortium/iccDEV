@@ -33,32 +33,9 @@ jobs:
     name: Triage issue
     runs-on: ubuntu-latest
     permissions:
-      contents: read
       issues: write  # Required to apply issue triage labels and comments.
 
     steps:
-      - name: Check out label taxonomy
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
-        with:
-          sparse-checkout: |
-            .github/labels.yml
-            .github/scripts/sync-labels.sh
-          persist-credentials: false
-
-      # preflight: allow-token-exposure reason=issue-label-maintenance
-      - name: Ensure repository labels exist
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-          GH_TOKEN: ${{ github.token }}
-          GH_REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-
-          .github/scripts/sync-labels.sh
-
       # preflight: allow-token-exposure reason=issue-triage-labels
       - name: Triage and welcome issue
         shell: bash --noprofile --norc {0}

@@ -23,6 +23,12 @@ shares one source of truth. Update rules here, not in the mirrors.
 - Exit 1-127 is graceful failure. Exit 128+ is signal termination.
 - Use sanitizer builds for bug hunting; see `.github/instructions/build-system.instructions.md`.
 - Add the nearest regression test for behavior fixes.
+- Before the first automated review, record a `base...HEAD` contract matrix for
+  every changed cross-cutting surface: producer, consumer, build/runtime
+  behavior, platform or toolchain boundary, CI trigger, dependency owner, and
+  local evidence. A later update still requires the complete contract matrix,
+  not a delta-only review. Any newly found blocker returns the branch to
+  branch-only grooming before another review.
 - Every new or relocated C/C++ source or header must retain the complete ICC
   Software License block used by adjacent files; abbreviated, placeholder, or
   omitted license text is a blocking defect.
@@ -58,6 +64,7 @@ shares one source of truth. Update rules here, not in the mirrors.
 | Workflow hardening | `.github/instructions/workflow-governance.instructions.md` |
 | Maintainer label system | `docs/label-system.md` |
 | Label triage prompt | `.github/prompts/maintainer-label-triage.prompt.md` |
+| Label triage audit agent | `.github/agents/maintainer-label-triage.agent.md` |
 | Testing details | `.github/instructions/testing.instructions.md` |
 | Python bindings | `.github/instructions/python-bindings.instructions.md` |
 | MATLAB MEX bindings | `.github/instructions/matlab-mex.instructions.md` |

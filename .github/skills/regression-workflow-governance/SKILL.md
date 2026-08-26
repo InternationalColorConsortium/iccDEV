@@ -98,8 +98,8 @@ If CMake or C++ changed, also run:
 - PR workflow helper trust boundaries follow `docs/workflow-security-trust-boundaries.md`.
 - Pull request review follows `docs/governance/UPSTREAM_PR_READINESS.md`:
   request review only for a frozen head with current evidence, review the
-  complete PR rather than incremental slices, and stop serial automated review
-  when a re-review finds an unchanged-code miss.
+  complete PR and contract matrix rather than incremental slices, and stop
+  serial automated review when a re-review finds any new blocker.
 - The PR was checked against the repeat-review findings in
   `docs/regression-workflow-governance.md`: scope split, script headers,
   trigger parity, trusted-base helpers, exact SHA validation, input rejection,

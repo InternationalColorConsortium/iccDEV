@@ -151,13 +151,13 @@ agent-policy surfaces.
   generic requests for broader tests when focused validation covers the diff.
 - Use one comment for one root cause. State the affected path, triggering
   condition, and the smallest safe remediation.
-- Review each head SHA once. For a later PR update, review only the changed
-  delta and do not re-post prior findings, summaries, or resolved concerns
+- Review every head against the complete cumulative `base...HEAD` diff and
+  contract matrix. For a later PR update, use the changed delta only to focus
+  new evidence; do not narrow the review scope or re-post resolved findings
   unless the update reintroduces the defect.
 - Request review only after the head is frozen and the readiness evidence is
-  current. If a re-review finds a missed issue in unchanged code, stop serial
-  automated review and return the branch to grooming until a maintainer directs
-  the next step.
+  current. If a re-review finds any new blocker, stop serial automated review
+  and return the branch to grooming until a maintainer directs the next step.
 - Conserve maintainer attention: prioritize a small set of high-confidence,
   actionable findings over exhaustive comment volume. No comment is better
   than a low-value concern.

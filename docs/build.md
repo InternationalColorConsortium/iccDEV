@@ -737,6 +737,11 @@ steps, see [Python packaging PR, merge, and production release](python-packaging
 ## vcpkg Consumers
 
 The `ports/iccdev/` overlay port builds core static libraries and CLI tools.
+The pinned vcpkg registry baseline is
+`00c6c71d9744ea2e5ce60fbe9a04b1699ddb03bc`. Keep the root and
+`Build/Cmake` manifests, the `hello-iccdev` registry configuration, and both
+vcpkg CI bootstrap paths synchronized when updating it. The overlay port
+manifest intentionally has no registry baseline.
 For a complete consuming-project example, see the
 [`examples/hello-iccdev` README](https://github.com/InternationalColorConsortium/iccDEV/blob/master/examples/hello-iccdev/README.md).
 

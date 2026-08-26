@@ -845,8 +845,10 @@ for build instructions.
 ### IIS ISAPI server-side integration
 
 The Windows IIS ISAPI sample at
-[`Tools/Winnt/IccIisIsapi/`](../Tools/Winnt/IccIisIsapi/) conditionally invokes
-`iccToJson` and `iccFromJson` as part of its tool pipeline when IccJSON is built.
+<a href="https://github.com/InternationalColorConsortium/iccDEV/tree/master/Tools/Winnt/IccIisIsapi/">Tools/Winnt/IccIisIsapi/</a>
+conditionally invokes `iccToJson` and `iccFromJson` as part of its tool pipeline
+when IccJSON is built.
 Uploaded ICC profiles are converted to JSON for inspection, and XML-originated
 profiles are also exported to JSON. See
-[`api.md`](../Tools/Winnt/IccIisIsapi/api.md) for the HTTP endpoint reference.
+<a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/Tools/Winnt/IccIisIsapi/api.md">api.md</a>
+for the HTTP endpoint reference.

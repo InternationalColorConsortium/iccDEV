@@ -10,6 +10,12 @@ unless an iccDEV maintainer explicitly requests that work. Contributors should
 describe needed coverage in the issue or pull request so maintainers can decide
 where it belongs.
 
+Before the first review of a cross-cutting change, attach a `base...HEAD`
+contract matrix identifying each changed surface's producer, consumer,
+build/runtime behavior, platform or toolchain boundary, CI trigger, dependency
+owner, and local evidence. Re-review the complete matrix after a repair; any
+new blocker returns the branch to branch-only grooming before another review.
+
 ## Canonical Locations
 
 | Item | Location | Purpose |
@@ -95,8 +101,9 @@ readiness gate in `docs/governance/UPSTREAM_PR_READINESS.md`. Review the
 complete pull request and cumulative diff, not incremental slices. A requested
 change returns the branch to branch-only grooming: repair the findings, renew
 the readiness evidence, then request one complete re-review when a maintainer
-needs it. If that re-review identifies a missed issue in unchanged code, stop
-serial automated review and require maintainer direction before continuing.
+needs it. If that re-review identifies any new blocker, including one in the
+repair, stop serial automated review and require maintainer direction before
+continuing.
 
 Recent maintainer PRs show the same avoidable review findings recurring. Before
 requesting review, check the PR against this list:
@@ -147,9 +154,16 @@ orchestrator. See `docs/label-system.md` for the current context list.
 
 When `container_changed` is true, `ci-pr-action` selects the read-only Docker
 PR verification lane and `PR Summary` requires its result. The lane is skipped
-for other changes to conserve runners. Do not treat a skipped lane as container
-verification; rerun it after any Dockerfile, container image, or container
-workflow update.
+for documentation, governance, and label-only changes to conserve runners.
+Dockerfile, Docker dependency, packaged MCP, and Docker-workflow changes build
+the exact PR image. Source, CMake, and test-only changes targeting `master`
+instead pull the canonical image dynamically by the detected base SHA, verify
+its OCI revision label, and build the mounted PR tree with the strict
+sanitizer/CTest contract. No Docker image SHA is embedded in workflow source.
+Other allowed base branches keep the full PR-image build because canonical
+immutable images are published only from `master`. Do not treat a skipped lane
+as container verification; rerun it after any Dockerfile, container image, or
+container workflow update.
 
 The Docker PR lane builds the exact checked-out PR Dockerfile without a workflow
 cache. The resulting image is local to the job: it must bind the checked-out PR

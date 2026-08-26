@@ -11,3 +11,5 @@ unsigned-integer-overflow:*/include/c++/*/bits/stl_bvector.h
 unsigned-integer-overflow:*/include/c++/*/bits/stl_uninitialized.h
 unsigned-integer-overflow:*/include/c++/*/bits/vector.tcc
 unsigned-integer-overflow:*/include/c++/*/ext/string_conversions.h
+# Apple libc++ hashes through intentional unsigned left-shift wrapping.
+shift-base:*/include/c++/v1/__functional/hash.h

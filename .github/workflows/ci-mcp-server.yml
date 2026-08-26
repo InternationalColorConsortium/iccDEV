@@ -14,15 +14,6 @@ permissions:
   contents: read
 
 on:
-  push:
-    branches:
-      - master
-      - ci-qa-mcp-server
-    paths:
-      - "Dockerfile"
-      - "iccdev-mcp/**"
-      - ".github/codeql-queries/iccdev-mcp/**"
-      - ".github/workflows/ci-mcp-server.yml"
   pull_request:
     branches:
       - master
