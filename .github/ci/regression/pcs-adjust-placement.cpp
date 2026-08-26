@@ -299,6 +299,64 @@ static void trailingEdgeAdjustmentApplies(icRenderingIntent nIntent,
   check(moved, label);
 }
 
+// Leading PCS edge: pcsSpace -> CMYK, one profile, mirroring
+// trailingEdgeAdjustmentApplies() but reversed -- the CMM's *source* is PCS
+// and the v2 profile runs in the output (PCS->device) direction, so this
+// exercises ConnectFirst()'s adjust branches. Those were dead code before
+// this task (NeedAdjustSrcPCS() was flag-gated false for a sole leading
+// xform) exactly as ConnectLast()'s were, and ConnectLast()'s counterpart
+// hid a real domain bug once it went live; this is the numeric insurance
+// pcsXformCount()/adjustingXformCount() alone (see
+// noXformPerformsItsOwnAdjustment()) cannot provide, since a cleared flag
+// plus an identity ConnectFirst() would still read as "handed over" there.
+//
+// pcsIn is deliberately an arbitrary, generic PCS pixel -- it does not need
+// to correspond to any particular color, only to be a well-formed point in
+// the space ConnectFirst() will convert through. For icSigXYZData, per
+// ConnectFirst()'s own contract (a leading pushXyzInToXyz() first), pcsIn is
+// *internal*-domain XYZ -- the same convention CIccCmm::Apply() uses at every
+// other internal-PCS-XYZ boundary in this file (see pawg-q4-xyz-pcs-decode's
+// internalD50).
+static void leadingEdgeAdjustmentApplies(icColorSpaceSignature nSrcSpace,
+                                         const icFloatNumber *pcsIn,
+                                         icRenderingIntent nIntent,
+                                         const char *label)
+{
+  CIccProfile v2;
+  buildV2CmykOutputProfile(v2);
+
+  icFloatNumber withIntent[4] = { 0 }, relative[4] = { 0 };
+
+  {
+    CIccCmm cmm(nSrcSpace, icSigCmykData, false);
+    check(cmm.AddXform(v2, nIntent) == icCmmStatOk, "leading: AddXform");
+    check(cmm.Begin() == icCmmStatOk, "leading: Begin");
+    check(cmm.Apply(withIntent, pcsIn) == icCmmStatOk, "leading: Apply");
+  }
+  {
+    // icRelativeColorimetric on a v2 profile takes no adjustment, so it is
+    // the unadjusted reference the adjusted result must differ from -- same
+    // reasoning as trailingEdgeAdjustmentApplies().
+    CIccCmm cmm(nSrcSpace, icSigCmykData, false);
+    check(cmm.AddXform(v2, icRelativeColorimetric) == icCmmStatOk, "leading: ref AddXform");
+    check(cmm.Begin() == icCmmStatOk, "leading: ref Begin");
+    check(cmm.Apply(relative, pcsIn) == icCmmStatOk, "leading: ref Apply");
+  }
+
+  // Checked across all four CMYK channels, unlike trailingEdgeAdjustmentApplies()'s
+  // single Lab channel: nothing pins which device channel the adjustment
+  // perturbs most after the BToA CLUT, so pinning one arbitrarily risks a
+  // spurious "did not move" if that particular channel is insensitive to it.
+  bool moved = false;
+  for (int i = 0; i < 4; i++) {
+    if (!closeRel(withIntent[i], relative[i], kTol)) {
+      moved = true;
+      break;
+    }
+  }
+  check(moved, label);
+}
+
 // Negative control for the whole file. The three numeric cases above all
 // compare an adjusted result against a relative-intent reference and assume
 // that reference carries no adjustment; this proves it structurally instead
@@ -680,6 +738,30 @@ int main(int /*argc*/, char ** /*argv*/)
       "trailing edge: v2 perceptual result differs from the unadjusted reference");
   trailingEdgeAdjustmentApplies(icAbsoluteColorimetric,
       "trailing edge: absolute result differs from the unadjusted reference");
+
+  // Leading edge, Lab CMM source: the common shape, same fixture direction as
+  // noXformPerformsItsOwnAdjustment(icSigLabData, icSigCmykData, false, ...).
+  {
+    static const icFloatNumber kLabIn[3] = { 0.60f, 0.55f, 0.45f };
+    leadingEdgeAdjustmentApplies(icSigLabData, kLabIn, icPerceptual,
+        "leading edge (Lab source): v2 perceptual result differs from the unadjusted reference");
+    leadingEdgeAdjustmentApplies(icSigLabData, kLabIn, icAbsoluteColorimetric,
+        "leading edge (Lab source): absolute result differs from the unadjusted reference");
+  }
+
+  // Leading edge, XYZ CMM source: GetSourceSpace() (XYZ) != the v2 profile's
+  // own PCS (Lab), so this drives ConnectFirst()'s srcSpace==icSigXYZData
+  // branch specifically -- the branch whose ConnectLast() mirror was the one
+  // actually broken. pcsIn is internal-domain XYZ (see
+  // leadingEdgeAdjustmentApplies()'s doc comment).
+  {
+    static const icFloatNumber kXyzIn[3] = { 0.30f, 0.28f, 0.22f };
+    leadingEdgeAdjustmentApplies(icSigXYZData, kXyzIn, icPerceptual,
+        "leading edge (XYZ source): v2 perceptual result differs from the unadjusted reference");
+    leadingEdgeAdjustmentApplies(icSigXYZData, kXyzIn, icAbsoluteColorimetric,
+        "leading edge (XYZ source): absolute result differs from the unadjusted reference");
+  }
+
   relativeIntentTakesNoAdjustment();
 
   interiorAdjustmentsCancel();

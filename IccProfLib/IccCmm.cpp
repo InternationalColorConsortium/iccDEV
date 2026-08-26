@@ -2841,12 +2841,16 @@ icStatusCMM CIccPcsXform::ConnectLast(CIccXform* pFromXform, icColorSpaceSignatu
       // both pre-scaled by 32768/65535 per the internal-PCS-XYZ convention),
       // and m_PCSScale/m_PCSOffset are computed in that same domain (see
       // CIccXform::Begin(), whose v2-perceptual offset is explicitly
-      // pre-scaled to internal units). pushScale3()/pushOffset3() below,
-      // like every other push* helper in this file, operate on *actual* XYZ
-      // (pushLabToXyz()'s own doc comment says as much), so bring the pixel
-      // into that domain first, exactly as the srcSpace==icSigLabData branch
-      // above does via its own actual-XYZ-producing conversion. Without this,
-      // the unconditional pushXyzToXyzIn() below re-scales an already-internal
+      // pre-scaled to internal units). pushScale3() is a bare ratio and does
+      // not care which domain it runs in, but pushOffset3() below defaults
+      // bConvertIntXyzOffset to true specifically to take an internal-domain
+      // offset (what m_PCSOffset already is) and rescale it by 65535/32768
+      // into the actual-domain step this chain otherwise runs on -- see
+      // pushOffset3()'s own doc comment. That rescale only lands correctly if
+      // the pixel it is added to is already actual-domain, so bring it there
+      // first, exactly as the srcSpace==icSigLabData branch above arranges via
+      // its own actual-XYZ-producing conversion. Without this, the
+      // unconditional pushXyzToXyzIn() below re-scales an already-internal
       // pixel a second time, halving the result again (xform-abstorel-adjust,
       // pawg-q4-xyz-pcs-decode).
       pushXyzInToXyz();
@@ -3327,7 +3331,7 @@ void CIccPcsXform::pushXyzLumToXyz(IIccProfileConnectionConditions *pPCC)
 
 /**
  **************************************************************************
- * Name: CIccPcsXform::pushXyzToXyzIn
+ * Name: CIccPcsXform::pushOffset3
  * 
  * Purpose: 
  *  Insert PCS step that adds an offset to 3 channels.  If bConvertIntXyzOffset
