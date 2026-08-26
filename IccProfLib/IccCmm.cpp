@@ -1799,6 +1799,44 @@ void CIccXform::AdjustPCS(icFloatNumber *DstPixel, const icFloatNumber *SrcPixel
 
 /**
  **************************************************************************
+ * Name: CIccXform::NeedsSrcPcsAdjust
+ *
+ * Purpose:
+ *  Reports whether the XYZ PCS adjustment applies to values entering this
+ *  xform.  This is the exact condition CheckSrcAbs() runs on, named so that
+ *  CIccPcsXform::Connect()/ConnectFirst() can ask it at Begin() time.
+ *
+ *  The spectral term is the substance: AdjustPCS() scales DstPixel[0..2] by
+ *  m_PCSScale, i.e. it reads the first three samples of the pixel as X, Y and
+ *  Z.  On a spectral PCS port those are the first three wavelength bands of a
+ *  spectrum, so the media-white ratio applied to them is not a colour
+ *  conversion at all -- it corrupts three bands and leaves the rest alone.
+ *  Relative and absolute spectra are related by the *spectral* white point,
+ *  which CIccPcsXform applies element-wise across the whole vector; see
+ *  pushSpectralWhitePointConvert() below.
+ **************************************************************************
+ */
+bool CIccXform::NeedsSrcPcsAdjust() const
+{
+  return m_bAdjustPCS && !m_bInput && !IsSpaceSpectralPCS(GetSrcSpace());
+}
+
+/**
+ **************************************************************************
+ * Name: CIccXform::NeedsDstPcsAdjust
+ *
+ * Purpose:
+ *  The destination-side mirror of NeedsSrcPcsAdjust() above, and the exact
+ *  condition CheckDstAbs() runs on.
+ **************************************************************************
+ */
+bool CIccXform::NeedsDstPcsAdjust() const
+{
+  return m_bAdjustPCS && m_bInput && !IsSpaceSpectralPCS(GetDstSpace());
+}
+
+/**
+ **************************************************************************
  * Name: CIccXform::CheckSrcAbs
  * 
  * Purpose: 
@@ -1815,7 +1853,13 @@ void CIccXform::AdjustPCS(icFloatNumber *DstPixel, const icFloatNumber *SrcPixel
  */
 const icFloatNumber *CIccXform::CheckSrcAbs(CIccApplyXform *pApply, const icFloatNumber *Pixel) const
 {
-	if (m_bAdjustPCS && !m_bInput) {
+  // Deliberately the base predicate, called qualified rather than virtually.
+  // It is the same (m_bAdjustPCS && !m_bInput) test this function has always
+  // run, now carrying the spectral-port exclusion.  Every derived override
+  // narrows it further, but each derived Apply() already applies its own extra
+  // condition at this call site, so dispatching virtually here would apply
+  // those conditions twice and change behaviour beyond the spectral exclusion.
+	if (CIccXform::NeedsSrcPcsAdjust()) {
     icFloatNumber *pAbsLab = pApply->m_AbsLab;
 		AdjustPCS(pAbsLab, Pixel);
     return pAbsLab;
@@ -1840,7 +1884,8 @@ const icFloatNumber *CIccXform::CheckSrcAbs(CIccApplyXform *pApply, const icFloa
  */
 void CIccXform::CheckDstAbs(icFloatNumber *Pixel) const
 {
-	if (m_bAdjustPCS && m_bInput) {
+  // Qualified, not virtual -- see the note in CheckSrcAbs() above.
+	if (CIccXform::NeedsDstPcsAdjust()) {
 		AdjustPCS(Pixel, Pixel);
   }
 }
@@ -2458,6 +2503,15 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
 
       case icSigReflectanceSpectralPcsData:
       case icSigTransmissionSpectralPcsData:
+        // From-side spectral white point conversion, ahead of every destination
+        // below: whatever the source vector becomes next -- XYZ, a resampled
+        // spectrum, a radiant spectrum -- it has to be carrying the intent's
+        // absolute-ness before it gets there.  This is the pFromXform push the
+        // spectral region never had; the Lab and XYZ source cases above have
+        // carried their pFromXform equivalent all along.
+        if ((stat=pushSpectralWhitePointConvert(pFromXform, true, m_nSrcSamples))!=icCmmStatOk) {
+          return stat;
+        }
         switch (m_dstSpace) {
           case icSigLabPcsData:
             if ((stat=pushRef2Xyz(pFromXform->m_pProfile, pFromXform->m_pConnectionConditions))!=icCmmStatOk) {
@@ -2504,6 +2558,14 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
                                     pToXform->m_pProfile->m_Header.spectralRange))!=icCmmStatOk) {
               return stat;
             }
+            // To-side conversion, last: the vector is now in the destination
+            // profile's range and has to leave this connection in the
+            // absolute-ness that profile's tag family expects.  Reciprocal of
+            // the from-side push above, so a matched pair folds away in
+            // Optimize().
+            if ((stat=pushSpectralWhitePointConvert(pToXform, false, m_nDstSamples))!=icCmmStatOk) {
+              return stat;
+            }
             break;
 
           case icSigRadiantSpectralPcsData:
@@ -2512,6 +2574,14 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             }
             if ((stat=pushSpecToRange(pFromXform->m_pProfile->m_Header.spectralRange,
                                         pToXform->m_pProfile->m_Header.spectralRange))!=icCmmStatOk) {
+              return stat;
+            }
+            // To-side conversion, last: the vector is now in the destination
+            // profile's range and has to leave this connection in the
+            // absolute-ness that profile's tag family expects.  Reciprocal of
+            // the from-side push above, so a matched pair folds away in
+            // Optimize().
+            if ((stat=pushSpectralWhitePointConvert(pToXform, false, m_nDstSamples))!=icCmmStatOk) {
               return stat;
             }
             break;
@@ -2526,6 +2596,16 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
       case icSigRadiantSpectralPcsData: {
         CIccProfile *pFromProfile = pFromXform->GetProfilePtr();
 //        CIccProfile *pToProfile = pToXform->GetProfilePtr();      // unused!
+
+        // From-side spectral white point conversion, ahead of every destination
+        // below: whatever the source vector becomes next -- XYZ, a resampled
+        // spectrum, a radiant spectrum -- it has to be carrying the intent's
+        // absolute-ness before it gets there.  This is the pFromXform push the
+        // spectral region never had; the Lab and XYZ source cases above have
+        // carried their pFromXform equivalent all along.
+        if ((stat=pushSpectralWhitePointConvert(pFromXform, true, m_nSrcSamples))!=icCmmStatOk) {
+          return stat;
+        }
 
         switch (m_dstSpace) {
           case icSigLabPcsData:
@@ -2577,6 +2657,14 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
                                    pToXform->m_pProfile->m_Header.spectralRange))!=icCmmStatOk) {
               return stat;
             }
+            // To-side conversion, last: the vector is now in the destination
+            // profile's range and has to leave this connection in the
+            // absolute-ness that profile's tag family expects.  Reciprocal of
+            // the from-side push above, so a matched pair folds away in
+            // Optimize().
+            if ((stat=pushSpectralWhitePointConvert(pToXform, false, m_nDstSamples))!=icCmmStatOk) {
+              return stat;
+            }
             break;
 
           default:
@@ -2589,6 +2677,12 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
 
       case icSigBiDirReflectanceSpectralPcsData:
       case icSigSparseMatrixSpectralPcsData:
+        // No from-side spectral white point conversion here, unlike the two
+        // cases above: a bi-directional reflectance vector is a (spectral x
+        // bi-spectral) grid and a sparse matrix port carries an encoded matrix,
+        // so an element-wise scale against a spectrum is not dimensionally
+        // meaningful for either.  The destination ports below can still be
+        // plain spectra, and those do convert.
         switch (m_dstSpace) {
           case icSigLabPcsData:
             // This was the one call among the nine status-returning push* helpers whose
@@ -2642,6 +2736,14 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
                                     pToXform->m_pProfile->m_Header.spectralRange))!=icCmmStatOk) {
               return stat;
             }
+            // To-side conversion, last: the vector is now in the destination
+            // profile's range and has to leave this connection in the
+            // absolute-ness that profile's tag family expects.  Reciprocal of
+            // the from-side push above, so a matched pair folds away in
+            // Optimize().
+            if ((stat=pushSpectralWhitePointConvert(pToXform, false, m_nDstSamples))!=icCmmStatOk) {
+              return stat;
+            }
             break;
 
           case icSigRadiantSpectralPcsData:
@@ -2650,6 +2752,14 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             }
             if ((stat=pushSpecToRange(pFromXform->m_pProfile->m_Header.spectralRange, 
                             pToXform->m_pProfile->m_Header.spectralRange))!=icCmmStatOk) {
+              return stat;
+            }
+            // To-side conversion, last: the vector is now in the destination
+            // profile's range and has to leave this connection in the
+            // absolute-ness that profile's tag family expects.  Reciprocal of
+            // the from-side push above, so a matched pair folds away in
+            // Optimize().
+            if ((stat=pushSpectralWhitePointConvert(pToXform, false, m_nDstSamples))!=icCmmStatOk) {
               return stat;
             }
             break;
@@ -2711,19 +2821,34 @@ icStatusCMM CIccPcsXform::ConnectFirst(CIccXform* pToXform, icColorSpaceSignatur
   // This transform runs from the CMM's source space into whatever the following
   // transform consumes, so the source side is derived from srcSpace and the
   // destination side is taken from pToXform.  Spectral PCS signatures are
-  // reduced to their colorimetric type the same way Connect() reduces them,
-  // because the steps pushed below operate on colorimetric PCS values.
+  // reduced to their colorimetric type the same way Connect() reduces them.
+  //
+  // The sample count is taken from the *unreduced* signature: a spectral PCS
+  // signature carries its channel count in its low 16 bits, and
+  // icGetColorSpaceType() strips exactly those bits, so reducing first and then
+  // counting reports 0 samples for every spectral edge.  Connect() does not
+  // have the problem because it takes both counts from the neighbouring xforms.
+  m_nSrcSamples = (icUInt16Number)icGetSpaceSamples(srcSpace);
   m_srcSpace = srcSpace;
   if (IsSpaceSpectralPCS(m_srcSpace))
     m_srcSpace = icGetColorSpaceType(m_srcSpace);
-  m_nSrcSamples = (icUInt16Number)icGetSpaceSamples(m_srcSpace);
 
   m_dstSpace = pToXform->GetSrcSpace();
   if (IsSpaceSpectralPCS(m_dstSpace))
     m_dstSpace = icGetColorSpaceType(m_dstSpace);
   m_nDstSamples = pToXform->GetNumSrcSamples();
 
-  if (srcSpace == icSigXYZData) {
+  // Spectral leading edge.  The CMM hands a spectral vector straight to
+  // pToXform, so the only conversion this edge can owe is the spectral white
+  // point one: nothing else in this function operates on a spectral vector, and
+  // the XYZ media-white adjustment the branches below push is excluded at a
+  // spectral port by CIccXform::NeedsSrcPcsAdjust().
+  if (IsSpaceSpectralPCS(srcSpace)) {
+    icStatusCMM specStat = pushSpectralWhitePointConvert(pToXform, false, m_nDstSamples);
+    if (specStat != icCmmStatOk)
+      return specStat;
+  }
+  else if (srcSpace == icSigXYZData) {
     pushXyzInToXyz();
     if (pToXform->NeedsSrcPcsAdjust()) {
       pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
@@ -2823,10 +2948,24 @@ icStatusCMM CIccPcsXform::ConnectLast(CIccXform* pFromXform, icColorSpaceSignatu
     m_srcSpace = icGetColorSpaceType(m_srcSpace);
   m_nSrcSamples = pFromXform->GetNumDstSamples();
 
+  // Counted before the reduction, for the reason given in ConnectFirst():
+  // icGetColorSpaceType() strips the low 16 bits that carry a spectral PCS
+  // signature's channel count.
+  m_nDstSamples = (icUInt16Number)icGetSpaceSamples(dstSpace);
   m_dstSpace = dstSpace;
   if (IsSpaceSpectralPCS(m_dstSpace))
     m_dstSpace = icGetColorSpaceType(m_dstSpace);
-  m_nDstSamples = (icUInt16Number)icGetSpaceSamples(m_dstSpace);
+
+  // Spectral trailing edge.  pFromXform emits a spectral vector straight into
+  // the CMM's destination space, and the only conversion this edge can owe is
+  // the spectral white point one.  The XYZ block below is a no-op here twice
+  // over: dstSpace is not a colorimetric PCS, and CIccXform::NeedsDstPcsAdjust()
+  // excludes a spectral port anyway.
+  if (IsSpaceSpectralPCS(srcSpace)) {
+    icStatusCMM specStat = pushSpectralWhitePointConvert(pFromXform, true, m_nSrcSamples);
+    if (specStat != icCmmStatOk)
+      return specStat;
+  }
 
   if (pFromXform->NeedsDstPcsAdjust() && IsSpaceColorimetricPCS(dstSpace)) {
     if (srcSpace == icSigLabData) {
@@ -3736,6 +3875,147 @@ icStatusCMM CIccPcsXform::pushSpecToRange(const icSpectralRange &srcRange, const
 
     m_list->push_back(ptr);
   }
+  return icCmmStatOk;
+}
+
+
+/**
+ **************************************************************************
+ * Name: CIccPcsXform::pushSpectralWhitePointConvert
+ *
+ * Purpose:
+ *  Insert the PCS step that converts a spectral PCS vector between the
+ *  absolute-ness its tag family carries and the absolute-ness the rendering
+ *  intent asks for.  Relative and absolute spectra are related element-wise by
+ *  the profile's spectral white point:
+ *
+ *      relative = absolute / white          absolute = relative * white
+ *
+ *  This is the spectral counterpart of the XYZ media-white adjustment that
+ *  CheckSrcAbs()/CheckDstAbs() perform on a colorimetric PCS port, and it
+ *  replaces that adjustment at a spectral port entirely -- see
+ *  CIccXform::NeedsSrcPcsAdjust() and
+ *  docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md.
+ *
+ * Args:
+ *  pXform       = the xform owning the port being converted.
+ *  bDstPort     = true for pXform's destination port (values leaving it),
+ *                 false for its source port (values entering it).
+ *  nPortSamples = the width of the pixel this step will run on, taken from the
+ *                 surrounding connection rather than re-derived here.
+ *
+ * Returns icCmmStatOk both when a conversion was pushed and when none was
+ * needed; a non-Ok status means the profile is not usable for the connection.
+ **************************************************************************
+ */
+icStatusCMM CIccPcsXform::pushSpectralWhitePointConvert(const CIccXform *pXform,
+                                                        bool bDstPort,
+                                                        icUInt16Number nPortSamples)
+{
+  if (!pXform || !pXform->m_pProfile)
+    return icCmmStatOk;
+
+  // Structural half of the direction rule, mirroring CheckDstAbs()/CheckSrcAbs()
+  // and the predicates named after them: only an input (device->PCS) xform
+  // converts on its destination port, only an output (PCS->device) xform
+  // converts on its source port.
+  if (bDstPort != pXform->m_bInput)
+    return icCmmStatOk;
+
+  // Convert if and only if the tag's absolute-ness differs from the intent's.
+  // An absolute tag read at absolute intent, and a relative tag read at
+  // relative intent, are already in the space the other side of the port wants.
+  const bool bIntentAbs = (pXform->m_nIntent == icAbsoluteColorimetric);
+  const bool bTagAbs = (pXform->m_nTagIntent == icAbsoluteColorimetric);
+  if (bIntentAbs == bTagAbs)
+    return icCmmStatOk;
+
+  // Only a port whose samples really are a plain spectrum.  A bi-directional
+  // reflectance port carries a (spectral x bi-spectral) grid and a sparse
+  // matrix port carries an encoded matrix, so scaling either element-wise
+  // against a spectrum is not dimensionally meaningful.
+  const icColorSpaceSignature nPortSpace = bDstPort ? pXform->GetDstSpace()
+                                                    : pXform->GetSrcSpace();
+  const icUInt32Number nPortType = icGetColorSpaceType(nPortSpace);
+  if (nPortType != icSigReflectanceSpectralPcsData &&
+      nPortType != icSigTransmissionSpectralPcsData &&
+      nPortType != icSigRadiantSpectralPcsData)
+    return icCmmStatOk;
+
+  CIccProfile *pProfile = pXform->m_pProfile;
+
+  // A missing or unusable spectral white point converts nothing rather than
+  // failing.  This matches how the colorimetric path degrades when the media
+  // white point tag is absent: calcMediaWhiteXYZ() falls back to the
+  // illuminant, media white and illuminant become equal, and CIccXform::Begin()
+  // finds nothing to adjust.
+  CIccTag *pTag = pProfile->FindTag(icSigSpectralWhitePointTag);
+  if (!pTag || !pTag->IsNumArrayType())
+    return icCmmStatOk;
+
+  CIccTagNumArray *pNumTag = (CIccTagNumArray*)pTag;
+
+  // A profile can disagree with itself about how many samples its spectral
+  // vector holds -- Testing/Display/LaserProjector.icc declares a 401-channel
+  // radiant signature alongside a 31-step range.  The scale has to match the
+  // pixel the step will run on, and there is no way to tell which of the
+  // disagreeing numbers the producer meant, so refuse rather than truncate or
+  // pad.  nPortSamples is the authority: it is what the neighbouring xforms
+  // report and what CIccApplyCmm sizes its pixel buffers from.
+  const icUInt32Number nSamples =
+    icGetSpaceSamples((icColorSpaceSignature)pProfile->m_Header.spectralPCS);
+
+  if (!nSamples ||
+      nSamples != (icUInt32Number)nPortSamples ||
+      nSamples != (icUInt32Number)pProfile->m_Header.spectralRange.steps ||
+      pNumTag->GetNumValues() < nSamples)
+    return icCmmStatInvalidProfile;
+
+  icFloatNumber *pWhite = new (std::nothrow) icFloatNumber[nSamples];
+  if (!pWhite)
+    return icCmmStatAllocErr;
+
+  // GetValues() defaults nStart to 0 and nVectorSize to 1, so the
+  // single-argument overload copies exactly one value into a buffer sized for
+  // the whole spectrum -- the bug documented at IccProfile.cpp's
+  // calcMediaWhiteXYZ().  Ask for the whole vector and honour the result.
+  if (!pNumTag->GetValues(pWhite, 0, nSamples)) {
+    delete [] pWhite;
+    return icCmmStatOk;
+  }
+
+  icUInt32Number i;
+  for (i=0; i<nSamples; i++) {
+    // A zero or non-finite sample is a bad profile: one direction of this pair
+    // divides by it, and an infinite scale poisons every PCS sample downstream.
+    // Refused in both directions on purpose -- accepting the multiply while
+    // refusing the divide would stop the two being inverses of each other.
+    // Same treatment CheckForInvalidPCSScale() gives a zero colorimetric scale.
+    if (!std::isfinite(pWhite[i]) || pWhite[i] == 0.0f) {
+      delete [] pWhite;
+      return icCmmStatInvalidProfile;
+    }
+  }
+
+  // One vector, inverted for the other direction, rather than two loops: the
+  // multiply pushed on one side of a connection and the divide pushed on the
+  // other are then exact reciprocals, and CIccPcsStepScale::concat() folds the
+  // adjacent pair to an identity that Optimize() drops.
+  //
+  // Destination port of an input xform: tag-space -> intent-space, so an
+  // absolute intent (whose tag is therefore relative) multiplies.  Source port
+  // of an output xform: intent-space -> tag-space, the exact inverse.
+  const bool bMultiply = bDstPort ? bIntentAbs : bTagAbs;
+
+  if (!bMultiply) {
+    for (i=0; i<nSamples; i++)
+      pWhite[i] = (icFloatNumber)1.0 / pWhite[i];
+  }
+
+  pushScale((icUInt16Number)nSamples, pWhite);
+
+  delete [] pWhite;
+
   return icCmmStatOk;
 }
 

@@ -80,6 +80,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <limits>
 
 static int g_failures = 0;
 
@@ -821,7 +822,25 @@ static bool buildV5SpectralInputProfile(CIccProfile &p)
   return true;
 }
 
-static void spectralTrailingEdgeStillAdjustsInsideApply()
+// WHAT THIS USED TO PIN, AND WHY IT CHANGED.
+//
+// Until the spectral PCS white point conversion landed, this case asserted the
+// opposite of what it asserts now: that samples 0..2 of the emitted spectral
+// vector ARE modified, because CIccXform::CheckDstAbs() ran the *XYZ*
+// media-white adjustment over the first three samples of a spectral pixel and
+// left the rest alone. AdjustPCS() treats DstPixel[0..2] as X, Y and Z; the
+// first three samples of a reflectance spectrum are not X, Y and Z, so that was
+// a defect, not a behaviour to preserve. The repository owner ruled that the
+// correct conversion is element-wise against the spectral white point, and
+// requirement S5 of
+// docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md
+// authorises stopping the XYZ path at a spectral port.
+//
+// This fixture carries no icSigSpectralWhitePointTag, so S7 ("missing white
+// point means no conversion") applies and the correct answer here is that all
+// six samples come through the pipeline untouched. The cases further down
+// assert what happens when a white point IS present.
+static void spectralTrailingEdgeNoLongerAdjustsInsideApply()
 {
   CIccProfile *pICC = new CIccProfile;
   if (!buildV5SpectralInputProfile(*pICC)) {
@@ -858,8 +877,8 @@ static void spectralTrailingEdgeStillAdjustsInsideApply()
     std::printf(" %.6f", (double)kSpectralConst[i]);
   std::printf("\n");
 
-  // Samples 3..5 are past the adjustment's reach and prove the pipeline itself
-  // is doing what the fixture says.
+  // Samples 3..5 were always past the XYZ adjustment's reach; they prove the
+  // pipeline itself is doing what the fixture says.
   bool tailIntact = true;
   for (int i = 3; i < (int)kSpectralSamples; i++)
     tailIntact = tailIntact && closeRel(dst[i], kSpectralConst[i], kTol);
@@ -870,16 +889,18 @@ static void spectralTrailingEdgeStillAdjustsInsideApply()
   for (int i = 0; i < 3; i++)
     headIntact = headIntact && closeRel(dst[i], kSpectralConst[i], kTol);
 
-  // This is the precondition itself, stated as it is true today.
-  check(!headIntact,
-        "spectral probe: samples 0..2 ARE modified -- the in-Apply() adjustment is live");
+  // The flipped assertion. This used to be check(!headIntact).
+  check(headIntact,
+        "spectral probe: samples 0..2 are no longer mangled by the XYZ adjustment");
 }
 
 // Control for the probe above: the identical fixture and the identical chain,
 // differing only in the rendering intent. At relative intent CIccXform::Begin()
-// never sets m_bAdjustPCS, so CheckDstAbs() is a no-op and all six samples come
-// through untouched. This attributes the head-only deviation above to the PCS
-// adjustment specifically, rather than to anything else in the MPE pipeline.
+// never sets m_bAdjustPCS at all, so the probe above and this control now agree
+// -- which is the point. Before S5 they disagreed in samples 0..2, and that
+// disagreement was the defect. Keeping this case pins that the MPE pipeline
+// itself is intent-independent, so the probe's result above cannot be explained
+// by anything other than the (now absent) PCS adjustment.
 static void spectralTrailingEdgeIsCleanAtRelativeIntent()
 {
   CIccProfile *pICC = new CIccProfile;
@@ -907,6 +928,519 @@ static void spectralTrailingEdgeIsCleanAtRelativeIntent()
   check(allIntact,
         "spectral control: every sample comes through the pipeline unmodified");
 }
+
+// --- spectral PCS white point conversion (S1-S8) --------------------------
+//
+// Spec: docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md
+//
+// The conversion is element-wise against icSigSpectralWhitePointTag,
+//   relative = absolute / white,   absolute = relative * white
+// and it fires exactly when the tag's absolute-ness differs from the rendering
+// intent's (S2). These cases drive CIccPcsXform::Connect()/ConnectFirst()/
+// ConnectLast() directly, the way connectReportsIdentityWhenAdjustmentsCancel()
+// above does, because that is the only way to observe which steps were pushed
+// on each side of a connection.
+
+// Deliberately not all ones, and deliberately straddling 1.0: a dropped
+// conversion, a conversion applied in the wrong direction, and a conversion
+// applied to only the first three samples are all separately detectable
+// against this vector.
+static const icFloatNumber kSpectralWhite[kSpectralSamples] = {
+  0.50f, 0.80f, 1.25f, 2.00f, 0.40f, 1.60f
+};
+
+// A second, different white point, used to show that the round-trip fold below
+// is a real cancellation and not just a connection that pushes nothing.
+static const icFloatNumber kSpectralWhite2[kSpectralSamples] = {
+  0.25f, 1.60f, 0.50f, 1.25f, 0.80f, 2.00f
+};
+
+// The spectrum handed to a standalone CIccPcsXform in these cases.
+static const icFloatNumber kSpectralProbe[kSpectralSamples] = {
+  0.11f, 0.22f, 0.33f, 0.44f, 0.55f, 0.66f
+};
+
+static void attachSpectralWhitePoint(CIccProfile &p, const icFloatNumber *pVals,
+                                     icUInt32Number nVals)
+{
+  CIccTagFloat32 *pWhite = new CIccTagFloat32((int)nVals);
+  for (icUInt32Number i = 0; i < nVals; i++)
+    (*pWhite)[i] = (icFloat32Number)pVals[i];
+  p.AttachTag(icSigSpectralWhitePointTag, pWhite);
+}
+
+// An MPE that ignores its input and emits nOut zeros. The pipeline content is
+// irrelevant to every case below -- they all drive the CIccPcsXform directly --
+// but CIccXformMpe::Begin() rejects a tag whose channel counts disagree with
+// the profile header, so the shape has to be right.
+static CIccTagMultiProcessElement *makeConstantMpe(icUInt16Number nIn, icUInt16Number nOut)
+{
+  CIccTagMultiProcessElement *pTag = new CIccTagMultiProcessElement;
+  pTag->SetChannels(nIn, nOut);
+
+  CIccMpeMatrix *pMtx = new CIccMpeMatrix;
+  if (!pMtx->SetSize(nIn, nOut, true)) {
+    delete pMtx;
+    delete pTag;
+    return NULL;
+  }
+  icFloatNumber *m = pMtx->GetMatrix();
+  for (int i = 0; i < (int)nIn * (int)nOut; i++)
+    m[i] = 0.0f;
+  icFloatNumber *k = pMtx->GetConstants();
+  for (int i = 0; i < (int)nOut; i++)
+    k[i] = 0.0f;
+
+  pTag->Attach(pMtx);
+  return pTag;
+}
+
+// A v5 spectral profile.
+//
+//   bInputProfile - device->PCS (a DToBx tag) rather than PCS->device (BToDx).
+//   bAbsTag       - carry only the absolute tag (DToB3/BToD3) instead of only
+//                   the relative one (DToB1/BToD1). CIccXform::Create()'s
+//                   fallback then sets m_nTagIntent from whichever tag it
+//                   finds, and that, paired with the requested intent, is what
+//                   selects the row of S2's table.
+//   nSpecType     - spectral PCS type signature (reflectance, transmission,
+//                   radiant, bi-directional reflectance or sparse matrix).
+//   nRangeSteps   - spectralRange.steps. Defaults to the signature's channel
+//                   count; a caller passes something else to build the
+//                   header-disagrees-with-itself case.
+//
+// m_Header.pcs stays Lab on purpose: that is what arms CIccXform::Begin()'s
+// XYZ media-white adjustment, so these fixtures are exactly the ones where the
+// pre-S5 code would have scaled samples 0..2.
+static bool buildSpectralPcsProfile(CIccProfile &p, bool bInputProfile, bool bAbsTag,
+                                    icColorSpaceSignature nSpecType, bool bWhitePoint,
+                                    const icFloatNumber *pWhite = kSpectralWhite,
+                                    icUInt32Number nWhiteVals = kSpectralSamples,
+                                    icUInt16Number nRangeSteps = kSpectralSamples)
+{
+  p.InitHeader();
+  p.m_Header.deviceClass = bInputProfile ? icSigInputClass : icSigOutputClass;
+  p.m_Header.colorSpace = icSigRgbData;
+  p.m_Header.pcs = icSigLabData;
+  p.m_Header.version = icVersionNumberV5;
+  p.m_Header.spectralPCS = icNColorSpaceSig(nSpecType, kSpectralSamples);
+  p.m_Header.spectralRange.start = icRange380nm;
+  p.m_Header.spectralRange.end = icRange780nm;
+  p.m_Header.spectralRange.steps = nRangeSteps;
+
+  // Keeps the header self-consistent for icSpectralPcsMatchesRange(), which
+  // reads a bi-spectral PCS as steps * biSpectralRange.steps channels.
+  if (nSpecType == icSigBiSpectralReflectanceData) {
+    p.m_Header.biSpectralRange.start = icRange380nm;
+    p.m_Header.biSpectralRange.end = icRange780nm;
+    p.m_Header.biSpectralRange.steps = 1;
+  }
+
+  attachRequiredTags(p, "v5 spectral white point fixture");
+  if (bWhitePoint)
+    attachSpectralWhitePoint(p, pWhite, nWhiteVals);
+
+  CIccTagMultiProcessElement *pMpe =
+    bInputProfile ? makeConstantMpe(3, kSpectralSamples)
+                  : makeConstantMpe(kSpectralSamples, 3);
+  if (!pMpe)
+    return false;
+
+  icSignature sig;
+  if (bInputProfile)
+    sig = bAbsTag ? icSigDToB3Tag : icSigDToB1Tag;
+  else
+    sig = bAbsTag ? icSigBToD3Tag : icSigBToD1Tag;
+  p.AttachTag(sig, pMpe);
+
+  return true;
+}
+
+// Builds a profile per buildSpectralPcsProfile() and hands back a Begun xform
+// over it. The xform owns the profile; nothing is leaked on failure.
+static CIccXform *makeSpectralXform(bool bInputProfile, bool bAbsTag, bool bAbsIntent,
+                                    icColorSpaceSignature nSpecType, bool bWhitePoint,
+                                    const icFloatNumber *pWhite = kSpectralWhite,
+                                    icUInt32Number nWhiteVals = kSpectralSamples,
+                                    icUInt16Number nRangeSteps = kSpectralSamples)
+{
+  CIccProfile *pICC = new CIccProfile;
+  if (!buildSpectralPcsProfile(*pICC, bInputProfile, bAbsTag, nSpecType, bWhitePoint,
+                               pWhite, nWhiteVals, nRangeSteps)) {
+    delete pICC;
+    return NULL;
+  }
+
+  CIccXform *pXform = CIccXform::Create(pICC, bInputProfile,
+                                        bAbsIntent ? icAbsoluteColorimetric
+                                                   : icRelativeColorimetric,
+                                        icInterpLinear, NULL, icXformLutSpectral,
+                                        true, NULL);
+  if (!pXform)
+    return NULL;   // Create() already freed the profile on its failure paths
+
+  if (pXform->Begin() != icCmmStatOk) {
+    delete pXform;
+    return NULL;
+  }
+
+  return pXform;
+}
+
+static icColorSpaceSignature spectralSigOf(icColorSpaceSignature nSpecType)
+{
+  return icNColorSpaceSig(nSpecType, kSpectralSamples);
+}
+
+// Runs a standalone CIccPcsXform over one spectral pixel.
+static bool applyPcs(CIccPcsXform &pcs, icFloatNumber *dst, const icFloatNumber *src)
+{
+  if (pcs.Begin() != icCmmStatOk)
+    return false;
+
+  icStatusCMM st = icCmmStatOk;   // GetNewApply() reads this before it writes it
+  CIccApplyXform *pApply = pcs.GetNewApply(st);
+  if (!pApply || st != icCmmStatOk) {
+    delete pApply;
+    return false;
+  }
+
+  pcs.Apply(pApply, dst, src);
+  delete pApply;
+  return true;
+}
+
+static bool spectrumClose(const icFloatNumber *got, const icFloatNumber *want)
+{
+  for (int i = 0; i < (int)kSpectralSamples; i++) {
+    if (!closeRel(got[i], want[i], kTol))
+      return false;
+  }
+  return true;
+}
+
+// S1/S3, destination port of an input xform: the tag emits values in the tag's
+// absolute-ness and the CMM's PCS must carry the intent's, so a relative tag at
+// absolute intent multiplies by the spectral white point. Driven through
+// ConnectLast(), which isolates a single port.
+//
+// The expected spectrum is the element-wise product written out from S1, not a
+// second run of the library path.
+static void spectralDstPortConvertsTagSpaceToIntentSpace()
+{
+  CIccXform *pFrom = makeSpectralXform(true, /*bAbsTag=*/false, /*bAbsIntent=*/true,
+                                       icSigReflectanceSpectralData, true);
+  check(pFrom != NULL, "spectral dst port: xform created");
+  if (!pFrom) return;
+
+  CIccPcsXform pcs;
+  const icStatusCMM rv = pcs.ConnectLast(pFrom, spectralSigOf(icSigReflectanceSpectralData));
+  check(rv == icCmmStatOk,
+        "spectral dst port: relative tag at absolute intent pushes a conversion");
+
+  if (rv == icCmmStatOk) {
+    icFloatNumber dst[kSpectralSamples];
+    icFloatNumber want[kSpectralSamples];
+    for (int i = 0; i < (int)kSpectralSamples; i++)
+      want[i] = kSpectralProbe[i] * kSpectralWhite[i];
+
+    check(applyPcs(pcs, dst, kSpectralProbe), "spectral dst port: Apply");
+    check(spectrumClose(dst, want),
+          "spectral dst port: relative -> absolute multiplies by the spectral white point");
+  }
+
+  delete pFrom;
+}
+
+// The exact inverse, on the source port of an output xform: the CMM's PCS
+// carries the intent's absolute-ness and the tag wants its own, so absolute
+// intent into a relative tag divides. Driven through ConnectFirst().
+static void spectralSrcPortConvertsIntentSpaceToTagSpace()
+{
+  CIccXform *pTo = makeSpectralXform(false, /*bAbsTag=*/false, /*bAbsIntent=*/true,
+                                     icSigReflectanceSpectralData, true);
+  check(pTo != NULL, "spectral src port: xform created");
+  if (!pTo) return;
+
+  CIccPcsXform pcs;
+  const icStatusCMM rv = pcs.ConnectFirst(pTo, spectralSigOf(icSigReflectanceSpectralData));
+  check(rv == icCmmStatOk,
+        "spectral src port: absolute intent into a relative tag pushes a conversion");
+
+  if (rv == icCmmStatOk) {
+    icFloatNumber dst[kSpectralSamples];
+    icFloatNumber want[kSpectralSamples];
+    for (int i = 0; i < (int)kSpectralSamples; i++)
+      want[i] = kSpectralProbe[i] / kSpectralWhite[i];
+
+    check(applyPcs(pcs, dst, kSpectralProbe), "spectral src port: Apply");
+    check(spectrumClose(dst, want),
+          "spectral src port: absolute -> relative divides by the spectral white point");
+  }
+
+  delete pTo;
+}
+
+// S2's four rows, on the destination port. The two no-conversion rows must
+// leave the connection empty; the two converting rows must scale in opposite
+// directions. Without the opposite-direction pair the table would be satisfied
+// by a conversion that always multiplies.
+static void spectralConversionFollowsTheIntentTable()
+{
+  struct Row {
+    bool bAbsTag;
+    bool bAbsIntent;
+    bool bConverts;
+    bool bMultiplies;
+    const char *szLabel;
+  };
+  static const Row kRows[4] = {
+    { true,  true,  false, false, "absolute tag at absolute intent takes no conversion" },
+    { false, false, false, false, "relative tag at relative intent takes no conversion" },
+    { false, true,  true,  true,  "relative tag at absolute intent multiplies" },
+    { true,  false, true,  false, "absolute tag at relative intent divides" },
+  };
+
+  for (int r = 0; r < 4; r++) {
+    char szMsg[192];
+    CIccXform *pFrom = makeSpectralXform(true, kRows[r].bAbsTag, kRows[r].bAbsIntent,
+                                         icSigReflectanceSpectralData, true);
+    std::snprintf(szMsg, sizeof(szMsg), "spectral table: xform created (%s)", kRows[r].szLabel);
+    check(pFrom != NULL, szMsg);
+    if (!pFrom) continue;
+
+    CIccPcsXform pcs;
+    const icStatusCMM rv = pcs.ConnectLast(pFrom, spectralSigOf(icSigReflectanceSpectralData));
+
+    std::snprintf(szMsg, sizeof(szMsg), "spectral table: %s", kRows[r].szLabel);
+    if (!kRows[r].bConverts) {
+      check(rv == icCmmStatIdentityXform, szMsg);
+    }
+    else {
+      icFloatNumber dst[kSpectralSamples];
+      icFloatNumber want[kSpectralSamples];
+      for (int i = 0; i < (int)kSpectralSamples; i++)
+        want[i] = kRows[r].bMultiplies ? kSpectralProbe[i] * kSpectralWhite[i]
+                                       : kSpectralProbe[i] / kSpectralWhite[i];
+      check(rv == icCmmStatOk && applyPcs(pcs, dst, kSpectralProbe) &&
+            spectrumClose(dst, want), szMsg);
+    }
+
+    delete pFrom;
+  }
+}
+
+// Round-trip identity across a full interior connection: the from-side
+// multiply and the to-side divide are exact inverses of one another, so
+// Optimize() folds the pair away and Connect() reports an identity xform.
+//
+// The identity claim alone could be satisfied by a Connect() that pushes
+// nothing at all (which is what it did before this change), so it is paired
+// here with the same connection between two profiles carrying *different*
+// spectral white points: there the pair must survive as the residual ratio.
+static void spectralInteriorConnectionFolds()
+{
+  {
+    CIccXform *pFrom = makeSpectralXform(true, false, true, icSigReflectanceSpectralData, true);
+    CIccXform *pTo = makeSpectralXform(false, false, true, icSigReflectanceSpectralData, true);
+    check(pFrom != NULL && pTo != NULL, "spectral fold: matched xforms created");
+    if (pFrom && pTo) {
+      CIccPcsXform pcs;
+      check(pcs.Connect(pFrom, pTo) == icCmmStatIdentityXform,
+            "spectral fold: matching white points cancel to an identity connection");
+    }
+    delete pFrom;
+    delete pTo;
+  }
+
+  {
+    CIccXform *pFrom = makeSpectralXform(true, false, true, icSigReflectanceSpectralData,
+                                         true, kSpectralWhite);
+    CIccXform *pTo = makeSpectralXform(false, false, true, icSigReflectanceSpectralData,
+                                       true, kSpectralWhite2);
+    check(pFrom != NULL && pTo != NULL, "spectral fold: mismatched xforms created");
+    if (pFrom && pTo) {
+      CIccPcsXform pcs;
+      const icStatusCMM rv = pcs.Connect(pFrom, pTo);
+      check(rv == icCmmStatOk,
+            "spectral fold: differing white points leave a residual conversion");
+      if (rv == icCmmStatOk) {
+        icFloatNumber dst[kSpectralSamples];
+        icFloatNumber want[kSpectralSamples];
+        for (int i = 0; i < (int)kSpectralSamples; i++)
+          want[i] = kSpectralProbe[i] * kSpectralWhite[i] / kSpectralWhite2[i];
+        check(applyPcs(pcs, dst, kSpectralProbe), "spectral fold: Apply");
+        check(spectrumClose(dst, want),
+              "spectral fold: the residual is the ratio of the two white points");
+      }
+    }
+    delete pFrom;
+    delete pTo;
+  }
+}
+
+// S4. Reflectance, transmission and radiant ports convert; bi-directional
+// reflectance and sparse-matrix ports do not, because their sample vectors are
+// not a plain spectrum and an element-wise scale against one is not
+// dimensionally meaningful. The converting types are asserted in the same case
+// so the exclusion cannot be satisfied by a conversion that never fires.
+static void spectralConversionAppliesOnlyToPlainSpectra()
+{
+  struct Case { icColorSpaceSignature nType; bool bConverts; const char *szName; };
+  static const Case kCases[5] = {
+    { icSigReflectanceSpectralData,     true,  "reflectance" },
+    { icSigTransmisionSpectralData,     true,  "transmission" },
+    { icSigRadiantSpectralData,         true,  "radiant" },
+    { icSigBiSpectralReflectanceData,   false, "bi-directional reflectance" },
+    { icSigSparseMatrixReflectanceData, false, "sparse matrix" },
+  };
+
+  for (int c = 0; c < 5; c++) {
+    char szMsg[192];
+    CIccXform *pFrom = makeSpectralXform(true, /*bAbsTag=*/false, /*bAbsIntent=*/true,
+                                         kCases[c].nType, true);
+    std::snprintf(szMsg, sizeof(szMsg), "spectral S4: xform created (%s)", kCases[c].szName);
+    check(pFrom != NULL, szMsg);
+    if (!pFrom) continue;
+
+    CIccPcsXform pcs;
+    const icStatusCMM rv = pcs.ConnectLast(pFrom, spectralSigOf(kCases[c].nType));
+
+    if (kCases[c].bConverts) {
+      std::snprintf(szMsg, sizeof(szMsg),
+                    "spectral S4: %s converts against the spectral white point",
+                    kCases[c].szName);
+      icFloatNumber dst[kSpectralSamples];
+      icFloatNumber want[kSpectralSamples];
+      for (int i = 0; i < (int)kSpectralSamples; i++)
+        want[i] = kSpectralProbe[i] * kSpectralWhite[i];
+      check(rv == icCmmStatOk && applyPcs(pcs, dst, kSpectralProbe) &&
+            spectrumClose(dst, want), szMsg);
+    }
+    else {
+      std::snprintf(szMsg, sizeof(szMsg), "spectral S4: %s takes no conversion",
+                    kCases[c].szName);
+      check(rv == icCmmStatIdentityXform, szMsg);
+    }
+
+    delete pFrom;
+  }
+}
+
+// S7: a missing spectral white point converts nothing rather than failing,
+// matching how the colorimetric path degrades when the media white point tag is
+// absent. Paired with the identical fixture that does carry the tag, so "no
+// conversion" cannot pass by the conversion never firing at all.
+static void spectralMissingWhitePointConvertsNothing()
+{
+  {
+    CIccXform *pFrom = makeSpectralXform(true, false, true,
+                                         icSigReflectanceSpectralData, /*bWhitePoint=*/false);
+    check(pFrom != NULL, "spectral S7: xform without a white point created");
+    if (pFrom) {
+      CIccPcsXform pcs;
+      check(pcs.ConnectLast(pFrom, spectralSigOf(icSigReflectanceSpectralData))
+              == icCmmStatIdentityXform,
+            "spectral S7: a missing spectral white point converts nothing");
+      delete pFrom;
+    }
+  }
+  {
+    CIccXform *pFrom = makeSpectralXform(true, false, true,
+                                         icSigReflectanceSpectralData, /*bWhitePoint=*/true);
+    check(pFrom != NULL, "spectral S7: control xform created");
+    if (pFrom) {
+      CIccPcsXform pcs;
+      check(pcs.ConnectLast(pFrom, spectralSigOf(icSigReflectanceSpectralData))
+              == icCmmStatOk,
+            "spectral S7: control -- the same fixture WITH a white point does convert");
+      delete pFrom;
+    }
+  }
+}
+
+// S8: a zero or non-finite white point sample is a bad profile. Dividing by it
+// would put an infinity into the PCS, so the connection is refused with
+// icCmmStatInvalidProfile the way CheckForInvalidPCSScale() refuses a zero
+// colorimetric scale. Both directions are checked: rejection has to be
+// symmetric, or the multiply and the divide would stop being inverses.
+static void spectralDegenerateWhitePointIsRejected()
+{
+  icFloatNumber zeroed[kSpectralSamples];
+  icFloatNumber infinite[kSpectralSamples];
+  for (int i = 0; i < (int)kSpectralSamples; i++) {
+    zeroed[i] = kSpectralWhite[i];
+    infinite[i] = kSpectralWhite[i];
+  }
+  zeroed[2] = 0.0f;
+  infinite[4] = std::numeric_limits<icFloatNumber>::infinity();
+
+  struct Case { const icFloatNumber *pWhite; bool bAbsIntent; const char *szName; };
+  const Case kCases[4] = {
+    { zeroed,   true,  "zero sample, multiplying direction" },
+    { zeroed,   false, "zero sample, dividing direction" },
+    { infinite, true,  "non-finite sample, multiplying direction" },
+    { infinite, false, "non-finite sample, dividing direction" },
+  };
+
+  for (int c = 0; c < 4; c++) {
+    char szMsg[192];
+    // bAbsIntent selects the row of S2's table: a relative tag at absolute
+    // intent multiplies, an absolute tag at relative intent divides.
+    CIccXform *pFrom = makeSpectralXform(true, /*bAbsTag=*/!kCases[c].bAbsIntent,
+                                         kCases[c].bAbsIntent,
+                                         icSigReflectanceSpectralData, true,
+                                         kCases[c].pWhite);
+    std::snprintf(szMsg, sizeof(szMsg), "spectral S8: xform created (%s)", kCases[c].szName);
+    check(pFrom != NULL, szMsg);
+    if (!pFrom) continue;
+
+    CIccPcsXform pcs;
+    const icStatusCMM rv = pcs.ConnectLast(pFrom, spectralSigOf(icSigReflectanceSpectralData));
+    std::snprintf(szMsg, sizeof(szMsg), "spectral S8: rejected (%s)", kCases[c].szName);
+    check(rv == icCmmStatInvalidProfile, szMsg);
+
+    delete pFrom;
+  }
+}
+
+// A profile can disagree with itself about how many samples its spectral vector
+// holds -- Testing/Display/LaserProjector.icc declares a 401-channel radiant
+// signature alongside a 31-step range in the same tag. The scale vector has to
+// match the pixel the step will run on, so a disagreement is refused rather
+// than silently truncated or padded.
+static void spectralSampleCountMismatchIsRejected()
+{
+  {
+    // spectralRange.steps disagrees with the signature's channel count.
+    CIccXform *pFrom = makeSpectralXform(true, false, true, icSigReflectanceSpectralData,
+                                         true, kSpectralWhite, kSpectralSamples,
+                                         /*nRangeSteps=*/3);
+    check(pFrom != NULL, "spectral count: range-mismatch xform created");
+    if (pFrom) {
+      CIccPcsXform pcs;
+      check(pcs.ConnectLast(pFrom, spectralSigOf(icSigReflectanceSpectralData))
+              == icCmmStatInvalidProfile,
+            "spectral count: a spectralRange that disagrees with the PCS signature is rejected");
+      delete pFrom;
+    }
+  }
+  {
+    // The white point tag is shorter than the spectrum it has to scale.
+    static const icFloatNumber kShort[4] = { 0.5f, 0.8f, 1.25f, 2.0f };
+    CIccXform *pFrom = makeSpectralXform(true, false, true, icSigReflectanceSpectralData,
+                                         true, kShort, /*nWhiteVals=*/4);
+    check(pFrom != NULL, "spectral count: short-tag xform created");
+    if (pFrom) {
+      CIccPcsXform pcs;
+      check(pcs.ConnectLast(pFrom, spectralSigOf(icSigReflectanceSpectralData))
+              == icCmmStatInvalidProfile,
+            "spectral count: a white point tag shorter than the spectrum is rejected");
+      delete pFrom;
+    }
+  }
+}
+
 
 // An XYZ-PCS matrix/TRC profile: the only PCS shape where AdjustPCS() used to
 // clamp negatives. See spec R8 -- the CIccPcsStep chain is pure affine, so a
@@ -1028,8 +1562,17 @@ int main(int /*argc*/, char ** /*argv*/)
   noXformPerformsItsOwnAdjustment(icSigLabData, icSigCmykData, false,
       "leading PCS edge: the device xform no longer adjusts, the PcsXform does");
 
-  spectralTrailingEdgeStillAdjustsInsideApply();
+  spectralTrailingEdgeNoLongerAdjustsInsideApply();
   spectralTrailingEdgeIsCleanAtRelativeIntent();
+
+  spectralDstPortConvertsTagSpaceToIntentSpace();
+  spectralSrcPortConvertsIntentSpaceToTagSpace();
+  spectralConversionFollowsTheIntentTable();
+  spectralInteriorConnectionFolds();
+  spectralConversionAppliesOnlyToPlainSpectra();
+  spectralMissingWhitePointConvertsNothing();
+  spectralDegenerateWhitePointIsRejected();
+  spectralSampleCountMismatchIsRejected();
 
   xyzPcsChainStillAdjusts();
 

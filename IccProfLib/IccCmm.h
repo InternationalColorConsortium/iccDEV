@@ -527,12 +527,26 @@ public:
   /// xform adjusts on the way in. Virtual so subclasses whose Apply() carried
   /// extra conditions can answer at Begin() time, which is when
   /// CIccPcsXform::Connect() has to decide whether to push the steps.
-  virtual bool NeedsSrcPcsAdjust() const { return m_bAdjustPCS && !m_bInput; }
+  ///
+  /// Answers false at a spectral PCS port. The adjustment these gate is the
+  /// XYZ media-white one, and AdjustPCS() implements it by treating the first
+  /// three samples of the pixel as X, Y and Z -- which the first three samples
+  /// of a spectral vector are not. A spectral port takes CIccPcsXform's
+  /// spectral white point conversion instead; see
+  /// docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md.
+  ///
+  /// Defined out of line in IccCmm.cpp for the same reason the
+  /// CIccXformNamedColor overrides below are: the IsSpaceSpectralPCS() needed
+  /// here is the file-local one there, and IccSignatureUtils.h declares a
+  /// different function of the same name that would silently win if it were
+  /// included in this header.
+  virtual bool NeedsSrcPcsAdjust() const;
 
   /// True when this xform's PCS adjustment applies to values leaving it.
   /// Mirrors the condition inside CheckDstAbs(): only an input (device->PCS)
-  /// xform adjusts on the way out.
-  virtual bool NeedsDstPcsAdjust() const { return m_bAdjustPCS && m_bInput; }
+  /// xform adjusts on the way out. Excludes a spectral PCS port for the reason
+  /// given on NeedsSrcPcsAdjust() above.
+  virtual bool NeedsDstPcsAdjust() const;
 
   bool LuminanceMatching() { return m_bLuminanceMatching; }
 
@@ -1224,6 +1238,8 @@ protected:
   icStatusCMM pushSpecToRange(const icSpectralRange &srcRange, const icSpectralRange &dstRange);
   icStatusCMM pushApplyIllum(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc);
   icStatusCMM pushRad2Xyz(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc, bool bAbsoluteCIEColorimetry=false);
+  icStatusCMM pushSpectralWhitePointConvert(const CIccXform *pXform, bool bDstPort,
+                                            icUInt16Number nPortSamples);
   icStatusCMM pushBiRef2Xyz(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc);
   icStatusCMM pushBiRef2Ref(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc);
   icStatusCMM pushBiRef2Rad(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc);
