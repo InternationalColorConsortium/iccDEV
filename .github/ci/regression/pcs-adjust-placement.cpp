@@ -665,6 +665,58 @@ static void namedColorAdjustPredicatesExcludeSpectralPcs()
         "named color spectral: spectral PCS destination excluded from adjustment");
 }
 
+// The review round on 21333dc5 added m_bSrcSpectralPCS/m_bDstSpectralPCS,
+// filled once by CIccXform::Begin(), so the base CIccXform::NeedsDstPcsAdjust()
+// no longer calls the virtual GetDstSpace() per pixel. Before that cache
+// existed, SetDestSpace() moving the destination space *after* Begin() was
+// harmless: the predicate read GetDstSpace() live, so any call order got the
+// current answer. SetDestSpace() is public API with no in-tree caller, so
+// nothing stops an out-of-tree caller from doing exactly that -- and without
+// a refresh, the cache would silently keep answering for the space that was
+// current when Begin() ran, not the real one.
+//
+// The direction matters: CIccXformNamedColor::NeedsDstPcsAdjust() ANDs the
+// (possibly stale) base cache with its own fresh !IsSpaceSpectralPCS(m_nDestSpace)
+// term. A move from colorimetric to spectral is masked by that fresh term --
+// the override's own recheck already excludes it, stale cache or not. The
+// move that is *not* masked is spectral to colorimetric: the stale cache
+// stays "spectral" (its !m_bDstSpectralPCS term stays false), so the AND
+// stays false and the override wrongly excludes the adjustment even though
+// the override's own fresh term now says "not spectral, go ahead." That is
+// the direction this pins.
+static void namedColorSetDestSpaceRefreshesCacheAfterBegin()
+{
+  SpectralSideNamedColor inDouble;
+
+  CIccProfile *pInProfile = new CIccProfile();
+  buildV2CmykOutputProfile(*pInProfile);
+
+  inDouble.SetParams(pInProfile, /*bInput=*/true, icPerceptual, icPerceptual,
+                      false, icInterpTetrahedral);
+
+  // Starts spectral, so the cache Begin() fills should say "spectral" and the
+  // predicate should stay excluded.
+  inDouble.SetSrcSpace(icSigCmykData);
+  inDouble.SetDestSpace(icSigReflectanceSpectralPcsData);
+
+  check(inDouble.Begin() == icCmmStatOk, "named color cache refresh: Begin");
+  check(inDouble.NeedAdjustPCS(),
+        "named color cache refresh: v2 perceptual needs an adjust (base)");
+  check(!inDouble.NeedsDstPcsAdjust(),
+        "named color cache refresh: spectral destination excluded before the move");
+
+  // Simulates an out-of-tree caller moving the destination port to a
+  // colorimetric PCS *after* Begin() already filled the cache from the
+  // spectral answer above. Without the refresh in SetDestSpace(), the base
+  // cache would still say "spectral" and this would stay excluded -- the
+  // stale, pre-move answer -- instead of correctly adjusting the now-
+  // colorimetric destination.
+  inDouble.SetDestSpace(icSigLabData);
+
+  check(inDouble.NeedsDstPcsAdjust(),
+        "named color cache refresh: colorimetric destination adjusts after the move, not stale");
+}
+
 // Reaching into the built chain is the only way to assert *where* the
 // adjustment happens. m_Xforms is protected on CIccCmm, so subclass it.
 //
@@ -1570,6 +1622,7 @@ int main(int /*argc*/, char ** /*argv*/)
   perSideAdjustPredicatesAreOffWhenNothingToAdjust();
   namedColorAdjustPredicatesRequireAnActualPcsSide();
   namedColorAdjustPredicatesExcludeSpectralPcs();
+  namedColorSetDestSpaceRefreshesCacheAfterBegin();
 
   noXformPerformsItsOwnAdjustment(icSigCmykData, icSigLabData, true,
       "trailing PCS edge: the device xform no longer adjusts, the PcsXform does");

@@ -8228,6 +8228,16 @@ icStatusCMM CIccXformNamedColor::SetSrcSpace(icColorSpaceSignature nSrcSpace)
 
   m_nSrcSpace = nSrcSpace;
 
+  // Refresh the cache CIccXform::Begin() fills, computing the exact same
+  // thing Begin() would compute for this object: GetSrcSpace() is overridden
+  // on this class to return m_nSrcSpace directly, so IsSpaceSpectralPCS() of
+  // the value just assigned IS IsSpaceSpectralPCS(GetSrcSpace()). Needed
+  // because SetSrcSpace() is public API with no in-tree caller guaranteeing
+  // it only runs before Begin(); without this, a caller that moves the
+  // source space after Begin() would silently desync the cache from the
+  // real source space -- no assertion, no error, wrong colour.
+  m_bSrcSpectralPCS = IsSpaceSpectralPCS(m_nSrcSpace);
+
   return icCmmStatOk;
 }
 
@@ -8262,6 +8272,11 @@ icStatusCMM CIccXformNamedColor::SetDestSpace(icColorSpaceSignature nDestSpace)
   }
 
   m_nDestSpace = nDestSpace;
+
+  // Refresh the cache the same way SetSrcSpace() does above, and for the same
+  // reason: GetDstSpace() is overridden here to return m_nDestSpace directly,
+  // so this is exactly IsSpaceSpectralPCS(GetDstSpace()) for this object.
+  m_bDstSpectralPCS = IsSpaceSpectralPCS(m_nDestSpace);
 
   return icCmmStatOk;
 }

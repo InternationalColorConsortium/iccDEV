@@ -616,15 +616,29 @@ protected:
 	icFloatNumber m_PCSScale[3]; // scale and offset for PCS adjustment in XYZ
 	icFloatNumber m_PCSOffset[3];
 
-  // Filled once by CIccXform::Begin() from IsSpaceSpectralPCS(GetSrcSpace())/
+  // Filled by CIccXform::Begin() from IsSpaceSpectralPCS(GetSrcSpace())/
   // IsSpaceSpectralPCS(GetDstSpace()); NeedsSrcPcsAdjust()/NeedsDstPcsAdjust()
   // read these instead of re-deriving the answer from a virtual GetSrcSpace()/
-  // GetDstSpace() call on every pixel Check*Abs() touches. Safe to fill once:
-  // every setter that can move a port's space (SetSrcSpace()/SetDestSpace()
-  // on CIccXformNamedColor, SetGamutXform(), SetPcsAdjustXform()) is called
-  // before Begin() runs on this xform, and every derived Begin() override
-  // calls CIccXform::Begin() first, before anything that could change the
-  // answer.
+  // GetDstSpace() call on every pixel Check*Abs() touches.
+  //
+  // SetGamutXform() and SetPcsAdjustXform() only ever run before Begin() (both
+  // are called from within Create()/CheckPCSRangeConversions(), before the
+  // xform's first Begin()), so Begin()'s fill is the only write those two
+  // need. SetSrcSpace()/SetDestSpace() on CIccXformNamedColor are different:
+  // they are public API with no in-tree caller, so nothing stops an
+  // out-of-tree caller from moving a port's space after Begin() has already
+  // filled this cache from the old one. Before this cache existed that was
+  // harmless -- the predicates read GetSrcSpace()/GetDstSpace() live, so any
+  // call ordering got the current answer. Caching turned that into a silent
+  // desync: the wrong conversion would apply and nothing would report it. So
+  // CIccXformNamedColor::SetSrcSpace()/SetDestSpace() also refresh their half
+  // of this cache directly, right after moving m_nSrcSpace/m_nDestSpace, using
+  // the same IsSpaceSpectralPCS() call on the value just assigned -- which is
+  // exactly IsSpaceSpectralPCS(GetSrcSpace())/IsSpaceSpectralPCS(GetDstSpace())
+  // for that class, since its GetSrcSpace()/GetDstSpace() overrides return
+  // m_nSrcSpace/m_nDestSpace directly. That makes the cache correct regardless
+  // of call ordering, rather than resting on a contract ("call this only
+  // before Begin()") that the public API cannot enforce.
   bool m_bSrcSpectralPCS;
   bool m_bDstSpectralPCS;
 
