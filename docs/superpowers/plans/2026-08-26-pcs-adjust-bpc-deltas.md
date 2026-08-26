@@ -366,3 +366,196 @@ combinations are bit-identical (0.0 delta, vs. the 1e-4 threshold), and —
 unlike the first pass — this null result has been verified against a live,
 non-identity execution of the moved code, not merely against a
 non-stale DLL running an unrelated code path.
+
+---
+
+# Task 8: Full sweep and handoff
+
+Branch: `refactor/pcs-adjust-in-pcsxform`, swept at `fd1b1830`, branched from
+`master` at `68b1b6f2`. No source changes were made during this sweep; the
+tree at the end of it is identical to the tree at the start, modulo one
+stray test-artifact file (`WEncConv.icc`, written to the repo root by a
+ctest run whose `WORKING_DIRECTORY` is the repo root) that was deleted as
+cleanup and was never tracked.
+
+## Corrected contract matrix
+
+The brief's Step 4 matrix (in `task-8-brief.md`) describes several rows as
+though Task 5's deletions had happened. **They have not.** Task 5 is
+halted, pending a decision from the repository owner (`task-5-report.md`,
+and the "Known gap" section of `docs/pcs-adjustment-placement.md`), because
+it found the in-`Apply()` PCS-adjustment path is still genuinely live for a
+v5 spectral-PCS profile at a chain edge under absolute colorimetric intent —
+proven by execution (`spectralTrailingEdgeStillAdjustsInsideApply()` in
+`.github/ci/regression/pcs-adjust-placement.cpp`), not by static reading.
+The rows below were re-verified directly against the tree at `fd1b1830`
+(`grep` line numbers cited are current as of that commit).
+
+| Surface | Producer | Consumer | Behavior change |
+|---|---|---|---|
+| `CIccXform::NeedsSrcPcsAdjust()` / `NeedsDstPcsAdjust()` | new virtuals on `CIccXform` (`IccProfLib/IccCmm.h:524,529`) | `CIccPcsXform::Connect()` / `ConnectFirst()` / `ConnectLast()` (e.g. `IccProfLib/IccCmm.cpp:2349,2356,2831`) | New API, in tree as designed. Overridden in `CIccXformMpe` (`IccCmm.h:1619-1629`) and `CIccXformNamedColor` (`IccCmm.cpp:8009,8025`, both excluding the spectral case). |
+| `SetSrcPCSConversion()` / `SetDstPCSConversion()` | **Still present**, not removed (`IccProfLib/IccCmm.h:513-514`) | `CIccCmm::CheckPCSConnections()` (`IccProfLib/IccCmm.cpp:9641,9668-9669,9715`) | Unchanged from `master`. Clears `m_bSrcPcsConversion`/`m_bDstPcsConversion` once a `CIccPcsXform` takes over an interior connection or a colorimetric-PCS chain edge. The brief's "removed public API" row does not describe this tree; see the halted-task row below. |
+| `CheckSrcAbs()` / `CheckDstAbs()` / `AdjustPCS()` | **Still live production code**, called from every `CIccXform::Apply()` override and `CIccXformMpe::Apply()` — 16 guarded call sites at `IccProfLib/IccCmm.cpp:5773,5811,6101,6143,6516,6599,6897,6957,7397,7483,7721,7760,7846,7875,8589,8635` | any xform whose `m_bSrcPcsConversion`/`m_bDstPcsConversion` is still true when `Apply()` runs | Not "deprecated, third-party subclasses only." On a colorimetric PCS the guard is normally false (the adjustment was handed to a `CIccPcsXform`), so these call sites go quiet — but on a **v5 spectral-PCS profile at a chain edge** the guard stays true and the old path executes for real, altering samples 0–2 of the spectral vector. This is a live in-tree behavior today, pinned by `spectralTrailingEdgeStillAdjustsInsideApply()`, not merely a double-apply risk for hypothetical external subclasses. |
+| `bUsePCSConversions` | **Retained and functional, not ignored** — parameter of `CIccCmm::Begin()` / `CIccNamedColorCmm::Begin()` / `CheckPCSConnections()` (`IccProfLib/IccCmm.cpp:9612,9878`) | interior PCS connections only (`IccProfLib/IccCmm.cpp:9666`); neither edge block consults it | Passing `true` keeps an *interior* connection on the old `CheckSrcAbs()`/`CheckDstAbs()` path instead of folding it into a `CIccPcsXform`. No in-tree caller passes `true`, so every in-tree chain gets the `CIccPcsXform` path in practice — but the flag still changes behavior for a caller that does pass `true`, so "ignored" overstates it. |
+| XYZ-PCS negative clamp (`CIccPCSUtil::NegClip`, formerly inside `AdjustPCS()`) | Removed from the new `CIccPcsStep` affine chain (`docs/pcs-adjustment-placement.md`, "What moved numerically") | any XYZ-PCS chain whose adjustment is folded into a `CIccPcsXform` | Negative XYZ is no longer forced to zero for adjustments that reach a `CIccPcsXform`. Unreachable from any built-in adjustment (absolute-intent uses zero offset/positive scale; v2-perceptual uses a positive offset) — only an `IIccAdjustPCSXform` hint with `Scale > 1` (`CIccApplyBPC`) can drive a non-negative input negative. Pinned by `xyzPcsChainStillAdjusts()`, which confirms the adjustment survives the move but, by the brief's own scope correction (Task 6 report), cannot itself demonstrate the clip delta since no in-tree fixture drives a negative offset. |
+| Task 5's deletions (16 call sites above, the two `m_b{Src,Dst}PcsConversion` flags, `NeedAdjustSrcPCS()`/`NeedAdjustDstPCS()`, and documenting `bUsePCSConversions` as ignored) | — | — | **Halted, not performed — not "removed" or "retained, deprecated."** The precondition ("after `Begin()`, no xform reports both `NeedAdjustPCS()` and an uncleared conversion flag") is false for the spectral-edge case above. `NeedAdjustSrcPCS()`/`NeedAdjustDstPCS()` are unchanged at `IccProfLib/IccCmm.h:516-517`. No file under `IccProfLib/` was touched for this task. Awaiting one of the three decisions recorded in `task-5-report.md` §2 from the repository owner. |
+
+## Step 1 — full CTest run vs. `master` baseline
+
+**Branch** (`out/plan-tests`, Debug config, tools/IccXML/IccJSON/zlib
+disabled because vcpkg cannot fetch its baseline on this machine):
+
+```
+cmake --build out/plan-tests --config Debug -j        # succeeded
+ctest --test-dir out/plan-tests -C Debug --output-on-failure --no-tests=error
+96% tests passed, 3 tests failed out of 79
+```
+
+- 79 tests registered. This is a CMM-focused subset, **not the full test
+  suite**.
+- 3 report `Not Run`: `iccdev.pawg-compression-paths`,
+  `iccdev.pawg-c5-cicp-optional`, `iccdev.iccviz-writer-serialization`.
+  Verified directly (not taken on the brief's word) that their executables
+  genuinely do not exist in this build tree — ctest's own output says
+  `Could not find executable .../iccPawgCompressionPathsTest.exe` etc. These
+  are configuration artefacts of building with `ENABLE_TOOLS=OFF` (the
+  `iccviz-writer-serialization` binary needs `Tools/CmdLine/.../IccCmdLineUtil.h`,
+  which isn't available without the tools build), not regressions.
+- 1 reports `Skipped`: `iccdev.fileio-reopen-nonregular` — pre-existing,
+  expected in this configuration.
+- 0 tests report `(Failed)`.
+
+**Master baseline** (fresh worktree at `../iccdev-master-baseline`, `master`
+@ `68b1b6f2`, configured with the corrected flags from the task-8 brief
+rather than the brief's original Step 1 command, which does not match this
+tree's actual configuration):
+
+```
+git worktree add ../iccdev-master-baseline master
+cmake -S ../iccdev-master-baseline/Build/Cmake -B ../iccdev-master-baseline/out/baseline \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE= \
+  -DENABLE_TESTS=ON -DENABLE_TOOLS=OFF -DENABLE_ICCXML=OFF -DENABLE_ICCJSON=OFF -DICC_USE_ZLIB=OFF
+cmake --build ../iccdev-master-baseline/out/baseline --config Debug --target build-test-binaries
+ctest --test-dir ../iccdev-master-baseline/out/baseline -C Debug --no-tests=error
+96% tests passed, 3 tests failed out of 78
+```
+
+- 78 tests registered (one fewer than the branch — the branch added test
+  coverage across Tasks 5–7, e.g. new functions in
+  `pcs-adjust-placement.cpp`).
+- The same 3 tests report `Not Run`, for the same reason (same missing
+  executables; `iccViz WriterSerializationTest` fails the same
+  `IccCmdLineUtil.h` include on `master` too).
+- 2 report `Skipped`: `iccdev.fileio-reopen-nonregular` (matches the
+  branch) plus `iccdev.embedded-profile-onelevel-load`, which the branch run
+  did *not* skip. Both trees register this test identically
+  (`SKIP_RETURN_CODE 77`); the skip is a runtime self-skip inside the test
+  binary (its own return code), not a difference in how the two trees were
+  configured or built. Recorded here as an observed environment-dependent
+  flake, not a regression — it went from "runs and passes" to "self-skips,"
+  never to "fails," and only on the baseline run.
+- 0 tests report `(Failed)`.
+
+**Diff.** Extracting `(Failed)` lines from each run's output and comparing:
+
+```
+comm -13 fails-baseline.txt fails-branch.txt
+(empty)
+```
+
+Both sets are empty — neither run has a single test reporting `(Failed)`.
+**No regression was introduced by this branch.** The only non-`Passed`
+outcomes on either side are the three configuration-artefact `Not Run`
+tests (identical on both trees) and the pre-existing/flaky `Skipped` tests
+discussed above.
+
+Cleanup: `git worktree remove --force ../iccdev-master-baseline` was run;
+`git worktree list` confirms it is gone.
+
+## Step 2 — sanitizer build
+
+**Not run.** `clang++` is not installed on this machine (`which clang++`
+fails against the full `PATH`). The brief's Step 2 command
+(`CC=clang CXX=clang++ cmake ... -DENABLE_ASAN=ON -DENABLE_UBSAN=ON`) cannot
+configure without it. No substitute (e.g. MSVC `/fsanitize=address`) was run
+in its place and none is claimed as equivalent — MSVC ASan and
+clang ASan+UBSan do not cover the same ground, and the brief's own rationale
+for this step ("ASan confirms nothing else read" the two conversion-flag
+bools) is in any case moot for this sweep: Task 5 never deleted those bools,
+so there is nothing to sanitizer-check with respect to that deletion here.
+**This step is unverified in this environment.**
+
+## Step 3 — Doxygen check
+
+`doxygen .github/ci/doxygen/Doxyfile` was run. The Doxyfile has
+`HAVE_DOT = YES`, but Graphviz's `dot` is not installed on this machine
+(`which dot` fails), which made the unmodified command fail mid-run trying
+to render call/collaboration graphs and never reach the point of writing
+`docs/generated/doxygen-warnings.log`. To get a real answer on the one thing
+this step actually needs to check — whether the new/changed Markdown under
+`docs/` introduces a broken or out-of-INPUT-tree link — the same Doxyfile
+was re-run once, piped through stdin with `HAVE_DOT=NO` appended as a
+config override (a diagnostic-only invocation; nothing under
+`.github/ci/doxygen/` was edited):
+
+```
+(cat .github/ci/doxygen/Doxyfile; echo "HAVE_DOT=NO") | doxygen -
+```
+
+Result: `docs/generated/doxygen-warnings.log` contained 8 lines, none of
+them about `docs/pcs-adjustment-placement.md`,
+`docs/superpowers/plans/2026-08-26-pcs-adjust-bpc-deltas.md`, or any other
+file touched by this branch:
+
+- 1 warning that `/usr/include` (an `INCLUDE_PATH` entry) isn't readable —
+  pre-existing, Windows-vs-Doxyfile-default noise, unrelated to this branch.
+- 4 `ignoring \dotfile command because HAVE_DOT is not set` warnings, all in
+  `docs/iccapply/*.dox` — an artefact of this diagnostic run's own
+  `HAVE_DOT=NO` override; they would not appear with Graphviz installed and
+  the Doxyfile's real `HAVE_DOT=YES`, and none reference this branch's docs.
+- 3 `explicit link request to 'operator=' could not be resolved` warnings in
+  `IccProfLib/IccTagBasic.cpp` — pre-existing, in a file this branch does
+  not touch.
+
+Confirmed `docs/` is in `INPUT` and that the new/changed files were
+genuinely scanned, not silently skipped: `docs/generated/html/` contains
+rendered pages for `pcs-adjustment-placement_8md.html`,
+`2026-08-26-pcs-adjust-bpc-deltas_8md.html`,
+`2026-08-26-pcs-adjust-in-pcsxform_8md.html`, and
+`2026-08-26-pcs-adjust-in-pcsxform-spec_8md.html`. None of the 8 warnings
+above are attributed to any of them, so the check the brief cares about —
+no Markdown link pointing outside the Doxygen INPUT tree — passes.
+
+**What this does not verify:** the *unmodified* Doxyfile with real
+`HAVE_DOT=YES` and Graphviz present, which is what CI actually runs. Missing
+Graphviz on this machine is an environment gap, the same category as the
+missing `clang++` — it is not something this task's "no source changes"
+scope extends to fixing. `docs/generated/` was deleted after both doxygen
+runs; nothing under it was committed.
+
+## What this sweep did and did not cover on this machine
+
+**Covered:** a full build and ctest run of the `out/plan-tests` CMM-focused
+subset (79 tests) with a `(Failed)`-set diff against a fresh `master`
+baseline worktree (78 tests) showing zero new failures; a Doxygen run
+confirming this branch's documentation changes introduce no warnings and
+are genuinely inside the INPUT tree; a direct `grep`-verified re-check of
+every symbol named in the brief's Step 4 matrix against the tree at
+`fd1b1830`, which is what produced the corrected matrix above.
+
+**Not covered:** the sanitizer build (Step 2) — no `clang++` on this
+machine, not run, not substituted. The Doxygen check was run against a
+temporarily-modified copy of the config (`HAVE_DOT=NO`, never written to
+disk under `.github/ci/doxygen/`) because Graphviz is absent here; the
+warning-count result is trustworthy for the link-safety question Step 3
+exists to answer, but the exact warning set under the real, unmodified
+CI configuration was not reproduced locally. The test run itself is a
+CMM-focused subset (tools/IccXML/IccJSON/zlib disabled), not the full
+suite — CI's full-feature configuration was not exercised here.
+
+No source file under `IccProfLib/`, `IccConnect/`, or elsewhere was
+modified during this sweep. The only filesystem change made and then
+undone was the temporary `docs/generated/` Doxygen output (deleted) and one
+stray test-artifact file, `WEncConv.icc`, written to the repo root by a
+test's own working directory during the ctest run (deleted; it was never
+tracked and is not part of this branch's deliverable).
