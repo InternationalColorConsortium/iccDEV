@@ -75,6 +75,8 @@
 #include "IccTag.h"
 #include "IccTagBasic.h"
 #include "IccTagLut.h"
+#include "IccTagMPE.h"
+#include "IccMpeBasic.h"
 
 #include <cmath>
 #include <cstdio>
@@ -730,6 +732,176 @@ static void noXformPerformsItsOwnAdjustment(icColorSpaceSignature nSrc,
   check(cmm.unhandedAdjustCount() == 0, label);
 }
 
+
+// --- PRECONDITION probe: spectral PCS at the trailing chain edge ----------
+//
+// Task 4's postcondition ("after Begin(), no xform reports both
+// NeedAdjustPCS() and an uncleared conversion flag") is claimed for
+// colorimetric PCS ports only. CheckPCSConnections()'s two edge blocks gate on
+// IsSpaceColorimetricPCS(GetSrcSpace()/GetDstSpace()), while CIccXform::Begin()
+// derives m_bAdjustPCS from m_pProfile->m_Header.pcs, which stays Lab/XYZ on a
+// v5 profile that also declares a spectralPCS. Whether that gap leaves a live
+// in-Apply() adjustment decides whether the in-xform path can be deleted at
+// all, so it is pinned here rather than reasoned about.
+//
+// The fixture is the narrowest configuration the analysis names: a v5
+// spectral-PCS input profile applied at absolute intent, media white != the
+// header illuminant, sitting at the end of the chain. It carries only a DToB1
+// tag, so CIccXform::Create()'s absolute-intent fallback resolves the tag and
+// sets m_nTagIntent = icRelativeColorimetric -- which is what keeps
+// CIccXformMpe's own "B2D3 tags don't need abs conversion" test from
+// suppressing the adjustment.
+
+static const icUInt16Number kSpectralSamples = 6;
+
+// The DToB1 pipeline ignores its input and emits these six constants, so the
+// unadjusted spectral answer is known exactly and any deviation in the first
+// three samples is the PCS adjustment and nothing else.
+static const icFloatNumber kSpectralConst[kSpectralSamples] = {
+  0.20f, 0.30f, 0.40f, 0.50f, 0.60f, 0.70f
+};
+
+static CIccTagMultiProcessElement *makeConstantSpectralD2B()
+{
+  CIccTagMultiProcessElement *pTag = new CIccTagMultiProcessElement;
+  pTag->SetChannels(3, kSpectralSamples);
+
+  CIccMpeMatrix *pMtx = new CIccMpeMatrix;
+  if (!pMtx->SetSize(3, kSpectralSamples, true)) {
+    delete pMtx;
+    delete pTag;
+    return NULL;
+  }
+
+  icFloatNumber *m = pMtx->GetMatrix();
+  for (int i = 0; i < 3 * (int)kSpectralSamples; i++)
+    m[i] = 0.0f;
+
+  icFloatNumber *k = pMtx->GetConstants();
+  for (int i = 0; i < (int)kSpectralSamples; i++)
+    k[i] = kSpectralConst[i];
+
+  pTag->Attach(pMtx);
+  return pTag;
+}
+
+static icColorSpaceSignature spectralSig()
+{
+  return (icColorSpaceSignature)icNColorSpaceSig(icSigReflectanceSpectralData,
+                                                 kSpectralSamples);
+}
+
+static bool buildV5SpectralInputProfile(CIccProfile &p)
+{
+  p.InitHeader();
+  p.m_Header.deviceClass = icSigInputClass;
+  p.m_Header.colorSpace = icSigRgbData;
+  p.m_Header.pcs = icSigLabData;          // colorimetric PCS still declared
+  p.m_Header.version = icVersionNumberV5;
+  p.m_Header.spectralPCS = (icColorSpaceSignature)spectralSig();
+  p.m_Header.spectralRange.start = icRange380nm;
+  p.m_Header.spectralRange.end = icRange780nm;
+  p.m_Header.spectralRange.steps = kSpectralSamples;
+
+  // Same non-D50 media white the colorimetric fixtures use, so the absolute
+  // adjustment is a real one.
+  attachRequiredTags(p, "v5 spectral input fixture");
+
+  CIccTagMultiProcessElement *pD2B = makeConstantSpectralD2B();
+  if (!pD2B)
+    return false;
+  p.AttachTag(icSigDToB1Tag, pD2B);
+
+  return true;
+}
+
+static void spectralTrailingEdgeStillAdjustsInsideApply()
+{
+  CIccProfile *pICC = new CIccProfile;
+  if (!buildV5SpectralInputProfile(*pICC)) {
+    delete pICC;
+    check(false, "spectral probe: fixture built");
+    return;
+  }
+
+  CmmProbe cmm(icSigRgbData, spectralSig(), true);
+  check(cmm.AddXform(pICC, icAbsoluteColorimetric, icInterpLinear, NULL,
+                     icXformLutSpectral, true, NULL) == icCmmStatOk,
+        "spectral probe: AddXform");
+  check(cmm.Begin() == icCmmStatOk, "spectral probe: Begin");
+
+  check(cmm.adjustingXformCount() == 1,
+        "spectral probe: the spectral xform still carries a PCS adjustment");
+  check(cmm.pcsXformCount() == 0,
+        "spectral probe: no CIccPcsXform is inserted at the spectral edge");
+  check(cmm.unhandedAdjustCount() == 1,
+        "spectral probe: the adjustment was never handed over to a CIccPcsXform");
+
+  icFloatNumber src[3] = { 0.20f, 0.40f, 0.60f };
+  icFloatNumber dst[kSpectralSamples];
+  for (int i = 0; i < (int)kSpectralSamples; i++)
+    dst[i] = -1.0f;
+
+  check(cmm.Apply(dst, src) == icCmmStatOk, "spectral probe: Apply");
+
+  std::printf("      spectral probe: emitted");
+  for (int i = 0; i < (int)kSpectralSamples; i++)
+    std::printf(" %.6f", (double)dst[i]);
+  std::printf("\n      spectral probe: pipeline constants");
+  for (int i = 0; i < (int)kSpectralSamples; i++)
+    std::printf(" %.6f", (double)kSpectralConst[i]);
+  std::printf("\n");
+
+  // Samples 3..5 are past the adjustment's reach and prove the pipeline itself
+  // is doing what the fixture says.
+  bool tailIntact = true;
+  for (int i = 3; i < (int)kSpectralSamples; i++)
+    tailIntact = tailIntact && closeRel(dst[i], kSpectralConst[i], kTol);
+  check(tailIntact,
+        "spectral probe: samples 3..5 come through the pipeline unmodified");
+
+  bool headIntact = true;
+  for (int i = 0; i < 3; i++)
+    headIntact = headIntact && closeRel(dst[i], kSpectralConst[i], kTol);
+
+  // This is the precondition itself, stated as it is true today.
+  check(!headIntact,
+        "spectral probe: samples 0..2 ARE modified -- the in-Apply() adjustment is live");
+}
+
+// Control for the probe above: the identical fixture and the identical chain,
+// differing only in the rendering intent. At relative intent CIccXform::Begin()
+// never sets m_bAdjustPCS, so CheckDstAbs() is a no-op and all six samples come
+// through untouched. This attributes the head-only deviation above to the PCS
+// adjustment specifically, rather than to anything else in the MPE pipeline.
+static void spectralTrailingEdgeIsCleanAtRelativeIntent()
+{
+  CIccProfile *pICC = new CIccProfile;
+  if (!buildV5SpectralInputProfile(*pICC)) {
+    delete pICC;
+    check(false, "spectral control: fixture built");
+    return;
+  }
+
+  CmmProbe cmm(icSigRgbData, spectralSig(), true);
+  check(cmm.AddXform(pICC, icRelativeColorimetric, icInterpLinear, NULL,
+                     icXformLutSpectral, true, NULL) == icCmmStatOk,
+        "spectral control: AddXform");
+  check(cmm.Begin() == icCmmStatOk, "spectral control: Begin");
+  check(cmm.adjustingXformCount() == 0,
+        "spectral control: relative intent takes no PCS adjustment");
+
+  icFloatNumber src[3] = { 0.20f, 0.40f, 0.60f };
+  icFloatNumber dst[kSpectralSamples];
+  check(cmm.Apply(dst, src) == icCmmStatOk, "spectral control: Apply");
+
+  bool allIntact = true;
+  for (int i = 0; i < (int)kSpectralSamples; i++)
+    allIntact = allIntact && closeRel(dst[i], kSpectralConst[i], kTol);
+  check(allIntact,
+        "spectral control: every sample comes through the pipeline unmodified");
+}
+
 int main(int /*argc*/, char ** /*argv*/)
 {
   adjustmentIsLargerThanTheToleranceBand();
@@ -776,6 +948,9 @@ int main(int /*argc*/, char ** /*argv*/)
       "trailing PCS edge: the device xform no longer adjusts, the PcsXform does");
   noXformPerformsItsOwnAdjustment(icSigLabData, icSigCmykData, false,
       "leading PCS edge: the device xform no longer adjusts, the PcsXform does");
+
+  spectralTrailingEdgeStillAdjustsInsideApply();
+  spectralTrailingEdgeIsCleanAtRelativeIntent();
 
   if (g_failures) {
     std::printf("\n%d check(s) failed\n", g_failures);
