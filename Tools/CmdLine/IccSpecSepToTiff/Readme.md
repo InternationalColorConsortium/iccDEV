@@ -75,6 +75,11 @@ single-channel TIFF inputs.
   output resolution values differ from the input's, both in the unit the input
   declared: an absent or non-positive resolution becomes 96 when the input is
   read, and a resolution below 1 that survives that becomes 72.
+- `start`, `end`, and `incr` select filename suffixes; they are not wavelength
+  values. The TIFF container records neither wavelengths, units, bandwidths,
+  nor channel names. A compatible embedded spectral ICC profile can provide
+  colour semantics to applications that support ICC.2, but it does not make
+  filename suffixes into wavelength metadata.
 - Each input TIFF must have exactly one sample per pixel.
 - Photometric interpretation must be `MINISBLACK` or `MINISWHITE`; palette,
   RGB, CMYK, and unknown photometrics are rejected. Floating-point
@@ -87,7 +92,15 @@ single-channel TIFF inputs.
   first. Each is `EXTRASAMPLE_UNSPECIFIED` (TIFF value 0), identifying it as
   auxiliary spectral data rather than associated or unassociated alpha. Very
   high channel-count spectral TIFFs can be valid but may exceed limits in
-  display tools such as ImageMagick.
+  display tools such as ImageMagick. Some editors, including Photoshop, expose
+  unspecified extras as channels labelled `Alpha 1`, `Alpha 2`, and so on;
+  those labels do not make the samples transparency data.
+- DeviceLink profiles are rejected because they cannot be embedded in image
+  files. Other profiles must match the output's data colour-space sample count;
+  the spectral PCS describes a connection space, not the TIFF input samples.
+- TIFF can carry ICC.2 profiles, but applications that do not implement ICC.2
+  may not read or apply them. Check target-application support before relying
+  on embedded ICC.2 spectral metadata.
 - An existing output destination must be a regular non-symlink file. Directories,
   devices, POSIX symlinks, and Windows reparse points are rejected before
   anything is written; a hard link is accepted, being another name for a regular

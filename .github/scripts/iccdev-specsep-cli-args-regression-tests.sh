@@ -42,6 +42,10 @@ FROMXML="$TOOLS_DIR/IccFromXml/iccFromXml"
 SPECTRAL_XML="$REPO_ROOT/Testing/ICS/Spec400_10_700-D50_2deg-Part1.xml"
 SPECTRAL_PROFILE="$OUTDIR/Spec400_10_700-D50_2deg-Part1.icc"
 SPECTRAL31_DIR="$OUTDIR/spectral31"
+SPECTRAL_RGB_XML="$REPO_ROOT/Testing/SpecRef/srgbRef.xml"
+SPECTRAL_RGB_PROFILE="$OUTDIR/srgb-spectral-pcs.icc"
+DEVICELINK_XML="$REPO_ROOT/Testing/Display/RgbGSDF.xml"
+DEVICELINK_PROFILE="$OUTDIR/rgb-gsdf-devicelink.icc"
 
 PASS=0
 FAIL=0
@@ -285,11 +289,29 @@ prepare_spectral_profile() {
     generate_spectral31_inputs
 }
 
+prepare_profile() {
+  local input_xml="$1"
+  local output_profile="$2"
+  local log_name="$3"
+
+  if [ ! -x "$FROMXML" ] || [ ! -f "$input_xml" ]; then
+    return 1
+  fi
+
+  "$FROMXML" "$input_xml" "$output_profile" > "$OUTDIR/$log_name.log" 2>&1 &&
+    [ -s "$output_profile" ]
+}
+
 echo "=== iccSpecSepToTiff CLI argument regression ==="
 
 if [ ! -x "$SPECSEP" ]; then
   echo "iccSpecSepToTiff not found at $SPECSEP -- skipping (build Tools first)"
   exit 0
+fi
+
+if ! command -v tiffinfo >/dev/null 2>&1; then
+  echo "tiffinfo is required for TIFF metadata and pixel-data validation" >&2
+  exit 2
 fi
 
 run_expect_version
@@ -314,6 +336,25 @@ run_expect_success \
   0 0 "$SPECTRAL_PREFIX" 1 3 1 "$PROFILE"
 check_tiffinfo_contains "specsep-srgb-profile-matching-3ch" "$OUTDIR/srgb-profile-matching-3ch.tif" "Samples/Pixel: 3" &&
   check_tiffinfo_contains "specsep-srgb-profile-matching-3ch" "$OUTDIR/srgb-profile-matching-3ch.tif" "ICC Profile: <present>"
+
+if prepare_profile "$SPECTRAL_RGB_XML" "$SPECTRAL_RGB_PROFILE" "fromxml-srgb-spectral-pcs"; then
+  run_expect_success \
+    "specsep-spectral-pcs-rgb-data-3ch" \
+    "$OUTDIR/spectral-pcs-rgb-data-3ch.tif" \
+    0 0 "$SPECTRAL_PREFIX" 1 3 1 "$SPECTRAL_RGB_PROFILE"
+else
+  echo "  [SKIP] specsep-spectral-pcs-rgb-data-3ch -- missing iccFromXml or srgbRef.xml"
+fi
+
+if prepare_profile "$DEVICELINK_XML" "$DEVICELINK_PROFILE" "fromxml-rgb-gsdf-devicelink"; then
+  run_expect_reject \
+    "specsep-devicelink-profile" \
+    "DeviceLink profile and cannot be embedded" \
+    "$OUTDIR/devicelink-profile.tif" \
+    0 0 "$SPECTRAL_PREFIX" 1 3 1 "$DEVICELINK_PROFILE"
+else
+  echo "  [SKIP] specsep-devicelink-profile -- missing iccFromXml or RgbGSDF.xml"
+fi
 
 run_expect_success \
   "specsep-fast-separate-planes" \
