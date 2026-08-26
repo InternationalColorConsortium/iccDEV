@@ -27,7 +27,7 @@ classifiers = [
     "Topic :: Scientific/Engineering",
 ]
 dependencies = [
-    "mcp[cli]>=1.26.0,<2",
+    "mcp[cli]>=1.26.0,<3",
 ]
 
 [project.optional-dependencies]
