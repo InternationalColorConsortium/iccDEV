@@ -902,6 +902,79 @@ static void spectralTrailingEdgeIsCleanAtRelativeIntent()
         "spectral control: every sample comes through the pipeline unmodified");
 }
 
+// An XYZ-PCS matrix/TRC profile: the only PCS shape where AdjustPCS() used to
+// clamp negatives. See spec R8 -- the CIccPcsStep chain is pure affine, so a
+// negative component that used to be clamped to zero now survives.
+static void buildXyzPcsRgbProfile(CIccProfile &p)
+{
+  p.InitHeader();
+  p.m_Header.version     = icVersionNumberV2_1;
+  p.m_Header.deviceClass = icSigDisplayClass;
+  p.m_Header.colorSpace  = icSigRgbData;
+  p.m_Header.pcs         = icSigXYZData;
+
+  static const struct { icSignature sig; double x, y, z; } kCols[3] = {
+    { icSigRedMatrixColumnTag,   0.4360, 0.2225, 0.0139 },
+    { icSigGreenMatrixColumnTag, 0.3851, 0.7169, 0.0971 },
+    { icSigBlueMatrixColumnTag,  0.1431, 0.0606, 0.7139 },
+  };
+  for (int i = 0; i < 3; i++) {
+    CIccTagXYZ *pCol = new CIccTagXYZ(1);
+    (*pCol)[0].X = icDtoF((icFloatNumber)kCols[i].x);
+    (*pCol)[0].Y = icDtoF((icFloatNumber)kCols[i].y);
+    (*pCol)[0].Z = icDtoF((icFloatNumber)kCols[i].z);
+    p.AttachTag(kCols[i].sig, pCol);
+  }
+
+  static const icSignature kTrc[3] = {
+    icSigRedTRCTag, icSigGreenTRCTag, icSigBlueTRCTag
+  };
+  for (int i = 0; i < 3; i++) {
+    CIccTagCurve *pCurve = (CIccTagCurve*)CIccTag::Create(icSigCurveType);
+    pCurve->SetSize(2);
+    (*pCurve)[0] = 0.0f;
+    (*pCurve)[1] = 1.0f;
+    p.AttachTag(kTrc[i], pCurve);
+  }
+
+  attachRequiredTags(p, "pcs adjust placement XYZ PCS fixture");
+}
+
+// The contract: an XYZ PCS chain still runs, still applies the adjustment, and
+// stays within the tolerance band of the unadjusted reference by the expected
+// margin. What it deliberately does NOT assert is that output is non-negative.
+static void xyzPcsChainStillAdjusts()
+{
+  CIccProfile rgb;
+  buildXyzPcsRgbProfile(rgb);
+
+  icFloatNumber dev[3] = { 0.02f, 0.03f, 0.04f };
+  icFloatNumber absolute[3] = { 0 }, relative[3] = { 0 };
+
+  {
+    CIccCmm cmm(icSigRgbData, icSigXYZData, true);
+    check(cmm.AddXform(rgb, icAbsoluteColorimetric) == icCmmStatOk, "xyzpcs: AddXform abs");
+    check(cmm.Begin() == icCmmStatOk, "xyzpcs: Begin abs");
+    check(cmm.Apply(absolute, dev) == icCmmStatOk, "xyzpcs: Apply abs");
+  }
+  {
+    CIccCmm cmm(icSigRgbData, icSigXYZData, true);
+    check(cmm.AddXform(rgb, icRelativeColorimetric) == icCmmStatOk, "xyzpcs: AddXform rel");
+    check(cmm.Begin() == icCmmStatOk, "xyzpcs: Begin rel");
+    check(cmm.Apply(relative, dev) == icCmmStatOk, "xyzpcs: Apply rel");
+  }
+
+  check(!closeRel(absolute[0], relative[0], kTol),
+        "xyzpcs: absolute intent still applies its media-white adjustment");
+
+  // Record the values so a reviewer can see the clipping delta rather than
+  // having to reason about it. Not an assertion.
+  std::printf("info: XYZ PCS absolute = %.9f %.9f %.9f\n",
+              (double)absolute[0], (double)absolute[1], (double)absolute[2]);
+  std::printf("info: XYZ PCS relative = %.9f %.9f %.9f\n",
+              (double)relative[0], (double)relative[1], (double)relative[2]);
+}
+
 int main(int /*argc*/, char ** /*argv*/)
 {
   adjustmentIsLargerThanTheToleranceBand();
@@ -951,6 +1024,8 @@ int main(int /*argc*/, char ** /*argv*/)
 
   spectralTrailingEdgeStillAdjustsInsideApply();
   spectralTrailingEdgeIsCleanAtRelativeIntent();
+
+  xyzPcsChainStillAdjusts();
 
   if (g_failures) {
     std::printf("\n%d check(s) failed\n", g_failures);
