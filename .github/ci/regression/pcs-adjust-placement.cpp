@@ -452,6 +452,58 @@ static void perSideAdjustPredicatesAreOffWhenNothingToAdjust()
   delete pOutput;
 }
 
+// CIccXformNamedColor's overrides narrow the base formula by IsSrcPCS()/
+// IsDestPCS(): a named-colour xform whose relevant side isn't actually the
+// profile's PCS must answer no even when the base m_bAdjustPCS/m_bInput
+// combination alone would answer yes. This pins that the override actually
+// changes the answer, not just that it compiles and links.
+static void namedColorAdjustPredicatesRequireAnActualPcsSide()
+{
+  CIccProfile *pOutProfile = new CIccProfile();
+  buildV2CmykOutputProfile(*pOutProfile);
+  pOutProfile->AttachTag(icSigNamedColor2Tag, new CIccTagNamedColor2(1, 4));
+
+  CIccProfile *pInProfile = new CIccProfile();
+  buildV2CmykOutputProfile(*pInProfile);
+  pInProfile->AttachTag(icSigNamedColor2Tag, new CIccTagNamedColor2(1, 4));
+
+  CIccXform *pOutXform = CIccXform::Create(pOutProfile, /*bInput=*/false, icPerceptual,
+                                            icInterpTetrahedral, NULL, icXformLutNamedColor);
+  CIccXform *pInXform  = CIccXform::Create(pInProfile,  /*bInput=*/true,  icPerceptual,
+                                            icInterpTetrahedral, NULL, icXformLutNamedColor);
+  check(pOutXform != NULL && pInXform != NULL, "named color: xforms created");
+  if (!pOutXform || !pInXform) { delete pOutXform; delete pInXform; return; }
+
+  // Neither side under test is set to the profile's Lab PCS here -- unlike a
+  // real named-colour lookup, which always has one side be the PCS. That is
+  // exactly the condition the overrides add on top of the base predicates.
+  // SetDestSpace() rejects a destination equal to the source, so the other
+  // side is set to icSigNamedData (also not the PCS, and a legal pairing).
+  ((CIccXformNamedColor*)pOutXform)->SetSrcSpace(icSigCmykData);
+  ((CIccXformNamedColor*)pOutXform)->SetDestSpace(icSigNamedData);
+  ((CIccXformNamedColor*)pInXform)->SetSrcSpace(icSigNamedData);
+  ((CIccXformNamedColor*)pInXform)->SetDestSpace(icSigCmykData);
+
+  check(pOutXform->Begin() == icCmmStatOk, "named color: output-side Begin");
+  check(pInXform->Begin() == icCmmStatOk, "named color: input-side Begin");
+
+  check(pOutXform->NeedAdjustPCS(), "named color: v2 perceptual output needs an adjust (base)");
+  check(pInXform->NeedAdjustPCS(), "named color: v2 perceptual input needs an adjust (base)");
+
+  // CIccXform::NeedsSrcPcsAdjust() alone (m_bAdjustPCS && !m_bInput) would
+  // say yes for the output xform here; CIccXformNamedColor's override must
+  // say no because the source side isn't actually PCS.
+  check(!pOutXform->NeedsSrcPcsAdjust(),
+        "named color: source side is not a PCS, override overrides the base yes");
+  // Symmetric on the destination side for the input xform (base:
+  // m_bAdjustPCS && m_bInput).
+  check(!pInXform->NeedsDstPcsAdjust(),
+        "named color: destination side is not a PCS either");
+
+  delete pOutXform;
+  delete pInXform;
+}
+
 int main(int /*argc*/, char ** /*argv*/)
 {
   adjustmentIsLargerThanTheToleranceBand();
@@ -467,6 +519,7 @@ int main(int /*argc*/, char ** /*argv*/)
 
   perSideAdjustPredicatesFollowDirection();
   perSideAdjustPredicatesAreOffWhenNothingToAdjust();
+  namedColorAdjustPredicatesRequireAnActualPcsSide();
 
   if (g_failures) {
     std::printf("\n%d check(s) failed\n", g_failures);

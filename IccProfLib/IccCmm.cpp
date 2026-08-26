@@ -7976,6 +7976,39 @@ bool CIccXformNamedColor::IsDestPCS() const
 
 
 /**
+ **************************************************************************
+ * Name: CIccXformNamedColor::NeedsSrcPcsAdjust
+ * 
+ * Purpose: 
+ *  True when this xform's PCS adjustment applies to values entering it.
+ *  Mirrors the guard around CheckSrcAbs() in Apply(): the source side must
+ *  actually be a colorimetric PCS -- a spectral PCS source is matched
+ *  against spectral data and never reaches CheckSrcAbs()/AdjustPCS().
+ **************************************************************************
+ */
+bool CIccXformNamedColor::NeedsSrcPcsAdjust() const
+{
+  return CIccXform::NeedsSrcPcsAdjust() && IsSrcPCS() && !IsSpaceSpectralPCS(m_nSrcSpace);
+}
+
+/**
+ **************************************************************************
+ * Name: CIccXformNamedColor::NeedsDstPcsAdjust
+ * 
+ * Purpose: 
+ *  True when this xform's PCS adjustment applies to values leaving it.
+ *  Mirrors the guard around CheckDstAbs() in Apply(): the destination side
+ *  must actually be a colorimetric PCS -- a spectral PCS destination takes
+ *  the spectral-tint path instead and never reaches CheckDstAbs()/AdjustPCS().
+ **************************************************************************
+ */
+bool CIccXformNamedColor::NeedsDstPcsAdjust() const
+{
+  return CIccXform::NeedsDstPcsAdjust() && IsDestPCS() && !IsSpaceSpectralPCS(m_nDestSpace);
+}
+
+
+/**
 **************************************************************************
 * Name: CIccXformMPE::CIccXformMPE
 * 

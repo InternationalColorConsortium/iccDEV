@@ -1543,6 +1543,18 @@ public:
   ///Checks if the destination space of the transform is PCS
   bool IsDestPCS() const;
 
+  /// Named-colour lookups take a PCS adjustment only when the side in question
+  /// really is a colorimetric PCS. A spectral PCS is matched against spectral
+  /// data and never reaches AdjustPCS().
+  ///
+  /// Defined out of line in IccCmm.cpp deliberately: the IsSpaceSpectralPCS()
+  /// these need is the file-local one there, which tests the five spectral PCS
+  /// signatures after icGetColorSpaceType(). IccSignatureUtils.h declares a
+  /// different function of the same name testing a single 'spc ' signature, and
+  /// because its parameter type is an exact match for icColorSpaceSignature,
+  /// including that header here would silently select the wrong predicate.
+  virtual bool NeedsSrcPcsAdjust() const;
+  virtual bool NeedsDstPcsAdjust() const;
 
   virtual LPIccCurve* ExtractInputCurves() {return NULL;}
   virtual LPIccCurve* ExtractOutputCurves() {return NULL;}
