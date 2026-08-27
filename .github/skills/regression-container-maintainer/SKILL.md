@@ -48,7 +48,7 @@ Use this skill for repeatable maintainer operations in
    wrapper in addition to the routine Docker PR envelope.
 10. For AFL/CFL work, run `iccdev-fuzz-env`, record the patch-stack counts, and
     run the smallest matching smoke (`iccdev-afl-smoke.sh --patches` or
-    `cfl/build.sh --patches`) before broader validation.
+    `.github/ci/cfl/build.sh --patches`) before broader validation.
 11. Run broader CTest or GCC 15.2 strict parity only after the focused check
     passes.
 12. Scan logs for compiler warnings, ASAN, UBSAN, and signal termination.

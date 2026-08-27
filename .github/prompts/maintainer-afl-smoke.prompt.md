@@ -14,7 +14,7 @@ command-line tools.
 - Local patch stacks: `.github/ci/fuzz-patches/afl` and
   `.github/ci/fuzz-patches/cfl`
 - Patch stack validation: `.github/scripts/check-fuzz-patches.sh`
-- CFL smoke: `cfl/build.sh` and `.github/workflows/ci-cfl-smoke.yml`
+- CFL smoke: `.github/ci/cfl/build.sh` and `.github/workflows/ci-cfl-smoke.yml`
 - Governance: `.github/instructions/workflow-governance.instructions.md`
 - Docs: `docs/afl-fuzzing.md`
 
@@ -89,7 +89,7 @@ shellcheck .github/scripts/iccdev-afl-smoke.sh
 actionlint .github/workflows/ci-afl-smoke.yml
 yamllint -d '{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable}}' .github/workflows/ci-afl-smoke.yml
 .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 30000
-cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize --seconds 30
+.github/ci/cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize --seconds 30
 ```
 
 Run `.github/scripts/preflight-safety-checks.sh --require-tools` before pushing
@@ -99,7 +99,7 @@ When changing AFL++ bootstrap behavior, also run the regression-container
 bootstrap probe documented in `docs/afl-fuzzing.md`.
 
 When changing fuzz patch stacks, the patch checker, the patch applicator, or
-`cfl/` build behavior, verify that `.github/workflows/ci-docker.yml` still
+`.github/ci/cfl/` build behavior, verify that `.github/workflows/ci-docker.yml` still
 rebuilds and tests the unified image for those paths.
 
 ## Handoff

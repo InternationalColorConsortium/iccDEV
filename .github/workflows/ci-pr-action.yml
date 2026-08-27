@@ -559,11 +559,11 @@ jobs:
             testing_changed=true
           fi
 
-          if has_changed_file '^\.github/(workflows|scripts|actions|codeql-queries)/|^\.githooks/'; then
+          if has_changed_file '^\.github/(ci|workflows|scripts|actions|codeql-queries)/|^\.githooks/'; then
             ci_changed=true
           fi
 
-          if has_changed_file '^(Dockerfile|\.dockerignore|docker/|requirements/docker-|iccdev-mcp/|\.github/workflows/ci-docker-pr\.yml|\.github/scripts/(check-workflow-cache-policy|sanitize-sed)\.sh)'; then
+          if has_changed_file '^(Dockerfile|\.dockerignore|\.github/ci/(docker|requirements)/|iccdev-mcp/|\.github/workflows/ci-docker-pr\.yml|\.github/scripts/(check-workflow-cache-policy|sanitize-sed)\.sh)'; then
             image_definition_changed=true
           fi
 

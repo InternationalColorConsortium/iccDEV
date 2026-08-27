@@ -18,7 +18,7 @@ usage() {
 }
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
-repo_root="$(cd "$script_dir/.." && pwd)"
+repo_root="$(cd "$script_dir/../../.." && pwd)"
 build_dir="${ICCDEV_CFL_BUILD_DIR:-$repo_root/build-cfl-smoke}"
 work_dir="${ICCDEV_CFL_WORK_DIR:-$repo_root/.cfl-smoke}"
 targets_csv="${ICCDEV_CFL_TARGETS:-dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize}"

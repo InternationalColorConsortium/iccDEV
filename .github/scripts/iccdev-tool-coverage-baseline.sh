@@ -701,9 +701,9 @@ run_test "cube-02" "Warm film LUT 5x5x5" \
   "$FROMCUBE" "$TD/test-warmfilm-5x5x5.cube" "$OUTDIR/warmfilm.icc"
 
 # Test with corpus cubes
-for cube_file in "$REPO_ROOT"/cfl/corpus-icc_fromcube_fuzzer/warm_film_2x2x2.cube \
-                 "$REPO_ROOT"/cfl/corpus-icc_fromcube_fuzzer/domain_with_input_range_2x2x2.cube \
-                 "$REPO_ROOT"/cfl/corpus-icc_fromcube_fuzzer/negative_domain_3x3x3.cube; do
+for cube_file in "$REPO_ROOT"/.github/ci/cfl/corpus-icc_fromcube_fuzzer/warm_film_2x2x2.cube \
+                 "$REPO_ROOT"/.github/ci/cfl/corpus-icc_fromcube_fuzzer/domain_with_input_range_2x2x2.cube \
+                 "$REPO_ROOT"/.github/ci/cfl/corpus-icc_fromcube_fuzzer/negative_domain_3x3x3.cube; do
   if [ -f "$cube_file" ]; then
     base=$(basename "$cube_file" .cube)
     run_test "cube-${base}" "Corpus cube: $base" \

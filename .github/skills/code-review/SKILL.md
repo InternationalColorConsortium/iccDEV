@@ -79,7 +79,7 @@ high-confidence, actionable findings over low-value comments.
 ## Review Flow
 
 1. Reconcile coupled surfaces in the contract matrix, including
-   Dockerfile/requirements/Dependabot, CMake/compiler/sanitizer/runtime
+   Dockerfile/.github/ci/requirements/Dependabot, CMake/compiler/sanitizer/runtime
    suppression, and workflow/helper/trust-boundary changes.
 2. Group related changed lines by root cause.
 3. Verify the highest-risk hypothesis with the smallest deterministic check.

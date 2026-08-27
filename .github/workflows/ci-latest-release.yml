@@ -1663,7 +1663,15 @@ jobs:
           test -f docs/generated/html/dot_search-lane.svg
           test -f docs/generated/html/dot_tolink-lane.svg
           test -f docs/generated/html/icc__apply__qa__suite_8sh_source.html
-          grep -q 'iccApply visual lanes' docs/generated/html/index.html
+          grep -q 'iccDEV Documentation' docs/generated/html/index.html
+          test -f docs/generated/html/curateddocumentation.html
+          test -f docs/generated/html/curatedlibraries.html
+          test -f docs/generated/html/curatedtools.html
+          test -f docs/generated/html/curatedtesting.html
+          if grep -q 'superpowers' docs/generated/html/navtreedata.js; then
+            echo "::error::Doxygen navigation contains excluded internal documentation"
+            exit 1
+          fi
           if compgen -G 'docs/generated/html/namespaceanonymous*' >/dev/null ||
              compgen -G 'docs/generated/html/structanonymous*' >/dev/null ||
              compgen -G 'docs/generated/html/classanonymous*' >/dev/null; then
@@ -1720,7 +1728,7 @@ jobs:
             echo "class hierarchy browser, call/caller graphs,"
             echo "collaboration diagrams, UML class diagrams,"
             echo "include dependency graphs, directory graphs,"
-            echo "treeview navigation, client-side search,"
+            echo "curated treeview navigation, client-side search,"
             echo "and cross-referenced inline source browser."
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 

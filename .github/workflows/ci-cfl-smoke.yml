@@ -229,7 +229,7 @@ jobs:
           echo "CFL patch mode: $(sanitize_line "$ICCDEV_CFL_PATCH_MODE_INPUT")"
           git rev-parse --verify HEAD
           git status --short
-          cfl/build.sh \
+          .github/ci/cfl/build.sh \
             --targets "$ICCDEV_CFL_TARGETS" \
             --seconds "$ICCDEV_CFL_SECONDS" \
             --build-dir "$ICCDEV_CFL_BUILD_DIR" \

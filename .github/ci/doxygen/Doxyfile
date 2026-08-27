@@ -15,8 +15,7 @@ PROJECT_BRIEF          = "ICC Color Profile Library - ProfLib, XML, JSON, Connec
 OUTPUT_DIRECTORY       = docs/generated
 HTML_OUTPUT            = html
 
-INPUT                  = README.md \
-                         IccProfLib \
+INPUT                  = IccProfLib \
                          IccXML/IccLibXML \
                          IccXML/CmdLine \
                          IccJSON/IccLibJSON \
@@ -29,14 +28,21 @@ INPUT                  = README.md \
                          examples/hello-iccdev/hello-iccdev.cpp \
                          examples/c-validation-dlopen/main.c \
                          docs \
+                         .github/ci/doxygen/curated-navigation.dox \
                          .github/ci/quality-assurance/scripts
-USE_MDFILE_AS_MAINPAGE = README.md
+USE_MDFILE_AS_MAINPAGE =
 FILE_PATTERNS          = *.h *.h.in *.hpp *.c *.cc *.cpp *.cxx *.md *.dox *.dot *.sh *.yaml *.yml
 RECURSIVE              = YES
 EXCLUDE                = docs/generated \
+                         docs/index.md \
+                         docs/documentation.md \
+                         docs/libraries.md \
+                         docs/tools.md \
+                         docs/testing.md \
+                         docs/superpowers \
+                         docs/governance/incidents \
                          docs/Testing/test-json-tools.sh \
                          IccProfLib/registry/README.md \
-                         Tools/Winnt/IccDEVCmm/README.md \
                          Build \
                          .git
 EXCLUDE_PATTERNS       = */Build/* \

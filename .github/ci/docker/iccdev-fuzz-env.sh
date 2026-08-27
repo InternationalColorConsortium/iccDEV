@@ -36,7 +36,7 @@ printf '\n'
 
 printf '%s\n' 'Examples:'
 printf '%s\n' '  .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump'
-printf '%s\n' '  cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip --seconds 30'
+printf '%s\n' '  .github/ci/cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip --seconds 30'
 printf '\n'
 
 printf '%s\n' 'Note: ci-afl-smoke rebuilds AFL++ dev wrappers against LLVM 22 before'

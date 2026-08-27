@@ -73,7 +73,7 @@
 
     Two limits on that, both worth knowing before reading a report from here.
 
-    First, the asserts are LIVE in this build.  cfl/build.sh compiles at -O1 and
+    First, the asserts are LIVE in this build.  .github/ci/cfl/build.sh compiles at -O1 and
     never defines NDEBUG, so MiniTIFF's assert(nrowBytes > 0) and its two
     <= UINT_MAX asserts still fire.  An out-of-contract geometry therefore
     aborts at the assert and ends the session BEFORE reaching the offset

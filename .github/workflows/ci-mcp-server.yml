@@ -102,6 +102,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+        with:
+          cache-binary: false
+
       - name: Validate unified Dockerfile parses
         env:
           BASH_ENV: /dev/null

@@ -104,7 +104,7 @@ under `.github/ci/test-data` is a hard error rather than a silent prune. Raise
 inputs -- they are independent gates. Validate with
 
 ```bash
-cfl/build.sh --targets profilevisualize,writerserialize --seconds 30
+.github/ci/cfl/build.sh --targets profilevisualize,writerserialize --seconds 30
 ```
 
 ## WASM Scope

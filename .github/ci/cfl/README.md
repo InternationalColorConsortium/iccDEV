@@ -26,7 +26,7 @@ input artifact.
 Run the local smoke with:
 
 ```bash
-cfl/build.sh --seconds 30
+.github/ci/cfl/build.sh --seconds 30
 ```
 
 Apply the local CFL patch stack before configuring iccDEV with `--patches`.
@@ -35,7 +35,7 @@ The
 patch branches test local fixes before they are promoted to source PRs:
 
 ```bash
-cfl/build.sh --patches --seconds 30
+.github/ci/cfl/build.sh --patches --seconds 30
 ```
 
 The default patch directory is `.github/ci/fuzz-patches/cfl`. The six command-
@@ -51,7 +51,7 @@ serialization entries it drives are not reachable from `IccVizModel` alone.
 Build and run only the in-process harnesses with:
 
 ```bash
-cfl/build.sh --targets profilevisualize,writerserialize --seconds 30
+.github/ci/cfl/build.sh --targets profilevisualize,writerserialize --seconds 30
 ```
 
 A CLUT-bearing seed has to survive into the corpus for either one to render a
@@ -67,5 +67,5 @@ consume them; they are the ClusterFuzz/OSS-Fuzz runner convention. `build.sh`
 passes `-max_len`, `-timeout`, `-rss_limit_mb` and `-use_value_profile`
 explicitly, so changing a value means changing it in both places.
 
-Do not commit generated `cfl/bin`, `.cfl-smoke`, build trees, crash artifacts,
+Do not commit generated `.github/ci/cfl/bin`, `.cfl-smoke`, build trees, crash artifacts,
 coverage output, or profiler data.
