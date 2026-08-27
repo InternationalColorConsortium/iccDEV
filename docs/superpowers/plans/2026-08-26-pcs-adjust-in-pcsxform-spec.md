@@ -82,9 +82,15 @@ both sides) still adjusts on exactly one side.
 **R5.** `m_bSrcPcsConversion`, `m_bDstPcsConversion`, `NeedAdjustSrcPCS()` and
 `NeedAdjustDstPCS()` are removed.
 
-**R6.** `CheckSrcAbs()`, `CheckDstAbs()` and `AdjustPCS()` are `protected`, so a
-third-party `CIccXform` subclass may call them from its own `Apply()`. They are
-retained and marked deprecated, not deleted.
+**R6. Superseded.** Originally: `CheckSrcAbs()`, `CheckDstAbs()` and
+`AdjustPCS()` are `protected`, so a third-party `CIccXform` subclass may call
+them from its own `Apply()`. They are retained and marked deprecated, not
+deleted. The repository owner overturned this after the fact: retaining them
+converted a compile error at a third-party call site into a silent
+double-application, because `CIccPcsXform` now performs the adjustment at the
+connection unconditionally and the flags that used to guard against a second
+application were already gone. The three functions, and the `m_AbsLab`
+scratch buffer only `CheckSrcAbs()` used, have been deleted.
 
 **R7.** `bUsePCSConversions` on `CIccCmm::Begin()` /
 `CIccNamedColorCmm::Begin()` / `CheckPCSConnections()` keeps its signature for

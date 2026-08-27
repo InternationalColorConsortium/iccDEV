@@ -528,17 +528,16 @@ public:
   /// push the steps.
   ///
   /// Answers false at a spectral PCS port. The adjustment these gate is the
-  /// XYZ media-white one, and AdjustPCS() implements it by treating the first
-  /// three samples of the pixel as X, Y and Z -- which the first three samples
-  /// of a spectral vector are not. A spectral port takes CIccPcsXform's
-  /// spectral white point conversion instead; see
+  /// XYZ media-white one, which treats the first three samples of the pixel
+  /// as X, Y and Z -- which the first three samples of a spectral vector are
+  /// not. A spectral port takes CIccPcsXform's spectral white point
+  /// conversion instead; see
   /// docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md.
   ///
   /// Reads m_bSrcSpectralPCS rather than calling the virtual GetSrcSpace()
   /// itself: GetSrcSpace() walks into the profile header, and this predicate
-  /// is asked once per port per Begin() -- and, for the deprecated
-  /// CheckSrcAbs(), once per pixel. Begin() fills the cache once, from the
-  /// same GetSrcSpace() this predicate used to call directly.
+  /// is asked once per port per Begin(), so Begin() fills the cache once,
+  /// from the same GetSrcSpace() this predicate used to call directly.
   ///
   /// Defined out of line in IccCmm.cpp for the same reason the
   /// CIccXformNamedColor overrides below are: the IsSpaceSpectralPCS() needed
@@ -565,17 +564,6 @@ public:
 
 protected:
   //Called by derived classes to initialize Base
-
-  /// Deprecated. CIccPcsXform performs all PCS adjustments as of the
-  /// CheckSrcAbs()/CheckDstAbs() retirement; no Apply() in IccProfLib calls
-  /// these any more. They are retained because they are protected and a
-  /// third-party CIccXform subclass may call them from its own Apply().
-  /// Such a subclass now applies the adjustment twice -- CIccPcsXform has
-  /// already performed it at the connection -- and should stop calling them.
-  /// See docs/pcs-adjustment-placement.md.
-  const icFloatNumber *CheckSrcAbs(CIccApplyXform *pApply, const icFloatNumber *Pixel) const;
-  void CheckDstAbs(icFloatNumber *Pixel) const;
-	void AdjustPCS(icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const;
 
   bool CheckForInvalidPCSScale() const;
 
@@ -692,8 +680,6 @@ public:
   const CIccXform *GetXform() { return m_pXform; }
 
 protected:
-  icFloatNumber m_AbsLab[3];
-
   CIccApplyXform(CIccXform *pXform);
 
   const CIccXform *m_pXform;

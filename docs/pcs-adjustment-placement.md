@@ -3,8 +3,8 @@
 `CIccXform::Apply()` performs no PCS adjustment at all. That part is
 unconditional: the guarded `CheckSrcAbs()`/`CheckDstAbs()` call sites are gone,
 along with the `m_bSrcPcsConversion`/`m_bDstPcsConversion` flags that used to
-route work through them. The three helpers themselves are retained but
-deprecated (see "Deprecated" below).
+route work through them. The three helpers themselves have since been deleted
+outright (see "Deprecated" below).
 
 Every adjustment that *is* performed -- absolute-colorimetric media-white
 scaling, the v2-perceptual black point shift, and `IIccAdjustPCSXform` hints
@@ -69,12 +69,24 @@ affects `CIccApplyBPC`'s black-point probes, which build exactly that shape.
 
 ## Deprecated
 
-`CIccXform::CheckSrcAbs()`, `CheckDstAbs()` and `AdjustPCS()` are no longer
-called from anywhere in `IccProfLib`. They are `protected` rather than private,
-so a third-party `CIccXform` subclass may call them from its own `Apply()`;
-they are kept for that reason alone. Such a subclass now applies the adjustment
-**twice** -- `CIccPcsXform` has already performed it at the connection -- and
-should stop calling them.
+### Removed: `CheckSrcAbs()`, `CheckDstAbs()`, `AdjustPCS()`
+
+`CIccXform::CheckSrcAbs()`, `CheckDstAbs()` and `AdjustPCS()` were retained for
+one revision after the call sites inside `Apply()` were removed, marked
+deprecated rather than deleted on the reasoning that they were `protected` and
+a third-party `CIccXform` subclass might still call them from its own
+`Apply()`.
+
+That reasoning was wrong, and they have since been deleted, along with the
+`m_AbsLab` scratch buffer that only `CheckSrcAbs()` used. The problem with
+retaining them: `CIccPcsXform` performs the adjustment at the connection
+unconditionally now, and the guard flags that used to suppress a second
+application (`m_bSrcPcsConversion`/`m_bDstPcsConversion`) were already gone.
+A third-party subclass still calling `CheckSrcAbs()`/`CheckDstAbs()` at a
+colorimetric PCS port applied the adjustment **twice** -- silently, because
+`m_bAdjustPCS` reads true there regardless. Retaining the functions turned
+what should have been a compile error at the caller's own line into a silent
+wrong-colour bug; deleting them restores the loud failure, which is the point.
 
 `bUsePCSConversions` on `CIccCmm::Begin()`, `CIccNamedColorCmm::Begin()` and
 `CheckPCSConnections()` is ignored. It used to select the in-xform path at an

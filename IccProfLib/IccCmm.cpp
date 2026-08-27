@@ -1779,66 +1779,6 @@ void CIccXform::ApplyN(CIccApplyXform *pXform, icFloatNumber *DstPixel, const ic
 
 /**
  **************************************************************************
-* Name: CIccXform::AdjustPCS
- * 
- * Purpose: 
-*  Deprecated -- see the declaration in IccCmm.h.  Nothing in IccProfLib
-*  calls this any more; CIccPcsXform pushes the equivalent CIccPcsSteps
-*  instead.  It is retained only for third-party CIccXform subclasses that
-*  call it (or CheckSrcAbs()/CheckDstAbs()) from their own Apply(), which
-*  now double-apply the adjustment and should stop.
-*
-*  It takes care of any PCS adjustments needed by the xform (the PCS is
-*  always version 4 relative).
- * 
- * Args: 
-*  DstPixel = Destination pixel where the result is stored,
-*  SrcPixel = Source pixel which is to be applied.
- * 
- **************************************************************************
- */
-void CIccXform::AdjustPCS(icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
-{
-  icColorSpaceSignature Space = m_pProfile->m_Header.pcs;
-
-  if (Space==icSigLabData) {
-    if (UseLegacyPCS()) {
-    	CIccPCSUtil::Lab2ToXyz(DstPixel, SrcPixel, true);
-    }
-    else {
-      CIccPCSUtil::LabToXyz(DstPixel, SrcPixel, true);
-    }
-  }
-  else {
-    DstPixel[0] = SrcPixel[0];
-    DstPixel[1] = SrcPixel[1];
-    DstPixel[2] = SrcPixel[2];
-  }
-
-  DstPixel[0] = DstPixel[0] * m_PCSScale[0] + m_PCSOffset[0];
-  DstPixel[1] = DstPixel[1] * m_PCSScale[1] + m_PCSOffset[1];
-  DstPixel[2] = DstPixel[2] * m_PCSScale[2] + m_PCSOffset[2];
-
-  if (Space==icSigLabData) {
-    if (UseLegacyPCS()) {
-
-    	CIccPCSUtil::XyzToLab2(DstPixel, DstPixel, true);
-    }
-    else {
-      CIccPCSUtil::XyzToLab(DstPixel, DstPixel, true);
-    }
-  }
-#ifndef SAMPLEICC_NOCLIPLABTOXYZ
-  else {
-    DstPixel[0] = CIccPCSUtil::NegClip(DstPixel[0]);
-    DstPixel[1] = CIccPCSUtil::NegClip(DstPixel[1]);
-    DstPixel[2] = CIccPCSUtil::NegClip(DstPixel[2]);
-  }
-#endif
-}
-
-/**
- **************************************************************************
  * Name: CIccXform::NeedsSrcPcsAdjust
  *
  * Purpose:
@@ -1846,11 +1786,12 @@ void CIccXform::AdjustPCS(icFloatNumber *DstPixel, const icFloatNumber *SrcPixel
  *  xform, so that CIccPcsXform::Connect()/ConnectFirst() can ask it at
  *  Begin() time and push the matching steps.
  *
- *  The spectral term is the substance: AdjustPCS() scales DstPixel[0..2] by
- *  m_PCSScale, i.e. it reads the first three samples of the pixel as X, Y and
- *  Z.  On a spectral PCS port those are the first three wavelength bands of a
- *  spectrum, so the media-white ratio applied to them is not a colour
- *  conversion at all -- it corrupts three bands and leaves the rest alone.
+ *  The spectral term is the substance: the XYZ media-white adjustment scales
+ *  DstPixel[0..2] by m_PCSScale, i.e. it reads the first three samples of the
+ *  pixel as X, Y and Z.  On a spectral PCS port those are the first three
+ *  wavelength bands of a spectrum, so the media-white ratio applied to them
+ *  is not a colour conversion at all -- it corrupts three bands and leaves
+ *  the rest alone.
  *  Relative and absolute spectra are related by the *spectral* white point,
  *  which CIccPcsXform applies element-wise across the whole vector; see
  *  pushSpectralWhitePointConvert() below.
@@ -1890,65 +1831,6 @@ bool CIccXform::NeedsDstPcsAdjust() const
   return m_bAdjustPCS && m_bInput && !m_bDstSpectralPCS;
 }
 
-/**
- **************************************************************************
- * Name: CIccXform::CheckSrcAbs
- * 
- * Purpose: 
- *  Deprecated -- see the declaration in IccCmm.h.  No Apply() in IccProfLib
- *  calls this any more; CIccPcsXform performs every PCS adjustment.  It is
- *  retained for third-party CIccXform subclasses that call it from their own
- *  Apply() BEFORE the actual xform is performed, to take care of Absolute to
- *  Relative adjustments (IE the PCS is always version 4 relative).  Such a
- *  subclass now applies the adjustment twice and should stop calling this.
- * 
- * Args: 
- *  Pixel = src pixel data (will not be modified)
- * 
- * Return: 
- *  returns Pixel or adjusted pixel data.
- **************************************************************************
- */
-const icFloatNumber *CIccXform::CheckSrcAbs(CIccApplyXform *pApply, const icFloatNumber *Pixel) const
-{
-  // Dispatches virtually so a derived override's extra condition
-  // (CIccXformMpe's B2D3/D2B3 test, CIccXformNamedColor's colorimetric/
-  // spectral split) is honoured here too -- the only guard left now that no
-  // Apply() in IccProfLib calls this.
-  if (NeedsSrcPcsAdjust()) {
-    icFloatNumber *pAbsLab = pApply->m_AbsLab;
-    AdjustPCS(pAbsLab, Pixel);
-    return pAbsLab;
-  }
-
-  return Pixel;
-}
-
-/**
- **************************************************************************
- * Name: CIccXform::CheckDstAbs
- * 
- * Purpose: 
- *  Deprecated -- see the declaration in IccCmm.h.  No Apply() in IccProfLib
- *  calls this any more; CIccPcsXform performs every PCS adjustment.  It is
- *  retained for third-party CIccXform subclasses that call it from their own
- *  Apply() AFTER the actual xform is performed, to take care of Absolute to
- *  Relative adjustments (IE the PCS is always version 4 relative).  Such a
- *  subclass now applies the adjustment twice and should stop calling this.
- * 
- * Args: 
- *  Pixel = source pixel data which will be modified
- *
- **************************************************************************
- */
-void CIccXform::CheckDstAbs(icFloatNumber *Pixel) const
-{
-  // Dispatches virtually -- see the note in CheckSrcAbs() above.
-  if (NeedsDstPcsAdjust()) {
-    AdjustPCS(Pixel, Pixel);
-  }
-}
-        
 /**
 **************************************************************************
 * Name: CIccXform::GetSrcSpace
@@ -2119,7 +2001,7 @@ icUInt16Number CIccXform::GetNumDstSamples() const
 *  Constructor
 **************************************************************************
 */
-CIccApplyXform::CIccApplyXform(CIccXform *pXform) : m_AbsLab{}
+CIccApplyXform::CIccApplyXform(CIccXform *pXform)
 {
   m_pXform = pXform;
 }
@@ -6117,9 +5999,9 @@ icStatusCMM CIccXformMonochrome::Begin()
 *  Does the actual application of the Xform.
 *  
 * Args:
-*  pApply = unused. It carried the CIccApplyXform scratch buffer for
-*           CheckSrcAbs(), which no longer runs here; kept for the
-*           virtual signature.
+*  pApply = unused. It carried the CIccApplyXform scratch buffer the
+*           now-removed CheckSrcAbs() used; kept for the virtual
+*           signature.
 *  DstPixel = Destination pixel where the result is stored,
 *  SrcPixel = Source pixel which is to be applied.
 **************************************************************************
@@ -6441,9 +6323,9 @@ static icFloatNumber RGBClip(icFloatNumber v, CIccCurve *pCurve)
  *  Does the actual application of the Xform.
  *  
  * Args:
- *  pApply = unused. It carried the CIccApplyXform scratch buffer for
- *           CheckSrcAbs(), which no longer runs here; kept for the
- *           virtual signature.
+ *  pApply = unused. It carried the CIccApplyXform scratch buffer the
+ *           now-removed CheckSrcAbs() used; kept for the virtual
+ *           signature.
  *  DstPixel = Destination pixel where the result is stored,
  *  SrcPixel = Source pixel which is to be applied.
  **************************************************************************
@@ -6851,9 +6733,9 @@ CIccXform3DLut::~CIccXform3DLut()
  *  Does the actual application of the Xform.
  *  
  * Args:
- *  pApply = unused. It carried the CIccApplyXform scratch buffer for
- *           CheckSrcAbs(), which no longer runs here; kept for the
- *           virtual signature.
+ *  pApply = unused. It carried the CIccApplyXform scratch buffer the
+ *           now-removed CheckSrcAbs() used; kept for the virtual
+ *           signature.
  *  DstPixel = Destination pixel where the result is stored,
  *  SrcPixel = Source pixel which is to be applied.
  **************************************************************************
@@ -7228,9 +7110,9 @@ icStatusCMM CIccXform4DLut::Begin()
  *  Does the actual application of the Xform.
  *  
  * Args:
- *  pApply = unused. It carried the CIccApplyXform scratch buffer for
- *           CheckSrcAbs(), which no longer runs here; kept for the
- *           virtual signature.
+ *  pApply = unused. It carried the CIccApplyXform scratch buffer the
+ *           now-removed CheckSrcAbs() used; kept for the virtual
+ *           signature.
  *  DstPixel = Destination pixel where the result is stored,
  *  SrcPixel = Source pixel which is to be applied.
  **************************************************************************
@@ -8029,9 +7911,9 @@ icStatusCMM CIccXformNamedColor::Begin()
  *  Does the actual application of the Xform.
  *  
  * Args:
- *  pApply = unused. It carried the CIccApplyXform scratch buffer for
- *           CheckSrcAbs(), which no longer runs here; kept for the
- *           virtual signature.
+ *  pApply = unused. It carried the CIccApplyXform scratch buffer the
+ *           now-removed CheckSrcAbs() used; kept for the virtual
+ *           signature.
  *  DstColorName = Destination string where the color name result is stored,
  *  SrcPixel = Source pixel which is to be applied.
  **************************************************************************
