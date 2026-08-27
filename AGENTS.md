@@ -77,6 +77,7 @@ shares one source of truth. Update rules here, not in the mirrors.
 | MCP subprocess debug | `.github/prompts/debug-mcp-subprocess.prompt.md` |
 | Python/Cython debug | `.github/prompts/debug-python-bindings.prompt.md` |
 | Documentation maintenance | `docs/documentation-maintenance.md` |
+| PCS adjustment placement (`CIccPcsXform` refactor) | `docs/pcs-adjustment-placement.md` |
 
 ## CFL Harness Scope
 

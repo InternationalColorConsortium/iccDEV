@@ -83,8 +83,9 @@
 // the v2 grayTRC fixture.
 //
 // Intent 1 is relative colorimetric throughout except pcs-abs, which uses 3
-// (absolute) deliberately: absolute forces the AdjustPCS/CheckSrcAbs path, so
-// the pcs-abs minus pcs-rel delta isolates PCS-adjustment cost.
+// (absolute) deliberately: absolute forces m_bAdjustPCS, so CIccPcsXform
+// pushes the PCS-adjustment steps at the connection, and the pcs-abs minus
+// pcs-rel delta isolates PCS-adjustment cost.
 //
 // That delta only exists if the two profiles disagree about the media white
 // point. The pcs pair is deliberately v2RgbLut8 (D50) -> sRGB_D65_MAT (D65) for

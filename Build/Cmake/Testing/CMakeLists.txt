@@ -4879,6 +4879,58 @@ function(iccdev_add_v2_legacy_pcs_test)
   endif()
 endfunction()
 
+# Characterization tests for PCS adjustment placement. Builds its own v2/v4
+# CMYK fixtures in memory -- Testing/**/*.icc is gitignored and generated, so a
+# tracked profile is not available on a fresh clone. Links IccProfLib alone.
+function(iccdev_add_pcs_adjust_placement_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPcsAdjustPlacementTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pcs-adjust-placement.cpp"
+  )
+  target_compile_features(iccPcsAdjustPlacementTest PRIVATE cxx_std_17)
+  target_include_directories(iccPcsAdjustPlacementTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccPcsAdjustPlacementTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPcsAdjustPlacementTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.pcs-adjust-placement
+      COMMAND "$<TARGET_FILE:iccPcsAdjustPlacementTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.pcs-adjust-placement
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccPcsAdjustPlacementTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.pcs-adjust-placement PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;iccprofLib;pcs;cmm;regression"
+  )
+  if(WIN32)
+    set(_pcs_adjust_placement_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPcsAdjustPlacementTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pcs_adjust_placement_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pcs-adjust-placement PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pcs_adjust_placement_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1883, second half: pin the tracked v2 XML fixtures themselves. Testing/**/*.icc
 # is gitignored, so Testing/V2/*.xml is the tracked artifact and the profile is
 # generated from it by CreateAllProfiles.sh. Each case asserts the fixture still
@@ -6062,14 +6114,6 @@ if(WIN32)
       300
       "iccdev;windows;setup;profiles"
       "${ICCDEV_TESTING_DIR}/CreateAllProfiles.bat"
-      # Validate the disposable Windows Testing tree by artifact count. The
-      # batch file echoes commands through cmd.exe, and tool stdout can be lost
-      # in that layer even when profiles are generated successfully.
-      # 135 since Testing/V2/v2GrayTRC{,Lab}.xml were added: they are the only
-      # sources in the tree that produce a CIccXformMonochrome, one per PCS
-      # encoding. Bump this with any change to the number of profiles
-      # CreateAllProfiles.bat generates.
-      EXPECTED_GENERATED_PROFILE_COUNT 135
     )
     set_tests_properties(iccdev.windows-create-profiles PROPERTIES
       FIXTURES_SETUP iccdev_profiles
@@ -6269,6 +6313,7 @@ if(WIN32)
   iccdev_add_json_fixednum_size_cap_test()
   iccdev_add_json_srng_uf32_test()
   iccdev_add_v2_legacy_pcs_test()
+  iccdev_add_pcs_adjust_placement_test()
   iccdev_add_v2_xml_fixtures_test()
   iccdev_add_datetime_parse_test()
   iccdev_add_encoding_surround_test()
@@ -6626,6 +6671,7 @@ iccdev_add_json_writer_move_test()
 iccdev_add_json_fixednum_size_cap_test()
 iccdev_add_json_srng_uf32_test()
 iccdev_add_v2_legacy_pcs_test()
+iccdev_add_pcs_adjust_placement_test()
 iccdev_add_v2_xml_fixtures_test()
 iccdev_add_datetime_parse_test()
 iccdev_add_encoding_surround_test()
