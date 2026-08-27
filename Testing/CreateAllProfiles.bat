@@ -250,6 +250,27 @@ REM RefEstimationImport.xml is not a standalone XML file
 
 cd ..
 
+cd HDR
+if not "%1"=="clean" goto do_HDR
+del /F/Q *.icc 2>NUL:
+goto end_HDR
+:do_HDR
+@echo on
+iccFromXml BT2100HlgFullScene.xml BT2100HlgFullScene.icc
+iccFromXml BT2100HlgNarrowScene.xml BT2100HlgNarrowScene.icc
+iccFromXml BT2100HlgFullDisplay.xml BT2100HlgFullDisplay.icc
+iccFromXml BT2100HlgNarrowDisplay.xml BT2100HlgNarrowDisplay.icc
+iccFromXml BT2100PQFullScene.xml BT2100PQFullScene.icc
+iccFromXml BT2100PQNarrowScene.xml BT2100PQNarrowScene.icc
+iccFromXml BT2100PQFullDisplay.xml BT2100PQFullDisplay.icc
+iccFromXml BT2100PQNarrowDisplay.xml BT2100PQNarrowDisplay.icc
+iccFromXml BT2100HlgSceneToDisplayLink.xml BT2100HlgSceneToDisplayLink.icc
+iccFromXml BT2100PQSceneToDisplayLink.xml BT2100PQSceneToDisplayLink.icc
+@echo off
+:end_HDR
+
+cd ..
+
 REM Issue #1883: before these, the corpus held no ICC v2 profile at all -- a clean
 REM checkout's 210 profiles are 208 v5 and 2 v4, with no 'mft2' or 'mft1' tag
 REM anywhere -- so the v2 legacy Lab encoding path was exercised by nothing. These three cover

@@ -148,6 +148,16 @@ Encoding/ISO22028-Encoded-bg-sRGB.icc	positive	valid	0	none	generated	-	conforma
 Encoding/ISO22028-Encoded-sRGB.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 Encoding/sRgbEncoding.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 Encoding/sRgbEncodingOverrides.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/BT2100HlgFullDisplay.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/BT2100HlgFullScene.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/BT2100HlgNarrowDisplay.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/BT2100HlgNarrowScene.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/BT2100HlgSceneToDisplayLink.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/BT2100PQFullDisplay.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/BT2100PQFullScene.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/BT2100PQNarrowDisplay.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/BT2100PQNarrowScene.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/BT2100PQSceneToDisplayLink.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 ICS/Lab_float-D65_2deg-Part1.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 ICS/Lab_float-IllumA_2deg-Part2.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 ICS/Lab_int-D65_2deg-Part1.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
