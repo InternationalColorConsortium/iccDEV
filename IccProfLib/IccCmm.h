@@ -619,8 +619,11 @@ protected:
 
   // NeedsSrcPcsAdjust()/NeedsDstPcsAdjust() read these instead of
   // re-deriving the answer from a virtual GetSrcSpace()/GetDstSpace() call
-  // (which, on the base implementation, walks the profile header) on every
-  // pixel Check*Abs() touches. Kept correct by refreshPcsPortCache() above,
+  // (which, on the base implementation, walks the profile header) every time
+  // they are asked. Before the CheckSrcAbs()/CheckDstAbs() retirement that
+  // was once per pixel; today it is once per port per Begin(), from
+  // CIccPcsXform::Connect()/ConnectFirst()/ConnectLast(). Kept correct by
+  // refreshPcsPortCache() above,
   // called from every site that can move a port after construction --
   // rather than by each such site recomputing IsSpaceSpectralPCS() itself,
   // which is how a first fix here (Begin() only) and a second fix (Begin()

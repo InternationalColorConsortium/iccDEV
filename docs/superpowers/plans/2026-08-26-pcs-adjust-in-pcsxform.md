@@ -1223,6 +1223,8 @@ and should stop.
 longer exists.
 ```
 
+> **UPDATE — the “retained, deprecated” call in that draft was overturned.** The repository owner ruled that retaining `CheckSrcAbs()`, `CheckDstAbs()` and `AdjustPCS()` for third-party subclasses was the wrong call: once `CIccPcsXform` performs the adjustment at the connection unconditionally, a subclass that still called these from its own `Apply()` would double-apply it silently, because `m_bAdjustPCS` reads true regardless and the flags that used to guard against a second application were already gone. Retaining them converted a compile error at the caller's own line into a silent wrong-colour bug. The three functions and the `m_AbsLab` scratch buffer `CheckSrcAbs()` used were deleted outright; see `docs/pcs-adjustment-placement.md`'s current “## Deprecated” section and R6 in [the spec](2026-08-26-pcs-adjust-in-pcsxform-spec.md) (marked superseded) for the up-to-date account. `bUsePCSConversions` remains retained-and-ignored as described above; that part did not change.
+
 - [ ] **Step 4: Commit**
 
 ```bash
@@ -1376,6 +1378,8 @@ Expected: `docs/generated/doxygen-warnings.log` empty. The new `docs/pcs-adjustm
 | `CheckSrcAbs()` / `CheckDstAbs()` / `AdjustPCS()` | retained, deprecated | third-party subclasses only | a subclass calling them now double-applies |
 | `bUsePCSConversions` | retained, ignored | `CIccCmm::Begin()`, `CIccNamedColorCmm::Begin()` | a caller passing `true` gets different behavior |
 | XYZ-PCS negative clamp | removed | any XYZ-PCS chain | negative XYZ no longer forced to zero |
+
+> **UPDATE — the `CheckSrcAbs()` / `CheckDstAbs()` / `AdjustPCS()` row above is superseded.** “Retained, deprecated” was the repository owner's original call and was later overturned by the same owner: the three functions and the `m_AbsLab` scratch buffer were deleted outright, because retaining them let a third-party subclass double-apply the adjustment silently instead of failing to compile. The live matrix is in `docs/superpowers/plans/2026-08-26-pcs-adjust-bpc-deltas.md`; the other four rows in this table are unaffected.
 
 - [ ] **Step 5: Commit and push**
 

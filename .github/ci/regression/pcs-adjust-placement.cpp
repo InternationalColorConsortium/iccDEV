@@ -893,7 +893,7 @@ static bool buildV5SpectralInputProfile(CIccProfile &p)
 // opposite of what it asserts now: that samples 0..2 of the emitted spectral
 // vector ARE modified, because CIccXform::CheckDstAbs() ran the *XYZ*
 // media-white adjustment over the first three samples of a spectral pixel and
-// left the rest alone. AdjustPCS() treats DstPixel[0..2] as X, Y and Z; the
+// left the rest alone. AdjustPCS() treated DstPixel[0..2] as X, Y and Z; the
 // first three samples of a reflectance spectrum are not X, Y and Z, so that was
 // a defect, not a behaviour to preserve. The repository owner ruled that the
 // correct conversion is element-wise against the spectral white point, and
