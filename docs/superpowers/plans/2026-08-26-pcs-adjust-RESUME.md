@@ -5,9 +5,19 @@
 **Paused:** 2026-08-26
 **Regression test:** `.github/ci/regression/pcs-adjust-placement.cpp`, 176 assertions
 
-> **All eight plan tasks and the spectral conversion are complete.** Everything
-> that remains needs a decision from the repository owner — see "Three open
-> decisions" below. Nothing is half-finished in the tree.
+> **All eight plan tasks, the spectral conversion, and the helper deletion are
+> complete.** Everything that remains needs a decision from the repository owner
+> — see "Three open decisions" below. Nothing is half-finished in the tree.
+>
+> **`CheckSrcAbs()`, `CheckDstAbs()`, `AdjustPCS()` and `m_AbsLab` are deleted**
+> (`bdbfa6a9`, `49c13bc9`). The spec's R6 originally said retain-and-deprecate;
+> the owner overturned that, and R6 is marked superseded rather than rewritten.
+> The reasoning: once `CIccPcsXform` performs the adjustment at the connection,
+> a third-party subclass still calling those from its own `Apply()` would
+> double-apply silently, because `m_bAdjustPCS` reads true regardless and the
+> suppressing flags were already gone. Retention converted a compile error at
+> the caller's own line into a silent wrong-colour bug. **This was the only new
+> hazard the branch had introduced, and deleting them removed it.**
 >
 > **One root cause explains every gap this work found.** `m_bAdjustPCS` can be
 > set on an xform with no guarantee its port is XYZ or Lab — the two
