@@ -331,8 +331,10 @@ if(ICCDEV_VERIFY_GENERATED_PROFILE_MANIFEST)
 
   file(STRINGS "${_manifest}" _manifest_lines)
   set(_manifest_generated_count 0)
+  set(_manifest_line_number 0)
   set(_missing_generated_profiles)
   foreach(_manifest_line IN LISTS _manifest_lines)
+    math(EXPR _manifest_line_number "${_manifest_line_number} + 1")
     if(_manifest_line MATCHES "^#" OR _manifest_line STREQUAL "")
       continue()
     endif()
@@ -341,7 +343,8 @@ if(ICCDEV_VERIFY_GENERATED_PROFILE_MANIFEST)
     list(LENGTH _manifest_fields _manifest_field_count)
     if(_manifest_field_count LESS 6)
       message(FATAL_ERROR
-        "${ICCDEV_TEST_NAME} found a malformed manifest row; see ${_log_file}")
+        "${ICCDEV_TEST_NAME} found a malformed manifest row at "
+        "${_manifest}:${_manifest_line_number}: ${_manifest_line}")
     endif()
 
     list(GET _manifest_fields 0 _manifest_profile)
