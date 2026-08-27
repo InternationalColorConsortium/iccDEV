@@ -1854,6 +1854,19 @@ void CIccXform::AdjustPCS(icFloatNumber *DstPixel, const icFloatNumber *SrcPixel
  *  Relative and absolute spectra are related by the *spectral* white point,
  *  which CIccPcsXform applies element-wise across the whole vector; see
  *  pushSpectralWhitePointConvert() below.
+ *
+ *  NOTE that spectral is the ONLY port kind excluded here, and it is not the
+ *  only one the X/Y/Z reading is wrong for.  An MCS port (GetDstSpace() returns
+ *  m_Header.mcs for an icToMCS xform, with no colorimetric test) reaches these
+ *  predicates unexcluded, and m_bAdjustPCS can be set on such an xform through
+ *  the IIccAdjustPCSXform hint path in Begin() above, which applies no port test
+ *  whatsoever.  Nothing then performs the adjustment -- CheckPCSConnections()
+ *  builds no CIccPcsXform at an MCS port either -- so today it is silently
+ *  dropped rather than silently wrong.  Before the CheckSrcAbs()/CheckDstAbs()
+ *  retirement it fired inside Apply() and mangled MCS channels 0..2.  See
+ *  "Known gaps" in docs/pcs-adjustment-placement.md; pinned by
+ *  pcsAdjustHintReachesANonPcsPort().  Awaiting the repository owner's ruling,
+ *  so do not add an MCS term here without reading that section first.
  **************************************************************************
  */
 bool CIccXform::NeedsSrcPcsAdjust() const
@@ -1866,7 +1879,10 @@ bool CIccXform::NeedsSrcPcsAdjust() const
  * Name: CIccXform::NeedsDstPcsAdjust
  *
  * Purpose:
- *  The destination-side mirror of NeedsSrcPcsAdjust() above.
+ *  The destination-side mirror of NeedsSrcPcsAdjust() above, including its note
+ *  about MCS ports -- which is a destination-side gap specifically, since an
+ *  icToMCS xform is an input xform and it is this predicate that answers true
+ *  for it.
  **************************************************************************
  */
 bool CIccXform::NeedsDstPcsAdjust() const

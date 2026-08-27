@@ -1,17 +1,27 @@
 # PCS adjustment placement
 
-On a colorimetric PCS, every PCS adjustment -- absolute-colorimetric
-media-white scaling, the v2-perceptual black point shift, and
-`IIccAdjustPCSXform` hints such as BPC -- is performed by `CIccPcsXform`.
-`CIccXform::Apply()` performs none: the guarded `CheckSrcAbs()`/`CheckDstAbs()`
-call sites are gone, along with the `m_bSrcPcsConversion`/`m_bDstPcsConversion`
-flags that used to route work through them. The three helpers themselves are
-retained but deprecated (see "Deprecated" below).
+`CIccXform::Apply()` performs no PCS adjustment at all. That part is
+unconditional: the guarded `CheckSrcAbs()`/`CheckDstAbs()` call sites are gone,
+along with the `m_bSrcPcsConversion`/`m_bDstPcsConversion` flags that used to
+route work through them. The three helpers themselves are retained but
+deprecated (see "Deprecated" below).
 
-On a spectral PCS the XYZ media-white adjustment does not apply at all;
-`NeedsSrcPcsAdjust()`/`NeedsDstPcsAdjust()` answer false there and
-`CIccPcsXform` pushes an element-wise spectral white point conversion instead.
-See `docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md`.
+Every adjustment that *is* performed -- absolute-colorimetric media-white
+scaling, the v2-perceptual black point shift, and `IIccAdjustPCSXform` hints
+such as BPC -- is performed by `CIccPcsXform`. But the **handover** to it
+happens only at a colorimetric PCS port. `CIccCmm::CheckPCSConnections()` builds
+a `CIccPcsXform` only where a port satisfies `IsSpaceColorimetricPCS()` or
+`IsSpaceSpectralPCS()`, and its two chain-edge blocks test only the former. The
+port kinds are not treated alike, and the differences are not all deliberate:
+
+| Port | What performs the adjustment |
+|---|---|
+| colorimetric PCS (XYZ, Lab) | `CIccPcsXform`, at the interior connection or at either chain edge |
+| spectral PCS | not the XYZ adjustment at all -- `NeedsSrcPcsAdjust()`/`NeedsDstPcsAdjust()` answer false, and `CIccPcsXform` pushes an element-wise spectral white point conversion instead. Interior connections only; a spectral chain *edge* gets nothing (see "Known gaps") |
+| MCS | nothing (see "Known gaps") |
+
+See `docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md`
+for the spectral conversion.
 
 ## Where each adjustment lands
 
@@ -73,7 +83,28 @@ interior PCS connection; there is no such path any more, so the interior
 parameter is retained for source compatibility. No caller in this tree ever
 passed `true`.
 
-## Known gap: spectral PCS at a chain edge
+## Known gaps: ports that are not a colorimetric PCS
+
+**One root cause, several symptoms.** `m_bAdjustPCS` can be set on an xform with
+no guarantee that the port the adjustment would apply to is XYZ or Lab. Two of
+the three setters in `CIccXform::Begin()` do test `IsSpacePCS(m_Header.pcs)` --
+but `m_Header.pcs` is not the same thing as the *port*, and the third setter,
+the `IIccAdjustPCSXform` hint path at `IccProfLib/IccCmm.cpp:1708-1723`, applies
+no port test whatsoever: it sets the flag purely on `CalcFactors()` returning
+true. Meanwhile `AdjustPCS()` unconditionally treats `pixel[0..2]` as X, Y and Z.
+
+Every gap below is a consequence of that one mismatch. So was the spectral
+interior connection, which used to drop the adjustment and now takes the white
+point conversion -- the one instance fully closed so far. The other two are only
+half closed: neither mangles a pixel any more, because the in-`Apply()` path that
+did the mangling is gone, but neither has been given the conversion it actually
+owes, and both are awaiting the repository owner.
+
+A reader who holds the root cause in mind will predict the next instance rather
+than discover it: look for any `GetSrcSpace()`/`GetDstSpace()` return that is
+neither XYZ nor Lab, and ask what can set `m_bAdjustPCS` for it.
+
+### Spectral PCS at a chain edge
 
 A spectral **interior** connection is handled: `CIccPcsXform::Connect()` pushes
 the element-wise spectral white point conversion on whichever side owes it.
@@ -97,3 +128,47 @@ in `.github/ci/regression/pcs-adjust-placement.cpp` pins that, and
 
 Whether the edge blocks should be widened to cover spectral ports is an open
 decision for the repository owner.
+
+### MCS ports, via an `IIccAdjustPCSXform` hint
+
+`CIccXform::GetDstSpace()` returns `m_Header.mcs` for an `icToMCS` xform, with
+no colorimetric test. `NeedsDstPcsAdjust()` excludes only spectral ports, so an
+MCS port reaches it unexcluded; `CIccXformMpe`'s override adds only an intent
+test, which is *satisfied* at a non-absolute intent rather than violated. And
+`CheckPCSConnections()` builds no `CIccPcsXform` at an MCS port -- the edge
+blocks require a colorimetric PCS, and the interior MCS clause requires the
+*next* xform to be MCS too.
+
+What reaches it: neither `IsSpacePCS(m_Header.pcs)` setter can fire on such an
+xform except at absolute intent -- the v2-perceptual branch needs `IsVersion2()`
+or `!HasPerceptualHandling()`, and an MCS xform is a v5 `CIccXformMpe`, which is
+neither. The hint path can, and does.
+
+`CIccApplyBPC` is the only in-tree `IIccAdjustPCSXform`; its `CalcFactors()` rejects
+`icAbsoluteColorimetric` and the `icSigLinkClass` / `icSigAbstractClass` /
+`icSigNamedColorClass` device classes, but it constrains the *profile*, never
+the port. An `icSigInputClass` profile carrying both `AToB0` (which the BPC
+black-point probe needs) and `AToM0`, added with `icXformLutMCS` at
+`icPerceptual` with a `CIccApplyBPCHint`, satisfies every one of those checks
+and reaches `Apply()` with `NeedsDstPcsAdjust()` true on an MCS port.
+
+Before the `CheckSrcAbs()`/`CheckDstAbs()` retirement the guard flag at that
+port was still set, so `CheckDstAbs()` ran and applied the BPC XYZ black-point
+affine to MCS channels 0..2, leaving the rest alone. Through an identity
+`AToM0` fed `0.20 0.40 0.60 0.80` that produced
+`0.213048 0.409379 0.587843 0.800000`. Today nothing performs it and the
+channels pass through unmodified -- so the retirement changed behaviour here.
+
+It is the same defect as the spectral one, in the same direction as the ruling
+already made there: MCS channels are not X, Y and Z, so the affine had no
+meaning. Restoring it would restore the corruption. But it is a behaviour change
+under a refactor whose contract was "changes no behaviour", so the ruling for
+MCS is the repository owner's. The options are the spectral three: leave it
+(the current state), build a `CIccPcsXform` at MCS ports, or reject the
+configuration at `Begin()`.
+
+`pcsAdjustHintReachesANonPcsPort()` in
+`.github/ci/regression/pcs-adjust-placement.cpp` pins the current state and is
+falsifiable in both directions: excluding MCS in the predicates flips
+`CmmProbe::inertAdjustCount()`, and building a `CIccPcsXform` there flips
+`pcsXformCount()`.
