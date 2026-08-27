@@ -1,8 +1,24 @@
 # Resume here — PCS adjustment refactor
 
 **Branch:** `refactor/pcs-adjust-in-pcsxform`, forked from `master` at `68b1b6f2`
-**Paused at:** `21333dc5`, 21 commits, every one reviewed and green
+**Paused at:** `a60ea4e1`, 29 commits, every one reviewed and green
 **Paused:** 2026-08-26
+**Regression test:** `.github/ci/regression/pcs-adjust-placement.cpp`, 176 assertions
+
+> **All eight plan tasks and the spectral conversion are complete.** Everything
+> that remains needs a decision from the repository owner — see "Three open
+> decisions" below. Nothing is half-finished in the tree.
+>
+> **One root cause explains every gap this work found.** `m_bAdjustPCS` can be
+> set on an xform with no guarantee its port is XYZ or Lab — the two
+> `IsSpacePCS(m_Header.pcs)` setters test the profile *header*, not the port,
+> and the `IIccAdjustPCSXform` hint path at
+> [IccCmm.cpp:1708-1723](../../../IccProfLib/IccCmm.cpp#L1708-L1723) tests
+> nothing at all — while `AdjustPCS()` unconditionally reads `pixel[0..2]` as
+> X, Y, Z. A spectral chain edge, a spectral interior connection and an MCS port
+> are three consequences of that single assumption. A reader who holds that in
+> mind will predict the fourth instance rather than discover it.
+> `docs/pcs-adjustment-placement.md` is the canonical statement of this.
 
 ## What is done
 
@@ -35,9 +51,42 @@ Original spec and plan: [spec](2026-08-26-pcs-adjust-in-pcsxform-spec.md),
 
 Both branches were unreachable dead code until this work made them live.
 
-## Queued work, in dependency order
+## Three open decisions — all the repository owner's
 
-### 1. Spectral fix round 1 — small, fully specified
+**A. The MCS port.** An `icToMCS` xform is an *input* xform whose destination is
+an MCS port. With a BPC hint it reaches `Apply()` with `NeedsDstPcsAdjust()`
+true and no `CIccPcsXform` handover — because `GetDstSpace()` returns
+`m_Header.mcs` with no colorimetric test, `NeedsDstPcsAdjust()` excludes only
+spectral, `CIccXformMpe`'s override adds only an intent test (and is *satisfied*
+at perceptual intent), and the edge blocks gate on `IsSpaceColorimetricPCS()`.
+Before Task 5 that applied an XYZ black-point affine to MCS channels 0-2;
+measured through an identity `AToM0` fed `0.20 0.40 0.60 0.80`, **before**
+`0.213048 0.409379 0.587843 0.800000`, **after** `0.200000 0.400000 0.600000
+0.800000`. Task 5's deletion stopped it, so **Task 5 did change behaviour**.
+The new behaviour was left in place rather than reverting to restore the
+corruption, and is pinned by `pcsAdjustHintReachesANonPcsPort()`.
+*Is stopping that affine correct — the same reasoning already ruled on for
+spectral — or should MCS ports get a defined adjustment of their own?* If the
+former, the branch stands as-is. If the latter, that is another spec.
+
+**B. The spectral chain edge.** A spectral chain *edge* gets no conversion:
+interior connections have it, edges do not. `CheckPCSConnections()` gates both
+edge blocks on `IsSpaceColorimetricPCS()`
+([:9962](../../../IccProfLib/IccCmm.cpp#L9962),
+[:10032](../../../IccProfLib/IccCmm.cpp#L10032)) and a spectral port never
+qualifies, so `ConnectFirst()`/`ConnectLast()`'s spectral branches — implemented
+and unit-tested — cannot run. Widening to `IsSpacePCS()` would complete the
+ruling already given. Deliberately not done: it is a second behaviour change
+beyond what the spectral spec authorises, and it makes two previously
+unreachable functions live for a new port type, which is where every latent bug
+on this branch was hiding. Wants its own commit and its own tests.
+
+**C. Integration.** Merge to `master` locally / push and open a PR / keep the
+branch. Not yet chosen.
+
+## Completed work that this record previously listed as queued
+
+### 1. Spectral fix round 1 — DONE (`1516fcce`, `769a34b3`, `0b8b5e9e`)
 
 One Important finding plus six Minors from the review of `21333dc5`.
 
@@ -74,7 +123,7 @@ at all; `:1249` substitutes an `icCmmStatIdentityXform` assertion for the
 spec's "returns the original spectrum" and should say so; and `IccCmm.cpp:1861`
 and `:1888` keep legacy leading tabs on two rewritten lines.
 
-### 2. Edge-gate widening — **needs the owner's decision**
+### 2. Edge-gate widening — still open, see decision B above
 
 Today a spectral chain **edge** no longer corrupts samples 0-2, but gets no
 conversion either. Wrong became absent, not correct.
@@ -98,7 +147,7 @@ used to count edge samples *after* `icGetColorSpaceType()` stripped the channel
 count, reporting 0 for every spectral edge. Fixed in `21333dc5`, latent until the
 gate widens.
 
-### 3. Task 5 — the deletions, now unblocked
+### 3. Task 5 — DONE (`ea2ca3b2`, `9f53b34b`, `a60ea4e1`)
 
 Task 5 of the original plan removes the in-`Apply()` machinery: 16 guarded
 `CheckSrcAbs()`/`CheckDstAbs()` call sites, `m_bSrcPcsConversion` /
@@ -111,7 +160,7 @@ ports. The spectral conversion has removed that dependency, so the precondition
 in the plan's Task 5 block is now satisfiable. Re-verify before deleting rather
 than assuming.
 
-### 4. Integration — unanswered
+### 4. Integration — still open, see decision C above
 
 Merge to `master` locally / push and open a PR / keep the branch. Not yet chosen.
 
