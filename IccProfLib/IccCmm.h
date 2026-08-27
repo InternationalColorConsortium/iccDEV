@@ -1932,7 +1932,7 @@ public:
   virtual icStatusCMM AddXform(CIccXform* pXform); //note pXform will be owned by the CMM
 
   //The Begin function should be called before Apply or GetNewApplyCmm()
-  /// bUsePCSConversions is ignored. It used to select an in-xform adjustment
+  /// bUsePcsConversion is ignored. It used to select an in-xform adjustment
   /// path that no longer exists; CIccPcsXform performs every PCS adjustment.
   /// The parameter is retained for source compatibility.
   virtual icStatusCMM Begin(bool bAllocNewApply=true, bool bUsePcsConversion=false);
@@ -2107,7 +2107,7 @@ public:
 
   ///Must be called before calling Apply() or GetNewApply()
   //The Begin function should be called before Apply or GetNewApplyCmm()
-  /// bUsePCSConversions is ignored. It used to select an in-xform adjustment
+  /// bUsePcsConversion is ignored. It used to select an in-xform adjustment
   /// path that no longer exists; CIccPcsXform performs every PCS adjustment.
   /// The parameter is retained for source compatibility.
   virtual icStatusCMM Begin(bool bAllocNewApply=true, bool bUsePcsConversion=false);

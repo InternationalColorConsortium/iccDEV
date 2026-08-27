@@ -1782,8 +1782,14 @@ void CIccXform::ApplyN(CIccApplyXform *pXform, icFloatNumber *DstPixel, const ic
 * Name: CIccXform::AdjustPCS
  * 
  * Purpose: 
-*  This function will take care of any PCS adjustments 
-*  needed by the xform (the PCS is always version 4 relative).
+*  Deprecated -- see the declaration in IccCmm.h.  Nothing in IccProfLib
+*  calls this any more; CIccPcsXform pushes the equivalent CIccPcsSteps
+*  instead.  It is retained only for third-party CIccXform subclasses that
+*  call it (or CheckSrcAbs()/CheckDstAbs()) from their own Apply(), which
+*  now double-apply the adjustment and should stop.
+*
+*  It takes care of any PCS adjustments needed by the xform (the PCS is
+*  always version 4 relative).
  * 
  * Args: 
 *  DstPixel = Destination pixel where the result is stored,
@@ -6095,12 +6101,14 @@ icStatusCMM CIccXformMonochrome::Begin()
 *  Does the actual application of the Xform.
 *  
 * Args:
-*  pApply = ApplyXform object containing temporary storage used during Apply
+*  pApply = unused. It carried the CIccApplyXform scratch buffer for
+*           CheckSrcAbs(), which no longer runs here; kept for the
+*           virtual signature.
 *  DstPixel = Destination pixel where the result is stored,
 *  SrcPixel = Source pixel which is to be applied.
 **************************************************************************
 */
-void CIccXformMonochrome::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
+void CIccXformMonochrome::Apply(CIccApplyXform*  /* pApply */, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
 {
 	icFloatNumber Pixel[3];
   
@@ -6417,12 +6425,14 @@ static icFloatNumber RGBClip(icFloatNumber v, CIccCurve *pCurve)
  *  Does the actual application of the Xform.
  *  
  * Args:
- *  pApply = ApplyXform object containging temporary storage used during Apply
+ *  pApply = unused. It carried the CIccApplyXform scratch buffer for
+ *           CheckSrcAbs(), which no longer runs here; kept for the
+ *           virtual signature.
  *  DstPixel = Destination pixel where the result is stored,
  *  SrcPixel = Source pixel which is to be applied.
  **************************************************************************
  */
-void CIccXformMatrixTRC::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
+void CIccXformMatrixTRC::Apply(CIccApplyXform*  /* pApply */, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
 {
   icFloatNumber Pixel[3];
 
@@ -6825,12 +6835,14 @@ CIccXform3DLut::~CIccXform3DLut()
  *  Does the actual application of the Xform.
  *  
  * Args:
- *  pApply = ApplyXform object containing temporary storage used during Apply
+ *  pApply = unused. It carried the CIccApplyXform scratch buffer for
+ *           CheckSrcAbs(), which no longer runs here; kept for the
+ *           virtual signature.
  *  DstPixel = Destination pixel where the result is stored,
  *  SrcPixel = Source pixel which is to be applied.
  **************************************************************************
  */
-void CIccXform3DLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
+void CIccXform3DLut::Apply(CIccApplyXform*  /* pApply */, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
 {
   icFloatNumber Pixel[16];
   int i;
@@ -7200,12 +7212,14 @@ icStatusCMM CIccXform4DLut::Begin()
  *  Does the actual application of the Xform.
  *  
  * Args:
- *  pApply = ApplyXform object containging temporary storage used during Apply
+ *  pApply = unused. It carried the CIccApplyXform scratch buffer for
+ *           CheckSrcAbs(), which no longer runs here; kept for the
+ *           virtual signature.
  *  DstPixel = Destination pixel where the result is stored,
  *  SrcPixel = Source pixel which is to be applied.
  **************************************************************************
  */
-void CIccXform4DLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
+void CIccXform4DLut::Apply(CIccApplyXform*  /* pApply */, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
 {
   icFloatNumber Pixel[16];
   int i;
@@ -7999,12 +8013,14 @@ icStatusCMM CIccXformNamedColor::Begin()
  *  Does the actual application of the Xform.
  *  
  * Args:
- *  pApply = ApplyXform object containging temporary storage used during Apply
+ *  pApply = unused. It carried the CIccApplyXform scratch buffer for
+ *           CheckSrcAbs(), which no longer runs here; kept for the
+ *           virtual signature.
  *  DstColorName = Destination string where the color name result is stored,
  *  SrcPixel = Source pixel which is to be applied.
  **************************************************************************
  */
-icStatusCMM CIccXformNamedColor::Apply(CIccApplyXform* pApply, icChar *DstColorName, const icFloatNumber *SrcPixel) const
+icStatusCMM CIccXformNamedColor::Apply(CIccApplyXform*  /* pApply */, icChar *DstColorName, const icFloatNumber *SrcPixel) const
 {
 
   if (m_pArray) {
