@@ -120,12 +120,31 @@ jobs:
             ICCDEV_TEST_OUTDIR="$BUILD_JSON/Testing/ctest-output/ci-json-create-profiles" \
             bash CreateAllProfiles.sh 2>&1 | tee "$CREATE_LOG"
 
-          profile_parse_count="$(grep -c 'Profile parsed and saved correctly' "$CREATE_LOG" || true)"
-          if [ "$profile_parse_count" -eq 0 ]; then
-            echo "[FAIL] Test-profile generation completed without producing a profile"
+          if ! awk -F '\t' '
+            $0 !~ /^[[:space:]]*($|#)/ && NF < 6 { malformed = 1 }
+            END { exit malformed }
+          ' qa-profile-manifest.tsv; then
+            echo "[FAIL] qa-profile-manifest.tsv contains a malformed row"
             exit 1
           fi
-          echo "[OK] Generated ${profile_parse_count} test profiles"
+
+          expected_generated_count=0
+          while IFS=$'\t' read -r profile_path _ _ _ _ source _; do
+            if [ "$source" != "generated" ]; then
+              continue
+            fi
+            expected_generated_count=$((expected_generated_count + 1))
+            if [ ! -f "$profile_path" ]; then
+              echo "[FAIL] Missing manifest-declared generated profile: ${profile_path}"
+              exit 1
+            fi
+          done < <(awk -F '\t' '$1 !~ /^#/ && NF >= 6 { print }' qa-profile-manifest.tsv)
+
+          if [ "$expected_generated_count" -eq 0 ]; then
+            echo "[FAIL] qa-profile-manifest.tsv declares no generated profiles"
+            exit 1
+          fi
+          echo "[OK] Generated profile manifest satisfied (${expected_generated_count} profiles)"
 
       - name: Refresh trusted sanitizer helpers for round-trip
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
