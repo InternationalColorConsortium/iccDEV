@@ -161,14 +161,11 @@ REPO_ROOT="$(git -C "$TESTING_DIR" rev-parse --show-toplevel 2>/dev/null || echo
 # profiles git tracks. Testing/hybrid/ICC and Testing/hybrid/Results are excluded
 # because they are not corpus at all: iccdev.hybrid-pipeline writes its own output
 # there while the suite runs, and Testing/hybrid/.gitignore - a committed file - says
-# so, listing "ICC/*.icc" and "Results/*.icc" as generated artifacts. Testing/HDR is
-# likewise produced by HDR/mkprofiles.sh for the hybrid pipeline, not by
-# CreateAllProfiles.sh. Without these exclusions the manifest test is
-# ordering-dependent, and the difference is not something a verdict baseline should
-# adjudicate.
+# so, listing "ICC/*.icc" and "Results/*.icc" as generated artifacts. Without these
+# exclusions the manifest test is ordering-dependent, and the difference is not
+# something a verdict baseline should adjudicate.
 list_corpus() {
   find "$TESTING_DIR" -name '*.icc' \
-    ! -path "$TESTING_DIR/HDR/*" \
     ! -path "$TESTING_DIR/hybrid/ICC/*" \
     ! -path "$TESTING_DIR/hybrid/Results/*" \
     | sort
