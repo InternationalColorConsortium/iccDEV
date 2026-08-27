@@ -39,7 +39,7 @@ updates:
     open-pull-requests-limit: 5
 
   - package-ecosystem: "pip"
-    directory: "/requirements"
+    directory: "/.github/ci/requirements"
     schedule:
       interval: "weekly"
       day: "monday"

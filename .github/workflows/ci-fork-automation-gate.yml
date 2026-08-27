@@ -98,7 +98,7 @@ jobs:
           fi
 
           protected_paths=()
-          protected_pattern='^(\.github/(workflows|scripts|actions|codeql-queries|instructions|skills|prompts|agents)/|\.github/copilot-instructions\.md$|\.agents/|(.*/)?(AGENTS|CLAUDE|GEMINI)\.md$|\.githooks/|Dockerfile(\..*)?$|\.dockerignore$|Build/Cmake/|cmake/|scripts/|docker/|iccdev-mcp/docker/)|(^|/)(CMakeLists\.txt|[^/]+\.cmake)$'
+          protected_pattern='^(\.github/(ci|workflows|scripts|actions|codeql-queries|instructions|skills|prompts|agents)/|\.github/copilot-instructions\.md$|\.agents/|(.*/)?(AGENTS|CLAUDE|GEMINI)\.md$|\.githooks/|Dockerfile(\..*)?$|\.dockerignore$|Build/Cmake/|cmake/|scripts/|iccdev-mcp/docker/)|(^|/)(CMakeLists\.txt|[^/]+\.cmake)$'
           for changed_file in "${changed_files[@]}"; do
             if [[ "$changed_file" =~ $protected_pattern ]]; then
               protected_paths+=("$changed_file")

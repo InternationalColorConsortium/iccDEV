@@ -114,7 +114,7 @@ ENV CC=clang \
 RUN groupadd --system iccdev-ci \
  && useradd --system --gid iccdev-ci --home-dir /workspace --create-home --shell /bin/bash iccdev-ci
 
-COPY --chown=iccdev-ci:iccdev-ci requirements /workspace/iccDEV/requirements
+COPY --chown=iccdev-ci:iccdev-ci .github/ci/requirements /workspace/iccDEV/.github/ci/requirements
 
 RUN python3 -m venv /opt/iccdev-spectral-preview \
  && /opt/iccdev-spectral-preview/bin/python -m pip install \
@@ -125,7 +125,7 @@ RUN python3 -m venv /opt/iccdev-spectral-preview \
  && /opt/iccdev-spectral-preview/bin/python -m pip install \
       --only-binary=:all: \
       --no-cache-dir \
-      -r /workspace/iccDEV/requirements/docker-spectral-preview.txt \
+      -r /workspace/iccDEV/.github/ci/requirements/docker-spectral-preview.txt \
       --quiet \
  && /opt/iccdev-spectral-preview/bin/python -m pip check \
  && /opt/iccdev-spectral-preview/bin/python -c 'import imagecodecs,numpy,PIL,tifffile; print(f"imagecodecs {imagecodecs.__version__}"); print(f"numpy {numpy.__version__}"); print(f"pillow {PIL.__version__}"); print(f"tifffile {tifffile.__version__}")' \
@@ -152,7 +152,7 @@ RUN python3 -m venv /opt/iccdev-workflow-qa \
  && /opt/iccdev-workflow-qa/bin/python -m pip install \
       --only-binary=:all: \
       --no-cache-dir \
-      -r /workspace/iccDEV/requirements/docker-workflow-qa.txt \
+      -r /workspace/iccDEV/.github/ci/requirements/docker-workflow-qa.txt \
       --quiet \
  && /opt/iccdev-workflow-qa/bin/python -m pip check \
  && ln -s /opt/iccdev-workflow-qa/bin/zizmor /usr/local/bin/zizmor \
@@ -164,9 +164,9 @@ RUN python3 -m venv /opt/iccdev-workflow-qa \
       /opt/iccdev-workflow-qa/lib/python*/site-packages/pip-*.dist-info
 
 COPY --chown=iccdev-ci:iccdev-ci . /workspace/iccDEV
-COPY --chmod=0755 docker/iccdev-banner.sh /usr/local/bin/iccdev-banner
-COPY --chmod=0755 docker/iccdev-fuzz-env.sh /usr/local/bin/iccdev-fuzz-env
-COPY --chmod=0755 docker/iccdev-generate-profiles.sh /usr/local/bin/iccdev-generate-profiles
+COPY --chmod=0755 .github/ci/docker/iccdev-banner.sh /usr/local/bin/iccdev-banner
+COPY --chmod=0755 .github/ci/docker/iccdev-fuzz-env.sh /usr/local/bin/iccdev-fuzz-env
+COPY --chmod=0755 .github/ci/docker/iccdev-generate-profiles.sh /usr/local/bin/iccdev-generate-profiles
 COPY --chmod=0755 iccdev-mcp/docker/docker-entrypoint.sh /usr/local/bin/iccdev-mcp-entrypoint
 
 RUN find /workspace/iccDEV/.github/scripts -maxdepth 1 -type f -name '*.sh' -exec chmod 0755 '{}' +

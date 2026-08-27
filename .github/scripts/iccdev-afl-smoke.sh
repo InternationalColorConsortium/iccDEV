@@ -28,7 +28,7 @@ work_dir="${AFL_WORK_DIR:-$repo_root/.afl-smoke}"
 build_type="${AFL_BUILD_TYPE:-Debug}"
 exec_timeout_ms="${AFL_EXEC_TIMEOUT_MS:-30000}"
 # Raised from 49152 to admit the whole committed seed corpus, matching
-# cfl/build.sh after #2120. Exactly one committed seed exceeds the old default --
+# .github/ci/cfl/build.sh after #2120. Exactly one committed seed exceeds the old default --
 # .github/ci/test-data/fuzz-clut-hbo-69197729.icc at 61,015 bytes -- so every AFL
 # smoke run staged that file and then deleted it again before fuzzing.
 #
@@ -344,7 +344,7 @@ prune_large_seeds() {
             # traced only by the TSV line below and the summary it feeds.
             #
             # So committed seeds are never pruned, they are a hard error, as in
-            # cfl/build.sh. Adding an oversized regression seed now forces an
+            # .github/ci/cfl/build.sh. Adding an oversized regression seed now forces an
             # explicit decision about the cap. Generated seeds still prune
             # silently, which is what the cap is for.
             if committed_source="$(committed_seed_source "$(basename "$file")")"; then

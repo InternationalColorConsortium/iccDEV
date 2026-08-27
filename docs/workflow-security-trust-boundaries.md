@@ -34,7 +34,7 @@ the base commit's sanitizer helpers, and obtains changed file names through the
 GitHub API. It never checks out, sources, or executes fork content.
 
 For a fork PR, changes to workflows, repository scripts, actions, hooks,
-Docker files, root `docker/`, `iccdev-mcp/docker/`, CMake/build configuration,
+Docker files, `.github/ci/docker/`, `iccdev-mcp/docker/`, CMake/build configuration,
 any `CMakeLists.txt` or `.cmake` file, root `scripts/`, or agent-policy surfaces
 fail the gate and receive the existing `Governance` label. Agent-policy surfaces
 are `.github/copilot-instructions.md`, `.github/instructions/**`,

@@ -29,7 +29,7 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
 
    ```bash
    .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 30000
-   cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize --seconds 30
+   .github/ci/cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize --seconds 30
    ```
 
 4. When changing AFL++ bootstrap behavior, validate the regression-container
@@ -91,7 +91,7 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
   maintainer-local patch stacks when `--patches` is requested.
 - Keep `ci-docker.yml` push paths and regression-image verification in sync
   with AFL/CFL patch-stack helpers so container rebuilds happen when the
-  checker, applicator, smoke script, `cfl/`, or fuzz patches change.
+  checker, applicator, smoke script, `.github/ci/cfl/`, or fuzz patches change.
 - Run `.github/scripts/check-fuzz-patches.sh` after editing either patch stack
   so malformed hunks or stale context are caught before workflow dispatch.
 - Keep manual AFL and CFL workflow inputs aligned: `target_ref` selects the
