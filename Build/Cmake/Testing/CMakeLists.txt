@@ -6050,13 +6050,16 @@ endfunction()
 
 if(WIN32)
   function(iccdev_add_windows_batch_test NAME TIMEOUT LABELS SCRIPT)
+    set(_options
+      VERIFY_GENERATED_PROFILE_MANIFEST
+    )
     set(_one_value_args
       EXPECTED_PROFILE_PARSE_COUNT
       EXPECTED_GENERATED_PROFILE_COUNT
       EXPECTED_OUTPUT
       FORBIDDEN_REGEX
     )
-    cmake_parse_arguments(ICCDEV_WIN_TEST "" "${_one_value_args}" "" ${ARGN})
+    cmake_parse_arguments(ICCDEV_WIN_TEST "${_options}" "${_one_value_args}" "" ${ARGN})
 
     if(NOT EXISTS "${SCRIPT}")
       message(STATUS "Skipping ${NAME}: ${SCRIPT} not found")
@@ -6082,6 +6085,11 @@ if(WIN32)
     if(DEFINED ICCDEV_WIN_TEST_EXPECTED_GENERATED_PROFILE_COUNT)
       list(APPEND _test_args
         "-DICCDEV_EXPECTED_GENERATED_PROFILE_COUNT=${ICCDEV_WIN_TEST_EXPECTED_GENERATED_PROFILE_COUNT}")
+    endif()
+
+    if(ICCDEV_WIN_TEST_VERIFY_GENERATED_PROFILE_MANIFEST)
+      list(APPEND _test_args
+        "-DICCDEV_VERIFY_GENERATED_PROFILE_MANIFEST=ON")
     endif()
 
     if(DEFINED ICCDEV_WIN_TEST_EXPECTED_OUTPUT)
@@ -6114,6 +6122,7 @@ if(WIN32)
       300
       "iccdev;windows;setup;profiles"
       "${ICCDEV_TESTING_DIR}/CreateAllProfiles.bat"
+      VERIFY_GENERATED_PROFILE_MANIFEST
     )
     set_tests_properties(iccdev.windows-create-profiles PROPERTIES
       FIXTURES_SETUP iccdev_profiles

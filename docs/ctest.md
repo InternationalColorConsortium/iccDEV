@@ -126,6 +126,7 @@ before running the suite.
 | `iccdev.applytolink-invalid-decoded-intent` | `Build/Cmake/Testing/CMakeLists.txt` |
 | `iccdev.applytolink-v4-missing-device-descriptions` | `Build/Cmake/Testing/CMakeLists.txt` |
 | `iccdev.xform-abstorel-adjust` | `.github/ci/regression/xform-abstorel-adjust.cpp` |
+| `iccdev.pcs-adjust-placement` | `.github/ci/regression/pcs-adjust-placement.cpp` |
 | `iccdev.reflectance-observer-illum-range` | `.github/ci/regression/reflectance-observer-illum-range.cpp` |
 | `iccdev.pcs-edge-metadata` | `.github/ci/regression/pcs-edge-metadata.cpp` |
 | `iccdev.parser-restore-calls` | `.github/ci/regression/parser-restore-calls.cpp` |
@@ -389,12 +390,12 @@ For repeatable agent-assisted work, use
    - Set labels and a timeout.
    - Add `FIXTURES_REQUIRED iccdev_profiles` when the test needs generated
      profiles.
-3. Update hard-coded coverage counts when generated profile counts change:
-   - Windows profile parse count in `Build/Cmake/Testing/CMakeLists.txt`.
-   - JSON profile parse count in `.github/workflows/ci-json-roundtrip.yml`.
-     Keep these in sync with `Testing/CreateAllProfiles.sh` and
-     `Testing/CreateAllProfiles.bat`.
-   - WASM expected ICC count in `Build/Cmake/wasm-package/regression.js`,
+3. Update `Testing/qa-profile-manifest.tsv` when generated profiles change.
+   The Windows profile setup and JSON round-trip workflow verify that every
+   manifest-declared generated profile exists after generation. Keep the
+   manifest in sync with `Testing/CreateAllProfiles.sh` and
+   `Testing/CreateAllProfiles.bat`.
+   Update the WASM expected ICC count in `Build/Cmake/wasm-package/regression.js`,
      `.github/workflows/ci-pr-wasm.yml`, `.github/workflows/ci-pr-action.yml`,
      and `.github/workflows/ci-latest-release.yml` when
      `Testing/CreateAllProfiles.sh` changes the generated-profile set.
