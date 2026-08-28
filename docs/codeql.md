@@ -17,11 +17,27 @@ Run local analysis with:
 .github/scripts/run-codeql-local.sh
 ```
 
+The bootstrap path in `ci-codeql-security.yml` and
+`ci-preflight-safety.yml` is pinned to CodeQL bundle 2.26.4 and verifies the
+official Linux release-asset SHA-256 before extraction. Update the version and
+digest together in both workflows.
+
 The GitHub Actions CodeQL workflow uploads only the standard
 `cpp-security-and-quality` SARIF. Run custom iccDEV query suites locally and
 attach report excerpts to issues or PRs only after maintainer triage.
 This includes the division-by-zero profile query, which has produced useful
 fixes but also guard-sensitive false positives.
+For `unbounded-profile-loop`, trace the full profile-to-tool path before
+synthesizing a PoC. A guard in `Begin()` may establish an Apply-path invariant;
+alerts #999, #1000, and #1647 are the reference case. If every tool path
+propagates the setup failure, add a focused query regression with both a
+suppressed guarded case and a reported unguarded control. Do not use a direct
+library call that violates the public Begin-before-Apply contract as evidence
+of profile reachability.
+Similarly, do not classify internal scheduler state or an allocation-sized
+derived count as profile-controlled solely because its member name contains
+`count`. Alerts #2360 and #881 are the narrow reference exclusions; retain the
+type-and-field scope when maintaining them.
 The XML narrowing query is scoped to high-signal channel and spectral-step
 attributes; broader enum, reserved, storage-type, and explicit-cast cases are
 left for separate local experiments.

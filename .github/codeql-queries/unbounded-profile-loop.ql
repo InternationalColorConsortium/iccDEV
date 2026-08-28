@@ -30,6 +30,21 @@ predicate accessesField(Expr e, Field field) {
 }
 
 /**
+ * Fields whose names resemble profile counts but whose values are bounded
+ * internal or derived state.
+ *
+ * Keep these exclusions type-and-field specific. A broad `job` or `count`
+ * exemption would hide real profile-controlled loops elsewhere.
+ */
+predicate isKnownBoundedNonProfileField(Field field) {
+  field.getDeclaringType().getName() = "CIccApplyThreadedCmmPool" and
+  field.getName() = "m_jobCount"
+  or
+  field.getDeclaringType().getName() = "CIccSampledCalculatorCurve" and
+  field.getName() = "m_nCount"
+}
+
+/**
  * Holds if `condition` compares `field` directly against the size of a
  * container - `field > v.size()`, `s.length() < field`, and so on.
  *
@@ -105,9 +120,13 @@ predicate hasSetupBoundGuardInSameType(Field field) {
       // this predicate's own purpose, and did: the clamp behind alerts
       // #2345-#2348 sits in CIccApplyCmmSearch's constructor, so every loop
       // reading the field from another method was reported as unguarded.
+      // Begin methods establish the corresponding Apply-path invariants in
+      // iccDEV. Omitting Begin produced alerts #999, #1000, and #1647 even
+      // after CIccCLUT::Begin() checked m_nNodes <= 65536 and every CMM caller
+      // propagated its false return before Apply() (issue #2313).
       setup instanceof Constructor
       or
-      setup.getName().regexpMatch("(?i).*(open|create|init|read|validate|load|parse|set).*")
+      setup.getName().regexpMatch("(?i).*(begin|open|create|init|read|validate|load|parse|set).*")
     ) and
     conditionMentionsFieldAndBound(guard.getCondition(), field)
   )
@@ -121,6 +140,11 @@ where
   fa.getTarget().getName().regexpMatch("(?i).*(count|num|size|length|steps|nInput|nOutput|m_n).*") and
   // The field is from a class/struct (not a local)
   exists(fa.getTarget().getDeclaringType()) and
+  // Exclude narrowly identified internal/derived counters. Alert #2360's
+  // m_jobCount is scheduler state capped by the 256-thread limit and sized
+  // m_jobs vector. Alert #881's m_nCount is allocation-sized state populated
+  // only after Begin() clamps nSize to ICC_MAXCALCCURVESIZE before SetSize().
+  not isKnownBoundedNonProfileField(fa.getTarget()) and
   // Exempt loops with a cooperative-cancellation guard in the condition
   // (e.g., && sink.ShouldContinue()) - bounded by IDescribeSink contract.
   not loop.getCondition().getAChild*().toString().matches("%ShouldContinue%") and

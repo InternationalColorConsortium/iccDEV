@@ -16,5 +16,10 @@ labels using `docs/label-system.md` and
    missing or drifted managed labels.
 5. Report affected consumers, expected API writes, and any manual migration
    required.
+6. For issues labeled `CodeQL`, distinguish an alert-only report from completed
+   technical triage. Keep `needs-triage` when there is no parser-to-tool
+   reachability evidence or false-positive rationale. Accept a false-positive
+   classification only when it names the guarding setup method, shows failure
+   propagation, and retains an unguarded query-test control.
 
 Return evidence and recommendations only. Do not edit labels or workflows.

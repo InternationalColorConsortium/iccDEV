@@ -1,0 +1,1 @@
+| case.cpp:35:5:36:17 | for(...;...;...) ... | Loop iteration count controlled by profile field 'm_nCount' without upper bound validation. Malformed profiles can cause DoS (CWE-400/CWE-834). |

@@ -18,15 +18,20 @@ manual findings involving iccDEV command-line tools.
 
 ## Workflow
 
-1. Build from a clean CMake cache with sanitizer flags.
-2. Verify sanitizer linkage before claiming coverage.
-3. Run the exact reproduction command and capture exit code plus stderr.
-4. Classify exit codes: `0` success, `1-127` graceful failure, `128+` signal.
-5. Attribute root cause from sanitizer stack frames, not PoC filenames.
-6. Inspect tool argument semantics before writing a one-liner. If a tool
+1. For a CodeQL alert, establish profile-to-tool reachability before creating a
+   PoC. Trace parser, `Begin()`, and `Apply()` return propagation. If setup
+   rejects the field and every tool caller propagates failure, classify the
+   alert as a query false positive and add a guarded plus unguarded query test;
+   do not force reachability with a direct API call that violates the contract.
+2. Build from a clean CMake cache with sanitizer flags.
+3. Verify sanitizer linkage before claiming coverage.
+4. Run the exact reproduction command and capture exit code plus stderr.
+5. Classify exit codes: `0` success, `1-127` graceful failure, `128+` signal.
+6. Attribute root cause from sanitizer stack frames, not PoC filenames.
+7. Inspect tool argument semantics before writing a one-liner. If a tool
    appends channel numbers, expands prefixes, or parses config files, preserve
    that behavior in the command instead of copying artifacts to synthetic names.
-7. For sanitizer noise triage, distinguish runtime suppressions from compile-time
+8. For sanitizer noise triage, distinguish runtime suppressions from compile-time
    ignorelists:
    - Use `Testing/silence.txt` only for recoverable runtime UBSAN suppressions.
    - Use `.github/ci/ubsan-ignorelist.txt` plus a rebuild for fatal
@@ -37,11 +42,11 @@ manual findings involving iccDEV command-line tools.
      `*/include/c++/*/bits/...` can be noise; project-owned `Icc*`, `Tools`,
      `IccConnect`, AFL, and CFL paths stay actionable unless a separate source
      fix or issue proves otherwise.
-8. Minimize reproduction steps while keeping them copy-pasteable. When a
+9. Minimize reproduction steps while keeping them copy-pasteable. When a
    maintainer asks for no substitutions, the command must start with the tool
    binary and use literal arguments only; do not use shell variables, loops,
    `mktemp`, or copy helpers.
-9. File or update issues using the canonical security format.
+10. File or update issues using the canonical security format.
 
 ## Build
 
