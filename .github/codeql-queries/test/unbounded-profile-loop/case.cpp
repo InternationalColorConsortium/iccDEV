@@ -1,3 +1,12 @@
+/*
+ * Copyright (c) 2026 International Color Consortium.
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the conditions in the
+ * ICC Software License are met.
+ */
+
 void consume(unsigned int value);
 
 class BeginGuarded {
