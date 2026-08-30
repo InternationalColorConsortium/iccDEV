@@ -63,6 +63,9 @@ Canonical regression scripts:
 - `.github/scripts/iccdev-cam-degenerate-regression-tests.sh`
 - `.github/scripts/iccdev-namedcolor-apply-regression-tests.sh`
 - `.github/scripts/iccdev-v5-namedcmm-regression-tests.sh`
+- `.github/scripts/iccdev-namedcolor-overprint-regression-tests.sh`
+- `.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh`
+- `.github/scripts/iccdev-applysearch-cli-args-regression.sh`
 
 For regression workflow updates, use
 `.github/skills/regression-workflow-governance/SKILL.md` and

@@ -50,6 +50,10 @@ when practical.
   current total.
 - Adding checks inside `iccdev-tool-coverage-baseline.sh` does not change that
   count; validate the direct script and `ctest -R '^iccdev\.tool-coverage$'`.
+- If a change touches legacy packed intent decoding or named-color overprint
+  variants, include both `.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh`
+  and `.github/scripts/iccdev-applysearch-cli-args-regression.sh`, plus
+  `.github/scripts/iccdev-namedcolor-overprint-regression-tests.sh`.
 - Windows full builds include focused executable regressions, batch-backed
   suites, dump/profile smoke coverage, shared-export coverage, and PAWG report
   coverage.

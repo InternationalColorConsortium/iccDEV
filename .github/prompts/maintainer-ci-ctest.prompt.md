@@ -80,6 +80,10 @@ Choose the smallest gate that proves the behavior:
 - When adding cases inside an existing script-backed suite, document that the
   CTest suite count is unchanged and validate both direct script execution and
   the CTest wrapper.
+- For legacy packed intent decoding or named-color overprint behavior, include
+  `.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh`,
+  `.github/scripts/iccdev-applysearch-cli-args-regression.sh`, and
+  `.github/scripts/iccdev-namedcolor-overprint-regression-tests.sh` in the focused validation.
 - When changing generated-profile totals, update every assertion source. For
   WASM parity this includes `Build/Cmake/wasm-package/regression.js`,
   `.github/workflows/ci-pr-wasm.yml`, `.github/workflows/ci-pr-action.yml`, and
