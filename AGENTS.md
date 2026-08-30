@@ -23,6 +23,11 @@ shares one source of truth. Update rules here, not in the mirrors.
 - Exit 1-127 is graceful failure. Exit 128+ is signal termination.
 - Use sanitizer builds for bug hunting; see `.github/instructions/build-system.instructions.md`.
 - Add the nearest regression test for behavior fixes.
+- For legacy packed intent decoding and named-color overprint behavior, keep
+  `iccApplyNamedCmm` and `iccApplySearch` coverage aligned with
+  `.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh`,
+  `.github/scripts/iccdev-applysearch-cli-args-regression.sh`, and
+  `.github/scripts/iccdev-namedcolor-overprint-regression-tests.sh`.
 - Before the first automated review, record a `base...HEAD` contract matrix for
   every changed cross-cutting surface: producer, consumer, build/runtime
   behavior, platform or toolchain boundary, CI trigger, dependency owner, and
