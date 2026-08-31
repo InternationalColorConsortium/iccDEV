@@ -1,5 +1,5 @@
 # Runtime-only dependencies for the Docker spectral-preview environment.
 numpy==2.5.2
-tifffile==2026.8.16
+tifffile==2026.8.23
 pillow==12.3.0
 imagecodecs==2026.8.16
