@@ -5798,8 +5798,21 @@ void CIccPcsStepSparseMatrix::Apply(CIccApplyPcsStep * /* pApply */, icFloatNumb
 {
   // Matrix built once in BeginStep(). This used to construct a CIccSparseMatrix
   // here, which allocated and freed on every pixel -- see BeginStep().
-  if (m_pMtx)
+  if (m_pMtx) {
     m_pMtx->MultiplyVector(pDst, pSrc);
+    return;
+  }
+
+  // BeginStep() did not run, so fall back to the pre-hoist behaviour rather
+  // than return with pDst never written. Apply() cannot report an error, and a
+  // silent early return leaves the caller's destination vector holding whatever
+  // the buffer happened to contain -- which is the same garbage for every
+  // pixel, so a whole image renders one flat colour that changes from run to
+  // run (#2332 follow-up). The local matrix is constructed per call, which is
+  // exactly the cost the hoist removed, but it is correct and thread safe.
+  CIccSparseMatrix mtx((icUInt8Number*)m_vals, m_nBytesPerMatrix, icSparseMatrixFloatNum, true);
+
+  mtx.MultiplyVector(pDst, pSrc);
 }
 
 
@@ -9825,6 +9838,7 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
   (void)bUsePCSConversions;  // see header: retained for source compatibility
 
   icStatusCMM rv = icCmmStatOk;
+  icStatusCMM rvBegin;
 
   CIccXformList::iterator last, next;
   CIccXformList xforms;
@@ -9857,6 +9871,21 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
       }
 
       if (rv != icCmmStatIdentityXform) {
+        // Nothing upstream will Begin() this object. CIccCmm::Begin() and
+        // CIccNamedColorCmm::Begin() both run their per-xform Begin() loop over
+        // m_Xforms *before* calling this function and neither revisits the list
+        // afterwards, so every CIccPcsXform in the chain -- all of which are
+        // built right here -- would otherwise reach Apply() unbegun, and any
+        // step that defers work to BeginStep() would never receive it. Begin()
+        // is safe to call now and not before: ConnectFirst() ends with
+        // Optimize(), so the step list is final. The same three lines follow the
+        // interior Connect() and the trailing ConnectLast() below.
+        rvBegin = pPcs->Begin();
+        if (rvBegin != icCmmStatOk) {
+          delete pPcs;
+          return rvBegin;
+        }
+
         ptr.ptr = pPcs;
         xforms.push_back(ptr);
 
@@ -9894,6 +9923,14 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
         }
 
         if (rv!=icCmmStatIdentityXform) {
+          // Begin() the object here for the reason given at the leading edge
+          // above: nothing else in the CMM ever will.
+          rvBegin = pPcs->Begin();
+          if (rvBegin != icCmmStatOk) {
+            delete pPcs;
+            return rvBegin;
+          }
+
           // A real conversion is needed: ownership of pPcs passes to the xform
           // list, which frees it when the CMM is destroyed.
           ptr.ptr = pPcs;
@@ -9927,6 +9964,14 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
       }
 
       if (rv != icCmmStatIdentityXform) {
+        // Begin() the object here for the reason given at the leading edge
+        // above: nothing else in the CMM ever will.
+        rvBegin = pPcs->Begin();
+        if (rvBegin != icCmmStatOk) {
+          delete pPcs;
+          return rvBegin;
+        }
+
         ptr.ptr = pPcs;
         xforms.push_back(ptr);
 
