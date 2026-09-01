@@ -149,6 +149,10 @@ if(NOT _read_result MATCHES "^-?[0-9]+$")
   message(FATAL_ERROR "[${LABEL}] reader did not run: ${_read_result}")
 endif()
 
+if(NOT _read_result EQUAL 0)
+  message(FATAL_ERROR "[${LABEL}] reader failed with exit ${_read_result}")
+endif()
+
 # REJECT_VERDICT is checked before EXPECT_VERDICT so the failure message names the
 # problem the file actually has rather than the string that was missing.
 if(DEFINED REJECT_VERDICT AND NOT "${REJECT_VERDICT}" STREQUAL "")
