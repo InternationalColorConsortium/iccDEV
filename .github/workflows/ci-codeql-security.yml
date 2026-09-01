@@ -224,21 +224,21 @@ jobs:
 
       - name: Upload standard CodeQL SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3  # v4
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4
         with:
           sarif_file: codeql-results/cpp-security-and-quality.sarif
           category: iccdev-standard-cpp-security-and-quality
 
       - name: Upload iccDEV custom SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3  # v4
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4
         with:
           sarif_file: codeql-results/iccdev-security.sarif
           category: iccdev-custom-security
 
       - name: Upload IccJSON/IccConnect custom SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3  # v4
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4
         with:
           sarif_file: codeql-results/iccdev-jsonlib-security.sarif
           category: iccdev-jsonlib-security
