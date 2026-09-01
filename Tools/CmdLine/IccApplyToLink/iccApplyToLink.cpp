@@ -467,10 +467,25 @@ public:
         pCurve0->GetSamples()[0] = 0;
         pCurve0->GetSamples()[1] = 1;
 
+        // Every input channel samples the same [range_min, range_max] domain, so
+        // one curve is shared across all of them -- CIccMpeCurveSet is built for
+        // that: SetCurve() only deletes the outgoing pointer when no other slot
+        // still aliases it, ~CIccMpeCurveSet()/SetSize(0) dedupe before deleting,
+        // and Write() emits the curve once with every position-table entry
+        // pointing at it.
+        //
+        // The loop counter was unused: it wrote slot 1 nSrcSamples-1 times and
+        // left slots 2..n-1 NULL (#2341). Write() skips a NULL slot instead of
+        // failing, so those channels kept the calloc'd {offset 0, size 0}
+        // position entry and the writer still reported success -- an RGB link
+        // was emitted, and rejected on read with "AToB0Tag - Tag has invalid
+        // structure!". A 1-channel source never enters the loop and a 2-channel
+        // source has slot 1 as its only iteration, so both were already correct
+        // -- which is why this survived since 889db62b.
         pCurves->SetCurve(0, pCurve0);
 
         for (icUInt16Number i = 1; i < nSrcSamples; i++) {
-          pCurves->SetCurve(1, pCurve0);
+          pCurves->SetCurve(i, pCurve0);
         }
 
         pTag->Attach(pCurves);
