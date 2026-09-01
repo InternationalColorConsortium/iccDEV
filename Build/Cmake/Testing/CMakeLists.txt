@@ -5956,6 +5956,49 @@ function(iccdev_add_spectral_clut_channel_count_test)
   endif()
 endfunction()
 
+# The sampled-curve half of the same guard retirement clut-apply-guard-retirement
+# covers. Those three removals were not redundant: m_range is a difference of two
+# unvalidated wire floats, NaN == 0.0 is false, so Begin()'s zero-span test never
+# excluded a NaN span and Apply() cast a NaN to a sample index (#2324, #2347).
+# The two sampled curves now refuse a non-finite span in Begin(); the sampled
+# segment cannot, because its outer segments are legitimately sentinel-bounded,
+# so it keeps the per-pixel guard. This test links IccProfLib alone and calls
+# functions only, so it needs no corpus fixture and runs on every platform.
+function(iccdev_add_sampled_curve_nonfinite_range_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSampledCurveNonFiniteRangeTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/sampled-curve-nonfinite-range.cpp"
+  )
+  target_link_libraries(iccSampledCurveNonFiniteRangeTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccSampledCurveNonFiniteRangeTest)
+
+  add_test(
+    NAME iccdev.sampled-curve-nonfinite-range
+    COMMAND "$<TARGET_FILE:iccSampledCurveNonFiniteRangeTest>"
+  )
+  set_tests_properties(iccdev.sampled-curve-nonfinite-range PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;iccprofLib;mpe;curve;apply;security;regression"
+  )
+  if(WIN32)
+    set(_sampled_curve_nonfinite_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSampledCurveNonFiniteRangeTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _sampled_curve_nonfinite_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.sampled-curve-nonfinite-range PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_sampled_curve_nonfinite_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_clut_apply_guard_retirement_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -6383,6 +6426,7 @@ if(WIN32)
   iccdev_add_spectral_clut_channel_count_test()
   iccdev_add_spectral_clut_xml_channel_mismatch_test()
   iccdev_add_clut_apply_guard_retirement_test()
+  iccdev_add_sampled_curve_nonfinite_range_test()
 
   if(TARGET iccFromXml AND TARGET iccDumpProfile AND TARGET iccApplyNamedCmm)
     add_test(
@@ -6741,6 +6785,7 @@ iccdev_add_zip_utf8_text_zlib_test()
 iccdev_add_spectral_clut_channel_count_test()
 iccdev_add_spectral_clut_xml_channel_mismatch_test()
 iccdev_add_clut_apply_guard_retirement_test()
+iccdev_add_sampled_curve_nonfinite_range_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")
