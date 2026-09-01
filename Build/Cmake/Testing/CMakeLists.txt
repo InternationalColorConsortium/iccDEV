@@ -2965,6 +2965,159 @@ function(iccdev_add_applytolink_v4_missing_desc_test)
   endif()
 endfunction()
 
+# #2341: CDevLinkWriter::begin() wrote curve-set slot 1 nSrcSamples-1 times.
+#
+# The V5 branch attaches a CIccMpeCurveSet when the input range is not the default
+# [0,1], sharing one CIccSingleSampledCurve across every input channel -- which the
+# class supports: SetCurve() only deletes an outgoing pointer no other slot still
+# aliases, and Write() emits a shared curve once with every position-table entry
+# pointing at it. The loop that filled slots 1..n-1 ignored its own counter and
+# wrote index 1 each pass, so slots 2..n-1 stayed NULL. Write() skips a NULL slot
+# instead of failing, leaving those channels the calloc'd {offset 0, size 0}
+# position entry, and the writer reported success.
+#
+# Which is why these assert the READ-BACK file, not the writer. On the unfixed
+# tool every case below exits 0 and prints "LUT successfully written": an
+# exit-status or message assertion, the shape every other iccApplyToLink test in
+# this file uses, passes against the defect.
+#
+# The verdict alone is not enough either, and that is measured rather than
+# assumed. An earlier version of this block asserted only "Profile is valid", and
+# replacing the curve-set condition in CDevLinkWriter::begin() with if(false) --
+# dropping the input-domain curves from every V5 link -- left every test green,
+# because a link with no curve set is perfectly valid. So the cases also assert
+# the structure: EXPECT_DUMP_COUNT pins one per-channel curve carrying the
+# requested domain for every input channel, and the default-range case asserts
+# the curve set is ABSENT.
+#
+# The defect needs a source space with at least THREE channels: a 1-channel
+# source never enters the loop, and for a 2-channel source the loop's single
+# iteration (i=1) writes slot 1, which is the slot it should write. Both are
+# therefore correct on the unfixed tool, which is how this survived from
+# 889db62b (2023-11-03) until now.
+#
+# The pair below is what pins it, and the two are jointly sufficient -- each of
+# the four mutations that matter turns at least one of them red, measured:
+#   RGB at 0.001..0.999  -- red for the original bug, for dropping the curve set,
+#                           and for filling the extra channels with the wrong
+#                           domain. EXPECT_DUMP_COUNT=3 is what carries the
+#                           general claim "one curve per input channel", which is
+#                           why a wider source is not needed to state it.
+#   RGB at 0 1           -- valid on BOTH trees; takes the branch that attaches
+#                           no curve set, so REJECT_DUMP asserts the absence the
+#                           other asserts the presence of. Red if the range
+#                           condition is widened to attach one unconditionally.
+# The second is a control and is not optional: without it a "fix" that attached a
+# curve set to every link would satisfy the first.
+#
+# Deliberately NOT registered: CMYK (4 channels) and Gray (1 channel) cases,
+# which ran green locally and turned all three Windows legs red -- MSVC, ClangCL
+# and MinGW alike -- with
+#   Error - Unable to add '...' to transform chain (status 3: Invalid profile)
+# for Testing/CMYK-3DLUTs/CMYK-3DLUTs.icc and Testing/Display/GrayGSDF.icc. Both
+# validate clean here and both are written by CreateAllProfiles.bat reporting
+# "Profile parsed and saved correctly", so the divergence is in reading them back,
+# not in generating them, and it is not understood. It is also invisible today:
+# no other CTest in this file uses either profile, and the manifest check that
+# would validate them is a script test, which is not registered on Windows at all.
+# That is a separate defect from #2341 and is reported separately; gating those
+# two cases to non-Windows here would have buried it. Every fixture used above is
+# tracked in git rather than generated, which is what makes the pair portable.
+function(iccdev_add_applytolink_curveset_channels_tests)
+  if(NOT TARGET iccApplyToLink OR NOT TARGET iccDumpProfile)
+    return()
+  endif()
+
+  add_dependencies(check iccApplyToLink iccDumpProfile)
+  add_dependencies(check-fast iccApplyToLink iccDumpProfile)
+
+  set(_applytolink_curveset_tests "")
+
+  # Spelled out rather than looped: foreach() flattens a "name;profile;range"
+  # element into separate iterations, so the grouping would not survive it -- the
+  # same reason the negative-intent pairs above are written out.
+  #
+  # The EXPECT_DUMP regex has two deliberate properties, both established by
+  # measurement rather than by reading.
+  #
+  # It must run through the closing bracket. string(REGEX MATCHALL) returns only
+  # ONE match for a pattern that stops mid-line -- "Single Sampled Curve
+  # \\[0\\.00100000" counts 1 against a dump holding three identical lines, while
+  # the same pattern extended to "\\]" counts 3. A truncated pattern would
+  # therefore fail every count here for a reason that has nothing to do with the
+  # profile, so the pattern is anchored to the end of the printed value.
+  #
+  # The trailing digits are matched as [0-9]* rather than spelled out.
+  # CIccSingleSampledCurve::Describe() renders the domain with %.8f
+  # (IccMpeBasic.cpp:1576) and icFloatNumber is unconditionally float
+  # (IccDefs.h:88), so "0.99900001" is deterministic -- but the Windows legs
+  # cannot be exercised locally, and this drops a printf last-digit-rounding
+  # assumption at no cost: the domain is still pinned to 0.999x, and the wrong
+  # domain a mis-fix produces renders "0.00000000, 1.00000000", which fails.
+  add_test(
+    NAME iccdev.applytolink-curveset-rgb-channels
+    COMMAND "${CMAKE_COMMAND}"
+      "-DWRITER=$<TARGET_FILE:iccApplyToLink>"
+      "-DREADER=$<TARGET_FILE:iccDumpProfile>"
+      "-DLABEL=applytolink-curveset"
+      "-DWRITER_ARGS=${ICCDEV_TEST_OUTDIR}/applytolink-curveset-rgb.icc;0;3;1;CurveSetRGB;0.001;0.999;1;0;${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc;0"
+      "-DEXPECT_VERDICT=Profile is valid"
+      "-DREJECT_VERDICT=Critical Error|Unable to parse"
+      "-DEXPECT_DUMP=Single Sampled Curve \\[0\\.00100000, 0\\.999[0-9]*\\]"
+      "-DEXPECT_DUMP_COUNT=3"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunDeviceLinkRoundTripTest.cmake"
+  )
+  list(APPEND _applytolink_curveset_tests iccdev.applytolink-curveset-rgb-channels)
+
+
+
+  # Control: the same RGB chain at the default range, which takes the branch that
+  # attaches no curve set. This is the case that fixes the range condition in
+  # place: REJECT_DUMP asserts the absence the other three assert the presence of,
+  # so widening the condition to attach a curve set unconditionally is red here
+  # while narrowing it to attach one never is red in the three above.
+  add_test(
+    NAME iccdev.applytolink-curveset-default-range
+    COMMAND "${CMAKE_COMMAND}"
+      "-DWRITER=$<TARGET_FILE:iccApplyToLink>"
+      "-DREADER=$<TARGET_FILE:iccDumpProfile>"
+      "-DLABEL=applytolink-curveset"
+      "-DWRITER_ARGS=${ICCDEV_TEST_OUTDIR}/applytolink-curveset-default-range.icc;0;3;1;CurveSetDefault;0;1;1;0;${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc;0"
+      "-DEXPECT_VERDICT=Profile is valid"
+      "-DREJECT_VERDICT=Critical Error|Unable to parse"
+      "-DREJECT_DUMP=BEGIN_CURVE_SET"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunDeviceLinkRoundTripTest.cmake"
+  )
+  list(APPEND _applytolink_curveset_tests iccdev.applytolink-curveset-default-range)
+
+  set_tests_properties(${_applytolink_curveset_tests} PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;tools;applytolink;mpe;curveset;issue-2341;regression"
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+
+  if(WIN32)
+    # Both tools are reached through cmake -P and inherit this test process's
+    # PATH, so both need the runtime paths -- the reader as much as the writer.
+    # A missing IccProfLib2.dll makes iccDumpProfile print nothing, and an empty
+    # report matches no EXPECT_VERDICT, so this presents as a verdict mismatch
+    # rather than as a load failure.
+    set(_applytolink_curveset_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccApplyToLink>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccDumpProfile>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _applytolink_curveset_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(${_applytolink_curveset_tests} PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_applytolink_curveset_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_fileio_getlength_position_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -6419,6 +6572,7 @@ if(WIN32)
   iccdev_add_applytolink_invalid_arg_test()
   iccdev_add_applytolink_negative_intent_tests()
   iccdev_add_applytolink_v4_missing_desc_test()
+  iccdev_add_applytolink_curveset_channels_tests()
   iccdev_add_prmg_hue_normalization_test()
   iccdev_add_qa_evidence_helpers_test()
   iccdev_add_windows_iccdevcmm_smoke_test()
@@ -6489,6 +6643,7 @@ endif()
 iccdev_add_applytolink_invalid_arg_test()
 iccdev_add_applytolink_negative_intent_tests()
 iccdev_add_applytolink_v4_missing_desc_test()
+iccdev_add_applytolink_curveset_channels_tests()
 
 set(ICCDEV_TIMEOUT_COMPAT_DIR "")
 if(NOT WIN32)
