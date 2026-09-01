@@ -54,7 +54,7 @@ RUN apt-get update \
     libtiff-tools=4.7.0-3ubuntu5 \
     liblzma-dev=5.8.3-1 \
     libpng-dev=1.6.57-1 \
-    libssl-dev=3.5.5-1ubuntu3.4 \
+    libssl-dev=3.5.5-1ubuntu3.5 \
     libtiff-dev=4.7.0-3ubuntu5 \
     libwxgtk3.2-dev=3.2.9+dfsg-1 \
     zlib1g=1:1.3.dfsg+really1.3.1-1ubuntu3 \
@@ -69,7 +69,7 @@ RUN apt-get update \
     make=4.4.1-3 \
     nano=8.7.1-1ubuntu0.1 \
     nlohmann-json3-dev=3.12.0.really.3.12.0.really.3.11.3-3build1 \
-    openssl-provider-legacy=3.5.5-1ubuntu3.4 \
+    openssl-provider-legacy=3.5.5-1ubuntu3.5 \
     pkg-config=2.5.1-4 \
     python3=3.14.3-0ubuntu2 \
     python3-dev=3.14.3-0ubuntu2 \
