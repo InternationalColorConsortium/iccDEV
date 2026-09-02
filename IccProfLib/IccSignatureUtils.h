@@ -633,6 +633,13 @@ inline bool IsValidColorSpaceSignature(icUInt32Number sig)
 //   This should be used to verify the `technology` field in `profileDescription`
 //   tags or `outputDevice` blocks.
 //
+//   CAVEAT: it rejects icSigUndefined (0), which CIccTagProfileSeqDesc::Validate
+//   accepts as "technology not defined" and which is a common real-world value --
+//   iccFromCube writes it (Tools/CmdLine/IccFromCube/iccFromCube.cpp:624). Gating a
+//   profileSequenceDesc entry on this predicate alone therefore rejects legitimate
+//   profiles; test for zero separately. It matches CIccTagSignature::Validate, where a
+//   technologyTag holding zero is genuinely non-compliant (#2101).
+//
 // HISTORY:
 //   Instrumented and standardized by David Hoyt on 01-MAR-2025.
 //   V2: Gate logging behind ICC_SIGNATURE_VERBOSE. 19-MAR-2026 DHOYT.
@@ -666,6 +673,15 @@ inline bool IsValidTechnologySignature(icUInt32Number sig)
     case (icUInt32Number)icSigOffsetLithography:
     case (icUInt32Number)icSigSilkscreen:
     case (icUInt32Number)icSigFlexography:
+
+    // Same four ICC.1 v4.3 rows missing from CIccInfo::GetTechnologySigName().  This
+    // header ships as a public API, so its answer disagreeing with
+    // CIccTagSignature::Validate is visible to consumers even though nothing in the
+    // tree calls it today (#2101).
+    case (icUInt32Number)icSigMotionPictureFilmScanner:
+    case (icUInt32Number)icSigMotionPictureFilmRecorder:
+    case (icUInt32Number)icSigDigitalMotionPictureCamera:
+    case (icUInt32Number)icSigDigitalCinemaProjector:
       return true;
 
     default:

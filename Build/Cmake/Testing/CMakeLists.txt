@@ -4636,6 +4636,19 @@ function(iccdev_add_signature_utils_contract_test)
     "${ICCDEV_REPO_ROOT}/.github/ci/regression/signature-utils-contract.cpp"
   )
   target_compile_features(iccSignatureUtilsContractTest PRIVATE cxx_std_17)
+
+  # expectedTechnologyName() is an exhaustive switch with no default label, so a new
+  # icTechnologySignature member makes it incomplete.  -Wswitch alone only warns, and
+  # this target is EXCLUDE_FROM_ALL (iccdev_add_regression_executable above), so the one
+  # -Werror lane -- ci-pr-gcc15.yml, which builds the default `all` target and greps its
+  # log for "warning:" -- never compiles this file and never sees it.  Promote it here so
+  # the guard is a build failure on the lanes that DO build this target (`check` /
+  # `build-test-binaries`) rather than a warning nobody reads.  MSVC's nearest equivalent
+  # (C4062) is off by default and is not promoted; the GCC/clang lanes carry this one.
+  if(NOT MSVC)
+    target_compile_options(iccSignatureUtilsContractTest PRIVATE -Werror=switch)
+  endif()
+
   target_include_directories(iccSignatureUtilsContractTest PRIVATE
     "${ICCDEV_REPO_ROOT}/IccProfLib"
   )

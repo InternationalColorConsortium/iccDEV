@@ -10953,6 +10953,16 @@ icValidateStatus CIccTagProfileSeqDesc::Validate(std::string sigPath, std::strin
     case icSigOffsetLithography:
     case icSigSilkscreen:
     case icSigFlexography:
+
+    // The same four ICC.1 v4.3 rows CIccTagSignature::Validate already accepts.  Without
+    // them a profileSequenceDesc entry recording a legal technology was reported
+    // NonCompliant here while the identical signature in a technologyTag validated, and
+    // once GetSigName() names them the message read "MotionPictureFilmScanner: Unknown
+    // Technology" -- naming the signature and calling it unknown in one line (#2101).
+    case icSigMotionPictureFilmScanner:
+    case icSigMotionPictureFilmRecorder:
+    case icSigDigitalMotionPictureCamera:
+    case icSigDigitalCinemaProjector:
       break;
 
     default:
