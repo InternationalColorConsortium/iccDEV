@@ -28,6 +28,104 @@ static std::vector<icFloatNumber> MakeZeroVector(size_t n)
   return v;
 }
 
+static int TestThreadedSearch(const char* profilePath)
+{
+  CIccCfgSearchApply search_apply;
+  for (int i = 0; i < 3; ++i) {
+    CIccCfgProfilePtr profile(new CIccCfgProfile());
+    profile->m_iccFile = profilePath;
+    profile->m_intent = icRelativeColorimetric;
+    profile->m_transform = icXformLutColor;
+    profile->m_interpolation = icInterpTetrahedral;
+    search_apply.m_profiles.push_back(profile);
+  }
+
+  CIccCfgPccWeightPtr pcc_weight(new CIccCfgPccWeight());
+  pcc_weight->m_pccPath = profilePath;
+  pcc_weight->m_dWeight = 1.0f;
+  search_apply.m_pccWeights.push_back(pcc_weight);
+
+  std::string default_error;
+  std::string scalar_error;
+  std::string automatic_error;
+  std::string threaded_error;
+  std::unique_ptr<CIccConnectCmm> default_cmm(
+    CIccConnectCmm::CreateSearch(search_apply, &default_error));
+  std::unique_ptr<CIccConnectCmm> scalar(
+    CIccConnectCmm::CreateSearch(search_apply, &scalar_error, 1));
+  std::unique_ptr<CIccConnectCmm> automatic(
+    CIccConnectCmm::CreateSearch(search_apply, &automatic_error, 0));
+  std::unique_ptr<CIccConnectCmm> threaded(
+    CIccConnectCmm::CreateSearch(search_apply, &threaded_error, 4));
+  if (!default_cmm || !default_cmm->GetSearchCmm() ||
+      default_cmm->IsThreaded()) {
+    std::fprintf(stderr, "default search CMM did not retain the scalar path: %s\n",
+                 default_error.c_str());
+    return 1;
+  }
+  if (!scalar || !scalar->GetSearchCmm()) {
+    std::fprintf(stderr, "failed to create scalar search CMM: %s\n", scalar_error.c_str());
+    return 1;
+  }
+  if (scalar->IsThreaded()) {
+    std::fprintf(stderr, "explicit one-thread search CMM used a threaded wrapper\n");
+    return 1;
+  }
+  if (!automatic || !automatic->GetSearchCmm() || !automatic->IsThreaded()) {
+    std::fprintf(stderr, "failed to create automatic-thread search CMM: %s\n",
+                 automatic_error.c_str());
+    return 1;
+  }
+  if (!threaded || !threaded->GetSearchCmm() || !threaded->IsThreaded()) {
+    std::fprintf(stderr, "failed to create threaded search CMM: %s\n",
+                 threaded_error.c_str());
+    return 1;
+  }
+
+  CIccCmm* defaultCmm = default_cmm->GetCmm();
+  CIccCmm* scalarCmm = scalar->GetCmm();
+  CIccCmm* automaticCmm = automatic->GetCmm();
+  CIccCmm* threadedCmm = threaded->GetCmm();
+  const int nSrcSamples = scalarCmm->GetSourceSamples();
+  const int nDstSamples = scalarCmm->GetDestSamples();
+  const icUInt32Number nPixels = 1024;
+  std::vector<icFloatNumber> src = MakeZeroVector(nPixels * nSrcSamples);
+  std::vector<icFloatNumber> defaultDst = MakeZeroVector(nPixels * nDstSamples);
+  std::vector<icFloatNumber> scalarDst = MakeZeroVector(nPixels * nDstSamples);
+  std::vector<icFloatNumber> automaticDst = MakeZeroVector(nPixels * nDstSamples);
+  std::vector<icFloatNumber> threadedDst = MakeZeroVector(nPixels * nDstSamples);
+
+  for (icUInt32Number p = 0; p < nPixels; ++p) {
+    for (int c = 0; c < nSrcSamples; ++c)
+      src[p * nSrcSamples + c] = static_cast<icFloatNumber>((p + c) % 17) / 16.0f;
+  }
+
+  if (defaultCmm->Apply(defaultDst.data(), src.data(), nPixels) != icCmmStatOk ||
+      scalarCmm->Apply(scalarDst.data(), src.data(), nPixels) != icCmmStatOk ||
+      automaticCmm->Apply(automaticDst.data(), src.data(), nPixels) != icCmmStatOk) {
+    std::fprintf(stderr, "search multi-pixel apply failed\n");
+    return 1;
+  }
+
+  for (int pass = 0; pass < 8; ++pass) {
+    if (threadedCmm->Apply(threadedDst.data(), src.data(), nPixels) != icCmmStatOk) {
+      std::fprintf(stderr, "threaded search multi-pixel apply failed on pass %d\n", pass);
+      return 1;
+    }
+  }
+
+  for (size_t i = 0; i < scalarDst.size(); ++i) {
+    if (!NearlyEqual(defaultDst[i], scalarDst[i]) ||
+        !NearlyEqual(scalarDst[i], automaticDst[i]) ||
+        !NearlyEqual(scalarDst[i], threadedDst[i])) {
+      std::fprintf(stderr, "search output mismatch at %zu\n", i);
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
 int main(int argc, char** argv)
 {
   if (argc < 2) {
@@ -130,5 +228,5 @@ int main(int argc, char** argv)
     }
   }
 
-  return 0;
+  return TestThreadedSearch(argv[1]);
 }

@@ -70,6 +70,7 @@
 
 
 #include "IccCmmSearch.h"
+#include "IccCmmThread.h"
 #include "IccUtil.h"
 #include "IccDefs.h"
 #include "IccMpeCalc.h"
@@ -78,6 +79,7 @@
 #include "IccSearch.h"
 #include "IccConnect.h"
 #include "IccCmdLineUtil.h"
+#include <cerrno>
 #include <cstdlib>  // EXIT_FAILURE, used by the -cfg argument guard added in #2075
 #include <memory>
 #include <vector>
@@ -206,9 +208,10 @@ bool IsSpacePCS( const icColorSpaceSignature &x )
 void Usage()
 {
   printf("iccApplySearch built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
-  printf("Usage 1: iccApplySearch -cfg config_file_path\n");
+  printf("Usage 1: iccApplySearch {-threads N} -cfg config_file_path\n");
+  printf("  Optional: -threads N (0=hardware concurrency, 1=single-threaded)\n");
   printf("  Where config_file_path is a json formatted ICC profile application configuration file\n\n");
-  printf("Usage 2: iccApplySearch {-debugcalc} data_file_path encoding[:precision[:digits]] interpolation {-ENV:tag value} profile1_path intent1 {{-ENV:tag value} middle_profile_path mid_intent} {-ENV:tag value} profile2_path intent2 -INIT init_intent2 {pcc_path1 weight1 ...}\n");
+  printf("Usage 2: iccApplySearch {-threads N} {-debugcalc} data_file_path encoding[:precision[:digits]] interpolation {-ENV:tag value} profile1_path intent1 {{-ENV:tag value} middle_profile_path mid_intent} {-ENV:tag value} profile2_path intent2 -INIT init_intent2 {pcc_path1 weight1 ...}\n");
   
   printf("  For final_data_encoding:\n");
   printf("    0 - icEncodeValue (converts to/from lab encoding when samples=3)\n");
@@ -246,6 +249,10 @@ void Usage()
 int main(int argc, const char* argv[])
 {
   int minargs = 3;  // name -cfg file.json
+  if (argc > 1 && !stricmp(argv[1], "-threads") && argc < 3) {
+    printf("Missing thread count for -threads\n");
+    return EXIT_FAILURE;
+  }
   if (argc < minargs) {
     Usage();
     return 0;
@@ -254,6 +261,26 @@ int main(int argc, const char* argv[])
   CIccCfgDataApply cfgApply;
   CIccCfgSearchApply cfgSearchApply;
   CIccCfgColorData cfgData;
+  int nThreads = 1;
+
+  if (argc > 2 && !stricmp(argv[1], "-threads")) {
+    char* end = nullptr;
+    errno = 0;
+    long parsed = strtol(argv[2], &end, 10);
+    if (errno || !end || end == argv[2] || *end || parsed < 0 ||
+        parsed > CIccThreadedCmm::GetMaxThreads()) {
+      printf("Invalid thread count '%s'\n", argv[2]);
+      return EXIT_FAILURE;
+    }
+    nThreads = (int)parsed;
+    argv += 2;
+    argc -= 2;
+
+    if (argc < minargs) {
+      Usage();
+      return EXIT_FAILURE;
+    }
+  }
 
   if (!stricmp(argv[1], "-cfg")) {
     // Usage 1 is exactly "-cfg <path>"; every setting comes from the JSON file, so
@@ -405,6 +432,11 @@ int main(int argc, const char* argv[])
     return -1;
   }
 
+  if (cfgApply.m_debugCalc && nThreads != 1) {
+    printf("-debugcalc requires -threads 1\n");
+    return EXIT_FAILURE;
+  }
+
   LogDebuggerPtr pDebugger;
   
   if (cfgApply.m_debugCalc) {
@@ -423,7 +455,7 @@ int main(int argc, const char* argv[])
 
   std::string sConnectError;
   std::unique_ptr<CIccConnectCmm> pConnect(
-    CIccConnectCmm::CreateSearch(cfgSearchApply, &sConnectError));
+    CIccConnectCmm::CreateSearch(cfgSearchApply, &sConnectError, nThreads));
 
   if (!pConnect) {
     if (!sConnectError.empty())
@@ -478,6 +510,55 @@ int main(int argc, const char* argv[])
 
   outData.m_srcEncoding = srcEncoding;
 
+  if (nThreads != 1) {
+    std::vector<CIccCfgDataEntry*> entries;
+    for (const auto& data : cfgData.m_data) {
+      if (data)
+        entries.push_back(data.get());
+    }
+
+    std::vector<icFloatNumber> srcPixels(entries.size() * nSrcSamples);
+    std::vector<icFloatNumber> dstPixels(entries.size() * nDestSamples);
+    std::vector<CIccCfgDataEntryPtr> outputs;
+    outputs.reserve(entries.size());
+
+    for (size_t index = 0; index < entries.size(); ++index) {
+      CIccCfgDataEntry* pData = entries[index];
+      CIccCfgDataEntryPtr out(new CIccCfgDataEntry());
+      out->m_srcName = pData->m_name;
+      out->m_srcValues = pData->m_values;
+
+      for (size_t i = 0; i < nSrcSamples && i < pData->m_values.size(); ++i)
+        Pixel[i] = pData->m_values[i];
+
+      if (CIccCmm::ToInternalEncoding(SrcspaceSig, srcEncoding,
+                                      srcPixels.data() + index * nSrcSamples,
+                                      Pixel, bClip)) {
+        printf("Invalid source data encoding\n");
+        return -1;
+      }
+      outputs.push_back(out);
+    }
+
+    if (!entries.empty() &&
+        pConnect->GetCmm()->Apply(dstPixels.data(), srcPixels.data(),
+                                  (icUInt32Number)entries.size())) {
+      printf("Profile application failed.\n");
+      return -1;
+    }
+
+    for (size_t index = 0; index < outputs.size(); ++index) {
+      icFloatNumber* dst = dstPixels.data() + index * nDestSamples;
+      if (CIccCmm::FromInternalEncoding(DestspaceSig, destEncoding, dst, dst)) {
+        printf("Invalid final data encoding\n");
+        return -1;
+      }
+      for (size_t i = 0; i < nDestSamples; ++i)
+        outputs[index]->m_values.push_back(dst[i]);
+      outData.m_data.push_back(outputs[index]);
+    }
+  }
+  else {
   //Apply profiles to each input color
   for (auto dataIter = cfgData.m_data.begin(); dataIter != cfgData.m_data.end(); dataIter++) {
     CIccCfgDataEntry* pData = dataIter->get();
@@ -530,6 +611,7 @@ int main(int argc, const char* argv[])
       out->m_debugInfo = pDebugger->m_log;
 
     outData.m_data.push_back(out);
+  }
   }
 
   //Now output the data

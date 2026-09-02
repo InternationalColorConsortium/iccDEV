@@ -105,7 +105,12 @@ CIccNamedColorCmm* CIccConnectCmm::GetNamedCmm() const
 
 CIccCmmSearch* CIccConnectCmm::GetSearchCmm() const
 {
-  return dynamic_cast<CIccCmmSearch*>(m_pCmm);
+  CIccCmmSearch* search = dynamic_cast<CIccCmmSearch*>(m_pCmm);
+  if (search)
+    return search;
+
+  CIccThreadedCmm* threaded = GetThreadedCmm();
+  return threaded ? dynamic_cast<CIccCmmSearch*>(threaded->GetBaseCmm()) : nullptr;
 }
 
 CIccThreadedCmm* CIccConnectCmm::GetThreadedCmm() const
@@ -463,8 +468,23 @@ CIccConnectCmm* CIccConnectCmm::CreateStandard(const CIccCfgProfileSequence& pro
 CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApply,
                                               std::string* pErrorMsg)
 {
+  return CreateSearch(searchApply, pErrorMsg, 1);
+}
+
+CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApply,
+                                              std::string* pErrorMsg,
+                                              int nThreads)
+{
   std::string localErr;
   std::string& sErrorMsg = pErrorMsg ? *pErrorMsg : localErr;
+
+  if (nThreads < 0 || nThreads > CIccThreadedCmm::GetMaxThreads()) {
+    std::ostringstream oss;
+    oss << "invalid thread count " << nThreads << " (maximum "
+        << CIccThreadedCmm::GetMaxThreads() << ")";
+    sErrorMsg = oss.str();
+    return nullptr;
+  }
 
   IccProfilePtrList pccList;
   auto pCmm = std::unique_ptr<CIccCmmSearch>(new (std::nothrow) CIccCmmSearch());
@@ -633,7 +653,8 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
   }
 
   ReleasePccList(pccList);
-  return Attach(pCmm.release());
+  std::unique_ptr<CIccCmm> baseCmm(pCmm.release());
+  return AttachStandardCmm(baseCmm, nThreads);
 }
 
 #ifdef USEICCDEVNAMESPACE

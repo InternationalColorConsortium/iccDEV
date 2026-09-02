@@ -163,10 +163,11 @@ delete conn;                                 // tears down wrapper + underlying 
 ```
 
 `conn->IsThreaded()` reports whether the wrapper was installed;
-`conn->GetThreadedCmm()` returns the wrapper directly when needed. The
-type-specific accessors `GetNamedCmm()` and `GetSearchCmm()` return null
-once the threaded wrapper is in place — striped apply only fits the
-standard pixel-pipeline use case.
+`conn->GetThreadedCmm()` returns the wrapper directly when needed.
+`GetNamedCmm()` returns null through a threaded wrapper, while
+`GetSearchCmm()` unwraps a threaded search CMM for search-specific
+inspection. `CreateSearch(searchApply, error, nThreads)` accepts the same
+`0` automatic, `1` scalar, and greater-than-one threaded selection.
 
 ## See Also
 

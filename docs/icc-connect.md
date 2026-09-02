@@ -45,7 +45,8 @@ factory methods that load profiles, register hints, attach PCCs, and call
 |---------|-------|----------|
 | `CreateStandard(profiles, embeddedData=null, embeddedLen=0, nThreads=1, pErrorMsg=nullptr)` | `CIccCfgProfileSequence` | Standard pixel-pipeline CMM; if `embeddedData` is supplied and the first profile config has an empty `iccFile`, that buffer is loaded as the first xform (e.g. for ICC profiles embedded in TIFF/JPEG). When `nThreads != 1`, the returned wrapper is a `CIccThreadedCmm` over the underlying CMM. |
 | `CreateNamed(profiles, srcSpace=icSigUnknownData, bInputProfile=true, pErrorMsg=nullptr)` | `CIccCfgProfileSequence` | Named-color CMM (`CIccNamedColorCmm`) for named-color workflows. |
-| `CreateSearch(searchApply, pErrorMsg=nullptr)` | `CIccCfgSearchApply` | Spectral inverse-search CMM (`CIccCmmSearch`) with weighted PCC attach and optional destination init profile. |
+| `CreateSearch(searchApply, pErrorMsg=nullptr)` | `CIccCfgSearchApply` | Scalar spectral inverse-search CMM (`CIccCmmSearch`) with weighted PCC attach and optional destination init profile. |
+| `CreateSearch(searchApply, pErrorMsg, nThreads)` | `CIccCfgSearchApply` | Spectral inverse-search CMM; `nThreads == 0` selects hardware concurrency, `1` leaves it scalar, and values above `1` return a `CIccThreadedCmm` wrapper. |
 | `Attach(pCmm)` | Any `CIccCmm*` | Wraps an externally constructed CMM; the wrapper takes ownership. |
 
 All factories return `nullptr` on any failure (profile load, hint allocation,
@@ -78,8 +79,8 @@ discard it. Passing `nullptr` (the default) silently drops the message.
 ```cpp
 CIccCmm*           GetCmm()         const;   // wrapped CMM (never null after success)
 CIccNamedColorCmm* GetNamedCmm()    const;   // non-null only for CreateNamed
-CIccCmmSearch*     GetSearchCmm()   const;   // non-null only for CreateSearch
-CIccThreadedCmm*   GetThreadedCmm() const;   // non-null when CreateStandard wrapped with nThreads != 1
+CIccCmmSearch*     GetSearchCmm()   const;   // non-null for scalar or threaded CreateSearch
+CIccThreadedCmm*   GetThreadedCmm() const;   // non-null when CreateStandard or CreateSearch wraps
 bool               IsThreaded()     const;   // shorthand for GetThreadedCmm() != nullptr
 icColorSpaceSignature GetSourceSpace() const;
 icColorSpaceSignature GetDestSpace()   const;
@@ -91,16 +92,17 @@ object and free with `delete`.
 ### Parallel Apply
 
 Threading is selected at construction time via the `nThreads` argument to
-`CreateStandard`. When `nThreads == 0` the factory uses
+`CreateStandard` or the three-argument `CreateSearch`. When `nThreads == 0` the factory uses
 `std::thread::hardware_concurrency()`; when `nThreads > 1` it uses that
 many workers; when `nThreads == 1` the underlying CMM is returned without
 the threaded wrapper. See the [threading guide](icc-cmm-threading.md)
 for the apply-time semantics.
 
-Because the threaded wrapper hides the type-specific CMM,
-`GetNamedCmm()` and `GetSearchCmm()` return `nullptr` once a threaded
-wrapper is in place. `GetThreadedCmm()` and `IsThreaded()` expose the
-wrapper directly when needed.
+Because the threaded wrapper hides a named-color CMM, `GetNamedCmm()`
+returns `nullptr` once it is in place. `GetSearchCmm()` unwraps a threaded
+search CMM and remains available for search-specific inspection.
+`GetThreadedCmm()` and `IsThreaded()` expose the wrapper directly when
+needed.
 
 For a worked example, see
 [`Tools/CmdLine/IccApplyProfiles/iccApplyProfiles.cpp`](../Tools/CmdLine/IccApplyProfiles/iccApplyProfiles.cpp),

@@ -203,6 +203,39 @@ static int checkSearchRebegin(const char* profilePath)
   return failures ? 1 : 0;
 }
 
+// Begin(false) prepares the search chains without reserving a default Apply
+// object. A subsequent Begin(true) must supply that object without rebuilding
+// the chains, matching the base CMM's lazy-apply contract.
+static int checkSearchDeferredApply(const char* profilePath)
+{
+  std::unique_ptr<CIccCmmSearch> pCmm(buildSearchCmm(profilePath));
+  if (!pCmm)
+    return 1;
+
+  icStatusCMM rv = pCmm->Begin(false);
+  if (rv != icCmmStatOk) {
+    std::fprintf(stderr, "cmmsearch-rebegin: FAIL  search Begin(false) status %d\n", (int)rv);
+    return 1;
+  }
+
+  rv = pCmm->Begin(true);
+  if (rv != icCmmStatOk) {
+    std::fprintf(stderr, "cmmsearch-rebegin: FAIL  search Begin(true) status %d\n", (int)rv);
+    return 1;
+  }
+
+  icFloatNumber dst[3] = { 0.0f, 0.0f, 0.0f };
+  rv = pCmm->Apply(dst, kSamples[0]);
+  if (rv != icCmmStatOk) {
+    std::fprintf(stderr, "cmmsearch-rebegin: FAIL  Apply after deferred Begin status %d\n", (int)rv);
+    return 1;
+  }
+
+  std::fprintf(stdout,
+    "cmmsearch-rebegin: PASS  Begin(false); Begin(true) supplies the default Apply\n");
+  return 0;
+}
+
 // Sequence 2: Begin(); AddXform(); Begin().  The added profile shifts the chain
 // through AddXform's case 2, which copies the already-nulled m_pDstProfile into
 // m_pMidProfile; pre-fix the second Begin() then bound that null at
@@ -363,6 +396,7 @@ int main(int argc, char** argv)
   int failures = 0;
   failures += checkBaseIdempotent(profilePath);
   failures += checkSearchRebegin(profilePath);
+  failures += checkSearchDeferredApply(profilePath);
   failures += checkSearchAddXformAfterBegin(profilePath);
 
   return failures ? 1 : 0;

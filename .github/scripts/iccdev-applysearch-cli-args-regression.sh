@@ -48,6 +48,7 @@ APPLY="$(find "$TOOLS_DIR" -maxdepth 2 -name iccApplySearch -type f 2>/dev/null 
 DATA="$TESTING_DIR/ApplyDataFiles/rgb8bit.txt"
 SRGB="$TESTING_DIR/sRGB_v4_ICC_preference.icc"
 CFG="$OUTDIR/applysearch-cfg.json"
+THREADED_DATA="$OUTDIR/rgb8bit-threaded.txt"
 
 fail() {
   echo "  [FAIL] iccApplySearch-cli-args -- $1"
@@ -147,9 +148,38 @@ require_file "$CFG"
 run_expect_success valid-cfg "$APPLY" -cfg "$CFG"
 run_expect_success valid-legacy "$APPLY" "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
 
+# Repeat the fixture past three 256-pixel chunks. With 16 pixel rows per copy,
+# 49 copies produce 784 pixels, so -threads 4 dispatches all four workers.
+# Require the bare default, explicit scalar, automatic, and four-worker CLI
+# output to remain byte-identical.
+sed -n '1,2p' "$DATA" > "$THREADED_DATA"
+for ((i = 0; i < 49; ++i)); do
+  sed -n '3,$p' "$DATA" >> "$THREADED_DATA"
+done
+run_expect_success valid-default \
+  "$APPLY" "$THREADED_DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
+run_expect_success valid-threads-1 \
+  "$APPLY" -threads 1 "$THREADED_DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
+run_expect_success valid-threads-auto \
+  "$APPLY" -threads 0 "$THREADED_DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
+run_expect_success valid-threads-4 \
+  "$APPLY" -threads 4 "$THREADED_DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
+for output in valid-threads-1 valid-threads-auto valid-threads-4; do
+  cmp "$OUTDIR/valid-default.log" "$OUTDIR/$output.log" ||
+    fail "$output output differs from the default scalar output"
+done
+run_expect_success valid-threads-cfg "$APPLY" -threads 4 -cfg "$CFG"
+
 # The #1674 guard this script exists for: everything past argv[2] used to be read
 # and dropped, leaving a zero exit behind.
 run_expect_reject cfg-extra "$APPLY" -cfg "$CFG" ignored-extra
+run_expect_reject threads-negative "$APPLY" -threads -1 -cfg "$CFG"
+run_expect_reject threads-too-large "$APPLY" -threads 257 -cfg "$CFG"
+run_expect_reject threads-not-a-number "$APPLY" -threads nope -cfg "$CFG"
+run_expect_reject threads-empty "$APPLY" -threads "" -cfg "$CFG"
+run_expect_reject threads-bare "$APPLY" -threads
+run_expect_reject threads-missing-command "$APPLY" -threads 4
+run_expect_reject threads-debugcalc "$APPLY" -threads 4 -debugcalc "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
 
 # Already rejected on master; pinned so the surface cannot regress quietly.
 run_expect_reject init-missing-value "$APPLY" "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT

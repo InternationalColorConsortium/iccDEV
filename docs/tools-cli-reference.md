@@ -27,6 +27,11 @@ single index for common command shapes and shared option tables.
 | `iccApplyToLink` | Build DeviceLink profiles or `.cube` LUTs | `iccApplyToLink output.icc 0 33 1 "Link" 0.0 1.0 1 1 src.icc 1 dst.icc 1` |
 | `iccRoundTrip` | Evaluate round-trip behavior | `iccRoundTrip profile.icc` |
 
+`iccApplySearch` accepts an optional leading `-threads N` before either
+`-cfg config.json` or its legacy positional form. `N=1` is the default scalar
+path, `N=0` uses available hardware concurrency, and positive values select an
+explicit worker count. `-debugcalc` requires `-threads 1`.
+
 For `iccApplyToLink`, `link_type=0` writes an ICC DeviceLink and `option`
 selects profile version (`0` for v4, `1` for v5). `link_type=1` writes a
 `.cube` text LUT and `option` is the precision (`0` through `20`). Other
