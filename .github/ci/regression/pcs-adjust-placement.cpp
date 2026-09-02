@@ -749,7 +749,125 @@ public:
     }
     return n;
   }
+
 };
+
+
+// --- The Begin() ordering contract ---------------------------------------
+//
+// Regression for the flat-colour defect introduced by #2217 and found through
+// the ICS example packages: every render whose chain contained a PCS connection
+// that reduces to a sparse matrix came out one uniform colour, and a different
+// colour on each run.
+//
+// #2217 hoisted CIccSparseMatrix construction out of
+// CIccPcsStepSparseMatrix::Apply() into a new BeginStep(), reached from a new
+// CIccPcsXform::Begin(). Nothing ever called it. CIccCmm::Begin() and
+// CIccNamedColorCmm::Begin() both run their per-xform Begin() loop over
+// m_Xforms *before* calling CheckPCSConnections(), which is where every
+// CIccPcsXform is created, and neither revisits the list. So m_pMtx stayed
+// null, Apply()'s null guard returned without writing pDst, and the caller read
+// back an untouched buffer -- identical for every pixel, hence flat, and
+// uninitialised, hence run-dependent.
+//
+// The fix is in two parts. CheckPCSConnections() now Begin()s every
+// CIccPcsXform it builds, which is the defect proper; and Apply() no longer
+// returns without writing pDst when the matrix is missing, which is what turned
+// a missed initialisation into undefined pixels rather than a clean failure.
+//
+// Only the second part is asserted below, because the first is not observable
+// once the second is in place -- an un-begun step now produces the right answer
+// anyway. Asserting the ordering itself needs either an accessor on
+// CIccPcsXform (an ABI break on an exported class) or a two-range spectral CMM
+// fixture that puts a real sparse step in a real chain; neither is here yet.
+static icSpectralRange makeSpectralRange(icFloat16Number start,
+                                         icFloat16Number end,
+                                         icUInt16Number steps)
+{
+  icSpectralRange r;
+  r.start = start;
+  r.end = end;
+  r.steps = steps;
+  return r;
+}
+
+// The consequence, at the step that actually carried it.
+//
+// A spectral range map is the sparse matrix these chains contain: rangeMap()
+// interpolates each destination sample from two adjacent source samples, so an
+// n x m map holds ~2n non-zeros and reduce() converts it. Apply()ing that step
+// without BeginStep() must still produce the dense matrix's answer -- it may
+// pay the pre-hoist per-pixel construction to do so, but it must never return
+// leaving the destination as the caller left it. Apply() cannot report an
+// error, so silence there is indistinguishable from a correct result.
+static void sparseMatrixStepWritesEveryOutputWithoutBeginStep()
+{
+  const icSpectralRange src = makeSpectralRange(icRange380nm, icRange700nm, 36);
+  const icSpectralRange dst = makeSpectralRange(icRange380nm, icRange780nm, 41);
+
+  CIccPcsStepMatrix *pDense = CIccPcsXform::rangeMap(src, dst);
+  check(pDense != NULL, "sparse step: rangeMap() built a matrix");
+  if (!pDense)
+    return;
+
+  CIccPcsStep *pSparse = pDense->reduce();
+  check(pSparse != (CIccPcsStep *)pDense,
+        "sparse step: a range map is sparse enough for reduce() to convert it");
+  check(pSparse->GetType() == icPcsStepSparseMatrix,
+        "sparse step: reduce() produced a CIccPcsStepSparseMatrix");
+
+  icFloatNumber in[36];
+  for (int i = 0; i < 36; i++)
+    in[i] = icFloatNumber(0.1 + 0.02 * i);
+
+  icFloatNumber want[41];
+  pDense->Apply(NULL, want, in);
+
+  // A value no correct result can hold, so "never written" is distinguishable
+  // from "written with the right answer" without relying on heap contents.
+  static const icFloatNumber kPoison = icFloatNumber(-12345.0);
+
+  icFloatNumber got[41];
+  int i;
+
+  for (i = 0; i < 41; i++)
+    got[i] = kPoison;
+
+  // Deliberately no BeginStep() here: this is the state CheckPCSConnections()
+  // used to leave every step in.
+  pSparse->Apply(NULL, got, in);
+
+  int nUnwritten = 0, nWrong = 0;
+  for (i = 0; i < 41; i++) {
+    if (got[i] == kPoison)
+      nUnwritten++;
+    else if (!closeRel(got[i], want[i], kTol))
+      nWrong++;
+  }
+  check(nUnwritten == 0,
+        "sparse step: Apply() without BeginStep() writes every destination sample");
+  check(nWrong == 0,
+        "sparse step: Apply() without BeginStep() agrees with the dense matrix");
+
+  // And the begun path, which is what the chain actually takes, agrees too.
+  check(pSparse->BeginStep(), "sparse step: BeginStep() succeeds");
+
+  for (i = 0; i < 41; i++)
+    got[i] = kPoison;
+
+  pSparse->Apply(NULL, got, in);
+
+  nWrong = 0;
+  for (i = 0; i < 41; i++) {
+    if (got[i] == kPoison || !closeRel(got[i], want[i], kTol))
+      nWrong++;
+  }
+  check(nWrong == 0,
+        "sparse step: Apply() after BeginStep() agrees with the dense matrix");
+
+  delete pSparse;
+  delete pDense;
+}
 
 // The core claim of this refactor, asserted structurally rather than
 // numerically: after Begin(), no device xform is left holding an adjustment.
@@ -1796,6 +1914,8 @@ int main(int /*argc*/, char ** /*argv*/)
 
   xyzPcsChainStillAdjusts();
   setParamsRefreshesCacheAfterBegin();
+
+  sparseMatrixStepWritesEveryOutputWithoutBeginStep();
 
   if (g_failures) {
     std::printf("\n%d check(s) failed\n", g_failures);
