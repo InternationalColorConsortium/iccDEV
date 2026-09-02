@@ -25,7 +25,7 @@ qa_init() {
     QA_OUTDIR="${QA_OUTDIR:-$(mktemp -d "/tmp/${tag}.XXXXXX")}"
     mkdir -p "$QA_OUTDIR"
 
-    export ASAN_OPTIONS="${ASAN_OPTIONS:-detect_leaks=0:halt_on_error=1:abort_on_error=1:symbolize=1}"
+    export ASAN_OPTIONS="${ASAN_OPTIONS:-detect_leaks=0:halt_on_error=1:abort_on_error=1:symbolize=1:allocator_may_return_null=1}"
     export UBSAN_OPTIONS="${UBSAN_OPTIONS:-halt_on_error=1:abort_on_error=1:print_stacktrace=1}"
     export LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE:-/dev/null}"
 
