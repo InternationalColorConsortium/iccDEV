@@ -127,7 +127,18 @@ void CIccMpeAcs::Describe(std::string &sDescription, int nVerboseness)
 {
   icChar sigBuf[30];
 
-  if (GetBAcsSig())
+  // Label from the ELEMENT TYPE, not from the value of the ACS data signature.
+  // GetBAcsSig() returns m_signature on a bACS element and the base class's
+  // icSigAcsZero on everything else (IccTagMPE.h:177), so testing its truth
+  // conflates "this is a bACS element" with "this element's signature is
+  // non-zero".  Those two agree only by luck.  icSigAcsZero is a legitimate,
+  // explicitly named signature -- CIccMpeXmlBAcs::ToXml goes out of its way to
+  // round-trip it rather than writing the text "NULL" (#1843) -- and a bACS
+  // element carrying it therefore described itself as ELEM_eACS (#2181).
+  // GetType() is fixed per class (IccMpeACS.h:135 and :159) and cannot be
+  // confused by the payload.  This is the only reader of GetBAcsSig() in the
+  // tree; everything else discriminates on IsAcs(), which was always type-based.
+  if (GetType() == icSigBAcsElemType)
     sDescription += "ELEM_bACS\n";
   else
     sDescription += "ELEM_eACS\n";
@@ -303,19 +314,34 @@ icValidateStatus CIccMpeAcs::Validate(std::string sigPath, std::string &sReport,
 ******************************************************************************/
 bool CIccMpeAcs::AllocData(size_t size)
 {
+  // Clear both members before allocating, so the class invariant
+  // "m_pData == NULL if and only if m_nDataSize == 0" holds on EVERY exit,
+  // failure included.  It previously did not: on a failed malloc m_pData became
+  // NULL while m_nDataSize kept the PREVIOUS allocation's size (#2181).
+  //
+  // That stale pair is not merely untidy, because the four copy paths below
+  // guard the memcpy on the DESTINATION pointer and the SOURCE size:
+  //
+  //     AllocData(elemAcs.m_nDataSize);
+  //     if (m_pData && elemAcs.m_nDataSize)
+  //       memcpy(m_pData, elemAcs.m_pData, m_nDataSize);
+  //
+  // Copying an element left in the broken state allocates successfully from the
+  // stale non-zero size, finds the source size non-zero, and reads from a source
+  // pointer that is NULL.  Restoring the invariant at its origin fixes all four
+  // sites -- and NewCopy() is one of them -- without four separate guards.
   free(m_pData);
+  m_pData = NULL;
+  m_nDataSize = 0;
 
   if (size) {
     m_pData = (icUInt8Number*)malloc(size);
-    if (m_pData)
-      m_nDataSize = size;
-  }
-  else {
-    m_pData = NULL;
-    m_nDataSize = 0;
+    if (!m_pData)
+      return false;
+    m_nDataSize = size;
   }
 
-  return (size==0 || m_pData!=NULL);
+  return true;
 }
 
 
