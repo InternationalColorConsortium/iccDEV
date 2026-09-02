@@ -801,6 +801,65 @@ icHdrHeadroomSource CIccHdrMetadataReader::ResolveDisplayHeadroom(icFloatNumber 
 
 /**
  ****************************************************************************
+ * Name: CIccHdrMetadataReader::ResolveContentHeadroom
+ *
+ * Purpose: Apply the priority order of clause 8.10.4 a) to c), which the
+ *  clause states for the Linear (8) transfer only.
+ *
+ *  Unlike 8.10.5's display order this one always produces a value: c) has no
+ *  metadata precondition, so a Linear profile carrying no HDR Image entry at
+ *  all still gets 1000 cd/m^2 / CRWL.  That is the point of the order - the
+ *  Linear transfer establishes no peak luminance, so without an assumed one
+ *  the tone-mapping operator has no scale to work in.
+ *
+ *  The clause calls the order "recommended" and then says the operator
+ *  "shall select that value according to" it.  The two modal verbs pull in
+ *  opposite directions and the clause does not say which governs; this
+ *  implementation follows the order exactly, which satisfies both readings.
+ *
+ * Args:
+ *  headroom = receives the resolved value when the return is not
+ *             icHdrContentHeadroomNone
+ *  crwl = the content HDR reference white to divide by, resolved by the
+ *         caller (see the header for why it is not read from this class)
+ *
+ * Return:
+ *  the rule that produced the value
+ *****************************************************************************
+ */
+icHdrContentHeadroomSource CIccHdrMetadataReader::ResolveContentHeadroom(icFloatNumber &headroom,
+                                                                        icFloatNumber crwl) const
+{
+  /* Every branch divides by CRWL, so a non-positive one is checked once here
+   * rather than three times below.  It cannot arise from this class - the
+   * parser rejects a non-positive CRWL and the default is 203 - but the value
+   * is the caller's, and an HAGC tag's reference white reaches this function
+   * without passing through that parser. */
+  if (crwl <= 0.0f)
+    return icHdrContentHeadroomNone;
+
+  /* a) CLL maximum content light level */
+  if (m_bHasCll) {
+    headroom = m_maxCll / crwl;
+    return icHdrContentHeadroomCll;
+  }
+
+  /* b) MDCV maximum luminance, when CLL is absent.  The order is a real
+   * precedence and not a fallback chain: CLL measures the content, MDCV
+   * measures the display it was mastered on, so a profile carrying both is
+   * answered from the content and the mastering peak is not consulted. */
+  if (m_bHasMdcv) {
+    headroom = m_mdcvMaxLuminance / crwl;
+    return icHdrContentHeadroomMdcv;
+  }
+
+  /* c) the assumed typical mastering peak */
+  headroom = (icFloatNumber)icHdrDefaultMasteringPeak / crwl;
+  return icHdrContentHeadroomDefault;
+}
+
+/**
+ ****************************************************************************
  * Name: icHdrIsRgbMatrixBased
  *
  * Purpose: Test the structural shape clause 8.10.6 requires: RGB data colour
@@ -846,6 +905,7 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
   info.nClass = icHdrProfileNone;
   info.contentReferenceWhite = (icFloatNumber)icHdrDefaultContentReferenceWhite;
   info.nHeadroomSource = icHdrHeadroomNone;
+  info.nContentHeadroomSource = icHdrContentHeadroomNone;
 
   if (!pProfile)
     return false;
@@ -889,7 +949,18 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
    * reference white, and when both it and a CRWL entry are present they are
    * describing the same quantity; the HAGC value is preferred because it is
    * the one the gain curve in that same tag was authored against, so using
-   * the other would evaluate the curve at a white it was not built for. */
+   * the other would evaluate the curve at a white it was not built for.
+   *
+   * PROPOSAL-ISSUE HDR-10: 8.10.4 states no precedence between the two, and
+   * its 203 cd/m^2 default is stated twice with different conditions - the
+   * Default paragraph fires only when there is neither an HAGC tag nor a CRWL
+   * entry, while the Linear priority order restates it as "defaulting to 203
+   * cd/m^2 when absent" with no HAGC qualifier.  The order below is this
+   * implementation's ruling: HAGC first, then the CRWL entry, then 203.  It
+   * is also what the content-headroom block further down divides by; see the
+   * HDR-10 marker there for the arithmetic that makes the disagreement
+   * visible, and Testing/HDR/HdrLinearHagcWhite.xml for the fixture that
+   * pins it. */
   CIccHdrMetadataReader meta;
   bool bHasMeta = meta.Read(pProfile);
 
@@ -911,6 +982,34 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
 
   if (bHasMeta)
     info.nHeadroomSource = meta.ResolveDisplayHeadroom(info.displayHeadroom);
+
+  /* Content headroom (8.10.4).  Gated on Linear because that is the only
+   * transfer the priority order is stated for, and because rule c) would
+   * otherwise assert a 1000 cd/m^2 peak for a PQ profile whose transfer
+   * already fixes one at 10 000.
+   *
+   * The divisor is info.contentReferenceWhite, resolved just above, not the
+   * reader's own CRWL.
+   *
+   * PROPOSAL-ISSUE HDR-10: 8.10.4 states the 203 cd/m^2 default twice with
+   * different conditions.  The Default paragraph fires only when there is no
+   * HAGC tag AND no CRWL entry; the priority order restates it as "defaulting
+   * to 203 cd/m^2 when absent" with no HAGC qualifier.  A Linear profile with
+   * an HAGC tag carrying a custom reference white and no CRWL entry therefore
+   * has two answers for this divisor.  The ruling here is the one taken at
+   * the reference-white block above: the HAGC tag's value wins, because the
+   * gain curve in that same tag was authored against it.  The two readings
+   * coincide at 203,0 whenever the HAGC tag sets no custom value, which is
+   * why the disagreement will not show up in testing.
+   *
+   * The reader is consulted even when it holds no HDR Image entry, since rule
+   * c) applies precisely to that case; the bHasMeta guard above is not
+   * repeated here.  A profile with no metadataTag leaves the reader empty,
+   * which is what c) tests for. */
+  if (info.bHasCicp && info.nTransferCharacteristics == icCicpTransferLinear) {
+    info.nContentHeadroomSource = meta.ResolveContentHeadroom(info.contentHeadroom,
+                                                              info.contentReferenceWhite);
+  }
 
   /* Source primaries (9.2.17 / 10.3). Only meaningful with a cicpTag, since
    * the ColourPrimaries field is what selects between the H.273 table and the

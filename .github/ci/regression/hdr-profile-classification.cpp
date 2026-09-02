@@ -21,7 +21,17 @@
 //    the entries agree and a different one when they do not, so only a
 //    deliberately inconsistent fixture can tell the two apart.
 //
-// 3. The conforming/intended split. Clause 8.10.1's definition is
+// 3. The content-headroom priority order of clause 8.10.4, which applies to the
+//    Linear (8) transfer alone. Its three rules divide three different
+//    numerators by the same CRWL, so a fixture whose CLL and MDCV agree, or
+//    whose CRWL is the 203 default, cannot tell a correct implementation from
+//    one that reached for the wrong entry - the arithmetic comes out the same.
+//    The four HdrLinear* fixtures are built so that every branch lands on a
+//    distinct value, and the fourth pins a ruling rather than a transcription:
+//    8.10.4 states its 203 default twice with different conditions and an HAGC
+//    tag carrying a custom reference white makes them disagree (HDR-10).
+//
+// 4. The conforming/intended split. Clause 8.10.1's definition is
 //    self-satisfying - an HDR Profile is defined as carrying a cicpTag whose
 //    TransferCharacteristics is 8, 16 or 18, so a profile that gets that field
 //    wrong is not an HDR Profile and violates nothing. The classifier's
@@ -267,7 +277,100 @@ void testDisplayMetadata()
 }
 
 // ---------------------------------------------------------------------------
-// 4. Classification and resolution
+// 4. The content-headroom priority order of clause 8.10.4 (Linear transfer)
+// ---------------------------------------------------------------------------
+void testContentHeadroom()
+{
+  icHdrProfileInfo info;
+
+  // a) CLL wins over MDCV. The fixture's two entries disagree by a factor of
+  // nearly seven, so a fallback chain that reached MDCV first returns 19.7
+  // where the order returns 2.956 - no tolerance hides that.
+  CIccProfile *pProfile = openFixture("HdrLinearCll.icc");
+  if (pProfile) {
+    check(icGetHdrProfileInfo(pProfile, info), "info resolved for the CLL fixture");
+    check(info.nTransferCharacteristics == icCicpTransferLinear, "the fixture is Linear");
+    check(info.nClass == icHdrProfileConforming, "Linear (8) is a conforming HDR transfer");
+    check(info.nContentHeadroomSource == icHdrContentHeadroomCll,
+          "rule a) fires when CLL is present");
+    checkClose(info.contentHeadroom, 600.0 / 203.0, 1e-4, "CLL.max / CRWL");
+    check(fabs(info.contentHeadroom - 4000.0 / 203.0) > 1.0,
+          "the mastering peak was not reached for while CLL was available");
+    delete pProfile;
+  }
+
+  // b) MDCV when CLL is absent, divided by a CRWL that is deliberately not the
+  // 203 default: with 203 the b) branch would give 19.7, and a reader that
+  // ignored the CRWL entry would still look right against a 203 fixture.
+  pProfile = openFixture("HdrLinearMdcv.icc");
+  if (pProfile) {
+    check(icGetHdrProfileInfo(pProfile, info), "info resolved for the MDCV fixture");
+    check(info.nContentHeadroomSource == icHdrContentHeadroomMdcv,
+          "rule b) fires when CLL is absent and MDCV is present");
+    checkClose(info.contentHeadroom, 40.0, 1e-4, "MDCV.max / CRWL, at the fixture's CRWL of 100");
+    checkClose(info.contentReferenceWhite, 100.0, 1e-4, "the CRWL entry, not the 203 default");
+    delete pProfile;
+  }
+
+  // c) both defaults at once: no metadataTag at all, so 1000 / 203. This is the
+  // branch with no metadata precondition, which is why the order always
+  // produces a value for a Linear profile.
+  pProfile = openFixture("HdrLinearNoMetadata.icc");
+  if (pProfile) {
+    check(icGetHdrProfileInfo(pProfile, info), "info resolved for the bare fixture");
+    check(info.nContentHeadroomSource == icHdrContentHeadroomDefault,
+          "rule c) fires when neither CLL nor MDCV is present");
+    checkClose(info.contentHeadroom, 1000.0 / 203.0, 1e-4,
+               "the 1000 cd/m^2 typical mastering peak over the 203 default");
+    check(!info.bContentReferenceWhiteFromProfile, "the reference white is the default");
+    delete pProfile;
+  }
+
+  // The HDR-10 ruling: an HAGC tag's custom reference white is the divisor,
+  // not the 203 the priority order's parenthesis names. 600/300 = 2.0 against
+  // 600/203 = 2.956, and the two readings are indistinguishable on any fixture
+  // whose HAGC tag leaves the reference white at its own 203 default.
+  pProfile = openFixture("HdrLinearHagcWhite.icc");
+  if (pProfile) {
+    check(icGetHdrProfileInfo(pProfile, info), "info resolved for the HAGC Linear fixture");
+    check(info.bHasHagc, "HAGC tag seen");
+    checkClose(info.contentReferenceWhite, 300.0, 1e-3,
+               "the HAGC tag's custom reference white is the resolved CRWL");
+    check(info.nContentHeadroomSource == icHdrContentHeadroomCll, "CLL still selects rule a)");
+    checkClose(info.contentHeadroom, 2.0, 1e-4,
+               "Hcontent divides by the HAGC reference white, not by the 203 default");
+    check(fabs(info.contentHeadroom - 600.0 / 203.0) > 0.5,
+          "the other reading of 8.10.4's default is not the one taken");
+    delete pProfile;
+  }
+
+  // The order is stated for Linear alone. A PQ profile carrying both entries
+  // must report no metadata-derived content headroom at all: PQ fixes a peak
+  // in the transfer function, and asserting 1000 cd/m^2 for it - which rule c)
+  // would do, since it has no metadata precondition - would contradict it.
+  pProfile = openFixture("HdrDisplayMetadata.icc");
+  if (pProfile) {
+    check(icGetHdrProfileInfo(pProfile, info), "info resolved for the PQ fixture");
+    check(info.nTransferCharacteristics == icCicpTransferPQ, "the fixture is PQ");
+    check(info.nContentHeadroomSource == icHdrContentHeadroomNone,
+          "no content headroom is derived for a non-Linear transfer");
+    checkClose(info.contentHeadroom, 0.0, 1e-9, "and no value is left behind");
+
+    // The reader answers the same question directly when a caller asks it
+    // outside the transfer gate - the gate is icGetHdrProfileInfo's, not the
+    // reader's, and the reader has no cicpTag to consult.
+    CIccHdrMetadataReader meta;
+    check(meta.Read(pProfile), "metadataTag read");
+    icFloatNumber headroom = 0.0f;
+    icHdrContentHeadroomSource src = meta.ResolveContentHeadroom(headroom);
+    check(src == icHdrContentHeadroomCll, "the reader applies rule a) when asked directly");
+    checkClose(headroom, 1000.0 / 203.0, 1e-4, "against its own CRWL");
+    delete pProfile;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5. Classification and resolution
 // ---------------------------------------------------------------------------
 void testClassification()
 {
@@ -373,6 +476,7 @@ int main()
   testCicpTable();
   testProfilePrimaries();
   testDisplayMetadata();
+  testContentHeadroom();
   testClassification();
 
   if (g_failures)

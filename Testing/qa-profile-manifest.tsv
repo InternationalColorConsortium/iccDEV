@@ -167,6 +167,10 @@ HDR/HdrBakedLut.icc	positive	valid	0	none	generated	-	conformant example profile
 HDR/HdrCicpUnspecified.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrDisplayMetadata.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrInvalidTransfer.icc	positive	valid	0	none	generated	-	classification fixture: TransferCharacteristics 13 puts it outside the clause 8.10 sub-class, which is not a defect - it is a valid Display profile carrying a cicpTag and a HAGC tag
+HDR/HdrLinearCll.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/HdrLinearHagcWhite.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/HdrLinearMdcv.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/HdrLinearNoMetadata.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrMissingBToA0.icc	negative	noncompliant	0	none	generated	-	negative fixture: an AToBx tag requires its paired BToAx tag
 ICS/Lab_float-D65_2deg-Part1.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 ICS/Lab_float-IllumA_2deg-Part2.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)

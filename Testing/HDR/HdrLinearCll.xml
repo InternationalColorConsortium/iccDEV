@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A conforming RGB HDR Display profile whose cicpTag declares the Linear (8)
+  transfer characteristic, written for the content-headroom priority order that
+  clause 8.10.4 states for Linear and for Linear only.
+
+  Why Linear needs an order at all: PQ carries a 10 000 cd/m2 peak in the
+  transfer function itself and HLG a nominal one, so for those two the content
+  peak is already established. Linear establishes nothing, so without an
+  assumed peak the tone-mapping operator of 8.10.2 has no scale to work in and
+  8.10.4 supplies one:
+
+    a) CLL present               ->  Hcontent = CLL.max / CRWL
+    b) CLL absent, MDCV present  ->  Hcontent = MDCV.max / CRWL
+    c) neither present           ->  Hcontent = 1000 cd/m2 / CRWL
+
+  The TRC tags are the 1.0 identity rather than the 2.2 the other fixtures
+  carry, because a Linear profile's encoding is already linear-light.
+
+  NOTE the wider fixture question this does not settle: the 29-08-2026 revision
+  of the amendment removes the TRC tags from an HDR Profile's required set, and
+  ten fixtures in this directory - these four included - still carry them. That
+  is register item B5 in docs/notes/2026-09-01-hdr-implementation-work-brief.md
+  and it is deliberately not decided here; these follow the existing style so
+  the whole set can be corrected in one pass once it is.
+
+  THIS FIXTURE exercises rule a), and its CLL and MDCV entries DISAGREE on
+  purpose:
+
+    CRWL 203, CLL.max 600, MDCV.max 4000
+
+  Rule a) gives 600/203 = 2,9557. A reader that treats the order as a fallback
+  chain and reaches for the mastering peak first returns 4000/203 = 19,7 - the
+  two are far enough apart that no tolerance hides the difference. CLL measures
+  the content and MDCV measures the display it was mastered on; the order
+  prefers the content, and a profile carrying both is not answered from the
+  display.
+-->
+<IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>4.50</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-09-01T00:00:00</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </PCSIlluminant>
+    <ProfileCreator>ICCD</ProfileCreator>
+  </Header>
+  <Tags>
+    <!-- The same sRGB/BT.709 colorants, chad and TRC tags every other fixture in
+         this directory carries, so that the only thing distinguishing these four
+         from one another is the metadata the content-headroom order reads. -->
+    <redColorantTag> <XYZArrayType>
+      <XYZNumber X="0.436004638672" Y="0.222503662109" Z="0.013900756836"/>
+    </XYZArrayType> </redColorantTag>
+
+    <greenColorantTag> <XYZArrayType>
+      <XYZNumber X="0.385101318359" Y="0.716903686523" Z="0.097106933594"/>
+    </XYZArrayType> </greenColorantTag>
+
+    <blueColorantTag> <XYZArrayType>
+      <XYZNumber X="0.143096923828" Y="0.060592651367" Z="0.713897705078"/>
+    </XYZArrayType> </blueColorantTag>
+
+    <chromaticAdaptationTag> <s15Fixed16ArrayType>
+      <Array>
+        1.047882  0.022919 -0.050201
+        0.029587  0.990479 -0.017059
+       -0.009232  0.015076  0.751678
+      </Array>
+    </s15Fixed16ArrayType> </chromaticAdaptationTag>
+
+    <redTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">1.0</ParametricCurve>
+    </parametricCurveType> </redTRCTag>
+
+    <greenTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">1.0</ParametricCurve>
+    </parametricCurveType> </greenTRCTag>
+
+    <blueTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">1.0</ParametricCurve>
+    </parametricCurveType> </blueTRCTag>
+
+    <mediaWhitePointTag> <XYZArrayType>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </XYZArrayType> </mediaWhitePointTag>
+
+    <cicpTag> <cicpType>
+      <cicpFields ColorPrimaries="1" TransferCharacteristics="8" MatrixCoefficients="0" VideoFullRangeFlag="1"/>
+    </cicpType> </cicpTag>
+
+    <metaDataTag> <dictType>
+      <DictEntry Name="CRWL" Value="203.0"/>
+      <DictEntry Name="CLL" Value="600.0 300.0 9"/>
+      <DictEntry Name="MDCV" Value="4000.0 0.005 9"/>
+    </dictType> </metaDataTag>
+
+    <profileDescriptionTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV Linear HDR profile: content headroom from CLL (clause 8.10.4 a)]]></LocalizedText>
+    </multiLocalizedUnicodeType> </profileDescriptionTag>
+
+    <copyrightTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright (C) 2026 The International Color Consortium. Generated fixture, no measured data.]]></LocalizedText>
+    </multiLocalizedUnicodeType> </copyrightTag>
+  </Tags>
+</IccProfile>

@@ -123,7 +123,18 @@ namespace iccDEV {
 
 /** BT.2100 HLG system default OOTF gamma and nominal peak display luminance
  * in cd/m^2.  BT.2100 defines gamma as a function of Lw; 1.2 is its value at
- * the 1000 cd/m^2 reference the standard tabulates. */
+ * the 1000 cd/m^2 reference the standard tabulates.
+ *
+ * PROPOSAL-ISSUE (no register key -- the corpus is silent, not contradictory):
+ * no HDR Profile carries Lw.  Because BT.2100 makes gamma a function of it,
+ * fixing gamma at 1.2 implicitly pins Lw at 1000 cd/m^2 for every HLG profile,
+ * whatever display the profile actually describes.  Clause 8.10.4 NOTE 9
+ * licenses exactly this - a CMM lacking metadata "may rely on the conventions
+ * of the cicpTag.TransferCharacteristics (e.g. ... the nominal HLG peak per
+ * Rec. ITU-R BT.2100)" - but it names no value, so the number below is this
+ * implementation's choice and not a transcription.  An HDR Display DCV
+ * maximum luminance would be the natural source for a per-profile Lw; wiring
+ * it in is a behaviour change and is not made here. */
 #define icHlgDefaultGamma 1.2
 #define icHlgDefaultPeakLuminance 1000.0
 
@@ -131,7 +142,17 @@ namespace iccDEV {
  * the scene luminance Y_s that drives the system gain.  BT.2100 states these
  * for its own (BT.2020) primaries and the HLG OOTF is defined in terms of
  * them regardless of what primaries the profile itself carries, so they are
- * deliberately *not* derived from the profile's matrix column tags. */
+ * deliberately *not* derived from the profile's matrix column tags.
+ *
+ * PROPOSAL-ISSUE (no register key -- the corpus is silent): clause 8.10 never
+ * says which luma coefficients the HLG OOTF uses, and a cicpTag may declare
+ * any ColourPrimaries alongside TransferCharacteristics 18.  Holding these at
+ * BT.2020 is defensible - BT.2100 defines the OOTF in these terms and an HLG
+ * signal is a BT.2100 signal - but for a profile declaring, say,
+ * ColourPrimaries 1 it silently forms Y_s from primaries the profile does not
+ * use.  The alternative, deriving the coefficients from the declared
+ * primaries, is a different rendering and equally unsupported by the text.
+ * Recorded so the choice is visible; not changed here. */
 #define icHlgLumaR 0.2627
 #define icHlgLumaG 0.6780
 #define icHlgLumaB 0.0593
@@ -208,6 +229,17 @@ ICCPROFLIB_API icFloatNumber icHlgOotfGain(icFloatNumber sceneLuminance, icFloat
  *  cannot exist: the OOTF's gain is a function of all three channels, so it
  *  has no per-channel form in any revision.  Resolved by the split below -
  *  the inverse OETF is per channel, the OOTF is not.
+ *
+ *  PROPOSAL-ISSUE HDR-08 (design-level) -- the same split is the ruling for
+ *  clause 8.10.2 a), and for the same reason.  That step calls code point 18's
+ *  function an EOTF, requires it per channel, and asks for a scene-referred
+ *  output; the HLG EOTF is OOTF o OETF^-1, which is neither per channel nor
+ *  scene referred, while the per-channel scene-referred function - the inverse
+ *  OETF - is what 8.10.6 names and what H.273 code point 18 identifies.  The
+ *  29-08-2026 revision removes the TRC tags, so no tag remains that could have
+ *  carried a per-channel curve and the step has to be read literally.  Ruled
+ *  the same way here: inverse OETF in the per-channel position, OOTF where a
+ *  three-channel function belongs.  See WP-03 above - one split, two texts.
  *
  *  This is also why the class works on a whole RGB triplet rather than one
  *  channel at a time: the HLG OOTF's gain is a function of the scene

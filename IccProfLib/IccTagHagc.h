@@ -92,6 +92,17 @@ class CIccProfile;
  *    0..7, but the proposal caps alternate images at 4.  This is the one
  *    limit the encoding is *wider* than the specification, so it is the
  *    only one Validate() has to police.
+ *
+ *    PROPOSAL-ISSUE (encoding, no register key): policing it at 4 is a
+ *    ruling, not a transcription.  The HAGC proposal states the cap in prose
+ *    and the encoding contradicts it by construction, and the proposal does
+ *    not say which governs - a tag declaring 5 alternate images is well
+ *    formed against the bit layout and out of range against the prose.  This
+ *    implementation reads such a tag (all 5 are decoded, so no data is lost)
+ *    and reports it from Validate(), which is the reading that keeps a
+ *    parser from rejecting bytes the encoding permits while still surfacing
+ *    the disagreement.  A future revision that widens the prose to 7 would
+ *    need only this constant changed.
  *  - the gain curve point array last index occupies 5 bits, so it can hold
  *    0..31 and the count of control points is 1..32.  The proposal's
  *    "shall be >= 0 and <= 31" is therefore satisfied by construction.
@@ -112,7 +123,16 @@ class CIccProfile;
  * MAX_UNKNOWN_TAG_SIZE.  It is in the header because the XML and JSON
  * authoring paths have to apply it to the hex text *before* they allocate a
  * buffer to decode it into - reaching SetRawMetadata()'s copy of the check
- * means the allocation has already happened. */
+ * means the allocation has already happened.
+ *
+ * PROPOSAL-ISSUE (no register key -- the corpus states no bound): unlike the
+ * structural limits above, 1 MiB is not something the encoding expresses.  It
+ * is a resource-exhaustion bound with no basis in the HAGC proposal, chosen
+ * to sit three orders of magnitude above the largest layout the format can
+ * describe so that no conformant tag can reach it.  Recorded as a decision
+ * because a future revision could in principle define a metadata payload this
+ * refuses, and because a bound with no spec basis is exactly the kind of
+ * limit that becomes invisible once it stops being questioned. */
 #define icHagcMaxMetadataSize 0x00100000u
 
 /** The largest Application Version and Min Application Version the encoding

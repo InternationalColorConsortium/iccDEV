@@ -98,6 +98,14 @@ class CIccTagDict;
  * BT.2408 graphics white. */
 #define icHdrDefaultContentReferenceWhite 203.0
 
+/** Default mastering peak luminance in cd/m^2 for a Linear HDR Profile that
+ * carries neither a CLL nor an MDCV entry (clause 8.10.4, priority order c).
+ * Unlike the 203 above this is not a reference white: it is the content peak
+ * the priority order assumes in the absence of metadata, and it is stated
+ * only for the Linear transfer, which - unlike PQ and HLG - establishes no
+ * peak of its own. */
+#define icHdrDefaultMasteringPeak 1000.0
+
 /**
  ***********************************************************************
  * Chromaticity coordinates of a set of colour primaries and their white,
@@ -160,6 +168,30 @@ typedef enum {
 } icHdrHeadroomSource;
 
 /**
+ * Which rule of clause 8.10.4's priority order produced the scalar content
+ * headroom Hcontent, in the order that clause defines.
+ *
+ * The order applies to the Linear (8) transfer only. PQ and HLG carry a peak
+ * luminance in the transfer function itself, so a content headroom derived
+ * from metadata would be answering a question those two transfers have
+ * already answered; 8.10.4 states the order for Linear and NOTE 9 sends a CMM
+ * that wants the others to "the conventions of the
+ * cicpTag.TransferCharacteristics" instead.
+ *
+ * Reported alongside the value for the same reason the display source is:
+ * rule c) is a stated assumption about content the profile says nothing
+ * about, and a consumer that cannot tell it from a) has no way to know the
+ * 1000 cd/m^2 came from the amendment rather than from the metadata.
+ */
+typedef enum {
+  icHdrContentHeadroomNone    = 0,  /* not derivable: the transfer is not Linear,
+                                     * or the reference white is not positive */
+  icHdrContentHeadroomCll     = 1,  /* 8.10.4 a): CLL.max / CRWL */
+  icHdrContentHeadroomMdcv    = 2,  /* 8.10.4 b): MDCV.maxLuminance / CRWL */
+  icHdrContentHeadroomDefault = 3,  /* 8.10.4 c): 1000 cd/m^2 / CRWL */
+} icHdrContentHeadroomSource;
+
+/**
  ***********************************************************************
  * Class: CIccHdrMetadataReader
  *
@@ -180,8 +212,21 @@ typedef enum {
  *  HDR Display category; their names and shapes are read from 8.10.5 itself,
  *  DCV on the shape of its registered sibling MDCV.
  *
+ *  PROPOSAL-ISSUE HDR-11: that reconstruction is a ruling.  8.10.5 makes the
+ *  registry "the authoritative source for the names, encodings and semantics
+ *  of each entry" and then describes entries the registry does not carry, so
+ *  there is no authoritative shape to read; DCV's field order and units here
+ *  are MDCV's, on the strength of the two being siblings and nothing more.
+ *  Re-verified against the live registry 2026-09-01: it carries HDR image
+ *  (MDCV, CCV, CLL, CRWL) and Printing, and no HDR Display category.  If the
+ *  category is registered with a different shape, this parse changes - which
+ *  is why a wrong field count is reported as unparsed rather than guessed at.
+ *
  *  One thing the registry does not state is what separates the fields of a
- *  multi-value entry, so any of space, tab, comma or semicolon is accepted,
+ *  multi-value entry (PROPOSAL-ISSUE HDR-11: the registry's Value column
+ *  gives the field list and no delimiter, and the amendment does not
+ *  reproduce the definitions), so any of space, tab, comma or semicolon is
+ *  accepted,
  *  and a value whose field count is wrong is reported as unparsed rather than
  *  read as its first few fields. Callers can tell "absent" from "present but
  *  not understood" (see HasUnparsedEntries()), and no validation diagnostic
@@ -257,6 +302,32 @@ public:
    */
   icHdrHeadroomSource ResolveDisplayHeadroom(icFloatNumber &headroom) const;
 
+  /**
+   * Resolve the scalar content headroom Hcontent by the priority order of
+   * clause 8.10.4, for a profile whose cicpTag.TransferCharacteristics is
+   * Linear (8). The caller owns that test: this class reads the metadataTag
+   * and never the cicpTag.
+   *
+   * crwl is the content HDR reference white to divide by. It is a parameter
+   * rather than a lookup because the profile-level answer is not always this
+   * class's own: an HAGC tag carries its own reference white, and
+   * icGetHdrProfileInfo() prefers it. Passing the value the caller resolved
+   * keeps Hcontent consistent with the reference white reported beside it.
+   *
+   * Returns the rule that fired; icHdrContentHeadroomNone means no value was
+   * produced, which for a Linear profile can only happen when crwl is not
+   * positive, since rule c) has no metadata precondition.
+   */
+  icHdrContentHeadroomSource ResolveContentHeadroom(icFloatNumber &headroom,
+                                                   icFloatNumber crwl) const;
+
+  /** ResolveContentHeadroom() against this class's own CRWL - the metadataTag
+   * entry, or clause 8.10.4's 203 cd/m^2 default when it is absent. Correct
+   * for a profile with no HAGC tag; see the overload above for why the
+   * profile-level path passes its own value instead. */
+  icHdrContentHeadroomSource ResolveContentHeadroom(icFloatNumber &headroom) const
+  { return ResolveContentHeadroom(headroom, GetResolvedContentReferenceWhite()); }
+
   /** True when a recognised key was present but its value did not parse.
    * Kept separate from absence so a caller never reads a reconstruction
    * failure as "the profile does not carry this". */
@@ -318,6 +389,14 @@ typedef struct {
    * supplies one. */
   icFloatNumber contentReferenceWhite;
   bool bContentReferenceWhiteFromProfile;
+
+  /* Resolved content headroom (8.10.4's Linear priority order). Populated
+   * only when the cicpTag declares TransferCharacteristics 8; for PQ and HLG
+   * the source is icHdrContentHeadroomNone and contentHeadroom is 0, which
+   * says the clause defines no metadata-derived value there, not that the
+   * content has no headroom. */
+  icHdrContentHeadroomSource nContentHeadroomSource;
+  icFloatNumber contentHeadroom;
 
   /* Resolved display headroom (8.10.5). */
   icHdrHeadroomSource nHeadroomSource;
