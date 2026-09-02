@@ -4034,6 +4034,139 @@ function(iccdev_add_xml_curve_oversize_file_test)
   endif()
 endfunction()
 
+# #2323: CIccMpeXmlCalculator::Flatten() scanned an in{}/out{} channel-reference
+# index for its closing bracket and then did "select = ptr + 1" unconditionally.
+# With no closing bracket the scan stops on the NUL terminator, so that assignment
+# ran strlen() one past it. Which diagnostic appears depends only on the selector
+# length, because that decides where the string keeps its bytes: <= 14 chars stays
+# inside libstdc++'s inline SSO buffer and is not caught at all (the malformed
+# reference is simply accepted), exactly 15 fills it and the read leaves the stack
+# frame (the reported 1-byte-read-stack-buffer-overflow, scariness 27), and >= 16
+# has moved to the heap. The helper covers all three plus the select[1] == '('
+# entry, and pins the well-formed spellings the corpus uses so that the guard
+# cannot be satisfied by refusing every indexed reference.
+function(iccdev_add_calc_channel_ref_unterminated_index_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCalcChannelRefUnterminatedIndexTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/calc-channel-ref-unterminated-index.cpp"
+  )
+  target_compile_features(iccCalcChannelRefUnterminatedIndexTest PRIVATE cxx_std_17)
+  target_include_directories(iccCalcChannelRefUnterminatedIndexTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccCalcChannelRefUnterminatedIndexTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccCalcChannelRefUnterminatedIndexTest)
+
+  # The helper writes its ten generated documents into this directory and
+  # chdir()s there, so nothing lands in the source tree.
+  set(_calc_unterminated_scratch
+    "${CMAKE_CURRENT_BINARY_DIR}/ctest-output/calc-channel-ref-unterminated-index")
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.calc-channel-ref-unterminated-index
+      COMMAND "$<TARGET_FILE:iccCalcChannelRefUnterminatedIndexTest>"
+              "${_calc_unterminated_scratch}"
+    )
+  else()
+    add_test(
+      NAME iccdev.calc-channel-ref-unterminated-index
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccCalcChannelRefUnterminatedIndexTest>"
+        "${_calc_unterminated_scratch}"
+    )
+  endif()
+  set_tests_properties(iccdev.calc-channel-ref-unterminated-index PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;xml;mpe;calculator;issue-2323;regression"
+  )
+  if(WIN32)
+    set(_calc_unterminated_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCalcChannelRefUnterminatedIndexTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _calc_unterminated_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.calc-channel-ref-unterminated-index PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_calc_unterminated_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# #2323 (JSON twin): CIccMpeJsonCalculator::Flatten() carries a byte-for-byte copy
+# of the XML defect -- "select = p + 1" after a scan that stops on the NUL when the
+# index is unterminated. It is a separate reachable entry point (iccFromJson on a
+# hand-authored document), and reachable through MORE spellings than the XML copy,
+# whose "select[1] == '('" typo keeps the '(' form out. Registered separately from
+# the XML helper so neither masks the other: this one is skipped where IccJSON is
+# not built, and the XML coverage does not disappear with it.
+function(iccdev_add_calc_channel_ref_unterminated_index_json_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCalcChannelRefUnterminatedIndexJsonTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/calc-channel-ref-unterminated-index-json.cpp"
+  )
+  target_compile_features(iccCalcChannelRefUnterminatedIndexJsonTest PRIVATE cxx_std_17)
+  target_include_directories(iccCalcChannelRefUnterminatedIndexJsonTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccCalcChannelRefUnterminatedIndexJsonTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccCalcChannelRefUnterminatedIndexJsonTest)
+
+  set(_calc_unterminated_json_scratch
+    "${CMAKE_CURRENT_BINARY_DIR}/ctest-output/calc-channel-ref-unterminated-index-json")
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.calc-channel-ref-unterminated-index-json
+      COMMAND "$<TARGET_FILE:iccCalcChannelRefUnterminatedIndexJsonTest>"
+              "${_calc_unterminated_json_scratch}"
+    )
+  else()
+    add_test(
+      NAME iccdev.calc-channel-ref-unterminated-index-json
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccCalcChannelRefUnterminatedIndexJsonTest>"
+        "${_calc_unterminated_json_scratch}"
+    )
+  endif()
+  set_tests_properties(iccdev.calc-channel-ref-unterminated-index-json PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;json;mpe;calculator;issue-2323;regression"
+  )
+  if(WIN32)
+    set(_calc_unterminated_json_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCalcChannelRefUnterminatedIndexJsonTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _calc_unterminated_json_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.calc-channel-ref-unterminated-index-json PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_calc_unterminated_json_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2006 part 4a: CIccTagCurve::SetSize() answered an over-cap request the same
 # way it answered SetSize(0) -- free the table, m_nSize = 0, return true -- so
 # the return value could not distinguish "emptied" (a success, and ICC.1 10.6's
@@ -6781,6 +6914,8 @@ if(WIN32)
   iccdev_add_xml_writer_graceful_degrade_test()
   iccdev_add_xml_relaxng_validation_leak_test()
   iccdev_add_xml_curve_oversize_file_test()
+  iccdev_add_calc_channel_ref_unterminated_index_test()
+  iccdev_add_calc_channel_ref_unterminated_index_json_test()
   iccdev_add_curve_setsize_contract_test()
   iccdev_add_curve_gamma_u8fixed8_test()
   iccdev_add_luminance_normalization_test()
@@ -7146,6 +7281,8 @@ iccdev_add_json_sparsematrix_huaf_test()
 iccdev_add_xml_writer_graceful_degrade_test()
 iccdev_add_xml_relaxng_validation_leak_test()
 iccdev_add_xml_curve_oversize_file_test()
+iccdev_add_calc_channel_ref_unterminated_index_test()
+iccdev_add_calc_channel_ref_unterminated_index_json_test()
 iccdev_add_curve_setsize_contract_test()
 iccdev_add_curve_gamma_u8fixed8_test()
 iccdev_add_luminance_normalization_test()

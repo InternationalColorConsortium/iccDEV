@@ -3155,7 +3155,18 @@ bool CIccMpeXmlCalculator::Flatten(std::string &flatStr, std::string macroName, 
         
         int i;
         for (i = 0; i < iter; i++) {
-          Flatten(flatStr, name, m->second.c_str(), parseStr, nLocalsOffset+nLocalsSize, nDepth + 1);
+          // Propagate the expansion's failure instead of discarding it (#2323).
+          // Every refusal inside a macro body -- an undefined nested macro, an
+          // unknown channel name, an out-of-range offset, and now an unterminated
+          // index -- was reported into parseStr and then dropped here, so the
+          // offending operator was silently left out of the flattened function and
+          // LoadXml() still returned true.  A document the parser had already
+          // decided was bad produced a profile, and the message explaining why sat
+          // unread in parseStr.  The JSON twin has always checked this return
+          // (CIccMpeJsonCalculator::Flatten, IccMpeJson.cpp), so this brings the two
+          // back into agreement rather than inventing a rule.
+          if (!Flatten(flatStr, name, m->second.c_str(), parseStr, nLocalsOffset+nLocalsSize, nDepth + 1))
+            return false;
         }
       }
       else {
@@ -3195,13 +3206,56 @@ bool CIccMpeXmlCalculator::Flatten(std::string &flatStr, std::string macroName, 
           const char *ptr;
           offset = atoi(select.c_str() + 1);
           for (ptr = select.c_str() + 1; *ptr && *ptr != ')' && *ptr != ']'; ptr++);
+          // An unterminated index -- "Lab[1" with no closing bracket -- left ptr on
+          // the NUL terminator, so "ptr + 1" addressed one past it and the
+          // assignment below ran strlen from there (#2323).  What that produces
+          // depends only on how long the selector is, because that decides where
+          // the string keeps its bytes: 14 characters or fewer stay inside
+          // libstdc++'s inline SSO buffer and nothing reports it at all -- the
+          // malformed reference is simply accepted -- exactly 15 fills that buffer
+          // so the read leaves this stack frame, which is the reported
+          // 1-byte-read-stack-buffer-overflow at scariness 27, and 16 or more has
+          // moved to the heap and reads past that allocation instead.  The
+          // reported case is the narrowest of the three.
+          //
+          // Refused rather than silently skipped.  Everything newly rejected here
+          // previously had NO defined behaviour, so there is no working input to
+          // preserve -- and the check above already refuses an unknown channel name
+          // on the same standard.  (The offset/size check below refuses an
+          // out-of-range in{} reference, but bounds out{} against the input count
+          // too; that is a separate defect, noted there.)  Accepting it would let
+          // "in{Lab[1" resolve quietly to in(5).  No tracked XML carries an
+          // unterminated index: every indexed reference in the corpus closes its
+          // bracket.
+          if (!*ptr) {
+            parseStr += "Unterminated index in '" + op + "' operation channel reference '" + ref + "'\n";
+            return false;
+          }
           select = ptr + 1;
         }
 
         if (select[0]==',')
           size = atoi(select.c_str() + 1);
 
-        if (size < 0 || offset<0 || ci->second.first + offset + size > m_nInputChannels) {
+        // Summed in a width that cannot wrap.  offset and size are both atoi()
+        // results on attacker-supplied text, so this was int arithmetic over two
+        // unbounded values and OVERFLOWED BEFORE IT COULD BE TESTED: measured with
+        // "in{Lab[2000000000],2000000000}", 4 + 2000000000 + 2000000000 wraps to
+        // -294967292, the comparison passes, and the operator flattens to
+        // in(2000000004,2000000000) instead of being refused (#2323).  UBSan calls
+        // it out at this line.  Fixed here for the same reason as the unterminated
+        // index above -- signed overflow has no defined behaviour, so there is no
+        // working input to preserve -- and the value is still refused, just at this
+        // guard rather than downstream in SetCalcFunc().
+        //
+        // NOTE the bound itself is m_nInputChannels for BOTH operators, so an out{}
+        // reference is range-checked against the INPUT count: a 7-in/3-out element
+        // accepts out{a[0],6} and writes the profile, and only Validate() reports
+        // "accesses illegal output channels".  That is a live defect, but it changes
+        // which documents are accepted rather than removing undefined behaviour, so
+        // it is reported on #2323 for a ruling rather than changed here.
+        const long long nEnd = (long long)ci->second.first + offset + size;
+        if (size < 0 || offset<0 || nEnd > (long long)m_nInputChannels) {
           parseStr += "Invalid '" + op + "' operation channel offset or size '" + refroot + "'\n";
           return false;
         }
