@@ -41,11 +41,10 @@ Use this skill for repeatable maintainer operations in
    CTest wrapper.
 8. For local PR proof, pull the published `latest` image, record its resolved
    digest, mount the reviewed worktree read-only, and copy it to container-local
-   scratch space. Run the Docker PR verification build (the configured tool and
-   test target set with strict Clang sanitizer flags), reject compiler warnings,
-   and run CTest excluding only the `slow` and `calculator` labels.
+   scratch space. Run the strict Clang sanitizer build, reject compiler
+   warnings, and run CTest excluding only the `slow` and `calculator` labels.
 9. When the PR-specific behavior is in an excluded suite, run its focused CTest
-   wrapper in addition to the routine Docker PR envelope.
+   wrapper in addition to the routine container envelope.
 10. For AFL/CFL work, run `iccdev-fuzz-env`, record the patch-stack counts, and
     run the smallest matching smoke (`iccdev-afl-smoke.sh --patches` or
     `.github/ci/cfl/build.sh --patches`) before broader validation.

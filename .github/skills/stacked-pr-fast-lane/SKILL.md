@@ -59,9 +59,8 @@ success as merge approval.
 
 Fast lane applies only to an open same-repository PR and runs exact GCC 15.2
 Release LTO plus GCC 15.2 ASAN+UBSAN Debug tool validation. It defaults to
-the latest CTest, with Windows opt-in. Docker verification is scheduled whenever
-the selected PR changes the container surface. It is an accelerator, not a
-replacement for required PR gates or the long-cycle `ci_scope=full` gate.
+the latest CTest, with Windows opt-in. It is an accelerator, not a replacement
+for required PR gates or the long-cycle `ci_scope=full` gate.
 
 Confirm the target before dispatch:
 
@@ -92,13 +91,9 @@ gh run watch <run-id> --repo InternationalColorConsortium/iccDEV --exit-status
 ```
 
 Trigger shared-concurrency runs sequentially. Add Windows only when the change
-needs that surface. Docker is required for container-surface changes, including
-the unified Dockerfile, packaged MCP source, and `ci-docker-pr.yml`. For
-source, CMake, and test-only changes targeting `master`, the Docker lane uses
-the dynamically detected base-SHA image and builds the mounted PR tree; no
-image SHA is hardcoded. Docker-definition changes and non-`master` base
-branches build the exact PR image. Escalate to `ci_scope=full` when the changed
-surface or merge policy requires the long cycle.
+needs that surface. Container-surface changes select the full matrix. Escalate
+to `ci_scope=full` when the changed surface or merge policy requires the long
+cycle.
 
 ## References
 

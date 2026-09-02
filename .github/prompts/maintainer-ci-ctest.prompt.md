@@ -37,13 +37,12 @@ maintainers unless an iccDEV maintainer explicitly approves the change.
 Choose the smallest gate that proves the behavior:
 
 - `ci-pr-action` full: explicit long-cycle Unix GCC/Clang Release and Debug,
-  exact GCC 15.2 strict Release LTO, GCC 15.2 ASAN+UBSAN tool tests, Windows,
-  and Docker verification. Its tool-test caller excludes the `pr-extended`
+  exact GCC 15.2 strict Release LTO, GCC 15.2 ASAN+UBSAN tool tests, and
+  Windows. Its tool-test caller excludes the `pr-extended`
   CTest label; labelled tests remain enabled in `ci-regression-checks`.
 - `ci-pr-action` fast lane: exact GCC 15.2 strict Release LTO plus GCC 15.2
   ASAN+UBSAN Release tool validation and the latest CTest by default, with
-  Windows opt-in. Docker verification is scheduled when the selected PR changes
-  the container surface.
+  Windows opt-in.
 - `ci-pr-action` auto: default path-scoped selection. Source, build, test, and
   container changes select the full matrix; workflow-only changes use preflight
   and workflow-security gates.
@@ -75,8 +74,8 @@ Choose the smallest gate that proves the behavior:
   log excerpts by default; rerun with `registry_qa_log_tail_lines=0` only when
   complete raw per-tool logs are required. Preserve downloaded registry profile
   payloads in developer reports so failing inputs remain available for review.
-- Container changes require the Docker PR verification lane. Do not claim the
-  container surface is verified until its local image build and hosted lane pass.
+- Container changes select the full matrix. Validate canonical image publication
+  through `ci-docker` on `master`.
 - When adding cases inside an existing script-backed suite, document that the
   CTest suite count is unchanged and validate both direct script execution and
   the CTest wrapper.

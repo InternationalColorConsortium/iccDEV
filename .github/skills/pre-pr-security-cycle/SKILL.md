@@ -29,8 +29,7 @@ security automation.
   run the relevant local scanners, patch confirmed findings, retest, and record
   any accepted scanner noise with a clear rationale.
 - Runner-reduction changes must retain trusted-base sanitizer sourcing,
-  sanitization for every workflow output, and path-gated coverage for container
-  changes.
+  sanitization for every workflow output, and container-change classification.
 
 ## Loop
 
@@ -99,11 +98,8 @@ Choose the smallest dynamic check that proves the changed behavior:
 - Dockerfile checks must not be advisory-only when container files changed:
   run `hadolint` and Trivy config, then build, scan, or smoke the affected image
   when practical.
-- Confirm that `container_changed` selects the read-only Docker PR verification
-  lane and that the aggregate PR status requires its result when selected.
-- For Docker PR fast lanes, validate the same helper checks that the publishing
-  workflow validates, including patch checkers, applicators, environment
-  banners, and healthcheck semantics.
+- Confirm that `container_changed` selects the full matrix and that canonical
+  image publication remains owned by `ci-docker` on `master`.
 - WASM validation and parity for Emscripten changes.
 - Release ZIP/checksum/artifact shape check for release packaging changes.
 - vcpkg consumer smoke for port/export changes.

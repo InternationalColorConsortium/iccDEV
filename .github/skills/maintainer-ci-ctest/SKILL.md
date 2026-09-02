@@ -80,7 +80,7 @@ when practical.
 - Follow `.github/instructions/workflow-governance.instructions.md`.
 - Treat `ci-pr-action` `full` as the explicit long-cycle maintainer gate. It runs
   Unix GCC/Clang Release and Debug builds, exact GCC 15.2 strict Release LTO in
-  the regression container, GCC 15.2 ASAN+UBSAN tool tests, Windows, and Docker.
+  the regression container, GCC 15.2 ASAN+UBSAN tool tests, and Windows.
   Its tool-test caller excludes the `pr-extended` CTest label to stay within
   the PR runtime budget; `ci-regression-checks` continues to run the labelled
   tests.
@@ -89,9 +89,9 @@ when practical.
   workflow-security gates.
 - Use `ci_scope=fast-lane` for the exact GCC 15.2 Release LTO and ASAN+UBSAN
   Release tool lanes. Fast lane defaults to the latest CTest with Windows
-  disabled; Docker runs when the PR changes the container surface.
-- Container changes require the Docker PR verification lane. Do not claim the
-  container surface is verified until its local image build and hosted lane pass.
+  disabled.
+- Container changes select the full matrix. Validate canonical image publication
+  through `ci-docker` on `master`.
 - Do not use `|| true` around profile generation, CTest discovery, regression
   execution, sanitizer checks, or packaging verification.
 - Use least-privilege permissions and credential cleanup.

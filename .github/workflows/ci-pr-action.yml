@@ -563,7 +563,7 @@ jobs:
             ci_changed=true
           fi
 
-          if has_changed_file '^(Dockerfile|\.dockerignore|\.github/ci/(docker|requirements)/|iccdev-mcp/|\.github/workflows/ci-docker-pr\.yml|\.github/scripts/(check-workflow-cache-policy|sanitize-sed)\.sh)'; then
+          if has_changed_file '^(Dockerfile|\.dockerignore|\.github/ci/(docker|requirements)/|iccdev-mcp/|\.github/scripts/(check-workflow-cache-policy|sanitize-sed)\.sh)'; then
             image_definition_changed=true
           fi
 
@@ -1148,17 +1148,6 @@ jobs:
           grep -Fq 'XML round-trip OK' <<< "$output"
           grep -Fq 'Hello, iccDEV!' <<< "$output"
 
-  docker-ci:
-    if: ${{ needs.detect-src.outputs.container_changed == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    name: Docker Clang 22 Verification
-    needs: [detect-src, validate-inputs]
-    uses: ./.github/workflows/ci-docker-pr.yml
-    with:
-      base_sha: ${{ needs.detect-src.outputs.base_sha }}
-      target_sha: ${{ needs.detect-src.outputs.target_sha }}
-      warning_policy: ${{ needs.validate-inputs.outputs.warning-policy }}
-      build_pr_image: ${{ needs.detect-src.outputs.image_definition_changed == 'true' || needs.detect-src.outputs.trusted_base_image_available != 'true' }}
-
   finalize:
     name: PR Summary
     runs-on: ubuntu-latest
@@ -1176,7 +1165,6 @@ jobs:
       - macos-release-lto
       - macos-debug
       - example-project
-      - docker-ci
     if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     steps:
       - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
@@ -1218,7 +1206,6 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed }}
-          CONTAINER_CHANGED: ${{ needs.detect-src.outputs.container_changed }}
           FAST_LANE: ${{ needs.validate-inputs.outputs.fast-lane }}
           DETECT_RESULT: ${{ needs.detect-src.result }}
           SETUP_RESULT: ${{ needs.setup.result }}
@@ -1235,7 +1222,6 @@ jobs:
           MACOS_RELEASE_LTO_RESULT: ${{ needs['macos-release-lto'].result }}
           MACOS_DEBUG_RESULT: ${{ needs['macos-debug'].result }}
           EXAMPLE_RESULT: ${{ needs['example-project'].result }}
-          DOCKER_RESULT: ${{ needs['docker-ci'].result }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -1266,7 +1252,6 @@ jobs:
           SETUP_RESULT="${SETUP_RESULT:-failure}"
           VALIDATE_RESULT="${VALIDATE_RESULT:-failure}"
           SRC_CHANGED="${SRC_CHANGED:-false}"
-          CONTAINER_CHANGED="${CONTAINER_CHANGED:-false}"
           FAST_LANE="${FAST_LANE:-false}"
           LINT_RESULT="${LINT_RESULT:-success}"
           SCAN_RESULT="${SCAN_RESULT:-success}"
@@ -1275,7 +1260,6 @@ jobs:
           MACOS_RELEASE_LTO_RESULT="${MACOS_RELEASE_LTO_RESULT:-success}"
           MACOS_DEBUG_RESULT="${MACOS_DEBUG_RESULT:-success}"
           EXAMPLE_RESULT="${EXAMPLE_RESULT:-success}"
-          DOCKER_RESULT="${DOCKER_RESULT:-success}"
           RISK_RESULT="${RISK_RESULT:-success}"
           GCC15_LTO_RESULT="${GCC15_LTO_RESULT:-success}"
 
@@ -1295,7 +1279,6 @@ jobs:
           SETUP_RESULT="$(trim_and_norm "$SETUP_RESULT")"
           VALIDATE_RESULT="$(trim_and_norm "$VALIDATE_RESULT")"
           SRC_CHANGED="$(trim_and_norm "$SRC_CHANGED")"
-          CONTAINER_CHANGED="$(trim_and_norm "$CONTAINER_CHANGED")"
           FAST_LANE="$(trim_and_norm "$FAST_LANE")"
           LINT_RESULT="$(trim_and_norm "$LINT_RESULT")"
           SCAN_RESULT="$(trim_and_norm "$SCAN_RESULT")"
@@ -1304,13 +1287,12 @@ jobs:
           MACOS_RELEASE_LTO_RESULT="$(trim_and_norm "$MACOS_RELEASE_LTO_RESULT")"
           MACOS_DEBUG_RESULT="$(trim_and_norm "$MACOS_DEBUG_RESULT")"
           EXAMPLE_RESULT="$(trim_and_norm "$EXAMPLE_RESULT")"
-          DOCKER_RESULT="$(trim_and_norm "$DOCKER_RESULT")"
           RISK_RESULT="$(trim_and_norm "$RISK_RESULT")"
           GCC15_LTO_RESULT="$(trim_and_norm "$GCC15_LTO_RESULT")"
 
           # --- compute overall result from upstream jobs ----------------------
           job_res=success
-          required_results=("$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$RISK_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$MACOS_RELEASE_LTO_RESULT" "$MACOS_DEBUG_RESULT" "$EXAMPLE_RESULT" "$DOCKER_RESULT")
+          required_results=("$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$RISK_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$MACOS_RELEASE_LTO_RESULT" "$MACOS_DEBUG_RESULT" "$EXAMPLE_RESULT")
           for s in "${required_results[@]}"; do
             # 'skipped' is acceptable (jobs are skipped when src_changed is false)
             # only 'failure' or 'cancelled' should cause overall failure
@@ -1319,10 +1301,6 @@ jobs:
               break
             fi
           done
-          if [[ "$CONTAINER_CHANGED" == "true" && "$DOCKER_RESULT" != "success" ]]; then
-            job_res=failure
-          fi
-
           # --- write header ----------------------------------------------------
           {
             echo "<div align=\"center\">"
@@ -1390,7 +1368,6 @@ jobs:
             printf "| macos-release-lto  | %s |\n" "$(sanitize_line "$MACOS_RELEASE_LTO_RESULT")"
             printf "| macos-debug        | %s |\n" "$(sanitize_line "$MACOS_DEBUG_RESULT")"
             printf "| example-project    | %s |\n" "$(sanitize_line "$EXAMPLE_RESULT")"
-            printf "| docker-ci          | %s |\n" "$(sanitize_line "$DOCKER_RESULT")"
             echo ""
             echo "**Overall Result:** \`$(sanitize_line "$job_res")\`"
             echo ""

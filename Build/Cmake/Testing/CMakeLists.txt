@@ -1701,8 +1701,8 @@ function(iccdev_add_mpe_acs_zero_signature_test)
   # SIZE_MAX/2 to force a malloc failure, and ASan does NOT return NULL for an
   # oversize request: with the default allocator_may_return_null=0 it reports
   # allocation-size-too-big and ABORTS the process.  Measured under the sanitizer
-  # lane's own options (ci-docker-pr.yml exports
-  # ASAN_OPTIONS="halt_on_error=0,detect_leaks=0"): exit 1, so this test would
+  # configuration with ASAN_OPTIONS="halt_on_error=0,detect_leaks=0": exit 1,
+  # so this test would
   # have gone red there while passing everywhere else.  halt_on_error does not
   # cover allocator errors.  allocator_may_return_null=1 restores the NULL return
   # the test is written against, and downgrades the message to a WARNING line

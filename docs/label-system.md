@@ -154,8 +154,8 @@ Dispatch `ci_scope=full` explicitly for a long-cycle matrix. For the shortest
 same-repository PR lane, provide an open `pr_number`, choose
 `ci_scope=fast-lane`, and set `ctest_recent_limit`, `include_windows`,
 and `warning_policy` on that dispatch. Fast lane defaults to the latest
-registered CTest and strict warning failure. Windows is opt-in; Docker
-verification is scheduled when the pull request changes the container surface.
+registered CTest and strict warning failure. Windows is opt-in. Docker
+publication remains owned by `ci-docker` on `master`.
 
 Manual dispatches use an event-qualified concurrency group. A dispatch on an
 open PR therefore does not cancel that PR's `pull_request` run; inspect the
@@ -166,11 +166,9 @@ Fuzzers)` (without Windows). Both callers use `_build-matrix.yml`, which
 centralizes the current reusable Unix and Windows gates plus focused sanitizer,
 option, version-header, and clean-rebuild lanes.
 
-Docker PR verification is required whenever the container surface changes,
-including the unified Dockerfile, packaged MCP source, or
-`ci-docker-pr.yml`. `PR Summary` fails a non-success `docker-ci` result for
-those changes; update the pinned GitHub Action, Docker, or container SHA
-references and rerun the lane before treating the container check as verified.
+Container-surface changes remain classified by the path detector for risk
+reporting and select the full matrix. Canonical image publication is validated
+through the master `ci-docker` workflow.
 
 ### Required Check Policy
 
@@ -185,11 +183,11 @@ fail-closed policy:
 | `Risk Analysis Gate / Windows Security Audit (PowerShell)` | Enforces PowerShell and Windows workflow security canaries. |
 | `WASM Release Build + Parity` | Required separately on `master` because it is outside `ci-pr-action`. |
 
-Do not require individual Unix, GCC 15.2, tool-test, Windows, or Docker job
-names in branch rules. Those jobs are conditional by selected mode and are
-covered by `PR Summary`. The summary must treat failed or cancelled detection,
-setup, and input-validation prerequisites as failures; only intentionally
-skipped mode-specific jobs are acceptable.
+Do not require individual Unix, GCC 15.2, tool-test, or Windows job names in
+branch rules. Those jobs are conditional by selected mode and are covered by
+`PR Summary`. The summary must treat failed or cancelled detection, setup, and
+input-validation prerequisites as failures; only intentionally skipped
+mode-specific jobs are acceptable.
 
 The active `ci-qa-flags` ruleset requires the three `ci-pr-action` contexts.
 `ci-pr-action` therefore runs for pull requests targeting either `master` or
@@ -199,9 +197,6 @@ The `ci-qa-pr-docker-testing` integrity ruleset does not require hosted status
 contexts before a direct maintainer push. It requires signed commits, linear
 fast-forward history, and deletion protection; maintainers dispatch
 `ci-pr-action` and `ci-docker` immediately after pushing the testing branch.
-Pull requests targeting `ci-qa-pr-docker-testing` also run `ci-pr-action`; its
-Docker PR lane is required for same-repository container-surface changes and
-builds the exact PR revision into a job-local image.
 
 ### CodeQL Ready
 
