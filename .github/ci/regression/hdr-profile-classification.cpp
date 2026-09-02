@@ -5,7 +5,7 @@
 // a profile that merely "validates clean":
 //
 // 1. The chromatic adaptation direction in icGetProfilePrimaries(). Clause 10.3
-//    NOTE 1 asks for tristimulus values relative to the profile's *actual*
+//    clause 4.3 asks for tristimulus values relative to the profile's *actual*
 //    adopted white. The matrix column tags are encoded relative to the PCS
 //    adopted white (D50) and the chromaticAdaptationTag is the matrix that took
 //    them there, so recovering the actual adopted white means applying its
@@ -137,12 +137,14 @@ void testCicpTable()
 }
 
 // ---------------------------------------------------------------------------
-// 2. Recovering primaries from the profile, per clause 10.3 NOTE 1 and NOTE 2
+// 2. Recovering primaries from the profile, per clause 10.3 of the approved
+//    CICP amendment: the procedure is normative body text there and its first
+//    NOTE is the no-chromaticAdaptationTag case
 // ---------------------------------------------------------------------------
 void testProfilePrimaries()
 {
   // HagcHexData declares ColourPrimaries 2 and carries sRGB/BT.709 colorants
-  // with no chromaticAdaptationTag. NOTE 2 governs: the profile's actual
+  // with no chromaticAdaptationTag. The first NOTE governs: the profile's actual
   // adopted white is the PCS adopted white, so the encoded values are used as
   // they stand and the recovered white is D50 - NOT the D65 those colorants
   // would have had before adaptation.

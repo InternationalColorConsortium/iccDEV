@@ -492,15 +492,6 @@ void testUnsupportedConfigurations()
   icHagcMetadata meta;
   CIccHagcEvaluator ev;
 
-  // Reference White Tone Mapping needs SMPTE ST 2094-50 clause C.3.8, which
-  // this implementation does not have. Declining is what makes the CMM fall
-  // through to the next descriptor of clause 8.10.3 instead of rendering the
-  // profile differently from a conforming implementation.
-  buildMetadata(meta, (icFloatNumber)2.0, (icFloatNumber)0.0, icHagcMixingMax, x, y, m, 2);
-  meta.m_bReferenceWhiteToneMapping = true;
-  check(!ev.Init(meta), "Reference White Tone Mapping is declined");
-  check(ev.GetUnsupportedReason() != NULL, "the declined configuration names its reason");
-
   // The Headroom Adaptive Tone Map flag clear means the tag carries no tone
   // mapping metadata at all (proposal 1.2.2.2).
   buildMetadata(meta, (icFloatNumber)2.0, (icFloatNumber)0.0, icHagcMixingMax, x, y, m, 2);
@@ -536,6 +527,124 @@ void testUnsupportedConfigurations()
   buildMetadata(meta, (icFloatNumber)2.0, (icFloatNumber)0.0, icHagcMixingMax, x, y, m, 2);
   memset(meta.GetAlternate(0)->m_coef, 0, sizeof(meta.GetAlternate(0)->m_coef));
   check(!ev.Init(meta), "an all-zero coefficient set is declined");
+}
+
+// ---------------------------------------------------------------------------
+// 6b. Reference White Tone Mapping: the alternates the file does not carry
+// ---------------------------------------------------------------------------
+//
+// With this flag set the tag contains NO alternate images - four header fields
+// are zeroed and the records are absent - so everything asserted here was
+// computed from the baseline headroom alone, per SMPTE ST 2094-50 C.3.8. The
+// expected values below were derived independently from that clause's formulae
+// rather than captured from this implementation's output.
+void testReferenceWhiteToneMap()
+{
+  icHagcAlternateImage alt[2];
+  icUInt8Number n = 99;
+
+  // Baseline headroom zero: C.3.8's first branch produces no alternates, which
+  // lands on the same defined no-tone-mapping case as an ordinary tag with
+  // none. Distinct from a failure, and the return value says so.
+  check(icHagcDeriveReferenceWhiteToneMap(0.0, alt, n), "a zero baseline headroom derives");
+  check(n == 0, "a zero baseline headroom yields no alternate images");
+
+  // A negative headroom is not a headroom.
+  n = 99;
+  check(!icHagcDeriveReferenceWhiteToneMap((icFloatNumber)-1.0, alt, n),
+        "a negative baseline headroom is refused");
+  check(n == 99, "the refused call left the count untouched");
+
+  // H = 2.0, chosen because it is strictly inside the clamp at
+  // log2(1000/203) = 2.30 stops: every value below still depends on it.
+  n = 0;
+  check(icHagcDeriveReferenceWhiteToneMap((icFloatNumber)2.0, alt, n), "H = 2 derives");
+  check(n == 2, "a positive baseline headroom yields exactly two alternate images");
+
+  // u = 2 / log2(1000/203) = 0.868589, so the second headroom is
+  // log2(8/3) * u = 1.230228 and the first is zero by definition.
+  checkClose(alt[0].m_headroom, 0.0, 0.0, "the first alternate sits at headroom zero");
+  checkClose(alt[1].m_headroom, 1.230228, 1e-5, "the second is log2(8/3) * u");
+
+  // Max mixing, which is k_max = 1 with every other coefficient zero.
+  check(alt[0].m_nMixingType == icHagcMixingMax, "the derived mixing is max");
+  checkClose(alt[0].m_coef[icHagcCoefMax], 1.0, 1e-9, "k_max is one");
+  checkClose(alt[0].m_coef[icHagcCoefRed], 0.0, 0.0, "k_red is zero");
+  checkClose(alt[0].m_coef[icHagcCoefComponent], 0.0, 0.0, "k_component is zero");
+
+  check(alt[0].m_nControlPoints == 8, "eight control points");
+  check(!alt[0].m_bPchipSlope, "the slopes come from the Bezier, not from the PCHIP path");
+
+  // The curve runs from the knee at relative linear white to the maximum at
+  // 2^H, so the first X is 1 and the last is 4. The endpoints are where the
+  // construction is checkable without reproducing the whole Bezier: the gain
+  // at the knee is log2(y_white,0) and at the maximum is log2(2^0 / 2^H) = -H.
+  checkClose(alt[0].m_x[0], 1.0, 1e-6, "alt 0 starts at relative linear white");
+  checkClose(alt[0].m_x[7], 4.0, 1e-6, "alt 0 ends at 2^H");
+  checkClose(alt[0].m_y[0], -0.822906, 1e-5, "alt 0 knee gain is log2(1 - u/2)");
+  checkClose(alt[0].m_y[7], -2.0, 1e-5, "alt 0 maps 2^H back to 1.0, i.e. a gain of -H");
+
+  checkClose(alt[1].m_x[0], 1.0, 1e-6, "alt 1 starts at relative linear white");
+  checkClose(alt[1].m_x[7], 4.0, 1e-6, "alt 1 ends at 2^H");
+  checkClose(alt[1].m_y[0], 0.0, 1e-6, "alt 1's knee is unity gain, its white being 1.0");
+  checkClose(alt[1].m_y[7], -0.769772, 1e-5, "alt 1 ends at H_alt,1 - H");
+
+  // Two interior points, one per alternate, so a change to the Bezier or to
+  // kappa cannot pass by moving only the ends.
+  checkClose(alt[0].m_x[3], 1.795834, 1e-5, "alt 0 interior X");
+  checkClose(alt[0].m_y[3], -1.196578, 1e-5, "alt 0 interior gain");
+  checkClose(alt[0].m_slope[3], -0.495833, 1e-5, "alt 0 interior slope");
+  checkClose(alt[1].m_x[5], 2.887725, 1e-5, "alt 1 interior X");
+  checkClose(alt[1].m_y[5], -0.498631, 1e-5, "alt 1 interior gain");
+  checkClose(alt[1].m_slope[5], -0.265428, 1e-5, "alt 1 interior slope");
+
+  // X strictly increasing and the slope at the knee zero - the Bezier starts
+  // tangent to the identity there, which is what makes the knee a knee.
+  int j;
+  for (j = 1; j < 8; j++) {
+    check(alt[0].m_x[j] > alt[0].m_x[j - 1], "alt 0 X is strictly increasing");
+    check(alt[1].m_x[j] > alt[1].m_x[j - 1], "alt 1 X is strictly increasing");
+  }
+  checkClose(alt[0].m_slope[0], 0.0, 1e-6, "the curve leaves the knee with zero gain slope");
+
+  // Above the clamp every derived value stops depending on the baseline, which
+  // is why the fixture uses 2.0 and not 3.0.
+  icHagcAlternateImage hi[2], hi2[2];
+  icUInt8Number nh = 0, nh2 = 0;
+  check(icHagcDeriveReferenceWhiteToneMap((icFloatNumber)3.0, hi, nh), "H = 3 derives");
+  check(icHagcDeriveReferenceWhiteToneMap((icFloatNumber)6.0, hi2, nh2), "H = 6 derives");
+  checkClose(hi[1].m_headroom, 1.415037, 1e-5, "above 2.30 stops the alternate headroom clamps");
+  checkClose(hi2[1].m_headroom, hi[1].m_headroom, 1e-6, "and stays clamped");
+  check(fabs(hi[0].m_y[7] - hi2[0].m_y[7]) > 1.0,
+        "the curves still differ, because the maximum still tracks 2^H");
+
+  // The evaluator accepts the mode now, and says the numbers were derived.
+  icFloatNumber x[2] = { 0.0, 1.0 };
+  icFloatNumber y[2] = { 0.0, (icFloatNumber)-1.0 };
+  icFloatNumber m[2] = { 0.0, 0.0 };
+  icHagcMetadata meta;
+  CIccHagcEvaluator ev;
+
+  buildMetadata(meta, (icFloatNumber)2.0, (icFloatNumber)0.0, icHagcMixingMax, x, y, m, 2);
+  meta.m_bReferenceWhiteToneMapping = true;
+  check(ev.Init(meta), "Reference White Tone Mapping is supported");
+  check(ev.UsesDerivedReferenceWhiteToneMap(), "and reports that its alternates were derived");
+  check(ev.GetUnsupportedReason() == NULL, "with no unsupported reason left over");
+
+  // The alternates the metadata object happens to carry are NOT used: in this
+  // mode the file has none, and a tag that somehow held some must still be
+  // evaluated from the derivation.
+  buildMetadata(meta, (icFloatNumber)2.0, (icFloatNumber)0.0, icHagcMixingMax, x, y, m, 2);
+  CIccHagcEvaluator plain;
+  check(plain.Init(meta), "the same metadata without the flag is supported");
+  check(!plain.UsesDerivedReferenceWhiteToneMap(), "and reports nothing derived");
+
+  meta.m_bReferenceWhiteToneMapping = true;
+  CIccHagcEvaluator flagged;
+  check(flagged.Init(meta), "with the flag set it is still supported");
+  check(flagged.SetTargetHeadroom((icFloatNumber)1.0) &&
+        plain.SetTargetHeadroom((icFloatNumber)1.0), "both evaluators take a target headroom");
+  check(!flagged.IsIdentity(), "the derived curves apply a gain");
 }
 
 // ---------------------------------------------------------------------------
@@ -837,6 +946,7 @@ int main(int /*argc*/, char * /*argv*/[])
   testComponentMixing();
   testPchipSlopes();
   testUnsupportedConfigurations();
+  testReferenceWhiteToneMap();
   testLazyLoadedProfile();
   testEndToEnd();
   testOutputDirection();

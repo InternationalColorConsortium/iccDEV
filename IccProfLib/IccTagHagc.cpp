@@ -1436,20 +1436,26 @@ icValidateStatus CIccTagHagc::Validate(std::string sigPath, std::string &sReport
   }
 
   if (m_metadata.m_bReferenceWhiteToneMapping) {
-    /* Not a defect in the tag: the parameters are legitimately absent and are
-     * PROPOSAL-ISSUE HAGC-05 (external dependency) -- with this flag set, four
-     * header fields are deliberately zeroed in the file and their effective
-     * values come from clause C.3.8 of SMPTE ST 2094-50:2026, which is not
-     * supplied with the amendment.  The tag is therefore not merely
-     * unrenderable but unparseable without that clause.
+    /* Not a defect in the tag, and no longer a limitation of this
+     * implementation either.
      *
-     * meant to be derived per clause C.3.8, which this implementation does not
-     * have.  Saying so is more honest than validating a curve we cannot build. */
+     * PROPOSAL-ISSUE HAGC-05 (external dependency) -- with this flag set, four
+     * header fields are deliberately zeroed in the file and the alternate
+     * images are absent altogether; their effective values come from clause
+     * C.3.8 of SMPTE ST 2094-50, so the tag is not merely unrenderable but
+     * unparseable to a reader holding only ICC documents.  That is what the
+     * item records, and it still holds against the amendment.
+     *
+     * icHagcDeriveReferenceWhiteToneMap() now performs the derivation, so the
+     * curve CAN be evaluated - but from a committee draft of ST 2094-50, not
+     * the published :2026 the amendment cites.  Said as information rather
+     * than as a warning: nothing is wrong with the profile, and a reader who
+     * needs to know which text the numbers came from is told where to look. */
     sReport += icMsgValidateInformation;
     sReport += sSigPathName;
-    sReport += " - HAGC Reference White Tone Mapping parameters are derived per clause C.3.8 of\r\n"
-               "    SMPTE ST 2094-50:2026, which is not implemented; the curve cannot be evaluated.\r\n";
-    rv = icMaxStatus(rv, icValidateWarning);
+    sReport += " - HAGC Reference White Tone Mapping parameters are not carried in the tag; they\r\n"
+               "    are derived per clause C.3.8 of SMPTE ST 2094-50 (read from the 2026-02-23\r\n"
+               "    committee draft, pending the published text).\r\n";
   }
 
   /* --- Global tone mapping parameters (proposal Table 2) --- */

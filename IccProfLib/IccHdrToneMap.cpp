@@ -729,6 +729,124 @@ bool icHagcDerivePchipSlopes(const icFloatNumber *x, const icFloatNumber *y,
 
 /**
  ****************************************************************************
+ * Name: icHagcDeriveReferenceWhiteToneMap
+ *
+ * Purpose:
+ *  Build the alternate images that a Reference White Tone Mapping tag does
+ *  not carry, per clause C.3.8 of SMPTE ST 2094-50.
+ *
+ *  READ THE HEADER BEFORE CHANGING ANY OF THIS.  C.3.8 was read from a
+ *  COMMITTEE DRAFT (PCD2, 2026-02-23), not the published ST 2094-50:2026 the
+ *  amendment cites, and the construction is described there rather than
+ *  quoted because the licence does not permit reproduction.
+ *
+ * Args:
+ *  baselineHeadroom = the tag's baseline headroom, log2
+ *  alternates = output, room for two
+ *  nAlternates = output, 0 or 2
+ *
+ * Return:
+ *  false when baselineHeadroom is negative or not a number
+ ****************************************************************************
+ */
+bool icHagcDeriveReferenceWhiteToneMap(icFloatNumber baselineHeadroom,
+                                       icHagcAlternateImage *alternates,
+                                       icUInt8Number &nAlternates)
+{
+  // The NaN test is the self-comparison rather than isnan(), which the rest of
+  // this file also avoids; a negative baseline headroom is not a headroom.
+  if (!alternates || baselineHeadroom != baselineHeadroom || baselineHeadroom < 0.0)
+    return false;
+
+  if (baselineHeadroom == 0.0) {
+    // C.3.8's first branch.  Not an error and not an empty tag: it lands on
+    // the no-alternates case proposal 1.2.2.6 already defines, where the
+    // baseline is clamped to the target volume and no tone mapping happens.
+    nAlternates = 0;
+    return true;
+  }
+
+  const double kLog2 = log(2.0);
+  // log2(1000/203): a typical mastering peak over BT.2408 HDR reference white.
+  const double kStops = log(1000.0 / 203.0) / kLog2;
+  const double kSpan = log(8.0 / 3.0) / kLog2;
+  const double kKappa = 0.65;
+
+  // u is the share of one mastering stop this baseline has, clamped at one -
+  // every term below is a function of it.
+  double u = (double)baselineHeadroom / kStops;
+  if (u > 1.0)
+    u = 1.0;
+
+  double headroom[2] = { 0.0, kSpan * u };
+  double yWhite[2] = { 1.0 - 0.5 * u, 1.0 };
+
+  int a, c;
+
+  for (a = 0; a < 2; a++) {
+    icHagcAlternateImage &alt = alternates[a];
+
+    alt.m_headroom = (icFloatNumber)headroom[a];
+    alt.SetMixingType(icHagcMixingMax);
+    alt.m_nControlPoints = 8;
+
+    // The slopes come from the Bezier's own derivative below, so this is not
+    // a curve whose slopes are left to be derived.
+    alt.m_bPchipSlope = false;
+    alt.m_nCurveReserved = 0;
+
+    // The knee sits at relative linear white and the maximum at the two
+    // headrooms, both in linear light rather than log2.
+    double xKnee = 1.0;
+    double yKnee = yWhite[a];
+    double xMax = pow(2.0, (double)baselineHeadroom);
+    double yMax = pow(2.0, headroom[a]);
+
+    // yKnee is at least 0,5 because u is capped at one, so this cannot divide
+    // by zero.  The knee ratio is what tilts the middle control point toward
+    // the highlights.
+    double xMid = (1.0 - kKappa) * xKnee + kKappa * (xKnee * yMax / yKnee);
+    double yMid = (1.0 - kKappa) * yKnee + kKappa * yMax;
+
+    double ax = xKnee - 2.0 * xMid + xMax;
+    double bx = 2.0 * xMid - 2.0 * xKnee;
+    double cx = xKnee;
+    double ay = yKnee - 2.0 * yMid + yMax;
+    double by = 2.0 * yMid - 2.0 * yKnee;
+    double cy = yKnee;
+
+    for (c = 0; c < 8; c++) {
+      double t = (double)c / 7.0;
+      double x = (ax * t + bx) * t + cx;
+      double y = (ay * t + by) * t + cy;
+      double dx = 2.0 * ax * t + bx;
+
+      // x and y are both positive across t in [0, 1] for every admissible
+      // baseline headroom - x runs from 1 to 2^H and y from yKnee to yMax,
+      // both of which are positive - so the two logarithms below are defined.
+      // dx is the Bezier's own x derivative and is likewise positive, the
+      // curve being monotone in x; guarding it costs nothing and keeps a
+      // future change to kappa from producing a silent infinity.
+      if (!(x > 0.0) || !(y > 0.0) || !(dx > 0.0))
+        return false;
+
+      double m = (2.0 * ay * t + by) / dx;
+
+      alt.m_x[c] = (icFloatNumber)x;
+      alt.m_y[c] = (icFloatNumber)(log(y / x) / kLog2);
+
+      // The slope of log2(y/x) with respect to x, which is what a gain curve
+      // control point's M means: d/dx [ln(y/x)/ln2] = (m*x - y)/(ln2 * x * y).
+      alt.m_slope[c] = (icFloatNumber)((x * m - y) / (kLog2 * x * y));
+    }
+  }
+
+  nAlternates = 2;
+  return true;
+}
+
+/**
+ ****************************************************************************
  * Name: CIccHagcEvaluator::Curve::Curve
  ****************************************************************************
  */
@@ -865,6 +983,7 @@ CIccHagcEvaluator::CIccHagcEvaluator()
   m_bSupported = false;
   m_szUnsupported = "not initialized";
   m_bDerivedSlopes = false;
+  m_bDerivedRefWhiteToneMap = false;
   m_nCurves = 0;
   m_targetHeadroom = 0.0;
   m_nCurveA = m_nCurveB = 0;
@@ -896,6 +1015,7 @@ bool CIccHagcEvaluator::Init(const icHagcMetadata &meta)
 
   m_bSupported = false;
   m_bDerivedSlopes = false;
+  m_bDerivedRefWhiteToneMap = false;
   m_nCurves = 0;
   m_bInvertible = false;
   m_bMonotone = false;
@@ -917,17 +1037,28 @@ bool CIccHagcEvaluator::Init(const icHagcMetadata &meta)
     return false;
   }
 
-  if (meta.m_bReferenceWhiteToneMapping) {
-    // Proposal 1.2.2.5 defines this mode's parameters by reference to clause
-    // C.3.8 of SMPTE ST 2094-50:2026, which this implementation does not
-    // have.  Reporting it unsupported makes the CMM fall cleanly through the
-    // descriptor precedence; inventing the derivation would render every such
-    // profile differently from a conforming implementation.
-    m_szUnsupported = "Reference White Tone Mapping requires SMPTE ST 2094-50 clause C.3.8";
-    return false;
-  }
+  // Proposal 1.2.2.5 defines this mode's parameters by reference to clause
+  // C.3.8 of SMPTE ST 2094-50, which the file does not contain: the four
+  // header fields are zeroed on the wire and the alternate images are absent
+  // altogether.  Building them here is the only way such a tag can be
+  // evaluated at all.  UsesDerivedReferenceWhiteToneMap() reports that it
+  // happened, because the construction comes from a committee draft - see
+  // icHagcDeriveReferenceWhiteToneMap().
+  icHagcAlternateImage derived[2];
+  const icHagcAlternateImage *pDerived = NULL;
+  icUInt8Number nAlt;
 
-  icUInt8Number nAlt = meta.GetNumAlternates();
+  if (meta.m_bReferenceWhiteToneMapping) {
+    if (!icHagcDeriveReferenceWhiteToneMap(meta.m_baselineHeadroom, derived, nAlt)) {
+      m_szUnsupported = "Reference White Tone Mapping baseline headroom is not derivable";
+      return false;
+    }
+    pDerived = derived;
+    m_bDerivedRefWhiteToneMap = true;
+  }
+  else {
+    nAlt = meta.GetNumAlternates();
+  }
 
   if (nAlt > icHagcMaxAlternates) {
     m_szUnsupported = "alternate image count exceeds the four the proposal permits";
@@ -954,7 +1085,7 @@ bool CIccHagcEvaluator::Init(const icHagcMetadata &meta)
   m_nCurves = 1;
 
   for (i = 0; i < nAlt; i++) {
-    const icHagcAlternateImage *pAlt = meta.GetAlternate(i);
+    const icHagcAlternateImage *pAlt = pDerived ? &pDerived[i] : meta.GetAlternate(i);
 
     if (!pAlt) {
       m_szUnsupported = "alternate image count disagrees with the alternates present";

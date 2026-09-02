@@ -87,7 +87,7 @@
          profile's own red/green/blue colorant tags and media white point. These
          colorants are sRGB/BT.709, so a correct recovery yields BT.709
          chromaticities and D50 white, not D65, because there is no
-         chromaticAdaptationTag and clause 10.3 NOTE 2 says the profile's actual
+         chromaticAdaptationTag and clause 10.3's first NOTE says the profile's actual
          adopted white is then the PCS adopted white. TransferCharacteristics 8
          (Linear) pairs with the zero-alternate HAGC block below, which says no
          tone mapping is to be performed. -->

@@ -377,6 +377,19 @@ typedef struct {
   bool bHasCicp;
   icUInt8Number nColourPrimaries;
   icUInt8Number nTransferCharacteristics;
+
+  /* The other two cicpType fields.  Clause 8.10 never mentions either, and
+   * nothing in the HDR path consults them today - they are reported because
+   * they were being read and thrown away, and because MatrixCoefficients is
+   * the field that would answer which luma coefficients the HLG OOTF should
+   * use: ITU-T H.273 Table 4 ties BT.2100's 0,2627 / 0,0593 to the value 9 and
+   * its equations 39 to 44 derive them from chromaticities for 12 and 13.  See
+   * the coefficient block in IccHdrToneMap.h.  VideoFullRangeFlag is reported
+   * for symmetry; a narrow-range HDR Profile is legal and nothing here acts on
+   * it. */
+  icUInt8Number nMatrixCoefficients;
+  bool bVideoFullRange;
+
   bool bTransferIsHdr;       /* TransferCharacteristics in {8, 16, 18} */
 
   /* Tone-mapping descriptors of clause 8.10.3, in its recommended ranking. */
@@ -420,7 +433,10 @@ ICCPROFLIB_API bool icGetCicpPrimaries(icUInt8Number nColourPrimaries, icCicpPri
 
 /**
  * Recover the source primaries from a profile's own tags, as clause 10.3
- * NOTE 1 specifies for ColourPrimaries equal to 2: take the CIEXYZ of the
+ * (the CICP Unspecified-Primaries amendment, APPROVED 2026-08-20 - which
+ * promoted this procedure out of a NOTE and into normative text, so cite the
+ * clause and not a note number; the note numbering moved with it)
+ * 4.3 specifies for ColourPrimaries equal to 2: take the CIEXYZ of the
  * three matrix column tags and the media white point, undo the chromatic
  * adaptation when a chromaticAdaptationTag is present so the values are
  * relative to the profile's actual adopted white rather than to the PCS

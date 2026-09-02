@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A conforming RGB HDR Display profile whose headroomAdaptiveGainCurveTag sets
+  the Reference White Tone Mapping flag (proposal 1.2.2.5).
+
+  This is the one HAGC configuration a reader holding only ICC documents cannot
+  parse. With the flag set, four header fields - alternate image count,
+  chromaticities mode, and the two "common" flags - are deliberately written as
+  ZERO, no alternate image records follow at all, and the effective values are
+  to be derived on the decoding side per clause C.3.8 of SMPTE ST 2094-50. The
+  file genuinely does not contain the tone-mapping curves; they are computed
+  from the baseline headroom alone.
+
+  Baseline headroom is 2,0 here rather than the 3,0 the sibling fixtures use,
+  because 2,0 sits strictly inside the range where C.3.8's derivation still
+  depends on it: the construction clamps at log2(1000/203) = 2,3 stops, above
+  which every derived value is constant. A fixture at 3,0 would be on the flat
+  side of that clamp and could not tell a correct derivation from one that
+  ignored the baseline.
+
+  Everything the derivation produces is asserted by hdr-tonemap.cpp against
+  values computed independently from C.3.8's formulae. Note the provenance:
+  C.3.8 was read from the 2026-02-23 committee draft of ST 2094-50, not the
+  published :2026 the amendment cites, so this fixture pins what iccDEV
+  currently believes rather than what is certainly conformant.
+--><IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>4.50</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-08-05T00:00:00</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="true" UseWithEmbeddedDataOnly="true"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </PCSIlluminant>
+    <ProfileCreator>ICCD</ProfileCreator>
+  </Header>
+  <Tags>
+    <redColorantTag> <XYZArrayType>
+      <XYZNumber X="0.636962890625" Y="0.262695312500" Z="0.000000000000"/>
+    </XYZArrayType> </redColorantTag>
+
+    <greenColorantTag> <XYZArrayType>
+      <XYZNumber X="0.144622802734" Y="0.677978515625" Z="0.028076171875"/>
+    </XYZArrayType> </greenColorantTag>
+
+    <blueColorantTag> <XYZArrayType>
+      <XYZNumber X="0.168869018555" Y="0.059326171875" Z="1.060989379883"/>
+    </XYZArrayType> </blueColorantTag>
+
+    <redTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </redTRCTag>
+
+    <greenTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </greenTRCTag>
+
+    <blueTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </blueTRCTag>
+
+    <mediaWhitePointTag> <XYZArrayType>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </XYZArrayType> </mediaWhitePointTag>
+
+    <cicpTag> <cicpType>
+      <cicpFields ColorPrimaries="9" TransferCharacteristics="16" MatrixCoefficients="0" VideoFullRangeFlag="1"/>
+    </cicpType> </cicpTag>
+
+    <headroomAdaptiveGainCurveTag> <headroomAdaptiveGainCurveType>
+      <HagcMetadata ApplicationVersion="3" MinApplicationVersion="1"
+                    BaselineHeadroom="2.0000" HeadroomAdaptiveToneMap="true"
+                    ReferenceWhiteToneMapping="true"/>
+    </headroomAdaptiveGainCurveType> </headroomAdaptiveGainCurveTag>
+
+    <profileDescriptionTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR display profile with a Reference White Tone Mapping HAGC tag]]></LocalizedText>
+    </multiLocalizedUnicodeType> </profileDescriptionTag>
+
+    <copyrightTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright (C) 2026 The International Color Consortium. Generated fixture, no measured data.]]></LocalizedText>
+    </multiLocalizedUnicodeType> </copyrightTag>
+  </Tags>
+</IccProfile>

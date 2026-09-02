@@ -163,6 +163,7 @@ HDR/HagcDisplay.icc	positive	valid	0	none	generated	-	conformant example profile
 HDR/HagcHexData.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HagcInvalidXOrder.icc	negative	noncompliant	0	none	generated	-	negative fixture: HAGC gain curve control point X values must be strictly increasing
 HDR/HagcMixingTypes.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/HagcRefWhiteToneMap.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrBakedLut.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrCicpUnspecified.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrDisplayMetadata.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean

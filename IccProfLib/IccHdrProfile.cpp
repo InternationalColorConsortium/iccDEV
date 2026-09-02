@@ -182,7 +182,7 @@ bool icGetCicpPrimaries(icUInt8Number nColourPrimaries, icCicpPrimaries &primari
  * Name: icHdrXyzToChromaticity
  *
  * Purpose: Convert one CIEXYZ tristimulus triplet to (x, y), per step 2 of
- *  clause 10.3 NOTE 1.
+ *  clause 10.3 (normative body text in the approved amendment).
  *
  *  A triplet summing to zero has no chromaticity at all - the conversion is
  *  0/0, not a large number - so it is refused rather than clamped. That case
@@ -264,7 +264,7 @@ static bool icHdrGetXyzTag(const CIccProfile *pProfile, icTagSignature sig,
  * Name: icGetProfilePrimaries
  *
  * Purpose: Recover the source primaries from the profile's own tags, per
- *  clause 10.3 NOTE 1.
+ *  clause 10.3 (normative body text in the approved amendment).
  *
  * Args:
  *  pProfile = the profile
@@ -296,17 +296,18 @@ bool icGetProfilePrimaries(const CIccProfile *pProfile, icCicpPrimaries &primari
     return false;
 
   /* PROPOSAL-ISSUE BALLOT-01 (design-level; one sentence would close it) -- the
-   * amendment's NOTE 1 delegates the chromaticAdaptationTag relationship to
+   * amendment's clause 4.3 delegates the chromaticAdaptationTag relationship to
    * ICC.1 9.2.15 / 9.2.36 / Annex F.3 and does not state the direction, but
    * those clauses describe the forward relationship while this derivation needs
    * the inverse.  The wrong direction returns a complete, plausible set of
    * chromaticities, so the error is not self-detecting.
    *
-   * Step 1 of NOTE 1 asks for the tristimulus values "expressed relative to
+   * Step 1 asks for the tristimulus values "expressed relative to
    * the profile's actual adopted white". The matrix column tags are encoded
    * relative to the *PCS* adopted white (D50); the chromaticAdaptationTag is
    * the matrix that took them there, so recovering the profile's actual
-   * adopted white means applying its inverse. NOTE 2 covers the other case:
+   * adopted white means applying its inverse. NOTE 1 covers the other case
+   * (NOTE 2 in the ballot text, renumbered on approval):
    * with no chromaticAdaptationTag the profile's actual adopted white is D50
    * already and the encoded values are used as they stand.
    *
@@ -938,8 +939,12 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
      * non-const profile keeps the constness where it belongs - on the caller,
      * which has no business being handed a mutable profile to ask a question. */
     CIccTagCicp *pCicpTag = (CIccTagCicp*)pCicp;
-    icUInt8Number mtx, full;
+    icUInt8Number mtx = 0, full = 0;
     pCicpTag->GetFields(info.nColourPrimaries, info.nTransferCharacteristics, mtx, full);
+    info.nMatrixCoefficients = mtx;
+    /* The field is a flag in a byte: anything non-zero is full range.  Both of
+     * these were read into locals and discarded before; see the struct. */
+    info.bVideoFullRange = (full != 0);
     info.bHasCicp = true;
     info.bTransferIsHdr = (info.nTransferCharacteristics == icCicpTransferLinear ||
                            info.nTransferCharacteristics == icCicpTransferPQ ||

@@ -363,6 +363,7 @@ then
 	iccFromXml HagcHexData.xml HagcHexData.icc
 	iccFromXml HagcMixingTypes.xml HagcMixingTypes.icc
 	iccFromXml HagcInvalidXOrder.xml HagcInvalidXOrder.icc
+	iccFromXml HagcRefWhiteToneMap.xml HagcRefWhiteToneMap.icc
 	iccFromXml HdrCicpUnspecified.xml HdrCicpUnspecified.icc
 	iccFromXml HdrDisplayMetadata.xml HdrDisplayMetadata.icc
 	iccFromXml HdrBakedLut.xml HdrBakedLut.icc

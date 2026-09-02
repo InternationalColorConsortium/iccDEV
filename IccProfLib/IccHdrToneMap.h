@@ -125,16 +125,24 @@ namespace iccDEV {
  * in cd/m^2.  BT.2100 defines gamma as a function of Lw; 1.2 is its value at
  * the 1000 cd/m^2 reference the standard tabulates.
  *
- * PROPOSAL-ISSUE (no register key -- the corpus is silent, not contradictory):
- * no HDR Profile carries Lw.  Because BT.2100 makes gamma a function of it,
- * fixing gamma at 1.2 implicitly pins Lw at 1000 cd/m^2 for every HLG profile,
- * whatever display the profile actually describes.  Clause 8.10.4 NOTE 9
- * licenses exactly this - a CMM lacking metadata "may rely on the conventions
- * of the cicpTag.TransferCharacteristics (e.g. ... the nominal HLG peak per
- * Rec. ITU-R BT.2100)" - but it names no value, so the number below is this
- * implementation's choice and not a transcription.  An HDR Display DCV
- * maximum luminance would be the natural source for a per-profile Lw; wiring
- * it in is a behaviour change and is not made here. */
+ * PROPOSAL-ISSUE (no register key -- the ICC corpus is silent; BT.2100 is
+ * not): no HDR Profile carries Lw, and because BT.2100 makes gamma a function
+ * of it, fixing gamma at 1.2 implicitly pins Lw at 1000 cd/m^2 for every HLG
+ * profile, whatever display the profile actually describes.  Clause 8.10.4
+ * NOTE 9 licenses exactly this - a CMM lacking metadata "may rely on the
+ * conventions of the cicpTag.TransferCharacteristics (e.g. ... the nominal HLG
+ * peak per Rec. ITU-R BT.2100)" - but it names no value, so the number below
+ * is this implementation's choice and not a transcription.
+ *
+ * What is NOT missing is the formula.  BT.2100-3 (02/2025) Note 5f, read
+ * 2026-09-01, gives gamma = 1,2 + 0,42 * log10(Lw / 1000) over the usual
+ * production monitoring range of Lw = 400 to 2 000 cd/m^2, and gamma = 1,2 *
+ * k^log2(Lw / 1000) with k = 1,111 outside it - two formulas with a branch at
+ * each end of that range, which any per-profile implementation has to get
+ * right.  So the only open question is where Lw comes from; the HDR Display
+ * DCV maximum luminance this library already parses is the natural source.
+ * Wiring it in changes rendered output for every HLG profile that carries one
+ * and is deliberately not done here. */
 #define icHlgDefaultGamma 1.2
 #define icHlgDefaultPeakLuminance 1000.0
 
@@ -144,15 +152,27 @@ namespace iccDEV {
  * them regardless of what primaries the profile itself carries, so they are
  * deliberately *not* derived from the profile's matrix column tags.
  *
- * PROPOSAL-ISSUE (no register key -- the corpus is silent): clause 8.10 never
- * says which luma coefficients the HLG OOTF uses, and a cicpTag may declare
- * any ColourPrimaries alongside TransferCharacteristics 18.  Holding these at
- * BT.2020 is defensible - BT.2100 defines the OOTF in these terms and an HLG
- * signal is a BT.2100 signal - but for a profile declaring, say,
- * ColourPrimaries 1 it silently forms Y_s from primaries the profile does not
- * use.  The alternative, deriving the coefficients from the declared
- * primaries, is a different rendering and equally unsupported by the text.
- * Recorded so the choice is visible; not changed here. */
+ * PROPOSAL-ISSUE (no register key): clause 8.10 never says which luma
+ * coefficients the HLG OOTF uses, and a cicpTag may declare any
+ * ColourPrimaries alongside TransferCharacteristics 18.  Holding these at
+ * BT.2020 is defensible - BT.2100-3 defines the OOTF in exactly these terms,
+ * Ys = 0,2627 Rs + 0,6780 Gs + 0,0593 Bs, and an HLG signal is a BT.2100
+ * signal - but for a profile declaring, say, ColourPrimaries 1 it silently
+ * forms Y_s from primaries the profile does not use.
+ *
+ * Read against H.273 (V4) on 2026-09-01, the alternative is better supported
+ * than this comment previously said.  Table 4 ties these same three numbers to
+ * MatrixCoefficients 9 (BT.2020 / BT.2100 non-constant luminance), and
+ * equations 39 to 44 give a general chromaticity-derived K_R / K_B for
+ * MatrixCoefficients 12 and 13 - a mechanism for computing luma constants from
+ * whatever primaries a profile declares.  The cicpTag even carries the
+ * MatrixCoefficients field that would select between them; icGetHdrProfileInfo
+ * reports it, and nothing in this file consults it.
+ *
+ * So the choice is between applying BT.2100's OOTF as BT.2100 defines it, and
+ * applying a primaries-consistent variant of it that no text asks for.  That
+ * is a ruling about rendered output, not a gap in the corpus, and it is
+ * deliberately not taken here. */
 #define icHlgLumaR 0.2627
 #define icHlgLumaG 0.6780
 #define icHlgLumaB 0.0593
@@ -235,7 +255,16 @@ ICCPROFLIB_API icFloatNumber icHlgOotfGain(icFloatNumber sceneLuminance, icFloat
  *  function an EOTF, requires it per channel, and asks for a scene-referred
  *  output; the HLG EOTF is OOTF o OETF^-1, which is neither per channel nor
  *  scene referred, while the per-channel scene-referred function - the inverse
- *  OETF - is what 8.10.6 names and what H.273 code point 18 identifies.  The
+ *  OETF - is what 8.10.6 names and what H.273 code point 18 identifies.
+ *
+ *  H.273 settles this in its own words, checked 2026-09-01 against the (V4)
+ *  (07/2024) text: clause 8.2 says a TransferCharacteristics value indicates
+ *  EITHER the reference opto-electronic function as a function of source input
+ *  linear optical intensity Lc, OR the inverse of the reference
+ *  electro-optical function as a function of output linear optical intensity
+ *  Lo - and Table 3 writes code point 16 (PQ) in Lo and code point 18 (HLG) in
+ *  Lc, remarking "ARIB STD-B67".  So 8.10.2 a) is contradicted by the document
+ *  it cites for the function, not merely by BT.2100.  The
  *  29-08-2026 revision removes the TRC tags, so no tag remains that could have
  *  carried a per-channel curve and the step has to be read literally.  Ruled
  *  the same way here: inverse OETF in the per-channel position, OOTF where a
@@ -398,6 +427,58 @@ ICCPROFLIB_API bool icHagcDerivePchipSlopes(const icFloatNumber *x, const icFloa
 
 /**
  ***********************************************************************
+ * Derive the alternate images of a Reference White Tone Mapping tag.
+ *
+ * PROPOSAL-ISSUE HAGC-05 (external dependency) -- proposal 1.2.2.5 sets four
+ * header fields to zero on the wire and says their effective values "shall
+ * not be read from the tag but instead derived on the decoding side as
+ * specified in Clause C.3.8" of SMPTE ST 2094-50.  A tag in this mode is
+ * therefore not merely unrenderable without that clause, it is UNPARSEABLE:
+ * the file does not contain the alternate images at all.  This function is
+ * that clause.
+ *
+ * SOURCE, AND ITS PROVENANCE -- the same caveat as icHagcDerivePchipSlopes()
+ * above, and for the same document.  C.3.8 was read on 2026-09-01 from the
+ * SECOND PUBLIC COMMITTEE DRAFT of ST 2094-50 (2026-02-23), not the published
+ * :2026 the amendment cites, and the SMPTE licence forbids reproducing its
+ * text.  What follows is a description of the construction, not a quotation,
+ * and every number in it must be re-verified against the published text.
+ *
+ * The construction, for a baseline headroom H (log2, as the tag encodes it):
+ *
+ *   - H = 0 yields NO alternate images.  That is not a failure - proposal
+ *     1.2.2.6's no-alternates case already has a defined meaning, and the
+ *     evaluator reaches it by the same path as an ordinary tag that carries
+ *     none.
+ *   - otherwise exactly TWO, at headrooms 0 and log2(8/3) * u, where
+ *     u = min(H / log2(1000/203), 1).  The 1000/203 is the ratio of a typical
+ *     mastering peak to BT.2408 HDR reference white, so u is "how much of one
+ *     mastering stop this baseline actually has", clamped at one.
+ *   - each carries the max component mixing (k_max = 1, the rest zero, which
+ *     is icHagcMixingMax exactly) and an eight-point gain curve.
+ *   - the curve is log2 of the gain of a quadratic Bezier tone curve in
+ *     relative linear light, through a knee at [1, y_white,a] to a maximum at
+ *     [2^H, 2^H_alt,a], with a highlight compression factor of 0,65 placing
+ *     the middle control point.  y_white,0 = 1 - u/2 and y_white,1 = 1.
+ *     Control points are sampled at t = c/7 and the slopes come from the
+ *     Bezier's own derivative, so the PCHIP path is not involved.
+ *
+ * The chromaticities C.3.8 also assigns - BT.2020 primaries and D65 - are not
+ * returned: they describe the gain application colour space, which this
+ * evaluator does not implement, and inventing a home for them here would
+ * imply it does.
+ *
+ * alternates must have room for two entries.  Returns false only when
+ * baselineHeadroom is negative or not a number, in which case nAlternates is
+ * left untouched; nAlternates is set to 0 or 2 otherwise.
+ ***********************************************************************
+ */
+ICCPROFLIB_API bool icHagcDeriveReferenceWhiteToneMap(icFloatNumber baselineHeadroom,
+                                                      icHagcAlternateImage *alternates,
+                                                      icUInt8Number &nAlternates);
+
+/**
+ ***********************************************************************
  * Class: CIccHagcEvaluator
  *
  * Purpose:
@@ -485,6 +566,13 @@ public:
    * icHagcDerivePchipSlopes() rather than read from the tag.  Exposed because
    * that derivation is a reconstruction of an unavailable SMPTE clause. */
   bool UsesDerivedSlopes() const { return m_bDerivedSlopes; }
+
+  /** True when the tag set the Reference White Tone Mapping flag and its
+   * alternate images were built by icHagcDeriveReferenceWhiteToneMap() rather
+   * than read from the file - which, in that mode, is the only way they can
+   * be obtained.  Reported for the same reason UsesDerivedSlopes() is: the
+   * construction comes from a committee draft. */
+  bool UsesDerivedReferenceWhiteToneMap() const { return m_bDerivedRefWhiteToneMap; }
 
   /**
    * Apply the gain curve to one display-linear RGB triplet, normalised so
@@ -605,6 +693,7 @@ protected:
   bool m_bSupported;
   const icChar *m_szUnsupported;
   bool m_bDerivedSlopes;
+  bool m_bDerivedRefWhiteToneMap;
 
   icUInt8Number m_nCurves;
   Curve m_curves[icHagcMaxAlternates + 1];   /* alternates plus the baseline */
