@@ -602,7 +602,6 @@ icStatusCMM CIccCmmSearch::Begin(bool bAllocNewApply, bool /* bUsePcsConversion 
     if (!m_pApply || rv != icCmmStatOk) {
       delete m_pApply;
       m_pApply = nullptr;
-      m_bValid = false;
       return rv;
     }
   }
