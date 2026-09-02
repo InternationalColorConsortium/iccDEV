@@ -2927,6 +2927,87 @@ function(iccdev_add_applytolink_negative_intent_tests)
   endif()
 endfunction()
 
+# #2270: iccApplyToLink's transform-type range check could never fire.
+#
+# nType is "abs(code % 100) / 10", so it spans 0..9; the check tested it against
+# icXformLutMinimum (0) and icXformLutMaximum (0xD). Sweeping all 1000 codes on
+# master, "decoded transform type is out of range" printed zero times. The check
+# was removed rather than widened, per the ruling on the issue.
+#
+# BOTH TESTS BELOW ARE GREEN ON THE UNFIXED TREE, and that is not a defect in
+# them: removing unreachable code cannot change behaviour, so there is no red
+# probe to write. What they pin is the ruling itself -- the two column widths a
+# future change could plausibly get wrong -- and each goes red under the
+# alternative that was rejected.
+#
+# "90" is the largest tens digit the column can hold (icXformLutColorimetric).
+# "140" is the case that separates this decode from CIccCfgProfileSequence::
+# fromArgs(): that one strips "% 1000", so its hundreds column feeds nType and
+# "140" is refused there as type 14 -- measured, alongside "130" resolving to
+# icXformLutNamedDevice. This tool spends the same column on nLuminance, so 140
+# is a luminance-matched BPC request and succeeds. Widening the tens column here
+# to 0..13 -- option (b) on the issue, the one not taken -- would silently
+# redefine every code from 100 up and turn this test red.
+function(iccdev_add_applytolink_transform_type_tests)
+  if(NOT TARGET iccApplyToLink)
+    return()
+  endif()
+
+  add_dependencies(check iccApplyToLink)
+  add_dependencies(check-fast iccApplyToLink)
+
+  set(_applytolink_type_tests "")
+
+  add_test(
+    NAME iccdev.applytolink-max-transform-type-digit
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccApplyToLink>"
+      "-DLABEL=applytolink-cli"
+      "-DTOOL_ARGS=${ICCDEV_TEST_OUTDIR}/applytolink-max-transform-type-digit.icc;0;2;1;MaxTypeDigit;0;1;0;0;${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc;90"
+      "-DEXPECT_EXIT=zero"
+      "-DEXPECT_MATCH=LUT successfully written"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  list(APPEND _applytolink_type_tests iccdev.applytolink-max-transform-type-digit)
+
+  add_test(
+    NAME iccdev.applytolink-hundreds-column-is-not-a-type
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccApplyToLink>"
+      "-DLABEL=applytolink-cli"
+      "-DTOOL_ARGS=${ICCDEV_TEST_OUTDIR}/applytolink-hundreds-column-is-not-a-type.icc;0;2;1;HundredsIsLuminance;0;1;0;0;${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc;140"
+      "-DEXPECT_EXIT=zero"
+      "-DEXPECT_MATCH=LUT successfully written"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  list(APPEND _applytolink_type_tests iccdev.applytolink-hundreds-column-is-not-a-type)
+
+  set_tests_properties(${_applytolink_type_tests} PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;tools;applytolink;cli;exitcode;issue-2270;regression"
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+
+  if(WIN32)
+    # Same reason as the sibling above: the tool is reached through cmake -P and
+    # the child inherits this process's PATH, so without these a missing
+    # IccProfLib2.dll would exit nonzero and fail these positive tests for a
+    # reason that has nothing to do with the decode.
+    set(_applytolink_type_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccApplyToLink>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _applytolink_type_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(${_applytolink_type_tests} PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_applytolink_type_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_applytolink_v4_missing_desc_test)
   if(NOT TARGET iccApplyToLink)
     return()
@@ -5878,6 +5959,120 @@ if(TARGET iccBenchApply)
     FIXTURES_REQUIRED iccdev_profiles
   )
 
+  # #2271: two columns of DecodeIntent() disagreed with the iccApplyToLink decode
+  # its own comment claimed to reproduce.
+  #
+  # A tens digit of 4 asks for black-point compensation. iccApplyToLink maps it to
+  # lookup type 0 plus a CIccApplyBPCHint; DecodeIntent() special-cased only
+  # nType == 1, so 4 reached AddXform() as the lookup type icXformLutBPC
+  # (IccCmm.h:136 is 0x4) and the whole chain failed. Measured on master: the same
+  # "40" wrote a device link through one tool and printed "Invalid Look-Up Table
+  # type" through the other. This is the red probe -- it fails to even exit 0
+  # before the fix.
+  add_test(
+    NAME iccdev.bench-apply-bpc-intent-code
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;1;Testing/sRGB_v4_ICC_preference.icc;40"
+      "-DEXPECT_EXIT=zero"
+      "-DEXPECT_MATCH=chain: 1 profile"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+
+  # Accepting "40" is not the same as honouring it, and the difference is exactly
+  # the defect: a fix that mapped the digit to type 0 and forgot the hint would
+  # pass the test above and change nothing. So this one pins the RESULT. The two
+  # runs differ only in the tens digit, and the checksum is over the applied
+  # pixels, so a hint that never reached the xform leaves them equal.
+  #
+  # Compared rather than pinned to a literal because the checksum is FNV-1a over
+  # raw float bytes -- portable across runs of one binary, not across compilers.
+  add_test(
+    NAME iccdev.bench-apply-bpc-changes-result
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;1;Testing/sRGB_v4_ICC_preference.icc;40"
+      "-DEXPECT_EXIT=zero"
+      "-DCOMPARE_ARGS=-pixels;4096;-repeats;1;1;Testing/sRGB_v4_ICC_preference.icc;0"
+      "-DCOMPARE_EXTRACT=0x([0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])"
+      "-DCOMPARE_MODE=differ"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+
+  # The hundreds column is a luminance-matching request. DecodeIntent() stripped
+  # it with "nIntent % 100" and never assigned it, so codes 0, 100 and 200 built
+  # the identical chain -- measured on master, all three gave 0x927c370d.
+  #
+  # TWO profiles, and first_transform=1, are both load-bearing. The hint sets
+  # m_bLuminanceMatching, which is read only by CIccPcsXform::pushXYZConvert()
+  # when connecting one profile's xform to the next -- a single-profile chain has
+  # no such connection and shows nothing. That is why the issue as filed reported
+  # the divergence from code inspection alone: the probe behind it used one
+  # profile and first_transform=0.
+  add_test(
+    NAME iccdev.bench-apply-luminance-column
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;1;Testing/sRGB_v4_ICC_preference.icc;100;Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc;0"
+      "-DEXPECT_EXIT=zero"
+      "-DCOMPARE_ARGS=-pixels;4096;-repeats;1;1;Testing/sRGB_v4_ICC_preference.icc;0;Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc;0"
+      "-DCOMPARE_EXTRACT=0x([0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])"
+      "-DCOMPARE_MODE=differ"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+
+  # The column is a flag, not a magnitude: iccApplyToLink tests "if (nLuminance)",
+  # so 100 and 200 request the same thing. Green before the fix as well as after
+  # -- both codes used to be dropped, and dropping two codes also makes them
+  # agree -- so it is a semantic pin rather than a red probe, and it is the
+  # partner the test above needs: on its own, "differ" is satisfied by any change
+  # that makes the hundreds column matter in any way at all, including reading it
+  # as a transform type. It is also the only caller exercising COMPARE_MODE=same,
+  # which would otherwise be an untested branch of the driver.
+  add_test(
+    NAME iccdev.bench-apply-luminance-column-is-a-flag
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;1;Testing/sRGB_v4_ICC_preference.icc;100;Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc;0"
+      "-DEXPECT_EXIT=zero"
+      "-DCOMPARE_ARGS=-pixels;4096;-repeats;1;1;Testing/sRGB_v4_ICC_preference.icc;200;Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc;0"
+      "-DCOMPARE_EXTRACT=0x([0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])"
+      "-DCOMPARE_MODE=same"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+
+  # The rejection path that now runs AFTER a hint has been constructed. "45" has
+  # tens digit 4, so DecodeIntent() adds the BPC hint, and then refuses the code
+  # on the units digit. Moving hint construction ahead of the range test is new in
+  # this change, and this is the case that proves the refusal survived it: an
+  # early "return true" bolted on next to the AddHint() calls would pass every
+  # other test in this block.
+  add_test(
+    NAME iccdev.bench-apply-hinted-then-rejected
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;1;Testing/sRGB_v4_ICC_preference.icc;45"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=decoded intent out of range"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+
+  # Both profiles these five name are tracked in the repository, not generated, so
+  # the fixture is a scheduling dependency rather than a source of them -- which
+  # is why a Windows leg cannot satisfy it while the file sits somewhere else.
+  set_tests_properties(
+    iccdev.bench-apply-bpc-intent-code
+    iccdev.bench-apply-bpc-changes-result
+    iccdev.bench-apply-luminance-column
+    iccdev.bench-apply-luminance-column-is-a-flag
+    iccdev.bench-apply-hinted-then-rejected
+    PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;issue-2271;regression"
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+
   if(WIN32)
     set(_bench_windows_env_mods
       "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccBenchApply>"
@@ -5898,7 +6093,12 @@ if(TARGET iccBenchApply)
       iccdev.bench-apply-empty-suite
       iccdev.bench-apply-negative-intent-code
       iccdev.bench-apply-valid-intent-code
-      iccdev.bench-apply-valid-intent-code-typed)
+      iccdev.bench-apply-valid-intent-code-typed
+      iccdev.bench-apply-bpc-intent-code
+      iccdev.bench-apply-bpc-changes-result
+      iccdev.bench-apply-luminance-column
+      iccdev.bench-apply-luminance-column-is-a-flag
+      iccdev.bench-apply-hinted-then-rejected)
     if(TARGET iccFromXml)
       list(APPEND _bench_env_mod_tests
         iccdev.apply-throughput
@@ -6571,6 +6771,7 @@ if(WIN32)
   iccdev_add_iccprofileplot_exitcode_test()
   iccdev_add_applytolink_invalid_arg_test()
   iccdev_add_applytolink_negative_intent_tests()
+  iccdev_add_applytolink_transform_type_tests()
   iccdev_add_applytolink_v4_missing_desc_test()
   iccdev_add_applytolink_curveset_channels_tests()
   iccdev_add_prmg_hue_normalization_test()
@@ -6642,6 +6843,7 @@ endif()
 # been called from both places.
 iccdev_add_applytolink_invalid_arg_test()
 iccdev_add_applytolink_negative_intent_tests()
+iccdev_add_applytolink_transform_type_tests()
 iccdev_add_applytolink_v4_missing_desc_test()
 iccdev_add_applytolink_curveset_channels_tests()
 

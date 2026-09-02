@@ -15,23 +15,34 @@ their code in the thing being measured.
 iccBenchApply {options} interpolation {profile_path rendering_intent {-PCC pcc_path}}...
 ```
 
-`interpolation` is `0` for linear or `1` for tetrahedral. `rendering_intent`
-takes `0..3` plus the `+1000` / `+10000` modifiers, and a negative code is
-rejected here exactly as `iccApplyToLink` rejects it — the column arithmetic
-drops the sign, so `-10` used to resolve as `10` in both tools (#2268).
+`interpolation` is `0` for linear or `1` for tetrahedral. `rendering_intent` is
+decoded column by column, exactly as `iccApplyToLink` decodes it: the units digit
+is the base intent `0`-`3`, the tens digit is the transform-lookup type
+(`icXformLutType`, reachable values `0`-`9`; `+10` drops the D2Bx/B2Dx tags and
+`+40` adds black-point compensation), `+100` requests luminance matching, and
+`+1000` uses a V5 sub-profile if present. A negative code is rejected here exactly
+as `iccApplyToLink` rejects it — the column arithmetic drops the sign, so `-10`
+used to resolve as `10` in both tools (#2268).
 
-The decode is **not** otherwise identical to `iccApplyToLink`'s, despite what
-this file said before #2268. Two columns diverge, so a chain given to the two
-tools does not always resolve the same way:
+Two columns used to diverge and no longer do (#2271). The hundreds column was
+stripped without being read, so `0`, `100` and `200` built the identical chain;
+and a tens digit of `4` reached `AddXform()` as the lookup type `icXformLutBPC`
+rather than as a hint, so `iccBenchApply … profile.icc 40` failed with `Invalid
+Look-Up Table type` where `iccApplyToLink … profile.icc 40` succeeded. Both are
+closed, so this tool can now time a BPC or luminance-matched chain;
+`iccdev.bench-apply-bpc-changes-result` and `iccdev.bench-apply-luminance-column`
+hold it to that by comparing the applied checksum against the same chain without
+the hint.
 
-| column | `iccApplyToLink` | `iccBenchApply` |
-|---|---|---|
-| `+100` | read as a luminance-matching request (`CIccLuminanceMatchingHint`) | discarded — the hundreds column is never read |
-| tens digit `4` | mapped to lookup type `0` plus a black-point-compensation hint | passed through as `icXformLutBPC`, which `AddXform` refuses with `Invalid Look-Up Table type` |
-
-So `iccBenchApply … profile.icc 40` fails where `iccApplyToLink … profile.icc 40`
-succeeds. Use this tool to time the plain intent and sub-profile columns; it
-cannot currently time a BPC or luminance-matched chain.
+`+10000` is **not** a separate modifier here, despite what this file said before:
+the sub-profile test is `(code / 1000) > 0`, so `10000` requests exactly what
+`1000` requests. A `+10000` column does exist in
+`CIccCfgProfileSequence::fromArgs()` — the decode behind `iccApplyNamedCmm`,
+`iccApplyProfiles` and `iccApplySearch` — which is a genuinely different decode:
+it strips `% 1000` rather than `% 100`, so there the hundreds column is part of
+the transform type and `100`-`130` select
+`icXformLutSpectral`-`icXformLutNamedDevice` instead of requesting luminance
+matching. The same code means different things in the two families (#2270).
 
 | option | effect |
 |---|---|
