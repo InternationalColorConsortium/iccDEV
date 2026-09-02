@@ -167,7 +167,8 @@ delete conn;                                 // tears down wrapper + underlying 
 `GetNamedCmm()` returns null through a threaded wrapper, while
 `GetSearchCmm()` unwraps a threaded search CMM for search-specific
 inspection. `CreateSearch(searchApply, error, nThreads)` accepts the same
-`0` automatic, `1` scalar, and greater-than-one threaded selection.
+`0` automatic, `1` scalar, and `2` through `CIccThreadedCmm::GetMaxThreads()`
+(currently 256) threaded selection; higher values are rejected.
 
 ## See Also
 

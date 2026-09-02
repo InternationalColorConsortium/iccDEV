@@ -46,7 +46,7 @@ factory methods that load profiles, register hints, attach PCCs, and call
 | `CreateStandard(profiles, embeddedData=null, embeddedLen=0, nThreads=1, pErrorMsg=nullptr)` | `CIccCfgProfileSequence` | Standard pixel-pipeline CMM; if `embeddedData` is supplied and the first profile config has an empty `iccFile`, that buffer is loaded as the first xform (e.g. for ICC profiles embedded in TIFF/JPEG). When `nThreads != 1`, the returned wrapper is a `CIccThreadedCmm` over the underlying CMM. |
 | `CreateNamed(profiles, srcSpace=icSigUnknownData, bInputProfile=true, pErrorMsg=nullptr)` | `CIccCfgProfileSequence` | Named-color CMM (`CIccNamedColorCmm`) for named-color workflows. |
 | `CreateSearch(searchApply, pErrorMsg=nullptr)` | `CIccCfgSearchApply` | Scalar spectral inverse-search CMM (`CIccCmmSearch`) with weighted PCC attach and optional destination init profile. |
-| `CreateSearch(searchApply, pErrorMsg, nThreads)` | `CIccCfgSearchApply` | Spectral inverse-search CMM; `nThreads == 0` selects hardware concurrency, `1` leaves it scalar, and values above `1` return a `CIccThreadedCmm` wrapper. |
+| `CreateSearch(searchApply, pErrorMsg, nThreads)` | `CIccCfgSearchApply` | Spectral inverse-search CMM; `nThreads == 0` selects hardware concurrency, `1` leaves it scalar, and `2` through `CIccThreadedCmm::GetMaxThreads()` (currently 256) return a `CIccThreadedCmm` wrapper. Higher values return `nullptr`. |
 | `Attach(pCmm)` | Any `CIccCmm*` | Wraps an externally constructed CMM; the wrapper takes ownership. |
 
 All factories return `nullptr` on any failure (profile load, hint allocation,

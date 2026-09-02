@@ -29,8 +29,9 @@ single index for common command shapes and shared option tables.
 
 `iccApplySearch` accepts an optional leading `-threads N` before either
 `-cfg config.json` or its legacy positional form. `N=1` is the default scalar
-path, `N=0` uses available hardware concurrency, and positive values select an
-explicit worker count. `-debugcalc` requires `-threads 1`.
+path, `N=0` uses available hardware concurrency, and `N=2` through `256`
+select an explicit worker count; higher values are rejected. `-debugcalc`
+requires `-threads 1`.
 
 For `iccApplyToLink`, `link_type=0` writes an ICC DeviceLink and `option`
 selects profile version (`0` for v4, `1` for v5). `link_type=1` writes a
