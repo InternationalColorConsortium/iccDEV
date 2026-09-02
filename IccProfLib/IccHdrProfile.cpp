@@ -142,7 +142,12 @@ static const struct {
   /* 12: SMPTE EG 432-1 (Display P3). Same primaries as 11, D65 white. */
   { 12, { 0.680f, 0.320f,  0.265f, 0.690f,  0.150f, 0.060f,  0.3127f, 0.3290f } },
 
-  /* 22: EBU Tech. 3213-E, D65 */
+  /* 22: D65, primaries with no source. H.273 V4 Table 2's informative remark
+   * for this row is "No corresponding industry specification identified" - it
+   * is the one entry in the table that names no standard, so nothing may be
+   * cited for it. (An earlier comment here attributed it to EBU Tech. 3213-E,
+   * which is wrong twice over: H.273 declines to name a source, and EBU Tech.
+   * 3213's primaries are the value 5 row, not this one.) */
   { 22, { 0.630f, 0.340f,  0.295f, 0.605f,  0.155f, 0.077f,  0.3127f, 0.3290f } },
 };
 
