@@ -6809,17 +6809,20 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
  *  headroom and no more.  A float PCS carries the values unharmed.
  *
  * Args:
- *  pApply = ApplyXform object containing temporary storage used during Apply
+ *  pApply = unused. It carried the CIccApplyXform scratch buffer the
+ *           now-removed CheckSrcAbs() used; kept for the virtual
+ *           signature. The PCS adjustment this xform still needs is pushed
+ *           by CIccPcsXform, which asks the inherited
+ *           NeedsSrcPcsAdjust()/NeedsDstPcsAdjust() at Begin() time -- the
+ *           HDR xform takes the base class's answer unchanged, since its
+ *           ports are the ordinary RGB/XYZ pair.
  *  DstPixel = Destination pixel where the result is stored
  *  SrcPixel = Source pixel which is to be applied
  **************************************************************************
  */
-void CIccXformMatrixTrcHdr::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
+void CIccXformMatrixTrcHdr::Apply(CIccApplyXform*  /* pApply */, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
 {
   icFloatNumber Pixel[3];
-
-  if (m_bSrcPcsConversion)
-    SrcPixel = CheckSrcAbs(pApply, SrcPixel);
 
   Pixel[0] = SrcPixel[0];
   Pixel[1] = SrcPixel[1];
@@ -6900,9 +6903,6 @@ void CIccXformMatrixTrcHdr::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixe
       m_transfer.FromLinear(DstPixel, Lin);
     }
   }
-
-  if (m_bDstPcsConversion)
-    CheckDstAbs(DstPixel);
 }
 
 /**
