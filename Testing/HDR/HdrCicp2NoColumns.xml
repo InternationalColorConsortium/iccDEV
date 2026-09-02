@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  NEGATIVE FIXTURE for the one case where clause 8.10.6 REQUIRES the matrix
+  column tags.
+
+  8.10.1 removes them from an HDR Profile's required set because the primaries
+  come from the cicpTag instead - "except when ColourPrimaries is equal to 2
+  (Unspecified): in that case the redMatrixColumnTag, greenMatrixColumnTag and
+  blueMatrixColumnTag shall be present and shall be used directly as the
+  RGB-to-PCSXYZ matrix". 8.10.6 states the same rule as "required if and only
+  if the cicpTag's ColourPrimaries field is equal to 2".
+
+  This profile declares ColourPrimaries 2 and carries none of the three. There
+  is then no RGB-to-PCSXYZ matrix anywhere in it: value 2 names no
+  chromaticities, so 8.10.2 c) has nothing to compute from and the tags that
+  would have supplied it directly are absent.
+
+  Note what this is NOT: it is still an HDR Profile. The matrix column tags are
+  not among the two things NOTE 3 uses to distinguish one, so their absence is
+  a missing required tag rather than a failure to qualify - which is what puts
+  the diagnostic inside clause 8.10's rules instead of silently outside them.
+--><IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>4.50</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-08-05T00:00:00</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </PCSIlluminant>
+    <ProfileCreator>ICCD</ProfileCreator>
+  </Header>
+  <Tags>
+    <!-- The canonical sRGB/BT.709 colorants adapted to the PCS adopted white,
+         which is what a conforming v4 matrix profile carries: the encoded values
+         are relative to D50, not to the display's own D65. The
+         chromaticAdaptationTag below is the matrix that put them there, so a
+         consumer recovering the source primaries per clause 10.3 NOTE 1 has to
+         apply its inverse to get back to D65. -->
+
+
+
+    <!-- Standard Bradford D65 to D50 adaptation. -->
+    <chromaticAdaptationTag> <s15Fixed16ArrayType>
+      <Array>
+        1.047882  0.022919 -0.050201
+        0.029587  0.990479 -0.017059
+       -0.009232  0.015076  0.751678
+      </Array>
+    </s15Fixed16ArrayType> </chromaticAdaptationTag>
+
+    <mediaWhitePointTag> <XYZArrayType>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </XYZArrayType> </mediaWhitePointTag>
+
+    <cicpTag> <cicpType>
+      <cicpFields ColorPrimaries="2" TransferCharacteristics="16" MatrixCoefficients="0" VideoFullRangeFlag="1"/>
+    </cicpType> </cicpTag>
+
+    <!-- Clause 8.10.1 of the 29-08-2026 revision: "the redTRCTag, greenTRCTag
+         and blueTRCTag shall not be present" in an HDR Profile. The transfer
+         function is conveyed by the cicpTag's TransferCharacteristics field
+         instead, and NOTE 3 makes their absence one of the two tag-level
+         features that distinguish an HDR Profile. This fixture was authored
+         against the previous revision and carried them.
+
+         The AToB0Tag/BToA0Tag pair below is what 8.10.6 makes mandatory, and
+         what NOTE 4 says gives a legacy CMM "a rendering path at all" once the
+         TRC tags are gone. Identity B curves: these fixtures exercise
+         classification and the tone-mapping chain, not the bake's accuracy. -->
+
+    <AToB0Tag> <lutAtoBType>
+      <Channels InputChannels="3" OutputChannels="3"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+    </lutAtoBType> </AToB0Tag>
+
+    <BToA0Tag> <lutBtoAType>
+      <Channels InputChannels="3" OutputChannels="3"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+    </lutBtoAType> </BToA0Tag>
+
+    <profileDescriptionTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR negative fixture: ColourPrimaries 2 with no matrix column tags in with cicp ColourPrimaries 2 (Unspecified)]]></LocalizedText>
+    </multiLocalizedUnicodeType> </profileDescriptionTag>
+
+    <copyrightTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright (C) 2026 The International Color Consortium. Generated fixture, no measured data.]]></LocalizedText>
+    </multiLocalizedUnicodeType> </copyrightTag>
+  </Tags>
+</IccProfile>

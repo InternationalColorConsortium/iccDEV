@@ -369,6 +369,8 @@ then
 	iccFromXml HdrBakedLut.xml HdrBakedLut.icc
 	iccFromXml HdrInvalidTransfer.xml HdrInvalidTransfer.icc
 	iccFromXml HdrMissingBToA0.xml HdrMissingBToA0.icc
+	iccFromXml HdrMissingLutPair.xml HdrMissingLutPair.icc
+	iccFromXml HdrCicp2NoColumns.xml HdrCicp2NoColumns.icc
 	iccFromXml HdrLinearCll.xml HdrLinearCll.icc
 	iccFromXml HdrLinearMdcv.xml HdrLinearMdcv.icc
 	iccFromXml HdrLinearNoMetadata.xml HdrLinearNoMetadata.icc

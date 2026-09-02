@@ -3640,8 +3640,85 @@ icValidateStatus CIccProfile::CheckHdrProfile(std::string &sReport) const
   if (info.nClass != icHdrProfileConforming)
     return rv;
 
+  const size_t hdrBufSize = 320;
+  icChar hdrBuf[hdrBufSize];
+
+  /* Clause 8.10.6's required tags, the HDR-specific ones that nothing else in
+   * Validate() covers.
+   *
+   * "An RGB HDR Profile shall additionally contain, for backward
+   * compatibility with consumers that do not implement HDR processing:
+   * AToB0Tag (9.2.1), REQUIRED REGARDLESS OF PROFILE CLASS; when the profile
+   * class is Display ('mntr'), the paired BToA0Tag (9.2.6) is also required."
+   *
+   * CheckRequiredTags() does not catch either.  Its Display branch accepts the
+   * pair OR the six matrix/TRC tags, and its Input branch likewise, so a
+   * profile that satisfies one alternative is never asked about the other -
+   * which is right for a conventional profile and wrong for an HDR Profile,
+   * where 8.10.6 requires the pair on top of everything else.
+   *
+   * NOTE 4 explains why it is mandatory rather than recommended: without it "a
+   * legacy CMM would have no matrix/TRC path to fall back to and could not
+   * produce a rendering from the profile at all", the TRC tags being
+   * prohibited. */
+  if (!IsTagPresent(icSigAToB0Tag)) {
+    sReport += icMsgValidateNonCompliant;
+    sReport += "HDR: AToB0Tag missing; clause 8.10.6 requires it in every RGB HDR Profile,\n"
+               "  regardless of profile class, as the fallback for consumers that do not\n"
+               "  implement HDR processing.\n";
+    rv = icMaxStatus(rv, icValidateNonCompliant);
+  }
+  else if (m_Header.deviceClass == icSigDisplayClass && !IsTagPresent(icSigBToA0Tag)) {
+    /* Reported by the pairing sweep below as well; kept separate because the
+     * two are different requirements - one is a required tag, the other is a
+     * rule about tags that are present - and a profile can fail this one with
+     * no AToBxTag at all. */
+    sReport += icMsgValidateNonCompliant;
+    sReport += "HDR: BToA0Tag missing; clause 8.10.6 requires it in a Display-class RGB HDR\n"
+               "  Profile alongside the mandatory AToB0Tag.\n";
+    rv = icMaxStatus(rv, icValidateNonCompliant);
+  }
+
+  /* NOT CHECKED, and it cannot be: 8.10.6 also says the AToB0Tag "shall carry
+   * an HDR->SDR tone mapping (i.e. its target headroom shall be equal to
+   * 1.0)".  Nothing in a lutAToBType records the target headroom it was baked
+   * at, so no reader can tell a conforming bake from one made at any other
+   * headroom.  The predecessor tag had exactly this field - the ADGC header
+   * carries "Backward compatible A2B0/A2B1/A2B2 target headroom, 0.0: not
+   * created" - and the HAGC amendment dropped it without replacement. */
+
+  /* Clause 8.10.6, and the matrix columns it makes conditional: "the
+   * redMatrixColumnTag, greenMatrixColumnTag and blueMatrixColumnTag are
+   * required if and only if the cicpTag's ColourPrimaries field is equal to 2
+   * (Unspecified)".  Only the "if" half is checked here.  The "only if" half
+   * is PROPOSAL-ISSUE HDR-15: 8.10.1 states the same rule three ways, once as
+   * "not required" and twice as a prohibition, and a redundant matrix column
+   * tag is not reported on the strength of the two that disagree with the
+   * one that is actually a rule about a profile. */
+  if (info.nColourPrimaries == icCicpPrimariesUnspecified &&
+      (!IsTagPresent(icSigRedMatrixColumnTag) || !IsTagPresent(icSigGreenMatrixColumnTag) ||
+       !IsTagPresent(icSigBlueMatrixColumnTag))) {
+    sReport += icMsgValidateNonCompliant;
+    sReport += "HDR: cicpTag ColourPrimaries is 2 (Unspecified) but the matrix column tags are\n"
+               "  not all present; clause 8.10.6 requires them in that case, and 8.10.2 c) has\n"
+               "  no other source for the RGB-to-PCSXYZ matrix.\n";
+    rv = icMaxStatus(rv, icValidateNonCompliant);
+  }
+
   /* Clause 8.10.6: "When a Display RGB HDR Profile contains an AToBxTag (see
    * 9.2.1), the corresponding BToAxTag (see 9.2.5) shall also be present."
+   *
+   * PROPOSAL-ISSUE HDR-09 - and this is the ruling that decides it.  8.10.3 c)
+   * says "Whenever an AToBxTag is present, its paired BToAxTag shall also be
+   * present", with no class condition, which would extend the rule to Input
+   * profiles.  8.10.6 confines it to Display.  The two cannot both hold now
+   * that the AToB0Tag is mandatory in both classes.
+   *
+   * 8.10.3's own heading resolves it: "Tone-mapping descriptors (INFORMATIVE
+   * precedence)".  An informative clause cannot impose a requirement, so its
+   * "shall" has no force and 8.10.6 - which is normative - governs.  That an
+   * informative clause contains a "shall" at all is itself worth raising, and
+   * is recorded under HDR-09.
    *
    * Not already covered: the Display branch of CheckRequiredTags() tests A2B0
    * and B2A0 only as a *pair* against the matrix/TRC alternative, so a profile
@@ -3659,18 +3736,16 @@ icValidateStatus CIccProfile::CheckHdrProfile(std::string &sReport) const
       { icSigAToB1Tag, icSigBToA1Tag, "1" },
       { icSigAToB2Tag, icSigBToA2Tag, "2" },
     };
-    const size_t bufSize = 256;
-    icChar buf[bufSize];
     size_t i;
 
     for (i = 0; i < sizeof(pairs) / sizeof(pairs[0]); i++) {
       if (IsTagPresent(pairs[i].aToB) && !IsTagPresent(pairs[i].bToA)) {
-        snprintf(buf, bufSize,
+        snprintf(hdrBuf, hdrBufSize,
                  "HDR: AToB%sTag present without its paired BToA%sTag; clause 8.10.6 requires the\n"
                  "  pair when a Display RGB HDR Profile contains an AToBxTag.\n",
                  pairs[i].szIndex, pairs[i].szIndex);
         sReport += icMsgValidateNonCompliant;
-        sReport += buf;
+        sReport += hdrBuf;
         rv = icMaxStatus(rv, icValidateNonCompliant);
       }
     }

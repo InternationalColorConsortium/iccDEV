@@ -627,6 +627,75 @@ void testClassification()
     delete pProfile;
   }
 
+  // Clause 8.10.6's mandatory backward-compatibility pair. The AToB0Tag is
+  // required "regardless of profile class" and nothing checked it: the Display
+  // branch of CheckRequiredTags() accepts the pair OR the six matrix/TRC tags,
+  // so a profile satisfying one alternative is never asked about the other.
+  // That was right for a conventional profile and wrong for an HDR Profile,
+  // where 8.10.6 requires the pair on top of everything else.
+  pProfile = openFixture("HdrMissingLutPair.icc");
+  if (pProfile) {
+    check(icGetHdrProfileInfo(pProfile, info), "info resolved for the pairless fixture");
+
+    // Membership first, because the diagnostic depends on it: a profile the
+    // classifier rejected would be judged by some other class's rules and this
+    // requirement would never be reached.
+    check(info.nClass == icHdrProfileConforming,
+          "a profile missing the pair is still an HDR Profile");
+    check(!info.bHasAToB0 && !info.bHasBToA0, "and carries neither tag");
+
+    std::string report;
+    icValidateStatus rv = pProfile->Validate(report);
+    check(rv >= icValidateNonCompliant, "the missing AToB0Tag is reported");
+    check(report.find("AToB0Tag missing") != std::string::npos,
+          "the report names the tag and the clause");
+    delete pProfile;
+  }
+
+  // The one case where the matrix column tags ARE required: ColourPrimaries 2.
+  // Value 2 names no chromaticities, so 8.10.2 c) has nothing to compute a
+  // matrix from and the tags that would supply it directly are absent - the
+  // profile has no RGB-to-PCSXYZ matrix at all.
+  pProfile = openFixture("HdrCicp2NoColumns.icc");
+  if (pProfile) {
+    check(icGetHdrProfileInfo(pProfile, info), "info resolved for the columnless fixture");
+    check(info.nClass == icHdrProfileConforming,
+          "missing matrix columns is a missing required tag, not a failure to qualify");
+    check(info.nColourPrimaries == 2, "the fixture declares ColourPrimaries 2");
+    check(!info.bMatrixColumnsPresent, "and carries none of the three");
+
+    // And the matrix genuinely cannot be built, which is why the clause
+    // requires them: icBuildHdrForwardMatrix refuses value 2 by design.
+    icFloatNumber m[9];
+    check(!icBuildHdrForwardMatrix(pProfile, info.nColourPrimaries, m),
+          "no matrix can be derived for ColourPrimaries 2");
+
+    std::string report;
+    icValidateStatus rv = pProfile->Validate(report);
+    check(rv >= icValidateNonCompliant, "the missing matrix columns are reported");
+    check(report.find("ColourPrimaries is 2") != std::string::npos,
+          "the report names the condition that makes them required");
+    delete pProfile;
+  }
+
+  // An Input-class HDR Profile with an AToB0Tag and no BToA0Tag is NOT
+  // reported, and that is a ruling rather than an oversight (HDR-09).
+  // 8.10.3 c) says "Whenever an AToBxTag is present, its paired BToAxTag shall
+  // also be present" with no class condition; 8.10.6 confines the requirement
+  // to Display. The two cannot both hold now that the AToB0Tag is mandatory in
+  // both classes - and 8.10.3's own heading, "Tone-mapping descriptors
+  // (informative precedence)", decides it: an informative clause cannot impose
+  // a requirement, so 8.10.6 governs. HdrMissingBToA0 is a Display profile, so
+  // it IS reported; this asserts the message says why.
+  pProfile = openFixture("HdrMissingBToA0.icc");
+  if (pProfile) {
+    std::string report;
+    pProfile->Validate(report);
+    check(report.find("Display RGB HDR Profile") != std::string::npos,
+          "the pairing diagnostic is scoped to the Display class, per 8.10.6");
+    delete pProfile;
+  }
+
   // A plain SDR profile must draw nothing. This is the false-positive guard:
   // the corpus is full of RGB display profiles, and a classifier that keyed on
   // the version alone, or on the presence of a cicpTag alone, would start

@@ -1457,8 +1457,13 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
   if (info.bTrcTagsPresent)
     bMembership = false;
 
-  if (info.nColourPrimaries == icCicpPrimariesUnspecified && !info.bMatrixColumnsPresent)
-    bMembership = false;
+  /* The matrix column tags are deliberately NOT a membership condition, even
+   * when ColourPrimaries is 2 where 8.10.1 says they "shall be present".
+   * NOTE 3 names the two things that DISTINGUISH an HDR Profile - a conforming
+   * cicpTag, and the absence of the TRC tags - and the matrix columns are not
+   * among them; they are a required tag, like the mediaWhitePointTag, and a
+   * profile missing a required tag is a broken member of its class rather than
+   * a non-member.  CIccProfile::CheckHdrProfile() reports their absence. */
 
   if (bMembership) {
     info.nClass = icHdrProfileConforming;

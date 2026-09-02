@@ -165,6 +165,7 @@ HDR/HagcInvalidXOrder.icc	negative	noncompliant	0	none	generated	-	negative fixt
 HDR/HagcMixingTypes.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HagcRefWhiteToneMap.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrBakedLut.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/HdrCicp2NoColumns.icc	negative	noncompliant	0	none	generated	-	negative fixture: ColourPrimaries 2 requires the matrix column tags, which supply the only RGB-to-PCSXYZ matrix such a profile can have
 HDR/HdrCicpUnspecified.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrDisplayMetadata.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrInvalidTransfer.icc	positive	valid	0	none	generated	-	classification fixture: TransferCharacteristics 13 puts it outside the clause 8.10 sub-class, which is not a defect - it is a valid Display profile carrying a cicpTag and a HAGC tag
@@ -173,6 +174,7 @@ HDR/HdrLinearHagcWhite.icc	positive	valid	0	none	generated	-	conformant example 
 HDR/HdrLinearMdcv.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrLinearNoMetadata.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrMissingBToA0.icc	negative	critical	255	none	generated	-	negative fixture: an AToBx tag requires its paired BToAx tag. Critical rather than noncompliant since the 8.10.1 migration: an HDR Profile carries no TRC tags, so a Display profile missing BToA0 also fails ICC.1's required-tag rule
+HDR/HdrMissingLutPair.icc	negative	critical	255	none	generated	-	negative fixture: clause 8.10.6's AToB0Tag is mandatory regardless of profile class; without it and the TRC tags a Display profile also fails ICC.1's required-tag rule
 ICS/Lab_float-D65_2deg-Part1.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 ICS/Lab_float-IllumA_2deg-Part2.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 ICS/Lab_int-D65_2deg-Part1.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
