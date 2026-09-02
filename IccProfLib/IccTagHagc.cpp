@@ -262,7 +262,14 @@ static icFloatNumber icHagcDecodeY(icUInt16Number v, double s)
   return (icFloatNumber)(s * (icHagcClampU32(v, 0, 60000) / 10000.0));
 }
 
-/** Proposal 0.1.3.9: M = tan((MIN(MAX(1, theta), 35999) - 18000) * pi/36000) */
+/** Proposal 0.1.3.9: M = tan((MIN(MAX(1, theta), 35999) - 18000) * pi/36000).
+ *
+ * Checked against SMPTE ST 2094-50 clause C.3.7 on 2026-09-01 (PCD2 draft, see
+ * icHagcDerivePchipSlopes()'s header for the provenance caveat): this decoder,
+ * icHagcDecodeX's 64000/1000 cap and icHagcDecodeY's signed 60000/10000 are
+ * each identical to the SMPTE text, as is the reference white's 203 default
+ * and its clamp(x, 1, 50000)/5 custom form in C.3.3.  The ICC proposal
+ * transcribed them faithfully; nothing here rests on a reconstruction. */
 static icFloatNumber icHagcDecodeSlope(icUInt16Number v)
 {
   double theta = (double)icHagcClampU32(v, 1, 35999);

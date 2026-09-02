@@ -231,8 +231,11 @@ public:
 
   /** When true the control point slopes were not carried in the tag and are
    * to be derived per clause C.3.9 of SMPTE ST 2094-50:2026 (proposal
-   * 1.1.3.5).  m_slope[] is left zeroed in that case; deriving it needs the
-   * SMPTE text, which this implementation does not yet have. */
+   * 1.1.3.5).  m_slope[] is left zeroed in that case and stays zeroed: this
+   * struct is the decoded wire format and nothing derived belongs in it.  The
+   * derivation is icHagcDerivePchipSlopes(), which the evaluator calls at
+   * Begin() time - read that function's header for where C.3.9 came from and
+   * the two places this implementation deliberately departs from it. */
   bool m_bPchipSlope;
 
   /** The 2 reserved bits of the byte carrying the last index and the PCHIP

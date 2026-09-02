@@ -343,27 +343,48 @@ protected:
  * set, i.e. whose slope angles were not carried in the tag (HAGC proposal
  * 1.1.3.5).
  *
- * PROPOSAL-ISSUE HAGC-05 (external dependency) -- the derivation this function
- * implements lives in a clause of SMPTE ST 2094-50:2026 that is not supplied
- * with the amendment, so the amendment is not independently implementable here.
- * UsesDerivedSlopes() exists so a caller can report when a curve relied on the
- * reconstruction below.
+ * PROPOSAL-ISSUE HAGC-05 (external dependency) -- clause 1.1.3.5 delegates
+ * this derivation to clause C.3.9 of SMPTE ST 2094-50:2026, which is not
+ * supplied with the amendment, so the amendment is not independently
+ * implementable from ICC documents alone.  UsesDerivedSlopes() exists so a
+ * caller can report when a curve relied on this function.
  *
- * RECONSTRUCTION, NOT A TRANSCRIPTION.  Clause 1.1.3.5 delegates the
- * derivation to clause C.3.9 of SMPTE ST 2094-50:2026, which this
- * implementation does not have.  What is implemented here is the standard
- * piecewise cubic Hermite interpolating polynomial slope rule that the
- * flag's own name points at - Fritsch and Carlson's monotonicity-preserving
- * weighted harmonic mean of the adjacent secant slopes, as used by
- * MATLAB/SciPy pchip - because that is what "PCHIP" denotes everywhere else
- * and because a curve built from it is guaranteed monotone between control
- * points, which is what the inverse path in CIccHagcEvaluator depends on.
+ * SOURCE, AND ITS PROVENANCE.  C.3.9 was read on 2026-09-01 -- but from the
+ * SECOND PUBLIC COMMITTEE DRAFT of ST 2094-50, dated 2026-02-23, published at
+ * github.com/SMPTE/st2094-50 for a review period that ended 2026-03-16.  The
+ * amendment cites the PUBLISHED ST 2094-50:2026.  Everything below that is
+ * attributed to C.3.9 therefore comes from a committee draft and must be
+ * re-verified against the published text; the SMPTE licence also forbids
+ * reproducing that text, so it is described here and never quoted.
  *
- * It is nevertheless a reconstruction: if C.3.9 specifies a different slope
- * rule, curves that set this flag will evaluate slightly differently here
- * than in a conforming implementation, while curves that carry explicit
- * slope angles are unaffected.  CIccHagcEvaluator::UsesDerivedSlopes()
- * reports when any contributing curve went through this function.
+ * C.3.9 defines, over h_i = x_i+1 - x_i and the secants s_i:
+ *   - interior points i in 1..N-2: zero when sign(s_i-1) != sign(s_i), else
+ *     3(h_i-1 + h_i) s_i-1 s_i / ((2h_i-1 + h_i) s_i-1 + (h_i-1 + 2h_i) s_i);
+ *   - the two endpoints (N >= 3): the one-sided three-point estimate;
+ *   - N = 2: both slopes are the single secant; N = 1: unused.
+ * Its NOTE states the result is equivalent to the PCHIP algorithm of
+ * DOI:10.1137/0905021 (Fritsch and Butland).
+ *
+ * The interior formula below is that formula exactly.  TWO DELIBERATE
+ * DIVERGENCES remain, both in the direction of the NOTE rather than of the
+ * draft's own formulas, and both are pinned by hdr-tonemap.cpp:
+ *
+ *   1. ENDPOINTS.  C.7 and C.8 give the three-point estimate with no sign
+ *      test and no magnitude limit, while the PCHIP algorithm their own NOTE
+ *      cites clamps both.  The difference is not cosmetic: for x = {0, 1, 3},
+ *      y = {0, 2, 3} - data that increases throughout - the draft's C.8
+ *      yields a slope of -0,5 at the last point, so the final segment dips
+ *      below the value it started from.  A gain curve is monotone by intent
+ *      and CIccHagcEvaluator's inverse depends on it, so the clamps are kept.
+ *   2. A FLAT PAIR.  When two consecutive secants are both zero their signs
+ *      are equal, so C.9 takes its "otherwise" branch, where numerator and
+ *      denominator are both zero.  Three collinear flat control points make
+ *      the draft formula 0/0.  Zero is used instead, which is the limit from
+ *      every direction and what PCHIP gives.
+ *
+ * Curves that carry explicit slope angles are unaffected by any of this.
+ * CIccHagcEvaluator::UsesDerivedSlopes() reports when a contributing curve
+ * went through this function.
  *
  * x must be strictly increasing over n points, and n must be 1 to
  * icHagcMaxControlPoints - the working arrays are sized by that maximum, so a

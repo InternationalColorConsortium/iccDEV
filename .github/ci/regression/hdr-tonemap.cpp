@@ -428,6 +428,38 @@ void testPchipSlopes()
   checkClose(slope[0], 0.5, 1e-9, "two-point PCHIP slope is the secant");
   checkClose(slope[1], 0.5, 1e-9, "two-point PCHIP slope is the secant at both ends");
 
+  // The interior formula of SMPTE ST 2094-50 C.3.9, to the value, on a
+  // deliberately NON-uniform grid: with h0 = 1 and h1 = 2 the interval
+  // weighting is the whole content of the formula, and an unweighted mean of
+  // the two secants (the obvious wrong implementation) gives 1.25 here rather
+  // than 6/7. s0 = 2, s1 = 0.5, so
+  //   3(h0 + h1) s0 s1 / ((2h0 + h1) s0 + (h0 + 2h1) s1) = 9 / 10.5.
+  icFloatNumber xw[3] = { 0.0, 1.0, 3.0 };
+  icFloatNumber yw[3] = { 0.0, 2.0, 3.0 };
+  check(icHagcDerivePchipSlopes(xw, yw, 3, slope), "PCHIP slopes derived on a non-uniform grid");
+  checkClose(slope[1], 9.0 / 10.5, 1e-6, "C.3.9's interval-weighted harmonic mean");
+  checkClose(slope[0], 2.5, 1e-6, "C.3.9's one-sided estimate at the first point");
+
+  // DIVERGENCE 1 from the committee draft, pinned so it cannot be lost.
+  // The same data is monotonically INCREASING, yet C.3.9's endpoint formula
+  // gives ((2*h1 + h0)*s1 - h1*s0) / (h1 + h0) = -0.5 at the last point: the
+  // final segment would dip below the value it starts from. The PCHIP
+  // algorithm the draft's own NOTE claims equivalence to clamps that to zero,
+  // and the inverse path depends on the curve staying monotone, so zero is
+  // what this implementation produces.
+  checkClose(slope[2], 0.0, 0.0,
+             "the end slope is clamped, not the draft's -0.5 on increasing data");
+
+  // DIVERGENCE 2. Three collinear flat points: both secants are zero, so
+  // their signs are EQUAL and C.3.9 takes its "otherwise" branch, where
+  // numerator and denominator are both zero. A conforming reading of the
+  // draft is 0/0 here; zero is the limit from every direction.
+  icFloatNumber xf[3] = { 0.0, 1.0, 2.0 };
+  icFloatNumber yf[3] = { 0.0, 0.0, 0.0 };
+  check(icHagcDerivePchipSlopes(xf, yf, 3, slope), "PCHIP slopes derived for a flat curve");
+  check(slope[0] == 0.0 && slope[1] == 0.0 && slope[2] == 0.0,
+        "a flat pair gives zero rather than the draft's 0/0");
+
   // Non-increasing X is a decode error, not something to interpolate over.
   icFloatNumber xb[3] = { 0.0, 1.0, 1.0 };
   icFloatNumber yb[3] = { 0.0, 1.0, 2.0 };

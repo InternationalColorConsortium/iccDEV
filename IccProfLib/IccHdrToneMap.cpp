@@ -615,14 +615,18 @@ icFloatNumber CIccHdrTransfer::FromLinearChannel(icFloatNumber v) const
  * Purpose:
  *  Derive control-point slopes for a curve whose PCHIP Slope flag is set.
  *
- *  RECONSTRUCTION - see the header for the full caveat.  The rule implemented
- *  is Fritsch and Carlson's: at an interior point whose two adjacent secants
- *  have the same sign, the slope is their weighted harmonic mean, weighted by
- *  the interval widths; where the secants change sign or either is zero, the
- *  point is a local extremum and the slope is zero.  Endpoints use the
- *  standard one-sided three-point formula, clamped so that it cannot exceed
- *  three times the adjacent secant, which is the condition that keeps the
- *  end segment monotone.
+ *  The interior rule is clause C.3.9 of SMPTE ST 2094-50 verbatim: at an
+ *  interior point whose two adjacent secants have the same sign, the slope is
+ *  their weighted harmonic mean, weighted by the interval widths; at a sign
+ *  change the point is a local extremum and the slope is zero.  Endpoints use
+ *  the one-sided three-point formula C.3.9 gives, then the two PCHIP clamps
+ *  it omits.
+ *
+ *  READ THE HEADER BEFORE CHANGING ANY OF THIS.  C.3.9 was read from a
+ *  COMMITTEE DRAFT (PCD2, 2026-02-23), not the published ST 2094-50:2026 the
+ *  amendment cites, and the two places this deliberately does not follow that
+ *  draft - the endpoint clamps, and a flat pair where the draft's formula is
+ *  0/0 - are set out there with the numbers that separate them.
  *
  * Args:
  *  x, y = control points, x strictly increasing
@@ -683,12 +687,21 @@ bool icHagcDerivePchipSlopes(const icFloatNumber *x, const icFloatNumber *y,
     else {
       // Sign change or a flat secant: a local extremum, where a non-zero
       // slope is exactly what would make the cubic overshoot.
+      //
+      // The `> 0.0` test rather than a pair of sign comparisons is what keeps
+      // a flat pair out of the harmonic mean.  C.3.9 branches on
+      // sign(s_i-1) != sign(s_i), which is FALSE when both secants are zero,
+      // sending three collinear flat control points into a 0/0.  Zero is the
+      // limit from every direction; see divergence 2 in the header.
       slope[i] = 0.0;
     }
   }
 
-  // Endpoints: the one-sided three-point estimate, with the two guards that
-  // make it monotonicity preserving.
+  // Endpoints: C.3.9's one-sided three-point estimate, then the two guards
+  // that make it monotonicity preserving.  The estimate is the draft's; the
+  // guards are not - they are the PCHIP algorithm the draft's own NOTE claims
+  // equivalence to.  See divergence 1 in the header for the control points
+  // that separate the two.
   double dEnd = ((2.0 * h[0] + h[1]) * delta[0] - h[0] * delta[1]) / (h[0] + h[1]);
 
   if (dEnd * delta[0] <= 0.0)
