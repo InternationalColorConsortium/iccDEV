@@ -61,9 +61,13 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdint>
+#include <exception>
 #include <iostream>
 #include <fstream>
+#include <memory>
+#include <new>
 #include <sstream>
+#include <utility>
 #include <vector>
 #include <string>
 #include <map>
@@ -117,7 +121,7 @@ public:
   size_t m_offset;
 };
 
-typedef std::vector<PDFObject *> pdf_object_list;
+typedef std::vector<std::unique_ptr<PDFObject>> pdf_object_list;
 
 /******************************************************************************/
 
@@ -333,19 +337,19 @@ class PDFWriter
 public:
   PDFWriter() : m_pageWidth(0), m_pageHeight(0), m_pageCount(0),
             m_xrefStart(0), m_pageParentIndex(0), m_outlineParentIndex(0),
-            m_fontIndex(0), m_groupIndex(0), m_procsetIndex(0)
+            m_fontIndex(0), m_groupIndex(0), m_procsetIndex(0), m_ok(true)
     { }
   PDFWriter( const std::string &filename, float widthPt, float heightPt ):
             m_pageWidth(0), m_pageHeight(0), m_pageCount(0), m_xrefStart(0),
             m_pageParentIndex(0), m_outlineParentIndex(0), m_fontIndex(0),
-            m_groupIndex(0), m_procsetIndex(0)
+            m_groupIndex(0), m_procsetIndex(0), m_ok(true)
     { OpenFile(filename, widthPt, heightPt); }
 
   ~PDFWriter()
     { CloseFile(); }
 
-  void OpenFile( const std::string &filename, float pageWidth, float pageHeight );
-  void CloseFile();
+  bool OpenFile( const std::string &filename, float pageWidth, float pageHeight );
+  bool CloseFile();
 
 public:
 
@@ -356,10 +360,29 @@ public:
   float PageWidth() const { return m_pageWidth; }
   float PageHeight() const { return m_pageHeight; }
   size_t ObjectCount() const { return m_objects.size(); }
+  bool IsValid() const { return m_ok; }
   bool xobjectExists( std::string name );
 
-  void AddObject( PDFObject *obj ) {
-    m_objects.push_back( obj );
+  template <class T, class... Args>
+  T *AddNewObject( Args&&... args ) {
+    if (!m_ok)
+      return NULL;
+
+    try {
+      std::unique_ptr<T> object(new (std::nothrow) T(std::forward<Args>(args)...));
+      if (!object) {
+        m_ok = false;
+        return NULL;
+      }
+
+      T *rawObject = object.get();
+      m_objects.emplace_back(std::move(object));
+      return rawObject;
+    }
+    catch (const std::exception&) {
+      m_ok = false;
+      return NULL;
+    }
   }
 
   void AddPage( std::string name, size_t content, std::string xObjectName );
@@ -374,21 +397,21 @@ protected:
   size_t lookupXObjectByName( std::string name );
 
   PDFPageParent *GetPageParent() {
-    if (!m_pageParentIndex) {
+    if (!m_ok || !m_pageParentIndex || m_pageParentIndex > m_objects.size()) {
       fprintf(stderr,"FATAL - PDF page parent index not set!\n");
       return NULL;
     }
-    PDFObject *parentObj( m_objects[m_pageParentIndex-1] );
+    PDFObject *parentObj( m_objects[m_pageParentIndex-1].get() );
     PDFPageParent *pageParent = dynamic_cast<PDFPageParent *>(parentObj);
     return pageParent;
   }
 
   PDFOutlineParent *GetOutlineParent() {
-    if (!m_outlineParentIndex) {
+    if (!m_ok || !m_outlineParentIndex || m_outlineParentIndex > m_objects.size()) {
       fprintf(stderr,"FATAL - PDF outline parent index not set!\n");
       return NULL;
     }
-    PDFObject *parentObj( m_objects[m_outlineParentIndex-1] );
+    PDFObject *parentObj( m_objects[m_outlineParentIndex-1].get() );
     PDFOutlineParent *outParent = dynamic_cast<PDFOutlineParent *>(parentObj);
     return outParent;
   }
@@ -415,6 +438,7 @@ private:
 
   std::string m_filename;
   pdf_object_list m_objects;
+  bool m_ok;
 };
 
 /******************************************************************************/

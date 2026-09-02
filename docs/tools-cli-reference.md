@@ -17,6 +17,10 @@ single index for common command shapes and shared option tables.
 | `iccProfileVisualize` | Dump profile LUT data as images and PDF graphs | `iccProfileVisualize profile.icc` |
 | `iccProfileVisualizePlot` | Render profile visualizations to PDF and TIFF | `iccProfileVisualizePlot profile.icc` |
 
+`iccProfileVisualize` writes `<profile-basename>_luts.pdf` beside its input.
+If PDF finalization fails, it preserves the rejected output target, prints a
+diagnostic, and returns a nonzero soft-failure status.
+
 ## Applying Profiles
 
 | Tool | Purpose | Example |

@@ -20,10 +20,14 @@ mkdir -p "$OUTDIR"
 
 VISUALIZE="$TOOLS_DIR/IccProfileVisualize/iccProfileVisualize"
 PROFILE="$TESTING_DIR/sRGB_v4_ICC_preference.icc"
+CMYK_PROFILE="$TESTING_DIR/CMYK-3DLUTs/CMYK-3DLUTs.icc"
 JSON_PROFILE="$TESTING_DIR/sRGB_v4_ICC_preference.json"
 WORK_PROFILE="$OUTDIR/sRGB_v4_ICC_preference.icc"
+CMYK_WORK_PROFILE="$OUTDIR/cmyk-lut.icc"
 BAD_TAG_PROFILE="$OUTDIR/sRGB_v4_ICC_preference-bad-A2B0-offset.icc"
 BAD_CLUT_PROFILE="$OUTDIR/sRGB_v4_ICC_preference-missing-A2B0-clut.icc"
+BLOCKED_PROFILE="$OUTDIR/blocked-output.icc"
+BLOCKED_PDF_PATH="$OUTDIR/blocked-output_luts.pdf"
 LOGFILE="$OUTDIR/iccProfileVisualize.log"
 
 export ASAN_OPTIONS="${ASAN_OPTIONS:-halt_on_error=0,detect_leaks=0}"
@@ -279,9 +283,76 @@ run_malformed_visualize() {
   pass_case "$name" "malformed LUT skipped without sanitizer findings"
 }
 
+run_cmyk_lut_visualize() {
+  local name="cmyk-lut-exports"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$OUTDIR"/cmyk-lut_B2A0.tif \
+        "$OUTDIR"/cmyk-lut_luts.pdf \
+        "$CMYK_WORK_PROFILE"
+
+  if [ ! -f "$CMYK_PROFILE" ]; then
+    fail_case "$name" "missing CMYK profile fixture: $CMYK_PROFILE"
+    return
+  fi
+
+  cp "$CMYK_PROFILE" "$CMYK_WORK_PROFILE"
+  timeout 60 "$VISUALIZE" "$CMYK_WORK_PROFILE" > "$OUTDIR/${name}.log" 2>&1 || exit_code=$?
+  check_sanitizers "$name" "$OUTDIR/${name}.log" || return
+
+  if [ "$exit_code" -ne 0 ]; then
+    fail_case "$name" "iccProfileVisualize exited $exit_code"
+    sed -n '1,40p' "$OUTDIR/${name}.log"
+    return
+  fi
+
+  require_tiff "$name/B2A0" "$OUTDIR/cmyk-lut_B2A0.tif" || return
+  require_pdf "$name/pdf" "$OUTDIR/cmyk-lut_luts.pdf" || return
+
+  pass_case "$name" "generated CMYK TIFF and PDF output"
+}
+
+run_blocked_pdf_output() {
+  local name="blocked-pdf-output"
+  local logfile="$OUTDIR/${name}.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -rf "$BLOCKED_PDF_PATH"
+  rm -f "$BLOCKED_PROFILE" "$logfile"
+  cp "$PROFILE" "$BLOCKED_PROFILE"
+  mkdir "$BLOCKED_PDF_PATH"
+
+  timeout 60 "$VISUALIZE" "$BLOCKED_PROFILE" > "$logfile" 2>&1 || exit_code=$?
+  check_sanitizers "$name" "$logfile" || return
+
+  if [ "$exit_code" -eq 0 ] || [ "$exit_code" -eq 124 ] || [ "$exit_code" -ge 128 ]; then
+    fail_case "$name" "expected graceful output failure, got exit $exit_code"
+    sed -n '1,40p' "$logfile"
+    return
+  fi
+
+  require_text "$name" "$logfile" "PDF writing error" || return
+  if [ ! -d "$BLOCKED_PDF_PATH" ]; then
+    fail_case "$name" "blocked PDF path was replaced"
+    return
+  fi
+
+  pass_case "$name" "blocked PDF finalization reports a graceful failure"
+}
+
 echo "=== iccProfileVisualize regression ==="
 
 run_visualize
+
+if [ "$FAIL" -eq 0 ]; then
+  run_cmyk_lut_visualize
+fi
+
+if [ "$FAIL" -eq 0 ]; then
+  run_blocked_pdf_output
+fi
 
 if [ "$FAIL" -eq 0 ]; then
   make_bad_tag_offset_profile "$PROFILE" "$BAD_TAG_PROFILE" || fail_case "bad-tag-fixture" "failed to create bad tag offset profile"
