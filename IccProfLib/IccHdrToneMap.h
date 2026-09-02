@@ -389,60 +389,50 @@ protected:
  * 1.1.3.5).
  *
  * PROPOSAL-ISSUE HAGC-05 (external dependency) -- clause 1.1.3.5 delegates
- * this derivation to clause C.3.9 of SMPTE ST 2094-50:2026, which is not
- * supplied with the amendment, so the amendment is not independently
- * implementable from ICC documents alone.  UsesDerivedSlopes() exists so a
- * caller can report when a curve relied on this function.
+ * this derivation to clause C.3.9 of SMPTE ST 2094-50, which is not supplied
+ * with the amendment, so the amendment is not independently implementable from
+ * ICC documents alone.  UsesDerivedSlopes() exists so a caller can report when
+ * a curve relied on this function.
  *
- * SOURCE, AND ITS PROVENANCE.  C.3.9 was read on 2026-09-01 -- but from the SECOND
- * PUBLIC COMMITTEE DRAFT of ST 2094-50, dated 2026-02-23, at
- * github.com/SMPTE/st2094-50.
+ * SOURCE: SMPTE ST 2094-50:2026-08, approved 2026-08-24, clause C.3.9, read
+ * 2026-09-02 from pub.smpte.org.  This is the PUBLISHED standard the amendment
+ * cites - an earlier version of this comment described the second public
+ * committee draft, which was the best available text at the time and is
+ * superseded.  The licence forbids reproducing it, so the clause is described
+ * here and never quoted.
  *
- * That is the CURRENT PUBLIC STATE of the document, not a lesser substitute
- * for one: checked 2026-09-02, the repository carries no tags, no releases and
- * that single artifact, and nothing has been pushed to it since 2026-05-22.
- * What makes it worth flagging is narrower - its README dates the review
- * period as having ended 2026-03-16, and CONTRIBUTING.md points active
- * drafting at a members-only private repository.  So this is the latest text
- * anyone outside SMPTE can read, and the comments raised in that review may
- * already have changed exactly the parts flagged below.  The SMPTE licence
- * forbids reproducing the text, so it is described here and never quoted.
+ * The published C.3.9 is not the draft's.  Three defects were raised against
+ * the draft here as HAGC-07, and all three are fixed:
  *
- * C.3.9 defines, over h_i = x_i+1 - x_i and the secants s_i:
- *   - interior points i in 1..N-2: zero when sign(s_i-1) != sign(s_i), else
- *     3(h_i-1 + h_i) s_i-1 s_i / ((2h_i-1 + h_i) s_i-1 + (h_i-1 + 2h_i) s_i);
- *   - the two endpoints (N >= 3): the one-sided three-point estimate;
- *   - N = 2: both slopes are the single secant; N = 1: unused.
- * Its NOTE states the result is equivalent to the PCHIP algorithm of
- * DOI:10.1137/0905021 (Fritsch and Butland).
+ *   1. ENDPOINTS.  The draft gave the one-sided three-point estimate with no
+ *      limits, so a monotone curve could get an end slope of the wrong sign.
+ *      The published clause applies both PCHIP limits - zero when the slope
+ *      disagrees with the adjacent secant, three times that secant when the
+ *      first two secants disagree - which is what this implementation had
+ *      already kept, against the draft, on the strength of the draft's own
+ *      NOTE claiming PCHIP equivalence.
+ *   2. A FLAT PAIR.  The draft's interior condition was a sign comparison, so
+ *      two consecutive zero secants fell through to a 0/0.  The published
+ *      Formula (C.8) adds "or s_i-1 = s_i = 0", giving zero - again what was
+ *      implemented here.
+ *   3. A DUPLICATED ABSCISSA, which 6.5.2 permits when the two Y values agree
+ *      and the draft's C.3.9 could not process.  The published clause defines
+ *      s_i piecewise (Formula (C.7): zero when the interval has zero width)
+ *      and classifies every control point as interior, left, right or
+ *      DEGENERATE by the strict inequalities between its neighbours.  This is
+ *      the one place the implementation had to change rather than be
+ *      confirmed: it used to refuse such a curve outright.
  *
- * The interior formula below is that formula exactly.  TWO DELIBERATE
- * DIVERGENCES remain, both in the direction of the NOTE rather than of the
- * draft's own formulas, and both are pinned by hdr-tonemap.cpp:
+ * What is implemented below is now the published clause, structurally - the
+ * four cases, Formulas (C.7) to (C.10), and the two limits in the order the
+ * clause applies them.  No deliberate divergence remains.
  *
- *   1. ENDPOINTS.  C.7 and C.8 give the three-point estimate with no sign
- *      test and no magnitude limit, while the PCHIP algorithm their own NOTE
- *      cites clamps both.  The difference is not cosmetic: for x = {0, 1, 3},
- *      y = {0, 2, 3} - data that increases throughout - the draft's C.8
- *      yields a slope of -0,5 at the last point, so the final segment dips
- *      below the value it started from.  A gain curve is monotone by intent
- *      and CIccHagcEvaluator's inverse depends on it, so the clamps are kept.
- *   2. A FLAT PAIR.  When two consecutive secants are both zero their signs
- *      are equal, so C.9 takes its "otherwise" branch, where numerator and
- *      denominator are both zero.  Three collinear flat control points make
- *      the draft formula 0/0.  Zero is used instead, which is the limit from
- *      every direction and what PCHIP gives.
- *
- * Curves that carry explicit slope angles are unaffected by any of this.
- * CIccHagcEvaluator::UsesDerivedSlopes() reports when a contributing curve
- * went through this function.
- *
- * x must be strictly increasing over n points, and n must be 1 to
- * icHagcMaxControlPoints - the working arrays are sized by that maximum, so a
- * larger n is refused rather than accommodated; a gain curve cannot carry more
- * points than that in any case, its count being a 5 bit last index.  Returns
- * false, leaving slope untouched, when either precondition fails or when n
- * is 0.
+ * x must be non-decreasing over n points, with y_i = y_i+1 wherever
+ * x_i = x_i+1 (6.5.2), and n must be 1 to icHagcMaxControlPoints - the working
+ * arrays are sized by that maximum, so a larger n is refused rather than
+ * accommodated; a gain curve cannot carry more points than that in any case,
+ * its count being a 5 bit last index.  Returns false, leaving slope
+ * untouched, when either precondition fails or when n is 0.
  */
 ICCPROFLIB_API bool icHagcDerivePchipSlopes(const icFloatNumber *x, const icFloatNumber *y,
                                             icUInt8Number n, icFloatNumber *slope);
@@ -459,12 +449,13 @@ ICCPROFLIB_API bool icHagcDerivePchipSlopes(const icFloatNumber *x, const icFloa
  * the file does not contain the alternate images at all.  This function is
  * that clause.
  *
- * SOURCE, AND ITS PROVENANCE -- the same caveat as icHagcDerivePchipSlopes()
- * above, and for the same document.  C.3.8 was read on 2026-09-01 from the
- * second public committee draft of ST 2094-50 (2026-02-23), the latest text
- * available outside SMPTE, and the licence forbids reproducing it.  What
- * follows is a description of the construction, not a quotation, and every
- * number in it is worth re-checking whenever a newer draft appears.
+ * SOURCE -- the same document as icHagcDerivePchipSlopes() above.  C.3.8 was
+ * first read from the second public committee draft and re-checked on
+ * 2026-09-02 against the PUBLISHED SMPTE ST 2094-50:2026-08: the clause is
+ * unchanged between them, down to the chromaticities, the 8/3 and 1000/203
+ * ratios, the 0,65 highlight compression and the eight control points, so the
+ * construction below is the published one.  The licence forbids reproducing
+ * it, so what follows is a description and not a quotation.
  *
  * The construction, for a baseline headroom H (log2, as the tag encodes it):
  *
@@ -610,11 +601,12 @@ public:
    * eight values to the tone map structure's chi_red..chi_white, and Annex A
    * applies the tone mapping IN that space and converts back afterwards.
    *
-   * TWO LAYERS OF PROVISIONALITY, both worth knowing before this is trusted:
-   * Annex A is INFORMATIVE within its own document, and that document is the
-   * 2026-02-23 public committee draft (see icHagcDerivePchipSlopes() for the
-   * provenance in full).  So this implements an informative annex of a draft
-   * against the silence of the normative ICC text.  It is therefore OPT IN:
+   * ONE LAYER OF PROVISIONALITY REMAINS.  Annex A is INFORMATIVE within its
+   * own document - but that document is now the published SMPTE ST
+   * 2094-50:2026-08, re-checked 2026-09-02 and unchanged from the draft this
+   * was written against, so the second layer is gone.  What is left is that
+   * this implements an informative annex against the silence of the normative
+   * ICC text.  It is therefore OPT IN:
    * an evaluator that is never given a matrix behaves exactly as before, which
    * is what the amendment as written asks for.
    *

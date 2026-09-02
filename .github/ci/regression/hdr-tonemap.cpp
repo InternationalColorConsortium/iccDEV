@@ -458,30 +458,70 @@ void testPchipSlopes()
   checkClose(slope[1], 9.0 / 10.5, 1e-6, "C.3.9's interval-weighted harmonic mean");
   checkClose(slope[0], 2.5, 1e-6, "C.3.9's one-sided estimate at the first point");
 
-  // DIVERGENCE 1 from the committee draft, pinned so it cannot be lost.
-  // The same data is monotonically INCREASING, yet C.3.9's endpoint formula
-  // gives ((2*h1 + h0)*s1 - h1*s0) / (h1 + h0) = -0.5 at the last point: the
-  // final segment would dip below the value it starts from. The PCHIP
-  // algorithm the draft's own NOTE claims equivalence to clamps that to zero,
-  // and the inverse path depends on the curve staying monotone, so zero is
-  // what this implementation produces.
-  checkClose(slope[2], 0.0, 0.0,
-             "the end slope is clamped, not the draft's -0.5 on increasing data");
+  // The endpoint limit of the published C.3.9. The same data is monotonically
+  // INCREASING, yet the three-point estimate gives -0.5 at the last point: the
+  // final segment would dip below the value it starts from. "If sign(m_i) !=
+  // sign(s_i-1) then let m_i = 0" is what prevents it.
+  //
+  // This assertion was written against the second public committee draft,
+  // which had the estimate and NEITHER limit, and it read "the end slope is
+  // clamped, not the draft's -0.5". It was a deliberate divergence then,
+  // justified only by the draft's own NOTE claiming PCHIP equivalence. The
+  // published standard added both limits (HAGC-07 problem 1, fixed), so the
+  // same number is now plain conformance.
+  checkClose(slope[2], 0.0, 0.0, "the end slope is limited to zero on increasing data");
 
-  // DIVERGENCE 2. Three collinear flat points: both secants are zero, so
-  // their signs are EQUAL and C.3.9 takes its "otherwise" branch, where
-  // numerator and denominator are both zero. A conforming reading of the
-  // draft is 0/0 here; zero is the limit from every direction.
+  // Three collinear flat points. Both secants are zero, so a condition written
+  // only as a sign comparison takes the "otherwise" branch and forms 0/0. The
+  // published Formula (C.8) adds "or s_i-1 = s_i = 0" for exactly this
+  // (HAGC-07 problem 2, fixed); the draft did not have it.
   icFloatNumber xf[3] = { 0.0, 1.0, 2.0 };
   icFloatNumber yf[3] = { 0.0, 0.0, 0.0 };
   check(icHagcDerivePchipSlopes(xf, yf, 3, slope), "PCHIP slopes derived for a flat curve");
   check(slope[0] == 0.0 && slope[1] == 0.0 && slope[2] == 0.0,
-        "a flat pair gives zero rather than the draft's 0/0");
+        "a flat pair gives zero, per Formula (C.8)'s second condition");
 
-  // Non-increasing X is a decode error, not something to interpolate over.
-  icFloatNumber xb[3] = { 0.0, 1.0, 1.0 };
+  // A DUPLICATED ABSCISSA, which 6.5.2 permits when the two Y values agree.
+  // The draft's C.3.9 could not process it - its secant was an unguarded
+  // division - and this implementation refused such a curve outright. The
+  // published clause defines s_i as zero on a zero-width interval (Formula
+  // C.7) and classifies each control point by the strict inequalities between
+  // its neighbours, so the duplicate is a DEGENERATE point and gets zero while
+  // its neighbours keep the slopes they would have had.
+  // its neighbours keep the slopes they would have had.
+  //
+  // Note which case each point falls into, because it is not the obvious one:
+  // for x = {0, 1, 1, 2} the two duplicated points are NOT degenerate. Point 1
+  // has a non-zero-width interval on its left and none on its right, so it is a
+  // RIGHT control point; point 2 is the mirror, a LEFT control point. Each has
+  // only one usable interval, so each takes the two-point difference and gets
+  // the secant of the interval it does have - 0.5, not zero. A point is
+  // degenerate only when BOTH neighbouring intervals have zero width.
+  icFloatNumber xd2[4] = { 0.0, 1.0, 1.0, 2.0 };
+  icFloatNumber yd2[4] = { 0.0, (icFloatNumber)0.5, (icFloatNumber)0.5, 1.0 };
+  check(icHagcDerivePchipSlopes(xd2, yd2, 4, slope), "a duplicated abscissa is accepted");
+  checkClose(slope[1], 0.5, 1e-9, "the left duplicate takes the two-point difference");
+  checkClose(slope[2], 0.5, 1e-9, "and so does the right one");
+  check(slope[0] > 0.0 && slope[3] > 0.0, "the outer points keep a positive slope");
+
+  // A genuinely degenerate point: three identical abscissae, so the middle one
+  // has zero-width intervals on both sides and the clause assigns it zero.
+  icFloatNumber xd3[5] = { 0.0, 1.0, 1.0, 1.0, 2.0 };
+  icFloatNumber yd3b[5] = { 0.0, (icFloatNumber)0.5, (icFloatNumber)0.5,
+                            (icFloatNumber)0.5, 1.0 };
+  check(icHagcDerivePchipSlopes(xd3, yd3b, 5, slope), "a triple abscissa is accepted");
+  checkClose(slope[2], 0.0, 0.0, "a point with no interval on either side is degenerate");
+
+  // The same shape with DISAGREEING Y is not degenerate but ambiguous - the
+  // curve would have two values at one abscissa - and 6.5.2 forbids it.
+  icFloatNumber ydBad[4] = { 0.0, (icFloatNumber)0.5, (icFloatNumber)0.7, 1.0 };
+  check(!icHagcDerivePchipSlopes(xd2, ydBad, 4, slope),
+        "a duplicated abscissa with differing Y is refused");
+
+  // X going backwards is a decode error, not something to interpolate over.
+  icFloatNumber xb[3] = { 0.0, 1.0, (icFloatNumber)0.5 };
   icFloatNumber yb[3] = { 0.0, 1.0, 2.0 };
-  check(!icHagcDerivePchipSlopes(xb, yb, 3, slope), "PCHIP refuses a repeated X coordinate");
+  check(!icHagcDerivePchipSlopes(xb, yb, 3, slope), "PCHIP refuses decreasing X");
 
   // A curve that leaves its slopes to be derived must report that it did.
   icFloatNumber x[3] = { 0.0, (icFloatNumber)0.5, 1.0 };

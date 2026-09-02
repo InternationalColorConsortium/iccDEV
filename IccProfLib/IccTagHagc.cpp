@@ -264,8 +264,7 @@ static icFloatNumber icHagcDecodeY(icUInt16Number v, double s)
 
 /** Proposal 0.1.3.9: M = tan((MIN(MAX(1, theta), 35999) - 18000) * pi/36000).
  *
- * Checked against SMPTE ST 2094-50 clause C.3.7 on 2026-09-01 (PCD2 draft, see
- * icHagcDerivePchipSlopes()'s header for the provenance caveat): this decoder,
+ * Checked against SMPTE ST 2094-50:2026-08 clause C.3.7: this decoder,
  * icHagcDecodeX's 64000/1000 cap and icHagcDecodeY's signed 60000/10000 are
  * each identical to the SMPTE text, as is the reference white's 203 default
  * and its clamp(x, 1, 50000)/5 custom form in C.3.3.  The ICC proposal
@@ -1447,16 +1446,14 @@ icValidateStatus CIccTagHagc::Validate(std::string sigPath, std::string &sReport
      * item records, and it still holds against the amendment.
      *
      * icHagcDeriveReferenceWhiteToneMap() now performs the derivation, so the
-     * curve CAN be evaluated - but from the second public committee draft of
-     * ST 2094-50, which is the latest public text of it.  Said as information
-     * rather
+     * curve CAN be evaluated, from the published SMPTE ST 2094-50:2026-08.
+     * Said as information rather
      * than as a warning: nothing is wrong with the profile, and a reader who
      * needs to know which text the numbers came from is told where to look. */
     sReport += icMsgValidateInformation;
     sReport += sSigPathName;
     sReport += " - HAGC Reference White Tone Mapping parameters are not carried in the tag; they\r\n"
-               "    are derived per clause C.3.8 of SMPTE ST 2094-50, read from its 2026-02-23\r\n"
-               "    public committee draft.\r\n";
+               "    are derived per clause C.3.8 of SMPTE ST 2094-50:2026-08.\r\n";
   }
 
   /* --- Global tone mapping parameters (proposal Table 2) --- */
@@ -1511,9 +1508,25 @@ icValidateStatus CIccTagHagc::Validate(std::string sigPath, std::string &sReport
      * non-increasing X array is not merely unordered - it makes the piecewise
      * cubic undefined or infinite.  Equality is rejected for the same reason. */
     for (j = 1; j < (int)pAlt->m_nControlPoints; j++) {
-      if (!(pAlt->m_x[j] > pAlt->m_x[j - 1])) {
+      /* SMPTE ST 2094-50:2026-08 clause 6.5.2: "For i in Z_Ncp-1 it shall be
+       * the case that x_i <= x_i+1.  If it is the case that x_i = x_i+1, then
+       * it shall also be the case that y_i = y_i+1."
+       *
+       * So a duplicated abscissa is legal when the two Y values agree, and the
+       * published C.3.9 defines what its slope is - a degenerate control point
+       * gets zero.  This used to demand STRICTLY increasing X and report a
+       * duplicate as non-compliant, which refused a curve the standard permits;
+       * an encoder padding a fixed-length control point array by repeating the
+       * last point produces exactly that shape.  What remains non-compliant is
+       * X going backwards, and a duplicate whose Y values disagree - which is
+       * ambiguous rather than degenerate, since the curve would have two values
+       * at one abscissa. */
+      if (pAlt->m_x[j] < pAlt->m_x[j - 1] ||
+          (pAlt->m_x[j] == pAlt->m_x[j - 1] && pAlt->m_y[j] != pAlt->m_y[j - 1])) {
         snprintf(buf, bufSize,
-                 " - HAGC alternate image %d control point X values are not strictly increasing at index %d.\r\n",
+                 " - HAGC alternate image %d control point X values decrease, or repeat with\r\n"
+                 "    differing Y, at index %d; clause 6.5.2 of SMPTE ST 2094-50 permits\r\n"
+                 "    x[i] == x[i+1] only when y[i] == y[i+1].\r\n",
                  i, j);
         sReport += icMsgValidateNonCompliant;
         sReport += sSigPathName;

@@ -651,6 +651,20 @@ icFloatNumber CIccHdrTransfer::FromLinearChannel(icFloatNumber v) const
 
 /**
  ****************************************************************************
+ * Name: icHagcSign
+ *
+ * Purpose: The sign function C.3.9's conditions are written in terms of, with
+ *  zero as its own sign - which is what makes "sign(s_i-1) != sign(s_i)" catch
+ *  a flat secant next to a rising one.
+ ****************************************************************************
+ */
+static int icHagcSign(double v)
+{
+  return (v > 0.0) ? 1 : ((v < 0.0) ? -1 : 0);
+}
+
+/**
+ ****************************************************************************
  * Name: icHagcDerivePchipSlopes
  *
  * Purpose:
@@ -664,9 +678,9 @@ icFloatNumber CIccHdrTransfer::FromLinearChannel(icFloatNumber v) const
  *  it omits.
  *
  *  READ THE HEADER BEFORE CHANGING ANY OF THIS.  C.3.9 was read from a
- *  COMMITTEE DRAFT (PCD2, 2026-02-23) - the latest public text, whose
- *  review closed 2026-03-16 - and the two places this deliberately does not
- *  follow that draft - the endpoint clamps, and a flat pair where the draft's formula is
+ *  PUBLISHED SMPTE ST 2094-50:2026-08 - the clause was rewritten
+ *  between the committee draft and publication, and the three places this
+ *  implementation had to diverge from that draft - the endpoint clamps, and a flat pair where the draft's formula is
  *  0/0 - are set out there with the numbers that separate them.
  *
  * Args:
@@ -682,88 +696,95 @@ icFloatNumber CIccHdrTransfer::FromLinearChannel(icFloatNumber v) const
 bool icHagcDerivePchipSlopes(const icFloatNumber *x, const icFloatNumber *y,
                              icUInt8Number n, icFloatNumber *slope)
 {
-  // n is an icUInt8Number, so it reaches 255, while the secant arrays below
-  // are sized by icHagcMaxControlPoints (32).  The in-library caller clamps
-  // first, but this is an exported entry point and the cap belongs with the
-  // arrays it protects, not with the one caller that happens to respect it.
+  // n is an icUInt8Number, so it reaches 255, while the arrays below are sized
+  // by icHagcMaxControlPoints (32).  The in-library caller clamps first, but
+  // this is an exported entry point and the cap belongs with the arrays it
+  // protects, not with the one caller that happens to respect it.
   if (!x || !y || !slope || !n || n > icHagcMaxControlPoints)
     return false;
 
   icUInt8Number i;
 
+  // 6.5.2 permits x_i == x_i+1 when y_i == y_i+1, and C.3.9 is written to
+  // handle it; what neither permits is X going backwards, which would make the
+  // piecewise cubic multi-valued.
   for (i = 1; i < n; i++) {
-    if (!(x[i] > x[i - 1]))
+    if (x[i] < x[i - 1])
+      return false;
+
+    if (x[i] == x[i - 1] && y[i] != y[i - 1])
       return false;
   }
 
-  // A single control point has no secant to derive anything from.  Zero is
-  // the only defensible slope: the curve is a point and every segment around
-  // it is either the constant extension below x[0] or the logarithmic
-  // extrapolation above it, neither of which consults the slope.
-  if (n == 1) {
-    slope[0] = 0.0;
-    return true;
-  }
-
-  // Secant slopes; delta[i] spans x[i]..x[i+1], so there are n-1 of them.
-  double delta[icHagcMaxControlPoints];
   double h[icHagcMaxControlPoints];
+  double s[icHagcMaxControlPoints];
 
+  // Formula (C.7): a zero-width interval has no secant, and the clause gives
+  // it a slope of zero rather than leaving the division undefined.
   for (i = 0; i + 1 < n; i++) {
     h[i] = (double)x[i + 1] - (double)x[i];
-    delta[i] = ((double)y[i + 1] - (double)y[i]) / h[i];
+    s[i] = (h[i] == 0.0) ? 0.0 : (((double)y[i + 1] - (double)y[i]) / h[i]);
   }
 
-  if (n == 2) {
-    slope[0] = slope[1] = (icFloatNumber)delta[0];
-    return true;
-  }
+  for (i = 0; i < n; i++) {
+    bool bHasLeft  = (i > 0) && (x[i - 1] < x[i]);
+    bool bHasRight = (i + 1 < n) && (x[i] < x[i + 1]);
+    double m;
 
-  for (i = 1; i + 1 < n; i++) {
-    if (delta[i - 1] * delta[i] > 0.0) {
-      double w1 = 2.0 * h[i] + h[i - 1];
-      double w2 = h[i] + 2.0 * h[i - 1];
-      slope[i] = (icFloatNumber)((w1 + w2) / (w1 / delta[i - 1] + w2 / delta[i]));
+    if (bHasLeft && bHasRight) {
+      // An interior control point, Formula (C.8): the interval-weighted
+      // harmonic mean of the two adjacent secants, and zero at an extremum or
+      // where both secants are flat - the second half of that condition is
+      // what keeps two consecutive zero secants out of a 0/0.
+      if (icHagcSign(s[i - 1]) != icHagcSign(s[i]) || (s[i - 1] == 0.0 && s[i] == 0.0)) {
+        m = 0.0;
+      }
+      else {
+        m = 3.0 * (h[i - 1] + h[i]) * s[i - 1] * s[i] /
+            ((2.0 * h[i - 1] + h[i]) * s[i - 1] + (h[i - 1] + 2.0 * h[i]) * s[i]);
+      }
+    }
+    else if (bHasRight) {
+      // A left control point.  The three-point estimate of Formula (C.9) when
+      // there is a second interval to lean on, then the two limits that keep
+      // the end segment monotone; otherwise the two-point difference.
+      if (i + 2 < n && x[i + 1] < x[i + 2]) {
+        m = ((2.0 * h[i] + h[i + 1]) * s[i] - h[i] * s[i + 1]) / (h[i] + h[i + 1]);
+
+        if (icHagcSign(m) != icHagcSign(s[i]))
+          m = 0.0;
+
+        if (icHagcSign(m) != icHagcSign(s[i + 1]) && fabs(m) > 3.0 * fabs(s[i]))
+          m = 3.0 * s[i];
+      }
+      else {
+        m = s[i];
+      }
+    }
+    else if (bHasLeft) {
+      // A right control point, Formula (C.10), mirrored.
+      if (i >= 2 && x[i - 2] < x[i - 1]) {
+        m = ((2.0 * h[i - 1] + h[i - 2]) * s[i - 1] - h[i - 1] * s[i - 2]) / (h[i - 1] + h[i - 2]);
+
+        if (icHagcSign(m) != icHagcSign(s[i - 1]))
+          m = 0.0;
+
+        if (icHagcSign(m) != icHagcSign(s[i - 2]) && fabs(m) > 3.0 * fabs(s[i - 1]))
+          m = 3.0 * s[i - 1];
+      }
+      else {
+        m = s[i - 1];
+      }
     }
     else {
-      // Sign change or a flat secant: a local extremum, where a non-zero
-      // slope is exactly what would make the cubic overshoot.
-      //
-      // The `> 0.0` test rather than a pair of sign comparisons is what keeps
-      // a flat pair out of the harmonic mean.  C.3.9 branches on
-      // sign(s_i-1) != sign(s_i), which is FALSE when both secants are zero,
-      // sending three collinear flat control points into a 0/0.  Zero is the
-      // limit from every direction; see divergence 2 in the header.
-      slope[i] = 0.0;
+      // Degenerate: a control point with no interval of non-zero width on
+      // either side, which is a duplicate of its neighbours or a curve of one
+      // point.  The clause assigns zero.
+      m = 0.0;
     }
+
+    slope[i] = (icFloatNumber)m;
   }
-
-  // Endpoints: C.3.9's one-sided three-point estimate, then the two guards
-  // that make it monotonicity preserving.  The estimate is the draft's; the
-  // guards are not - they are the PCHIP algorithm the draft's own NOTE claims
-  // equivalence to.  See divergence 1 in the header for the control points
-  // that separate the two.
-  double dEnd = ((2.0 * h[0] + h[1]) * delta[0] - h[0] * delta[1]) / (h[0] + h[1]);
-
-  if (dEnd * delta[0] <= 0.0)
-    dEnd = 0.0;
-  else if (delta[0] * delta[1] <= 0.0 && fabs(dEnd) > fabs(3.0 * delta[0]))
-    dEnd = 3.0 * delta[0];
-
-  slope[0] = (icFloatNumber)dEnd;
-
-  icUInt8Number last = (icUInt8Number)(n - 1);
-  double hl = h[last - 1], hl2 = h[last - 2];
-  double dl = delta[last - 1], dl2 = delta[last - 2];
-
-  dEnd = ((2.0 * hl + hl2) * dl - hl * dl2) / (hl + hl2);
-
-  if (dEnd * dl <= 0.0)
-    dEnd = 0.0;
-  else if (dl * dl2 <= 0.0 && fabs(dEnd) > fabs(3.0 * dl))
-    dEnd = 3.0 * dl;
-
-  slope[last] = (icFloatNumber)dEnd;
 
   return true;
 }
@@ -777,7 +798,8 @@ bool icHagcDerivePchipSlopes(const icFloatNumber *x, const icFloatNumber *y,
  *  not carry, per clause C.3.8 of SMPTE ST 2094-50.
  *
  *  READ THE HEADER BEFORE CHANGING ANY OF THIS.  C.3.8 was read from a
- *  COMMITTEE DRAFT (PCD2, 2026-02-23), the latest public text, and the
+ *  published SMPTE ST 2094-50:2026-08, whose C.3.8 is
+ *  unchanged from the committee draft this was first written against.  The
  *  construction is described there rather than quoted because the licence does
  *  not permit reproduction.
  *
@@ -1009,6 +1031,13 @@ icFloatNumber CIccHagcEvaluator::Curve::Gain(icFloatNumber v) const
   while (i + 1 < nPoints && v >= x[i + 1])
     i++;
 
+  // Formula (12)'s second case: at a control point the value is that point's
+  // own y.  For a segment of non-zero width the cubic gives the same answer at
+  // t = 0, so this only bites on a duplicated abscissa - where the scan can
+  // land on the zero-width segment and there is no parameter to form.
+  if (v == x[i])
+    return y[i];
+
   double t = ((double)v - (double)x[i]) * (double)invdx[i];
 
   return (icFloatNumber)((((double)c3[i] * t + (double)c2[i]) * t + (double)c1[i]) * t + (double)c0[i]);
@@ -1153,12 +1182,15 @@ bool CIccHagcEvaluator::Init(const icHagcMetadata &meta)
       c.y[j] = pAlt->m_y[j];
     }
 
-    // Strictly increasing X is what makes the piecewise cubic a function at
-    // all; Validate() reports it as NonCompliant, and evaluating it anyway
-    // would divide by a zero interval width.
+    // Non-decreasing X is what makes the piecewise cubic a function at all.
+    // ST 2094-50:2026-08 clause 6.5.2 permits x_i == x_i+1 when y_i == y_i+1,
+    // and Formula (12)'s exact-hit branch evaluates such a curve without ever
+    // forming the zero-width segment's parameter, so a duplicate is a no-op
+    // point rather than a defect.  X going backwards, or a duplicate whose Y
+    // values differ, is neither.
     for (j = 1; j < c.nPoints; j++) {
-      if (!(c.x[j] > c.x[j - 1])) {
-        m_szUnsupported = "control point X coordinates are not strictly increasing";
+      if (c.x[j] < c.x[j - 1] || (c.x[j] == c.x[j - 1] && c.y[j] != c.y[j - 1])) {
+        m_szUnsupported = "control point X coordinates decrease, or repeat with differing Y";
         m_nCurves = 0;
         return false;
       }
@@ -1184,6 +1216,18 @@ bool CIccHagcEvaluator::Init(const icHagcMetadata &meta)
     // values and the two scaled slopes.
     for (j = 0; j + 1 < c.nPoints; j++) {
       double dx = (double)c.x[j + 1] - (double)c.x[j];
+
+      // A zero-width segment carries no values of its own: Formula (12) puts
+      // the only x it contains into the exact-hit branch, so its coefficients
+      // are never evaluated.  Leaving invdx at zero keeps them finite rather
+      // than filling the cache with infinities that a later change might read.
+      if (dx == 0.0) {
+        c.invdx[j] = 0.0;
+        c.c3[j] = c.c2[j] = c.c1[j] = 0.0;
+        c.c0[j] = c.y[j];
+        continue;
+      }
+
       double mi = dx * (double)slope[j];
       double mi1 = dx * (double)slope[j + 1];
       double yi = (double)c.y[j];

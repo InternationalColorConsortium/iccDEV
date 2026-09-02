@@ -620,17 +620,33 @@ void testValidate()
   if (!report.empty())
     printf("  (clean tag report: %s)\n", report.c_str());
 
-  // Non-increasing X makes the piecewise cubic's t = (x - x_i)/(x_i+1 - x_i)
-  // divide by zero, so it is a defect and not merely untidy ordering.
+  // A duplicated abscissa whose Y values DISAGREE. SMPTE ST 2094-50:2026-08
+  // clause 6.5.2 permits x_i == x_i+1 only "if it is the case that y_i =
+  // y_i+1", and this pair does not satisfy that: the curve would have two
+  // values at one abscissa, which is ambiguous rather than degenerate.
   icHagcMetadata badX = makeFullModel();
   badX.GetAlternate(0)->m_x[2] = badX.GetAlternate(0)->m_x[1];
   CIccTagHagc badXTag;
   badXTag.SetMetadata(badX);
   report.clear();
   check(badXTag.Validate("HAGC", report, NULL) == icValidateNonCompliant,
-        "non-increasing control point X is non-compliant");
-  check(report.find("strictly increasing") != std::string::npos,
-        "non-increasing X names the defect");
+        "a duplicated abscissa with differing Y is non-compliant");
+  check(report.find("repeat with") != std::string::npos,
+        "and the report says which of the two conditions it broke");
+
+  // The same duplicate with AGREEING Y is legal, and used to be rejected here:
+  // this implementation demanded strictly increasing X until the published
+  // C.3.9 defined what a zero-width interval means (HAGC-07 problem 3). An
+  // encoder padding a fixed-length control point array by repeating the last
+  // point produces exactly this shape.
+  icHagcMetadata dupX = makeFullModel();
+  dupX.GetAlternate(0)->m_x[2] = dupX.GetAlternate(0)->m_x[1];
+  dupX.GetAlternate(0)->m_y[2] = dupX.GetAlternate(0)->m_y[1];
+  CIccTagHagc dupXTag;
+  dupXTag.SetMetadata(dupX);
+  report.clear();
+  check(dupXTag.Validate("HAGC", report, NULL) < icValidateNonCompliant,
+        "a duplicated abscissa with equal Y is permitted by 6.5.2");
 
   // Mixing type 3 with every coefficient zero makes p_sum zero, which the
   // informative annex says cannot happen because the mixing divides by it.
