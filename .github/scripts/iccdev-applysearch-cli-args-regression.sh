@@ -49,6 +49,7 @@ DATA="$TESTING_DIR/ApplyDataFiles/rgb8bit.txt"
 SRGB="$TESTING_DIR/sRGB_v4_ICC_preference.icc"
 CFG="$OUTDIR/applysearch-cfg.json"
 THREADED_DATA="$OUTDIR/rgb8bit-threaded.txt"
+THREAD_IMPL="$REPO_ROOT/IccProfLib/IccCmmThread.cpp"
 
 fail() {
   echo "  [FAIL] iccApplySearch-cli-args -- $1"
@@ -148,12 +149,24 @@ require_file "$CFG"
 run_expect_success valid-cfg "$APPLY" -cfg "$CFG"
 run_expect_success valid-legacy "$APPLY" "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
 
-# Repeat the fixture past three 256-pixel chunks. With 16 pixel rows per copy,
-# 49 copies produce 784 pixels, so -threads 4 dispatches all four workers.
+# Derive the fixture size from the production dispatch threshold. Four workers
+# require more than three chunks; coupling the copy count to the constant keeps
+# this test from silently becoming scalar if the threshold changes.
 # Require the bare default, explicit scalar, automatic, and four-worker CLI
 # output to remain byte-identical.
+require_file "$THREAD_IMPL"
+pixels_per_thread="$(awk \
+  '$1 == "static" && $2 == "const" && $3 == "icUInt32Number" && \
+   $4 == "kIccSmallApplyPixelsPerThread" && $5 == "=" { \
+     sub(/;$/, "", $6); print $6; exit \
+   }' "$THREAD_IMPL")"
+data_rows="$(sed -n '3,$p' "$DATA" | awk 'NF { count++ } END { print count + 0 }')"
+if [[ ! "$pixels_per_thread" =~ ^[1-9][0-9]*$ ]] || (( data_rows < 1 )); then
+  fail "unable to derive the four-worker fixture size"
+fi
+threaded_copies=$(( (3 * pixels_per_thread + 1 + data_rows - 1) / data_rows ))
 sed -n '1,2p' "$DATA" > "$THREADED_DATA"
-for ((i = 0; i < 49; ++i)); do
+for ((i = 0; i < threaded_copies; ++i)); do
   sed -n '3,$p' "$DATA" >> "$THREADED_DATA"
 done
 run_expect_success valid-default \
