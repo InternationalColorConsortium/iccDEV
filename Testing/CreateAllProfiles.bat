@@ -255,17 +255,13 @@ if not "%1"=="clean" goto do_HDR
 del /F/Q *.icc 2>NUL:
 goto end_HDR
 :do_HDR
+REM #2328: HDR\mkprofiles.bat already builds exactly these ten profiles, so call it
+REM rather than keeping a second copy of the same command list here -- a duplicate
+REM list drifts silently and leaves iccdev.qa-profile-manifest short a profile or a
+REM manifest row depending on which copy was edited. CALL is required: invoking a
+REM .bat without it transfers control and never returns to this script.
 @echo on
-iccFromXml BT2100HlgFullScene.xml BT2100HlgFullScene.icc
-iccFromXml BT2100HlgNarrowScene.xml BT2100HlgNarrowScene.icc
-iccFromXml BT2100HlgFullDisplay.xml BT2100HlgFullDisplay.icc
-iccFromXml BT2100HlgNarrowDisplay.xml BT2100HlgNarrowDisplay.icc
-iccFromXml BT2100PQFullScene.xml BT2100PQFullScene.icc
-iccFromXml BT2100PQNarrowScene.xml BT2100PQNarrowScene.icc
-iccFromXml BT2100PQFullDisplay.xml BT2100PQFullDisplay.icc
-iccFromXml BT2100PQNarrowDisplay.xml BT2100PQNarrowDisplay.icc
-iccFromXml BT2100HlgSceneToDisplayLink.xml BT2100HlgSceneToDisplayLink.icc
-iccFromXml BT2100PQSceneToDisplayLink.xml BT2100PQSceneToDisplayLink.icc
+call mkprofiles.bat
 @echo off
 :end_HDR
 
