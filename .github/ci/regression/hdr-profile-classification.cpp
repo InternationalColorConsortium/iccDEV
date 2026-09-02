@@ -555,7 +555,14 @@ void testClassification()
   if (pProfile) {
     check(icGetHdrProfileInfo(pProfile, info), "info resolved");
     check(info.nClass == icHdrProfileConforming, "metadata fixture is a conforming HDR Profile");
-    check(info.bRgbMatrixBased, "recognised as three-component matrix-based");
+    // The revision's structural conditions, not the previous one's. An HDR
+    // Profile is RGB and Input or Display; 8.10.1 then says the TRC tags
+    // "shall not be present", so requiring the conventional six - which is
+    // what bRgbMatrixBased still reports - would make every revision-shaped
+    // profile unclassifiable.
+    check(info.bRgbInputOrDisplay, "recognised as an RGB Input or Display profile");
+    check(!info.bTrcTagsPresent, "and carries none of the three prohibited TRC tags");
+    check(!info.bRgbMatrixBased, "so it is not the conventional six-tag shape NOTE 3 contrasts it with");
     check(info.bVersion4_5, "recognised as declaring 4.5.0.0");
     check(info.bHasCicp && info.bTransferIsHdr, "cicp present with an HDR transfer");
     check(!info.bHasHagc, "no HAGC tag, which 8.10.1 NOTE 3 makes optional");

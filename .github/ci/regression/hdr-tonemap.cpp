@@ -190,11 +190,29 @@ void testTransferNormalisation()
   CIccHdrTransfer lin;
   check(lin.Init(icCicpTransferLinear, (icFloatNumber)icHdrDefaultContentReferenceWhite),
         "Linear transfer initialises");
-  check(lin.UsesProfileCurves(), "Linear defers to the profile TRC tags");
+  // The 29-08-2026 revision settled what a Linear value means. Step a) of
+  // 8.10.2 normalises "PQ in cd/m2 / 10 000, HLG in scene-referred units per
+  // Rec. ITU-R BT.2100, or, for Linear, DIRECTLY IN CD/M2". So Linear does not
+  // defer to the profile's TRC tags - the same revision prohibits them - and
+  // the change of normalisation is a division by the content reference white,
+  // exactly as it is for the other two.
+  check(!lin.UsesProfileCurves(), "Linear no longer defers to the profile TRC tags");
 
   src[0] = (icFloatNumber)3.5;
   lin.ToLinear(dst, src);
-  checkClose(dst[0], 3.5, 0.0, "Linear transfer passes values through unchanged");
+  checkClose(dst[0], 3.5 / 203.0, 1e-9,
+             "a Linear value is a luminance in cd/m^2, divided by CRWL");
+
+  // 3,5 cd/m2 is below reference white, so the result is below 1.0; the whole
+  // point of the normalisation is that a value ABOVE reference white survives,
+  // which a sampled TRC clamping at 1.0 could never represent.
+  src[0] = (icFloatNumber)406.0;
+  lin.ToLinear(dst, src);
+  checkClose(dst[0], 2.0, 1e-6, "twice reference white is 2.0, not clipped to 1.0");
+
+  // And the inverse puts it back in cd/m^2.
+  lin.FromLinear(src, dst);
+  checkClose(src[0], 406.0, 1e-3, "FromLinear returns cd/m^2");
 
   // Anything clause 8.10.1 does not permit is refused rather than guessed at.
   CIccHdrTransfer bad;
@@ -907,10 +925,17 @@ void testEndToEnd()
   // is the luminance its own chain normalises to - not the 203 default. A
   // reader that ignored the tag's custom value would put this pixel 48% high.
 
-  // 1. No hint: exactly the pre-amendment behaviour. The sampled/parametric
-  //    2.2 TRC is applied and the HDR path never engages.
+  // 1. No hint: exactly the pre-amendment behaviour - except that under the
+  //    29-08-2026 revision there is no longer a conventional chain to fall
+  //    back TO. An HDR Profile carries no TRC tags, so a consumer that does
+  //    not ask for HDR processing gets the AToB0Tag, which is precisely what
+  //    8.10.1 NOTE 4 says the mandatory pair is for: "a backward-compatible
+  //    HDR->SDR fallback for consumers that do not implement HDR processing".
+  //    Before the revision this profile had TRC tags and this assertion read
+  //    icXformTypeMatrixTRC.
   if (applyPixel("HagcDisplay.icc", NULL, src, noHint, &nType)) {
-    check(nType == icXformTypeMatrixTRC, "without a hint an HDR profile uses the conventional chain");
+    check(nType == icXformType3DLut || nType == icXformTypeMatrixTRC,
+          "without a hint an HDR profile falls back to its mandatory AToB0Tag");
   }
 
   // 2. With a hint at SDR target headroom: the HDR chain, tone mapped by the
@@ -1003,10 +1028,16 @@ void testEndToEnd()
   }
 
   //    HdrBakedLut carries the AToB0/BToA0 pair and no HAGC, so the choice is
-  //    between descriptor c) and this build's own operator - the identity of
-  //    NOTE 6, which ranks below a rendering the author actually baked.
+  //    between descriptor c) and this build's own operator - and 8.10.3 ranks
+  //    the AToB0Tag LAST of the three. This assertion used to read the other
+  //    way, on the reasoning that a rendering the author baked beats an
+  //    identity; 8.10.6 then made the pair MANDATORY, so that reading would
+  //    disable the 8.10.2 chain for every profile without a HAGC tag. NOTE 4
+  //    settles it: the pair is the fallback "for consumers that do not
+  //    implement HDR processing", which this is not.
   if (applyPixel("HdrBakedLut.icc", &hint, src, dst, &nType)) {
-    check(nType != icXformTypeMatrixTrcHdr, "Auto lets a baked AToB0 outrank the identity operator");
+    check(nType == icXformTypeMatrixTrcHdr,
+          "Auto ranks the CMM's own operator above a baked AToB0, per 8.10.3");
   }
 
   hint.m_nPolicy = icHdrToneMapPreferHagc;
@@ -1023,12 +1054,15 @@ void testEndToEnd()
     check(nType != icXformTypeMatrixTrcHdr, "PreferLut takes the baked AToB0 over the HAGC tag");
   }
 
-  // 8. Disable is exactly the hint-less path.
+  // 8. Disable is exactly the hint-less path: whatever a consumer that never
+  //    asked for HDR processing would have got, which for a revision-shaped
+  //    HDR Profile is the mandatory AToB0Tag rather than a matrix/TRC chain
+  //    that no longer exists.
   hint.m_nPolicy = icHdrToneMapDisable;
   src[0] = src[1] = src[2] = vWhite;
 
   if (applyPixel("HagcDisplay.icc", &hint, src, dst, &nType)) {
-    check(nType == icXformTypeMatrixTRC, "the Disable policy leaves the conventional chain alone");
+    check(nType != icXformTypeMatrixTrcHdr, "the Disable policy engages no HDR chain");
   }
 }
 

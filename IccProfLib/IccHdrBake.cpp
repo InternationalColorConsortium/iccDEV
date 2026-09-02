@@ -261,8 +261,14 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
     return false;
   }
 
-  if (!info.bRgbMatrixBased) {
-    m_szUnsupported = "Not a three-component matrix-based RGB profile";
+  // bRgbInputOrDisplay, not bRgbMatrixBased: an HDR Profile authored to the
+  // 29-08-2026 revision carries no TRC tags and, unless ColourPrimaries is 2,
+  // no matrix column tags either, so the conventional six-tag test would
+  // decline exactly the profiles this bake exists for.  What the bake actually
+  // needs is the header shape plus a matrix, and the matrix is built below
+  // from the cicpTag.
+  if (!info.bRgbInputOrDisplay) {
+    m_szUnsupported = "Not an RGB Input or Display profile";
     return false;
   }
 
@@ -353,9 +359,15 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
     // that cannot run the descriptor, which is what this tag's readers are.
   }
 
-  if (!icHdrBakeGetColumn(pProfile, icSigRedMatrixColumnTag,   m_matrix + 0) ||
-      !icHdrBakeGetColumn(pProfile, icSigGreenMatrixColumnTag, m_matrix + 3) ||
-      !icHdrBakeGetColumn(pProfile, icSigBlueMatrixColumnTag,  m_matrix + 6)) {
+  // The matrix column tags are optional in the revision shape.  When they are
+  // absent the cicpTag block below is the only source, so their absence is
+  // only fatal for ColourPrimaries 2 - where 8.10.1 requires them and nothing
+  // else can supply the matrix.
+  bool bHaveColumns = icHdrBakeGetColumn(pProfile, icSigRedMatrixColumnTag,   m_matrix + 0) &&
+                      icHdrBakeGetColumn(pProfile, icSigGreenMatrixColumnTag, m_matrix + 3) &&
+                      icHdrBakeGetColumn(pProfile, icSigBlueMatrixColumnTag,  m_matrix + 6);
+
+  if (!bHaveColumns && info.nColourPrimaries == icCicpPrimariesUnspecified) {
     m_szUnsupported = "Missing or malformed matrix column tag";
     return false;
   }
@@ -363,14 +375,16 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
   // icHdrBakeGetColumn() wrote each column's XYZ contiguously, which is the
   // transpose of what the matrix needs: column j holds the XYZ of primary j,
   // and row i of the matrix holds component i of all three primaries.
-  icFloatNumber columns[9];
-  memcpy(columns, m_matrix, sizeof(columns));
+  if (bHaveColumns) {
+    icFloatNumber columns[9];
+    memcpy(columns, m_matrix, sizeof(columns));
 
-  icUInt8Number row, col;
+    icUInt8Number row, col;
 
-  for (row = 0; row < 3; row++) {
-    for (col = 0; col < 3; col++)
-      m_matrix[row * 3 + col] = columns[col * 3 + row];
+    for (row = 0; row < 3; row++) {
+      for (col = 0; col < 3; col++)
+        m_matrix[row * 3 + col] = columns[col * 3 + row];
+    }
   }
 
   // PROPOSAL-ISSUE HDR-07.  The same replacement CIccXformMatrixTrcHdr::Begin()
@@ -385,6 +399,10 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
 
     if (icBuildHdrForwardMatrix(pProfile, info.nColourPrimaries, fwd))
       memcpy(m_matrix, fwd, sizeof(m_matrix));
+    else if (!bHaveColumns) {
+      m_szUnsupported = "No matrix: neither cicpTag primaries nor matrix column tags";
+      return false;
+    }
   }
 
   memcpy(m_inverse, m_matrix, sizeof(m_inverse));

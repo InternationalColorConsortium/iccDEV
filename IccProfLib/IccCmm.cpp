@@ -576,11 +576,34 @@ static bool icUseHdrToneMapPath(CIccProfile *pProfile, bool bInput,
 
     case icHdrToneMapAuto:
     default:
-      // The recommended ranking: HAGC, then the CMM's own operator, then the
-      // baked LUT.  This build's "own operator" is the identity of NOTE 6,
-      // which ranks below a LUT the author actually rendered - so a profile
-      // with a LUT and no HAGC goes through the cascade.
-      return info.bHasHagc || !bHasLut;
+      // 8.10.3's ranking, followed as stated: a) the HAGC tag, b) the
+      // application or CMM operator, c) the AToB0Tag, last.
+      //
+      // This used to return `bHasHagc || !bHasLut`, ranking the baked LUT
+      // ABOVE this build's own operator on the grounds that a LUT the author
+      // rendered beats an identity.  That reasoning was written when the
+      // AToB0Tag was optional.  8.10.6 now makes the pair MANDATORY, so every
+      // conforming HDR Profile carries one and the old test would have
+      // disabled the 8.10.2 chain for every profile without a HAGC tag - the
+      // amendment's central mechanism, dead in the common case.
+      //
+      // 8.10.1 NOTE 4 settles which way round it goes: the mandatory pair is
+      // "A backward-compatible HDR->SDR fallback for consumers that do not
+      // implement HDR processing", and where no descriptor is present "the
+      // choice of how to perform the tone-mapping step of 8.10.2 is left to
+      // the consuming application or CMM (for example: identity pass-through
+      // producing HDR-linear PCSXYZ)".  This CMM does implement HDR
+      // processing, so the fallback is not for it.
+      //
+      // PROPOSAL-ISSUE HDR-13 lives here.  An N-component LUT-based Display
+      // profile can satisfy every condition of 8.10.1 - the required tag sets
+      // are contained in each other and 9.2.17 permits a cicpTag anywhere - so
+      // this branch can take the 8.10.2 chain on a profile whose author meant
+      // its LUT to be the rendering.  A consumer that would rather trust the
+      // LUT has icHdrToneMapPreferLut; there is no test the corpus supplies
+      // that would let this one decide for itself.
+      (void)bHasLut;
+      return true;
   }
 }
 
@@ -6715,23 +6738,74 @@ void CIccXformMatrixTrcHdr::SetHdrParams(const CIccCreateHdrXformHint *pHint)
  */
 icStatusCMM CIccXformMatrixTrcHdr::Begin()
 {
-  // The base sets up the three matrix columns, inverts them for the output
-  // direction, and loads the TRC curves.  The curves are only *used* for
-  // TransferCharacteristics = 8; for PQ and HLG the analytic EOTF replaces
-  // them.  They are still loaded because the base owns that bookkeeping
-  // (m_bFreeCurve, the identity check) and because the profile is required to
-  // carry them - clause 8.10.1 makes an HDR Profile matrix-based, so their
-  // absence is a structural failure worth reporting through the base's own
-  // icCmmStatProfileMissingTag rather than silently tolerating.
-  icStatusCMM status = CIccXformMatrixTRC::Begin();
-
-  if (status != icCmmStatOk)
-    return status;
-
   icHdrProfileInfo info;
 
   if (!icGetHdrProfileInfo(m_pProfile, info))
     return icCmmStatInvalidProfile;
+
+  // TWO SHAPES REACH HERE, and the difference is the whole of clause 8.10.1's
+  // revision.  A profile authored against the PREVIOUS revision carries the
+  // conventional six matrix column and TRC tags, and the base class sets
+  // everything up from them.  A profile authored against this one carries no
+  // TRC tags at all - 8.10.1 says they "shall not be present" - so the base
+  // would fail with icCmmStatProfileMissingTag on a perfectly conforming
+  // profile, which is what made the HDR path unreachable for them.
+  //
+  // The revision shape needs less, not more: the transfer comes from the
+  // cicpTag analytically, so there are no curves to load, and the matrix comes
+  // from the cicpTag's primaries (see the HDR-07 block below) or, when
+  // ColourPrimaries is 2, from the matrix column tags that 8.10.1 then
+  // requires.
+  bool bConventional = m_pProfile->IsTagPresent(icSigRedTRCTag) &&
+                       m_pProfile->IsTagPresent(icSigGreenTRCTag) &&
+                       m_pProfile->IsTagPresent(icSigBlueTRCTag) &&
+                       m_pProfile->IsTagPresent(icSigRedMatrixColumnTag) &&
+                       m_pProfile->IsTagPresent(icSigGreenMatrixColumnTag) &&
+                       m_pProfile->IsTagPresent(icSigBlueMatrixColumnTag);
+
+  if (bConventional) {
+    icStatusCMM status = CIccXformMatrixTRC::Begin();
+
+    if (status != icCmmStatOk)
+      return status;
+  }
+  else {
+    // The base's own precondition for the output direction, which is about the
+    // PCS rather than about any tag, so it holds either way.
+    if (!m_bInput && m_pProfile->m_Header.pcs != icSigXYZData)
+      return icCmmStatBadSpaceLink;
+
+    // No sampled curves: m_transfer supplies the linearisation below, and
+    // leaving these NULL is what tells CIccXformMatrixTRC::Apply() to skip the
+    // per-channel curve step entirely.
+    m_Curve[0] = m_Curve[1] = m_Curve[2] = NULL;
+    m_ApplyCurvePtr = NULL;
+
+    if (info.nColourPrimaries == icCicpPrimariesUnspecified) {
+      // 8.10.1's exception: with ColourPrimaries 2 the matrix column tags
+      // "shall be present and shall be used directly as the RGB-to-PCSXYZ
+      // matrix", so this is the one revision-shaped case the HDR-07 block
+      // below does not cover.
+      const CIccTagXYZ *pXYZ;
+      int col;
+      icTagSignature sigs[3] = { icSigRedMatrixColumnTag, icSigGreenMatrixColumnTag,
+                                 icSigBlueMatrixColumnTag };
+
+      for (col = 0; col < 3; col++) {
+        pXYZ = GetColumn(sigs[col]);
+
+        if (!pXYZ)
+          return icCmmStatProfileMissingTag;
+
+        m_e[col]     = icFtoD((*pXYZ)[0].X);
+        m_e[3 + col] = icFtoD((*pXYZ)[0].Y);
+        m_e[6 + col] = icFtoD((*pXYZ)[0].Z);
+      }
+
+      if (!m_bInput && !icMatrixInvert3x3(m_e))
+        return icCmmStatInvalidProfile;
+    }
+  }
 
   if (!info.bHasCicp) {
     // Clause 8.10.1 requires the cicpTag of every HDR Profile.  Without it

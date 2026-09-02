@@ -866,20 +866,37 @@ icHdrContentHeadroomSource CIccHdrMetadataReader::ResolveContentHeadroom(icFloat
 
 /**
  ****************************************************************************
+ * Name: icHdrIsRgbInputOrDisplay
+ *
+ * Purpose: 8.10.1's first membership condition - "An HDR Profile shall be a
+ *  three-component matrix-based Input profile (see 8.3.3) or a
+ *  three-component matrix-based Display profile (see 8.4.3)" - reduced to the
+ *  part of it this revision still requires unconditionally.
+ *
+ *  The clause names the parent class by its tag set, and then removes six of
+ *  that set's tags from an HDR Profile.  What survives is the header: RGB, and
+ *  Input or Display.
+ ****************************************************************************
+ */
+static bool icHdrIsRgbInputOrDisplay(const CIccProfile *pProfile)
+{
+  return pProfile->m_Header.colorSpace == icSigRgbData &&
+         (pProfile->m_Header.deviceClass == icSigInputClass ||
+          pProfile->m_Header.deviceClass == icSigDisplayClass);
+}
+
+/**
+ ****************************************************************************
  * Name: icHdrIsRgbMatrixBased
  *
- * Purpose: Test the structural shape clause 8.10.6 requires: RGB data colour
- *  space, Input or Display class, and the three matrix column and TRC tags of
- *  a three-component matrix-based profile (8.3.3 / 8.4.3).
- *****************************************************************************
+ * Purpose: The CONVENTIONAL three-component matrix-based shape - all six of
+ *  the tags 8.3.3 and 8.4.3 require.  This is what 8.10.1 NOTE 3 distinguishes
+ *  an HDR Profile from, not a condition of being one.
+ ****************************************************************************
  */
 static bool icHdrIsRgbMatrixBased(const CIccProfile *pProfile)
 {
-  if (pProfile->m_Header.colorSpace != icSigRgbData)
-    return false;
-
-  if (pProfile->m_Header.deviceClass != icSigInputClass &&
-      pProfile->m_Header.deviceClass != icSigDisplayClass)
+  if (!icHdrIsRgbInputOrDisplay(pProfile))
     return false;
 
   return pProfile->IsTagPresent(icSigRedMatrixColumnTag) &&
@@ -1268,7 +1285,16 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
   if (!pProfile)
     return false;
 
+  info.bRgbInputOrDisplay = icHdrIsRgbInputOrDisplay(pProfile);
   info.bRgbMatrixBased = icHdrIsRgbMatrixBased(pProfile);
+
+  info.bTrcTagsPresent = pProfile->IsTagPresent(icSigRedTRCTag) ||
+                         pProfile->IsTagPresent(icSigGreenTRCTag) ||
+                         pProfile->IsTagPresent(icSigBlueTRCTag);
+
+  info.bMatrixColumnsPresent = pProfile->IsTagPresent(icSigRedMatrixColumnTag) &&
+                               pProfile->IsTagPresent(icSigGreenMatrixColumnTag) &&
+                               pProfile->IsTagPresent(icSigBlueMatrixColumnTag);
 
   /* "4.5.0.0 or later within v4", not equality with 4.5.0.0.  An amendment is
    * one link in a chain of amendments against the base major version, and what
@@ -1395,7 +1421,46 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
    * class the profile turns out to belong to.  Linear (8) is deliberately not
    * a signal on its own: it is as common in SDR workflows as in HDR ones, and
    * treating it as one would open an HDR section on ordinary profiles. */
-  if (info.bRgbMatrixBased && info.bVersion4_5 && info.bHasCicp && info.bTransferIsHdr) {
+  bool bMembership = info.bRgbInputOrDisplay && info.bVersion4_5 &&
+                     info.bHasCicp && info.bTransferIsHdr;
+
+  /* 8.10.1's two tag-level conditions, which this revision states and the
+   * previous one did not.  Getting these backwards is what made
+   * icHdrProfileConforming unreachable for any profile authored to this
+   * revision: the old test required the six matrix and TRC tags to be
+   * PRESENT, where the clause now requires three of them to be ABSENT.
+   *
+   * The TRC prohibition is unambiguous - "except that the redTRCTag,
+   * greenTRCTag and blueTRCTag shall not be present", and NOTE 3 makes their
+   * absence a distinguishing feature "always" - so it is a condition of
+   * membership here.
+   *
+   * PROPOSAL-ISSUE HDR-15: the matrix column rule is not stated with the same
+   * force, and 8.10.1 gives it three different strengths in three sentences.
+   * The body says they "are likewise NOT REQUIRED"; the next paragraph calls
+   * the pair of rules "Both PROHIBITIONS"; and NOTE 3 relies on their absence
+   * as a discriminator, which only works if it is one.  "Not required" and
+   * "prohibited" are different rules with different consequences: under the
+   * first a profile may carry matrix columns that duplicate what the cicpTag
+   * says, which is exactly the "represents each piece of colorimetric
+   * information exactly once" the same paragraph gives as the rationale.
+   *
+   * Ruled the lenient way: their presence does not cost membership when
+   * ColourPrimaries is not 2, because "not required" is the only one of the
+   * three formulations that is actually a rule about a profile.  Their
+   * ABSENCE does cost membership when ColourPrimaries IS 2, because there the
+   * clause says "shall be present" and without them there is no matrix at
+   * all.  A redundant matrix column tag is a conformance question and belongs
+   * to Validate(), not to whether the profile is an HDR Profile - see
+   * icHdrProfileClass in the header on why membership and conformance are
+   * kept apart. */
+  if (info.bTrcTagsPresent)
+    bMembership = false;
+
+  if (info.nColourPrimaries == icCicpPrimariesUnspecified && !info.bMatrixColumnsPresent)
+    bMembership = false;
+
+  if (bMembership) {
     info.nClass = icHdrProfileConforming;
   }
   else if (info.bHasHagc || (bHasMeta && meta.HasAnyHdrEntry()) ||

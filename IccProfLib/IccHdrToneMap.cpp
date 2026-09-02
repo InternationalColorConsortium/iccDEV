@@ -309,10 +309,18 @@ bool CIccHdrTransfer::Init(icUInt8Number nTransferCharacteristics,
 
   switch (nTransferCharacteristics) {
     case icCicpTransferLinear:
-      // Nothing analytic to apply: the identity is the EOTF, so the profile's
-      // own TRC tags carry whatever linearisation there is.  See
-      // UsesProfileCurves() for why this is the only case where they are used.
-      m_bUseProfileCurves = true;
+      // PROPOSAL-ISSUE HDR-01, applied to the Linear case.  The identity is
+      // the EOTF, and the 29-08-2026 revision says what its output means:
+      // step a) normalises "PQ in cd/m2 / 10 000, HLG in scene-referred units
+      // per Rec. ITU-R BT.2100, or, for Linear, DIRECTLY IN CD/M2, consistent
+      // with the CLL, MDCV and CRWL entries of 8.10.4".
+      //
+      // So the change of normalisation this class performs - from the
+      // transfer's own convention to reference-white-relative light - is a
+      // division by CRWL, exactly as it is for PQ and HLG.  It is not a
+      // deferral to the profile's TRC tags: the same revision prohibits those
+      // tags, so there is nothing to defer to.  See ChannelToReference().
+      m_bUseProfileCurves = false;
       m_bSupported = true;
       break;
 
@@ -414,9 +422,10 @@ icFloatNumber CIccHdrTransfer::ToLinearChannel(icFloatNumber v) const
  *
  *  For PQ that is a single constant, 10 000 / CRWL.  For HLG it is the OOTF -
  *  whose gain is a function of the scene luminance of all three channels -
- *  followed by the same kind of constant, Lw / CRWL.  For Linear there is
- *  nothing to do: the profile's TRC tags are the linearisation and they
- *  already produce reference white relative values.
+ *  followed by the same kind of constant, Lw / CRWL.  For Linear it is 1 /
+ *  CRWL: step a) says a Linear value is already a luminance in cd/m2, so the
+ *  only thing between it and reference-white-relative light is the reference
+ *  white itself.
  *
  * Args:
  *  dst = destination triplet, may alias src
@@ -441,6 +450,20 @@ void CIccHdrTransfer::ChannelToReference(icFloatNumber *dst, const icFloatNumber
     icFloatNumber ys = (icFloatNumber)(icHlgLumaR * src[0] + icHlgLumaG * src[1] + icHlgLumaB * src[2]);
     icFloatNumber scale = icHlgOotfGain(ys, m_hlgGamma) *
                           (icFloatNumber)((double)m_hlgPeakLuminance / (double)m_referenceWhite);
+
+    dst[0] = src[0] * scale;
+    dst[1] = src[1] * scale;
+    dst[2] = src[2] * scale;
+    return;
+  }
+
+  // Linear: the value is a luminance in cd/m^2 (8.10.2 a), so reference-white
+  // relative light is one division away.  m_referenceWhite is positive by
+  // construction - Init() takes the resolved CRWL, which carries 8.10.4's 203
+  // default - but the guard keeps a caller that built one by hand from
+  // producing infinities across a whole image.
+  if (m_nTransfer == icCicpTransferLinear && m_referenceWhite > 0.0) {
+    icFloatNumber scale = (icFloatNumber)(1.0 / (double)m_referenceWhite);
 
     dst[0] = src[0] * scale;
     dst[1] = src[1] * scale;
@@ -479,6 +502,13 @@ icFloatNumber CIccHdrTransfer::GetPeakReferenceLevel() const
 
   if (m_nTransfer == icCicpTransferHLG)
     return (icFloatNumber)((double)m_hlgPeakLuminance / (double)m_referenceWhite);
+
+  // Linear: an encoded 1.0 is 1 cd/m^2 by 8.10.2 a), so its reference-white
+  // relative value is 1 / CRWL - the same shape as the other two, and no
+  // longer the 1.0 that was right only while the profile's TRC tags carried
+  // the normalisation.
+  if (m_nTransfer == icCicpTransferLinear && m_referenceWhite > 0.0)
+    return (icFloatNumber)(1.0 / (double)m_referenceWhite);
 
   return (icFloatNumber)1.0;
 }
@@ -572,6 +602,16 @@ void CIccHdrTransfer::ReferenceToChannel(icFloatNumber *dst, const icFloatNumber
     dst[0] = fd[0] / gain;
     dst[1] = fd[1] / gain;
     dst[2] = fd[2] / gain;
+    return;
+  }
+
+  // Linear: the exact inverse of ChannelToReference()'s division - back from
+  // reference-white-relative light to the luminance in cd/m^2 that 8.10.2 a)
+  // says a Linear value is.
+  if (m_nTransfer == icCicpTransferLinear && m_referenceWhite > 0.0) {
+    dst[0] = src[0] * m_referenceWhite;
+    dst[1] = src[1] * m_referenceWhite;
+    dst[2] = src[2] * m_referenceWhite;
     return;
   }
 

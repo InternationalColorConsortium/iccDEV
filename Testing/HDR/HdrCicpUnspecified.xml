@@ -70,18 +70,6 @@
       </Array>
     </s15Fixed16ArrayType> </chromaticAdaptationTag>
 
-    <redTRCTag> <parametricCurveType>
-      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
-    </parametricCurveType> </redTRCTag>
-
-    <greenTRCTag> <parametricCurveType>
-      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
-    </parametricCurveType> </greenTRCTag>
-
-    <blueTRCTag> <parametricCurveType>
-      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
-    </parametricCurveType> </blueTRCTag>
-
     <mediaWhitePointTag> <XYZArrayType>
       <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
     </XYZArrayType> </mediaWhitePointTag>
@@ -89,6 +77,36 @@
     <cicpTag> <cicpType>
       <cicpFields ColorPrimaries="2" TransferCharacteristics="16" MatrixCoefficients="0" VideoFullRangeFlag="1"/>
     </cicpType> </cicpTag>
+
+    <!-- Clause 8.10.1 of the 29-08-2026 revision: "the redTRCTag, greenTRCTag
+         and blueTRCTag shall not be present" in an HDR Profile. The transfer
+         function is conveyed by the cicpTag's TransferCharacteristics field
+         instead, and NOTE 3 makes their absence one of the two tag-level
+         features that distinguish an HDR Profile. This fixture was authored
+         against the previous revision and carried them.
+
+         The AToB0Tag/BToA0Tag pair below is what 8.10.6 makes mandatory, and
+         what NOTE 4 says gives a legacy CMM "a rendering path at all" once the
+         TRC tags are gone. Identity B curves: these fixtures exercise
+         classification and the tone-mapping chain, not the bake's accuracy. -->
+
+    <AToB0Tag> <lutAtoBType>
+      <Channels InputChannels="3" OutputChannels="3"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+    </lutAtoBType> </AToB0Tag>
+
+    <BToA0Tag> <lutBtoAType>
+      <Channels InputChannels="3" OutputChannels="3"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+    </lutBtoAType> </BToA0Tag>
 
     <profileDescriptionTag> <multiLocalizedUnicodeType>
       <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR display profile with cicp ColourPrimaries 2 (Unspecified)]]></LocalizedText>

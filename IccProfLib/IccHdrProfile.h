@@ -372,7 +372,26 @@ typedef struct {
   icHdrProfileClass nClass;
 
   /* Structural facts the classification was made from. */
-  bool bRgbMatrixBased;      /* RGB + Input/Display + the three matrix column and TRC tags */
+
+  /** RGB data colour space and Input or Display class - 8.10.1's first
+   * condition, and the only part of the parent class's structure that this
+   * revision still requires unconditionally. */
+  bool bRgbInputOrDisplay;
+
+  /** The CONVENTIONAL three-component matrix-based shape: bRgbInputOrDisplay
+   * plus all three matrix column tags and all three TRC tags.  This is what a
+   * pre-revision profile looks like and what 8.10.1 NOTE 3 distinguishes an
+   * HDR Profile FROM; it is no longer a condition of being one. */
+  bool bRgbMatrixBased;
+
+  /** Any of redTRCTag, greenTRCTag, blueTRCTag present.  8.10.1: in an HDR
+   * Profile they "shall not be present", always. */
+  bool bTrcTagsPresent;
+
+  /** All three matrix column tags present.  Required when ColourPrimaries is
+   * 2 and, on one reading of 8.10.1, prohibited otherwise - see the
+   * classification block in icGetHdrProfileInfo(). */
+  bool bMatrixColumnsPresent;
   bool bVersion4_5;          /* profileVersionField declares 4.5.0.0 or later within v4 */
   bool bHasCicp;
   icUInt8Number nColourPrimaries;

@@ -67,18 +67,6 @@
       </Array>
     </s15Fixed16ArrayType> </chromaticAdaptationTag>
 
-    <redTRCTag> <parametricCurveType>
-      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
-    </parametricCurveType> </redTRCTag>
-
-    <greenTRCTag> <parametricCurveType>
-      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
-    </parametricCurveType> </greenTRCTag>
-
-    <blueTRCTag> <parametricCurveType>
-      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
-    </parametricCurveType> </blueTRCTag>
-
     <mediaWhitePointTag> <XYZArrayType>
       <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
     </XYZArrayType> </mediaWhitePointTag>
