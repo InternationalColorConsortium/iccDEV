@@ -1591,11 +1591,37 @@ bool CIccMpeJsonCalculator::Flatten(std::string &flatStr, std::string macroName,
           const char *p;
           offset = atoi(select.c_str() + 1);
           for (p = select.c_str() + 1; *p && *p != ')' && *p != ']'; p++);
+          // Identical to the defect fixed in CIccMpeXmlCalculator::Flatten (#2323),
+          // and reachable through MORE spellings than that one: the entry condition
+          // here is correctly "select[0] == '('", where the XML copy has a typo
+          // ("select[1]"), so "in{Lab(XXXX" reaches this line as well as
+          // "in{Lab[XXXX".  An unterminated index leaves p on the NUL terminator, so
+          // "p + 1" addresses one past it and the assignment runs strlen from there:
+          // a stack-buffer-overflow read when the selector is exactly 15 characters
+          // and fills the string's inline SSO buffer, a heap-buffer-overflow at 16 or
+          // more, and no diagnostic at all below that -- where the malformed
+          // reference is simply accepted.  Refused for the same reason as the XML
+          // side: the checks either side already refuse an unknown channel name and
+          // an out-of-range offset/size.
+          if (!*p) {
+            parseStr += "Unterminated index in '" + op + "' channel reference '" + ref + "'\n";
+            return false;
+          }
           select = p + 1;
         }
         if (select[0] == ',') sz = atoi(select.c_str() + 1);
-        if (sz < 0 || offset < 0 ||
-            ci->second.first + offset + sz > (int)m_nInputChannels) {
+        // Summed in a width that cannot wrap, as in the XML twin (#2323): offset
+        // and sz are both atoi() results on attacker-supplied text, so this was int
+        // arithmetic over two unbounded values and overflowed before it could be
+        // tested.  Signed overflow has no defined behaviour, so there is no working
+        // input to preserve; the value is still refused, just at this guard.
+        //
+        // NOTE the bound is m_nInputChannels for BOTH operators here too, so an
+        // out{} reference is range-checked against the INPUT count.  Reported on
+        // #2323 for a ruling rather than changed here, because it changes which
+        // documents are accepted rather than removing undefined behaviour.
+        const long long nEnd = (long long)ci->second.first + offset + sz;
+        if (sz < 0 || offset < 0 || nEnd > (long long)m_nInputChannels) {
           parseStr += "Invalid '" + op + "' channel offset/size '" + refroot + "'\n";
           return false;
         }
