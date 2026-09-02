@@ -40,7 +40,13 @@ updating, or merging an iccDEV PR.
    producer, consumer, build/runtime behavior, toolchain or platform boundary,
    CI trigger, dependency owner, and evidence. If a re-review finds any new
    blocker, stop serial automated review and return to branch-only grooming.
-7. Prepare a golfed handoff with commands, run IDs, sentinels, and known skips.
+7. For threading, synchronization, lifecycle, worker-dispatch, or concurrent
+   output changes, add a concurrency evidence packet: ownership/destruction
+   contract; repeated and failed initialization behavior; proof that multiple
+   workers execute; scalar, automatic, and explicit-worker output parity;
+   changed-path boundary failures; sanitizer/Release evidence; and
+   platform-specific fixture/runtime evidence.
+8. Prepare a golfed handoff with commands, run IDs, sentinels, and known skips.
 
 ## Handoff Format
 

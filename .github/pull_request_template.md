@@ -11,6 +11,11 @@
 - [ ] Updated documentation for user-visible behavior changes
 - [ ] Ran sanitizer coverage for memory-safety or parser changes
 - [ ] Added or updated regression coverage for behavior changes
+- [ ] For threading, synchronization, lifecycle, or concurrent-dispatch changes,
+      attached the concurrency evidence packet described in
+      `docs/pre-pr-security-cycle.md`: ownership/lifecycle contract, worker
+      dispatch proof, scalar/auto/explicit-worker parity, failure behavior,
+      sanitizer results, and platform coverage
 - [ ] Attached a `base...HEAD` contract matrix for cross-cutting changes:
       producer, consumer, build/runtime behavior, platform/toolchain boundary,
       CI trigger, dependency owner, and local evidence

@@ -46,10 +46,17 @@ security automation.
    each changed cross-cutting surface to its producer, consumer, build/runtime
    behavior, platform or toolchain boundary, CI trigger, dependency owner, and
    local evidence.
-8. If a re-review finds any new blocker, including one in the repair, stop
+8. For threading, synchronization, lifecycle, worker-dispatch, or concurrent
+   output changes, attach a concurrency evidence packet to the PR summary:
+   ownership/destruction contract; repeated and failed initialization behavior;
+   proof that multiple workers execute; scalar, automatic, and explicit-worker
+   parity; changed-path boundary failures; sanitizer/Release evidence; and
+   platform-specific fixture/runtime evidence. This packet enables automated
+   review; it is not a requirement to claim a separate human review.
+9. If a re-review finds any new blocker, including one in the repair, stop
    serial review and return to branch-only grooming until a maintainer directs
    the next step.
-9. Prepare a concise handoff.
+10. Prepare a concise handoff.
 
 For focused local iteration, run
 `.github/scripts/preflight-safety-checks.sh --fast-lane=matlab` for MATLAB-only

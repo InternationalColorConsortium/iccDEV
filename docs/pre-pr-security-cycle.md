@@ -42,6 +42,29 @@ the smallest useful evidence.
 7. Produce a golfed handoff: branch, commit, changed surface, command results,
    hosted run IDs, known skips or deferred items, and merge-readiness signal.
 
+## Concurrency Evidence Packet
+
+For a PR that changes threading, synchronization, object lifetime, worker
+dispatch, or concurrent output, include this concise packet in the PR summary
+so an automated reviewer can verify the complete contract:
+
+- ownership and lifecycle: creator, owner, destruction order, repeated
+  initialization, and failed-initialization behavior;
+- worker dispatch: input size or telemetry proving that at least two workers
+  execute the concurrent path, not only wrapper construction;
+- output parity: scalar (`-threads 1`), automatic (`-threads 0`), and one or
+  more explicit multi-worker modes produce the expected equivalent output;
+- boundary and failure behavior: invalid worker count, malformed CLI input,
+  timeout, allocation, or setup failure relevant to the changed path;
+- dynamic evidence: exact sanitizer command/result and any required Release
+  or runtime-dispatch command/result;
+- platform coverage: tested platform/toolchain paths and any platform-specific
+  generator, fixture, runtime-library, or CTest dependency.
+
+Do not replace this packet with an assertion that a human review occurred. The
+packet is the reviewable evidence; any additional maintainer review follows the
+repository's normal ownership process.
+
 ## Stacked PR and Fast-Lane Handoff
 
 For related changes that require multiple PRs within a rolling 24-hour period,
