@@ -531,7 +531,15 @@ typedef enum {
     icSigMotionPictureFilmScanner       = 0x6D706673,  /* 'mpfs' */
     icSigMotionPictureFilmRecorder      = 0x6D706672,  /* 'mpfr' */
     icSigDigitalMotionPictureCamera     = 0x646D7063,  /* 'dmpc' */
-    icSigDigitalCinemaProjector         = 0x64636A70,  /* 'dcpj' */
+    /* SPEC-ISSUE #2101: ICC.1-2022-05 prints this row's mnemonic as 'dcpj' but its hex
+     * as 64636A70h, and those disagree -- 'dcpj' encodes as 6463706Ah, 64636A70h decodes
+     * as 'dcjp'.  It is the only self-inconsistent row in either specification's
+     * signature tables, and technology signatures have no published registry to break
+     * the tie.  The normative hex is kept, unchanged since 1f0a9dd2.  Do not "correct"
+     * this toward the mnemonic without an ICC ruling: a profile holding 64636A70h
+     * validates today and one holding 6463706Ah is reported NonCompliant, so flipping
+     * the literal silently moves which existing profiles are conformant. */
+    icSigDigitalCinemaProjector         = 0x64636A70,  /* 'dcpj' as printed; 64636A70h = 'dcjp' */
     icMaxEnumTechnology                 = 0xFFFFFFFF,
 } icTechnologySignature;
 

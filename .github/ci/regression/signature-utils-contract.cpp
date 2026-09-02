@@ -26,8 +26,11 @@
 // Returns 0 on success; the number of failed assertions otherwise (each printed).
 
 #include "IccSignatureUtils.h"
+#include "IccTagBasic.h"
 #include "IccUtil.h"
 #include "icProfileHeader.h"
+
+#include <string>
 
 #include <cstdio>
 #include <cstring>
@@ -177,6 +180,257 @@ void testMcsNamingStillHolds()
         "CIccInfo::GetColorSpaceSigName keeps the MCS context");
 }
 
+// --- 7. The technology signature lists, which drifted the way section 4 guards against. ---
+// FOUR places carry technology-signature knowledge and none of them consulted the others:
+//
+//   CIccInfo::GetTechnologySigName()      names one         (IccUtil.cpp)
+//   IsValidTechnologySignature()          accepts one       (this header)
+//   CIccTagSignature::Validate()          accepts one, for a technologyTag
+//                                                           (IccTagBasic.cpp:3021)
+//   CIccTagProfileSeqDesc::Validate()     accepts one, for a profileSequenceDesc entry
+//                                                           (IccTagBasic.cpp:10932)
+//
+// Only CIccTagSignature::Validate() carried all 26 enum members. The other three stopped
+// at the 22 that predate ICC.1 v4.3, so the four motion picture and digital cinema
+// signatures validated as compliant in a technologyTag and simultaneously printed as
+// "Unknown 'mpfs'" -- measured on master dd6164ee via iccDumpProfile before #2101.
+//
+// The two Validate() sites legitimately differ -- the profileSequenceDesc one also
+// accepts icSigUndefined, "technology not defined", which is not valid for a
+// technologyTag -- so they cannot share this header's predicate without an "undefined
+// permitted" flag, and each keeps its own switch. Both are callable in process:
+// CIccTag::Validate ignores its pProfile argument, CIccTagSignature carries SetValue()
+// and CIccTagProfileSeqDesc::m_Descriptions is public, so testValidateTechnologyRows()
+// below pins them directly rather than trusting the switches to stay in step.
+const char *expectedTechnologyName(icTechnologySignature sig)
+{
+  // Deliberately NO default: label. Adding a member to icTechnologySignature makes this
+  // switch incomplete, which -Wswitch reports and which this target promotes to an error
+  // via -Werror=switch (set in iccdev_add_signature_utils_contract_test).  The promotion
+  // is the point: this target is EXCLUDE_FROM_ALL, so the -Werror lane (ci-pr-gcc15.yml)
+  // builds the default `all` target and never compiles this file -- an unpromoted warning
+  // here would be emitted into a log nothing greps.  That is the compile-time half of the
+  // guard; the runtime table below is hand-maintained and would stay green for a 27th
+  // member, which is precisely the failure mode #2101 is about.
+  switch (sig) {
+  case icSigDigitalCamera:              return "DigitalCamera";
+  case icSigFilmScanner:                return "FilmScanner";
+  case icSigReflectiveScanner:          return "ReflectiveScanner";
+  case icSigInkJetPrinter:              return "InkJetPrinter";
+  case icSigThermalWaxPrinter:          return "ThermalWaxPrinter";
+  case icSigElectrophotographicPrinter: return "ElectrophotographicPrinter";
+  case icSigElectrostaticPrinter:       return "ElectrostaticPrinter";
+  case icSigDyeSublimationPrinter:      return "DyeSublimationPrinter";
+  case icSigPhotographicPaperPrinter:   return "PhotographicPaperPrinter";
+  case icSigFilmWriter:                 return "FilmWriter";
+  case icSigVideoMonitor:               return "VideoMonitor";
+  case icSigVideoCamera:                return "VideoCamera";
+  case icSigProjectionTelevision:       return "ProjectionTelevision";
+  case icSigCRTDisplay:                 return "CRTDisplay";
+  case icSigPMDisplay:                  return "PMDisplay";
+  case icSigAMDisplay:                  return "AMDisplay";
+  case icSigPhotoCD:                    return "PhotoCD";
+  case icSigPhotoImageSetter:           return "PhotoImageSetter";
+  case icSigGravure:                    return "Gravure";
+  case icSigOffsetLithography:          return "OffsetLithography";
+  case icSigSilkscreen:                 return "Silkscreen";
+  case icSigFlexography:                return "Flexography";
+  case icSigMotionPictureFilmScanner:   return "MotionPictureFilmScanner";
+  case icSigMotionPictureFilmRecorder:  return "MotionPictureFilmRecorder";
+  case icSigDigitalMotionPictureCamera: return "DigitalMotionPictureCamera";
+  case icSigDigitalCinemaProjector:     return "DigitalCinemaProjector";
+
+  // Not technologies: "not defined" and the enum terminator. Named only so the switch
+  // stays exhaustive; both are deliberately absent from kTechnology[] below, and the NULL
+  // return means that adding either one there would be reported as a failure rather than
+  // silently tolerated.
+  case icSigUndefined:                  return NULL;
+  case icMaxEnumTechnology:             return NULL;
+  }
+
+  return NULL;
+}
+
+void testTechnologySignatures()
+{
+  // The iteration list. Names are NOT repeated here -- expectedTechnologyName() above is
+  // the single source for those, so the two cannot disagree.
+  const icUInt32Number kTechnology[] = {
+    (icUInt32Number)icSigDigitalCamera,              (icUInt32Number)icSigFilmScanner,
+    (icUInt32Number)icSigReflectiveScanner,          (icUInt32Number)icSigInkJetPrinter,
+    (icUInt32Number)icSigThermalWaxPrinter,          (icUInt32Number)icSigElectrophotographicPrinter,
+    (icUInt32Number)icSigElectrostaticPrinter,       (icUInt32Number)icSigDyeSublimationPrinter,
+    (icUInt32Number)icSigPhotographicPaperPrinter,   (icUInt32Number)icSigFilmWriter,
+    (icUInt32Number)icSigVideoMonitor,               (icUInt32Number)icSigVideoCamera,
+    (icUInt32Number)icSigProjectionTelevision,       (icUInt32Number)icSigCRTDisplay,
+    (icUInt32Number)icSigPMDisplay,                  (icUInt32Number)icSigAMDisplay,
+    (icUInt32Number)icSigPhotoCD,                    (icUInt32Number)icSigPhotoImageSetter,
+    (icUInt32Number)icSigGravure,                    (icUInt32Number)icSigOffsetLithography,
+    (icUInt32Number)icSigSilkscreen,                 (icUInt32Number)icSigFlexography,
+    // The four v4.3 rows. Before #2101 each of these failed BOTH checks below.
+    (icUInt32Number)icSigMotionPictureFilmScanner,   (icUInt32Number)icSigMotionPictureFilmRecorder,
+    (icUInt32Number)icSigDigitalMotionPictureCamera, (icUInt32Number)icSigDigitalCinemaProjector,
+  };
+
+  CIccInfo info;
+
+  for (size_t i = 0; i < sizeof(kTechnology) / sizeof(kTechnology[0]); i++) {
+    const icTechnologySignature sig = (icTechnologySignature)kTechnology[i];
+    const char *want = expectedTechnologyName(sig);
+    const char *got  = info.GetTechnologySigName(sig);
+
+    // GetUnknownName() formats "Unknown 'xxxx' = ...", so an unnamed signature is not
+    // merely a different string -- asserting the exact name is what makes this fail
+    // loudly rather than drift into a plausible-looking fallback.
+    if (!want || !got || std::strcmp(got, want) != 0) {
+      ++g_fail;
+      std::fprintf(stderr, "[signature-utils-contract] FAIL: GetTechnologySigName(0x%08X) "
+                           "(got \"%s\", want \"%s\")\n",
+                   (unsigned)kTechnology[i], got ? got : "(null)", want ? want : "(null)");
+    }
+
+    // Named per signature rather than with one shared string: the two lists are
+    // independent, so a signature that is named but not accepted has to say which.
+    if (!IsValidTechnologySignature(kTechnology[i])) {
+      ++g_fail;
+      std::fprintf(stderr, "[signature-utils-contract] FAIL: IsValidTechnologySignature"
+                           "(0x%08X) rejects %s\n",
+                   (unsigned)kTechnology[i], want ? want : "(unnamed)");
+    }
+  }
+
+  // SPEC-ISSUE #2101: ICC.1-2022-05 prints the digital cinema projector mnemonic as
+  // 'dcpj' while giving its hex as 64636A70h = 'dcjp'. iccDEV encodes the hex, so the
+  // transposed spelling is NOT a technology signature. Pinned in both directions so that
+  // a future "correction" toward the mnemonic cannot land silently: it would flip which
+  // of these two assertions fails, and whichever way the ICC rules, that flip must be a
+  // deliberate change to this test rather than an invisible one.
+  check(IsValidTechnologySignature(0x64636A70), "the published hex 'dcjp' is the signature");
+  check(!IsValidTechnologySignature(0x6463706A), "the published mnemonic 'dcpj' is not");
+
+  check(!IsValidTechnologySignature((icUInt32Number)icSigUndefined),
+        "icSigUndefined is not a technology");
+  check(!IsValidTechnologySignature(0x4A554E4B), "'JUNK' is not a technology");
+}
+
+// --- 8. The two Validate() sites, pinned directly. ---
+// Section 7 covers the naming pair; this covers the only change in #2101 that alters a
+// validation VERDICT. Without it that hunk has no coverage at all: no profile in the
+// tracked corpus carries these four signatures, so reverting it leaves CI green while a
+// legal profileSequenceDesc entry is again reported NonCompliant.
+// Build a profileSequenceDesc entry that is safe to validate.
+//
+// CIccProfileDescStruct's default constructor is empty (IccTagBasic.cpp:10605) while its
+// copy constructor reads every member, and push_back copies -- so m_deviceMfg,
+// m_deviceModel and m_attributes have to be set or the copy reads indeterminate values,
+// which a sanitizer lane would flag even though Validate() never inspects them.
+//
+// Both description tags are required for a different reason: Validate() dereferences
+// m_deviceMfgDesc.GetTag() and m_deviceModelDesc.GetTag() unconditionally
+// (IccTagBasic.cpp:10995-10996), so a struct without them segfaults before reaching the
+// technology switch. SetType() returns false and leaves the pointer null if the tag
+// factory fails, so its result is checked -- otherwise a factory regression would crash
+// this test instead of failing an assertion in it.
+void addSeqEntry(CIccTagProfileSeqDesc &seq, icTechnologySignature tech)
+{
+  CIccProfileDescStruct desc;
+  desc.m_deviceMfg   = 0;
+  desc.m_deviceModel = 0;
+  desc.m_attributes  = 0;
+  desc.m_technology  = tech;
+
+  check(desc.m_deviceMfgDesc.SetType(icSigMultiLocalizedUnicodeType),
+        "deviceMfgDesc tag allocated");
+  check(desc.m_deviceModelDesc.SetType(icSigMultiLocalizedUnicodeType),
+        "deviceModelDesc tag allocated");
+
+  seq.m_Descriptions->push_back(desc);
+}
+
+void testValidateTechnologyRows()
+{
+  // Assert on the technology FINDING, not on the aggregate verdict. A hand-built
+  // profileSequenceDesc entry carries empty text tags and so validates as Warning no
+  // matter what the technology switch decides; keying off icValidateOK would couple this
+  // test to unrelated findings and, worse, would still pass if "Unknown Technology" came
+  // back alongside some other warning.
+  const char *kUnknown = "Unknown Technology";
+
+  const icTechnologySignature kV43[] = {
+    icSigMotionPictureFilmScanner, icSigMotionPictureFilmRecorder,
+    icSigDigitalMotionPictureCamera, icSigDigitalCinemaProjector,
+  };
+
+  for (size_t i = 0; i < sizeof(kV43) / sizeof(kV43[0]); i++) {
+    // A technologyTag holding the signature. CIccTagSignature::Validate keys off the
+    // first signature in the path, so the path has to say technologyTag for the
+    // technology switch to be the one that runs.
+    CIccTagSignature tag;
+    tag.SetValue((icUInt32Number)kV43[i]);
+    std::string rpt;
+    tag.Validate(icGetSigPath(icSigTechnologyTag), rpt, NULL);
+    if (rpt.find(kUnknown) != std::string::npos) {
+      ++g_fail;
+      std::fprintf(stderr, "[signature-utils-contract] FAIL: technologyTag 0x%08X "
+                           "reported unknown by CIccTagSignature::Validate\n",
+                   (unsigned)kV43[i]);
+    }
+
+    // The same signature in a profileSequenceDesc entry, which is a separate switch.
+    CIccTagProfileSeqDesc seq;
+    addSeqEntry(seq, kV43[i]);
+    std::string seqRpt;
+    seq.Validate(icGetSigPath(icSigProfileSequenceDescTag), seqRpt, NULL);
+    if (seqRpt.find(kUnknown) != std::string::npos) {
+      ++g_fail;
+      std::fprintf(stderr, "[signature-utils-contract] FAIL: profileSequenceDesc 0x%08X "
+                           "reported unknown by CIccTagProfileSeqDesc::Validate\n",
+                   (unsigned)kV43[i]);
+    }
+  }
+
+  // Anti-vacuity: the same two calls with a signature that really is not a technology
+  // must still produce the finding. Without this pair, deleting the switches' default
+  // branch entirely would leave every assertion above green.
+  {
+    CIccTagSignature tag;
+    tag.SetValue(0x4A554E4B);  // 'JUNK'
+    std::string rpt;
+    tag.Validate(icGetSigPath(icSigTechnologyTag), rpt, NULL);
+    check(rpt.find(kUnknown) != std::string::npos,
+          "CIccTagSignature::Validate still reports a genuine unknown technology");
+  }
+  {
+    CIccTagProfileSeqDesc seq;
+    addSeqEntry(seq, (icTechnologySignature)0x4A554E4B);
+    std::string rpt;
+    seq.Validate(icGetSigPath(icSigProfileSequenceDescTag), rpt, NULL);
+    check(rpt.find(kUnknown) != std::string::npos,
+          "CIccTagProfileSeqDesc::Validate still reports a genuine unknown technology");
+  }
+
+  // The asymmetry the two switches are entitled to: "technology not defined" is a legal
+  // profileSequenceDesc entry and is NOT a legal technologyTag. Pinned so that any future
+  // attempt to share one predicate between them has to confront it rather than silently
+  // pick one side.
+  {
+    CIccTagProfileSeqDesc seq;
+    addSeqEntry(seq, icSigUndefined);
+    std::string rpt;
+    seq.Validate(icGetSigPath(icSigProfileSequenceDescTag), rpt, NULL);
+    check(rpt.find(kUnknown) == std::string::npos,
+          "profileSequenceDesc accepts icSigUndefined");
+  }
+  {
+    CIccTagSignature tag;
+    tag.SetValue((icUInt32Number)icSigUndefined);
+    std::string rpt;
+    tag.Validate(icGetSigPath(icSigTechnologyTag), rpt, NULL);
+    check(rpt.find(kUnknown) != std::string::npos,
+          "technologyTag rejects icSigUndefined");
+  }
+}
+
 } // namespace
 
 int main()
@@ -187,6 +441,8 @@ int main()
   testAgreement();
   testSpectralPcs();
   testMcsNamingStillHolds();
+  testTechnologySignatures();
+  testValidateTechnologyRows();
 
   if (g_fail)
     std::fprintf(stderr, "[signature-utils-contract] %d assertion(s) failed\n", g_fail);
