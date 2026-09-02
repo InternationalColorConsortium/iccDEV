@@ -483,6 +483,7 @@ ICCPROFLIB_API bool icHagcDeriveReferenceWhiteToneMap(icFloatNumber baselineHead
                                                       icHagcAlternateImage *alternates,
                                                       icUInt8Number &nAlternates);
 
+
 /**
  ***********************************************************************
  * Class: CIccHagcEvaluator
@@ -579,6 +580,41 @@ public:
    * be obtained.  Reported for the same reason UsesDerivedSlopes() is: the
    * construction comes from a committee draft. */
   bool UsesDerivedReferenceWhiteToneMap() const { return m_bDerivedRefWhiteToneMap; }
+
+  /**
+   * Apply the gain in the tag's declared gain application colour space rather
+   * than in the space the pixels arrive in (SMPTE ST 2094-50 Annex A).
+   *
+   * PROVISIONAL - PROPOSAL-ISSUE HAGC-10, and read the item before relying on
+   * this.  The ICC amendment defines the Gain Curve Chromaticities Mode and
+   * eight chromaticity values (proposal 0.1.2.7) and then never says what a
+   * consumer does with them: annex 1's gain curve function, which is the only
+   * thing that specifies the operator, does not mention chromaticities at all.
+   * The instruction to convert lives in ST 2094-50 - clause 6.2 binds the
+   * eight values to the tone map structure's chi_red..chi_white, and Annex A
+   * applies the tone mapping IN that space and converts back afterwards.
+   *
+   * TWO LAYERS OF PROVISIONALITY, both worth knowing before this is trusted:
+   * Annex A is INFORMATIVE within its own document, and that document is the
+   * 2026-02-23 public committee draft (see icHagcDerivePchipSlopes() for the
+   * provenance in full).  So this implements an informative annex of a draft
+   * against the silence of the normative ICC text.  It is therefore OPT IN:
+   * an evaluator that is never given a matrix behaves exactly as before, which
+   * is what the amendment as written asks for.
+   *
+   * toGain is nine elements, row major, taking linear RGB in the space the
+   * caller will hand to Apply() into linear RGB in the gain application space;
+   * icBuildPrimariesConversionMatrix() builds it.  The inverse is computed
+   * here.  Passing NULL clears the conversion.  Returns false when the matrix
+   * is singular, in which case the conversion is left cleared rather than half
+   * set.
+   */
+  bool SetGainApplicationMatrix(const icFloatNumber *toGain);
+
+  /** True when a gain application space conversion is in force - i.e. when
+   * SetGainApplicationMatrix() was given a matrix that is not the identity.
+   * Reported for the same reason the other two derived-behaviour flags are. */
+  bool UsesGainApplicationSpace() const { return m_bGainSpace; }
 
   /**
    * Apply the gain curve to one display-linear RGB triplet, normalised so
@@ -701,6 +737,12 @@ protected:
   bool m_bDerivedSlopes;
   bool m_bDerivedRefWhiteToneMap;
 
+  /* ST 2094-50 Annex A's gain application colour space conversion, and its
+   * inverse.  m_bGainSpace is false unless a caller opted in. */
+  bool m_bGainSpace;
+  icFloatNumber m_toGain[9];
+  icFloatNumber m_fromGain[9];
+
   icUInt8Number m_nCurves;
   Curve m_curves[icHagcMaxAlternates + 1];   /* alternates plus the baseline */
 
@@ -716,6 +758,31 @@ protected:
   bool m_bMonotone;                 /* t*2^G(t) strictly increasing */
   bool m_bPerChannelMix;            /* k_component is the only non-zero coefficient */
 };
+
+/**
+ ***********************************************************************
+ * Put an evaluator into the gain application colour space its tag declares,
+ * for a profile whose own primaries are known.
+ *
+ * PROVISIONAL - see CIccHagcEvaluator::SetGainApplicationMatrix() for what
+ * this rests on (PROPOSAL-ISSUE HAGC-10: an informative annex of a committee
+ * draft, against silence in the ICC amendment).  It is a single call so that
+ * every consumer opts in the same way and so that `grep HAGC-10` finds all of
+ * them at once.
+ *
+ * Resolves the tag's Gain Curve Chromaticities Mode, resolves the profile's
+ * own source primaries the way clause 9.2.17 asks, and installs the matrix
+ * between them.  Does nothing and returns true when the two agree, which is
+ * the common case and costs the evaluator nothing per pixel.
+ *
+ * Returns false only when a conversion was called for and could not be built.
+ * A caller may ignore that: the evaluator is then in the state the ICC
+ * amendment as written describes.
+ ***********************************************************************
+ */
+ICCPROFLIB_API bool icHagcApplyGainApplicationSpace(CIccHagcEvaluator &evaluator,
+                                                    const CIccProfile *pProfile,
+                                                    const icHagcMetadata &meta);
 
 #ifdef USEICCDEVNAMESPACE
 } //namespace iccDEV

@@ -459,6 +459,60 @@ ICCPROFLIB_API bool icGetResolvedPrimaries(const CIccProfile *pProfile, icUInt8N
                                            icCicpPrimaries &primaries, bool *bFromProfile = NULL);
 
 /**
+ * Build the 3x3 matrix taking linear RGB in a set of primaries to CIEXYZ,
+ * scaled so that RGB = (1, 1, 1) maps to the primaries' own white with Y = 1.
+ *
+ * This is the standard construction and is stated in no one document: the
+ * three chromaticities give the directions of the columns and the white point
+ * fixes their lengths.  Returns false when a chromaticity has y = 0, or when
+ * the three primaries are collinear and the system has no solution.
+ *
+ * matrix is nine elements, row major, as every other 3x3 in this library.
+ */
+ICCPROFLIB_API bool icBuildRgbToXyzMatrix(const icCicpPrimaries &primaries, icFloatNumber *matrix);
+
+/**
+ * Build the 3x3 matrix taking linear RGB in one set of primaries to linear RGB
+ * in another, chromatically adapting between their white points when they
+ * differ.
+ *
+ * The adaptation is the linearized Bradford transform of ICC.1:2022 Annex E.3,
+ * which is what E.2 composes into a chromatic adaptation matrix and what
+ * clause 9.2.15 recommends for ICC profiles:
+ *
+ *   M = M_dst^-1 . M_BFD^-1 . diag(rho_dst / rho_src) . M_BFD . M_src
+ *
+ * Returns false when either primary set is degenerate or a matrix in the chain
+ * is singular.  When the two white points are equal the adaptation reduces to
+ * the identity, and it is computed rather than special cased so that a caller
+ * cannot get a different answer by rounding.
+ */
+ICCPROFLIB_API bool icBuildPrimariesConversionMatrix(const icCicpPrimaries &src,
+                                                     const icCicpPrimaries &dst,
+                                                     icFloatNumber *matrix);
+
+/**
+ * Resolve a headroomAdaptiveGainCurveTag's Gain Curve Chromaticities Mode to a
+ * set of chromaticities.
+ *
+ * Modes 0, 1 and 2 name entries in ITU-T H.273 Table 2 and mode 3 takes the
+ * eight values the tag carries, in the order [xR yR xG yG xB yB xW yW].
+ *
+ * PROPOSAL-ISSUE HAGC-09: mode 0 is described in proposal 0.1.2.7 as "the
+ * colour primaries with a value of 2 in Table 2 in ITU-T H.273, i.e. primaries
+ * from Recommendation ITU-R BT.709-6".  Those are different things - BT.709-6
+ * is H.273 value 1, and value 2 is Unspecified, which under the CICP
+ * Unspecified-Primaries amendment means "resolve against the profile's own
+ * matrix column tags".  This follows the NAME, so mode 0 resolves to BT.709.
+ *
+ * pCustom is read only for mode 3 and may be NULL otherwise.  Returns false
+ * for an unknown mode, or for mode 3 with no values.
+ */
+ICCPROFLIB_API bool icHagcGetGainApplicationPrimaries(icUInt8Number nMode,
+                                                      const icFloatNumber *pCustom,
+                                                      icCicpPrimaries &primaries);
+
+/**
  * Classify a profile against clause 8.10 and resolve everything the clause
  * defines. Returns false only when pProfile is NULL; a profile that is not an
  * HDR Profile is reported as icHdrProfileNone with the structural fields

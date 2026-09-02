@@ -279,6 +279,105 @@ void testDisplayMetadata()
 }
 
 // ---------------------------------------------------------------------------
+// 3b. Building matrices from chromaticities
+// ---------------------------------------------------------------------------
+//
+// These exist for SMPTE ST 2094-50 Annex A's gain application colour space,
+// and clause 8.10.1 NOTE 2's forward matrix will need the same construction.
+// Every expected value below is a published one - the canonical sRGB matrix
+// and the standard BT.709 to BT.2020 coefficients - rather than a capture of
+// what this implementation produces, which is the only way this test can
+// catch the implementation being wrong in a self-consistent way.
+void testPrimariesMatrices()
+{
+  icCicpPrimaries p709, p2020, pDci;
+  icFloatNumber m[9];
+
+  check(icGetCicpPrimaries(1, p709) && icGetCicpPrimaries(9, p2020) &&
+        icGetCicpPrimaries(11, pDci), "the three primary sets are in the table");
+
+  // The sRGB / BT.709 RGB-to-XYZ matrix, as published to six places.
+  check(icBuildRgbToXyzMatrix(p709, m), "BT.709 builds");
+  checkClose(m[0], 0.412391, 1e-5, "sRGB matrix [0][0]");
+  checkClose(m[1], 0.357584, 1e-5, "sRGB matrix [0][1]");
+  checkClose(m[2], 0.180481, 1e-5, "sRGB matrix [0][2]");
+  checkClose(m[3], 0.212639, 1e-5, "sRGB matrix [1][0]");
+  checkClose(m[4], 0.715169, 1e-5, "sRGB matrix [1][1]");
+  checkClose(m[5], 0.072192, 1e-5, "sRGB matrix [1][2]");
+  checkClose(m[6], 0.019331, 1e-5, "sRGB matrix [2][0]");
+  checkClose(m[7], 0.119195, 1e-5, "sRGB matrix [2][1]");
+  checkClose(m[8], 0.950532, 1e-5, "sRGB matrix [2][2]");
+
+  // The defining property: RGB = (1,1,1) is the white point at Y = 1. This is
+  // what fixes the column scaling, so a matrix built with the scaling wrong
+  // still has the right column directions and fails only here.
+  checkClose(m[3] + m[4] + m[5], 1.0, 1e-6, "unit RGB has Y = 1");
+  checkClose(m[0] + m[1] + m[2], 0.3127 / 0.3290, 1e-5, "unit RGB has D65's X");
+
+  // A chromaticity with no luminance names no colour.
+  icCicpPrimaries bad = p709;
+  bad.yGreen = 0.0;
+  check(!icBuildRgbToXyzMatrix(bad, m), "a zero y is refused");
+
+  // Same primaries in and out is the identity, and it is computed rather than
+  // special cased, so this also says the two halves are consistent.
+  check(icBuildPrimariesConversionMatrix(p709, p709, m), "709 to 709 builds");
+  checkClose(m[0], 1.0, 1e-6, "identity [0][0]");
+  checkClose(m[1], 0.0, 1e-6, "identity [0][1]");
+  checkClose(m[4], 1.0, 1e-6, "identity [1][1]");
+  checkClose(m[8], 1.0, 1e-6, "identity [2][2]");
+
+  // BT.709 to BT.2020, both at D65 so no adaptation is involved. These are the
+  // standard published coefficients.
+  check(icBuildPrimariesConversionMatrix(p709, p2020, m), "709 to 2020 builds");
+  checkClose(m[0], 0.627404, 1e-5, "709->2020 [0][0]");
+  checkClose(m[1], 0.329283, 1e-5, "709->2020 [0][1]");
+  checkClose(m[2], 0.043313, 1e-5, "709->2020 [0][2]");
+  checkClose(m[3], 0.069097, 1e-5, "709->2020 [1][0]");
+  checkClose(m[4], 0.919540, 1e-5, "709->2020 [1][1]");
+  checkClose(m[8], 0.895595, 1e-5, "709->2020 [2][2]");
+
+  // Each row sums to one: white is white in both spaces, which holds for any
+  // correct conversion and is what a wrong white scaling breaks.
+  checkClose(m[0] + m[1] + m[2], 1.0, 1e-6, "709->2020 preserves white, row 0");
+  checkClose(m[3] + m[4] + m[5], 1.0, 1e-6, "709->2020 preserves white, row 1");
+  checkClose(m[6] + m[7] + m[8], 1.0, 1e-6, "709->2020 preserves white, row 2");
+
+  // DCI P3 to BT.709 crosses two different white points, so this is the case
+  // the Bradford adaptation of ICC.1 Annex E actually does something in. The
+  // white-to-white property is the strong assertion: a von Kries scaling of
+  // XYZ, or no adaptation at all, fails it.
+  check(icBuildPrimariesConversionMatrix(pDci, p709, m), "DCI P3 to 709 builds");
+  checkClose(m[0] + m[1] + m[2], 1.0, 1e-6, "adapted conversion maps white to white, row 0");
+  checkClose(m[3] + m[4] + m[5], 1.0, 1e-6, "adapted conversion maps white to white, row 1");
+  checkClose(m[6] + m[7] + m[8], 1.0, 1e-6, "adapted conversion maps white to white, row 2");
+  checkClose(m[0], 1.157516, 1e-4, "DCI->709 [0][0], Bradford adapted");
+  checkClose(m[1], -0.154962, 1e-4, "DCI->709 [0][1]");
+  checkClose(m[8], 1.096628, 1e-4, "DCI->709 [2][2]");
+
+  // The HAGC chromaticities modes. HAGC-09: mode 0 is BT.709, which is H.273
+  // value 1 - the proposal says "a value of 2", and value 2 has no
+  // chromaticities at all, so a reader following the number gets nothing.
+  icCicpPrimaries g;
+  check(icHagcGetGainApplicationPrimaries(0, NULL, g), "mode 0 resolves");
+  checkClose(g.xRed, 0.640, 1e-6, "mode 0 is BT.709, not H.273 value 2");
+  check(icHagcGetGainApplicationPrimaries(1, NULL, g), "mode 1 resolves");
+  checkClose(g.xRed, 0.680, 1e-6, "mode 1 is Display P3");
+  checkClose(g.xWhite, 0.3127, 1e-6, "mode 1's white is D65, not DCI");
+  check(icHagcGetGainApplicationPrimaries(2, NULL, g), "mode 2 resolves");
+  checkClose(g.xRed, 0.708, 1e-6, "mode 2 is BT.2020");
+
+  icFloatNumber custom[8] = { (icFloatNumber)0.7, (icFloatNumber)0.3,
+                              (icFloatNumber)0.2, (icFloatNumber)0.7,
+                              (icFloatNumber)0.1, (icFloatNumber)0.05,
+                              (icFloatNumber)0.3127, (icFloatNumber)0.3290 };
+  check(icHagcGetGainApplicationPrimaries(3, custom, g), "mode 3 resolves");
+  checkClose(g.xGreen, 0.2, 1e-6, "mode 3 reads the tag's own values in order");
+  check(!icHagcGetGainApplicationPrimaries(3, NULL, g), "mode 3 with no values is refused");
+  check(!icHagcGetGainApplicationPrimaries(4, custom, g), "an unknown mode is refused");
+}
+
+// ---------------------------------------------------------------------------
 // 4. The content-headroom priority order of clause 8.10.4 (Linear transfer)
 // ---------------------------------------------------------------------------
 void testContentHeadroom()
@@ -478,6 +577,7 @@ int main()
   testCicpTable();
   testProfilePrimaries();
   testDisplayMetadata();
+  testPrimariesMatrices();
   testContentHeadroom();
   testClassification();
 

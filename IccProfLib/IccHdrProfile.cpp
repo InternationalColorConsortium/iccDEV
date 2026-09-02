@@ -892,6 +892,232 @@ static bool icHdrIsRgbMatrixBased(const CIccProfile *pProfile)
 
 /**
  ****************************************************************************
+ * Name: icBuildRgbToXyzMatrix
+ *
+ * Purpose: The columns of an RGB to XYZ matrix are the primaries' own
+ *  tristimulus values, scaled so that RGB = (1, 1, 1) is the white point.
+ *
+ *  Chromaticities give directions only: (x, y) fixes X : Y : Z but not the
+ *  magnitude, so the three columns are known up to three unknown scale
+ *  factors.  Requiring that they sum to the white point's XYZ is what
+ *  determines them, which is one 3x3 solve.
+ *
+ * Args:
+ *  primaries = the four chromaticities
+ *  matrix = receives nine elements, row major
+ *
+ * Return:
+ *  false when a chromaticity has y = 0, or the primaries are collinear
+ ****************************************************************************
+ */
+bool icBuildRgbToXyzMatrix(const icCicpPrimaries &primaries, icFloatNumber *matrix)
+{
+  if (!matrix)
+    return false;
+
+  const icFloatNumber ys[4] = { primaries.yRed, primaries.yGreen, primaries.yBlue, primaries.yWhite };
+  const icFloatNumber xs[4] = { primaries.xRed, primaries.xGreen, primaries.xBlue, primaries.xWhite };
+  int i;
+
+  /* A zero y is not a rounding problem to guard against: it is a chromaticity
+   * with no luminance, which names no colour at all. */
+  for (i = 0; i < 4; i++) {
+    if (!(ys[i] > 0.0))
+      return false;
+  }
+
+  /* Each primary at unit luminance.  Column i of this is the direction of
+   * primary i in XYZ. */
+  icFloatNumber prim[9];
+  for (i = 0; i < 3; i++) {
+    prim[i]     = (icFloatNumber)((double)xs[i] / (double)ys[i]);
+    prim[3 + i] = 1.0;
+    prim[6 + i] = (icFloatNumber)((1.0 - (double)xs[i] - (double)ys[i]) / (double)ys[i]);
+  }
+
+  /* The white at Y = 1, which is the vector the three columns must sum to. */
+  icFloatNumber white[3];
+  white[0] = (icFloatNumber)((double)xs[3] / (double)ys[3]);
+  white[1] = 1.0;
+  white[2] = (icFloatNumber)((1.0 - (double)xs[3] - (double)ys[3]) / (double)ys[3]);
+
+  icFloatNumber inv[9];
+  memcpy(inv, prim, sizeof(inv));
+
+  if (!icMatrixInvert3x3(inv))
+    return false;
+
+  /* scale = prim^-1 . white */
+  icFloatNumber scale[3];
+  for (i = 0; i < 3; i++) {
+    scale[i] = (icFloatNumber)((double)inv[i * 3 + 0] * (double)white[0] +
+                               (double)inv[i * 3 + 1] * (double)white[1] +
+                               (double)inv[i * 3 + 2] * (double)white[2]);
+  }
+
+  for (i = 0; i < 3; i++) {
+    matrix[0 + i] = (icFloatNumber)((double)prim[0 + i] * (double)scale[i]);
+    matrix[3 + i] = (icFloatNumber)((double)prim[3 + i] * (double)scale[i]);
+    matrix[6 + i] = (icFloatNumber)((double)prim[6 + i] * (double)scale[i]);
+  }
+
+  return true;
+}
+
+/**
+ ****************************************************************************
+ * Name: icBuildPrimariesConversionMatrix
+ *
+ * Purpose: Linear RGB in one set of primaries to linear RGB in another,
+ *  through XYZ, chromatically adapting between the two white points.
+ *
+ *  The adaptation is ICC.1:2022 Annex E.3's linearized Bradford transform,
+ *  which E.2 composes exactly this way and which 9.2.15 recommends for ICC
+ *  profiles.  Doing it in cone space rather than scaling XYZ directly is the
+ *  whole point: a von Kries scaling of XYZ moves hues, and the difference
+ *  between the two is visible at a D65-to-D50 adaptation.
+ *
+ * Args:
+ *  src, dst = the two primary sets
+ *  matrix = receives nine elements, row major
+ *
+ * Return:
+ *  false when either set is degenerate or a matrix in the chain is singular
+ ****************************************************************************
+ */
+bool icBuildPrimariesConversionMatrix(const icCicpPrimaries &src,
+                                      const icCicpPrimaries &dst,
+                                      icFloatNumber *matrix)
+{
+  if (!matrix)
+    return false;
+
+  /* ICC.1:2022 Annex E.3, Equation (E.1). */
+  static const icFloatNumber kBradford[9] = {
+     (icFloatNumber) 0.8951, (icFloatNumber) 0.2664, (icFloatNumber)-0.1614,
+     (icFloatNumber)-0.7502, (icFloatNumber) 1.7135, (icFloatNumber) 0.0367,
+     (icFloatNumber) 0.0389, (icFloatNumber)-0.0685, (icFloatNumber) 1.0296
+  };
+
+  icFloatNumber mSrc[9], mDst[9];
+
+  if (!icBuildRgbToXyzMatrix(src, mSrc) || !icBuildRgbToXyzMatrix(dst, mDst))
+    return false;
+
+  /* Both whites at Y = 1, then into cone space. */
+  if (!(src.yWhite > 0.0) || !(dst.yWhite > 0.0))
+    return false;
+
+  double wSrc[3], wDst[3];
+  wSrc[0] = (double)src.xWhite / (double)src.yWhite;
+  wSrc[1] = 1.0;
+  wSrc[2] = (1.0 - (double)src.xWhite - (double)src.yWhite) / (double)src.yWhite;
+  wDst[0] = (double)dst.xWhite / (double)dst.yWhite;
+  wDst[1] = 1.0;
+  wDst[2] = (1.0 - (double)dst.xWhite - (double)dst.yWhite) / (double)dst.yWhite;
+
+  double coneSrc[3], coneDst[3];
+  int i;
+
+  for (i = 0; i < 3; i++) {
+    coneSrc[i] = (double)kBradford[i * 3 + 0] * wSrc[0] +
+                 (double)kBradford[i * 3 + 1] * wSrc[1] +
+                 (double)kBradford[i * 3 + 2] * wSrc[2];
+    coneDst[i] = (double)kBradford[i * 3 + 0] * wDst[0] +
+                 (double)kBradford[i * 3 + 1] * wDst[1] +
+                 (double)kBradford[i * 3 + 2] * wDst[2];
+
+    /* A cone response of zero would need a white with no response in one of
+     * the three bands, which no real chromaticity has; refuse rather than
+     * divide. */
+    if (!(coneSrc[i] > 0.0))
+      return false;
+  }
+
+  /* M_adapt = M_BFD^-1 . diag(cone_dst / cone_src) . M_BFD  (Equation E.2). */
+  icFloatNumber bfdInv[9];
+  memcpy(bfdInv, kBradford, sizeof(bfdInv));
+
+  if (!icMatrixInvert3x3(bfdInv))
+    return false;
+
+  icFloatNumber scaled[9];
+  for (i = 0; i < 3; i++) {
+    double r = coneDst[i] / coneSrc[i];
+    scaled[i * 3 + 0] = (icFloatNumber)(r * (double)kBradford[i * 3 + 0]);
+    scaled[i * 3 + 1] = (icFloatNumber)(r * (double)kBradford[i * 3 + 1]);
+    scaled[i * 3 + 2] = (icFloatNumber)(r * (double)kBradford[i * 3 + 2]);
+  }
+
+  icFloatNumber adapt[9];
+  icMatrixMultiply3x3(adapt, bfdInv, scaled);
+
+  /* M = M_dst^-1 . M_adapt . M_src */
+  icFloatNumber dstInv[9];
+  memcpy(dstInv, mDst, sizeof(dstInv));
+
+  if (!icMatrixInvert3x3(dstInv))
+    return false;
+
+  icFloatNumber tmp[9];
+  icMatrixMultiply3x3(tmp, adapt, mSrc);
+  icMatrixMultiply3x3(matrix, dstInv, tmp);
+
+  return true;
+}
+
+/**
+ ****************************************************************************
+ * Name: icHagcGetGainApplicationPrimaries
+ *
+ * Purpose: Resolve a HAGC Gain Curve Chromaticities Mode to chromaticities.
+ *
+ *  See the header for PROPOSAL-ISSUE HAGC-09 and why mode 0 resolves to
+ *  BT.709 rather than to the H.273 code point the proposal names beside it.
+ *
+ * Args:
+ *  nMode = the mode, 0 to 3
+ *  pCustom = eight values [xR yR xG yG xB yB xW yW], read only for mode 3
+ *  primaries = receives the result
+ *
+ * Return:
+ *  false for an unknown mode, or mode 3 with no values
+ ****************************************************************************
+ */
+bool icHagcGetGainApplicationPrimaries(icUInt8Number nMode, const icFloatNumber *pCustom,
+                                       icCicpPrimaries &primaries)
+{
+  switch (nMode) {
+    case 0:
+      return icGetCicpPrimaries(1, primaries);   /* BT.709-6 */
+
+    case 1:
+      return icGetCicpPrimaries(12, primaries);  /* SMPTE EG 432-1, Display P3 */
+
+    case 2:
+      return icGetCicpPrimaries(9, primaries);   /* BT.2020-2 */
+
+    case 3:
+      if (!pCustom)
+        return false;
+
+      primaries.xRed   = pCustom[0];
+      primaries.yRed   = pCustom[1];
+      primaries.xGreen = pCustom[2];
+      primaries.yGreen = pCustom[3];
+      primaries.xBlue  = pCustom[4];
+      primaries.yBlue  = pCustom[5];
+      primaries.xWhite = pCustom[6];
+      primaries.yWhite = pCustom[7];
+      return true;
+
+    default:
+      return false;
+  }
+}
+
+/**
+ ****************************************************************************
  * Name: icGetHdrProfileInfo
  *
  * Purpose: Classify a profile against clause 8.10 and resolve everything the

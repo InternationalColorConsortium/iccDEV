@@ -337,6 +337,12 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
     CIccTagHagc *pHagc = (CIccTagHagc*)pTag;
 
     if (m_evaluator.Init(pHagc->GetMetadata())) {
+      // PROPOSAL-ISSUE HAGC-10, PROVISIONAL - the same opt-in the CMM path
+      // takes, and it has to be the same one: a bake that tone mapped in a
+      // different space from the live path would not be the rendering it
+      // claims to approximate.
+      icHagcApplyGainApplicationSpace(m_evaluator, pProfile, pHagc->GetMetadata());
+
       m_evaluator.SetTargetHeadroom((icFloatNumber)(log(icHdrBakeTargetHeadroom) / log(2.0)));
 
       m_bClampToTarget = m_evaluator.ClampsToTargetVolume();

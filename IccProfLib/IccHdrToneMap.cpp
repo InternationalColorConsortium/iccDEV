@@ -76,6 +76,7 @@
 
 #include "IccHdrToneMap.h"
 #include "IccHdrProfile.h"
+#include "IccUtil.h"
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
@@ -984,6 +985,7 @@ CIccHagcEvaluator::CIccHagcEvaluator()
   m_szUnsupported = "not initialized";
   m_bDerivedSlopes = false;
   m_bDerivedRefWhiteToneMap = false;
+  m_bGainSpace = false;
   m_nCurves = 0;
   m_targetHeadroom = 0.0;
   m_nCurveA = m_nCurveB = 0;
@@ -1016,6 +1018,7 @@ bool CIccHagcEvaluator::Init(const icHagcMetadata &meta)
   m_bSupported = false;
   m_bDerivedSlopes = false;
   m_bDerivedRefWhiteToneMap = false;
+  m_bGainSpace = false;
   m_nCurves = 0;
   m_bInvertible = false;
   m_bMonotone = false;
@@ -1457,6 +1460,153 @@ icFloatNumber CIccHagcEvaluator::EvalGainExponent(icFloatNumber x, bool *bValid 
 
 /**
  ****************************************************************************
+ * Name: CIccHagcEvaluator::SetGainApplicationMatrix
+ *
+ * Purpose: Opt in to SMPTE ST 2094-50 Annex A's gain application colour
+ *  space.  READ THE HEADER FIRST - this implements an informative annex of a
+ *  committee draft against ICC text that says nothing at all, and it is off
+ *  unless a caller asks for it.
+ *
+ *  What the annex asks for is narrow.  Annex A.2 converts the input to
+ *  relative linear light normalised so HDR reference white is 1,0, in the
+ *  gain application primaries; A.3 applies the tone map there; A.4's return
+ *  leg is explicitly outside that document's scope.  This library's chain
+ *  already delivers the first two thirds of that - CIccHdrTransfer produces
+ *  reference-white-relative linear light, which is the HDR-01 ruling - so the
+ *  only thing missing is the change of primaries, and the only thing this
+ *  function adds is that matrix and its inverse around the gain.
+ *
+ * Args:
+ *  toGain = nine elements row major, or NULL to clear
+ *
+ * Return:
+ *  false when the matrix is singular; the conversion is cleared, not partial
+ ****************************************************************************
+ */
+bool CIccHagcEvaluator::SetGainApplicationMatrix(const icFloatNumber *toGain)
+{
+  m_bGainSpace = false;
+
+  if (!toGain)
+    return true;
+
+  icFloatNumber inv[9];
+  memcpy(inv, toGain, sizeof(inv));
+
+  if (!icMatrixInvert3x3(inv))
+    return false;
+
+  memcpy(m_toGain, toGain, sizeof(m_toGain));
+  memcpy(m_fromGain, inv, sizeof(m_fromGain));
+  m_bGainSpace = true;
+  return true;
+}
+
+/**
+ ****************************************************************************
+ * Name: icHagcApplyMatrix
+ *
+ * Purpose: dst = m . src for a row-major 3x3, in double, dst may alias src.
+ ****************************************************************************
+ */
+static void icHagcApplyMatrix(icFloatNumber *dst, const icFloatNumber *m, const icFloatNumber *src)
+{
+  double v[3];
+  int i;
+
+  for (i = 0; i < 3; i++) {
+    v[i] = (double)m[i * 3 + 0] * (double)src[0] +
+           (double)m[i * 3 + 1] * (double)src[1] +
+           (double)m[i * 3 + 2] * (double)src[2];
+  }
+
+  dst[0] = (icFloatNumber)v[0];
+  dst[1] = (icFloatNumber)v[1];
+  dst[2] = (icFloatNumber)v[2];
+}
+
+/**
+ ****************************************************************************
+ * Name: icHagcApplyGainApplicationSpace
+ *
+ * Purpose: The one place a consumer opts in to ST 2094-50 Annex A.
+ *
+ *  PROPOSAL-ISSUE HAGC-10.  Two resolutions and a matrix:
+ *
+ *   - the gain application primaries, from the tag's chromaticities mode;
+ *   - the source primaries, resolved as clause 9.2.17 asks - the cicpTag's
+ *     ColourPrimaries when it names a set, the profile's own matrix column
+ *     tags when it is 2.  The pixels reaching the evaluator are the profile's
+ *     device RGB, so those are the primaries they are in;
+ *   - the conversion between them, chromatically adapted per ICC.1 Annex E.
+ *
+ *  When the two sets agree - a BT.2020 profile with chromaticities mode 2,
+ *  say - nothing is installed and the evaluator runs exactly as it did before
+ *  this existed.  That is the common case.
+ *
+ * Args:
+ *  evaluator = an already-initialised evaluator
+ *  pProfile = the profile the tag came from
+ *  meta = the tag's decoded metadata
+ *
+ * Return:
+ *  false when a conversion was needed and could not be built
+ ****************************************************************************
+ */
+bool icHagcApplyGainApplicationSpace(CIccHagcEvaluator &evaluator,
+                                     const CIccProfile *pProfile,
+                                     const icHagcMetadata &meta)
+{
+  if (!pProfile)
+    return false;
+
+  icCicpPrimaries gain;
+
+  if (!icHagcGetGainApplicationPrimaries((icUInt8Number)meta.m_nChromaticitiesMode,
+                                         meta.m_chromaticities, gain))
+    return false;
+
+  icHdrProfileInfo info;
+
+  if (!icGetHdrProfileInfo(pProfile, info) || !info.bHasCicp)
+    return false;
+
+  icCicpPrimaries src;
+
+  if (!icGetResolvedPrimaries(pProfile, info.nColourPrimaries, src, NULL))
+    return false;
+
+  // Equality is tested on the chromaticities rather than on the resulting
+  // matrix: two sets that agree to the last bit produce an identity anyway,
+  // and comparing here avoids building a matrix to throw it away.  The
+  // tolerance is the encoding's - the tag stores chromaticities as
+  // MIN(v, 50000)/50000, so 1/50000 is the smallest difference it can express.
+  const double kTol = 1.0 / 50000.0;
+  const icFloatNumber *a = &gain.xRed;
+  const icFloatNumber *b = &src.xRed;
+  bool bSame = true;
+  int i;
+
+  for (i = 0; i < 8; i++) {
+    if (fabs((double)a[i] - (double)b[i]) > kTol) {
+      bSame = false;
+      break;
+    }
+  }
+
+  if (bSame)
+    return true;
+
+  icFloatNumber m[9];
+
+  if (!icBuildPrimariesConversionMatrix(src, gain, m))
+    return false;
+
+  return evaluator.SetGainApplicationMatrix(m);
+}
+
+/**
+ ****************************************************************************
  * Name: CIccHagcEvaluator::Apply
  *
  * Purpose:
@@ -1494,6 +1644,13 @@ void CIccHagcEvaluator::Apply(icFloatNumber *dst, const icFloatNumber *src) cons
   in[1] = src[1];
   in[2] = src[2];
 
+  // ST 2094-50 Annex A: the gain is defined to be applied in the gain
+  // application colour space, so the triplet changes primaries here and
+  // changes back below.  Off unless a caller opted in - see
+  // SetGainApplicationMatrix().
+  if (m_bGainSpace)
+    icHagcApplyMatrix(in, m_toGain, in);
+
   double g[3] = { 0.0, 0.0, 0.0 };
   icFloatNumber mixed[3];
   icUInt8Number i;
@@ -1518,6 +1675,14 @@ void CIccHagcEvaluator::Apply(icFloatNumber *dst, const icFloatNumber *src) cons
 
   for (i = 0; i < 3; i++)
     dst[i] = (icFloatNumber)(pow(2.0, g[i]) * (double)in[i]);
+
+  // Back out of the gain application space.  Annex A.4's own return leg is
+  // "outside the scope" of ST 2094-50 and is illustrative only, so what
+  // happens here is just the inverse of A.2's change of primaries: clause
+  // 8.10.2 owns everything downstream, and it expects the profile's own
+  // primaries, not the tag's.
+  if (m_bGainSpace)
+    icHagcApplyMatrix(dst, m_fromGain, dst);
 }
 
 /**
@@ -1575,6 +1740,13 @@ bool CIccHagcEvaluator::Invert(icFloatNumber *dst, const icFloatNumber *src) con
   out[0] = src[0];
   out[1] = src[1];
   out[2] = src[2];
+
+  // The forward direction applies the gain in the gain application space, so
+  // the inverse has to search there too: convert the output in, solve, and
+  // convert the recovered input back out at the end.  See
+  // SetGainApplicationMatrix() - off unless a caller opted in.
+  if (m_bGainSpace)
+    icHagcApplyMatrix(out, m_toGain, out);
 
   // The right-hand side: one value shared by all three channels for a common
   // gain, or the channel's own output for component-only mixing.
@@ -1653,6 +1825,9 @@ bool CIccHagcEvaluator::Invert(icFloatNumber *dst, const icFloatNumber *src) con
     for (i = 0; i < 3; i++)
       dst[i] = out[i] / gain[0];
   }
+
+  if (m_bGainSpace)
+    icHagcApplyMatrix(dst, m_fromGain, dst);
 
   return true;
 }

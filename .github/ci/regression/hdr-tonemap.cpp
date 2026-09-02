@@ -648,6 +648,84 @@ void testReferenceWhiteToneMap()
 }
 
 // ---------------------------------------------------------------------------
+// 6c. The gain application colour space (SMPTE ST 2094-50 Annex A)
+// ---------------------------------------------------------------------------
+//
+// PROVISIONAL, and the test says so as loudly as the code does: this pins an
+// informative annex of a committee draft against silence in the ICC amendment
+// (HAGC-10). What it can pin properly is that the machinery is off by default,
+// that it is an exact no-op for the identity, and that the forward and inverse
+// directions agree - none of which depends on the annex being right.
+void testGainApplicationSpace()
+{
+  icFloatNumber x[3] = { 0.0, (icFloatNumber)0.5, (icFloatNumber)4.0 };
+  icFloatNumber y[3] = { 0.0, (icFloatNumber)-0.3, (icFloatNumber)-1.0 };
+  icFloatNumber m[3] = { 0.0, 0.0, 0.0 };
+
+  icHagcMetadata meta;
+  buildMetadata(meta, (icFloatNumber)2.0, (icFloatNumber)0.0, icHagcMixingMax, x, y, m, 3);
+
+  icFloatNumber src[3] = { (icFloatNumber)0.8, (icFloatNumber)0.4, (icFloatNumber)0.2 };
+  icFloatNumber plain[3], converted[3];
+
+  CIccHagcEvaluator ev;
+  check(ev.Init(meta), "evaluator initialised");
+  check(!ev.UsesGainApplicationSpace(), "no conversion until a caller asks for one");
+  check(ev.SetTargetHeadroom((icFloatNumber)1.0), "target headroom set");
+  ev.Apply(plain, src);
+
+  // The identity matrix must be indistinguishable from no matrix at all,
+  // bit for bit: if it is not, the conversion is doing something on its own.
+  icFloatNumber ident[9] = { 1, 0, 0,  0, 1, 0,  0, 0, 1 };
+  check(ev.SetGainApplicationMatrix(ident), "the identity installs");
+  check(ev.UsesGainApplicationSpace(), "and is reported as installed");
+  ev.Apply(converted, src);
+  check(converted[0] == plain[0] && converted[1] == plain[1] && converted[2] == plain[2],
+        "an identity conversion changes nothing at all");
+
+  // A singular matrix has no inverse, so there is no way back out of the gain
+  // space; refusing is the only correct answer, and the state must be cleared
+  // rather than left half set.
+  icFloatNumber singular[9] = { 1, 2, 3,  2, 4, 6,  1, 1, 1 };
+  check(!ev.SetGainApplicationMatrix(singular), "a singular matrix is refused");
+  check(!ev.UsesGainApplicationSpace(), "and leaves no conversion behind");
+  ev.Apply(converted, src);
+  check(converted[0] == plain[0], "a refused matrix leaves the evaluator as it was");
+
+  // A real conversion: BT.709 to BT.2020, which is what a BT.709 profile
+  // carrying chromaticities mode 2 would install. The result must differ -
+  // that is the whole point of the annex - and the inverse must undo it.
+  icCicpPrimaries p709, p2020;
+  check(icGetCicpPrimaries(1, p709) && icGetCicpPrimaries(9, p2020), "primaries resolved");
+
+  icFloatNumber conv[9];
+  check(icBuildPrimariesConversionMatrix(p709, p2020, conv), "conversion matrix built");
+  check(ev.SetGainApplicationMatrix(conv), "the conversion installs");
+  ev.Apply(converted, src);
+
+  check(fabs(converted[0] - plain[0]) > 1e-4 || fabs(converted[1] - plain[1]) > 1e-4,
+        "applying the gain in another space gives a different answer");
+
+  // Round trip. The inverse searches in the gain space and converts back, so
+  // this fails if either leg uses the wrong matrix or the wrong direction.
+  if (ev.IsInvertible()) {
+    icFloatNumber back[3];
+    check(ev.Invert(back, converted), "the converted result inverts");
+    checkClose(back[0], src[0], 1e-3, "round trip recovers R");
+    checkClose(back[1], src[1], 1e-3, "round trip recovers G");
+    checkClose(back[2], src[2], 1e-3, "round trip recovers B");
+  }
+
+  // Neutral in, neutral out: white is white in both spaces, so an achromatic
+  // input must stay achromatic however the gain is applied. A transposed or
+  // mis-scaled matrix breaks this while still looking plausible.
+  icFloatNumber grey[3] = { (icFloatNumber)0.6, (icFloatNumber)0.6, (icFloatNumber)0.6 };
+  ev.Apply(converted, grey);
+  checkClose(converted[0], converted[1], 1e-5, "a neutral stays neutral, R against G");
+  checkClose(converted[1], converted[2], 1e-5, "a neutral stays neutral, G against B");
+}
+
+// ---------------------------------------------------------------------------
 // 7. End to end through the CMM
 // ---------------------------------------------------------------------------
 
@@ -947,6 +1025,7 @@ int main(int /*argc*/, char * /*argv*/[])
   testPchipSlopes();
   testUnsupportedConfigurations();
   testReferenceWhiteToneMap();
+  testGainApplicationSpace();
   testLazyLoadedProfile();
   testEndToEnd();
   testOutputDirection();

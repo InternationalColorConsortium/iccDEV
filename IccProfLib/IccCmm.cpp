@@ -6758,6 +6758,14 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
       CIccTagHagc *pHagc = (CIccTagHagc*)pTag;
 
       if (m_evaluator.Init(pHagc->GetMetadata())) {
+        // PROPOSAL-ISSUE HAGC-10, PROVISIONAL: apply the gain in the colour
+        // space the tag declares for it, per SMPTE ST 2094-50 Annex A.  The
+        // ICC amendment defines the chromaticities and never says to use
+        // them; read icHagcApplyGainApplicationSpace() before trusting this.
+        // A failure is not an error - it leaves the evaluator behaving as the
+        // amendment as written describes.
+        icHagcApplyGainApplicationSpace(m_evaluator, m_pProfile, pHagc->GetMetadata());
+
         // The tag encodes headrooms in log2 space and the hint carries a
         // linear ratio, so this is the one place the two meet.
         m_evaluator.SetTargetHeadroom((icFloatNumber)(log((double)m_targetHeadroom) / log(2.0)));
