@@ -378,13 +378,19 @@ protected:
  * implementable from ICC documents alone.  UsesDerivedSlopes() exists so a
  * caller can report when a curve relied on this function.
  *
- * SOURCE, AND ITS PROVENANCE.  C.3.9 was read on 2026-09-01 -- but from the
- * SECOND PUBLIC COMMITTEE DRAFT of ST 2094-50, dated 2026-02-23, published at
- * github.com/SMPTE/st2094-50 for a review period that ended 2026-03-16.  The
- * amendment cites the PUBLISHED ST 2094-50:2026.  Everything below that is
- * attributed to C.3.9 therefore comes from a committee draft and must be
- * re-verified against the published text; the SMPTE licence also forbids
- * reproducing that text, so it is described here and never quoted.
+ * SOURCE, AND ITS PROVENANCE.  C.3.9 was read on 2026-09-01 -- but from the SECOND
+ * PUBLIC COMMITTEE DRAFT of ST 2094-50, dated 2026-02-23, at
+ * github.com/SMPTE/st2094-50.
+ *
+ * That is the CURRENT PUBLIC STATE of the document, not a lesser substitute
+ * for one: checked 2026-09-02, the repository carries no tags, no releases and
+ * that single artifact, and nothing has been pushed to it since 2026-05-22.
+ * What makes it worth flagging is narrower - its README dates the review
+ * period as having ended 2026-03-16, and CONTRIBUTING.md points active
+ * drafting at a members-only private repository.  So this is the latest text
+ * anyone outside SMPTE can read, and the comments raised in that review may
+ * already have changed exactly the parts flagged below.  The SMPTE licence
+ * forbids reproducing the text, so it is described here and never quoted.
  *
  * C.3.9 defines, over h_i = x_i+1 - x_i and the secants s_i:
  *   - interior points i in 1..N-2: zero when sign(s_i-1) != sign(s_i), else
@@ -439,10 +445,10 @@ ICCPROFLIB_API bool icHagcDerivePchipSlopes(const icFloatNumber *x, const icFloa
  *
  * SOURCE, AND ITS PROVENANCE -- the same caveat as icHagcDerivePchipSlopes()
  * above, and for the same document.  C.3.8 was read on 2026-09-01 from the
- * SECOND PUBLIC COMMITTEE DRAFT of ST 2094-50 (2026-02-23), not the published
- * :2026 the amendment cites, and the SMPTE licence forbids reproducing its
- * text.  What follows is a description of the construction, not a quotation,
- * and every number in it must be re-verified against the published text.
+ * second public committee draft of ST 2094-50 (2026-02-23), the latest text
+ * available outside SMPTE, and the licence forbids reproducing it.  What
+ * follows is a description of the construction, not a quotation, and every
+ * number in it is worth re-checking whenever a newer draft appears.
  *
  * The construction, for a baseline headroom H (log2, as the tag encodes it):
  *

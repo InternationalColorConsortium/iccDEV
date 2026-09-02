@@ -623,9 +623,9 @@ icFloatNumber CIccHdrTransfer::FromLinearChannel(icFloatNumber v) const
  *  it omits.
  *
  *  READ THE HEADER BEFORE CHANGING ANY OF THIS.  C.3.9 was read from a
- *  COMMITTEE DRAFT (PCD2, 2026-02-23), not the published ST 2094-50:2026 the
- *  amendment cites, and the two places this deliberately does not follow that
- *  draft - the endpoint clamps, and a flat pair where the draft's formula is
+ *  COMMITTEE DRAFT (PCD2, 2026-02-23) - the latest public text, whose
+ *  review closed 2026-03-16 - and the two places this deliberately does not
+ *  follow that draft - the endpoint clamps, and a flat pair where the draft's formula is
  *  0/0 - are set out there with the numbers that separate them.
  *
  * Args:
@@ -736,9 +736,9 @@ bool icHagcDerivePchipSlopes(const icFloatNumber *x, const icFloatNumber *y,
  *  not carry, per clause C.3.8 of SMPTE ST 2094-50.
  *
  *  READ THE HEADER BEFORE CHANGING ANY OF THIS.  C.3.8 was read from a
- *  COMMITTEE DRAFT (PCD2, 2026-02-23), not the published ST 2094-50:2026 the
- *  amendment cites, and the construction is described there rather than
- *  quoted because the licence does not permit reproduction.
+ *  COMMITTEE DRAFT (PCD2, 2026-02-23), the latest public text, and the
+ *  construction is described there rather than quoted because the licence does
+ *  not permit reproduction.
  *
  * Args:
  *  baselineHeadroom = the tag's baseline headroom, log2

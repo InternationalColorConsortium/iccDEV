@@ -162,8 +162,14 @@ typedef enum {
 
 /**
  * Gain Curve Chromaticities Mode (proposal 1.2.2.7).  Modes 0..2 name entries
- * in Table 2 of ITU-T H.273 (2, 12 and 9 respectively); mode 3 means the tag
- * carries eight explicit chromaticity values.
+ * in Table 2 of ITU-T H.273 and mode 3 means the tag carries eight explicit
+ * chromaticity values.
+ *
+ * The proposal cites the code points 2, 12 and 9 with the names BT.709-6,
+ * Display P3 and BT.2020-2.  Checked against H.273 (V4) on 2026-09-02, the
+ * second and third are right and the FIRST IS NOT: BT.709-6 is value 1, and
+ * value 2 is Unspecified.  These enumerators follow the names - see
+ * PROPOSAL-ISSUE HAGC-09 at m_nChromaticitiesMode.
  */
 typedef enum {
   icHagcChromaticitiesBT709     = 0,
@@ -344,11 +350,27 @@ public:
 
   /** Reference White Tone Mapping flag (proposal 1.2.2.5).  When true the
    * remaining bit fields of the same byte are zero on the wire, no records
-   * follow, and the effective values are derived per clause C.3.8 of SMPTE
-   * ST 2094-50:2026 - which this implementation does not have, so it reports
-   * the configuration as unsupported rather than guessing at it. */
+   * follow, and the alternate images are absent from the file: their effective
+   * values are derived per clause C.3.8 of SMPTE ST 2094-50, which
+   * icHagcDeriveReferenceWhiteToneMap() implements.  This struct stays as the
+   * file has it - empty - and the derivation happens in the evaluator. */
   bool m_bReferenceWhiteToneMapping;
 
+  /** Gain Curve Chromaticities Mode (proposal 0.1.2.7).
+   *
+   * PROPOSAL-ISSUE HAGC-09: mode 0 is described as "the colour primaries with
+   * a value of 2 in Table 2 in ITU-T H.273, i.e. primaries from Recommendation
+   * ITU-R BT.709-6".  Those are two different things.  H.273 Table 2 value 2
+   * is Unspecified; BT.709-6 is value 1.  Modes 1 and 2 cite 12 and 9, both
+   * correct.  The enumerator below follows the NAME, because the number is the
+   * part that is wrong and because value 2 is the one code point that means
+   * "resolve against the profile's own matrix column tags" under the CICP
+   * Unspecified-Primaries amendment - a reader following it would get a
+   * profile-dependent answer where BT.709 was meant.
+   *
+   * PROPOSAL-ISSUE HAGC-10: nothing in the amendment says what a consumer does
+   * with this field.  It is defined here and used nowhere - annex 1's gain
+   * curve function never mentions chromaticities.  See the mode enum. */
   icHagcChromaticitiesMode m_nChromaticitiesMode;
 
   /** Common Component Mixing flag (proposal 1.1.2.8): the mixing mode, and

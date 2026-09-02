@@ -1447,15 +1447,16 @@ icValidateStatus CIccTagHagc::Validate(std::string sigPath, std::string &sReport
      * item records, and it still holds against the amendment.
      *
      * icHagcDeriveReferenceWhiteToneMap() now performs the derivation, so the
-     * curve CAN be evaluated - but from a committee draft of ST 2094-50, not
-     * the published :2026 the amendment cites.  Said as information rather
+     * curve CAN be evaluated - but from the second public committee draft of
+     * ST 2094-50, which is the latest public text of it.  Said as information
+     * rather
      * than as a warning: nothing is wrong with the profile, and a reader who
      * needs to know which text the numbers came from is told where to look. */
     sReport += icMsgValidateInformation;
     sReport += sSigPathName;
     sReport += " - HAGC Reference White Tone Mapping parameters are not carried in the tag; they\r\n"
-               "    are derived per clause C.3.8 of SMPTE ST 2094-50 (read from the 2026-02-23\r\n"
-               "    committee draft, pending the published text).\r\n";
+               "    are derived per clause C.3.8 of SMPTE ST 2094-50, read from its 2026-02-23\r\n"
+               "    public committee draft.\r\n";
   }
 
   /* --- Global tone mapping parameters (proposal Table 2) --- */
