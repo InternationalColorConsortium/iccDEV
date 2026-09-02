@@ -823,10 +823,33 @@ void Usage()
   printf("    40 - Perceptual with BPC\n");
   printf("    41 - Relative Colorimetric with BPC\n");
   printf("    42 - Saturation with BPC\n");
-  printf("    50 - BDRF Parameters\n");
-  printf("    60 - BDRF Direct\n");
-  printf("    70 - BDRF MCS Parameters\n");
-  printf("    80 - MCS connection\n");
+  // #2262: the acronym was transposed, B-D-R-F -- ICC.2-2023 9.2.14-17 and
+  // 9.2.26-29 spell the tags brdfAToB0Tag..brdfDToB3Tag, and the library's own
+  // identifiers already agree (icXformLutBRDFParam, icSigBRDFDToB0Tag,
+  // CIccStructBRDF).  The same three lines carry the typo in iccApplyNamedCmm
+  // and iccApplyProfiles and are corrected there too.
+  //
+  // The four codes also take a rendering intent in their units digit, which
+  // printing them as flat values said they did not: CIccXform::Create() indexes
+  // a four-entry tag array with nTagIntent in each of the
+  // icXformLutBRDFParam..icXformLutMCS cases, and the decode that feeds it
+  // falls through its type switch for 5..8, so "nIntent % 10" reaches the
+  // intent unchanged.  80 is qualified because it is the one code where that is
+  // only half true: icXformLutMCS offsets by nTagIntent on its MVIS/Output
+  // branch (MToS0..3, MToB0..3) but reads a single AToM0Tag for
+  // MultiplexIdentification/Input and a single MToA0Tag for MultiplexLink, so
+  // 80..83 are indistinguishable in the to-MCS direction.
+  //
+  // Written in the "NN + Intent" form iccApplyNamedCmm uses for its 10/20/40
+  // rows rather than enumerated in this screen's own style:
+  // spelling out 50..53, 60..63, 70..73 and 80..83 would add twelve lines to
+  // say the same thing, and this way the three tools' BRDF and MCS rows agree
+  // line for line -- nothing had ever compared them, which is how the same
+  // three transforms came to be named two different ways.
+  printf("    50 + Intent - BRDF Parameters\n");
+  printf("    60 + Intent - BRDF Direct\n");
+  printf("    70 + Intent - BRDF MCS Parameters\n");
+  printf("    80 + Intent - MCS connection (Intent applies to MToS/MToB only)\n");
   printf("  +100 - Use Luminance based PCS adjustment\n");
   printf(" +1000 - Use V5 sub-profile if present\n");
 }

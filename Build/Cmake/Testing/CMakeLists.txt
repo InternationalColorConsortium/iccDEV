@@ -8248,6 +8248,40 @@ if(TARGET iccApplyProfiles)
    )
 endif()
 
+# #2262 - the same three tools publish the same decimal rendering-intent table,
+# and all three carried the same two defects on its BRDF rows: the acronym was
+# transposed, and 50/60/70/80 were printed as flat values although each of them
+# takes an intent in its units digit exactly as the "20 + Intent" row above them
+# does. Registered as one test rather than folded into the *-cli-args siblings
+# because the defect is a disagreement *between* the three screens -- nothing
+# ever compared them, which is how iccApplyNamedCmm came to name the same three
+# transforms "Model"/"Light"/"Output" while the other two named them
+# "Parameters"/"Direct"/"MCS Parameters" -- so the cross-tool comparison is the
+# assertion, and it needs all three tools in one process list.
+#
+# Needs no profile fixture: the only .icc it opens is the tracked
+# Testing/sRGB_v4_ICC_preference.icc, and it is opened for its *decode*, read
+# back from -exportcfg, which is written before any transform is built. A
+# profile actually carrying BRDF tags would be needed to apply these transforms
+# and is not needed to assert what the codes decode to.
+#
+# Timeout matches the siblings. Three no-argument usage runs plus seventeen
+# argument decodes: 0.27s in total on a strict Release clang build and 2.24s
+# under GCC Strict ASAN+UBSAN Debug in CI, a 54x margin on the 120 budget at
+# the slower of the two. None of the runs transforms any data -- the usage runs
+# print and exit, and the decode runs stop at transform creation -- so what the
+# sanitized build adds is twenty process startups rather than work, which is
+# why the two figures differ by 8x on a test that does almost nothing.
+if(TARGET iccApplyNamedCmm AND TARGET iccApplyProfiles AND TARGET iccApplyToLink)
+  iccdev_add_script_test(
+    iccdev.issue-2262-brdf-usage
+    120
+    "iccdev;cmm;tools;cli;issue-2190;issue-2262;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2262-brdf-usage-regression.sh"
+   )
+endif()
+
 # #2150 - both iccApply* tools remap a PCS source signature to icSigDevXYZData /
 # icSigDevLabData so PCS numbers are not reinterpreted as device data, then
 # cleared the resulting 0.0-1.0 clip for icEncodeFloat only. Three encodings
