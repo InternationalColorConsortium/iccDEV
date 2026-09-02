@@ -304,18 +304,14 @@ cd HDR
 find . -iname "*\.icc" -delete
 if [ "$1" != "clean" ]
 then
-	set -x
-	iccFromXml BT2100HlgFullScene.xml BT2100HlgFullScene.icc
-	iccFromXml BT2100HlgNarrowScene.xml BT2100HlgNarrowScene.icc
-	iccFromXml BT2100HlgFullDisplay.xml BT2100HlgFullDisplay.icc
-	iccFromXml BT2100HlgNarrowDisplay.xml BT2100HlgNarrowDisplay.icc
-	iccFromXml BT2100PQFullScene.xml BT2100PQFullScene.icc
-	iccFromXml BT2100PQNarrowScene.xml BT2100PQNarrowScene.icc
-	iccFromXml BT2100PQFullDisplay.xml BT2100PQFullDisplay.icc
-	iccFromXml BT2100PQNarrowDisplay.xml BT2100PQNarrowDisplay.icc
-	iccFromXml BT2100HlgSceneToDisplayLink.xml BT2100HlgSceneToDisplayLink.icc
-	iccFromXml BT2100PQSceneToDisplayLink.xml BT2100PQSceneToDisplayLink.icc
-	set +x
+	# #2328: HDR/mkprofiles.sh already builds exactly these ten profiles and is what
+	# the CI workflows invoke directly, so call it rather than keeping a second copy
+	# of the same command list here. A duplicate list drifts silently: an eleventh
+	# HDR profile added to one copy would leave iccdev.qa-profile-manifest either
+	# short a profile or short a manifest row, depending on which copy was edited.
+	# sh -x, not a bare sh: set -x does not cross the process boundary, and every
+	# other section of this script traces its iccFromXml calls into CreateAllProfiles.log.
+	sh -x mkprofiles.sh
 fi
 cd ..
 
