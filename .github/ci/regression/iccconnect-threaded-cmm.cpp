@@ -126,14 +126,13 @@ static int TestThreadedSearch(const char* profilePath)
       std::fprintf(stderr, "threaded search multi-pixel apply failed on pass %d\n", pass);
       return 1;
     }
-  }
-
-  for (size_t i = 0; i < scalarDst.size(); ++i) {
-    if (!NearlyEqual(defaultDst[i], scalarDst[i]) ||
-        !NearlyEqual(scalarDst[i], automaticDst[i]) ||
-        !NearlyEqual(scalarDst[i], threadedDst[i])) {
-      std::fprintf(stderr, "search output mismatch at %zu\n", i);
-      return 1;
+    for (size_t i = 0; i < scalarDst.size(); ++i) {
+      if (!NearlyEqual(defaultDst[i], scalarDst[i]) ||
+          !NearlyEqual(scalarDst[i], automaticDst[i]) ||
+          !NearlyEqual(scalarDst[i], threadedDst[i])) {
+        std::fprintf(stderr, "search output mismatch on pass %d at %zu\n", pass, i);
+        return 1;
+      }
     }
   }
 

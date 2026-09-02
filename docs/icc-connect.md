@@ -57,7 +57,7 @@ passed to `CreateStandard` are not retained by the library.
 ### Error Reporting
 
 The library never writes to `stderr`. To learn *why* a factory call
-returned `nullptr`, pass a `std::string*` as the final `pErrorMsg`
+returned `nullptr`, pass a `std::string*` through its `pErrorMsg`
 argument. On failure it is populated with a single human-readable line
 describing the first failure encountered, prefixed where applicable with
 the failing stage index. Examples:
