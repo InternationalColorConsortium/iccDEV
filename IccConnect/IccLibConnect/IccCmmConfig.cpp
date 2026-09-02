@@ -1158,7 +1158,17 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
       if (nIntent > (int)icAbsoluteColorimetric)
         return 0;
       
-      if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
+      // Only the upper bound is testable, and unlike the identically spelled check
+      // in iccApplyToLink it is genuinely live here: this decode strips "% 1000"
+      // rather than "% 100", so nType carries the hundreds column and spans 0..99.
+      // Measured on master: "130" resolves to icXformLutNamedDevice and "140" is
+      // refused by this very comparison.  The lower half cannot fire -- nType is
+      // "abs(...) / 10", never negative -- so it is dropped for the same reason
+      // #2267 dropped the intent lower bounds two lines up.  CodeQL did not raise
+      // this one the way it raised those: cpp/constant-comparison cannot see through
+      // abs(), so it had to be found by set-diffing the four copies of the check by
+      // hand (#2270).
+      if (nType > (int)icXformLutMaximum)
         return 0;
 
       pProf->m_intent = (icRenderingIntent)nIntent;
@@ -1428,7 +1438,17 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
       if (nIntent > (int)icAbsoluteColorimetric)
         return 0;
       
-      if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
+      // Only the upper bound is testable, and unlike the identically spelled check
+      // in iccApplyToLink it is genuinely live here: this decode strips "% 1000"
+      // rather than "% 100", so nType carries the hundreds column and spans 0..99.
+      // Measured on master: "130" resolves to icXformLutNamedDevice and "140" is
+      // refused by this very comparison.  The lower half cannot fire -- nType is
+      // "abs(...) / 10", never negative -- so it is dropped for the same reason
+      // #2267 dropped the intent lower bounds two lines up.  CodeQL did not raise
+      // this one the way it raised those: cpp/constant-comparison cannot see through
+      // abs(), so it had to be found by set-diffing the four copies of the check by
+      // hand (#2270).
+      if (nType > (int)icXformLutMaximum)
         return 0;
 
       pProf->m_intent = (icRenderingIntent)nIntent;
@@ -1503,7 +1523,17 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
     if (nIntent > (int)icAbsoluteColorimetric)
       return 0;
       
-    if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
+    // Only the upper bound is testable, and unlike the identically spelled check
+    // in iccApplyToLink it is genuinely live here: this decode strips "% 1000"
+    // rather than "% 100", so nType carries the hundreds column and spans 0..99.
+    // Measured on master: "130" resolves to icXformLutNamedDevice and "140" is
+    // refused by this very comparison.  The lower half cannot fire -- nType is
+    // "abs(...) / 10", never negative -- so it is dropped for the same reason
+    // #2267 dropped the intent lower bounds two lines up.  CodeQL did not raise
+    // this one the way it raised those: cpp/constant-comparison cannot see through
+    // abs(), so it had to be found by set-diffing the four copies of the check by
+    // hand (#2270).
+    if (nType > (int)icXformLutMaximum)
       return 0;
 
     m_intentInitial = (icRenderingIntent)nIntent;

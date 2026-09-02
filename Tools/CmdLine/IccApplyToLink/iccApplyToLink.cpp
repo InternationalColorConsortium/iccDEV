@@ -1139,11 +1139,22 @@ int main(int argc, icChar* argv[])
         return 1;
       }
       
-      if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum) {
-        printf("Invalid rendering intent '%s': decoded transform type is out of range\n", argv[nCount+1]);
-        releasePccList(pccList);
-        return 1;
-      }
+      // No transform-type range test here: neither bound can be crossed, and the
+      // message this used to print was unreachable for every one of the 2^31
+      // codes ParseIntArg accepts.  nType is "abs(value % 100) / 10" of a value
+      // the sign guard above has already refused if negative, so it is 0..9 --
+      // icXformLutMinimum is 0, and icXformLutMaximum is 0xD, four above the
+      // largest tens digit the column can hold (#2270).
+      //
+      // The check read as live because the sibling decode in
+      // CIccCfgProfileSequence::fromArgs() genuinely needs it: that one strips
+      // "% 1000" rather than "% 100", so its hundreds column feeds nType and
+      // "100".."130" really do select icXformLutSpectral..icXformLutNamedDevice
+      // there, with "140" and up refused by the same comparison.  This tool
+      // spends its hundreds column on nLuminance below instead, which is why the
+      // four types above 9 have no spelling on THIS command line and why
+      // widening the column here would silently redefine every code from 100 up.
+      // Removed rather than widened for that reason (#2270 ruling).
 
       if (nLuminance) {
         Hint.AddHint(new CIccLuminanceMatchingHint());

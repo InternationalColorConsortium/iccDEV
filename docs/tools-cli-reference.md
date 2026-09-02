@@ -138,12 +138,25 @@ tools separately (#2268) -- before that a negative code whose units digit was
 zero, such as `-10`, was accepted by them and produced the same output as its
 positive twin.
 
-The sign rule is the only column the two tools are known to share. `iccBenchApply`
-discards the hundreds column rather than reading it as a luminance request, and
-passes a tens digit of `4` straight through as `icXformLutBPC` instead of mapping
-it to a black-point-compensation hint -- so `iccBenchApply <profile> 40` fails with
-`Invalid Look-Up Table type` where `iccApplyToLink <profile> 40` succeeds. See
+Until #2271 the sign rule was the only column the two tools shared:
+`iccBenchApply` discarded the hundreds column rather than reading it as a
+luminance request, and passed a tens digit of `4` straight through as
+`icXformLutBPC` instead of mapping it to a black-point-compensation hint -- so
+`iccBenchApply <profile> 40` failed with `Invalid Look-Up Table type` where
+`iccApplyToLink <profile> 40` succeeded. Both columns now match, asserted by the
+`iccdev.bench-apply-bpc-*` and `iccdev.bench-apply-luminance-column` tests. See
 <a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/Tools/CmdLine/IccBenchApply/Readme.md">Tools/CmdLine/IccBenchApply/Readme.md</a>.
+
+One divergence is real and by design, and it is the trap worth knowing about:
+`iccApplyToLink` and `iccBenchApply` strip `% 100` and spend the hundreds column
+on a luminance request, while `CIccCfgProfileSequence::fromArgs()` -- the decode
+behind `iccApplyNamedCmm`, `iccApplyProfiles` and `iccApplySearch` -- strips
+`% 1000`, so there the hundreds column is part of the transform type. Measured
+with `iccApplyNamedCmm -exportcfg`, `100`/`110`/`120`/`130` resolve to
+`spectral`/`namedColorimetric`/`namedSpectral`/`namedDevice` and `140` is
+refused. So `100` means a spectral transform to one family of tools and luminance
+matching to the other; the four `icXformLutType` values above `9` are reachable
+only from the first (#2270).
 
 The over-black / over-gray flags only affect chains that include a v5
 NamedColor profile. JSON callers prefer the `transform` field values,

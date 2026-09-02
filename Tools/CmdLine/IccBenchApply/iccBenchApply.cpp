@@ -79,6 +79,7 @@
 #include <utility>
 #include <vector>
 
+#include "IccApplyBPC.h"
 #include "IccCmm.h"
 #include "IccCmmThread.h"
 #include "IccDefs.h"
@@ -104,8 +105,25 @@ static void Usage()
   printf("Usage: iccBenchApply {options} interpolation"
          " {profile_path rendering_intent {-PCC pcc_path}}...\n\n");
   printf("  interpolation      0 = Linear, 1 = Tetrahedral\n");
-  printf("  rendering_intent   0..3, plus +1000 / +10000 modifiers"
-         " (as iccApplyToLink)\n\n");
+  // Deliberately describes the columns and points at iccApplyToLink for the
+  // tens-column list rather than reprinting it.  Four tools already publish
+  // their own copy of that table and they do not agree; a fifth copy here would
+  // be a fifth thing to keep in step (#2262).  The old line was wrong in both
+  // directions anyway: it claimed "0..3" when the tens and hundreds columns are
+  // read too, and it advertised a "+10000" modifier this decode does not have --
+  // bUseSubProfile is (code / 1000) > 0, so 10000 is just another way of saying
+  // 1000.  The +10000 column belongs to CIccCfgProfileSequence::fromArgs, a
+  // different decode used by different tools (#2271).
+  printf("  rendering_intent   decimal columns, decoded exactly as"
+         " iccApplyToLink:\n");
+  printf("                       units 0..3   rendering intent\n");
+  printf("                       tens  0..9   transform type"
+         " (1 = no D2Bx/B2Dx, 4 = BPC)\n");
+  printf("                       +100         luminance-based PCS adjustment\n");
+  printf("                       +1000        use V5 sub-profile if present\n");
+  printf("                     Run iccApplyToLink with no arguments for the"
+         " full\n");
+  printf("                     list of tens-column codes.\n\n");
   printf("  -pixels N          pixels per buffer      (default 1048576)\n");
   printf("  -repeats N         timed repeats per case (default 7)\n");
   printf("  -perxform          per-xform breakdown, including PCS steps\n");
@@ -138,11 +156,25 @@ static bool ParseIntArg(const char *arg, int minValue, int maxValue, int &value)
   return true;
 }
 
-// Decodes one encoded rendering intent the way iccApplyToLink.cpp:1054-1059 does,
-// so a chain given to this tool and the same chain given to that one resolve
+// Decodes one encoded rendering intent the way iccApplyToLink.cpp does, so a
+// chain given to this tool and the same chain given to that one resolve
 // identically. Returns false when the decoded intent is out of range.
+//
+// Every column is now read here.  The two that were not are #2271: the hundreds
+// column is a luminance-matching request, which this function used to strip
+// without assigning, and a tens digit of 4 asks for black-point compensation,
+// which used to reach AddXform() as the lookup type icXformLutBPC (IccCmm.h:136
+// happens to be 0x4) and made the whole chain fail with "Invalid Look-Up Table
+// type".  Both are hints rather than return values, which is why the caller now
+// supplies a hint manager -- there was previously nowhere to put them.
+//
+// Hint is filled, never cleared: the caller owns it and may already have put
+// something in it.  Ownership of each hint passes to Hint, and Hint must outlive
+// the AddXform() call that reads it, so both callers declare one per profile
+// inside the loop, exactly as iccApplyToLink does.
 static bool DecodeIntent(int nEncoded, int &nIntent, int &nType,
-                         bool &bUseSubProfile, bool &bUseD2BxB2DxTags)
+                         bool &bUseSubProfile, bool &bUseD2BxB2DxTags,
+                         CIccCreateXformHintManager &Hint)
 {
   // Assigned before the guard below so every return path leaves the caller with
   // defined values.  The early return is new, and both current callers treat
@@ -162,24 +194,48 @@ static bool DecodeIntent(int nEncoded, int &nIntent, int &nType,
   // the built-in -suite table held to the same rule as the command line, and
   // matches the guard iccApplyToLink grew in the same change (#2268, #2190).
   //
-  // The sign rule is the only part of this decode that is now known to match
-  // that tool column for column.  Two others do NOT: the hundreds column is
-  // read there as a luminance-matching request and is discarded here, and a
-  // tens digit of 4 selects black-point compensation there while reaching
-  // AddXform() as icXformLutBPC here.  Do not widen the equivalence claim
-  // above without closing those.
+  // This guard alone refuses before any hint is constructed.  The OTHER rejection
+  // -- the intent range test at the bottom -- deliberately does not: it runs after
+  // both AddHint() calls, so "45" adds the BPC hint and then returns false,
+  // leaving a partially filled manager.  That order is iccApplyToLink's, and
+  // keeping the two diffable is worth more than the narrower guarantee, because
+  // the manager is per profile and both callers treat false as fatal and destroy
+  // it unread.  A third caller that ignored the return value would be the one
+  // case this matters for, so: the return value is the contract, not the manager.
   if (nEncoded < 0)
     return false;
 
   bUseSubProfile = (nEncoded / 1000) > 0;
   nIntent = nEncoded % 1000;
+  // Split out rather than folded into the "% 100" below: this is the column
+  // iccApplyToLink reads as nLuminance, and reading it is the point (#2271).
+  const int nLuminance = nIntent / 100;
   nIntent = nIntent % 100;
   nType   = abs(nIntent) / 10;
   nIntent = nIntent % 10;
 
-  if (nType == 1) {
+  // Spelled as the same switch iccApplyToLink uses, in the same order, because
+  // the two are required to agree and a divergence is easiest to see when the
+  // two blocks read alike.  Types 2, 3 and 5..9 fall through to AddXform() as
+  // themselves; only 1 and 4 are re-encoded as flags on type 0.
+  switch (nType) {
+  case 1:
     nType = 0;
     bUseD2BxB2DxTags = false;
+    break;
+  case 4:
+    nType = 0;
+    Hint.AddHint(new CIccApplyBPCHint());
+    break;
+  default:
+    break;
+  }
+
+  // Added after the type switch and before the range test, matching the order in
+  // iccApplyToLink -- the hint is independent of both, but keeping the sequence
+  // identical is what makes the two decodes diffable.
+  if (nLuminance) {
+    Hint.AddHint(new CIccLuminanceMatchingHint());
   }
 
   // Only the upper bound is testable.  nIntent is "% 100" then "% 10" of a
@@ -499,7 +555,13 @@ static int RunSuite()
     for (size_t i = 0; i < bc.chain.size(); i++) {
       int nIntent, nType;
       bool bSub, bD2B;
-      if (!DecodeIntent(bc.chain[i].encodedIntent, nIntent, nType, bSub, bD2B)) {
+      // Declared inside the loop: a hint manager owns the hints it is given and
+      // is read during AddXform(), so each profile in the chain needs its own
+      // (#2271).  One hoisted out would carry profile 0's BPC request onto every
+      // later profile in the same case.
+      CIccCreateXformHintManager Hint;
+      if (!DecodeIntent(bc.chain[i].encodedIntent, nIntent, nType, bSub, bD2B,
+                        Hint)) {
         printf("  %-16s SKIP   bad encoded intent %d\n",
                bc.name.c_str(), bc.chain[i].encodedIntent);
         bBuilt = false;
@@ -511,7 +573,7 @@ static int RunSuite()
                                          bc.interpolation ? icInterpTetrahedral
                                                           : icInterpLinear,
                                          NULL, (icXformLutType)nType,
-                                         bD2B, NULL, bSub);
+                                         bD2B, &Hint, bSub);
       if (stat != icCmmStatOk) {
         if (g_bCsv)
           printf("%s,,,,,,skip-addxform\n", bc.name.c_str());
@@ -777,8 +839,10 @@ int main(int argc, const char *argv[])
 
     int nIntent, nType;
     bool bUseSubProfile, bUseD2BxB2DxTags;
+    // Per profile, for the reason given at the -suite call site above.
+    CIccCreateXformHintManager Hint;
     if (!DecodeIntent(nEncoded, nIntent, nType,
-                      bUseSubProfile, bUseD2BxB2DxTags)) {
+                      bUseSubProfile, bUseD2BxB2DxTags, Hint)) {
       // Two distinct rejections share one gate, so name which one fired.  The
       // sign case is the whole point of the guard: "-10" used to be accepted
       // and resolve as "10", so reporting it as an out-of-range decoded intent
@@ -811,7 +875,7 @@ int main(int argc, const char *argv[])
                                        pPccProfile.get(),
                                        (icXformLutType)nType,
                                        bUseD2BxB2DxTags,
-                                       NULL,
+                                       &Hint,
                                        bUseSubProfile);
     if (stat != icCmmStatOk) {
       printf("Unable to add '%s' to the chain: %s\n",
