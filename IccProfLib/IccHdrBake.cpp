@@ -373,6 +373,20 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
       m_matrix[row * 3 + col] = columns[col * 3 + row];
   }
 
+  // PROPOSAL-ISSUE HDR-07.  The same replacement CIccXformMatrixTrcHdr::Begin()
+  // makes, and it HAS to be the same one: this bake exists to store that path's
+  // rendering in a lutAToBType, so a matrix that differs from the CMM's is not
+  // an approximation of it - it is a different rendering wearing its name.
+  // Clause 8.10.1's "shall" puts the cicpTag's primaries ahead of the colorant
+  // tags read above, and icBuildHdrForwardMatrix() supplies the chromatic
+  // adaptation that 8.10.1 NOTE 2 leaves out.
+  if (info.nColourPrimaries != icCicpPrimariesUnspecified) {
+    icFloatNumber fwd[9];
+
+    if (icBuildHdrForwardMatrix(pProfile, info.nColourPrimaries, fwd))
+      memcpy(m_matrix, fwd, sizeof(m_matrix));
+  }
+
   memcpy(m_inverse, m_matrix, sizeof(m_inverse));
   m_bInverseValid = icMatrixInvert3x3(m_inverse);
 

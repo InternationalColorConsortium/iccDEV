@@ -1118,6 +1118,132 @@ bool icHagcGetGainApplicationPrimaries(icUInt8Number nMode, const icFloatNumber 
 
 /**
  ****************************************************************************
+ * Name: icHdrGetChad
+ *
+ * Purpose: Read a profile's chromaticAdaptationTag into a row-major 3x3.
+ *
+ * Return:
+ *  true when the tag is present and well formed; false when it is absent,
+ *  which is not an error - the caller then treats the profile's actual
+ *  adopted white as the PCS adopted white
+ ****************************************************************************
+ */
+static bool icHdrGetChad(const CIccProfile *pProfile, icFloatNumber *chad)
+{
+  const CIccTag *pChad = icHdrFindTag(pProfile, icSigChromaticAdaptationTag);
+
+  if (!pChad || pChad->GetType() != icSigS15Fixed16ArrayType)
+    return false;
+
+  const CIccTagS15Fixed16 *pChadTag = (const CIccTagS15Fixed16*)pChad;
+
+  if (pChadTag->GetSize() < 9)
+    return false;
+
+  /* Read through GetValues() rather than operator[], for the reasons
+   * icGetProfilePrimaries() gives at its own chad read: it is the const
+   * accessor, it converts from s15Fixed16 itself, and it bounds-checks. */
+  return pChadTag->GetValues(chad, 0, 9);
+}
+
+/**
+ ****************************************************************************
+ * Name: icBuildHdrForwardMatrix
+ *
+ * Purpose: Clause 8.10.2 c)'s RGB-to-PCSXYZ matrix, built from the cicpTag's
+ *  primaries, with the chromatic adaptation NOTE 2 leaves out.
+ *
+ *  READ THE HEADER.  The three-step order there is a ruling against defective
+ *  normative text (PROPOSAL-ISSUE HDR-07), not a transcription of it.
+ *
+ * Args:
+ *  pProfile = the profile
+ *  nColourPrimaries = the cicpTag's ColourPrimaries field
+ *  matrix = receives nine elements, row major
+ *
+ * Return:
+ *  false when the value names no chromaticities, the mediaWhitePointTag is
+ *  absent, or the chromaticAdaptationTag is singular
+ ****************************************************************************
+ */
+bool icBuildHdrForwardMatrix(const CIccProfile *pProfile, icUInt8Number nColourPrimaries,
+                             icFloatNumber *matrix)
+{
+  if (!pProfile || !matrix)
+    return false;
+
+  icCicpPrimaries primaries;
+
+  /* Value 2 is deliberately not handled here: 9.2.17 sends it to the profile's
+   * own matrix column tags, which are then the matrix and need no building. */
+  if (!icGetCicpPrimaries(nColourPrimaries, primaries))
+    return false;
+
+  icFloatNumber white[3];
+
+  if (!icHdrGetXyzTag(pProfile, icSigMediaWhitePointTag, white))
+    return false;
+
+  icFloatNumber chad[9], chadInv[9];
+  bool bHasChad = icHdrGetChad(pProfile, chad);
+
+  if (bHasChad) {
+    memcpy(chadInv, chad, sizeof(chadInv));
+
+    if (!icMatrixInvert3x3(chadInv))
+      return false;
+
+    /* Step 1: the profile's ACTUAL adopted white.  The mediaWhitePointTag is
+     * encoded relative to the PCS adopted white and the chad is the matrix
+     * that took it there, so the inverse recovers it - BALLOT-01's ruling,
+     * and getting the direction wrong here moves the white by about 0,035 in
+     * x while still producing a plausible matrix. */
+    double w[3];
+    int i;
+
+    for (i = 0; i < 3; i++) {
+      w[i] = (double)chadInv[i * 3 + 0] * (double)white[0] +
+             (double)chadInv[i * 3 + 1] * (double)white[1] +
+             (double)chadInv[i * 3 + 2] * (double)white[2];
+    }
+
+    white[0] = (icFloatNumber)w[0];
+    white[1] = (icFloatNumber)w[1];
+    white[2] = (icFloatNumber)w[2];
+  }
+
+  /* The white as a chromaticity, which is what the primary matrix wants.  A
+   * white with no tristimulus sum is not a white. */
+  double sum = (double)white[0] + (double)white[1] + (double)white[2];
+
+  if (!(sum > 0.0))
+    return false;
+
+  primaries.xWhite = (icFloatNumber)((double)white[0] / sum);
+  primaries.yWhite = (icFloatNumber)((double)white[1] / sum);
+
+  /* Step 2: the primary matrix at the profile's actual adopted white. */
+  icFloatNumber actual[9];
+
+  if (!icBuildRgbToXyzMatrix(primaries, actual))
+    return false;
+
+  if (!bHasChad) {
+    /* No chad means the actual adopted white IS the PCS adopted white, so
+     * there is nothing to adapt and step 3 is the identity. */
+    memcpy(matrix, actual, sizeof(icFloatNumber) * 9);
+    return true;
+  }
+
+  /* Step 3: M_PCS = [chad] . M_actual.  This is the operation NOTE 2 omits,
+   * and it is why the columns of the result do not sit at the H.273
+   * chromaticities. */
+  icMatrixMultiply3x3(matrix, chad, actual);
+  return true;
+}
+
+/**
+ ****************************************************************************
  * Name: icGetHdrProfileInfo
  *
  * Purpose: Classify a profile against clause 8.10 and resolve everything the

@@ -513,6 +513,52 @@ ICCPROFLIB_API bool icHagcGetGainApplicationPrimaries(icUInt8Number nMode,
                                                       icCicpPrimaries &primaries);
 
 /**
+ * Build the RGB-to-PCSXYZ matrix that clause 8.10.2 c) needs, for an HDR
+ * Profile whose cicpTag names a set of primaries.
+ *
+ * 8.10.1 makes this mandatory and not optional: when ColourPrimaries is not 2,
+ * the matrix "shall be computed from the chromaticity coordinates associated
+ * with ColourPrimaries (see Rec. ITU-T H.273, Table 2) and the profile's
+ * adopted white point", and the matrix column tags are no longer required to
+ * be present at all.
+ *
+ * PROPOSAL-ISSUE HDR-07: NOTE 2's stated procedure cannot produce that matrix.
+ * It asks for the H.273 chromaticities and the profile's adopted white point
+ * and then stops, which yields a matrix whose columns sit at the H.273
+ * chromaticities - but 8.10.2 c) feeds PCSXYZ, whose values are relative to
+ * the PCS adopted white.  No choice of white point closes the gap, because
+ * what is missing is not a white point but an operation: the chromatic
+ * adaptation.  ICC.1 6.2.1 NOTE 1 explains why nobody noticed - a CMM never
+ * applies the chad, because in a conventional profile the author baked it into
+ * the matrix column tags, and NOTE 2 moved matrix construction to run time
+ * without moving the adaptation with it.
+ *
+ * The ruling implemented here is the register's suggested resolution, in
+ * order:
+ *
+ *   1. recover the profile's ACTUAL adopted white by applying the inverse of
+ *      the chromaticAdaptationTag to the mediaWhitePointTag - the same
+ *      inverse, and for the same reason, as icGetProfilePrimaries() above
+ *      (PROPOSAL-ISSUE BALLOT-01);
+ *   2. build the primary matrix from the H.273 chromaticities and that white;
+ *   3. apply the chromaticAdaptationTag to the result, so that
+ *      M_PCS = [chad] . M_actual.
+ *
+ * The columns of the returned matrix therefore do NOT sit at the H.273
+ * chromaticities, which is the point: they sit where a conventional profile's
+ * matrix column tags would have sat, because that is what PCSXYZ means.
+ *
+ * Returns false when ColourPrimaries names no chromaticities (0, 2, 3 and the
+ * unassigned values), when the mediaWhitePointTag is absent, or when the
+ * chromaticAdaptationTag is present but singular.  A caller that gets false
+ * for ColourPrimaries equal to 2 should use the profile's own matrix column
+ * tags, which is what 9.2.17 directs for that value.
+ */
+ICCPROFLIB_API bool icBuildHdrForwardMatrix(const CIccProfile *pProfile,
+                                            icUInt8Number nColourPrimaries,
+                                            icFloatNumber *matrix);
+
+/**
  * Classify a profile against clause 8.10 and resolve everything the clause
  * defines. Returns false only when pProfile is NULL; a profile that is not an
  * HDR Profile is reported as icHdrProfileNone with the structural fields

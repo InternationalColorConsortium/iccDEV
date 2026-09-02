@@ -378,6 +378,78 @@ void testPrimariesMatrices()
 }
 
 // ---------------------------------------------------------------------------
+// 3c. Clause 8.10.2 c)'s forward matrix, built from the cicpTag (HDR-07)
+// ---------------------------------------------------------------------------
+//
+// The assertion that carries this one is not a number out of the standard: it
+// is that for a CONVENTIONALLY authored profile - one that declares primaries
+// in its cicpTag and also carries the matrix column tags a pre-amendment
+// profile would have - the matrix derived from the cicpTag reproduces the
+// tags. It has to, because both describe the same display, and the tags are
+// what an author baked the chromatic adaptation into.
+//
+// That is exactly what NOTE 2's stated procedure does NOT do, which is HDR-07:
+// stopping at the H.273 chromaticities and the adopted white leaves the result
+// at the display's own white instead of the PCS adopted white, off by the
+// whole D65-to-D50 adaptation.
+void testHdrForwardMatrix()
+{
+  icFloatNumber m[9];
+
+  CIccProfile *pProfile = openFixture("HdrDisplayMetadata.icc");
+
+  if (pProfile) {
+    // BT.709 in the cicpTag, sRGB colorants, and a Bradford D65-to-D50
+    // chromaticAdaptationTag - the ordinary shape.
+    check(icBuildHdrForwardMatrix(pProfile, 1, m), "the forward matrix builds for BT.709");
+
+    // The profile's own red colorant, for comparison. 1e-4 is the s15Fixed16
+    // grid the colorant tags are quantised onto plus the chad's own rounding;
+    // it is not a loose tolerance, it is the exact one this can be checked to.
+    checkClose(m[0], 0.436005, 1e-4, "derived matrix reproduces the red colorant X");
+    checkClose(m[3], 0.222504, 1e-4, "derived matrix reproduces the red colorant Y");
+    checkClose(m[1], 0.385101, 1e-4, "derived matrix reproduces the green colorant X");
+    checkClose(m[4], 0.716904, 1e-4, "derived matrix reproduces the green colorant Y");
+    checkClose(m[8], 0.713898, 1e-4, "derived matrix reproduces the blue colorant Z");
+
+    // And the discriminator: NOTE 2 as written would give the canonical sRGB
+    // matrix, whose red X is 0.412391. The adaptation is worth 0.024 here -
+    // twenty times the agreement above - so a reader cannot mistake one
+    // result for the other.
+    check(fabs(m[0] - 0.412391) > 0.02,
+          "the result is adapted to the PCS white, not left at the display's own");
+
+    // Value 2 has no chromaticities to build from: 9.2.17 sends it to the
+    // profile's own matrix column tags instead, and this must say so rather
+    // than inventing a matrix.
+    check(!icBuildHdrForwardMatrix(pProfile, 2, m), "ColourPrimaries 2 is not built here");
+    check(!icBuildHdrForwardMatrix(pProfile, 0, m), "Reserved (0) builds nothing");
+    check(!icBuildHdrForwardMatrix(pProfile, 13, m), "an unassigned value builds nothing");
+    check(!icBuildHdrForwardMatrix(NULL, 1, m), "a null profile is refused");
+
+    delete pProfile;
+  }
+
+  // A profile whose declared primaries and colorant tags genuinely disagree is
+  // where the clause's "shall" bites: BT.2020 in the cicpTag against colorants
+  // that are not BT.2020. The derived matrix must follow the cicpTag.
+  pProfile = openFixture("HagcMixingTypes.icc");
+
+  if (pProfile) {
+    check(icBuildHdrForwardMatrix(pProfile, 9, m), "the forward matrix builds for BT.2020");
+    check(fabs(m[0] - 0.636963) > 0.02,
+          "a disagreeing profile follows its cicpTag, not its colorant tags");
+
+    // BT.2020's blue primary has y = 0.046 and the green x = 0.170, so the
+    // matrix is recognisably BT.2020 rather than BT.709: the red column's Y
+    // is well above BT.709's 0.2225.
+    check(m[3] > 0.26, "the red column's luminance is BT.2020's, not BT.709's");
+
+    delete pProfile;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 4. The content-headroom priority order of clause 8.10.4 (Linear transfer)
 // ---------------------------------------------------------------------------
 void testContentHeadroom()
@@ -578,6 +650,7 @@ int main()
   testProfilePrimaries();
   testDisplayMetadata();
   testPrimariesMatrices();
+  testHdrForwardMatrix();
   testContentHeadroom();
   testClassification();
 

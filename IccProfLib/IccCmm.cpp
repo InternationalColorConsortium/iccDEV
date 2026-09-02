@@ -6739,6 +6739,40 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
     return icCmmStatProfileMissingTag;
   }
 
+  // PROPOSAL-ISSUE HDR-07.  Clause 8.10.1 is a "shall": when ColourPrimaries
+  // is not 2, the RGB-to-PCSXYZ matrix of 8.10.2 c) is computed from the
+  // H.273 chromaticities and the profile's adopted white, NOT from the matrix
+  // column tags - which this revision no longer requires a profile to carry.
+  // The base class has just built m_e from those tags, so this replaces it.
+  //
+  // icBuildHdrForwardMatrix() adds the chromatic adaptation NOTE 2 omits; see
+  // its header.  For a conventionally authored profile the two agree to the
+  // s15Fixed16 quantisation of the colorant tags, which is the check that the
+  // ruling is right - dropping the adaptation moves the result by about 0,024
+  // in X, twenty times the disagreement that remains.
+  //
+  // A profile whose declared primaries and colorant tags genuinely disagree
+  // renders differently from here on, and by the clause's own "shall" that is
+  // the intended outcome: the cicpTag is the statement of what the encoding
+  // is, and the colorant tags are then stale.
+  if (info.nColourPrimaries != icCicpPrimariesUnspecified) {
+    icFloatNumber fwd[9];
+
+    if (icBuildHdrForwardMatrix(m_pProfile, info.nColourPrimaries, fwd)) {
+      memcpy(m_e, fwd, sizeof(m_e));
+
+      // The base inverts m_e for the output direction, so a replacement has
+      // to be inverted too - and this is the one failure that must not be
+      // tolerated, since the xform would otherwise carry a forward matrix
+      // while claiming to run backwards.
+      if (!m_bInput && !icMatrixInvert3x3(m_e))
+        return icCmmStatInvalidProfile;
+    }
+    // A failure to build is not fatal: the base's matrix from the colorant
+    // tags is what a pre-amendment CMM would have used, and for a profile
+    // that carries them it remains a defensible rendering.
+  }
+
   if (!m_transfer.Init(info.nTransferCharacteristics, info.contentReferenceWhite,
                        m_hlgGamma, m_hlgPeakLuminance)) {
     return icCmmStatUnsupported;

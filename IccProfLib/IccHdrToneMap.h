@@ -134,15 +134,27 @@ namespace iccDEV {
  * peak per Rec. ITU-R BT.2100)" - but it names no value, so the number below
  * is this implementation's choice and not a transcription.
  *
- * What is NOT missing is the formula.  BT.2100-3 (02/2025) Note 5f, read
- * 2026-09-01, gives gamma = 1,2 + 0,42 * log10(Lw / 1000) over the usual
- * production monitoring range of Lw = 400 to 2 000 cd/m^2, and gamma = 1,2 *
- * k^log2(Lw / 1000) with k = 1,111 outside it - two formulas with a branch at
- * each end of that range, which any per-profile implementation has to get
- * right.  So the only open question is where Lw comes from; the HDR Display
- * DCV maximum luminance this library already parses is the natural source.
- * Wiring it in changes rendered output for every HLG profile that carries one
- * and is deliberately not done here. */
+ * RESOLVED 2026-09-02, and the values below are NOT this implementation's
+ * choice after all.  SMPTE ST 2094-50 Annex A.2, specifying the very step
+ * this class performs, says that for HLG content the EOTF is "the HLG
+ * Reference EOTF as described in Table 5 of Recommendation ITU-R BT.2100-3,
+ * with parameters L_W = 1000, L_B = 0, and gamma = 1,2".  Both constants are
+ * pinned, at exactly the values here.
+ *
+ * So a per-profile Lw is not a missing feature; putting one in would
+ * CONTRADICT the annex.  BT.2100-3 Note 5f does give gamma as a function of
+ * Lw - 1,2 + 0,42 * log10(Lw / 1000) over the production range of 400 to
+ * 2 000 cd/m^2, and 1,2 * k^log2(Lw / 1000) with k = 1,111 outside it - but
+ * that formula belongs to the DISPLAY the signal is being rendered for, which
+ * is A.4's territory and explicitly outside ST 2094-50's scope.  It is not
+ * the content decode this class implements.
+ *
+ * What remains open is only that the ICC amendment itself says none of this:
+ * 8.10.4 NOTE 9 licenses "the conventions of the
+ * cicpTag.TransferCharacteristics" without naming a value, so an implementer
+ * reading only ICC documents still has to go and find A.2 to learn what the
+ * conventions are.  That is the same gap HAGC-05 and HAGC-10 record, not a
+ * defect in these constants. */
 #define icHlgDefaultGamma 1.2
 #define icHlgDefaultPeakLuminance 1000.0
 
@@ -160,19 +172,23 @@ namespace iccDEV {
  * signal - but for a profile declaring, say, ColourPrimaries 1 it silently
  * forms Y_s from primaries the profile does not use.
  *
- * Read against H.273 (V4) on 2026-09-01, the alternative is better supported
- * than this comment previously said.  Table 4 ties these same three numbers to
- * MatrixCoefficients 9 (BT.2020 / BT.2100 non-constant luminance), and
- * equations 39 to 44 give a general chromaticity-derived K_R / K_B for
- * MatrixCoefficients 12 and 13 - a mechanism for computing luma constants from
- * whatever primaries a profile declares.  The cicpTag even carries the
- * MatrixCoefficients field that would select between them; icGetHdrProfileInfo
- * reports it, and nothing in this file consults it.
+ * RESOLVED 2026-09-02, and in the opposite direction to the one this comment
+ * previously left open.  SMPTE ST 2094-50 Annex A.2 NOTE 7 is explicit: "The
+ * HLG Reference OOTF in this formulation must be applied using the color
+ * primaries indicated in Table 2 of Recommendation ITU-R BT.2100-3" - which
+ * are BT.2020's.  Holding these coefficients at BT.2020 is therefore
+ * REQUIRED, and deriving them from a profile's declared ColourPrimaries -
+ * the alternative floated here a day earlier - is the thing the corpus rules
+ * out.  H.273's chromaticity-derived K_R / K_B (equations 39 to 44) exists for
+ * MatrixCoefficients 12 and 13 and has nothing to do with the OOTF.
  *
- * So the choice is between applying BT.2100's OOTF as BT.2100 defines it, and
- * applying a primaries-consistent variant of it that no text asks for.  That
- * is a ruling about rendered output, not a gap in the corpus, and it is
- * deliberately not taken here. */
+ * NOTE 7 does imply something this implementation does NOT do, and it is
+ * worth knowing about: taken strictly, an HLG signal whose ColourPrimaries
+ * are not 9 should be converted INTO BT.2020 primaries before the OOTF and
+ * back afterwards, rather than having BT.2020 coefficients applied to it
+ * where it stands.  No profile in the corpus is in that state - every HLG
+ * fixture declares ColourPrimaries 9 - so the case is unexercised as well as
+ * unimplemented.  Recorded rather than guessed at. */
 #define icHlgLumaR 0.2627
 #define icHlgLumaG 0.6780
 #define icHlgLumaB 0.0593
