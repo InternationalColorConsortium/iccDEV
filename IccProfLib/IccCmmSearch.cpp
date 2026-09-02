@@ -71,6 +71,8 @@
 #include "IccCmmSearch.h"
 
 #include <cmath>
+#include <memory>
+#include <utility>
 
 
 CIccApplyCmmSearch::CIccApplyCmmSearch(CIccCmm* pBaseCmm) : CIccApplyCmm(pBaseCmm)
@@ -118,28 +120,38 @@ CIccApplyCmmSearch::CIccApplyCmmSearch(CIccCmm* pBaseCmm) : CIccApplyCmm(pBaseCm
   m_bNeedPcsToLab = pCmm->m_bNeedPcsToLab;
 
   icStatusCMM status = icCmmStatOk;
-  m_pMidToDstApply = pCmm->m_mid_to_dst->GetNewApplyCmm(status);
-  if (!m_pMidToDstApply || status != icCmmStatOk)
+  std::unique_ptr<CIccApplyCmm> mid_to_dst_apply(
+    pCmm->m_mid_to_dst->GetNewApplyCmm(status));
+  if (!mid_to_dst_apply || status != icCmmStatOk)
     return;
 
+  std::vector<std::unique_ptr<CIccApplyCmm>> src_to_mid_apply;
+  src_to_mid_apply.reserve(pCmm->m_src_to_mid.size());
   for (const auto& cmm : pCmm->m_src_to_mid) {
-    CIccApplyCmm* apply = cmm->GetNewApplyCmm(status);
+    std::unique_ptr<CIccApplyCmm> apply(cmm->GetNewApplyCmm(status));
     if (!apply || status != icCmmStatOk) {
-      delete apply;
       return;
     }
-    m_srcToMidApply.push_back(apply);
+    src_to_mid_apply.push_back(std::move(apply));
   }
 
+  std::vector<std::unique_ptr<CIccApplyCmm>> dst_to_mid_apply;
+  dst_to_mid_apply.reserve(pCmm->m_dst_to_mid.size());
   for (const auto& cmm : pCmm->m_dst_to_mid) {
-    CIccApplyCmm* apply = cmm->GetNewApplyCmm(status);
+    std::unique_ptr<CIccApplyCmm> apply(cmm->GetNewApplyCmm(status));
     if (!apply || status != icCmmStatOk) {
-      delete apply;
       return;
     }
-    m_dstToMidApply.push_back(apply);
+    dst_to_mid_apply.push_back(std::move(apply));
   }
 
+  m_srcToMidApply.reserve(src_to_mid_apply.size());
+  m_dstToMidApply.reserve(dst_to_mid_apply.size());
+  m_pMidToDstApply = mid_to_dst_apply.release();
+  for (auto& apply : src_to_mid_apply)
+    m_srcToMidApply.push_back(apply.release());
+  for (auto& apply : dst_to_mid_apply)
+    m_dstToMidApply.push_back(apply.release());
   m_bReady = true;
 }
 
@@ -616,7 +628,14 @@ CIccApplyCmm* CIccCmmSearch::GetNewApplyCmm(icStatusCMM& status)
     return nullptr;
   }
 
-  CIccApplyCmmSearch* apply = new (std::nothrow) CIccApplyCmmSearch(this);
+  CIccApplyCmmSearch* apply = nullptr;
+  try {
+    apply = new (std::nothrow) CIccApplyCmmSearch(this);
+  }
+  catch (const std::bad_alloc&) {
+    status = icCmmStatAllocErr;
+    return nullptr;
+  }
   if (!apply) {
     status = icCmmStatAllocErr;
     return nullptr;

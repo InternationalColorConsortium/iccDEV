@@ -45,6 +45,20 @@ static int TestThreadedSearch(const char* profilePath)
   pcc_weight->m_dWeight = 1.0f;
   search_apply.m_pccWeights.push_back(pcc_weight);
 
+  std::string too_many_threads_error;
+  std::unique_ptr<CIccConnectCmm> too_many_threads(
+    CIccConnectCmm::CreateSearch(
+      search_apply, &too_many_threads_error, CIccThreadedCmm::GetMaxThreads() + 1));
+  if (too_many_threads) {
+    std::fprintf(stderr, "oversized search thread count was accepted\n");
+    return 1;
+  }
+  if (too_many_threads_error.find("invalid thread count") == std::string::npos) {
+    std::fprintf(stderr, "missing oversized search thread count error: %s\n",
+                 too_many_threads_error.c_str());
+    return 1;
+  }
+
   std::string default_error;
   std::string scalar_error;
   std::string automatic_error;
