@@ -2011,6 +2011,8 @@ filename_list parse_arguments( int argc, char *argv[] )
 
 int main(int argc, char* argv[])
 {
+  int status = 0;
+
   if (argc <= 1) {
     printUsage();
     return 0;
@@ -2038,14 +2040,17 @@ int main(int argc, char* argv[])
       processProfile( pIcc, basename, data );
 
       size_t count = 0;
+      bool outputCreated = true;
       if (gOutputJSON)
         count = outputDataToJSON( data, sanitizedFile );
       else
-        count = outputDataToPDF( data, basename );
+        outputCreated = outputDataToPDF( data, basename, count );
       
       if (!count) {
         LogAnError(stderr,"Profile %s had no content for output\n", sanitizedFile.c_str() );
       }
+      if (!outputCreated)
+        status = 1;
 
       delete pIcc;
     }   // end try
@@ -2060,7 +2065,7 @@ int main(int argc, char* argv[])
 
   } // end for file list
 
-  return 0;
+  return status;
 }
 
 /******************************************************************************/

@@ -598,8 +598,8 @@ void outputNamedColorsXYPDF( xyPlotData *plot, PDFWriter &pdffile )
   commands << "Q\n";
 
   // and finally create the graphics object and page
-  PDFGraphic *graphics = new PDFGraphic( commands.str() );
-  pdffile.AddObject( graphics );
+  if (!pdffile.AddNewObject<PDFGraphic>(commands.str()))
+    return;
   size_t content = pdffile.ObjectCount();
 
   pdffile.AddPage( plot->object_name, content, "xyPlot" );
@@ -685,8 +685,8 @@ void outputNamedColorsABPDF( abPlotData *plot, PDFWriter &pdffile )
 
 
   // and finally create the graphics object and page
-  PDFGraphic *graphics = new PDFGraphic( commands.str() );
-  pdffile.AddObject( graphics );
+  if (!pdffile.AddNewObject<PDFGraphic>(commands.str()))
+    return;
   size_t content = pdffile.ObjectCount();
 
   pdffile.AddPage( plot->object_name, content, "abPlot" );
@@ -750,8 +750,8 @@ void output1DLUTPDF( lutPlotData *lut, PDFWriter &pdffile )
   }
 
   // and finally create the graphics object and page
-  PDFGraphic *graphics = new PDFGraphic( commands.str() );
-  pdffile.AddObject( graphics );
+  if (!pdffile.AddNewObject<PDFGraphic>(commands.str()))
+    return;
   size_t content = pdffile.ObjectCount();
   std::string pageName = extract_LUTNameForBookmark( fullName );
   pdffile.AddPage( pageName, content, "Axes" );
@@ -759,10 +759,13 @@ void output1DLUTPDF( lutPlotData *lut, PDFWriter &pdffile )
 
 /******************************************************************************/
 
-size_t outputDataToPDF( profileVisualizationData &data, const std::string &basename )
+bool outputDataToPDF( profileVisualizationData &data, const std::string &basename,
+                      size_t &objectCount )
 {
+  objectCount = 0;
+
   if (data.pages.size() == 0)
-    return 0;
+    return true;
 
 // write next to input file
 // write output to basename + _luts.pdf
@@ -770,6 +773,8 @@ size_t outputDataToPDF( profileVisualizationData &data, const std::string &basen
 
   std::string pdfPath = basename + "_luts.pdf";
   PDFWriter pdffile( pdfPath, 8*inch2point, 8*inch2point );
+  if (!pdffile.IsValid())
+    return false;
 
   // iterate over pages in data
   for (auto &page : data.pages ) {
@@ -800,11 +805,11 @@ size_t outputDataToPDF( profileVisualizationData &data, const std::string &basen
     }
   } // end iteration over pages
 
-  size_t objectCount = pdffile.PageCount(); // grab page count before destroying the pages
+  objectCount = pdffile.PageCount(); // grab page count before destroying the pages
+  if (!pdffile.CloseFile())
+    return false;
 
-  pdffile.CloseFile();
-
-  return objectCount;
+  return true;
 
 }   // end outputDataToPDF()
 

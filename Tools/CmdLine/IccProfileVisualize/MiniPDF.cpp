@@ -289,7 +289,7 @@ float PDFEstimateStringWidth( const std::string &str, float textSizePts )
 /******************************************************************************/
 /******************************************************************************/
 
-void PDFWriter::OpenFile( const std::string &filename, float widthPt, float heightPt )
+bool PDFWriter::OpenFile( const std::string &filename, float widthPt, float heightPt )
 {
   if (!m_filename.empty()) {
     LogAnError(stderr,"WARNING - PDF file already open!\n");
@@ -300,40 +300,43 @@ void PDFWriter::OpenFile( const std::string &filename, float widthPt, float heig
   m_pageHeight = heightPt;
 
   m_objects.clear();
+  m_xobjects.clear();
+  m_pageCount = 0;
   m_xrefStart = 0;          // set when writing
+  m_ok = true;
 
   // root = 1
   m_outlineParentIndex = 2;
   m_pageParentIndex = 3;
 
   // Create root object, always object 1
-  PDFRoot *rootObj = new PDFRoot(m_pageParentIndex,m_outlineParentIndex);
-  m_objects.push_back( rootObj );
+  if (!AddNewObject<PDFRoot>(m_pageParentIndex, m_outlineParentIndex))
+    return false;
 
   // Create outline data from pages
-  PDFOutlineParent *outlineObj = new PDFOutlineParent();
-  m_objects.push_back( outlineObj );
+  if (!AddNewObject<PDFOutlineParent>())
+    return false;
 
   // Create page parent, link to add children out of order
-  PDFPageParent *pageParentObj = new PDFPageParent();
-  m_objects.push_back( pageParentObj );
+  if (!AddNewObject<PDFPageParent>())
+    return false;
 
 
   // common procset
-  PDFProcSet *procObj = new PDFProcSet( "[/PDF /Text]" );
-  m_objects.push_back( procObj );
+  if (!AddNewObject<PDFProcSet>("[/PDF /Text]"))
+    return false;
   size_t procSet = m_objects.size();
   m_procsetIndex = procSet;
 
   // common font definition
-  PDFFont *fontObj = new PDFFont( "Helvetica" );
-  m_objects.push_back( fontObj );
+  if (!AddNewObject<PDFFont>("Helvetica"))
+    return false;
   size_t font = m_objects.size();
   m_fontIndex = font;
 
   // common group object
-  PDFGroup *groupObj = new PDFGroup();
-  m_objects.push_back( groupObj );
+  if (!AddNewObject<PDFGroup>())
+    return false;
   size_t group = m_objects.size();
   m_groupIndex = group;
 
@@ -344,20 +347,30 @@ void PDFWriter::OpenFile( const std::string &filename, float widthPt, float heig
   (void)PDFDebugPages( *this );
 #endif
 
+  return true;
 }
 
 /******************************************************************************/
 
-void PDFWriter::CloseFile()
+bool PDFWriter::CloseFile()
 {
+  bool success = m_ok;
+
   if (!m_filename.empty()) {
-    if (PageCount() > 0) {
+    if (m_ok && PageCount() > 0) {
         try  {
           std::ostringstream out;
           out.exceptions(std::ios::badbit | std::ios::failbit);
 
           CreateTOCFromPages();     // this inserts pages, be careful!
           CreateOutlineFromPages();
+          if (!m_ok) {
+            LogAnError(stderr, "PDF writing error in '%s': unable to allocate PDF objects\n", m_filename.c_str());
+            m_filename.clear();
+            m_objects.clear();
+            m_xobjects.clear();
+            return false;
+          }
           WriteHeader(out);
           WriteObjects(out);
           WriteXRefs(out);
@@ -372,28 +385,26 @@ void PDFWriter::CloseFile()
           // private WritePdfTextFile() copy that lived here.
           if (!icWriteAndClose(outFile, out.str())) {
             LogAnError(stderr, "PDF writing error in '%s': unable to open regular output file\n", m_filename.c_str());
-            m_filename.clear();
-            return;
+            success = false;
           }
 
         }
         catch (const std::exception& e) {
           LogAnError(stderr, "PDF writing error in '%s': '%s'\n", m_filename.c_str(), e.what() );
+          success = false;
         }
-        catch (...) {
-          LogAnError(stderr, "PDF writing error in '%s': unknown exception\n", m_filename.c_str());
-        }
+    }
+    else if (!m_ok) {
+      LogAnError(stderr, "PDF writing error in '%s': unable to allocate PDF objects\n", m_filename.c_str());
+      success = false;
     }
     m_filename.clear();
   }
 
-  // always cleanup all of the allocated objects
-  for (auto &obj: m_objects ) {
-    delete obj;
-    obj = NULL;
-  }
   m_objects.clear();
+  m_xobjects.clear();
 
+  return success;
 }
 
 /******************************************************************************/
@@ -402,6 +413,8 @@ void PDFWriter::CreateOutlineFromPages()
 {
   PDFPageParent *pageParent = GetPageParent();
   PDFOutlineParent *outParent = GetOutlineParent();
+  if (!pageParent || !outParent)
+    return;
 
   const size_t pageCount = pageParent->m_pageObjectIndices.size();
   for ( size_t k = 0; k < pageCount; ++k ) {
@@ -415,8 +428,8 @@ void PDFWriter::CreateOutlineFromPages()
     if (k < (pageCount-1))
       nextIndex = currentIndex + 1;
     std::string bookmarkName = std::to_string(k+1) + " " + name;    // may want to match for TOC
-    PDFOutlineEntry *outline = new PDFOutlineEntry( m_outlineParentIndex, pageIndex, bookmarkName, prevIndex, nextIndex );
-    AddObject( outline );
+    if (!AddNewObject<PDFOutlineEntry>(m_outlineParentIndex, pageIndex, bookmarkName, prevIndex, nextIndex))
+      return;
     outParent->AddOutlineObject( ObjectCount() );
   }
 
@@ -427,11 +440,12 @@ void PDFWriter::CreateOutlineFromPages()
 // currently used by TOC - no xobjects
 size_t PDFWriter::AddPageHidden( size_t contentIndex, const std::vector<size_t> &annots )
 {
-    PDFPage *pageObj = new PDFPage( m_pageWidth, m_pageHeight,
+    PDFPage *pageObj = AddNewObject<PDFPage>(m_pageWidth, m_pageHeight,
                     m_pageParentIndex, contentIndex, m_procsetIndex,
                     m_fontIndex, 0, "" );
+    if (!pageObj)
+      return 0;
     pageObj->AddAnnotationList( annots );
-    m_objects.push_back( pageObj );
     return ObjectCount();
 }
 
@@ -449,6 +463,8 @@ void PDFWriter::CreateTOCFromPages()
   const float tocTextLeading = 1.5f * tocTextSize;
   
   PDFPageParent *pageParent = GetPageParent();
+  if (!pageParent)
+    return;
   size_t pageCount = pageParent->m_pageObjectIndices.size();
   
   if (pageCount == 0)
@@ -480,8 +496,8 @@ void PDFWriter::CreateTOCFromPages()
 
     float textWidth = PDFEstimateStringWidth( pageLabel, tocTextSize );
     Rect2D area( left, left+textWidth, lineStartY - tocTextLeading, lineStartY );
-    PDFAnnotation *annot = new PDFAnnotation( area, pageIndex );
-    AddObject( annot );
+    if (!AddNewObject<PDFAnnotation>(area, pageIndex))
+      return;
     
     linkList.push_back( ObjectCount() );
 
@@ -495,8 +511,8 @@ void PDFWriter::CreateTOCFromPages()
       commands << PDFSingleLineTextLabel( pointLabel, false, point2D(0,0), tocTextSize,
                             contentsName, kPDFTextAlignLeft );
     
-      PDFGraphic *graphics = new PDFGraphic( commands.str() );
-      AddObject( graphics );
+      if (!AddNewObject<PDFGraphic>(commands.str()))
+        return;
       size_t tocPageContentIndex = ObjectCount();
       size_t tocPageIndex = AddPageHidden( tocPageContentIndex, linkList );
       tocPages.push_back( tocPageIndex );
@@ -735,10 +751,15 @@ void PDFWriter::AddXObject( const Rect2D &bounds, std::string &content, std::str
   if (procSet == 0)
     procSet = m_procsetIndex;
 
-  PDFXObject *xobjObj = new PDFXObject( content, bounds, group, font, procSet );
-  m_objects.emplace_back( xobjObj );
+  if (!AddNewObject<PDFXObject>(content, bounds, group, font, procSet))
+    return;
 
-  m_xobjects[ name ] = m_objects.size();
+  try {
+    m_xobjects[ name ] = m_objects.size();
+  }
+  catch (const std::exception&) {
+    m_ok = false;
+  }
 }
 
 /******************************************************************************/
@@ -769,11 +790,16 @@ bool PDFWriter::xobjectExists( std::string name )
 void PDFWriter::AddPage( std::string name, size_t content, std::string xObjectName )
 {
   size_t xindex = lookupXObjectByName( xObjectName );
-  PDFPage *pageObj = new PDFPage( m_pageWidth, m_pageHeight,
+  PDFPage *pageObj = AddNewObject<PDFPage>(m_pageWidth, m_pageHeight,
                     m_pageParentIndex, content, m_procsetIndex,
                     m_fontIndex, xindex, xObjectName );
-  m_objects.push_back( pageObj );
-  GetPageParent()->AddPage( ObjectCount(), name );
+  if (!pageObj)
+    return;
+
+  PDFPageParent *pageParent = GetPageParent();
+  if (!pageParent)
+    return;
+  pageParent->AddPage( ObjectCount(), name );
   m_pageCount++;
 }
 
@@ -1193,8 +1219,8 @@ int PDFDebugPages( PDFWriter &pdffile )
 
 
   // and finally create the graphics object and page
-  PDFGraphic *graphics = new PDFGraphic( commands.str() );
-  pdffile.AddObject( graphics );
+  if (!pdffile.AddNewObject<PDFGraphic>(commands.str()))
+    return 0;
   size_t content = pdffile.ObjectCount();
   pdffile.AddPage( "DEBUG Single Line Text", content, std::string() );
   }
@@ -1229,8 +1255,8 @@ int PDFDebugPages( PDFWriter &pdffile )
   
 
   // and finally create the graphics object and page
-  PDFGraphic *graphics = new PDFGraphic( commands.str() );
-  pdffile.AddObject( graphics );
+  if (!pdffile.AddNewObject<PDFGraphic>(commands.str()))
+    return 0;
   size_t content = pdffile.ObjectCount();
   pdffile.AddPage( "DEBUG Character Measurement", content, std::string() );
   }
@@ -1276,8 +1302,8 @@ int PDFDebugPages( PDFWriter &pdffile )
                 centerLeftIndent, labelCenterLeft+random_ipsum_lines, kPDFTextAlignCenterLeft );
 
   // and finally create the graphics object and page
-  PDFGraphic *graphics = new PDFGraphic( commands.str() );
-  pdffile.AddObject( graphics );
+  if (!pdffile.AddNewObject<PDFGraphic>(commands.str()))
+    return 0;
   size_t content = pdffile.ObjectCount();
   pdffile.AddPage( "DEBUG Multi Line Text", content, std::string() );
   }
@@ -1323,8 +1349,8 @@ int PDFDebugPages( PDFWriter &pdffile )
                 centerLeftIndent, lineLimit, labelCenterLeft+random_ipsum_paragraph, kPDFTextAlignCenterLeft );
 
   // and finally create the graphics object and page
-  PDFGraphic *graphics = new PDFGraphic( commands.str() );
-  pdffile.AddObject( graphics );
+  if (!pdffile.AddNewObject<PDFGraphic>(commands.str()))
+    return 0;
   size_t content = pdffile.ObjectCount();
   pdffile.AddPage( "DEBUG Paragraph Text", content, std::string() );
   }
@@ -1439,8 +1465,8 @@ int PDFDebugPages( PDFWriter &pdffile )
   
     
   // and finally create the graphics object and page
-  PDFGraphic *graphics = new PDFGraphic( commands.str() );
-  pdffile.AddObject( graphics );
+  if (!pdffile.AddNewObject<PDFGraphic>(commands.str()))
+    return 0;
   size_t content = pdffile.ObjectCount();
   pdffile.AddPage( "DEBUG Tables", content, std::string() );
 #endif

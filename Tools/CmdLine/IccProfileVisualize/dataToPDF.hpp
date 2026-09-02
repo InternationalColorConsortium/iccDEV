@@ -64,7 +64,8 @@
 
 /******************************************************************************/
 
-size_t outputDataToPDF( profileVisualizationData &data, const std::string &basename );
+bool outputDataToPDF( profileVisualizationData &data, const std::string &basename,
+                      size_t &objectCount );
 
 /******************************************************************************/
 
