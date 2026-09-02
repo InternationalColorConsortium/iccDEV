@@ -837,6 +837,60 @@ void testLazyLoadedProfile()
   delete pOpened;
 }
 
+// The gain application space resolved from a real profile, which is the only
+// way to exercise icHagcApplyGainApplicationSpace()'s two resolutions at once.
+void testGainApplicationSpaceFromProfile()
+{
+  // HagcRefWhiteToneMap sets the Reference White Tone Mapping flag, and
+  // proposal 1.2.2.5 ZEROES the chromaticities mode on the wire along with the
+  // three other fields. Reading that zero at face value resolves mode 0 -
+  // BT.709 - where C.3.8 assigns the gain application chromaticities itself,
+  // and assigns BT.2020. The fixture's own primaries are BT.2020, so the
+  // correct answer is that no conversion is needed at all; a reader that took
+  // the zeroed field would install a BT.2020-to-BT.709 conversion here and
+  // tone map every such profile in the wrong space.
+  CIccProfile *pProfile = openFixture("HagcRefWhiteToneMap.icc");
+
+  if (pProfile) {
+    CIccTag *pTag = pProfile->FindTag(icSigHeadroomAdaptiveGainCurveTag);
+
+    if (pTag && pTag->GetType() == icSigHeadroomAdaptiveGainCurveType) {
+      CIccTagHagc *pHagc = (CIccTagHagc*)pTag;
+      CIccHagcEvaluator ev;
+
+      check(ev.Init(pHagc->GetMetadata()), "the derived-alternates fixture initialises");
+      check(icHagcApplyGainApplicationSpace(ev, pProfile, pHagc->GetMetadata()),
+            "its gain application space resolves");
+      check(!ev.UsesGainApplicationSpace(),
+            "C.3.8's BT.2020 chromaticities are used, not the zeroed mode field");
+    }
+
+    delete pProfile;
+  }
+
+  // A profile whose own primaries differ from the mode its tag declares is the
+  // case the conversion exists for, and one is already in the corpus.
+  pProfile = openFixture("HagcMixingTypes.icc");
+
+  if (pProfile) {
+    CIccTag *pTag = pProfile->FindTag(icSigHeadroomAdaptiveGainCurveTag);
+
+    if (pTag && pTag->GetType() == icSigHeadroomAdaptiveGainCurveType) {
+      CIccTagHagc *pHagc = (CIccTagHagc*)pTag;
+      CIccHagcEvaluator ev;
+
+      if (ev.Init(pHagc->GetMetadata())) {
+        check(icHagcApplyGainApplicationSpace(ev, pProfile, pHagc->GetMetadata()),
+              "a differing pair resolves");
+        check(ev.UsesGainApplicationSpace(),
+              "and installs a conversion rather than silently skipping it");
+      }
+    }
+
+    delete pProfile;
+  }
+}
+
 void testEndToEnd()
 {
   icFloatNumber src[3], dst[3], noHint[3];
@@ -1027,6 +1081,7 @@ int main(int /*argc*/, char * /*argv*/[])
   testReferenceWhiteToneMap();
   testGainApplicationSpace();
   testLazyLoadedProfile();
+  testGainApplicationSpaceFromProfile();
   testEndToEnd();
   testOutputDirection();
 

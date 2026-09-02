@@ -1562,9 +1562,20 @@ bool icHagcApplyGainApplicationSpace(CIccHagcEvaluator &evaluator,
 
   icCicpPrimaries gain;
 
-  if (!icHagcGetGainApplicationPrimaries((icUInt8Number)meta.m_nChromaticitiesMode,
-                                         meta.m_chromaticities, gain))
+  if (meta.m_bReferenceWhiteToneMapping) {
+    // The chromaticities mode is one of the four fields 1.2.2.5 zeroes on the
+    // wire, so reading it here would resolve mode 0 - BT.709 - for every such
+    // tag.  C.3.8 assigns the gain application chromaticities itself, and
+    // assigns BT.2020 with D65.  Taking the field at face value would apply
+    // the gain in the wrong space for every Reference White Tone Mapping
+    // profile, which is exactly the sort of thing a zeroed field invites.
+    if (!icGetCicpPrimaries(9, gain))
+      return false;
+  }
+  else if (!icHagcGetGainApplicationPrimaries((icUInt8Number)meta.m_nChromaticitiesMode,
+                                              meta.m_chromaticities, gain)) {
     return false;
+  }
 
   icHdrProfileInfo info;
 
