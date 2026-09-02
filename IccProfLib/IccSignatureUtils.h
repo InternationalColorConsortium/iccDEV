@@ -667,6 +667,9 @@ inline bool IsValidTechnologySignature(icUInt32Number sig)
     case (icUInt32Number)icSigCRTDisplay:
     case (icUInt32Number)icSigPMDisplay:
     case (icUInt32Number)icSigAMDisplay:
+    // ICC.1:2022 Table 29's two display rows, absent from the enum until now (#2101).
+    case (icUInt32Number)icSigLCDDisplay:
+    case (icUInt32Number)icSigOLEDDisplay:
     case (icUInt32Number)icSigPhotoCD:
     case (icUInt32Number)icSigPhotoImageSetter:
     case (icUInt32Number)icSigGravure:

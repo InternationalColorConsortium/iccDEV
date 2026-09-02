@@ -3035,6 +3035,10 @@ icValidateStatus CIccTagSignature::Validate(std::string sigPath, std::string &sR
     case icSigCRTDisplay:
     case icSigPMDisplay:
     case icSigAMDisplay:
+    // ICC.1:2022 Table 29 lists these between 'AMD ' and 'KPCD'; both Validate()
+    // lists rejected them as NonCompliant because the enum had no row (#2101).
+    case icSigLCDDisplay:
+    case icSigOLEDDisplay:
     case icSigPhotoCD:
     case icSigPhotoImageSetter:
     case icSigGravure:
@@ -10947,6 +10951,10 @@ icValidateStatus CIccTagProfileSeqDesc::Validate(std::string sigPath, std::strin
     case icSigCRTDisplay:
     case icSigPMDisplay:
     case icSigAMDisplay:
+    // ICC.1:2022 Table 29 lists these between 'AMD ' and 'KPCD'; both Validate()
+    // lists rejected them as NonCompliant because the enum had no row (#2101).
+    case icSigLCDDisplay:
+    case icSigOLEDDisplay:
     case icSigPhotoCD:
     case icSigPhotoImageSetter:
     case icSigGravure:
