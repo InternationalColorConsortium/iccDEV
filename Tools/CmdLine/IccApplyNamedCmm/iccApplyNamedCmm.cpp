@@ -252,10 +252,43 @@ void Usage()
   printf("     30 - Gamut\n");
   printf("     33 - Gamut Absolute\n");
   printf("     40 + Intent - with BPC\n");
-  printf("     50 - BDRF Model\n");
-  printf("     60 - BDRF Light\n");
-  printf("     70 - BDRF Output\n");
-  printf("     80 - MCS connection\n");
+  // Two corrections, both #2262.
+  //
+  // (1) The acronym was transposed, B-D-R-F.  ICC.2-2023 9.2.14-17 and 9.2.26-29
+  // spell the tags brdfAToB0Tag..brdfDToB3Tag, and every identifier in the
+  // library already agrees: icXformLutBRDFParam (IccCmm.h), icSigBRDFDToB0Tag,
+  // CIccStructBRDF.  The same three lines carry the typo in iccApplyProfiles
+  // and iccApplyToLink and are corrected there too.
+  //
+  // (2) These four codes take a rendering intent in their units digit exactly
+  // as "20 + Intent" does, and printing them as flat values said they did not.
+  // Each of the four transform types selects from a four-entry tag array
+  // indexed by nTagIntent in CIccXform::Create() -- brdfSpectralParameter0 /
+  // brdfColorimetricParameter0 for 50, BRDFDToB0 / BRDFAToB0 for 60,
+  // BRDFMToS0 / BRDFMToB0 for 70, MToS0 / MToB0 for 80 (IccProfLib/IccCmm.cpp,
+  // the icXformLutBRDFParam..icXformLutMCS cases).  80 is qualified because it
+  // is the one code where that is only half true: icXformLutMCS offsets by
+  // nTagIntent on its MVIS/Output branch (MToS0..3, MToB0..3) but reads a
+  // single AToM0Tag for MultiplexIdentification/Input and a single MToA0Tag for
+  // MultiplexLink, so 80..83 are indistinguishable in the to-MCS direction --
+  // the same reason 30/31/32 are identical and gamut stays in the flat form.
+  //
+  // The decode that feeds them preserves the digit: fromArgs() falls through
+  // its type switch for 5..8, so "nIntent % 10" reaches m_intent unchanged
+  // (IccCmmConfig.cpp).  Reading these lines as "51 is not a valid code" is
+  // what produced the refuted Finding 2 on #2261, so the omission had already
+  // cost a review round.
+  //
+  // The transform names are the ones the exported configuration and
+  // docs/icc-connect-config.schema.json publish for these same types --
+  // brdfParam, brdfDirect, brdfMcsParam -- rather than the previous
+  // "Model"/"Light"/"Output" wording, which matched neither the schema nor the
+  // two sibling tools: nothing connected the old row for 60 to the
+  // "transform": "brdfDirect" that -exportcfg writes when it is given.
+  printf("     50 + Intent - BRDF Parameters\n");
+  printf("     60 + Intent - BRDF Direct\n");
+  printf("     70 + Intent - BRDF MCS Parameters\n");
+  printf("     80 + Intent - MCS connection (Intent applies to MToS/MToB only)\n");
   printf("     90 + Intent - Colorimetric Only\n");
   printf("    100 + Intent - Spectral Only\n");
   printf("    +1000 - Use Luminance based PCS adjustment\n");
