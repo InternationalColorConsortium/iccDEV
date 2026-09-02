@@ -1655,6 +1655,89 @@ function(iccdev_add_cicp_copy_ctor_test)
   endif()
 endfunction()
 
+# #2181: two defects in the ACS multi-process elements.
+#
+# CIccMpeAcs::Describe() picked its label with "if (GetBAcsSig())", which returns
+# m_signature on a bACS element and the base class's icSigAcsZero on everything
+# else -- so it conflated the element TYPE with whether the ACS data signature
+# happened to be non-zero. Those agree for every bACS element except one carrying
+# icSigAcsZero, a legitimate value CIccMpeXmlBAcs::ToXml deliberately preserves
+# (#1843), which therefore reported itself as ELEM_eACS. GetType() is fixed per
+# class and cannot be confused. Describe() was the ONLY reader of GetBAcsSig() in
+# the tree -- everything else discriminates on IsAcs(), which was always
+# type-based -- so the blast radius is the dump, not the CMM.
+#
+# And CIccMpeAcs::AllocData() left m_nDataSize at the previous allocation's value
+# when malloc failed, so the element carried a NULL pointer beside a non-zero
+# size. All four copy paths guard their memcpy on the destination pointer and the
+# SOURCE size, so copying such an element reads from NULL -- and NewCopy() is one
+# of them. Case 4 of the test forces the failure with SIZE_MAX/2, which every
+# malloc refuses outright, so the red/green is deterministic rather than
+# OOM-dependent, and then performs that copy.
+#
+# Drives Describe() directly rather than chaining iccFromXml into iccDumpProfile:
+# the bytes iccFromXml writes were verified correct, so the tool chain would test
+# two innocent tools to reach one defective function -- and unlike a script test,
+# this is registered on Windows. Header + IccProfLib only.
+function(iccdev_add_mpe_acs_zero_signature_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMpeAcsZeroSigTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/mpe-acs-zero-signature.cpp"
+  )
+  target_compile_features(iccMpeAcsZeroSigTest PRIVATE cxx_std_17)
+  target_include_directories(iccMpeAcsZeroSigTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccMpeAcsZeroSigTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccMpeAcsZeroSigTest)
+
+  # Launched through `cmake -E env` because case 4 deliberately asks for
+  # SIZE_MAX/2 to force a malloc failure, and ASan does NOT return NULL for an
+  # oversize request: with the default allocator_may_return_null=0 it reports
+  # allocation-size-too-big and ABORTS the process.  Measured under the sanitizer
+  # lane's own options (ci-docker-pr.yml exports
+  # ASAN_OPTIONS="halt_on_error=0,detect_leaks=0"): exit 1, so this test would
+  # have gone red there while passing everywhere else.  halt_on_error does not
+  # cover allocator errors.  allocator_may_return_null=1 restores the NULL return
+  # the test is written against, and downgrades the message to a WARNING line
+  # that matches none of the in-tree "ERROR: AddressSanitizer" screens.  The same
+  # option is used for the same reason by the issue-1846, issue-1909 and AFL
+  # scripts.  detect_leaks=0 mirrors what the lanes already set, since setting
+  # ASAN_OPTIONS here replaces the inherited value rather than adding to it; a
+  # CTest ENVIRONMENT property is not reliable for ASAN_OPTIONS (see
+  # iccdev.xform-create-tag-ownership above).
+  add_test(
+    NAME iccdev.mpe-acs-zero-signature
+    COMMAND "${CMAKE_COMMAND}" -E env
+      "ASAN_OPTIONS=detect_leaks=0:allocator_may_return_null=1"
+      "$<TARGET_FILE:iccMpeAcsZeroSigTest>"
+  )
+  set_tests_properties(iccdev.mpe-acs-zero-signature PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;mpe;acs;issue-2181;regression"
+  )
+  if(WIN32)
+    set(_mpe_acs_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMpeAcsZeroSigTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _mpe_acs_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.mpe-acs-zero-signature PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_mpe_acs_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2001: iccPawgReport check C5 warned on every profile carrying a cicpTag,
 # because icSigCicpTag was missing from kCommonOptional. The tag is recognised by
 # IsSpecTag() (CIccTagCreator resolves 'cicp' to "cicpTag"), so it is never
@@ -6745,6 +6828,7 @@ if(WIN32)
   iccdev_add_getvalues_nstart_test()
   iccdev_add_chromaticity_validate_test()
   iccdev_add_cicp_copy_ctor_test()
+  iccdev_add_mpe_acs_zero_signature_test()
   iccdev_add_pawg_c5_cicp_test()
   iccdev_add_gamut_xform_semantics_test()
   iccdev_add_rangemap_uninitialized_test()
@@ -7112,6 +7196,7 @@ iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_chromaticity_validate_test()
 iccdev_add_cicp_copy_ctor_test()
+iccdev_add_mpe_acs_zero_signature_test()
 iccdev_add_pawg_c5_cicp_test()
 iccdev_add_gamut_xform_semantics_test()
 iccdev_add_rangemap_uninitialized_test()

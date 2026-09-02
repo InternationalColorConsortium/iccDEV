@@ -2332,15 +2332,24 @@ bool CIccMpeXmlBAcs::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   m_signature = icXmlStrToSig(icXmlAttrValue(pNode, "Signature"));
 
-  if (pNode->children && pNode->children->type == XML_TEXT_NODE && pNode->children->content) {
-    icUInt32Number nSize = icXmlGetHexDataSize((const char*)pNode->children->content);
+  // AllocData() is called unconditionally, the no-data case included.  The old
+  // shape only called it inside "if (nSize)", so parsing into an element that
+  // already held data, from a node carrying none, left the OLD buffer and the
+  // OLD size in place -- the element would then write out a payload its XML
+  // never asked for.  Every in-tree caller builds a fresh object per element
+  // (IccTagXml.cpp), so this is reachability-by-reuse rather than a live defect
+  // today; it is fixed because ParseXml() reads as though it fully defines the
+  // element, and the next caller to reuse one is entitled to that (#2181).
+  icUInt32Number nSize = 0;
+  if (pNode->children && pNode->children->type == XML_TEXT_NODE && pNode->children->content)
+    nSize = icXmlGetHexDataSize((const char*)pNode->children->content);
 
-    if (nSize) {
-      if (!AllocData(nSize))
-        return false;
-      icXmlGetHexData(m_pData, (const char *)pNode->children->content, nSize);
-    }
-  }
+  if (!AllocData(nSize))
+    return false;
+
+  if (nSize)
+    icXmlGetHexData(m_pData, (const char *)pNode->children->content, nSize);
+
   return true;
 }
 
@@ -2385,15 +2394,24 @@ bool CIccMpeXmlEAcs::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   m_signature = icXmlStrToSig(icXmlAttrValue(pNode, "Signature"));
 
-  if (pNode->children && pNode->children->type == XML_TEXT_NODE && pNode->children->content) {
-    icUInt32Number nSize = icXmlGetHexDataSize((const char*)pNode->children->content);
+  // AllocData() is called unconditionally, the no-data case included.  The old
+  // shape only called it inside "if (nSize)", so parsing into an element that
+  // already held data, from a node carrying none, left the OLD buffer and the
+  // OLD size in place -- the element would then write out a payload its XML
+  // never asked for.  Every in-tree caller builds a fresh object per element
+  // (IccTagXml.cpp), so this is reachability-by-reuse rather than a live defect
+  // today; it is fixed because ParseXml() reads as though it fully defines the
+  // element, and the next caller to reuse one is entitled to that (#2181).
+  icUInt32Number nSize = 0;
+  if (pNode->children && pNode->children->type == XML_TEXT_NODE && pNode->children->content)
+    nSize = icXmlGetHexDataSize((const char*)pNode->children->content);
 
-    if (nSize) {
-      if (!AllocData(nSize))
-        return false;
-      icXmlGetHexData(m_pData, (const char *)pNode->children->content, nSize);
-    }
-  }
+  if (!AllocData(nSize))
+    return false;
+
+  if (nSize)
+    icXmlGetHexData(m_pData, (const char *)pNode->children->content, nSize);
+
   return true;
 }
 
