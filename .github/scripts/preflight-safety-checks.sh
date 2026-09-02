@@ -11,11 +11,19 @@
 set -euo pipefail
 
 REQUIRE_TOOLS=0
+FAST_LANE=0
+FAST_SCOPE=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --require-tools) REQUIRE_TOOLS=1; shift ;;
+    --fast-lane) FAST_LANE=1; shift ;;
+    --fast-lane=matlab) FAST_LANE=1; FAST_SCOPE="matlab"; shift ;;
     --help|-h)
-      echo "Usage: preflight-safety-checks.sh [--require-tools]"
+      echo "Usage: preflight-safety-checks.sh [--fast-lane[=matlab]] [--require-tools]"
+      echo ""
+      echo "  --fast-lane         Scan changed workflow/script surfaces and skip CodeQL."
+      echo "  --fast-lane=matlab  Limit the fast lane to MATLAB workflow infrastructure."
+      echo "  --require-tools  Fail instead of skipping unavailable optional tools."
       exit 0
       ;;
     *) echo "[FAIL] Unknown option: $1" >&2; exit 1 ;;
@@ -92,8 +100,38 @@ run_trivy_config() {
   return 127
 }
 
+run_doxygen_check() {
+  local output_dir status=0
+  output_dir="$(mktemp -d "${TMPDIR:-/tmp}/iccdev-doxygen.XXXXXX")"
+
+  if ! doxygen .github/ci/doxygen/Doxyfile \
+    "OUTPUT_DIRECTORY=$output_dir" \
+    "WARN_LOGFILE=$output_dir/doxygen-warnings.log"; then
+    status=1
+  fi
+  if [ -s "$output_dir/doxygen-warnings.log" ]; then
+    cat "$output_dir/doxygen-warnings.log" >&2
+    status=1
+  fi
+
+  rm -rf "$output_dir"
+  return "$status"
+}
+
 run_workflow_cache_policy() {
-  .github/scripts/check-workflow-cache-policy.sh .github/workflows
+  .github/scripts/check-workflow-cache-policy.sh "${workflow_files[@]}"
+}
+
+run_workflow_bash_prologue_policy() {
+  if [ "$base_ref_available" -eq 1 ]; then
+    python3 .github/scripts/check-workflow-bash-prologue.py \
+      --changed \
+      --base "$base_ref" \
+      "${workflow_files[@]}"
+  else
+    python3 .github/scripts/check-workflow-bash-prologue.py \
+      "${workflow_files[@]}"
+  fi
 }
 
 workflow_trigger_names() {
@@ -501,7 +539,8 @@ for path in sys.argv[1:]:
 
             if uses.startswith("docker/build-push-action@"):
                 for key in ("cache-from", "cache-to"):
-                    if str(block.get(key, "")).strip():
+                    cache_value = str(block.get(key, "")).strip()
+                    if cache_value:
                         print(f"[FAIL] {label}: Docker Buildx {key} is prohibited",
                               file=sys.stderr)
                         failures += 1
@@ -925,33 +964,58 @@ script_files=()
 python_files=()
 docker_files=()
 changed_files=()
+deleted_workflow_files=()
 base_ref="${PREFLIGHT_BASE_REF:-origin/master}"
+base_ref_available=0
+scan_paths=(.github .githooks Dockerfile 'Dockerfile.*' .dockerignore)
+if [ "$FAST_SCOPE" = "matlab" ]; then
+  scan_paths=(
+    .github/workflows/ci-matlab.yml
+    .github/scripts/preflight-safety-checks.sh
+  )
+fi
 if git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
+  base_ref_available=1
   while IFS= read -r file; do
     changed_files+=("$file")
   done < <(git diff --name-only --diff-filter=ACMRT "$base_ref"...HEAD -- \
-    .github .githooks Dockerfile 'Dockerfile.*' .dockerignore | sort)
+    "${scan_paths[@]}" | sort)
   while IFS= read -r file; do
     changed_files+=("$file")
   done < <(git diff --cached --name-only --diff-filter=ACMRT -- \
-    .github .githooks Dockerfile 'Dockerfile.*' .dockerignore | sort)
+    "${scan_paths[@]}" | sort)
   while IFS= read -r file; do
     changed_files+=("$file")
   done < <(git diff --name-only --diff-filter=ACMRT -- \
-    .github .githooks Dockerfile 'Dockerfile.*' .dockerignore | sort)
+    "${scan_paths[@]}" | sort)
+  while IFS= read -r file; do
+    deleted_workflow_files+=("$file")
+  done < <(git diff --name-only --diff-filter=D "$base_ref"...HEAD -- .github/workflows | sort)
+  while IFS= read -r file; do
+    deleted_workflow_files+=("$file")
+  done < <(git diff --cached --name-only --diff-filter=D -- .github/workflows | sort)
+  while IFS= read -r file; do
+    deleted_workflow_files+=("$file")
+  done < <(git diff --name-only --diff-filter=D -- .github/workflows | sort)
   while IFS= read -r file; do
     changed_files+=("$file")
   done < <(git ls-files --others --exclude-standard -- \
-    .github .githooks Dockerfile 'Dockerfile.*' .dockerignore | sort)
+    "${scan_paths[@]}" | sort)
 else
-  while IFS= read -r file; do
-    changed_files+=("$file")
-  done < <(
-    {
-      find .github .githooks -type f 2>/dev/null
-      find . -maxdepth 1 -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '.dockerignore' \)
-    } | sed 's#^\./##' | sort
-  )
+  if [ "$FAST_SCOPE" = "matlab" ]; then
+    for file in "${scan_paths[@]}"; do
+      [ -f "$file" ] && changed_files+=("$file")
+    done
+  else
+    while IFS= read -r file; do
+      changed_files+=("$file")
+    done < <(
+      {
+        find .github .githooks -type f 2>/dev/null
+        find . -maxdepth 1 -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '.dockerignore' \)
+      } | sed 's#^\./##' | sort
+    )
+  fi
 fi
 
 unique_changed_files=()
@@ -959,13 +1023,39 @@ while IFS= read -r file; do
   unique_changed_files+=("$file")
 done < <(printf '%s\n' "${changed_files[@]}" | awk 'NF && !seen[$0]++')
 
-while IFS= read -r file; do
-  workflow_files+=("$file")
-done < <(
-  find .github/workflows -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null |
-    sed 's#^\./##' |
-    sort
-)
+if [ "$FAST_LANE" -eq 1 ]; then
+  if [ "${#deleted_workflow_files[@]}" -gt 0 ] ||
+    { [ "$FAST_SCOPE" = "matlab" ] && [ "$base_ref_available" -eq 0 ]; }; then
+    if [ "${#deleted_workflow_files[@]}" -gt 0 ]; then
+      echo "[WARN] Workflow deletion detected; scanning all remaining workflows" >&2
+    else
+      echo "[WARN] Workflow base is unavailable; scanning all remaining workflows" >&2
+    fi
+    while IFS= read -r file; do
+      workflow_files+=("$file")
+    done < <(
+      find .github/workflows -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null |
+        sed 's#^\./##' |
+        sort
+    )
+  else
+    for file in "${unique_changed_files[@]}"; do
+      case "$file" in
+        .github/workflows/*.yml|.github/workflows/*.yaml)
+          workflow_files+=("$file")
+          ;;
+      esac
+    done
+  fi
+else
+  while IFS= read -r file; do
+    workflow_files+=("$file")
+  done < <(
+    find .github/workflows -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null |
+      sed 's#^\./##' |
+      sort
+  )
+fi
 
 for file in "${unique_changed_files[@]}"; do
   case "$file" in
@@ -997,6 +1087,8 @@ for path in sys.argv[1:]:
     print(f"[OK] {path}")
 PY
 
+  run_check "workflow Bash prologue policy" run_workflow_bash_prologue_policy
+
   if command -v actionlint >/dev/null 2>&1; then
     run_check "actionlint" actionlint -no-color "${workflow_files[@]}"
   else
@@ -1019,7 +1111,10 @@ PY
   run_check "workflow security canaries" workflow_security_canaries
   run_check "GitHub token format canaries" token_format_canaries
   run_check "local ci-risk-analysis subset" run_workflow_risk_subset
-  if command -v codeql >/dev/null 2>&1; then
+  if [ "$FAST_LANE" -eq 1 ]; then
+    echo "[SKIP] CodeQL Actions analysis (fast lane)"
+    echo ""
+  elif command -v codeql >/dev/null 2>&1; then
     run_check "CodeQL Actions analysis" run_codeql_actions_analysis
   else
     skip_or_fail "codeql"
@@ -1027,6 +1122,13 @@ PY
 else
   echo "[SKIP] No changed workflow files"
   echo ""
+fi
+
+if [ -f .github/scripts/check-workflow-bash-prologue.py ]; then
+  run_check "workflow Bash prologue checker fixtures" \
+    python3 .github/scripts/check-workflow-bash-prologue.py --self-test
+else
+  skip_or_fail "check-workflow-bash-prologue.py"
 fi
 
 if [ "${#script_files[@]}" -gt 0 ]; then
@@ -1042,7 +1144,10 @@ fi
 
 if [ "${#python_files[@]}" -gt 0 ]; then
   run_check "Python syntax" python3 -m py_compile "${python_files[@]}"
-  if command -v codeql >/dev/null 2>&1; then
+  if [ "$FAST_LANE" -eq 1 ]; then
+    echo "[SKIP] CodeQL Python analysis (fast lane)"
+    echo ""
+  elif command -v codeql >/dev/null 2>&1; then
     run_check "CodeQL Python analysis" run_codeql_python_analysis
   else
     skip_or_fail "codeql"
@@ -1070,7 +1175,16 @@ else
   echo ""
 fi
 
-if [ -f .github/codeql-queries/iccdev-security-suite.qls ]; then
+if command -v doxygen >/dev/null 2>&1; then
+  run_check "Doxygen documentation warnings" run_doxygen_check
+else
+  skip_or_fail "doxygen"
+fi
+
+if [ "$FAST_LANE" -eq 1 ]; then
+  echo "[SKIP] CodeQL query resolution (fast lane)"
+  echo ""
+elif [ -f .github/codeql-queries/iccdev-security-suite.qls ]; then
   if command -v codeql >/dev/null 2>&1; then
     run_check "CodeQL query resolution" codeql resolve queries .github/codeql-queries/iccdev-security-suite.qls
     if [ -f .github/codeql-queries/iccdev-mcp/iccdev-mcp-security-suite.qls ]; then

@@ -39,6 +39,10 @@ run: |
   source .github/scripts/sanitize-sed.sh
 ```
 
+The blocking pre-flight and risk gates enforce the first three lines of this
+prologue in order for every new or modified Bash `run:` block. The sanitizer
+remains mandatory before writing to `GITHUB_STEP_SUMMARY` or `GITHUB_OUTPUT`.
+
 PowerShell-only workflows and jobs do not need `BASH_ENV`. Use an explicit
 PowerShell shell on each step or `defaults.run.shell` at job/workflow scope.
 
@@ -56,6 +60,11 @@ run: |
   if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
   . .github/scripts/sanitize.ps1
 ```
+
+Expected-failure probes must explicitly terminate successfully after validating
+the expected nonzero native exit. PowerShell preserves `$LASTEXITCODE`, so a
+step can print its success message and still fail when the shell exits. End
+such a probe with `exit 0` only after its exit-code and output assertions pass.
 
 ## Injection Prevention
 
@@ -76,6 +85,17 @@ For privileged `pull_request_target` or `workflow_run` automation, never check
 out or execute PR-controlled content. Use trusted workflow metadata only, pass
 IDs through `env:`, and mutate PR state with least-privilege `issues: write` or
 `pull-requests: write` permissions.
+
+## Fork Agent-Configuration Boundary
+
+Treat custom instructions, agent instructions, and agent skills from fork PR
+heads as untrusted.
+
+The trusted-base `Fork Automation Gate` must reject fork changes to
+`.github/copilot-instructions.md`, `.github/instructions/**`,
+`.github/skills/**`, `.github/prompts/**`, `.github/agents/**`, `.agents/**`,
+and every `AGENTS.md`, `CLAUDE.md`, or `GEMINI.md`. Check both the current and
+previous path to catch renames.
 
 For `pull_request` workflows that must build or test PR code, keep repo-local
 workflow helpers trusted: check out `.github/scripts` from
@@ -293,9 +313,11 @@ only the source checkout. If a packaged test derives data paths relative to its
 installed location, preserve those paths in the archive and assert the required
 files again after artifact download. MATLAB release payloads must include the
 MEX runtime dependencies, required `Testing/` fixtures, gamma regression
-profile, and colorimetry table sources. The staged suite must report zero
-skipped groups unless Docker interoperability is the sole skip because the
-pinned image is unavailable.
+profile, colorimetry table sources, `iccPawgReport`, the MATLAB PAWG Q1 audit
+and calculation helpers, and `test_pawg_q1`. Put the flat Windows bundle root
+on the staged MATLAB process `PATH` before running QA. The staged suite must
+report zero skipped groups unless Docker interoperability is the sole skip
+because the pinned image is unavailable.
 
 ## Optional Local Hooks
 

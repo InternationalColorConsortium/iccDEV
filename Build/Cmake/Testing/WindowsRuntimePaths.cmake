@@ -12,6 +12,29 @@ function(iccdev_add_existing_path_entry OUT_VAR CANDIDATE)
   endif()
 endfunction()
 
+# Adds one dependency prefix's runtime directories in the order the loader must
+# see them. Every prefix this file deals with has the same two-tree shape --
+# <prefix>/bin holds release DLLs, <prefix>/debug/bin holds debug ones -- and
+# both trees spell the DLL identically (libxml2.dll either way), so whichever
+# lands on PATH first is the one that binds.
+#
+# This is done per prefix rather than once for vcpkg because the ordering is
+# otherwise trivially defeated: CMAKE_PREFIX_PATH is read before the vcpkg block
+# below, and list(REMOVE_DUPLICATES) keeps an entry's FIRST position, so a prefix
+# path naming the same triplet directory would pin the release tree ahead of the
+# debug one no matter what the vcpkg block did afterwards.
+function(iccdev_add_prefix_runtime_entries OUT_VAR PREFIX CONFIG)
+  set(_prefix_entries_local "${${OUT_VAR}}")
+  if(CONFIG MATCHES "^[Dd][Ee][Bb][Uu][Gg]$")
+    iccdev_add_existing_path_entry(_prefix_entries_local "${PREFIX}/debug/bin")
+    iccdev_add_existing_path_entry(_prefix_entries_local "${PREFIX}/bin")
+  else()
+    iccdev_add_existing_path_entry(_prefix_entries_local "${PREFIX}/bin")
+    iccdev_add_existing_path_entry(_prefix_entries_local "${PREFIX}/debug/bin")
+  endif()
+  set(${OUT_VAR} "${_prefix_entries_local}" PARENT_SCOPE)
+endfunction()
+
 function(iccdev_read_cache_value OUT_VAR BUILD_DIR CACHE_NAME)
   set(${OUT_VAR} "" PARENT_SCOPE)
   set(_cache_file "${BUILD_DIR}/CMakeCache.txt")
@@ -32,18 +55,48 @@ endfunction()
 function(iccdev_collect_cache_runtime_path_entries OUT_VAR BUILD_DIR)
   set(_runtime_path_entries)
 
+  # Resolved first, because every prefix added below is ordered by it.
+  # ICCDEV_CONFIG is set by StageWindowsRuntime.cmake, RunWindowsBatchTest.cmake
+  # and RunInstalledPackageConsumerTest.cmake; RunWindowsDumpProfileSmokeTest and
+  # RunWindowsPawgReportSmokeTest do not set it, and a multi-config generator
+  # leaves the cache's CMAKE_BUILD_TYPE empty too. Those callers get the
+  # release-first order, which is what every caller got before this helper knew
+  # about debug trees at all -- in-tree tests are unaffected either way because
+  # StageWindowsRuntime.cmake copies dependency DLLs next to the staged binaries.
+  set(_runtime_config "")
+  if(DEFINED ICCDEV_CONFIG)
+    set(_runtime_config "${ICCDEV_CONFIG}")
+  endif()
+  if("${_runtime_config}" STREQUAL "")
+    iccdev_read_cache_value(_runtime_config "${BUILD_DIR}" CMAKE_BUILD_TYPE)
+  endif()
+
   iccdev_read_cache_value(_cmake_prefix_path "${BUILD_DIR}" CMAKE_PREFIX_PATH)
   foreach(_prefix IN LISTS _cmake_prefix_path)
-    iccdev_add_existing_path_entry(_runtime_path_entries "${_prefix}/bin")
+    iccdev_add_prefix_runtime_entries(_runtime_path_entries "${_prefix}" "${_runtime_config}")
   endforeach()
 
-  iccdev_read_cache_value(_vcpkg_installed_dir "${BUILD_DIR}" VCPKG_INSTALLED_DIR)
+  # vcpkg splits DLLs by configuration: release in <installed>/<triplet>/bin and
+  # debug in <installed>/<triplet>/debug/bin. Adding only the release tree is
+  # why an out-of-tree consumer on the Windows Debug leg dies at load with
+  # 0xc0000135 (STATUS_DLL_NOT_FOUND, which names no DLL). In-tree tests never
+  # notice, because StageWindowsRuntime.cmake copies the dependency DLLs next to
+  # the binaries it stages. `_VCPKG_INSTALLED_DIR` is the vcpkg toolchain's own
+  # internal spelling and is the only one present in some vcpkg versions.
+  set(_vcpkg_installed_dir "")
+  foreach(_vcpkg_cache_name VCPKG_INSTALLED_DIR _VCPKG_INSTALLED_DIR)
+    iccdev_read_cache_value(_vcpkg_installed_dir "${BUILD_DIR}" "${_vcpkg_cache_name}")
+    if(NOT "${_vcpkg_installed_dir}" STREQUAL "")
+      break()
+    endif()
+  endforeach()
   iccdev_read_cache_value(_vcpkg_target_triplet "${BUILD_DIR}" VCPKG_TARGET_TRIPLET)
   if(NOT "${_vcpkg_installed_dir}" STREQUAL ""
       AND NOT "${_vcpkg_target_triplet}" STREQUAL "")
-    iccdev_add_existing_path_entry(
+    iccdev_add_prefix_runtime_entries(
       _runtime_path_entries
-      "${_vcpkg_installed_dir}/${_vcpkg_target_triplet}/bin")
+      "${_vcpkg_installed_dir}/${_vcpkg_target_triplet}"
+      "${_runtime_config}")
   endif()
 
   foreach(_compiler_cache_name CMAKE_C_COMPILER CMAKE_CXX_COMPILER)
@@ -84,23 +137,40 @@ function(iccdev_collect_cache_runtime_path_entries OUT_VAR BUILD_DIR)
     endif()
   endforeach()
 
-  foreach(_library_cache_name
-      LIBXML2_LIBRARY
-      PNG_LIBRARY
-      PNG_LIBRARY_RELEASE
-      JPEG_LIBRARY
-      JPEG_LIBRARY_RELEASE
-      TIFF_LIBRARY
-      TIFF_LIBRARY_RELEASE
-      ZLIB_LIBRARY
-      ZLIB_LIBRARY_RELEASE
-  )
-    iccdev_read_cache_value(_library_path "${BUILD_DIR}" "${_library_cache_name}")
-    if(NOT "${_library_path}" STREQUAL "" AND EXISTS "${_library_path}")
-      get_filename_component(_library_dir "${_library_path}" DIRECTORY)
-      get_filename_component(_library_prefix "${_library_dir}/.." ABSOLUTE)
-      iccdev_add_existing_path_entry(_runtime_path_entries "${_library_prefix}/bin")
+  # select_library_configurations() sets the singular <LIB>_LIBRARY_RELEASE and
+  # <LIB>_LIBRARY_DEBUG alongside the combined <LIB>_LIBRARY, so reading the
+  # configuration-matching spelling FIRST is what gives these prefixes the same
+  # debug-first ordering the vcpkg tree gets. Without it a Debug consumer whose
+  # cache carries no vcpkg variables -- the case the _VCPKG_INSTALLED_DIR
+  # fallback above exists for -- would still bind the release DLL.
+  set(_library_cache_names)
+  foreach(_library_stem LIBXML2 PNG JPEG TIFF ZLIB)
+    if(_runtime_config MATCHES "^[Dd][Ee][Bb][Uu][Gg]$")
+      list(APPEND _library_cache_names
+        "${_library_stem}_LIBRARY_DEBUG" "${_library_stem}_LIBRARY_RELEASE")
+    else()
+      list(APPEND _library_cache_names
+        "${_library_stem}_LIBRARY_RELEASE" "${_library_stem}_LIBRARY_DEBUG")
     endif()
+    # The combined value last: it is the fallback for a cache that carries no
+    # per-configuration spelling at all, and it cannot express an order.
+    list(APPEND _library_cache_names "${_library_stem}_LIBRARY")
+  endforeach()
+
+  foreach(_library_cache_name IN LISTS _library_cache_names)
+    iccdev_read_cache_value(_library_value "${BUILD_DIR}" "${_library_cache_name}")
+    # Under a multi-config generator these cache entries are the per-config list
+    # "optimized;<release path>;debug;<debug path>", so an EXISTS test on the
+    # whole string is false and the entry used to contribute nothing at all.
+    # Iterating the halves covers both spellings; the "optimized"/"debug"/
+    # "general" keywords are not paths and drop out of the EXISTS test below.
+    foreach(_library_path IN LISTS _library_value)
+      if(EXISTS "${_library_path}" AND NOT IS_DIRECTORY "${_library_path}")
+        get_filename_component(_library_dir "${_library_path}" DIRECTORY)
+        get_filename_component(_library_prefix "${_library_dir}/.." ABSOLUTE)
+        iccdev_add_existing_path_entry(_runtime_path_entries "${_library_prefix}/bin")
+      endif()
+    endforeach()
   endforeach()
 
   iccdev_add_existing_path_entry(_runtime_path_entries "$ENV{SystemRoot}/System32")

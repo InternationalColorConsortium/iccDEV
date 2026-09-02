@@ -20,6 +20,9 @@ on:
     paths:
       - '.github/**'
       - '.githooks/**'
+      - 'AGENTS.md'
+      - 'README.md'
+      - 'docs/**'
       - 'Dockerfile'
       - 'Dockerfile.*'
       - '.dockerignore'
@@ -29,6 +32,9 @@ on:
     paths:
       - '.github/**'
       - '.githooks/**'
+      - 'AGENTS.md'
+      - 'README.md'
+      - 'docs/**'
       - 'Dockerfile'
       - 'Dockerfile.*'
       - '.dockerignore'
@@ -40,6 +46,7 @@ concurrency:
 
 jobs:
   preflight:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: "Pre-flight checks"
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -86,14 +93,14 @@ jobs:
           source trusted/.github/scripts/sanitize-sed.sh
 
           sudo apt-get update -qq
-          sudo apt-get install -y -qq shellcheck
+          sudo apt-get install -y -qq doxygen graphviz shellcheck
 
           python3 -m venv /tmp/iccdev-preflight
           /tmp/iccdev-preflight/bin/python -m pip install --upgrade pip --quiet
           /tmp/iccdev-preflight/bin/python -m pip install \
             'PyYAML>=6,<7' \
             'yamllint>=1.35,<2' \
-            'zizmor>=1.9,<2' \
+            'zizmor==1.26.1' \
             --quiet
           echo "/tmp/iccdev-preflight/bin" >> "$GITHUB_PATH"
 
@@ -107,9 +114,9 @@ jobs:
             # is the release asset's, so bump CODEQL_VER and CODEQL_SHA256 together:
             #   gh api repos/github/codeql-action/releases/tags/codeql-bundle-v"$CODEQL_VER" \
             #     --jq '.assets[]|select(.name=="codeql-bundle-linux64.tar.gz").digest'
-            CODEQL_VER="2.25.6"
+            CODEQL_VER="2.26.4"
             CODEQL_ARCHIVE="/tmp/codeql-bundle-linux64.tar.gz"
-            CODEQL_SHA256="55c5a760f8a98d882ce452f69c427116a034d91450c627bef717d4acd896632c"
+            CODEQL_SHA256="48e1ab8b874d57bd6fd7c90fefee75addc5a45e9bd063982df9beb45a62dd5d3"
             CODEQL_URL="https://github.com/github/codeql-action/releases/download"
             curl -fsSL --retry 3 \
               -o "${CODEQL_ARCHIVE}" \
@@ -316,6 +323,30 @@ jobs:
           fi
 
           exit "$failures"
+
+      - name: Run Doxygen documentation check
+        if: env.PREFLIGHT_TRUST_MODE == 'bootstrap-inline'
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        working-directory: target
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source ../trusted/.github/scripts/sanitize-sed.sh
+
+          output_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/iccdev-doxygen.XXXXXX")"
+          trap 'rm -rf "$output_dir"' EXIT
+          doxygen_status=0
+          doxygen .github/ci/doxygen/Doxyfile \
+            "OUTPUT_DIRECTORY=$output_dir" \
+            "WARN_LOGFILE=$output_dir/doxygen-warnings.log" || doxygen_status=$?
+          if [ -s "$output_dir/doxygen-warnings.log" ]; then
+            sanitize_print "$(cat "$output_dir/doxygen-warnings.log")"
+            exit 1
+          fi
+          exit "$doxygen_status"
 
       - name: Write pre-flight summary
         if: always()

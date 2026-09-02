@@ -64,15 +64,88 @@ SET( CFILES
     ${SRC_PATH}/IccProfLib/IccWrapper.cpp
    )
 
+function(iccdev_check_cxx_compiler_flag FLAG RESULT_VAR)
+  include(CheckCXXCompilerFlag)
+  set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+  check_cxx_compiler_flag("${FLAG}" "${RESULT_VAR}")
+endfunction()
+
+set(ICCDEV_AVX2_SOURCE "${SRC_PATH}/IccProfLib/IccTagLutAvx2.cpp")
+set(ICCDEV_AVX2_ENABLED OFF)
+if(ICCDEV_ENABLE_AVX2)
+  string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _iccdev_processor)
+  if(MSVC AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(STATUS
+      "[SKIP] ICCDEV_ENABLE_AVX2 is disabled for native MSVC because measured CLUT throughput is slower than the SSE2 fallback; use ClangCL")
+  elseif(CMAKE_SIZEOF_VOID_P EQUAL 8
+      AND _iccdev_processor MATCHES "^(amd64|x86_64|x64)$")
+    if(MSVC)
+      set(_iccdev_avx2_flag "/arch:AVX2")
+    else()
+      set(_iccdev_avx2_flag "-mavx2")
+    endif()
+    iccdev_check_cxx_compiler_flag(
+      "${_iccdev_avx2_flag}" ICCDEV_COMPILER_SUPPORTS_AVX2)
+    if(ICCDEV_COMPILER_SUPPORTS_AVX2)
+      list(APPEND CFILES "${ICCDEV_AVX2_SOURCE}")
+      set_source_files_properties("${ICCDEV_AVX2_SOURCE}"
+        PROPERTIES COMPILE_OPTIONS "${_iccdev_avx2_flag}")
+      set(ICCDEV_AVX2_ENABLED ON)
+      message(STATUS "AVX2 CLUT interpolation enabled with ${_iccdev_avx2_flag}")
+    else()
+      message(WARNING
+        "ICCDEV_ENABLE_AVX2 was requested, but ${CMAKE_CXX_COMPILER} does not support ${_iccdev_avx2_flag}")
+    endif()
+  else()
+    message(WARNING
+      "ICCDEV_ENABLE_AVX2 was requested for unsupported target architecture '${CMAKE_SYSTEM_PROCESSOR}'")
+  endif()
+endif()
+set(ICCDEV_AVX2_EFFECTIVE "${ICCDEV_AVX2_ENABLED}" CACHE INTERNAL
+  "Whether the AVX2 CLUT implementation is compiled" FORCE)
+
+set(ICCDEV_AVX512_SOURCE "${SRC_PATH}/IccProfLib/IccTagLutAvx512.cpp")
+set(ICCDEV_AVX512_ENABLED OFF)
+if(ICCDEV_ENABLE_AVX512)
+  string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _iccdev_processor)
+  if(MSVC AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(STATUS
+      "[SKIP] ICCDEV_ENABLE_AVX512 is disabled for native MSVC; use ClangCL")
+  elseif(CMAKE_SIZEOF_VOID_P EQUAL 8
+      AND _iccdev_processor MATCHES "^(amd64|x86_64|x64)$")
+    if(MSVC)
+      set(_iccdev_avx512_flag "/arch:AVX512")
+    else()
+      set(_iccdev_avx512_flag "-mavx512f")
+    endif()
+    iccdev_check_cxx_compiler_flag(
+      "${_iccdev_avx512_flag}" ICCDEV_COMPILER_SUPPORTS_AVX512)
+    if(ICCDEV_COMPILER_SUPPORTS_AVX512)
+      list(APPEND CFILES "${ICCDEV_AVX512_SOURCE}")
+      set_source_files_properties("${ICCDEV_AVX512_SOURCE}"
+        PROPERTIES COMPILE_OPTIONS "${_iccdev_avx512_flag}")
+      set(ICCDEV_AVX512_ENABLED ON)
+      message(STATUS "AVX-512 CLUT interpolation enabled with ${_iccdev_avx512_flag}")
+    else()
+      message(WARNING
+        "ICCDEV_ENABLE_AVX512 was requested, but ${CMAKE_CXX_COMPILER} does not support ${_iccdev_avx512_flag}")
+    endif()
+  else()
+    message(WARNING
+      "ICCDEV_ENABLE_AVX512 was requested for unsupported target architecture '${CMAKE_SYSTEM_PROCESSOR}'")
+  endif()
+endif()
+set(ICCDEV_AVX512_EFFECTIVE "${ICCDEV_AVX512_ENABLED}" CACHE INTERNAL
+  "Whether the AVX-512 CLUT implementation is compiled" FORCE)
+
 # Public headers - defined unconditionally for target_sources / install
 SET( HEADERS_PUBLIC
   ${SRC_PATH}/IccProfLib/IccApplyBPC.h
   ${SRC_PATH}/IccProfLib/IccArrayBasic.h
   ${SRC_PATH}/IccProfLib/IccArrayFactory.h
   ${SRC_PATH}/IccProfLib/IccCAM.h
-  # Issue #2154: relocated from Tools/CmdLine so IccConnect stops reaching across
-  # the tree for it. Header-only (all inline), so no CFILES entry and no export.
-  ${SRC_PATH}/IccProfLib/IccCmdLineUtil.h
+  ${SRC_PATH}/IccProfLib/IccCValidation.h
+  ${SRC_PATH}/IccProfLib/IccFileUtil.h
   ${SRC_PATH}/IccProfLib/IccCmm.h
   ${SRC_PATH}/IccProfLib/IccCmmThread.h
   ${SRC_PATH}/IccProfLib/IccColorimetry.h
@@ -119,6 +192,7 @@ SET( HEADERS_PUBLIC
   ${SRC_PATH}/IccProfLib/IccSearch.h
   ${SRC_PATH}/IccProfLib/IccCmmSearch.h
   ${SRC_PATH}/IccProfLib/icProfileHeader.h
+  ${SRC_PATH}/Tools/CmdLine/IccCmdLineUtil.h
 )
 
 IF(ENABLE_INSTALL_RIM)
@@ -191,6 +265,23 @@ IF(ENABLE_SHARED_LIBS)
   if(NOT MSVC)
     target_compile_definitions(${TARGET_NAME} PRIVATE ICCPROFLIBDLL_EXPORTS)
   endif()
+  target_compile_definitions(${TARGET_NAME}
+    PRIVATE ICC_C_API_EXPORTS
+    INTERFACE ICC_C_API_IMPORTS)
+
+  # Exported global DATA (#2154, from #1888). WINDOWS_EXPORT_ALL_SYMBOLS below
+  # auto-exports functions but not data, so the eight ICCPROFLIB_DATA_API globals
+  # need real dllexport here and real dllimport in consumers. Kept separate from
+  # ICCPROFLIBDLL_EXPORTS so this does not flip the ~308 incomplete
+  # ICCPROFLIB_API annotations and change how every class and function exports.
+  #
+  # PRIVATE for the export side; INTERFACE for the import side so anything
+  # linking THIS shared target -- in-tree tools and find_package() consumers
+  # alike -- sees __declspec(dllimport). The static target deliberately gets
+  # neither, since a static consumer must keep a plain extern.
+  target_compile_definitions(${TARGET_NAME}
+    PRIVATE   ICCPROFLIBDLL_DATA_EXPORTS
+    INTERFACE ICCPROFLIBDLL_DATA_IMPORTS)
   if(ICC_USE_ZLIB)
     target_compile_definitions(${TARGET_NAME} PUBLIC ICC_USE_ZLIB=1)
   endif()
@@ -208,6 +299,18 @@ IF(ENABLE_SHARED_LIBS)
 
   # Enforce C++17 standard per-target
   target_compile_features(${TARGET_NAME} PUBLIC cxx_std_17)
+  if(ICCDEV_AVX2_ENABLED)
+    target_compile_definitions(${TARGET_NAME} PRIVATE ICC_USE_AVX2=1)
+  endif()
+  if(ICC_AVX2_CLUT_DEBUG)
+    target_compile_definitions(${TARGET_NAME} PRIVATE ICC_AVX2_CLUT_DEBUG=1)
+  endif()
+  if(ICCDEV_ENABLE_PERF_MONITORING)
+    target_compile_definitions(${TARGET_NAME} PRIVATE ICC_PERF_MONITORING=1)
+  endif()
+  if(ICCDEV_AVX512_ENABLED)
+    target_compile_definitions(${TARGET_NAME} PRIVATE ICC_USE_AVX512=1)
+  endif()
 
   # PUBLIC include dirs - propagate to consumers via target_link_libraries()
   # Build dir FIRST so generated IccProfLibVer.h (with git hash) wins over source tree copy
@@ -242,6 +345,18 @@ IF(ENABLE_STATIC_LIBS)
 
   # Enforce C++17 standard per-target
   target_compile_features(${TARGET_NAME}-static PUBLIC cxx_std_17)
+  if(ICCDEV_AVX2_ENABLED)
+    target_compile_definitions(${TARGET_NAME}-static PRIVATE ICC_USE_AVX2=1)
+  endif()
+  if(ICC_AVX2_CLUT_DEBUG)
+    target_compile_definitions(${TARGET_NAME}-static PRIVATE ICC_AVX2_CLUT_DEBUG=1)
+  endif()
+  if(ICCDEV_ENABLE_PERF_MONITORING)
+    target_compile_definitions(${TARGET_NAME}-static PRIVATE ICC_PERF_MONITORING=1)
+  endif()
+  if(ICCDEV_AVX512_ENABLED)
+    target_compile_definitions(${TARGET_NAME}-static PRIVATE ICC_USE_AVX512=1)
+  endif()
   if(ICC_USE_ZLIB)
     target_compile_definitions(${TARGET_NAME}-static PUBLIC ICC_USE_ZLIB=1)
   endif()

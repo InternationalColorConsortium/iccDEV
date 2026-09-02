@@ -4,6 +4,51 @@ Systematic code review workflow for finding security bugs in iccDEV.
 Based on analysis of 80+ upstream issues and 19 findings from manual
 code review (April 2026).
 
+## Review Churn Controls
+
+Before reporting a finding, confirm that it is introduced by the reviewed diff
+or that the diff makes a pre-existing condition newly reachable. Report only a
+concrete, reproducible correctness or security impact. Do not file style-only,
+speculative, duplicate, or broad-test comments when focused evidence is
+available.
+
+Use one finding per root cause. Include the changed file and line, triggering
+condition, impact, and smallest safe remediation. Read `AGENTS.md`,
+`.github/copilot-instructions.md`, matching path instructions, and
+`.github/skills/code-review/SKILL.md` before reviewing.
+
+Review only a frozen head that has passed
+`docs/governance/UPSTREAM_PR_READINESS.md`. Review the complete PR surface and
+cumulative diff, not incremental slices. Before reviewing, record a
+`base...HEAD` contract matrix mapping each changed cross-cutting surface to its
+producer, consumer, build/runtime behavior, platform or toolchain boundary, CI
+trigger, dependency owner, and local evidence. A request for changes returns
+the branch to branch-only grooming; re-review only after readiness evidence and
+the complete contract matrix are renewed. If a re-review finds any new blocker,
+including in the repair, stop serial automated review and require maintainer
+direction. Prefer no comment to low-value review volume.
+
+For every new or relocated C/C++ source or header, verify the complete ICC
+Software License block is retained. A missing, abbreviated, or placeholder
+block is a blocking changed-line defect.
+
+## MATLAB MEX Review Pass
+
+For `matlab/**` changes, read
+`.github/instructions/matlab-code-review.instructions.md` before reporting.
+Verify:
+
+1. MEX actions reject wrong argument counts, MATLAB types, scalar shapes, enum
+   boundaries, and stale native handles before conversion or dereference.
+2. MATLAB wrappers close temporary files, file handles, Java streams, and
+   native handles on both success and failure.
+3. Public required-argument functions retain actionable `iccdev:*Required`
+   errors and matching `test_usage_guidance` fixtures.
+4. Tool wrappers use Java `ProcessBuilder` argument lists, surface nonzero
+   native diagnostics, and never return failed output as success.
+5. A new native tool dependency is wired through focused tests, Release build
+   targets, CI, staged artifacts, and MATLAB documentation.
+
 ## 4-Category Hunt
 
 ### Category 1: Serialization Mismatch (CWE-345)

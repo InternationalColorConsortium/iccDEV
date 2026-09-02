@@ -76,7 +76,7 @@
 #include <fstream>
 #include <cstring>
 #include <new>
-#include "IccCmdLineUtil.h" // relocated into IccProfLib per #2154; was ../../Tools/CmdLine
+#include "IccFileUtil.h"
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -90,51 +90,6 @@ namespace iccDEV {
 static bool icWriteString(FILE* f, const std::string& out)
 {
   return out.empty() || fwrite(out.c_str(), 1, out.size(), f) == out.size();
-}
-
-static FILE* icOpenWriteTextFile(const char* filename)
-{
-  if (!filename || !filename[0])
-    return stdout;
-
-#if defined(_WIN32)
-  return fopen(filename, "wt");
-#else
-  struct stat st;
-  if (stat(filename, &st) == 0 && !S_ISREG(st.st_mode))
-    return nullptr;
-
-  int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-  if (fd < 0)
-    return nullptr;
-
-  if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
-    close(fd);
-    return nullptr;
-  }
-
-  FILE* f = fdopen(fd, "w");
-  if (!f)
-    close(fd);
-
-  return f;
-#endif
-}
-
-static bool icCloseWriteTextFile(FILE* f)
-{
-  if (!f)
-    return false;
-
-  bool failed = (fflush(f) != 0) || (ferror(f) != 0);
-
-  if (f == stdout)
-    return !failed;
-
-  if (fclose(f) != 0)
-    failed = true;
-
-  return !failed;
 }
 
 static bool icFormatFloatValue(char* buf, size_t bufSize, int nDigits, int nPrecision, icFloatNumber v)
@@ -1212,24 +1167,54 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
       if (!icParseIntArg(args[1], nIntent) || nIntent == INT_MIN)
         return 0;
 
+      // A negative code is not a documented form, but it was accepted whenever
+      // the units digit was zero: nType takes abs() while the intent digit does
+      // not, and -110 % 10 is 0, so "-110" decoded exactly like "110" -- and the
+      // sign silently took the overprint field with it, because -1000110 / 1000000
+      // is -1, which matched neither over-black nor over-gray.  #1400 added the
+      // range checks below to reject invalid codes; this is the case they cannot
+      // see, because by the time they run the value has already lost the sign
+      // (#2190).
+      if (nIntent < 0)
+        return 0;
+
       pProf->m_useD2BxB2Dx = true;
       // Overprint variant for NamedColor xforms is encoded as the millions
       // digit of the intent code:
       //   +1000000 -> icNamedColorOverBlack (spcb)
       //   +2000000 -> icNamedColorOverGray  (spcg)
-      // Anything else leaves the default icNamedColorOverWhite (spec).
+      // Any other value in that column is refused rather than decoded as the
+      // default icNamedColorOverWhite (spec).  The two array members are
+      // mutually exclusive, so "+3000000" cannot mean both; answering it with
+      // neither handed a caller who asked for an overprint a plain over-white
+      // transform and exit 0, and the same silence swallowed "+9000000" and
+      // every larger typo (#2190).
       // Strip the field before the existing decimal-coded flags are read.
       {
         int overprintCode = nIntent / 1000000;
-        if (overprintCode == 1)
+        if (overprintCode == 0)
+          pProf->m_nOverprint = icNamedColorOverWhite;
+        else if (overprintCode == 1)
           pProf->m_nOverprint = icNamedColorOverBlack;
         else if (overprintCode == 2)
           pProf->m_nOverprint = icNamedColorOverGray;
         else
-          pProf->m_nOverprint = icNamedColorOverWhite;
+          return 0;
         nIntent = nIntent % 1000000;
       }
+      // Recorded, but nothing downstream consumes it: m_useHToS reaches only
+      // toJson(), CIccCmm::AddXform() has no HToS parameter, and
+      // CheckPCSRangeConversions() injects the HToS transform whenever the tag
+      // is present regardless of any flag.  Left as-is here -- wiring it
+      // through is a library API change, not part of this decode fix (#2190).
       pProf->m_useHToS = (nIntent / 100000) != 0;
+      // Strip the HToS digit before the V5 sub-profile digit is read.  Without
+      // this the "/ 10000" below still sees the hundred-thousands column, so any
+      // code carrying +100000 forced m_useV5SubProfile true as well and there was
+      // no way to ask for HToS alone -- the two flags are documented as
+      // independent.  The -INIT decode further down already strips at this width
+      // for exactly this reason (#2190).
+      nIntent = nIntent % 100000;
       pProf->m_useV5SubProfile = (nIntent / 10000) != 0;
       nIntent = nIntent % 10000;
       pProf->m_adjustPcsLuminance = nIntent / 1000 != 0;
@@ -1253,8 +1238,13 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
         break;
       }
       
-      // pin decoded values to valid range
-      if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric)
+      // Pin the decoded values to their valid range.  Only the upper bound can
+      // fire here: a negative code is refused at the top of this decode (#2190),
+      // and the lower half never covered that case in the first place -- by the
+      // time it runs "% 10" has dropped the sign, which is exactly how "-110"
+      // reached this point as 0.  Testing it left a comparison that is always
+      // false (CodeQL cpp/constant-comparison #2359).
+      if (nIntent > (int)icAbsoluteColorimetric)
         return 0;
       
       if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
@@ -1485,24 +1475,54 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
       if (!icParseIntArg(args[1], nIntent) || nIntent == INT_MIN)
         return 0;
 
+      // A negative code is not a documented form, but it was accepted whenever
+      // the units digit was zero: nType takes abs() while the intent digit does
+      // not, and -110 % 10 is 0, so "-110" decoded exactly like "110" -- and the
+      // sign silently took the overprint field with it, because -1000110 / 1000000
+      // is -1, which matched neither over-black nor over-gray.  #1400 added the
+      // range checks below to reject invalid codes; this is the case they cannot
+      // see, because by the time they run the value has already lost the sign
+      // (#2190).
+      if (nIntent < 0)
+        return 0;
+
       pProf->m_useD2BxB2Dx = true;
       // Overprint variant for NamedColor xforms is encoded as the millions
       // digit of the intent code:
       //   +1000000 -> icNamedColorOverBlack (spcb)
       //   +2000000 -> icNamedColorOverGray  (spcg)
-      // Anything else leaves the default icNamedColorOverWhite (spec).
+      // Any other value in that column is refused rather than decoded as the
+      // default icNamedColorOverWhite (spec).  The two array members are
+      // mutually exclusive, so "+3000000" cannot mean both; answering it with
+      // neither handed a caller who asked for an overprint a plain over-white
+      // transform and exit 0, and the same silence swallowed "+9000000" and
+      // every larger typo (#2190).
       // Strip the field before the existing decimal-coded flags are read.
       {
         int overprintCode = nIntent / 1000000;
-        if (overprintCode == 1)
+        if (overprintCode == 0)
+          pProf->m_nOverprint = icNamedColorOverWhite;
+        else if (overprintCode == 1)
           pProf->m_nOverprint = icNamedColorOverBlack;
         else if (overprintCode == 2)
           pProf->m_nOverprint = icNamedColorOverGray;
         else
-          pProf->m_nOverprint = icNamedColorOverWhite;
+          return 0;
         nIntent = nIntent % 1000000;
       }
+      // Recorded, but nothing downstream consumes it: m_useHToS reaches only
+      // toJson(), CIccCmm::AddXform() has no HToS parameter, and
+      // CheckPCSRangeConversions() injects the HToS transform whenever the tag
+      // is present regardless of any flag.  Left as-is here -- wiring it
+      // through is a library API change, not part of this decode fix (#2190).
       pProf->m_useHToS = (nIntent / 100000) != 0;
+      // Strip the HToS digit before the V5 sub-profile digit is read.  Without
+      // this the "/ 10000" below still sees the hundred-thousands column, so any
+      // code carrying +100000 forced m_useV5SubProfile true as well and there was
+      // no way to ask for HToS alone -- the two flags are documented as
+      // independent.  The -INIT decode further down already strips at this width
+      // for exactly this reason (#2190).
+      nIntent = nIntent % 100000;
       pProf->m_useV5SubProfile = (nIntent / 10000) != 0;
       nIntent = nIntent % 10000;
       pProf->m_adjustPcsLuminance = nIntent / 1000 != 0;
@@ -1519,8 +1539,13 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
         nType = icXformLutColor;
       }
       
-      // pin decoded values to valid range
-      if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric)
+      // Pin the decoded values to their valid range.  Only the upper bound can
+      // fire here: a negative code is refused at the top of this decode (#2190),
+      // and the lower half never covered that case in the first place -- by the
+      // time it runs "% 10" has dropped the sign, which is exactly how "-110"
+      // reached this point as 0.  Testing it left a comparison that is always
+      // false (CodeQL cpp/constant-comparison #2357).
+      if (nIntent > (int)icAbsoluteColorimetric)
         return 0;
       
       if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
@@ -1556,10 +1581,24 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
     if (!icParseIntArg(args[1], nIntent) || nIntent == INT_MIN)
       return 0;
 
+    // Same sign gap as the two profile decodes above: abs() on the type digit
+    // let a negative code through whenever the units digit was zero (#2190).
+    if (nIntent < 0)
+      return 0;
+
     m_bInitialized = true;
 
     m_useD2BxB2DxInitial = true;
-    nIntent = nIntent % 100000;
+    // -INIT carries no overprint and no HToS field -- there is no
+    // m_nOverprintInitial or m_useHToSInitial for them to land in -- so a code
+    // reaching into those columns is refused rather than masked off.  Masking
+    // is what "% 100000" used to do here, and once the two profile decodes
+    // above started refusing an unrecognised overprint column it left the same
+    // value answered two different ways inside one command line: "<profile>
+    // 3000000" was rejected while "-INIT 3000000" silently ran a plain
+    // perceptual initial transform and exited 0 (#2190).
+    if (nIntent >= 100000)
+      return 0;
     m_useV5SubProfileInitial = (nIntent / 10000) != 0;
     nIntent = nIntent % 10000;
     m_adjustPcsLuminanceInitial = nIntent / 1000 != 0;
@@ -1575,8 +1614,13 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
       nType = icXformLutColor;
     }
       
-    // pin decoded values to valid range
-    if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric)
+    // Pin the decoded values to their valid range.  Only the upper bound can
+    // fire here: a negative code is refused at the top of this decode (#2190),
+    // and the lower half never covered that case in the first place -- by the
+    // time it runs "% 10" has dropped the sign, which is exactly how "-110"
+    // reached this point as 0.  Testing it left a comparison that is always
+    // false (CodeQL cpp/constant-comparison #2358).
+    if (nIntent > (int)icAbsoluteColorimetric)
       return 0;
       
     if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
@@ -2370,7 +2414,14 @@ bool CIccCfgColorData::toLegacy(const char* filename, const CIccCfgProfileArray 
   if (nDigits > 20) nDigits = 20;
   if (nPrecision > 20) nPrecision = 20;
 
-  f = icOpenWriteTextFile(filename);
+  // Shared helper from IccCmdLineUtil.h (#2154), replacing a private copy that
+  // differed only in its POSIX mode string: the copy passed "w" to fdopen, this
+  // passes "wt". Inert -- POSIX has no text/binary distinction and glibc, musl
+  // and the BSD/bionic __sflags lineage all ignore an unknown mode letter.
+  // Deliberately NOT icOpenRegularWriteFile(filename, "w"), which would match
+  // POSIX exactly but drop the explicit "wt" the copy used on Windows, leaving
+  // text mode dependent on _fmode -- a global an embedding application can set.
+  f = icOpenRegularWriteTextFile(filename);
 
   if (!f)
     return false;
@@ -2459,7 +2510,7 @@ bool CIccCfgColorData::toLegacy(const char* filename, const CIccCfgProfileArray 
     fprintf(f, "\n");
   }
 
-  if (!icCloseWriteTextFile(f))
+  if (!icFlushAndClose(f))
     return false;
 
   return true;
@@ -2632,7 +2683,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
   if (!nFields)
     return false;
 
-  f = icOpenWriteTextFile(filename);
+  f = icOpenRegularWriteTextFile(filename);
 
   if (!f)
     return false;
@@ -2720,7 +2771,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
   }
   fprintf(f, "END_DATA\n");
 
-  if (!icCloseWriteTextFile(f))
+  if (!icFlushAndClose(f))
     return false;
 
   return true;

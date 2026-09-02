@@ -5,19 +5,18 @@ SET( SRC_PATH ../../../.. )
 SET( SOURCES
   ${SRC_PATH}/Tools/CmdLine/IccProfilePlot/iccProfilePlot.cpp )
 SET( TARGET_NAME iccProfilePlot )
-SET( ICC_PLOT_LINK_LIB ${TARGET_LIB_ICCPROFLIB} )
 
-IF(WIN32 AND ENABLE_SHARED_LIBS AND TARGET IccProfLib2-static)
-  # Mirror iccDumpProfile: link the static lib on Windows shared builds, since
-  # the tool references exported data symbols that do not dllimport cleanly.
-  SET( ICC_PLOT_LINK_LIB IccProfLib2-static )
-ENDIF()
-
+# Both tools here link ${TARGET_LIB_ICCPROFLIB} on every platform, including
+# Windows shared builds.  Until #2219 they linked IccProfLib2-static there,
+# mirroring iccDumpProfile -- but neither of them, nor IccVizModel.cpp, ever
+# referenced one of the eight exported globals, so that fallback was inherited
+# rather than needed.  It is gone either way now that the globals carry
+# ICCPROFLIB_DATA_API dllexport/dllimport (#2154).
 ADD_EXECUTABLE( ${TARGET_NAME} ${SOURCES} )
 
 # IccVizEngine carries IccVizModel.cpp plus the include directory that makes
 # IccVizModel.hpp / IccVizMath.hpp / spectralLocus.hpp reachable.
-TARGET_LINK_LIBRARIES( ${TARGET_NAME} ${ICC_PLOT_LINK_LIB} IccVizEngine )
+TARGET_LINK_LIBRARIES( ${TARGET_NAME} ${TARGET_LIB_ICCPROFLIB} IccVizEngine )
 IF(ENABLE_INSTALL_RIM)
   INSTALL (TARGETS ${TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
 ENDIF(ENABLE_INSTALL_RIM)
@@ -36,7 +35,7 @@ ADD_EXECUTABLE( ${VIZ_TARGET_NAME} ${VIZ_SOURCES} )
 
 # The Mini* writers stay listed above: they are this tool's rendering back end,
 # not part of the engine, and no other consumer compiles them.
-TARGET_LINK_LIBRARIES( ${VIZ_TARGET_NAME} ${ICC_PLOT_LINK_LIB} IccVizEngine )
+TARGET_LINK_LIBRARIES( ${VIZ_TARGET_NAME} ${TARGET_LIB_ICCPROFLIB} IccVizEngine )
 IF(ENABLE_INSTALL_RIM)
   INSTALL (TARGETS ${VIZ_TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
 ENDIF(ENABLE_INSTALL_RIM)

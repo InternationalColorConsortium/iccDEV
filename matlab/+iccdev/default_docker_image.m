@@ -5,5 +5,5 @@ function image = default_docker_image()
 % BSD 3-Clause License. See LICENSE.md for details.
 
   image = ['ghcr.io/internationalcolorconsortium/iccdev@sha256:' ...
-    'b003dcfdc04776035b51d9cdc03f90d62cc70c745da321ae29e182075bf2845d'];
+    '0a54b8ad1ca73e294ecf9c71323e6385c8812945c6ca3b40ba98d9f82b89c0fc'];
 end

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>2.10</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>GRAY</DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-08-20T00:00:00</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Perceptual</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </PCSIlluminant>
+    <ProfileCreator>ICCD</ProfileCreator>
+  </Header>
+  <Tags>
+    <grayTRCTag> <curveType>
+      <Curve>
+         563
+      </Curve>
+    </curveType> </grayTRCTag>
+
+    <profileDescriptionTag> <textDescriptionType>
+      <TextData><![CDATA[iccDEV v2 grayscale display profile (grayTRC)]]></TextData>
+    </textDescriptionType> </profileDescriptionTag>
+
+    <copyrightTag> <textType>
+      <TextData><![CDATA[Copyright (C) 2026 The International Color Consortium. Generated fixture, no measured data.]]></TextData>
+    </textType> </copyrightTag>
+
+    <mediaWhitePointTag> <XYZArrayType>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </XYZArrayType> </mediaWhitePointTag>
+
+  </Tags>
+</IccProfile>

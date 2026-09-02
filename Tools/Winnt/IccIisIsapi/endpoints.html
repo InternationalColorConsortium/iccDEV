@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
   <title>iccDEV IIS Server - Endpoint Console</title>
   <style>
     :root {
@@ -413,8 +414,6 @@
         <button class="tool-button secondary" type="button" data-endpoint-url="./iccIisIsapi.dll?mode=health">Check Health</button>
         <button class="tool-button secondary" type="button" data-endpoint-url="./iccIisIsapi.dll?format=xml">Fetch XML</button>
         <a class="link-button secondary" href="./index.html">Back to Landing</a>
-        <a class="link-button secondary" href="./_tool-work/">Open Workspaces</a>
-        <a class="link-button secondary" href="./integration.html">Integration Guide</a>
       </div>
       <div id="live-status" class="status-chip">Waiting for the first request</div>
     </section>
@@ -434,43 +433,41 @@
         <h2>Request Modes</h2>
         <dl class="table-grid">
           <dt><code>./iccIisIsapi.dll</code></dt>
-          <dd>Version summary with profile spec version and XML byte count.</dd>
+          <dd>Service summary with profile specification and payload metadata.</dd>
           <dt><code>?mode=health</code></dt>
           <dd>Plain-text <code>ok</code> response for liveness checks.</dd>
           <dt><code>?format=xml</code></dt>
           <dd>Minimal ICC XML payload with <code>application/xml</code> content type.</dd>
           <dt><code>POST ?mode=tools&amp;input=icc|xml</code></dt>
-          <dd>Runs <code>iccToXml</code>, <code>iccFromXml</code>, <code>iccDumpProfile</code>, and <code>iccRoundTrip</code>, then returns JSON with exit codes, logs, artifacts, and workspace links.</dd>
+          <dd>Converts and validates the upload, generates an ICC PAWG profile assessment, and returns results with downloadable reports and artifacts.</dd>
         </dl>
       </section>
 
       <section>
-        <h2>Quick Tests</h2>
-        <div class="command-list">
-          <code>curl.exe http://localhost:18081/iccIisIsapi.dll?mode=health</code>
-          <code>curl.exe http://localhost:18081/iccIisIsapi.dll</code>
-          <code>curl.exe http://localhost:18081/iccIisIsapi.dll?format=xml</code>
-          <code>curl.exe -H "Accept: application/json" -H "Content-Type: application/octet-stream" ^
-  --data-binary "@sample.icc" ^
-  "http://localhost:18081/iccIisIsapi.dll?mode=tools&amp;input=icc&amp;filename=sample.icc"</code>
-        </div>
+        <h2>What You Receive</h2>
+        <ul>
+          <li>A readable profile assessment with security, conformance, and quality indicators.</li>
+          <li>A downloadable PAWG text report that can be saved or shared.</li>
+          <li>Converted ICC, XML, and optional JSON files when each conversion succeeds.</li>
+          <li>A private job workspace containing the uploaded file, reports, and detailed logs.</li>
+        </ul>
       </section>
 
       <section>
         <h2>Operator Notes</h2>
         <ul>
           <li>The endpoint surface stays rooted at <code>iccIisIsapi.dll</code>, so existing smoke checks remain simple.</li>
-          <li>The upload workflow persists uploads, generated files, and logs into <code>/_tool-work/</code>.</li>
-          <li>The workspace root now has its own landing page, so it avoids IIS directory-level <code>403.14</code>.</li>
+          <li>The upload workflow persists uploads, generated files, and logs behind non-enumerated capability URLs.</li>
+          <li>Workspaces expire after 24 hours and the server retains at most 100 jobs.</li>
         </ul>
       </section>
     </div>
 
     <section class="panel tool-suite-box">
-      <h2>Run The Top 4 Tools In The Browser</h2>
+      <h2>Analyze An ICC Profile</h2>
       <p>
-        Upload an ICC profile or ICC XML file and the IIS endpoint will run the tool suite on the server:
-        <code>iccToXml</code>, <code>iccFromXml</code>, <code>iccDumpProfile</code>, and <code>iccRoundTrip</code>.
+        Choose an ICC profile or ICC XML file. The server will convert and validate it, run the
+        <strong>ICC Profile Assessment Working Group report</strong>, and provide readable results plus downloadable files.
       </p>
       <form id="tool-upload-form">
         <div class="form-row">
@@ -486,13 +483,13 @@
             </select>
           </div>
           <div>
-            <button class="tool-button" type="submit">Run Top 4 Tools</button>
+            <button class="tool-button" type="submit">Analyze Profile</button>
           </div>
         </div>
       </form>
       <p class="tool-help">
-        ICC upload flow: <code>iccToXml</code> -> <code>iccFromXml</code> -> <code>iccDumpProfile</code> -> <code>iccRoundTrip</code>.
-        XML upload flow starts with <code>iccFromXml</code> and then runs the remaining tools on the regenerated ICC profile.
+        The Profile Assessment Report checks security, conformance, and quality indicators. A completed report can contain
+        warnings or failures; use the report details to decide what needs review.
       </p>
       <p class="tool-help">
         Each request also gets a persisted workspace page under <code>./_tool-work/&lt;job&gt;/</code>, with direct links to the uploaded
@@ -509,7 +506,7 @@
         <h2>Response Expectations</h2>
         <ul>
           <li><code>health</code> should return <code>ok</code> with <code>text/plain; charset=utf-8</code>.</li>
-          <li><code>summary</code> should include both <code>IccProfLib</code> and <code>IccLibXML</code> version strings.</li>
+          <li><code>summary</code> should identify the service without exposing build or commit metadata.</li>
           <li><code>xml</code> should return <code>application/xml; charset=utf-8</code> and begin with an XML declaration.</li>
           <li><code>tools</code> should return <code>application/json; charset=utf-8</code> and one result card per wrapped tool.</li>
         </ul>
@@ -518,8 +515,8 @@
       <section>
         <h2>Next Step</h2>
         <p>
-          If the responses are not what you expect, switch to <a href="./integration.html">Integration Guide</a> and re-check the site
-          root, handler verbs, runtime DLL set, and persisted workspace behavior.
+            If the responses are not what you expect, contact the server operator
+            and provide the request status without sharing uploaded artifacts.
         </p>
       </section>
     </div>

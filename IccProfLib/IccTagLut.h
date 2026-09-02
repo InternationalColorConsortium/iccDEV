@@ -159,7 +159,7 @@ public:
   bool SetSize(icUInt32Number nSize, icTagCurveSizeInit nSizeOpt=icInitZero);
   bool SetGamma(icFloatNumber gamma);
 
-  virtual void Begin() {m_nMaxIndex = m_nSize ? (icUInt16Number)(m_nSize - 1) : 0;}
+  virtual void Begin();
   virtual icFloatNumber Apply(icFloatNumber v) const;
   virtual icValidateStatus Validate(std::string sigPath, std::string &sReport, const CIccProfile* pProfile=NULL) const;
   virtual bool IsIdentity();
@@ -168,6 +168,10 @@ protected:
   icFloatNumber *m_Curve;
   icUInt32Number m_nSize;
   icUInt16Number m_nMaxIndex;
+
+  /// Gamma for the single-entry form, decoded once by Begin(). Apply() rebuilt it
+  /// from m_Curve[0] on every call before handing it to pow().
+  icFloatNumber m_fGamma;
 };
 
 /**
@@ -373,7 +377,11 @@ public:
   icUInt32Number GetOffset(int index) const { return m_nOffset ? m_nOffset[index] : 0; }
 
 
-  void Begin();
+  //! Prepare the CLUT for Apply(). Returns false if the object is not in a
+  //! usable state -- most importantly if Init() was never called or refused,
+  //! which leaves no data behind the grid the interpolators would walk. Callers
+  //! on an apply path must not proceed when this returns false.
+  bool Begin();
 
   CIccApplyCLUT* GetNewApply();
 
@@ -389,6 +397,14 @@ public:
   void Iterate(IIccCLUTExec* pExec);
   icValidateStatus Validate(std::string sigPath, std::string &sReport, const CIccProfile* pProfile=NULL)  const;
 
+  /// Retained for source compatibility; has no effect.
+  ///
+  /// The Interp* functions now clamp inline via icClutGridClamp rather than
+  /// calling through a function pointer, and they do so uniformly -- the former
+  /// ClutUnitClip and NoClip behaviours are unified, differing only in that
+  /// +Inf now saturates to the top of the grid on both paths instead of
+  /// collapsing to the bottom on the NoClip one. The stored pointer is kept so
+  /// existing callers still compile, but nothing reads it.
   void SetClipFunc(icCLUTCLIPFUNC ClipFunc) { m_UnitClipFunc = ClipFunc; }
 
   icUInt8Number GetPrecision() { return m_nPrecision; }
@@ -407,6 +423,11 @@ protected:
   void SubIterate(IIccCLUTExec* pExec, icUInt8Number nIndex, icUInt32Number nPos);
 
   icCLUTCLIPFUNC m_UnitClipFunc;
+
+  /// Ceiling for Interp2d's offset clamp, computed in Begin() from values fixed
+  /// by then. Interp2d recomputed it from NumPoints(), m_nOutput and n011 on
+  /// every pixel.
+  int m_nMaxDataOffset2d;
 
   icUInt8Number m_nReserved2[3];
   
@@ -466,7 +487,12 @@ public:
   bool SwapMBCurves() const { return m_bUseMCurvesAsBCurves; }
 
   void Cleanup();
-  void Init(icUInt8Number nInputChannels, icUInt8Number nOutputChannels);
+
+  //! Set the channel counts everything else in this object is sized from.
+  //! Returns false, changing nothing, if either count is outside 1..16 -- the
+  //! bound CIccCLUT::Init() and the lut read paths already impose. Callers on a
+  //! load or parse path must not proceed when this returns false.
+  bool Init(icUInt8Number nInputChannels, icUInt8Number nOutputChannels);
 
   icUInt8Number InputChannels() const { return m_nInput; }
   icUInt8Number OutputChannels() const { return m_nOutput; }

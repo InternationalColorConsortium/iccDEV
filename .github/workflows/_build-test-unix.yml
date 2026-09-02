@@ -153,7 +153,7 @@ jobs:
           fi
 
           CC=clang CXX=clang++ cmake Cmake \
-            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_BUILD_TYPE=Release \
             -DENABLE_TOOLS=ON \
             -DENABLE_ICCXML=ON \
             "${CMAKE_EXTRA_ARGS[@]}" 2>&1 | tee "$LOGDIR/cmake.log"
@@ -324,7 +324,7 @@ jobs:
             echo "WARN: RunTests.sh exited $rc"
           }
 
-      - name: Run CalcTest/checkInvalidProfiles.sh
+      - name: Run CalcTest/runtests.sh
         if: ${{ inputs.run-full-tests }}
         env:
           BASH_ENV: /dev/null
@@ -346,10 +346,7 @@ jobs:
           export LD_LIBRARY_PATH="${WORKSPACE_DIR}/Build/IccProfLib:${WORKSPACE_DIR}/Build/IccXML"
 
           cd "${WORKSPACE_DIR}/Testing/CalcTest"
-          sh checkInvalidProfiles.sh 2>&1 | tee "$LOGDIR/checkInvalidProfiles.log" || {
-            rc=$?
-            echo "WARN: checkInvalidProfiles.sh exited $rc"
-          }
+          sh runtests.sh 2>&1 | tee "$LOGDIR/calc-runtests.log"
 
       # ---------------------------------------------------------------
       # Phase 6: Tool parity -- sweep all profiles (full tests only)
@@ -1048,7 +1045,7 @@ jobs:
               "mcs-updateprev:mcs-updateprev.log:MCS updateprev" \
               "mcs-withBkgd:mcs-updateprevWithBkgd.log:MCS updateprevWithBkgd" \
               "RunTests:RunTests.log:iccDEV test suite" \
-              "CalcTest:checkInvalidProfiles.log:CalcTest invalid profiles"
+              "CalcTest:calc-runtests.log:CalcTest full wrapper"
             do
               IFS=':' read -r phase logfile desc <<< "$item"
               if [ -f "$LOGDIR/$logfile" ]; then

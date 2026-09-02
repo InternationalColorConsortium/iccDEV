@@ -423,8 +423,8 @@ static void cmd_cmm_attach(int nlhs, mxArray *plhs[],
   }
   if (nrhs >= 6) {
     int v = get_int(prhs[5], "lutType");
-    if (v < 0 || v > 0xA)
-      mexErrMsgIdAndTxt("iccdev:badArgs", "lutType must be 0..10, got %d.", v);
+    if (v < icXformLutColor || v > icXformLutMaximum)
+      mexErrMsgIdAndTxt("iccdev:badArgs", "lutType must be 0..13, got %d.", v);
     lutType = static_cast<icXformLutType>(v);
   }
   if (nrhs >= 7) useD2B  = static_cast<icBoolean>(get_int(prhs[6], "useD2B"));

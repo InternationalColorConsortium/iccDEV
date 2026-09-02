@@ -4,6 +4,13 @@ Use this prompt when the `ci-vcpkg-ports.yml` workflow fails.
 
 ## Quick Triage
 
+### 0. Verify the Registry Baseline Set
+
+For a registry baseline update, keep `vcpkg.json`, `Build/Cmake/vcpkg.json`,
+`examples/hello-iccdev/vcpkg-configuration.json`,
+`.github/workflows/ci-vcpkg-ports.yml`, and `.github/workflows/ci.yml` at the
+same commit. The overlay port manifest intentionally has no registry baseline.
+
 ### 1. Identify Which Platform Failed
 
 The workflow runs on 3 platforms. Check which job(s) failed:

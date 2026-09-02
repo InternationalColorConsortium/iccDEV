@@ -23,5 +23,6 @@ function result = run_docker_qa(image)
       'Missing Docker output marker: %s', expected{i});
   end
 
-  fprintf('Docker QA passed with %s\n', result.imageId);
+  fprintf('Docker QA passed: reference=%s image-id=%s\n', ...
+    result.image, result.imageId);
 end

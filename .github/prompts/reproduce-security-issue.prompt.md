@@ -6,6 +6,19 @@ investigating a crash reported against an ICC profile or image file.
 ## Examples
 - https://github.com/InternationalColorConsortium/iccDEV/issues/696 https://github.com/InternationalColorConsortium/iccDEV/issues/700 https://github.com/InternationalColorConsortium/iccDEV/issues/734 https://github.com/InternationalColorConsortium/iccDEV/issues/753
 
+## Step 0: Establish Tool Reachability
+
+For a CodeQL report, trace the untrusted field from its parser through setup and
+the affected operation before synthesizing an artifact. Check whether `Init()`,
+`Read()`, or `Begin()` bounds the field and whether every command-line tool
+propagates a failed setup result. A direct library call that skips a required
+setup method does not prove profile-to-tool reachability.
+
+If the path is blocked, record the guard and call-chain evidence, add a CodeQL
+query test with a guarded case and an unguarded control, and report a false
+positive instead of creating a PoC. Alerts #999, #1000, and #1647 are the
+reference case for a `Begin()`-established Apply invariant.
+
 ## Step 1: Identify the Advisory
 
 ```bash

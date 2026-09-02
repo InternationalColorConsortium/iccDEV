@@ -248,5 +248,127 @@ run_expect_reject enc-percent-lab-src "$APPLY" "$LABSRC" 3 0 "$SRGB" 1
 grep -Fq "Invalid source data encoding" "$OUTDIR/enc-percent-lab-src.log" ||
   fail "enc-percent-lab-src did not report the source encoding rejection"
 
+
+###############################################################################
+# #2190: the decimal-coded intent columns are independent fields, and
+# CIccCfgProfile::fromArgs() did not treat them that way
+#
+# Three separate silences, all on the same decode:
+#
+#   1. +100000 (HToS) forced +10000 (V5 sub-profile) on with it. The V5 digit
+#      is read as "nIntent / 10000" and the HToS column had not been stripped
+#      first, so every code >= 100000 divides to >= 10 and set the flag. No
+#      argument existed that asked for HToS alone. The -INIT decode in the same
+#      file already stripped at this width, which is what makes this a slip
+#      rather than a contract.
+#   2. The millions column accepted any value: only 1 and 2 were decoded and
+#      everything else fell through to the default over-white. "3000000" -- the
+#      form in the issue, from a caller trying to combine over-black and
+#      over-gray, which are mutually exclusive array members -- ran a plain
+#      over-white transform and exited 0.
+#   3. A negative code was accepted whenever its units digit was zero: the type
+#      digit takes abs() and the intent digit does not, so "-110" decoded
+#      exactly like "110" and the sign silently discarded the overprint field
+#      along the way (-1000110 / 1000000 is -1, matching neither variant).
+#
+# The flag half is asserted through -exportcfg, not through exit status. Exit
+# status cannot see it: every invocation below exited 0 before the fix, which
+# is precisely the defect. The decoded configuration is the only place a wrong
+# flag is observable, so that read-back is the assertion.
+###############################################################################
+
+assert_cfg_has() {
+  grep -Fq "$2" "$1" || fail "$3"
+}
+
+assert_cfg_lacks() {
+  if grep -Fq "$2" "$1"; then
+    fail "$3"
+  fi
+}
+
+# useHToS is asserted as a decode result only. Nothing downstream consumes it
+# (AddXform takes no HToS argument and CheckPCSRangeConversions injects the
+# transform unconditionally), so these cases pin which columns the parser reads
+# -- they are not evidence that the HToS selector does anything at apply time.
+#
+# The two flags are a crossing pair, for the same reason the encoding cases
+# above are: asserting only that +100000 sets HToS would still pass with the
+# columns fused, and asserting only that it leaves V5 clear would pass if the
+# export had silently stopped emitting either field. Each arm has to show one
+# flag present and the other absent, and the third arm has to show both, before
+# "independent" is pinned rather than merely "not always equal".
+HTOS_CFG="$OUTDIR/intent-htos-only.cfg.json"
+rm -f "$HTOS_CFG"
+run_expect_success intent-htos-only "$APPLY" -exportcfg "$HTOS_CFG" "$DATA" 0 1 "$SRGB" 100000
+assert_cfg_has   "$HTOS_CFG" '"useHToS": true' \
+  "intent-htos-only did not set useHToS for +100000"
+assert_cfg_lacks "$HTOS_CFG" '"useV5SubProfile": true' \
+  "intent-htos-only set useV5SubProfile: the HToS column is bleeding into the V5 column"
+
+V5_CFG="$OUTDIR/intent-v5-only.cfg.json"
+rm -f "$V5_CFG"
+run_expect_success intent-v5-only "$APPLY" -exportcfg "$V5_CFG" "$DATA" 0 1 "$SRGB" 10000
+assert_cfg_has   "$V5_CFG" '"useV5SubProfile": true' \
+  "intent-v5-only did not set useV5SubProfile for +10000"
+assert_cfg_lacks "$V5_CFG" '"useHToS": true' \
+  "intent-v5-only set useHToS for a code that does not carry it"
+
+BOTH_CFG="$OUTDIR/intent-htos-and-v5.cfg.json"
+rm -f "$BOTH_CFG"
+run_expect_success intent-htos-and-v5 "$APPLY" -exportcfg "$BOTH_CFG" "$DATA" 0 1 "$SRGB" 110000
+assert_cfg_has "$BOTH_CFG" '"useHToS": true' \
+  "intent-htos-and-v5 did not set useHToS for +110000"
+assert_cfg_has "$BOTH_CFG" '"useV5SubProfile": true' \
+  "intent-htos-and-v5 did not set useV5SubProfile for +110000"
+
+# Overprint: the two documented codes have to keep decoding to their own
+# variants, or the rejections below would pass against a parser that had simply
+# stopped reading the millions column at all. The transform name is the
+# read-back that carries the overprint -- it is only rendered for a named
+# transform, hence the "110" (namedColorimetric) type digit on every arm here.
+BLACK_CFG="$OUTDIR/intent-over-black.cfg.json"
+rm -f "$BLACK_CFG"
+run_expect_success intent-over-black "$APPLY" -exportcfg "$BLACK_CFG" "$DATA" 0 1 "$SRGB" 1000110
+assert_cfg_has "$BLACK_CFG" '"transform": "namedColorimetricOnBlack"' \
+  "intent-over-black did not decode +1000000 to the over-black variant"
+
+GRAY_CFG="$OUTDIR/intent-over-gray.cfg.json"
+rm -f "$GRAY_CFG"
+run_expect_success intent-over-gray "$APPLY" -exportcfg "$GRAY_CFG" "$DATA" 0 1 "$SRGB" 2000110
+assert_cfg_has "$GRAY_CFG" '"transform": "namedColorimetricOnGray"' \
+  "intent-over-gray did not decode +2000000 to the over-gray variant"
+
+# ...and an unrecognised millions column is refused rather than answered with
+# over-white. 3000000 and 3111003 are the exact codes reported in #2190.
+assert_rejected_sequence() {
+  grep -Fqx "Unable to parse profile sequence arguments" "$OUTDIR/$1.log" ||
+    fail "$1 was refused, but not by the profile-sequence parser"
+}
+
+run_expect_reject intent-overprint-3 "$APPLY" "$DATA" 0 1 "$SRGB" 3000000
+assert_rejected_sequence intent-overprint-3
+run_expect_reject intent-overprint-3-flags "$APPLY" "$DATA" 0 1 "$SRGB" 3111003
+assert_rejected_sequence intent-overprint-3-flags
+run_expect_reject intent-overprint-9 "$APPLY" "$DATA" 0 1 "$SRGB" 9000110
+assert_rejected_sequence intent-overprint-9
+run_expect_reject intent-overprint-12 "$APPLY" "$DATA" 0 1 "$SRGB" 12000110
+assert_rejected_sequence intent-overprint-12
+
+# Negative codes. Paired with the positive form of the same value so the
+# rejection cannot be credited to the type digit or to the profile: 110 is
+# asserted to succeed immediately above as intent-over-black's base, and -110
+# used to reach the identical decode.
+run_expect_reject intent-negative "$APPLY" "$DATA" 0 1 "$SRGB" -110
+assert_rejected_sequence intent-negative
+run_expect_reject intent-negative-overprint "$APPLY" "$DATA" 0 1 "$SRGB" -1000110
+assert_rejected_sequence intent-negative-overprint
+POS_CFG="$OUTDIR/intent-pos.cfg.json"
+rm -f "$POS_CFG"
+run_expect_success intent-negative-control "$APPLY" -exportcfg "$POS_CFG" \
+  "$DATA" 0 1 "$SRGB" 110
+assert_cfg_has "$POS_CFG" '"transform": "namedColorimetric"' \
+  "intent-negative-control did not accept the positive form of the rejected code"
+
 echo "  [PASS] iccApplyNamedCmm-cli-args"
 exit 0

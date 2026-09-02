@@ -1,0 +1,7 @@
+name: iccdev/security-query-tests
+version: 1.0.0
+dependencies:
+  iccdev/security-queries: "*"
+  codeql/cpp-all: "8.0.3"
+extractor: cpp
+tests: .

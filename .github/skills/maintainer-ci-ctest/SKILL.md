@@ -50,6 +50,10 @@ when practical.
   current total.
 - Adding checks inside `iccdev-tool-coverage-baseline.sh` does not change that
   count; validate the direct script and `ctest -R '^iccdev\.tool-coverage$'`.
+- If a change touches legacy packed intent decoding or named-color overprint
+  variants, include both `.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh`
+  and `.github/scripts/iccdev-applysearch-cli-args-regression.sh`, plus
+  `.github/scripts/iccdev-namedcolor-overprint-regression-tests.sh`.
 - Windows full builds include focused executable regressions, batch-backed
   suites, dump/profile smoke coverage, shared-export coverage, and PAWG report
   coverage.
@@ -77,16 +81,17 @@ when practical.
 - Treat `ci-pr-action` `full` as the explicit long-cycle maintainer gate. It runs
   Unix GCC/Clang Release and Debug builds, exact GCC 15.2 strict Release LTO in
   the regression container, GCC 15.2 ASAN+UBSAN tool tests, Windows, and Docker.
+  Its tool-test caller excludes the `pr-extended` CTest label to stay within
+  the PR runtime budget; `ci-regression-checks` continues to run the labelled
+  tests.
 - `ci_scope=auto` is the default. It selects the full matrix for source, build,
   test, and container changes; workflow-only changes run the preflight and
   workflow-security gates.
 - Use `ci_scope=fast-lane` for the exact GCC 15.2 Release LTO and ASAN+UBSAN
-  Release tool lanes. Fast lane defaults to the latest CTest with Windows and
-  Docker disabled; add them only when the change needs those surfaces.
-- On `ci-qa-pr-docker-testing`, Docker PR verification is advisory. Let the
-  orchestrator continue when that lane fails, mark the run for
-  `bump-sha-pins`, update pinned action or container SHAs, and rerun Docker
-  before claiming container verification.
+  Release tool lanes. Fast lane defaults to the latest CTest with Windows
+  disabled; Docker runs when the PR changes the container surface.
+- Container changes require the Docker PR verification lane. Do not claim the
+  container surface is verified until its local image build and hosted lane pass.
 - Do not use `|| true` around profile generation, CTest discovery, regression
   execution, sanitizer checks, or packaging verification.
 - Use least-privilege permissions and credential cleanup.
@@ -101,6 +106,17 @@ when practical.
   `ci-regression-checks` through that orchestrator for ASAN/UBSAN CTest coverage.
 
 ## Local Validation
+
+For focused workflow iteration, start with:
+
+```bash
+.github/scripts/preflight-safety-checks.sh --fast-lane
+```
+
+This scans changed workflow/script surfaces without running CTest or local
+CodeQL databases. Run only the nearest feature test during iteration, then use
+`--fast-lane=matlab` for MATLAB-only work. Use the full preflight or hosted
+gates before final handoff.
 
 ```bash
 file <changed-files>
@@ -139,7 +155,7 @@ docker build -t iccdev-container-check -f <Dockerfile> .
 docker run --rm iccdev-container-check <smoke-command>
 ```
 
-For `Dockerfile.ci-regression`, also run a no-cache build and smoke
+For the unified `Dockerfile`, also run a no-cache build and smoke
 `clang`, `clang++`, `gcc`, `g++`, `cmake`, `afl-fuzz`, and `/usr/bin/time`. If the image is
 published, pass the published branch or SHA tag to `ci-iccdev-tool-tests.yml`.
 

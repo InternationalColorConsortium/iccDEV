@@ -455,11 +455,11 @@ CIccXform::CIccXform()
   m_nIntent = icUnknownIntent;
   m_pAdjustPCS = NULL;
   m_bAdjustPCS = false;
+  m_bSrcSpectralPCS = false;
+  m_bDstSpectralPCS = false;
   m_bAbsToRel = false;
   m_nMCS = icNoMCS;
   m_bUseSpectralPCS = false;
-  m_bSrcPcsConversion = true;
-  m_bDstPcsConversion = true;
   m_pConnectionConditions = NULL;
   m_bDeleteEnvLooup = true;
   m_pCmmEnvVarLookup = NULL;
@@ -692,7 +692,18 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
         // lives in DToBx tags regardless of how the caller set bUseD2BTags. Opening
         // that path here lets icXformLutColor + a spectral source profile resolve
         // without the caller having to set useD2BxB2Dx explicitly.
-        if (bUseD2BTags || pProfile->m_Header.spectralPCS) {
+        //
+        // "Spectral-only" is the !pcs test, not the bare spectralPCS test that
+        // stood here: ICC.2:2023 lets a profile carry an independent colorimetric
+        // PCS as well, and for those the caller's opt-out has to be honoured.
+        // CIccCmm::AddXform already draws the line that way -- its nDstSpace
+        // selection reads (bUseD2BxB2DxTags || !m_Header.pcs) -- so without this
+        // term the two disagree: AddXform records the 3-sample XYZ connection
+        // while Create hands back a DToBx transform emitting spectralPCS samples,
+        // and CIccCmm::Begin() then rejects the chain with icCmmStatBadSpaceLink.
+        // Measured on SixChanInputRef (AToB3 6->3, DToB3 6->36) with the D2B
+        // opt-out intents 11 and 13 (#1982).
+        if (bUseD2BTags || (pProfile->m_Header.spectralPCS && !pProfile->m_Header.pcs)) {
           if (nLutType != icXformLutColorimetric &&
               (pProfile->m_Header.spectralPCS || pProfile->m_Header.version >= icVersionNumberV5)) {
             pTag = pProfile->FindTag(icSigDToB0Tag + nTagIntent);
@@ -831,7 +842,16 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
 
         // Spectral-only destination profiles only carry BToDx tags; let icXformLutColor
         // resolve them without requiring the caller to set useD2BxB2Dx.
-        if (bUseD2BTags || (nLutType != icXformLutColorimetric && pProfile->m_Header.spectralPCS)) {
+        //
+        // Same !pcs correction as the bInput branch above, and it has to land in
+        // the same commit: the two mis-selections currently cancel out.  A chain
+        // whose source and destination are both dual-PCS resolves today because
+        // both ends silently take the spectral route, so fixing only the input
+        // side leaves the destination on BToDx and turns a working link into
+        // icCmmStatUnsupportedPcsLink.  Measured with SixChanInputRef into
+        // SixChanCameraRef under the opt-out intents (#1982).
+        if (bUseD2BTags || (nLutType != icXformLutColorimetric &&
+                            pProfile->m_Header.spectralPCS && !pProfile->m_Header.pcs)) {
           pTag = pProfile->FindTag(icSigBToD0Tag + nTagIntent);
 
           //Additional precedence not prescribed by the v4 ICC Specification
@@ -1337,6 +1357,13 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
 
     rv->SetParams(pProfile, bInput, nIntent, nTagIntent, bUseSpectralPCS, nInterp, pHintManager, bAbsToRel, nMCS);
 
+    // Record the flag as it stands *here*, after the icXformLutSpectral and
+    // icXformLutColorimetric adjustments above rewrote it, so it names the tag
+    // family the selection code actually walked rather than what the caller
+    // asked for.  CIccApplyBPC reads it back to build its black-point
+    // transforms from the same family.
+    rv->SetUseD2BTags(bUseD2BTags);
+
     // The icXformLutGamut case above forced bInput false to walk the gamt tag
     // in its stored B-to-A direction.  Record that this is a gamut xform so the
     // reported destination stays icSigGamutData rather than the device space.
@@ -1477,6 +1504,11 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
       rv->m_pConnectionConditions = pProfile;
 
     rv->SetParams(pProfile, bInput, nIntent, nTagIntent, bUseSpectralPCS, nInterp, pHintManager, bAbsToRel, nMCS);
+
+    // No SetUseD2BTags() here: this overload is handed the tag outright, so
+    // there is no tag-family selection to record and no way for CIccApplyBPC
+    // to reproduce the caller's choice by rebuilding a cmm from the profile.
+    // m_bUseD2BTags keeps its constructor default of false.
   }
   else if (bOwnsProfile) {
     // No xform was built for this profile/tag combination; pProfile never
@@ -1515,6 +1547,13 @@ void CIccXform::SetParams(CIccProfile *pProfile, bool bInput, icRenderingIntent 
   m_bAbsToRel = bAbsToRel;
   m_nMCS = nMCS;
   m_bLuminanceMatching = false;
+
+  // m_pProfile, m_bInput and m_bUseSpectralPCS above are exactly the fields
+  // the base GetSrcSpace()/GetDstSpace() compute from (m_bGamutXform and
+  // m_bPcsAdjustXform are the other two, refreshed by their own setters).
+  // Called on an already-constructed xform in every in-tree caller -- see
+  // refreshPcsPortCache()'s declaration in IccCmm.h.
+  refreshPcsPortCache();
 
   if (pHintManager) {
     IIccCreateXformHint *pHint=NULL;
@@ -1608,17 +1647,44 @@ bool CIccXform::CheckForInvalidPCSScale() const
 
 /**
  **************************************************************************
+ * Name: CIccXform::refreshPcsPortCache
+ *
+ * Purpose:
+ *  Recomputes m_bSrcSpectralPCS/m_bDstSpectralPCS from
+ *  IsSpaceSpectralPCS(GetSrcSpace())/IsSpaceSpectralPCS(GetDstSpace()). See
+ *  the declaration in IccCmm.h for the full list of call sites and why
+ *  virtual dispatch here is safe at every one of them.
+ **************************************************************************
+ */
+void CIccXform::refreshPcsPortCache()
+{
+  m_bSrcSpectralPCS = IsSpaceSpectralPCS(GetSrcSpace());
+  m_bDstSpectralPCS = IsSpaceSpectralPCS(GetDstSpace());
+}
+
+/**
+ **************************************************************************
  * Name: CIccXform::Begin
  * 
  * Purpose: 
  *  This function will be called before the xform is applied.  Derived objects
- *  should also call this base class function to initialize for Absolute Colorimetric
- *  Intent handling which is performed through the use of the CheckSrcAbs and
- *  CheckDstAbs functions.
+ *  should also call this base class function to initialize for Absolute
+ *  Colorimetric Intent handling.  The adjustment itself is performed by the
+ *  CIccPcsXform that CIccCmm::CheckPCSConnections() places at the connection;
+ *  what this sets up (m_bAdjustPCS, m_PCSScale, m_PCSOffset) is what
+ *  NeedsSrcPcsAdjust()/NeedsDstPcsAdjust() report and CIccPcsXform reads.
  **************************************************************************
  */
 icStatusCMM CIccXform::Begin()
 {
+  // Refresh the port-spectral-ness cache unconditionally: whatever moved a
+  // port's space since the last refresh (SetParams(), SetGamutXform(),
+  // SetPcsAdjustXform(), or a CIccXformNamedColor SetSrcSpace()/
+  // SetDestSpace()), Begin() is the point every derived Begin() override
+  // reaches (each calls CIccXform::Begin() first) before Apply() can read
+  // the cache through NeedsSrcPcsAdjust()/NeedsDstPcsAdjust().
+  refreshPcsPortCache();
+
   IIccProfileConnectionConditions *pCond = GetConnectionConditions();
 
   icFloatNumber mediaXYZ[3];
@@ -1808,106 +1874,58 @@ void CIccXform::ApplyN(CIccApplyXform *pXform, icFloatNumber *DstPixel, const ic
 
 /**
  **************************************************************************
-* Name: CIccXform::AdjustPCS
- * 
- * Purpose: 
-*  This function will take care of any PCS adjustments 
-*  needed by the xform (the PCS is always version 4 relative).
- * 
- * Args: 
-*  DstPixel = Destination pixel where the result is stored,
-*  SrcPixel = Source pixel which is to be applied.
- * 
- **************************************************************************
- */
-void CIccXform::AdjustPCS(icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
-{
-  icColorSpaceSignature Space = m_pProfile->m_Header.pcs;
-
-  if (Space==icSigLabData) {
-    if (UseLegacyPCS()) {
-    	CIccPCSUtil::Lab2ToXyz(DstPixel, SrcPixel, true);
-    }
-    else {
-      CIccPCSUtil::LabToXyz(DstPixel, SrcPixel, true);
-    }
-  }
-  else {
-    DstPixel[0] = SrcPixel[0];
-    DstPixel[1] = SrcPixel[1];
-    DstPixel[2] = SrcPixel[2];
-  }
-
-  DstPixel[0] = DstPixel[0] * m_PCSScale[0] + m_PCSOffset[0];
-  DstPixel[1] = DstPixel[1] * m_PCSScale[1] + m_PCSOffset[1];
-  DstPixel[2] = DstPixel[2] * m_PCSScale[2] + m_PCSOffset[2];
-
-  if (Space==icSigLabData) {
-    if (UseLegacyPCS()) {
-
-    	CIccPCSUtil::XyzToLab2(DstPixel, DstPixel, true);
-    }
-    else {
-      CIccPCSUtil::XyzToLab(DstPixel, DstPixel, true);
-    }
-  }
-#ifndef SAMPLEICC_NOCLIPLABTOXYZ
-  else {
-    DstPixel[0] = CIccPCSUtil::NegClip(DstPixel[0]);
-    DstPixel[1] = CIccPCSUtil::NegClip(DstPixel[1]);
-    DstPixel[2] = CIccPCSUtil::NegClip(DstPixel[2]);
-  }
-#endif
-}
-
-/**
- **************************************************************************
- * Name: CIccXform::CheckSrcAbs
- * 
- * Purpose: 
- *  This function will be called by a derived CIccXform object's Apply() function
- *  BEFORE the actual xform is performed to take care of Absolute to Relative
- *  adjustments needed by the xform (IE the PCS is always version 4 relative).
- * 
- * Args: 
- *  Pixel = src pixel data (will not be modified)
- * 
- * Return: 
- *  returns Pixel or adjusted pixel data.
- **************************************************************************
- */
-const icFloatNumber *CIccXform::CheckSrcAbs(CIccApplyXform *pApply, const icFloatNumber *Pixel) const
-{
-	if (m_bAdjustPCS && !m_bInput) {
-    icFloatNumber *pAbsLab = pApply->m_AbsLab;
-		AdjustPCS(pAbsLab, Pixel);
-    return pAbsLab;
-  }
-
-  return Pixel;
-}
-
-/**
- **************************************************************************
- * Name: CIccXform::CheckDstAbs
- * 
- * Purpose: 
- *  This function will be called by a derived CIccXform object's Apply() function
- *  AFTER the actual xform is performed to take care of Absolute to Relative
- *  adjustments needed by the xform (IE the PCS is always version 4 relative).
- * 
- * Args: 
- *  Pixel = source pixel data which will be modified
+ * Name: CIccXform::NeedsSrcPcsAdjust
  *
+ * Purpose:
+ *  Reports whether the XYZ PCS adjustment applies to values entering this
+ *  xform, so that CIccPcsXform::Connect()/ConnectFirst() can ask it at
+ *  Begin() time and push the matching steps.
+ *
+ *  The spectral term is the substance: the XYZ media-white adjustment scales
+ *  DstPixel[0..2] by m_PCSScale, i.e. it reads the first three samples of the
+ *  pixel as X, Y and Z.  On a spectral PCS port those are the first three
+ *  wavelength bands of a spectrum, so the media-white ratio applied to them
+ *  is not a colour conversion at all -- it corrupts three bands and leaves
+ *  the rest alone.
+ *  Relative and absolute spectra are related by the *spectral* white point,
+ *  which CIccPcsXform applies element-wise across the whole vector; see
+ *  pushSpectralWhitePointConvert() below.
+ *
+ *  NOTE that spectral is the ONLY port kind excluded here, and it is not the
+ *  only one the X/Y/Z reading is wrong for.  An MCS port (GetDstSpace() returns
+ *  m_Header.mcs for an icToMCS xform, with no colorimetric test) reaches these
+ *  predicates unexcluded, and m_bAdjustPCS can be set on such an xform through
+ *  the IIccAdjustPCSXform hint path in Begin() above, which applies no port test
+ *  whatsoever.  Nothing then performs the adjustment -- CheckPCSConnections()
+ *  builds no CIccPcsXform at an MCS port either -- so today it is silently
+ *  dropped rather than silently wrong.  Before the CheckSrcAbs()/CheckDstAbs()
+ *  retirement it fired inside Apply() and mangled MCS channels 0..2.  See
+ *  "Known gaps" in docs/pcs-adjustment-placement.md; pinned by
+ *  pcsAdjustHintReachesANonPcsPort().  Awaiting the repository owner's ruling,
+ *  so do not add an MCS term here without reading that section first.
  **************************************************************************
  */
-void CIccXform::CheckDstAbs(icFloatNumber *Pixel) const
+bool CIccXform::NeedsSrcPcsAdjust() const
 {
-	if (m_bAdjustPCS && m_bInput) {
-		AdjustPCS(Pixel, Pixel);
-  }
+  return m_bAdjustPCS && !m_bInput && !m_bSrcSpectralPCS;
 }
-        
+
+/**
+ **************************************************************************
+ * Name: CIccXform::NeedsDstPcsAdjust
+ *
+ * Purpose:
+ *  The destination-side mirror of NeedsSrcPcsAdjust() above, including its note
+ *  about MCS ports -- which is a destination-side gap specifically, since an
+ *  icToMCS xform is an input xform and it is this predicate that answers true
+ *  for it.
+ **************************************************************************
+ */
+bool CIccXform::NeedsDstPcsAdjust() const
+{
+  return m_bAdjustPCS && m_bInput && !m_bDstSpectralPCS;
+}
+
 /**
 **************************************************************************
 * Name: CIccXform::GetSrcSpace
@@ -2078,7 +2096,7 @@ icUInt16Number CIccXform::GetNumDstSamples() const
 *  Constructor
 **************************************************************************
 */
-CIccApplyXform::CIccApplyXform(CIccXform *pXform) : m_AbsLab{}
+CIccApplyXform::CIccApplyXform(CIccXform *pXform)
 {
   m_pXform = pXform;
 }
@@ -2409,14 +2427,14 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
               pushLab2ToXyz(pFromXform->m_pConnectionConditions);
             else
               pushLabToXyz(pFromXform->m_pConnectionConditions);
-            if (pFromXform->NeedAdjustDstPCS()) {
+            if (pFromXform->NeedsDstPcsAdjust()) {
               pushScale3(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]);
               pushOffset3(pFromXform->m_PCSOffset[0], pFromXform->m_PCSOffset[1], pFromXform->m_PCSOffset[2]);
             }
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2435,14 +2453,14 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
               pushLab2ToXyz(pFromXform->m_pConnectionConditions);
             else
               pushLabToXyz(pFromXform->m_pConnectionConditions);
-            if (pFromXform->NeedAdjustDstPCS()) {
+            if (pFromXform->NeedsDstPcsAdjust()) {
               pushScale3(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]);
               pushOffset3(pFromXform->m_PCSOffset[0], pFromXform->m_PCSOffset[1], pFromXform->m_PCSOffset[2]);
             }
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2468,14 +2486,14 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
         switch (m_dstSpace) {
           case icSigLabPcsData:
             pushXyzInToXyz();
-            if (pFromXform->NeedAdjustDstPCS()) {
+            if (pFromXform->NeedsDstPcsAdjust()) {
               pushScale3(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]);
               pushOffset3(pFromXform->m_PCSOffset[0], pFromXform->m_PCSOffset[1], pFromXform->m_PCSOffset[2]);
             }
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2491,14 +2509,14 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
 
           case icSigXYZPcsData:
             pushXyzInToXyz();
-            if (pFromXform->NeedAdjustDstPCS()) {
+            if (pFromXform->NeedsDstPcsAdjust()) {
               pushScale3(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]);
               pushOffset3(pFromXform->m_PCSOffset[0], pFromXform->m_PCSOffset[1], pFromXform->m_PCSOffset[2]);
             }
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2521,6 +2539,15 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
 
       case icSigReflectanceSpectralPcsData:
       case icSigTransmissionSpectralPcsData:
+        // From-side spectral white point conversion, ahead of every destination
+        // below: whatever the source vector becomes next -- XYZ, a resampled
+        // spectrum, a radiant spectrum -- it has to be carrying the intent's
+        // absolute-ness before it gets there.  This is the pFromXform push the
+        // spectral region never had; the Lab and XYZ source cases above have
+        // carried their pFromXform equivalent all along.
+        if ((stat=pushSpectralWhitePointConvert(pFromXform, true, m_nSrcSamples))!=icCmmStatOk) {
+          return stat;
+        }
         switch (m_dstSpace) {
           case icSigLabPcsData:
             if ((stat=pushRef2Xyz(pFromXform->m_pProfile, pFromXform->m_pConnectionConditions))!=icCmmStatOk) {
@@ -2529,7 +2556,7 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2550,7 +2577,7 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2567,6 +2594,14 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
                                     pToXform->m_pProfile->m_Header.spectralRange))!=icCmmStatOk) {
               return stat;
             }
+            // To-side conversion, last: the vector is now in the destination
+            // profile's range and has to leave this connection in the
+            // absolute-ness that profile's tag family expects.  Reciprocal of
+            // the from-side push above, so a matched pair folds away in
+            // Optimize().
+            if ((stat=pushSpectralWhitePointConvert(pToXform, false, m_nDstSamples))!=icCmmStatOk) {
+              return stat;
+            }
             break;
 
           case icSigRadiantSpectralPcsData:
@@ -2575,6 +2610,14 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             }
             if ((stat=pushSpecToRange(pFromXform->m_pProfile->m_Header.spectralRange,
                                         pToXform->m_pProfile->m_Header.spectralRange))!=icCmmStatOk) {
+              return stat;
+            }
+            // To-side conversion, last: the vector is now in the destination
+            // profile's range and has to leave this connection in the
+            // absolute-ness that profile's tag family expects.  Reciprocal of
+            // the from-side push above, so a matched pair folds away in
+            // Optimize().
+            if ((stat=pushSpectralWhitePointConvert(pToXform, false, m_nDstSamples))!=icCmmStatOk) {
               return stat;
             }
             break;
@@ -2590,6 +2633,16 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
         CIccProfile *pFromProfile = pFromXform->GetProfilePtr();
 //        CIccProfile *pToProfile = pToXform->GetProfilePtr();      // unused!
 
+        // From-side spectral white point conversion, ahead of every destination
+        // below: whatever the source vector becomes next -- XYZ, a resampled
+        // spectrum, a radiant spectrum -- it has to be carrying the intent's
+        // absolute-ness before it gets there.  This is the pFromXform push the
+        // spectral region never had; the Lab and XYZ source cases above have
+        // carried their pFromXform equivalent all along.
+        if ((stat=pushSpectralWhitePointConvert(pFromXform, true, m_nSrcSamples))!=icCmmStatOk) {
+          return stat;
+        }
+
         switch (m_dstSpace) {
           case icSigLabPcsData:
             if ((stat=pushRad2Xyz(pFromProfile, pFromXform->m_pConnectionConditions, false))!=icCmmStatOk) {
@@ -2598,7 +2651,7 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2619,7 +2672,7 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2640,6 +2693,14 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
                                    pToXform->m_pProfile->m_Header.spectralRange))!=icCmmStatOk) {
               return stat;
             }
+            // To-side conversion, last: the vector is now in the destination
+            // profile's range and has to leave this connection in the
+            // absolute-ness that profile's tag family expects.  Reciprocal of
+            // the from-side push above, so a matched pair folds away in
+            // Optimize().
+            if ((stat=pushSpectralWhitePointConvert(pToXform, false, m_nDstSamples))!=icCmmStatOk) {
+              return stat;
+            }
             break;
 
           default:
@@ -2652,6 +2713,12 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
 
       case icSigBiDirReflectanceSpectralPcsData:
       case icSigSparseMatrixSpectralPcsData:
+        // No from-side spectral white point conversion here, unlike the two
+        // cases above: a bi-directional reflectance vector is a (spectral x
+        // bi-spectral) grid and a sparse matrix port carries an encoded matrix,
+        // so an element-wise scale against a spectrum is not dimensionally
+        // meaningful for either.  The destination ports below can still be
+        // plain spectra, and those do convert.
         switch (m_dstSpace) {
           case icSigLabPcsData:
             // This was the one call among the nine status-returning push* helpers whose
@@ -2664,7 +2731,7 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2685,7 +2752,7 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
-            if (pToXform->NeedAdjustSrcPCS()) {
+            if (pToXform->NeedsSrcPcsAdjust()) {
               if (pToXform->CheckForInvalidPCSScale())
                 return icCmmStatBadXform;
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
@@ -2705,14 +2772,34 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
                                     pToXform->m_pProfile->m_Header.spectralRange))!=icCmmStatOk) {
               return stat;
             }
+            // To-side conversion, last: the vector is now in the destination
+            // profile's range and has to leave this connection in the
+            // absolute-ness that profile's tag family expects. Unlike the
+            // colorimetric-source branches above, this source branch pushes
+            // no from-side spectral white point conversion (see the comment
+            // at the top of this case), so there is no matching push for this
+            // one to fold against in Optimize().
+            if ((stat=pushSpectralWhitePointConvert(pToXform, false, m_nDstSamples))!=icCmmStatOk) {
+              return stat;
+            }
             break;
 
           case icSigRadiantSpectralPcsData:
             if ((stat=pushBiRef2Rad(pFromXform->m_pProfile, pFromXform->m_pConnectionConditions))!=icCmmStatOk) {
               return stat;
             }
-            if ((stat=pushSpecToRange(pFromXform->m_pProfile->m_Header.spectralRange, 
+            if ((stat=pushSpecToRange(pFromXform->m_pProfile->m_Header.spectralRange,
                             pToXform->m_pProfile->m_Header.spectralRange))!=icCmmStatOk) {
+              return stat;
+            }
+            // To-side conversion, last: the vector is now in the destination
+            // profile's range and has to leave this connection in the
+            // absolute-ness that profile's tag family expects. Unlike the
+            // colorimetric-source branches above, this source branch pushes
+            // no from-side spectral white point conversion (see the comment
+            // at the top of this case), so there is no matching push for this
+            // one to fold against in Optimize().
+            if ((stat=pushSpectralWhitePointConvert(pToXform, false, m_nDstSamples))!=icCmmStatOk) {
               return stat;
             }
             break;
@@ -2774,21 +2861,36 @@ icStatusCMM CIccPcsXform::ConnectFirst(CIccXform* pToXform, icColorSpaceSignatur
   // This transform runs from the CMM's source space into whatever the following
   // transform consumes, so the source side is derived from srcSpace and the
   // destination side is taken from pToXform.  Spectral PCS signatures are
-  // reduced to their colorimetric type the same way Connect() reduces them,
-  // because the steps pushed below operate on colorimetric PCS values.
+  // reduced to their colorimetric type the same way Connect() reduces them.
+  //
+  // The sample count is taken from the *unreduced* signature: a spectral PCS
+  // signature carries its channel count in its low 16 bits, and
+  // icGetColorSpaceType() strips exactly those bits, so reducing first and then
+  // counting reports 0 samples for every spectral edge.  Connect() does not
+  // have the problem because it takes both counts from the neighbouring xforms.
+  m_nSrcSamples = (icUInt16Number)icGetSpaceSamples(srcSpace);
   m_srcSpace = srcSpace;
   if (IsSpaceSpectralPCS(m_srcSpace))
     m_srcSpace = icGetColorSpaceType(m_srcSpace);
-  m_nSrcSamples = (icUInt16Number)icGetSpaceSamples(m_srcSpace);
 
   m_dstSpace = pToXform->GetSrcSpace();
   if (IsSpaceSpectralPCS(m_dstSpace))
     m_dstSpace = icGetColorSpaceType(m_dstSpace);
   m_nDstSamples = pToXform->GetNumSrcSamples();
 
-  if (srcSpace == icSigXYZData) {
+  // Spectral leading edge.  The CMM hands a spectral vector straight to
+  // pToXform, so the only conversion this edge can owe is the spectral white
+  // point one: nothing else in this function operates on a spectral vector, and
+  // the XYZ media-white adjustment the branches below push is excluded at a
+  // spectral port by CIccXform::NeedsSrcPcsAdjust().
+  if (IsSpaceSpectralPCS(srcSpace)) {
+    icStatusCMM specStat = pushSpectralWhitePointConvert(pToXform, false, m_nDstSamples);
+    if (specStat != icCmmStatOk)
+      return specStat;
+  }
+  else if (srcSpace == icSigXYZData) {
     pushXyzInToXyz();
-    if (pToXform->NeedAdjustSrcPCS()) {
+    if (pToXform->NeedsSrcPcsAdjust()) {
       pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
       pushOffset3(pToXform->m_PCSOffset[0], pToXform->m_PCSOffset[1], pToXform->m_PCSOffset[2]);
     }
@@ -2814,13 +2916,13 @@ icStatusCMM CIccPcsXform::ConnectFirst(CIccXform* pToXform, icColorSpaceSignatur
       // ~2x too large (65535/32768) and the Lab->device direction (e.g. round-trip
       // evaluation through a matrix/TRC display profile) is grossly wrong.
       pushLabToXyz(pToXform->m_pConnectionConditions);
-      if (pToXform->NeedAdjustSrcPCS()) {
+      if (pToXform->NeedsSrcPcsAdjust()) {
         pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
         pushOffset3(pToXform->m_PCSOffset[0], pToXform->m_PCSOffset[1], pToXform->m_PCSOffset[2]);
       }
       pushXyzToXyzIn();
     }
-    else if (pToXform->NeedAdjustSrcPCS()) {
+    else if (pToXform->NeedsSrcPcsAdjust()) {
       pushLabToXyz(pToXform->m_pConnectionConditions);
       pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
       pushOffset3(pToXform->m_PCSOffset[0], pToXform->m_PCSOffset[1], pToXform->m_PCSOffset[2]);
@@ -2886,17 +2988,51 @@ icStatusCMM CIccPcsXform::ConnectLast(CIccXform* pFromXform, icColorSpaceSignatu
     m_srcSpace = icGetColorSpaceType(m_srcSpace);
   m_nSrcSamples = pFromXform->GetNumDstSamples();
 
+  // Counted before the reduction, for the reason given in ConnectFirst():
+  // icGetColorSpaceType() strips the low 16 bits that carry a spectral PCS
+  // signature's channel count.
+  m_nDstSamples = (icUInt16Number)icGetSpaceSamples(dstSpace);
   m_dstSpace = dstSpace;
   if (IsSpaceSpectralPCS(m_dstSpace))
     m_dstSpace = icGetColorSpaceType(m_dstSpace);
-  m_nDstSamples = (icUInt16Number)icGetSpaceSamples(m_dstSpace);
 
-  if (pFromXform->NeedAdjustDstPCS() && IsSpaceColorimetricPCS(dstSpace)) {
+  // Spectral trailing edge.  pFromXform emits a spectral vector straight into
+  // the CMM's destination space, and the only conversion this edge can owe is
+  // the spectral white point one.  The XYZ block below is a no-op here twice
+  // over: dstSpace is not a colorimetric PCS, and CIccXform::NeedsDstPcsAdjust()
+  // excludes a spectral port anyway.
+  if (IsSpaceSpectralPCS(srcSpace)) {
+    icStatusCMM specStat = pushSpectralWhitePointConvert(pFromXform, true, m_nSrcSamples);
+    if (specStat != icCmmStatOk)
+      return specStat;
+  }
+
+  if (pFromXform->NeedsDstPcsAdjust() && IsSpaceColorimetricPCS(dstSpace)) {
     if (srcSpace == icSigLabData) {
       if (pFromXform->UseLegacyPCS())
         pushLab2ToXyz(pFromXform->m_pConnectionConditions);
       else
         pushLabToXyz(pFromXform->m_pConnectionConditions);
+    }
+    else if (srcSpace == icSigXYZData) {
+      // pFromXform's own Apply() emits *internal* XYZ at its dst port (e.g.
+      // CIccXformMatrixTRC's XYZScale(), CIccXform3DLut's raw LUT samples --
+      // both pre-scaled by 32768/65535 per the internal-PCS-XYZ convention),
+      // and m_PCSScale/m_PCSOffset are computed in that same domain (see
+      // CIccXform::Begin(), whose v2-perceptual offset is explicitly
+      // pre-scaled to internal units). pushScale3() is a bare ratio and does
+      // not care which domain it runs in, but pushOffset3() below defaults
+      // bConvertIntXyzOffset to true specifically to take an internal-domain
+      // offset (what m_PCSOffset already is) and rescale it by 65535/32768
+      // into the actual-domain step this chain otherwise runs on -- see
+      // pushOffset3()'s own doc comment. That rescale only lands correctly if
+      // the pixel it is added to is already actual-domain, so bring it there
+      // first, exactly as the srcSpace==icSigLabData branch above arranges via
+      // its own actual-XYZ-producing conversion. Without this, the
+      // unconditional pushXyzToXyzIn() below re-scales an already-internal
+      // pixel a second time, halving the result again (xform-abstorel-adjust,
+      // pawg-q4-xyz-pcs-decode).
+      pushXyzInToXyz();
     }
 
     pushScale3(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]);
@@ -2938,7 +3074,35 @@ icStatusCMM CIccPcsXform::ConnectLast(CIccXform* pFromXform, icColorSpaceSignatu
  **************************************************************************
  * Name: CIccPcsXform::Optimize
  * 
- * Purpose: 
+ * Purpose:
+ *  Gives each step in the chain its one chance to precompute invariant state.
+ *
+ *  Runs after Connect()/Optimize() have finished building the list and before
+ *  GetNewApply(), so a step can build immutable data here and treat it as
+ *  read-only in Apply(). Doing that work lazily on first Apply() instead would
+ *  be a data race: Apply() is const and runs concurrently on every worker
+ *  thread of a CIccThreadedCmm.
+ **************************************************************************
+ */
+icStatusCMM CIccPcsXform::Begin()
+{
+  if (m_list) {
+    CIccPcsStepList::iterator i;
+
+    for (i = m_list->begin(); i != m_list->end(); i++) {
+      if (i->ptr && !i->ptr->BeginStep())
+        return icCmmStatInvalidLut;
+    }
+  }
+
+  return icCmmStatOk;
+}
+
+/**
+**************************************************************************
+ * Name: CIccPcsXform::Optimize
+ *
+ * Purpose:
  *  Analyzes and concatenates/removes transforms in pcs transformation chain
  **************************************************************************
  */
@@ -3346,7 +3510,7 @@ void CIccPcsXform::pushXyzLumToXyz(IIccProfileConnectionConditions *pPCC)
 
 /**
  **************************************************************************
- * Name: CIccPcsXform::pushXyzToXyzIn
+ * Name: CIccPcsXform::pushOffset3
  * 
  * Purpose: 
  *  Insert PCS step that adds an offset to 3 channels.  If bConvertIntXyzOffset
@@ -3751,6 +3915,160 @@ icStatusCMM CIccPcsXform::pushSpecToRange(const icSpectralRange &srcRange, const
 
     m_list->push_back(ptr);
   }
+  return icCmmStatOk;
+}
+
+
+/**
+ **************************************************************************
+ * Name: CIccPcsXform::pushSpectralWhitePointConvert
+ *
+ * Purpose:
+ *  Insert the PCS step that converts a spectral PCS vector between the
+ *  absolute-ness its tag family carries and the absolute-ness the rendering
+ *  intent asks for.  Relative and absolute spectra are related element-wise by
+ *  the profile's spectral white point:
+ *
+ *      relative = absolute / white          absolute = relative * white
+ *
+ *  This is the spectral counterpart of the XYZ media-white adjustment
+ *  CIccPcsXform pushes on a colorimetric PCS port, and it replaces that
+ *  adjustment at a spectral port entirely -- see
+ *  CIccXform::NeedsSrcPcsAdjust() and
+ *  docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md.
+ *
+ * Args:
+ *  pXform       = the xform owning the port being converted.
+ *  bDstPort     = true for pXform's destination port (values leaving it),
+ *                 false for its source port (values entering it).
+ *  nPortSamples = the width of the pixel this step will run on, taken from the
+ *                 surrounding connection rather than re-derived here.
+ *
+ * Returns icCmmStatOk both when a conversion was pushed and when none was
+ * needed; a non-Ok status means the profile is not usable for the connection.
+ **************************************************************************
+ */
+icStatusCMM CIccPcsXform::pushSpectralWhitePointConvert(const CIccXform *pXform,
+                                                        bool bDstPort,
+                                                        icUInt16Number nPortSamples)
+{
+  if (!pXform || !pXform->m_pProfile)
+    return icCmmStatOk;
+
+  // Structural half of the direction rule, mirroring
+  // NeedsDstPcsAdjust()/NeedsSrcPcsAdjust(): only an input (device->PCS) xform
+  // converts on its destination port, only an output (PCS->device) xform
+  // converts on its source port.
+  if (bDstPort != pXform->m_bInput)
+    return icCmmStatOk;
+
+  // Convert if and only if the tag's absolute-ness differs from the intent's.
+  // An absolute tag read at absolute intent, and a relative tag read at
+  // relative intent, are already in the space the other side of the port wants.
+  const bool bIntentAbs = (pXform->m_nIntent == icAbsoluteColorimetric);
+  const bool bTagAbs = (pXform->m_nTagIntent == icAbsoluteColorimetric);
+  if (bIntentAbs == bTagAbs)
+    return icCmmStatOk;
+
+  // Only a port whose samples really are a plain spectrum.  A bi-directional
+  // reflectance port carries a (spectral x bi-spectral) grid and a sparse
+  // matrix port carries an encoded matrix, so scaling either element-wise
+  // against a spectrum is not dimensionally meaningful.
+  const icColorSpaceSignature nPortSpace = bDstPort ? pXform->GetDstSpace()
+                                                    : pXform->GetSrcSpace();
+  const icUInt32Number nPortType = icGetColorSpaceType(nPortSpace);
+  if (nPortType != icSigReflectanceSpectralPcsData &&
+      nPortType != icSigTransmissionSpectralPcsData &&
+      nPortType != icSigRadiantSpectralPcsData)
+    return icCmmStatOk;
+
+  CIccProfile *pProfile = pXform->m_pProfile;
+
+  // A missing or unusable spectral white point converts nothing rather than
+  // failing.  This matches how the colorimetric path degrades when the media
+  // white point tag is absent: calcMediaWhiteXYZ() falls back to the
+  // illuminant, media white and illuminant become equal, and CIccXform::Begin()
+  // finds nothing to adjust.
+  CIccTag *pTag = pProfile->FindTag(icSigSpectralWhitePointTag);
+  if (!pTag || !pTag->IsNumArrayType())
+    return icCmmStatOk;
+
+  CIccTagNumArray *pNumTag = (CIccTagNumArray*)pTag;
+
+  // A profile can disagree with itself about how many samples its spectral
+  // vector holds -- Testing/Display/LaserProjector.icc declares a 401-channel
+  // radiant signature alongside a 31-step range.  nSamples below is what
+  // actually gets allocated and pushed (see pushScale() at the end of this
+  // function): it is the profile's own statement of its spectral channel
+  // count, read from the same spectralPCS signature icSpectralPcsMatchesRange()
+  // already checks against spectralRange.steps for the three plain-spectrum
+  // types -- calling it here instead of re-deriving the same comparison keeps
+  // that invariant stated in one place. Connect() already calls it on both
+  // connected profiles before ever reaching this helper; ConnectFirst() and
+  // ConnectLast() do not, so the call here is load-bearing for those two.
+  //
+  // nSamples != nPortSamples below is defensive, not load-bearing: nPortSamples
+  // is what the neighbouring xforms report and what CIccApplyCmm sizes its
+  // pixel buffers from, but at every one of this function's nine call sites it
+  // traces back to GetNumSrcSamples()/GetNumDstSamples() on this same pXform,
+  // which for a spectral port resolves to icGetSpaceSamples() on this same
+  // spectralPCS signature -- the identical quantity nSamples is computed from
+  // two lines below. The two cannot actually disagree; refusing rather than
+  // truncating or padding is only in case that ever stops being true.
+  const icUInt32Number nSamples =
+    icGetSpaceSamples((icColorSpaceSignature)pProfile->m_Header.spectralPCS);
+
+  if (!nSamples ||
+      nSamples != (icUInt32Number)nPortSamples ||
+      !icSpectralPcsMatchesRange(pProfile->m_Header) ||
+      pNumTag->GetNumValues() < nSamples)
+    return icCmmStatInvalidProfile;
+
+  icFloatNumber *pWhite = new (std::nothrow) icFloatNumber[nSamples];
+  if (!pWhite)
+    return icCmmStatAllocErr;
+
+  // GetValues() defaults nStart to 0 and nVectorSize to 1, so the
+  // single-argument overload copies exactly one value into a buffer sized for
+  // the whole spectrum -- the bug documented at IccProfile.cpp's
+  // calcMediaWhiteXYZ().  Ask for the whole vector and honour the result.
+  if (!pNumTag->GetValues(pWhite, 0, nSamples)) {
+    delete [] pWhite;
+    return icCmmStatOk;
+  }
+
+  icUInt32Number i;
+  for (i=0; i<nSamples; i++) {
+    // A zero or non-finite sample is a bad profile: one direction of this pair
+    // divides by it, and an infinite scale poisons every PCS sample downstream.
+    // Refused in both directions on purpose -- accepting the multiply while
+    // refusing the divide would stop the two being inverses of each other.
+    // Same treatment CheckForInvalidPCSScale() gives a zero colorimetric scale.
+    if (!std::isfinite(pWhite[i]) || pWhite[i] == 0.0f) {
+      delete [] pWhite;
+      return icCmmStatInvalidProfile;
+    }
+  }
+
+  // One vector, inverted for the other direction, rather than two loops: the
+  // multiply pushed on one side of a connection and the divide pushed on the
+  // other are then exact reciprocals, and CIccPcsStepScale::concat() folds the
+  // adjacent pair to an identity that Optimize() drops.
+  //
+  // Destination port of an input xform: tag-space -> intent-space, so an
+  // absolute intent (whose tag is therefore relative) multiplies.  Source port
+  // of an output xform: intent-space -> tag-space, the exact inverse.
+  const bool bMultiply = bDstPort ? bIntentAbs : bTagAbs;
+
+  if (!bMultiply) {
+    for (i=0; i<nSamples; i++)
+      pWhite[i] = (icFloatNumber)1.0 / pWhite[i];
+  }
+
+  pushScale((icUInt16Number)nSamples, pWhite);
+
+  delete [] pWhite;
+
   return icCmmStatOk;
 }
 
@@ -5510,20 +5828,55 @@ CIccPcsStepSparseMatrix::CIccPcsStepSparseMatrix(icUInt16Number nRows, icUInt16N
   m_nBytesPerMatrix = nBytesPerMatrix;
   m_nChannels = 0;
   m_vals = new icFloatNumber[m_nBytesPerMatrix/sizeof(icFloatNumber)];
+  m_pMtx = NULL;   // built by BeginStep(), once m_vals has been populated
 }
 
 
 /**
 **************************************************************************
 * Name: CIccPcsStepSparseMatrix::~CIccPcsStepSparseMatrix
-* 
-* Purpose: 
+*
+* Purpose:
 *  Destructor
 **************************************************************************
 */
 CIccPcsStepSparseMatrix::~CIccPcsStepSparseMatrix()
 {
+  delete m_pMtx;
   delete [] m_vals;
+}
+
+
+/**
+**************************************************************************
+* Name: CIccPcsStepSparseMatrix::BeginStep
+*
+* Purpose:
+*  Builds the sparse matrix wrapper once, before any Apply().
+*
+*  The matrix is parsed from m_vals, which is fixed by the time the step list is
+*  built, so the CIccSparseMatrix it produces is identical for every pixel.
+*  Apply() used to construct one per pixel with bInitFromData=true, and
+*  CIccSparseMatrix::Init() (IccSparseMatrix.cpp:145) unconditionally deletes and
+*  re-news its m_Data accessor -- so that was a heap allocation and free on every
+*  pixel, plus a dimension re-parse and the 4096-dimension bounds test.
+*
+*  It is held on the step rather than in a CIccApplyPcsStep because it is
+*  immutable from here on and MultiplyVector() is const, so every thread can
+*  share the one instance. Contrast CIccPcsStepSrcSparseMatrix, whose matrix
+*  wraps per-pixel source data and therefore cannot be shared.
+**************************************************************************
+*/
+bool CIccPcsStepSparseMatrix::BeginStep()
+{
+  // Idempotent: BeginStep() can be reached more than once, and rebuilding from
+  // the same m_vals yields the same matrix.
+  delete m_pMtx;
+
+  m_pMtx = new (std::nothrow) CIccSparseMatrix((icUInt8Number*)m_vals,
+                                               m_nBytesPerMatrix,
+                                               icSparseMatrixFloatNum, true);
+  return m_pMtx != NULL;
 }
 
 
@@ -5538,6 +5891,20 @@ CIccPcsStepSparseMatrix::~CIccPcsStepSparseMatrix()
 */
 void CIccPcsStepSparseMatrix::Apply(CIccApplyPcsStep * /* pApply */, icFloatNumber *pDst, const icFloatNumber *pSrc) const
 {
+  // Matrix built once in BeginStep(). This used to construct a CIccSparseMatrix
+  // here, which allocated and freed on every pixel -- see BeginStep().
+  if (m_pMtx) {
+    m_pMtx->MultiplyVector(pDst, pSrc);
+    return;
+  }
+
+  // BeginStep() did not run, so fall back to the pre-hoist behaviour rather
+  // than return with pDst never written. Apply() cannot report an error, and a
+  // silent early return leaves the caller's destination vector holding whatever
+  // the buffer happened to contain -- which is the same garbage for every
+  // pixel, so a whole image renders one flat colour that changes from run to
+  // run (#2332 follow-up). The local matrix is constructed per call, which is
+  // exactly the cost the hoist removed, but it is correct and thread safe.
   CIccSparseMatrix mtx((icUInt8Number*)m_vals, m_nBytesPerMatrix, icSparseMatrixFloatNum, true);
 
   mtx.MultiplyVector(pDst, pSrc);
@@ -5706,6 +6073,29 @@ icStatusCMM CIccXformMonochrome::Begin()
 		m_ApplyCurvePtr = m_Curve;
 	}
 
+	// Apply() used to rebuild this on every pixel, in both directions, from
+	// compile-time constants: icXyzToPcs plus, for a Lab PCS, XyzToLab and its
+	// three cube roots, behind a virtual UseLegacyPCS() call. Nothing in it
+	// depends on the source colour, and both m_pProfile->m_Header.pcs and
+	// UseLegacyPCS() are fixed by the time Begin() runs.
+	//
+	// Idempotent: recomputing from the same constants yields the same values, so
+	// reaching Begin() a second time is harmless.
+	m_PcsWhite[0] = icFloatNumber(icPerceptualRefWhiteX);
+	m_PcsWhite[1] = icFloatNumber(icPerceptualRefWhiteY);
+	m_PcsWhite[2] = icFloatNumber(icPerceptualRefWhiteZ);
+
+	icXyzToPcs(m_PcsWhite);
+
+	if (m_pProfile->m_Header.pcs==icSigLabData) {
+		if (UseLegacyPCS()) {
+			CIccPCSUtil::XyzToLab2(m_PcsWhite, m_PcsWhite, true);
+		}
+		else {
+			CIccPCSUtil::XyzToLab(m_PcsWhite, m_PcsWhite, true);
+		}
+	}
+
 	return icCmmStatOk;
 }
 
@@ -5717,18 +6107,20 @@ icStatusCMM CIccXformMonochrome::Begin()
 *  Does the actual application of the Xform.
 *  
 * Args:
-*  pApply = ApplyXform object containing temporary storage used during Apply
+*  pApply = unused. It carried the CIccApplyXform scratch buffer the
+*           now-removed CheckSrcAbs() used; kept for the virtual
+*           signature.
 *  DstPixel = Destination pixel where the result is stored,
 *  SrcPixel = Source pixel which is to be applied.
 **************************************************************************
 */
-void CIccXformMonochrome::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
+void CIccXformMonochrome::Apply(CIccApplyXform*  /* pApply */, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
 {
 	icFloatNumber Pixel[3];
   
-  if (m_bSrcPcsConversion)
-	  SrcPixel = CheckSrcAbs(pApply, SrcPixel);
-
+	// m_PcsWhite is computed once in Begin(). Both branches below used to rebuild
+	// it here on every pixel -- icXyzToPcs, and for a Lab PCS XyzToLab's three
+	// cube roots behind a virtual UseLegacyPCS() call -- entirely from constants.
 	if (m_bInput) {
 		Pixel[0] = SrcPixel[0];
 
@@ -5736,52 +6128,30 @@ void CIccXformMonochrome::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel,
 			Pixel[0] = m_ApplyCurvePtr->Apply(Pixel[0]);
 		}
 
-		DstPixel[0] = icFloatNumber(icPerceptualRefWhiteX); 
-		DstPixel[1] = icFloatNumber(icPerceptualRefWhiteY);
-		DstPixel[2] = icFloatNumber(icPerceptualRefWhiteZ);
-
-		icXyzToPcs(DstPixel);
-
-		if (m_pProfile->m_Header.pcs==icSigLabData) {
-			if (UseLegacyPCS()) {
-				CIccPCSUtil::XyzToLab2(DstPixel, DstPixel, true);
-			}
-			else {
-				CIccPCSUtil::XyzToLab(DstPixel, DstPixel, true);
-			}
-		}
-
-		DstPixel[0] *= Pixel[0];
-		DstPixel[1] *= Pixel[0];
-		DstPixel[2] *= Pixel[0];
+		DstPixel[0] = m_PcsWhite[0] * Pixel[0];
+		DstPixel[1] = m_PcsWhite[1] * Pixel[0];
+		DstPixel[2] = m_PcsWhite[2] * Pixel[0];
 	}
 	else {
-		Pixel[0] = icFloatNumber(icPerceptualRefWhiteX); 
-		Pixel[1] = icFloatNumber(icPerceptualRefWhiteY);
-		Pixel[2] = icFloatNumber(icPerceptualRefWhiteZ);
-
-		icXyzToPcs(Pixel);
-
+		// The divide is kept rather than turned into a precomputed reciprocal:
+		// x/w and x*(1/w) are not bit-identical, and the cube roots hoisted above
+		// dominate a single division. Preserving exact output keeps the harness
+		// checksum usable as a strict equality oracle for the rest of this branch.
+		//
+		// The header test selects which source component to read rather than
+		// computing anything, so it stays; folding it into another member would
+		// buy nothing measurable.
 		if (m_pProfile->m_Header.pcs==icSigLabData) {
-			if (UseLegacyPCS()) {
-				CIccPCSUtil::XyzToLab2(Pixel, Pixel, true);
-			}
-			else {
-				CIccPCSUtil::XyzToLab(Pixel, Pixel, true);
-			}
-			DstPixel[0] = SrcPixel[0]/Pixel[0];
+			DstPixel[0] = SrcPixel[0]/m_PcsWhite[0];
 		}
 		else {
-			DstPixel[0] = SrcPixel[1]/Pixel[1];
+			DstPixel[0] = SrcPixel[1]/m_PcsWhite[1];
 		}
 
 		if (m_ApplyCurvePtr) {
 			DstPixel[0] = m_ApplyCurvePtr->Apply(DstPixel[0]);
 		}
 	}
-
-  if (m_bDstPcsConversion)
-	  CheckDstAbs(DstPixel);
 }
 
 /**
@@ -6061,17 +6431,16 @@ static icFloatNumber RGBClip(icFloatNumber v, CIccCurve *pCurve)
  *  Does the actual application of the Xform.
  *  
  * Args:
- *  pApply = ApplyXform object containging temporary storage used during Apply
+ *  pApply = unused. It carried the CIccApplyXform scratch buffer the
+ *           now-removed CheckSrcAbs() used; kept for the virtual
+ *           signature.
  *  DstPixel = Destination pixel where the result is stored,
  *  SrcPixel = Source pixel which is to be applied.
  **************************************************************************
  */
-void CIccXformMatrixTRC::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
+void CIccXformMatrixTRC::Apply(CIccApplyXform*  /* pApply */, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
 {
   icFloatNumber Pixel[3];
-
-  if (m_bSrcPcsConversion)
-    SrcPixel = CheckSrcAbs(pApply, SrcPixel);
 
   Pixel[0] = SrcPixel[0];
   Pixel[1] = SrcPixel[1];
@@ -6111,9 +6480,6 @@ void CIccXformMatrixTRC::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, 
       DstPixel[2] = (icFloatNumber)(m_e[6] * X + m_e[7] * Y + m_e[8] * Z);
     }
   }
-
-  if (m_bDstPcsConversion)
-    CheckDstAbs(DstPixel);
 }
 
 /**
@@ -6636,7 +7002,10 @@ CIccXform3DLut::~CIccXform3DLut()
     }
 
     if (m_pTag->m_CLUT) {
-      m_pTag->m_CLUT->Begin();
+      // Begin() refuses a CLUT that Init() never made usable -- reachable when
+      // the tag was built by a parser rather than read from a profile.
+      if (!m_pTag->m_CLUT->Begin())
+        return icCmmStatInvalidLut;
     }
 
     if (m_pTag->m_CurvesA) {
@@ -6669,7 +7038,10 @@ CIccXform3DLut::~CIccXform3DLut()
     }
 
     if (m_pTag->m_CLUT) {
-      m_pTag->m_CLUT->Begin();
+      // Begin() refuses a CLUT that Init() never made usable -- reachable when
+      // the tag was built by a parser rather than read from a profile.
+      if (!m_pTag->m_CLUT->Begin())
+        return icCmmStatInvalidLut;
     }
 
     if (m_pTag->m_CurvesM) {
@@ -6721,6 +7093,11 @@ CIccXform3DLut::~CIccXform3DLut()
     }
   }
 
+  // Apply() zero-fills its scratch pixel above channel 3 only when nothing
+  // downstream will write those channels. Interp3d and Interp3dTetra write all
+  // m_nOutput channels on every path, so with a CLUT present the fill is dead.
+  m_bNeedScratchInit = (m_pTag->m_CLUT == NULL);
+
   return icCmmStatOk;
 }
 
@@ -6732,26 +7109,30 @@ CIccXform3DLut::~CIccXform3DLut()
  *  Does the actual application of the Xform.
  *  
  * Args:
- *  pApply = ApplyXform object containing temporary storage used during Apply
+ *  pApply = unused. It carried the CIccApplyXform scratch buffer the
+ *           now-removed CheckSrcAbs() used; kept for the virtual
+ *           signature.
  *  DstPixel = Destination pixel where the result is stored,
  *  SrcPixel = Source pixel which is to be applied.
  **************************************************************************
  */
-void CIccXform3DLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
+void CIccXform3DLut::Apply(CIccApplyXform*  /* pApply */, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
 {
   icFloatNumber Pixel[16];
   int i;
 
-  if (m_bSrcPcsConversion)
-    SrcPixel = CheckSrcAbs(pApply, SrcPixel);
-
   Pixel[0] = SrcPixel[0];
   Pixel[1] = SrcPixel[1];
   Pixel[2] = SrcPixel[2];
-  
-  // make sure all output pixel values are initialized, just in case
-  for (i = 3; i < m_pTag->m_nOutput; ++i) {
-     Pixel[i] = 0.0;
+
+  // Only when nothing downstream will write these channels. With a CLUT present
+  // Interp3d/Interp3dTetra write all m_nOutput channels on every path, so this
+  // fill is dead -- and it ran unconditionally, on every pixel. Decided in
+  // Begin(); the original comment was "just in case", which is the case.
+  if (m_bNeedScratchInit) {
+    for (i = 3; i < m_pTag->m_nOutput; ++i) {
+      Pixel[i] = 0.0;
+    }
   }
 
   if (m_pTag->m_bInputMatrix) {
@@ -6819,9 +7200,6 @@ void CIccXform3DLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
   for (i=0; i<m_pTag->m_nOutput; i++) {
     DstPixel[i] = Pixel[i];
   }
-
-  if (m_bDstPcsConversion)
-    CheckDstAbs(DstPixel);
 }
 
 /**
@@ -7004,7 +7382,10 @@ icStatusCMM CIccXform4DLut::Begin()
     }
 
     if (m_pTag->m_CLUT) {
-      m_pTag->m_CLUT->Begin();
+      // Begin() refuses a CLUT that Init() never made usable -- reachable when
+      // the tag was built by a parser rather than read from a profile.
+      if (!m_pTag->m_CLUT->Begin())
+        return icCmmStatInvalidLut;
     }
 
     if (m_pTag->m_CurvesA) {
@@ -7040,7 +7421,10 @@ icStatusCMM CIccXform4DLut::Begin()
     }
 
     if (m_pTag->m_CLUT) {
-      m_pTag->m_CLUT->Begin();
+      // Begin() refuses a CLUT that Init() never made usable -- reachable when
+      // the tag was built by a parser rather than read from a profile.
+      if (!m_pTag->m_CLUT->Begin())
+        return icCmmStatInvalidLut;
     }
 
     if (m_pTag->m_CurvesM) {
@@ -7102,18 +7486,17 @@ icStatusCMM CIccXform4DLut::Begin()
  *  Does the actual application of the Xform.
  *  
  * Args:
- *  pApply = ApplyXform object containging temporary storage used during Apply
+ *  pApply = unused. It carried the CIccApplyXform scratch buffer the
+ *           now-removed CheckSrcAbs() used; kept for the virtual
+ *           signature.
  *  DstPixel = Destination pixel where the result is stored,
  *  SrcPixel = Source pixel which is to be applied.
  **************************************************************************
  */
-void CIccXform4DLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
+void CIccXform4DLut::Apply(CIccApplyXform*  /* pApply */, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
 {
   icFloatNumber Pixel[16];
   int i;
-
-  if (m_bSrcPcsConversion)
-    SrcPixel = CheckSrcAbs(pApply, SrcPixel);
 
   Pixel[0] = SrcPixel[0];
   Pixel[1] = SrcPixel[1];
@@ -7171,9 +7554,6 @@ void CIccXform4DLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
   for (i=0; i<m_pTag->m_nOutput; i++) {
     DstPixel[i] = Pixel[i];
   }
-
-  if (m_bDstPcsConversion)
-    CheckDstAbs(DstPixel);
 }
 
 /**
@@ -7399,8 +7779,20 @@ icStatusCMM CIccXformNDLut::Begin()
   // m_nInput/m_nOutput). Assert that bound explicitly and reject an out-of-range
   // count as an invalid LUT so the per-channel curve walks can never be driven past
   // those arrays even if the count reached this object corrupted.
-  const int kMaxLutInputChannels = 256;
-  if (m_nNumInput < 0 || m_nNumInput >= kMaxLutInputChannels)
+  // Bound is 16, not 256. Apply() copies the source into a fixed icFloatNumber
+  // Pixel[16], so a tag declaring more input channels than that cannot be applied
+  // correctly no matter what: the previous 256 bound let such a tag through and
+  // Apply() then clamped the count to 16 per pixel, silently truncating the
+  // transform rather than reporting it. Refusing it here removes both per-pixel
+  // clamps and turns quiet wrong colour into icCmmStatInvalidLut.
+  //
+  // 16 is also the ceiling the format allows: icMaxChannels, which CIccCLUT::Init
+  // enforces on load (see the CWE-674 note at IccTagLut.cpp:2182).
+  const int kMaxLutInputChannels = 16;
+  if (m_nNumInput < 0 || m_nNumInput > kMaxLutInputChannels)
+    return icCmmStatInvalidLut;
+
+  if (m_pTag->m_nOutput > kMaxLutInputChannels)
     return icCmmStatInvalidLut;
 
   m_ApplyCurvePtrA = m_ApplyCurvePtrB = m_ApplyCurvePtrM = NULL;
@@ -7430,7 +7822,10 @@ icStatusCMM CIccXformNDLut::Begin()
     }
 
     if (m_pTag->m_CLUT) {
-      m_pTag->m_CLUT->Begin();
+      // Begin() refuses a CLUT that Init() never made usable -- reachable when
+      // the tag was built by a parser rather than read from a profile.
+      if (!m_pTag->m_CLUT->Begin())
+        return icCmmStatInvalidLut;
     }
 
     if (m_pTag->m_CurvesA) {
@@ -7474,7 +7869,10 @@ icStatusCMM CIccXformNDLut::Begin()
     }
 
     if (m_pTag->m_CLUT) {
-      m_pTag->m_CLUT->Begin();
+      // Begin() refuses a CLUT that Init() never made usable -- reachable when
+      // the tag was built by a parser rather than read from a profile.
+      if (!m_pTag->m_CLUT->Begin())
+        return icCmmStatInvalidLut;
     }
 
     if (m_pTag->m_CurvesM) {
@@ -7594,11 +7992,8 @@ void CIccXformNDLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
   icFloatNumber Pixel[16] = {0};
   int i;
 
-  if (m_bSrcPcsConversion)
-    SrcPixel = CheckSrcAbs(pApply, SrcPixel);
-
-  // Prevent array bounds overflow - Pixel has 16 elements
-  int nInput = (m_nNumInput > 16) ? 16 : m_nNumInput;
+  // No clamp: Begin() refuses m_nNumInput above 16, which is what Pixel[] holds.
+  const int nInput = m_nNumInput;
 
   for (i=0; i<nInput; i++)
     Pixel[i] = SrcPixel[i];
@@ -7674,13 +8069,11 @@ void CIccXformNDLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
     }
   }
 
-  int nOutput = (m_pTag->m_nOutput > 16) ? 16 : m_pTag->m_nOutput;
+  // No clamp: Begin() refuses m_pTag->m_nOutput above 16 for the same reason.
+  const int nOutput = m_pTag->m_nOutput;
   for (i=0; i<nOutput; i++) {
     DstPixel[i] = Pixel[i];
   }
-
-  if (m_bDstPcsConversion)
-    CheckDstAbs(DstPixel);
 }
 
 /**
@@ -7894,12 +8287,14 @@ icStatusCMM CIccXformNamedColor::Begin()
  *  Does the actual application of the Xform.
  *  
  * Args:
- *  pApply = ApplyXform object containging temporary storage used during Apply
+ *  pApply = unused. It carried the CIccApplyXform scratch buffer the
+ *           now-removed CheckSrcAbs() used; kept for the virtual
+ *           signature.
  *  DstColorName = Destination string where the color name result is stored,
  *  SrcPixel = Source pixel which is to be applied.
  **************************************************************************
  */
-icStatusCMM CIccXformNamedColor::Apply(CIccApplyXform* pApply, icChar *DstColorName, const icFloatNumber *SrcPixel) const
+icStatusCMM CIccXformNamedColor::Apply(CIccApplyXform*  /* pApply */, icChar *DstColorName, const icFloatNumber *SrcPixel) const
 {
 
   if (m_pArray) {
@@ -7917,9 +8312,6 @@ icStatusCMM CIccXformNamedColor::Apply(CIccApplyXform* pApply, icChar *DstColorN
           return icCmmStatColorNotFound;
       }
       else {
-        if (m_bSrcPcsConversion)
-          SrcPixel = CheckSrcAbs(pApply, SrcPixel);
-
         icFloatNumber pix[3];
         memcpy(pix, SrcPixel, 3*sizeof(icFloatNumber));
 
@@ -7956,9 +8348,6 @@ icStatusCMM CIccXformNamedColor::Apply(CIccApplyXform* pApply, icChar *DstColorN
     icInt32Number j;
 
     if (IsSrcPCS()) {
-      if (m_bSrcPcsConversion)
-        SrcPixel = CheckSrcAbs(pApply, SrcPixel);
-
       for(i=0; i<3; i++)
         PCSPix[i] = SrcPixel[i];
 
@@ -8042,8 +8431,6 @@ icStatusCMM CIccXformNamedColor::Apply(CIccApplyXform*  /* pApply */, icFloatNum
         else {
           icXyzToPcs(DstPixel);
         }
-        if (m_bDstPcsConversion)
-          CheckDstAbs(DstPixel);
       }
     }
     else {
@@ -8071,8 +8458,6 @@ icStatusCMM CIccXformNamedColor::Apply(CIccApplyXform*  /* pApply */, icFloatNum
       else {
         memcpy(DstPixel, pTag->GetEntry(j)->pcsCoords, 3*sizeof(icFloatNumber));
       }
-      if (m_bDstPcsConversion)
-        CheckDstAbs(DstPixel);
     }
     else {
       j = pTag->FindColor(SrcColorName);
@@ -8114,6 +8499,14 @@ icStatusCMM CIccXformNamedColor::SetSrcSpace(icColorSpaceSignature nSrcSpace)
 
   m_nSrcSpace = nSrcSpace;
 
+  // Refresh the port cache CIccXform's other setters also refresh (see
+  // refreshPcsPortCache()'s declaration in IccCmm.h): SetSrcSpace() is
+  // public API with no in-tree caller guaranteeing it only runs before
+  // Begin(), and without this a caller that moves the source space after
+  // Begin() would silently desync the cache from the real source space --
+  // no assertion, no error, wrong colour.
+  refreshPcsPortCache();
+
   return icCmmStatOk;
 }
 
@@ -8148,6 +8541,10 @@ icStatusCMM CIccXformNamedColor::SetDestSpace(icColorSpaceSignature nDestSpace)
   }
 
   m_nDestSpace = nDestSpace;
+
+  // Refresh the port cache, same as SetSrcSpace() above and for the same
+  // reason.
+  refreshPcsPortCache();
 
   return icCmmStatOk;
 }
@@ -8191,6 +8588,40 @@ bool CIccXformNamedColor::IsDestPCS() const
   }
   else 
     return false;
+}
+
+
+/**
+ **************************************************************************
+ * Name: CIccXformNamedColor::NeedsSrcPcsAdjust
+ * 
+ * Purpose: 
+ *  True when this xform's PCS adjustment applies to values entering it.
+ *  Mirrors the guard that used to sit around CheckSrcAbs() in Apply(): the
+ *  source side must actually be a colorimetric PCS -- a spectral PCS source
+ *  is matched against spectral data and takes no XYZ media-white adjustment.
+ **************************************************************************
+ */
+bool CIccXformNamedColor::NeedsSrcPcsAdjust() const
+{
+  return CIccXform::NeedsSrcPcsAdjust() && IsSrcPCS() && !IsSpaceSpectralPCS(m_nSrcSpace);
+}
+
+/**
+ **************************************************************************
+ * Name: CIccXformNamedColor::NeedsDstPcsAdjust
+ * 
+ * Purpose: 
+ *  True when this xform's PCS adjustment applies to values leaving it.
+ *  Mirrors the guard that used to sit around CheckDstAbs() in Apply(): the
+ *  destination side must actually be a colorimetric PCS -- a spectral PCS
+ *  destination takes the spectral-tint path instead and takes no XYZ
+ *  media-white adjustment.
+ **************************************************************************
+ */
+bool CIccXformNamedColor::NeedsDstPcsAdjust() const
+{
+  return CIccXform::NeedsDstPcsAdjust() && IsDestPCS() && !IsSpaceSpectralPCS(m_nDestSpace);
 }
 
 
@@ -8511,6 +8942,10 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
   if (rv) {
     rv->SetParams(pProfile, bInput, nIntent, nTagIntent, bUseSpectralPCS, nInterp, pHintManager, bAbsToRel);
 
+    // bUseDToB is this overload's equivalent of CIccXform::Create()'s
+    // bUseD2BTags; record it for the same reason.
+    rv->SetUseD2BTags(bUseDToB);
+
     // Same reasoning as the icXformLutGamut case in CIccXform::Create(): this
     // overload has no in-tree caller, but it is public API and its gamut case
     // forces bInput false the same way, so it needs the same marking.
@@ -8661,9 +9096,9 @@ void CIccXformMpe::SetAppliedCC(IIccProfileConnectionConditions *pPCC)
 * 
 * Purpose: 
 *  This function will be called before the xform is applied.  Derived objects
-*  should also call the base class function to initialize for Absolute Colorimetric
-*  Intent handling which is performed through the use of the CheckSrcAbs and
-*  CheckDstAbs functions.
+*  should also call this base class function to initialize for Absolute
+*  Colorimetric Intent handling.  The adjustment itself is performed by the
+*  CIccPcsXform that CIccCmm::CheckPCSConnections() places at the connection.
 **************************************************************************
 */
 icStatusCMM CIccXformMpe::Begin()
@@ -8747,11 +9182,6 @@ void CIccXformMpe::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, const 
 
   icFloatNumber temp[3];
   if (!m_bInput || m_bPcsAdjustXform) { //PCS comming in?
-    if (m_nIntent != icAbsoluteColorimetric || m_nIntent != m_nTagIntent) {  //B2D3 tags don't need abs conversion
-      if (m_bSrcPcsConversion)
-        SrcPixel = CheckSrcAbs(pApply, SrcPixel);
-    }
-
     //Since MPE tags use "real" values for PCS we need to convert from 
     //internal encoding used by IccProfLib
     switch (GetSrcSpace()) {
@@ -8791,11 +9221,6 @@ void CIccXformMpe::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, const 
 
       default:
         break;
-    }
-
-    if (m_nIntent != icAbsoluteColorimetric || m_nIntent != m_nTagIntent) { //D2B3 tags don't need abs conversion
-      if (m_bDstPcsConversion)
-        CheckDstAbs(DstPixel);
     }
   }
 }
@@ -9773,7 +10198,10 @@ icStatusCMM CIccCmm::AddXform(CIccXform* pXform)
 
 icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
 {
+  (void)bUsePCSConversions;  // see header: retained for source compatibility
+
   icStatusCMM rv = icCmmStatOk;
+  icStatusCMM rvBegin;
 
   CIccXformList::iterator last, next;
   CIccXformList xforms;
@@ -9787,7 +10215,11 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
     next++;
 
     icColorSpaceSignature lastSpace = last->ptr->GetSrcSpace();
-    if (!last->ptr->IsInput() && IsSpaceColorimetricPCS(lastSpace) && (GetSourceSpace() !=lastSpace || last->ptr->UseLegacyPCS())) {
+    // NeedAdjustPCS() mirrors the trailing-edge condition below. Without it a
+    // chain whose source PCS already matches the profile's gets no leading edge
+    // xform, leaving nowhere to put a source-side PCS adjustment.
+    if (!last->ptr->IsInput() && IsSpaceColorimetricPCS(lastSpace) &&
+        (last->ptr->NeedAdjustPCS() || GetSourceSpace() != lastSpace || last->ptr->UseLegacyPCS())) {
       CIccPcsXform* pPcs = new (std::nothrow) CIccPcsXform();
 
       if (!pPcs) {
@@ -9802,6 +10234,21 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
       }
 
       if (rv != icCmmStatIdentityXform) {
+        // Nothing upstream will Begin() this object. CIccCmm::Begin() and
+        // CIccNamedColorCmm::Begin() both run their per-xform Begin() loop over
+        // m_Xforms *before* calling this function and neither revisits the list
+        // afterwards, so every CIccPcsXform in the chain -- all of which are
+        // built right here -- would otherwise reach Apply() unbegun, and any
+        // step that defers work to BeginStep() would never receive it. Begin()
+        // is safe to call now and not before: ConnectFirst() ends with
+        // Optimize(), so the step list is final. The same three lines follow the
+        // interior Connect() and the trailing ConnectLast() below.
+        rvBegin = pPcs->Begin();
+        if (rvBegin != icCmmStatOk) {
+          delete pPcs;
+          return rvBegin;
+        }
+
         ptr.ptr = pPcs;
         xforms.push_back(ptr);
 
@@ -9817,10 +10264,9 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
     for (;next!=m_Xforms->end(); last=next, next++) {
       if ((last->ptr->IsInput() && last->ptr->IsMCS() && next->ptr->IsMCS()) ||
           (IsSpaceSpectralPCS(last->ptr->GetDstSpace()) || IsSpaceSpectralPCS(next->ptr->GetSrcSpace())) ||
-          (!bUsePCSConversions && 
-           (IsSpaceColorimetricPCS(last->ptr->GetDstSpace()) || IsSpaceColorimetricPCS(next->ptr->GetSrcSpace())))) {
-        last->ptr->SetDstPCSConversion(false);
-        next->ptr->SetSrcPCSConversion(false);
+          IsSpaceColorimetricPCS(last->ptr->GetDstSpace()) || IsSpaceColorimetricPCS(next->ptr->GetSrcSpace())) {
+        // No handover needed: CIccPcsXform performs every PCS adjustment, and
+        // CIccXform::Apply() performs none.
         CIccPcsXform *pPcs = new (std::nothrow) CIccPcsXform();
 
         if (!pPcs) {
@@ -9840,6 +10286,14 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
         }
 
         if (rv!=icCmmStatIdentityXform) {
+          // Begin() the object here for the reason given at the leading edge
+          // above: nothing else in the CMM ever will.
+          rvBegin = pPcs->Begin();
+          if (rvBegin != icCmmStatOk) {
+            delete pPcs;
+            return rvBegin;
+          }
+
           // A real conversion is needed: ownership of pPcs passes to the xform
           // list, which frees it when the CMM is destroyed.
           ptr.ptr = pPcs;
@@ -9864,6 +10318,7 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
       if (!pPcs) {
         return icCmmStatAllocErr;
       }
+
       rv = pPcs->ConnectLast(last->ptr, GetDestSpace());
 
       if (rv != icCmmStatOk && rv != icCmmStatIdentityXform) {
@@ -9872,6 +10327,14 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
       }
 
       if (rv != icCmmStatIdentityXform) {
+        // Begin() the object here for the reason given at the leading edge
+        // above: nothing else in the CMM ever will.
+        rvBegin = pPcs->Begin();
+        if (rvBegin != icCmmStatOk) {
+          delete pPcs;
+          return rvBegin;
+        }
+
         ptr.ptr = pPcs;
         xforms.push_back(ptr);
 

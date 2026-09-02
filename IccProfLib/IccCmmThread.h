@@ -74,6 +74,7 @@
 
 // Forward reference
 class CIccThreadedCmm;
+class CIccApplyThreadedCmmPool;
 
 /**
  **************************************************************************
@@ -104,8 +105,11 @@ public:
 protected:
   CIccApplyThreadedCmm(CIccCmm *pCmm);
   bool Init(CIccCmm *pCmm, int nThreads);
+  bool EnsureWorkers(int nWorkers);
 
   std::vector<CIccApplyCmm*> m_workers;
+  CIccApplyThreadedCmmPool *m_pool;
+  CIccCmm *m_baseCmm;
   int m_nThreads;
 };
 

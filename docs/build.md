@@ -105,6 +105,38 @@ Windows presets place iccDEV `.exe` and `.dll` runtime artifacts together under
 example `out\vs2022-x64\bin\Release\iccToXml.exe`; no manual PATH update is
 required for iccDEV project DLLs.
 
+For a reproducible Release build and `iccBenchApply` performance report, run:
+
+```powershell
+.\.github\scripts\iccdev-windows-release-report.ps1 `
+  -BuildDir out\windows-msvc-release-report `
+  -Threads '1,2,4,8,16'
+```
+
+The script records host and Visual Studio details, configure and build timing,
+compiler warnings, project artifact counts and size, profile-generation time,
+and the `iccBenchApply` suite's median/minimum/maximum throughput and scaling.
+It writes JSON, Markdown, raw benchmark CSV, and command logs under the build
+directory's `reports` folder. Use an otherwise idle machine for comparisons;
+the report records results but does not assert a performance threshold.
+If application-control policy blocks locally built unsigned executables or
+dependencies, run the report on an approved Windows build host or CI runner;
+do not disable the machine policy. `-ProfileRoot` can reuse a Testing tree
+generated elsewhere, but it cannot bypass executable-signing policy.
+
+Windows filesystems are case-insensitive by default, while the repository has
+legacy paths that differ only by case. For a genuinely clean Git checkout, use
+WSL2 storage rather than `/mnt/c` or `/mnt/e`, and preserve LF line endings:
+
+```bash
+git config --global core.autocrlf false
+git clone https://github.com/InternationalColorConsortium/iccDEV.git
+```
+
+Keep Windows build output on a native Windows volume when measuring MSVC or
+ClangCL; the WSL2 checkout recommendation is for collision-free Git and Unix
+script work, not for benchmarking through a network-mounted source tree.
+
 ## Windows ClangCL
 
 Use the Visual Studio LLVM toolset with the same vcpkg-managed dependencies as
@@ -287,14 +319,17 @@ The helper defaults to user-space samples, DWARF call graphs, a higher sample
 frequency, and a minimum sample threshold so short or kernel-heavy captures do
 not produce misleading SVGs with large `unknown` blocks.
 
-The reusable tool-test workflow can also run opt-in all-tool profiling. Dispatch
-`ci-pr-action` with `run_tool_flamegraphs=true` to include the sanitized
-FlameGraph manifest in the job summary. Each profiled tool records status,
-sample count, unknown folded-frame count, SVG availability, and skip reason.
-On successful runs, the workflow uploads an `iccdev-developer-report-<BuildType>`
-artifact with `index.html`, CTest outputs, QA target-flag evidence, hybrid timing
-data when requested, and FlameGraph data/SVGs when profiling was enabled. The
-artifact upload uses the reviewed sanitized developer-report governance exception.
+The reusable `ci-regression-checks` workflow can also run opt-in all-tool
+profiling. Dispatch it with `run_tool_flamegraphs=true`; optionally set
+`flamegraph_repeat` and `flamegraph_timeout` for the capture envelope. On a
+successful run, download `iccdev-developer-report-<BuildType>` and open its root
+`index.html`: it embeds the FlameGraph dashboard when profiling was requested.
+Each manifest row records status, sample count, unknown folded-frame count, SVG
+availability, and a skip or failure reason. A runner without usable `perf`
+truthfully produces `SKIP` or `PERF_FAIL` rows and no SVGs; it is not a visual
+capture. The artifact also contains CTest outputs, QA target-flag evidence,
+optional hybrid timing data, and all FlameGraph capture data. The artifact
+upload uses the reviewed sanitized developer-report governance exception.
 
 ```cmd
 set VCPKG_ROOT=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\vcpkg
@@ -302,6 +337,121 @@ cmake --preset vs2022-x64-qa-flags -S Build/Cmake -B out/vs2022-x64-qa-flags
 cmake --preset vs2022-clangcl-x64-qa-flags -S Build/Cmake -B out/vs2022-clangcl-x64-qa-flags
 cmake --preset mingw-x64-qa-flags -S Build/Cmake -B out/mingw-x64-qa-flags
 ```
+
+### Linux AVX2 and AVX-512 CLUT build
+
+Linux and WSL2 can use paired Clang presets for portable, AVX2, and AVX-512
+CLUT comparisons. The presets hold the compiler, Release configuration, QA
+flags, enabled tools and tests, disabled wxWidgets UI, and disabled AVX2
+diagnostics constant:
+
+```bash
+cmake --preset linux-clang-clut-baseline-qa-flags \
+  -S Build/Cmake -B out/clut-baseline
+cmake --preset linux-clang-clut-avx2-qa-flags \
+  -S Build/Cmake -B out/clut-avx2
+cmake --preset linux-clang-clut-avx512-qa-flags \
+  -S Build/Cmake -B out/clut-avx512
+
+cmake --build out/clut-baseline --parallel "$(nproc)"
+cmake --build out/clut-avx2 --parallel "$(nproc)"
+cmake --build out/clut-avx512 --parallel "$(nproc)"
+```
+
+The AVX-512 preset inherits the AVX2 preset so AVX2 remains the intermediate
+runtime fallback. The focused CLUT test uses distinct values at every grid
+point so its expected output checks both corner selection and interpolation
+weights. Its eight-, nine-, eleven-, and fourteen-output fixtures validate
+fallback behavior, while the fifteen-output fixture covers a full AVX2 vector
+plus a masked tail and the corresponding AVX-512 path.
+
+To inspect AVX2 dispatch or set source breakpoints, add
+`-DICC_AVX2_CLUT_DEBUG=ON`. This emits the CPU decision, output channel count,
+corner offsets, interpolation weights, and per-kernel elapsed nanoseconds
+through `IccSignatureUtils.h`. It is intentionally diagnostic-only: trace
+logging and timing are compiled out when the option is `OFF`, so do not use a
+debug-trace build for throughput benchmarks.
+
+### Windows AVX2 CLUT build
+
+`vs2022-clangcl-x64-avx2-qa-flags` enables the optional AVX2 3D CLUT
+interpolation implementation. It compiles the AVX2 code in a separate
+translation unit and dispatches only after CPUID and XGETBV verify OS AVX
+state, so the resulting binary retains the scalar/SSE fallback on other x64
+CPUs.
+
+```cmd
+set VCPKG_ROOT=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\vcpkg
+cmake --preset vs2022-clangcl-x64-clut-baseline-qa-flags -S Build/Cmake -B out/vs2022-clangcl-x64-clut-baseline-qa-flags
+cmake --preset vs2022-clangcl-x64-avx2-qa-flags -S Build/Cmake -B out/vs2022-clangcl-x64-avx2-qa-flags
+cmake --build out/vs2022-clangcl-x64-clut-baseline-qa-flags --config Release --target IccProfLib2 -- /m /maxcpucount
+cmake --build out/vs2022-clangcl-x64-avx2-qa-flags --config Release -- /m /maxcpucount
+ctest --test-dir out/vs2022-clangcl-x64-avx2-qa-flags -C Release --output-on-failure --no-tests=error -R "^iccdev\.clut-eight-output-regression$"
+ctest --test-dir out/vs2022-clangcl-x64-avx2-qa-flags -C Release --output-on-failure --no-tests=error
+```
+
+The Visual Studio presets run vcpkg manifest installation during
+configuration, so separate `vcpkg integrate install` and `vcpkg install`
+commands are not required. The dedicated CLUT comparison presets suppress the
+repository's existing Microsoft CRT compatibility deprecations; other Windows
+presets continue to report them.
+
+The preset is intentionally opt-in. Enable `ICCDEV_ENABLE_AVX2=ON` only for
+x86-64 compiler targets that accept the required ISA flag; CMake validates the
+compiler flag during configuration. Native MSVC reports an explicit skip and
+keeps SSE2 because its measured AVX2 path was slower; use ClangCL on Windows.
+The focused regression converts valid 3D
+RGB-to-8CLR, RGB-to-9CLR, RGB-to-BCLR, RGB-to-ECLR, and RGB-to-FCLR ICC v5
+fixtures and verifies their expected CLUT outputs. On an AVX2-capable x86-64
+host, the fifteen-output fixture enters the AVX2 helper; eight, nine, eleven,
+and fourteen outputs validate SSE2 fallback.
+
+For an interleaved Release comparison across every supported output count:
+
+```powershell
+.github\scripts\iccdev-windows-clut-avx2-benchmark.ps1 `
+  -BaselineBuildDir out\vs2022-clangcl-x64-clut-baseline-qa-flags `
+  -Avx2BuildDir out\vs2022-clangcl-x64-avx2-qa-flags `
+  -Iterations 20000000 -Repetitions 11 `
+  -AffinityCpu 30 `
+  -OutputPath out\clut-avx2-benchmark.tsv
+```
+
+Every result row must report `output_vector_match=True`. The helper compares
+the raw float bits for each output lane; a rounded aggregate checksum is not a
+sufficient correctness check. Keep both benchmark builds on ClangCL; comparing
+native MSVC against ClangCL also measures a compiler change.
+
+For a Windows debugging session, use the dedicated diagnostics preset:
+
+```cmd
+cmake --preset vs2022-clangcl-x64-avx2-diagnostics -S Build/Cmake -B out/vs2022-clangcl-x64-avx2-diagnostics
+cmake --build out/vs2022-clangcl-x64-avx2-diagnostics --config Debug -- /m /maxcpucount
+ctest --test-dir out/vs2022-clangcl-x64-avx2-diagnostics -C Debug --output-on-failure --no-tests=error -R "^iccdev\.clut-eight-output-regression$"
+```
+
+Set source breakpoints in
+`IccTraceAvx2ClutDispatch()` or `IccTraceAvx2ClutKernel()` in
+`IccSignatureUtils.h` to inspect the selected path and kernel inputs.
+
+### Windows AVX-512 CLUT build
+
+`vs2022-clangcl-x64-avx512-qa-flags` adds the experimental AVX-512
+implementation while retaining AVX2 and scalar/SSE fallbacks. The AVX-512
+translation unit is compiled separately, and runtime dispatch requires CPUID
+AVX-512F support plus XGETBV confirmation that XMM, YMM, opmask, and ZMM state
+are enabled by the operating system.
+
+```cmd
+cmake --preset vs2022-clangcl-x64-avx512-qa-flags -S Build/Cmake -B out/vs2022-clangcl-x64-avx512-qa-flags
+cmake --build out/vs2022-clangcl-x64-avx512-qa-flags --config Release -- /m /maxcpucount
+ctest --test-dir out/vs2022-clangcl-x64-avx512-qa-flags -C Release --output-on-failure --no-tests=error -R "^iccdev\.clut-eight-output-regression$"
+ctest --test-dir out/vs2022-clangcl-x64-avx512-qa-flags -C Release --output-on-failure --no-tests=error
+```
+
+`ICCDEV_ENABLE_AVX512=ON` is independently opt-in and defaults to `OFF`.
+The Windows preset also enables AVX2 so AVX2-capable systems retain that
+intermediate fallback when AVX-512 is unavailable.
 
 ## Runtime packaging
 
@@ -329,48 +479,96 @@ smoke and uploads the `reficcmax-runtime-packages-linux` artifact.
 rather than from `__declspec` annotations: MSVC is deliberately excluded from the
 `ICCPROFLIBDLL_EXPORTS` definition in `Build/Cmake/IccProfLib/CMakeLists.txt`.
 That arrangement dates from #764, and the same file records why hidden visibility
-is not used on GCC/Clang — `ICCPROFLIB_API` annotations are incomplete
+is not used on GCC/Clang -- `ICCPROFLIB_API` annotations are incomplete
 (~308 partial uses across 43 headers) and `IccXML` has none at all.
 
-One consequence is worth knowing before it costs a CI round (#1888):
+### Exported global data (#1888, fixed in #2219)
+
+One consequence of that arrangement cost several CI rounds before it was fixed:
 
 > `WINDOWS_EXPORT_ALL_SYMBOLS` auto-exports **functions**. Exported global
-> **variables** still require explicit `dllexport`/`dllimport`, which IccProfLib
-> does not carry. Referencing one from outside the library fails to link on
+> **variables** still require explicit `dllexport`/`dllimport`. IccProfLib
+> carried none, so referencing one from outside the library failed to link on
 > Windows shared builds with `LNK2019`/`LNK1120`, while every function in the
-> same header links normally.
+> same header linked normally.
 
-Linux and macOS have no import-library model and are unaffected, so this never
-appears in a local pre-flight on those platforms.
+Linux and macOS have no import-library model and were never affected, so this
+never appeared in a local pre-flight on those platforms.
 
-Affected symbols are `g_pIccMatrixSolver` and `g_pIccMatrixInverter`
+Eight globals are involved: `g_pIccMatrixSolver` and `g_pIccMatrixInverter`
 (`IccSolve.h`), and `icD50XYZ`, `icD50XYZxx` and the four `icMsgValidate*`
-message prefixes (`IccUtil.h`). Each declaration carries a note. `IccUtil.h` also
-declared `icInfo` until #1897, but that one had no definition anywhere in the tree
-and so failed to link on every platform — a dangling declaration rather than an
-export problem. It is gone; construct a `CIccInfo` where one is needed. The
-`iccdev.proflib-exported-global-definitions` CTest now checks every
-`ICCPROFLIB_API extern` declaration in these headers against the built library's
-symbol table, so a declaration added without a definition fails CI rather than
-reaching a consumer.
+message prefixes (`IccUtil.h`). They now carry `ICCPROFLIB_DATA_API`, a macro
+kept deliberately separate from `ICCPROFLIB_API` so real `dllexport`/`dllimport`
+could be added without flipping the ~308 incomplete `ICCPROFLIB_API` annotations
+and changing how every class and function is exported. The shared IccProfLib
+target defines `ICCPROFLIBDLL_DATA_EXPORTS` `PRIVATE` and
+`ICCPROFLIBDLL_DATA_IMPORTS` `INTERFACE`, so anything linking it — in-tree tools
+and `find_package()` consumers alike — sees `dllimport`. The static target
+deliberately gets neither and keeps a plain `extern`.
 
-Existing consumers handle it in one of two ways:
+Nothing special is needed to consume these symbols now. Link
+`RefIccMAX::IccProfLib2` and reference them; the workarounds the tree used to
+carry are gone (#2154):
 
-- **Tools** link `IccProfLib2-static` on Windows shared builds — see
-  `Build/Cmake/Tools/{IccDumpProfile,IccProfilePlot,wxProfileDump}/CMakeLists.txt`.
-  Regression executables get the same fallback through
-  `${ICCDEV_TEST_LIB_ICCPROFLIB}`.
-- **Consumers that also link `IccXML`/`IccJson`** cannot use that fallback, since
-  those libraries link `IccProfLib` `PUBLIC` and the static copy would load the
-  library twice in one process. They avoid the symbol and use literal values.
+- **Tools** — `iccDumpProfile`, `iccProfilePlot` and `wxProfileDump` linked
+  `IccProfLib2-static` on Windows shared builds; all three now link
+  `${TARGET_LIB_ICCPROFLIB}` on every platform.
+- **Regression executables** — the `${ICCDEV_TEST_LIB_ICCPROFLIB}` indirection
+  that applied the same fallback is retired; tests link
+  `${TARGET_LIB_ICCPROFLIB}` directly.
+- **Consumers that also link `IccXML`/`IccJson`** could never use that fallback
+  anyway, since those libraries link `IccProfLib` `PUBLIC` and a static copy
+  would load the library twice in one process. That constraint is moot now.
 
-Prefer the setter functions where they exist: `IccSetMatrixSolver()` and
-`IccSetMatrixInverter()` are functions, so they link normally and are the
-supported way to install a custom solver against the DLL.
+One case still needs a line of CMake: a **hand-built imported target**, which
+inherits nothing. `install(EXPORT)` carries the `INTERFACE` definition, and
+`Build/Cmake/Modules/FindRefIccMAX.cmake` and `examples/hello-iccdev` set it
+explicitly for the same reason — but a consumer that constructs its own
+`IMPORTED` target from a found library path must add
+`INTERFACE_COMPILE_DEFINITIONS "ICCPROFLIBDLL_DATA_IMPORTS"` to it, on the
+shared target only. Without it the macro compiles empty and Windows is back to
+`LNK2019`.
 
-See `.github/ci/regression/README.md` for the test-side rules and
-`iccdev.proflib-exported-data-linkage`, which pins both the linkage and the
-literal values that dependent tests hard-code.
+Two CTests hold the fix in place, and they fail differently on purpose. An
+in-tree target that cannot link takes the whole Windows build down rather than
+turning one test red, so `iccdev.proflib-exported-data-linkage` (in-tree, all
+platforms) pins the linkage and the literal values, while
+`iccdev.proflib-exported-data-dll-linkage` configures and compiles a consumer
+**out of tree** at test time and reports a lost annotation as a single failing
+test with the `LNK2019` in its log.
+
+A third test, `iccdev.installed-package-consumer`, covers the same annotation
+one step further out — on the *installed* package rather than the build tree.
+It stages an install into a temporary prefix and then builds and runs three
+consumers against it: `find_package(RefIccMAX CONFIG)`, `find_package(RefIccMAX
+MODULE)` through `FindRefIccMAX.cmake`, and `examples/hello-iccdev` itself. A
+fourth arm repeats MODULE mode with a target-less `RefIccMAXConfig.cmake`
+planted earlier on `CMAKE_PREFIX_PATH`, the shape every install before #712 has.
+Each
+arm pins the library it resolved back to the staged prefix, so a machine with
+iccDEV installed system-wide cannot quietly satisfy the test with that copy
+instead. The MODULE arm additionally asserts the imported target still carries
+`ICCPROFLIBDLL_DATA_IMPORTS`, which no compile or link step would notice off
+Windows because `IccProfLibConf.h`'s non-PC branch never reads the macro. The
+arms are skipped, with a logged reason, on sanitizer builds (the out-of-tree
+consumers are not instrumented) and the MODULE arms on static-only builds.
+
+`IccUtil.h` also declared `icInfo` until #1897, but that one had no definition
+anywhere in the tree and so failed to link on every platform — a dangling
+declaration rather than an export problem. It is gone; construct a `CIccInfo`
+where one is needed. The `iccdev.proflib-exported-global-definitions` CTest
+checks every `ICCPROFLIB_API extern` **and** `ICCPROFLIB_DATA_API extern`
+declaration in these headers — in both macro orderings — against the built
+library's symbol table, so a declaration added without a definition fails CI
+rather than reaching a consumer. Annotate a new exported *variable*
+`ICCPROFLIB_DATA_API`, not `ICCPROFLIB_API`: both are audited, but only the
+first exports data on Windows.
+
+`IccSetMatrixSolver()` and `IccSetMatrixInverter()` remain the supported way to
+install a custom solver: they are functions, and they do not depend on the
+caller writing through an imported pointer.
+
+See `.github/ci/regression/README.md` for the test-side rules.
 
 ## Namespace wrapping (known defect)
 
@@ -503,12 +701,11 @@ should change container package pins, published image tags, or GHCR workflows.
 
 | File | Maintainer purpose | Publish/validation path |
 |------|--------------------|-------------------------|
-| `Dockerfile` | Ubuntu release/runtime image for `ghcr.io/internationalcolorconsortium/iccdev`. | Validate with a local Docker build and tool smoke test before maintainer publishing. |
-| `Dockerfile.ci-regression` | Pinned Ubuntu maintainer image for `ci-regression-checks`, with Clang/LLVM 22 defaults, GCC 15.2+, sanitizer, debugger, fuzzing, git, curl, and GitHub CLI tooling. | Validate locally with a no-cache Docker build and toolchain smoke tests before maintainer publishing; AFL wrapper changes also need the `docs/afl-fuzzing.md` container bootstrap probe; consumer workflows select the published tag. |
+| `Dockerfile` | Pinned Ubuntu unified image for runtime, MCP, and maintainer checks, with Clang/LLVM 22 defaults, a Clang 21 pair for the packaged AFL++ LLVM plugin, GCC 15.2+, sanitizer, debugger, fuzzing, git, curl, and GitHub CLI tooling. | Validate locally with a no-cache Docker build and toolchain smoke tests before maintainer publishing; AFL wrapper changes also need the `docs/afl-fuzzing.md` container bootstrap probe; consumer workflows select `latest`, an immutable SHA, or a release tag. |
 
-Before using a branch-specific regression image, maintainers should publish it
-through the maintainer-controlled container release path, record the branch or
-SHA tag, then pass that tag to `ci-iccdev-tool-tests.yml`.
+For reproducible maintainer checks, pass the immutable SHA tag to
+`ci-iccdev-tool-tests.yml`; use `latest` only for the current `master`
+baseline and a release tag for a released image.
 
 ## Python Wheel Validation
 
@@ -540,6 +737,11 @@ steps, see [Python packaging PR, merge, and production release](python-packaging
 ## vcpkg Consumers
 
 The `ports/iccdev/` overlay port builds core static libraries and CLI tools.
+The pinned vcpkg registry baseline is
+`eae1680538b86f962455c27abca2aad0dc304a4d`. Keep the root and
+`Build/Cmake` manifests, the `hello-iccdev` registry configuration, and both
+vcpkg CI bootstrap paths synchronized when updating it. The overlay port
+manifest intentionally has no registry baseline.
 For a complete consuming-project example, see the
 [`examples/hello-iccdev` README](https://github.com/InternationalColorConsortium/iccDEV/blob/master/examples/hello-iccdev/README.md).
 
@@ -547,3 +749,11 @@ For a complete consuming-project example, see the
 find_package(RefIccMAX CONFIG REQUIRED)
 target_link_libraries(my_target PRIVATE RefIccMAX::IccProfLib2-static)
 ```
+
+Use `CONFIG` mode for a static-only install, as above.
+`Build/Cmake/Modules/FindRefIccMAX.cmake` reports not-found for one on purpose:
+a static archive carries none of its own dependencies, and which ones the
+consumer has to repeat depends on the options the install was built with
+(`ICC_USE_ZLIB`, `ENABLE_ICCXML`) — something a hand-written find module cannot
+see. The `CONFIG` package is generated from the build that produced it and
+carries them exactly.

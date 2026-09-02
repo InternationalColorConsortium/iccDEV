@@ -67,6 +67,10 @@
 
 int DumpPawgReport(const char *szFilename, bool bJson);
 
+#if defined(ICCDEV_ENABLE_QA_FLAGS)
+int DumpPawgQaEvidence(const char *szFilename);
+#endif
+
 // Assessment-only entry points (issue #1775): run the PAWG evaluation "up to the
 // point of Output, not for Output" over an in-memory profile image, so the
 // overnight CI fuzzing harness can drive the code path with no filesystem

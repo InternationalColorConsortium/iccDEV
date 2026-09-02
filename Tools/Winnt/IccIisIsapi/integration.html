@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
   <title>iccDEV IIS Server - Integration Guide</title>
   <link rel="stylesheet" href="./site.css">
   <script defer src="./sanitize.js"></script>
@@ -105,7 +106,7 @@
               <dt>`?format=xml`</dt>
               <dd>Minimal ICC XML.</dd>
               <dt>`POST ?mode=tools&amp;input=icc|xml`</dt>
-              <dd>Runs the four native tools and returns JSON for the browser console.</dd>
+              <dd>Runs the conversion, validation, PAWG assessment, and round-trip pipeline for the browser console.</dd>
             </dl>
           </div>
         </div>
@@ -120,7 +121,7 @@
             <li><code>iconv-2.dll</code></li>
             <li><code>libxml2.dll</code></li>
             <li><code>zlib1.dll</code></li>
-            <li><code>iccDumpProfile.exe</code>, <code>iccToXml.exe</code>, <code>iccFromXml.exe</code>, <code>iccRoundTrip.exe</code> for the browser tool console</li>
+            <li><code>iccDumpProfile.exe</code>, <code>iccPawgReport.exe</code>, <code>iccToXml.exe</code>, <code>iccFromXml.exe</code>, <code>iccRoundTrip.exe</code> for the browser tool console</li>
             <li>This website shell: <code>index.html</code>, <code>endpoints.html</code>, <code>integration.html</code>, <code>site.css</code>, <code>site.js</code>, <code>assets\*</code></li>
           </ul>
           <p>
@@ -134,12 +135,12 @@
           <h2>Browser tool suite</h2>
           <p>
             The endpoint console now supports raw file upload from the browser. Upload an ICC profile or ICC XML file on
-            <a href="./endpoints.html">Endpoint Console</a> and IIS will run <code>iccToXml</code>, <code>iccFromXml</code>,
-            <code>iccDumpProfile</code>, and <code>iccRoundTrip</code> inside the worker process environment.
+            <a href="./endpoints.html">Endpoint Console</a> and IIS will convert the upload, run
+            <code>iccDumpProfile</code> and <code>iccPawgReport</code>, and perform round-trip checks inside the worker process environment.
           </p>
           <p>
-            The response is JSON and the page renders the real exit code, console output, generated XML preview, and any
-            tool-specific warnings. Each request also leaves behind a per-request workspace under
+            The response is JSON and the page renders the real exit code, console output, generated XML preview, PAWG assessment,
+            and any tool-specific warnings. Each request also leaves behind a per-request workspace under
             <code>_tool-work\&lt;job&gt;</code> so the uploaded input, generated XML or ICC, and tool logs can be fetched directly
             over HTTP. Round-trip failures are surfaced per tool rather than being treated as an HTTP failure.
           </p>
@@ -165,19 +166,20 @@
               <li>The app pool architecture matches the build architecture.</li>
               <li>The site physical path points at the installed `bin` directory.</li>
               <li>The ISAPI restriction entry explicitly allows <code>iccIisIsapi.dll</code>.</li>
-              <li>The site handler list includes a mapping for <code>iccIisIsapi.dll</code> using `IsapiModule` and allows <code>POST</code> as well as <code>GET</code>/<code>HEAD</code>.</li>
+              <li>The site handler list includes a mapping for <code>iccIisIsapi.dll</code> using `IsapiModule` and allows <code>GET</code> and <code>POST</code>.</li>
               <li>The runtime DLLs are present next to the handler.</li>
               <li>The four IIS-exposed tools are present next to the handler.</li>
             </ul>
           </div>
           <div class="note-box">
             <h2>Useful local commands</h2>
-            <pre class="code-block">curl.exe http://localhost:18081/iccIisIsapi.dll?mode=health
-curl.exe http://localhost:18081/iccIisIsapi.dll
-curl.exe http://localhost:18081/iccIisIsapi.dll?format=xml
+            <pre class="code-block">$baseUrl = "http://localhost:18081"
+curl.exe "$baseUrl/iccIisIsapi.dll?mode=health"
+curl.exe "$baseUrl/iccIisIsapi.dll"
+curl.exe "$baseUrl/iccIisIsapi.dll?format=xml"
 curl.exe -H "Accept: application/json" -H "Content-Type: application/octet-stream" ^
   --data-binary "@sample.icc" ^
-  "http://localhost:18081/iccIisIsapi.dll?mode=tools&amp;input=icc&amp;filename=sample.icc"</pre>
+  "$baseUrl/iccIisIsapi.dll?mode=tools&amp;input=icc&amp;filename=sample.icc"</pre>
           </div>
         </div>
 

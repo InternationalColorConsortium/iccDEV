@@ -18,7 +18,7 @@ Provides:
 
 from libc.stdlib cimport malloc, free
 from libc.string cimport memset, memcpy
-from cpython.bytes cimport PyBytes_AsString
+from cpython.bytes cimport PyBytes_AsString, PyBytes_FromStringAndSize
 
 cimport iccdev.cicc_wrapper as cicc
 
@@ -162,6 +162,27 @@ class CmmStatus(enum.IntEnum):
     Unsupported        = cicc.icCmmStatUnsupported
 
 
+class ValidationStatus(enum.IntEnum):
+    """ICC profile validation status returned by :func:`validate_profile`."""
+    OK               = cicc.ICC_VALIDATION_OK
+    WARNING          = cicc.ICC_VALIDATION_WARNING
+    NON_COMPLIANT    = cicc.ICC_VALIDATION_NON_COMPLIANT
+    CRITICAL_ERROR   = cicc.ICC_VALIDATION_CRITICAL_ERROR
+    INVALID_ARGUMENT = cicc.ICC_VALIDATION_INVALID_ARGUMENT
+    INTERNAL_ERROR   = cicc.ICC_VALIDATION_INTERNAL_ERROR
+
+
+ValidationResult = namedtuple('ValidationResult', ['status', 'report'])
+
+
+def _validation_status_from_code(int status):
+    """Map a native validation status, handling ABI-version mismatches."""
+    try:
+        return ValidationStatus(status)
+    except ValueError:
+        return ValidationStatus.INTERNAL_ERROR
+
+
 # ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
@@ -240,6 +261,45 @@ def sig_to_str(unsigned int sig):
         sig & 0xFF,
     ])
     return b.decode('ascii', errors='replace').strip()
+
+
+def validate_profile(profile):
+    """Validate ICC profile bytes without invoking a command-line tool.
+
+    Returns a :class:`ValidationResult` containing the native validation
+    status and report. Malformed profiles return a non-OK status rather than
+    raising an exception.
+    """
+    cdef bytes profile_bytes
+    cdef bytes report_bytes
+    cdef const unsigned char *profile_data
+    cdef char report[8192]
+    cdef cicc.icc_validation_status status
+
+    if isinstance(profile, bytes):
+        profile_bytes = profile
+    elif isinstance(profile, (bytearray, memoryview)):
+        profile_bytes = bytes(profile)
+    else:
+        raise TypeError(
+            f"expected bytes-like ICC profile data, got {type(profile).__name__}"
+        )
+
+    memset(report, 0, sizeof(report))
+    profile_data = <const unsigned char *>PyBytes_AsString(profile_bytes)
+    status = cicc.icc_validate_profile(
+        profile_data, len(profile_bytes), report, sizeof(report))
+    report_bytes = PyBytes_FromStringAndSize(report, sizeof(report))
+    return ValidationResult(
+        _validation_status_from_code(<int>status),
+        report_bytes.split(b'\0', 1)[0].decode('utf-8', errors='replace'),
+    )
+
+
+def validate_profile_file(path):
+    """Read and validate an ICC profile file using :func:`validate_profile`."""
+    with open(path, 'rb') as profile_file:
+        return validate_profile(profile_file.read())
 
 
 # ---------------------------------------------------------------------------

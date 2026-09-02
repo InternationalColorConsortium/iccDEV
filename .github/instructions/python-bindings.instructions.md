@@ -48,7 +48,10 @@ python -m pip install -e "./python[dev]"
 ```
 
 If `ICCDEV_BUILD_DIR` is unset or the static library is not found, `setup.py`
-compiles all 36 IccProfLib `.cpp` files inline into the extension module.
+compiles the portable IccProfLib `.cpp` files inline into the extension module.
+The AVX2 and AVX-512 translation units remain CMake-managed because they need
+architecture-specific flags and cannot be compiled in universal or non-x86
+source builds.
 
 ## Test
 
@@ -96,6 +99,8 @@ cmm.begin()
 - Source distributions require Cython and do not ship generated `_iccdev.cpp`
 - `vendor_iccproflib.py` writes `vendor/IccProfLib/MANIFEST.sha256` for source evidence
 - `setup.py` must keep pre-built library search paths in sync with test helpers
+- Unix extensions linked against pre-built static IccProfLib must also link
+  zlib when `ICC_USE_ZLIB` is enabled
 - Run tests from the repository root with `--import-mode=importlib`; installed
   package validation must set `ICCDEV_REQUIRE_INSTALLED_PACKAGE=1` so tests fail
   if `iccdev` imports from the source checkout instead of site-packages.
@@ -104,7 +109,10 @@ cmm.begin()
 
 - If `ICCDEV_BUILD_DIR` points to a stale build, the extension may link against
   an old library. Delete the build and rebuild both iccDEV and the extension.
-- The inline compilation mode compiles ~36 files and takes 2-3 minutes.
+- The inline compilation mode compiles the portable source set and takes
+  several minutes.
+- `undefined symbol: deflateInit_` means the extension found a zlib-enabled
+  static IccProfLib but omitted zlib from the final extension link.
 - Test profiles must exist in `../Testing/` -- run `CreateAllProfiles.sh` first.
 - Current API is intentionally header/CMM focused. Tag-level reads, in-memory
   profile handles in the Cython object, CMM environment variables, named color

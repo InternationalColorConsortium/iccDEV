@@ -14,37 +14,11 @@ permissions:
   contents: read
 
 on:
-  push:
-    branches:
-      - master
-      - ci-qa-matlab-examples
-      - ci-qa-matlab-examples-gamma
-      - ci-qa-matlab-windows-powershell
-    paths:
-      - ".github/workflows/ci-matlab.yml"
-      - "Build/Cmake/**"
-      - "IccProfLib/**"
-      - "**/*.m"
-      - "matlab/**"
-      - "Testing/Display/sRGB_D65_MAT.xml"
-      - "Testing/Display/sRGB_D65_MAT-300lx.xml"
-      - "Testing/Display/sRGB_D65_MAT-500lx.xml"
-      - "Testing/HDR/BT2100PQFullDisplay.xml"
-      - "Testing/sRGB_v4_ICC_preference.icc"
   pull_request:
     branches:
       - master
     paths:
       - ".github/workflows/ci-matlab.yml"
-      - "Build/Cmake/**"
-      - "IccProfLib/**"
-      - "**/*.m"
-      - "matlab/**"
-      - "Testing/Display/sRGB_D65_MAT.xml"
-      - "Testing/Display/sRGB_D65_MAT-300lx.xml"
-      - "Testing/Display/sRGB_D65_MAT-500lx.xml"
-      - "Testing/HDR/BT2100PQFullDisplay.xml"
-      - "Testing/sRGB_v4_ICC_preference.icc"
   workflow_dispatch:
 
 concurrency:
@@ -56,6 +30,10 @@ jobs:
     name: Windows MATLAB MEX
     runs-on: windows-2022
     timeout-minutes: 45
+    env:
+      ICCDEV_VCPKG_EXPORT_URL: >-
+        https://github.com/InternationalColorConsortium/iccDEV/releases/download/v2.3.1/vcpkg-exported-deps.zip
+      ICCDEV_VCPKG_EXPORT_SHA256: f8c70cb22dfe1ec379549a66a66473ad5f4f1fbe27c2b7340d69112c606a52ff
     defaults:
       run:
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
@@ -97,7 +75,7 @@ jobs:
             run(fullfile('matlab', 'examples', 'colorimetry_issue_1475.m'))
           generate-summary: false
 
-      - name: Configure and build IccProfLib
+      - name: Fetch pinned vcpkg dependencies
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
           POWERSHELL_UPDATECHECK: Off
@@ -112,18 +90,56 @@ jobs:
           }
           . .trusted-helpers/.github/scripts/sanitize.ps1
 
+          $archive = Join-Path $env:RUNNER_TEMP 'vcpkg-exported-deps.zip'
+          Invoke-WebRequest -Uri $env:ICCDEV_VCPKG_EXPORT_URL -OutFile $archive
+          $actualDigest = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
+          if ($actualDigest -ne $env:ICCDEV_VCPKG_EXPORT_SHA256) {
+            throw "vcpkg export digest mismatch: $actualDigest"
+          }
+          tar -xf $archive -C $env:GITHUB_WORKSPACE
+          if ($LASTEXITCODE -ne 0) {
+            throw "vcpkg export extraction failed with exit code $LASTEXITCODE"
+          }
+          Remove-Item -LiteralPath $archive -Force
+
+          $toolchain = Join-Path $env:GITHUB_WORKSPACE `
+            'scripts\buildsystems\vcpkg.cmake'
+          if (-not (Test-Path $toolchain -PathType Leaf)) {
+            throw "Exported vcpkg CMake toolchain not found: $toolchain"
+          }
+
+      - name: Configure and build current iccDEV source
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+          . .trusted-helpers/.github/scripts/sanitize.ps1
+
+          $toolchain = Join-Path $env:GITHUB_WORKSPACE `
+            'scripts\buildsystems\vcpkg.cmake'
           $configureArgs = @(
             '-S', 'Build\Cmake'
             '-B', 'out\matlab'
             '-G', 'Visual Studio 17 2022'
             '-A', 'x64'
+            "-DCMAKE_TOOLCHAIN_FILE=$toolchain"
+            '-DVCPKG_TARGET_TRIPLET=x64-windows'
+            '-DVCPKG_MANIFEST_MODE=OFF'
             '-DENABLE_TESTS=ON'
             '-DENABLE_TOOLS=ON'
             '-DENABLE_WXWIDGETS=OFF'
             '-DENABLE_SHARED_LIBS=OFF'
             '-DENABLE_STATIC_LIBS=ON'
             '-DENABLE_ICCXML=OFF'
-            '-DENABLE_ICCJSON=OFF'
+            '-DENABLE_ICCJSON=ON'
             '-DENABLE_IMAGE_TOOLS=OFF'
             '-DENABLE_CMM_TOOLS=OFF'
             '-DENABLE_IIS_TOOLS=OFF'
@@ -140,7 +156,12 @@ jobs:
             '--config', 'Release'
             '--target'
             'IccProfLib2-static'
+            'IccJSON2-static'
+            'iccToJson'
+            'iccFromJson'
             'iccProfilePlot'
+            'iccPawgReport'
+            'iccPawgQ1QualityContractTest'
             'iccLuminanceNormalizationTest'
             'iccColorimetryMethodsTest'
             '--parallel'
@@ -150,7 +171,7 @@ jobs:
             throw "Native regression test build failed with exit code $LASTEXITCODE"
           }
 
-      - name: Run native luminance and colorimetry regressions
+      - name: Run native MATLAB regressions
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
           POWERSHELL_UPDATECHECK: Off
@@ -164,8 +185,14 @@ jobs:
           }
           . .trusted-helpers/.github/scripts/sanitize.ps1
 
+          $nativeRegressionPattern = (
+            '^iccdev\.(' +
+            'luminance-normalization|' +
+            'colorimetry-methods|' +
+            'pawg-q1-quality-contract)$'
+          )
           ctest --test-dir out\matlab -C Release `
-            -R '^iccdev\.(luminance-normalization|colorimetry-methods)$' `
+            -R $nativeRegressionPattern `
             --output-on-failure `
             --no-tests=error
           if ($LASTEXITCODE -ne 0) {
@@ -188,6 +215,9 @@ jobs:
           command: >-
             addpath('matlab');
             addpath(fullfile('matlab', 'tests'));
+            test_usage_guidance();
+            test_json_bindings();
+            test_lut_type_range();
             run_local_qa();
             test_add_docker_path();
             test_plot();
@@ -201,7 +231,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      ICCDEV_IMAGE: ghcr.io/internationalcolorconsortium/iccdev:latest
+      ICCDEV_IMAGE_REPOSITORY: ghcr.io/internationalcolorconsortium/iccdev
+      ICCDEV_IMAGE_DIGEST: sha256:0a54b8ad1ca73e294ecf9c71323e6385c8812945c6ca3b40ba98d9f82b89c0fc
 
     steps:
       - name: Checkout repository
@@ -235,7 +266,7 @@ jobs:
           unset GITHUB_TOKEN || true
           source .trusted-helpers/.github/scripts/sanitize-sed.sh
 
-          docker pull "${ICCDEV_IMAGE}"
+          docker pull "${ICCDEV_IMAGE_REPOSITORY}@${ICCDEV_IMAGE_DIGEST}"
 
       - name: Validate published container from MATLAB
         # matlab-actions/run-command v3
@@ -243,5 +274,5 @@ jobs:
         with:
           command: >-
             addpath('matlab');
-            run_docker_qa(getenv('ICCDEV_IMAGE'))
+            run_docker_qa(strcat(getenv('ICCDEV_IMAGE_REPOSITORY'), '@', getenv('ICCDEV_IMAGE_DIGEST')))
           generate-summary: false

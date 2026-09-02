@@ -75,6 +75,7 @@
 #include <climits>
 #include <cstdlib>
 #include <cerrno>
+#include <string>
 #include <vector>
 #include <unordered_map>
 #include <sys/stat.h>
@@ -99,6 +100,198 @@ static bool g_bDiagMode = false;
 
 // Diagnostic logging macros
 #define DIAG(...) do { if (g_bDiagMode) { fprintf(stderr, "[DIAG] "); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); } } while(0)
+
+#if defined(ICCDEV_ENABLE_QA_FLAGS)
+static const char *kQaEvidenceSchema = "iccdev-qa-evidence/v1";
+static const char *kQaPayloadMarker = "ICCDEV_QA_TARGET_FLAG_41414141";
+static const char *kQaNoncePrefix = "ICCDEV_QA_NONCE_";
+static const unsigned char kQaControlledBytes[] = {
+  0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41,
+  0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41
+};
+
+static const char *ValidationStatusName(icValidateStatus nStatus)
+{
+  switch (nStatus) {
+  case icValidateOK:
+    return "ok";
+  case icValidateWarning:
+    return "warning";
+  case icValidateNonCompliant:
+    return "non_compliant";
+  case icValidateCriticalError:
+    return "critical_error";
+  default:
+    return "unknown";
+  }
+}
+
+static bool FindQaPayloadTag(const char *profilePath, CIccProfile *pIcc,
+                             icUInt32Number &offset, icUInt32Number &size,
+                             bool &bHasControlledBytes, std::string &nonce)
+{
+  bHasControlledBytes = false;
+  nonce.clear();
+  if (!profilePath || !pIcc)
+    return false;
+
+  const icTagSignature qaSig = (icTagSignature)icGetSigVal("qaFL");
+  bool found = false;
+  TagEntryList::iterator it;
+
+  for (it = pIcc->m_Tags.begin(); it != pIcc->m_Tags.end(); ++it) {
+    if (it->TagInfo.sig == qaSig) {
+      offset = it->TagInfo.offset;
+      size = it->TagInfo.size;
+      found = true;
+      break;
+    }
+  }
+
+  if (!found || size == 0 || size > 65536)
+    return false;
+
+  FILE *fp = fopen(profilePath, "rb");
+  if (!fp)
+    return false;
+
+  bool markerFound = false;
+  bool offsetFitsLong = true;
+#if LONG_MAX < 4294967295LL
+    offsetFitsLong = offset <= (icUInt32Number)LONG_MAX;
+#endif
+  if (offsetFitsLong && fseek(fp, (long)offset, SEEK_SET) == 0) {
+    std::vector<char> payload((size_t)size + 1, 0);
+    size_t nRead = fread(payload.data(), 1, (size_t)size, fp);
+    if (nRead == (size_t)size) {
+      const char *markerEnd = kQaPayloadMarker + strlen(kQaPayloadMarker);
+      markerFound = std::search(payload.begin(), payload.begin() + nRead,
+                                kQaPayloadMarker, markerEnd) != payload.begin() + nRead;
+      bHasControlledBytes =
+        std::search(payload.begin(), payload.begin() + nRead,
+                    kQaControlledBytes,
+                    kQaControlledBytes + sizeof(kQaControlledBytes)) != payload.begin() + nRead;
+
+      std::string payloadText(payload.data(), nRead);
+      size_t noncePos = payloadText.find(kQaNoncePrefix);
+      if (noncePos != std::string::npos) {
+        size_t nonceEnd = noncePos;
+        while (nonceEnd < payloadText.size()) {
+          unsigned char ch = (unsigned char)payloadText[nonceEnd];
+          if (!((ch >= 'A' && ch <= 'Z') ||
+                (ch >= '0' && ch <= '9') ||
+                ch == '_')) {
+            break;
+          }
+          nonceEnd++;
+        }
+        nonce = payloadText.substr(noncePos, nonceEnd - noncePos);
+      }
+    }
+  }
+
+  fclose(fp);
+  return markerFound;
+}
+
+static void EmitQaValidationTagTable(CIccProfile *pIcc, bool bDumpValidation)
+{
+  printf("\"validationTags\":[");
+  if (pIcc && bDumpValidation) {
+    bool wroteTag = false;
+    const size_t bufSize = 64;
+    char buf[bufSize];
+    TagEntryList::iterator it;
+
+    for (it = pIcc->m_Tags.begin(); it != pIcc->m_Tags.end(); ++it) {
+      printf("%s{\"signature\":\"%s\",\"offset\":%u,\"size\":%u}",
+             wroteTag ? "," : "",
+             icJsonEscape(icGetSig(buf, bufSize, it->TagInfo.sig)).c_str(),
+             (unsigned int)it->TagInfo.offset,
+             (unsigned int)it->TagInfo.size);
+      wroteTag = true;
+    }
+  }
+  printf("],");
+}
+
+static int EmitQaEvidenceJson(const char *profilePath, CIccProfile *pIcc,
+                              icValidateStatus nStatus, bool bDumpValidation,
+                              bool bUseRead, int verbosity)
+{
+  CIccInfo Fmt;
+  bool bHasPayload = false;
+  bool bHasControlledBytes = false;
+  std::string qaNonce;
+  icUInt32Number payloadOffset = 0;
+  icUInt32Number payloadSize = 0;
+
+  if (pIcc)
+    bHasPayload = FindQaPayloadTag(profilePath, pIcc, payloadOffset, payloadSize,
+                                   bHasControlledBytes, qaNonce);
+
+  printf("{");
+  printf("\"schema\":\"%s\",", kQaEvidenceSchema);
+  printf("\"tool\":\"iccDumpProfile\",");
+  printf("\"profile\":\"%s\",", icJsonEscape(profilePath).c_str());
+  // -v does not load through either of these: it routes through
+  // ValidateIccProfile() and ignores bUseRead entirely, so reporting
+  // "OpenIccProfile" there named a function the run never called.
+  printf("\"loadMode\":\"%s\",",
+         bDumpValidation ? "ValidateIccProfile" :
+         (bUseRead ? "ReadIccProfile" : "OpenIccProfile"));
+  printf("\"validationRequested\":%s,", bDumpValidation ? "true" : "false");
+  printf("\"validationStatus\":\"%s\",", ValidationStatusName(nStatus));
+  printf("\"verbosity\":%d,", verbosity);
+  printf("\"loaded\":%s,", pIcc ? "true" : "false");
+
+  if (pIcc) {
+    icHeader *pHdr = &pIcc->m_Header;
+    printf("\"profileSize\":%u,", (unsigned int)pHdr->size);
+    if (Fmt.IsProfileIDCalculated(&pHdr->profileID))
+      printf("\"profileId\":\"%s\",", icJsonEscape(Fmt.GetProfileID(&pHdr->profileID)).c_str());
+    else
+      printf("\"profileId\":null,");
+    printf("\"tagCount\":%u,", (unsigned int)pIcc->m_Tags.size());
+  }
+  else {
+    printf("\"profileSize\":null,\"profileId\":null,\"tagCount\":0,");
+  }
+
+  EmitQaValidationTagTable(pIcc, bDumpValidation);
+
+  printf("\"qaFlags\":[");
+  bool wroteFlag = false;
+  if (pIcc) {
+    printf("\"ICCDEV_FLAG_LOAD\"");
+    wroteFlag = true;
+  }
+  if (pIcc && bDumpValidation) {
+    printf("%s\"ICCDEV_FLAG_VALIDATE\"", wroteFlag ? "," : "");
+    wroteFlag = true;
+  }
+  if (bHasPayload) {
+    printf("%s\"ICCDEV_FLAG_TAG_PAYLOAD\"", wroteFlag ? "," : "");
+    wroteFlag = true;
+  }
+  if (bHasPayload && bHasControlledBytes) {
+    printf("%s\"ICCDEV_FLAG_CONTROLLED_PATTERN\"", wroteFlag ? "," : "");
+  }
+  printf("]");
+
+  if (bHasPayload) {
+    printf(",\"qaPayload\":{\"tag\":\"qaFL\",\"offset\":%u,\"size\":%u,\"marker\":\"%s\",",
+           (unsigned int)payloadOffset, (unsigned int)payloadSize, kQaPayloadMarker);
+    printf("\"controlledPattern\":\"%s\"", bHasControlledBytes ? "0x41414141" : "");
+    if (!qaNonce.empty())
+      printf(",\"nonce\":\"%s\"", icJsonEscape(qaNonce.c_str()).c_str());
+    printf("}");
+  }
+
+  printf("}\n");
+  return pIcc ? 0 : 1;
+}
+#endif
 
 static const char* GetLateBindingNote(icElemTypeSignature sig)
 {
@@ -203,11 +396,22 @@ bool DumpTagEntry(CIccProfile *pIcc, IccTagEntry &entry, int nVerboseness)
 
 void printUsage(void)
 {
+#if defined(ICCDEV_ENABLE_QA_FLAGS)
+    printf("Usage: iccDumpProfile {-v} {int} {--diag} {--read} {--qa-flags} {--evidence-json} profile {tagId to dump/\"ALL\"}\n");
+#else
+    // The default build rejects both flags, so the synopsis must not offer them.
     printf("Usage: iccDumpProfile {-v} {int} {--diag} {--read} profile {tagId to dump/\"ALL\"}\n");
+#endif
     printf("\nThe -v option causes profile validation to be performed.\n"
            "The optional integer parameter specifies verboseness of output (1-100, default=100).\n"
            "  --diag   Enable diagnostic mode (size checks, load tracing to stderr)\n"
            "  --read   Use ReadIccProfile (eager load) instead of OpenIccProfile (lazy)\n");
+#if defined(ICCDEV_ENABLE_QA_FLAGS)
+    printf("  --qa-flags      Enable QA target flag detection for supported evidence modes\n"
+           "  --evidence-json Emit schema-versioned QA evidence JSON and suppress normal text output\n");
+#else
+    printf("  --qa-flags and --evidence-json require ICCDEV_ENABLE_QA_FLAGS=ON at build time\n");
+#endif
     printf("iccDumpProfile built with IccProfLib version " ICCPROFLIBVER "\n\n");
 }
 
@@ -345,25 +549,61 @@ int main(int argc, char* argv[])
   icValidateStatus nStatus = icValidateOK;
   bool bDumpValidation = false;
   bool bUseRead = false;
+#if defined(ICCDEV_ENABLE_QA_FLAGS)
+  bool bEvidenceJson = false;
+  bool bQaFlags = false;
+#endif
 
-  // Consume --diag and --read flags from anywhere in argv
-  for (int k = 1; k < argc; k++) {
+  // Consume position-independent flags from anywhere in argv.
+  int k = 1;
+  while (k < argc) {
+    bool bConsumedFlag = false;
     if (strcmp(argv[k], "--diag") == 0) {
       g_bDiagMode = true;
-      // Shift remaining args left
-      for (int m = k; m < argc - 1; m++)
-        argv[m] = argv[m + 1];
-      argc--;
-      k--;  // re-check this position
+      bConsumedFlag = true;
     }
     else if (strcmp(argv[k], "--read") == 0) {
       bUseRead = true;
+      bConsumedFlag = true;
+    }
+#if defined(ICCDEV_ENABLE_QA_FLAGS)
+    else if (strcmp(argv[k], "--qa-flags") == 0) {
+      bQaFlags = true;
+      bConsumedFlag = true;
+    }
+    else if (strcmp(argv[k], "--evidence-json") == 0) {
+      bEvidenceJson = true;
+      bQaFlags = true;
+      bConsumedFlag = true;
+    }
+#else
+    else if (strcmp(argv[k], "--qa-flags") == 0 || strcmp(argv[k], "--evidence-json") == 0) {
+      fprintf(stderr, "QA target flags require ICCDEV_ENABLE_QA_FLAGS=ON at build time\n");
+      return 1;
+    }
+#endif
+
+    if (bConsumedFlag) {
       for (int m = k; m < argc - 1; m++)
         argv[m] = argv[m + 1];
       argc--;
-      k--;
+    }
+    else {
+      k++;
     }
   }
+
+#if defined(ICCDEV_ENABLE_QA_FLAGS)
+  // --evidence-json is the only evidence mode iccDumpProfile has, so it turns
+  // --qa-flags on by itself.  Rejecting --qa-flags on its own is what stops the
+  // flag from being decorative: it used to be parsed, consumed and then thrown
+  // away with a (void) cast, so `--qa-flags profile.icc` silently produced an
+  // ordinary text dump and exit 0.  iccPawgReport rejects the same combination.
+  if (bQaFlags && !bEvidenceJson) {
+    fprintf(stderr, "--qa-flags requires --evidence-json for iccDumpProfile\n");
+    return 1;
+  }
+#endif
 
   if (argc <= 1) {
     printUsage();
@@ -392,8 +632,17 @@ int main(int argc, char* argv[])
         return -1;
       }
     }
-    else if (argv[nArg] == endptr) {
-        verbosity = 100;
+    else {
+      // The token was not accepted as a verbosity argument, so it is the profile
+      // filename and the documented default (usage text: "default=100") applies.
+      //
+      // Restoring here rather than under the old `argv[nArg] == endptr` test matters
+      // because strtol() has ALREADY overwritten verbosity by this point. That test
+      // only fired when strtol consumed nothing at all, so a filename that merely
+      // starts with digits kept the parsed value: "123.icc" -- the very case the
+      // comment above exists to support -- left verbosity at 123, outside the
+      // documented 1-100 range, and "50test.icc" left it at 50.
+      verbosity = 100;
     }
 
     pIcc = ValidateIccProfile(argv[nArg], sReport, nStatus);
@@ -415,9 +664,37 @@ int main(int argc, char* argv[])
         return -1;
       }
     }
+    else {
+      // #2248: this branch had no counterpart to the -v branch's recovery, so an
+      // ordinary filename left verbosity at whatever strtol() returned -- 0 for a
+      // name with no leading digit. The documented default is 100, so every plain
+      // `iccDumpProfile <file>` ran at minimum verbosity instead of maximum, and the
+      // two branches disagreed about what "no integer given" means. Same restoration
+      // as above, for the same reason.
+      //
+      // This is the branch that carries the output-volume change, and it is large:
+      // the gates that newly open are the `nVerboseness > 50` / `> 75` CLUT and
+      // curve dumps in IccTagLut.cpp, IccTagMPE.cpp and IccMpeACS.cpp. Measured
+      // across Testing/, `<file> ALL` grows about 6x in total bytes; the worst
+      // single profile, Testing/hybrid/ICC/CMYK_Hybrid_Profile.icc, goes from 133
+      // lines / 0.02 s to 517455 lines / 0.53 s. That is the documented behaviour
+      // rather than a regression, but the callers that pipe `ALL` through a
+      // per-profile `timeout` -- _build-test-unix.yml and iccdev-fuzz-triage.sh,
+      // at 30 s and 20 s -- lost roughly an order of magnitude of headroom, so a
+      // future profile larger than that one is where this would first bite.
+      verbosity = 100;
+    }
 
     pIcc = bUseRead ? ReadIccProfile(argv[nArg]) : OpenIccProfile(argv[nArg]);
   }
+
+#if defined(ICCDEV_ENABLE_QA_FLAGS)
+  if (bEvidenceJson) {
+    int rc = EmitQaEvidenceJson(argv[nArg], pIcc, nStatus, bDumpValidation, bUseRead, verbosity);
+    delete pIcc;
+    return rc;
+  }
+#endif
 
   CIccInfo Fmt;
   icHeader* pHdr = NULL;

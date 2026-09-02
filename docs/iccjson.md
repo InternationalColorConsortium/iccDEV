@@ -73,6 +73,25 @@ iccFromJson input.json output.icc
 iccDumpProfile output.icc
 ```
 
+### MATLAB bindings
+
+The MATLAB package provides shell-free wrappers around the same tools after
+`iccToJson` and `iccFromJson` have been built. Add `matlab/` to the MATLAB path,
+then use `iccdev.to_json` to obtain UTF-8 JSON text and `iccdev.from_json` to
+return a `uint8` ICC byte column:
+
+```matlab
+json_text = iccdev.to_json(fullfile('Testing', ...
+  'sRGB_v4_ICC_preference.icc'));
+profile_bytes = iccdev.from_json(json_text);
+```
+
+`from_json` also accepts an existing JSON file path. Both wrappers require a
+Java-enabled MATLAB or Octave runtime, preserve native parser diagnostics, and
+do not produce ICC bytes after a failed conversion. See
+[MATLAB bindings and QA](matlab-bindings.md) for the Release build targets and
+the `test_json_bindings` round-trip coverage.
+
 ## JSON Structure
 
 Every JSON profile is wrapped in a top-level `IccProfile` object:
@@ -826,8 +845,10 @@ for build instructions.
 ### IIS ISAPI server-side integration
 
 The Windows IIS ISAPI sample at
-[`Tools/Winnt/IccIisIsapi/`](../Tools/Winnt/IccIisIsapi/) conditionally invokes
-`iccToJson` and `iccFromJson` as part of its tool pipeline when IccJSON is built.
+<a href="https://github.com/InternationalColorConsortium/iccDEV/tree/master/Tools/Winnt/IccIisIsapi/">Tools/Winnt/IccIisIsapi/</a>
+conditionally invokes `iccToJson` and `iccFromJson` as part of its tool pipeline
+when IccJSON is built.
 Uploaded ICC profiles are converted to JSON for inspection, and XML-originated
 profiles are also exported to JSON. See
-[`api.md`](../Tools/Winnt/IccIisIsapi/api.md) for the HTTP endpoint reference.
+<a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/Tools/Winnt/IccIisIsapi/api.md">api.md</a>
+for the HTTP endpoint reference.

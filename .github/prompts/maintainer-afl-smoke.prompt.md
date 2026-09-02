@@ -8,13 +8,13 @@ command-line tools.
 - Workflow: `.github/workflows/ci-afl-smoke.yml`
 - Driver: `.github/scripts/iccdev-afl-smoke.sh`
 - AFL++ source: `https://github.com/AFLplusplus/AFLplusplus/tree/dev`
-- Container: `ghcr.io/internationalcolorconsortium/iccdev-ci-regression`
+- Container: `ghcr.io/internationalcolorconsortium/iccdev`
 - Container workflow: `.github/workflows/ci-docker.yml`
 - Seeds: `.github/ci/test-data/` and `.github/ci/afl-seeds/`
 - Local patch stacks: `.github/ci/fuzz-patches/afl` and
   `.github/ci/fuzz-patches/cfl`
 - Patch stack validation: `.github/scripts/check-fuzz-patches.sh`
-- CFL smoke: `cfl/build.sh` and `.github/workflows/ci-cfl-smoke.yml`
+- CFL smoke: `.github/ci/cfl/build.sh` and `.github/workflows/ci-cfl-smoke.yml`
 - Governance: `.github/instructions/workflow-governance.instructions.md`
 - Docs: `docs/afl-fuzzing.md`
 
@@ -61,7 +61,7 @@ PRs, and `none` when comparing raw branch behavior.
 Expose CFL runtime as seconds per target, not LibFuzzer iteration or execution
 counts, so the manual UI matches AFL's duration model.
 
-The regression image packages the compiler runtime needed by its packaged
+The unified image packages the compiler runtime needed by its packaged
 AFL++ wrapper for short local smoke checks. The AFL workflow should still
 rebuild and probe AFL++ wrappers against the selected LLVM major version. Avoid
 broad AFL++ `source-only` or full LLVM builds in the smoke workflow when they
@@ -89,7 +89,7 @@ shellcheck .github/scripts/iccdev-afl-smoke.sh
 actionlint .github/workflows/ci-afl-smoke.yml
 yamllint -d '{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable}}' .github/workflows/ci-afl-smoke.yml
 .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 30000
-cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize --seconds 30
+.github/ci/cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize --seconds 30
 ```
 
 Run `.github/scripts/preflight-safety-checks.sh --require-tools` before pushing
@@ -99,8 +99,8 @@ When changing AFL++ bootstrap behavior, also run the regression-container
 bootstrap probe documented in `docs/afl-fuzzing.md`.
 
 When changing fuzz patch stacks, the patch checker, the patch applicator, or
-`cfl/` build behavior, verify that `.github/workflows/ci-docker.yml` still
-rebuilds and tests the regression image for those paths.
+`.github/ci/cfl/` build behavior, verify that `.github/workflows/ci-docker.yml` still
+rebuilds and tests the unified image for those paths.
 
 ## Handoff
 

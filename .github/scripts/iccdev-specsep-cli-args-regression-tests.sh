@@ -42,6 +42,10 @@ FROMXML="$TOOLS_DIR/IccFromXml/iccFromXml"
 SPECTRAL_XML="$REPO_ROOT/Testing/ICS/Spec400_10_700-D50_2deg-Part1.xml"
 SPECTRAL_PROFILE="$OUTDIR/Spec400_10_700-D50_2deg-Part1.icc"
 SPECTRAL31_DIR="$OUTDIR/spectral31"
+SPECTRAL_RGB_XML="$REPO_ROOT/Testing/SpecRef/srgbRef.xml"
+SPECTRAL_RGB_PROFILE="$OUTDIR/srgb-spectral-pcs.icc"
+DEVICELINK_XML="$REPO_ROOT/Testing/Display/RgbGSDF.xml"
+DEVICELINK_PROFILE="$OUTDIR/rgb-gsdf-devicelink.icc"
 
 PASS=0
 FAIL=0
@@ -98,7 +102,16 @@ run_expect_success() {
     return
   fi
 
-  pass_case "$name" "created output TIFF"
+  for expected in "Output:" "Size:" "BitsPerSample:" "SamplesPerPixel:" \
+                  "Planar:" "Compression:" "Profile:" "Image successfully written!"; do
+    if ! grep -Fq "$expected" "$log" 2>/dev/null; then
+      fail_case "$name" "success output missing summary field: $expected"
+      sed -n '1,80p' "$log"
+      return
+    fi
+  done
+
+  pass_case "$name" "created output TIFF: $out"
 }
 
 run_expect_reject() {
@@ -136,6 +149,33 @@ run_expect_reject() {
   pass_case "$name" "rejected malformed arguments"
 }
 
+run_expect_version() {
+  local name="specsep-version"
+  local log="$OUTDIR/$name.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$log"
+
+  timeout 60 "$SPECSEP" --version > "$log" 2>&1 || exit_code=$?
+
+  check_sanitizers "$name" "$log" || return
+
+  if [ "$exit_code" -ne 0 ]; then
+    fail_case "$name" "expected success, got exit=$exit_code"
+    sed -n '1,40p' "$log"
+    return
+  fi
+
+  if ! grep -Eq '^iccSpecSepToTiff [0-9]' "$log" 2>/dev/null; then
+    fail_case "$name" "version output did not identify the tool and version"
+    sed -n '1,40p' "$log"
+    return
+  fi
+
+  pass_case "$name" "reported tool version"
+}
+
 check_tiffinfo_contains() {
   local name="$1"
   local file="$2"
@@ -155,6 +195,31 @@ check_tiffinfo_contains() {
   if ! grep -Fq "$expected" "$log" 2>/dev/null; then
     fail_case "$name" "tiffinfo output missing: $expected"
     sed -n '1,80p' "$log"
+    return 1
+  fi
+
+  return 0
+}
+
+check_tiff_data_contains() {
+  local name="$1"
+  local file="$2"
+  local expected="$3"
+  local log="$OUTDIR/$name.tiffdata"
+
+  if ! command -v tiffinfo >/dev/null 2>&1; then
+    return 0
+  fi
+
+  tiffinfo -d "$file" > "$log" 2>&1 || {
+    fail_case "$name" "tiffinfo could not decode output pixels"
+    sed -n '1,80p' "$log"
+    return 1
+  }
+
+  if ! grep -Fq "$expected" "$log" 2>/dev/null; then
+    fail_case "$name" "decoded TIFF data missing channel order: $expected"
+    sed -n '1,120p' "$log"
     return 1
   fi
 
@@ -224,12 +289,31 @@ prepare_spectral_profile() {
     generate_spectral31_inputs
 }
 
+prepare_profile() {
+  local input_xml="$1"
+  local output_profile="$2"
+  local log_name="$3"
+
+  if [ ! -x "$FROMXML" ] || [ ! -f "$input_xml" ]; then
+    return 1
+  fi
+
+  "$FROMXML" "$input_xml" "$output_profile" > "$OUTDIR/$log_name.log" 2>&1 &&
+    [ -s "$output_profile" ]
+}
+
 echo "=== iccSpecSepToTiff CLI argument regression ==="
 
 if [ ! -x "$SPECSEP" ]; then
   echo "iccSpecSepToTiff not found at $SPECSEP -- skipping (build Tools first)"
   exit 0
 fi
+
+if ! command -v tiffinfo >/dev/null 2>&1; then
+  echo "  [WARN] tiffinfo unavailable; skipping TIFF metadata and pixel-data validation" >&2
+fi
+
+run_expect_version
 
 run_expect_success \
   "specsep-harvest-gray300-no-profile" \
@@ -239,17 +323,55 @@ check_tiffinfo_contains "specsep-harvest-gray300-no-profile" "$OUTDIR/harvest-gr
   check_tiffinfo_contains "specsep-harvest-gray300-no-profile" "$OUTDIR/harvest-gray300-no-profile.tif" "Image Width: 300 Image Length: 300"
 
 run_expect_success \
+  "specsep-spectral-ten-band-data-cube" \
+  "$OUTDIR/spectral-ten-band-data-cube.tif" \
+  0 0 "$SPECTRAL_PREFIX" 1 10 1
+check_tiffinfo_contains "specsep-spectral-ten-band-data-cube" "$OUTDIR/spectral-ten-band-data-cube.tif" "Extra Samples: 9<unspecified, unspecified, unspecified, unspecified, unspecified, unspecified, unspecified, unspecified, unspecified>" &&
+  check_tiff_data_contains "specsep-spectral-ten-band-data-cube" "$OUTDIR/spectral-ten-band-data-cube.tif" "99 19 32 33 cb 4c 64 66 fd 7f 96 99 2f b3 c8 cc 61 e6 fa ff"
+
+run_expect_success \
   "specsep-srgb-profile-matching-3ch" \
   "$OUTDIR/srgb-profile-matching-3ch.tif" \
   0 0 "$SPECTRAL_PREFIX" 1 3 1 "$PROFILE"
 check_tiffinfo_contains "specsep-srgb-profile-matching-3ch" "$OUTDIR/srgb-profile-matching-3ch.tif" "Samples/Pixel: 3" &&
   check_tiffinfo_contains "specsep-srgb-profile-matching-3ch" "$OUTDIR/srgb-profile-matching-3ch.tif" "ICC Profile: <present>"
 
+if prepare_profile "$SPECTRAL_RGB_XML" "$SPECTRAL_RGB_PROFILE" "fromxml-srgb-spectral-pcs"; then
+  run_expect_success \
+    "specsep-spectral-pcs-rgb-data-3ch" \
+    "$OUTDIR/spectral-pcs-rgb-data-3ch.tif" \
+    0 0 "$SPECTRAL_PREFIX" 1 3 1 "$SPECTRAL_RGB_PROFILE"
+else
+  echo "  [SKIP] specsep-spectral-pcs-rgb-data-3ch -- missing iccFromXml or srgbRef.xml"
+fi
+
+if prepare_profile "$DEVICELINK_XML" "$DEVICELINK_PROFILE" "fromxml-rgb-gsdf-devicelink"; then
+  run_expect_reject \
+    "specsep-devicelink-profile" \
+    "DeviceLink profile and cannot be embedded" \
+    "$OUTDIR/devicelink-profile.tif" \
+    0 0 "$SPECTRAL_PREFIX" 1 3 1 "$DEVICELINK_PROFILE"
+else
+  echo "  [SKIP] specsep-devicelink-profile -- missing iccFromXml or RgbGSDF.xml"
+fi
+
 run_expect_success \
   "specsep-fast-separate-planes" \
   "$OUTDIR/fast-separate.tif" \
   0 1 "$SPECTRAL_PREFIX" 1 10 1
 check_tiffinfo_contains "specsep-fast-separate-planes" "$OUTDIR/fast-separate.tif" "Planar Configuration: separate image planes"
+
+run_expect_success \
+  "specsep-channel-order-ascending" \
+  "$OUTDIR/channel-order-ascending.tif" \
+  0 0 "$SPECTRAL_PREFIX" 1 3 1
+check_tiff_data_contains "specsep-channel-order-ascending" "$OUTDIR/channel-order-ascending.tif" "99 19 32 33 cb 4c"
+
+run_expect_success \
+  "specsep-channel-order-descending" \
+  "$OUTDIR/channel-order-descending.tif" \
+  0 0 "$SPECTRAL_PREFIX" 3 1 -1
+check_tiff_data_contains "specsep-channel-order-descending" "$OUTDIR/channel-order-descending.tif" "cb 4c 32 33 99 19"
 
 if prepare_spectral_profile; then
   run_expect_success \

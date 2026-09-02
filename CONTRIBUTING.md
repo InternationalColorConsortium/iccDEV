@@ -42,8 +42,8 @@ All Pull Requests should be tied to an existing Issue that discusses the problem
 
 ## Legal Requirements
 
-All official software projects hosted by the International Color Consoritum (ICC)
-follows the open source software best practice policies. The [International Color Consoritum IP policy](https://www.color.org/iccip.xalter) governs ICC specification development and contributions to ICC open source software. Software contributions are also covered by the Contributor License Agreement (CLA).
+All official software projects hosted by the International Color Consortium (ICC)
+follows the open source software best practice policies. The [International Color Consortium IP policy](https://www.color.org/iccip.xalter) governs ICC specification development and contributions to ICC open source software. Software contributions are also covered by the Contributor License Agreement (CLA).
 
 ### Contributor License Agreements
 

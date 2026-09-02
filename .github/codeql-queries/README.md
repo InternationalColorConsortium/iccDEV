@@ -83,5 +83,25 @@ Results are written to `codeql-results/`:
    `gh codeql database analyze <db> .github/codeql-queries/my-query.ql --format=sarif-latest --output=/tmp/test.sarif`
 4. Verify results before committing.
 
+Run the checked-in query tests after changing query logic:
+
+```bash
+codeql pack install .github/codeql-queries
+codeql pack install .github/codeql-queries/test \
+  --additional-packs=.github/codeql-queries
+codeql test run .github/codeql-queries/test \
+  --additional-packs=.github/codeql-queries
+```
+
+`unbounded-profile-loop` treats `Begin()` as an invariant-establishing setup
+method, alongside `Init()`, `Read()`, and the other setup methods recognized by
+the query. Alerts #999, #1000, and #1647 were false positives after
+`CIccCLUT::Begin()` bounded `m_nNodes` and its CMM callers propagated failure.
+The rule also excludes the exact internal/derived fields behind alerts #2360
+and #881; neither is an untrusted profile loop bound. Do not generalize those
+exclusions to other job or count fields.
+Keep the negative query-test case: genuinely unguarded profile-count loops must
+still be reported.
+
 Standard-suite findings such as CLI path input or intentional float comparisons
 may be informational rather than vulnerabilities; triage them in context.

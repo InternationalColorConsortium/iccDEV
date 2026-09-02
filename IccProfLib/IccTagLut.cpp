@@ -84,6 +84,16 @@
 #ifdef ICC_USE_SSE2
   #include <emmintrin.h>
 #endif
+#if (defined(ICC_USE_AVX2) || defined(ICC_USE_AVX512)) && defined(_MSC_VER)
+  #include <intrin.h>
+#endif
+#ifdef ICC_USE_AVX512
+  #include "IccTagLutAvx512.h"
+#endif
+#ifdef ICC_USE_AVX2
+  #include "IccTagLutAvx2.h"
+#endif
+#include "IccSignatureUtils.h"
 #include "IccTag.h"
 #include "IccUtil.h"
 #include "IccProfile.h"
@@ -91,6 +101,59 @@
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
+#endif
+
+#ifdef ICC_USE_AVX2
+static inline bool iccUseAvx2ClutOutput(int outputChannels)
+{
+  return outputChannels == 15;
+}
+
+#if defined(_MSC_VER)
+  #define ICC_CLUT_NOINLINE __declspec(noinline)
+#else
+  #define ICC_CLUT_NOINLINE __attribute__((noinline))
+#endif
+
+static ICC_CLUT_NOINLINE bool iccTryInterp3dAvx2(
+  icFloatNumber *destPixel, const icFloatNumber *data,
+  const icUInt32Number offsets[8], const icFloatNumber weights[8],
+  int outputChannels)
+{
+  static const bool hasAvx2 = []() {
+#if defined(_MSC_VER)
+    int cpuid[4];
+    __cpuidex(cpuid, 0, 0);
+    if (cpuid[0] < 7)
+      return false;
+
+    __cpuidex(cpuid, 1, 0);
+    if (!(cpuid[2] & (1 << 27)) || !(cpuid[2] & (1 << 28)))
+      return false;
+    if ((_xgetbv(0) & 0x6) != 0x6)
+      return false;
+
+    __cpuidex(cpuid, 7, 0);
+    return (cpuid[1] & (1 << 5)) != 0;
+#elif defined(__i386__) || defined(__x86_64__)
+    __builtin_cpu_init();
+    return __builtin_cpu_supports("avx2");
+#else
+    return false;
+#endif
+  }();
+
+  ICC_AVX2_CLUT_TRACE_DISPATCH(
+    hasAvx2, hasAvx2, outputChannels, data,
+    hasAvx2 ? offsets : NULL, hasAvx2 ? weights : NULL);
+  if (!hasAvx2)
+    return false;
+
+  iccCLUTInterp3dAvx2(destPixel, data, offsets, weights, outputChannels);
+  return true;
+}
+
+#undef ICC_CLUT_NOINLINE
 #endif
 
 /**
@@ -646,6 +709,27 @@ bool CIccTagCurve::IsIdentity()
 *  
 *****************************************************************************
 */
+/**
+****************************************************************************
+* Name: CIccTagCurve::Begin
+*
+* Purpose: Precomputes what Apply() would otherwise rederive per call.
+*
+*  m_nMaxIndex is the table's top index. m_fGamma decodes the single-entry form,
+*  where m_Curve[0] is a u8Fixed8Number holding the gamma: Apply() used to redo
+*  that decode on every call before handing the result to pow().
+*****************************************************************************
+*/
+void CIccTagCurve::Begin()
+{
+  m_nMaxIndex = m_nSize ? (icUInt16Number)(m_nSize - 1) : 0;
+
+  //Convert 0.0 to 1.0 float to 16bit and then convert from u8Fixed8Number
+  m_fGamma = (m_nSize == 1 && m_Curve)
+               ? (icFloatNumber)(m_Curve[0] * 65535.0 / 256.0)
+               : (icFloatNumber)1.0;
+}
+
 icFloatNumber CIccTagCurve::Apply(icFloatNumber v) const
 {
   if (std::isnan(v))
@@ -655,16 +739,19 @@ icFloatNumber CIccTagCurve::Apply(icFloatNumber v) const
   else if(v<0.0) v = 0.0;
   else if(v>1.0) v = 1.0;
 
-  icUInt32Number nIndex = static_cast<icUInt32Number>(v * m_nMaxIndex);
-
+  // The two degenerate table sizes are tested before nIndex is computed. They
+  // were tested after, so every call through a gamma curve or an empty curve
+  // paid a multiply and a cast whose result it then discarded.
   if (!m_nSize) {
     return v;
   }
   if (m_nSize==1) {
-    //Convert 0.0 to 1.0 float to 16bit and then convert from u8Fixed8Number
-    icFloatNumber dGamma = (icFloatNumber)(m_Curve[0] * 65535.0 / 256.0);
-    return (icFloatNumber)pow(v, dGamma);
+    // Gamma decoded once in Begin(); this rebuilt it from m_Curve[0] per call.
+    return (icFloatNumber)pow(v, m_fGamma);
   }
+
+  icUInt32Number nIndex = static_cast<icUInt32Number>(v * m_nMaxIndex);
+
   if (nIndex == m_nMaxIndex) {
     return m_Curve[nIndex];
   }
@@ -1731,8 +1818,52 @@ static icFloatNumber ClutUnitClip(icFloatNumber v)
     return 0;
   else if (v>1.0)
     return 1.0;
- 
+
   return v;
+}
+
+/**
+****************************************************************************
+* Name: icClutGridClamp
+*
+* Purpose: Scales a source component into grid units and clamps it to [0, mx].
+*
+*  Replaces the m_UnitClipFunc indirect call that every Interp* function used to
+*  make once per input channel per pixel, together with the isfinite and range
+*  tests that followed it. Those did the same work twice: ClutUnitClip mapped NaN
+*  to 0 and clamped to [0,1], and the interpolator then re-tested isfinite and
+*  clamped to [0,mx]. Clamping to [0,mx] after the multiply subsumes clamping to
+*  [0,1] before it, and the indirect call was what stopped the whole sequence
+*  vectorizing.
+*
+*  Exactly equivalent to the former ClutUnitClip path for every input:
+*
+*     v        old (ClutUnitClip)          new
+*     0.5      0.5 -> 0.5*mx              0.5*mx
+*     1.5      clipped to 1.0 -> mx       1.5*mx > mx -> mx
+*    -0.5      clipped to 0   -> 0        negative -> 0
+*     NaN      isnan -> 0     -> 0        !(NaN > 0) is true -> 0
+*    +Inf      clipped to 1.0 -> mx       Inf > mx -> mx
+*    -Inf      clipped to 0   -> 0        !(-Inf > 0) -> 0
+*
+*  It DELIBERATELY CHANGES the former NoClip path for +Inf only. NoClip passed the
+*  value through, so +Inf reached the isfinite test and produced 0 -- the opposite
+*  end of the grid from what the default path produced for the same input. The two
+*  paths now agree that +Inf saturates high. Every other input, including NaN and
+*  -Inf, is unchanged on both paths.
+*****************************************************************************
+*/
+static inline icFloatNumber icClutGridClamp(icFloatNumber v, icUInt8Number mx)
+{
+  const icFloatNumber fmx = (icFloatNumber)mx;
+  const icFloatNumber x = v * fmx;
+
+  if (!(x > 0.0f))    // comparison is false for NaN, so NaN and -Inf land here
+    return 0.0f;
+  if (x > fmx)
+    return fmx;
+
+  return x;
 }
 
 /**
@@ -1818,6 +1949,7 @@ CIccCLUT::CIccCLUT(icUInt8Number nInputChannels, icUInt16Number nOutputChannels,
   memset(&m_nReserved2, 0 , sizeof(m_nReserved2));
 
   m_UnitClipFunc = ClutUnitClip;
+  m_nMaxDataOffset2d = 0;   // set by Begin() for the 2-input case
 }
 
 
@@ -1853,6 +1985,7 @@ CIccCLUT::CIccCLUT(const CIccCLUT &ICLUT)
   memcpy(m_pData, ICLUT.m_pData, num*sizeof(icFloatNumber));
 
   m_UnitClipFunc = ICLUT.m_UnitClipFunc;
+  m_nMaxDataOffset2d = ICLUT.m_nMaxDataOffset2d;
 }
 
 
@@ -1891,6 +2024,7 @@ CIccCLUT &CIccCLUT::operator=(const CIccCLUT &CLUTTag)
   memcpy(m_pData, CLUTTag.m_pData, num*sizeof(icFloatNumber));
 
   m_UnitClipFunc = CLUTTag.m_UnitClipFunc;
+  m_nMaxDataOffset2d = CLUTTag.m_nMaxDataOffset2d;
 
   return *this;
 }
@@ -2421,14 +2555,28 @@ void CIccCLUT::DumpLut(IDescribeSink &sink, const icChar *szName,
  *
  *****************************************************************************
  */
-void CIccCLUT::Begin()
+bool CIccCLUT::Begin()
 {
   int i;
-  // CWE-400/834: m_nInput indexes the fixed 16-entry m_GridPoints/m_MaxGridPoint/
-  // m_nPower arrays and drives m_nNodes = (1<<m_nInput). Init() already rejects
-  // m_nInput>16 on load; assert the bound locally so it is explicit at point of use.
-  if (m_nInput > 16)
-    return;
+
+  // Init() is what establishes every quantity below: the grid, the data buffer,
+  // and the input count itself. It refuses an m_nInput outside 1..16, a grid
+  // granularity below 2, and any grid whose size overflows 32 bits, and it
+  // leaves m_pData NULL when it does. That NULL is the one reliable signal that
+  // this object was never made usable, and it is the state a CLUT built outside
+  // the profile reader can be left in -- icCLutFromXml() and icCLUTFromJson()
+  // construct a CIccCLUT directly from a parsed channel count, and the public
+  // constructor plus a skipped or failed Init() reaches it too. Refuse here so
+  // an uninitialized CLUT cannot be handed to the interpolators.
+  if (!m_pData)
+    return false;
+
+  // m_nInput indexes the fixed 16-entry m_GridPoints/m_MaxGridPoint/m_nPower
+  // arrays and drives m_nNodes = (1<<m_nInput) (CWE-400/834). Init() rejects
+  // m_nInput>16, so a CLUT holding data cannot be over the bound; keep the
+  // check so the limit is explicit at the point the arrays are indexed.
+  if (m_nInput < 1 || m_nInput > 16)
+    return false;
   for (i=0; i<m_nInput; i++) {
     m_MaxGridPoint[i] = m_GridPoints[i] - 1;
   }
@@ -2448,7 +2596,7 @@ void CIccCLUT::Begin()
   // bound on the field so the offset-table walks below have an explicit upper limit
   // a corrupted CLUT cannot exceed. Value-preserving: a valid m_nNodes is <= 65536.
   if (m_nNodes > 65536)
-    return;
+    return false;
 
   if (m_nInput==1) {
     m_nOffset[0] = n000 = 0;
@@ -2459,6 +2607,10 @@ void CIccCLUT::Begin()
     m_nOffset[1] = n001 = m_DimSize[0];
     m_nOffset[2] = n010 = m_DimSize[1];
     m_nOffset[3] = n011 = n001 + n010;
+
+    // Ceiling for Interp2d's offset clamp; see there. Depends only on values
+    // fixed by this point, so Interp2d no longer recomputes it per pixel.
+    m_nMaxDataOffset2d = (int)NumPoints()*(int)m_nOutput - ((int)m_nOutput + (int)n011);
   }
   else if (m_nInput==3) {
     m_nOffset[0] = n000 = 0;
@@ -2612,6 +2764,8 @@ void CIccCLUT::Begin()
       }
     }
   }
+
+  return true;
 }
 
 
@@ -2644,17 +2798,7 @@ void CIccCLUT::Interp1d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
 {
   icUInt8Number mx = m_MaxGridPoint[0];
 
-  icFloatNumber x = m_UnitClipFunc(srcPixel[0]) * mx;
-  
-  // m_UnitClipFunc points to NoClip
-  if (!std::isfinite(x))
-    x = 0.0f;
-    
-  if (x < 0.0f)
-    x = 0.0f;
-
-  if (x > mx)
-    x = mx;
+  icFloatNumber x = icClutGridClamp(srcPixel[0], mx);
 
   icUInt32Number ix = (icUInt32Number)x;
 
@@ -2699,25 +2843,10 @@ void CIccCLUT::Interp2d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icUInt8Number mx = m_MaxGridPoint[0];
   icUInt8Number my = m_MaxGridPoint[1];
 
-  // The UnitClip function pointer is calling "NoClip", but now removes NaN and Inf
-  icFloatNumber x = m_UnitClipFunc(srcPixel[0]) * mx;
-  icFloatNumber y = m_UnitClipFunc(srcPixel[1]) * my;
-  
-  // m_UnitClipFunc points to NoClip
-  if (!std::isfinite(x))
-    x = 0.0f;
-  if (!std::isfinite(y))
-    y = 0.0f;
-    
-  if (x < 0.0f)
-    x = 0.0f;
-  if (y < 0.0f)
-    y = 0.0f;
-
-  if (x > mx)
-    x = mx;
-  if (y > my)
-    y = my;
+  // See icClutGridClamp: scales into grid units and clamps, replacing the former
+  // m_UnitClipFunc call plus the isfinite and range tests that followed it.
+  icFloatNumber x = icClutGridClamp(srcPixel[0], mx);
+  icFloatNumber y = icClutGridClamp(srcPixel[1], my);
 
   icUInt32Number ix = (icUInt32Number)x;
   icUInt32Number iy = (icUInt32Number)y;
@@ -2772,40 +2901,41 @@ void CIccCLUT::Interp2d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
  */
 void CIccCLUT::Interp3dTetra(icFloatNumber *destPixel, const icFloatNumber *srcPixel) const
 {
-  // CWE-400/834: m_nOutput controls the destPixel write loop below. Valid LUT
-  // profiles cap output channels at <=16 (the read path rejects larger); guard
-  // locally so the bound is explicit even if the field is corrupted in memory.
-  if (m_nOutput > 16)
-    return;
+  // NOTE FOR ANYONE ADDING A BOUNDS CHECK HERE -- please don't; this one was a
+  // defect.
+  //
+  // "if (m_nOutput > 16) return;" used to stand here, described as bounding the
+  // destPixel write loop below on the grounds that "valid LUT profiles cap
+  // output channels at <=16". They do not, and this was the only interpolator
+  // that believed it. Interp1d, Interp2d, Interp3d, Interp4d, Interp5d and
+  // Interp6d all write m_nOutput values with no such bound, and m_nOutput is an
+  // icUInt16Number precisely because MPE CLUT elements need more than 16 --
+  // CIccMpeCLUT::Read bounds m_nInputChannels at 16 but deliberately leaves
+  // m_nOutputChannels unbounded, and a spectral CLUT's output count is its
+  // spectral step count.
+  //
+  // So for a perfectly legal 3-input CLUT with 17 or more outputs, this returned
+  // without writing anything: destPixel was left holding whatever the caller had
+  // in it, and only when the tetrahedral path was selected. Interp3d, reached
+  // from the same element under icElemInterpLinear, produced correct values for
+  // the identical CLUT. Measured before removal, at 3 inputs and 0.5 in each
+  // channel: nOut=16 gave 0.250 from both routines; nOut=17 and nOut=20 gave
+  // 0.250 from Interp3d and an untouched destination from Interp3dTetra.
+  //
+  // destPixel is sized by the caller from the same channel count this loop
+  // walks -- m_nBufChannels in the MPE pipeline, GetNumDstSamples() for a LUT
+  // xform, both pinned to the tag's output count at Begin() -- so the write is
+  // in bounds for any m_nOutput the object can legitimately carry, exactly as it
+  // is in the six sibling routines.
   icUInt8Number mx = m_MaxGridPoint[0];
   icUInt8Number my = m_MaxGridPoint[1];
   icUInt8Number mz = m_MaxGridPoint[2];
 
-  icFloatNumber x = m_UnitClipFunc(srcPixel[0]) * mx;
-  icFloatNumber y = m_UnitClipFunc(srcPixel[1]) * my;
-  icFloatNumber z = m_UnitClipFunc(srcPixel[2]) * mz;
-  
-  // m_UnitClipFunc points to NoClip, so no actual clipping is done
-  if (!std::isfinite(x))
-    x = 0.0f;
-  if (!std::isfinite(y))
-    y = 0.0f;
-  if (!std::isfinite(z))
-    z = 0.0f;
-
-  if (x < 0.0f)
-    x = 0.0f;
-  if (y < 0.0f)
-    y = 0.0f;
-  if (z < 0.0f)
-    z = 0.0f;
-
-  if (x > mx)
-    x = mx;
-  if (y > my)
-    y = my;
-  if (z > mz)
-    z = mz;
+  // See icClutGridClamp: scales into grid units and clamps, replacing the former
+  // m_UnitClipFunc call plus the isfinite and range tests that followed it.
+  icFloatNumber x = icClutGridClamp(srcPixel[0], mx);
+  icFloatNumber y = icClutGridClamp(srcPixel[1], my);
+  icFloatNumber z = icClutGridClamp(srcPixel[2], mz);
 
   icUInt32Number ix = (icUInt32Number)x;
   icUInt32Number iy = (icUInt32Number)y;
@@ -2885,35 +3015,16 @@ void CIccCLUT::Interp3dTetra(icFloatNumber *destPixel, const icFloatNumber *srcP
  */
 void CIccCLUT::Interp3d(icFloatNumber *destPixel, const icFloatNumber *srcPixel) const
 {
+  ICC_PERF_CLUT_SCOPE((int)m_nOutput);
   icUInt8Number mx = m_MaxGridPoint[0];
   icUInt8Number my = m_MaxGridPoint[1];
   icUInt8Number mz = m_MaxGridPoint[2];
 
-  icFloatNumber x = m_UnitClipFunc(srcPixel[0]) * mx;
-  icFloatNumber y = m_UnitClipFunc(srcPixel[1]) * my;
-  icFloatNumber z = m_UnitClipFunc(srcPixel[2]) * mz;
-  
-  // m_UnitClipFunc points to NoClip, so no actual clipping is done
-  if (!std::isfinite(x))
-    x = 0.0f;
-  if (!std::isfinite(y))
-    y = 0.0f;
-  if (!std::isfinite(z))
-    z = 0.0f;
-    
-  if (x < 0.0f)
-    x = 0.0f;
-  if (y < 0.0f)
-    y = 0.0f;
-  if (z < 0.0f)
-    z = 0.0f;
-
-  if (x > mx)
-    x = mx;
-  if (y > my)
-    y = my;
-  if (z > mz)
-    z = mz;
+  // See icClutGridClamp: scales into grid units and clamps, replacing the former
+  // m_UnitClipFunc call plus the isfinite and range tests that followed it.
+  icFloatNumber x = icClutGridClamp(srcPixel[0], mx);
+  icFloatNumber y = icClutGridClamp(srcPixel[1], my);
+  icFloatNumber z = icClutGridClamp(srcPixel[2], mz);
 
   icUInt32Number ix = (icUInt32Number)x;
   icUInt32Number iy = (icUInt32Number)y;
@@ -2955,9 +3066,57 @@ void CIccCLUT::Interp3d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   dF6 =  s*  t* nu;
   dF7 =  s*  t*  u;
 
+#ifdef ICC_USE_AVX512
+  static const bool hasAvx512 = []() {
+#if defined(_MSC_VER)
+    int cpuid[4];
+    __cpuidex(cpuid, 0, 0);
+    if (cpuid[0] < 7)
+      return false;
+
+    __cpuidex(cpuid, 1, 0);
+    if (!(cpuid[2] & (1 << 27)) || !(cpuid[2] & (1 << 28)))
+      return false;
+    if ((_xgetbv(0) & 0xe6) != 0xe6)
+      return false;
+
+    __cpuidex(cpuid, 7, 0);
+    return (cpuid[1] & (1 << 16)) != 0;
+#elif defined(__i386__) || defined(__x86_64__)
+    __builtin_cpu_init();
+    return __builtin_cpu_supports("avx512f");
+#else
+    return false;
+#endif
+  }();
+
+  if (hasAvx512 && m_nOutput >= 8 && m_nOutput <= 16) {
+    const icUInt32Number offsets[] = {n000, n001, n010, n011,
+                                      n100, n101, n110, n111};
+    const icFloatNumber weights[] = {dF0, dF1, dF2, dF3, dF4, dF5, dF6, dF7};
+    ICC_PERF_CLUT_PATH(icPerfClutAvx512);
+    iccCLUTInterp3dAvx512(destPixel, p, offsets, weights, (int)m_nOutput);
+    return;
+  }
+#endif
+
+#ifdef ICC_USE_AVX2
+  if (iccUseAvx2ClutOutput((int)m_nOutput)) {
+    const icUInt32Number offsets[] = {n000, n001, n010, n011,
+                                      n100, n101, n110, n111};
+    const icFloatNumber weights[] = {dF0, dF1, dF2, dF3, dF4, dF5, dF6, dF7};
+    if (iccTryInterp3dAvx2(
+          destPixel, p, offsets, weights, (int)m_nOutput)) {
+      ICC_PERF_CLUT_PATH(icPerfClutAvx2);
+      return;
+    }
+  }
+#endif
+
 #ifdef ICC_USE_SSE2
   const int nOutputLimit = (int)m_nOutput;
   if (nOutputLimit >= 4) {
+    ICC_PERF_CLUT_PATH(icPerfClutSse2);
     __m128 vF0 = _mm_set1_ps(dF0), vF1 = _mm_set1_ps(dF1);
     __m128 vF2 = _mm_set1_ps(dF2), vF3 = _mm_set1_ps(dF3);
     __m128 vF4 = _mm_set1_ps(dF4), vF5 = _mm_set1_ps(dF5);
@@ -3016,38 +3175,12 @@ void CIccCLUT::Interp4d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icUInt8Number my = m_MaxGridPoint[2];
   icUInt8Number mz = m_MaxGridPoint[3];
 
-  icFloatNumber w = m_UnitClipFunc(srcPixel[0]) * mw;
-  icFloatNumber x = m_UnitClipFunc(srcPixel[1]) * mx;
-  icFloatNumber y = m_UnitClipFunc(srcPixel[2]) * my;
-  icFloatNumber z = m_UnitClipFunc(srcPixel[3]) * mz;
-  
-  // m_UnitClipFunc points to NoClip
-  if (!std::isfinite(w))
-    w = 0.0f;
-  if (!std::isfinite(x))
-    x = 0.0f;
-  if (!std::isfinite(y))
-    y = 0.0f;
-  if (!std::isfinite(z))
-    z = 0.0f;
-    
-  if (w < 0.0f)
-    w = 0.0f;
-  if (x < 0.0f)
-    x = 0.0f;
-  if (y < 0.0f)
-    y = 0.0f;
-  if (z < 0.0f)
-    z = 0.0f;
-
-  if (x > mx)
-    x = mx;
-  if (y > my)
-    y = my;
-  if (z > mz)
-    z = mz;
-  if (w > mw)
-    w = mw;
+  // See icClutGridClamp: scales into grid units and clamps, replacing the former
+  // m_UnitClipFunc call plus the isfinite and range tests that followed it.
+  icFloatNumber w = icClutGridClamp(srcPixel[0], mw);
+  icFloatNumber x = icClutGridClamp(srcPixel[1], mx);
+  icFloatNumber y = icClutGridClamp(srcPixel[2], my);
+  icFloatNumber z = icClutGridClamp(srcPixel[3], mz);
 
   icUInt32Number iw = (icUInt32Number)w;
   icUInt32Number ix = (icUInt32Number)x;
@@ -3131,45 +3264,16 @@ void CIccCLUT::Interp5d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icUInt8Number m3 = m_MaxGridPoint[3];
   icUInt8Number m4 = m_MaxGridPoint[4];
 
-  icFloatNumber g0 = m_UnitClipFunc(srcPixel[0]) * m0;
-  icFloatNumber g1 = m_UnitClipFunc(srcPixel[1]) * m1;
-  icFloatNumber g2 = m_UnitClipFunc(srcPixel[2]) * m2;
-  icFloatNumber g3 = m_UnitClipFunc(srcPixel[3]) * m3;
-  icFloatNumber g4 = m_UnitClipFunc(srcPixel[4]) * m4;
-  
-  // m_UnitClipFunc points to NoClip
-  if (!std::isfinite(g0))
-    g0 = 0.0f;
-  if (!std::isfinite(g1))
-    g1 = 0.0f;
-  if (!std::isfinite(g2))
-    g2 = 0.0f;
-  if (!std::isfinite(g3))
-    g3 = 0.0f;
-  if (!std::isfinite(g4))
-    g4 = 0.0f;
+  // See icClutGridClamp: scales into grid units and clamps, replacing the former
+  // m_UnitClipFunc call plus the isfinite and range tests that followed it. The
+  // g5 guard added for #1504 is subsumed -- the helper treats every channel
+  // identically, so no channel can be left without one.
 
-  if (g0 < 0.0f)
-    g0 = 0.0f;
-  if (g1 < 0.0f)
-    g1 = 0.0f;
-  if (g2 < 0.0f)
-    g2 = 0.0f;
-  if (g3 < 0.0f)
-    g3 = 0.0f;
-  if (g4 < 0.0f)
-    g4 = 0.0f;
-    
-  if (g0 > m0)
-    g0 = m0;
-  if (g1 > m1)
-    g1 = m1;
-  if (g2 > m2)
-    g2 = m2;
-  if (g3 > m3)
-    g3 = m3;
-  if (g4 > m4)
-    g4 = m4;
+  icFloatNumber g0 = icClutGridClamp(srcPixel[0], m0);
+  icFloatNumber g1 = icClutGridClamp(srcPixel[1], m1);
+  icFloatNumber g2 = icClutGridClamp(srcPixel[2], m2);
+  icFloatNumber g3 = icClutGridClamp(srcPixel[3], m3);
+  icFloatNumber g4 = icClutGridClamp(srcPixel[4], m4);
 
   icUInt32Number ig0 = (icUInt32Number)g0;
   icUInt32Number ig1 = (icUInt32Number)g1;
@@ -3278,57 +3382,17 @@ void CIccCLUT::Interp6d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icUInt8Number m4 = m_MaxGridPoint[4];
   icUInt8Number m5 = m_MaxGridPoint[5];
 
-  icFloatNumber g0 = m_UnitClipFunc(srcPixel[0]) * m0;
-  icFloatNumber g1 = m_UnitClipFunc(srcPixel[1]) * m1;
-  icFloatNumber g2 = m_UnitClipFunc(srcPixel[2]) * m2;
-  icFloatNumber g3 = m_UnitClipFunc(srcPixel[3]) * m3;
-  icFloatNumber g4 = m_UnitClipFunc(srcPixel[4]) * m4;
-  icFloatNumber g5 = m_UnitClipFunc(srcPixel[5]) * m5;
-  
-  // m_UnitClipFunc points to NoClip
-  if (!std::isfinite(g0))
-    g0 = 0.0f;
-  if (!std::isfinite(g1))
-    g1 = 0.0f;
-  if (!std::isfinite(g2))
-    g2 = 0.0f;
-  if (!std::isfinite(g3))
-    g3 = 0.0f;
-  if (!std::isfinite(g4))
-    g4 = 0.0f;
-  // g5 needs the same NaN/Inf guard as g0..g4: the < 0 and > m5 clamps below
-  // cannot catch a non-finite value (NaN compares false against both bounds),
-  // so without this an Inf/NaN srcPixel[5] would reach the (icUInt32Number)g5
-  // cast unguarded -- undefined behaviour. (g0..g4 were guarded here; g5 was
-  // missed when this finiteness block was added.)
-  if (!std::isfinite(g5))
-    g5 = 0.0f;
+  // See icClutGridClamp: scales into grid units and clamps, replacing the former
+  // m_UnitClipFunc call plus the isfinite and range tests that followed it. The
+  // g5 guard added for #1504 is subsumed -- the helper treats every channel
+  // identically, so no channel can be left without one.
 
-  if (g0 < 0.0f)
-    g0 = 0.0f;
-  if (g1 < 0.0f)
-    g1 = 0.0f;
-  if (g2 < 0.0f)
-    g2 = 0.0f;
-  if (g3 < 0.0f)
-    g3 = 0.0f;
-  if (g4 < 0.0f)
-    g4 = 0.0f;
-  if (g5 < 0.0f)
-    g5 = 0.0f;
-
-  if (g0 > m0)
-    g0 = m0;
-  if (g1 > m1)
-    g1 = m1;
-  if (g2 > m2)
-    g2 = m2;
-  if (g3 > m3)
-    g3 = m3;
-  if (g4 > m4)
-    g4 = m4;
-  if (g5 > m5)
-    g5 = m5;
+  icFloatNumber g0 = icClutGridClamp(srcPixel[0], m0);
+  icFloatNumber g1 = icClutGridClamp(srcPixel[1], m1);
+  icFloatNumber g2 = icClutGridClamp(srcPixel[2], m2);
+  icFloatNumber g3 = icClutGridClamp(srcPixel[3], m3);
+  icFloatNumber g4 = icClutGridClamp(srcPixel[4], m4);
+  icFloatNumber g5 = icClutGridClamp(srcPixel[5], m5);
 
   icUInt32Number ig0 = (icUInt32Number)g0;
   icUInt32Number ig1 = (icUInt32Number)g1;
@@ -3474,27 +3538,42 @@ void CIccCLUT::InterpND(icFloatNumber *destPixel, const icFloatNumber *srcPixel,
   icFloatNumber* s = pApply->m_s;
   icUInt32Number* ig = pApply->m_ig;
 
-  // CWE-400/834: m_nInput drives the grid loop below and m_nNodes = (1<<m_nInput)
-  // used for the df[] loop. Input channels are capped at <=16 by Init() on load;
-  // guard locally so both bounds are explicit at point of use.
-  if (m_nInput > 16)
-    return;
-
-  // CWE-400/CWE-834: m_nNodes == (1<<m_nInput) and indexes the fixed df[]/m_nOffset
-  // arrays; assert the derived upper bound (m_nInput<=16 => m_nNodes<=65536) on the
-  // field itself so the node walks below have an explicit limit.
-  const icUInt32Number nMaxNodes = 65536;
-  if (m_nNodes > nMaxNodes)
-    return;
+  // NOTE FOR ANYONE ADDING A BOUNDS CHECK HERE -- please don't; put it in
+  // Begin().
+  //
+  // Two per-pixel guards used to stand at this point: "if (m_nInput > 16)
+  // return;" and "if (m_nNodes > 65536) return;". Both are gone deliberately.
+  //
+  // m_nInput indexes the fixed 16-entry m_GridPoints/m_MaxGridPoint/m_nPower
+  // arrays and drives m_nNodes = (1<<m_nInput), which indexes df[] and
+  // m_nOffset. Those bounds still matter -- they are just no longer this
+  // function's to assert. Begin() establishes both: it refuses an m_nInput
+  // outside 1..16 and refuses a CLUT whose Init() never allocated m_pData, it
+  // returns bool rather than leaving the object half-configured, and all nine of
+  // its callers act on the result up through CIccCmm::Begin(), which aborts the
+  // chain on the first failure. So Apply() cannot be reached with either bound
+  // violated, and re-testing them per pixel could only re-confirm what Begin()
+  // proved.
+  //
+  // The history is worth knowing, because these lines have twice been reasoned
+  // about incorrectly. They were called "duplicated from Begin()" and, later,
+  // "the only guard that works" -- both by tracing the call chain rather than
+  // probing it, and neither was true at the time. Before Begin() could refuse,
+  // m_nInput > 16 was already unreachable here: the element readers turned a
+  // failed Init() into a failed Read() through their GetData(0) NULL checks,
+  // because Init() leaves m_pData NULL when it refuses and GetData(0) is
+  // &m_pData[0]. The guards were unreachable, not load-bearing.
+  //
+  // Note also what they never did: nothing here protected the failure that
+  // actually crashes an un-Begin()'d CLUT, which is a NULL m_nOffset and an
+  // uninitialized m_MaxGridPoint, regardless of the channel count.
+  // Begin()-before-Apply() is the precondition that matters, and it is now a
+  // checked one.
 
   for (i=0; i<m_nInput; i++) {
-    g[i] = m_UnitClipFunc(srcPixel[i]) * m_MaxGridPoint[i];
-    if (!std::isfinite(g[i]))
-      g[i] = 0.0;
-    if (g[i] < 0)
-      g[i] = 0.0;
-    if (g[i] > m_MaxGridPoint[i])
-      g[i] = m_MaxGridPoint[i];
+    // See icClutGridClamp: scales into grid units and clamps, replacing the
+    // former m_UnitClipFunc call plus the isfinite and range tests.
+    g[i] = icClutGridClamp(srcPixel[i], m_MaxGridPoint[i]);
     ig[i] = (icUInt32Number)g[i];
     s[m_nInput-1-i] = g[i] - ig[i];
     if (ig[i]==m_MaxGridPoint[i]) {
@@ -3793,11 +3872,26 @@ void CIccMBB::Cleanup()
 {
   int i;
 
-  // CWE-400/834: the curve-pointer arrays are allocated to m_nInput/m_nOutput at
-  // load (both capped at <=16 by the lut tag read path). Clamp the delete loops to
-  // the array bound so a corrupted channel count can never walk past the allocation.
-  int nIn  = (m_nInput  > 16) ? 16 : m_nInput;
-  int nOut = (m_nOutput > 16) ? 16 : m_nOutput;
+  // These loops must mirror NewCurvesA/B/M exactly, because those are what
+  // allocated the arrays: A takes !IsInputB() ? m_nInput : m_nOutput, M and B
+  // take IsInputMatrix() ? m_nInput : m_nOutput, and IsInputB() is defined as
+  // IsInputMatrix(), so each branch below frees the same count its allocator
+  // used.
+  //
+  // They used to be clamped to 16 "so a corrupted channel count can never walk
+  // past the allocation". That reasoning is inverted: the arrays are sized by the
+  // very counts being clamped, so a count above 16 does not overrun the
+  // allocation -- clamping *leaks* the entries from 16 upward, silently, in a
+  // destructor. And a count below the allocation cannot happen, because nothing
+  // mutates m_nInput/m_nOutput between NewCurves* and Cleanup() except Init(),
+  // which calls Cleanup() first.
+  //
+  // The bound belongs where the count is established, and now is: Init() refuses
+  // anything outside 1..16, matching CIccCLUT::Init() and the guarantee
+  // CIccCLUT::Begin() relies on. So these loops trust their counts, exactly as
+  // the interpolators trust what Begin() established.
+  int nIn  = m_nInput;
+  int nOut = m_nOutput;
 
   if (IsInputMatrix()) {
     if (m_CurvesB) {
@@ -3870,11 +3964,32 @@ void CIccMBB::Cleanup()
  *  nOutputChannels = number of output channels
  *****************************************************************************
  */
-void CIccMBB::Init(icUInt8Number nInputChannels, icUInt8Number nOutputChannels)
+bool CIccMBB::Init(icUInt8Number nInputChannels, icUInt8Number nOutputChannels)
 {
+  // Establish the bound here, where the counts are set, rather than re-testing it
+  // in the loops that consume them. Everything downstream sizes itself from these
+  // two numbers -- NewCurvesA/B/M allocate arrays of them, Cleanup() frees the
+  // same counts, and SetCLUT() requires a CIccCLUT whose own dimensionality
+  // matches m_nInput, which CIccCLUT::Init() independently caps at 16. Sixteen is
+  // therefore the bound the whole object already depends on; it just was not
+  // stated anywhere, so Cleanup() clamped defensively and leaked instead.
+  //
+  // Nothing loaded from a profile is newly refused: the mAB, lut8 and lut16 read
+  // paths all reject counts above 15 before they get here, and both the XML and
+  // JSON MBB parsers bound theirs at 15 as well. What this catches is a direct
+  // caller of the public API -- the same door CIccCLUT::Init() and
+  // CIccCLUT::Begin() are guarding.
+  //
+  // Checked before Cleanup(), so a refused call leaves the object exactly as it
+  // was rather than half-torn-down.
+  if (nInputChannels < 1 || nInputChannels > 16 ||
+      nOutputChannels < 1 || nOutputChannels > 16)
+    return false;
+
   Cleanup();
   m_nInput = nInputChannels;
   m_nOutput = nOutputChannels;
+  return true;
 }
 
 /**
@@ -4373,7 +4488,8 @@ CIccMatrix* CIccMBB::NewMatrix()
  * Args:
  *  pGridPoints = number of grid points in the CLUT
  *
- * Return: Pointer to the CIccCLUT object
+ * Return: Pointer to the CIccCLUT object, or NULL if the CLUT could not be
+ *  initialized for this object's channel counts and the requested grid.
  *****************************************************************************
  */
 CIccCLUT* CIccMBB::NewCLUT(icUInt8Number *pGridPoints, icUInt8Number nPrecision/*=2*/)
@@ -4383,7 +4499,19 @@ CIccCLUT* CIccMBB::NewCLUT(icUInt8Number *pGridPoints, icUInt8Number nPrecision/
 
   m_CLUT = new CIccCLUT(m_nInput, m_nOutput, nPrecision);
 
-  m_CLUT->Init(pGridPoints);
+  // Init() refuses an input count outside 1..16, a grid granularity below 2, and
+  // any grid whose node count overflows 32 bits. Its result was dropped here and
+  // the CLUT handed back regardless, so callers received an object with
+  // m_pData NULL that nothing distinguished from a working one -- GetData(0)
+  // returned NULL and was written through (#1781). iccApplyToLink works around
+  // this by constructing the CLUT itself and calling SetCLUT(); it should not
+  // have to. Report the failure the way the return type always implied, and drop
+  // the CLUT rather than leaving the tag owning an unusable one.
+  if (!m_CLUT->Init(pGridPoints)) {
+    delete m_CLUT;
+    m_CLUT = NULL;
+    return NULL;
+  }
 
   return m_CLUT;
 }
@@ -4423,7 +4551,8 @@ CIccCLUT *CIccMBB::SetCLUT(CIccCLUT *clut)
  * Args:
  *  nGridPoints = number of grid points in the CLUT
  *
- * Return: Pointer to the CIccCLUT object
+ * Return: Pointer to the CIccCLUT object, or NULL if the CLUT could not be
+ *  initialized for this object's channel counts and the requested grid.
  *****************************************************************************
  */
 CIccCLUT* CIccMBB::NewCLUT(icUInt8Number nGridPoints, icUInt8Number nPrecision/*=2*/)
@@ -4433,7 +4562,13 @@ CIccCLUT* CIccMBB::NewCLUT(icUInt8Number nGridPoints, icUInt8Number nPrecision/*
 
   m_CLUT = new CIccCLUT(m_nInput, m_nOutput, nPrecision);
 
-  m_CLUT->Init(nGridPoints);
+  // See the pGridPoints overload above: Init()'s refusal was dropped and the
+  // uninitialized CLUT returned as though it were usable.
+  if (!m_CLUT->Init(nGridPoints)) {
+    delete m_CLUT;
+    m_CLUT = NULL;
+    return NULL;
+  }
 
   return m_CLUT;
 }

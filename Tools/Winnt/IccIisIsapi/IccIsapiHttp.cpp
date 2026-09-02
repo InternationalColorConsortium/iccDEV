@@ -74,13 +74,7 @@ bool SendResponse(LPEXTENSION_CONTROL_BLOCK ecb,
   headers += contentType;
   headers += "\r\nContent-Length: ";
   headers += std::to_string(body.size());
-  headers += "\r\nCache-Control: no-store"
-             "\r\nX-Content-Type-Options: nosniff"
-             "\r\nX-Frame-Options: DENY"
-             "\r\nContent-Security-Policy: default-src 'none'"
-             "\r\nReferrer-Policy: no-referrer"
-             "\r\nX-XSS-Protection: 1; mode=block"
-             "\r\n\r\n";
+  headers += "\r\n\r\n";
 
   HSE_SEND_HEADER_EX_INFO headerInfo{};
   headerInfo.pszStatus = const_cast<LPSTR>(status);
@@ -120,6 +114,36 @@ bool Send400(LPEXTENSION_CONTROL_BLOCK ecb,
   const std::string safe = SanitizeErrorMessage(rawMessage);
   return SendResponse(ecb,
                       "400 Bad Request",
+                      "application/json; charset=utf-8",
+                      std::string("{\"error\":\"") + JsonEscape(safe) + "\"}");
+}
+
+bool Send403(LPEXTENSION_CONTROL_BLOCK ecb,
+             const std::string& rawMessage)
+{
+  const std::string safe = SanitizeErrorMessage(rawMessage);
+  return SendResponse(ecb,
+                      "403 Forbidden",
+                      "application/json; charset=utf-8",
+                      std::string("{\"error\":\"") + JsonEscape(safe) + "\"}");
+}
+
+bool Send415(LPEXTENSION_CONTROL_BLOCK ecb,
+             const std::string& rawMessage)
+{
+  const std::string safe = SanitizeErrorMessage(rawMessage);
+  return SendResponse(ecb,
+                      "415 Unsupported Media Type",
+                      "application/json; charset=utf-8",
+                      std::string("{\"error\":\"") + JsonEscape(safe) + "\"}");
+}
+
+bool Send429(LPEXTENSION_CONTROL_BLOCK ecb,
+             const std::string& rawMessage)
+{
+  const std::string safe = SanitizeErrorMessage(rawMessage);
+  return SendResponse(ecb,
+                      "429 Too Many Requests",
                       "application/json; charset=utf-8",
                       std::string("{\"error\":\"") + JsonEscape(safe) + "\"}");
 }
@@ -174,7 +198,7 @@ std::vector<unsigned char> ReadRequestBody(LPEXTENSION_CONTROL_BLOCK ecb,
 
   const DWORD totalBytes = std::max(ecb->cbTotalBytes, ecb->cbAvailable);
 
-  // Reject oversized uploads BEFORE allocation — CWE-789 prevention.
+  // Reject oversized uploads BEFORE allocation - CWE-789 prevention.
   if (static_cast<size_t>(totalBytes) > maxBytes) {
     return {};
   }
@@ -203,6 +227,31 @@ std::vector<unsigned char> ReadRequestBody(LPEXTENSION_CONTROL_BLOCK ecb,
   }
 
   return body;
+}
+
+std::string GetServerVariableString(LPEXTENSION_CONTROL_BLOCK ecb,
+                                    const char* name)
+{
+  if (!ecb || !ecb->GetServerVariable || !name) {
+    return std::string();
+  }
+
+  DWORD size = 0;
+  if (ecb->GetServerVariable(ecb->ConnID, const_cast<char*>(name), nullptr, &size) ||
+      GetLastError() != ERROR_INSUFFICIENT_BUFFER ||
+      size == 0) {
+    return std::string();
+  }
+
+  std::vector<char> value(size);
+  if (!ecb->GetServerVariable(ecb->ConnID,
+                              const_cast<char*>(name),
+                              value.data(),
+                              &size)) {
+    return std::string();
+  }
+
+  return std::string(value.data());
 }
 
 }  // namespace iccIsapi

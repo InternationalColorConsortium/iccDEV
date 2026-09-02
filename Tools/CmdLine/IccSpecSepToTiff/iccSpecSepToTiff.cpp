@@ -74,6 +74,7 @@
 #include <cstdlib>
 #include <cerrno>
 #include <climits>
+#include <cstdarg>
 #include <cstdio>
 #include <cstring>
 #include <cmath>
@@ -81,17 +82,19 @@
 #include <vector>
 #include <memory>
 #include <limits>
+#include <new>
 #include <string>
 #include "IccCmm.h"
 #include "IccUtil.h"
 #include "IccDefs.h"
 #include "IccApplyBPC.h"
 #include "TiffImg.h"
+#include "IccCmdLineUtil.h"
 #include "IccProfLibVer.h"
 
 //===================================================
 
-void Usage(const char *name)
+static void Usage(FILE *stream, const char *name)
 {
   // remove path before command name
   const char *strippedName = strrchr( name, '/' );      // Unix/MacOS
@@ -103,28 +106,48 @@ void Usage(const char *name)
   else
     ++strippedName;
 
-  printf("Usage: %s output compress sep infile_prefix start end incr {profile}\n", strippedName ); // argv[0]
-  printf("Concatenates several spectral TIFF files into a single file, with optional embedded ICC profile.\n");
-  
-  printf("\toutput: path/name of the TIFF file to be created\n");                               // argv[1]
-  printf("\tcompress: boolean (0 | 1), should the output be compressed\n");                     // argv[2]
-  printf("\tsep: boolean (0 | 1), plane data are separated in the output TIFF\n");              // argv[3]
-  printf("\tinfile_prefix: literal input filename prefix; channel numbers are appended, example: \"spec_\"\n"); // argv[4]
-  printf("\tstart: integer, first channel number to process\n");                                // argv[5]
-  printf("\tend: integer, last channel number to process\n");                                   // argv[6]
-  printf("\tincrement: integer, increment between channels\n");                                 // argv[7]
-  printf("\tprofile: optional ICC profile to validate and embed in the output TIFF\n");         // argv[8]
-  printf("\n");
-  printf("Notes:\n");
-  printf("\t-h/--help are not option flags; run without arguments to print this usage.\n");
-  printf("\tinfile_prefix is not a printf format string; \"spec_00\" with start=1 opens \"spec_001\".\n");
-  printf("\tstart/end/increment must be plain decimal integers; whitespace, '+', NaN, and floats are rejected.\n");
-  printf("\tEmbedded profiles must parse and validate as ICC profiles. If a spectral PCS is present,\n");
-  printf("\tits channel count/range steps must match the generated TIFF SamplesPerPixel.\n");
-  printf("\tWithout a spectral PCS, profile data color-space samples must match TIFF SamplesPerPixel.\n");
-  printf("\tCI fixture images are intentionally tiny; use larger source TIFFs for visual display review.\n");
-  printf("Built with IccProfLib version " ICCPROFLIBVER "\n");
-  printf("\n");
+  // argv[0] is attacker-controlled in the same way every other argument is, so it
+  // gets the same escaping the sibling TIFF tool applies before echoing a name.
+  std::string safeName = icSanitizeConsoleText(strippedName);
+
+  fprintf(stream, "Usage:\n");
+  fprintf(stream, "  %s output compress sep infile_prefix start end incr [profile]\n", safeName.c_str());
+  fprintf(stream, "  %s -h | --help\n", safeName.c_str());
+  fprintf(stream, "  %s --version\n\n", safeName.c_str());
+  fprintf(stream, "Combine single-channel spectral TIFF files into one multi-sample TIFF.\n\n");
+
+  fprintf(stream, "Arguments:\n");
+  fprintf(stream, "  output         TIFF file to create\n");                                     // argv[1]
+  fprintf(stream, "  compress       0 for no compression, 1 for LZW\n");                         // argv[2]
+  fprintf(stream, "  sep            0 for interleaved samples, 1 for separate planes\n");        // argv[3]
+  fprintf(stream, "  infile_prefix  Literal prefix; the channel number is appended\n");          // argv[4]
+  fprintf(stream, "  start          First channel number\n");                                    // argv[5]
+  fprintf(stream, "  end            Last channel number, inclusive\n");                          // argv[6]
+  fprintf(stream, "  incr           Nonzero channel increment\n");                               // argv[7]
+  fprintf(stream, "  profile        Optional ICC profile to validate and embed\n\n");            // argv[8]
+
+  fprintf(stream, "Rules:\n");
+  fprintf(stream, "  compress and sep accept only 0 or 1.\n");
+  fprintf(stream, "  start, end, and incr accept plain decimal integers.\n");
+  fprintf(stream, "  The range must land exactly on end and may descend with a negative incr.\n");
+  fprintf(stream, "  infile_prefix is not a printf format string.\n");
+  fprintf(stream, "  Every input must be a matching single-channel grayscale TIFF.\n");
+  fprintf(stream, "  An optional profile must be conformant and match SamplesPerPixel.\n\n");
+
+  fprintf(stream, "Limits:\n");
+  fprintf(stream, "  SamplesPerPixel is limited to 65535 channels by the TIFF field.\n");
+  fprintf(stream, "  ICC profile data is limited to 4294967295 bytes.\n");
+  fprintf(stream, "  TIFF width and height are limited to 32-bit unsigned values.\n");
+  fprintf(stream, "  LZW output supports 8, 16, or 32 bits per sample.\n");
+  fprintf(stream, "  Inputs stay open concurrently; the OS open-file limit may be lower.\n\n");
+  fprintf(stream, "Built with IccProfLib version " ICCPROFLIBVER "\n");
+}
+
+//===================================================
+
+static void PrintVersion()
+{
+  printf("iccSpecSepToTiff " ICCPROFLIBVER "\n");
 }
 
 //===================================================
@@ -205,7 +228,36 @@ static void printFirstValidationLine(const std::string &report)
   size_t end = report.find('\n');
   std::string line = report.substr(0, end == std::string::npos ? report.size() : end);
   if (!line.empty())
-    printf("Profile validation detail: %s\n", line.c_str());
+    fprintf(stderr, "Profile validation detail: %s\n",
+            icSanitizeConsoleText(line).c_str());
+}
+
+// Renders the accepted-profile line into a string instead of printing it, so
+// main() can hold it back until the conversion has actually succeeded.  Kept as
+// a printf-style formatter rather than a stream so the two call sites below use
+// the exact format strings they printed before, and the attribute keeps the
+// compiler checking them.
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((format(printf, 2, 3)))
+#endif
+static void formatAcceptedSummary(std::string &out, const char *format, ...)
+{
+  va_list args;
+  va_start(args, format);
+  int needed = vsnprintf(NULL, 0, format, args);
+  va_end(args);
+
+  if (needed < 0) {
+    out.clear();
+    return;
+  }
+
+  std::vector<char> buffer((size_t)needed + 1);
+  va_start(args, format);
+  vsnprintf(buffer.data(), buffer.size(), format, args);
+  va_end(args);
+
+  out.assign(buffer.data());
 }
 
 static void sigToText(icUInt32Number sig, char *buf, size_t bufSize)
@@ -219,12 +271,19 @@ static void sigToText(icUInt32Number sig, char *buf, size_t bufSize)
 
 static bool validateProfileSampleCompatibility(const CIccProfile *profile,
                                                size_t nSamples,
-                                               const char *profilePath)
+                                               const char *profilePath,
+                                               std::string &acceptedSummary)
 {
   if (!profile)
     return false;
 
   const icHeader &header = profile->m_Header;
+  if (header.deviceClass == icSigLinkClass) {
+    fprintf(stderr, "Profile %s is a DeviceLink profile and cannot be embedded in a TIFF image.\n",
+            icSanitizeConsoleText(profilePath).c_str());
+    return false;
+  }
+
   char colorSpace[64];
   char pcs[64];
   char spectralPcs[64];
@@ -233,70 +292,94 @@ static bool validateProfileSampleCompatibility(const CIccProfile *profile,
   sigToText(header.pcs, pcs, sizeof(pcs));
   sigToText(header.spectralPCS, spectralPcs, sizeof(spectralPcs));
 
-  if (header.spectralPCS != icSigNoSpectralData) {
+  // The TIFF samples are the profile's A-side data colour space.  spectralPCS
+  // describes its connection space and therefore must not select the TIFF
+  // sample count, except for an ICC.2 abstract profile with no data space.
+  bool abstractSpectralProfile =
+      header.deviceClass == icSigAbstractClass &&
+      header.colorSpace == icSigNoColorData;
+  if (abstractSpectralProfile) {
     icUInt32Number spectralSamples = icGetSpaceSamples((icColorSpaceSignature)header.spectralPCS);
 
     if (!spectralSamples || spectralSamples != nSamples) {
-      printf("Profile %s spectral PCS samples (%u, %s) do not match TIFF SamplesPerPixel (%zu).\n",
-             profilePath, (unsigned int)spectralSamples, spectralPcs, nSamples);
+      fprintf(stderr, "Abstract spectral profile %s spectral PCS samples (%u, %s) do not match TIFF SamplesPerPixel (%zu).\n",
+              icSanitizeConsoleText(profilePath).c_str(),
+              (unsigned int)spectralSamples, spectralPcs, nSamples);
       return false;
     }
 
     if (!header.spectralRange.steps || header.spectralRange.steps != nSamples) {
-      printf("Profile %s spectral PCS range steps (%u) do not match TIFF SamplesPerPixel (%zu).\n",
-             profilePath, (unsigned int)header.spectralRange.steps, nSamples);
+      fprintf(stderr, "Abstract spectral profile %s spectral PCS range steps (%u) do not match TIFF SamplesPerPixel (%zu).\n",
+              icSanitizeConsoleText(profilePath).c_str(),
+              (unsigned int)header.spectralRange.steps, nSamples);
       return false;
     }
 
-    printf("ICC profile accepted: %s, status=conformant, data=%s, PCS=%s, spectralPCS=%s, spectralRangeSteps=%u, TIFFSamples=%zu\n",
-           profilePath, colorSpace, pcs, spectralPcs, (unsigned int)header.spectralRange.steps, nSamples);
+    formatAcceptedSummary(acceptedSummary,
+                          "ICC profile accepted: %s, status=conformant, data=%s, PCS=%s, spectralPCS=%s, spectralRangeSteps=%u, TIFFSamples=%zu",
+                          icSanitizeConsoleText(profilePath).c_str(), colorSpace, pcs, spectralPcs,
+                          (unsigned int)header.spectralRange.steps, nSamples);
     return true;
   }
 
-  icUInt32Number dataSamples = profile->GetSpaceSamples();
+  icUInt32Number dataSamples = icGetSpaceSamples((icColorSpaceSignature)header.colorSpace);
   if (!dataSamples || dataSamples != nSamples) {
-    printf("Profile %s data color-space samples (%u, %s) do not match TIFF SamplesPerPixel (%zu).\n",
-           profilePath, (unsigned int)dataSamples, colorSpace, nSamples);
+    fprintf(stderr, "Profile %s data color-space samples (%u, %s) do not match TIFF SamplesPerPixel (%zu).\n",
+            icSanitizeConsoleText(profilePath).c_str(),
+            (unsigned int)dataSamples, colorSpace, nSamples);
     return false;
   }
 
-  printf("ICC profile accepted: %s, status=conformant, data=%s, PCS=%s, TIFFSamples=%zu\n",
-         profilePath, colorSpace, pcs, nSamples);
+  formatAcceptedSummary(acceptedSummary,
+                        "ICC profile accepted: %s, status=conformant, data=%s, PCS=%s, spectralPCS=%s, TIFFSamples=%zu",
+                        icSanitizeConsoleText(profilePath).c_str(), colorSpace, pcs, spectralPcs, nSamples);
   return true;
 }
 
 static bool readValidateProfile(const char *profilePath,
                                 size_t nSamples,
                                 std::unique_ptr<unsigned char[]> &destProfile,
-                                size_t &destProfileLength)
+                                size_t &destProfileLength,
+                                std::string &acceptedSummary)
 {
   destProfile.reset();
   destProfileLength = 0;
+  acceptedSummary.clear();
 
   CIccFileIO io;
   if (!io.Open(profilePath, "rb")) {
-    printf("Cannot open profile %s\n", profilePath);
+    fprintf(stderr, "Cannot open profile %s\n",
+            icSanitizeConsoleText(profilePath).c_str());
     return false;
   }
 
   destProfileLength = io.GetLength();
   if (!destProfileLength) {
     io.Close();
-    printf("Profile %s is empty; refusing to embed zero-length ICC data.\n", profilePath);
+    fprintf(stderr, "Profile %s is empty; refusing to embed zero-length ICC data.\n",
+            icSanitizeConsoleText(profilePath).c_str());
     return false;
   }
 
   if (destProfileLength > (size_t)std::numeric_limits<icUInt32Number>::max()) {
     io.Close();
-    printf("Profile %s is too large to embed in TIFF ICCProfile tag: %zu bytes\n",
-           profilePath, destProfileLength);
+    fprintf(stderr, "Profile %s is too large to embed in TIFF ICCProfile tag: %zu bytes\n",
+            icSanitizeConsoleText(profilePath).c_str(), destProfileLength);
     return false;
   }
 
-  destProfile.reset(new unsigned char[destProfileLength]);
+  destProfile.reset(new (std::nothrow) unsigned char[destProfileLength]);
+  if (!destProfile) {
+    io.Close();
+    fprintf(stderr, "Unable to allocate %zu bytes for profile %s.\n",
+            destProfileLength, icSanitizeConsoleText(profilePath).c_str());
+    return false;
+  }
+
   if (io.Read8(destProfile.get(), destProfileLength) != destProfileLength) {
     io.Close();
-    printf("Cannot read complete profile %s\n", profilePath);
+    fprintf(stderr, "Cannot read complete profile %s\n",
+            icSanitizeConsoleText(profilePath).c_str());
     return false;
   }
   io.Close();
@@ -308,14 +391,16 @@ static bool readValidateProfile(const char *profilePath,
                                                          validateReport,
                                                          validateStatus));
   if (!profile) {
-    printf("Cannot parse profile %s as an ICC profile.\n", profilePath);
+    fprintf(stderr, "Cannot parse profile %s as an ICC profile.\n",
+            icSanitizeConsoleText(profilePath).c_str());
     printFirstValidationLine(validateReport);
     return false;
   }
 
   if (validateStatus >= icValidateNonCompliant) {
-    printf("Profile %s failed ICC validation: %s.\n",
-           profilePath, validateStatusName(validateStatus));
+    fprintf(stderr, "Profile %s failed ICC validation: %s.\n",
+            icSanitizeConsoleText(profilePath).c_str(),
+            validateStatusName(validateStatus));
     printFirstValidationLine(validateReport);
     return false;
   }
@@ -329,7 +414,8 @@ static bool readValidateProfile(const char *profilePath,
     profileForSamples = compatibilityProfile.get();
   }
 
-  if (!validateProfileSampleCompatibility(profileForSamples, nSamples, profilePath))
+  if (!validateProfileSampleCompatibility(profileForSamples, nSamples, profilePath,
+                                          acceptedSummary))
     return false;
 
   return true;
@@ -337,17 +423,53 @@ static bool readValidateProfile(const char *profilePath,
 
 //===================================================
 
+// Once Create() has opened the output, every later failure path leaves a
+// partially written TIFF behind.  Create() truncates any existing file, so a
+// run that failed part way through also replaced a previously good output with
+// an unreadable stub that still looked like a result.  Discard the incomplete
+// file so a failed conversion leaves no output rather than a corrupt one.
+static void discardPartialOutput(CTiffImg &outfile, const char *path)
+{
+  outfile.Close();
+  remove(path);
+}
+
+//===================================================
+
 int main(int argc, char* argv[]) {
   const int minargs = 8; // argc = 8 without profile, 9 with profile
-  
+
+  // An explicit help/version request is the one invocation that is *not* an
+  // error, so it prints on stdout and exits 0, matching iccRoundTrip and
+  // iccPawgReport.  Everything below keeps the #1514 contract: a malformed
+  // invocation reported success to the caller even though nothing was produced,
+  // so wrapper scripts/CI could not tell a no-op apart from a real conversion.
+  if (argc == 2 && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help"))) {
+    Usage(stdout, argv[0]);
+    return 0;
+  }
+
+  if (argc == 2 && !strcmp(argv[1], "--version")) {
+    PrintVersion();
+    return 0;
+  }
+
   if (argc < minargs || argc > 9) {
-    // Too few arguments is a usage *error*, not a successful help request: this
-    // tool has no explicit -h/--help flag, so Usage() only ever fires here, on a
-    // malformed invocation.  Returning 0 reported success to the caller even
-    // though nothing was produced (#1514), so wrapper scripts/CI could not tell
-    // a no-op apart from a real conversion.  Fail like every other error exit in
-    // main(), all of which return -1 (process status 255).
-    Usage(argv[0]);
+    // Say which way the invocation is malformed before the syntax block: a bare
+    // Usage() dump left the caller to diff their command against it.  The
+    // diagnostic and the usage both go to stderr because this path is a failure;
+    // -h/--help above is the only route to Usage() on stdout.  Fail like every
+    // other error exit in main(), all of which return -1 (process status 255).
+    if (argc < minargs)
+      fprintf(stderr, "Missing arguments: expected 7 or 8, received %d.\n",
+              argc > 0 ? argc - 1 : 0);
+    else
+      fprintf(stderr, "Unexpected extra argument: %s\n",
+              icSanitizeConsoleText(argv[9]).c_str());
+
+    // argc==0 is legal for execve, and Usage() runs strrchr() on the name before
+    // anything else can reject it, so substitute the tool's own name there.
+    Usage(stderr, argc > 0 ? argv[0] : "iccSpecSepToTiff");
     return -1;
   }
 
@@ -355,7 +477,9 @@ int main(int argc, char* argv[]) {
   bool bSep = false;
 
   if (!parseBoolArg(argv[2], bCompress) || !parseBoolArg(argv[3], bSep)) {
-    printf("Invalid boolean value for compress or sep: %s, %s\n", argv[2], argv[3]);
+    fprintf(stderr, "Invalid boolean value for compress or sep: %s, %s\n",
+            icSanitizeConsoleText(argv[2]).c_str(),
+            icSanitizeConsoleText(argv[3]).c_str());
     return -1;
   }
 
@@ -366,12 +490,15 @@ int main(int argc, char* argv[]) {
   if (!parseIntArg(argv[5], start) ||
       !parseIntArg(argv[6], end) ||
       !parseIntArg(argv[7], step)) {
-    printf("Invalid channel range: %s, %s, %s\n", argv[5], argv[6], argv[7]);
+    fprintf(stderr, "Invalid channel range: %s, %s, %s\n",
+            icSanitizeConsoleText(argv[5]).c_str(),
+            icSanitizeConsoleText(argv[6]).c_str(),
+            icSanitizeConsoleText(argv[7]).c_str());
     return -1;
   }
 
   if (step == 0) {
-    printf("Error: increment cannot be zero.\n");
+    fprintf(stderr, "Error: increment cannot be zero.\n");
     return -1;  // Exit the program with an error code
   }
 
@@ -380,7 +507,7 @@ int main(int argc, char* argv[]) {
 
   if ( ((range < 0) && (step > 0))
     || ((range > 0) && (step < 0)) ) {
-    printf("Bad steps values would overflow: %d, %d, %d\n", start, end, step );
+    fprintf(stderr, "Bad steps values would overflow: %d, %d, %d\n", start, end, step);
     return -1;
   }
 
@@ -388,7 +515,8 @@ int main(int argc, char* argv[]) {
   long long absStep = step < 0 ? -(long long)step : (long long)step;
 
   if (absRange % absStep) {
-    printf("Invalid channel range specified: increment does not land on end: %d, %d, %d\n", start, end, step);
+    fprintf(stderr, "Invalid channel range specified: increment does not land on end: %d, %d, %d\n",
+            start, end, step);
     return -1;
   }
 
@@ -396,23 +524,32 @@ int main(int argc, char* argv[]) {
 
   if (nSamples < 1 ||
       nSamples > (size_t)std::numeric_limits<icUInt16Number>::max()) {
-    printf("Invalid sample count specified: %d, %d, %d\n", start, end, step );
+    fprintf(stderr, "Invalid sample count specified: %d, %d, %d\n", start, end, step);
     return -1;
   }
 
   // open ALL input files
-  std::vector<CTiffImg> infile(nSamples);
+  std::vector<CTiffImg> infile;
+  try {
+    infile.resize(nSamples);
+  }
+  catch (const std::bad_alloc &) {
+    fprintf(stderr, "Unable to allocate input state for %zu channels.\n", nSamples);
+    return -1;
+  }
 
   for (size_t i=0; i<nSamples; i++) {
     long long channelNum = (long long)start + (long long)i * (long long)step;
     std::string filename = std::string(argv[4]) + std::to_string(channelNum);
     if (!infile[i].Open(filename.c_str())) {
-      printf("Cannot open input %s\n", filename.c_str());
+      fprintf(stderr, "Cannot open input %s\n",
+              icSanitizeConsoleText(filename).c_str());
       return -1;
     }
 
     if (infile[i].GetSamples() != 1) {
-      printf("input %s does not have 1 sample per pixel\n", filename.c_str());
+      fprintf(stderr, "input %s does not have 1 sample per pixel\n",
+              icSanitizeConsoleText(filename).c_str());
       return -1;
     }
 
@@ -421,17 +558,24 @@ int main(int argc, char* argv[]) {
     // PHOTO_PALETTE.  Comparing against PHOTOMETRIC_PALETTE never matched, so
     // palette input was wrongly accepted and converted (#1381).
     if (infile[i].GetPhoto() == PHOTO_PALETTE) {
-      printf("input %s is a palette based file\n", filename.c_str());
+      fprintf(stderr, "input %s is a palette based file\n",
+              icSanitizeConsoleText(filename).c_str());
       return -1;
     }
 
+    // The resolution unit belongs in this check alongside the resolution values it
+    // qualifies: 300 pixels/inch and 300 pixels/cm are the same two numbers describing
+    // images of different physical size, so comparing only GetXRes()/GetYRes() accepted
+    // a channel set that does not actually share a format (#2220).
     if (i && (infile[i].GetWidth() != infile[0].GetWidth() ||
       infile[i].GetHeight() != infile[0].GetHeight() ||
       infile[i].GetBitsPerSample() != infile[0].GetBitsPerSample() ||
       infile[i].GetPhoto() != infile[0].GetPhoto() ||
       infile[i].GetXRes() != infile[0].GetXRes() ||
-      infile[i].GetYRes() != infile[0].GetYRes())) {
-        printf("input %s does not have same format as other files\n", filename.c_str());
+      infile[i].GetYRes() != infile[0].GetYRes() ||
+      infile[i].GetResolutionUnit() != infile[0].GetResolutionUnit())) {
+        fprintf(stderr, "input %s does not have same format as other files\n",
+                icSanitizeConsoleText(filename).c_str());
         return -1;
     }
   }
@@ -448,12 +592,24 @@ int main(int argc, char* argv[]) {
   if (f->GetPhoto()==PHOTO_MINISWHITE)
     invert = true;
   else if (f->GetPhoto()!=PHOTO_MINISBLACK) {
-    printf("Input photometric interpretation must be MinIsWhite or MinIsBlack\n");
+    fprintf(stderr, "Input photometric interpretation must be MinIsWhite or MinIsBlack\n");
+    return -1;
+  }
+
+  // The MinIsWhite inversion below is a per-byte XOR with 0xff, which is only
+  // meaningful for integer samples.  Applying it to IEEE floats rewrites the
+  // sign and exponent instead of the sample value: 0.25 (0x3E800000) becomes
+  // 0xC17FFFFF (-15.999999) and 0.0 becomes a NaN.  The tool nevertheless
+  // reported success, so a float MinIsWhite input was silently converted to
+  // garbage.  Refuse the combination rather than emit corrupt samples.
+  if (invert && f->GetSampleFormat() == SAMPLEFORMAT_IEEEFP) {
+    fprintf(stderr, "Floating point MinIsWhite input cannot be inverted: %s\n",
+            icSanitizeConsoleText(argv[4]).c_str());
     return -1;
   }
 
   if (f->GetBitsPerSample() % 8) {
-    printf("Input bits per sample must be byte aligned: %u\n", f->GetBitsPerSample());
+    fprintf(stderr, "Input bits per sample must be byte aligned: %u\n", f->GetBitsPerSample());
     return -1;
   }
 
@@ -465,13 +621,23 @@ int main(int argc, char* argv[]) {
   if (!checkedSizeProduct(bytePerLine, nSamples, inputSize) ||
       !checkedSizeProduct(f->GetWidth(), bytesPerSample, outWidthSize) ||
       !checkedSizeProduct(outWidthSize, nSamples, outSize)) {
-    printf("Image row size is too large\n");
+    fprintf(stderr, "Image row size is too large\n");
     return -1;
   }
   
   // use unique_ptr to automatically free the buffers
-  std::unique_ptr<icUInt8Number[]> inbufffer( new icUInt8Number[ inputSize ] );
-  std::unique_ptr<icUInt8Number[]> outbuffer( new icUInt8Number[ outSize ] );
+  // The row buffers are sized from the input geometry, so a small crafted TIFF
+  // can request gigabytes: a 250-byte file declaring a 500,000,000-pixel wide
+  // float row asks for 2GB here.  Throwing new turned that into an unhandled
+  // std::bad_alloc and the tool died with SIGABRT (signal 6) instead of
+  // reporting the problem, so allocate without throwing and fail like every
+  // other input error.
+  std::unique_ptr<icUInt8Number[]> inbufffer( new (std::nothrow) icUInt8Number[ inputSize ] );
+  std::unique_ptr<icUInt8Number[]> outbuffer( new (std::nothrow) icUInt8Number[ outSize ] );
+  if (!inbufffer || !outbuffer) {
+    fprintf(stderr, "Cannot allocate image row buffers of %zu and %zu bytes\n", inputSize, outSize);
+    return -1;
+  }
   icUInt8Number *inbuf = inbufffer.get();
   icUInt8Number *outbuf = outbuffer.get();
 
@@ -486,22 +652,64 @@ int main(int argc, char* argv[]) {
   // profile pointer lifetime needs to last until output file is written!
   std::unique_ptr<unsigned char[]> destProfile;
   size_t destProfileLength = 0;
+  // Held until the output is written: announcing the profile as accepted before
+  // Create()/SetIccProfile()/WriteLine() have had their chance to fail left a
+  // failed run with output on stdout, so "stdout empty" could not be read as
+  // "nothing was produced" -- the very distinction #1514 asked for.
+  std::string acceptedProfileSummary;
   if (argc>8) {
-    if (!readValidateProfile(argv[8], nSamples, destProfile, destProfileLength))
+    if (!readValidateProfile(argv[8], nSamples, destProfile, destProfileLength,
+                             acceptedProfileSummary))
       return -1;
   }
 
   CTiffImg outfile;
   unsigned int nExtraSamples = nSamples > 1 ? (unsigned int)nSamples - 1 : 0;
+
+  // Create() truncates the destination the moment its TIFFOpen(...,"w")
+  // succeeds, but it also refuses some requests before opening anything (an
+  // unsupported compression/sample-size pair, a destination that is not a
+  // regular file).  Removing unconditionally on failure would therefore delete
+  // a pre-existing file this run never touched, so only discard an output that
+  // did not exist beforehand.
+  //
+  // outputExisted alone is not sufficient once Create() refuses symlinks
+  // (#2242).  A *dangling* symlink reads as "did not exist" here -- the probe
+  // below opens the link's target, which is missing -- so the !outputExisted
+  // arm on its own would remove() the link that Create() had just declined to
+  // touch.  Measured: with the lstat() change but without WasOutputOpened(),
+  // a dangling-symlink destination is correctly refused and then deleted.
+  // Gating on "did TIFFOpen() actually run" is what keeps the refusal
+  // non-destructive, so both halves of this guard are load-bearing.
+  bool outputExisted = false;
+  {
+    // Probed with CIccFileIO to match readValidateProfile() above; a bare
+    // fopen() here would add another MSVC C4996 deprecation to the surface
+    // #2171 is already tracking.
+    CIccFileIO existing;
+    outputExisted = existing.Open(argv[1], "rb");
+    if (outputExisted)
+      existing.Close();
+  }
+
+  // xRes/yRes above are copied straight from the input, so the input's unit has to be
+  // carried across with them.  Leaving it to default meant a centimetre-based source
+  // produced an output with no RESOLUTIONUNIT tag at all, which every reader takes as
+  // inches -- the same numbers, a physical size 2.54x off (#2220).
   if (!outfile.Create(argv[1], f->GetWidth(), f->GetHeight(), f->GetBitsPerSample(), PHOTO_MINISBLACK,
-                     (unsigned int)nSamples, nExtraSamples, xRes, yRes, bCompress, bSep)) {
-    printf("Unable to create %s\n", argv[1]);
+                     (unsigned int)nSamples, nExtraSamples, xRes, yRes, bCompress, bSep,
+                     f->GetResolutionUnit())) {
+    fprintf(stderr, "Unable to create %s\n", icSanitizeConsoleText(argv[1]).c_str());
+    if (!outputExisted && outfile.WasOutputOpened())
+      remove(argv[1]);
     return -1;
   }
 
   if (destProfile) {
     if (!outfile.SetIccProfile( destProfile.get(), (unsigned int)destProfileLength )) {
-      printf("Unable to embed ICC profile in %s\n", argv[1]);
+      fprintf(stderr, "Unable to embed ICC profile in %s\n",
+              icSanitizeConsoleText(argv[1]).c_str());
+      discardPartialOutput(outfile, argv[1]);
       return -1;
     }
   }
@@ -511,10 +719,11 @@ int main(int argc, char* argv[]) {
     for (size_t j=0; j<nSamples; j++) {
       sptr = inbuf + j*bytePerLine;
       if (!infile[j].ReadLine(sptr)) {
-        printf("Error reading line %u of file %zu\n", i, j);
+        fprintf(stderr, "Error reading line %u of file %zu\n", i, j);
+        discardPartialOutput(outfile, argv[1]);
         return -1;
       }
-      if (invert) {     // NOTE - this will not work for floating point data, but that should never be inverted anyway
+      if (invert) {     // float samples are rejected above, so this XOR only ever sees integer data
         for (size_t k=0; k<bytePerLine; k++) {
           sptr[k] ^= 0xff;
         }
@@ -529,7 +738,9 @@ int main(int argc, char* argv[]) {
       }
     }
     if (!outfile.WriteLine(outbuf)) {
-      printf("Error writing line %d\n", i);
+      fprintf(stderr, "Error writing line %u to %s\n", i,
+              icSanitizeConsoleText(argv[1]).c_str());
+      discardPartialOutput(outfile, argv[1]);
       return -1;
     }
   }
@@ -537,6 +748,16 @@ int main(int argc, char* argv[]) {
   // We need to close output first, to use all pointer data before buffers are destructed.
   outfile.Close();
 
+  if (!acceptedProfileSummary.empty())
+    printf("%s\n", acceptedProfileSummary.c_str());
+
+  printf("Output:            %s\n", icSanitizeConsoleText(argv[1]).c_str());
+  printf("Size:              %u x %u pixels\n", f->GetWidth(), f->GetHeight());
+  printf("BitsPerSample:     %u\n", f->GetBitsPerSample());
+  printf("SamplesPerPixel:   %zu\n", nSamples);
+  printf("Planar:            %s\n", bSep ? "separate" : "interleaved");
+  printf("Compression:       %s\n", bCompress ? "LZW" : "none");
+  printf("Profile:           %s\n", destProfile ? "embedded" : "none");
   printf("Image successfully written!\n");
 
   // buffers and input files closed by destructors

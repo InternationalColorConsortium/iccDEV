@@ -63,7 +63,74 @@ Copyright:  (c) see ICC Software License
 */
 
 #include "IccWrapper.h"
+#include "IccCValidation.h"
 #include "IccApplyBPC.h"
+
+#include <cstring>
+#include <limits>
+#include <string>
+
+// icc_validate_profile returns icValidateStatus re-tagged as the C enum rather
+// than mapped through a table, so the two enumerations must agree by value. A
+// code inserted into icValidateStatus would silently change this published C
+// ABI; pin the four shared codes here so that lands as a build error (#2276).
+static_assert(static_cast<int>(icValidateOK) == ICC_VALIDATION_OK,
+              "icValidateOK must match ICC_VALIDATION_OK");
+static_assert(static_cast<int>(icValidateWarning) == ICC_VALIDATION_WARNING,
+              "icValidateWarning must match ICC_VALIDATION_WARNING");
+static_assert(static_cast<int>(icValidateNonCompliant) == ICC_VALIDATION_NON_COMPLIANT,
+              "icValidateNonCompliant must match ICC_VALIDATION_NON_COMPLIANT");
+static_assert(static_cast<int>(icValidateCriticalError) == ICC_VALIDATION_CRITICAL_ERROR,
+              "icValidateCriticalError must match ICC_VALIDATION_CRITICAL_ERROR");
+
+namespace {
+
+void CopyValidationReport(char *report, size_t reportSize, const std::string &source)
+{
+  if (!report || !reportSize)
+    return;
+
+  size_t copySize = source.size();
+  if (copySize >= reportSize)
+    copySize = reportSize - 1;
+
+  if (copySize)
+    std::memcpy(report, source.data(), copySize);
+  report[copySize] = '\0';
+}
+
+} // namespace
+
+icc_validation_status icc_validate_profile(const unsigned char *iccData,
+                                           size_t iccSize,
+                                           char *report,
+                                           size_t reportSize)
+{
+  if (!iccData || !iccSize || iccSize > std::numeric_limits<icUInt32Number>::max()) {
+    CopyValidationReport(report, reportSize, "Invalid ICC profile buffer");
+    return ICC_VALIDATION_INVALID_ARGUMENT;
+  }
+
+  try {
+    CIccMemIO io;
+    io.Attach(const_cast<icUInt8Number *>(iccData),
+              static_cast<icUInt32Number>(iccSize), false);
+
+    CIccProfile profile;
+    std::string validationReport;
+    icValidateStatus status = profile.ReadValidate(&io, validationReport);
+    CopyValidationReport(report, reportSize, validationReport);
+    return static_cast<icc_validation_status>(status);
+  }
+  catch (const std::exception &exception) {
+    CopyValidationReport(report, reportSize, exception.what());
+  }
+  catch (...) {
+    CopyValidationReport(report, reportSize, "IccProfLib validation failed internally");
+  }
+
+  return ICC_VALIDATION_INTERNAL_ERROR;
+}
 
 class CIccCmmEnvVarsWrapper : public IIccCmmEnvVarLookup
 {

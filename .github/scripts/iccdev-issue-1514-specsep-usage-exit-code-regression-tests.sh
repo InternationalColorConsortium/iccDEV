@@ -7,16 +7,20 @@
 # returned 0 -- a success status for what is actually a malformed invocation,
 # so wrapper scripts / CI could not distinguish a no-op from a real conversion.
 # The fix makes the argc<minargs path return -1 (process status 255), matching
-# every other error exit in main().
+# every other error exit in main().  The tool now also has real -h/--help and
+# --version flags, so the "Usage() only ever fires on an error" assumption the
+# original test was written under no longer holds: which stream Usage() lands on
+# is what separates a help request from a malformed invocation.
 #
 # This test asserts:
-#   1. no-args            -> non-zero exit (the #1514 fix) + Usage printed
-#   2. too-few-args       -> non-zero exit (the #1514 fix) + Usage printed
-#   3. valid argc, missing input prefix -> exit 255 + "Cannot open input"
-#      (regression guard: the real-error path must keep failing non-zero)
+#   1. no-args and too-few-args -> exit 255, Usage on stderr, nothing on stdout
+#   2. -h/--help                -> exit 0, Usage on stdout, nothing on stderr
+#   3. --version                -> exit 0, version on stdout, nothing on stderr
+#   4. missing input prefix     -> exit 255, diagnostic on stderr, no output file
 #
-# Before the fix, cases 1 and 2 exit 0 and this script FAILs (red); after the
-# fix they exit 255 and it PASSes (green).
+# Before the #1514 fix, cases 1 and 2 exit 0 and this script FAILs (red).  Before
+# the stream split, every case above writes its diagnostic to stdout and the
+# empty-stream assertions FAIL (red).
 #
 # Environment variables:
 #   ICCDEV_TOOLS_DIR   -- path to Build/Tools or build/Tools
@@ -48,7 +52,8 @@ export ASAN_OPTIONS="${ASAN_OPTIONS:-halt_on_error=0,detect_leaks=0}"
 export UBSAN_OPTIONS="${UBSAN_OPTIONS:-halt_on_error=0,print_stacktrace=1}"
 
 SPECSEP="$TOOLS_DIR/IccSpecSepToTiff/iccSpecSepToTiff"
-LOGFILE="$OUTDIR/specsep-usage-exit-code.log"
+STDOUT_LOG="$OUTDIR/specsep-usage.stdout.log"
+STDERR_LOG="$OUTDIR/specsep-usage.stderr.log"
 
 PASS=0
 FAIL=0
@@ -74,32 +79,75 @@ check_sanitizers() {
   return 0
 }
 
-# Cases 1 & 2: malformed (too few args) must fail non-zero AND still print Usage.
-run_usage_nonzero() {
+# Malformed invocations fail with Usage on stderr and no stdout payload.
+run_usage_error() {
   local name="$1"; shift
   TOTAL=$((TOTAL + 1))
   local exit_code=0
-  timeout 60 "$SPECSEP" "$@" > "$LOGFILE" 2>&1 || exit_code=$?
+  timeout 60 "$SPECSEP" "$@" > "$STDOUT_LOG" 2> "$STDERR_LOG" || exit_code=$?
 
-  check_sanitizers "$name" "$LOGFILE" || { sed -n '1,20p' "$LOGFILE"; return; }
+  check_sanitizers "$name" "$STDOUT_LOG" || { sed -n '1,20p' "$STDOUT_LOG"; return; }
+  check_sanitizers "$name" "$STDERR_LOG" || { sed -n '1,20p' "$STDERR_LOG"; return; }
 
-  if [ "$exit_code" -eq 0 ]; then
-    fail_case "$name" "expected non-zero exit for malformed invocation, got exit=0 (#1514)"
-    sed -n '1,20p' "$LOGFILE"
+  if [ "$exit_code" -ne 255 ]; then
+    fail_case "$name" "expected exit=255 for malformed invocation, got exit=$exit_code"
+    sed -n '1,20p' "$STDERR_LOG"
     return
   fi
 
-  if ! grep -Fq "Usage:" "$LOGFILE" 2>/dev/null; then
-    fail_case "$name" "missing Usage text on malformed invocation"
-    sed -n '1,20p' "$LOGFILE"
+  if ! grep -Fq "Usage:" "$STDERR_LOG" 2>/dev/null; then
+    fail_case "$name" "missing Usage text on stderr"
+    sed -n '1,20p' "$STDERR_LOG"
     return
   fi
 
-  pass_case "$name" "malformed invocation rejected with exit=$exit_code and Usage printed"
+  if [ -s "$STDOUT_LOG" ]; then
+    fail_case "$name" "malformed invocation wrote to stdout"
+    sed -n '1,20p' "$STDOUT_LOG"
+    return
+  fi
+
+  pass_case "$name" "malformed invocation rejected with exit=255 and Usage on stderr"
 }
 
-# Case 3: well-formed argc but the input prefix resolves to no files -- the
-# pre-existing error path that already returned -1; guard it stays non-zero.
+run_meta_success() {
+  local name="$1"
+  local arg="$2"
+  local expected="$3"
+  local forbidden="${4:-}"
+  TOTAL=$((TOTAL + 1))
+  local exit_code=0
+
+  timeout 60 "$SPECSEP" "$arg" > "$STDOUT_LOG" 2> "$STDERR_LOG" || exit_code=$?
+
+  check_sanitizers "$name" "$STDOUT_LOG" || return
+  check_sanitizers "$name" "$STDERR_LOG" || return
+
+  if [ "$exit_code" -ne 0 ] || ! grep -Eq "$expected" "$STDOUT_LOG" 2>/dev/null; then
+    fail_case "$name" "expected successful stdout matching: $expected"
+    sed -n '1,30p' "$STDOUT_LOG"
+    sed -n '1,30p' "$STDERR_LOG"
+    return
+  fi
+
+  # --version must not simply reprint the usage block: the synopsis lines carry
+  # the tool name too, so a name-only match cannot discriminate the two paths.
+  if [ -n "$forbidden" ] && grep -Eq "$forbidden" "$STDOUT_LOG" 2>/dev/null; then
+    fail_case "$name" "stdout unexpectedly matched: $forbidden"
+    sed -n '1,30p' "$STDOUT_LOG"
+    return
+  fi
+
+  if [ -s "$STDERR_LOG" ]; then
+    fail_case "$name" "successful metadata request wrote to stderr"
+    sed -n '1,30p' "$STDERR_LOG"
+    return
+  fi
+
+  pass_case "$name" "returned requested metadata on stdout with exit=0"
+}
+
+# A well-formed argc with a missing input remains a normal CLI failure.
 run_missing_input_reject() {
   local name="iccSpecSepToTiff missing-input-prefix still exits non-zero"
   TOTAL=$((TOTAL + 1))
@@ -107,19 +155,26 @@ run_missing_input_reject() {
   local out="$OUTDIR/should-not-exist.tif"
   rm -f "$out"
   # 8 args (no profile): output compress sep prefix start end incr
-  timeout 60 "$SPECSEP" "$out" 0 0 "$OUTDIR/no-such-prefix_" 0 0 1 > "$LOGFILE" 2>&1 || exit_code=$?
+  timeout 60 "$SPECSEP" "$out" 0 0 "$OUTDIR/no-such-prefix_" 0 0 1 > "$STDOUT_LOG" 2> "$STDERR_LOG" || exit_code=$?
 
-  check_sanitizers "$name" "$LOGFILE" || { sed -n '1,20p' "$LOGFILE"; return; }
+  check_sanitizers "$name" "$STDOUT_LOG" || return
+  check_sanitizers "$name" "$STDERR_LOG" || return
 
   if [ "$exit_code" -ne 255 ]; then
     fail_case "$name" "expected exit=255 for missing input, got exit=$exit_code"
-    sed -n '1,20p' "$LOGFILE"
+    sed -n '1,20p' "$STDERR_LOG"
     return
   fi
 
-  if ! grep -Fq "Cannot open input" "$LOGFILE" 2>/dev/null; then
-    fail_case "$name" "missing 'Cannot open input' diagnostic"
-    sed -n '1,20p' "$LOGFILE"
+  if ! grep -Fq "Cannot open input" "$STDERR_LOG" 2>/dev/null; then
+    fail_case "$name" "missing 'Cannot open input' diagnostic on stderr"
+    sed -n '1,20p' "$STDERR_LOG"
+    return
+  fi
+
+  if [ -s "$STDOUT_LOG" ]; then
+    fail_case "$name" "missing-input failure wrote to stdout"
+    sed -n '1,20p' "$STDOUT_LOG"
     return
   fi
 
@@ -128,7 +183,7 @@ run_missing_input_reject() {
     return
   fi
 
-  pass_case "$name" "missing input rejected with exit=255"
+  pass_case "$name" "missing input rejected with exit=255 and stderr diagnostic"
 }
 
 if [ ! -x "$SPECSEP" ]; then
@@ -137,8 +192,11 @@ if [ ! -x "$SPECSEP" ]; then
 fi
 
 echo "=== iccSpecSepToTiff usage-path exit-code regression (#1514) ==="
-run_usage_nonzero "iccSpecSepToTiff no-args exits non-zero"
-run_usage_nonzero "iccSpecSepToTiff too-few-args exits non-zero" foo.bar 0 0
+run_usage_error "iccSpecSepToTiff no-args exits non-zero"
+run_usage_error "iccSpecSepToTiff too-few-args exits non-zero" foo.bar 0 0
+run_meta_success "iccSpecSepToTiff short help" -h "^Usage:"
+run_meta_success "iccSpecSepToTiff long help" --help "^Usage:"
+run_meta_success "iccSpecSepToTiff version" --version "^iccSpecSepToTiff [0-9]" "^Usage:"
 run_missing_input_reject
 echo "iccSpecSepToTiff usage-path exit-code regression: $PASS passed, $FAIL failed, $TOTAL total"
 

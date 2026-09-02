@@ -34,6 +34,7 @@ from iccdev._iccdev import (
     IccCmm,
     IccApply,
     IccProfileHeader,
+    ValidationResult,
     # Exceptions
     IccError,
     IccProfileError,
@@ -45,10 +46,13 @@ from iccdev._iccdev import (
     Interpolation,
     LutType,
     CmmStatus,
+    ValidationStatus,
     # Convenience functions
     sig_to_str,
     open_profile,
     read_profile,
+    validate_profile,
+    validate_profile_file,
 )
 from iccdev.cli import (
     IccToolError,
@@ -71,6 +75,7 @@ __all__ = [
     "IccCmm",
     "IccApply",
     "IccProfileHeader",
+    "ValidationResult",
     # Exceptions
     "IccError",
     "IccProfileError",
@@ -83,10 +88,13 @@ __all__ = [
     "Interpolation",
     "LutType",
     "CmmStatus",
+    "ValidationStatus",
     # Functions
     "sig_to_str",
     "open_profile",
     "read_profile",
+    "validate_profile",
+    "validate_profile_file",
     # CLI-backed helpers
     "IccToolError",
     "available_tools",

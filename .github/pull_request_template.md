@@ -11,6 +11,10 @@
 - [ ] Updated documentation for user-visible behavior changes
 - [ ] Ran sanitizer coverage for memory-safety or parser changes
 - [ ] Added or updated regression coverage for behavior changes
+- [ ] Attached a `base...HEAD` contract matrix for cross-cutting changes:
+      producer, consumer, build/runtime behavior, platform/toolchain boundary,
+      CI trigger, dependency owner, and local evidence
+- [ ] Reviewed active and suppressed automated findings from review threads and summaries
 - [ ] For Python package changes, followed `docs/python-packaging-release.md` for PR and merge requirements
 - [ ] Did not change maintainer-owned workflow, CTest, CPack, sanitizer, release, or security infrastructure unless requested by an iccDEV maintainer
 - [ ] New source files include the ICC copyright and BSD 3-Clause license header
@@ -18,8 +22,8 @@
 
 ## Legal Requirements
 
-All official software projects hosted by the International Color Consoritum (ICC)
-follows the open source software best practice policies. The [International Color Consoritum IP policy](https://www.color.org/iccip.xalter) governs ICC specification development and contributions to ICC open source software. Software contributions are also covered by the Contributor License Agreement (CLA).
+All official software projects hosted by the International Color Consortium (ICC)
+follows the open source software best practice policies. The [International Color Consortium IP policy](https://www.color.org/iccip.xalter) governs ICC specification development and contributions to ICC open source software. Software contributions are also covered by the Contributor License Agreement (CLA).
 
 ### Contributor License Agreements
 

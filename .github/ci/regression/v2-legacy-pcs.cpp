@@ -12,14 +12,17 @@
 //   - CIccCmm::Begin() (IccCmm.cpp:9214 and :9285) splices a CIccPcsXform onto a
 //     legacy transform's PCS edge when UseLegacyPCS() is set. This is the leg
 //     that produces the rescale seen at the output, and the one group 3 covers.
-//   - CIccXform::AdjustPCS() picks Lab2ToXyz/XyzToLab2 over LabToXyz/XyzToLab.
-//     It runs here (v2 + perceptual sets m_bAdjustPCS), but it converts
+//   - Wherever a colorimetric PCS adjustment applies (v2 + perceptual sets
+//     m_bAdjustPCS), CIccPcsXform's Connect()/ConnectFirst()/ConnectLast()
+//     push pushLab2ToXyz()/pushXyzToLab2() instead of pushLabToXyz()/
+//     pushXyzToLab() when UseLegacyPCS() is set (IccCmm.cpp, e.g. the
+//     pushLab2ToXyz()/pushLabToXyz() choices in Connect()). But it converts
 //     Lab -> XYZ -> Lab with the *same* encoding on both sides, so changing both
 //     sides together cancels out and is not visible at the output at all. Only a
 //     one-sided change is, and group 3 does catch that. Measured, against a
 //     deliberately broken library: predicate forced false -> 5 assertions fail;
-//     AdjustPCS input leg only -> 4 fail; both AdjustPCS legs together -> passes,
-//     correctly, because the encodings cancel.
+//     the input leg's encoding choice alone -> 4 fail; both legs together ->
+//     passes, correctly, because the encodings cancel.
 //
 // Nothing in CI reached any of that. A clean checkout's Testing corpus -- the 80
 // tracked profiles plus the 130 CreateAllProfiles.sh generates, 210 in all -- is
@@ -223,8 +226,9 @@ void legacyEncodingMath()
       }
     }
 
-    // The pair is used in both directions inside a single AdjustPCS call, so a
-    // one-sided change would corrupt every v2 transform rather than fail loudly.
+    // The pair is used in both directions inside a single legacy-PCS
+    // conversion, so a one-sided change would corrupt every v2 transform
+    // rather than fail loudly.
     CIccPCSUtil::Lab4ToLab2(back, lab4);
     for (int c = 0; c < 3; c++) {
       if (std::fabs((double)back[c] - (double)probe[i][c]) > 1e-6) {
@@ -233,8 +237,8 @@ void legacyEncodingMath()
       }
     }
 
-    // The full legacy leg of AdjustPCS: Lab2 -> XYZ -> Lab2 must be an identity
-    // to within float noise, exactly as the v4 leg is.
+    // The full legacy leg of the PCS adjustment: Lab2 -> XYZ -> Lab2 must be
+    // an identity to within float noise, exactly as the v4 leg is.
     icFloatNumber xyz[3], roundTrip[3];
     CIccPCSUtil::Lab2ToXyz(xyz, probe[i], true);
     CIccPCSUtil::XyzToLab2(roundTrip, xyz, true);

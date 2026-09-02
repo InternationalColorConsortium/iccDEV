@@ -67,6 +67,39 @@
       "displayName": "Windows MSVC (VS2026) QA flags"
     },
     {
+      "name": "vs2022-clangcl-x64-clut-baseline-qa-flags",
+      "inherits": ["vs2022-clangcl-x64-qa-flags"],
+      "displayName": "Windows ClangCL (VS2022) CLUT baseline QA flags",
+      "cacheVariables": {
+        "ICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS": "ON"
+      }
+    },
+    {
+      "name": "vs2022-clangcl-x64-avx2-qa-flags",
+      "inherits": ["vs2022-clangcl-x64-clut-baseline-qa-flags"],
+      "displayName": "Windows ClangCL (VS2022) AVX2 QA flags",
+      "cacheVariables": {
+        "ICCDEV_ENABLE_AVX2": "ON"
+      }
+    },
+    {
+      "name": "vs2022-clangcl-x64-avx2-diagnostics",
+      "inherits": ["vs2022-clangcl-x64-avx2-qa-flags"],
+      "displayName": "Windows ClangCL (VS2022) AVX2 diagnostics",
+      "description": "Enables AVX2 CLUT dispatch and timing tracepoints for source-level debugging. Do not use this preset for throughput benchmarks.",
+      "cacheVariables": {
+        "ICC_AVX2_CLUT_DEBUG": "ON"
+      }
+    },
+    {
+      "name": "vs2022-clangcl-x64-avx512-qa-flags",
+      "inherits": ["vs2022-clangcl-x64-avx2-qa-flags"],
+      "displayName": "Windows ClangCL (VS2022) AVX-512 QA flags",
+      "cacheVariables": {
+        "ICCDEV_ENABLE_AVX512": "ON"
+      }
+    },
+    {
       "name": "mingw-ucrt64-base",
       "inherits": "default-base",
       "hidden": true,
@@ -137,6 +170,34 @@
       "name": "linux-clang-qa-flags",
       "inherits": ["linux-clang", "qa-flags-base"],
       "displayName": "Linux Clang QA flags"
+    },
+    {
+      "name": "linux-clang-clut-baseline-qa-flags",
+      "inherits": ["linux-clang-qa-flags"],
+      "displayName": "Linux Clang CLUT baseline QA flags",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENABLE_WXWIDGETS": "OFF",
+        "ICCDEV_ENABLE_AVX2": "OFF",
+        "ICCDEV_ENABLE_AVX512": "OFF",
+        "ICC_AVX2_CLUT_DEBUG": "OFF"
+      }
+    },
+    {
+      "name": "linux-clang-clut-avx2-qa-flags",
+      "inherits": ["linux-clang-clut-baseline-qa-flags"],
+      "displayName": "Linux Clang CLUT AVX2 QA flags",
+      "cacheVariables": {
+        "ICCDEV_ENABLE_AVX2": "ON"
+      }
+    },
+    {
+      "name": "linux-clang-clut-avx512-qa-flags",
+      "inherits": ["linux-clang-clut-avx2-qa-flags"],
+      "displayName": "Linux Clang CLUT AVX-512 QA flags",
+      "cacheVariables": {
+        "ICCDEV_ENABLE_AVX512": "ON"
+      }
     },
     {
       "name": "linux-gcc-asan",

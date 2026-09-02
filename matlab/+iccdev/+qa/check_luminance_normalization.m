@@ -20,8 +20,8 @@ function results = check_luminance_normalization(fixture_root)
   display_dir = fullfile(fixture_root, 'Display');
   fixture_names = {
     'sRGB_D65_MAT.xml'
-    'sRGB_D65_MAT-300lx.xml'
-    'sRGB_D65_MAT-500lx.xml'
+    'sRGB_D65_MAT-300cdm2.xml'
+    'sRGB_D65_MAT-500cdm2.xml'
   };
   expected_y = [1; 300; 500];
   illuminant = zeros(3, 3);

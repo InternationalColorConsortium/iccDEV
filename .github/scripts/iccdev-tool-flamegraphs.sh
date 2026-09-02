@@ -207,6 +207,16 @@ command_string()
   printf '%s\n' "$out"
 }
 
+html_escape()
+{
+  printf '%s' "$1" | sed \
+    -e 's/&/\&amp;/g' \
+    -e 's/</\&lt;/g' \
+    -e 's/>/\&gt;/g' \
+    -e 's/"/\&quot;/g' \
+    -e "s/'/\&#39;/g"
+}
+
 sample_count()
 {
   local report="$1"
@@ -346,6 +356,119 @@ skip_tool()
   local name="$1"
   local note="$2"
   manifest_row "$name" "SKIP" "" "0" "0" "" "" "" "$note"
+}
+
+read_manifest_row()
+{
+  local manifest_line="$1"
+  local separator=$'\034'
+  manifest_line="${manifest_line//$'\t'/$separator}"
+  IFS="$separator" read -r tool status exit_code samples unknown svg report command note <<< "$manifest_line"
+}
+
+write_dashboard()
+{
+  local dashboard="$OUTDIR/index.html"
+  local dashboard_rows="$WORKDIR/dashboard-rows.tsv"
+  local profiled_count
+  local low_sample_count
+  local skipped_count
+  local manifest_line
+  local tool status exit_code samples unknown svg report command note
+
+  : > "$dashboard_rows"
+  while IFS= read -r manifest_line; do
+    read_manifest_row "$manifest_line"
+    [ "$tool" = "tool" ] && continue
+    if [ -n "$svg" ] && [ -f "$svg" ]; then
+      printf '%012d\t%s\t%s\t%s\t%s\t%s\n' \
+        "$samples" "$tool" "$status" "$unknown" \
+        "${svg#"$OUTDIR"/}" "${report#"$OUTDIR"/}" >> "$dashboard_rows"
+    fi
+  done < "$MANIFEST"
+  sort -t $'\t' -k1,1nr -k2,2 "$dashboard_rows" > "${dashboard_rows}.sorted"
+  mv "${dashboard_rows}.sorted" "$dashboard_rows"
+
+  profiled_count="$(awk -F'\t' 'NR > 1 && $2 == "PROFILED" { count++ } END { print count + 0 }' "$MANIFEST")"
+  low_sample_count="$(awk -F'\t' 'NR > 1 && $2 == "LOW_SAMPLES" { count++ } END { print count + 0 }' "$MANIFEST")"
+  skipped_count="$(awk -F'\t' 'NR > 1 && $2 ~ /^(SKIP|PERF_FAIL)$/ { count++ } END { print count + 0 }' "$MANIFEST")"
+
+  {
+    printf '%s\n' '<!doctype html>'
+    printf '%s\n' '<html lang="en"><head><meta charset="utf-8">'
+    printf '%s\n' '<meta name="viewport" content="width=device-width, initial-scale=1">'
+    printf '%s\n' '<title>iccDEV FlameGraph Dashboard</title>'
+    printf '%s\n' '<style>'
+    printf '%s\n' 'body{font-family:system-ui,sans-serif;line-height:1.45;margin:2rem;color:#17202a}'
+    printf '%s\n' 'h1,h2{margin-bottom:.35rem}.lede{color:#4b5563;max-width:70rem}'
+    printf '%s\n' '.counts{display:flex;gap:.75rem;flex-wrap:wrap;margin:1rem 0}'
+    printf '%s\n' '.count{border:1px solid #d0d7de;border-radius:.5rem;padding:.5rem .8rem;background:#f6f8fa}'
+    printf '%s\n' '.primary{border:1px solid #d0d7de;border-radius:.5rem;padding:.75rem;margin:1rem 0}'
+    printf '%s\n' '.primary object{width:100%;height:34rem;border:0}.gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(19rem,1fr));gap:1rem}'
+    printf '%s\n' '.card{border:1px solid #d0d7de;border-radius:.5rem;padding:.5rem;color:inherit;text-decoration:none}'
+    printf '%s\n' '.card img{width:100%;height:11rem;object-fit:contain}.card strong{display:block;margin-top:.4rem}'
+    printf '%s\n' 'table{border-collapse:collapse;width:100%;margin:1rem 0}th,td{border:1px solid #d0d7de;padding:.45rem;text-align:left}'
+    printf '%s\n' 'th{background:#f6f8fa}.pass{color:#1a7f37}.warn{color:#9a6700}.skip{color:#57606a}code{background:#f6f8fa;padding:.1rem .25rem}'
+    printf '%s\n' '@media(max-width:700px){body{margin:1rem}.primary object{height:23rem}}'
+    printf '%s\n' '</style></head><body>'
+    printf '%s\n' '<h1>iccDEV FlameGraph Dashboard</h1>'
+    printf '%s\n' '<p class="lede">Interactive call-stack visualization is the primary view. Timing and sample counts help judge capture quality; they are not performance thresholds.</p>'
+    printf '<div class="counts"><span class="count"><strong>%s</strong> profiled</span>' "$(html_escape "$profiled_count")"
+    printf '<span class="count"><strong>%s</strong> low samples</span>' "$(html_escape "$low_sample_count")"
+    printf '<span class="count"><strong>%s</strong> skipped or perf failures</span></div>\n' "$(html_escape "$skipped_count")"
+
+    if [ -s "$dashboard_rows" ]; then
+      IFS=$'\t' read -r samples tool status unknown svg report < "$dashboard_rows"
+      printf '<h2>Primary Graph: %s</h2>\n' "$(html_escape "$tool")"
+      printf '<div class="primary"><object data="%s" type="image/svg+xml">' "$(html_escape "$svg")"
+      printf '<a href="%s">Open %s FlameGraph</a></object></div>\n' \
+        "$(html_escape "$svg")" "$(html_escape "$tool")"
+      printf '%s\n' '<h2>All Interactive FlameGraphs</h2><div class="gallery">'
+      while IFS=$'\t' read -r samples tool status unknown svg report; do
+        printf '<a class="card" href="%s"><img src="%s" alt="%s FlameGraph">' \
+          "$(html_escape "$svg")" "$(html_escape "$svg")" "$(html_escape "$tool")"
+        printf '<strong>%s</strong><span>%s samples; %s unknown frames</span></a>\n' \
+          "$(html_escape "$tool")" "$(html_escape "$samples")" "$(html_escape "$unknown")"
+      done < "$dashboard_rows"
+      printf '%s\n' '</div>'
+    else
+      printf '%s\n' '<h2>No Interactive FlameGraphs Captured</h2>'
+      printf '%s\n' '<p>Review the manifest for perf availability, capture failures, and skipped inputs.</p>'
+    fi
+
+    printf '%s\n' '<h2>Capture Manifest</h2>'
+    printf '%s\n' '<table><tr><th>Tool</th><th>Status</th><th>Samples</th><th>Unknown Frames</th><th>Graph</th><th>Perf Report</th><th>Note</th></tr>'
+    while IFS= read -r manifest_line; do
+      read_manifest_row "$manifest_line"
+      [ "$tool" = "tool" ] && continue
+      status_class="skip"
+      case "$status" in
+        PROFILED)
+          status_class="pass"
+          ;;
+        LOW_SAMPLES)
+          status_class="warn"
+          ;;
+      esac
+      svg_link="-"
+      report_link="-"
+      if [ -n "$svg" ] && [ -f "$svg" ]; then
+        svg_rel="${svg#"$OUTDIR"/}"
+        svg_link="<a href=\"$(html_escape "$svg_rel")\">Open graph</a>"
+      fi
+      if [ -n "$report" ] && [ -f "$report" ]; then
+        report_rel="${report#"$OUTDIR"/}"
+        report_link="<a href=\"$(html_escape "$report_rel")\">Open report</a>"
+      fi
+      printf '<tr><td>%s</td><td class="%s">%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n' \
+        "$(html_escape "$tool")" "$status_class" "$(html_escape "$status")" \
+        "$(html_escape "$samples")" "$(html_escape "$unknown")" \
+        "$svg_link" "$report_link" "$(html_escape "$note")"
+    done < "$MANIFEST"
+    printf '%s\n' '</table>'
+    printf '<p>Raw capture files are listed in <a href="%s">manifest.tsv</a>.</p>\n' "$(html_escape "${MANIFEST#"$OUTDIR"/}")"
+    printf '%s\n' '</body></html>'
+  } > "$dashboard"
 }
 
 require_file()
@@ -518,6 +641,8 @@ if [ -n "$DESCRIBE" ]; then
 else
   skip_tool iccDescribeSinkTest "missing tool"
 fi
+
+write_dashboard
 
 echo "[INFO] FlameGraph output: $OUTDIR"
 find "$OUTDIR" -maxdepth 3 -type f | sort

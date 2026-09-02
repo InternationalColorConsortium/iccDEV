@@ -42,7 +42,17 @@ helpers, profile dump, and round-trip parity tests.
    Expected: XML/JSON/blob helper conversion, `iccDumpProfile`, `iccRoundTrip`,
    and PAWG smoke tests pass or skip only when the native tool build is absent.
 
-6. **Run CI workflow locally**
+6. **Validate both package build modes**
+
+   - With `ICCDEV_BUILD_DIR`, verify the extension imports and its Unix linkage
+     includes zlib when the static library was built with `ICC_USE_ZLIB`.
+   - Without `ICCDEV_BUILD_DIR`, build and install the sdist in an isolated
+     environment. The portable inline source set must exclude the AVX2 and
+     AVX-512 translation units.
+   - Run installed-package tests without assuming setuptools is present at
+     runtime.
+
+7. **Run CI workflow locally**
 
    ```bash
    gh workflow run ci-json-python.yml
@@ -54,6 +64,9 @@ helpers, profile dump, and round-trip parity tests.
 - [ ] CreateAllProfiles completes without errors
 - [ ] RunTests passes all tests
 - [ ] Python package installs cleanly
+- [ ] Pre-built Unix extension resolves zlib symbols
+- [ ] Standalone sdist builds on non-x86 or universal targets without x86 SIMD sources
+- [ ] Installed-package smoke does not require setuptools
 - [ ] Tests run from repository root with `--import-mode=importlib`
 - [ ] XML/JSON/blob helper parity tests pass
 - [ ] Profile dump and round-trip parity tests pass

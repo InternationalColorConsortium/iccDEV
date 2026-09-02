@@ -65,9 +65,9 @@ jobs:
       - name: Bootstrap pinned vcpkg
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           source .github/scripts/sanitize-sed.sh
 
           git clone https://github.com/microsoft/vcpkg.git "$RUNNER_TEMP/vcpkg"

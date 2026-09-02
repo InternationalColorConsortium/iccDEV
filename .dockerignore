@@ -8,6 +8,8 @@
 deps.zip
 installed/
 out/
+msvc/
+build-matlab-full/
 scripts/
 
 # Python package outputs

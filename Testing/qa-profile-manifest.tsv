@@ -140,8 +140,8 @@ Display/Rec2020rgbSpectral.icc	compatibility	warning	0	none	generated	-	baseline
 Display/Rec2100HlgFull.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 Display/Rec2100HlgNarrow.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 Display/RgbGSDF.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
-Display/sRGB_D65_MAT-300lx.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
-Display/sRGB_D65_MAT-500lx.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+Display/sRGB_D65_MAT-300cdm2.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+Display/sRGB_D65_MAT-500cdm2.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 Display/sRGB_D65_MAT.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 Display/sRGB_D65_colorimetric.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 Encoding/ISO22028-Encoded-bg-sRGB.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
@@ -263,6 +263,8 @@ SpecRef/SixChanInputRef.icc	compatibility	warning	0	none	generated	-	baselined: 
 SpecRef/argbRef.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 SpecRef/srgbRef.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 V2/v2CmykLut16.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+V2/v2GrayTRC.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+V2/v2GrayTRCLab.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 V2/v2RgbLut8.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 V2/v2RgbMatrixTRC.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 mcs/17ChanWithSpots-MVIS.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean

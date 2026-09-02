@@ -159,26 +159,46 @@ for index, entry in enumerate(labels, 1):
   exit 2
 }
 
-count=0
+declare -A live_labels=()
+
+if ! $dry_run; then
+  while IFS=$'\t' read -r name color description; do
+    [[ -n "$name" ]] || continue
+    live_labels["$name"]="${color}"$'\t'"${description}"
+  done < <(
+    gh api --paginate "repos/$repo/labels?per_page=100" \
+      --jq '.[] | [.name, .color, .description] | @tsv'
+  )
+fi
+
+updated=0
+unchanged=0
 while IFS=$'\t' read -r name color description; do
   [[ -n "$name" ]] || continue
 
   if $dry_run; then
     printf '[DRY-RUN] %s #%s %s\n' "$name" "$color" "$description"
   else
+    desired="${color}"$'\t'"${description}"
+    if [[ "${live_labels[$name]-}" == "$desired" ]]; then
+      printf '[SKIP] %s\n' "$name"
+      unchanged=$((unchanged + 1))
+      continue
+    fi
+
     gh label create "$name" \
       --repo "$repo" \
       --color "$color" \
       --description "$description" \
       --force >/dev/null
     printf '[OK] %s\n' "$name"
+    updated=$((updated + 1))
   fi
-
-  count=$((count + 1))
 done < <(parse_labels)
 
 if $dry_run; then
-  printf '[DRY-RUN] validated %d labels from %s for %s\n' "$count" "$labels_file" "$repo"
+  printf '[DRY-RUN] validated labels from %s for %s\n' "$labels_file" "$repo"
 else
-  printf '[OK] synced %d labels from %s for %s\n' "$count" "$labels_file" "$repo"
+  printf '[OK] synced %d updated and %d unchanged labels from %s for %s\n' \
+    "$updated" "$unchanged" "$labels_file" "$repo"
 fi

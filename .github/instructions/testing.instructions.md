@@ -43,10 +43,19 @@ profile write failure regressions, two batch-backed suites through
 `Build/Cmake/Testing/RunWindowsBatchTest.cmake`, the
 iccDumpProfile smoke suite, the IccDEVCmm DLL smoke suite, the issue-987 shared
 export suite, the issue-1009 IccJson export suite, and the PAWG report smoke
-suite. Windows
+suite. They also register `iccdev.clut-eight-output-regression` through the
+native `RunClutEightOutputRegression.cmake` runner; do not rely on the Unix
+shell runner for this test because the Windows CTest branch returns before
+script-test registration. Windows
 feature-disabled builds register the subset whose targets are available. The
 Windows batch wrapper runs scripts from a disposable copy of `Testing/` under
 the build tree and must not dirty the source `Testing/` directory.
+
+AVX2 CLUT performance is not asserted by CTest. After the focused correctness
+test passes, use `.github/scripts/iccdev-windows-clut-avx2-benchmark.ps1` with
+separate baseline and AVX2 Release build directories. The helper alternates
+execution order, covers output counts 8-16, and verifies bit-exact output
+parity for every lane.
 
 Windows CTest wrappers source runtime DLL directories from `CMakeCache.txt`
 through `Build/Cmake/Testing/WindowsRuntimePaths.cmake`. Keep that helper in
@@ -71,6 +80,7 @@ Use `.github/ci/regression/README.md` as the canonical catalog and naming guide.
 
 Script-based gates live in `.github/scripts/`, including:
 
+- `iccdev-specsep-qa.sh` (runs the complete SpecSep script suite)
 - `iccdev-json-parser-regression-tests.sh`
 - `iccdev-json-cfg-tests.sh`
 - `iccdev-stdobserver-regression-tests.sh`
@@ -88,6 +98,13 @@ Script-based gates live in `.github/scripts/`, including:
 
 When adding a new regression input, add the matching script or workflow assertion
 in the same change.
+
+The SpecSep wrapper preflights the checked-in sequences under
+`.github/ci/test-data/spectral/`, `.github/ci/test-data/specsep-harvest/`, and
+`.github/ci/test-data/specsep-truncated/`, then runs the CLI argument, TIFF
+geometry, usage/metadata, and numbered-fixture matrix suites plus both
+optional-profile sweeps. It is independent of the caller's current directory;
+set `ICCDEV_TOOLS_DIR` when the build is not under `Build/Tools`.
 
 ## Test Profile Directories
 

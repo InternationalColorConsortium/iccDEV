@@ -25,24 +25,31 @@ Use this skill when adding, removing, or auditing labels and label automation.
 ## Workflow
 
 1. Read `../../../docs/label-system.md`.
-2. Update `.github/labels.yml` before changing workflow or labeler behavior.
-3. Add `.github/labeler.yml` rules only for deterministic file paths or branch
+2. Audit the managed manifest against live labels before changing taxonomy.
+   `.github/labels.yml` is not destructive: classify undeclared live labels as
+   legacy or migrate them deliberately.
+3. Update `.github/labels.yml` before changing workflow or labeler behavior.
+4. Add `.github/labeler.yml` rules only for deterministic file paths or branch
    names. Do not classify severity, exploitability, or maintainer judgment from
    PR text.
-4. Keep privileged label workflows on trusted metadata:
+5. Keep privileged label workflows on trusted metadata:
    - no checkout of PR head code in `pull_request_target`;
    - explicit `zizmor` rationale for any retained `pull_request_target` labeler;
    - least-privilege job permissions;
    - pinned third-party actions;
    - no direct `${{ }}` expressions inside shell.
-5. If issue triage logic changes, keep it conservative and make labels easy for
+6. Keep issue triage and PR-status labeling independent of taxonomy
+   synchronization; neither may issue manifest-wide label writes for every
+   issue or PR event.
+7. If issue triage logic changes, keep it conservative and make labels easy for
    maintainers to override.
-6. If PR status labels change, preserve mutual exclusion among `passed`,
+8. If PR status labels change, preserve mutual exclusion among `passed`,
    `failed`, and `pending`.
-7. If PR CI control labels change, keep them maintainer-only, one-shot, and
+9. If PR CI control labels change, keep them maintainer-only, one-shot, and
    restricted to same-repository pull requests.
-8. Update docs and prompts when policy or maintainer workflow changes.
-9. For a new scope label, add its canonical `.github/labels.yml` entry before
+10. Update docs, prompts, agents, and the inventory artifact when policy or
+    maintainer workflow changes.
+11. For a new scope label, add its canonical `.github/labels.yml` entry before
    issue-text or path automation. Keep deletion manual after checking all active
    label consumers.
 
@@ -67,6 +74,8 @@ For workflow governance changes, also run:
 ## Review Checklist
 
 - `.github/labels.yml` contains every automated label.
+- Managed labels are reconciled with the live inventory without deleting legacy
+  labels or rewriting unchanged metadata.
 - `.github/labeler.yml` paths are specific enough to avoid noisy labels.
 - Large PR safeguards still exist.
 - Label workflows do not execute untrusted PR content.
@@ -77,6 +86,7 @@ For workflow governance changes, also run:
   GitHub Action, Docker, or container SHA refreshes.
 - `codeql-ready` still routes to the full CodeQL workflow.
 - Documentation, skills, and prompts point to the same canonical files.
+- The label-triage agent and inventory artifact match the managed manifest.
 
 ## References
 

@@ -9,8 +9,8 @@
 // WINDOWS_EXPORT_ALL_SYMBOLS rather than from __declspec annotations -- MSVC is
 // deliberately excluded from the ICCPROFLIBDLL_EXPORTS definition, a decision
 // taken in #764. That mechanism auto-exports functions but not global data, and
-// IccProfLib carries no dllexport/dllimport on its data, so a consumer emits a
-// direct data reference with no __imp_ indirection and the link fails:
+// IccProfLib carried no dllexport/dllimport on its data, so a consumer emitted a
+// direct data reference with no __imp_ indirection and the link failed:
 //
 //   mpe-empty-identity.obj : error LNK2019: unresolved external symbol
 //     "char const * const icMsgValidateWarning" (?icMsgValidateWarning@@3PEBDEB)
@@ -21,11 +21,15 @@
 // Linux and macOS have no import-library model and are unaffected, so a green
 // local pre-flight proves nothing here -- only the Windows CI leg does.
 //
-// THIS TEST IS THE PROOF. Its value is that it links at all on Windows: it is
-// built against ${ICCDEV_TEST_LIB_ICCPROFLIB}, which falls back to the static
-// library on Windows shared builds exactly as the three affected tools already
-// do. If that fallback is removed or the export model changes, this stops
-// linking and the Windows leg goes red instead of the next author discovering it.
+// #2219 fixed that: the eight globals carry ICCPROFLIB_DATA_API, real
+// dllexport/dllimport kept separate from the incomplete ICCPROFLIB_API. This
+// test was written before the fix and linked IccProfLib2-static on Windows to
+// sidestep it, exactly as three tools did; #2154 retired that fallback, so it
+// now links IccProfLib2.dll like every other regression executable and its LINK
+// is once again an assertion. Note where the failure lands: an in-tree target
+// that cannot link takes the whole Windows BUILD down, which is why
+// iccdev.proflib-exported-data-dll-linkage exists to compile the same
+// references out of tree and report the loss as one red test instead.
 //
 // It covers all eight exported globals -- the four icMsgValidate* prefixes,
 // both icD50XYZ arrays, and both solver pointers. A ninth declaration, icInfo,
@@ -36,10 +40,8 @@
 // It also has a job on every platform. Several tests assert on hard-coded copies
 // of these values rather than reading the globals: mpe-empty-identity.cpp spells
 // out three of the icMsgValidate* prefixes and pawg-q4-xyz-pcs-decode.cpp spells
-// out the icD50XYZ triple. Both of those link IccProfLib alone and predate
-// ${ICCDEV_TEST_LIB_ICCPROFLIB}, so they hard-code by history rather than by
-// necessity; a test that also links IccXML or IccJson has no choice, because
-// adding the static IccProfLib would load the library twice in one process.
+// out the icD50XYZ triple. They hard-code by history rather than by necessity --
+// both were written while reading these globals still failed to link on Windows.
 // Hard-coded copies drift silently. Pinning the real globals here means a change
 // to icMsgValidateWarning or icD50XYZ fails HERE, naming the literals that must
 // be updated, rather than leaving those tests quietly asserting stale text.

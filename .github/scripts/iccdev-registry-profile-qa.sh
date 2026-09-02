@@ -37,6 +37,7 @@ Outputs:
   <out-dir>/download-manifest.tsv
   <out-dir>/summary.md
   <out-dir>/{pawg,dumpprofile,roundtrip}/results.tsv
+  <out-dir>/specsep/{logs,tiffs}/
 USAGE
 }
 
@@ -144,6 +145,18 @@ run_scan pawg "$SCRIPT_DIR/icc-pawg-qa-scan.sh" text || status=1
 run_scan dumpprofile "$SCRIPT_DIR/icc-dumpprofile-qa-scan.sh" validate-all || status=1
 run_scan roundtrip "$SCRIPT_DIR/icc-roundtrip-qa-scan.sh" intent-1 || status=1
 
+# --fail-on, like run_scan above: this corpus deliberately contains malformed
+# profiles, and CI runs the whole job with --fail-on CRASH,TIMEOUT.  Without
+# forwarding it, an ordinary validation rejection in this lane failed a job the
+# other three lanes were told to tolerate.
+specsep_args=(--profile-dir "$PROFILE_DIR" --fail-on "$FAIL_ON")
+if [[ "$MAX_PROFILES" -gt 0 ]]; then
+  specsep_args+=(--max-profiles "$MAX_PROFILES")
+fi
+ICCDEV_TEST_TIMEOUT="$TIMEOUT_SECONDS" \
+ICCDEV_TEST_OUTDIR="$OUTDIR/specsep" \
+  bash "$SCRIPT_DIR/iccdev-specsep-profile-sweep.sh" "${specsep_args[@]}" || status=1
+
 {
   printf '# ICC registry profile QA\n\n'
   printf '| Field | Value |\n'
@@ -167,6 +180,9 @@ run_scan roundtrip "$SCRIPT_DIR/icc-roundtrip-qa-scan.sh" intent-1 || status=1
       printf 'No summary produced.\n\n'
     fi
   done
+  printf '### specsep\n\n'
+  printf 'The optional profile argument was swept with fixed eight-channel inputs.\n'
+  printf 'Per-profile logs and accepted TIFFs are under `%s`.\n\n' "$OUTDIR/specsep"
 } > "$SUMMARY"
 
 printf '[SUMMARY] registry_profiles=%s\n' "$ICC_COUNT"

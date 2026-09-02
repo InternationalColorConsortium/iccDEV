@@ -13,7 +13,9 @@ single index for common command shapes and shared option tables.
 | `iccFromJson` | Convert JSON to ICC binary | `iccFromJson input.json output.icc` |
 | `iccDumpProfile` | Dump and validate ICC profile contents | `iccDumpProfile -v profile.icc ALL` |
 | `iccDumpProfile` | Emit gated QA evidence flags | `iccDumpProfile --qa-flags --evidence-json --diag -v 100 profile.icc` |
+| `iccProfilePlot` | Emit data-first profile graphs and CLUT rasters | `iccProfilePlot profile.icc list` |
 | `iccProfileVisualize` | Dump profile LUT data as images and PDF graphs | `iccProfileVisualize profile.icc` |
+| `iccProfileVisualizePlot` | Render profile visualizations to PDF and TIFF | `iccProfileVisualizePlot profile.icc` |
 
 ## Applying Profiles
 
@@ -39,16 +41,22 @@ its destination transform.
 | `iccTiffDump` | Inspect TIFF metadata and embedded ICC | `iccTiffDump image.tif` |
 | `iccPngDump` | Inspect PNG metadata and embedded ICC | `iccPngDump image.png` |
 | `iccJpegDump` | Inspect JPEG metadata and embedded ICC | `iccJpegDump image.jpg` |
-| `iccPawgReport` | Emit an ICC PAWG profile assessment checklist report for security, conformance, and quality review | `iccPawgReport profile.icc` |
-| `iccPawgReport` | Emit gated QA evidence flags | `iccPawgReport --qa-flags --evidence-json profile.icc` |
+| `iccPawgReport` | Emit an ICC PAWG profile assessment checklist report for security, conformance, and quality review | `iccPawgReport Testing/sRGB_v4_ICC_preference.icc` |
+| `iccPawgReport` | Emit machine-readable assessment results; Q1 includes structured, unrounded round-trip metrics | `iccPawgReport --json Testing/sRGB_v4_ICC_preference.icc` |
+| `iccPawgReport` | Emit gated QA evidence flags | `iccPawgReport --qa-flags --evidence-json Testing/sRGB_v4_ICC_preference.icc` |
 | `iccSpecSepToTiff` | Combine spectral separation TIFFs | `iccSpecSepToTiff output.tif 0 0 spectral/spec_ 1 10 1` |
 | `iccV5DspObsToV4Dsp` | Convert v5 display/observer profiles to v4 display | `iccV5DspObsToV4Dsp display.icc observer.icc output.icc` |
 | `iccFromCube` | Convert `.cube` 3D LUT to ICC.2 DeviceLink | `iccFromCube input.cube output.icc` |
+| `iccBenchApply` | Measure profile-chain apply throughput and checksums | `iccBenchApply -suite -csv -threads 1,2,8` |
 
 `iccSpecSepToTiff` treats the input argument as a filename prefix and appends
 each channel number from `start` through `end`. For a single input named
 `spec_3`, pass prefix `spec_` with `start=3` and `end=3`. The prefix is literal,
 not a `printf` pattern: `spec_%03d.tif` opens `spec_%03d.tif1`, not `spec_001.tif`.
+
+Run `.github/scripts/iccdev-specsep-corpus-matrix.sh` to exercise every
+checked-in numbered spectral fixture as a one-channel output under all
+compression and planar layouts, with TIFF metadata validation.
 
 When `{profile}` is provided, the file is parsed and validated as an ICC profile
 before any output is written. ICC.2 spectral PCS profiles must have spectral PCS
@@ -56,6 +64,21 @@ channels and spectral range steps equal to the generated TIFF `SamplesPerPixel`;
 non-spectral profiles must have a data color-space sample count equal to
 `SamplesPerPixel`. Non-ICC bytes, empty files, non-compliant profiles, and
 sample-count mismatches are rejected.
+
+Sweep the optional profile argument across a directory while holding the
+checked-in separation inputs constant:
+
+```bash
+ICCDEV_TOOLS_DIR="$PWD/Build/Tools" \
+  .github/scripts/iccdev-specsep-profile-sweep.sh \
+  --profile-dir /path/to/profiles --channels 3
+```
+
+`--channels` sets how many inputs are combined, and therefore the sample count a
+profile must match to be embedded; it defaults to 8. An incompatible profile is
+an expected rejection only when the tool emits a profile diagnostic and leaves no
+output TIFF. Timeouts, sanitizer findings, unexplained exits, and incomplete
+successes fail the sweep.
 
 ## Text Data Encoding Values
 
@@ -93,13 +116,42 @@ parsed by the shared `CIccCfgProfile::fromArgs` is:
 | `+1000000` | NamedColor over-black (`icSigNmclSpectralOverBlackMbr`, `'spcb'`) |
 | `+2000000` | NamedColor over-gray (`icSigNmclSpectralOverGrayMbr`, `'spcg'`) |
 
+Each column is an independent field: `+100000` no longer implies `+10000`, and
+`+10000` never implied `+100000`. The millions column accepts only the two
+overprint values above -- the members are mutually exclusive, so a combined
+`+3000000` is refused rather than decoded as over-white -- and the whole code
+must be non-negative (#2190).
+
+`+100000` is currently recorded in the configuration but not acted on: no
+`AddXform` overload takes an HToS argument, and `CheckPCSRangeConversions()`
+injects the HToS transform whenever the tag is present, regardless of the flag.
+It is accepted and round-trips through the JSON config, but selects nothing
+(#2190).
+
+`iccApplyToLink` and `iccBenchApply` do not reach that shared parser. Each
+carries its own decode of a smaller set of columns, and the weights differ by a
+decade: in `iccApplyToLink` the tens digit is the transform-lookup type, `+100`
+is luminance matching and `+1000` selects the V5 sub-profile.
+
+The non-negative rule above holds in all three decodes, but it reached the two
+tools separately (#2268) -- before that a negative code whose units digit was
+zero, such as `-10`, was accepted by them and produced the same output as its
+positive twin.
+
+The sign rule is the only column the two tools are known to share. `iccBenchApply`
+discards the hundreds column rather than reading it as a luminance request, and
+passes a tens digit of `4` straight through as `icXformLutBPC` instead of mapping
+it to a black-point-compensation hint -- so `iccBenchApply <profile> 40` fails with
+`Invalid Look-Up Table type` where `iccApplyToLink <profile> 40` succeeds. See
+<a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/Tools/CmdLine/IccBenchApply/Readme.md">Tools/CmdLine/IccBenchApply/Readme.md</a>.
+
 The over-black / over-gray flags only affect chains that include a v5
 NamedColor profile. JSON callers prefer the `transform` field values,
 which combine an output-side stem (`named` / `namedColorimetric` /
 `namedSpectral` / `namedDevice`) with an overprint suffix
 (`OnBlack` / `OnGray`, only meaningful on the spectral path) - see
 [`docs/icc-connect-config.schema.json`](icc-connect-config.schema.json)
-and [`Tools/CmdLine/IccApplyNamedCmm/Readme.md`](../Tools/CmdLine/IccApplyNamedCmm/Readme.md).
+and <a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/Tools/CmdLine/IccApplyNamedCmm/Readme.md">Tools/CmdLine/IccApplyNamedCmm/Readme.md</a>.
 
 Tool-specific details remain in each `Tools/CmdLine/*/Readme.md` file.
 
@@ -115,7 +167,7 @@ harness because a crashing process cannot reliably emit its own final JSON.
 
 ```sh
 iccDumpProfile --qa-flags --evidence-json --diag -v 100 profile.icc
-iccPawgReport --qa-flags --evidence-json profile.icc
+iccPawgReport --qa-flags --evidence-json Testing/sRGB_v4_ICC_preference.icc
 iccApplyNamedCmm --evidence-json -cfg apply-config-with-dstFile.json
 iccTiffDump --evidence-json image.tif extracted.icc
 ```

@@ -27,14 +27,6 @@ env:
   TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
 
 on:
-  push:
-    branches: [master]
-    paths:
-      - '.github/scripts/sanitize-sed.sh'
-      - '.github/scripts/sanitize.ps1'
-      - '.github/tests/**'
-      - '.github/workflows/ci-sanitizer-tests.yml'
-
   pull_request:
     branches: [master]
     paths:
@@ -49,6 +41,7 @@ concurrency:
 
 jobs:
   bash-tests:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Bash Sanitizer Tests
     runs-on: ubuntu-latest
 
@@ -63,9 +56,9 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       # preflight: allow-pr-script-execution reason=sanitizer-under-test
       - name: Verify sanitize-sed.sh exists
@@ -74,6 +67,8 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           if [ ! -r .github/scripts/sanitize-sed.sh ]; then
             echo "ERROR: sanitize-sed.sh not found" >&2
             exit 1
@@ -88,6 +83,8 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           bash .github/tests/test_sanitization.sh
 
       # preflight: allow-pr-script-execution reason=sanitizer-under-test
@@ -97,6 +94,8 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           bash .github/tests/test-xss-signatures.sh
 
       # preflight: allow-pr-script-execution reason=sanitizer-under-test
@@ -106,6 +105,8 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           bash .github/tests/test-xss-extended.sh
 
       # preflight: allow-pr-script-execution reason=sanitizer-under-test
@@ -122,6 +123,8 @@ jobs:
           SIMULATED_HEAD_REF_HEX: "666561747572652ff09fa496f09fa69e2d68696464656e2d6368617273"
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           source .github/scripts/sanitize-sed.sh
           SIMULATED_HEAD_REF="$(printf '%s' "${SIMULATED_HEAD_REF_HEX}" | xxd -r -p)"
 
@@ -197,6 +200,8 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           if [ ! -r "$TRUSTED_SCRIPTS/sanitize-sed.sh" ]; then
             echo "sanitize-sed.sh missing - cannot generate summary" >&2
             exit 0
@@ -226,6 +231,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
   powershell-tests:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: PowerShell Sanitizer Tests
     runs-on: windows-2025-vs2026
 

@@ -36,11 +36,12 @@ development headers when the published image does not already contain them,
 puts the freshly built AFL++ checkout first in `PATH`, and builds iccDEV with
 `afl-clang-fast`.
 
-The regression image keeps the packaged `afl-clang-fast` wrapper usable for
-short local smoke checks by installing its matching compiler runtime. For CI,
-use the rebuilt wrapper path and explicitly probe it against the same LLVM
-major version as `clang-22`. Known-good AFL wrapper checks compile both C and
-C++ probes with:
+The unified image keeps the packaged `afl-clang-fast` wrapper usable for short
+local smoke checks. Its packaged LLVM plugin targets Clang 21, so use
+`AFL_CC=clang-21` and `AFL_CXX=clang++-21` for that path. The AFL smoke workflow
+rebuilds AFL++ against Clang 22; use the rebuilt wrapper path and explicitly
+probe it with Clang 22. Known-good rebuilt-wrapper checks compile both C and C++
+probes with:
 
 ```bash
 AFL_PATH=/path/to/AFLplusplus AFL_CC=clang-22 AFL_CXX=clang++-22 \
@@ -104,7 +105,7 @@ AFL patches locally before configuring iccDEV with:
 ```
 
 The default AFL patch directory is `.github/ci/fuzz-patches/afl`. CFL uses the
-parallel `.github/ci/fuzz-patches/cfl` stack through `cfl/build.sh --patches`.
+parallel `.github/ci/fuzz-patches/cfl` stack through `.github/ci/cfl/build.sh --patches`.
 Run `.github/scripts/check-fuzz-patches.sh` before committing patch-stack
 edits; it validates both stacks with `git apply --check` from a fresh temporary
 clone.
@@ -182,11 +183,11 @@ cmake --build build-clang-normal --target iccApplyNamedCmm -j"$(nproc)"
 ```
 
 For Docker parity with CI, mount the checkout and run the same smoke checks in
-the regression image:
+the unified image:
 
 ```bash
 docker run --rm -v "$PWD":/work -w /work \
-  ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master \
+  ghcr.io/internationalcolorconsortium/iccdev:latest \
   bash -lc '
     CC=gcc CXX=g++ cmake -S Build/Cmake -B /tmp/iccdev-gcc-normal \
       -DENABLE_TOOLS=ON -DENABLE_TESTS=OFF -DENABLE_IMAGE_TOOLS=OFF \
@@ -206,10 +207,10 @@ target, and replay a representative input. Keep the removal only when the report
 does not return or when the returned report now has a project-owned fix.
 
 Local container bootstrap check, useful before changing the workflow or the
-regression image:
+unified image:
 
 ```bash
-docker run --rm --user 0 ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master bash -lc '
+docker run --rm --user 0 ghcr.io/internationalcolorconsortium/iccdev:latest bash -lc '
 set -euo pipefail
 apt-get -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 update -qq
 apt-get install -y -qq --no-install-recommends llvm-22-dev zlib1g-dev >/tmp/apt-install.log
@@ -263,11 +264,11 @@ The workflow follows the repository workflow-governance model:
 
 ## CFL Core Smoke
 
-The matching CFL smoke entry point is `cfl/build.sh` and the manual
+The matching CFL smoke entry point is `.github/ci/cfl/build.sh` and the manual
 `ci-cfl-smoke` workflow:
 
 ```bash
-cfl/build.sh --seconds 30
+.github/ci/cfl/build.sh --seconds 30
 
 gh workflow run ci-cfl-smoke.yml \
   -f cfl_targets=dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize \

@@ -69,10 +69,13 @@ target_compile_options(target PRIVATE
 # MSVC differences:
 - vcpkg handles all dependencies (manifest mode)
 - No LD_LIBRARY_PATH -> DLLs must be in PATH or same directory
+- Local MATLAB reproductions use PowerShell and the repo\msvc build root;
+  use MATLAB setenv for current-process variables, never shell export
 - Windows CTest wrappers add build-tree, vcpkg, compiler, and MinGW runtime
   directories from CMakeCache; raw executable runs still need an explicit PATH
 - PowerShell sanitizer: .github/scripts/sanitize.ps1
-- Line endings: CRLF in bat scripts, LF in sh scripts
+- Line endings: CRLF in PowerShell, bat, and cmd scripts; LF in docs, prompts,
+  skills, CMake, YAML/JSON, Dockerfiles, and Unix scripts
 - Path separators: backslash in build output
 ```
 

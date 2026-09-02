@@ -26,7 +26,9 @@ for i = 1:numel(candidates)
 end
 if isempty(profilePath)
   error('iccdev:exampleProfileNotFound', ...
-    'No bundled display profile found. Run Testing/CreateAllProfiles.sh first.');
+    ['No bundled display profile found. On Windows, run ' ...
+     './CreateAllProfiles.bat from Testing in PowerShell; on Unix, run ' ...
+     './CreateAllProfiles.sh from Testing.']);
 end
 
 fprintf('=== iccdev MATLAB Example: Read Profile ===\n\n');
@@ -49,7 +51,11 @@ fprintf('Illuminant:   X=%.4f Y=%.4f Z=%.4f\n', ...
 fprintf('Date:         %04d-%02d-%02d %02d:%02d:%02d\n', ...
   hdr.dateYear, hdr.dateMonth, hdr.dateDay, ...
   hdr.dateHours, hdr.dateMinutes, hdr.dateSeconds);
-fprintf('Profile ID:   %s\n', sprintf('%02x', hdr.profileId));
+if all(hdr.profileId == 0)
+  fprintf('Profile ID:   (not calculated)\n');
+else
+  fprintf('Profile ID:   %s\n', sprintf('%02x', hdr.profileId));
+end
 
 p.close();
 fprintf('\nDone.\n');

@@ -4,7 +4,7 @@
 # including IccProfLib, IccXML, IccJSON/IccLibJSON, IccConnect/IccLibConnect,
 # command-line tools such as IccPawgReport and IccProfileVisualize, Winnt tools
 # such as IccIisIsapi and its OpenAPI contract, the hello-iccdev example app
-# source, and Testing docs.
+# source, and developer documentation.
 # Visual aids include interactive SVG call/caller graphs, class hierarchy,
 # collaboration diagrams, include graphs, directory graphs, treeview navigation,
 # client-side search, and source browsing.
@@ -15,8 +15,7 @@ PROJECT_BRIEF          = "ICC Color Profile Library - ProfLib, XML, JSON, Connec
 OUTPUT_DIRECTORY       = docs/generated
 HTML_OUTPUT            = html
 
-INPUT                  = README.md \
-                         IccProfLib \
+INPUT                  = IccProfLib \
                          IccXML/IccLibXML \
                          IccXML/CmdLine \
                          IccJSON/IccLibJSON \
@@ -27,16 +26,23 @@ INPUT                  = README.md \
                          Tools/Winnt/IccIisIsapi/iis-isapi.openapi.yaml \
                          Tools/wxWidget \
                          examples/hello-iccdev/hello-iccdev.cpp \
+                         examples/c-validation-dlopen/main.c \
                          docs \
-                         .github/ci/quality-assurance/scripts \
-                         Testing/Readme.md
-USE_MDFILE_AS_MAINPAGE = README.md
+                         .github/ci/doxygen/curated-navigation.dox \
+                         .github/ci/quality-assurance/scripts
+USE_MDFILE_AS_MAINPAGE =
 FILE_PATTERNS          = *.h *.h.in *.hpp *.c *.cc *.cpp *.cxx *.md *.dox *.dot *.sh *.yaml *.yml
 RECURSIVE              = YES
 EXCLUDE                = docs/generated \
+                         docs/index.md \
+                         docs/documentation.md \
+                         docs/libraries.md \
+                         docs/tools.md \
+                         docs/testing.md \
+                         docs/superpowers \
+                         docs/governance/incidents \
                          docs/Testing/test-json-tools.sh \
                          IccProfLib/registry/README.md \
-                         Tools/Winnt/IccDEVCmm/README.md \
                          Build \
                          .git
 EXCLUDE_PATTERNS       = */Build/* \

@@ -103,6 +103,28 @@ namespace iccDEV {
     #define ICCPROFLIB_EXTERN extern
   #endif
 
+  // Exported global *data* needs its own annotation (#2154, from #1888).
+  //
+  // A shared MSVC build exports through CMake's WINDOWS_EXPORT_ALL_SYMBOLS
+  // rather than __declspec, because ICCPROFLIB_API annotation is incomplete
+  // (~308 partial uses across 43 headers) -- see Build/Cmake/IccProfLib/
+  // CMakeLists.txt and the #764 decision recorded there. That auto-exports
+  // functions but NOT data, so a consumer referencing one of the eight
+  // exported globals emitted a direct data reference with no __imp_
+  // indirection and failed to link (LNK2019/LNK2001) while every function in
+  // the same header thunked normally.
+  //
+  // ICCPROFLIB_DATA_API is deliberately separate from ICCPROFLIB_API so the
+  // data symbols can carry real dllexport/dllimport without flipping those 308
+  // annotations, which would change how every class and function is exported.
+  #if defined(ICCPROFLIBDLL_EXPORTS) || defined(ICCPROFLIBDLL_DATA_EXPORTS)
+    #define ICCPROFLIB_DATA_API __declspec(dllexport)
+  #elif defined(ICCPROFLIBDLL_IMPORTS) || defined(ICCPROFLIBDLL_DATA_IMPORTS)
+    #define ICCPROFLIB_DATA_API __declspec(dllimport)
+  #else //static lib, or a consumer of one
+    #define ICCPROFLIB_DATA_API
+  #endif
+
   //Since msvc doesn't support cbrtf use pow instead
   #define ICC_CBRTF(v) pow((double)(v), 1.0/3.0)
 
@@ -150,6 +172,14 @@ namespace iccDEV {
   #else
     #define ICCPROFLIB_API
     #define ICCPROFLIB_EXTERN extern
+  #endif
+
+  // See the MSVC arm above. There is no import-library model here, so data and
+  // functions link the same way and this only needs to track ICCPROFLIB_API.
+  #if defined(ICCPROFLIBDLL_EXPORTS) || defined(ICCPROFLIBDLL_DATA_EXPORTS)
+    #define ICCPROFLIB_DATA_API __attribute__((visibility("default")))
+  #else
+    #define ICCPROFLIB_DATA_API
   #endif
   #define stricmp strcasecmp
   #define strnicmp strncasecmp

@@ -1,5 +1,7 @@
 function run_local_qa()
 %RUN_LOCAL_QA Run the iccDEV MATLAB regression suite and local smoke tests.
+%   On Windows, ICCDEV_BUILD_DIR should name the repository's msvc build root,
+%   which must contain bin\Release\iccPawgReport.exe.
 %
 % Copyright (c) International Color Consortium.
 % BSD 3-Clause License. See LICENSE.md for details.
@@ -28,7 +30,8 @@ function run_local_qa()
       fullfile(repo_root, 'Testing'));
   end
 
-  test_iccdev();
+  test_summary = test_iccdev();
+  test_pawg_q1();
 
   profile = iccdev.IccProfile(profile_path);
   header = profile.header();
@@ -64,5 +67,11 @@ function run_local_qa()
   assert(missing_profile_failed, ...
     'Opening a missing profile should raise an error.');
 
-  fprintf('Local MATLAB QA passed for %s\n', repo_root);
+  if test_summary.skipped > 0
+    fprintf(['Local MATLAB QA completed with reduced coverage for %s: ' ...
+      '%d passed, %d skipped\n'], repo_root, ...
+      test_summary.passed, test_summary.skipped);
+  else
+    fprintf('Local MATLAB QA passed with full coverage for %s\n', repo_root);
+  end
 end

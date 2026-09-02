@@ -181,6 +181,13 @@ class TestServerImport:
         assert mcp is not None
         assert callable(main)
 
+    def test_fastmcp_settings_are_resolved(self):
+        from iccdev_mcp.server import mcp
+        from mcp.server.fastmcp.server import Settings as FastMCPSettings
+
+        assert mcp is not None
+        assert FastMCPSettings.__pydantic_complete__
+
     def test_server_has_tools(self):
         from iccdev_mcp import __version__
         from iccdev_mcp.server import mcp
@@ -254,6 +261,16 @@ class TestNativeTools:
         assert result["file_size"] > 0
         assert all(0x20 <= ord(ch) <= 0x7E for ch in result["color_space_display"])
 
+    def test_validate_profile(self):
+        import iccdev
+        from iccdev_mcp.server import validate_profile
+        if not iccdev.native_validation_available():
+            pytest.skip("Native C validation ABI is not available")
+        result = validate_profile(_test_profile)
+        assert result["status_name"] in {"OK", "WARNING"}
+        assert result["status"] in {0, 1}
+        assert isinstance(result["report"], str)
+
     def test_printable_signature_accepts_int_and_str(self):
         from iccdev_mcp.server import _printable_signature
         assert _printable_signature(0x52474220) == "RGB "
@@ -285,7 +302,14 @@ class TestNativeTools:
         assert result["status"] == "ok"
         assert result["version"] == __version__
         assert result["python_api"]["available"] is True
-        assert result["python_api"]["tools"] == 6
+        assert result["python_api"]["tools"] == len(
+            result["python_api"]["available_tools"]
+        )
+        assert result["total_tools"] == (
+            len(result["python_api"]["available_tools"])
+            + len(result["cli_tools"]["available"])
+            + len(result["service_tools"])
+        )
 
 
 @pytest.mark.skipif(not HAS_ICCDEV, reason="iccdev not installed")

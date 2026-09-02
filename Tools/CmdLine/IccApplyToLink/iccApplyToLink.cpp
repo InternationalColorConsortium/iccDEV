@@ -467,10 +467,25 @@ public:
         pCurve0->GetSamples()[0] = 0;
         pCurve0->GetSamples()[1] = 1;
 
+        // Every input channel samples the same [range_min, range_max] domain, so
+        // one curve is shared across all of them -- CIccMpeCurveSet is built for
+        // that: SetCurve() only deletes the outgoing pointer when no other slot
+        // still aliases it, ~CIccMpeCurveSet()/SetSize(0) dedupe before deleting,
+        // and Write() emits the curve once with every position-table entry
+        // pointing at it.
+        //
+        // The loop counter was unused: it wrote slot 1 nSrcSamples-1 times and
+        // left slots 2..n-1 NULL (#2341). Write() skips a NULL slot instead of
+        // failing, so those channels kept the calloc'd {offset 0, size 0}
+        // position entry and the writer still reported success -- an RGB link
+        // was emitted, and rejected on read with "AToB0Tag - Tag has invalid
+        // structure!". A 1-channel source never enters the loop and a 2-channel
+        // source has slot 1 as its only iteration, so both were already correct
+        // -- which is why this survived since 889db62b.
         pCurves->SetCurve(0, pCurve0);
 
         for (icUInt16Number i = 1; i < nSrcSamples; i++) {
-          pCurves->SetCurve(1, pCurve0);
+          pCurves->SetCurve(i, pCurve0);
         }
 
         pTag->Attach(pCurves);
@@ -572,14 +587,15 @@ public:
       for (icUInt16Number i = 0; i < nDstSamples; i++) {
         pCurves[i] = new CIccTagCurve();
       }
-      // CIccMBB::NewCLUT() calls CIccCLUT::Init() but discards its result and
-      // returns the CLUT either way, so a grid Init refused arrived here as a
+      // CIccMBB::NewCLUT() used to call CIccCLUT::Init() and return the CLUT
+      // whether or not it succeeded, so a grid Init refused arrived here as a
       // CLUT with m_pData NULL and m_nNumPoints already committed: GetData(0)
       // gave a NULL write target that setNextNode()'s countdown guard did not
-      // stop, and the first node memcpy'd to address zero (#1781). Build and
-      // initialize the CLUT explicitly -- as the V5 branch above already does
-      // -- so Init()'s result is visible here, then hand it over with
-      // SetCLUT(), which is what NewCLUT() would have done internally.
+      // stop, and the first node memcpy'd to address zero (#1781). NewCLUT() now
+      // returns NULL in that case, but this branch keeps building and
+      // initializing the CLUT explicitly -- as the V5 branch above already does
+      // -- because that is what lets the failure be reported with the grid size
+      // and channel counts that caused it, rather than as a bare NULL.
       CIccCLUT* pCLUT = new CIccCLUT((icUInt8Number)nSrcSamples, (icUInt8Number)nDstSamples);
       if (!pCLUT->Init(m_grid)) {
         printf("Unable to allocate a %d-point CLUT for %u source and %u destination channels\n",
@@ -829,8 +845,7 @@ static bool ParseIntArg(const char *arg, int minValue, int maxValue, int &value)
   parsed = strtol(arg, &end, 10);
 
   if (errno == ERANGE || end == arg || *end != '\0' ||
-      parsed < minValue || parsed > maxValue ||
-      parsed < INT_MIN || parsed > INT_MAX) {
+      parsed < minValue || parsed > maxValue) {
     return false;
   }
 
@@ -1051,6 +1066,20 @@ int main(int argc, icChar* argv[])
         releasePccList(pccList);
         return 1;
       }
+      // A negative code is not a documented form, but it was accepted whenever
+      // the units digit was zero: nType below takes abs() while the intent digit
+      // does not, and -110 % 10 is 0, so "-110" decoded exactly like "110" and
+      // wrote a byte-identical device link.  The range test further down cannot
+      // see it -- by the time it runs the value has already lost the sign, which
+      // is why only "-3" and other non-zero units digits were ever refused.
+      // Same gap and same remedy as CIccCfgProfileSequence::fromArgs()
+      // (IccCmmConfig.cpp, #2190); refused here so the two tools agree (#2268).
+      if (nIntent < 0) {
+        printf("Invalid rendering intent '%s': a negative intent code is not a"
+               " valid form\n", argv[nCount+1]);
+        releasePccList(pccList);
+        return 1;
+      }
       bUseSubProfile = (nIntent / 1000) > 0;
       nIntent = nIntent % 1000;
       nLuminance = nIntent / 100;
@@ -1074,7 +1103,14 @@ int main(int argc, icChar* argv[])
         break;
       }
       
-      if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric) {
+      // Only the upper bound is testable here.  nIntent is "value % 10" of a
+      // value the guard above has already refused if negative, so it is 0..9 --
+      // icPerceptual is 0, and a "nIntent < icPerceptual" term would be
+      // constantly false.  That is the same dead comparison CodeQL raised as
+      // #2357/#2358/#2359 against IccCmmConfig.cpp once #2261 added the sign
+      // guard there, removed in #2267; adding the guard here without removing
+      // this term would file the alert a second time (#2268).
+      if (nIntent > (int)icAbsoluteColorimetric) {
         printf("Invalid rendering intent '%s': decoded intent is out of range\n", argv[nCount+1]);
         releasePccList(pccList);
         return 1;
@@ -1111,7 +1147,11 @@ int main(int argc, icChar* argv[])
 
       //Read profile from path and add it to theCmm
       CIccProfile* pXformProfile = ReadIccProfile(argv[nCount], bUseSubProfile); //We need all tags in profile for providing information to link
-      stat = theCmm.AddXform(pXformProfile, nIntent<0 ? icUnknownIntent : (icRenderingIntent)nIntent, nInterp, pPccProfile,
+      // No negative test here: nIntent reached this point through the sign guard
+      // and the range check above, so it is 0..3 and the icUnknownIntent arm
+      // this used to carry could never be taken.  Kept as a plain cast rather
+      // than a dead ternary for the reason given at the range check (#2268).
+      stat = theCmm.AddXform(pXformProfile, (icRenderingIntent)nIntent, nInterp, pPccProfile,
                               (icXformLutType)nType, bUseD2BxB2DxTags, &Hint);
       if (stat) {
         // AddXform can fail for reasons that have nothing to do with the

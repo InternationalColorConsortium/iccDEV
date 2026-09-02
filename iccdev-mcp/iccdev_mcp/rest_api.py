@@ -1,6 +1,6 @@
 """REST API layer for iccdev-mcp.
 
-Mirrors all 25 MCP tools as HTTP endpoints using Starlette.
+Mirrors all 26 MCP tools as HTTP endpoints using Starlette.
 Each endpoint delegates to the same function backing the MCP tool,
 ensuring MCP and REST always return identical results.
 
@@ -306,7 +306,7 @@ _REST_UI_HTML = r"""<!DOCTYPE html>
 'use strict';
 const TOOL_GROUPS = [
   { title: 'Status', tools: ['health', 'tools', 'profiles', 'enum_spaces'] },
-  { title: 'Python native', tools: ['inspect_header', 'profile_summary', 'sig_to_str', 'color_transform', 'roundtrip_delta'] },
+  { title: 'Python native', tools: ['inspect_header', 'profile_summary', 'validate_profile', 'sig_to_str', 'color_transform', 'roundtrip_delta'] },
   { title: 'ICC profile CLI', tools: ['dump_profile', 'pawg_report', 'to_xml', 'to_json', 'roundtrip'] },
   { title: 'Image and conversion CLI', tools: ['tiff_dump', 'jpeg_dump', 'png_dump', 'from_xml', 'from_json', 'from_cube'] },
   { title: 'Advanced CLI', tools: ['apply_profiles', 'apply_named_cmm', 'create_link', 'v5_to_v4', 'spec_sep', 'apply_search'] },
@@ -314,11 +314,12 @@ const TOOL_GROUPS = [
 ];
 const TOOLS = {
   health: { label: 'Health', method: 'GET', path: '/api/health', desc: 'Server status, Python binding availability, and CLI discovery.', fields: [] },
-  tools: { label: 'Tool discovery', method: 'GET', path: '/api/tools', desc: 'List the 25 MCP tools plus REST-only utility routes exposed by iccdev-mcp.', fields: [] },
+  tools: { label: 'Tool discovery', method: 'GET', path: '/api/tools', desc: 'List the 26 MCP tools plus REST-only utility routes exposed by iccdev-mcp.', fields: [] },
   profiles: { label: 'Profile browser', method: 'GET', path: '/api/profiles', desc: 'List bundled or configured ICC profiles by Testing/ directory and filename.', fields: [{ name: 'directory', label: 'Directory', type: 'profile_directory', kind: 'profile' }, { name: 'filename', label: 'Filename', type: 'testing_file', kind: 'profile', directoryField: 'directory' }] },
   enum_spaces: { label: 'Enum color spaces', method: 'GET', path: '/api/enum-spaces', desc: 'List Python ColorSpace enum values.', fields: [] },
   inspect_header: { label: 'Inspect header', method: 'GET', path: '/api/inspect-header', desc: 'Read ICC profile header fields with computed names.', fields: [{ name: 'path', label: 'ICC profile', type: 'profile', required: true }] },
   profile_summary: { label: 'Profile summary', method: 'GET', path: '/api/profile-summary', desc: 'Compact Python-native profile classification and routing metadata.', fields: [{ name: 'path', label: 'ICC profile', type: 'profile', required: true }] },
+  validate_profile: { label: 'Validate profile', method: 'GET', path: '/api/validate-profile', desc: 'Validate an ICC profile in memory and return its native status and report.', fields: [{ name: 'path', label: 'ICC profile', type: 'profile', required: true }] },
   sig_to_str: { label: 'Signature to string', method: 'GET', path: '/api/sig-to-str', desc: 'Decode a 32-bit ICC signature integer.', fields: [{ name: 'sig', label: 'Signature integer', type: 'number', value: '1380401696', required: true }] },
   color_transform: { label: 'Color transform', method: 'POST', path: '/api/color-transform', desc: 'Apply a Python-native CMM transform between compatible RGB display profiles. Overprint, high-channel, named-color, and calculator test profiles may reject the default 3-channel pixel input with BadXform.', fields: [{ name: 'src_profile', label: 'Source profile', type: 'profile', required: true, prefer: 'rgb_transform' }, { name: 'dst_profile', label: 'Destination profile', type: 'profile', required: true, prefer: 'rgb_transform' }, { name: 'pixels', label: 'Pixels JSON', type: 'json', value: '[[0.5,0.4,0.3]]', required: true }, { name: 'rendering_intent', label: 'Rendering intent', type: 'select', value: 'perceptual', options: ['perceptual', 'relative', 'saturation', 'absolute'] }, { name: 'interpolation', label: 'Interpolation', type: 'select', value: 'tetrahedral', options: ['tetrahedral', 'linear'] }] },
   roundtrip_delta: { label: 'Roundtrip delta', method: 'POST', path: '/api/roundtrip-delta', desc: 'Measure Python-native round-trip delta for profile pixels.', fields: [{ name: 'profile', label: 'ICC profile', type: 'profile', required: true }, { name: 'pixels', label: 'Pixels JSON', type: 'json', value: '[[0.5,0.4,0.3]]', required: true }, { name: 'rendering_intent', label: 'Rendering intent', type: 'select', value: 'perceptual', options: ['perceptual', 'relative', 'saturation', 'absolute'] }] },
@@ -820,6 +821,8 @@ API_TOOLS = [
      "description": "Profile header fields as JSON", "type": "native"},
     {"name": "profile_summary", "method": "GET", "path": "/api/profile-summary",
      "description": "Compact profile classification metadata", "type": "native"},
+    {"name": "validate_profile", "method": "GET", "path": "/api/validate-profile",
+     "description": "In-memory profile validation status and report", "type": "native"},
     {"name": "color_transform", "method": "POST", "path": "/api/color-transform",
      "description": "Apply color transform between profiles", "type": "native"},
     {"name": "roundtrip_delta", "method": "POST", "path": "/api/roundtrip-delta",
@@ -883,16 +886,23 @@ async def api_health(request: Request) -> JSONResponse:
     tools_info = cli_tools.discover_tools()
 
     try:
-        import iccdev  # noqa: F401
+        import iccdev
         python_api = True
+        validation_api = getattr(
+            iccdev,
+            "native_validation_available",
+            lambda: hasattr(iccdev, "validate_profile_file"),
+        )()
     except ImportError:
         python_api = False
+        validation_api = False
 
     return _json({
         "ok": True,
         "server": "iccdev-mcp",
         "version": __version__,
         "python_api_available": python_api,
+        "validation_api_available": validation_api,
         "cli_tools": {
             "available": tools_info["available"],
             "missing": tools_info["missing"],
@@ -953,6 +963,27 @@ async def api_profile_summary(request: Request) -> JSONResponse:
         return _error(f"iccdev Python API not available: {e}", 503)
     except ValueError as e:
         return _error(str(e), 400)
+    except Exception as e:
+        return _error(str(e), 500)
+
+
+async def api_validate_profile(request: Request) -> JSONResponse:
+    """GET /api/validate-profile?path= -- Native profile validation."""
+    path = request.query_params.get("path", "")
+    if not path:
+        return _error("Missing required parameter: path")
+
+    try:
+        from iccdev_mcp.server import validate_profile
+        return _json(validate_profile(path))
+    except ImportError:
+        return _error("iccdev Python package not installed", 503)
+    except FileNotFoundError as e:
+        return _error(str(e), 404)
+    except ValueError as e:
+        return _error(str(e), 400)
+    except RuntimeError as e:
+        return _error(str(e), 503)
     except Exception as e:
         return _error(str(e), 500)
 
@@ -1626,6 +1657,7 @@ def _build_routes() -> list:
         # Python-native tools
         Route("/api/inspect-header", api_inspect_header, methods=["GET"]),
         Route("/api/profile-summary", api_profile_summary, methods=["GET"]),
+        Route("/api/validate-profile", api_validate_profile, methods=["GET"]),
         Route("/api/color-transform", api_color_transform, methods=["POST"]),
         Route("/api/roundtrip-delta", api_roundtrip_delta, methods=["POST"]),
         Route("/api/sig-to-str", api_sig_to_str, methods=["GET"]),

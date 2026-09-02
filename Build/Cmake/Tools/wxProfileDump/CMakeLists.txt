@@ -26,13 +26,12 @@ get_filename_component(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../.." AB
 set(SRC_PATH "${PROJECT_ROOT}")
 set(SOURCES ${SRC_PATH}/Tools/wxWidget/wxProfileDump/wxProfileDump.cpp)
 set(TARGET_NAME iccDumpProfileGui)
+# Links ${TARGET_LIB_ICCPROFLIB} on every platform, including Windows shared
+# builds.  Until #2219 this tool linked IccProfLib2-static there: it references
+# the exported data symbols icMsgValidateWarning / icMsgValidateNonCompliant,
+# which WINDOWS_EXPORT_ALL_SYMBOLS cannot export.  Those eight globals now carry
+# ICCPROFLIB_DATA_API dllexport/dllimport, so the fallback is gone (#2154).
 set(WX_LINK_LIB ${TARGET_LIB_ICCPROFLIB})
-
-IF(WIN32 AND ENABLE_SHARED_LIBS AND TARGET IccProfLib2-static)
-  # wxProfileDump references exported data symbols (icMsgValidateWarning,
-  # icMsgValidateNonCompliant) that WINDOWS_EXPORT_ALL_SYMBOLS cannot export.
-  SET(WX_LINK_LIB IccProfLib2-static)
-ENDIF()
 
 # Log configuration
 message(STATUS "SRC_PATH: ${SRC_PATH}")

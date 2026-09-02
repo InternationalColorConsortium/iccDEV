@@ -90,6 +90,15 @@ Copyright:  (c) see Software License
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
+#ifdef ICC_AVX2_CLUT_DEBUG
+  #include <chrono>
+#endif
+#ifdef ICC_PERF_MONITORING
+  #include <atomic>
+  #include <chrono>
+  #include <cstdlib>
+  #include <cstring>
+#endif
 
 
 #ifndef icSigSpectralPcsData
@@ -237,9 +246,232 @@ inline bool IsSpaceSpectralPCS(icColorSpaceSignature sig)
   #define ICC_LOG_SAFE_VAL(name, idx, basePtr, limit) ((void)0)
 #endif
 
+#ifdef ICC_PERF_MONITORING
+enum IccPerfClutPath {
+  icPerfClutScalar,
+  icPerfClutSse2,
+  icPerfClutAvx2,
+  icPerfClutAvx512,
+  icPerfClutPathCount
+};
 
-///////////////////////////////////////////////////////////////////////////////
-// FUNCTION: ColorSpaceSignatureToStr
+struct IccPerfStats {
+  std::atomic<unsigned long long> clutCalls[icPerfClutPathCount] = {};
+  std::atomic<unsigned long long> clutOutputChannels[17] = {};
+  std::atomic<unsigned long long> clutElapsedNanoseconds = {};
+  std::atomic<unsigned long long> threadedCalls = {};
+  std::atomic<unsigned long long> threadedPixels = {};
+  std::atomic<unsigned long long> threadedWorkerStrips = {};
+  std::atomic<unsigned long long> threadedActiveWorkers = {};
+};
+
+inline IccPerfStats g_iccPerfStats;
+
+inline bool IccPerfMonitoringEnabled()
+{
+  static const bool enabled = []() {
+    const char *value = std::getenv("ICC_PERF_STATS_FILE");
+    return value && value[0] && std::strcmp(value, "0");
+  }();
+  return enabled;
+}
+
+inline void IccPerfWriteReport()
+{
+  const char *path = std::getenv("ICC_PERF_STATS_FILE");
+  if (!path || !path[0])
+    return;
+
+  FILE *stream = std::fopen(path, "a");
+  if (!stream) {
+    ICC_LOG_WARNING("Unable to write ICC performance report: %s", path);
+    return;
+  }
+
+  std::fprintf(stream, "format=iccdev-perf-v1\n");
+  std::fprintf(stream, "clut_elapsed_ns=%llu\n",
+               g_iccPerfStats.clutElapsedNanoseconds.load(std::memory_order_relaxed));
+  for (int pathIndex = 0; pathIndex < icPerfClutPathCount; pathIndex++) {
+    static const char *const pathNames[] = {"scalar", "sse2", "avx2", "avx512"};
+    std::fprintf(stream, "clut_calls_%s=%llu\n", pathNames[pathIndex],
+                 g_iccPerfStats.clutCalls[pathIndex].load(std::memory_order_relaxed));
+  }
+  for (int outputChannels = 0; outputChannels <= 16; outputChannels++) {
+    const unsigned long long calls =
+      g_iccPerfStats.clutOutputChannels[outputChannels].load(std::memory_order_relaxed);
+    if (calls)
+      std::fprintf(stream, "clut_calls_outputs_%d=%llu\n", outputChannels, calls);
+  }
+  std::fprintf(stream, "threaded_calls=%llu\n",
+               g_iccPerfStats.threadedCalls.load(std::memory_order_relaxed));
+  std::fprintf(stream, "threaded_pixels=%llu\n",
+               g_iccPerfStats.threadedPixels.load(std::memory_order_relaxed));
+  std::fprintf(stream, "threaded_worker_strips=%llu\n",
+               g_iccPerfStats.threadedWorkerStrips.load(std::memory_order_relaxed));
+  std::fprintf(stream, "threaded_active_workers=%llu\n",
+               g_iccPerfStats.threadedActiveWorkers.load(std::memory_order_relaxed));
+  std::fclose(stream);
+}
+
+class IccPerfReportWriter {
+public:
+  ~IccPerfReportWriter()
+  {
+    IccPerfWriteReport();
+  }
+};
+
+inline void IccPerfEnsureReportWriter()
+{
+  static IccPerfReportWriter writer;
+  (void)writer;
+}
+
+class IccPerfClutScope {
+public:
+  explicit IccPerfClutScope(int outputChannels)
+    : m_outputChannels(outputChannels), m_path(icPerfClutScalar),
+      m_enabled(IccPerfMonitoringEnabled())
+  {
+    if (m_enabled) {
+      IccPerfEnsureReportWriter();
+      m_start = std::chrono::steady_clock::now();
+    }
+  }
+
+  ~IccPerfClutScope()
+  {
+    if (!m_enabled)
+      return;
+
+    const unsigned long long elapsedNanoseconds =
+      static_cast<unsigned long long>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now() - m_start).count());
+    g_iccPerfStats.clutCalls[m_path].fetch_add(1, std::memory_order_relaxed);
+    if (m_outputChannels >= 0 && m_outputChannels <= 16)
+      g_iccPerfStats.clutOutputChannels[m_outputChannels].fetch_add(
+        1, std::memory_order_relaxed);
+    g_iccPerfStats.clutElapsedNanoseconds.fetch_add(
+      elapsedNanoseconds, std::memory_order_relaxed);
+  }
+
+  void SetPath(IccPerfClutPath path)
+  {
+    m_path = path;
+  }
+
+private:
+  int m_outputChannels;
+  IccPerfClutPath m_path;
+  bool m_enabled;
+  std::chrono::steady_clock::time_point m_start;
+};
+
+inline void IccPerfRecordThreadedCmm(icUInt32Number pixels, int activeWorkers)
+{
+  if (!IccPerfMonitoringEnabled())
+    return;
+
+  IccPerfEnsureReportWriter();
+  g_iccPerfStats.threadedCalls.fetch_add(1, std::memory_order_relaxed);
+  g_iccPerfStats.threadedPixels.fetch_add(pixels, std::memory_order_relaxed);
+  g_iccPerfStats.threadedWorkerStrips.fetch_add(
+    static_cast<unsigned long long>(activeWorkers - 1), std::memory_order_relaxed);
+  g_iccPerfStats.threadedActiveWorkers.fetch_add(
+    static_cast<unsigned long long>(activeWorkers), std::memory_order_relaxed);
+}
+
+#define ICC_PERF_CLUT_SCOPE(outputChannels) \
+  IccPerfClutScope iccPerfClutScope(outputChannels)
+#define ICC_PERF_CLUT_PATH(path) iccPerfClutScope.SetPath(path)
+#define ICC_PERF_THREADED_CMM(pixels, activeWorkers) \
+  IccPerfRecordThreadedCmm(pixels, activeWorkers)
+#else
+#define ICC_PERF_CLUT_SCOPE(outputChannels) ((void)0)
+#define ICC_PERF_CLUT_PATH(path) ((void)0)
+#define ICC_PERF_THREADED_CMM(pixels, activeWorkers) ((void)0)
+#endif
+
+  // -----------------------------------------------------------------------------
+  // AVX2 CLUT DEBUG TRACEPOINTS
+  //
+  // Define ICC_AVX2_CLUT_DEBUG to log dispatch decisions and per-kernel timing.
+  // IccTraceAvx2ClutDispatch() and IccTraceAvx2ClutKernel() are intentional
+  // source-level breakpoints for inspecting the CLUT's offsets and weights.
+  // The helpers and all call sites compile out in normal builds.
+  // -----------------------------------------------------------------------------
+
+  #ifdef ICC_AVX2_CLUT_DEBUG
+  struct IccAvx2ClutTraceData {
+    bool cpuSupportsAvx2;
+    bool selected;
+    int outputChannels;
+    const void *data;
+    const icUInt32Number *offsets;
+    const icFloatNumber *weights;
+  };
+
+  inline void IccTraceAvx2ClutDispatch(const IccAvx2ClutTraceData &trace)
+  {
+    ICC_LOG_INFO(
+      "AVX2 CLUT dispatch: selected=%d cpu=%d outputs=%d data=%p offsets=[%u,%u,%u,%u,%u,%u,%u,%u]",
+      trace.selected, trace.cpuSupportsAvx2, trace.outputChannels, trace.data,
+      trace.offsets ? trace.offsets[0] : 0, trace.offsets ? trace.offsets[1] : 0,
+      trace.offsets ? trace.offsets[2] : 0, trace.offsets ? trace.offsets[3] : 0,
+      trace.offsets ? trace.offsets[4] : 0, trace.offsets ? trace.offsets[5] : 0,
+      trace.offsets ? trace.offsets[6] : 0, trace.offsets ? trace.offsets[7] : 0);
+  }
+
+  inline void IccTraceAvx2ClutKernel(const IccAvx2ClutTraceData &trace,
+                                     long long elapsedNanoseconds)
+  {
+    const int vectorOutputs = (trace.outputChannels / 8) * 8;
+    const int maskedOutputs = trace.outputChannels - vectorOutputs;
+    ICC_LOG_INFO(
+      "AVX2 CLUT kernel: outputs=%d vector_outputs=%d masked_outputs=%d elapsed_ns=%lld weights=[%.8g,%.8g,%.8g,%.8g,%.8g,%.8g,%.8g,%.8g]",
+      trace.outputChannels, vectorOutputs, maskedOutputs,
+      elapsedNanoseconds, trace.weights[0], trace.weights[1], trace.weights[2],
+      trace.weights[3], trace.weights[4], trace.weights[5], trace.weights[6],
+      trace.weights[7]);
+  }
+
+  class IccAvx2ClutTimer {
+  public:
+    explicit IccAvx2ClutTimer(const IccAvx2ClutTraceData &trace)
+      : m_trace(trace), m_start(std::chrono::steady_clock::now())
+    {
+    }
+
+    ~IccAvx2ClutTimer()
+    {
+      const long long elapsedNanoseconds =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+          std::chrono::steady_clock::now() - m_start).count();
+      IccTraceAvx2ClutKernel(m_trace, elapsedNanoseconds);
+    }
+
+  private:
+    const IccAvx2ClutTraceData &m_trace;
+    std::chrono::steady_clock::time_point m_start;
+  };
+
+  #define ICC_AVX2_CLUT_TRACE_DISPATCH(cpuSupportsAvx2, selected, outputChannels, data, offsets, weights) \
+    do { \
+      const IccAvx2ClutTraceData trace = {cpuSupportsAvx2, selected, outputChannels, data, offsets, weights}; \
+      IccTraceAvx2ClutDispatch(trace); \
+    } while(0)
+
+  #define ICC_AVX2_CLUT_TRACE_KERNEL(outputChannels, data, offsets, weights) \
+    const IccAvx2ClutTraceData iccAvx2ClutTrace = {true, true, outputChannels, data, offsets, weights}; \
+    IccAvx2ClutTimer iccAvx2ClutTimer(iccAvx2ClutTrace)
+  #else
+  #define ICC_AVX2_CLUT_TRACE_DISPATCH(cpuSupportsAvx2, selected, outputChannels, data, offsets, weights) ((void)0)
+  #define ICC_AVX2_CLUT_TRACE_KERNEL(outputChannels, data, offsets, weights) ((void)0)
+  #endif
+
+
+  ///////////////////////////////////////////////////////////////////////////////
+  // FUNCTION: ColorSpaceSignatureToStr
 //
 // PURPOSE:
 //   Converts a 32-bit ICC color space signature (icUInt32Number) into a

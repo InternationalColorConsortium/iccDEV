@@ -1216,6 +1216,16 @@ icFloatNumber CIccSampledCurveSegment::Apply(icFloatNumber v) const
   else if (v>m_endPoint)
     v=m_endPoint;
 
+  // The isfinite guard has to stay here, unlike the two sampled curves below,
+  // because Begin() cannot establish the invariant for a segment. A sampled
+  // segment is never the first one -- Begin() refuses a null pPrevSeg, and
+  // CIccSegmentedCurve::Begin() passes null for the first -- but it can be the
+  // last, and CIccSegmentedCurve::Read() gives the last segment the
+  // icMaxFloat32Number sentinel as its end point. An infinite m_range is
+  // therefore a legitimate configuration that Begin() must not reject, and even
+  // between finite endpoints (v-m_startPoint) can overflow to infinity, leaving
+  // inf/inf == NaN. NaN survives both clamps below and makes the cast to a
+  // sample index undefined (#2347).
   icFloatNumber pos = (v-m_startPoint)/m_range * m_last;
   if (!std::isfinite(pos) || pos<0.0f)
     pos=0.0f;
@@ -1259,6 +1269,19 @@ icValidateStatus CIccSampledCurveSegment::Validate(std::string sigPath, std::str
     sReport += sSigPathName;
     sReport += " sampled curve has too few sample points.\n";
     rv = icMaxStatus(rv, icValidateCriticalError);
+  }
+  // Each endpoint is tested on its own rather than their difference, unlike the
+  // two sampled curves below. The difference is legitimately infinite here: the
+  // last segment of a segmented curve gets the icMaxFloat32Number sentinel as
+  // its end point, so any sufficiently negative breakpoint overflows the span
+  // while both endpoints remain sound wire values. What is actually malformed
+  // is a non-finite endpoint, which every comparison in Apply() then answers
+  // false and which the zero-range test below cannot see (#2347).
+  else if (!std::isfinite(m_startPoint) || !std::isfinite(m_endPoint)) {
+    sReport += icMsgValidateWarning;
+    sReport += sSigPathName;
+    sReport += " sampled curve has a non-finite end point.\n";
+    rv = icMaxStatus(rv, icValidateWarning);
   }
   else if (m_endPoint-m_startPoint == 0.0) {
     sReport += icMsgValidateWarning;
@@ -1782,8 +1805,14 @@ bool CIccSingleSampledCurve::Begin(icElemInterp /* nInterp */, CIccTagMultiProce
   if (m_nCount<2)
     return false;
 
+  // m_firstEntry and m_lastEntry come straight off the wire (Read() reads them
+  // with ReadFloat32Float, and the XML parser with atof), so either can be NaN
+  // or an infinity. NaN == 0.0 is false, so a NaN span used to pass the test
+  // below and reach Apply(), where it made the cast to a sample index undefined
+  // (#2324). isfinite() on the span covers both endpoints at once: a difference
+  // is finite only when both operands are finite and it does not overflow.
   m_range = m_lastEntry - m_firstEntry;
-  if (m_range == 0.0)
+  if (!std::isfinite(m_range) || m_range == 0.0)
     return false;
   m_last = (icFloatNumber)(m_nCount - 1);
   if (m_last == 0)
@@ -1843,8 +1872,11 @@ icFloatNumber CIccSingleSampledCurve::Apply(icFloatNumber v) const
     return m_hiSlope * v + m_hiIntercept;
   }
 
+  // No isfinite guard: v is non-NaN and inside [m_firstEntry, m_lastEntry] on
+  // this path, and Begin() refuses a zero or non-finite m_range and a zero
+  // m_last, so (v-m_firstEntry) lies in [0, m_range] and pos in [0, m_last].
   icFloatNumber pos = (v-m_firstEntry)/m_range * m_last;
-  if (!std::isfinite(pos) || pos<0.0f)
+  if (pos<0.0f)
     pos=0.0f;
   else if (pos>m_last)
     pos=m_last;
@@ -1902,7 +1934,17 @@ icValidateStatus CIccSingleSampledCurve::Validate(std::string sigPath, std::stri
     rv = icMaxStatus(rv, icValidateCriticalError);
   }
   
-  if (m_lastEntry-m_firstEntry <= 0.0) {
+  // The non-finite case is tested first and separately: NaN <= 0.0 is false, so
+  // the range test below reported a NaN domain as valid even though Begin() now
+  // refuses it (#2324). Leaving it out would have this validator call a profile
+  // clean that the CMM will not apply.
+  if (!std::isfinite(m_lastEntry-m_firstEntry)) {
+    sReport += icMsgValidateWarning;
+    sReport += sSigPathName;
+    sReport += " single sampled curve has a non-finite sample range.\r\n";
+    rv = icMaxStatus(rv, icValidateWarning);
+  }
+  else if (m_lastEntry-m_firstEntry <= 0.0) {
     sReport += icMsgValidateWarning;
     sReport += sSigPathName;
     sReport += " single sampled curve has an invalid sample range.\r\n";
@@ -2419,8 +2461,13 @@ bool CIccSampledCalculatorCurve::Begin(icElemInterp nInterp, CIccTagMultiProcess
 
   SetSize(nSize);
 
+  // Same wire-supplied endpoints as CIccSingleSampledCurve::Begin, and the same
+  // NaN-slips-past-== 0.0 hole (#2324). This bounds the src values the sample
+  // loop below feeds to the calculator; it says nothing about what comes back,
+  // since a calculator can return non-finite for finite input (an explicit
+  // divide by zero, say), so the sample table itself carries no such guarantee.
   m_range = m_lastEntry - m_firstEntry;
-  if (m_range == 0.0)
+  if (!std::isfinite(m_range) || m_range == 0.0)
     return false;
   m_last = (icFloatNumber)(m_nCount - 1);
   if (m_last == 0)
@@ -2487,8 +2534,11 @@ icFloatNumber CIccSampledCalculatorCurve::Apply(icFloatNumber v) const
     return m_hiSlope * v + m_hiIntercept;
   }
 
+  // No isfinite guard: same argument as CIccSingleSampledCurve::Apply -- v is
+  // forced finite above, is inside the sampled range here, and Begin() refuses a
+  // zero or non-finite range.
   icFloatNumber pos = (v - m_firstEntry) / m_range * m_last;
-  if (!std::isfinite(pos) || pos<0.0f)
+  if (pos<0.0f)
     pos=0.0f;
   else if (pos>m_last)
     pos=m_last;
@@ -2539,7 +2589,14 @@ icValidateStatus CIccSampledCalculatorCurve::Validate(std::string sigPath, std::
     rv = icMaxStatus(rv, icValidateWarning);
   }
 
-  if (m_lastEntry - m_firstEntry <= 0.0) {
+  // Same NaN blind spot as CIccSingleSampledCurve::Validate, same reason (#2324).
+  if (!std::isfinite(m_lastEntry - m_firstEntry)) {
+    sReport += icMsgValidateWarning;
+    sReport += sSigPathName;
+    sReport += " sampled calculator curve has a non-finite sample range.\n";
+    rv = icMaxStatus(rv, icValidateWarning);
+  }
+  else if (m_lastEntry - m_firstEntry <= 0.0) {
     sReport += icMsgValidateWarning;
     sReport += sSigPathName;
     sReport += " sampled calculator curve has an invalid sample range.\n";
@@ -4217,11 +4274,11 @@ bool CIccToneMapFunc::Begin()
 
 icFloatNumber CIccToneMapFunc::Apply(icFloatNumber lumValue, icFloatNumber pixelValue) const
 {
-  if (!m_nFunctionType && m_params) {
-    return m_params[0] * lumValue * (pixelValue + m_params[1]) + m_params[2];
-  }
-
-  return 0;
+  // No function-type or null-parameter test: Begin() returns false unless
+  // m_nFunctionType is 0 and m_params is non-null with at least NumArgs()
+  // entries, and a tone map whose Begin() failed is never applied. This ran once
+  // per output channel per pixel to re-establish both.
+  return m_params[0] * lumValue * (pixelValue + m_params[1]) + m_params[2];
 }
 
 icValidateStatus CIccToneMapFunc::Validate(std::string& sReport, int /* nVerboseness */) const
@@ -5709,7 +5766,12 @@ bool CIccMpeCLUT::Read(icUInt32Number size, CIccIO *pIO)
 
   m_pCLUT->SetClipFunc(NoClip);
 
-  m_pCLUT->Init(gridPoints);
+  // The GetData(0) check below turns a refused Init() into a failed Read() only
+  // because Init() leaves m_pData NULL and GetData(0) is &m_pData[0]. State the
+  // rejection where it happens instead of relying on that; CIccMpeExtCLUT::Read
+  // further down this file already does.
+  if (!m_pCLUT->Init(gridPoints))
+    return false;
 
   icFloatNumber *pData = m_pCLUT->GetData(0);
 
@@ -5788,7 +5850,20 @@ bool CIccMpeCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElement * /* pM
   if (!m_pCLUT)
     return false;
 
-  m_pCLUT->Begin();
+  // m_interpType is chosen from m_nInputChannels below, but every interpolator
+  // it selects walks the CLUT's own m_nInput. The two are only guaranteed equal
+  // when the element came from Read(), which bounds the count before narrowing
+  // it to the CLUT's icUInt8Number. An element built by a parser sets
+  // m_nInputChannels from its own source and lets the same narrowing happen
+  // separately when it constructs the CLUT, so a declared 257 could leave a
+  // one-dimensional CLUT under an element claiming 257 channels. Compare them
+  // here, where every apply path passes regardless of how the element was
+  // built.
+  if (m_pCLUT->GetInputDim() != m_nInputChannels)
+    return false;
+
+  if (!m_pCLUT->Begin())
+    return false;
 
   switch (m_nInputChannels) {
   case 1:
@@ -6382,11 +6457,18 @@ bool CIccMpeCAM::Write(CIccIO *pIO)
 
 bool CIccMpeCAM::Begin(icElemInterp /* nInterp */, CIccTagMultiProcessElement * /* pMPE */ )
 {
-  if (m_pCAM) {
-    icFloatNumber surround = m_pCAM->GetParameter_C();
-    return std::isfinite((double)surround) && surround >= 0.0f && surround <= 1.0f;
-  }
-  return false;
+  if (!m_pCAM)
+    return false;
+
+  // Moved here from CIccMpeJabToXYZ::Apply and CIccMpeXYZToJab::Apply, which each
+  // re-tested it on every pixel. Both convert through a three-component CAM, so
+  // any other channel count is an element this class cannot apply; refusing it
+  // here is what lets Apply() run unguarded.
+  if (m_nInputChannels != 3 || m_nOutputChannels != 3)
+    return false;
+
+  icFloatNumber surround = m_pCAM->GetParameter_C();
+  return std::isfinite((double)surround) && surround >= 0.0f && surround <= 1.0f;
 }
 
 void CIccMpeCAM::SetCAM(CIccCamConverter *pCAM)
@@ -6514,16 +6596,10 @@ CIccMpeJabToXYZ::~CIccMpeJabToXYZ()
 
 void CIccMpeJabToXYZ::Apply(CIccApplyMpe * /* pApply */, icFloatNumber *dstPixel, const icFloatNumber *srcPixel) const
 {
-  if (!dstPixel || !srcPixel)
-    return;
-
-  if (!m_pCAM || m_nInputChannels != 3 || m_nOutputChannels != 3) {
-    if (m_nOutputChannels > 0 && m_nOutputChannels <= 3) {
-      memset(dstPixel, 0, m_nOutputChannels * sizeof(icFloatNumber));
-    }
-    return;
-  }
-
+  // No guards: CIccMpeCAM::Begin() refuses a null m_pCAM and a channel count
+  // other than 3, and an element whose Begin() failed is never applied. The
+  // buffers come from the caller's own storage, so they cannot be null. All of
+  // this was re-established on every pixel.
   m_pCAM->JabToXYZ(srcPixel, dstPixel, 1);
 }
 
@@ -6580,16 +6656,10 @@ CIccMpeXYZToJab::~CIccMpeXYZToJab()
 
 void CIccMpeXYZToJab::Apply(CIccApplyMpe * /* pApply */, icFloatNumber *dstPixel, const icFloatNumber *srcPixel) const
 {
-  if (!dstPixel || !srcPixel)
-    return;
-
-  if (!m_pCAM || m_nInputChannels != 3 || m_nOutputChannels != 3) {
-    if (m_nOutputChannels > 0 && m_nOutputChannels <= 3) {
-      memset(dstPixel, 0, m_nOutputChannels * sizeof(icFloatNumber));
-    }
-    return;
-  }
-
+  // No guards: CIccMpeCAM::Begin() refuses a null m_pCAM and a channel count
+  // other than 3, and an element whose Begin() failed is never applied. The
+  // buffers come from the caller's own storage, so they cannot be null. All of
+  // this was re-established on every pixel.
   m_pCAM->XYZToJab(srcPixel, dstPixel, 1);
 }
 

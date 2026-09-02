@@ -5,7 +5,11 @@ shift-exponent:*/IccMD5.cpp
 # Fatal IntegerSanitizer builds require the compile-time ignorelist instead.
 unsigned-integer-overflow:*/include/c++/*/bits/basic_string.h
 unsigned-integer-overflow:*/include/c++/*/bits/basic_string.tcc
+# GCC 15 may report the non-canonical toolchain path before path normalization.
+unsigned-integer-overflow:/usr/lib/gcc/x86_64-linux-gnu/*/../../../../include/c++/*/bits/basic_string.tcc
 unsigned-integer-overflow:*/include/c++/*/bits/stl_bvector.h
 unsigned-integer-overflow:*/include/c++/*/bits/stl_uninitialized.h
 unsigned-integer-overflow:*/include/c++/*/bits/vector.tcc
 unsigned-integer-overflow:*/include/c++/*/ext/string_conversions.h
+# Apple libc++ hashes through intentional unsigned left-shift wrapping.
+shift-base:*/include/c++/v1/__functional/hash.h

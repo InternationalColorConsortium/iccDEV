@@ -104,18 +104,39 @@ public:
 
   void Close();
 
+  // nResolutionUnit names the unit fXRes/fYRes are expressed in (one of libtiff's
+  // RESUNIT_* codes).  It is a defaulted trailing parameter so the existing callers
+  // that do not care keep compiling unchanged and keep writing inch-based output,
+  // while the tools that copy a source image's resolution can now carry its unit
+  // across as well (#2220).
   bool Create(const char *szFname, unsigned int nWidth, unsigned int nHeight,
               unsigned int nBPS, unsigned int nPhoto, unsigned int nSamples, unsigned int nExtraSamples,
-              float fXRes, float fYRes, bool bCompress=true, bool bSep=false);
+              float fXRes, float fYRes, bool bCompress=true, bool bSep=false,
+              unsigned int nResolutionUnit=RESUNIT_INCH);
   bool Open(const char *szFname);
+  // True once this object's Create() got past TIFFOpen(..., "w") -- i.e. the
+  // destination was actually created or truncated by this run.  A caller that
+  // discards a failed output needs this to tell "Create() refused the path and
+  // touched nothing" from "Create() opened the path and then failed", because
+  // only the second case leaves something of ours to remove (#2242).  Reset by
+  // Create() and Open(), and deliberately NOT cleared by Close(), so it stays
+  // readable on the failure path after Create() has closed the handle.
+  bool WasOutputOpened() const { return m_bOutputOpened; }
 
   bool ReadLine(unsigned char *pBuf);
   bool WriteLine(unsigned char *pBuf);
   
   unsigned int GetWidth() { return m_nWidth;}
   unsigned int GetHeight() { return m_nHeight;}
-  double GetWidthIn() { return (double)m_nWidth / m_fXRes; }
-  double GetHeightIn() { return (double)m_nHeight / m_fYRes; }
+  // Physical size in inches, as the names promise.  m_fXRes/m_fYRes are expressed in
+  // whatever unit TIFFTAG_RESOLUTIONUNIT names, so the bare division these used to do
+  // only yields inches when that unit is RESUNIT_INCH: a centimetre-based image was
+  // reported 2.54x too large.  RESUNIT_NONE carries no absolute size at all -- its
+  // resolution values fix only an aspect ratio (TIFF 6.0, TIFFTAG_RESOLUTIONUNIT) --
+  // so return 0 there and let the caller omit the figure rather than print a
+  // meaningless one (#2220).
+  double GetWidthIn() { return InchesFromPixels(m_nWidth, m_fXRes); }
+  double GetHeightIn() { return InchesFromPixels(m_nHeight, m_fYRes); }
   unsigned int GetBitsPerSample() { return m_nBitsPerSample;}
   unsigned int GetPhoto();
   unsigned int GetSamples() { return m_nSamples;}
@@ -124,6 +145,9 @@ public:
   unsigned int GetPlanar() { return m_nPlanar; }
   unsigned int GetSampleFormat() { return m_nSampleFormat; }
   unsigned int GetOrientation() { return m_nOrientation; }
+  // The unit GetXRes()/GetYRes() are counted in; RESUNIT_INCH when the source image
+  // said nothing, which is what libtiff defaults an absent tag to.
+  unsigned int GetResolutionUnit() { return m_nResolutionUnit; }
   float GetXRes() {return m_fXRes;}
   float GetYRes() {return m_fYRes;}
 
@@ -133,8 +157,27 @@ public:
   bool SetIccProfile(unsigned char *pProfile, unsigned int  nLen);
 
 protected:
+  // Shared by GetWidthIn()/GetHeightIn(); see the comment on those.  Guards fRes as
+  // well as the unit because it is genuinely observable as zero: a freshly constructed
+  // object has it, and so does one whose Open() failed, since the failure path runs
+  // Close() and Close() resets it before the non-positive-resolution fix-up is reached.
+  // Both members are zero together in those states, so the old bare division computed
+  // 0.0/0.0 and returned a NaN.
+  double InchesFromPixels(unsigned int nPixels, float fRes)
+  {
+    if (fRes <= 0.0f || m_nResolutionUnit == RESUNIT_NONE)
+      return 0.0;
+
+    double dInches = (double)nPixels / (double)fRes;
+    if (m_nResolutionUnit == RESUNIT_CENTIMETER)
+      dInches /= 2.54;
+
+    return dInches;
+  }
+
   TIFF *m_hTif;
   bool m_bRead;
+  bool m_bOutputOpened;
 
   unsigned int m_nWidth;
   unsigned int m_nHeight;
@@ -147,6 +190,7 @@ protected:
   icUInt16Number m_nCompress;
   icUInt16Number m_nSampleFormat;
   icUInt16Number m_nOrientation;
+  icUInt16Number m_nResolutionUnit;
 
   float m_fXRes;
   float m_fYRes;

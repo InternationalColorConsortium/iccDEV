@@ -23,9 +23,21 @@ documentation for accuracy.
 3. Inventory duplicated or stale content before editing.
 4. Preserve exact commands, paths, CMake options, executable names, and safety
    requirements.
+   For Windows MATLAB documentation, preserve PowerShell syntax, the
+   `repo\msvc` build root, MATLAB `setenv`, real `Testing/...` smoke profiles,
+   and the PAWG tool, native contract target, and staged support-file list.
 5. Replace repeated detail with links to canonical sources.
-6. Delete duplicate files only after moving unique content elsewhere.
-7. Run whitespace, local-link, ASCII, and stale-reference checks.
+6. Keep Doxygen-friendly links within the scanned INPUT tree; for repo-root or
+   example links that do not exist under Doxygen's configured input, use an
+   explicit HTML anchor (`<a href="...">...</a>`) instead of a Markdown link that
+   triggers warning-only docs failures.
+7. Delete duplicate files only after moving unique content elsewhere.
+8. Run whitespace, local-link, ASCII, line-ending, and stale-reference checks.
+   Run `doxygen .github/ci/doxygen/Doxyfile` and require
+   `docs/generated/doxygen-warnings.log` to be empty. Do not add generated
+   Doxygen HTML or warning logs to the change.
+   Require LF for documentation, prompts, skills, MATLAB, CMake, YAML/JSON,
+   Dockerfiles, and Unix scripts; preserve CRLF for `.ps1`, `.bat`, and `.cmd`.
 
 ## Harvest Rules
 

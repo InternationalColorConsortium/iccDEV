@@ -59,10 +59,13 @@ bool contains(const std::string &haystack, const char *needle)
 }
 
 // The report-level prefixes are spelled out rather than taken from the exported
-// icMsgValidate* globals in IccUtil.h. Those globals do not resolve when a test
-// binary links IccProfLib under MSVC (LNK2019), and matching the literal text is
-// the stronger assertion anyway: it pins what a log scan actually greps for, so
-// renaming a global cannot quietly change the observable output.
+// icMsgValidate* globals in IccUtil.h. That began as a workaround -- those globals
+// would not resolve from a test binary under MSVC (LNK2019) until #2219 gave them
+// dllexport/dllimport -- but the literal text is the stronger assertion anyway: it
+// pins what a log scan actually greps for, so renaming a global cannot quietly
+// change the observable output. iccdev.proflib-exported-data-linkage pins these
+// three literals against the real globals -- and icMsgValidateNonCompliant,
+// which has no copy here -- so drift fails there.
 const char *const kInformation = "Information - ";
 const char *const kWarning     = "Warning! - ";
 const char *const kError       = "Error! - ";

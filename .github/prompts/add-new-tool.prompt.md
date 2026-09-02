@@ -21,7 +21,8 @@ Create `Tools/CmdLine/IccNewTool/iccNewTool.cpp`:
  * Copyright (c) 2024-2026 The International Color Consortium.
  *                           All rights reserved.
  *
- * [BSD 3-Clause license text]
+ * Copy the complete ICC Software License block from an adjacent existing
+ * C++ source file. Do not use an abbreviated or placeholder license banner.
  */
 
 #include <cstdio>
@@ -100,7 +101,14 @@ LD_LIBRARY_PATH=IccProfLib:IccXML \
 
 ## Step 6: Add to Testing
 
-If the tool accepts ICC profiles, add validation to `Testing/RunTests.sh`:
+Prefer a focused CTest registration in
+`Build/Cmake/Testing/CMakeLists.txt`, add the target to the relevant build-test
+dependency list, and document the selector in `docs/ctest.md`. CTest and
+workflow changes are maintainer-owned, so coordinate those edits with an
+iccDEV maintainer.
+
+If the tool also belongs in the legacy profile sweep, add equivalent validation
+to both `Testing/RunTests.sh` and `Testing/RunTests.bat`:
 ```bash
 echo "==========================================================================="
 echo "Test NewTool with sRGB"
@@ -114,10 +122,17 @@ Add the same to `Testing/RunTests.bat` for Windows.
 - Add `Tools/CmdLine/IccNewTool/Readme.md` with purpose, usage, and output notes
 - Add tool description and example to `docs/tools-cli-reference.md`
 - Confirm `.github/ci/doxygen/Doxyfile` includes Markdown so `Tools/CmdLine/*/Readme.md` files are generated
+- Keep tool and reference links Doxygen-safe: if a link points outside the Doxygen INPUT tree, use an explicit HTML anchor (`<a href="...">...</a>`) instead of a Markdown link that will trigger warning-only docs failures
+- Run `doxygen .github/ci/doxygen/Doxyfile` and require an empty `docs/generated/doxygen-warnings.log`; do not add generated Doxygen output or warning logs
 - Add tool description to `docs/index.md` under "Tools based upon these libraries"
 - Add to `docs/install.md` Docker examples if applicable
-- Update `.github/copilot-instructions.md` project structure table
+- Update `.github/prompts/contributor-onboarding.prompt.md` when the repository map changes
 - Update `Build/Cmake/wasm-package/` staging, exports, tests, package metadata, and release workflow smoke text if WASM-compatible
+- Update `iccdev-mcp/` only when the tool has a safe, bounded MCP use case; CLI-only tools must be documented as such
+- Add or update an agent prompt/skill only for a repeatable maintainer workflow, not merely because a binary was added
+- Do not add the tool to `IccIisIsapi` by default. That sample intentionally
+  exposes a bounded ICC/XML pipeline; a new IIS wrapper needs an explicit input,
+  timeout, artifact, and deployment design.
 
 ## Checklist
 
@@ -127,8 +142,10 @@ Add the same to `Testing/RunTests.bat` for Windows.
 - [ ] Emscripten `if(EMSCRIPTEN)` guard for WASM
 - [ ] Builds clean with `clang++ -Wall -Wextra`
 - [ ] 0 ASan/UBSan findings on test profiles
-- [ ] Added to Testing/RunTests.sh and .bat
+- [ ] Added to focused CTest coverage and, if applicable, both legacy RunTests scripts
 - [ ] Tool `Readme.md`, `docs/tools-cli-reference.md`, and `docs/index.md` updated
 - [ ] If core tool: added to `_core_tools` in `ports/iccdev/portfile.cmake`
 - [ ] If core tool: added to verify step in `.github/workflows/ci-vcpkg-ports.yml`
+- [ ] Packaging/install and runtime dependency behavior verified
+- [ ] MCP, WASM, IIS, prompts, and skills explicitly classified as integrated or not applicable
 - [ ] PR description includes: purpose, build/test commands, sample output

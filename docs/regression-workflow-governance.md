@@ -10,6 +10,12 @@ unless an iccDEV maintainer explicitly requests that work. Contributors should
 describe needed coverage in the issue or pull request so maintainers can decide
 where it belongs.
 
+Before the first review of a cross-cutting change, attach a `base...HEAD`
+contract matrix identifying each changed surface's producer, consumer,
+build/runtime behavior, platform or toolchain boundary, CI trigger, dependency
+owner, and local evidence. Re-review the complete matrix after a repair; any
+new blocker returns the branch to branch-only grooming before another review.
+
 ## Canonical Locations
 
 | Item | Location | Purpose |
@@ -25,7 +31,7 @@ where it belongs.
 | Workflow rules | `.github/instructions/workflow-governance.instructions.md` | Shell hardening, output sanitization, and injection prevention. |
 | Workflow trust boundaries | `docs/workflow-security-trust-boundaries.md` | Trusted-base helper model, PR workflow canaries, and visual review aids. |
 | Testing rules | `.github/instructions/testing.instructions.md` | Test directories, script expectations, and regression flow. |
-| Maintainer Dockerfiles | `Dockerfile`, `Dockerfile.mcp`, `Dockerfile.ci-regression` | Release/runtime images and pinned CI dependency images. |
+| Unified Dockerfile | `Dockerfile` | Published runtime, MCP, and pinned CI dependency image. |
 
 ## When to Add a Script
 
@@ -90,21 +96,14 @@ scanner noise with a clear rationale.
 ## Pull Request Review Convergence
 
 Maintainer-owned infrastructure reviews must converge instead of repeatedly
-expanding scope. Use this direct three-review loop for Copilot service reviews
-unless a maintainer explicitly requests more review:
-
-1. First review: perform the complete inventory of the pull request and review
-   every touched file. This should be the broadest review.
-2. Second review: review only the first-review fixes. Do not add new files,
-   functions, enums, templates, or unrelated scope unless the fix itself
-   requires it.
-3. Third review: conclude with either `Ok to Merge` or
-   `Please Request Maintainer Review`.
-
-After the third Copilot service review, Copilot is out of the review loop until
-a maintainer requests another review. Later review comments should be resolved
-by maintainers or by targeted follow-up work against explicit maintainer
-requests.
+expanding scope. Before requesting review, freeze the head and pass the
+readiness gate in `docs/governance/UPSTREAM_PR_READINESS.md`. Review the
+complete pull request and cumulative diff, not incremental slices. A requested
+change returns the branch to branch-only grooming: repair the findings, renew
+the readiness evidence, then request one complete re-review when a maintainer
+needs it. If that re-review identifies any new blocker, including one in the
+repair, stop serial automated review and require maintainer direction before
+continuing.
 
 Recent maintainer PRs show the same avoidable review findings recurring. Before
 requesting review, check the PR against this list:
@@ -116,9 +115,9 @@ requesting review, check the PR against this list:
 - Keep push, pull-request, reusable, and manual-dispatch validation paths
   equivalent for the changed surface. If a workflow tests a helper on push,
   the PR fast lane should test the same helper or document why it cannot.
-- Keep branch triggers and publish conditions aligned. The
-  `ci-qa-pr-docker-testing` Docker publication path is manual; do not add it to
-  a broad push trigger merely because related workflow logic names the branch.
+- Keep branch triggers and publish conditions aligned. `ci-docker` publishes
+  the canonical image only from `master` and release tags; do not add
+  branch-specific or variant image tags.
 - Keep Docker and regression-container docs reproducible from a fresh checkout
   or clean container. Fetch branch refs explicitly and avoid relying on local
   remote-tracking state, generated files, or preexisting host permissions.
@@ -132,16 +131,19 @@ requesting review, check the PR against this list:
   numeric strings with leading zeroes.
 - Keep bounded jobs actually bounded. Runtime maxima must fit the job timeout
   after multiplying by target count and build/setup time.
+- End PowerShell expected-failure probes with `exit 0` after all assertions
+  pass. A handled native failure leaves `$LASTEXITCODE` nonzero and otherwise
+  makes the workflow step fail after printing a success message.
 - Do not leave temporary clones, generated profiles, crash artifacts, or other
   local proof material behind unless the PR intentionally adds test fixtures.
 - For AFL/CFL and Docker changes, probe both the advertised user path and the
   CI path: wrapper compile probes, patch-stack checks, dry-run patch
   application, `iccdev-fuzz-env`, and container healthcheck semantics.
 
-For every `Dockerfile*` change, compare `ci-qa-pr-docker-testing` with
-`ci-qa-flags` and carry applicable fixes to both branches. The testing branch is
-the container proving ground; `ci-qa-flags` remains a required synchronized
-maintainer branch and must be included in the hosted validation report.
+For every `Dockerfile` change, validate the one canonical image locally and
+through `ci-docker` on `master`. Keep its `latest`, immutable full-SHA, and
+release-tag behavior consistent; do not restore variant Dockerfiles or
+branch-specific image publication.
 
 Branch protection should require stable aggregate contexts, not conditional
 lane job names. `PR Summary` must aggregate orchestration prerequisites and all
@@ -152,16 +154,21 @@ orchestrator. See `docs/label-system.md` for the current context list.
 
 When `container_changed` is true, `ci-pr-action` selects the read-only Docker
 PR verification lane and `PR Summary` requires its result. The lane is skipped
-for other changes to conserve runners. Do not treat a skipped lane as container
-verification; rerun it after any Dockerfile, container image, or container
-workflow update.
+for documentation, governance, and label-only changes to conserve runners.
+Dockerfile, Docker dependency, packaged MCP, and Docker-workflow changes build
+the exact PR image. Source, CMake, and test-only changes targeting `master`
+instead pull the canonical image dynamically by the detected base SHA, verify
+its OCI revision label, and build the mounted PR tree with the strict
+sanitizer/CTest contract. No Docker image SHA is embedded in workflow source.
+Other allowed base branches keep the full PR-image build because canonical
+immutable images are published only from `master`. Do not treat a skipped lane
+as container verification; rerun it after any Dockerfile, container image, or
+container workflow update.
 
-The Docker PR lane consumes the published
-`ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest` image as a
-maintainer-controlled build cache. It must report the resolved digest, bind the
-checked-out PR tree read-only, copy it to container-local scratch space, and
-build and run the fast CTest envelope there. Do not rebuild the regression image
-per PR; image rebuilds and publishing belong to `ci-docker`.
+The Docker PR lane builds the exact checked-out PR Dockerfile without a workflow
+cache. The resulting image is local to the job: it must bind the checked-out PR
+tree read-only, copy it to container-local scratch space, and build and run the
+fast CTest envelope there. Only `ci-docker` publishes images.
 
 Local review should include YAML parsing, `actionlint`, `yamllint`, direct
 `${{ }}` interpolation scans for `run:` blocks, Dockerfile base/remote-exec
@@ -251,22 +258,20 @@ separate from general source changes when practical.
 
 | File | Owner intent | Required local checks |
 |------|--------------|-----------------------|
-| `Dockerfile` | Ubuntu release/runtime image for the published `iccdev` container. | Build locally, run at least one installed tool, and check the healthcheck target. |
-| `Dockerfile.ci-regression` | Maintainer image for ASAN/UBSAN CTest, fuzzing, review, and hybrid timing gates. | Run a no-cache build and smoke `git`, `gh`, `curl`, `clang`, `clang++`, `gcc`, `g++`, `lldb`, `gdb`, `cmake`, `afl-fuzz`, `afl-showmap`, `iccdev-fuzz-env`, libFuzzer compilation, and `/usr/bin/time`; AFL wrapper changes also need the container bootstrap probe in `docs/afl-fuzzing.md`. |
+| `Dockerfile` | Unified image for runtime tools, MCP, ASAN/UBSAN CTest, fuzzing, review, and hybrid timing gates. Clang 22 is the default toolchain; the packaged AFL++ LLVM plugin is paired with Clang 21. | Run a no-cache build and smoke `git`, `gh`, `curl`, `clang`, `clang++`, `gcc`, `g++`, `lldb`, `gdb`, `cmake`, `afl-fuzz`, `afl-showmap`, `iccdev-fuzz-env`, MCP initialization, libFuzzer compilation, and `/usr/bin/time`; AFL wrapper changes also need the container bootstrap probe in `docs/afl-fuzzing.md`. |
 
-For `Dockerfile.ci-regression` publishing:
+For unified `Dockerfile` publishing:
 
 1. Build and smoke the target image locally with no cache.
 2. Publish through the maintainer-controlled container release path.
-3. Record the published branch tag, immutable SHA tag, digest, and source
-   revision from the release output.
-4. Promote `latest` only after all image smoke tests and regression CTest checks
-   succeed, then confirm it resolves to the same immutable digest after a
-   `master` publication or an explicit protected Docker-testing branch
-   promotion.
+3. Record the published immutable SHA tag, digest, and source revision from the
+   release output.
+4. Publish `latest` only from `master` after all image smoke tests and
+   regression CTest checks succeed, then confirm it resolves to the immutable
+   digest.
 5. Pass the immutable SHA tag to `ci-iccdev-tool-tests.yml` and rerun the
    regression gate.
-6. Remove temporary branch-specific inputs after the branch is no longer needed.
+6. Do not create branch-specific or run-specific image tags.
 
 For day-to-day image use, PR checkout, issue reproduction, evidence handling,
 and CI dispatch commands, use

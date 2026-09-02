@@ -60,10 +60,14 @@ fi
 echo "====================== CalcTest =========================="
 
 cd ../CalcTest
+if [ "$1" = "clean" ]
+then
+	rm -f calcCheckInit.icc calcExercizeOps.icc
+fi
 if [ "$1" != "clean" ]
 then
 	set -x
-	# cannot delete *.icc as many are non-XML test files
+	# Keep the committed non-XML fixtures and replace only generated outputs.
 	iccFromXml calcCheckInit.xml   calcCheckInit.icc
 	iccFromXml calcExercizeOps.xml calcExercizeOps.icc
 	set +x
@@ -96,8 +100,8 @@ then
 	iccFromXml Rec2100HlgFull.xml Rec2100HlgFull.icc
 	iccFromXml Rec2100HlgNarrow.xml Rec2100HlgNarrow.icc
 	iccFromXml RgbGSDF.xml RgbGSDF.icc
-	iccFromXml sRGB_D65_MAT-300lx.xml sRGB_D65_MAT-300lx.icc
-	iccFromXml sRGB_D65_MAT-500lx.xml sRGB_D65_MAT-500lx.icc
+	iccFromXml sRGB_D65_MAT-300cdm2.xml sRGB_D65_MAT-300cdm2.icc
+	iccFromXml sRGB_D65_MAT-500cdm2.xml sRGB_D65_MAT-500cdm2.icc
 	iccFromXml sRGB_D65_MAT.xml       sRGB_D65_MAT.icc
 	iccFromXml sRGB_D65_colorimetric.xml sRGB_D65_colorimetric.icc
 	set +x
@@ -294,14 +298,46 @@ then
 fi
 cd ..
 
+echo "====================== HDR =========================="
+
+cd HDR
+find . -iname "*\.icc" -delete
+if [ "$1" != "clean" ]
+then
+	set -x
+	iccFromXml BT2100HlgFullScene.xml BT2100HlgFullScene.icc
+	iccFromXml BT2100HlgNarrowScene.xml BT2100HlgNarrowScene.icc
+	iccFromXml BT2100HlgFullDisplay.xml BT2100HlgFullDisplay.icc
+	iccFromXml BT2100HlgNarrowDisplay.xml BT2100HlgNarrowDisplay.icc
+	iccFromXml BT2100PQFullScene.xml BT2100PQFullScene.icc
+	iccFromXml BT2100PQNarrowScene.xml BT2100PQNarrowScene.icc
+	iccFromXml BT2100PQFullDisplay.xml BT2100PQFullDisplay.icc
+	iccFromXml BT2100PQNarrowDisplay.xml BT2100PQNarrowDisplay.icc
+	iccFromXml BT2100HlgSceneToDisplayLink.xml BT2100HlgSceneToDisplayLink.icc
+	iccFromXml BT2100PQSceneToDisplayLink.xml BT2100PQSceneToDisplayLink.icc
+	set +x
+fi
+cd ..
+
 echo "====================== V2 =========================="
 
 # Issue #1883: before these, the corpus held no ICC v2 profile at all -- a clean
 # checkout's 210 profiles are 208 v5 and 2 v4, with no 'mft2' or 'mft1' tag
-# anywhere -- so the v2 legacy Lab encoding path was exercised by nothing. These three cover
+# anywhere -- so the v2 legacy Lab encoding path was exercised by nothing. These five cover
 # the v2 shapes that path depends on: lut16Type ('mft2', which is what selects
-# UseLegacyPCS), lut8Type ('mft1'), and the matrix/TRC form most real v2 display
-# profiles take.
+# UseLegacyPCS), lut8Type ('mft1'), the matrix/TRC form most real v2 display
+# profiles take, and grayTRC ('kTRC') at both PCS encodings.
+#
+# The grayTRC pair was added because no profile in the tree produced a
+# CIccXformMonochrome at all, so that xform's apply path was exercised by
+# nothing. Display/GrayGSDF is the only other Gray profile and it is link class
+# with GRAY for both device space and PCS, so it builds a devicelink and never
+# reaches the monochrome xform.
+#
+# Both encodings are needed, not just one: CIccXformMonochrome::Apply takes a
+# different branch for a Lab PCS, and only that branch reaches XyzToLab and its
+# three cube roots. With the XYZ fixture alone, changes to that branch are
+# invisible to both the test suite and the throughput harness.
 cd V2
 find . -iname "*\.icc" -delete
 if [ "$1" != "clean" ]
@@ -310,6 +346,8 @@ then
 	iccFromXml v2CmykLut16.xml   v2CmykLut16.icc
 	iccFromXml v2RgbLut8.xml     v2RgbLut8.icc
 	iccFromXml v2RgbMatrixTRC.xml v2RgbMatrixTRC.icc
+	iccFromXml v2GrayTRC.xml     v2GrayTRC.icc
+	iccFromXml v2GrayTRCLab.xml  v2GrayTRCLab.icc
 	set +x
 fi
 cd ..

@@ -1,0 +1,62 @@
+/**
+\mainpage iccDEV Documentation
+
+iccDEV provides C++ libraries and command-line tools for ICC.1 and ICC.2/iccMAX
+color profiles. Use the curated sections below to navigate the public release
+documentation; source-level API indexes remain available through the navigation
+tabs.
+
+\subpage curateddocumentation "Documentation and Reports"
+\subpage curatedlibraries "Libraries"
+\subpage curatedtools "Tools"
+\subpage curatedtesting "Testing and CTest"
+*/
+
+/**
+\page curateddocumentation Documentation and Reports
+
+\subpage md_docs_2install "Install"
+\subpage md_docs_2build "Build"
+\subpage md_docs_2bisect "Bisecting regressions"
+\subpage md_docs_2linear-stack-workflow "Linear stack workflow"
+\subpage md_docs_2pre-pr-security-cycle "Pre-PR security cycle"
+\subpage md_docs_2regression-container "Maintainer regression container"
+\subpage md_docs_2regression-workflow-governance "Regression workflow governance"
+\subpage md_docs_2workflow-security-trust-boundaries "Workflow security trust boundaries"
+\subpage md_docs_2codeql "CodeQL security analysis"
+\subpage md_docs_2documentation-maintenance "Documentation maintenance"
+\subpage md_docs_2label-system "Maintainer label system"
+\subpage md_docs_2label-inventory-audit "Label inventory audit"
+\subpage md_docs_2governance_2UPSTREAM__PR__READINESS "Upstream pull request readiness"
+*/
+
+/**
+\page curatedlibraries Libraries
+
+\subpage md_docs_2c-api-validation "C validation API"
+\subpage md_docs_2icc-cmm-threading "CIccThreadedCmm"
+\subpage md_docs_2icc-connect "IccConnect library"
+\subpage md_docs_2iccjson "IccJSON guide"
+\subpage md_docs_2iccjson-tag-types "ICC JSON tag reference"
+\subpage md_docs_2pcs-adjustment-placement "PCS adjustment placement"
+*/
+
+/**
+\page curatedtools Tools
+
+\subpage md_docs_2tools-cli-reference "CLI tool reference"
+\subpage iccapply_overview "iccApply visual lanes"
+*/
+
+/**
+\page curatedtesting Testing and CTest
+
+\subpage md_docs_2ctest "CTest tool suites"
+\subpage md_docs_2afl-fuzzing "AFL++ smoke fuzzing"
+\subpage md_docs_2maintainer-qa-scans "Maintainer QA scans"
+\subpage md_docs_2matlab-bindings "MATLAB bindings and QA"
+\subpage md_docs_2python-packaging-release "Python packaging release"
+\subpage md_docs_2avx2-clut-diagnostics "AVX2 CLUT diagnostics"
+\subpage md_docs_2avx2-clut-linux-performance "Linux CLUT profiling report"
+\subpage md_docs_2avx2-clut-windows-performance "Windows CLUT performance report"
+*/

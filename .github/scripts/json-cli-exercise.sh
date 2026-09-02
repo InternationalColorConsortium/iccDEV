@@ -1,5 +1,5 @@
 #!/bin/bash
-# JSON CLI Exercise -- 125 tests across 26 groups for all JSON-enabled iccDEV tools
+# JSON CLI Exercise -- comprehensive test suite for all JSON-enabled iccDEV tools
 # Adapted for upstream iccDEV repository (run from repo root)
 set -o pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -1277,6 +1277,54 @@ elif [ "$rc" -eq 0 ]; then PASS=$((PASS+1)); echo "[PASS] #$TOTAL search cli: li
 else FAIL=$((FAIL+1)); echo "[FAIL] #$TOTAL search cli: linear (exit=$rc)"; fi
 
 # ============================================================
+# GROUP 27: Named overprint intent columns and JSON transform enums
+# ============================================================
+echo ""
+echo "--- GROUP 27: Named overprint and transform enums (4 tests) ---"
+
+# 27a: CLI legacy overprint intent=1000003 (over-black, succeeds on Silver)
+TOTAL=$((TOTAL+1))
+output=$("$NAMEDCMM" "Testing/Named/NamedColorSilverOnly.txt" 0 1 "Testing/Named/NamedColor.icc" 1000003 2>&1)
+rc=$?
+asan_hit=$(echo "$output" | grep -c 'AddressSanitizer\|runtime error:' || true)
+if [ "$asan_hit" -gt 0 ]; then ASAN=$((ASAN+1)); echo "[ASAN] #$TOTAL cli named: overprint intent=1000003 (exit=$rc)"
+elif [ "$rc" -eq 0 ]; then PASS=$((PASS+1)); echo "[PASS] #$TOTAL cli named: over-black intent=1000003 (exit=$rc)"
+else FAIL=$((FAIL+1)); echo "[FAIL] #$TOTAL cli named: over-black intent=1000003 (exit=$rc, expected=0)"; fi
+
+# 27b: CLI legacy overprint intent=2000003 (over-gray, fails cleanly on Silver)
+TOTAL=$((TOTAL+1))
+output=$("$NAMEDCMM" "Testing/Named/NamedColorSilverOnly.txt" 0 1 "Testing/Named/NamedColor.icc" 2000003 2>&1)
+rc=$?
+asan_hit=$(echo "$output" | grep -c 'AddressSanitizer\|runtime error:' || true)
+if [ "$asan_hit" -gt 0 ]; then ASAN=$((ASAN+1)); echo "[ASAN] #$TOTAL cli named: overprint intent=2000003 (exit=$rc)"
+elif [ "$rc" -eq 1 ]; then PASS=$((PASS+1)); echo "[PASS] #$TOTAL cli named: over-gray intent=2000003 fail-clean (exit=$rc)"
+else FAIL=$((FAIL+1)); echo "[FAIL] #$TOTAL cli named: over-gray intent=2000003 (exit=$rc, expected=1)"; fi
+
+# 27c: JSON transform=namedOnBlack (succeeds on Silver)
+python3 -c "
+import json
+cfg = {
+  'dataFiles': {'srcType':'colorData','dstEncoding':'float','dstType':'legacy'},
+  'profileSequence': [{'iccFile':'Testing/Named/NamedColor.icc','intent':3,'transform':'namedOnBlack','useD2BxB2Dx':True}],
+  'colorData': {'srcSpace':'nmcl','encoding':'percent','srcEncoding':'value','data':[{'n':'Silver','v':[1.0]}]}
+}
+json.dump(cfg, open('/tmp/test-transform-namedOnBlack.json','w'), indent=2)
+"
+run_test "named transform=namedOnBlack" "$NAMEDCMM" "/tmp/test-transform-namedOnBlack.json" 0
+
+# 27d: JSON transform=namedOnGray (fails cleanly on Silver)
+python3 -c "
+import json
+cfg = {
+  'dataFiles': {'srcType':'colorData','dstEncoding':'float','dstType':'legacy'},
+  'profileSequence': [{'iccFile':'Testing/Named/NamedColor.icc','intent':3,'transform':'namedOnGray','useD2BxB2Dx':True}],
+  'colorData': {'srcSpace':'nmcl','encoding':'percent','srcEncoding':'value','data':[{'n':'Silver','v':[1.0]}]}
+}
+json.dump(cfg, open('/tmp/test-transform-namedOnGray.json','w'), indent=2)
+"
+run_test "named transform=namedOnGray" "$NAMEDCMM" "/tmp/test-transform-namedOnGray.json" 1
+
+# ============================================================
 # SUMMARY
 # ============================================================
 echo ""
@@ -1299,6 +1347,7 @@ rm -f /tmp/test-enc-*.json /tmp/test-prec-*.json /tmp/test-dig-*.json \
       /tmp/test-search-*.json /tmp/test-applyprofiles-*.json /tmp/test-neg-*.json \
       /tmp/test-large-*.json /tmp/test-bad-*.json /tmp/test-num-*.json \
       /tmp/test-empty-*.json /tmp/test-cmyk-*.json /tmp/test-all-*.json \
+      /tmp/test-transform-*.json \
       /tmp/test-srcfile-*.json /tmp/test-external-data.* /tmp/json-test-output.txt \
       /tmp/test-cli-data.txt /tmp/test-cli-8bit.txt /tmp/test-cli-16bit.txt \
       /tmp/test-real-tiff-*.json /tmp/json-tiff-*.tif /tmp/cli-tiff-*.tif 2>/dev/null
@@ -1316,8 +1365,8 @@ rm -f /tmp/test-enc-*.json /tmp/test-prec-*.json /tmp/test-dig-*.json \
 # One consequence is deliberate.  The CTest declares FIXTURES_REQUIRED
 # iccdev_profiles, and the cases below reference generated profiles such as
 # Testing/Display/sRGB_D65_MAT.icc by relative path.  Run standalone against a
-# tree where that fixture has never executed, 74 of the 125 cases fail on the
-# missing profiles and this script now exits non-zero.  That is the correct
+# tree where that fixture has never executed, cases fail on the missing
+# profiles and this script now exits non-zero.  That is the correct
 # signal -- a run that measured nothing should not report success -- and it is
 # why the exit status keys off the tally rather than off the last command.
 if [ "$FAIL" -gt 0 ] || [ "$ASAN" -gt 0 ]; then

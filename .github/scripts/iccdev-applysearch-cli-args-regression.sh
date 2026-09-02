@@ -156,5 +156,63 @@ run_expect_reject init-missing-value "$APPLY" "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -I
 run_expect_reject legacy-extra "$APPLY" "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1 ignored-extra
 run_expect_reject env-short-name "$APPLY" "$DATA" 0 0 -ENV:abc 1 "$SRGB" 1 "$SRGB" 1 -INIT 1
 
+
+###############################################################################
+# #2190: the intent-code columns, in both positions iccApplySearch offers
+#
+# iccApplySearch is the only tool that reaches CIccCfgSearchApply::fromArgs and
+# the -INIT initializer, so it is the only place the two decodes can be pinned
+# against each other. They must answer the same code the same way: while the
+# profile decode refused an unrecognised overprint column and -INIT masked it
+# off, "3000000" was rejected in one position and silently accepted in the
+# other within a single command line.
+#
+# -INIT has no overprint and no HToS field, so any code reaching those columns
+# is refused there rather than truncated to the part it can represent.
+###############################################################################
+
+assert_rejected_sequence() {
+  grep -Fqx "Unable to parse profile sequence arguments" "$OUTDIR/$1.log" ||
+    fail "$1 was refused, but not by the profile-sequence parser"
+}
+
+# Same value, both positions, same verdict -- the pairing is the assertion.
+run_expect_reject intent-overprint-3-profile \
+  "$APPLY" "$DATA" 0 0 "$SRGB" 3000000 "$SRGB" 1 -INIT 1
+assert_rejected_sequence intent-overprint-3-profile
+run_expect_reject intent-overprint-3-init \
+  "$APPLY" "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 3000000
+assert_rejected_sequence intent-overprint-3-init
+run_expect_reject intent-overprint-9-init \
+  "$APPLY" "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 9000000
+assert_rejected_sequence intent-overprint-9-init
+run_expect_reject intent-htos-init \
+  "$APPLY" "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 100000
+assert_rejected_sequence intent-htos-init
+
+# Negative codes, both positions. "-110" used to decode exactly like "110"
+# because the type digit takes abs() and the intent digit does not.
+#
+# These two need the diagnostic asserted, not just a non-zero exit. Before the
+# fix "-110" was accepted by the parser and the run died later in Begin() with
+# "Invalid Look-Up Table type" -- also a non-zero exit, so run_expect_reject
+# alone passes against the defect and pins nothing. The parse-time message is
+# what separates "refused the argument" from "ran with it and failed downstream".
+run_expect_reject intent-negative-profile \
+  "$APPLY" "$DATA" 0 0 "$SRGB" -110 "$SRGB" 1 -INIT 1
+assert_rejected_sequence intent-negative-profile
+run_expect_reject intent-negative-init \
+  "$APPLY" "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT -110
+assert_rejected_sequence intent-negative-init
+
+# Controls. Without these the rejections above would also be satisfied by a
+# decode that had stopped accepting the columns altogether: +1000000 is a valid
+# overprint in the profile position, and +10000 is the widest column -INIT can
+# still represent, so both must continue to run.
+run_expect_success intent-overprint-1-profile \
+  "$APPLY" "$DATA" 0 0 "$SRGB" 1000000 "$SRGB" 1 -INIT 1
+run_expect_success intent-v5-init \
+  "$APPLY" "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 10000
+
 echo "  [PASS] iccApplySearch-cli-args"
 exit 0

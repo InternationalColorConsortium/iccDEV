@@ -34,6 +34,13 @@ on:
         required: false
         default: ""
         type: string
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: "Git ref or exact commit SHA to check out (defaults to the selected ref)"
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: pr-win-${{ github.event.pull_request.number || github.ref }}
@@ -48,8 +55,8 @@ env:
 
 jobs:
   build:
-    name: Windows MSVC + ClangCL build
-    runs-on: windows-2022
+    name: Windows MSVC build and test
+    runs-on: windows-latest
     timeout-minutes: 20
     defaults:
       run:
@@ -63,6 +70,15 @@ jobs:
         with:
           ref: ${{ inputs.target_sha || github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
+          path: .trusted-workflow
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
           persist-credentials: false
 
       - name: Harden Environment and Validate Inputs
@@ -119,14 +135,14 @@ jobs:
          # --- Harden Git configuration ---
          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
          git config --global credential.helper ""
-         # --- PATH hardening: limit to trusted tool locations ---
+         # --- PATH hardening: prioritize trusted tool locations ---
          $trustedPath = @(
              "$env:SystemRoot\system32",
              "$env:SystemRoot",
              "$env:ProgramFiles\Git\bin",
              "$env:ProgramFiles\PowerShell\7"
          ) -join ';'
-         $env:PATH = $trustedPath
+         $env:PATH = "$trustedPath;$env:PATH"
          Write-Host "Finished Harden Environment and Validate Inputs" -ForegroundColor Green
 
       - name: Test Sanitization Functions
@@ -144,7 +160,7 @@ jobs:
           Write-Host "========================================" -ForegroundColor Cyan
           Write-Host ""
           # Source the sanitization functions
-          . .github/scripts/sanitize.ps1
+          . .trusted-workflow\.github\scripts\sanitize.ps1
           # Quick validation tests
           $unicodeInput = "Hello " + [char]0x4E16 + [char]0x754C
           $tests = @(
@@ -226,7 +242,7 @@ jobs:
           ) -join '/'
           Start-BitsTransfer -Source $depsUrl -Destination "deps.zip"
           Write-Host "========= Extracting Dependencies ...    ================`n"
-          tar -xf deps.zip
+          Expand-Archive -LiteralPath 'deps.zip' -DestinationPath . -Force
       - name: CMake Configure
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
@@ -268,6 +284,92 @@ jobs:
           Write-Host "========= Building iccDEV ... ================`n"
           cmake --build build -- /m /maxcpucount
 
+      - name: Validate IIS PAWG assessment surface
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+          . .trusted-workflow\.github\scripts\sanitize.ps1
+
+          $binDir = (Resolve-Path 'Build\Cmake\build\bin\Debug').Path
+          $iisDll = Join-Path $binDir 'iccIisIsapi.dll'
+          $iisSmoke = Join-Path $binDir 'iccIisIsapiSmoke.exe'
+          $pawg = Join-Path $binDir 'iccPawgReport.exe'
+          $sample = (Resolve-Path 'Testing\sRGB_v4_ICC_preference.icc').Path
+          $endpointPage = Join-Path $binDir 'endpoints.html'
+          $errorPage = Join-Path $binDir 'error.html'
+          $landingScript = Join-Path $binDir 'index.js'
+          $siteScript = Join-Path $binDir 'site.js'
+          $webConfig = Join-Path $binDir 'web.config'
+          $endpointQa = 'Tools\Winnt\IccIisIsapi\Test-IccIisIsapiEndpoints.ps1'
+
+          foreach ($required in @(
+            $iisDll,
+            $iisSmoke,
+            $pawg,
+            $endpointPage,
+            $errorPage,
+            $landingScript,
+            $siteScript,
+            $webConfig,
+            $endpointQa
+          )) {
+            if (-not (Test-Path -LiteralPath $required)) {
+              throw "Required IIS PAWG artifact missing: $(Sanitize-Line $required)"
+            }
+          }
+
+          & $iisSmoke $iisDll
+          if ($LASTEXITCODE -ne 0) {
+            throw "iccIisIsapiSmoke failed with exit code $LASTEXITCODE"
+          }
+
+          $pawgOutput = (& $pawg $sample 2>&1) -join "`n"
+          $pawgExit = $LASTEXITCODE
+          if ($pawgExit -notin 0, 1) {
+            throw "iccPawgReport failed with exit code $pawgExit"
+          }
+          if ($pawgOutput -notmatch 'ICC PROFILE ASSESSMENT REPORT') {
+            throw "iccPawgReport output omitted the assessment report header"
+          }
+
+          $pageText = Get-Content -LiteralPath $endpointPage -Raw
+          $landingScriptText = Get-Content -LiteralPath $landingScript -Raw
+          $siteScriptText = Get-Content -LiteralPath $siteScript -Raw
+          $webConfigText = Get-Content -LiteralPath $webConfig -Raw
+          if ($pageText -notmatch 'Analyze An ICC Profile' -or
+              $landingScriptText -notmatch 'loadEndpoint' -or
+              $siteScriptText -notmatch 'Download assessment report' -or
+              $siteScriptText -notmatch 'X-ICCDEV-Request' -or
+              $webConfigText -notmatch 'frame-ancestors' -or
+              $webConfigText -notmatch "style-src-attr 'none'" -or
+              $webConfigText -notmatch 'errorMode="Custom"' -or
+              $webConfigText -match "'unsafe-inline'") {
+            throw "Built endpoint page omitted the PAWG user interface"
+          }
+
+          $tokens = $null
+          $parseErrors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            $endpointQa,
+            [ref]$tokens,
+            [ref]$parseErrors
+          )
+          if ($parseErrors.Count -ne 0) {
+            throw "Endpoint QA script failed PowerShell parsing"
+          }
+
+          Sanitize-Print "[OK] IIS PAWG build, smoke, UI, and QA script checks passed"
+
       - name: Run batch profile creation routines
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
@@ -282,7 +384,7 @@ jobs:
           if (Test-Path Env:GITHUB_TOKEN) {
             Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
           }
-          . .github/scripts/sanitize.ps1
+          . .trusted-workflow\.github\scripts\sanitize.ps1
 
           function Resolve-ExistingPath([string] $Path) {
             if (-not (Test-Path -LiteralPath $Path)) {
@@ -496,157 +598,6 @@ jobs:
             --config Debug `
             --selection-output build\recent-ctests.txt
 
-      - name: Run ClangCL build and CTest check
-        env:
-          POWERSHELL_TELEMETRY_OPTOUT: "1"
-          POWERSHELL_UPDATECHECK: Off
-          CLANGCL_C_FLAGS: /D_CRT_SECURE_NO_WARNINGS /clang:-Wno-deprecated-declarations
-          CLANGCL_CXX_FLAGS: /D_CRT_SECURE_NO_WARNINGS /clang:-Wno-deprecated-declarations
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
-          $ProgressPreference = 'SilentlyContinue'
-          $env:GH_NO_UPDATE_NOTIFIER = '1'
-          $env:GH_PROMPT_DISABLED = '1'
-          git config --global credential.helper ""
-          if (Test-Path Env:GITHUB_TOKEN) {
-           Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
-          }
-
-          function Invoke-NativeLogged {
-           param(
-             [Parameter(Mandatory = $true)][string] $FilePath,
-             [Parameter(Mandatory = $true)][string[]] $Arguments,
-             [Parameter(Mandatory = $true)][string] $LogPath
-           )
-           & $FilePath @Arguments 2>&1 | Tee-Object -FilePath $LogPath -Append
-           if ($LASTEXITCODE -ne 0) {
-             throw "$FilePath failed with exit code $LASTEXITCODE"
-           }
-          }
-
-          $buildDir = 'Build\Cmake\build-clangcl-pr-smoke'
-          if (Test-Path -LiteralPath $buildDir) {
-           Remove-Item -Recurse -Force -LiteralPath $buildDir
-          }
-          New-Item -ItemType Directory -Force -Path $buildDir | Out-Null
-
-          $expectedNoisePolicy = '/D_CRT_SECURE_NO_WARNINGS /clang:-Wno-deprecated-declarations'
-          if ($env:CLANGCL_C_FLAGS -ne $expectedNoisePolicy) {
-           throw 'Unexpected ClangCL C warning policy'
-          }
-          if ($env:CLANGCL_CXX_FLAGS -ne $expectedNoisePolicy) {
-           throw 'Unexpected ClangCL CXX warning policy'
-          }
-
-          $configureLog = Join-Path $buildDir 'clangcl-configure.log'
-          $buildLog = Join-Path $buildDir 'clangcl-build.log'
-          $checkLog = Join-Path $buildDir 'clangcl-check.log'
-
-          Invoke-NativeLogged cmake @(
-           '-S', 'Build\Cmake',
-           '-B', $buildDir,
-           '-G', 'Visual Studio 17 2022',
-           '-A', 'x64',
-           '-T', 'ClangCL',
-           '-DCMAKE_TOOLCHAIN_FILE=..\..\scripts\buildsystems\vcpkg.cmake',
-           '-DVCPKG_MANIFEST_MODE=OFF',
-           "-DCMAKE_C_FLAGS=$env:CLANGCL_C_FLAGS",
-           "-DCMAKE_CXX_FLAGS=$env:CLANGCL_CXX_FLAGS",
-           '-DENABLE_TOOLS=ON',
-           '-DENABLE_CMM_TOOLS=ON',
-           '-DENABLE_TESTS=ON',
-           '-Wno-dev'
-          ) $configureLog
-          Invoke-NativeLogged cmake @(
-           '--build', $buildDir,
-           '--config', 'Debug',
-           '--parallel'
-          ) $buildLog
-          Invoke-NativeLogged cmake @(
-           '--build', $buildDir,
-           '--config', 'Debug',
-           '--target', 'build-test-binaries',
-           '--parallel'
-          ) $checkLog
-          Invoke-NativeLogged python @(
-           '.github\scripts\run-recent-ctests.py',
-           '--test-dir', $buildDir,
-           '--config', 'Debug',
-           '--selection-output', (Join-Path $buildDir 'recent-ctests.txt')
-          ) $checkLog
-
-      - name: Summarize ClangCL compiler warning signal
-        if: always()
-        env:
-          POWERSHELL_TELEMETRY_OPTOUT: "1"
-          POWERSHELL_UPDATECHECK: Off
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
-          $ProgressPreference = 'SilentlyContinue'
-          git config --global credential.helper ""
-          if (Test-Path Env:GITHUB_TOKEN) {
-           Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
-          }
-
-          function Invoke-Native {
-           param(
-             [Parameter(Mandatory = $true)][string] $FilePath,
-             [Parameter(Mandatory = $true)][string[]] $Arguments
-           )
-           & $FilePath @Arguments
-           if ($LASTEXITCODE -ne 0) {
-             throw "$FilePath failed with exit code $LASTEXITCODE"
-           }
-          }
-
-          $summaryScript = '.github\scripts\iccdev-compiler-warning-summary.py'
-          $buildLog = 'Build\Cmake\build-clangcl-pr-smoke\clangcl-build.log'
-          $detailsPath = 'Build\Cmake\build-clangcl-pr-smoke\clangcl-warning-signal.md'
-
-          if (-not (Test-Path -LiteralPath $summaryScript)) {
-           Write-Host '[WARN] ClangCL warning summary script is missing'
-           return
-          }
-
-          Invoke-Native python @(
-           $summaryScript,
-           '--log', $buildLog,
-           '--summary', $env:GITHUB_STEP_SUMMARY,
-           '--details', $detailsPath,
-           '--context', 'Windows ClangCL',
-           '--issues', '#1025,#1036'
-          )
-
-      - name: ClangCL Summary
-        if: always()
-        env:
-          POWERSHELL_TELEMETRY_OPTOUT: "1"
-          POWERSHELL_UPDATECHECK: Off
-          GH_JOB_STATUS: ${{ job.status }}
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
-          $ProgressPreference = 'SilentlyContinue'
-          . .github/scripts/sanitize.ps1
-          $summaryLines = @(
-           '### Windows ClangCL smoke',
-           '',
-           '- Generator: ``Visual Studio 17 2022 -T ClangCL``',
-           '- Warning policy: ``_CRT_SECURE_NO_WARNINGS`` plus ``-Wno-deprecated-declarations``',
-           '- Build scope: ``full configured command-line project plus Windows CMM DLL``',
-           '- Build type: ``Debug``',
-           '- CTest: ``all registered Windows suites``',
-           "- Result: ``$(Sanitize-Line $env:GH_JOB_STATUS)``"
-          )
-          $summaryLines | ForEach-Object {
-            Sanitize-Print $_
-          } | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-
       - name: GitHub Summary
         if: always()
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
@@ -665,10 +616,10 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
-          # Use canonical sanitization from .github/scripts/sanitize.ps1
+          # Use canonical sanitization from the trusted base checkout.
           # PowerShell dot-sourcing: loads the script into the current scope
-          . .github/scripts/sanitize.ps1
-          "## CMake Windows Build Summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          . .trusted-workflow\.github\scripts\sanitize.ps1
+          "## CMake Windows MSVC Build Summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "Repository: $(Sanitize-Line $env:GH_REPOSITORY)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "Run URL: $(Sanitize-Line $env:GH_RUN_URL)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
@@ -678,6 +629,418 @@ jobs:
           "Runner OS: $(Sanitize-Line $env:GH_RUNNER_OS)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "Status: $(Sanitize-Line $env:GH_JOB_STATUS)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+
+  clangcl-build:
+    name: Windows ClangCL build and test
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      ICCDEV_VCPKG_EXPORT_SHA256: f8c70cb22dfe1ec379549a66a66473ad5f4f1fbe27c2b7340d69112c606a52ff
+    defaults:
+      run:
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+
+    steps:
+      - name: Checkout PR source
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ inputs.target_sha || github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
+          path: .trusted-workflow
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Harden Environment and Validate Inputs
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $env:POWERSHELL_TELEMETRY_OPTOUT = "1"
+          $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
+          $env:GH_NO_UPDATE_NOTIFIER = "1"
+          $env:GH_PROMPT_DISABLED = "1"
+          $env:NUGET_XMLDOC_MODE = "skip"
+          # --- Validate workspace path (defense-in-depth) ---
+          if (-not (Test-Path $env:GITHUB_WORKSPACE)) {
+            throw "Invalid GITHUB_WORKSPACE path: $env:GITHUB_WORKSPACE"
+          }
+          # --- Remove tokens or UCI that should not exist in PR CI ---
+          foreach ($v in @(
+            'GITHUB_TOKEN',
+            'ACTIONS_RUNTIME_TOKEN',
+            'ACTIONS_ID_TOKEN_REQUEST_URL',
+            'ACTIONS_ID_TOKEN_REQUEST_TOKEN'
+          )) {
+            if (Test-Path "Env:$v") {
+              Remove-Item "Env:$v" -ErrorAction SilentlyContinue
+            }
+          }
+          # --- Canonicalization then sanitize user controllable input ---
+          function Canonicalize([string]$s) {
+            if (-not $s) { return "" }
+            $s = $s.Trim()
+            $s = $s.Replace("`r","").Replace("`n","")
+            # Strip C0 controls, DEL, and Unicode bidi/zero-width/formatting chars
+            $s = -join ($s.ToCharArray() | Where-Object {
+              $c = [int]$_
+              $c -ge 32 -and $c -ne 127 -and
+              -not ($c -ge 0x200B -and $c -le 0x200F) -and
+              -not ($c -ge 0x2028 -and $c -le 0x202F) -and
+              -not ($c -ge 0x2060 -and $c -le 0x2069) -and
+              $c -ne 0xFEFF -and
+              -not ($c -ge 0xFFF9 -and $c -le 0xFFFB)
+            })
+            return $s
+          }
+          # --- Canonicalize PR-controlled environment values ---
+          $env:GITHUB_REF      = Canonicalize $env:GITHUB_REF
+          $env:GITHUB_HEAD_REF = Canonicalize $env:GITHUB_HEAD_REF
+          $env:GITHUB_BASE_REF = Canonicalize $env:GITHUB_BASE_REF
+          # --- Harden Git configuration ---
+          git config --global credential.helper ""
+          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
+          # --- PATH hardening: prioritize trusted tool locations ---
+          $trustedPath = @(
+            "$env:SystemRoot\system32",
+            "$env:SystemRoot",
+            "$env:ProgramFiles\Git\bin",
+            "$env:ProgramFiles\PowerShell\7"
+          ) -join ';'
+          $env:PATH = "$trustedPath;$env:PATH"
+          Write-Host "Finished Harden Environment and Validate Inputs" -ForegroundColor Green
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57  # v3.0.0 (node24)
+
+      - name: Install dependencies
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+          $depsUrl = @(
+            'https://github.com/InternationalColorConsortium/iccDEV/releases/download'
+            'v2.3.1/vcpkg-exported-deps.zip'
+          ) -join '/'
+          Start-BitsTransfer -Source $depsUrl -Destination 'deps.zip'
+          $actualDigest = (Get-FileHash -LiteralPath 'deps.zip' -Algorithm SHA256).Hash
+          if ($actualDigest -ne $env:ICCDEV_VCPKG_EXPORT_SHA256) {
+            throw "vcpkg export digest mismatch: $actualDigest"
+          }
+          Expand-Archive -LiteralPath 'deps.zip' -DestinationPath . -Force
+
+      - name: Run ClangCL build and CTest check
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+
+          function Invoke-NativeLogged {
+            param(
+              [Parameter(Mandatory = $true)][string] $FilePath,
+              [Parameter(Mandatory = $true)][string[]] $Arguments,
+              [Parameter(Mandatory = $true)][string] $LogPath
+            )
+            & $FilePath @Arguments 2>&1 | Tee-Object -FilePath $LogPath -Append
+            if ($LASTEXITCODE -ne 0) {
+              throw "$FilePath failed with exit code $LASTEXITCODE"
+            }
+          }
+
+          $buildDir = 'Build\Cmake\build-clangcl-pr-smoke'
+          $toolchainFile = Join-Path $env:GITHUB_WORKSPACE 'scripts\buildsystems\vcpkg.cmake'
+          if (Test-Path -LiteralPath $buildDir) {
+            Remove-Item -Recurse -Force -LiteralPath $buildDir
+          }
+          New-Item -ItemType Directory -Force -Path $buildDir | Out-Null
+
+          $configureLog = Join-Path $buildDir 'clangcl-configure.log'
+          $buildLog = Join-Path $buildDir 'clangcl-build.log'
+          $checkLog = Join-Path $buildDir 'clangcl-check.log'
+
+          Invoke-NativeLogged cmake @(
+            '-S', 'Build\Cmake',
+            '-B', $buildDir,
+            '-G', 'Visual Studio 18 2026',
+            '-A', 'x64',
+            '-T', 'ClangCL',
+            "-DCMAKE_TOOLCHAIN_FILE=$toolchainFile",
+            '-DVCPKG_MANIFEST_MODE=OFF',
+            '-DENABLE_TOOLS=ON',
+            '-DENABLE_CMM_TOOLS=ON',
+            '-DENABLE_TESTS=ON',
+            '-DICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS=ON',
+            '-DICCDEV_ENABLE_AVX2=ON',
+            '-Wno-dev'
+          ) $configureLog
+          Invoke-NativeLogged cmake @(
+            '--build', $buildDir,
+            '--config', 'Debug',
+            '--parallel'
+          ) $buildLog
+          Invoke-NativeLogged cmake @(
+            '--build', $buildDir,
+            '--config', 'Debug',
+            '--target', 'build-test-binaries',
+            '--parallel'
+          ) $checkLog
+          Invoke-NativeLogged python @(
+            '.github\scripts\run-recent-ctests.py',
+            '--test-dir', $buildDir,
+            '--config', 'Debug',
+            '--selection-output', (Join-Path $buildDir 'recent-ctests.txt')
+          ) $checkLog
+
+      - name: Summarize ClangCL compiler warning signal
+        if: always()
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+
+          function Invoke-Native {
+            param(
+              [Parameter(Mandatory = $true)][string] $FilePath,
+              [Parameter(Mandatory = $true)][string[]] $Arguments
+            )
+            & $FilePath @Arguments
+            if ($LASTEXITCODE -ne 0) {
+              throw "$FilePath failed with exit code $LASTEXITCODE"
+            }
+          }
+
+          $summaryScript = '.github\scripts\iccdev-compiler-warning-summary.py'
+          $buildLog = 'Build\Cmake\build-clangcl-pr-smoke\clangcl-build.log'
+          $detailsPath = 'Build\Cmake\build-clangcl-pr-smoke\clangcl-warning-signal.md'
+
+          if (-not (Test-Path -LiteralPath $summaryScript)) {
+            Write-Host '[WARN] ClangCL warning summary script is missing'
+            return
+          }
+
+          Invoke-Native python @(
+            $summaryScript,
+            '--log', $buildLog,
+            '--summary', $env:GITHUB_STEP_SUMMARY,
+            '--details', $detailsPath,
+            '--context', 'Windows ClangCL',
+            '--issues', '#1025,#1036'
+          )
+
+      - name: ClangCL summary
+        if: always()
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+          GH_JOB_STATUS: ${{ job.status }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+          . .trusted-workflow\.github\scripts\sanitize.ps1
+          $summaryLines = @(
+            '### Windows ClangCL smoke',
+            '',
+            '- Generator: ``Visual Studio 18 2026 -T ClangCL``',
+            '- Warning policy: ``_CRT_SECURE_NO_WARNINGS`` via ``ICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS``',
+            '- Build scope: ``full configured command-line project plus Windows CMM DLL``',
+            '- Build type: ``Debug``',
+            '- CTest: ``all registered Windows suites``',
+            "- Result: ``$(Sanitize-Line $env:GH_JOB_STATUS)``"
+          )
+          $summaryLines | ForEach-Object {
+            Sanitize-Print $_
+          } | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+  windows-release-performance:
+    name: Windows Release performance report
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      ICCDEV_VCPKG_EXPORT_SHA256: f8c70cb22dfe1ec379549a66a66473ad5f4f1fbe27c2b7340d69112c606a52ff
+    defaults:
+      run:
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+
+    steps:
+      - name: Checkout PR source
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ inputs.target_sha || github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
+          path: .trusted-workflow
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Harden Environment and Validate Inputs
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $env:POWERSHELL_TELEMETRY_OPTOUT = "1"
+          $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
+          $env:GH_NO_UPDATE_NOTIFIER = "1"
+          $env:GH_PROMPT_DISABLED = "1"
+          $env:NUGET_XMLDOC_MODE = "skip"
+          # --- Validate workspace path (defense-in-depth) ---
+          if (-not (Test-Path $env:GITHUB_WORKSPACE)) {
+            throw "Invalid GITHUB_WORKSPACE path: $env:GITHUB_WORKSPACE"
+          }
+          # --- Remove tokens or UCI that should not exist in PR CI ---
+          foreach ($v in @(
+            'GITHUB_TOKEN',
+            'ACTIONS_RUNTIME_TOKEN',
+            'ACTIONS_ID_TOKEN_REQUEST_URL',
+            'ACTIONS_ID_TOKEN_REQUEST_TOKEN'
+          )) {
+            if (Test-Path "Env:$v") {
+              Remove-Item "Env:$v" -ErrorAction SilentlyContinue
+            }
+          }
+          # --- Canonicalization then sanitize user controllable input ---
+          function Canonicalize([string]$s) {
+            if (-not $s) { return "" }
+            $s = $s.Trim()
+            $s = $s.Replace("`r","").Replace("`n","")
+            # Strip C0 controls, DEL, and Unicode bidi/zero-width/formatting chars
+            $s = -join ($s.ToCharArray() | Where-Object {
+              $c = [int]$_
+              $c -ge 32 -and $c -ne 127 -and
+              -not ($c -ge 0x200B -and $c -le 0x200F) -and
+              -not ($c -ge 0x2028 -and $c -le 0x202F) -and
+              -not ($c -ge 0x2060 -and $c -le 0x2069) -and
+              $c -ne 0xFEFF -and
+              -not ($c -ge 0xFFF9 -and $c -le 0xFFFB)
+            })
+            return $s
+          }
+          # --- Canonicalize PR-controlled environment values ---
+          $env:GITHUB_REF      = Canonicalize $env:GITHUB_REF
+          $env:GITHUB_HEAD_REF = Canonicalize $env:GITHUB_HEAD_REF
+          $env:GITHUB_BASE_REF = Canonicalize $env:GITHUB_BASE_REF
+          # --- Harden Git configuration ---
+          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          # --- PATH hardening: prioritize trusted tool locations ---
+          $trustedPath = @(
+            "$env:SystemRoot\system32",
+            "$env:SystemRoot",
+            "$env:ProgramFiles\Git\bin",
+            "$env:ProgramFiles\PowerShell\7"
+          ) -join ';'
+          $env:PATH = "$trustedPath;$env:PATH"
+          Write-Host "Finished Harden Environment and Validate Inputs" -ForegroundColor Green
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57  # v3.0.0 (node24)
+
+      - name: Install dependencies
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+          $depsUrl = @(
+            'https://github.com/InternationalColorConsortium/iccDEV/releases/download'
+            'v2.3.1/vcpkg-exported-deps.zip'
+          ) -join '/'
+          Start-BitsTransfer -Source $depsUrl -Destination 'deps.zip'
+          $actualDigest = (Get-FileHash -LiteralPath 'deps.zip' -Algorithm SHA256).Hash
+          if ($actualDigest -ne $env:ICCDEV_VCPKG_EXPORT_SHA256) {
+            throw "vcpkg export digest mismatch: $actualDigest"
+          }
+          Expand-Archive -LiteralPath 'deps.zip' -DestinationPath . -Force
+
+      - name: Run Windows Release performance report
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          # preflight: allow-pr-script-execution reason=exercise Windows Release report
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+          . .trusted-workflow\.github\scripts\sanitize.ps1
+          if (-not $env:VCPKG_INSTALLATION_ROOT) {
+            throw 'VCPKG_INSTALLATION_ROOT is not set on this runner'
+          }
+          $env:VCPKG_ROOT = $env:VCPKG_INSTALLATION_ROOT
+          $cmakeArgs = @(
+            '-DVCPKG_MANIFEST_MODE=OFF'
+            "-DVCPKG_INSTALLED_DIR=$env:GITHUB_WORKSPACE\installed"
+          )
+          .\.github\scripts\iccdev-windows-release-report.ps1 `
+            -BuildDir out\windows-msvc-release-report `
+            -Preset vs2026-x64 `
+            -CMakeConfigureArguments $cmakeArgs `
+            -Threads '1,2,4,8,16'
+          Get-Content out\windows-msvc-release-report\reports\windows-release-report.md |
+            ForEach-Object { Sanitize-Print $_ } |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
   mingw-smoke:
     name: MinGW UCRT64 smoke

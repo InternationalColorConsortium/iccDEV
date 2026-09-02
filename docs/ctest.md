@@ -116,6 +116,7 @@ before running the suite.
 | Test | Source |
 |------|--------|
 | `iccdev.create-profiles` | `Testing/CreateAllProfiles.sh` |
+| `iccdev.c-validation-dlopen` | `.github/ci/regression/c-validation-dlopen.c` |
 | `iccdev.embedio-read8-bounds` | `.github/ci/regression/embedio-read8-bounds.cpp` |
 | `iccdev.fileio-getlength-preserves-position` | `.github/ci/regression/fileio-getlength-position.cpp` |
 | `iccdev.fileio-reopen-nonregular` | `.github/ci/regression/fileio-reopen-nonregular.cpp` |
@@ -125,6 +126,7 @@ before running the suite.
 | `iccdev.applytolink-invalid-decoded-intent` | `Build/Cmake/Testing/CMakeLists.txt` |
 | `iccdev.applytolink-v4-missing-device-descriptions` | `Build/Cmake/Testing/CMakeLists.txt` |
 | `iccdev.xform-abstorel-adjust` | `.github/ci/regression/xform-abstorel-adjust.cpp` |
+| `iccdev.pcs-adjust-placement` | `.github/ci/regression/pcs-adjust-placement.cpp` |
 | `iccdev.reflectance-observer-illum-range` | `.github/ci/regression/reflectance-observer-illum-range.cpp` |
 | `iccdev.pcs-edge-metadata` | `.github/ci/regression/pcs-edge-metadata.cpp` |
 | `iccdev.parser-restore-calls` | `.github/ci/regression/parser-restore-calls.cpp` |
@@ -134,9 +136,17 @@ before running the suite.
 | `iccdev.hybrid-pipeline` | `.github/scripts/iccdev-hybrid-pipeline-tests.sh` |
 | `iccdev.searchvec-uio-regression` | `.github/scripts/iccdev-searchvec-uio-regression.sh` |
 | `iccdev.specsep-tiff-geometry-regression` | `.github/scripts/iccdev-specsep-tiff-geometry-regression-tests.sh` |
+| `iccdev.tiff-resolution-unit-regression` | `.github/scripts/iccdev-tiff-resolution-unit-regression-tests.sh` |
+| `iccdev.tiff-separated-strips` | `.github/ci/regression/tiff-separated-strips.cpp` |
+| `iccdev.specsep-usage-exit-code-regression` | `.github/scripts/iccdev-issue-1514-specsep-usage-exit-code-regression-tests.sh` |
+| `iccdev.specsep-cli-args-regression` | `.github/scripts/iccdev-specsep-cli-args-regression-tests.sh` |
+| `iccdev.specsep-corpus-matrix` | `.github/scripts/iccdev-specsep-corpus-matrix.sh` |
+| `iccdev.specsep-profile-sweep` | `.github/scripts/iccdev-specsep-profile-sweep.sh` |
+| `iccdev.specsep-profile-sweep-accept` | `.github/scripts/iccdev-specsep-profile-sweep.sh` (`--channels 3`) |
 | `iccdev.dump-profile-header-regression` | `.github/scripts/iccdev-dump-profile-header-regression-tests.sh` |
 | `iccdev.basic-string-regressions` | `.github/scripts/iccdev-basic-string-regression-tests.sh` |
 | `iccdev.pawg-report-regressions` | `.github/scripts/iccdev-pawg-report-regression-tests.sh` |
+| `iccdev.pawg-q1-quality-contract` | `.github/ci/regression/pawg-q1-quality-contract.cpp` |
 | `iccdev.json-cfg` | `.github/scripts/iccdev-json-cfg-tests.sh` |
 | `iccdev.json-cli-exercise` | `.github/scripts/json-cli-exercise.sh` |
 | `iccdev.json-parser-regressions` | `.github/scripts/iccdev-json-parser-regression-tests.sh` |
@@ -149,6 +159,8 @@ before running the suite.
 | `iccdev.cam-degenerate-regressions` | `.github/scripts/iccdev-cam-degenerate-regression-tests.sh` |
 | `iccdev.calculator-regressions` | `.github/scripts/iccdev-calculator-regression-tests.sh` |
 | `iccdev.lut16-zero-curve-regressions` | `.github/scripts/iccdev-lut16-zero-curve-regression-tests.sh` |
+| `iccdev.applynamedcmm-cli-args` | `.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh` |
+| `iccdev.applysearch-cli-args` | `.github/scripts/iccdev-applysearch-cli-args-regression.sh` |
 | `iccdev.namedcolor-apply-regressions` | `.github/scripts/iccdev-namedcolor-apply-regression-tests.sh` |
 | `iccdev.v5-namedcmm-regressions` | `.github/scripts/iccdev-v5-namedcmm-regression-tests.sh` |
 | `iccdev.namedcolor-overprint-regressions` | `.github/scripts/iccdev-namedcolor-overprint-regression-tests.sh` |
@@ -188,6 +200,9 @@ checks the 32-item PAWG report structure, verifies summary counts against the
 rendered item lines, runs malformed and malware-signature dynamic inputs, and
 fails on sanitizer findings.
 
+`iccdev.pawg-q1-quality-contract` validates the PAWG Q1 sample budget,
+CIEDE2000 reference vectors, and Gray/RGB/CMYK round-trip model selection.
+
 `iccdev.cam-degenerate-regressions` compiles a small helper from
 `.github/ci/regression/cam-degenerate.cpp` and exercises degenerate CAM forward
 and inverse conversions. It guards against divide-by-zero and non-finite
@@ -197,9 +212,17 @@ appearance state regressions without committing generated profiles.
 integration test as a separate `slow` CTest label. The maintainer `check` target
 runs the full suite, including `slow`. Routine CI tool sweeps use the fast lane
 with `--label-exclude slow --label-exclude calculator`, and the `check-fast`
-target runs with `--label-exclude slow`; run full CTest or the hybrid gate
+target excludes `slow` and `known-red` with one label regular expression. Run
+full CTest or the hybrid gate
 explicitly when the slow and calculator suites are in scope:
 `ctest --test-dir build -R '^iccdev\.hybrid-pipeline$' --output-on-failure`.
+
+The normal `ci-pr-action` full lane additionally excludes the `pr-extended`
+label to keep its average runtime in the 8-12 minute envelope. Label membership
+defines the deferred tests; all other slow tests remain in the PR lane.
+`ci-regression-checks` leaves the label enabled, so deferred tests remain
+covered by the full regression surface. Run any deferred test directly when the
+change affects it.
 
 Use a standalone CTest row for focused crash regressions that need clear
 maintainer visibility in CTest output. For example,
@@ -231,6 +254,7 @@ Windows full tool builds register these tests when all targets are available:
 | `iccdev.windows-pawg-report-smoke` | `Build/Cmake/Testing/RunWindowsPawgReportSmokeTest.cmake` |
 | `iccdev.issue-987-shared-mpe-export` | `Build/Cmake/Testing/RunWindowsSharedExportTest.cmake` |
 | `iccdev.issue-1009-iccjson-profilejson-export` | `Build/Cmake/Testing/RunWindowsIccJsonExportTest.cmake` |
+| `iccdev.installed-package-consumer` | `Build/Cmake/Testing/RunInstalledPackageConsumerTest.cmake` |
 
 The batch-backed Windows tests run through
 `Build/Cmake/Testing/RunWindowsBatchTest.cmake`. The wrapper copies `Testing/`
@@ -243,7 +267,17 @@ unified `bin` runtime directory and falls back to the older per-tool
 Windows CTest wrappers collect build-tree DLL directories plus runtime
 dependency directories from `CMakeCache.txt`, including `CMAKE_PREFIX_PATH`,
 vcpkg installed triplets, compiler `bin` directories, and common dependency
-library prefixes. MSVC builds also add the matching Debug CRT redistributable
+library prefixes. Per-configuration trees are covered on both counts: vcpkg
+keeps release DLLs in `<installed>/<triplet>/bin` and debug DLLs in
+`<installed>/<triplet>/debug/bin`, and the collector adds both, ordering the one
+matching `ICCDEV_CONFIG` (or the cache's `CMAKE_BUILD_TYPE`) first. That ordering
+is applied per prefix -- to `CMAKE_PREFIX_PATH` entries and dependency library
+prefixes as well as to the vcpkg tree -- because the first matching directory on
+`PATH` is the one the loader binds, and both trees spell the DLL identically. Dependency
+library cache entries are read per configuration too, so the
+`optimized;<path>;debug;<path>` form a multi-config generator stores in
+`LIBXML2_LIBRARY` or `ZLIB_LIBRARY` contributes its `bin` prefixes instead of
+being discarded whole. MSVC builds also add the matching Debug CRT redistributable
 directory when it is present, so Debug helper binaries and DLLs can run on CI
 machines that do not have `msvcp140d.dll` or `vcruntime140d.dll` on the system
 `PATH`. This keeps CTest execution independent of a developer's interactive
@@ -252,6 +286,15 @@ Debug CRT by building a bounded runtime `PATH` from tool, DLL, vcpkg, MSVC CRT,
 and Windows system directories.
 MinGW builds still need the UCRT64 `bin` directory on the invoking shell `PATH`
 because GCC launches runtime-dependent compiler subprocesses during the build.
+
+`iccdev.windows-runtime-paths`
+(`Build/Cmake/Testing/RunWindowsRuntimePathsTest.cmake`) covers that collector
+against synthetic `CMakeCache.txt` fixtures, asserting both vcpkg configuration
+trees, the per-configuration ordering, and the `optimized;...;debug;...`
+library-cache form. It is registered on every platform rather than only on
+Windows: the effect of a miss is Windows-only -- an out-of-tree consumer fails
+to load with `0xc0000135`, `STATUS_DLL_NOT_FOUND`, which names no DLL -- but the
+cause is cache parsing, so it reproduces anywhere and needs no build products.
 
 Windows MSVC AddressSanitizer uses comma-separated `ASAN_OPTIONS`
 (`detect_leaks=0,halt_on_error=1`) and does not support LeakSanitizer
@@ -279,13 +322,35 @@ and header/file-size diagnostic. `iccdev.issue-987-shared-mpe-export` is a
 focused Windows shared-library regression for MSVC and MinGW. It checks that
 `IccProfLib2.dll` exports `CIccTagMultiProcessElement::NumElements` with
 `dumpbin` or `objdump`, then builds and runs a small consumer against the
-build-tree DLL and import library. `iccdev.windows-iccdevcmm-smoke` loads the
+build-tree DLL and import library. In an AddressSanitizer build, this consumer
+and the exported-data DLL consumer inherit the parent ASan and MSVC runtime
+settings so the executable and instrumented DLL share one runtime contract.
+`iccdev.windows-iccdevcmm-smoke` loads the
 Windows ICM CMM DLL directly, verifies the required `CM*` exports and `ICCD`
 CMM identity, validates `sRGB_v4_ICC_preference.icc`, then creates, translates
 through, and deletes a two-profile RGB transform without registering the CMM
 globally. `iccdev.issue-1009-iccjson-profilejson-export` checks that
 `IccJSON2.dll` exports `CIccProfileJson::~CIccProfileJson` for MSVC ABI
 consumers.
+
+`iccdev.installed-package-consumer` runs on every platform and covers the
+*installed* package rather than the build tree. It stages an install into a
+temporary prefix -- component `dev` tree-wide, then component `runtime` per
+library directory, so a command-line tool that was never built cannot be
+reported as a broken package -- checks the installed header and CMake package
+surface, then builds and runs three consumers against it:
+`find_package(RefIccMAX CONFIG)`, `find_package(RefIccMAX MODULE)` through
+`Build/Cmake/Modules/FindRefIccMAX.cmake`, and `examples/hello-iccdev` as
+shipped. A fourth arm repeats MODULE mode with a target-less
+`RefIccMAXConfig.cmake` planted earlier on `CMAKE_PREFIX_PATH`, the shape a
+pre-2.3.2 install has. Each arm pins the library it resolved back to the staged
+prefix, so an iccDEV installed elsewhere on the machine cannot satisfy the test
+in place of this build tree. Unlike the Windows consumers above, this one is
+skipped -- with a logged reason -- on sanitizer builds rather than inheriting
+the parent settings: its consumers are separate CMake projects, and an
+uninstrumented executable cannot load an ASan-instrumented library. The
+MODULE-mode arms are likewise skipped on static-only builds, where
+`FindRefIccMAX.cmake` reports not-found by design.
 
 ## Fixtures and Logs
 
@@ -327,12 +392,12 @@ For repeatable agent-assisted work, use
    - Set labels and a timeout.
    - Add `FIXTURES_REQUIRED iccdev_profiles` when the test needs generated
      profiles.
-3. Update hard-coded coverage counts when generated profile counts change:
-   - Windows profile parse count in `Build/Cmake/Testing/CMakeLists.txt`.
-   - JSON profile parse count in `.github/workflows/ci-json-roundtrip.yml`.
-     Keep these in sync with `Testing/CreateAllProfiles.sh` and
-     `Testing/CreateAllProfiles.bat`.
-   - WASM expected ICC count in `Build/Cmake/wasm-package/regression.js`,
+3. Update `Testing/qa-profile-manifest.tsv` when generated profiles change.
+   The Windows profile setup and JSON round-trip workflow verify that every
+   manifest-declared generated profile exists after generation. Keep the
+   manifest in sync with `Testing/CreateAllProfiles.sh` and
+   `Testing/CreateAllProfiles.bat`.
+   Update the WASM expected ICC count in `Build/Cmake/wasm-package/regression.js`,
      `.github/workflows/ci-pr-wasm.yml`, `.github/workflows/ci-pr-action.yml`,
      and `.github/workflows/ci-latest-release.yml` when
      `Testing/CreateAllProfiles.sh` changes the generated-profile set.

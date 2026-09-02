@@ -95,6 +95,7 @@ env:
 
 jobs:
   detect-src:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Welcome to iccDEV
     runs-on: ubuntu-latest
     permissions:
@@ -109,12 +110,21 @@ jobs:
       testing_changed: ${{ steps.diffcheck.outputs.testing_changed }}
       ci_changed: ${{ steps.diffcheck.outputs.ci_changed }}
       container_changed: ${{ steps.diffcheck.outputs.container_changed }}
+      image_definition_changed: ${{ steps.diffcheck.outputs.image_definition_changed }}
+      container_toolchain_required: ${{ steps.diffcheck.outputs.container_toolchain_required }}
+      trusted_base_image_available: ${{ steps.diffcheck.outputs.trusted_base_image_available }}
       docs_only: ${{ steps.diffcheck.outputs.docs_only }}
+      native_changed: ${{ steps.diffcheck.outputs.native_changed }}
+      risk_required: ${{ steps.diffcheck.outputs.risk_required }}
+      run_windows_risk: ${{ steps.diffcheck.outputs.run_windows_risk }}
+      example_consumer_changed: ${{ steps.diffcheck.outputs.example_consumer_changed }}
       fast_lane: ${{ steps.diffcheck.outputs.fast_lane }}
       include_windows: ${{ steps.diffcheck.outputs.include_windows }}
       ctest_recent_limit: ${{ steps.diffcheck.outputs.ctest_recent_limit }}
+      ctest_mode: ${{ steps.diffcheck.outputs.ctest_mode }}
       warning_policy: ${{ steps.diffcheck.outputs.warning_policy }}
       target_sha: ${{ steps.diffcheck.outputs.target_sha }}
+      base_sha: ${{ steps.diffcheck.outputs.base_sha }}
       target_repository: ${{ steps.diffcheck.outputs.target_repository }}
       pr_number: ${{ steps.diffcheck.outputs.pr_number }}
 
@@ -124,6 +134,86 @@ jobs:
           fetch-depth: 50  # Increased from 2 to allow merge-base detection
           # Disable unsafe fetch options
           persist-credentials: false
+
+      - name: Resolve workflow-dispatch PR
+        id: dispatch-pr
+        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          escape_html() {
+            local value="$1"
+            value="${value//&/&amp;}"
+            value="${value//</&lt;}"
+            value="${value//>/&gt;}"
+            value="${value//\"/&quot;}"
+            value="${value//\'/&#39;}"
+            printf '%s' "$value"
+          }
+          sanitize_line() { escape_html "$1"; }
+
+          if [[ ! "$DISPATCH_PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+            echo "workflow_dispatch fast lane requires numeric pr_number" >&2
+            exit 1
+          fi
+
+          pr_json="$(gh api "repos/${GH_REPOSITORY}/pulls/${DISPATCH_PR_NUMBER}")"
+          if [ "$(jq -r '.state' <<< "$pr_json")" != "open" ]; then
+            echo "workflow_dispatch target PR is not open: $DISPATCH_PR_NUMBER" >&2
+            exit 1
+          fi
+
+          base_ref="$(jq -r '.base.ref' <<< "$pr_json")"
+          case "$base_ref" in
+            master|ci-qa-flags|ci-qa-pr-docker-testing)
+              ;;
+            *)
+              echo "workflow_dispatch target PR uses an unsupported base: $DISPATCH_PR_NUMBER" >&2
+              exit 1
+              ;;
+          esac
+
+          base_sha="$(jq -r '.base.sha' <<< "$pr_json")"
+          head_sha="$(jq -r '.head.sha' <<< "$pr_json")"
+          target_repository="$(jq -r '.head.repo.full_name' <<< "$pr_json")"
+          if [ "$target_repository" != "$GH_REPOSITORY" ]; then
+            echo "workflow_dispatch fast lane requires a same-repository PR" >&2
+            exit 1
+          fi
+          for sha in "$base_sha" "$head_sha"; do
+            if [[ ! "$sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              echo "workflow_dispatch target PR returned an invalid commit SHA" >&2
+              exit 1
+            fi
+          done
+
+          {
+            printf 'base_ref=%s\n' "$(sanitize_line "$base_ref")"
+            printf 'base_sha=%s\n' "$(sanitize_line "$base_sha")"
+            printf 'head_sha=%s\n' "$(sanitize_line "$head_sha")"
+            printf 'target_repository=%s\n' "$(sanitize_line "$target_repository")"
+          } >> "$GITHUB_OUTPUT"  # elements-sanitized
+
+      - name: Checkout workflow-dispatch PR head
+        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          DISPATCH_HEAD_SHA: ${{ steps.dispatch-pr.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git -c protocol.version=2 fetch --no-tags origin "$DISPATCH_HEAD_SHA" --depth=50
+          git checkout --detach "$DISPATCH_HEAD_SHA"
 
       # Checkout the trusted base commit into a separate path so we do not
       # source code from the PR workspace (untrusted).
@@ -137,14 +227,28 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Checkout resolved workflow-dispatch base
+        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          DISPATCH_BASE_SHA: ${{ steps.dispatch-pr.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git -C base -c protocol.version=2 fetch --no-tags origin "$DISPATCH_BASE_SHA" --depth=1
+          git -C base checkout --detach "$DISPATCH_BASE_SHA"
+
       - name: Configure Git Environment
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
 
       - name: Check for source changes
         id: diffcheck
@@ -158,27 +262,39 @@ jobs:
           DISPATCH_PR_NUMBER: ${{ inputs.pr_number || '' }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login || github.actor }}
           PR_NUMBER: ${{ github.event.pull_request.number || '' }}
           PR_BASE_REF: ${{ github.base_ref || 'master' }}
+          DISPATCH_BASE_REF: ${{ steps.dispatch-pr.outputs.base_ref || '' }}
+          DISPATCH_BASE_SHA: ${{ steps.dispatch-pr.outputs.base_sha || '' }}
+          DISPATCH_HEAD_SHA: ${{ steps.dispatch-pr.outputs.head_sha || '' }}
+          DISPATCH_TARGET_REPOSITORY: ${{ steps.dispatch-pr.outputs.target_repository || '' }}
           GH_EVENT_NAME: ${{ github.event_name }}
           GH_ACTOR: ${{ github.actor }}
           GH_REPOSITORY: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-
-          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
           source "$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
 
           ci_scope="${CI_SCOPE:-auto}"
           head_sha="${PR_HEAD_SHA}"
+          base_sha="$(git -C "$GITHUB_WORKSPACE/base" rev-parse HEAD)"
           target_repository="${PR_HEAD_REPO}"
           pr_number="${PR_NUMBER}"
           fast_lane=false
           include_windows=true
           ctest_recent_limit=0
           warning_policy=fail
+          image_definition_changed=false
+          container_toolchain_required=false
+          trusted_base_image_available=false
+          # Default to the full PR CTest surface. The pr-extended tests
+          # are deferred only by the PR caller and remain in regression runs.
+          ctest_mode=full
 
           case "$ci_scope" in
             auto|full|source|governance|docs|fast-lane)
@@ -197,6 +313,10 @@ jobs:
             local ci_changed="$5"
             local container_changed="$6"
             local docs_only="$7"
+            local native_changed="$8"
+            local risk_required="$9"
+            local run_windows_risk="${10}"
+            local example_consumer_changed="${11}"
 
             write_github_output() {
               local key="$1"
@@ -217,12 +337,21 @@ jobs:
             write_github_output testing_changed "$testing_changed"
             write_github_output ci_changed "$ci_changed"
             write_github_output container_changed "$container_changed"
+            write_github_output image_definition_changed "$image_definition_changed"
+            write_github_output container_toolchain_required "$container_toolchain_required"
+            write_github_output trusted_base_image_available "$trusted_base_image_available"
             write_github_output docs_only "$docs_only"
+            write_github_output native_changed "$native_changed"
+            write_github_output risk_required "$risk_required"
+            write_github_output run_windows_risk "$run_windows_risk"
+            write_github_output example_consumer_changed "$example_consumer_changed"
             write_github_output fast_lane "$fast_lane"
             write_github_output include_windows "$include_windows"
             write_github_output ctest_recent_limit "$ctest_recent_limit"
+            write_github_output ctest_mode "$ctest_mode"
             write_github_output warning_policy "$warning_policy"
             write_github_output target_sha "$head_sha"
+            write_github_output base_sha "$base_sha"
             write_github_output target_repository "$target_repository"
             write_github_output pr_number "$pr_number"
           }
@@ -244,9 +373,12 @@ jobs:
             if [ -z "${GH_TOKEN:-}" ]; then
               return 1
             fi
-            permission="$(gh api \
+            if ! permission="$(gh api \
               "repos/${GH_REPOSITORY}/collaborators/${actor}/permission" \
-              --jq '.permission' 2>/dev/null || true)"
+              --jq '.permission')"; then
+              echo "Unable to determine repository permission for ${actor}" >&2
+              return 2
+            fi
             case "$permission" in
               admin|maintain|write)
                 return 0
@@ -283,31 +415,25 @@ jobs:
             ci_scope=fast-lane
             include_windows=false
             ctest_recent_limit=1
+            ctest_mode=fast
             warning_policy=fail
           }
 
           resolve_dispatch_pr() {
             local number="$1"
-            local pr_json
             if [[ ! "$number" =~ ^[1-9][0-9]*$ ]]; then
               echo "workflow_dispatch fast lane requires numeric pr_number" >&2
               return 1
             fi
-            pr_json="$(gh api "repos/${GH_REPOSITORY}/pulls/${number}")"
-            if [ "$(jq -r '.state' <<< "$pr_json")" != "open" ]; then
-              echo "workflow_dispatch target PR is not open: $number" >&2
+            if [[ -z "$DISPATCH_BASE_REF" || -z "$DISPATCH_BASE_SHA" ||
+                  -z "$DISPATCH_HEAD_SHA" || -z "$DISPATCH_TARGET_REPOSITORY" ]]; then
+              echo "workflow_dispatch PR metadata was not resolved" >&2
               return 1
             fi
-            case "$(jq -r '.base.ref' <<< "$pr_json")" in
-              master|ci-qa-flags)
-                ;;
-              *)
-                echo "workflow_dispatch target PR uses an unsupported base: $number" >&2
-                return 1
-                ;;
-            esac
-            head_sha="$(jq -r '.head.sha' <<< "$pr_json")"
-            target_repository="$(jq -r '.head.repo.full_name' <<< "$pr_json")"
+            head_sha="$DISPATCH_HEAD_SHA"
+            base_sha="$DISPATCH_BASE_SHA"
+            dispatch_base_ref="$DISPATCH_BASE_REF"
+            target_repository="$DISPATCH_TARGET_REPOSITORY"
             pr_number="$number"
           }
 
@@ -315,6 +441,7 @@ jobs:
             full|source)
               include_windows=true
               ctest_recent_limit=0
+              ctest_mode=full
               warning_policy=fail
               ;;
             fast-lane)
@@ -357,21 +484,26 @@ jobs:
             return 0
           }
 
-          if ! validate_sha "$head_sha"; then
-            echo "Warning: invalid or missing head commit sha; assuming source changed for safety" >&2
-            write_scope_outputs true true true true false false false
+          if ! validate_sha "$head_sha" || ! validate_sha "$base_sha"; then
+            echo "Warning: invalid or missing PR commit SHA; assuming source changed for safety" >&2
+            image_definition_changed=true
+            container_toolchain_required=true
+            write_scope_outputs true true true true false true false true true true true
             exit 0
           fi
 
-          base_ref="${PR_BASE_REF}"
+          base_ref="${dispatch_base_ref:-$PR_BASE_REF}"
+          if [ "$base_ref" = "master" ]; then
+            trusted_base_image_available=true
+          fi
 
           # Avoid fetching refs from user-controllable inputs like ($base_ref)
           case "$base_ref" in
-            master|ci-qa-flags)
+            master|ci-qa-flags|ci-qa-pr-docker-testing)
               ;;
             *)
               echo "Ref blocked or unsupported: $base_ref" >&2
-              write_scope_outputs false false false false false false false
+              write_scope_outputs false false false false false false false false false false false
               exit 0
               ;;
           esac
@@ -385,7 +517,9 @@ jobs:
           # Check if merge base exists before running diff
           if ! git merge-base "origin/${base_ref}" HEAD >/dev/null 2>&1; then
             echo "Warning: no merge base found; assuming source changed for safety" >&2
-            write_scope_outputs true true true true false false false
+            image_definition_changed=true
+            container_toolchain_required=true
+            write_scope_outputs true true true true false true false true true true true
             exit 0
           fi
 
@@ -396,12 +530,22 @@ jobs:
             grep -Eiq "$pattern" <<< "$changed_files"
           }
 
+          requires_windows_risk_audit() {
+            # The Windows audit scans the full workflow tree, so any changed
+            # workflow can add or alter PowerShell use without a filename allowlist.
+            has_changed_file '(^|/)[^/]+\.ps1$|^\.github/workflows/[^/]+\.ya?ml$'
+          }
+
           source_changed=false
           build_config_changed=false
           testing_changed=false
           ci_changed=false
           container_changed=false
           docs_only=false
+          native_changed=false
+          risk_required=false
+          run_windows_risk=false
+          example_consumer_changed=false
 
           if has_changed_file '\.(cpp|cxx|cc|c|h|hpp|hh)$'; then
             source_changed=true
@@ -415,11 +559,19 @@ jobs:
             testing_changed=true
           fi
 
-          if has_changed_file '^\.github/(workflows|scripts|actions|codeql-queries)/'; then
+          if has_changed_file '^\.github/(ci|workflows|scripts|actions|codeql-queries)/|^\.githooks/'; then
             ci_changed=true
           fi
 
-          if has_changed_file '^Dockerfile(\..*)?$|^\.dockerignore$|^(docker|python|iccdev-mcp)/'; then
+          if has_changed_file '^(Dockerfile|\.dockerignore|\.github/ci/(docker|requirements)/|iccdev-mcp/|\.github/workflows/ci-docker-pr\.yml|\.github/scripts/(check-workflow-cache-policy|sanitize-sed)\.sh)'; then
+            image_definition_changed=true
+          fi
+
+          if [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$testing_changed" == "true" ]]; then
+            container_toolchain_required=true
+          fi
+
+          if [[ "$image_definition_changed" == "true" || "$container_toolchain_required" == "true" ]]; then
             container_changed=true
           fi
 
@@ -428,6 +580,35 @@ jobs:
           if [[ -n "$changed_files" ]] &&
              ! grep -Eiv "$docs_pattern" <<< "$changed_files" >/dev/null; then
             docs_only=true
+          fi
+
+          # Compiler and CTest jobs run only for native source edits. CMake,
+          # fixture, workflow, and documentation-only PRs do not need a native
+          # build to validate their changed surface.
+          if [[ "$source_changed" == "true" ]]; then
+            native_changed=true
+          fi
+
+          if has_changed_file '^(examples/hello-iccdev/|IccProfLib/|IccXML/|IccJSON/|IccConnect/|Build/Cmake/(CMakeLists\.txt|IccProfLib/|IccXML/|IccJSON/|IccConnect/|RefIccMAX))'; then
+            example_consumer_changed=true
+          fi
+
+          if [ "$target_repository" != "$GH_REPOSITORY" ]; then
+            risk_required=true
+            run_windows_risk=true
+          elif [[ "$ci_changed" == "true" || "$container_changed" == "true" ]]; then
+            permission_status=0
+            actor_has_write_permission "$PR_AUTHOR" || permission_status=$?
+            if [ "$permission_status" -eq 0 ]; then
+              risk_required=true
+              if requires_windows_risk_audit; then
+                run_windows_risk=true
+              fi
+            elif [ "$permission_status" -eq 2 ]; then
+              echo "Unable to verify PR author permission; scheduling risk analysis fail closed" >&2
+              risk_required=true
+              run_windows_risk=true
+            fi
           fi
 
           # Keep execution scope separate from the factual diff classification.
@@ -446,7 +627,7 @@ jobs:
               ;;
           esac
 
-          write_scope_outputs "$run_full" "$source_changed" "$build_config_changed" "$testing_changed" "$ci_changed" "$container_changed" "$docs_only"
+          write_scope_outputs "$run_full" "$source_changed" "$build_config_changed" "$testing_changed" "$ci_changed" "$container_changed" "$docs_only" "$native_changed" "$risk_required" "$run_windows_risk" "$example_consumer_changed"
 
       - name: Generate Summary
         shell: bash --noprofile --norc {0}
@@ -468,9 +649,9 @@ jobs:
           DOCS_ONLY: ${{ steps.diffcheck.outputs.docs_only }}
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
 
           # --- load trusted canonical sanitizers from the checked-out base ---
           TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
@@ -558,6 +739,19 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Checkout resolved workflow-dispatch base
+        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          BASE_SHA: ${{ needs.detect-src.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git -C base -c protocol.version=2 fetch --no-tags origin "$BASE_SHA" --depth=1
+          git -C base checkout --detach "$BASE_SHA"
+
       - name: Print PR Details
         shell: bash --noprofile --norc {0}
         env:
@@ -578,8 +772,9 @@ jobs:
           DOCS_ONLY: ${{ needs.detect-src.outputs.docs_only }}
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
           # Load canonical sanitizers from trusted checkout
           TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
           if [[ -f "$TRUSTED_SANITIZER" ]]; then
@@ -642,9 +837,10 @@ jobs:
           DOCS_ONLY: ${{ needs.detect-src.outputs.docs_only || 'false' }}
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
 
           git config --add safe.directory "$PWD"
-          git config --global credential.helper ""
 
           # load trusted canonical sanitizers
           TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
@@ -715,6 +911,7 @@ jobs:
       fast-lane: ${{ steps.v.outputs.fast_lane }}
       include-windows: ${{ steps.v.outputs.include_windows }}
       ctest-recent-limit: ${{ steps.v.outputs.ctest_recent_limit }}
+      ctest-mode: ${{ steps.v.outputs.ctest_mode }}
       warning-policy: ${{ steps.v.outputs.warning_policy }}
 
     steps:
@@ -728,6 +925,19 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Checkout resolved workflow-dispatch base
+        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          BASE_SHA: ${{ needs.detect-src.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git -C .trusted-workflow -c protocol.version=2 fetch --no-tags origin "$BASE_SHA" --depth=1
+          git -C .trusted-workflow checkout --detach "$BASE_SHA"
+
       - name: Set up PR validation
         id: v
         shell: bash --noprofile --norc {0}
@@ -736,6 +946,7 @@ jobs:
           FAST_LANE: ${{ needs.detect-src.outputs.fast_lane || 'false' }}
           INCLUDE_WINDOWS: ${{ needs.detect-src.outputs.include_windows || 'true' }}
           CTEST_RECENT_LIMIT: ${{ needs.detect-src.outputs.ctest_recent_limit || '0' }}
+          CTEST_MODE: ${{ needs.detect-src.outputs.ctest_mode || 'full' }}
           WARNING_POLICY: ${{ needs.detect-src.outputs.warning_policy || 'fail' }}
         run: |
           set -euo pipefail
@@ -748,7 +959,7 @@ jobs:
             local value="$2"
 
             case "$key" in
-              regression_image_tag|fast_lane|include_windows|ctest_recent_limit|warning_policy) ;;
+              regression_image_tag|fast_lane|include_windows|ctest_recent_limit|ctest_mode|warning_policy) ;;
               *)
                 echo "Invalid output key: $key" >&2
                 exit 1
@@ -768,10 +979,11 @@ jobs:
           write_github_output fast_lane "$FAST_LANE"
           write_github_output include_windows "$INCLUDE_WINDOWS"
           write_github_output ctest_recent_limit "$CTEST_RECENT_LIMIT"
+          write_github_output ctest_mode "$CTEST_MODE"
           write_github_output warning_policy "$WARNING_POLICY"
 
   risk-gate:
-    if: ${{ needs.detect-src.outputs.ci_changed == 'true' || needs.detect-src.outputs.container_changed == 'true' }}
+    if: ${{ needs.detect-src.outputs.risk_required == 'true' }}
     name: Risk Analysis Gate
     needs: [detect-src]
     uses: ./.github/workflows/ci-pr-risk-security-analysis.yml
@@ -780,9 +992,10 @@ jobs:
       git_ref: ${{ needs.detect-src.outputs.target_sha }}
       severity_threshold: 'HIGH'
       fail_on_findings: true
+      run_windows_audit: ${{ needs.detect-src.outputs.run_windows_risk == 'true' }}
 
   gcc15-lto-ci:
-    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    if: ${{ needs.detect-src.outputs.native_changed == 'true' }}
     name: GCC 15.2 Strict Release LTO
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-gcc15.yml
@@ -791,7 +1004,7 @@ jobs:
       target-sha: ${{ needs.detect-src.outputs.target_sha }}
 
   tool-tests:
-    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    if: ${{ needs.detect-src.outputs.native_changed == 'true' }}
     # Together with gcc15-lto-ci, this is the compact strict Unix coverage.
     name: Tool Smoke Tests (ASAN+UBSAN, Debug)
     needs: [detect-src, validate-inputs]
@@ -799,27 +1012,152 @@ jobs:
     with:
       regression_image_tag: ${{ needs.validate-inputs.outputs.regression-image-tag }}
       tool_build_type: Debug
-      ctest_mode: fast
+      ctest_mode: ${{ needs.validate-inputs.outputs.ctest-mode }}
       ctest_recent_limit: ${{ needs.validate-inputs.outputs.ctest-recent-limit }}
+      exclude_extended_pr_tests: true
       warning_policy: ${{ needs.validate-inputs.outputs.warning-policy }}
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
 
   win-ci:
-    if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.validate-inputs.outputs.include-windows == 'true' }}
+    if: ${{ needs.detect-src.outputs.native_changed == 'true' && needs.validate-inputs.outputs.include-windows == 'true' }}
     name: Windows Build & Test Profiles
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-win.yml
     with:
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
 
+  macos-release-lto:
+    if: ${{ needs.detect-src.outputs.native_changed == 'true' && needs.detect-src.outputs.ci_scope != 'fast-lane' }}
+    name: macOS Clang Release LTO
+    needs: [detect-src, validate-inputs]
+    uses: ./.github/workflows/ci-pr-unix.yml
+    with:
+      os-list: '["macos-latest"]'
+      build-types: '["Release"]'
+      compilers: '["clang"]'
+      enable-lto: true
+      warning-policy: ${{ needs.validate-inputs.outputs.warning-policy }}
+      profile-test-mode: smoke
+      target-sha: ${{ needs.detect-src.outputs.target_sha }}
+
+  macos-debug:
+    if: ${{ needs.detect-src.outputs.native_changed == 'true' && needs.detect-src.outputs.ci_scope != 'fast-lane' }}
+    name: macOS Clang Debug
+    needs: [detect-src, validate-inputs]
+    uses: ./.github/workflows/ci-pr-unix.yml
+    with:
+      os-list: '["macos-latest"]'
+      build-types: '["Debug"]'
+      compilers: '["clang"]'
+      enable-lto: false
+      warning-policy: ${{ needs.validate-inputs.outputs.warning-policy }}
+      profile-test-mode: smoke
+      target-sha: ${{ needs.detect-src.outputs.target_sha }}
+
+  example-project:
+    if: ${{ needs.detect-src.outputs.example_consumer_changed == 'true' }}
+    name: Example Consumer Project
+    needs: [detect-src]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout consumer source
+        # preflight: allow-codeql-actions reason=readonly-build-target-checkout
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ needs.detect-src.outputs.target_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout trusted sanitizer helper
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
+          path: trusted-base
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout resolved workflow-dispatch base
+        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          BASE_SHA: ${{ needs.detect-src.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git -C trusted-base -c protocol.version=2 fetch --no-tags origin "$BASE_SHA" --depth=1
+          git -C trusted-base checkout --detach "$BASE_SHA"
+
+      - name: Install consumer build dependencies
+        # preflight: allow-codeql-actions reason=readonly-build-target-checkout
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source trusted-base/.github/scripts/sanitize-sed.sh
+          # preflight: allow-package-install reason=consumer-build-dependencies
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cmake libjpeg-dev libpng-dev libtiff-dev \
+            libxml2-dev nlohmann-json3-dev
+
+      - name: Build exported libraries
+        # preflight: allow-codeql-actions reason=readonly-build-target-checkout
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          TARGET_SHA: ${{ needs.detect-src.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source trusted-base/.github/scripts/sanitize-sed.sh
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          cmake -S Build/Cmake -B build-consumer-libraries \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_TESTS=OFF \
+            -DENABLE_TOOLS=OFF \
+            -DENABLE_WXWIDGETS=OFF
+          cmake --build build-consumer-libraries --parallel "$(nproc)" \
+            --target IccProfLib2 IccXML2 IccJSON2
+
+      - name: Build and run example consumer
+        # preflight: allow-codeql-actions reason=readonly-build-target-checkout
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source trusted-base/.github/scripts/sanitize-sed.sh
+          cmake -S examples/hello-iccdev -B build-example-consumer \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DICCDEV_BUILD_DIR="$GITHUB_WORKSPACE/build-consumer-libraries"
+          cmake --build build-example-consumer --parallel "$(nproc)"
+          export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/build-consumer-libraries/IccProfLib"
+          LD_LIBRARY_PATH+=":$GITHUB_WORKSPACE/build-consumer-libraries/IccXML"
+          LD_LIBRARY_PATH+=":$GITHUB_WORKSPACE/build-consumer-libraries/IccJSON"
+          output="$(./build-example-consumer/hello-iccdev 2>&1)"
+          printf '%s\n' "$output"
+          grep -Fq 'XML round-trip OK' <<< "$output"
+          grep -Fq 'Hello, iccDEV!' <<< "$output"
+
   docker-ci:
-    if: ${{ needs.detect-src.outputs.container_changed == 'true' }}
+    if: ${{ needs.detect-src.outputs.container_changed == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     name: Docker Clang 22 Verification
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-docker-pr.yml
     with:
+      base_sha: ${{ needs.detect-src.outputs.base_sha }}
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
       warning_policy: ${{ needs.validate-inputs.outputs.warning-policy }}
+      build_pr_image: ${{ needs.detect-src.outputs.image_definition_changed == 'true' || needs.detect-src.outputs.trusted_base_image_available != 'true' }}
 
   finalize:
     name: PR Summary
@@ -835,8 +1173,11 @@ jobs:
       # - scan-build
       - tool-tests
       - win-ci
+      - macos-release-lto
+      - macos-debug
+      - example-project
       - docker-ci
-    if: always()
+    if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     steps:
       - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
@@ -850,6 +1191,19 @@ jobs:
           path: base
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Checkout resolved workflow-dispatch base
+        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          BASE_SHA: ${{ needs.detect-src.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git -C base -c protocol.version=2 fetch --no-tags origin "$BASE_SHA" --depth=1
+          git -C base checkout --detach "$BASE_SHA"
 
       - name: PR Details
         shell: bash --noprofile --norc {0}
@@ -878,11 +1232,15 @@ jobs:
           SCAN_RESULT: skipped
           TOOL_RESULT: ${{ needs['tool-tests'].result }}
           WIN_RESULT: ${{ needs['win-ci'].result }}
+          MACOS_RELEASE_LTO_RESULT: ${{ needs['macos-release-lto'].result }}
+          MACOS_DEBUG_RESULT: ${{ needs['macos-debug'].result }}
+          EXAMPLE_RESULT: ${{ needs['example-project'].result }}
           DOCKER_RESULT: ${{ needs['docker-ci'].result }}
         run: |
           set -euo pipefail
-          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
 
           # load canonical sanitizers from trusted checkout
           TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
@@ -914,6 +1272,9 @@ jobs:
           SCAN_RESULT="${SCAN_RESULT:-success}"
           TOOL_RESULT="${TOOL_RESULT:-success}"
           WIN_RESULT="${WIN_RESULT:-success}"
+          MACOS_RELEASE_LTO_RESULT="${MACOS_RELEASE_LTO_RESULT:-success}"
+          MACOS_DEBUG_RESULT="${MACOS_DEBUG_RESULT:-success}"
+          EXAMPLE_RESULT="${EXAMPLE_RESULT:-success}"
           DOCKER_RESULT="${DOCKER_RESULT:-success}"
           RISK_RESULT="${RISK_RESULT:-success}"
           GCC15_LTO_RESULT="${GCC15_LTO_RESULT:-success}"
@@ -940,13 +1301,16 @@ jobs:
           SCAN_RESULT="$(trim_and_norm "$SCAN_RESULT")"
           TOOL_RESULT="$(trim_and_norm "$TOOL_RESULT")"
           WIN_RESULT="$(trim_and_norm "$WIN_RESULT")"
+          MACOS_RELEASE_LTO_RESULT="$(trim_and_norm "$MACOS_RELEASE_LTO_RESULT")"
+          MACOS_DEBUG_RESULT="$(trim_and_norm "$MACOS_DEBUG_RESULT")"
+          EXAMPLE_RESULT="$(trim_and_norm "$EXAMPLE_RESULT")"
           DOCKER_RESULT="$(trim_and_norm "$DOCKER_RESULT")"
           RISK_RESULT="$(trim_and_norm "$RISK_RESULT")"
           GCC15_LTO_RESULT="$(trim_and_norm "$GCC15_LTO_RESULT")"
 
           # --- compute overall result from upstream jobs ----------------------
           job_res=success
-          required_results=("$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$RISK_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$DOCKER_RESULT")
+          required_results=("$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$RISK_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$MACOS_RELEASE_LTO_RESULT" "$MACOS_DEBUG_RESULT" "$EXAMPLE_RESULT" "$DOCKER_RESULT")
           for s in "${required_results[@]}"; do
             # 'skipped' is acceptable (jobs are skipped when src_changed is false)
             # only 'failure' or 'cancelled' should cause overall failure
@@ -1023,6 +1387,9 @@ jobs:
             printf "| scan-build         | %s |\n" "$(sanitize_line "$SCAN_RESULT")"
             printf "| tool-tests         | %s |\n" "$(sanitize_line "$TOOL_RESULT")"
             printf "| win-ci             | %s |\n" "$(sanitize_line "$WIN_RESULT")"
+            printf "| macos-release-lto  | %s |\n" "$(sanitize_line "$MACOS_RELEASE_LTO_RESULT")"
+            printf "| macos-debug        | %s |\n" "$(sanitize_line "$MACOS_DEBUG_RESULT")"
+            printf "| example-project    | %s |\n" "$(sanitize_line "$EXAMPLE_RESULT")"
             printf "| docker-ci          | %s |\n" "$(sanitize_line "$DOCKER_RESULT")"
             echo ""
             echo "**Overall Result:** \`$(sanitize_line "$job_res")\`"

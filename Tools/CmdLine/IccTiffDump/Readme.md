@@ -31,6 +31,12 @@ temporary file and atomically renamed only after the complete write succeeds.
 Existing regular files may be replaced atomically; device files, directories,
 and symbolic links are rejected as extraction destinations.
 
+The `Resolution:` line names the unit the file declares -- `pixels per/inch`,
+`pixels per/centimeter`, or `(relative, no absolute unit)` for `RESUNIT_NONE`,
+where the resolution values fix an aspect ratio and no absolute size exists. The
+`Size:` line reports the physical size in inches, converted from centimeters when
+needed, and omits it entirely under `RESUNIT_NONE`.
+
 The no-argument form is a help/syntax path and exits successfully. Other
 malformed invocations fail: extra trailing arguments are rejected, missing input
 files fail, and export requests fail when the TIFF has no embedded ICC profile.

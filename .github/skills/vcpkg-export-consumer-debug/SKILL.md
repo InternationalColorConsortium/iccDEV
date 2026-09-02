@@ -40,6 +40,11 @@ the portfile passes `-DICC_USE_ZLIB=ON`, and the overlay `port-version` is
 incremented. Do not add zlib directly to `examples/hello-iccdev/vcpkg.json`;
 that consumer receives it through the `iccdev` port.
 
+For a registry baseline update, synchronize the root and `Build/Cmake`
+manifests, `examples/hello-iccdev/vcpkg-configuration.json`, the explicit
+checkouts in `ci-vcpkg-ports.yml`, and `VCPKG_BASELINE` in `ci.yml`. The
+overlay port manifest intentionally has no registry baseline.
+
 ## Staleness Check
 
 1. Compare the tested ref with the current PR head:

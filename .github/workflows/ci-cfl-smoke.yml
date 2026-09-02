@@ -49,9 +49,9 @@ permissions:
           - all
           - none
       regression_image_tag:
-        description: 'Trusted regression container tag'
+        description: 'Trusted unified image tag'
         required: false
-        default: master
+        default: latest
         type: string
   workflow_call:
     inputs:
@@ -81,9 +81,9 @@ permissions:
         default: none
         type: string
       regression_image_tag:
-        description: 'Trusted regression container tag'
+        description: 'Trusted unified image tag'
         required: false
-        default: master
+        default: latest
         type: string
 
 concurrency:
@@ -96,7 +96,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     container:
-      image: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${{ inputs.regression_image_tag || 'master' }}
+      image: ghcr.io/internationalcolorconsortium/iccdev:${{ inputs.regression_image_tag || 'latest' }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -148,9 +148,9 @@ jobs:
           TARGET_SHA: ${{ inputs.target_sha }}
         run: |
           set -euo pipefail
-          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           case "$TARGET_SHA" in
             *[!0-9a-fA-F]*)
               echo "ERROR: invalid target SHA: $(sanitize_line "$TARGET_SHA")" >&2
@@ -229,7 +229,7 @@ jobs:
           echo "CFL patch mode: $(sanitize_line "$ICCDEV_CFL_PATCH_MODE_INPUT")"
           git rev-parse --verify HEAD
           git status --short
-          cfl/build.sh \
+          .github/ci/cfl/build.sh \
             --targets "$ICCDEV_CFL_TARGETS" \
             --seconds "$ICCDEV_CFL_SECONDS" \
             --build-dir "$ICCDEV_CFL_BUILD_DIR" \

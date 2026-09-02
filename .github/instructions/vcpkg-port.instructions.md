@@ -105,5 +105,9 @@ When updating the port:
    port manifests, then increment `"port-version"`.
 4. Update `REF` and `SHA512` in `portfile.cmake` for non-local consumers when
    the pinned source changes.
-5. Test locally before pushing: set `VCPKG_ICCDEV_SOURCE` and run
+5. For a vcpkg registry baseline update, synchronize `vcpkg.json`,
+   `Build/Cmake/vcpkg.json`, `examples/hello-iccdev/vcpkg-configuration.json`,
+   `.github/workflows/ci-vcpkg-ports.yml`, and `.github/workflows/ci.yml`.
+   The overlay port manifest intentionally does not carry a registry baseline.
+6. Test locally before pushing: set `VCPKG_ICCDEV_SOURCE` and run
    `vcpkg install iccdev --overlay-ports=ports --classic`

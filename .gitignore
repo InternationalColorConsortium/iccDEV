@@ -64,6 +64,8 @@ Developer Defs.props
 
 #build files
 out/*
+/msvc/
+/build-matlab-full/
 
 # CMake generated files
 CMakeCache.txt
@@ -86,7 +88,7 @@ build-afl-smoke/
 # CFL build artifacts
 build-cfl-smoke/
 .cfl-smoke/
-cfl/bin/
+.github/ci/cfl/bin/
 # Coverage data
 *.profraw
 *.profdata

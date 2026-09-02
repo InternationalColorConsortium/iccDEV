@@ -3,6 +3,7 @@
 # Copyright (c) International Color Consortium.
 # BSD 3-Clause License. See LICENSE.md for details.
 
+from libc.stddef cimport size_t
 from libc.stdint cimport uint8_t, uint16_t, uint32_t, int8_t, int32_t
 
 cdef extern from "IccProfLibConf.h":
@@ -283,3 +284,20 @@ cdef extern from "IccWrapper.h":
     CIccProfileHandle* IccProfileOpenHandle(const char *szFname)
     icBoolean IccProfileGetHeader(CIccProfileHandle *pProfile, icHeader *pHeader)
     void IccProfileFree(CIccProfileHandle *pProfile)
+
+
+cdef extern from "IccCValidation.h":
+    ctypedef enum icc_validation_status:
+        ICC_VALIDATION_OK
+        ICC_VALIDATION_WARNING
+        ICC_VALIDATION_NON_COMPLIANT
+        ICC_VALIDATION_CRITICAL_ERROR
+        ICC_VALIDATION_INVALID_ARGUMENT
+        ICC_VALIDATION_INTERNAL_ERROR
+
+    icc_validation_status icc_validate_profile(
+        const unsigned char *icc_data,
+        size_t icc_size,
+        char *report,
+        size_t report_size,
+    )

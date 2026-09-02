@@ -28,10 +28,16 @@ produces incorrect results from ICC profile operations.
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| ImportError: undefined symbol | Missing libIccProfLib2 | Set LD_LIBRARY_PATH |
+| `ImportError: undefined symbol: deflateInit_` | Static IccProfLib linked without zlib | Ensure the extension link includes zlib |
+| Other undefined IccProfLib symbol | Missing or stale libIccProfLib2 | Set `ICCDEV_BUILD_DIR`, rebuild, and reinstall |
+| macOS arm64 error in `IccTagLutAvx*.cpp` | Standalone build compiled CMake-managed x86 SIMD sources | Keep AVX2/AVX-512 sources out of inline or universal builds |
 | Cython compilation error | Missing headers | Install libxml2-dev, libtiff-dev |
 | Segfault on profile load | ASAN mismatch | Build with matching sanitizer flags |
 | Version mismatch | Stale extension | python -m pip install -e "./python[dev]" --force-reinstall |
+
+For isolated sdist validation, do not assume runtime environments contain
+setuptools. Packaging-configuration tests should skip when build dependencies
+are intentionally absent; importing `iccdev` must not require setuptools.
 
 ## JSON Parity Testing
 

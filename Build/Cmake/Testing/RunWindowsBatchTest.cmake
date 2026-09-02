@@ -1,5 +1,9 @@
 # Run one legacy Windows batch test through CTest and validate its output.
 
+if(POLICY CMP0007)
+  cmake_policy(SET CMP0007 NEW)
+endif()
+
 set(_required_vars
   ICCDEV_TEST_NAME
   ICCDEV_TESTING_DIR
@@ -305,7 +309,70 @@ if(_source_status_available)
 endif()
 
 if(NOT _result EQUAL 0)
+  string(REGEX MATCHALL "[^\r\n]*\\[FAIL\\][^\r\n]*"
+    _failure_lines "${_combined_output}")
+  if(_failure_lines)
+    list(JOIN _failure_lines "\n  " _failure_summary)
+    message(FATAL_ERROR
+      "${ICCDEV_TEST_NAME} exited with ${_result}; failing commands:\n"
+      "  ${_failure_summary}\n"
+      "Captured output:\n${_combined_output}\n"
+      "Full output: ${_log_file}")
+  endif()
   message(FATAL_ERROR "${ICCDEV_TEST_NAME} exited with ${_result}; see ${_log_file}")
+endif()
+
+if(ICCDEV_VERIFY_GENERATED_PROFILE_MANIFEST)
+  set(_manifest "${ICCDEV_WINDOWS_WORK_DIR}/qa-profile-manifest.tsv")
+  if(NOT EXISTS "${_manifest}")
+    message(FATAL_ERROR
+      "${ICCDEV_TEST_NAME} requires qa-profile-manifest.tsv; see ${_log_file}")
+  endif()
+
+  file(STRINGS "${_manifest}" _manifest_lines)
+  set(_manifest_generated_count 0)
+  set(_manifest_line_number 0)
+  set(_missing_generated_profiles)
+  foreach(_manifest_line IN LISTS _manifest_lines)
+    math(EXPR _manifest_line_number "${_manifest_line_number} + 1")
+    if(_manifest_line MATCHES "^#" OR _manifest_line STREQUAL "")
+      continue()
+    endif()
+
+    string(REPLACE "\t" ";" _manifest_fields "${_manifest_line}")
+    list(LENGTH _manifest_fields _manifest_field_count)
+    if(_manifest_field_count LESS 6)
+      message(FATAL_ERROR
+        "${ICCDEV_TEST_NAME} found a malformed manifest row at "
+        "${_manifest}:${_manifest_line_number}: ${_manifest_line}")
+    endif()
+
+    list(GET _manifest_fields 0 _manifest_profile)
+    list(GET _manifest_fields 5 _manifest_source)
+    if(NOT _manifest_source STREQUAL "generated")
+      continue()
+    endif()
+
+    math(EXPR _manifest_generated_count "${_manifest_generated_count} + 1")
+    if(NOT EXISTS "${ICCDEV_WINDOWS_WORK_DIR}/${_manifest_profile}")
+      list(APPEND _missing_generated_profiles "${_manifest_profile}")
+    endif()
+  endforeach()
+
+  if(_manifest_generated_count EQUAL 0)
+    message(FATAL_ERROR
+      "${ICCDEV_TEST_NAME} manifest declares no generated profiles; see ${_log_file}")
+  endif()
+  if(_missing_generated_profiles)
+    list(JOIN _missing_generated_profiles "\n  " _missing_generated_summary)
+    message(FATAL_ERROR
+      "${ICCDEV_TEST_NAME} is missing manifest-declared generated profile(s):\n"
+      "  ${_missing_generated_summary}\n"
+      "See ${_log_file}")
+  endif()
+  message(STATUS
+    "${ICCDEV_TEST_NAME} satisfied generated profile manifest "
+    "(${_manifest_generated_count} profiles)")
 endif()
 
 set(_forbidden_regex

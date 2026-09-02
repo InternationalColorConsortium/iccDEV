@@ -1,4 +1,4 @@
-function test_iccdev()
+function summary = test_iccdev()
 %TEST_ICCDEV Comprehensive test suite for iccdev MATLAB/Octave bindings.
 %
 %   test_iccdev()
@@ -33,6 +33,8 @@ function test_iccdev()
     'issue #1475 colorimetry math', nPass, nFail);
   [nPass, nFail] = run_test(@test_build_mex_dependency_paths, ...
     'build dependency path selection', nPass, nFail);
+  [nPass, nFail] = run_test(@test_usage_guidance, ...
+    'default usage guidance', nPass, nFail);
 
   % --- Profile tests (need test profiles) ---
   profilePath = find_test_profile();
@@ -42,8 +44,11 @@ function test_iccdev()
     [nPass, nFail] = run_test(@() test_profile_read_vs_open(profilePath), 'Read vs Open', nPass, nFail);
     [nPass, nFail] = run_test(@() test_profile_header_fields(profilePath), 'Header fields', nPass, nFail);
     [nPass, nFail] = run_test(@() test_profile_double_close(profilePath), 'Double close safety', nPass, nFail);
+    [nPass, nFail] = run_test(@test_lut_type_range, ...
+      'iccMAX LUT type range', nPass, nFail);
+    [nPass, nFail] = run_test(@test_json_bindings, 'IccJSON conversion', nPass, nFail);
   else
-    [nSkip, skipped] = note_skip('Profile open/header/read/fields/double-close', ...
+    [nSkip, skipped] = note_skip('Profile open/header/read/fields/double-close/IccJSON', ...
       'no test profile found', nSkip, skipped);
   end
 
@@ -79,11 +84,15 @@ function test_iccdev()
     [nPass, nFail] = run_test(@() test_cmm_single_precision(srcProf, dstProf), 'Single precision input', nPass, nFail);
   else
     [nSkip, skipped] = note_skip('CMM pipeline/bulk/apply-handle/single-precision', ...
-      'no compatible profile pair; run CreateAllProfiles.sh', nSkip, skipped);
+      ['no compatible profile pair; from Testing run ./CreateAllProfiles.bat ' ...
+       'in PowerShell on Windows, or ./CreateAllProfiles.sh on Unix'], ...
+      nSkip, skipped);
   end
 
   fprintf('\n=== Results: %d passed, %d failed, %d skipped ===\n', ...
     nPass, nFail, nSkip);
+  summary = struct('passed', nPass, 'failed', nFail, 'skipped', nSkip, ...
+    'skippedGroups', {skipped});
   if nSkip > 0
     % Name them again at the end. A skip scrolls past in the middle of a long
     % run, and the count alone does not say what stopped running.

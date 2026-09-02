@@ -4,6 +4,8 @@
 # while exposing standard CMake/CTest labels, timeouts, fixtures, and a check
 # target for local and CI use.
 
+include(CheckCCompilerFlag)
+
 find_program(BASH_EXECUTABLE bash)
 
 get_filename_component(ICCDEV_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
@@ -50,50 +52,24 @@ function(iccdev_add_regression_executable TARGET_NAME)
   add_dependencies(build-test-binaries "${TARGET_NAME}")
 endfunction()
 
-# Link target for regression executables that reference an exported IccProfLib
-# global *variable* rather than only its functions (#1888).
-#
-# On a Windows shared build the library is IccProfLib2.dll, exported by CMake's
-# WINDOWS_EXPORT_ALL_SYMBOLS rather than by __declspec annotations: MSVC is
-# deliberately excluded from the ICCPROFLIBDLL_EXPORTS definition in
-# Build/Cmake/IccProfLib/CMakeLists.txt, a decision made in #764 and recorded in
-# the comment there. WINDOWS_EXPORT_ALL_SYMBOLS auto-exports functions; global
-# data still needs explicit dllexport/dllimport, which IccProfLib does not carry.
-# A consumer compiling with ICCPROFLIB_API empty therefore emits a direct data
-# reference with no __imp_ indirection and fails to link (LNK2019/LNK2001), while
-# every function in the same header thunks normally. Linux and macOS are immune,
-# so a green local pre-flight says nothing about this.
-#
-# The three tools with the same problem already resolve it this way -- see
-# Build/Cmake/Tools/{IccDumpProfile,IccProfilePlot,wxProfileDump}/CMakeLists.txt.
-#
-# USE THIS ONLY FOR TESTS THAT LINK IccProfLib ALONE. IccXML2 and IccJson link
-# ${TARGET_LIB_ICCPROFLIB} PUBLIC, so a test that links one of those *and* the
-# static IccProfLib pulls the library into the process twice -- once inside the
-# DLL, once in the executable -- giving two copies of its globals. Tests that
-# link IccXML/IccJson must keep using ${TARGET_LIB_ICCPROFLIB} and must not
-# reference exported library data at all; assert on literal values instead, as
-# .github/ci/regression/{json-sparsematrix-huaf,xml-writer-graceful-degrade,
-# json-bcd-version-parse}.cpp do -- those three are the tests that actually link
-# one of the two libraries. mpe-empty-identity.cpp and pawg-q4-xyz-pcs-decode.cpp
-# also hard-code literals, but they link IccProfLib alone and simply predate this
-# variable; they are eligible for it, not barred from it.
-if(WIN32 AND ENABLE_SHARED_LIBS AND TARGET IccProfLib2-static)
-  set(ICCDEV_TEST_LIB_ICCPROFLIB IccProfLib2-static)
-else()
-  set(ICCDEV_TEST_LIB_ICCPROFLIB ${TARGET_LIB_ICCPROFLIB})
-endif()
-message(STATUS "ICCDEV_TEST_LIB_ICCPROFLIB  = ${ICCDEV_TEST_LIB_ICCPROFLIB}")
+# Regression executables link ${TARGET_LIB_ICCPROFLIB}, functions and exported
+# global data alike. There used to be a second link target here,
+# ${ICCDEV_TEST_LIB_ICCPROFLIB}, which resolved to IccProfLib2-static on Windows
+# shared builds because WINDOWS_EXPORT_ALL_SYMBOLS auto-exports functions but not
+# data (#1888): a test referencing icMsgValidateWarning or icD50XYZ emitted a
+# direct data reference with no __imp_ indirection and failed with LNK2019. #2219
+# gave those eight globals real dllexport/dllimport via ICCPROFLIB_DATA_API, so
+# #2154 retired the fallback here and in the three tools that carried the same
+# workaround. See docs/build.md, "Exported global data".
 
 add_custom_target(check-fast
   COMMAND "${CMAKE_CTEST_COMMAND}"
           ${ICCDEV_CTEST_CONFIG_ARGS}
-          --label-exclude slow
-          --label-exclude known-red
+          --label-exclude "slow|known-red"
           --output-on-failure
           --no-tests=error
   WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
-  COMMENT "Run iccDEV CTest suite excluding slow tests"
+  COMMENT "Run iccDEV CTest suite excluding slow and known-red tests"
   VERBATIM
 )
 add_dependencies(check-fast build-test-binaries)
@@ -134,6 +110,75 @@ endfunction()
 iccdev_add_check_dependencies()
 if(TARGET iccDescribeSinkTest)
   add_dependencies(build-test-binaries iccDescribeSinkTest)
+endif()
+
+# Issue #2276: this compiles a C-only consumer against IccCValidation.h and
+# resolves the entry point at runtime. Linking the helper to IccProfLib would
+# hide both C++ name mangling and accidental C++ dependencies in the header.
+if(ENABLE_SHARED_LIBS AND TARGET "${TARGET_LIB_ICCPROFLIB}")
+  iccdev_add_regression_executable(iccCValidationDlopenTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/c-validation-dlopen.c"
+  )
+  set_target_properties(iccCValidationDlopenTest PROPERTIES
+    C_STANDARD 99
+    C_STANDARD_REQUIRED ON
+  )
+  # Pattern initialization caught the prior probe of an unwritten report byte.
+  # Keep the consumer in that mode where Clang provides it.
+  if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+    set(CMAKE_REQUIRED_FLAGS "-Werror=unused-command-line-argument")
+    check_c_compiler_flag(
+      "-ftrivial-auto-var-init=pattern"
+      ICCDEV_HAVE_PATTERN_AUTO_VAR_INIT
+    )
+    unset(CMAKE_REQUIRED_FLAGS)
+    if(ICCDEV_HAVE_PATTERN_AUTO_VAR_INIT)
+      target_compile_options(iccCValidationDlopenTest PRIVATE
+        -ftrivial-auto-var-init=pattern
+      )
+    endif()
+  endif()
+  target_include_directories(iccCValidationDlopenTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  # CMAKE_DL_LIBS is empty where dlopen lives in libc (musl, FreeBSD), so this
+  # needs no platform guard; a literal -ldl fails to link on those.
+  target_link_libraries(iccCValidationDlopenTest PRIVATE ${CMAKE_DL_LIBS})
+  # The test loads the library instead of linking it, so CMake cannot infer the
+  # edge: without this, building only this target leaves nothing to dlopen and
+  # the documented build-then-ctest sequence fails (#2276).
+  add_dependencies(iccCValidationDlopenTest "${TARGET_LIB_ICCPROFLIB}")
+  add_dependencies(check iccCValidationDlopenTest)
+
+  add_test(
+    NAME iccdev.c-validation-dlopen
+    COMMAND
+      "$<TARGET_FILE:iccCValidationDlopenTest>"
+      "$<TARGET_FILE:${TARGET_LIB_ICCPROFLIB}>"
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+  )
+  set_tests_properties(iccdev.c-validation-dlopen PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;c-api;dlopen;issue-2276;regression"
+  )
+  # LoadLibraryA resolves the DLL's own imports (zlib1.dll via ICC_USE_ZLIB)
+  # through the executable directory and PATH, which only happens to work while
+  # ICCDEV_WINDOWS_UNIFIED_RUNTIME stages them together. Same treatment as the
+  # sibling tests above.
+  if(WIN32)
+    set(_c_validation_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCValidationDlopenTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _c_validation_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.c-validation-dlopen PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_c_validation_windows_env_mods}"
+    )
+  endif()
 endif()
 
 function(iccdev_add_iccconnect_thread_test)
@@ -185,6 +230,39 @@ function(iccdev_add_iccconnect_thread_test)
       ENVIRONMENT_MODIFICATION "${_iccconnect_windows_env_mods}"
     )
   endif()
+endfunction()
+
+function(iccdev_add_clut_avx512_sixteen_output_test)
+  if(NOT ICCDEV_AVX512_EFFECTIVE)
+    return()
+  endif()
+
+  set(_avx512_source
+    "${ICCDEV_REPO_ROOT}/IccProfLib/IccTagLutAvx512.cpp")
+  iccdev_add_regression_executable(iccClutAvx512SixteenOutputTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/clut-avx512-sixteen-output.cpp"
+    "${_avx512_source}"
+  )
+  target_compile_features(iccClutAvx512SixteenOutputTest PRIVATE cxx_std_17)
+  target_include_directories(iccClutAvx512SixteenOutputTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib")
+  if(MSVC)
+    set_source_files_properties("${_avx512_source}"
+      PROPERTIES COMPILE_OPTIONS "/arch:AVX512")
+  else()
+    set_source_files_properties("${_avx512_source}"
+      PROPERTIES COMPILE_OPTIONS "-mavx512f")
+  endif()
+
+  add_test(
+    NAME iccdev.clut-avx512-sixteen-output
+    COMMAND "$<TARGET_FILE:iccClutAvx512SixteenOutputTest>"
+  )
+  set_tests_properties(iccdev.clut-avx512-sixteen-output PROPERTIES
+    SKIP_RETURN_CODE 77
+    TIMEOUT 30
+    LABELS "iccdev;clut;avx512;regression"
+  )
 endfunction()
 
 function(iccdev_add_iccconnect_config_parser_test)
@@ -528,10 +606,7 @@ endfunction()
 # copied from, the load never descending past one level, and the nLoaded==0
 # condition that drives the second-level dump fallback). See the long comment
 # at the top of .github/ci/regression/embedded-profile-onelevel-load.cpp for
-# the full story. This test links IccProfLib alone and calls functions only
-# (no exported library data), so ${TARGET_LIB_ICCPROFLIB} is correct here --
-# see the variable's own comment above for when ICCDEV_TEST_LIB_ICCPROFLIB is
-# needed instead.
+# the full story. This test links IccProfLib alone and calls functions only.
 #
 # Most of what this test checks is an in-memory nested profile built and
 # saved to a scratch file at runtime (path passed as argv[1]), so it needs no
@@ -775,14 +850,14 @@ function(iccdev_add_pawg_q4_xyz_pcs_decode_test)
 endfunction()
 
 function(iccdev_add_tointernal_fixedint_roundtrip_test)
-  if(NOT TARGET "${ICCDEV_TEST_LIB_ICCPROFLIB}")
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
   endif()
 
   iccdev_add_regression_executable(iccToInternalFixedIntRoundtripTest
     "${ICCDEV_REPO_ROOT}/.github/ci/regression/tointernal-fixedint-roundtrip.cpp"
   )
-  target_link_libraries(iccToInternalFixedIntRoundtripTest PRIVATE ${ICCDEV_TEST_LIB_ICCPROFLIB})
+  target_link_libraries(iccToInternalFixedIntRoundtripTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
   add_dependencies(check iccToInternalFixedIntRoundtripTest)
 
   add_test(
@@ -797,7 +872,7 @@ function(iccdev_add_tointernal_fixedint_roundtrip_test)
   if(WIN32)
     set(_tointernal_env_mods
       "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccToInternalFixedIntRoundtripTest>"
-      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${ICCDEV_TEST_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
     )
     foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
       list(APPEND _tointernal_env_mods
@@ -988,6 +1063,89 @@ function(iccdev_add_pawg_q1q3_relative_intent_test)
     endforeach()
     set_tests_properties(iccdev.pawg-q1q3-relative-colorimetric PROPERTIES
       ENVIRONMENT_MODIFICATION "${_pawg_q1q3_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# Guards PAWG Q1 metric bounds and model selection.  The MATLAB QA workflow
+# builds this target directly, so register it with both CTest and the check
+# aggregate to keep the native contract available on every platform.
+function(iccdev_add_pawg_q1_quality_contract_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPawgQ1QualityContractTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pawg-q1-quality-contract.cpp"
+  )
+  target_include_directories(iccPawgQ1QualityContractTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport"
+  )
+  target_link_libraries(iccPawgQ1QualityContractTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPawgQ1QualityContractTest)
+
+  add_test(
+    NAME iccdev.pawg-q1-quality-contract
+    COMMAND "$<TARGET_FILE:iccPawgQ1QualityContractTest>"
+  )
+  set_tests_properties(iccdev.pawg-q1-quality-contract PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;pawg;quality;issue-1475;regression"
+  )
+  if(WIN32)
+    set(_pawg_q1_quality_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPawgQ1QualityContractTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pawg_q1_quality_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pawg-q1-quality-contract PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pawg_q1_quality_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# Guards the rotl/rotr operand that SIccCalcOp::Describe dropped (#2265):
+# the icSigRotateLeftOp/icSigRotateRightOp arm formatted its selectors and then
+# broke without appending them, so the ops described themselves bare and a
+# re-read fell back on GetIndex()'s (1,1) defaults -- zeroing the rotate count
+# and offset.  An iccToXml -> iccFromXml round trip therefore rewrote the
+# transform, and erased the stack underflow that made calcUnderStack_rotl.icc
+# and _rotr.icc invalid.  The test asserts Describe(SetFunction(text)) == text.
+function(iccdev_add_mpecalc_rotate_operand_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMpeCalcRotateOperandTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/mpecalc-rotate-operand-roundtrip.cpp"
+  )
+  target_link_libraries(iccMpeCalcRotateOperandTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccMpeCalcRotateOperandTest)
+
+  add_test(
+    NAME iccdev.mpecalc-rotate-operand-roundtrip
+    COMMAND "$<TARGET_FILE:iccMpeCalcRotateOperandTest>"
+  )
+  set_tests_properties(iccdev.mpecalc-rotate-operand-roundtrip PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 25
+    LABELS "iccdev;mpe;calc;xml;regression"
+  )
+  if(WIN32)
+    set(_mpecalc_rotate_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMpeCalcRotateOperandTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _mpecalc_rotate_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.mpecalc-rotate-operand-roundtrip PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_mpecalc_rotate_windows_env_mods}"
     )
   endif()
 endfunction()
@@ -1193,6 +1351,48 @@ function(iccdev_add_xform_create_tag_ownership_test)
     endforeach()
     set_tests_properties(iccdev.xform-create-tag-ownership PROPERTIES
       ENVIRONMENT_MODIFICATION "${_xform_create_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# CIccApplyBPC rebuilds its own cmm objects to find the black point, and used to
+# choose the tag family by profile version instead of asking the xform it is
+# adjusting.  A v4 profile carrying both BToA0 and BToD0 therefore had black
+# measured through the MPE tag even when the caller passed
+# bUseD2BxB2DxTags=false, so the scale and offset came from a pipeline the
+# transform never applies.  Only the B-side is affected -- Create()'s input
+# branch gates DToBx on spectralPCS or v5.  Header + IccProfLib only.
+function(iccdev_add_bpc_d2b_tag_family_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccBpcD2bTagFamilyTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/bpc-d2b-tag-family.cpp"
+  )
+  target_link_libraries(iccBpcD2bTagFamilyTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccBpcD2bTagFamilyTest)
+
+  add_test(
+    NAME iccdev.bpc-d2b-tag-family
+    COMMAND "$<TARGET_FILE:iccBpcD2bTagFamilyTest>"
+  )
+  set_tests_properties(iccdev.bpc-d2b-tag-family PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;cmm;xform;bpc;regression"
+  )
+  if(WIN32)
+    set(_bpc_d2b_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccBpcD2bTagFamilyTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _bpc_d2b_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.bpc-d2b-tag-family PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_bpc_d2b_windows_env_mods}"
     )
   endif()
 endfunction()
@@ -2928,6 +3128,130 @@ function(iccdev_add_applytolink_invalid_arg_test)
   endif()
 endfunction()
 
+# #2268: iccApplyToLink accepted a negative rendering-intent code.
+#
+# The decode at iccApplyToLink.cpp splits one integer into decimal columns, and
+# it takes abs() on the transform-type digit but not on the intent digit. A
+# negative code whose units digit is zero therefore survived every check: "-10"
+# and "-110" reached the range test at the bottom carrying an intent of 0, and
+# produced device links byte-identical to "10" and "110". Only a non-zero units
+# digit -- "-3" -- was ever refused, which is why the gap read as covered.
+#
+# The same guard lands in iccBenchApply::DecodeIntent(), whose comment states it
+# decodes "the way iccApplyToLink.cpp does, so a chain given to this tool and the
+# same chain given to that one resolve identically". The pair below and the
+# iccdev.bench-apply-negative-intent-* pair above assert that sentence: same
+# code, both tools, same verdict. Fixing one alone is what would break it.
+#
+# Driven through RunBenchApplyCliTest.cmake rather than WILL_FAIL because a bare
+# nonzero exit does not distinguish this refusal from a crash or a missing
+# runtime library -- the wrapper makes the message assertion mandatory. That
+# matters more here than usual: the sibling iccdev.applytolink-invalid-decoded-intent
+# below is a WILL_FAIL test, so a message-blind assertion is exactly the coverage
+# this family already had and the reason the sign case went unnoticed.
+#
+# iccdev.applytolink-valid-intent-code is the positive control, and it is not
+# optional: a guard that refused every code would satisfy both negative tests.
+function(iccdev_add_applytolink_negative_intent_tests)
+  if(NOT TARGET iccApplyToLink)
+    return()
+  endif()
+
+  add_dependencies(check iccApplyToLink)
+  add_dependencies(check-fast iccApplyToLink)
+
+  set(_applytolink_intent_tests "")
+
+  # "-10" is the pair for "10" and "-110" the pair for "110". On the FIXED tree
+  # the two negatives reach the same branch -- the guard fires immediately after
+  # ParseIntArg, before any % or abs() arithmetic -- so the second is not extra
+  # branch coverage. It is kept because it is a second independent red probe
+  # against the unfixed tool, where the two took genuinely different routes
+  # through the column decode ("-110" also set the luminance flag via
+  # nLuminance = -1) and both still produced output.
+  # Spelled out rather than looped because foreach() flattens a "name;code"
+  # element into two iterations, so the pairing would not survive the loop.
+  add_test(
+    NAME iccdev.applytolink-negative-intent-code
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccApplyToLink>"
+      "-DLABEL=applytolink-cli"
+      "-DTOOL_ARGS=${ICCDEV_TEST_OUTDIR}/applytolink-negative-intent-code.icc;0;2;1;NegativeIntent;0;1;0;0;${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc;-10"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=a negative intent code is not a valid form"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  list(APPEND _applytolink_intent_tests iccdev.applytolink-negative-intent-code)
+
+  add_test(
+    NAME iccdev.applytolink-negative-intent-code-typed
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccApplyToLink>"
+      "-DLABEL=applytolink-cli"
+      "-DTOOL_ARGS=${ICCDEV_TEST_OUTDIR}/applytolink-negative-intent-code-typed.icc;0;2;1;NegativeIntent;0;1;0;0;${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc;-110"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=a negative intent code is not a valid form"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  list(APPEND _applytolink_intent_tests iccdev.applytolink-negative-intent-code-typed)
+
+  # Same command line, same columns, only the sign removed. "LUT successfully
+  # written" is asserted rather than the exit status alone so this stays a
+  # statement about the tool doing the work, not merely about it not failing.
+  add_test(
+    NAME iccdev.applytolink-valid-intent-code
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccApplyToLink>"
+      "-DLABEL=applytolink-cli"
+      "-DTOOL_ARGS=${ICCDEV_TEST_OUTDIR}/applytolink-valid-intent-code.icc;0;2;1;ValidIntent;0;1;0;0;${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc;10"
+      "-DEXPECT_EXIT=zero"
+      "-DEXPECT_MATCH=LUT successfully written"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  list(APPEND _applytolink_intent_tests iccdev.applytolink-valid-intent-code)
+
+  # The second positive control, and it earns its place: with only "10" a guard
+  # mis-written as "nIntent < 0 || nIntent >= 100" would satisfy every other test
+  # here. "110" is the smallest accepted code that reaches past the tens column.
+  add_test(
+    NAME iccdev.applytolink-valid-intent-code-typed
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccApplyToLink>"
+      "-DLABEL=applytolink-cli"
+      "-DTOOL_ARGS=${ICCDEV_TEST_OUTDIR}/applytolink-valid-intent-code-typed.icc;0;2;1;ValidIntent;0;1;0;0;${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc;110"
+      "-DEXPECT_EXIT=zero"
+      "-DEXPECT_MATCH=LUT successfully written"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  list(APPEND _applytolink_intent_tests iccdev.applytolink-valid-intent-code-typed)
+
+  set_tests_properties(${_applytolink_intent_tests} PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;tools;applytolink;cli;exitcode;issue-2268;regression"
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+
+  if(WIN32)
+    # The tool is reached through cmake -P, and the child inherits this test
+    # process's PATH, so it needs the same runtime paths as every other
+    # iccApplyToLink test. Without them the two negative tests would pass on
+    # Windows for want of IccProfLib2.dll -- STATUS_DLL_NOT_FOUND is an ordinary
+    # nonzero exit -- and the positive control is what would catch it.
+    set(_applytolink_intent_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccApplyToLink>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _applytolink_intent_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(${_applytolink_intent_tests} PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_applytolink_intent_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_applytolink_v4_missing_desc_test)
   if(NOT TARGET iccApplyToLink)
     return()
@@ -2962,6 +3286,159 @@ function(iccdev_add_applytolink_v4_missing_desc_test)
     endforeach()
     set_tests_properties(iccdev.applytolink-v4-missing-device-descriptions PROPERTIES
       ENVIRONMENT_MODIFICATION "${_applytolink_v4_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# #2341: CDevLinkWriter::begin() wrote curve-set slot 1 nSrcSamples-1 times.
+#
+# The V5 branch attaches a CIccMpeCurveSet when the input range is not the default
+# [0,1], sharing one CIccSingleSampledCurve across every input channel -- which the
+# class supports: SetCurve() only deletes an outgoing pointer no other slot still
+# aliases, and Write() emits a shared curve once with every position-table entry
+# pointing at it. The loop that filled slots 1..n-1 ignored its own counter and
+# wrote index 1 each pass, so slots 2..n-1 stayed NULL. Write() skips a NULL slot
+# instead of failing, leaving those channels the calloc'd {offset 0, size 0}
+# position entry, and the writer reported success.
+#
+# Which is why these assert the READ-BACK file, not the writer. On the unfixed
+# tool every case below exits 0 and prints "LUT successfully written": an
+# exit-status or message assertion, the shape every other iccApplyToLink test in
+# this file uses, passes against the defect.
+#
+# The verdict alone is not enough either, and that is measured rather than
+# assumed. An earlier version of this block asserted only "Profile is valid", and
+# replacing the curve-set condition in CDevLinkWriter::begin() with if(false) --
+# dropping the input-domain curves from every V5 link -- left every test green,
+# because a link with no curve set is perfectly valid. So the cases also assert
+# the structure: EXPECT_DUMP_COUNT pins one per-channel curve carrying the
+# requested domain for every input channel, and the default-range case asserts
+# the curve set is ABSENT.
+#
+# The defect needs a source space with at least THREE channels: a 1-channel
+# source never enters the loop, and for a 2-channel source the loop's single
+# iteration (i=1) writes slot 1, which is the slot it should write. Both are
+# therefore correct on the unfixed tool, which is how this survived from
+# 889db62b (2023-11-03) until now.
+#
+# The pair below is what pins it, and the two are jointly sufficient -- each of
+# the four mutations that matter turns at least one of them red, measured:
+#   RGB at 0.001..0.999  -- red for the original bug, for dropping the curve set,
+#                           and for filling the extra channels with the wrong
+#                           domain. EXPECT_DUMP_COUNT=3 is what carries the
+#                           general claim "one curve per input channel", which is
+#                           why a wider source is not needed to state it.
+#   RGB at 0 1           -- valid on BOTH trees; takes the branch that attaches
+#                           no curve set, so REJECT_DUMP asserts the absence the
+#                           other asserts the presence of. Red if the range
+#                           condition is widened to attach one unconditionally.
+# The second is a control and is not optional: without it a "fix" that attached a
+# curve set to every link would satisfy the first.
+#
+# Deliberately NOT registered: CMYK (4 channels) and Gray (1 channel) cases,
+# which ran green locally and turned all three Windows legs red -- MSVC, ClangCL
+# and MinGW alike -- with
+#   Error - Unable to add '...' to transform chain (status 3: Invalid profile)
+# for Testing/CMYK-3DLUTs/CMYK-3DLUTs.icc and Testing/Display/GrayGSDF.icc. Both
+# validate clean here and both are written by CreateAllProfiles.bat reporting
+# "Profile parsed and saved correctly", so the divergence is in reading them back,
+# not in generating them, and it is not understood. It is also invisible today:
+# no other CTest in this file uses either profile, and the manifest check that
+# would validate them is a script test, which is not registered on Windows at all.
+# That is a separate defect from #2341 and is reported separately; gating those
+# two cases to non-Windows here would have buried it. Every fixture used above is
+# tracked in git rather than generated, which is what makes the pair portable.
+function(iccdev_add_applytolink_curveset_channels_tests)
+  if(NOT TARGET iccApplyToLink OR NOT TARGET iccDumpProfile)
+    return()
+  endif()
+
+  add_dependencies(check iccApplyToLink iccDumpProfile)
+  add_dependencies(check-fast iccApplyToLink iccDumpProfile)
+
+  set(_applytolink_curveset_tests "")
+
+  # Spelled out rather than looped: foreach() flattens a "name;profile;range"
+  # element into separate iterations, so the grouping would not survive it -- the
+  # same reason the negative-intent pairs above are written out.
+  #
+  # The EXPECT_DUMP regex has two deliberate properties, both established by
+  # measurement rather than by reading.
+  #
+  # It must run through the closing bracket. string(REGEX MATCHALL) returns only
+  # ONE match for a pattern that stops mid-line -- "Single Sampled Curve
+  # \\[0\\.00100000" counts 1 against a dump holding three identical lines, while
+  # the same pattern extended to "\\]" counts 3. A truncated pattern would
+  # therefore fail every count here for a reason that has nothing to do with the
+  # profile, so the pattern is anchored to the end of the printed value.
+  #
+  # The trailing digits are matched as [0-9]* rather than spelled out.
+  # CIccSingleSampledCurve::Describe() renders the domain with %.8f
+  # (IccMpeBasic.cpp:1576) and icFloatNumber is unconditionally float
+  # (IccDefs.h:88), so "0.99900001" is deterministic -- but the Windows legs
+  # cannot be exercised locally, and this drops a printf last-digit-rounding
+  # assumption at no cost: the domain is still pinned to 0.999x, and the wrong
+  # domain a mis-fix produces renders "0.00000000, 1.00000000", which fails.
+  add_test(
+    NAME iccdev.applytolink-curveset-rgb-channels
+    COMMAND "${CMAKE_COMMAND}"
+      "-DWRITER=$<TARGET_FILE:iccApplyToLink>"
+      "-DREADER=$<TARGET_FILE:iccDumpProfile>"
+      "-DLABEL=applytolink-curveset"
+      "-DWRITER_ARGS=${ICCDEV_TEST_OUTDIR}/applytolink-curveset-rgb.icc;0;3;1;CurveSetRGB;0.001;0.999;1;0;${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc;0"
+      "-DEXPECT_VERDICT=Profile is valid"
+      "-DREJECT_VERDICT=Critical Error|Unable to parse"
+      "-DEXPECT_DUMP=Single Sampled Curve \\[0\\.00100000, 0\\.999[0-9]*\\]"
+      "-DEXPECT_DUMP_COUNT=3"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunDeviceLinkRoundTripTest.cmake"
+  )
+  list(APPEND _applytolink_curveset_tests iccdev.applytolink-curveset-rgb-channels)
+
+
+
+  # Control: the same RGB chain at the default range, which takes the branch that
+  # attaches no curve set. This is the case that fixes the range condition in
+  # place: REJECT_DUMP asserts the absence the other three assert the presence of,
+  # so widening the condition to attach a curve set unconditionally is red here
+  # while narrowing it to attach one never is red in the three above.
+  add_test(
+    NAME iccdev.applytolink-curveset-default-range
+    COMMAND "${CMAKE_COMMAND}"
+      "-DWRITER=$<TARGET_FILE:iccApplyToLink>"
+      "-DREADER=$<TARGET_FILE:iccDumpProfile>"
+      "-DLABEL=applytolink-curveset"
+      "-DWRITER_ARGS=${ICCDEV_TEST_OUTDIR}/applytolink-curveset-default-range.icc;0;3;1;CurveSetDefault;0;1;1;0;${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc;0"
+      "-DEXPECT_VERDICT=Profile is valid"
+      "-DREJECT_VERDICT=Critical Error|Unable to parse"
+      "-DREJECT_DUMP=BEGIN_CURVE_SET"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunDeviceLinkRoundTripTest.cmake"
+  )
+  list(APPEND _applytolink_curveset_tests iccdev.applytolink-curveset-default-range)
+
+  set_tests_properties(${_applytolink_curveset_tests} PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;tools;applytolink;mpe;curveset;issue-2341;regression"
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+
+  if(WIN32)
+    # Both tools are reached through cmake -P and inherit this test process's
+    # PATH, so both need the runtime paths -- the reader as much as the writer.
+    # A missing IccProfLib2.dll makes iccDumpProfile print nothing, and an empty
+    # report matches no EXPECT_VERDICT, so this presents as a verdict mismatch
+    # rather than as a load failure.
+    set(_applytolink_curveset_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccApplyToLink>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccDumpProfile>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _applytolink_curveset_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(${_applytolink_curveset_tests} PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_applytolink_curveset_env_mods}"
     )
   endif()
 endfunction()
@@ -4147,6 +4624,74 @@ function(iccdev_add_tiff_create_overflow_test)
   endif()
 endfunction()
 
+# #2228: separated (PLANARCONFIG_SEPARATE) strip handling. CTiffImg advanced each
+# decoded plane by one row while the deplaning loop strides by a whole strip, and
+# sized the strip buffer from the interleaved row width so the allocation grew with
+# the square of SamplesPerPixel. Like iccdev.tiff-create-overflow, this compiles
+# TiffImg.cpp directly because CTiffImg is tool code rather than part of IccProfLib.
+function(iccdev_add_tiff_separated_strips_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+  if(NOT TARGET TIFF::TIFF AND NOT TIFF_LIBRARY)
+    find_package(TIFF QUIET)
+  endif()
+  if(TARGET TIFF::TIFF)
+    set(_tiff_lib TIFF::TIFF)
+  elseif(TIFF_LIBRARY)
+    set(_tiff_lib ${TIFF_LIBRARY})
+  else()
+    message(STATUS "iccdev.tiff-separated-strips: libtiff not found, test skipped")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccTiffSeparatedStripsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/tiff-separated-strips.cpp"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccApplyProfiles/TiffImg.cpp"
+  )
+  target_compile_features(iccTiffSeparatedStripsTest PRIVATE cxx_std_17)
+  target_include_directories(iccTiffSeparatedStripsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccApplyProfiles"
+  )
+  target_link_libraries(iccTiffSeparatedStripsTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB} ${_tiff_lib})
+  add_dependencies(check iccTiffSeparatedStripsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.tiff-separated-strips
+      COMMAND "$<TARGET_FILE:iccTiffSeparatedStripsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.tiff-separated-strips
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccTiffSeparatedStripsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.tiff-separated-strips PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 120
+    LABELS "iccdev;tools;tiff;spectral;regression"
+  )
+  if(WIN32)
+    set(_tiffseparated_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccTiffSeparatedStripsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _tiffseparated_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.tiff-separated-strips PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_tiffseparated_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_signature_utils_contract_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -4334,14 +4879,16 @@ function(iccdev_add_calc_envsig_sign_extension_test)
 endfunction()
 
 # #1888: proves a regression executable can link an exported IccProfLib global
-# *variable*. WINDOWS_EXPORT_ALL_SYMBOLS exports functions but not data, so on a
-# Windows shared build this only links via ${ICCDEV_TEST_LIB_ICCPROFLIB}; if that
-# fallback is dropped the Windows leg fails here rather than in whichever new
-# test next reaches for library data. Also pins the values that the tests which
-# cannot link these symbols -- anything co-linking IccXML -- hard-code instead.
-# Links IccProfLib only, by design: co-linking IccXML would load IccProfLib twice.
+# *variable*. WINDOWS_EXPORT_ALL_SYMBOLS exports functions but not data, so until
+# #2219 gave the eight globals ICCPROFLIB_DATA_API this linked on a Windows shared
+# build only by falling back to IccProfLib2-static. That fallback is retired
+# (#2154): the test now links the DLL like every other, and if the annotation is
+# lost the Windows leg fails at BUILD time here -- while
+# iccdev.proflib-exported-data-dll-linkage, which builds its consumer out of tree,
+# reports the same loss as a test failure. Also pins the values that tests which
+# read no library data hard-code instead.
 function(iccdev_add_proflib_exported_data_linkage_test)
-  if(NOT TARGET "${ICCDEV_TEST_LIB_ICCPROFLIB}")
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
   endif()
 
@@ -4353,7 +4900,7 @@ function(iccdev_add_proflib_exported_data_linkage_test)
     "${ICCDEV_REPO_ROOT}/IccProfLib"
   )
   target_link_libraries(iccProfLibExportedDataLinkageTest PRIVATE
-    ${ICCDEV_TEST_LIB_ICCPROFLIB})
+    ${TARGET_LIB_ICCPROFLIB})
   add_dependencies(check iccProfLibExportedDataLinkageTest)
 
   add_test(
@@ -4368,7 +4915,7 @@ function(iccdev_add_proflib_exported_data_linkage_test)
   if(WIN32)
     set(_exported_data_windows_env_mods
       "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccProfLibExportedDataLinkageTest>"
-      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${ICCDEV_TEST_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
     )
     foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
       list(APPEND _exported_data_windows_env_mods
@@ -4437,6 +4984,153 @@ function(iccdev_add_proflib_exported_global_definitions_test)
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     TIMEOUT 60
     LABELS "iccdev;build;linkage;api;issue-1897;regression"
+  )
+endfunction()
+
+# #2154 item 3: the installed find_package() surface, exercised by real consumers.
+#
+# Nothing in CI ran `cmake --install` before this test, and nothing built
+# examples/hello-iccdev at all -- the only find_package(RefIccMAX) in CI is
+# ci-vcpkg-ports.yml, CONFIG mode against a port that forces
+# -DENABLE_SHARED_LIBS=OFF. Every consumer path onto a SHARED install was
+# therefore unguarded, which is how two FindRefIccMAX.cmake defects survived:
+# neither is reachable from inside the build tree, only from a consumer of the
+# installed prefix.
+#
+# Runs everywhere rather than being gated to one platform. The staged prefix is
+# the same on all of them, and the Windows leg additionally covers the dllimport
+# annotation the package has to carry INTERFACE for the eight
+# ICCPROFLIB_DATA_API globals (#1888) -- the module-mode half of which is
+# invisible off Windows, since IccProfLibConf.h's non-PC branch never reads the
+# macro. The check target gains the library targets because the test stages the
+# install from their build artefacts; it deliberately does NOT depend on the
+# command-line tools, and stages by component so a tool that was never built
+# cannot be reported as a broken package.
+function(iccdev_add_installed_package_consumer_test)
+  if(NOT ENABLE_INSTALL_RIM)
+    message(STATUS
+      "ENABLE_INSTALL_RIM is off - skipping iccdev.installed-package-consumer")
+    return()
+  endif()
+
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    message(STATUS
+      "IccProfLib/IccXML not both built - skipping iccdev.installed-package-consumer")
+    return()
+  endif()
+
+  # The consumers are configured and compiled out of tree at test time, so they
+  # carry none of this build's sanitizer flags. Linking a clean executable
+  # against an instrumented shared library is not merely unmeasured, it aborts:
+  # ASan refuses to start unless its runtime comes first in the initial library
+  # list. Reproducing the parent's full sanitizer configuration inside a nested
+  # configure would be its own source of false reds, and nothing about package
+  # consumability is sanitizer-specific -- the ordinary legs cover it.
+  # Every option that feeds SANITIZER_LIST, not just the well-known five:
+  # ENABLE_INTEGER_SANITIZER alone leaves the libraries built with
+  # -fno-sanitize-recover=integer, so an unsigned overflow inside library code
+  # aborts the uninstrumented consumer and reports as a packaging failure.
+  if(ENABLE_SANITIZERS OR ENABLE_ASAN OR ENABLE_UBSAN OR ENABLE_TSAN OR
+     ENABLE_MSAN OR ENABLE_LSAN OR ENABLE_FUZZING OR
+     ENABLE_INTEGER_SANITIZER OR ENABLE_FLOAT_SANITIZER)
+    message(STATUS
+      "sanitizer build - skipping iccdev.installed-package-consumer "
+      "(out-of-tree consumers are not instrumented)")
+    return()
+  endif()
+
+  # Library directories whose runtime component the test stages. Tools are
+  # excluded on purpose; see the comment above.
+  set(_lib_subdirs IccProfLib IccXML)
+  set(_have_json FALSE)
+  set(_have_connect FALSE)
+  if(TARGET "${TARGET_LIB_ICCJSON}")
+    list(APPEND _lib_subdirs IccJSON)
+    set(_have_json TRUE)
+  endif()
+  if(TARGET "${TARGET_LIB_ICCCONNECT}")
+    list(APPEND _lib_subdirs IccConnect)
+    set(_have_connect TRUE)
+  endif()
+
+  # Everything the "dev" and "runtime" component installs read, so that
+  # `cmake --build . --target check` produces a stageable tree. The static
+  # archives are in the dev component, so they are needed even though the
+  # consumers link the shared libraries.
+  foreach(_dep IccProfLib2 IccProfLib2-static IccXML2 IccXML2-static
+                IccJSON2 IccJSON2-static IccConnect2 IccConnect2-static)
+    if(TARGET ${_dep})
+      # A static-only configuration aliases IccProfLib2 onto IccProfLib2-static,
+      # and add_dependencies() on an ALIAS is a hard CMake error, so resolve
+      # through the alias rather than trusting the name.
+      get_target_property(_dep_alias ${_dep} ALIASED_TARGET)
+      if(_dep_alias)
+        add_dependencies(check ${_dep_alias})
+      else()
+        add_dependencies(check ${_dep})
+      endif()
+    endif()
+  endforeach()
+
+  add_test(
+    NAME iccdev.installed-package-consumer
+    COMMAND "${CMAKE_COMMAND}"
+      "-DICCDEV_TEST_NAME=iccdev.installed-package-consumer"
+      "-DICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/iccdev-installed-package-consumer"
+      "-DICCDEV_REPO_ROOT=${ICCDEV_REPO_ROOT}"
+      "-DICCDEV_BUILD_DIR=${CMAKE_BINARY_DIR}"
+      "-DICCDEV_CONFIG=$<CONFIG>"
+      "-DICCDEV_GENERATOR=${CMAKE_GENERATOR}"
+      "-DICCDEV_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+      # Without the toolset the ClangCL leg would configure its consumer against
+      # the default v143 while passing it a clang-cl CMAKE_CXX_COMPILER, so the
+      # consumer and the libraries it links come from different compilers.
+      "-DICCDEV_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
+      "-DICCDEV_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+      "-DICCDEV_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}"
+      "-DICCDEV_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
+      "-DICCDEV_VCPKG_TRIPLET=${VCPKG_TARGET_TRIPLET}"
+      "-DICCDEV_LIB_SUBDIRS=${_lib_subdirs}"
+      "-DICCDEV_HAVE_SHARED=${ENABLE_SHARED_LIBS}"
+      "-DICCDEV_HAVE_JSON=${_have_json}"
+      "-DICCDEV_HAVE_CONNECT=${_have_connect}"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunInstalledPackageConsumerTest.cmake"
+  )
+  # Generous because the test performs three nested configure+build cycles on
+  # top of staging two prefixes; a cold MSVC configure alone can take a minute.
+  set_tests_properties(iccdev.installed-package-consumer PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 900
+    # Four nested configure+build cycles; running them against a runner already
+    # saturated by ctest -j is the likeliest way to spend that timeout.
+    RUN_SERIAL TRUE
+    LABELS "iccdev;install;package;find-package;consumer;issue-2154;regression"
+  )
+endfunction()
+
+# #2154: coverage for the collector behind every Windows runtime PATH in this
+# tree, Build/Cmake/Testing/WindowsRuntimePaths.cmake, which had none.
+#
+# It is registered on EVERY platform, not behind if(WIN32). The two defects it
+# pins only bite on Windows -- an out-of-tree consumer that finds no libxml2 or
+# zlib dies at load with 0xc0000135, STATUS_DLL_NOT_FOUND, which names no DLL --
+# but their cause is CMakeCache.txt parsing, so a synthetic cache reproduces
+# them anywhere. Discovering a cache-parsing bug on the Windows Debug leg costs
+# a full CI round trip per attempt; discovering it here costs under a second.
+# The test needs no targets, no build products and no bash: it writes its own
+# cache fixtures and calls the collector directly.
+function(iccdev_add_windows_runtime_paths_test)
+  add_test(
+    NAME iccdev.windows-runtime-paths
+    COMMAND "${CMAKE_COMMAND}"
+      "-DICCDEV_TEST_NAME=iccdev.windows-runtime-paths"
+      "-DICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/iccdev-windows-runtime-paths"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunWindowsRuntimePathsTest.cmake"
+  )
+  set_tests_properties(iccdev.windows-runtime-paths PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;cmake;windows;runtime-path;issue-2154;regression"
   )
 endfunction()
 
@@ -4650,8 +5344,7 @@ endfunction()
 # legacy transform. This test builds both a v2 'mft2' and a v4 'mAB ' profile
 # over identical CLUT content in memory and asserts the two disagree by exactly
 # the 65535/65280 factor, so it cannot be disabled by a corpus change. Links
-# IccProfLib alone and references no exported library data, so it is eligible for
-# ${ICCDEV_TEST_LIB_ICCPROFLIB}.
+# IccProfLib alone and references no exported library data.
 function(iccdev_add_v2_legacy_pcs_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -4664,7 +5357,7 @@ function(iccdev_add_v2_legacy_pcs_test)
   target_include_directories(iccV2LegacyPcsTest PRIVATE
     "${ICCDEV_REPO_ROOT}/IccProfLib"
   )
-  target_link_libraries(iccV2LegacyPcsTest PRIVATE ${ICCDEV_TEST_LIB_ICCPROFLIB})
+  target_link_libraries(iccV2LegacyPcsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
   add_dependencies(check iccV2LegacyPcsTest)
 
   if(WIN32)
@@ -4701,6 +5394,58 @@ function(iccdev_add_v2_legacy_pcs_test)
   endif()
 endfunction()
 
+# Characterization tests for PCS adjustment placement. Builds its own v2/v4
+# CMYK fixtures in memory -- Testing/**/*.icc is gitignored and generated, so a
+# tracked profile is not available on a fresh clone. Links IccProfLib alone.
+function(iccdev_add_pcs_adjust_placement_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPcsAdjustPlacementTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pcs-adjust-placement.cpp"
+  )
+  target_compile_features(iccPcsAdjustPlacementTest PRIVATE cxx_std_17)
+  target_include_directories(iccPcsAdjustPlacementTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccPcsAdjustPlacementTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPcsAdjustPlacementTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.pcs-adjust-placement
+      COMMAND "$<TARGET_FILE:iccPcsAdjustPlacementTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.pcs-adjust-placement
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccPcsAdjustPlacementTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.pcs-adjust-placement PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;iccprofLib;pcs;cmm;regression"
+  )
+  if(WIN32)
+    set(_pcs_adjust_placement_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPcsAdjustPlacementTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pcs_adjust_placement_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pcs-adjust-placement PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pcs_adjust_placement_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1883, second half: pin the tracked v2 XML fixtures themselves. Testing/**/*.icc
 # is gitignored, so Testing/V2/*.xml is the tracked artifact and the profile is
 # generated from it by CreateAllProfiles.sh. Each case asserts the fixture still
@@ -4708,8 +5453,7 @@ endfunction()
 # declares a 2.x header, still carries the LUT type it exists to provide, and
 # still validates without a critical error -- a fixture that silently drifted to
 # v4 would otherwise restore the original coverage gap while looking healthy.
-# Needs IccXML (CIccProfileXml) + IccProfLib; skipped where IccXML is not built,
-# and barred from ${ICCDEV_TEST_LIB_ICCPROFLIB} because it co-links IccXML.
+# Needs IccXML (CIccProfileXml) + IccProfLib; skipped where IccXML is not built.
 function(iccdev_add_v2_xml_fixtures_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
     return()
@@ -4952,6 +5696,32 @@ endfunction()
 # loops, so the unfixed code fails by TIMEOUT; the value checks additionally
 # confirm the reduction matches an independently computed fmod, and that the
 # NaN/infinity/L-range rejections are unchanged. IccProfLib only.
+function(iccdev_add_qa_evidence_helpers_test)
+  # Header-only: IccCmdLineUtil.h is all inline, so this links no library and
+  # needs no Windows runtime PATH entries.  It is therefore platform-agnostic
+  # and registers on both the WIN32 and non-WIN32 paths below -- the omission
+  # #2237 fixed for two other tests.
+  iccdev_add_regression_executable(iccQaEvidenceHelpersTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/qa-evidence-helpers.cpp"
+  )
+  target_compile_features(iccQaEvidenceHelpersTest PRIVATE cxx_std_17)
+  target_include_directories(iccQaEvidenceHelpersTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine"
+  )
+  add_dependencies(check iccQaEvidenceHelpersTest)
+
+  add_test(
+    NAME iccdev.qa-evidence-helpers
+    COMMAND "$<TARGET_FILE:iccQaEvidenceHelpersTest>"
+  )
+  set_tests_properties(iccdev.qa-evidence-helpers PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;qa-flags;issue-1853;regression"
+  )
+endfunction()
+
 function(iccdev_add_prmg_hue_normalization_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -5080,15 +5850,774 @@ function(iccdev_add_zip_utf8_text_zlib_test)
   endif()
 endfunction()
 
+# Pins CIccCLUT's grid-coordinate clamp semantics, in particular that +Inf
+# saturates to the top of the grid on both the default and the former NoClip
+# path. Those two disagreed about +Inf before the clamp was inlined -- one
+# saturated high, the other collapsed to zero.
+#
+# This needs its own test because the change is invisible to everything else:
+# the throughput harness reported no checksum movement on any case even with
+# +Inf on every channel, since the only corpus profiles that install the NoClip
+# path are three-channel and the only wider profile has no CLUT element.
+if(TARGET ${TARGET_LIB_ICCPROFLIB})
+  iccdev_add_regression_executable(iccClutGridClampTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/clut-grid-clamp-inf.cpp"
+  )
+  target_link_libraries(iccClutGridClampTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccClutGridClampTest)
+
+  add_test(
+    NAME iccdev.clut-grid-clamp-inf
+    COMMAND "$<TARGET_FILE:iccClutGridClampTest>"
+  )
+  set_tests_properties(iccdev.clut-grid-clamp-inf PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;iccprofLib;clut;clamp;regression"
+  )
+  if(WIN32)
+    set(_clutclamp_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccClutGridClampTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _clutclamp_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.clut-grid-clamp-inf PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_clutclamp_windows_env_mods}"
+    )
+  endif()
+endif()
+
+
+# Throughput harness for the IccProfLib apply paths (iccBenchApply).
+#
+# NOTE: this must stay ABOVE the if(WIN32) branch immediately below. That branch
+# registers the Windows test set and then return()s, so anything placed after it
+# never runs on Windows. This block handles WIN32 itself.
+#
+# Records; never asserts a timing threshold. Shared CI runners vary 20-30%
+# between runs on the same commit, so a threshold would flake without catching
+# anything a local run would not. The test fails on a real defect: a checksum
+# that moved between thread counts, a second Begin() that changed the output,
+# or -- since #2254 -- a run in which no case was measured at all.
+#
+# That last clause is the anti-vacuity guard, and it is not theoretical. Before
+# #2254 the tool exited 0 after printing "0 case(s) measured, 9 skipped", so
+# this test passed unchanged against a build whose profile fixture produced
+# nothing. iccdev.bench-apply-empty-suite below is its negative control: it
+# points the roots at a directory with no Testing/ tree and requires the
+# failure, so a regression that restores the old exit status turns that test
+# red rather than quietly re-hollowing this one.
+#
+# The 'slow' label puts it on the existing opt-out path rather than inventing
+# one: check-fast excludes 'slow' while check excludes only 'known-red', so the
+# full suite runs it and the fast loop does not.
+#
+# ENVIRONMENT hands the tool both profile roots. iccdev.create-profiles writes
+# generated profiles into the source tree while iccdev.windows-create-profiles
+# writes them into the build tree, and the tool resolves against both rather
+# than assuming a platform.
+#
+# #2254 corrected the second root. It was ${CMAKE_BINARY_DIR}, which resolved
+# nothing on any platform: iccdev.windows-create-profiles does not generate into
+# <build>/Testing -- that is the CTest scratch directory -- but into
+# ${ICCDEV_TEST_OUTDIR}/windows-testing, a copy of the source Testing/ tree that
+# it then fills with 135 profiles (see the WIN32 branch below and
+# RunWindowsBatchTest.cmake:184-194). All nine cases open a generated profile
+# first -- the table's one tracked profile is never the first in its chain -- so
+# on Windows every case SKIPped and this test passed in 0.01
+# seconds without measuring anything -- visible in run 32563985818, where the
+# fixture that produced the profiles it never found took 6.62 seconds. That
+# directory is already a Testing tree rather than a directory containing one,
+# which is why icBenchResolveProfile now tries each root both ways.
+#
+# On POSIX the new value simply does not exist and the source root answers, as
+# it always did.
+#
+# #2254: the two tests that DRIVE the suite are gated on iccFromXml, because
+# without it there is no corpus and no fixture to build one. The Windows
+# fixture is registered only inside if(TARGET iccFromXml) (see
+# iccdev.windows-create-profiles below), and every one of the nine cases opens a
+# generated profile first, so on a configuration such as the mingw-core-x64
+# preset -- ENABLE_ICCXML=OFF with ENABLE_TESTS=ON and ENABLE_TOOLS=ON -- the
+# suite can only ever measure zero. Before this change that was a silent pass;
+# with the exit status corrected it would be a red leg reporting a configuration
+# choice as a defect. Not registering a test that cannot measure is the honest
+# reading of both. The argument-handling tests below are NOT gated: they exit
+# before a profile is opened, and iccdev.bench-apply-empty-suite asserts the
+# absence of a corpus, so it needs one least of all.
+if(TARGET iccBenchApply)
+  add_dependencies(build-test-binaries iccBenchApply)
+
+  if(TARGET iccFromXml)
+    if(WIN32)
+      add_test(
+        NAME iccdev.apply-throughput
+        COMMAND "$<TARGET_FILE:iccBenchApply>" -suite -csv -pixels 65536 -repeats 3
+      )
+    else()
+      add_test(
+        NAME iccdev.apply-throughput
+        COMMAND
+          "${CMAKE_COMMAND}" -E env
+          ${ICCDEV_TEST_ENV}
+          "$<TARGET_FILE:iccBenchApply>" -suite -csv -pixels 65536 -repeats 3
+      )
+    endif()
+
+    set_tests_properties(iccdev.apply-throughput PROPERTIES
+      WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+      TIMEOUT 300
+      LABELS "iccdev;iccprofLib;benchmark;throughput;slow"
+      FIXTURES_REQUIRED iccdev_profiles
+      ENVIRONMENT "ICCDEV_BENCH_SOURCE_ROOT=${ICCDEV_REPO_ROOT};ICCDEV_BENCH_BUILD_ROOT=${ICCDEV_TEST_OUTDIR}/windows-testing"
+    )
+  endif()
+
+  # #2250: iccBenchApply read the -PCC profile and never deleted it. The CMM does
+  # not take ownership -- CIccXform::Create stores it as the bare
+  # m_pConnectionConditions pointer and ~CIccXform never frees it -- so every run
+  # that passed -PCC leaked the whole profile object graph. Nothing caught it
+  # because no registered test passed -PCC at all; iccdev.apply-throughput above
+  # drives only the built-in suite, which never takes that branch.
+  #
+  # The tracked sRGB profile is used as its own PCC so this needs no fixture. The
+  # obvious spelling, -PCC PCC/Lab_float-D50_2deg.icc, would not survive: every
+  # PCC/*.icc is gitignored and generated by CreateAllProfiles, whose output root
+  # differs per platform, and the leak is in the caller so any profile shows it.
+  #
+  # ASAN_OPTIONS follows the rule spelled out at iccdev.cmmsearch-namedcolor-
+  # ownership above -- ONLY detect_leaks=1, because the inherited
+  # "halt_on_error=0,detect_leaks=0" disables the scan and halt_on_error=0 alone
+  # still exits 0 after printing the report. The first version of this test
+  # inherited that string, reported 123684 leaked bytes, and passed. It is placed
+  # after ${ICCDEV_TEST_ENV} so it replaces rather than merges with it; that
+  # variable is in fact still empty here, being set further down this file, below
+  # this block.
+  #
+  # Ceiling worth knowing: the leak assertion rides entirely on that override, so
+  # only the sanitizer legs can fail for #2250. On a Windows leg or any
+  # non-sanitizer build this degrades to a smoke test that the -PCC path still
+  # runs. Measured on 2f329b79 with the ASan preset: pre-fix 123684 bytes in 129
+  # allocations and exit 1, post-fix a clean exit 0.
+  if(WIN32)
+    add_test(
+      NAME iccdev.apply-throughput-pcc
+      COMMAND "$<TARGET_FILE:iccBenchApply>"
+        -pixels 4096 -repeats 1
+        0 Testing/sRGB_v4_ICC_preference.icc 0
+        -PCC Testing/sRGB_v4_ICC_preference.icc
+    )
+  else()
+    add_test(
+      NAME iccdev.apply-throughput-pcc
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "ASAN_OPTIONS=detect_leaks=1"
+        "$<TARGET_FILE:iccBenchApply>"
+        -pixels 4096 -repeats 1
+        0 Testing/sRGB_v4_ICC_preference.icc 0
+        -PCC Testing/sRGB_v4_ICC_preference.icc
+    )
+  endif()
+
+  set_tests_properties(iccdev.apply-throughput-pcc PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;throughput;pcc;leak;issue-2250;regression"
+  )
+
+  # -------------------------------------------------------------------------
+  # #2254: the iccBenchApply command-line contract.
+  #
+  # A QA pass over the tool's invocations found three ways to ask for something
+  # and be told nothing, plus the exit status that made the benchmark above
+  # vacuous. Each of the four tests below pins one of them, and each fails
+  # against the tool as it stood at 0964739d:
+  #
+  #   arity-floor           an argc floor of 3 rejected every two-argument
+  #                         invocation, including `iccBenchApply -suite` -- the
+  #                         spelling the Readme and docs/tools-cli-reference.md
+  #                         both give as the way to run the table. Callers
+  #                         padded it with a stray trailing token, which is how
+  #                         the next defect went unnoticed.
+  #
+  #                         This is asserted through `iccBenchApply 1` rather
+  #                         than through `-suite` itself, for a reason worth
+  #                         stating: the floor is an argc test, so any
+  #                         two-argument form exercises the same branch, and
+  #                         `-suite` on its own has no way to be made cheap. It
+  #                         takes the default 1048576-pixel, 7-repeat budget,
+  #                         which on the slow build that prompted #2254 ran for
+  #                         over 25 minutes in a single case. Registering that
+  #                         as a CTest would import the exact runtime this issue
+  #                         is about. `1` reaches the floor in microseconds and
+  #                         discriminates on the message: before the fix the
+  #                         tool printed the usage text, after it the chain
+  #                         error the argument actually earns.
+  #   suite-rejects-chain   `-suite 1 <profile> 10002` ran the built-in table,
+  #                         silently discarded the profile and the intent, and
+  #                         exited 0.
+  #   suite-rejects-perxform  RunSuite reads neither g_bPerXform nor g_bLeaf, so
+  #                         both options were accepted and dropped.
+  #   empty-suite           every case SKIPping still exited 0. This is the
+  #                         negative control for iccdev.apply-throughput: it
+  #                         gives the tool roots with no Testing/ tree, so all
+  #                         nine cases must SKIP and the run must fail.
+  #
+  # These are argument-handling assertions, not benchmarks. Three of the four
+  # exit before any profile is opened, so they need no fixture and no timing
+  # budget; only suite-standalone measures, and it does so at 4096 pixels and a
+  # single repeat.
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bench-empty-root")
+
+  add_test(
+    NAME iccdev.bench-apply-arity-floor
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=1"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=No profiles given"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-arity-floor PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;issue-2254;regression"
+  )
+
+  add_test(
+    NAME iccdev.bench-apply-suite-rejects-chain
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;-suite;1;Testing/sRGB_v4_ICC_preference.icc;10002"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=takes no chain"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-suite-rejects-chain PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;issue-2254;regression"
+  )
+
+  add_test(
+    NAME iccdev.bench-apply-suite-rejects-perxform
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;-perxform;-suite"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=has no effect with -suite"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-suite-rejects-perxform PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;issue-2254;regression"
+  )
+
+  # The positive counterpart to iccdev.bench-apply-empty-suite below, and the
+  # regression test for the resolver change: run from inside a Testing tree with
+  # no ICCDEV_BENCH_* set at all, so both roots default to "." and only the
+  # direct form can resolve anything. Before #2254 this measured zero cases --
+  # it is the invocation from the QA report, `cd Testing && iccBenchApply
+  # -suite` -- and it is the same code path that makes the Windows profile tree
+  # reachable, so the two platforms pin each other here rather than each relying
+  # on a leg the other does not run.
+  # Gated with iccdev.apply-throughput, and for a second reason as well: on
+  # Windows this working directory is created by iccdev.windows-create-profiles,
+  # which is itself inside if(TARGET iccFromXml). Registered unconditionally,
+  # the test would fail with "Unable to find working directory" on a no-XML
+  # Windows configure -- a message about the fixture, not about the CLI contract
+  # the test exists to pin.
+  if(TARGET iccFromXml)
+    if(WIN32)
+      set(_bench_testing_cwd "${ICCDEV_TEST_OUTDIR}/windows-testing")
+    else()
+      set(_bench_testing_cwd "${ICCDEV_REPO_ROOT}/Testing")
+    endif()
+
+    add_test(
+      NAME iccdev.bench-apply-testing-cwd
+      COMMAND "${CMAKE_COMMAND}"
+        "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+        "-DTOOL_ARGS=-pixels;4096;-repeats;1;-suite"
+        "-DEXPECT_EXIT=zero"
+        "-DEXPECT_MATCH=[1-9][0-9]* case\\(s\\) measured"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+    )
+    set_tests_properties(iccdev.bench-apply-testing-cwd PROPERTIES
+      WORKING_DIRECTORY "${_bench_testing_cwd}"
+      TIMEOUT 300
+      LABELS "iccdev;iccprofLib;benchmark;cli;issue-2254;regression"
+      FIXTURES_REQUIRED iccdev_profiles
+    )
+  endif()
+
+  add_test(
+    NAME iccdev.bench-apply-empty-suite
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;-suite"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=no benchmark cases were measured"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-empty-suite PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;issue-2254;regression"
+    ENVIRONMENT "ICCDEV_BENCH_SOURCE_ROOT=${CMAKE_CURRENT_BINARY_DIR}/bench-empty-root;ICCDEV_BENCH_BUILD_ROOT=${CMAKE_CURRENT_BINARY_DIR}/bench-empty-root"
+  )
+
+  # #2268: the sign column, on the tool that documents itself as decoding the
+  # same way iccApplyToLink does.
+  #
+  # DecodeIntent() takes abs() on the transform-type digit and not on the intent
+  # digit, so "-10" resolved exactly like "10" and ran a full benchmark. "-3" was
+  # refused, which is what made the gap look covered. The guard sits inside
+  # DecodeIntent() rather than at the caller so the built-in -suite table is held
+  # to the same rule as the command line; the table itself carries only :1 and :3
+  # today, so nothing there changes.
+  #
+  # Paired with iccdev.applytolink-negative-intent-code below: the two tools must
+  # answer one code the same way, which is the equivalence DecodeIntent()'s own
+  # comment claims. -pixels/-repeats are pinned low because the positive control
+  # measures for real, and the two negative cases exit before a profile is opened.
+  add_test(
+    NAME iccdev.bench-apply-negative-intent-code
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;1;Testing/sRGB_v4_ICC_preference.icc;-10"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=a negative intent code is not a valid form"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-negative-intent-code PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;issue-2268;regression"
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+
+  # Positive control for the guard above: same command line, sign removed. Without
+  # it a DecodeIntent() that returned false unconditionally would pass the
+  # negative test and prove nothing.
+  add_test(
+    NAME iccdev.bench-apply-valid-intent-code
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;1;Testing/sRGB_v4_ICC_preference.icc;10"
+      "-DEXPECT_EXIT=zero"
+      "-DEXPECT_MATCH=chain: 1 profile"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-valid-intent-code PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;issue-2268;regression"
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+
+  # Same reason as the iccApplyToLink twin: "10" alone cannot tell a correct
+  # guard from one mis-written as "nEncoded < 0 || nEncoded >= 100".
+  add_test(
+    NAME iccdev.bench-apply-valid-intent-code-typed
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;1;Testing/sRGB_v4_ICC_preference.icc;110"
+      "-DEXPECT_EXIT=zero"
+      "-DEXPECT_MATCH=chain: 1 profile"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-valid-intent-code-typed PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;issue-2268;regression"
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+
+  if(WIN32)
+    set(_bench_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccBenchApply>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _bench_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    # Only the tests that were actually registered: set_tests_properties on an
+    # unknown name is a hard configure error, and the two suite-driving tests
+    # are gated on iccFromXml above.
+    set(_bench_env_mod_tests
+      iccdev.apply-throughput-pcc
+      iccdev.bench-apply-arity-floor
+      iccdev.bench-apply-suite-rejects-chain
+      iccdev.bench-apply-suite-rejects-perxform
+      iccdev.bench-apply-empty-suite
+      iccdev.bench-apply-negative-intent-code
+      iccdev.bench-apply-valid-intent-code
+      iccdev.bench-apply-valid-intent-code-typed)
+    if(TARGET iccFromXml)
+      list(APPEND _bench_env_mod_tests
+        iccdev.apply-throughput
+        iccdev.bench-apply-testing-cwd)
+    endif()
+    # #2254: the CLI-contract tests reach the tool through cmake -P, and a child
+    # process inherits the PATH the test process was given, so they need the
+    # same runtime paths. Without this they would fail on Windows for want of
+    # IccProfLib2.dll, and the three that assert a nonzero exit would have
+    # passed for exactly that wrong reason -- STATUS_DLL_NOT_FOUND is an
+    # ordinary nonzero status, not a launch failure the wrapper can spot. What
+    # keeps that honest is the wrapper's mandatory EXPECT_MATCH on every
+    # negative test; the paths are what make the tests measure the tool rather
+    # than the loader.
+    foreach(_bench_cli_test IN LISTS _bench_env_mod_tests)
+      set_tests_properties(${_bench_cli_test} PROPERTIES
+        ENVIRONMENT_MODIFICATION "${_bench_windows_env_mods}"
+      )
+    endforeach()
+  endif()
+endif()
+
+
+# #2248: iccDumpProfile's verbosity default, on both argument paths.
+#
+# The usage text says the integer parameter is optional with "default=100", and
+# verbosity is initialised to 100 -- but both branches then run strtol() over the
+# next argument to support a profile whose name starts with a digit ("123.icc"),
+# and assign the result unconditionally. When that token is NOT a verbosity
+# argument the parsed value was left in place, so the default never held:
+#
+#   iccDumpProfile profile.icc     verbosity 0        (strtol returns 0)
+#   iccDumpProfile 123.icc         verbosity 123      (outside the documented 1-100)
+#   iccDumpProfile 50test.icc      verbosity 50
+#
+# The -v branch carried a partial recovery, `else if (argv[nArg] == endptr)`, which
+# only fired when strtol consumed nothing at all -- so `-v 123.icc` was wrong there
+# too, and mirroring that branch into the other one would have fixed the first case
+# and left the other two. The fix restores the default across the whole reject path,
+# in both branches, which is what these four tests pin.
+#
+# Like the iccBenchApply block above, this MUST stay above the if(WIN32) branch
+# that follows: that branch return()s, so a registration placed after it never
+# reaches a Windows leg. This is #2237 verbatim, and the argv handling under test
+# is exactly the kind of thing that platform would be expected to cover.
+#
+# These run from a directory holding copies of a corpus profile under digit-led
+# names, because the defect is a property of the ARGUMENT text: an absolute path
+# begins with '/', strtol consumes nothing, and the interesting cases cannot arise.
+if(TARGET iccDumpProfile)
+  set(_dumpcli_dir "${CMAKE_CURRENT_BINARY_DIR}/dumpprofile-cli")
+  file(MAKE_DIRECTORY "${_dumpcli_dir}")
+  foreach(_dumpcli_name "123.icc" "50test.icc" "plain.icc")
+    configure_file(
+      "${ICCDEV_REPO_ROOT}/Testing/sRGB_v4_ICC_preference.icc"
+      "${_dumpcli_dir}/${_dumpcli_name}"
+      COPYONLY
+    )
+  endforeach()
+
+  # The filed defect: an ordinary filename, no -v, no integer.
+  add_test(
+    NAME iccdev.dumpprofile-verbosity-default
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccDumpProfile>"
+      "-DTOOL_ARGS=--diag;plain.icc"
+      "-DWORKDIR=${_dumpcli_dir}"
+      "-DEXPECT_MATCH=Verbosity: 100[^0-9]"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunDumpProfileCliTest.cmake"
+  )
+
+  # A name that merely STARTS with digits. strtol consumes "123" and stops at '.',
+  # so the -v branch's endptr test never fired: this is the case that separates
+  # restoring the reject path from mirroring that branch, and it is the documented
+  # "123.icc" support case the code comment exists for.
+  add_test(
+    NAME iccdev.dumpprofile-verbosity-digit-filename
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccDumpProfile>"
+      "-DTOOL_ARGS=--diag;123.icc"
+      "-DWORKDIR=${_dumpcli_dir}"
+      "-DEXPECT_MATCH=Verbosity: 100[^0-9]"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunDumpProfileCliTest.cmake"
+  )
+
+  # The same shape on the validation branch, the one that had the partial recovery.
+  add_test(
+    NAME iccdev.dumpprofile-verbosity-digit-filename-validate
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccDumpProfile>"
+      "-DTOOL_ARGS=--diag;-v;50test.icc"
+      "-DWORKDIR=${_dumpcli_dir}"
+      "-DEXPECT_MATCH=Verbosity: 100[^0-9]"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunDumpProfileCliTest.cmake"
+  )
+
+  # The controls that keep the three above honest. Restoring the default must not
+  # become "always 100": an explicit integer still has to win, so these go red
+  # against a fix that hardcodes the default instead of restoring it only when the
+  # token was rejected.
+  #
+  # There are two of them because there are two accept paths, and a control on one
+  # says nothing about the other. Measured: hardcoding `verbosity = 100` in the -v
+  # branch's accept path leaves all four of the other tests green while
+  # `iccDumpProfile -v 7 profile.icc` silently runs at 100. That is the same
+  # per-branch reasoning the fix itself rests on, applied to the tests.
+  add_test(
+    NAME iccdev.dumpprofile-verbosity-explicit-wins
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccDumpProfile>"
+      "-DTOOL_ARGS=--diag;7;plain.icc"
+      "-DWORKDIR=${_dumpcli_dir}"
+      "-DEXPECT_MATCH=Verbosity: 7[^0-9]"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunDumpProfileCliTest.cmake"
+  )
+
+  add_test(
+    NAME iccdev.dumpprofile-verbosity-explicit-wins-validate
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccDumpProfile>"
+      "-DTOOL_ARGS=--diag;-v;7;plain.icc"
+      "-DWORKDIR=${_dumpcli_dir}"
+      "-DEXPECT_MATCH=Verbosity: 7[^0-9]"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunDumpProfileCliTest.cmake"
+  )
+
+  set(_dumpcli_tests
+    iccdev.dumpprofile-verbosity-default
+    iccdev.dumpprofile-verbosity-digit-filename
+    iccdev.dumpprofile-verbosity-digit-filename-validate
+    iccdev.dumpprofile-verbosity-explicit-wins
+    iccdev.dumpprofile-verbosity-explicit-wins-validate)
+
+  foreach(_dumpcli_test IN LISTS _dumpcli_tests)
+    set_tests_properties(${_dumpcli_test} PROPERTIES
+      TIMEOUT 120
+      LABELS "iccdev;tools;dumpprofile;cli;issue-2248;regression"
+    )
+  endforeach()
+
+  if(WIN32)
+    # Same reasoning as the iccBenchApply CLI tests above: the tool is reached
+    # through cmake -P, so it needs the runtime paths on PATH or it dies for want
+    # of IccProfLib2.dll. These all assert exit 0, so a missing DLL turns them red
+    # rather than green -- but red for the loader, not for the verbosity contract.
+    set(_dumpcli_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccDumpProfile>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _dumpcli_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    foreach(_dumpcli_test IN LISTS _dumpcli_tests)
+      set_tests_properties(${_dumpcli_test} PROPERTIES
+        ENVIRONMENT_MODIFICATION "${_dumpcli_windows_env_mods}"
+      )
+    endforeach()
+  endif()
+endif()
+
+function(iccdev_add_spectral_clut_channel_count_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSpectralClutChannelCountTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/spectral-clut-channel-count-bound.cpp"
+  )
+  target_link_libraries(iccSpectralClutChannelCountTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+
+  add_dependencies(check iccSpectralClutChannelCountTest)
+
+  # No fixture argument: the test builds the MPE element bodies in memory. The
+  # channel counts that matter (257, 259, 260, 272) are single 16-bit fields, so a
+  # tracked profile would carry nothing the buffers here do not say more directly.
+  if(WIN32)
+    add_test(
+      NAME iccdev.spectral-clut-channel-count-bound
+      COMMAND "$<TARGET_FILE:iccSpectralClutChannelCountTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.spectral-clut-channel-count-bound
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccSpectralClutChannelCountTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.spectral-clut-channel-count-bound PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;mpe;spectral;clut;security;regression"
+  )
+  if(WIN32)
+    set(_spectral_clut_channel_count_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSpectralClutChannelCountTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _spectral_clut_channel_count_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.spectral-clut-channel-count-bound PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_spectral_clut_channel_count_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# The sampled-curve half of the same guard retirement clut-apply-guard-retirement
+# covers. Those three removals were not redundant: m_range is a difference of two
+# unvalidated wire floats, NaN == 0.0 is false, so Begin()'s zero-span test never
+# excluded a NaN span and Apply() cast a NaN to a sample index (#2324, #2347).
+# The two sampled curves now refuse a non-finite span in Begin(); the sampled
+# segment cannot, because its outer segments are legitimately sentinel-bounded,
+# so it keeps the per-pixel guard. This test links IccProfLib alone and calls
+# functions only, so it needs no corpus fixture and runs on every platform.
+function(iccdev_add_sampled_curve_nonfinite_range_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSampledCurveNonFiniteRangeTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/sampled-curve-nonfinite-range.cpp"
+  )
+  target_link_libraries(iccSampledCurveNonFiniteRangeTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccSampledCurveNonFiniteRangeTest)
+
+  add_test(
+    NAME iccdev.sampled-curve-nonfinite-range
+    COMMAND "$<TARGET_FILE:iccSampledCurveNonFiniteRangeTest>"
+  )
+  set_tests_properties(iccdev.sampled-curve-nonfinite-range PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;iccprofLib;mpe;curve;apply;security;regression"
+  )
+  if(WIN32)
+    set(_sampled_curve_nonfinite_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSampledCurveNonFiniteRangeTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _sampled_curve_nonfinite_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.sampled-curve-nonfinite-range PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_sampled_curve_nonfinite_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+function(iccdev_add_clut_apply_guard_retirement_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccClutApplyGuardRetirementTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/clut-apply-guard-retirement.cpp"
+  )
+  target_link_libraries(iccClutApplyGuardRetirementTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+
+  add_dependencies(check iccClutApplyGuardRetirementTest)
+
+  # No fixture: every CLUT here is built in memory. The output counts that matter
+  # (17, 20) exceed what any tracked profile carries, which is why the defect in
+  # Interp3dTetra survived so long.
+  if(WIN32)
+    add_test(
+      NAME iccdev.clut-apply-guard-retirement
+      COMMAND "$<TARGET_FILE:iccClutApplyGuardRetirementTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.clut-apply-guard-retirement
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccClutApplyGuardRetirementTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.clut-apply-guard-retirement PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;clut;cmm;apply;regression"
+  )
+  if(WIN32)
+    set(_clut_apply_guard_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccClutApplyGuardRetirementTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _clut_apply_guard_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.clut-apply-guard-retirement PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_clut_apply_guard_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+function(iccdev_add_spectral_clut_xml_channel_mismatch_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSpectralClutXmlChannelMismatchTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/spectral-clut-xml-channel-mismatch.cpp"
+  )
+  target_compile_features(iccSpectralClutXmlChannelMismatchTest PRIVATE cxx_std_17)
+  target_include_directories(iccSpectralClutXmlChannelMismatchTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccSpectralClutXmlChannelMismatchTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccSpectralClutXmlChannelMismatchTest)
+
+  add_test(
+    NAME iccdev.spectral-clut-xml-channel-mismatch
+    COMMAND "$<TARGET_FILE:iccSpectralClutXmlChannelMismatchTest>"
+  )
+  set_tests_properties(iccdev.spectral-clut-xml-channel-mismatch PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;xml;mpe;spectral;clut;security;regression"
+  )
+  if(WIN32)
+    set(_spectral_clut_xml_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSpectralClutXmlChannelMismatchTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _spectral_clut_xml_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.spectral-clut-xml-channel-mismatch PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_spectral_clut_xml_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 if(WIN32)
   function(iccdev_add_windows_batch_test NAME TIMEOUT LABELS SCRIPT)
+    set(_options
+      VERIFY_GENERATED_PROFILE_MANIFEST
+    )
     set(_one_value_args
       EXPECTED_PROFILE_PARSE_COUNT
       EXPECTED_GENERATED_PROFILE_COUNT
       EXPECTED_OUTPUT
       FORBIDDEN_REGEX
     )
-    cmake_parse_arguments(ICCDEV_WIN_TEST "" "${_one_value_args}" "" ${ARGN})
+    cmake_parse_arguments(ICCDEV_WIN_TEST "${_options}" "${_one_value_args}" "" ${ARGN})
 
     if(NOT EXISTS "${SCRIPT}")
       message(STATUS "Skipping ${NAME}: ${SCRIPT} not found")
@@ -5114,6 +6643,11 @@ if(WIN32)
     if(DEFINED ICCDEV_WIN_TEST_EXPECTED_GENERATED_PROFILE_COUNT)
       list(APPEND _test_args
         "-DICCDEV_EXPECTED_GENERATED_PROFILE_COUNT=${ICCDEV_WIN_TEST_EXPECTED_GENERATED_PROFILE_COUNT}")
+    endif()
+
+    if(ICCDEV_WIN_TEST_VERIFY_GENERATED_PROFILE_MANIFEST)
+      list(APPEND _test_args
+        "-DICCDEV_VERIFY_GENERATED_PROFILE_MANIFEST=ON")
     endif()
 
     if(DEFINED ICCDEV_WIN_TEST_EXPECTED_OUTPUT)
@@ -5146,10 +6680,7 @@ if(WIN32)
       300
       "iccdev;windows;setup;profiles"
       "${ICCDEV_TESTING_DIR}/CreateAllProfiles.bat"
-      # Validate the disposable Windows Testing tree by artifact count. The
-      # batch file echoes commands through cmd.exe, and tool stdout can be lost
-      # in that layer even when profiles are generated successfully.
-      EXPECTED_GENERATED_PROFILE_COUNT 133
+      VERIFY_GENERATED_PROFILE_MANIFEST
     )
     set_tests_properties(iccdev.windows-create-profiles PROPERTIES
       FIXTURES_SETUP iccdev_profiles
@@ -5213,6 +6744,14 @@ if(WIN32)
     add_dependencies(check iccPawgReport)
   endif()
 
+  # The two shared-library checks below configure consumers outside this CMake
+  # tree. Propagate the parent ASan mode and CRT selection so those executables
+  # load an instrumented IccProfLib2.dll with the same runtime contract.
+  set(_iccdev_windows_consumer_asan OFF)
+  if(ENABLE_ASAN OR ENABLE_SANITIZERS)
+    set(_iccdev_windows_consumer_asan ON)
+  endif()
+
   if(ENABLE_SHARED_LIBS AND TARGET IccProfLib2)
     add_test(
       NAME iccdev.issue-987-shared-mpe-export
@@ -5229,6 +6768,8 @@ if(WIN32)
         "-DICCDEV_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
         "-DICCDEV_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
         "-DICCDEV_CXX_COMPILER_ID=${CMAKE_CXX_COMPILER_ID}"
+        "-DICCDEV_ENABLE_ASAN=${_iccdev_windows_consumer_asan}"
+        "-DICCDEV_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}"
         "-DICCDEV_OBJDUMP=${CMAKE_OBJDUMP}"
         -P "${CMAKE_CURRENT_LIST_DIR}/RunWindowsSharedExportTest.cmake"
     )
@@ -5236,6 +6777,39 @@ if(WIN32)
       WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
       TIMEOUT 180
       LABELS "iccdev;windows;shared;issue-987"
+    )
+    add_dependencies(check IccProfLib2)
+  endif()
+
+  # #2154: the DLL-side counterpart to iccdev.proflib-exported-data-linkage.
+  # Both now link the DLL, but they fail differently, which is why both stay: an
+  # in-tree target that cannot link takes the BUILD down, so it can never be
+  # expressed as a red test. This one configures and compiles its consumer out of
+  # tree at test time, so a lost ICCPROFLIB_DATA_API annotation surfaces as a
+  # single failing test with the LNK2019 in its log.
+  if(ENABLE_SHARED_LIBS AND TARGET IccProfLib2)
+    add_test(
+      NAME iccdev.proflib-exported-data-dll-linkage
+      COMMAND
+        "${CMAKE_COMMAND}"
+        "-DICCDEV_TEST_NAME=iccdev.proflib-exported-data-dll-linkage"
+        "-DICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/iccdev-proflib-exported-data-dll-linkage"
+        "-DICCDEV_REPO_ROOT=${ICCDEV_REPO_ROOT}"
+        "-DICCDEV_BUILD_DIR=${CMAKE_BINARY_DIR}"
+        "-DICCDEV_CONFIG=$<CONFIG>"
+        "-DICCDEV_ICCPROFLIB_DLL=$<TARGET_FILE:IccProfLib2>"
+        "-DICCDEV_ICCPROFLIB_IMPLIB=$<TARGET_LINKER_FILE:IccProfLib2>"
+        "-DICCDEV_GENERATOR=${CMAKE_GENERATOR}"
+        "-DICCDEV_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+        "-DICCDEV_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+        "-DICCDEV_ENABLE_ASAN=${_iccdev_windows_consumer_asan}"
+        "-DICCDEV_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunWindowsExportedDataLinkageTest.cmake"
+    )
+    set_tests_properties(iccdev.proflib-exported-data-dll-linkage PROPERTIES
+      WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+      TIMEOUT 180
+      LABELS "iccdev;windows;shared;linkage;issue-1888;issue-2154;regression"
     )
     add_dependencies(check IccProfLib2)
   endif()
@@ -5262,6 +6836,7 @@ if(WIN32)
   endif()
 
   iccdev_add_iccconnect_thread_test()
+  iccdev_add_clut_avx512_sixteen_output_test()
   iccdev_add_iccconnect_config_parser_test()
   iccdev_add_cmmsearch_init_pcc_test()
   iccdev_add_cmmsearch_rebegin_test()
@@ -5294,15 +6869,19 @@ if(WIN32)
   iccdev_add_mcs_colorspace_name_test()
   iccdev_add_signature_utils_contract_test()
   iccdev_add_tiff_create_overflow_test()
+  iccdev_add_tiff_separated_strips_test()
   iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_calc_envsig_sign_extension_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
+  iccdev_add_installed_package_consumer_test()
+  iccdev_add_windows_runtime_paths_test()
   iccdev_add_json_bcd_version_test()
   iccdev_add_json_writer_move_test()
   iccdev_add_json_fixednum_size_cap_test()
   iccdev_add_json_srng_uf32_test()
   iccdev_add_v2_legacy_pcs_test()
+  iccdev_add_pcs_adjust_placement_test()
   iccdev_add_v2_xml_fixtures_test()
   iccdev_add_datetime_parse_test()
   iccdev_add_encoding_surround_test()
@@ -5315,12 +6894,15 @@ if(WIN32)
   iccdev_add_pawg_q4_xyz_pcs_decode_test()
   iccdev_add_tointernal_fixedint_roundtrip_test()
   iccdev_add_pawg_q1q3_relative_intent_test()
+  iccdev_add_pawg_q1_quality_contract_test()
   iccdev_add_cmm_registry_allowlist_test()
   iccdev_add_mpecalc_matrix_overflow_test()
+  iccdev_add_mpecalc_rotate_operand_test()
   iccdev_add_sparsematrix_set_roundtrip_test()
   iccdev_add_cmmsearch_namedcolor_ownership_test()
   iccdev_add_xform_create_tag_ownership_test()
   iccdev_add_xform_abstorel_adjust_test()
+  iccdev_add_bpc_d2b_tag_family_test()
   iccdev_add_reflectance_observer_illum_range_test()
   iccdev_add_colorimetry_methods_test()
   iccdev_add_getvalues_nstart_test()
@@ -5357,20 +6939,80 @@ if(WIN32)
   iccdev_add_iccprofileplot_pdf_leak_test()
   iccdev_add_iccprofileplot_exitcode_test()
   iccdev_add_applytolink_invalid_arg_test()
+  iccdev_add_applytolink_negative_intent_tests()
   iccdev_add_applytolink_v4_missing_desc_test()
+  iccdev_add_applytolink_curveset_channels_tests()
   iccdev_add_prmg_hue_normalization_test()
+  iccdev_add_qa_evidence_helpers_test()
   iccdev_add_windows_iccdevcmm_smoke_test()
   iccdev_add_zip_utf8_text_zlib_test()
+  iccdev_add_spectral_clut_channel_count_test()
+  iccdev_add_spectral_clut_xml_channel_mismatch_test()
+  iccdev_add_clut_apply_guard_retirement_test()
+  iccdev_add_sampled_curve_nonfinite_range_test()
+
+  if(TARGET iccFromXml AND TARGET iccDumpProfile AND TARGET iccApplyNamedCmm)
+    add_test(
+      NAME iccdev.clut-eight-output-regression
+      COMMAND
+        "${CMAKE_COMMAND}"
+        "-DICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/iccdev-clut-eight-output-regression"
+        "-DICCDEV_FROM_XML=$<TARGET_FILE:iccFromXml>"
+        "-DICCDEV_DUMP_PROFILE=$<TARGET_FILE:iccDumpProfile>"
+        "-DICCDEV_APPLY_NAMED_CMM=$<TARGET_FILE:iccApplyNamedCmm>"
+        "-DICCDEV_FIXTURE_XML_8=${ICCDEV_TESTING_DIR}/CLUT/avx2-3d-8-output.xml"
+        "-DICCDEV_FIXTURE_XML_9=${ICCDEV_TESTING_DIR}/CLUT/avx2-3d-9-output.xml"
+        "-DICCDEV_FIXTURE_XML_11=${ICCDEV_TESTING_DIR}/CLUT/avx2-3d-11-output.xml"
+        "-DICCDEV_FIXTURE_XML_14=${ICCDEV_TESTING_DIR}/CLUT/avx2-3d-14-output.xml"
+        "-DICCDEV_FIXTURE_XML_15=${ICCDEV_TESTING_DIR}/CLUT/avx2-3d-15-output.xml"
+        "-DICCDEV_FIXTURE_INPUT=${ICCDEV_TESTING_DIR}/CLUT/avx2-3d-8-output.txt"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunClutEightOutputRegression.cmake"
+    )
+    set_tests_properties(iccdev.clut-eight-output-regression PROPERTIES
+      WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+      TIMEOUT 60
+      LABELS "iccdev;clut;high-channel;regression"
+    )
+    if(WIN32)
+      set(_clut_windows_env_mods
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccFromXml>"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccDumpProfile>"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccApplyNamedCmm>"
+      )
+      foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+        list(APPEND _clut_windows_env_mods
+          "PATH=path_list_prepend:${_runtime_path}")
+      endforeach()
+      set_tests_properties(iccdev.clut-eight-output-regression PROPERTIES
+        ENVIRONMENT_MODIFICATION "${_clut_windows_env_mods}"
+      )
+    endif()
+    add_dependencies(check iccFromXml iccDumpProfile iccApplyNamedCmm)
+  endif()
 
   return()
 endif()
+
+# Registered above the bash gate on purpose. This test runs cmake -P against
+# synthetic CMakeCache.txt fixtures -- no bash, no tools, no build products --
+# and the collector it covers is used by builds that have no bash either.
+iccdev_add_windows_runtime_paths_test()
 
 if(NOT BASH_EXECUTABLE)
   message(WARNING "bash not found; iccDEV CTest script tests are disabled.")
   return()
 endif()
 
+# Registered here as well as inside the if(WIN32) branch above.  That branch ends in
+# return(), so its call list and this one are mutually exclusive rather than duplicated:
+# a function called only up there runs on Windows and nowhere else (#2237).  Nothing in
+# iccdev_add_applytolink_invalid_arg_test() is Windows-specific -- it drives the same
+# iccApplyToLink binary as the v4_missing_desc sibling directly below, which has always
+# been called from both places.
+iccdev_add_applytolink_invalid_arg_test()
+iccdev_add_applytolink_negative_intent_tests()
 iccdev_add_applytolink_v4_missing_desc_test()
+iccdev_add_applytolink_curveset_channels_tests()
 
 set(ICCDEV_TIMEOUT_COMPAT_DIR "")
 if(NOT WIN32)
@@ -5516,6 +7158,17 @@ if(ICCDEV_NLOHMANN_INCLUDE_DIR)
   set(ICCDEV_TEST_INCLUDE_ENV "CPATH=${ICCDEV_NLOHMANN_INCLUDE_DIR}:$ENV{CPATH}")
 endif()
 
+set(ICCDEV_UBSAN_OPTIONS "halt_on_error=0,print_stacktrace=1")
+if(NOT WIN32)
+  get_filename_component(ICCDEV_UBSAN_SUPPRESSIONS
+                         "${CMAKE_CURRENT_LIST_DIR}/../../../Testing/silence.txt"
+                         ABSOLUTE)
+  if(EXISTS "${ICCDEV_UBSAN_SUPPRESSIONS}")
+    string(APPEND ICCDEV_UBSAN_OPTIONS
+           ":suppressions=${ICCDEV_UBSAN_SUPPRESSIONS}")
+  endif()
+endif()
+
 set(ICCDEV_TEST_ENV
   "PATH=${ICCDEV_TOOL_PATH}:$ENV{PATH}"
   "LD_LIBRARY_PATH=${ICCDEV_SHARED_LIBRARY_PATH}:$ENV{LD_LIBRARY_PATH}"
@@ -5525,7 +7178,7 @@ set(ICCDEV_TEST_ENV
   "CC=${CMAKE_C_COMPILER}"
   "CXX=${CMAKE_CXX_COMPILER}"
   "ASAN_OPTIONS=halt_on_error=0,detect_leaks=0"
-  "UBSAN_OPTIONS=halt_on_error=0,print_stacktrace=1"
+  "UBSAN_OPTIONS=${ICCDEV_UBSAN_OPTIONS}"
   # print_stacktrace=1 above makes every sanitizer report symbolize its stack.
   # llvm-symbolizer consults DEBUGINFOD_URLS while doing so, and the regression
   # container inherits Ubuntu's default (https://debuginfod.ubuntu.com) because
@@ -5552,6 +7205,7 @@ set(ICCDEV_TEST_ENV
 )
 
 iccdev_add_iccconnect_thread_test()
+iccdev_add_clut_avx512_sixteen_output_test()
 iccdev_add_iccconnect_config_parser_test()
 iccdev_add_cmmsearch_init_pcc_test()
 iccdev_add_cmmsearch_rebegin_test()
@@ -5584,15 +7238,18 @@ iccdev_add_struct_name_spelling_test()
 iccdev_add_mcs_colorspace_name_test()
 iccdev_add_signature_utils_contract_test()
 iccdev_add_tiff_create_overflow_test()
+iccdev_add_tiff_separated_strips_test()
 iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_calc_envsig_sign_extension_test()
 iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_proflib_exported_global_definitions_test()
+iccdev_add_installed_package_consumer_test()
 iccdev_add_json_bcd_version_test()
 iccdev_add_json_writer_move_test()
 iccdev_add_json_fixednum_size_cap_test()
 iccdev_add_json_srng_uf32_test()
 iccdev_add_v2_legacy_pcs_test()
+iccdev_add_pcs_adjust_placement_test()
 iccdev_add_v2_xml_fixtures_test()
 iccdev_add_datetime_parse_test()
 iccdev_add_encoding_surround_test()
@@ -5603,13 +7260,21 @@ iccdev_add_tag_layout_shared_data_test()
 iccdev_add_pawg_q2_tonecurves_test()
 iccdev_add_pawg_q4_characterization_test()
 iccdev_add_pawg_q4_xyz_pcs_decode_test()
+# Same single-call-site omission as iccdev_add_applytolink_invalid_arg_test() above: this
+# was reachable only through the if(WIN32) branch, so the platform-agnostic encoding
+# round trip it pins never ran on Linux or macOS (#2237).  The function already does its
+# own if(WIN32) PATH handling, so calling it unconditionally is safe on every platform.
+iccdev_add_tointernal_fixedint_roundtrip_test()
 iccdev_add_pawg_q1q3_relative_intent_test()
+iccdev_add_pawg_q1_quality_contract_test()
 iccdev_add_cmm_registry_allowlist_test()
 iccdev_add_mpecalc_matrix_overflow_test()
+iccdev_add_mpecalc_rotate_operand_test()
 iccdev_add_sparsematrix_set_roundtrip_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_xform_create_tag_ownership_test()
 iccdev_add_xform_abstorel_adjust_test()
+iccdev_add_bpc_d2b_tag_family_test()
 iccdev_add_reflectance_observer_illum_range_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
@@ -5646,7 +7311,12 @@ iccdev_add_iccprofileplot_clut_oob_test()
 iccdev_add_iccprofileplot_pdf_leak_test()
 iccdev_add_iccprofileplot_exitcode_test()
 iccdev_add_prmg_hue_normalization_test()
+iccdev_add_qa_evidence_helpers_test()
 iccdev_add_zip_utf8_text_zlib_test()
+iccdev_add_spectral_clut_channel_count_test()
+iccdev_add_spectral_clut_xml_channel_mismatch_test()
+iccdev_add_clut_apply_guard_retirement_test()
+iccdev_add_sampled_curve_nonfinite_range_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")
@@ -5669,6 +7339,16 @@ function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
     LABELS "${LABELS}"
   )
 endfunction()
+
+if(TARGET iccFromXml AND TARGET iccDumpProfile AND TARGET iccApplyNamedCmm)
+  iccdev_add_script_test(
+    iccdev.clut-eight-output-regression
+    60
+    "iccdev;clut;high-channel;regression;sanitizer"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-clut-eight-output-regression-tests.sh"
+  )
+endif()
 
 iccdev_add_script_test(
   iccdev.create-profiles
@@ -5733,7 +7413,7 @@ if(ICCDEV_HAS_JSON_RUNTIME_CONFIG_TOOLS AND ICCDEV_HAS_JSON_TOOLS)
   iccdev_add_script_test(
     iccdev.hybrid-pipeline
     900
-    "iccdev;tools;hybrid;asan;regression;slow"
+    "iccdev;tools;hybrid;asan;regression;slow;pr-extended"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-hybrid-pipeline-tests.sh"
   )
@@ -5749,6 +7429,29 @@ if(TARGET iccFromXml AND TARGET iccApplyNamedCmm AND TARGET iccApplySearch)
     "iccdev;tools;hybrid;search;ub;regression"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-searchvec-uio-regression.sh"
+  )
+endif()
+
+# Maintainer QA evidence CLI (#1853).  The ICCDEV_ENABLE_QA_FLAGS option, the
+# *-qa-flags CMake presets, the CI lanes that set it, and docs/build.md all
+# already reference this test by name, so it is registered under the same gate
+# that compiles the --evidence-json code into the tools.  Registering it
+# unconditionally would fail every default build, where the flags do not exist.
+# The script hard-requires nine tools and its find_tool() exits 1 rather than
+# skipping when one is missing, so a QA-flags build without ENABLE_ICCXML or
+# ENABLE_ICCJSON would register a test that dies at tool discovery.
+if(ICCDEV_ENABLE_QA_FLAGS
+   AND TARGET iccDumpProfile AND TARGET iccPawgReport
+   AND TARGET iccApplyNamedCmm AND TARGET iccTiffDump
+   AND TARGET iccToXml AND TARGET iccFromXml
+   AND TARGET iccToJson AND TARGET iccFromJson
+   AND TARGET iccRoundTrip)
+  iccdev_add_script_test(
+    iccdev.qa-target-flags
+    120
+    "iccdev;qa-flags;issue-1853;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-qa-target-flags.sh"
   )
 endif()
 
@@ -5775,6 +7478,60 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-specsep-cli-args-regression-tests.sh"
 )
+
+# Guarded on the target, like iccdev.tiff-resolution-unit-regression below.
+# Both scripts exit 2 when iccSpecSepToTiff is missing rather than skipping the
+# way the older sibling suites do, so an unguarded registration turns a
+# tools-off configure red instead of simply not offering the tests.
+if(TARGET iccSpecSepToTiff)
+  iccdev_add_script_test(
+    iccdev.specsep-corpus-matrix
+    180
+    "iccdev;specsep;tiff;corpus;matrix;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-specsep-corpus-matrix.sh"
+  )
+
+  # The sweep only reaches its accept path when a profile's sample count matches
+  # the generated TIFF, so it is registered twice rather than once.  CalcTest is
+  # 80 deliberately broken profiles at the default 8 channels -- rejection only
+  # -- and a single run against it would be green while never once embedding a
+  # profile.  Testing/ holds exactly one .icc at depth 1, the 3-channel sRGB v4
+  # preference profile, so the second registration covers acceptance for the
+  # cost of one file.
+  iccdev_add_script_test(
+    iccdev.specsep-profile-sweep
+    300
+    "iccdev;specsep;tiff;profile;sweep;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-specsep-profile-sweep.sh"
+    --profile-dir "${ICCDEV_REPO_ROOT}/Testing/CalcTest"
+  )
+
+  iccdev_add_script_test(
+    iccdev.specsep-profile-sweep-accept
+    120
+    "iccdev;specsep;tiff;profile;sweep;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-specsep-profile-sweep.sh"
+    --profile-dir "${ICCDEV_REPO_ROOT}/Testing"
+    --channels 3
+  )
+endif()
+
+# TIFFTAG_RESOLUTIONUNIT lives in shared CTiffImg code, so it is covered per caller:
+# iccSpecSepToTiff and iccApplyProfiles both write through the same Create(), and
+# iccTiffDump reads the same member back (#2220).  Guarded on all three targets
+# because the cases are not independent of any one of them.
+if(TARGET iccSpecSepToTiff AND TARGET iccApplyProfiles AND TARGET iccTiffDump)
+  iccdev_add_script_test(
+    iccdev.tiff-resolution-unit-regression
+    120
+    "iccdev;tools;tiff;resolution;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-tiff-resolution-unit-regression-tests.sh"
+  )
+endif()
 
 iccdev_add_script_test(
   iccdev.dump-profile-header-regression
@@ -5875,6 +7632,26 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1337-checkpcsconnections-regression.sh"
 )
 
+# Guards dual-PCS transform selection in CIccXform::Create (#1982).  The D2B/B2D
+# opt-out intents must select the colorimetric AToBx/BToAx transforms rather than
+# the fixture's spectral DToBx/BToDx ones.  Covers both directions: the source
+# side is checked by exit status and link shape, the destination side by
+# requiring the opt-out and opt-in links to differ (they are byte-identical when
+# the opt-out is ignored, so an exit-status check alone would be vacuous there).
+iccdev_add_script_test(
+  iccdev.issue-1982-dual-pcs-selection-regression
+  120
+  "iccdev;tools;cmm;applytolink;issue-1982;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1982-dual-pcs-selection-regression.sh"
+)
+# The script exits 77 when iccFromXml/iccApplyToLink/iccDumpProfile are absent
+# (a build without ENABLE_ICCXML, or a Windows checkout where the tools are
+# .exe).  Without this the skip would be reported as a green pass.
+set_tests_properties(iccdev.issue-1982-dual-pcs-selection-regression PROPERTIES
+  SKIP_RETURN_CODE 77
+)
+
 # CI debug helper for the NaN/SixChanInputRef iccApplyToLink PoC.  It preserves
 # the original master heap-buffer-overflow replay with extra signature/register
 # logging and now expects the NaN range to fail closed before CMM/LUT generation.
@@ -5926,7 +7703,7 @@ if(ICCDEV_HAS_JSON_TOOLS)
   iccdev_add_script_test(
     iccdev.json-parser-regressions
     300
-    "iccdev;json;parser;regression;asan"
+    "iccdev;json;parser;regression;asan;slow;pr-extended"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-json-parser-regression-tests.sh"
   )
@@ -5942,7 +7719,7 @@ if(ICCDEV_HAS_JSON_TOOLS)
   iccdev_add_script_test(
     iccdev.json-sort-regression
     300
-    "iccdev;json;sort;regression;issue-1920;asan;slow"
+    "iccdev;json;sort;regression;issue-1920;asan;slow;pr-extended"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-json-sort-regression.sh"
   )
@@ -6799,10 +8576,16 @@ if(TARGET iccApplyNamedCmm)
   # other. Both profiles it uses are tracked, so this still needs no fixture
   # dependency and the timeout is unchanged -- the added cases run the same
   # 16-row rgb8bit.txt transform the existing ones already do.
+  #
+  # #2190 adds the intent-code half. Its flag cases assert the decoded
+  # configuration through -exportcfg instead of the exit status, because the
+  # defects they pin all exited 0: +100000 silently forced the V5 sub-profile
+  # flag on with HToS, and an unrecognised overprint column silently decoded as
+  # over-white. Exit status is only load-bearing for the rejection cases.
   iccdev_add_script_test(
     iccdev.applynamedcmm-cli-args
     120
-    "iccdev;cmm;config;cli;security;issue-1674;issue-2124;regression"
+    "iccdev;cmm;config;cli;security;issue-1674;issue-2124;issue-2190;regression"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh"
    )
@@ -6817,7 +8600,7 @@ if(TARGET iccApplySearch)
   iccdev_add_script_test(
     iccdev.applysearch-cli-args
     120
-    "iccdev;cmm;config;cli;security;issue-1674;issue-1853;regression"
+    "iccdev;cmm;config;cli;security;issue-1674;issue-1853;issue-2190;regression"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applysearch-cli-args-regression.sh"
    )
@@ -6925,7 +8708,7 @@ iccdev_add_script_test(
 iccdev_add_script_test(
   iccdev.issue-1781-applytolink-qa-matrix
   300
-  "iccdev;tools;applytolink;security;issue-1781;regression;slow"
+  "iccdev;tools;applytolink;security;issue-1781;regression;slow;pr-extended"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1781-applytolink-qa-matrix.sh"
 )

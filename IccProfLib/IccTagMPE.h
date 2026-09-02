@@ -209,12 +209,21 @@ public:
 
   CIccMultiProcessElement *GetElem() const { return m_pElem; }
 
+  /// Whether the element this wraps is an ACS marker, resolved once at
+  /// construction. CIccTagMultiProcessElement::Apply's middle loop used to ask
+  /// via GetElem()->IsAcs(), which is two calls -- one of them virtual -- for
+  /// every middle element of every pixel, whether or not any ACS element is
+  /// present. The answer is fixed once the element list is read.
+  bool IsAcsElem() const { return m_bIsAcs; }
+
   void Apply(icFloatNumber *pDestPixel, const icFloatNumber *pSrcPixel) { m_pElem->Apply(this, pDestPixel, pSrcPixel); }
 
 protected:
   CIccApplyTagMpe *m_pApplyTag;
 
   CIccMultiProcessElement *m_pElem;
+
+  bool m_bIsAcs;
 };
 
 

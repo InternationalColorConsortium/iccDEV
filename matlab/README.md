@@ -10,6 +10,8 @@ ICC color profile library, built as a MEX extension.
 - **Thread-safe apply** - create per-thread apply handles
 - **MATLAB OOP** - classes in `+iccdev` package namespace
 - **Profile plots** - render data from the `iccProfilePlot` visualization model
+- **IccJSON conversion** - convert profiles to editable JSON and JSON back to ICC bytes
+- **PAWG Q1 audit** - independently calculate metrics over shared CMM transforms and compare structured native results
 - **NumPy-compatible** - handles column-major <-> row-major transpose automatically
 - **Compatible** - MATLAB R2015b+ and GNU Octave 6+
 
@@ -21,8 +23,16 @@ ICC color profile library, built as a MEX extension.
 
 `iccdev.plot` additionally requires MATLAB R2016b+ or GNU Octave 7.1+ for
 `jsondecode`, plus a Java-enabled runtime for shell-free process execution.
+The PAWG Q1 audit has the same runtime requirements and also requires the
+`iccPawgReport` executable. IccJSON conversion requires the same Java-enabled
+runtime plus `iccToJson` and `iccFromJson`.
 
 ## Quick Start
+
+Windows MATLAB Desktop users should follow the portable MSVC/vcpkg setup,
+persistent `MATLABPATH` configuration, and Docker interoperability workflow in
+[`docs/matlab-bindings.md`](../docs/matlab-bindings.md). The shell commands
+below are for single-config Unix-like builds.
 
 ### 1. Build IccProfLib2
 
@@ -43,17 +53,32 @@ ctest --test-dir build-matlab-full --output-on-failure --no-tests=error
 
 ```matlab
 repo_root = pwd;
+if exist(fullfile(repo_root, 'Build', 'Cmake'), 'dir') ~= 7
+  repo_root = fileparts(repo_root);
+end
+assert(exist(fullfile(repo_root, 'Build', 'Cmake'), 'dir') == 7);
+cd(repo_root);
 addpath(fullfile(repo_root, 'matlab'));
 build_mex('BuildDir', fullfile(repo_root, 'build-matlab-full'));
 ```
 
-Or with environment variable:
+Or set the build directory for the current MATLAB process:
+
+```matlab
+setenv('ICCDEV_BUILD_DIR', fullfile(repo_root, 'build-matlab-full'));
+build_mex();
+```
+
+For a Unix shell that launches MATLAB or Octave, the equivalent is:
 
 ```bash
 export ICCDEV_BUILD_DIR="$PWD/build-matlab-full"
 ```
 
+Do not enter `export` in MATLAB or PowerShell. From MATLAB, use `setenv`:
+
 ```matlab
+setenv('ICCDEV_BUILD_DIR', fullfile(repo_root, 'build-matlab-full'));
 build_mex();
 ```
 
@@ -61,19 +86,27 @@ build_mex();
 
 ```matlab
 repo_root = pwd;
+if exist(fullfile(repo_root, 'Build', 'Cmake'), 'dir') ~= 7
+  repo_root = fileparts(repo_root);
+end
+cd(repo_root);
 addpath(fullfile(repo_root, 'matlab'));
+profile_path = fullfile(repo_root, 'Testing', ...
+  'sRGB_v4_ICC_preference.icc');
 
-% Read a profile
-p = iccdev.IccProfile('sRGB.icc');
+assert(exist(profile_path, 'file') == 2);
+
+% Read a checked-in profile
+p = iccdev.IccProfile(profile_path);
 hdr = p.header();
 fprintf('Version: %s\n', hdr.versionString);
 fprintf('Color space: %s\n', iccdev.sig_to_str(uint32(hdr.colorSpace)));
 p.close();
 
-% Color transform
+% Checked-in self-transform smoke
 cmm = iccdev.IccCmm();
-cmm.attach('input.icc', 'intent', iccdev.RenderingIntent.Perceptual);
-cmm.attach('output.icc');
+cmm.attach(profile_path, 'intent', iccdev.RenderingIntent.Perceptual);
+cmm.attach(profile_path);
 cmm.begin();
 
 result = cmm.apply([0.5, 0.3, 0.1]);
@@ -90,11 +123,11 @@ cmm.close();
 
 ### Classes
 
-| Class | Description |
-|-------|-------------|
-| `iccdev.IccProfile` | Read/open ICC profiles, inspect header |
-| `iccdev.IccCmm` | Color Management Module - build & apply transforms |
-| `iccdev.IccApply` | Thread-safe per-thread apply handle |
+| Class or constructor | Description |
+|----------------------|-------------|
+| `iccdev.IccProfile(profile_path, ...)` | Open an ICC profile and inspect its header |
+| `iccdev.IccCmm()` | Build and apply a multi-profile transform |
+| `cmm.get_apply()` | Create an `iccdev.IccApply` thread-safe handle; do not construct it directly |
 
 ### Constants
 
@@ -109,8 +142,12 @@ cmm.close();
 | Function | Description |
 |----------|-------------|
 | `iccdev.sig_to_str(sig)` | Convert 4-byte ICC signature to ASCII string |
+| `iccdev.to_json(profile, ...)` | Convert an ICC profile to IccJSON text with `iccToJson` |
+| `iccdev.from_json(json, ...)` | Convert IccJSON text or a JSON file to ICC bytes with `iccFromJson` |
 | `iccdev.plot(profile, ...)` | Render all graph visualizations exposed by `iccProfilePlot` |
+| `iccdev.qa.audit_pawg_q1(profile, ...)` | Calculate PAWG Q1 metrics and compare them with `iccPawgReport --json` |
 | `iccdev.qa.check_luminance_normalization()` | Reproduce spectral-viewing luminance scaling and warning-window checks |
+| `iccdev.qa.check_colorimetry_issue_1475()` | Compare legacy and registry D50 spectral reductions |
 | `iccdev.docker_available(image)` | Check Docker daemon and image availability |
 | `iccdev.docker_validate(profile, ...)` | Run containerized dump and round-trip validation |
 | `add_docker_path(directory)` | Add a user-selected Docker CLI directory to the current MATLAB process |
@@ -119,11 +156,45 @@ cmm.close();
 | `run_gamma_qa()` | Verify issue #815 curveType u8Fixed8 gamma decoding |
 | `run_docker_qa(image)` | Validate the published container and output contract |
 
+Constructors and functions require the arguments shown above. Only enum classes
+such as `iccdev.RenderingIntent` and `iccdev.Interpolation` are intended to be
+entered by name for direct display. Missing required arguments produce an
+actionable error containing a working invocation. See the verified
+[interactive API smoke examples](../docs/matlab-bindings.md#interactive-api-smoke-examples)
+for complete commands covering profiles, CMM transforms, `IccApply`,
+signatures, and plots.
+
+### IccJSON conversion
+
+Build `iccToJson` and `iccFromJson`, then convert a checked-in profile:
+
+```matlab
+json_text = iccdev.to_json(fullfile('Testing', ...
+  'sRGB_v4_ICC_preference.icc'));
+profile_bytes = iccdev.from_json(json_text);
+```
+
+`from_json` also accepts an existing JSON file path. It treats other scalar
+text as UTF-8 JSON content and returns a `uint8` column vector. Both functions
+run the native tools through a Java process without a shell, preserve the
+native parser diagnostics, and do not produce an ICC result after a parse
+failure.
+
+`test_json_bindings` exercises checked-in ICC.1/v4 and ICC.2/v5 profiles. It
+checks the specification-defined profile size, `acsp` signature, BCD version,
+version-specific reserved fields, creation date/time ranges, tag-table bounds,
+four-byte alignment, shared data, overlap and padding rules, and Profile ID
+MD5 when an ID is present. These are binary container checks, not a claim of
+complete class-specific or tag-type conformance.
+
 ### iccdev.IccProfile
 
 ```matlab
-p = iccdev.IccProfile('path/to/profile.icc');
-p = iccdev.IccProfile('path/to/profile.icc', 'lazy', false);
+repo_root = fileparts(fileparts(which('build_mex')));
+profile_path = fullfile(repo_root, 'Testing', ...
+  'sRGB_v4_ICC_preference.icc');
+p = iccdev.IccProfile(profile_path);
+p = iccdev.IccProfile(profile_path, 'lazy', false);
 
 hdr = p.header();    % Returns struct with all header fields
 p.display();         % Print header summary
@@ -135,14 +206,18 @@ Header struct fields:
 - `magic`, `platform`, `flags`, `manufacturer`, `model`
 - `attributes`, `renderingIntent`, `creator`
 - `illuminantX/Y/Z`, `dateYear/Month/Day/Hours/Minutes/Seconds`
-- `profileId` (16-element uint8)
+- `profileId` (16-element uint8; all zero means the ID was not calculated)
 - `versionString` (computed, e.g., `'4.3.0'`)
 
 ### iccdev.IccCmm
 
 ```matlab
+repo_root = fileparts(fileparts(which('build_mex')));
+profile_path = fullfile(repo_root, 'Testing', ...
+  'sRGB_v4_ICC_preference.icc');
 cmm = iccdev.IccCmm();
-cmm.attach('profile.icc', 'intent', iccdev.RenderingIntent.Perceptual);
+cmm.attach(profile_path, 'intent', iccdev.RenderingIntent.Perceptual);
+cmm.attach(profile_path);
 cmm.begin();
 
 result = cmm.apply([0.5, 0.3, 0.1]);        % Single pixel
@@ -181,9 +256,31 @@ $ConfigureArgs = @(
   '-G', 'Visual Studio 17 2022'
   '-A', 'x64'
   "-DCMAKE_TOOLCHAIN_FILE=$Toolchain"
+  '-DENABLE_TESTS=ON'
+  '-DENABLE_TOOLS=ON'
 )
 cmake @ConfigureArgs
-cmake --build $Build --config Release --target IccProfLib2-static -- /m
+$BuildArgs = @(
+  '--build', $Build
+  '--config', 'Release'
+  '--target', 'IccProfLib2-static', 'IccJSON2-static', 'iccToJson',
+    'iccFromJson', 'iccProfilePlot', 'iccPawgReport',
+    'iccPawgQ1QualityContractTest'
+  '--', '/m'
+)
+cmake @BuildArgs
+if ($LASTEXITCODE -ne 0) {
+  throw "Required MATLAB targets failed with exit code $LASTEXITCODE."
+}
+$PlotTool = Join-Path $Build 'bin\Release\iccProfilePlot.exe'
+$PawgTool = Join-Path $Build 'bin\Release\iccPawgReport.exe'
+$ToJsonTool = Join-Path $Build 'bin\Release\iccToJson.exe'
+$FromJsonTool = Join-Path $Build 'bin\Release\iccFromJson.exe'
+foreach ($RequiredTool in @($PlotTool, $PawgTool, $ToJsonTool, $FromJsonTool)) {
+  if (-not (Test-Path $RequiredTool -PathType Leaf)) {
+    throw "Required MATLAB QA tool was not built: $RequiredTool"
+  }
+}
 ```
 
 ```matlab
@@ -193,12 +290,9 @@ build_mex('BuildDir', fullfile(repo_root, 'msvc'));
 
 When `ICC_USE_ZLIB=ON`, `build_mex` reads `CMakeCache.txt`, links the matching
 vcpkg zlib import library, and copies its runtime DLL beside `icc_mex`.
-
-Build the data-first plotting CLI when using `iccdev.plot`:
-
-```powershell
-cmake --build $Build --config Release --target iccProfilePlot --parallel
-```
+`iccToJson`, `iccFromJson`, `iccProfilePlot`, and `iccPawgReport` are required
+QA prerequisites; do not defer any of these targets until after MATLAB testing
+starts.
 
 Then render every graph exposed by a profile:
 
@@ -219,14 +313,30 @@ build_mex('BuildDir', fullfile(repo_root, 'build-matlab-full'));
 
 ### GNU Octave
 
+The following `export` is Unix shell syntax:
+
 ```bash
 export ICCDEV_BUILD_DIR="$PWD/build-matlab-full"
 octave --eval "addpath('matlab'); build_mex();"
 ```
 
+The `export` command above is Unix-shell syntax. In MATLAB, use `setenv`; on
+Windows, use PowerShell `$env:ICCDEV_BUILD_DIR = $Build`.
+
 ## Testing
 
 ```matlab
+repo_root = fileparts(fileparts(which('build_mex')));
+build_dir = fullfile(repo_root, 'msvc');
+setenv('ICCDEV_BUILD_DIR', build_dir);
+assert(isfile(fullfile(build_dir, 'bin', 'Release', ...
+  'iccProfilePlot.exe')), 'Build iccProfilePlot before MATLAB QA.');
+assert(isfile(fullfile(build_dir, 'bin', 'Release', ...
+  'iccPawgReport.exe')), 'Build iccPawgReport before MATLAB QA.');
+assert(isfile(fullfile(build_dir, 'bin', 'Release', ...
+  'iccToJson.exe')), 'Build iccToJson before MATLAB QA.');
+assert(isfile(fullfile(build_dir, 'bin', 'Release', ...
+  'iccFromJson.exe')), 'Build iccFromJson before MATLAB QA.');
 addpath('matlab');
 addpath('matlab/tests');
 test_iccdev();
@@ -238,6 +348,14 @@ missing-profile smoke checks with:
 ```matlab
 run_local_qa();
 test_plot();
+```
+
+Run the PAWG Q1 audit directly when investigating round-trip quality:
+
+```matlab
+result = iccdev.qa.audit_pawg_q1( ...
+  fullfile('Testing', 'sRGB_v4_ICC_preference.icc'));
+assert(result.passed);
 ```
 
 Verify the ICC.1 `curveType` gamma calculation used by issue
@@ -287,11 +405,15 @@ If Docker is installed but is not on the PATH inherited by MATLAB Desktop,
 select its CLI directory explicitly:
 
 ```matlab
+docker_cli_directory = uigetdir('', 'Select the directory containing the Docker CLI');
+assert(~isequal(docker_cli_directory, 0), 'Docker CLI directory selection was cancelled.');
 add_docker_path(docker_cli_directory);
+assert(system('docker version') == 0, 'Docker Desktop is not available.');
+run_docker_qa();
 ```
 
-The helper validates the directory and executable, updates only the current
-MATLAB process, and does not run Docker or QA automatically.
+The helper validates the selected directory and executable, updates only the
+current MATLAB process, and does not run Docker or QA automatically.
 
 Reproduce the issue #1811 spectral-viewing luminance calculations without
 building the MEX gateway:
@@ -329,8 +451,29 @@ by comparing the legacy 5 nm D50 direct sum with the registry-loaded 10 nm
 weighting table:
 
 ```matlab
+repo_root = fileparts(fileparts(which('build_mex')));
+addpath(fullfile(repo_root, 'matlab'));
+addpath(fullfile(repo_root, 'matlab', 'tests'));
 test_colorimetry_issue_1475();
-run('matlab/examples/colorimetry_issue_1475.m');
+run(fullfile(repo_root, 'matlab', 'examples', ...
+  'colorimetry_issue_1475.m'));
+```
+
+On Windows, build and run the compiled control from 64-bit PowerShell. The
+local Windows build root is always `repo\msvc`:
+
+```powershell
+$Repo = (git rev-parse --show-toplevel).Trim()
+$Build = Join-Path $Repo 'msvc'
+cmake --build $Build --config Release --target iccColorimetryMethodsTest -- /m
+$ColorimetryTestArgs = @(
+  '--test-dir', $Build
+  '-C', 'Release'
+  '-R', '^iccdev\.colorimetry-methods$'
+  '--output-on-failure'
+  '--no-tests=error'
+)
+ctest @ColorimetryTestArgs
 ```
 
 The MATLAB check parses the tables directly from `IccTagBasic.cpp` and
@@ -338,14 +481,20 @@ The MATLAB check parses the tables directly from `IccTagBasic.cpp` and
 2-degree observer, the legacy path produces `Z=0.824679094` while the registry
 table produces `Z=0.825128117`, a gap of `-0.000449`.
 
-That gap is a difference in the illuminant *data*, not in how it is integrated:
+The decisive control derives a complete 10 nm weighting operator from the same
+legacy 5 nm SPD and CMFs. It reproduces the 5 nm perfect-diffuser white to
+floating-point precision. Directly re-summing every second sample instead moves
+`Z` by `-0.000622`; that is a different coarse-grid algorithm, not the weighting
+method recommended by TN-06.
 
-- **Not the reduction method.** `iccdev.colorimetry-methods` asserts
-  `DirectSum == Weighting == SpragueTo1nm` to `TOL_EXACT` on a common grid, so a
-  weighting table is not intrinsically closer to CIE than a direct sum.
-- **Not the sample grid.** Re-summing the same legacy data on the 10 nm subgrid
-  moves `Z` by `-0.000622` -- larger than the gap and opposite in sign. The
-  check computes this as `grid_effect` and asserts it.
+For this white-point comparison, the remaining gap is therefore in the source
+tables, not the 10 nm weighting representation. This conclusion does not
+generalize to non-flat measured spectra, where the choice of reduction method
+remains material.
+
+The report labels the decimal-literal source model separately from the
+compiled-float model. Registry float32 literal rounding changes a channel by
+less than `7e-9`; the native CTest remains authoritative for compiled behavior.
 
 Which path is "closer" is a choice of reference, so the check pins both
 directions: against CIE 15 (`Z=0.82521`) the registry table wins
@@ -364,8 +513,28 @@ is related but remains a separate ingestion concern: `iccPawgReport` currently
 requires measured Lab or XYZ columns and does not derive PCS values from
 spectral-only characterization rows.
 
-The MATLAB check is an independent fixture/arithmetic model. The native CTest
-is authoritative for warning status and message behavior; both should pass.
+The MATLAB check is an independent source-table arithmetic model. The native
+CTest is authoritative for the compiled reduction-method contract; both should
+pass.
+
+Build and run the native issue #1475 contract from PowerShell:
+
+```powershell
+$ColorimetryBuildArgs = @(
+  '--build', $Build
+  '--config', 'Release'
+  '--target', 'iccColorimetryMethodsTest'
+)
+cmake @ColorimetryBuildArgs
+$ColorimetryTestArgs = @(
+  '--test-dir', $Build
+  '-C', 'Release'
+  '-R', '^iccdev\.colorimetry-methods$'
+  '--output-on-failure'
+  '--no-tests=error'
+)
+ctest @ColorimetryTestArgs
+```
 
 See [MATLAB bindings and QA](../docs/matlab-bindings.md) for the Windows
 desktop workflow, profile generation, WSL2 boundaries, troubleshooting, and
