@@ -654,7 +654,10 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
 
   ReleasePccList(pccList);
   std::unique_ptr<CIccCmm> baseCmm(pCmm.release());
-  return AttachStandardCmm(baseCmm, nThreads);
+  CIccConnectCmm* pConnect = AttachStandardCmm(baseCmm, nThreads);
+  if (!pConnect)
+    sErrorMsg = "failed to attach search CMM";
+  return pConnect;
 }
 
 #ifdef USEICCDEVNAMESPACE
