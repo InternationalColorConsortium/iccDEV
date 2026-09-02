@@ -7,6 +7,7 @@ corpora for the main `iccApply*` command-line tools:
 - `iccApplyProfiles`
 - `iccApplySearch`
 - `iccApplyToLink`
+- `iccBenchApply`
 
 The scripts are intended for maintainer QA on a local checkout. They exercise
 documented command-line argument shapes, optional config export/replay paths,
@@ -49,6 +50,7 @@ Run these checks from the repository root after building the tools. Set
 .github/ci/quality-assurance/scripts/iccApplyNamedCmm-quick-check.sh
 .github/ci/quality-assurance/scripts/iccApplySearch-quick-check.sh
 .github/ci/quality-assurance/scripts/iccApplyToLink-quick-check.sh
+.github/ci/quality-assurance/scripts/iccBenchApply-quick-check.sh
 ```
 
 The focused checks use checked-in fixtures and validate representative success,

@@ -28,6 +28,7 @@ OUT_FILE=""
 DRY_RUN=0
 KEEP_GOING=1
 REPLAY_CFG=1
+ALLOW_CLEAN_REJECTIONS=0
 SHOW_SANITIZER=0
 SYMBOLIZER_PATH=""
 PCC_OVERRIDE=""
@@ -65,6 +66,7 @@ Execution:
   --jobs N                        Parallel jobs. Default: 1.
   --log-dir DIR                   Default: icc-ci-path-logs.
   --stop-on-fail                  Stop on first failure in serial mode.
+  --allow-clean-rejections        Record known incompatible transforms without failing.
   --show-sanitizer                Echo sanitizer snippets live.
 
 Overrides:
@@ -226,6 +228,7 @@ while [[ $# -gt 0 ]]; do
     --no-replay-cfg) REPLAY_CFG=0; shift ;;
     --show-sanitizer) SHOW_SANITIZER=1; shift ;;
     --stop-on-fail) KEEP_GOING=0; shift ;;
+    --allow-clean-rejections) ALLOW_CLEAN_REJECTIONS=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown option: $1" ;;
@@ -609,6 +612,10 @@ cmd_tool_name() {
   awk '{ print $1; exit }' <<< "$1"
 }
 
+cmd_output_path() {
+  sed -n 's/.*>[[:space:]]*\([^[:space:]]*\)[[:space:]]*$/\1/p' <<< "$1"
+}
+
 extract_sanitizer() {
   local prefix="$1"
   mkdir -p "$(dirname "$prefix")"
@@ -617,7 +624,7 @@ extract_sanitizer() {
 
 run_cmd() {
   local idx="$1" phase="$2" cmd="$3"
-  local prefix rc
+  local prefix rc result_path
   prefix="$(printf '%s/%05d.%s' "$LOG_DIR" "$idx" "$phase")"
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -652,6 +659,20 @@ run_cmd() {
       echo
     } >> "$LOG_DIR/sanitizer-summary.txt"
     [[ "$SHOW_SANITIZER" -eq 1 ]] && { echo "SANITIZER $idx $phase:"; cat "${prefix}.san"; }
+  fi
+
+  result_path="$(cmd_output_path "$cmd")"
+  if [[ "$rc" -ne 0 && "$ALLOW_CLEAN_REJECTIONS" -eq 1 &&
+        ! -s "${prefix}.san" && -n "$result_path" && -f "$result_path" ]] &&
+     grep -qE "AttachPCC failed|Unable to begin profile application - Possibly invalid or incompatible profiles" "$result_path"; then
+    echo "REJECT $idx $phase rc=$rc"
+    {
+      printf '%05d %s rc=%s\n' "$idx" "$phase" "$rc"
+      cat "${prefix}.cmd"
+      sed -n '1,20p' "$result_path"
+      echo
+    } >> "$LOG_DIR/rejections.txt"
+    return 0
   fi
 
   if [[ "$rc" -eq 0 ]]; then
@@ -704,6 +725,7 @@ fi
 mkdir -p "$LOG_DIR"
 : > "$LOG_DIR/sanitizer-summary.txt"
 : > "$LOG_DIR/failures.txt"
+: > "$LOG_DIR/rejections.txt"
 
 tmp="$(mktemp)"
 emit_all "$MUTATIONS" "$START_AT" > "$tmp"
