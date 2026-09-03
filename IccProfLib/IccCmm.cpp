@@ -10182,8 +10182,12 @@ icStatusCMM CIccCmm::Begin(bool bAllocApplyCmm/*=true*/, bool bUsePCSConversions
 
   if (bAllocApplyCmm) {
     m_pApply = GetNewApplyCmm(rv);
-    if (!m_pApply && rv == icCmmStatOk)
-      rv = icCmmStatAllocErr;
+    if (!m_pApply || rv != icCmmStatOk) {
+      delete m_pApply;
+      m_pApply = NULL;
+      if (rv == icCmmStatOk)
+        rv = icCmmStatAllocErr;
+    }
   }
   else
     rv = icCmmStatOk;
@@ -12325,6 +12329,21 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
  */
  icStatusCMM CIccNamedColorCmm::Begin(bool bAllocNewApply/* =true */, bool bUsePcsConversion/*=false*/)
 {
+  if (m_bValid) {
+    if (bAllocNewApply && !m_pApply) {
+      icStatusCMM rv = icCmmStatOk;
+      m_pApply = GetNewApplyCmm(rv);
+      if (!m_pApply || rv != icCmmStatOk) {
+        delete m_pApply;
+        m_pApply = NULL;
+        if (rv == icCmmStatOk)
+          rv = icCmmStatAllocErr;
+        return rv;
+      }
+    }
+    return icCmmStatOk;
+  }
+
   if (m_nDestSpace==icSigUnknownData) {
     m_nDestSpace = m_nLastSpace;
   }
@@ -12371,8 +12390,12 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
     rv = icCmmStatOk;
 
     m_pApply = GetNewApplyCmm(rv);
-    if (!m_pApply && rv == icCmmStatOk)
-      rv = icCmmStatAllocErr;
+    if (!m_pApply || rv != icCmmStatOk) {
+      delete m_pApply;
+      m_pApply = NULL;
+      if (rv == icCmmStatOk)
+        rv = icCmmStatAllocErr;
+    }
   }
   else
     rv = icCmmStatOk;
@@ -12606,6 +12629,7 @@ CIccApplyCmm *CIccMruCmm::GetNewApplyCmm(icStatusCMM &status)
     return NULL;
   }
 
+  status = icCmmStatOk;
   return rv;
 }
 

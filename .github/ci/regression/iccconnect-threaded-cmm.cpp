@@ -51,25 +51,85 @@ public:
   }
 };
 
-static bool CheckNullApplyFailure(const char* profilePath)
+class CIccUnexpectedApply : public CIccApplyCmm
+{
+public:
+  CIccUnexpectedApply(CIccCmm* cmm) : CIccApplyCmm(cmm) {}
+};
+
+class CIccErrorApplyCmm : public CIccCmm
+{
+public:
+  CIccApplyCmm* GetNewApplyCmm(icStatusCMM& status) override
+  {
+    status = icCmmStatBad;
+    return new CIccUnexpectedApply(this);
+  }
+};
+
+class CIccErrorApplyNamedColorCmm : public CIccNamedColorCmm
+{
+public:
+  CIccApplyCmm* GetNewApplyCmm(icStatusCMM& status) override
+  {
+    status = icCmmStatBad;
+    return new CIccUnexpectedApply(this);
+  }
+};
+
+static bool CheckApplyFailure(const char* profilePath)
 {
   CIccNullApplyCmm cmm;
   CIccNullApplyNamedColorCmm namedCmm;
-  CIccCmm* cmms[] = { &cmm, &namedCmm };
-  const char* names[] = { "standard", "named-color" };
+  CIccErrorApplyCmm errorCmm;
+  CIccErrorApplyNamedColorCmm errorNamedCmm;
+  struct FailureCase {
+    CIccCmm* cmm;
+    const char* name;
+    icStatusCMM expectedStatus;
+  };
+  FailureCase cases[] = {
+    { &cmm, "standard null/OK", icCmmStatAllocErr },
+    { &namedCmm, "named-color null/OK", icCmmStatAllocErr },
+    { &errorCmm, "standard apply/error", icCmmStatBad },
+    { &errorNamedCmm, "named-color apply/error", icCmmStatBad },
+  };
 
-  for (size_t i = 0; i < sizeof(cmms) / sizeof(cmms[0]); ++i) {
-    if (cmms[i]->AddXform(profilePath, icRelativeColorimetric) != icCmmStatOk) {
-      std::fprintf(stderr, "failed to add %s allocation-failure test profile\n",
-                   names[i]);
+  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+    if (cases[i].cmm->AddXform(profilePath, icRelativeColorimetric) !=
+        icCmmStatOk) {
+      std::fprintf(stderr, "failed to add %s test profile\n", cases[i].name);
       return false;
     }
-    if (cmms[i]->Begin() != icCmmStatAllocErr || cmms[i]->Valid() ||
-        cmms[i]->GetApply()) {
+    if (cases[i].cmm->Begin() != cases[i].expectedStatus ||
+        cases[i].cmm->Valid() || cases[i].cmm->GetApply()) {
       std::fprintf(stderr,
-                   "%s CMM accepted a null apply object as valid\n", names[i]);
+                   "%s CMM retained a failed apply object\n", cases[i].name);
       return false;
     }
+  }
+
+  return true;
+}
+
+static bool CheckNamedColorBeginIdempotent(const char* profilePath)
+{
+  CIccNamedColorCmm cmm;
+  if (cmm.AddXform(profilePath, icRelativeColorimetric) != icCmmStatOk ||
+      cmm.Begin(false) != icCmmStatOk || !cmm.Valid() || cmm.GetApply()) {
+    std::fprintf(stderr, "named-color CMM Begin(false) failed\n");
+    return false;
+  }
+
+  if (cmm.Begin() != icCmmStatOk || !cmm.GetApply()) {
+    std::fprintf(stderr, "named-color CMM failed to allocate after Begin(false)\n");
+    return false;
+  }
+
+  CIccApplyCmm* apply = cmm.GetApply();
+  if (cmm.Begin() != icCmmStatOk || cmm.GetApply() != apply) {
+    std::fprintf(stderr, "named-color CMM Begin() is not idempotent\n");
+    return false;
   }
 
   return true;
@@ -111,7 +171,8 @@ int main(int argc, char** argv)
     std::fprintf(stderr, "threaded CMM did not use CIccThreadedCmm\n");
     return 1;
   }
-  if (!CheckNullApplyFailure(argv[1]))
+  if (!CheckApplyFailure(argv[1]) ||
+      !CheckNamedColorBeginIdempotent(argv[1]))
     return 1;
 
   json oversizedThreadsJson;
