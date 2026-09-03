@@ -110,9 +110,6 @@ jobs:
       testing_changed: ${{ steps.diffcheck.outputs.testing_changed }}
       ci_changed: ${{ steps.diffcheck.outputs.ci_changed }}
       container_changed: ${{ steps.diffcheck.outputs.container_changed }}
-      image_definition_changed: ${{ steps.diffcheck.outputs.image_definition_changed }}
-      container_toolchain_required: ${{ steps.diffcheck.outputs.container_toolchain_required }}
-      trusted_base_image_available: ${{ steps.diffcheck.outputs.trusted_base_image_available }}
       docs_only: ${{ steps.diffcheck.outputs.docs_only }}
       native_changed: ${{ steps.diffcheck.outputs.native_changed }}
       risk_required: ${{ steps.diffcheck.outputs.risk_required }}
@@ -289,9 +286,6 @@ jobs:
           include_windows=true
           ctest_recent_limit=0
           warning_policy=fail
-          image_definition_changed=false
-          container_toolchain_required=false
-          trusted_base_image_available=false
           # Default to the full PR CTest surface. The pr-extended tests
           # are deferred only by the PR caller and remain in regression runs.
           ctest_mode=full
@@ -337,9 +331,6 @@ jobs:
             write_github_output testing_changed "$testing_changed"
             write_github_output ci_changed "$ci_changed"
             write_github_output container_changed "$container_changed"
-            write_github_output image_definition_changed "$image_definition_changed"
-            write_github_output container_toolchain_required "$container_toolchain_required"
-            write_github_output trusted_base_image_available "$trusted_base_image_available"
             write_github_output docs_only "$docs_only"
             write_github_output native_changed "$native_changed"
             write_github_output risk_required "$risk_required"
@@ -486,16 +477,11 @@ jobs:
 
           if ! validate_sha "$head_sha" || ! validate_sha "$base_sha"; then
             echo "Warning: invalid or missing PR commit SHA; assuming source changed for safety" >&2
-            image_definition_changed=true
-            container_toolchain_required=true
             write_scope_outputs true true true true false true false true true true true
             exit 0
           fi
 
           base_ref="${dispatch_base_ref:-$PR_BASE_REF}"
-          if [ "$base_ref" = "master" ]; then
-            trusted_base_image_available=true
-          fi
 
           # Avoid fetching refs from user-controllable inputs like ($base_ref)
           case "$base_ref" in
@@ -517,8 +503,6 @@ jobs:
           # Check if merge base exists before running diff
           if ! git merge-base "origin/${base_ref}" HEAD >/dev/null 2>&1; then
             echo "Warning: no merge base found; assuming source changed for safety" >&2
-            image_definition_changed=true
-            container_toolchain_required=true
             write_scope_outputs true true true true false true false true true true true
             exit 0
           fi
@@ -563,15 +547,8 @@ jobs:
             ci_changed=true
           fi
 
-          if has_changed_file '^(Dockerfile|\.dockerignore|\.github/ci/(docker|requirements)/|iccdev-mcp/|\.github/scripts/(check-workflow-cache-policy|sanitize-sed)\.sh)'; then
-            image_definition_changed=true
-          fi
-
-          if [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$testing_changed" == "true" ]]; then
-            container_toolchain_required=true
-          fi
-
-          if [[ "$image_definition_changed" == "true" || "$container_toolchain_required" == "true" ]]; then
+          if has_changed_file '^(Dockerfile|\.dockerignore|\.github/ci/(docker|requirements)/|iccdev-mcp/|\.github/scripts/(check-workflow-cache-policy|sanitize-sed)\.sh)' ||
+             [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$testing_changed" == "true" ]]; then
             container_changed=true
           fi
 

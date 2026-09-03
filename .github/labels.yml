@@ -83,9 +83,6 @@
 - name: ci:ctest-last-10
   color: 1d76db
   description: Fast lane runs only the ten most recent registered CTests
-- name: ci:docker
-  color: 0e8a16
-  description: Add Docker verification to the PR fast lane
 - name: ci:no-windows
   color: c5def5
   description: Keep Windows excluded from the PR fast lane
