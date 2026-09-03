@@ -257,6 +257,7 @@ enum IccPerfClutPath {
 
 struct IccPerfStats {
   std::atomic<unsigned long long> clutCalls[icPerfClutPathCount] = {};
+  std::atomic<unsigned long long> clutInputDimensions[17] = {};
   std::atomic<unsigned long long> clutOutputChannels[17] = {};
   std::atomic<unsigned long long> clutElapsedNanoseconds = {};
   std::atomic<unsigned long long> threadedCalls = {};
@@ -302,6 +303,14 @@ inline void IccPerfWriteReport()
     if (calls)
       std::fprintf(stream, "clut_calls_outputs_%d=%llu\n", outputChannels, calls);
   }
+  for (int inputDimensions = 0; inputDimensions <= 16; inputDimensions++) {
+    const unsigned long long calls =
+      g_iccPerfStats.clutInputDimensions[inputDimensions].load(
+        std::memory_order_relaxed);
+    if (calls)
+      std::fprintf(stream, "clut_calls_dimensions_%d=%llu\n",
+                   inputDimensions, calls);
+  }
   std::fprintf(stream, "threaded_calls=%llu\n",
                g_iccPerfStats.threadedCalls.load(std::memory_order_relaxed));
   std::fprintf(stream, "threaded_pixels=%llu\n",
@@ -329,9 +338,9 @@ inline void IccPerfEnsureReportWriter()
 
 class IccPerfClutScope {
 public:
-  explicit IccPerfClutScope(int outputChannels)
-    : m_outputChannels(outputChannels), m_path(icPerfClutScalar),
-      m_enabled(IccPerfMonitoringEnabled())
+  IccPerfClutScope(int inputDimensions, int outputChannels)
+    : m_inputDimensions(inputDimensions), m_outputChannels(outputChannels),
+      m_path(icPerfClutScalar), m_enabled(IccPerfMonitoringEnabled())
   {
     if (m_enabled) {
       IccPerfEnsureReportWriter();
@@ -348,6 +357,9 @@ public:
       static_cast<unsigned long long>(std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::steady_clock::now() - m_start).count());
     g_iccPerfStats.clutCalls[m_path].fetch_add(1, std::memory_order_relaxed);
+    if (m_inputDimensions >= 0 && m_inputDimensions <= 16)
+      g_iccPerfStats.clutInputDimensions[m_inputDimensions].fetch_add(
+        1, std::memory_order_relaxed);
     if (m_outputChannels >= 0 && m_outputChannels <= 16)
       g_iccPerfStats.clutOutputChannels[m_outputChannels].fetch_add(
         1, std::memory_order_relaxed);
@@ -361,6 +373,7 @@ public:
   }
 
 private:
+  int m_inputDimensions;
   int m_outputChannels;
   IccPerfClutPath m_path;
   bool m_enabled;
@@ -382,12 +395,15 @@ inline void IccPerfRecordThreadedCmm(icUInt32Number pixels, int activeWorkers)
 }
 
 #define ICC_PERF_CLUT_SCOPE(outputChannels) \
-  IccPerfClutScope iccPerfClutScope(outputChannels)
+  IccPerfClutScope iccPerfClutScope(-1, outputChannels)
+#define ICC_PERF_CLUT_SCOPE_DIMENSIONS(inputDimensions, outputChannels) \
+  IccPerfClutScope iccPerfClutScope(inputDimensions, outputChannels)
 #define ICC_PERF_CLUT_PATH(path) iccPerfClutScope.SetPath(path)
 #define ICC_PERF_THREADED_CMM(pixels, activeWorkers) \
   IccPerfRecordThreadedCmm(pixels, activeWorkers)
 #else
 #define ICC_PERF_CLUT_SCOPE(outputChannels) ((void)0)
+#define ICC_PERF_CLUT_SCOPE_DIMENSIONS(inputDimensions, outputChannels) ((void)0)
 #define ICC_PERF_CLUT_PATH(path) ((void)0)
 #define ICC_PERF_THREADED_CMM(pixels, activeWorkers) ((void)0)
 #endif

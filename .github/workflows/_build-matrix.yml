@@ -48,6 +48,21 @@ on:
         required: false
         type: boolean
         default: false
+      run-mcs-profile:
+        description: "Run the bounded MCS iccApplyProfiles performance profile"
+        required: false
+        type: boolean
+        default: false
+      mcs-profile-seconds:
+        description: "Target measured seconds for the MCS performance profile"
+        required: false
+        type: string
+        default: "300"
+      mcs-profile-max-seconds:
+        description: "Hard wall-clock ceiling for the MCS performance profile"
+        required: false
+        type: string
+        default: "600"
 
 concurrency:
   group: "build-matrix-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}"
@@ -187,6 +202,9 @@ jobs:
       ctest_recent_limit: ${{ inputs['ctest-recent-limit'] }}
       tool_build_type: ${{ inputs['tool-build-type'] }}
       run_hybrid_timing: ${{ inputs['run-hybrid-timing'] }}
+      run_mcs_profile: ${{ inputs['run-mcs-profile'] }}
+      mcs_profile_seconds: ${{ inputs['mcs-profile-seconds'] }}
+      mcs_profile_max_seconds: ${{ inputs['mcs-profile-max-seconds'] }}
 
   version-header-test:
     runs-on: ubuntu-latest

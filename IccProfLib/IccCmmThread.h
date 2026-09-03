@@ -102,6 +102,11 @@ public:
   virtual icStatusCMM Apply(icFloatNumber *DstPixel, const icFloatNumber *SrcPixel);
   virtual icStatusCMM Apply(icFloatNumber *DstPixel, const icFloatNumber *SrcPixel, icUInt32Number nPixels);
 
+  unsigned long long GetAsyncWorkerStripCount() const
+  {
+    return m_nAsyncWorkerStrips;
+  }
+
 protected:
   CIccApplyThreadedCmm(CIccCmm *pCmm);
   bool Init(CIccCmm *pCmm, int nThreads);
@@ -111,6 +116,7 @@ protected:
   CIccApplyThreadedCmmPool *m_pool;
   CIccCmm *m_baseCmm;
   int m_nThreads;
+  unsigned long long m_nAsyncWorkerStrips;
 };
 
 

@@ -12,7 +12,7 @@ their code in the thing being measured.
 ## Usage
 
 ```
-iccBenchApply {options} interpolation {profile_path rendering_intent {-PCC pcc_path}}...
+iccBenchApply {options} interpolation {{-ENV:sig value} profile_path rendering_intent {-PCC pcc_path}}...
 ```
 
 `interpolation` is `0` for linear or `1` for tetrahedral. `rendering_intent` is
@@ -54,6 +54,21 @@ matching. The same code means different things in the two families (#2270).
 | `-suite` | run the built-in case table; takes no chain arguments |
 | `-csv` | machine-readable output |
 
+`-ENV:sig value` sets a CMM environment variable for the profile immediately
+following it, matching the profile-chain placement used by `iccApplyProfiles`
+and `iccApplyToLink`.
+
+For the MCS sample chain, first generate the MCS profile fixtures in
+`Testing/mcs/`, then run this command from the repository root:
+
+```text
+iccBenchApply -pixels 1048576 -repeats 5 1 \
+  Testing/mcs/6ChanSelect-MID.icc 0 \
+  -ENV:bkgX 0.4014 -ENV:bkgY 0.2391 -ENV:bkgZ 0.0272 \
+  Testing/mcs/18ChanWithSpots-MVIS.icc 0 \
+  Testing/sRGB_v4_ICC_preference.icc 1
+```
+
 Examples:
 
 ```sh
@@ -86,7 +101,7 @@ is the headline number and the only one that reflects the chunked multi-pixel
 path in `CIccCmm.cpp`.
 
 **Per xform** (`-perxform`). After `Begin()`, the chain is enumerated through
-`CIccCmm::IterateXforms` and each xform timed individually — including the
+`CIccCmm::IterateXforms` and each xform timed individually -- including the
 `CIccPcsXform` entries `Begin()` inserts between profiles, which are invisible in
 the whole-chain figure.
 
@@ -104,7 +119,7 @@ accessors. Reported in Mval/s.
 
 2. **Checksums only compare across builds with matching compiler flags.** The
    hash is over raw float bit patterns, which is what makes it an exact
-   equivalence oracle — and also what makes it sensitive to legitimate
+   equivalence oracle -- and also what makes it sensitive to legitimate
    floating-point reassociation. A checksum difference between two different
    builds means *investigate*, not *regression*.
 
@@ -126,16 +141,16 @@ which is not always what the profile names suggest.
 
 | case | resolved chain | notes |
 |---|---|---|
-| `matrix-trc` | MatrixTRC → PCS → Mpe | |
-| `lut-3d-tetra` | 3DLut → PCS → 3DLut | also carries the `Begin()` re-entry check |
-| `spectral-6ch` | Mpe → PCS → 3DLut | see misreading 3 above |
-| `monochrome` | Monochrome → MatrixTRC | no PCS step: XYZ PCS on both sides |
-| `mpe-calc` | Mpe → PCS → Mpe | the Calculator element |
-| `mpe-tonemap` | Mpe → Mpe | no PCS step |
-| `pcs-rel` | 3DLut → PCS → Mpe | relative colorimetric |
-| `pcs-abs` | 3DLut → PCS → Mpe | absolute; the delta against `pcs-rel` isolates PCS adjustment |
+| `matrix-trc` | MatrixTRC -> PCS -> Mpe | |
+| `lut-3d-tetra` | 3DLut -> PCS -> 3DLut | also carries the `Begin()` re-entry check |
+| `spectral-6ch` | Mpe -> PCS -> 3DLut | see misreading 3 above |
+| `monochrome` | Monochrome -> MatrixTRC | no PCS step: XYZ PCS on both sides |
+| `mpe-calc` | Mpe -> PCS -> Mpe | the Calculator element |
+| `mpe-tonemap` | Mpe -> Mpe | no PCS step |
+| `pcs-rel` | 3DLut -> PCS -> Mpe | relative colorimetric |
+| `pcs-abs` | 3DLut -> PCS -> Mpe | absolute; the delta against `pcs-rel` isolates PCS adjustment |
 
-The `pcs` pair is `V2/v2RgbLut8.icc` (D50) → `sRGB_D65_MAT.icc` (D65)
+The `pcs` pair is `V2/v2RgbLut8.icc` (D50) -> `sRGB_D65_MAT.icc` (D65)
 deliberately. The obvious choice of reusing the `lut-3d-tetra` pair does not
 work: both `Testing/V2` LUT profiles carry a `mediaWhitePointTag` of exactly D50,
 which makes the absolute adjustment an identity and produces a checksum
@@ -160,8 +175,8 @@ Never a slow number. Only:
 ## Input data
 
 Deterministic LCG fill with a fixed seed, so runs are comparable. The final row
-of the buffer is deliberately pathological — negative, greater than one, ±inf,
-and NaN — because several of the clamp and non-finite paths worth measuring would
+of the buffer is deliberately pathological -- negative, greater than one, +/-inf,
+and NaN -- because several of the clamp and non-finite paths worth measuring would
 otherwise never execute, and a happy-path-only buffer would let an incorrect
 change pass the checksum oracle unnoticed.
 

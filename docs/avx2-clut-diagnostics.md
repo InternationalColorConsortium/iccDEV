@@ -62,9 +62,11 @@ Configure a separate release build with
 `-DICCDEV_ENABLE_PERF_MONITORING=ON` to collect aggregate, opt-in library
 telemetry. The library remains silent unless `ICC_PERF_STATS_FILE` names a
 report file. The report records CLUT calls by scalar/SSE2/AVX2/AVX-512 path,
-output-channel counts, aggregate CLUT elapsed nanoseconds, and threaded-CMM
-call, pixel, strip, and active-worker totals. Each process appends one report
-block, so a CTest run preserves its child-process telemetry in one file.
+input-dimensionality and output-channel counts, aggregate CLUT elapsed
+nanoseconds, and threaded-CMM call, pixel, strip, and active-worker totals.
+Three-dimensional and four-dimensional scalar interpolation are currently
+dimension-labeled. Each process appends one report block, so a CTest run
+preserves its child-process telemetry in one file.
 
 On Linux, capture the focused regression in a fresh output directory:
 

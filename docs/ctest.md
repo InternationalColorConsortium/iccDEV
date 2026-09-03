@@ -123,6 +123,12 @@ before running the suite.
 | `iccdev.fileio-seek-tell` | `.github/ci/regression/fileio-seek-tell.cpp` |
 | `iccdev.iccconnect-config-parser` | `.github/ci/regression/iccconnect-config-parser.cpp` |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
+| `iccdev.bench-apply-env` | `Build/Cmake/Testing/CMakeLists.txt` |
+| `iccdev.bench-apply-env-invalid` | `Build/Cmake/Testing/CMakeLists.txt` |
+| `iccdev.bench-apply-env-nonfinite` | `Build/Cmake/Testing/CMakeLists.txt` |
+| `iccdev.bench-apply-env-invalid-signature` | `Build/Cmake/Testing/CMakeLists.txt` |
+| `iccdev.bench-apply-env-missing-value` | `Build/Cmake/Testing/CMakeLists.txt` |
+| `iccdev.bench-apply-env-missing-profile` | `Build/Cmake/Testing/CMakeLists.txt` |
 | `iccdev.applytolink-invalid-decoded-intent` | `Build/Cmake/Testing/CMakeLists.txt` |
 | `iccdev.applytolink-v4-missing-device-descriptions` | `Build/Cmake/Testing/CMakeLists.txt` |
 | `iccdev.xform-abstorel-adjust` | `.github/ci/regression/xform-abstorel-adjust.cpp` |

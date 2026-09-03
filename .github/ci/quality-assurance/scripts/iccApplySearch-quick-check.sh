@@ -38,5 +38,25 @@ qa_run export-config success "" "$BIN" -exportcfganddata "$CFG" \
 qa_require_file "$CFG"
 qa_run replay-config success "" "$BIN" -cfg "$CFG"
 qa_run config-extra reject "Unexpected extra arguments for -cfg" "$BIN" -cfg "$CFG" ignored-extra
+threaded_data="$QA_OUTDIR/rgb8bit-threaded.txt"
+awk '
+    /^icEncode/ { print; have_encoding = 1; next }
+    !have_encoding { print; next }
+    { rows = rows $0 ORS }
+    END {
+        for (i = 0; i < 64; i++)
+            printf "%s", rows
+    }
+' "$DATA" > "$threaded_data"
+qa_run threads-one success "" \
+    "$BIN" -threads 1 "$threaded_data" 0 0 "$PROFILE" 1 "$PROFILE" 1 -INIT 1
+threads_reference="$QA_LAST_LOG"
+for nthreads in 0 2 4; do
+    qa_run "threads-$nthreads" success "" \
+        "$BIN" -threads "$nthreads" "$threaded_data" 0 0 "$PROFILE" 1 "$PROFILE" 1 -INIT 1
+    if ! cmp -s "$threads_reference" "$QA_LAST_LOG"; then
+        qa_fail "threads-$nthreads output differs from threads-one"
+    fi
+done
 
 qa_finish

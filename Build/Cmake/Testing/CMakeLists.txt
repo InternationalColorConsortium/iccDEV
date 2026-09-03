@@ -5978,6 +5978,107 @@ if(TARGET iccBenchApply)
     LABELS "iccdev;iccprofLib;benchmark;throughput;pcc;leak;issue-2250;regression"
   )
 
+  if(WIN32)
+    set(_bench_environment_testing_root "${ICCDEV_TEST_OUTDIR}/windows-testing")
+  else()
+    set(_bench_environment_testing_root "${ICCDEV_REPO_ROOT}/Testing")
+  endif()
+
+  if(TARGET iccFromXml)
+    add_test(
+      NAME iccdev.bench-apply-env
+      COMMAND "${CMAKE_COMMAND}"
+        "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+        "-DTOOL_ARGS=-pixels;4096;-repeats;1;1;${_bench_environment_testing_root}/mcs/6ChanSelect-MID.icc;0;-ENV:bkgX;0.4014;-ENV:bkgY;0.2391;-ENV:bkgZ;0.0272;${_bench_environment_testing_root}/mcs/18ChanWithSpots-MVIS.icc;0;${_bench_environment_testing_root}/sRGB_v4_ICC_preference.icc;1"
+        "-DEXPECT_EXIT=zero"
+        "-DCOMPARE_ARGS=-pixels;4096;-repeats;1;1;${_bench_environment_testing_root}/mcs/6ChanSelect-MID.icc;0;${_bench_environment_testing_root}/mcs/18ChanWithSpots-MVIS.icc;0;${_bench_environment_testing_root}/sRGB_v4_ICC_preference.icc;1"
+        "-DCOMPARE_EXTRACT=0x([0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])"
+        "-DCOMPARE_MODE=differ"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+    )
+    set_tests_properties(iccdev.bench-apply-env PROPERTIES
+      WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+      TIMEOUT 120
+      LABELS "iccdev;iccprofLib;benchmark;cli;environment;regression"
+      FIXTURES_REQUIRED iccdev_profiles
+    )
+  endif()
+
+  add_test(
+    NAME iccdev.bench-apply-env-invalid
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;1;-ENV:bkgX;nan;Testing/sRGB_v4_ICC_preference.icc;0"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=expected a finite number"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-env-invalid PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;environment;regression"
+  )
+
+  add_test(
+    NAME iccdev.bench-apply-env-nonfinite
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;1;-ENV:bkgX;inf;Testing/sRGB_v4_ICC_preference.icc;0"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=expected a finite number"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-env-nonfinite PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;environment;regression"
+  )
+
+  add_test(
+    NAME iccdev.bench-apply-env-invalid-signature
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;1;-ENV:bkgXextra;0.4014;Testing/sRGB_v4_ICC_preference.icc;0"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=expected exactly four characters"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-env-invalid-signature PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;environment;regression"
+  )
+
+  add_test(
+    NAME iccdev.bench-apply-env-missing-value
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;1;-ENV:bkgX"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=has no environment value"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-env-missing-value PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;environment;regression"
+  )
+
+  add_test(
+    NAME iccdev.bench-apply-env-missing-profile
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-pixels;4096;-repeats;1;1;-ENV:bkgX;0.4014"
+      "-DEXPECT_EXIT=nonzero"
+      "-DEXPECT_MATCH=must be followed by a profile"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-env-missing-profile PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;cli;environment;regression"
+  )
+
   # -------------------------------------------------------------------------
   # #2254: the iccBenchApply command-line contract.
   #
@@ -6316,6 +6417,11 @@ if(TARGET iccBenchApply)
     # are gated on iccFromXml above.
     set(_bench_env_mod_tests
       iccdev.apply-throughput-pcc
+      iccdev.bench-apply-env-invalid
+      iccdev.bench-apply-env-nonfinite
+      iccdev.bench-apply-env-invalid-signature
+      iccdev.bench-apply-env-missing-value
+      iccdev.bench-apply-env-missing-profile
       iccdev.bench-apply-arity-floor
       iccdev.bench-apply-suite-rejects-chain
       iccdev.bench-apply-suite-rejects-perxform
@@ -6331,6 +6437,7 @@ if(TARGET iccBenchApply)
     if(TARGET iccFromXml)
       list(APPEND _bench_env_mod_tests
         iccdev.apply-throughput
+        iccdev.bench-apply-env
         iccdev.bench-apply-testing-cwd)
     endif()
     # #2254: the CLI-contract tests reach the tool through cmake -P, and a child

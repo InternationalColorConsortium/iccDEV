@@ -3015,7 +3015,7 @@ void CIccCLUT::Interp3dTetra(icFloatNumber *destPixel, const icFloatNumber *srcP
  */
 void CIccCLUT::Interp3d(icFloatNumber *destPixel, const icFloatNumber *srcPixel) const
 {
-  ICC_PERF_CLUT_SCOPE((int)m_nOutput);
+  ICC_PERF_CLUT_SCOPE_DIMENSIONS(3, (int)m_nOutput);
   icUInt8Number mx = m_MaxGridPoint[0];
   icUInt8Number my = m_MaxGridPoint[1];
   icUInt8Number mz = m_MaxGridPoint[2];
@@ -3170,6 +3170,7 @@ void CIccCLUT::Interp3d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
  */
 void CIccCLUT::Interp4d(icFloatNumber *destPixel, const icFloatNumber *srcPixel) const
 {
+  ICC_PERF_CLUT_SCOPE_DIMENSIONS(4, (int)m_nOutput);
   icUInt8Number mw = m_MaxGridPoint[0];
   icUInt8Number mx = m_MaxGridPoint[1];
   icUInt8Number my = m_MaxGridPoint[2];

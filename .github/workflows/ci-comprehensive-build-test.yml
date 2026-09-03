@@ -41,6 +41,21 @@ on:
         required: false
         default: false
         type: boolean
+      run-mcs-profile:
+        description: "Run bounded MCS iccApplyProfiles performance profiling"
+        required: false
+        default: false
+        type: boolean
+      mcs-profile-seconds:
+        description: "Target measured seconds for the MCS performance profile"
+        required: false
+        default: "300"
+        type: string
+      mcs-profile-max-seconds:
+        description: "Hard wall-clock ceiling for the MCS performance profile"
+        required: false
+        default: "600"
+        type: string
 
 jobs:
   build-matrix:
@@ -52,3 +67,6 @@ jobs:
       ctest-recent-limit: ${{ inputs['ctest-recent-limit'] }}
       tool-build-type: ${{ inputs['tool-build-type'] }}
       run-hybrid-timing: ${{ inputs['run-hybrid-timing'] }}
+      run-mcs-profile: ${{ inputs['run-mcs-profile'] }}
+      mcs-profile-seconds: ${{ inputs['mcs-profile-seconds'] }}
+      mcs-profile-max-seconds: ${{ inputs['mcs-profile-max-seconds'] }}

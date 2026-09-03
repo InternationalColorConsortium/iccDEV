@@ -2459,7 +2459,8 @@ bool CIccSampledCalculatorCurve::Begin(icElemInterp nInterp, CIccTagMultiProcess
   if (nSize > ICC_MAXCALCCURVESIZE)
     nSize = ICC_MAXCALCCURVESIZE;
 
-  SetSize(nSize);
+  if (!SetSize(nSize))
+    return false;
 
   // Same wire-supplied endpoints as CIccSingleSampledCurve::Begin, and the same
   // NaN-slips-past-== 0.0 hole (#2324). This bounds the src values the sample
@@ -2478,6 +2479,8 @@ bool CIccSampledCalculatorCurve::Begin(icElemInterp nInterp, CIccTagMultiProcess
 
   //Use calculator element to populate lookup table
   CIccApplyMpe *pApply = m_pCalc->GetNewApply(NULL);
+  if (!pApply)
+    return false;
   for (icUInt32Number i = 0; i < m_nCount; i++) {
     icFloatNumber src, dst;
     src = (icFloatNumber)i / m_last * m_range + m_firstEntry;

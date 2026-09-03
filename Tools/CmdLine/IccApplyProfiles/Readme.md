@@ -76,6 +76,41 @@ Two limits are deliberate rather than oversights:
   two steps is not covered. The check guards against writing through a symlink
   that is already there, not against a race for the path.
 
+## Performance Diagnostics
+
+Set `ICC_APPLY_PROFILES_TIMING=1` to print bounded apply-loop timing:
+
+```text
+[TIMING] Loop ms: 28997.128
+[TIMING] Apply ms: 27611.920
+[TIMING] Apply pct: 95.223
+[TIMING] Apply calls: 1048576
+[TIMING] Async worker strips: 0
+```
+
+`Async worker strips` is the cumulative number of strips queued to background
+workers by the active apply object. It is zero for scalar and short-row calls
+that run entirely on the caller thread.
+
+Timing and trace modes suppress the carriage-return progress display so logs
+remain line-oriented and safe to copy or parse.
+
+Set `ICC_APPLY_TRACE=1` for phase, image geometry, profile-chain, buffer, and
+throughput records through `IccSignatureUtils.h`. Level 2 also logs each row;
+level 3 logs each pixel and is intended only for tiny diagnostic crops. Keep
+`ICC_VERBOSE_CALC_APPLY=OFF` for timing because it dumps the calculator program
+for every pixel and changes the workload into an output-throughput test.
+
+For the MCS overprint command, the bounded profiling helper constructs 1x1,
+64x64, and 512x512 crops, calibrates with the original 1024x1024 TIFF, compares
+Debug sanitizer and Release output checksums, and repeats the full sanitizer
+case to target 300 seconds without exceeding 600 seconds:
+
+```sh
+.github/scripts/iccdev-mcs-applyprofiles-profile.sh \
+  out/debug-asan-ubsan-trace out/release-compare /tmp/iccdev-mcs-profile
+```
+
 ## See Also
 
 - [CLI tool reference](../../../docs/tools-cli-reference.md)

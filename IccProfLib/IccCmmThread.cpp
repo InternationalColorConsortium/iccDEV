@@ -135,8 +135,10 @@ public:
   icStatusCMM Apply(std::vector<CIccApplyCmm*> &workers,
                     icFloatNumber *dstPixel, const icFloatNumber *srcPixel,
                     icUInt32Number nPixels, int nActive,
-                    int nSrcSamples, int nDstSamples)
+                    int nSrcSamples, int nDstSamples,
+                    int &workerStripsDispatched)
   {
+    workerStripsDispatched = 0;
     if (!EnsureWorkerThreads(nActive - 1))
       return icCmmStatAllocErr;
 
@@ -163,6 +165,7 @@ public:
       for (size_t i = 0; i < m_jobCount; i++)
         m_jobs[i] = i;
     }
+    workerStripsDispatched = nActive - 1;
 
     for (int i = 0; i < nActive - 1; i++)
       m_jobReady.notify_one();
@@ -260,6 +263,7 @@ CIccApplyThreadedCmm::CIccApplyThreadedCmm(CIccCmm *pCmm) : CIccApplyCmm(pCmm)
   m_pool = NULL;
   m_baseCmm = NULL;
   m_nThreads = 1;
+  m_nAsyncWorkerStrips = 0;
 }
 
 
@@ -394,9 +398,13 @@ icStatusCMM CIccApplyThreadedCmm::Apply(icFloatNumber *DstPixel, const icFloatNu
   if (!EnsureWorkers(nActive))
     return icCmmStatAllocErr;
 
+  int workerStripsDispatched = 0;
   ICC_PERF_THREADED_CMM(nPixels, nActive);
-  return m_pool->Apply(m_workers, DstPixel, SrcPixel, nPixels, nActive,
-                       nSrcSamples, nDstSamples);
+  icStatusCMM status = m_pool->Apply(m_workers, DstPixel, SrcPixel, nPixels,
+                                     nActive, nSrcSamples, nDstSamples,
+                                     workerStripsDispatched);
+  m_nAsyncWorkerStrips += static_cast<unsigned long long>(workerStripsDispatched);
+  return status;
 }
 
 

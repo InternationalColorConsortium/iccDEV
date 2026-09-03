@@ -4,7 +4,8 @@
 ###############################################################################
 #
 # Verifies that iccApplyProfiles produces bit-identical TIFF output under
-# every non-negative -threads mode supported by CIccConnectCmm::CreateStandard():
+# every requested non-negative -threads mode supported by
+# CIccConnectCmm::CreateStandard():
 #   -threads  1   single-threaded (no CIccThreadedCmm wrapper, per-pixel apply)
 #   -threads  0   wrapper with std::thread::hardware_concurrency() workers
 #   -threads  N   wrapper with N workers (default N=4 here)
@@ -22,6 +23,7 @@
 #   ICCDEV_TOOLS_DIR   -- path to Build/Tools/ (contains tool subdirs)
 #   ICCDEV_TESTING_DIR -- path to Testing/ (contains sRGB_v4_ICC_preference.icc)
 #   ICCDEV_TEST_OUTDIR -- output directory for temporary files and logs
+#   ICCDEV_THREAD_VALUES -- comma-separated worker counts (default: 1,0,2,4)
 #
 # Exit code: 0 = all pass, 1 = test failure, 2 = ASAN/UBSAN finding
 ###############################################################################
@@ -31,6 +33,7 @@ set -uo pipefail
 TOOLS_DIR="${ICCDEV_TOOLS_DIR:?Set ICCDEV_TOOLS_DIR to iccDEV Build/Tools path}"
 TESTING_DIR="${ICCDEV_TESTING_DIR:?Set ICCDEV_TESTING_DIR to iccDEV Testing path}"
 OUTDIR="${ICCDEV_TEST_OUTDIR:-/tmp/iccdev-iccapplyprofiles-threading}"
+THREAD_VALUES="${ICCDEV_THREAD_VALUES:-1,0,2,4}"
 mkdir -p "$OUTDIR"
 
 APPLY_PROFILES="$TOOLS_DIR/IccApplyProfiles/iccApplyProfiles"
@@ -164,10 +167,33 @@ run_threads() {
 }
 
 REF=""
-for entry in "1:t1" "0:auto" "4:t4"; do
+IFS=, read -r -a THREAD_MODES <<< "$THREAD_VALUES"
+if [ "${#THREAD_MODES[@]}" -eq 0 ]; then
+  echo "  [FAIL] no thread modes requested"
+  exit 1
+fi
+
+for nthreads in "${THREAD_MODES[@]}"; do
+  case "$nthreads" in
+    0|[1-9]|[1-9][0-9]|[1-9][0-9][0-9])
+      ;;
+    *)
+      echo "  [FAIL] invalid thread mode: $nthreads"
+      FAIL=$((FAIL + 1))
+      continue
+      ;;
+  esac
+  if [ "$nthreads" -gt 256 ]; then
+    echo "  [FAIL] thread mode exceeds supported maximum: $nthreads"
+    FAIL=$((FAIL + 1))
+    continue
+  fi
+
   TOTAL=$((TOTAL + 1))
-  nthreads="${entry%%:*}"
-  label="${entry##*:}"
+  label="t${nthreads}"
+  if [ "$nthreads" = "0" ]; then
+    label="auto"
+  fi
 
   out="$(run_threads "$nthreads" "$label")" || { FAIL=$((FAIL + 1)); continue; }
 

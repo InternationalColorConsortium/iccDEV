@@ -54,6 +54,21 @@ on:
         required: false
         default: false
         type: boolean
+      run_mcs_profile:
+        description: 'Run the bounded MCS iccApplyProfiles performance profile'
+        required: false
+        default: false
+        type: boolean
+      mcs_profile_seconds:
+        description: 'Target measured seconds for the MCS performance profile'
+        required: false
+        default: '300'
+        type: string
+      mcs_profile_max_seconds:
+        description: 'Hard wall-clock ceiling for the MCS performance profile'
+        required: false
+        default: '600'
+        type: string
       run_tool_flamegraphs:
         description: 'Capture opt-in all-tool FlameGraph dashboards'
         required: false
@@ -166,6 +181,21 @@ on:
         required: false
         default: false
         type: boolean
+      run_mcs_profile:
+        description: 'Run the bounded MCS iccApplyProfiles performance profile'
+        required: false
+        default: false
+        type: boolean
+      mcs_profile_seconds:
+        description: 'Target measured seconds for the MCS performance profile'
+        required: false
+        default: '300'
+        type: string
+      mcs_profile_max_seconds:
+        description: 'Hard wall-clock ceiling for the MCS performance profile'
+        required: false
+        default: '600'
+        type: string
       run_tool_flamegraphs:
         description: 'Capture opt-in all-tool FlameGraph dashboards'
         required: false
@@ -297,6 +327,14 @@ jobs:
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           ref: ${{ inputs.target_sha || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout trusted sanitizer helper
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
+          path: trusted-base
           persist-credentials: false
           fetch-depth: 1
 
@@ -642,6 +680,86 @@ jobs:
           HYBRID_TIMING_INSTRUMENT="$HYBRID_TIMING_INSTRUMENT_INPUT" \
             .github/scripts/iccdev-hybrid-applyprofiles-timing.sh
 
+      # preflight: allow-pr-script-execution reason=mcs-profiling-helper-under-test
+      - name: Run bounded MCS iccApplyProfiles profile
+        id: mcs_profile
+        if: ${{ inputs.run_mcs_profile }}
+        timeout-minutes: 25
+        env:
+          BASH_ENV: /dev/null
+          MCS_PROFILE_SECONDS_INPUT: ${{ inputs.mcs_profile_seconds || '300' }}
+          MCS_PROFILE_MAX_SECONDS_INPUT: ${{ inputs.mcs_profile_max_seconds || '600' }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          TRUSTED_SANITIZER="$GITHUB_WORKSPACE/trusted-base/.github/scripts/sanitize-sed.sh"
+          if [ ! -f "$TRUSTED_SANITIZER" ]; then
+            echo "[FAIL] trusted sanitizer helper is unavailable" >&2
+            exit 1
+          fi
+          # shellcheck disable=SC1090
+          source "$TRUSTED_SANITIZER"
+
+          for time_limit in \
+            "$MCS_PROFILE_SECONDS_INPUT" "$MCS_PROFILE_MAX_SECONDS_INPUT"; do
+            case "$time_limit" in
+              ''|*[!0-9]*|0|0[0-9]*|????*)
+                echo "::error title=Invalid MCS profile window::Values must be positive integers"
+                exit 1
+                ;;
+            esac
+          done
+          if [ "$MCS_PROFILE_SECONDS_INPUT" -gt "$MCS_PROFILE_MAX_SECONDS_INPUT" ] ||
+             [ "$MCS_PROFILE_MAX_SECONDS_INPUT" -gt 600 ]; then
+            echo "::error title=Invalid MCS profile window::Target must not exceed maximum; maximum is 600"
+            exit 1
+          fi
+
+          debug_dir="${BUILD_DIR}-mcs-debug"
+          release_dir="${BUILD_DIR}-mcs-release"
+          common_options=(
+            -DENABLE_TOOLS=ON
+            -DENABLE_TESTS=OFF
+            -DENABLE_WXWIDGETS=OFF
+            -DENABLE_SHARED_LIBS=ON
+            -DENABLE_STATIC_LIBS=OFF
+            -DICC_USE_ZLIB=ON
+            -DICCDEV_ENABLE_QA_FLAGS=ON
+            -DICCDEV_ENABLE_STRICT_WARNINGS=ON
+            -DICCDEV_ENABLE_PERF_MONITORING=ON
+            -DICC_VERBOSE_CALC_APPLY=OFF
+            -DICC_CLUT_DEBUG=OFF
+            -DICC_AVX2_CLUT_DEBUG=OFF
+          )
+          cmake -S Build/Cmake -B "$debug_dir" \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DENABLE_SANITIZERS=ON \
+            -DSANITIZER_RECOVER=ON \
+            -DENABLE_LTO=OFF \
+            "${common_options[@]}" \
+            -Wno-dev
+          cmake -S Build/Cmake -B "$release_dir" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DENABLE_LTO=ON \
+            "${common_options[@]}" \
+            -Wno-dev
+          cmake --build "$debug_dir" --parallel "$(nproc)" \
+            --target iccApplyProfiles iccFromXml
+          cmake --build "$release_dir" --parallel "$(nproc)" \
+            --target iccApplyProfiles iccBenchApply
+
+          ICCDEV_MCS_PROFILE_SECONDS="$MCS_PROFILE_SECONDS_INPUT" \
+          ICCDEV_MCS_PROFILE_MAX_SECONDS="$MCS_PROFILE_MAX_SECONDS_INPUT" \
+            .github/scripts/iccdev-mcs-applyprofiles-profile.sh \
+              "$debug_dir" \
+              "$release_dir" \
+              "${BUILD_DIR}/Testing/ctest-output/mcs-applyprofiles-profile"
+
       - name: Run ICC registry profile QA scan
         if: ${{ inputs.run_registry_qa }}
         env:
@@ -712,27 +830,13 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
-          if [ -f "$SANITIZER" ]; then
-            # shellcheck disable=SC1090
-            source "$SANITIZER"
-          else
-            escape_html() {
-              local s="$1"
-              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
-              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
-              printf '%s' "$s"
-            }
-            sanitize_line() { escape_html "$1"; }
-            sanitize_code_line() {
-              local s="$1"
-              s="${s//$'\r'/}"
-              s="${s//$'\n'/ }"
-              s="$(printf '%s' "$s" | tr -d '\000-\011\013\014\016-\037\177')"
-              s="${s//\`\`\`/\` \` \`}"
-              printf '%s' "$s"
-            }
+          TRUSTED_SANITIZER="$GITHUB_WORKSPACE/trusted-base/.github/scripts/sanitize-sed.sh"
+          if [ ! -f "$TRUSTED_SANITIZER" ]; then
+            echo "[FAIL] trusted sanitizer helper is unavailable" >&2
+            exit 1
           fi
+          # shellcheck disable=SC1090
+          source "$TRUSTED_SANITIZER"
           sanitize_table_cell() {
             local s
             s="$(sanitize_line "$1")"
@@ -761,6 +865,9 @@ jobs:
             test_cmd="${test_cmd} --limit ${CTEST_RECENT_LIMIT}"
           fi
           timing_report="${BUILD_DIR}/Testing/ctest-output/hybrid-applyprofiles-timing/hybrid-applyprofiles-timing.tsv"
+          mcs_profile_dir="${BUILD_DIR}/Testing/ctest-output/mcs-applyprofiles-profile"
+          mcs_profile_report="${mcs_profile_dir}/report.txt"
+          mcs_profile_summary="${mcs_profile_dir}/summary.tsv"
           qa_dir="${BUILD_DIR}/Testing/ctest-output/iccdev-qa-target-flags"
           qa_evidence="${qa_dir}/evidence.ndjson"
           qa_summary="${qa_dir}/summary.tsv"
@@ -906,10 +1013,57 @@ jobs:
                 echo "$timing_row"
               done
             fi
+            if [ -f "$mcs_profile_summary" ]; then
+              echo ""
+              echo "## MCS \`iccApplyProfiles\` Performance Profile"
+              echo ""
+              if [ -f "$mcs_profile_report" ]; then
+                echo '```text'
+                while IFS= read -r line; do
+                  sanitize_code_line "$line"
+                  echo ""
+                done < "$mcs_profile_report"
+                echo '```'
+              else
+                echo "[FAIL] Final MCS report was not produced; partial run evidence follows."
+              fi
+              echo ""
+              echo "| Case | Build | Pixels | Status | Elapsed s | Apply ms | Apply % | SHA-256 |"
+              echo "|------|-------|--------|--------|-----------|----------|---------|---------|"
+              tail -n +2 "$mcs_profile_summary" | while IFS=$'\t' read -r \
+                case_name build_name pixels status elapsed_s _user_s _system_s \
+                _rss apply_ms apply_pct checksum _log_path; do
+                printf "| %s | %s | %s | %s | %s | %s | %s | \`%s\` |\n" \
+                  "$(sanitize_table_cell "$case_name")" \
+                  "$(sanitize_table_cell "$build_name")" \
+                  "$(sanitize_table_cell "$pixels")" \
+                  "$(sanitize_table_cell "$status")" \
+                  "$(sanitize_table_cell "$elapsed_s")" \
+                  "$(sanitize_table_cell "$apply_ms")" \
+                  "$(sanitize_table_cell "$apply_pct")" \
+                  "$(sanitize_table_cell "$checksum")"
+              done
+              if [ ! -f "$mcs_profile_report" ] &&
+                 [ -d "${mcs_profile_dir}/runs" ]; then
+                echo ""
+                echo "### MCS Failure Logs"
+                echo ""
+                echo '```text'
+                find "${mcs_profile_dir}/runs" -maxdepth 1 -type f -name '*.log' \
+                  -print | sort | while IFS= read -r log; do
+                    printf '[%s]\n' "$(sanitize_line "${log##*/}")"
+                    sed -n '1,160p' "$log" | while IFS= read -r line; do
+                      sanitize_code_line "$line"
+                      echo ""
+                    done
+                  done
+                echo '```'
+              fi
+            fi
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: Package developer report
-        if: ${{ success() }}
+        if: always()
         env:
           BASH_ENV: /dev/null
         run: |
@@ -917,19 +1071,13 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
-          if [ -f "$SANITIZER" ]; then
-            # shellcheck disable=SC1090
-            source "$SANITIZER"
-          else
-            escape_html() {
-              local s="$1"
-              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
-              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
-              printf '%s' "$s"
-            }
-            sanitize_line() { escape_html "$1"; }
+          TRUSTED_SANITIZER="$GITHUB_WORKSPACE/trusted-base/.github/scripts/sanitize-sed.sh"
+          if [ ! -f "$TRUSTED_SANITIZER" ]; then
+            echo "[FAIL] trusted sanitizer helper is unavailable" >&2
+            exit 1
           fi
+          # shellcheck disable=SC1090
+          source "$TRUSTED_SANITIZER"
 
           report_dir="${BUILD_DIR}/Testing/ctest-output/developer-report"
           data_dir="${report_dir}/data"
@@ -955,6 +1103,38 @@ jobs:
             fi
           }
 
+          copy_sanitized_text_if_present() {
+            local src="$1"
+            local dst="$2"
+            if [ -f "$src" ]; then
+              mkdir -p "$(dirname "$dst")"
+              while IFS= read -r line || [ -n "$line" ]; do
+                sanitize_line "$line"
+                echo ""
+              done < "$src" > "$dst"
+            fi
+          }
+
+          copy_sanitized_tsv_if_present() {
+            local src="$1"
+            local dst="$2"
+            local line
+            local field
+            if [ -f "$src" ]; then
+              mkdir -p "$(dirname "$dst")"
+              while IFS= read -r line || [ -n "$line" ]; do
+                while [[ "$line" == *$'\t'* ]]; do
+                  field="${line%%$'\t'*}"
+                  sanitize_line "$field"
+                  printf '\t'
+                  line="${line#*$'\t'}"
+                done
+                sanitize_line "$line"
+                printf '\n'
+              done < "$src" > "$dst"
+            fi
+          }
+
           copy_file_if_present "${BUILD_DIR}/build.log" "${data_dir}/build.log"
           copy_file_if_present "${BUILD_DIR}/ctest-list.txt" "${data_dir}/ctest-list.txt"
           copy_file_if_present "${BUILD_DIR}/recent-ctests.txt" "${data_dir}/recent-ctests.txt"
@@ -977,6 +1157,22 @@ jobs:
           copy_dir_if_present \
             "${BUILD_DIR}/Testing/ctest-output/registry-profile-qa" \
             "${data_dir}/registry-profile-qa"
+          mcs_profile_dir="${BUILD_DIR}/Testing/ctest-output/mcs-applyprofiles-profile"
+          copy_sanitized_text_if_present \
+            "${mcs_profile_dir}/report.txt" \
+            "${data_dir}/mcs-applyprofiles-profile/report.txt"
+          copy_sanitized_tsv_if_present \
+            "${mcs_profile_dir}/summary.tsv" \
+            "${data_dir}/mcs-applyprofiles-profile/summary.tsv"
+          if [ ! -f "${mcs_profile_dir}/report.txt" ] &&
+             [ -d "${mcs_profile_dir}/runs" ]; then
+            for log in "${mcs_profile_dir}"/runs/*.log; do
+              [ -f "$log" ] || continue
+              copy_sanitized_text_if_present \
+                "$log" \
+                "${data_dir}/mcs-applyprofiles-profile/$(basename "$log")"
+            done
+          fi
           {
             printf 'iccDEV developer report\n'
             printf '=======================\n\n'
@@ -1060,6 +1256,89 @@ jobs:
         with:
           name: iccdev-developer-report-${{ inputs.tool_build_type || 'Debug' }}
           path: ${{ env.BUILD_DIR }}/Testing/ctest-output/developer-report
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Package MCS failure evidence
+        id: package_mcs_failure_evidence
+        if: ${{ failure() && inputs.run_mcs_profile && steps.mcs_profile.outcome == 'failure' }}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          TRUSTED_SANITIZER="$GITHUB_WORKSPACE/trusted-base/.github/scripts/sanitize-sed.sh"
+          if [ ! -f "$TRUSTED_SANITIZER" ]; then
+            echo "[FAIL] trusted sanitizer helper is unavailable" >&2
+            exit 1
+          fi
+          # shellcheck disable=SC1090
+          source "$TRUSTED_SANITIZER"
+
+          report_dir="${BUILD_DIR}/Testing/ctest-output/mcs-applyprofiles-failure-report"
+          mcs_profile_dir="${BUILD_DIR}/Testing/ctest-output/mcs-applyprofiles-profile"
+          rm -rf "$report_dir"
+          mkdir -p "$report_dir"
+          {
+            printf 'MCS apply profiling failure evidence\n'
+            printf '===================================\n\n'
+            printf 'Only bounded, sanitized MCS text is included in this artifact.\n'
+          } > "${report_dir}/README.txt"
+
+          copy_sanitized_text_if_present() {
+            local src="$1"
+            local dst="$2"
+            if [ -f "$src" ]; then
+              while IFS= read -r line || [ -n "$line" ]; do
+                sanitize_line "$line"
+                echo ""
+              done < "$src" > "$dst"
+            fi
+          }
+
+          copy_sanitized_tsv_if_present() {
+            local src="$1"
+            local dst="$2"
+            local line
+            local field
+            if [ -f "$src" ]; then
+              while IFS= read -r line || [ -n "$line" ]; do
+                while [[ "$line" == *$'\t'* ]]; do
+                  field="${line%%$'\t'*}"
+                  sanitize_line "$field"
+                  printf '\t'
+                  line="${line#*$'\t'}"
+                done
+                sanitize_line "$line"
+                printf '\n'
+              done < "$src" > "$dst"
+            fi
+          }
+
+          copy_sanitized_text_if_present \
+            "${mcs_profile_dir}/report.txt" \
+            "${report_dir}/report.txt"
+          copy_sanitized_tsv_if_present \
+            "${mcs_profile_dir}/summary.tsv" \
+            "${report_dir}/summary.tsv"
+          if [ -d "${mcs_profile_dir}/runs" ]; then
+            for log in "${mcs_profile_dir}"/runs/*.log; do
+              [ -f "$log" ] || continue
+              copy_sanitized_text_if_present \
+                "$log" \
+                "${report_dir}/$(basename "$log")"
+            done
+          fi
+
+      - name: Upload MCS failure evidence
+        if: ${{ failure() && steps.package_mcs_failure_evidence.outcome == 'success' }}
+        # preflight: allow-untrusted-artifact reason=sanitized-mcs-failure-evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: iccdev-mcs-applyprofiles-failure-${{ inputs.tool_build_type || 'Debug' }}
+          path: ${{ env.BUILD_DIR }}/Testing/ctest-output/mcs-applyprofiles-failure-report
           if-no-files-found: error
           retention-days: 14
 

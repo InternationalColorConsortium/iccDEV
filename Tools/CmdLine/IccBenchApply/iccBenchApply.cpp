@@ -71,9 +71,11 @@
 
 #include <cerrno>
 #include <climits>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -83,6 +85,7 @@
 #include "IccCmm.h"
 #include "IccCmmThread.h"
 #include "IccDefs.h"
+#include "IccEnvVar.h"
 #include "IccProfLibVer.h"
 #include "IccProfile.h"
 #include "IccTagLut.h"
@@ -103,7 +106,8 @@ static void Usage()
 {
   printf("iccBenchApply built with IccProfLib version " ICCPROFLIBVER "\n\n");
   printf("Usage: iccBenchApply {options} interpolation"
-         " {profile_path rendering_intent {-PCC pcc_path}}...\n\n");
+         " {{-ENV:sig value} profile_path rendering_intent"
+         " {-PCC pcc_path}}...\n\n");
   printf("  interpolation      0 = Linear, 1 = Tetrahedral\n");
   // Deliberately describes the columns and points at iccApplyToLink for the
   // tens-column list rather than reprinting it.  Four tools already publish
@@ -124,6 +128,7 @@ static void Usage()
   printf("                     Run iccApplyToLink with no arguments for the"
          " full\n");
   printf("                     list of tens-column codes.\n\n");
+  printf("  -ENV:sig value     environment value for the next profile\n");
   printf("  -pixels N          pixels per buffer      (default 1048576)\n");
   printf("  -repeats N         timed repeats per case (default 7)\n");
   printf("  -perxform          per-xform breakdown, including PCS steps\n");
@@ -153,6 +158,25 @@ static bool ParseIntArg(const char *arg, int minValue, int maxValue, int &value)
   }
 
   value = (int)parsed;
+  return true;
+}
+
+static bool ParseFloatArg(const char *arg, icFloatNumber &value)
+{
+  char *end = NULL;
+  double parsed;
+
+  if (!arg || !*arg)
+    return false;
+
+  errno = 0;
+  parsed = strtod(arg, &end);
+  if (errno == ERANGE || end == arg || *end != '\0' || !std::isfinite(parsed) ||
+      parsed < -std::numeric_limits<icFloatNumber>::max() ||
+      parsed > std::numeric_limits<icFloatNumber>::max())
+    return false;
+
+  value = (icFloatNumber)parsed;
   return true;
 }
 
@@ -822,6 +846,34 @@ int main(int argc, const char *argv[])
   std::string sFirstProfile;
 
   while (nArg < argc) {
+    icCmmEnvSigMap envVars;
+    while (nArg < argc && !strnicmp(argv[nArg], "-ENV:", 5)) {
+      if (nArg + 1 >= argc) {
+        printf("%s has no environment value\n", argv[nArg]);
+        return 1;
+      }
+
+      const char *envSignature = argv[nArg] + 5;
+      if (strlen(envSignature) != 4) {
+        printf("Invalid environment signature '%s':"
+               " expected exactly four characters\n", envSignature);
+        return 1;
+      }
+
+      icFloatNumber value;
+      if (!ParseFloatArg(argv[nArg + 1], value)) {
+        printf("Invalid environment value '%s' for %s:"
+               " expected a finite number\n", argv[nArg + 1], argv[nArg]);
+        return 1;
+      }
+      envVars[icGetSigVal(envSignature)] = value;
+      nArg += 2;
+    }
+    if (nArg >= argc) {
+      printf("Environment variables must be followed by a profile\n");
+      return 1;
+    }
+
     const char *szProfile = argv[nArg];
 
     if (nArg + 1 >= argc) {
@@ -866,6 +918,15 @@ int main(int argc, const char *argv[])
         return 1;
       }
       nArg += 2;
+    }
+
+    if (!envVars.empty()) {
+      std::unique_ptr<CIccCmmEnvVarHint> envHint(
+        new CIccCmmEnvVarHint(envVars));
+      if (!Hint.AddHint(envHint.release())) {
+        printf("Unable to attach environment variables to '%s'\n", szProfile);
+        return 1;
+      }
     }
 
     icStatusCMM stat = theCmm.AddXform(szProfile,
