@@ -269,7 +269,8 @@ int main(int argc, const char* argv[])
     long parsed = strtol(argv[2], &end, 10);
     if (errno || !end || end == argv[2] || *end || parsed < 0 ||
         parsed > CIccThreadedCmm::GetMaxThreads()) {
-      printf("Invalid thread count '%s'\n", argv[2]);
+      printf("Invalid thread count '%s': expected 0..%d\n", argv[2],
+             CIccThreadedCmm::GetMaxThreads());
       return EXIT_FAILURE;
     }
     nThreads = (int)parsed;

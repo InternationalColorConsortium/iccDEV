@@ -188,6 +188,8 @@ run_expect_success valid-threads-cfg "$APPLY" -threads 4 -cfg "$CFG"
 run_expect_reject cfg-extra "$APPLY" -cfg "$CFG" ignored-extra
 run_expect_reject threads-negative "$APPLY" -threads -1 -cfg "$CFG"
 run_expect_reject threads-too-large "$APPLY" -threads 257 -cfg "$CFG"
+grep -Fq "expected 0..256" "$OUTDIR/threads-too-large.log" ||
+  fail "threads-too-large diagnostic omitted the supported range"
 run_expect_reject threads-not-a-number "$APPLY" -threads nope -cfg "$CFG"
 run_expect_reject threads-empty "$APPLY" -threads "" -cfg "$CFG"
 run_expect_reject threads-bare "$APPLY" -threads
