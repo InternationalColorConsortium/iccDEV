@@ -74,8 +74,8 @@ For EVERY `run:` step in the workflow, verify:
 - [ ] Push triggers, PR verification, reusable workflow calls, and manual
       dispatches test the same changed helper behavior where practical
 - [ ] Runner-reduction changes retain workflow-security gates for
-      `container_changed` paths; Docker image validation remains a local and
-      publishing-workflow responsibility
+      container-surface (`image_definition_changed`) paths; Docker image
+      validation remains a local and publishing-workflow responsibility
 - [ ] Branch-specific publish or promotion logic has matching branch triggers
       and documentation
 - [ ] Documented container commands work from a fresh checkout or clean

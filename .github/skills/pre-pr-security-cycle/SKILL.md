@@ -92,8 +92,9 @@ Choose the smallest dynamic check that proves the changed behavior:
 - Dockerfile checks must not be advisory-only when container files changed:
   run `hadolint` and Trivy config, then build, scan, or smoke the affected image
   when practical.
-- Confirm that `container_changed` selects workflow-security gates without
-  adding a Docker verification job or full PR matrix to the aggregate status.
+- Confirm that container-surface (`image_definition_changed`) changes select
+  workflow-security gates without adding a Docker verification job or full PR
+  matrix to the aggregate status.
 - For container changes, validate the same helper checks that the publishing
   workflow validates, including patch checkers, applicators, environment
   banners, and healthcheck semantics.
