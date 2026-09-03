@@ -71,11 +71,16 @@
 #include "IccCmmSearch.h"
 
 #include <cmath>
+#include <memory>
+#include <utility>
 
 
 CIccApplyCmmSearch::CIccApplyCmmSearch(CIccCmm* pBaseCmm) : CIccApplyCmm(pBaseCmm)
 {
   CIccCmmSearch* pCmm = (CIccCmmSearch*)pBaseCmm;
+
+  m_bReady = false;
+  m_pMidToDstApply = nullptr;
 
   m_nApply = pCmm->m_pcc.size();
   if (!m_nApply)
@@ -113,10 +118,50 @@ CIccApplyCmmSearch::CIccApplyCmmSearch(CIccCmm* pBaseCmm) : CIccApplyCmm(pBaseCm
   m_maxBounds = pCmm->m_maxBounds;
 
   m_bNeedPcsToLab = pCmm->m_bNeedPcsToLab;
+
+  icStatusCMM status = icCmmStatOk;
+  std::unique_ptr<CIccApplyCmm> mid_to_dst_apply(
+    pCmm->m_mid_to_dst->GetNewApplyCmm(status));
+  if (!mid_to_dst_apply || status != icCmmStatOk)
+    return;
+
+  std::vector<std::unique_ptr<CIccApplyCmm>> src_to_mid_apply;
+  src_to_mid_apply.reserve(pCmm->m_src_to_mid.size());
+  for (const auto& cmm : pCmm->m_src_to_mid) {
+    std::unique_ptr<CIccApplyCmm> apply(cmm->GetNewApplyCmm(status));
+    if (!apply || status != icCmmStatOk) {
+      return;
+    }
+    src_to_mid_apply.push_back(std::move(apply));
+  }
+
+  std::vector<std::unique_ptr<CIccApplyCmm>> dst_to_mid_apply;
+  dst_to_mid_apply.reserve(pCmm->m_dst_to_mid.size());
+  for (const auto& cmm : pCmm->m_dst_to_mid) {
+    std::unique_ptr<CIccApplyCmm> apply(cmm->GetNewApplyCmm(status));
+    if (!apply || status != icCmmStatOk) {
+      return;
+    }
+    dst_to_mid_apply.push_back(std::move(apply));
+  }
+
+  m_srcToMidApply.reserve(src_to_mid_apply.size());
+  m_dstToMidApply.reserve(dst_to_mid_apply.size());
+  m_pMidToDstApply = mid_to_dst_apply.release();
+  for (auto& apply : src_to_mid_apply)
+    m_srcToMidApply.push_back(apply.release());
+  for (auto& apply : dst_to_mid_apply)
+    m_dstToMidApply.push_back(apply.release());
+  m_bReady = true;
 }
 
 CIccApplyCmmSearch::~CIccApplyCmmSearch()
 {
+  delete m_pMidToDstApply;
+  for (CIccApplyCmm* apply : m_srcToMidApply)
+    delete apply;
+  for (CIccApplyCmm* apply : m_dstToMidApply)
+    delete apply;
 }
 
 static icFloatNumber sq(icFloatNumber x) { return x * x; }
@@ -133,7 +178,7 @@ icFloatNumber CIccApplyCmmSearch::costFunc(CIccSearchVec& point)
     // costFunc has no status channel, so report the point as infeasible instead:
     // the same sentinel the bounds barrier uses keeps the optimizer away from it
     // rather than letting it converge on a garbage minimum.
-    if (pCmm->m_dst_to_mid[i]->Apply(&m_pixel[0], &point.vec()[0]) != icCmmStatOk)
+    if (m_dstToMidApply[i]->Apply(&m_pixel[0], &point.vec()[0]) != icCmmStatOk)
       return overBoundsCost;
 
     if (m_bNeedPcsToLab) {
@@ -200,7 +245,7 @@ icStatusCMM CIccApplyCmmSearch::Apply(icFloatNumber* DstPixel, const icFloatNumb
       // Propagate the per-PCC forward transform status (#1860).  Swallowing it
       // left m_mid_data[i] holding whatever the previous pixel wrote, so the
       // search then optimised against a stale target and still reported success.
-      icStatusCMM statMid = pCmm->m_src_to_mid[i]->Apply(&m_mid_data[i][0], SrcPixel);
+      icStatusCMM statMid = m_srcToMidApply[i]->Apply(&m_mid_data[i][0], SrcPixel);
       if (statMid != icCmmStatOk)
         return statMid;
     }
@@ -208,7 +253,7 @@ icStatusCMM CIccApplyCmmSearch::Apply(icFloatNumber* DstPixel, const icFloatNumb
 
   // Same for the transform that seeds the search's starting point: if it fails
   // m_startPixel is stale and every subsequent simplex vertex derives from it.
-  icStatusCMM statStart = pCmm->m_mid_to_dst->Apply(&m_startPixel[0], &m_mid_data[0][0]);
+  icStatusCMM statStart = m_pMidToDstApply->Apply(&m_startPixel[0], &m_mid_data[0][0]);
   if (statStart != icCmmStatOk)
     return statStart;
 
@@ -374,7 +419,7 @@ icStatusCMM CIccCmmSearch::AttachPCC(IIccProfileConnectionConditions* pPCC, icFl
 
 #define checkCmmStatus(rv) if (rv != icCmmStatOk) return rv
 
-icStatusCMM CIccCmmSearch::Begin(bool /* bAllocNewApply */, bool /* bUsePcsConversion */)
+icStatusCMM CIccCmmSearch::Begin(bool bAllocNewApply, bool /* bUsePcsConversion */)
 {
   icStatusCMM rv;
 
@@ -390,8 +435,17 @@ icStatusCMM CIccCmmSearch::Begin(bool /* bAllocNewApply */, bool /* bUsePcsConve
   // the reference AddXform overload.  Guarding on m_pApply -- which the tail of
   // this function sets -- also stops that second pass leaking the CIccApplyCmm
   // the first one allocated and pushing a duplicate chain into m_dst_to_mid.
-  if (m_pApply)
+  if (m_bValid) {
+    if (bAllocNewApply && !m_pApply) {
+      m_pApply = GetNewApplyCmm(rv);
+      if (!m_pApply || rv != icCmmStatOk) {
+        delete m_pApply;
+        m_pApply = nullptr;
+        return rv;
+      }
+    }
     return icCmmStatOk;
+  }
 
   if (m_nAttached < 2)
     return icCmmStatBadXform;
@@ -553,11 +607,47 @@ icStatusCMM CIccCmmSearch::Begin(bool /* bAllocNewApply */, bool /* bUsePcsConve
   else
     m_bNeedPcsToLab = false;
 
-  m_pApply = new CIccApplyCmmSearch(this);
-
   m_bValid = true;
 
+  if (bAllocNewApply) {
+    m_pApply = GetNewApplyCmm(rv);
+    if (!m_pApply || rv != icCmmStatOk) {
+      delete m_pApply;
+      m_pApply = nullptr;
+      return rv;
+    }
+  }
+
   return rv;
+}
+
+CIccApplyCmm* CIccCmmSearch::GetNewApplyCmm(icStatusCMM& status)
+{
+  if (!m_bValid) {
+    status = icCmmStatBad;
+    return nullptr;
+  }
+
+  CIccApplyCmmSearch* apply = nullptr;
+  try {
+    apply = new (std::nothrow) CIccApplyCmmSearch(this);
+  }
+  catch (const std::bad_alloc&) {
+    status = icCmmStatAllocErr;
+    return nullptr;
+  }
+  if (!apply) {
+    status = icCmmStatAllocErr;
+    return nullptr;
+  }
+  if (!apply->IsReady()) {
+    delete apply;
+    status = icCmmStatAllocErr;
+    return nullptr;
+  }
+
+  status = icCmmStatOk;
+  return apply;
 }
 
 //Call to Detach and remove all pending IO objects attached to the profiles used by the CMM. Should be called only after Begin()
