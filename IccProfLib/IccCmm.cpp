@@ -10182,6 +10182,8 @@ icStatusCMM CIccCmm::Begin(bool bAllocApplyCmm/*=true*/, bool bUsePCSConversions
 
   if (bAllocApplyCmm) {
     m_pApply = GetNewApplyCmm(rv);
+    if (!m_pApply && rv == icCmmStatOk)
+      rv = icCmmStatAllocErr;
   }
   else
     rv = icCmmStatOk;
@@ -12369,6 +12371,8 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
     rv = icCmmStatOk;
 
     m_pApply = GetNewApplyCmm(rv);
+    if (!m_pApply && rv == icCmmStatOk)
+      rv = icCmmStatAllocErr;
   }
   else
     rv = icCmmStatOk;

@@ -6,6 +6,7 @@
 
 #include "IccConnect.h"
 #include "IccCmmThread.h"
+#include "IccCmm.h"
 #include "IccUtil.h"
 
 #include <cmath>
@@ -30,6 +31,48 @@ static std::vector<icFloatNumber> MakeZeroVector(size_t n)
   for (size_t i = 0; i < n; ++i)
     v.push_back(0.0f);
   return v;
+}
+
+class CIccNullApplyCmm : public CIccCmm
+{
+public:
+  CIccApplyCmm* GetNewApplyCmm(icStatusCMM&) override
+  {
+    return nullptr;
+  }
+};
+
+class CIccNullApplyNamedColorCmm : public CIccNamedColorCmm
+{
+public:
+  CIccApplyCmm* GetNewApplyCmm(icStatusCMM&) override
+  {
+    return nullptr;
+  }
+};
+
+static bool CheckNullApplyFailure(const char* profilePath)
+{
+  CIccNullApplyCmm cmm;
+  CIccNullApplyNamedColorCmm namedCmm;
+  CIccCmm* cmms[] = { &cmm, &namedCmm };
+  const char* names[] = { "standard", "named-color" };
+
+  for (size_t i = 0; i < sizeof(cmms) / sizeof(cmms[0]); ++i) {
+    if (cmms[i]->AddXform(profilePath, icRelativeColorimetric) != icCmmStatOk) {
+      std::fprintf(stderr, "failed to add %s allocation-failure test profile\n",
+                   names[i]);
+      return false;
+    }
+    if (cmms[i]->Begin() != icCmmStatAllocErr || cmms[i]->Valid() ||
+        cmms[i]->GetApply()) {
+      std::fprintf(stderr,
+                   "%s CMM accepted a null apply object as valid\n", names[i]);
+      return false;
+    }
+  }
+
+  return true;
 }
 
 int main(int argc, char** argv)
@@ -68,6 +111,8 @@ int main(int argc, char** argv)
     std::fprintf(stderr, "threaded CMM did not use CIccThreadedCmm\n");
     return 1;
   }
+  if (!CheckNullApplyFailure(argv[1]))
+    return 1;
 
   json oversizedThreadsJson;
   oversizedThreadsJson["threads"] = CIccThreadedCmm::GetMaxThreads() + 1;
