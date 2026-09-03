@@ -419,6 +419,13 @@ jobs:
             warning_policy=fail
           }
 
+          apply_docs_only_defaults() {
+            include_windows=false
+            ctest_recent_limit=1
+            ctest_mode=fast
+            warning_policy=fail
+          }
+
           resolve_dispatch_pr() {
             local number="$1"
             if [[ ! "$number" =~ ^[1-9][0-9]*$ ]]; then
@@ -582,11 +589,10 @@ jobs:
             docs_only=true
           fi
 
-          # Documentation-only diffs use the constrained fast-lane settings.
-          # This automatic classification does not accept a user-supplied
-          # fast-lane dispatch, which remains maintainer-restricted above.
+          # Documentation-only diffs use constrained test defaults without
+          # changing their reported scope or enabling a fast-lane dispatch.
           if [[ "$docs_only" == "true" && ( "$ci_scope" == "auto" || "$ci_scope" == "docs" ) ]]; then
-            apply_fast_lane_defaults
+            apply_docs_only_defaults
           fi
 
           # Compiler and CTest jobs run only for native source edits. CMake,
