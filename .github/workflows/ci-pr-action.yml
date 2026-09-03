@@ -630,7 +630,7 @@ jobs:
             full|source|fast-lane)
               run_full=true
               ;;
-            governance|skip)
+            governance|docs|skip)
               run_full=false
               ;;
             auto)

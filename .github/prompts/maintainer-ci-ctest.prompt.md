@@ -37,8 +37,8 @@ maintainers unless an iccDEV maintainer explicitly approves the change.
 Choose the smallest gate that proves the behavior:
 
 - `ci-pr-action` full: explicit long-cycle Unix GCC/Clang Release and Debug,
-  exact GCC 15.2 strict Release LTO, GCC 15.2 ASAN+UBSAN tool tests, Windows,
-  validation. Its tool-test caller excludes the `pr-extended`
+  exact GCC 15.2 strict Release LTO, GCC 15.2 ASAN+UBSAN tool tests, and
+  Windows validation. Its tool-test caller excludes the `pr-extended`
   CTest label; labelled tests remain enabled in `ci-regression-checks`.
 - `ci-pr-action` fast lane: exact GCC 15.2 strict Release LTO plus GCC 15.2
   ASAN+UBSAN Release tool validation and the latest CTest by default, with
