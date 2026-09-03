@@ -244,6 +244,7 @@ int main()
   checkPlanarRoundTrip(1u);
   checkPlanarRoundTrip(2u);
   checkPlanarRoundTrip(3u);
+  checkPlanarRoundTrip(5u);
   checkWideChannelCount();
 
   cleanup();

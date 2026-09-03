@@ -186,11 +186,13 @@ void Usage()
   printf("iccApplyProfiles built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
 
   printf("Usage: iccApplyProfiles {-threads N} -cfg config_file\n\n");
-  printf("  Optional: -threads [N] (use N worker threads; 0=hardware concurrency, 1=single-threaded)\n");
+  printf("  Optional: -threads [N] (use 0..%d worker threads; 0=hardware concurrency, 1=single-threaded)\n",
+         CIccThreadedCmm::GetMaxThreads());
   printf("  Optional: -cfg config_file (use JSON formatted configuration file to define apply options)\n\n");
 
   printf("Alt-Usage: iccApplyProfiles {-threads N} {-exportcfg config_file} src_tiff_file dst_tiff_file dst_sample_encoding dst_compression dst_planar dst_embed_icc interpolation {{-ENV:sig value} profile_file_path rendering_intent {-PCC connection_conditions_path}}\n\n");
-  printf("  Optional: -threads [N] (use N worker threads; 0=hardware concurrency, 1=single-threaded)\n");
+  printf("  Optional: -threads [N] (use 0..%d worker threads; 0=hardware concurrency, 1=single-threaded)\n",
+         CIccThreadedCmm::GetMaxThreads());
   printf("  Optional: -exportcfg config_file (create config_file based on rest of arguments)\n\n");
   printf("  For dst_sample_encoding:\n");
   printf("    0 - Same as src\n");
@@ -288,7 +290,7 @@ int main(int argc, const char** argv)
     char *end = nullptr;
     errno = 0;
     long parsed = strtol(argv[2], &end, 10);
-    if (errno || !end || end == argv[2] || *end || parsed < 0 ||
+    if (errno || end == argv[2] || *end || parsed < 0 ||
         parsed > CIccThreadedCmm::GetMaxThreads()) {
       printf("Invalid thread count '%s': expected 0..%d\n", argv[2],
              CIccThreadedCmm::GetMaxThreads());

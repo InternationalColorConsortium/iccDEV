@@ -137,7 +137,9 @@ int main(int argc, char** argv)
   // CIccThreadedCmm documents that separate apply objects may be used by
   // concurrent callers.  Exercise that ownership boundary: each outer thread
   // has its own apply object, worker pool, and destination storage while both
-  // share only the immutable, Begin()-ed base CMM and source pixels.
+  // share only the immutable, Begin()-ed base CMM and source pixels. This
+  // validates results on every build; the former m_bValid data race is
+  // discriminated only when this test runs under ThreadSanitizer.
   icStatusCMM applyStatusA = icCmmStatBad;
   icStatusCMM applyStatusB = icCmmStatBad;
   std::unique_ptr<CIccApplyCmm> applyA(
