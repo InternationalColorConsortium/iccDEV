@@ -148,11 +148,17 @@ require_file "$CFG"
 run_expect_success valid-cfg "$APPLY" -cfg "$CFG"
 run_expect_success valid-legacy "$APPLY" "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
 
-# Repeat the tracked 16-row input until the batch is strictly larger than the
+# Repeat the tracked input until the batch is strictly larger than the
 # 1,024-pixel bulk threshold. This makes all eight requested workers useful and
-# keeps the fixture generated from an existing cross-platform input.
+# keeps the fixture generated from an existing cross-platform input even if its
+# row count changes.
 sed -n '1,2p' "$DATA" > "$THREADED_DATA"
-for ((i = 0; i < 65; ++i)); do
+source_rows="$(sed -n '3,$p' "$DATA" | awk 'NF { count++ } END { print count + 0 }')"
+if (( source_rows <= 0 )); then
+  fail "tracked input has no data rows"
+fi
+repeat_count=$((1024 / source_rows + 1))
+for ((i = 0; i < repeat_count; ++i)); do
   sed -n '3,$p' "$DATA" >> "$THREADED_DATA"
 done
 threaded_rows="$(sed -n '3,$p' "$THREADED_DATA" | awk 'NF { count++ } END { print count + 0 }')"
@@ -188,6 +194,8 @@ run_expect_reject threads-missing-count "$APPLY" -threads
 run_expect_reject threads-missing-command "$APPLY" -threads 8
 run_expect_reject threads-debugcalc \
   "$APPLY" -threads 8 -debugcalc "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
+grep -Fqx -- "-debugcalc requires -threads 1" "$OUTDIR/threads-debugcalc.log" ||
+  fail "threads-debugcalc did not enforce the single-thread diagnostic"
 
 # Already rejected on master; pinned so the surface cannot regress quietly.
 run_expect_reject init-missing-value "$APPLY" "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT
