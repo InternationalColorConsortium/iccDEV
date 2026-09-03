@@ -73,8 +73,9 @@ For EVERY `run:` step in the workflow, verify:
 - [ ] Container changes have runtime smoke and image/config scan evidence
 - [ ] Push triggers, PR verification, reusable workflow calls, and manual
       dispatches test the same changed helper behavior where practical
-- [ ] Runner-reduction changes retain a read-only Docker verification lane for
-      `container_changed` paths, and aggregate it into the PR status when run
+- [ ] Runner-reduction changes retain workflow-security gates and full-matrix
+      selection for `container_changed` paths; Docker image validation remains
+      a local and publishing-workflow responsibility
 - [ ] Branch-specific publish or promotion logic has matching branch triggers
       and documentation
 - [ ] Documented container commands work from a fresh checkout or clean

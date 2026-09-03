@@ -152,23 +152,11 @@ require removed lane names or initialization jobs as branch contexts. Require
 WASM parity separately on `master`, where that workflow runs outside the
 orchestrator. See `docs/label-system.md` for the current context list.
 
-When `container_changed` is true, `ci-pr-action` selects the read-only Docker
-PR verification lane and `PR Summary` requires its result. The lane is skipped
-for documentation, governance, and label-only changes to conserve runners.
-Dockerfile, Docker dependency, packaged MCP, and Docker-workflow changes build
-the exact PR image. Source, CMake, and test-only changes targeting `master`
-instead pull the canonical image dynamically by the detected base SHA, verify
-its OCI revision label, and build the mounted PR tree with the strict
-sanitizer/CTest contract. No Docker image SHA is embedded in workflow source.
-Other allowed base branches keep the full PR-image build because canonical
-immutable images are published only from `master`. Do not treat a skipped lane
-as container verification; rerun it after any Dockerfile, container image, or
-container workflow update.
-
-The Docker PR lane builds the exact checked-out PR Dockerfile without a workflow
-cache. The resulting image is local to the job: it must bind the checked-out PR
-tree read-only, copy it to container-local scratch space, and build and run the
-fast CTest envelope there. Only `ci-docker` publishes images.
+When `container_changed` is true, `ci-pr-action` selects its workflow-security
+gates and full PR matrix. It does not run a Docker Clang verification job or
+aggregate a `docker-ci` result. Dockerfile, Docker dependency, packaged MCP,
+and Docker-workflow changes require the local canonical-image build and smoke
+in `docs/regression-container.md`; only `ci-docker` publishes images.
 
 Local review should include YAML parsing, `actionlint`, `yamllint`, direct
 `${{ }}` interpolation scans for `run:` blocks, Dockerfile base/remote-exec
