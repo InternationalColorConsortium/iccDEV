@@ -148,9 +148,11 @@ status label automation from starting another full CI run. Use labels for
 classification and review routing, not as CI controls.
 
 Pull requests and manual dispatches default to `ci_scope=auto`. In auto scope,
-the full matrix runs only for source, build, test, or container changes;
+the full matrix runs only for source, build, or test changes;
 documentation-only changes use the constrained fast-lane settings, and
 workflow-only changes receive the preflight and workflow-security gates.
+Container-only changes use workflow-security gates and local container
+validation.
 Dispatch `ci_scope=full` explicitly for a long-cycle matrix. For the shortest
 same-repository PR lane, provide an open `pr_number`, choose
 `ci_scope=fast-lane`, and set `ctest_recent_limit`, `include_windows`,
@@ -168,10 +170,9 @@ centralizes the current reusable Unix and Windows gates plus focused sanitizer,
 option, version-header, and clean-rebuild lanes.
 
 Container-surface changes, including the unified Dockerfile, packaged MCP
-source, or `ci-docker-pr.yml`, still select the workflow-security gates and
-the full PR matrix. The brittle Docker Clang verification job is not part of
-`ci-pr-action`; validate a container change locally before the canonical
-`ci-docker` publishing workflow.
+source, or `ci-docker-pr.yml`, select workflow-security gates only. The brittle
+Docker Clang verification job is not part of `ci-pr-action`; validate a
+container change locally before the canonical `ci-docker` publishing workflow.
 
 ### Required Check Policy
 
@@ -201,8 +202,8 @@ contexts before a direct maintainer push. It requires signed commits, linear
 fast-forward history, and deletion protection; maintainers dispatch
 `ci-pr-action` and `ci-docker` immediately after pushing the testing branch.
 Pull requests targeting `ci-qa-pr-docker-testing` also run `ci-pr-action`.
-Container-surface changes select its workflow-security gates and full matrix;
-they do not create a job-local Docker image.
+Container-surface changes select its workflow-security gates only; they do not
+create a job-local Docker image.
 
 ### CodeQL Ready
 

@@ -44,10 +44,11 @@ Choose the smallest gate that proves the behavior:
   ASAN+UBSAN Release tool validation and the latest CTest by default, with
   Windows opt-in. It does not run Docker verification for a container-surface
   change.
-- `ci-pr-action` auto: default path-scoped selection. Source, build, test, and
-  container changes select the full matrix; documentation-only changes use the
-  constrained fast-lane settings, while workflow-only changes use preflight and
-  workflow-security gates.
+- `ci-pr-action` auto: default path-scoped selection. Source, build, and test
+  changes select the full matrix; documentation-only changes use the constrained
+  fast-lane settings, while workflow-only changes use preflight and
+  workflow-security gates. Container-only changes use workflow-security gates
+  and local container validation.
 - CTest suite: cross-platform tool/profile behavior that belongs in the normal
   local and CI test surface.
 - Focused `.github/scripts/*.sh` regression: reusable Linux regression logic or

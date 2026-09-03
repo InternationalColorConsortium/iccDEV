@@ -85,9 +85,10 @@ when practical.
   the PR runtime budget; `ci-regression-checks` continues to run the labelled
   tests.
 - `ci_scope=auto` is the default. It selects the full matrix for source, build,
-  test, and container changes; documentation-only changes use the constrained
-  fast-lane settings, while workflow-only changes run the preflight and
-  workflow-security gates.
+  and test changes; documentation-only changes use the constrained fast-lane
+  settings, while workflow-only changes run the preflight and workflow-security
+  gates. Container-only changes use workflow-security gates and local container
+  validation.
 - Use `ci_scope=fast-lane` for the exact GCC 15.2 Release LTO and ASAN+UBSAN
   Release tool lanes. Fast lane defaults to the latest CTest with Windows
   disabled; it does not run a Docker verification job.

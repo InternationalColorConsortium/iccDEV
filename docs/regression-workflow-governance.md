@@ -152,9 +152,9 @@ require removed lane names or initialization jobs as branch contexts. Require
 WASM parity separately on `master`, where that workflow runs outside the
 orchestrator. See `docs/label-system.md` for the current context list.
 
-When `container_changed` is true, `ci-pr-action` selects its workflow-security
-gates and full PR matrix. It does not run a Docker Clang verification job or
-aggregate a `docker-ci` result. Dockerfile, Docker dependency, packaged MCP,
+When `container_changed` is true, `ci-pr-action` selects workflow-security
+gates only. It does not run a Docker Clang verification job, a full PR matrix,
+or aggregate a `docker-ci` result. Dockerfile, Docker dependency, packaged MCP,
 and Docker-workflow changes require the local canonical-image build and smoke
 in `docs/regression-container.md`; only `ci-docker` publishes images.
 

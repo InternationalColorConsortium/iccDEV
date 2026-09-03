@@ -634,7 +634,7 @@ jobs:
               run_full=false
               ;;
             auto)
-              if [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$testing_changed" == "true" || "$container_changed" == "true" ]]; then
+              if [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$testing_changed" == "true" ]]; then
                 run_full=true
               fi
               ;;
