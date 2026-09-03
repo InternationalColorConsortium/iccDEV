@@ -20,11 +20,10 @@
     This is a SEPARATE reachable entry point, not a duplicate of the XML test:
     CIccMpeJsonCalculator is registered for icSigCalculatorElemType in
     IccMpeJsonFactory.cpp, so iccFromJson on a hand-authored document reaches it
-    without any XML involved.  It is also reachable through MORE spellings than
-    the XML copy, because its entry condition is the correct
-    "select[0] == '('" where the XML one has a typo ("select[1]"): both
-    "in{Lab[XXXX" and "in{Lab(XXXX" arrive here, and only the first arrives on
-    the XML side.  Both are asserted below for exactly that reason.
+    without any XML involved.  Both "in{Lab[XXXX" and "in{Lab(XXXX" arrive
+    here, and both are asserted below.  (The XML copy once admitted only the
+    first, through a select[1] typo in its entry test; that was corrected as the
+    follow-up deferred from #2365, and the XML helper now pins the same two.)
 
     Registered separately from the XML helper rather than folded into it so that
     neither can mask the other: this one is skipped where IccJSON is not built,
@@ -41,6 +40,7 @@
 #include "IccProfileJson.h"
 #include "IccTagJsonFactory.h"
 #include "IccMpeJsonFactory.h"
+#include "IccTagMPE.h"
 
 #include <cstdio>
 #include <filesystem>
@@ -110,9 +110,8 @@ static bool writeFile(const std::string& path, const std::string& text)
 
 // Returns whether the document parsed.  A sanitizer abort inside here IS the
 // defect on an instrumented lane: the caller never gets its result back.
-static bool loadJson(const char* file, std::string& parseStr)
+static bool loadJson(CIccProfileJson& profile, const char* file, std::string& parseStr)
 {
-  CIccProfileJson profile;
   return profile.LoadJson(file, &parseStr);
 }
 
@@ -129,8 +128,9 @@ static int expectRefused(const std::string& mainFunction, const char* file, cons
   if (!writeFile(file, profileJson(mainFunction)))
     return check(false, label);
 
+  CIccProfileJson profile;
   std::string parseStr;
-  bool loaded = loadJson(file, parseStr);
+  bool loaded = loadJson(profile, file, parseStr);
   bool named = parseStr.find(needle) != std::string::npos;
 
   return check(!loaded && named, label);
@@ -141,8 +141,53 @@ static int expectParsed(const std::string& mainFunction, const char* file, const
   if (!writeFile(file, profileJson(mainFunction)))
     return check(false, label);
 
+  CIccProfileJson profile;
   std::string parseStr;
-  return check(loadJson(file, parseStr), label);
+  return check(loadJson(profile, file, parseStr), label);
+}
+
+// The flattened function, as Describe() prints it.  The XML helper's header
+// calls a bare "it loaded" assertion worthless for this defect, and it is worth
+// exactly as little here: the claim these two files jointly make is that the two
+// parsers agree on WHICH CHANNEL a parenthesised index selects, and only the
+// flattened function says that.  Without this the JSON side could regain the
+// same slip -- select[1] for select[0] -- and stay green while reading channel 4.
+static std::string flattenedFunction(const char* file)
+{
+  CIccProfileJson profile;
+  std::string parseStr;
+  if (!loadJson(profile, file, parseStr))
+    return "<did not load: " + parseStr.substr(0, 120) + ">";
+
+  CIccTagMultiProcessElement* mpe =
+      dynamic_cast<CIccTagMultiProcessElement*>(profile.FindTag(icSigAToB1Tag));
+  if (!mpe || mpe->NumElements() < 1)
+    return "<no A2B1 multiProcessElement>";
+
+  std::string text;
+  mpe->GetElement(0)->Describe(text, 100);
+  const std::string begin = "BEGIN_CALC_FUNCTION\n";
+  size_t b = text.find(begin);
+  size_t e = text.find("\nEND_CALC_FUNCTION", b);
+  if (b == std::string::npos || e == std::string::npos)
+    return "<no BEGIN_CALC_FUNCTION marker in Describe() output>";
+  b += begin.size();
+  return text.substr(b, e - b);
+}
+
+static int expectFlatten(const std::string& mainFunction, const char* file,
+                         const char* expected, const char* label)
+{
+  if (!writeFile(file, profileJson(mainFunction)))
+    return check(false, label);
+
+  std::string flat = flattenedFunction(file);
+  const bool ok = flat.find(expected) != std::string::npos;
+  if (!ok)
+    std::fprintf(stderr,
+                 "calc-channel-ref-unterminated-index-json:       got '%s'  expected to contain '%s'\n",
+                 flat.c_str(), expected);
+  return check(ok, label);
 }
 
 int main(int argc, char* argv[])
@@ -185,11 +230,11 @@ int main(int argc, char* argv[])
                             "json-unterminated-heap.json",
                             "selector past the SSO buffer (heap overflow) is refused");
 
-  // The '(' spelling.  This one reaches the block here but NOT on the XML side,
-  // where select[1] == '(' keeps it out -- so it is only covered by this file.
+  // The '(' spelling.  Reaches the block here, and -- since the select[1] typo
+  // was corrected -- on the XML side too; each helper pins its own parser.
   failures += expectRefused("{\\nin{Lab(" + filler(14) + "\\nout{L}\\n}\\n",
                             "json-unterminated-paren.json",
-                            "the '(' spelling, which the XML typo blocks, is refused here");
+                            "the '(' spelling of an unterminated index is refused here too");
 
   failures += expectRefused("{\\nin{C}\\nout{a[" + filler(14) + "\\n}\\n",
                             "json-unterminated-out.json",
@@ -218,12 +263,21 @@ int main(int argc, char* argv[])
   // "in{Lab(1,2)}" would NOT be a control: the size is only read from a ",size"
   // that FOLLOWS the closing bracket, so the "2" inside the parentheses is
   // discarded, the operator flattens to in(5,1), and the function then fails on
-  // stack balance rather than on anything this fix touches.  That is the same
-  // deferred defect as the select[1] typo -- an index quietly narrowed instead
-  // of refused -- and pinning it here would assert today's wrong behaviour.
-  failures += expectParsed("{\\nin{Lab(1)}\\nout{L}\\n}\\n",
-                           "json-wellformed-paren.json",
-                           "the well-formed '(' spelling still parses");
+  // stack balance rather than on anything this fix touches.  That is a deferred
+  // defect of the same shape the select[1] typo had -- an index quietly narrowed
+  // instead of refused -- and pinning it here would assert today's wrong behaviour.
+  // Not expectParsed: this is the assertion the XML helper's parity claim rests
+  // on, so it names the channel.  "Lab" is at offset 4, so index 1 is channel 5 --
+  // the same in[5] the XML helper requires of both of its spellings.
+  failures += expectFlatten("{\\nin{Lab(1)}\\nout{L}\\n}\\n",
+                            "json-wellformed-paren.json",
+                            "in[5]",
+                            "in{Lab(1)} selects channel 5 here, as it now does in XML");
+
+  failures += expectFlatten("{\\nin{Lab[1]}\\nout{L}\\n}\\n",
+                            "json-wellformed-bracket.json",
+                            "in[5]",
+                            "in{Lab[1]} selects channel 5 here too");
 
   return failures ? 1 : 0;
 }

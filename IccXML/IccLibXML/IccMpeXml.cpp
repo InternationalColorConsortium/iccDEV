@@ -3202,7 +3202,29 @@ bool CIccMpeXmlCalculator::Flatten(std::string &flatStr, std::string macroName, 
         int offset = 0;
         int size = 1;
 
-        if (select[0] == '[' || select[1] == '(') {
+        // select[1] was a typo for select[0] -- since RefIccMAX 2.1.10, 4f5b3d38.
+        // refroot stops at '(' exactly as at '[', so "in{Lab(1)}" arrived here
+        // with select = "(1)", failed BOTH halves of the test, and fell through
+        // with offset 0: it flattened to in(4,1) where "in{Lab[1]}" flattens to
+        // in(5,1) -- Describe() renders those in[4] and in[5] -- and the profile
+        // applied channel 4.  The JSON twin (CIccMpeJsonCalculator::Flatten)
+        // tests select[0] and has always produced in(5,1) for the same document,
+        // and tget/tput/tsav accept "(n)" through CIccFuncTokenizer::GetIndex,
+        // so the parenthesised index was a recognised spelling everywhere except
+        // this one line.  Deferred from #2365 (#2323) because it changes what the
+        // parser accepts.
+        //
+        // It changes five input families, not one, and the CTest pins each --
+        // "in{Lab(1)}" 4 -> 5, an unterminated "(XXXX" from silently accepted to
+        // refused by the guard below, "in{Lab(1),2}" from refused to in(5,2), and
+        // the two ",(" spellings (a selector whose FIRST character is a comma,
+        // which is what a second-character test used to admit) out of this block
+        // altogether: "in{C,(3)}" was accepted as in(0,1) with its index
+        // discarded and is now refused downstream, and an unterminated ",(XXXX"
+        // is still refused but no longer by this function.  No tracked XML or
+        // JSON uses any parenthesised in{}/out{} index, so no generated profile
+        // moves; the corpus's "(n)" spellings are all tget/tput.
+        if (select[0] == '[' || select[0] == '(') {
           const char *ptr;
           offset = atoi(select.c_str() + 1);
           for (ptr = select.c_str() + 1; *ptr && *ptr != ')' && *ptr != ']'; ptr++);
