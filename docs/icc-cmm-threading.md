@@ -109,6 +109,10 @@ iccApplyProfiles -threads N -cfg config.json
 
 The flag is parsed before `-cfg`, so it must come first.
 
+`iccApplySearch` accepts the same leading option for inverse-search batches;
+explicit values are limited to `CIccThreadedCmm::GetMaxThreads()`, and
+`-debugcalc` requires `-threads 1`.
+
 ## TIFF Performance Benchmark
 
 Use the cross-platform benchmark helper to compare `-threads 1`, `2`, and `0`
@@ -142,9 +146,9 @@ undefined.
 ## Use From IccConnect
 
 When a CMM is built through [`CIccConnectCmm`](icc-connect.md), pass
-`nThreads` into `CreateStandard` directly — the factory installs the
-wrapper internally and `CIccConnectCmm` keeps single ownership of the
-whole stack:
+`nThreads` into `CreateStandard` or the three-argument `CreateSearch`; the
+factory installs the wrapper internally and `CIccConnectCmm` keeps single
+ownership of the whole stack:
 
 ```cpp
 std::string sError;
@@ -164,14 +168,13 @@ delete conn;                                 // tears down wrapper + underlying 
 
 `conn->IsThreaded()` reports whether the wrapper was installed;
 `conn->GetThreadedCmm()` returns the wrapper directly when needed. The
-type-specific accessors `GetNamedCmm()` and `GetSearchCmm()` return null
-once the threaded wrapper is in place — striped apply only fits the
-standard pixel-pipeline use case.
+`GetNamedCmm()` accessor returns null through a threaded wrapper;
+`GetSearchCmm()` unwraps a threaded search CMM.
 
 ## See Also
 
 - [IccConnect library](icc-connect.md) — factory that constructs a
   `Begin()`-ed CMM from JSON config, with an `nThreads` parameter on
-  `CreateStandard` for parallel apply.
+  `CreateStandard` and `CreateSearch` for parallel apply.
 - [CLI tool reference](tools-cli-reference.md) — shared option tables for
   the `iccApply*` tools.
