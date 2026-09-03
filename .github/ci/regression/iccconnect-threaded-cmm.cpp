@@ -9,9 +9,13 @@
 #include "IccUtil.h"
 
 #include <cmath>
+#include <condition_variable>
 #include <cstdio>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 static bool NearlyEqual(icFloatNumber a, icFloatNumber b)
@@ -126,6 +130,71 @@ int main(int argc, char** argv)
       std::fprintf(stderr,
                    "threaded mismatch at %zu: scalar=%g threaded=%g\n",
                    i, scalarDst[i], threadedDst[i]);
+      return 1;
+    }
+  }
+
+  // CIccThreadedCmm documents that separate apply objects may be used by
+  // concurrent callers.  Exercise that ownership boundary: each outer thread
+  // has its own apply object, worker pool, and destination storage while both
+  // share only the immutable, Begin()-ed base CMM and source pixels.
+  icStatusCMM applyStatusA = icCmmStatBad;
+  icStatusCMM applyStatusB = icCmmStatBad;
+  std::unique_ptr<CIccApplyCmm> applyA(
+    pThreadedCmm->GetNewApplyCmm(applyStatusA));
+  std::unique_ptr<CIccApplyCmm> applyB(
+    pThreadedCmm->GetNewApplyCmm(applyStatusB));
+  if (!applyA || !applyB || applyStatusA != icCmmStatOk ||
+      applyStatusB != icCmmStatOk) {
+    std::fprintf(stderr, "failed to create concurrent threaded apply objects\n");
+    return 1;
+  }
+
+  std::vector<icFloatNumber> concurrentDstA =
+    MakeZeroVector(nPixels * nDstSamples);
+  std::vector<icFloatNumber> concurrentDstB =
+    MakeZeroVector(nPixels * nDstSamples);
+  std::mutex startMutex;
+  std::condition_variable startCondition;
+  int ready = 0;
+  bool start = false;
+  icStatusCMM concurrentStatusA = icCmmStatOk;
+  icStatusCMM concurrentStatusB = icCmmStatOk;
+  auto applyConcurrent = [&](CIccApplyCmm* apply,
+                             std::vector<icFloatNumber>& dst,
+                             icStatusCMM& status) {
+    {
+      std::unique_lock<std::mutex> lock(startMutex);
+      ready++;
+      startCondition.notify_all();
+      startCondition.wait(lock, [&]() { return start; });
+    }
+    for (int pass = 0; pass < 8 && status == icCmmStatOk; ++pass)
+      status = apply->Apply(dst.data(), src.data(), nPixels);
+  };
+
+  std::thread threadA(applyConcurrent, applyA.get(),
+                      std::ref(concurrentDstA), std::ref(concurrentStatusA));
+  std::thread threadB(applyConcurrent, applyB.get(),
+                      std::ref(concurrentDstB), std::ref(concurrentStatusB));
+  {
+    std::unique_lock<std::mutex> lock(startMutex);
+    startCondition.wait(lock, [&]() { return ready == 2; });
+    start = true;
+  }
+  startCondition.notify_all();
+  threadA.join();
+  threadB.join();
+
+  if (concurrentStatusA != icCmmStatOk || concurrentStatusB != icCmmStatOk) {
+    std::fprintf(stderr, "concurrent threaded apply failed: %d, %d\n",
+                 (int)concurrentStatusA, (int)concurrentStatusB);
+    return 1;
+  }
+  for (size_t i = 0; i < scalarDst.size(); ++i) {
+    if (!NearlyEqual(scalarDst[i], concurrentDstA[i]) ||
+        !NearlyEqual(scalarDst[i], concurrentDstB[i])) {
+      std::fprintf(stderr, "concurrent threaded mismatch at %zu\n", i);
       return 1;
     }
   }

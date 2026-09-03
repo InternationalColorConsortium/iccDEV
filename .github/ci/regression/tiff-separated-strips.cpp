@@ -92,7 +92,10 @@ bool setCommonFields(TIFF *tif, uint32_t width, uint32_t height,
 // 81 bands matches the 380-780 nm image used by the ICC ICS packages.
 const unsigned int kBands = 81;
 const uint32_t kWidth = 4;
-const uint32_t kHeight = 4;
+// Keep the height indivisible by the multi-row strip cases so the last strip is
+// shorter.  TIFF permits that layout; CTiffImg used to reject it because its
+// per-sample strip count used floor division.
+const uint32_t kHeight = 5;
 
 bool writePlanar(uint32_t rowsPerStrip)
 {
@@ -106,7 +109,9 @@ bool writePlanar(uint32_t rowsPerStrip)
   std::vector<unsigned char> strip(kWidth * rowsPerStrip);
   for (unsigned int sample = 0; ok && sample < kBands; ++sample) {
     for (uint32_t row = 0; ok && row < kHeight; row += rowsPerStrip) {
-      for (uint32_t stripRow = 0; stripRow < rowsPerStrip; ++stripRow)
+      const uint32_t rowCount =
+        rowsPerStrip < kHeight - row ? rowsPerStrip : kHeight - row;
+      for (uint32_t stripRow = 0; stripRow < rowCount; ++stripRow)
         for (uint32_t column = 0; column < kWidth; ++column)
           strip[stripRow * kWidth + column] =
               sampleValue(sample, row + stripRow, column);
@@ -114,7 +119,7 @@ bool writePlanar(uint32_t rowsPerStrip)
                                  TIFFComputeStrip(tif, row,
                                                   static_cast<uint16_t>(sample)),
                                  strip.data(),
-                                 static_cast<tmsize_t>(strip.size())) >= 0;
+                                 static_cast<tmsize_t>(rowCount * kWidth)) >= 0;
     }
   }
 
@@ -238,6 +243,7 @@ int main()
 
   checkPlanarRoundTrip(1u);
   checkPlanarRoundTrip(2u);
+  checkPlanarRoundTrip(3u);
   checkWideChannelCount();
 
   cleanup();

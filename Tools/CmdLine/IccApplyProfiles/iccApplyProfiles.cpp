@@ -72,9 +72,11 @@
 
 #include <cstdio>
 #include <cstdlib>  // EXIT_FAILURE, used by the argument-contract guards in main()
+#include <cerrno>
 #include <memory>
 #include <string>
 #include "IccCmm.h"
+#include "IccCmmThread.h"
 #include "IccUtil.h"
 #include "IccDefs.h"
 #include "IccConnect.h"
@@ -138,6 +140,15 @@ static bool AddPixelBufSlack(size_t& nBytes)
     return false;
 
   nBytes += nSlackBytes;
+  return true;
+}
+
+static bool MultiplySize(size_t nValue, size_t nCount, size_t& nResult)
+{
+  if (nCount && nValue > (size_t)-1 / nCount)
+    return false;
+
+  nResult = nValue * nCount;
   return true;
 }
 
@@ -268,13 +279,22 @@ int main(int argc, const char** argv)
   bool bThreadArg = false;
   int nThreadArg = cfgConnect.m_nThreads;
 
-  if (argc > 3 && !stricmp(argv[1], "-threads")) {
-    nThreadArg = atoi(argv[2]);
-    if (nThreadArg < 0 || nThreadArg > 1024) {      // arbitrary upper limit
-      printf("Invalid thread count '%s'\n", argv[2]);
-      Usage();
-      return -1;
+  if (!stricmp(argv[1], "-threads")) {
+    if (argc < 3) {
+      printf("Missing thread count for -threads\n");
+      return EXIT_FAILURE;
     }
+
+    char *end = nullptr;
+    errno = 0;
+    long parsed = strtol(argv[2], &end, 10);
+    if (errno || !end || end == argv[2] || *end || parsed < 0 ||
+        parsed > CIccThreadedCmm::GetMaxThreads()) {
+      printf("Invalid thread count '%s': expected 0..%d\n", argv[2],
+             CIccThreadedCmm::GetMaxThreads());
+      return EXIT_FAILURE;
+    }
+    nThreadArg = (int)parsed;
     bThreadArg = true;
     argv += 2;
     argc -= 2;
@@ -608,12 +628,40 @@ int main(int argc, const char** argv)
 
   icFloatNumber *pSrcRowBuf = nullptr;
   icFloatNumber *pDstRowBuf = nullptr;
+  unsigned int nRowsPerApply = 1;
   if (bUseRowApply) {
+    size_t nSrcFloatRowBytes = 0;
+    size_t nDstFloatRowBytes = 0;
+
+    if (!GetFloatRowByteCount(SrcImg.GetWidth(), nSrcColorSamples, nSrcFloatRowBytes) ||
+        !GetFloatRowByteCount(SrcImg.GetWidth(), nDestSamples, nDstFloatRowBytes) ||
+        nSrcFloatRowBytes > (size_t)-1 - nDstFloatRowBytes) {
+      printf("Invalid row buffer size!\n");
+      free(pSBuf);
+      free(pDBuf);
+      return -1;
+    }
+
+    // Keep the combined float working set near 4 MiB and cap the batch at 64
+    // rows.  This gives narrow images enough pixels to engage the worker pool
+    // without allowing tall, high-channel images to request unbounded memory.
+    const size_t nTargetBatchBytes = 4u * 1024u * 1024u;
+    const size_t nCombinedRowBytes = nSrcFloatRowBytes + nDstFloatRowBytes;
+    size_t nBatchRows = nCombinedRowBytes ? nTargetBatchBytes / nCombinedRowBytes : 1;
+    if (nBatchRows < 1)
+      nBatchRows = 1;
+    if (nBatchRows > 64)
+      nBatchRows = 64;
+    if (SrcImg.GetWidth() && nBatchRows > UINT32_MAX / SrcImg.GetWidth())
+      nBatchRows = UINT32_MAX / SrcImg.GetWidth();
+    if (!nBatchRows)
+      nBatchRows = 1;
+    nRowsPerApply = (unsigned int)nBatchRows;
+
     size_t nSrcRowBytes = 0;
     size_t nDstRowBytes = 0;
-
-    if (!GetFloatRowByteCount(SrcImg.GetWidth(), nSrcColorSamples, nSrcRowBytes) ||
-        !GetFloatRowByteCount(SrcImg.GetWidth(), nDestSamples, nDstRowBytes) ||
+    if (!MultiplySize(nSrcFloatRowBytes, nRowsPerApply, nSrcRowBytes) ||
+        !MultiplySize(nDstFloatRowBytes, nRowsPerApply, nDstRowBytes) ||
         !AddPixelBufSlack(nSrcRowBytes) ||
         !AddPixelBufSlack(nDstRowBytes)) {
       printf("Invalid row buffer size!\n");
@@ -711,38 +759,90 @@ int main(int argc, const char** argv)
     return true;
   };
 
-  //Read each line
+  //Read and apply each line, batching adjacent rows for threaded CMMs.
   bool bApplySuccess = true;
-  for (i=0; i<(int)SrcImg.GetHeight(); i++) {
-    if (!SrcImg.ReadLine(pSBuf)) {
-      printf("Error reading line %d from Tiff file - '%s'\n", i, cfgApply.m_srcImgFile.c_str());
-      bApplySuccess = false;
-      break;
-    }
+  for (i=0; i<(int)SrcImg.GetHeight();) {
     if (bUseRowApply) {
-      for (sptr=pSBuf, j=0; j<(int)SrcImg.GetWidth(); j++, sptr+=sbpp) {
-        if (!decodePixel(pSrcRowBuf + j * nSrcColorSamples, sptr)) {
-          free(pSBuf);
-          free(pDBuf);
-          free(pSrcRowBuf);
-          free(pDstRowBuf);
-          return -1;
+      unsigned int nBatchRows = nRowsPerApply;
+      const unsigned int nRemainingRows = SrcImg.GetHeight() - (unsigned int)i;
+      if (nBatchRows > nRemainingRows)
+        nBatchRows = nRemainingRows;
+
+      for (unsigned int nRow = 0; nRow < nBatchRows; nRow++) {
+        if (!SrcImg.ReadLine(pSBuf)) {
+          printf("Error reading line %u from Tiff file - '%s'\n",
+                 (unsigned int)i + nRow, cfgApply.m_srcImgFile.c_str());
+          bApplySuccess = false;
+          break;
+        }
+
+        icFloatNumber *pSrcFloatRow =
+          pSrcRowBuf + (size_t)nRow * SrcImg.GetWidth() * nSrcColorSamples;
+        for (sptr=pSBuf, j=0; j<(int)SrcImg.GetWidth(); j++, sptr+=sbpp) {
+          if (!decodePixel(pSrcFloatRow + j * nSrcColorSamples, sptr)) {
+            free(pSBuf);
+            free(pDBuf);
+            free(pSrcRowBuf);
+            free(pDstRowBuf);
+            return -1;
+          }
         }
       }
+      if (!bApplySuccess)
+        break;
 
-      pTheCmm->Apply(pDstRowBuf, pSrcRowBuf, SrcImg.GetWidth());
+      const icUInt32Number nBatchPixels =
+        (icUInt32Number)(SrcImg.GetWidth() * nBatchRows);
+      icStatusCMM applyStatus =
+        pTheCmm->Apply(pDstRowBuf, pSrcRowBuf, nBatchPixels);
+      if (applyStatus != icCmmStatOk) {
+        printf("Profile application failed for lines %d-%u (status %d).\n", i,
+               (unsigned int)i + nBatchRows - 1, (int)applyStatus);
+        bApplySuccess = false;
+        break;
+      }
 
-      for (dptr=pDBuf, j=0; j<(int)SrcImg.GetWidth(); j++, dptr+=dbpp) {
-        if (!encodePixel(dptr, pDstRowBuf + j * nDestSamples)) {
-          free(pSBuf);
-          free(pDBuf);
-          free(pSrcRowBuf);
-          free(pDstRowBuf);
-          return -1;
+      for (unsigned int nRow = 0; nRow < nBatchRows; nRow++) {
+        icFloatNumber *pDstFloatRow =
+          pDstRowBuf + (size_t)nRow * SrcImg.GetWidth() * nDestSamples;
+        for (dptr=pDBuf, j=0; j<(int)SrcImg.GetWidth(); j++, dptr+=dbpp) {
+          if (!encodePixel(dptr, pDstFloatRow + j * nDestSamples)) {
+            free(pSBuf);
+            free(pDBuf);
+            free(pSrcRowBuf);
+            free(pDstRowBuf);
+            return -1;
+          }
+        }
+
+        if (!DstImg.WriteLine(pDBuf)) {
+          printf("Error writing line %u to Tiff file - '%s'\n",
+                 (unsigned int)i + nRow, cfgApply.m_dstImgFile.c_str());
+          bApplySuccess = false;
+          break;
+        }
+
+        curper = static_cast<int>((static_cast<float>(i + nRow + 1) * 100.0f) /
+                                  static_cast<float>(SrcImg.GetHeight()));
+        if (curper != lastPer) {
+          printf("\r%d%%", curper);
+          lastPer = curper;
         }
       }
+      if (!bApplySuccess)
+        break;
+
+      i += nBatchRows;
+      continue;
     }
     else {
+      if (!SrcImg.ReadLine(pSBuf)) {
+        printf("Error reading line %d from Tiff file - '%s'\n", i,
+               cfgApply.m_srcImgFile.c_str());
+        bApplySuccess = false;
+        break;
+      }
+
       for (sptr=pSBuf, dptr=pDBuf, j=0; j<(int)SrcImg.GetWidth(); j++, sptr+=sbpp, dptr+=dbpp) {
         if (!decodePixel(SrcPixel, sptr)) {
           free(pSBuf);
@@ -753,7 +853,13 @@ int main(int argc, const char** argv)
         }
 
         //Use CMM to convert SrcPixel to DestPixel
-        pTheCmm->Apply(DestPixel, SrcPixel);
+        icStatusCMM applyStatus = pTheCmm->Apply(DestPixel, SrcPixel);
+        if (applyStatus != icCmmStatOk) {
+          printf("Profile application failed at pixel %d on line %d (status %d).\n",
+                 j, i, (int)applyStatus);
+          bApplySuccess = false;
+          break;
+        }
 
         if (!encodePixel(dptr, DestPixel)) {
           free(pSBuf);
@@ -764,6 +870,9 @@ int main(int argc, const char** argv)
         }
       }
     }
+
+    if (!bApplySuccess)
+      break;
 
     //Output the converted pixels to the destination image
     if (!DstImg.WriteLine(pDBuf)) {
@@ -779,6 +888,7 @@ int main(int argc, const char** argv)
       printf("\r%d%%", curper);
       lastPer = curper;
     }
+    i++;
   }
   printf("\n");
 
