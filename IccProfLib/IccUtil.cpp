@@ -1705,6 +1705,14 @@ const icChar *CIccInfo::GetTechnologySigName(icTechnologySignature sig)
   case icSigAMDisplay:
     return "AMDisplay";
 
+  // ICC.1:2022 Table 29 rows that never reached the enum, so every list below keyed
+  // off it silently omitted them and GetSigName() reported "Unknown 'LCD '" (#2101).
+  case icSigLCDDisplay:
+    return "LCDDisplay";
+
+  case icSigOLEDDisplay:
+    return "OLEDDisplay";
+
   case icSigPhotoCD:
     return "PhotoCD";
 

@@ -522,6 +522,13 @@ typedef enum {
     icSigCRTDisplay                     = 0x43525420,  /* 'CRT ' */
     icSigPMDisplay                      = 0x504D4420,  /* 'PMD ' */
     icSigAMDisplay                      = 0x414D4420,  /* 'AMD ' */
+    /* ICC.1:2022 Table 29 prints these two display rows between 'AMD ' and 'KPCD'.
+     * They were never transcribed, so unlike the v4.3 rows named in #2101 they are
+     * absent from the enum entirely -- which is why -Werror=switch cannot flag them:
+     * a signature that has no enumerator leaves every switch over the enum
+     * exhaustive.  A profile carrying either one validated as NonCompliant. */
+    icSigLCDDisplay                     = 0x4C434420,  /* 'LCD ' */
+    icSigOLEDDisplay                    = 0x4F4C4544,  /* 'OLED' */
     icSigPhotoCD                        = 0x4B504344,  /* 'KPCD' */
     icSigPhotoImageSetter               = 0x696D6773,  /* 'imgs' */
     icSigGravure                        = 0x67726176,  /* 'grav' */

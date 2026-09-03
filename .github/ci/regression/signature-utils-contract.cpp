@@ -229,6 +229,8 @@ const char *expectedTechnologyName(icTechnologySignature sig)
   case icSigCRTDisplay:                 return "CRTDisplay";
   case icSigPMDisplay:                  return "PMDisplay";
   case icSigAMDisplay:                  return "AMDisplay";
+  case icSigLCDDisplay:                 return "LCDDisplay";
+  case icSigOLEDDisplay:                return "OLEDDisplay";
   case icSigPhotoCD:                    return "PhotoCD";
   case icSigPhotoImageSetter:           return "PhotoImageSetter";
   case icSigGravure:                    return "Gravure";
@@ -264,6 +266,9 @@ void testTechnologySignatures()
     (icUInt32Number)icSigVideoMonitor,               (icUInt32Number)icSigVideoCamera,
     (icUInt32Number)icSigProjectionTelevision,       (icUInt32Number)icSigCRTDisplay,
     (icUInt32Number)icSigPMDisplay,                  (icUInt32Number)icSigAMDisplay,
+    // Table 29 prints these between 'AMD ' and 'KPCD'.  Unlike the v4.3 rows below they
+    // had no enumerator at all, so -Werror=switch could not have flagged their absence.
+    (icUInt32Number)icSigLCDDisplay,                 (icUInt32Number)icSigOLEDDisplay,
     (icUInt32Number)icSigPhotoCD,                    (icUInt32Number)icSigPhotoImageSetter,
     (icUInt32Number)icSigGravure,                    (icUInt32Number)icSigOffsetLithography,
     (icUInt32Number)icSigSilkscreen,                 (icUInt32Number)icSigFlexography,
@@ -356,36 +361,41 @@ void testValidateTechnologyRows()
   // back alongside some other warning.
   const char *kUnknown = "Unknown Technology";
 
-  const icTechnologySignature kV43[] = {
+  // Every row whose Validate() verdict #2101 changed: the four ICC.1 v4.3 technologies,
+  // then Table 29's two display rows, which had no enumerator at all until they were
+  // added alongside these.  Both switches below carry a default: label, so a row missing
+  // from either is reported NonCompliant rather than caught by -Werror=switch.
+  const icTechnologySignature kAddedRows[] = {
     icSigMotionPictureFilmScanner, icSigMotionPictureFilmRecorder,
     icSigDigitalMotionPictureCamera, icSigDigitalCinemaProjector,
+    icSigLCDDisplay, icSigOLEDDisplay,
   };
 
-  for (size_t i = 0; i < sizeof(kV43) / sizeof(kV43[0]); i++) {
+  for (size_t i = 0; i < sizeof(kAddedRows) / sizeof(kAddedRows[0]); i++) {
     // A technologyTag holding the signature. CIccTagSignature::Validate keys off the
     // first signature in the path, so the path has to say technologyTag for the
     // technology switch to be the one that runs.
     CIccTagSignature tag;
-    tag.SetValue((icUInt32Number)kV43[i]);
+    tag.SetValue((icUInt32Number)kAddedRows[i]);
     std::string rpt;
     tag.Validate(icGetSigPath(icSigTechnologyTag), rpt, NULL);
     if (rpt.find(kUnknown) != std::string::npos) {
       ++g_fail;
       std::fprintf(stderr, "[signature-utils-contract] FAIL: technologyTag 0x%08X "
                            "reported unknown by CIccTagSignature::Validate\n",
-                   (unsigned)kV43[i]);
+                   (unsigned)kAddedRows[i]);
     }
 
     // The same signature in a profileSequenceDesc entry, which is a separate switch.
     CIccTagProfileSeqDesc seq;
-    addSeqEntry(seq, kV43[i]);
+    addSeqEntry(seq, kAddedRows[i]);
     std::string seqRpt;
     seq.Validate(icGetSigPath(icSigProfileSequenceDescTag), seqRpt, NULL);
     if (seqRpt.find(kUnknown) != std::string::npos) {
       ++g_fail;
       std::fprintf(stderr, "[signature-utils-contract] FAIL: profileSequenceDesc 0x%08X "
                            "reported unknown by CIccTagProfileSeqDesc::Validate\n",
-                   (unsigned)kV43[i]);
+                   (unsigned)kAddedRows[i]);
     }
   }
 
