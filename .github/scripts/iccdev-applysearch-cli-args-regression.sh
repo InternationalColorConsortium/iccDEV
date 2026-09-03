@@ -48,6 +48,7 @@ APPLY="$(find "$TOOLS_DIR" -maxdepth 2 -name iccApplySearch -type f 2>/dev/null 
 DATA="$TESTING_DIR/ApplyDataFiles/rgb8bit.txt"
 SRGB="$TESTING_DIR/sRGB_v4_ICC_preference.icc"
 CFG="$OUTDIR/applysearch-cfg.json"
+THREADED_DATA="$OUTDIR/rgb8bit-threaded.txt"
 
 fail() {
   echo "  [FAIL] iccApplySearch-cli-args -- $1"
@@ -147,9 +148,46 @@ require_file "$CFG"
 run_expect_success valid-cfg "$APPLY" -cfg "$CFG"
 run_expect_success valid-legacy "$APPLY" "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
 
+# Repeat the tracked 16-row input until the batch is strictly larger than the
+# 1,024-pixel bulk threshold. This makes all eight requested workers useful and
+# keeps the fixture generated from an existing cross-platform input.
+sed -n '1,2p' "$DATA" > "$THREADED_DATA"
+for ((i = 0; i < 65; ++i)); do
+  sed -n '3,$p' "$DATA" >> "$THREADED_DATA"
+done
+threaded_rows="$(sed -n '3,$p' "$THREADED_DATA" | awk 'NF { count++ } END { print count + 0 }')"
+if (( threaded_rows <= 1024 )); then
+  fail "threaded fixture has only $threaded_rows data rows"
+fi
+
+run_expect_success valid-threads-default \
+  "$APPLY" "$THREADED_DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
+if [ ! -s "$OUTDIR/valid-threads-default.log" ]; then
+  fail "valid-threads-default produced no output"
+fi
+for nthreads in 0 1 2 4 8; do
+  run_expect_success "valid-threads-$nthreads" \
+    "$APPLY" -threads "$nthreads" "$THREADED_DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
+  if [ ! -s "$OUTDIR/valid-threads-$nthreads.log" ]; then
+    fail "valid-threads-$nthreads produced no output"
+  fi
+  cmp "$OUTDIR/valid-threads-default.log" "$OUTDIR/valid-threads-$nthreads.log" ||
+    fail "valid-threads-$nthreads output differs from the default output"
+done
+run_expect_success valid-threads-cfg "$APPLY" -threads 8 -cfg "$CFG"
+
 # The #1674 guard this script exists for: everything past argv[2] used to be read
 # and dropped, leaving a zero exit behind.
 run_expect_reject cfg-extra "$APPLY" -cfg "$CFG" ignored-extra
+run_expect_reject threads-negative "$APPLY" -threads -1 -cfg "$CFG"
+run_expect_reject threads-too-large "$APPLY" -threads 257 -cfg "$CFG"
+grep -Fq "expected 0..256" "$OUTDIR/threads-too-large.log" ||
+  fail "threads-too-large diagnostic omitted the supported range"
+run_expect_reject threads-not-a-number "$APPLY" -threads nope -cfg "$CFG"
+run_expect_reject threads-missing-count "$APPLY" -threads
+run_expect_reject threads-missing-command "$APPLY" -threads 8
+run_expect_reject threads-debugcalc \
+  "$APPLY" -threads 8 -debugcalc "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
 
 # Already rejected on master; pinned so the surface cannot regress quietly.
 run_expect_reject init-missing-value "$APPLY" "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT
