@@ -1592,10 +1592,10 @@ bool CIccMpeJsonCalculator::Flatten(std::string &flatStr, std::string macroName,
           offset = atoi(select.c_str() + 1);
           for (p = select.c_str() + 1; *p && *p != ')' && *p != ']'; p++);
           // Identical to the defect fixed in CIccMpeXmlCalculator::Flatten (#2323),
-          // and reachable through MORE spellings than that one: the entry condition
-          // here is correctly "select[0] == '('", where the XML copy has a typo
-          // ("select[1]"), so "in{Lab(XXXX" reaches this line as well as
-          // "in{Lab[XXXX".  An unterminated index leaves p on the NUL terminator, so
+          // reachable as "in{Lab(XXXX" as well as "in{Lab[XXXX".  (The XML copy
+          // tested select[1] for the '(' case -- a typo that kept that spelling
+          // out of its block and quietly read index 0; corrected as the follow-up
+          // to #2365.)  An unterminated index leaves p on the NUL terminator, so
           // "p + 1" addresses one past it and the assignment runs strlen from there:
           // a stack-buffer-overflow read when the selector is exactly 15 characters
           // and fills the string's inline SSO buffer, a heap-buffer-overflow at 16 or

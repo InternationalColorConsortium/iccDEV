@@ -31,13 +31,27 @@
     not, because before the fix it PARSES: that is what keeps this test from
     being vacuous on the lanes that carry no instrumentation.
 
-    Two spellings reach the same block.  "select[0] == '['" is the ordinary one;
-    "select[1] == '('" is a second entry with a defect of its own (it is a typo
-    for select[0], which is why "in{C(0,3)}" silently ignores its index while
-    tget/tput handle the same spelling correctly through
-    CIccFuncTokenizer::GetIndex).  That typo is NOT changed here -- it alters
-    which references are accepted, which is a maintainer ruling -- but it is
-    covered, because a reference reaching the block that way overflowed too.
+    Two spellings reach the block, "in{Lab[1]}" and "in{Lab(1)}".  The second
+    only does so since the select[1] typo in its entry test was corrected (the
+    follow-up deferred from #2365).  That one-character change moves FIVE input
+    families, in both directions, and every one of them is pinned below --
+    measured against a build of each side, 7-in/3-out, "Lab" at offset 4:
+
+      document              before          after
+      in{Lab(1)}            in[4]           in[5]     the intended fix
+      in{Lab(XXXX (unterm)  LOADED in[4]    REFUSED   by the #2323 guard
+      in{Lab(1),2}          REFUSED         in[5,2]   parity with "[1],2"
+      in{C,(3)}             LOADED in[0]    REFUSED   acceptance regression
+      in{C,(XXXX (unterm)   REFUSED here    REFUSED downstream
+
+    The last two are the ",(" family: a selector whose first character is a
+    comma, which is what the typo's second-character test used to admit.  Their
+    refusal is no longer this guard's, so they are kept as cases rather than
+    dropped along with the typo -- see the notes on each.
+
+    Describe() text is the oracle wherever two spellings must agree, because a
+    load that merely succeeds is exactly what the typo produced: both documents
+    parsed either way, and only the channel differed.
 
     The controls matter as much as the failures: an "unterminated index is
     refused" assertion is satisfied just as well by refusing every indexed
@@ -55,6 +69,7 @@
 #include "IccProfileXml.h"
 #include "IccTagXmlFactory.h"
 #include "IccMpeXmlFactory.h"
+#include "IccTagMPE.h"
 
 #include <cstdio>
 #include <filesystem>
@@ -116,9 +131,8 @@ static bool writeFile(const std::string& path, const std::string& text)
 
 // Returns whether the document parsed.  A sanitizer abort inside here IS the
 // defect on an instrumented lane: the caller never gets its result back.
-static bool loadXml(const char* file, std::string& parseStr)
+static bool loadXml(CIccProfileXml& profile, const char* file, std::string& parseStr)
 {
-  CIccProfileXml profile;
   return profile.LoadXml(file, "", &parseStr);
 }
 
@@ -140,8 +154,9 @@ static int expectRefused(const std::string& body, const char* file, const char* 
   if (!writeFile(file, profileXml(body, macros)))
     return check(false, label);
 
+  CIccProfileXml profile;
   std::string parseStr;
-  bool loaded = loadXml(file, parseStr);
+  bool loaded = loadXml(profile, file, parseStr);
   bool named = parseStr.find(needle) != std::string::npos;
 
   return check(!loaded && named, label);
@@ -153,8 +168,60 @@ static int expectParsed(const std::string& body, const char* file, const char* l
   if (!writeFile(file, profileXml(body, macros)))
     return check(false, label);
 
+  CIccProfileXml profile;
   std::string parseStr;
-  return check(loadXml(file, parseStr), label);
+  return check(loadXml(profile, file, parseStr), label);
+}
+
+// The flattened function the calculator element was built from, as Describe()
+// prints it ("{ 0 0 in[5] out[0,3] }").  This is the only observable that
+// separates "in{Lab(1)}" from "in{Lab[1]}": both LOAD, and under the typo both
+// applied cleanly -- one of them on the wrong channel.
+//
+// Each way of not getting one is reported distinctly rather than collapsed into
+// "": a fixture that stops loading for an unrelated reason, a tag lookup that
+// breaks, and a Describe() marker that is reworded would otherwise all present
+// as the same empty-string mismatch, and the diagnostic could not say which.
+static std::string flattenedFunction(const char* file)
+{
+  CIccProfileXml profile;
+  std::string parseStr;
+  if (!loadXml(profile, file, parseStr))
+    return "<did not load: " + parseStr.substr(0, 120) + ">";
+
+  CIccTagMultiProcessElement* mpe =
+      dynamic_cast<CIccTagMultiProcessElement*>(profile.FindTag(icSigAToB1Tag));
+  if (!mpe || mpe->NumElements() < 1)
+    return "<no A2B1 multiProcessElement>";
+
+  std::string text;
+  mpe->GetElement(0)->Describe(text, 100);
+  const std::string begin = "BEGIN_CALC_FUNCTION\n";
+  size_t b = text.find(begin);
+  size_t e = text.find("\nEND_CALC_FUNCTION", b);
+  if (b == std::string::npos || e == std::string::npos)
+    return "<no BEGIN_CALC_FUNCTION marker in Describe() output>";
+  b += begin.size();
+  return text.substr(b, e - b);
+}
+
+// Write the same reference in both spellings and require the same function.
+static int expectSameFlatten(const std::string& bracketBody, const std::string& parenBody,
+                             const char* bracketFile, const char* parenFile,
+                             const char* expected, const char* label)
+{
+  if (!writeFile(bracketFile, profileXml(bracketBody)) ||
+      !writeFile(parenFile, profileXml(parenBody)))
+    return check(false, label);
+
+  std::string bracket = flattenedFunction(bracketFile);
+  std::string paren = flattenedFunction(parenFile);
+  const bool same = (bracket == paren) && bracket.find(expected) != std::string::npos;
+  if (!same)
+    std::fprintf(stderr,
+                 "calc-channel-ref-unterminated-index:       bracket '%s'  paren '%s'  expected to contain '%s'\n",
+                 bracket.c_str(), paren.c_str(), expected);
+  return check(same, label);
 }
 
 int main(int argc, char* argv[])
@@ -198,11 +265,39 @@ int main(int argc, char* argv[])
                             "unterminated-heap.xml",
                             "selector past the SSO buffer (heap overflow) is refused");
 
-  // The second way into the same block: select[1] == '(' rather than
-  // select[0] == '['.  Reached with a reference whose selector starts ",(".
-  failures += expectRefused("in{C,(" + filler(13) + " out{L}",
+  // The '(' spelling of the same reference.  Before the select[1] typo was
+  // corrected this document never entered the block at all -- the unterminated
+  // index was ACCEPTED, as offset 0 -- so this case is red on the typo alone.
+  failures += expectRefused("in{Lab(" + filler(14) + " out{L}",
                             "unterminated-paren.xml",
-                            "the select[1] == '(' entry into the block is refused too");
+                            "the '(' spelling of an unterminated index is refused by the same guard");
+
+  // The ",(" selector, which is where the typo used to send a reference whose
+  // FIRST character is a comma.  Correcting the entry test moved this family out
+  // of the block, so its refusal is no longer this guard's: the selector is
+  // discarded, ",(XXXX" reaches the size branch as atoi("(XXXX") == 0, and the
+  // flattened "in(0,0)" is refused by CIccFuncTokenizer::GetIndex, which rejects
+  // a zero size.  Kept, rather than dropped with the typo that created it,
+  // because the refusal now rests on a check nothing else here pins: were
+  // GetIndex ever to accept in(n,0), this document would be silently accepted
+  // with its malformed selector thrown away -- the #2323 class exactly.  The
+  // needle is the downstream message, and the flattened text names WHERE.
+  failures += expectRefused("in{C,(" + filler(13) + " out{L}",
+                            "unterminated-comma-paren.xml",
+                            "an unterminated ',(' index is still refused, now downstream",
+                            "",
+                            "Main Calculator Function from \"{ in(0,0)");
+
+  // The same family, terminated.  This one CHANGED DIRECTION: it loaded before
+  // the fix, as in(0,1) with the "(3)" silently discarded, and is refused now.
+  // That is the narrowing standard #2323 applied, but it is an acceptance
+  // regression for any hand-authored document using the spelling, so it is
+  // stated here rather than left to be discovered.  No tracked XML uses it.
+  failures += expectRefused("in{C,(3)} out{L}",
+                            "terminated-comma-paren.xml",
+                            "a terminated ',(' index, accepted before the fix, is refused now",
+                            "",
+                            "Main Calculator Function from \"{ in(0,0)");
 
   // Same guard from the out{} operator, which shares the code path and only
   // differs in which channel map it consults -- the message names the operator.
@@ -244,6 +339,26 @@ int main(int argc, char* argv[])
   failures += expectParsed("in{Lab[0]} out{L}",
                            "wellformed-offset.xml",
                            "in{Lab[0]} still parses");
+
+  // The control for the typo itself.  Both documents load before and after the
+  // fix; what changed is WHICH channel the '(' form reads.  Lab sits at offset 4,
+  // so index 1 is channel 5, and the bracket form is the reference the paren form
+  // must agree with -- the same agreement the JSON parser has always had.
+  failures += expectSameFlatten("in{Lab[1]} out{L}", "in{Lab(1)} out{L}",
+                                "wellformed-bracket.xml", "wellformed-paren.xml",
+                                "in[5]",
+                                "in{Lab(1)} flattens to the same function as in{Lab[1]}, in[5]");
+
+  // The offset+size pair, which is the second thing the corrected entry test
+  // changed direction on: "in{Lab(1),2}" was REFUSED before the fix (the paren
+  // form never entered the block, so the size stayed 1 and in(4,1) failed stack
+  // balance against a two-channel out{}) and now flattens to in[5,2], the same
+  // as the bracket spelling.  Asserted for the same reason as the bare form:
+  // parity is the contract, and only a comparison of the two can state it.
+  failures += expectSameFlatten("in{Lab[1],2} out{a,2}", "in{Lab(1),2} out{a,2}",
+                                "wellformed-bracket-size.xml", "wellformed-paren-size.xml",
+                                "in[5,2]",
+                                "in{Lab(1),2} flattens to the same function as in{Lab[1],2}, in[5,2]");
 
   failures += expectParsed("in{Lab} out{a,2}",
                            "wellformed-sizeonly.xml",

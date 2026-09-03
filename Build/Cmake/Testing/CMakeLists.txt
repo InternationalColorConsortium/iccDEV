@@ -4042,9 +4042,12 @@ endfunction()
 # inside libstdc++'s inline SSO buffer and is not caught at all (the malformed
 # reference is simply accepted), exactly 15 fills it and the read leaves the stack
 # frame (the reported 1-byte-read-stack-buffer-overflow, scariness 27), and >= 16
-# has moved to the heap. The helper covers all three plus the select[1] == '('
-# entry, and pins the well-formed spellings the corpus uses so that the guard
-# cannot be satisfied by refusing every indexed reference.
+# has moved to the heap. The helper covers all three. It also carries the
+# follow-up deferred from #2365 -- Flatten()'s entry test read select[1] where it
+# meant select[0], so a parenthesised index selected the wrong channel -- and
+# pins each of the five input families that correction moves, together with the
+# well-formed spellings the corpus uses, so that the guard cannot be satisfied by
+# refusing every indexed reference.
 function(iccdev_add_calc_channel_ref_unterminated_index_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
     return()
@@ -4063,8 +4066,8 @@ function(iccdev_add_calc_channel_ref_unterminated_index_test)
     ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
   add_dependencies(check iccCalcChannelRefUnterminatedIndexTest)
 
-  # The helper writes its ten generated documents into this directory and
-  # chdir()s there, so nothing lands in the source tree.
+  # The helper writes its generated documents into this directory and chdir()s
+  # there, so nothing lands in the source tree.
   set(_calc_unterminated_scratch
     "${CMAKE_CURRENT_BINARY_DIR}/ctest-output/calc-channel-ref-unterminated-index")
 
@@ -4107,10 +4110,12 @@ endfunction()
 # #2323 (JSON twin): CIccMpeJsonCalculator::Flatten() carries a byte-for-byte copy
 # of the XML defect -- "select = p + 1" after a scan that stops on the NUL when the
 # index is unterminated. It is a separate reachable entry point (iccFromJson on a
-# hand-authored document), and reachable through MORE spellings than the XML copy,
-# whose "select[1] == '('" typo keeps the '(' form out. Registered separately from
-# the XML helper so neither masks the other: this one is skipped where IccJSON is
-# not built, and the XML coverage does not disappear with it.
+# hand-authored document). It also asserts the flattened function, not merely
+# that the document loads, because the parity the XML helper claims -- both
+# parsers select the same channel for a parenthesised index -- is only measured
+# if both sides name the channel. Registered separately from the XML helper so
+# neither masks the other: this one is skipped where IccJSON is not built, and
+# the XML coverage does not disappear with it.
 function(iccdev_add_calc_channel_ref_unterminated_index_json_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
     return()
