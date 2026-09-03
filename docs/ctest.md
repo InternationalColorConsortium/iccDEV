@@ -186,6 +186,11 @@ The JSON round-trip uses a temporary directory for generated `.json` and
 round-trip `.icc` files so a passing Unix run does not remove or modify tracked
 files in `Testing/`.
 
+`iccdev.applysearch-cli-args` derives a batch of more than 1,024 rows from the
+tracked RGB input and requires byte-identical output for the default path and
+`-threads 0`, `1`, `2`, `4`, and `8`. It also covers configuration mode,
+malformed thread counts, and the single-thread requirement for `-debugcalc`.
+
 `iccdev.tool-coverage` may add focused command-line regressions inside the
 existing script without changing the CTest suite count. When a bug is tied to an
 AFL-minimized crash or hang, embed the smallest stable reproducer in the script
