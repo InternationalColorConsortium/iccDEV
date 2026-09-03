@@ -76,12 +76,33 @@ static const icFloatNumber kSamples[][3] = {
 };
 static const int kNumSamples = (int)(sizeof(kSamples) / sizeof(kSamples[0]));
 
+class CFailOnceCmmSearch : public CIccCmmSearch
+{
+public:
+  CFailOnceCmmSearch() : m_bFailNextApply(true) {}
+
+  virtual CIccApplyCmm* GetNewApplyCmm(icStatusCMM& status) override
+  {
+    if (m_bFailNextApply) {
+      m_bFailNextApply = false;
+      status = icCmmStatAllocErr;
+      return NULL;
+    }
+
+    return CIccCmmSearch::GetNewApplyCmm(status);
+  }
+
+private:
+  bool m_bFailNextApply;
+};
+
 // Builds a two-profile search CMM over the same profile twice, which makes the
 // search a device->device identity and keeps the assertion about Begin() rather
 // than about color accuracy.
-static CIccCmmSearch* buildSearchCmm(const char* profilePath)
+static CIccCmmSearch* buildSearchCmm(const char* profilePath,
+                                     CIccCmmSearch* pSearch = NULL)
 {
-  std::unique_ptr<CIccCmmSearch> pCmm(new CIccCmmSearch());
+  std::unique_ptr<CIccCmmSearch> pCmm(pSearch ? pSearch : new CIccCmmSearch());
 
   CIccProfile* pSrc = OpenIccProfile(profilePath);
   CIccProfile* pDst = OpenIccProfile(profilePath);
@@ -233,6 +254,46 @@ static int checkSearchDeferredApply(const char* profilePath)
 
   std::fprintf(stdout,
     "cmmsearch-rebegin: PASS  Begin(false); Begin(true) supplies the default Apply\n");
+  return 0;
+}
+
+// Force the default Apply allocation to fail after the search chains are
+// valid. The next Begin(true) must retry that allocation without rebuilding
+// or invalidating the chains.
+static int checkSearchApplyAllocationRetry(const char* profilePath)
+{
+  std::unique_ptr<CIccCmmSearch> pCmm(
+    buildSearchCmm(profilePath, new CFailOnceCmmSearch()));
+  if (!pCmm)
+    return 1;
+
+  icStatusCMM rv = pCmm->Begin(true);
+  if (rv != icCmmStatAllocErr) {
+    std::fprintf(stderr,
+      "cmmsearch-rebegin: FAIL  forced Apply allocation returned status %d\n",
+      (int)rv);
+    return 1;
+  }
+
+  rv = pCmm->Begin(true);
+  if (rv != icCmmStatOk) {
+    std::fprintf(stderr,
+      "cmmsearch-rebegin: FAIL  Begin(true) retry returned status %d\n",
+      (int)rv);
+    return 1;
+  }
+
+  icFloatNumber dst[3] = { 0.0f, 0.0f, 0.0f };
+  rv = pCmm->Apply(dst, kSamples[0]);
+  if (rv != icCmmStatOk) {
+    std::fprintf(stderr,
+      "cmmsearch-rebegin: FAIL  Apply after allocation retry returned status %d\n",
+      (int)rv);
+    return 1;
+  }
+
+  std::fprintf(stdout,
+    "cmmsearch-rebegin: PASS  Begin(true) retries a failed Apply allocation\n");
   return 0;
 }
 
@@ -397,6 +458,7 @@ int main(int argc, char** argv)
   failures += checkBaseIdempotent(profilePath);
   failures += checkSearchRebegin(profilePath);
   failures += checkSearchDeferredApply(profilePath);
+  failures += checkSearchApplyAllocationRetry(profilePath);
   failures += checkSearchAddXformAfterBegin(profilePath);
 
   return failures ? 1 : 0;
