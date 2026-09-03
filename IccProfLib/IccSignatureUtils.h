@@ -630,8 +630,12 @@ inline bool IsValidColorSpaceSignature(icUInt32Number sig)
 //   Debug and warning output is gated behind ICC_SIGNATURE_VERBOSE.
 //
 // NOTE:
-//   This should be used to verify the `technology` field in `profileDescription`
-//   tags or `outputDevice` blocks.
+//   A technology signature appears in exactly two places: the top-level
+//   technologyTag ('tech', a signatureType), and the `technology` field of each
+//   icProfileDescStruct entry in profileSequenceDescTag ('pseq'). Use this
+//   predicate for those. It is not carried by profileDescriptionTag ('desc'),
+//   which is a multiLocalizedUnicode, and there is no "outputDevice" block --
+//   this NOTE named both until #2368, contradicting the CAVEAT below.
 //
 //   CAVEAT: it rejects icSigUndefined (0), which CIccTagProfileSeqDesc::Validate
 //   accepts as "technology not defined" and which is a common real-world value --
