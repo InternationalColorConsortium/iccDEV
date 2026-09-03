@@ -547,7 +547,7 @@ jobs:
             ci_changed=true
           fi
 
-          if has_changed_file '^(Dockerfile|\.dockerignore|\.github/ci/(docker|requirements)/|iccdev-mcp/|\.github/scripts/(check-workflow-cache-policy|sanitize-sed)\.sh)' ||
+          if has_changed_file '^(Dockerfile|\.dockerignore|\.github/ci/(docker|requirements)/|iccdev-mcp/|\.github/workflows/ci-docker\.yml|\.github/scripts/(check-workflow-cache-policy|sanitize-sed)\.sh)' ||
              [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$testing_changed" == "true" ]]; then
             container_changed=true
           fi
