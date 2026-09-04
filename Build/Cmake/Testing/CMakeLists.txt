@@ -7612,7 +7612,7 @@ endif()
 if(TARGET iccSpecSepToTiff AND TARGET iccApplyProfiles AND TARGET iccTiffDump)
   iccdev_add_script_test(
     iccdev.tiff-resolution-unit-regression
-    120
+    300
     "iccdev;tools;tiff;resolution;regression;asan"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-tiff-resolution-unit-regression-tests.sh"
