@@ -5006,10 +5006,10 @@ function(iccdev_add_installed_package_consumer_test)
     set(_have_connect TRUE)
   endif()
 
-  # Everything the "dev" and "runtime" component installs read, so that
-  # `cmake --build . --target check` produces a stageable tree. The static
-  # archives are in the dev component, so they are needed even though the
-  # consumers link the shared libraries.
+  # Everything the "dev" and "runtime" component installs read, so that both
+  # `build-test-binaries` and its dependent `check` target produce a stageable
+  # tree. The static archives are in the dev component, so they are needed even
+  # though the consumers link the shared libraries.
   foreach(_dep IccProfLib2 IccProfLib2-static IccXML2 IccXML2-static
                 IccJSON2 IccJSON2-static IccConnect2 IccConnect2-static)
     if(TARGET ${_dep})
@@ -5018,9 +5018,9 @@ function(iccdev_add_installed_package_consumer_test)
       # through the alias rather than trusting the name.
       get_target_property(_dep_alias ${_dep} ALIASED_TARGET)
       if(_dep_alias)
-        add_dependencies(check ${_dep_alias})
+        add_dependencies(build-test-binaries ${_dep_alias})
       else()
-        add_dependencies(check ${_dep})
+        add_dependencies(build-test-binaries ${_dep})
       endif()
     endif()
   endforeach()
@@ -5042,6 +5042,7 @@ function(iccdev_add_installed_package_consumer_test)
       "-DICCDEV_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
       "-DICCDEV_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}"
       "-DICCDEV_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
+      "-DICCDEV_VCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR}"
       "-DICCDEV_VCPKG_TRIPLET=${VCPKG_TARGET_TRIPLET}"
       "-DICCDEV_LIB_SUBDIRS=${_lib_subdirs}"
       "-DICCDEV_HAVE_SHARED=${ENABLE_SHARED_LIBS}"
@@ -5057,7 +5058,7 @@ function(iccdev_add_installed_package_consumer_test)
     # Four nested configure+build cycles; running them against a runner already
     # saturated by ctest -j is the likeliest way to spend that timeout.
     RUN_SERIAL TRUE
-    LABELS "iccdev;install;package;find-package;consumer;issue-2154;regression"
+    LABELS "iccdev;install;package;find-package;consumer;issue-2154;issue-2394;regression"
   )
 endfunction()
 
