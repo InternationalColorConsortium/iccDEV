@@ -7585,6 +7585,26 @@ if(TARGET iccSpecSepToTiff)
   )
 endif()
 
+# "sameAsSource" asks iccApplyProfiles to copy the source image's compression and
+# planar configuration, but the two tests converted a libtiff enum to bool, and
+# COMPRESSION_NONE and PLANARCONFIG_CONTIG are both 1 -- so both were constant
+# true and the request came out inverted (#2379).  Only iccApplyProfiles is
+# needed: the assertions read tags 259 and 284 out of the output IFD rather than
+# through iccTiffDump, and both fixtures are tracked, so no generated profile is
+# required.
+if(TARGET iccApplyProfiles)
+  iccdev_add_script_test(
+    iccdev.issue-2379-tiff-sameassource-regression
+    180
+    "iccdev;tools;tiff;json;cfg;applyprofiles;issue-2379;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2379-tiff-sameassource-regression.sh"
+  )
+  set_tests_properties(iccdev.issue-2379-tiff-sameassource-regression PROPERTIES
+    SKIP_RETURN_CODE 77
+  )
+endif()
+
 # TIFFTAG_RESOLUTIONUNIT lives in shared CTiffImg code, so it is covered per caller:
 # iccSpecSepToTiff and iccApplyProfiles both write through the same Create(), and
 # iccTiffDump reads the same member back (#2220).  Guarded on all three targets

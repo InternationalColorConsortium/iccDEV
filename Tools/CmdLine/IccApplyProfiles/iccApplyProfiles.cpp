@@ -482,8 +482,22 @@ int main(int argc, const char** argv)
   bool bHasSrcProfile = SrcImg.GetIccProfile(pSrcProfile, nSrcProfileLen);
 
   //Retrieve command line arguments
-  bool bCompress = cfgApply.m_dstCompression == icDstBoolFromSrc ? SrcImg.GetCompress() : (cfgApply.m_dstCompression != icDstBoolFalse);
-  bool bSeparation = cfgApply.m_dstPlanar == icDstBoolFromSrc ? SrcImg.GetPlanar() : (cfgApply.m_dstPlanar != icDstBoolFalse);
+  // "sameAsSource" has to compare the source's tag against the value that means
+  // "off", not convert that tag to bool.  COMPRESSION_NONE is 1 and
+  // PLANARCONFIG_CONTIG is 1, so GetCompress() and GetPlanar() are nonzero for
+  // every TIFF libtiff can open and both tests were constant true: a config
+  // asking to copy the source wrote LZW over an uncompressed image and separated
+  // planes over a contiguous one.  The request was not merely ignored, it was
+  // inverted, and the source's own value was never read.
+  //
+  // Create() maps these two booleans back onto LZW/NONE and SEPARATE/CONTIG
+  // (TiffImg.cpp:443-444), so "compressed" is the most the destination can say:
+  // a JPEG or Deflate source copies as compressed and is written as LZW.  That
+  // is the existing bool contract, not a new narrowing.
+  //
+  // bEmbed below is unaffected -- bHasSrcProfile is already a bool.
+  bool bCompress = cfgApply.m_dstCompression == icDstBoolFromSrc ? SrcImg.GetCompress() != COMPRESSION_NONE : (cfgApply.m_dstCompression != icDstBoolFalse);
+  bool bSeparation = cfgApply.m_dstPlanar == icDstBoolFromSrc ? SrcImg.GetPlanar() == PLANARCONFIG_SEPARATE : (cfgApply.m_dstPlanar != icDstBoolFalse);
   bool bEmbed = cfgApply.m_dstEmbedIcc == icDstBoolFromSrc ? bHasSrcProfile : (cfgApply.m_dstEmbedIcc != icDstBoolFalse);
 
 
