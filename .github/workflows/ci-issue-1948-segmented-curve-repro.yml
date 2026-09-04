@@ -5,18 +5,17 @@
 #                 All rights reserved.
 #                 https://color.org
 #
-# Intent: Reproduce issue #1948 CIccIO strict-aliasing writer defect.
+# Intent: Manual Valgrind/Helgrind proof-of-concept workflow for issue #2380.
 #
-# The linux-clang-version-sweep job answers the #1952 question of whether the
-# defect is a property of a particular clang release.  It is not: every clang
-# major in the Ubuntu 24.04 pockets reproduces it, including the exact package
-# 1:20.1.2-0ubuntu1~24.04.3 that was reported as immune.  Each row also carries
-# its own -fno-strict-aliasing and ENABLE_LTO=OFF controls, so a null result can
-# be told apart from an invalid experiment.
+# This keeps the established workflow path so maintainers can dispatch the
+# branch version before it reaches the default branch. It is a bounded
+# regression demonstrator, not a production fuzzing service.
 #
 ###############################################################
 
-name: "Issue 1948 CIccIO strict-aliasing repro"
+name: "Issue 2380 Valgrind and Helgrind PoC"
+
+# yamllint disable rule:line-length
 
 permissions:
   contents: read
@@ -25,35 +24,59 @@ permissions:
 'on':
   workflow_dispatch:
     inputs:
-      target_ref:
-        description: 'iccDEV ref to compare'
+      target_kind:
+        description: 'How target_value is resolved'
         required: true
-        default: master
+        default: pull-request
+        type: choice
+        options:
+          - pull-request
+          - branch
+          - ref
+      target_value:
+        description: 'PR number, branch name, full commit SHA, or refs/tags/...'
+        required: true
+        default: '2378'
+        type: string
+      scenario:
+        description: 'PR #2378 red/green proof or clean selected-target check'
+        required: true
+        default: pr-2378-before-after
+        type: choice
+        options:
+          - pr-2378-before-after
+          - target-clean
+      valgrind_tool:
+        description: 'Valgrind analyzer'
+        required: true
+        default: both
+        type: choice
+        options:
+          - both
+          - helgrind
+          - memcheck
+      repeat_count:
+        description: 'Runs per analyzer and state, 1-10'
+        required: true
+        default: '3'
         type: string
       regression_image_tag:
-        description: 'Trusted unified image tag for Linux comparison'
+        description: 'Trusted unified iccDEV image tag'
         required: false
         default: latest
-        type: string
-      sweep_ref:
-        description: >-
-          Known-defective ref the clang version sweep builds. Must predate the
-          #1948 fix (c7883bd1) or every row correctly reports no defect.
-        required: false
-        default: v2.3.2.1
         type: string
 
 concurrency:
   group: >-
-    issue-1948-ciccio-strict-aliasing-${{ github.workflow }}-${{
-    inputs.target_ref || 'master' }}
+    issue-2380-valgrind-${{ github.workflow }}-${{
+    inputs.target_kind }}-${{ inputs.target_value }}
   cancel-in-progress: false
 
 jobs:
-  linux-clang-gcc:
-    name: "Linux strict-aliasing discriminator"
+  valgrind-poc:
+    name: "${{ inputs.scenario }} (${{ inputs.valgrind_tool }})"
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 180
     container:
       image: >-
         ghcr.io/internationalcolorconsortium/iccdev:${{
@@ -67,32 +90,39 @@ jobs:
         shell: bash --noprofile --norc {0}
     env:
       BASH_ENV: /dev/null
-      TARGET_REF_INPUT: ${{ inputs.target_ref || 'master' }}
+      TRUSTED_ROOT: ${{ github.workspace }}/trusted
       TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
 
     steps:
-      - name: Checkout trusted scripts
+      - name: Checkout trusted workflow helpers
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           ref: ${{ github.workflow_sha }}
           path: trusted
-          sparse-checkout: .github/scripts
+          sparse-checkout: |
+            .github/scripts
+            .github/ci/regression/pr-2378-helgrind-before.patch
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Checkout target ref
+      - name: Checkout target seed
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
-          # preflight: allow-codeql-actions reason=manual-readonly-target-checkout
-          ref: ${{ inputs.target_ref || 'master' }}
+          ref: ${{ github.workflow_sha }}
           path: target
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Compare strict and no-strict-aliasing generated profiles
+      - name: Resolve PR, branch, or ref
+        id: resolve
         working-directory: target
         env:
           BASH_ENV: /dev/null
+          TARGET_KIND_INPUT: ${{ inputs.target_kind }}
+          TARGET_VALUE_INPUT: ${{ inputs.target_value }}
+          SCENARIO_INPUT: ${{ inputs.scenario }}
+          REPEAT_COUNT_INPUT: ${{ inputs.repeat_count }}
+          VALGRIND_TOOL_INPUT: ${{ inputs.valgrind_tool }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -100,425 +130,146 @@ jobs:
           source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           git config --global --add safe.directory "$PWD"
 
-          cmake -S Build/Cmake -B out/clang-strict -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
-            -DENABLE_TOOLS=ON -DENABLE_WXWIDGETS=OFF
-          cmake -S Build/Cmake -B out/clang-no-strict -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_C_FLAGS_RELEASE="-O3 -DNDEBUG -fno-strict-aliasing" \
-            -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG -fno-strict-aliasing" \
-            -DENABLE_TOOLS=ON -DENABLE_WXWIDGETS=OFF
-          cmake -S Build/Cmake -B out/gcc -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
-            -DENABLE_TOOLS=ON -DENABLE_WXWIDGETS=OFF
-          cmake --build out/clang-strict --target iccFromXml iccToXml iccDumpProfile --parallel "$(nproc)"
-          cmake --build out/clang-no-strict --target iccFromXml iccToXml iccDumpProfile --parallel "$(nproc)"
-          cmake --build out/gcc --target iccFromXml iccToXml iccDumpProfile --parallel "$(nproc)"
-
-          out/clang-strict/Tools/IccFromXml/iccFromXml Testing/Calc/RGBWProjector.xml rgbw-clang-strict.icc
-          out/clang-no-strict/Tools/IccFromXml/iccFromXml Testing/Calc/RGBWProjector.xml rgbw-clang-no-strict.icc
-          out/gcc/Tools/IccFromXml/iccFromXml Testing/Calc/RGBWProjector.xml rgbw-gcc.icc
-          out/clang-strict/Tools/IccToXml/iccToXml rgbw-clang-strict.icc rgbw-clang-strict.readback.xml
-          out/clang-no-strict/Tools/IccToXml/iccToXml rgbw-clang-no-strict.icc rgbw-clang-no-strict.readback.xml
-          out/gcc/Tools/IccToXml/iccToXml rgbw-gcc.icc rgbw-gcc.readback.xml
-
-          set +e
-          cmp -l rgbw-clang-strict.icc rgbw-clang-no-strict.icc > issue-1948-clang-strict-vs-nostrict-cmp.log
-          strict_cmp_status=$?
-          cmp -l rgbw-clang-no-strict.icc rgbw-gcc.icc > issue-1948-nostrict-vs-gcc-cmp.log
-          nostrict_gcc_cmp_status=$?
-          set -e
-
-          zero_segment='SampledSegment Start="0.00000000" End="0.00000000"'
-          one_segment='SampledSegment Start="0.00000000" End="1.00000000"'
-          clang_strict_zero_count="$(grep -c "$zero_segment" \
-            rgbw-clang-strict.readback.xml || true)"
-          clang_strict_one_count="$(grep -c "$one_segment" \
-            rgbw-clang-strict.readback.xml || true)"
-          clang_nostrict_zero_count="$(grep -c "$zero_segment" \
-            rgbw-clang-no-strict.readback.xml || true)"
-          clang_nostrict_one_count="$(grep -c "$one_segment" \
-            rgbw-clang-no-strict.readback.xml || true)"
-          gcc_zero_count="$(grep -c "$zero_segment" rgbw-gcc.readback.xml || true)"
-          gcc_one_count="$(grep -c "$one_segment" rgbw-gcc.readback.xml || true)"
-          strict_diff_byte_count="$(wc -l < issue-1948-clang-strict-vs-nostrict-cmp.log)"
-          nostrict_gcc_diff_byte_count="$(wc -l < issue-1948-nostrict-vs-gcc-cmp.log)"
-
-          {
-            echo "## Issue #1948 Linux CIccIO strict-aliasing discriminator"
-            echo ""
-            echo "- Target ref: \`$(sanitize_line "$TARGET_REF_INPUT")\`"
-            echo "- Target commit: \`$(sanitize_line "$(git rev-parse HEAD)")\`"
-            echo "- clang strict vs no-strict cmp status: \`$(sanitize_line "$strict_cmp_status")\`"
-            echo "- clang strict vs no-strict differing byte count: \`$(sanitize_line "$strict_diff_byte_count")\`"
-            echo "- clang no-strict vs gcc cmp status: \`$(sanitize_line "$nostrict_gcc_cmp_status")\`"
-            echo "- clang no-strict vs gcc differing byte count:" \
-              "\`$(sanitize_line "$nostrict_gcc_diff_byte_count")\`"
-            echo "- clang strict readback zero-end segments: \`$(sanitize_line "$clang_strict_zero_count")\`"
-            echo "- clang strict readback one-end segments: \`$(sanitize_line "$clang_strict_one_count")\`"
-            echo "- clang -fno-strict-aliasing readback zero-end segments:" \
-              "\`$(sanitize_line "$clang_nostrict_zero_count")\`"
-            echo "- clang -fno-strict-aliasing readback one-end segments:" \
-              "\`$(sanitize_line "$clang_nostrict_one_count")\`"
-            echo "- gcc readback zero-end segments: \`$(sanitize_line "$gcc_zero_count")\`"
-            echo "- gcc readback one-end segments: \`$(sanitize_line "$gcc_one_count")\`"
-            echo ""
-            echo "### clang strict readback sampled segments"
-            echo '```text'
-            grep -n 'SampledSegment' rgbw-clang-strict.readback.xml | head -12 | while IFS= read -r line; do
-              sanitize_code_line "$line"
-            done
-            echo '```'
-            echo ""
-            echo "### clang -fno-strict-aliasing readback sampled segments"
-            echo '```text'
-            grep -n 'SampledSegment' rgbw-clang-no-strict.readback.xml | head -12 | while IFS= read -r line; do
-              sanitize_code_line "$line"
-            done
-            echo '```'
-            echo ""
-            echo "### gcc readback sampled segments"
-            echo '```text'
-            grep -n 'SampledSegment' rgbw-gcc.readback.xml | head -12 | while IFS= read -r line; do
-              sanitize_code_line "$line"
-            done
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
-
-          if [ "$clang_strict_zero_count" -eq 0 ] ||
-             [ "$clang_nostrict_one_count" -eq 0 ] ||
-             [ "$gcc_one_count" -eq 0 ]; then
-            echo "[FAIL] issue #1948 strict-aliasing discriminator did not reproduce" >&2
-            exit 1
-          fi
-
-  linux-clang-version-sweep:
-    name: "Linux clang ${{ matrix.clang }} sweep"
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        clang: ['17', '18', '19', '20']
-    container:
-      image: ubuntu:24.04
-      options: --user 0
-    defaults:
-      run:
-        shell: bash --noprofile --norc {0}
-    env:
-      BASH_ENV: /dev/null
-      CLANG_SUFFIX: ${{ matrix.clang }}
-      SWEEP_REF_INPUT: ${{ inputs.sweep_ref || 'v2.3.2.1' }}
-      TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
-      DEBIAN_FRONTEND: noninteractive
-
-    steps:
-      # A bare Ubuntu 24.04 image is deliberate rather than the regression
-      # container: the pockets carry four clang majors side by side, and the
-      # clang-20 package here is 1:20.1.2-0ubuntu1~24.04.3 -- the exact build
-      # reported on #1952 as not reproducing.  The regression image pins one
-      # newer toolchain and so cannot host that comparison.
-      # preflight: allow-package-install reason=clang-version-sweep-toolchain
-      - name: Install clang and build dependencies
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          apt-get update -qq
-          # llvm-N is not optional padding: it carries llvm-ar and llvm-ranlib,
-          # and without them CMake's check_ipo_supported probe fails to archive
-          # its test object, reports "LTO not supported", and quietly configures
-          # the arm with LTO off -- which is the one setting that makes this
-          # defect disappear.  Measured: strict arm read 10 correct segments.
-          apt-get install -y -qq --no-install-recommends \
-            "clang-${CLANG_SUFFIX}" "lld-${CLANG_SUFFIX}" \
-            "llvm-${CLANG_SUFFIX}" "llvm-${CLANG_SUFFIX}-linker-tools" \
-            ca-certificates cmake git make xxd \
-            libjpeg-dev libpng-dev libtiff-dev libxml2-dev \
-            nlohmann-json3-dev zlib1g-dev
-          # xxd is absent from the bare image and sanitize-sed.sh reaches for it
-          # on its hidden-character path; the regression container ships it, so
-          # the dependency is invisible until a summary line trips that branch.
-
-      - name: Checkout trusted scripts
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
-        with:
-          ref: ${{ github.workflow_sha }}
-          path: trusted
-          sparse-checkout: .github/scripts
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Checkout sweep ref
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
-        with:
-          # preflight: allow-codeql-actions reason=manual-readonly-target-checkout
-          ref: ${{ inputs.sweep_ref || 'v2.3.2.1' }}
-          path: target
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Build strict, no-strict and no-LTO arms and measure
-        working-directory: target
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
-          git config --global --add safe.directory "$PWD"
-
-          cc="clang-${CLANG_SUFFIX}"
-          cxx="clang++-${CLANG_SUFFIX}"
-          clang_banner="$("$cc" --version | head -1)"
-          clang_package="$(dpkg-query -s "clang-${CLANG_SUFFIX}" |
-            awk '/^Version:/ {print $2}')"
-
-          lto_on='>>> Link-Time Optimization (LTO) enabled for Release builds'
-          lto_off='>>> Link-Time Optimization (LTO) disabled: ENABLE_LTO=OFF'
-
-          # Assert the LTO state each arm was meant to have rather than merely
-          # printing whatever CMake decided.  ENABLE_LTO=OFF alone flips this
-          # defect clean, so an arm that silently loses LTO returns a false
-          # negative; matching only "Link-Time Optimization" would accept the
-          # "not supported" line and hide exactly that.
-          build_arm() {
-            arm="$1"
-            lto_expect="$2"
-            shift 2
-            cmake -S Build/Cmake -B "out/$arm" -DCMAKE_BUILD_TYPE=Release \
-              -DCMAKE_C_COMPILER="$cc" -DCMAKE_CXX_COMPILER="$cxx" \
-              -DENABLE_TOOLS=ON -DENABLE_WXWIDGETS=OFF "$@" \
-              > "configure-$arm.log" 2>&1
-            if ! grep -F "$lto_expect" "configure-$arm.log"; then
-              echo "[INVALID] $arm arm did not configure as '$lto_expect'" >&2
-              grep -E '>>> Link-Time Optimization' "configure-$arm.log" >&2 ||
-                echo "[INVALID] no LTO verdict in configure output" >&2
+          case "$REPEAT_COUNT_INPUT" in
+            ''|0*|*[!0-9]*)
+              echo "ERROR: repeat_count must be an integer from 1 through 10" >&2
               exit 2
+              ;;
+          esac
+          repeat_count=$((10#$REPEAT_COUNT_INPUT))
+          if [ "$repeat_count" -lt 1 ] || [ "$repeat_count" -gt 10 ]; then
+            echo "ERROR: repeat_count must be an integer from 1 through 10" >&2
+            exit 2
+          fi
+          case "$SCENARIO_INPUT" in
+            pr-2378-before-after|target-clean) ;;
+            *) echo "ERROR: unsupported scenario" >&2; exit 2 ;;
+          esac
+          case "$VALGRIND_TOOL_INPUT" in
+            both|helgrind|memcheck) ;;
+            *) echo "ERROR: unsupported valgrind_tool" >&2; exit 2 ;;
+          esac
+
+          case "$TARGET_KIND_INPUT" in
+            pull-request)
+              case "$TARGET_VALUE_INPUT" in
+                ''|0*|*[!0-9]*)
+                  echo "ERROR: pull-request target_value must be a positive integer" >&2
+                  exit 2
+                  ;;
+              esac
+              git fetch --no-tags --depth=1 origin \
+                "pull/$TARGET_VALUE_INPUT/head"
+              ;;
+            branch)
+              if ! git check-ref-format "refs/heads/$TARGET_VALUE_INPUT"; then
+                echo "ERROR: invalid branch target_value: $(sanitize_line "$TARGET_VALUE_INPUT")" >&2
+                exit 2
+              fi
+              git fetch --no-tags --depth=1 origin \
+                "refs/heads/$TARGET_VALUE_INPUT"
+              ;;
+            ref)
+              if [[ "$TARGET_VALUE_INPUT" =~ ^[0-9a-fA-F]{40}$ ]]; then
+                git fetch --no-tags --depth=1 origin "$TARGET_VALUE_INPUT"
+              elif [[ "$TARGET_VALUE_INPUT" == refs/tags/* ]] &&
+                   git check-ref-format "$TARGET_VALUE_INPUT"; then
+                git fetch --no-tags --depth=1 origin "$TARGET_VALUE_INPUT"
+              else
+                echo "ERROR: ref target_value must be a full SHA or refs/tags/..." >&2
+                exit 2
+              fi
+              ;;
+            *)
+              echo "ERROR: unsupported target_kind: $(sanitize_line "$TARGET_KIND_INPUT")" >&2
+              exit 2
+              ;;
+          esac
+
+          git checkout --detach FETCH_HEAD
+          resolved_sha="$(git rev-parse HEAD)"
+          if [ "$SCENARIO_INPUT" = "pr-2378-before-after" ] &&
+             { [ "$TARGET_KIND_INPUT" != "pull-request" ] ||
+               [ "$TARGET_VALUE_INPUT" != "2378" ]; }; then
+            echo "ERROR: pr-2378-before-after requires pull-request target 2378" >&2
+            exit 2
+          fi
+          printf 'resolved_sha=%s\n' "$(sanitize_line "$resolved_sha")" >> "$GITHUB_OUTPUT"
+
+      # preflight: allow-pr-script-execution reason=manual-readonly-valgrind-reproduction
+      - name: Run bounded Valgrind proof
+        working-directory: target
+        env:
+          BASH_ENV: /dev/null
+          REPEAT_COUNT_INPUT: ${{ inputs.repeat_count }}
+          RESOLVED_SHA: ${{ steps.resolve.outputs.resolved_sha }}
+          SCENARIO_INPUT: ${{ inputs.scenario }}
+          TARGET_KIND_INPUT: ${{ inputs.target_kind }}
+          TARGET_VALUE_INPUT: ${{ inputs.target_value }}
+          VALGRIND_TOOL_INPUT: ${{ inputs.valgrind_tool }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+
+          qa="$TRUSTED_SCRIPTS/iccdev-valgrind-qa.sh"
+          work_root="$RUNNER_TEMP/iccdev-valgrind-poc"
+          selected_src="$work_root/selected"
+          before_src="$work_root/before"
+          mkdir -p "$work_root"
+          cp -a "$PWD" "$selected_src"
+
+          run_qa()
+          {
+            local source_dir="$1"
+            local state="$2"
+            local analyzer="$3"
+            local expectation="$4"
+            "$qa" \
+              --source-dir "$source_dir" \
+              --build-dir "$work_root/build-$state" \
+              --tool "$analyzer" \
+              --expect "$expectation" \
+              --runs "$REPEAT_COUNT_INPUT" \
+              --out-dir "$work_root/logs/$state-$analyzer"
+          }
+
+          if [ "$SCENARIO_INPUT" = "pr-2378-before-after" ]; then
+            cp -a "$selected_src" "$before_src"
+            git -C "$before_src" apply \
+              "$TRUSTED_ROOT/.github/ci/regression/pr-2378-helgrind-before.patch"
+            if [ "$VALGRIND_TOOL_INPUT" = "helgrind" ] ||
+               [ "$VALGRIND_TOOL_INPUT" = "both" ]; then
+              run_qa "$before_src" before helgrind finding
+              run_qa "$selected_src" after helgrind clean
             fi
-            cmake --build "out/$arm" --target iccFromXml iccToXml \
-              --parallel "$(nproc)" > "build-$arm.log" 2>&1
-          }
-
-          # The sweep ref may be years old, so locate the tools instead of
-          # hard-coding a build-tree layout that has moved since 2015.
-          # -print -quit rather than a pipe into head: under pipefail a head
-          # that closes the pipe early leaves find killed by SIGPIPE, and the
-          # assignment would then abort the step under set -e.
-          measure_arm() {
-            arm="$1"
-            from_xml="$(find "out/$arm" -type f -name iccFromXml -perm -u+x \
-              -print -quit)"
-            to_xml="$(find "out/$arm" -type f -name iccToXml -perm -u+x \
-              -print -quit)"
-            "$from_xml" Testing/Calc/RGBWProjector.xml "rgbw-$arm.icc" >/dev/null
-            "$to_xml" "rgbw-$arm.icc" "rgbw-$arm.readback.xml" >/dev/null
-          }
-
-          build_arm strict "$lto_on"
-          build_arm nostrict "$lto_on" \
-            -DCMAKE_C_FLAGS_RELEASE="-O3 -DNDEBUG -fno-strict-aliasing" \
-            -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG -fno-strict-aliasing"
-          build_arm nolto "$lto_off" -DENABLE_LTO=OFF
-
-          measure_arm strict
-          measure_arm nostrict
-          measure_arm nolto
-
-          zero_segment='SampledSegment Start="0.00000000" End="0.00000000"'
-          one_segment='SampledSegment Start="0.00000000" End="1.00000000"'
-          strict_zero="$(grep -c "$zero_segment" rgbw-strict.readback.xml || true)"
-          strict_one="$(grep -c "$one_segment" rgbw-strict.readback.xml || true)"
-          nostrict_zero="$(grep -c "$zero_segment" \
-            rgbw-nostrict.readback.xml || true)"
-          nostrict_one="$(grep -c "$one_segment" \
-            rgbw-nostrict.readback.xml || true)"
-          nolto_zero="$(grep -c "$zero_segment" rgbw-nolto.readback.xml || true)"
-          nolto_one="$(grep -c "$one_segment" rgbw-nolto.readback.xml || true)"
-
-          # Print the counts to stdout as well as to the summary: on #1952 the
-          # pass/fail sentence alone could not distinguish a clean compiler from
-          # a measurement taken against a stale build tree.
-          echo "counts: strict_zero=$strict_zero strict_one=$strict_one" \
-            "nostrict_zero=$nostrict_zero nostrict_one=$nostrict_one" \
-            "nolto_zero=$nolto_zero nolto_one=$nolto_one"
+            if [ "$VALGRIND_TOOL_INPUT" = "memcheck" ] ||
+               [ "$VALGRIND_TOOL_INPUT" = "both" ]; then
+              run_qa "$before_src" before memcheck clean
+              run_qa "$selected_src" after memcheck clean
+            fi
+          else
+            if [ "$VALGRIND_TOOL_INPUT" = "helgrind" ] ||
+               [ "$VALGRIND_TOOL_INPUT" = "both" ]; then
+              run_qa "$selected_src" selected helgrind clean
+            fi
+            if [ "$VALGRIND_TOOL_INPUT" = "memcheck" ] ||
+               [ "$VALGRIND_TOOL_INPUT" = "both" ]; then
+              run_qa "$selected_src" selected memcheck clean
+            fi
+          fi
 
           {
-            echo "## Issue #1948 clang $(sanitize_line "$CLANG_SUFFIX") sweep"
+            echo "## Issue #2380 Valgrind/Helgrind PoC"
             echo ""
-            echo "- Sweep ref: \`$(sanitize_line "$SWEEP_REF_INPUT")\`"
-            echo "- Sweep commit: \`$(sanitize_line "$(git rev-parse HEAD)")\`"
-            echo "- Compiler: \`$(sanitize_line "$clang_banner")\`"
-            echo "- Package version: \`$(sanitize_line "$clang_package")\`"
+            echo "- Scenario: \`$(sanitize_line "$SCENARIO_INPUT")\`"
+            echo "- Target kind: \`$(sanitize_line "$TARGET_KIND_INPUT")\`"
+            echo "- Target value: \`$(sanitize_line "$TARGET_VALUE_INPUT")\`"
+            echo "- Resolved commit: \`$(sanitize_line "$RESOLVED_SHA")\`"
+            echo "- Analyzer: \`$(sanitize_line "$VALGRIND_TOOL_INPUT")\`"
+            echo "- Runs per state: \`$(sanitize_line "$REPEAT_COUNT_INPUT")\`"
             echo ""
-            echo "| arm | zero-end | one-end | expected |"
-            echo "|---|---|---|---|"
-            echo "| strict, LTO on | \`$(sanitize_line "$strict_zero")\` |" \
-              "\`$(sanitize_line "$strict_one")\` | defect |"
-            echo "| -fno-strict-aliasing | \`$(sanitize_line "$nostrict_zero")\` |" \
-              "\`$(sanitize_line "$nostrict_one")\` | clean |"
-            echo "| ENABLE_LTO=OFF | \`$(sanitize_line "$nolto_zero")\` |" \
-              "\`$(sanitize_line "$nolto_one")\` | clean |"
-            echo ""
-            echo "### strict readback sampled segments"
-            echo '```text'
-            grep -n 'SampledSegment' rgbw-strict.readback.xml | head -12 |
-              while IFS= read -r line; do
-                sanitize_code_line "$line"
-              done
-            echo '```'
+            echo "The PR #2378 comparison expects Helgrind exit 99 before the fix"
+            echo "and a clean exit after it. Memcheck is a clean control in both states."
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
-
-          # Each leg gets its own message and exit code.  A broken control and a
-          # compiler that genuinely writes correct profiles are different
-          # results, and collapsing them into one sentence is what made the
-          # earlier clang-20 run read as immunity.
-          if [ "$nostrict_one" -eq 0 ] || [ "$nostrict_zero" -ne 0 ]; then
-            echo "[INVALID] -fno-strict-aliasing control did not write a" \
-              "correct profile; the experiment says nothing about clang" \
-              "$CLANG_SUFFIX" >&2
-            exit 2
-          fi
-          if [ "$nolto_one" -eq 0 ] || [ "$nolto_zero" -ne 0 ]; then
-            echo "[INVALID] ENABLE_LTO=OFF control did not write a correct" \
-              "profile; the experiment says nothing about clang" \
-              "$CLANG_SUFFIX" >&2
-            exit 2
-          fi
-          if [ "$strict_zero" -eq 0 ]; then
-            echo "[NO DEFECT] clang $CLANG_SUFFIX wrote a correct profile at" \
-              "$SWEEP_REF_INPUT with strict aliasing and LTO on" >&2
-            exit 1
-          fi
-          echo "[REPRODUCED] clang $CLANG_SUFFIX flattened $strict_zero" \
-            "segmented-curve breakpoints at $SWEEP_REF_INPUT"
-
-  windows-msvc:
-    name: "Windows MSVC"
-    runs-on: windows-2022
-    timeout-minutes: 90
-    defaults:
-      run:
-        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
-    env:
-      POWERSHELL_TELEMETRY_OPTOUT: 1
-      POWERSHELL_UPDATECHECK: Off
-      TARGET_REF_INPUT: ${{ inputs.target_ref || 'master' }}
-
-    steps:
-      - name: Checkout trusted scripts
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
-        with:
-          ref: ${{ github.workflow_sha }}
-          path: trusted
-          sparse-checkout: .github/scripts
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Checkout target ref
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
-        with:
-          # preflight: allow-codeql-actions reason=manual-readonly-target-checkout
-          ref: ${{ inputs.target_ref || 'master' }}
-          path: target
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Download vcpkg exported dependencies
-        working-directory: target
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
-          $ProgressPreference = 'SilentlyContinue'
-          git config --global credential.helper ""
-          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
-          . ..\trusted\.github\scripts\sanitize.ps1
-
-          $vcpkgExportUrl = 'https://github.com/InternationalColorConsortium/iccDEV/' +
-            'releases/download/v2.3.1/vcpkg-exported-deps.zip'
-          Invoke-WebRequest -Uri $vcpkgExportUrl -OutFile deps.zip
-          tar -xf deps.zip
-          Remove-Item -LiteralPath deps.zip -Force
-          "Using vcpkg export: $(Sanitize-Line $vcpkgExportUrl)"
-
-      - name: Build and read back with MSVC
-        working-directory: target
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
-          git config --global credential.helper ""
-          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
-          . ..\trusted\.github\scripts\sanitize.ps1
-          function Sanitize-CodeLineForSummary {
-            param([AllowEmptyString()][string]$InputString = "")
-            $result = Strip-CtrlRemoveNewlines -InputString $InputString
-            $result = Trim-Whitespace -InputString $result
-            $result = $result.Replace('```', '` ` `')
-            return (Truncate-String -InputString $result -MaxLen 1000)
-          }
-          git config --global --add safe.directory $PWD.Path
-
-          cmake -B out\msvc-issue-1948 -S Build\Cmake `
-            -G "Visual Studio 17 2022" `
-            -A x64 `
-            -DCMAKE_TOOLCHAIN_FILE="$PWD\scripts\buildsystems\vcpkg.cmake" `
-            -DVCPKG_MANIFEST_MODE=OFF `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DENABLE_TOOLS=ON `
-            -DENABLE_WXWIDGETS=OFF `
-            -Wno-dev
-          cmake --build out\msvc-issue-1948 --config Release --target iccFromXml iccToXml --parallel
-
-          $runtimeDir = Join-Path $PWD.Path 'out\msvc-issue-1948\bin\Release'
-          if (-not (Test-Path -LiteralPath $runtimeDir)) {
-            $runtimeDir = Join-Path $PWD.Path 'out\msvc-issue-1948\bin'
-          }
-          $env:PATH = @(
-            $runtimeDir,
-            (Join-Path $PWD.Path 'installed\x64-windows\bin'),
-            (Join-Path $PWD.Path 'installed\x64-windows\debug\bin'),
-            $env:PATH
-          ) -join ';'
-
-          $fromXml = Join-Path $runtimeDir 'iccFromXml.exe'
-          $toXml = Join-Path $runtimeDir 'iccToXml.exe'
-          & $fromXml 'Testing\Calc\RGBWProjector.xml' 'rgbw-msvc.icc'
-          if ($LASTEXITCODE -ne 0) {
-            throw "iccFromXml failed with exit code $LASTEXITCODE"
-          }
-          & $toXml 'rgbw-msvc.icc' 'rgbw-msvc.readback.xml'
-          if ($LASTEXITCODE -ne 0) {
-            throw "iccToXml failed with exit code $LASTEXITCODE"
-          }
-
-          $zeroSegment = 'SampledSegment Start="0.00000000" End="0.00000000"'
-          $oneSegment = 'SampledSegment Start="0.00000000" End="1.00000000"'
-          $zeroCount = @(Select-String -Path 'rgbw-msvc.readback.xml' -Pattern $zeroSegment).Count
-          $oneCount = @(Select-String -Path 'rgbw-msvc.readback.xml' -Pattern $oneSegment).Count
-          $summary = $env:GITHUB_STEP_SUMMARY
-          "## Issue #1948 Windows MSVC" | Out-File -FilePath $summary -Append
-          "" | Out-File -FilePath $summary -Append
-          "- Target ref: ``$(Sanitize-Line $env:TARGET_REF_INPUT)``" |
-            Out-File -FilePath $summary -Append
-          "- Target commit: ``$(Sanitize-Line (git rev-parse HEAD))``" |
-            Out-File -FilePath $summary -Append
-          "- MSVC readback zero-end segments: ``$zeroCount``" |
-            Out-File -FilePath $summary -Append
-          "- MSVC readback one-end segments: ``$oneCount``" |
-            Out-File -FilePath $summary -Append
-          "" | Out-File -FilePath $summary -Append
-          "### MSVC readback sampled segments" | Out-File -FilePath $summary -Append
-          '```text' | Out-File -FilePath $summary -Append
-          Select-String -Path 'rgbw-msvc.readback.xml' -Pattern 'SampledSegment' |
-            Select-Object -First 12 |
-            ForEach-Object { Sanitize-CodeLineForSummary $_.Line } |
-            Out-File -FilePath $summary -Append
-          '```' | Out-File -FilePath $summary -Append
-
-          if ($oneCount -eq 0) {
-            throw 'MSVC did not preserve End="1.00000000" for issue #1948 comparison'
-          }
