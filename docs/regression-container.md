@@ -94,7 +94,21 @@ scenario demonstrates the PR #2378 `GetNewApplyCmm()` race before and after the
 fix. It is a proof-of-concept workflow, not a hosted fuzzing service.
 
 For a local PR #2378 comparison, check out the issue #2380 branch as `TOOLING`
-and the PR head as `TARGET`. Keep evidence in a new host directory:
+and the PR head as `TARGET`. These setup commands are each independently
+copyable one-liners; replace the three `/path/to` locations first:
+
+```bash
+git clone --branch ci-qa-issue-2380-valgrind https://github.com/InternationalColorConsortium/iccDEV.git /path/to/iccDEV-issue-2380
+git clone https://github.com/InternationalColorConsortium/iccDEV.git /path/to/iccDEV-pr-2378
+git -C /path/to/iccDEV-pr-2378 fetch origin pull/2378/head
+git -C /path/to/iccDEV-pr-2378 switch --detach FETCH_HEAD
+mkdir /path/to/new/iccdev-valgrind-evidence
+docker pull ghcr.io/internationalcolorconsortium/iccdev:latest
+```
+
+Then run the single Docker invocation below. It prints the complete first
+Helgrind or Memcheck record for each before/after state and also preserves every
+run under `EVIDENCE`:
 
 ```bash
 IMAGE=ghcr.io/internationalcolorconsortium/iccdev:latest
@@ -121,15 +135,19 @@ docker run --rm \
     qa=/tooling/.github/scripts/iccdev-valgrind-qa.sh
     "$qa" --source-dir "$work/before" --build-dir "$work/build-before" \
       --tool helgrind --expect finding --runs 3 \
+      --label before \
       --out-dir /evidence/before-helgrind
     "$qa" --source-dir "$work/after" --build-dir "$work/build-after" \
       --tool helgrind --expect clean --runs 3 \
+      --label after \
       --out-dir /evidence/after-helgrind
     "$qa" --source-dir "$work/before" --build-dir "$work/build-before" \
       --tool memcheck --expect clean --runs 1 \
+      --label before \
       --out-dir /evidence/before-memcheck
     "$qa" --source-dir "$work/after" --build-dir "$work/build-after" \
       --tool memcheck --expect clean --runs 1 \
+      --label after \
       --out-dir /evidence/after-memcheck
   '
 ```
@@ -137,7 +155,7 @@ docker run --rm \
 The focused one-line form for any already prepared non-sanitized source tree is:
 
 ```bash
-.github/scripts/iccdev-valgrind-qa.sh --source-dir "$PWD" --build-dir /tmp/iccdev-valgrind --tool helgrind --expect clean --runs 3
+.github/scripts/iccdev-valgrind-qa.sh --source-dir "$PWD" --build-dir /tmp/iccdev-valgrind --tool helgrind --expect clean --runs 3 --label selected
 ```
 
 For actual local mutation fuzzing, build an uninstrumented tool and a

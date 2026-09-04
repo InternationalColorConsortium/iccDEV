@@ -232,7 +232,27 @@ jobs:
               --tool "$analyzer" \
               --expect "$expectation" \
               --runs "$REPEAT_COUNT_INPUT" \
+              --label "$state" \
               --out-dir "$work_root/logs/$state-$analyzer"
+          }
+
+          append_summary_log()
+          {
+            local heading="$1"
+            local log="$2"
+            local line
+            local line_count=0
+            [ -f "$log" ] || return 0
+            {
+              echo ""
+              echo "### $(sanitize_line "$heading")"
+              echo '```text'
+              while IFS= read -r line && [ "$line_count" -lt 200 ]; do
+                printf '%s\n' "$(sanitize_code_line "$line")"
+                line_count=$((line_count + 1))
+              done < "$log"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
           }
 
           if [ "$SCENARIO_INPUT" = "pr-2378-before-after" ]; then
@@ -273,3 +293,16 @@ jobs:
             echo "The PR #2378 comparison expects Helgrind exit 99 before the fix"
             echo "and a clean exit after it. Memcheck is a clean control in both states."
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+          append_summary_log "Before: Helgrind finding" \
+            "$work_root/logs/before-helgrind/helgrind-1.log"
+          append_summary_log "After: Helgrind clean" \
+            "$work_root/logs/after-helgrind/helgrind-1.log"
+          append_summary_log "Before control: Memcheck clean" \
+            "$work_root/logs/before-memcheck/memcheck-1.log"
+          append_summary_log "After control: Memcheck clean" \
+            "$work_root/logs/after-memcheck/memcheck-1.log"
+          append_summary_log "Selected target: Helgrind clean" \
+            "$work_root/logs/selected-helgrind/helgrind-1.log"
+          append_summary_log "Selected target: Memcheck clean" \
+            "$work_root/logs/selected-memcheck/memcheck-1.log"

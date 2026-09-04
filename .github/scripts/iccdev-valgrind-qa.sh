@@ -39,7 +39,7 @@ set -uo pipefail
 
 usage()
 {
-  echo "Usage: $0 --source-dir DIR --build-dir DIR --tool TOOL --expect STATE [--runs N] [--out-dir DIR]"
+  echo "Usage: $0 --source-dir DIR --build-dir DIR --tool TOOL --expect STATE [--runs N] [--out-dir DIR] [--label LABEL]"
   echo "  TOOL: helgrind or memcheck"
   echo "  STATE: clean or finding (finding is valid only for helgrind)"
 }
@@ -50,6 +50,7 @@ tool=""
 expect=""
 runs=1
 out_dir=""
+label="selected"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -81,6 +82,11 @@ while [ "$#" -gt 0 ]; do
     --out-dir)
       [ "$#" -ge 2 ] || { usage >&2; exit 2; }
       out_dir="$2"
+      shift 2
+      ;;
+    --label)
+      [ "$#" -ge 2 ] || { usage >&2; exit 2; }
+      label="$2"
       shift 2
       ;;
     -h|--help)
@@ -115,6 +121,12 @@ if [ "$runs" -lt 1 ] || [ "$runs" -gt 10 ]; then
   echo "[FAIL] --runs must be an integer from 1 through 10" >&2
   exit 2
 fi
+case "$label" in
+  ''|*[!A-Za-z0-9._-]*)
+    echo "[FAIL] --label must contain only ASCII letters, digits, dot, dash, or underscore" >&2
+    exit 2
+    ;;
+esac
 if [ ! -f "$source_dir/Build/Cmake/CMakeLists.txt" ] ||
    [ ! -f "$source_dir/Testing/sRGB_v4_ICC_preference.icc" ]; then
   echo "[FAIL] --source-dir is not a complete iccDEV checkout: $source_dir" >&2
@@ -171,6 +183,13 @@ for run_no in $(seq 1 "$runs"); do
     >"$log" 2>&1
   status=$?
   set -e
+
+  if [ "$run_no" -eq 1 ]; then
+    echo "[EVIDENCE] BEGIN $label $tool run $run_no (exit $status)"
+    LC_ALL=C tr -d '\000-\011\013\014\016-\037\177' < "$log" |
+      sed -n '1,200p'
+    echo "[EVIDENCE] END $label $tool run $run_no"
+  fi
 
   if [ "$expect" = "clean" ]; then
     if [ "$status" -ne 0 ] || ! grep -Eq 'ERROR SUMMARY: 0 errors' "$log"; then
