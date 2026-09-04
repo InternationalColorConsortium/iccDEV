@@ -17,9 +17,11 @@ included Clang 21 pair for compatible instrumentation.
 | `v<release>` | Immutable released image. |
 | Existing legacy tags | Retained temporarily for continuity; unsupported for new use. |
 
-Use `latest` only to start interactive work. Record the resolved digest and
-source revision in a report; use the SHA tag whenever another person or CI job
-must reproduce the result.
+Resolve every selected tag to a digest and record that digest plus the source
+revision before automated or shared validation. Execute the resolved digest,
+not the tag, so a mutable tag cannot change during the run. Do not hardcode one
+full-SHA tag as a long-lived workflow default; it becomes stale as the
+maintainer image advances. Replay prior evidence with its recorded digest.
 
 Existing short-SHA, branch, and image-variant tags remain available only to
 avoid breaking current users during the consolidation transition. Do not create,
@@ -27,10 +29,11 @@ recommend, or depend on new legacy tags. Re-evaluate their retention and
 removal through a separately announced tag-management change.
 
 ```bash
-IMAGE=ghcr.io/internationalcolorconsortium/iccdev:latest
-docker pull "$IMAGE"
-docker image inspect "$IMAGE" \
-  --format '{{index .RepoDigests 0}} revision={{index .Config.Labels "org.opencontainers.image.revision"}}'
+IMAGE_TAG=ghcr.io/internationalcolorconsortium/iccdev:latest
+docker pull "$IMAGE_TAG"
+IMAGE="$(docker image inspect "$IMAGE_TAG" --format '{{index .RepoDigests 0}}')"
+IMAGE_REVISION="$(docker image inspect "$IMAGE_TAG" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+printf 'digest=%s revision=%s\n' "$IMAGE" "$IMAGE_REVISION"
 docker run --rm -it "$IMAGE"
 ```
 
@@ -83,6 +86,143 @@ Use the smallest focused project test before the broad CTest envelope. Preserve
 evidence outside the disposable container. Exit `1` through `127` is a graceful
 failure; exit `128` or higher is signal termination. Attribute sanitizer
 findings by stack-frame source path, not input filename.
+
+## Valgrind and Helgrind
+
+The unified image includes Valgrind. Build a separate non-sanitized Debug tree
+before using Memcheck or Helgrind; do not place either tool around the image's
+ASAN/UBSAN build. Issue #2380 provides a bounded manual workflow at
+`.github/workflows/ci-issue-2380-valgrind-repro.yml`. Its default
+scenario demonstrates the PR #2378 `GetNewApplyCmm()` race before and after the
+fix. It is a proof-of-concept workflow, not a hosted fuzzing service.
+
+For a local PR #2378 comparison, check out the default branch as `TOOLING` and
+the PR head as `TARGET`. These setup commands are each independently
+copyable one-liners; replace the three `/path/to` locations first:
+
+```bash
+git clone https://github.com/InternationalColorConsortium/iccDEV.git /path/to/iccDEV-tooling
+git clone https://github.com/InternationalColorConsortium/iccDEV.git /path/to/iccDEV-pr-2378
+git -C /path/to/iccDEV-pr-2378 fetch origin pull/2378/head
+git -C /path/to/iccDEV-pr-2378 switch --detach FETCH_HEAD
+mkdir /path/to/new/iccdev-valgrind-evidence
+docker pull ghcr.io/internationalcolorconsortium/iccdev:latest
+```
+
+Then run the single Docker invocation below. It prints the complete first
+Helgrind or Memcheck record for each before/after state and also preserves every
+run under `EVIDENCE`:
+
+```bash
+IMAGE_TAG=ghcr.io/internationalcolorconsortium/iccdev:latest
+TOOLING=/path/to/iccDEV-tooling
+TARGET=/path/to/iccDEV-pr-2378
+EVIDENCE=/path/to/new/iccdev-valgrind-evidence
+mkdir -p "$EVIDENCE"
+docker pull "$IMAGE_TAG"
+IMAGE="$(docker image inspect "$IMAGE_TAG" --format '{{index .RepoDigests 0}}')"
+IMAGE_REVISION="$(docker image inspect "$IMAGE_TAG" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+printf 'digest=%s revision=%s\n' "$IMAGE" "$IMAGE_REVISION"
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  -v "$TOOLING:/tooling:ro" \
+  -v "$TARGET:/target:ro" \
+  -v "$EVIDENCE:/evidence" \
+  "$IMAGE" bash -lc '
+    set -euo pipefail
+    work="$(mktemp -d)"
+    cp -a --no-preserve=ownership /target/. "$work/after"
+    if [ -f "$work/after/.git" ]; then unlink "$work/after/.git"; fi
+    cp -a "$work/after" "$work/before"
+    patch -d "$work/before" -p1 < \
+      /tooling/.github/ci/regression/pr-2378-helgrind-before.patch
+    qa=/tooling/.github/scripts/iccdev-valgrind-qa.sh
+    "$qa" --source-dir "$work/before" --build-dir "$work/build-before" \
+      --tool helgrind --expect finding --runs 3 \
+      --label before \
+      --out-dir /evidence/before-helgrind
+    "$qa" --source-dir "$work/after" --build-dir "$work/build-after" \
+      --tool helgrind --expect clean --runs 3 \
+      --label after \
+      --out-dir /evidence/after-helgrind
+    "$qa" --source-dir "$work/before" --build-dir "$work/build-before" \
+      --tool memcheck --expect clean --runs 1 \
+      --label before \
+      --out-dir /evidence/before-memcheck
+    "$qa" --source-dir "$work/after" --build-dir "$work/build-after" \
+      --tool memcheck --expect clean --runs 1 \
+      --label after \
+      --out-dir /evidence/after-memcheck
+  '
+```
+
+The focused one-line form for any already prepared non-sanitized source tree is:
+
+```bash
+.github/scripts/iccdev-valgrind-qa.sh --source-dir "$PWD" --build-dir /tmp/iccdev-valgrind --tool helgrind --expect clean --runs 3 --label selected
+```
+
+For actual local mutation fuzzing, build an uninstrumented tool and a
+libFuzzer-only CLI harness, then place Memcheck around each tool child. Do not
+use `.github/ci/cfl/build.sh` for this combination because that normal CFL path
+adds ASAN/UBSAN. The run count is intentionally operator-controlled; the hosted
+issue workflow does not run this campaign. The following container command
+fuzzes `iccDumpProfile` for 300 iterations and leaves the evolving corpus,
+Valgrind log, and findings in the mounted evidence directory:
+
+```bash
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  -v "$TARGET:/target:ro" \
+  -v "$EVIDENCE:/evidence" \
+  "$IMAGE" bash -lc '
+    set -euo pipefail
+    work="$(mktemp -d)"
+    cp -a --no-preserve=ownership /target/. "$work/iccDEV"
+    if [ -f "$work/iccDEV/.git" ]; then unlink "$work/iccDEV/.git"; fi
+    cmake -S "$work/iccDEV/Build/Cmake" -B "$work/build" \
+      -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_TESTS=OFF \
+      -DENABLE_SANITIZERS=OFF -DENABLE_ASAN=OFF -DENABLE_UBSAN=OFF \
+      -DENABLE_TSAN=OFF -DENABLE_LTO=OFF -DENABLE_WXWIDGETS=OFF
+    cmake --build "$work/build" --target iccDumpProfile --parallel "$(nproc)"
+    clang++ -std=c++17 -g -O1 -fsanitize=fuzzer \
+      -DICCDEV_CFL_TARGET=\"dump\" \
+      "$work/iccDEV/.github/ci/cfl/icc_cli_fuzzer.cpp" \
+      -o "$work/icc_dump_valgrind_fuzzer"
+    mkdir -p "$work/wrappers/IccDumpProfile" \
+      /evidence/valgrind-corpus /evidence/valgrind-findings
+    cp "$work/iccDEV/Testing/sRGB_v4_ICC_preference.icc" \
+      /evidence/valgrind-corpus/seed.icc
+    printf "%s\n" \
+      "#!/bin/bash" \
+      "set +e" \
+      "valgrind --quiet --tool=memcheck --leak-check=full --track-origins=yes --error-exitcode=99 \"\$ICCDEV_VALGRIND_REAL_TOOL\" \"\$@\"" \
+      "status=\$?" \
+      "if [ \"\$status\" -eq 99 ]; then kill -ABRT \"\$\$\"; fi" \
+      "exit \"\$status\"" \
+      > "$work/wrappers/IccDumpProfile/iccDumpProfile"
+    chmod +x "$work/wrappers/IccDumpProfile/iccDumpProfile"
+    set +e
+    ICCDEV_CFL_TOOL_DIR="$work/wrappers" \
+    ICCDEV_VALGRIND_REAL_TOOL="$work/build/Tools/IccDumpProfile/iccDumpProfile" \
+      "$work/icc_dump_valgrind_fuzzer" \
+      /evidence/valgrind-corpus \
+      -runs=300 -max_len=262144 \
+      -artifact_prefix=/evidence/valgrind-findings/ \
+      > /evidence/libfuzzer-valgrind.log 2>&1
+    status=$?
+    set -e
+    tail -80 /evidence/libfuzzer-valgrind.log
+    exit "$status"
+  '
+```
+
+The wrapper converts Valgrind exit 99 into a child signal so the existing CFL
+harness saves the triggering input. Replay each saved input once outside the
+mutation loop. Use Helgrind instead of Memcheck only for a target that exercises
+concurrent callers; the threaded CMM regression above is the canonical example.
+Long campaigns, corpus minimization, and crash triage remain local maintainer
+operations.
 
 ## Building and Publishing
 

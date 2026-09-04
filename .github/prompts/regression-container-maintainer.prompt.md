@@ -8,7 +8,7 @@ Canonical guide: `docs/regression-container.md`
 ## Inputs
 
 - Operation: basic smoke / PR validation / issue reproduction
-- Image tag (`latest` for initial interactive work, immutable SHA for reproducibility):
+- Image selector (`latest`, full-SHA tag, or release tag; resolved at run time):
 - PR number:
 - Issue number:
 - Branch or commit:
@@ -23,8 +23,9 @@ Canonical guide: `docs/regression-container.md`
 
 ## Required Workflow
 
-1. Pull the selected image and record its digest and source revision. If using
-   `latest`, verify both before starting.
+1. Pull the selected tag, resolve and record its digest and source revision,
+   then execute the digest. Do not hardcode a particular SHA as a reusable
+   workflow default.
 2. Start with a clean container Git worktree. Stop and report if it is dirty.
 3. For a PR, fetch `pull/<number>/head` and check out the fetched ref detached.
 4. For an issue, use the smallest existing project input and project tool.
@@ -44,10 +45,9 @@ Canonical guide: `docs/regression-container.md`
 12. Save evidence outside the disposable container.
 13. If CI is requested, use the PR trigger or explicitly dispatch
     `ci-pr-action.yml`; do not assume a branch push triggers it.
-14. Use only `latest`, immutable SHA, or release tags. Existing legacy tags are
-    continuity-only; do not create, recommend, or depend on branch, run, or
-    image-variant tags. Require a separate tag-management decision before
-    removing a legacy tag.
+14. Use only `latest`, full-SHA, or release tags as selectors and resolve them
+    at run time. Existing legacy tags are continuity-only; do not create,
+    recommend, or depend on branch, run, or image-variant tags.
 15. Include the canonical image digest and hosted run in the handoff.
 
 For AFL/CFL work, keep the review scope narrow: these helpers are experimental
