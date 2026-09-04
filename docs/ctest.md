@@ -350,12 +350,22 @@ shipped. A fourth arm repeats MODULE mode with a target-less
 `RefIccMAXConfig.cmake` planted earlier on `CMAKE_PREFIX_PATH`, the shape a
 pre-2.3.2 install has. Each arm pins the library it resolved back to the staged
 prefix, so an iccDEV installed elsewhere on the machine cannot satisfy the test
-in place of this build tree. Unlike the Windows consumers above, this one is
-skipped -- with a logged reason -- on sanitizer builds rather than inheriting
-the parent settings: its consumers are separate CMake projects, and an
-uninstrumented executable cannot load an ASan-instrumented library. The
-MODULE-mode arms are likewise skipped on static-only builds, where
-`FindRefIccMAX.cmake` reports not-found by design.
+in place of this build tree. The direct MODULE arm sets
+`REFICCMAX_SKIP_CONFIG` so an unrelated system CONFIG package cannot bypass the
+manual-discovery path under test; the legacy-config arm leaves CONFIG enabled
+to verify its target-less-package fallback. Unlike the Windows consumers
+above, this one is skipped -- with a logged reason -- on sanitizer builds
+rather than inheriting the parent settings: its consumers are separate CMake
+projects, and an uninstrumented executable cannot load an ASan-instrumented
+library. The MODULE-mode arms are likewise skipped on static-only builds,
+where `FindRefIccMAX.cmake` reports not-found by design.
+
+When the parent uses vcpkg, the test forwards its toolchain, installed tree,
+and target triplet while disabling manifest mode for the nested consumers. This
+keeps dependency discovery in the already populated parent tree instead of
+falling back to vcpkg's unrelated global classic tree. The
+`build-test-binaries` target builds both shared and static library artifacts
+that the test stages, so the focused CTest can run without a prior full build.
 
 ## Fixtures and Logs
 
