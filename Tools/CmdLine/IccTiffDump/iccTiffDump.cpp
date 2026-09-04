@@ -482,9 +482,30 @@ int main(int argc, icChar* argv[])
             GetSampleFormatDescription( SrcImg.GetSampleFormat()) );
 
   printf("SamplesPerPixel:   %d\n", SrcImg.GetSamples());
-  int nExtra = SrcImg.GetExtraSamples();
-  if (nExtra)
-    printf("ExtraSamples:      %d\n", nExtra);
+  // Report on tag PRESENCE, not on a nonzero count.  The old test printed nothing
+  // when tag 338 was absent and nothing when it was stored as zero, and said nothing
+  // at all about a directory libtiff had repaired: the tracked 81-band
+  // Testing/hybrid/Data/smCows380_5_780.tif dumped "SamplesPerPixel: 81" and
+  // "Photometric: Min Is Black" -- one colour channel -- with the other 80 channels
+  // unmentioned, while libtiff's own warning went to stderr and named no count.
+  // GetEffectiveExtraSamples() is what libtiff repaired the layout to, so state it
+  // and say it was not stored, rather than leave the reader to reconcile the two
+  // numbers themselves (#2386).
+  //
+  // Only the absent-tag half of that gap is closed here.  Where tag 338 IS present
+  // and libtiff still repairs, it overwrites the stored count in place and exposes
+  // no way to read the original back, so the plain figure printed below is libtiff's
+  // and may not be the file's -- a 6-sample MinIsBlack image storing [2] prints 5.
+  // Recovering the stored count would mean parsing the IFD independently of libtiff;
+  // that is not done here because the same repaired count is what colour management
+  // consumes, and which of the two is correct is the open question on #2379/#2385.
+  unsigned int nExtra = SrcImg.GetExtraSamples();
+  unsigned int nEffectiveExtra = SrcImg.GetEffectiveExtraSamples();
+  if (SrcImg.HasStoredExtraSamples())
+    printf("ExtraSamples:      %u\n", nExtra);
+  else if (nEffectiveExtra)
+    printf("ExtraSamples:      not stored; libtiff treats %u of %u samples as non-color\n",
+      nEffectiveExtra, SrcImg.GetSamples());
   printf("Photometric:       %s\n", GetId(SrcImg.GetPhoto(), photo_types));
   printf("BytesPerLine:      %d\n", SrcImg.GetBytesPerLine());
   printf("Resolution:        (%lf x %lf) %s\n", SrcImg.GetXRes(), SrcImg.GetYRes(),

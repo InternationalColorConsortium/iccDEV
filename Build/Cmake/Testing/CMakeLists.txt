@@ -7679,6 +7679,26 @@ if(TARGET iccSpecSepToTiff AND TARGET iccApplyProfiles AND TARGET iccTiffDump)
   )
 endif()
 
+# CTiffImg::Open() discarded the TIFFGetField(TIFFTAG_EXTRASAMPLES) return, so no
+# caller could tell an absent tag 338 from a stored one, and iccTiffDump reported
+# nothing at all for a directory libtiff had silently repaired (#2386).  Only
+# iccTiffDump is exercised -- the fix deliberately leaves the count colour
+# management reads alone -- so it is the only target guarded on.  Three of the
+# four fixtures are written by the script; the fourth is the tracked
+# Testing/hybrid/Data/smCows380_5_780.tif, which needs no generated profile.
+if(TARGET iccTiffDump)
+  iccdev_add_script_test(
+    iccdev.tiff-extrasamples-diagnostics
+    120
+    "iccdev;tools;tiff;tiffdump;extrasamples;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-tiff-extrasamples-diagnostics-tests.sh"
+  )
+  set_tests_properties(iccdev.tiff-extrasamples-diagnostics PROPERTIES
+    SKIP_RETURN_CODE 77
+  )
+endif()
+
 iccdev_add_script_test(
   iccdev.dump-profile-header-regression
   120
