@@ -89,7 +89,7 @@ findings by stack-frame source path, not input filename.
 The unified image includes Valgrind. Build a separate non-sanitized Debug tree
 before using Memcheck or Helgrind; do not place either tool around the image's
 ASAN/UBSAN build. Issue #2380 provides a bounded manual workflow at
-`.github/workflows/ci-issue-1948-segmented-curve-repro.yml`. Its default
+`.github/workflows/ci-issue-2380-valgrind-repro.yml`. Its default
 scenario demonstrates the PR #2378 `GetNewApplyCmm()` race before and after the
 fix. It is a proof-of-concept workflow, not a hosted fuzzing service.
 
