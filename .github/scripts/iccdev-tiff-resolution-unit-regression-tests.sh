@@ -239,6 +239,12 @@ require_tool() {
   return 0
 }
 
+# Per-case timeouts are held well under the CTest TIMEOUT this script is registered
+# with (Build/Cmake/Testing/CMakeLists.txt).  They were 60 and 120 against a 120s
+# budget, so across seven case invocations the worst case was 480s: CTest killed the
+# whole script first and the per-case "got exit=124" line and its log tail -- the only
+# things that say WHICH case hung -- were never printed.
+#
 # iccSpecSepToTiff must hand the unit of its input channels to its output.  Run
 # for each of the three units TIFF defines, including RESUNIT_INCH: before the
 # fix no unit tag was written at all, so the inch case is a real assertion rather
@@ -267,7 +273,7 @@ run_specsep_unit_preserved() {
     fi
   done
 
-  timeout 60 "$SPECSEP" "$OUTPUT_TIFF" 0 0 "$WORKDIR/spec_" 1 2 1 > "$LOGFILE" 2>&1 || exit_code=$?
+  timeout 30 "$SPECSEP" "$OUTPUT_TIFF" 0 0 "$WORKDIR/spec_" 1 2 1 > "$LOGFILE" 2>&1 || exit_code=$?
 
   if ! check_sanitizers "$name" "$LOGFILE"; then
     sed -n '1,40p' "$LOGFILE"
@@ -312,7 +318,7 @@ run_specsep_unit_mismatch_rejected() {
     return
   fi
 
-  timeout 60 "$SPECSEP" "$OUTPUT_TIFF" 0 0 "$WORKDIR/spec_" 1 2 1 > "$LOGFILE" 2>&1 || exit_code=$?
+  timeout 30 "$SPECSEP" "$OUTPUT_TIFF" 0 0 "$WORKDIR/spec_" 1 2 1 > "$LOGFILE" 2>&1 || exit_code=$?
 
   if ! check_sanitizers "$name" "$LOGFILE"; then
     sed -n '1,40p' "$LOGFILE"
@@ -365,7 +371,7 @@ run_applyprofiles_unit_preserved() {
     return
   fi
 
-  timeout 120 "$APPLYPROFILES" "$WORKDIR/source.tif" "$OUTPUT_TIFF" 0 0 0 0 1 \
+  timeout 30 "$APPLYPROFILES" "$WORKDIR/source.tif" "$OUTPUT_TIFF" 0 0 0 0 1 \
     "$SRGB_PROFILE" 1 > "$LOGFILE" 2>&1 || exit_code=$?
 
   if ! check_sanitizers "$name" "$LOGFILE"; then
@@ -411,7 +417,7 @@ run_tiffdump_reports_unit() {
     return
   fi
 
-  timeout 60 "$TIFFDUMP" "$WORKDIR/source.tif" > "$LOGFILE" 2>&1 || exit_code=$?
+  timeout 30 "$TIFFDUMP" "$WORKDIR/source.tif" > "$LOGFILE" 2>&1 || exit_code=$?
 
   if ! check_sanitizers "$name" "$LOGFILE"; then
     sed -n '1,40p' "$LOGFILE"
@@ -462,7 +468,7 @@ run_tiffdump_relative_resolution() {
     return
   fi
 
-  timeout 60 "$TIFFDUMP" "$WORKDIR/source.tif" > "$LOGFILE" 2>&1 || exit_code=$?
+  timeout 30 "$TIFFDUMP" "$WORKDIR/source.tif" > "$LOGFILE" 2>&1 || exit_code=$?
 
   if ! check_sanitizers "$name" "$LOGFILE"; then
     sed -n '1,40p' "$LOGFILE"
