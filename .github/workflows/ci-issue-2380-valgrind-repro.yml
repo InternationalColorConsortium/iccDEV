@@ -60,7 +60,7 @@ permissions:
         default: '3'
         type: string
       regression_image_tag:
-        description: 'Trusted unified iccDEV image tag'
+        description: 'Trusted tag; the job resolves and runs its immutable digest'
         required: false
         default: latest
         type: string
@@ -72,14 +72,79 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  resolve-image:
+    name: "Resolve container provenance"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+    outputs:
+      image_ref: ${{ steps.resolve.outputs.image_ref }}
+      image_revision: ${{ steps.resolve.outputs.image_revision }}
+      requested_tag: ${{ steps.resolve.outputs.requested_tag }}
+    steps:
+      - name: Checkout trusted sanitizer
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: trusted-image
+          sparse-checkout: .github/scripts/sanitize-sed.sh
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Resolve selected tag to digest
+        id: resolve
+        env:
+          BASH_ENV: /dev/null
+          REGRESSION_IMAGE_TAG_INPUT: ${{ inputs.regression_image_tag || 'latest' }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source trusted-image/.github/scripts/sanitize-sed.sh
+
+          if [[ ! "$REGRESSION_IMAGE_TAG_INPUT" =~ ^(latest|sha-[0-9a-f]{40}|v[0-9][A-Za-z0-9._-]*)$ ]]; then
+            echo "ERROR: image tag must be latest, sha-<full-commit>, or a release tag" >&2
+            exit 2
+          fi
+          requested_ref="ghcr.io/internationalcolorconsortium/iccdev:$REGRESSION_IMAGE_TAG_INPUT"
+          docker pull "$requested_ref"
+          resolved_ref="$(docker image inspect "$requested_ref" \
+            --format '{{index .RepoDigests 0}}')"
+          image_revision="$(docker image inspect "$requested_ref" \
+            --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+          if [[ ! "$resolved_ref" =~ ^ghcr[.]io/internationalcolorconsortium/iccdev@sha256:[0-9a-f]{64}$ ]]; then
+            echo "ERROR: selected image did not resolve to the canonical digest" >&2
+            exit 2
+          fi
+          if [[ ! "$image_revision" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: selected image lacks a full source revision label" >&2
+            exit 2
+          fi
+
+          {
+            printf 'image_ref=%s\n' "$(sanitize_line "$resolved_ref")"
+            printf 'image_revision=%s\n' "$(sanitize_line "$image_revision")"
+            printf 'requested_tag=%s\n' "$(sanitize_line "$REGRESSION_IMAGE_TAG_INPUT")"
+          } >> "$GITHUB_OUTPUT"  # elements-sanitized
+          {
+            echo "## Resolved iccDEV container"
+            echo ""
+            echo "- Requested tag: \`$(sanitize_line "$REGRESSION_IMAGE_TAG_INPUT")\`"
+            echo "- Executed digest: \`$(sanitize_line "$resolved_ref")\`"
+            echo "- Source revision: \`$(sanitize_line "$image_revision")\`"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
   valgrind-poc:
     name: "${{ inputs.scenario }} (${{ inputs.valgrind_tool }})"
+    needs: resolve-image
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     container:
-      image: >-
-        ghcr.io/internationalcolorconsortium/iccdev:${{
-        inputs.regression_image_tag || 'latest' }}
+      image: ${{ needs.resolve-image.outputs.image_ref }}  # zizmor: ignore[unpinned-images] validated digest
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -91,6 +156,9 @@ jobs:
       BASH_ENV: /dev/null
       TRUSTED_ROOT: ${{ github.workspace }}/trusted
       TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
+      IMAGE_REQUESTED_TAG: ${{ needs.resolve-image.outputs.requested_tag }}
+      IMAGE_RESOLVED_REF: ${{ needs.resolve-image.outputs.image_ref }}
+      IMAGE_SOURCE_REVISION: ${{ needs.resolve-image.outputs.image_revision }}
 
     steps:
       - name: Checkout trusted workflow helpers
@@ -111,6 +179,23 @@ jobs:
           path: target
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Verify resolved container provenance
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+
+          if [ "${ICCDEV_SOURCE_REVISION:-}" != "$IMAGE_SOURCE_REVISION" ]; then
+            echo "ERROR: running container revision does not match resolved provenance" >&2
+            exit 2
+          fi
+          echo "[INFO] image tag: $(sanitize_line "$IMAGE_REQUESTED_TAG")"
+          echo "[INFO] image digest: $(sanitize_line "$IMAGE_RESOLVED_REF")"
+          echo "[INFO] image revision: $(sanitize_line "$IMAGE_SOURCE_REVISION")"
 
       - name: Resolve PR, branch, or ref
         id: resolve
@@ -286,6 +371,9 @@ jobs:
             echo "- Target kind: \`$(sanitize_line "$TARGET_KIND_INPUT")\`"
             echo "- Target value: \`$(sanitize_line "$TARGET_VALUE_INPUT")\`"
             echo "- Resolved commit: \`$(sanitize_line "$RESOLVED_SHA")\`"
+            echo "- Image tag: \`$(sanitize_line "$IMAGE_REQUESTED_TAG")\`"
+            echo "- Image digest: \`$(sanitize_line "$IMAGE_RESOLVED_REF")\`"
+            echo "- Image source revision: \`$(sanitize_line "$IMAGE_SOURCE_REVISION")\`"
             echo "- Analyzer: \`$(sanitize_line "$VALGRIND_TOOL_INPUT")\`"
             echo "- Runs per state: \`$(sanitize_line "$REPEAT_COUNT_INPUT")\`"
             echo ""
@@ -294,7 +382,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
           append_summary_log "Before: Helgrind finding" \
-            "$work_root/logs/before-helgrind/helgrind-1.log"
+            "$work_root/logs/before-helgrind/helgrind-finding.log"
           append_summary_log "After: Helgrind clean" \
             "$work_root/logs/after-helgrind/helgrind-1.log"
           append_summary_log "Before control: Memcheck clean" \

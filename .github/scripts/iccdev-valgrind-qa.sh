@@ -190,7 +190,20 @@ for tool_dir in "${runtime_tool_dirs[@]}"; do
   runtime_tool_path+="${runtime_tool_path:+:}$build_dir/Tools/$tool_dir"
 done
 
+print_evidence()
+{
+  local evidence_log="$1"
+  local evidence_run="$2"
+  local evidence_status="$3"
+  echo "[EVIDENCE] BEGIN $label $tool run $evidence_run (exit $evidence_status)"
+  LC_ALL=C tr -d '\000-\011\013\014\016-\037\177' < "$evidence_log" |
+    sed -n '1,200p'
+  echo "[EVIDENCE] END $label $tool run $evidence_run"
+}
+
 finding_seen=0
+finding_log="$out_dir/$tool-finding.log"
+rm -f -- "$finding_log"
 for run_no in $(seq 1 "$runs"); do
   log="$out_dir/$tool-$run_no.log"
   set +e
@@ -205,10 +218,7 @@ for run_no in $(seq 1 "$runs"); do
   set -e
 
   if [ "$run_no" -eq 1 ]; then
-    echo "[EVIDENCE] BEGIN $label $tool run $run_no (exit $status)"
-    LC_ALL=C tr -d '\000-\011\013\014\016-\037\177' < "$log" |
-      sed -n '1,200p'
-    echo "[EVIDENCE] END $label $tool run $run_no"
+    print_evidence "$log" "$run_no" "$status"
   fi
 
   if [ "$expect" = "clean" ]; then
@@ -224,6 +234,12 @@ for run_no in $(seq 1 "$runs"); do
   if [ "$status" -eq 99 ] &&
      grep -Fq 'CIccCmm::GetNewApplyCmm' "$log" &&
      grep -Fq 'Possible data race' "$log"; then
+    if [ "$finding_seen" -eq 0 ]; then
+      cp "$log" "$finding_log"
+      if [ "$run_no" -ne 1 ]; then
+        print_evidence "$log" "$run_no" "$status"
+      fi
+    fi
     finding_seen=1
     echo "[PASS] helgrind run $run_no reproduced the GetNewApplyCmm race"
   elif [ "$status" -eq 0 ]; then

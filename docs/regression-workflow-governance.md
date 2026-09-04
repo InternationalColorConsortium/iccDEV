@@ -121,6 +121,10 @@ requesting review, check the PR against this list:
 - Keep Docker and regression-container docs reproducible from a fresh checkout
   or clean container. Fetch branch refs explicitly and avoid relying on local
   remote-tracking state, generated files, or preexisting host permissions.
+- Let maintainers select a supported container tag at dispatch time, resolve
+  it to a digest before starting the container job, and record both that digest
+  and the image source revision. Do not hardcode one full-SHA tag as a durable
+  workflow default.
 - Validate trusted-base helper boundaries in PR workflows. PR-controlled
   checkouts must not provide sanitizer, summary, release, or package helpers
   unless the step is a reviewed test-only exception.

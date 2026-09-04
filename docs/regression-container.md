@@ -17,9 +17,11 @@ included Clang 21 pair for compatible instrumentation.
 | `v<release>` | Immutable released image. |
 | Existing legacy tags | Retained temporarily for continuity; unsupported for new use. |
 
-Use `latest` only to start interactive work. Record the resolved digest and
-source revision in a report; use the SHA tag whenever another person or CI job
-must reproduce the result.
+Resolve every selected tag to a digest and record that digest plus the source
+revision before automated or shared validation. Execute the resolved digest,
+not the tag, so a mutable tag cannot change during the run. Do not hardcode one
+full-SHA tag as a long-lived workflow default; it becomes stale as the
+maintainer image advances. Replay prior evidence with its recorded digest.
 
 Existing short-SHA, branch, and image-variant tags remain available only to
 avoid breaking current users during the consolidation transition. Do not create,
@@ -27,10 +29,11 @@ recommend, or depend on new legacy tags. Re-evaluate their retention and
 removal through a separately announced tag-management change.
 
 ```bash
-IMAGE=ghcr.io/internationalcolorconsortium/iccdev:latest
-docker pull "$IMAGE"
-docker image inspect "$IMAGE" \
-  --format '{{index .RepoDigests 0}} revision={{index .Config.Labels "org.opencontainers.image.revision"}}'
+IMAGE_TAG=ghcr.io/internationalcolorconsortium/iccdev:latest
+docker pull "$IMAGE_TAG"
+IMAGE="$(docker image inspect "$IMAGE_TAG" --format '{{index .RepoDigests 0}}')"
+IMAGE_REVISION="$(docker image inspect "$IMAGE_TAG" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+printf 'digest=%s revision=%s\n' "$IMAGE" "$IMAGE_REVISION"
 docker run --rm -it "$IMAGE"
 ```
 
@@ -93,12 +96,12 @@ ASAN/UBSAN build. Issue #2380 provides a bounded manual workflow at
 scenario demonstrates the PR #2378 `GetNewApplyCmm()` race before and after the
 fix. It is a proof-of-concept workflow, not a hosted fuzzing service.
 
-For a local PR #2378 comparison, check out the issue #2380 branch as `TOOLING`
-and the PR head as `TARGET`. These setup commands are each independently
+For a local PR #2378 comparison, check out the default branch as `TOOLING` and
+the PR head as `TARGET`. These setup commands are each independently
 copyable one-liners; replace the three `/path/to` locations first:
 
 ```bash
-git clone --branch ci-qa-issue-2380-valgrind https://github.com/InternationalColorConsortium/iccDEV.git /path/to/iccDEV-issue-2380
+git clone https://github.com/InternationalColorConsortium/iccDEV.git /path/to/iccDEV-tooling
 git clone https://github.com/InternationalColorConsortium/iccDEV.git /path/to/iccDEV-pr-2378
 git -C /path/to/iccDEV-pr-2378 fetch origin pull/2378/head
 git -C /path/to/iccDEV-pr-2378 switch --detach FETCH_HEAD
@@ -111,14 +114,15 @@ Helgrind or Memcheck record for each before/after state and also preserves every
 run under `EVIDENCE`:
 
 ```bash
-IMAGE=ghcr.io/internationalcolorconsortium/iccdev:latest
-TOOLING=/path/to/iccDEV-issue-2380
+IMAGE_TAG=ghcr.io/internationalcolorconsortium/iccdev:latest
+TOOLING=/path/to/iccDEV-tooling
 TARGET=/path/to/iccDEV-pr-2378
 EVIDENCE=/path/to/new/iccdev-valgrind-evidence
 mkdir -p "$EVIDENCE"
-docker pull "$IMAGE"
-docker image inspect "$IMAGE" \
-  --format '{{index .RepoDigests 0}} revision={{index .Config.Labels "org.opencontainers.image.revision"}}'
+docker pull "$IMAGE_TAG"
+IMAGE="$(docker image inspect "$IMAGE_TAG" --format '{{index .RepoDigests 0}}')"
+IMAGE_REVISION="$(docker image inspect "$IMAGE_TAG" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+printf 'digest=%s revision=%s\n' "$IMAGE" "$IMAGE_REVISION"
 docker run --rm \
   --user "$(id -u):$(id -g)" \
   -v "$TOOLING:/tooling:ro" \
