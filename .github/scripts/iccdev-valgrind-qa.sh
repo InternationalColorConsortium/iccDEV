@@ -174,11 +174,31 @@ else
              --track-origins=yes)
 fi
 
+# Match the runtime search environment used by ICCDEV_TEST_ENV. The regression
+# links shared libraries and may call tools from this build tree, so invoking it
+# directly must not depend on an installed or container-provided iccDEV runtime.
+runtime_library_path="$build_dir/IccProfLib:$build_dir/IccXML"
+runtime_library_path+=":$build_dir/IccJSON:$build_dir/IccConnect"
+runtime_tool_dirs=(
+  IccApplyNamedCmm IccApplyProfiles IccApplySearch IccApplyToLink
+  IccDumpProfile IccFromCube IccFromJson IccFromXml IccJpegDump
+  IccPawgReport IccPngDump IccRoundTrip IccSpecSepToTiff IccTiffDump
+  IccToJson IccToXml IccV5DspObsToV4Dsp IccProfileVisualize
+)
+runtime_tool_path=""
+for tool_dir in "${runtime_tool_dirs[@]}"; do
+  runtime_tool_path+="${runtime_tool_path:+:}$build_dir/Tools/$tool_dir"
+done
+
 finding_seen=0
 for run_no in $(seq 1 "$runs"); do
   log="$out_dir/$tool-$run_no.log"
   set +e
-  valgrind "${tool_args[@]}" "${common_args[@]}" \
+  DEBUGINFOD_URLS='' \
+  LD_LIBRARY_PATH="$runtime_library_path${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+  DYLD_LIBRARY_PATH="$runtime_library_path${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}" \
+  PATH="$runtime_tool_path${PATH:+:$PATH}" \
+    valgrind "${tool_args[@]}" "${common_args[@]}" \
     "$test_binary" "$source_dir/Testing/sRGB_v4_ICC_preference.icc" \
     >"$log" 2>&1
   status=$?
