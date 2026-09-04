@@ -410,7 +410,23 @@ static bool parseVersion(const std::string &sPart, unsigned long &rv)
 {
   icUInt32Number v = 0;
 
-  if (!icXmlParseU32(sPart.c_str(), v, 99))
+  // Trim first: a component carries the element's literal text, so a
+  // pretty-printed or hand-edited document indents it ("<ProfileVersion>\n
+  // 5.10\n</ProfileVersion>") or leaves a trailing space. icXmlParseU32 requires
+  // the whole string to be consumed, and strtoull skips leading blanks but not
+  // trailing ones, so "5.10 " was rejected outright and the version reached the
+  // header as 0 -- silently, since ParseBasic still returns true. That has been
+  // true of <ProfileVersion> since the #1845 repair put this helper on that path;
+  // routing <ProfileSubClassVersion> through the same helper would otherwise have
+  // spread it to a field whose atoi() had tolerated the whitespace.
+  std::string sTrimmed = sPart;
+  const char *szBlank = " \t\r\n\f\v";
+  std::string::size_type nFirst = sTrimmed.find_first_not_of(szBlank);
+  if (nFirst == std::string::npos)
+    return false;
+  sTrimmed = sTrimmed.substr(nFirst, sTrimmed.find_last_not_of(szBlank) - nFirst + 1);
+
+  if (!icXmlParseU32(sTrimmed.c_str(), v, 99))
     return false;
 
   rv = ((v / 10) % 10) * 16 + (v % 10);
@@ -471,8 +487,12 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
           szVer++;
 
         if (bVerOk && *szVer) {
+          // Accumulate rather than assign.  889db62b repaired the major and
+          // minor loops above but left these two, so every iteration overwrote
+          // the previous digit and only the last one reached parseVersion:
+          // "5.10.12.34" landed as 05 10 02 04.
           for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
-            ver = *szVer;
+            ver += *szVer;
           }
           bVerOk = parseVersion(ver, verClassMajor);
           ver.clear();
@@ -481,10 +501,17 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
 
           if (bVerOk && *szVer) {
             for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
-              ver = *szVer;
+              ver += *szVer;
             }
             bVerOk = parseVersion(ver, verClassMinor);
             ver.clear();
+
+            // The header holds exactly four components, so anything still
+            // unconsumed is a fifth. Rejecting rather than silently truncating
+            // is what icJsonParseBCDVersionStr does -- it hands the whole
+            // remainder to a helper that refuses more than two digits.
+            if (bVerOk && *szVer)
+              bVerOk = false;
           }
         }
       }
@@ -509,18 +536,51 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
       const char *szVer = (const char*)pNode->children->content;
       std::string ver;
       unsigned long verClassMajor = 0, verClassMinor = 0;
+      // Three defects shared this block and they only cancel out together: the
+      // loops assigned instead of appending, so only the last digit survived;
+      // the major loop never stepped over the separator, so the minor loop ran
+      // zero times and atoi("") supplied 0; and atoi() stored a raw decimal
+      // where the header holds BCD.  Repairing only the first would have put
+      // "12" in the byte as 0x0C, which GetSubClassVersionName then rejects as
+      // "Invalid BCD subclass version".  parseVersion is the strict BCD helper
+      // ProfileVersion already uses, and matches icJsonParseBCDVersionStr on
+      // the JSON side.
+      bool bVerOk = false;
 
-      if (szVer) {
+      for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
+        ver += *szVer;
+      }
+      bVerOk = parseVersion(ver, verClassMajor);
+      ver.clear();
+      if (*szVer)
+        szVer++;
+
+      // A missing minor component stays 0, so "12" means "12.00"; a present but
+      // malformed one rejects the whole subclass version.
+      if (bVerOk && *szVer) {
         for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
-          ver = *szVer;
+          ver += *szVer;
         }
-        verClassMajor = (unsigned char)atoi(ver.c_str());
+        bVerOk = parseVersion(ver, verClassMinor);
         ver.clear();
-        
-        for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
-          ver = *szVer;
-        }
-        verClassMinor = (unsigned char)atoi(ver.c_str());
+
+        // As above: the sub-class version is two components, so a third is a
+        // malformation rather than something to truncate away.
+        if (bVerOk && *szVer)
+          bVerOk = false;
+      }
+
+      if (!bVerOk) {
+        // Malformed input already reached the header as zero via atoi(), so the
+        // stored value is unchanged; what is new is the recorded reason. Note
+        // iccFromXml prints parseStr only when LoadXml fails, and ParseBasic
+        // returns true regardless, so this string is not yet surfaced on the
+        // command line -- that suppression is #2387 finding 4 / #2384, which
+        // needs a ruling on the tool's exit contract before it can move.
+        parseStr += "Cannot parse ProfileSubClassVersion '";
+        parseStr += (const char*)pNode->children->content;
+        parseStr += "'\n";
+        verClassMajor = verClassMinor = 0;
       }
 
       m_Header.version = (m_Header.version & 0xffff0000) | (((verClassMajor << 8) | verClassMinor) & 0x0000ffff);

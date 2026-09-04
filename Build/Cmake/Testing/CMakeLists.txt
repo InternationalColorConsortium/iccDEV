@@ -5137,6 +5137,63 @@ function(iccdev_add_json_bcd_version_test)
   endif()
 endfunction()
 
+# #2387 findings 1 and 2: CIccProfileXml::ParseBasic walked a multi-component version
+# one component at a time, but 889db62b repaired only the first two loops from
+# "ver = *szVer" (assign, keeping the last digit) to "ver += *szVer" (accumulate).
+# The third and fourth loops, and both loops of the separate <ProfileSubClassVersion>
+# element, kept the assigning form, so "5.10.12.34" reached header bytes 8..11 as
+# 05 10 02 04 while iccFromXml reported a correct save. The sub-class block also
+# never stepped over its separator (its minor loop ran zero times) and used atoi()
+# where the header holds BCD -- so accumulating the digits alone would have written
+# 0x0C22, which GetSubClassVersionName rejects as "Invalid BCD subclass version".
+# Both components now use parseVersion, matching icJsonParseBCDVersionStr on the
+# JSON side (see iccdev.json-bcd-version-parse, the twin of this test). Drives the
+# public CIccProfileXml::ParseXml, so it needs IccXML + IccProfLib + libxml2 and is
+# skipped where IccXML is not built.
+function(iccdev_add_xml_version_parse_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlVersionParseTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-version-parse.cpp"
+  )
+  target_compile_features(iccXmlVersionParseTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlVersionParseTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlVersionParseTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlVersionParseTest)
+
+  add_test(
+    NAME iccdev.xml-version-parse
+    COMMAND "$<TARGET_FILE:iccXmlVersionParseTest>"
+  )
+  set_tests_properties(iccdev.xml-version-parse PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;xml;header;issue-2387;regression"
+  )
+  if(WIN32)
+    set(_xml_version_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlVersionParseTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _xml_version_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-version-parse PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_xml_version_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+
 # #1911: the JSON writers handed every payload up to the document root by value, so a
 # CLUT-bearing tag's samples were deep-copied and destroyed once per level of the
 # chain (data -> clut -> tagData -> tagObj -> entry -> Tags -> IccProfile). Those
@@ -6951,6 +7008,7 @@ if(WIN32)
   iccdev_add_installed_package_consumer_test()
   iccdev_add_windows_runtime_paths_test()
   iccdev_add_json_bcd_version_test()
+  iccdev_add_xml_version_parse_test()
   iccdev_add_json_writer_move_test()
   iccdev_add_json_fixednum_size_cap_test()
   iccdev_add_json_srng_uf32_test()
@@ -7317,6 +7375,7 @@ iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_proflib_exported_global_definitions_test()
 iccdev_add_installed_package_consumer_test()
 iccdev_add_json_bcd_version_test()
+iccdev_add_xml_version_parse_test()
 iccdev_add_json_writer_move_test()
 iccdev_add_json_fixednum_size_cap_test()
 iccdev_add_json_srng_uf32_test()
