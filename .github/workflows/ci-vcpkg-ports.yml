@@ -65,7 +65,7 @@ jobs:
           git config --global --add safe.directory "$PWD"
           # Pin vcpkg to builtin-baseline from vcpkg.json for reproducibility
           git clone https://github.com/microsoft/vcpkg.git "$RUNNER_TEMP/vcpkg"
-          git -C "$RUNNER_TEMP/vcpkg" checkout eae1680538b86f962455c27abca2aad0dc304a4d
+          git -C "$RUNNER_TEMP/vcpkg" checkout 04a9d8e5212d01ee1dd9478eadd9caade4f8b0d4
           "$RUNNER_TEMP/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
           echo "VCPKG_ROOT=$RUNNER_TEMP/vcpkg" >> "$GITHUB_ENV"
       - name: Bootstrap vcpkg (Windows)
@@ -82,7 +82,7 @@ jobs:
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           # Pin vcpkg to builtin-baseline from vcpkg.json for reproducibility
           git clone https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP\vcpkg"
-          git -C "$env:RUNNER_TEMP\vcpkg" checkout eae1680538b86f962455c27abca2aad0dc304a4d
+          git -C "$env:RUNNER_TEMP\vcpkg" checkout 04a9d8e5212d01ee1dd9478eadd9caade4f8b0d4
           & "$env:RUNNER_TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
           Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_ROOT=$env:RUNNER_TEMP\vcpkg"
       # Install port via overlay
