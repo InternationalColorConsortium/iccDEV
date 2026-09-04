@@ -270,6 +270,14 @@ workflow permission audit for workflow files. Use `hadolint`, Trivy config, or
 equivalent Dockerfile checks when container files are in scope. Run CodeQL for
 related C/C++ or CMake changes, not as the workflow YAML checker.
 
+The repository-level `.github/zizmor.yml` temporarily disables zizmor 1.30's
+`self-repository` audit. Keep same-repository `uses:` references in the `./`
+form until released actionlint supports GitHub's `$/` form
+([actionlint #711](https://github.com/rhysd/actionlint/issues/711)) and the
+repository no longer needs GitHub Enterprise Server compatibility.
+Remove the exception and migrate all local references together; do not suppress
+actionlint's syntax validation per workflow.
+
 The pre-flight gate must include Dockerfile paths when container files change.
 Dockerfile checks are blocking for changed container files: avoid advisory-only
 suppression for package pinning, `RUN cd` patterns, missing healthchecks, or
