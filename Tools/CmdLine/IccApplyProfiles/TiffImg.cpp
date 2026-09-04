@@ -725,12 +725,13 @@ bool CTiffImg::Open(const char *szFname)
       Close();
       return false;
     }
+    // A TIFF plane may end with a short final strip.  Use overflow-free ceiling
+    // division so TIFFComputeStrip()'s sample-plane stride includes that strip.
+    // The old floor division was only correct when ImageLength was an exact
+    // multiple of RowsPerStrip, and Open() rejected every other separated TIFF.
     m_nStripsPerSample = m_nHeight / m_nRowsPerStrip;
-    //Only support separations that evenly fit into strips
-    if (m_nHeight % m_nRowsPerStrip) {
-      Close();
-      return false;
-    }
+    if (m_nHeight % m_nRowsPerStrip)
+      m_nStripsPerSample++;
   }
   else {
     m_nStripSamples = 1;
@@ -775,7 +776,7 @@ bool CTiffImg::Open(const char *szFname)
 
 bool CTiffImg::ReadLine(unsigned char *pBuf)
 {
-  if (!m_bRead || m_nRowsPerStrip == 0 ||
+  if (!m_bRead || m_nCurLine >= m_nHeight || m_nRowsPerStrip == 0 ||
       m_nSamples == 0 || m_nSamples > kMaxTiffSamples ||
       m_nStripSamples == 0 || m_nStripSamples > kMaxTiffSamples)
     return false;

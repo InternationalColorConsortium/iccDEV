@@ -10182,9 +10182,18 @@ icStatusCMM CIccCmm::Begin(bool bAllocApplyCmm/*=true*/, bool bUsePCSConversions
 
   if (bAllocApplyCmm) {
     m_pApply = GetNewApplyCmm(rv);
+    if (!m_pApply || rv != icCmmStatOk) {
+      delete m_pApply;
+      m_pApply = NULL;
+      if (rv == icCmmStatOk)
+        rv = icCmmStatAllocErr;
+    }
   }
   else
     rv = icCmmStatOk;
+
+  if (rv == icCmmStatOk)
+    m_bValid = true;
 
   return rv;
 }
@@ -10221,8 +10230,6 @@ CIccApplyCmm *CIccCmm::GetNewApplyCmm(icStatusCMM &status)
     }
     pApply->AppendApplyXform(pXform);
   }
-
-  m_bValid = true;
 
   status = icCmmStatOk;
 
@@ -12322,6 +12329,21 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
  */
  icStatusCMM CIccNamedColorCmm::Begin(bool bAllocNewApply/* =true */, bool bUsePcsConversion/*=false*/)
 {
+  if (m_bValid) {
+    if (bAllocNewApply && !m_pApply) {
+      icStatusCMM rv = icCmmStatOk;
+      m_pApply = GetNewApplyCmm(rv);
+      if (!m_pApply || rv != icCmmStatOk) {
+        delete m_pApply;
+        m_pApply = NULL;
+        if (rv == icCmmStatOk)
+          rv = icCmmStatAllocErr;
+        return rv;
+      }
+    }
+    return icCmmStatOk;
+  }
+
   if (m_nDestSpace==icSigUnknownData) {
     m_nDestSpace = m_nLastSpace;
   }
@@ -12368,9 +12390,18 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
     rv = icCmmStatOk;
 
     m_pApply = GetNewApplyCmm(rv);
+    if (!m_pApply || rv != icCmmStatOk) {
+      delete m_pApply;
+      m_pApply = NULL;
+      if (rv == icCmmStatOk)
+        rv = icCmmStatAllocErr;
+    }
   }
   else
     rv = icCmmStatOk;
+
+  if (rv == icCmmStatOk)
+    m_bValid = true;
 
   return rv;
 }
@@ -12389,19 +12420,21 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
  {
   CIccApplyCmm *pApply = new (std::nothrow) CIccApplyNamedColorCmm(this);
 
-  if (pApply) {
-    for (CIccXformList::iterator i=m_Xforms->begin(); i!=m_Xforms->end(); i++) {
-      CIccApplyXform *pXform = i->ptr->GetNewApply(status);
-      if (status != icCmmStatOk || !pXform) {
-        delete pApply;
-        return NULL;
-      }
-      pApply->AppendApplyXform(pXform);
-    }
-
-    m_bValid = true;
-    status = icCmmStatOk;
+  if (!pApply) {
+    status = icCmmStatAllocErr;
+    return NULL;
   }
+
+  for (CIccXformList::iterator i=m_Xforms->begin(); i!=m_Xforms->end(); i++) {
+    CIccApplyXform *pXform = i->ptr->GetNewApply(status);
+    if (status != icCmmStatOk || !pXform) {
+      delete pApply;
+      return NULL;
+    }
+    pApply->AppendApplyXform(pXform);
+  }
+
+  status = icCmmStatOk;
   return pApply;
 }
 
@@ -12596,6 +12629,7 @@ CIccApplyCmm *CIccMruCmm::GetNewApplyCmm(icStatusCMM &status)
     return NULL;
   }
 
+  status = icCmmStatOk;
   return rv;
 }
 

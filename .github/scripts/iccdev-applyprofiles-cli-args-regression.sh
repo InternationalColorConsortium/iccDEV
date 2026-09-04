@@ -185,6 +185,11 @@ run_expect_success valid-cfg "$APPLY" -cfg "$CFG"
 run_expect_success valid-legacy \
   "$APPLY" "$SRC" "$OUTDIR/legacy.tif" 0 0 0 0 1 "$SRGB" 1
 run_expect_success threads-cfg-valid "$APPLY" -threads 1 -cfg "$CFG"
+run_expect_reject threads-missing "$APPLY" -threads
+run_expect_reject threads-nonnumeric "$APPLY" -threads nope -cfg "$CFG"
+run_expect_reject threads-trailing "$APPLY" -threads 2junk -cfg "$CFG"
+run_expect_reject threads-negative "$APPLY" -threads -1 -cfg "$CFG"
+run_expect_reject threads-over-max "$APPLY" -threads 257 -cfg "$CFG"
 
 # The two cases that fail against an unfixed tool: each ran the transform, wrote
 # its output and exited 0 with the trailing token discarded.

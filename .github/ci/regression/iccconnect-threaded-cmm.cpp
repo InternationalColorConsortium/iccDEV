@@ -6,12 +6,17 @@
 
 #include "IccConnect.h"
 #include "IccCmmThread.h"
+#include "IccCmm.h"
 #include "IccUtil.h"
 
 #include <cmath>
+#include <condition_variable>
 #include <cstdio>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 static bool NearlyEqual(icFloatNumber a, icFloatNumber b)
@@ -26,6 +31,108 @@ static std::vector<icFloatNumber> MakeZeroVector(size_t n)
   for (size_t i = 0; i < n; ++i)
     v.push_back(0.0f);
   return v;
+}
+
+class CIccNullApplyCmm : public CIccCmm
+{
+public:
+  CIccApplyCmm* GetNewApplyCmm(icStatusCMM&) override
+  {
+    return nullptr;
+  }
+};
+
+class CIccNullApplyNamedColorCmm : public CIccNamedColorCmm
+{
+public:
+  CIccApplyCmm* GetNewApplyCmm(icStatusCMM&) override
+  {
+    return nullptr;
+  }
+};
+
+class CIccUnexpectedApply : public CIccApplyCmm
+{
+public:
+  CIccUnexpectedApply(CIccCmm* cmm) : CIccApplyCmm(cmm) {}
+};
+
+class CIccErrorApplyCmm : public CIccCmm
+{
+public:
+  CIccApplyCmm* GetNewApplyCmm(icStatusCMM& status) override
+  {
+    status = icCmmStatBad;
+    return new CIccUnexpectedApply(this);
+  }
+};
+
+class CIccErrorApplyNamedColorCmm : public CIccNamedColorCmm
+{
+public:
+  CIccApplyCmm* GetNewApplyCmm(icStatusCMM& status) override
+  {
+    status = icCmmStatBad;
+    return new CIccUnexpectedApply(this);
+  }
+};
+
+static bool CheckApplyFailure(const char* profilePath)
+{
+  CIccNullApplyCmm cmm;
+  CIccNullApplyNamedColorCmm namedCmm;
+  CIccErrorApplyCmm errorCmm;
+  CIccErrorApplyNamedColorCmm errorNamedCmm;
+  struct FailureCase {
+    CIccCmm* cmm;
+    const char* name;
+    icStatusCMM expectedStatus;
+  };
+  FailureCase cases[] = {
+    { &cmm, "standard null/OK", icCmmStatAllocErr },
+    { &namedCmm, "named-color null/OK", icCmmStatAllocErr },
+    { &errorCmm, "standard apply/error", icCmmStatBad },
+    { &errorNamedCmm, "named-color apply/error", icCmmStatBad },
+  };
+
+  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+    if (cases[i].cmm->AddXform(profilePath, icRelativeColorimetric) !=
+        icCmmStatOk) {
+      std::fprintf(stderr, "failed to add %s test profile\n", cases[i].name);
+      return false;
+    }
+    if (cases[i].cmm->Begin() != cases[i].expectedStatus ||
+        cases[i].cmm->Valid() || cases[i].cmm->GetApply()) {
+      std::fprintf(stderr,
+                   "%s CMM retained a failed apply object\n", cases[i].name);
+      return false;
+    }
+  }
+
+  return true;
+}
+
+static bool CheckNamedColorBeginIdempotent(const char* profilePath)
+{
+  CIccNamedColorCmm cmm;
+  if (cmm.AddXform(profilePath, icRelativeColorimetric) != icCmmStatOk ||
+      cmm.Begin(false) != icCmmStatOk || !cmm.Valid() || cmm.GetApply()) {
+    std::fprintf(stderr, "named-color CMM Begin(false) failed\n");
+    return false;
+  }
+
+  if (cmm.Begin() != icCmmStatOk || !cmm.GetApply()) {
+    std::fprintf(stderr, "named-color CMM failed to allocate after Begin(false)\n");
+    return false;
+  }
+
+  CIccApplyCmm* apply = cmm.GetApply();
+  if (cmm.Begin() != icCmmStatOk || cmm.GetApply() != apply) {
+    std::fprintf(stderr, "named-color CMM Begin() is not idempotent\n");
+    return false;
+  }
+
+  return true;
 }
 
 int main(int argc, char** argv)
@@ -64,6 +171,9 @@ int main(int argc, char** argv)
     std::fprintf(stderr, "threaded CMM did not use CIccThreadedCmm\n");
     return 1;
   }
+  if (!CheckApplyFailure(argv[1]) ||
+      !CheckNamedColorBeginIdempotent(argv[1]))
+    return 1;
 
   json oversizedThreadsJson;
   oversizedThreadsJson["threads"] = CIccThreadedCmm::GetMaxThreads() + 1;
@@ -126,6 +236,73 @@ int main(int argc, char** argv)
       std::fprintf(stderr,
                    "threaded mismatch at %zu: scalar=%g threaded=%g\n",
                    i, scalarDst[i], threadedDst[i]);
+      return 1;
+    }
+  }
+
+  // CIccThreadedCmm documents that separate apply objects may be used by
+  // concurrent callers.  Exercise that ownership boundary: each outer thread
+  // has its own apply object, worker pool, and destination storage while both
+  // share only the immutable, Begin()-ed base CMM and source pixels. This
+  // validates results on every build; the former m_bValid data race is
+  // discriminated only when this test runs under ThreadSanitizer.
+  icStatusCMM applyStatusA = icCmmStatBad;
+  icStatusCMM applyStatusB = icCmmStatBad;
+  std::unique_ptr<CIccApplyCmm> applyA(
+    pThreadedCmm->GetNewApplyCmm(applyStatusA));
+  std::unique_ptr<CIccApplyCmm> applyB(
+    pThreadedCmm->GetNewApplyCmm(applyStatusB));
+  if (!applyA || !applyB || applyStatusA != icCmmStatOk ||
+      applyStatusB != icCmmStatOk) {
+    std::fprintf(stderr, "failed to create concurrent threaded apply objects\n");
+    return 1;
+  }
+
+  std::vector<icFloatNumber> concurrentDstA =
+    MakeZeroVector(nPixels * nDstSamples);
+  std::vector<icFloatNumber> concurrentDstB =
+    MakeZeroVector(nPixels * nDstSamples);
+  std::mutex startMutex;
+  std::condition_variable startCondition;
+  int ready = 0;
+  bool start = false;
+  icStatusCMM concurrentStatusA = icCmmStatOk;
+  icStatusCMM concurrentStatusB = icCmmStatOk;
+  auto applyConcurrent = [&](CIccApplyCmm* apply,
+                             std::vector<icFloatNumber>& dst,
+                             icStatusCMM& status) {
+    {
+      std::unique_lock<std::mutex> lock(startMutex);
+      ready++;
+      startCondition.notify_all();
+      startCondition.wait(lock, [&]() { return start; });
+    }
+    for (int pass = 0; pass < 8 && status == icCmmStatOk; ++pass)
+      status = apply->Apply(dst.data(), src.data(), nPixels);
+  };
+
+  std::thread threadA(applyConcurrent, applyA.get(),
+                      std::ref(concurrentDstA), std::ref(concurrentStatusA));
+  std::thread threadB(applyConcurrent, applyB.get(),
+                      std::ref(concurrentDstB), std::ref(concurrentStatusB));
+  {
+    std::unique_lock<std::mutex> lock(startMutex);
+    startCondition.wait(lock, [&]() { return ready == 2; });
+    start = true;
+  }
+  startCondition.notify_all();
+  threadA.join();
+  threadB.join();
+
+  if (concurrentStatusA != icCmmStatOk || concurrentStatusB != icCmmStatOk) {
+    std::fprintf(stderr, "concurrent threaded apply failed: %d, %d\n",
+                 (int)concurrentStatusA, (int)concurrentStatusB);
+    return 1;
+  }
+  for (size_t i = 0; i < scalarDst.size(); ++i) {
+    if (!NearlyEqual(scalarDst[i], concurrentDstA[i]) ||
+        !NearlyEqual(scalarDst[i], concurrentDstB[i])) {
+      std::fprintf(stderr, "concurrent threaded mismatch at %zu\n", i);
       return 1;
     }
   }

@@ -80,6 +80,8 @@ jobs:
             options: "-DENABLE_UBSAN=ON"
           - name: asan-ubsan
             options: "-DENABLE_ASAN=ON -DENABLE_UBSAN=ON"
+          - name: tsan
+            options: "-DENABLE_TSAN=ON -DENABLE_SANITIZERS=OFF"
     defaults:
       run:
         shell: bash --noprofile --norc {0}
