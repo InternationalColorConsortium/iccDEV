@@ -985,7 +985,7 @@ def make_tiff(path, w, h, bps):
     data_offset = ifd_offset + ifd_size
     bps_offset = data_offset; xres_offset = bps_offset + 6; yres_offset = xres_offset + 8
     strip_offset = yres_offset + 8
-    header = struct.pack('<2sIH', b'II', 42, ifd_offset)
+    header = struct.pack('<2sHI', b'II', 42, ifd_offset)
     def e(tag, typ, cnt, val): return struct.pack('<HHII', tag, typ, cnt, val)
     ifd = struct.pack('<H', num_entries)
     ifd += e(256,3,1,w) + e(257,3,1,h) + e(258,3,3,bps_offset)

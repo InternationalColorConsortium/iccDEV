@@ -23,6 +23,7 @@ export LD_LIBRARY_PATH="$BUILD_ROOT/IccProfLib:$BUILD_ROOT/IccXML:$BUILD_ROOT/Ic
 NAMEDCMM="$TOOLS_DIR/IccApplyNamedCmm/iccApplyNamedCmm"
 SEARCH="$TOOLS_DIR/IccApplySearch/iccApplySearch"
 PROFILES="$TOOLS_DIR/IccApplyProfiles/iccApplyProfiles"
+TIFFDUMP="$TOOLS_DIR/IccTiffDump/iccTiffDump"
 
 PASS=0; FAIL=0; ASAN=0; TOTAL=0
 
@@ -968,7 +969,7 @@ else FAIL=$((FAIL+1)); echo "[FAIL] #$TOTAL search cli: debugcalc (exit=$rc)"; f
 # GROUP 23: ApplyProfiles -- Real TIFF processing (JSON -cfg)
 # ============================================================
 echo ""
-echo "--- GROUP 23: ApplyProfiles Real TIFF Processing (10 tests) ---"
+echo "--- GROUP 23: ApplyProfiles Real TIFF Processing (11 tests) ---"
 
 # Create minimal test TIFFs if test-data dir exists
 TEST_DATA_DIR=""
@@ -988,32 +989,59 @@ if [ ! -w "$TEST_DATA_DIR" ]; then GEN_DIR="/tmp/json-test-tiffs"; mkdir -p "$GE
 for tif_spec in "rgb-4x4-8bit.tif:4:4:8" "rgb-4x4-16bit.tif:4:4:16" "rgb-8x8-8bit.tif:8:8:8"; do
   name="${tif_spec%%:*}"; rest="${tif_spec#*:}"; w="${rest%%:*}"; rest="${rest#*:}"; h="${rest%%:*}"; bps="${rest#*:}"
   if [ ! -f "$TEST_DATA_DIR/$name" ] && [ ! -f "$GEN_DIR/$name" ]; then
-    python3 - <<PYEOF
+    python3 -c '
+import struct
 import sys
-try:
-    from PIL import Image
-except ImportError:
-    sys.exit(0)
-w, h, bps = $w, $h, $bps
-mode = 'RGB' if bps == 8 else 'I;16'
-if bps == 16:
-    # 16-bit RGB via 3 separate I;16 channels merged
-    chans = [Image.new('I;16', (w, h), 32896) for _ in range(3)]
-    img = Image.merge('RGB', [c.convert('L') for c in chans])
-    # PIL can't natively write 16-bit RGB TIFFs in all builds; fallback to 8-bit RGB if needed
-    try:
-        img.save('$GEN_DIR/$name', format='TIFF', compression='raw')
-    except Exception:
-        Image.new('RGB', (w, h), (128, 128, 128)).save('$GEN_DIR/$name', format='TIFF', compression='raw')
-else:
-    Image.new('RGB', (w, h), (128, 128, 128)).save('$GEN_DIR/$name', format='TIFF', compression='raw')
-PYEOF
+
+path, w, h, bps = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+spp = 3
+data_len = w * h * spp * (bps // 8)
+pixel_data = bytes([128] * data_len)
+ifd_offset = 8
+num_entries = 12
+ifd_size = 2 + num_entries * 12 + 4
+data_offset = ifd_offset + ifd_size
+bps_offset = data_offset
+xres_offset = bps_offset + 6
+yres_offset = xres_offset + 8
+strip_offset = yres_offset + 8
+header = struct.pack("<2sHI", b"II", 42, ifd_offset)
+def entry(tag, field_type, count, value):
+    return struct.pack("<HHII", tag, field_type, count, value)
+ifd = struct.pack("<H", num_entries)
+ifd += entry(256, 3, 1, w) + entry(257, 3, 1, h) + entry(258, 3, 3, bps_offset)
+ifd += entry(259, 3, 1, 1) + entry(262, 3, 1, 2) + entry(273, 4, 1, strip_offset)
+ifd += entry(277, 3, 1, spp) + entry(278, 3, 1, h) + entry(279, 4, 1, data_len)
+ifd += entry(282, 5, 1, xres_offset) + entry(283, 5, 1, yres_offset) + entry(296, 3, 1, 2)
+ifd += struct.pack("<I", 0)
+extra = struct.pack("<HHH", bps, bps, bps)
+extra += struct.pack("<II", 72, 1) + struct.pack("<II", 72, 1)
+with open(path, "wb") as output_file:
+    output_file.write(header)
+    output_file.write(ifd)
+    output_file.write(extra)
+    output_file.write(pixel_data)
+' "$GEN_DIR/$name" "$w" "$h" "$bps"
   fi
 done
 # Use a per-file lookup so each missing TIFF resolves to whichever dir has it
 tif_path() {
   if [ -f "$TEST_DATA_DIR/$1" ]; then echo "$TEST_DATA_DIR/$1"; else echo "$GEN_DIR/$1"; fi
 }
+
+TIF16=$(tif_path rgb-4x4-16bit.tif)
+TOTAL=$((TOTAL+1))
+output=$("$TIFFDUMP" "$TIF16" 2>&1)
+rc=$?
+asan_hit=$(echo "$output" | grep -c 'AddressSanitizer\|runtime error:' || true)
+if [ "$asan_hit" -gt 0 ]; then
+  ASAN=$((ASAN+1)); echo "[ASAN] #$TOTAL fixture: 16-bit RGB TIFF (exit=$rc)"
+elif [ "$rc" -eq 0 ] && echo "$output" | grep -Eq '^BitsPerSample:[[:space:]]+16 ' && echo "$output" | grep -Eq '^SamplesPerPixel:[[:space:]]+3$'; then
+  PASS=$((PASS+1)); echo "[PASS] #$TOTAL fixture: 16-bit RGB TIFF metadata (exit=$rc)"
+else
+  FAIL=$((FAIL+1)); echo "[FAIL] #$TOTAL fixture: expected 3-channel 16-bit RGB TIFF (exit=$rc)"
+  echo "$output" | grep -E 'BitsPerSample|SamplesPerPixel' || true
+fi
 
 # 23a: Real TIFF with each dstEncoding
 for enc in 8Bit 16Bit float sameAsSource; do
@@ -1027,7 +1055,6 @@ import json; json.dump({
 done
 
 # 23b: 16-bit source TIFF
-TIF16=$(tif_path rgb-4x4-16bit.tif)
 python3 -c "
 import json; json.dump({
   'imageFiles':{'srcImageFile':'$TIF16','dstImageFile':'/tmp/json-tiff-16src.tif',
