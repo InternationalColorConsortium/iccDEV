@@ -149,7 +149,12 @@ if ! cmake -S "$source_dir/Build/Cmake" -B "$build_dir" \
   -DENABLE_SANITIZERS=OFF \
   -DENABLE_ASAN=OFF \
   -DENABLE_UBSAN=OFF \
+  -DENABLE_INTEGER_SANITIZER=OFF \
+  -DENABLE_FLOAT_SANITIZER=OFF \
   -DENABLE_TSAN=OFF \
+  -DENABLE_MSAN=OFF \
+  -DENABLE_LSAN=OFF \
+  -DENABLE_FUZZING=OFF \
   -DENABLE_LTO=OFF; then
   echo "[FAIL] CMake configuration failed" >&2
   exit 2
