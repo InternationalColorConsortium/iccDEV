@@ -16,20 +16,20 @@
 * @ChrisCoxArt @colourbill-ctrl @xsscx
 
 # GitHub configuration, Actions workflows & PR automation
-/.github/** @xsscx @ChrisCoxArt @dwtza
+/.github/** @xsscx @ChrisCoxArt @colourbill-ctrl @dwtza
 
 # CI regression tests
 /.github/ci/regression/ @xsscx @ChrisCoxArt @colourbill-ctrl
 
 # High-risk GitHub automation and governance paths
-/.github/workflows/** @dwtza @maxderhak @ChrisCoxArt @xsscx
-/.github/actions/** @dwtza @maxderhak @ChrisCoxArt @xsscx
-/.github/scripts/** @dwtza @ChrisCoxArt @xsscx
-/.github/skills/** @dwtza @maxderhak @ChrisCoxArt @xsscx
-/.github/prompts/** @dwtza @maxderhak @ChrisCoxArt @xsscx
-/.github/instructions/** @dwtza @maxderhak @ChrisCoxArt @xsscx
-/.github/labels.yml @dwtza @ChrisCoxArt @xsscx
-/.github/labeler.yml @dwtza @ChrisCoxArt @xsscx
+/.github/workflows/** @dwtza @maxderhak @ChrisCoxArt@colourbill-ctrl @xsscx
+/.github/actions/** @dwtza @maxderhak @ChrisCoxArt @colourbill-ctrl @xsscx
+/.github/scripts/** @dwtza @ChrisCoxArt @colourbill-ctrl @colourbill-ctrl @xsscx
+/.github/skills/** @dwtza @maxderhak @ChrisCoxArt @colourbill-ctrl @xsscx
+/.github/prompts/** @dwtza @maxderhak @ChrisCoxArt @colourbill-ctrl @xsscx
+/.github/instructions/** @dwtza @maxderhak @ChrisCoxArt@colourbill-ctrl  @xsscx
+/.github/labels.yml @dwtza @ChrisCoxArt @colourbill-ctrl @xsscx
+/.github/labeler.yml @dwtza @ChrisCoxArt @colourbill-ctrl @xsscx
 
 # Core JSON/config source
 /IccJSON/**/*.cpp @ChrisCoxArt @colourbill-ctrl @maxderhak @xsscx
