@@ -545,6 +545,18 @@ xyz_array_at_cap
 # No tracked document uses responseCurveSet16Type, which is why neither survived
 # into a fixture; these three are written here.
 
+# The four tags a v2 GRAY mntr profile must carry to be conformant, carried by
+# every document below so that the CONTROLS convert with exit 0.
+#
+# They used to be omitted: a resp tag on a bare header parses, so the documents
+# reached the parser this suite is about, and iccFromXml returned EXIT_SUCCESS
+# for the resulting profile even though it validated above icValidateWarning.
+# #2384 made that an EXIT_FAILURE, which is what a control asserting "exit 0"
+# should have meant all along -- the old fixtures were testing "the parser
+# accepted it", never "a usable profile came out".  Adding the required tags
+# keeps the strong exit-0 assertion instead of relaxing it, and does not touch
+# what is under test: the resp tag, its CountOfChannels and its Measurement
+# rows are unchanged, and the round-trip cases only look for the resp tag.
 write_countofchannels_document() {
   # write_countofchannels_document <path> <count-element>
   cat > "$1" <<XMLEOF
@@ -566,6 +578,10 @@ write_countofchannels_document() {
         </ChannelResponses>
       </ResponseCurve>
     </responseCurveSet16Type>
+    <grayTRCTag> <curveType><Curve>563</Curve></curveType> </grayTRCTag>
+    <profileDescriptionTag> <textDescriptionType><TextData>responseCurveSet16 regression fixture</TextData></textDescriptionType> </profileDescriptionTag>
+    <copyrightTag> <textType><TextData>ICC regression fixture</TextData></textType> </copyrightTag>
+    <mediaWhitePointTag> <XYZArrayType><XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/></XYZArrayType> </mediaWhitePointTag>
   </Tags>
 </IccProfile>
 XMLEOF
@@ -867,6 +883,10 @@ measurement_reserved_not_inherited() {
         </ChannelResponses>
       </ResponseCurve>
     </responseCurveSet16Type>
+    <grayTRCTag> <curveType><Curve>563</Curve></curveType> </grayTRCTag>
+    <profileDescriptionTag> <textDescriptionType><TextData>responseCurveSet16 regression fixture</TextData></textDescriptionType> </profileDescriptionTag>
+    <copyrightTag> <textType><TextData>ICC regression fixture</TextData></textType> </copyrightTag>
+    <mediaWhitePointTag> <XYZArrayType><XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/></XYZArrayType> </mediaWhitePointTag>
   </Tags>
 </IccProfile>
 XMLEOF

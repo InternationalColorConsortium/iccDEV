@@ -7686,6 +7686,26 @@ if(TARGET iccApplyProfiles AND TARGET iccApplySearch
     SKIP_RETURN_CODE 77)
 endif()
 
+# The converter half of the same CLI-contract family (#2384): iccFromXml and
+# iccFromJson reported success for a profile they had just declared invalid.
+# Guarded on both targets because the suite measures both and its "nothing
+# measured" guard would otherwise turn a partial build into a skip that hides
+# the half that did build.
+#
+# Deliberately NOT labelled "slow", for the same reason as the sibling above --
+# ci-pr-action.yml pins ctest_mode=fast, which drops the slow label (#2412).
+if(TARGET iccFromXml AND TARGET iccFromJson)
+  iccdev_add_script_test(
+    iccdev.invalid-profile-exit-code-regression
+    120
+    "iccdev;fromxml;fromjson;cli;validate;exitcode;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2384-invalid-profile-exit-code-regression.sh"
+  )
+  set_tests_properties(iccdev.invalid-profile-exit-code-regression PROPERTIES
+    SKIP_RETURN_CODE 77)
+endif()
+
 # Guarded on the target, like iccdev.tiff-resolution-unit-regression below.
 # Both scripts exit 2 when iccSpecSepToTiff is missing rather than skipping the
 # way the older sibling suites do, so an unguarded registration turns a

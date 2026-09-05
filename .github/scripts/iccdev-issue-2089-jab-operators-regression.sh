@@ -241,8 +241,33 @@ run_case() {
   if ! check_log "$name/fromxml" "$fromxml_log"; then
     return
   fi
-  if [ "$exit_code" -ne 0 ] || [ ! -s "$icc" ]; then
-    fail_case "$name" "iccFromXml failed with exit=$exit_code"
+  # Status still matters for the outcomes it is the ONLY witness to.  Relaxing
+  # the guard below to the artifact must not also stop this case noticing that
+  # iccFromXml wrote the profile and then died in teardown, or hung: a SIGSEGV
+  # in a tag destructor leaves a complete .icc on disk and, on the ordinary
+  # uninstrumented lanes, no sanitizer text for check_log/check_sanitizers to
+  # find -- so an artifact-only assertion would report PASS for a crash.  The
+  # #2384 suite excludes the same range for the same reason.
+  if [ "$exit_code" -eq 124 ]; then
+    fail_case "$name" "iccFromXml timed out"
+    return
+  fi
+  if [ "$exit_code" -ge 128 ] && [ "$exit_code" -le 192 ]; then
+    fail_case "$name" "iccFromXml died on signal $((exit_code - 128))"
+    sed -n '1,20p' "$fromxml_log"
+    return
+  fi
+  # The artifact, not the status.  These probes are minimal v5 "spac" documents
+  # carrying just desc and an A2B1 calculator: enough to exercise the Jab
+  # operators, never a conformant profile (Validate reports "Critical tag(s)
+  # missing" for the class), and adding the tags that would silence it means
+  # carrying a full colorimetric transform that has nothing to do with what is
+  # measured here.  Since #2384 iccFromXml exits non-zero for a profile it
+  # declares invalid while still writing it, so the signal that the document
+  # was ACCEPTED is the file plus the absence of a parse error -- the same way
+  # the #1898/#1845 fixtures assert it.
+  if [ ! -s "$icc" ] || grep -q "Unable to Parse" "$fromxml_log"; then
+    fail_case "$name" "iccFromXml produced no profile (exit=$exit_code)"
     sed -n '1,20p' "$fromxml_log"
     return
   fi

@@ -67,13 +67,25 @@ while IFS= read -r icc; do
     continue
   fi
   # FromJson
-  if ! timeout 30 "$FROMJSON" /tmp/json-rt-test.json /tmp/json-rt-test.icc >/dev/null 2>&1; then
+  # A non-zero iccFromJson no longer means "no profile".  Since #2384 the tool
+  # exits non-zero for a profile that validates above icValidateWarning while
+  # still WRITING it, and four generated profiles round-trip that way --
+  # Named/SparseMatrixNamedColor.icc plus CalcTest/calcOverMem_t{get,put,sav}.icc.
+  # Treating status as the gate silently moved them from "byte-parity compared"
+  # to SKIP: the harness stayed green while covering less, and
+  # SparseMatrixNamedColor is a NON-CalcTest profile that had been counting
+  # toward the non-calc failure gate.  Gate on the artifact instead, so a written
+  # profile is always size-compared and only a genuinely absent one skips.
+  rm -f /tmp/json-rt-test.icc
+  fromjson_rc=0
+  timeout 30 "$FROMJSON" /tmp/json-rt-test.json /tmp/json-rt-test.icc >/dev/null 2>&1 || fromjson_rc=$?
+  if [ ! -s /tmp/json-rt-test.icc ]; then
     if is_expected_fromjson_failure "$relpath"; then
       XFAIL=$((XFAIL + 1))
       echo "[XFAIL] $relpath (expected invalid calculator profile)"
     else
       SKIP=$((SKIP + 1))
-      echo "[SKIP] $relpath (FromJson failed)"
+      echo "[SKIP] $relpath (FromJson wrote no profile, exit=$fromjson_rc)"
     fi
     rm -f /tmp/json-rt-test.json
     continue
