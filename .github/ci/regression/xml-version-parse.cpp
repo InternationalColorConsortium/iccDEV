@@ -158,11 +158,42 @@ int main()
   checkVersion("5.10", 0x05100000u, "\"5.10\" encodes as 0x0510");
   checkVersion("2.20", 0x02200000u, "\"2.20\" encodes as 0x0220");
 
-  // A missing minor component keeps its previous meaning ("4" == "4.0"), and a
-  // single-digit minor keeps its previous encoding: parseVersion maps 3 to 0x03
-  // rather than 0x30, matching icJsonParseBCDByte on the JSON side.
+  // A missing minor component keeps its previous meaning ("4" == "4.0").
   checkVersion("4", 0x04000000u, "\"4\" encodes as 0x0400");
-  checkVersion("4.3", 0x04030000u, "\"4.3\" encodes as 0x0403 (unchanged quirk)");
+
+  // --- #2383: a one-digit minor is a TENTHS digit ------------------------------
+  // This assertion is inverted from #2387, which pinned 0x0403 as an "unchanged
+  // quirk" while repairing the neighbouring loops.  It is the defect: a minor is
+  // the fractional part of a decimal version, so "4.3" is four-and-three-TENTHS
+  // and must encode exactly as the canonical "4.30" does.  The old 0x0403 read
+  // back as 4.03, and for "5.1" gave #2383's 0x05010100 -- below the library's
+  // 5.10 threshold, which is what made a v5.1 profile report its zero-step
+  // observer and illuminant encodings as noncompliant.
+  checkVersion("4.3", 0x04300000u, "\"4.3\" encodes as 0x0430, same as \"4.30\" (#2383)");
+  checkVersion("5.1", 0x05100000u, "\"5.1\" encodes as 0x0510, same as \"5.10\" (#2383)");
+  check(parseVersion("5.1", NULL) == parseVersion("5.10", NULL),
+        "\"5.1\" and \"5.10\" are the same version");
+
+  // Keyed on the digit count, not the value: an explicit two-digit minor is
+  // already in hundredths and must NOT be scaled again.
+  checkVersion("4.05", 0x04050000u, "\"4.05\" stays 0x0405 -- two digits are not scaled");
+
+  // The scaling test counts DIGITS, so the component must be digits-only and at
+  // most two of them -- icJsonParseBCDByte's contract on the JSON side.  Without
+  // that, strtoull's tolerance of '+' and of leading zeros let "5.+1" and "5.001"
+  // past the length test and encode as 0x01 while "5.1" encoded as 0x10, and the
+  // JSON twin rejected both outright: one version text, two header words,
+  // depending on the importer.
+  checkVersion("5.+1", 0u, "a signed minor is rejected, as on the JSON side");
+  checkVersion("5.001", 0u, "a three-digit minor is rejected, as on the JSON side");
+  checkVersion("+5.10", 0u, "a signed major is rejected");
+  checkVersion("4.50", 0x04500000u, "\"4.50\" stays 0x0450");
+  checkVersion("4.5", 0x04500000u, "\"4.5\" encodes as 0x0450");
+  checkVersion("4.0", 0x04000000u, "\"4.0\" still encodes as 0x0400");
+
+  // The rule reaches the class minor too, the fourth component.
+  checkVersion("5.10.12.3", 0x05101230u, "a one-digit class minor scales to tenths");
+  checkVersion("5.10.12.03", 0x05101203u, "a two-digit class minor is not scaled");
 
   // --- finding 1: the third and fourth components lost their leading digit ------
   // The issue's own fixture. Before the repair this gave 0x05100204.
@@ -171,8 +202,10 @@ int main()
                "four-component version keeps every digit (#2387 finding 1)");
   checkVersion("5.10.12", 0x05101200u,
                "three-component version keeps the class major's leading digit");
-  checkVersion("5.10.1.2", 0x05100102u,
-               "single-digit class components are unaffected");
+  // The class MAJOR is a whole number and stays unscaled; only the minor beside
+  // it moves (0x02 -> 0x20), which is the #2383 rule applied to this component.
+  checkVersion("5.10.1.2", 0x05100120u,
+               "a single-digit class major stays whole, its minor scales to tenths");
 
   // The strictness of the shared helper reaches the later components too: a
   // malformed one rejects the whole version rather than landing partly parsed.
@@ -189,6 +222,13 @@ int main()
                 "explicit sub-class version keeps both components (#2387 finding 2)");
   checkSubClass("1.20", 0x0120u, "single-digit sub-class major is unaffected");
   checkSubClass("12", 0x1200u, "a missing sub-class minor stays 0 (\"12\" == \"12.00\")");
+
+  // #2383 through the separate element, which is its own parse site rather than
+  // the fourth component of <ProfileVersion> covered above.
+  checkSubClass("1.2", 0x0120u, "a one-digit sub-class minor scales to tenths (#2383)");
+  checkSubClass("1.02", 0x0102u, "a two-digit sub-class minor is not scaled");
+  check(parseVersion("5.10", "1.2") == parseVersion("5.10", "1.20"),
+        "sub-class \"1.2\" and \"1.20\" are the same version");
 
   // These are the assertions a digits-only repair fails. atoi() would store "12" as
   // decimal 12 == 0x0C and "34" as 0x22, giving 0x0C22 -- a value
