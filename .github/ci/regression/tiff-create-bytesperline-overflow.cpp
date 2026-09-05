@@ -340,6 +340,82 @@ int main()
     }
   }
 
+  // --- 10. A zero bits-per-sample is not a depth.
+  //
+  // Zero passes Create()'s "nBPS % 8" guard, and libtiff accepts
+  // TIFFSetField(BITSPERSAMPLE, 0) with rc=1, so neither the modulus nor the
+  // write-status check added for #2386 catches it. The pre-fix path therefore
+  // authored the directory with BitsPerSample 0 and only gave up once
+  // TIFFStripSize() returned 0 and the "stripSize <= 0" test refused it -- by which
+  // point TIFFOpen had created the destination, leaving a ~140-byte stub on disk.
+  // (Not calcBytesPerLine(): the contiguous branch this case exercises never calls
+  // it, and on the separated branch "stripSize <= 0" fires first.) Open() has
+  // always refused m_nBitsPerSample == 0 on the way in, so this makes the two
+  // symmetric.
+  //
+  // Red/green: against the pre-fix TiffImg.cpp the first assertion passes by
+  // accident -- Create() does return false, just far too late -- and the second
+  // fails, because a file is left on disk. That second assertion is what pins the
+  // fix, so exit status alone is not the test here.
+  //
+  // Not reachable from either tool caller: their depth comes back out of Open(),
+  // which rejects zero. This guards the public API, like case 9 above.
+  {
+    // bCompress MUST be passed as false. It defaults to true, and the guard just
+    // below the modulus -- "bCompress && nBPS != 8 && != 16 && != 32" -- then
+    // rejects a zero depth before TIFFOpen() is ever reached. Written with the
+    // default, this case passes against the unfixed library while never once
+    // exercising the zero-depth path; measured, and it is why this reads
+    // explicitly rather than relying on the signature.
+    cleanup();
+    CTiffImg img;
+    const bool ok = img.Create(kOutPath, 64u, 4u, /*nBPS=*/0u, PHOTO_MINISBLACK,
+                               3u, 0u, 72.0f, 72.0f, /*bCompress=*/false,
+                               /*bSep=*/false);
+    check(!ok, "Create() rejects a zero bits-per-sample");
+    img.Close();
+
+    std::FILE *left = std::fopen(kOutPath, "rb");
+    check(left == NULL,
+          "Create() writes no file when it rejects a zero bits-per-sample");
+    if (left)
+      std::fclose(left);
+    cleanup();
+  }
+
+  // --- 11. A written image knows its own ExtraSamples count.
+  //
+  // Create() sets the ExtraSamples observers for an output image so a Create()d
+  // object does not report "tag 338 was not present" while having just written it.
+  // The stored-count pair added for #2386 has to be set in the same place: without
+  // it, HasStoredExtraSamplesCount() answers false for a directory this object just
+  // authored, and false is defined as "could not determine -- unreadable, non-TIFF,
+  // or BigTIFF", none of which is true here. Nothing repairs a directory we write,
+  // so the stored count is exactly the one we were handed.
+  //
+  // No production caller reads these off an output image today, which is precisely
+  // why the gap survived into review -- so it is asserted here.
+  {
+    cleanup();
+    CTiffImg img;
+    const bool ok = img.Create(kOutPath, 64u, 4u, 8u, PHOTO_MINISBLACK, 6u,
+                               /*nExtraSamples=*/5u, 72.0f, 72.0f,
+                               /*bCompress=*/false, /*bSep=*/false);
+    check(ok, "Create() accepts a 6-sample image declaring 5 extra samples");
+    if (ok) {
+      check(img.HasStoredExtraSamples(),
+            "a written image reports tag 338 as stored");
+      check(img.HasStoredExtraSamplesCount(),
+            "a written image knows the ExtraSamples count it stored");
+      check(img.GetStoredExtraSamplesCount() == 5u,
+            "the stored count on a written image is the one Create() was given");
+      check(img.GetEffectiveExtraSamples() == 5u,
+            "nothing repairs a directory we author, so effective == stored");
+    }
+    img.Close();
+    cleanup();
+  }
+
   if (g_fail)
     std::fprintf(stderr, "[tiff-create-overflow] %d assertion(s) failed\n", g_fail);
   else

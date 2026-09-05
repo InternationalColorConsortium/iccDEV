@@ -20,11 +20,14 @@
 # extra sample, and feeding 80 to iccApplyProfiles would reclassify an 81-band
 # spectral image's bands as alpha.  Case 4 pins that separation.
 #
-# Only the ABSENT-tag half of the gap is closed.  Where tag 338 is present and
-# libtiff still repairs, it overwrites the stored count in place while leaving the
-# field marked present, so the plain getter returns the repaired figure and the
-# original is unrecoverable through libtiff.  Case 2 pins that limit deliberately,
-# with a fixture whose stored and repaired counts disagree.
+# The PRESENT-and-repaired half is closed too.  Where tag 338 is present and libtiff
+# still repairs, it overwrites the stored count in place while leaving the field
+# marked present, so every libtiff getter returns the repaired figure -- a 6-sample
+# MinIsBlack file storing one extra and an honest five-extra file produced
+# byte-identical dumps.  CTiffImg::Open() now reads tag 338's own count field out of
+# the IFD, which is the only way to recover it, and iccTiffDump reports both numbers
+# when they disagree.  Case 2 pins that, and carries an honest-directory control so an
+# unconditional annotation cannot satisfy it.
 #
 # Fixtures are written byte by byte rather than through an encoder so the tag
 # under test is exactly what the test intends, and tag presence is read back out
@@ -320,7 +323,7 @@ case_absent_tag_is_explained() {
 }
 
 ###############################################################################
-# Case 2 -- a stored tag prints the plain count and is not relabelled as repaired.
+# Case 2 -- a repaired tag names BOTH counts; an honest one prints the plain count.
 #
 # The fixture is deliberately the shape where stored and repaired DISAGREE: 6
 # samples, MinIsBlack (one colour channel), tag 338 storing a single value.  One
@@ -330,10 +333,17 @@ case_absent_tag_is_explained() {
 # returns 5, not the 1 the IFD holds, and libtiff offers no way to read the
 # original back.
 #
-# So this case pins the documented limit of the #2386 fix rather than an
-# aspiration: the tag-present half of the gap is NOT closed, and the number
-# printed is libtiff's.  A well-formed fixture (5 stored extras) would have made
-# stored and repaired identical and pinned nothing.
+# This case previously pinned that as a documented LIMIT, asserting a bare "5".
+# The limit is now lifted: CTiffImg::Open() reads tag 338's own count field out
+# of the IFD, which is the only way to recover it, so the dump can name both
+# numbers.  The assertion below is therefore the reverse of what it once was --
+# a bare "5" for this fixture is now a FAILURE, because it means a repaired
+# directory is again indistinguishable from an honest one.
+#
+# The honest 5-extra control at the end is what gives that teeth.  An
+# implementation appending the wording unconditionally would satisfy the first
+# assertion; case 3's well-formed fixture does not cover it, because that file
+# carries no tag 338 at all and so never reaches this branch.
 ###############################################################################
 case_stored_tag_prints_count() {
   local name="stored-tag-prints-count"
@@ -354,18 +364,53 @@ case_stored_tag_prints_count() {
     return
   fi
 
+  # UPDATED for the second half of #2386. This case previously asserted a bare "5" and
+  # carried a failure arm reading "if that is now recoverable, this case and the header
+  # comment both need updating" -- the stored count IS now recoverable, because Open()
+  # reads tag 338's count field straight out of the IFD rather than asking libtiff,
+  # which cannot answer once it has repaired the directory in place.
+  #
+  # Both numbers are required. The effective count leads, because it is the layout the
+  # rest of libtiff is using; the stored count follows, because it is what tells the
+  # reader the file is malformed at all.
   local line
   line="$(dump_extrasamples_line "$f")"
   case "$line" in
+    "5 (file stores 1"*) ;;
     "5")
-      pass_case "$name" "a present tag prints libtiff's plain count (5), with no repair wording" ;;
-    "1")
-      fail_case "$name" "dump printed the stored count 1 -- if that is now recoverable, this case and the header comment both need updating" ;;
+      fail_case "$name" "dump printed a bare 5 -- the repaired directory is again indistinguishable from an honest one"
+      return ;;
     *"not stored"*)
-      fail_case "$name" "a file that DOES store tag 338 was reported as not stored: $line" ;;
+      fail_case "$name" "a file that DOES store tag 338 was reported as not stored: $line"
+      return ;;
     *)
-      fail_case "$name" "expected a plain count, got: '${line:-<no line>}'" ;;
+      fail_case "$name" "expected the effective count then the stored one, got: '${line:-<no line>}'"
+      return ;;
   esac
+
+  # The control that makes the assertion above mean something: a file whose stored
+  # count is honest must NOT be annotated. Without this, an implementation that
+  # appended the wording unconditionally would pass. case_wellformed_file_is_silent
+  # does not cover it -- that fixture has no tag 338 at all, so it never reaches this
+  # branch; this one stores five extras and is annotation-eligible.
+  local honest="$WORKDIR/minisblack-6ch-338-five.tif"
+  generate_tiff "$honest" 4 4 6 1 0 0 0 0 0
+
+  local honest_stored
+  honest_stored="$(read_stored_extrasamples_count "$honest")"
+  if [ "$honest_stored" != "5" ]; then
+    fail_case "$name" "control fixture should store 5 extras, IFD says '$honest_stored'"
+    return
+  fi
+
+  local honest_line
+  honest_line="$(dump_extrasamples_line "$honest")"
+  if [ "$honest_line" != "5" ]; then
+    fail_case "$name" "an honest 5-extra file must print a bare '5', got '${honest_line:-<no line>}'"
+    return
+  fi
+
+  pass_case "$name" "a repaired tag names both counts; an honest one prints a bare 5"
 }
 
 ###############################################################################
