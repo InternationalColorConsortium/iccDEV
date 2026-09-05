@@ -295,8 +295,16 @@ int main(int argc, const char* argv[])
     argc -= 2;
 
     if (argc < minargs) {
+      // No `argc > 0 ?` clamp here, unlike the sibling message at the top of main().
+      // That guard runs before any adjustment, where argc is only bounded from above,
+      // so a process entered with argc == 0 would reach it and report "received -1" --
+      // well-defined arithmetic, just a nonsensical count -- and the clamp earns its
+      // place.  This copy runs after the minargs test has established argc >= 3 and
+      // after `argc -= 2`, so argc >= 1 on every path that reaches this line and the
+      // clamp's else branch was unreachable -- a dead bound the -threads shift created
+      // (code-scanning alert 2365, cpp/constant-comparison).
       fprintf(stderr, "Missing arguments after -threads: expected at least %d, received %d.\n",
-              minargs - 1, argc > 0 ? argc - 1 : 0);
+              minargs - 1, argc - 1);
       Usage(stderr);
       return EXIT_FAILURE;
     }

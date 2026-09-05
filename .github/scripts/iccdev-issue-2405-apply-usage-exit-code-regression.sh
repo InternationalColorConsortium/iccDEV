@@ -28,7 +28,7 @@
 # is why every case below asserts the quiet stream is EMPTY -- an implementation
 # that printed usage to both would satisfy a status-only test.
 #
-# Red/green, measured against master f186948c: 22 of the 26 cases below fail.
+# Red/green, measured against master f186948c: 24 of the 28 cases below fail.
 # All thirteen too-few-operand forms fail, each reporting exit=0.  The five
 # "clears minargs but still malformed" cases fail because master answers them on
 # stdout.  Of the eight help cases, the four on iccApplyProfiles and
@@ -43,6 +43,16 @@
 # the malformed cases, not the help cases, are what red/green this change.
 # Those four assertions still earn their place: they pin the help path against
 # a future regression once it is the only route to Usage() on stdout.
+#
+# The two "threads-then-*" cases were added later, with code-scanning alert
+# 2365 (cpp/constant-comparison), and they fail
+# against f186948c too -- which is why the count above is 24 of 28 rather than
+# 22 of 26.  There the post-"-threads" guard is a bare "Usage(); return
+# EXIT_FAILURE;" and Usage() takes no stream argument, so the screen lands on
+# stdout and there is no "Missing arguments after -threads" line to match.
+# They fail on the stdout assertion first, and would fail on the message one
+# too.  That alert itself is not what they red/green -- see the note on
+# run_threads_operand_count() below.
 #
 # Anti-vacuity: assert_usage_screen() pins a row that this change does not
 # touch, so a truncated or empty capture cannot satisfy the stream assertions
@@ -106,16 +116,19 @@ check_sanitizers() {
 # row assumed common to all, which is what a first version of this test assumed
 # and got wrong.
 #
+# Passed in by each caller rather than read from a global: as a global it was
+# assigned by the per-tool table loop and any case running outside that loop
+# silently inherited the last entry's row (found while fixing alert 2365).
+#
 # Matched as a whole line with -F against a leading-whitespace-stripped copy:
 # every anchor below contains "+", "(", ")" or "/", all ERE metacharacters, so a
 # regex would quietly stop meaning what it reads as (the same reasoning as the
 # #2262 row assertions).  The tools indent these rows differently.
-ANCHOR=""
 assert_usage_screen() {
-  local name="$1" log="$2" where="$3"
+  local name="$1" log="$2" where="$3" anchor="$4"
   sed 's/^[[:space:]]*//' "$log" > "$log.stripped"
-  if ! grep -Fqx "$ANCHOR" "$log.stripped" 2>/dev/null; then
-    fail_case "$name" "no complete usage screen on $where (last row \"$ANCHOR\" absent)"
+  if ! grep -Fqx "$anchor" "$log.stripped" 2>/dev/null; then
+    fail_case "$name" "no complete usage screen on $where (last row \"$anchor\" absent)"
     sed -n '1,10p' "$log"
     return 1
   fi
@@ -124,7 +137,7 @@ assert_usage_screen() {
 
 # A malformed invocation: non-zero status, usage on stderr, stdout untouched.
 run_malformed() {
-  local name="$1" tool="$2"; shift 2
+  local name="$1" tool="$2" anchor="$3"; shift 3
   TOTAL=$((TOTAL + 1))
   local exit_code=0
 
@@ -158,7 +171,7 @@ run_malformed() {
     sed -n '1,5p' "$STDERR_LOG"
     return
   fi
-  assert_usage_screen "$name" "$STDERR_LOG" "stderr" || return
+  assert_usage_screen "$name" "$STDERR_LOG" "stderr" "$anchor" || return
 
   pass_case "$name" "rejected with exit=$exit_code, usage on stderr, stdout empty"
 }
@@ -206,9 +219,66 @@ run_malformed_no_usage() {
   pass_case "$name" "rejected with exit=$exit_code, diagnostic on stderr, stdout empty"
 }
 
+# The operand-count guard that runs AFTER "-threads N" has been consumed.
+# iccApplySearch shifts its vector ("argv += 2; argc -= 2") and then repeats the
+# minargs test, so the count in that second message comes from a different
+# expression than the one the sweep above covers -- and nothing reached it: the
+# "threads-no-count" case below stops at the earlier "Missing thread count"
+# guard, which returns before the shift.
+#
+# These cases do not red/green alert 2365.  That change removed an "argc > 0 ?" clamp
+# whose else branch was already unreachable -- the minargs test has established
+# argc >= 3 before the shift, so argc >= 1 after it -- and the output is
+# identical before and after it (verified on all five reachable forms).  What
+# they pin is the arithmetic the clamp was standing in front of: "-threads 4"
+# leaves argc == 1, the smallest value that can reach the line, so a rewrite
+# that dropped the "- 1" or clamped on the wrong side would print 1 or 0 here
+# rather than 0 and 1.  Asserts the whole line with -F: the message has no
+# regex metacharacters but the count is the point, and a substring match on
+# "received" would accept any number.
+run_threads_operand_count() {
+  local name="$1" tool="$2" anchor="$3" expected="$4"; shift 4
+  TOTAL=$((TOTAL + 1))
+  local exit_code=0
+
+  : > "$STDOUT_LOG"; : > "$STDERR_LOG"
+  timeout 60 "$tool" "$@" > "$STDOUT_LOG" 2> "$STDERR_LOG" || exit_code=$?
+
+  check_sanitizers "$name" "$STDOUT_LOG" || return
+  check_sanitizers "$name" "$STDERR_LOG" || return
+
+  if [ "$exit_code" -eq 124 ]; then
+    fail_case "$name" "timed out"
+    return
+  fi
+  if [ "$exit_code" -ge 128 ] && [ "$exit_code" -le 192 ]; then
+    fail_case "$name" "crashed with signal $((exit_code - 128))"
+    return
+  fi
+  if [ "$exit_code" -eq 0 ]; then
+    fail_case "$name" "incomplete invocation reported success (exit=0)"
+    return
+  fi
+  if [ -s "$STDOUT_LOG" ]; then
+    fail_case "$name" "malformed invocation wrote $(wc -c < "$STDOUT_LOG") bytes to stdout"
+    sed -n '1,5p' "$STDOUT_LOG"
+    return
+  fi
+
+  local want="Missing arguments after -threads: expected at least 2, received ${expected}."
+  if ! grep -Fqx "$want" "$STDERR_LOG" 2>/dev/null; then
+    fail_case "$name" "stderr does not carry \"$want\""
+    sed -n '1,5p' "$STDERR_LOG"
+    return
+  fi
+  assert_usage_screen "$name" "$STDERR_LOG" "stderr" "$anchor" || return
+
+  pass_case "$name" "reported received=$expected, usage on stderr, stdout empty"
+}
+
 # A help request: exit 0, usage on stdout, stderr untouched.
 run_help() {
-  local name="$1" tool="$2" flag="$3"
+  local name="$1" tool="$2" anchor="$3" flag="$4"
   TOTAL=$((TOTAL + 1))
   local exit_code=0
 
@@ -228,7 +298,7 @@ run_help() {
     sed -n '1,5p' "$STDERR_LOG"
     return
   fi
-  assert_usage_screen "$name" "$STDOUT_LOG" "stdout" || return
+  assert_usage_screen "$name" "$STDOUT_LOG" "stdout" "$anchor" || return
 
   pass_case "$name" "$flag printed usage on stdout and exited 0"
 }
@@ -249,7 +319,7 @@ for entry in "iccApplyProfiles|$PROFILES|0|+10000 - Use V5 sub-profile if presen
              "iccApplyNamedCmm|$NAMEDCMM|0|only one of +1000000 / +2000000 may be given)" \
              "iccApplySearch|$SEARCH|1|+10000 - Use V5 sub-profile if present" \
              "iccApplyToLink|$TOLINK|8|+1000 - Use V5 sub-profile if present"; do
-  IFS='|' read -r name tool maxops ANCHOR <<< "$entry"
+  IFS='|' read -r name tool maxops anchor <<< "$entry"
 
   if [ ! -x "$tool" ]; then
     skip_case "$name" "not built at $tool"
@@ -260,11 +330,11 @@ for entry in "iccApplyProfiles|$PROFILES|0|+10000 - Use V5 sub-profile if presen
   # iccApplyToLink accepted nine of them and iccApplySearch two, so a test that
   # only ran the tool with no operands would leave most of the defect uncovered.
   for n in $(seq 0 "$maxops"); do
-    run_malformed "$name $n-operand" "$tool" "${ARGS[@]:0:$n}"
+    run_malformed "$name $n-operand" "$tool" "$anchor" "${ARGS[@]:0:$n}"
   done
 
-  run_help "$name short help" "$tool" -h
-  run_help "$name long help" "$tool" --help
+  run_help "$name short help" "$tool" "$anchor" -h
+  run_help "$name long help" "$tool" "$anchor" --help
 done
 
 # Forms that clear minargs but are still malformed.  One operand is a complete
@@ -285,6 +355,19 @@ fi
 if [ -x "$SEARCH" ]; then
   run_malformed_no_usage "iccApplySearch unparseable-args" "$SEARCH" "$DATA" 0
   run_malformed_no_usage "iccApplySearch threads-no-count" "$SEARCH" -threads
+  # argc == 1 and argc == 2 after the shift: the only two values that reach the
+  # post-"-threads" guard (a third operand clears minargs and goes to the parser).
+  #
+  # The anchor is passed in rather than inherited: it used to be a global that
+  # the per-tool table loop above assigned, so out here it still held whichever
+  # row the LAST entry set -- iccApplyToLink's "+1000", not iccApplySearch's
+  # "+10000" -- and assert_usage_screen() looked for a row this tool never
+  # prints and failed for the wrong reason.  It is now a parameter, so a case
+  # added anywhere has to name the screen it expects.
+  run_threads_operand_count "iccApplySearch threads-then-nothing" "$SEARCH" \
+    "+10000 - Use V5 sub-profile if present" 0 -threads 4
+  run_threads_operand_count "iccApplySearch threads-then-one-operand" "$SEARCH" \
+    "+10000 - Use V5 sub-profile if present" 1 -threads 4 -cfg
 fi
 
 echo "=== summary: $PASS passed, $FAIL failed, $SKIP skipped, $TOTAL total ==="
