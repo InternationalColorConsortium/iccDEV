@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <ProfileVersion>4.4</ProfileVersion>
+    <ProfileDeviceClass>abst</ProfileDeviceClass>
+    <DataColourSpace>nc0006</DataColourSpace>
+    <PCS>Lab </PCS>
+    <CreationDateTime>2026-09-05T12:00:00</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Perceptual</RenderingIntent>
+    <PCSIlluminant><XYZNumber X="0.9642" Y="1.0" Z="0.8249"/></PCSIlluminant>
+    <ProfileID>1</ProfileID>
+  </Header>
+  <Tags>
+    <multiLocalizedUnicodeType>
+      <TagSignature>desc</TagSignature>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Invalid v4 profile using an iccMAX N-channel space]]></LocalizedText>
+    </multiLocalizedUnicodeType>
+    <multiProcessElementType>
+      <TagSignature>A2B0</TagSignature>
+      <MultiProcessElements InputChannels="6" OutputChannels="3"/>
+    </multiProcessElementType>
+    <XYZType>
+      <TagSignature>wtpt</TagSignature>
+      <XYZNumber X="0.9642" Y="1.0" Z="0.8249"/>
+    </XYZType>
+    <multiLocalizedUnicodeType>
+      <TagSignature>cprt</TagSignature>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright 2026 International Color Consortium]]></LocalizedText>
+    </multiLocalizedUnicodeType>
+  </Tags>
+</IccProfile>
