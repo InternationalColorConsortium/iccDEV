@@ -406,7 +406,22 @@ bool CIccProfileXml::ToXmlWithBlanks(std::string &xml, std::string blanks)
 // performs the range check.  This is the XML twin of the JSON defect fixed for
 // #1830, whose icJsonParseBCDByte in IccProfileJson.cpp now carries the same
 // contract.
-static bool parseVersion(const std::string &sPart, unsigned long &rv)
+// bFractional distinguishes the two kinds of component this helper encodes.  A
+// major is a whole number, so "5" is 0x05.  A minor is the fractional part of a
+// decimal version, so its digits are positional: "5.1" is five-and-one-TENTH and
+// must reach the header as 0x10, exactly as the canonical "5.10" does.  Encoding
+// the digit as the integer 1 instead gave 0x01, i.e. 5.01, which is #2383's
+// `0x05010100` -- and, being below the library's 5.10 threshold, is what made a
+// v5.1 profile report its zero-step observer and illuminant encodings as
+// noncompliant.
+//
+// #2387's test pinned this as an "unchanged quirk" while that PR repaired the
+// neighbouring loops; it is the defect itself, so that assertion is inverted here
+// rather than preserved.  Rejecting a one-digit minor instead was not an option:
+// 28 tracked documents use the short form (19x "5.0", 9x "1.0"), all with a zero
+// minor, which is why the corpus never exposed this.
+static bool parseVersion(const std::string &sPart, unsigned long &rv,
+                         bool bFractional)
 {
   icUInt32Number v = 0;
 
@@ -426,8 +441,29 @@ static bool parseVersion(const std::string &sPart, unsigned long &rv)
     return false;
   sTrimmed = sTrimmed.substr(nFirst, sTrimmed.find_last_not_of(szBlank) - nFirst + 1);
 
+  // Require one or two DIGITS, which is icJsonParseBCDByte's contract on the JSON
+  // side.  icXmlParseU32 alone is not enough here: it rejects a leading '-' but
+  // strtoull still accepts '+', and it accepts any number of leading zeros while
+  // the value stays <= 99.  Both slipped past the length test below, so "5.+1"
+  // and "5.001" scaled differently from "5.1" -- and, since the JSON twin refuses
+  // them outright, the same version text produced two different header words
+  // depending on which importer was used.  Checking digits here makes the length
+  // test below a true digit count and closes that divergence.
+  if (sTrimmed.size() < 1 || sTrimmed.size() > 2)
+    return false;
+  for (std::string::size_type i = 0; i < sTrimmed.size(); i++) {
+    if (sTrimmed[i] < '0' || sTrimmed[i] > '9')
+      return false;
+  }
+
   if (!icXmlParseU32(sTrimmed.c_str(), v, 99))
     return false;
+
+  // Scale a one-digit fractional component to its tenths place, so "1" and "10"
+  // both encode as 0x10.  Keyed on the digit COUNT rather than the value, so a
+  // written-out "05" still means five hundredths and is left at 0x05.
+  if (bFractional && sTrimmed.size() == 1)
+    v *= 10;
 
   rv = ((v / 10) % 10) * 16 + (v % 10);
   return true;
@@ -472,7 +508,7 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
       for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
         ver += *szVer;
       }
-      bVerOk = parseVersion(ver, verMajor);
+      bVerOk = parseVersion(ver, verMajor, false);
       ver.clear();
       if (*szVer)
         szVer++;
@@ -481,7 +517,7 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
         for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
           ver += *szVer;
         }
-        bVerOk = parseVersion(ver, verMinor);
+        bVerOk = parseVersion(ver, verMinor, true);
         ver.clear();
         if (*szVer)
           szVer++;
@@ -494,7 +530,7 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
           for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
             ver += *szVer;
           }
-          bVerOk = parseVersion(ver, verClassMajor);
+          bVerOk = parseVersion(ver, verClassMajor, false);
           ver.clear();
           if (*szVer)
             szVer++;
@@ -503,7 +539,7 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
             for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
               ver += *szVer;
             }
-            bVerOk = parseVersion(ver, verClassMinor);
+            bVerOk = parseVersion(ver, verClassMinor, true);
             ver.clear();
 
             // The header holds exactly four components, so anything still
@@ -550,7 +586,7 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
       for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
         ver += *szVer;
       }
-      bVerOk = parseVersion(ver, verClassMajor);
+      bVerOk = parseVersion(ver, verClassMajor, false);
       ver.clear();
       if (*szVer)
         szVer++;
@@ -561,7 +597,7 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
         for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
           ver += *szVer;
         }
-        bVerOk = parseVersion(ver, verClassMinor);
+        bVerOk = parseVersion(ver, verClassMinor, true);
         ver.clear();
 
         // As above: the sub-class version is two components, so a third is a

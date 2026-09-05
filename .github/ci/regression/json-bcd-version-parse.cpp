@@ -100,12 +100,29 @@ int main()
   checkVersion("5.00", 0x05000000u, "\"5.00\" encodes as 0x0500");
   checkVersion("2.20", 0x02200000u, "\"2.20\" encodes as 0x0220");
 
-  // A missing minor component keeps its previous meaning ("4" == "4.0"), and a
-  // single-digit minor keeps its previous (quirky but unchanged) encoding: atoi("3")
-  // was 3, giving 0x03 rather than 0x30. Pinned so this fix stays behaviour-neutral
-  // for input that already parsed.
+  // A missing minor component keeps its previous meaning ("4" == "4.0").
   checkVersion("4", 0x04000000u, "\"4\" encodes as 0x0400");
-  checkVersion("4.3", 0x04030000u, "\"4.3\" encodes as 0x0403 (unchanged quirk)");
+
+  // --- #2383: a one-digit minor is a TENTHS digit ------------------------------
+  // Inverted from the assertion #1830 left here, which pinned 0x0403 as a
+  // "quirky but unchanged" encoding.  It is the defect: a minor is the fractional
+  // part of a decimal version, so "4.3" is four-and-three-TENTHS and must encode
+  // exactly as the canonical "4.30" that CIccInfo::GetVersionName writes.
+  //
+  // The XML twin (parseVersion in IccProfileXml.cpp) carries the identical rule
+  // and the mirror of these assertions.  The two MUST agree: the same document is
+  // convertible either way, and a disagreement would make a JSON->XML round trip
+  // change the profile version.
+  checkVersion("4.3", 0x04300000u, "\"4.3\" encodes as 0x0430, same as \"4.30\" (#2383)");
+  checkVersion("5.1", 0x05100000u, "\"5.1\" encodes as 0x0510, same as \"5.10\" (#2383)");
+  check(parseVersion("5.1", NULL) == parseVersion("5.10", NULL),
+        "\"5.1\" and \"5.10\" are the same version");
+
+  // Keyed on the digit count, not the value, so an explicit two-digit minor is
+  // already in hundredths and is not scaled again.
+  checkVersion("4.05", 0x04050000u, "\"4.05\" stays 0x0405 -- two digits are not scaled");
+  checkVersion("4.5", 0x04500000u, "\"4.5\" encodes as 0x0450");
+  checkVersion("4.0", 0x04000000u, "\"4.0\" still encodes as 0x0400");
 
   // --- the #1830 cases ---------------------------------------------------------
 
@@ -138,6 +155,17 @@ int main()
   v = parseVersion("4.30", "-1");
   check(v == 0x04300000u, "negative subclass version rejected, major preserved (#1830)");
   check((v & 0x0000ffffu) == 0u, "rejected subclass version leaves the low half zero");
+
+  // #2383 reaches the subclass through the same helper, so it scales here too.
+  // Mirrors the XML twin's checkSubClass cases deliberately: the subclass minor is
+  // the axis this change moved, and covering it on only one side would let a later
+  // one-sided edit drift the two encoders apart without any test noticing.
+  v = parseVersion("4.30", "1.2");
+  check(v == 0x04300120u, "a one-digit subclass minor scales to tenths (#2383)");
+  check(v == parseVersion("4.30", "1.20"),
+        "subclass \"1.2\" and \"1.20\" are the same version");
+  v = parseVersion("4.30", "1.02");
+  check(v == 0x04300102u, "a two-digit subclass minor is not scaled");
 
   if (g_fail)
     std::fprintf(stderr, "[json-bcd-version] %d assertion(s) failed\n", g_fail);
