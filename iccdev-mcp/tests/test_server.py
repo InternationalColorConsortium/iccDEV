@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import math
 import os
 import pytest
@@ -227,25 +229,81 @@ class TestServerImport:
         assert mcp is not None
         assert callable(main)
 
-    def test_fastmcp_settings_are_resolved(self):
+    def test_mcpserver_is_registered(self):
         from iccdev_mcp.server import mcp
-        from mcp.server.fastmcp.server import Settings as FastMCPSettings
+        from mcp.server.mcpserver import MCPServer
 
-        assert mcp is not None
-        assert FastMCPSettings.__pydantic_complete__
+        assert isinstance(mcp, MCPServer)
 
     def test_server_has_tools(self):
         from iccdev_mcp import __version__
         from iccdev_mcp.server import mcp
-        # FastMCP should have registered tools
-        assert mcp is not None
-        options = mcp._mcp_server.create_initialization_options()
-        assert options.server_version == __version__
+        assert mcp.version == __version__
 
     def test_package_version(self):
         from importlib.metadata import version
         from iccdev_mcp import __version__
         assert version("iccdev-mcp") == __version__
+
+
+@pytest.mark.asyncio
+async def test_server_discover_request_succeeds():
+    """The current MCP discovery request must not be parsed as a legacy request."""
+    source_root = str(Path(__file__).resolve().parent.parent)
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(
+        filter(None, (source_root, env.get("PYTHONPATH")))
+    )
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
+        "iccdev_mcp.server",
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=env,
+    )
+    assert process.stdin is not None
+    assert process.stdout is not None
+
+    try:
+        request = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "server/discover",
+            "params": {
+                "_meta": {
+                    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                    "io.modelcontextprotocol/clientInfo": {
+                        "name": "iccdev-mcp-test",
+                        "version": "1.0",
+                    },
+                    "io.modelcontextprotocol/clientCapabilities": {},
+                },
+            },
+        }
+        process.stdin.write((json.dumps(request) + "\n").encode())
+        await process.stdin.drain()
+
+        response_line = await asyncio.wait_for(process.stdout.readline(), timeout=5)
+        assert response_line, "server/discover did not receive a response within 5 seconds"
+        response = json.loads(response_line)
+        assert response["id"] == 1
+        assert "error" not in response
+        assert "2026-07-28" in response["result"]["supportedVersions"]
+    finally:
+        process.stdin.close()
+        try:
+            await asyncio.wait_for(process.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            if process.returncode is None:
+                process.terminate()
+            try:
+                await asyncio.wait_for(process.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                if process.returncode is None:
+                    process.kill()
+                await process.wait()
 
 
 # ---------------------------------------------------------------------------
