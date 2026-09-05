@@ -247,12 +247,16 @@ int main(int argc, char* argv[])
   // Re-indented to match its block.  The stray four-space indent was harmless while
   // nothing preceded it, but it now follows an if-statement and -Wmisleading-indentation
   // rejects it outright on the strict lanes.
+  // On stderr, like every other failing exit in this main().  This one returned
+  // EXIT_FAILURE already but answered on stdout, so a caller that separates the
+  // streams -- the discriminator this file's Usage() comment relies on -- saw a
+  // silent stderr for a run that parsed nothing (#2384).
   if (!profile.LoadXml(argv[1], szRelaxNGDir.c_str(), &reason)) {
-    printf("%s", reason.c_str());
+    fprintf(stderr, "%s", reason.c_str());
 #ifndef WIN32
-    printf("\n");
+    fprintf(stderr, "\n");
 #endif
-    printf("Unable to Parse '%s'\n", argv[1]);
+    fprintf(stderr, "Unable to Parse '%s'\n", argv[1]);
     return EXIT_FAILURE;
   }
 
@@ -282,23 +286,41 @@ int main(int argc, char* argv[])
       printf("Profile parsed and saved correctly\n");
     }
     else {
-      printf("Unable to save profile as '%s'\n", argv[2]);
+      fprintf(stderr, "Unable to save profile as '%s'\n", argv[2]);
       return EXIT_FAILURE;
     }
   }
   else {
+    // A profile that validates above icValidateWarning is still WRITTEN -- that is
+    // deliberate and is kept: the file is what lets a caller inspect or repair what
+    // it asked for, and this tree's own #1898/#1901/#1845 fixtures depend on the
+    // artifact appearing.  What changes is that the run no longer REPORTS success.
+    //
+    // It used to print "Profile is invalid, but saved correctly" and the whole
+    // validation report on stdout and then return EXIT_SUCCESS, so an invalid
+    // profile was indistinguishable from a conformant one to any caller that checks
+    // $? -- which is how one reached three TIFFs and package generation before
+    // anyone noticed (#2384).  Both signals now say the same thing: the report goes
+    // to stderr with the rest of this main()'s diagnostics, and the status is
+    // EXIT_FAILURE, matching every other non-success exit here.
+    //
+    // The artifact still exists, so a caller that WANTS a deliberately invalid
+    // profile keeps working by ignoring the status -- which is exactly what the
+    // fixtures above do; they gate on the file, never on $?.
     for (i=0; i<16; i++) {
       if (profile.m_Header.profileID.ID8[i])
         break;
     }
     if (SaveIccProfile(argv[2], &profile, bNoId ? icNeverWriteID : (i<16 ? icAlwaysWriteID : icVersionBasedID))) {
-      printf("Profile parsed.  Profile is invalid, but saved correctly\n");
+      fprintf(stderr, "Profile parsed.  Profile is invalid, but saved correctly\n");
     }
     else {
-      printf("Unable to save profile - profile is invalid!\n");
+      fprintf(stderr, "Unable to save profile - profile is invalid!\n");
       return EXIT_FAILURE;
     }
-    printf("%s", valid_report.c_str());
+    fprintf(stderr, "%s", valid_report.c_str());
+    fprintf(stderr, "\n");
+    return EXIT_FAILURE;
   }
 
   printf("\n");

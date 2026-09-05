@@ -778,6 +778,19 @@ raise SystemExit("namedColor2 tag not found")
 # profile.  Generating it would make these cases depend on the resp tag's READ path,
 # and when that path was broken (#2399) they would have gone green by skipping rather
 # than red -- the failure mode this file's own reject helper exists to prevent.
+# Every document carries the four tags a v2 GRAY mntr profile must have, so the
+# CONTROL converts with exit 0.  They were omitted while iccFromJson returned
+# EXIT_SUCCESS for a profile it had just declared invalid; #2384 made that an
+# EXIT_FAILURE, so a control asserting exit 0 now means what it always claimed.
+# The outputResponseTag under test -- its CountOfChannels and DeviceCode -- is
+# unchanged, and the overflow cases are still refused by the parser before
+# validation is reached.  Mirrors the same change in the XML sibling suite.
+#
+# The tag TYPES are the v2 ones -- textDescriptionType and textType, not
+# multiLocalizedUnicodeType -- because these documents declare ProfileVersion
+# 2.10.  Validate() rejects the v4 spellings here as "Invalid tag type (Might
+# be critical!)", so the v4 forms would leave the control failing for a second,
+# unrelated reason.
 write_responsecurve_json() {
   # write_responsecurve_json <path> <count> <device-code>
   cat > "$1" <<JSONEOF
@@ -808,7 +821,13 @@ write_responsecurve_json() {
           ]
         }
       }
-    }
+    },
+    { "grayTRCTag": { "data": { "type": "curveType", "curveType": "gamma", "gamma": 2.19921880909169 } } },
+    { "profileDescriptionTag": { "data": { "type": "textDescriptionType",
+        "description": "responseCurveSet16 regression fixture" } } },
+    { "copyrightTag": { "data": { "type": "textType", "text": "ICC regression fixture" } } },
+    { "mediaWhitePointTag": { "data": { "type": "XYZArrayType",
+        "XYZ": [ [ 0.964202880859375, 1.0, 0.8249053955078125 ] ] } } }
   ]
 }
 JSONEOF

@@ -246,12 +246,39 @@ run_compressed_import()
   TOTAL=$((TOTAL + 1))
   rm -f "$icc" "$roundtrip_xml" "$dump_log" "$log"
 
-  "$FROMXML" "$xml" "$icc" > "$log" 2>&1 || exit_code=$?
+  # Bounded: the guard below no longer keys off the status, so without a timeout
+  # a post-write hang would wedge the run rather than fail this case.
+  timeout 60 "$FROMXML" "$xml" "$icc" > "$log" 2>&1 || exit_code=$?
   check_sanitizers "$name" "$log" || return
 
+  # Status still matters for the outcomes it is the ONLY witness to.  Relaxing
+  # the guard below to the artifact must not also stop this case noticing that
+  # iccFromXml wrote the profile and then died in teardown, or hung: a SIGSEGV
+  # in a tag destructor leaves a complete .icc on disk and, on the ordinary
+  # uninstrumented lanes, no sanitizer text for check_sanitizers to
+  # find -- so an artifact-only assertion would report PASS for a crash.  The
+  # #2384 suite excludes the same range for the same reason.
+  if [ "$exit_code" -eq 124 ]; then
+    fail_case "$name" "iccFromXml timed out"
+    return
+  fi
+  if [ "$exit_code" -ge 128 ] && [ "$exit_code" -le 192 ]; then
+    fail_case "$name" "iccFromXml died on signal $((exit_code - 128))"
+    sed -n '1,40p' "$log"
+    return
+  fi
+
   if [ "$expect_zlib" = "ON" ]; then
-    if [ "$exit_code" -ne 0 ] || [ ! -s "$icc" ]; then
-      fail_case "$name" "zlib-enabled build rejected generated HexCompressedData"
+    # The artifact, not the status.  This fixture REPLACES profileDescriptionTag
+    # with a utf8ZipType carrying HexCompressedData -- the thing under test --
+    # and Validate() calls that "profileDescriptionTag utf8ZipType: Invalid tag
+    # type", so the profile is non-conformant BY CONSTRUCTION and cannot be made
+    # otherwise without deleting what this case exists to measure.  Since #2384
+    # iccFromXml exits non-zero for such a profile while still writing it, so
+    # "the zlib build imported the stream" is the file plus the absence of a
+    # parse error, exactly as the #1898/#1845 fixtures already assert it.
+    if [ ! -s "$icc" ] || grep -q "Unable to Parse" "$log"; then
+      fail_case "$name" "zlib-enabled build rejected generated HexCompressedData (exit=$exit_code)"
       sed -n '1,80p' "$log"
       return
     fi
