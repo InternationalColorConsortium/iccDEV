@@ -63,6 +63,8 @@ shares one source of truth. Update rules here, not in the mirrors.
 | Apply-path throughput benchmark | `Tools/CmdLine/IccBenchApply/Readme.md` |
 | Security repro | `.github/prompts/reproduce-security-issue.prompt.md` |
 | iccSpecSepToTiff QA | `.github/skills/specsep-qa/SKILL.md` |
+| ICC v5 profile validation QA | `.github/skills/v5-profile-validation-qa/SKILL.md` |
+| ICC v5 profile validation prompt | `.github/prompts/v5-profile-validation-qa.prompt.md` |
 | IIS ISAPI endpoint QA | `.github/skills/iis-isapi-qa/SKILL.md` |
 | Issue filing format | `.github/prompts/file-security-issue.prompt.md` |
 | Library hardening | `.github/instructions/icc-library-code.instructions.md` |

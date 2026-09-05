@@ -6736,6 +6736,51 @@ function(iccdev_add_spectral_clut_xml_channel_mismatch_test)
   endif()
 endfunction()
 
+# The compact XML fixtures exercise the complete iccFromXml -> binary profile ->
+# CIccProfile::Validate path.  Existing in-memory spectral tests protect CMM and
+# tag internals; this test pins the public tool path, including 36- and 81-channel
+# signatures and the ICC.1/ICC.2 version boundary.  Run it on Windows too so the
+# same generated profiles and diagnostics are checked by every full CTest gate.
+function(iccdev_add_v5_profile_validation_test)
+  if(NOT TARGET iccFromXml OR NOT TARGET iccDumpProfile)
+    return()
+  endif()
+
+  add_test(
+    NAME iccdev.v5-profile-validation
+    COMMAND
+      "${CMAKE_COMMAND}"
+      "-DICCDEV_FROM_XML=$<TARGET_FILE:iccFromXml>"
+      "-DICCDEV_DUMP_PROFILE=$<TARGET_FILE:iccDumpProfile>"
+      "-DICCDEV_FIXTURE_DIR=${ICCDEV_TESTING_DIR}/ICS/V5Coverage"
+      "-DICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/iccdev-v5-profile-validation"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunV5ProfileValidation.cmake"
+  )
+  set_tests_properties(iccdev.v5-profile-validation PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;profile;xml;v5;iccmax;spectral;high-channel;spec;regression"
+  )
+  add_dependencies(check iccFromXml iccDumpProfile)
+  add_dependencies(check-fast iccFromXml iccDumpProfile)
+
+  if(WIN32)
+    set(_v5_profile_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccFromXml>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccDumpProfile>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _v5_profile_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.v5-profile-validation PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_v5_profile_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 if(WIN32)
   function(iccdev_add_windows_batch_test NAME TIMEOUT LABELS SCRIPT)
     set(_options
@@ -7076,6 +7121,7 @@ if(WIN32)
   iccdev_add_zip_utf8_text_zlib_test()
   iccdev_add_spectral_clut_channel_count_test()
   iccdev_add_spectral_clut_xml_channel_mismatch_test()
+  iccdev_add_v5_profile_validation_test()
   iccdev_add_clut_apply_guard_retirement_test()
   iccdev_add_sampled_curve_nonfinite_range_test()
 
@@ -7441,6 +7487,7 @@ iccdev_add_qa_evidence_helpers_test()
 iccdev_add_zip_utf8_text_zlib_test()
 iccdev_add_spectral_clut_channel_count_test()
 iccdev_add_spectral_clut_xml_channel_mismatch_test()
+iccdev_add_v5_profile_validation_test()
 iccdev_add_clut_apply_guard_retirement_test()
 iccdev_add_sampled_curve_nonfinite_range_test()
 

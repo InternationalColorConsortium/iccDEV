@@ -13,6 +13,7 @@ long command references.
 | `stacked-pr-fast-lane` | Managing related short-window PR stacks and guarded maintainer fast-lane validation. |
 | `sanitizer-repro` | Reproducing ASAN/UBSAN findings or security advisories. |
 | `specsep-qa` | Running or diagnosing the repository-owned `iccSpecSepToTiff` QA suites and fixtures. |
+| `v5-profile-validation-qa` | Synthesizing and validating ICC v5/iccMAX spectral XML, high-channel, version-boundary, sanitizer, and coverage cases. |
 | `json-config-regression` | Editing JSON/profile config parsing or tests. |
 | `iis-isapi-qa` | Building, deploying, and validating the Windows IIS ISAPI HTTP and browser assessment surface. |
 | `maintainer-ci-ctest` | Updating maintainer-owned CI, CTest, CPack, sanitizer, workflow, or release gates. |

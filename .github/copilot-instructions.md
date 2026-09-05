@@ -231,6 +231,7 @@ Key safety rules:
 | Debug MATLAB bindings | `.github/prompts/debug-matlab-bindings.prompt.md` |
 | Debug WASM build | `.github/prompts/debug-wasm-build.prompt.md` |
 | iccSpecSepToTiff QA | `.github/prompts/specsep-qa.prompt.md` |
+| ICC v5 profile validation QA | `.github/prompts/v5-profile-validation-qa.prompt.md` |
 | AVX2 CLUT diagnostics | `.github/prompts/avx2-clut-diagnostics.prompt.md` |
 | IIS ISAPI endpoint QA | `.github/prompts/iis-isapi-qa.prompt.md` |
 | Version bump | `.github/prompts/version-bump.prompt.md` |
@@ -244,6 +245,7 @@ Key safety rules:
 | AFL smoke workflow | `.github/skills/afl-smoke/SKILL.md` |
 | Sanitizer reproduction | `.github/skills/sanitizer-repro/SKILL.md` |
 | iccSpecSepToTiff QA | `.github/skills/specsep-qa/SKILL.md` |
+| ICC v5 profile validation QA | `.github/skills/v5-profile-validation-qa/SKILL.md` |
 | IIS ISAPI endpoint QA | `.github/skills/iis-isapi-qa/SKILL.md` |
 | JSON/config regressions | `.github/skills/json-config-regression/SKILL.md` |
 | Regression workflow governance | `.github/skills/regression-workflow-governance/SKILL.md` |

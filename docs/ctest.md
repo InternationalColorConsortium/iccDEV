@@ -163,6 +163,7 @@ before running the suite.
 | `iccdev.applysearch-cli-args` | `.github/scripts/iccdev-applysearch-cli-args-regression.sh` |
 | `iccdev.namedcolor-apply-regressions` | `.github/scripts/iccdev-namedcolor-apply-regression-tests.sh` |
 | `iccdev.v5-namedcmm-regressions` | `.github/scripts/iccdev-v5-namedcmm-regression-tests.sh` |
+| `iccdev.v5-profile-validation` | `Build/Cmake/Testing/RunV5ProfileValidation.cmake` and `Testing/ICS/V5Coverage/*.xml` |
 | `iccdev.namedcolor-overprint-regressions` | `.github/scripts/iccdev-namedcolor-overprint-regression-tests.sh` |
 | `iccdev.version-bcd-regressions` | `.github/scripts/iccdev-version-bcd-regression-tests.sh` |
 | `iccdev.profile-visualize-regressions` | `.github/scripts/iccdev-profile-visualize-tests.sh` |
@@ -204,6 +205,16 @@ must reject invalid numeric fields before conversion without sanitizer findings.
 checks the 32-item PAWG report structure, verifies summary counts against the
 rendered item lines, runs malformed and malware-signature dynamic inputs, and
 fails on sanitizer findings.
+
+`iccdev.v5-profile-validation` synthesizes six profiles from compact XML
+sources and runs the serialized results through `iccDumpProfile -v 100`. Its
+accepted controls cover two-, 36-, and 81-channel reflectance spectral PCS
+signatures. Its rejection cases cover spectral signature/range mismatch, the
+one-step interpretation boundary, and an ICC.2 `ncXXXX` data space placed in an
+ICC.1 v4 profile. Invalid cases must be rejected by both `iccFromXml` and
+`iccDumpProfile`; the converter's preserved artifact is checked independently.
+See `v5-profile-validation-qa.md` for the specification correlation and the
+distinction between focused validator acceptance and full profile conformance.
 
 `iccdev.pawg-q1-quality-contract` validates the PAWG Q1 sample budget,
 CIEDE2000 reference vectors, and Gray/RGB/CMYK round-trip model selection.

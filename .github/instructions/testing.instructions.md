@@ -119,6 +119,7 @@ set `ICCDEV_TOOLS_DIR` when the build is not under `Build/Tools`.
 | `Testing/SpecRef/` | Spectral reflectance profiles | spectral round-trip |
 | `Testing/HDR/` | HDR/HLG/PQ display profiles | HDR workflows |
 | `Testing/ICS/` | ICS interoperability profiles | ICS validation |
+| `Testing/ICS/V5Coverage/` | Focused ICC v5 spectral boundary XML | `iccdev.v5-profile-validation` |
 | `Testing/Overprint/` | Overprint simulation profiles | overprint workflows |
 | `Testing/CMYK-3DLUTs/` | CMYK 3D LUT profiles | CMYK workflows |
 | `Testing/hybrid/` | Hybrid spectral/colorimetric profiles | hybrid workflows |
