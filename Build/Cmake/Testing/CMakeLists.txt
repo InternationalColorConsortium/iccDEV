@@ -7628,6 +7628,25 @@ if(TARGET iccFromXml)
     SKIP_RETURN_CODE 77)
 endif()
 
+# #2401: the element (<n>) and text spellings of one XML array must agree.  Not
+# labelled "slow", so it runs on the pull_request path (ci-pr-action.yml pins
+# ctest_mode=fast, which drops the slow label).
+if(TARGET iccFromXml)
+  iccdev_add_script_test(
+    iccdev.xml-array-element-form-regression
+    300
+    "iccdev;xml;array;parser;issue-2401;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2401-xml-array-element-form-regression.sh"
+  )
+  # Exits 77 when iccFromXml or python3 is absent, or nothing was measured.
+  # Seven cases x one invocation x "timeout 25" is a 175s worst case, so the
+  # registered budget has to exceed it: if CTest kills the test first, the
+  # script's own per-case diagnostic and log tail are never produced.
+  set_tests_properties(iccdev.xml-array-element-form-regression PROPERTIES
+    SKIP_RETURN_CODE 77)
+endif()
+
 # Guarded on the target, like iccdev.tiff-resolution-unit-regression below.
 # Both scripts exit 2 when iccSpecSepToTiff is missing rather than skipping the
 # way the older sibling suites do, so an unguarded registration turns a

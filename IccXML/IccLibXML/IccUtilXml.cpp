@@ -1084,6 +1084,92 @@ float clipTypeRange( const float &input )
   return input;
 }
 
+// #2401: ONE conversion, shared by both spellings of an array body.
+//
+// An <Array>/<Data> body may be written as text ("256 255 300 -1") or as a run
+// of <n> elements.  ParseText() clipped with clipTypeRange<T>(atof(...)) while
+// ParseArray()'s element branch cast atol() straight to T, so <n>256</n> in a
+// uInt8Array wrapped to 0 where the identical text array clipped to 255.  Two
+// implementations that merely happen to agree drift again, so they now have
+// one: agreement is structural here, not a coincidence the tests have to keep
+// re-checking.
+//
+// Integers are parsed integrally rather than through atof().  atol() was exact
+// for the whole uInt64 range on LP64, and routing those values through a
+// double's 53-bit mantissa would have LOST fidelity that the element form
+// already had -- 9007199254740993 landing as ...92.  It also avoids
+// clipTypeRange()'s (long double)max() comparison, which on a platform where
+// long double == double rounds UINT64_MAX up to 2^64, so the saturation test
+// fails and the cast is undefined.  Every integer instantiation of this
+// template is unsigned, which is why "below the range" is simply zero.
+template<typename T>
+static T icParseArrayValue(const char *num)
+{
+  // Skipped once, before anything else looks at the token.  Keeping this inside
+  // the integer branch would make the NaN literal test below whitespace
+  // sensitive: a pretty-printed "<n>\n  nan\n</n>" would miss strncmp() and
+  // fall through to clipTypeRange(), which flushes NaN to zero, while the
+  // unindented spelling produced a real NaN.
+  const char *p = num;
+  while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
+    p++;
+
+  // Long-standing special case kept from ParseText(): a real NaN for floating
+  // point, zero for integers, which cannot represent one.
+  if (!strncmp(p, "nan", 3) || !strncmp(p, "-nan", 4)) {
+    if (std::is_floating_point<T>())
+      return (T)nanf(p);
+    return (T)0;
+  }
+
+  if constexpr (std::numeric_limits<T>::is_integer) {
+    static_assert(!std::numeric_limits<T>::is_signed,
+                  "negative values are clipped to zero here, which is only the "
+                  "right lower bound while every integer instantiation of "
+                  "CIccXmlArrayType is unsigned");
+
+    // A token carrying a decimal point or an exponent is not an integer
+    // literal, and strtoull() would stop at the '.' and read "1e300" as 1.
+    bool bFloatToken = false;
+    for (const char *q = p; *q; q++) {
+      if (*q == '.' || *q == 'e' || *q == 'E') {
+        bFloatToken = true;
+        break;
+      }
+    }
+
+    if (!bFloatToken) {
+      if (*p == '-')
+        return (T)0;    // clip below the range, as clipTypeRange() did
+
+      errno = 0;
+      char *end = nullptr;
+      unsigned long long v = strtoull(p, &end, 10);
+      if (errno == ERANGE ||
+          v > (unsigned long long)std::numeric_limits<T>::max())
+        return std::numeric_limits<T>::max();
+      return (T)v;
+    }
+
+    // Float-shaped token in an integer array.  Saturate in double space rather
+    // than deferring to clipTypeRange(): its bound is (long double)max(), and
+    // where long double == double (MSVC x64/ARM64) that rounds UINT64_MAX up to
+    // 2^64, so "1.8446744073709552e19" fails the > test and the cast to
+    // uint64_t is undefined.  Comparing >= against the same rounded-up bound
+    // saturates instead.  atol() was defined here before this change, so this
+    // path must not be the one that introduces UB.
+    double d = atof(p);
+    if (std::isnan(d) || d <= 0.0)
+      return (T)0;
+    if (d >= (double)std::numeric_limits<T>::max())
+      return std::numeric_limits<T>::max();
+    return (T)d;
+  }
+  else {
+    return clipTypeRange<T>(atof(p));
+  }
+}
+
 template <class T, icTagTypeSignature Tsig>
 icUInt32Number CIccXmlArrayType<T, Tsig>::ParseText(T* pBuf, icUInt32Number nSize, const char *szText)
 {	
@@ -1104,15 +1190,7 @@ icUInt32Number CIccXmlArrayType<T, Tsig>::ParseText(T* pBuf, icUInt32Number nSiz
     }
     else if (bInNum) {
       num[b] = 0;
-      if (!strncmp(num, "nan", 3) || !strncmp(num, "-nan", 4)) {
-        if (std::is_floating_point<T>())        // compile type constant for each type
-          pBuf[n] = (T)nanf(num);
-        else
-          pBuf[n] = 0;  // flush nan to zero for integers
-      }
-      else {
-        pBuf[n] = clipTypeRange<T>(atof(num));  // clip input to valid output range
-      }
+      pBuf[n] = icParseArrayValue<T>(num);
       n++;
       bInNum = false;
     }
@@ -1120,15 +1198,7 @@ icUInt32Number CIccXmlArrayType<T, Tsig>::ParseText(T* pBuf, icUInt32Number nSiz
   }
   if ( bInNum && (n < nSize) ) {
     num[b] = 0;
-    if (!strncmp(num, "nan", 3) || !strncmp(num, "-nan", 4)) {
-        if (std::is_floating_point<T>())        // compile type constant for each type
-          pBuf[n] = (T)nanf(num);
-        else
-          pBuf[n] = 0;  // flush nan to zero for integers
-    }
-    else {
-      pBuf[n] = clipTypeRange<T>(atof(num));  // clip input to valid output range
-    }
+    pBuf[n] = icParseArrayValue<T>(num);
     n++;
   } 
 
@@ -1166,9 +1236,14 @@ bool CIccXmlArrayType<T, Tsig>::ParseArray(T* pBuf, icUInt32Number nSize, xmlNod
           !icXmlStrCmp(pNode->name, "f") &&
           pNode->children &&
           pNode->children->content) {
-            float f = 0.0f;
-            sscanf((const char *)(pNode->children->content), "%f", &f);
-            pBuf[i] = (T)f;
+            // #2401: was an unchecked sscanf("%f") straight into a cast, which
+            // made this a THIRD conversion: no clamp, so <f>1e50</f> stored
+            // +inf into an MPE matrix where the identical text array clipped to
+            // FLT_MAX, and no "nan" literal case.  Same helper as the other two
+            // spellings.  (What still differs is acceptance, not conversion: a
+            // non-numeric <f> body counts as a value here while the text form
+            // rejects the array in ParseTextCount().)
+            pBuf[i] = icParseArrayValue<T>((const char *)(pNode->children->content));
             i++;
         }
       }
@@ -1197,7 +1272,16 @@ bool CIccXmlArrayType<T, Tsig>::ParseArray(T* pBuf, icUInt32Number nSize, xmlNod
           !icXmlStrCmp(pNode->name, "n") &&
           pNode->children &&
           pNode->children->content) {
-            pBuf[i] = (T)atol((const char *)(pNode->children->content));
+            // #2401: this was (T)atol(...), an unchecked narrowing cast, so
+            // <n>256</n> in a uInt8Array wrapped to 0 and <n>300</n> to 44
+            // while the identical text-form array clipped both to 255.  atol()
+            // also discarded the fractional part outright for the
+            // float32/float64/float16 arrays, which reach this branch too:
+            // only icSigFloatArrayType scans for "f" elements (see the
+            // wrapper's scanType), so <n>0.5</n> in a float32Array stored 0.
+            // Both are the same defect -- this branch had its own conversion --
+            // so it now calls the one ParseText() uses.
+            pBuf[i] = icParseArrayValue<T>((const char *)(pNode->children->content));
             i++;
         }
       }
