@@ -23,8 +23,12 @@ LABEL org.opencontainers.image.title="iccDEV" \
       org.opencontainers.image.source="https://github.com/InternationalColorConsortium/iccDEV"
 
 # Pebble is inherited from the Ubuntu base but unused by the unified image.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends \
+# Refresh the indexes for each attempt so a mirror-sync mismatch cannot reuse
+# the incomplete index from the preceding attempt.
+RUN for attempt in 1 2 3; do \
+      rm -rf /var/lib/apt/lists/*; \
+      if apt-get -o Acquire::Retries=3 update \
+       && apt-get install -y --no-install-recommends \
     afl++=4.33c-1.1ubuntu1 \
     bash=5.3-2ubuntu1 \
     binutils=2.46-3ubuntu2 \
@@ -37,7 +41,7 @@ RUN apt-get update \
     cmake=4.2.3-2ubuntu2 \
     cppcheck=2.19.0-3 \
     curl=8.18.0-1ubuntu2.4 \
-    diffutils=1:3.12-1 \
+    diffutils=1:3.12-1ubuntu0.1 \
     file=1:5.46-5build2 \
     g++=4:15.2.0-5ubuntu1 \
     gcc=4:15.2.0-5ubuntu1 \
@@ -46,7 +50,7 @@ RUN apt-get update \
     gh=2.46.0-4 \
     git=1:2.53.0-1ubuntu1 \
     gcovr=7.2+really-2 \
-    gpgv=2.4.8-4ubuntu3 \
+    gpgv=2.4.8-4ubuntu3.1 \
     jq=1.8.1-4ubuntu2 \
     libclang-rt-22-dev=1:22.1.2-1ubuntu1 \
     libclang-rt-21-dev=1:21.1.8-6ubuntu1 \
@@ -57,7 +61,7 @@ RUN apt-get update \
     libssl-dev=3.5.5-1ubuntu3.5 \
     libtiff-dev=4.7.0-3ubuntu5 \
     libwxgtk3.2-dev=3.2.9+dfsg-1 \
-    zlib1g=1:1.3.dfsg+really1.3.1-1ubuntu3 \
+    zlib1g=1:1.3.dfsg+really1.3.1-1ubuntu3.1 \
     lld-22=1:22.1.2-1ubuntu1 \
     lldb-22=1:22.1.2-1ubuntu1 \
     libxml2-16=2.15.2+dfsg-0.1ubuntu0.1 \
@@ -81,7 +85,14 @@ RUN apt-get update \
     valgrind=1:3.26.0-0ubuntu1 \
     wx-common=3.2.9+dfsg-1 \
     yamllint=1.37.1-1 \
-    zlib1g-dev=1:1.3.dfsg+really1.3.1-1ubuntu3 \
+    zlib1g-dev=1:1.3.dfsg+really1.3.1-1ubuntu3.1; then \
+        break; \
+      fi; \
+      if [ "$attempt" -eq 3 ]; then \
+        exit 1; \
+      fi; \
+      sleep "$((attempt * 10))"; \
+    done \
  && rm -f /usr/bin/pebble \
  && rm -rf /var/lib/apt/lists/*
 
@@ -260,7 +271,7 @@ RUN chmod 0755 /usr/local/bin/iccdev-banner \
  && chown iccdev-ci:iccdev-ci /workspace/.bashrc
 
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
-  CMD clang --version >/dev/null && cmake --version >/dev/null && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null || exit 1
+  CMD ["bash", "-c", "clang --version >/dev/null && cmake --version >/dev/null && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null"]
 
 LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 ENV ICCDEV_SOURCE_REVISION="${GIT_COMMIT}"
