@@ -272,7 +272,7 @@ public:
 
     m_f = icOpenRegularWriteBinaryFile(m_filename.c_str());
     if (!m_f) {
-      printf("Unable to open '%s'\n", m_filename.c_str());
+      printf("Unable to open '%s'\n", icSanitizeConsoleText(m_filename.c_str()).c_str());
       return false;
     }
 
@@ -933,7 +933,7 @@ int main(int argc, icChar* argv[])
 
   int nLinkType = 0;
   if (!ParseIntArg(argv[2], 0, 1, nLinkType)) {
-    printf("Invalid link_type '%s': expected 0 (Device Link) or 1 (.cube text file)\n", argv[2]);
+    printf("Invalid link_type '%s': expected 0 (Device Link) or 1 (.cube text file)\n", icSanitizeConsoleText(argv[2]).c_str());
     return 1;
   }
 
@@ -956,7 +956,7 @@ int main(int argc, icChar* argv[])
 
   int nLutSize = 0;
   if (!ParseIntArg(argv[3], 2, 255, nLutSize)) {
-    printf("Invalid LUT size '%s': expected an integer between 2 and 255\n", argv[3]);
+    printf("Invalid LUT size '%s': expected an integer between 2 and 255\n", icSanitizeConsoleText(argv[3]).c_str());
     return EXIT_FAILURE;
   }
   
@@ -965,13 +965,13 @@ int main(int argc, icChar* argv[])
   int nOption = 0;
   if (nLinkType == 0) {
     if (!ParseIntArg(argv[4], 0, 1, nOption)) {
-      printf("Invalid option '%s': DeviceLink option must be 0 (v4) or 1 (v5)\n", argv[4]);
+      printf("Invalid option '%s': DeviceLink option must be 0 (v4) or 1 (v5)\n", icSanitizeConsoleText(argv[4]).c_str());
       return 1;
     }
   }
   else {
     if (!ParseIntArg(argv[4], 0, 20, nOption)) {
-      printf("Invalid option '%s': .cube precision must be between 0 and 20\n", argv[4]);
+      printf("Invalid option '%s': .cube precision must be between 0 and 20\n", icSanitizeConsoleText(argv[4]).c_str());
       return 1;
     }
   }
@@ -1036,13 +1036,13 @@ int main(int argc, icChar* argv[])
   //Retrieve command line arguments
   int nFirstTransform = 0;
   if (!ParseIntArg(argv[8], 0, 1, nFirstTransform)) {
-    printf("Invalid first_transform '%s': expected 0 or 1\n", argv[8]);
+    printf("Invalid first_transform '%s': expected 0 or 1\n", icSanitizeConsoleText(argv[8]).c_str());
     return 1;
   }
   bool bFirstTransform = nFirstTransform != 0;
   int nInterpVal = 0;
   if (!ParseIntArg(argv[9], 0, 1, nInterpVal)) {
-    printf("Invalid interp '%s': expected 0 (linear) or 1 (tetrahedral)\n", argv[9]);
+    printf("Invalid interp '%s': expected 0 (linear) or 1 (tetrahedral)\n", icSanitizeConsoleText(argv[9]).c_str());
     return 1;
   }
   icXformInterp nInterp = (nInterpVal == 0) ? icInterpLinear : icInterpTetrahedral;
@@ -1075,7 +1075,7 @@ int main(int argc, icChar* argv[])
       icSignature sig = icGetSigVal(argv[nCount]+5);
       icFloatNumber val;
       if (!ParseFloatArg(argv[nCount+1], val)) {
-        printf("Invalid environment value '%s' for %s: expected a finite number\n", argv[nCount+1], argv[nCount]);
+        printf("Invalid environment value '%s' for %s: expected a finite number\n", icSanitizeConsoleText(argv[nCount+1]).c_str(), icSanitizeConsoleText(argv[nCount]).c_str());
         releasePccList(pccList);
         return 1;
       }
@@ -1085,7 +1085,7 @@ int main(int argc, icChar* argv[])
     else if (stricmp(argv[nCount], "-PCC")) { //Attach profile while ignoring -PCC (this are handled below as profiles are attached)
       bUseD2BxB2DxTags = true;
       if (!ParseIntArg(argv[nCount+1], INT_MIN, INT_MAX, nIntent)) {
-        printf("Invalid rendering intent '%s': expected an integer code\n", argv[nCount+1]);
+        printf("Invalid rendering intent '%s': expected an integer code\n", icSanitizeConsoleText(argv[nCount+1]).c_str());
         releasePccList(pccList);
         return 1;
       }
@@ -1099,7 +1099,7 @@ int main(int argc, icChar* argv[])
       // (IccCmmConfig.cpp, #2190); refused here so the two tools agree (#2268).
       if (nIntent < 0) {
         printf("Invalid rendering intent '%s': a negative intent code is not a"
-               " valid form\n", argv[nCount+1]);
+               " valid form\n", icSanitizeConsoleText(argv[nCount+1]).c_str());
         releasePccList(pccList);
         return 1;
       }
@@ -1134,7 +1134,7 @@ int main(int argc, icChar* argv[])
       // guard there, removed in #2267; adding the guard here without removing
       // this term would file the alert a second time (#2268).
       if (nIntent > (int)icAbsoluteColorimetric) {
-        printf("Invalid rendering intent '%s': decoded intent is out of range\n", argv[nCount+1]);
+        printf("Invalid rendering intent '%s': decoded intent is out of range\n", icSanitizeConsoleText(argv[nCount+1]).c_str());
         releasePccList(pccList);
         return 1;
       }
@@ -1164,7 +1164,7 @@ int main(int argc, icChar* argv[])
       if (i+1<nNumProfiles && !stricmp(argv[nCount+2], "-PCC")) {  
         pPccProfile = OpenIccProfile(argv[nCount+3]);
         if (!pPccProfile) {
-          printf("Unable to open Profile Connections Conditions from '%s'\n", argv[nCount+3]);
+          printf("Unable to open Profile Connections Conditions from '%s'\n", icSanitizeConsoleText(argv[nCount+3]).c_str());
           // Free any -PCC profiles opened on earlier loop iterations (#1336).
           releasePccList(pccList);
           return -1;
@@ -1199,7 +1199,7 @@ int main(int argc, icChar* argv[])
         // profile, which misled users when a structurally valid profile was
         // simply chained incompatibly - see issue #1322.  Decode the status
         // with CIccCmm::GetStatusText so the real cause is visible.
-        printf("Error - Unable to add '%s' to transform chain (status %d: %s)\n", argv[nCount], stat, CIccCmm::GetStatusText(stat));
+        printf("Error - Unable to add '%s' to transform chain (status %d: %s)\n", icSanitizeConsoleText(argv[nCount]).c_str(), stat, CIccCmm::GetStatusText(stat));
         if (stat == icCmmStatBadSpaceLink) {
           printf("The profile's color spaces do not connect with the previous transform in the chain.\n");
         }
@@ -1326,10 +1326,10 @@ int main(int argc, icChar* argv[])
   }
 
   if (pWriter->finish()) {
-    printf("\nLUT successfully written to '%s'\n", argv[1]);
+    printf("\nLUT successfully written to '%s'\n", icSanitizeConsoleText(argv[1]).c_str());
   }
   else {
-    printf("\nUnable to write LUT to '%s'\n", argv[1]);
+    printf("\nUnable to write LUT to '%s'\n", icSanitizeConsoleText(argv[1]).c_str());
     return -1;
   }
 

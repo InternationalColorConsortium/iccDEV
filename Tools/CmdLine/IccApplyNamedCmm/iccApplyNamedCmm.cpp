@@ -397,31 +397,31 @@ int main(int argc, const char* argv[])
 
     json cfg;
     if (!loadJsonFrom(cfg, argv[2]) || !cfg.is_object()) {
-      printf("Unable to read configuration from '%s'\n", argv[2]);
+      printf("Unable to read configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
       return EXIT_FAILURE;
     }
 
     if (cfg.find("dataFiles") == cfg.end() || !cfgApply.fromJson(cfg["dataFiles"])) {
-      printf("Unable to parse dataFile configuration from '%s'\n", argv[2]);
+      printf("Unable to parse dataFile configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
       return EXIT_FAILURE;
     }
 
     if (cfg.find("profileSequence") == cfg.end() || !cfgProfiles.fromJson(cfg["profileSequence"])) {
-      printf("Unable to parse profileSequence configuration from '%s'\n", argv[2]);
+      printf("Unable to parse profileSequence configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
       return EXIT_FAILURE;
     }
 
     if (cfgApply.m_srcType == icCfgColorData) {
       if (cfgApply.m_srcFile.empty()) {
         if (!cfgData.fromJson(cfg["colorData"])) {
-          printf("Unable to parse colorData configuration from '%s'\n", argv[2]);
+          printf("Unable to parse colorData configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
           return EXIT_FAILURE;
         }
       }
       else {
         json data;
         if (!loadJsonFrom(data, cfgApply.m_srcFile.c_str()) || !cfgData.fromJson(data)) {
-          printf("Unable to load color data from '%s'\n", cfgApply.m_srcFile.c_str());
+          printf("Unable to load color data from '%s'\n", icSanitizeConsoleText(cfgApply.m_srcFile.c_str()).c_str());
           return EXIT_FAILURE;
         }
       }
@@ -429,13 +429,13 @@ int main(int argc, const char* argv[])
     else if (cfgApply.m_srcType == icCfgIt8) {
       cfgData.m_srcSpace = cfgApply.m_srcSpace;
       if (cfgApply.m_srcFile.empty() || !cfgData.fromIt8(cfgApply.m_srcFile.c_str())) {
-        printf("Unable to parse IT8 data file '%s'\n", cfgApply.m_srcFile.c_str());
+        printf("Unable to parse IT8 data file '%s'\n", icSanitizeConsoleText(cfgApply.m_srcFile.c_str()).c_str());
         return EXIT_FAILURE;
       }
     }
     else if (cfgApply.m_srcType == icCfgLegacy) {
       if (!cfgData.fromLegacy(cfgApply.m_srcFile.c_str())) {
-        printf("Unable to parse legacy data file '%s'\n", cfgApply.m_srcFile.c_str());
+        printf("Unable to parse legacy data file '%s'\n", icSanitizeConsoleText(cfgApply.m_srcFile.c_str()).c_str());
         return EXIT_FAILURE;
       }
     }
@@ -492,7 +492,7 @@ int main(int argc, const char* argv[])
     }
 
     if (cfgApply.m_srcType != icCfgLegacy || !cfgData.fromLegacy(cfgApply.m_srcFile.c_str())) {
-      printf("Unable to parse legacy data file '%s'\n", cfgApply.m_srcFile.c_str());
+      printf("Unable to parse legacy data file '%s'\n", icSanitizeConsoleText(cfgApply.m_srcFile.c_str()).c_str());
       return EXIT_FAILURE;
     }
 
@@ -521,17 +521,17 @@ int main(int argc, const char* argv[])
         std::string jsonText = cfgJson.dump(1);
         size_t n = fwrite(jsonText.c_str(), 1, jsonText.size(), f);
         if (n != jsonText.size()) {
-          printf("Error writing json config file '%s'\n", exportFile.c_str());
+          printf("Error writing json config file '%s'\n", icSanitizeConsoleText(exportFile.c_str()).c_str());
           fclose(f);
           return EXIT_FAILURE;
         }
         if (!icFlushAndClose(f)) {
-          printf("Error closing json config file '%s'\n", exportFile.c_str());
+          printf("Error closing json config file '%s'\n", icSanitizeConsoleText(exportFile.c_str()).c_str());
           return EXIT_FAILURE;
         }
       }
       else {
-        printf("Unable to export config file '%s'\n", exportFile.c_str());
+        printf("Unable to export config file '%s'\n", icSanitizeConsoleText(exportFile.c_str()).c_str());
         return EXIT_FAILURE;
       }
     }
@@ -588,7 +588,7 @@ int main(int argc, const char* argv[])
 
   if (!pConnect) {
     if (!sConnectError.empty())
-      printf("Error - %s\n", sConnectError.c_str());
+      printf("Error - %s\n", icSanitizeConsoleText(sConnectError.c_str()).c_str());
     else
       printf("Error - Unable to begin profile application - Possibly invalid or incompatible profiles\n");
     return EXIT_FAILURE;

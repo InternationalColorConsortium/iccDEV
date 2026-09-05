@@ -292,7 +292,7 @@ int main(int argc, const char** argv)
     long parsed = strtol(argv[2], &end, 10);
     if (errno || end == argv[2] || *end || parsed < 0 ||
         parsed > CIccThreadedCmm::GetMaxThreads()) {
-      printf("Invalid thread count '%s': expected 0..%d\n", argv[2],
+      printf("Invalid thread count '%s': expected 0..%d\n", icSanitizeConsoleText(argv[2]).c_str(),
              CIccThreadedCmm::GetMaxThreads());
       return EXIT_FAILURE;
     }
@@ -319,23 +319,23 @@ int main(int argc, const char** argv)
 
     json cfg;
     if (!loadJsonFrom(cfg, argv[2]) || !cfg.is_object()) {
-      printf("Unable to read configuration from '%s'\n", argv[2]);
+      printf("Unable to read configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
       return -1;
     }
 
     if (cfg.find("imageFiles") == cfg.end() || !cfgApply.fromJson(cfg["imageFiles"])) {
-      printf("Unable to parse imageFiles configuration from '%s'\n", argv[2]);
+      printf("Unable to parse imageFiles configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
       return -1;
     }
 
     if (cfg.find("profileSequence") == cfg.end() || !cfgProfiles.fromJson(cfg["profileSequence"])) {
-      printf("Unable to parse profileSequence configuration from '%s'\n", argv[2]);
+      printf("Unable to parse profileSequence configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
       return -1;
     }
 
     auto connectOptions = cfg.find("connect");
     if (connectOptions != cfg.end() && !cfgConnect.fromJson(*connectOptions)) {
-      printf("Unable to parse connect configuration from '%s'\n", argv[2]);
+      printf("Unable to parse connect configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
       return -1;
     }
   }
@@ -409,17 +409,17 @@ int main(int argc, const char** argv)
 
         std::string jsonText = cfgJson.dump(1);
         if (fwrite(jsonText.c_str(), 1, jsonText.size(), f) != jsonText.size()) {
-          printf("Unable to write complete config file '%s'\n", exportFile.c_str());
+          printf("Unable to write complete config file '%s'\n", icSanitizeConsoleText(exportFile.c_str()).c_str());
           fclose(f);
           return -1;
         }
         if (!icFlushAndClose(f)) {
-          printf("Unable to close config file '%s'\n", exportFile.c_str());
+          printf("Unable to close config file '%s'\n", icSanitizeConsoleText(exportFile.c_str()).c_str());
           return -1;
         }
       }
       else {
-        printf("Unable to export config file '%s'\n", exportFile.c_str());
+        printf("Unable to export config file '%s'\n", icSanitizeConsoleText(exportFile.c_str()).c_str());
         return -1;
       }
     }
@@ -436,7 +436,7 @@ int main(int argc, const char** argv)
 
   //Open source image file and get information from it
   if (!SrcImg.Open(cfgApply.m_srcImgFile.c_str())) {
-    printf("\nFile [%s] cannot be opened.\n", cfgApply.m_srcImgFile.c_str());
+    printf("\nFile [%s] cannot be opened.\n", icSanitizeConsoleText(cfgApply.m_srcImgFile.c_str()).c_str());
     return -1;
   }
   sn = SrcImg.GetSamples();
@@ -520,7 +520,7 @@ int main(int argc, const char** argv)
 
   if (!pConnect) {
     if (!sConnectError.empty())
-      printf("Error - %s\n", sConnectError.c_str());
+      printf("Error - %s\n", icSanitizeConsoleText(sConnectError.c_str()).c_str());
     else
       printf("Error - Unable to begin profile application - Possibly invalid or incompatible profiles\n");
     return -1;
@@ -542,14 +542,14 @@ int main(int argc, const char** argv)
     //Allow color management to ignore extra samples when non extra samples match samples in profile
     if (sen != 0) {
       if (nSrcSamples != (int)(sn - sen)) {
-        printf("Number of non-extra samples %u in image[%s] doesn't match device samples %d in first profile\n", sn - sen, cfgApply.m_srcImgFile.c_str(), nSrcSamples);
+        printf("Number of non-extra samples %u in image[%s] doesn't match device samples %d in first profile\n", sn - sen, icSanitizeConsoleText(cfgApply.m_srcImgFile.c_str()).c_str(), nSrcSamples);
         return -1;
       }
       else
         nSrcSamples = sn;
     }
     else {
-      printf("Number of samples %u in image[%s] doesn't match device samples %d in first profile\n", sn, cfgApply.m_srcImgFile.c_str(), nSrcSamples);
+      printf("Number of samples %u in image[%s] doesn't match device samples %d in first profile\n", sn, icSanitizeConsoleText(cfgApply.m_srcImgFile.c_str()).c_str(), nSrcSamples);
       return -1;
     }
   }
@@ -605,7 +605,7 @@ int main(int argc, const char** argv)
   // and the physical size shifted by 2.54x.  Same defect as iccSpecSepToTiff, because
   // both tools reach it through the same shared CTiffImg::Create() (#2220).
   if (!DstImg.Create(cfgApply.m_dstImgFile.c_str(), SrcImg.GetWidth(), SrcImg.GetHeight(), dbps, photo, nDestSamples, nExtraSamples, SrcImg.GetXRes(), SrcImg.GetYRes(), bCompress, bSeparation, SrcImg.GetResolutionUnit())) {
-    printf("Unable to create Tiff file - '%s'\n", cfgApply.m_dstImgFile.c_str());
+    printf("Unable to create Tiff file - '%s'\n", icSanitizeConsoleText(cfgApply.m_dstImgFile.c_str()).c_str());
     return -1;
   }
 
@@ -787,7 +787,7 @@ int main(int argc, const char** argv)
       for (unsigned int nRow = 0; nRow < nBatchRows; nRow++) {
         if (!SrcImg.ReadLine(pSBuf)) {
           printf("Error reading line %u from Tiff file - '%s'\n",
-                 (unsigned int)i + nRow, cfgApply.m_srcImgFile.c_str());
+                 (unsigned int)i + nRow, icSanitizeConsoleText(cfgApply.m_srcImgFile.c_str()).c_str());
           bApplySuccess = false;
           break;
         }
@@ -833,7 +833,7 @@ int main(int argc, const char** argv)
 
         if (!DstImg.WriteLine(pDBuf)) {
           printf("Error writing line %u to Tiff file - '%s'\n",
-                 (unsigned int)i + nRow, cfgApply.m_dstImgFile.c_str());
+                 (unsigned int)i + nRow, icSanitizeConsoleText(cfgApply.m_dstImgFile.c_str()).c_str());
           bApplySuccess = false;
           break;
         }
@@ -854,7 +854,7 @@ int main(int argc, const char** argv)
     else {
       if (!SrcImg.ReadLine(pSBuf)) {
         printf("Error reading line %d from Tiff file - '%s'\n", i,
-               cfgApply.m_srcImgFile.c_str());
+               icSanitizeConsoleText(cfgApply.m_srcImgFile.c_str()).c_str());
         bApplySuccess = false;
         break;
       }
@@ -892,7 +892,7 @@ int main(int argc, const char** argv)
 
     //Output the converted pixels to the destination image
     if (!DstImg.WriteLine(pDBuf)) {
-      printf("Error writing line %d to Tiff file - '%s'\n", i, cfgApply.m_dstImgFile.c_str());
+      printf("Error writing line %d to Tiff file - '%s'\n", i, icSanitizeConsoleText(cfgApply.m_dstImgFile.c_str()).c_str());
       bApplySuccess = false;
       break;
     }
