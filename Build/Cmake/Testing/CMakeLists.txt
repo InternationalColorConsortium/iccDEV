@@ -7666,6 +7666,26 @@ if(TARGET iccApplyProfiles AND TARGET iccApplySearch
     SKIP_RETURN_CODE 77)
 endif()
 
+# The iccApply* half of the same CLI-contract family (#2405).  Guarded on all
+# four targets because the script measures all four and its "nothing measured"
+# guard would otherwise turn a partial build into a skip that hides real cases.
+# Deliberately NOT labelled "slow", so it runs on the pull_request path --
+# ci-pr-action.yml pins ctest_mode=fast, which drops the slow label (#2412).
+if(TARGET iccApplyProfiles AND TARGET iccApplySearch
+   AND TARGET iccApplyNamedCmm AND TARGET iccApplyToLink)
+  iccdev_add_script_test(
+    iccdev.apply-usage-exit-code-regression
+    120
+    "iccdev;apply;cli;args;usage;exitcode;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2405-apply-usage-exit-code-regression.sh"
+  )
+  # Exits 77 when no tool was found and no case ran, so a lane that does not
+  # build the Tools skips rather than going red.
+  set_tests_properties(iccdev.apply-usage-exit-code-regression PROPERTIES
+    SKIP_RETURN_CODE 77)
+endif()
+
 # Guarded on the target, like iccdev.tiff-resolution-unit-regression below.
 # Both scripts exit 2 when iccSpecSepToTiff is missing rather than skipping the
 # way the older sibling suites do, so an unguarded registration turns a

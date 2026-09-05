@@ -74,6 +74,7 @@
 #include <cstdio>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>  // strcmp, used by the -h/--help contract guard in main()
 #include <string>
 #include <vector>
 #include <list>
@@ -770,59 +771,59 @@ protected:
   CIccTagProfileSeqDesc* m_pTagSeq = nullptr;
 };
 
-void Usage() 
+void Usage(FILE* stream) 
 {
-  printf("iccApplyToLink built with IccProfLib version " ICCPROFLIBVER "\n\n");
+  fprintf(stream, "iccApplyToLink built with IccProfLib version " ICCPROFLIBVER "\n\n");
 
-  printf("Usage: iccApplyToLink dst_link_file link_type lut_size option title range_min range_max first_transform interp {{-ENV:sig value} profile_file_path rendering_intent {-PCC connection_conditions_path}}\n\n");
-  printf("  dst_link_file is path of file to create\n\n");
+  fprintf(stream, "Usage: iccApplyToLink dst_link_file link_type lut_size option title range_min range_max first_transform interp {{-ENV:sig value} profile_file_path rendering_intent {-PCC connection_conditions_path}}\n\n");
+  fprintf(stream, "  dst_link_file is path of file to create\n\n");
   
-  printf("  For link_type:\n");
-  printf("    0 - Device Link\n");
-  printf("    1 - .cube text file\n\n");
+  fprintf(stream, "  For link_type:\n");
+  fprintf(stream, "    0 - Device Link\n");
+  fprintf(stream, "    1 - .cube text file\n\n");
   
-  printf("  Where lut_size represents the number of grid entries for each lut dimension.\n\n");
+  fprintf(stream, "  Where lut_size represents the number of grid entries for each lut dimension.\n\n");
   
-  printf("  For option when link_type is 0:\n");
-  printf("    0 - version 4 profile with 16-bit table\n");
-  printf("    1 - version 5 profile\n\n");
-  printf("  For option when link_type is 1:\n");
-  printf("    option represents the digits of precision for lut for .cube files\n\n");
+  fprintf(stream, "  For option when link_type is 0:\n");
+  fprintf(stream, "    0 - version 4 profile with 16-bit table\n");
+  fprintf(stream, "    1 - version 5 profile\n\n");
+  fprintf(stream, "  For option when link_type is 1:\n");
+  fprintf(stream, "    option represents the digits of precision for lut for .cube files\n\n");
 
-  printf("  title is the title/description for the dest_link_file\n\n");
+  fprintf(stream, "  title is the title/description for the dest_link_file\n\n");
 
-  printf("  range_min specifies the minimum input value (usually 0.0)\n");
-  printf("  range_max specifies the maximum input value (usually 1.0)\n");
-  printf("    range_max must be greater than range_min\n");
-  printf("    a range other than 0.0 to 1.0 needs option 1 (v5) or link_type 1 (.cube);\n");
-  printf("    a version 4 device link has nowhere to record it\n\n");
+  fprintf(stream, "  range_min specifies the minimum input value (usually 0.0)\n");
+  fprintf(stream, "  range_max specifies the maximum input value (usually 1.0)\n");
+  fprintf(stream, "    range_max must be greater than range_min\n");
+  fprintf(stream, "    a range other than 0.0 to 1.0 needs option 1 (v5) or link_type 1 (.cube);\n");
+  fprintf(stream, "    a version 4 device link has nowhere to record it\n\n");
 
-  printf("  For first_transform:\n");
-  printf("    0 - use destination transform from first profile\n");
-  printf("    1 - use source transform from first profile\n\n");
+  fprintf(stream, "  For first_transform:\n");
+  fprintf(stream, "    0 - use destination transform from first profile\n");
+  fprintf(stream, "    1 - use source transform from first profile\n\n");
 
-  printf("  For interp:\n");
-  printf("    0 - linear interpolation\n");
-  printf("    1 - tetrahedral interpolation\n\n");
+  fprintf(stream, "  For interp:\n");
+  fprintf(stream, "    0 - linear interpolation\n");
+  fprintf(stream, "    1 - tetrahedral interpolation\n\n");
 
-  printf("  For rendering_intent:\n");
-  printf("    0 - Perceptual\n");
-  printf("    1 - Relative\n");
-  printf("    2 - Saturation\n");
-  printf("    3 - Absolute\n");
-  printf("    10 - Perceptual without D2Bx/B2Dx\n");
-  printf("    11 - Relative without D2Bx/B2Dx\n");
-  printf("    12 - Saturation without D2Bx/B2Dx\n");
-  printf("    13 - Absolute without D2Bx/B2Dx\n");
-  printf("    20 - Preview Perceptual\n");
-  printf("    21 - Preview Relative\n");
-  printf("    22 - Preview Saturation\n");
-  printf("    23 - Preview Absolute\n");
-  printf("    30 - Gamut\n");
-  printf("    33 - Gamut Absolute\n");
-  printf("    40 - Perceptual with BPC\n");
-  printf("    41 - Relative Colorimetric with BPC\n");
-  printf("    42 - Saturation with BPC\n");
+  fprintf(stream, "  For rendering_intent:\n");
+  fprintf(stream, "    0 - Perceptual\n");
+  fprintf(stream, "    1 - Relative\n");
+  fprintf(stream, "    2 - Saturation\n");
+  fprintf(stream, "    3 - Absolute\n");
+  fprintf(stream, "    10 - Perceptual without D2Bx/B2Dx\n");
+  fprintf(stream, "    11 - Relative without D2Bx/B2Dx\n");
+  fprintf(stream, "    12 - Saturation without D2Bx/B2Dx\n");
+  fprintf(stream, "    13 - Absolute without D2Bx/B2Dx\n");
+  fprintf(stream, "    20 - Preview Perceptual\n");
+  fprintf(stream, "    21 - Preview Relative\n");
+  fprintf(stream, "    22 - Preview Saturation\n");
+  fprintf(stream, "    23 - Preview Absolute\n");
+  fprintf(stream, "    30 - Gamut\n");
+  fprintf(stream, "    33 - Gamut Absolute\n");
+  fprintf(stream, "    40 - Perceptual with BPC\n");
+  fprintf(stream, "    41 - Relative Colorimetric with BPC\n");
+  fprintf(stream, "    42 - Saturation with BPC\n");
   // #2262: the acronym was transposed, B-D-R-F -- ICC.2-2023 9.2.14-17 and
   // 9.2.26-29 spell the tags brdfAToB0Tag..brdfDToB3Tag, and the library's own
   // identifiers already agree (icXformLutBRDFParam, icSigBRDFDToB0Tag,
@@ -846,12 +847,12 @@ void Usage()
   // say the same thing, and this way the three tools' BRDF and MCS rows agree
   // line for line -- nothing had ever compared them, which is how the same
   // three transforms came to be named two different ways.
-  printf("    50 + Intent - BRDF Parameters\n");
-  printf("    60 + Intent - BRDF Direct\n");
-  printf("    70 + Intent - BRDF MCS Parameters\n");
-  printf("    80 + Intent - MCS connection (Intent applies to MToS/MToB only)\n");
-  printf("  +100 - Use Luminance based PCS adjustment\n");
-  printf(" +1000 - Use V5 sub-profile if present\n");
+  fprintf(stream, "    50 + Intent - BRDF Parameters\n");
+  fprintf(stream, "    60 + Intent - BRDF Direct\n");
+  fprintf(stream, "    70 + Intent - BRDF MCS Parameters\n");
+  fprintf(stream, "    80 + Intent - MCS connection (Intent applies to MToS/MToB only)\n");
+  fprintf(stream, "  +100 - Use Luminance based PCS adjustment\n");
+  fprintf(stream, " +1000 - Use V5 sub-profile if present\n");
 }
 
 //===================================================
@@ -914,9 +915,25 @@ static void releasePccList(IccProfilePtrList& pccList)
 int main(int argc, icChar* argv[])
 {
   int minargs = 10; // minimum number of arguments
-  if(argc<minargs) {
-    Usage();
+
+  // An explicit help request is the one invocation here that is not an error, so
+  // it prints on stdout and exits 0; every malformed form below prints on stderr
+  // and fails.  Once both paths print the same screen the stream is the only
+  // thing that separates them -- status alone cannot (#1514).
+  if (argc == 2 && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help"))) {
+    Usage(stdout);
     return 0;
+  }
+
+  if(argc<minargs) {
+    // #2405: every prefix of 0..8 operands landed here, printed usage on stdout
+    // and exited 0 -- nine distinct incomplete forms all reporting success.
+    // Fail like the odd-argument guard immediately below, which already paired
+    // its diagnostic with Usage() and returned -1.
+    fprintf(stderr, "Missing arguments: expected at least %d, received %d.\n",
+            minargs - 1, argc > 0 ? argc - 1 : 0);
+    Usage(stderr);
+    return -1;
   }
 
   int nNumProfiles, temp;
@@ -924,8 +941,8 @@ int main(int argc, icChar* argv[])
 
   //remaining arguments must be in pairs
   if(temp%2 != 0) {
-    printf("\nMissing arguments!\n");
-    Usage();
+    fprintf(stderr, "\nMissing arguments!\n");
+    Usage(stderr);
     return -1;
   }
 

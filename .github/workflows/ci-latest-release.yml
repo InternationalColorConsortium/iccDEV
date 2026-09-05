@@ -229,9 +229,13 @@ jobs:
             "echo \"Tools directory: \$SCRIPT_DIR\"" \
             > "$stage/path.sh"
           chmod +x "$stage/path.sh"
+          # -h, not a bare invocation: since #2405 an incomplete operand list is a
+          # failure (usage on stderr, non-zero), and this step runs under
+          # "set -euo pipefail", so a bare call would abort the job on the first
+          # tool.  -h is the supported route to the banner and exits 0.
           for tool in iccApplyProfiles iccApplyNamedCmm iccApplySearch; do
             LD_LIBRARY_PATH="$stage${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-              "$stage/$tool" 2>&1 | grep -q "IccLibConnect Version"
+              "$stage/$tool" -h 2>&1 | grep -q "IccLibConnect Version"
           done
           # Summary of staged bundle contents
           total=$(find "$stage" -type f | wc -l)
@@ -442,9 +446,10 @@ jobs:
             done
             install_name_tool -add_rpath "@loader_path" "$target" || true
           done
+          # -h for the same reason as the Linux staging step above (#2405).
           for tool in iccApplyProfiles iccApplyNamedCmm iccApplySearch; do
             DYLD_LIBRARY_PATH="$stage${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}" \
-              "$stage/$tool" 2>&1 | grep -q "IccLibConnect Version"
+              "$stage/$tool" -h 2>&1 | grep -q "IccLibConnect Version"
           done
           # Summary of staged bundle contents
           total=$(find "$stage" -type f | wc -l)

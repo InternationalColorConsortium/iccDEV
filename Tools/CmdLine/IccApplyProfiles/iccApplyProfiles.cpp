@@ -73,6 +73,7 @@
 #include <cstdio>
 #include <cstdlib>  // EXIT_FAILURE, used by the argument-contract guards in main()
 #include <cerrno>
+#include <cstring>  // strcmp, used by the -h/--help contract guard in main()
 #include <memory>
 #include <string>
 #include "IccCmm.h"
@@ -181,59 +182,59 @@ static icUInt16Number UnitClipToUInt16(icFloatNumber v)
 
 
 
-void Usage() 
+void Usage(FILE* stream) 
 {
-  printf("iccApplyProfiles built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
+  fprintf(stream, "iccApplyProfiles built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
 
-  printf("Usage: iccApplyProfiles {-threads N} -cfg config_file\n\n");
-  printf("  Optional: -threads [N] (use 0..%d worker threads; 0=hardware concurrency, 1=single-threaded)\n",
+  fprintf(stream, "Usage: iccApplyProfiles {-threads N} -cfg config_file\n\n");
+  fprintf(stream, "  Optional: -threads [N] (use 0..%d worker threads; 0=hardware concurrency, 1=single-threaded)\n",
          CIccThreadedCmm::GetMaxThreads());
-  printf("  Optional: -cfg config_file (use JSON formatted configuration file to define apply options)\n\n");
+  fprintf(stream, "  Optional: -cfg config_file (use JSON formatted configuration file to define apply options)\n\n");
 
-  printf("Alt-Usage: iccApplyProfiles {-threads N} {-exportcfg config_file} src_tiff_file dst_tiff_file dst_sample_encoding dst_compression dst_planar dst_embed_icc interpolation {{-ENV:sig value} profile_file_path rendering_intent {-PCC connection_conditions_path}}\n\n");
-  printf("  Optional: -threads [N] (use 0..%d worker threads; 0=hardware concurrency, 1=single-threaded)\n",
+  fprintf(stream, "Alt-Usage: iccApplyProfiles {-threads N} {-exportcfg config_file} src_tiff_file dst_tiff_file dst_sample_encoding dst_compression dst_planar dst_embed_icc interpolation {{-ENV:sig value} profile_file_path rendering_intent {-PCC connection_conditions_path}}\n\n");
+  fprintf(stream, "  Optional: -threads [N] (use 0..%d worker threads; 0=hardware concurrency, 1=single-threaded)\n",
          CIccThreadedCmm::GetMaxThreads());
-  printf("  Optional: -exportcfg config_file (create config_file based on rest of arguments)\n\n");
-  printf("  For dst_sample_encoding:\n");
-  printf("    0 - Same as src\n");
-  printf("    1 - icEncode8Bit\n");
-  printf("    2 - icEncode16Bit\n");
-  printf("    3 - icEncodeFloat\n\n");
+  fprintf(stream, "  Optional: -exportcfg config_file (create config_file based on rest of arguments)\n\n");
+  fprintf(stream, "  For dst_sample_encoding:\n");
+  fprintf(stream, "    0 - Same as src\n");
+  fprintf(stream, "    1 - icEncode8Bit\n");
+  fprintf(stream, "    2 - icEncode16Bit\n");
+  fprintf(stream, "    3 - icEncodeFloat\n\n");
 
-  printf("  For dst_compression:\n");
-  printf("    0 - No compression\n");
-  printf("    1 - LZW compression\n\n");
+  fprintf(stream, "  For dst_compression:\n");
+  fprintf(stream, "    0 - No compression\n");
+  fprintf(stream, "    1 - LZW compression\n\n");
 
-  printf("  For dst_planar:\n");
-  printf("    0 - Contig\n");
-  printf("    1 - Separation\n\n");
+  fprintf(stream, "  For dst_planar:\n");
+  fprintf(stream, "    0 - Contig\n");
+  fprintf(stream, "    1 - Separation\n\n");
 
-  printf("  For dst_embed_icc:\n");
-  printf("    0 - Do not Embed\n");
-  printf("    1 - Embed Last ICC\n\n");
+  fprintf(stream, "  For dst_embed_icc:\n");
+  fprintf(stream, "    0 - Do not Embed\n");
+  fprintf(stream, "    1 - Embed Last ICC\n\n");
 
-  printf("  For interpolation:\n");
-  printf("    0 - Linear\n");
-  printf("    1 - Tetrahedral\n\n");
+  fprintf(stream, "  For interpolation:\n");
+  fprintf(stream, "    0 - Linear\n");
+  fprintf(stream, "    1 - Tetrahedral\n\n");
 
-  printf("  For rendering_intent:\n");
-  printf("    0 - Perceptual\n");
-  printf("    1 - Relative\n");
-  printf("    2 - Saturation\n");
-  printf("    3 - Absolute\n");
-  printf("    10 - Perceptual without D2Bx/B2Dx\n");
-  printf("    11 - Relative without D2Bx/B2Dx\n");
-  printf("    12 - Saturation without D2Bx/B2Dx\n");
-  printf("    13 - Absolute without D2Bx/B2Dx\n");
-  printf("    20 - Preview Perceptual\n");
-  printf("    21 - Preview Relative\n");
-  printf("    22 - Preview Saturation\n");
-  printf("    23 - Preview Absolute\n");
-  printf("    30 - Gamut\n");
-  printf("    33 - Gamut Absolute\n");
-  printf("    40 - Perceptual with BPC\n");
-  printf("    41 - Relative Colorimetric with BPC\n");
-  printf("    42 - Saturation with BPC\n");
+  fprintf(stream, "  For rendering_intent:\n");
+  fprintf(stream, "    0 - Perceptual\n");
+  fprintf(stream, "    1 - Relative\n");
+  fprintf(stream, "    2 - Saturation\n");
+  fprintf(stream, "    3 - Absolute\n");
+  fprintf(stream, "    10 - Perceptual without D2Bx/B2Dx\n");
+  fprintf(stream, "    11 - Relative without D2Bx/B2Dx\n");
+  fprintf(stream, "    12 - Saturation without D2Bx/B2Dx\n");
+  fprintf(stream, "    13 - Absolute without D2Bx/B2Dx\n");
+  fprintf(stream, "    20 - Preview Perceptual\n");
+  fprintf(stream, "    21 - Preview Relative\n");
+  fprintf(stream, "    22 - Preview Saturation\n");
+  fprintf(stream, "    23 - Preview Absolute\n");
+  fprintf(stream, "    30 - Gamut\n");
+  fprintf(stream, "    33 - Gamut Absolute\n");
+  fprintf(stream, "    40 - Perceptual with BPC\n");
+  fprintf(stream, "    41 - Relative Colorimetric with BPC\n");
+  fprintf(stream, "    42 - Saturation with BPC\n");
   // #2262: the acronym was transposed, B-D-R-F -- ICC.2-2023 9.2.14-17 and
   // 9.2.26-29 spell the tags brdfAToB0Tag..brdfDToB3Tag, and the library's own
   // identifiers already agree (icXformLutBRDFParam, icSigBRDFDToB0Tag,
@@ -257,12 +258,12 @@ void Usage()
   // say the same thing, and this way the three tools' BRDF and MCS rows agree
   // line for line -- nothing had ever compared them, which is how the same
   // three transforms came to be named two different ways.
-  printf("    50 + Intent - BRDF Parameters\n");
-  printf("    60 + Intent - BRDF Direct\n");
-  printf("    70 + Intent - BRDF MCS Parameters\n");
-  printf("    80 + Intent - MCS connection (Intent applies to MToS/MToB only)\n");
-  printf("  +1000 - Use Luminance based PCS adjustment\n");
-  printf(" +10000 - Use V5 sub-profile if present\n");
+  fprintf(stream, "    50 + Intent - BRDF Parameters\n");
+  fprintf(stream, "    60 + Intent - BRDF Direct\n");
+  fprintf(stream, "    70 + Intent - BRDF MCS Parameters\n");
+  fprintf(stream, "    80 + Intent - MCS connection (Intent applies to MToS/MToB only)\n");
+  fprintf(stream, "  +1000 - Use Luminance based PCS adjustment\n");
+  fprintf(stream, " +10000 - Use V5 sub-profile if present\n");
 }
 
 //===================================================
@@ -270,9 +271,26 @@ void Usage()
 int main(int argc, const char** argv)
 {
   int minargs = 2;
-  if (argc < minargs) {
-    Usage();
+
+  // An explicit help request is the one invocation here that is not an error, so
+  // it prints on stdout and exits 0; every malformed form below prints on stderr
+  // and fails.  Once both paths print the same screen the stream is the only
+  // thing that separates them -- status alone cannot (#1514).
+  if (argc == 2 && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help"))) {
+    Usage(stdout);
     return 0;
+  }
+
+  if (argc < minargs) {
+    // #2405: this printed the usage screen on stdout and returned success, so a
+    // caller could not tell a real apply from a tool that had done nothing at
+    // all.  Name which way the invocation is malformed before the syntax block --
+    // a bare Usage() dump left the caller to diff their command against it --
+    // and fail like the two other Usage() error exits below, which return -1.
+    fprintf(stderr, "Missing arguments: expected at least %d, received %d.\n",
+            minargs - 1, argc > 0 ? argc - 1 : 0);
+    Usage(stderr);
+    return -1;
   }
 
   CIccCfgImageApply cfgApply;
@@ -283,7 +301,8 @@ int main(int argc, const char** argv)
 
   if (!stricmp(argv[1], "-threads")) {
     if (argc < 3) {
-      printf("Missing thread count for -threads\n");
+      // #2405: stderr, matching the byte-identical guard in iccApplySearch.
+      fprintf(stderr, "Missing thread count for -threads\n");
       return EXIT_FAILURE;
     }
 
@@ -353,8 +372,8 @@ int main(int argc, const char** argv)
 
     int nArg = cfgApply.fromArgs(&argv[0], argc);
     if (!nArg) {
-      printf("Unable to parse configuration arguments\n");
-      Usage();
+      fprintf(stderr, "Unable to parse configuration arguments\n");
+      Usage(stderr);
       return -1;
     }
     argv += nArg;
@@ -362,8 +381,8 @@ int main(int argc, const char** argv)
 
     nArg = cfgProfiles.fromArgs(&argv[0], argc);
     if (!nArg) {
-      printf("Unable to parse profile sequence arguments\n");
-      Usage();
+      fprintf(stderr, "Unable to parse profile sequence arguments\n");
+      Usage(stderr);
       return -1;
     }
     // CIccCfgProfileSequence::fromArgs() consumes the profile group in pairs and
