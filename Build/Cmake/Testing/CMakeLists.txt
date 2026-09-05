@@ -7605,6 +7605,29 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-specsep-cli-args-regression-tests.sh"
 )
 
+# The iccFromXml half of the same CLI-contract family as
+# iccdev.specsep-usage-exit-code-regression above: a malformed invocation must not
+# report success, an unrecognised option must not be skipped in silence, -v must not
+# fail open, and -noid must leave no profile ID behind (#2387).  Deliberately NOT
+# labelled "slow", so it runs on the pull_request path -- ci-pr-action.yml pins
+# ctest_mode=fast, which drops the slow label.
+if(TARGET iccFromXml)
+  iccdev_add_script_test(
+    iccdev.fromxml-cli-contract-regression
+    120
+    "iccdev;xml;fromxml;cli;args;usage;exitcode;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2387-fromxml-cli-contract-regression.sh"
+  )
+  # The script exits 77 when iccFromXml is absent and when nothing was measured.
+  # Without this property CTest reports 77 as a FAILURE, so a lane that simply does
+  # not build the tool would go red rather than skipping -- and the "nothing was
+  # measured" guard, which exists so an empty run cannot report green, would itself
+  # turn every such run into a false failure.
+  set_tests_properties(iccdev.fromxml-cli-contract-regression PROPERTIES
+    SKIP_RETURN_CODE 77)
+endif()
+
 # Guarded on the target, like iccdev.tiff-resolution-unit-regression below.
 # Both scripts exit 2 when iccSpecSepToTiff is missing rather than skipping the
 # way the older sibling suites do, so an unguarded registration turns a
