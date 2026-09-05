@@ -1891,8 +1891,15 @@ bool CIccTagJsonResponseCurveSet16::ToJson(IccJson &j)
 
 bool CIccTagJsonResponseCurveSet16::ParseJson(const IccJson &j, std::string &parseStr)
 {
+  // The upper bound matters as much as the lower one: SetNumChannels takes an
+  // icUInt16Number, so 65537 was cast down to 1 and this parser accepted a document
+  // it then wrote as a different one -- the JSON half of #2398, which the XML twin
+  // (CIccTagXmlResponseCurveSet16::ParseXml) carried in the same shape.  The
+  // "< 0 || > 0xffff" guard is the idiom this file already uses before narrowing a
+  // JSON integer to a channel count (see the SparseMatrixArray case above).
   int nChannels = 0;
-  if (!jGetValue(j, "CountOfChannels", nChannels) || nChannels <= 0) {
+  if (!jGetValue(j, "CountOfChannels", nChannels) || nChannels <= 0 ||
+      nChannels > 0xffff) {
     parseStr += "Missing or invalid CountOfChannels in ResponseCurveSet16\n";
     return false;
   }
@@ -1942,9 +1949,26 @@ bool CIccTagJsonResponseCurveSet16::ParseJson(const IccJson &j, std::string &par
           icResponse16Number resp = {};
           int dc = 0, res = 0;
           double mv = 0.0;
-          jGetValue(jm, "DeviceCode", dc);
+
+          // Both fields are icUInt16Number in icResponse16Number and were read into an
+          // int and cast unchecked, so "DeviceCode": 65537 stored 1 and -1 stored 65535 --
+          // the same narrowing CountOfChannels carried above and that the XML twin
+          // (CIccTagXmlResponseCurveSet16::ParseXml) fixes in the same tag (#2398).  The
+          // jGetValue result was discarded too, so "DeviceCode": "abc" silently yielded 0.
+          // Range-tested with this file's own "< 0 || > 0xffff" idiom; a field that is
+          // absent keeps its zero default, as the XML path allows for Reserved.
+          if (jsonExistsField(jm, "DeviceCode") &&
+              (!jGetValue(jm, "DeviceCode", dc) || dc < 0 || dc > 0xffff)) {
+            parseStr += "Invalid Measurement DeviceCode in ResponseCurveSet16\n";
+            return false;
+          }
+          if (jsonExistsField(jm, "Reserved") &&
+              (!jGetValue(jm, "Reserved", res) || res < 0 || res > 0xffff)) {
+            parseStr += "Invalid Measurement Reserved in ResponseCurveSet16\n";
+            return false;
+          }
           jGetValue(jm, "MeasValue",  mv);
-          jGetValue(jm, "Reserved",   res);
+
           resp.deviceCode       = (icUInt16Number)dc;
           resp.measurementValue = icDtoF((icFloatNumber)mv);
           resp.reserved         = (icUInt16Number)res;

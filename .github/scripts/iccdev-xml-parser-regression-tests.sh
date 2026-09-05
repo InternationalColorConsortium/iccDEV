@@ -220,6 +220,20 @@ echo "=== Parser hardening still armed ==="
 # expected to use.
 PARSER_DIAG='parser error|exceeds the parser'"'"'s nesting-depth or name-length limit'
 
+# What the responseCurveSet16Type parser says when it refuses the count itself, as
+# opposed to iccFromXml refusing the profile for some later reason.
+#
+# Anchored on the diagnostics the fix actually emits.  The first version of this
+# pattern carried a bare "responseCurveSet16Type" alternative, which subsumed the
+# specific one and matched CIccProfileXml::ParseTag's generic
+#   Unable to Parse "responseCurveSet16Type" (responseCurveSet16Type) Tag on line N
+# -- a line printed for ANY failure inside the tag.  Measured against a document whose
+# only defect is a channel-count mismatch: the generic line matched, so the attribution
+# asserted nothing beyond "the tag failed" and a change that refused every
+# responseCurveSet16Type would have passed all of these cases while the guards under
+# test were gone.
+RESP_TAG_DIAG='(Empty|Invalid) CountOfChannels in responseCurveSet16Type|Invalid Measurement (DeviceCode|Reserved) in responseCurveSet16Type'
+
 # Proves the assertion in reject_case() is worth something: a well-formed
 # document that violates no parser limit must be refused WITHOUT any parser
 # diagnostic, because it fails later as an invalid profile. If this ever starts
@@ -509,6 +523,453 @@ xyz_array_at_cap() {
 
 xyz_array_over_cap
 xyz_array_at_cap
+
+###############################################################################
+# 5. responseCurveSet16Type CountOfChannels (#2397 null deref, #2398 wrap)
+###############################################################################
+#
+# CIccTagXmlResponseCurveSet16::ParseXml checked that icXmlFindNode located the
+# <CountOfChannels> element and then read pNode->children->content without
+# checking the child.  An empty <CountOfChannels/> is well-formed XML with no
+# text child, so libxml2 leaves children NULL: UBSan reported "member access
+# within null pointer of type 'struct _xmlNode'" and a release build took a
+# SIGSEGV (#2397).
+#
+# The same line used atoi() and stored into an icUInt32Number, while
+# SetNumChannels takes an icUInt16Number.  "4294967297" is 0x100000001 --
+# undefined for atoi() to begin with -- and truncated to 1, so the tool wrote a
+# profile byte-identical to the one a count of 1 produces and reported success
+# (#2398).  That equality is the assertion below, because exit status alone
+# cannot distinguish "refused the count" from "refused the profile".
+#
+# No tracked document uses responseCurveSet16Type, which is why neither survived
+# into a fixture; these three are written here.
+
+write_countofchannels_document() {
+  # write_countofchannels_document <path> <count-element>
+  cat > "$1" <<XMLEOF
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <ProfileVersion>2.10</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>GRAY</DataColourSpace>
+    <PCS>XYZ </PCS>
+  </Header>
+  <Tags>
+    <responseCurveSet16Type>
+      <TagSignature>resp</TagSignature>
+      $2
+      <ResponseCurve MeasUnitSignature="Status A">
+        <ChannelResponses X="0" Y="0" Z="0">
+          <Measurement DeviceCode="0" MeasValue="0"/>
+        </ChannelResponses>
+      </ResponseCurve>
+    </responseCurveSet16Type>
+  </Tags>
+</IccProfile>
+XMLEOF
+}
+
+countofchannels_empty_element() {
+  local name="xml-responsecurve-empty-count"
+  local file="$OUTDIR/resp-empty.xml" logfile="$OUTDIR/${name}.log"
+
+  if [ ! -x "$FROMXML" ]; then
+    skip "$name" "iccFromXml not built"
+    return
+  fi
+
+  write_countofchannels_document "$file" "<CountOfChannels/>"
+
+  "$FROMXML" "$file" "$OUTDIR/${name}.icc" >"$logfile" 2>&1
+  local status=$?
+
+  # The defect was a crash, so the assertion is on HOW it exits, not merely that
+  # it does. A signal death surfaces as 128+signum through the shell (139 for
+  # SIGSEGV), which is what this fixture produced before the child guard.
+  if [ "$status" -ge 128 ]; then
+    fail "$name" "iccFromXml died on a signal (exit $status) -- the null deref is back"
+    return
+  fi
+  if [ "$status" -eq 0 ]; then
+    fail "$name" "an empty CountOfChannels was accepted"
+    return
+  fi
+  # Section 4's rule applies here: exit status alone is not attribution, because
+  # every fixture in this script exits non-zero. Require the parser to name the tag
+  # it refused, so a change that rejects this document earlier -- during header
+  # parsing, or by refusing every responseCurveSet16Type -- goes red instead of
+  # passing while the guard under test is gone.
+  if ! grep -qE "$RESP_TAG_DIAG" "$logfile"; then
+    fail "$name" "refused, but not by the responseCurveSet16Type parser"
+    return
+  fi
+  check_sanitizers "$name" "$logfile" || return
+  pass "$name (empty element refused by the tag parser, exit $status, no signal)"
+}
+
+countofchannels_overflow_is_not_one() {
+  local name="xml-responsecurve-count-overflow"
+  local over="$OUTDIR/resp-over.xml" ctrl="$OUTDIR/resp-ctrl.xml"
+  local logfile="$OUTDIR/${name}.log"
+
+  if [ ! -x "$FROMXML" ]; then
+    skip "$name" "iccFromXml not built"
+    return
+  fi
+
+  write_countofchannels_document "$over" "<CountOfChannels>4294967297</CountOfChannels>"
+  write_countofchannels_document "$ctrl" "<CountOfChannels>1</CountOfChannels>"
+
+  rm -f "$OUTDIR/${name}-over.icc" "$OUTDIR/${name}-ctrl.icc"
+  "$FROMXML" "$over" "$OUTDIR/${name}-over.icc" >"$logfile" 2>&1
+  local over_status=$?
+  "$FROMXML" "$ctrl" "$OUTDIR/${name}-ctrl.icc" >"$OUTDIR/${name}-ctrl.log" 2>&1
+  local ctrl_status=$?
+
+  # The control must still convert. Without it a fix that refuses every
+  # responseCurveSet16Type document would pass this case while breaking the tag.
+  if [ "$ctrl_status" -ne 0 ] || [ ! -s "$OUTDIR/${name}-ctrl.icc" ]; then
+    fail "$name" "the count-of-1 control no longer converts (exit $ctrl_status)"
+    return
+  fi
+
+  if [ "$over_status" -eq 0 ]; then
+    # This is the shape the issue measured: both documents produced the same
+    # bytes, so the tool silently agreed to a different document than the one
+    # supplied. Name that explicitly rather than reporting a bare "accepted".
+    if cmp -s "$OUTDIR/${name}-over.icc" "$OUTDIR/${name}-ctrl.icc"; then
+      fail "$name" "4294967297 truncated to 1 -- output is byte-identical to the control"
+    else
+      fail "$name" "an out-of-range CountOfChannels was accepted"
+    fi
+    return
+  fi
+
+  if [ -s "$OUTDIR/${name}-over.icc" ]; then
+    fail "$name" "a rejected count still left a profile behind"
+    return
+  fi
+
+  if ! grep -qE "$RESP_TAG_DIAG" "$logfile"; then
+    fail "$name" "refused, but not by the responseCurveSet16Type parser"
+    return
+  fi
+
+  # Scan BOTH logs. The control is the run that actually reaches SetNumChannels and
+  # allocates per-channel storage, so it is the interesting memory path; scanning
+  # only the rejected run would let a finding on the accepted one sit unread while
+  # this case reports PASS on the sanitizer lanes.
+  check_sanitizers "$name" "$logfile" || return
+  check_sanitizers "$name (control)" "$OUTDIR/${name}-ctrl.log" || return
+  pass "$name (out-of-range count refused, control still converts)"
+}
+
+countofchannels_indented_is_accepted() {
+  local name="xml-responsecurve-count-indented"
+  local file="$OUTDIR/resp-indent.xml" logfile="$OUTDIR/${name}.log"
+
+  if [ ! -x "$FROMXML" ]; then
+    skip "$name" "iccFromXml not built"
+    return
+  fi
+
+  # Element text carries the document's own indentation. atoi() skipped it; a strict
+  # helper that requires the whole string consumed does not, so tightening this parse
+  # without trimming first would refuse an ordinary pretty-printed document -- the
+  # same trap #2387 fixed for <ProfileVersion>. This case is the guard for that, and
+  # it is the ONLY one here that asserts acceptance.
+  write_countofchannels_document "$file" "$(printf '<CountOfChannels>\n        1\n      </CountOfChannels>')"
+
+  if ! "$FROMXML" "$file" "$OUTDIR/${name}.icc" >"$logfile" 2>&1; then
+    fail "$name" "a pretty-printed CountOfChannels was refused"
+    return
+  fi
+  if [ ! -s "$OUTDIR/${name}.icc" ]; then
+    fail "$name" "accepted but wrote no profile, so nothing proves it reached the tag"
+    return
+  fi
+  check_sanitizers "$name" "$logfile" || return
+  pass "$name (indented element text still parses)"
+}
+
+countofchannels_zero_refused() {
+  local name="xml-responsecurve-count-zero"
+  local file="$OUTDIR/resp-zero.xml" logfile="$OUTDIR/${name}.log"
+
+  if [ ! -x "$FROMXML" ]; then
+    skip "$name" "iccFromXml not built"
+    return
+  fi
+
+  # The JSON twin rejects CountOfChannels <= 0 and docs/icc-profile.schema.json
+  # declares "minimum": 1, so the XML path accepting 0 was the odd one out.
+  #
+  # This fixture deliberately carries NO ResponseCurve element. With one present the
+  # later "nChannels != icXmlNodeCount(...)" mismatch refuses the document anyway, so
+  # a zero-count fixture that includes a curve passes even against the unfixed
+  # library -- measured, and it made the first version of this case vacuous. With no
+  # curve that check cannot fire, and the old parser accepted the document and wrote
+  # a profile for a tag claiming zero channels.
+  cat > "$file" <<XMLEOF
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <ProfileVersion>2.10</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>GRAY</DataColourSpace>
+    <PCS>XYZ </PCS>
+  </Header>
+  <Tags>
+    <responseCurveSet16Type>
+      <TagSignature>resp</TagSignature>
+      <CountOfChannels>0</CountOfChannels>
+    </responseCurveSet16Type>
+  </Tags>
+</IccProfile>
+XMLEOF
+
+  if "$FROMXML" "$file" "$OUTDIR/${name}.icc" >"$logfile" 2>&1; then
+    fail "$name" "a zero CountOfChannels was accepted and a profile written, unlike the JSON twin"
+    return
+  fi
+  if ! grep -qE "$RESP_TAG_DIAG" "$logfile"; then
+    fail "$name" "refused, but not by the responseCurveSet16Type parser"
+    return
+  fi
+  check_sanitizers "$name" "$logfile" || return
+  pass "$name (zero count refused, matching the JSON twin and the schema)"
+}
+
+measurement_devicecode_overflow() {
+  local name="xml-responsecurve-devicecode-overflow"
+  local over="$OUTDIR/resp-dev-over.xml" ctrl="$OUTDIR/resp-dev-ctrl.xml"
+  local logfile="$OUTDIR/${name}.log"
+
+  if [ ! -x "$FROMXML" ]; then
+    skip "$name" "iccFromXml not built"
+    return
+  fi
+
+  # icResponse16Number::deviceCode is an icUInt16Number and was filled by atoi(), so
+  # DeviceCode="65537" truncated to 1 exactly as CountOfChannels did -- same tag, same
+  # function, 45 lines apart. Asserted the same way: the two documents must not
+  # produce the same bytes.
+  #
+  # Both documents are written from the helper rather than sed-ed out of another case's
+  # output.  The previous version read $OUTDIR/resp-ctrl.xml, which only exists once
+  # countofchannels_overflow_is_not_one() has run; its fallback arm wrote "$ctrl" and the
+  # unconditional redirect on the following line then truncated that same file to zero
+  # bytes before sed failed, with "|| true" swallowing the failure -- so the case reported
+  # a false "the DeviceCode=1 control no longer converts" instead of testing anything.
+  write_countofchannels_document "$ctrl" "<CountOfChannels>1</CountOfChannels>"
+  write_countofchannels_document "$over" "<CountOfChannels>1</CountOfChannels>"
+  sed -i 's|DeviceCode="0"|DeviceCode="1"|' "$ctrl"
+  sed -i 's|DeviceCode="0"|DeviceCode="65537"|' "$over"
+
+  rm -f "$OUTDIR/${name}-over.icc" "$OUTDIR/${name}-ctrl.icc"
+  "$FROMXML" "$over" "$OUTDIR/${name}-over.icc" >"$logfile" 2>&1
+  local over_status=$?
+  "$FROMXML" "$ctrl" "$OUTDIR/${name}-ctrl.icc" >"$OUTDIR/${name}-ctrl.log" 2>&1
+  local ctrl_status=$?
+
+  if [ "$ctrl_status" -ne 0 ] || [ ! -s "$OUTDIR/${name}-ctrl.icc" ]; then
+    fail "$name" "the DeviceCode=1 control no longer converts (exit $ctrl_status)"
+    return
+  fi
+
+  if [ "$over_status" -eq 0 ]; then
+    if cmp -s "$OUTDIR/${name}-over.icc" "$OUTDIR/${name}-ctrl.icc"; then
+      fail "$name" "DeviceCode 65537 truncated to 1 -- output is byte-identical to the control"
+    else
+      fail "$name" "an out-of-range DeviceCode was accepted"
+    fi
+    return
+  fi
+
+  check_sanitizers "$name" "$logfile" || return
+  check_sanitizers "$name (control)" "$OUTDIR/${name}-ctrl.log" || return
+  pass "$name (out-of-range DeviceCode refused, control still converts)"
+}
+
+responsecurve_profile_reads_back() {
+  local name="xml-responsecurve-reads-back"
+  local file="$OUTDIR/resp-readback.xml" logfile="$OUTDIR/${name}.log"
+
+  if [ ! -x "$FROMXML" ] || [ ! -x "$TOXML" ]; then
+    skip "$name" "iccFromXml or iccToXml not built"
+    return
+  fi
+
+  # CIccTagResponseCurveSet16::Read bounded the curve offset twice: once tag-relative
+  # against the tag length (correct), then again as an ABSOLUTE file position against
+  # that same tag length. A 44-byte resp tag at file offset 396 with curve offset 16
+  # computed 412 > 44, so Read returned false and NO profile carrying this tag could be
+  # read back -- iccToXml and iccToJson both said "Unable to read" and iccDumpProfile
+  # reported the tag missing, for bytes that are correct (#2399).
+  #
+  # This is section 1's read-back-what-you-wrote invariant applied to this tag: without
+  # it every other case here asserts only on documents the toolchain cannot consume, and
+  # all four would stay green while the tag remained unreadable.
+  write_countofchannels_document "$file" "<CountOfChannels>1</CountOfChannels>"
+
+  if ! "$FROMXML" "$file" "$OUTDIR/${name}.icc" >"$logfile" 2>&1; then
+    fail "$name" "the control document no longer converts"
+    return
+  fi
+  if ! "$TOXML" "$OUTDIR/${name}.icc" "$OUTDIR/${name}-back.xml" >>"$logfile" 2>&1; then
+    fail "$name" "iccToXml cannot read back the profile it just wrote -- the resp tag offset bound is back"
+    return
+  fi
+  if ! grep -q "responseCurveSet16Type" "$OUTDIR/${name}-back.xml"; then
+    fail "$name" "round-tripped, but the resp tag did not survive"
+    return
+  fi
+  check_sanitizers "$name" "$logfile" || return
+  pass "$name (profile with a resp tag reads back and keeps the tag)"
+}
+
+measurement_reserved_not_inherited() {
+  local name="xml-responsecurve-reserved-not-inherited"
+  local file="$OUTDIR/resp-reserved.xml" logfile="$OUTDIR/${name}.log"
+
+  if [ ! -x "$FROMXML" ] || [ ! -x "$TOXML" ]; then
+    skip "$name" "iccFromXml or iccToXml not built"
+    return
+  fi
+
+  # icResponse16Number was declared once per <ChannelResponses> and reused for every
+  # <Measurement> sibling. deviceCode and measurementValue are assigned every iteration,
+  # but reserved only when the attribute is present, so a bare <Measurement> following
+  # Reserved="7" inherited the 7 -- a field ICC requires to be 0 (#2399).
+  #
+  # Asserted through a round trip rather than on the bytes: ToXml emits Reserved only
+  # when it is nonzero, so the count of Reserved="7" in the regenerated document is
+  # exactly the number of measurements that carry it. Two means the second inherited.
+  cat > "$file" <<XMLEOF
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <ProfileVersion>2.10</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>GRAY</DataColourSpace>
+    <PCS>XYZ </PCS>
+  </Header>
+  <Tags>
+    <responseCurveSet16Type>
+      <TagSignature>resp</TagSignature>
+      <CountOfChannels>1</CountOfChannels>
+      <ResponseCurve MeasUnitSignature="Status A">
+        <ChannelResponses X="0" Y="0" Z="0">
+          <Measurement DeviceCode="1" MeasValue="0" Reserved="7"/>
+          <Measurement DeviceCode="2" MeasValue="0"/>
+        </ChannelResponses>
+      </ResponseCurve>
+    </responseCurveSet16Type>
+  </Tags>
+</IccProfile>
+XMLEOF
+
+  if ! "$FROMXML" "$file" "$OUTDIR/${name}.icc" >"$logfile" 2>&1; then
+    fail "$name" "the two-measurement document no longer converts"
+    return
+  fi
+  if ! "$TOXML" "$OUTDIR/${name}.icc" "$OUTDIR/${name}-back.xml" >>"$logfile" 2>&1; then
+    fail "$name" "iccToXml cannot read the profile back, so the field cannot be checked"
+    return
+  fi
+
+  local nReserved
+  nReserved=$(grep -c 'Reserved="7"' "$OUTDIR/${name}-back.xml")
+  if [ "$nReserved" -ne 1 ]; then
+    fail "$name" "Reserved=\"7\" appears $nReserved time(s); the measurement that omitted it inherited the previous value"
+    return
+  fi
+  check_sanitizers "$name" "$logfile" || return
+  pass "$name (an omitted Reserved stays 0 instead of inheriting)"
+}
+
+countofchannels_65536_channel_write() {
+  local name="xml-responsecurve-count-65536-oob"
+  local file="$OUTDIR/resp-65536.xml" logfile="$OUTDIR/${name}.log"
+
+  if [ ! -x "$FROMXML" ]; then
+    skip "$name" "iccFromXml not built"
+    return
+  fi
+
+  # The narrowing in #2398 was not only a wrong value -- at exactly 65536 it was a heap
+  # out-of-bounds WRITE, and a second crash distinct from #2397's null deref.
+  #
+  # CountOfChannels was parsed into an icUInt32Number, so 65536 survived intact in
+  # nChannels.  CIccResponseCurveStruct's constructor takes an icUInt16Number, so the
+  # struct was built with 65536 truncated to 0 and calloc'd nothing -- while the
+  # "nChannels != icXmlNodeCount(...)" gate compared the UNtruncated 65536 and therefore
+  # passed for a document carrying 65536 <ChannelResponses>.  The loop then wrote through
+  # curves.GetXYZ(i) (IccTagBasic.h:1704, an unchecked &m_maxColorantXYZ[index]) for i up
+  # to 65535: roughly 768 KiB written past a zero-sized allocation.  Measured on the
+  # unfixed parser: SIGSEGV, core dumped, exit 139.
+  #
+  # The fixture MUST carry all 65536 elements.  With fewer, the count gate refuses the
+  # document before the write and the unfixed parser exits non-zero all by itself, so the
+  # case would pass against the very defect it exists to pin -- the same vacuity that the
+  # zero-count fixture above had to be rebuilt to avoid.
+  if ! python3 - "$file" <<'PY'
+import sys
+n = 65536
+chan = ('        <ChannelResponses X="0" Y="0" Z="0">\n'
+        '          <Measurement DeviceCode="0" MeasValue="0"/>\n'
+        '        </ChannelResponses>\n')
+with open(sys.argv[1], "w") as f:
+    f.write('<?xml version="1.0" encoding="UTF-8"?>\n<IccProfile>\n  <Header>\n'
+            '    <ProfileVersion>2.10</ProfileVersion>\n'
+            '    <ProfileDeviceClass>mntr</ProfileDeviceClass>\n'
+            '    <DataColourSpace>GRAY</DataColourSpace>\n'
+            '    <PCS>XYZ </PCS>\n  </Header>\n  <Tags>\n'
+            '    <responseCurveSet16Type>\n      <TagSignature>resp</TagSignature>\n'
+            f'      <CountOfChannels>{n}</CountOfChannels>\n'
+            '      <ResponseCurve MeasUnitSignature="Status A">\n')
+    f.write(chan * n)
+    f.write('      </ResponseCurve>\n    </responseCurveSet16Type>\n  </Tags>\n</IccProfile>\n')
+PY
+  then
+    skip "$name" "could not generate the 65536-channel document"
+    return
+  fi
+
+  "$FROMXML" "$file" "$OUTDIR/${name}.icc" >"$logfile" 2>&1
+  local status=$?
+
+  # Asserted on HOW it exits, like the empty-element case: this defect's signature is a
+  # signal death (128+signum), which a bare "exit != 0" would have accepted.
+  if [ "$status" -ge 128 ]; then
+    fail "$name" "iccFromXml died on a signal (exit $status) -- the 65536-channel OOB write is back"
+    return
+  fi
+  if [ "$status" -eq 0 ]; then
+    fail "$name" "a CountOfChannels of 65536 was accepted"
+    return
+  fi
+  if ! grep -qE "$RESP_TAG_DIAG" "$logfile"; then
+    fail "$name" "refused, but not by the responseCurveSet16Type parser"
+    return
+  fi
+  check_sanitizers "$name" "$logfile" || return
+  pass "$name (65536 channels refused at the count, no signal)"
+}
+
+echo
+echo "=== responseCurveSet16 CountOfChannels (issues #2397, #2398, #2399) ==="
+
+countofchannels_empty_element
+countofchannels_overflow_is_not_one
+countofchannels_indented_is_accepted
+countofchannels_zero_refused
+measurement_devicecode_overflow
+responsecurve_profile_reads_back
+measurement_reserved_not_inherited
+countofchannels_65536_channel_write
 
 ###############################################################################
 

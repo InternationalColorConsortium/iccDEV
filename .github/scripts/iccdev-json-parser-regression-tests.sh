@@ -761,6 +761,64 @@ for idx in range(tag_count):
 raise SystemExit("namedColor2 tag not found")
 ' "$NAMED_PROFILE" "$NAMED_INVALID_ASCII"
 
+###############################################################################
+# responseCurveSet16Type measurement/channel counts (#2398)
+###############################################################################
+#
+# CIccTagJsonResponseCurveSet16::ParseJson read CountOfChannels, DeviceCode and
+# Reserved into an int and cast each to the icUInt16Number that actually stores it,
+# so a value above the field's ceiling was truncated and the parser wrote a profile
+# for a document it had not been given.  Measured against the unfixed parser:
+# "CountOfChannels": 65537 produced a file byte-identical to the count-of-1 control,
+# "DeviceCode": 65537 one byte-identical to DeviceCode 1, and -1 one byte-identical
+# to 65535 -- all three at exit 0.  This is the JSON half of #2398; the XML twin is
+# pinned in iccdev-xml-parser-regression-tests.sh.
+#
+# The fixture is written here in full rather than produced by iccToJson from an ICC
+# profile.  Generating it would make these cases depend on the resp tag's READ path,
+# and when that path was broken (#2399) they would have gone green by skipping rather
+# than red -- the failure mode this file's own reject helper exists to prevent.
+write_responsecurve_json() {
+  # write_responsecurve_json <path> <count> <device-code>
+  cat > "$1" <<JSONEOF
+{
+  "Header": {
+    "ProfileVersion": "2.10.0",
+    "ProfileDeviceClass": "mntr",
+    "DataColourSpace": "GRAY",
+    "PCS": "XYZ ",
+    "RenderingIntent": "Perceptual"
+  },
+  "Tags": [
+    {
+      "outputResponseTag": {
+        "data": {
+          "type": "responseCurveSet16Type",
+          "CountOfChannels": $2,
+          "ResponseCurves": [
+            {
+              "MeasurementUnit": "Status A",
+              "Channels": [
+                {
+                  "MaxColorantXYZ": [ 0.0, 0.0, 0.0 ],
+                  "Measurements": [ { "DeviceCode": $3, "MeasValue": 0.0 } ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
+JSONEOF
+}
+
+write_responsecurve_json "$OUTDIR/responsecurve-control.json" 1 1
+write_responsecurve_json "$OUTDIR/responsecurve-count-overflow.json" 65537 1
+write_responsecurve_json "$OUTDIR/responsecurve-devicecode-overflow.json" 1 65537
+write_responsecurve_json "$OUTDIR/responsecurve-devicecode-negative.json" 1 -1
+
 echo "Using base profile: $PROFILE"
 echo "Using XML profile:  $XML_PROFILE"
 echo "Tools dir: $TOOLS_DIR"
@@ -778,6 +836,14 @@ run_reject_test "spectral-offset-short" "$OUTDIR/spectral-offset-short.json" "of
 run_reject_test "struct-bad-member" "$OUTDIR/struct-bad-member.json" "MemberTag 'badMember' missing 'type' field"
 run_fromjson_success_test "utf16-short-text" "$OUTDIR/utf16-short-text.json"
 run_reject_test "empty-tag-name" "$OUTDIR/empty-tag-name.json" "Tag entry has empty name"
+
+# The control runs first and must convert: without it, a change that refused every
+# responseCurveSet16Type document would satisfy all three reject cases below while
+# removing the guards they exist to pin.
+run_fromjson_success_test "responsecurve-control" "$OUTDIR/responsecurve-control.json"
+run_reject_test "responsecurve-count-overflow" "$OUTDIR/responsecurve-count-overflow.json" "Missing or invalid CountOfChannels in ResponseCurveSet16"
+run_reject_test "responsecurve-devicecode-overflow" "$OUTDIR/responsecurve-devicecode-overflow.json" "Invalid Measurement DeviceCode in ResponseCurveSet16"
+run_reject_test "responsecurve-devicecode-negative" "$OUTDIR/responsecurve-devicecode-negative.json" "Invalid Measurement DeviceCode in ResponseCurveSet16"
 run_reject_test "struct-empty-member-name" "$OUTDIR/struct-empty-member-name.json" "MemberTag entry has empty name"
 run_xml_reject_test "xml-matrix-huge-channels" "$XML_MATRIX_HUGE" "Invalid InputChannels or OutputChannels In MatrixElement"
 run_xml_reject_test "xml-empty-private-type" "$XML_EMPTY_PRIVATE_TYPE" "Invalid private tag type attribute"
