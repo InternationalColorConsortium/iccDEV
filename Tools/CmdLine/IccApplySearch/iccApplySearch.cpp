@@ -80,6 +80,7 @@
 #include "IccConnect.h"
 #include "IccCmdLineUtil.h"
 #include <cerrno>
+#include <cstring>  // strcmp, used by the -h/--help contract guard in main()
 #include <cstdlib>  // EXIT_FAILURE, used by the -cfg argument guard added in #2075
 #include <memory>
 #include <vector>
@@ -205,42 +206,42 @@ bool IsSpacePCS( const icColorSpaceSignature &x )
 }
 
 
-void Usage()
+void Usage(FILE* stream)
 {
-  printf("iccApplySearch built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
-  printf("Usage 1: iccApplySearch {-threads N} -cfg config_file_path\n");
-  printf("  Optional: -threads N (0=hardware concurrency, 1=single-threaded)\n");
-  printf("  Where config_file_path is a json formatted ICC profile application configuration file\n\n");
-  printf("Usage 2: iccApplySearch {-threads N} {-debugcalc} data_file_path encoding[:precision[:digits]] interpolation {-ENV:tag value} profile1_path intent1 {{-ENV:tag value} middle_profile_path mid_intent} {-ENV:tag value} profile2_path intent2 -INIT init_intent2 {pcc_path1 weight1 ...}\n");
+  fprintf(stream, "iccApplySearch built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
+  fprintf(stream, "Usage 1: iccApplySearch {-threads N} -cfg config_file_path\n");
+  fprintf(stream, "  Optional: -threads N (0=hardware concurrency, 1=single-threaded)\n");
+  fprintf(stream, "  Where config_file_path is a json formatted ICC profile application configuration file\n\n");
+  fprintf(stream, "Usage 2: iccApplySearch {-threads N} {-debugcalc} data_file_path encoding[:precision[:digits]] interpolation {-ENV:tag value} profile1_path intent1 {{-ENV:tag value} middle_profile_path mid_intent} {-ENV:tag value} profile2_path intent2 -INIT init_intent2 {pcc_path1 weight1 ...}\n");
   
-  printf("  For final_data_encoding:\n");
-  printf("    0 - icEncodeValue (converts to/from lab encoding when samples=3)\n");
-  printf("    1 - icEncodePercent\n");
-  printf("    2 - icEncodeUnitFloat (may clip to 0.0 to 1.0)\n");
-  printf("    3 - icEncodeFloat\n");
-  printf("    4 - icEncode8Bit\n");
-  printf("    5 - icEncode16Bit\n");
-  printf("    6 - icEncode16BitV2\n\n");
+  fprintf(stream, "  For final_data_encoding:\n");
+  fprintf(stream, "    0 - icEncodeValue (converts to/from lab encoding when samples=3)\n");
+  fprintf(stream, "    1 - icEncodePercent\n");
+  fprintf(stream, "    2 - icEncodeUnitFloat (may clip to 0.0 to 1.0)\n");
+  fprintf(stream, "    3 - icEncodeFloat\n");
+  fprintf(stream, "    4 - icEncode8Bit\n");
+  fprintf(stream, "    5 - icEncode16Bit\n");
+  fprintf(stream, "    6 - icEncode16BitV2\n\n");
 
-  printf("  FmtPrecision - formatting for # of digits after decimal (default=4)\n");
-  printf("  FmtDigits - formatting for total # of digits (default=5+FmtPrecision)\n\n");
+  fprintf(stream, "  FmtPrecision - formatting for # of digits after decimal (default=4)\n");
+  fprintf(stream, "  FmtDigits - formatting for total # of digits (default=5+FmtPrecision)\n\n");
 
-  printf("  For interpolation:\n");
-  printf("    0 - Linear\n");
-  printf("    1 - Tetrahedral\n\n");
+  fprintf(stream, "  For interpolation:\n");
+  fprintf(stream, "    0 - Linear\n");
+  fprintf(stream, "    1 - Tetrahedral\n\n");
 
-  printf("  For init_intent/intent1/intent2/mid_intent:\n");
-  printf("     0 - Perceptual\n");
-  printf("     1 - Relative\n");
-  printf("     2 - Saturation\n");
-  printf("     3 - Absolute\n");
-  printf("     10 + Intent - without D2Bx/B2Dx\n");
-  printf("     40 + Intent - with BPC\n");
-  printf("     90 + Intent - Colorimetric Only\n");
-  printf("    100 + Intent - Spectral Only\n");
-  printf(" +10000 - Use V5 sub-profile if present\n");
+  fprintf(stream, "  For init_intent/intent1/intent2/mid_intent:\n");
+  fprintf(stream, "     0 - Perceptual\n");
+  fprintf(stream, "     1 - Relative\n");
+  fprintf(stream, "     2 - Saturation\n");
+  fprintf(stream, "     3 - Absolute\n");
+  fprintf(stream, "     10 + Intent - without D2Bx/B2Dx\n");
+  fprintf(stream, "     40 + Intent - with BPC\n");
+  fprintf(stream, "     90 + Intent - Colorimetric Only\n");
+  fprintf(stream, "    100 + Intent - Spectral Only\n");
+  fprintf(stream, " +10000 - Use V5 sub-profile if present\n");
   
-  printf("\n");
+  fprintf(stream, "\n");
 }
 
 
@@ -249,13 +250,29 @@ void Usage()
 int main(int argc, const char* argv[])
 {
   int minargs = 3;  // name -cfg file.json
+
+  // An explicit help request is the one invocation here that is not an error, so
+  // it prints on stdout and exits 0; every malformed form below prints on stderr
+  // and fails.  Once both paths print the same screen the stream is the only
+  // thing that separates them -- status alone cannot (#1514).
+  if (argc == 2 && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help"))) {
+    Usage(stdout);
+    return 0;
+  }
+
   if (argc > 1 && !stricmp(argv[1], "-threads") && argc < 3) {
-    printf("Missing thread count for -threads\n");
+    fprintf(stderr, "Missing thread count for -threads\n");
     return EXIT_FAILURE;
   }
   if (argc < minargs) {
-    Usage();
-    return 0;
+    // #2405: usage on stdout plus exit 0 reported success for an invocation that
+    // applied nothing.  Fail like the identical post-"-threads" guard below,
+    // which already returned EXIT_FAILURE -- the two disagreed only because the
+    // shifted copy was written later.
+    fprintf(stderr, "Missing arguments: expected at least %d, received %d.\n",
+            minargs - 1, argc > 0 ? argc - 1 : 0);
+    Usage(stderr);
+    return EXIT_FAILURE;
   }
 
   CIccCfgDataApply cfgApply;
@@ -278,7 +295,9 @@ int main(int argc, const char* argv[])
     argc -= 2;
 
     if (argc < minargs) {
-      Usage();
+      fprintf(stderr, "Missing arguments after -threads: expected at least %d, received %d.\n",
+              minargs - 1, argc > 0 ? argc - 1 : 0);
+      Usage(stderr);
       return EXIT_FAILURE;
     }
   }
@@ -368,7 +387,11 @@ int main(int argc, const char* argv[])
 
     int nArg = cfgApply.fromArgs(&argv[0], argc);
     if (!nArg) {
-      printf("Unable to parse configuration arguments\n");
+      // #2405: on stderr because this is a malformed-invocation diagnostic and the
+      // sibling tool prints it there.  The rest of this main()'s diagnostics stay
+      // on stdout: they are a pre-existing, and consistent, convention across all
+      // four tools, and moving them is a separate change.
+      fprintf(stderr, "Unable to parse configuration arguments\n");
       return EXIT_FAILURE;
     }
     argv += nArg;
@@ -376,7 +399,7 @@ int main(int argc, const char* argv[])
 
     nArg = cfgSearchApply.fromArgs(&argv[0], argc);
     if (!nArg) {
-      printf("Unable to parse profile sequence arguments\n");
+      fprintf(stderr, "Unable to parse profile sequence arguments\n");
       return -1;
     }
 

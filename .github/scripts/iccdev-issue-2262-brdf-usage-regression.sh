@@ -175,20 +175,32 @@ assert_usage_row() {
 check_usage() {
   local name="$1" tool="$2"
   local log="$OUTDIR/$name.log"
+  local errlog="$OUTDIR/$name.err.log"
   local rc=0
 
-  rm -f "$log"
+  # #2405 changed how this screen is reached.  A bare invocation used to print
+  # it on stdout and exit 0; that is now the malformed path (stderr, non-zero)
+  # and "-h" is the only route to Usage() on stdout.  The rows below are the
+  # same rows either way -- the tools print one screen -- so this test keeps
+  # asserting them, it just asks for them the way a help request now does.
+  # Streams are captured separately rather than merged: "-h" writing anything
+  # to stderr would mean the help path had picked up a diagnostic.
+  rm -f "$log" "$errlog"
   set +e
-  timeout 60 "$tool" > "$log" 2>&1
+  timeout 60 "$tool" -h > "$log" 2> "$errlog"
   rc=$?
   set -e
 
   check_sanitizers "$log" || fail "$name usage emitted sanitizer diagnostics"
+  check_sanitizers "$errlog" || fail "$name usage emitted sanitizer diagnostics on stderr"
   if [ "$rc" -eq 124 ]; then
     fail "$name timed out printing usage"
   fi
   if [ "$rc" -ne 0 ]; then
-    fail "$name did not exit 0 when printing usage (exit=$rc)"
+    fail "$name -h did not exit 0 (exit=$rc)"
+  fi
+  if [ -s "$errlog" ]; then
+    fail "$name -h wrote to stderr"
   fi
 
   sed 's/^[[:space:]]*//' "$log" > "$OUTDIR/$name.stripped"
