@@ -7647,6 +7647,25 @@ if(TARGET iccFromXml)
     SKIP_RETURN_CODE 77)
 endif()
 
+# #2406: profile and data-file paths must not carry terminal control sequences
+# into the tools' diagnostics (CWE-150/CWE-117).  Not labelled "slow", so it
+# runs on the pull_request path (ci-pr-action.yml pins ctest_mode=fast, which
+# drops the slow label).  Four cases x "timeout 60" is a 240s worst case.
+if(TARGET iccApplyProfiles AND TARGET iccApplySearch
+   AND TARGET iccApplyNamedCmm AND TARGET iccApplyToLink)
+  iccdev_add_script_test(
+    iccdev.apply-console-injection-regression
+    300
+    "iccdev;apply;security;console;injection;issue-2406;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2406-apply-console-injection-regression.sh"
+  )
+  # Exits 77 when no tool is built, the apply data files are missing, or nothing
+  # was measured.
+  set_tests_properties(iccdev.apply-console-injection-regression PROPERTIES
+    SKIP_RETURN_CODE 77)
+endif()
+
 # Guarded on the target, like iccdev.tiff-resolution-unit-regression below.
 # Both scripts exit 2 when iccSpecSepToTiff is missing rather than skipping the
 # way the older sibling suites do, so an unguarded registration turns a

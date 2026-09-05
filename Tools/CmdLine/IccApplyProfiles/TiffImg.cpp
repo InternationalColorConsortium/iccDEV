@@ -75,6 +75,57 @@
 #include <limits>
 #include <climits>   // LONG_MAX, for the IFD-offset bound in readStoredExtraSamplesCount()
 #include "TiffImg.h"
+#include "IccFileUtil.h"  // icSanitizeConsoleText - #2406
+#include <cstdarg>
+
+// #2406: libtiff routes every diagnostic through a handler that prints the
+// "module" string and the formatted message straight to stderr.  Every
+// TIFFError() call in this file passes the FILE PATH as that module string, and
+// libtiff raises its own "TIFFOpen: <path>: No such file or directory." the same
+// way -- so a path carrying ESC reproduced CSI/OSC payloads on the terminal.
+// Sanitizing the argument at each call site would have left libtiff's internal
+// message raw; the handler is the one place both meet.
+//
+// The format mirrors libtiff's own unix handlers exactly ("module: ", the
+// message, then ".\n", with "Warning, " prefixed for warnings), so output is
+// unchanged for the ASCII paths every existing test uses -- only control and
+// non-ASCII bytes render differently, which is the defect.
+//
+// Installed for every consumer of this file rather than in one tool's main():
+// iccApplyProfiles, iccSpecSepToTiff and iccTiffDump all compile TiffImg.cpp and
+// all three leaked through these same sites.
+static void icTiffSanitizedErrorHandler(const char* module, const char* fmt, va_list ap)
+{
+  char msg[1024];
+  vsnprintf(msg, sizeof(msg), fmt, ap);
+  if (module != NULL)
+    fprintf(stderr, "%s: ", icSanitizeConsoleText(module).c_str());
+  fprintf(stderr, "%s.\n", icSanitizeConsoleText(msg).c_str());
+}
+
+static void icTiffSanitizedWarningHandler(const char* module, const char* fmt, va_list ap)
+{
+  char msg[1024];
+  vsnprintf(msg, sizeof(msg), fmt, ap);
+  if (module != NULL)
+    fprintf(stderr, "%s: ", icSanitizeConsoleText(module).c_str());
+  fprintf(stderr, "Warning, %s.\n", icSanitizeConsoleText(msg).c_str());
+}
+
+namespace {
+// A file-scope object so the handlers are in place before main() runs, whichever
+// of the three tools is linking this file.  TIFFSetErrorHandler is a plain
+// function-pointer assignment, so there is no static-initialisation-order
+// dependency here.
+struct IccTiffSanitizedHandlers {
+  IccTiffSanitizedHandlers()
+  {
+    TIFFSetErrorHandler(icTiffSanitizedErrorHandler);
+    TIFFSetWarningHandler(icTiffSanitizedWarningHandler);
+  }
+};
+const IccTiffSanitizedHandlers g_icTiffSanitizedHandlers;
+}
 
 // The output-destination check below needs GetFileAttributesA() on Windows and
 // lstat()/errno on POSIX (#2242).  <windows.h> is pulled in here, in the shared
