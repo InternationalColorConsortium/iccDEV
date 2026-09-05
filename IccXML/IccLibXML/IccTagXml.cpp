@@ -3054,14 +3054,63 @@ bool CIccTagXmlResponseCurveSet16::ToXml(std::string &xml, std::string blanks/* 
 }
 
 
-bool CIccTagXmlResponseCurveSet16::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
+bool CIccTagXmlResponseCurveSet16::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
-  pNode = icXmlFindNode(pNode, "CountOfChannels"); 
+  pNode = icXmlFindNode(pNode, "CountOfChannels");
 
   if(!pNode)
     return false;
 
-  icUInt32Number nChannels = (icUInt32Number)atoi((const char*)pNode->children->content);
+  // An empty <CountOfChannels/> is a well-formed element with NO text child, so
+  // libxml2 leaves pNode->children NULL and the old read of children->content
+  // dereferenced it: "member access within null pointer of type 'struct _xmlNode'",
+  // and a SIGSEGV in a release build (#2397).  The pNode test above is not the same
+  // check -- icXmlFindNode found the element, it simply has no content.  Every other
+  // ->children->content read in the XML parsers guards the child first; this was the
+  // one site that did not.
+  if (!pNode->children || !pNode->children->content) {
+    parseStr += "Empty CountOfChannels in responseCurveSet16Type\n";
+    return false;
+  }
+
+  // icXmlParseU16, not atoi(), and sized to the setter rather than to icUInt32Number.
+  // SetNumChannels takes an icUInt16Number, so the old u32 value was narrowed on the
+  // way in: "4294967297" is 0x100000001, which atoi() has undefined behaviour on to
+  // begin with, and which truncated to 1 -- producing a profile byte-identical to the
+  // one a count of 1 produces, reported as "parsed and saved correctly" (#2398).
+  // Parsing straight into the setter's own type refuses the value instead of
+  // silently agreeing to a different document than the one supplied.
+  //
+  // TRIM FIRST.  Every other icXmlParseU16 caller passes an attribute value; this is
+  // the first to pass ELEMENT text, which carries the document's own indentation.
+  // The helper requires the whole string to be consumed and strtoul skips leading
+  // blanks but not trailing ones, so a pretty-printed
+  // "<CountOfChannels>\n  1\n</CountOfChannels>" would be refused outright -- a
+  // document atoi() read as 1.  That is the same trap #2387 fixed for
+  // <ProfileVersion> (see parseVersion in IccProfileXml.cpp, which trims for exactly
+  // this reason); applying the strict helper without the trim would have reproduced
+  // it here.  The two trims are deliberately not shared yet: parseVersion is
+  // file-static in a translation unit with an open change against it.
+  std::string sCount((const char*)pNode->children->content);
+  const char *szBlank = " \t\r\n\f\v";
+  std::string::size_type nFirst = sCount.find_first_not_of(szBlank);
+  if (nFirst == std::string::npos) {
+    parseStr += "Empty CountOfChannels in responseCurveSet16Type\n";
+    return false;
+  }
+  sCount = sCount.substr(nFirst, sCount.find_last_not_of(szBlank) - nFirst + 1);
+
+  icUInt16Number nChannels = 0;
+  if (!icXmlParseU16(sCount.c_str(), nChannels) || !nChannels) {
+    // Zero is refused as well as out-of-range: the JSON twin already rejects
+    // "CountOfChannels" <= 0 (IccTagJson.cpp:1895) and
+    // docs/icc-profile.schema.json declares "minimum": 1, so accepting it here was
+    // the odd one out.  A zero count sizes no channels while the tag still claims
+    // response curves.
+    parseStr += "Invalid CountOfChannels in responseCurveSet16Type\n";
+    return false;
+  }
+
   SetNumChannels(nChannels);
 
   if (!m_ResponseCurves)
@@ -3085,8 +3134,6 @@ bool CIccTagXmlResponseCurveSet16::ParseXml(xmlNode *pNode, std::string & /*pars
         if (pChild->type == XML_ELEMENT_NODE && !icXmlStrCmp(pChild->name, "ChannelResponses")) {
           CIccResponse16List *pResponseList = curves.GetResponseList(i);
           icXYZNumber *pXYZ = curves.GetXYZ(i);
-          icResponse16Number response{};  // zero-init (.reserved is conditionally set; ICC spec requires it be 0)
-
           const icChar *szX = icXmlAttrValue(pChild, "X");
           const icChar *szY = icXmlAttrValue(pChild, "Y");
           const icChar *szZ = icXmlAttrValue(pChild, "Z");
@@ -3100,6 +3147,16 @@ bool CIccTagXmlResponseCurveSet16::ParseXml(xmlNode *pNode, std::string & /*pars
 
           for (pMeasurement = pChild->children; pMeasurement; pMeasurement = pMeasurement->next) {
             if (pMeasurement->type == XML_ELEMENT_NODE && !icXmlStrCmp(pMeasurement->name, "Measurement")) {
+              // Declared per <Measurement>, not per <ChannelResponses>.  deviceCode and
+              // measurementValue are assigned unconditionally below, but `reserved` is set
+              // only when the attribute is present, so one object reused across siblings
+              // carried the previous measurement's value into a measurement that omitted
+              // it: Reserved="7" followed by a bare <Measurement> wrote 0001 0007 and
+              // 0002 0007, giving the second a nonzero field ICC requires to be 0 (#2399).
+              // Scoping it here makes that structural rather than a comment on a
+              // conditional assignment.
+              icResponse16Number response{};
+
               const icChar *szDeviceCode = icXmlAttrValue(pMeasurement, "DeviceCode");
               const icChar *szValue = icXmlAttrValue(pMeasurement, "MeasValue");
               const icChar *szReserved = icXmlAttrValue(pMeasurement, "Reserved");
@@ -3107,11 +3164,25 @@ bool CIccTagXmlResponseCurveSet16::ParseXml(xmlNode *pNode, std::string & /*pars
               if (!szDeviceCode || !szValue || !*szDeviceCode || !*szValue)
                 return false;
 
-              response.deviceCode = (icUInt16Number)atoi(szDeviceCode);
+              // Same narrowing as CountOfChannels above, in the same tag: both fields
+              // are icUInt16Number in icResponse16Number, and atoi() returns an int,
+              // so DeviceCode="65537" stored 1 and produced a file byte-identical to
+              // DeviceCode="1" -- measured, both hashed to df884791948f... "-1"
+              // likewise landed as 65535.  These are attributes rather than element
+              // text, so they need no trim; icXmlParseU16 rejects the sign, non-digits
+              // and anything above the field's own ceiling (#2398).
+              if (!icXmlParseU16(szDeviceCode, response.deviceCode)) {
+                parseStr += "Invalid Measurement DeviceCode in responseCurveSet16Type\n";
+                return false;
+              }
               response.measurementValue = icDtoF((icFloatNumber)atof(szValue));
 
-              if (szReserved && *szReserved)
-                response.reserved = atoi(szReserved);
+              if (szReserved && *szReserved) {
+                if (!icXmlParseU16(szReserved, response.reserved)) {
+                  parseStr += "Invalid Measurement Reserved in responseCurveSet16Type\n";
+                  return false;
+                }
+              }
 
               pResponseList->push_back(response);
             }

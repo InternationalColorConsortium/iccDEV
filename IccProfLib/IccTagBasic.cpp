@@ -11494,8 +11494,17 @@ bool CIccTagResponseCurveSet16::Read(icUInt32Number size, CIccIO *pIO)
       delete[] nOffset;
       return false;
     }
+    // nOffset[i] is TAG-RELATIVE and is already bounded against the tag length by the
+    // check above.  offsetCalc is an ABSOLUTE file position, so the only thing left to
+    // bound it against is what the IO layer can address; comparing it with `size` -- the
+    // tag's byte length -- rejected every ordinary profile carrying this tag.  The resp
+    // tag iccFromXml writes sits at file offset 396 with size 44 and curve offset 16, so
+    // this computed 412 > 44 and returned false: iccToXml and iccToJson both reported
+    // "Unable to read" and iccDumpProfile reported the tag "not found", for a tag whose
+    // bytes are correct (#2399).  A tag can only fail this way when its own file offset
+    // exceeds its length, which is true of essentially every real tag.
     size_t offsetCalc = startPos + nOffset[i];
-    if (offsetCalc > size || offsetCalc > 0xFFFFFFFFULL) {
+    if (offsetCalc > 0xFFFFFFFFULL) {
       delete[] nOffset;
       return false;
     }
