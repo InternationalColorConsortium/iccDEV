@@ -59,6 +59,40 @@ docker run --rm -p 127.0.0.1:8080:8080 "$IMAGE" iccdev-mcp-entrypoint rest
 curl -fsS http://127.0.0.1:8080/api/health
 ```
 
+The CLI tools remain sanitizer-instrumented. Python native validation uses an
+isolated non-sanitized shared IccProfLib at
+`/opt/iccdev-validation/lib/libIccProfLib2.so`; no ASAN runtime is preloaded into
+Python. `ICCDEV_VALIDATION_LIBRARY` selects this library and takes precedence
+over `ICCDEV_BUILD_DIR`. Override it to select another shared library, or unset
+it to use build-directory discovery. An explicitly empty or invalid library
+fails closed; optional pip-only installations can still report validation as
+unavailable. The image build calls the ABI on the checked-in sRGB profile.
+`BUILD_JOBS` defaults to 32 and controls both CLI and isolated ABI compilation.
+
+Run the release runtime smoke from a checkout with Python 3 and Docker:
+
+```bash
+python3 .github/scripts/iccdev-container-smoke.py "$IMAGE" --report-dir out/container-smoke
+```
+
+This initializes MCP, sends the initialized notification, discovers tools, and
+calls health, header inspection, and native validation before closing stdin.
+It also starts REST on an ephemeral localhost-only port, checks health and
+inventory shapes, and exercises header inspection, PAWG, and native validation.
+Deadlines bound responses and startup; cleanup removes both named containers on
+success or failure. Failure logs stay in the CI job log and the optional report
+directory; CI uploads those diagnostics on failure. Inventories and image
+identity are printed rather than asserting a fixed tool count. `ci-docker`
+uses the same helper, requiring native validation. Its existing dispatch remains
+non-publishing on feature branches; only master and release tags publish.
+The read-only `ci-docker-pr` caller uses it when building the changed Dockerfile;
+its trusted-base-image-only path does not claim to test a new runtime. No PR
+runtime artifacts are uploaded. The MCP package workflow includes the shared
+scanner and smoke helper paths in its test triggers.
+
+The sole supported Dockerfile is the unified sanitizer image. Do not reintroduce
+retired per-variant Dockerfiles to test optional native-library behavior.
+
 ## Local Review
 
 Mount reviewed source read-only, copy it to container-local scratch space, then

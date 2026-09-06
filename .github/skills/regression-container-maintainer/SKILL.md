@@ -61,6 +61,13 @@ Use this skill for repeatable maintainer operations in
 16. Report exact image tag, digest, source revision, commands, results, evidence,
     and workflow URLs.
 
+For container/MCP runtime changes, run
+`python3 .github/scripts/iccdev-container-smoke.py "$IMAGE"` before dispatch.
+It checks real MCP and REST operations and requires native validation in the
+unified image. Keep stdin open through the last response and report the dynamic
+inventory. Use `python3 -m pytest iccdev-mcp/tests -q` for the focused scanner,
+entrypoint, server, and REST contracts; do not use CI as the first validation.
+
 ## Safety Gates
 
 - Do not mount the Docker socket, SSH keys, or GitHub token into untrusted code.

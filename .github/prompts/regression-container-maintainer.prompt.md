@@ -50,6 +50,12 @@ Canonical guide: `docs/regression-container.md`
     recommend, or depend on branch, run, or image-variant tags.
 15. Include the canonical image digest and hosted run in the handoff.
 
+For MCP/REST container changes, run the reusable runtime gate before dispatch:
+`python3 .github/scripts/iccdev-container-smoke.py "$IMAGE" --report-dir out/container-smoke`.
+Run `python3 -m pytest iccdev-mcp/tests -q` for the focused scanner, native
+override, entrypoint, and REST contracts. Report exact discovered inventories,
+not a fixed healthy-tool total. Do not close MCP stdin before tool responses.
+
 For AFL/CFL work, keep the review scope narrow: these helpers are experimental
 maintainer workflows and local validation patch stacks. They should support
 manual fuzz runs from `master` or an integration branch, not redefine required

@@ -354,6 +354,17 @@ jobs:
             /tmp/cfl-smoke -max_total_time=1
           '
 
+      # preflight: allow-pr-script-execution reason=container-runtime-test
+      - name: Verify built image MCP and REST runtime
+        if: ${{ inputs.build_pr_image }}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          python3 .github/scripts/iccdev-container-smoke.py "$TEST_IMAGE"
+
       - name: Build and test PR tree inside unified image
         env:
           BASH_ENV: /dev/null

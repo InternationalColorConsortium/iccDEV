@@ -29,6 +29,52 @@ from iccdev_mcp.cli_tools import _find_tool, discover_tools, TOOL_BINARIES
 # Profile resolution tests
 # ---------------------------------------------------------------------------
 
+class TestValidationLibraryOverrides:
+    @pytest.mark.parametrize("value", ["", "/missing/libIccProfLib2.so"])
+    def test_invalid_explicit_override_fails_closed(self, monkeypatch, tmp_path, value):
+        import iccdev
+        library = tmp_path / "IccProfLib" / "libIccProfLib2.so"
+        library.parent.mkdir()
+        library.write_bytes(b"not a library")
+        monkeypatch.setenv("ICCDEV_BUILD_DIR", str(tmp_path))
+        monkeypatch.setenv("ICCDEV_VALIDATION_LIBRARY", value)
+        with pytest.raises(RuntimeError, match="ICCDEV_VALIDATION_LIBRARY"):
+            iccdev._validation_library_path()
+        assert not iccdev.native_validation_available()
+        with pytest.raises(RuntimeError):
+            iccdev.validate_profile(b"invalid profile")
+
+    def test_explicit_library_precedes_build_dir(self, monkeypatch, tmp_path):
+        import iccdev
+        library = tmp_path / "explicit.so"
+        library.write_bytes(b"not a library")
+        monkeypatch.setenv("ICCDEV_VALIDATION_LIBRARY", str(library))
+        monkeypatch.setenv("ICCDEV_BUILD_DIR", "/missing/build")
+        assert iccdev._validation_library_path() == library
+        assert not iccdev.native_validation_available()
+        with pytest.raises(RuntimeError, match="Unable to load"):
+            iccdev.validate_profile(b"profile")
+
+    def test_build_dir_when_explicit_library_unset(self, monkeypatch, tmp_path):
+        import iccdev
+        library = tmp_path / "IccProfLib" / "libIccProfLib2.so"
+        library.parent.mkdir()
+        library.write_bytes(b"not a library")
+        monkeypatch.delenv("ICCDEV_VALIDATION_LIBRARY", raising=False)
+        monkeypatch.setenv("ICCDEV_BUILD_DIR", str(tmp_path))
+        assert iccdev._validation_library_path() == library
+
+    def test_optional_without_native_configuration(self, monkeypatch):
+        import iccdev
+        monkeypatch.delenv("ICCDEV_VALIDATION_LIBRARY", raising=False)
+        monkeypatch.delenv("ICCDEV_BUILD_DIR", raising=False)
+        assert not iccdev.native_validation_available()
+        from iccdev_mcp.server import health_check
+        health = health_check()
+        assert not health["validation_api"]["available"]
+        assert "validate_profile" not in health["python_api"]["available_tools"]
+
+
 class TestProfileResolution:
     """Tests for profile path resolution."""
 
