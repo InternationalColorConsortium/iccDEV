@@ -4632,6 +4632,52 @@ function(iccdev_add_tiff_separated_strips_test)
   endif()
 endfunction()
 
+function(iccdev_add_console_sanitize_codepoint_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccConsoleSanitizeCodepointTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/console-sanitize-codepoint.cpp"
+  )
+  target_compile_features(iccConsoleSanitizeCodepointTest PRIVATE cxx_std_17)
+
+  target_include_directories(iccConsoleSanitizeCodepointTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  # IccFileUtil.h is header-only, so this target links nothing and needs no runtime
+  # search path -- hence no ENVIRONMENT_MODIFICATION block on Windows, unlike the
+  # neighbouring regression tests.  It also makes the test the header's only standalone
+  # consumer: the four iccApply* tools reach it through IccProfLib, so without this the
+  # header is never compiled on its own and an include it forgot to make would surface
+  # as a tool build break instead of here.
+  add_dependencies(check iccConsoleSanitizeCodepointTest)
+
+  # Needing no library path is not a reason to drop ICCDEV_TEST_ENV: it also carries
+  # ASAN_OPTIONS/UBSAN_OPTIONS and the empty DEBUGINFOD_URLS.  Without it this test
+  # would inherit the container's Ubuntu default for the last of those, and one
+  # symbolized sanitizer report would spend ~90s in llvm-symbolizer against the
+  # TIMEOUT below -- the #1928 stall documented further down this file.
+  if(WIN32)
+    add_test(
+      NAME iccdev.console-sanitize-codepoint
+      COMMAND "$<TARGET_FILE:iccConsoleSanitizeCodepointTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.console-sanitize-codepoint
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccConsoleSanitizeCodepointTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.console-sanitize-codepoint PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;security;console;sanitize;issue-2420;regression"
+  )
+endfunction()
+
 function(iccdev_add_signature_utils_contract_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -6999,6 +7045,7 @@ if(WIN32)
   iccdev_add_struct_name_spelling_test()
   iccdev_add_mcs_colorspace_name_test()
   iccdev_add_signature_utils_contract_test()
+  iccdev_add_console_sanitize_codepoint_test()
   iccdev_add_tiff_create_overflow_test()
   iccdev_add_tiff_separated_strips_test()
   iccdev_add_mpexml_unknown_reserved_test()
@@ -7367,6 +7414,7 @@ iccdev_add_tag_name_spelling_test()
 iccdev_add_struct_name_spelling_test()
 iccdev_add_mcs_colorspace_name_test()
 iccdev_add_signature_utils_contract_test()
+iccdev_add_console_sanitize_codepoint_test()
 iccdev_add_tiff_create_overflow_test()
 iccdev_add_tiff_separated_strips_test()
 iccdev_add_mpexml_unknown_reserved_test()
