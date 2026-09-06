@@ -218,8 +218,9 @@ SUMMARY_MD="${SUMMARY_MD:-$OUTDIR/summary.md}"
 printf "file\tvariant\texit\tstatus\tsanitizer\tsignals\terrors\twarnings\tqa_fail\tqa_warn\tqa_gap\tqa_not_run\tcompliant\n" > "$RESULTS"
 : > "$FINDINGS"
 
-if [[ -d "$REPO_ROOT/Build/IccProfLib" ]]; then
-  export LD_LIBRARY_PATH="$REPO_ROOT/Build/IccProfLib:$REPO_ROOT/Build/IccXML${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+BUILD_DIR="${ICCDEV_BUILD_DIR:-$REPO_ROOT/Build}"
+if [[ -d "$BUILD_DIR/IccProfLib" ]]; then
+  export LD_LIBRARY_PATH="$BUILD_DIR/IccProfLib:$BUILD_DIR/IccXML${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 fi
 export ASAN_OPTIONS="${ASAN_OPTIONS:-detect_leaks=0,halt_on_error=0}"
 export UBSAN_OPTIONS="${UBSAN_OPTIONS:-halt_on_error=0,print_stacktrace=1}"

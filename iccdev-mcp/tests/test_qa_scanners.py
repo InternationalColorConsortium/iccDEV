@@ -94,10 +94,12 @@ def scanner_tree(tmp_path):
     return scripts, inputs
 
 
-def stub(path, output="", code=0, sleep=False):
+def stub(path, output="", code=0, sleep=False, print_library_path=False):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("#!/usr/bin/env python3\nimport sys,time\n"
                     + ("time.sleep(5)\n" if sleep else "")
+                    + ("print(__import__('os').environ.get('LD_LIBRARY_PATH', ''))\n"
+                       if print_library_path else "")
                     + f"print({output!r})\nsys.exit({code})\n", encoding="ascii")
     path.chmod(0o755)
     return path
@@ -137,6 +139,23 @@ def test_real_timeout(scanner_tree, tmp_path):
     binary = stub(tmp_path / "tool", sleep=True)
     result, rows = scan(scanner_tree, tmp_path, args=("--tool", str(binary), "--variant", "text"))
     assert result.returncode == 1 and rows[0]["status"] == "TIMEOUT"
+
+
+def test_out_of_tree_build_adds_runtime_libraries(scanner_tree, tmp_path):
+    build_dir = tmp_path / "build"
+    for library in ("IccProfLib", "IccXML"):
+        (build_dir / library).mkdir(parents=True)
+    binary = stub(tmp_path / "tool", "clean", print_library_path=True)
+    result, rows = scan(
+        scanner_tree, tmp_path, "dumpprofile",
+        env={"ICCDEV_BUILD_DIR": str(build_dir), "LD_LIBRARY_PATH": "/existing"},
+        args=("--tool", str(binary), "--variant", "basic"),
+    )
+    logfile = tmp_path / "out" / "logs" / "basic-test.icc.log"
+    assert result.returncode == 0 and rows[0]["status"] == "PASS", result.stdout + result.stderr
+    assert logfile.read_text(encoding="utf-8").splitlines()[0] == (
+        f"{build_dir}/IccProfLib:{build_dir}/IccXML:/existing"
+    )
 
 
 @pytest.mark.parametrize("tool,variable,name,variant", [
