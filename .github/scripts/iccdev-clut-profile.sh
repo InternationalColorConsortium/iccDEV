@@ -126,9 +126,16 @@ if command -v perf >/dev/null 2>&1 && perf stat -e cycles true >/dev/null 2>&1; 
         effective_events=()
         for event in "${perf_events[@]}"; do
             if awk -F, -v target="$event" '
-                {
-                    name = $3
+                function canonical_event(name) {
                     sub(/:.*/, "", name)
+                    if (name ~ /^[^/]+\/[^/]+\/$/) {
+                        sub(/^[^/]+\//, "", name)
+                        sub(/\/$/, "", name)
+                    }
+                    return name
+                }
+                {
+                    name = canonical_event($3)
                     if (name == target && $1 !~ /^</)
                         found = 1
                 }
@@ -140,6 +147,10 @@ if command -v perf >/dev/null 2>&1 && perf stat -e cycles true >/dev/null 2>&1; 
             fi
         done
         perf_events=("${effective_events[@]}")
+        if [ "${#perf_events[@]}" -eq 0 ]; then
+            perf_available=0
+            printf 'combined_probe=unavailable\n' >> "$perf_event_file"
+        fi
     else
         perf_available=0
         printf 'combined_probe=unavailable\n' >> "$perf_event_file"
@@ -193,13 +204,25 @@ for run in $(seq 1 "$runs"); do
     fi
 
     awk -F, -v run="$run" -v elapsed="${elapsed:-}" '
+        BEGIN {
+            CONVFMT = "%.17g"
+            OFMT = "%.17g"
+        }
         function clean(value) {
             gsub(/[[:space:]]/, "", value)
             gsub(/,/, "", value)
             return value
         }
+        function canonical_event(name) {
+            sub(/:.*/, "", name)
+            if (name ~ /^[^/]+\/[^/]+\/$/) {
+                sub(/^[^/]+\//, "", name)
+                sub(/\/$/, "", name)
+            }
+            return name
+        }
         function number(value) {
-            return value ~ /^[0-9]+([.][0-9]+)?$/
+            return value ~ /^[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?$/
         }
         function ratio(numerator, denominator) {
             if (number(numerator) && number(denominator) && denominator > 0)
@@ -207,32 +230,23 @@ for run in $(seq 1 "$runs"); do
             return "n/a"
         }
         {
-            event = clean($3)
-            sub(/:.*/, "", event)
+            event = canonical_event(clean($3))
+            value = clean($1)
+            if (number(value))
+                event_values[event] += value
         }
-        event == "cycles" { cycles = clean($1) }
-        event == "instructions" { instructions = clean($1) }
-        event == "branches" { branches = clean($1) }
-        event == "branch-misses" { branch_misses = clean($1) }
-        event == "cache-references" { cache_references = clean($1) }
-        event == "cache-misses" { cache_misses = clean($1) }
-        event == "mem_inst_retired.all_loads" { memory_loads = clean($1) }
-        event == "mem_inst_retired.all_stores" { memory_stores = clean($1) }
-        event == "fp_arith_inst_retired.scalar" { fp_scalar = clean($1) }
-        event == "fp_arith_inst_retired.4_flops" { fp_4_flops = clean($1) }
-        event == "fp_arith_inst_retired.8_flops" { fp_8_flops = clean($1) }
         END {
-            values[1] = cycles
-            values[2] = instructions
-            values[3] = branches
-            values[4] = branch_misses
-            values[5] = cache_references
-            values[6] = cache_misses
-            values[7] = memory_loads
-            values[8] = memory_stores
-            values[9] = fp_scalar
-            values[10] = fp_4_flops
-            values[11] = fp_8_flops
+            values[1] = event_values["cycles"]
+            values[2] = event_values["instructions"]
+            values[3] = event_values["branches"]
+            values[4] = event_values["branch-misses"]
+            values[5] = event_values["cache-references"]
+            values[6] = event_values["cache-misses"]
+            values[7] = event_values["mem_inst_retired.all_loads"]
+            values[8] = event_values["mem_inst_retired.all_stores"]
+            values[9] = event_values["fp_arith_inst_retired.scalar"]
+            values[10] = event_values["fp_arith_inst_retired.4_flops"]
+            values[11] = event_values["fp_arith_inst_retired.8_flops"]
             for (i = 1; i <= 11; i++)
                 if (!number(values[i]))
                     values[i] = "n/a"

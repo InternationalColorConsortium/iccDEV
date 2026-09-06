@@ -6307,7 +6307,7 @@ if(TARGET iccBenchApply)
       "-DTOOL=$<TARGET_FILE:iccBenchApply>"
       "-DTOOL_ARGS=-metrics;-pixels;4;-repeats;1;1;Testing/sRGB_v4_ICC_preference.icc;0"
       "-DEXPECT_EXIT=zero"
-      "-DEXPECT_MATCH=benchmark_metrics case=chain"
+      "-DEXPECT_MATCHES=benchmark_metrics case=chain;resolved_transform_count=1;pixels_per_apply=4;thread_count_settings=1;timed_applies_per_thread_setting=1;scheduled_applies_per_thread_setting=2;total_timed_applies=1;total_scheduled_applies=2;input_buffer_bytes=48;output_buffer_bytes=48;benchmark_buffer_bytes=96;benchmark_bytes_per_apply=96"
       -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
   )
   set_tests_properties(iccdev.bench-apply-metrics PROPERTIES

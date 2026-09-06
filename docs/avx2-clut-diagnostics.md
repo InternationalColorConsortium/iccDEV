@@ -85,6 +85,10 @@ successfully scheduled together by the profiler's combined probe.
 Floating-point columns retain the exact `perf` event scope rather than claiming
 a cross-CPU FLOP total. Dynamic stack-operand counts are not available from a
 portable counter and require architecture-specific sampling or disassembly.
+On hybrid Intel hosts, `perf` may qualify generic events as `cpu_core/...` and
+`cpu_atom/...`; the profiler normalizes those names and sums their reported
+values into the matching generic column. A combined probe that yields no usable
+events is reported as unavailable and the timed run proceeds without `perf`.
 A ratio describes this end-to-end CTest envelope; it is not a kernel-only or
 per-pixel value. The report also includes a `strace -f -c` summary when
 available, and optional `perf.data`, folded stacks, and an SVG flamegraph.
