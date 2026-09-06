@@ -17,10 +17,17 @@ Run local analysis with:
 .github/scripts/run-codeql-local.sh
 ```
 
-The bootstrap path in `ci-codeql-security.yml` and
-`ci-preflight-safety.yml` is pinned to CodeQL bundle 2.26.4 and verifies the
+The bootstrap path in `ci-codeql-security.yml`, `ci-preflight-safety.yml` and
+`ci-codeql-query-tests.yml` is pinned to CodeQL bundle 2.26.4 and verifies the
 official Linux release-asset SHA-256 before extraction. Update the version and
-digest together in both workflows.
+digest together in all three workflows -- a bump applied to only some of them
+fails the others at their next `sha256sum -c`.
+
+`ci-codeql-query-tests.yml` runs the checked-in query unit tests under
+`.github/codeql-queries/test` on any PR touching `.github/codeql-queries/**`.
+It builds no database. Unlike the other two it never falls back to a `codeql`
+already on the runner's PATH, because `.expected` files assert extractor
+line/column locations exactly and an unpinned CLI can flip them.
 
 The GitHub Actions CodeQL workflow uploads only the standard
 `cpp-security-and-quality` SARIF. Run custom iccDEV query suites locally and
