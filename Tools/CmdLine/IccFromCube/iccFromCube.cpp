@@ -437,7 +437,27 @@ protected:
     return rv;
   }
 
-  bool isEOF() { return m_f ? feof(m_f)!=0 : true; }
+  // ferror() belongs in this test as much as feof().  A read that FAILS -- a directory
+  // (EISDIR), an I/O error mid-file -- makes fgetc() return EOF while leaving feof()
+  // FALSE and setting ferror() instead, so getNextLine() returned an empty string and
+  // the three `while (!isEOF())` loops below never advanced: iccFromCube spun forever
+  // on a directory argument, at exit code 124 under any timeout (#2414, CWE-835).
+  //
+  // This is the whole fix, deliberately.  Probing the path with icIsReadableFile()
+  // before opening it looks like the tidier guard and is a REGRESSION: the probe
+  // opens, reads and closes, so a second fopen() of a single-reader FIFO blocks on a
+  // writer that has already been consumed.  Measured -- `mkfifo p; cat x.cube > p &`
+  // then iccFromCube on p exits 254 here and hung at 124 with that guard in place.
+  // Validate the stream you are holding, not the path you are about to open again.
+  //
+  // It does NOT terminate every unreadable stream, and the limit is worth naming:
+  // getNextLine()'s own `while ((c = fgetc(m_f)) != EOF && c != '\n')` never consults
+  // isEOF(), so an ENDLESS readable stream still spins -- /dev/zero hangs at 124 both
+  // before and after this change, at a flat RSS, so it is CPU exhaustion rather than an
+  // allocation blow-up.  That is a separate pre-existing defect in the line reader:
+  // filed as #2442, because bounding it changes what a legitimately long line means and
+  // MAX_LINE_LEN below caps what is STORED, not what is CONSUMED.
+  bool isEOF() { return m_f ? (feof(m_f)!=0 || ferror(m_f)!=0) : true; }
 
 // Longest line iccFromCube keeps the text of.  The .cube format sets no line
 // length limit, but reading a line unbounded would let one pathological line

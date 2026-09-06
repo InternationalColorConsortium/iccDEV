@@ -7714,6 +7714,38 @@ if(TARGET iccApplyProfiles AND TARGET iccApplySearch
     SKIP_RETURN_CODE 77)
 endif()
 
+# #2414: fopen() succeeds on a directory, so a directory argument reaches code
+# that believes it opened a file.  #2411 hit this in iccFromXml's schema lookup;
+# the same shape HANGS iccFromCube (isEOF() tested feof() alone, while a failed
+# read sets ferror() and leaves feof() false) and hangs iccFromXml on a FIFO
+# schema -- all CWE-835.  Three defect cases fail against ee14d031, two of them
+# with rc=124; the five controls pass on BOTH builds, which is what proves the
+# guard is not too eager.  One control is a FIFO into iccFromCube, guarding the
+# FIX rather than the defect: a path probe before open() takes a named pipe from
+# 254 to 124, which is why iccFromCube does not use the shared guard.
+#
+# Deliberately NOT labelled "slow", so it runs on the pull_request path:
+# ci-pr-action.yml pins ctest_mode=fast, which drops the slow label (#2412).
+#
+# 300s for a 220s worst case (7 spawns: 20+60+20+20+20+60+20), matching the two
+# registrations above.  240 would leave 20s for eight process spawns, and on a
+# sanitizer or loaded leg a run where two cases genuinely time out overshoots it
+# -- CTest then kills the script, so none of its per-case [FAIL] lines or log
+# tails are produced and the lane reports a bare "Timeout" for precisely the
+# regression this suite exists to diagnose.
+if(TARGET iccFromCube AND TARGET iccFromXml)
+  iccdev_add_script_test(
+    iccdev.directory-read-guard-regression
+    300
+    "iccdev;tools;cli;fromcube;fromxml;directory;issue-2414;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2414-directory-read-guard-tests.sh"
+  )
+  # Exits 77 when neither tool is built or no case was measured.
+  set_tests_properties(iccdev.directory-read-guard-regression PROPERTIES
+    SKIP_RETURN_CODE 77)
+endif()
+
 # The iccApply* half of the same CLI-contract family (#2405).  Guarded on all
 # four targets because the script measures all four and its "nothing measured"
 # guard would otherwise turn a partial build into a skip that hides real cases.

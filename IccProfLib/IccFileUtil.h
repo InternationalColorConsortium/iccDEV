@@ -65,9 +65,14 @@
 #include <cstdio>
 #include <string>
 
+// sys/types.h + sys/stat.h are needed on BOTH arms now: icIsReadableFile() tests for a
+// regular file on Windows too, via _stat/_S_IFREG.  They were POSIX-guarded while only
+// the POSIX arm used them.
+#include <sys/types.h>
+#include <sys/stat.h>
+
 #if !defined(_WIN32)
 #include <fcntl.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
@@ -202,6 +207,104 @@ inline std::string icSanitizeConsoleText(const char* szText)
 inline std::string icSanitizeConsoleText(const std::string& text)
 {
   return icSanitizeConsoleText(text.c_str());
+}
+
+// True when szPath names a regular file a byte can actually be read from.
+//
+// fopen(dir, "r") SUCCEEDS on glibc, so "it opened" does not mean "it is a file":
+// iccFromXml's -v=<some-directory> slipped past an openability guard and produced a
+// four-line libxml2 cascade naming the XML file instead of the one-line schema error
+// the guard existed to give (#2411).
+//
+// BOTH tests are needed, and each covers what the other misses -- measured, not assumed.
+//
+// The regular-file test alone is not enough: it says nothing about whether the file can
+// actually be read, which is the case #2411 was about.
+//
+// The read alone is not enough either.  With this function's O_NONBLOCK open, read() on
+// a writer-less FIFO returns 0 -- end-of-file, indistinguishable from an empty regular
+// file -- so the read arm ACCEPTS it, and the caller's own blocking reopen then hangs.
+// Deleting the S_ISREG line and keeping everything else makes exactly that happen:
+// the suite's fromxml-schema-fifo case goes from rc=1 to a 124 timeout.  (An earlier
+// note here claimed read() failed with EAGAIN in that case.  It does not; it returns 0.)
+//
+// ANSWERS ONE QUESTION: "is this a REGULAR file I can read a byte from".  It is for a
+// caller that will open the path AGAIN afterwards -- a schema handed to libxml2, a
+// candidate probed while walking PATH -- so anything that cannot survive being opened
+// twice must be refused here rather than accepted.  Hence the S_ISREG test: a FIFO
+// passes a naive read-a-byte probe and then HANGS the caller's reopen, because the
+// probe has already consumed the single writer's rendezvous.  Measured on 00b91b56,
+// before this arm existed: `iccFromXml x.xml o.icc -v=<a fifo>` sat at exit 124 both
+// with a writer and without one (a read-open of a writer-less FIFO blocks on its own).
+//
+// O_NONBLOCK is what makes the refusal cheap rather than another hang: it lets the
+// open of a writer-less FIFO return immediately so fstat() can reject it.  It has no
+// effect on a regular file, which never blocks.
+//
+// A caller whose input may LEGITIMATELY be a pipe or a device must not use this at all
+// -- it would refuse valid input.  Validate the HANDLE you are holding instead: test
+// ferror() on the stream you already opened.  That is what iccFromCube does, and why
+// it does not call this.
+//
+// An empty regular file is READABLE: read() returns 0 with no error, which is why the
+// test is n >= 0 rather than n == 1.
+//
+// Still a diagnostic guard, not a security boundary -- it answers the question at one
+// instant and the caller opens the path again.  Where the identity of the opened object
+// matters, keep the validated handle instead: see icWriteDocumentAndClose() in
+// Tools/CmdLine/IccCmdLineUtil.h.
+inline bool icIsReadableFile(const char* szPath)
+{
+  if (!szPath || !szPath[0])
+    return false;
+
+#if !defined(_WIN32)
+  int fd = open(szPath, O_RDONLY | O_NONBLOCK);
+  if (fd < 0)
+    return false;
+
+  struct stat st;
+  if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+    close(fd);
+    return false;
+  }
+
+  char ch;
+  ssize_t nRead = read(fd, &ch, 1);
+  close(fd);
+  return nRead >= 0;
+#else
+  // The regular-file test is needed HERE TOO, and read-a-byte cannot stand in for it.
+  // Win32 resolves the reserved DOS device names (NUL, CON, AUX, COM1-9, LPT1-9)
+  // anywhere on a path, with any extension: fopen("NUL", "rb") SUCCEEDS and fread()
+  // then reports EOF with no error -- exactly what an empty regular file looks like.
+  // So a read-only test returns TRUE for NUL, and `iccFromXml in.xml out.icc -v=NUL`
+  // would pass this guard, leaving validation silently skipped at exit 0: the very
+  // failure the caller added the guard to remove (#2411).  _S_IFREG rejects it.
+  //
+  // _S_IFMT/_S_IFREG rather than S_ISREG(): MSVC's <sys/stat.h> defines the former
+  // pair but not the macro, and IccIO.cpp guards its S_ISREG() helpers out of the
+  // Windows build for that reason.  A path that does not exist yet cannot be stat()ed
+  // at all -- Tools/CmdLine/IccApplyProfiles/TiffImg.cpp:isWindowsDevicePath() solves
+  // that neighbouring problem name-first, for the WRITE side.
+  //
+  // No O_NONBLOCK equivalent here, and none is needed: the writer-less-FIFO block this
+  // guard avoids on POSIX is not reachable through a Win32 path a schema is spelled
+  // with.  Read-a-byte otherwise means the same thing: stdio fills a whole buffer, so
+  // this remains a test for seekable inputs.
+  struct _stat st;
+  if (_stat(szPath, &st) != 0 || (st.st_mode & _S_IFMT) != _S_IFREG)
+    return false;
+
+  FILE* f = fopen(szPath, "rb");
+  if (!f)
+    return false;
+
+  char ch;
+  bool bReadable = (fread(&ch, 1, 1, f) == 1) || (feof(f) && !ferror(f));
+  fclose(f);
+  return bReadable;
+#endif
 }
 
 inline FILE* icOpenRegularWriteFile(const char* szFname, const char* szMode)
