@@ -13,6 +13,7 @@ FROM ubuntu:26.04@sha256:678c6550cc43645e08669028bc177f50be4e7c5b8cca677067b1914
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ARG GIT_COMMIT=unknown
+ARG BUILD_JOBS=32
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -114,6 +115,7 @@ ENV CC=clang \
     ASAN_SYMBOLIZER_PATH=/usr/bin/llvm-symbolizer \
     ICCDEV_ROOT=/workspace/iccDEV \
     ICCDEV_BUILD_DIR=/workspace/build \
+    ICCDEV_VALIDATION_LIBRARY=/opt/iccdev-validation/lib/libIccProfLib2.so \
     ICCDEV_TOOLS_DIR=/workspace/build/Tools \
     ICCDEV_TESTING_DIR=/workspace/iccDEV/Testing \
     ICCDEV_MCP_PYTHON=/opt/iccdev-mcp/bin/python \
@@ -236,9 +238,9 @@ RUN rm -rf .git \
      -DENABLE_SHARED_LIBS=ON \
      -DENABLE_STATIC_LIBS=ON \
      -Wno-dev \
- && cmake --build /workspace/build --parallel "$(nproc)"
+ && cmake --build /workspace/build --parallel "$BUILD_JOBS"
 
-RUN cmake --build /workspace/build --target build-test-binaries --parallel "$(nproc)"
+RUN cmake --build /workspace/build --target build-test-binaries --parallel "$BUILD_JOBS"
 
 # Regression helpers are EXCLUDE_FROM_ALL, so this has to follow
 # build-test-binaries: before it the executable does not exist and ctest
@@ -252,6 +254,10 @@ RUN git checkout -- silence.txt \
  && test -z "$(git status --porcelain --untracked-files=all)"
 
 USER root
+RUN bash /workspace/iccDEV/.github/ci/docker/build-validation-library.sh \
+      /workspace/iccDEV /opt/iccdev-validation/lib "$BUILD_JOBS" \
+ && /opt/iccdev-mcp/bin/python -c "import iccdev; from pathlib import Path; assert iccdev.native_validation_available(); result = iccdev.validate_profile_file(Path(\"/workspace/iccDEV/Testing/sRGB_v4_ICC_preference.icc\")); assert result.status == iccdev.ValidationStatus.OK, result"
+
 RUN chmod 0755 /usr/local/bin/iccdev-banner \
  && chmod 0755 /usr/local/bin/iccdev-fuzz-env \
  && chmod 0755 /usr/local/bin/iccdev-generate-profiles \

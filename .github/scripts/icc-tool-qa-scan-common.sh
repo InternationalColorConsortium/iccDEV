@@ -69,7 +69,8 @@ sanitize_filename() {
 }
 
 TOOL_NAME="${ICC_QA_TOOL_NAME:?ICC_QA_TOOL_NAME is required}"
-TOOL="${ICC_QA_TOOL:?ICC_QA_TOOL is required}"
+TOOL="${ICC_QA_TOOL-}"
+TOOL_EXPLICIT="${ICC_QA_TOOL_EXPLICIT-}"
 TOOL_USAGE="${ICC_QA_TOOL_USAGE:-$TOOL_NAME profile.icc}"
 VARIANTS="${ICC_QA_VARIANTS:?ICC_QA_VARIANTS is required}"
 INPUT_DIR="."
@@ -127,7 +128,7 @@ USAGE
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --tool) TOOL="$2"; shift 2 ;;
+    --tool) TOOL="$2"; TOOL_EXPLICIT=x; shift 2 ;;
     --out-dir) OUTDIR="$2"; shift 2 ;;
     --timeout) TIMEOUT_SECONDS="$2"; shift 2 ;;
     --recursive) MAX_DEPTH=0; shift ;;
@@ -177,8 +178,30 @@ if [[ "$LIST_VARIANTS" -eq 1 ]]; then
   exit 0
 fi
 
-if [[ ! -x "$TOOL" ]]; then
+if [[ -z "$TOOL_EXPLICIT" ]]; then
+  # Match build-tree subdirectories and flat installed tool directories.
+  # Explicit per-tool overrides never fall back, even when empty or invalid.
+  for tools_dir in "${ICCDEV_TOOLS_DIR-}" "$REPO_ROOT/Build/Tools"; do
+    [[ -n "$tools_dir" ]] || continue
+    for candidate in "$tools_dir/${ICC_QA_TOOL_SUBDIR:?}/$TOOL_NAME" "$tools_dir/$TOOL_NAME"; do
+      if [[ -f "$candidate" && -x "$candidate" ]]; then
+        TOOL="$candidate"
+        break 2
+      fi
+    done
+  done
+  if [[ -z "$TOOL" ]]; then
+    TOOL="$(command -v "$TOOL_NAME" || true)"
+  fi
+fi
+
+if [[ ! -f "$TOOL" || ! -x "$TOOL" ]]; then
   echo "ERROR: $TOOL_NAME not executable: $TOOL" >&2
+  exit 2
+fi
+
+if [[ "$TOOL_NAME" == "iccPawgReport" ]] && ! command -v python3 >/dev/null; then
+  echo "ERROR: PAWG structured classification requires python3" >&2
   exit 2
 fi
 
@@ -227,6 +250,9 @@ QA_NOT_RUN_RE='(\[NOT RUN\]|(^|[[:space:]])NOT RUN:[[:space:]]*[1-9][0-9]*)'
 COMPLIANT_RE='(^|[^[:alpha:]])(Compliant|compliant|COMPLIANT|Non-Compliant|non-compliant|NON-COMPLIANT|Noncompliant|noncompliant)([^[:alpha:]]|$)'
 MATCH_RE="$SANITIZER_RE|$SIGNAL_RE|$ERROR_RE|$WARNING_RE"
 MATCH_RE+="|$QA_FAIL_RE|$QA_WARN_RE|$QA_GAP_RE|$QA_NOT_RUN_RE|$COMPLIANT_RE"
+if [[ "$TOOL_NAME" == "iccPawgReport" ]]; then
+  MATCH_RE="$SANITIZER_RE|$SIGNAL_RE"
+fi
 
 safe_log_name() {
   local name
@@ -243,7 +269,7 @@ classify_exit() {
   local exit_code="$1" sanitizer="$2" signals="$3" issue_count="$4"
   if [[ "$sanitizer" -gt 0 || "$signals" -gt 0 ]]; then
     printf 'CRASH'
-  elif [[ "$exit_code" -eq 134 || "$exit_code" -eq 136 || "$exit_code" -eq 137 || "$exit_code" -eq 139 ]]; then
+  elif [[ "$exit_code" -ge 128 ]]; then
     printf 'CRASH'
   elif [[ "$exit_code" -eq 124 ]]; then
     printf 'TIMEOUT'
@@ -329,6 +355,13 @@ run_variant() {
   qa_gap_count="$(count_matches "$QA_GAP_RE" "$logfile")"
   qa_not_run_count="$(count_matches "$QA_NOT_RUN_RE" "$logfile")"
   compliant_count="$(count_matches "$COMPLIANT_RE" "$logfile")"
+  if [[ "$TOOL_NAME" == "iccPawgReport" ]]; then
+    local pawg_counts
+    pawg_counts="$(python3 "$SCRIPT_DIR/icc-pawg-qa-classify.py" "$variant" "$logfile")"
+    read -r errors qa_fail_count qa_warn_count qa_gap_count qa_not_run_count <<< "$pawg_counts"
+    warnings=0
+    compliant_count=0
+  fi
   line_count="$(wc -l < "$logfile" | tr -d '[:space:]')"
   issue_count=$((errors + warnings + qa_fail_count + qa_warn_count + qa_gap_count + qa_not_run_count))
   status="$(classify_exit "$exit_code" "$sanitizer" "$signals" "$issue_count")"
@@ -349,6 +382,11 @@ run_variant() {
     "$errors" "$warnings" "$qa_fail_count" "$qa_warn_count" "$qa_gap_count" \
     "$qa_not_run_count" "$compliant_count" >> "$RESULTS"
   emit_findings "$rel" "$variant" "$logfile" "$status" "$exit_code" | tee -a "$FINDINGS"
+  if [[ "$TOOL_NAME" == "iccPawgReport" && "$issue_count" -gt 0 ]]; then
+    printf "[%s][%s] PAWG errors=%s FAIL=%s WARN=%s GAP=%s NOT RUN=%s (see log)\n" \
+      "$(sanitize_line "$rel")" "$(sanitize_line "$variant")" "$errors" \
+      "$qa_fail_count" "$qa_warn_count" "$qa_gap_count" "$qa_not_run_count" | tee -a "$FINDINGS"
+  fi
   compact_logfile "$logfile" "$line_count"
 }
 

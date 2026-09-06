@@ -7,7 +7,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 export ICC_QA_TOOL_NAME="iccRoundTrip"
-export ICC_QA_TOOL="${ICC_ROUND_TRIP:-$REPO_ROOT/Build/Tools/IccRoundTrip/iccRoundTrip}"
+export ICC_QA_TOOL="${ICC_ROUND_TRIP-}"
+export ICC_QA_TOOL_EXPLICIT="${ICC_ROUND_TRIP+x}"
+export ICC_QA_TOOL_SUBDIR="IccRoundTrip"
 export ICC_QA_TOOL_USAGE="iccRoundTrip profile.icc {rendering_intent=1 {use_mpe=0}}"
 export ICC_QA_OUT_PREFIX="roundtrip-qa"
 export ICC_QA_TIMEOUT_DEFAULT="${ICC_ROUNDTRIP_QA_TIMEOUT:-30}"
@@ -21,4 +23,5 @@ intent-2-mpe||2 1
 intent-3-mpe||3 1'
 
 # shellcheck source=.github/scripts/icc-tool-qa-scan-common.sh
+# shellcheck disable=SC1091
 source "$SCRIPT_DIR/icc-tool-qa-scan-common.sh"

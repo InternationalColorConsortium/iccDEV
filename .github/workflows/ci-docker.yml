@@ -196,7 +196,8 @@ jobs:
             ctest --test-dir "$ICCDEV_BUILD_DIR" -N --no-tests=error >/dev/null
           '
 
-      - name: Verify MCP runtime
+      - name: Verify real MCP and REST runtime
+        id: runtime-smoke
         env:
           BASH_ENV: /dev/null
           TEST_IMAGE: ${{ steps.test-image.outputs.image }}
@@ -205,28 +206,17 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          help_output="$(docker run --rm \
-            --entrypoint /usr/local/bin/iccdev-mcp-entrypoint "$TEST_IMAGE" --help)"
-          grep -q '^usage: iccdev-mcp ' <<< "$help_output"
-          initialize_request='{"jsonrpc":"2.0","id":1,"method":"initialize",'
-          initialize_request+='"params":{"protocolVersion":"2025-06-18","capabilities":{},'
-          initialize_request+='"clientInfo":{"name":"ci","version":"1.0"}}}'
-          initialize_response="$(printf '%s\n' "$initialize_request" | \
-            timeout 30 docker run --rm -i --entrypoint iccdev-mcp "$TEST_IMAGE")"
-          python3 -c '
-          import json
-          import sys
-          response = json.loads(sys.stdin.readline())
-          assert response["result"]["serverInfo"]["name"] == "iccdev-mcp"
-          ' <<< "$initialize_response"
-          docker run --rm --entrypoint python "$TEST_IMAGE" -c '
-          from iccdev_mcp.cli_tools import TOOL_BINARIES
-          from iccdev_mcp.server import health_check
-          health = health_check()
-          assert health["python_api"]["available"]
-          assert set(health["cli_tools"]["available"]) == set(TOOL_BINARIES)
-          assert not health["cli_tools"]["missing"]
-          '
+          python3 .github/scripts/iccdev-container-smoke.py "$TEST_IMAGE" \
+            --report-dir out/container-smoke
+
+      - name: Upload runtime smoke diagnostics on failure
+        if: ${{ failure() && steps.runtime-smoke.outcome == 'failure' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: iccdev-container-smoke
+          path: out/container-smoke/
+          retention-days: 7
+          if-no-files-found: error
 
       - name: Generate SBOM
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
