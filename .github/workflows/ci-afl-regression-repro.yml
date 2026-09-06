@@ -118,6 +118,10 @@ jobs:
             echo "- \`iccdev.apply-throughput ... Passed\` confirms the #2207 regression executed."
             echo "- \`100% tests passed, 0 tests failed\` confirms the CTest result."
             echo "- 27 CSV rows ending in \`,ok\` confirm 9 suite cases at each of 1, 2, and 8 threads."
+            echo "- 9 \`benchmark_metrics case=...\` blocks show the exact benchmark-buffer"
+            echo "  footprint and workload for every suite case."
+            echo "- Each metrics block must contain internally consistent buffer sizes and the"
+            echo "  architecture-specific instruction, stack, and FLOP collection boundaries."
             echo "- \`CHECKSUM MISMATCH\`, \`SOME CASES FAILED\`, and \`FAIL:\` must be absent."
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
@@ -150,7 +154,7 @@ jobs:
             -DENABLE_WXWIDGETS=OFF \
             -DENABLE_IMAGE_TOOLS=OFF
           cmake --build Build/apply-throughput-repro \
-            --target build-test-binaries \
+            --target build-test-binaries iccFromXml \
             --parallel "$(nproc)"
 
       - name: Run iccBenchApply regression
@@ -163,6 +167,8 @@ jobs:
           unset GITHUB_TOKEN || true
           test_log="Build/apply-throughput-repro/iccdev.apply-throughput.log"
           threaded_log="Build/apply-throughput-repro/iccdev.apply-throughput-threaded.log"
+          metrics_log="Build/apply-throughput-repro/iccdev.apply-throughput-metrics.log"
+          metrics_verified="Build/apply-throughput-repro/iccdev.apply-throughput-metrics-verified"
           ctest --test-dir Build/apply-throughput-repro \
             --output-on-failure \
             --no-tests=error \
@@ -172,7 +178,8 @@ jobs:
           ICCDEV_BENCH_SOURCE_ROOT="$PWD" \
             ICCDEV_BENCH_BUILD_ROOT="$PWD/Build/apply-throughput-repro" \
             Build/apply-throughput-repro/Tools/IccBenchApply/iccBenchApply \
-              -suite -csv -pixels 65536 -repeats 3 -threads 1,2,8 | tee "$threaded_log"
+              -metrics -suite -csv -pixels 65536 -repeats 3 -threads 1,2,8 \
+              2> >(tee "$metrics_log" >&2) | tee "$threaded_log"
 
           if ! grep -qE 'Test +#[0-9]+: iccdev.create-profiles.*Passed' "$test_log"; then
             echo "[FAIL] Missing successful iccdev.create-profiles fixture signal" >&2
@@ -227,11 +234,92 @@ jobs:
             echo "[FAIL] Missing or inconsistent 1,2,8-thread CSV replay signal" >&2
             exit 1
           fi
+          if ! awk '
+            function finish_block() {
+              if (active &&
+                  !(have_xforms && have_pixels && have_repeats && have_applies &&
+                    have_input && have_output && have_total && have_bytes_per_apply &&
+                    have_instructions && have_stack && have_flops &&
+                    total == input + output && bytes_per_apply == total)) {
+                invalid = 1
+              }
+            }
+            /^benchmark_metrics case=/ {
+              finish_block()
+              case_name = substr($2, 6)
+              if (!case_name || seen[case_name]++) {
+                invalid = 1
+              }
+              block_count++
+              active = 1
+              input = output = total = bytes_per_apply = 0
+              have_input = have_output = have_total = have_bytes_per_apply = 0
+              have_pixels = have_repeats = have_applies = have_xforms = 0
+              have_instructions = have_stack = have_flops = 0
+              next
+            }
+            /^  resolved_transform_count=/ {
+              have_xforms = ($0 ~ /^  resolved_transform_count=[1-9][0-9]*$/)
+              next
+            }
+            /^  pixels_per_apply=/ {
+              have_pixels = ($0 == "  pixels_per_apply=65536")
+              next
+            }
+            /^  timed_applies_per_thread=/ {
+              have_repeats = ($0 == "  timed_applies_per_thread=3")
+              next
+            }
+            /^  total_applies_per_thread=/ {
+              have_applies = ($0 == "  total_applies_per_thread=4")
+              next
+            }
+            /^  input_buffer_bytes=/ {
+              input = substr($0, 22) + 0
+              have_input = input > 0
+              next
+            }
+            /^  output_buffer_bytes=/ {
+              output = substr($0, 23) + 0
+              have_output = output > 0
+              next
+            }
+            /^  benchmark_buffer_bytes=/ {
+              total = substr($0, 26) + 0
+              have_total = total > 0
+              next
+            }
+            /^  benchmark_bytes_per_apply=/ {
+              bytes_per_apply = substr($0, 29) + 0
+              have_bytes_per_apply = bytes_per_apply > 0
+              next
+            }
+            /^  hardware_instructions=/ {
+              have_instructions = ($0 == "  hardware_instructions=external-profiler-required")
+              next
+            }
+            /^  stack_operands=/ {
+              have_stack = ($0 == "  stack_operands=compiler-abi-specific")
+              next
+            }
+            /^  floating_point_operations=/ {
+              have_flops = ($0 == "  floating_point_operations=profile-and-isa-specific")
+              next
+            }
+            END {
+              finish_block()
+              exit (invalid || block_count != 9) ? 1 : 0
+            }
+          ' "$metrics_log"; then
+            echo "[FAIL] Missing or inconsistent benchmark metrics replay signal" >&2
+            exit 1
+          fi
+          touch "$metrics_verified"
           if grep -qE 'CHECKSUM MISMATCH|SOME CASES FAILED|FAIL:' "$test_log" "$threaded_log"; then
             echo "[FAIL] iccBenchApply reported a correctness failure" >&2
             exit 1
           fi
-          echo "[OK] Verified fixture, CTest, and 1,2,8-thread checksum signals"
+          echo "[OK] Verified fixture, CTest, metrics, and 1,2,8-thread checksum signals"
 
       - name: Report replay result
         if: ${{ always() }}
@@ -246,10 +334,13 @@ jobs:
 
           test_log="Build/apply-throughput-repro/iccdev.apply-throughput.log"
           threaded_log="Build/apply-throughput-repro/iccdev.apply-throughput-threaded.log"
+          metrics_log="Build/apply-throughput-repro/iccdev.apply-throughput-metrics.log"
+          metrics_verified="Build/apply-throughput-repro/iccdev.apply-throughput-metrics-verified"
           fixture_signal="FAIL"
           regression_signal="FAIL"
           ctest_signal="FAIL"
           threaded_signal="FAIL"
+          metrics_signal="FAIL"
           checksum_signal="FAIL"
           overall_signal="FAIL"
 
@@ -304,6 +395,9 @@ jobs:
           ' "$threaded_log"; then
             threaded_signal="PASS"
           fi
+          if [ -f "$metrics_log" ] && [ -f "$metrics_verified" ]; then
+            metrics_signal="PASS"
+          fi
           if [ -f "$test_log" ] && [ -f "$threaded_log" ] && \
              ! grep -qE 'CHECKSUM MISMATCH|SOME CASES FAILED|FAIL:' "$test_log" "$threaded_log"; then
             checksum_signal="PASS"
@@ -313,6 +407,7 @@ jobs:
              [ "$regression_signal" = "PASS" ] && \
              [ "$ctest_signal" = "PASS" ] && \
              [ "$threaded_signal" = "PASS" ] && \
+             [ "$metrics_signal" = "PASS" ] && \
              [ "$checksum_signal" = "PASS" ]; then
             overall_signal="PASS"
           fi
@@ -328,6 +423,7 @@ jobs:
             echo "| #2207 throughput regression | ${regression_signal} |"
             echo "| CTest aggregate | ${ctest_signal} |"
             echo "| 9 cases x 3 thread counts, CSV status ok | ${threaded_signal} |"
+            echo "| 9 metrics blocks, buffer values and collection boundaries | ${metrics_signal} |"
             echo "| No correctness-failure marker | ${checksum_signal} |"
             echo ""
             echo "**Overall replay signal**: ${overall_signal}"

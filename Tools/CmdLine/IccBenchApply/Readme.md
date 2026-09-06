@@ -51,6 +51,7 @@ matching. The same code means different things in the two families (#2270).
 | `-threads L` | comma list of thread counts, e.g. `1,2,8` (default `1`) |
 | `-perxform` | per-xform breakdown, including PCS steps |
 | `-leaf` | isolated hot leaf functions |
+| `-metrics` | report the benchmark buffers and workload; with `-csv`, writes metrics to stderr |
 | `-suite` | run the built-in case table; takes no chain arguments |
 | `-csv` | machine-readable output |
 
@@ -69,6 +70,27 @@ iccBenchApply -suite -csv -threads 1,2,8
 # the built-in table, bounded for a quick check
 iccBenchApply -suite -pixels 65536 -repeats 3
 ```
+
+## Metrics report
+
+`-metrics` reports the exact source and destination benchmark-buffer sizes,
+their total allocation footprint, the logical input-plus-output buffer capacity
+per scheduled apply, pixel count, and warm-up plus timed apply count. It reports
+once for a command-line chain and once for each resolved `-suite` case.
+`benchmark_bytes_per_apply` is therefore a logical capacity value, not a claim
+about physical DRAM traffic: cache residency, write allocation, prefetching,
+and transform-local storage are platform- and profile-dependent. These values
+describe the tool's allocations and scheduled calls; they do not claim to
+represent all memory touched inside a profile's resolved transform graph.
+
+The report intentionally does not invent process-independent values for
+hardware instructions, stack operands, or floating-point operations. Each
+depends on the compiler, target ABI, optimization level, resolved transforms,
+and scalar/SSE/AVX dispatch. The current Linux profiling path already collects
+the accurate process instruction count with `perf stat`; use
+`.github/scripts/iccdev-clut-profile.sh` for that evidence. FLOP hardware
+events are CPU-model-specific, and stack operands require disassembly or a
+sampling profile, so neither is portable benchmark output.
 
 `-suite` and a chain are alternatives, not a chain with a default. Passing both
 is refused rather than silently resolved in favour of the table, and `-perxform`

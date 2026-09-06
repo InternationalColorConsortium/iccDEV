@@ -77,7 +77,10 @@ FLAMEGRAPH_DIR=/path/to/FlameGraph \
 ```
 
 The report includes per-run wall/user/system time and RSS, median and p95
-elapsed time, `perf stat` counters when permitted by the host, a `strace -f -c`
+elapsed time, raw `perf stat` counters when permitted by the host, and derived
+IPC, instruction-rate, branch-miss-rate, and cache-miss-rate values in
+`perf-derived.tsv`. A ratio describes this end-to-end CTest envelope; it is not
+a kernel-only or per-pixel value. The report also includes a `strace -f -c`
 summary when available, and optional `perf.data`, folded stacks, and an SVG
 flamegraph. `perf` hardware counters may be unavailable when
 `kernel.perf_event_paranoid` disallows them; this is reported rather than

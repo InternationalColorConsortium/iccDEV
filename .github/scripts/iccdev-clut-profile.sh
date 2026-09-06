@@ -7,6 +7,7 @@
 ###############################################################################
 
 set -euo pipefail
+export LC_ALL=C
 
 if [ "$#" -ne 2 ]; then
     echo "usage: $0 BUILD_DIR OUTPUT_DIR" >&2
@@ -55,6 +56,7 @@ fi
 
 mkdir -p "$output_dir"
 samples_file="$output_dir/samples.tsv"
+derived_perf_file="$output_dir/perf-derived.tsv"
 environment_file="$output_dir/environment.txt"
 
 runner=()
@@ -96,6 +98,8 @@ fi
 
 printf 'run\telapsed_s\tuser_s\tsystem_s\tmax_rss_kb\tstatus\tlog\tperf_stat\n' \
     > "$samples_file"
+printf 'run\tcycles\tinstructions\tbranches\tbranch_misses\tcache_references\tcache_misses\tinstructions_per_cycle\tinstructions_per_second\tbranch_miss_rate\tcache_miss_rate\n' \
+    > "$derived_perf_file"
 for run in $(seq 1 "$runs"); do
     log_file="$output_dir/run-${run}.log"
     time_file="$output_dir/run-${run}.time"
@@ -132,6 +136,47 @@ context-switches,cpu-migrations \
         echo "[FAIL] telemetry was not produced in run $run: $telemetry_file" >&2
         exit 1
     fi
+
+    awk -F, -v run="$run" -v elapsed="${elapsed:-}" '
+        function clean(value) {
+            gsub(/[[:space:]]/, "", value)
+            gsub(/,/, "", value)
+            return value
+        }
+        function number(value) {
+            return value ~ /^[0-9]+([.][0-9]+)?$/
+        }
+        function ratio(numerator, denominator) {
+            if (number(numerator) && number(denominator) && denominator > 0)
+                return numerator / denominator
+            return "n/a"
+        }
+        {
+            event = clean($3)
+            sub(/:.*/, "", event)
+        }
+        event == "cycles" { cycles = clean($1) }
+        event == "instructions" { instructions = clean($1) }
+        event == "branches" { branches = clean($1) }
+        event == "branch-misses" { branch_misses = clean($1) }
+        event == "cache-references" { cache_references = clean($1) }
+        event == "cache-misses" { cache_misses = clean($1) }
+        END {
+            values[1] = cycles
+            values[2] = instructions
+            values[3] = branches
+            values[4] = branch_misses
+            values[5] = cache_references
+            values[6] = cache_misses
+            for (i = 1; i <= 6; i++)
+                if (!number(values[i]))
+                    values[i] = "n/a"
+            printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+                run, values[1], values[2], values[3], values[4], values[5],
+                values[6], ratio(values[2], values[1]),
+                ratio(values[2], elapsed), ratio(values[4], values[3]),
+                ratio(values[6], values[5])
+        }' "$perf_file" >> "$derived_perf_file"
 done
 
 if command -v strace >/dev/null 2>&1; then
@@ -176,4 +221,5 @@ awk -F '\t' '
 
 printf 'perf_stat=%s\n' "$([ "$perf_available" -eq 1 ] && echo available || echo unavailable)" \
     >> "$output_dir/summary.txt"
+printf 'perf_derived=%s\n' "$derived_perf_file" >> "$output_dir/summary.txt"
 printf '[PASS] profile report: %s\n' "$output_dir"

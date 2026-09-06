@@ -208,9 +208,12 @@ create a job-local Docker image.
 ### CodeQL Ready
 
 `ci-codeql-security.yml` uses the `codeql-ready` label to trigger the full
-CodeQL security workflow for a PR. Use this label when a change touches C/C++,
-CMake, CodeQL query logic, parser hardening, or security-sensitive automation
-and the fast preflight checks are not enough.
+CodeQL security workflow for an open same-repository PR. Labelling a merged PR
+does not rerun CodeQL: the push trigger already analyzes `master`, and a
+label-triggered run would use the PR base commit's trusted query set while
+publishing its results against `master`. Use this label when a change touches
+C/C++, CMake, CodeQL query logic, parser hardening, or security-sensitive
+automation and the fast preflight checks are not enough.
 
 ## Maintainer Change Process
 

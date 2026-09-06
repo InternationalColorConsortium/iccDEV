@@ -6297,6 +6297,25 @@ if(TARGET iccBenchApply)
     FIXTURES_REQUIRED iccdev_profiles
   )
 
+  # Metrics describe the benchmark buffers and scheduled calls, while
+  # architecture-specific instruction, stack, and FLOP counts stay with the
+  # platform profiler. Keep this a tiny direct chain so it imports neither a
+  # timing threshold nor the suite's slow profile fixture.
+  add_test(
+    NAME iccdev.bench-apply-metrics
+    COMMAND "${CMAKE_COMMAND}"
+      "-DTOOL=$<TARGET_FILE:iccBenchApply>"
+      "-DTOOL_ARGS=-metrics;-pixels;4;-repeats;1;1;Testing/sRGB_v4_ICC_preference.icc;0"
+      "-DEXPECT_EXIT=zero"
+      "-DEXPECT_MATCH=benchmark_metrics case=chain"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+  )
+  set_tests_properties(iccdev.bench-apply-metrics PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;benchmark;metrics;regression"
+  )
+
   # #2271: two columns of DecodeIntent() disagreed with the iccApplyToLink decode
   # its own comment claimed to reproduce.
   #
