@@ -177,11 +177,17 @@ jobs:
             -V \
             -R '^iccdev\.apply-throughput$' | tee "$test_log"
 
+          metrics_status=0
           ICCDEV_BENCH_SOURCE_ROOT="$PWD" \
             ICCDEV_BENCH_BUILD_ROOT="$PWD/Build/apply-throughput-repro" \
             Build/apply-throughput-repro/Tools/IccBenchApply/iccBenchApply \
               -metrics -suite -csv -pixels 65536 -repeats 3 -threads 1,2,8 \
-              2> >(tee "$metrics_log" >&2) | tee "$threaded_log"
+              2> "$metrics_log" | tee "$threaded_log" || metrics_status=$?
+          cat "$metrics_log" >&2
+          if [ "$metrics_status" -ne 0 ]; then
+            echo "[FAIL] iccBenchApply metrics replay failed: $metrics_status" >&2
+            exit "$metrics_status"
+          fi
 
           if ! grep -qE 'Test +#[0-9]+: iccdev.create-profiles.*Passed' "$test_log"; then
             echo "[FAIL] Missing successful iccdev.create-profiles fixture signal" >&2
