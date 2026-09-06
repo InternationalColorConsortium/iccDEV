@@ -332,6 +332,161 @@ else
   fi
 fi
 
+###############################################################################
+# Acceptance parity (#2401 follow-up)
+#
+# The conversion was unified above; what stayed different was ACCEPTANCE.  The
+# text form decides a body has values in it with ParseTextCount(), and rejects
+# the whole array when it counts none.  The element form applied no such test:
+# any <n>/<f> body was taken as a value.  Both spellings now go through
+# ParseTextCount(), so the pairs below must agree on accept-vs-reject.
+#
+# The empty-element case is the sharp one, and it is a defect rather than an
+# inconsistency.  icXmlNodeCount() counted <n></n>, the write loop's
+# `children && content` guard skipped it, and SetSize()'s buffer comes from
+# malloc() with no zeroing -- so the slot it stood for was serialized into the
+# .icc never having been written, and the parse still reported success.  Under
+# MALLOC_PERTURB_=42 glibc fills fresh allocations with 0xd5, which is what the
+# assertion looks for: on the unfixed build a 48-element array with 47 empty
+# elements writes 47 bytes of 0xd5 to disk.
+#
+# Deliberately NOT tightened past parity: "abc" and "Silver" contain characters
+# icIsNumChar() accepts ('a', 'e'), so the text form takes them as one token
+# worth 0 and the element form must too.  Testing/hybrid's three Overprint
+# profiles carry <n>Silver</n> and <n>ProcessBlack</n> in a colorantOrderTag,
+# which reaches this same CIccUInt8Array::ParseArray -- rejecting non-numeric
+# bodies outright would refuse three tracked corpus profiles.  Those two cases
+# are here to hold that line.
+###############################################################################
+
+emit_single() {
+  # Both tags carry the same body, so a rejection is attributable to that body
+  # rather than to whichever of the two spellings happened to be paired with it.
+  emit_profile "$1" uInt8NumberType Array "$2" "$2"
+}
+
+# name | body | expected: "accept" or "reject" -- asserted for BOTH spellings
+run_acceptance_case() {
+  local name="$1" elem_body="$2" text_body="$3" want="$4"
+  TOTAL=$((TOTAL + 1))
+
+  local e_rc=0 t_rc=0
+  emit_single "$OUTDIR/$name-elem.xml" "$elem_body"
+  emit_single "$OUTDIR/$name-text.xml" "$text_body"
+  rm -f "$OUTDIR/$name-elem.icc" "$OUTDIR/$name-text.icc"
+  timeout 25 "$FROMXML" "$OUTDIR/$name-elem.xml" "$OUTDIR/$name-elem.icc" \
+    > "$OUTDIR/$name-elem.log" 2>&1 || e_rc=$?
+  timeout 25 "$FROMXML" "$OUTDIR/$name-text.xml" "$OUTDIR/$name-text.icc" \
+    > "$OUTDIR/$name-text.log" 2>&1 || t_rc=$?
+
+  local e_got t_got
+  [ "$e_rc" -eq 0 ] && e_got=accept || e_got=reject
+  [ "$t_rc" -eq 0 ] && t_got=accept || t_got=reject
+
+  if [ "$e_got" != "$t_got" ]; then
+    fail_case "$name" "element form $e_got(s) while text form $t_got(s) -- the parity this fixes"
+    return
+  fi
+  # Agreement alone would be satisfied by both spellings regressing together, so
+  # pin which side of the line the body falls on.
+  if [ "$e_got" != "$want" ]; then
+    fail_case "$name" "both spellings $e_got, expected both to $want"
+    return
+  fi
+  pass_case "$name" "both spellings $want -- agreed"
+}
+
+# Element-form-only assertion.  Used where the two spellings are NOT twins: a
+# multi-token element body has no text equivalent with the same array length, so
+# parity is the wrong question -- the contract is that the element form refuses
+# rather than filling one slot and dropping the rest.
+run_element_reject_case() {
+  local name="$1" elem_body="$2"
+  TOTAL=$((TOTAL + 1))
+
+  local rc=0
+  emit_single "$OUTDIR/$name-elem.xml" "$elem_body"
+  rm -f "$OUTDIR/$name-elem.icc"
+  timeout 25 "$FROMXML" "$OUTDIR/$name-elem.xml" "$OUTDIR/$name-elem.icc" \
+    > "$OUTDIR/$name-elem.log" 2>&1 || rc=$?
+
+  if [ "$rc" -eq 0 ]; then
+    fail_case "$name" "element form accepted a body carrying more than one value"
+    return
+  fi
+  pass_case "$name" "element form refused a multi-value body (exit=$rc)"
+}
+
+echo "--- acceptance parity ---"
+
+# No character icIsNumChar() accepts anywhere in the body: the text form has
+# always refused these, and the element form now does too.
+#
+# The bodies compared here are single-token on purpose.  A MIXED body such as
+# "zz 2" is not a like-for-like twin: ParseTextCount() does not reject it, it
+# simply produces no token for the "zz" run, so the text form yields a
+# one-element array while <n>zz</n><n>2</n> is a two-element array with one bad
+# element.  Those are different inputs, not the same input parsed two ways.
+run_acceptance_case nonnumeric-zz  "<n>zz</n>"          "zz"     reject
+run_acceptance_case nonnumeric-pun "<n>!!!</n>"         "!!!"    reject
+
+# Parity is the rule, not "reject anything that is not a number": both of these
+# carry a character icIsNumChar() accepts, so both spellings take them as a
+# token worth 0.  Testing/hybrid's colorantOrderTag depends on this.
+run_acceptance_case numchar-abc    "<n>abc</n>"         "abc"    accept
+run_acceptance_case numchar-silver "<n>Silver</n>"      "Silver" accept
+
+# One element is one slot.  icParseArrayValue() converts the first token in a
+# body and ignores the rest, so <n>10 20 30</n> filled one slot and dropped two
+# values -- the array came out SHORTER than the identical text spelling, which is
+# the same count-vs-values mismatch the empty element produces at the other end.
+# Measured before the fix: <n>10 20 30</n><n>40</n> gave [10, 40] where the text
+# body "10 20 30 40" gave [10, 20, 30, 40], and iccFromXml exited 0.
+#
+# The test for this is whitespace tokens, NOT ParseTextCount()==1: that counter
+# treats 'a', 'e' and 'n' as numeric so "nan" survives, which makes
+# "ProcessBlack" two tokens and "ProcessMagenta" four -- and Testing/hybrid's
+# three Overprint profiles put exactly those in a colorantOrderTag.  Counting
+# with it here would refuse tracked corpus profiles; the last case below pins
+# that.
+run_element_reject_case multi-token     "<n>10 20 30</n><n>40</n>"
+run_element_reject_case multi-token-one "<n>10 20</n>"
+run_acceptance_case     corpus-colorant "<n>ProcessBlack</n>" "ProcessBlack" accept
+
+# An empty element is counted but yields nothing, so it must reject rather than
+# leave the slot it reserved unwritten.
+run_acceptance_case empty-element  "<n></n><n>2</n>"    ""       reject
+run_acceptance_case selfclosing    "<n/><n>2</n>"       ""       reject
+
+# The uninitialised read itself, observed rather than inferred.  47 empty
+# elements and one real value: on the unfixed build this is accepted and the 47
+# unwritten bytes reach the file as MALLOC_PERTURB_'s fill pattern.
+TOTAL=$((TOTAL + 1))
+perturb_body=""
+i=0
+while [ "$i" -lt 47 ]; do perturb_body="$perturb_body<n></n>"; i=$((i + 1)); done
+perturb_body="$perturb_body<n>170</n>"
+emit_single "$OUTDIR/perturb.xml" "$perturb_body"
+rm -f "$OUTDIR/perturb.icc"
+perturb_rc=0
+MALLOC_PERTURB_=42 timeout 25 "$FROMXML" "$OUTDIR/perturb.xml" "$OUTDIR/perturb.icc" \
+  > "$OUTDIR/perturb.log" 2>&1 || perturb_rc=$?
+if [ "$perturb_rc" -ne 0 ]; then
+  pass_case "uninitialised-slots" "array with unwritten slots refused (exit=$perturb_rc)"
+elif [ ! -f "$OUTDIR/perturb.icc" ]; then
+  fail_case "uninitialised-slots" "iccFromXml reported success but wrote no profile"
+else
+  perturb_hex="$(read_tag_values "$OUTDIR/perturb.icc" ELEM B 48)" || perturb_hex=""
+  # 0xd5 == 42 ^ 0xff, glibc's fill for a freshly malloc()ed block.
+  if printf '%s\n' "$perturb_hex" | grep -qw 213; then
+    fail_case "uninitialised-slots" \
+      "accepted, and unwritten slots reached the .icc as MALLOC_PERTURB_ fill: $perturb_hex"
+  else
+    fail_case "uninitialised-slots" \
+      "accepted an array whose slots were never all written: $perturb_hex"
+  fi
+fi
+
 echo "=== summary: $PASS passed, $FAIL failed, $TOTAL total ==="
 
 if [ "$FAIL" -ne 0 ]; then
