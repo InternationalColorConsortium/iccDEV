@@ -696,6 +696,42 @@ void testClassification()
     delete pProfile;
   }
 
+  // A metadata primaries code of 2 resolves against the containing profile,
+  // not to "unknown". The registry says so for CLL and CCV -- the primaries
+  // are "defined by tags required by [a] three component matrix-based display
+  // profile containing this metadata" -- and the ICC HDR Display registration
+  // of 2026-06-24 says of DCV that a value of 2 "has the same meaning as in
+  // the cicpTag", which under the CICP amendment is the same recovery.
+  //
+  // HdrCicpUnspecified is the one shape where that can be satisfied: it
+  // declares ColourPrimaries 2, so 8.10.1 requires the matrix column tags, and
+  // they are what resolves. Its colorants are sRGB with no chromatic
+  // adaptation, so NOTE 2's case applies and the recovered white is D50.
+  pProfile = openFixture("HdrCicpUnspecified.icc");
+  if (pProfile) {
+    CIccHdrMetadataReader meta2;
+    check(meta2.Read(pProfile), "metadataTag read for the ColourPrimaries 2 fixture");
+
+    check(meta2.HasContentLightLevel(), "CLL present");
+    check(meta2.ContentLightLevelPrimariesResolved(),
+          "a CLL primaries code of 2 resolves against the profile's own tags");
+    checkClose(meta2.GetContentLightLevelPrimaries().xRed, 0.6400, 1e-3,
+               "and gives the profile's red primary, not nothing");
+
+    check(meta2.HasDisplayColourVolume(), "DCV present");
+    check(meta2.DisplayPrimariesResolved(),
+          "a DCV primaries code of 2 resolves the same way");
+
+    // The discriminator: value 2 has no entry in H.273 Table 2 at all, so a
+    // reader that looked it up there rather than in the profile would report
+    // nothing resolved and no chromaticities.
+    icCicpPrimaries table;
+    check(!icGetCicpPrimaries(2, table),
+          "H.273 Table 2 has no chromaticities for value 2, which is the point");
+
+    delete pProfile;
+  }
+
   // A plain SDR profile must draw nothing. This is the false-positive guard:
   // the corpus is full of RGB display profiles, and a classifier that keyed on
   // the version alone, or on the presence of a cicpTag alone, would start

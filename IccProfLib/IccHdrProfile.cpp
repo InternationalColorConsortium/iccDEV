@@ -550,7 +550,8 @@ static bool icHdrGetDictValue(const CIccTagDict *pDict, const char *szKey,
  *  resolved for it and the caller is told so.
  *****************************************************************************
  */
-static bool icHdrParseRegistryVolume(const std::string &s, int nLums, double *pLums,
+static bool icHdrParseRegistryVolume(const CIccProfile *pProfile, const std::string &s,
+                                     int nLums, double *pLums,
                                      icCicpPrimaries &primaries, bool &bPrimariesResolved)
 {
   double v[4];
@@ -578,7 +579,34 @@ static bool icHdrParseRegistryVolume(const std::string &s, int nLums, double *pL
       v[nLums] != (double)(icUInt8Number)v[nLums])
     return false;
 
-  bPrimariesResolved = icGetCicpPrimaries((icUInt8Number)v[nLums], primaries);
+  icUInt8Number nCode = (icUInt8Number)v[nLums];
+
+  if (nCode == icCicpPrimariesUnspecified) {
+    /* The registry is explicit about this code, and it does NOT mean "unknown"
+     * here.  Its CLL and CCV entries say a primaries value of 2 "means that
+     * the primaries are defined by tags required by [a] three component
+     * matrix-based display profile containing this metadata", and the HDR
+     * Display registration of 2026-06-24 says of DCV that "a primaries value
+     * of 2 has the same meaning as in the cicpTag" - which, under the CICP
+     * Unspecified-Primaries amendment, is the same recovery.  So it resolves
+     * against the containing profile, exactly as icGetResolvedPrimaries()
+     * does for the cicpTag itself.
+     *
+     * PROPOSAL-ISSUE HDR-18: in a profile authored to the 29-08-2026 revision
+     * this usually cannot be satisfied.  8.10.1 removes the matrix column tags
+     * from an HDR Profile unless the cicpTag's own ColourPrimaries is 2, so a
+     * metadata entry carrying primaries 2 has nothing to resolve against in
+     * every other conforming HDR Profile - and these entries are Optional, so
+     * nothing prevents one being written.  icGetProfilePrimaries() returns
+     * false there, which leaves bPrimariesResolved false: the same answer as
+     * before this branch existed, now for a stated reason rather than by
+     * omission. */
+    bPrimariesResolved = icGetProfilePrimaries(pProfile, primaries);
+  }
+  else {
+    bPrimariesResolved = icGetCicpPrimaries(nCode, primaries);
+  }
+
   return true;
 }
 
@@ -652,7 +680,7 @@ bool CIccHdrMetadataReader::Read(const CIccProfile *pProfile)
   bParseable = false;
   if (icHdrGetDictValue(pDict, kIccHdrKeyCll, value, bParseable)) {
     double lums[2];
-    if (bParseable && icHdrParseRegistryVolume(value, 2, lums, m_cllPrimaries,
+    if (bParseable && icHdrParseRegistryVolume(pProfile, value, 2, lums, m_cllPrimaries,
                                                m_bCllPrimariesResolved)) {
       m_maxCll = (icFloatNumber)lums[0];
       m_maxFall = (icFloatNumber)lums[1];
@@ -667,7 +695,7 @@ bool CIccHdrMetadataReader::Read(const CIccProfile *pProfile)
   bParseable = false;
   if (icHdrGetDictValue(pDict, kIccHdrKeyMdcv, value, bParseable)) {
     double lums[2];
-    if (bParseable && icHdrParseRegistryVolume(value, 2, lums, m_mdcvPrimaries,
+    if (bParseable && icHdrParseRegistryVolume(pProfile, value, 2, lums, m_mdcvPrimaries,
                                                m_bMdcvPrimariesResolved)) {
       m_mdcvMaxLuminance = (icFloatNumber)lums[0];
       m_mdcvMinLuminance = (icFloatNumber)lums[1];
@@ -715,13 +743,17 @@ bool CIccHdrMetadataReader::Read(const CIccProfile *pProfile)
     }
   }
 
-  /* DCV is not registered. 8.10.5 describes it in the same terms as MDCV -
-   * maximum and minimum luminance and primaries - so it is read on the
-   * registered sibling's shape. */
+  /* DCV's shape is no longer a reconstruction.  The ICC HDR Display dictType
+   * registration of 2026-06-24 gives its Value as "Floating point number,
+   * floating point number, 8-bit number", the floats being "the luminance
+   * range (maximum and minimum) of the display" and the byte "color primaries
+   * as per ITU-T H.273" - which is what was read here from 8.10.5's prose on
+   * the registered sibling MDCV's shape, confirmed field for field.  See
+   * HDR-11 for why the registration is still not the registry. */
   bParseable = false;
   if (icHdrGetDictValue(pDict, kIccHdrKeyDcv, value, bParseable)) {
     double lums[2];
-    if (bParseable && icHdrParseRegistryVolume(value, 2, lums, m_dcvPrimaries,
+    if (bParseable && icHdrParseRegistryVolume(pProfile, value, 2, lums, m_dcvPrimaries,
                                                m_bDcvPrimariesResolved)) {
       m_dcvMaxLuminance = (icFloatNumber)lums[0];
       m_dcvMinLuminance = (icFloatNumber)lums[1];

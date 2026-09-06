@@ -207,10 +207,14 @@ typedef enum {
  *  the registry fixes the storage: name and value strings are UTF-16BE
  *  Unicode, not NULL terminated.
  *
- *  The three HDR Display entries - DERH, DCV, DRWL - are not registered.
- *  Clause 8.10.5 is not yet accepted, so the registry correctly carries no
- *  HDR Display category; their names and shapes are read from 8.10.5 itself,
- *  DCV on the shape of its registered sibling MDCV.
+ *  The three HDR Display entries - DERH, DCV, DRWL - have a registration
+ *  document (ICC, change date 2026-06-24) but are still not IN the registry:
+ *  read live 2026-09-06, it carries HDR image and Printing and no HDR Display
+ *  category, and none of the three has an entry page.  Their shapes here were
+ *  first read from 8.10.5's prose, DCV on the shape of its registered sibling
+ *  MDCV, and the registration document confirms all three field for field -
+ *  DCV "Floating point number, floating point number, 8-bit number", DRWL and
+ *  DERH one float each.
  *
  *  PROPOSAL-ISSUE HDR-11: that reconstruction is a ruling.  8.10.5 makes the
  *  registry "the authoritative source for the names, encodings and semantics
@@ -341,10 +345,12 @@ public:
 protected:
   bool m_bHasCrwl, m_bHasCll, m_bHasMdcv, m_bHasCcv;
 
-  /* A registry primaries code of 2 means "not expressible in ITU-T H.273; use
-   * the containing profile's own tags", and unassigned codes name nothing at
-   * all. Either way no chromaticities are resolved, and a caller must not read
-   * the primaries struct without checking. */
+  /* A registry primaries code of 2 means "use the containing profile's own
+   * matrix column tags", which is resolved here rather than reported as
+   * unknown - see icHdrParseRegistryVolume() and PROPOSAL-ISSUE HDR-18 for the
+   * case where an HDR Profile no longer carries those tags.  Unassigned codes
+   * name nothing at all.  Either way a caller must not read the primaries
+   * struct without checking these first. */
   bool m_bCllPrimariesResolved, m_bMdcvPrimariesResolved, m_bDcvPrimariesResolved;
   bool m_bHasDerh, m_bHasDrwl, m_bHasDcv;
   bool m_bUnparsed;
