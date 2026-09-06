@@ -22,7 +22,7 @@
 /.github/ci/regression/ @xsscx @ChrisCoxArt @colourbill-ctrl
 
 # High-risk GitHub automation and governance paths
-/.github/workflows/** @dwtza @maxderhak @ChrisCoxArt@colourbill-ctrl @xsscx
+/.github/workflows/** @dwtza @maxderhak @ChrisCoxArt @colourbill-ctrl @xsscx
 /.github/actions/** @dwtza @maxderhak @ChrisCoxArt @colourbill-ctrl @xsscx
 /.github/scripts/** @dwtza @ChrisCoxArt @colourbill-ctrl @colourbill-ctrl @xsscx
 /.github/skills/** @dwtza @maxderhak @ChrisCoxArt @colourbill-ctrl @xsscx
