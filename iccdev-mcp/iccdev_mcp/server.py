@@ -4,10 +4,10 @@
 # BSD 3-Clause License. See LICENSE.md for details.
 
 """
-FastMCP server exposing 26 tools for ICC color profile operations.
+MCP server exposing 26 tools for ICC color profile operations.
 
 Phase 1 (Python-native): inspect_header, profile_summary, validate_profile,
-    color_transform, roundtrip_delta, sig_to_str, enum_spaces
+    color_transform, roundtrip_delta, icc_sig_to_str, enum_spaces
 Phase 2 (subprocess): 17 CLI tool wrappers (see cli_tools.py)
 """
 
@@ -20,27 +20,20 @@ import shlex
 from pathlib import Path
 from typing import Optional
 
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.server import Settings as FastMCPSettings
+from mcp.server.mcpserver import MCPServer
 
 from iccdev_mcp import __version__, cli_tools
 from iccdev_mcp.profiles import list_profiles, resolve_profile_path
 
-# MCP 1.x's generic lifespan annotation needs resolution before pydantic-settings
-# reads environment sources on Python 3.14.
-FastMCPSettings.model_rebuild()
-
-mcp = FastMCP(
+mcp = MCPServer(
     "iccdev-mcp",
+    version=__version__,
     instructions=(
         "ICC color profile tools from the International Color Consortium's "
         "RefIccMAX (iccDEV) library. Provides profile inspection, color "
         "transforms, and format conversion for ICC.1 and ICC.2 profiles."
     ),
 )
-# FastMCP does not expose its low-level Server version parameter. Set the
-# application version explicitly so MCP initialize does not report the SDK version.
-mcp._mcp_server.version = __version__
 
 _NATIVE_TOOL_NAMES = (
     "inspect_header",
@@ -894,11 +887,10 @@ def main():
     )
     args = parser.parse_args()
 
-    # Set port on the server instance for network transports
-    if args.transport != "stdio":
-        mcp.settings.port = args.port
-
-    mcp.run(transport=args.transport)
+    if args.transport == "stdio":
+        mcp.run()
+    else:
+        mcp.run(transport=args.transport, port=args.port)
 
 
 if __name__ == "__main__":
