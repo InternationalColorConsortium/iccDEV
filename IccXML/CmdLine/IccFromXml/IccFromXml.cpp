@@ -8,6 +8,7 @@
 #include "IccIO.h"
 #include "IccUtil.h"
 #include "IccProfLibVer.h"
+#include "IccFileUtil.h"
 #include "IccLibXMLVer.h"
 #include "IccXmlConfig.h"
 #include <cstdlib>
@@ -37,25 +38,10 @@ static bool isHelpRequest(const char *szArg)
          !stricmp(szArg, "-help") || !stricmp(szArg, "-?");
 }
 
-// Whether szPath names something that can actually be READ as a file.
-//
-// fopen(dir, "r") succeeds on glibc, so "it opened" does not mean "it is a schema":
-// -v=<some-directory> slipped past the openability guard below and produced a
-// four-line libxml2 cascade naming the XML file instead of the one-line schema error
-// the guard exists to give.  Reading a byte is the portable discriminator -- a
-// directory fails the read with EISDIR, while a legitimately empty file reports EOF
-// with no error (#2387).
-static bool isReadableFile(const char *szPath)
-{
-  FILE *f = fopen(szPath, "r");
-  if (!f)
-    return false;
-
-  char ch;
-  bool bReadable = (fread(&ch, 1, 1, f) == 1) || (feof(f) && !ferror(f));
-  fclose(f);
-  return bReadable;
-}
+// The read-a-byte discriminator this file introduced in #2411 now lives in
+// IccProfLib/IccFileUtil.h as icIsReadableFile(), beside icOpenRegularWriteFile()'s
+// write-side check, so the other CLI tools can reach it too (#2414).  It was static
+// here, so nothing else could.
 
 // The directory the running executable lives in, with a trailing separator, or an
 // empty string when it cannot be determined.
@@ -109,7 +95,7 @@ static std::string executableDir(const char *szArgv0)
       char cLast = dir[dir.size() - 1];
       if (cLast != '/' && cLast != '\\')
         dir += "/";
-      if (isReadableFile((dir + exe).c_str()))
+      if (icIsReadableFile((dir + exe).c_str()))
         return dir;
     }
 
@@ -188,7 +174,7 @@ int main(int argc, char* argv[])
           fprintf(stderr, "Error: -v= requires a RelaxNG schema file path\n");
           return EXIT_FAILURE;
         }
-        if (!isReadableFile(szRelaxNGDir.c_str())) {
+        if (!icIsReadableFile(szRelaxNGDir.c_str())) {
           fprintf(stderr, "Error: cannot read RelaxNG schema '%s'\n", szRelaxNGDir.c_str());
           return EXIT_FAILURE;
         }
@@ -199,14 +185,14 @@ int main(int argc, char* argv[])
         // BINARY lives in, so the documented invocation never found it.  Try the
         // documented location first, then the executable's own directory, so an
         // installation shipping the schema beside the binary keeps working.
-        if (isReadableFile(szRelaxNGFileName)) {
+        if (icIsReadableFile(szRelaxNGFileName)) {
           szRelaxNGDir = szRelaxNGFileName;
         }
         else {
           std::string dir = executableDir(argv[0]);
           if (!dir.empty()) {
             std::string path = dir + szRelaxNGFileName;
-            if (isReadableFile(path.c_str()))
+            if (icIsReadableFile(path.c_str()))
               szRelaxNGDir = path;
           }
         }
