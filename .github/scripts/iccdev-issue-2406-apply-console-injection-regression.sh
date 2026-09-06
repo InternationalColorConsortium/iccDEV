@@ -13,7 +13,10 @@
 #   IccConnect.cpp; iccApplyToLink prints argv directly.
 #
 # The library already had the helper -- icSanitizeConsoleText() in
-# IccProfLib/IccFileUtil.h, which escapes C0/C1 and anything >= 0x7f as \xHH.
+# IccProfLib/IccFileUtil.h.  It escapes everything that is not printable ASCII:
+# ASCII controls, 0x7F and malformed bytes as \xHH, and -- since #2420 -- each
+# non-ASCII codepoint as one \uXXXX (\UXXXXXXXX above the BMP) rather than one
+# \xHH per byte.  The cases below are all ASCII ESC, which is unaffected.
 # iccSpecSepToTiff routes its OWN prints through it, which is why these four
 # tools looked like the whole story; measured, it still emitted 4 raw ESC bytes
 # on f186948c, because the leak it shares with iccApplyProfiles is not in either
