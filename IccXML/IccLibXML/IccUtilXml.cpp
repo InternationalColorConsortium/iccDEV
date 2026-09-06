@@ -1205,6 +1205,36 @@ icUInt32Number CIccXmlArrayType<T, Tsig>::ParseText(T* pBuf, icUInt32Number nSiz
   return n;
 }
 
+// True when szText carries exactly one whitespace-delimited token.
+//
+// An <n>/<f> element stands for exactly one array slot, and icParseArrayValue()
+// converts the first token in the body and ignores anything after it.  So a body
+// like "10 20 30" would fill one slot and silently drop two values, leaving the
+// array shorter than the count that reserved the slots -- the same mismatch the
+// empty-element case produces at the other end.
+//
+// This is deliberately NOT ParseTextCount()==1.  That counter treats 'a', 'e' and
+// 'n' as numeric characters so "nan" survives, which makes "ProcessBlack" two
+// tokens and "ProcessMagenta" four; Testing/hybrid's three Overprint profiles put
+// exactly those in a colorantOrderTag, so counting with it here would refuse
+// tracked corpus profiles.  Whitespace is the right delimiter for "one value".
+static bool icXmlIsSingleToken(const char *szText)
+{
+  int nTokens = 0;
+
+  for (const char *p = szText; *p; ) {
+    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
+      p++;
+    if (!*p)
+      break;
+    nTokens++;
+    while (*p && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r')
+      p++;
+  }
+
+  return nTokens == 1;
+}
+
 template <class T, icTagTypeSignature Tsig>
 bool CIccXmlArrayType<T, Tsig>::ParseArray(T* pBuf, icUInt32Number nSize, xmlNode *pNode)
 {
@@ -1233,17 +1263,35 @@ bool CIccXmlArrayType<T, Tsig>::ParseArray(T* pBuf, icUInt32Number nSize, xmlNod
       icUInt32Number i;
       for (i=0; i<nSize && pNode; pNode = pNode->next) {
         if (pNode->type == XML_ELEMENT_NODE &&
-          !icXmlStrCmp(pNode->name, "f") &&
-          pNode->children &&
-          pNode->children->content) {
+          !icXmlStrCmp(pNode->name, "f")) {
             // #2401: was an unchecked sscanf("%f") straight into a cast, which
             // made this a THIRD conversion: no clamp, so <f>1e50</f> stored
             // +inf into an MPE matrix where the identical text array clipped to
             // FLT_MAX, and no "nan" literal case.  Same helper as the other two
-            // spellings.  (What still differs is acceptance, not conversion: a
-            // non-numeric <f> body counts as a value here while the text form
-            // rejects the array in ParseTextCount().)
-            pBuf[i] = icParseArrayValue<T>((const char *)(pNode->children->content));
+            // spellings.
+
+            // A counted element must actually carry a value.  An empty
+            // <f/> was skipped by the old `children && content` guard while
+            // icXmlNodeCount() still counted it, so the slot it stood for was
+            // never written and SetSize()'s malloc()ed buffer was serialized
+            // uninitialised -- MALLOC_PERTURB_=42 writes 0xd5 through to the
+            // .icc, and the parse still reported success.
+            if (!pNode->children || !pNode->children->content)
+              return false;
+
+            // Acceptance now matches the text form, which is the parity #2401
+            // was about: ParseTextCount() is what decides a text body has a
+            // value in it, so the element body is admitted on the same test
+            // rather than on a second rule that can drift from it.
+            const char *szValue = (const char *)(pNode->children->content);
+            if (!ParseTextCount(szValue))
+              return false;
+
+            // One element is one slot, so its body must be one value.
+            if (!icXmlIsSingleToken(szValue))
+              return false;
+
+            pBuf[i] = icParseArrayValue<T>(szValue);
             i++;
         }
       }
@@ -1269,9 +1317,7 @@ bool CIccXmlArrayType<T, Tsig>::ParseArray(T* pBuf, icUInt32Number nSize, xmlNod
       icUInt32Number i;
       for (i=0; i<nSize && pNode; pNode = pNode->next) {
         if (pNode->type == XML_ELEMENT_NODE &&
-          !icXmlStrCmp(pNode->name, "n") &&
-          pNode->children &&
-          pNode->children->content) {
+          !icXmlStrCmp(pNode->name, "n")) {
             // #2401: this was (T)atol(...), an unchecked narrowing cast, so
             // <n>256</n> in a uInt8Array wrapped to 0 and <n>300</n> to 44
             // while the identical text-form array clipped both to 255.  atol()
@@ -1281,7 +1327,29 @@ bool CIccXmlArrayType<T, Tsig>::ParseArray(T* pBuf, icUInt32Number nSize, xmlNod
             // wrapper's scanType), so <n>0.5</n> in a float32Array stored 0.
             // Both are the same defect -- this branch had its own conversion --
             // so it now calls the one ParseText() uses.
-            pBuf[i] = icParseArrayValue<T>((const char *)(pNode->children->content));
+
+            // A counted element must actually carry a value.  An empty
+            // <n/> was skipped by the old `children && content` guard while
+            // icXmlNodeCount() still counted it, so the slot it stood for was
+            // never written and SetSize()'s malloc()ed buffer was serialized
+            // uninitialised -- MALLOC_PERTURB_=42 writes 0xd5 through to the
+            // .icc, and the parse still reported success.
+            if (!pNode->children || !pNode->children->content)
+              return false;
+
+            // Acceptance now matches the text form, which is the parity #2401
+            // was about: ParseTextCount() is what decides a text body has a
+            // value in it, so the element body is admitted on the same test
+            // rather than on a second rule that can drift from it.
+            const char *szValue = (const char *)(pNode->children->content);
+            if (!ParseTextCount(szValue))
+              return false;
+
+            // One element is one slot, so its body must be one value.
+            if (!icXmlIsSingleToken(szValue))
+              return false;
+
+            pBuf[i] = icParseArrayValue<T>(szValue);
             i++;
         }
       }
