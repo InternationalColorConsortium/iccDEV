@@ -79,10 +79,16 @@ FLAMEGRAPH_DIR=/path/to/FlameGraph \
 The report includes per-run wall/user/system time and RSS, median and p95
 elapsed time, raw `perf stat` counters when permitted by the host, and derived
 IPC, instruction-rate, branch-miss-rate, and cache-miss-rate values in
-`perf-derived.tsv`. A ratio describes this end-to-end CTest envelope; it is not
-a kernel-only or per-pixel value. The report also includes a `strace -f -c`
-summary when available, and optional `perf.data`, folded stacks, and an SVG
-flamegraph. `perf` hardware counters may be unavailable when
+`perf-derived.tsv`. On hosts that advertise the required events, that TSV also
+contains numeric retired memory-load/store and floating-point event counts
+successfully scheduled together by the profiler's combined probe.
+Floating-point columns retain the exact `perf` event scope rather than claiming
+a cross-CPU FLOP total. Dynamic stack-operand counts are not available from a
+portable counter and require architecture-specific sampling or disassembly.
+A ratio describes this end-to-end CTest envelope; it is not a kernel-only or
+per-pixel value. The report also includes a `strace -f -c` summary when
+available, and optional `perf.data`, folded stacks, and an SVG flamegraph.
+`perf` hardware counters may be unavailable when
 `kernel.perf_event_paranoid` disallows them; this is reported rather than
 treated as a correctness failure. Do not use `strace`, source coverage, or
 debug logging when collecting cycle or throughput comparisons.

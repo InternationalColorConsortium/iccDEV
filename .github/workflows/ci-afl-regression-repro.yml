@@ -120,8 +120,10 @@ jobs:
             echo "- 27 CSV rows ending in \`,ok\` confirm 9 suite cases at each of 1, 2, and 8 threads."
             echo "- 9 \`benchmark_metrics case=...\` blocks show the exact benchmark-buffer"
             echo "  footprint and workload for every suite case."
-            echo "- Each metrics block must contain internally consistent buffer sizes and the"
-            echo "  architecture-specific instruction, stack, and FLOP collection boundaries."
+            echo "- Each metrics block must contain internally consistent buffer sizes, three"
+            echo "  thread-count settings, and per-setting plus sweep-total apply counts."
+            echo "- Architecture-specific instruction, memory-operation, and floating-point"
+            echo "  event counts are collected by the optional platform profiler, not this CLI."
             echo "- \`CHECKSUM MISMATCH\`, \`SOME CASES FAILED\`, and \`FAIL:\` must be absent."
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
@@ -237,9 +239,10 @@ jobs:
           if ! awk '
             function finish_block() {
               if (active &&
-                  !(have_xforms && have_pixels && have_repeats && have_applies &&
-                    have_input && have_output && have_total && have_bytes_per_apply &&
-                    have_instructions && have_stack && have_flops &&
+                  !(have_xforms && have_pixels && have_thread_settings &&
+                    have_per_setting_timed && have_per_setting_scheduled &&
+                    have_total_timed && have_total_scheduled && have_input &&
+                    have_output && have_total && have_bytes_per_apply &&
                     total == input + output && bytes_per_apply == total)) {
                 invalid = 1
               }
@@ -254,8 +257,9 @@ jobs:
               active = 1
               input = output = total = bytes_per_apply = 0
               have_input = have_output = have_total = have_bytes_per_apply = 0
-              have_pixels = have_repeats = have_applies = have_xforms = 0
-              have_instructions = have_stack = have_flops = 0
+              have_pixels = have_thread_settings = have_xforms = 0
+              have_per_setting_timed = have_per_setting_scheduled = 0
+              have_total_timed = have_total_scheduled = 0
               next
             }
             /^  resolved_transform_count=/ {
@@ -266,12 +270,24 @@ jobs:
               have_pixels = ($0 == "  pixels_per_apply=65536")
               next
             }
-            /^  timed_applies_per_thread=/ {
-              have_repeats = ($0 == "  timed_applies_per_thread=3")
+            /^  thread_count_settings=/ {
+              have_thread_settings = ($0 == "  thread_count_settings=3")
               next
             }
-            /^  total_applies_per_thread=/ {
-              have_applies = ($0 == "  total_applies_per_thread=4")
+            /^  timed_applies_per_thread_setting=/ {
+              have_per_setting_timed = ($0 == "  timed_applies_per_thread_setting=3")
+              next
+            }
+            /^  scheduled_applies_per_thread_setting=/ {
+              have_per_setting_scheduled = ($0 == "  scheduled_applies_per_thread_setting=4")
+              next
+            }
+            /^  total_timed_applies=/ {
+              have_total_timed = ($0 == "  total_timed_applies=9")
+              next
+            }
+            /^  total_scheduled_applies=/ {
+              have_total_scheduled = ($0 == "  total_scheduled_applies=12")
               next
             }
             /^  input_buffer_bytes=/ {
@@ -292,18 +308,6 @@ jobs:
             /^  benchmark_bytes_per_apply=/ {
               bytes_per_apply = substr($0, 29) + 0
               have_bytes_per_apply = bytes_per_apply > 0
-              next
-            }
-            /^  hardware_instructions=/ {
-              have_instructions = ($0 == "  hardware_instructions=external-profiler-required")
-              next
-            }
-            /^  stack_operands=/ {
-              have_stack = ($0 == "  stack_operands=compiler-abi-specific")
-              next
-            }
-            /^  floating_point_operations=/ {
-              have_flops = ($0 == "  floating_point_operations=profile-and-isa-specific")
               next
             }
             END {

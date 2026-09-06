@@ -302,24 +302,33 @@ static void ReportMetrics(const char *caseName, const CIccCmm &cmm,
   const unsigned long long sourceBytes = sourceValues * sizeof(icFloatNumber);
   const unsigned long long destinationBytes =
     destinationValues * sizeof(icFloatNumber);
-  const unsigned long long appliesPerThread = (unsigned long long)g_nRepeats + 1;
+  const unsigned long long threadSettings =
+    static_cast<unsigned long long>(g_threads.size());
+  const unsigned long long timedAppliesPerThreadSetting =
+    static_cast<unsigned long long>(g_nRepeats);
+  const unsigned long long scheduledAppliesPerThreadSetting =
+    timedAppliesPerThreadSetting + 1;
   FILE *stream = g_bCsv ? stderr : stdout;
 
   fprintf(stream, "benchmark_metrics case=%s\n", caseName);
   fprintf(stream, "  resolved_transform_count=%llu\n",
           (unsigned long long)transformCount);
   fprintf(stream, "  pixels_per_apply=%u\n", (unsigned int)g_nPixels);
-  fprintf(stream, "  timed_applies_per_thread=%d\n", g_nRepeats);
-  fprintf(stream, "  total_applies_per_thread=%llu\n", appliesPerThread);
+  fprintf(stream, "  thread_count_settings=%llu\n", threadSettings);
+  fprintf(stream, "  timed_applies_per_thread_setting=%llu\n",
+          timedAppliesPerThreadSetting);
+  fprintf(stream, "  scheduled_applies_per_thread_setting=%llu\n",
+          scheduledAppliesPerThreadSetting);
+  fprintf(stream, "  total_timed_applies=%llu\n",
+          threadSettings * timedAppliesPerThreadSetting);
+  fprintf(stream, "  total_scheduled_applies=%llu\n",
+          threadSettings * scheduledAppliesPerThreadSetting);
   fprintf(stream, "  input_buffer_bytes=%llu\n", sourceBytes);
   fprintf(stream, "  output_buffer_bytes=%llu\n", destinationBytes);
   fprintf(stream, "  benchmark_buffer_bytes=%llu\n",
           sourceBytes + destinationBytes);
   fprintf(stream, "  benchmark_bytes_per_apply=%llu\n",
           sourceBytes + destinationBytes);
-  fprintf(stream, "  hardware_instructions=external-profiler-required\n");
-  fprintf(stream, "  stack_operands=compiler-abi-specific\n");
-  fprintf(stream, "  floating_point_operations=profile-and-isa-specific\n");
   if (g_bCsv)
     fflush(stream);
 }

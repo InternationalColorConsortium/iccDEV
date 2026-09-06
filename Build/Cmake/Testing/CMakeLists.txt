@@ -6451,6 +6451,7 @@ if(TARGET iccBenchApply)
       iccdev.bench-apply-negative-intent-code
       iccdev.bench-apply-valid-intent-code
       iccdev.bench-apply-valid-intent-code-typed
+      iccdev.bench-apply-metrics
       iccdev.bench-apply-bpc-intent-code
       iccdev.bench-apply-bpc-changes-result
       iccdev.bench-apply-luminance-column

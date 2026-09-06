@@ -211,7 +211,9 @@ create a job-local Docker image.
 CodeQL security workflow for an open same-repository PR. Labelling a merged PR
 does not rerun CodeQL: the push trigger already analyzes `master`, and a
 label-triggered run would use the PR base commit's trusted query set while
-publishing its results against `master`. Use this label when a change touches
+publishing its results against `master`. Closed unmerged PRs are also ignored:
+they are not active review targets and must be reopened before CodeQL can run.
+Use this label when a change touches
 C/C++, CMake, CodeQL query logic, parser hardening, or security-sensitive
 automation and the fast preflight checks are not enough.
 

@@ -92,13 +92,69 @@ ctest_command=(
 } > "$environment_file"
 
 perf_available=0
+perf_events=()
+perf_optional_events=()
+perf_event_file="$output_dir/perf-events.txt"
 if command -v perf >/dev/null 2>&1 && perf stat -e cycles true >/dev/null 2>&1; then
     perf_available=1
+    perf_events=(
+        cycles
+        instructions
+        branches
+        branch-misses
+        cache-references
+        cache-misses
+        context-switches
+        cpu-migrations
+    )
+    for event in \
+        mem_inst_retired.all_loads \
+        mem_inst_retired.all_stores \
+        fp_arith_inst_retired.scalar \
+        fp_arith_inst_retired.4_flops \
+        fp_arith_inst_retired.8_flops; do
+        if perf stat -e "$event" true >/dev/null 2>&1; then
+            perf_events+=("$event")
+            perf_optional_events+=("$event")
+        else
+            printf 'unavailable_event=%s\n' "$event" >> "$perf_event_file"
+        fi
+    done
+    perf_probe="$output_dir/perf-event-probe.csv"
+    if perf stat -x, -o "$perf_probe" \
+        -e "$(IFS=,; printf '%s' "${perf_events[*]}")" sleep 1; then
+        effective_events=()
+        for event in "${perf_events[@]}"; do
+            if awk -F, -v target="$event" '
+                {
+                    name = $3
+                    sub(/:.*/, "", name)
+                    if (name == target && $1 !~ /^</)
+                        found = 1
+                }
+                END { exit found ? 0 : 1 }
+            ' "$perf_probe"; then
+                effective_events+=("$event")
+            else
+                printf 'excluded_event=%s\n' "$event" >> "$perf_event_file"
+            fi
+        done
+        perf_events=("${effective_events[@]}")
+    else
+        perf_available=0
+        printf 'combined_probe=unavailable\n' >> "$perf_event_file"
+        for event in "${perf_optional_events[@]}"; do
+            printf 'excluded_event=%s\n' "$event" >> "$perf_event_file"
+        done
+    fi
+fi
+if [ "$perf_available" -eq 1 ]; then
+    printf 'effective_event=%s\n' "${perf_events[@]}" >> "$perf_event_file"
 fi
 
 printf 'run\telapsed_s\tuser_s\tsystem_s\tmax_rss_kb\tstatus\tlog\tperf_stat\n' \
     > "$samples_file"
-printf 'run\tcycles\tinstructions\tbranches\tbranch_misses\tcache_references\tcache_misses\tinstructions_per_cycle\tinstructions_per_second\tbranch_miss_rate\tcache_miss_rate\n' \
+printf 'run\tcycles\tinstructions\tbranches\tbranch_misses\tcache_references\tcache_misses\tmemory_load_instructions\tmemory_store_instructions\tfp_arith_scalar_events\tfp_arith_4_flop_events\tfp_arith_8_flop_events\tinstructions_per_cycle\tinstructions_per_second\tbranch_miss_rate\tcache_miss_rate\n' \
     > "$derived_perf_file"
 for run in $(seq 1 "$runs"); do
     log_file="$output_dir/run-${run}.log"
@@ -109,8 +165,7 @@ for run in $(seq 1 "$runs"); do
 
     if [ "$perf_available" -eq 1 ]; then
         perf stat -x, -o "$perf_file" \
-            -e cycles,instructions,branches,branch-misses,cache-references,cache-misses,\
-context-switches,cpu-migrations \
+            -e "$(IFS=,; printf '%s' "${perf_events[*]}")" \
             env "ICC_PERF_STATS_FILE=$telemetry_file" \
             /usr/bin/time -f 'elapsed_s=%e\nuser_s=%U\nsystem_s=%S\nmax_rss_kb=%M' \
             -o "$time_file" "${runner[@]}" "${ctest_command[@]}" > "$log_file" 2>&1 || status=$?
@@ -161,6 +216,11 @@ context-switches,cpu-migrations \
         event == "branch-misses" { branch_misses = clean($1) }
         event == "cache-references" { cache_references = clean($1) }
         event == "cache-misses" { cache_misses = clean($1) }
+        event == "mem_inst_retired.all_loads" { memory_loads = clean($1) }
+        event == "mem_inst_retired.all_stores" { memory_stores = clean($1) }
+        event == "fp_arith_inst_retired.scalar" { fp_scalar = clean($1) }
+        event == "fp_arith_inst_retired.4_flops" { fp_4_flops = clean($1) }
+        event == "fp_arith_inst_retired.8_flops" { fp_8_flops = clean($1) }
         END {
             values[1] = cycles
             values[2] = instructions
@@ -168,12 +228,18 @@ context-switches,cpu-migrations \
             values[4] = branch_misses
             values[5] = cache_references
             values[6] = cache_misses
-            for (i = 1; i <= 6; i++)
+            values[7] = memory_loads
+            values[8] = memory_stores
+            values[9] = fp_scalar
+            values[10] = fp_4_flops
+            values[11] = fp_8_flops
+            for (i = 1; i <= 11; i++)
                 if (!number(values[i]))
                     values[i] = "n/a"
-            printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+            printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
                 run, values[1], values[2], values[3], values[4], values[5],
-                values[6], ratio(values[2], values[1]),
+                values[6], values[7], values[8], values[9], values[10],
+                values[11], ratio(values[2], values[1]),
                 ratio(values[2], elapsed), ratio(values[4], values[3]),
                 ratio(values[6], values[5])
         }' "$perf_file" >> "$derived_perf_file"

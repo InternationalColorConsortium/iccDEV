@@ -83,14 +83,20 @@ and transform-local storage are platform- and profile-dependent. These values
 describe the tool's allocations and scheduled calls; they do not claim to
 represent all memory touched inside a profile's resolved transform graph.
 
-The report intentionally does not invent process-independent values for
-hardware instructions, stack operands, or floating-point operations. Each
-depends on the compiler, target ABI, optimization level, resolved transforms,
-and scalar/SSE/AVX dispatch. The current Linux profiling path already collects
-the accurate process instruction count with `perf stat`; use
-`.github/scripts/iccdev-clut-profile.sh` for that evidence. FLOP hardware
-events are CPU-model-specific, and stack operands require disassembly or a
-sampling profile, so neither is portable benchmark output.
+`thread_count_settings` is the number of requested `-threads` values, not the
+number of workers in one apply. The per-thread-setting values describe one
+whole-buffer warm-up plus timed sequence. The `total_*` values multiply those
+scheduled calls across all requested settings, so `-threads 1,2,8 -repeats 3`
+reports 3 thread-count settings, 3 timed and 4 scheduled applies per setting,
+9 timed applies, and 12 scheduled applies total.
+
+The report intentionally omits hardware instructions, stack operands, and
+floating-point operations. They depend on the compiler, target ABI,
+optimization level, resolved transforms, and scalar/SSE/AVX dispatch. Use the
+opt-in Linux profiler, `.github/scripts/iccdev-clut-profile.sh`, for numeric
+hardware instruction, memory-operation, and supported floating-point event
+counts. Stack operands need architecture-specific disassembly or sampling, so
+they are not portable benchmark output.
 
 `-suite` and a chain are alternatives, not a chain with a default. Passing both
 is refused rather than silently resolved in favour of the table, and `-perxform`
