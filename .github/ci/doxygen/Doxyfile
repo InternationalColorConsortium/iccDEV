@@ -69,8 +69,7 @@ INCLUDE_PATH           = IccProfLib \
                          Tools/CmdLine/IccPawgReport \
                          Tools/CmdLine/IccProfileVisualize \
                          Tools/Winnt/IccIisIsapi \
-                         examples/hello-iccdev \
-                         /usr/include
+                         examples/hello-iccdev
 
 # Extraction settings. Keep file-local anonymous namespaces out of the public
 # hierarchy/UI: they are implementation details and make inherits.html split into

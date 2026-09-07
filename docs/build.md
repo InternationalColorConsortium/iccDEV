@@ -69,6 +69,28 @@ To open the generated project:
 open out/macos-xcode/RefIccMAX.xcodeproj
 ```
 
+`Build/XCode/BuildAll.sh` wraps this same configure/build sequence and can be
+invoked from any working directory. It replaces the legacy per-tool Xcode
+projects and source-tree copies; executables remain under the build directory,
+not in `Testing/`. Pass CMake configure options as arguments, or use
+`ICCDEV_XCODE_BUILD_DIR`, `ICCDEV_XCODE_CONFIG`, and
+`CMAKE_BUILD_PARALLEL_LEVEL` to select the output directory, configuration, and
+job count. Relative build directories are resolved from the repository root.
+For example:
+
+```bash
+ICCDEV_XCODE_CONFIG=Debug Build/XCode/BuildAll.sh -DENABLE_WXWIDGETS=OFF
+```
+
+This wrapper builds macOS, not iOS; use the mobile core presets and the
+device smoke app below for an iPhone or iPad.
+
+Xcode places CLI executables in `Tools/<tool>/<configuration>/`. Some Unix
+shell-backed CTest suites still assume the single-configuration
+`Tools/<tool>/` layout; use a Ninja build for those suites rather than copying
+executables into the source tree. Native CMake test targets use `ctest -C`
+to select the Xcode configuration.
+
 For GuardMalloc/libgmalloc crash reproduction, use a non-sanitizer Debug build
 and verify that the built Mach-O tools contain `LC_UUID`. Apple's dynamic loader
 can abort before `main()` when `DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib`
@@ -125,6 +147,66 @@ installed on its macOS runner, builds every matching mobile-core preset, and
 uploads the static libraries, generated version headers, and a build manifest
 as the `iccdev-apple-mobile-core` artifact. Run it manually or call
 `.github/workflows/ci-apple-mobile-core.yml` from another workflow.
+
+### Run the core smoke app on an iPhone or iPad
+
+`Build/AppleMobile` is a standalone Xcode consumer of the core's exported
+CMake package. It does not enable desktop tools or CTest on iOS. The app
+exercises the bundled RGB profile, memory and sandbox-file serialization,
+truncated-header rejection, single/batch RGB transforms, and analytic
+3D CLUT interpolation with 3, 8, 15, and 16 output channels.
+
+Use an unlocked, paired device with Developer Mode enabled and an Apple
+Development signing identity in Xcode. A Developer ID Application certificate
+cannot sign an iOS app. Set your team ID and the device identifier from
+`xcrun devicectl list devices`; do not commit signing credentials, provisioning
+profiles, device identifiers, or generated Xcode projects.
+
+Run from the repository root, with `TEAM_ID` and `DEVICE_ID` set in your shell:
+
+```bash
+cmake --preset apple-ios-device-core -S Build/Cmake \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0
+cmake --build out/apple-ios-device-core --parallel
+cmake -S Build/AppleMobile -B out/apple-ios-device-smoke -G Xcode \
+  -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos \
+  -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0 \
+  -DRefIccMAX_DIR="$PWD/out/apple-ios-device-core" \
+  -DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM="$TEAM_ID"
+xcodebuild -project out/apple-ios-device-smoke/IccDevCoreSmoke.xcodeproj \
+  -target IccDevCoreSmoke -configuration Release -sdk iphoneos \
+  -allowProvisioningUpdates -allowProvisioningDeviceRegistration build
+xcrun devicectl device install app --device "$DEVICE_ID" \
+  out/apple-ios-device-smoke/Release-iphoneos/IccDevCoreSmoke.app
+xcrun devicectl device process launch --device "$DEVICE_ID" \
+  --console --terminate-existing --timeout 90 \
+  --json-output out/apple-ios-device-smoke/device-launch.json \
+  org.color.iccdev.CoreSmoke --exit-after-tests
+jq -e '.info.outcome == "success" and .result.terminationResult.exitCode == 0' \
+  out/apple-ios-device-smoke/device-launch.json
+xcrun devicectl device copy from --device "$DEVICE_ID" \
+  --domain-type appDataContainer --domain-identifier org.color.iccdev.CoreSmoke \
+  --source Documents/results.json \
+  --destination out/apple-ios-device-smoke/results.json
+jq -e '.passed == true and (.tests | length > 0) and all(.tests[]; .passed == true)' \
+  out/apple-ios-device-smoke/results.json
+```
+
+Require successful commands, `ICCDEV_DEVICE_TESTS PASS` in the console,
+exit code zero in the current launch JSON, and a passing report copied from
+that run. An installation or launch alone is not a test pass. A normal app
+launch (without `--exit-after-tests`) leaves the report visible on the device.
+This is a core smoke suite, not the desktop regression suite or a benchmark.
+
+Set `ICCDEV_IOS_BUNDLE_IDENTIFIER` at configure time if your team needs a
+different app ID, and use that same ID in the device commands. The 17.0 target
+above is specific to this sample; keep the core and app deployment targets
+aligned. For simulator use, build `apple-ios-simulator-core`, configure the
+app into a separate directory with `CMAKE_OSX_SYSROOT=iphonesimulator` and
+the simulator core's `RefIccMAX_DIR`, then build with `-sdk iphonesimulator
+CODE_SIGNING_ALLOWED=NO`. Use `xcrun simctl install` and `xcrun simctl launch
+--console-pty` with a booted simulator. Never link a device archive into a
+simulator app, even when both use arm64.
 
 ## Windows MSVC
 

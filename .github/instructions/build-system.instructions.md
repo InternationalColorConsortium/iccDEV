@@ -22,11 +22,23 @@ Primary build file: `Build/Cmake/CMakeLists.txt`
 | Platform | Configure entry point |
 |----------|-----------------------|
 | Linux | `cd Build && cmake Cmake -DCMAKE_CXX_COMPILER=clang++` |
-| macOS Xcode | `cd Build && cmake -G "Xcode" Cmake` |
+| macOS Xcode | `cmake --preset macos-xcode -S Build/Cmake -B out/macos-xcode` |
 | Windows MSVC/vcpkg | `cmake --preset vs2022-x64 -B Build -S Build/Cmake` |
 | Emscripten/WASM | `cd Build && emcmake cmake Cmake -DENABLE_TESTS=OFF -DENABLE_SHARED_LIBS=OFF` |
 
 User-facing build details live in `docs/build.md`.
+
+`Build/XCode/BuildAll.sh` is a macOS-only wrapper around that preset. Keep
+outputs in the build tree; do not restore the obsolete per-tool Xcode projects
+or copy binaries and TIFF sources into `Testing/` or `Tools/`.
+
+Apple mobile presets build the static core only. `Build/AppleMobile` consumes
+the exported core package in a separate iOS app build; keep its device/simulator
+SDK, architecture, and deployment target aligned with the core archive.
+Physical-device smoke results require both the current `devicectl --console`
+termination exit code and the app's persisted `Documents/results.json`, not
+just successful installation or launch. Keep signing and device identifiers
+local. See `docs/build.md` for the commands.
 
 ## CMake Diagnostics
 

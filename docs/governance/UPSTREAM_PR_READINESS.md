@@ -1,4 +1,4 @@
-# Upstream Pull Request Authorization and Readiness
+# Upstream Pull Request Authorization and Readiness {#upstream-pr-readiness}
 
 Use this policy before creating, reopening, or requesting review on an
 upstream pull request.
