@@ -78,6 +78,35 @@
 
 namespace {
 
+#if defined(ICCDEV_APPLE_HAS_JSON) || defined(ICCDEV_APPLE_HAS_XML)
+class IccFactoryScope {
+public:
+  IccFactoryScope(IIccTagFactory *tagFactory, IIccMpeFactory *mpeFactory)
+    : m_tagPushed(tagFactory != nullptr), m_mpePushed(mpeFactory != nullptr)
+  {
+    if (tagFactory)
+      CIccTagCreator::PushFactory(tagFactory);
+    if (mpeFactory)
+      CIccMpeCreator::PushFactory(mpeFactory);
+  }
+
+  ~IccFactoryScope()
+  {
+    if (m_mpePushed)
+      delete CIccMpeCreator::PopFactory();
+    if (m_tagPushed)
+      delete CIccTagCreator::PopFactory();
+  }
+
+  IccFactoryScope(const IccFactoryScope &) = delete;
+  IccFactoryScope &operator=(const IccFactoryScope &) = delete;
+
+private:
+  bool m_tagPushed;
+  bool m_mpePushed;
+};
+#endif
+
 bool Check(NSMutableArray<NSDictionary *> *results, bool ok, NSString *name)
 {
   [results addObject:@{@"test": name, @"passed": @(ok)}];
@@ -187,8 +216,7 @@ void TestProfiles(NSMutableArray<NSDictionary *> *results, NSURL *documents)
 #ifdef ICCDEV_APPLE_HAS_JSON
 void TestJson(NSMutableArray<NSDictionary *> *results, NSString *path)
 {
-  CIccTagCreator::PushFactory(new CIccTagJsonFactory());
-  CIccMpeCreator::PushFactory(new CIccMpeJsonFactory());
+  IccFactoryScope factories(new CIccTagJsonFactory(), new CIccMpeJsonFactory());
 
   CIccFileIO src;
   if (!Check(results, src.Open(path.fileSystemRepresentation, "r"),
@@ -215,8 +243,7 @@ void TestJson(NSMutableArray<NSDictionary *> *results, NSString *path)
 #ifdef ICCDEV_APPLE_HAS_XML
 void TestXml(NSMutableArray<NSDictionary *> *results, NSString *path)
 {
-  CIccTagCreator::PushFactory(new CIccTagXmlFactory());
-  CIccMpeCreator::PushFactory(new CIccMpeXmlFactory());
+  IccFactoryScope factories(new CIccTagXmlFactory(), new CIccMpeXmlFactory());
 
   CIccFileIO src;
   if (!Check(results, src.Open(path.fileSystemRepresentation, "r"),

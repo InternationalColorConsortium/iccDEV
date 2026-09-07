@@ -42,6 +42,10 @@ case "${ICCDEV_APPLE_CORE_FLAVOR:-extended}" in
   minimal) core_preset="apple-${platform}-simulator-core" ;;
   *) echo "Set ICCDEV_APPLE_CORE_FLAVOR to extended or minimal" >&2; exit 2 ;;
 esac
+expect_extended=false
+if [[ "$core_preset" == *-extended-core ]]; then
+  expect_extended=true
+fi
 json_package_args=()
 if [[ "$core_preset" == *-extended-core ]]; then
   if command -v brew >/dev/null 2>&1 &&
@@ -165,9 +169,27 @@ run_case() {
     return 1
   fi
   cp "$result_file" "$build/${name}.json"
-  if ! jq -e --argjson expected "$expected" '
+  if ! jq -e --argjson expected "$expected" --argjson expect_extended "$expect_extended" '
+    def passed_test($name):
+      any(.tests[]; .test == $name and .passed == true);
+    def note_status($component; $status):
+      any(.notes[]; .component == $component and .status == $status);
+    def common_required:
+      passed_test("Write invalid ICC control inside app sandbox") and
+      passed_test("Reject invalid ICC file without RGB default substitution") and
+      note_status("Command-line tools"; "not run on device") and
+      note_status("Image-dependent tools"; "not built");
+    def extended_required:
+      passed_test("Read generated JSON back into profile") and
+      passed_test("Serialize profile to XML text") and
+      passed_test("Apply one RGB pixel through IccConnect CMM") and
+      note_status("IccJSON"; "built") and
+      note_status("IccXML"; "built") and
+      note_status("IccConnect"; "built");
     .passed == $expected and (.tests | length > 0) and
     (if $expected then all(.tests[]; .passed == true)
+       and common_required
+       and (if $expect_extended then extended_required else true end)
      else any(.tests[]; .test == "Bundled RGB fixture exists" and .passed == false) end)
   ' "$build/${name}.json" >/dev/null; then
     sed -n '1,120p' "$build/${name}.log"
