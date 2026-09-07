@@ -64,6 +64,7 @@
 #include <string>
 #include <exception>
 #include "IccProfLibVer.h"
+#include "IccFileUtil.h"
 #include "PawgReport.h"
 
 #ifdef _WIN32
@@ -137,7 +138,8 @@ int main(int argc, char *argv[])
       return 0;
     }  else if (argv[k][0] == '-') {
        // unrecognized switch/option, document and return error
-       printf("Unknown option \"%s\"\n\n", argv[k] );
+       printf("Unknown option \"%s\"\n\n",
+               icSanitizeConsoleText(argv[k]).c_str() );
        printUsage();
        return 1;
     } else {
@@ -164,6 +166,13 @@ int main(int argc, char *argv[])
   }
 #endif
 
+  // #2414: built BEFORE the try, not inside the handlers.  std::bad_alloc is a
+  // std::exception, so sanitizing in the catch block would allocate on the one
+  // path where allocation has just failed -- and an exception escaping a handler
+  // leaves main() uncaught, turning a clean diagnostic into a terminate().  This
+  // is also the hoisting pattern the other nine tools in this sweep use.
+  const std::string displayPath = icSanitizeConsoleText(profilePath);
+
   try {
 #if defined(ICCDEV_ENABLE_QA_FLAGS)
     if (bEvidenceJson) {
@@ -173,10 +182,12 @@ int main(int argc, char *argv[])
     return DumpPawgReport(profilePath.c_str(), bJson);
   }
   catch (const std::exception& e) {
-    fprintf(stderr, "ERROR - exception while processing PAWG report for '%s': %s\n", profilePath.c_str(), e.what() );
+    fprintf(stderr, "ERROR - exception while processing PAWG report for '%s': %s\n",
+             displayPath.c_str(), e.what() );
   }
   catch (...) {
-    printf("ERROR - Unknown exception while preparing PAWG report for '%s'\n", profilePath.c_str() );
+    printf("ERROR - Unknown exception while preparing PAWG report for '%s'\n",
+            displayPath.c_str() );
   }
   
   // we only get here if an exception was thrown during report generation

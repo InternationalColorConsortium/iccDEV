@@ -75,6 +75,7 @@
 #include <cstdlib>
 #include <string>
 #include <vector>
+#include "IccFileUtil.h"
 
 // -- tiny hand-rolled JSON emitter (no third-party deps, like IccPawgReport) --
 
@@ -245,7 +246,11 @@ int main(int argc, char* argv[]) {
 
   CIccProfile* pIcc = OpenIccProfile(path);
   if (!pIcc) {
-    std::fprintf(stderr, "Unable to parse '%s' as an ICC profile.\n", path);
+    // #2414: the operand is echoed here, so a path carrying terminal control
+    // sequences reached the console verbatim (#2406).  The JSON writer below
+    // uses jstr() for its own sink.
+    std::fprintf(stderr, "Unable to parse '%s' as an ICC profile.\n",
+                 icSanitizeConsoleText(path).c_str());
     return 2;
   }
 

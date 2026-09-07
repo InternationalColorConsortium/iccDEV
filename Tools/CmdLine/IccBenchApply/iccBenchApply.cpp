@@ -87,6 +87,7 @@
 #include "IccProfile.h"
 #include "IccTagLut.h"
 #include "IccUtil.h"
+#include "IccFileUtil.h"
 
 #include "BenchCases.h"
 #include "BenchTimer.h"
@@ -458,11 +459,15 @@ static void RunLeaf(const char *szProfilePath)
 {
   CIccProfile *pProfile = ReadIccProfile(szProfilePath);
   if (!pProfile) {
-    printf("  (leaf: cannot read '%s')\n", szProfilePath);
+    // #2414: a profile path reaching the console verbatim carries whatever
+    // terminal control sequences its name holds (#2406).
+    printf("  (leaf: cannot read '%s')\n",
+           icSanitizeConsoleText(szProfilePath).c_str());
     return;
   }
 
-  printf("\n  isolated leaf functions (%s):\n", szProfilePath);
+  printf("\n  isolated leaf functions (%s):\n",
+         icSanitizeConsoleText(szProfilePath).c_str());
   printf("  %-28s %9s\n", "function", "Mval/s");
 
   // A2B0 is where a LUT-based profile keeps its device-to-PCS transform.
@@ -801,7 +806,8 @@ int main(int argc, const char *argv[])
         if (*p == ',' || *p == '\0') {
           int n;
           if (!ParseIntArg(tok.c_str(), 1, 1024, n)) {
-            printf("Invalid thread count '%s': expected 1..1024\n", tok.c_str());
+            printf("Invalid thread count '%s': expected 1..1024\n",
+                   icSanitizeConsoleText(tok).c_str());
             return 1;
           }
           g_threads.push_back(n);
@@ -817,7 +823,8 @@ int main(int argc, const char *argv[])
       nArg += 2;
     }
     else {
-      printf("Unknown option '%s'\n", argv[nArg]);
+      printf("Unknown option '%s'\n",
+             icSanitizeConsoleText(argv[nArg]).c_str());
       Usage();
       return 1;
     }
@@ -835,7 +842,8 @@ int main(int argc, const char *argv[])
   if (g_bSuite && nArg < argc) {
     printf("-suite runs the built-in case table and takes no chain;"
            " '%s' and everything after it would be ignored.\n"
-           "Drop them, or drop -suite to benchmark that chain.\n", argv[nArg]);
+           "Drop them, or drop -suite to benchmark that chain.\n",
+           icSanitizeConsoleText(argv[nArg]).c_str());
     return 1;
   }
 
@@ -883,14 +891,15 @@ int main(int argc, const char *argv[])
     const char *szProfile = argv[nArg];
 
     if (nArg + 1 >= argc) {
-      printf("Profile '%s' has no rendering intent\n", szProfile);
+      printf("Profile '%s' has no rendering intent\n",
+             icSanitizeConsoleText(szProfile).c_str());
       return 1;
     }
 
     int nEncoded;
     if (!ParseIntArg(argv[nArg + 1], INT_MIN, INT_MAX, nEncoded)) {
       printf("Invalid rendering intent '%s': expected an integer code\n",
-             argv[nArg + 1]);
+             icSanitizeConsoleText(argv[nArg + 1]).c_str());
       return 1;
     }
     nArg += 2;
@@ -907,11 +916,11 @@ int main(int argc, const char *argv[])
       // would describe a digit the caller can see is in range (#2268).
       if (nEncoded < 0) {
         printf("Invalid rendering intent '%s': a negative intent code is not a"
-               " valid form\n", argv[nArg - 1]);
+               " valid form\n", icSanitizeConsoleText(argv[nArg - 1]).c_str());
       }
       else {
         printf("Invalid rendering intent '%s': decoded intent out of range\n",
-               argv[nArg - 1]);
+               icSanitizeConsoleText(argv[nArg - 1]).c_str());
       }
       return 1;
     }
@@ -920,7 +929,8 @@ int main(int argc, const char *argv[])
     if (nArg + 1 < argc && !stricmp(argv[nArg], "-PCC")) {
       pPccProfile.reset(ReadIccProfile(argv[nArg + 1]));
       if (!pPccProfile) {
-        printf("Unable to read PCC profile '%s'\n", argv[nArg + 1]);
+        printf("Unable to read PCC profile '%s'\n",
+               icSanitizeConsoleText(argv[nArg + 1]).c_str());
         return 1;
       }
       nArg += 2;
@@ -937,7 +947,8 @@ int main(int argc, const char *argv[])
                                        bUseSubProfile);
     if (stat != icCmmStatOk) {
       printf("Unable to add '%s' to the chain: %s\n",
-             szProfile, CIccCmm::GetStatusText(stat));
+             icSanitizeConsoleText(szProfile).c_str(),
+             CIccCmm::GetStatusText(stat));
       return 1;
     }
     if (pPccProfile)

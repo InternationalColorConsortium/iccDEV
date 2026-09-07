@@ -79,6 +79,7 @@
 #include "IccEval.h"
 #include "IccPrmg.h"
 #include "IccProfLibVer.h"
+#include "IccFileUtil.h"
 
 class CIccMinMaxEval : public CIccEvalCompare
 {
@@ -190,10 +191,16 @@ int main(int argc, char* argv[])
   }
 
   if (argc > 4) {
-    printf("Unexpected extra argument: '%s'\n", argv[4]);
+    printf("Unexpected extra argument: '%s'\n",
+           icSanitizeConsoleText(argv[4]).c_str());
     PrintUsage();
     return 1;
   }
+
+  // #2414: the profile path is echoed by the failure paths and by the report header,
+  // so a path carrying terminal control sequences reached the console verbatim
+  // (#2406).  EvaluateProfile() still receives the real path.
+  std::string srcName = icSanitizeConsoleText(argv[1]);
 
   icRenderingIntent nIntent = icRelativeColorimetric;
   bool nUseMPE = false;
@@ -201,7 +208,8 @@ int main(int argc, char* argv[])
   if (argc>2) {
     int temp = 0;
     if (!ParseIntArg(argv[2], (int)icPerceptual, (int)icAbsoluteColorimetric, temp)) {
-      printf("Invalid rendering_intent: '%s'\n", argv[2]);
+      printf("Invalid rendering_intent: '%s'\n",
+             icSanitizeConsoleText(argv[2]).c_str());
       PrintUsage();
       return 1;
     }
@@ -210,7 +218,8 @@ int main(int argc, char* argv[])
     if (argc > 3) {
       int tempUseMPE = 0;
       if (!ParseIntArg(argv[3], 0, 1, tempUseMPE)) {
-        printf("Invalid use_mpe: '%s'\n", argv[3]);
+        printf("Invalid use_mpe: '%s'\n",
+               icSanitizeConsoleText(argv[3]).c_str());
         PrintUsage();
         return 1;
       }
@@ -226,7 +235,8 @@ int main(int argc, char* argv[])
     // Decode the status so callers can tell an outright failure (e.g. an
     // unreadable profile) from a deliberate refusal such as "Too many samples
     // used", which guards the round trip against wide device spaces (#1405).
-    printf("Unable to perform round trip on '%s': %s\n", argv[1], CIccCmm::GetStatusText(stat));
+    printf("Unable to perform round trip on '%s': %s\n", srcName.c_str(),
+           CIccCmm::GetStatusText(stat));
     if (stat == icCmmStatTooManySamples) {
       return 0;
     }
@@ -241,7 +251,7 @@ int main(int argc, char* argv[])
 
   CIccInfo info;
 
-  printf("Profile:          '%s'\n", argv[1]);
+  printf("Profile:          '%s'\n", srcName.c_str());
   printf("Rendering Intent: %s\n", info.GetRenderingIntentName(nIntent));
   if (prmgOk) {
     printf("Specified Gamut:  %s\n", prmg.m_bPrmgImplied ? "Perceptual Reference Medium Gamut" : "Not Specified");

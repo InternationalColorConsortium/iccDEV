@@ -91,6 +91,7 @@
 #include "IccDefs.h"
 #include "IccProfLibVer.h"
 #include "IccCmdLineUtil.h"
+#include "IccFileUtil.h"
 #include <zlib.h>
 #if !defined(_WIN32)
 #include <fcntl.h>
@@ -224,7 +225,11 @@ if (injectIccFile) {
         safe_exit("Missing --output argument for write mode.");
     }
 
-    printf("[INFO] Injecting ICC profile '%s' into PNG: '%s'\n", injectIccFile, outputPngFile);
+    // #2414: the operands are echoed here and below, so a path carrying
+    // terminal control sequences reached the console verbatim (#2406).
+    printf("[INFO] Injecting ICC profile '%s' into PNG: '%s'\n",
+           icSanitizeConsoleText(injectIccFile).c_str(),
+           icSanitizeConsoleText(outputPngFile).c_str());
 
     if (!InjectIccProfile(inputFile, injectIccFile, outputPngFile)) {
         safe_exit("Failed to inject ICC profile.");
@@ -235,7 +240,8 @@ if (injectIccFile) {
 }
 
     // --- Extraction Mode ---
-    printf("[INFO] Opening PNG file: %s\n", inputFile);
+    printf("[INFO] Opening PNG file: %s\n",
+           icSanitizeConsoleText(inputFile).c_str());
     FILE *fp = fopen(inputFile, "rb");
     if (!fp) {
         LOG_ERROR("File cannot be opened.");
@@ -723,7 +729,8 @@ bool PrintIccProfileInfo(const unsigned char *pProfMem, unsigned int nLen, const
             LOG_ERROR("Failed to close ICC profile output file.");
             return false;
         }
-        printf("[INFO] ICC Profile saved to: %s\n", outputFile);
+        printf("[INFO] ICC Profile saved to: %s\n",
+               icSanitizeConsoleText(outputFile).c_str());
     }
     
     printf("--------------------------------------------------------------------\n");
