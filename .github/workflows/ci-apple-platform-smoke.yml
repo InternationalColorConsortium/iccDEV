@@ -1,0 +1,86 @@
+# Copyright (c) 2026 International Color Consortium.
+# SPDX-License-Identifier: BSD-3-Clause
+name: Apple platform smoke
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'IccProfLib/**'
+      - 'Build/AppleMobile/**'
+      - 'Build/Cmake/**'
+      - 'Build/XCode/**'
+      - 'Testing/AppleMobile/**'
+      - 'Testing/**/sRGB_D65_MAT.icc'
+      - 'Tools/CmdLine/IccFromCube/**'
+      - 'Tools/CmdLine/IccDumpProfile/**'
+      - '.github/ci/regression/profile-write-failure.cpp'
+      - '.github/scripts/iccdev-fromcube-cli-args-regression.sh'
+      - '.github/scripts/iccdev-apple-simulator-smoke.sh'
+      - '.github/scripts/iccdev-xcode-ctest-smoke.sh'
+      - '.github/workflows/ci-apple-platform-smoke.yml'
+      - '.github/workflows/ci-apple-mobile-core.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apple-smoke-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    steps:
+      - name: Checkout test sources
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          persist-credentials: false
+
+      - name: Checkout trusted summary helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: base
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      # preflight: allow-pr-script-execution reason=native-apple-host-test-only
+      - name: Exercise native simulator and Xcode CTest hosts
+        env:
+          BASH_ENV: /dev/null
+          ICCDEV_APPLE_DOWNLOAD_RUNTIME: '1'
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          bash .github/scripts/iccdev-apple-simulator-smoke.sh ios
+          bash .github/scripts/iccdev-apple-simulator-smoke.sh watchos
+          bash .github/scripts/iccdev-xcode-ctest-smoke.sh
+
+      - name: Summarize Apple smoke results
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          # shellcheck source=.github/scripts/sanitize-sed.sh
+          source "$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
+          {
+            for platform in ios watchos; do
+              report="out/apple-${platform}-simulator-smoke/restored.json"
+              count="$(jq -er '.tests | length' "$report")"
+              sanitize_line "${platform}: ${count} core checks; missing-fixture failure control passed."
+              printf '\n'
+            done
+            sanitize_line "Xcode Release and Debug CTest runtime gates passed."
+            printf '\n'
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

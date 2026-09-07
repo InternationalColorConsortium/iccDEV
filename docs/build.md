@@ -69,6 +69,28 @@ To open the generated project:
 open out/macos-xcode/RefIccMAX.xcodeproj
 ```
 
+`Build/XCode/BuildAll.sh` wraps this same configure/build sequence and can be
+invoked from any working directory. It replaces the legacy per-tool Xcode
+projects and source-tree copies; executables remain under the build directory,
+not in `Testing/`. Pass CMake configure options as arguments, or use
+`ICCDEV_XCODE_BUILD_DIR`, `ICCDEV_XCODE_CONFIG`, and
+`CMAKE_BUILD_PARALLEL_LEVEL` to select the output directory, configuration, and
+job count. Relative build directories are resolved from the repository root.
+For example:
+
+```bash
+ICCDEV_XCODE_CONFIG=Debug Build/XCode/BuildAll.sh -DENABLE_WXWIDGETS=OFF
+```
+
+This wrapper builds macOS, not iOS; use the mobile core presets and the
+device smoke app below for an iPhone or iPad.
+
+Xcode places CLI executables in `Tools/<tool>/<configuration>/`. Use
+`ctest --test-dir out/macos-xcode -C Release` to select that configuration.
+CTest automatically prepares a configuration-specific compatibility directory
+for the shell-backed suites; no executable copies or manual path overrides
+are needed. See [CTest Tool Suites](ctest.md) for the build and test commands.
+
 For GuardMalloc/libgmalloc crash reproduction, use a non-sanitizer Debug build
 and verify that the built Mach-O tools contain `LC_UUID`. Apple's dynamic loader
 can abort before `main()` when `DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib`
@@ -120,11 +142,110 @@ App code must use only sandbox-authorized file locations or streams. Native
 Apple test hosts are the appropriate test mechanism for these targets; the
 repository's command-line CTest suites remain macOS-host tools.
 
-The reusable `Apple mobile core libraries` workflow discovers the Apple SDKs
-installed on its macOS runner, builds every matching mobile-core preset, and
-uploads the static libraries, generated version headers, and a build manifest
-as the `iccdev-apple-mobile-core` artifact. Run it manually or call
-`.github/workflows/ci-apple-mobile-core.yml` from another workflow.
+The `Apple mobile core libraries` workflow discovers installed Apple SDKs,
+builds every matching mobile-core preset, and runs the simulator and Xcode
+CTest smoke gates below. Master pushes and manual runs upload the static
+libraries, generated version headers, and build manifest as
+`iccdev-apple-mobile-core`. Dispatch
+`.github/workflows/ci-apple-mobile-core.yml` for this complete Apple gate.
+The separate `Apple platform smoke` workflow runs the same runtime gates for
+affected same-repository pull requests without uploading PR-produced artifacts.
+
+### Run the core smoke app on an iPhone, iPad, or Apple Watch
+
+`Build/AppleMobile` is a standalone Xcode consumer of the core's exported
+CMake package. UIKit (iOS) and SwiftUI (watchOS) hosts share Foundation-based
+tests; neither enables desktop tools or CTest on the device. The app
+exercises the bundled RGB profile, memory and sandbox-file serialization,
+truncated-header rejection, single/batch RGB transforms, and analytic
+3D CLUT interpolation with 3, 8, 15, and 16 output channels.
+
+Use an unlocked, paired device with Developer Mode enabled and an Apple
+Development signing identity in Xcode. A Developer ID Application certificate
+cannot sign a mobile app. Set your team ID and the device identifier from
+`xcrun devicectl list devices`; do not commit signing credentials, provisioning
+profiles, device identifiers, or generated Xcode projects.
+For a watch, also keep its paired iPhone available and confirm Xcode can connect
+to the watch. Developer Mode alone does not establish the CoreDevice network
+tunnel.
+
+Run from the repository root, with `TEAM_ID` and `DEVICE_ID` set in your shell.
+Set `PLATFORM=watchos` for a watch; the default below targets iPhone/iPad:
+
+```bash
+platform="${PLATFORM:-ios}"
+case "$platform" in
+  ios)
+    system=iOS; sdk=iphoneos; arch=arm64; deployment=17.0
+    bundle=org.color.iccdev.CoreSmoke ;;
+  watchos)
+    system=watchOS; sdk=watchos; arch=arm64_32; deployment=10.0
+    bundle=org.color.iccdev.CoreSmoke.watch ;;
+  *) echo "Set PLATFORM to ios or watchos" >&2; exit 2 ;;
+esac
+core="out/apple-${platform}-device-core"
+build="out/apple-${platform}-device-smoke"
+cmake --preset "apple-${platform}-device-core" -S Build/Cmake \
+  -DCMAKE_OSX_ARCHITECTURES="$arch" -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment"
+cmake --build "$core" --parallel
+cmake -S Build/AppleMobile -B "$build" -G Xcode \
+  -DCMAKE_SYSTEM_NAME="$system" -DCMAKE_OSX_SYSROOT="$sdk" \
+  -DCMAKE_OSX_ARCHITECTURES="$arch" -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment" \
+  -DRefIccMAX_DIR="$PWD/$core" \
+  -DICCDEV_APPLE_BUNDLE_IDENTIFIER="$bundle" \
+  -DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM="$TEAM_ID"
+xcodebuild -project "$build/IccDevCoreSmoke.xcodeproj" \
+  -target IccDevCoreSmoke -configuration Release -sdk "$sdk" \
+  -allowProvisioningUpdates -allowProvisioningDeviceRegistration build
+xcrun devicectl device install app --device "$DEVICE_ID" \
+  "$build/Release-${sdk}/IccDevCoreSmoke.app"
+xcrun devicectl device process launch --device "$DEVICE_ID" \
+  --console --terminate-existing --timeout 90 \
+  --json-output "$build/device-launch.json" "$bundle" --exit-after-tests
+jq -e '.info.outcome == "success" and .result.terminationResult.exitCode == 0' \
+  "$build/device-launch.json"
+xcrun devicectl device copy from --device "$DEVICE_ID" \
+  --domain-type appDataContainer --domain-identifier "$bundle" \
+  --source Documents/results.json --destination "$build/results.json"
+jq -e '.passed == true and (.tests | length > 0) and all(.tests[]; .passed == true)' \
+  "$build/results.json"
+```
+
+Require successful commands, `ICCDEV_DEVICE_TESTS PASS` in the console,
+exit code zero in the current launch JSON, and a passing report copied from
+that run. An installation or launch alone is not a test pass. A normal app
+launch (without `--exit-after-tests`) leaves the report visible on the device.
+This is a core smoke suite, not the desktop regression suite or a benchmark.
+
+Change `bundle` if your team needs a different app ID, and use the same ID in
+the device commands. `ICCDEV_IOS_BUNDLE_IDENTIFIER` remains supported for iOS
+when `ICCDEV_APPLE_BUNDLE_IDENTIFIER` is unset or empty. The deployment targets
+above are specific to this sample; keep the core and app targets aligned.
+Never link a device archive into a simulator app, even when both use arm64.
+Use the simulator helper below to build and exercise matching simulator pairs.
+
+### Run the simulator and Xcode CI gates locally
+
+From the repository root on a Mac with Xcode, CMake, Ninja, and `jq`:
+
+```bash
+bash .github/scripts/iccdev-apple-simulator-smoke.sh ios
+bash .github/scripts/iccdev-apple-simulator-smoke.sh watchos
+bash .github/scripts/iccdev-xcode-ctest-smoke.sh
+```
+
+Each simulator command builds a matching core/app pair and creates a disposable
+simulator. It requires a fresh passing report, then a missing-profile failure
+control, followed by a restored passing run. Reports and console logs remain
+under `out/apple-<platform>-simulator-smoke`; only the simulator created by the
+command is shut down and deleted. No signing identity is needed. An unavailable
+runtime fails with an installation command; set
+`ICCDEV_APPLE_DOWNLOAD_RUNTIME=1` to permit Xcode to download it, as CI does.
+
+The Xcode command builds dependency-free Release and Debug test targets in
+`out/xcode-ctest-smoke`, exercises the configuration-specific CTest runtime
+layout, and requires freshly generated CLI output to catch skipped execution.
+See [CTest tool suites](ctest.md) for broader desktop coverage.
 
 ## Windows MSVC
 

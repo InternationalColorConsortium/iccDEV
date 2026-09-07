@@ -24,6 +24,7 @@ new blocker returns the branch to branch-only grooming before another review.
 | Regression PoC inventory | `.github/ci/regression/README.md` | Maps regression inputs and scripts to issues. |
 | Tool test gate | `.github/workflows/ci-iccdev-tool-tests.yml` | ASAN/UBSAN tool coverage, JSON gates, regression scripts, and broad generated-profile CLI coverage. |
 | MATLAB Windows gate | `.github/workflows/ci-matlab.yml` | PowerShell-native MSVC build, MATLAB MEX QA, native focused regressions, and Docker interoperability. |
+| Apple platform gates | `.github/workflows/ci-apple-platform-smoke.yml`, `.github/workflows/ci-apple-mobile-core.yml` | iOS/watchOS simulator hosts and Xcode Release/Debug CTest runtime layouts; [local commands](build.md). |
 | CTest registration | `Build/Cmake/Testing/CMakeLists.txt` | CTest names, labels, fixtures, timeouts, and check target. |
 | CTest process guide | `docs/ctest.md` | Local commands, registered suites, and add-test workflow. |
 | Maintainer CI skill | `.github/skills/maintainer-ci-ctest/SKILL.md` | Repeatable maintainer workflow for CI, CTest, CPack, sanitizer, and release gates. |
@@ -58,6 +59,15 @@ Every new regression gate should state:
 Prefer deterministic invariants over broad diffs. For generated ICC profiles,
 normalize only documented volatile fields when comparing whole files; otherwise
 assert specific tag sizes, offsets, record lengths, or validation messages.
+
+The Apple gates extend #2445's static-core SDK builds with native runtime
+coverage. Both use `iccdev-apple-simulator-smoke.sh` and
+`iccdev-xcode-ctest-smoke.sh`: simulator success requires a fresh report and
+console sentinel, a missing-fixture control must fail, and Xcode CTest must
+produce fresh CLI output in both configurations. The path-filtered PR workflow
+runs only for same-repository heads and keeps outputs in the job workspace.
+The master-push/manual core workflow additionally builds all available SDK
+presets and uploads their archives. A nonzero helper exit fails either gate.
 
 ## Workflow Governance Requirements
 

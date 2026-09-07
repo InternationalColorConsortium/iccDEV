@@ -7343,6 +7343,8 @@ exit "$status"
   endif()
 endif()
 
+include("${CMAKE_CURRENT_LIST_DIR}/UnixMultiConfigRuntime.cmake")
+
 set(ICCDEV_TOOL_PATHS
   "${ICCDEV_TOOLS_DIR}/IccApplyNamedCmm"
   "${ICCDEV_TOOLS_DIR}/IccApplyProfiles"
@@ -7369,7 +7371,7 @@ endif()
 
 list(JOIN ICCDEV_TOOL_PATHS ":" ICCDEV_TOOL_PATH)
 set(ICCDEV_SHARED_LIBRARY_PATH
-    "${CMAKE_BINARY_DIR}/IccProfLib:${CMAKE_BINARY_DIR}/IccXML:${CMAKE_BINARY_DIR}/IccJSON:${CMAKE_BINARY_DIR}/IccConnect")
+    "${ICCDEV_SCRIPT_BUILD_DIR}/IccProfLib:${ICCDEV_SCRIPT_BUILD_DIR}/IccXML:${ICCDEV_SCRIPT_BUILD_DIR}/IccJSON:${ICCDEV_SCRIPT_BUILD_DIR}/IccConnect")
 
 set(ICCDEV_REQUIRE_JSON_ROUNDTRIP 0)
 if(TARGET iccToJson AND TARGET iccFromJson)
@@ -7454,7 +7456,7 @@ set(ICCDEV_TEST_ENV
   "LLVM_PROFILE_FILE=/dev/null"
   "ICCDEV_TOOLS_DIR=${ICCDEV_TOOLS_DIR}"
   "ICCDEV_TESTING_DIR=${ICCDEV_TESTING_DIR}"
-  "ICCDEV_BUILD_DIR=${CMAKE_BINARY_DIR}"
+  "ICCDEV_BUILD_DIR=${ICCDEV_SCRIPT_BUILD_DIR}"
   "ICCDEV_REQUIRE_JSON_ROUNDTRIP=${ICCDEV_REQUIRE_JSON_ROUNDTRIP}"
   # Issue #1856. The JSON size bound is configurable, so a test that asserts on
   # a document size has to know which limit the readers were actually built
@@ -9317,4 +9319,16 @@ if(TARGET iccDescribeSinkTest)
     TIMEOUT 60
     LABELS  "iccdev;describe;api;sink;options"
   )
+endif()
+
+# UnixMultiConfigRuntime.cmake bails out on WIN32 without defining the
+# iccdev_unix_runtime fixture, so this wiring must be skipped there too or
+# Windows multi-config (Visual Studio) CTest runs get unsatisfied fixtures.
+if(ICCDEV_IS_MULTI_CONFIG AND NOT WIN32)
+  get_property(_iccdev_runtime_tests DIRECTORY PROPERTY TESTS)
+  foreach(_test IN LISTS _iccdev_runtime_tests)
+    if(NOT _test MATCHES "^iccdev\\.(unix-multi-config-runtime|unix-runtime-layout)$")
+      set_property(TEST "${_test}" APPEND PROPERTY FIXTURES_REQUIRED iccdev_unix_runtime)
+    endif()
+  endforeach()
 endif()
