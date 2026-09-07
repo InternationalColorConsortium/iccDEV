@@ -1,10 +1,16 @@
 # Copyright (c) 2026 International Color Consortium.
 # SPDX-License-Identifier: BSD-3-Clause
 
+# CMakeLists.txt uses ICCDEV_SCRIPT_BUILD_DIR (via ICCDEV_BUILD_DIR and
+# ICCDEV_SHARED_LIBRARY_PATH) for every platform, so the default must be set
+# before any early return below.
+set(ICCDEV_SCRIPT_BUILD_DIR "${CMAKE_BINARY_DIR}")
+
 # This runtime view and its layout regression rely on POSIX semantics (hard
 # links, `find -type f`) that Windows multi-config generators (Visual Studio)
 # do not provide. Bail out early so Windows CTest runs neither register an
-# unsatisfiable iccdev_unix_runtime fixture nor the Unix-only layout test.
+# unsatisfiable iccdev_unix_runtime fixture nor the Unix-only layout test,
+# while still leaving ICCDEV_SCRIPT_BUILD_DIR defined above.
 if(WIN32)
   return()
 endif()
@@ -26,7 +32,6 @@ function(iccdev_append_runtime_entry SOURCE_PATH DESTINATION_PATH)
   set(_iccdev_runtime_manifest "${_iccdev_runtime_manifest}" PARENT_SCOPE)
 endfunction()
 
-set(ICCDEV_SCRIPT_BUILD_DIR "${CMAKE_BINARY_DIR}")
 if(ICCDEV_IS_MULTI_CONFIG)
   foreach(_config IN LISTS CMAKE_CONFIGURATION_TYPES)
     if(NOT _config MATCHES "^[A-Za-z0-9_+-][A-Za-z0-9_.+-]*$")
