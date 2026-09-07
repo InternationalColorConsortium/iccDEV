@@ -88,13 +88,19 @@ xcrun simctl boot "$simulator"
 booted=1
 xcrun simctl bootstatus "$simulator" -b
 xcrun simctl install "$simulator" "$app"
-data="$(xcrun simctl get_app_container "$simulator" "$bundle" data)"
-installed_app="$(xcrun simctl get_app_container "$simulator" "$bundle" app)"
+data=""
+installed_app=""
+refresh_app_containers() {
+  data="$(xcrun simctl get_app_container "$simulator" "$bundle" data)"
+  installed_app="$(xcrun simctl get_app_container "$simulator" "$bundle" app)"
+}
+refresh_app_containers
 
 run_case() {
   local name="$1" expected="$2"
   local launch_status=0 timed_out=0
-  rm -f "$data/Documents/results.json"
+  local result_file="$data/Documents/results.json"
+  rm -f "$result_file"
   xcrun simctl launch --console-pty --terminate-running-process \
     "$simulator" "$bundle" --exit-after-tests > "$build/${name}.log" 2>&1 &
   launch_pid=$!
@@ -119,7 +125,12 @@ run_case() {
     sed -n '1,120p' "$build/${name}.log"
     return 1
   fi
-  cp "$data/Documents/results.json" "$build/${name}.json"
+  if [[ ! -s "$result_file" ]]; then
+    echo "Simulator case ${name} did not persist results at ${result_file}." >&2
+    sed -n '1,120p' "$build/${name}.log"
+    return 1
+  fi
+  cp "$result_file" "$build/${name}.json"
   if ! jq -e --argjson expected "$expected" '
     .passed == $expected and (.tests | length > 0) and
     (if $expected then all(.tests[]; .passed == true)
@@ -138,6 +149,7 @@ run_case() {
 run_case positive true
 mv "$installed_app/sRGB_D65_MAT.icc" "$installed_app/sRGB_D65_MAT.icc.disabled"
 run_case missing-fixture false
-mv "$installed_app/sRGB_D65_MAT.icc.disabled" "$installed_app/sRGB_D65_MAT.icc"
+xcrun simctl install "$simulator" "$app"
+refresh_app_containers
 run_case restored true
 printf '%s simulator core smoke passed using %s\n' "$system" "$runtime"
