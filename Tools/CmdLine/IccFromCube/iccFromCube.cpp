@@ -82,6 +82,7 @@
 #include "IccTagMPE.h"
 #include "IccMpeBasic.h"
 #include "IccProfLibVer.h"
+#include "IccFileUtil.h"
 #include "IccUtil.h"
 #include "IccCmdLineUtil.h"
 
@@ -227,7 +228,9 @@ public:
       else if (line.substr(0, 19) == "LUT_OUT_VIDEO_RANGE")
         m_bLutOutVideoRange = true;
       else {
-        printf("Unknown keyword '%s'\n", line.c_str());
+        // A line of the .cube FILE, not an argv operand -- the stronger vector of
+        // the two, because a downloaded LUT is not something the caller typed.
+        printf("Unknown keyword '%s'\n", icSanitizeConsoleText(line).c_str());
         return false;
       }
     }
@@ -578,15 +581,22 @@ int main(int argc, char* argv[])
     return argc <= 2 ? 0 : 1;
   }
 
+  // #2414: both operands are echoed by the failure paths below, so a path carrying
+  // terminal control sequences reached the console verbatim (#2406).  Sanitized once
+  // here rather than at each printf; CubeFile and SaveIccProfile still receive the
+  // real path.
+  std::string srcName = icSanitizeConsoleText(argv[1]);
+  std::string dstName = icSanitizeConsoleText(argv[2]);
+
   CubeFile cube(argv[1]);
 
   if (!cube.parseHeader()) {
-    printf("Unable to parse '%s'\n", argv[1]);
+    printf("Unable to parse '%s'\n", srcName.c_str());
     return -2;
   }
 
   if (!cube.sizeLut3D()) {
-    printf("3DLUT not found in '%s'\n", argv[1]);
+    printf("3DLUT not found in '%s'\n", srcName.c_str());
     return -3;
   }
 
@@ -647,7 +657,7 @@ int main(int argc, char* argv[])
   CIccCLUT* pCLUT = new CIccCLUT(3, 3);
   
   if (!pCLUT->Init(cube.sizeLut3D()) ) {
-    printf("Unable to create LUT from '%s'\n", argv[1]);
+    printf("Unable to create LUT from '%s'\n", srcName.c_str());
     delete pCLUT;
     delete pMpeCLUT;
     delete pTag;
@@ -656,7 +666,7 @@ int main(int argc, char* argv[])
 
   bool bSuccess = cube.parse3DTable(pCLUT->GetData(0), pCLUT->NumPoints()*3);
   if (!bSuccess) {
-    printf("Unable to parse LUT from '%s'\n", argv[1]);
+    printf("Unable to parse LUT from '%s'\n", srcName.c_str());
     delete pCLUT;
     delete pMpeCLUT;
     delete pTag;
@@ -716,10 +726,10 @@ int main(int argc, char* argv[])
   profile.AttachTag(icSigProfileSequenceDescTag, pSeqTag);
 
   if (SaveIccProfile(argv[2], &profile)) {
-    printf("'%s' successfully created\n", argv[2]);
+    printf("'%s' successfully created\n", dstName.c_str());
   }
   else {
-    printf("Unable to save profile '%s'\n", argv[2]);
+    printf("Unable to save profile '%s'\n", dstName.c_str());
     return 5;
   }
 

@@ -8,6 +8,7 @@
 #include "IccIO.h"
 #include "IccProfLibVer.h"
 #include "IccLibXMLVer.h"
+#include "IccFileUtil.h"
 #include <cstdlib>
 
 int main(int argc, char* argv[])
@@ -24,13 +25,20 @@ int main(int argc, char* argv[])
   CIccProfileXml profile;
   CIccFileIO srcIO, dstIO;
 
+  // #2414: both operands are echoed by every failure path below, so a path carrying
+  // terminal control sequences reached the console verbatim (#2406).  Sanitized once
+  // here rather than at each printf so a message added later cannot reintroduce the
+  // raw form; the paths handed to Open() stay untouched.
+  std::string srcName = icSanitizeConsoleText(argv[1]);
+  std::string dstName = icSanitizeConsoleText(argv[2]);
+
   if (!srcIO.Open(argv[1], "r")) {
-    printf("Unable to open '%s'\n", argv[1]);
+    printf("Unable to open '%s'\n", srcName.c_str());
     return EXIT_FAILURE;
   }
 
   if (!profile.Read(&srcIO)) {
-    printf("Unable to read '%s'\n", argv[1]);
+    printf("Unable to read '%s'\n", srcName.c_str());
     return EXIT_FAILURE;
   }
 
@@ -38,19 +46,19 @@ int main(int argc, char* argv[])
   xml.reserve(40000000);
 
   if (!profile.ToXml(xml)) {
-    printf("Unable to convert '%s' to xml\n", argv[1]);
+    printf("Unable to convert '%s' to xml\n", srcName.c_str());
     return EXIT_FAILURE;
   }
 
   if (!dstIO.Open(argv[2], "wb")) {
-    printf("unable to open '%s'\n", argv[2]);
+    printf("unable to open '%s'\n", dstName.c_str());
     return EXIT_FAILURE;
   }
 
   if (dstIO.Write8((char*)xml.c_str(), xml.size()) != xml.size() ||
       !dstIO.Flush() ||
       !dstIO.CloseFile()) {
-    printf("Unable to write '%s'\n", argv[2]);
+    printf("Unable to write '%s'\n", dstName.c_str());
     return EXIT_FAILURE;
   }
 

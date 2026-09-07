@@ -133,6 +133,13 @@ int main(int argc, char* argv[])
     return EXIT_FAILURE;
   }
 
+  // #2414: every failure path below echoes one of the two operands, so a path
+  // carrying terminal control sequences reached the console verbatim (#2406).
+  // Sanitized once here rather than at each print site; the paths handed to
+  // LoadXml()/SaveIccProfile() stay untouched.
+  std::string srcName = icSanitizeConsoleText(argv[1]);
+  std::string dstName = icSanitizeConsoleText(argv[2]);
+
   // Profile XML on the CLI tool's filesystem is trusted by the invoking
   // user (same trust boundary as the XML file itself), so opt in to
   // <tag File="..."/> / <tag Filename="..."/> loaders. Library/WASM
@@ -175,7 +182,8 @@ int main(int argc, char* argv[])
           return EXIT_FAILURE;
         }
         if (!icIsReadableFile(szRelaxNGDir.c_str())) {
-          fprintf(stderr, "Error: cannot read RelaxNG schema '%s'\n", szRelaxNGDir.c_str());
+          fprintf(stderr, "Error: cannot read RelaxNG schema '%s'\n",
+                  icSanitizeConsoleText(szRelaxNGDir).c_str());
           return EXIT_FAILURE;
         }
       }
@@ -203,7 +211,8 @@ int main(int argc, char* argv[])
       // silence: an ordinary "-no-id" typo left bNoId false, produced a profile with
       // an ID, and still exited 0, reporting success for a run that ignored what it
       // was told to do.
-      fprintf(stderr, "Error: unrecognized option '%s'\n", argv[i]);
+      fprintf(stderr, "Error: unrecognized option '%s'\n",
+              icSanitizeConsoleText(argv[i]).c_str());
       Usage(stderr);
       return EXIT_FAILURE;
     }
@@ -228,7 +237,8 @@ int main(int argc, char* argv[])
   // what the README documents, so it stays; the silence about which file was used is
   // the part worth fixing.
   if (bValidateRequested)
-    printf("Validating against RelaxNG schema '%s'\n", szRelaxNGDir.c_str());
+    printf("Validating against RelaxNG schema '%s'\n",
+           icSanitizeConsoleText(szRelaxNGDir).c_str());
 
   // Re-indented to match its block.  The stray four-space indent was harmless while
   // nothing preceded it, but it now follows an if-statement and -Wmisleading-indentation
@@ -242,7 +252,7 @@ int main(int argc, char* argv[])
 #ifndef WIN32
     fprintf(stderr, "\n");
 #endif
-    fprintf(stderr, "Unable to Parse '%s'\n", argv[1]);
+    fprintf(stderr, "Unable to Parse '%s'\n", srcName.c_str());
     return EXIT_FAILURE;
   }
 
@@ -272,7 +282,7 @@ int main(int argc, char* argv[])
       printf("Profile parsed and saved correctly\n");
     }
     else {
-      fprintf(stderr, "Unable to save profile as '%s'\n", argv[2]);
+      fprintf(stderr, "Unable to save profile as '%s'\n", dstName.c_str());
       return EXIT_FAILURE;
     }
   }

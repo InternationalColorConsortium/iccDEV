@@ -79,6 +79,7 @@
 #include "IccTagLut.h"
 #include "IccUtil.h"
 #include "IccProfLibVer.h"
+#include "IccFileUtil.h"
 #include "IccQualityMetrics.h"
 #include "IccSignatureRegistry.h"
 
@@ -2427,7 +2428,18 @@ int DumpPawgReport(const char *szFilename, bool bJson)
   printf("            Goals for profile assessment\n");
   printf("URL:        %s\n", kPawgUrl);
   printf("Tool:       iccPawgReport (IccProfLib " ICCPROFLIBVER ")\n");
-  printf("Profile:    %s\n", szFilename ? szFilename : "(null)");
+  // #2414: the report header echoes the operand, so a path carrying terminal
+  // control sequences reached the console verbatim (#2406).
+  //
+  // The JSON writer above is NOT equivalent cover, and an earlier draft of this
+  // comment claimed it was.  icJsonEscape() (Tools/CmdLine/IccCmdLineUtil.h)
+  // escapes ESC as \u001b but appends well-formed UTF-8 unchanged, so U+202E
+  // RIGHT-TO-LEFT OVERRIDE and the C1 controls -- exactly the codepoints #2437
+  // added the by-codepoint escape for -- still reach a terminal that cats the
+  // --json output.  Widening icJsonEscape() changes a shared helper and the
+  // shape of every JSON consumer's input, so it is filed rather than done here.
+  printf("Profile:    %s\n",
+         szFilename ? icSanitizeConsoleText(szFilename).c_str() : "(null)");
   printf("Size:       %zu bytes\n", raw.data.size());
   printf("Load:       %s\n", pIcc ? "parsed by IccProfLib" : "raw checks only; IccProfLib parse failed");
   printf("\n");

@@ -85,6 +85,7 @@
 #include "IccUtil.h"
 #include "IccProfLibVer.h"
 #include "IccCmdLineUtil.h"
+#include "IccFileUtil.h"
 
 // #define MEMORY_LEAK_CHECK to enable C RTL memory leak checking (slow!)
 #define MEMORY_LEAK_CHECK
@@ -700,9 +701,15 @@ int main(int argc, char* argv[])
   icHeader* pHdr = NULL;
 
   // Precondition: nArg is argument of ICC profile filename
+  // #2414: the operand is echoed on both the failure and the success path, so a
+  // path carrying terminal control sequences reached the console verbatim (#2406).
+  // The --evidence-json writer above escapes it with icJsonEscape(); this is the
+  // text form's counterpart.
+  std::string srcName = icSanitizeConsoleText(argv[nArg]);
+
   printf("Built with IccProfLib version " ICCPROFLIBVER "\n\n");
   if (!pIcc) {
-    printf("Unable to parse '%s' as ICC profile!\n", argv[nArg]);
+    printf("Unable to parse '%s' as ICC profile!\n", srcName.c_str());
     nStatus = icValidateCriticalError;
   }
   else {
@@ -710,7 +717,7 @@ int main(int argc, char* argv[])
     const size_t bufSize = 64;
     char buf[bufSize];
 
-    printf("Profile:            '%s'\n", argv[nArg]);
+    printf("Profile:            '%s'\n", srcName.c_str());
     if(Fmt.IsProfileIDCalculated(&pHdr->profileID))
       printf("Profile ID:         %s\n", Fmt.GetProfileID(&pHdr->profileID));
     else

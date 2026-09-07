@@ -7895,6 +7895,39 @@ if(TARGET iccApplyNamedCmm AND TARGET iccApplySearch AND TARGET iccFromXml)
     SKIP_RETURN_CODE 77)
 endif()
 
+# The ANSI-injection half of #2414's QA task -- the counterpart to the directory
+# guard above.  #2419 sanitized the four iccApply* tools and #2437 moved the
+# helper to per-codepoint escaping; this covers the eight further tools measured
+# to echo an operand verbatim on 764fc176, plus iccProfilePlot and
+# iccV5DspObsToV4Dsp, which a first pass wrongly cleared.
+#
+# Guarded on iccDumpProfile AND iccToXml rather than on all ten: the script
+# skips per-tool and reports what it could not measure, but iccToXml carries
+# BOTH controls, and a run with the controls skipped could pass while an
+# over-eager fix went unnoticed.
+#
+# The 300 s budget is the sibling's, and the per-case timeout was cut to 20 s to
+# stay inside it: 13 spawns at the sibling's 60 s would be a 780 s worst case,
+# and CTest killing the script means no [FAIL] line and a bare "Timeout" for
+# precisely the regression this suite exists to diagnose.
+#
+# Deliberately NOT labelled "slow", for the same reason as the apply-usage suite
+# below: ci-pr-action.yml pins ctest_mode=fast, which drops the slow label, and
+# a console-injection regression that runs on no PR leg is not a regression test
+# (#2412).
+if(TARGET iccDumpProfile AND TARGET iccToXml)
+  iccdev_add_script_test(
+    iccdev.console-sanitize-sweep-regression
+    300
+    "iccdev;tools;cli;console;sanitize;issue-2414;issue-2406;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2414-console-sanitize-sweep-tests.sh"
+  )
+  # Exits 77 when no tool was found and no case ran.
+  set_tests_properties(iccdev.console-sanitize-sweep-regression PROPERTIES
+    SKIP_RETURN_CODE 77)
+endif()
+
 # The iccApply* half of the same CLI-contract family (#2405).  Guarded on all
 # four targets because the script measures all four and its "nothing measured"
 # guard would otherwise turn a partial build into a skip that hides real cases.
