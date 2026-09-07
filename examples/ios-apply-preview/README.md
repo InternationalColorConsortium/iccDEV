@@ -31,6 +31,33 @@ This is intentionally not a full mobile port of the desktop
 profiles, or consume JSON configuration. It is a visual CMM apply preview that
 keeps the first mobile example limited to IccProfLib and UIKit.
 
+## Quick start from a fresh clone
+
+From the repository root, run the helper script in this example directory. It
+builds the matching `apple-ios-*-core` static library, configures the Xcode app,
+and builds the app bundle.
+
+```bash
+git clone https://github.com/InternationalColorConsortium/iccDEV.git
+cd iccDEV
+examples/ios-apply-preview/build-ios.sh simulator --open
+```
+
+Use a booted simulator for a terminal smoke run:
+
+```bash
+examples/ios-apply-preview/build-ios.sh simulator --run-tests
+```
+
+Use an unlocked, paired iPhone or iPad for a physical-device build. Set
+`TEAM_ID` and `DEVICE_ID` from Xcode and `xcrun devicectl list devices`.
+
+```bash
+TEAM_ID=ABCDE12345 examples/ios-apply-preview/build-ios.sh device --open
+TEAM_ID=ABCDE12345 DEVICE_ID=<udid> \
+  examples/ios-apply-preview/build-ios.sh device --launch
+```
+
 ## Build and run on an iPhone or iPad
 
 Use an unlocked, paired device with Developer Mode enabled and an Apple
@@ -65,6 +92,13 @@ Launch without `--exit-after-tests` for hands-on visual review on iPhone or
 iPad. The UI includes size and interpolation selectors, source/applied/color
 delta image panels, ICC and repository links, and a native share sheet.
 
+The same sequence is wrapped by:
+
+```bash
+TEAM_ID=ABCDE12345 DEVICE_ID=<udid> \
+  examples/ios-apply-preview/build-ios.sh device --run-tests
+```
+
 ## Build and run on the simulator
 
 ```bash
@@ -84,6 +118,12 @@ xcodebuild -project out/ios-apply-preview-sim/IccApplyPreviewPOC.xcodeproj \
 
 Install and launch the built `.app` in a simulator with `xcrun simctl` to
 review the same visual panels without a physical device.
+
+The same sequence is wrapped by:
+
+```bash
+examples/ios-apply-preview/build-ios.sh simulator --run-tests
+```
 
 ## Scope and gaps
 

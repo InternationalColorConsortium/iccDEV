@@ -9,12 +9,16 @@ cmake_minimum_required(VERSION 3.21)
 project(IccApplyPreviewPOC LANGUAGES CXX OBJCXX)
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "iOS" OR NOT CMAKE_GENERATOR STREQUAL "Xcode")
-  message(FATAL_ERROR "Use the Xcode generator with -DCMAKE_SYSTEM_NAME=iOS")
+  message(FATAL_ERROR
+    "Use examples/ios-apply-preview/build-ios.sh or configure with "
+    "-G Xcode -DCMAKE_SYSTEM_NAME=iOS")
 endif()
 
 find_package(RefIccMAX CONFIG REQUIRED)
 if(NOT TARGET RefIccMAX::IccProfLib2-static)
-  message(FATAL_ERROR "Build the matching apple-ios-*-core static library first")
+  message(FATAL_ERROR
+    "Build the matching apple-ios-*-core static library first, or run "
+    "examples/ios-apply-preview/build-ios.sh")
 endif()
 
 set(ICCDEV_APPLYPREVIEW_BUNDLE_IDENTIFIER "org.color.iccdev.ApplyPreviewPOC"
