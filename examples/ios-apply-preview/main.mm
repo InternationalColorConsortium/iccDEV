@@ -249,6 +249,16 @@ static UIColor *IccDevBrandBlue(void)
   actions.spacing = 12;
   actions.translatesAutoresizingMaskIntoConstraints = NO;
 
+  UIStackView *links = nil;
+  if (isPad) {
+    links = [[UIStackView alloc] initWithArrangedSubviews:@[iccLink, repoLink]];
+    links.axis = UILayoutConstraintAxisHorizontal;
+    links.alignment = UIStackViewAlignmentFill;
+    links.distribution = UIStackViewDistributionFillEqually;
+    links.spacing = 12;
+    links.translatesAutoresizingMaskIntoConstraints = NO;
+  }
+
   UIStackView *(^imagePanel)(NSString *, UIImageView *) =
     ^UIStackView *(NSString *text, UIImageView *image) {
       UIStackView *panel = [[UIStackView alloc]
@@ -274,6 +284,7 @@ static UIColor *IccDevBrandBlue(void)
 
   NSArray<UIView *> *arranged = isPad ? @[
     title,
+    links,
     controls,
     actions,
     previewPanels,
@@ -306,12 +317,13 @@ static UIColor *IccDevBrandBlue(void)
   stack.spacing = isPad ? 12 : 12;
   stack.translatesAutoresizingMaskIntoConstraints = NO;
 
-  UIScrollView *scroll = [[UIScrollView alloc] init];
-  scroll.translatesAutoresizingMaskIntoConstraints = NO;
+  UIScrollView *scroll = nil;
   if (isPad) {
     [controller.view addSubview:stack];
   }
   else {
+    scroll = [[UIScrollView alloc] init];
+    scroll.translatesAutoresizingMaskIntoConstraints = NO;
     [scroll addSubview:stack];
     [controller.view addSubview:scroll];
   }
@@ -395,6 +407,7 @@ static UIColor *IccDevBrandBlue(void)
                                       constant:12],
       [stack.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor
                                          constant:-12],
+      [links.heightAnchor constraintGreaterThanOrEqualToConstant:32],
       [controls.heightAnchor constraintGreaterThanOrEqualToConstant:58],
       [actions.heightAnchor constraintEqualToConstant:52],
       [source.heightAnchor constraintEqualToAnchor:safeArea.heightAnchor
