@@ -27,11 +27,15 @@ INPUT                  = IccProfLib \
                          Tools/wxWidget \
                          examples/hello-iccdev/hello-iccdev.cpp \
                          examples/c-validation-dlopen/main.c \
+                         examples/ios-benchapply/README.md \
+                         examples/ios-benchapply/BenchApplyHost.h \
+                         examples/ios-benchapply/BenchApplyHost.mm \
+                         examples/ios-benchapply/main.mm \
                          docs \
                          .github/ci/doxygen/curated-navigation.dox \
                          .github/ci/quality-assurance/scripts
 USE_MDFILE_AS_MAINPAGE =
-FILE_PATTERNS          = *.h *.h.in *.hpp *.c *.cc *.cpp *.cxx *.md *.dox *.dot *.sh *.yaml *.yml
+FILE_PATTERNS          = *.h *.h.in *.hpp *.c *.cc *.cpp *.cxx *.mm *.md *.dox *.dot *.sh *.yaml *.yml
 RECURSIVE              = YES
 EXCLUDE                = docs/generated \
                          docs/index.md \
@@ -69,7 +73,8 @@ INCLUDE_PATH           = IccProfLib \
                          Tools/CmdLine/IccPawgReport \
                          Tools/CmdLine/IccProfileVisualize \
                          Tools/Winnt/IccIisIsapi \
-                         examples/hello-iccdev
+                         examples/hello-iccdev \
+                         examples/ios-benchapply
 
 # Extraction settings. Keep file-local anonymous namespaces out of the public
 # hierarchy/UI: they are implementation details and make inherits.html split into

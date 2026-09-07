@@ -3,6 +3,7 @@
 
 cmake_minimum_required(VERSION 3.21)
 project(IccDevCoreSmoke LANGUAGES CXX OBJCXX)
+list(REMOVE_ITEM CMAKE_OBJCXX_IMPLICIT_LINK_LIBRARIES objc)
 
 if(NOT CMAKE_SYSTEM_NAME MATCHES "^(iOS|tvOS|watchOS)$" OR NOT CMAKE_GENERATOR STREQUAL "Xcode")
   message(FATAL_ERROR "Use the Xcode generator with -DCMAKE_SYSTEM_NAME=iOS, tvOS, or watchOS")
