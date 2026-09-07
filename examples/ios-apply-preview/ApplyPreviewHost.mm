@@ -272,8 +272,11 @@ IccApplyPreviewResult *IccDevRunApplyPreview(NSUInteger edgePixels,
       result.sourceImage != nil && result.appliedImage != nil &&
       result.deltaImage != nil;
 
-    NSURL *documents = [[[NSFileManager defaultManager]
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSURL *documents = [[fileManager
       URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
+    NSURL *reportURL = documents
+      ? [documents URLByAppendingPathComponent:@"apply-preview-report.json"] : nil;
     NSDictionary *jsonReport = @{
       @"passed": @(result.passed),
       @"edgePixels": @(edgePixels),
@@ -286,18 +289,28 @@ IccApplyPreviewResult *IccDevRunApplyPreview(NSUInteger edgePixels,
       @"libraryVersion": @ICCPROFLIBVER
     };
     NSError *error = nil;
-    NSData *json = [NSJSONSerialization dataWithJSONObject:jsonReport
-                                                   options:NSJSONWritingPrettyPrinted
-                                                     error:&error];
-    const BOOL written = json && documents &&
-      [json writeToURL:[documents URLByAppendingPathComponent:
-                          @"apply-preview-report.json"]
-               options:NSDataWritingAtomic error:&error];
     NSString *persistFailure = nil;
-    if (!written) {
+    if (!reportURL) {
+      persistFailure = @"resolve Documents/apply-preview-report.json";
+    } else if ([fileManager fileExistsAtPath:reportURL.path] &&
+               ![fileManager removeItemAtURL:reportURL error:&error]) {
+      persistFailure = [NSString stringWithFormat:@"remove stale device results: %@",
+        error ? error.localizedDescription : @"remove failed"];
+    } else {
+      NSData *json = [NSJSONSerialization dataWithJSONObject:jsonReport
+                                                     options:NSJSONWritingPrettyPrinted
+                                                       error:&error];
+      if (!json) {
+        persistFailure = [NSString stringWithFormat:@"serialize device results: %@",
+          error ? error.localizedDescription : @"serialize failed"];
+      } else if (![json writeToURL:reportURL
+                           options:NSDataWritingAtomic error:&error]) {
+        persistFailure = [NSString stringWithFormat:@"write device results: %@",
+          error ? error.localizedDescription : @"write failed"];
+      }
+    }
+    if (persistFailure) {
       result.passed = NO;
-      persistFailure =
-        error ? error.localizedDescription : @"no output location";
     }
     [report appendFormat:
       @"%@\n\n"
