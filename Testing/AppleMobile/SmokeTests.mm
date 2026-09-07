@@ -301,6 +301,7 @@ NSString *IccDevRunCoreSmoke(void)
     NSURL *documents = [[[NSFileManager defaultManager]
       URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
     NSString *profilePath = [[NSBundle mainBundle] pathForResource:@"sRGB_D65_MAT" ofType:@"icc"];
+    (void)profilePath;
     if (Check(results, documents != nil, @"Locate app sandbox"))
       TestProfiles(results, documents);
 #ifdef ICCDEV_APPLE_HAS_JSON

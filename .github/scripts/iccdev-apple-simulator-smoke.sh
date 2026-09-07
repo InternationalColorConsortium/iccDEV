@@ -2,20 +2,34 @@
 # Copyright (c) 2026 International Color Consortium.
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# Run the native core host on a disposable iOS/watchOS simulator. A fresh
+# Run the native core host on a disposable Apple simulator. A fresh
 # persisted report and console sentinel, not simctl's exit code alone, decide
 # success. The missing-fixture control must fail before restoring a passing run.
 set -euo pipefail
 
 if [[ $# -gt 1 ]]; then
-  echo "Usage: $0 [ios|watchos]" >&2
+  echo "Usage: $0 [ios|iphone|ipad|tvos|tv|watchos|watch]" >&2
   exit 2
 fi
-platform="${1:-ios}"
-case "$platform" in
-  ios) system=iOS; sdk=iphonesimulator; family=iPhone; deployment=17.0 ;;
-  watchos) system=watchOS; sdk=watchsimulator; family='Apple Watch'; deployment=10.0 ;;
-  *) echo "Usage: $0 [ios|watchos]" >&2; exit 2 ;;
+requested="${1:-ios}"
+case "$requested" in
+  ios|iphone)
+    build_suffix="$requested"
+    platform=ios; run_target=iphone; system=iOS; sdk=iphonesimulator
+    family=iPhone; deployment=17.0 ;;
+  ipad)
+    build_suffix=ipad
+    platform=ios; run_target=ipad; system=iOS; sdk=iphonesimulator
+    family=iPad; deployment=17.0 ;;
+  tvos|tv)
+    build_suffix="$requested"
+    platform=tvos; run_target=tv; system=tvOS; sdk=appletvsimulator
+    family='Apple TV'; deployment=17.0 ;;
+  watchos|watch)
+    build_suffix="$requested"
+    platform=watchos; run_target=watch; system=watchOS; sdk=watchsimulator
+    family='Apple Watch'; deployment=10.0 ;;
+  *) echo "Usage: $0 [ios|iphone|ipad|tvos|tv|watchos|watch]" >&2; exit 2 ;;
 esac
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$repo_root"
@@ -35,7 +49,7 @@ if [[ "$core_preset" == *-extended-core ]]; then
   fi
 fi
 core="out/${core_preset}"
-build="out/apple-${platform}-simulator-smoke"
+build="out/apple-${build_suffix}-simulator-smoke"
 mkdir -p "$build"
 
 xcrun simctl list runtimes --json > "$build/runtimes.json"
@@ -65,7 +79,8 @@ cmake --build "$core" --parallel "$(sysctl -n hw.ncpu)"
 cmake -S Build/AppleMobile -B "$build" -G Xcode \
   -DCMAKE_SYSTEM_NAME="$system" -DCMAKE_OSX_SYSROOT="$sdk" \
   -DCMAKE_OSX_ARCHITECTURES="$(uname -m)" -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment" \
-  -DRefIccMAX_DIR="$repo_root/$core" "${json_package_args[@]}"
+  -DICCDEV_APPLE_RUN_TARGET="$run_target" -DRefIccMAX_DIR="$repo_root/$core" \
+  "${json_package_args[@]}"
 xcodebuild -quiet -project "$build/IccDevCoreSmoke.xcodeproj" \
   -target IccDevCoreSmoke -configuration Release -sdk "$sdk" CODE_SIGNING_ALLOWED=NO build
 app="$repo_root/$build/Release-${sdk}/IccDevCoreSmoke.app"

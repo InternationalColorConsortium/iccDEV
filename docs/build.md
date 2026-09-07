@@ -185,22 +185,30 @@ to the watch. Developer Mode alone does not establish the CoreDevice network
 tunnel.
 
 Run from the repository root, with `TEAM_ID` and `DEVICE_ID` set in your shell.
-Set `PLATFORM=watchos` for a watch; the default below targets iPhone/iPad:
+Set `RUN_TARGET` to `iphone`, `ipad`, `tv`, or `watch`; the default below
+targets iPhone. The run target selects the matching Apple platform, Xcode
+device family, bundle identifier, SDK, architecture, and core preset:
 
 ```bash
-platform="${PLATFORM:-ios}"
-case "$platform" in
-  ios)
-    system=iOS; sdk=iphoneos; arch=arm64; deployment=17.0
+run_target="${RUN_TARGET:-iphone}"
+case "$run_target" in
+  iphone)
+    platform=ios; system=iOS; sdk=iphoneos; arch=arm64; deployment=17.0
     bundle=org.color.iccdev.CoreSmoke ;;
-  watchos)
+  ipad)
+    system=iOS; sdk=iphoneos; arch=arm64; deployment=17.0
+    platform=ios; bundle=org.color.iccdev.CoreSmoke.ipad ;;
+  tv)
+    platform=tvos; system=tvOS; sdk=appletvos; arch=arm64; deployment=17.0
+    bundle=org.color.iccdev.CoreSmoke.tv ;;
+  watch)
     system=watchOS; sdk=watchos; arch=arm64_32; deployment=10.0
-    bundle=org.color.iccdev.CoreSmoke.watch ;;
-  *) echo "Set PLATFORM to ios or watchos" >&2; exit 2 ;;
+    platform=watchos; bundle=org.color.iccdev.CoreSmoke.watch ;;
+  *) echo "Set RUN_TARGET to iphone, ipad, tv, or watch" >&2; exit 2 ;;
 esac
 core_preset="apple-${platform}-device-extended-core"
 core="out/${core_preset}"
-build="out/apple-${platform}-device-smoke"
+build="out/apple-${run_target}-device-smoke"
 json_package_args=()
 if [[ "$core_preset" == *-extended-core ]] && command -v brew >/dev/null 2>&1; then
   json_prefix="$(brew --prefix nlohmann-json 2>/dev/null || true)"
@@ -215,6 +223,7 @@ cmake -S Build/AppleMobile -B "$build" -G Xcode \
   -DCMAKE_SYSTEM_NAME="$system" -DCMAKE_OSX_SYSROOT="$sdk" \
   -DCMAKE_OSX_ARCHITECTURES="$arch" -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment" \
   -DRefIccMAX_DIR="$PWD/$core" \
+  -DICCDEV_APPLE_RUN_TARGET="$run_target" \
   -DICCDEV_APPLE_BUNDLE_IDENTIFIER="$bundle" \
   -DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM="$TEAM_ID" \
   "${json_package_args[@]}"
@@ -257,6 +266,8 @@ nlohmann-json available to CMake:
 
 ```bash
 bash .github/scripts/iccdev-apple-simulator-smoke.sh ios
+bash .github/scripts/iccdev-apple-simulator-smoke.sh ipad
+bash .github/scripts/iccdev-apple-simulator-smoke.sh tvos
 bash .github/scripts/iccdev-apple-simulator-smoke.sh watchos
 bash .github/scripts/iccdev-xcode-ctest-smoke.sh
 ```
