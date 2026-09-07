@@ -602,7 +602,7 @@ jobs:
 
       - name: Set up MATLAB
         # matlab-actions/setup-matlab v3
-        uses: matlab-actions/setup-matlab@2323adb8243827ea460b0def4c413545aaec46a9
+        uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d
         with:
           release: R2026a
 
