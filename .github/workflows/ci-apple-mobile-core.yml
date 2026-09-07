@@ -52,6 +52,8 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          # shellcheck source=.github/scripts/sanitize-sed.sh
+          source "$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
           if ! brew list --versions nlohmann-json >/dev/null; then
             brew install nlohmann-json
           fi
