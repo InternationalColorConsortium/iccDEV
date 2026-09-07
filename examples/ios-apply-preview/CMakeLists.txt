@@ -22,8 +22,10 @@ set(ICCDEV_APPLYPREVIEW_BUNDLE_IDENTIFIER "org.color.iccdev.ApplyPreviewPOC"
 
 set(_source "${CMAKE_CURRENT_SOURCE_DIR}")
 set(_assets "${CMAKE_CURRENT_SOURCE_DIR}/Assets.xcassets")
+set(_src_profile "${CMAKE_CURRENT_SOURCE_DIR}/../../Testing/sRGB_v4_ICC_preference.icc")
 set(_profile "${CMAKE_CURRENT_SOURCE_DIR}/../../Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc")
 set_source_files_properties("${_assets}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+set_source_files_properties("${_src_profile}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 set_source_files_properties("${_profile}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 
 add_executable(IccApplyPreviewPOC MACOSX_BUNDLE
@@ -31,6 +33,7 @@ add_executable(IccApplyPreviewPOC MACOSX_BUNDLE
   "${_source}/ApplyPreviewHost.h"
   "${_source}/ApplyPreviewHost.mm"
   "${_assets}"
+  "${_src_profile}"
   "${_profile}")
 
 target_link_libraries(IccApplyPreviewPOC PRIVATE
@@ -44,12 +47,14 @@ target_link_options(IccApplyPreviewPOC PRIVATE LINKER:-no_warn_duplicate_librari
 set_target_properties(IccApplyPreviewPOC PROPERTIES
   OBJCXX_STANDARD 17
   OBJCXX_STANDARD_REQUIRED YES
+  MACOSX_BUNDLE_ICON_FILE AppIcon
   MACOSX_BUNDLE_INFO_PLIST "${_source}/Info.plist.in"
   XCODE_GENERATE_SCHEME YES
   XCODE_SCHEME_LAUNCH_CONFIGURATION Release
   XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES
   XCODE_ATTRIBUTE_DISABLE_MANUAL_TARGET_ORDER_BUILD_WARNING YES
   XCODE_ATTRIBUTE_SUPPORTS_MACCATALYST NO
+  XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME AppIcon
   XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
   XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${ICCDEV_APPLYPREVIEW_BUNDLE_IDENTIFIER}"
   XCODE_ATTRIBUTE_CODE_SIGN_STYLE Automatic)

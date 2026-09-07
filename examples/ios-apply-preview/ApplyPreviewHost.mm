@@ -144,17 +144,15 @@ static void IccDevEncodeImages(const std::vector<icFloatNumber>& src,
       const icUInt8Number dstByte = IccDevUnitToByte(dst[f + c]);
       srcRgba[p + c] = srcByte;
       dstRgba[p + c] = dstByte;
+      deltaRgba[p + c] =
+        IccDevUnitToByte(static_cast<icFloatNumber>(
+          std::fabs(static_cast<double>(dst[f + c] - src[f + c])) * 12.0));
       checksum ^= dstByte;
       checksum *= 16777619u;
       const double channelDelta =
         std::fabs(static_cast<double>(dst[f + c] - src[f + c]));
       pixelDelta = std::max(pixelDelta, channelDelta);
     }
-    const icUInt8Number deltaByte =
-      IccDevUnitToByte(static_cast<icFloatNumber>(pixelDelta * 8.0));
-    deltaRgba[p + 0u] = deltaByte;
-    deltaRgba[p + 1u] = deltaByte;
-    deltaRgba[p + 2u] = deltaByte;
     srcRgba[p + 3u] = 255;
     dstRgba[p + 3u] = 255;
     deltaRgba[p + 3u] = 255;
@@ -209,10 +207,13 @@ IccApplyPreviewResult *IccDevRunApplyPreview(NSUInteger edgePixels,
       static_cast<long>(os.majorVersion), static_cast<long>(os.minorVersion),
       static_cast<long>(os.patchVersion)];
 
-    NSString *path =
+    NSString *srcPath =
+      [[NSBundle mainBundle] pathForResource:@"sRGB_v4_ICC_preference"
+                                      ofType:@"icc"];
+    NSString *dstPath =
       [[NSBundle mainBundle] pathForResource:@"sRGB_D65_MAT" ofType:@"icc"];
-    if (!path) {
-      [report appendString:@"FAIL\n\nBundled RGB fixture not found.\n"];
+    if (!srcPath || !dstPath) {
+      [report appendString:@"FAIL\n\nBundled RGB fixtures not found.\n"];
       result.report = report;
       IccDevFinishApplyPreview(result);
       return result;
@@ -222,11 +223,11 @@ IccApplyPreviewResult *IccDevRunApplyPreview(NSUInteger edgePixels,
       useTetrahedral ? icInterpTetrahedral : icInterpLinear;
     CIccCmm cmm(icSigRgbData, icSigRgbData, true);
     icStatusCMM status =
-      cmm.AddXform(path.fileSystemRepresentation, icRelativeColorimetric,
+      cmm.AddXform(srcPath.fileSystemRepresentation, icRelativeColorimetric,
                    interpolation);
     if (status == icCmmStatOk) {
       status =
-        cmm.AddXform(path.fileSystemRepresentation, icRelativeColorimetric,
+        cmm.AddXform(dstPath.fileSystemRepresentation, icRelativeColorimetric,
                      interpolation);
     }
     if (status == icCmmStatOk)
@@ -272,13 +273,11 @@ IccApplyPreviewResult *IccDevRunApplyPreview(NSUInteger edgePixels,
 
     [report appendFormat:
       @"%@\n\n"
-       "Chain: sRGB_D65_MAT.icc -> sRGB_D65_MAT.icc\n"
+       "Chain: sRGB_v4_ICC_preference.icc -> sRGB_D65_MAT.icc\n"
        "Intent: relative colorimetric\n"
        "Interpolation: %@\n"
        "Generated image: %lux%lu RGB ramp and swatch grid\n"
-       "Preview panels: source, applied, identity delta amplified 8x\n"
-       "Expected visual delta: black or nearly black for every size and\n"
-       "interpolation choice in this self-profile chain\n\n"
+       "Preview panels: source, applied, per-channel delta amplified 12x\n\n"
        "Mean channel delta: %.9f\n"
        "Max channel delta:  %.9f\n"
        "Applied checksum:   0x%08x\n\n"
@@ -292,7 +291,7 @@ IccApplyPreviewResult *IccDevRunApplyPreview(NSUInteger edgePixels,
     NSDictionary *jsonReport = @{
       @"passed": @(result.passed),
       @"edgePixels": @(edgePixels),
-      @"profileChain": @"sRGB_D65_MAT.icc -> sRGB_D65_MAT.icc",
+      @"profileChain": @"sRGB_v4_ICC_preference.icc -> sRGB_D65_MAT.icc",
       @"renderingIntent": @"relative colorimetric",
       @"interpolation": interpName,
       @"meanChannelDelta": @(meanDelta),

@@ -1,9 +1,8 @@
 # ios-apply-preview
 
 Proof-of-concept iOS/iPadOS app inspired by `iccApplyProfiles`. It generates
-an RGB image in memory, applies the bundled `sRGB_D65_MAT.icc` profile through
-`CIccCmm`, and displays source, applied, and amplified identity-delta panels
-on device.
+an RGB image in memory, applies bundled ICC profiles through `CIccCmm`, and
+displays source, applied, and amplified color-delta panels on device.
 Manual-review artifact: no CTest registration and no CI gate.
 
 ## What it does
@@ -11,21 +10,21 @@ Manual-review artifact: no CTest registration and no CI gate.
 Builds a fixed two-link chain:
 
 ```
-sRGB_D65_MAT.icc -> sRGB_D65_MAT.icc
+sRGB_v4_ICC_preference.icc -> sRGB_D65_MAT.icc
 ```
 
 The app renders a generated RGB ramp and swatch grid, applies the profile
 chain with relative colorimetric intent, and reports mean channel delta, max
 channel delta, and an FNV-1a checksum of the applied preview bytes. The delta
-panel is expected to be black or nearly black because the bundled proof of
-concept applies the same matrix/curve profile back to itself; this remains true
-for every image-size and interpolation option. A native `Share Report` button
+panel is expected to be colorful because it shows per-channel differences
+amplified 12x between two bundled RGB profiles. A native `Share Report` button
 sends the text report to Messages, Mail, AirDrop, or an installed share
 extension.
 
 The visual shell mirrors the current ICC website export: ICC logo header,
 the "Making color seamless between devices and documents" tagline, brand-blue
-primary action, and mobile-first stacked layout.
+primary action, mobile-first stacked layout, and a generated ICC app icon
+compiled through the Xcode asset catalog.
 
 This is intentionally not a full mobile port of the desktop
 `iccApplyProfiles` CLI. It does not parse TIFF files, write TIFF output, embed
@@ -63,7 +62,7 @@ xcrun devicectl device process launch --device "$DEVICE_ID" \
 ```
 
 Launch without `--exit-after-tests` for hands-on visual review on iPhone or
-iPad. The UI includes size and interpolation selectors, source/applied/identity
+iPad. The UI includes size and interpolation selectors, source/applied/color
 delta image panels, ICC and repository links, and a native share sheet.
 
 ## Build and run on the simulator

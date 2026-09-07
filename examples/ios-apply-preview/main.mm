@@ -191,9 +191,9 @@ static UIColor *IccDevBrandBlue(void)
 
   UILabel *deltaNote = [[UILabel alloc] init];
   deltaNote.text =
-    @"Expected: the delta image remains black for all sizes and interpolation "
-     "choices because this proof of concept applies sRGB_D65_MAT.icc back to "
-     "itself.";
+    @"Expected: the delta image is now colorful. It shows per-channel "
+     "differences amplified 12x from sRGB_v4_ICC_preference.icc into "
+     "sRGB_D65_MAT.icc.";
   deltaNote.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
   deltaNote.textColor = [UIColor secondaryLabelColor];
   deltaNote.numberOfLines = 0;
@@ -227,7 +227,7 @@ static UIColor *IccDevBrandBlue(void)
     source,
     label(@"Applied image"),
     applied,
-    label(@"Identity delta, expected black"),
+    label(@"Color delta, amplified 12x"),
     delta,
     deltaNote,
     report

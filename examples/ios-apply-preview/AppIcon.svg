@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" fill="#111827"/>
+  <circle cx="512" cy="360" r="210" fill="none" stroke="#F9FAFB" stroke-width="56"/>
+  <path d="M320 360a192 192 0 0 1 192-192" fill="none" stroke="#EF4444" stroke-width="72" stroke-linecap="round"/>
+  <path d="M608 194a192 192 0 0 1 96 166" fill="none" stroke="#22C55E" stroke-width="72" stroke-linecap="round"/>
+  <path d="M704 360a192 192 0 0 1-192 192" fill="none" stroke="#3B82F6" stroke-width="72" stroke-linecap="round"/>
+  <path d="M512 552a192 192 0 0 1-166-96" fill="none" stroke="#F59E0B" stroke-width="72" stroke-linecap="round"/>
+  <text x="512" y="725" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="112" font-weight="700" fill="#F9FAFB">BENCH</text>
+  <text x="512" y="835" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="84" font-weight="700" fill="#93C5FD">ICC</text>
+</svg>
