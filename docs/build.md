@@ -155,10 +155,10 @@ The `Apple mobile core libraries` workflow discovers installed Apple SDKs,
 builds every matching minimal and extended mobile-core preset, and runs the
 simulator and Xcode CTest smoke gates below. Master pushes and manual runs
 upload the static libraries, generated version headers, and build manifest as
-`iccdev-apple-mobile-core`. Dispatch
-`.github/workflows/ci-apple-mobile-core.yml` for this complete Apple gate.
-The separate `Apple platform smoke` workflow runs the same runtime gates for
-affected same-repository pull requests without uploading PR-produced artifacts.
+`iccdev-apple-mobile-core`. Apple mobile and Apple smoke workflows are not
+pull-request triggers; dispatch `.github/workflows/ci-apple-mobile-core.yml`
+or `.github/workflows/ci-apple-platform-smoke.yml` when a PR needs this Apple
+gate before review.
 
 ### Run the core smoke app on an iPhone, iPad, or Apple Watch
 
