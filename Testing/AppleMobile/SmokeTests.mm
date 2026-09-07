@@ -126,13 +126,14 @@ void TestProfiles(NSMutableArray<NSDictionary *> *results, NSURL *documents)
   NSError *invalidError = nil;
   bool invalidWritten = [invalidData writeToURL:invalid options:NSDataWritingAtomic
                                          error:&invalidError];
-  std::unique_ptr<CIccProfile> invalidProfile(
-    invalidWritten ? ReadIccProfile(invalid.fileSystemRepresentation) : nullptr);
-  Check(results, invalidWritten && !invalidProfile,
-        @"Reject invalid ICC file without RGB default substitution");
-  if (invalidWritten &&
-      ![[NSFileManager defaultManager] removeItemAtURL:invalid error:&invalidError]) {
-    std::fprintf(stderr, "%s\n", invalidError.localizedDescription.UTF8String);
+  if (Check(results, invalidWritten, @"Write invalid ICC control inside app sandbox")) {
+    std::unique_ptr<CIccProfile> invalidProfile(
+      ReadIccProfile(invalid.fileSystemRepresentation));
+    Check(results, !invalidProfile,
+          @"Reject invalid ICC file without RGB default substitution");
+    if (![[NSFileManager defaultManager] removeItemAtURL:invalid error:&invalidError]) {
+      std::fprintf(stderr, "%s\n", invalidError.localizedDescription.UTF8String);
+    }
   }
 
   NSURL *saved = [documents URLByAppendingPathComponent:@"roundtrip.icc"];

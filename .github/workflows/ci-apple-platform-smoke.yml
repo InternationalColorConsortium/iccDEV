@@ -80,8 +80,10 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          bash .github/scripts/iccdev-apple-simulator-smoke.sh ios
-          bash .github/scripts/iccdev-apple-simulator-smoke.sh watchos
+          targets=(ios ipad tvos watchos)
+          for target in "${targets[@]}"; do
+            bash .github/scripts/iccdev-apple-simulator-smoke.sh "$target"
+          done
           bash .github/scripts/iccdev-xcode-ctest-smoke.sh
 
       - name: Summarize Apple smoke results
@@ -94,10 +96,11 @@ jobs:
           # shellcheck source=.github/scripts/sanitize-sed.sh
           source "$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
           {
-            for platform in ios watchos; do
-              report="out/apple-${platform}-simulator-smoke/restored.json"
+            targets=(ios ipad tvos watchos)
+            for target in "${targets[@]}"; do
+              report="out/apple-${target}-simulator-smoke/restored.json"
               count="$(jq -er '.tests | length' "$report")"
-              sanitize_line "${platform}: ${count} core checks; missing-fixture failure control passed."
+              sanitize_line "${target}: ${count} core checks; missing-fixture failure control passed."
               printf '\n'
             done
             sanitize_line "Xcode Release and Debug CTest runtime gates passed."
