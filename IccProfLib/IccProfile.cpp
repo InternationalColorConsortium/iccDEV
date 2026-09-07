@@ -3687,6 +3687,35 @@ icValidateStatus CIccProfile::CheckHdrProfile(std::string &sReport) const
    * carries "Backward compatible A2B0/A2B1/A2B2 target headroom, 0.0: not
    * created" - and the HAGC amendment dropped it without replacement. */
 
+  /* Clause 8.10.5 is addressed to one profile class and one only: "An HDR
+   * Profile of the Display class ('mntr') may convey HDR display metadata via
+   * the metadataTag", and 8.10.1's bullet repeats the condition - HDR display
+   * metadata is "applicable when the profile is of the Display class
+   * ('mntr')".  The registration of 2026-06-24 files all three under a
+   * category named HDR Display for the same reason.
+   *
+   * An Input-class HDR Profile carrying DERH, DCV or DRWL is therefore outside
+   * the only clause that gives those entries meaning.  Nothing forbids the
+   * bytes - the entries are Optional and a metadataTag may carry anything -
+   * so this is INFORMATION, not a defect: the profile is well formed and a
+   * consumer simply has no rule telling it what to do with them.
+   *
+   * CIccHdrMetadataReader still reads and reports them, deliberately.  It
+   * reports what the file contains; suppressing an entry that is present would
+   * make it lie about the bytes, and it is the consumer that owns scope. */
+  if (m_Header.deviceClass != icSigDisplayClass) {
+    CIccHdrMetadataReader meta;
+
+    if (meta.Read(this) &&
+        (meta.HasDisplayHeadroom() || meta.HasDisplayColourVolume() ||
+         meta.HasDisplayReferenceWhite())) {
+      sReport += icMsgValidateInformation;
+      sReport += "HDR: the metadataTag carries HDR Display entries (DERH, DCV or DRWL) in a\r\n"
+                 "  profile that is not of the Display class; clause 8.10.5 applies them only to\r\n"
+                 "  'mntr' profiles, so nothing in clause 8.10 gives them a meaning here.\r\n";
+    }
+  }
+
   /* Clause 8.10.6, and the matrix columns it makes conditional: "the
    * redMatrixColumnTag, greenMatrixColumnTag and blueMatrixColumnTag are
    * required if and only if the cicpTag's ColourPrimaries field is equal to 2

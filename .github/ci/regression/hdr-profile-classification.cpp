@@ -732,6 +732,34 @@ void testClassification()
     delete pProfile;
   }
 
+  // HDR Display metadata in an Input-class profile. Clause 8.10.5 opens "An HDR
+  // Profile of the Display class ('mntr') may convey HDR display metadata",
+  // 8.10.1's bullet repeats the condition, and the ICC registration of
+  // 2026-06-24 files DCV, DRWL and DERH under a category named HDR Display. So
+  // the entries are outside the only clause that gives them meaning - but
+  // nothing forbids them, and they are Optional, so the profile is valid.
+  pProfile = openFixture("HdrInputDisplayMeta.icc");
+  if (pProfile) {
+    check(icGetHdrProfileInfo(pProfile, info), "info resolved for the Input-class fixture");
+    check(info.nClass == icHdrProfileConforming,
+          "an Input-class HDR Profile with AToB0 and no BToA0 is conforming");
+    check(info.bHasAToB0 && !info.bHasBToA0,
+          "8.10.6 requires the pair only for Display; this is HDR-09's ruling");
+
+    // The reader still reports what the file contains - it reports bytes, and
+    // scope belongs to the consumer.
+    CIccHdrMetadataReader meta3;
+    check(meta3.Read(pProfile), "the metadataTag is still read");
+    check(meta3.HasDisplayHeadroom(), "and the out-of-scope DERH is still reported");
+
+    std::string report;
+    icValidateStatus rv = pProfile->Validate(report);
+    check(rv < icValidateWarning, "the profile is valid: nothing forbids the bytes");
+    check(report.find("not of the Display class") != std::string::npos,
+          "but the scope note is emitted");
+    delete pProfile;
+  }
+
   // A plain SDR profile must draw nothing. This is the false-positive guard:
   // the corpus is full of RGB display profiles, and a classifier that keyed on
   // the version alone, or on the presence of a cicpTag alone, would start

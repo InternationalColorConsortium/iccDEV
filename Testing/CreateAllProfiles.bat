@@ -305,6 +305,7 @@ iccFromXml HdrInvalidTransfer.xml HdrInvalidTransfer.icc
 iccFromXml HdrMissingBToA0.xml HdrMissingBToA0.icc
 iccFromXml HdrMissingLutPair.xml HdrMissingLutPair.icc
 iccFromXml HdrCicp2NoColumns.xml HdrCicp2NoColumns.icc
+iccFromXml HdrInputDisplayMeta.xml HdrInputDisplayMeta.icc
 iccFromXml HdrLinearCll.xml HdrLinearCll.icc
 iccFromXml HdrLinearMdcv.xml HdrLinearMdcv.icc
 iccFromXml HdrLinearNoMetadata.xml HdrLinearNoMetadata.icc

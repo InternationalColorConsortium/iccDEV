@@ -409,16 +409,26 @@ const icChar *icGetHdrTransferName(icUInt8Number nTransferCharacteristics)
  * as authoritative: CRWL, CLL, MDCV and CCV, with the field lists each entry's
  * Value column gives.  Those are read facts, not reconstructions.
  *
- * The three HDR Display entries - DERH, DCV, DRWL - are not registered: they
- * belong to clause 8.10.5, which is not yet accepted, so the registry correctly
- * carries no HDR Display category.  Their names and shapes are read from 8.10.5
- * itself.  None of them feeds a diagnostic: an entry that is not registered must
- * not produce a validation message about someone else's profile.
+ * The three HDR Display entries - DCV, DRWL, DERH - now have a registration
+ * document of their own: "dictType metadata entry: Display Color Volume" and
+ * its two siblings, owner ICC, change date 2026-06-24, category HDR Display.
+ * It gives DCV as "Floating point number, floating point number, 8-bit number"
+ * - the display's luminance range and its primaries per ITU-T H.273 - and DRWL
+ * and DERH as one floating point number each.  That is field for field what
+ * this reader had derived from 8.10.5's prose on the shape of MDCV, so nothing
+ * about the parse changes.
+ *
+ * PROPOSAL-ISSUE HDR-11: the registration is still not the registry.  Read live
+ * 2026-09-06, registry.color.org/dicttype-metadata carries HDR image and
+ * Printing and no HDR Display category, and none of the three has an entry
+ * page - two and a half months after the registration's own change date, and
+ * a week after an amendment revision that speaks of "the entries REGISTERED in
+ * the HDR Display category" in the present tense.  So these three still feed
+ * no diagnostic about anyone else's profile beyond the scope note below.
  * ===========================================================================
  */
 
-/* HDR Image: names as registered.  HDR Display: names as clause 8.10.5 uses
- * them in its precedence list, pending registration. */
+/* Entry names, all as the registrations give them. */
 static const char *kIccHdrKeyCrwl = "CRWL";   /* Content HDR Reference White Luminance */
 static const char *kIccHdrKeyCll  = "CLL";    /* Content Light Level */
 static const char *kIccHdrKeyMdcv = "MDCV";   /* Mastering Display Colour Volume */
@@ -426,6 +436,19 @@ static const char *kIccHdrKeyCcv  = "CCV";    /* Content Colour Volume */
 static const char *kIccHdrKeyDerh = "DERH";   /* Display Extended Range Headroom */
 static const char *kIccHdrKeyDrwl = "DRWL";   /* Display HDR Reference White Luminance */
 static const char *kIccHdrKeyDcv  = "DCV";    /* Display Colour Volume */
+
+/* The Display name element each registration specifies - the human-readable
+ * string an authoring path puts in a dictType record's display-name mluc, and
+ * the label a report should use so a reader can find the entry in the registry.
+ * Spelled exactly as registered, American spelling included: these are literal
+ * registered strings, not descriptions to be localised into house style. */
+static const char *kIccHdrDisplayNameCrwl = "Content HDR Reference White Luminance";
+static const char *kIccHdrDisplayNameCll  = "Content Light Level";
+static const char *kIccHdrDisplayNameMdcv = "Mastering Display Color Volume";
+static const char *kIccHdrDisplayNameCcv  = "Content Color Volume";
+static const char *kIccHdrDisplayNameDcv  = "Display Color Volume";
+static const char *kIccHdrDisplayNameDrwl = "Display HDR Reference White Luminance";
+static const char *kIccHdrDisplayNameDerh = "Display Extended Range Headroom";
 
 /**
  ****************************************************************************

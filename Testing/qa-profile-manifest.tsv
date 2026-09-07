@@ -169,6 +169,7 @@ HDR/HdrCicp2NoColumns.icc	negative	noncompliant	0	none	generated	-	negative fixt
 HDR/HdrCicpUnspecified.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrDisplayMetadata.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrInvalidTransfer.icc	positive	valid	0	none	generated	-	classification fixture: TransferCharacteristics 13 puts it outside the clause 8.10 sub-class, which is not a defect - it is a valid Display profile carrying a cicpTag and a HAGC tag
+HDR/HdrInputDisplayMeta.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean. Input-class HDR Profile carrying HDR Display metadata, which clause 8.10.5 scopes to Display profiles - an informational note, not a defect
 HDR/HdrLinearCll.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrLinearHagcWhite.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrLinearMdcv.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
