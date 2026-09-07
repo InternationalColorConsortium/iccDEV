@@ -51,6 +51,15 @@
 #import "SmokeTests.h"
 #include <TargetConditionals.h>
 
+static UIColor *IccDevViewBackgroundColor()
+{
+#if TARGET_OS_TV
+  return [UIColor blackColor];
+#else
+  return [UIColor systemBackgroundColor];
+#endif
+}
+
 @interface IccDevAppDelegate : UIResponder <UIApplicationDelegate>
 @property(nonatomic, strong) UIWindow *window;
 @end
@@ -61,16 +70,36 @@
 {
   (void)application;
   (void)launchOptions;
+  // initWithFrame:[UIScreen mainScreen].bounds is deprecated starting iOS 26
+  // in favour of a windowScene-based initializer, but this smoke app keeps the
+  // app-delegate-owns-the-window pattern rather than adding a full UIScene
+  // lifecycle. Silenced narrowly, once, rather than disabling
+  // -Wdeprecated-declarations for the whole target.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
   self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+#pragma clang diagnostic pop
   UIViewController *controller = [[UIViewController alloc] init];
-  UITextView *text = [[UITextView alloc] initWithFrame:self.window.bounds];
+  controller.view.backgroundColor = IccDevViewBackgroundColor();
+  UITextView *text = [[UITextView alloc] initWithFrame:CGRectMake(0.0, 0.0, 0.0, 0.0)];
 #if !TARGET_OS_TV
   text.editable = NO;
 #endif
-  text.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-  text.font = [UIFont monospacedSystemFontOfSize:14 weight:UIFontWeightRegular];
+  text.scrollEnabled = YES;
+  text.translatesAutoresizingMaskIntoConstraints = NO;
+  text.backgroundColor = IccDevViewBackgroundColor();
+  text.textColor = [UIColor labelColor];
+  text.textContainerInset = UIEdgeInsetsMake(16, 16, 16, 16);
+  text.font = [UIFont monospacedSystemFontOfSize:20 weight:UIFontWeightRegular];
   text.text = @"iccDEV core device tests running...";
-  controller.view = text;
+  [controller.view addSubview:text];
+  UILayoutGuide *safeArea = controller.view.safeAreaLayoutGuide;
+  [NSLayoutConstraint activateConstraints:@[
+    [text.leadingAnchor constraintEqualToAnchor:safeArea.leadingAnchor constant:8],
+    [text.trailingAnchor constraintEqualToAnchor:safeArea.trailingAnchor constant:-8],
+    [text.topAnchor constraintEqualToAnchor:safeArea.topAnchor constant:8],
+    [text.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor constant:-8],
+  ]];
   self.window.rootViewController = controller;
   [self.window makeKeyAndVisible];
 
