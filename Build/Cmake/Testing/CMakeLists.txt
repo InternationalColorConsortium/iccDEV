@@ -7950,6 +7950,26 @@ if(TARGET iccApplyProfiles AND TARGET iccApplySearch
     SKIP_RETURN_CODE 77)
 endif()
 
+# The dump half of the same CLI-contract family (#2453): iccDumpProfile assigned
+# its return value only inside the "if (bDumpValidation)" block that -v opens, so
+# without -v it returned the initialiser 0 for a missing file, a directory and
+# random bytes alike.  Guarded on the target so a lane that does not build the
+# Tools skips rather than going red.
+#
+# Deliberately NOT labelled "slow", for the same reason as the siblings above --
+# ci-pr-action.yml pins ctest_mode=fast, which drops the slow label (#2412).
+if(TARGET iccDumpProfile)
+  iccdev_add_script_test(
+    iccdev.dumpprofile-exit-code-regression
+    120
+    "iccdev;dumpprofile;cli;validate;exitcode;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2453-dumpprofile-exit-code-regression.sh"
+  )
+  set_tests_properties(iccdev.dumpprofile-exit-code-regression PROPERTIES
+    SKIP_RETURN_CODE 77)
+endif()
+
 # The converter half of the same CLI-contract family (#2384): iccFromXml and
 # iccFromJson reported success for a profile they had just declared invalid.
 # Guarded on both targets because the suite measures both and its "nothing
