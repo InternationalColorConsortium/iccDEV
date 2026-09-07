@@ -32,6 +32,8 @@
 # Optional -D args:
 #   TOOL_ARGS    - ';'-separated argument list passed to the tool
 #   EXPECT_MATCH - regex that must appear in stdout or stderr (run A only)
+#   EXPECT_MATCHES - ';'-separated regexes that must each appear in stdout or
+#                    stderr (run A only)
 #   LABEL        - prefix for this driver's own log lines
 #                  (default: bench-apply-cli, so existing callers are unchanged)
 # Optional -D args for a two-run differential assertion (#2271):
@@ -138,6 +140,13 @@ if(DEFINED EXPECT_MATCH AND NOT "${EXPECT_MATCH}" STREQUAL "")
       "[${LABEL}] output did not match '${EXPECT_MATCH}'")
   endif()
 endif()
+
+foreach(_expected_match IN LISTS EXPECT_MATCHES)
+  if(NOT _output MATCHES "${_expected_match}")
+    message(FATAL_ERROR
+      "[${LABEL}] output did not match '${_expected_match}'")
+  endif()
+endforeach()
 
 if(DEFINED COMPARE_ARGS AND NOT "${COMPARE_ARGS}" STREQUAL "")
   if(NOT DEFINED COMPARE_EXTRACT OR "${COMPARE_EXTRACT}" STREQUAL "")

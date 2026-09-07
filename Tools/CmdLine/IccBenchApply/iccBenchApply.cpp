@@ -98,6 +98,7 @@ static bool             g_bLeaf     = false;
 static std::vector<int> g_threads;
 static bool             g_bSuite    = false;
 static bool             g_bCsv      = false;
+static bool             g_bMetrics  = false;
 
 static void Usage()
 {
@@ -128,6 +129,7 @@ static void Usage()
   printf("  -repeats N         timed repeats per case (default 7)\n");
   printf("  -perxform          per-xform breakdown, including PCS steps\n");
   printf("  -leaf              isolated hot leaf functions\n");
+  printf("  -metrics           report exact benchmark memory and workload metrics\n");
   printf("  -threads L         comma list of thread counts, e.g. 1,2,8\n");
   printf("  -suite             run the built-in case table; takes no chain\n");
   printf("  -csv               machine-readable output\n");
@@ -282,6 +284,54 @@ public:
 
   std::vector<CIccXform *> m_xforms;
 };
+
+// This is deliberately a benchmark-buffer report, not a claim about the
+// library's transient allocations or the compiler's generated instructions.
+// The latter vary with the resolved transform graph, ISA dispatch, ABI, and
+// optimizer, and are collected accurately by the platform profiler instead.
+static void ReportMetrics(const char *caseName, const CIccCmm &cmm,
+                          size_t transformCount)
+{
+  if (!g_bMetrics)
+    return;
+
+  const unsigned long long sourceValues =
+    (unsigned long long)g_nPixels * cmm.GetSourceSamples();
+  const unsigned long long destinationValues =
+    (unsigned long long)g_nPixels * cmm.GetDestSamples();
+  const unsigned long long sourceBytes = sourceValues * sizeof(icFloatNumber);
+  const unsigned long long destinationBytes =
+    destinationValues * sizeof(icFloatNumber);
+  const unsigned long long threadSettings =
+    static_cast<unsigned long long>(g_threads.size());
+  const unsigned long long timedAppliesPerThreadSetting =
+    static_cast<unsigned long long>(g_nRepeats);
+  const unsigned long long scheduledAppliesPerThreadSetting =
+    timedAppliesPerThreadSetting + 1;
+  FILE *stream = g_bCsv ? stderr : stdout;
+
+  fprintf(stream, "benchmark_metrics case=%s\n", caseName);
+  fprintf(stream, "  resolved_transform_count=%llu\n",
+          (unsigned long long)transformCount);
+  fprintf(stream, "  pixels_per_apply=%u\n", (unsigned int)g_nPixels);
+  fprintf(stream, "  thread_count_settings=%llu\n", threadSettings);
+  fprintf(stream, "  timed_applies_per_thread_setting=%llu\n",
+          timedAppliesPerThreadSetting);
+  fprintf(stream, "  scheduled_applies_per_thread_setting=%llu\n",
+          scheduledAppliesPerThreadSetting);
+  fprintf(stream, "  total_timed_applies=%llu\n",
+          threadSettings * timedAppliesPerThreadSetting);
+  fprintf(stream, "  total_scheduled_applies=%llu\n",
+          threadSettings * scheduledAppliesPerThreadSetting);
+  fprintf(stream, "  input_buffer_bytes=%llu\n", sourceBytes);
+  fprintf(stream, "  output_buffer_bytes=%llu\n", destinationBytes);
+  fprintf(stream, "  benchmark_buffer_bytes=%llu\n",
+          sourceBytes + destinationBytes);
+  fprintf(stream, "  benchmark_bytes_per_apply=%llu\n",
+          sourceBytes + destinationBytes);
+  if (g_bCsv)
+    fflush(stream);
+}
 
 // Runs the chain at each requested thread count.
 //
@@ -601,6 +651,10 @@ static int RunSuite()
       continue;
     }
 
+    CChainReporter reporter;
+    theCmm.IterateXforms(&reporter);
+    ReportMetrics(bc.name.c_str(), theCmm, reporter.m_xforms.size());
+
     if (!RunThreadSweep(theCmm, g_threads, bc.name.c_str()))
       bAllOk = false;
     nRan++;
@@ -721,6 +775,10 @@ int main(int argc, const char *argv[])
     }
     else if (!stricmp(argv[nArg], "-leaf")) {
       g_bLeaf = true;
+      nArg++;
+    }
+    else if (!stricmp(argv[nArg], "-metrics")) {
+      g_bMetrics = true;
       nArg++;
     }
     else if (!stricmp(argv[nArg], "-suite")) {
@@ -901,6 +959,7 @@ int main(int argc, const char *argv[])
 
   CChainReporter reporter;
   theCmm.IterateXforms(&reporter);
+  ReportMetrics("chain", theCmm, reporter.m_xforms.size());
 
   printf("resolved transforms:\n");
   for (size_t i = 0; i < reporter.m_xforms.size(); i++) {

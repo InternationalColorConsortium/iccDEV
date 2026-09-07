@@ -51,6 +51,7 @@ matching. The same code means different things in the two families (#2270).
 | `-threads L` | comma list of thread counts, e.g. `1,2,8` (default `1`) |
 | `-perxform` | per-xform breakdown, including PCS steps |
 | `-leaf` | isolated hot leaf functions |
+| `-metrics` | report the benchmark buffers and workload; with `-csv`, writes metrics to stderr |
 | `-suite` | run the built-in case table; takes no chain arguments |
 | `-csv` | machine-readable output |
 
@@ -69,6 +70,33 @@ iccBenchApply -suite -csv -threads 1,2,8
 # the built-in table, bounded for a quick check
 iccBenchApply -suite -pixels 65536 -repeats 3
 ```
+
+## Metrics report
+
+`-metrics` reports the exact source and destination benchmark-buffer sizes,
+their total allocation footprint, the logical input-plus-output buffer capacity
+per scheduled apply, pixel count, and warm-up plus timed apply count. It reports
+once for a command-line chain and once for each resolved `-suite` case.
+`benchmark_bytes_per_apply` is therefore a logical capacity value, not a claim
+about physical DRAM traffic: cache residency, write allocation, prefetching,
+and transform-local storage are platform- and profile-dependent. These values
+describe the tool's allocations and scheduled calls; they do not claim to
+represent all memory touched inside a profile's resolved transform graph.
+
+`thread_count_settings` is the number of requested `-threads` values, not the
+number of workers in one apply. The per-thread-setting values describe one
+whole-buffer warm-up plus timed sequence. The `total_*` values multiply those
+scheduled calls across all requested settings, so `-threads 1,2,8 -repeats 3`
+reports 3 thread-count settings, 3 timed and 4 scheduled applies per setting,
+9 timed applies, and 12 scheduled applies total.
+
+The report intentionally omits hardware instructions, stack operands, and
+floating-point operations. They depend on the compiler, target ABI,
+optimization level, resolved transforms, and scalar/SSE/AVX dispatch. Use the
+opt-in Linux profiler, `.github/scripts/iccdev-clut-profile.sh`, for numeric
+hardware instruction, memory-operation, and supported floating-point event
+counts. Stack operands need architecture-specific disassembly or sampling, so
+they are not portable benchmark output.
 
 `-suite` and a chain are alternatives, not a chain with a default. Passing both
 is refused rather than silently resolved in favour of the table, and `-perxform`
