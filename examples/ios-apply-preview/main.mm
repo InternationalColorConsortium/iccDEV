@@ -88,6 +88,8 @@ static UIColor *IccDevBrandBlue(void)
 #pragma clang diagnostic pop
   UIViewController *controller = [[UIViewController alloc] init];
   controller.view.backgroundColor = [UIColor systemBackgroundColor];
+  const BOOL isPad =
+    [UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad;
 
   UIImageView *logo = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"ICCLogo"]];
   logo.contentMode = UIViewContentModeScaleAspectFit;
@@ -203,15 +205,80 @@ static UIColor *IccDevBrandBlue(void)
   UITextView *report = [[UITextView alloc] initWithFrame:CGRectZero];
   report.editable = NO;
   report.selectable = YES;
-  report.scrollEnabled = NO;
+  report.scrollEnabled = isPad ? YES : NO;
+  report.showsVerticalScrollIndicator = isPad ? YES : NO;
   report.backgroundColor = [UIColor secondarySystemBackgroundColor];
   report.textColor = [UIColor labelColor];
-  report.textContainerInset = UIEdgeInsetsMake(12, 12, 12, 12);
-  report.font = [UIFont monospacedSystemFontOfSize:14 weight:UIFontWeightRegular];
+  report.textContainerInset = UIEdgeInsetsMake(isPad ? 8 : 12,
+                                               isPad ? 10 : 12,
+                                               isPad ? 8 : 12,
+                                               isPad ? 10 : 12);
+  report.font = [UIFont monospacedSystemFontOfSize:isPad ? 13 : 14
+                                            weight:UIFontWeightRegular];
   report.text = @"Apply preview ready.";
   report.translatesAutoresizingMaskIntoConstraints = NO;
+  [report setContentHuggingPriority:UILayoutPriorityDefaultLow
+                             forAxis:UILayoutConstraintAxisVertical];
 
-  UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[
+  UIStackView *(^controlPanel)(NSString *, UIControl *) =
+    ^UIStackView *(NSString *text, UIControl *control) {
+      UIStackView *panel = [[UIStackView alloc]
+        initWithArrangedSubviews:@[label(text), control]];
+      panel.axis = UILayoutConstraintAxisVertical;
+      panel.alignment = UIStackViewAlignmentFill;
+      panel.distribution = UIStackViewDistributionFill;
+      panel.spacing = 4;
+      panel.translatesAutoresizingMaskIntoConstraints = NO;
+      return panel;
+    };
+
+  UIStackView *controls = [[UIStackView alloc] initWithArrangedSubviews:@[
+    controlPanel(@"Image size", size),
+    controlPanel(@"Interpolation", interpolation)
+  ]];
+  controls.axis = UILayoutConstraintAxisHorizontal;
+  controls.alignment = UIStackViewAlignmentFill;
+  controls.distribution = UIStackViewDistributionFillEqually;
+  controls.spacing = 12;
+  controls.translatesAutoresizingMaskIntoConstraints = NO;
+
+  UIStackView *actions = [[UIStackView alloc] initWithArrangedSubviews:@[run, share]];
+  actions.axis = UILayoutConstraintAxisHorizontal;
+  actions.alignment = UIStackViewAlignmentFill;
+  actions.distribution = UIStackViewDistributionFillEqually;
+  actions.spacing = 12;
+  actions.translatesAutoresizingMaskIntoConstraints = NO;
+
+  UIStackView *(^imagePanel)(NSString *, UIImageView *) =
+    ^UIStackView *(NSString *text, UIImageView *image) {
+      UIStackView *panel = [[UIStackView alloc]
+        initWithArrangedSubviews:@[label(text), image]];
+      panel.axis = UILayoutConstraintAxisVertical;
+      panel.alignment = UIStackViewAlignmentFill;
+      panel.distribution = UIStackViewDistributionFill;
+      panel.spacing = 6;
+      panel.translatesAutoresizingMaskIntoConstraints = NO;
+      return panel;
+    };
+
+  UIStackView *previewPanels = [[UIStackView alloc] initWithArrangedSubviews:@[
+    imagePanel(@"Source image", source),
+    imagePanel(@"Applied image", applied),
+    imagePanel(@"Color delta, amplified 12x", delta)
+  ]];
+  previewPanels.axis = UILayoutConstraintAxisHorizontal;
+  previewPanels.alignment = UIStackViewAlignmentFill;
+  previewPanels.distribution = UIStackViewDistributionFillEqually;
+  previewPanels.spacing = 12;
+  previewPanels.translatesAutoresizingMaskIntoConstraints = NO;
+
+  NSArray<UIView *> *arranged = isPad ? @[
+    title,
+    controls,
+    actions,
+    previewPanels,
+    report
+  ] : @[
     logo,
     title,
     subtitle,
@@ -231,17 +298,23 @@ static UIColor *IccDevBrandBlue(void)
     delta,
     deltaNote,
     report
-  ]];
+  ];
+  UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:arranged];
   stack.axis = UILayoutConstraintAxisVertical;
   stack.alignment = UIStackViewAlignmentFill;
   stack.distribution = UIStackViewDistributionFill;
-  stack.spacing = 12;
+  stack.spacing = isPad ? 12 : 12;
   stack.translatesAutoresizingMaskIntoConstraints = NO;
 
   UIScrollView *scroll = [[UIScrollView alloc] init];
   scroll.translatesAutoresizingMaskIntoConstraints = NO;
-  [scroll addSubview:stack];
-  [controller.view addSubview:scroll];
+  if (isPad) {
+    [controller.view addSubview:stack];
+  }
+  else {
+    [scroll addSubview:stack];
+    [controller.view addSubview:scroll];
+  }
 
   __weak UISegmentedControl *weakSize = size;
   __weak UISegmentedControl *weakInterpolation = interpolation;
@@ -312,33 +385,55 @@ static UIColor *IccDevBrandBlue(void)
   }] forControlEvents:UIControlEventTouchUpInside];
 
   UILayoutGuide *safeArea = controller.view.safeAreaLayoutGuide;
-  [NSLayoutConstraint activateConstraints:@[
-    [scroll.leadingAnchor constraintEqualToAnchor:safeArea.leadingAnchor],
-    [scroll.trailingAnchor constraintEqualToAnchor:safeArea.trailingAnchor],
-    [scroll.topAnchor constraintEqualToAnchor:safeArea.topAnchor],
-    [scroll.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor],
-    [logo.heightAnchor constraintLessThanOrEqualToConstant:120],
-    [logo.heightAnchor constraintGreaterThanOrEqualToConstant:72],
-    [stack.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor
-                                        constant:16],
-    [stack.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor
+  if (isPad) {
+    [NSLayoutConstraint activateConstraints:@[
+      [stack.leadingAnchor constraintEqualToAnchor:safeArea.leadingAnchor
+                                          constant:18],
+      [stack.trailingAnchor constraintEqualToAnchor:safeArea.trailingAnchor
+                                           constant:-18],
+      [stack.topAnchor constraintEqualToAnchor:safeArea.topAnchor
+                                      constant:12],
+      [stack.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor
+                                         constant:-12],
+      [controls.heightAnchor constraintGreaterThanOrEqualToConstant:58],
+      [actions.heightAnchor constraintEqualToConstant:52],
+      [source.heightAnchor constraintEqualToAnchor:safeArea.heightAnchor
+                                        multiplier:0.25],
+      [applied.heightAnchor constraintEqualToAnchor:source.heightAnchor],
+      [delta.heightAnchor constraintEqualToAnchor:source.heightAnchor],
+      [report.heightAnchor constraintGreaterThanOrEqualToAnchor:safeArea.heightAnchor
+                                                     multiplier:0.32]
+    ]];
+  }
+  else {
+    [NSLayoutConstraint activateConstraints:@[
+      [scroll.leadingAnchor constraintEqualToAnchor:safeArea.leadingAnchor],
+      [scroll.trailingAnchor constraintEqualToAnchor:safeArea.trailingAnchor],
+      [scroll.topAnchor constraintEqualToAnchor:safeArea.topAnchor],
+      [scroll.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor],
+      [logo.heightAnchor constraintLessThanOrEqualToConstant:120],
+      [logo.heightAnchor constraintGreaterThanOrEqualToConstant:72],
+      [stack.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor
+                                          constant:16],
+      [stack.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor
+                                           constant:-16],
+      [stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor
+                                      constant:16],
+      [stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor
                                          constant:-16],
-    [stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor
-                                    constant:16],
-    [stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor
-                                       constant:-16],
-    [stack.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor
-                                      constant:-32],
-    [iccLink.heightAnchor constraintGreaterThanOrEqualToConstant:32],
-    [repoLink.heightAnchor constraintGreaterThanOrEqualToConstant:32],
-    [size.heightAnchor constraintGreaterThanOrEqualToConstant:36],
-    [interpolation.heightAnchor constraintGreaterThanOrEqualToConstant:36],
-    [run.heightAnchor constraintGreaterThanOrEqualToConstant:44],
-    [share.heightAnchor constraintGreaterThanOrEqualToConstant:44],
-    [source.heightAnchor constraintEqualToAnchor:source.widthAnchor],
-    [applied.heightAnchor constraintEqualToAnchor:applied.widthAnchor],
-    [delta.heightAnchor constraintEqualToAnchor:delta.widthAnchor]
-  ]];
+      [stack.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor
+                                        constant:-32],
+      [iccLink.heightAnchor constraintGreaterThanOrEqualToConstant:32],
+      [repoLink.heightAnchor constraintGreaterThanOrEqualToConstant:32],
+      [size.heightAnchor constraintGreaterThanOrEqualToConstant:36],
+      [interpolation.heightAnchor constraintGreaterThanOrEqualToConstant:36],
+      [run.heightAnchor constraintGreaterThanOrEqualToConstant:44],
+      [share.heightAnchor constraintGreaterThanOrEqualToConstant:44],
+      [source.heightAnchor constraintEqualToAnchor:source.widthAnchor],
+      [applied.heightAnchor constraintEqualToAnchor:applied.widthAnchor],
+      [delta.heightAnchor constraintEqualToAnchor:delta.widthAnchor]
+    ]];
+  }
 
   self.window.rootViewController = controller;
   [self.window makeKeyAndVisible];
