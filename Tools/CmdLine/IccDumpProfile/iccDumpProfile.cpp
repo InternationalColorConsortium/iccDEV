@@ -1052,6 +1052,39 @@ int main(int argc, char* argv[])
       break;
     }
   }
+  else if (!pIcc) {
+    // #2453: the switch above is the ONLY place nValid is ever assigned, and it
+    // sits inside the bDumpValidation gate that only -v opens.  Without -v the
+    // tool therefore returned its initialiser for every outcome: a missing file,
+    // a directory and 200 random bytes all exited 0, indistinguishable from a
+    // successful dump, even though the "Unable to parse" branch above had already
+    // recorded icValidateCriticalError.  Report that failure.
+    //
+    // 1, NOT -1.  A -1 return becomes shell status 255, and three in-repo
+    // harnesses read >= 128 as "died on a signal": iccdev-fuzz-triage.sh's
+    // classify_log(), icc-tool-qa-scan-common.sh's classify_exit(), and the
+    // sweep in _build-test-unix.yml.  The fuzz triage replays AFL findings as
+    // `<tool> <input> ALL` on this exact path, and those inputs are unparseable
+    // by construction, so -1 would reclassify every one of them from "clean" to
+    // a fabricated "signal" and redden the lane -- a crash report for a tool
+    // that exited cleanly.  1 lands in the graceful-fail / FAIL bucket, which
+    // neither harness counts as a failure, and it matches what this tool's own
+    // --evidence-json writer already returns for the identical !pIcc condition.
+    //
+    // Deliberately keyed off the parse failure rather than off nStatus, because
+    // nStatus is not left at icValidateOK on this path: the duplicate-tag-
+    // signature check at :863 runs without -v and can raise it to
+    // icValidateWarning.  (The six other icMaxStatus sites, :896 through :981,
+    // sit inside the bDumpValidation block opened at :883 and run only with -v.)
+    // The switch maps Warning and NonCompliant alike to 0, so keying off !pIcc
+    // changes exactly the invocations that printed "Unable to parse".
+    //
+    // What this deliberately does NOT do is make the plain path agree with -v: a
+    // profile that parses but is critically invalid still exits 0 here, because
+    // without -v no validation pass ever runs.  Validating unconditionally is the
+    // larger option in #2453 and needs a ruling.
+    nValid = 1;
+  }
   printf("\n\n");
 
   sReport += "\n";
