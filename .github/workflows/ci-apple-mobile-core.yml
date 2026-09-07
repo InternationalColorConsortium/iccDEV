@@ -1,0 +1,110 @@
+name: Apple mobile core libraries
+
+on:
+  push:
+    branches:
+      - master
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Apple mobile static cores
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Build available Apple mobile core libraries
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          # shellcheck source=.github/scripts/sanitize-sed.sh
+          source "$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+
+          sdk_manifest="${RUNNER_TEMP}/iccdev-apple-sdks.txt"
+          xcodebuild -showsdks > "$sdk_manifest"
+
+          rm -rf artifacts
+          mkdir -p artifacts
+          artifact_manifest="artifacts/manifest.txt"
+          : > "$artifact_manifest"
+
+          targets=(
+            "apple-ios-device-core|iphoneos"
+            "apple-ios-simulator-core|iphonesimulator"
+            "apple-tvos-device-core|appletvos"
+            "apple-tvos-simulator-core|appletvsimulator"
+            "apple-watchos-device-core|watchos"
+            "apple-watchos-simulator-core|watchsimulator"
+            "apple-visionos-device-core|xros"
+            "apple-visionos-simulator-core|xrsimulator"
+          )
+
+          built_count=0
+          for target in "${targets[@]}"; do
+            IFS='|' read -r preset sdk <<< "$target"
+            if ! grep -qF -- "-sdk ${sdk}" "$sdk_manifest"; then
+              printf '%s|%s|skipped: SDK unavailable\n' "$preset" "$sdk" >> "$artifact_manifest"
+              continue
+            fi
+
+            cmake --preset "$preset" -S Build/Cmake
+            cmake --build "out/${preset}" --parallel "$(sysctl -n hw.ncpu)"
+
+            library="out/${preset}/IccProfLib/libIccProfLib2-static.a"
+            version_header="out/${preset}/IccProfLib/IccProfLibVer.h"
+            test -f "$library"
+            test -f "$version_header"
+
+            output_dir="artifacts/${preset}"
+            mkdir -p "$output_dir"
+            cp "$library" "$version_header" "$output_dir/"
+            printf '%s|%s|built\n' "$preset" "$sdk" >> "$artifact_manifest"
+            built_count=$((built_count + 1))
+          done
+
+          if [[ "$built_count" -eq 0 ]]; then
+            echo "No supported Apple mobile SDKs are installed on this runner." >&2
+            exit 1
+          fi
+
+          {
+            echo "### Apple mobile core libraries"
+            echo ""
+            echo "| Preset | SDK | Result |"
+            echo "|---|---|---|"
+            while IFS='|' read -r preset sdk result; do
+              printf '| '
+              sanitize_line "$preset"
+              printf ' | '
+              sanitize_line "$sdk"
+              printf ' | '
+              sanitize_line "$result"
+              echo ' |'
+            done < "$artifact_manifest"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+      - name: Upload Apple mobile core libraries
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: iccdev-apple-mobile-core
+          path: artifacts
+          if-no-files-found: error
+          retention-days: 14
