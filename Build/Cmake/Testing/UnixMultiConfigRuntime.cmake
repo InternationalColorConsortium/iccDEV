@@ -1,6 +1,14 @@
 # Copyright (c) 2026 International Color Consortium.
 # SPDX-License-Identifier: BSD-3-Clause
 
+# This runtime view and its layout regression rely on POSIX semantics (hard
+# links, `find -type f`) that Windows multi-config generators (Visual Studio)
+# do not provide. Bail out early so Windows CTest runs neither register an
+# unsatisfiable iccdev_unix_runtime fixture nor the Unix-only layout test.
+if(WIN32)
+  return()
+endif()
+
 function(iccdev_collect_runtime_targets DIRECTORY_PATH OUTPUT_VAR)
   get_property(_targets DIRECTORY "${DIRECTORY_PATH}" PROPERTY BUILDSYSTEM_TARGETS)
   get_property(_children DIRECTORY "${DIRECTORY_PATH}" PROPERTY SUBDIRECTORIES)

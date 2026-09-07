@@ -9321,7 +9321,10 @@ if(TARGET iccDescribeSinkTest)
   )
 endif()
 
-if(ICCDEV_IS_MULTI_CONFIG)
+# UnixMultiConfigRuntime.cmake bails out on WIN32 without defining the
+# iccdev_unix_runtime fixture, so this wiring must be skipped there too or
+# Windows multi-config (Visual Studio) CTest runs get unsatisfied fixtures.
+if(ICCDEV_IS_MULTI_CONFIG AND NOT WIN32)
   get_property(_iccdev_runtime_tests DIRECTORY PROPERTY TESTS)
   foreach(_test IN LISTS _iccdev_runtime_tests)
     if(NOT _test MATCHES "^iccdev\\.(unix-multi-config-runtime|unix-runtime-layout)$")
