@@ -656,7 +656,7 @@ jobs:
 
       - name: Build MATLAB MEX gateway
         # matlab-actions/run-command v3
-        uses: matlab-actions/run-command@75644028e1e2aa374bbfdc968a65718a178cc264
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5
         with:
           command: >-
             addpath('matlab');
@@ -888,7 +888,7 @@ jobs:
 
       - name: Run staged MATLAB release QA
         # matlab-actions/run-command v3
-        uses: matlab-actions/run-command@75644028e1e2aa374bbfdc968a65718a178cc264
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5
         with:
           command: >-
             stage = fullfile(pwd, 'staging', 'iccDEV-Testing');
