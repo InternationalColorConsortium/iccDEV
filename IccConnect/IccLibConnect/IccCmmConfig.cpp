@@ -1858,25 +1858,164 @@ static bool ParseNextNumber(icFloatNumber& num, icChar** text)
 
 //===================================================
 
-static bool ParseName(icChar* pName, icChar* pString)
+static int HexDigit(icChar c)
+{
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  return -1;
+}
+
+// #2439: the '{ "name" }' tokens are the only text toLegacy() writes that
+// fromLegacy() reads back, so what lands in a config *file* has to survive the
+// trip. icSanitizeConsoleText() cannot carry it: that helper is deliberately
+// lossy because it is written for a terminal -- it escapes every non-ASCII
+// codepoint and leaves a literal backslash alone, so a name holding U+00FC and
+// the six characters \u00FC both encode to the same six characters, and neither
+// reads back. Measured on 764fc176: a profile colour named Gr<U+00FC>n applied
+// through iccApplyNamedCmm wrote { "Gr\u00FCn" }, and feeding that token back
+// in failed the lookup with "Profile application failed."
+//
+// This encoder escapes only what the format or the written file cannot take:
+//
+//   \ and "     framing. The backslash has to be spelled for any escape to be
+//               decodable; the quote goes out as \x22 so that ParseName()'s
+//               terminator scan cannot match inside the name.
+//   C0, DEL, C1 control codepoints. #2406 keeps these out of text iccDEV emits
+//               and no colour name legitimately carries one. C1 is escaped as
+//               its two UTF-8 bytes, which re-form the codepoint exactly.
+//   ill-formed  UTF-8, one byte at a time, so a mangled name cannot leave a
+//               file whose meaning depends on the reader.
+//
+// Everything else -- printable ASCII and every printable non-ASCII codepoint --
+// is written as its own bytes. An ordinary ASCII name is therefore byte-for-byte
+// what it is today, and a non-ASCII one now round-trips exactly.
+static std::string EncodeCfgName(const std::string& name)
+{
+  static const icChar hex[] = "0123456789ABCDEF";
+  std::string out;
+  // Walked by length, not to the first NUL. m_name reaches toLegacy() from
+  // readers other than fromLegacy() -- the JSON and IT8 paths -- and one of
+  // those can hand over a name with an embedded NUL, which c_str() would end the
+  // token at. It is escaped like any other C0 byte instead. icDecodeUtf8() below
+  // still reads through a NUL-terminated buffer, so a truncated sequence at the
+  // end of the string fails validation rather than running off it.
+  const unsigned char* base = (const unsigned char*)name.c_str();
+  const unsigned char* end = base + name.size();
+  const unsigned char* p = base;
+
+  while (p < end) {
+    unsigned char ch = *p;
+    int nEscape = 0;
+
+    if (ch == '\\') {
+      out += "\\\\";
+      p++;
+      continue;
+    }
+
+    // A double quote falls through to the \xNN escape below rather than being
+    // spelled \", so that no raw '"' byte can appear inside a token at all.
+    // ParseName() finds the end of the token with strstr(..., "\" }"), which
+    // knows nothing about escapes: with a \" spelling, a colour name containing
+    // '" }' matched at its OWN escaped quote and came back truncated. Measured
+    // on the first cut of this fix -- A" }B encoded to A\" }B and decoded to A\.
+    // \x22 leaves the terminator scan only one thing it can match.
+    if (ch != '"' && ch >= 0x20 && ch < 0x7f) {
+      out += (icChar)ch;
+      p++;
+      continue;
+    }
+
+    if (ch >= 0x80) {
+      unsigned int cp = 0;
+      int len = icDecodeUtf8(p, &cp);
+
+      if (len > 1 && p + len <= end) {
+        // C1 is spelled C2 80..C2 9F in UTF-8 and a terminal still acts on it,
+        // so it is escaped like C0. Every other well-formed codepoint keeps its
+        // own bytes -- that is what makes the round trip exact.
+        if (cp < 0x80u || cp > 0x9fu) {
+          out.append((const icChar*)p, (size_t)len);
+          p += len;
+          continue;
+        }
+        nEscape = len;
+      }
+      // A byte that is not a well-formed lead, or a sequence that would run past
+      // the end. Fall through and escape a single byte, so an invalid lead
+      // cannot swallow what follows.
+    }
+
+    if (!nEscape)
+      nEscape = 1;
+
+    while (nEscape--) {
+      out += "\\x";
+      out += hex[(*p >> 4) & 0xf];
+      out += hex[*p & 0xf];
+      p++;
+    }
+  }
+
+  return out;
+}
+
+static bool ParseName(std::string& name, const icChar* pString)
 {
   if (strncmp(pString, "{ \"", 3))
     return false;
 
-  const icChar* ptr = strstr(pString, "\" }");
+  // #2439: search from past the opening quote, not from the start of the line.
+  // strstr() from pString matches the '{ "' prefix's OWN quote whenever the name
+  // begins with ' }' -- the terminator was then found BEFORE the name started,
+  // ptr < p, the decode loop never ran and fromLegacy() dropped the row with no
+  // diagnostic. Measured on 764fc176 with a colour named ' }B'.
+  const icChar* p = pString + 3;
+  const icChar* ptr = strstr(p, "\" }");
 
   if (!ptr)
     return false;
 
-  icUInt32Number nNameLen = (icUInt32Number)(ptr - (pString + 3));
+  // #2439: decode into a std::string. This used to strncpy() the token into a
+  // caller-supplied icChar[256] with a length taken straight from the token, so
+  // any legacy config file carrying a name of 256 characters or more wrote past
+  // that buffer: ASan reports a stack-buffer-overflow in ParseName for both
+  // `iccApplyNamedCmm <file> 0 0 <profile> 1` and the iccApplySearch equivalent
+  // (CWE-787). It was reachable from the tool's own output -- a colour named
+  // with 43 accented characters is 86 bytes in, but 258 characters back out
+  // under the console escaping this function used to be handed. A larger buffer
+  // would only move the boundary, so there is no buffer.
+  name.clear();
 
-  if (!nNameLen)
-    return false;
+  while (p < ptr) {
+    if (*p == '\\' && p + 1 < ptr) {
+      icChar esc = p[1];
 
-  strncpy(pName, pString + 3, nNameLen);
-  pName[nNameLen] = '\0';
+      if (esc == '\\') {
+        name += esc;
+        p += 2;
+        continue;
+      }
 
-  return true;
+      if (esc == 'x' && p + 3 < ptr) {
+        int hi = HexDigit(p[2]), lo = HexDigit(p[3]);
+
+        if (hi >= 0 && lo >= 0) {
+          name += (icChar)((hi << 4) | lo);
+          p += 4;
+          continue;
+        }
+      }
+      // Not an escape EncodeCfgName() emits. Keep both characters, so a name
+      // that already contained a backslash -- a path spelled into a colour name,
+      // say -- reads exactly as it did before #2439.
+    }
+
+    name += *p++;
+  }
+
+  return !name.empty();
 }
 
 
@@ -1929,22 +2068,35 @@ bool CIccCfgColorData::fromLegacy(const char* filename, bool bReset)
     delete[] tempBuf;
     return false;
   }
-  char SrcNameBuf[256];
   int nSrcSamples = icGetSpaceSamples(m_srcSpace);
   CIccPixelBuf Pixel(nSrcSamples + 16);
 
+  // #2439: a line longer than tempBufSize makes getline() set failbit without
+  // reaching eof, and failbit is sticky -- every later getline() then returns
+  // immediately having extracted nothing, so `while (!eof())` spins forever.
+  // Measured on 764fc176: a 30000-character name is exit 124 under any timeout
+  // (CWE-835), the same shape as #2414 and #2442 in the sibling tools. Reading
+  // the stream state after each getline() ends the loop instead; a clean EOF sets
+  // failbit too, on the final zero-character read, so this also covers the
+  // ordinary exit and does not need eof() to be consulted separately.
   while (!InputData.eof()) {
     CIccCfgDataEntryPtr data(new CIccCfgDataEntry());
 
     //Are names coming is as an input?
     if (m_srcSpace == icSigNamedData) {
       InputData.getline(tempBuf, tempBufSize);
-      if (!ParseName(SrcNameBuf, tempBuf))
+      if (InputData.fail())
+        break;
+
+      // #2439: the fixed icChar[256] this used to fill is gone -- the token
+      // carries its own length and nothing bounded it.
+      if (!ParseName(data->m_name, tempBuf))
         continue;
 
-      data->m_name = SrcNameBuf;
-
-      icChar* numptr = strstr(tempBuf, "\" }");
+      // #2439: from tempBuf + 3 for the same reason ParseName() does -- these two
+      // scans have to agree on where the name ended, or the tint is read out of
+      // the middle of the name.
+      icChar* numptr = strstr(tempBuf + 3, "\" }");
       if (numptr)
         numptr += 3;
 
@@ -1956,6 +2108,9 @@ bool CIccCfgColorData::fromLegacy(const char* filename, bool bReset)
     else { //pixel sample data coming in as input
 
       InputData.getline(tempBuf, tempBufSize);
+      if (InputData.fail())
+        break;
+
       if (!ParseNumbers(Pixel, tempBuf, nSamples))
         continue;
 
@@ -2341,6 +2496,19 @@ bool CIccCfgColorData::toLegacy(const char* filename, const CIccCfgProfileArray 
            icWriteString(f, tempBuf);
   };
 
+  // #2439: same text, two sinks, two encoders. A named file is read back by
+  // fromLegacy(), so its name tokens need EncodeCfgName(), which is reversible.
+  // icOpenRegularWriteFile() hands back stdout for an empty filename, and stdout
+  // may be a terminal, so that case stays on the console escaping #2406/#2420
+  // put there. A redirected stdout keeps the console spelling too: the FILE* is
+  // still stdout, and guessing from isatty() would make the bytes iccDEV writes
+  // depend on how the caller invoked it. Ask for a file if you want to read it
+  // back.
+  const bool bToFile = (f != stdout);
+  auto nameToken = [bToFile](const std::string& sName)->std::string {
+    return bToFile ? EncodeCfgName(sName) : icSanitizeConsoleText(sName);
+  };
+
   std::string out;
   snprintf(tempBuf, tempSize, "%s\t; ", icGetColorSig(tempBuf2, tempSize, m_space, false));
   out = tempBuf;
@@ -2364,6 +2532,10 @@ bool CIccCfgColorData::toLegacy(const char* filename, const CIccCfgProfileArray 
 
   fprintf(f, ";Source data is after semicolon\n");
   
+  // #2439: the ';' lines below stay on icSanitizeConsoleText() on purpose.
+  // ParseName() rejects them and fromLegacy() skips them, so they are comments
+  // no reader decodes -- lossy-but-safe is the right trade for text whose only
+  // consumer is a person looking at the file.
   fprintf(f, "\n;Profiles applied\n");
   for (auto pIter = profiles.begin(); pIter != profiles.end(); pIter++) {
     CIccCfgProfile* pProf = pIter->get();
@@ -2390,7 +2562,7 @@ bool CIccCfgColorData::toLegacy(const char* filename, const CIccCfgProfileArray 
     }
 
     if (pData->m_name.size() != size_t(0)) {
-      fprintf(f, "{ \"%s\" }\t;", icSanitizeConsoleText(pData->m_name).c_str() );
+      fprintf(f, "{ \"%s\" }\t;", nameToken(pData->m_name).c_str() );
     }
     else {
       for (size_t i = 0; i < pData->m_values.size(); i++) {
@@ -2400,7 +2572,7 @@ bool CIccCfgColorData::toLegacy(const char* filename, const CIccCfgProfileArray 
     }
 
     if (pData->m_srcName.size() != size_t(0)) {
-      fprintf(f,"{ \"%s\" }", icSanitizeConsoleText(pData->m_srcName).c_str());
+      fprintf(f,"{ \"%s\" }", nameToken(pData->m_srcName).c_str());
       // Echo the tint the caller supplied (m_srcValues[0]).  We used to
       // suppress this when the tint was exactly 1.0, but that hid a
       // value the caller had explicitly written -- the
