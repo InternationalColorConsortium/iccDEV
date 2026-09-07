@@ -21,10 +21,12 @@ amplified 12x between two bundled RGB profiles. A native `Share Report` button
 sends the text report to Messages, Mail, AirDrop, or an installed share
 extension.
 
-The visual shell mirrors the current ICC website export: ICC logo header,
-the "Making color seamless between devices and documents" tagline, brand-blue
-primary action, mobile-first stacked layout, and a generated ICC app icon
-compiled through the Xcode asset catalog.
+The iPhone visual shell mirrors the current ICC website export: ICC logo
+header, the "Making color seamless between devices and documents" tagline,
+brand-blue primary action, mobile-first stacked layout, and a generated ICC app
+icon compiled through the Xcode asset catalog. The iPad layout uses a compact
+full-screen dashboard with the ICC and repository links preserved so the
+preview images and report use the available viewport.
 
 This is intentionally not a full mobile port of the desktop
 `iccApplyProfiles` CLI. It does not parse TIFF files, write TIFF output, embed
@@ -71,6 +73,8 @@ outputs. Override the default `org.color.iccdev.ApplyPreviewPOC` bundle ID with
 `-DICCDEV_APPLYPREVIEW_BUNDLE_IDENTIFIER=...` when configuring CMake directly.
 
 ```bash
+bundle_id="${BUNDLE_ID:-org.color.iccdev.ApplyPreviewPOC}"
+
 cmake --preset apple-ios-device-core -S Build/Cmake \
   -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0
 cmake --build out/apple-ios-device-core --config Release --parallel
@@ -79,6 +83,7 @@ cmake -S examples/ios-apply-preview -B out/ios-apply-preview-device -G Xcode \
   -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos \
   -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0 \
   -DRefIccMAX_DIR="$PWD/out/apple-ios-device-core" \
+  -DICCDEV_APPLYPREVIEW_BUNDLE_IDENTIFIER="$bundle_id" \
   -DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM="$TEAM_ID"
 
 xcodebuild -project out/ios-apply-preview-device/IccApplyPreviewPOC.xcodeproj \
@@ -89,7 +94,7 @@ xcrun devicectl device install app --device "$DEVICE_ID" \
   "out/ios-apply-preview-device/Release-iphoneos/IccApplyPreviewPOC.app"
 xcrun devicectl device process launch --device "$DEVICE_ID" \
   --console --terminate-existing --timeout 90 \
-  org.color.iccdev.ApplyPreviewPOC --exit-after-tests
+  "$bundle_id" --exit-after-tests
 ```
 
 Launch without `--exit-after-tests` for hands-on visual review on iPhone or

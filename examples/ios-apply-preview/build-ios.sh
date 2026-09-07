@@ -27,7 +27,7 @@ Environment:
   SIMULATOR_UDID  Simulator UDID for simulator --run-tests or --launch.
                   Defaults to "booted".
   BUILD_CONFIG    Xcode build configuration. Defaults to Release.
-  DEPLOYMENT      iOS deployment target. Defaults to 17.0.
+  DEPLOYMENT      iOS deployment target for the core and app. Defaults to 17.0.
   ARCH            Target architecture. Defaults to arm64.
   BUNDLE_ID       App bundle identifier. Defaults to
                   org.color.iccdev.ApplyPreviewPOC.
