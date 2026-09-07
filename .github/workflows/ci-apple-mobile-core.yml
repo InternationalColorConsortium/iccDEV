@@ -26,6 +26,18 @@ jobs:
         with:
           persist-credentials: false
 
+      # Checkout the trusted base commit into a separate path so we do not
+      # source code from the PR workspace (untrusted) when this workflow is
+      # reached via workflow_call from a pull_request caller.
+      - name: Checkout base commit (trusted sanitizers)
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
+          path: base
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Build available Apple mobile core libraries
         env:
           BASH_ENV: /dev/null
@@ -35,7 +47,7 @@ jobs:
           unset GITHUB_TOKEN || true
 
           # shellcheck source=.github/scripts/sanitize-sed.sh
-          source "$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          source "$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
 
           sdk_manifest="${RUNNER_TEMP}/iccdev-apple-sdks.txt"
           xcodebuild -showsdks > "$sdk_manifest"
@@ -101,7 +113,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: Upload Apple mobile core libraries
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: iccdev-apple-mobile-core
