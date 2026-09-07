@@ -21,13 +21,16 @@ set(ICCDEV_APPLYPREVIEW_BUNDLE_IDENTIFIER "org.color.iccdev.ApplyPreviewPOC"
   CACHE STRING "Bundle identifier registered with your Apple development team")
 
 set(_source "${CMAKE_CURRENT_SOURCE_DIR}")
+set(_assets "${CMAKE_CURRENT_SOURCE_DIR}/Assets.xcassets")
 set(_profile "${CMAKE_CURRENT_SOURCE_DIR}/../../Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc")
+set_source_files_properties("${_assets}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 set_source_files_properties("${_profile}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 
 add_executable(IccApplyPreviewPOC MACOSX_BUNDLE
   "${_source}/main.mm"
   "${_source}/ApplyPreviewHost.h"
   "${_source}/ApplyPreviewHost.mm"
+  "${_assets}"
   "${_profile}")
 
 target_link_libraries(IccApplyPreviewPOC PRIVATE

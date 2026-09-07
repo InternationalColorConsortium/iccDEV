@@ -54,6 +54,28 @@
 @property(nonatomic, strong) UIWindow *window;
 @end
 
+static UIColor *IccDevBrandBlue(void)
+{
+  if (@available(iOS 13.0, *)) {
+    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
+      if (traits.userInterfaceStyle == UIUserInterfaceStyleDark) {
+        return [UIColor colorWithRed:91.0 / 255.0
+                               green:173.0 / 255.0
+                                blue:217.0 / 255.0
+                               alpha:1.0];
+      }
+      return [UIColor colorWithRed:3.0 / 255.0
+                             green:102.0 / 255.0
+                              blue:153.0 / 255.0
+                             alpha:1.0];
+    }];
+  }
+  return [UIColor colorWithRed:3.0 / 255.0
+                         green:102.0 / 255.0
+                          blue:153.0 / 255.0
+                         alpha:1.0];
+}
+
 @implementation IccApplyPreviewAppDelegate
 - (BOOL)application:(UIApplication *)application
     didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
@@ -67,15 +89,19 @@
   UIViewController *controller = [[UIViewController alloc] init];
   controller.view.backgroundColor = [UIColor systemBackgroundColor];
 
+  UIImageView *logo = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"ICCLogo"]];
+  logo.contentMode = UIViewContentModeScaleAspectFit;
+  logo.translatesAutoresizingMaskIntoConstraints = NO;
+
   UILabel *title = [[UILabel alloc] init];
-  title.text = @"iccDEV Apply Preview";
+  title.text = @"International Color Consortium";
   title.font = [UIFont preferredFontForTextStyle:UIFontTextStyleTitle1];
   title.textAlignment = NSTextAlignmentCenter;
   title.adjustsFontForContentSizeCategory = YES;
   title.translatesAutoresizingMaskIntoConstraints = NO;
 
   UILabel *subtitle = [[UILabel alloc] init];
-  subtitle.text = @"In-memory RGB image through a CIccCmm profile chain";
+  subtitle.text = @"Making color seamless between devices and documents";
   subtitle.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
   subtitle.textAlignment = NSTextAlignmentCenter;
   subtitle.textColor = [UIColor secondaryLabelColor];
@@ -120,13 +146,23 @@
   interpolation.translatesAutoresizingMaskIntoConstraints = NO;
 
   UIButton *run = [UIButton buttonWithType:UIButtonTypeSystem];
-  [run setTitle:@"Run Apply Preview" forState:UIControlStateNormal];
+  UIButtonConfiguration *runConfig = [UIButtonConfiguration filledButtonConfiguration];
+  runConfig.title = @"Run Apply Preview";
+  runConfig.baseBackgroundColor = IccDevBrandBlue();
+  runConfig.baseForegroundColor = [UIColor whiteColor];
+  runConfig.contentInsets = NSDirectionalEdgeInsetsMake(10, 16, 10, 16);
+  run.configuration = runConfig;
   run.titleLabel.font =
     [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
   run.translatesAutoresizingMaskIntoConstraints = NO;
 
   UIButton *share = [UIButton buttonWithType:UIButtonTypeSystem];
-  [share setTitle:@"Share Report" forState:UIControlStateNormal];
+  UIButtonConfiguration *shareConfig =
+    [UIButtonConfiguration borderedButtonConfiguration];
+  shareConfig.title = @"Share Report";
+  shareConfig.baseForegroundColor = IccDevBrandBlue();
+  shareConfig.contentInsets = NSDirectionalEdgeInsetsMake(10, 16, 10, 16);
+  share.configuration = shareConfig;
   share.titleLabel.font =
     [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
   share.translatesAutoresizingMaskIntoConstraints = NO;
@@ -147,10 +183,22 @@
     UILabel *view = [[UILabel alloc] init];
     view.text = text;
     view.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+    view.numberOfLines = 0;
     view.adjustsFontForContentSizeCategory = YES;
     view.translatesAutoresizingMaskIntoConstraints = NO;
     return view;
   };
+
+  UILabel *deltaNote = [[UILabel alloc] init];
+  deltaNote.text =
+    @"Expected: the delta image remains black for all sizes and interpolation "
+     "choices because this proof of concept applies sRGB_D65_MAT.icc back to "
+     "itself.";
+  deltaNote.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+  deltaNote.textColor = [UIColor secondaryLabelColor];
+  deltaNote.numberOfLines = 0;
+  deltaNote.adjustsFontForContentSizeCategory = YES;
+  deltaNote.translatesAutoresizingMaskIntoConstraints = NO;
 
   UITextView *report = [[UITextView alloc] initWithFrame:CGRectZero];
   report.editable = NO;
@@ -164,11 +212,14 @@
   report.translatesAutoresizingMaskIntoConstraints = NO;
 
   UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[
+    logo,
     title,
     subtitle,
     iccLink,
     repoLink,
+    label(@"Image size, edge pixels"),
     size,
+    label(@"Interpolation"),
     interpolation,
     run,
     share,
@@ -176,8 +227,9 @@
     source,
     label(@"Applied image"),
     applied,
-    label(@"Delta image, amplified 8x"),
+    label(@"Identity delta, expected black"),
     delta,
+    deltaNote,
     report
   ]];
   stack.axis = UILayoutConstraintAxisVertical;
@@ -265,6 +317,8 @@
     [scroll.trailingAnchor constraintEqualToAnchor:safeArea.trailingAnchor],
     [scroll.topAnchor constraintEqualToAnchor:safeArea.topAnchor],
     [scroll.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor],
+    [logo.heightAnchor constraintLessThanOrEqualToConstant:120],
+    [logo.heightAnchor constraintGreaterThanOrEqualToConstant:72],
     [stack.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor
                                         constant:16],
     [stack.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor
