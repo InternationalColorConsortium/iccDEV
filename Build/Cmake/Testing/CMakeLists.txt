@@ -7862,6 +7862,39 @@ if(TARGET iccFromCube)
     SKIP_RETURN_CODE 77)
 endif()
 
+# #2439: the legacy config writer handed its name tokens to the CONSOLE
+# sanitizer, so the only text fromLegacy() reads back was encoded for a terminal.
+# Two defects fell out: the round trip does not close for a non-ASCII colour
+# name, and the six-characters-per-codepoint expansion made ParseName()'s
+# unbounded strncpy into a char[256] reachable from the tool's OWN output -- a
+# 43-character name is 86 bytes in and 258 characters back out.  On a stock
+# Release build _FORTIFY_SOURCE turns that into SIGABRT, so the suite is red on
+# an uninstrumented lane too and needs no sanitizer to be worth running.
+#
+# Guarded on iccFromXml as well as the two apply tools: the script builds all
+# three of its named-colour profiles from tracked XML rather than from
+# Testing/*.icc, every one of which is generated.
+#
+# Deliberately NOT labelled "slow", so it runs on the pull_request path --
+# ci-pr-action.yml pins ctest_mode=fast, which drops the slow label (#2412).
+#
+# 300s for a ~200s worst case: 3 iccFromXml profile builds at 120s each is the
+# ceiling, but they complete in well under a second on every lane measured, and
+# the 10 tool spawns are 60s apiece.
+if(TARGET iccApplyNamedCmm AND TARGET iccApplySearch AND TARGET iccFromXml)
+  iccdev_add_script_test(
+    iccdev.config-name-roundtrip-regression
+    300
+    "iccdev;tools;cli;applynamedcmm;applysearch;config;named;issue-2439;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2439-config-name-roundtrip-tests.sh"
+  )
+  # Exits 77 when a tool or python3 is unavailable, when a fixture profile
+  # cannot be built, or when no defect case was measured.
+  set_tests_properties(iccdev.config-name-roundtrip-regression PROPERTIES
+    SKIP_RETURN_CODE 77)
+endif()
+
 # The iccApply* half of the same CLI-contract family (#2405).  Guarded on all
 # four targets because the script measures all four and its "nothing measured"
 # guard would otherwise turn a partial build into a skip that hides real cases.
