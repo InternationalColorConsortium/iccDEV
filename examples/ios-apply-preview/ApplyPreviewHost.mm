@@ -131,7 +131,7 @@ static void IccDevEncodeImages(const std::vector<icFloatNumber>& src,
                                icUInt32Number& checksum)
 {
   checksum = 2166136261u;
-  double sumDelta = 0.0;
+  double sumChannelDelta = 0.0;
   maxDelta = 0.0;
   const size_t nPixels = src.size() / 3u;
 
@@ -151,16 +151,17 @@ static void IccDevEncodeImages(const std::vector<icFloatNumber>& src,
       checksum *= 16777619u;
       const double channelDelta =
         std::fabs(static_cast<double>(dst[f + c] - src[f + c]));
+      sumChannelDelta += channelDelta;
       pixelDelta = std::max(pixelDelta, channelDelta);
     }
     srcRgba[p + 3u] = 255;
     dstRgba[p + 3u] = 255;
     deltaRgba[p + 3u] = 255;
-    sumDelta += pixelDelta;
     maxDelta = std::max(maxDelta, pixelDelta);
   }
 
-  meanDelta = nPixels ? sumDelta / static_cast<double>(nPixels) : 0.0;
+  meanDelta = nPixels ?
+    sumChannelDelta / (static_cast<double>(nPixels) * 3.0) : 0.0;
 }
 
 static void IccDevFinishApplyPreview(IccApplyPreviewResult *result)
