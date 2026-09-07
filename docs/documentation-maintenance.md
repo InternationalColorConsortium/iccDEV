@@ -10,6 +10,7 @@ point to deeper references.
 |-------|------------------|
 | User install and packaging | `docs/install.md` |
 | User build instructions | `docs/build.md` |
+| Apple mobile static cores and smoke app | `docs/build.md`, `.github/instructions/build-system.instructions.md`, and `.github/skills/maintainer-ci-ctest/SKILL.md` |
 | MATLAB bindings and Windows PowerShell setup | `docs/matlab-bindings.md` |
 | MATLAB MEX code review | `.github/instructions/matlab-code-review.instructions.md` and `.github/skills/code-review/SKILL.md` |
 | MATLAB IccJSON conversion, PAWG Q1 runtime, native contract, and release support files | `docs/matlab-bindings.md`, `docs/iccjson.md`, and `.github/skills/matlab-bindings-test/SKILL.md` |

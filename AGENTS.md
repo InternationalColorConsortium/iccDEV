@@ -47,6 +47,7 @@ shares one source of truth. Update rules here, not in the mirrors.
 | Need | File |
 |------|------|
 | Build, test, style, CI | `.github/copilot-instructions.md` |
+| Apple mobile static cores and smoke app | `docs/build.md` |
 | AVX2 CLUT diagnostics and optimization handoff | `docs/avx2-clut-diagnostics.md` |
 | Pull request preparation and handoff | `docs/pre-pr-security-cycle.md` |
 | Pre-PR security skill | `.github/skills/pre-pr-security-cycle/SKILL.md` |

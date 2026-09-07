@@ -173,6 +173,33 @@ function(iccdev_apple_sysroot_allows_arm64_32 OUTPUT_VAR)
   endif()
 endfunction()
 
+function(iccdev_resolve_apple_sdk_path OUTPUT_VAR)
+  set(_iccdev_apple_sdk "${CMAKE_OSX_SYSROOT}")
+  if(NOT _iccdev_apple_sdk)
+    set(${OUTPUT_VAR} "" PARENT_SCOPE)
+    return()
+  endif()
+  if(IS_ABSOLUTE "${_iccdev_apple_sdk}")
+    set(${OUTPUT_VAR} "${_iccdev_apple_sdk}" PARENT_SCOPE)
+    return()
+  endif()
+
+  find_program(_iccdev_xcrun xcrun)
+  if(_iccdev_xcrun)
+    execute_process(
+      COMMAND "${_iccdev_xcrun}" --sdk "${_iccdev_apple_sdk}" --show-sdk-path
+      OUTPUT_VARIABLE _iccdev_apple_sdk_path
+      ERROR_QUIET
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(_iccdev_apple_sdk_path AND IS_DIRECTORY "${_iccdev_apple_sdk_path}")
+      set(${OUTPUT_VAR} "${_iccdev_apple_sdk_path}" PARENT_SCOPE)
+      return()
+    endif()
+  endif()
+
+  set(${OUTPUT_VAR} "" PARENT_SCOPE)
+endfunction()
+
 # Normalize Apple architecture aliases before project() so CMake's compiler
 # probe does not receive invalid -arch spellings such as ARM64 or amd64.
 if(DEFINED CMAKE_OSX_ARCHITECTURES AND NOT CMAKE_OSX_ARCHITECTURES STREQUAL "")
@@ -197,6 +224,7 @@ set(PROJECT_DOWN_NAME "reficcmax")
 # whether that target is desktop macOS or one of the mobile Apple platforms.
 set(ICCDEV_APPLE_PLATFORM "")
 set(ICCDEV_IS_MACOS FALSE)
+set(ICCDEV_APPLE_SDK_PATH "")
 if(APPLE)
   set(_iccdev_apple_sdk "${CMAKE_OSX_SYSROOT}")
   if(NOT _iccdev_apple_sdk)
@@ -228,6 +256,10 @@ if(APPLE)
     message(FATAL_ERROR
       "Unsupported Apple SDK '${CMAKE_OSX_SYSROOT}'. Set CMAKE_OSX_SYSROOT "
       "to a supported Apple SDK.")
+  endif()
+
+  if(NOT ICCDEV_IS_MACOS)
+    iccdev_resolve_apple_sdk_path(ICCDEV_APPLE_SDK_PATH)
   endif()
 endif()
 
@@ -699,6 +731,35 @@ endif()
 
 # --- LibXml2 ---
 if(ENABLE_ICCXML)
+  if(APPLE AND NOT ICCDEV_IS_MACOS)
+    if(NOT ICCDEV_APPLE_SDK_PATH)
+      message(FATAL_ERROR
+        "Unable to resolve selected Apple SDK path for LibXml2 discovery.")
+    endif()
+
+    set(_iccdev_libxml2_include_dir "${ICCDEV_APPLE_SDK_PATH}/usr/include/libxml2")
+    if(NOT IS_DIRECTORY "${_iccdev_libxml2_include_dir}")
+      message(FATAL_ERROR
+        "Selected Apple SDK does not provide LibXml2 headers: "
+        "${_iccdev_libxml2_include_dir}")
+    endif()
+    set(LIBXML2_INCLUDE_DIR "${_iccdev_libxml2_include_dir}"
+      CACHE PATH "LibXml2 include directory for selected Apple SDK" FORCE)
+
+    if(EXISTS "${ICCDEV_APPLE_SDK_PATH}/usr/lib/libxml2.tbd")
+      set(_iccdev_libxml2_library "${ICCDEV_APPLE_SDK_PATH}/usr/lib/libxml2.tbd")
+    elseif(EXISTS "${ICCDEV_APPLE_SDK_PATH}/usr/lib/libxml2.dylib")
+      set(_iccdev_libxml2_library "${ICCDEV_APPLE_SDK_PATH}/usr/lib/libxml2.dylib")
+    else()
+      message(FATAL_ERROR
+        "Selected Apple SDK does not provide a LibXml2 library under "
+        "${ICCDEV_APPLE_SDK_PATH}/usr/lib.")
+    endif()
+    set(LIBXML2_LIBRARY "${_iccdev_libxml2_library}"
+      CACHE FILEPATH "LibXml2 library for selected Apple SDK" FORCE)
+    set(LIBXML2_LIBRARIES "${_iccdev_libxml2_library}"
+      CACHE STRING "LibXml2 libraries for selected Apple SDK" FORCE)
+  endif()
   find_package(LibXml2 REQUIRED)
   if(VERBOSE_CONFIG)
     message(STATUS "LibXml2                : ${LIBXML2_LIBRARIES} (version: ${LIBXML2_VERSION})")

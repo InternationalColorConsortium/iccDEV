@@ -115,14 +115,18 @@ GuardMalloc separately when checking allocator-sensitive behavior.
 
 ## Apple mobile core libraries
 
-iOS, tvOS, watchOS, and visionOS builds provide the dependency-free static
-`IccProfLib2` core only. They intentionally exclude command-line tools,
-CTest executables, XML, JSON, zlib, image libraries, and wxWidgets. Integrate
-the resulting archive into an app or package it with matching device and
-simulator archives as an XCFramework.
+iOS, tvOS, watchOS, and visionOS builds provide two static-library tiers. The
+`apple-*-core` presets remain dependency-free and build `IccProfLib2-static`
+only. The `apple-*-extended-core` presets add zlib-backed text tags, IccXML,
+IccJSON, and IccConnect when the Apple SDK and host headers are available.
+They still intentionally exclude command-line tools, CTest executables, image
+libraries, and wxWidgets. Integrate the resulting archives into an app or
+package matching device and simulator archives as an XCFramework.
 
-These presets require Xcode on macOS. The device and simulator presets below
-use arm64; change `CMAKE_OSX_ARCHITECTURES` for an Xcode-supported simulator
+These presets require Xcode on macOS. Extended presets additionally need
+nlohmann-json CMake package metadata on the host; the Apple SDK supplies zlib
+and LibXml2 for the mobile target. The device and simulator presets below use
+arm64; change `CMAKE_OSX_ARCHITECTURES` for an Xcode-supported simulator
 architecture when needed. watchOS devices use the platform's `arm64_32`
 architecture.
 
@@ -132,20 +136,25 @@ cmake --preset apple-ios-device-core -S Build/Cmake
 
 cmake --preset apple-ios-simulator-core -S Build/Cmake
 (cd Build/Cmake && cmake --build --preset apple-ios-simulator-core --parallel)
+
+cmake --preset apple-ios-simulator-extended-core -S Build/Cmake
+(cd Build/Cmake && cmake --build --preset apple-ios-simulator-extended-core --parallel)
 ```
 
-Equivalent `apple-tvos-*-core`, `apple-watchos-*-core`, and
-`apple-visionos-*-core` presets select the corresponding device or simulator
-SDK. Set the app's minimum deployment target through
+Equivalent `apple-tvos-*-core`, `apple-watchos-*-core`,
+`apple-visionos-*-core`, and matching `*-extended-core` presets select the
+corresponding device or simulator SDK. Set the app's minimum deployment target through
 `CMAKE_OSX_DEPLOYMENT_TARGET`; iccDEV does not choose one on behalf of an app.
 App code must use only sandbox-authorized file locations or streams. Native
 Apple test hosts are the appropriate test mechanism for these targets; the
-repository's command-line CTest suites remain macOS-host tools.
+repository's command-line CTest suites remain macOS-host tools. The mobile app
+reports this as a non-failing gap while exercising the library-backed
+capabilities those tools depend on.
 
 The `Apple mobile core libraries` workflow discovers installed Apple SDKs,
-builds every matching mobile-core preset, and runs the simulator and Xcode
-CTest smoke gates below. Master pushes and manual runs upload the static
-libraries, generated version headers, and build manifest as
+builds every matching minimal and extended mobile-core preset, and runs the
+simulator and Xcode CTest smoke gates below. Master pushes and manual runs
+upload the static libraries, generated version headers, and build manifest as
 `iccdev-apple-mobile-core`. Dispatch
 `.github/workflows/ci-apple-mobile-core.yml` for this complete Apple gate.
 The separate `Apple platform smoke` workflow runs the same runtime gates for
@@ -154,11 +163,17 @@ affected same-repository pull requests without uploading PR-produced artifacts.
 ### Run the core smoke app on an iPhone, iPad, or Apple Watch
 
 `Build/AppleMobile` is a standalone Xcode consumer of the core's exported
-CMake package. UIKit (iOS) and SwiftUI (watchOS) hosts share Foundation-based
-tests; neither enables desktop tools or CTest on the device. The app
-exercises the bundled RGB profile, memory and sandbox-file serialization,
-truncated-header rejection, single/batch RGB transforms, and analytic
-3D CLUT interpolation with 3, 8, 15, and 16 output channels.
+CMake package. UIKit (iOS/iPadOS) and SwiftUI (watchOS) hosts share
+Foundation-based tests; neither enables desktop tools or CTest on the device.
+The app exercises the bundled RGB profile, memory and sandbox-file
+serialization, truncated-header rejection, single/batch RGB transforms,
+invalid-file rejection without accepting a platform/default RGB substitute,
+analytic 3D CLUT interpolation with 3, 8, 15, and 16 output channels, and
+extended JSON/XML/IccConnect checks when linked to an `apple-*-extended-core`
+build. Its on-screen summary and `Documents/results.json` include non-failing
+notes for mobile gaps such as desktop command-line tools, image-dependent tool
+packaging, and external platform-profile substitution investigations that are
+not part of the public iccDEV smoke app.
 
 Use an unlocked, paired device with Developer Mode enabled and an Apple
 Development signing identity in Xcode. A Developer ID Application certificate
@@ -170,30 +185,48 @@ to the watch. Developer Mode alone does not establish the CoreDevice network
 tunnel.
 
 Run from the repository root, with `TEAM_ID` and `DEVICE_ID` set in your shell.
-Set `PLATFORM=watchos` for a watch; the default below targets iPhone/iPad:
+Set `RUN_TARGET` to `iphone`, `ipad`, `tv`, or `watch`; the default below
+targets iPhone. The run target selects the matching Apple platform, Xcode
+device family, bundle identifier, SDK, architecture, and core preset:
 
 ```bash
-platform="${PLATFORM:-ios}"
-case "$platform" in
-  ios)
-    system=iOS; sdk=iphoneos; arch=arm64; deployment=17.0
+run_target="${RUN_TARGET:-iphone}"
+case "$run_target" in
+  iphone)
+    platform=ios; system=iOS; sdk=iphoneos; arch=arm64; deployment=17.0
     bundle=org.color.iccdev.CoreSmoke ;;
-  watchos)
+  ipad)
+    system=iOS; sdk=iphoneos; arch=arm64; deployment=17.0
+    platform=ios; bundle=org.color.iccdev.CoreSmoke.ipad ;;
+  tv)
+    platform=tvos; system=tvOS; sdk=appletvos; arch=arm64; deployment=17.0
+    bundle=org.color.iccdev.CoreSmoke.tv ;;
+  watch)
     system=watchOS; sdk=watchos; arch=arm64_32; deployment=10.0
-    bundle=org.color.iccdev.CoreSmoke.watch ;;
-  *) echo "Set PLATFORM to ios or watchos" >&2; exit 2 ;;
+    platform=watchos; bundle=org.color.iccdev.CoreSmoke.watch ;;
+  *) echo "Set RUN_TARGET to iphone, ipad, tv, or watch" >&2; exit 2 ;;
 esac
-core="out/apple-${platform}-device-core"
-build="out/apple-${platform}-device-smoke"
-cmake --preset "apple-${platform}-device-core" -S Build/Cmake \
+core_preset="apple-${platform}-device-extended-core"
+core="out/${core_preset}"
+build="out/apple-${run_target}-device-smoke"
+json_package_args=()
+if [[ "$core_preset" == *-extended-core ]] && command -v brew >/dev/null 2>&1; then
+  json_prefix="$(brew --prefix nlohmann-json 2>/dev/null || true)"
+  if [[ -f "${json_prefix}/share/cmake/nlohmann_json/nlohmann_jsonConfig.cmake" ]]; then
+    json_package_args+=("-Dnlohmann_json_DIR=${json_prefix}/share/cmake/nlohmann_json")
+  fi
+fi
+cmake --preset "$core_preset" -S Build/Cmake \
   -DCMAKE_OSX_ARCHITECTURES="$arch" -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment"
 cmake --build "$core" --parallel
 cmake -S Build/AppleMobile -B "$build" -G Xcode \
   -DCMAKE_SYSTEM_NAME="$system" -DCMAKE_OSX_SYSROOT="$sdk" \
   -DCMAKE_OSX_ARCHITECTURES="$arch" -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment" \
   -DRefIccMAX_DIR="$PWD/$core" \
+  -DICCDEV_APPLE_RUN_TARGET="$run_target" \
   -DICCDEV_APPLE_BUNDLE_IDENTIFIER="$bundle" \
-  -DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM="$TEAM_ID"
+  -DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM="$TEAM_ID" \
+  "${json_package_args[@]}"
 xcodebuild -project "$build/IccDevCoreSmoke.xcodeproj" \
   -target IccDevCoreSmoke -configuration Release -sdk "$sdk" \
   -allowProvisioningUpdates -allowProvisioningDeviceRegistration build
@@ -216,6 +249,8 @@ exit code zero in the current launch JSON, and a passing report copied from
 that run. An installation or launch alone is not a test pass. A normal app
 launch (without `--exit-after-tests`) leaves the report visible on the device.
 This is a core smoke suite, not the desktop regression suite or a benchmark.
+Set `core_preset="apple-${platform}-device-core"` to test the dependency-free
+library tier instead.
 
 Change `bundle` if your team needs a different app ID, and use the same ID in
 the device commands. `ICCDEV_IOS_BUNDLE_IDENTIFIER` remains supported for iOS
@@ -226,10 +261,13 @@ Use the simulator helper below to build and exercise matching simulator pairs.
 
 ### Run the simulator and Xcode CI gates locally
 
-From the repository root on a Mac with Xcode, CMake, Ninja, and `jq`:
+From the repository root on a Mac with Xcode, CMake, Ninja, `jq`, and
+nlohmann-json available to CMake:
 
 ```bash
 bash .github/scripts/iccdev-apple-simulator-smoke.sh ios
+bash .github/scripts/iccdev-apple-simulator-smoke.sh ipad
+bash .github/scripts/iccdev-apple-simulator-smoke.sh tvos
 bash .github/scripts/iccdev-apple-simulator-smoke.sh watchos
 bash .github/scripts/iccdev-xcode-ctest-smoke.sh
 ```
@@ -241,6 +279,8 @@ under `out/apple-<platform>-simulator-smoke`; only the simulator created by the
 command is shut down and deleted. No signing identity is needed. An unavailable
 runtime fails with an installation command; set
 `ICCDEV_APPLE_DOWNLOAD_RUNTIME=1` to permit Xcode to download it, as CI does.
+The simulator helper uses `ICCDEV_APPLE_CORE_FLAVOR=extended` by default; set
+`ICCDEV_APPLE_CORE_FLAVOR=minimal` to exercise the dependency-free core.
 
 The Xcode command builds dependency-free Release and Debug test targets in
 `out/xcode-ctest-smoke`, exercises the configuration-specific CTest runtime

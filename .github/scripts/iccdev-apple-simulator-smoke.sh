@@ -2,25 +2,62 @@
 # Copyright (c) 2026 International Color Consortium.
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# Run the native core host on a disposable iOS/watchOS simulator. A fresh
+# Run the native core host on a disposable Apple simulator. A fresh
 # persisted report and console sentinel, not simctl's exit code alone, decide
 # success. The missing-fixture control must fail before restoring a passing run.
 set -euo pipefail
 
 if [[ $# -gt 1 ]]; then
-  echo "Usage: $0 [ios|watchos]" >&2
+  echo "Usage: $0 [ios|iphone|ipad|tvos|tv|watchos|watch]" >&2
   exit 2
 fi
-platform="${1:-ios}"
-case "$platform" in
-  ios) system=iOS; sdk=iphonesimulator; family=iPhone; deployment=17.0 ;;
-  watchos) system=watchOS; sdk=watchsimulator; family='Apple Watch'; deployment=10.0 ;;
-  *) echo "Usage: $0 [ios|watchos]" >&2; exit 2 ;;
+requested="${1:-ios}"
+case "$requested" in
+  ios|iphone)
+    build_suffix="$requested"
+    display_target=iPhone
+    platform=ios; run_target=iphone; system=iOS; sdk=iphonesimulator
+    family=iPhone; deployment=17.0 ;;
+  ipad)
+    build_suffix=ipad
+    display_target=iPad
+    platform=ios; run_target=ipad; system=iOS; sdk=iphonesimulator
+    family=iPad; deployment=17.0 ;;
+  tvos|tv)
+    build_suffix="$requested"
+    display_target=tvOS
+    platform=tvos; run_target=tv; system=tvOS; sdk=appletvsimulator
+    family='Apple TV'; deployment=17.0 ;;
+  watchos|watch)
+    build_suffix="$requested"
+    display_target=watchOS
+    platform=watchos; run_target=watch; system=watchOS; sdk=watchsimulator
+    family='Apple Watch'; deployment=10.0 ;;
+  *) echo "Usage: $0 [ios|iphone|ipad|tvos|tv|watchos|watch]" >&2; exit 2 ;;
 esac
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$repo_root"
-core="out/apple-${platform}-simulator-core"
-build="out/apple-${platform}-simulator-smoke"
+case "${ICCDEV_APPLE_CORE_FLAVOR:-extended}" in
+  extended) core_preset="apple-${platform}-simulator-extended-core" ;;
+  minimal) core_preset="apple-${platform}-simulator-core" ;;
+  *) echo "Set ICCDEV_APPLE_CORE_FLAVOR to extended or minimal" >&2; exit 2 ;;
+esac
+expect_extended=false
+if [[ "$core_preset" == *-extended-core ]]; then
+  expect_extended=true
+fi
+json_package_args=()
+if [[ "$core_preset" == *-extended-core ]]; then
+  if command -v brew >/dev/null 2>&1 &&
+      json_prefix="$(brew --prefix nlohmann-json 2>/dev/null)" &&
+      [[ -f "${json_prefix}/share/cmake/nlohmann_json/nlohmann_jsonConfig.cmake" ]]; then
+    json_package_args+=(
+      "-Dnlohmann_json_DIR=${json_prefix}/share/cmake/nlohmann_json"
+    )
+  fi
+fi
+core="out/${core_preset}"
+build="out/apple-${build_suffix}-simulator-smoke"
 mkdir -p "$build"
 
 xcrun simctl list runtimes --json > "$build/runtimes.json"
@@ -44,13 +81,14 @@ selection="$(jq -er --arg prefix "com.apple.CoreSimulator.SimRuntime.${system}-"
   ' "$build/runtimes.json")"
 IFS=$'\t' read -r runtime device_type <<< "$selection"
 
-cmake --preset "apple-${platform}-simulator-core" -S Build/Cmake \
+cmake --preset "$core_preset" -S Build/Cmake \
   -DCMAKE_OSX_ARCHITECTURES="$(uname -m)" -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment"
 cmake --build "$core" --parallel "$(sysctl -n hw.ncpu)"
 cmake -S Build/AppleMobile -B "$build" -G Xcode \
   -DCMAKE_SYSTEM_NAME="$system" -DCMAKE_OSX_SYSROOT="$sdk" \
   -DCMAKE_OSX_ARCHITECTURES="$(uname -m)" -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment" \
-  -DRefIccMAX_DIR="$repo_root/$core"
+  -DICCDEV_APPLE_RUN_TARGET="$run_target" -DRefIccMAX_DIR="$repo_root/$core" \
+  "${json_package_args[@]}"
 xcodebuild -quiet -project "$build/IccDevCoreSmoke.xcodeproj" \
   -target IccDevCoreSmoke -configuration Release -sdk "$sdk" CODE_SIGNING_ALLOWED=NO build
 app="$repo_root/$build/Release-${sdk}/IccDevCoreSmoke.app"
@@ -83,7 +121,7 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-simulator="$(xcrun simctl create "iccDEV-${platform}-smoke-$$" "$device_type" "$runtime")"
+simulator="$(xcrun simctl create "iccDEV-${build_suffix}-smoke-$$" "$device_type" "$runtime")"
 xcrun simctl boot "$simulator"
 booted=1
 xcrun simctl bootstatus "$simulator" -b
@@ -131,9 +169,27 @@ run_case() {
     return 1
   fi
   cp "$result_file" "$build/${name}.json"
-  if ! jq -e --argjson expected "$expected" '
+  if ! jq -e --argjson expected "$expected" --argjson expect_extended "$expect_extended" '
+    def passed_test($name):
+      any(.tests[]; .test == $name and .passed == true);
+    def note_status($component; $status):
+      any(.notes[]; .component == $component and .status == $status);
+    def common_required:
+      passed_test("Write invalid ICC control inside app sandbox") and
+      passed_test("Reject invalid ICC file without RGB default substitution") and
+      note_status("Command-line tools"; "not run on device") and
+      note_status("Image-dependent tools"; "not built");
+    def extended_required:
+      passed_test("Read generated JSON back into profile") and
+      passed_test("Serialize profile to XML text") and
+      passed_test("Apply one RGB pixel through IccConnect CMM") and
+      note_status("IccJSON"; "built") and
+      note_status("IccXML"; "built") and
+      note_status("IccConnect"; "built");
     .passed == $expected and (.tests | length > 0) and
     (if $expected then all(.tests[]; .passed == true)
+       and common_required
+       and (if $expect_extended then extended_required else true end)
      else any(.tests[]; .test == "Bundled RGB fixture exists" and .passed == false) end)
   ' "$build/${name}.json" >/dev/null; then
     sed -n '1,120p' "$build/${name}.log"
@@ -152,4 +208,4 @@ run_case missing-fixture false
 xcrun simctl install "$simulator" "$app"
 refresh_app_containers
 run_case restored true
-printf '%s simulator core smoke passed using %s\n' "$system" "$runtime"
+printf '%s simulator core smoke passed using %s\n' "$display_target" "$runtime"

@@ -54,18 +54,72 @@
 #include "IccProfile.h"
 #include "IccTagLut.h"
 
+#ifdef ICCDEV_APPLE_HAS_CONNECT
+#include "IccConnect.h"
+#endif
+#ifdef ICCDEV_APPLE_HAS_JSON
+#include "IccLibJSONVer.h"
+#include "IccMpeJsonFactory.h"
+#include "IccProfileJson.h"
+#include "IccTagJsonFactory.h"
+#endif
+#ifdef ICCDEV_APPLE_HAS_XML
+#include "IccLibXMLVer.h"
+#include "IccMpeXmlFactory.h"
+#include "IccProfileXml.h"
+#include "IccTagXmlFactory.h"
+#endif
+
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <string>
 
 namespace {
+
+#if defined(ICCDEV_APPLE_HAS_JSON) || defined(ICCDEV_APPLE_HAS_XML)
+class IccFactoryScope {
+public:
+  IccFactoryScope(IIccTagFactory *tagFactory, IIccMpeFactory *mpeFactory)
+    : m_tagPushed(tagFactory != nullptr), m_mpePushed(mpeFactory != nullptr)
+  {
+    if (tagFactory)
+      CIccTagCreator::PushFactory(tagFactory);
+    if (mpeFactory)
+      CIccMpeCreator::PushFactory(mpeFactory);
+  }
+
+  ~IccFactoryScope()
+  {
+    if (m_mpePushed)
+      delete CIccMpeCreator::PopFactory();
+    if (m_tagPushed)
+      delete CIccTagCreator::PopFactory();
+  }
+
+  IccFactoryScope(const IccFactoryScope &) = delete;
+  IccFactoryScope &operator=(const IccFactoryScope &) = delete;
+
+private:
+  bool m_tagPushed;
+  bool m_mpePushed;
+};
+#endif
 
 bool Check(NSMutableArray<NSDictionary *> *results, bool ok, NSString *name)
 {
   [results addObject:@{@"test": name, @"passed": @(ok)}];
   std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", name.UTF8String);
   return ok;
+}
+
+void Note(NSMutableArray<NSDictionary *> *notes, NSString *component, NSString *status,
+          NSString *detail)
+{
+  [notes addObject:@{@"component": component, @"status": status, @"detail": detail}];
+  std::printf("[INFO] %s: %s - %s\n", component.UTF8String, status.UTF8String,
+              detail.UTF8String);
 }
 
 bool Near(icFloatNumber value, icFloatNumber expected, double tolerance)
@@ -94,6 +148,22 @@ void TestProfiles(NSMutableArray<NSDictionary *> *results, NSURL *documents)
     return;
   std::unique_ptr<CIccProfile> truncated(ReadIccProfile(memory.GetData(), 64));
   Check(results, !truncated, @"Reject truncated profile header");
+
+  const unsigned char invalidBytes[132] = {};
+  NSURL *invalid = [documents URLByAppendingPathComponent:@"invalid-substitution-control.icc"];
+  NSData *invalidData = [NSData dataWithBytes:invalidBytes length:sizeof(invalidBytes)];
+  NSError *invalidError = nil;
+  bool invalidWritten = [invalidData writeToURL:invalid options:NSDataWritingAtomic
+                                         error:&invalidError];
+  if (Check(results, invalidWritten, @"Write invalid ICC control inside app sandbox")) {
+    std::unique_ptr<CIccProfile> invalidProfile(
+      ReadIccProfile(invalid.fileSystemRepresentation));
+    Check(results, !invalidProfile,
+          @"Reject invalid ICC file without RGB default substitution");
+    if (![[NSFileManager defaultManager] removeItemAtURL:invalid error:&invalidError]) {
+      std::fprintf(stderr, "%s\n", invalidError.localizedDescription.UTF8String);
+    }
+  }
 
   NSURL *saved = [documents URLByAppendingPathComponent:@"roundtrip.icc"];
   bool savedOk = SaveIccProfile(saved.fileSystemRepresentation, restored.get(), icNeverWriteID);
@@ -143,6 +213,75 @@ void TestProfiles(NSMutableArray<NSDictionary *> *results, NSURL *documents)
   Check(results, singleMatches, @"Single-pixel and batch CMM results agree");
 }
 
+#ifdef ICCDEV_APPLE_HAS_JSON
+void TestJson(NSMutableArray<NSDictionary *> *results, NSString *path)
+{
+  IccFactoryScope factories(new CIccTagJsonFactory(), new CIccMpeJsonFactory());
+
+  CIccFileIO src;
+  if (!Check(results, src.Open(path.fileSystemRepresentation, "r"),
+             @"Open bundled RGB profile for JSON"))
+    return;
+  CIccProfileJson profile;
+  if (!Check(results, profile.Read(&src), @"Read profile through IccJSON profile type"))
+    return;
+
+  std::string jsonText;
+  if (!Check(results, profile.ToJson(jsonText, 2) && jsonText.find("IccProfile") != std::string::npos,
+             @"Serialize profile to JSON text"))
+    return;
+  IccJson parsed = IccJson::parse(jsonText, nullptr, false);
+  if (!Check(results, !parsed.is_discarded(), @"Parse generated JSON text"))
+    return;
+  std::string reason;
+  CIccProfileJson restored;
+  Check(results, restored.ParseJson(parsed, reason) &&
+         restored.m_Header.colorSpace == icSigRgbData, @"Read generated JSON back into profile");
+}
+#endif
+
+#ifdef ICCDEV_APPLE_HAS_XML
+void TestXml(NSMutableArray<NSDictionary *> *results, NSString *path)
+{
+  IccFactoryScope factories(new CIccTagXmlFactory(), new CIccMpeXmlFactory());
+
+  CIccFileIO src;
+  if (!Check(results, src.Open(path.fileSystemRepresentation, "r"),
+             @"Open bundled RGB profile for XML"))
+    return;
+  CIccProfileXml profile;
+  if (!Check(results, profile.Read(&src), @"Read profile through IccXML profile type"))
+    return;
+
+  std::string xmlText;
+  Check(results, profile.ToXml(xmlText) &&
+         xmlText.find("<IccProfile") != std::string::npos, @"Serialize profile to XML text");
+}
+#endif
+
+#ifdef ICCDEV_APPLE_HAS_CONNECT
+void TestConnect(NSMutableArray<NSDictionary *> *results, NSString *path)
+{
+  std::unique_ptr<CIccProfile> profile(ReadIccProfile(path.fileSystemRepresentation));
+  std::unique_ptr<CIccCmm> cmm(new CIccCmm(icSigRgbData, icSigRgbData, true));
+  if (!Check(results, profile &&
+             cmm->AddXform(*profile, icRelativeColorimetric) == icCmmStatOk &&
+             cmm->AddXform(*profile, icRelativeColorimetric) == icCmmStatOk &&
+             cmm->Begin() == icCmmStatOk, @"Prepare CMM for IccConnect wrapper"))
+    return;
+  std::unique_ptr<CIccConnectCmm> connect(
+    CIccConnectCmm::Attach(cmm.release()));
+  if (!Check(results, connect && connect->GetCmm(), @"Attach CMM through IccConnect"))
+    return;
+  icFloatNumber input[3] = {0.25f, 0.5f, 0.75f};
+  icFloatNumber output[3] = {};
+  Check(results, connect->GetCmm()->Apply(output, input) == icCmmStatOk &&
+         Near(output[0], input[0], 0.005) &&
+         Near(output[1], input[1], 0.005) &&
+         Near(output[2], input[2], 0.005), @"Apply one RGB pixel through IccConnect CMM");
+}
+#endif
+
 void TestClut(NSMutableArray<NSDictionary *> *results)
 {
   for (icUInt16Number channels : {3, 8, 15, 16}) {
@@ -186,10 +325,38 @@ NSString *IccDevRunCoreSmoke(void)
 {
   @autoreleasepool {
     NSMutableArray<NSDictionary *> *results = [NSMutableArray array];
+    NSMutableArray<NSDictionary *> *notes = [NSMutableArray array];
     NSURL *documents = [[[NSFileManager defaultManager]
       URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
+    NSString *profilePath = [[NSBundle mainBundle] pathForResource:@"sRGB_D65_MAT" ofType:@"icc"];
+    (void)profilePath;
     if (Check(results, documents != nil, @"Locate app sandbox"))
       TestProfiles(results, documents);
+#ifdef ICCDEV_APPLE_HAS_JSON
+    Note(notes, @"IccJSON", @"built", [NSString stringWithFormat:@"IccLibJSON %s", ICCLIBJSONVER]);
+    if (profilePath)
+      TestJson(results, profilePath);
+#else
+    Note(notes, @"IccJSON", @"not built", @"Use an apple-*-extended-core preset with nlohmann-json.");
+#endif
+#ifdef ICCDEV_APPLE_HAS_XML
+    Note(notes, @"IccXML", @"built", [NSString stringWithFormat:@"IccLibXML %s", ICCLIBXMLVER]);
+    if (profilePath)
+      TestXml(results, profilePath);
+#else
+    Note(notes, @"IccXML", @"not built", @"Use an apple-*-extended-core preset with LibXml2.");
+#endif
+#ifdef ICCDEV_APPLE_HAS_CONNECT
+    Note(notes, @"IccConnect", @"built", @"CMM wrapper library linked into the app.");
+    if (profilePath)
+      TestConnect(results, profilePath);
+#else
+    Note(notes, @"IccConnect", @"not built", @"Requires IccJSON in the Apple core archive.");
+#endif
+    Note(notes, @"Command-line tools", @"not run on device",
+         @"Desktop CLI tools remain covered by macOS-host CTest; the mobile sandbox app exercises their library-backed capabilities.");
+    Note(notes, @"Image-dependent tools", @"not built",
+         @"PNG, JPEG, and TIFF command-line tools need cross-compiled image dependencies before mobile packaging.");
     TestClut(results);
     bool passed = results.count > 0;
     for (NSDictionary *result in results)
@@ -197,6 +364,7 @@ NSString *IccDevRunCoreSmoke(void)
     NSOperatingSystemVersion os = [NSProcessInfo processInfo].operatingSystemVersion;
     NSDictionary *report = @{
       @"passed": @(passed), @"tests": results,
+      @"notes": notes,
       @"libraryVersion": @ICCPROFLIBVER,
       @"osVersion": [NSString stringWithFormat:@"%ld.%ld.%ld",
                     static_cast<long>(os.majorVersion), static_cast<long>(os.minorVersion),
@@ -220,6 +388,11 @@ NSString *IccDevRunCoreSmoke(void)
                             result[@"test"]];
     if (!written)
       [summary appendString:@"FAIL Persist device results\n"];
+    [summary appendString:@"\nCapabilities and gaps\n"];
+    for (NSDictionary *note in notes) {
+      [summary appendFormat:@"%@: %@ - %@\n", note[@"component"], note[@"status"],
+                            note[@"detail"]];
+    }
     std::printf("ICCDEV_DEVICE_TESTS %s (%lu checks)\n", passed ? "PASS" : "FAIL",
                 static_cast<unsigned long>(results.count));
     std::fflush(stdout);

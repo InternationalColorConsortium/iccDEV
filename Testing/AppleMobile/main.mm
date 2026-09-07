@@ -49,6 +49,7 @@
 
 #import <UIKit/UIKit.h>
 #import "SmokeTests.h"
+#include <TargetConditionals.h>
 
 @interface IccDevAppDelegate : UIResponder <UIApplicationDelegate>
 @property(nonatomic, strong) UIWindow *window;
@@ -63,7 +64,9 @@
   self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
   UIViewController *controller = [[UIViewController alloc] init];
   UITextView *text = [[UITextView alloc] initWithFrame:self.window.bounds];
+#if !TARGET_OS_TV
   text.editable = NO;
+#endif
   text.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
   text.font = [UIFont monospacedSystemFontOfSize:14 weight:UIFontWeightRegular];
   text.text = @"iccDEV core device tests running...";
