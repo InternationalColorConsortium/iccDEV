@@ -155,7 +155,8 @@ if [[ -n "$launch_mode" ]]; then
   if [[ "$target" == "simulator" ]]; then
     simulator="${SIMULATOR_UDID:-booted}"
     xcrun simctl install "$simulator" "$app_path"
-    xcrun simctl launch --console "$simulator" "$bundle_id" "${app_args[@]}"
+    xcrun simctl launch --console-pty --terminate-running-process \
+      "$simulator" "$bundle_id" "${app_args[@]}"
   else
     if [[ -z "${DEVICE_ID:-}" ]]; then
       echo "error: DEVICE_ID is required for device launch" >&2
