@@ -98,9 +98,24 @@ escape_html() {
   printf '%s' "$s"
 }
 
+# ANSI escape rules, built from real bytes for the same reason the Unicode fallback
+# below is: CSI (ESC [ ... final), OSC (ESC ] ... BEL), then any remaining bare ESC.
+_SAN_ANSI_RE=$'s/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b//g'
+
 # _strip_unicode_control STRING
 # Remove Unicode control/formatting characters that enable Trojan Source,
 # invisible padding, and homoglyph attacks:
+#   - C1 controls (U+0080-U+009F), in their well-formed UTF-8 spelling C2 80..C2 9F.
+#     U+009B is CSI, the same introducer the ANSI rule strips in its ESC [ form, so
+#     leaving it reopens log spoofing from the other side.  sanitize.ps1 already
+#     drops this block (keep-set 0x20..0x7E plus >= 0xA0), as does the library's
+#     icSanitizeConsoleText().
+#     KNOWN RESIDUE: a RAW 0x80-0x9F byte -- malformed UTF-8, not a codepoint -- is
+#     still passed through here.  It cannot be removed with tr: those same byte
+#     values are legitimate UTF-8 continuation bytes, and blanket-deleting them
+#     would corrupt ordinary text (the suite's own UTF-8 case is E4 B8 96 E7 95 8C,
+#     which contains 0x96).  Removing it needs a real UTF-8 decode, as the library
+#     side does; sanitize_ref() is unaffected because it whitelists to ASCII.
 #   - Bidi overrides/embeddings (U+202A-202E, U+2066-2069)
 #   - Zero-width chars (U+200B-200F, U+2060, U+FEFF)
 #   - Tag characters (U+E0001-E007F) - used in emoji but abusable
@@ -109,6 +124,7 @@ _strip_unicode_control() {
   local s="$1"
   if command -v perl >/dev/null 2>&1; then
     s="$(printf '%s' "$s" | perl -CS -pe '
+      s/[\x{0080}-\x{009F}]//g;
       s/[\x{200B}-\x{200F}]//g;
       s/[\x{2028}-\x{202F}]//g;
       s/[\x{2060}-\x{2069}]//g;
@@ -117,15 +133,29 @@ _strip_unicode_control() {
       s/[\x{FFF9}-\x{FFFB}]//g;
     ')"
   else
-    # Fallback: strip known UTF-8 byte sequences for the most dangerous chars
-    s="$(printf '%s' "$s" | sed -E '
-      s/\xe2\x80[\x8b-\x8f]//g;
-      s/\xe2\x80[\xa8-\xaf]//g;
-      s/\xe2\x81[\xa0-\xa9]//g;
-      s/\xf3\xa0[\x80-\x81][\x80-\xbf]//g;
-      s/\xef\xbb\xbf//g;
-      s/\xef\xbf[\xb9-\xbb]//g;
-    ')"
+    # Fallback: strip known UTF-8 byte sequences for the most dangerous chars.
+    #
+    # LC_ALL=C is the load-bearing part, and it is why five of these six rules used
+    # to be dead.  In a UTF-8 locale a bracket expression like [\xa8-\xaf] is a
+    # CHARACTER range whose endpoints are not characters, so it matches nothing;
+    # only the bracket-free U+FEFF rule fired, and a U+202E filename came through
+    # sanitize_line() byte-identical on a perl-less runner.  Under LC_ALL=C the same
+    # ranges are byte ranges and match -- which is exactly why sanitize_ref() below
+    # already sets it.  (GNU sed does honour \xNN inside a bracket expression; the
+    # locale, not the escape, was the bug.)
+    #
+    # The $'...' expansion is belt-and-braces on top of that: it hands sed real bytes
+    # rather than escape text, so the rules also work on BSD sed, which does not
+    # interpret \xNN at all.  macOS runners source this file.
+    local re
+    re=$'s/\xc2[\x80-\x9f]//g;'                  # U+0080-U+009F C1 controls
+    re+=$'s/\xe2\x80[\x8b-\x8f]//g;'             # U+200B-U+200F zero-width
+    re+=$'s/\xe2\x80[\xa8-\xaf]//g;'             # U+2028-U+202F separators, bidi overrides
+    re+=$'s/\xe2\x81[\xa0-\xa9]//g;'             # U+2060-U+2069 word joiner, bidi isolates
+    re+=$'s/\xf3\xa0[\x80-\x81][\x80-\xbf]//g;'  # U+E0001-U+E007F tag characters
+    re+=$'s/\xef\xbb\xbf//g;'                    # U+FEFF BOM
+    re+=$'s/\xef\xbf[\xb9-\xbb]//g;'             # U+FFF9-U+FFFB interlinear annotation
+    s="$(printf '%s' "$s" | LC_ALL=C sed -E "$re")"
   fi
   printf '%s' "$s"
 }
@@ -139,8 +169,14 @@ _strip_ctrl_keep_newlines() {
   # remove CRs explicitly
   s="${s//$'\r'/}"
   # strip ANSI escape sequences: CSI (\x1b[...m), OSC (\x1b]...\x07), then any remaining bare ESC
-  s="$(printf '%s' "$s" | sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b//g')"
-  # strip Unicode bidi overrides, zero-width chars, and formatting controls
+  # Same escape/locale care as _strip_unicode_control: built from real bytes and
+  # matched under LC_ALL=C, so these rules also fire on BSD sed (macOS runners),
+  # which does not interpret \xNN.  Without that they matched the literal text
+  # "x1b" there and only the tr below removed the ESC, leaving "[31m" in the summary.
+  s="$(printf '%s' "$s" | LC_ALL=C sed -E "$_SAN_ANSI_RE")"
+  # strip Unicode bidi overrides, zero-width chars, and formatting controls.
+  # This is also what removes the C1 controls: the tr below works on BYTES and
+  # cannot see them, because UTF-8 spells U+0080-U+009F as C2 80..C2 9F.
   s="$(_strip_unicode_control "$s")"
   # remove NUL and other C0 control chars except LF (0x0A), plus DEL (0x7F)
   s="$(printf '%s' "$s" | tr -d '\000-\011\013\014\016-\037\177')"
@@ -157,8 +193,14 @@ _strip_ctrl_remove_newlines() {
   s="${s//$'\r'/}"
   s="${s//$'\n'/ }"
   # strip ANSI escape sequences: CSI (\x1b[...m), OSC (\x1b]...\x07), then any remaining bare ESC
-  s="$(printf '%s' "$s" | sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b//g')"
-  # strip Unicode bidi overrides, zero-width chars, and formatting controls
+  # Same escape/locale care as _strip_unicode_control: built from real bytes and
+  # matched under LC_ALL=C, so these rules also fire on BSD sed (macOS runners),
+  # which does not interpret \xNN.  Without that they matched the literal text
+  # "x1b" there and only the tr below removed the ESC, leaving "[31m" in the summary.
+  s="$(printf '%s' "$s" | LC_ALL=C sed -E "$_SAN_ANSI_RE")"
+  # strip Unicode bidi overrides, zero-width chars, and formatting controls.
+  # This is also what removes the C1 controls: the tr below works on BYTES and
+  # cannot see them, because UTF-8 spells U+0080-U+009F as C2 80..C2 9F.
   s="$(_strip_unicode_control "$s")"
   # remove other control characters (NUL, etc.) plus DEL (0x7F)
   s="$(printf '%s' "$s" | tr -d '\000-\011\013\014\016-\037\177')"
@@ -325,6 +367,13 @@ detect_hidden_chars() {
   # Check for BOM (U+FEFF = EF BB BF in UTF-8)
   if printf '%s' "$input" | LC_ALL=C grep -qP '\xef\xbb\xbf' 2>/dev/null; then
     details="${details}  - U+FEFF (BOM / Zero-Width No-Break Space)\n"
+    found=0
+  fi
+
+  # Check for C1 controls (U+0080-U+009F = C2 80-9F).  Listed so a CSI-carrying ref
+  # is named rather than falling through to the "unknown category" catch-all below.
+  if printf '%s' "$input" | LC_ALL=C grep -qP '\xc2[\x80-\x9f]' 2>/dev/null; then
+    details="${details}  - U+0080-U+009F (C1 Control)\n"
     found=0
   fi
 

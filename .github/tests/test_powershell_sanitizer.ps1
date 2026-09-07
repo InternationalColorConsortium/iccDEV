@@ -88,6 +88,41 @@ Assert-Eq "Filename path separators neutralized" `
     ".._.._etc_passwd" `
     (Sanitize-Filename -InputString "../../etc/passwd")
 
+# -----------------------------------------------------------------------------
+# C1 controls (U+0080-U+009F) -- Bash/PowerShell parity anchors
+#
+# Strip-CtrlRemoveNewlines keeps 0x20..0x7E plus >= 0xA0, so this block is already
+# dropped here; U+009B is CSI, the same introducer the ANSI rule above strips in
+# its ESC-bracket form.  The Bash side could not see it at all until now: its C0
+# strip is tr, which works on BYTES, and UTF-8 spells this block C2 80..C2 9F.
+# These cases pin the behaviour sanitize-sed.sh was just corrected to match, so a
+# future edit to either script cannot silently drift from the other.
+# -----------------------------------------------------------------------------
+
+Assert-Eq "C1 CSI U+009B stripped" `
+    "log2K1Gsp" `
+    (Sanitize-Line -InputString "log$([char]0x9B)2K$([char]0x9B)1Gsp")
+
+Assert-Eq "C1 low bound U+0080 stripped" `
+    "ab" `
+    (Sanitize-Line -InputString "a$([char]0x80)b")
+
+Assert-Eq "C1 high bound U+009F stripped" `
+    "ab" `
+    (Sanitize-Line -InputString "a$([char]0x9F)b")
+
+Assert-Eq "U+00A0 just above C1 preserved" `
+    "a$([char]0xA0)b" `
+    (Sanitize-Line -InputString "a$([char]0xA0)b")
+
+Assert-Eq "Latin-1 letter above C1 preserved" `
+    "a$([char]0xE9)b" `
+    (Sanitize-Line -InputString "a$([char]0xE9)b")
+
+Assert-Eq "C1 CSI stripped by Sanitize-Print" `
+    "log2K" `
+    (Sanitize-Print -InputString "log$([char]0x9B)2K")
+
 Assert-Eq "Version marker" `
     "iccDEV-sanitizer-v4" `
     (Sanitizer-Version)
