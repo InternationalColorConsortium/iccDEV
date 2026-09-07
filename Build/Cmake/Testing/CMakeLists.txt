@@ -1610,6 +1610,68 @@ function(iccdev_add_chromaticity_validate_test)
   endif()
 endfunction()
 
+# #2435: isLegalUTF8() omitted the second-byte LOWER bound for the 0xED and
+# 0xF4 leads. case 2 applies only the UPPER bound and the generic lower bound
+# lives in the switch's default: arm, which every named arm bypasses -- E0 and F0
+# tighten the lower bound so they imply a >= 0x80 by accident, ED and F4 did not.
+# 532,480 malformed sequences passed strictConversion and were silently
+# re-encoded as different characters: ED 01 80 as U+B040, and F4 01 80 80 as
+# U+81000, which is above U+10FFFF and came out of icConvertUTF8toUTF16 as a
+# surrogate pair, so the OUTPUT was not well-formed UTF-16 either. Bisected by
+# xsscx to 1f0a9dd (2015-09-29) -- wrong for the function's entire life.
+#
+# The test walks every sequence the function can be asked about (84,994,816)
+# against an RFC 3629 reference and asserts BOTH directions: nothing malformed
+# accepted, and nothing well-formed rejected. The second direction is what
+# catches a fix that over-tightens -- blanket-rejecting the ED and F4 leads
+# passes every hand-written malformed case and breaks U+D7FF and U+10FFFF, the
+# two codepoints those arms exist to bound.
+#
+# Every probe hands the whole buffer over as the window so the function derives
+# its own length and reaches the validator. Sizing the window to the RFC length
+# instead skipped isLegalUTF8() entirely for the 77 leads that have no RFC length,
+# leaving `*source > 0xF4` and the 0xC0/0xC1 overlong guard with no coverage at
+# all: deleting the former kept the arm green while F5 80 80 80 became legal,
+# which is the call shape isLegalUTF8String() makes on real profile text.
+#
+# 120s rather than the usual 60s: the exhaustive arm is ~85M calls, about a
+# second optimised, but it is measured on Debug and sanitizer legs too.
+# Header + IccProfLib only.
+function(iccdev_add_islegalutf8_bound_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccIsLegalUtf8BoundTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/islegalutf8-second-byte-bound.cpp"
+  )
+  target_link_libraries(iccIsLegalUtf8BoundTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccIsLegalUtf8BoundTest)
+
+  add_test(
+    NAME iccdev.islegalutf8-second-byte-bound
+    COMMAND "$<TARGET_FILE:iccIsLegalUtf8BoundTest>"
+  )
+  set_tests_properties(iccdev.islegalutf8-second-byte-bound PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;utf8;unicode;validation;security;issue-2435;regression"
+  )
+  if(WIN32)
+    set(_islegalutf8_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccIsLegalUtf8BoundTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _islegalutf8_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.islegalutf8-second-byte-bound PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_islegalutf8_windows_env_mods}")
+  endif()
+
+endfunction()
+
 # #2000: CIccTagCicp's copy constructor had an empty body and a commented-out
 # parameter (/* ITXYZ */, copy-paste residue from CIccTagXYZ), so the four
 # icUInt8Number members -- which have no in-class initialiser -- were left
@@ -7479,6 +7541,7 @@ iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_chromaticity_validate_test()
 iccdev_add_cicp_copy_ctor_test()
+iccdev_add_islegalutf8_bound_test()
 iccdev_add_mpe_acs_zero_signature_test()
 iccdev_add_pawg_c5_cicp_test()
 iccdev_add_gamut_xform_semantics_test()
