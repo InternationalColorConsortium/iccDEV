@@ -32,6 +32,23 @@ echo ""
 pass=0
 fail=0
 
+# _log_value STRING
+# Render a value for the log.  The payloads here are attack strings by design, so
+# echoing them raw writes live CSI, bidi and zero-width sequences into the Actions
+# log -- the exact spoofing this suite exists to prevent, and it lands in the one
+# place a human reads closely, the FAIL diagnostic.  Anything that is not printable
+# ASCII is shown as hex instead.  Filtering with tr rather than a grep guard keeps
+# this correct under the `set -o pipefail` above.
+_log_value() {
+  local stripped
+  stripped=$(printf '%s' "$1" | LC_ALL=C tr -dc '\040-\176')
+  if [ "$stripped" = "$1" ]; then
+    printf '%s' "$1"
+  else
+    printf 'hex:%s' "$(printf '%s' "$1" | xxd -p | tr -d '\n')"
+  fi
+}
+
 run_test() {
   local test_name="$1"
   local input="$2"
@@ -39,12 +56,12 @@ run_test() {
   local func="${4:-sanitize_line}"
 
   echo "Test $((pass + fail + 1)): $test_name"
-  echo "  Input:    $input"
-  echo "  Expected: $expected"
+  echo "  Input:    $(_log_value "$input")"
+  echo "  Expected: $(_log_value "$expected")"
 
   local result
   result=$("$func" "$input")
-  echo "  Result:   $result"
+  echo "  Result:   $(_log_value "$result")"
 
   if [ "$result" = "$expected" ]; then
     echo "  [PASS]"
@@ -115,6 +132,113 @@ run_test "Zero-width characters (stripped by v3)" \
 run_test "Unicode tag characters stripped" \
   "$(printf 'tag\xf3\xa0\x81\xa1char')" \
   "tagchar"
+
+# -----------------------------------------------------------------------------
+# C1 controls (U+0080-U+009F)
+#
+# tr works on BYTES, so the C0/DEL strip in _strip_ctrl_* cannot see these: UTF-8
+# spells them C2 80..C2 9F.  U+009B is CSI -- the same introducer the ANSI rule
+# strips in its ESC [ form -- so a C1 that survives reopens log spoofing from the
+# other side.  sanitize.ps1 already drops the block (keep-set 0x20..0x7E plus
+# >= 0xA0) and the library's icSanitizeConsoleText() escapes it as the six
+# characters backslash-u-0-0-9-B, so these cases pin Bash to the behaviour the
+# other two implementations already have.
+# -----------------------------------------------------------------------------
+
+run_test "C1 CSI U+009B stripped" \
+  "$(from_hex '6c6f67c29b324bc29b31477370')" \
+  "log2K1Gsp"
+
+run_test "C1 low bound U+0080 stripped" \
+  "$(from_hex '61c28062')" \
+  "ab"
+
+run_test "C1 high bound U+009F stripped" \
+  "$(from_hex '61c29f62')" \
+  "ab"
+
+run_test "U+00A0 just above C1 preserved" \
+  "$(from_hex '61c2a062')" \
+  "$(from_hex '61c2a062')"
+
+run_test "Latin-1 letter above C1 preserved" \
+  "$(from_hex '61c3a962')" \
+  "$(from_hex '61c3a962')"
+
+run_test "C1 CSI stripped by sanitize_print" \
+  "$(from_hex '6c6f67c29b324b')" \
+  "log2K" \
+  "sanitize_print"
+
+# -----------------------------------------------------------------------------
+# The perl-less fallback in _strip_unicode_control
+#
+# The fallback is a safety net that nothing ever exercised: every CI runner has
+# perl, so the sed branch was dead code, and five of its six rules had never
+# removed anything.  They were written as backslash-x-N-N inside bracket
+# expressions, and GNU sed honours that escape outside a bracket expression but
+# not inside one -- so only the bracket-free U+FEFF rule fired, and a U+202E
+# filename came through sanitize_line() byte-identical.  These cases run the
+# fallback on every runner by masking perl, holding both branches to one answer.
+# -----------------------------------------------------------------------------
+
+# Shadow `command` inside a subshell so `command -v perl` fails and the sed branch
+# runs.  Production code is untouched: nothing here adds a test-only switch to it.
+# shellcheck disable=SC2317  # reached indirectly, as run_test's "$func"
+sanitize_line_no_perl() {
+  (
+    command() {
+      if [ "${2:-}" = "perl" ]; then return 1; fi
+      builtin command "$@"
+    }
+    sanitize_line "$1"
+  )
+}
+
+run_test "Fallback: control case, plain ASCII survives" \
+  "no-perl-plain-ascii" \
+  "no-perl-plain-ascii" \
+  "sanitize_line_no_perl"
+
+run_test "Fallback: U+202E bidi override stripped" \
+  "$(from_hex '676e702ee280ae636369')" \
+  "gnp.cci" \
+  "sanitize_line_no_perl"
+
+run_test "Fallback: U+200B zero-width stripped" \
+  "$(from_hex '61e2808b62')" \
+  "ab" \
+  "sanitize_line_no_perl"
+
+run_test "Fallback: U+2066 bidi isolate stripped" \
+  "$(from_hex '61e281a662')" \
+  "ab" \
+  "sanitize_line_no_perl"
+
+run_test "Fallback: U+E0001 tag character stripped" \
+  "$(from_hex '61f3a0808162')" \
+  "ab" \
+  "sanitize_line_no_perl"
+
+run_test "Fallback: U+FFF9 interlinear annotation stripped" \
+  "$(from_hex '61efbfb962')" \
+  "ab" \
+  "sanitize_line_no_perl"
+
+run_test "Fallback: U+FEFF BOM stripped" \
+  "$(from_hex '61efbbbf62')" \
+  "ab" \
+  "sanitize_line_no_perl"
+
+run_test "Fallback: C1 CSI U+009B stripped" \
+  "$(from_hex '61c29b62')" \
+  "ab" \
+  "sanitize_line_no_perl"
+
+run_test "Fallback: U+2027 below the range preserved" \
+  "$(from_hex '61e280a762')" \
+  "$(from_hex '61e280a762')" \
+  "sanitize_line_no_perl"
 
 # =============================================================================
 # Control Character and Injection Tests
