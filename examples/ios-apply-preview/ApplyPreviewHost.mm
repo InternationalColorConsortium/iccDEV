@@ -271,21 +271,6 @@ IccApplyPreviewResult *IccDevRunApplyPreview(NSUInteger edgePixels,
       result.sourceImage != nil && result.appliedImage != nil &&
       result.deltaImage != nil;
 
-    [report appendFormat:
-      @"%@\n\n"
-       "Chain: sRGB_v4_ICC_preference.icc -> sRGB_D65_MAT.icc\n"
-       "Intent: relative colorimetric\n"
-       "Interpolation: %@\n"
-       "Generated image: %lux%lu RGB ramp and swatch grid\n"
-       "Preview panels: source, applied, per-channel delta amplified 12x\n\n"
-       "Mean channel delta: %.9f\n"
-       "Max channel delta:  %.9f\n"
-       "Applied checksum:   0x%08x\n\n"
-       "Report: Documents/apply-preview-report.json\n",
-      result.passed ? @"PASS" : @"FAIL", interpName,
-      static_cast<unsigned long>(width), static_cast<unsigned long>(height),
-      meanDelta, maxDelta, checksum];
-
     NSURL *documents = [[[NSFileManager defaultManager]
       URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
     NSDictionary *jsonReport = @{
@@ -307,11 +292,29 @@ IccApplyPreviewResult *IccDevRunApplyPreview(NSUInteger edgePixels,
       [json writeToURL:[documents URLByAppendingPathComponent:
                           @"apply-preview-report.json"]
                options:NSDataWritingAtomic error:&error];
+    NSString *persistFailure = nil;
     if (!written) {
       result.passed = NO;
-      [report appendFormat:@"FAIL Persist device results: %s\n",
-        error ? error.localizedDescription.UTF8String : "no output location"];
+      persistFailure =
+        error ? error.localizedDescription : @"no output location";
     }
+    [report appendFormat:
+      @"%@\n\n"
+       "Chain: sRGB_v4_ICC_preference.icc -> sRGB_D65_MAT.icc\n"
+       "Intent: relative colorimetric\n"
+       "Interpolation: %@\n"
+       "Generated image: %lux%lu RGB ramp and swatch grid\n"
+       "Preview panels: source, applied, per-channel delta amplified 12x\n\n"
+       "Mean channel delta: %.9f\n"
+       "Max channel delta:  %.9f\n"
+       "Applied checksum:   0x%08x\n\n"
+       "Report: Documents/apply-preview-report.json\n",
+      result.passed ? @"PASS" : @"FAIL", interpName,
+      static_cast<unsigned long>(width), static_cast<unsigned long>(height),
+      meanDelta, maxDelta, checksum];
+    if (persistFailure)
+      [report appendFormat:@"FAIL Persist device results: %@\n",
+        persistFailure];
     result.report = report;
     IccDevFinishApplyPreview(result);
     return result;

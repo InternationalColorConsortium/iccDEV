@@ -40,6 +40,7 @@ INPUT                  = IccProfLib \
                          .github/ci/quality-assurance/scripts
 USE_MDFILE_AS_MAINPAGE =
 FILE_PATTERNS          = *.h *.h.in *.hpp *.c *.cc *.cpp *.cxx *.mm *.md *.dox *.dot *.sh *.yaml *.yml
+EXTENSION_MAPPING      = mm=C++
 RECURSIVE              = YES
 EXCLUDE                = docs/generated \
                          docs/index.md \
