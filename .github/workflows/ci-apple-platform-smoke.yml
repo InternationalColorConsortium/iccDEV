@@ -9,7 +9,10 @@ name: Apple platform smoke
     branches:
       - master
     paths:
+      - 'IccConnect/**'
+      - 'IccJSON/**'
       - 'IccProfLib/**'
+      - 'IccXML/**'
       - 'Build/AppleMobile/**'
       - 'Build/Cmake/**'
       - 'Build/XCode/**'

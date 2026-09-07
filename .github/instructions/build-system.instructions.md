@@ -46,7 +46,9 @@ presets also build zlib-backed IccXML, IccJSON, and IccConnect where SDK and
 host dependency discovery support them. `Build/AppleMobile` consumes the
 exported core package in separate iOS/watchOS app builds; keep each device/simulator
 SDK, architecture, deployment target, and minimal/extended tier aligned with
-the core archive.
+the core archive. For extended mobile cores, LibXml2 headers and libraries
+must both resolve from the selected Apple SDK; do not let host macOS headers
+feed an iOS, tvOS, watchOS, or visionOS archive.
 Physical-device smoke results require both the current `devicectl --console`
 termination exit code and the app's persisted `Documents/results.json`, not
 just successful installation or launch. Keep signing and device identifiers
