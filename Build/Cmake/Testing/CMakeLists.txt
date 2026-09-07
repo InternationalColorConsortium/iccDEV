@@ -1672,6 +1672,52 @@ function(iccdev_add_islegalutf8_bound_test)
 
 endfunction()
 
+# #2454: icJsonEscape() appended well-formed UTF-8 unchanged, so --json and
+# --evidence-json emitted live U+202E and the C1 controls while the text sink
+# escaped the same string.  Twelve hand-written cases, not an exhaustive walk:
+# six that fail against master and six controls that pass on both builds so a
+# blunter fix cannot satisfy the suite.  Header + IccProfLib only.
+function(iccdev_add_json_escape_codepoint_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccJsonEscapeCodepointTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/json-escape-codepoint.cpp"
+  )
+  # icJsonEscape() lives in Tools/CmdLine/IccCmdLineUtil.h, which is header-only
+  # and pulls in IccProfLib's IccFileUtil.h for the icDecodeUtf8() this fix
+  # reuses (#2437).  Linking the library keeps this consistent with its sibling
+  # regression executables rather than relying on the helper staying inline.
+  target_include_directories(iccJsonEscapeCodepointTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine")
+  target_link_libraries(iccJsonEscapeCodepointTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccJsonEscapeCodepointTest)
+
+  add_test(
+    NAME iccdev.json-escape-codepoint
+    COMMAND "$<TARGET_FILE:iccJsonEscapeCodepointTest>"
+  )
+  set_tests_properties(iccdev.json-escape-codepoint PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;json;utf8;unicode;cli;security;issue-2454;regression")
+  if(WIN32)
+    set(_json_escape_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccJsonEscapeCodepointTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _json_escape_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.json-escape-codepoint PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_json_escape_windows_env_mods}")
+  endif()
+
+endfunction()
+
+
 # #2000: CIccTagCicp's copy constructor had an empty body and a commented-out
 # parameter (/* ITXYZ */, copy-paste residue from CIccTagXYZ), so the four
 # icUInt8Number members -- which have no in-class initialiser -- were left
@@ -7544,6 +7590,7 @@ iccdev_add_getvalues_nstart_test()
 iccdev_add_chromaticity_validate_test()
 iccdev_add_cicp_copy_ctor_test()
 iccdev_add_islegalutf8_bound_test()
+iccdev_add_json_escape_codepoint_test()
 iccdev_add_mpe_acs_zero_signature_test()
 iccdev_add_pawg_c5_cicp_test()
 iccdev_add_gamut_xform_semantics_test()

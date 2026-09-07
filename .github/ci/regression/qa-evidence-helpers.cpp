@@ -85,12 +85,20 @@ int main()
   expect("json control set", icJsonEscape("\b\f\n\r\t"), "\\b\\f\\n\\r\\t");
   expect("json other control byte", icJsonEscape("\x01"), "\\u0001");
 
-  // Well-formed UTF-8 passes through byte for byte. Escaping these as \u00XX
-  // would emit the code points U+00C3 U+00A9 instead of U+00E9 -- the #1853
-  // mojibake -- so this case is that bug turned into an assertion.
-  expect("json utf-8 passthrough", icJsonEscape("caf\xc3\xa9"), "caf\xc3\xa9");
-  expect("json utf-8 3-byte", icJsonEscape("\xe2\x82\xac"), "\xe2\x82\xac");
-  expect("json utf-8 4-byte", icJsonEscape("\xf0\x9f\x8e\xa8"), "\xf0\x9f\x8e\xa8");
+  // Well-formed UTF-8 is escaped by CODE POINT (#2454).  These three cases still
+  // guard the #1853 mojibake they were written for, and that is why they assert
+  // the single-code-point spelling rather than being deleted: escaping each BYTE
+  // as \u00XX would emit U+00C3 U+00A9 for an e-acute, so "caf\u00c3\u00a9"
+  // here would be that bug.  One escape per code point, and it decodes back to
+  // the character that went in.
+  //
+  // These used to assert byte-for-byte passthrough.  That is what #2454 removed:
+  // it left --json emitting live U+202E and the C1 controls while the text sink
+  // escaped the same string.  Above the BMP the spelling is a UTF-16 surrogate
+  // pair, because JSON has no \U escape (RFC 8259 section 7).
+  expect("json utf-8 by code point", icJsonEscape("caf\xc3\xa9"), "caf\\u00e9");
+  expect("json utf-8 3-byte", icJsonEscape("\xe2\x82\xac"), "\\u20ac");
+  expect("json utf-8 4-byte", icJsonEscape("\xf0\x9f\x8e\xa8"), "\\ud83c\\udfa8");
 
   // A JSON text must be valid UTF-8 (RFC 8259 8.1), and these strings carry
   // paths straight from argv, which on POSIX need not be UTF-8 at all. Passing
