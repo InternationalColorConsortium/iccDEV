@@ -8,24 +8,6 @@ name: Apple platform smoke
   pull_request:
     branches:
       - master
-    paths:
-      - 'IccConnect/**'
-      - 'IccJSON/**'
-      - 'IccProfLib/**'
-      - 'IccXML/**'
-      - 'Build/AppleMobile/**'
-      - 'Build/Cmake/**'
-      - 'Build/XCode/**'
-      - 'Testing/AppleMobile/**'
-      - 'Testing/**/sRGB_D65_MAT.icc'
-      - 'Tools/CmdLine/IccFromCube/**'
-      - 'Tools/CmdLine/IccDumpProfile/**'
-      - '.github/ci/regression/profile-write-failure.cpp'
-      - '.github/scripts/iccdev-fromcube-cli-args-regression.sh'
-      - '.github/scripts/iccdev-apple-simulator-smoke.sh'
-      - '.github/scripts/iccdev-xcode-ctest-smoke.sh'
-      - '.github/workflows/ci-apple-platform-smoke.yml'
-      - '.github/workflows/ci-apple-mobile-core.yml'
   workflow_dispatch:
 
 permissions:

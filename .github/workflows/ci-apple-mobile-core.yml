@@ -72,13 +72,11 @@ jobs:
           sdk_manifest="${RUNNER_TEMP}/iccdev-apple-sdks.txt"
           xcodebuild -showsdks > "$sdk_manifest"
 
-          json_package_args=()
+          json_package_arg=""
           if command -v brew >/dev/null 2>&1 &&
               json_prefix="$(brew --prefix nlohmann-json 2>/dev/null)" &&
               [[ -f "${json_prefix}/share/cmake/nlohmann_json/nlohmann_jsonConfig.cmake" ]]; then
-            json_package_args+=(
-              "-Dnlohmann_json_DIR=${json_prefix}/share/cmake/nlohmann_json"
-            )
+            json_package_arg="-Dnlohmann_json_DIR=${json_prefix}/share/cmake/nlohmann_json"
           fi
 
           rm -rf artifacts
@@ -113,11 +111,11 @@ jobs:
               continue
             fi
 
-            cmake_args=()
-            if [[ "$preset" == *-extended-core ]]; then
-              cmake_args=("${json_package_args[@]}")
+            if [[ "$preset" == *-extended-core ]] && [[ -n "$json_package_arg" ]]; then
+              cmake --preset "$preset" -S Build/Cmake "$json_package_arg"
+            else
+              cmake --preset "$preset" -S Build/Cmake
             fi
-            cmake --preset "$preset" -S Build/Cmake "${cmake_args[@]}"
             cmake --build "out/${preset}" --parallel "$(sysctl -n hw.ncpu)"
 
             output_dir="artifacts/${preset}"
