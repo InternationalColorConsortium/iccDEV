@@ -26,6 +26,8 @@ Confirm that the work is maintainer-owned before editing:
 - CPack, release packaging, installer, or artifact publishing logic
 - sanitizer helper scripts and sanitizer policy
 - CodeQL, workflow governance, or security automation
+- Apple mobile static-core presets, simulator/device smoke apps, or Apple
+  platform workflows
 - vcpkg port release verification
 
 If the request comes from a general contributor, ask them to describe the
@@ -54,6 +56,11 @@ Choose the smallest gate that proves the behavior:
 - Focused `.github/scripts/*.sh` regression: reusable Linux regression logic or
   parser/security invariant.
 - Workflow inline step: short one-off CI assertion tied to a specific workflow.
+- Apple mobile platform gate: static-library SDK coverage and native
+  simulator/device smoke. Keep dependency-free `apple-*-core` presets available,
+  use `apple-*-extended-core` for zlib/IccXML/IccJSON/IccConnect where
+  dependencies are discoverable, and preserve app-reported mobile gaps for
+  desktop CLI and image-tool packaging.
 - CPack or package smoke: install/export/uninstall, bundled consumers, or
   release artifact structure.
 - Sanitizer gate: memory-safety, parser, or profile-controlled undefined
@@ -67,6 +74,9 @@ Choose the smallest gate that proves the behavior:
 - Update `.github/instructions/testing.instructions.md` when the test becomes
   standard policy.
 - Update `docs/regression-workflow-governance.md` for workflow process changes.
+- Update `docs/build.md`, `.github/instructions/build-system.instructions.md`,
+  and Apple workflow governance notes when changing Apple mobile presets,
+  `Build/AppleMobile`, or simulator/device smoke behavior.
 - Update `docs/build.md` and `docs/regression-workflow-governance.md` when
   changing maintainer Dockerfiles, container dependencies, GHCR publish flow, or
   pinned unified image digests.
@@ -142,6 +152,20 @@ Workflow YAML:
 python3 -c "import yaml; [yaml.safe_load(open(p)) for p in ['.github/workflows/<workflow>.yml']]; print('YAML parse OK')"
 actionlint -no-color .github/workflows/<workflow>.yml
 ```
+
+Apple mobile core and simulator smoke on macOS:
+
+```bash
+cmake --list-presets=configure -S Build/Cmake | grep -E 'apple-.*(extended-core|core)'
+bash .github/scripts/iccdev-apple-simulator-smoke.sh ios
+bash .github/scripts/iccdev-apple-simulator-smoke.sh watchos
+bash .github/scripts/iccdev-xcode-ctest-smoke.sh
+```
+
+For the dependency-free app path, set `ICCDEV_APPLE_CORE_FLAVOR=minimal` and
+record that it was an explicit minimal-tier check. For extended smoke, require
+the app report to include JSON, XML, IccConnect, the public invalid-profile
+substitution control, and non-failing mobile gap notes.
 
 GitHub verification:
 

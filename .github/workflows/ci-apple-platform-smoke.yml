@@ -1,8 +1,10 @@
 # Copyright (c) 2026 International Color Consortium.
 # SPDX-License-Identifier: BSD-3-Clause
+---
+# yamllint disable rule:line-length
 name: Apple platform smoke
 
-on:
+'on':
   pull_request:
     branches:
       - master
@@ -51,6 +53,18 @@ jobs:
           path: base
           sparse-checkout: .github/scripts
           persist-credentials: false
+
+      # preflight: allow-package-install reason=apple-mobile-extended-core-json-header-dependency
+      - name: Install Apple extended-core dependency headers
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          if ! brew list --versions nlohmann-json >/dev/null; then
+            brew install nlohmann-json
+          fi
 
       # preflight: allow-pr-script-execution reason=native-apple-host-test-only
       - name: Exercise native simulator and Xcode CTest hosts

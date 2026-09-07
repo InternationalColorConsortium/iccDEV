@@ -19,7 +19,22 @@ case "$platform" in
 esac
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$repo_root"
-core="out/apple-${platform}-simulator-core"
+case "${ICCDEV_APPLE_CORE_FLAVOR:-extended}" in
+  extended) core_preset="apple-${platform}-simulator-extended-core" ;;
+  minimal) core_preset="apple-${platform}-simulator-core" ;;
+  *) echo "Set ICCDEV_APPLE_CORE_FLAVOR to extended or minimal" >&2; exit 2 ;;
+esac
+json_package_args=()
+if [[ "$core_preset" == *-extended-core ]]; then
+  if command -v brew >/dev/null 2>&1 &&
+      json_prefix="$(brew --prefix nlohmann-json 2>/dev/null)" &&
+      [[ -f "${json_prefix}/share/cmake/nlohmann_json/nlohmann_jsonConfig.cmake" ]]; then
+    json_package_args+=(
+      "-Dnlohmann_json_DIR=${json_prefix}/share/cmake/nlohmann_json"
+    )
+  fi
+fi
+core="out/${core_preset}"
 build="out/apple-${platform}-simulator-smoke"
 mkdir -p "$build"
 
@@ -44,13 +59,13 @@ selection="$(jq -er --arg prefix "com.apple.CoreSimulator.SimRuntime.${system}-"
   ' "$build/runtimes.json")"
 IFS=$'\t' read -r runtime device_type <<< "$selection"
 
-cmake --preset "apple-${platform}-simulator-core" -S Build/Cmake \
+cmake --preset "$core_preset" -S Build/Cmake \
   -DCMAKE_OSX_ARCHITECTURES="$(uname -m)" -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment"
 cmake --build "$core" --parallel "$(sysctl -n hw.ncpu)"
 cmake -S Build/AppleMobile -B "$build" -G Xcode \
   -DCMAKE_SYSTEM_NAME="$system" -DCMAKE_OSX_SYSROOT="$sdk" \
   -DCMAKE_OSX_ARCHITECTURES="$(uname -m)" -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment" \
-  -DRefIccMAX_DIR="$repo_root/$core"
+  -DRefIccMAX_DIR="$repo_root/$core" "${json_package_args[@]}"
 xcodebuild -quiet -project "$build/IccDevCoreSmoke.xcodeproj" \
   -target IccDevCoreSmoke -configuration Release -sdk "$sdk" CODE_SIGNING_ALLOWED=NO build
 app="$repo_root/$build/Release-${sdk}/IccDevCoreSmoke.app"

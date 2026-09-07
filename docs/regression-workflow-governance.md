@@ -61,13 +61,18 @@ normalize only documented volatile fields when comparing whole files; otherwise
 assert specific tag sizes, offsets, record lengths, or validation messages.
 
 The Apple gates extend #2445's static-core SDK builds with native runtime
-coverage. Both use `iccdev-apple-simulator-smoke.sh` and
+coverage. The core workflow builds both dependency-free `apple-*-core` presets
+and extended `apple-*-extended-core` presets where each SDK is installed. Both
+workflows use `iccdev-apple-simulator-smoke.sh` and
 `iccdev-xcode-ctest-smoke.sh`: simulator success requires a fresh report and
-console sentinel, a missing-fixture control must fail, and Xcode CTest must
-produce fresh CLI output in both configurations. The path-filtered PR workflow
-runs only for same-repository heads and keeps outputs in the job workspace.
-The master-push/manual core workflow additionally builds all available SDK
-presets and uploads their archives. A nonzero helper exit fails either gate.
+console sentinel, a missing-fixture control must fail, the report must include
+the built extended-library checks, the public invalid-profile substitution
+control, and non-failing mobile gap notes; Xcode CTest must produce fresh CLI
+output in both configurations. The path-filtered PR workflow runs only for
+same-repository heads and keeps outputs in the job workspace. The
+master-push/manual core workflow additionally uploads the built static
+archives, generated version headers, and build manifest. A nonzero helper exit
+fails either gate.
 
 ## Workflow Governance Requirements
 

@@ -1,6 +1,8 @@
+---
+# yamllint disable rule:line-length
 name: Apple mobile core libraries
 
-on:
+'on':
   push:
     branches:
       - master
@@ -42,6 +44,18 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      # preflight: allow-package-install reason=apple-mobile-extended-core-json-header-dependency
+      - name: Install Apple extended-core dependency headers
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          if ! brew list --versions nlohmann-json >/dev/null; then
+            brew install nlohmann-json
+          fi
+
       - name: Build available Apple mobile core libraries
         env:
           BASH_ENV: /dev/null
@@ -63,13 +77,21 @@ jobs:
 
           targets=(
             "apple-ios-device-core|iphoneos"
+            "apple-ios-device-extended-core|iphoneos"
             "apple-ios-simulator-core|iphonesimulator"
+            "apple-ios-simulator-extended-core|iphonesimulator"
             "apple-tvos-device-core|appletvos"
+            "apple-tvos-device-extended-core|appletvos"
             "apple-tvos-simulator-core|appletvsimulator"
+            "apple-tvos-simulator-extended-core|appletvsimulator"
             "apple-watchos-device-core|watchos"
+            "apple-watchos-device-extended-core|watchos"
             "apple-watchos-simulator-core|watchsimulator"
+            "apple-watchos-simulator-extended-core|watchsimulator"
             "apple-visionos-device-core|xros"
+            "apple-visionos-device-extended-core|xros"
             "apple-visionos-simulator-core|xrsimulator"
+            "apple-visionos-simulator-extended-core|xrsimulator"
           )
 
           built_count=0
@@ -83,14 +105,27 @@ jobs:
             cmake --preset "$preset" -S Build/Cmake
             cmake --build "out/${preset}" --parallel "$(sysctl -n hw.ncpu)"
 
-            library="out/${preset}/IccProfLib/libIccProfLib2-static.a"
-            version_header="out/${preset}/IccProfLib/IccProfLibVer.h"
-            test -f "$library"
-            test -f "$version_header"
-
             output_dir="artifacts/${preset}"
             mkdir -p "$output_dir"
-            cp "$library" "$version_header" "$output_dir/"
+
+            components=(
+              "IccProfLib|IccProfLib2-static|IccProfLibVer.h"
+            )
+            if [[ "$preset" == *-extended-core ]]; then
+              components+=(
+                "IccXML|IccXML2-static|IccLibXMLVer.h"
+                "IccJSON|IccJSON2-static|IccLibJSONVer.h"
+                "IccConnect|IccConnect2-static|IccLibConnectVer.h"
+              )
+            fi
+            for component in "${components[@]}"; do
+              IFS='|' read -r library_dir library_name version_header_name <<< "$component"
+              library="out/${preset}/${library_dir}/lib${library_name}.a"
+              version_header="out/${preset}/${library_dir}/${version_header_name}"
+              test -f "$library"
+              test -f "$version_header"
+              cp "$library" "$version_header" "$output_dir/"
+            done
             printf '%s|%s|built\n' "$preset" "$sdk" >> "$artifact_manifest"
             built_count=$((built_count + 1))
           done

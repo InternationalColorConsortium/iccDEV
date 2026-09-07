@@ -40,17 +40,22 @@ resolve library aliases before hard-linking or copying them into the view.
 Do not replace it with shared flat aliases that can select another
 configuration, or point `cmake --build` at the compatibility directory.
 
-Apple mobile presets build the static core only. `Build/AppleMobile` consumes
-the exported core package in separate iOS/watchOS app builds; keep each device/simulator
-SDK, architecture, and deployment target aligned with the core archive.
+Apple mobile presets build static libraries only. The dependency-free
+`apple-*-core` presets build `IccProfLib2-static`; the `apple-*-extended-core`
+presets also build zlib-backed IccXML, IccJSON, and IccConnect where SDK and
+host dependency discovery support them. `Build/AppleMobile` consumes the
+exported core package in separate iOS/watchOS app builds; keep each device/simulator
+SDK, architecture, deployment target, and minimal/extended tier aligned with
+the core archive.
 Physical-device smoke results require both the current `devicectl --console`
 termination exit code and the app's persisted `Documents/results.json`, not
 just successful installation or launch. Keep signing and device identifiers
 local. The UIKit and SwiftUI hosts share the Foundation smoke engine; keep
 Objective-C++ flags off Swift sources. Use
 `.github/scripts/iccdev-apple-simulator-smoke.sh` for fresh-report and
-missing-fixture controls, and `.github/scripts/iccdev-xcode-ctest-smoke.sh` for
-Release/Debug runtime discovery. See `docs/build.md` for the commands.
+missing-fixture controls and extended-core capability reporting, and
+`.github/scripts/iccdev-xcode-ctest-smoke.sh` for Release/Debug runtime
+discovery. See `docs/build.md` for the commands.
 
 ## CMake Diagnostics
 

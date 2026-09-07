@@ -34,8 +34,27 @@ set_source_files_properties("${_profile}" PROPERTIES MACOSX_PACKAGE_LOCATION Res
 
 add_executable(IccDevCoreSmoke MACOSX_BUNDLE
   "${_source}/SmokeTests.mm" "${_source}/SmokeTests.h" "${_profile}")
-target_link_libraries(IccDevCoreSmoke PRIVATE
-  RefIccMAX::IccProfLib2-static "-framework Foundation")
+set(_iccdev_core_smoke_libs "-framework Foundation")
+if(TARGET RefIccMAX::IccConnect2-static)
+  list(APPEND _iccdev_core_smoke_libs RefIccMAX::IccConnect2-static)
+  target_compile_definitions(IccDevCoreSmoke PRIVATE ICCDEV_APPLE_HAS_CONNECT=1)
+endif()
+if(TARGET RefIccMAX::IccJSON2-static)
+  if(NOT TARGET RefIccMAX::IccConnect2-static)
+    list(APPEND _iccdev_core_smoke_libs RefIccMAX::IccJSON2-static)
+  endif()
+  target_compile_definitions(IccDevCoreSmoke PRIVATE ICCDEV_APPLE_HAS_JSON=1)
+endif()
+if(TARGET RefIccMAX::IccXML2-static)
+  list(APPEND _iccdev_core_smoke_libs RefIccMAX::IccXML2-static)
+  target_compile_definitions(IccDevCoreSmoke PRIVATE ICCDEV_APPLE_HAS_XML=1)
+endif()
+if(NOT TARGET RefIccMAX::IccConnect2-static AND
+    NOT TARGET RefIccMAX::IccJSON2-static AND
+    NOT TARGET RefIccMAX::IccXML2-static)
+  list(APPEND _iccdev_core_smoke_libs RefIccMAX::IccProfLib2-static)
+endif()
+target_link_libraries(IccDevCoreSmoke PRIVATE ${_iccdev_core_smoke_libs})
 target_compile_features(IccDevCoreSmoke PRIVATE cxx_std_17)
 target_compile_options(IccDevCoreSmoke PRIVATE
   "$<$<COMPILE_LANGUAGE:CXX,OBJCXX>:-Wall;-Wextra;-Werror>"
