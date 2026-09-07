@@ -7766,6 +7766,39 @@ if(TARGET iccFromCube AND TARGET iccFromXml)
     SKIP_RETURN_CODE 77)
 endif()
 
+# #2442: the sibling of #2414 in the same tool, and the reason it is a separate
+# registration rather than another case in that script -- it is a different loop
+# with a different termination route.  #2414 repaired isEOF() so the three
+# `while (!isEOF())` loops end on a FAILED read; getNextLine()'s own fgetc loop
+# never consults isEOF(), so an endlessly readable stream that never emits a
+# newline spun inside one call and /dev/zero measured 124 both before and after
+# that fix (CWE-835).
+#
+# Guarded on iccFromCube alone: unlike the #2414 suite this measures one tool,
+# so a partial build has nothing to hide.
+#
+# Deliberately NOT labelled "slow", so it runs on the pull_request path:
+# ci-pr-action.yml pins ctest_mode=fast, which drops the slow label (#2412).
+#
+# 400s for a 290s worst case (10 spawns: 15+15+30+30+30+30+30+30+20+60).  As
+# with the registration above, the budget is set over the SUM of the per-case
+# timeouts rather than over the ~0.1s a healthy run takes: a tighter one risks
+# CTest killing the script instead of letting it fail, which would replace
+# eleven per-case verdicts and their log tails with a bare "Timeout" for exactly
+# the regression this suite exists to diagnose.
+if(TARGET iccFromCube)
+  iccdev_add_script_test(
+    iccdev.fromcube-endless-stream-regression
+    400
+    "iccdev;tools;cli;fromcube;endless;issue-2442;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2442-fromcube-endless-stream-tests.sh"
+  )
+  # Exits 77 when iccFromCube is not built or no endless-stream case was measured.
+  set_tests_properties(iccdev.fromcube-endless-stream-regression PROPERTIES
+    SKIP_RETURN_CODE 77)
+endif()
+
 # The iccApply* half of the same CLI-contract family (#2405).  Guarded on all
 # four targets because the script measures all four and its "nothing measured"
 # guard would otherwise turn a partial build into a skip that hides real cases.
