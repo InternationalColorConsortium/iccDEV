@@ -15,18 +15,22 @@ requested="${1:-ios}"
 case "$requested" in
   ios|iphone)
     build_suffix="$requested"
+    display_target=iPhone
     platform=ios; run_target=iphone; system=iOS; sdk=iphonesimulator
     family=iPhone; deployment=17.0 ;;
   ipad)
     build_suffix=ipad
+    display_target=iPad
     platform=ios; run_target=ipad; system=iOS; sdk=iphonesimulator
     family=iPad; deployment=17.0 ;;
   tvos|tv)
     build_suffix="$requested"
+    display_target=tvOS
     platform=tvos; run_target=tv; system=tvOS; sdk=appletvsimulator
     family='Apple TV'; deployment=17.0 ;;
   watchos|watch)
     build_suffix="$requested"
+    display_target=watchOS
     platform=watchos; run_target=watch; system=watchOS; sdk=watchsimulator
     family='Apple Watch'; deployment=10.0 ;;
   *) echo "Usage: $0 [ios|iphone|ipad|tvos|tv|watchos|watch]" >&2; exit 2 ;;
@@ -113,7 +117,7 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-simulator="$(xcrun simctl create "iccDEV-${platform}-smoke-$$" "$device_type" "$runtime")"
+simulator="$(xcrun simctl create "iccDEV-${build_suffix}-smoke-$$" "$device_type" "$runtime")"
 xcrun simctl boot "$simulator"
 booted=1
 xcrun simctl bootstatus "$simulator" -b
@@ -182,4 +186,4 @@ run_case missing-fixture false
 xcrun simctl install "$simulator" "$app"
 refresh_app_containers
 run_case restored true
-printf '%s simulator core smoke passed using %s\n' "$system" "$runtime"
+printf '%s simulator core smoke passed using %s\n' "$display_target" "$runtime"
