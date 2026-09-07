@@ -85,11 +85,11 @@ ICCDEV_XCODE_CONFIG=Debug Build/XCode/BuildAll.sh -DENABLE_WXWIDGETS=OFF
 This wrapper builds macOS, not iOS; use the mobile core presets and the
 device smoke app below for an iPhone or iPad.
 
-Xcode places CLI executables in `Tools/<tool>/<configuration>/`. Some Unix
-shell-backed CTest suites still assume the single-configuration
-`Tools/<tool>/` layout; use a Ninja build for those suites rather than copying
-executables into the source tree. Native CMake test targets use `ctest -C`
-to select the Xcode configuration.
+Xcode places CLI executables in `Tools/<tool>/<configuration>/`. Use
+`ctest --test-dir out/macos-xcode -C Release` to select that configuration.
+CTest automatically prepares a configuration-specific compatibility directory
+for the shell-backed suites; no executable copies or manual path overrides
+are needed. See [CTest Tool Suites](ctest.md) for the build and test commands.
 
 For GuardMalloc/libgmalloc crash reproduction, use a non-sanitizer Debug build
 and verify that the built Mach-O tools contain `LC_UUID`. Apple's dynamic loader

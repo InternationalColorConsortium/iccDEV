@@ -59,6 +59,34 @@ Windows presets use a unified build-tree runtime directory. Visual Studio tools
 and iccDEV DLLs are under `out\vs2022-x64\bin\<Config>`; MinGW tools are under
 `out\mingw-x64\bin`.
 
+macOS Xcode and Unix Ninja Multi-Config:
+
+```bash
+cmake --preset macos-xcode -S Build/Cmake -B out/macos-xcode
+cmake --build out/macos-xcode --config Release --parallel
+cmake --build out/macos-xcode --config Release --target build-test-binaries --parallel
+ctest --test-dir out/macos-xcode -C Release \
+  -R '^iccdev\.(unix-runtime-layout|clut-eight-output-regression)$' \
+  --output-on-failure --no-tests=error
+```
+
+The `iccdev.unix-multi-config-runtime` setup fixture automatically prepares
+`Testing/ctest-runtime/<Config>/` inside the build tree. It exposes symlinks
+to that configuration's built CLI targets, shared/static libraries (including
+linker and SONAME aliases), generated version headers, and the real CMake cache.
+CTest points the shell suites' `PATH`, library paths, `ICCDEV_TOOLS_DIR`, and
+`ICCDEV_BUILD_DIR` at this flat compatibility layout. It is a test runtime
+directory, not a second CMake build tree; continue using the original build
+directory with `cmake --build`.
+
+Only already-built artifacts are exposed. Build the selected configuration
+first; the runtime view never substitutes Release artifacts for unbuilt Debug targets.
+Each configuration has its own runtime directory and script-output directory;
+regeneration removes stale aliases without changing actual build artifacts.
+Single-config Unix and Windows runtime layouts are unchanged. Existing
+profile-generation scripts still operate in the source `Testing/` directory;
+do not run those fixtures concurrently against the same checkout.
+
 Windows MinGW single-config generators, `cmd.exe`:
 
 ```cmd
@@ -115,6 +143,8 @@ before running the suite.
 
 | Test | Source |
 |------|--------|
+| `iccdev.unix-multi-config-runtime` | `Build/Cmake/Testing/UnixMultiConfigRuntime.cmake`; automatic Unix multi-config runtime setup |
+| `iccdev.unix-runtime-layout` | `Build/Cmake/Testing/TestUnixTestRuntime.cmake`; configuration isolation, stale aliases, spaced paths, and failure controls |
 | `iccdev.create-profiles` | `Testing/CreateAllProfiles.sh` |
 | `iccdev.c-validation-dlopen` | `.github/ci/regression/c-validation-dlopen.c` |
 | `iccdev.embedio-read8-bounds` | `.github/ci/regression/embedio-read8-bounds.cpp` |
