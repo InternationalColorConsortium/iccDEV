@@ -32,15 +32,28 @@ foreach(_config IN ITEMS Release Debug)
 endforeach()
 foreach(_config IN ITEMS Release Debug)
   set(_view "${_build}/Testing/ctest-runtime/${_config}")
-  if(NOT IS_SYMLINK "${_view}/Tools/Probe/probe" OR
-      NOT IS_SYMLINK "${_view}/CMakeCache.txt")
-    message(FATAL_ERROR "Runtime view did not preserve artifact/cache links")
+  if(NOT EXISTS "${_view}/Tools/Probe/probe" OR
+      NOT EXISTS "${_view}/CMakeCache.txt" OR
+      IS_SYMLINK "${_view}/Tools/Probe/probe" OR
+      IS_SYMLINK "${_view}/CMakeCache.txt")
+    message(FATAL_ERROR "Runtime view must expose regular artifact/cache files")
+  endif()
+  execute_process(COMMAND find "${_view}/Tools" -maxdepth 2 -name probe -type f
+    RESULT_VARIABLE _find_result OUTPUT_VARIABLE _found OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if(NOT _find_result STREQUAL "0" OR NOT _found STREQUAL "${_view}/Tools/Probe/probe")
+    message(FATAL_ERROR "Shell find -type f cannot discover the staged tool")
   endif()
   file(READ "${_view}/Tools/Probe/probe" _content)
   if(NOT _content STREQUAL "${_config}\n")
     message(FATAL_ERROR "Runtime view selected the wrong configuration")
   endif()
 endforeach()
+
+file(CREATE_LINK "${_build}/Tools/Probe/Release/probe" "${_build}/probe-alias" SYMBOLIC)
+stage("Alias" "${_build}/probe-alias" "Tools/Probe/probe" TRUE)
+if(IS_SYMLINK "${_build}/Testing/ctest-runtime/Alias/Tools/Probe/probe")
+  message(FATAL_ERROR "A symlinked source was not resolved to a regular runtime file")
+endif()
 
 stage("Release" "${_build}/not-built;${_build}/CMakeCache.txt"
   "Tools/Probe/probe;CMakeCache.txt" TRUE)

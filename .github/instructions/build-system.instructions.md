@@ -35,16 +35,22 @@ or copy binaries and TIFF sources into `Testing/` or `Tools/`.
 For Unix multi-config CTest, keep the `iccdev_unix_runtime` setup fixture:
 `UnixMultiConfigRuntime.cmake` maps CMake target paths into separate
 `Testing/ctest-runtime/<Config>` directories for the unchanged shell suites.
+Expose regular files, not symlinks, because existing scripts use `find -type f`;
+resolve library aliases before hard-linking or copying them into the view.
 Do not replace it with shared flat aliases that can select another
 configuration, or point `cmake --build` at the compatibility directory.
 
 Apple mobile presets build the static core only. `Build/AppleMobile` consumes
-the exported core package in a separate iOS app build; keep its device/simulator
+the exported core package in separate iOS/watchOS app builds; keep each device/simulator
 SDK, architecture, and deployment target aligned with the core archive.
 Physical-device smoke results require both the current `devicectl --console`
 termination exit code and the app's persisted `Documents/results.json`, not
 just successful installation or launch. Keep signing and device identifiers
-local. See `docs/build.md` for the commands.
+local. The UIKit and SwiftUI hosts share the Foundation smoke engine; keep
+Objective-C++ flags off Swift sources. Use
+`.github/scripts/iccdev-apple-simulator-smoke.sh` for fresh-report and
+missing-fixture controls, and `.github/scripts/iccdev-xcode-ctest-smoke.sh` for
+Release/Debug runtime discovery. See `docs/build.md` for the commands.
 
 ## CMake Diagnostics
 

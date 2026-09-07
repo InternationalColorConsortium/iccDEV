@@ -71,9 +71,11 @@ ctest --test-dir out/macos-xcode -C Release \
 ```
 
 The `iccdev.unix-multi-config-runtime` setup fixture automatically prepares
-`Testing/ctest-runtime/<Config>/` inside the build tree. It exposes symlinks
+`Testing/ctest-runtime/<Config>/` inside the build tree. It exposes regular files
 to that configuration's built CLI targets, shared/static libraries (including
 linker and SONAME aliases), generated version headers, and the real CMake cache.
+Artifacts use hard links where possible, otherwise copies; library symlinks
+are resolved so legacy `find -type f` discovery cannot silently skip tools.
 CTest points the shell suites' `PATH`, library paths, `ICCDEV_TOOLS_DIR`, and
 `ICCDEV_BUILD_DIR` at this flat compatibility layout. It is a test runtime
 directory, not a second CMake build tree; continue using the original build
@@ -86,6 +88,10 @@ regeneration removes stale aliases without changing actual build artifacts.
 Single-config Unix and Windows runtime layouts are unchanged. Existing
 profile-generation scripts still operate in the source `Testing/` directory;
 do not run those fixtures concurrently against the same checkout.
+
+For the dependency-free Xcode CI reproduction, run
+`bash .github/scripts/iccdev-xcode-ctest-smoke.sh`. It covers Release and Debug
+runtime staging, native profile-write behavior, and fresh `iccFromCube` output.
 
 Windows MinGW single-config generators, `cmd.exe`:
 

@@ -14,8 +14,8 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
   exit 0
 fi
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+repo_root=$(CDPATH='' cd -- "$script_dir/../.." && pwd)
 build_dir=${ICCDEV_XCODE_BUILD_DIR:-out/macos-xcode}
 config=${ICCDEV_XCODE_CONFIG:-Release}
 case "$build_dir" in

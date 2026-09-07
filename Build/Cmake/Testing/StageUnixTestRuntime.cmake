@@ -51,7 +51,12 @@ while(_source_count GREATER 0)
   if(EXISTS "${_source}")
     get_filename_component(_directory "${_root}/${_destination}" DIRECTORY)
     file(MAKE_DIRECTORY "${_directory}")
-    file(CREATE_LINK "${_source}" "${_root}/${_destination}" SYMBOLIC RESULT _result)
+    # Several shell suites discover tools with find -type f, which excludes symlinks.
+    # Resolve library aliases too, then expose regular files without duplicating
+    # data on the usual same-filesystem build tree.
+    file(REAL_PATH "${_source}" _resolved_source)
+    file(CREATE_LINK "${_resolved_source}" "${_root}/${_destination}"
+      COPY_ON_ERROR RESULT _result)
     if(NOT _result STREQUAL "0")
       message(FATAL_ERROR "Cannot stage ${_destination}: ${_result}")
     endif()

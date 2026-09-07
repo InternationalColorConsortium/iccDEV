@@ -47,40 +47,16 @@
  *
  */
 
-#import <UIKit/UIKit.h>
-#import "SmokeTests.h"
+#pragma once
 
-@interface IccDevAppDelegate : UIResponder <UIApplicationDelegate>
-@property(nonatomic, strong) UIWindow *window;
-@end
+#import <Foundation/Foundation.h>
 
-@implementation IccDevAppDelegate
-- (BOOL)application:(UIApplication *)application
-    didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
-{
-  (void)application;
-  (void)launchOptions;
-  self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
-  UIViewController *controller = [[UIViewController alloc] init];
-  UITextView *text = [[UITextView alloc] initWithFrame:self.window.bounds];
-  text.editable = NO;
-  text.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-  text.font = [UIFont monospacedSystemFontOfSize:14 weight:UIFontWeightRegular];
-  text.text = @"iccDEV core device tests running...";
-  controller.view = text;
-  self.window.rootViewController = controller;
-  [self.window makeKeyAndVisible];
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-  dispatch_async(dispatch_get_main_queue(), ^{
-    text.text = IccDevRunCoreSmoke();
-  });
-  return YES;
+NSString * _Nonnull IccDevRunCoreSmoke(void);
+
+#ifdef __cplusplus
 }
-@end
-
-int main(int argc, char *argv[])
-{
-  @autoreleasepool {
-    return UIApplicationMain(argc, argv, nil, NSStringFromClass([IccDevAppDelegate class]));
-  }
-}
+#endif
