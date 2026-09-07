@@ -23,6 +23,9 @@ endif()
 
 set(ICCDEV_APPLYPREVIEW_BUNDLE_IDENTIFIER "org.color.iccdev.ApplyPreviewPOC"
   CACHE STRING "Bundle identifier registered with your Apple development team")
+message(STATUS
+  "IccApplyPreviewPOC bundle identifier: "
+  "${ICCDEV_APPLYPREVIEW_BUNDLE_IDENTIFIER}")
 
 set(_source "${CMAKE_CURRENT_SOURCE_DIR}")
 set(_assets "${CMAKE_CURRENT_SOURCE_DIR}/Assets.xcassets")

@@ -51,6 +51,8 @@ examples/ios-apply-preview/build-ios.sh simulator --run-tests
 
 Use an unlocked, paired iPhone or iPad for a physical-device build. Set
 `TEAM_ID` and `DEVICE_ID` from Xcode and `xcrun devicectl list devices`.
+Set `BUNDLE_ID` if your Apple development team requires a custom app bundle
+identifier.
 
 ```bash
 TEAM_ID=ABCDE12345 examples/ios-apply-preview/build-ios.sh device --open
@@ -64,7 +66,9 @@ Use an unlocked, paired device with Developer Mode enabled and an Apple
 Development signing identity in Xcode. Set your team ID and device identifier
 from `xcrun devicectl list devices`. Do not commit signing credentials,
 provisioning profiles, device identifiers, generated Xcode projects, or build
-outputs.
+outputs. Override the default `org.color.iccdev.ApplyPreviewPOC` bundle ID with
+`BUNDLE_ID` when using the helper script, or
+`-DICCDEV_APPLYPREVIEW_BUNDLE_IDENTIFIER=...` when configuring CMake directly.
 
 ```bash
 cmake --preset apple-ios-device-core -S Build/Cmake \

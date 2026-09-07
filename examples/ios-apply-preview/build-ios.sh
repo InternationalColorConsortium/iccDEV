@@ -29,6 +29,8 @@ Environment:
   BUILD_CONFIG    Xcode build configuration. Defaults to Release.
   DEPLOYMENT      iOS deployment target. Defaults to 17.0.
   ARCH            Target architecture. Defaults to arm64.
+  BUNDLE_ID       App bundle identifier. Defaults to
+                  org.color.iccdev.ApplyPreviewPOC.
 
 Examples:
   examples/ios-apply-preview/build-ios.sh simulator --open
@@ -91,7 +93,7 @@ repo_root="$(cd "$script_dir/../.." && pwd)"
 configuration="${BUILD_CONFIG:-Release}"
 deployment="${DEPLOYMENT:-17.0}"
 arch="${ARCH:-arm64}"
-bundle_id="org.color.iccdev.ApplyPreviewPOC"
+bundle_id="${BUNDLE_ID:-org.color.iccdev.ApplyPreviewPOC}"
 
 if [[ "$target" == "simulator" ]]; then
   core_preset="apple-ios-simulator-core"
@@ -126,6 +128,7 @@ app_config_args=(
   -DCMAKE_OSX_ARCHITECTURES="$arch"
   -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment"
   -DRefIccMAX_DIR="$core_dir"
+  -DICCDEV_APPLYPREVIEW_BUNDLE_IDENTIFIER="$bundle_id"
 )
 if [[ "$target" == "device" ]]; then
   app_config_args+=("-DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM=$TEAM_ID")
