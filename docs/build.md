@@ -91,6 +91,41 @@ Do not combine GuardMalloc with AddressSanitizer, ThreadSanitizer, or
 MemorySanitizer. Use ASan/UBSan builds for sanitizer attribution and use
 GuardMalloc separately when checking allocator-sensitive behavior.
 
+## Apple mobile core libraries
+
+iOS, tvOS, watchOS, and visionOS builds provide the dependency-free static
+`IccProfLib2` core only. They intentionally exclude command-line tools,
+CTest executables, XML, JSON, zlib, image libraries, and wxWidgets. Integrate
+the resulting archive into an app or package it with matching device and
+simulator archives as an XCFramework.
+
+These presets require Xcode on macOS. The device and simulator presets below
+use arm64; change `CMAKE_OSX_ARCHITECTURES` for an Xcode-supported simulator
+architecture when needed. watchOS devices use the platform's `arm64_32`
+architecture.
+
+```bash
+cmake --preset apple-ios-device-core -S Build/Cmake
+(cd Build/Cmake && cmake --build --preset apple-ios-device-core --parallel)
+
+cmake --preset apple-ios-simulator-core -S Build/Cmake
+(cd Build/Cmake && cmake --build --preset apple-ios-simulator-core --parallel)
+```
+
+Equivalent `apple-tvos-*-core`, `apple-watchos-*-core`, and
+`apple-visionos-*-core` presets select the corresponding device or simulator
+SDK. Set the app's minimum deployment target through
+`CMAKE_OSX_DEPLOYMENT_TARGET`; iccDEV does not choose one on behalf of an app.
+App code must use only sandbox-authorized file locations or streams. Native
+Apple test hosts are the appropriate test mechanism for these targets; the
+repository's command-line CTest suites remain macOS-host tools.
+
+The reusable `Apple mobile core libraries` workflow discovers the Apple SDKs
+installed on its macOS runner, builds every matching mobile-core preset, and
+uploads the static libraries, generated version headers, and a build manifest
+as the `iccdev-apple-mobile-core` artifact. Run it manually or call
+`.github/workflows/ci-apple-mobile-core.yml` from another workflow.
+
 ## Windows MSVC
 
 ```cmd

@@ -353,6 +353,110 @@
       "displayName": "macOS (Xcode)",
       "generator": "Xcode",
       "binaryDir": "${sourceDir}/../../out/${presetName}"
+    },
+    {
+      "name": "apple-mobile-core-base",
+      "hidden": true,
+      "inherits": "default-base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENABLE_SHARED_LIBS": "OFF",
+        "ENABLE_STATIC_LIBS": "ON",
+        "ENABLE_TOOLS": "OFF",
+        "ENABLE_TESTS": "OFF",
+        "ENABLE_ICCXML": "OFF",
+        "ENABLE_ICCJSON": "OFF",
+        "ICC_USE_ZLIB": "OFF",
+        "ENABLE_IMAGE_TOOLS": "OFF",
+        "ENABLE_WXWIDGETS": "OFF",
+        "ENABLE_CMM_TOOLS": "OFF",
+        "ENABLE_IIS_TOOLS": "OFF"
+      }
+    },
+    {
+      "name": "apple-ios-device-core",
+      "inherits": "apple-mobile-core-base",
+      "displayName": "iOS device core library",
+      "binaryDir": "${sourceDir}/../../out/${presetName}",
+      "cacheVariables": {
+        "CMAKE_OSX_SYSROOT": "iphoneos",
+        "CMAKE_OSX_ARCHITECTURES": "arm64"
+      }
+    },
+    {
+      "name": "apple-ios-simulator-core",
+      "inherits": "apple-mobile-core-base",
+      "displayName": "iOS simulator core library",
+      "binaryDir": "${sourceDir}/../../out/${presetName}",
+      "cacheVariables": {
+        "CMAKE_OSX_SYSROOT": "iphonesimulator",
+        "CMAKE_OSX_ARCHITECTURES": "arm64"
+      }
+    },
+    {
+      "name": "apple-tvos-device-core",
+      "inherits": "apple-mobile-core-base",
+      "displayName": "tvOS device core library",
+      "binaryDir": "${sourceDir}/../../out/${presetName}",
+      "cacheVariables": {
+        "CMAKE_OSX_SYSROOT": "appletvos",
+        "CMAKE_OSX_ARCHITECTURES": "arm64"
+      }
+    },
+    {
+      "name": "apple-tvos-simulator-core",
+      "inherits": "apple-mobile-core-base",
+      "displayName": "tvOS simulator core library",
+      "binaryDir": "${sourceDir}/../../out/${presetName}",
+      "cacheVariables": {
+        "CMAKE_OSX_SYSROOT": "appletvsimulator",
+        "CMAKE_OSX_ARCHITECTURES": "arm64"
+      }
+    },
+    {
+      "name": "apple-watchos-device-core",
+      "inherits": "apple-mobile-core-base",
+      "displayName": "watchOS device core library",
+      "binaryDir": "${sourceDir}/../../out/${presetName}",
+      "cacheVariables": {
+        "CMAKE_OSX_SYSROOT": "watchos",
+        "CMAKE_OSX_ARCHITECTURES": "arm64_32"
+      }
+    },
+    {
+      "name": "apple-watchos-simulator-core",
+      "inherits": "apple-mobile-core-base",
+      "displayName": "watchOS simulator core library",
+      "binaryDir": "${sourceDir}/../../out/${presetName}",
+      "cacheVariables": {
+        "CMAKE_OSX_SYSROOT": "watchsimulator",
+        "CMAKE_OSX_ARCHITECTURES": "arm64"
+      }
+    },
+    {
+      "name": "apple-visionos-device-core",
+      "inherits": "apple-mobile-core-base",
+      "displayName": "visionOS device core library",
+      "binaryDir": "${sourceDir}/../../out/${presetName}",
+      "cacheVariables": {
+        "CMAKE_OSX_SYSROOT": "xros",
+        "CMAKE_OSX_ARCHITECTURES": "arm64"
+      }
+    },
+    {
+      "name": "apple-visionos-simulator-core",
+      "inherits": "apple-mobile-core-base",
+      "displayName": "visionOS simulator core library",
+      "binaryDir": "${sourceDir}/../../out/${presetName}",
+      "cacheVariables": {
+        "CMAKE_OSX_SYSROOT": "xrsimulator",
+        "CMAKE_OSX_ARCHITECTURES": "arm64"
+      }
     }
   ],
   "buildPresets": [
@@ -375,6 +479,38 @@
       "name": "macos-xcode",
       "configurePreset": "macos-xcode",
       "configuration": "Release"
+    },
+    {
+      "name": "apple-ios-device-core",
+      "configurePreset": "apple-ios-device-core"
+    },
+    {
+      "name": "apple-ios-simulator-core",
+      "configurePreset": "apple-ios-simulator-core"
+    },
+    {
+      "name": "apple-tvos-device-core",
+      "configurePreset": "apple-tvos-device-core"
+    },
+    {
+      "name": "apple-tvos-simulator-core",
+      "configurePreset": "apple-tvos-simulator-core"
+    },
+    {
+      "name": "apple-watchos-device-core",
+      "configurePreset": "apple-watchos-device-core"
+    },
+    {
+      "name": "apple-watchos-simulator-core",
+      "configurePreset": "apple-watchos-simulator-core"
+    },
+    {
+      "name": "apple-visionos-device-core",
+      "configurePreset": "apple-visionos-device-core"
+    },
+    {
+      "name": "apple-visionos-simulator-core",
+      "configurePreset": "apple-visionos-simulator-core"
     }
   ]
 }
