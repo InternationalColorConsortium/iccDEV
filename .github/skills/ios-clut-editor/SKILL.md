@@ -1,0 +1,97 @@
+---
+name: ios-clut-editor
+description: >
+  Build, review, and maintain the ios-clut-editor profile and 3D CLUT editing
+  proof-of-concept app without repeating prior iOS review-loop failures.
+allowed-tools:
+  - bash
+  - read
+  - grep
+  - glob
+  - shell(git:*)
+  - shell(gh:*)
+---
+
+# iOS CLUT Editor Workflow
+
+Use this skill when changing `examples/ios-clut-editor/**`, its documentation,
+or its local build helper.
+
+## Start Gate
+
+1. Confirm the branch is intended for branch-local grooming, not PR publication.
+2. Read `AGENTS.md`, `.github/copilot-instructions.md`,
+   `.github/instructions/build-system.instructions.md`, and
+   `docs/governance/UPSTREAM_PR_READINESS.md`.
+3. Review prior iOS examples before editing:
+   `examples/ios-apply-preview`, `examples/ios-benchapply`,
+   `Build/AppleMobile`, and `.github/scripts/iccdev-apple-simulator-smoke.sh`.
+4. Inventory active and suppressed review findings if this branch already has a
+   PR. Do not repair comment-by-comment.
+
+## Required Invariants
+
+- `IccClutEditorPOC`, `ICCDEV_CLUTEDITOR_BUNDLE_IDENTIFIER`, README commands,
+  and `build-ios.sh` must refer to the same app and bundle ID.
+- The app consumes matching iOS or Mac Catalyst static core builds; it must not
+  depend on desktop tools, CTest executables, libtiff, wxWidgets, signing files,
+  or generated Xcode output.
+- Keep `CMAKE_OSX_DEPLOYMENT_TARGET`, CMake Xcode attributes, helper defaults,
+  and README examples aligned.
+- Keep CMM and CLUT application on a background queue and update UIKit only on
+  the main queue.
+- Remove stale `Documents/clut-editor-report.json` before writing the latest
+  accepted render's report; stale background renders must not overwrite it.
+- Keep simulator launch repeatable with
+  `simctl launch --console-pty --terminate-running-process`.
+- Keep device launch repeatable with
+  `devicectl device process launch --console --terminate-existing --timeout`.
+- Keep Mac Catalyst runnable on Apple Silicon Macs through
+  `build-ios.sh maccatalyst` using a matching Mac Catalyst core archive, not an
+  iOS device or simulator archive.
+- Fail before building device targets when physical-device signing inputs still
+  contain placeholder team or bundle values; unsigned simulator and Mac
+  Catalyst runs must not be blocked by a device-only signing placeholder and
+  should ignore a globally exported placeholder bundle ID.
+- Keep edited-image export available through the native share sheet.
+- Disable report and edited-image sharing while a render is pending so exports
+  cannot use stale controls.
+- Keep the profile-chain CMM interpolation fixed and make the UI selector apply
+  only to the editable CLUT unless the report and docs explicitly say otherwise.
+- Keep the light/dark/system appearance toggle available as an educational
+  visual comparison tool.
+- Keep the compact iPhone layout tuned for visible controls: half-height
+  logo/banner, short action labels, and two-column preview rows; do not regress
+  the current iPad/Mac wide dashboard layout when adjusting phone density.
+- Reused assets must not carry stale sibling-app text such as `BENCH` or
+  `APPLY` into CLUT editor source art or generated icons.
+- Doxygen should include the README, `.h`, and `.mm` files through INPUT and
+  `*.mm` in FILE_PATTERNS; do not add `EXTENSION_MAPPING = mm=C++`.
+
+## Validation
+
+Use the smallest complete validation for the changed surface:
+
+```bash
+git diff --check
+cmake --preset apple-ios-simulator-core -S Build/Cmake \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0
+cmake --build out/apple-ios-simulator-core --config Release --parallel
+examples/ios-clut-editor/build-ios.sh simulator --run-tests
+examples/ios-clut-editor/build-ios.sh maccatalyst --run-tests
+doxygen .github/ci/doxygen/Doxyfile
+test ! -s docs/generated/doxygen-warnings.log
+```
+
+For documentation-only edits, keep the Doxygen and diff checks. For code or
+helper edits, run the simulator smoke unless unavailable and record the exact
+skip reason.
+
+## Stop Rules
+
+- Do not push until the local gate covering the current diff passes.
+- Do not request repeated automated reviews for convergence. If a second review
+  cycle finds a new blocker, report `review-stop: FAIL - maintainer direction
+  required` and stop.
+- Do not add workflow or CTest registration unless a maintainer explicitly
+  requests it.

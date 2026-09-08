@@ -2,14 +2,14 @@
 # Copyright (c) 2026 International Color Consortium.
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# Configure and build the ios-apply-preview Xcode app from a fresh iccDEV clone.
+# Configure and build the ios-benchapply Xcode app from a fresh iccDEV clone.
 
 set -euo pipefail
 
 usage() {
   cat <<'USAGE'
 Usage:
-  examples/ios-apply-preview/build-ios.sh [simulator|device] [options]
+  examples/ios-benchapply/build-ios.sh [simulator|device] [options]
 
 Targets:
   simulator   Build the iOS simulator app with code signing disabled (default).
@@ -30,13 +30,13 @@ Environment:
   DEPLOYMENT      iOS deployment target for the core and app. Defaults to 17.0.
   ARCH            Target architecture. Defaults to arm64.
   BUNDLE_ID       App bundle identifier. Defaults to
-                  org.color.iccdev.ApplyPreviewPOC.
+                  org.color.iccdev.BenchApplyPOC.
 
 Examples:
-  examples/ios-apply-preview/build-ios.sh simulator --open
-  examples/ios-apply-preview/build-ios.sh simulator --run-tests
-  TEAM_ID="$TEAM_ID" examples/ios-apply-preview/build-ios.sh device --open
-  TEAM_ID="$TEAM_ID" DEVICE_ID="$DEVICE_ID" examples/ios-apply-preview/build-ios.sh device --launch
+  examples/ios-benchapply/build-ios.sh simulator --open
+  examples/ios-benchapply/build-ios.sh simulator --run-tests
+  TEAM_ID="$TEAM_ID" examples/ios-benchapply/build-ios.sh device --open
+  TEAM_ID="$TEAM_ID" DEVICE_ID="$DEVICE_ID" examples/ios-benchapply/build-ios.sh device --launch
 USAGE
 }
 
@@ -125,7 +125,7 @@ repo_root="$(cd "$script_dir/../.." && pwd)"
 configuration="${BUILD_CONFIG:-Release}"
 deployment="${DEPLOYMENT:-17.0}"
 arch="${ARCH:-arm64}"
-default_bundle_id="org.color.iccdev.ApplyPreviewPOC"
+default_bundle_id="org.color.iccdev.BenchApplyPOC"
 bundle_id="${BUNDLE_ID:-$default_bundle_id}"
 bundle_id_is_placeholder=0
 if is_placeholder_bundle_id "$bundle_id"; then
@@ -139,13 +139,13 @@ fi
 if [[ "$target" == "simulator" ]]; then
   core_preset="apple-ios-simulator-core"
   core_dir="$repo_root/out/apple-ios-simulator-core"
-  app_build_dir="$repo_root/out/ios-apply-preview-sim"
+  app_build_dir="$repo_root/out/ios-benchapply-sim"
   sdk="iphonesimulator"
   sign_args=(CODE_SIGNING_ALLOWED=NO)
 else
   core_preset="apple-ios-device-core"
   core_dir="$repo_root/out/apple-ios-device-core"
-  app_build_dir="$repo_root/out/ios-apply-preview-device"
+  app_build_dir="$repo_root/out/ios-benchapply-device"
   sdk="iphoneos"
   sign_args=(-allowProvisioningUpdates -allowProvisioningDeviceRegistration)
   if [[ -z "${TEAM_ID:-}" ]]; then
@@ -179,23 +179,23 @@ app_config_args=(
   -DCMAKE_OSX_ARCHITECTURES="$arch"
   -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment"
   -DRefIccMAX_DIR="$core_dir"
-  -DICCDEV_APPLYPREVIEW_BUNDLE_IDENTIFIER="$bundle_id"
+  -DICCDEV_BENCHAPPLY_BUNDLE_IDENTIFIER="$bundle_id"
 )
 if [[ "$target" == "device" ]]; then
   app_config_args+=("-DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM=$TEAM_ID")
 fi
 cmake "${app_config_args[@]}"
 
-xcodebuild -project "$app_build_dir/IccApplyPreviewPOC.xcodeproj" \
-  -target IccApplyPreviewPOC \
+xcodebuild -project "$app_build_dir/IccBenchApplyPOC.xcodeproj" \
+  -target IccBenchApplyPOC \
   -configuration "$configuration" \
   -sdk "$sdk" \
   "${sign_args[@]}" \
   build
 
-app_path="$app_build_dir/$configuration-$sdk/IccApplyPreviewPOC.app"
+app_path="$app_build_dir/$configuration-$sdk/IccBenchApplyPOC.app"
 if [[ "$open_project" -eq 1 ]]; then
-  open "$app_build_dir/IccApplyPreviewPOC.xcodeproj"
+  open "$app_build_dir/IccBenchApplyPOC.xcodeproj"
 fi
 
 if [[ -n "$launch_mode" ]]; then

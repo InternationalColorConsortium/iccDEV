@@ -83,6 +83,12 @@ use `.github/skills/regression-container-maintainer/SKILL.md` and
 - Workflow governance: `.github/instructions/workflow-governance.instructions.md`
 - Apple mobile static-core and smoke-app flow: `docs/build.md` and
   `.github/instructions/build-system.instructions.md`
+- Manual iOS example app helpers: `examples/ios-apply-preview/README.md`,
+  `examples/ios-benchapply/README.md`, `examples/ios-clut-editor/README.md`,
+  and `.github/skills/ios-manual-examples/SKILL.md`
+- iOS CLUT editor proof-of-concept: `examples/ios-clut-editor/README.md`,
+  `.github/skills/ios-clut-editor/SKILL.md`, and
+  `.github/prompts/ios-clut-editor.prompt.md`
 - Windows session helper: dot-source `.\.github\scripts\icc-session.ps1`, then
   run `icc-session` to create the next `DD-mmm-YYYY-NNN` workspace directory.
 - AVX2 CLUT debugging and optimization handoff:
@@ -218,8 +224,10 @@ Key safety rules:
 | Reduce documentation noise | `.github/prompts/reduce-doc-noise.prompt.md` |
 | Build/test/coverage | `.github/prompts/build-and-test.prompt.md` |
 | Add a CLI tool | `.github/prompts/add-new-tool.prompt.md` |
+| iOS CLUT editor planning | `.github/prompts/ios-clut-editor.prompt.md` |
 | Contributor onboarding | `.github/prompts/contributor-onboarding.prompt.md` |
 | Cross-platform CI | `.github/prompts/cross-platform-ci.prompt.md` |
+| Manual iOS examples | `.github/prompts/ios-manual-examples.prompt.md` |
 | Regression workflow gate | `.github/prompts/add-regression-workflow.prompt.md` |
 | Maintainer AFL smoke | `.github/prompts/maintainer-afl-smoke.prompt.md` |
 | Maintainer CTest selection | `.github/prompts/maintainer-ci-ctest.prompt.md` |
@@ -243,6 +251,8 @@ Key safety rules:
 | Task | Skill |
 |------|-------|
 | Documentation maintenance | `.github/skills/docs-maintenance/SKILL.md` |
+| Manual iOS example app helpers | `.github/skills/ios-manual-examples/SKILL.md` |
+| iOS CLUT editor app | `.github/skills/ios-clut-editor/SKILL.md` |
 | AFL smoke workflow | `.github/skills/afl-smoke/SKILL.md` |
 | Sanitizer reproduction | `.github/skills/sanitizer-repro/SKILL.md` |
 | iccSpecSepToTiff QA | `.github/skills/specsep-qa/SKILL.md` |

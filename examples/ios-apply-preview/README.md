@@ -54,11 +54,14 @@ examples/ios-apply-preview/build-ios.sh simulator --run-tests
 Use an unlocked, paired iPhone or iPad for a physical-device build. Set
 `TEAM_ID` and `DEVICE_ID` from Xcode and `xcrun devicectl list devices`.
 Set `BUNDLE_ID` if your Apple development team requires a custom app bundle
-identifier.
+identifier. The helper rejects placeholder signing values before building so a
+mistyped local session does not waste a full device build. Unsigned simulator
+runs ignore a globally exported placeholder `BUNDLE_ID` and use the default
+bundle ID instead.
 
 ```bash
-TEAM_ID=ABCDE12345 examples/ios-apply-preview/build-ios.sh device --open
-TEAM_ID=ABCDE12345 DEVICE_ID=<udid> \
+TEAM_ID="$TEAM_ID" examples/ios-apply-preview/build-ios.sh device --open
+TEAM_ID="$TEAM_ID" DEVICE_ID="$DEVICE_ID" \
   examples/ios-apply-preview/build-ios.sh device --launch
 ```
 
@@ -71,6 +74,8 @@ provisioning profiles, device identifiers, generated Xcode projects, or build
 outputs. Override the default `org.color.iccdev.ApplyPreviewPOC` bundle ID with
 `BUNDLE_ID` when using the helper script, or
 `-DICCDEV_APPLYPREVIEW_BUNDLE_IDENTIFIER=...` when configuring CMake directly.
+Do not export placeholder values; use values that Xcode can sign for the
+selected device.
 
 ```bash
 bundle_id="${BUNDLE_ID:-org.color.iccdev.ApplyPreviewPOC}"
@@ -104,7 +109,7 @@ delta image panels, ICC and repository links, and a native share sheet.
 The same sequence is wrapped by:
 
 ```bash
-TEAM_ID=ABCDE12345 DEVICE_ID=<udid> \
+TEAM_ID="$TEAM_ID" DEVICE_ID="$DEVICE_ID" \
   examples/ios-apply-preview/build-ios.sh device --run-tests
 ```
 

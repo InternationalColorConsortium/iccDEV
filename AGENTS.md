@@ -48,6 +48,8 @@ shares one source of truth. Update rules here, not in the mirrors.
 |------|------|
 | Build, test, style, CI | `.github/copilot-instructions.md` |
 | Apple mobile static cores and smoke app | `docs/build.md` |
+| Manual iOS example app helpers | `examples/ios-apply-preview/README.md`, `examples/ios-benchapply/README.md`, `examples/ios-clut-editor/README.md`, `.github/skills/ios-manual-examples/SKILL.md` |
+| iOS CLUT editor POC | `examples/ios-clut-editor/README.md`, `.github/skills/ios-clut-editor/SKILL.md` |
 | AVX2 CLUT diagnostics and optimization handoff | `docs/avx2-clut-diagnostics.md` |
 | Pull request preparation and handoff | `docs/pre-pr-security-cycle.md` |
 | Pre-PR security skill | `.github/skills/pre-pr-security-cycle/SKILL.md` |
@@ -60,6 +62,8 @@ shares one source of truth. Update rules here, not in the mirrors.
 | Regression container prompt | `.github/prompts/regression-container-maintainer.prompt.md` |
 | Maintainer CTest selection and CI budget | `.github/skills/maintainer-ci-ctest/SKILL.md` |
 | New CLI tool onboarding | `.github/prompts/add-new-tool.prompt.md` |
+| Manual iOS examples | `.github/prompts/ios-manual-examples.prompt.md` |
+| iOS CLUT editor planning | `.github/prompts/ios-clut-editor.prompt.md` |
 | Contributor onboarding | `.github/prompts/contributor-onboarding.prompt.md` |
 | Apply-path throughput benchmark | `Tools/CmdLine/IccBenchApply/Readme.md` |
 | Security repro | `.github/prompts/reproduce-security-issue.prompt.md` |

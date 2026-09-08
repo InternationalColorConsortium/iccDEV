@@ -2,23 +2,24 @@
 # Copyright (c) 2026 International Color Consortium.
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# Configure and build the ios-apply-preview Xcode app from a fresh iccDEV clone.
+# Configure and build the ios-clut-editor Xcode app from a fresh iccDEV clone.
 
 set -euo pipefail
 
 usage() {
   cat <<'USAGE'
 Usage:
-  examples/ios-apply-preview/build-ios.sh [simulator|device] [options]
+  examples/ios-clut-editor/build-ios.sh [simulator|device|maccatalyst] [options]
 
 Targets:
   simulator   Build the iOS simulator app with code signing disabled (default).
   device      Build the iPhone/iPad app. Requires TEAM_ID for command-line build.
+  maccatalyst Build the Mac Catalyst app for Apple Silicon Macs.
 
 Options:
   --open       Open the generated Xcode project after building.
-  --run-tests  Install and launch with --exit-after-tests.
-  --launch     Install and launch for visual review.
+  --run-tests  Launch with --exit-after-tests.
+  --launch     Launch for visual review.
   --help       Show this help.
 
 Environment:
@@ -28,15 +29,20 @@ Environment:
                   Defaults to "booted".
   BUILD_CONFIG    Xcode build configuration. Defaults to Release.
   DEPLOYMENT      iOS deployment target for the core and app. Defaults to 17.0.
+  MACOS_DEPLOYMENT
+                  macOS deployment target for Mac Catalyst. Defaults to 14.0.
+  MAC_DESTINATION Xcode destination for Mac Catalyst. Defaults to
+                  "generic/platform=macOS,variant=Mac Catalyst".
   ARCH            Target architecture. Defaults to arm64.
   BUNDLE_ID       App bundle identifier. Defaults to
-                  org.color.iccdev.ApplyPreviewPOC.
+                  org.color.iccdev.ClutEditorPOC.
 
 Examples:
-  examples/ios-apply-preview/build-ios.sh simulator --open
-  examples/ios-apply-preview/build-ios.sh simulator --run-tests
-  TEAM_ID="$TEAM_ID" examples/ios-apply-preview/build-ios.sh device --open
-  TEAM_ID="$TEAM_ID" DEVICE_ID="$DEVICE_ID" examples/ios-apply-preview/build-ios.sh device --launch
+  examples/ios-clut-editor/build-ios.sh simulator --open
+  examples/ios-clut-editor/build-ios.sh simulator --run-tests
+  examples/ios-clut-editor/build-ios.sh maccatalyst --run-tests
+  TEAM_ID="$TEAM_ID" examples/ios-clut-editor/build-ios.sh device --open
+  TEAM_ID="$TEAM_ID" DEVICE_ID="$DEVICE_ID" examples/ios-clut-editor/build-ios.sh device --launch
 USAGE
 }
 
@@ -81,14 +87,17 @@ fi
 if [[ "$target" == "sim" ]]; then
   target="simulator"
 fi
+if [[ "$target" == "mac" || "$target" == "catalyst" ]]; then
+  target="maccatalyst"
+fi
 if [[ "$target" == "iphone" || "$target" == "ipad" ]]; then
   target="device"
 fi
 case "$target" in
-  simulator|device)
+  simulator|device|maccatalyst)
     ;;
   *)
-    echo "error: first argument must be simulator or device" >&2
+    echo "error: first argument must be simulator, device, or maccatalyst" >&2
     usage >&2
     exit 2
     ;;
@@ -124,9 +133,11 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
 configuration="${BUILD_CONFIG:-Release}"
 deployment="${DEPLOYMENT:-17.0}"
+macos_deployment="${MACOS_DEPLOYMENT:-14.0}"
 arch="${ARCH:-arm64}"
-default_bundle_id="org.color.iccdev.ApplyPreviewPOC"
+default_bundle_id="org.color.iccdev.ClutEditorPOC"
 bundle_id="${BUNDLE_ID:-$default_bundle_id}"
+mac_destination="${MAC_DESTINATION:-generic/platform=macOS,variant=Mac Catalyst}"
 bundle_id_is_placeholder=0
 if is_placeholder_bundle_id "$bundle_id"; then
   bundle_id_is_placeholder=1
@@ -139,13 +150,19 @@ fi
 if [[ "$target" == "simulator" ]]; then
   core_preset="apple-ios-simulator-core"
   core_dir="$repo_root/out/apple-ios-simulator-core"
-  app_build_dir="$repo_root/out/ios-apply-preview-sim"
+  app_build_dir="$repo_root/out/ios-clut-editor-sim"
   sdk="iphonesimulator"
+  sign_args=(CODE_SIGNING_ALLOWED=NO)
+elif [[ "$target" == "maccatalyst" ]]; then
+  core_preset=""
+  core_dir="$repo_root/out/apple-maccatalyst-core"
+  app_build_dir="$repo_root/out/ios-clut-editor-maccatalyst"
+  sdk="macosx"
   sign_args=(CODE_SIGNING_ALLOWED=NO)
 else
   core_preset="apple-ios-device-core"
   core_dir="$repo_root/out/apple-ios-device-core"
-  app_build_dir="$repo_root/out/ios-apply-preview-device"
+  app_build_dir="$repo_root/out/ios-clut-editor-device"
   sdk="iphoneos"
   sign_args=(-allowProvisioningUpdates -allowProvisioningDeviceRegistration)
   if [[ -z "${TEAM_ID:-}" ]]; then
@@ -165,37 +182,88 @@ else
   fi
 fi
 
-cmake --preset "$core_preset" -S "$repo_root/Build/Cmake" \
-  -DCMAKE_OSX_ARCHITECTURES="$arch" \
-  -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment"
-cmake --build "$core_dir" --config "$configuration" --parallel
+if [[ "$target" == "maccatalyst" ]]; then
+  cmake -S "$repo_root/Build/Cmake" -B "$core_dir" -G Xcode \
+    -DCMAKE_OSX_SYSROOT=macosx \
+    -DCMAKE_OSX_ARCHITECTURES="$arch" \
+    -DCMAKE_BUILD_TYPE="$configuration" \
+    -DENABLE_SHARED_LIBS=OFF \
+    -DENABLE_STATIC_LIBS=ON \
+    -DENABLE_TOOLS=OFF \
+    -DENABLE_TESTS=OFF \
+    -DENABLE_ICCXML=OFF \
+    -DENABLE_ICCJSON=OFF \
+    -DICC_USE_ZLIB=OFF \
+    -DENABLE_IMAGE_TOOLS=OFF \
+    -DENABLE_WXWIDGETS=OFF \
+    -DENABLE_CMM_TOOLS=OFF \
+    -DENABLE_IIS_TOOLS=OFF \
+    -DCMAKE_XCODE_ATTRIBUTE_SUPPORTS_MACCATALYST=YES \
+    -DCMAKE_XCODE_ATTRIBUTE_DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER=NO \
+    -DCMAKE_XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET="$deployment" \
+    -DCMAKE_XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET="$macos_deployment"
+  xcodebuild -project "$core_dir/RefIccMAX.xcodeproj" \
+    -scheme IccProfLib2-static \
+    -configuration "$configuration" \
+    -sdk "$sdk" \
+    -destination "$mac_destination" \
+    clean build
+else
+  cmake --preset "$core_preset" -S "$repo_root/Build/Cmake" \
+    -DCMAKE_OSX_ARCHITECTURES="$arch" \
+    -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment"
+  cmake --build "$core_dir" --config "$configuration" --parallel
+fi
 
 app_config_args=(
   -S "$script_dir"
   -B "$app_build_dir"
   -G Xcode
-  -DCMAKE_SYSTEM_NAME=iOS
   -DCMAKE_OSX_SYSROOT="$sdk"
   -DCMAKE_OSX_ARCHITECTURES="$arch"
-  -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment"
   -DRefIccMAX_DIR="$core_dir"
-  -DICCDEV_APPLYPREVIEW_BUNDLE_IDENTIFIER="$bundle_id"
+  -DICCDEV_CLUTEDITOR_BUNDLE_IDENTIFIER="$bundle_id"
+  -DICCDEV_CLUTEDITOR_IOS_DEPLOYMENT_TARGET="$deployment"
+  -DICCDEV_CLUTEDITOR_MACOS_DEPLOYMENT_TARGET="$macos_deployment"
 )
+if [[ "$target" == "maccatalyst" ]]; then
+  app_config_args+=("-DICCDEV_CLUTEDITOR_ENABLE_MACCATALYST=ON")
+else
+  app_config_args+=("-DCMAKE_SYSTEM_NAME=iOS")
+  app_config_args+=("-DCMAKE_OSX_DEPLOYMENT_TARGET=$deployment")
+fi
 if [[ "$target" == "device" ]]; then
   app_config_args+=("-DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM=$TEAM_ID")
 fi
 cmake "${app_config_args[@]}"
 
-xcodebuild -project "$app_build_dir/IccApplyPreviewPOC.xcodeproj" \
-  -target IccApplyPreviewPOC \
-  -configuration "$configuration" \
-  -sdk "$sdk" \
-  "${sign_args[@]}" \
-  build
+if [[ "$target" == "maccatalyst" ]]; then
+  xcodebuild -project "$app_build_dir/IccClutEditorPOC.xcodeproj" \
+    -scheme IccClutEditorPOC \
+    -configuration "$configuration" \
+    -sdk "$sdk" \
+    -destination "$mac_destination" \
+    "${sign_args[@]}" \
+    build
+else
+  xcodebuild -project "$app_build_dir/IccClutEditorPOC.xcodeproj" \
+    -target IccClutEditorPOC \
+    -configuration "$configuration" \
+    -sdk "$sdk" \
+    "${sign_args[@]}" \
+    build
+fi
 
-app_path="$app_build_dir/$configuration-$sdk/IccApplyPreviewPOC.app"
+if [[ "$target" == "maccatalyst" ]]; then
+  app_path="$app_build_dir/$configuration-maccatalyst/IccClutEditorPOC.app"
+  if [[ ! -d "$app_path" ]]; then
+    app_path="$app_build_dir/$configuration/IccClutEditorPOC.app"
+  fi
+else
+  app_path="$app_build_dir/$configuration-$sdk/IccClutEditorPOC.app"
+fi
 if [[ "$open_project" -eq 1 ]]; then
-  open "$app_build_dir/IccApplyPreviewPOC.xcodeproj"
+  open "$app_build_dir/IccClutEditorPOC.xcodeproj"
 fi
 
 if [[ -n "$launch_mode" ]]; then
@@ -208,6 +276,12 @@ if [[ -n "$launch_mode" ]]; then
     xcrun simctl install "$simulator" "$app_path"
     xcrun simctl launch --console-pty --terminate-running-process \
       "$simulator" "$bundle_id" "${app_args[@]}"
+  elif [[ "$target" == "maccatalyst" ]]; then
+    if [[ "$launch_mode" == "tests" ]]; then
+      "$app_path/Contents/MacOS/IccClutEditorPOC" "${app_args[@]}"
+    else
+      open -n "$app_path"
+    fi
   else
     if [[ -z "${DEVICE_ID:-}" ]]; then
       echo "error: DEVICE_ID is required for device launch" >&2
