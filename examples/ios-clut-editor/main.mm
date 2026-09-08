@@ -680,6 +680,7 @@ static void IccDevConfigureImageView(UIImageView *image)
 - (void)scheduleEditorRun
 {
   [self updateSliderSummary];
+  ++self.renderSerial;
   self.renderInFlight = YES;
   self.reportView.text = @"Applying ICC profile chain and live CLUT edit...";
   self.shareButton.enabled = NO;

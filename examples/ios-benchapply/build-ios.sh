@@ -69,10 +69,14 @@ is_placeholder_bundle_id() {
   return 1
 }
 
-target="${1:-simulator}"
-if [[ "$target" == "--help" || "$target" == "-h" ]]; then
+target="simulator"
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   usage
   exit 0
+fi
+if [[ "${1:-}" != "" && "${1:-}" != --* ]]; then
+  target="$1"
+  shift
 fi
 if [[ "$target" == "sim" ]]; then
   target="simulator"
@@ -82,7 +86,6 @@ if [[ "$target" == "iphone" || "$target" == "ipad" ]]; then
 fi
 case "$target" in
   simulator|device)
-    shift || true
     ;;
   *)
     echo "error: first argument must be simulator or device" >&2
