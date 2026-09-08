@@ -128,6 +128,15 @@ typedef enum {
   // useful value that is not defined by the spec.
   icSigNullDataOp                   = 0x00000000, /* not valid, used for data range */
 
+  //ICC.2:2023 Table 102 rows 1 and 2. Neither carries an (S) selector, but they
+  //differ in what they touch: 'noop' takes no stack argument and leaves no
+  //result, while 'scnt' takes X1...XN and leaves X1...XN N -- it reads the stack
+  //depth and pushes it WITHOUT consuming the operands. Both are specified with
+  //"S shall be zero"; iccDEV does not enforce that, matching how it already
+  //treats the pi/+INF/-INF/NaN rows of the same table (#2086).
+  icSigNoOperationOp                = 0x6e6f6f70,  /* 'noop' */
+  icSigStackCountOp                 = 0x73636e74,  /* 'scnt' */
+
   //Floating point constant operation
   icSigDataOp                       = 0x64617461,  /* 'data' */
   icSigPiOp                         = 0x70692020,  /* 'pi  ' */
@@ -220,6 +229,7 @@ typedef enum {
   icSigVectorMinimumOp              = 0x766d696e,  /* 'vmin' */
   icSigVectorMaximumOp              = 0x766d6178,  /* 'vmax' */
   icSigVectorAndOp                  = 0x76616e64,  /* 'vand' */
+  icSigVectorXorOp                  = 0x76786f72,  /* 'vxor' */
   icSigVectorOrOp                   = 0x766f7220,  /* 'vor ' */
 
   //Matrix Operations

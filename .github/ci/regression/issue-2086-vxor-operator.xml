@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ICC.2:2023 Table 102 'vxor' (76786f72h), which iccDEV did not implement
+  (#2086). Before the fix iccFromXml rejected this file with
+  Invalid Operator "vxor" and the whole calculator tag failed to parse.
+
+  vxor is exercised at width 3 so the (S) selector operand is genuinely used:
+  at width 1 the selector is 0 whether or not vxor reaches ParseFuncDef's
+  index-operand case list, which would leave that path uncovered.
+
+  Operands are fractional and straddle the 0,5 threshold that DEFINES the
+  operator, rather than being exactly 1 and 0:
+
+    X = 0,7  0,6  0,4      Y = 0,4  0,5  0,3
+
+    channel 0   0,7 >= 0,5 xor 0,4 <  0,5   ->  1   exactly one operand
+    channel 1   0,6 >= 0,5 xor 0,5 >= 0,5   ->  0   both, and 0,5 pins that
+                                                    the comparison is >= not >
+    channel 2   0,4 <  0,5 xor 0,3 <  0,5   ->  0   neither
+
+  Channel 1 is what separates vxor from vand and from vor, which both yield 1
+  there, and channels 1 and 2 together reject a threshold-free implementation
+  such as (Xi != Yi), which would return 1 for all three.
+
+  The function takes no input, so the expected output is the fixed triple
+  (1, 0, 0) on every row.
+-->
+<IccProfile>
+  <Header>
+    <ProfileVersion>5.0</ProfileVersion>
+    <ProfileDeviceClass>spac</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>now</CreationDateTime>
+    <RenderingIntent>Relative</RenderingIntent>
+    <PCSIlluminant><XYZNumber X="0.9505" Y="1.00000000" Z="1.0891"/></PCSIlluminant>
+    <ProfileCreator>ICC </ProfileCreator>
+  </Header>
+  <Tags>
+    <multiLocalizedUnicodeType>
+      <TagSignature>desc</TagSignature>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[issue-2086 vxor]]></LocalizedText>
+    </multiLocalizedUnicodeType>
+    <multiProcessElementType>
+      <TagSignature>A2B1</TagSignature>
+      <MultiProcessElements InputChannels="3" OutputChannels="3">
+        <CalculatorElement InputChannels="3" OutputChannels="3">
+          <MainFunction>
+{
+0.7 0.6 0.4
+0.4 0.5 0.3
+vxor(3)
+out(0,3)
+}
+          </MainFunction>
+        </CalculatorElement>
+      </MultiProcessElements>
+    </multiProcessElementType>
+    <multiProcessElementType>
+      <TagSignature>B2A1</TagSignature>
+      <MultiProcessElements InputChannels="3" OutputChannels="3">
+        <CalculatorElement InputChannels="3" OutputChannels="3">
+          <MainFunction>{ in(0,3) out(0,3) }</MainFunction>
+        </CalculatorElement>
+      </MultiProcessElements>
+    </multiProcessElementType>
+    <XYZType>
+      <TagSignature>wtpt</TagSignature>
+      <XYZNumber X="0.9505" Y="1.00000000" Z="1.0891"/>
+    </XYZType>
+    <multiLocalizedUnicodeType>
+      <TagSignature>cprt</TagSignature>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright International Color Consortium]]></LocalizedText>
+    </multiLocalizedUnicodeType>
+  </Tags>
+</IccProfile>
