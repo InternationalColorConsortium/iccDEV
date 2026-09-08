@@ -26,6 +26,10 @@ INPUT                  = IccProfLib \
                          Tools/Winnt/IccIisIsapi/iis-isapi.openapi.yaml \
                          Tools/wxWidget \
                          examples/hello-iccdev/hello-iccdev.cpp \
+                         examples/ios-apply-preview/README.md \
+                         examples/ios-apply-preview/main.mm \
+                         examples/ios-apply-preview/ApplyPreviewHost.h \
+                         examples/ios-apply-preview/ApplyPreviewHost.mm \
                          examples/c-validation-dlopen/main.c \
                          examples/ios-benchapply/README.md \
                          examples/ios-benchapply/BenchApplyHost.h \
