@@ -252,7 +252,10 @@ else
 fi
 
 if [[ "$target" == "maccatalyst" ]]; then
-  app_path="$app_build_dir/$configuration/IccClutEditorPOC.app"
+  app_path="$app_build_dir/$configuration-maccatalyst/IccClutEditorPOC.app"
+  if [[ ! -d "$app_path" ]]; then
+    app_path="$app_build_dir/$configuration/IccClutEditorPOC.app"
+  fi
 else
   app_path="$app_build_dir/$configuration-$sdk/IccClutEditorPOC.app"
 fi

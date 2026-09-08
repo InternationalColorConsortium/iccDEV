@@ -76,6 +76,14 @@ static icUInt8Number IccDevUnitToByte(double value)
   return static_cast<icUInt8Number>(IccDevClampUnit(value) * 255.0 + 0.5);
 }
 
+static CGColorSpaceRef IccDevCreateSrgbColorSpace()
+{
+  CGColorSpaceRef colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  if (!colorSpace)
+    colorSpace = CGColorSpaceCreateDeviceRGB();
+  return colorSpace;
+}
+
 static size_t IccDevClutIndex(NSUInteger grid,
                               NSUInteger r,
                               NSUInteger g,
@@ -116,7 +124,7 @@ static BOOL IccDevDecodeImage(UIImage *image,
     return NO;
 
   std::vector<icUInt8Number> rgba(static_cast<size_t>(width) * height * 4u);
-  CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+  CGColorSpaceRef colorSpace = IccDevCreateSrgbColorSpace();
   CGContextRef context = colorSpace ?
     CGBitmapContextCreate(rgba.data(), width, height, 8, width * 4u,
                           colorSpace,
@@ -129,8 +137,9 @@ static BOOL IccDevDecodeImage(UIImage *image,
   }
 
   CGContextSetBlendMode(context, kCGBlendModeCopy);
-  CGContextDrawImage(context, CGRectMake(0.0, 0.0, width, height),
-                     image.CGImage);
+  UIGraphicsPushContext(context);
+  [image drawInRect:CGRectMake(0.0, 0.0, width, height)];
+  UIGraphicsPopContext();
   CGContextRelease(context);
   CGColorSpaceRelease(colorSpace);
 
@@ -338,7 +347,7 @@ static UIImage *IccDevMakeImage(const std::vector<icFloatNumber>& rgb,
   NSData *data = [NSData dataWithBytes:rgba.data() length:rgba.size()];
   CGDataProviderRef provider =
     CGDataProviderCreateWithCFData((__bridge CFDataRef)data);
-  CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+  CGColorSpaceRef colorSpace = IccDevCreateSrgbColorSpace();
   if (!provider || !colorSpace) {
     if (colorSpace)
       CGColorSpaceRelease(colorSpace);

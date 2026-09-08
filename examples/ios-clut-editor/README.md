@@ -19,7 +19,8 @@ The live edit controls build an in-memory RGB 3D LUT with adjustable grid size,
 interpolation mode, exposure, contrast, saturation, and warm/cool bias. The
 output report records mean channel delta, max channel delta, and an FNV-1a
 checksum of the edited preview bytes. `Documents/clut-editor-report.json` is
-removed before each write so a failed run cannot leave stale validation output.
+removed before the latest accepted render writes its report so a failed or stale
+background run cannot leave misleading validation output.
 
 The UI reuses the current iOS example visual shell and ICC assets: ICC logo
 header, color.org and repository links, brand-blue primary action, compact
@@ -116,8 +117,10 @@ share sheet, and an edited-image export share sheet for Files, Photos, AirDrop,
 and installed image extensions. iPhone keeps the same controls but uses a
 half-height logo/banner, shorter action labels, and shorter two-column preview
 rows so sliders and images fit with less scrolling; iPad and Mac Catalyst keep
-the wide dashboard layout. The UI stays intentionally simple and educational
-for students and younger Apple developers learning colorimetry concepts.
+the wide dashboard layout when the current window is wide enough, and compact
+Split View or resized Catalyst windows keep the overflowing controls in a
+scrollable compact layout. The UI stays intentionally simple and educational for
+students and younger Apple developers learning colorimetry concepts.
 
 The same sequence is wrapped by:
 
@@ -189,8 +192,11 @@ xcodebuild -project out/ios-clut-editor-maccatalyst/IccClutEditorPOC.xcodeproj \
   -scheme IccClutEditorPOC -configuration Release -sdk macosx \
   -destination 'generic/platform=macOS,variant=Mac Catalyst' \
   CODE_SIGNING_ALLOWED=NO build
-out/ios-clut-editor-maccatalyst/Release/IccClutEditorPOC.app/Contents/MacOS/IccClutEditorPOC \
-  --exit-after-tests
+app_path=out/ios-clut-editor-maccatalyst/Release-maccatalyst/IccClutEditorPOC.app
+if [ ! -d "$app_path" ]; then
+  app_path=out/ios-clut-editor-maccatalyst/Release/IccClutEditorPOC.app
+fi
+"$app_path/Contents/MacOS/IccClutEditorPOC" --exit-after-tests
 ```
 
 ## Scope and gaps

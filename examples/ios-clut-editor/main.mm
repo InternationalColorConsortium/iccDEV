@@ -174,10 +174,18 @@ static void IccDevConfigureImageView(UIImageView *image)
 {
   [super viewDidLoad];
   self.view.backgroundColor = [UIColor systemBackgroundColor];
-  BOOL isPad =
-    [UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad;
+  const BOOL isPhone =
+    [UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPhone;
+  CGFloat layoutWidth = self.view.bounds.size.width;
+  if (layoutWidth <= 0.0)
+    layoutWidth = [UIScreen mainScreen].bounds.size.width;
+  BOOL isPad = !isPhone &&
+    self.traitCollection.horizontalSizeClass != UIUserInterfaceSizeClassCompact &&
+    layoutWidth >= 700.0;
 #if TARGET_OS_MACCATALYST
-  isPad = YES;
+  isPad =
+    self.traitCollection.horizontalSizeClass != UIUserInterfaceSizeClassCompact &&
+    layoutWidth >= 700.0;
 #endif
   const BOOL compactPhone = !isPad;
 
@@ -472,52 +480,47 @@ static void IccDevConfigureImageView(UIImageView *image)
   stack.spacing = compactPhone ? 8 : 12;
   stack.translatesAutoresizingMaskIntoConstraints = NO;
 
-  UIScrollView *scroll = nil;
+  UIScrollView *scroll = [[UIScrollView alloc] init];
+  scroll.translatesAutoresizingMaskIntoConstraints = NO;
   UILayoutGuide *safeArea = self.view.safeAreaLayoutGuide;
+  [scroll addSubview:stack];
+  [self.view addSubview:scroll];
+  CGFloat margin = isPad ? 18.0 : 16.0;
+  NSMutableArray<NSLayoutConstraint *> *constraints = [NSMutableArray arrayWithArray:@[
+    [scroll.leadingAnchor constraintEqualToAnchor:safeArea.leadingAnchor],
+    [scroll.trailingAnchor constraintEqualToAnchor:safeArea.trailingAnchor],
+    [scroll.topAnchor constraintEqualToAnchor:safeArea.topAnchor],
+    [scroll.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor],
+    [stack.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor
+                                        constant:margin],
+    [stack.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor
+                                         constant:-margin],
+    [stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor
+                                    constant:isPad ? 12 : 16],
+    [stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor
+                                       constant:isPad ? -12 : -16],
+    [stack.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor
+                                      constant:-(margin * 2.0)]
+  ]];
   if (isPad) {
-    [self.view addSubview:stack];
-    [NSLayoutConstraint activateConstraints:@[
-      [stack.leadingAnchor constraintEqualToAnchor:safeArea.leadingAnchor
-                                          constant:18],
-      [stack.trailingAnchor constraintEqualToAnchor:safeArea.trailingAnchor
-                                           constant:-18],
-      [stack.topAnchor constraintEqualToAnchor:safeArea.topAnchor
-                                      constant:12],
-      [stack.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor
-                                         constant:-12],
+    [constraints addObjectsFromArray:@[
+      [stack.heightAnchor constraintGreaterThanOrEqualToAnchor:scroll.frameLayoutGuide.heightAnchor
+                                                      constant:-24],
       [actions.heightAnchor constraintEqualToConstant:50],
       [imageButtons.heightAnchor constraintEqualToConstant:50],
-      [self.sourceView.heightAnchor constraintEqualToAnchor:safeArea.heightAnchor
+      [self.sourceView.heightAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.heightAnchor
                                                  multiplier:0.20],
       [self.managedView.heightAnchor constraintEqualToAnchor:self.sourceView.heightAnchor],
       [self.editedView.heightAnchor constraintEqualToAnchor:self.sourceView.heightAnchor],
       [self.deltaView.heightAnchor constraintEqualToAnchor:self.sourceView.heightAnchor],
-      [self.reportView.heightAnchor constraintGreaterThanOrEqualToAnchor:safeArea.heightAnchor
+      [self.reportView.heightAnchor constraintGreaterThanOrEqualToAnchor:scroll.frameLayoutGuide.heightAnchor
                                                               multiplier:0.24]
     ]];
   }
   else {
-    scroll = [[UIScrollView alloc] init];
-    scroll.translatesAutoresizingMaskIntoConstraints = NO;
-    [scroll addSubview:stack];
-    [self.view addSubview:scroll];
-    [NSLayoutConstraint activateConstraints:@[
-      [scroll.leadingAnchor constraintEqualToAnchor:safeArea.leadingAnchor],
-      [scroll.trailingAnchor constraintEqualToAnchor:safeArea.trailingAnchor],
-      [scroll.topAnchor constraintEqualToAnchor:safeArea.topAnchor],
-      [scroll.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor],
+    [constraints addObjectsFromArray:@[
       [logo.heightAnchor constraintLessThanOrEqualToConstant:55],
       [logo.heightAnchor constraintGreaterThanOrEqualToConstant:34],
-      [stack.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor
-                                          constant:16],
-      [stack.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor
-                                           constant:-16],
-      [stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor
-                                      constant:16],
-      [stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor
-                                         constant:-16],
-      [stack.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor
-                                        constant:-32],
       [self.runButton.heightAnchor constraintGreaterThanOrEqualToConstant:44],
       [self.shareButton.heightAnchor constraintGreaterThanOrEqualToConstant:44],
       [self.saveImageButton.heightAnchor constraintGreaterThanOrEqualToConstant:44],
@@ -529,6 +532,7 @@ static void IccDevConfigureImageView(UIImageView *image)
       [self.reportView.heightAnchor constraintGreaterThanOrEqualToConstant:160]
     ]];
   }
+  [NSLayoutConstraint activateConstraints:constraints];
 
   [pick addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
     (void)action;
