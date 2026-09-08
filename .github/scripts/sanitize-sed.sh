@@ -102,6 +102,74 @@ escape_html() {
 # below is: CSI (ESC [ ... final), OSC (ESC ] ... BEL), then any remaining bare ESC.
 _SAN_ANSI_RE=$'s/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b//g'
 
+# _strip_stray_c1 STRING
+# Remove raw 0x80-0x9F bytes that are NOT part of a well-formed UTF-8 sequence.
+#
+# These cannot be removed with tr: the same byte values are legitimate UTF-8
+# continuation bytes, so blanket deletion corrupts ordinary text -- the suite's
+# own UTF-8 case is E4 B8 96 E7 95 8C, which contains 0x96.  Telling the two
+# apart needs an actual decode, so this walks the byte stream the way
+# icDecodeUtf8() (IccProfLib/IccFileUtil.h) does and drops a 0x80-0x9F byte only
+# where no well-formed sequence claims it.  U+009B is CSI -- the same introducer
+# the ANSI rule strips in its ESC [ form -- and a terminal in a single-byte mode
+# acts on the raw byte, so leaving it reopened log spoofing from a third side.
+#
+# Deliberately narrow: a malformed byte OUTSIDE 0x80-0x9F is still passed
+# through, which is what the "overlong UTF-8 bytes preserved (no decode)" case in
+# test_sanitization.sh asserts.  Widening this to drop every ill-formed byte
+# would reverse that decision silently -- that test only checks no ASCII '<'/'>'
+# is synthesized, which dropping satisfies just as well as preserving.
+#
+# awk rather than perl: the perl-less fallback is the path #2463 found stripping
+# nothing at all, so this rule must not depend on perl being installed.  awk is
+# not guarded here because it is already an unguarded hard dependency of this
+# file -- _trim_whitespace() below pipes through it, and sanitize_line() calls
+# that.  A `command -v awk` fallback would therefore rescue only sanitize_print(),
+# and would rescue it by silently returning the input unfiltered, which is the
+# raw-CSI residue this function exists to remove.  Failing loudly is correct.
+_strip_stray_c1() {
+  local s="$1"
+  printf '%s' "$s" | LC_ALL=C awk '
+    BEGIN {
+      for (i = 0; i < 256; i++) ord[sprintf("%c", i)] = i
+      # Second-byte bounds mirror icDecodeUtf8(): E0 A0 rejects the overlong
+      # 3-byte forms, ED 9F the surrogates, F0 90 the overlong 4-byte forms,
+      # and F4 8F caps at U+10FFFF.
+      lo[224] = 160; hi[224] = 191
+      lo[237] = 128; hi[237] = 159
+      lo[240] = 144; hi[240] = 191
+      lo[244] = 128; hi[244] = 143
+    }
+    {
+      out = ""; n = length($0); i = 1
+      while (i <= n) {
+        c = ord[substr($0, i, 1)]
+        len = 0
+        if (c < 128)                   len = 1
+        else if (c >= 194 && c <= 223) len = 2
+        else if (c >= 224 && c <= 239) len = 3
+        else if (c >= 240 && c <= 244) len = 4
+        if (len == 1) { out = out substr($0, i, 1); i++; continue }
+        if (len > 1) {
+          L = (c in lo) ? lo[c] : 128
+          H = (c in hi) ? hi[c] : 191
+          ok = (i + len - 1 <= n)
+          for (k = 2; ok && k <= len; k++) {
+            b = ord[substr($0, i + k - 1, 1)]
+            if (k == 2) { if (b < L   || b > H)   ok = 0 }
+            else        { if (b < 128 || b > 191) ok = 0 }
+          }
+          if (ok) { out = out substr($0, i, len); i += len; continue }
+        }
+        # Not the start of a well-formed sequence: drop only a stray C1.
+        if (c < 128 || c > 159) out = out substr($0, i, 1)
+        i++
+      }
+      print out
+    }
+  '
+}
+
 # _strip_unicode_control STRING
 # Remove Unicode control/formatting characters that enable Trojan Source,
 # invisible padding, and homoglyph attacks:
@@ -110,18 +178,20 @@ _SAN_ANSI_RE=$'s/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b//g'
 #     leaving it reopens log spoofing from the other side.  sanitize.ps1 already
 #     drops this block (keep-set 0x20..0x7E plus >= 0xA0), as does the library's
 #     icSanitizeConsoleText().
-#     KNOWN RESIDUE: a RAW 0x80-0x9F byte -- malformed UTF-8, not a codepoint -- is
-#     still passed through here.  It cannot be removed with tr: those same byte
-#     values are legitimate UTF-8 continuation bytes, and blanket-deleting them
-#     would corrupt ordinary text (the suite's own UTF-8 case is E4 B8 96 E7 95 8C,
-#     which contains 0x96).  Removing it needs a real UTF-8 decode, as the library
-#     side does; sanitize_ref() is unaffected because it whitelists to ASCII.
+#     A RAW 0x80-0x9F byte -- malformed UTF-8, not a codepoint -- is handled by
+#     _strip_stray_c1() below rather than here, because neither branch of this
+#     function can see one: perl works on decoded codepoints and the sed rules
+#     match well-formed spellings.  sanitize_ref() is unaffected either way
+#     because it whitelists to ASCII.
 #   - Bidi overrides/embeddings (U+202A-202E, U+2066-2069)
 #   - Zero-width chars (U+200B-200F, U+2060, U+FEFF)
 #   - Tag characters (U+E0001-E007F) - used in emoji but abusable
 # Uses perl for reliable multi-byte removal; falls back to sed byte patterns.
 _strip_unicode_control() {
   local s="$1"
+  # Stray C1 bytes first, for the reason given above: neither branch below can
+  # see a byte that is not a codepoint and not a well-formed spelling.
+  s="$(_strip_stray_c1 "$s")"
   if command -v perl >/dev/null 2>&1; then
     s="$(printf '%s' "$s" | perl -CS -pe '
       s/[\x{0080}-\x{009F}]//g;
@@ -372,7 +442,13 @@ detect_hidden_chars() {
 
   # Check for C1 controls (U+0080-U+009F = C2 80-9F).  Listed so a CSI-carrying ref
   # is named rather than falling through to the "unknown category" catch-all below.
-  if printf '%s' "$input" | LC_ALL=C grep -qP '\xc2[\x80-\x9f]' 2>/dev/null; then
+  # The raw-byte half needs the same decode _strip_stray_c1() does: a bare
+  # [\x80-\x9f] grep here would mislabel every CJK ref, because the 0x96 in
+  # E4 B8 96 is a continuation byte.  If the decoder removes anything, the input
+  # carried a stray C1.  Both sides go through $( ) so trailing-newline handling
+  # cannot make them differ spuriously.
+  if printf '%s' "$input" | LC_ALL=C grep -qP '\xc2[\x80-\x9f]' 2>/dev/null ||
+     [ "$(_strip_stray_c1 "$input")" != "$(printf '%s' "$input")" ]; then
     details="${details}  - U+0080-U+009F (C1 Control)\n"
     found=0
   fi
