@@ -290,11 +290,11 @@ See [CTest tool suites](ctest.md) for broader desktop coverage.
 ### Manual iOS example apps
 
 The `examples/ios-*` apps are standalone manual-review Xcode consumers of the
-exported `apple-ios-*-core` package. They are not CTest targets and are not
-part of the Apple workflow gates unless a maintainer explicitly adds that
-coverage. Keep their app CMake, helper script, README commands, bundle-ID
-override, deployment target, asset labels, persisted report path, and simulator
-or device launch behavior aligned as one surface.
+exported Apple static-core package. They are not CTest targets and are not part
+of the Apple workflow gates unless a maintainer explicitly adds that coverage.
+Keep their app CMake, helper script, README commands, bundle-ID override,
+deployment target, asset labels, persisted report path, and simulator, device,
+or Mac Catalyst launch behavior aligned as one surface.
 
 | Example | Purpose | Start here |
 | --- | --- | --- |
@@ -302,18 +302,30 @@ or device launch behavior aligned as one surface.
 | `ios-apply-preview` | Visual profile-apply preview with source, applied, and delta panels. | <a href="../examples/ios-apply-preview/README.md">examples/ios-apply-preview/README.md</a> |
 | `ios-clut-editor` | Live profile-chain plus editable 3D CLUT preview for a selected or default image. | <a href="../examples/ios-clut-editor/README.md">examples/ios-clut-editor/README.md</a> |
 
-For `ios-clut-editor`, use the example helper from the repository root:
+Use each example helper from the repository root:
 
 ```bash
+examples/ios-apply-preview/build-ios.sh simulator --run-tests
+examples/ios-benchapply/build-ios.sh simulator --run-tests
 examples/ios-clut-editor/build-ios.sh simulator --run-tests
-TEAM_ID=ABCDE12345 DEVICE_ID=<udid> \
+examples/ios-clut-editor/build-ios.sh maccatalyst --run-tests
+TEAM_ID="$TEAM_ID" DEVICE_ID="$DEVICE_ID" \
+  examples/ios-apply-preview/build-ios.sh device --launch
+TEAM_ID="$TEAM_ID" DEVICE_ID="$DEVICE_ID" \
+  examples/ios-benchapply/build-ios.sh device --launch
+TEAM_ID="$TEAM_ID" DEVICE_ID="$DEVICE_ID" \
   examples/ios-clut-editor/build-ios.sh device --launch
 ```
 
-The helper removes bundle-ID drift by forwarding `BUNDLE_ID` to
-`ICCDEV_CLUTEDITOR_BUNDLE_IDENTIFIER`, uses Release by default, and launches
+Each helper removes bundle-ID drift by forwarding `BUNDLE_ID` to
+each app-specific CMake bundle variable, uses Release by default, and launches
 the simulator with `--console-pty --terminate-running-process` so repeated
-terminal smokes exercise a fresh process.
+terminal smokes exercise a fresh process. Device runs reject placeholder
+signing values before starting the build without blocking simulator or Mac
+Catalyst runs; unsigned simulator and Mac Catalyst runs ignore a globally
+exported placeholder `BUNDLE_ID` and use the default bundle ID instead. The
+`ios-clut-editor` `maccatalyst` target builds a matching Mac Catalyst
+`IccProfLib2-static` archive and runs the same UIKit app on Apple Silicon Macs.
 
 ## Windows MSVC
 

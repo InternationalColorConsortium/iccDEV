@@ -8,6 +8,7 @@ long command references.
 |-------|----------|
 | `afl-smoke` | Running or updating the manual AFL++ smoke workflow, seeds, and maintainer documentation. |
 | `docs-maintenance` | Reducing documentation noise or reorganizing docs. |
+| `ios-manual-examples` | Maintaining local build helpers and docs for manual iOS example apps. |
 | `ios-clut-editor` | Building, reviewing, or maintaining the iOS profile and 3D CLUT editor proof-of-concept app. |
 | `pre-pr-security-cycle` | Running the maintainer pre-PR secure loop: code, build/test, SAST/CodeQL, sanitizer/DAST-style checks, fix, repeat, handoff. |
 | `code-review` | Reviewing pull requests with changed-line evidence, including focused MATLAB MEX checks, without duplicate or speculative findings. |

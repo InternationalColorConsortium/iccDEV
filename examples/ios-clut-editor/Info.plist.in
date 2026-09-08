@@ -19,9 +19,11 @@
   <key>CFBundleVersion</key>
   <string>1</string>
   <key>LSRequiresIPhoneOS</key>
-  <true/>
+  <${ICCDEV_CLUTEDITOR_REQUIRES_IPHONEOS}/>
   <key>NSPhotoLibraryUsageDescription</key>
   <string>Select an image to preview profile and CLUT edits locally in this app.</string>
+  <key>NSPhotoLibraryAddUsageDescription</key>
+  <string>Save the edited CLUT preview image to the photo library.</string>
   <key>UIApplicationSceneManifest</key>
   <dict>
     <key>UIApplicationSupportsMultipleScenes</key>

@@ -406,13 +406,58 @@ static void IccDevMeasureEdit(const std::vector<icFloatNumber>& managed,
     sumChannelDelta / (static_cast<double>(nPixels) * 3.0) : 0.0;
 }
 
-static void IccDevFinishClutEditor(IccClutEditorResult *result)
+void IccDevFinishClutEditor(IccClutEditorResult *result)
 {
   std::printf("ICCDEV_CLUTEDITOR_TESTS %s\n",
               result.passed ? "PASS" : "FAIL");
   std::fflush(stdout);
   if ([[NSProcessInfo processInfo].arguments containsObject:@"--exit-after-tests"])
     std::exit(result.passed ? 0 : 1);
+}
+
+BOOL IccDevPersistClutEditorReport(IccClutEditorResult *result,
+                                   NSString **failure)
+{
+  NSFileManager *fileManager = [NSFileManager defaultManager];
+  NSURL *documents = [[fileManager
+    URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
+  NSURL *reportURL = documents
+    ? [documents URLByAppendingPathComponent:@"clut-editor-report.json"] : nil;
+  NSError *error = nil;
+  if (!reportURL) {
+    if (failure)
+      *failure = @"resolve Documents/clut-editor-report.json";
+    return NO;
+  }
+  if ([fileManager fileExistsAtPath:reportURL.path] &&
+      ![fileManager removeItemAtURL:reportURL error:&error]) {
+    if (failure) {
+      *failure = [NSString stringWithFormat:@"remove stale device results: %@",
+        error ? error.localizedDescription : @"remove failed"];
+    }
+    return NO;
+  }
+  if (!result.jsonReport)
+    return YES;
+
+  NSData *json = [NSJSONSerialization dataWithJSONObject:result.jsonReport
+                                                 options:NSJSONWritingPrettyPrinted
+                                                   error:&error];
+  if (!json) {
+    if (failure) {
+      *failure = [NSString stringWithFormat:@"serialize device results: %@",
+        error ? error.localizedDescription : @"serialize failed"];
+    }
+    return NO;
+  }
+  if (![json writeToURL:reportURL options:NSDataWritingAtomic error:&error]) {
+    if (failure) {
+      *failure = [NSString stringWithFormat:@"write device results: %@",
+        error ? error.localizedDescription : @"write failed"];
+    }
+    return NO;
+  }
+  return YES;
 }
 
 IccClutEditorResult *IccDevRunClutEditor(UIImage *selectedImage,
@@ -476,7 +521,6 @@ IccClutEditorResult *IccDevRunClutEditor(UIImage *selectedImage,
     if (!srcPath || !dstPath) {
       [report appendString:@"FAIL\n\nBundled RGB fixtures not found.\n"];
       result.report = report;
-      IccDevFinishClutEditor(result);
       return result;
     }
 
@@ -497,7 +541,6 @@ IccClutEditorResult *IccDevRunClutEditor(UIImage *selectedImage,
       [report appendFormat:@"FAIL\n\nBuild RGB editor CMM: %s\n",
         CIccCmm::GetStatusText(status)];
       result.report = report;
-      IccDevFinishClutEditor(result);
       return result;
     }
 
@@ -508,7 +551,6 @@ IccClutEditorResult *IccDevRunClutEditor(UIImage *selectedImage,
       [report appendFormat:@"FAIL\n\nApply RGB editor CMM: %s\n",
         CIccCmm::GetStatusText(status)];
       result.report = report;
-      IccDevFinishClutEditor(result);
       return result;
     }
 
@@ -532,11 +574,6 @@ IccClutEditorResult *IccDevRunClutEditor(UIImage *selectedImage,
       result.sourceImage != nil && result.managedImage != nil &&
       result.editedImage != nil && result.deltaImage != nil;
 
-    NSFileManager *fileManager = [NSFileManager defaultManager];
-    NSURL *documents = [[fileManager
-      URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
-    NSURL *reportURL = documents
-      ? [documents URLByAppendingPathComponent:@"clut-editor-report.json"] : nil;
     NSDictionary *jsonReport = @{
       @"passed": @(result.passed),
       @"edgePixels": @(edgePixels),
@@ -554,29 +591,7 @@ IccClutEditorResult *IccDevRunClutEditor(UIImage *selectedImage,
       @"checksum": [NSString stringWithFormat:@"0x%08x", checksum],
       @"libraryVersion": @ICCPROFLIBVER
     };
-    NSError *error = nil;
-    NSString *persistFailure = nil;
-    if (!reportURL) {
-      persistFailure = @"resolve Documents/clut-editor-report.json";
-    } else if ([fileManager fileExistsAtPath:reportURL.path] &&
-               ![fileManager removeItemAtURL:reportURL error:&error]) {
-      persistFailure = [NSString stringWithFormat:@"remove stale device results: %@",
-        error ? error.localizedDescription : @"remove failed"];
-    } else {
-      NSData *json = [NSJSONSerialization dataWithJSONObject:jsonReport
-                                                     options:NSJSONWritingPrettyPrinted
-                                                       error:&error];
-      if (!json) {
-        persistFailure = [NSString stringWithFormat:@"serialize device results: %@",
-          error ? error.localizedDescription : @"serialize failed"];
-      } else if (![json writeToURL:reportURL
-                           options:NSDataWritingAtomic error:&error]) {
-        persistFailure = [NSString stringWithFormat:@"write device results: %@",
-          error ? error.localizedDescription : @"write failed"];
-      }
-    }
-    if (persistFailure)
-      result.passed = NO;
+    result.jsonReport = jsonReport;
 
     [report appendFormat:
       @"%@\n\n"
@@ -599,11 +614,7 @@ IccClutEditorResult *IccDevRunClutEditor(UIImage *selectedImage,
       static_cast<unsigned long>(gridPoints), interpName, exposureStops,
       contrast, saturation, warmBias, static_cast<unsigned long>(width),
       static_cast<unsigned long>(height), meanDelta, maxDelta, checksum];
-    if (persistFailure)
-      [report appendFormat:@"FAIL Persist device results: %@\n",
-        persistFailure];
     result.report = report;
-    IccDevFinishClutEditor(result);
     return result;
   }
 }

@@ -58,6 +58,7 @@
 @property(nonatomic, strong, nullable) UIImage *editedImage;
 @property(nonatomic, strong, nullable) UIImage *deltaImage;
 @property(nonatomic, copy, nonnull) NSString *report;
+@property(nonatomic, copy, nullable) NSDictionary<NSString *, id> *jsonReport;
 @end
 
 #ifdef __cplusplus
@@ -73,6 +74,11 @@ IccClutEditorResult * _Nonnull IccDevRunClutEditor(
   double saturation,
   double warmBias,
   BOOL useTetrahedral);
+
+BOOL IccDevPersistClutEditorReport(IccClutEditorResult * _Nonnull result,
+                                   NSString * _Nullable * _Nullable failure);
+
+void IccDevFinishClutEditor(IccClutEditorResult * _Nonnull result);
 
 #ifdef __cplusplus
 }

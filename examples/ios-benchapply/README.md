@@ -21,14 +21,53 @@ case table and `-suite`/`-perxform`/`-leaf`/`-csv` argv handling resolve a
 mobile app. The POC uses the one ICC profile already bundled for the
 `Build/AppleMobile` core smoke app.
 
+## Quick start from a fresh clone
+
+From the repository root, run the helper script in this example directory. It
+builds the matching `apple-ios-*-core` static library, configures the Xcode app,
+and builds the app bundle.
+
+```bash
+git clone https://github.com/InternationalColorConsortium/iccDEV.git
+cd iccDEV
+examples/ios-benchapply/build-ios.sh simulator --open
+```
+
+Use a booted simulator for a terminal smoke run:
+
+```bash
+examples/ios-benchapply/build-ios.sh simulator --run-tests
+```
+
+Use an unlocked, paired iPhone or iPad for a physical-device build. Set
+`TEAM_ID` and `DEVICE_ID` from Xcode and `xcrun devicectl list devices`.
+Set `BUNDLE_ID` if your Apple development team requires a custom app bundle
+identifier. The helper rejects placeholder signing values before building so a
+mistyped local session does not waste a full device build. Unsigned simulator
+runs ignore a globally exported placeholder `BUNDLE_ID` and use the default
+bundle ID instead.
+
+```bash
+TEAM_ID="$TEAM_ID" examples/ios-benchapply/build-ios.sh device --open
+TEAM_ID="$TEAM_ID" DEVICE_ID="$DEVICE_ID" \
+  examples/ios-benchapply/build-ios.sh device --launch
+```
+
 ## Build and run on an iPhone or iPad
 
 Use an unlocked, paired device with Developer Mode enabled and an Apple
 Development signing identity in Xcode. Set your team ID and device identifier
 from `xcrun devicectl list devices`. Do not commit signing credentials,
-provisioning profiles, device identifiers, or generated Xcode projects.
+provisioning profiles, device identifiers, generated Xcode projects, or build
+outputs. Override the default `org.color.iccdev.BenchApplyPOC` bundle ID with
+`BUNDLE_ID` when using the helper script, or
+`-DICCDEV_BENCHAPPLY_BUNDLE_IDENTIFIER=...` when configuring CMake directly.
+Do not export placeholder values; use values that Xcode can sign for the
+selected device.
 
 ```bash
+bundle_id="${BUNDLE_ID:-org.color.iccdev.BenchApplyPOC}"
+
 cmake --preset apple-ios-device-core -S Build/Cmake \
   -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0
 cmake --build out/apple-ios-device-core --config Release --parallel
@@ -37,6 +76,7 @@ cmake -S examples/ios-benchapply -B out/ios-benchapply-device -G Xcode \
   -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos \
   -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0 \
   -DRefIccMAX_DIR="$PWD/out/apple-ios-device-core" \
+  -DICCDEV_BENCHAPPLY_BUNDLE_IDENTIFIER="$bundle_id" \
   -DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM="$TEAM_ID"
 
 xcodebuild -project out/ios-benchapply-device/IccBenchApplyPOC.xcodeproj \
@@ -47,7 +87,7 @@ xcrun devicectl device install app --device "$DEVICE_ID" \
   "out/ios-benchapply-device/Release-iphoneos/IccBenchApplyPOC.app"
 xcrun devicectl device process launch --device "$DEVICE_ID" \
   --console --terminate-existing --timeout 90 \
-  org.color.iccdev.BenchApplyPOC --exit-after-tests
+  "$bundle_id" --exit-after-tests
 ```
 
 The app uses the ICC logo SVG requested from `https://static.color.org/img/icc-logo.f367b829dca5.svg`.
@@ -69,6 +109,13 @@ The on-screen summary and `Documents/bench-results.json` (readable via
 checksum. `--exit-after-tests` makes the process exit 0/1 for automation; a
 normal launch (without that argument) leaves the report visible on screen.
 
+The same sequence is wrapped by:
+
+```bash
+TEAM_ID="$TEAM_ID" DEVICE_ID="$DEVICE_ID" \
+  examples/ios-benchapply/build-ios.sh device --run-tests
+```
+
 ## Build and run on the simulator (no signing needed)
 
 ```bash
@@ -88,6 +135,12 @@ xcodebuild -project out/ios-benchapply-sim/IccBenchApplyPOC.xcodeproj \
 
 Install and launch the built `.app` in a simulator with `xcrun simctl` to
 review the same report without a physical device.
+
+The same sequence is wrapped by:
+
+```bash
+examples/ios-benchapply/build-ios.sh simulator --run-tests
+```
 
 ## Scope and gaps
 

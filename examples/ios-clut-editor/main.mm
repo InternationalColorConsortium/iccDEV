@@ -48,6 +48,7 @@
  */
 
 #import <UIKit/UIKit.h>
+#import <TargetConditionals.h>
 #import "ClutEditorHost.h"
 
 @interface IccClutEditorViewController :
@@ -60,15 +61,18 @@
 @property(nonatomic, strong) UIButton *pickButton;
 @property(nonatomic, strong) UIButton *runButton;
 @property(nonatomic, strong) UIButton *shareButton;
+@property(nonatomic, strong) UIButton *saveImageButton;
 @property(nonatomic, strong) UILabel *sliderSummary;
 @property(nonatomic, strong) UISegmentedControl *sizeControl;
 @property(nonatomic, strong) UISegmentedControl *gridControl;
 @property(nonatomic, strong) UISegmentedControl *interpolationControl;
+@property(nonatomic, strong) UISegmentedControl *appearanceControl;
 @property(nonatomic, strong) UISlider *exposureSlider;
 @property(nonatomic, strong) UISlider *contrastSlider;
 @property(nonatomic, strong) UISlider *saturationSlider;
 @property(nonatomic, strong) UISlider *warmSlider;
 @property(nonatomic, strong) UIImage *selectedImage;
+@property(nonatomic, strong) UIImage *lastEditedImage;
 @property(nonatomic, copy) NSString *lastReport;
 @property(nonatomic, assign) NSInteger renderSerial;
 @end
@@ -170,8 +174,12 @@ static void IccDevConfigureImageView(UIImageView *image)
 {
   [super viewDidLoad];
   self.view.backgroundColor = [UIColor systemBackgroundColor];
-  const BOOL isPad =
+  BOOL isPad =
     [UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad;
+#if TARGET_OS_MACCATALYST
+  isPad = YES;
+#endif
+  const BOOL compactPhone = !isPad;
 
   UIImageView *logo =
     [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"ICCLogo"]];
@@ -179,11 +187,14 @@ static void IccDevConfigureImageView(UIImageView *image)
   logo.translatesAutoresizingMaskIntoConstraints = NO;
 
   UILabel *title =
-    IccDevLabel(@"iccCLUT Editor Proof of Concept", UIFontTextStyleTitle1);
+    IccDevLabel(compactPhone ? @"iccCLUT Editor" :
+                              @"iccCLUT Editor Proof of Concept",
+                compactPhone ? UIFontTextStyleTitle3 : UIFontTextStyleTitle1);
   title.textAlignment = NSTextAlignmentCenter;
   UILabel *subtitle = IccDevLabel(
-    @"Edit a live 3D LUT, apply it after a bundled ICC profile chain, "
-     "and preview the result on a selected or default image.",
+    compactPhone ? @"Live ICC profile chain plus editable 3D LUT preview." :
+      @"Edit a live 3D LUT, apply it after a bundled ICC profile chain, "
+       "and preview the result on a selected or default image.",
     UIFontTextStyleSubheadline);
   subtitle.textAlignment = NSTextAlignmentCenter;
   subtitle.textColor = [UIColor secondaryLabelColor];
@@ -207,6 +218,10 @@ static void IccDevConfigureImageView(UIImageView *image)
     [[UISegmentedControl alloc] initWithItems:@[@"Linear", @"Tetra"]];
   self.interpolationControl.selectedSegmentIndex = 0;
   self.interpolationControl.translatesAutoresizingMaskIntoConstraints = NO;
+  self.appearanceControl =
+    [[UISegmentedControl alloc] initWithItems:@[@"System", @"Light", @"Dark"]];
+  self.appearanceControl.selectedSegmentIndex = 0;
+  self.appearanceControl.translatesAutoresizingMaskIntoConstraints = NO;
 
   self.exposureSlider = [[UISlider alloc] init];
   self.exposureSlider.minimumValue = -1.0f;
@@ -238,7 +253,10 @@ static void IccDevConfigureImageView(UIImageView *image)
     [UIButtonConfiguration borderedButtonConfiguration];
   pickConfig.title = @"Select Image";
   pickConfig.baseForegroundColor = IccDevBrandBlue();
-  pickConfig.contentInsets = NSDirectionalEdgeInsetsMake(10, 16, 10, 16);
+  pickConfig.contentInsets = NSDirectionalEdgeInsetsMake(compactPhone ? 8 : 10,
+                                                        16,
+                                                        compactPhone ? 8 : 10,
+                                                        16);
   pick.configuration = pickConfig;
   pick.translatesAutoresizingMaskIntoConstraints = NO;
 
@@ -247,17 +265,23 @@ static void IccDevConfigureImageView(UIImageView *image)
     [UIButtonConfiguration borderedButtonConfiguration];
   resetConfig.title = @"Use Default";
   resetConfig.baseForegroundColor = IccDevBrandBlue();
-  resetConfig.contentInsets = NSDirectionalEdgeInsetsMake(10, 16, 10, 16);
+  resetConfig.contentInsets = NSDirectionalEdgeInsetsMake(compactPhone ? 8 : 10,
+                                                         16,
+                                                         compactPhone ? 8 : 10,
+                                                         16);
   reset.configuration = resetConfig;
   reset.translatesAutoresizingMaskIntoConstraints = NO;
 
   self.runButton = [UIButton buttonWithType:UIButtonTypeSystem];
   UIButtonConfiguration *runConfig =
     [UIButtonConfiguration filledButtonConfiguration];
-  runConfig.title = @"Apply Live Edit";
+  runConfig.title = compactPhone ? @"Apply" : @"Apply Live Edit";
   runConfig.baseBackgroundColor = IccDevBrandBlue();
   runConfig.baseForegroundColor = [UIColor whiteColor];
-  runConfig.contentInsets = NSDirectionalEdgeInsetsMake(10, 16, 10, 16);
+  runConfig.contentInsets = NSDirectionalEdgeInsetsMake(compactPhone ? 8 : 10,
+                                                       compactPhone ? 10 : 16,
+                                                       compactPhone ? 8 : 10,
+                                                       compactPhone ? 10 : 16);
   self.runButton.configuration = runConfig;
   self.runButton.titleLabel.font =
     [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
@@ -266,13 +290,30 @@ static void IccDevConfigureImageView(UIImageView *image)
   self.shareButton = [UIButton buttonWithType:UIButtonTypeSystem];
   UIButtonConfiguration *shareConfig =
     [UIButtonConfiguration borderedButtonConfiguration];
-  shareConfig.title = @"Share Report";
+  shareConfig.title = compactPhone ? @"Report" : @"Share Report";
   shareConfig.baseForegroundColor = IccDevBrandBlue();
-  shareConfig.contentInsets = NSDirectionalEdgeInsetsMake(10, 16, 10, 16);
+  shareConfig.contentInsets = NSDirectionalEdgeInsetsMake(compactPhone ? 8 : 10,
+                                                         compactPhone ? 10 : 16,
+                                                         compactPhone ? 8 : 10,
+                                                         compactPhone ? 10 : 16);
   self.shareButton.configuration = shareConfig;
   self.shareButton.titleLabel.font =
     [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
   self.shareButton.translatesAutoresizingMaskIntoConstraints = NO;
+
+  self.saveImageButton = [UIButton buttonWithType:UIButtonTypeSystem];
+  UIButtonConfiguration *saveConfig =
+    [UIButtonConfiguration borderedButtonConfiguration];
+  saveConfig.title = compactPhone ? @"Image" : @"Share Edited Image";
+  saveConfig.baseForegroundColor = IccDevBrandBlue();
+  saveConfig.contentInsets = NSDirectionalEdgeInsetsMake(compactPhone ? 8 : 10,
+                                                        compactPhone ? 10 : 16,
+                                                        compactPhone ? 8 : 10,
+                                                        compactPhone ? 10 : 16);
+  self.saveImageButton.configuration = saveConfig;
+  self.saveImageButton.titleLabel.font =
+    [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+  self.saveImageButton.translatesAutoresizingMaskIntoConstraints = NO;
 
   self.sourceView = [[UIImageView alloc] init];
   self.managedView = [[UIImageView alloc] init];
@@ -309,17 +350,43 @@ static void IccDevConfigureImageView(UIImageView *image)
   links.spacing = 8;
   links.translatesAutoresizingMaskIntoConstraints = NO;
 
-  UIStackView *topControls =
-    [[UIStackView alloc] initWithArrangedSubviews:@[
-      IccDevControlPanel(@"Image size", self.sizeControl),
-      IccDevControlPanel(@"CLUT grid", self.gridControl),
-      IccDevControlPanel(@"Interpolation", self.interpolationControl)
+  UIStackView *sizePanel = IccDevControlPanel(@"Image size", self.sizeControl);
+  UIStackView *gridPanel = IccDevControlPanel(@"CLUT grid", self.gridControl);
+  UIStackView *interpolationPanel =
+    IccDevControlPanel(@"Interpolation", self.interpolationControl);
+  UIStackView *appearancePanel =
+    IccDevControlPanel(@"Appearance", self.appearanceControl);
+  UIStackView *topControls = nil;
+  if (isPad) {
+    topControls = [[UIStackView alloc] initWithArrangedSubviews:@[
+      sizePanel, gridPanel, interpolationPanel, appearancePanel
     ]];
-  topControls.axis = isPad ? UILayoutConstraintAxisHorizontal :
-                             UILayoutConstraintAxisVertical;
+    topControls.axis = UILayoutConstraintAxisHorizontal;
+  }
+  else {
+    UIStackView *topControlsUpper =
+      [[UIStackView alloc] initWithArrangedSubviews:@[sizePanel, gridPanel]];
+    topControlsUpper.axis = UILayoutConstraintAxisHorizontal;
+    topControlsUpper.alignment = UIStackViewAlignmentFill;
+    topControlsUpper.distribution = UIStackViewDistributionFillEqually;
+    topControlsUpper.spacing = 8;
+    topControlsUpper.translatesAutoresizingMaskIntoConstraints = NO;
+    UIStackView *topControlsLower =
+      [[UIStackView alloc] initWithArrangedSubviews:@[interpolationPanel,
+                                                      appearancePanel]];
+    topControlsLower.axis = UILayoutConstraintAxisHorizontal;
+    topControlsLower.alignment = UIStackViewAlignmentFill;
+    topControlsLower.distribution = UIStackViewDistributionFillEqually;
+    topControlsLower.spacing = 8;
+    topControlsLower.translatesAutoresizingMaskIntoConstraints = NO;
+    topControls = [[UIStackView alloc] initWithArrangedSubviews:@[
+      topControlsUpper, topControlsLower
+    ]];
+    topControls.axis = UILayoutConstraintAxisVertical;
+  }
   topControls.alignment = UIStackViewAlignmentFill;
   topControls.distribution = UIStackViewDistributionFillEqually;
-  topControls.spacing = 10;
+  topControls.spacing = compactPhone ? 8 : 10;
   topControls.translatesAutoresizingMaskIntoConstraints = NO;
 
   UIStackView *sliders =
@@ -333,7 +400,7 @@ static void IccDevConfigureImageView(UIImageView *image)
   sliders.axis = UILayoutConstraintAxisVertical;
   sliders.alignment = UIStackViewAlignmentFill;
   sliders.distribution = UIStackViewDistributionFill;
-  sliders.spacing = 6;
+  sliders.spacing = compactPhone ? 4 : 6;
   sliders.translatesAutoresizingMaskIntoConstraints = NO;
 
   UIStackView *imageButtons =
@@ -346,25 +413,49 @@ static void IccDevConfigureImageView(UIImageView *image)
 
   UIStackView *actions =
     [[UIStackView alloc] initWithArrangedSubviews:@[self.runButton,
-                                                    self.shareButton]];
+                                                    self.shareButton,
+                                                    self.saveImageButton]];
   actions.axis = UILayoutConstraintAxisHorizontal;
   actions.alignment = UIStackViewAlignmentFill;
   actions.distribution = UIStackViewDistributionFillEqually;
-  actions.spacing = 10;
+  actions.spacing = compactPhone ? 8 : 10;
   actions.translatesAutoresizingMaskIntoConstraints = NO;
 
-  UIStackView *previews =
-    [[UIStackView alloc] initWithArrangedSubviews:@[
-      IccDevImagePanel(@"Source", self.sourceView),
-      IccDevImagePanel(@"Managed", self.managedView),
-      IccDevImagePanel(@"Edited", self.editedView),
-      IccDevImagePanel(@"Delta, amplified 8x", self.deltaView)
-    ]];
-  previews.axis = isPad ? UILayoutConstraintAxisHorizontal :
-                          UILayoutConstraintAxisVertical;
+  UIView *sourcePanel = IccDevImagePanel(@"Source", self.sourceView);
+  UIView *managedPanel = IccDevImagePanel(@"Managed", self.managedView);
+  UIView *editedPanel = IccDevImagePanel(@"Edited", self.editedView);
+  UIView *deltaPanel = IccDevImagePanel(@"Delta, amplified 8x", self.deltaView);
+  NSArray<UIView *> *previewPanels = @[sourcePanel, managedPanel,
+                                       editedPanel, deltaPanel];
+  UIStackView *previews = nil;
+  if (isPad) {
+    previews = [[UIStackView alloc] initWithArrangedSubviews:previewPanels];
+    previews.axis = UILayoutConstraintAxisHorizontal;
+  }
+  else {
+    UIStackView *previewTop =
+      [[UIStackView alloc] initWithArrangedSubviews:@[sourcePanel,
+                                                      managedPanel]];
+    previewTop.axis = UILayoutConstraintAxisHorizontal;
+    previewTop.alignment = UIStackViewAlignmentFill;
+    previewTop.distribution = UIStackViewDistributionFillEqually;
+    previewTop.spacing = 8;
+    previewTop.translatesAutoresizingMaskIntoConstraints = NO;
+    UIStackView *previewBottom =
+      [[UIStackView alloc] initWithArrangedSubviews:@[editedPanel,
+                                                      deltaPanel]];
+    previewBottom.axis = UILayoutConstraintAxisHorizontal;
+    previewBottom.alignment = UIStackViewAlignmentFill;
+    previewBottom.distribution = UIStackViewDistributionFillEqually;
+    previewBottom.spacing = 8;
+    previewBottom.translatesAutoresizingMaskIntoConstraints = NO;
+    previews = [[UIStackView alloc] initWithArrangedSubviews:@[previewTop,
+                                                               previewBottom]];
+    previews.axis = UILayoutConstraintAxisVertical;
+  }
   previews.alignment = UIStackViewAlignmentFill;
   previews.distribution = UIStackViewDistributionFillEqually;
-  previews.spacing = 10;
+  previews.spacing = compactPhone ? 8 : 10;
   previews.translatesAutoresizingMaskIntoConstraints = NO;
 
   NSArray<UIView *> *arranged = isPad ? @[
@@ -378,7 +469,7 @@ static void IccDevConfigureImageView(UIImageView *image)
   stack.axis = UILayoutConstraintAxisVertical;
   stack.alignment = UIStackViewAlignmentFill;
   stack.distribution = UIStackViewDistributionFill;
-  stack.spacing = 12;
+  stack.spacing = compactPhone ? 8 : 12;
   stack.translatesAutoresizingMaskIntoConstraints = NO;
 
   UIScrollView *scroll = nil;
@@ -415,8 +506,8 @@ static void IccDevConfigureImageView(UIImageView *image)
       [scroll.trailingAnchor constraintEqualToAnchor:safeArea.trailingAnchor],
       [scroll.topAnchor constraintEqualToAnchor:safeArea.topAnchor],
       [scroll.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor],
-      [logo.heightAnchor constraintLessThanOrEqualToConstant:110],
-      [logo.heightAnchor constraintGreaterThanOrEqualToConstant:68],
+      [logo.heightAnchor constraintLessThanOrEqualToConstant:55],
+      [logo.heightAnchor constraintGreaterThanOrEqualToConstant:34],
       [stack.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor
                                           constant:16],
       [stack.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor
@@ -429,11 +520,13 @@ static void IccDevConfigureImageView(UIImageView *image)
                                         constant:-32],
       [self.runButton.heightAnchor constraintGreaterThanOrEqualToConstant:44],
       [self.shareButton.heightAnchor constraintGreaterThanOrEqualToConstant:44],
-      [self.sourceView.heightAnchor constraintEqualToAnchor:self.sourceView.widthAnchor],
-      [self.managedView.heightAnchor constraintEqualToAnchor:self.managedView.widthAnchor],
-      [self.editedView.heightAnchor constraintEqualToAnchor:self.editedView.widthAnchor],
-      [self.deltaView.heightAnchor constraintEqualToAnchor:self.deltaView.widthAnchor],
-      [self.reportView.heightAnchor constraintGreaterThanOrEqualToConstant:220]
+      [self.saveImageButton.heightAnchor constraintGreaterThanOrEqualToConstant:44],
+      [self.sourceView.heightAnchor constraintEqualToAnchor:self.sourceView.widthAnchor
+                                                 multiplier:0.55],
+      [self.managedView.heightAnchor constraintEqualToAnchor:self.sourceView.heightAnchor],
+      [self.editedView.heightAnchor constraintEqualToAnchor:self.sourceView.heightAnchor],
+      [self.deltaView.heightAnchor constraintEqualToAnchor:self.sourceView.heightAnchor],
+      [self.reportView.heightAnchor constraintGreaterThanOrEqualToConstant:160]
     ]];
   }
 
@@ -454,6 +547,14 @@ static void IccDevConfigureImageView(UIImageView *image)
     (void)action;
     [self shareReport];
   }] forControlEvents:UIControlEventTouchUpInside];
+  [self.saveImageButton addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
+    (void)action;
+    [self shareEditedImage];
+  }] forControlEvents:UIControlEventTouchUpInside];
+  [self.appearanceControl addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
+    (void)action;
+    [self applyAppearanceStyle];
+  }] forControlEvents:UIControlEventValueChanged];
 
   for (UIControl *control in @[self.sizeControl, self.gridControl,
                                self.interpolationControl,
@@ -467,6 +568,19 @@ static void IccDevConfigureImageView(UIImageView *image)
 
   [self updateSliderSummary];
   [self runEditor];
+}
+
+- (void)applyAppearanceStyle
+{
+  UIUserInterfaceStyle style = UIUserInterfaceStyleUnspecified;
+  if (self.appearanceControl.selectedSegmentIndex == 1) {
+    style = UIUserInterfaceStyleLight;
+  }
+  else if (self.appearanceControl.selectedSegmentIndex == 2) {
+    style = UIUserInterfaceStyleDark;
+  }
+  self.overrideUserInterfaceStyle = style;
+  self.view.window.overrideUserInterfaceStyle = style;
 }
 
 - (NSUInteger)selectedEdgePixels
@@ -528,13 +642,22 @@ static void IccDevConfigureImageView(UIImageView *image)
     dispatch_async(dispatch_get_main_queue(), ^{
       if (serial != self.renderSerial)
         return;
+      NSString *persistFailure = nil;
+      if (!IccDevPersistClutEditorReport(result, &persistFailure)) {
+        result.passed = NO;
+        result.report = [result.report stringByAppendingFormat:
+          @"FAIL Persist device results: %@\n",
+          persistFailure ?: @"write failed"];
+      }
       self.sourceView.image = result.sourceImage;
       self.managedView.image = result.managedImage;
       self.editedView.image = result.editedImage;
       self.deltaView.image = result.deltaImage;
       self.reportView.text = result.report;
       self.lastReport = result.report;
+      self.lastEditedImage = result.editedImage;
       self.runButton.enabled = YES;
+      IccDevFinishClutEditor(result);
     });
   });
 }
@@ -566,6 +689,40 @@ static void IccDevConfigureImageView(UIImageView *image)
                                       applicationActivities:nil];
   activity.popoverPresentationController.sourceView = self.shareButton;
   activity.popoverPresentationController.sourceRect = self.shareButton.bounds;
+  [self presentViewController:activity animated:YES completion:nil];
+}
+
+- (void)shareEditedImage
+{
+  UIImage *image = self.lastEditedImage ?: self.editedView.image;
+  if (!image) {
+    self.reportView.text =
+      [self.reportView.text stringByAppendingString:
+        @"\nNo edited image is available to share.\n"];
+    return;
+  }
+  NSData *png = UIImagePNGRepresentation(image);
+  if (!png) {
+    self.reportView.text =
+      [self.reportView.text stringByAppendingString:
+        @"\nFAIL Encode edited image as PNG.\n"];
+    return;
+  }
+  NSURL *url = [NSURL fileURLWithPath:
+    [NSTemporaryDirectory() stringByAppendingPathComponent:
+      @"icc-clut-editor-edited.png"]];
+  NSError *error = nil;
+  if (![png writeToURL:url options:NSDataWritingAtomic error:&error]) {
+    self.reportView.text = [self.reportView.text stringByAppendingFormat:
+      @"\nFAIL Write edited image export: %@\n",
+      error ? error.localizedDescription : @"write failed"];
+    return;
+  }
+  UIActivityViewController *activity =
+    [[UIActivityViewController alloc] initWithActivityItems:@[image, url]
+                                      applicationActivities:nil];
+  activity.popoverPresentationController.sourceView = self.saveImageButton;
+  activity.popoverPresentationController.sourceRect = self.saveImageButton.bounds;
   [self presentViewController:activity animated:YES completion:nil];
 }
 

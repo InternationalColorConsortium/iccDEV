@@ -33,9 +33,9 @@ or its local build helper.
 
 - `IccClutEditorPOC`, `ICCDEV_CLUTEDITOR_BUNDLE_IDENTIFIER`, README commands,
   and `build-ios.sh` must refer to the same app and bundle ID.
-- The app consumes `apple-ios-*-core`; it must not depend on desktop tools,
-  CTest executables, libtiff, wxWidgets, signing files, or generated Xcode
-  output.
+- The app consumes matching iOS or Mac Catalyst static core builds; it must not
+  depend on desktop tools, CTest executables, libtiff, wxWidgets, signing files,
+  or generated Xcode output.
 - Keep `CMAKE_OSX_DEPLOYMENT_TARGET`, CMake Xcode attributes, helper defaults,
   and README examples aligned.
 - Keep CMM and CLUT application on a background queue and update UIKit only on
@@ -46,6 +46,19 @@ or its local build helper.
   `simctl launch --console-pty --terminate-running-process`.
 - Keep device launch repeatable with
   `devicectl device process launch --console --terminate-existing --timeout`.
+- Keep Mac Catalyst runnable on Apple Silicon Macs through
+  `build-ios.sh maccatalyst` using a matching Mac Catalyst core archive, not an
+  iOS device or simulator archive.
+- Fail before building device targets when physical-device signing inputs still
+  contain placeholder team or bundle values; unsigned simulator and Mac
+  Catalyst runs must not be blocked by a device-only signing placeholder and
+  should ignore a globally exported placeholder bundle ID.
+- Keep edited-image export available through the native share sheet.
+- Keep the light/dark/system appearance toggle available as an educational
+  visual comparison tool.
+- Keep the compact iPhone layout tuned for visible controls: half-height
+  logo/banner, short action labels, and two-column preview rows; do not regress
+  the current iPad/Mac wide dashboard layout when adjusting phone density.
 - Reused assets must not carry stale sibling-app text such as `BENCH` or
   `APPLY` into CLUT editor source art or generated icons.
 - Doxygen should include the README, `.h`, and `.mm` files through INPUT and
@@ -61,6 +74,7 @@ cmake --preset apple-ios-simulator-core -S Build/Cmake \
   -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0
 cmake --build out/apple-ios-simulator-core --config Release --parallel
 examples/ios-clut-editor/build-ios.sh simulator --run-tests
+examples/ios-clut-editor/build-ios.sh maccatalyst --run-tests
 doxygen .github/ci/doxygen/Doxyfile
 test ! -s docs/generated/doxygen-warnings.log
 ```
