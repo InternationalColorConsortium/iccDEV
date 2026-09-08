@@ -993,15 +993,13 @@ static bool buildV5SpectralInputProfile(CIccProfile &p)
 // docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md
 // authorises stopping the XYZ path at a spectral port.
 //
-// This fixture carries no icSigSpectralWhitePointTag, but that is not why all
-// six samples come through the pipeline untouched: CheckPCSConnections() gates
-// both chain-edge blocks on IsSpaceColorimetricPCS(), so no CIccPcsXform is
-// built at this spectral edge at all -- asserted directly three lines below by
-// pcsXformCount() == 0. Adding a white point tag to this fixture would not
-// change the result; S7 ("missing white point means no conversion") never
-// gets a chance to run here because nothing reaches pushSpectralWhitePointConvert()
-// on this path. The cases further down build a real CIccPcsXform (via
-// Connect()/ConnectFirst()/ConnectLast() directly) and assert S7 there.
+// This fixture carries no icSigSpectralWhitePointTag, and that is now the whole
+// reason all six samples come through the pipeline untouched. Both chain-edge
+// blocks in CheckPCSConnections() gate on IsSpacePCS(), so a CIccPcsXform *is*
+// built at this spectral edge; with no white point tag to convert against it
+// pushes nothing and Optimize() drops it, which is what pcsXformCount() == 0
+// records three lines below. Adding a white point tag would change the result,
+// and spectralTrailingEdgeConvertsThroughCmm() further down is that fixture.
 static void spectralTrailingEdgeNoLongerAdjustsInsideApply()
 {
   CIccProfile *pICC = new CIccProfile;
@@ -1613,6 +1611,309 @@ static void spectralSampleCountMismatchIsRejected()
 }
 
 
+// --- the spectral chain edge, through a real CMM --------------------------
+//
+// The S1-S8 cases above drive Connect()/ConnectFirst()/ConnectLast() directly,
+// which is the only way to observe which steps a port pushed. That leaves one
+// thing unasserted: whether CIccCmm::CheckPCSConnections() ever *builds* a
+// CIccPcsXform at a spectral chain edge for those branches to run in.
+//
+// It used not to. Both edge blocks gated on IsSpaceColorimetricPCS(), which no
+// spectral signature satisfies, so ConnectFirst()/ConnectLast()'s spectral
+// branches were unreachable from a chain and a chain that began or ended on a
+// spectral PCS carried the tag's own absolute-ness straight through. Both
+// blocks now gate on IsSpacePCS(), the same predicate the interior loop uses.
+//
+// These cases therefore assert through CIccCmm::Apply() rather than through a
+// standalone CIccPcsXform: the pixel, and the presence of the CIccPcsXform
+// that produced it, are exactly what the widened gate is responsible for.
+
+// Products with kSpectralConst stay inside 0..1 on purpose -- an emitted
+// spectral sample above 1.0 would confound a clamp with a dropped conversion.
+// Straddling 1.0 still separates a multiply from a divide from a no-op.
+static const icFloatNumber kSpectralEdgeWhite[kSpectralSamples] = {
+  0.50f, 0.80f, 1.25f, 1.50f, 0.40f, 1.25f
+};
+
+// buildV5SpectralInputProfile()'s fixture, parameterized over the spectral PCS
+// type and given an optional spectral white point tag. DToB1 is the relative
+// tag, so an absolute-intent request is S2's converting row.
+static bool buildV5SpectralEdgeProfile(CIccProfile &p, icColorSpaceSignature nSpecType,
+                                       bool bWhitePoint,
+                                       const icFloatNumber *pWhite = kSpectralEdgeWhite)
+{
+  if (!buildV5SpectralInputProfile(p))
+    return false;
+
+  p.m_Header.spectralPCS = spectralSigOf(nSpecType);
+  if (nSpecType == icSigBiSpectralReflectanceData) {
+    p.m_Header.biSpectralRange.start = icRange380nm;
+    p.m_Header.biSpectralRange.end = icRange780nm;
+    p.m_Header.biSpectralRange.steps = 1;
+  }
+
+  if (bWhitePoint)
+    attachSpectralWhitePoint(p, pWhite, kSpectralSamples);
+
+  return true;
+}
+
+// An MPE that copies its first nOut inputs to its outputs, so a conversion
+// applied to the pixel *before* the pipeline is observable after it. The
+// constant-emitting fixtures above cannot show that: they ignore their input.
+static CIccTagMultiProcessElement *makeSelectMpe(icUInt16Number nIn, icUInt16Number nOut)
+{
+  CIccTagMultiProcessElement *pTag = new CIccTagMultiProcessElement;
+  pTag->SetChannels(nIn, nOut);
+
+  CIccMpeMatrix *pMtx = new CIccMpeMatrix;
+  if (!pMtx->SetSize(nIn, nOut, true)) {
+    delete pMtx;
+    delete pTag;
+    return NULL;
+  }
+  icFloatNumber *m = pMtx->GetMatrix();
+  for (int i = 0; i < (int)nIn * (int)nOut; i++)
+    m[i] = 0.0f;
+  for (int o = 0; o < (int)nOut; o++)
+    m[o * (int)nIn + o] = 1.0f;          // dst[o] = src[o]
+  icFloatNumber *k = pMtx->GetConstants();
+  for (int i = 0; i < (int)nOut; i++)
+    k[i] = 0.0f;
+
+  pTag->Attach(pMtx);
+  return pTag;
+}
+
+// The mirror of buildV5SpectralEdgeProfile() in the other direction: a v5
+// output profile whose BToD1 tag passes the first three spectral samples
+// through to its device channels.
+static bool buildV5SpectralOutputProfile(CIccProfile &p, bool bWhitePoint,
+                                         const icFloatNumber *pWhite = kSpectralEdgeWhite)
+{
+  p.InitHeader();
+  p.m_Header.deviceClass = icSigOutputClass;
+  p.m_Header.colorSpace = icSigRgbData;
+  p.m_Header.pcs = icSigLabData;
+  p.m_Header.version = icVersionNumberV5;
+  p.m_Header.spectralPCS = spectralSig();
+  p.m_Header.spectralRange.start = icRange380nm;
+  p.m_Header.spectralRange.end = icRange780nm;
+  p.m_Header.spectralRange.steps = kSpectralSamples;
+
+  attachRequiredTags(p, "v5 spectral output fixture");
+  if (bWhitePoint)
+    attachSpectralWhitePoint(p, pWhite, kSpectralSamples);
+
+  CIccTagMultiProcessElement *pB2D = makeSelectMpe(kSpectralSamples, 3);
+  if (!pB2D)
+    return false;
+  p.AttachTag(icSigBToD1Tag, pB2D);
+
+  return true;
+}
+
+// Trailing edge: RGB -> spectral PCS, one input profile, absolute intent
+// against a relative DToB1 tag. The pipeline emits kSpectralConst regardless of
+// input, so the emitted spectrum is known exactly and the edge conversion is
+// the only thing that can have touched it.
+//
+// Note this asserts all six samples, not three. The XYZ media-white adjustment
+// that used to reach a spectral port scaled samples 0..2 and left the rest
+// alone (see spectralTrailingEdgeNoLongerAdjustsInsideApply() above); an
+// element-wise conversion against the spectral white point touches every
+// sample, so a chain that scaled only the first three would fail here.
+static void spectralTrailingEdgeConvertsThroughCmm()
+{
+  CIccProfile *pICC = new CIccProfile;
+  if (!buildV5SpectralEdgeProfile(*pICC, icSigReflectanceSpectralData, true)) {
+    delete pICC;
+    check(false, "spectral trailing edge: fixture built");
+    return;
+  }
+
+  CmmProbe cmm(icSigRgbData, spectralSig(), true);
+  check(cmm.AddXform(pICC, icAbsoluteColorimetric, icInterpLinear, NULL,
+                     icXformLutSpectral, true, NULL) == icCmmStatOk,
+        "spectral trailing edge: AddXform");
+  check(cmm.Begin() == icCmmStatOk, "spectral trailing edge: Begin");
+
+  check(cmm.pcsXformCount() == 1,
+        "spectral trailing edge: a CIccPcsXform is now built at the spectral edge");
+
+  icFloatNumber src[3] = { 0.20f, 0.40f, 0.60f };
+  icFloatNumber dst[kSpectralSamples];
+  for (int i = 0; i < (int)kSpectralSamples; i++)
+    dst[i] = -1.0f;
+  check(cmm.Apply(dst, src) == icCmmStatOk, "spectral trailing edge: Apply");
+
+  icFloatNumber want[kSpectralSamples];
+  for (int i = 0; i < (int)kSpectralSamples; i++)
+    want[i] = kSpectralConst[i] * kSpectralEdgeWhite[i];
+
+  std::printf("      spectral trailing edge: emitted");
+  for (int i = 0; i < (int)kSpectralSamples; i++)
+    std::printf(" %.6f", (double)dst[i]);
+  std::printf("\n      spectral trailing edge: expected");
+  for (int i = 0; i < (int)kSpectralSamples; i++)
+    std::printf(" %.6f", (double)want[i]);
+  std::printf("\n");
+
+  check(spectrumClose(dst, want),
+        "spectral trailing edge: every sample is multiplied by the spectral white point");
+}
+
+// Leading edge, the other direction: spectral PCS -> RGB through an output
+// profile. Absolute intent into a relative BToD1 tag divides, and the tag
+// passes samples 0..2 through, so the device values are the divided spectrum.
+static void spectralLeadingEdgeConvertsThroughCmm()
+{
+  CIccProfile *pICC = new CIccProfile;
+  if (!buildV5SpectralOutputProfile(*pICC, true)) {
+    delete pICC;
+    check(false, "spectral leading edge: fixture built");
+    return;
+  }
+
+  CmmProbe cmm(spectralSig(), icSigRgbData, false);
+  check(cmm.AddXform(pICC, icAbsoluteColorimetric, icInterpLinear, NULL,
+                     icXformLutSpectral, true, NULL) == icCmmStatOk,
+        "spectral leading edge: AddXform");
+  check(cmm.Begin() == icCmmStatOk, "spectral leading edge: Begin");
+
+  check(cmm.pcsXformCount() == 1,
+        "spectral leading edge: a CIccPcsXform is now built at the spectral edge");
+
+  icFloatNumber dst[3] = { -1.0f, -1.0f, -1.0f };
+  check(cmm.Apply(dst, kSpectralProbe) == icCmmStatOk, "spectral leading edge: Apply");
+
+  bool bClose = true;
+  for (int i = 0; i < 3; i++) {
+    const double want = (double)kSpectralProbe[i] / (double)kSpectralEdgeWhite[i];
+    std::printf("      spectral leading edge: channel %d got %.6f want %.6f\n",
+                i, (double)dst[i], want);
+    bClose = bClose && closeRel(dst[i], want, kTol);
+  }
+  check(bClose,
+        "spectral leading edge: the spectrum is divided by the spectral white point");
+}
+
+// S4 at the edge. The gate is IsSpacePCS(), which every spectral signature
+// satisfies, so a bi-spectral or sparse-matrix edge does get a CIccPcsXform
+// built -- and pushSpectralWhitePointConvert() must then decline it, leaving
+// nothing to apply and the whole CIccPcsXform dropped by Optimize(). The
+// converting types are asserted in the same loop so the exclusion cannot pass
+// by the conversion never firing at all.
+static void spectralEdgeS4Exclusions()
+{
+  struct Case { icColorSpaceSignature nType; bool bConverts; const char *szName; };
+  static const Case kCases[5] = {
+    { icSigReflectanceSpectralData,     true,  "reflectance" },
+    { icSigTransmisionSpectralData,     true,  "transmission" },
+    { icSigRadiantSpectralData,         true,  "radiant" },
+    { icSigBiSpectralReflectanceData,   false, "bi-directional reflectance" },
+    { icSigSparseMatrixReflectanceData, false, "sparse matrix" },
+  };
+
+  for (int c = 0; c < 5; c++) {
+    char szMsg[192];
+    CIccProfile *pICC = new CIccProfile;
+    if (!buildV5SpectralEdgeProfile(*pICC, kCases[c].nType, true)) {
+      delete pICC;
+      std::snprintf(szMsg, sizeof(szMsg), "spectral edge S4: fixture built (%s)",
+                    kCases[c].szName);
+      check(false, szMsg);
+      continue;
+    }
+
+    CmmProbe cmm(icSigRgbData, spectralSigOf(kCases[c].nType), true);
+    std::snprintf(szMsg, sizeof(szMsg), "spectral edge S4: AddXform (%s)", kCases[c].szName);
+    check(cmm.AddXform(pICC, icAbsoluteColorimetric, icInterpLinear, NULL,
+                       icXformLutSpectral, true, NULL) == icCmmStatOk, szMsg);
+    std::snprintf(szMsg, sizeof(szMsg), "spectral edge S4: Begin (%s)", kCases[c].szName);
+    check(cmm.Begin() == icCmmStatOk, szMsg);
+
+    icFloatNumber src[3] = { 0.20f, 0.40f, 0.60f };
+    icFloatNumber dst[kSpectralSamples];
+    for (int i = 0; i < (int)kSpectralSamples; i++)
+      dst[i] = -1.0f;
+    std::snprintf(szMsg, sizeof(szMsg), "spectral edge S4: Apply (%s)", kCases[c].szName);
+    check(cmm.Apply(dst, src) == icCmmStatOk, szMsg);
+
+    icFloatNumber want[kSpectralSamples];
+    for (int i = 0; i < (int)kSpectralSamples; i++)
+      want[i] = kCases[c].bConverts ? kSpectralConst[i] * kSpectralEdgeWhite[i]
+                                    : kSpectralConst[i];
+
+    std::snprintf(szMsg, sizeof(szMsg),
+                  kCases[c].bConverts
+                    ? "spectral edge S4: %s converts at the chain edge"
+                    : "spectral edge S4: %s takes no conversion at the chain edge",
+                  kCases[c].szName);
+    check(cmm.pcsXformCount() == (kCases[c].bConverts ? 1 : 0) &&
+          spectrumClose(dst, want), szMsg);
+  }
+}
+
+// S7 at the edge: a spectral PCS edge on a profile with no spectral white point
+// tag converts nothing rather than failing. Unlike
+// spectralTrailingEdgeNoLongerAdjustsInsideApply(), which reaches this outcome
+// because no CIccPcsXform was built at all, the CIccPcsXform is now built here
+// and pushes nothing, so Optimize() drops it -- same pixel, different reason,
+// and this is the case that exercises pushSpectralWhitePointConvert()'s missing
+// tag path from a chain.
+static void spectralEdgeMissingWhitePointConvertsNothing()
+{
+  CIccProfile *pICC = new CIccProfile;
+  if (!buildV5SpectralEdgeProfile(*pICC, icSigReflectanceSpectralData,
+                                  /*bWhitePoint=*/false)) {
+    delete pICC;
+    check(false, "spectral edge S7: fixture built");
+    return;
+  }
+
+  CmmProbe cmm(icSigRgbData, spectralSig(), true);
+  check(cmm.AddXform(pICC, icAbsoluteColorimetric, icInterpLinear, NULL,
+                     icXformLutSpectral, true, NULL) == icCmmStatOk,
+        "spectral edge S7: AddXform");
+  check(cmm.Begin() == icCmmStatOk, "spectral edge S7: Begin");
+  check(cmm.pcsXformCount() == 0,
+        "spectral edge S7: nothing to convert leaves no CIccPcsXform in the chain");
+
+  icFloatNumber src[3] = { 0.20f, 0.40f, 0.60f };
+  icFloatNumber dst[kSpectralSamples];
+  check(cmm.Apply(dst, src) == icCmmStatOk, "spectral edge S7: Apply");
+  check(spectrumClose(dst, kSpectralConst),
+        "spectral edge S7: a missing spectral white point leaves the spectrum alone");
+}
+
+// S8 at the edge: a zero white point sample would put an infinity in the PCS,
+// so the chain must refuse to Begin() rather than build a conversion around it.
+// The widened gate is what makes this reachable from a chain at all -- before
+// it, a degenerate spectral white point on an edge profile was simply ignored.
+static void spectralEdgeDegenerateWhitePointIsRejected()
+{
+  icFloatNumber zeroed[kSpectralSamples];
+  for (int i = 0; i < (int)kSpectralSamples; i++)
+    zeroed[i] = kSpectralEdgeWhite[i];
+  zeroed[2] = 0.0f;
+
+  CIccProfile *pICC = new CIccProfile;
+  if (!buildV5SpectralEdgeProfile(*pICC, icSigReflectanceSpectralData, true, zeroed)) {
+    delete pICC;
+    check(false, "spectral edge S8: fixture built");
+    return;
+  }
+
+  CmmProbe cmm(icSigRgbData, spectralSig(), true);
+  check(cmm.AddXform(pICC, icAbsoluteColorimetric, icInterpLinear, NULL,
+                     icXformLutSpectral, true, NULL) == icCmmStatOk,
+        "spectral edge S8: AddXform");
+  check(cmm.Begin() == icCmmStatInvalidProfile,
+        "spectral edge S8: a zero spectral white point sample fails the chain");
+}
+
+
 // An XYZ-PCS matrix/TRC profile: the only PCS shape where AdjustPCS() used to
 // clamp negatives. See spec R8 -- the CIccPcsStep chain is pure affine, so a
 // negative component that used to be clamped to zero now survives.
@@ -1911,6 +2212,12 @@ int main(int /*argc*/, char ** /*argv*/)
   spectralMissingWhitePointConvertsNothing();
   spectralDegenerateWhitePointIsRejected();
   spectralSampleCountMismatchIsRejected();
+
+  spectralTrailingEdgeConvertsThroughCmm();
+  spectralLeadingEdgeConvertsThroughCmm();
+  spectralEdgeS4Exclusions();
+  spectralEdgeMissingWhitePointConvertsNothing();
+  spectralEdgeDegenerateWhitePointIsRejected();
 
   xyzPcsChainStillAdjusts();
   setParamsRefreshesCacheAfterBegin();

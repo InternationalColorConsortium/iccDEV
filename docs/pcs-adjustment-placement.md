@@ -7,17 +7,16 @@ route work through them. The three helpers themselves have since been deleted
 outright (see "Deprecated" below).
 
 Every adjustment that *is* performed -- absolute-colorimetric media-white
-scaling, the v2-perceptual black point shift, and `IIccAdjustPCSXform` hints
-such as BPC -- is performed by `CIccPcsXform`. But the **handover** to it
-happens only at a colorimetric PCS port. `CIccCmm::CheckPCSConnections()` builds
-a `CIccPcsXform` only where a port satisfies `IsSpaceColorimetricPCS()` or
-`IsSpaceSpectralPCS()`, and its two chain-edge blocks test only the former. The
-port kinds are not treated alike, and the differences are not all deliberate:
+scaling, the v2-perceptual black point shift, the spectral white point
+conversion, and `IIccAdjustPCSXform` hints such as BPC -- is performed by
+`CIccPcsXform`. The **handover** to it happens at any PCS port. `CIccCmm::CheckPCSConnections()`
+builds a `CIccPcsXform` wherever a port satisfies `IsSpacePCS()`, and its
+interior loop and both chain-edge blocks all test that same predicate.
 
 | Port | What performs the adjustment |
 |---|---|
 | colorimetric PCS (XYZ, Lab) | `CIccPcsXform`, at the interior connection or at either chain edge |
-| spectral PCS | not the XYZ adjustment at all -- `NeedsSrcPcsAdjust()`/`NeedsDstPcsAdjust()` answer false, and `CIccPcsXform` pushes an element-wise spectral white point conversion instead. Interior connections only; a spectral chain *edge* gets nothing (see "Known gaps") |
+| spectral PCS | not the XYZ adjustment at all -- `NeedsSrcPcsAdjust()`/`NeedsDstPcsAdjust()` answer false, and `CIccPcsXform` pushes an element-wise spectral white point conversion instead. Interior connections and both chain edges via `Connect()`/`ConnectFirst()`/`ConnectLast()` |
 | MCS | nothing (see "Known gaps") |
 
 See `docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md`
@@ -105,41 +104,37 @@ the `IIccAdjustPCSXform` hint path at `IccProfLib/IccCmm.cpp:1708-1723`, applies
 no port test whatsoever: it sets the flag purely on `CalcFactors()` returning
 true. Meanwhile `AdjustPCS()` unconditionally treats `pixel[0..2]` as X, Y and Z.
 
-Every gap below is a consequence of that one mismatch. So was the spectral
-interior connection, which used to drop the adjustment and now takes the white
-point conversion -- the one instance fully closed so far. The other two are only
-half closed: neither mangles a pixel any more, because the in-`Apply()` path that
-did the mangling is gone, but neither has been given the conversion it actually
-owes, and both are awaiting the repository owner.
+Every gap below was a consequence of that one mismatch. The spectral interior
+connection used to drop the adjustment and now takes the white point conversion;
+the spectral chain edge is now closed as well. The remaining open item is MCS.
 
 A reader who holds the root cause in mind will predict the next instance rather
 than discover it: look for any `GetSrcSpace()`/`GetDstSpace()` return that is
 neither XYZ nor Lab, and ask what can set `m_bAdjustPCS` for it.
 
-### Spectral PCS at a chain edge
+### Spectral PCS at a chain edge (closed)
 
 A spectral **interior** connection is handled: `CIccPcsXform::Connect()` pushes
 the element-wise spectral white point conversion on whichever side owes it.
 
-A spectral **chain edge** is not. `CIccCmm::CheckPCSConnections()`'s two edge
-blocks gate on `IsSpaceColorimetricPCS()`, and a spectral signature never
-satisfies that, so no `CIccPcsXform` is built at a spectral edge and
-`ConnectFirst()`/`ConnectLast()`'s own spectral branches never get to run. A
-chain that begins or ends on a spectral PCS therefore gets no white point
-conversion at that edge.
+A spectral **chain edge** is now handled as well. `CIccCmm::CheckPCSConnections()`'s
+two edge blocks were widened from `IsSpaceColorimetricPCS()` to `IsSpacePCS()`,
+so a spectral signature satisfies them and `ConnectFirst()`/`ConnectLast()`'s
+spectral branches run. A chain that begins or ends on a spectral PCS now gets
+the white point conversion at that edge.
 
-Nothing silently mangles the pixel there any more: the XYZ media-white
-adjustment that used to fire inside `Apply()` at such an edge is gone with the
-rest of the in-xform path, and `NeedsSrcPcsAdjust()`/`NeedsDstPcsAdjust()`
-answer false at a spectral port regardless. The chain simply carries the tag's
-own absolute-ness through unchanged. `spectralTrailingEdgeNoLongerAdjustsInsideApply()`
-in `.github/ci/regression/pcs-adjust-placement.cpp` pins that, and
-`CmmProbe::inertAdjustCount()` records the residue: the xform still reports
-`NeedAdjustPCS()`, but neither port asks for the adjustment, so no
-`CIccPcsXform` will ever pick it up.
+Nothing silently mangles the pixel there: the XYZ media-white adjustment that
+used to fire inside `Apply()` at such an edge is gone with the rest of the
+in-xform path, and `NeedsSrcPcsAdjust()`/`NeedsDstPcsAdjust()` answer false at
+a spectral port regardless. The chain now carries the correct absolute-ness
+through the element-wise spectral white point conversion.
 
-Whether the edge blocks should be widened to cover spectral ports is an open
-decision for the repository owner.
+`spectralTrailingEdgeNoLongerAdjustsInsideApply()` in
+`.github/ci/regression/pcs-adjust-placement.cpp` pins that the in-Apply() path
+no longer fires, and the new edge-conversion tests (`spectralTrailingEdgeConvertsThroughCmm`,
+`spectralLeadingEdgeConvertsThroughCmm`, `spectralEdgeS4Exclusions`,
+`spectralEdgeMissingWhitePointConvertsNothing`, `spectralEdgeDegenerateWhitePointIsRejected`)
+pin the conversion behaviour end-to-end.
 
 ### MCS ports, via an `IIccAdjustPCSXform` hint
 

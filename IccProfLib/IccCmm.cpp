@@ -9855,7 +9855,13 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
     // NeedAdjustPCS() mirrors the trailing-edge condition below. Without it a
     // chain whose source PCS already matches the profile's gets no leading edge
     // xform, leaving nowhere to put a source-side PCS adjustment.
-    if (!last->ptr->IsInput() && IsSpaceColorimetricPCS(lastSpace) &&
+    //
+    // The gate is IsSpacePCS(), the same predicate the interior loop uses, and
+    // not IsSpaceColorimetricPCS(): a chain that begins on a spectral PCS owes
+    // that edge the element-wise spectral white point conversion, and
+    // ConnectFirst()'s spectral branch cannot run unless a CIccPcsXform is
+    // built here for it. See docs/pcs-adjustment-placement.md.
+    if (!last->ptr->IsInput() && IsSpacePCS(lastSpace) &&
         (last->ptr->NeedAdjustPCS() || GetSourceSpace() != lastSpace || last->ptr->UseLegacyPCS())) {
       CIccPcsXform* pPcs = new (std::nothrow) CIccPcsXform();
 
@@ -9948,7 +9954,9 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
     }
 
     lastSpace = last->ptr->GetDstSpace();
-    if (last->ptr->IsInput() && IsSpaceColorimetricPCS(lastSpace) && 
+    // IsSpacePCS() for the reason given at the leading edge above; here it is
+    // ConnectLast()'s spectral branch that needs the CIccPcsXform to exist.
+    if (last->ptr->IsInput() && IsSpacePCS(lastSpace) &&
         (last->ptr->NeedAdjustPCS() || GetDestSpace() != lastSpace || last->ptr->UseLegacyPCS())) {
       CIccPcsXform* pPcs = new (std::nothrow) CIccPcsXform();
 
