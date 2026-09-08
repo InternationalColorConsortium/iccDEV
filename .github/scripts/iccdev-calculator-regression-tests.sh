@@ -260,6 +260,88 @@ run_reject_profile() {
   pass_case "$name"
 }
 
+# ICC.2:2023 Table 102 'noop', 'scnt' and 'vxor' (#2086). Before the fix
+# iccFromXml rejected these fixtures with Invalid Operator "..." and wrote no
+# profile, so the conversion alone is the red/green check for acceptance.
+#
+# Acceptance is not enough on its own: an operator can be added to the enum and
+# still compute the wrong thing, so each fixture's function takes no input and
+# every row must come back as one fixed triple. The operand choices that make
+# these discriminating are documented in the fixtures themselves -- in short,
+# vxor is exercised at width 3 across the 0,5 threshold so that vand, vor and a
+# threshold-free (Xi != Yi) all produce a different triple, and the noop/scnt
+# ladder must read 0, 1, 2.
+run_table102_operator_fixture() {
+  local name="$1"
+  local fixture="$2"
+  local expected="$3"
+  local source_xml="$REPO_ROOT/.github/ci/regression/${fixture}.xml"
+  local source_txt="$REPO_ROOT/.github/ci/regression/issue-2086-table102-operands.txt"
+  local built_icc="$OUTDIR/${fixture}.icc"
+  local fromxml_log="$OUTDIR/${fixture}-fromxml.log"
+  local apply_log="$OUTDIR/${fixture}-apply.log"
+  local exit_code=0
+  local rows=0
+  local row
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$built_icc" "$fromxml_log" "$apply_log"
+
+  if [ ! -f "$source_xml" ] || [ ! -f "$source_txt" ]; then
+    fail_case "$name" "missing Table 102 fixture"
+    return
+  fi
+
+  timeout 30 "$FROMXML" "$source_xml" "$built_icc" > "$fromxml_log" 2>&1 || exit_code=$?
+  if ! check_log "$name/fromxml" "$fromxml_log"; then
+    return
+  fi
+  if [ "$exit_code" -ne 0 ] || [ ! -s "$built_icc" ]; then
+    fail_case "$name" "iccFromXml rejected the Table 102 operators (exit=$exit_code)"
+    sed -n '1,10p' "$fromxml_log"
+    return
+  fi
+
+  exit_code=0
+  timeout 30 "$APPLYNCM" "$source_txt" 3 0 "$built_icc" 1 > "$apply_log" 2>&1 || exit_code=$?
+  if ! check_log "$name/apply" "$apply_log"; then
+    return
+  fi
+  if [ "$exit_code" -ne 0 ]; then
+    fail_case "$name" "iccApplyNamedCmm failed with exit=$exit_code"
+    return
+  fi
+
+  # Data rows carry the source values after a ';'. Compare only the result
+  # triple, and count the rows so that "no output at all" cannot pass.
+  while IFS= read -r row; do
+    rows=$((rows + 1))
+    if [ "$row" != "$expected" ]; then
+      fail_case "$name" "row $rows was '$row', expected '$expected'"
+      return
+    fi
+  done < <(awk -F';' '/;/ && $1 ~ /[0-9]/ {print $1}' "$apply_log" |
+             awk '{ if (NF==3) printf "%s %s %s\n", $1, $2, $3 }')
+
+  if [ "$rows" -ne 3 ]; then
+    fail_case "$name" "expected 3 result rows, saw $rows"
+    return
+  fi
+
+  pass_case "$name"
+}
+
+run_table102_operators() {
+  run_table102_operator_fixture \
+    "issue-2086-vxor-operator" \
+    "issue-2086-vxor-operator" \
+    "1.0000 0.0000 0.0000"
+  run_table102_operator_fixture \
+    "issue-2086-noop-scnt-operators" \
+    "issue-2086-noop-scnt-operators" \
+    "0.0000 1.0000 2.0000"
+}
+
 run_issue_1103_dump_profile_regression() {
   local name="issue-1103-calculator-window-underflow"
   local profile="$ISSUE_1103_CALC_UNDERFLOW_PROFILE"
@@ -314,6 +396,7 @@ if [ "$FAIL" -eq 0 ]; then
   run_reject_profile "calcOverMem_tput.icc"
   run_reject_profile "calcOverMem_tsav.icc"
   run_issue_1103_dump_profile_regression
+  run_table102_operators
 fi
 
 echo "Calculator regression tests: $PASS passed, $FAIL failed, $TOTAL total"

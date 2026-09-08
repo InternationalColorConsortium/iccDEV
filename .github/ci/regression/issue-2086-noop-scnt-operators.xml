@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ICC.2:2023 Table 102 'noop' (6e6f6f70h) and 'scnt' (73636e74h), which iccDEV
+  did not implement (#2086).
+
+  Table 102 gives noop no stack arguments and no results, and scnt arguments
+  X1 ... XN with results X1 ... XN N: it reads the stack depth and pushes it
+  without consuming the operands.
+
+  Both are pinned by one ladder. Each scnt reports the depth at that point, so
+  the run must be 0, 1, 2, which holds only if scnt pushes exactly one value
+  and reads the CURRENT depth, and only if neither noop pushes nor consumes
+  anything. A noop that touched the stack, or a scnt that pushed a constant or
+  consumed its operands, shifts the ladder.
+
+  The function takes no input, so the expected output is the fixed triple
+  (0, 1, 2) on every row.
+-->
+<IccProfile>
+  <Header>
+    <ProfileVersion>5.0</ProfileVersion>
+    <ProfileDeviceClass>spac</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>now</CreationDateTime>
+    <RenderingIntent>Relative</RenderingIntent>
+    <PCSIlluminant><XYZNumber X="0.9505" Y="1.00000000" Z="1.0891"/></PCSIlluminant>
+    <ProfileCreator>ICC </ProfileCreator>
+  </Header>
+  <Tags>
+    <multiLocalizedUnicodeType>
+      <TagSignature>desc</TagSignature>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[issue-2086 noop scnt]]></LocalizedText>
+    </multiLocalizedUnicodeType>
+    <multiProcessElementType>
+      <TagSignature>A2B1</TagSignature>
+      <MultiProcessElements InputChannels="3" OutputChannels="3">
+        <CalculatorElement InputChannels="3" OutputChannels="3">
+          <MainFunction>
+{
+noop
+scnt
+noop
+scnt
+scnt
+out(0,3)
+}
+          </MainFunction>
+        </CalculatorElement>
+      </MultiProcessElements>
+    </multiProcessElementType>
+    <multiProcessElementType>
+      <TagSignature>B2A1</TagSignature>
+      <MultiProcessElements InputChannels="3" OutputChannels="3">
+        <CalculatorElement InputChannels="3" OutputChannels="3">
+          <MainFunction>{ in(0,3) out(0,3) }</MainFunction>
+        </CalculatorElement>
+      </MultiProcessElements>
+    </multiProcessElementType>
+    <XYZType>
+      <TagSignature>wtpt</TagSignature>
+      <XYZNumber X="0.9505" Y="1.00000000" Z="1.0891"/>
+    </XYZType>
+    <multiLocalizedUnicodeType>
+      <TagSignature>cprt</TagSignature>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright International Color Consortium]]></LocalizedText>
+    </multiLocalizedUnicodeType>
+  </Tags>
+</IccProfile>
