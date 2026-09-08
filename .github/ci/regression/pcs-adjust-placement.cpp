@@ -50,6 +50,7 @@
 #include "IccTagBasic.h"
 #include "IccTagLut.h"
 #include "IccTagMPE.h"
+#include "IccUtil.h"
 #include "IccMpeBasic.h"
 #include "IccApplyBPC.h"
 
@@ -1914,6 +1915,304 @@ static void spectralEdgeDegenerateWhitePointIsRejected()
 }
 
 
+// --- isSameWhite's tolerance ---------------------------------------------
+//
+// CIccPcsLabStep::isSameWhite() gates every Lab<->XYZ fold in
+// CIccPcsStep*::concat(), and it used to compare the two white points with ==.
+//
+// Both whites come from getNormIlluminantXYZ() on the respective side's
+// connection conditions, and two profiles can name the same D50 and still hand
+// back different floats. A v2 or v4 profile with no spectral viewing
+// conditions tag gets the icD50XYZ literal {0.9642, 1.0, 0.8249}; a v5 one
+// gets its s15Fixed16 header illuminant back through icFtoD(), and
+// CIccProfile::InitHeader() writes icDtoF(0.9642) there, so that is
+// {0.96420288, 1.0, 0.82490539}. == read the pair as two different white
+// points and refused the fold, leaving a connection that carries a full
+// Lab->XYZ->Lab round trip -- two cube-root passes -- to express an identity.
+//
+// The band this needs is not float noise: 2.9e-6 in X and 5.4e-6 in Z are ~48x
+// and ~91x one ULP at those magnitudes. icIsNear()'s 1e-8 default sits *below*
+// one ULP at 0.96 (5.96e-8), so at white point magnitudes it is exactly ==,
+// and passing it would have left the fold refused. That is why isSameWhite()
+// names icPcsWhiteNearRange (1e-5) explicitly.
+
+// The D50 the pre-v5 path hands back.
+static const icFloatNumber kD50Literal[3] = { 0.9642f, 1.0000f, 0.8249f };
+
+// The same D50 after a trip through the s15Fixed16 header illuminant.
+static void d50ThroughTheHeader(icFloatNumber *pXYZ)
+{
+  for (int i = 0; i < 3; i++)
+    pXYZ[i] = icFtoD(icDtoF(kD50Literal[i]));
+}
+
+static icPcsStepType foldedType(CIccPcsStep &first, CIccPcsStep &next)
+{
+  CIccPcsStep *pFold = first.concat(&next);
+  if (!pFold)
+    return icPcsStepUnknown;      // concat() declines by returning NULL
+  const icPcsStepType nType = pFold->GetType();
+  delete pFold;
+  return nType;
+}
+
+// The oracle for every fold assertion below: the two whites really are
+// different floats, and the difference really does sit inside the tolerance
+// band and outside float noise. Without this the fold cases would pass just as
+// well against == on two bit-identical vectors.
+static void encodedD50DiffersFromTheLiteralWithinTheBand()
+{
+  icFloatNumber encoded[3];
+  d50ThroughTheHeader(encoded);
+
+  bool bAnyDifferent = false;
+  double maxDiff = 0.0;
+  for (int i = 0; i < 3; i++) {
+    const double diff = std::fabs((double)encoded[i] - (double)kD50Literal[i]);
+    if (encoded[i] != kD50Literal[i])
+      bAnyDifferent = true;
+    if (diff > maxDiff)
+      maxDiff = diff;
+  }
+
+  std::printf("info: literal D50 = %.9f %.9f %.9f\n",
+              (double)kD50Literal[0], (double)kD50Literal[1], (double)kD50Literal[2]);
+  std::printf("info: header  D50 = %.9f %.9f %.9f (max diff %.3e)\n",
+              (double)encoded[0], (double)encoded[1], (double)encoded[2], maxDiff);
+
+  check(bAnyDifferent,
+        "white tolerance: the header-encoded D50 is not bit-equal to the literal");
+  // One ULP at 0.96f is 5.96e-8. A difference that failed this bound would be
+  // float noise, and a tolerance band would be the wrong fix for it.
+  check(maxDiff > 1.0e-6,
+        "white tolerance: the difference is an encoding difference, not float noise");
+  check(maxDiff < 1.0e-5,
+        "white tolerance: the difference is inside icPcsWhiteNearRange");
+}
+
+// All six folds isSameWhite() gates, each driven with the literal white on one
+// side and the header-encoded white on the other. Four collapse an exact round
+// trip to an identity; two collapse a v2/v4 encoding change to the single
+// scale step that expresses it.
+static void labStepsFoldAcrossAnEncodingDifferenceInTheWhite()
+{
+  icFloatNumber enc[3];
+  d50ThroughTheHeader(enc);
+
+  {
+    CIccPcsStepXYZToLab first(kD50Literal);
+    CIccPcsStepLabToXYZ next(enc);
+    check(foldedType(first, next) == icPcsStepIdentity,
+          "white tolerance: XYZ->Lab . Lab->XYZ folds to an identity");
+  }
+  {
+    CIccPcsStepLabToXYZ first(kD50Literal);
+    CIccPcsStepXYZToLab next(enc);
+    check(foldedType(first, next) == icPcsStepIdentity,
+          "white tolerance: Lab->XYZ . XYZ->Lab folds to an identity");
+  }
+  {
+    CIccPcsStepXYZToLab2 first(kD50Literal);
+    CIccPcsStepLab2ToXYZ next(enc);
+    check(foldedType(first, next) == icPcsStepIdentity,
+          "white tolerance: XYZ->Lab2 . Lab2->XYZ folds to an identity");
+  }
+  {
+    CIccPcsStepLab2ToXYZ first(kD50Literal);
+    CIccPcsStepXYZToLab2 next(enc);
+    check(foldedType(first, next) == icPcsStepIdentity,
+          "white tolerance: Lab2->XYZ . XYZ->Lab2 folds to an identity");
+  }
+  {
+    CIccPcsStepLabToXYZ first(kD50Literal);
+    CIccPcsStepXYZToLab2 next(enc);
+    check(foldedType(first, next) == icPcsStepLabToLab2,
+          "white tolerance: Lab->XYZ . XYZ->Lab2 folds to a Lab->Lab2 scale");
+  }
+  {
+    CIccPcsStepLab2ToXYZ first(kD50Literal);
+    CIccPcsStepXYZToLab next(enc);
+    check(foldedType(first, next) == icPcsStepLab2ToLab,
+          "white tolerance: Lab2->XYZ . XYZ->Lab folds to a Lab2->Lab scale");
+  }
+}
+
+// The band has to have an outside. A genuinely different white point -- D65,
+// 1.4e-2 away in X and 2.6e-1 in Z, three to four orders of magnitude outside
+// the band -- must still refuse every fold, or the tolerance would be
+// conflating media rather than encodings.
+static void labStepsRefuseToFoldAGenuinelyDifferentWhite()
+{
+  static const icFloatNumber kD65[3] = { 0.9505f, 1.0000f, 1.0890f };
+
+  {
+    CIccPcsStepXYZToLab first(kD50Literal);
+    CIccPcsStepLabToXYZ next(kD65);
+    check(foldedType(first, next) == icPcsStepUnknown,
+          "white tolerance: a D50/D65 pair does not fold to an identity");
+  }
+  {
+    CIccPcsStepLab2ToXYZ first(kD50Literal);
+    CIccPcsStepXYZToLab next(kD65);
+    check(foldedType(first, next) == icPcsStepUnknown,
+          "white tolerance: a D50/D65 pair does not fold to a Lab2->Lab scale");
+  }
+
+  // A perturbation just outside the band pins where the edge is, rather than
+  // that an edge exists somewhere.
+  icFloatNumber justOutside[3];
+  for (int i = 0; i < 3; i++)
+    justOutside[i] = kD50Literal[i];
+  justOutside[0] = (icFloatNumber)(kD50Literal[0] + 2.0e-5);
+  {
+    CIccPcsStepXYZToLab first(kD50Literal);
+    CIccPcsStepLabToXYZ next(justOutside);
+    check(foldedType(first, next) == icPcsStepUnknown,
+          "white tolerance: 2e-5 in X is outside the band and does not fold");
+  }
+}
+
+// What the fold costs numerically. Dropping the pair is only legitimate if the
+// round trip it replaces was already an identity to well inside this file's
+// tolerance -- otherwise the band would be buying speed with accuracy.
+// Measured on the two whites above rather than argued.
+static void foldingAcrossTheBandIsNumericallyHarmless()
+{
+  icFloatNumber enc[3];
+  d50ThroughTheHeader(enc);
+
+  CIccPcsStepXYZToLab toLab(kD50Literal);
+  CIccPcsStepLabToXYZ toXyz(enc);
+
+  static const icFloatNumber kXyzProbe[3] = { 0.3457f, 0.3585f, 0.2751f };
+  icFloatNumber lab[3] = { 0 }, back[3] = { 0 };
+  toLab.Apply(NULL, lab, kXyzProbe);
+  toXyz.Apply(NULL, back, lab);
+
+  double maxDiff = 0.0;
+  for (int i = 0; i < 3; i++) {
+    const double diff = std::fabs((double)back[i] - (double)kXyzProbe[i]);
+    if (diff > maxDiff)
+      maxDiff = diff;
+  }
+  std::printf("info: XYZ->Lab->XYZ across the band moves the pixel by %.3e\n", maxDiff);
+  // Measured: 1.8e-6, an order of magnitude under this file's assertion
+  // tolerance and ~2000x under the smallest real PCS adjustment (the 3.5e-3
+  // v2-perceptual one, pinned by adjustmentIsLargerThanTheToleranceBand()).
+  check(maxDiff < kTol,
+        "white tolerance: the folded round trip was an identity to inside 1e-5");
+}
+
+// Reaching into a connection's step list is the only way to assert that the
+// fold happened rather than that the answer came out the same either way: the
+// unfolded round trip computes the same pixel, just with two cube-root passes
+// more of it.
+class PcsProbe : public CIccPcsXform
+{
+public:
+  int stepCount()
+  {
+    return m_list ? (int)m_list->size() : -1;
+  }
+
+  icPcsStepType stepType(int n)
+  {
+    if (!m_list)
+      return icPcsStepUnknown;
+    int i = 0;
+    for (CIccPcsStepList::iterator s = m_list->begin(); s != m_list->end(); s++, i++) {
+      if (i == n)
+        return s->ptr->GetType();
+    }
+    return icPcsStepUnknown;
+  }
+
+  void printSteps(const char *szWhat)
+  {
+    std::string str;
+    if (m_list) {
+      for (CIccPcsStepList::iterator s = m_list->begin(); s != m_list->end(); s++)
+        s->ptr->dump(str);
+    }
+    std::printf("info: %s step list:%s\n", szWhat, str.c_str());
+  }
+};
+
+// v5 CMYK output, Lab PCS: identical to the v4 fixture but for the version, so
+// the only thing that changes about the connection is which branch
+// getNormIlluminantXYZ() takes -- the icD50XYZ literal for v4, the icFtoD()'d
+// header illuminant for v5.
+static void buildV5CmykOutputProfile(CIccProfile &p)
+{
+  buildV4CmykOutputProfile(p);
+  p.m_Header.version = icVersionNumberV5;
+}
+
+// The connection the tolerance exists for, at the level a chain actually
+// builds one: a v2 profile (Lab2 PCS encoding, literal D50) into a v5 profile
+// (Lab PCS encoding, header-encoded D50). Connect() pushes Lab2->XYZ then
+// XYZ->Lab; isSameWhite() folding that pair leaves the one scale step the
+// v2->v4 encoding change actually is.
+static void v2ToV5LabConnectionFoldsTheRedundantRoundTrip()
+{
+  {
+    CIccProfile *pIn = new CIccProfile();
+    CIccProfile *pOut = new CIccProfile();
+    buildV2CmykOutputProfile(*pIn);
+    buildV5CmykOutputProfile(*pOut);
+
+    CIccXform *pFrom = CIccXform::Create(pIn, true, icRelativeColorimetric, icInterpTetrahedral);
+    CIccXform *pTo = CIccXform::Create(pOut, false, icRelativeColorimetric, icInterpTetrahedral);
+    check(pFrom != NULL && pTo != NULL, "v2->v5 fold: xforms created");
+    if (pFrom && pTo) {
+      check(pFrom->Begin() == icCmmStatOk && pTo->Begin() == icCmmStatOk,
+            "v2->v5 fold: Begin");
+
+      PcsProbe pcs;
+      const icStatusCMM rv = pcs.Connect(pFrom, pTo);
+      pcs.printSteps("v2->v5 relative");
+      check(rv == icCmmStatOk, "v2->v5 fold: the connection survives as a real xform");
+      check(pcs.stepCount() == 1,
+            "v2->v5 fold: the Lab2->XYZ->Lab round trip folds to a single step");
+      check(pcs.stepType(0) == icPcsStepLab2ToLab,
+            "v2->v5 fold: what survives is the v2->v4 encoding scale");
+    }
+    delete pFrom;
+    delete pTo;
+  }
+
+  // Control: the same connection with white points that genuinely differ must
+  // keep both conversions, or the case above would pass on a fold that always
+  // fires.
+  {
+    CIccProfile *pIn = new CIccProfile();
+    CIccProfile *pOut = new CIccProfile();
+    buildV2CmykOutputProfile(*pIn);
+    buildV5CmykOutputProfile(*pOut);
+    pOut->m_Header.illuminant.X = icDtoF((icFloatNumber)0.9505);
+    pOut->m_Header.illuminant.Y = icDtoF((icFloatNumber)1.0000);
+    pOut->m_Header.illuminant.Z = icDtoF((icFloatNumber)1.0890);
+
+    CIccXform *pFrom = CIccXform::Create(pIn, true, icRelativeColorimetric, icInterpTetrahedral);
+    CIccXform *pTo = CIccXform::Create(pOut, false, icRelativeColorimetric, icInterpTetrahedral);
+    check(pFrom != NULL && pTo != NULL, "v2->v5 control: xforms created");
+    if (pFrom && pTo) {
+      check(pFrom->Begin() == icCmmStatOk && pTo->Begin() == icCmmStatOk,
+            "v2->v5 control: Begin");
+
+      PcsProbe pcs;
+      const icStatusCMM rv = pcs.Connect(pFrom, pTo);
+      pcs.printSteps("v2->D65 v5 relative");
+      check(rv == icCmmStatOk, "v2->v5 control: the connection survives");
+      check(pcs.stepCount() == 2,
+            "v2->v5 control: a real white point difference keeps both conversions");
+    }
+    delete pFrom;
+    delete pTo;
+  }
+}
+
+
 // An XYZ-PCS matrix/TRC profile: the only PCS shape where AdjustPCS() used to
 // clamp negatives. See spec R8 -- the CIccPcsStep chain is pure affine, so a
 // negative component that used to be clamped to zero now survives.
@@ -2218,6 +2517,12 @@ int main(int /*argc*/, char ** /*argv*/)
   spectralEdgeS4Exclusions();
   spectralEdgeMissingWhitePointConvertsNothing();
   spectralEdgeDegenerateWhitePointIsRejected();
+
+  encodedD50DiffersFromTheLiteralWithinTheBand();
+  labStepsFoldAcrossAnEncodingDifferenceInTheWhite();
+  labStepsRefuseToFoldAGenuinelyDifferentWhite();
+  foldingAcrossTheBandIsNumericallyHarmless();
+  v2ToV5LabConnectionFoldsTheRedundantRoundTrip();
 
   xyzPcsChainStillAdjusts();
   setParamsRefreshesCacheAfterBegin();

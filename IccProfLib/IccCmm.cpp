@@ -4558,6 +4558,10 @@ void CIccPcsStepRouteMcs::dump(std::string &str) const
 
 extern icFloatNumber icD50XYZ[3];
 
+//Tolerance isSameWhite() treats two normalized XYZ white points as one.  See
+//CIccPcsLabStep::isSameWhite() for why exact equality is the wrong test.
+static const icFloatNumber icPcsWhiteNearRange = (icFloatNumber)1.0e-5;
+
 /**
 **************************************************************************
 * Name: CIccPcsLabStep::isSameWhite
@@ -4568,9 +4572,18 @@ extern icFloatNumber icD50XYZ[3];
 */
 bool CIccPcsLabStep::isSameWhite(const icFloatNumber *xyzWhite)
 {
-  return (m_xyzWhite[0]==xyzWhite[0] &&
-          m_xyzWhite[1]==xyzWhite[1] &&
-          m_xyzWhite[2]==xyzWhite[2]);
+  //Two sides of a connection can name the same white point and still arrive at
+  //different icFloatNumbers.  getNormIlluminantXYZ() hands a v4 profile the
+  //icD50XYZ literal {0.9642, 1.0, 0.8249} and a v5 profile the s15Fixed16
+  //header illuminant, icFtoD()'d to {0.96420288, 1.0, 0.82490539} - a 2.9e-6
+  //and a 5.4e-6 difference for the same D50.  Exact equality read that as two
+  //white points and left a redundant Lab->XYZ->Lab round trip in the chain.
+  //icPcsWhiteNearRange is above the 7.63e-6 worst case of encoding a normalized
+  //white in s15Fixed16, and orders of magnitude below any visual threshold, so
+  //no pair of genuinely different white points falls inside it.
+  return (icIsNear(m_xyzWhite[0], xyzWhite[0], icPcsWhiteNearRange) &&
+          icIsNear(m_xyzWhite[1], xyzWhite[1], icPcsWhiteNearRange) &&
+          icIsNear(m_xyzWhite[2], xyzWhite[2], icPcsWhiteNearRange));
 }
 
 

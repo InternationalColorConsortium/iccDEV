@@ -34,6 +34,33 @@ for the spectral conversion.
 inverses and adjacent in the PCS fold to `icCmmStatIdentityXform` and the whole
 `CIccPcsXform` is dropped.
 
+### Which white points count as one
+
+Every `Lab<->XYZ` fold in `CIccPcsStepXYZToLab::concat()` and its three
+siblings is gated by
+`CIccPcsLabStep::isSameWhite()`, and both white points reach it from
+`getNormIlluminantXYZ()` on the respective side's connection conditions. Two
+profiles can name the same D50 and still hand back different `icFloatNumber`s:
+a v2 or v4 profile with no spectral viewing conditions tag gets the `icD50XYZ`
+literal `{0.9642, 1.0, 0.8249}`, while a v5 one gets its `s15Fixed16` header
+illuminant back through `icFtoD()`, `{0.96420288, 1.0, 0.82490539}` -- 2.9e-6
+in X and 5.4e-6 in Z apart for the same illuminant.
+
+`isSameWhite()` therefore compares within `icPcsWhiteNearRange` (1e-5) rather
+than exactly. Without it a v2-into-v5 connection kept a full
+`Lab2 -> XYZ -> Lab` round trip -- two cube-root passes -- where the encoding
+change alone is one scale step. The band is above the 7.63e-6 worst case of
+encoding a normalized white in `s15Fixed16` and far below any perceptually
+meaningful white point difference; note that `icIsNear()`'s own 1e-8 default
+would not do, because one `float` ULP at 0.96 is 5.96e-8, so at white point
+magnitudes that default is exact equality.
+
+`v2ToV5LabConnectionFoldsTheRedundantRoundTrip()` in
+`.github/ci/regression/pcs-adjust-placement.cpp` reads the surviving step list
+of that connection, with a D65 control that must keep both conversions, and the
+`labSteps*` cases pin all six folds the predicate gates plus the outside of the
+band.
+
 ## What moved numerically
 
 Moving the same affine math from `AdjustPCS()` into `CIccPcsStep`s
