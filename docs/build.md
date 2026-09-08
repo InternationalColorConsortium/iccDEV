@@ -287,6 +287,34 @@ The Xcode command builds dependency-free Release and Debug test targets in
 layout, and requires freshly generated CLI output to catch skipped execution.
 See [CTest tool suites](ctest.md) for broader desktop coverage.
 
+### Manual iOS example apps
+
+The `examples/ios-*` apps are standalone manual-review Xcode consumers of the
+exported `apple-ios-*-core` package. They are not CTest targets and are not
+part of the Apple workflow gates unless a maintainer explicitly adds that
+coverage. Keep their app CMake, helper script, README commands, bundle-ID
+override, deployment target, asset labels, persisted report path, and simulator
+or device launch behavior aligned as one surface.
+
+| Example | Purpose | Start here |
+| --- | --- | --- |
+| `ios-benchapply` | On-device `CIccCmm::Apply` timing POC using the desktop benchmark primitives. | <a href="../examples/ios-benchapply/README.md">examples/ios-benchapply/README.md</a> |
+| `ios-apply-preview` | Visual profile-apply preview with source, applied, and delta panels. | <a href="../examples/ios-apply-preview/README.md">examples/ios-apply-preview/README.md</a> |
+| `ios-clut-editor` | Live profile-chain plus editable 3D CLUT preview for a selected or default image. | <a href="../examples/ios-clut-editor/README.md">examples/ios-clut-editor/README.md</a> |
+
+For `ios-clut-editor`, use the example helper from the repository root:
+
+```bash
+examples/ios-clut-editor/build-ios.sh simulator --run-tests
+TEAM_ID=ABCDE12345 DEVICE_ID=<udid> \
+  examples/ios-clut-editor/build-ios.sh device --launch
+```
+
+The helper removes bundle-ID drift by forwarding `BUNDLE_ID` to
+`ICCDEV_CLUTEDITOR_BUNDLE_IDENTIFIER`, uses Release by default, and launches
+the simulator with `--console-pty --terminate-running-process` so repeated
+terminal smokes exercise a fresh process.
+
 ## Windows MSVC
 
 ```cmd

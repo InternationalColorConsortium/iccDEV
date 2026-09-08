@@ -30,6 +30,10 @@ INPUT                  = IccProfLib \
                          examples/ios-apply-preview/main.mm \
                          examples/ios-apply-preview/ApplyPreviewHost.h \
                          examples/ios-apply-preview/ApplyPreviewHost.mm \
+                         examples/ios-clut-editor/README.md \
+                         examples/ios-clut-editor/main.mm \
+                         examples/ios-clut-editor/ClutEditorHost.h \
+                         examples/ios-clut-editor/ClutEditorHost.mm \
                          examples/c-validation-dlopen/main.c \
                          examples/ios-benchapply/README.md \
                          examples/ios-benchapply/BenchApplyHost.h \
@@ -78,6 +82,7 @@ INCLUDE_PATH           = IccProfLib \
                          Tools/CmdLine/IccProfileVisualize \
                          Tools/Winnt/IccIisIsapi \
                          examples/hello-iccdev \
+                         examples/ios-clut-editor \
                          examples/ios-benchapply
 
 # Extraction settings. Keep file-local anonymous namespaces out of the public
