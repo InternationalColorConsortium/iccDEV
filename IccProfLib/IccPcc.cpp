@@ -75,7 +75,21 @@
 #include "IccProfile.h"
 #include "IccTag.h"
 #include "IccCmm.h"
+#include "IccUtil.h"
 #include <new>
+
+//Tolerance isEquivalentPcc() treats two normalized illuminant white points as
+//naming the same one.  Wider than CIccPcsLabStep::isSameWhite()'s 1e-5 in
+//IccCmm.cpp on purpose: that predicate decides whether an exact Lab<->XYZ round
+//trip can be folded away, while this one decides whether a chromatic adaptation
+//is spliced into the chain, and the two errors are not the same size.  A false
+//negative here costs a whole adaptation between profiles that share a PCC --
+//issue #1860 measured 0.14 to 0.57 per channel from exactly that -- while a
+//false positive skips an adaptation no larger than the band itself.  1e-4 is
+//also what CIccTagSpectralViewingConditions::setIlluminant() already allows
+//when it classifies a white point as D50 or D65, and it still separates D50
+//from D65 by more than two orders of magnitude.
+static const icFloatNumber icPccWhiteNearRange = (icFloatNumber)1.0e-4;
 
 static bool icCanMapSpectralRange(const icSpectralRange &srcRange, const icSpectralRange &dstRange)
 {
@@ -108,9 +122,14 @@ bool IIccProfileConnectionConditions::isEquivalentPcc(IIccProfileConnectionCondi
       getNormIlluminantXYZ(&XYZ1[0]);
       IPCC.getNormIlluminantXYZ(&XYZ2[0]);
 
-      if (XYZ1[0]!=XYZ2[0] ||
-          XYZ1[1]!=XYZ2[1] ||
-          XYZ1[2]!=XYZ2[2])
+      //Both vectors are computed as X/Y, 1, Z/Y from a float32 tag, so two
+      //profiles naming the same illuminant disagree in the low bits whenever
+      //they wrote it at different luminance scales or rounded it differently.
+      //Exact equality read that as two different viewing conditions and sent
+      //the connection on to splice an adaptation between them.
+      if (!icIsNear(XYZ1[0], XYZ2[0], icPccWhiteNearRange) ||
+          !icIsNear(XYZ1[1], XYZ2[1], icPccWhiteNearRange) ||
+          !icIsNear(XYZ1[2], XYZ2[2], icPccWhiteNearRange))
         return false;
     }
     else {
