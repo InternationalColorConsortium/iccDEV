@@ -16,11 +16,14 @@ sRGB_v4_ICC_preference.icc -> sRGB_D65_MAT.icc
 ```
 
 The live edit controls build an in-memory RGB 3D LUT with adjustable grid size,
-interpolation mode, exposure, contrast, saturation, and warm/cool bias. The
-output report records mean channel delta, max channel delta, and an FNV-1a
-checksum of the edited preview bytes. `Documents/clut-editor-report.json` is
-removed before the latest accepted render writes its report so a failed or stale
-background run cannot leave misleading validation output.
+CLUT interpolation mode, exposure, contrast, saturation, and warm/cool bias. The
+bundled ICC profile chain uses fixed linear interpolation so the managed
+baseline stays stable while the editable CLUT comparison changes. The output
+report records the platform, CMM interpolation, mean channel delta, max channel
+delta, and an FNV-1a checksum of the edited preview bytes.
+`Documents/clut-editor-report.json` is removed before the latest accepted
+render writes its report so a failed or stale background run cannot leave
+misleading validation output.
 
 The UI reuses the current iOS example visual shell and ICC assets: ICC logo
 header, color.org and repository links, brand-blue primary action, compact
@@ -110,7 +113,7 @@ xcrun devicectl device process launch --device "$DEVICE_ID" \
 ```
 
 Launch without `--exit-after-tests` for hands-on visual review. The UI includes
-size, CLUT grid, interpolation, exposure, contrast, saturation, warm/cool,
+size, CLUT grid, CLUT interpolation, exposure, contrast, saturation, warm/cool,
 image-selection, reset-default, light/dark/system appearance switching,
 source/managed/edited/delta panels, ICC and repository links, a native report
 share sheet, and an edited-image export share sheet for Files, Photos, AirDrop,
@@ -119,7 +122,9 @@ half-height logo/banner, shorter action labels, and shorter two-column preview
 rows so sliders and images fit with less scrolling; iPad and Mac Catalyst keep
 the wide dashboard layout when the current window is wide enough, and compact
 Split View or resized Catalyst windows keep the overflowing controls in a
-scrollable compact layout. The UI stays intentionally simple and educational for
+scrollable compact layout after size transitions. Report and image sharing are
+disabled while a fresh render is pending so exported artifacts always match the
+latest accepted controls. The UI stays intentionally simple and educational for
 students and younger Apple developers learning colorimetry concepts.
 
 The same sequence is wrapped by:

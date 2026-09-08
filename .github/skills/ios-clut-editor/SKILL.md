@@ -40,8 +40,8 @@ or its local build helper.
   and README examples aligned.
 - Keep CMM and CLUT application on a background queue and update UIKit only on
   the main queue.
-- Remove stale `Documents/clut-editor-report.json` before writing the current
-  run's report.
+- Remove stale `Documents/clut-editor-report.json` before writing the latest
+  accepted render's report; stale background renders must not overwrite it.
 - Keep simulator launch repeatable with
   `simctl launch --console-pty --terminate-running-process`.
 - Keep device launch repeatable with
@@ -54,6 +54,10 @@ or its local build helper.
   Catalyst runs must not be blocked by a device-only signing placeholder and
   should ignore a globally exported placeholder bundle ID.
 - Keep edited-image export available through the native share sheet.
+- Disable report and edited-image sharing while a render is pending so exports
+  cannot use stale controls.
+- Keep the profile-chain CMM interpolation fixed and make the UI selector apply
+  only to the editable CLUT unless the report and docs explicitly say otherwise.
 - Keep the light/dark/system appearance toggle available as an educational
   visual comparison tool.
 - Keep the compact iPhone layout tuned for visible controls: half-height

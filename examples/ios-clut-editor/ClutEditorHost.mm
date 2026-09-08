@@ -48,6 +48,7 @@
  */
 
 #import "ClutEditorHost.h"
+#import <TargetConditionals.h>
 #include "IccCmm.h"
 #include "IccProfLibVer.h"
 
@@ -500,17 +501,23 @@ IccClutEditorResult *IccDevRunClutEditor(UIImage *selectedImage,
     NSString *shortVersion = info[@"CFBundleShortVersionString"] ?: @"unknown";
     NSString *buildVersion = info[@"CFBundleVersion"] ?: @"unknown";
     NSString *interpName = useTetrahedral ? @"tetrahedral" : @"linear";
+#if TARGET_OS_MACCATALYST
+    NSString *platformName = @"Mac Catalyst";
+#else
+    NSString *platformName = @"iOS";
+#endif
     NSMutableString *report = [NSMutableString stringWithFormat:
       @"ICCDEV CLUT EDITOR\n"
-       "Profile and 3D LUT iOS POC\n"
+       "Profile and 3D LUT %@ POC\n"
        "==========================\n\n"
        "Run: %@\n"
        "App: %@ (%@)\n"
        "ICC: https://www.color.org/\n"
        "Repo: https://github.com/InternationalColorConsortium/iccDEV\n"
        "Library: IccProfLib %s\n"
-       "Platform: iOS %ld.%ld.%ld\n\n",
-      runDate, shortVersion, buildVersion, ICCPROFLIBVER,
+       "Platform: %@ %ld.%ld.%ld\n\n",
+      platformName, runDate, shortVersion, buildVersion, ICCPROFLIBVER,
+      platformName,
       static_cast<long>(os.majorVersion), static_cast<long>(os.minorVersion),
       static_cast<long>(os.patchVersion)];
 
@@ -533,16 +540,15 @@ IccClutEditorResult *IccDevRunClutEditor(UIImage *selectedImage,
       return result;
     }
 
-    const icXformInterp interpolation =
-      useTetrahedral ? icInterpTetrahedral : icInterpLinear;
+    const icXformInterp cmmInterpolation = icInterpLinear;
     CIccCmm cmm(icSigRgbData, icSigRgbData, true);
     icStatusCMM status =
       cmm.AddXform(srcPath.fileSystemRepresentation, icRelativeColorimetric,
-                   interpolation);
+                   cmmInterpolation);
     if (status == icCmmStatOk) {
       status =
         cmm.AddXform(dstPath.fileSystemRepresentation, icRelativeColorimetric,
-                     interpolation);
+                     cmmInterpolation);
     }
     if (status == icCmmStatOk)
       status = cmm.Begin();
@@ -587,8 +593,10 @@ IccClutEditorResult *IccDevRunClutEditor(UIImage *selectedImage,
       @"passed": @(result.passed),
       @"edgePixels": @(edgePixels),
       @"selectedImage": @(usedPickedImage),
+      @"platform": platformName,
       @"profileChain": @"sRGB_v4_ICC_preference.icc -> sRGB_D65_MAT.icc",
       @"renderingIntent": @"relative colorimetric",
+      @"cmmInterpolation": @"linear",
       @"clutGridPoints": @(gridPoints),
       @"clutInterpolation": interpName,
       @"exposureStops": @(exposureStops),
@@ -607,6 +615,7 @@ IccClutEditorResult *IccDevRunClutEditor(UIImage *selectedImage,
        "Input image: %@\n"
        "Profile chain: sRGB_v4_ICC_preference.icc -> sRGB_D65_MAT.icc\n"
        "Intent: relative colorimetric\n"
+       "CMM interpolation: linear (fixed)\n"
        "CLUT grid: %lu points per axis\n"
        "CLUT interpolation: %@\n"
        "Exposure: %.3f stops\n"

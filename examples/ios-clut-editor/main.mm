@@ -72,9 +72,14 @@
 @property(nonatomic, strong) UISlider *saturationSlider;
 @property(nonatomic, strong) UISlider *warmSlider;
 @property(nonatomic, strong) UIImage *selectedImage;
+@property(nonatomic, strong) UIImage *lastSourceImage;
+@property(nonatomic, strong) UIImage *lastManagedImage;
 @property(nonatomic, strong) UIImage *lastEditedImage;
+@property(nonatomic, strong) UIImage *lastDeltaImage;
 @property(nonatomic, copy) NSString *lastReport;
 @property(nonatomic, assign) NSInteger renderSerial;
+@property(nonatomic, assign) BOOL wideLayout;
+@property(nonatomic, assign) BOOL renderInFlight;
 @end
 
 @interface IccClutEditorAppDelegate : UIResponder <UIApplicationDelegate>
@@ -100,6 +105,14 @@ static UIColor *IccDevBrandBlue(void)
                              alpha:1.0];
     }];
   }
+  return [UIColor colorWithRed:3.0 / 255.0
+                         green:102.0 / 255.0
+                          blue:153.0 / 255.0
+                         alpha:1.0];
+}
+
+static UIColor *IccDevPrimaryBlue(void)
+{
   return [UIColor colorWithRed:3.0 / 255.0
                          green:102.0 / 255.0
                           blue:153.0 / 255.0
@@ -170,23 +183,64 @@ static void IccDevConfigureImageView(UIImageView *image)
 
 @implementation IccClutEditorViewController
 
-- (void)viewDidLoad
+- (BOOL)useWideLayoutForSize:(CGSize)size
 {
-  [super viewDidLoad];
-  self.view.backgroundColor = [UIColor systemBackgroundColor];
   const BOOL isPhone =
     [UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPhone;
-  CGFloat layoutWidth = self.view.bounds.size.width;
+  CGFloat layoutWidth = size.width;
   if (layoutWidth <= 0.0)
     layoutWidth = [UIScreen mainScreen].bounds.size.width;
-  BOOL isPad = !isPhone &&
+  BOOL wide = !isPhone &&
     self.traitCollection.horizontalSizeClass != UIUserInterfaceSizeClassCompact &&
     layoutWidth >= 700.0;
 #if TARGET_OS_MACCATALYST
-  isPad =
+  wide =
     self.traitCollection.horizontalSizeClass != UIUserInterfaceSizeClassCompact &&
     layoutWidth >= 700.0;
 #endif
+  return wide;
+}
+
+- (void)viewDidLoad
+{
+  [super viewDidLoad];
+  [self rebuildInterfaceForSize:self.view.bounds.size];
+}
+
+- (void)viewWillTransitionToSize:(CGSize)size
+       withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator
+{
+  [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+  BOOL wide = [self useWideLayoutForSize:size];
+  if (wide == self.wideLayout)
+    return;
+  [coordinator animateAlongsideTransition:nil completion:
+    ^(id<UIViewControllerTransitionCoordinatorContext> context) {
+      (void)context;
+      [self rebuildInterfaceForSize:size];
+    }];
+}
+
+- (void)rebuildInterfaceForSize:(CGSize)size
+{
+  const BOOL hadInterface = self.reportView != nil;
+  NSInteger sizeIndex = self.sizeControl ? self.sizeControl.selectedSegmentIndex : 1;
+  NSInteger gridIndex = self.gridControl ? self.gridControl.selectedSegmentIndex : 1;
+  NSInteger interpIndex =
+    self.interpolationControl ? self.interpolationControl.selectedSegmentIndex : 0;
+  NSInteger appearanceIndex =
+    self.appearanceControl ? self.appearanceControl.selectedSegmentIndex : 0;
+  float exposureValue = self.exposureSlider ? self.exposureSlider.value : 0.0f;
+  float contrastValue = self.contrastSlider ? self.contrastSlider.value : 1.0f;
+  float saturationValue = self.saturationSlider ? self.saturationSlider.value : 1.0f;
+  float warmValue = self.warmSlider ? self.warmSlider.value : 0.0f;
+
+  for (UIView *subview in self.view.subviews)
+    [subview removeFromSuperview];
+
+  self.view.backgroundColor = [UIColor systemBackgroundColor];
+  const BOOL isPad = [self useWideLayoutForSize:size];
+  self.wideLayout = isPad;
   const BOOL compactPhone = !isPad;
 
   UIImageView *logo =
@@ -216,40 +270,40 @@ static void IccDevConfigureImageView(UIImageView *image)
 
   self.sizeControl =
     [[UISegmentedControl alloc] initWithItems:@[@"160", @"256", @"384"]];
-  self.sizeControl.selectedSegmentIndex = 1;
+  self.sizeControl.selectedSegmentIndex = sizeIndex;
   self.sizeControl.translatesAutoresizingMaskIntoConstraints = NO;
   self.gridControl =
     [[UISegmentedControl alloc] initWithItems:@[@"5", @"9", @"17"]];
-  self.gridControl.selectedSegmentIndex = 1;
+  self.gridControl.selectedSegmentIndex = gridIndex;
   self.gridControl.translatesAutoresizingMaskIntoConstraints = NO;
   self.interpolationControl =
     [[UISegmentedControl alloc] initWithItems:@[@"Linear", @"Tetra"]];
-  self.interpolationControl.selectedSegmentIndex = 0;
+  self.interpolationControl.selectedSegmentIndex = interpIndex;
   self.interpolationControl.translatesAutoresizingMaskIntoConstraints = NO;
   self.appearanceControl =
     [[UISegmentedControl alloc] initWithItems:@[@"System", @"Light", @"Dark"]];
-  self.appearanceControl.selectedSegmentIndex = 0;
+  self.appearanceControl.selectedSegmentIndex = appearanceIndex;
   self.appearanceControl.translatesAutoresizingMaskIntoConstraints = NO;
 
   self.exposureSlider = [[UISlider alloc] init];
   self.exposureSlider.minimumValue = -1.0f;
   self.exposureSlider.maximumValue = 1.0f;
-  self.exposureSlider.value = 0.0f;
+  self.exposureSlider.value = exposureValue;
   self.exposureSlider.translatesAutoresizingMaskIntoConstraints = NO;
   self.contrastSlider = [[UISlider alloc] init];
   self.contrastSlider.minimumValue = 0.50f;
   self.contrastSlider.maximumValue = 1.50f;
-  self.contrastSlider.value = 1.0f;
+  self.contrastSlider.value = contrastValue;
   self.contrastSlider.translatesAutoresizingMaskIntoConstraints = NO;
   self.saturationSlider = [[UISlider alloc] init];
   self.saturationSlider.minimumValue = 0.0f;
   self.saturationSlider.maximumValue = 2.0f;
-  self.saturationSlider.value = 1.0f;
+  self.saturationSlider.value = saturationValue;
   self.saturationSlider.translatesAutoresizingMaskIntoConstraints = NO;
   self.warmSlider = [[UISlider alloc] init];
   self.warmSlider.minimumValue = -1.0f;
   self.warmSlider.maximumValue = 1.0f;
-  self.warmSlider.value = 0.0f;
+  self.warmSlider.value = warmValue;
   self.warmSlider.translatesAutoresizingMaskIntoConstraints = NO;
 
   self.sliderSummary = IccDevLabel(@"", UIFontTextStyleFootnote);
@@ -284,13 +338,14 @@ static void IccDevConfigureImageView(UIImageView *image)
   UIButtonConfiguration *runConfig =
     [UIButtonConfiguration filledButtonConfiguration];
   runConfig.title = compactPhone ? @"Apply" : @"Apply Live Edit";
-  runConfig.baseBackgroundColor = IccDevBrandBlue();
+  runConfig.baseBackgroundColor = IccDevPrimaryBlue();
   runConfig.baseForegroundColor = [UIColor whiteColor];
   runConfig.contentInsets = NSDirectionalEdgeInsetsMake(compactPhone ? 8 : 10,
                                                        compactPhone ? 10 : 16,
                                                        compactPhone ? 8 : 10,
                                                        compactPhone ? 10 : 16);
   self.runButton.configuration = runConfig;
+  self.runButton.enabled = !self.renderInFlight;
   self.runButton.titleLabel.font =
     [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
   self.runButton.translatesAutoresizingMaskIntoConstraints = NO;
@@ -305,6 +360,7 @@ static void IccDevConfigureImageView(UIImageView *image)
                                                          compactPhone ? 8 : 10,
                                                          compactPhone ? 10 : 16);
   self.shareButton.configuration = shareConfig;
+  self.shareButton.enabled = !self.renderInFlight && self.lastReport.length > 0;
   self.shareButton.titleLabel.font =
     [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
   self.shareButton.translatesAutoresizingMaskIntoConstraints = NO;
@@ -319,6 +375,7 @@ static void IccDevConfigureImageView(UIImageView *image)
                                                         compactPhone ? 8 : 10,
                                                         compactPhone ? 10 : 16);
   self.saveImageButton.configuration = saveConfig;
+  self.saveImageButton.enabled = !self.renderInFlight && self.lastEditedImage != nil;
   self.saveImageButton.titleLabel.font =
     [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
   self.saveImageButton.translatesAutoresizingMaskIntoConstraints = NO;
@@ -331,6 +388,10 @@ static void IccDevConfigureImageView(UIImageView *image)
                                self.editedView, self.deltaView]) {
     IccDevConfigureImageView(image);
   }
+  self.sourceView.image = self.lastSourceImage;
+  self.managedView.image = self.lastManagedImage;
+  self.editedView.image = self.lastEditedImage;
+  self.deltaView.image = self.lastDeltaImage;
 
   self.reportView = [[UITextView alloc] initWithFrame:CGRectZero];
   self.reportView.editable = NO;
@@ -346,7 +407,8 @@ static void IccDevConfigureImageView(UIImageView *image)
   self.reportView.font =
     [UIFont monospacedSystemFontOfSize:isPad ? 13 : 14
                                 weight:UIFontWeightRegular];
-  self.reportView.text = @"CLUT editor ready.";
+  self.reportView.text = self.lastReport ?: (self.renderInFlight ?
+    @"Applying ICC profile chain and live CLUT edit..." : @"CLUT editor ready.");
   self.reportView.translatesAutoresizingMaskIntoConstraints = NO;
 
   UIStackView *links =
@@ -571,7 +633,9 @@ static void IccDevConfigureImageView(UIImageView *image)
   }
 
   [self updateSliderSummary];
-  [self runEditor];
+  [self applyAppearanceStyle];
+  if (!hadInterface)
+    [self runEditor];
 }
 
 - (void)applyAppearanceStyle
@@ -616,6 +680,10 @@ static void IccDevConfigureImageView(UIImageView *image)
 - (void)scheduleEditorRun
 {
   [self updateSliderSummary];
+  self.renderInFlight = YES;
+  self.reportView.text = @"Applying ICC profile chain and live CLUT edit...";
+  self.shareButton.enabled = NO;
+  self.saveImageButton.enabled = NO;
   [NSObject cancelPreviousPerformRequestsWithTarget:self
                                            selector:@selector(runEditor)
                                              object:nil];
@@ -637,8 +705,11 @@ static void IccDevConfigureImageView(UIImageView *image)
   const double saturation = self.saturationSlider.value;
   const double warm = self.warmSlider.value;
   const BOOL tetra = self.interpolationControl.selectedSegmentIndex == 1;
+  self.renderInFlight = YES;
   self.reportView.text = @"Applying ICC profile chain and live CLUT edit...";
   self.runButton.enabled = NO;
+  self.shareButton.enabled = NO;
+  self.saveImageButton.enabled = NO;
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
     IccClutEditorResult *result =
       IccDevRunClutEditor(input, edge, grid, exposure, contrast, saturation,
@@ -658,9 +729,15 @@ static void IccDevConfigureImageView(UIImageView *image)
       self.editedView.image = result.editedImage;
       self.deltaView.image = result.deltaImage;
       self.reportView.text = result.report;
+      self.lastSourceImage = result.sourceImage;
+      self.lastManagedImage = result.managedImage;
       self.lastReport = result.report;
       self.lastEditedImage = result.editedImage;
+      self.lastDeltaImage = result.deltaImage;
+      self.renderInFlight = NO;
       self.runButton.enabled = YES;
+      self.shareButton.enabled = result.report.length > 0;
+      self.saveImageButton.enabled = result.editedImage != nil;
       IccDevFinishClutEditor(result);
     });
   });

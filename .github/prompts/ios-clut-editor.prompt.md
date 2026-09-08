@@ -37,7 +37,12 @@ Preserve these invariants:
   blocking simulator or Mac Catalyst runs for a device-only signing placeholder.
 - Mac Catalyst runs use a matching Mac Catalyst core archive and run on Apple
   Silicon Macs through `build-ios.sh maccatalyst`.
-- The app removes stale JSON reports before writing new report output.
+- The app removes stale JSON reports before writing the latest accepted render
+  output; older background renders must not overwrite newer reports.
+- Report and edited-image share actions are disabled while a fresh render is
+  pending, then re-enabled only for the accepted result.
+- The profile-chain CMM interpolation stays fixed so the interpolation selector
+  changes only the editable CLUT comparison.
 - The app exposes edited-image export through the native share sheet.
 - The app exposes a light/dark/system appearance toggle as an educational
   visual comparison tool.
