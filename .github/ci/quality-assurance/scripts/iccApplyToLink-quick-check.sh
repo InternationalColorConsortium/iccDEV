@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 source "$SCRIPT_DIR/qa-common.sh"
 qa_init "iccApplyToLink-quick-check"
 
-BIN="$ICCDEV_BUILD_DIR/Tools/IccApplyToLink/iccApplyToLink"
+BIN="$ICCDEV_TOOLS_DIR/IccApplyToLink/iccApplyToLink"
 PROFILE="$ICCDEV_ROOT/Testing/sRGB_v4_ICC_preference.icc"
 
 qa_require_tool "$BIN"
@@ -39,5 +39,9 @@ qa_run restricted-v4 reject "V4 device links cannot record" \
     "$BIN" "$QA_OUTDIR/restricted-v4.icc" 0 2 0 "QA restricted" 0.1 0.9 0 0 "$PROFILE" 1
 qa_run restricted-v5 success "" "$BIN" "$QA_OUTDIR/restricted-v5.icc" \
     0 2 1 "QA restricted v5" 0.1 0.9 0 0 "$PROFILE" 1
+qa_run v5-device-link success "" "$BIN" "$QA_OUTDIR/v5-device-link.icc" \
+    0 9 1 "AFL v5 DeviceLink" -0.25 1.25 1 0 "$PROFILE" 1 "$PROFILE" 1
+qa_run cube-intent-13 success "" "$BIN" "$QA_OUTDIR/cube-intent-13.cube" \
+    1 2 4 "AFL" 0 1 0 0 "$PROFILE" 13
 
 qa_finish

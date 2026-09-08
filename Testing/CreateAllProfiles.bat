@@ -261,7 +261,7 @@ REM list drifts silently and leaves iccdev.qa-profile-manifest short a profile o
 REM manifest row depending on which copy was edited. CALL is required: invoking a
 REM .bat without it transfers control and never returns to this script.
 @echo on
-call mkprofiles.bat
+call .\mkprofiles.bat
 @echo off
 :end_HDR
 

@@ -112,7 +112,7 @@ fi
 
 LINK_EXTRA=()
 if [[ "$PROFLIB" == *.a ]] &&
-    grep -q '^ICC_USE_ZLIB:BOOL=ON$' "$BUILD_ROOT/CMakeCache.txt" 2>/dev/null; then
+    grep -q '^ICC_USE_ZLIB:BOOL=ON$' "${ICCDEV_CMAKE_CACHE:-$BUILD_ROOT/CMakeCache.txt}" 2>/dev/null; then
   LINK_EXTRA+=(-lz)
 fi
 
