@@ -167,15 +167,25 @@ HDR/HagcRefWhiteToneMap.icc	positive	valid	0	none	generated	-	conformant example
 HDR/HdrBakedLut.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrCicp2NoColumns.icc	negative	noncompliant	0	none	generated	-	negative fixture: ColourPrimaries 2 requires the matrix column tags, which supply the only RGB-to-PCSXYZ matrix such a profile can have
 HDR/HdrCicpUnspecified.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/HdrColorSpaceClass.icc	compatibility	warning	0	none	generated	-	baselined: 8.10.1 membership negative (device class not Input/Display); the warning IS the expected result -- CheckTagExclusion bars cicpTag outside Input/Display/ColorEncoding, the same restriction 8.10.1 states from the other side
 HDR/HdrDisplayMetadata.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
-HDR/HdrInvalidTransfer.icc	positive	valid	0	none	generated	-	classification fixture: TransferCharacteristics 13 puts it outside the clause 8.10 sub-class, which is not a defect - it is a valid Display profile carrying a cicpTag and a HAGC tag
+HDR/HdrHeadroomDcvCrwl.icc	positive	valid	0	none	generated	-	conforming HDR Display profile; isolates clause 8.10.5 rule c) DCV/CRWL, CRWL deliberately 250 so a reader firing the wrong rule returns a different number
+HDR/HdrHeadroomDcvDrwl.icc	positive	valid	0	none	generated	-	conforming HDR Display profile; isolates clause 8.10.5 rule b) DCV/DRWL, DRWL deliberately 500 so a fall-through to rule c) returns 4,926 instead of 2,0
 HDR/HdrInputDisplayMeta.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean. Input-class HDR Profile carrying HDR Display metadata, which clause 8.10.5 scopes to Display profiles - an informational note, not a defect
+HDR/HdrInvalidTransfer.icc	positive	valid	0	none	generated	-	classification fixture: TransferCharacteristics 13 puts it outside the clause 8.10 sub-class, which is not a defect - it is a valid Display profile carrying a cicpTag and a HAGC tag
 HDR/HdrLinearCll.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrLinearHagcWhite.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrLinearMdcv.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrLinearNoMetadata.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrMissingBToA0.icc	negative	critical	255	none	generated	-	negative fixture: an AToBx tag requires its paired BToAx tag. Critical rather than noncompliant since the 8.10.1 migration: an HDR Profile carries no TRC tags, so a Display profile missing BToA0 also fails ICC.1's required-tag rule
+HDR/HdrMissingBToA1.icc	negative	noncompliant	0	none	generated	-	negative fixture: clause 8.10.6 pairing at x=1, which HdrMissingBToA0 cannot reach because x=0 is mandatory outright
 HDR/HdrMissingLutPair.icc	negative	critical	255	none	generated	-	negative fixture: clause 8.10.6's AToB0Tag is mandatory regardless of profile class; without it and the TRC tags a Display profile also fails ICC.1's required-tag rule
+HDR/HdrNoCicpTag.icc	positive	valid	0	none	generated	-	8.10.1 membership negative (no cicpTag) and a conformant profile; metadataTag retained so a classifier keying off metadata rather than the cicpTag misclassifies it
+HDR/HdrNonRgbSpace.icc	positive	valid	0	none	generated	-	8.10.1 membership negative (3CLR data colour space) and a conformant profile; 3CLR keeps the channel count at three so every other tag is unchanged
+HDR/HdrTransferSdr.icc	positive	valid	0	none	generated	-	8.10.1 membership negative (TransferCharacteristics 1, not 8/16/18) and a conformant profile; no TRC tags, which is what isolates it from HdrInvalidTransfer
+HDR/HdrTrcTagsPresent.icc	positive	valid	0	none	generated	-	8.10.1 membership negative (TRC tags present) and a conformant profile; de-confounds HdrInvalidTransfer, which fails this condition and the transfer condition at once
+HDR/HdrVersion44.icc	positive	valid	0	none	generated	-	8.10.1 membership negative (version 4.4, below the 4.5 window) and a conformant profile
+HDR/HdrVersion46.icc	compatibility	warning	0	none	generated	-	conforming HDR Profile at 4.6.0.0, the 'or later within v4' edge that separates '>= 4.5' from '== 4.5'; the unexpected-minor-number warning is unavoidable since 4.5 is the highest defined v4 minor
 ICS/Lab_float-D65_2deg-Part1.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 ICS/Lab_float-IllumA_2deg-Part2.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 ICS/Lab_int-D65_2deg-Part1.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)

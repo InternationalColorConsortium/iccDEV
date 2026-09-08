@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MEMBERSHIP NEGATIVE for clause 8.10.1: there is no cicpTag.
+
+  NOTE 3 of 8.10.1 calls a conforming cicpTag "the sole tag-level requirement
+  that distinguishes an HDR Profile from a conventional three-component
+  matrix-based Input or Display profile".  Remove it and exactly that
+  distinction goes: what is left here is a conventional Display profile that
+  happens to carry HDR Image and HDR Display metadata.
+
+  The metadataTag is deliberately RETAINED.  A classifier that reached for the
+  metadata rather than the cicpTag - which is the plausible wrong
+  implementation, since the metadata is what carries the HDR luminance figures
+  - would still see HDR content here and misclassify.
+
+  Everything else 8.10.1 requires is satisfied, so this fixture isolates that
+  one condition: a classifier that stopped testing it would misclassify this
+  profile as an HDR Profile, and would still pass every positive in the corpus.
+
+  This profile remains a CONFORMANT ICC profile - see above for any diagnostic
+  this particular fixture is expected to draw.  Failing a membership condition
+  means the profile is not an HDR Profile; it does not make the profile
+  non-conformant, and nothing in 8.10 says otherwise.  That ruling is recorded
+  against HDR-02/HDR-03, both withdrawn on it.
+
+  EXPECTED CLASSIFICATION is icHdrProfileHdrContent - NOT icHdrProfileNone.
+  This profile still carries HDR Image and HDR Display metadata, and that is
+  precisely what the middle bucket of icHdrProfileClass exists for: HDR content
+  a consumer may legitimately act on, sitting in a profile that is not an HDR
+  Profile.  A classifier reduced to a yes/no could not express this verdict at
+  all, which is the second thing these fixtures pin.
+-->
+<IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>4.50</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-08-05T00:00:00</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </PCSIlluminant>
+    <ProfileCreator>ICCD</ProfileCreator>
+  </Header>
+  <Tags>
+    <!-- The canonical sRGB/BT.709 colorants adapted to the PCS adopted white,
+         which is what a conforming v4 matrix profile carries: the encoded values
+         are relative to D50, not to the display's own D65. The
+         chromaticAdaptationTag below is the matrix that put them there, so a
+         consumer recovering the source primaries per clause 10.3 NOTE 1 has to
+         apply its inverse to get back to D65. -->
+    <redColorantTag> <XYZArrayType>
+      <XYZNumber X="0.436004638672" Y="0.222503662109" Z="0.013900756836"/>
+    </XYZArrayType> </redColorantTag>
+
+    <greenColorantTag> <XYZArrayType>
+      <XYZNumber X="0.385101318359" Y="0.716903686523" Z="0.097106933594"/>
+    </XYZArrayType> </greenColorantTag>
+
+    <blueColorantTag> <XYZArrayType>
+      <XYZNumber X="0.143096923828" Y="0.060592651367" Z="0.713897705078"/>
+    </XYZArrayType> </blueColorantTag>
+
+    <!-- Standard Bradford D65 to D50 adaptation. -->
+    <chromaticAdaptationTag> <s15Fixed16ArrayType>
+      <Array>
+        1.047882  0.022919 -0.050201
+        0.029587  0.990479 -0.017059
+       -0.009232  0.015076  0.751678
+      </Array>
+    </s15Fixed16ArrayType> </chromaticAdaptationTag>
+
+    <mediaWhitePointTag> <XYZArrayType>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </XYZArrayType> </mediaWhitePointTag>
+
+
+    <metaDataTag> <dictType>
+      <DictEntry Name="CRWL" Value="203.0"/>
+      <DictEntry Name="CLL" Value="1000.0 400.0 9"/>
+      <DictEntry Name="MDCV" Value="1000.0 0.005 9"/>
+      <DictEntry Name="DERH" Value="4.0"/>
+      <DictEntry Name="DRWL" Value="203.0"/>
+      <DictEntry Name="DCV" Value="1000.0 0.005 1"/>
+    </dictType> </metaDataTag>
+
+    <!-- Clause 8.10.1 of the 29-08-2026 revision: "the redTRCTag, greenTRCTag
+         and blueTRCTag shall not be present" in an HDR Profile. The transfer
+         function is conveyed by the cicpTag's TransferCharacteristics field
+         instead, and NOTE 3 makes their absence one of the two tag-level
+         features that distinguish an HDR Profile. This fixture was authored
+         against the previous revision and carried them.
+
+         The AToB0Tag/BToA0Tag pair below is what 8.10.6 makes mandatory, and
+         what NOTE 4 says gives a legacy CMM "a rendering path at all" once the
+         TRC tags are gone. Identity B curves: these fixtures exercise
+         classification and the tone-mapping chain, not the bake's accuracy. -->
+
+    <AToB0Tag> <lutAtoBType>
+      <Channels InputChannels="3" OutputChannels="3"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+    </lutAtoBType> </AToB0Tag>
+
+    <BToA0Tag> <lutBtoAType>
+      <Channels InputChannels="3" OutputChannels="3"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+    </lutBtoAType> </BToA0Tag>
+
+    <profileDescriptionTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR membership negative: no cicpTag]]></LocalizedText>
+    </multiLocalizedUnicodeType> </profileDescriptionTag>
+
+    <copyrightTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright (C) 2026 The International Color Consortium. Generated fixture, no measured data.]]></LocalizedText>
+    </multiLocalizedUnicodeType> </copyrightTag>
+  </Tags>
+</IccProfile>

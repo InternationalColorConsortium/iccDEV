@@ -376,6 +376,43 @@ then
 	iccFromXml HdrLinearMdcv.xml HdrLinearMdcv.icc
 	iccFromXml HdrLinearNoMetadata.xml HdrLinearNoMetadata.icc
 	iccFromXml HdrLinearHagcWhite.xml HdrLinearHagcWhite.icc
+
+	# Clause 8.10.1 membership corpus. Each of these flips exactly ONE of the
+	# clause's membership conditions and satisfies every other one, so a
+	# classifier that drops or weakens that condition is misclassifying exactly
+	# one fixture. Before they existed the only membership negative was
+	# HdrInvalidTransfer, which fails two conditions at once (non-HDR transfer
+	# AND TRC tags present) and so cannot say which of the two was tested.
+	#
+	# All six are CONFORMANT profiles that classify as icHdrProfileHdrContent:
+	# failing 8.10.1 makes a profile not an HDR Profile, it does not make it
+	# non-conformant, and each still carries HDR metadata. Two draw a warning
+	# that is itself the expected result -- see the fixture headers and the
+	# rows in Testing/qa-profile-manifest.tsv.
+	iccFromXml HdrNonRgbSpace.xml HdrNonRgbSpace.icc
+	iccFromXml HdrColorSpaceClass.xml HdrColorSpaceClass.icc
+	iccFromXml HdrVersion44.xml HdrVersion44.icc
+	iccFromXml HdrNoCicpTag.xml HdrNoCicpTag.icc
+	iccFromXml HdrTrcTagsPresent.xml HdrTrcTagsPresent.icc
+	iccFromXml HdrTransferSdr.xml HdrTransferSdr.icc
+
+	# The other edge of the same window: 4.6.0.0 is "4.5.0.0 or later within
+	# v4", so this one IS an HDR Profile. It is the only fixture that separates
+	# a correct ">= 4.5 and < 5" test from a wrong "== 4.5".
+	iccFromXml HdrVersion46.xml HdrVersion46.icc
+
+	# Clause 8.10.5 display-headroom precedence, rules b) and c). The base
+	# fixture HdrDisplayMetadata fires rule a); these two remove entries to
+	# expose the rules below it, and pick values that make a reader firing the
+	# wrong rule return a different number rather than the same one.
+	iccFromXml HdrHeadroomDcvDrwl.xml HdrHeadroomDcvDrwl.icc
+	iccFromXml HdrHeadroomDcvCrwl.xml HdrHeadroomDcvCrwl.icc
+
+	# Clause 8.10.6 pairing at x = 1. HdrMissingBToA0 covers x = 0, but x = 0
+	# is the pair 8.10.6 makes mandatory outright, so an implementation that
+	# only ever looked for AToB0Tag/BToA0Tag passes it. This is a negative --
+	# see Testing/expected-invalid-fromxml.tsv.
+	iccFromXml HdrMissingBToA1.xml HdrMissingBToA1.icc
 	set +x
 fi
 cd ..

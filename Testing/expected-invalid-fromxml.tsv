@@ -12,6 +12,7 @@
 # classifier greps for it literally. An entry that fails either test silently
 # pre-approves its whole glob for a regression it can never match.
 HdrMissingBToA0	invalid-saved	without its paired BToA0Tag	HDR Profile negative fixture: clause 8.10.6 requires the BToAx pair when a Display RGB HDR Profile contains an AToBx tag
+HdrMissingBToA1	invalid-saved	without its paired BToA1Tag	HDR Profile negative fixture: clause 8.10.6 pairing at x=1, which HdrMissingBToA0 cannot reach because x=0 is the pair 8.10.6 makes mandatory outright
 HagcInvalidXOrder	invalid-saved	not strictly increasing	headroomAdaptiveGainCurveTag negative fixture: control point X values must be strictly increasing or the gain evaluator's segment parameter divides by zero
 calcUnderStack_*	parse-fail	Unable to parse element of type CIccMpeXmlCalculator	calculator under-stack negative profiles intentionally reject invalid stack operations
 uio-CIccCalculatorFunc-CheckUnderflowOverflow-IccMpeCalc_cpp-Line4238	parse-fail	Unable to Parse	calculator underflow/overflow fixture intentionally emits malformed unknown-element XML
