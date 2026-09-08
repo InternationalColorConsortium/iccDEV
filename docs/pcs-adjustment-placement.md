@@ -55,6 +55,16 @@ meaningful white point difference; note that `icIsNear()`'s own 1e-8 default
 would not do, because one `float` ULP at 0.96 is 5.96e-8, so at white point
 magnitudes that default is exact equality.
 
+There is a sibling predicate with the same problem and a different answer.
+`IIccProfileConnectionConditions::isEquivalentPcc()` decides whether
+`pushXYZConvert()` splices a chromatic adaptation, and it compared its two
+normalized illuminant white points with `==` for the same reason. It now
+compares within `icPccWhiteNearRange` (1e-4) -- a wider band than this one, on
+purpose: a false negative there costs a whole adaptation between profiles that
+share a PCC (#1860 measured 0.14 to 0.57 per channel), while a false positive
+skips an adaptation no larger than the band. Keep the two in mind together; they
+answer different questions about the same kind of difference.
+
 `v2ToV5LabConnectionFoldsTheRedundantRoundTrip()` in
 `.github/ci/regression/pcs-adjust-placement.cpp` reads the surviving step list
 of that connection, with a D65 control that must keep both conversions, and the

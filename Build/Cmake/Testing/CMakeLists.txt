@@ -2530,6 +2530,41 @@ function(iccdev_add_pcs_xyzconvert_matrix_channels_test)
   endif()
 endfunction()
 
+function(iccdev_add_pcc_equivalent_white_tolerance_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPccEquivalentWhiteToleranceTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pcc-equivalent-white-tolerance.cpp"
+  )
+  target_link_libraries(iccPccEquivalentWhiteToleranceTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPccEquivalentWhiteToleranceTest)
+
+  add_test(
+    NAME iccdev.pcc-equivalent-white-tolerance
+    COMMAND "$<TARGET_FILE:iccPccEquivalentWhiteToleranceTest>"
+  )
+  set_tests_properties(iccdev.pcc-equivalent-white-tolerance PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;iccprofLib;cmm;pcc;issue-1860;regression"
+  )
+  if(WIN32)
+    set(_pccwhite_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPccEquivalentWhiteToleranceTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pccwhite_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pcc-equivalent-white-tolerance PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pccwhite_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_dpcc_pcc_replacement_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -7233,6 +7268,7 @@ if(WIN32)
   iccdev_add_unsupported_profile_class_test()
   iccdev_add_dpcc_pcc_replacement_test()
   iccdev_add_pcs_xyzconvert_matrix_channels_test()
+  iccdev_add_pcc_equivalent_white_tolerance_test()
   iccdev_add_iccviz_metrics_test()
   iccdev_add_iccviz_degenerate_test()
   iccdev_add_iccviz_pdf_axis_test()
@@ -7609,6 +7645,7 @@ iccdev_add_extended_device_colorspace_test()
 iccdev_add_unsupported_profile_class_test()
 iccdev_add_dpcc_pcc_replacement_test()
 iccdev_add_pcs_xyzconvert_matrix_channels_test()
+iccdev_add_pcc_equivalent_white_tolerance_test()
 iccdev_add_iccviz_metrics_test()
 iccdev_add_iccviz_degenerate_test()
 iccdev_add_iccviz_pdf_axis_test()
