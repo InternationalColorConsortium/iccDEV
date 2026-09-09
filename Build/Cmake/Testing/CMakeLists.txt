@@ -2497,6 +2497,52 @@ function(iccdev_add_unsupported_profile_class_test)
   endif()
 endfunction()
 
+# #2176: CIccXform::Begin() reported every failure of its IIccAdjustPCSXform hint as
+# icCmmStatIncorrectApply -- "Incorrect Apply object" -- which is false on all 26 of
+# CalcFactors()' failure paths: the apply object is well formed in every one and it is
+# the PCS adjustment that failed. The other 33 icCmmStatIncorrectApply returns in
+# IccCmm.cpp all concern a missing apply object or an unusable apply interface, so this
+# site was the lone outlier. It now returns icCmmStatCantAdjustPcs. The test drives two
+# failures with unrelated causes (an intent CalcFactors() refuses outright, and a
+# genuinely degenerate black-point estimate) plus a control that must still begin
+# cleanly, so the change cannot be satisfied by failing more often. Fixtures are built
+# in code -- case 2 needs a degenerate BToA0 no generated corpus profile carries.
+# Header + IccProfLib only.
+function(iccdev_add_pcs_adjust_status_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPcsAdjustStatusTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pcs-adjust-status.cpp"
+  )
+  target_link_libraries(iccPcsAdjustStatusTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPcsAdjustStatusTest)
+
+  add_test(
+    NAME iccdev.pcs-adjust-status
+    COMMAND "$<TARGET_FILE:iccPcsAdjustStatusTest>"
+  )
+  set_tests_properties(iccdev.pcs-adjust-status PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;cmm;status;issue-2176;regression"
+  )
+  if(WIN32)
+    set(_pcsadjstat_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPcsAdjustStatusTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pcsadjstat_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pcs-adjust-status PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pcsadjstat_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_pcs_xyzconvert_matrix_channels_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -7238,6 +7284,7 @@ if(WIN32)
   iccdev_add_utf8_textarray_test()
   iccdev_add_extended_device_colorspace_test()
   iccdev_add_unsupported_profile_class_test()
+  iccdev_add_pcs_adjust_status_test()
   iccdev_add_dpcc_pcc_replacement_test()
   iccdev_add_pcs_xyzconvert_matrix_channels_test()
   iccdev_add_iccviz_metrics_test()
@@ -7614,6 +7661,7 @@ iccdev_add_xyz_negative_z_test()
 iccdev_add_utf8_textarray_test()
 iccdev_add_extended_device_colorspace_test()
 iccdev_add_unsupported_profile_class_test()
+iccdev_add_pcs_adjust_status_test()
 iccdev_add_dpcc_pcc_replacement_test()
 iccdev_add_pcs_xyzconvert_matrix_channels_test()
 iccdev_add_iccviz_metrics_test()
