@@ -170,6 +170,15 @@ typedef enum {
  * second and third are right and the FIRST IS NOT: BT.709-6 is value 1, and
  * value 2 is Unspecified.  These enumerators follow the names - see
  * PROPOSAL-ISSUE HAGC-09 at m_nChromaticitiesMode.
+ *
+ * The clause that settles it is SMPTE ST 2094-50:2026-08 C.3.5, which is what
+ * the proposal is transcribing here.  C.3.5 tabulates each mode's
+ * chromaticities as explicit numbers and cites H.273 nowhere, so the code
+ * points are the proposal's own gloss rather than anything the source standard
+ * asked for - which is how a wrong one got in.  Verified 2026-09-08: mode 0's
+ * values are BT.709's primaries and D65 white, mode 1's are Display P3's and
+ * mode 2's are BT.2020's, and all four of these enumerators match.  Read C.3.5,
+ * not Table 2, when checking this again.
  */
 typedef enum {
   icHagcChromaticitiesBT709     = 0,

@@ -437,18 +437,23 @@ static const char *kIccHdrKeyDerh = "DERH";   /* Display Extended Range Headroom
 static const char *kIccHdrKeyDrwl = "DRWL";   /* Display HDR Reference White Luminance */
 static const char *kIccHdrKeyDcv  = "DCV";    /* Display Colour Volume */
 
-/* The Display name element each registration specifies - the human-readable
- * string an authoring path puts in a dictType record's display-name mluc, and
- * the label a report should use so a reader can find the entry in the registry.
- * Spelled exactly as registered, American spelling included: these are literal
- * registered strings, not descriptions to be localised into house style. */
-static const char *kIccHdrDisplayNameCrwl = "Content HDR Reference White Luminance";
-static const char *kIccHdrDisplayNameCll  = "Content Light Level";
-static const char *kIccHdrDisplayNameMdcv = "Mastering Display Color Volume";
-static const char *kIccHdrDisplayNameCcv  = "Content Color Volume";
-static const char *kIccHdrDisplayNameDcv  = "Display Color Volume";
-static const char *kIccHdrDisplayNameDrwl = "Display HDR Reference White Luminance";
-static const char *kIccHdrDisplayNameDerh = "Display Extended Range Headroom";
+/* The registrations also specify a Display name element for each of these seven
+ * keys - the human-readable string an authoring path puts in a dictType
+ * record's display-name mluc, and the label a report would use so a reader can
+ * find the entry in the registry.  They were transcribed here in 446564a6 and
+ * are NOT kept, because nothing in this build writes a dictType record or
+ * labels one: seven string constants with no consumer are dead weight that
+ * -Wunused-variable correctly flags, and ci-pr-gcc15 builds with -Werror.
+ *
+ * They are not lost.  The authoritative source is the live dictType Metadata
+ * Registry, with the HDR Display half additionally in the registration document
+ * held at docs/notes/hdr-proposals/HDR.Display.Metadata.DictType.Entries.ICC.docx.
+ * Transcribe them again when there is a caller - and transcribe them, do not
+ * recall them: they are literal registered strings, American spelling included
+ * ("Color", not "Colour"), not descriptions to be localised into house style.
+ * That spelling was verified against the live registry when it was first taken,
+ * and getting it wrong would produce a record that does not match the registry
+ * it claims to follow. */
 
 /**
  ****************************************************************************
