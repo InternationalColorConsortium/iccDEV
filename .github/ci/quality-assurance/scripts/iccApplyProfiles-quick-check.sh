@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 source "$SCRIPT_DIR/qa-common.sh"
 qa_init "iccApplyProfiles-quick-check"
 
-BIN="$ICCDEV_BUILD_DIR/Tools/IccApplyProfiles/iccApplyProfiles"
+BIN="$ICCDEV_TOOLS_DIR/IccApplyProfiles/iccApplyProfiles"
 SRC="$ICCDEV_ROOT/Testing/ApplyDataFiles/seed-tiff-none-rgb-8x8.tif"
 PROFILE="$ICCDEV_ROOT/Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc"
 CFG="$QA_OUTDIR/profiles.json"
@@ -42,5 +42,17 @@ qa_run legacy-extra reject "Unexpected extra arguments" \
     "$BIN" "$SRC" "$QA_OUTDIR/legacy-extra.tif" 1 0 0 0 0 "$PROFILE" 1 ignored-extra
 qa_run threads-one success "" \
     "$BIN" -threads 1 "$SRC" "$QA_OUTDIR/threads-one.tif" 1 0 0 0 0 "$PROFILE" 1
+
+qa_run deep-options success "" \
+    "$BIN" "$SRC" "$QA_OUTDIR/deep-options.tif" 2 1 0 1 1 "$PROFILE" 12
+[ -s "$QA_OUTDIR/deep-options.tif" ] || qa_fail "deep-options did not create a TIFF"
+if command -v tiffinfo >/dev/null 2>&1; then
+    tiffinfo "$QA_OUTDIR/deep-options.tif" >"$QA_OUTDIR/tiff-deep.log" 2>&1
+    qa_assert_contains "$QA_OUTDIR/tiff-deep.log" "Bits/Sample: 16" "deep lane writes 16-bit samples"
+    qa_assert_contains "$QA_OUTDIR/tiff-deep.log" "Compression Scheme: LZW" "deep lane writes LZW"
+fi
+
+qa_run threads-four-row success "" \
+    "$BIN" -threads 4 "$SRC" "$QA_OUTDIR/threads-four-row.tif" 3 1 1 1 1 "$PROFILE" 40
 
 qa_finish

@@ -48,7 +48,7 @@ if(TARGET iccdev-stage-windows-runtime)
 endif()
 
 function(iccdev_add_regression_executable TARGET_NAME)
-  add_executable("${TARGET_NAME}" EXCLUDE_FROM_ALL ${ARGN})
+  add_executable("${TARGET_NAME}" ${ARGN})
   add_dependencies(build-test-binaries "${TARGET_NAME}")
 endfunction()
 
@@ -1786,9 +1786,10 @@ endfunction()
 # Drives Describe() directly rather than chaining iccFromXml into iccDumpProfile:
 # the bytes iccFromXml writes were verified correct, so the tool chain would test
 # two innocent tools to reach one defective function -- and unlike a script test,
-# this is registered on Windows. Header + IccProfLib only.
+# this is registered on Windows. Requires IccXML because the helper derives
+# test elements from the XML MPE classes.
 function(iccdev_add_mpe_acs_zero_signature_test)
-  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
     return()
   endif()
 
@@ -1868,6 +1869,7 @@ function(iccdev_add_pawg_c5_cicp_test)
   )
   target_compile_features(iccPawgC5CicpTest PRIVATE cxx_std_17)
   target_include_directories(iccPawgC5CicpTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine"
     "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport"
   )
   target_link_libraries(iccPawgC5CicpTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
@@ -2753,7 +2755,10 @@ function(iccdev_add_iccviz_writer_serialization_test)
   # path, and the other copy has no Serialize declaration -- so if the engine's
   # include dir ever moved, the headers and the sources could silently come from
   # different copies.
-  target_include_directories(iccVizWriterSerializationTest PRIVATE "${_viz_writer_dir}")
+  target_include_directories(iccVizWriterSerializationTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine"
+    "${_viz_writer_dir}"
+  )
   target_link_libraries(iccVizWriterSerializationTest PRIVATE
     ${TARGET_LIB_ICCPROFLIB} IccVizEngine)
   add_dependencies(check iccVizWriterSerializationTest)
@@ -3851,6 +3856,7 @@ function(iccdev_add_pawg_compression_paths_test)
   )
   target_compile_features(iccPawgCompressionPathsTest PRIVATE cxx_std_17)
   target_include_directories(iccPawgCompressionPathsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine"
     "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport"
   )
   target_link_libraries(iccPawgCompressionPathsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
@@ -4797,13 +4803,10 @@ function(iccdev_add_signature_utils_contract_test)
   target_compile_features(iccSignatureUtilsContractTest PRIVATE cxx_std_17)
 
   # expectedTechnologyName() is an exhaustive switch with no default label, so a new
-  # icTechnologySignature member makes it incomplete.  -Wswitch alone only warns, and
-  # this target is EXCLUDE_FROM_ALL (iccdev_add_regression_executable above), so the one
-  # -Werror lane -- ci-pr-gcc15.yml, which builds the default `all` target and greps its
-  # log for "warning:" -- never compiles this file and never sees it.  Promote it here so
-  # the guard is a build failure on the lanes that DO build this target (`check` /
-  # `build-test-binaries`) rather than a warning nobody reads.  MSVC's nearest equivalent
-  # (C4062) is off by default and is not promoted; the GCC/clang lanes carry this one.
+  # icTechnologySignature member makes it incomplete. -Wswitch alone only warns; promote
+  # it so this guard fails the normal build rather than relying on warning-log inspection.
+  # MSVC's nearest equivalent (C4062) is off by default and is not promoted; GCC and clang
+  # carry this guard.
   if(NOT MSVC)
     target_compile_options(iccSignatureUtilsContractTest PRIVATE -Werror=switch)
   endif()
@@ -6938,6 +6941,10 @@ if(WIN32)
       "-DICCDEV_WINDOWS_WORK_DIR=${ICCDEV_TEST_OUTDIR}/windows-testing"
       "-DICCDEV_CONFIG=$<CONFIG>"
     )
+    if(ICCDEV_WINDOWS_UNIFIED_RUNTIME)
+      list(APPEND _test_args
+        "-DICCDEV_UNIFIED_RUNTIME_DIR=$<TARGET_FILE_DIR:iccFromXml>")
+    endif()
 
     if(DEFINED ICCDEV_WIN_TEST_EXPECTED_PROFILE_PARSE_COUNT)
       list(APPEND _test_args

@@ -496,14 +496,13 @@ cmake -S Build/Cmake -B build \
   -DENABLE_WXWIDGETS=OFF
 cmake --build build --parallel "$(nproc)"
 ctest --test-dir build -N --no-tests=error
-cmake --build build --target build-test-binaries --parallel "$(nproc)"
 ctest --test-dir build --output-on-failure --no-tests=error
 ```
 
-The default `all` build excludes CTest-only regression helper binaries. The
-`build-test-binaries` target builds those helpers for filtered CTest runs. The
-`check` target runs the same CTest suite after building tool and test
-dependencies:
+The default `all` build includes CTest regression helper binaries, so direct
+CTest runs work after a normal build. The `build-test-binaries` compatibility
+target remains available for scripts that explicitly request all helpers. The
+`check` target runs the same CTest suite after building tool and test dependencies:
 
 ```bash
 cmake --build build --target check

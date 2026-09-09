@@ -969,7 +969,7 @@ PROFLIB="$(find_library_file "$BUILD_ROOT/IccProfLib" "IccProfLib2" 2>/dev/null 
 XMLLIB="$(find_library_file "$BUILD_ROOT/IccXML" "IccXML2" 2>/dev/null || true)"
 LINK_EXTRA=()
 if [ -n "$PROFLIB" ] && [[ "$PROFLIB" == *.a ]] &&
-    grep -q '^ICC_USE_ZLIB:BOOL=ON$' "$BUILD_ROOT/CMakeCache.txt" 2>/dev/null; then
+    grep -q '^ICC_USE_ZLIB:BOOL=ON$' "${ICCDEV_CMAKE_CACHE:-$BUILD_ROOT/CMakeCache.txt}" 2>/dev/null; then
   LINK_EXTRA+=(-lz)
 fi
 

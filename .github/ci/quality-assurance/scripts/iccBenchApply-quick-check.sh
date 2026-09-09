@@ -14,7 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 source "$SCRIPT_DIR/qa-common.sh"
 qa_init "iccBenchApply-quick-check"
 
-BIN="$ICCDEV_BUILD_DIR/Tools/IccBenchApply/iccBenchApply"
+BIN="$ICCDEV_TOOLS_DIR/IccBenchApply/iccBenchApply"
 PROFILE="$ICCDEV_ROOT/Testing/sRGB_v4_ICC_preference.icc"
 COMMON_ARGS=(-pixels 4 -repeats 1 1)
 

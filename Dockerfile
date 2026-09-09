@@ -8,7 +8,7 @@
 #
 ###############################################################
 
-FROM ubuntu:26.04@sha256:678c6550cc43645e08669028bc177f50be4e7c5b8cca677067b1914d4afc7a03
+FROM ubuntu:26.04@sha256:2260313b31c8c011cd2eebe728008efac1b3982be73eb71348ea2648d2c0e09b
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -41,7 +41,7 @@ RUN for attempt in 1 2 3; do \
     clang-tools-22=1:22.1.2-1ubuntu1 \
     cmake=4.2.3-2ubuntu2 \
     cppcheck=2.19.0-3 \
-    curl=8.18.0-1ubuntu2.4 \
+    curl=8.18.0-1ubuntu2.5 \
     diffutils=1:3.12-1ubuntu0.1 \
     file=1:5.46-5build2 \
     g++=4:15.2.0-5ubuntu1 \
@@ -59,7 +59,9 @@ RUN for attempt in 1 2 3; do \
     libtiff-tools=4.7.0-3ubuntu5 \
     liblzma-dev=5.8.3-1 \
     libpng-dev=1.6.57-1 \
+    libcurl4t64=8.18.0-1ubuntu2.5 \
     libssl-dev=3.5.5-1ubuntu3.5 \
+    libssl3t64=3.5.5-1ubuntu3.5 \
     libtiff-dev=4.7.0-3ubuntu5 \
     libwxgtk3.2-dev=3.2.9+dfsg-1 \
     zlib1g=1:1.3.dfsg+really1.3.1-1ubuntu3.1 \
@@ -74,6 +76,7 @@ RUN for attempt in 1 2 3; do \
     make=4.4.1-3 \
     nano=8.7.1-1ubuntu0.1 \
     nlohmann-json3-dev=3.12.0.really.3.12.0.really.3.11.3-3build1 \
+    openssl=3.5.5-1ubuntu3.5 \
     openssl-provider-legacy=3.5.5-1ubuntu3.5 \
     pkg-config=2.5.1-4 \
     python3=3.14.3-0ubuntu2 \

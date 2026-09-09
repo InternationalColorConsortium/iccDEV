@@ -9,7 +9,8 @@ applyTo: "Build/**"
 Primary build file: `Build/Cmake/CMakeLists.txt`
 
 - Project: RefIccMAX v2.3.2.3
-- Minimum CMake: 3.21
+- Direct configuration minimum CMake: 3.18
+- Preset minimum CMake: 3.23
 - C++ standard: C++17
 - Compiler floor: GCC 11+, Clang 10+, MSVC 19.30+
 - Recommended compilers for the strict-warning tier: GCC 15+, Clang 14+,

@@ -18,6 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TOOLS_DIR="${ICCDEV_TOOLS_DIR:-$REPO_ROOT/Build/Tools}"
 BUILD_DIR="${ICCDEV_BUILD_DIR:-}"
+CMAKE_CACHE="${ICCDEV_CMAKE_CACHE:-}"
 OUTDIR="${ICCDEV_TEST_OUTDIR:-/tmp/iccdev-lut16-zero-curve-regressions}"
 mkdir -p "$OUTDIR"
 
@@ -32,6 +33,10 @@ if [ -z "$BUILD_DIR" ] || [ ! -d "$BUILD_DIR/IccProfLib" ]; then
       break
     fi
   done
+fi
+
+if [ -z "$CMAKE_CACHE" ]; then
+  CMAKE_CACHE="$BUILD_DIR/CMakeCache.txt"
 fi
 
 if [ -z "${CXX:-}" ]; then
@@ -73,6 +78,7 @@ run_zero_curve_write() {
   local run_log="$OUTDIR/$name.run.log"
   local lib_dir="$BUILD_DIR/IccProfLib"
   local lib_arg=""
+  local lib_deps=()
   local san_flags=()
   local run_ec=0
 
@@ -91,7 +97,20 @@ run_zero_curve_write() {
   done
 
   if [ -z "$lib_arg" ]; then
-    fail_case "$name" "missing shared IccProfLib library in $lib_dir"
+    for lib_name in IccProfLib2d-static IccProfLib2-static; do
+      if [ -f "$lib_dir/lib${lib_name}.a" ]; then
+        lib_arg="-l${lib_name}"
+        if [ -f "$CMAKE_CACHE" ] &&
+           grep -q '^ICC_USE_ZLIB:BOOL=ON$' "$CMAKE_CACHE" 2>/dev/null; then
+          lib_deps+=("-lz")
+        fi
+        break
+      fi
+    done
+  fi
+
+  if [ -z "$lib_arg" ]; then
+    fail_case "$name" "missing IccProfLib library in $lib_dir"
     return
   fi
 
@@ -100,21 +119,21 @@ run_zero_curve_write() {
     return
   fi
 
-  if [ -f "$BUILD_DIR/CMakeCache.txt" ]; then
-    if grep -q '^ENABLE_SANITIZERS:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
+  if [ -f "$CMAKE_CACHE" ]; then
+    if grep -q '^ENABLE_SANITIZERS:BOOL=ON$' "$CMAKE_CACHE"; then
       if "$CXX" --version 2>/dev/null | grep -qi clang; then
         san_flags+=("-fsanitize=address,undefined,integer,float-divide-by-zero,float-cast-overflow")
       else
         san_flags+=("-fsanitize=address,undefined")
       fi
     else
-      if grep -q '^ENABLE_ASAN:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
+      if grep -q '^ENABLE_ASAN:BOOL=ON$' "$CMAKE_CACHE"; then
         san_flags+=("-fsanitize=address")
       fi
-      if grep -q '^ENABLE_UBSAN:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
+      if grep -q '^ENABLE_UBSAN:BOOL=ON$' "$CMAKE_CACHE"; then
         san_flags+=("-fsanitize=undefined")
       fi
-      if grep -q '^ENABLE_INTEGER_SANITIZER:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt" &&
+      if grep -q '^ENABLE_INTEGER_SANITIZER:BOOL=ON$' "$CMAKE_CACHE" &&
          "$CXX" --version 2>/dev/null | grep -qi clang; then
         san_flags+=("-fsanitize=integer")
       fi
@@ -125,7 +144,7 @@ run_zero_curve_write() {
       -I"$REPO_ROOT/IccProfLib" \
       -I"$BUILD_DIR/IccProfLib" \
       "$helper_cpp" \
-      -L"$lib_dir" "$lib_arg" -Wl,-rpath,"$lib_dir" \
+      -L"$lib_dir" "$lib_arg" "${lib_deps[@]}" -Wl,-rpath,"$lib_dir" \
       -o "$helper_bin" > "$compile_log" 2>&1; then
     fail_case "$name" "failed to compile helper"
     sed -n '1,80p' "$compile_log"
