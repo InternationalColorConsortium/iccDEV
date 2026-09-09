@@ -76,7 +76,10 @@ void testSpectralRangeType()
 
   io.Seek(0, icSeekSet);
   CIccTagSpectralRange dst;
-  check(dst.Read(io.GetLength(), &io), "srng: Read() succeeds");
+  // CIccIO::GetLength() is size_t and Read() takes icUInt32Number, so the
+  // narrowing is spelled out the way curve-setsize-contract.cpp:108 spells it.
+  // The length is the 20 bytes asserted above, so the cast cannot lose a value.
+  check(dst.Read((icUInt32Number)io.GetLength(), &io), "srng: Read() succeeds");
 
   check(dst.m_spectralRange.start == pSrc->m_spectralRange.start &&
         dst.m_spectralRange.end   == pSrc->m_spectralRange.end   &&
