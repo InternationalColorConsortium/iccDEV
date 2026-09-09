@@ -78,7 +78,10 @@ jobs:
               autoconf-archive \
               automake \
               libtool \
-              libltdl-dev
+              libltdl-dev \
+              libx11-dev \
+              libxext-dev \
+              libxft-dev
           fi
 
           git clone https://github.com/microsoft/vcpkg.git "$RUNNER_TEMP/vcpkg"
