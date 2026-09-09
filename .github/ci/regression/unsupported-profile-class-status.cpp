@@ -186,12 +186,18 @@ int main()
     // The reference for "fell through to the default" is a status one past the last
     // enumerator. It must stay inside the enum's valid value range: icStatusCMM is an
     // unscoped enum with no fixed underlying type, so its values span only the smallest
-    // bit-field holding -1..19 (a signed 6-bit field, i.e. -32..31). Loading anything
+    // bit-field holding -1..20 (a signed 6-bit field, i.e. -32..31). Loading anything
     // outside that is undefined behaviour, which UBSan's enum check flags at the switch
     // in GetStatusText -- a far-out sentinel such as 0x7FFFFFFF fails the sanitizer CI
-    // jobs. If a future status does take 20 it will have its own text, so the assertion
-    // below stays meaningful either way.
-    const char *szUnknown = CIccCmm::GetStatusText((icStatusCMM)20);
+    // jobs.
+    //
+    // This was 20 until #2176 appended icCmmStatCantAdjustPcs there. The old note said
+    // the assertion "stays meaningful either way" if a future status took 20, which was
+    // wrong: the check below only compares szNew against szUnknown, so once 20 decoded
+    // to real text the comparison stopped testing anything about falling through to the
+    // default and merely observed that two different statuses have different text. The
+    // sentinel has to track the end of the enum to keep saying what it claims to say.
+    const char *szUnknown = CIccCmm::GetStatusText((icStatusCMM)21);
 
     check(szNew != NULL && strcmp(szNew, szUnknown) != 0,
           "icCmmStatUnsupportedProfileClass should decode to text rather than fall through to the default");

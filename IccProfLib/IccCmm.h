@@ -113,6 +113,20 @@ typedef enum {
   // iccRoundTrip report a perfectly valid profile as "Invalid profile" (#1843).
   // Appended at the end of the enum so no existing value is renumbered.
   icCmmStatUnsupportedProfileClass = 19,
+  // Reported when an IIccAdjustPCSXform hint cannot produce the PCS scale and
+  // offset factors CIccXform::Begin() asked it for.  CalcFactors() returns bool,
+  // so Begin() cannot tell which of its 26 failure paths ran -- it used to
+  // report all of them as icCmmStatIncorrectApply, which is false on every one:
+  // the caller's apply object is well formed in each case, and the failure is
+  // the adjustment, not the apply.  The 33 other icCmmStatIncorrectApply returns
+  // in IccCmm.cpp all concern a missing apply object or an unusable apply
+  // interface, so this site was the lone outlier and a caller had no way to tell
+  // the two apart.  Named for the interface rather than for black point
+  // compensation: CIccApplyBPC is the only in-tree implementer, but
+  // IIccAdjustPCSXform is exported and reached through a hint, so an
+  // out-of-tree implementer need not be doing black point compensation at all
+  // (#2176).  Appended at the end of the enum so no existing value is renumbered.
+  icCmmStatCantAdjustPcs           = 20,
 } icStatusCMM;
 
 /// CMM Interpolation types
