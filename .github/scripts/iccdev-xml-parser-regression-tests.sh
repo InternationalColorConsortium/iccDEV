@@ -558,7 +558,16 @@ xyz_array_at_cap
 # what is under test: the resp tag, its CountOfChannels and its Measurement
 # rows are unchanged, and the round-trip cases only look for the resp tag.
 write_countofchannels_document() {
-  # write_countofchannels_document <path> <count-element>
+  # write_countofchannels_document <path> <count-element> [device-code]
+  #
+  # The DeviceCode is a parameter rather than a post-hoc "sed -i" edit because
+  # BSD sed takes the backup extension as a SEPARATE argument. On macOS,
+  # "sed -i 's|a|b|' file" consumed the s-expression as the suffix, tried to run
+  # the file path as the script, exited non-zero and left the document
+  # unmodified -- so both fixtures kept DeviceCode="0", the overflow case
+  # compared a document against itself, and it reported the library truncating
+  # 65537 to 1: a defect that does not exist (#2477).
+  local device_code="${3:-0}"
   cat > "$1" <<XMLEOF
 <?xml version="1.0" encoding="UTF-8"?>
 <IccProfile>
@@ -574,7 +583,7 @@ write_countofchannels_document() {
       $2
       <ResponseCurve MeasUnitSignature="Status A">
         <ChannelResponses X="0" Y="0" Z="0">
-          <Measurement DeviceCode="0" MeasValue="0"/>
+          <Measurement DeviceCode="${device_code}" MeasValue="0"/>
         </ChannelResponses>
       </ResponseCurve>
     </responseCurveSet16Type>
@@ -773,16 +782,26 @@ measurement_devicecode_overflow() {
   # function, 45 lines apart. Asserted the same way: the two documents must not
   # produce the same bytes.
   #
-  # Both documents are written from the helper rather than sed-ed out of another case's
-  # output.  The previous version read $OUTDIR/resp-ctrl.xml, which only exists once
-  # countofchannels_overflow_is_not_one() has run; its fallback arm wrote "$ctrl" and the
-  # unconditional redirect on the following line then truncated that same file to zero
-  # bytes before sed failed, with "|| true" swallowing the failure -- so the case reported
-  # a false "the DeviceCode=1 control no longer converts" instead of testing anything.
-  write_countofchannels_document "$ctrl" "<CountOfChannels>1</CountOfChannels>"
-  write_countofchannels_document "$over" "<CountOfChannels>1</CountOfChannels>"
-  sed -i 's|DeviceCode="0"|DeviceCode="1"|' "$ctrl"
-  sed -i 's|DeviceCode="0"|DeviceCode="65537"|' "$over"
+  # Both documents are written from the helper, DeviceCode included, rather than sed-ed
+  # out of another case's output.  The previous version read $OUTDIR/resp-ctrl.xml, which
+  # only exists once countofchannels_overflow_is_not_one() has run; its fallback arm wrote
+  # "$ctrl" and the unconditional redirect on the following line then truncated that same
+  # file to zero bytes before sed failed, with "|| true" swallowing the failure -- so the
+  # case reported a false "the DeviceCode=1 control no longer converts" instead of testing
+  # anything.  The version after that still patched the DeviceCode in with "sed -i", which
+  # is a GNU spelling: it is a no-op that exits 1 under BSD sed, so on macOS both documents
+  # kept DeviceCode="0" and this case compared a document against itself (#2477).
+  write_countofchannels_document "$ctrl" "<CountOfChannels>1</CountOfChannels>" "1"
+  write_countofchannels_document "$over" "<CountOfChannels>1</CountOfChannels>" "65537"
+
+  # The two fixtures differing is what makes the cmp below meaningful: when they were
+  # identical, "byte-identical to the control" read as a library truncation rather than as
+  # the harness defect it was.  Assert it here so that failure mode can never be reported
+  # as a defect in the tag parser again.
+  if cmp -s "$ctrl" "$over"; then
+    fail "$name" "harness: the control and overflow documents are identical, so the DeviceCode was never varied"
+    return
+  fi
 
   rm -f "$OUTDIR/${name}-over.icc" "$OUTDIR/${name}-ctrl.icc"
   "$FROMXML" "$over" "$OUTDIR/${name}-over.icc" >"$logfile" 2>&1
@@ -801,6 +820,22 @@ measurement_devicecode_overflow() {
     else
       fail "$name" "an out-of-range DeviceCode was accepted"
     fi
+    return
+  fi
+
+  if [ -s "$OUTDIR/${name}-over.icc" ]; then
+    fail "$name" "a rejected DeviceCode still left a profile behind"
+    return
+  fi
+
+  # Section 4's rule, which this case was the only one of the four to skip: exit
+  # status alone is not attribution, because every fixture in this script exits
+  # non-zero.  Without it a later document- or header-level refusal -- the shape
+  # #2384 already imposed on this fixture family once -- would reject the overflow
+  # document before the Measurement element is parsed at all, and this case would
+  # keep reporting PASS with the DeviceCode range guard deleted outright.
+  if ! grep -qE "$RESP_TAG_DIAG" "$logfile"; then
+    fail "$name" "refused, but not by the responseCurveSet16Type parser"
     return
   fi
 

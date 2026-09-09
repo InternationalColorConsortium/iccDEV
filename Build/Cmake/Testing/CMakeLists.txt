@@ -8420,11 +8420,19 @@ set_tests_properties(iccdev.pcc-zero-illuminant-regressions PROPERTIES
 # true. Where that matters is ci-iccdev-tool-tests.yml run with ctest_mode=full
 # and the local check target; both exclude known-red and neither excludes slow.
 #
-# It does NOT put this test on the pull_request path: ci-pr-action.yml pins
-# ctest_mode=fast, which drops it on the slow label, and the Windows legs never
-# register it at all because the if(WIN32) branch above returns before the bash
-# script tests. Measured on dispatched run 31852372579 -- the case does not
-# execute on any PR leg. Widening that is a separate question from this fix.
+# That paragraph used to end by saying this test runs on no PR leg, because
+# ci-pr-action.yml pinned ctest_mode=fast and the slow label dropped it
+# (measured on dispatched run 31852372579). That stopped being true six days
+# later: #2201 (029dc30c) made ctest_mode default to full, and full excludes
+# only known-red. Measured on PR run 34291518125 (job 102279464003, an ordinary
+# source PR): "Test #200: iccdev.xml-parser-regressions .. Passed 18.51 sec".
+# The Windows legs still never register it, because the if(WIN32) branch above
+# returns before the bash script tests.
+#
+# What the PR legs cannot cover is the sed dialect: they are Linux and Windows
+# only, and #2477 was a GNU-only "sed -i" spelling inside the script that is a
+# failing no-op under BSD sed. It went red on a maintainer's local macOS run
+# while every PR leg stayed green.
 if(TARGET iccFromXml AND TARGET iccToXml AND TARGET iccApplyToLink)
   iccdev_add_script_test(
     iccdev.xml-parser-regressions
