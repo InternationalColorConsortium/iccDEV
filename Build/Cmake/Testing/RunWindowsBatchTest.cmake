@@ -79,7 +79,11 @@ list(REMOVE_DUPLICATES _candidate_tool_suffixes)
 if(DEFINED ICCDEV_UNIFIED_RUNTIME_DIR AND
    EXISTS "${ICCDEV_UNIFIED_RUNTIME_DIR}/iccFromXml.exe")
   set(_resolved_runtime_dir "${ICCDEV_UNIFIED_RUNTIME_DIR}")
-  set(_resolved_config "${ICCDEV_CONFIG}")
+  if(DEFINED ICCDEV_CONFIG AND NOT "${ICCDEV_CONFIG}" STREQUAL "")
+    set(_resolved_config "${ICCDEV_CONFIG}")
+  else()
+    set(_resolved_config "unified-runtime")
+  endif()
 endif()
 
 if(_resolved_config STREQUAL "")

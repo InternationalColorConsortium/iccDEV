@@ -18,6 +18,7 @@
 # Environment variables:
 #   ICCDEV_TOOLS_DIR   -- path to Build/Tools or build/Tools
 #   ICCDEV_BUILD_DIR   -- path to CMake build directory
+#   ICCDEV_CMAKE_CACHE -- path to the outer CMakeCache.txt for forwarded builds
 #   ICCDEV_TEST_OUTDIR -- output directory for temporary files and logs
 ###############################################################################
 
@@ -27,6 +28,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TOOLS_DIR="${ICCDEV_TOOLS_DIR:-$REPO_ROOT/Build/Tools}"
 BUILD_DIR="${ICCDEV_BUILD_DIR:-}"
+CMAKE_CACHE="${ICCDEV_CMAKE_CACHE:-}"
 OUTDIR="${ICCDEV_TEST_OUTDIR:-/tmp/iccdev-encprofile-matrix-leak-regressions}"
 mkdir -p "$OUTDIR"
 
@@ -41,6 +43,10 @@ if [ -z "$BUILD_DIR" ] || [ ! -d "$BUILD_DIR/IccProfLib" ]; then
       break
     fi
   done
+fi
+
+if [ -z "$CMAKE_CACHE" ]; then
+  CMAKE_CACHE="$BUILD_DIR/CMakeCache.txt"
 fi
 
 if [ -z "${CXX:-}" ]; then
@@ -112,8 +118,8 @@ run_encprofile_helper() {
     return
   fi
 
-  if [ -f "$BUILD_DIR/CMakeCache.txt" ]; then
-    if grep -q '^ENABLE_SANITIZERS:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
+  if [ -f "$CMAKE_CACHE" ]; then
+    if grep -q '^ENABLE_SANITIZERS:BOOL=ON$' "$CMAKE_CACHE"; then
       if "$CXX" --version 2>/dev/null | grep -qi clang; then
         san_flags+=("-fsanitize=address,undefined,integer,float-divide-by-zero,float-cast-overflow")
       else
@@ -121,11 +127,11 @@ run_encprofile_helper() {
       fi
       has_asan=1
     else
-      if grep -q '^ENABLE_ASAN:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
+      if grep -q '^ENABLE_ASAN:BOOL=ON$' "$CMAKE_CACHE"; then
         san_flags+=("-fsanitize=address")
         has_asan=1
       fi
-      if grep -q '^ENABLE_UBSAN:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
+      if grep -q '^ENABLE_UBSAN:BOOL=ON$' "$CMAKE_CACHE"; then
         san_flags+=("-fsanitize=undefined")
       fi
     fi

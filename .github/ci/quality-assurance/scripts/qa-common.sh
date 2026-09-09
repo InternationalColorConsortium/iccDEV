@@ -86,7 +86,7 @@ qa_run() {
     QA_LAST_LOG="$QA_OUTDIR/$name.log"
     QA_LAST_CMD="$QA_OUTDIR/$name.cmd"
     {
-        printf 'argc=%d\n' "$(( $# - 1 ))"
+        printf 'argc=%d\n' "$#"
         printf 'command='
         printf ' %q' "$@"
         printf '\n'

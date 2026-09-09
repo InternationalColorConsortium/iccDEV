@@ -15,5 +15,11 @@
     "libjpeg-turbo",
     "zlib"
   ],
-  "overrides": []
+  "overrides": [
+    {
+      "name": "libiconv",
+      "version": "1.18",
+      "port-version": 0
+    }
+  ]
 }

@@ -132,6 +132,7 @@ if("tools" IN_LIST FEATURES)
         iccPawgReport
         iccV5DspObsToV4Dsp
         iccProfileVisualize
+        iccBenchApply
     )
     vcpkg_copy_tools(TOOL_NAMES ${_core_tools} AUTO_CLEAN)
 
