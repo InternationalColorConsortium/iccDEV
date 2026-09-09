@@ -53,8 +53,10 @@
 # Red/green against 764fc176: all eight defect cases fail (raw ESC present,
 # escaped form absent).  Both controls pass on BOTH builds.
 #
-# NOT labelled "slow": ci-pr-action.yml pins ctest_mode=fast, which drops the
-# slow label, and this suite needs to run on the pull_request path (#2412).
+# NOT labelled "slow": this suite has to stay in the routine set, and
+# check-fast and the dispatch-only Unix and fast-lane runs all exclude
+# that label.  Not a PR-path concern since #2201 (029dc30c) made ctest_mode
+# default to full (#2412).
 #
 # Environment variables:
 #   ICCDEV_TOOLS_DIR   -- path to Build/Tools or build/Tools

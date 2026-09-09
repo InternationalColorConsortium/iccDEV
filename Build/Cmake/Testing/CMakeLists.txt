@@ -7796,8 +7796,10 @@ iccdev_add_script_test(
 # iccdev.specsep-usage-exit-code-regression above: a malformed invocation must not
 # report success, an unrecognised option must not be skipped in silence, -v must not
 # fail open, and -noid must leave no profile ID behind (#2387).  Deliberately NOT
-# labelled "slow", so it runs on the pull_request path -- ci-pr-action.yml pins
-# ctest_mode=fast, which drops the slow label.
+# labelled "slow": check-fast and the dispatch-only Unix and fast-lane
+# runs all exclude that label, so applying it would drop this suite from each.
+# Not a PR-path concern since #2201 (029dc30c) made ctest_mode default to full;
+# the iccdev.xml-parser-regressions block below carries the measured account.
 if(TARGET iccFromXml)
   iccdev_add_script_test(
     iccdev.fromxml-cli-contract-regression
@@ -7816,8 +7818,9 @@ if(TARGET iccFromXml)
 endif()
 
 # #2401: the element (<n>) and text spellings of one XML array must agree.  Not
-# labelled "slow", so it runs on the pull_request path (ci-pr-action.yml pins
-# ctest_mode=fast, which drops the slow label).
+# labelled "slow": check-fast and the dispatch-only Unix and fast-lane
+# runs all exclude that label, so applying it would drop this suite from each.
+# Not a PR-path concern since #2201 (029dc30c) made ctest_mode default to full.
 if(TARGET iccFromXml)
   iccdev_add_script_test(
     iccdev.xml-array-element-form-regression
@@ -7835,9 +7838,10 @@ if(TARGET iccFromXml)
 endif()
 
 # #2406: profile and data-file paths must not carry terminal control sequences
-# into the tools' diagnostics (CWE-150/CWE-117).  Not labelled "slow", so it
-# runs on the pull_request path (ci-pr-action.yml pins ctest_mode=fast, which
-# drops the slow label).  Four cases x "timeout 60" is a 240s worst case.
+# into the tools' diagnostics (CWE-150/CWE-117).  Not labelled "slow":
+# check-fast and the dispatch-only Unix and fast-lane runs all exclude
+# that label.  Not a PR-path concern since #2201 (029dc30c) made ctest_mode
+# default to full.  Four cases x "timeout 60" is a 240s worst case.
 if(TARGET iccApplyProfiles AND TARGET iccApplySearch
    AND TARGET iccApplyNamedCmm AND TARGET iccApplyToLink)
   iccdev_add_script_test(
@@ -7863,8 +7867,10 @@ endif()
 # FIX rather than the defect: a path probe before open() takes a named pipe from
 # 254 to 124, which is why iccFromCube does not use the shared guard.
 #
-# Deliberately NOT labelled "slow", so it runs on the pull_request path:
-# ci-pr-action.yml pins ctest_mode=fast, which drops the slow label (#2412).
+# Deliberately NOT labelled "slow": check-fast and the dispatch-only Unix
+# and fast-lane runs all exclude that label, so applying it would drop
+# this suite from each.  Not a PR-path concern since #2201 (029dc30c) made
+# ctest_mode default to full (#2412).
 #
 # 300s for a 220s worst case (7 spawns: 20+60+20+20+20+60+20), matching the two
 # registrations above.  240 would leave 20s for eight process spawns, and on a
@@ -7896,8 +7902,10 @@ endif()
 # Guarded on iccFromCube alone: unlike the #2414 suite this measures one tool,
 # so a partial build has nothing to hide.
 #
-# Deliberately NOT labelled "slow", so it runs on the pull_request path:
-# ci-pr-action.yml pins ctest_mode=fast, which drops the slow label (#2412).
+# Deliberately NOT labelled "slow": check-fast and the dispatch-only Unix
+# and fast-lane runs all exclude that label, so applying it would drop
+# this suite from each.  Not a PR-path concern since #2201 (029dc30c) made
+# ctest_mode default to full (#2412).
 #
 # 400s for a 290s worst case (10 spawns: 15+15+30+30+30+30+30+30+20+60).  As
 # with the registration above, the budget is set over the SUM of the per-case
@@ -7931,8 +7939,10 @@ endif()
 # three of its named-colour profiles from tracked XML rather than from
 # Testing/*.icc, every one of which is generated.
 #
-# Deliberately NOT labelled "slow", so it runs on the pull_request path --
-# ci-pr-action.yml pins ctest_mode=fast, which drops the slow label (#2412).
+# Deliberately NOT labelled "slow": check-fast and the dispatch-only Unix
+# and fast-lane runs all exclude that label, so applying it would drop
+# this suite from each.  Not a PR-path concern since #2201 (029dc30c) made
+# ctest_mode default to full (#2412).
 #
 # 300s for a ~200s worst case: 3 iccFromXml profile builds at 120s each is the
 # ceiling, but they complete in well under a second on every lane measured, and
@@ -7968,8 +7978,9 @@ endif()
 # precisely the regression this suite exists to diagnose.
 #
 # Deliberately NOT labelled "slow", for the same reason as the apply-usage suite
-# below: ci-pr-action.yml pins ctest_mode=fast, which drops the slow label, and
-# a console-injection regression that runs on no PR leg is not a regression test
+# below: check-fast and the dispatch-only Unix and fast-lane runs all
+# exclude that label, so applying it would drop this suite from each.  Not a
+# PR-path concern since #2201 (029dc30c) made ctest_mode default to full
 # (#2412).
 if(TARGET iccDumpProfile AND TARGET iccToXml)
   iccdev_add_script_test(
@@ -7987,8 +7998,10 @@ endif()
 # The iccApply* half of the same CLI-contract family (#2405).  Guarded on all
 # four targets because the script measures all four and its "nothing measured"
 # guard would otherwise turn a partial build into a skip that hides real cases.
-# Deliberately NOT labelled "slow", so it runs on the pull_request path --
-# ci-pr-action.yml pins ctest_mode=fast, which drops the slow label (#2412).
+# Deliberately NOT labelled "slow": check-fast and the dispatch-only Unix
+# and fast-lane runs all exclude that label, so applying it would drop
+# this suite from each.  Not a PR-path concern since #2201 (029dc30c) made
+# ctest_mode default to full (#2412).
 if(TARGET iccApplyProfiles AND TARGET iccApplySearch
    AND TARGET iccApplyNamedCmm AND TARGET iccApplyToLink)
   iccdev_add_script_test(
@@ -8010,8 +8023,10 @@ endif()
 # random bytes alike.  Guarded on the target so a lane that does not build the
 # Tools skips rather than going red.
 #
-# Deliberately NOT labelled "slow", for the same reason as the siblings above --
-# ci-pr-action.yml pins ctest_mode=fast, which drops the slow label (#2412).
+# Deliberately NOT labelled "slow", for the same reason as the siblings above:
+# check-fast and the dispatch-only Unix and fast-lane runs all exclude
+# that label.  Not a PR-path concern since #2201 (029dc30c) made ctest_mode
+# default to full (#2412).
 if(TARGET iccDumpProfile)
   iccdev_add_script_test(
     iccdev.dumpprofile-exit-code-regression
@@ -8030,8 +8045,10 @@ endif()
 # measured" guard would otherwise turn a partial build into a skip that hides
 # the half that did build.
 #
-# Deliberately NOT labelled "slow", for the same reason as the sibling above --
-# ci-pr-action.yml pins ctest_mode=fast, which drops the slow label (#2412).
+# Deliberately NOT labelled "slow", for the same reason as the sibling above:
+# check-fast and the dispatch-only Unix and fast-lane runs all exclude
+# that label.  Not a PR-path concern since #2201 (029dc30c) made ctest_mode
+# default to full (#2412).
 if(TARGET iccFromXml AND TARGET iccFromJson)
   iccdev_add_script_test(
     iccdev.invalid-profile-exit-code-regression
