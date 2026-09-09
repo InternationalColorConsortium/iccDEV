@@ -79,6 +79,7 @@
 #include <utility>
 #include <vector>
 
+#include "IccApplyBPC.h"
 #include "IccCmm.h"
 #include "IccCmmThread.h"
 #include "IccDefs.h"
@@ -86,6 +87,7 @@
 #include "IccProfile.h"
 #include "IccTagLut.h"
 #include "IccUtil.h"
+#include "IccFileUtil.h"
 
 #include "BenchCases.h"
 #include "BenchTimer.h"
@@ -97,6 +99,7 @@ static bool             g_bLeaf     = false;
 static std::vector<int> g_threads;
 static bool             g_bSuite    = false;
 static bool             g_bCsv      = false;
+static bool             g_bMetrics  = false;
 
 static void Usage()
 {
@@ -104,12 +107,30 @@ static void Usage()
   printf("Usage: iccBenchApply {options} interpolation"
          " {profile_path rendering_intent {-PCC pcc_path}}...\n\n");
   printf("  interpolation      0 = Linear, 1 = Tetrahedral\n");
-  printf("  rendering_intent   0..3, plus +1000 / +10000 modifiers"
-         " (as iccApplyToLink)\n\n");
+  // Deliberately describes the columns and points at iccApplyToLink for the
+  // tens-column list rather than reprinting it.  Four tools already publish
+  // their own copy of that table and they do not agree; a fifth copy here would
+  // be a fifth thing to keep in step (#2262).  The old line was wrong in both
+  // directions anyway: it claimed "0..3" when the tens and hundreds columns are
+  // read too, and it advertised a "+10000" modifier this decode does not have --
+  // bUseSubProfile is (code / 1000) > 0, so 10000 is just another way of saying
+  // 1000.  The +10000 column belongs to CIccCfgProfileSequence::fromArgs, a
+  // different decode used by different tools (#2271).
+  printf("  rendering_intent   decimal columns, decoded exactly as"
+         " iccApplyToLink:\n");
+  printf("                       units 0..3   rendering intent\n");
+  printf("                       tens  0..9   transform type"
+         " (1 = no D2Bx/B2Dx, 4 = BPC)\n");
+  printf("                       +100         luminance-based PCS adjustment\n");
+  printf("                       +1000        use V5 sub-profile if present\n");
+  printf("                     Run iccApplyToLink with no arguments for the"
+         " full\n");
+  printf("                     list of tens-column codes.\n\n");
   printf("  -pixels N          pixels per buffer      (default 1048576)\n");
   printf("  -repeats N         timed repeats per case (default 7)\n");
   printf("  -perxform          per-xform breakdown, including PCS steps\n");
   printf("  -leaf              isolated hot leaf functions\n");
+  printf("  -metrics           report exact benchmark memory and workload metrics\n");
   printf("  -threads L         comma list of thread counts, e.g. 1,2,8\n");
   printf("  -suite             run the built-in case table; takes no chain\n");
   printf("  -csv               machine-readable output\n");
@@ -138,11 +159,25 @@ static bool ParseIntArg(const char *arg, int minValue, int maxValue, int &value)
   return true;
 }
 
-// Decodes one encoded rendering intent the way iccApplyToLink.cpp:1054-1059 does,
-// so a chain given to this tool and the same chain given to that one resolve
+// Decodes one encoded rendering intent the way iccApplyToLink.cpp does, so a
+// chain given to this tool and the same chain given to that one resolve
 // identically. Returns false when the decoded intent is out of range.
+//
+// Every column is now read here.  The two that were not are #2271: the hundreds
+// column is a luminance-matching request, which this function used to strip
+// without assigning, and a tens digit of 4 asks for black-point compensation,
+// which used to reach AddXform() as the lookup type icXformLutBPC (IccCmm.h:136
+// happens to be 0x4) and made the whole chain fail with "Invalid Look-Up Table
+// type".  Both are hints rather than return values, which is why the caller now
+// supplies a hint manager -- there was previously nowhere to put them.
+//
+// Hint is filled, never cleared: the caller owns it and may already have put
+// something in it.  Ownership of each hint passes to Hint, and Hint must outlive
+// the AddXform() call that reads it, so both callers declare one per profile
+// inside the loop, exactly as iccApplyToLink does.
 static bool DecodeIntent(int nEncoded, int &nIntent, int &nType,
-                         bool &bUseSubProfile, bool &bUseD2BxB2DxTags)
+                         bool &bUseSubProfile, bool &bUseD2BxB2DxTags,
+                         CIccCreateXformHintManager &Hint)
 {
   // Assigned before the guard below so every return path leaves the caller with
   // defined values.  The early return is new, and both current callers treat
@@ -162,24 +197,48 @@ static bool DecodeIntent(int nEncoded, int &nIntent, int &nType,
   // the built-in -suite table held to the same rule as the command line, and
   // matches the guard iccApplyToLink grew in the same change (#2268, #2190).
   //
-  // The sign rule is the only part of this decode that is now known to match
-  // that tool column for column.  Two others do NOT: the hundreds column is
-  // read there as a luminance-matching request and is discarded here, and a
-  // tens digit of 4 selects black-point compensation there while reaching
-  // AddXform() as icXformLutBPC here.  Do not widen the equivalence claim
-  // above without closing those.
+  // This guard alone refuses before any hint is constructed.  The OTHER rejection
+  // -- the intent range test at the bottom -- deliberately does not: it runs after
+  // both AddHint() calls, so "45" adds the BPC hint and then returns false,
+  // leaving a partially filled manager.  That order is iccApplyToLink's, and
+  // keeping the two diffable is worth more than the narrower guarantee, because
+  // the manager is per profile and both callers treat false as fatal and destroy
+  // it unread.  A third caller that ignored the return value would be the one
+  // case this matters for, so: the return value is the contract, not the manager.
   if (nEncoded < 0)
     return false;
 
   bUseSubProfile = (nEncoded / 1000) > 0;
   nIntent = nEncoded % 1000;
+  // Split out rather than folded into the "% 100" below: this is the column
+  // iccApplyToLink reads as nLuminance, and reading it is the point (#2271).
+  const int nLuminance = nIntent / 100;
   nIntent = nIntent % 100;
   nType   = abs(nIntent) / 10;
   nIntent = nIntent % 10;
 
-  if (nType == 1) {
+  // Spelled as the same switch iccApplyToLink uses, in the same order, because
+  // the two are required to agree and a divergence is easiest to see when the
+  // two blocks read alike.  Types 2, 3 and 5..9 fall through to AddXform() as
+  // themselves; only 1 and 4 are re-encoded as flags on type 0.
+  switch (nType) {
+  case 1:
     nType = 0;
     bUseD2BxB2DxTags = false;
+    break;
+  case 4:
+    nType = 0;
+    Hint.AddHint(new CIccApplyBPCHint());
+    break;
+  default:
+    break;
+  }
+
+  // Added after the type switch and before the range test, matching the order in
+  // iccApplyToLink -- the hint is independent of both, but keeping the sequence
+  // identical is what makes the two decodes diffable.
+  if (nLuminance) {
+    Hint.AddHint(new CIccLuminanceMatchingHint());
   }
 
   // Only the upper bound is testable.  nIntent is "% 100" then "% 10" of a
@@ -226,6 +285,54 @@ public:
 
   std::vector<CIccXform *> m_xforms;
 };
+
+// This is deliberately a benchmark-buffer report, not a claim about the
+// library's transient allocations or the compiler's generated instructions.
+// The latter vary with the resolved transform graph, ISA dispatch, ABI, and
+// optimizer, and are collected accurately by the platform profiler instead.
+static void ReportMetrics(const char *caseName, const CIccCmm &cmm,
+                          size_t transformCount)
+{
+  if (!g_bMetrics)
+    return;
+
+  const unsigned long long sourceValues =
+    (unsigned long long)g_nPixels * cmm.GetSourceSamples();
+  const unsigned long long destinationValues =
+    (unsigned long long)g_nPixels * cmm.GetDestSamples();
+  const unsigned long long sourceBytes = sourceValues * sizeof(icFloatNumber);
+  const unsigned long long destinationBytes =
+    destinationValues * sizeof(icFloatNumber);
+  const unsigned long long threadSettings =
+    static_cast<unsigned long long>(g_threads.size());
+  const unsigned long long timedAppliesPerThreadSetting =
+    static_cast<unsigned long long>(g_nRepeats);
+  const unsigned long long scheduledAppliesPerThreadSetting =
+    timedAppliesPerThreadSetting + 1;
+  FILE *stream = g_bCsv ? stderr : stdout;
+
+  fprintf(stream, "benchmark_metrics case=%s\n", caseName);
+  fprintf(stream, "  resolved_transform_count=%llu\n",
+          (unsigned long long)transformCount);
+  fprintf(stream, "  pixels_per_apply=%u\n", (unsigned int)g_nPixels);
+  fprintf(stream, "  thread_count_settings=%llu\n", threadSettings);
+  fprintf(stream, "  timed_applies_per_thread_setting=%llu\n",
+          timedAppliesPerThreadSetting);
+  fprintf(stream, "  scheduled_applies_per_thread_setting=%llu\n",
+          scheduledAppliesPerThreadSetting);
+  fprintf(stream, "  total_timed_applies=%llu\n",
+          threadSettings * timedAppliesPerThreadSetting);
+  fprintf(stream, "  total_scheduled_applies=%llu\n",
+          threadSettings * scheduledAppliesPerThreadSetting);
+  fprintf(stream, "  input_buffer_bytes=%llu\n", sourceBytes);
+  fprintf(stream, "  output_buffer_bytes=%llu\n", destinationBytes);
+  fprintf(stream, "  benchmark_buffer_bytes=%llu\n",
+          sourceBytes + destinationBytes);
+  fprintf(stream, "  benchmark_bytes_per_apply=%llu\n",
+          sourceBytes + destinationBytes);
+  if (g_bCsv)
+    fflush(stream);
+}
 
 // Runs the chain at each requested thread count.
 //
@@ -352,11 +459,15 @@ static void RunLeaf(const char *szProfilePath)
 {
   CIccProfile *pProfile = ReadIccProfile(szProfilePath);
   if (!pProfile) {
-    printf("  (leaf: cannot read '%s')\n", szProfilePath);
+    // #2414: a profile path reaching the console verbatim carries whatever
+    // terminal control sequences its name holds (#2406).
+    printf("  (leaf: cannot read '%s')\n",
+           icSanitizeConsoleText(szProfilePath).c_str());
     return;
   }
 
-  printf("\n  isolated leaf functions (%s):\n", szProfilePath);
+  printf("\n  isolated leaf functions (%s):\n",
+         icSanitizeConsoleText(szProfilePath).c_str());
   printf("  %-28s %9s\n", "function", "Mval/s");
 
   // A2B0 is where a LUT-based profile keeps its device-to-PCS transform.
@@ -499,7 +610,13 @@ static int RunSuite()
     for (size_t i = 0; i < bc.chain.size(); i++) {
       int nIntent, nType;
       bool bSub, bD2B;
-      if (!DecodeIntent(bc.chain[i].encodedIntent, nIntent, nType, bSub, bD2B)) {
+      // Declared inside the loop: a hint manager owns the hints it is given and
+      // is read during AddXform(), so each profile in the chain needs its own
+      // (#2271).  One hoisted out would carry profile 0's BPC request onto every
+      // later profile in the same case.
+      CIccCreateXformHintManager Hint;
+      if (!DecodeIntent(bc.chain[i].encodedIntent, nIntent, nType, bSub, bD2B,
+                        Hint)) {
         printf("  %-16s SKIP   bad encoded intent %d\n",
                bc.name.c_str(), bc.chain[i].encodedIntent);
         bBuilt = false;
@@ -511,7 +628,7 @@ static int RunSuite()
                                          bc.interpolation ? icInterpTetrahedral
                                                           : icInterpLinear,
                                          NULL, (icXformLutType)nType,
-                                         bD2B, NULL, bSub);
+                                         bD2B, &Hint, bSub);
       if (stat != icCmmStatOk) {
         if (g_bCsv)
           printf("%s,,,,,,skip-addxform\n", bc.name.c_str());
@@ -538,6 +655,10 @@ static int RunSuite()
       nSkipped++;
       continue;
     }
+
+    CChainReporter reporter;
+    theCmm.IterateXforms(&reporter);
+    ReportMetrics(bc.name.c_str(), theCmm, reporter.m_xforms.size());
 
     if (!RunThreadSweep(theCmm, g_threads, bc.name.c_str()))
       bAllOk = false;
@@ -661,6 +782,10 @@ int main(int argc, const char *argv[])
       g_bLeaf = true;
       nArg++;
     }
+    else if (!stricmp(argv[nArg], "-metrics")) {
+      g_bMetrics = true;
+      nArg++;
+    }
     else if (!stricmp(argv[nArg], "-suite")) {
       g_bSuite = true;
       nArg++;
@@ -681,7 +806,8 @@ int main(int argc, const char *argv[])
         if (*p == ',' || *p == '\0') {
           int n;
           if (!ParseIntArg(tok.c_str(), 1, 1024, n)) {
-            printf("Invalid thread count '%s': expected 1..1024\n", tok.c_str());
+            printf("Invalid thread count '%s': expected 1..1024\n",
+                   icSanitizeConsoleText(tok).c_str());
             return 1;
           }
           g_threads.push_back(n);
@@ -697,7 +823,8 @@ int main(int argc, const char *argv[])
       nArg += 2;
     }
     else {
-      printf("Unknown option '%s'\n", argv[nArg]);
+      printf("Unknown option '%s'\n",
+             icSanitizeConsoleText(argv[nArg]).c_str());
       Usage();
       return 1;
     }
@@ -715,7 +842,8 @@ int main(int argc, const char *argv[])
   if (g_bSuite && nArg < argc) {
     printf("-suite runs the built-in case table and takes no chain;"
            " '%s' and everything after it would be ignored.\n"
-           "Drop them, or drop -suite to benchmark that chain.\n", argv[nArg]);
+           "Drop them, or drop -suite to benchmark that chain.\n",
+           icSanitizeConsoleText(argv[nArg]).c_str());
     return 1;
   }
 
@@ -763,33 +891,36 @@ int main(int argc, const char *argv[])
     const char *szProfile = argv[nArg];
 
     if (nArg + 1 >= argc) {
-      printf("Profile '%s' has no rendering intent\n", szProfile);
+      printf("Profile '%s' has no rendering intent\n",
+             icSanitizeConsoleText(szProfile).c_str());
       return 1;
     }
 
     int nEncoded;
     if (!ParseIntArg(argv[nArg + 1], INT_MIN, INT_MAX, nEncoded)) {
       printf("Invalid rendering intent '%s': expected an integer code\n",
-             argv[nArg + 1]);
+             icSanitizeConsoleText(argv[nArg + 1]).c_str());
       return 1;
     }
     nArg += 2;
 
     int nIntent, nType;
     bool bUseSubProfile, bUseD2BxB2DxTags;
+    // Per profile, for the reason given at the -suite call site above.
+    CIccCreateXformHintManager Hint;
     if (!DecodeIntent(nEncoded, nIntent, nType,
-                      bUseSubProfile, bUseD2BxB2DxTags)) {
+                      bUseSubProfile, bUseD2BxB2DxTags, Hint)) {
       // Two distinct rejections share one gate, so name which one fired.  The
       // sign case is the whole point of the guard: "-10" used to be accepted
       // and resolve as "10", so reporting it as an out-of-range decoded intent
       // would describe a digit the caller can see is in range (#2268).
       if (nEncoded < 0) {
         printf("Invalid rendering intent '%s': a negative intent code is not a"
-               " valid form\n", argv[nArg - 1]);
+               " valid form\n", icSanitizeConsoleText(argv[nArg - 1]).c_str());
       }
       else {
         printf("Invalid rendering intent '%s': decoded intent out of range\n",
-               argv[nArg - 1]);
+               icSanitizeConsoleText(argv[nArg - 1]).c_str());
       }
       return 1;
     }
@@ -798,7 +929,8 @@ int main(int argc, const char *argv[])
     if (nArg + 1 < argc && !stricmp(argv[nArg], "-PCC")) {
       pPccProfile.reset(ReadIccProfile(argv[nArg + 1]));
       if (!pPccProfile) {
-        printf("Unable to read PCC profile '%s'\n", argv[nArg + 1]);
+        printf("Unable to read PCC profile '%s'\n",
+               icSanitizeConsoleText(argv[nArg + 1]).c_str());
         return 1;
       }
       nArg += 2;
@@ -811,11 +943,12 @@ int main(int argc, const char *argv[])
                                        pPccProfile.get(),
                                        (icXformLutType)nType,
                                        bUseD2BxB2DxTags,
-                                       NULL,
+                                       &Hint,
                                        bUseSubProfile);
     if (stat != icCmmStatOk) {
       printf("Unable to add '%s' to the chain: %s\n",
-             szProfile, CIccCmm::GetStatusText(stat));
+             icSanitizeConsoleText(szProfile).c_str(),
+             CIccCmm::GetStatusText(stat));
       return 1;
     }
     if (pPccProfile)
@@ -837,6 +970,7 @@ int main(int argc, const char *argv[])
 
   CChainReporter reporter;
   theCmm.IterateXforms(&reporter);
+  ReportMetrics("chain", theCmm, reporter.m_xforms.size());
 
   printf("resolved transforms:\n");
   for (size_t i = 0; i < reporter.m_xforms.size(); i++) {

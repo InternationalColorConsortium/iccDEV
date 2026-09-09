@@ -70,6 +70,7 @@
 
 
 #include "IccCmmSearch.h"
+#include "IccCmmThread.h"
 #include "IccUtil.h"
 #include "IccDefs.h"
 #include "IccMpeCalc.h"
@@ -78,6 +79,8 @@
 #include "IccSearch.h"
 #include "IccConnect.h"
 #include "IccCmdLineUtil.h"
+#include <cerrno>
+#include <cstring>  // strcmp, used by the -h/--help contract guard in main()
 #include <cstdlib>  // EXIT_FAILURE, used by the -cfg argument guard added in #2075
 #include <memory>
 #include <vector>
@@ -203,41 +206,42 @@ bool IsSpacePCS( const icColorSpaceSignature &x )
 }
 
 
-void Usage()
+void Usage(FILE* stream)
 {
-  printf("iccApplySearch built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
-  printf("Usage 1: iccApplySearch -cfg config_file_path\n");
-  printf("  Where config_file_path is a json formatted ICC profile application configuration file\n\n");
-  printf("Usage 2: iccApplySearch {-debugcalc} data_file_path encoding[:precision[:digits]] interpolation {-ENV:tag value} profile1_path intent1 {{-ENV:tag value} middle_profile_path mid_intent} {-ENV:tag value} profile2_path intent2 -INIT init_intent2 {pcc_path1 weight1 ...}\n");
+  fprintf(stream, "iccApplySearch built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
+  fprintf(stream, "Usage 1: iccApplySearch {-threads N} -cfg config_file_path\n");
+  fprintf(stream, "  Optional: -threads N (0=hardware concurrency, 1=single-threaded)\n");
+  fprintf(stream, "  Where config_file_path is a json formatted ICC profile application configuration file\n\n");
+  fprintf(stream, "Usage 2: iccApplySearch {-threads N} {-debugcalc} data_file_path encoding[:precision[:digits]] interpolation {-ENV:tag value} profile1_path intent1 {{-ENV:tag value} middle_profile_path mid_intent} {-ENV:tag value} profile2_path intent2 -INIT init_intent2 {pcc_path1 weight1 ...}\n");
   
-  printf("  For final_data_encoding:\n");
-  printf("    0 - icEncodeValue (converts to/from lab encoding when samples=3)\n");
-  printf("    1 - icEncodePercent\n");
-  printf("    2 - icEncodeUnitFloat (may clip to 0.0 to 1.0)\n");
-  printf("    3 - icEncodeFloat\n");
-  printf("    4 - icEncode8Bit\n");
-  printf("    5 - icEncode16Bit\n");
-  printf("    6 - icEncode16BitV2\n\n");
+  fprintf(stream, "  For final_data_encoding:\n");
+  fprintf(stream, "    0 - icEncodeValue (converts to/from lab encoding when samples=3)\n");
+  fprintf(stream, "    1 - icEncodePercent\n");
+  fprintf(stream, "    2 - icEncodeUnitFloat (may clip to 0.0 to 1.0)\n");
+  fprintf(stream, "    3 - icEncodeFloat\n");
+  fprintf(stream, "    4 - icEncode8Bit\n");
+  fprintf(stream, "    5 - icEncode16Bit\n");
+  fprintf(stream, "    6 - icEncode16BitV2\n\n");
 
-  printf("  FmtPrecision - formatting for # of digits after decimal (default=4)\n");
-  printf("  FmtDigits - formatting for total # of digits (default=5+FmtPrecision)\n\n");
+  fprintf(stream, "  FmtPrecision - formatting for # of digits after decimal (default=4)\n");
+  fprintf(stream, "  FmtDigits - formatting for total # of digits (default=5+FmtPrecision)\n\n");
 
-  printf("  For interpolation:\n");
-  printf("    0 - Linear\n");
-  printf("    1 - Tetrahedral\n\n");
+  fprintf(stream, "  For interpolation:\n");
+  fprintf(stream, "    0 - Linear\n");
+  fprintf(stream, "    1 - Tetrahedral\n\n");
 
-  printf("  For init_intent/intent1/intent2/mid_intent:\n");
-  printf("     0 - Perceptual\n");
-  printf("     1 - Relative\n");
-  printf("     2 - Saturation\n");
-  printf("     3 - Absolute\n");
-  printf("     10 + Intent - without D2Bx/B2Dx\n");
-  printf("     40 + Intent - with BPC\n");
-  printf("     90 + Intent - Colorimetric Only\n");
-  printf("    100 + Intent - Spectral Only\n");
-  printf(" +10000 - Use V5 sub-profile if present\n");
+  fprintf(stream, "  For init_intent/intent1/intent2/mid_intent:\n");
+  fprintf(stream, "     0 - Perceptual\n");
+  fprintf(stream, "     1 - Relative\n");
+  fprintf(stream, "     2 - Saturation\n");
+  fprintf(stream, "     3 - Absolute\n");
+  fprintf(stream, "     10 + Intent - without D2Bx/B2Dx\n");
+  fprintf(stream, "     40 + Intent - with BPC\n");
+  fprintf(stream, "     90 + Intent - Colorimetric Only\n");
+  fprintf(stream, "    100 + Intent - Spectral Only\n");
+  fprintf(stream, " +10000 - Use V5 sub-profile if present\n");
   
-  printf("\n");
+  fprintf(stream, "\n");
 }
 
 
@@ -246,14 +250,65 @@ void Usage()
 int main(int argc, const char* argv[])
 {
   int minargs = 3;  // name -cfg file.json
-  if (argc < minargs) {
-    Usage();
+
+  // An explicit help request is the one invocation here that is not an error, so
+  // it prints on stdout and exits 0; every malformed form below prints on stderr
+  // and fails.  Once both paths print the same screen the stream is the only
+  // thing that separates them -- status alone cannot (#1514).
+  if (argc == 2 && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help"))) {
+    Usage(stdout);
     return 0;
+  }
+
+  if (argc > 1 && !stricmp(argv[1], "-threads") && argc < 3) {
+    fprintf(stderr, "Missing thread count for -threads\n");
+    return EXIT_FAILURE;
+  }
+  if (argc < minargs) {
+    // #2405: usage on stdout plus exit 0 reported success for an invocation that
+    // applied nothing.  Fail like the identical post-"-threads" guard below,
+    // which already returned EXIT_FAILURE -- the two disagreed only because the
+    // shifted copy was written later.
+    fprintf(stderr, "Missing arguments: expected at least %d, received %d.\n",
+            minargs - 1, argc > 0 ? argc - 1 : 0);
+    Usage(stderr);
+    return EXIT_FAILURE;
   }
 
   CIccCfgDataApply cfgApply;
   CIccCfgSearchApply cfgSearchApply;
   CIccCfgColorData cfgData;
+  int nThreads = 1;
+
+  if (!stricmp(argv[1], "-threads")) {
+    char* end = nullptr;
+    errno = 0;
+    long parsed = strtol(argv[2], &end, 10);
+    if (errno || !end || end == argv[2] || *end || parsed < 0 ||
+        parsed > CIccThreadedCmm::GetMaxThreads()) {
+      printf("Invalid thread count '%s': expected 0..%d\n", icSanitizeConsoleText(argv[2]).c_str(),
+             CIccThreadedCmm::GetMaxThreads());
+      return EXIT_FAILURE;
+    }
+    nThreads = (int)parsed;
+    argv += 2;
+    argc -= 2;
+
+    if (argc < minargs) {
+      // No `argc > 0 ?` clamp here, unlike the sibling message at the top of main().
+      // That guard runs before any adjustment, where argc is only bounded from above,
+      // so a process entered with argc == 0 would reach it and report "received -1" --
+      // well-defined arithmetic, just a nonsensical count -- and the clamp earns its
+      // place.  This copy runs after the minargs test has established argc >= 3 and
+      // after `argc -= 2`, so argc >= 1 on every path that reaches this line and the
+      // clamp's else branch was unreachable -- a dead bound the -threads shift created
+      // (code-scanning alert 2365, cpp/constant-comparison).
+      fprintf(stderr, "Missing arguments after -threads: expected at least %d, received %d.\n",
+              minargs - 1, argc - 1);
+      Usage(stderr);
+      return EXIT_FAILURE;
+    }
+  }
 
   if (!stricmp(argv[1], "-cfg")) {
     // Usage 1 is exactly "-cfg <path>"; every setting comes from the JSON file, so
@@ -271,31 +326,31 @@ int main(int argc, const char* argv[])
 
     json cfg;
     if (!loadJsonFrom(cfg, argv[2]) || !cfg.is_object()) {
-      printf("Unable to read configuration from '%s'\n", argv[2]);
+      printf("Unable to read configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
       return -1;
     }
 
     if (cfg.find("dataFiles") == cfg.end() || !cfgApply.fromJson(cfg["dataFiles"])) {
-      printf("Unable to parse dataFile configuration from '%s'\n", argv[2]);
+      printf("Unable to parse dataFile configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
       return -1;
     }
 
     if (cfg.find("searchApply") == cfg.end() || !cfgSearchApply.fromJson(cfg["searchApply"])) {
-      printf("Unable to parse profileSequence configuration from '%s'\n", argv[2]);
+      printf("Unable to parse profileSequence configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
       return -1;
     }
 
     if (cfgApply.m_srcType == icCfgColorData) {
       if (cfgApply.m_srcFile.empty()) {
         if (!cfgData.fromJson(cfg["colorData"])) {
-          printf("Unable to parse colorData configuration from '%s'\n", argv[2]);
+          printf("Unable to parse colorData configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
           return -1;
         }
       }
       else {
         json data;
         if (!loadJsonFrom(data, cfgApply.m_srcFile.c_str()) || !cfgData.fromJson(data)) {
-          printf("Unable to load color data from '%s'\n", cfgApply.m_srcFile.c_str());
+          printf("Unable to load color data from '%s'\n", icSanitizeConsoleText(cfgApply.m_srcFile.c_str()).c_str());
           return -1;
         }
       }
@@ -303,13 +358,13 @@ int main(int argc, const char* argv[])
     else if (cfgApply.m_srcType == icCfgIt8) {
       cfgData.m_srcSpace = cfgApply.m_srcSpace;
       if (cfgApply.m_srcFile.empty() || !cfgData.fromIt8(cfgApply.m_srcFile.c_str())) {
-        printf("Unable to parse IT8 data file '%s'\n", cfgApply.m_srcFile.c_str());
+        printf("Unable to parse IT8 data file '%s'\n", icSanitizeConsoleText(cfgApply.m_srcFile.c_str()).c_str());
         return -1;
       }
     }
     else if (cfgApply.m_srcType == icCfgLegacy) {
       if (!cfgData.fromLegacy(cfgApply.m_srcFile.c_str())) {
-        printf("Unable to parse legacy data file '%s'\n", cfgApply.m_srcFile.c_str());
+        printf("Unable to parse legacy data file '%s'\n", icSanitizeConsoleText(cfgApply.m_srcFile.c_str()).c_str());
         return -1;
       }
     }
@@ -340,7 +395,11 @@ int main(int argc, const char* argv[])
 
     int nArg = cfgApply.fromArgs(&argv[0], argc);
     if (!nArg) {
-      printf("Unable to parse configuration arguments\n");
+      // #2405: on stderr because this is a malformed-invocation diagnostic and the
+      // sibling tool prints it there.  The rest of this main()'s diagnostics stay
+      // on stdout: they are a pre-existing, and consistent, convention across all
+      // four tools, and moving them is a separate change.
+      fprintf(stderr, "Unable to parse configuration arguments\n");
       return EXIT_FAILURE;
     }
     argv += nArg;
@@ -348,12 +407,12 @@ int main(int argc, const char* argv[])
 
     nArg = cfgSearchApply.fromArgs(&argv[0], argc);
     if (!nArg) {
-      printf("Unable to parse profile sequence arguments\n");
+      fprintf(stderr, "Unable to parse profile sequence arguments\n");
       return -1;
     }
 
     if (cfgApply.m_srcType != icCfgLegacy || !cfgData.fromLegacy(cfgApply.m_srcFile.c_str())) {
-      printf("Unable to parse legacy data file '%s'\n", cfgApply.m_srcFile.c_str());
+      printf("Unable to parse legacy data file '%s'\n", icSanitizeConsoleText(cfgApply.m_srcFile.c_str()).c_str());
       return -1;
     }
 
@@ -383,17 +442,17 @@ int main(int argc, const char* argv[])
         std::string jsonText = cfgJson.dump(1);
         size_t n = fwrite(jsonText.c_str(), 1, jsonText.size(), f);
         if (n != jsonText.size()) {
-          printf("Error writing json config file '%s'\n", exportFile.c_str());
+          printf("Error writing json config file '%s'\n", icSanitizeConsoleText(exportFile.c_str()).c_str());
           fclose(f);
           return -1;
         }
         if (!icFlushAndClose(f)) {
-          printf("Error closing json config file '%s'\n", exportFile.c_str());
+          printf("Error closing json config file '%s'\n", icSanitizeConsoleText(exportFile.c_str()).c_str());
           return -1;
         }
       }
       else {
-        printf("Unable to export config file '%s'\n", exportFile.c_str());
+        printf("Unable to export config file '%s'\n", icSanitizeConsoleText(exportFile.c_str()).c_str());
         return -1;
       }
     }
@@ -403,6 +462,11 @@ int main(int argc, const char* argv[])
   if (cfgSearchApply.m_profiles.size() != 2 && cfgSearchApply.m_profiles.size() != 3) {
     printf("Only sequences of 2 or 3 profiles are supported\n");
     return -1;
+  }
+
+  if (cfgApply.m_debugCalc && nThreads != 1) {
+    printf("-debugcalc requires -threads 1\n");
+    return EXIT_FAILURE;
   }
 
   LogDebuggerPtr pDebugger;
@@ -423,11 +487,11 @@ int main(int argc, const char* argv[])
 
   std::string sConnectError;
   std::unique_ptr<CIccConnectCmm> pConnect(
-    CIccConnectCmm::CreateSearch(cfgSearchApply, &sConnectError));
+    CIccConnectCmm::CreateSearch(cfgSearchApply, &sConnectError, nThreads));
 
   if (!pConnect) {
     if (!sConnectError.empty())
-      printf("Error - %s\n", sConnectError.c_str());
+      printf("Error - %s\n", icSanitizeConsoleText(sConnectError.c_str()).c_str());
     printf("Unable to begin profile application - Possibly invalid or incompatible profiles\n");
     return -1;
   }
@@ -478,6 +542,55 @@ int main(int argc, const char* argv[])
 
   outData.m_srcEncoding = srcEncoding;
 
+  if (nThreads != 1) {
+    std::vector<CIccCfgDataEntry*> entries;
+    for (const auto& data : cfgData.m_data) {
+      if (data)
+        entries.push_back(data.get());
+    }
+
+    std::vector<icFloatNumber> srcPixels(entries.size() * nSrcSamples);
+    std::vector<icFloatNumber> dstPixels(entries.size() * nDestSamples);
+    std::vector<CIccCfgDataEntryPtr> outputs;
+    outputs.reserve(entries.size());
+
+    for (size_t index = 0; index < entries.size(); ++index) {
+      CIccCfgDataEntry* pData = entries[index];
+      CIccCfgDataEntryPtr out(new CIccCfgDataEntry());
+      out->m_srcName = pData->m_name;
+      out->m_srcValues = pData->m_values;
+
+      for (size_t i = 0; i < nSrcSamples && i < pData->m_values.size(); ++i)
+        Pixel[i] = pData->m_values[i];
+
+      if (CIccCmm::ToInternalEncoding(SrcspaceSig, srcEncoding,
+                                      srcPixels.data() + index * nSrcSamples,
+                                      Pixel, bClip)) {
+        printf("Invalid source data encoding\n");
+        return -1;
+      }
+      outputs.push_back(out);
+    }
+
+    if (!entries.empty() &&
+        pConnect->GetCmm()->Apply(dstPixels.data(), srcPixels.data(),
+                                  (icUInt32Number)entries.size())) {
+      printf("Profile application failed.\n");
+      return -1;
+    }
+
+    for (size_t index = 0; index < outputs.size(); ++index) {
+      icFloatNumber* dst = dstPixels.data() + index * nDestSamples;
+      if (CIccCmm::FromInternalEncoding(DestspaceSig, destEncoding, dst, dst)) {
+        printf("Invalid final data encoding\n");
+        return -1;
+      }
+      for (size_t i = 0; i < nDestSamples; ++i)
+        outputs[index]->m_values.push_back(dst[i]);
+      outData.m_data.push_back(outputs[index]);
+    }
+  }
+  else {
   //Apply profiles to each input color
   for (auto dataIter = cfgData.m_data.begin(); dataIter != cfgData.m_data.end(); dataIter++) {
     CIccCfgDataEntry* pData = dataIter->get();
@@ -530,6 +643,7 @@ int main(int argc, const char* argv[])
       out->m_debugInfo = pDebugger->m_log;
 
     outData.m_data.push_back(out);
+  }
   }
 
   //Now output the data

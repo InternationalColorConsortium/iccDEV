@@ -168,6 +168,12 @@ inline std::string icSanitizeFileName(const std::string& text)
 // start one.  This is Unicode 15.0 table 3-7 verbatim, so it rejects the things
 // a naive "0xC0-0xFF starts a sequence" test lets through: over-long encodings,
 // UTF-16 surrogates (ED A0..BF), and anything above U+10FFFF.
+//
+// RETAINED DELIBERATELY, do not remove as dead code: #2454 moved icJsonEscape()
+// -- its only in-tree caller -- onto icDecodeUtf8(), so nothing in this repo
+// calls this any more.  It ships in the installed public header, so dropping it
+// is an API change for downstream consumers and needs a maintainer call rather
+// than a dead-code sweep.
 inline size_t icUtf8SequenceLength(const unsigned char* p)
 {
   const unsigned char c = p[0];
@@ -205,23 +211,35 @@ inline size_t icUtf8SequenceLength(const unsigned char* p)
 
 // Escape a string for use as a JSON string value.
 //
-// Bytes at or above 0x80 are passed through when, and only when, they form a
-// well-formed UTF-8 sequence.  Both halves of that rule are load-bearing (#1853):
+// A byte at or above 0x80 is decoded to its CODE POINT and escaped as \uXXXX
+// (a surrogate pair above the BMP).  #1853 and #2454 each rule out one of the
+// two simpler options, and the distinction between them is load-bearing:
 //
-//   - Escaping them as \u00XX, which PawgReport.cpp used to do, reads a UTF-8
-//     byte as if it were a code point.  U+00E9 is the two bytes C3 A9, which
-//     come out as \u00c3\u00a9 -- the two code points U+00C3 U+00A9 -- so
-//     "cafe" with an acute e reads back with two wrong characters in its place.
-//     The document is valid JSON and the text in it is wrong.
-//   - Passing them through unconditionally is no better.  A JSON text must be
+//   - Escaping each BYTE as \u00XX, which PawgReport.cpp used to do, reads a
+//     UTF-8 byte as if it were a code point.  U+00E9 is the two bytes C3 A9,
+//     which come out as \u00c3\u00a9 -- the two code points U+00C3 U+00A9 --
+//     so "cafe" with an acute e reads back with two wrong characters in its
+//     place.  The document is valid JSON and the text in it is wrong (#1853).
+//     Escaping by code point is NOT that mistake: U+00E9 becomes \u00e9, one
+//     escape, and it decodes back to the character that went in.
+//   - Passing a well-formed sequence through unchanged is what this used to do,
+//     and it left the JSON sinks emitting live U+202E RIGHT-TO-LEFT OVERRIDE
+//     and the C1 controls while the text sink escaped the same name -- one
+//     input, two sinks, opposite answers (#2454).  A JSON text must also be
 //     valid UTF-8 (RFC 8259 section 8.1), and these strings include paths taken
 //     straight from argv, which on POSIX are byte strings that need not be UTF-8
-//     at all.  A Latin-1 filename would put a lone 0xE9 inside a string and the
+//     at all; a Latin-1 filename would put a lone 0xE9 inside a string and the
 //     document would not decode.
 //
-// A byte that is not part of a well-formed sequence is therefore replaced with
-// U+FFFD.  Substituting \u00XX instead would assert the byte was Latin-1, which
-// is a guess; U+FFFD records that the input was not text, which is the fact.
+// Escaping by code point settles both: the output is pure ASCII, so it is valid
+// UTF-8 by construction, and it decodes back to exactly the input text.
+//
+// A byte that is not part of a well-formed sequence is replaced with U+FFFD.
+// Substituting \u00XX instead would assert the byte was Latin-1, which is a
+// guess; U+FFFD records that the input was not text, which is the fact.
+//
+// DEL (0x7F) is escaped too, so that this sink and icSanitizeConsoleText()
+// agree on the whole control set rather than only on the parts above 0x80.
 inline std::string icJsonEscape(const char* szText)
 {
   static const char hex[] = "0123456789abcdef";
@@ -274,24 +292,71 @@ inline std::string icJsonEscape(const char* szText)
       continue;
     }
 
+    // #2454: DEL is terminal-active and icSanitizeConsoleText() escapes it, so
+    // letting it through here would leave exactly the sink-divergence this fix
+    // is filed against, just at 0x7F instead of above 0x80.
+    if (ch == 0x7f) {
+      result += "\\u007f";
+      p++;
+      continue;
+    }
+
     if (ch < 0x80) {
       result += (char)ch;
       p++;
       continue;
     }
 
-    // icUtf8SequenceLength() reads up to three bytes past p.  That is safe here
-    // because it stops at the first byte outside the continuation range, and the
-    // terminating NUL is outside it -- a truncated sequence at the end of the
-    // string returns 0 rather than reading past the terminator.
-    size_t len = icUtf8SequenceLength(p);
-    if (!len) {
+    // #2454: escape non-ASCII by codepoint instead of appending it verbatim.
+    // Well-formed UTF-8 used to be copied through unchanged, so --json and
+    // --evidence-json still emitted U+202E RIGHT-TO-LEFT OVERRIDE and the C1
+    // controls -- the exact codepoints the text sink has escaped since #2419,
+    // and the ones #2437 re-spelled by codepoint.  One name reached two sinks
+    // and got opposite answers.
+    //
+    // This is transparent to a machine consumer: the raw bytes and the \uXXXX
+    // escape are the same string to any conformant JSON parser (RFC 8259 s7).
+    // What changes is that a human cat-ing the output no longer receives live
+    // terminal-active codepoints (CVE-2021-42574).  Output is now pure ASCII.
+    //
+    // icDecodeUtf8() is the decoder #2437 added, so both sinks now share one
+    // whitelist rather than two implementations of the same table.  It reads up
+    // to three bytes past p, which is safe for the same reason the previous
+    // length helper was: it stops at the first byte outside the continuation
+    // range, and the terminating NUL is outside it, so a truncated sequence at
+    // the end of the string returns 0 rather than reading past the terminator.
+    unsigned int cp = 0;
+    int len = icDecodeUtf8(p, &cp);
+    if (len < 1) {
       result += "\\ufffd";
       p++;
       continue;
     }
 
-    result.append((const char*)p, len);
+    // JSON has no \U escape.  A codepoint above the BMP must be spelled as a
+    // UTF-16 surrogate pair, which is why this cannot reuse the text sink's
+    // \U0001F600 spelling from icSanitizeConsoleText() -- that is valid there
+    // and would be invalid JSON here.
+    if (cp > 0xffffu) {
+      const unsigned int v = cp - 0x10000u;
+      const unsigned int hiSur = 0xd800u + (v >> 10);
+      const unsigned int loSur = 0xdc00u + (v & 0x3ffu);
+      int shift;
+
+      result += "\\u";
+      for (shift = 12; shift >= 0; shift -= 4)
+        result += hex[(hiSur >> shift) & 0xfu];
+      result += "\\u";
+      for (shift = 12; shift >= 0; shift -= 4)
+        result += hex[(loSur >> shift) & 0xfu];
+    }
+    else {
+      int shift;
+
+      result += "\\u";
+      for (shift = 12; shift >= 0; shift -= 4)
+        result += hex[(cp >> shift) & 0xfu];
+    }
     p += len;
   }
 

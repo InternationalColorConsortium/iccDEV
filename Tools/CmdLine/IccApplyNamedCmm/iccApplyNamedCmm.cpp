@@ -85,6 +85,7 @@
 #include <unistd.h>
 #endif
 #include <cstdlib>
+#include <cstring>  // strcmp, used by the -h/--help contract guard in main()
 
 
 // ============================================================================
@@ -196,22 +197,22 @@ typedef std::shared_ptr<CIccLogDebugger> LogDebuggerPtr;
 //----------------------------------------------------
 
 
-void Usage()
+void Usage(FILE* stream)
 {
-  printf("iccApplyNamedCmm built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
+  fprintf(stream, "iccApplyNamedCmm built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
 
-  printf("Usage 1: iccApplyNamedCmm {--evidence-json} -cfg config_file_path\n");
-  printf("  Where config_file_path is a json formatted ICC profile application configuration file\n\n");
-  printf("Usage 2: iccApplyNamedCmm (-exportcfg/-exportcfganddata config_file_path} {-debugcalc} data_file_path final_data_encoding{:FmtPrecision{:FmtDigits}} interpolation {{-ENV:Name value} {-HDR headroom} {-HDRMAP policy} profile_file_path Rendering_intent {-PCC connection_conditions_path}}\n\n");
+  fprintf(stream, "Usage 1: iccApplyNamedCmm {--evidence-json} -cfg config_file_path\n");
+  fprintf(stream, "  Where config_file_path is a json formatted ICC profile application configuration file\n\n");
+  fprintf(stream, "Usage 2: iccApplyNamedCmm (-exportcfg/-exportcfganddata config_file_path} {-debugcalc} data_file_path final_data_encoding{:FmtPrecision{:FmtDigits}} interpolation {{-ENV:Name value} {-HDR headroom} {-HDRMAP policy} profile_file_path Rendering_intent {-PCC connection_conditions_path}}\n\n");
   
-  printf("  For final_data_encoding:\n");
-  printf("    0 - icEncodeValue (converts to/from lab encoding when samples=3)\n");
-  printf("    1 - icEncodePercent\n");
-  printf("    2 - icEncodeUnitFloat (may clip to 0.0 to 1.0)\n");
-  printf("    3 - icEncodeFloat\n");
-  printf("    4 - icEncode8Bit\n");
-  printf("    5 - icEncode16Bit\n");
-  printf("    6 - icEncode16BitV2\n\n");
+  fprintf(stream, "  For final_data_encoding:\n");
+  fprintf(stream, "    0 - icEncodeValue (converts to/from lab encoding when samples=3)\n");
+  fprintf(stream, "    1 - icEncodePercent\n");
+  fprintf(stream, "    2 - icEncodeUnitFloat (may clip to 0.0 to 1.0)\n");
+  fprintf(stream, "    3 - icEncodeFloat\n");
+  fprintf(stream, "    4 - icEncode8Bit\n");
+  fprintf(stream, "    5 - icEncode16Bit\n");
+  fprintf(stream, "    6 - icEncode16BitV2\n\n");
 
   // #2124: this list read as though all seven selectors were always available,
   // so a Lab destination refusing icEncodePercent looked like a broken encoding
@@ -229,60 +230,93 @@ void Usage()
   // pointer, not a promise. (It also omitted icEncodeUnitFloat for the two PCS
   // spaces when this note was written; #2146 fixed the source side that
   // omission described and brought the table into line.)
-  printf("    Not every encoding is valid for every colour space: a 'Lab '\n");
-  printf("    destination refuses icEncodePercent and an 'XYZ ' destination\n");
-  printf("    refuses icEncode8Bit, each rejected when the data is converted\n");
-  printf("    rather than here. IccCmm.h's icFloatColorEncoding table lists\n");
-  printf("    the per-space encodings.\n\n");
+  fprintf(stream, "    Not every encoding is valid for every colour space: a 'Lab '\n");
+  fprintf(stream, "    destination refuses icEncodePercent and an 'XYZ ' destination\n");
+  fprintf(stream, "    refuses icEncode8Bit, each rejected when the data is converted\n");
+  fprintf(stream, "    rather than here. IccCmm.h's icFloatColorEncoding table lists\n");
+  fprintf(stream, "    the per-space encodings.\n\n");
 
-  printf("    FmtPrecision - formatting for # of digits after decimal (default=4)\n");
-  printf("    FmtDigits - formatting for total # of digits (default=5+FmtPrecision)\n\n");
+  fprintf(stream, "    FmtPrecision - formatting for # of digits after decimal (default=4)\n");
+  fprintf(stream, "    FmtDigits - formatting for total # of digits (default=5+FmtPrecision)\n\n");
 
   // ICC.1 clause 8.10.  Documented as a pair because -HDRMAP alone does
   // nothing: the target headroom is what engages the HDR path at all.
-  printf("  For -HDR headroom (ICC.1 clause 8.10 HDR Profiles):\n");
-  printf("    The target headroom as a ratio of peak luminance to HDR reference white:\n");
-  printf("    1.0 = SDR, 2.0 = one stop, 4.0 = two stops. Applies to the profile that\n");
-  printf("    follows it. Without -HDR an HDR Profile is processed exactly as it is by a\n");
-  printf("    CMM that does not implement clause 8.10, because the target headroom is not\n");
-  printf("    carried in the profile and cannot be inferred from it.\n\n");
+  fprintf(stream, "  For -HDR headroom (ICC.1 clause 8.10 HDR Profiles):\n");
+  fprintf(stream, "    The target headroom as a ratio of peak luminance to HDR reference white:\n");
+  fprintf(stream, "    1.0 = SDR, 2.0 = one stop, 4.0 = two stops. Applies to the profile that\n");
+  fprintf(stream, "    follows it. Without -HDR an HDR Profile is processed exactly as it is by a\n");
+  fprintf(stream, "    CMM that does not implement clause 8.10, because the target headroom is not\n");
+  fprintf(stream, "    carried in the profile and cannot be inferred from it.\n\n");
 
-  printf("  For -HDRMAP policy (only meaningful alongside -HDR):\n");
-  printf("    auto - the recommended descriptor ranking of clause 8.10.3 (default)\n");
-  printf("    hagc - always use the headroomAdaptiveGainCurveTag when present\n");
-  printf("    lut  - prefer the profile's baked AToB0/BToA0 pair\n");
-  printf("    off  - do not engage the HDR path\n\n");
+  fprintf(stream, "  For -HDRMAP policy (only meaningful alongside -HDR):\n");
+  fprintf(stream, "    auto - the recommended descriptor ranking of clause 8.10.3 (default)\n");
+  fprintf(stream, "    hagc - always use the headroomAdaptiveGainCurveTag when present\n");
+  fprintf(stream, "    lut  - prefer the profile's baked AToB0/BToA0 pair\n");
+  fprintf(stream, "    off  - do not engage the HDR path\n\n");
 
-  printf("  For interpolation:\n");
-  printf("    0 - Linear\n");
-  printf("    1 - Tetrahedral\n\n");
+  fprintf(stream, "  For interpolation:\n");
+  fprintf(stream, "    0 - Linear\n");
+  fprintf(stream, "    1 - Tetrahedral\n\n");
 
-  printf("  For Rendering_intent:\n");
-  printf("     0 - Perceptual\n");
-  printf("     1 - Relative\n");
-  printf("     2 - Saturation\n");
-  printf("     3 - Absolute\n");
-  printf("     10 + Intent - without D2Bx/B2Dx\n");
-  printf("     20 + Intent - Preview\n");
-  printf("     30 - Gamut\n");
-  printf("     33 - Gamut Absolute\n");
-  printf("     40 + Intent - with BPC\n");
-  printf("     50 - BDRF Model\n");
-  printf("     60 - BDRF Light\n");
-  printf("     70 - BDRF Output\n");
-  printf("     80 - MCS connection\n");
-  printf("     90 + Intent - Colorimetric Only\n");
-  printf("    100 + Intent - Spectral Only\n");
-  printf("    +1000 - Use Luminance based PCS adjustment\n");
-  printf("   +10000 - Use V5 sub-profile if present\n");
-  printf("  +100000 - Use HToS tag if present\n");
-  printf(" +1000000 - NamedColor over black (icSigNmclSpectralOverBlackMbr 'spcb')\n");
-  printf(" +2000000 - NamedColor over gray  (icSigNmclSpectralOverGrayMbr 'spcg')\n");
+  fprintf(stream, "  For Rendering_intent:\n");
+  fprintf(stream, "     0 - Perceptual\n");
+  fprintf(stream, "     1 - Relative\n");
+  fprintf(stream, "     2 - Saturation\n");
+  fprintf(stream, "     3 - Absolute\n");
+  fprintf(stream, "     10 + Intent - without D2Bx/B2Dx\n");
+  fprintf(stream, "     20 + Intent - Preview\n");
+  fprintf(stream, "     30 - Gamut\n");
+  fprintf(stream, "     33 - Gamut Absolute\n");
+  fprintf(stream, "     40 + Intent - with BPC\n");
+  // Two corrections, both #2262.
+  //
+  // (1) The acronym was transposed, B-D-R-F.  ICC.2-2023 9.2.14-17 and 9.2.26-29
+  // spell the tags brdfAToB0Tag..brdfDToB3Tag, and every identifier in the
+  // library already agrees: icXformLutBRDFParam (IccCmm.h), icSigBRDFDToB0Tag,
+  // CIccStructBRDF.  The same three lines carry the typo in iccApplyProfiles
+  // and iccApplyToLink and are corrected there too.
+  //
+  // (2) These four codes take a rendering intent in their units digit exactly
+  // as "20 + Intent" does, and printing them as flat values said they did not.
+  // Each of the four transform types selects from a four-entry tag array
+  // indexed by nTagIntent in CIccXform::Create() -- brdfSpectralParameter0 /
+  // brdfColorimetricParameter0 for 50, BRDFDToB0 / BRDFAToB0 for 60,
+  // BRDFMToS0 / BRDFMToB0 for 70, MToS0 / MToB0 for 80 (IccProfLib/IccCmm.cpp,
+  // the icXformLutBRDFParam..icXformLutMCS cases).  80 is qualified because it
+  // is the one code where that is only half true: icXformLutMCS offsets by
+  // nTagIntent on its MVIS/Output branch (MToS0..3, MToB0..3) but reads a
+  // single AToM0Tag for MultiplexIdentification/Input and a single MToA0Tag for
+  // MultiplexLink, so 80..83 are indistinguishable in the to-MCS direction --
+  // the same reason 30/31/32 are identical and gamut stays in the flat form.
+  //
+  // The decode that feeds them preserves the digit: fromArgs() falls through
+  // its type switch for 5..8, so "nIntent % 10" reaches m_intent unchanged
+  // (IccCmmConfig.cpp).  Reading these lines as "51 is not a valid code" is
+  // what produced the refuted Finding 2 on #2261, so the omission had already
+  // cost a review round.
+  //
+  // The transform names are the ones the exported configuration and
+  // docs/icc-connect-config.schema.json publish for these same types --
+  // brdfParam, brdfDirect, brdfMcsParam -- rather than the previous
+  // "Model"/"Light"/"Output" wording, which matched neither the schema nor the
+  // two sibling tools: nothing connected the old row for 60 to the
+  // "transform": "brdfDirect" that -exportcfg writes when it is given.
+  fprintf(stream, "     50 + Intent - BRDF Parameters\n");
+  fprintf(stream, "     60 + Intent - BRDF Direct\n");
+  fprintf(stream, "     70 + Intent - BRDF MCS Parameters\n");
+  fprintf(stream, "     80 + Intent - MCS connection (Intent applies to MToS/MToB only)\n");
+  fprintf(stream, "     90 + Intent - Colorimetric Only\n");
+  fprintf(stream, "    100 + Intent - Spectral Only\n");
+  fprintf(stream, "    +1000 - Use Luminance based PCS adjustment\n");
+  fprintf(stream, "   +10000 - Use V5 sub-profile if present\n");
+  fprintf(stream, "  +100000 - Use HToS tag if present\n");
+  fprintf(stream, " +1000000 - NamedColor over black (icSigNmclSpectralOverBlackMbr 'spcb')\n");
+  fprintf(stream, " +2000000 - NamedColor over gray  (icSigNmclSpectralOverGrayMbr 'spcg')\n");
   // The two overprint codes read as additive flags, and #2190 was filed by a
   // caller who combined them. They select mutually exclusive array members, so
   // say here that only one may be given rather than let "+3000000" look legal.
-  printf("            (over black and over gray are alternatives, not flags:\n");
-  printf("             only one of +1000000 / +2000000 may be given)\n");
+  fprintf(stream, "            (over black and over gray are alternatives, not flags:\n");
+  fprintf(stream, "             only one of +1000000 / +2000000 may be given)\n");
 }
 
 static std::string GetProfileId(const char* profilePath)
@@ -353,6 +387,15 @@ int main(int argc, const char* argv[])
   int minargs = 2;
   bool bEvidenceJson = false;
 
+  // An explicit help request is the one invocation here that is not an error, so
+  // it prints on stdout and exits 0; every malformed form below prints on stderr
+  // and fails.  Once both paths print the same screen the stream is the only
+  // thing that separates them -- status alone cannot (#1514).
+  if (argc == 2 && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help"))) {
+    Usage(stdout);
+    return 0;
+  }
+
   if (argc > 1 && !stricmp(argv[1], "--evidence-json")) {
     bEvidenceJson = true;
     argv++;
@@ -360,8 +403,15 @@ int main(int argc, const char* argv[])
   }
 
   if (argc < minargs) {
-    Usage();
-    return 0;
+    // #2405: usage on stdout plus exit 0 told a wrapper the apply had succeeded
+    // when no data file or profile had been given.  Fail like every other error
+    // exit in this main(), all of which return EXIT_FAILURE.  argc is counted
+    // after the --evidence-json shift above, so the number reported is the
+    // operand count the tool actually had to work with.
+    fprintf(stderr, "Missing arguments: expected at least %d, received %d.\n",
+            minargs - 1, argc > 0 ? argc - 1 : 0);
+    Usage(stderr);
+    return EXIT_FAILURE;
   }
 
   CIccCfgDataApply cfgApply;
@@ -379,31 +429,31 @@ int main(int argc, const char* argv[])
 
     json cfg;
     if (!loadJsonFrom(cfg, argv[2]) || !cfg.is_object()) {
-      printf("Unable to read configuration from '%s'\n", argv[2]);
+      printf("Unable to read configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
       return EXIT_FAILURE;
     }
 
     if (cfg.find("dataFiles") == cfg.end() || !cfgApply.fromJson(cfg["dataFiles"])) {
-      printf("Unable to parse dataFile configuration from '%s'\n", argv[2]);
+      printf("Unable to parse dataFile configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
       return EXIT_FAILURE;
     }
 
     if (cfg.find("profileSequence") == cfg.end() || !cfgProfiles.fromJson(cfg["profileSequence"])) {
-      printf("Unable to parse profileSequence configuration from '%s'\n", argv[2]);
+      printf("Unable to parse profileSequence configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
       return EXIT_FAILURE;
     }
 
     if (cfgApply.m_srcType == icCfgColorData) {
       if (cfgApply.m_srcFile.empty()) {
         if (!cfgData.fromJson(cfg["colorData"])) {
-          printf("Unable to parse colorData configuration from '%s'\n", argv[2]);
+          printf("Unable to parse colorData configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
           return EXIT_FAILURE;
         }
       }
       else {
         json data;
         if (!loadJsonFrom(data, cfgApply.m_srcFile.c_str()) || !cfgData.fromJson(data)) {
-          printf("Unable to load color data from '%s'\n", cfgApply.m_srcFile.c_str());
+          printf("Unable to load color data from '%s'\n", icSanitizeConsoleText(cfgApply.m_srcFile.c_str()).c_str());
           return EXIT_FAILURE;
         }
       }
@@ -411,13 +461,13 @@ int main(int argc, const char* argv[])
     else if (cfgApply.m_srcType == icCfgIt8) {
       cfgData.m_srcSpace = cfgApply.m_srcSpace;
       if (cfgApply.m_srcFile.empty() || !cfgData.fromIt8(cfgApply.m_srcFile.c_str())) {
-        printf("Unable to parse IT8 data file '%s'\n", cfgApply.m_srcFile.c_str());
+        printf("Unable to parse IT8 data file '%s'\n", icSanitizeConsoleText(cfgApply.m_srcFile.c_str()).c_str());
         return EXIT_FAILURE;
       }
     }
     else if (cfgApply.m_srcType == icCfgLegacy) {
       if (!cfgData.fromLegacy(cfgApply.m_srcFile.c_str())) {
-        printf("Unable to parse legacy data file '%s'\n", cfgApply.m_srcFile.c_str());
+        printf("Unable to parse legacy data file '%s'\n", icSanitizeConsoleText(cfgApply.m_srcFile.c_str()).c_str());
         return EXIT_FAILURE;
       }
     }
@@ -448,7 +498,11 @@ int main(int argc, const char* argv[])
 
     int nArg = cfgApply.fromArgs(&argv[0], argc);
     if (!nArg) {
-      printf("Unable to parse configuration arguments\n");
+      // #2405: on stderr because this is a malformed-invocation diagnostic and the
+      // sibling tool prints it there.  The rest of this main()'s diagnostics stay
+      // on stdout: they are a pre-existing, and consistent, convention across all
+      // four tools, and moving them is a separate change.
+      fprintf(stderr, "Unable to parse configuration arguments\n");
       return EXIT_FAILURE;
     }
     argv += nArg;
@@ -456,7 +510,7 @@ int main(int argc, const char* argv[])
 
     nArg = cfgProfiles.fromArgs(&argv[0], argc);
     if (!nArg) {
-      printf("Unable to parse profile sequence arguments\n");
+      fprintf(stderr, "Unable to parse profile sequence arguments\n");
       return EXIT_FAILURE;
     }
     // fromArgs() reports how many arguments it consumed and stops at the first it
@@ -474,7 +528,7 @@ int main(int argc, const char* argv[])
     }
 
     if (cfgApply.m_srcType != icCfgLegacy || !cfgData.fromLegacy(cfgApply.m_srcFile.c_str())) {
-      printf("Unable to parse legacy data file '%s'\n", cfgApply.m_srcFile.c_str());
+      printf("Unable to parse legacy data file '%s'\n", icSanitizeConsoleText(cfgApply.m_srcFile.c_str()).c_str());
       return EXIT_FAILURE;
     }
 
@@ -503,17 +557,17 @@ int main(int argc, const char* argv[])
         std::string jsonText = cfgJson.dump(1);
         size_t n = fwrite(jsonText.c_str(), 1, jsonText.size(), f);
         if (n != jsonText.size()) {
-          printf("Error writing json config file '%s'\n", exportFile.c_str());
+          printf("Error writing json config file '%s'\n", icSanitizeConsoleText(exportFile.c_str()).c_str());
           fclose(f);
           return EXIT_FAILURE;
         }
         if (!icFlushAndClose(f)) {
-          printf("Error closing json config file '%s'\n", exportFile.c_str());
+          printf("Error closing json config file '%s'\n", icSanitizeConsoleText(exportFile.c_str()).c_str());
           return EXIT_FAILURE;
         }
       }
       else {
-        printf("Unable to export config file '%s'\n", exportFile.c_str());
+        printf("Unable to export config file '%s'\n", icSanitizeConsoleText(exportFile.c_str()).c_str());
         return EXIT_FAILURE;
       }
     }
@@ -570,7 +624,7 @@ int main(int argc, const char* argv[])
 
   if (!pConnect) {
     if (!sConnectError.empty())
-      printf("Error - %s\n", sConnectError.c_str());
+      printf("Error - %s\n", icSanitizeConsoleText(sConnectError.c_str()).c_str());
     else
       printf("Error - Unable to begin profile application - Possibly invalid or incompatible profiles\n");
     return EXIT_FAILURE;

@@ -74,6 +74,7 @@
 #include <cstdio>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>  // strcmp, used by the -h/--help contract guard in main()
 #include <string>
 #include <vector>
 #include <list>
@@ -272,7 +273,7 @@ public:
 
     m_f = icOpenRegularWriteBinaryFile(m_filename.c_str());
     if (!m_f) {
-      printf("Unable to open '%s'\n", m_filename.c_str());
+      printf("Unable to open '%s'\n", icSanitizeConsoleText(m_filename.c_str()).c_str());
       return false;
     }
 
@@ -770,65 +771,88 @@ protected:
   CIccTagProfileSeqDesc* m_pTagSeq = nullptr;
 };
 
-void Usage() 
+void Usage(FILE* stream) 
 {
-  printf("iccApplyToLink built with IccProfLib version " ICCPROFLIBVER "\n\n");
+  fprintf(stream, "iccApplyToLink built with IccProfLib version " ICCPROFLIBVER "\n\n");
 
-  printf("Usage: iccApplyToLink dst_link_file link_type lut_size option title range_min range_max first_transform interp {{-ENV:sig value} profile_file_path rendering_intent {-PCC connection_conditions_path}}\n\n");
-  printf("  dst_link_file is path of file to create\n\n");
+  fprintf(stream, "Usage: iccApplyToLink dst_link_file link_type lut_size option title range_min range_max first_transform interp {{-ENV:sig value} profile_file_path rendering_intent {-PCC connection_conditions_path}}\n\n");
+  fprintf(stream, "  dst_link_file is path of file to create\n\n");
   
-  printf("  For link_type:\n");
-  printf("    0 - Device Link\n");
-  printf("    1 - .cube text file\n\n");
+  fprintf(stream, "  For link_type:\n");
+  fprintf(stream, "    0 - Device Link\n");
+  fprintf(stream, "    1 - .cube text file\n\n");
   
-  printf("  Where lut_size represents the number of grid entries for each lut dimension.\n\n");
+  fprintf(stream, "  Where lut_size represents the number of grid entries for each lut dimension.\n\n");
   
-  printf("  For option when link_type is 0:\n");
-  printf("    0 - version 4 profile with 16-bit table\n");
-  printf("    1 - version 5 profile\n\n");
-  printf("  For option when link_type is 1:\n");
-  printf("    option represents the digits of precision for lut for .cube files\n\n");
+  fprintf(stream, "  For option when link_type is 0:\n");
+  fprintf(stream, "    0 - version 4 profile with 16-bit table\n");
+  fprintf(stream, "    1 - version 5 profile\n\n");
+  fprintf(stream, "  For option when link_type is 1:\n");
+  fprintf(stream, "    option represents the digits of precision for lut for .cube files\n\n");
 
-  printf("  title is the title/description for the dest_link_file\n\n");
+  fprintf(stream, "  title is the title/description for the dest_link_file\n\n");
 
-  printf("  range_min specifies the minimum input value (usually 0.0)\n");
-  printf("  range_max specifies the maximum input value (usually 1.0)\n");
-  printf("    range_max must be greater than range_min\n");
-  printf("    a range other than 0.0 to 1.0 needs option 1 (v5) or link_type 1 (.cube);\n");
-  printf("    a version 4 device link has nowhere to record it\n\n");
+  fprintf(stream, "  range_min specifies the minimum input value (usually 0.0)\n");
+  fprintf(stream, "  range_max specifies the maximum input value (usually 1.0)\n");
+  fprintf(stream, "    range_max must be greater than range_min\n");
+  fprintf(stream, "    a range other than 0.0 to 1.0 needs option 1 (v5) or link_type 1 (.cube);\n");
+  fprintf(stream, "    a version 4 device link has nowhere to record it\n\n");
 
-  printf("  For first_transform:\n");
-  printf("    0 - use destination transform from first profile\n");
-  printf("    1 - use source transform from first profile\n\n");
+  fprintf(stream, "  For first_transform:\n");
+  fprintf(stream, "    0 - use destination transform from first profile\n");
+  fprintf(stream, "    1 - use source transform from first profile\n\n");
 
-  printf("  For interp:\n");
-  printf("    0 - linear interpolation\n");
-  printf("    1 - tetrahedral interpolation\n\n");
+  fprintf(stream, "  For interp:\n");
+  fprintf(stream, "    0 - linear interpolation\n");
+  fprintf(stream, "    1 - tetrahedral interpolation\n\n");
 
-  printf("  For rendering_intent:\n");
-  printf("    0 - Perceptual\n");
-  printf("    1 - Relative\n");
-  printf("    2 - Saturation\n");
-  printf("    3 - Absolute\n");
-  printf("    10 - Perceptual without D2Bx/B2Dx\n");
-  printf("    11 - Relative without D2Bx/B2Dx\n");
-  printf("    12 - Saturation without D2Bx/B2Dx\n");
-  printf("    13 - Absolute without D2Bx/B2Dx\n");
-  printf("    20 - Preview Perceptual\n");
-  printf("    21 - Preview Relative\n");
-  printf("    22 - Preview Saturation\n");
-  printf("    23 - Preview Absolute\n");
-  printf("    30 - Gamut\n");
-  printf("    33 - Gamut Absolute\n");
-  printf("    40 - Perceptual with BPC\n");
-  printf("    41 - Relative Colorimetric with BPC\n");
-  printf("    42 - Saturation with BPC\n");
-  printf("    50 - BDRF Parameters\n");
-  printf("    60 - BDRF Direct\n");
-  printf("    70 - BDRF MCS Parameters\n");
-  printf("    80 - MCS connection\n");
-  printf("  +100 - Use Luminance based PCS adjustment\n");
-  printf(" +1000 - Use V5 sub-profile if present\n");
+  fprintf(stream, "  For rendering_intent:\n");
+  fprintf(stream, "    0 - Perceptual\n");
+  fprintf(stream, "    1 - Relative\n");
+  fprintf(stream, "    2 - Saturation\n");
+  fprintf(stream, "    3 - Absolute\n");
+  fprintf(stream, "    10 - Perceptual without D2Bx/B2Dx\n");
+  fprintf(stream, "    11 - Relative without D2Bx/B2Dx\n");
+  fprintf(stream, "    12 - Saturation without D2Bx/B2Dx\n");
+  fprintf(stream, "    13 - Absolute without D2Bx/B2Dx\n");
+  fprintf(stream, "    20 - Preview Perceptual\n");
+  fprintf(stream, "    21 - Preview Relative\n");
+  fprintf(stream, "    22 - Preview Saturation\n");
+  fprintf(stream, "    23 - Preview Absolute\n");
+  fprintf(stream, "    30 - Gamut\n");
+  fprintf(stream, "    33 - Gamut Absolute\n");
+  fprintf(stream, "    40 - Perceptual with BPC\n");
+  fprintf(stream, "    41 - Relative Colorimetric with BPC\n");
+  fprintf(stream, "    42 - Saturation with BPC\n");
+  // #2262: the acronym was transposed, B-D-R-F -- ICC.2-2023 9.2.14-17 and
+  // 9.2.26-29 spell the tags brdfAToB0Tag..brdfDToB3Tag, and the library's own
+  // identifiers already agree (icXformLutBRDFParam, icSigBRDFDToB0Tag,
+  // CIccStructBRDF).  The same three lines carry the typo in iccApplyNamedCmm
+  // and iccApplyProfiles and are corrected there too.
+  //
+  // The four codes also take a rendering intent in their units digit, which
+  // printing them as flat values said they did not: CIccXform::Create() indexes
+  // a four-entry tag array with nTagIntent in each of the
+  // icXformLutBRDFParam..icXformLutMCS cases, and the decode that feeds it
+  // falls through its type switch for 5..8, so "nIntent % 10" reaches the
+  // intent unchanged.  80 is qualified because it is the one code where that is
+  // only half true: icXformLutMCS offsets by nTagIntent on its MVIS/Output
+  // branch (MToS0..3, MToB0..3) but reads a single AToM0Tag for
+  // MultiplexIdentification/Input and a single MToA0Tag for MultiplexLink, so
+  // 80..83 are indistinguishable in the to-MCS direction.
+  //
+  // Written in the "NN + Intent" form iccApplyNamedCmm uses for its 10/20/40
+  // rows rather than enumerated in this screen's own style:
+  // spelling out 50..53, 60..63, 70..73 and 80..83 would add twelve lines to
+  // say the same thing, and this way the three tools' BRDF and MCS rows agree
+  // line for line -- nothing had ever compared them, which is how the same
+  // three transforms came to be named two different ways.
+  fprintf(stream, "    50 + Intent - BRDF Parameters\n");
+  fprintf(stream, "    60 + Intent - BRDF Direct\n");
+  fprintf(stream, "    70 + Intent - BRDF MCS Parameters\n");
+  fprintf(stream, "    80 + Intent - MCS connection (Intent applies to MToS/MToB only)\n");
+  fprintf(stream, "  +100 - Use Luminance based PCS adjustment\n");
+  fprintf(stream, " +1000 - Use V5 sub-profile if present\n");
 }
 
 //===================================================
@@ -891,9 +915,25 @@ static void releasePccList(IccProfilePtrList& pccList)
 int main(int argc, icChar* argv[])
 {
   int minargs = 10; // minimum number of arguments
-  if(argc<minargs) {
-    Usage();
+
+  // An explicit help request is the one invocation here that is not an error, so
+  // it prints on stdout and exits 0; every malformed form below prints on stderr
+  // and fails.  Once both paths print the same screen the stream is the only
+  // thing that separates them -- status alone cannot (#1514).
+  if (argc == 2 && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help"))) {
+    Usage(stdout);
     return 0;
+  }
+
+  if(argc<minargs) {
+    // #2405: every prefix of 0..8 operands landed here, printed usage on stdout
+    // and exited 0 -- nine distinct incomplete forms all reporting success.
+    // Fail like the odd-argument guard immediately below, which already paired
+    // its diagnostic with Usage() and returned -1.
+    fprintf(stderr, "Missing arguments: expected at least %d, received %d.\n",
+            minargs - 1, argc > 0 ? argc - 1 : 0);
+    Usage(stderr);
+    return -1;
   }
 
   int nNumProfiles, temp;
@@ -901,8 +941,8 @@ int main(int argc, icChar* argv[])
 
   //remaining arguments must be in pairs
   if(temp%2 != 0) {
-    printf("\nMissing arguments!\n");
-    Usage();
+    fprintf(stderr, "\nMissing arguments!\n");
+    Usage(stderr);
     return -1;
   }
 
@@ -910,7 +950,7 @@ int main(int argc, icChar* argv[])
 
   int nLinkType = 0;
   if (!ParseIntArg(argv[2], 0, 1, nLinkType)) {
-    printf("Invalid link_type '%s': expected 0 (Device Link) or 1 (.cube text file)\n", argv[2]);
+    printf("Invalid link_type '%s': expected 0 (Device Link) or 1 (.cube text file)\n", icSanitizeConsoleText(argv[2]).c_str());
     return 1;
   }
 
@@ -933,7 +973,7 @@ int main(int argc, icChar* argv[])
 
   int nLutSize = 0;
   if (!ParseIntArg(argv[3], 2, 255, nLutSize)) {
-    printf("Invalid LUT size '%s': expected an integer between 2 and 255\n", argv[3]);
+    printf("Invalid LUT size '%s': expected an integer between 2 and 255\n", icSanitizeConsoleText(argv[3]).c_str());
     return EXIT_FAILURE;
   }
   
@@ -942,13 +982,13 @@ int main(int argc, icChar* argv[])
   int nOption = 0;
   if (nLinkType == 0) {
     if (!ParseIntArg(argv[4], 0, 1, nOption)) {
-      printf("Invalid option '%s': DeviceLink option must be 0 (v4) or 1 (v5)\n", argv[4]);
+      printf("Invalid option '%s': DeviceLink option must be 0 (v4) or 1 (v5)\n", icSanitizeConsoleText(argv[4]).c_str());
       return 1;
     }
   }
   else {
     if (!ParseIntArg(argv[4], 0, 20, nOption)) {
-      printf("Invalid option '%s': .cube precision must be between 0 and 20\n", argv[4]);
+      printf("Invalid option '%s': .cube precision must be between 0 and 20\n", icSanitizeConsoleText(argv[4]).c_str());
       return 1;
     }
   }
@@ -1013,13 +1053,13 @@ int main(int argc, icChar* argv[])
   //Retrieve command line arguments
   int nFirstTransform = 0;
   if (!ParseIntArg(argv[8], 0, 1, nFirstTransform)) {
-    printf("Invalid first_transform '%s': expected 0 or 1\n", argv[8]);
+    printf("Invalid first_transform '%s': expected 0 or 1\n", icSanitizeConsoleText(argv[8]).c_str());
     return 1;
   }
   bool bFirstTransform = nFirstTransform != 0;
   int nInterpVal = 0;
   if (!ParseIntArg(argv[9], 0, 1, nInterpVal)) {
-    printf("Invalid interp '%s': expected 0 (linear) or 1 (tetrahedral)\n", argv[9]);
+    printf("Invalid interp '%s': expected 0 (linear) or 1 (tetrahedral)\n", icSanitizeConsoleText(argv[9]).c_str());
     return 1;
   }
   icXformInterp nInterp = (nInterpVal == 0) ? icInterpLinear : icInterpTetrahedral;
@@ -1052,7 +1092,7 @@ int main(int argc, icChar* argv[])
       icSignature sig = icGetSigVal(argv[nCount]+5);
       icFloatNumber val;
       if (!ParseFloatArg(argv[nCount+1], val)) {
-        printf("Invalid environment value '%s' for %s: expected a finite number\n", argv[nCount+1], argv[nCount]);
+        printf("Invalid environment value '%s' for %s: expected a finite number\n", icSanitizeConsoleText(argv[nCount+1]).c_str(), icSanitizeConsoleText(argv[nCount]).c_str());
         releasePccList(pccList);
         return 1;
       }
@@ -1062,7 +1102,7 @@ int main(int argc, icChar* argv[])
     else if (stricmp(argv[nCount], "-PCC")) { //Attach profile while ignoring -PCC (this are handled below as profiles are attached)
       bUseD2BxB2DxTags = true;
       if (!ParseIntArg(argv[nCount+1], INT_MIN, INT_MAX, nIntent)) {
-        printf("Invalid rendering intent '%s': expected an integer code\n", argv[nCount+1]);
+        printf("Invalid rendering intent '%s': expected an integer code\n", icSanitizeConsoleText(argv[nCount+1]).c_str());
         releasePccList(pccList);
         return 1;
       }
@@ -1076,7 +1116,7 @@ int main(int argc, icChar* argv[])
       // (IccCmmConfig.cpp, #2190); refused here so the two tools agree (#2268).
       if (nIntent < 0) {
         printf("Invalid rendering intent '%s': a negative intent code is not a"
-               " valid form\n", argv[nCount+1]);
+               " valid form\n", icSanitizeConsoleText(argv[nCount+1]).c_str());
         releasePccList(pccList);
         return 1;
       }
@@ -1111,16 +1151,27 @@ int main(int argc, icChar* argv[])
       // guard there, removed in #2267; adding the guard here without removing
       // this term would file the alert a second time (#2268).
       if (nIntent > (int)icAbsoluteColorimetric) {
-        printf("Invalid rendering intent '%s': decoded intent is out of range\n", argv[nCount+1]);
+        printf("Invalid rendering intent '%s': decoded intent is out of range\n", icSanitizeConsoleText(argv[nCount+1]).c_str());
         releasePccList(pccList);
         return 1;
       }
       
-      if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum) {
-        printf("Invalid rendering intent '%s': decoded transform type is out of range\n", argv[nCount+1]);
-        releasePccList(pccList);
-        return 1;
-      }
+      // No transform-type range test here: neither bound can be crossed, and the
+      // message this used to print was unreachable for every one of the 2^31
+      // codes ParseIntArg accepts.  nType is "abs(value % 100) / 10" of a value
+      // the sign guard above has already refused if negative, so it is 0..9 --
+      // icXformLutMinimum is 0, and icXformLutMaximum is 0xD, four above the
+      // largest tens digit the column can hold (#2270).
+      //
+      // The check read as live because the sibling decode in
+      // CIccCfgProfileSequence::fromArgs() genuinely needs it: that one strips
+      // "% 1000" rather than "% 100", so its hundreds column feeds nType and
+      // "100".."130" really do select icXformLutSpectral..icXformLutNamedDevice
+      // there, with "140" and up refused by the same comparison.  This tool
+      // spends its hundreds column on nLuminance below instead, which is why the
+      // four types above 9 have no spelling on THIS command line and why
+      // widening the column here would silently redefine every code from 100 up.
+      // Removed rather than widened for that reason (#2270 ruling).
 
       if (nLuminance) {
         Hint.AddHint(new CIccLuminanceMatchingHint());
@@ -1130,7 +1181,7 @@ int main(int argc, icChar* argv[])
       if (i+1<nNumProfiles && !stricmp(argv[nCount+2], "-PCC")) {  
         pPccProfile = OpenIccProfile(argv[nCount+3]);
         if (!pPccProfile) {
-          printf("Unable to open Profile Connections Conditions from '%s'\n", argv[nCount+3]);
+          printf("Unable to open Profile Connections Conditions from '%s'\n", icSanitizeConsoleText(argv[nCount+3]).c_str());
           // Free any -PCC profiles opened on earlier loop iterations (#1336).
           releasePccList(pccList);
           return -1;
@@ -1165,7 +1216,7 @@ int main(int argc, icChar* argv[])
         // profile, which misled users when a structurally valid profile was
         // simply chained incompatibly - see issue #1322.  Decode the status
         // with CIccCmm::GetStatusText so the real cause is visible.
-        printf("Error - Unable to add '%s' to transform chain (status %d: %s)\n", argv[nCount], stat, CIccCmm::GetStatusText(stat));
+        printf("Error - Unable to add '%s' to transform chain (status %d: %s)\n", icSanitizeConsoleText(argv[nCount]).c_str(), stat, CIccCmm::GetStatusText(stat));
         if (stat == icCmmStatBadSpaceLink) {
           printf("The profile's color spaces do not connect with the previous transform in the chain.\n");
         }
@@ -1292,10 +1343,10 @@ int main(int argc, icChar* argv[])
   }
 
   if (pWriter->finish()) {
-    printf("\nLUT successfully written to '%s'\n", argv[1]);
+    printf("\nLUT successfully written to '%s'\n", icSanitizeConsoleText(argv[1]).c_str());
   }
   else {
-    printf("\nUnable to write LUT to '%s'\n", argv[1]);
+    printf("\nUnable to write LUT to '%s'\n", icSanitizeConsoleText(argv[1]).c_str());
     return -1;
   }
 

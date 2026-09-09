@@ -458,6 +458,11 @@ run_cmd() {
     bash -lc "$cmd" > "${prefix}.out" 2> "${prefix}.err"
     rc=$?
   fi
+  printf -v status_index '%05d' "$idx"
+  status_file="$LOG_DIR/status/${status_index}.${phase}.rc"
+  status_tmp="${status_file}.$$"
+  printf '%s\n' "$rc" > "$status_tmp"
+  mv -f "$status_tmp" "$status_file"
 
   extract_sanitizer "$prefix"
 
@@ -496,7 +501,12 @@ run_one() {
     if [[ -n "$cfg" && -f "$cfg" ]]; then
       if (( idx % 2 == 0 )); then thread_prefix="-threads 1 "; else thread_prefix=""; fi
       cfg_cmd="iccApplyProfiles ${thread_prefix}-cfg ${cfg}"
-      run_cmd "$idx" "cfg" "$cfg_cmd" || rc=$?
+      if run_cmd "$idx" "cfg" "$cfg_cmd"; then
+        :
+      else
+        cfg_rc=$?
+        [[ "$rc" -ne 0 ]] || rc=$cfg_rc
+      fi
     elif [[ "$DRY_RUN" -ne 1 ]]; then
       echo "SKIP $idx cfg ; config not generated: $cfg"
     fi
@@ -518,11 +528,18 @@ if [[ "$MODE" == "generate" ]]; then
 fi
 
 mkdir -p "$LOG_DIR"
+status_dir="$LOG_DIR/status"
+if [[ -d "$status_dir" ]]; then
+  find "$status_dir" -mindepth 1 -maxdepth 1 -type f -name '*.rc' -delete
+fi
+mkdir -p "$status_dir"
 : > "$LOG_DIR/sanitizer-summary.txt"
 : > "$LOG_DIR/failures.txt"
 
 tmp="$(mktemp)"
 emit_export_mutations "$MUTATIONS" "$START_AT" > "$tmp"
+selected_mutations="$(wc -l < "$tmp")"
+printf '%s\n' "$selected_mutations" > "$status_dir/expected-export-count"
 
 if [[ "$JOBS" -le 1 ]]; then
   failures=0
@@ -546,20 +563,35 @@ fi
 
 # Simple parallel queue preserving full command lines.
 current="$START_AT"
+failures=0
+active_children=0
 while IFS= read -r cmd; do
   idx="$current"
   current=$((current + 1))
   (
     run_one "$idx" "$cmd"
   ) &
-  while (( $(jobs -rp | wc -l) >= JOBS )); do
-    wait -n || true
+  active_children=$((active_children + 1))
+  while (( active_children >= JOBS )); do
+    if ! wait -n; then
+      failures=$((failures + 1))
+    fi
+    active_children=$((active_children - 1))
   done
 done < "$tmp"
 
-while wait -n 2>/dev/null; do :; done
+while (( active_children > 0 )); do
+  if ! wait -n; then
+    failures=$((failures + 1))
+  fi
+  active_children=$((active_children - 1))
+done
 
 rm -f "$tmp"
+echo "=== Done: failures=$failures ==="
 echo "Sanitizer summary: $LOG_DIR/sanitizer-summary.txt"
 echo "Failure summary:   $LOG_DIR/failures.txt"
-exit 0
+if [[ "$failures" -eq 0 ]]; then
+  exit 0
+fi
+exit 1

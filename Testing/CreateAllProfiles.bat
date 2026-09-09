@@ -250,6 +250,23 @@ REM RefEstimationImport.xml is not a standalone XML file
 
 cd ..
 
+cd HDR
+if not "%1"=="clean" goto do_HDR
+del /F/Q *.icc 2>NUL:
+goto end_HDR
+:do_HDR
+REM #2328: HDR\mkprofiles.bat already builds exactly these ten profiles, so call it
+REM rather than keeping a second copy of the same command list here -- a duplicate
+REM list drifts silently and leaves iccdev.qa-profile-manifest short a profile or a
+REM manifest row depending on which copy was edited. CALL is required: invoking a
+REM .bat without it transfers control and never returns to this script.
+@echo on
+call .\mkprofiles.bat
+@echo off
+:end_HDR
+
+cd ..
+
 REM Issue #1883: before these, the corpus held no ICC v2 profile at all -- a clean
 REM checkout's 210 profiles are 208 v5 and 2 v4, with no 'mft2' or 'mft1' tag
 REM anywhere -- so the v2 legacy Lab encoding path was exercised by nothing. These three cover
@@ -269,92 +286,5 @@ iccFromXml v2GrayTRC.xml v2GrayTRC.icc
 iccFromXml v2GrayTRCLab.xml v2GrayTRCLab.icc
 @echo off
 :end_V2
-
-cd ..
-
-REM Testing/HDR/ has carried ten BT.2100 fixtures and its own mkprofiles since
-REM before the HAGC work, but nothing ever ran it: the directory was absent from
-REM this script, so no .icc was produced from it, and everything downstream keys
-REM off the .icc files found under Testing/.
-cd HDR
-if not "%1"=="clean" goto do_HDR
-del /F/Q *.icc 2>NUL:
-goto end_HDR
-:do_HDR
-@echo on
-iccFromXml BT2100HlgFullScene.xml BT2100HlgFullScene.icc
-iccFromXml BT2100HlgNarrowScene.xml BT2100HlgNarrowScene.icc
-iccFromXml BT2100HlgFullDisplay.xml BT2100HlgFullDisplay.icc
-iccFromXml BT2100HlgNarrowDisplay.xml BT2100HlgNarrowDisplay.icc
-iccFromXml BT2100PQFullScene.xml BT2100PQFullScene.icc
-iccFromXml BT2100PQNarrowScene.xml BT2100PQNarrowScene.icc
-iccFromXml BT2100PQFullDisplay.xml BT2100PQFullDisplay.icc
-iccFromXml BT2100PQNarrowDisplay.xml BT2100PQNarrowDisplay.icc
-iccFromXml BT2100HlgSceneToDisplayLink.xml BT2100HlgSceneToDisplayLink.icc
-iccFromXml BT2100PQSceneToDisplayLink.xml BT2100PQSceneToDisplayLink.icc
-iccFromXml HagcDisplay.xml HagcDisplay.icc
-iccFromXml HagcCommonParams.xml HagcCommonParams.icc
-iccFromXml HagcHexData.xml HagcHexData.icc
-iccFromXml HagcMixingTypes.xml HagcMixingTypes.icc
-iccFromXml HagcInvalidXOrder.xml HagcInvalidXOrder.icc
-iccFromXml HagcRefWhiteToneMap.xml HagcRefWhiteToneMap.icc
-iccFromXml HdrCicpUnspecified.xml HdrCicpUnspecified.icc
-iccFromXml HdrDisplayMetadata.xml HdrDisplayMetadata.icc
-iccFromXml HdrBakedLut.xml HdrBakedLut.icc
-iccFromXml HdrInvalidTransfer.xml HdrInvalidTransfer.icc
-iccFromXml HdrMissingBToA0.xml HdrMissingBToA0.icc
-iccFromXml HdrMissingLutPair.xml HdrMissingLutPair.icc
-iccFromXml HdrCicp2NoColumns.xml HdrCicp2NoColumns.icc
-iccFromXml HdrInputDisplayMeta.xml HdrInputDisplayMeta.icc
-iccFromXml HdrLinearCll.xml HdrLinearCll.icc
-iccFromXml HdrLinearMdcv.xml HdrLinearMdcv.icc
-iccFromXml HdrLinearNoMetadata.xml HdrLinearNoMetadata.icc
-iccFromXml HdrLinearHagcWhite.xml HdrLinearHagcWhite.icc
-
-REM Clause 8.10.1 membership corpus. Each of these flips exactly ONE of the
-REM clause's membership conditions and satisfies every other one, so a classifier
-REM that drops or weakens that condition is misclassifying exactly one fixture.
-REM Before they existed the only membership negative was HdrInvalidTransfer,
-REM which fails two conditions at once (non-HDR transfer AND TRC tags present)
-REM and so cannot say which of the two was tested.
-REM
-REM All six are CONFORMANT profiles that classify as icHdrProfileHdrContent:
-REM failing 8.10.1 makes a profile not an HDR Profile, it does not make it
-REM non-conformant, and each still carries HDR metadata. Two draw a warning that
-REM is itself the expected result -- see the fixture headers and the rows in
-REM Testing/qa-profile-manifest.tsv.
-iccFromXml HdrNonRgbSpace.xml HdrNonRgbSpace.icc
-iccFromXml HdrColorSpaceClass.xml HdrColorSpaceClass.icc
-iccFromXml HdrVersion44.xml HdrVersion44.icc
-iccFromXml HdrNoCicpTag.xml HdrNoCicpTag.icc
-iccFromXml HdrTrcTagsPresent.xml HdrTrcTagsPresent.icc
-iccFromXml HdrTransferSdr.xml HdrTransferSdr.icc
-
-REM The other edge of the same window: 4.6.0.0 is "4.5.0.0 or later within v4",
-REM so this one IS an HDR Profile. It is the only fixture that separates a
-REM correct ">= 4.5 and < 5" test from a wrong "== 4.5".
-iccFromXml HdrVersion46.xml HdrVersion46.icc
-
-REM Clause 8.10.5 display-headroom precedence, rules b) and c). The base fixture
-REM HdrDisplayMetadata fires rule a); these two remove entries to expose the
-REM rules below it, and pick values that make a reader firing the wrong rule
-REM return a different number rather than the same one.
-iccFromXml HdrHeadroomDcvDrwl.xml HdrHeadroomDcvDrwl.icc
-iccFromXml HdrHeadroomDcvCrwl.xml HdrHeadroomDcvCrwl.icc
-
-REM Clause 8.10.6 pairing at x = 1. HdrMissingBToA0 covers x = 0, but x = 0 is
-REM the pair 8.10.6 makes mandatory outright, so an implementation that only
-REM ever looked for AToB0Tag/BToA0Tag passes it. This is a negative -- see
-REM Testing/expected-invalid-fromxml.tsv.
-iccFromXml HdrMissingBToA1.xml HdrMissingBToA1.icc
-
-REM IMPL-02: the VideoFullRangeFlag pair. Identical in every byte but that one
-REM field. Nothing reads the flag, so the two currently render IDENTICALLY --
-REM the pair pins the gap rather than asserting a pass, so that whichever way
-REM IMPL-02 is resolved, the resolution has to move a fixture.
-iccFromXml HdrFullRangeFlag.xml HdrFullRangeFlag.icc
-iccFromXml HdrNarrowRangeFlag.xml HdrNarrowRangeFlag.icc
-@echo off
-:end_HDR
 
 cd ..

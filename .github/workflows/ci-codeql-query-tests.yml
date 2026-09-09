@@ -1,0 +1,147 @@
+###############################################################
+#
+# Copyright (c) 2025-2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+## Intent: Run the CodeQL query unit tests under .github/codeql-queries/test
+##
+## Why this is a separate workflow rather than a job in
+## ci-codeql-security.yml: that workflow's pull_request trigger is
+## types:[labeled] and its analyze job additionally requires the
+## 'codeql-ready' label, because it builds the whole tree to make a
+## database.  These tests need no database and no build -- the qltest
+## extractor compiles the fixture itself -- so they can and should run on
+## every PR that edits a query.  Adding them there would have meant
+## widening that workflow's triggers for every PR.
+##
+## NOTE: CODEQL_VER/CODEQL_SHA256 below are a THIRD pin site for the CodeQL
+## bundle, alongside ci-codeql-security.yml and ci-preflight-safety.yml.
+## Bump all three together; docs/codeql.md lists them.
+#
+###############################################################
+
+name: "ci-codeql-query-tests"
+
+# Pinned SHAs and CodeQL command strings exceed line length.
+# yamllint disable rule:line-length
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - '.github/codeql-queries/**'
+      - '.github/workflows/ci-codeql-query-tests.yml'
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/codeql-queries/**'
+      - '.github/workflows/ci-codeql-query-tests.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: "codeql-query-tests-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}"
+  cancel-in-progress: true
+
+jobs:
+  query-tests:
+    name: CodeQL Query Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install CodeQL CLI
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          # Unlike the sibling workflows this does NOT fall back to a codeql
+          # already on PATH.  Query-test output carries extractor line/column
+          # locations that .expected files assert exactly, so an unpinned CLI
+          # could flip these tests PASS/FAIL for reasons unrelated to the diff.
+          # CODEQL_SHA256 is the release asset digest for this exact bundle, so the
+          # two values below must always be refreshed together:
+          #   gh api repos/github/codeql-action/releases/tags/codeql-bundle-v"$CODEQL_VER" \
+          #     --jq '.assets[]|select(.name=="codeql-bundle-linux64.tar.gz").digest'
+          CODEQL_VER="2.26.4"
+          CODEQL_ARCHIVE="/tmp/codeql-bundle-linux64.tar.gz"
+          CODEQL_SHA256="48e1ab8b874d57bd6fd7c90fefee75addc5a45e9bd063982df9beb45a62dd5d3"
+          CODEQL_URL="https://github.com/github/codeql-action/releases/download"
+          curl -fsSL --retry 3 \
+            -o "${CODEQL_ARCHIVE}" \
+            "${CODEQL_URL}/codeql-bundle-v${CODEQL_VER}/codeql-bundle-linux64.tar.gz"
+          printf '%s  %s\n' "${CODEQL_SHA256}" "${CODEQL_ARCHIVE}" | sha256sum -c -
+          tar xzf "${CODEQL_ARCHIVE}" -C /opt
+          # Prepend, so a codeql already on the runner image cannot win.
+          echo "/opt/codeql" >> "$GITHUB_PATH"
+
+      - name: Install CodeQL pack dependencies
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          # Both installs, as .github/codeql-queries/README.md prescribes.
+          # With the pinned bundle above these mostly resolve from the bundle's
+          # own qlpacks (it rewrites the lock files to an empty dependency set
+          # in the process -- harmless here, but do not commit that churn).
+          # They matter for a standalone CLI, where the query pack's lock
+          # supplies codeql/cpp-all 8.0.3 and the test pack pins that same
+          # version; the second install is what keeps the two in step if the
+          # query pack's lock is ever regenerated against a newer cpp-all.
+          codeql pack install .github/codeql-queries
+          codeql pack install .github/codeql-queries/test \
+            --additional-packs=.github/codeql-queries
+
+      - name: Run query unit tests
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          # A qltest whose sources the extractor cannot see still reports
+          # PASSED, against an empty database -- the argv-unchecked-index
+          # fixture did exactly that twice while it was being written, once
+          # printing "found nothing to extract".  The cpp extractor does not
+          # descend into subdirectories, so require a source file beside every
+          # .qlref.  This checks the necessary condition only: it says the
+          # extractor has something to compile, not that compiling it produced
+          # a non-empty database.  A suite with a non-empty .expected already
+          # proves that itself; this is the backstop for all-negative suites,
+          # which cannot.
+          missing=0
+          while IFS= read -r ref; do
+            d="$(dirname "$ref")"
+            # find, not `ls a b c`: ls exits non-zero when *any* glob is
+            # unmatched, so absent .cc/.cxx would fail a directory that has a
+            # perfectly good .cpp.
+            if [ -z "$(find "$d" -maxdepth 1 -type f \
+                        \( -name '*.c' -o -name '*.cpp' \
+                           -o -name '*.cc' -o -name '*.cxx' \) -print -quit)" ]; then
+              echo "[FAIL] $d has $(basename "$ref") but no source file beside it" >&2
+              missing=1
+            fi
+          done < <(find .github/codeql-queries/test -name '*.qlref' -print)
+          [ "$missing" -eq 0 ] || exit 1
+
+          codeql test run .github/codeql-queries/test \
+            --additional-packs=.github/codeql-queries \
+            --threads=0

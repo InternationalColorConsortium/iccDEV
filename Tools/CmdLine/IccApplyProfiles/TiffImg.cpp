@@ -73,7 +73,59 @@
 #include <cstring>
 #include <algorithm>
 #include <limits>
+#include <climits>   // LONG_MAX, for the IFD-offset bound in readStoredExtraSamplesCount()
 #include "TiffImg.h"
+#include "IccFileUtil.h"  // icSanitizeConsoleText - #2406
+#include <cstdarg>
+
+// #2406: libtiff routes every diagnostic through a handler that prints the
+// "module" string and the formatted message straight to stderr.  Every
+// TIFFError() call in this file passes the FILE PATH as that module string, and
+// libtiff raises its own "TIFFOpen: <path>: No such file or directory." the same
+// way -- so a path carrying ESC reproduced CSI/OSC payloads on the terminal.
+// Sanitizing the argument at each call site would have left libtiff's internal
+// message raw; the handler is the one place both meet.
+//
+// The format mirrors libtiff's own unix handlers exactly ("module: ", the
+// message, then ".\n", with "Warning, " prefixed for warnings), so output is
+// unchanged for the ASCII paths every existing test uses -- only control and
+// non-ASCII bytes render differently, which is the defect.
+//
+// Installed for every consumer of this file rather than in one tool's main():
+// iccApplyProfiles, iccSpecSepToTiff and iccTiffDump all compile TiffImg.cpp and
+// all three leaked through these same sites.
+static void icTiffSanitizedErrorHandler(const char* module, const char* fmt, va_list ap)
+{
+  char msg[1024];
+  vsnprintf(msg, sizeof(msg), fmt, ap);
+  if (module != NULL)
+    fprintf(stderr, "%s: ", icSanitizeConsoleText(module).c_str());
+  fprintf(stderr, "%s.\n", icSanitizeConsoleText(msg).c_str());
+}
+
+static void icTiffSanitizedWarningHandler(const char* module, const char* fmt, va_list ap)
+{
+  char msg[1024];
+  vsnprintf(msg, sizeof(msg), fmt, ap);
+  if (module != NULL)
+    fprintf(stderr, "%s: ", icSanitizeConsoleText(module).c_str());
+  fprintf(stderr, "Warning, %s.\n", icSanitizeConsoleText(msg).c_str());
+}
+
+namespace {
+// A file-scope object so the handlers are in place before main() runs, whichever
+// of the three tools is linking this file.  TIFFSetErrorHandler is a plain
+// function-pointer assignment, so there is no static-initialisation-order
+// dependency here.
+struct IccTiffSanitizedHandlers {
+  IccTiffSanitizedHandlers()
+  {
+    TIFFSetErrorHandler(icTiffSanitizedErrorHandler);
+    TIFFSetWarningHandler(icTiffSanitizedWarningHandler);
+  }
+};
+const IccTiffSanitizedHandlers g_icTiffSanitizedHandlers;
+}
 
 // The output-destination check below needs GetFileAttributesA() on Windows and
 // lstat()/errno on POSIX (#2242).  <windows.h> is pulled in here, in the shared
@@ -292,6 +344,113 @@ bool calcBytesPerLine(unsigned int width, unsigned int bitsPerSample,
   return checkedUInt32(bytes, bytesPerLine);
 }
 
+// The ExtraSamples count as the FILE stores it, read straight out of the IFD.
+//
+// libtiff cannot answer this.  When the photometric model plus the stored
+// ExtraSamples do not account for SamplesPerPixel it repairs the directory in memory
+// and overwrites the count IN PLACE, leaving the field marked present, so every
+// libtiff getter -- plain or Defaulted -- returns the repaired figure and the stored
+// one is gone.  Measured on a 6-sample MinIsBlack file storing ExtraSamples [0]:
+// tiffdump shows "ExtraSamples (338) SHORT (3) 1<0>" while tiffinfo and iccTiffDump
+// both report 5, so a repaired file and an honest 5-extra file produced byte-identical
+// dumps (#2386).
+//
+// Reading tag 338's own count field is the only way to tell them apart, and it needs
+// nothing but the 12-byte IFD entry: for ExtraSamples the entry's count IS the number
+// of extra samples.  Opened separately from libtiff's handle so nothing here can
+// disturb the decoder's file position.
+//
+// Reporting only.  A false return means "could not determine" -- not "absent" -- and
+// the caller must keep the two apart: BigTIFF (magic 43) lays its IFD out differently
+// and is deliberately not parsed here rather than guessed at.
+bool readStoredExtraSamplesCount(const char *szFname, icUInt16Number &nStored)
+{
+  if (!szFname)
+    return false;
+
+  FILE *f = fopen(szFname, "rb");
+  if (!f)
+    return false;
+
+  unsigned char hdr[8];
+  if (fread(hdr, 1, sizeof(hdr), f) != sizeof(hdr)) {
+    fclose(f);
+    return false;
+  }
+
+  bool bLittle;
+  if (hdr[0] == 'I' && hdr[1] == 'I')
+    bLittle = true;
+  else if (hdr[0] == 'M' && hdr[1] == 'M')
+    bLittle = false;
+  else {
+    fclose(f);
+    return false;
+  }
+
+  struct Get {
+    bool little;
+    icUInt32Number u16(const unsigned char *p) const {
+      return little ? (icUInt32Number)(p[0] | (p[1] << 8))
+                    : (icUInt32Number)(p[1] | (p[0] << 8));
+    }
+    icUInt32Number u32(const unsigned char *p) const {
+      return little ? ((icUInt32Number)p[0] | ((icUInt32Number)p[1] << 8) |
+                       ((icUInt32Number)p[2] << 16) | ((icUInt32Number)p[3] << 24))
+                    : ((icUInt32Number)p[3] | ((icUInt32Number)p[2] << 8) |
+                       ((icUInt32Number)p[1] << 16) | ((icUInt32Number)p[0] << 24));
+    }
+  } get{bLittle};
+
+  // 42 is classic TIFF. 43 is BigTIFF, whose IFD carries 8-byte counts and 20-byte
+  // entries; parsing it as classic would read garbage, so refuse instead.
+  if (get.u16(hdr + 2) != 42) {
+    fclose(f);
+    return false;
+  }
+
+  // The offset is a TIFF uint32, but fseek() takes a long, which is 32-bit on LLP64 --
+  // the MSVC lane.  A classic TIFF larger than 2 GiB may legally place its first IFD at
+  // or above 0x80000000, which would cast to a negative offset there and fail, so the
+  // same file would report its stored count on Linux and silently decline to on
+  // Windows.  Refuse the out-of-range offset explicitly instead, so "could not
+  // determine" means the same thing on every lane rather than depending on sizeof(long).
+  icUInt32Number nIfdOffset = get.u32(hdr + 4);
+  if (nIfdOffset < 8 || nIfdOffset > (icUInt32Number)LONG_MAX ||
+      fseek(f, (long)nIfdOffset, SEEK_SET) != 0) {
+    fclose(f);
+    return false;
+  }
+
+  unsigned char count[2];
+  if (fread(count, 1, sizeof(count), f) != sizeof(count)) {
+    fclose(f);
+    return false;
+  }
+
+  icUInt32Number nEntries = get.u16(count);
+  for (icUInt32Number i = 0; i < nEntries; i++) {
+    unsigned char entry[12];
+    if (fread(entry, 1, sizeof(entry), f) != sizeof(entry)) {
+      fclose(f);
+      return false;
+    }
+    if (get.u16(entry) == TIFFTAG_EXTRASAMPLES) {
+      icUInt32Number nCount = get.u32(entry + 4);
+      fclose(f);
+      // The count is what is being reported, so it has to fit the field it is
+      // compared against; a value this large is a malformed directory either way.
+      if (nCount > kMaxTiffSamples)
+        return false;
+      nStored = (icUInt16Number)nCount;
+      return true;
+    }
+  }
+
+  fclose(f);
+  return false;
+}
+
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -309,6 +468,10 @@ CTiffImg::CTiffImg()
     m_nPhoto(0),
     m_nSamples(0),
     m_nExtraSamples(0),
+    m_bExtraSamplesStored(false),
+    m_nEffectiveExtraSamples(0),
+    m_nStoredExtraSamplesCount(0),
+    m_bStoredExtraSamplesKnown(false),
     m_nPlanar(0),
     m_nCompress(0),
     m_nSampleFormat(SAMPLEFORMAT_UINT),
@@ -383,6 +546,10 @@ void CTiffImg::Close()
   m_nPhoto = 0;
   m_nSamples = 0;
   m_nExtraSamples = 0;
+  m_bExtraSamplesStored = false;
+  m_nEffectiveExtraSamples = 0;
+  m_nStoredExtraSamplesCount = 0;
+  m_bStoredExtraSamplesKnown = false;
   m_nPlanar = 0;
   m_nCompress = 0;
   m_nSampleFormat = SAMPLEFORMAT_UINT;
@@ -411,7 +578,19 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   m_bRead = false;
   m_bOutputOpened = false;
 
-  if (nBPS % 8)
+  // Zero is rejected explicitly: it passes "% 8" and libtiff accepts
+  // TIFFSetField(BITSPERSAMPLE, 0) with rc=1, so neither the modulus nor the write
+  // status catches it.  The directory was therefore authored with BitsPerSample 0 and
+  // only abandoned much further down, once TIFFStripSize() returned 0 ("Computed
+  // scanline size is zero") and the "stripSize <= 0" test refused it -- on BOTH the
+  // separated and contiguous branches, and note it is that test rather than
+  // calcBytesPerLine(), which the contiguous branch never calls.  By then TIFFOpen had
+  // created the destination, so a ~140-byte stub was left on disk.  Open() has always
+  // refused m_nBitsPerSample == 0 on the way in; this makes Create() symmetric with it
+  // and refuses before the destination is touched (#2386).  Neither tool caller can
+  // reach it -- their depth comes back out of Open() -- so this guards the public API,
+  // as the ResolutionUnit check below does.
+  if (!nBPS || nBPS % 8)
     return false;
 
   if (bCompress && nBPS != 8 && nBPS != 16 && nBPS != 32)
@@ -499,11 +678,42 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
     TIFFError(szFname,"Can not open output image");
     return false;
   }
-  TIFFSetField(m_hTif, TIFFTAG_IMAGEWIDTH, (uint32_t) m_nWidth);
-  TIFFSetField(m_hTif, TIFFTAG_IMAGELENGTH, (uint32_t) m_nHeight);
-  TIFFSetField(m_hTif, TIFFTAG_PHOTOMETRIC, m_nPhoto);
-  TIFFSetField(m_hTif, TIFFTAG_PLANARCONFIG, m_nPlanar);
-  TIFFSetField(m_hTif, TIFFTAG_SAMPLESPERPIXEL, m_nSamples);
+  // Required directory state, written through a helper that keeps the result.  The
+  // EXTRASAMPLES arm below already closed and failed on a rejected write while every
+  // other tag here discarded its status, so the writer could believe libtiff had
+  // accepted a directory it had refused; this makes the whole block consistent (#2386).
+  //
+  // No input Create() permits can currently produce a rejection: measured against
+  // libtiff 4.5.1 and 4.7.2, every tag below returns 1 for every value that gets past
+  // the entry guards, and the one set-time failure available at all -- SamplesPerPixel
+  // of 0, "Bad value 0" -- is already refused above.  Codec validity is NOT checked
+  // here either way, because libtiff defers it to write time (COMPRESSION 9999 and an
+  // unconfigured JBIG both return 1), so this guard is not a substitute for the
+  // write-time diagnostics.  It exists so a stricter libtiff fails at the tag that
+  // was rejected rather than somewhere downstream.
+  //
+  // Checked in two stages rather than once at the end: libtiff validates an
+  // ExtraSamples count against SamplesPerPixel, so the EXTRASAMPLES arm below must
+  // not run on a directory that did not accept SamplesPerPixel -- it would fail for
+  // the second reason and report the wrong tag.  The remaining writes are collected
+  // and checked together after the last of them.
+  //
+  // The accumulation is `&=`, never `&&=`/`&&`: it must NOT short-circuit.  Every
+  // TIFFSetField below has to run whatever an earlier one returned, because the
+  // directory being written is the product of all of them -- switching to a
+  // short-circuiting operator would silently stop writing tags after the first
+  // rejection and produce a file missing required state rather than an error.
+  bool bFieldsSet = true;
+  bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_IMAGEWIDTH, (uint32_t) m_nWidth) == 1;
+  bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_IMAGELENGTH, (uint32_t) m_nHeight) == 1;
+  bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_PHOTOMETRIC, m_nPhoto) == 1;
+  bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_PLANARCONFIG, m_nPlanar) == 1;
+  bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_SAMPLESPERPIXEL, m_nSamples) == 1;
+  if (!bFieldsSet) {
+    TIFFError(szFname, "Can not set required TIFF directory fields");
+    Close();
+    return false;
+  }
   if (m_nExtraSamples) {
     unsigned short* extrasamplevalues = static_cast<unsigned short*>(calloc(m_nExtraSamples, sizeof(unsigned short)));
     if (!extrasamplevalues) {
@@ -517,21 +727,39 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
       return false;
     }
   }
-  TIFFSetField(m_hTif, TIFFTAG_BITSPERSAMPLE, m_nBitsPerSample);
+  // Keep the two ExtraSamples observers true for a written image as well as a read
+  // one.  Close() resets them and only Open() set them, so a Create()d object
+  // reported "tag 338 was not present" while having just written it, contradicting
+  // the unconditional promise on HasStoredExtraSamples().  No caller reads them off
+  // an output image today; setting them here keeps that from becoming a trap.  This
+  // is the one place the write path knows the answer: the tag is written exactly
+  // when m_nExtraSamples is nonzero, and nothing repairs a directory we author, so
+  // the effective count is the requested one.
+  m_bExtraSamplesStored = (m_nExtraSamples != 0);
+  m_nEffectiveExtraSamples = m_nExtraSamples;
+  // The stored-count pair belongs here for the same reason, and leaving it out would
+  // have re-opened exactly the trap this block exists to close: a Create()d object
+  // would answer HasStoredExtraSamplesCount() == false, which the header defines as
+  // "could not determine -- unreadable, non-TIFF, or BigTIFF".  None of those is true
+  // of a directory we just authored from a count we were handed.  Nothing repairs a
+  // directory we write, so the stored count IS the requested one.
+  m_bStoredExtraSamplesKnown = true;
+  m_nStoredExtraSamplesCount = m_nExtraSamples;
+  bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_BITSPERSAMPLE, m_nBitsPerSample) == 1;
   if (m_nBitsPerSample >= 32) {
     m_nSampleFormat = SAMPLEFORMAT_IEEEFP;
-    TIFFSetField(m_hTif, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_IEEEFP);
+    bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_IEEEFP) == 1;
   }
-  TIFFSetField(m_hTif, TIFFTAG_ROWSPERSTRIP, m_nRowsPerStrip);
-  TIFFSetField(m_hTif, TIFFTAG_COMPRESSION, m_nCompress);
-  TIFFSetField(m_hTif, TIFFTAG_ORIENTATION, m_nOrientation);
+  bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_ROWSPERSTRIP, m_nRowsPerStrip) == 1;
+  bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_COMPRESSION, m_nCompress) == 1;
+  bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_ORIENTATION, m_nOrientation) == 1;
   // Written unconditionally, next to the values it qualifies.  libtiff omits the tag
   // unless it is set and readers then fall back to their own default, so an output
   // converted from a centimetre-based source came out silently claiming inches and
   // its physical size shifted by 2.54x (#2220).  Stating the unit even when it is
   // RESUNIT_INCH costs one IFD entry and makes the file say what it means instead of
   // depending on the reader agreeing about the default.
-  TIFFSetField(m_hTif, TIFFTAG_RESOLUTIONUNIT, m_nResolutionUnit);
+  bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_RESOLUTIONUNIT, m_nResolutionUnit) == 1;
   // m_fXRes/m_fYRes, not the raw parameters: a non-positive resolution was clamped to
   // 96 above, and writing the unclamped argument put the file at odds with the object
   // that produced it -- GetXRes() answered 96 while the file declared 0.  Harmless
@@ -540,15 +768,21 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   // is corrected here.  Neither tool caller is affected: iccSpecSepToTiff substitutes
   // its own value below 1, and iccApplyProfiles takes an already-clamped resolution out
   // of Open(), so for both m_fXRes == fXRes.
-  TIFFSetField(m_hTif, TIFFTAG_XRESOLUTION, m_fXRes);
-  TIFFSetField(m_hTif, TIFFTAG_YRESOLUTION, m_fYRes);
+  bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_XRESOLUTION, m_fXRes) == 1;
+  bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_YRESOLUTION, m_fYRes) == 1;
   if (bCompress) {
     if (m_nBitsPerSample >= 32) {
-      TIFFSetField(m_hTif, TIFFTAG_PREDICTOR, PREDICTOR_FLOATINGPOINT);
+      bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_PREDICTOR, PREDICTOR_FLOATINGPOINT) == 1;
     }
     else {
-      TIFFSetField(m_hTif, TIFFTAG_PREDICTOR, PREDICTOR_HORIZONTAL);
+      bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_PREDICTOR, PREDICTOR_HORIZONTAL) == 1;
     }
+  }
+
+  if (!bFieldsSet) {
+    TIFFError(szFname, "Can not set required TIFF directory fields");
+    Close();
+    return false;
   }
 
   m_nCurLine = 0;
@@ -658,7 +892,48 @@ bool CTiffImg::Open(const char *szFname)
 
   TIFFGetFieldDefaulted(m_hTif, TIFFTAG_PLANARCONFIG, &m_nPlanar);
   TIFFGetFieldDefaulted(m_hTif, TIFFTAG_SAMPLESPERPIXEL, &m_nSamples);
-  TIFFGetField(m_hTif, TIFFTAG_EXTRASAMPLES, &m_nExtraSamples, &nSampleInfo);
+  // Plain Get, and its return is now kept: unlike its neighbours this one must
+  // report what the file STORES, because colour management sizes the image from
+  // it (iccApplyProfiles.cpp:543 lets a profile match sn-sen instead of sn).  A
+  // failed Get leaves the destination untouched, so m_nExtraSamples would silently
+  // keep whatever it held; Close() zeroes it at the top of Open() so that was 0 by
+  // luck rather than by contract.  Assign it explicitly and record whether tag 338
+  // was there at all -- 0 otherwise means "absent", not "stored as zero" (#2386).
+  m_bExtraSamplesStored =
+    (TIFFGetField(m_hTif, TIFFTAG_EXTRASAMPLES, &m_nExtraSamples, &nSampleInfo) == 1);
+  if (!m_bExtraSamplesStored)
+    m_nExtraSamples = 0;
+
+  // The reporting-only companion.  When the photometric model plus the stored
+  // ExtraSamples do not add up to SamplesPerPixel, libtiff repairs the directory
+  // in memory and warns ("Defining non-color channels as ExtraSamples"), but it
+  // publishes the repaired count ONLY through the Defaulted getter -- the plain
+  // Get above still fails.  Measured on libtiff 4.5.1 and 4.7.2 against the tracked
+  // 81-band Testing/hybrid/Data/smCows380_5_780.tif: Get returns 0 and writes
+  // nothing, Defaulted returns 1 with 80.  Keep that figure for iccTiffDump to
+  // explain the layout the rest of libtiff is actually using, and keep it away from
+  // m_nExtraSamples, which must stay the stored count (see the header).
+  m_nEffectiveExtraSamples = m_nExtraSamples;
+  {
+    icUInt16Number nEffective = 0;
+    icUInt16Number *pEffectiveInfo = NULL;
+    // m_nSamples is already read above, so the count can be bounded here.  libtiff
+    // derives it as SamplesPerPixel minus the photometric model's colour channels
+    // and cannot exceed it, but this value is printed rather than validated, and the
+    // check below rejects only m_nExtraSamples -- so clamp instead of trusting it.
+    if (TIFFGetFieldDefaulted(m_hTif, TIFFTAG_EXTRASAMPLES, &nEffective, &pEffectiveInfo) == 1 &&
+        nEffective <= m_nSamples)
+      m_nEffectiveExtraSamples = nEffective;
+  }
+
+  // The count the file itself stores, which no libtiff getter can report once the
+  // directory has been repaired in place.  Read from the IFD so that a repaired file
+  // is distinguishable from an honest one: without it a 6-sample MinIsBlack image
+  // storing ExtraSamples [0] and one honestly storing five produced identical dumps
+  // (#2386).  Failure here means "could not determine", so the flag is what gates
+  // reporting -- a 0 count is a legitimate stored value, not a sentinel.
+  m_bStoredExtraSamplesKnown =
+    readStoredExtraSamplesCount(szFname, m_nStoredExtraSamplesCount);
   TIFFGetFieldDefaulted(m_hTif, TIFFTAG_SAMPLEFORMAT, &m_nSampleFormat);
   TIFFGetFieldDefaulted(m_hTif, TIFFTAG_ROWSPERSTRIP, &m_nRowsPerStrip);
   TIFFGetFieldDefaulted(m_hTif, TIFFTAG_ORIENTATION, &m_nOrientation);
@@ -725,12 +1000,13 @@ bool CTiffImg::Open(const char *szFname)
       Close();
       return false;
     }
+    // A TIFF plane may end with a short final strip.  Use overflow-free ceiling
+    // division so TIFFComputeStrip()'s sample-plane stride includes that strip.
+    // The old floor division was only correct when ImageLength was an exact
+    // multiple of RowsPerStrip, and Open() rejected every other separated TIFF.
     m_nStripsPerSample = m_nHeight / m_nRowsPerStrip;
-    //Only support separations that evenly fit into strips
-    if (m_nHeight % m_nRowsPerStrip) {
-      Close();
-      return false;
-    }
+    if (m_nHeight % m_nRowsPerStrip)
+      m_nStripsPerSample++;
   }
   else {
     m_nStripSamples = 1;
@@ -775,7 +1051,7 @@ bool CTiffImg::Open(const char *szFname)
 
 bool CTiffImg::ReadLine(unsigned char *pBuf)
 {
-  if (!m_bRead || m_nRowsPerStrip == 0 ||
+  if (!m_bRead || m_nCurLine >= m_nHeight || m_nRowsPerStrip == 0 ||
       m_nSamples == 0 || m_nSamples > kMaxTiffSamples ||
       m_nStripSamples == 0 || m_nStripSamples > kMaxTiffSamples)
     return false;

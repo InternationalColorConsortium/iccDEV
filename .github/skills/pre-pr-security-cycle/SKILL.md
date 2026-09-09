@@ -92,9 +92,10 @@ Choose the smallest dynamic check that proves the changed behavior:
 - Dockerfile checks must not be advisory-only when container files changed:
   run `hadolint` and Trivy config, then build, scan, or smoke the affected image
   when practical.
-- Confirm that `container_changed` selects the read-only Docker PR verification
-  lane and that the aggregate PR status requires its result when selected.
-- For Docker PR fast lanes, validate the same helper checks that the publishing
+- Confirm that container-surface (`image_definition_changed`) changes select
+  workflow-security gates without adding a Docker verification job or full PR
+  matrix to the aggregate status.
+- For container changes, validate the same helper checks that the publishing
   workflow validates, including patch checkers, applicators, environment
   banners, and healthcheck semantics.
 - WASM validation and parity for Emscripten changes.

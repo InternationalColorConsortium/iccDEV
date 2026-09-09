@@ -8,7 +8,7 @@ Canonical guide: `docs/regression-container.md`
 ## Inputs
 
 - Operation: basic smoke / PR validation / issue reproduction
-- Image tag (`latest` for initial interactive work, immutable SHA for reproducibility):
+- Image selector (`latest`, full-SHA tag, or release tag; resolved at run time):
 - PR number:
 - Issue number:
 - Branch or commit:
@@ -23,8 +23,9 @@ Canonical guide: `docs/regression-container.md`
 
 ## Required Workflow
 
-1. Pull the selected image and record its digest and source revision. If using
-   `latest`, verify both before starting.
+1. Pull the selected tag, resolve and record its digest and source revision,
+   then execute the digest. Do not hardcode a particular SHA as a reusable
+   workflow default.
 2. Start with a clean container Git worktree. Stop and report if it is dirty.
 3. For a PR, fetch `pull/<number>/head` and check out the fetched ref detached.
 4. For an issue, use the smallest existing project input and project tool.
@@ -32,11 +33,11 @@ Canonical guide: `docs/regression-container.md`
 6. Run the focused regression first and its CTest wrapper when registered.
 7. For local PR proof, pull the published `latest` image, record its resolved
    digest, mount the reviewed worktree read-only, and copy it to container-local
-   scratch space. Run the Docker PR verification build: strict Clang sanitizer
-   flags, the configured tool and test target set, zero compiler warnings, and
-   CTest excluding only the `slow` and `calculator` labels.
+   scratch space. Run the local canonical-image build with the configured tool
+   and test target set, zero compiler warnings, and CTest excluding only the
+   `slow` and `calculator` labels.
 8. If the changed behavior is in an excluded suite, run its focused CTest in
-   addition to the routine Docker PR envelope.
+   addition to the local container envelope.
 9. Scan output for compiler warnings, ASAN, UBSAN, and signal termination.
 10. Classify exit `1-127` as graceful and `128+` as signal termination.
 11. For AFL/CFL work, run `iccdev-fuzz-env`, verify patch-stack counts, and run
@@ -44,11 +45,16 @@ Canonical guide: `docs/regression-container.md`
 12. Save evidence outside the disposable container.
 13. If CI is requested, use the PR trigger or explicitly dispatch
     `ci-pr-action.yml`; do not assume a branch push triggers it.
-14. Use only `latest`, immutable SHA, or release tags. Existing legacy tags are
-    continuity-only; do not create, recommend, or depend on branch, run, or
-    image-variant tags. Require a separate tag-management decision before
-    removing a legacy tag.
+14. Use only `latest`, full-SHA, or release tags as selectors and resolve them
+    at run time. Existing legacy tags are continuity-only; do not create,
+    recommend, or depend on branch, run, or image-variant tags.
 15. Include the canonical image digest and hosted run in the handoff.
+
+For MCP/REST container changes, run the reusable runtime gate before dispatch:
+`python3 .github/scripts/iccdev-container-smoke.py "$IMAGE" --report-dir out/container-smoke`.
+Run `python3 -m pytest iccdev-mcp/tests -q` for the focused scanner, native
+override, entrypoint, and REST contracts. Report exact discovered inventories,
+not a fixed healthy-tool total. Do not close MCP stdin before tool responses.
 
 For AFL/CFL work, keep the review scope narrow: these helpers are experimental
 maintainer workflows and local validation patch stacks. They should support

@@ -32,6 +32,50 @@ echo ""
 pass=0
 fail=0
 
+# _log_value STRING
+# Render a value for the log.  The payloads here are attack strings by design, so
+# echoing them raw writes live CSI, bidi and zero-width sequences into the Actions
+# log -- the exact spoofing this suite exists to prevent, and it lands in the one
+# place a human reads closely, the FAIL diagnostic.  Anything that is not printable
+# ASCII is shown as hex instead.  Filtering with tr rather than a grep guard keeps
+# this correct under the `set -o pipefail` above.
+_log_value() {
+  local stripped
+  stripped=$(printf '%s' "$1" | LC_ALL=C tr -dc '\040-\176')
+  if [ "$stripped" = "$1" ]; then
+    printf '%s' "$1"
+  else
+    printf 'hex:%s' "$(printf '%s' "$1" | xxd -p | tr -d '\n')"
+  fi
+}
+
+# run_detect_test NAME INPUT LABEL EXPECT(yes|no)
+# detect_hidden_chars() reports rather than transforms, so it needs a
+# contains/not-contains assertion instead of run_test's exact match.
+run_detect_test() {
+  local test_name="$1" input="$2" label="$3" expect="$4"
+
+  echo "Test $((pass + fail + 1)): $test_name"
+  echo "  Input:    $(_log_value "$input")"
+  echo "  Expected: $expect \"$label\""
+
+  local out
+  out=$(detect_hidden_chars "$input" 2>&1 || true)
+
+  local got="no"
+  case "$out" in *"$label"*) got="yes" ;; esac
+  echo "  Result:   $got"
+
+  if [ "$got" = "$expect" ]; then
+    echo "  [PASS]"
+    pass=$((pass + 1))
+  else
+    echo "  [FAIL]"
+    fail=$((fail + 1))
+  fi
+  echo ""
+}
+
 run_test() {
   local test_name="$1"
   local input="$2"
@@ -39,12 +83,12 @@ run_test() {
   local func="${4:-sanitize_line}"
 
   echo "Test $((pass + fail + 1)): $test_name"
-  echo "  Input:    $input"
-  echo "  Expected: $expected"
+  echo "  Input:    $(_log_value "$input")"
+  echo "  Expected: $(_log_value "$expected")"
 
   local result
   result=$("$func" "$input")
-  echo "  Result:   $result"
+  echo "  Result:   $(_log_value "$result")"
 
   if [ "$result" = "$expected" ]; then
     echo "  [PASS]"
@@ -115,6 +159,200 @@ run_test "Zero-width characters (stripped by v3)" \
 run_test "Unicode tag characters stripped" \
   "$(printf 'tag\xf3\xa0\x81\xa1char')" \
   "tagchar"
+
+# -----------------------------------------------------------------------------
+# C1 controls (U+0080-U+009F)
+#
+# tr works on BYTES, so the C0/DEL strip in _strip_ctrl_* cannot see these: UTF-8
+# spells them C2 80..C2 9F.  U+009B is CSI -- the same introducer the ANSI rule
+# strips in its ESC [ form -- so a C1 that survives reopens log spoofing from the
+# other side.  sanitize.ps1 already drops the block (keep-set 0x20..0x7E plus
+# >= 0xA0) and the library's icSanitizeConsoleText() escapes it as the six
+# characters backslash-u-0-0-9-B, so these cases pin Bash to the behaviour the
+# other two implementations already have.
+# -----------------------------------------------------------------------------
+
+run_test "C1 CSI U+009B stripped" \
+  "$(from_hex '6c6f67c29b324bc29b31477370')" \
+  "log2K1Gsp"
+
+run_test "C1 low bound U+0080 stripped" \
+  "$(from_hex '61c28062')" \
+  "ab"
+
+run_test "C1 high bound U+009F stripped" \
+  "$(from_hex '61c29f62')" \
+  "ab"
+
+run_test "U+00A0 just above C1 preserved" \
+  "$(from_hex '61c2a062')" \
+  "$(from_hex '61c2a062')"
+
+run_test "Latin-1 letter above C1 preserved" \
+  "$(from_hex '61c3a962')" \
+  "$(from_hex '61c3a962')"
+
+run_test "C1 CSI stripped by sanitize_print" \
+  "$(from_hex '6c6f67c29b324b')" \
+  "log2K" \
+  "sanitize_print"
+
+# -----------------------------------------------------------------------------
+# RAW C1 bytes (0x80-0x9F not in a well-formed UTF-8 sequence)
+#
+# The cases above are the well-formed spelling C2 80..C2 9F.  A RAW 0x9B byte is
+# not a codepoint at all, so perl (which decodes) and the sed rules (which match
+# spellings) both used to pass it straight through -- the residue #2463 left
+# behind.  _strip_stray_c1() decodes byte-wise to tell a stray C1 from a
+# legitimate continuation byte.
+#
+# ANTI-VACUITY: the CJK and U+00A0 cases below are the point of the exercise.
+# The obvious "fix" -- tr -d '\200-\237' -- passes every stray-C1 case here and
+# CORRUPTS both of these, because 世 is E4 B8 96 and that 0x96 is a continuation
+# byte, not a control.  A future simplification that loses the decode fails here.
+# -----------------------------------------------------------------------------
+
+run_test "Raw C1 CSI 0x9B stripped" \
+  "$(from_hex '6c6f679b32334b')" \
+  "log23K"
+
+run_test "Raw C1 low bound 0x80 stripped" \
+  "$(from_hex '618062')" \
+  "ab"
+
+run_test "Raw C1 high bound 0x9F stripped" \
+  "$(from_hex '619f62')" \
+  "ab"
+
+run_test "Raw C1 after a valid multi-byte sequence stripped" \
+  "$(from_hex '61e4b8969b62')" \
+  "$(from_hex '61e4b89662')"
+
+run_test "Raw 0xA0 just above the C1 block preserved" \
+  "$(from_hex '61a062')" \
+  "$(from_hex '61a062')"
+
+run_test "CJK survives raw-C1 stripping (0x96 is a continuation byte)" \
+  "$(from_hex '48656c6c6f20e4b896e7958c')" \
+  "$(from_hex '48656c6c6f20e4b896e7958c')"
+
+run_test "Truncated lead drops only the stray C1 it swallowed" \
+  "$(from_hex '61e49b62')" \
+  "$(from_hex '61e462')"
+
+run_test "Raw C1 stripped by sanitize_print" \
+  "$(from_hex '6c6f679b324b')" \
+  "log2K" \
+  "sanitize_print"
+
+# -----------------------------------------------------------------------------
+# The perl-less fallback in _strip_unicode_control
+#
+# The fallback is a safety net that nothing ever exercised: every CI runner has
+# perl, so the sed branch was dead code, and five of its six rules had never
+# removed anything.  They were written as backslash-x-N-N inside bracket
+# expressions, and GNU sed honours that escape outside a bracket expression but
+# not inside one -- so only the bracket-free U+FEFF rule fired, and a U+202E
+# filename came through sanitize_line() byte-identical.  These cases run the
+# fallback on every runner by masking perl, holding both branches to one answer.
+# -----------------------------------------------------------------------------
+
+# Shadow `command` inside a subshell so `command -v perl` fails and the sed branch
+# runs.  Production code is untouched: nothing here adds a test-only switch to it.
+# shellcheck disable=SC2317  # reached indirectly, as run_test's "$func"
+sanitize_line_no_perl() {
+  (
+    command() {
+      if [ "${2:-}" = "perl" ]; then return 1; fi
+      builtin command "$@"
+    }
+    sanitize_line "$1"
+  )
+}
+
+run_test "Fallback: control case, plain ASCII survives" \
+  "no-perl-plain-ascii" \
+  "no-perl-plain-ascii" \
+  "sanitize_line_no_perl"
+
+run_test "Fallback: U+202E bidi override stripped" \
+  "$(from_hex '676e702ee280ae636369')" \
+  "gnp.cci" \
+  "sanitize_line_no_perl"
+
+run_test "Fallback: U+200B zero-width stripped" \
+  "$(from_hex '61e2808b62')" \
+  "ab" \
+  "sanitize_line_no_perl"
+
+run_test "Fallback: U+2066 bidi isolate stripped" \
+  "$(from_hex '61e281a662')" \
+  "ab" \
+  "sanitize_line_no_perl"
+
+run_test "Fallback: U+E0001 tag character stripped" \
+  "$(from_hex '61f3a0808162')" \
+  "ab" \
+  "sanitize_line_no_perl"
+
+run_test "Fallback: U+FFF9 interlinear annotation stripped" \
+  "$(from_hex '61efbfb962')" \
+  "ab" \
+  "sanitize_line_no_perl"
+
+run_test "Fallback: U+FEFF BOM stripped" \
+  "$(from_hex '61efbbbf62')" \
+  "ab" \
+  "sanitize_line_no_perl"
+
+run_test "Fallback: C1 CSI U+009B stripped" \
+  "$(from_hex '61c29b62')" \
+  "ab" \
+  "sanitize_line_no_perl"
+
+# Raw C1 on the perl-less path.  #2463's finding was that this branch stripped
+# nothing but the BOM; the stray-C1 decode must not depend on perl either.
+run_test "Fallback: raw C1 CSI 0x9B stripped" \
+  "$(from_hex '619b62')" \
+  "ab" \
+  "sanitize_line_no_perl"
+
+run_test "Fallback: CJK survives raw-C1 stripping" \
+  "$(from_hex '61e4b89662')" \
+  "$(from_hex '61e4b89662')" \
+  "sanitize_line_no_perl"
+
+# -----------------------------------------------------------------------------
+# detect_hidden_chars() parity with the strip side
+#
+# The reporting half greps the well-formed spelling C2 80..C2 9F, so a RAW C1
+# used to fall through to the "unknown category" catch-all -- detected, but
+# misnamed, which costs triage time.  It now also consults _strip_stray_c1().
+#
+# ANTI-VACUITY: the CJK case is why the obvious widening is wrong.  A bare
+# [\x80-\x9f] grep names every CJK ref a C1 control, because the 0x96 in
+# E4 B8 96 is a continuation byte.  That case must stay "no".
+# -----------------------------------------------------------------------------
+
+run_detect_test "Detect: raw C1 named, not 'unknown category'" \
+  "$(from_hex '6c6f679b32')" \
+  "U+0080-U+009F (C1 Control)" \
+  "yes"
+
+run_detect_test "Detect: well-formed C1 still named" \
+  "$(from_hex '6c6f67c29b32')" \
+  "U+0080-U+009F (C1 Control)" \
+  "yes"
+
+run_detect_test "Detect: CJK is NOT named a C1 control" \
+  "$(from_hex '48656c6c6f20e4b89620')" \
+  "U+0080-U+009F (C1 Control)" \
+  "no"
+
+run_test "Fallback: U+2027 below the range preserved" \
+  "$(from_hex '61e280a762')" \
+  "$(from_hex '61e280a762')" \
+  "sanitize_line_no_perl"
 
 # =============================================================================
 # Control Character and Injection Tests

@@ -20,6 +20,9 @@ on:
     paths:
       - "Dockerfile"
       - "iccdev-mcp/**"
+      - ".github/scripts/icc-*-qa-*"
+      - ".github/scripts/iccdev-container-smoke.py"
+      - ".github/ci/docker/build-validation-library.sh"
       - ".github/codeql-queries/iccdev-mcp/**"
       - ".github/workflows/ci-mcp-server.yml"
   workflow_dispatch:

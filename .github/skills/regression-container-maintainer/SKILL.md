@@ -21,8 +21,8 @@ Use this skill for repeatable maintainer operations in
 ## Required Inputs
 
 1. Operation: basic smoke, PR validation, or issue reproduction.
-2. Image tag: `latest` for initial interactive work or an immutable SHA tag for
-   reproducible validation.
+2. Image selector: choose `latest`, a full-SHA tag, or a release tag at run
+   time; do not embed a particular SHA as a reusable default.
 3. PR, issue, branch, or commit reference.
 4. Affected tool and smallest focused regression.
 5. Expected pass and failure signals.
@@ -31,8 +31,8 @@ Use this skill for repeatable maintainer operations in
 ## Workflow
 
 1. Read `../../../docs/regression-container.md`.
-2. Pull the image and record its digest and source revision. For `latest`, verify
-   both values before using the image.
+2. Pull the selected tag, resolve it to a digest, record the digest and source
+   revision, and execute the digest rather than the mutable tag.
 3. Mount only an evidence directory and start a disposable container.
 4. Require a clean initial Git worktree.
 5. For a PR, fetch `pull/<number>/head` and check out the ref detached.
@@ -41,11 +41,10 @@ Use this skill for repeatable maintainer operations in
    CTest wrapper.
 8. For local PR proof, pull the published `latest` image, record its resolved
    digest, mount the reviewed worktree read-only, and copy it to container-local
-   scratch space. Run the Docker PR verification build (the configured tool and
-   test target set with strict Clang sanitizer flags), reject compiler warnings,
+   scratch space. Run the local canonical-image build, reject compiler warnings,
    and run CTest excluding only the `slow` and `calculator` labels.
 9. When the PR-specific behavior is in an excluded suite, run its focused CTest
-   wrapper in addition to the routine Docker PR envelope.
+   wrapper in addition to the local container envelope.
 10. For AFL/CFL work, run `iccdev-fuzz-env`, record the patch-stack counts, and
     run the smallest matching smoke (`iccdev-afl-smoke.sh --patches` or
     `.github/ci/cfl/build.sh --patches`) before broader validation.
@@ -54,13 +53,20 @@ Use this skill for repeatable maintainer operations in
 12. Scan logs for compiler warnings, ASAN, UBSAN, and signal termination.
 13. Trigger `ci-pr-action.yml` explicitly for a pre-PR branch; a push alone does
     not trigger that workflow.
-14. Use only `latest`, immutable SHA, or release tags. Existing legacy tags are
-    continuity-only; do not introduce, recommend, or depend on branch, run, or
-    image-variant tags. Require a separate tag-management decision before
-    removing a legacy tag.
+14. Use only `latest`, full-SHA, or release tags as selectors. Resolve the
+    selector at run time; never hardcode one SHA tag as a long-lived workflow
+    default. Existing legacy tags are continuity-only; do not introduce,
+    recommend, or depend on branch, run, or image-variant tags.
 15. Confirm the canonical image digest and hosted validation explicitly.
 16. Report exact image tag, digest, source revision, commands, results, evidence,
     and workflow URLs.
+
+For container/MCP runtime changes, run
+`python3 .github/scripts/iccdev-container-smoke.py "$IMAGE"` before dispatch.
+It checks real MCP and REST operations and requires native validation in the
+unified image. Keep stdin open through the last response and report the dynamic
+inventory. Use `python3 -m pytest iccdev-mcp/tests -q` for the focused scanner,
+entrypoint, server, and REST contracts; do not use CI as the first validation.
 
 ## Safety Gates
 

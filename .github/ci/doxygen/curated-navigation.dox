@@ -27,7 +27,7 @@ tabs.
 \subpage md_docs_2documentation-maintenance "Documentation maintenance"
 \subpage md_docs_2label-system "Maintainer label system"
 \subpage md_docs_2label-inventory-audit "Label inventory audit"
-\subpage md_docs_2governance_2UPSTREAM__PR__READINESS "Upstream pull request readiness"
+\subpage upstream-pr-readiness "Upstream pull request readiness"
 */
 
 /**

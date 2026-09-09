@@ -630,8 +630,19 @@ inline bool IsValidColorSpaceSignature(icUInt32Number sig)
 //   Debug and warning output is gated behind ICC_SIGNATURE_VERBOSE.
 //
 // NOTE:
-//   This should be used to verify the `technology` field in `profileDescription`
-//   tags or `outputDevice` blocks.
+//   A technology signature appears in exactly two places: the top-level
+//   technologyTag ('tech', a signatureType), and the `technology` field of each
+//   icProfileDescStruct entry in profileSequenceDescTag ('pseq'). Use this
+//   predicate for those. It is not carried by profileDescriptionTag ('desc'),
+//   which is a multiLocalizedUnicode, and there is no "outputDevice" block --
+//   this NOTE named both until #2368, contradicting the CAVEAT below.
+//
+//   CAVEAT: it rejects icSigUndefined (0), which CIccTagProfileSeqDesc::Validate
+//   accepts as "technology not defined" and which is a common real-world value --
+//   iccFromCube writes it (Tools/CmdLine/IccFromCube/iccFromCube.cpp:624). Gating a
+//   profileSequenceDesc entry on this predicate alone therefore rejects legitimate
+//   profiles; test for zero separately. It matches CIccTagSignature::Validate, where a
+//   technologyTag holding zero is genuinely non-compliant (#2101).
 //
 // HISTORY:
 //   Instrumented and standardized by David Hoyt on 01-MAR-2025.
@@ -660,12 +671,24 @@ inline bool IsValidTechnologySignature(icUInt32Number sig)
     case (icUInt32Number)icSigCRTDisplay:
     case (icUInt32Number)icSigPMDisplay:
     case (icUInt32Number)icSigAMDisplay:
+    // ICC.1:2022 Table 29's two display rows, absent from the enum until now (#2101).
+    case (icUInt32Number)icSigLCDDisplay:
+    case (icUInt32Number)icSigOLEDDisplay:
     case (icUInt32Number)icSigPhotoCD:
     case (icUInt32Number)icSigPhotoImageSetter:
     case (icUInt32Number)icSigGravure:
     case (icUInt32Number)icSigOffsetLithography:
     case (icUInt32Number)icSigSilkscreen:
     case (icUInt32Number)icSigFlexography:
+
+    // Same four ICC.1 v4.3 rows missing from CIccInfo::GetTechnologySigName().  This
+    // header ships as a public API, so its answer disagreeing with
+    // CIccTagSignature::Validate is visible to consumers even though nothing in the
+    // tree calls it today (#2101).
+    case (icUInt32Number)icSigMotionPictureFilmScanner:
+    case (icUInt32Number)icSigMotionPictureFilmRecorder:
+    case (icUInt32Number)icSigDigitalMotionPictureCamera:
+    case (icUInt32Number)icSigDigitalCinemaProjector:
       return true;
 
     default:

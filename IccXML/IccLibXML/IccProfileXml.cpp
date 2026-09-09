@@ -406,12 +406,64 @@ bool CIccProfileXml::ToXmlWithBlanks(std::string &xml, std::string blanks)
 // performs the range check.  This is the XML twin of the JSON defect fixed for
 // #1830, whose icJsonParseBCDByte in IccProfileJson.cpp now carries the same
 // contract.
-static bool parseVersion(const std::string &sPart, unsigned long &rv)
+// bFractional distinguishes the two kinds of component this helper encodes.  A
+// major is a whole number, so "5" is 0x05.  A minor is the fractional part of a
+// decimal version, so its digits are positional: "5.1" is five-and-one-TENTH and
+// must reach the header as 0x10, exactly as the canonical "5.10" does.  Encoding
+// the digit as the integer 1 instead gave 0x01, i.e. 5.01, which is #2383's
+// `0x05010100` -- and, being below the library's 5.10 threshold, is what made a
+// v5.1 profile report its zero-step observer and illuminant encodings as
+// noncompliant.
+//
+// #2387's test pinned this as an "unchanged quirk" while that PR repaired the
+// neighbouring loops; it is the defect itself, so that assertion is inverted here
+// rather than preserved.  Rejecting a one-digit minor instead was not an option:
+// 28 tracked documents use the short form (19x "5.0", 9x "1.0"), all with a zero
+// minor, which is why the corpus never exposed this.
+static bool parseVersion(const std::string &sPart, unsigned long &rv,
+                         bool bFractional)
 {
   icUInt32Number v = 0;
 
-  if (!icXmlParseU32(sPart.c_str(), v, 99))
+  // Trim first: a component carries the element's literal text, so a
+  // pretty-printed or hand-edited document indents it ("<ProfileVersion>\n
+  // 5.10\n</ProfileVersion>") or leaves a trailing space. icXmlParseU32 requires
+  // the whole string to be consumed, and strtoull skips leading blanks but not
+  // trailing ones, so "5.10 " was rejected outright and the version reached the
+  // header as 0 -- silently, since ParseBasic still returns true. That has been
+  // true of <ProfileVersion> since the #1845 repair put this helper on that path;
+  // routing <ProfileSubClassVersion> through the same helper would otherwise have
+  // spread it to a field whose atoi() had tolerated the whitespace.
+  std::string sTrimmed = sPart;
+  const char *szBlank = " \t\r\n\f\v";
+  std::string::size_type nFirst = sTrimmed.find_first_not_of(szBlank);
+  if (nFirst == std::string::npos)
     return false;
+  sTrimmed = sTrimmed.substr(nFirst, sTrimmed.find_last_not_of(szBlank) - nFirst + 1);
+
+  // Require one or two DIGITS, which is icJsonParseBCDByte's contract on the JSON
+  // side.  icXmlParseU32 alone is not enough here: it rejects a leading '-' but
+  // strtoull still accepts '+', and it accepts any number of leading zeros while
+  // the value stays <= 99.  Both slipped past the length test below, so "5.+1"
+  // and "5.001" scaled differently from "5.1" -- and, since the JSON twin refuses
+  // them outright, the same version text produced two different header words
+  // depending on which importer was used.  Checking digits here makes the length
+  // test below a true digit count and closes that divergence.
+  if (sTrimmed.size() < 1 || sTrimmed.size() > 2)
+    return false;
+  for (std::string::size_type i = 0; i < sTrimmed.size(); i++) {
+    if (sTrimmed[i] < '0' || sTrimmed[i] > '9')
+      return false;
+  }
+
+  if (!icXmlParseU32(sTrimmed.c_str(), v, 99))
+    return false;
+
+  // Scale a one-digit fractional component to its tenths place, so "1" and "10"
+  // both encode as 0x10.  Keyed on the digit COUNT rather than the value, so a
+  // written-out "05" still means five hundredths and is left at 0x05.
+  if (bFractional && sTrimmed.size() == 1)
+    v *= 10;
 
   rv = ((v / 10) % 10) * 16 + (v % 10);
   return true;
@@ -456,7 +508,7 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
       for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
         ver += *szVer;
       }
-      bVerOk = parseVersion(ver, verMajor);
+      bVerOk = parseVersion(ver, verMajor, false);
       ver.clear();
       if (*szVer)
         szVer++;
@@ -465,26 +517,37 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
         for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
           ver += *szVer;
         }
-        bVerOk = parseVersion(ver, verMinor);
+        bVerOk = parseVersion(ver, verMinor, true);
         ver.clear();
         if (*szVer)
           szVer++;
 
         if (bVerOk && *szVer) {
+          // Accumulate rather than assign.  889db62b repaired the major and
+          // minor loops above but left these two, so every iteration overwrote
+          // the previous digit and only the last one reached parseVersion:
+          // "5.10.12.34" landed as 05 10 02 04.
           for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
-            ver = *szVer;
+            ver += *szVer;
           }
-          bVerOk = parseVersion(ver, verClassMajor);
+          bVerOk = parseVersion(ver, verClassMajor, false);
           ver.clear();
           if (*szVer)
             szVer++;
 
           if (bVerOk && *szVer) {
             for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
-              ver = *szVer;
+              ver += *szVer;
             }
-            bVerOk = parseVersion(ver, verClassMinor);
+            bVerOk = parseVersion(ver, verClassMinor, true);
             ver.clear();
+
+            // The header holds exactly four components, so anything still
+            // unconsumed is a fifth. Rejecting rather than silently truncating
+            // is what icJsonParseBCDVersionStr does -- it hands the whole
+            // remainder to a helper that refuses more than two digits.
+            if (bVerOk && *szVer)
+              bVerOk = false;
           }
         }
       }
@@ -509,18 +572,51 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
       const char *szVer = (const char*)pNode->children->content;
       std::string ver;
       unsigned long verClassMajor = 0, verClassMinor = 0;
+      // Three defects shared this block and they only cancel out together: the
+      // loops assigned instead of appending, so only the last digit survived;
+      // the major loop never stepped over the separator, so the minor loop ran
+      // zero times and atoi("") supplied 0; and atoi() stored a raw decimal
+      // where the header holds BCD.  Repairing only the first would have put
+      // "12" in the byte as 0x0C, which GetSubClassVersionName then rejects as
+      // "Invalid BCD subclass version".  parseVersion is the strict BCD helper
+      // ProfileVersion already uses, and matches icJsonParseBCDVersionStr on
+      // the JSON side.
+      bool bVerOk = false;
 
-      if (szVer) {
+      for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
+        ver += *szVer;
+      }
+      bVerOk = parseVersion(ver, verClassMajor, false);
+      ver.clear();
+      if (*szVer)
+        szVer++;
+
+      // A missing minor component stays 0, so "12" means "12.00"; a present but
+      // malformed one rejects the whole subclass version.
+      if (bVerOk && *szVer) {
         for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
-          ver = *szVer;
+          ver += *szVer;
         }
-        verClassMajor = (unsigned char)atoi(ver.c_str());
+        bVerOk = parseVersion(ver, verClassMinor, true);
         ver.clear();
-        
-        for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
-          ver = *szVer;
-        }
-        verClassMinor = (unsigned char)atoi(ver.c_str());
+
+        // As above: the sub-class version is two components, so a third is a
+        // malformation rather than something to truncate away.
+        if (bVerOk && *szVer)
+          bVerOk = false;
+      }
+
+      if (!bVerOk) {
+        // Malformed input already reached the header as zero via atoi(), so the
+        // stored value is unchanged; what is new is the recorded reason. Note
+        // iccFromXml prints parseStr only when LoadXml fails, and ParseBasic
+        // returns true regardless, so this string is not yet surfaced on the
+        // command line -- that suppression is #2387 finding 4 / #2384, which
+        // needs a ruling on the tool's exit contract before it can move.
+        parseStr += "Cannot parse ProfileSubClassVersion '";
+        parseStr += (const char*)pNode->children->content;
+        parseStr += "'\n";
+        verClassMajor = verClassMinor = 0;
       }
 
       m_Header.version = (m_Header.version & 0xffff0000) | (((verClassMajor << 8) | verClassMinor) & 0x0000ffff);

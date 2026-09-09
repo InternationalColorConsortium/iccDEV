@@ -19,10 +19,25 @@
 
 import cpp
 
-/** A `main`-style argv parameter (char** or char*[] named argv). */
+/**
+ * A `main`-style argv parameter (char** or char*[] named argv).
+ *
+ * Both spellings have to be accepted, as this comment has always said.  A
+ * parameter written `char* argv[]` decays to a pointer at the call, but the
+ * extractor keeps the *declared* type, so its unspecified type is an
+ * `ArrayType` -- `char *[]` -- and never a `PointerType`.  Testing only for
+ * `PointerType` therefore matched `char** argv` alone.  Measured on a database
+ * of this tree, 19 functions under Tools/ take an (argc, argv) pair and 17 of
+ * them spell argv as an array, so `takesArgcArgv` was false for those 17 and
+ * the query reported clean over almost its entire stated scope
+ * (code-scanning alert 2366).
+ */
 predicate isArgv(Parameter p) {
   p.getName() = "argv" and
-  p.getType().getUnspecifiedType() instanceof PointerType
+  exists(Type t |
+    t = p.getType().getUnspecifiedType() and
+    (t instanceof PointerType or t instanceof ArrayType)
+  )
 }
 
 /** Function on the argc/argv path (main, or any function taking argc+argv). */
@@ -55,7 +70,33 @@ predicate hasArgcGuard(Function f, ArrayExpr access) {
   exists(ComparisonOperation cmp |
     cmp.getEnclosingFunction() = f and
     cmp.getAnOperand().(VariableAccess).getTarget().(Parameter).getName() = "argc" and
-    cmp.getLocation().getStartLine() < access.getLocation().getStartLine()
+    // The guard and the access sit on the *same* line in the short-circuit
+    // idiom every CmdLine tool spells its help screen with --
+    //   if (argc == 2 && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")))
+    // -- where `argv[1]` is read only because `argc == 2` already held.  A
+    // strict `<` on lines could not see that guard and reported the read twice,
+    // once per `argv[1]`: that is code-scanning alerts 2366 and 2367.
+    //
+    // Same line is not on its own enough, though.  Relaxing this to `<=` also
+    // swallows the case the line test exists to catch,
+    //   if (!strcmp(argv[1], "-x") && argc > 2)
+    // where argv[1] is read *before* argc is compared and is out of bounds at
+    // argc == 1.  So on a shared line, compare columns: the comparison has to
+    // start left of the access, which the help idiom satisfies and this one
+    // does not.
+    //
+    // Columns are still only an ordering approximation.  A guard written
+    // entirely on one line but inverted relative to the access -- `if (argc > 5)
+    // { ... } else { ... argv[3] ... }` -- reads left to right and is missed.
+    // `GuardCondition.controls()` is the sound way to do this and would replace
+    // the whole predicate; that is a much larger change than these alerts
+    // need.
+    (
+      cmp.getLocation().getStartLine() < access.getLocation().getStartLine()
+      or
+      cmp.getLocation().getStartLine() = access.getLocation().getStartLine() and
+      cmp.getLocation().getStartColumn() < access.getLocation().getStartColumn()
+    )
   )
   or
   // assert/return-on-bad-argc earlier

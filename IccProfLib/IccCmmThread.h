@@ -182,6 +182,7 @@ public:
   virtual icColorSpaceSignature GetLastXformDest()    { return m_pCmm->GetLastXformDest(); }
 
   int GetNumThreads() const { return m_nThreads; }
+  CIccCmm* GetBaseCmm() const { return m_pCmm; }
 
 protected:
   CIccCmm *m_pCmm;

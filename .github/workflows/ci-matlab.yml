@@ -56,7 +56,7 @@ jobs:
 
       - name: Set up MATLAB
         # matlab-actions/setup-matlab v3
-        uses: matlab-actions/setup-matlab@2323adb8243827ea460b0def4c413545aaec46a9
+        uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d
         with:
           release: R2026a
 
@@ -64,7 +64,7 @@ jobs:
         # matlab-actions/run-command v3
         # Both checks are pure arithmetic over checked-in tables and fixtures, so
         # they run before the native build rather than depending on it.
-        uses: matlab-actions/run-command@75644028e1e2aa374bbfdc968a65718a178cc264
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5
         with:
           command: >-
             addpath('matlab');
@@ -201,7 +201,7 @@ jobs:
 
       - name: Build MATLAB MEX gateway
         # matlab-actions/run-command v3
-        uses: matlab-actions/run-command@75644028e1e2aa374bbfdc968a65718a178cc264
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5
         with:
           command: >-
             addpath('matlab');
@@ -210,7 +210,7 @@ jobs:
 
       - name: Run MATLAB QA
         # matlab-actions/run-command v3
-        uses: matlab-actions/run-command@75644028e1e2aa374bbfdc968a65718a178cc264
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5
         with:
           command: >-
             addpath('matlab');
@@ -252,7 +252,7 @@ jobs:
 
       - name: Set up MATLAB
         # matlab-actions/setup-matlab v3
-        uses: matlab-actions/setup-matlab@2323adb8243827ea460b0def4c413545aaec46a9
+        uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d
         with:
           release: R2026a
 
@@ -270,7 +270,7 @@ jobs:
 
       - name: Validate published container from MATLAB
         # matlab-actions/run-command v3
-        uses: matlab-actions/run-command@75644028e1e2aa374bbfdc968a65718a178cc264
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5
         with:
           command: >-
             addpath('matlab');

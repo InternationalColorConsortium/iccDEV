@@ -290,7 +290,17 @@ jobs:
             echo "[JSON-RT] TOJSON_OK profile=${safe_rel} json_bytes=${json_size} json=${json_out}"
             echo "[JSON-RT] COMMAND iccFromJson source=${json_out} output=${rt_out} log=${fromjson_log}"
 
-            if ! timeout 30 "$FROMJSON" "$json_out" "$rt_out" >"$fromjson_log" 2>&1; then
+            # A non-zero iccFromJson no longer means "no profile": since #2384 the
+            # tool exits non-zero for a profile validating above icValidateWarning
+            # while still WRITING it, and four generated profiles round-trip that
+            # way (Named/SparseMatrixNamedColor.icc and
+            # CalcTest/calcOverMem_t{get,put,sav}.icc).  Keying the skip off the
+            # status moved them out of byte-parity coverage while this job stayed
+            # green.  Gate on the artifact, as Testing/RunJsonTests.sh now does.
+            fromjson_rc=0
+            rm -f "$rt_out"
+            timeout 30 "$FROMJSON" "$json_out" "$rt_out" >"$fromjson_log" 2>&1 || fromjson_rc=$?
+            if [ ! -s "$rt_out" ]; then
               if is_expected_fromjson_failure "$rel"; then
                 XFAIL=$((XFAIL+1))
                 profile_status="XFAIL_FROMJSON"
@@ -312,9 +322,9 @@ jobs:
               if [ "$profile_status" = "XFAIL_FROMJSON" ]; then
                 echo "| [XFAIL] | ${safe_rel} | $(sanitize_line "${orig_size}") | $(sanitize_line "${json_size}") | - | expected invalid calculator profile |" >> "$GITHUB_STEP_SUMMARY"
               else
-                echo "| [SKIP] | ${safe_rel} | $(sanitize_line "${orig_size}") | $(sanitize_line "${json_size}") | - | iccFromJson failed |" >> "$GITHUB_STEP_SUMMARY"
+                echo "| [SKIP] | ${safe_rel} | $(sanitize_line "${orig_size}") | $(sanitize_line "${json_size}") | - | iccFromJson wrote no profile (exit $(sanitize_line "${fromjson_rc}")) |" >> "$GITHUB_STEP_SUMMARY"
               fi
-              echo "[JSON-RT] ${profile_status} profile=${safe_rel} original=${original_record} json=${json_record} roundtrip=${rt_record} log=${fromjson_log}"
+              echo "[JSON-RT] ${profile_status} profile=${safe_rel} fromjson_exit=${fromjson_rc} original=${original_record} json=${json_record} roundtrip=${rt_record} log=${fromjson_log}"
               sanitize_tool_log "[JSON-RT][iccFromJson]" "$fromjson_log"
               if [ "$rel" = "Display/LCDDisplay.icc" ]; then
                 LCDDISPLAY_STATUS="$profile_status"

@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import math
 import os
 import pytest
@@ -28,6 +30,52 @@ from iccdev_mcp.cli_tools import _find_tool, discover_tools, TOOL_BINARIES
 # ---------------------------------------------------------------------------
 # Profile resolution tests
 # ---------------------------------------------------------------------------
+
+class TestValidationLibraryOverrides:
+    @pytest.mark.parametrize("value", ["", "/missing/libIccProfLib2.so"])
+    def test_invalid_explicit_override_fails_closed(self, monkeypatch, tmp_path, value):
+        import iccdev
+        library = tmp_path / "IccProfLib" / "libIccProfLib2.so"
+        library.parent.mkdir()
+        library.write_bytes(b"not a library")
+        monkeypatch.setenv("ICCDEV_BUILD_DIR", str(tmp_path))
+        monkeypatch.setenv("ICCDEV_VALIDATION_LIBRARY", value)
+        with pytest.raises(RuntimeError, match="ICCDEV_VALIDATION_LIBRARY"):
+            iccdev._validation_library_path()
+        assert not iccdev.native_validation_available()
+        with pytest.raises(RuntimeError):
+            iccdev.validate_profile(b"invalid profile")
+
+    def test_explicit_library_precedes_build_dir(self, monkeypatch, tmp_path):
+        import iccdev
+        library = tmp_path / "explicit.so"
+        library.write_bytes(b"not a library")
+        monkeypatch.setenv("ICCDEV_VALIDATION_LIBRARY", str(library))
+        monkeypatch.setenv("ICCDEV_BUILD_DIR", "/missing/build")
+        assert iccdev._validation_library_path() == library
+        assert not iccdev.native_validation_available()
+        with pytest.raises(RuntimeError, match="Unable to load"):
+            iccdev.validate_profile(b"profile")
+
+    def test_build_dir_when_explicit_library_unset(self, monkeypatch, tmp_path):
+        import iccdev
+        library = tmp_path / "IccProfLib" / "libIccProfLib2.so"
+        library.parent.mkdir()
+        library.write_bytes(b"not a library")
+        monkeypatch.delenv("ICCDEV_VALIDATION_LIBRARY", raising=False)
+        monkeypatch.setenv("ICCDEV_BUILD_DIR", str(tmp_path))
+        assert iccdev._validation_library_path() == library
+
+    def test_optional_without_native_configuration(self, monkeypatch):
+        import iccdev
+        monkeypatch.delenv("ICCDEV_VALIDATION_LIBRARY", raising=False)
+        monkeypatch.delenv("ICCDEV_BUILD_DIR", raising=False)
+        assert not iccdev.native_validation_available()
+        from iccdev_mcp.server import health_check
+        health = health_check()
+        assert not health["validation_api"]["available"]
+        assert "validate_profile" not in health["python_api"]["available_tools"]
+
 
 class TestProfileResolution:
     """Tests for profile path resolution."""
@@ -181,25 +229,81 @@ class TestServerImport:
         assert mcp is not None
         assert callable(main)
 
-    def test_fastmcp_settings_are_resolved(self):
+    def test_mcpserver_is_registered(self):
         from iccdev_mcp.server import mcp
-        from mcp.server.fastmcp.server import Settings as FastMCPSettings
+        from mcp.server.mcpserver import MCPServer
 
-        assert mcp is not None
-        assert FastMCPSettings.__pydantic_complete__
+        assert isinstance(mcp, MCPServer)
 
     def test_server_has_tools(self):
         from iccdev_mcp import __version__
         from iccdev_mcp.server import mcp
-        # FastMCP should have registered tools
-        assert mcp is not None
-        options = mcp._mcp_server.create_initialization_options()
-        assert options.server_version == __version__
+        assert mcp.version == __version__
 
     def test_package_version(self):
         from importlib.metadata import version
         from iccdev_mcp import __version__
         assert version("iccdev-mcp") == __version__
+
+
+@pytest.mark.asyncio
+async def test_server_discover_request_succeeds():
+    """The current MCP discovery request must not be parsed as a legacy request."""
+    source_root = str(Path(__file__).resolve().parent.parent)
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(
+        filter(None, (source_root, env.get("PYTHONPATH")))
+    )
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
+        "iccdev_mcp.server",
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=env,
+    )
+    assert process.stdin is not None
+    assert process.stdout is not None
+
+    try:
+        request = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "server/discover",
+            "params": {
+                "_meta": {
+                    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                    "io.modelcontextprotocol/clientInfo": {
+                        "name": "iccdev-mcp-test",
+                        "version": "1.0",
+                    },
+                    "io.modelcontextprotocol/clientCapabilities": {},
+                },
+            },
+        }
+        process.stdin.write((json.dumps(request) + "\n").encode())
+        await process.stdin.drain()
+
+        response_line = await asyncio.wait_for(process.stdout.readline(), timeout=5)
+        assert response_line, "server/discover did not receive a response within 5 seconds"
+        response = json.loads(response_line)
+        assert response["id"] == 1
+        assert "error" not in response
+        assert "2026-07-28" in response["result"]["supportedVersions"]
+    finally:
+        process.stdin.close()
+        try:
+            await asyncio.wait_for(process.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            if process.returncode is None:
+                process.terminate()
+            try:
+                await asyncio.wait_for(process.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                if process.returncode is None:
+                    process.kill()
+                await process.wait()
 
 
 # ---------------------------------------------------------------------------

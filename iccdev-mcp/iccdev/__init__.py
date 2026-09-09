@@ -67,7 +67,7 @@ class ValidationResult(NamedTuple):
 def _validation_library_path() -> Path:
     """Find a shared IccProfLib containing the public validation ABI."""
     configured = os.environ.get("ICCDEV_VALIDATION_LIBRARY")
-    if configured:
+    if configured is not None:
         path = Path(configured)
         if path.is_file():
             return path

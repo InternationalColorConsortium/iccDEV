@@ -119,6 +119,9 @@ public:
   //   description of the first failure encountered.  Callers print it.
   static CIccConnectCmm* CreateSearch(const CIccCfgSearchApply& searchApply,
                                        std::string* pErrorMsg = nullptr);
+  static CIccConnectCmm* CreateSearch(const CIccCfgSearchApply& searchApply,
+                                       std::string* pErrorMsg,
+                                       int nThreads);
 
   // Wraps an already-initialized CMM (takes ownership).
   static CIccConnectCmm* Attach(CIccCmm* pCmm);

@@ -42,8 +42,8 @@ else()
     vcpkg_from_github(
         OUT_SOURCE_PATH SOURCE_PATH
         REPO InternationalColorConsortium/iccDEV
-        REF 3fb8e19870fab46666929bcbad08a598a9c9e01b
-        SHA512 ce4c0f38c7deb6e66142a9993f40df2ba87b2bcb972358d52d33bd9e1ca10d822c96688ba3a106e15208f9fc3daa800509f24270714f226942c157866f2da1a2
+        REF 1a4a2892c0ba929d4c3dc6313663650dad90208f
+        SHA512 d15e2b3a0c25a351fa59fc9f21890922ec30f917a549207e51b44ecf0c56ed3e423f2e67fa69d6cc0de27e0ae28cca084578704d5baafc120b691f284f44e612
         HEAD_REF master
     )
 endif()
@@ -132,6 +132,7 @@ if("tools" IN_LIST FEATURES)
         iccPawgReport
         iccV5DspObsToV4Dsp
         iccProfileVisualize
+        iccBenchApply
     )
     vcpkg_copy_tools(TOOL_NAMES ${_core_tools} AUTO_CLEAN)
 

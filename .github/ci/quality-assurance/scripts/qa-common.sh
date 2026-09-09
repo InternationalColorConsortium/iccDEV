@@ -10,11 +10,12 @@ set -uo pipefail
 
 QA_FAILURES=0
 QA_LAST_LOG=""
+QA_LAST_CMD=""
 QA_LAST_RC=0
 
 qa_init() {
     local tag="$1"
-    local script_dir repo_root
+    local script_dir repo_root candidate
 
     script_dir="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd -P)"
     repo_root="$(git -C "$script_dir" rev-parse --show-toplevel)" ||
@@ -22,14 +23,28 @@ qa_init() {
 
     ICCDEV_ROOT="${ICCDEV_ROOT:-$repo_root}"
     ICCDEV_BUILD_DIR="${ICCDEV_BUILD_DIR:-$ICCDEV_ROOT/Build}"
+    if [ -z "${ICCDEV_TOOLS_DIR:-}" ]; then
+        for candidate in "$ICCDEV_BUILD_DIR/Tools"; do
+            if [ -d "$candidate" ]; then
+                ICCDEV_TOOLS_DIR="$candidate"
+                break
+            fi
+        done
+        ICCDEV_TOOLS_DIR="${ICCDEV_TOOLS_DIR:-$ICCDEV_BUILD_DIR/Tools}"
+    fi
     QA_OUTDIR="${QA_OUTDIR:-$(mktemp -d "/tmp/${tag}.XXXXXX")}"
+    QA_TIMEOUT_SECONDS="${QA_TIMEOUT_SECONDS:-30}"
+    if ! [[ "$QA_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+        echo "error: QA_TIMEOUT_SECONDS must be a positive integer" >&2
+        exit 2
+    fi
     mkdir -p "$QA_OUTDIR"
 
-    export ASAN_OPTIONS="${ASAN_OPTIONS:-detect_leaks=0:halt_on_error=1:abort_on_error=1:symbolize=1}"
+    export ASAN_OPTIONS="${ASAN_OPTIONS:-detect_leaks=0:halt_on_error=1:abort_on_error=1:symbolize=1:allocator_may_return_null=1}"
     export UBSAN_OPTIONS="${UBSAN_OPTIONS:-halt_on_error=1:abort_on_error=1:print_stacktrace=1}"
     export LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE:-/dev/null}"
 
-    echo "[INFO] repository=$ICCDEV_ROOT build=$ICCDEV_BUILD_DIR output=$QA_OUTDIR"
+    echo "[INFO] repository=$ICCDEV_ROOT build=$ICCDEV_BUILD_DIR tools=$ICCDEV_TOOLS_DIR output=$QA_OUTDIR timeout=${QA_TIMEOUT_SECONDS}s"
 }
 
 qa_fail() {
@@ -69,7 +84,14 @@ qa_run() {
     shift 3
 
     QA_LAST_LOG="$QA_OUTDIR/$name.log"
-    timeout 30 "$@" >"$QA_LAST_LOG" 2>&1
+    QA_LAST_CMD="$QA_OUTDIR/$name.cmd"
+    {
+        printf 'argc=%d\n' "$#"
+        printf 'command='
+        printf ' %q' "$@"
+        printf '\n'
+    } >"$QA_LAST_CMD"
+    timeout "$QA_TIMEOUT_SECONDS" "$@" >"$QA_LAST_LOG" 2>&1
     QA_LAST_RC=$?
     if ! qa_scan_sanitizers "$QA_LAST_LOG"; then
         sanitizer_failed=1

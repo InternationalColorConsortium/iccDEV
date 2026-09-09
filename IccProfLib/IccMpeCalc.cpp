@@ -677,6 +677,30 @@ public:
   }
 };
 
+// ICC.2:2023 Table 102 row 1: no stack arguments, no stack results (#2086).
+class CIccOpDefNoOperation : public IIccOpDef
+{
+public:
+  virtual bool Exec(SIccCalcOp * /* op */, SIccOpState & /* os */)
+  {
+    return true;
+  }
+};
+
+// ICC.2:2023 Table 102 row 2: "Stack size count". The arguments column is
+// X1 ... XN and the results column X1 ... XN N, so the operand vector is left
+// in place and the count is pushed on top -- it reads the stack depth rather
+// than consuming it (#2086).
+class CIccOpDefStackCount : public IIccOpDef
+{
+public:
+  virtual bool Exec(SIccCalcOp * /* op */, SIccOpState &os)
+  {
+    OsPushArg(os,(icFloatNumber)os.pStack->size());
+    return true;
+  }
+};
+
 class CIccOpDefPi : public IIccOpDef
 {
 public:
@@ -918,6 +942,26 @@ public:
     icFloatNumber *s = &(*os.pStack)[ss-tn];
     for (j=0; j<n; j++) {
       s[j] = (s[j]>=0.5f && s[j+n]>=0.5) ? 1.0f : 0.0f;
+    }
+    return OsShrinkArgs(os,n);
+  }
+};
+
+// ICC.2:2023 Table 102 prints 'vxor' between 'vand' and 'vor ', and gives it the
+// same two-vector shape: Zi = 1,0 when exactly one of Xi, Yi is >= 0,5 (#2086).
+class CIccOpDefVectorXor : public IIccOpDef
+{
+public:
+  virtual bool Exec(SIccCalcOp *op, SIccOpState &os)
+  {
+    int j, n = op->data.select.v1+1;
+    int tn = n*2;
+    size_t ss = os.pStack->size();
+    if (tn>(int)ss)
+      return false;
+    icFloatNumber *s = &(*os.pStack)[ss-tn];
+    for (j=0; j<n; j++) {
+      s[j] = ((s[j]>=0.5f) != (s[j+n]>=0.5f)) ? 1.0f : 0.0f;
     }
     return OsShrinkArgs(os,n);
   }
@@ -2059,6 +2103,7 @@ void SIccCalcOp::Describe(std::string &desc, int /* nVerboseness */)
     case icSigVectorMinimumOp:
     case icSigVectorMaximumOp:
     case icSigVectorAndOp:
+    case icSigVectorXorOp:
     case icSigVectorOrOp:
       if (data.select.v1) {
         snprintf(buf, bufSize, "[%d]", data.select.v1+1);
@@ -2112,7 +2157,9 @@ CIccCalcOpMgr::CIccCalcOpMgr()
   m_map[icSigPopOp] = new CIccOpDefPop();
   m_map[icSigSolveOp] = new CIccOpDefSolve();
   m_map[icSigTransposeOp] = new CIccOpDefTranspose();
-  m_map[icSigPiOp] = new CIccOpDefPi(); 
+  m_map[icSigNoOperationOp] = new CIccOpDefNoOperation();
+  m_map[icSigStackCountOp] = new CIccOpDefStackCount();
+  m_map[icSigPiOp] = new CIccOpDefPi();
   m_map[icSigPosInfinityOp] = new CIccOpDefPosInfinity();
   m_map[icSigNegInfinityOp] = new CIccOpDefNegInfinity();
   m_map[icSigNotaNumberOp] = new CIccOpDefNotANumber(); 
@@ -2155,6 +2202,7 @@ CIccCalcOpMgr::CIccCalcOpMgr()
   m_map[icSigVectorMinimumOp] = new CIccOpDefVectorMinimum();
   m_map[icSigVectorMaximumOp] = new CIccOpDefVectorMaximum();
   m_map[icSigVectorAndOp] = new CIccOpDefVectorAnd();
+  m_map[icSigVectorXorOp] = new CIccOpDefVectorXor();
   m_map[icSigVectorOrOp] = new CIccOpDefVectorOr();
   m_map[icSigMinimumOp] = new CIccOpDefMinimum();          
   m_map[icSigMaximumOp] = new CIccOpDefMaximum();          
@@ -2217,7 +2265,9 @@ bool SIccCalcOp::IsValidOp(icSigCalcOp sig)
     case icSigPopOp:
     case icSigSolveOp:
     case icSigTransposeOp:
-    case icSigPiOp: 
+    case icSigNoOperationOp:
+    case icSigStackCountOp:
+    case icSigPiOp:
     case icSigPosInfinityOp:
     case icSigNegInfinityOp:
     case icSigNotaNumberOp:
@@ -2260,8 +2310,9 @@ bool SIccCalcOp::IsValidOp(icSigCalcOp sig)
     case icSigVectorMinimumOp:
     case icSigVectorMaximumOp:
     case icSigVectorAndOp:
+    case icSigVectorXorOp:
     case icSigVectorOrOp:
-    case icSigMinimumOp:          
+    case icSigMinimumOp:
     case icSigMaximumOp:          
     case icSigRealNumberOp:
     case icSigLessThanOp:         
@@ -2347,11 +2398,16 @@ icUInt16Number SIccCalcOp::ArgsUsed(CIccMpeCalculator *pCalc)
   
   switch (sig) {
     case icSigDataOp:
+    // 'noop' and 'scnt' consume nothing: Table 102 gives noop no stack
+    // arguments at all, and scnt's results column repeats its X1 ... XN
+    // arguments unchanged before the pushed count (#2086).
+    case icSigNoOperationOp:
+    case icSigStackCountOp:
     case icSigPiOp:
     case icSigPosInfinityOp:
     case icSigNegInfinityOp:
     case icSigNotaNumberOp:
-    case icSigInputChanOp:        
+    case icSigInputChanOp:
     case icSigTempGetChanOp:
     case icSigEnvVarOp:
       return 0;
@@ -2448,6 +2504,7 @@ icUInt16Number SIccCalcOp::ArgsUsed(CIccMpeCalculator *pCalc)
     case icSigVectorMinimumOp:
     case icSigVectorMaximumOp:
     case icSigVectorAndOp:
+    case icSigVectorXorOp:
     case icSigVectorOrOp:
       {
       uint32_t fullSum = 2*((uint32_t)data.select.v1+1);
@@ -2523,6 +2580,9 @@ icUInt16Number SIccCalcOp::ArgsPushed(CIccMpeCalculator *pCalc)
     case icSigOutputChanOp:
     case icSigTempPutChanOp:
 
+    // 'noop' is the one operator in Table 102 whose results column is None.
+    case icSigNoOperationOp:
+
     case icSigPopOp:
     case icSigIfOp:
     case icSigSelectOp:
@@ -2531,7 +2591,10 @@ icUInt16Number SIccCalcOp::ArgsPushed(CIccMpeCalculator *pCalc)
       /*case icSigDefaultOp:*/  //This is only valid after an icSigSelectOp is parsed
       return 0;
 
-    case icSigDataOp:            
+    case icSigDataOp:
+    // 'scnt' leaves its arguments in place and pushes the count on top, so it
+    // grows the stack by exactly one (#2086).
+    case icSigStackCountOp:
     case icSigPiOp:
     case icSigPosInfinityOp:
     case icSigNegInfinityOp:
@@ -2667,6 +2730,7 @@ icUInt16Number SIccCalcOp::ArgsPushed(CIccMpeCalculator *pCalc)
     case icSigVectorMinimumOp:
     case icSigVectorMaximumOp:
     case icSigVectorAndOp:
+    case icSigVectorXorOp:
     case icSigVectorOrOp:
       {
       uint32_t fullSum = ((uint32_t)data.select.v1+1);
@@ -3468,6 +3532,7 @@ const char *CIccCalculatorFunc::ParseFuncDef(const char *szFuncDef, CIccCalcOpLi
       case icSigVectorMinimumOp:
       case icSigVectorMaximumOp:
       case icSigVectorAndOp:
+      case icSigVectorXorOp:
       case icSigVectorOrOp:
         if (!scan.GetIndex(op.data.select.v1, op.data.select.v2, 1))
           return NULL;

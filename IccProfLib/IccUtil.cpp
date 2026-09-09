@@ -1705,6 +1705,14 @@ const icChar *CIccInfo::GetTechnologySigName(icTechnologySignature sig)
   case icSigAMDisplay:
     return "AMDisplay";
 
+  // ICC.1:2022 Table 29 rows that never reached the enum, so every list below keyed
+  // off it silently omitted them and GetSigName() reported "Unknown 'LCD '" (#2101).
+  case icSigLCDDisplay:
+    return "LCDDisplay";
+
+  case icSigOLEDDisplay:
+    return "OLEDDisplay";
+
   case icSigPhotoCD:
     return "PhotoCD";
 
@@ -1722,6 +1730,24 @@ const icChar *CIccInfo::GetTechnologySigName(icTechnologySignature sig)
 
   case icSigFlexography:
     return "Flexography";
+
+  // The motion picture and digital cinema rows arrived with ICC.1 v4.3 and were never
+  // added here, so CIccTagSignature::Validate accepted them as compliant while every
+  // caller of GetSigName() -- iccDumpProfile among them -- reported them as
+  // "Unknown 'mpfs'" and so on.  Naming them is what makes the two agree (#2101).
+  case icSigMotionPictureFilmScanner:
+    return "MotionPictureFilmScanner";
+
+  case icSigMotionPictureFilmRecorder:
+    return "MotionPictureFilmRecorder";
+
+  case icSigDigitalMotionPictureCamera:
+    return "DigitalMotionPictureCamera";
+
+  // Named by the enum's value, not by the mnemonic ICC.1 prints beside it; see the
+  // SPEC-ISSUE #2101 note at icProfileHeader.h's icSigDigitalCinemaProjector.
+  case icSigDigitalCinemaProjector:
+    return "DigitalCinemaProjector";
 
   default:
     return GetUnknownName(sig);

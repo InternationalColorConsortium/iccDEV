@@ -61,13 +61,13 @@ skip_or_fail() {
   fi
 }
 
-HADOLINT_IMAGE="${PREFLIGHT_HADOLINT_IMAGE:-hadolint/hadolint@sha256:30a8fd2e785ab6176eed53f74769e04f125afb2f74a6c52aef7d463583b6d45e}"
-TRIVY_IMAGE="${PREFLIGHT_TRIVY_IMAGE:-aquasec/trivy@sha256:5c59e08f980b5d4d503329773480fcea2c9bdad7e381d846fbf9f2ecb8050f6b}"
+HADOLINT_IMAGE="${PREFLIGHT_HADOLINT_IMAGE:-hadolint/hadolint@sha256:fdf19d026b54834f88c62774fdf2a61ff3b586a42632e5070674d41a796bfdf3}"
+TRIVY_IMAGE="${PREFLIGHT_TRIVY_IMAGE:-aquasec/trivy@sha256:ee940acbf1f58ebadb42d01434ce4609530bf1b52536afbd1eee66cd7123c5c9}"
 TRIVY_CACHE_DIR="${PREFLIGHT_TRIVY_CACHE_DIR:-${TMPDIR:-/tmp}/iccdev-trivy-cache-$$}"
 
 run_hadolint() {
   if command -v hadolint >/dev/null 2>&1; then
-    hadolint "$@"
+    hadolint --failure-threshold warning "$@"
     return
   fi
   if command -v docker >/dev/null 2>&1; then
@@ -75,7 +75,7 @@ run_hadolint() {
       -v "$REPO_ROOT":/repo:ro \
       -w /repo \
       "$HADOLINT_IMAGE" \
-      hadolint "$@"
+      hadolint --failure-threshold warning "$@"
     return
   fi
   return 127

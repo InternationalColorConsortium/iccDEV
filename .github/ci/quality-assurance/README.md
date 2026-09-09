@@ -7,6 +7,7 @@ corpora for the main `iccApply*` command-line tools:
 - `iccApplyProfiles`
 - `iccApplySearch`
 - `iccApplyToLink`
+- `iccBenchApply`
 
 The scripts are intended for maintainer QA on a local checkout. They exercise
 documented command-line argument shapes, optional config export/replay paths,
@@ -34,27 +35,34 @@ use build-tree tool paths when they are available.
 ../../.github/ci/quality-assurance/scripts/icc_apply_qa_suite.sh --mutations 12
 ```
 
-The suite runs a small smoke across all four apply tools and scans logs for
-sanitizer signatures. It exits nonzero if any tool command fails or sanitizer
+The suite runs both focused argument contracts and mutation smoke cases across
+all four apply tools, then scans logs for sanitizer signatures. The focused
+contracts include V5 BRDF and spectral NamedCmm transforms, deep and row
+ApplyProfiles options, fast/no-init/weighted ApplySearch paths, and V5/CUBE
+ApplyToLink output. It exits nonzero if any tool command fails or sanitizer
 output is detected.
 
 ## Focused quick checks
 
 Run these checks from the repository root after building the tools. Set
 `ICCDEV_BUILD_DIR` when the build directory is not `Build/`; set
-`ICCDEV_ROOT` when invoking a copied script outside the checkout.
+`ICCDEV_ROOT` when invoking a copied script outside the checkout. Set
+`ICCDEV_TOOLS_DIR` to override tool discovery.
 
 ```sh
 .github/ci/quality-assurance/scripts/iccApplyProfiles-quick-check.sh
 .github/ci/quality-assurance/scripts/iccApplyNamedCmm-quick-check.sh
 .github/ci/quality-assurance/scripts/iccApplySearch-quick-check.sh
 .github/ci/quality-assurance/scripts/iccApplyToLink-quick-check.sh
+.github/ci/quality-assurance/scripts/iccBenchApply-quick-check.sh
 ```
 
 The focused checks use checked-in fixtures and validate representative success,
 configuration export/replay, and argument-rejection paths. They write logs and
 temporary outputs under a fresh `QA_OUTDIR` unless that environment variable is
-set.
+set. Every `qa_run` also writes a sibling `.cmd` file with the exact tool argc
+and shell-escaped argv. Set `QA_TIMEOUT_SECONDS` to override the 30-second
+per-command limit.
 
 ## Per-tool drivers
 

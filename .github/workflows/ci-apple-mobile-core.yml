@@ -1,0 +1,219 @@
+---
+# yamllint disable rule:line-length
+name: Apple mobile core libraries
+
+'on':
+  push:
+    branches:
+      - master
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apple-core-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Apple mobile static cores
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+
+      # Checkout the trusted base commit into a separate path so we do not
+      # source code from the PR workspace (untrusted) when this workflow is
+      # reached via workflow_call from a pull_request caller.
+      - name: Checkout base commit (trusted sanitizers)
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: base
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      # preflight: allow-package-install reason=apple-mobile-extended-core-json-header-dependency
+      - name: Install Apple extended-core dependency headers
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          # shellcheck source=.github/scripts/sanitize-sed.sh
+          source "$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
+          if ! brew list --versions nlohmann-json >/dev/null; then
+            brew install nlohmann-json
+          fi
+
+      - name: Build available Apple mobile core libraries
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          # shellcheck source=.github/scripts/sanitize-sed.sh
+          source "$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
+
+          sdk_manifest="${RUNNER_TEMP}/iccdev-apple-sdks.txt"
+          xcodebuild -showsdks > "$sdk_manifest"
+
+          json_package_arg=""
+          if command -v brew >/dev/null 2>&1 &&
+              json_prefix="$(brew --prefix nlohmann-json 2>/dev/null)" &&
+              [[ -f "${json_prefix}/share/cmake/nlohmann_json/nlohmann_jsonConfig.cmake" ]]; then
+            json_package_arg="-Dnlohmann_json_DIR=${json_prefix}/share/cmake/nlohmann_json"
+          fi
+
+          rm -rf artifacts
+          mkdir -p artifacts
+          artifact_manifest="artifacts/manifest.txt"
+          : > "$artifact_manifest"
+
+          targets=(
+            "apple-ios-device-core|iphoneos"
+            "apple-ios-device-extended-core|iphoneos"
+            "apple-ios-simulator-core|iphonesimulator"
+            "apple-ios-simulator-extended-core|iphonesimulator"
+            "apple-tvos-device-core|appletvos"
+            "apple-tvos-device-extended-core|appletvos"
+            "apple-tvos-simulator-core|appletvsimulator"
+            "apple-tvos-simulator-extended-core|appletvsimulator"
+            "apple-watchos-device-core|watchos"
+            "apple-watchos-device-extended-core|watchos"
+            "apple-watchos-simulator-core|watchsimulator"
+            "apple-watchos-simulator-extended-core|watchsimulator"
+            "apple-visionos-device-core|xros"
+            "apple-visionos-device-extended-core|xros"
+            "apple-visionos-simulator-core|xrsimulator"
+            "apple-visionos-simulator-extended-core|xrsimulator"
+          )
+
+          built_count=0
+          for target in "${targets[@]}"; do
+            IFS='|' read -r preset sdk <<< "$target"
+            if ! grep -qF -- "-sdk ${sdk}" "$sdk_manifest"; then
+              printf '%s|%s|skipped: SDK unavailable\n' "$preset" "$sdk" >> "$artifact_manifest"
+              continue
+            fi
+
+            if [[ "$preset" == *-extended-core ]] && [[ -n "$json_package_arg" ]]; then
+              cmake --preset "$preset" -S Build/Cmake "$json_package_arg"
+            else
+              cmake --preset "$preset" -S Build/Cmake
+            fi
+            cmake --build "out/${preset}" --parallel "$(sysctl -n hw.ncpu)"
+
+            output_dir="artifacts/${preset}"
+            mkdir -p "$output_dir"
+
+            components=(
+              "IccProfLib|IccProfLib2-static|IccProfLibVer.h"
+            )
+            if [[ "$preset" == *-extended-core ]]; then
+              components+=(
+                "IccXML|IccXML2-static|IccLibXMLVer.h"
+                "IccJSON|IccJSON2-static|IccLibJSONVer.h"
+                "IccConnect|IccConnect2-static|IccLibConnectVer.h"
+              )
+            fi
+            for component in "${components[@]}"; do
+              IFS='|' read -r library_dir library_name version_header_name <<< "$component"
+              library="out/${preset}/${library_dir}/lib${library_name}.a"
+              version_header="out/${preset}/${library_dir}/${version_header_name}"
+              test -f "$library"
+              test -f "$version_header"
+              cp "$library" "$version_header" "$output_dir/"
+            done
+            printf '%s|%s|built\n' "$preset" "$sdk" >> "$artifact_manifest"
+            built_count=$((built_count + 1))
+          done
+
+          if [[ "$built_count" -eq 0 ]]; then
+            echo "No supported Apple mobile SDKs are installed on this runner." >&2
+            exit 1
+          fi
+
+          {
+            echo "### Apple mobile core libraries"
+            echo ""
+            echo "| Preset | SDK | Result |"
+            echo "|---|---|---|"
+            while IFS='|' read -r preset sdk result; do
+              printf '| '
+              sanitize_line "$preset"
+              printf ' | '
+              sanitize_line "$sdk"
+              printf ' | '
+              sanitize_line "$result"
+              echo ' |'
+            done < "$artifact_manifest"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+      # preflight: allow-pr-script-execution reason=native-apple-host-test-only
+      - name: Exercise Apple simulator hosts
+        env:
+          BASH_ENV: /dev/null
+          ICCDEV_APPLE_DOWNLOAD_RUNTIME: '1'
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          targets=(ios ipad tvos watchos)
+          for target in "${targets[@]}"; do
+            bash .github/scripts/iccdev-apple-simulator-smoke.sh "$target"
+          done
+
+      # preflight: allow-pr-script-execution reason=xcode-ctest-runtime-test-only
+      - name: Exercise Xcode CTest runtime layouts
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          bash .github/scripts/iccdev-xcode-ctest-smoke.sh
+
+      - name: Summarize native Apple smoke results
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          # shellcheck source=.github/scripts/sanitize-sed.sh
+          source "$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
+          {
+            targets=(ios ipad tvos watchos)
+            for target in "${targets[@]}"; do
+              report="out/apple-${target}-simulator-smoke/restored.json"
+              count="$(jq -er '.tests | length' "$report")"
+              sanitize_line "${target}: ${count} core checks; missing-fixture failure control passed."
+              printf '\n'
+            done
+            sanitize_line "Xcode Release and Debug CTest runtime gates passed."
+            printf '\n'
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+      - name: Upload Apple mobile core libraries
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: iccdev-apple-mobile-core
+          path: artifacts
+          if-no-files-found: error
+          retention-days: 14

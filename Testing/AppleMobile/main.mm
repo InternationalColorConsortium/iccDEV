@@ -1,0 +1,118 @@
+/*
+ * Copyright (c) International Color Consortium.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *
+ * 3. In the absence of prior written permission, the names "ICC" and "The
+ *    International Color Consortium" must not be used to imply that the
+ *    ICC organization endorses or promotes products derived from this
+ *    software.
+ *
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE INTERNATIONAL COLOR CONSORTIUM OR
+ * ITS CONTRIBUTING MEMBERS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+ * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
+ * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ * ====================================================================
+ *
+ * This software consists of voluntary contributions made by many
+ * individuals on behalf of the The International Color Consortium.
+ *
+ *
+ * Membership in the ICC is encouraged when this software is used for
+ * commercial purposes.
+ *
+ *
+ * For more information on The International Color Consortium, please
+ * see <http://www.color.org/>.
+ *
+ *
+ */
+
+#import <UIKit/UIKit.h>
+#import "SmokeTests.h"
+#include <TargetConditionals.h>
+
+static UIColor *IccDevViewBackgroundColor()
+{
+#if TARGET_OS_TV
+  return [UIColor blackColor];
+#else
+  return [UIColor systemBackgroundColor];
+#endif
+}
+
+@interface IccDevAppDelegate : UIResponder <UIApplicationDelegate>
+@property(nonatomic, strong) UIWindow *window;
+@end
+
+@implementation IccDevAppDelegate
+- (BOOL)application:(UIApplication *)application
+    didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
+{
+  (void)application;
+  (void)launchOptions;
+  // initWithFrame:[UIScreen mainScreen].bounds is deprecated starting iOS 26
+  // in favour of a windowScene-based initializer, but this smoke app keeps the
+  // app-delegate-owns-the-window pattern rather than adding a full UIScene
+  // lifecycle. Silenced narrowly, once, rather than disabling
+  // -Wdeprecated-declarations for the whole target.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+#pragma clang diagnostic pop
+  UIViewController *controller = [[UIViewController alloc] init];
+  controller.view.backgroundColor = IccDevViewBackgroundColor();
+  UITextView *text = [[UITextView alloc] initWithFrame:CGRectMake(0.0, 0.0, 0.0, 0.0)];
+#if !TARGET_OS_TV
+  text.editable = NO;
+#endif
+  text.scrollEnabled = YES;
+  text.translatesAutoresizingMaskIntoConstraints = NO;
+  text.backgroundColor = IccDevViewBackgroundColor();
+  text.textColor = [UIColor labelColor];
+  text.textContainerInset = UIEdgeInsetsMake(16, 16, 16, 16);
+  text.font = [UIFont monospacedSystemFontOfSize:20 weight:UIFontWeightRegular];
+  text.text = @"iccDEV core device tests running...";
+  [controller.view addSubview:text];
+  UILayoutGuide *safeArea = controller.view.safeAreaLayoutGuide;
+  [NSLayoutConstraint activateConstraints:@[
+    [text.leadingAnchor constraintEqualToAnchor:safeArea.leadingAnchor constant:8],
+    [text.trailingAnchor constraintEqualToAnchor:safeArea.trailingAnchor constant:-8],
+    [text.topAnchor constraintEqualToAnchor:safeArea.topAnchor constant:8],
+    [text.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor constant:-8],
+  ]];
+  self.window.rootViewController = controller;
+  [self.window makeKeyAndVisible];
+
+  dispatch_async(dispatch_get_main_queue(), ^{
+    text.text = IccDevRunCoreSmoke();
+  });
+  return YES;
+}
+@end
+
+int main(int argc, char *argv[])
+{
+  @autoreleasepool {
+    return UIApplicationMain(argc, argv, nil, NSStringFromClass([IccDevAppDelegate class]));
+  }
+}

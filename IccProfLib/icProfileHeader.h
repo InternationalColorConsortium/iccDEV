@@ -524,6 +524,13 @@ typedef enum {
     icSigCRTDisplay                     = 0x43525420,  /* 'CRT ' */
     icSigPMDisplay                      = 0x504D4420,  /* 'PMD ' */
     icSigAMDisplay                      = 0x414D4420,  /* 'AMD ' */
+    /* ICC.1:2022 Table 29 prints these two display rows between 'AMD ' and 'KPCD'.
+     * They were never transcribed, so unlike the v4.3 rows named in #2101 they are
+     * absent from the enum entirely -- which is why -Werror=switch cannot flag them:
+     * a signature that has no enumerator leaves every switch over the enum
+     * exhaustive.  A profile carrying either one validated as NonCompliant. */
+    icSigLCDDisplay                     = 0x4C434420,  /* 'LCD ' */
+    icSigOLEDDisplay                    = 0x4F4C4544,  /* 'OLED' */
     icSigPhotoCD                        = 0x4B504344,  /* 'KPCD' */
     icSigPhotoImageSetter               = 0x696D6773,  /* 'imgs' */
     icSigGravure                        = 0x67726176,  /* 'grav' */
@@ -533,7 +540,15 @@ typedef enum {
     icSigMotionPictureFilmScanner       = 0x6D706673,  /* 'mpfs' */
     icSigMotionPictureFilmRecorder      = 0x6D706672,  /* 'mpfr' */
     icSigDigitalMotionPictureCamera     = 0x646D7063,  /* 'dmpc' */
-    icSigDigitalCinemaProjector         = 0x64636A70,  /* 'dcpj' */
+    /* SPEC-ISSUE #2101: ICC.1-2022-05 prints this row's mnemonic as 'dcpj' but its hex
+     * as 64636A70h, and those disagree -- 'dcpj' encodes as 6463706Ah, 64636A70h decodes
+     * as 'dcjp'.  It is the only self-inconsistent row in either specification's
+     * signature tables, and technology signatures have no published registry to break
+     * the tie.  The normative hex is kept, unchanged since 1f0a9dd2.  Do not "correct"
+     * this toward the mnemonic without an ICC ruling: a profile holding 64636A70h
+     * validates today and one holding 6463706Ah is reported NonCompliant, so flipping
+     * the literal silently moves which existing profiles are conformant. */
+    icSigDigitalCinemaProjector         = 0x64636A70,  /* 'dcpj' as printed; 64636A70h = 'dcjp' */
     icMaxEnumTechnology                 = 0xFFFFFFFF,
 } icTechnologySignature;
 

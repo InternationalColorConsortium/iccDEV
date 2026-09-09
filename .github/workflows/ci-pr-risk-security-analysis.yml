@@ -1389,7 +1389,7 @@ jobs:
           echo "Runs pinned zizmor offline against workflow and composite-action definitions." >> "$RISK_REPORT_PATH"
           echo "" >> "$RISK_REPORT_PATH"
 
-          ZIZMOR_VERSION="1.26.1"
+          ZIZMOR_VERSION="1.30.0"
           ZIZMOR_VENV="${RUNNER_TEMP}/zizmor-venv"
           ZIZMOR_JSON="${RUNNER_TEMP}/zizmor-findings.json"
           ZIZMOR_LOG="${RUNNER_TEMP}/zizmor.log"

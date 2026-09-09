@@ -2332,15 +2332,24 @@ bool CIccMpeXmlBAcs::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   m_signature = icXmlStrToSig(icXmlAttrValue(pNode, "Signature"));
 
-  if (pNode->children && pNode->children->type == XML_TEXT_NODE && pNode->children->content) {
-    icUInt32Number nSize = icXmlGetHexDataSize((const char*)pNode->children->content);
+  // AllocData() is called unconditionally, the no-data case included.  The old
+  // shape only called it inside "if (nSize)", so parsing into an element that
+  // already held data, from a node carrying none, left the OLD buffer and the
+  // OLD size in place -- the element would then write out a payload its XML
+  // never asked for.  Every in-tree caller builds a fresh object per element
+  // (IccTagXml.cpp), so this is reachability-by-reuse rather than a live defect
+  // today; it is fixed because ParseXml() reads as though it fully defines the
+  // element, and the next caller to reuse one is entitled to that (#2181).
+  icUInt32Number nSize = 0;
+  if (pNode->children && pNode->children->type == XML_TEXT_NODE && pNode->children->content)
+    nSize = icXmlGetHexDataSize((const char*)pNode->children->content);
 
-    if (nSize) {
-      if (!AllocData(nSize))
-        return false;
-      icXmlGetHexData(m_pData, (const char *)pNode->children->content, nSize);
-    }
-  }
+  if (!AllocData(nSize))
+    return false;
+
+  if (nSize)
+    icXmlGetHexData(m_pData, (const char *)pNode->children->content, nSize);
+
   return true;
 }
 
@@ -2385,15 +2394,24 @@ bool CIccMpeXmlEAcs::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   m_signature = icXmlStrToSig(icXmlAttrValue(pNode, "Signature"));
 
-  if (pNode->children && pNode->children->type == XML_TEXT_NODE && pNode->children->content) {
-    icUInt32Number nSize = icXmlGetHexDataSize((const char*)pNode->children->content);
+  // AllocData() is called unconditionally, the no-data case included.  The old
+  // shape only called it inside "if (nSize)", so parsing into an element that
+  // already held data, from a node carrying none, left the OLD buffer and the
+  // OLD size in place -- the element would then write out a payload its XML
+  // never asked for.  Every in-tree caller builds a fresh object per element
+  // (IccTagXml.cpp), so this is reachability-by-reuse rather than a live defect
+  // today; it is fixed because ParseXml() reads as though it fully defines the
+  // element, and the next caller to reuse one is entitled to that (#2181).
+  icUInt32Number nSize = 0;
+  if (pNode->children && pNode->children->type == XML_TEXT_NODE && pNode->children->content)
+    nSize = icXmlGetHexDataSize((const char*)pNode->children->content);
 
-    if (nSize) {
-      if (!AllocData(nSize))
-        return false;
-      icXmlGetHexData(m_pData, (const char *)pNode->children->content, nSize);
-    }
-  }
+  if (!AllocData(nSize))
+    return false;
+
+  if (nSize)
+    icXmlGetHexData(m_pData, (const char *)pNode->children->content, nSize);
+
   return true;
 }
 
@@ -3137,7 +3155,18 @@ bool CIccMpeXmlCalculator::Flatten(std::string &flatStr, std::string macroName, 
         
         int i;
         for (i = 0; i < iter; i++) {
-          Flatten(flatStr, name, m->second.c_str(), parseStr, nLocalsOffset+nLocalsSize, nDepth + 1);
+          // Propagate the expansion's failure instead of discarding it (#2323).
+          // Every refusal inside a macro body -- an undefined nested macro, an
+          // unknown channel name, an out-of-range offset, and now an unterminated
+          // index -- was reported into parseStr and then dropped here, so the
+          // offending operator was silently left out of the flattened function and
+          // LoadXml() still returned true.  A document the parser had already
+          // decided was bad produced a profile, and the message explaining why sat
+          // unread in parseStr.  The JSON twin has always checked this return
+          // (CIccMpeJsonCalculator::Flatten, IccMpeJson.cpp), so this brings the two
+          // back into agreement rather than inventing a rule.
+          if (!Flatten(flatStr, name, m->second.c_str(), parseStr, nLocalsOffset+nLocalsSize, nDepth + 1))
+            return false;
         }
       }
       else {
@@ -3173,17 +3202,82 @@ bool CIccMpeXmlCalculator::Flatten(std::string &flatStr, std::string macroName, 
         int offset = 0;
         int size = 1;
 
-        if (select[0] == '[' || select[1] == '(') {
+        // select[1] was a typo for select[0] -- since RefIccMAX 2.1.10, 4f5b3d38.
+        // refroot stops at '(' exactly as at '[', so "in{Lab(1)}" arrived here
+        // with select = "(1)", failed BOTH halves of the test, and fell through
+        // with offset 0: it flattened to in(4,1) where "in{Lab[1]}" flattens to
+        // in(5,1) -- Describe() renders those in[4] and in[5] -- and the profile
+        // applied channel 4.  The JSON twin (CIccMpeJsonCalculator::Flatten)
+        // tests select[0] and has always produced in(5,1) for the same document,
+        // and tget/tput/tsav accept "(n)" through CIccFuncTokenizer::GetIndex,
+        // so the parenthesised index was a recognised spelling everywhere except
+        // this one line.  Deferred from #2365 (#2323) because it changes what the
+        // parser accepts.
+        //
+        // It changes five input families, not one, and the CTest pins each --
+        // "in{Lab(1)}" 4 -> 5, an unterminated "(XXXX" from silently accepted to
+        // refused by the guard below, "in{Lab(1),2}" from refused to in(5,2), and
+        // the two ",(" spellings (a selector whose FIRST character is a comma,
+        // which is what a second-character test used to admit) out of this block
+        // altogether: "in{C,(3)}" was accepted as in(0,1) with its index
+        // discarded and is now refused downstream, and an unterminated ",(XXXX"
+        // is still refused but no longer by this function.  No tracked XML or
+        // JSON uses any parenthesised in{}/out{} index, so no generated profile
+        // moves; the corpus's "(n)" spellings are all tget/tput.
+        if (select[0] == '[' || select[0] == '(') {
           const char *ptr;
           offset = atoi(select.c_str() + 1);
           for (ptr = select.c_str() + 1; *ptr && *ptr != ')' && *ptr != ']'; ptr++);
+          // An unterminated index -- "Lab[1" with no closing bracket -- left ptr on
+          // the NUL terminator, so "ptr + 1" addressed one past it and the
+          // assignment below ran strlen from there (#2323).  What that produces
+          // depends only on how long the selector is, because that decides where
+          // the string keeps its bytes: 14 characters or fewer stay inside
+          // libstdc++'s inline SSO buffer and nothing reports it at all -- the
+          // malformed reference is simply accepted -- exactly 15 fills that buffer
+          // so the read leaves this stack frame, which is the reported
+          // 1-byte-read-stack-buffer-overflow at scariness 27, and 16 or more has
+          // moved to the heap and reads past that allocation instead.  The
+          // reported case is the narrowest of the three.
+          //
+          // Refused rather than silently skipped.  Everything newly rejected here
+          // previously had NO defined behaviour, so there is no working input to
+          // preserve -- and the check above already refuses an unknown channel name
+          // on the same standard.  (The offset/size check below refuses an
+          // out-of-range in{} reference, but bounds out{} against the input count
+          // too; that is a separate defect, noted there.)  Accepting it would let
+          // "in{Lab[1" resolve quietly to in(5).  No tracked XML carries an
+          // unterminated index: every indexed reference in the corpus closes its
+          // bracket.
+          if (!*ptr) {
+            parseStr += "Unterminated index in '" + op + "' operation channel reference '" + ref + "'\n";
+            return false;
+          }
           select = ptr + 1;
         }
 
         if (select[0]==',')
           size = atoi(select.c_str() + 1);
 
-        if (size < 0 || offset<0 || ci->second.first + offset + size > m_nInputChannels) {
+        // Summed in a width that cannot wrap.  offset and size are both atoi()
+        // results on attacker-supplied text, so this was int arithmetic over two
+        // unbounded values and OVERFLOWED BEFORE IT COULD BE TESTED: measured with
+        // "in{Lab[2000000000],2000000000}", 4 + 2000000000 + 2000000000 wraps to
+        // -294967292, the comparison passes, and the operator flattens to
+        // in(2000000004,2000000000) instead of being refused (#2323).  UBSan calls
+        // it out at this line.  Fixed here for the same reason as the unterminated
+        // index above -- signed overflow has no defined behaviour, so there is no
+        // working input to preserve -- and the value is still refused, just at this
+        // guard rather than downstream in SetCalcFunc().
+        //
+        // NOTE the bound itself is m_nInputChannels for BOTH operators, so an out{}
+        // reference is range-checked against the INPUT count: a 7-in/3-out element
+        // accepts out{a[0],6} and writes the profile, and only Validate() reports
+        // "accesses illegal output channels".  That is a live defect, but it changes
+        // which documents are accepted rather than removing undefined behaviour, so
+        // it is reported on #2323 for a ruling rather than changed here.
+        const long long nEnd = (long long)ci->second.first + offset + size;
+        if (size < 0 || offset<0 || nEnd > (long long)m_nInputChannels) {
           parseStr += "Invalid '" + op + "' operation channel offset or size '" + refroot + "'\n";
           return false;
         }

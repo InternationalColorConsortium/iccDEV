@@ -9,7 +9,8 @@ applyTo: "Build/**"
 Primary build file: `Build/Cmake/CMakeLists.txt`
 
 - Project: RefIccMAX v2.3.2.3
-- Minimum CMake: 3.21
+- Direct configuration minimum CMake: 3.18
+- Preset minimum CMake: 3.23
 - C++ standard: C++17
 - Compiler floor: GCC 11+, Clang 10+, MSVC 19.30+
 - Recommended compilers for the strict-warning tier: GCC 15+, Clang 14+,
@@ -22,11 +23,42 @@ Primary build file: `Build/Cmake/CMakeLists.txt`
 | Platform | Configure entry point |
 |----------|-----------------------|
 | Linux | `cd Build && cmake Cmake -DCMAKE_CXX_COMPILER=clang++` |
-| macOS Xcode | `cd Build && cmake -G "Xcode" Cmake` |
+| macOS Xcode | `cmake --preset macos-xcode -S Build/Cmake -B out/macos-xcode` |
 | Windows MSVC/vcpkg | `cmake --preset vs2022-x64 -B Build -S Build/Cmake` |
 | Emscripten/WASM | `cd Build && emcmake cmake Cmake -DENABLE_TESTS=OFF -DENABLE_SHARED_LIBS=OFF` |
 
 User-facing build details live in `docs/build.md`.
+
+`Build/XCode/BuildAll.sh` is a macOS-only wrapper around that preset. Keep
+outputs in the build tree; do not restore the obsolete per-tool Xcode projects
+or copy binaries and TIFF sources into `Testing/` or `Tools/`.
+
+For Unix multi-config CTest, keep the `iccdev_unix_runtime` setup fixture:
+`UnixMultiConfigRuntime.cmake` maps CMake target paths into separate
+`Testing/ctest-runtime/<Config>` directories for the unchanged shell suites.
+Expose regular files, not symlinks, because existing scripts use `find -type f`;
+resolve library aliases before hard-linking or copying them into the view.
+Do not replace it with shared flat aliases that can select another
+configuration, or point `cmake --build` at the compatibility directory.
+
+Apple mobile presets build static libraries only. The dependency-free
+`apple-*-core` presets build `IccProfLib2-static`; the `apple-*-extended-core`
+presets also build zlib-backed IccXML, IccJSON, and IccConnect where SDK and
+host dependency discovery support them. `Build/AppleMobile` consumes the
+exported core package in separate iOS/watchOS app builds; keep each device/simulator
+SDK, architecture, deployment target, and minimal/extended tier aligned with
+the core archive. For extended mobile cores, LibXml2 headers and libraries
+must both resolve from the selected Apple SDK; do not let host macOS headers
+feed an iOS, tvOS, watchOS, or visionOS archive.
+Physical-device smoke results require both the current `devicectl --console`
+termination exit code and the app's persisted `Documents/results.json`, not
+just successful installation or launch. Keep signing and device identifiers
+local. The UIKit and SwiftUI hosts share the Foundation smoke engine; keep
+Objective-C++ flags off Swift sources. Use
+`.github/scripts/iccdev-apple-simulator-smoke.sh` for fresh-report and
+missing-fixture controls and extended-core capability reporting, and
+`.github/scripts/iccdev-xcode-ctest-smoke.sh` for Release/Debug runtime
+discovery. See `docs/build.md` for the commands.
 
 ## CMake Diagnostics
 

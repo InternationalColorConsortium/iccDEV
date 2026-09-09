@@ -1,50 +1,40 @@
 #!/bin/sh
-config="Release"
+# Copyright (c) 2026 International Color Consortium.
+# SPDX-License-Identifier: BSD-3-Clause
+set -eu
 
-cd ../../IccProfLib
-xcodebuild -target IccProfLib-macOS -configuration "$config"
-cp Build/$config/* ../Build/XCode/lib
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  printf '%s\n' \
+    'Usage: BuildAll.sh [CMake configure options...]' \
+    'Builds macOS with the macos-xcode preset; no files are copied into Testing/.' \
+    'ICCDEV_XCODE_BUILD_DIR: build directory (default: out/macos-xcode, relative to repo)' \
+    'ICCDEV_XCODE_CONFIG: Debug, Release (default), RelWithDebInfo, or MinSizeRel' \
+    'CMAKE_BUILD_PARALLEL_LEVEL: positive build job count (default: available CPUs)' \
+    'For iOS device tests, see docs/build.md and Build/AppleMobile.'
+  exit 0
+fi
 
-cd ../IccXML/IccLibXML
-xcodebuild -target IccLibXML-macOS -configuration "$config"
-cp build/$config/* ../../Build/XCode/lib
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+repo_root=$(CDPATH='' cd -- "$script_dir/../.." && pwd)
+build_dir=${ICCDEV_XCODE_BUILD_DIR:-out/macos-xcode}
+config=${ICCDEV_XCODE_CONFIG:-Release}
+case "$build_dir" in
+  /*) ;;
+  *) build_dir="$repo_root/$build_dir" ;;
+esac
+case "$config" in
+  Debug|Release|RelWithDebInfo|MinSizeRel) ;;
+  *) printf 'Unsupported ICCDEV_XCODE_CONFIG: %s\n' "$config" >&2; exit 2 ;;
+esac
 
-cd ../../Tools/CmdLine/IccApplyNamedCmm
-xcodebuild -target IccApplyNamedCMM -configuration "$config"
-cp build/$config/IccApplyNamedCmm ../../../Testing
+jobs=${CMAKE_BUILD_PARALLEL_LEVEL:-$(sysctl -n hw.ncpu)}
+case "$jobs" in
+  ''|*[!0-9]*) printf 'Build job count must be a positive integer\n' >&2; exit 2 ;;
+esac
+if [ "$jobs" -eq 0 ]; then
+  printf 'Build job count must be a positive integer\n' >&2
+  exit 2
+fi
 
-cd ../IccApplyProfiles
-xcodebuild -target iccApplyProfiles -configuration "$config"
-cp build/$config/IccApplyProfiles ../../../Testing
-
-cd ../IccDumpProfile
-xcodebuild -target IccDumpProfile -configuration "$config"
-cp build/$config/IccDumpProfile ../../../Testing
-
-cd ../IccRoundTrip
-xcodebuild -target IccRoundTrip -configuration "$config"
-cp build/$config/IccRoundTrip ../../../Testing
-
-cd ../IccSpecSepToTiff
-cp ../IccApplyProfiles/TiffImg.* .
-xcodebuild -target IccSpecSepToTiff -configuration "$config"
-cp build/$config/IccSpecSepToTiff ../../../Testing
-
-cd ../IccTiffDump
-cp ../IccApplyProfiles/TiffImg.* .
-xcodebuild -target IccTiffDump -configuration "$config"
-cp build/$config/IccTiffDump ../../../Testing
-
-cd ../../../IccXML/CmdLine/IccFromXml
-xcodebuild -target IccFromXml -configuration "$config"
-cp build/$config/IccFromXml ../../../Testing
-
-cd ../../../IccXML/CmdLine/IccToXml
-xcodebuild -target IccToXML -configuration "$config"
-cp build/$config/IccToXml ../../../Testing
-
-cd ../../../Tools/MacOS-X/RefIccMAXCmm
-xcodebuild -target RefIccMAXCmm -configuration "$config"
-
-cd ../../wxWidget/wxProfileDump/
-xcodebuild -target wxProfileDump -configuration "$config"
+cmake --preset macos-xcode -S "$repo_root/Build/Cmake" -B "$build_dir" "$@"
+cmake --build "$build_dir" --config "$config" --parallel "$jobs"

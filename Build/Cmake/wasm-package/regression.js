@@ -153,10 +153,11 @@ function collectInitialIccs(dir) {
   return files;
 }
 
-function parseCreateAllProfiles(scriptPath) {
-  const generated = new Set();
-  const cleanupDirs = new Set();
-  let cwd = '';
+function parseCreateAllProfiles(scriptPath, inherited) {
+  const generated = inherited ? inherited.generated : new Set();
+  const cleanupDirs = inherited ? inherited.cleanupDirs : new Set();
+  const scriptDir = path.dirname(scriptPath);
+  let cwd = inherited ? inherited.cwd : '';
   for (const line of fs.readFileSync(scriptPath, 'utf8').split('\n')) {
     const cd = line.match(/^\s*cd\s+([^;&|]+)/);
     if (cd) {
@@ -165,6 +166,20 @@ function parseCreateAllProfiles(scriptPath) {
     }
     if (/find\s+\.\s+-iname\s+["']?\*\\?\.icc["']?\s+-delete/.test(line)) {
       cleanupDirs.add(cwd);
+      continue;
+    }
+    // #2328: CreateAllProfiles.sh delegates its HDR block to HDR/mkprofiles.sh
+    // rather than repeating that generator's ten iccFromXml lines. This parser is
+    // a third consumer of those lines, so it has to follow the call: without this
+    // the ten HDR/BT2100*.icc are absent from expectedIccs while HDR stays in
+    // cleanupDirs, and the real run below reports them as unexpected output.
+    // The callee runs in a subshell, so its cd's do not leak back into cwd here.
+    const nested = line.match(/^\s*(?:sh|bash)\s+(?:-[A-Za-z]+\s+)*(\S+\.sh)\s*$/);
+    if (nested) {
+      const nestedPath = path.join(scriptDir, cwd, nested[1]);
+      if (fs.existsSync(nestedPath)) {
+        parseCreateAllProfiles(nestedPath, { generated, cleanupDirs, cwd });
+      }
       continue;
     }
     const fromXml = line.match(/^\s*iccFromXml\s+(\S+)\s+(\S+)/);

@@ -3035,6 +3035,10 @@ icValidateStatus CIccTagSignature::Validate(std::string sigPath, std::string &sR
     case icSigCRTDisplay:
     case icSigPMDisplay:
     case icSigAMDisplay:
+    // ICC.1:2022 Table 29 lists these between 'AMD ' and 'KPCD'; both Validate()
+    // lists rejected them as NonCompliant because the enum had no row (#2101).
+    case icSigLCDDisplay:
+    case icSigOLEDDisplay:
     case icSigPhotoCD:
     case icSigPhotoImageSetter:
     case icSigGravure:
@@ -10959,12 +10963,26 @@ icValidateStatus CIccTagProfileSeqDesc::Validate(std::string sigPath, std::strin
     case icSigCRTDisplay:
     case icSigPMDisplay:
     case icSigAMDisplay:
+    // ICC.1:2022 Table 29 lists these between 'AMD ' and 'KPCD'; both Validate()
+    // lists rejected them as NonCompliant because the enum had no row (#2101).
+    case icSigLCDDisplay:
+    case icSigOLEDDisplay:
     case icSigPhotoCD:
     case icSigPhotoImageSetter:
     case icSigGravure:
     case icSigOffsetLithography:
     case icSigSilkscreen:
     case icSigFlexography:
+
+    // The same four ICC.1 v4.3 rows CIccTagSignature::Validate already accepts.  Without
+    // them a profileSequenceDesc entry recording a legal technology was reported
+    // NonCompliant here while the identical signature in a technologyTag validated, and
+    // once GetSigName() names them the message read "MotionPictureFilmScanner: Unknown
+    // Technology" -- naming the signature and calling it unknown in one line (#2101).
+    case icSigMotionPictureFilmScanner:
+    case icSigMotionPictureFilmRecorder:
+    case icSigDigitalMotionPictureCamera:
+    case icSigDigitalCinemaProjector:
       break;
 
     default:
@@ -11488,8 +11506,17 @@ bool CIccTagResponseCurveSet16::Read(icUInt32Number size, CIccIO *pIO)
       delete[] nOffset;
       return false;
     }
+    // nOffset[i] is TAG-RELATIVE and is already bounded against the tag length by the
+    // check above.  offsetCalc is an ABSOLUTE file position, so the only thing left to
+    // bound it against is what the IO layer can address; comparing it with `size` -- the
+    // tag's byte length -- rejected every ordinary profile carrying this tag.  The resp
+    // tag iccFromXml writes sits at file offset 396 with size 44 and curve offset 16, so
+    // this computed 412 > 44 and returned false: iccToXml and iccToJson both reported
+    // "Unable to read" and iccDumpProfile reported the tag "not found", for a tag whose
+    // bytes are correct (#2399).  A tag can only fail this way when its own file offset
+    // exceeds its length, which is true of essentially every real tag.
     size_t offsetCalc = startPos + nOffset[i];
-    if (offsetCalc > size || offsetCalc > 0xFFFFFFFFULL) {
+    if (offsetCalc > 0xFFFFFFFFULL) {
       delete[] nOffset;
       return false;
     }

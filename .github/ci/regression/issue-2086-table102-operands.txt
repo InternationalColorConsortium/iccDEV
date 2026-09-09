@@ -1,0 +1,5 @@
+'RGB ' ; Data Format
+icEncodeUnitFloat ; Encoding
+0.2 0.2 0.2
+0.8 0.8 0.8
+0.2 0.8 0.2

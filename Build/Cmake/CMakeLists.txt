@@ -134,6 +134,84 @@ if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
     endif()
 endif()
 
+function(iccdev_normalize_apple_architectures OUTPUT_VAR ARM64_32_ALLOWED CONTEXT)
+  # CMAKE_OSX_ARCHITECTURES is already a CMake list (semicolon-separated,
+  # e.g. "arm64;x86_64" for universal builds). Do NOT run separate_arguments()
+  # on it: that performs UNIX-command-line whitespace splitting and corrupts
+  # multi-arch lists that contain no whitespace, collapsing them into a
+  # single malformed token.
+  set(_iccdev_archs "${CMAKE_OSX_ARCHITECTURES}")
+  set(_iccdev_normalized_archs "")
+  foreach(a IN LISTS _iccdev_archs)
+    string(TOLOWER "${a}" a_lc)
+    if(a_lc MATCHES "^arm64e?$")
+      list(APPEND _iccdev_normalized_archs "arm64")
+    elseif(a_lc MATCHES "^(x86_64|amd64)$")
+      list(APPEND _iccdev_normalized_archs "x86_64")
+    elseif(a_lc STREQUAL "arm64_32" AND ARM64_32_ALLOWED)
+      list(APPEND _iccdev_normalized_archs "arm64_32")
+    else()
+      message(FATAL_ERROR "Unsupported requested ${CONTEXT} architecture: '${a}'")
+    endif()
+  endforeach()
+  list(REMOVE_DUPLICATES _iccdev_normalized_archs)
+  list(JOIN _iccdev_normalized_archs ";" _iccdev_archs_final)
+  set(${OUTPUT_VAR} "${_iccdev_archs_final}" PARENT_SCOPE)
+endfunction()
+
+function(iccdev_apple_sysroot_allows_arm64_32 OUTPUT_VAR)
+  set(_iccdev_apple_sdk "${CMAKE_OSX_SYSROOT}")
+  if(NOT _iccdev_apple_sdk)
+    set(_iccdev_apple_sdk "macosx")
+  endif()
+  get_filename_component(_iccdev_apple_sdk "${_iccdev_apple_sdk}" NAME)
+  string(TOLOWER "${_iccdev_apple_sdk}" _iccdev_apple_sdk)
+  if(_iccdev_apple_sdk MATCHES "^watchos")
+    set(${OUTPUT_VAR} TRUE PARENT_SCOPE)
+  else()
+    set(${OUTPUT_VAR} FALSE PARENT_SCOPE)
+  endif()
+endfunction()
+
+function(iccdev_resolve_apple_sdk_path OUTPUT_VAR)
+  set(_iccdev_apple_sdk "${CMAKE_OSX_SYSROOT}")
+  if(NOT _iccdev_apple_sdk)
+    set(${OUTPUT_VAR} "" PARENT_SCOPE)
+    return()
+  endif()
+  if(IS_ABSOLUTE "${_iccdev_apple_sdk}")
+    set(${OUTPUT_VAR} "${_iccdev_apple_sdk}" PARENT_SCOPE)
+    return()
+  endif()
+
+  find_program(_iccdev_xcrun xcrun)
+  if(_iccdev_xcrun)
+    execute_process(
+      COMMAND "${_iccdev_xcrun}" --sdk "${_iccdev_apple_sdk}" --show-sdk-path
+      OUTPUT_VARIABLE _iccdev_apple_sdk_path
+      ERROR_QUIET
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(_iccdev_apple_sdk_path AND IS_DIRECTORY "${_iccdev_apple_sdk_path}")
+      set(${OUTPUT_VAR} "${_iccdev_apple_sdk_path}" PARENT_SCOPE)
+      return()
+    endif()
+  endif()
+
+  set(${OUTPUT_VAR} "" PARENT_SCOPE)
+endfunction()
+
+# Normalize Apple architecture aliases before project() so CMake's compiler
+# probe does not receive invalid -arch spellings such as ARM64 or amd64.
+if(DEFINED CMAKE_OSX_ARCHITECTURES AND NOT CMAKE_OSX_ARCHITECTURES STREQUAL "")
+  iccdev_apple_sysroot_allows_arm64_32(_iccdev_pre_project_arm64_32_allowed)
+  iccdev_normalize_apple_architectures(_iccdev_pre_project_archs_final
+    "${_iccdev_pre_project_arm64_32_allowed}" Apple)
+  if(NOT _iccdev_pre_project_archs_final STREQUAL "${CMAKE_OSX_ARCHITECTURES}")
+    set(CMAKE_OSX_ARCHITECTURES "${_iccdev_pre_project_archs_final}"
+      CACHE STRING "Apple target architectures" FORCE)
+  endif()
+endif()
+
 # ----------------------------------------------------------------------
 # Project Identity and Versioning
 # ----------------------------------------------------------------------
@@ -141,6 +219,49 @@ endif()
 project(RefIccMAX LANGUAGES C CXX)
 set(PROJECT_UP_NAME "REFICCMAX")
 set(PROJECT_DOWN_NAME "reficcmax")
+
+# Apple targets share CMAKE_SYSTEM_NAME=Darwin.  The selected SDK identifies
+# whether that target is desktop macOS or one of the mobile Apple platforms.
+set(ICCDEV_APPLE_PLATFORM "")
+set(ICCDEV_IS_MACOS FALSE)
+set(ICCDEV_APPLE_SDK_PATH "")
+if(APPLE)
+  set(_iccdev_apple_sdk "${CMAKE_OSX_SYSROOT}")
+  if(NOT _iccdev_apple_sdk)
+    set(_iccdev_apple_sdk "macosx")
+  endif()
+  get_filename_component(_iccdev_apple_sdk "${_iccdev_apple_sdk}" NAME)
+  string(TOLOWER "${_iccdev_apple_sdk}" _iccdev_apple_sdk)
+
+  if(_iccdev_apple_sdk MATCHES "^macosx")
+    set(ICCDEV_APPLE_PLATFORM "macos")
+    set(ICCDEV_IS_MACOS TRUE)
+  elseif(_iccdev_apple_sdk MATCHES "^iphoneos")
+    set(ICCDEV_APPLE_PLATFORM "ios")
+  elseif(_iccdev_apple_sdk MATCHES "^iphonesimulator")
+    set(ICCDEV_APPLE_PLATFORM "ios-simulator")
+  elseif(_iccdev_apple_sdk MATCHES "^appletvos")
+    set(ICCDEV_APPLE_PLATFORM "tvos")
+  elseif(_iccdev_apple_sdk MATCHES "^appletvsimulator")
+    set(ICCDEV_APPLE_PLATFORM "tvos-simulator")
+  elseif(_iccdev_apple_sdk MATCHES "^watchos")
+    set(ICCDEV_APPLE_PLATFORM "watchos")
+  elseif(_iccdev_apple_sdk MATCHES "^watchsimulator")
+    set(ICCDEV_APPLE_PLATFORM "watchos-simulator")
+  elseif(_iccdev_apple_sdk MATCHES "^xros")
+    set(ICCDEV_APPLE_PLATFORM "visionos")
+  elseif(_iccdev_apple_sdk MATCHES "^xrsimulator")
+    set(ICCDEV_APPLE_PLATFORM "visionos-simulator")
+  else()
+    message(FATAL_ERROR
+      "Unsupported Apple SDK '${CMAKE_OSX_SYSROOT}'. Set CMAKE_OSX_SYSROOT "
+      "to a supported Apple SDK.")
+  endif()
+
+  if(NOT ICCDEV_IS_MACOS)
+    iccdev_resolve_apple_sdk_path(ICCDEV_APPLE_SDK_PATH)
+  endif()
+endif()
 
 # Version components (4-part version: 2.3.2.3)
 set(${PROJECT_UP_NAME}_MAJOR_VERSION 2)
@@ -610,6 +731,35 @@ endif()
 
 # --- LibXml2 ---
 if(ENABLE_ICCXML)
+  if(APPLE AND NOT ICCDEV_IS_MACOS)
+    if(NOT ICCDEV_APPLE_SDK_PATH)
+      message(FATAL_ERROR
+        "Unable to resolve selected Apple SDK path for LibXml2 discovery.")
+    endif()
+
+    set(_iccdev_libxml2_include_dir "${ICCDEV_APPLE_SDK_PATH}/usr/include/libxml2")
+    if(NOT IS_DIRECTORY "${_iccdev_libxml2_include_dir}")
+      message(FATAL_ERROR
+        "Selected Apple SDK does not provide LibXml2 headers: "
+        "${_iccdev_libxml2_include_dir}")
+    endif()
+    set(LIBXML2_INCLUDE_DIR "${_iccdev_libxml2_include_dir}"
+      CACHE PATH "LibXml2 include directory for selected Apple SDK" FORCE)
+
+    if(EXISTS "${ICCDEV_APPLE_SDK_PATH}/usr/lib/libxml2.tbd")
+      set(_iccdev_libxml2_library "${ICCDEV_APPLE_SDK_PATH}/usr/lib/libxml2.tbd")
+    elseif(EXISTS "${ICCDEV_APPLE_SDK_PATH}/usr/lib/libxml2.dylib")
+      set(_iccdev_libxml2_library "${ICCDEV_APPLE_SDK_PATH}/usr/lib/libxml2.dylib")
+    else()
+      message(FATAL_ERROR
+        "Selected Apple SDK does not provide a LibXml2 library under "
+        "${ICCDEV_APPLE_SDK_PATH}/usr/lib.")
+    endif()
+    set(LIBXML2_LIBRARY "${_iccdev_libxml2_library}"
+      CACHE FILEPATH "LibXml2 library for selected Apple SDK" FORCE)
+    set(LIBXML2_LIBRARIES "${_iccdev_libxml2_library}"
+      CACHE STRING "LibXml2 libraries for selected Apple SDK" FORCE)
+  endif()
   find_package(LibXml2 REQUIRED)
   if(VERBOSE_CONFIG)
     message(STATUS "LibXml2                : ${LIBXML2_LIBRARIES} (version: ${LIBXML2_VERSION})")
@@ -833,7 +983,7 @@ if(ENABLE_MSAN AND (ENABLE_ASAN OR ENABLE_SANITIZERS OR ENABLE_TSAN OR ENABLE_LS
 endif()
 
 if(ENABLE_MACOS_GUARD_MALLOC)
-  if(NOT APPLE)
+  if(NOT ICCDEV_IS_MACOS)
     message(FATAL_ERROR "ENABLE_MACOS_GUARD_MALLOC is only supported on macOS")
   endif()
   if(ENABLE_ASAN OR ENABLE_SANITIZERS OR ENABLE_FUZZING OR ENABLE_TSAN OR ENABLE_MSAN OR ENABLE_LSAN)
@@ -1298,62 +1448,53 @@ endif()
 # Architecture and Platform Detection
 # ----------------------------------------------------------------------
 if(APPLE)
-  message(STATUS "Detected platform: macOS")
+  message(STATUS "Detected platform: Apple ${ICCDEV_APPLE_PLATFORM}")
 
-  # Host architecture (where CMake is running)
-  set(_HOST_ARCH "${CMAKE_HOST_SYSTEM_PROCESSOR}")
-  if(NOT _HOST_ARCH)
-    execute_process(COMMAND uname -m
-      OUTPUT_VARIABLE _HOST_ARCH
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-  endif()
-  string(TOLOWER "${_HOST_ARCH}" _HOST_ARCH_LC)
-  if(_HOST_ARCH_LC MATCHES "^arm64e?$")
-    set(_HOST_ARCH "arm64")
-  elseif(_HOST_ARCH_LC MATCHES "^(x86_64|amd64)$")
-    set(_HOST_ARCH "x86_64")
-  endif()
-  message(STATUS "Host architecture       : ${_HOST_ARCH}")
-
-  # Detect Rosetta (1 means translated)
-  execute_process(
-    COMMAND /usr/sbin/sysctl -n sysctl.proc_translated
-    OUTPUT_VARIABLE _ROSETTA
-    ERROR_QUIET
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-  if(_ROSETTA STREQUAL "1")
-    message(STATUS "Rosetta translation     : active (terminal running under Rosetta)")
-  else()
-    message(STATUS "Rosetta translation     : not active")
-  endif()
-
-  # Target architectures: respect user/toolchain if already set
-  if(DEFINED CMAKE_OSX_ARCHITECTURES AND NOT CMAKE_OSX_ARCHITECTURES STREQUAL "")
-    set(_REQ_ARCHS "${CMAKE_OSX_ARCHITECTURES}")
-    # Normalize list elements
-    separate_arguments(_REQ_ARCHS)
-    set(_NORM_ARCHS "")
-    foreach(a IN LISTS _REQ_ARCHS)
-      string(TOLOWER "${a}" a_lc)
-      if(a_lc MATCHES "^arm64e?$")
-        list(APPEND _NORM_ARCHS "arm64")
-      elseif(a_lc MATCHES "^(x86_64|amd64)$")
-        list(APPEND _NORM_ARCHS "x86_64")
-      else()
-        message(FATAL_ERROR "Unsupported requested macOS arch: '${a}'")
-      endif()
-    endforeach()
-    list(REMOVE_DUPLICATES _NORM_ARCHS)
-    list(JOIN _NORM_ARCHS ";" _ARCHS_FINAL)
-    if(NOT _ARCHS_FINAL STREQUAL "${CMAKE_OSX_ARCHITECTURES}")
-      set(CMAKE_OSX_ARCHITECTURES "${_ARCHS_FINAL}" CACHE STRING "macOS architectures" FORCE)
+  if(ICCDEV_IS_MACOS)
+    # Host architecture (where CMake is running)
+    set(_HOST_ARCH "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+    if(NOT _HOST_ARCH)
+      execute_process(COMMAND uname -m
+        OUTPUT_VARIABLE _HOST_ARCH
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
     endif()
-    message(STATUS "Requested target archs  : ${CMAKE_OSX_ARCHITECTURES}")
-  else()
-    # Default to host arch if nothing specified
-    set(CMAKE_OSX_ARCHITECTURES "${_HOST_ARCH}" CACHE STRING "macOS architectures" FORCE)
-    message(STATUS "Defaulting target archs : ${CMAKE_OSX_ARCHITECTURES}")
+    string(TOLOWER "${_HOST_ARCH}" _HOST_ARCH_LC)
+    if(_HOST_ARCH_LC MATCHES "^arm64e?$")
+      set(_HOST_ARCH "arm64")
+    elseif(_HOST_ARCH_LC MATCHES "^(x86_64|amd64)$")
+      set(_HOST_ARCH "x86_64")
+    endif()
+    message(STATUS "Host architecture       : ${_HOST_ARCH}")
+
+    # Detect Rosetta (1 means translated).
+    execute_process(
+      COMMAND /usr/sbin/sysctl -n sysctl.proc_translated
+      OUTPUT_VARIABLE _ROSETTA
+      ERROR_QUIET
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(_ROSETTA STREQUAL "1")
+      message(STATUS "Rosetta translation     : active (terminal running under Rosetta)")
+    else()
+      message(STATUS "Rosetta translation     : not active")
+    endif()
+
+    if(NOT DEFINED CMAKE_OSX_ARCHITECTURES OR CMAKE_OSX_ARCHITECTURES STREQUAL "")
+      set(CMAKE_OSX_ARCHITECTURES "${_HOST_ARCH}" CACHE STRING "macOS architectures" FORCE)
+      message(STATUS "Defaulting target archs : ${CMAKE_OSX_ARCHITECTURES}")
+    endif()
   endif()
+
+  set(_iccdev_arm64_32_allowed FALSE)
+  if(ICCDEV_APPLE_PLATFORM STREQUAL "watchos")
+    set(_iccdev_arm64_32_allowed TRUE)
+  endif()
+  iccdev_normalize_apple_architectures(_iccdev_archs_final
+    "${_iccdev_arm64_32_allowed}" "${ICCDEV_APPLE_PLATFORM}")
+  if(NOT _iccdev_archs_final STREQUAL "${CMAKE_OSX_ARCHITECTURES}")
+    set(CMAKE_OSX_ARCHITECTURES "${_iccdev_archs_final}"
+      CACHE STRING "Apple target architectures" FORCE)
+  endif()
+  message(STATUS "Requested target archs  : ${CMAKE_OSX_ARCHITECTURES}")
 
   # Add compile definitions for single-arch builds
   list(LENGTH CMAKE_OSX_ARCHITECTURES _ARCHLEN)
@@ -1365,9 +1506,9 @@ if(APPLE)
     endif()
   endif()
 
-  message(STATUS "Final macOS architectures: ${CMAKE_OSX_ARCHITECTURES}")
+  message(STATUS "Final Apple architectures: ${CMAKE_OSX_ARCHITECTURES}")
 
-  # macOS hardening flags (parity with Linux)
+  # Apple hardening flags (parity with Linux)
   # Base set: works on any C++17-capable compiler.
   add_compile_options(
     -Wall
@@ -1400,16 +1541,16 @@ if(APPLE)
       -Wundef
       -Wpointer-arith
     )
-    message(STATUS "macOS: strict warnings ENABLED (${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION})")
+    message(STATUS "Apple ${ICCDEV_APPLE_PLATFORM}: strict warnings ENABLED (${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION})")
   elseif(ICCDEV_ENABLE_STRICT_WARNINGS)
-    message(STATUS "macOS: strict warnings DISABLED -- ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION} below floor (GCC 15 / Clang 14). Base hardening still active.")
+    message(STATUS "Apple ${ICCDEV_APPLE_PLATFORM}: strict warnings DISABLED -- ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION} below floor (GCC 15 / Clang 14). Base hardening still active.")
   else()
-    message(STATUS "macOS: strict warnings DISABLED by ICCDEV_ENABLE_STRICT_WARNINGS=OFF. Base hardening still active.")
+    message(STATUS "Apple ${ICCDEV_APPLE_PLATFORM}: strict warnings DISABLED by ICCDEV_ENABLE_STRICT_WARNINGS=OFF. Base hardening still active.")
   endif()
 
-  _iccdev_configure_fortify_source("macOS")
+  _iccdev_configure_fortify_source("Apple ${ICCDEV_APPLE_PLATFORM}")
 
-  message(STATUS "macOS build: Warning flags and security hardening applied.")
+  message(STATUS "Apple ${ICCDEV_APPLE_PLATFORM} build: Warning flags and security hardening applied.")
 
 elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
   message(STATUS "Detected platform: Linux")
@@ -1941,7 +2082,7 @@ IF(ENABLE_TOOLS)
     iccdev_fixup_msvc_compile_pdb(${_iccdev_tool_target})
   endforeach()
 
-  if(APPLE AND ENABLE_MACOS_GUARD_MALLOC)
+  if(ICCDEV_IS_MACOS AND ENABLE_MACOS_GUARD_MALLOC)
     add_custom_target(check-macos-guard-malloc
       COMMAND "${CMAKE_COMMAND}"
         "-DICCDEV_BINARY_DIR=${CMAKE_BINARY_DIR}"

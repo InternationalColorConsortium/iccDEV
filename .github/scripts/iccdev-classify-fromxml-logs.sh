@@ -78,10 +78,11 @@ expected_parse_fail=0
 unclassified=0
 hard_fail=0
 
-shopt -s nullglob
-for logf in "$LOGDIR"/*.log; do
+while IFS= read -r -d '' logf; do
   total=$((total + 1))
-  base="$(basename "$logf" .log)"
+  relative_log="${logf#"$LOGDIR/"}"
+  base="${relative_log%.log}"
+  manifest_base="$(basename "$base")"
   status="$(classify_status "$logf")"
   iccout="$RTDIR/${base}_rt.icc"
 
@@ -98,7 +99,7 @@ for logf in "$LOGDIR"/*.log; do
       if [ ! -s "$iccout" ]; then
         unclassified=$((unclassified + 1))
         echo "  [UNCLASSIFIED_MISSING_INVALID_OUTPUT] $base"
-      elif matches_manifest "$base" "$status" "$logf"; then
+      elif matches_manifest "$manifest_base" "$status" "$logf"; then
         expected_invalid=$((expected_invalid + 1))
         echo "  [EXPECTED_INVALID] $base -- $expected_reason"
       else
@@ -110,7 +111,7 @@ for logf in "$LOGDIR"/*.log; do
       if [ -s "$iccout" ]; then
         unclassified=$((unclassified + 1))
         echo "  [UNCLASSIFIED_PARSE_WITH_OUTPUT] $base"
-      elif matches_manifest "$base" "$status" "$logf"; then
+      elif matches_manifest "$manifest_base" "$status" "$logf"; then
         expected_parse_fail=$((expected_parse_fail + 1))
         echo "  [EXPECTED_PARSE_FAIL] $base -- $expected_reason"
       else
@@ -127,8 +128,7 @@ for logf in "$LOGDIR"/*.log; do
       echo "  [UNCLASSIFIED_STATUS] $base -- $status"
       ;;
   esac
-done
-shopt -u nullglob
+done < <(find "$LOGDIR" -type f -name '*.log' -print0 | sort -z)
 
 echo ""
 echo "iccFromXml classification: $total logs, $valid valid-saved, $expected_invalid expected-invalid-saved, $expected_parse_fail expected-parse-fail, $unclassified unclassified, $hard_fail hard-fail"

@@ -1,0 +1,7 @@
+diff --git a/IccProfLib/IccCmm.cpp b/IccProfLib/IccCmm.cpp
+--- a/IccProfLib/IccCmm.cpp
++++ b/IccProfLib/IccCmm.cpp
+@@ -10234,1 +10234,3 @@ CIccApplyCmm *CIccCmm::GetNewApplyCmm(icStatusCMM &status)
++  m_bValid = true;
++
+   status = icCmmStatOk;

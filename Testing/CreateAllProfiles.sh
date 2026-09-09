@@ -298,6 +298,23 @@ then
 fi
 cd ..
 
+echo "====================== HDR =========================="
+
+cd HDR
+find . -iname "*\.icc" -delete
+if [ "$1" != "clean" ]
+then
+	# #2328: HDR/mkprofiles.sh already builds exactly these ten profiles and is what
+	# the CI workflows invoke directly, so call it rather than keeping a second copy
+	# of the same command list here. A duplicate list drifts silently: an eleventh
+	# HDR profile added to one copy would leave iccdev.qa-profile-manifest either
+	# short a profile or short a manifest row, depending on which copy was edited.
+	# sh -x, not a bare sh: set -x does not cross the process boundary, and every
+	# other section of this script traces its iccFromXml calls into CreateAllProfiles.log.
+	sh -x mkprofiles.sh
+fi
+cd ..
+
 echo "====================== V2 =========================="
 
 # Issue #1883: before these, the corpus held no ICC v2 profile at all -- a clean
@@ -327,99 +344,6 @@ then
 	iccFromXml v2RgbMatrixTRC.xml v2RgbMatrixTRC.icc
 	iccFromXml v2GrayTRC.xml     v2GrayTRC.icc
 	iccFromXml v2GrayTRCLab.xml  v2GrayTRCLab.icc
-	set +x
-fi
-cd ..
-
-echo "====================== HDR =========================="
-
-# Testing/HDR/ has carried ten BT.2100 fixtures and its own mkprofiles.sh since
-# before the HAGC work, but nothing ever ran it: the directory was absent from
-# this script, so no .icc was produced from it, and everything downstream keys
-# off the .icc files found under Testing/. That left the HDR fixtures outside the
-# qa-profile-manifest baseline and outside the iccToXml/iccFromXml CI sweeps,
-# which both enumerate "find Testing -name '*.icc'". Adding the directory here is
-# what gives the HAGC fixtures - and the ten that were already here - any effect.
-# All were checked before this was added: the ten BT.2100 profiles and the HAGC
-# positives validate clean, and HagcInvalidXOrder is a deliberate negative
-# recorded in Testing/expected-invalid-fromxml.tsv.
-cd HDR
-find . -iname "*\.icc" -delete
-if [ "$1" != "clean" ]
-then
-	set -x
-	iccFromXml BT2100HlgFullScene.xml BT2100HlgFullScene.icc
-	iccFromXml BT2100HlgNarrowScene.xml BT2100HlgNarrowScene.icc
-	iccFromXml BT2100HlgFullDisplay.xml BT2100HlgFullDisplay.icc
-	iccFromXml BT2100HlgNarrowDisplay.xml BT2100HlgNarrowDisplay.icc
-	iccFromXml BT2100PQFullScene.xml BT2100PQFullScene.icc
-	iccFromXml BT2100PQNarrowScene.xml BT2100PQNarrowScene.icc
-	iccFromXml BT2100PQFullDisplay.xml BT2100PQFullDisplay.icc
-	iccFromXml BT2100PQNarrowDisplay.xml BT2100PQNarrowDisplay.icc
-	iccFromXml BT2100HlgSceneToDisplayLink.xml BT2100HlgSceneToDisplayLink.icc
-	iccFromXml BT2100PQSceneToDisplayLink.xml BT2100PQSceneToDisplayLink.icc
-	iccFromXml HagcDisplay.xml HagcDisplay.icc
-	iccFromXml HagcCommonParams.xml HagcCommonParams.icc
-	iccFromXml HagcHexData.xml HagcHexData.icc
-	iccFromXml HagcMixingTypes.xml HagcMixingTypes.icc
-	iccFromXml HagcInvalidXOrder.xml HagcInvalidXOrder.icc
-	iccFromXml HagcRefWhiteToneMap.xml HagcRefWhiteToneMap.icc
-	iccFromXml HdrCicpUnspecified.xml HdrCicpUnspecified.icc
-	iccFromXml HdrDisplayMetadata.xml HdrDisplayMetadata.icc
-	iccFromXml HdrBakedLut.xml HdrBakedLut.icc
-	iccFromXml HdrInvalidTransfer.xml HdrInvalidTransfer.icc
-	iccFromXml HdrMissingBToA0.xml HdrMissingBToA0.icc
-	iccFromXml HdrMissingLutPair.xml HdrMissingLutPair.icc
-	iccFromXml HdrCicp2NoColumns.xml HdrCicp2NoColumns.icc
-	iccFromXml HdrInputDisplayMeta.xml HdrInputDisplayMeta.icc
-	iccFromXml HdrLinearCll.xml HdrLinearCll.icc
-	iccFromXml HdrLinearMdcv.xml HdrLinearMdcv.icc
-	iccFromXml HdrLinearNoMetadata.xml HdrLinearNoMetadata.icc
-	iccFromXml HdrLinearHagcWhite.xml HdrLinearHagcWhite.icc
-
-	# Clause 8.10.1 membership corpus. Each of these flips exactly ONE of the
-	# clause's membership conditions and satisfies every other one, so a
-	# classifier that drops or weakens that condition is misclassifying exactly
-	# one fixture. Before they existed the only membership negative was
-	# HdrInvalidTransfer, which fails two conditions at once (non-HDR transfer
-	# AND TRC tags present) and so cannot say which of the two was tested.
-	#
-	# All six are CONFORMANT profiles that classify as icHdrProfileHdrContent:
-	# failing 8.10.1 makes a profile not an HDR Profile, it does not make it
-	# non-conformant, and each still carries HDR metadata. Two draw a warning
-	# that is itself the expected result -- see the fixture headers and the
-	# rows in Testing/qa-profile-manifest.tsv.
-	iccFromXml HdrNonRgbSpace.xml HdrNonRgbSpace.icc
-	iccFromXml HdrColorSpaceClass.xml HdrColorSpaceClass.icc
-	iccFromXml HdrVersion44.xml HdrVersion44.icc
-	iccFromXml HdrNoCicpTag.xml HdrNoCicpTag.icc
-	iccFromXml HdrTrcTagsPresent.xml HdrTrcTagsPresent.icc
-	iccFromXml HdrTransferSdr.xml HdrTransferSdr.icc
-
-	# The other edge of the same window: 4.6.0.0 is "4.5.0.0 or later within
-	# v4", so this one IS an HDR Profile. It is the only fixture that separates
-	# a correct ">= 4.5 and < 5" test from a wrong "== 4.5".
-	iccFromXml HdrVersion46.xml HdrVersion46.icc
-
-	# Clause 8.10.5 display-headroom precedence, rules b) and c). The base
-	# fixture HdrDisplayMetadata fires rule a); these two remove entries to
-	# expose the rules below it, and pick values that make a reader firing the
-	# wrong rule return a different number rather than the same one.
-	iccFromXml HdrHeadroomDcvDrwl.xml HdrHeadroomDcvDrwl.icc
-	iccFromXml HdrHeadroomDcvCrwl.xml HdrHeadroomDcvCrwl.icc
-
-	# Clause 8.10.6 pairing at x = 1. HdrMissingBToA0 covers x = 0, but x = 0
-	# is the pair 8.10.6 makes mandatory outright, so an implementation that
-	# only ever looked for AToB0Tag/BToA0Tag passes it. This is a negative --
-	# see Testing/expected-invalid-fromxml.tsv.
-	iccFromXml HdrMissingBToA1.xml HdrMissingBToA1.icc
-
-	# IMPL-02: the VideoFullRangeFlag pair. Identical in every byte but that one
-	# field. Nothing reads the flag, so the two currently render IDENTICALLY --
-	# the pair pins the gap rather than asserting a pass, so that whichever way
-	# IMPL-02 is resolved, the resolution has to move a fixture.
-	iccFromXml HdrFullRangeFlag.xml HdrFullRangeFlag.icc
-	iccFromXml HdrNarrowRangeFlag.xml HdrNarrowRangeFlag.icc
 	set +x
 fi
 cd ..

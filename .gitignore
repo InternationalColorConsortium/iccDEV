@@ -100,6 +100,8 @@ build-cfl-smoke/
 **/RefIccMAXTargets.cmake
 **/compile_commands.json
 codeql-results/
+# Databases `codeql test run` extracts next to each test directory.
+*.testproj/
 
 # Built tool binaries (no extension on Linux)
 # DANGER - this line overfilters and removes the ability to add or change CMakeList.txt files in the tools directory

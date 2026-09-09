@@ -1,2 +1,2 @@
 # Docker-only workflow security analyzer.
-zizmor==1.29.0
+zizmor==1.30.0

@@ -35,7 +35,6 @@ cmake -S Build/Cmake -B build \
   -DENABLE_STATIC_LIBS=ON
 cmake --build build --parallel "$(nproc)"
 ctest --test-dir build -N --no-tests=error
-cmake --build build --target build-test-binaries --parallel "$(nproc)"
 ctest --test-dir build --output-on-failure --no-tests=error
 ctest --test-dir build --label-exclude slow --output-on-failure --no-tests=error
 cmake --build build --target check
@@ -50,7 +49,6 @@ cmake --preset vs2022-x64 -S Build/Cmake -B out/vs2022-x64 ^
   -DENABLE_TOOLS=ON
 cmake --build out/vs2022-x64 --config Release -- /m /maxcpucount
 ctest --test-dir out/vs2022-x64 -C Release -N --no-tests=error
-cmake --build out/vs2022-x64 --config Release --target build-test-binaries
 ctest --test-dir out/vs2022-x64 -C Release --output-on-failure --no-tests=error
 cmake --build out/vs2022-x64 --config Release --target check
 ```
@@ -59,6 +57,39 @@ Windows presets use a unified build-tree runtime directory. Visual Studio tools
 and iccDEV DLLs are under `out\vs2022-x64\bin\<Config>`; MinGW tools are under
 `out\mingw-x64\bin`.
 
+macOS Xcode and Unix Ninja Multi-Config:
+
+```bash
+cmake --preset macos-xcode -S Build/Cmake -B out/macos-xcode
+cmake --build out/macos-xcode --config Release --parallel
+ctest --test-dir out/macos-xcode -C Release \
+  -R '^iccdev\.(unix-runtime-layout|clut-eight-output-regression)$' \
+  --output-on-failure --no-tests=error
+```
+
+The `iccdev.unix-multi-config-runtime` setup fixture automatically prepares
+`Testing/ctest-runtime/<Config>/` inside the build tree. It exposes regular files
+to that configuration's built CLI targets, shared/static libraries (including
+linker and SONAME aliases), generated version headers, and the real CMake cache.
+Artifacts use hard links where possible, otherwise copies; library symlinks
+are resolved so legacy `find -type f` discovery cannot silently skip tools.
+CTest points the shell suites' `PATH`, library paths, `ICCDEV_TOOLS_DIR`, and
+`ICCDEV_BUILD_DIR` at this flat compatibility layout. It is a test runtime
+directory, not a second CMake build tree; continue using the original build
+directory with `cmake --build`.
+
+Only already-built artifacts are exposed. Build the selected configuration
+first; the runtime view never substitutes Release artifacts for unbuilt Debug targets.
+Each configuration has its own runtime directory and script-output directory;
+regeneration removes stale aliases without changing actual build artifacts.
+Single-config Unix and Windows runtime layouts are unchanged. Existing
+profile-generation scripts still operate in the source `Testing/` directory;
+do not run those fixtures concurrently against the same checkout.
+
+For the dependency-free Xcode CI reproduction, run
+`bash .github/scripts/iccdev-xcode-ctest-smoke.sh`. It covers Release and Debug
+runtime staging, native profile-write behavior, and fresh `iccFromCube` output.
+
 Windows MinGW single-config generators, `cmd.exe`:
 
 ```cmd
@@ -66,7 +97,6 @@ set PATH=C:\msys64\ucrt64\bin;C:\msys64\usr\bin;%PATH%
 cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 ^
   -DENABLE_TESTS=ON
 cmake --build out/mingw-x64 --parallel
-cmake --build out/mingw-x64 --target build-test-binaries --parallel
 ctest --test-dir out/mingw-x64 -R "^iccdev\.(windows-icc-dump-profile-smoke|issue-987-shared-mpe-export)$" --output-on-failure --no-tests=error
 ```
 
@@ -77,7 +107,6 @@ $env:PATH = 'C:\msys64\ucrt64\bin;C:\msys64\usr\bin;' + $env:PATH
 cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 `
   -DENABLE_TESTS=ON
 cmake --build out/mingw-x64 --parallel
-cmake --build out/mingw-x64 --target build-test-binaries --parallel
 ctest --test-dir out/mingw-x64 -R "^iccdev\.(windows-icc-dump-profile-smoke|issue-987-shared-mpe-export)$" --output-on-failure --no-tests=error
 ```
 
@@ -88,7 +117,6 @@ packages, use the dependency-light static preset. `cmd.exe`:
 set PATH=C:\msys64\ucrt64\bin;C:\msys64\usr\bin;%PATH%
 cmake --preset mingw-core-x64 -S Build/Cmake -B out/mingw-core-x64
 cmake --build out/mingw-core-x64 --parallel
-cmake --build out/mingw-core-x64 --target build-test-binaries --parallel
 ctest --test-dir out/mingw-core-x64 -R "iccconnect|icc-dump-profile-smoke" --output-on-failure --no-tests=error
 ```
 
@@ -98,23 +126,25 @@ PowerShell:
 $env:PATH = 'C:\msys64\ucrt64\bin;C:\msys64\usr\bin;' + $env:PATH
 cmake --preset mingw-core-x64 -S Build/Cmake -B out/mingw-core-x64
 cmake --build out/mingw-core-x64 --parallel
-cmake --build out/mingw-core-x64 --target build-test-binaries --parallel
 ctest --test-dir out/mingw-core-x64 -R "iccconnect|icc-dump-profile-smoke" --output-on-failure --no-tests=error
 ```
 
 Use `--no-tests=error` for discovery and execution so a registration regression
 cannot pass as a green no-op.
 
-The default `all` build intentionally excludes CTest-only helper binaries such as
-`iccFileIoSeekTellTest` and `iccParserRestoreCallsTest`. Build the
-`build-test-binaries` target before running filtered CTest commands directly, or
-use the `check` / `check-fast` targets to build tool and test dependencies
-before running the suite.
+The default `all` build includes CTest helper binaries such as
+`iccFileIoSeekTellTest` and `iccParserRestoreCallsTest`, so filtered CTest
+commands can run directly after a normal build. The `build-test-binaries`
+compatibility target remains available for scripts that explicitly request all
+helpers; `check` and `check-fast` build tool and test dependencies before
+running the suite.
 
 ## Registered Suites
 
 | Test | Source |
 |------|--------|
+| `iccdev.unix-multi-config-runtime` | `Build/Cmake/Testing/UnixMultiConfigRuntime.cmake`; automatic Unix multi-config runtime setup |
+| `iccdev.unix-runtime-layout` | `Build/Cmake/Testing/TestUnixTestRuntime.cmake`; configuration isolation, stale aliases, spaced paths, and failure controls |
 | `iccdev.create-profiles` | `Testing/CreateAllProfiles.sh` |
 | `iccdev.c-validation-dlopen` | `.github/ci/regression/c-validation-dlopen.c` |
 | `iccdev.embedio-read8-bounds` | `.github/ci/regression/embedio-read8-bounds.cpp` |
@@ -123,6 +153,7 @@ before running the suite.
 | `iccdev.fileio-seek-tell` | `.github/ci/regression/fileio-seek-tell.cpp` |
 | `iccdev.iccconnect-config-parser` | `.github/ci/regression/iccconnect-config-parser.cpp` |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
+| `iccdev.bench-apply-metrics` | `Build/Cmake/Testing/CMakeLists.txt`; asserts the deterministic one-profile, four-pixel metrics contract |
 | `iccdev.applytolink-invalid-decoded-intent` | `Build/Cmake/Testing/CMakeLists.txt` |
 | `iccdev.applytolink-v4-missing-device-descriptions` | `Build/Cmake/Testing/CMakeLists.txt` |
 | `iccdev.xform-abstorel-adjust` | `.github/ci/regression/xform-abstorel-adjust.cpp` |
@@ -185,6 +216,11 @@ before running the suite.
 The JSON round-trip uses a temporary directory for generated `.json` and
 round-trip `.icc` files so a passing Unix run does not remove or modify tracked
 files in `Testing/`.
+
+`iccdev.applysearch-cli-args` derives a batch of more than 1,024 rows from the
+tracked RGB input and requires byte-identical output for the default path and
+`-threads 0`, `1`, `2`, `4`, and `8`. It also covers configuration mode,
+malformed thread counts, and the single-thread requirement for `-debugcalc`.
 
 `iccdev.tool-coverage` may add focused command-line regressions inside the
 existing script without changing the CTest suite count. When a bug is tied to an
@@ -345,12 +381,22 @@ shipped. A fourth arm repeats MODULE mode with a target-less
 `RefIccMAXConfig.cmake` planted earlier on `CMAKE_PREFIX_PATH`, the shape a
 pre-2.3.2 install has. Each arm pins the library it resolved back to the staged
 prefix, so an iccDEV installed elsewhere on the machine cannot satisfy the test
-in place of this build tree. Unlike the Windows consumers above, this one is
-skipped -- with a logged reason -- on sanitizer builds rather than inheriting
-the parent settings: its consumers are separate CMake projects, and an
-uninstrumented executable cannot load an ASan-instrumented library. The
-MODULE-mode arms are likewise skipped on static-only builds, where
-`FindRefIccMAX.cmake` reports not-found by design.
+in place of this build tree. The direct MODULE arm sets
+`REFICCMAX_SKIP_CONFIG` so an unrelated system CONFIG package cannot bypass the
+manual-discovery path under test; the legacy-config arm leaves CONFIG enabled
+to verify its target-less-package fallback. Unlike the Windows consumers
+above, this one is skipped -- with a logged reason -- on sanitizer builds
+rather than inheriting the parent settings: its consumers are separate CMake
+projects, and an uninstrumented executable cannot load an ASan-instrumented
+library. The MODULE-mode arms are likewise skipped on static-only builds,
+where `FindRefIccMAX.cmake` reports not-found by design.
+
+When the parent uses vcpkg, the test forwards its toolchain, installed tree,
+and target triplet while disabling manifest mode for the nested consumers. This
+keeps dependency discovery in the already populated parent tree instead of
+falling back to vcpkg's unrelated global classic tree. The
+`build-test-binaries` target builds both shared and static library artifacts
+that the test stages, so the focused CTest can run without a prior full build.
 
 ## Fixtures and Logs
 

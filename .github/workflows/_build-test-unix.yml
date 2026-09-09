@@ -369,8 +369,10 @@ jobs:
           PASS=0; FAIL=0; TOTAL=0
           while IFS= read -r icc; do
             TOTAL=$((TOTAL + 1))
-            base="$(basename "$icc" .icc)"
+            base="${icc#"${WORKSPACE_DIR}/Testing/"}"
+            base="${base%.icc}"
             logf="$LOGDIR/${base}.log"
+            mkdir -p "$(dirname "$logf")"
             timeout 30 "$DUMP" "$icc" ALL > "$logf" 2>&1 && rc=0 || rc=$?
             if [ "$rc" -ge 128 ]; then
               FAIL=$((FAIL + 1))
@@ -409,9 +411,11 @@ jobs:
           PASS=0; FAIL=0; READ_FAIL=0; TOTAL=0
           while IFS= read -r icc; do
             TOTAL=$((TOTAL + 1))
-            base="$(basename "$icc" .icc)"
+            base="${icc#"${WORKSPACE_DIR}/Testing/"}"
+            base="${base%.icc}"
             xmlout="$XMLDIR/${base}.xml"
             logf="$LOGDIR/${base}.log"
+            mkdir -p "$(dirname "$xmlout")" "$(dirname "$logf")"
             timeout 30 "$TOXML" "$icc" "$xmlout" > "$logf" 2>&1 && rc=0 || rc=$?
             if [ "$rc" -ge 128 ]; then
               FAIL=$((FAIL + 1))
@@ -433,6 +437,11 @@ jobs:
 
           echo ""
           echo "iccToXml: $TOTAL tested, $PASS pass, $FAIL fail (READ_FAIL=$READ_FAIL)"
+          XML_COUNT="$(find "$XMLDIR" -type f -name '*.xml' | wc -l)"
+          if [ "$XML_COUNT" -ne "$PASS" ]; then
+            echo "[FAIL] iccToXml output count mismatch: $PASS successful conversions, $XML_COUNT XML files"
+            exit 1
+          fi
           if [ "$FAIL" -gt 0 ]; then
             echo "[FAIL] iccToXml sweep produced failures"
             exit 1
@@ -463,13 +472,13 @@ jobs:
           }
 
           PASS=0; FAIL=0; HARD_FAIL=0; TOTAL=0
-          for xmlf in "$XMLDIR"/*.xml; do
-            [ -f "$xmlf" ] || continue
-            [ -s "$xmlf" ] || continue
+          while IFS= read -r xmlf; do
             TOTAL=$((TOTAL + 1))
-            base="$(basename "$xmlf" .xml)"
+            base="${xmlf#"$XMLDIR/"}"
+            base="${base%.xml}"
             iccout="$RTDIR/${base}_rt.icc"
             logf="$LOGDIR/${base}.log"
+            mkdir -p "$(dirname "$iccout")" "$(dirname "$logf")"
             timeout 30 "$FROMXML" "$xmlf" "$iccout" > "$logf" 2>&1 && rc=0 || rc=$?
             if is_hard_exit "$rc"; then
               FAIL=$((FAIL + 1))
@@ -485,7 +494,7 @@ jobs:
             else
               PASS=$((PASS + 1))
             fi
-          done
+          done < <(find "$XMLDIR" -type f -name '*.xml' -size +0c | sort)
 
           echo ""
           echo "iccFromXml RT: $TOTAL tested, $PASS reconstructed, $FAIL not reconstructed"
@@ -942,8 +951,12 @@ jobs:
           # Per-tool subdirectory logs
           for subdir in dump toxml fromxml roundtrip parity; do
             if [ -d "$LOGDIR/$subdir" ]; then
-              mkdir -p "$OUTDIR/$subdir"
-              cp "$LOGDIR/$subdir"/*.log "$OUTDIR/$subdir/" 2>/dev/null || true
+              while IFS= read -r -d '' logf; do
+                relative_log="${logf#"$LOGDIR/"}"
+                destination="$OUTDIR/$(dirname "$relative_log")"
+                mkdir -p "$destination"
+                cp "$logf" "$destination/"
+              done < <(find "$LOGDIR/$subdir" -type f -name '*.log' -print0)
             fi
           done
 

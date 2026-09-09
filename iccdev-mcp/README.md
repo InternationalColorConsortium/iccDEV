@@ -78,7 +78,14 @@ Useful runtime defaults are already configured:
 |----------|---------|
 | `ICCDEV_TOOLS_DIR` | `/workspace/build/Tools` |
 | `ICCDEV_TESTING_DIR` | `/workspace/iccDEV/Testing` |
-| `LD_LIBRARY_PATH` | iccDEV build library directories |
+| `ICCDEV_VALIDATION_LIBRARY` | `/opt/iccdev-validation/lib/libIccProfLib2.so` |
+
+The unified image keeps sanitizer CLI tools, but loads the validation ABI from
+an isolated non-sanitized shared build. An explicit validation library overrides
+`ICCDEV_BUILD_DIR`, including the image default above. To select a custom build,
+override this library path or unset it before starting the server. Empty,
+missing, and unloadable explicit library paths fail closed without silently
+falling back. Pip-only installations retain optional validation behavior.
 
 Mount additional profiles read-only and list them through
 `ICCDEV_PROFILE_DIRS`:
@@ -99,11 +106,29 @@ docker run --rm -p 127.0.0.1:8080:8080 \
   iccdev:mcp-local iccdev-mcp-entrypoint rest
 curl -fsS http://127.0.0.1:8080/api/health
 curl -fsS http://127.0.0.1:8080/api/tools
+python3 .github/scripts/iccdev-container-smoke.py iccdev:mcp-local
 # Optional REST dashboard in a browser
 xdg-open http://127.0.0.1:8080/  # or open the URL manually
 ```
 
 ### Claude Desktop
+
+For a container-only local client, use this unified image configuration. Keep
+`-i` (open stdin), omit `-t`, and do not close stdin until requested tool
+responses arrive:
+
+```json
+{
+  "mcpServers": {
+    "iccdev": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i",
+               "ghcr.io/internationalcolorconsortium/iccdev:latest",
+               "iccdev-mcp-entrypoint", "mcp"]
+    }
+  }
+}
+```
 
 Add to `claude_desktop_config.json`:
 

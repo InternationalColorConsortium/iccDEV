@@ -140,7 +140,57 @@ public:
   unsigned int GetBitsPerSample() { return m_nBitsPerSample;}
   unsigned int GetPhoto();
   unsigned int GetSamples() { return m_nSamples;}
+  // libtiff's ExtraSamples count for the open image, and 0 when tag 338 is absent.
+  //
+  // This is NOT reliably the count the file stores, and callers must not read it as
+  // such.  When the photometric model plus the stored ExtraSamples do not account
+  // for SamplesPerPixel, libtiff repairs the directory -- and where tag 338 IS
+  // present it overwrites the stored count IN PLACE while leaving the field marked
+  // present, so the plain TIFFGetField() in Open() succeeds and hands back the
+  // repaired figure.  Measured on libtiff 4.5.1 and 4.7.2 with a 6-sample MinIsBlack
+  // file storing ExtraSamples [2]: the IFD carries 1, this answers 5.  libtiff
+  // exposes no way to recover the stored count once that has happened -- so Open()
+  // reads it out of the IFD directly instead; see GetStoredExtraSamplesCount() below
+  // when you need the count the file actually carries.
+  //
+  // That matters because colour management keys off this value:
+  // iccApplyProfiles.cpp:541-547 lets a profile match sn-sen instead of sn, so on
+  // such a file a profile is matched against the repaired channel split rather than
+  // the file's own.  The behaviour predates #2386 and is unchanged by it -- which
+  // split is correct is the carrier-contract question open on #2379/#2385, so it is
+  // deliberately not decided here.
   unsigned int GetExtraSamples() { return m_nExtraSamples; }
+  // Whether tag 338 was present in the IFD at all.  This is the one thing that IS
+  // exact: it comes from the TIFFGetField() return, which tracks the field-present
+  // bit and is unaffected by the in-place repair above.  GetExtraSamples() answers 0
+  // both for "absent" and for a stored zero-length count, and Open() used to discard
+  // the return that separates them (#2386).
+  bool HasStoredExtraSamples() const { return m_bExtraSamplesStored; }
+  // The count libtiff is actually working with, including where tag 338 was absent
+  // and the plain getter therefore returned nothing.  Equal to GetExtraSamples() in
+  // every case except that one, which is exactly the case it exists for: an 81-band
+  // spectral image with no tag 338 leaves GetExtraSamples() at 0 while libtiff sizes
+  // the image as 1 colour channel plus 80 non-colour.  Reporting only -- feeding it
+  // to colour management would reclassify those spectral bands as alpha.
+  unsigned int GetEffectiveExtraSamples() const { return m_nEffectiveExtraSamples; }
+  // Whether the ExtraSamples count the FILE stores could be recovered, and what it is.
+  //
+  // This is the one thing GetExtraSamples() cannot give you on a repaired file, and it
+  // does not come from libtiff at all: Open() reads tag 338's count field straight out
+  // of the IFD, because libtiff overwrites the stored count in place and then reports
+  // the repaired figure through every getter it has.  On a 6-sample MinIsBlack image
+  // storing ExtraSamples [0] this answers 1 while GetExtraSamples() answers 5.
+  //
+  // False means "could not determine" -- an unreadable file, a non-TIFF, or BigTIFF,
+  // whose directory layout is deliberately not parsed -- and NOT "tag 338 absent",
+  // which is HasStoredExtraSamples(). Keep the two apart: a stored count of 0 is a
+  // legitimate value, so the flag is what gates use of the number.
+  //
+  // Reporting only, like GetEffectiveExtraSamples(). Which count colour management
+  // should key off is the carrier-contract question open on #2379/#2385 and is not
+  // decided here; iccApplyProfiles still uses GetExtraSamples().
+  bool HasStoredExtraSamplesCount() const { return m_bStoredExtraSamplesKnown; }
+  unsigned int GetStoredExtraSamplesCount() const { return m_nStoredExtraSamplesCount; }
   unsigned int GetCompress() { return m_nCompress; }
   unsigned int GetPlanar() { return m_nPlanar; }
   unsigned int GetSampleFormat() { return m_nSampleFormat; }
@@ -186,6 +236,10 @@ protected:
   icUInt16Number m_nPhoto;
   icUInt16Number m_nSamples;
   icUInt16Number m_nExtraSamples;
+  bool m_bExtraSamplesStored;
+  icUInt16Number m_nEffectiveExtraSamples;
+  icUInt16Number m_nStoredExtraSamplesCount;
+  bool m_bStoredExtraSamplesKnown;
   icUInt16Number m_nPlanar;
   icUInt16Number m_nCompress;
   icUInt16Number m_nSampleFormat;

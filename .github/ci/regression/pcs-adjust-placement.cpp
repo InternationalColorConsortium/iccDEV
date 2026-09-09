@@ -50,6 +50,7 @@
 #include "IccTagBasic.h"
 #include "IccTagLut.h"
 #include "IccTagMPE.h"
+#include "IccUtil.h"
 #include "IccMpeBasic.h"
 #include "IccApplyBPC.h"
 
@@ -993,15 +994,13 @@ static bool buildV5SpectralInputProfile(CIccProfile &p)
 // docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md
 // authorises stopping the XYZ path at a spectral port.
 //
-// This fixture carries no icSigSpectralWhitePointTag, but that is not why all
-// six samples come through the pipeline untouched: CheckPCSConnections() gates
-// both chain-edge blocks on IsSpaceColorimetricPCS(), so no CIccPcsXform is
-// built at this spectral edge at all -- asserted directly three lines below by
-// pcsXformCount() == 0. Adding a white point tag to this fixture would not
-// change the result; S7 ("missing white point means no conversion") never
-// gets a chance to run here because nothing reaches pushSpectralWhitePointConvert()
-// on this path. The cases further down build a real CIccPcsXform (via
-// Connect()/ConnectFirst()/ConnectLast() directly) and assert S7 there.
+// This fixture carries no icSigSpectralWhitePointTag, and that is now the whole
+// reason all six samples come through the pipeline untouched. Both chain-edge
+// blocks in CheckPCSConnections() gate on IsSpacePCS(), so a CIccPcsXform *is*
+// built at this spectral edge; with no white point tag to convert against it
+// pushes nothing and Optimize() drops it, which is what pcsXformCount() == 0
+// records three lines below. Adding a white point tag would change the result,
+// and spectralTrailingEdgeConvertsThroughCmm() further down is that fixture.
 static void spectralTrailingEdgeNoLongerAdjustsInsideApply()
 {
   CIccProfile *pICC = new CIccProfile;
@@ -1613,6 +1612,607 @@ static void spectralSampleCountMismatchIsRejected()
 }
 
 
+// --- the spectral chain edge, through a real CMM --------------------------
+//
+// The S1-S8 cases above drive Connect()/ConnectFirst()/ConnectLast() directly,
+// which is the only way to observe which steps a port pushed. That leaves one
+// thing unasserted: whether CIccCmm::CheckPCSConnections() ever *builds* a
+// CIccPcsXform at a spectral chain edge for those branches to run in.
+//
+// It used not to. Both edge blocks gated on IsSpaceColorimetricPCS(), which no
+// spectral signature satisfies, so ConnectFirst()/ConnectLast()'s spectral
+// branches were unreachable from a chain and a chain that began or ended on a
+// spectral PCS carried the tag's own absolute-ness straight through. Both
+// blocks now gate on IsSpacePCS(), the same predicate the interior loop uses.
+//
+// These cases therefore assert through CIccCmm::Apply() rather than through a
+// standalone CIccPcsXform: the pixel, and the presence of the CIccPcsXform
+// that produced it, are exactly what the widened gate is responsible for.
+
+// Products with kSpectralConst stay inside 0..1 on purpose -- an emitted
+// spectral sample above 1.0 would confound a clamp with a dropped conversion.
+// Straddling 1.0 still separates a multiply from a divide from a no-op.
+static const icFloatNumber kSpectralEdgeWhite[kSpectralSamples] = {
+  0.50f, 0.80f, 1.25f, 1.50f, 0.40f, 1.25f
+};
+
+// buildV5SpectralInputProfile()'s fixture, parameterized over the spectral PCS
+// type and given an optional spectral white point tag. DToB1 is the relative
+// tag, so an absolute-intent request is S2's converting row.
+static bool buildV5SpectralEdgeProfile(CIccProfile &p, icColorSpaceSignature nSpecType,
+                                       bool bWhitePoint,
+                                       const icFloatNumber *pWhite = kSpectralEdgeWhite)
+{
+  if (!buildV5SpectralInputProfile(p))
+    return false;
+
+  p.m_Header.spectralPCS = spectralSigOf(nSpecType);
+  if (nSpecType == icSigBiSpectralReflectanceData) {
+    p.m_Header.biSpectralRange.start = icRange380nm;
+    p.m_Header.biSpectralRange.end = icRange780nm;
+    p.m_Header.biSpectralRange.steps = 1;
+  }
+
+  if (bWhitePoint)
+    attachSpectralWhitePoint(p, pWhite, kSpectralSamples);
+
+  return true;
+}
+
+// An MPE that copies its first nOut inputs to its outputs, so a conversion
+// applied to the pixel *before* the pipeline is observable after it. The
+// constant-emitting fixtures above cannot show that: they ignore their input.
+static CIccTagMultiProcessElement *makeSelectMpe(icUInt16Number nIn, icUInt16Number nOut)
+{
+  CIccTagMultiProcessElement *pTag = new CIccTagMultiProcessElement;
+  pTag->SetChannels(nIn, nOut);
+
+  CIccMpeMatrix *pMtx = new CIccMpeMatrix;
+  if (!pMtx->SetSize(nIn, nOut, true)) {
+    delete pMtx;
+    delete pTag;
+    return NULL;
+  }
+  icFloatNumber *m = pMtx->GetMatrix();
+  for (int i = 0; i < (int)nIn * (int)nOut; i++)
+    m[i] = 0.0f;
+  for (int o = 0; o < (int)nOut; o++)
+    m[o * (int)nIn + o] = 1.0f;          // dst[o] = src[o]
+  icFloatNumber *k = pMtx->GetConstants();
+  for (int i = 0; i < (int)nOut; i++)
+    k[i] = 0.0f;
+
+  pTag->Attach(pMtx);
+  return pTag;
+}
+
+// The mirror of buildV5SpectralEdgeProfile() in the other direction: a v5
+// output profile whose BToD1 tag passes the first three spectral samples
+// through to its device channels.
+static bool buildV5SpectralOutputProfile(CIccProfile &p, bool bWhitePoint,
+                                         const icFloatNumber *pWhite = kSpectralEdgeWhite)
+{
+  p.InitHeader();
+  p.m_Header.deviceClass = icSigOutputClass;
+  p.m_Header.colorSpace = icSigRgbData;
+  p.m_Header.pcs = icSigLabData;
+  p.m_Header.version = icVersionNumberV5;
+  p.m_Header.spectralPCS = spectralSig();
+  p.m_Header.spectralRange.start = icRange380nm;
+  p.m_Header.spectralRange.end = icRange780nm;
+  p.m_Header.spectralRange.steps = kSpectralSamples;
+
+  attachRequiredTags(p, "v5 spectral output fixture");
+  if (bWhitePoint)
+    attachSpectralWhitePoint(p, pWhite, kSpectralSamples);
+
+  CIccTagMultiProcessElement *pB2D = makeSelectMpe(kSpectralSamples, 3);
+  if (!pB2D)
+    return false;
+  p.AttachTag(icSigBToD1Tag, pB2D);
+
+  return true;
+}
+
+// Trailing edge: RGB -> spectral PCS, one input profile, absolute intent
+// against a relative DToB1 tag. The pipeline emits kSpectralConst regardless of
+// input, so the emitted spectrum is known exactly and the edge conversion is
+// the only thing that can have touched it.
+//
+// Note this asserts all six samples, not three. The XYZ media-white adjustment
+// that used to reach a spectral port scaled samples 0..2 and left the rest
+// alone (see spectralTrailingEdgeNoLongerAdjustsInsideApply() above); an
+// element-wise conversion against the spectral white point touches every
+// sample, so a chain that scaled only the first three would fail here.
+static void spectralTrailingEdgeConvertsThroughCmm()
+{
+  CIccProfile *pICC = new CIccProfile;
+  if (!buildV5SpectralEdgeProfile(*pICC, icSigReflectanceSpectralData, true)) {
+    delete pICC;
+    check(false, "spectral trailing edge: fixture built");
+    return;
+  }
+
+  CmmProbe cmm(icSigRgbData, spectralSig(), true);
+  check(cmm.AddXform(pICC, icAbsoluteColorimetric, icInterpLinear, NULL,
+                     icXformLutSpectral, true, NULL) == icCmmStatOk,
+        "spectral trailing edge: AddXform");
+  check(cmm.Begin() == icCmmStatOk, "spectral trailing edge: Begin");
+
+  check(cmm.pcsXformCount() == 1,
+        "spectral trailing edge: a CIccPcsXform is now built at the spectral edge");
+
+  icFloatNumber src[3] = { 0.20f, 0.40f, 0.60f };
+  icFloatNumber dst[kSpectralSamples];
+  for (int i = 0; i < (int)kSpectralSamples; i++)
+    dst[i] = -1.0f;
+  check(cmm.Apply(dst, src) == icCmmStatOk, "spectral trailing edge: Apply");
+
+  icFloatNumber want[kSpectralSamples];
+  for (int i = 0; i < (int)kSpectralSamples; i++)
+    want[i] = kSpectralConst[i] * kSpectralEdgeWhite[i];
+
+  std::printf("      spectral trailing edge: emitted");
+  for (int i = 0; i < (int)kSpectralSamples; i++)
+    std::printf(" %.6f", (double)dst[i]);
+  std::printf("\n      spectral trailing edge: expected");
+  for (int i = 0; i < (int)kSpectralSamples; i++)
+    std::printf(" %.6f", (double)want[i]);
+  std::printf("\n");
+
+  check(spectrumClose(dst, want),
+        "spectral trailing edge: every sample is multiplied by the spectral white point");
+}
+
+// Leading edge, the other direction: spectral PCS -> RGB through an output
+// profile. Absolute intent into a relative BToD1 tag divides, and the tag
+// passes samples 0..2 through, so the device values are the divided spectrum.
+static void spectralLeadingEdgeConvertsThroughCmm()
+{
+  CIccProfile *pICC = new CIccProfile;
+  if (!buildV5SpectralOutputProfile(*pICC, true)) {
+    delete pICC;
+    check(false, "spectral leading edge: fixture built");
+    return;
+  }
+
+  CmmProbe cmm(spectralSig(), icSigRgbData, false);
+  check(cmm.AddXform(pICC, icAbsoluteColorimetric, icInterpLinear, NULL,
+                     icXformLutSpectral, true, NULL) == icCmmStatOk,
+        "spectral leading edge: AddXform");
+  check(cmm.Begin() == icCmmStatOk, "spectral leading edge: Begin");
+
+  check(cmm.pcsXformCount() == 1,
+        "spectral leading edge: a CIccPcsXform is now built at the spectral edge");
+
+  icFloatNumber dst[3] = { -1.0f, -1.0f, -1.0f };
+  check(cmm.Apply(dst, kSpectralProbe) == icCmmStatOk, "spectral leading edge: Apply");
+
+  bool bClose = true;
+  for (int i = 0; i < 3; i++) {
+    const double want = (double)kSpectralProbe[i] / (double)kSpectralEdgeWhite[i];
+    std::printf("      spectral leading edge: channel %d got %.6f want %.6f\n",
+                i, (double)dst[i], want);
+    bClose = bClose && closeRel(dst[i], want, kTol);
+  }
+  check(bClose,
+        "spectral leading edge: the spectrum is divided by the spectral white point");
+}
+
+// S4 at the edge. The gate is IsSpacePCS(), which every spectral signature
+// satisfies, so a bi-spectral or sparse-matrix edge does get a CIccPcsXform
+// built -- and pushSpectralWhitePointConvert() must then decline it, leaving
+// nothing to apply and the whole CIccPcsXform dropped by Optimize(). The
+// converting types are asserted in the same loop so the exclusion cannot pass
+// by the conversion never firing at all.
+static void spectralEdgeS4Exclusions()
+{
+  struct Case { icColorSpaceSignature nType; bool bConverts; const char *szName; };
+  static const Case kCases[5] = {
+    { icSigReflectanceSpectralData,     true,  "reflectance" },
+    { icSigTransmisionSpectralData,     true,  "transmission" },
+    { icSigRadiantSpectralData,         true,  "radiant" },
+    { icSigBiSpectralReflectanceData,   false, "bi-directional reflectance" },
+    { icSigSparseMatrixReflectanceData, false, "sparse matrix" },
+  };
+
+  for (int c = 0; c < 5; c++) {
+    char szMsg[192];
+    CIccProfile *pICC = new CIccProfile;
+    if (!buildV5SpectralEdgeProfile(*pICC, kCases[c].nType, true)) {
+      delete pICC;
+      std::snprintf(szMsg, sizeof(szMsg), "spectral edge S4: fixture built (%s)",
+                    kCases[c].szName);
+      check(false, szMsg);
+      continue;
+    }
+
+    CmmProbe cmm(icSigRgbData, spectralSigOf(kCases[c].nType), true);
+    std::snprintf(szMsg, sizeof(szMsg), "spectral edge S4: AddXform (%s)", kCases[c].szName);
+    check(cmm.AddXform(pICC, icAbsoluteColorimetric, icInterpLinear, NULL,
+                       icXformLutSpectral, true, NULL) == icCmmStatOk, szMsg);
+    std::snprintf(szMsg, sizeof(szMsg), "spectral edge S4: Begin (%s)", kCases[c].szName);
+    check(cmm.Begin() == icCmmStatOk, szMsg);
+
+    icFloatNumber src[3] = { 0.20f, 0.40f, 0.60f };
+    icFloatNumber dst[kSpectralSamples];
+    for (int i = 0; i < (int)kSpectralSamples; i++)
+      dst[i] = -1.0f;
+    std::snprintf(szMsg, sizeof(szMsg), "spectral edge S4: Apply (%s)", kCases[c].szName);
+    check(cmm.Apply(dst, src) == icCmmStatOk, szMsg);
+
+    icFloatNumber want[kSpectralSamples];
+    for (int i = 0; i < (int)kSpectralSamples; i++)
+      want[i] = kCases[c].bConverts ? kSpectralConst[i] * kSpectralEdgeWhite[i]
+                                    : kSpectralConst[i];
+
+    std::snprintf(szMsg, sizeof(szMsg),
+                  kCases[c].bConverts
+                    ? "spectral edge S4: %s converts at the chain edge"
+                    : "spectral edge S4: %s takes no conversion at the chain edge",
+                  kCases[c].szName);
+    check(cmm.pcsXformCount() == (kCases[c].bConverts ? 1 : 0) &&
+          spectrumClose(dst, want), szMsg);
+  }
+}
+
+// S7 at the edge: a spectral PCS edge on a profile with no spectral white point
+// tag converts nothing rather than failing. Unlike
+// spectralTrailingEdgeNoLongerAdjustsInsideApply(), which reaches this outcome
+// because no CIccPcsXform was built at all, the CIccPcsXform is now built here
+// and pushes nothing, so Optimize() drops it -- same pixel, different reason,
+// and this is the case that exercises pushSpectralWhitePointConvert()'s missing
+// tag path from a chain.
+static void spectralEdgeMissingWhitePointConvertsNothing()
+{
+  CIccProfile *pICC = new CIccProfile;
+  if (!buildV5SpectralEdgeProfile(*pICC, icSigReflectanceSpectralData,
+                                  /*bWhitePoint=*/false)) {
+    delete pICC;
+    check(false, "spectral edge S7: fixture built");
+    return;
+  }
+
+  CmmProbe cmm(icSigRgbData, spectralSig(), true);
+  check(cmm.AddXform(pICC, icAbsoluteColorimetric, icInterpLinear, NULL,
+                     icXformLutSpectral, true, NULL) == icCmmStatOk,
+        "spectral edge S7: AddXform");
+  check(cmm.Begin() == icCmmStatOk, "spectral edge S7: Begin");
+  check(cmm.pcsXformCount() == 0,
+        "spectral edge S7: nothing to convert leaves no CIccPcsXform in the chain");
+
+  icFloatNumber src[3] = { 0.20f, 0.40f, 0.60f };
+  icFloatNumber dst[kSpectralSamples];
+  check(cmm.Apply(dst, src) == icCmmStatOk, "spectral edge S7: Apply");
+  check(spectrumClose(dst, kSpectralConst),
+        "spectral edge S7: a missing spectral white point leaves the spectrum alone");
+}
+
+// S8 at the edge: a zero white point sample would put an infinity in the PCS,
+// so the chain must refuse to Begin() rather than build a conversion around it.
+// The widened gate is what makes this reachable from a chain at all -- before
+// it, a degenerate spectral white point on an edge profile was simply ignored.
+static void spectralEdgeDegenerateWhitePointIsRejected()
+{
+  icFloatNumber zeroed[kSpectralSamples];
+  for (int i = 0; i < (int)kSpectralSamples; i++)
+    zeroed[i] = kSpectralEdgeWhite[i];
+  zeroed[2] = 0.0f;
+
+  CIccProfile *pICC = new CIccProfile;
+  if (!buildV5SpectralEdgeProfile(*pICC, icSigReflectanceSpectralData, true, zeroed)) {
+    delete pICC;
+    check(false, "spectral edge S8: fixture built");
+    return;
+  }
+
+  CmmProbe cmm(icSigRgbData, spectralSig(), true);
+  check(cmm.AddXform(pICC, icAbsoluteColorimetric, icInterpLinear, NULL,
+                     icXformLutSpectral, true, NULL) == icCmmStatOk,
+        "spectral edge S8: AddXform");
+  check(cmm.Begin() == icCmmStatInvalidProfile,
+        "spectral edge S8: a zero spectral white point sample fails the chain");
+}
+
+
+// --- isSameWhite's tolerance ---------------------------------------------
+//
+// CIccPcsLabStep::isSameWhite() gates every Lab<->XYZ fold in
+// CIccPcsStep*::concat(), and it used to compare the two white points with ==.
+//
+// Both whites come from getNormIlluminantXYZ() on the respective side's
+// connection conditions, and two profiles can name the same D50 and still hand
+// back different floats. A v2 or v4 profile with no spectral viewing
+// conditions tag gets the icD50XYZ literal {0.9642, 1.0, 0.8249}; a v5 one
+// gets its s15Fixed16 header illuminant back through icFtoD(), and
+// CIccProfile::InitHeader() writes icDtoF(0.9642) there, so that is
+// {0.96420288, 1.0, 0.82490539}. == read the pair as two different white
+// points and refused the fold, leaving a connection that carries a full
+// Lab->XYZ->Lab round trip -- two cube-root passes -- to express an identity.
+//
+// The band this needs is not float noise: 2.9e-6 in X and 5.4e-6 in Z are ~48x
+// and ~91x one ULP at those magnitudes. icIsNear()'s 1e-8 default sits *below*
+// one ULP at 0.96 (5.96e-8), so at white point magnitudes it is exactly ==,
+// and passing it would have left the fold refused. That is why isSameWhite()
+// names icPcsWhiteNearRange (1e-5) explicitly.
+
+// The D50 the pre-v5 path hands back.
+static const icFloatNumber kD50Literal[3] = { 0.9642f, 1.0000f, 0.8249f };
+
+// The same D50 after a trip through the s15Fixed16 header illuminant.
+static void d50ThroughTheHeader(icFloatNumber *pXYZ)
+{
+  for (int i = 0; i < 3; i++)
+    pXYZ[i] = icFtoD(icDtoF(kD50Literal[i]));
+}
+
+static icPcsStepType foldedType(CIccPcsStep &first, CIccPcsStep &next)
+{
+  CIccPcsStep *pFold = first.concat(&next);
+  if (!pFold)
+    return icPcsStepUnknown;      // concat() declines by returning NULL
+  const icPcsStepType nType = pFold->GetType();
+  delete pFold;
+  return nType;
+}
+
+// The oracle for every fold assertion below: the two whites really are
+// different floats, and the difference really does sit inside the tolerance
+// band and outside float noise. Without this the fold cases would pass just as
+// well against == on two bit-identical vectors.
+static void encodedD50DiffersFromTheLiteralWithinTheBand()
+{
+  icFloatNumber encoded[3];
+  d50ThroughTheHeader(encoded);
+
+  bool bAnyDifferent = false;
+  double maxDiff = 0.0;
+  for (int i = 0; i < 3; i++) {
+    const double diff = std::fabs((double)encoded[i] - (double)kD50Literal[i]);
+    if (encoded[i] != kD50Literal[i])
+      bAnyDifferent = true;
+    if (diff > maxDiff)
+      maxDiff = diff;
+  }
+
+  std::printf("info: literal D50 = %.9f %.9f %.9f\n",
+              (double)kD50Literal[0], (double)kD50Literal[1], (double)kD50Literal[2]);
+  std::printf("info: header  D50 = %.9f %.9f %.9f (max diff %.3e)\n",
+              (double)encoded[0], (double)encoded[1], (double)encoded[2], maxDiff);
+
+  check(bAnyDifferent,
+        "white tolerance: the header-encoded D50 is not bit-equal to the literal");
+  // One ULP at 0.96f is 5.96e-8. A difference that failed this bound would be
+  // float noise, and a tolerance band would be the wrong fix for it.
+  check(maxDiff > 1.0e-6,
+        "white tolerance: the difference is an encoding difference, not float noise");
+  check(maxDiff < 1.0e-5,
+        "white tolerance: the difference is inside icPcsWhiteNearRange");
+}
+
+// All six folds isSameWhite() gates, each driven with the literal white on one
+// side and the header-encoded white on the other. Four collapse an exact round
+// trip to an identity; two collapse a v2/v4 encoding change to the single
+// scale step that expresses it.
+static void labStepsFoldAcrossAnEncodingDifferenceInTheWhite()
+{
+  icFloatNumber enc[3];
+  d50ThroughTheHeader(enc);
+
+  {
+    CIccPcsStepXYZToLab first(kD50Literal);
+    CIccPcsStepLabToXYZ next(enc);
+    check(foldedType(first, next) == icPcsStepIdentity,
+          "white tolerance: XYZ->Lab . Lab->XYZ folds to an identity");
+  }
+  {
+    CIccPcsStepLabToXYZ first(kD50Literal);
+    CIccPcsStepXYZToLab next(enc);
+    check(foldedType(first, next) == icPcsStepIdentity,
+          "white tolerance: Lab->XYZ . XYZ->Lab folds to an identity");
+  }
+  {
+    CIccPcsStepXYZToLab2 first(kD50Literal);
+    CIccPcsStepLab2ToXYZ next(enc);
+    check(foldedType(first, next) == icPcsStepIdentity,
+          "white tolerance: XYZ->Lab2 . Lab2->XYZ folds to an identity");
+  }
+  {
+    CIccPcsStepLab2ToXYZ first(kD50Literal);
+    CIccPcsStepXYZToLab2 next(enc);
+    check(foldedType(first, next) == icPcsStepIdentity,
+          "white tolerance: Lab2->XYZ . XYZ->Lab2 folds to an identity");
+  }
+  {
+    CIccPcsStepLabToXYZ first(kD50Literal);
+    CIccPcsStepXYZToLab2 next(enc);
+    check(foldedType(first, next) == icPcsStepLabToLab2,
+          "white tolerance: Lab->XYZ . XYZ->Lab2 folds to a Lab->Lab2 scale");
+  }
+  {
+    CIccPcsStepLab2ToXYZ first(kD50Literal);
+    CIccPcsStepXYZToLab next(enc);
+    check(foldedType(first, next) == icPcsStepLab2ToLab,
+          "white tolerance: Lab2->XYZ . XYZ->Lab folds to a Lab2->Lab scale");
+  }
+}
+
+// The band has to have an outside. A genuinely different white point -- D65,
+// 1.4e-2 away in X and 2.6e-1 in Z, three to four orders of magnitude outside
+// the band -- must still refuse every fold, or the tolerance would be
+// conflating media rather than encodings.
+static void labStepsRefuseToFoldAGenuinelyDifferentWhite()
+{
+  static const icFloatNumber kD65[3] = { 0.9505f, 1.0000f, 1.0890f };
+
+  {
+    CIccPcsStepXYZToLab first(kD50Literal);
+    CIccPcsStepLabToXYZ next(kD65);
+    check(foldedType(first, next) == icPcsStepUnknown,
+          "white tolerance: a D50/D65 pair does not fold to an identity");
+  }
+  {
+    CIccPcsStepLab2ToXYZ first(kD50Literal);
+    CIccPcsStepXYZToLab next(kD65);
+    check(foldedType(first, next) == icPcsStepUnknown,
+          "white tolerance: a D50/D65 pair does not fold to a Lab2->Lab scale");
+  }
+
+  // A perturbation just outside the band pins where the edge is, rather than
+  // that an edge exists somewhere.
+  icFloatNumber justOutside[3];
+  for (int i = 0; i < 3; i++)
+    justOutside[i] = kD50Literal[i];
+  justOutside[0] = (icFloatNumber)(kD50Literal[0] + 2.0e-5);
+  {
+    CIccPcsStepXYZToLab first(kD50Literal);
+    CIccPcsStepLabToXYZ next(justOutside);
+    check(foldedType(first, next) == icPcsStepUnknown,
+          "white tolerance: 2e-5 in X is outside the band and does not fold");
+  }
+}
+
+// What the fold costs numerically. Dropping the pair is only legitimate if the
+// round trip it replaces was already an identity to well inside this file's
+// tolerance -- otherwise the band would be buying speed with accuracy.
+// Measured on the two whites above rather than argued.
+static void foldingAcrossTheBandIsNumericallyHarmless()
+{
+  icFloatNumber enc[3];
+  d50ThroughTheHeader(enc);
+
+  CIccPcsStepXYZToLab toLab(kD50Literal);
+  CIccPcsStepLabToXYZ toXyz(enc);
+
+  static const icFloatNumber kXyzProbe[3] = { 0.3457f, 0.3585f, 0.2751f };
+  icFloatNumber lab[3] = { 0 }, back[3] = { 0 };
+  toLab.Apply(NULL, lab, kXyzProbe);
+  toXyz.Apply(NULL, back, lab);
+
+  double maxDiff = 0.0;
+  for (int i = 0; i < 3; i++) {
+    const double diff = std::fabs((double)back[i] - (double)kXyzProbe[i]);
+    if (diff > maxDiff)
+      maxDiff = diff;
+  }
+  std::printf("info: XYZ->Lab->XYZ across the band moves the pixel by %.3e\n", maxDiff);
+  // Measured: 1.8e-6, an order of magnitude under this file's assertion
+  // tolerance and ~2000x under the smallest real PCS adjustment (the 3.5e-3
+  // v2-perceptual one, pinned by adjustmentIsLargerThanTheToleranceBand()).
+  check(maxDiff < kTol,
+        "white tolerance: the folded round trip was an identity to inside 1e-5");
+}
+
+// Reaching into a connection's step list is the only way to assert that the
+// fold happened rather than that the answer came out the same either way: the
+// unfolded round trip computes the same pixel, just with two cube-root passes
+// more of it.
+class PcsProbe : public CIccPcsXform
+{
+public:
+  int stepCount()
+  {
+    return m_list ? (int)m_list->size() : -1;
+  }
+
+  icPcsStepType stepType(int n)
+  {
+    if (!m_list)
+      return icPcsStepUnknown;
+    int i = 0;
+    for (CIccPcsStepList::iterator s = m_list->begin(); s != m_list->end(); s++, i++) {
+      if (i == n)
+        return s->ptr->GetType();
+    }
+    return icPcsStepUnknown;
+  }
+
+  void printSteps(const char *szWhat)
+  {
+    std::string str;
+    if (m_list) {
+      for (CIccPcsStepList::iterator s = m_list->begin(); s != m_list->end(); s++)
+        s->ptr->dump(str);
+    }
+    std::printf("info: %s step list:%s\n", szWhat, str.c_str());
+  }
+};
+
+// v5 CMYK output, Lab PCS: identical to the v4 fixture but for the version, so
+// the only thing that changes about the connection is which branch
+// getNormIlluminantXYZ() takes -- the icD50XYZ literal for v4, the icFtoD()'d
+// header illuminant for v5.
+static void buildV5CmykOutputProfile(CIccProfile &p)
+{
+  buildV4CmykOutputProfile(p);
+  p.m_Header.version = icVersionNumberV5;
+}
+
+// The connection the tolerance exists for, at the level a chain actually
+// builds one: a v2 profile (Lab2 PCS encoding, literal D50) into a v5 profile
+// (Lab PCS encoding, header-encoded D50). Connect() pushes Lab2->XYZ then
+// XYZ->Lab; isSameWhite() folding that pair leaves the one scale step the
+// v2->v4 encoding change actually is.
+static void v2ToV5LabConnectionFoldsTheRedundantRoundTrip()
+{
+  {
+    CIccProfile *pIn = new CIccProfile();
+    CIccProfile *pOut = new CIccProfile();
+    buildV2CmykOutputProfile(*pIn);
+    buildV5CmykOutputProfile(*pOut);
+
+    CIccXform *pFrom = CIccXform::Create(pIn, true, icRelativeColorimetric, icInterpTetrahedral);
+    CIccXform *pTo = CIccXform::Create(pOut, false, icRelativeColorimetric, icInterpTetrahedral);
+    check(pFrom != NULL && pTo != NULL, "v2->v5 fold: xforms created");
+    if (pFrom && pTo) {
+      check(pFrom->Begin() == icCmmStatOk && pTo->Begin() == icCmmStatOk,
+            "v2->v5 fold: Begin");
+
+      PcsProbe pcs;
+      const icStatusCMM rv = pcs.Connect(pFrom, pTo);
+      pcs.printSteps("v2->v5 relative");
+      check(rv == icCmmStatOk, "v2->v5 fold: the connection survives as a real xform");
+      check(pcs.stepCount() == 1,
+            "v2->v5 fold: the Lab2->XYZ->Lab round trip folds to a single step");
+      check(pcs.stepType(0) == icPcsStepLab2ToLab,
+            "v2->v5 fold: what survives is the v2->v4 encoding scale");
+    }
+    delete pFrom;
+    delete pTo;
+  }
+
+  // Control: the same connection with white points that genuinely differ must
+  // keep both conversions, or the case above would pass on a fold that always
+  // fires.
+  {
+    CIccProfile *pIn = new CIccProfile();
+    CIccProfile *pOut = new CIccProfile();
+    buildV2CmykOutputProfile(*pIn);
+    buildV5CmykOutputProfile(*pOut);
+    pOut->m_Header.illuminant.X = icDtoF((icFloatNumber)0.9505);
+    pOut->m_Header.illuminant.Y = icDtoF((icFloatNumber)1.0000);
+    pOut->m_Header.illuminant.Z = icDtoF((icFloatNumber)1.0890);
+
+    CIccXform *pFrom = CIccXform::Create(pIn, true, icRelativeColorimetric, icInterpTetrahedral);
+    CIccXform *pTo = CIccXform::Create(pOut, false, icRelativeColorimetric, icInterpTetrahedral);
+    check(pFrom != NULL && pTo != NULL, "v2->v5 control: xforms created");
+    if (pFrom && pTo) {
+      check(pFrom->Begin() == icCmmStatOk && pTo->Begin() == icCmmStatOk,
+            "v2->v5 control: Begin");
+
+      PcsProbe pcs;
+      const icStatusCMM rv = pcs.Connect(pFrom, pTo);
+      pcs.printSteps("v2->D65 v5 relative");
+      check(rv == icCmmStatOk, "v2->v5 control: the connection survives");
+      check(pcs.stepCount() == 2,
+            "v2->v5 control: a real white point difference keeps both conversions");
+    }
+    delete pFrom;
+    delete pTo;
+  }
+}
+
+
 // An XYZ-PCS matrix/TRC profile: the only PCS shape where AdjustPCS() used to
 // clamp negatives. See spec R8 -- the CIccPcsStep chain is pure affine, so a
 // negative component that used to be clamped to zero now survives.
@@ -1911,6 +2511,18 @@ int main(int /*argc*/, char ** /*argv*/)
   spectralMissingWhitePointConvertsNothing();
   spectralDegenerateWhitePointIsRejected();
   spectralSampleCountMismatchIsRejected();
+
+  spectralTrailingEdgeConvertsThroughCmm();
+  spectralLeadingEdgeConvertsThroughCmm();
+  spectralEdgeS4Exclusions();
+  spectralEdgeMissingWhitePointConvertsNothing();
+  spectralEdgeDegenerateWhitePointIsRejected();
+
+  encodedD50DiffersFromTheLiteralWithinTheBand();
+  labStepsFoldAcrossAnEncodingDifferenceInTheWhite();
+  labStepsRefuseToFoldAGenuinelyDifferentWhite();
+  foldingAcrossTheBandIsNumericallyHarmless();
+  v2ToV5LabConnectionFoldsTheRedundantRoundTrip();
 
   xyzPcsChainStillAdjusts();
   setParamsRefreshesCacheAfterBegin();

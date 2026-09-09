@@ -33,6 +33,7 @@ Choose the smallest maintainer-owned surface that proves the behavior:
 | Add focused Linux regression | `.github/scripts/*.sh` | `.github/ci/regression/README.md` or `docs/ctest.md` |
 | Register CTest suite | `Build/Cmake/Testing/CMakeLists.txt` | `docs/ctest.md` |
 | Change workflow gate | `.github/workflows/*.yml` | `docs/regression-workflow-governance.md` |
+| Change Apple mobile core gate | `Build/Cmake/CMakePresets.json`, `Build/AppleMobile/**`, `.github/workflows/ci-apple-*.yml` | `docs/build.md` and `docs/regression-workflow-governance.md` |
 | Change maintainer Dockerfile | `Dockerfile*` | `docs/build.md` and `docs/regression-workflow-governance.md` |
 | Change sanitizer policy | `Build/Cmake/CMakeLists.txt`, `.github/scripts/sanitize-*` | `.github/instructions/*` |
 | Change CPack/release packaging | `Build/Cmake/**`, release workflows | `docs/build.md` or release docs |
@@ -80,18 +81,24 @@ when practical.
 - Follow `.github/instructions/workflow-governance.instructions.md`.
 - Treat `ci-pr-action` `full` as the explicit long-cycle maintainer gate. It runs
   Unix GCC/Clang Release and Debug builds, exact GCC 15.2 strict Release LTO in
-  the regression container, GCC 15.2 ASAN+UBSAN tool tests, Windows, and Docker.
+  the regression container, GCC 15.2 ASAN+UBSAN tool tests, and Windows.
   Its tool-test caller excludes the `pr-extended` CTest label to stay within
   the PR runtime budget; `ci-regression-checks` continues to run the labelled
   tests.
 - `ci_scope=auto` is the default. It selects the full matrix for source, build,
-  test, and container changes; workflow-only changes run the preflight and
-  workflow-security gates.
+  and test changes; documentation-only changes use the constrained fast-lane
+  settings, while workflow-only changes run the preflight and workflow-security
+  gates. Container-only changes use workflow-security gates and local container
+  validation.
 - Use `ci_scope=fast-lane` for the exact GCC 15.2 Release LTO and ASAN+UBSAN
   Release tool lanes. Fast lane defaults to the latest CTest with Windows
-  disabled; Docker runs when the PR changes the container surface.
-- Container changes require the Docker PR verification lane. Do not claim the
-  container surface is verified until its local image build and hosted lane pass.
+  disabled; it does not run a Docker verification job.
+- Container changes require the local canonical-image build and smoke in
+  `docs/regression-container.md`; the Docker PR verification job is disabled.
+- Apple mobile core changes must keep the dependency-free `apple-*-core`
+  presets available, align matching `apple-*-extended-core` presets with SDK
+  and dependency discovery, and keep simulator app capability/gap reporting in
+  `Build/AppleMobile` synchronized with `docs/build.md`.
 - Do not use `|| true` around profile generation, CTest discovery, regression
   execution, sanitizer checks, or packaging verification.
 - Use least-privilege permissions and credential cleanup.
@@ -143,6 +150,20 @@ For workflow YAML:
 python3 -c "import yaml; [yaml.safe_load(open(p)) for p in ['.github/workflows/<workflow>.yml']]; print('YAML parse OK')"
 actionlint -no-color .github/workflows/<workflow>.yml
 ```
+
+For Apple mobile core and simulator workflow changes on macOS:
+
+```bash
+cmake --list-presets=configure -S Build/Cmake | grep -E 'apple-.*(extended-core|core)'
+bash .github/scripts/iccdev-apple-simulator-smoke.sh ios
+bash .github/scripts/iccdev-apple-simulator-smoke.sh watchos
+bash .github/scripts/iccdev-xcode-ctest-smoke.sh
+```
+
+Set `ICCDEV_APPLE_CORE_FLAVOR=minimal` only when explicitly validating the
+dependency-free app path. The default simulator smoke should use the extended
+core and require the app's JSON report to include built-library checks, the
+public invalid-profile substitution control, and non-failing mobile gap notes.
 
 For CPack, install/export, vcpkg, or release packaging changes, run the nearest
 packaging smoke test and inspect logs for missing files, duplicate install

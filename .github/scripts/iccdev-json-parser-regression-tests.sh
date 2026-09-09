@@ -761,6 +761,83 @@ for idx in range(tag_count):
 raise SystemExit("namedColor2 tag not found")
 ' "$NAMED_PROFILE" "$NAMED_INVALID_ASCII"
 
+###############################################################################
+# responseCurveSet16Type measurement/channel counts (#2398)
+###############################################################################
+#
+# CIccTagJsonResponseCurveSet16::ParseJson read CountOfChannels, DeviceCode and
+# Reserved into an int and cast each to the icUInt16Number that actually stores it,
+# so a value above the field's ceiling was truncated and the parser wrote a profile
+# for a document it had not been given.  Measured against the unfixed parser:
+# "CountOfChannels": 65537 produced a file byte-identical to the count-of-1 control,
+# "DeviceCode": 65537 one byte-identical to DeviceCode 1, and -1 one byte-identical
+# to 65535 -- all three at exit 0.  This is the JSON half of #2398; the XML twin is
+# pinned in iccdev-xml-parser-regression-tests.sh.
+#
+# The fixture is written here in full rather than produced by iccToJson from an ICC
+# profile.  Generating it would make these cases depend on the resp tag's READ path,
+# and when that path was broken (#2399) they would have gone green by skipping rather
+# than red -- the failure mode this file's own reject helper exists to prevent.
+# Every document carries the four tags a v2 GRAY mntr profile must have, so the
+# CONTROL converts with exit 0.  They were omitted while iccFromJson returned
+# EXIT_SUCCESS for a profile it had just declared invalid; #2384 made that an
+# EXIT_FAILURE, so a control asserting exit 0 now means what it always claimed.
+# The outputResponseTag under test -- its CountOfChannels and DeviceCode -- is
+# unchanged, and the overflow cases are still refused by the parser before
+# validation is reached.  Mirrors the same change in the XML sibling suite.
+#
+# The tag TYPES are the v2 ones -- textDescriptionType and textType, not
+# multiLocalizedUnicodeType -- because these documents declare ProfileVersion
+# 2.10.  Validate() rejects the v4 spellings here as "Invalid tag type (Might
+# be critical!)", so the v4 forms would leave the control failing for a second,
+# unrelated reason.
+write_responsecurve_json() {
+  # write_responsecurve_json <path> <count> <device-code>
+  cat > "$1" <<JSONEOF
+{
+  "Header": {
+    "ProfileVersion": "2.10.0",
+    "ProfileDeviceClass": "mntr",
+    "DataColourSpace": "GRAY",
+    "PCS": "XYZ ",
+    "RenderingIntent": "Perceptual"
+  },
+  "Tags": [
+    {
+      "outputResponseTag": {
+        "data": {
+          "type": "responseCurveSet16Type",
+          "CountOfChannels": $2,
+          "ResponseCurves": [
+            {
+              "MeasurementUnit": "Status A",
+              "Channels": [
+                {
+                  "MaxColorantXYZ": [ 0.0, 0.0, 0.0 ],
+                  "Measurements": [ { "DeviceCode": $3, "MeasValue": 0.0 } ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    { "grayTRCTag": { "data": { "type": "curveType", "curveType": "gamma", "gamma": 2.19921880909169 } } },
+    { "profileDescriptionTag": { "data": { "type": "textDescriptionType",
+        "description": "responseCurveSet16 regression fixture" } } },
+    { "copyrightTag": { "data": { "type": "textType", "text": "ICC regression fixture" } } },
+    { "mediaWhitePointTag": { "data": { "type": "XYZArrayType",
+        "XYZ": [ [ 0.964202880859375, 1.0, 0.8249053955078125 ] ] } } }
+  ]
+}
+JSONEOF
+}
+
+write_responsecurve_json "$OUTDIR/responsecurve-control.json" 1 1
+write_responsecurve_json "$OUTDIR/responsecurve-count-overflow.json" 65537 1
+write_responsecurve_json "$OUTDIR/responsecurve-devicecode-overflow.json" 1 65537
+write_responsecurve_json "$OUTDIR/responsecurve-devicecode-negative.json" 1 -1
+
 echo "Using base profile: $PROFILE"
 echo "Using XML profile:  $XML_PROFILE"
 echo "Tools dir: $TOOLS_DIR"
@@ -778,6 +855,14 @@ run_reject_test "spectral-offset-short" "$OUTDIR/spectral-offset-short.json" "of
 run_reject_test "struct-bad-member" "$OUTDIR/struct-bad-member.json" "MemberTag 'badMember' missing 'type' field"
 run_fromjson_success_test "utf16-short-text" "$OUTDIR/utf16-short-text.json"
 run_reject_test "empty-tag-name" "$OUTDIR/empty-tag-name.json" "Tag entry has empty name"
+
+# The control runs first and must convert: without it, a change that refused every
+# responseCurveSet16Type document would satisfy all three reject cases below while
+# removing the guards they exist to pin.
+run_fromjson_success_test "responsecurve-control" "$OUTDIR/responsecurve-control.json"
+run_reject_test "responsecurve-count-overflow" "$OUTDIR/responsecurve-count-overflow.json" "Missing or invalid CountOfChannels in ResponseCurveSet16"
+run_reject_test "responsecurve-devicecode-overflow" "$OUTDIR/responsecurve-devicecode-overflow.json" "Invalid Measurement DeviceCode in ResponseCurveSet16"
+run_reject_test "responsecurve-devicecode-negative" "$OUTDIR/responsecurve-devicecode-negative.json" "Invalid Measurement DeviceCode in ResponseCurveSet16"
 run_reject_test "struct-empty-member-name" "$OUTDIR/struct-empty-member-name.json" "MemberTag entry has empty name"
 run_xml_reject_test "xml-matrix-huge-channels" "$XML_MATRIX_HUGE" "Invalid InputChannels or OutputChannels In MatrixElement"
 run_xml_reject_test "xml-empty-private-type" "$XML_EMPTY_PRIVATE_TYPE" "Invalid private tag type attribute"
@@ -884,7 +969,7 @@ PROFLIB="$(find_library_file "$BUILD_ROOT/IccProfLib" "IccProfLib2" 2>/dev/null 
 XMLLIB="$(find_library_file "$BUILD_ROOT/IccXML" "IccXML2" 2>/dev/null || true)"
 LINK_EXTRA=()
 if [ -n "$PROFLIB" ] && [[ "$PROFLIB" == *.a ]] &&
-    grep -q '^ICC_USE_ZLIB:BOOL=ON$' "$BUILD_ROOT/CMakeCache.txt" 2>/dev/null; then
+    grep -q '^ICC_USE_ZLIB:BOOL=ON$' "${ICCDEV_CMAKE_CACHE:-$BUILD_ROOT/CMakeCache.txt}" 2>/dev/null; then
   LINK_EXTRA+=(-lz)
 fi
 

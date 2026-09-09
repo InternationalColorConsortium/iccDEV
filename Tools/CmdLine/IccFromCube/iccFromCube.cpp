@@ -82,6 +82,7 @@
 #include "IccTagMPE.h"
 #include "IccMpeBasic.h"
 #include "IccProfLibVer.h"
+#include "IccFileUtil.h"
 #include "IccUtil.h"
 #include "IccCmdLineUtil.h"
 
@@ -227,7 +228,9 @@ public:
       else if (line.substr(0, 19) == "LUT_OUT_VIDEO_RANGE")
         m_bLutOutVideoRange = true;
       else {
-        printf("Unknown keyword '%s'\n", line.c_str());
+        // A line of the .cube FILE, not an argv operand -- the stronger vector of
+        // the two, because a downloaded LUT is not something the caller typed.
+        printf("Unknown keyword '%s'\n", icSanitizeConsoleText(line).c_str());
         return false;
       }
     }
@@ -325,7 +328,22 @@ public:
       }
     }
 
-    return true;
+    // This loop needs its own arm, and it is the one place the consume cap does
+    // not simply fall out of an existing failure path.  The other two callers
+    // already treat a given-up stream as failure -- parseHeader() through
+    // `return !isEOF()`, and the table loop above through `n != num` -- but here
+    // an empty line is LEGAL, so a discarded over-long line is indistinguishable
+    // from a blank one and the loop would exit and report success.  It did:
+    // a complete table followed by a 70000-character junk line printed the cap
+    // diagnostic and then "successfully created" at rc=0, writing a profile that
+    // master rejects with "Too many 3DLUT entries" -- an error message on a
+    // successful exit, and a validation LOST to a change meant to add one.
+    //
+    // Refuse instead of guessing.  Whether the discarded line was trailing
+    // garbage or a harmless comment is exactly what the cap threw away, so the
+    // only honest answer is that the file was not read, and main() says so with
+    // "Unable to parse LUT from", naming it.
+    return !m_bStreamUnusable;
   }
 
 protected:
@@ -392,6 +410,10 @@ protected:
   
   bool open()
   {
+    // Cleared here and nowhere else: this is the one point that means "start of
+    // stream" for both the first open and the fseek-to-0 re-open below.
+    m_bStreamUnusable = false;
+
     if (!m_f) {
       m_f = fopen(m_sFilename.c_str(), "rb");
     }
@@ -437,7 +459,28 @@ protected:
     return rv;
   }
 
-  bool isEOF() { return m_f ? feof(m_f)!=0 : true; }
+  // ferror() belongs in this test as much as feof().  A read that FAILS -- a directory
+  // (EISDIR), an I/O error mid-file -- makes fgetc() return EOF while leaving feof()
+  // FALSE and setting ferror() instead, so getNextLine() returned an empty string and
+  // the three `while (!isEOF())` loops below never advanced: iccFromCube spun forever
+  // on a directory argument, at exit code 124 under any timeout (#2414, CWE-835).
+  //
+  // This is the whole fix, deliberately.  Probing the path with icIsReadableFile()
+  // before opening it looks like the tidier guard and is a REGRESSION: the probe
+  // opens, reads and closes, so a second fopen() of a single-reader FIFO blocks on a
+  // writer that has already been consumed.  Measured -- `mkfifo p; cat x.cube > p &`
+  // then iccFromCube on p exits 254 here and hung at 124 with that guard in place.
+  // Validate the stream you are holding, not the path you are about to open again.
+  //
+  // m_bStreamUnusable is the second arm, and it comes from the sibling defect (#2442).
+  // The ferror() test above cannot reach an ENDLESSLY READABLE stream: getNextLine()'s
+  // own `while ((c = fgetc(m_f)) != EOF && c != '\n')` never consults isEOF(), so on a
+  // stream that always yields a byte and never a newline neither EOF nor ferror() ever
+  // arrives and the read loop spins inside a single getNextLine() call.  /dev/zero hung
+  // at 124 with a flat RSS -- CPU exhaustion, not an allocation blow-up (CWE-835).
+  // getNextLine() bounds what it CONSUMES and raises this flag, which routes that case
+  // into the same three `while (!isEOF())` loops the ferror() arm already terminates.
+  bool isEOF() { return m_bStreamUnusable || (m_f ? (feof(m_f)!=0 || ferror(m_f)!=0) : true); }
 
 // Longest line iccFromCube keeps the text of.  The .cube format sets no line
 // length limit, but reading a line unbounded would let one pathological line
@@ -446,10 +489,26 @@ protected:
 // above the longest row seen in practice.
 #define MAX_LINE_LEN 8192u
 
+// Longest line iccFromCube will CONSUME, as opposed to keep the text of (#2442).
+// The two caps are separate on purpose.  MAX_LINE_LEN bounds the string that comes
+// back, and characters past it are deliberately still READ so that the tail of an
+// over-long line is not returned as the next call's "line" (#1843) -- which means
+// MAX_LINE_LEN on its own places no bound at all on how long the loop below runs.
+//
+// The .cube format sets no line length limit, so this number is a contract, not an
+// implementation detail, and it is chosen to be unreachable by any real file rather
+// than to be tight: a table row is three floats and roughly thirty characters, and
+// the longest line in the tracked corpus is under 100.  Eight times the store cap
+// leaves that whole margin intact -- every line short of 64 KiB still behaves
+// exactly as it did, tail-dropped and then rejected by the parser -- while still
+// terminating a stream that never emits a newline at all.
+#define MAX_LINE_CONSUME_LEN (8u * MAX_LINE_LEN)
+
   std::string getNextLine()
   {
     std::string rv;
     int c;
+    icUInt32Number nConsumed = 0;
 
     // Consume to the end of the physical line, not merely to MAX_LINE_LEN.  The
     // previous loop stopped once it had taken MAX_LINE_LEN characters *without*
@@ -461,6 +520,29 @@ protected:
     // table row short of its three floats, so it is rejected explicitly by
     // parse3DTable() rather than silently misread as a different row.
     while ((c = fgetc(m_f)) != EOF && c != '\n') {
+      // Counted before the '\r' skip below, because what has to be bounded is the
+      // work this loop does, not the text it keeps -- a stream of bare carriage
+      // returns is exactly as endless as a stream of any other byte.
+      if (++nConsumed > MAX_LINE_CONSUME_LEN) {
+        // Fail the parse rather than resume mid-line.  Returning the truncated text
+        // here would hand a fragment to the caller to be parsed as a keyword or a
+        // table row in its own right, which is the #1843 defect the consume-to-EOL
+        // loop was written to fix; and resuming at the cut point would make the
+        // remainder the next call's line, which is the same thing one call later.
+        // Dropping the text and marking the stream unusable ends the parse instead:
+        // isEOF() now reports true, so parseHeader() returns false through
+        // `return !isEOF()` and parse3DTable()'s table loop stops short of its row
+        // count and reports an incomplete table.  Its TRAILING loop is the
+        // exception and checks m_bStreamUnusable directly -- an empty line is legal
+        // there, so "the stream gave up" and "a blank line" arrive looking alike;
+        // see the comment on that return.  All three routes end in main() printing
+        // "Unable to parse", naming the file.
+        printf("Line longer than %u characters\n", (unsigned int)MAX_LINE_CONSUME_LEN);
+        m_bStreamUnusable = true;
+        rv.clear();
+        return rv;
+      }
+
       if (c == '\r') //skip unsupported carriage returns
         continue;
 
@@ -472,6 +554,12 @@ protected:
   }
 
   FILE* m_f=nullptr;
+
+  // Sticky for the lifetime of the open stream, and cleared by open() rather than
+  // by the caller: parseHeader() and parse3DTable() read the same handle in turn,
+  // so a flag reset between them would let the second pass spin on the stream the
+  // first one just gave up on.
+  bool m_bStreamUnusable=false;
 
   int m_sizeLut3D = 0;
   icFloatNumber m_fMinInput[3] = { 0.0f, 0.0f, 0.0f };
@@ -493,15 +581,22 @@ int main(int argc, char* argv[])
     return argc <= 2 ? 0 : 1;
   }
 
+  // #2414: both operands are echoed by the failure paths below, so a path carrying
+  // terminal control sequences reached the console verbatim (#2406).  Sanitized once
+  // here rather than at each printf; CubeFile and SaveIccProfile still receive the
+  // real path.
+  std::string srcName = icSanitizeConsoleText(argv[1]);
+  std::string dstName = icSanitizeConsoleText(argv[2]);
+
   CubeFile cube(argv[1]);
 
   if (!cube.parseHeader()) {
-    printf("Unable to parse '%s'\n", argv[1]);
+    printf("Unable to parse '%s'\n", srcName.c_str());
     return -2;
   }
 
   if (!cube.sizeLut3D()) {
-    printf("3DLUT not found in '%s'\n", argv[1]);
+    printf("3DLUT not found in '%s'\n", srcName.c_str());
     return -3;
   }
 
@@ -562,7 +657,7 @@ int main(int argc, char* argv[])
   CIccCLUT* pCLUT = new CIccCLUT(3, 3);
   
   if (!pCLUT->Init(cube.sizeLut3D()) ) {
-    printf("Unable to create LUT from '%s'\n", argv[1]);
+    printf("Unable to create LUT from '%s'\n", srcName.c_str());
     delete pCLUT;
     delete pMpeCLUT;
     delete pTag;
@@ -571,7 +666,7 @@ int main(int argc, char* argv[])
 
   bool bSuccess = cube.parse3DTable(pCLUT->GetData(0), pCLUT->NumPoints()*3);
   if (!bSuccess) {
-    printf("Unable to parse LUT from '%s'\n", argv[1]);
+    printf("Unable to parse LUT from '%s'\n", srcName.c_str());
     delete pCLUT;
     delete pMpeCLUT;
     delete pTag;
@@ -631,10 +726,10 @@ int main(int argc, char* argv[])
   profile.AttachTag(icSigProfileSequenceDescTag, pSeqTag);
 
   if (SaveIccProfile(argv[2], &profile)) {
-    printf("'%s' successfully created\n", argv[2]);
+    printf("'%s' successfully created\n", dstName.c_str());
   }
   else {
-    printf("Unable to save profile '%s'\n", argv[2]);
+    printf("Unable to save profile '%s'\n", dstName.c_str());
     return 5;
   }
 

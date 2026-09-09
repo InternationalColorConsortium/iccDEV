@@ -248,6 +248,7 @@ for target in "${selected_targets[@]}"; do
     "-Wall" "-Wextra" "-Werror"
     "-fsanitize=fuzzer-no-link,address,undefined"
     "-I$repo_root/IccProfLib"
+    "-I$repo_root/Tools/CmdLine"
     "-I$local_viz_dir"
   )
 

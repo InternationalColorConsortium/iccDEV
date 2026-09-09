@@ -7,6 +7,7 @@
 ###############################################################################
 
 set -euo pipefail
+export LC_ALL=C
 
 if [ "$#" -ne 2 ]; then
     echo "usage: $0 BUILD_DIR OUTPUT_DIR" >&2
@@ -55,6 +56,7 @@ fi
 
 mkdir -p "$output_dir"
 samples_file="$output_dir/samples.tsv"
+derived_perf_file="$output_dir/perf-derived.tsv"
 environment_file="$output_dir/environment.txt"
 
 runner=()
@@ -90,12 +92,81 @@ ctest_command=(
 } > "$environment_file"
 
 perf_available=0
+perf_events=()
+perf_optional_events=()
+perf_event_file="$output_dir/perf-events.txt"
 if command -v perf >/dev/null 2>&1 && perf stat -e cycles true >/dev/null 2>&1; then
     perf_available=1
+    perf_events=(
+        cycles
+        instructions
+        branches
+        branch-misses
+        cache-references
+        cache-misses
+        context-switches
+        cpu-migrations
+    )
+    for event in \
+        mem_inst_retired.all_loads \
+        mem_inst_retired.all_stores \
+        fp_arith_inst_retired.scalar \
+        fp_arith_inst_retired.4_flops \
+        fp_arith_inst_retired.8_flops; do
+        if perf stat -e "$event" true >/dev/null 2>&1; then
+            perf_events+=("$event")
+            perf_optional_events+=("$event")
+        else
+            printf 'unavailable_event=%s\n' "$event" >> "$perf_event_file"
+        fi
+    done
+    perf_probe="$output_dir/perf-event-probe.csv"
+    if perf stat -x, -o "$perf_probe" \
+        -e "$(IFS=,; printf '%s' "${perf_events[*]}")" sleep 1; then
+        effective_events=()
+        for event in "${perf_events[@]}"; do
+            if awk -F, -v target="$event" '
+                function canonical_event(name) {
+                    sub(/:.*/, "", name)
+                    if (name ~ /^[^/]+\/[^/]+\/$/) {
+                        sub(/^[^/]+\//, "", name)
+                        sub(/\/$/, "", name)
+                    }
+                    return name
+                }
+                {
+                    name = canonical_event($3)
+                    if (name == target && $1 !~ /^</)
+                        found = 1
+                }
+                END { exit found ? 0 : 1 }
+            ' "$perf_probe"; then
+                effective_events+=("$event")
+            else
+                printf 'excluded_event=%s\n' "$event" >> "$perf_event_file"
+            fi
+        done
+        perf_events=("${effective_events[@]}")
+        if [ "${#perf_events[@]}" -eq 0 ]; then
+            perf_available=0
+            printf 'combined_probe=unavailable\n' >> "$perf_event_file"
+        fi
+    else
+        perf_available=0
+        printf 'combined_probe=unavailable\n' >> "$perf_event_file"
+        for event in "${perf_optional_events[@]}"; do
+            printf 'excluded_event=%s\n' "$event" >> "$perf_event_file"
+        done
+    fi
+fi
+if [ "$perf_available" -eq 1 ]; then
+    printf 'effective_event=%s\n' "${perf_events[@]}" >> "$perf_event_file"
 fi
 
 printf 'run\telapsed_s\tuser_s\tsystem_s\tmax_rss_kb\tstatus\tlog\tperf_stat\n' \
     > "$samples_file"
+printf 'run\tcycles\tinstructions\tbranches\tbranch_misses\tcache_references\tcache_misses\tmemory_load_instructions\tmemory_store_instructions\tfp_arith_scalar_events\tfp_arith_4_flop_events\tfp_arith_8_flop_events\tinstructions_per_cycle\tinstructions_per_second\tbranch_miss_rate\tcache_miss_rate\n' \
+    > "$derived_perf_file"
 for run in $(seq 1 "$runs"); do
     log_file="$output_dir/run-${run}.log"
     time_file="$output_dir/run-${run}.time"
@@ -105,8 +176,7 @@ for run in $(seq 1 "$runs"); do
 
     if [ "$perf_available" -eq 1 ]; then
         perf stat -x, -o "$perf_file" \
-            -e cycles,instructions,branches,branch-misses,cache-references,cache-misses,\
-context-switches,cpu-migrations \
+            -e "$(IFS=,; printf '%s' "${perf_events[*]}")" \
             env "ICC_PERF_STATS_FILE=$telemetry_file" \
             /usr/bin/time -f 'elapsed_s=%e\nuser_s=%U\nsystem_s=%S\nmax_rss_kb=%M' \
             -o "$time_file" "${runner[@]}" "${ctest_command[@]}" > "$log_file" 2>&1 || status=$?
@@ -132,6 +202,61 @@ context-switches,cpu-migrations \
         echo "[FAIL] telemetry was not produced in run $run: $telemetry_file" >&2
         exit 1
     fi
+
+    awk -F, -v run="$run" -v elapsed="${elapsed:-}" '
+        BEGIN {
+            CONVFMT = "%.17g"
+            OFMT = "%.17g"
+        }
+        function clean(value) {
+            gsub(/[[:space:]]/, "", value)
+            gsub(/,/, "", value)
+            return value
+        }
+        function canonical_event(name) {
+            sub(/:.*/, "", name)
+            if (name ~ /^[^/]+\/[^/]+\/$/) {
+                sub(/^[^/]+\//, "", name)
+                sub(/\/$/, "", name)
+            }
+            return name
+        }
+        function number(value) {
+            return value ~ /^[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?$/
+        }
+        function ratio(numerator, denominator) {
+            if (number(numerator) && number(denominator) && denominator > 0)
+                return numerator / denominator
+            return "n/a"
+        }
+        {
+            event = canonical_event(clean($3))
+            value = clean($1)
+            if (number(value))
+                event_values[event] += value
+        }
+        END {
+            values[1] = event_values["cycles"]
+            values[2] = event_values["instructions"]
+            values[3] = event_values["branches"]
+            values[4] = event_values["branch-misses"]
+            values[5] = event_values["cache-references"]
+            values[6] = event_values["cache-misses"]
+            values[7] = event_values["mem_inst_retired.all_loads"]
+            values[8] = event_values["mem_inst_retired.all_stores"]
+            values[9] = event_values["fp_arith_inst_retired.scalar"]
+            values[10] = event_values["fp_arith_inst_retired.4_flops"]
+            values[11] = event_values["fp_arith_inst_retired.8_flops"]
+            for (i = 1; i <= 11; i++)
+                if (!number(values[i]))
+                    values[i] = "n/a"
+            printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+                run, values[1], values[2], values[3], values[4], values[5],
+                values[6], values[7], values[8], values[9], values[10],
+                values[11], ratio(values[2], values[1]),
+                ratio(values[2], elapsed), ratio(values[4], values[3]),
+                ratio(values[6], values[5])
+        }' "$perf_file" >> "$derived_perf_file"
 done
 
 if command -v strace >/dev/null 2>&1; then
@@ -176,4 +301,5 @@ awk -F '\t' '
 
 printf 'perf_stat=%s\n' "$([ "$perf_available" -eq 1 ] && echo available || echo unavailable)" \
     >> "$output_dir/summary.txt"
+printf 'perf_derived=%s\n' "$derived_perf_file" >> "$output_dir/summary.txt"
 printf '[PASS] profile report: %s\n' "$output_dir"

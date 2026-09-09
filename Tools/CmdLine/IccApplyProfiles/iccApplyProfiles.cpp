@@ -72,9 +72,12 @@
 
 #include <cstdio>
 #include <cstdlib>  // EXIT_FAILURE, used by the argument-contract guards in main()
+#include <cerrno>
+#include <cstring>  // strcmp, used by the -h/--help contract guard in main()
 #include <memory>
 #include <string>
 #include "IccCmm.h"
+#include "IccCmmThread.h"
 #include "IccUtil.h"
 #include "IccDefs.h"
 #include "IccConnect.h"
@@ -141,6 +144,15 @@ static bool AddPixelBufSlack(size_t& nBytes)
   return true;
 }
 
+static bool MultiplySize(size_t nValue, size_t nCount, size_t& nResult)
+{
+  if (nCount && nValue > (size_t)-1 / nCount)
+    return false;
+
+  nResult = nValue * nCount;
+  return true;
+}
+
 static icFloatNumber UnitClip(icFloatNumber v)
 {
   if (std::isnan(v))
@@ -170,78 +182,103 @@ static icUInt16Number UnitClipToUInt16(icFloatNumber v)
 
 
 
-void Usage() 
+void Usage(FILE* stream) 
 {
-  printf("iccApplyProfiles built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
+  fprintf(stream, "iccApplyProfiles built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
 
-  printf("Usage: iccApplyProfiles {-threads N} -cfg config_file\n\n");
-  printf("  Optional: -threads [N] (use N worker threads; 0=hardware concurrency, 1=single-threaded)\n");
-  printf("  Optional: -cfg config_file (use JSON formatted configuration file to define apply options)\n\n");
+  fprintf(stream, "Usage: iccApplyProfiles {-threads N} -cfg config_file\n\n");
+  fprintf(stream, "  Optional: -threads [N] (use 0..%d worker threads; 0=hardware concurrency, 1=single-threaded)\n",
+         CIccThreadedCmm::GetMaxThreads());
+  fprintf(stream, "  Optional: -cfg config_file (use JSON formatted configuration file to define apply options)\n\n");
 
-  printf("Alt-Usage: iccApplyProfiles {-threads N} {-exportcfg config_file} src_tiff_file dst_tiff_file dst_sample_encoding dst_compression dst_planar dst_embed_icc interpolation {{-ENV:sig value} {-HDR headroom} {-HDRMAP policy} profile_file_path rendering_intent {-PCC connection_conditions_path}}\n\n");
-  printf("  Optional: -threads [N] (use N worker threads; 0=hardware concurrency, 1=single-threaded)\n");
-  printf("  Optional: -exportcfg config_file (create config_file based on rest of arguments)\n\n");
-  printf("  For dst_sample_encoding:\n");
-  printf("    0 - Same as src\n");
-  printf("    1 - icEncode8Bit\n");
-  printf("    2 - icEncode16Bit\n");
-  printf("    3 - icEncodeFloat\n\n");
+  fprintf(stream, "Alt-Usage: iccApplyProfiles {-threads N} {-exportcfg config_file} src_tiff_file dst_tiff_file dst_sample_encoding dst_compression dst_planar dst_embed_icc interpolation {{-ENV:sig value} {-HDR headroom} {-HDRMAP policy} profile_file_path rendering_intent {-PCC connection_conditions_path}}\n\n");
+  fprintf(stream, "  Optional: -threads [N] (use 0..%d worker threads; 0=hardware concurrency, 1=single-threaded)\n",
+         CIccThreadedCmm::GetMaxThreads());
+  fprintf(stream, "  Optional: -exportcfg config_file (create config_file based on rest of arguments)\n\n");
+  fprintf(stream, "  For dst_sample_encoding:\n");
+  fprintf(stream, "    0 - Same as src\n");
+  fprintf(stream, "    1 - icEncode8Bit\n");
+  fprintf(stream, "    2 - icEncode16Bit\n");
+  fprintf(stream, "    3 - icEncodeFloat\n\n");
 
-  printf("  For dst_compression:\n");
-  printf("    0 - No compression\n");
-  printf("    1 - LZW compression\n\n");
+  fprintf(stream, "  For dst_compression:\n");
+  fprintf(stream, "    0 - No compression\n");
+  fprintf(stream, "    1 - LZW compression\n\n");
 
-  printf("  For dst_planar:\n");
-  printf("    0 - Contig\n");
-  printf("    1 - Separation\n\n");
+  fprintf(stream, "  For dst_planar:\n");
+  fprintf(stream, "    0 - Contig\n");
+  fprintf(stream, "    1 - Separation\n\n");
 
-  printf("  For dst_embed_icc:\n");
-  printf("    0 - Do not Embed\n");
-  printf("    1 - Embed Last ICC\n\n");
+  fprintf(stream, "  For dst_embed_icc:\n");
+  fprintf(stream, "    0 - Do not Embed\n");
+  fprintf(stream, "    1 - Embed Last ICC\n\n");
 
   // ICC.1 clause 8.10.  Documented as a pair because -HDRMAP alone does
   // nothing: the target headroom is what engages the HDR path at all.
-  printf("  For -HDR headroom (ICC.1 clause 8.10 HDR Profiles):\n");
-  printf("    The target headroom as a ratio of peak luminance to HDR reference white:\n");
-  printf("    1.0 = SDR, 2.0 = one stop, 4.0 = two stops. Applies to the profile that\n");
-  printf("    follows it. Without -HDR an HDR Profile is processed exactly as it is by a\n");
-  printf("    CMM that does not implement clause 8.10, because the target headroom is not\n");
-  printf("    carried in the profile and cannot be inferred from it.\n\n");
+  fprintf(stream, "  For -HDR headroom (ICC.1 clause 8.10 HDR Profiles):\n");
+  fprintf(stream, "    The target headroom as a ratio of peak luminance to HDR reference white:\n");
+  fprintf(stream, "    1.0 = SDR, 2.0 = one stop, 4.0 = two stops. Applies to the profile that\n");
+  fprintf(stream, "    follows it. Without -HDR an HDR Profile is processed exactly as it is by a\n");
+  fprintf(stream, "    CMM that does not implement clause 8.10, because the target headroom is not\n");
+  fprintf(stream, "    carried in the profile and cannot be inferred from it.\n\n");
 
-  printf("  For -HDRMAP policy (only meaningful alongside -HDR):\n");
-  printf("    auto - the recommended descriptor ranking of clause 8.10.3 (default)\n");
-  printf("    hagc - always use the headroomAdaptiveGainCurveTag when present\n");
-  printf("    lut  - prefer the profile's baked AToB0/BToA0 pair\n");
-  printf("    off  - do not engage the HDR path\n\n");
+  fprintf(stream, "  For -HDRMAP policy (only meaningful alongside -HDR):\n");
+  fprintf(stream, "    auto - the recommended descriptor ranking of clause 8.10.3 (default)\n");
+  fprintf(stream, "    hagc - always use the headroomAdaptiveGainCurveTag when present\n");
+  fprintf(stream, "    lut  - prefer the profile's baked AToB0/BToA0 pair\n");
+  fprintf(stream, "    off  - do not engage the HDR path\n\n");
 
-  printf("  For interpolation:\n");
-  printf("    0 - Linear\n");
-  printf("    1 - Tetrahedral\n\n");
+  fprintf(stream, "  For interpolation:\n");
+  fprintf(stream, "    0 - Linear\n");
+  fprintf(stream, "    1 - Tetrahedral\n\n");
 
-  printf("  For rendering_intent:\n");
-  printf("    0 - Perceptual\n");
-  printf("    1 - Relative\n");
-  printf("    2 - Saturation\n");
-  printf("    3 - Absolute\n");
-  printf("    10 - Perceptual without D2Bx/B2Dx\n");
-  printf("    11 - Relative without D2Bx/B2Dx\n");
-  printf("    12 - Saturation without D2Bx/B2Dx\n");
-  printf("    13 - Absolute without D2Bx/B2Dx\n");
-  printf("    20 - Preview Perceptual\n");
-  printf("    21 - Preview Relative\n");
-  printf("    22 - Preview Saturation\n");
-  printf("    23 - Preview Absolute\n");
-  printf("    30 - Gamut\n");
-  printf("    33 - Gamut Absolute\n");
-  printf("    40 - Perceptual with BPC\n");
-  printf("    41 - Relative Colorimetric with BPC\n");
-  printf("    42 - Saturation with BPC\n");
-  printf("    50 - BDRF Parameters\n");
-  printf("    60 - BDRF Direct\n");
-  printf("    70 - BDRF MCS Parameters\n");
-  printf("    80 - MCS connection\n");
-  printf("  +1000 - Use Luminance based PCS adjustment\n");
-  printf(" +10000 - Use V5 sub-profile if present\n");
+  fprintf(stream, "  For rendering_intent:\n");
+  fprintf(stream, "    0 - Perceptual\n");
+  fprintf(stream, "    1 - Relative\n");
+  fprintf(stream, "    2 - Saturation\n");
+  fprintf(stream, "    3 - Absolute\n");
+  fprintf(stream, "    10 - Perceptual without D2Bx/B2Dx\n");
+  fprintf(stream, "    11 - Relative without D2Bx/B2Dx\n");
+  fprintf(stream, "    12 - Saturation without D2Bx/B2Dx\n");
+  fprintf(stream, "    13 - Absolute without D2Bx/B2Dx\n");
+  fprintf(stream, "    20 - Preview Perceptual\n");
+  fprintf(stream, "    21 - Preview Relative\n");
+  fprintf(stream, "    22 - Preview Saturation\n");
+  fprintf(stream, "    23 - Preview Absolute\n");
+  fprintf(stream, "    30 - Gamut\n");
+  fprintf(stream, "    33 - Gamut Absolute\n");
+  fprintf(stream, "    40 - Perceptual with BPC\n");
+  fprintf(stream, "    41 - Relative Colorimetric with BPC\n");
+  fprintf(stream, "    42 - Saturation with BPC\n");
+  // #2262: the acronym was transposed, B-D-R-F -- ICC.2-2023 9.2.14-17 and
+  // 9.2.26-29 spell the tags brdfAToB0Tag..brdfDToB3Tag, and the library's own
+  // identifiers already agree (icXformLutBRDFParam, icSigBRDFDToB0Tag,
+  // CIccStructBRDF).  The same three lines carry the typo in iccApplyNamedCmm
+  // and iccApplyToLink and are corrected there too.
+  //
+  // The four codes also take a rendering intent in their units digit, which
+  // printing them as flat values said they did not: CIccXform::Create() indexes
+  // a four-entry tag array with nTagIntent in each of the
+  // icXformLutBRDFParam..icXformLutMCS cases, and the decode that feeds it
+  // falls through its type switch for 5..8, so "nIntent % 10" reaches the
+  // intent unchanged.  80 is qualified because it is the one code where that is
+  // only half true: icXformLutMCS offsets by nTagIntent on its MVIS/Output
+  // branch (MToS0..3, MToB0..3) but reads a single AToM0Tag for
+  // MultiplexIdentification/Input and a single MToA0Tag for MultiplexLink, so
+  // 80..83 are indistinguishable in the to-MCS direction.
+  //
+  // Written in the "NN + Intent" form iccApplyNamedCmm uses for its 10/20/40
+  // rows rather than enumerated in this screen's own style:
+  // spelling out 50..53, 60..63, 70..73 and 80..83 would add twelve lines to
+  // say the same thing, and this way the three tools' BRDF and MCS rows agree
+  // line for line -- nothing had ever compared them, which is how the same
+  // three transforms came to be named two different ways.
+  fprintf(stream, "    50 + Intent - BRDF Parameters\n");
+  fprintf(stream, "    60 + Intent - BRDF Direct\n");
+  fprintf(stream, "    70 + Intent - BRDF MCS Parameters\n");
+  fprintf(stream, "    80 + Intent - MCS connection (Intent applies to MToS/MToB only)\n");
+  fprintf(stream, "  +1000 - Use Luminance based PCS adjustment\n");
+  fprintf(stream, " +10000 - Use V5 sub-profile if present\n");
 }
 
 //===================================================
@@ -249,9 +286,26 @@ void Usage()
 int main(int argc, const char** argv)
 {
   int minargs = 2;
-  if (argc < minargs) {
-    Usage();
+
+  // An explicit help request is the one invocation here that is not an error, so
+  // it prints on stdout and exits 0; every malformed form below prints on stderr
+  // and fails.  Once both paths print the same screen the stream is the only
+  // thing that separates them -- status alone cannot (#1514).
+  if (argc == 2 && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help"))) {
+    Usage(stdout);
     return 0;
+  }
+
+  if (argc < minargs) {
+    // #2405: this printed the usage screen on stdout and returned success, so a
+    // caller could not tell a real apply from a tool that had done nothing at
+    // all.  Name which way the invocation is malformed before the syntax block --
+    // a bare Usage() dump left the caller to diff their command against it --
+    // and fail like the two other Usage() error exits below, which return -1.
+    fprintf(stderr, "Missing arguments: expected at least %d, received %d.\n",
+            minargs - 1, argc > 0 ? argc - 1 : 0);
+    Usage(stderr);
+    return -1;
   }
 
   CIccCfgImageApply cfgApply;
@@ -260,13 +314,23 @@ int main(int argc, const char** argv)
   bool bThreadArg = false;
   int nThreadArg = cfgConnect.m_nThreads;
 
-  if (argc > 3 && !stricmp(argv[1], "-threads")) {
-    nThreadArg = atoi(argv[2]);
-    if (nThreadArg < 0 || nThreadArg > 1024) {      // arbitrary upper limit
-      printf("Invalid thread count '%s'\n", argv[2]);
-      Usage();
-      return -1;
+  if (!stricmp(argv[1], "-threads")) {
+    if (argc < 3) {
+      // #2405: stderr, matching the byte-identical guard in iccApplySearch.
+      fprintf(stderr, "Missing thread count for -threads\n");
+      return EXIT_FAILURE;
     }
+
+    char *end = nullptr;
+    errno = 0;
+    long parsed = strtol(argv[2], &end, 10);
+    if (errno || end == argv[2] || *end || parsed < 0 ||
+        parsed > CIccThreadedCmm::GetMaxThreads()) {
+      printf("Invalid thread count '%s': expected 0..%d\n", icSanitizeConsoleText(argv[2]).c_str(),
+             CIccThreadedCmm::GetMaxThreads());
+      return EXIT_FAILURE;
+    }
+    nThreadArg = (int)parsed;
     bThreadArg = true;
     argv += 2;
     argc -= 2;
@@ -289,23 +353,23 @@ int main(int argc, const char** argv)
 
     json cfg;
     if (!loadJsonFrom(cfg, argv[2]) || !cfg.is_object()) {
-      printf("Unable to read configuration from '%s'\n", argv[2]);
+      printf("Unable to read configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
       return -1;
     }
 
     if (cfg.find("imageFiles") == cfg.end() || !cfgApply.fromJson(cfg["imageFiles"])) {
-      printf("Unable to parse imageFiles configuration from '%s'\n", argv[2]);
+      printf("Unable to parse imageFiles configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
       return -1;
     }
 
     if (cfg.find("profileSequence") == cfg.end() || !cfgProfiles.fromJson(cfg["profileSequence"])) {
-      printf("Unable to parse profileSequence configuration from '%s'\n", argv[2]);
+      printf("Unable to parse profileSequence configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
       return -1;
     }
 
     auto connectOptions = cfg.find("connect");
     if (connectOptions != cfg.end() && !cfgConnect.fromJson(*connectOptions)) {
-      printf("Unable to parse connect configuration from '%s'\n", argv[2]);
+      printf("Unable to parse connect configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
       return -1;
     }
   }
@@ -323,8 +387,8 @@ int main(int argc, const char** argv)
 
     int nArg = cfgApply.fromArgs(&argv[0], argc);
     if (!nArg) {
-      printf("Unable to parse configuration arguments\n");
-      Usage();
+      fprintf(stderr, "Unable to parse configuration arguments\n");
+      Usage(stderr);
       return -1;
     }
     argv += nArg;
@@ -332,8 +396,8 @@ int main(int argc, const char** argv)
 
     nArg = cfgProfiles.fromArgs(&argv[0], argc);
     if (!nArg) {
-      printf("Unable to parse profile sequence arguments\n");
-      Usage();
+      fprintf(stderr, "Unable to parse profile sequence arguments\n");
+      Usage(stderr);
       return -1;
     }
     // CIccCfgProfileSequence::fromArgs() consumes the profile group in pairs and
@@ -379,17 +443,17 @@ int main(int argc, const char** argv)
 
         std::string jsonText = cfgJson.dump(1);
         if (fwrite(jsonText.c_str(), 1, jsonText.size(), f) != jsonText.size()) {
-          printf("Unable to write complete config file '%s'\n", exportFile.c_str());
+          printf("Unable to write complete config file '%s'\n", icSanitizeConsoleText(exportFile.c_str()).c_str());
           fclose(f);
           return -1;
         }
         if (!icFlushAndClose(f)) {
-          printf("Unable to close config file '%s'\n", exportFile.c_str());
+          printf("Unable to close config file '%s'\n", icSanitizeConsoleText(exportFile.c_str()).c_str());
           return -1;
         }
       }
       else {
-        printf("Unable to export config file '%s'\n", exportFile.c_str());
+        printf("Unable to export config file '%s'\n", icSanitizeConsoleText(exportFile.c_str()).c_str());
         return -1;
       }
     }
@@ -406,7 +470,7 @@ int main(int argc, const char** argv)
 
   //Open source image file and get information from it
   if (!SrcImg.Open(cfgApply.m_srcImgFile.c_str())) {
-    printf("\nFile [%s] cannot be opened.\n", cfgApply.m_srcImgFile.c_str());
+    printf("\nFile [%s] cannot be opened.\n", icSanitizeConsoleText(cfgApply.m_srcImgFile.c_str()).c_str());
     return -1;
   }
   sn = SrcImg.GetSamples();
@@ -452,8 +516,22 @@ int main(int argc, const char** argv)
   bool bHasSrcProfile = SrcImg.GetIccProfile(pSrcProfile, nSrcProfileLen);
 
   //Retrieve command line arguments
-  bool bCompress = cfgApply.m_dstCompression == icDstBoolFromSrc ? SrcImg.GetCompress() : (cfgApply.m_dstCompression != icDstBoolFalse);
-  bool bSeparation = cfgApply.m_dstPlanar == icDstBoolFromSrc ? SrcImg.GetPlanar() : (cfgApply.m_dstPlanar != icDstBoolFalse);
+  // "sameAsSource" has to compare the source's tag against the value that means
+  // "off", not convert that tag to bool.  COMPRESSION_NONE is 1 and
+  // PLANARCONFIG_CONTIG is 1, so GetCompress() and GetPlanar() are nonzero for
+  // every TIFF libtiff can open and both tests were constant true: a config
+  // asking to copy the source wrote LZW over an uncompressed image and separated
+  // planes over a contiguous one.  The request was not merely ignored, it was
+  // inverted, and the source's own value was never read.
+  //
+  // Create() maps these two booleans back onto LZW/NONE and SEPARATE/CONTIG
+  // (TiffImg.cpp:443-444), so "compressed" is the most the destination can say:
+  // a JPEG or Deflate source copies as compressed and is written as LZW.  That
+  // is the existing bool contract, not a new narrowing.
+  //
+  // bEmbed below is unaffected -- bHasSrcProfile is already a bool.
+  bool bCompress = cfgApply.m_dstCompression == icDstBoolFromSrc ? SrcImg.GetCompress() != COMPRESSION_NONE : (cfgApply.m_dstCompression != icDstBoolFalse);
+  bool bSeparation = cfgApply.m_dstPlanar == icDstBoolFromSrc ? SrcImg.GetPlanar() == PLANARCONFIG_SEPARATE : (cfgApply.m_dstPlanar != icDstBoolFalse);
   bool bEmbed = cfgApply.m_dstEmbedIcc == icDstBoolFromSrc ? bHasSrcProfile : (cfgApply.m_dstEmbedIcc != icDstBoolFalse);
 
 
@@ -476,7 +554,7 @@ int main(int argc, const char** argv)
 
   if (!pConnect) {
     if (!sConnectError.empty())
-      printf("Error - %s\n", sConnectError.c_str());
+      printf("Error - %s\n", icSanitizeConsoleText(sConnectError.c_str()).c_str());
     else
       printf("Error - Unable to begin profile application - Possibly invalid or incompatible profiles\n");
     return -1;
@@ -498,14 +576,14 @@ int main(int argc, const char** argv)
     //Allow color management to ignore extra samples when non extra samples match samples in profile
     if (sen != 0) {
       if (nSrcSamples != (int)(sn - sen)) {
-        printf("Number of non-extra samples %u in image[%s] doesn't match device samples %d in first profile\n", sn - sen, cfgApply.m_srcImgFile.c_str(), nSrcSamples);
+        printf("Number of non-extra samples %u in image[%s] doesn't match device samples %d in first profile\n", sn - sen, icSanitizeConsoleText(cfgApply.m_srcImgFile.c_str()).c_str(), nSrcSamples);
         return -1;
       }
       else
         nSrcSamples = sn;
     }
     else {
-      printf("Number of samples %u in image[%s] doesn't match device samples %d in first profile\n", sn, cfgApply.m_srcImgFile.c_str(), nSrcSamples);
+      printf("Number of samples %u in image[%s] doesn't match device samples %d in first profile\n", sn, icSanitizeConsoleText(cfgApply.m_srcImgFile.c_str()).c_str(), nSrcSamples);
       return -1;
     }
   }
@@ -561,7 +639,7 @@ int main(int argc, const char** argv)
   // and the physical size shifted by 2.54x.  Same defect as iccSpecSepToTiff, because
   // both tools reach it through the same shared CTiffImg::Create() (#2220).
   if (!DstImg.Create(cfgApply.m_dstImgFile.c_str(), SrcImg.GetWidth(), SrcImg.GetHeight(), dbps, photo, nDestSamples, nExtraSamples, SrcImg.GetXRes(), SrcImg.GetYRes(), bCompress, bSeparation, SrcImg.GetResolutionUnit())) {
-    printf("Unable to create Tiff file - '%s'\n", cfgApply.m_dstImgFile.c_str());
+    printf("Unable to create Tiff file - '%s'\n", icSanitizeConsoleText(cfgApply.m_dstImgFile.c_str()).c_str());
     return -1;
   }
 
@@ -600,12 +678,40 @@ int main(int argc, const char** argv)
 
   icFloatNumber *pSrcRowBuf = nullptr;
   icFloatNumber *pDstRowBuf = nullptr;
+  unsigned int nRowsPerApply = 1;
   if (bUseRowApply) {
+    size_t nSrcFloatRowBytes = 0;
+    size_t nDstFloatRowBytes = 0;
+
+    if (!GetFloatRowByteCount(SrcImg.GetWidth(), nSrcColorSamples, nSrcFloatRowBytes) ||
+        !GetFloatRowByteCount(SrcImg.GetWidth(), nDestSamples, nDstFloatRowBytes) ||
+        nSrcFloatRowBytes > (size_t)-1 - nDstFloatRowBytes) {
+      printf("Invalid row buffer size!\n");
+      free(pSBuf);
+      free(pDBuf);
+      return -1;
+    }
+
+    // Keep the combined float working set near 4 MiB and cap the batch at 64
+    // rows.  This gives narrow images enough pixels to engage the worker pool
+    // without allowing tall, high-channel images to request unbounded memory.
+    const size_t nTargetBatchBytes = 4u * 1024u * 1024u;
+    const size_t nCombinedRowBytes = nSrcFloatRowBytes + nDstFloatRowBytes;
+    size_t nBatchRows = nCombinedRowBytes ? nTargetBatchBytes / nCombinedRowBytes : 1;
+    if (nBatchRows < 1)
+      nBatchRows = 1;
+    if (nBatchRows > 64)
+      nBatchRows = 64;
+    if (SrcImg.GetWidth() && nBatchRows > UINT32_MAX / SrcImg.GetWidth())
+      nBatchRows = UINT32_MAX / SrcImg.GetWidth();
+    if (!nBatchRows)
+      nBatchRows = 1;
+    nRowsPerApply = (unsigned int)nBatchRows;
+
     size_t nSrcRowBytes = 0;
     size_t nDstRowBytes = 0;
-
-    if (!GetFloatRowByteCount(SrcImg.GetWidth(), nSrcColorSamples, nSrcRowBytes) ||
-        !GetFloatRowByteCount(SrcImg.GetWidth(), nDestSamples, nDstRowBytes) ||
+    if (!MultiplySize(nSrcFloatRowBytes, nRowsPerApply, nSrcRowBytes) ||
+        !MultiplySize(nDstFloatRowBytes, nRowsPerApply, nDstRowBytes) ||
         !AddPixelBufSlack(nSrcRowBytes) ||
         !AddPixelBufSlack(nDstRowBytes)) {
       printf("Invalid row buffer size!\n");
@@ -703,38 +809,90 @@ int main(int argc, const char** argv)
     return true;
   };
 
-  //Read each line
+  //Read and apply each line, batching adjacent rows for threaded CMMs.
   bool bApplySuccess = true;
-  for (i=0; i<(int)SrcImg.GetHeight(); i++) {
-    if (!SrcImg.ReadLine(pSBuf)) {
-      printf("Error reading line %d from Tiff file - '%s'\n", i, cfgApply.m_srcImgFile.c_str());
-      bApplySuccess = false;
-      break;
-    }
+  for (i=0; i<(int)SrcImg.GetHeight();) {
     if (bUseRowApply) {
-      for (sptr=pSBuf, j=0; j<(int)SrcImg.GetWidth(); j++, sptr+=sbpp) {
-        if (!decodePixel(pSrcRowBuf + j * nSrcColorSamples, sptr)) {
-          free(pSBuf);
-          free(pDBuf);
-          free(pSrcRowBuf);
-          free(pDstRowBuf);
-          return -1;
+      unsigned int nBatchRows = nRowsPerApply;
+      const unsigned int nRemainingRows = SrcImg.GetHeight() - (unsigned int)i;
+      if (nBatchRows > nRemainingRows)
+        nBatchRows = nRemainingRows;
+
+      for (unsigned int nRow = 0; nRow < nBatchRows; nRow++) {
+        if (!SrcImg.ReadLine(pSBuf)) {
+          printf("Error reading line %u from Tiff file - '%s'\n",
+                 (unsigned int)i + nRow, icSanitizeConsoleText(cfgApply.m_srcImgFile.c_str()).c_str());
+          bApplySuccess = false;
+          break;
+        }
+
+        icFloatNumber *pSrcFloatRow =
+          pSrcRowBuf + (size_t)nRow * SrcImg.GetWidth() * nSrcColorSamples;
+        for (sptr=pSBuf, j=0; j<(int)SrcImg.GetWidth(); j++, sptr+=sbpp) {
+          if (!decodePixel(pSrcFloatRow + j * nSrcColorSamples, sptr)) {
+            free(pSBuf);
+            free(pDBuf);
+            free(pSrcRowBuf);
+            free(pDstRowBuf);
+            return -1;
+          }
         }
       }
+      if (!bApplySuccess)
+        break;
 
-      pTheCmm->Apply(pDstRowBuf, pSrcRowBuf, SrcImg.GetWidth());
+      const icUInt32Number nBatchPixels =
+        (icUInt32Number)(SrcImg.GetWidth() * nBatchRows);
+      icStatusCMM applyStatus =
+        pTheCmm->Apply(pDstRowBuf, pSrcRowBuf, nBatchPixels);
+      if (applyStatus != icCmmStatOk) {
+        printf("Profile application failed for lines %d-%u (status %d).\n", i,
+               (unsigned int)i + nBatchRows - 1, (int)applyStatus);
+        bApplySuccess = false;
+        break;
+      }
 
-      for (dptr=pDBuf, j=0; j<(int)SrcImg.GetWidth(); j++, dptr+=dbpp) {
-        if (!encodePixel(dptr, pDstRowBuf + j * nDestSamples)) {
-          free(pSBuf);
-          free(pDBuf);
-          free(pSrcRowBuf);
-          free(pDstRowBuf);
-          return -1;
+      for (unsigned int nRow = 0; nRow < nBatchRows; nRow++) {
+        icFloatNumber *pDstFloatRow =
+          pDstRowBuf + (size_t)nRow * SrcImg.GetWidth() * nDestSamples;
+        for (dptr=pDBuf, j=0; j<(int)SrcImg.GetWidth(); j++, dptr+=dbpp) {
+          if (!encodePixel(dptr, pDstFloatRow + j * nDestSamples)) {
+            free(pSBuf);
+            free(pDBuf);
+            free(pSrcRowBuf);
+            free(pDstRowBuf);
+            return -1;
+          }
+        }
+
+        if (!DstImg.WriteLine(pDBuf)) {
+          printf("Error writing line %u to Tiff file - '%s'\n",
+                 (unsigned int)i + nRow, icSanitizeConsoleText(cfgApply.m_dstImgFile.c_str()).c_str());
+          bApplySuccess = false;
+          break;
+        }
+
+        curper = static_cast<int>((static_cast<float>(i + nRow + 1) * 100.0f) /
+                                  static_cast<float>(SrcImg.GetHeight()));
+        if (curper != lastPer) {
+          printf("\r%d%%", curper);
+          lastPer = curper;
         }
       }
+      if (!bApplySuccess)
+        break;
+
+      i += nBatchRows;
+      continue;
     }
     else {
+      if (!SrcImg.ReadLine(pSBuf)) {
+        printf("Error reading line %d from Tiff file - '%s'\n", i,
+               icSanitizeConsoleText(cfgApply.m_srcImgFile.c_str()).c_str());
+        bApplySuccess = false;
+        break;
+      }
+
       for (sptr=pSBuf, dptr=pDBuf, j=0; j<(int)SrcImg.GetWidth(); j++, sptr+=sbpp, dptr+=dbpp) {
         if (!decodePixel(SrcPixel, sptr)) {
           free(pSBuf);
@@ -745,7 +903,13 @@ int main(int argc, const char** argv)
         }
 
         //Use CMM to convert SrcPixel to DestPixel
-        pTheCmm->Apply(DestPixel, SrcPixel);
+        icStatusCMM applyStatus = pTheCmm->Apply(DestPixel, SrcPixel);
+        if (applyStatus != icCmmStatOk) {
+          printf("Profile application failed at pixel %d on line %d (status %d).\n",
+                 j, i, (int)applyStatus);
+          bApplySuccess = false;
+          break;
+        }
 
         if (!encodePixel(dptr, DestPixel)) {
           free(pSBuf);
@@ -757,9 +921,12 @@ int main(int argc, const char** argv)
       }
     }
 
+    if (!bApplySuccess)
+      break;
+
     //Output the converted pixels to the destination image
     if (!DstImg.WriteLine(pDBuf)) {
-      printf("Error writing line %d to Tiff file - '%s'\n", i, cfgApply.m_dstImgFile.c_str());
+      printf("Error writing line %d to Tiff file - '%s'\n", i, icSanitizeConsoleText(cfgApply.m_dstImgFile.c_str()).c_str());
       bApplySuccess = false;
       break;
     }
@@ -771,6 +938,7 @@ int main(int argc, const char** argv)
       printf("\r%d%%", curper);
       lastPer = curper;
     }
+    i++;
   }
   printf("\n");
 

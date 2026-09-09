@@ -24,6 +24,7 @@ new blocker returns the branch to branch-only grooming before another review.
 | Regression PoC inventory | `.github/ci/regression/README.md` | Maps regression inputs and scripts to issues. |
 | Tool test gate | `.github/workflows/ci-iccdev-tool-tests.yml` | ASAN/UBSAN tool coverage, JSON gates, regression scripts, and broad generated-profile CLI coverage. |
 | MATLAB Windows gate | `.github/workflows/ci-matlab.yml` | PowerShell-native MSVC build, MATLAB MEX QA, native focused regressions, and Docker interoperability. |
+| Apple platform gates | `.github/workflows/ci-apple-platform-smoke.yml`, `.github/workflows/ci-apple-mobile-core.yml` | iOS/watchOS simulator hosts and Xcode Release/Debug CTest runtime layouts; [local commands](build.md). |
 | CTest registration | `Build/Cmake/Testing/CMakeLists.txt` | CTest names, labels, fixtures, timeouts, and check target. |
 | CTest process guide | `docs/ctest.md` | Local commands, registered suites, and add-test workflow. |
 | Maintainer CI skill | `.github/skills/maintainer-ci-ctest/SKILL.md` | Repeatable maintainer workflow for CI, CTest, CPack, sanitizer, and release gates. |
@@ -58,6 +59,20 @@ Every new regression gate should state:
 Prefer deterministic invariants over broad diffs. For generated ICC profiles,
 normalize only documented volatile fields when comparing whole files; otherwise
 assert specific tag sizes, offsets, record lengths, or validation messages.
+
+The Apple gates extend #2445's static-core SDK builds with native runtime
+coverage. The core workflow builds both dependency-free `apple-*-core` presets
+and extended `apple-*-extended-core` presets where each SDK is installed. Both
+workflows use `iccdev-apple-simulator-smoke.sh` and
+`iccdev-xcode-ctest-smoke.sh`: simulator success requires a fresh report and
+console sentinel, a missing-fixture control must fail, the report must include
+the built extended-library checks, the public invalid-profile substitution
+control, and non-failing mobile gap notes; Xcode CTest must produce fresh CLI
+output in both configurations. The path-filtered PR workflow runs only for
+same-repository heads and keeps outputs in the job workspace. The
+master-push/manual core workflow additionally uploads the built static
+archives, generated version headers, and build manifest. A nonzero helper exit
+fails either gate.
 
 ## Workflow Governance Requirements
 
@@ -121,6 +136,10 @@ requesting review, check the PR against this list:
 - Keep Docker and regression-container docs reproducible from a fresh checkout
   or clean container. Fetch branch refs explicitly and avoid relying on local
   remote-tracking state, generated files, or preexisting host permissions.
+- Let maintainers select a supported container tag at dispatch time, resolve
+  it to a digest before starting the container job, and record both that digest
+  and the image source revision. Do not hardcode one full-SHA tag as a durable
+  workflow default.
 - Validate trusted-base helper boundaries in PR workflows. PR-controlled
   checkouts must not provide sanitizer, summary, release, or package helpers
   unless the step is a reviewed test-only exception.
@@ -152,23 +171,12 @@ require removed lane names or initialization jobs as branch contexts. Require
 WASM parity separately on `master`, where that workflow runs outside the
 orchestrator. See `docs/label-system.md` for the current context list.
 
-When `container_changed` is true, `ci-pr-action` selects the read-only Docker
-PR verification lane and `PR Summary` requires its result. The lane is skipped
-for documentation, governance, and label-only changes to conserve runners.
-Dockerfile, Docker dependency, packaged MCP, and Docker-workflow changes build
-the exact PR image. Source, CMake, and test-only changes targeting `master`
-instead pull the canonical image dynamically by the detected base SHA, verify
-its OCI revision label, and build the mounted PR tree with the strict
-sanitizer/CTest contract. No Docker image SHA is embedded in workflow source.
-Other allowed base branches keep the full PR-image build because canonical
-immutable images are published only from `master`. Do not treat a skipped lane
-as container verification; rerun it after any Dockerfile, container image, or
-container workflow update.
-
-The Docker PR lane builds the exact checked-out PR Dockerfile without a workflow
-cache. The resulting image is local to the job: it must bind the checked-out PR
-tree read-only, copy it to container-local scratch space, and build and run the
-fast CTest envelope there. Only `ci-docker` publishes images.
+When `image_definition_changed` is true, `ci-pr-action` selects
+workflow-security gates only. It does not run a Docker Clang verification job,
+a full PR matrix, or aggregate a `docker-ci` result. Dockerfile, Docker
+dependency, packaged MCP, and Docker-workflow changes require the local
+canonical-image build and smoke in `docs/regression-container.md`; only
+`ci-docker` publishes images.
 
 Local review should include YAML parsing, `actionlint`, `yamllint`, direct
 `${{ }}` interpolation scans for `run:` blocks, Dockerfile base/remote-exec

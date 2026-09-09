@@ -482,9 +482,47 @@ int main(int argc, icChar* argv[])
             GetSampleFormatDescription( SrcImg.GetSampleFormat()) );
 
   printf("SamplesPerPixel:   %d\n", SrcImg.GetSamples());
-  int nExtra = SrcImg.GetExtraSamples();
-  if (nExtra)
-    printf("ExtraSamples:      %d\n", nExtra);
+  // Report on tag PRESENCE, not on a nonzero count.  The old test printed nothing
+  // when tag 338 was absent and nothing when it was stored as zero, and said nothing
+  // at all about a directory libtiff had repaired: the tracked 81-band
+  // Testing/hybrid/Data/smCows380_5_780.tif dumped "SamplesPerPixel: 81" and
+  // "Photometric: Min Is Black" -- one colour channel -- with the other 80 channels
+  // unmentioned, while libtiff's own warning went to stderr and named no count.
+  // GetEffectiveExtraSamples() is what libtiff repaired the layout to, so state it
+  // and say it was not stored, rather than leave the reader to reconcile the two
+  // numbers themselves (#2386).
+  //
+  // The present-and-repaired half is now covered too.  Where tag 338 IS present and
+  // libtiff repairs anyway, it overwrites the stored count in place and reports the
+  // repaired figure through every getter it has, so this line used to be libtiff's
+  // number presented as the file's: a 6-sample MinIsBlack image storing ExtraSamples
+  // [0] printed "ExtraSamples: 5", byte-identical to an honest five-extra file.  Two
+  // materially different directories were indistinguishable in the dump, which is the
+  // half of #2386 left open by #2402.
+  //
+  // CTiffImg::Open() now reads tag 338's count field straight out of the IFD, so the
+  // stored figure is available to compare -- see HasStoredExtraSamplesCount().  When
+  // the two disagree, print both and name the repair; the reader needs the stored one
+  // to know the file is malformed and the effective one to understand the layout the
+  // rest of libtiff is using.  Reporting only: iccApplyProfiles still consumes the
+  // repaired count, and which of the two SHOULD drive colour management is the
+  // carrier-contract question open on #2379/#2385, deliberately not decided here.
+  unsigned int nExtra = SrcImg.GetExtraSamples();
+  unsigned int nEffectiveExtra = SrcImg.GetEffectiveExtraSamples();
+  if (SrcImg.HasStoredExtraSamples()) {
+    // Gated on the flag, not on a nonzero count: a stored 0 is a legitimate value, and
+    // a false flag means the count could not be determined (BigTIFF, or an unreadable
+    // file) rather than that the tag was absent.
+    if (SrcImg.HasStoredExtraSamplesCount() &&
+        SrcImg.GetStoredExtraSamplesCount() != nExtra)
+      printf("ExtraSamples:      %u (file stores %u; libtiff repaired the layout)\n",
+        nExtra, SrcImg.GetStoredExtraSamplesCount());
+    else
+      printf("ExtraSamples:      %u\n", nExtra);
+  }
+  else if (nEffectiveExtra)
+    printf("ExtraSamples:      not stored; libtiff treats %u of %u samples as non-color\n",
+      nEffectiveExtra, SrcImg.GetSamples());
   printf("Photometric:       %s\n", GetId(SrcImg.GetPhoto(), photo_types));
   printf("BytesPerLine:      %d\n", SrcImg.GetBytesPerLine());
   printf("Resolution:        (%lf x %lf) %s\n", SrcImg.GetXRes(), SrcImg.GetYRes(),

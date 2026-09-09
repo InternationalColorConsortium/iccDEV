@@ -13,7 +13,7 @@ profile compatibility reporting.
 
 | Script | Tool | Default variants |
 |--------|------|------------------|
-| `.github/scripts/icc-pawg-qa-scan.sh` | `iccPawgReport` | text, JSON, eager-read, JSON eager-read |
+| `.github/scripts/icc-pawg-qa-scan.sh` | `iccPawgReport` | text, JSON |
 | `.github/scripts/icc-dumpprofile-qa-scan.sh` | `iccDumpProfile` | basic, validate, verbosity, tag, `ALL`, read, diagnostic read |
 | `.github/scripts/icc-roundtrip-qa-scan.sh` | `iccRoundTrip` | intents 0-3 with LUT and MPE modes |
 | `.github/scripts/iccdev-registry-profile-qa.sh` | registry runner | PAWG text, dump validate-all, roundtrip intent 1, SpecSep optional-profile sweep |
@@ -48,6 +48,14 @@ for stricter gates. The registry workflow intentionally uses `--fail-on CRASH`
 because its source list includes malformed profiles and full-matrix variants
 that exercise expected non-pass validation paths.
 
+PAWG classification requires Python 3 and reads checklist verdicts and checked
+summary counts, not words in questions or details. `OK`/`PASS` and `N/A` items
+with consistent zero issue counts pass. `WARN`, `FAIL`, `GAP`, and `NOT RUN`
+remain separate TSV counters. Missing, malformed, or inconsistent reports are
+`QA-ISSUE` on exit 0; a nonzero tool exit remains `FAIL`. Sanitizer, signal, and
+timeout evidence takes precedence. Benign compression wording and `FAIL: 0`
+do not create findings. Other tools retain their diagnostic-text classification.
+
 ## Validation report levels
 
 `iccDumpProfile -v` prints one line per finding, prefixed by the level the
@@ -58,7 +66,7 @@ reached:
 |--------|----------------------|---------|
 | `Information - ` | none | A defined, conformant state worth naming in the report. Does not affect the verdict. |
 | `Warning! - ` | `Profile has warning(s)` | Conforms, but with something a reader may want to act on. |
-| `NonCompliant! - ` | `Profile violates ICC specification` | Does not conform; may still be usable. Note that `iccDumpProfile` still exits 0 here — parse the text, not `$?`, when this verdict matters. |
+| `NonCompliant! - ` | `Profile violates ICC specification` | Does not conform; may still be usable. Note that `iccDumpProfile` still exits 0 here - parse the text, not `$?`, when this verdict matters. |
 | `Error! - ` | `Profile has Critical Error(s)` | Does not conform and is not usable. |
 
 Because a `QA-ISSUE` status keys off warning indicators, a diagnostic emitted at
@@ -82,7 +90,7 @@ the tag rather than a separate validation rule:
 
 Profiles are therefore not expected to omit an optional intent tag merely because
 its chain is empty. Presence with an identity chain and absence are different
-statements — the `PCC`, `ICS` and `mcs` fixtures under `Testing/` declare
+statements - the `PCC`, `ICS` and `mcs` fixtures under `Testing/` declare
 `DToB3`/`BToD3` and the `AToB`/`BToA`/`AToM0` intent tags this way on purpose, to
 advertise the channel counts of a pass-through connection.
 
@@ -90,7 +98,7 @@ Reporting the equal-channel case at information level moved 74 of the 210
 profiles in a freshly generated corpus from `Profile has warning(s)` to
 `Profile is valid`, with the critical-error count unchanged. Note that corpus
 counts only reproduce from a clean checkout plus
-`Testing/CreateAllProfiles.sh` — a working tree that has accumulated profiles
+`Testing/CreateAllProfiles.sh` - a working tree that has accumulated profiles
 from earlier runs will report higher numbers.
 
 ## Local examples
@@ -106,7 +114,16 @@ cmake --build build --parallel "$(nproc)"
 .github/scripts/icc-roundtrip-qa-scan.sh --timeout 10 --variant intent-1 Testing
 ```
 
-For build trees that place tools outside `Build/Tools`, pass explicit tool paths:
+Binary discovery order is `--tool`, the tool-specific environment override
+(`ICC_PAWG_REPORT`, `ICC_DUMP_PROFILE`, or `ICC_ROUND_TRIP`),
+`ICCDEV_TOOLS_DIR`, checkout `Build/Tools`, then `PATH`. Directory discovery
+accepts both `IccTool/iccTool` build layouts and flat installed binaries.
+Explicit per-tool overrides fail closed when empty, missing, or nonexecutable;
+an invalid configured directory falls through to checkout and `PATH`.
+The unified image already sets `ICCDEV_TOOLS_DIR=/workspace/build/Tools`, so
+registry child scanners need no per-tool overrides.
+
+For other build trees, configure the directory or pass an explicit tool path:
 
 ```bash
 .github/scripts/icc-pawg-qa-scan.sh \

@@ -39,7 +39,7 @@ trailing direct-mode token is rejected rather than ignored.
 | profile sequence | pairs with optional `-ENV:sig value` and `-PCC file` | Standard CMM transforms and connection conditions. |
 
 The rendering-intent selector supports the documented base, transform,
-preview, gamut, BPC, BDRF, and MCS values printed by `Usage()`. Add 1000 for
+preview, gamut, BPC, BRDF, and MCS values printed by `Usage()`. Add 1000 for
 luminance-based PCS adjustment and 10000 to use a V5 sub-profile where present.
 
 \section profiles_runtime Transform and output behavior

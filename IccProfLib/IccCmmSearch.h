@@ -128,6 +128,8 @@ public:
   // Returns icCmmStatOk on success.
   virtual icStatusCMM GetApplyCost(icFloatNumber& dCost, const icFloatNumber* SrcPixel);
 
+  bool IsReady() const { return m_bReady; }
+
   protected:
   CIccApplyCmmSearch(CIccCmm* pCmm);
 
@@ -143,6 +145,10 @@ public:
   icFloatVector m_maxBounds;
 
   bool m_bNeedPcsToLab;
+  bool m_bReady;
+  CIccApplyCmm* m_pMidToDstApply;
+  std::vector<CIccApplyCmm*> m_srcToMidApply;
+  std::vector<CIccApplyCmm*> m_dstToMidApply;
 };
 
 
@@ -184,7 +190,7 @@ public:
   virtual icStatusCMM Begin(bool bAllocNewApply = true, bool bUsePcsConversion = false);
 
   //Get an additional Apply CMM object to apply pixels with.  The Apply object should be deleted by the caller.
-  virtual CIccApplyCmm* GetNewApplyCmm(icStatusCMM& /*status*/) { return nullptr; }
+  virtual CIccApplyCmm* GetNewApplyCmm(icStatusCMM& status);
 
   //Call to Detach and remove all pending IO objects attached to the profiles used by the CMM. Should be called only after Begin()
   virtual icStatusCMM RemoveAllIO();

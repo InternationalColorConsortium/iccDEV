@@ -24,10 +24,17 @@
 #   REFICCMAX_LIBRARIES     - Libraries to link
 #   REFICCMAX_VERSION       - Version string
 #
+# Input controls:
+#   REFICCMAX_SKIP_CONFIG   - Skip CONFIG mode and use manual discovery
+#
 ###############################################################
 
 # ----- Phase 1: Try CONFIG mode (preferred) -----
-find_package(RefIccMAX CONFIG QUIET)
+if(REFICCMAX_SKIP_CONFIG)
+  set(RefIccMAX_FOUND FALSE)
+else()
+  find_package(RefIccMAX CONFIG QUIET)
+endif()
 
 # Accept CONFIG mode only if it actually produced the imported target this
 # module documents. RefIccMAX_FOUND on its own is not that proof: CMake sets it
