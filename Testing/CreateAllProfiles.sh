@@ -413,6 +413,13 @@ then
 	# only ever looked for AToB0Tag/BToA0Tag passes it. This is a negative --
 	# see Testing/expected-invalid-fromxml.tsv.
 	iccFromXml HdrMissingBToA1.xml HdrMissingBToA1.icc
+
+	# IMPL-02: the VideoFullRangeFlag pair. Identical in every byte but that one
+	# field. Nothing reads the flag, so the two currently render IDENTICALLY --
+	# the pair pins the gap rather than asserting a pass, so that whichever way
+	# IMPL-02 is resolved, the resolution has to move a fixture.
+	iccFromXml HdrFullRangeFlag.xml HdrFullRangeFlag.icc
+	iccFromXml HdrNarrowRangeFlag.xml HdrNarrowRangeFlag.icc
 	set +x
 fi
 cd ..

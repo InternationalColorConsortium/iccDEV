@@ -347,6 +347,13 @@ REM the pair 8.10.6 makes mandatory outright, so an implementation that only
 REM ever looked for AToB0Tag/BToA0Tag passes it. This is a negative -- see
 REM Testing/expected-invalid-fromxml.tsv.
 iccFromXml HdrMissingBToA1.xml HdrMissingBToA1.icc
+
+REM IMPL-02: the VideoFullRangeFlag pair. Identical in every byte but that one
+REM field. Nothing reads the flag, so the two currently render IDENTICALLY --
+REM the pair pins the gap rather than asserting a pass, so that whichever way
+REM IMPL-02 is resolved, the resolution has to move a fixture.
+iccFromXml HdrFullRangeFlag.xml HdrFullRangeFlag.icc
+iccFromXml HdrNarrowRangeFlag.xml HdrNarrowRangeFlag.icc
 @echo off
 :end_HDR
 
