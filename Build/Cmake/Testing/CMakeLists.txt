@@ -2310,6 +2310,55 @@ endfunction()
 # space, every decode formula at its clamp boundaries, refusal of truncated and
 # over-count blocks, and the raw-blob retention that lets a block this build
 # cannot parse still survive a load/save cycle byte for byte.
+# T1c (HDR profiles): enforces Testing/HDR/hdr-corpus-manifest.tsv, the expected
+# clause 8.10 CLASSIFICATION of every fixture in Testing/HDR.
+#
+# This is the axis iccdev.qa-profile-manifest cannot express. That test records
+# the validation verdict, and failing clause 8.10.1's membership conditions does
+# not make a profile invalid -- all six membership negatives validate `valid`
+# and are indistinguishable there. Without this test they assert nothing.
+#
+# It also fails on a fixture that mkprofiles built but nobody listed, which is
+# how a corpus drifts into asserting nothing in the first place.
+#
+# FIXTURES_REQUIRED iccdev_profiles: the .icc are generated, not tracked.
+function(iccdev_add_hdr_corpus_manifest_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccHdrCorpusManifestTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/hdr-corpus-manifest.cpp"
+  )
+  target_compile_features(iccHdrCorpusManifestTest PRIVATE cxx_std_17)
+  target_link_libraries(iccHdrCorpusManifestTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccHdrCorpusManifestTest)
+
+  add_test(
+    NAME iccdev.hdr-corpus-manifest
+    COMMAND "$<TARGET_FILE:iccHdrCorpusManifestTest>"
+  )
+  set_tests_properties(iccdev.hdr-corpus-manifest PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    FIXTURES_REQUIRED iccdev_profiles
+    TIMEOUT 120
+    LABELS "iccdev;validation;hdr;corpus;regression"
+  )
+  if(WIN32)
+    set(_hdr_corpus_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccHdrCorpusManifestTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _hdr_corpus_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.hdr-corpus-manifest PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_hdr_corpus_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_hagc_codec_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -7983,6 +8032,7 @@ iccdev_add_hagc_authoring_invariants_test()
 iccdev_add_hagc_json_authoring_test()
 iccdev_add_hdr_profile_test()
 iccdev_add_hdr_tonemap_test()
+iccdev_add_hdr_corpus_manifest_test()
 iccdev_add_hdr_bake_test()
 iccdev_add_pcc_reflectance_observer_range_test()
 iccdev_add_pcs_edge_metadata_test()

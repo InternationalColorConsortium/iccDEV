@@ -1,0 +1,73 @@
+# Testing/HDR/hdr-corpus-manifest.tsv - expected clause 8.10 CLASSIFICATION per fixture
+#
+# Enforced by CTest: iccdev.hdr-corpus-manifest
+#
+# WHY THIS EXISTS SEPARATELY FROM qa-profile-manifest.tsv. That manifest records
+# the VALIDATION verdict - valid / warning / noncompliant. It cannot express what
+# most of these fixtures were built to pin, because failing clause 8.10.1's
+# membership conditions does not make a profile invalid: all six membership
+# negatives validate `valid` and are indistinguishable there. This file records
+# the other axis - what icGetHdrProfileInfo() concludes - so that a classifier
+# which stopped testing one condition fails a row instead of passing silently.
+#
+# Columns (tab separated):
+#   fixture            basename, no extension; Testing/HDR/<fixture>.icc
+#   class              none | conforming | hdr-content   (icHdrProfileClass)
+#   display_headroom   expected icHdrProfileInfo::displayHeadroom
+#   headroom_source    - | derh | dcv-drwl | dcv-crwl     (clause 8.10.5 rule)
+#   content_headroom   expected icHdrProfileInfo::contentHeadroom
+#   content_source     - | cll | mdcv | default-1000      (clause 8.10.4 rule)
+#   purpose            what the fixture is FOR; the only place a reader learns
+#                      why a row's numbers are the numbers
+#
+# A value of 0 with a source of "-" means not derivable from the profile, which
+# is itself an assertion: 8.10.5 d) and the not-Linear case of 8.10.4.
+#
+# Floats compare to a relative tolerance of 1e-5, because these are icFloatNumber
+# (float, not double) and an exact compare would fail on values like 4,92611.
+#
+# ADDING A FIXTURE: add it here AND in Testing/qa-profile-manifest.tsv AND in
+# Testing/HDR/mkprofiles.sh/.bat, which is the single source of the build list.
+# The test fails on an unlisted profile, so forgetting this file is caught.
+BT2100HlgFullDisplay	hdr-content	0	-	0	-	v5 BT.2100 HLG display; outside 8.10.1's version window
+BT2100HlgFullScene	hdr-content	0	-	0	-	v5 BT.2100 HLG scene; outside the version window
+BT2100HlgNarrowDisplay	hdr-content	0	-	0	-	v5 narrow-range HLG display; range expansion is an explicit MPE curve
+BT2100HlgNarrowScene	hdr-content	0	-	0	-	v5 narrow-range HLG scene; range expansion is an explicit MPE curve
+BT2100HlgSceneToDisplayLink	none	0	-	0	-	v5 DeviceLink; no cicpTag and no HDR metadata, so not even HDR content
+BT2100PQFullDisplay	hdr-content	0	-	0	-	v5 BT.2100 PQ display; outside the version window
+BT2100PQFullScene	hdr-content	0	-	0	-	v5 BT.2100 PQ scene; outside the version window
+BT2100PQNarrowDisplay	hdr-content	0	-	0	-	v5 narrow-range PQ display; range expansion is an explicit MPE curve
+BT2100PQNarrowScene	hdr-content	0	-	0	-	v5 narrow-range PQ scene; range expansion is an explicit MPE curve
+BT2100PQSceneToDisplayLink	none	0	-	0	-	v5 DeviceLink; no cicpTag and no HDR metadata
+HagcCommonParams	conforming	0	-	0	-	HAGC common-parameter sharing flags; HLG
+HagcDisplay	conforming	0	-	0	-	HAGC full layout; PQ
+HagcHexData	conforming	0	-	4.92611	default-1000	HAGC raw-byte authoring path; Linear, so 8.10.4 rule c) also fires
+HagcInvalidXOrder	conforming	0	-	0	-	NEGATIVE: control-point X values not strictly increasing
+HagcMixingTypes	conforming	0	-	0	-	HAGC component mixing types 1 and 3
+HagcRefWhiteToneMap	conforming	0	-	0	-	ST 2094-50 C.3.8 reference-white tone map
+HdrBakedLut	conforming	0	-	0	-	baked AToB0/BToA0 pair; makes 8.10.3's precedence observable
+HdrCicp2NoColumns	conforming	0	-	0	-	NEGATIVE: ColourPrimaries 2 without the matrix column tags
+HdrCicpUnspecified	conforming	4.92611	dcv-drwl	0	-	ColourPrimaries 2 WITH the columns; the positive of that pair
+HdrColorSpaceClass	hdr-content	4	derh	0	-	8.10.1 MEMBERSHIP NEGATIVE: device class not Input/Display
+HdrDisplayMetadata	conforming	4	derh	0	-	the conforming base fixture; 8.10.5 rule a), all three entries disagreeing
+HdrFullRangeFlag	conforming	4	derh	0	-	IMPL-02 pair, full-range half; control for the narrow half
+HdrHeadroomDcvCrwl	conforming	4	dcv-crwl	0	-	8.10.5 rule c): DCV / CRWL, CRWL deliberately 250 not 203
+HdrHeadroomDcvDrwl	conforming	2	dcv-drwl	0	-	8.10.5 rule b): DCV / DRWL, chosen so rule c) would give a different number
+HdrHlgBt2020Primaries	conforming	4	derh	0	-	IMPL-04 control: HLG at ColourPrimaries 9, whose Y row IS the old constants
+HdrHlgBt709Primaries	conforming	4	derh	0	-	IMPL-04: the first HLG fixture not in BT.2020 primaries
+HdrInputDisplayMeta	conforming	4	derh	0	-	HDR Display metadata on an Input-class profile; draws an Information note
+HdrInvalidTransfer	hdr-content	0	-	0	-	NEGATIVE, CONFOUNDED: non-HDR transfer AND TRC tags; kept as-is, de-confounded by the two fixtures below
+HdrLinearCll	conforming	0	-	2.95567	cll	8.10.4 rule a): CLL / CRWL
+HdrLinearHagcWhite	conforming	0	-	2	cll	HDR-10 ruling: the HAGC tag's reference white wins over a CRWL entry
+HdrLinearMdcv	conforming	0	-	40	mdcv	8.10.4 rule b): MDCV / CRWL
+HdrLinearNoMetadata	conforming	0	-	4.92611	default-1000	8.10.4 rule c): the 1000 cd/m2 default
+HdrMissingBToA0	conforming	0	-	0	-	NEGATIVE: 8.10.6 mandatory BToA0 absent
+HdrMissingBToA1	conforming	4	derh	0	-	NEGATIVE: 8.10.6 pairing at x=1, which x=0 cannot reach
+HdrMissingLutPair	conforming	4	derh	0	-	NEGATIVE: both halves of the x=0 pair absent
+HdrNarrowRangeFlag	conforming	4	derh	0	-	IMPL-02: VideoFullRangeFlag 0; warns that this build does not expand it
+HdrNoCicpTag	hdr-content	4	derh	0	-	8.10.1 MEMBERSHIP NEGATIVE: no cicpTag; metadata RETAINED so a metadata-keyed classifier fails
+HdrNonRgbSpace	hdr-content	4	derh	0	-	8.10.1 MEMBERSHIP NEGATIVE: data colour space 3CLR, not RGB
+HdrTransferSdr	hdr-content	4	derh	0	-	8.10.1 MEMBERSHIP NEGATIVE: TransferCharacteristics 1; no TRC tags, so isolated
+HdrTrcTagsPresent	hdr-content	4	derh	0	-	8.10.1 MEMBERSHIP NEGATIVE: TRC tags present; PQ retained, so isolated
+HdrVersion44	hdr-content	4	derh	0	-	8.10.1 MEMBERSHIP NEGATIVE: version 4.4, below the window
+HdrVersion46	conforming	4	derh	0	-	8.10.1 POSITIVE: version 4.6; the only fixture separating >=4.5 from ==4.5
