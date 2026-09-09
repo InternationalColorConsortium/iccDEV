@@ -284,7 +284,8 @@ CIccHdrTransfer::CIccHdrTransfer()
 bool CIccHdrTransfer::Init(icUInt8Number nTransferCharacteristics,
                            icFloatNumber contentReferenceWhite,
                            icFloatNumber hlgGamma /* =icHlgDefaultGamma */,
-                           icFloatNumber hlgPeakLuminance /* =icHlgDefaultPeakLuminance */)
+                           icFloatNumber hlgPeakLuminance /* =icHlgDefaultPeakLuminance */,
+                           icUInt8Number nColourPrimaries /* =9 */)
 {
   m_bSupported = false;
   m_bUseProfileCurves = false;
@@ -306,6 +307,50 @@ bool CIccHdrTransfer::Init(icUInt8Number nTransferCharacteristics,
   m_hlgGamma = (hlgGamma > 0.0) ? hlgGamma : (icFloatNumber)icHlgDefaultGamma;
   m_hlgPeakLuminance = (hlgPeakLuminance > 0.0) ? hlgPeakLuminance
                                                 : (icFloatNumber)icHlgDefaultPeakLuminance;
+
+  /* IMPL-04: the OOTF's luma coefficients.
+   *
+   * ST 2094-50 Annex A.2 NOTE 7 requires the HLG Reference OOTF to be applied
+   * using BT.2100 Table 2 primaries - BT.2020's - and taken strictly that
+   * means an HLG signal in other primaries should be converted INTO BT.2020,
+   * put through the OOTF, and converted back.
+   *
+   * That round trip collapses.  The OOTF is a SCALAR gain applied alike to all
+   * three channels, dst = src * g(Ys), so for any conversion matrix M
+   *
+   *     M^-1 * (M*src * g)  ==  src * g
+   *
+   * and the matrices cancel.  The only thing the conversion changes is which
+   * Ys is formed - and BT.2020's coefficients applied to BT.2020 RGB are that
+   * colour's true luminance.  So the whole of NOTE 7 reduces to: form Ys as
+   * the true luminance of the source colour, which is the Y row of the
+   * RGB-to-XYZ matrix for the primaries the signal is actually in.
+   *
+   * For ColourPrimaries 9 that row IS 0,2627 / 0,6780 / 0,0593 - the fixed
+   * constants this used before - so every existing HLG profile is unchanged
+   * bit for bit, and only a profile declaring other primaries moves.  BT.709
+   * gives 0,2126 / 0,7152 / 0,0722.
+   *
+   * Falls back to the BT.2020 constants whenever the primaries cannot be
+   * resolved, which includes ColourPrimaries 2: recovering those from the
+   * profile's matrix column tags needs the profile, which this class does not
+   * have, and BT.2020 is the value NOTE 7 names. */
+  m_lumaR = (icFloatNumber)icHlgLumaR;
+  m_lumaG = (icFloatNumber)icHlgLumaG;
+  m_lumaB = (icFloatNumber)icHlgLumaB;
+
+  if (nTransferCharacteristics == icCicpTransferHLG &&
+      nColourPrimaries != icCicpPrimariesUnspecified) {
+    icCicpPrimaries prim;
+    icFloatNumber   rgb2xyz[9];
+
+    if (icGetCicpPrimaries(nColourPrimaries, prim) &&
+        icBuildRgbToXyzMatrix(prim, rgb2xyz)) {
+      m_lumaR = rgb2xyz[3];
+      m_lumaG = rgb2xyz[4];
+      m_lumaB = rgb2xyz[5];
+    }
+  }
 
   switch (nTransferCharacteristics) {
     case icCicpTransferLinear:
@@ -447,7 +492,7 @@ void CIccHdrTransfer::ChannelToReference(icFloatNumber *dst, const icFloatNumber
     // Y_s uses the BT.2100 coefficients on the scene-linear triplet, before
     // the gain is applied - the OOTF is defined on scene luminance, not on
     // the display luminance it produces.
-    icFloatNumber ys = (icFloatNumber)(icHlgLumaR * src[0] + icHlgLumaG * src[1] + icHlgLumaB * src[2]);
+    icFloatNumber ys = (icFloatNumber)(m_lumaR * src[0] + m_lumaG * src[1] + m_lumaB * src[2]);
     icFloatNumber scale = icHlgOotfGain(ys, m_hlgGamma) *
                           (icFloatNumber)((double)m_hlgPeakLuminance / (double)m_referenceWhite);
 
@@ -584,7 +629,7 @@ void CIccHdrTransfer::ReferenceToChannel(icFloatNumber *dst, const icFloatNumber
     fd[1] = src[1] * toAbsolute;
     fd[2] = src[2] * toAbsolute;
 
-    icFloatNumber yd = (icFloatNumber)(icHlgLumaR * fd[0] + icHlgLumaG * fd[1] + icHlgLumaB * fd[2]);
+    icFloatNumber yd = (icFloatNumber)(m_lumaR * fd[0] + m_lumaG * fd[1] + m_lumaB * fd[2]);
 
     if (!(yd > 0.0)) {
       dst[0] = dst[1] = dst[2] = 0.0;

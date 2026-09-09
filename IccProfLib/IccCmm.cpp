@@ -6861,7 +6861,7 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
   }
 
   if (!m_transfer.Init(info.nTransferCharacteristics, info.contentReferenceWhite,
-                       m_hlgGamma, m_hlgPeakLuminance)) {
+                       m_hlgGamma, m_hlgPeakLuminance, info.nColourPrimaries)) {
     return icCmmStatUnsupported;
   }
 
@@ -6898,6 +6898,37 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
       // ranks descriptors so that a CMM which cannot run one falls to the
       // next, and the next here is the identity operator NOTE 6 permits.
     }
+  }
+
+  /* IMPL-03: the content headroom of clause 8.10.4 was resolved and consumed
+   * by nothing.  It is consulted here, and ONLY to decide whether a clamp is
+   * needed - no curve, no operator.  8.10 specifies no tone-mapping operator
+   * for this case, so inventing one would make our renders differ from
+   * another implementation's for the same file; deciding whether the content
+   * already fits the target volume needs no operator at all.
+   *
+   * The rule: if the content is known to occupy no more headroom than the
+   * consumer asked to render for, it fits, and clamping it can only destroy
+   * values that were already displayable.  If it exceeds the target, the
+   * excess cannot be shown at that headroom, and 1.2.2.6 already establishes
+   * the clamp as the answer for the analogous HAGC case with no alternates.
+   *
+   * SCOPE.  This can only fire for a Linear transfer: icGetHdrProfileInfo()
+   * resolves the content headroom for TransferCharacteristics 8 alone,
+   * because that is the only transfer 8.10.4 states the priority order for -
+   * PQ and HLG carry a peak in the transfer function itself.  For every other
+   * transfer nContentHeadroomSource is icHdrContentHeadroomNone and this
+   * block does nothing, which is why the guard is on the SOURCE and not on
+   * the value.
+   *
+   * Where a gain curve is doing the mapping (m_bToneMap) the curve owns the
+   * result and this must not second-guess it, so the relaxation applies only
+   * to the clamp. */
+  if (info.nContentHeadroomSource != icHdrContentHeadroomNone && !m_bToneMap) {
+    if (info.contentHeadroom <= m_targetHeadroom)
+      m_bClampToTarget = false;   /* the content already fits */
+    else
+      m_bClampToTarget = true;    /* excess cannot be shown at this headroom */
   }
 
   if (!m_bInput && m_bToneMap && !m_evaluator.IsInvertible()) {

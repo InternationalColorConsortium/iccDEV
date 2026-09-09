@@ -111,4 +111,11 @@ iccFromXml HdrMissingBToA1.xml HdrMissingBToA1.icc
 iccFromXml HdrFullRangeFlag.xml HdrFullRangeFlag.icc
 iccFromXml HdrNarrowRangeFlag.xml HdrNarrowRangeFlag.icc
 
+# IMPL-04: the HLG OOTF luma-coefficient pair. Identical but for
+# ColourPrimaries. Only a NON-NEUTRAL colour separates them - the coefficients
+# sum to 1 in both sets, so a grey renders the same either way. The BT.2020
+# half is the control: if it moves, that is a regression, not the fix.
+iccFromXml HdrHlgBt709Primaries.xml HdrHlgBt709Primaries.icc
+iccFromXml HdrHlgBt2020Primaries.xml HdrHlgBt2020Primaries.icc
+
 echo "====================== Exiting HDR/mkprofiles.sh =========================="

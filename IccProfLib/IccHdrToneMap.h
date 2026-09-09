@@ -315,10 +315,16 @@ public:
    *
    * Returns false when the configuration is not one this class can evaluate.
    */
+  /* nColourPrimaries is the cicpTag's ColourPrimaries, used for HLG only, to
+   * derive the OOTF's luma coefficients - see IMPL-04 and the icHlgLuma block
+   * above.  It defaults to 9 (BT.2020), which reproduces the fixed
+   * coefficients exactly, so a caller that does not pass it gets the previous
+   * behaviour bit for bit. */
   bool Init(icUInt8Number nTransferCharacteristics,
             icFloatNumber contentReferenceWhite,
             icFloatNumber hlgGamma = (icFloatNumber)icHlgDefaultGamma,
-            icFloatNumber hlgPeakLuminance = (icFloatNumber)icHlgDefaultPeakLuminance);
+            icFloatNumber hlgPeakLuminance = (icFloatNumber)icHlgDefaultPeakLuminance,
+            icUInt8Number nColourPrimaries = 9);
 
   bool IsSupported() const { return m_bSupported; }
 
@@ -378,6 +384,11 @@ protected:
   bool m_bSupported;
   bool m_bUseProfileCurves;
   icUInt8Number m_nTransfer;
+  /* The OOTF's luma coefficients.  BT.2020's unless the profile declares other
+   * primaries; see IMPL-04.  Held rather than #defined because they now depend
+   * on the profile. */
+  icFloatNumber m_lumaR, m_lumaG, m_lumaB;
+
   icFloatNumber m_referenceWhite;
   icFloatNumber m_hlgGamma;
   icFloatNumber m_hlgPeakLuminance;

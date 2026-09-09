@@ -3780,6 +3780,37 @@ icValidateStatus CIccProfile::CheckHdrProfile(std::string &sReport) const
     }
   }
 
+  /* IMPL-02: VideoFullRangeFlag is not acted on anywhere in this
+   * implementation, and a reader has no other way to find that out.
+   *
+   * This is a WARNING about US, not about the file.  Clause 8.10 never
+   * mentions the field, so a narrow-range HDR Profile violates nothing, and
+   * the wording below says so.  It is not merely Information because the
+   * consequence is a wrong rendering rather than a fact worth knowing: the
+   * transfer of a clause 8.10 profile is implied by
+   * cicpTag.TransferCharacteristics and applied directly, with no curve to
+   * carry a range expansion the way a v5 multiProcessElement pipeline does,
+   * so the EOTF is evaluated on unexpanded code values.
+   *
+   * Not expanded here because the expansion is not knowable at this layer.
+   * Studio-swing limits depend on the source bit depth - 8-bit white is
+   * 235/255 = 0,9216 and 10-bit is 940/1023 = 0,9188 - and the CMM receives
+   * normalised floats with no bit depth attached, so any expansion this build
+   * applied would be right for one depth and wrong for the others.  Fixing
+   * that means plumbing the source bit depth through the xform hint, which is
+   * a wider change than a diagnostic.
+   *
+   * Testing/HDR/HdrFullRangeFlag and HdrNarrowRangeFlag differ in exactly
+   * this field and are what pin the behaviour either way. */
+  if (info.bHasCicp && !info.bVideoFullRange) {
+    sReport += icMsgValidateWarning;
+    sReport += "HDR: cicpTag VideoFullRangeFlag is 0 (narrow range). Clause 8.10 does not\r\n"
+               "  mention the field, so this profile violates nothing, but this implementation\r\n"
+               "  does not expand narrow-range values: the transfer function is evaluated on\r\n"
+               "  the encoded values as received.\r\n";
+    rv = icMaxStatus(rv, icValidateWarning);
+  }
+
   return rv;
 }
 

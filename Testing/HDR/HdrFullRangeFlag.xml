@@ -31,9 +31,17 @@
   narrow and nothing expands first, the EOTF is evaluated on unexpanded code
   values - a lifted black and a clipped white, silently.
 
-  Both halves are CONFORMING HDR Profiles and both validate clean.  Clause 8.10
-  never mentions the field, so neither half violates anything; whether the
-  clause INTENDS to permit narrow range is the open question IMPL-02 records.
+  Both halves are CONFORMING HDR Profiles - clause 8.10 never mentions the
+  field, so neither violates anything.  They no longer validate identically,
+  though: since 2026-09-08 `CheckHdrProfile()` emits a WARNING on the narrow
+  half saying this implementation does not expand narrow-range values.  That
+  warning is about the implementation, not the file, and it is the first thing
+  in the tree that makes the flag observable at all.  The full half stays
+  clean, which is what proves the diagnostic keys on this one field.
+
+  Whether clause 8.10 INTENDS to permit narrow range remains the open question
+  IMPL-02 records; the diagnostic reports our limitation, it does not answer
+  the spec question.
 -->
 <IccProfile>
   <Header>

@@ -1,47 +1,51 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  clause 8.10 HDR Display profile declaring VideoFullRangeFlag = 0.
+  PAIR for IMPL-04 - the HLG OOTF's luma coefficients.  This half declares
+  ColourPrimaries 1 (BT.709); `HdrHlgBt2020Primaries.xml` is identical but
+  for that field.
 
-  This fixture is one half of a PAIR. `HdrFullRangeFlag.xml` and
-  `HdrNarrowRangeFlag.xml` are identical in every byte except the
-  `VideoFullRangeFlag` field of the cicpTag, which is narrow range (0) here.
+  WHY THE PAIR EXISTS.  SMPTE ST 2094-50 Annex A.2 NOTE 7 requires the HLG
+  Reference OOTF to be applied using BT.2100 Table 2 primaries - BT.2020's -
+  which taken strictly means an HLG signal in other primaries is converted INTO
+  BT.2020, put through the OOTF, and converted back.  Until 2026-09-08 this
+  implementation applied BT.2020's coefficients wherever the signal stood, and
+  no fixture could tell: every HLG profile in the corpus declared primaries 9,
+  so the correct and incorrect behaviours coincided everywhere.
 
-  WHAT THE PAIR IS FOR - register item IMPL-02.  Nothing in this implementation
-  reads `VideoFullRangeFlag`.  `icGetHdrProfileInfo()` resolves it into
-  `icHdrProfileInfo::bVideoFullRange` and no transform consults it, which the
-  struct comment states plainly: "a narrow-range HDR Profile is legal and
-  nothing here acts on it".
+  WHAT THE FIX IS.  The round trip collapses.  The OOTF is a SCALAR gain
+  applied alike to all three channels - dst = src * g(Ys) - so for any
+  conversion matrix M, M^-1 * (M*src * g) == src * g and the matrices cancel.
+  The only thing the conversion changes is which Ys is formed, and BT.2020's
+  coefficients on BT.2020 RGB are that colour's true luminance.  So NOTE 7
+  reduces to forming Ys as the true luminance of the source colour: the Y row
+  of the RGB-to-XYZ matrix for the primaries the signal is actually in.
 
-  So these two profiles currently render IDENTICALLY.  That is the point.  The
-  pair is not a passing test - it is the gap made visible and pinned, so that
-  whichever way IMPL-02 is resolved, the resolution has a fixture that must
-  change.  A build that starts honouring the flag makes them differ; a ruling
-  that narrow range is not permitted in a clause 8.10 profile makes the narrow
-  half a validation negative.  Either outcome moves this pair.
+  For ColourPrimaries 9 that row is 0,2627 / 0,6780 / 0,0593, which is exactly
+  the constants used before - so the BT.2020 half of this pair is unchanged bit
+  for bit, and the corpus's five existing HLG profiles are too.  For BT.709 it
+  is 0,2126 / 0,7152 / 0,0722.
 
-  WHY IT MATTERS HERE AND NOT FOR THE v5 FIXTURES.  Four of the ten BT.2100
-  fixtures in this directory are narrow-range and are correct, because a v5
-  multiProcessElement pipeline carries the range expansion as an explicit
-  curve: `BT2100PQNarrowDisplay.xml` opens with a `SingleSampledCurve` running
-  0,0625152 to 0,9181929 - the 10-bit studio-swing pair 64/1023 and 940/1023.
-  The transform is self-contained there and the CICP field is descriptive.
+  WHAT THE PAIR DOES AND DOES NOT ISOLATE - read this before writing a test on
+  it.  ColourPrimaries drives TWO things: the OOTF's luma coefficients (this
+  item) and the RGB-to-PCSXYZ forward matrix.  A render through these two
+  profiles therefore differs for BOTH reasons at once, and the pair CANNOT
+  attribute the difference to the OOTF on its own.  It exercises the path; it
+  does not isolate it.
 
-  A clause 8.10 HDR Profile has no such curve.  Its transfer is IMPLIED by
-  `cicpTag.TransferCharacteristics` and applied directly, so if the flag says
-  narrow and nothing expands first, the EOTF is evaluated on unexpanded code
-  values - a lifted black and a clipped white, silently.
+  Isolating it needs CIccHdrTransfer directly, with everything but the
+  primaries held constant.  Done that way on 2026-09-08, input 0,8 / 0,3 / 0,1:
+  BT.709 gives 1,053631, BT.2020 1,087089, Display P3 1,064372 in the first
+  channel.  That is the OOTF alone.
 
-  Both halves are CONFORMING HDR Profiles - clause 8.10 never mentions the
-  field, so neither violates anything.  They no longer validate identically,
-  though: since 2026-09-08 `CheckHdrProfile()` emits a WARNING on the narrow
-  half saying this implementation does not expand narrow-range values.  That
-  warning is about the implementation, not the file, and it is the first thing
-  in the tree that makes the flag observable at all.  The full half stays
-  clean, which is what proves the diagnostic keys on this one field.
+  A NEUTRAL colour cannot tell any of them apart - the coefficients sum to 1 in
+  every set, so Ys = v when R = G = B, and all three return 0,249739.  So a
+  test built on this pair must use a colour with unequal channels, and even
+  then it is asserting the combined effect.
 
-  Whether clause 8.10 INTENDS to permit narrow range remains the open question
-  IMPL-02 records; the diagnostic reports our limitation, it does not answer
-  the spec question.
+  Both halves are conforming HDR Display profiles and both validate clean.
+
+  This is the half that MOVED on 2026-09-08.  Its OOTF now forms Ys with
+  BT.709's luminance weights rather than BT.2020's.
 -->
 <IccProfile>
   <Header>
@@ -92,7 +96,7 @@
     </XYZArrayType> </mediaWhitePointTag>
 
     <cicpTag> <cicpType>
-      <cicpFields ColorPrimaries="1" TransferCharacteristics="16" MatrixCoefficients="0" VideoFullRangeFlag="0"/>
+      <cicpFields ColorPrimaries="1" TransferCharacteristics="18" MatrixCoefficients="0" VideoFullRangeFlag="1"/>
     </cicpType> </cicpTag>
 
     <metaDataTag> <dictType>
@@ -135,7 +139,7 @@
     </lutBtoAType> </BToA0Tag>
 
     <profileDescriptionTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR VideoFullRangeFlag pair: narrow range (0)]]></LocalizedText>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR HLG with BT.709 primaries: the OOTF luma-coefficient case]]></LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>
 
     <copyrightTag> <multiLocalizedUnicodeType>

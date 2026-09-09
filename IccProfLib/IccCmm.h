@@ -435,8 +435,6 @@ class ICCPROFLIB_API CIccCreateHdrXformHint : public IIccCreateXformHint
 public:
   CIccCreateHdrXformHint() {
     m_targetHeadroom = 1.0;
-    m_bHasDisplayHeadroom = false;
-    m_displayHeadroom = 1.0;
     m_nPolicy = icHdrToneMapAuto;
     m_hlgGamma = (icFloatNumber)icHlgDefaultGamma;
     m_hlgPeakLuminance = (icFloatNumber)icHlgDefaultPeakLuminance;
@@ -451,14 +449,35 @@ public:
    * Begin(). A value at or below zero is treated as 1.0. */
   icFloatNumber m_targetHeadroom;
 
-  /** Override for the display headroom the profile's own HDR Display
-   * metadata resolves to (clause 8.10.5). Set m_bHasDisplayHeadroom to use
-   * it. Distinct from m_targetHeadroom: the target is what the consumer is
-   * rendering *for*, while this describes what the profile's destination
-   * device can do. They coincide in the common case, which is why leaving
-   * this unset simply uses the target. */
-  bool m_bHasDisplayHeadroom;
-  icFloatNumber m_displayHeadroom;
+  /* REMOVED 2026-09-08 (IMPL-01): m_bHasDisplayHeadroom and m_displayHeadroom.
+   *
+   * They were an override for the display headroom a profile's own HDR
+   * Display metadata resolves to under clause 8.10.5, and they carried a doc
+   * comment stating that contract.  Nothing ever honoured it.  SetHdrParams()
+   * copied four fields off this hint and never those two, from the commit
+   * that introduced the class (0733a80f) to the one that removed them - a
+   * search of the whole history for either name in any .cpp returns nothing.
+   * So this was not a feature that regressed; it was never wired at all, and
+   * the comment made it read as though it had been.
+   *
+   * Deleted rather than finished, FOR NOW, and the distinction is worth
+   * keeping: the concept is real.  When an HDR Profile is the DESTINATION its
+   * 8.10.5 metadata describes the display being rendered to, so "default the
+   * target to the destination profile's declared headroom" is a coherent
+   * behaviour someone may well want.  What ruled it out here is the paragraph
+   * at the top of this class: 8.10.2 NOTE 5 says H_target is not encoded in
+   * the profile and cannot be inferred from it, and having the CMM resolve it
+   * from the profile is exactly the inference that paragraph exists to
+   * forbid.  Adding it back is therefore a deliberate softening of that rule,
+   * to be argued on its merits rather than slipped in as plumbing.
+   *
+   * A caller who wants that behaviour today says so explicitly, which is
+   * two lines and visible at the call site:
+   *
+   *     icHdrProfileInfo info;
+   *     if (icGetHdrProfileInfo(pProfile, info))
+   *       hint.m_targetHeadroom = info.displayHeadroom;
+   */
 
   icHdrToneMapPolicy m_nPolicy;
 

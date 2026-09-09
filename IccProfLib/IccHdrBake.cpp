@@ -283,7 +283,8 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
   }
 
   if (!m_transfer.Init(info.nTransferCharacteristics, info.contentReferenceWhite,
-                       m_params.hlgGamma, m_params.hlgPeakLuminance)) {
+                       m_params.hlgGamma, m_params.hlgPeakLuminance,
+                       info.nColourPrimaries)) {
     m_szUnsupported = "Transfer characteristic has no analytic form here";
     return false;
   }

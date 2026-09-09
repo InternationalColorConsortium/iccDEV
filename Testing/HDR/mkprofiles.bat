@@ -106,5 +106,12 @@ REM rather than asserting a pass.
 iccFromXml HdrFullRangeFlag.xml HdrFullRangeFlag.icc
 iccFromXml HdrNarrowRangeFlag.xml HdrNarrowRangeFlag.icc
 
+REM IMPL-04: the HLG OOTF luma-coefficient pair. Identical but for
+REM ColourPrimaries. Only a NON-NEUTRAL colour separates them - the coefficients
+REM sum to 1 in both sets, so a grey renders the same either way. The BT.2020
+REM half is the control: if it moves, that is a regression, not the fix.
+iccFromXml HdrHlgBt709Primaries.xml HdrHlgBt709Primaries.icc
+iccFromXml HdrHlgBt2020Primaries.xml HdrHlgBt2020Primaries.icc
+
 @echo off
 echo ====================== Exiting HDR/mkprofiles.bat ==========================
