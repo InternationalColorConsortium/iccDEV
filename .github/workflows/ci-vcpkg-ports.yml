@@ -219,7 +219,7 @@ jobs:
             errors=$((errors + 1))
           fi
           # Check tools
-          for tool in iccDumpProfile iccRoundTrip iccApplyNamedCmm iccFromXml iccToXml iccFromJson iccToJson; do
+          for tool in iccDumpProfile iccRoundTrip iccApplyNamedCmm iccFromXml iccToXml iccFromJson iccToJson iccBenchApply; do
             if [ -x "$PREFIX/tools/iccdev/$tool" ]; then
               echo "[OK] Tool $tool found"
             else
@@ -227,6 +227,13 @@ jobs:
               errors=$((errors + 1))
             fi
           done
+          if [ "$errors" -eq 0 ]; then
+            "$PREFIX/tools/iccdev/iccBenchApply" \
+              -pixels 4 -repeats 1 1 \
+              "$GITHUB_WORKSPACE/Testing/sRGB_v4_ICC_preference.icc" 0 \
+              >/dev/null
+            echo "[OK] Tool iccBenchApply smoke passed"
+          fi
           # Summary
           {
             echo "## vcpkg Port Verification - $(sanitize_line "$RUNNER_OS")"
@@ -294,13 +301,23 @@ jobs:
             $errors++
           }
           # Check tools
-          foreach ($tool in @('iccDumpProfile.exe','iccRoundTrip.exe','iccApplyNamedCmm.exe','iccFromXml.exe','iccToXml.exe','iccFromJson.exe','iccToJson.exe')) {
+          foreach ($tool in @('iccDumpProfile.exe','iccRoundTrip.exe','iccApplyNamedCmm.exe','iccFromXml.exe','iccToXml.exe','iccFromJson.exe','iccToJson.exe','iccBenchApply.exe')) {
             if (Test-Path "$prefix\tools\iccdev\$tool") {
               Write-Host "[OK] Tool $tool found"
             } else {
               Write-Host "[FAIL] Tool $tool NOT found"
               $errors++
             }
+          }
+          if ($errors -eq 0) {
+            & "$prefix\tools\iccdev\iccBenchApply.exe" `
+              -pixels 4 -repeats 1 1 `
+              "$env:GITHUB_WORKSPACE\Testing\sRGB_v4_ICC_preference.icc" 0 `
+              | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+              throw "iccBenchApply smoke failed with exit code $LASTEXITCODE"
+            }
+            Write-Host "[OK] Tool iccBenchApply smoke passed"
           }
           # Summary
           $os = Sanitize-Line "Windows"

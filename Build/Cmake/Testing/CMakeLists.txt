@@ -48,7 +48,7 @@ if(TARGET iccdev-stage-windows-runtime)
 endif()
 
 function(iccdev_add_regression_executable TARGET_NAME)
-  add_executable("${TARGET_NAME}" EXCLUDE_FROM_ALL ${ARGN})
+  add_executable("${TARGET_NAME}" ${ARGN})
   add_dependencies(build-test-binaries "${TARGET_NAME}")
 endfunction()
 
