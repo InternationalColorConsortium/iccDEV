@@ -71,3 +71,25 @@ def test_unix_prebuilt_static_library_honors_zlib_off(monkeypatch, tmp_path):
     extension = captured["ext_modules"][0]
 
     assert extension.libraries == ["IccProfLib2-static"]
+
+
+def test_windows_prebuilt_static_library_links_vcpkg_zlib(monkeypatch, tmp_path):
+    build_dir = tmp_path / "build"
+    library_dir = build_dir / "IccProfLib"
+    vcpkg_dir = build_dir / "vcpkg_installed" / "x64-windows"
+    library_dir.mkdir(parents=True)
+    (vcpkg_dir / "lib").mkdir(parents=True)
+    (vcpkg_dir / "bin").mkdir(parents=True)
+    (library_dir / "IccProfLib2-static.lib").write_bytes(b"")
+    zlib_library = vcpkg_dir / "lib" / "z.lib"
+    zlib_runtime = vcpkg_dir / "bin" / "z.dll"
+    zlib_library.write_bytes(b"")
+    zlib_runtime.write_bytes(b"")
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr("shutil.which", lambda _command: None)
+
+    namespace, captured = _load_setup(monkeypatch, build_dir)
+    extension = captured["ext_modules"][0]
+
+    assert extension.extra_link_args == [str(zlib_library)]
+    assert namespace["prebuilt_runtime_dlls"] == [str(zlib_runtime)]

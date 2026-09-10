@@ -37,8 +37,9 @@ on:
         type: string
 
 concurrency:
-  group: pr-win-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Direct Windows runs must not interrupt an active reusable Windows gate.
+  group: ci-pr-win-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
 
 env:
   GH_REPO: ${{ github.repository }}

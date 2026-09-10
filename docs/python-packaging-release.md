@@ -32,8 +32,9 @@ checkout. Release Python builds must link against release
 `IccProfLib2-static.lib` plus its Release dependency libraries, including zlib
 when `ICC_USE_ZLIB` is enabled; build iccDEV Release or point
 `ICCDEV_BUILD_DIR` at the Release build root. When that zlib dependency is a
-dynamic vcpkg library, the Windows wheel must bundle the matching `zlib1.dll`
-beside `_iccdev.pyd` so installed-package tests do not rely on PATH state. Debug
+dynamic vcpkg library, the Windows wheel must bundle its matching runtime DLL
+(`z.dll`, `zlib1.dll`, or `zlib.dll`) beside `_iccdev.pyd` so installed-package
+tests do not rely on PATH state. Debug
 CRT libraries are only valid with a debug Python interpreter or explicit
 `ICCDEV_ALLOW_DEBUG_PYTHON_LIB=1`. An explicit `ICCDEV_BUILD_DIR` is
 authoritative and must not be rescued by another Release library elsewhere in

@@ -154,7 +154,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path "out\vs2022-vcpkg\Testing\ci" | Out-Null
 
           Write-Host "Building CTest helper binaries..."
-          cmake --build out\vs2022-vcpkg --config Release --target build-test-binaries --parallel
+          # vcpkg's z-applocal copies shared runtime DLLs beside every helper.
+          # Serializing this target avoids concurrent writes to the same DLL.
+          cmake --build out\vs2022-vcpkg --config Release --target build-test-binaries --parallel 1
           if ($LASTEXITCODE -ne 0) {
             throw "CTest helper binary build failed with exit code $LASTEXITCODE"
           }

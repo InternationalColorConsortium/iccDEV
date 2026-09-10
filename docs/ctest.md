@@ -463,11 +463,15 @@ script output and still leave a deterministic pass/fail condition.
 ## CI Coverage
 
 The `ci-json-python` orchestrator calls the reusable Unix and Windows build
-workflows. The Windows reusable workflow runs CTest discovery, asserts the
-7 registered Windows suites, executes CTest with JUnit output, and then runs
-the `check` target. The Unix reusable workflow runs the Linux CTest gate for
-full-test jobs and asserts the expected 25-suite discovery line before
-execution.
+workflows. The Windows reusable workflow runs CTest discovery, executes CTest
+with JUnit output, and then runs the `check` target. The Unix reusable workflow
+runs the Linux CTest gate for full-test jobs and verifies its discovered suite
+set before execution. `ci-pr-win` uses a non-cancelling, Windows-specific
+concurrency group so a direct Windows dispatch cannot interrupt an active
+reusable Windows gate. `ci-pr-unix` supports direct `workflow_dispatch` with
+the same safe matrix defaults as its reusable invocation. `CI Comprehensive
+Build and Test` keeps both Windows gates enabled through the callable build
+matrix.
 
 Python packaging CI builds source and wheel artifacts, validates metadata with
 `twine check`, prints the configured cibuildwheel identifiers for Windows,
