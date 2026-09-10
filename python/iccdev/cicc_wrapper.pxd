@@ -183,6 +183,8 @@ cdef extern from "IccCmm.h":
         icCmmStatTooManySamples     = 16
         icCmmStatBadMCSLink         = 17
         icCmmStatUnsupported        = 18
+        icCmmStatUnsupportedProfileClass = 19
+        icCmmStatCantAdjustPcs      = 20
 
     # Interpolation types
     ctypedef enum icXformInterp:

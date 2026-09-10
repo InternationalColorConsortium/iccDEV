@@ -81,6 +81,16 @@ class TestEnums:
         assert CmmStatus.Bad == -1
         assert CmmStatus.CantOpenProfile == 1
 
+    def test_cmm_status_mirrors_the_end_of_the_c_enum(self):
+        # The mirror stopped at 18 and nothing noticed, so #1843's
+        # icCmmStatUnsupportedProfileClass read back from Python as a bare
+        # code(19) for three weeks. Pinning the last two values keeps a new
+        # C status from being appended without its Python name (#2176).
+        assert CmmStatus.Unsupported == 18
+        assert CmmStatus.UnsupportedProfileClass == 19
+        assert CmmStatus.CantAdjustPcs == 20
+        assert CmmStatus.IncorrectApply == 8
+
     def test_lut_type_values(self):
         assert LutType.Color == 0
         assert LutType.NamedColor == 1

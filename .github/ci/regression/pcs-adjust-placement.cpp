@@ -2346,8 +2346,10 @@ static void setParamsRefreshesCacheAfterBegin()
 // most of the trouble: it rejects icAbsoluteColorimetric outright and rejects
 // the icSigLinkClass / icSigAbstractClass / icSigNamedColorClass device classes
 // (IccProfLib/IccApplyBPC.cpp), returning false and so making Begin() fail with
-// icCmmStatIncorrectApply. icSigLinkClass is the case that matters for the
-// premise: a device link's header pcs is its *output device* space, not a PCS.
+// icCmmStatCantAdjustPcs (icCmmStatIncorrectApply before #2176 renamed what that
+// site reports; the control flow is unchanged). icSigLinkClass is the case that
+// matters for the premise: a device link's header pcs is its *output device*
+// space, not a PCS.
 // With links rejected, every surviving class does have a colorimetric pcs.
 //
 // What CalcFactors() does NOT exclude is the *port*. An icToMCS xform is an
@@ -2381,7 +2383,7 @@ static void pcsAdjustHintReachesANonPcsPort()
 
   // AToB0/AToB1 + BToA0/BToA1 + wtpt, header pcs = Lab. The AToB0 is what
   // CIccApplyBPC::calcSrcBlackPoint() needs for its device->PCS probe; without
-  // it CalcFactors() fails and Begin() returns icCmmStatIncorrectApply.
+  // it CalcFactors() fails and Begin() returns icCmmStatCantAdjustPcs (#2176).
   buildV2CmykOutputProfile(*pICC);
   pICC->m_Header.version     = icVersionNumberV5;
   pICC->m_Header.deviceClass = icSigInputClass;   // allowed by CalcFactors()

@@ -1831,8 +1831,14 @@ icStatusCMM CIccXform::Begin()
       return icCmmStatInvalidProfile;
     }
 		
+    // CalcFactors() returns bool, so every one of its failure paths arrives here
+    // as a bare false.  Reporting them as icCmmStatIncorrectApply said the
+    // caller's apply object was wrong, which is untrue on all of them -- the
+    // apply object is fine and the PCS adjustment is what failed.  One code for
+    // all of them is the most this site can say without widening the exported
+    // IIccAdjustPCSXform interface; it is at least true of all of them (#2176).
     if (!m_pAdjustPCS->CalcFactors(&ProfileCopy, this, m_PCSScale, m_PCSOffset)) {
-      return icCmmStatIncorrectApply;
+      return icCmmStatCantAdjustPcs;
     }
 
     m_bAdjustPCS = true;
@@ -9786,6 +9792,13 @@ const icChar* CIccCmm::GetStatusText(icStatusCMM stat)
   // operation does not apply to this kind of profile" (#1843).
   case icCmmStatUnsupportedProfileClass:
     return "Unsupported profile class";
+  // CIccXform::Begin() reported a failed PCS adjustment as "Incorrect Apply
+  // object", which describes the caller's apply object rather than the thing
+  // that actually failed; keep the text about the *adjustment* so a caller can
+  // tell a malformed apply object from a hint that could not compute its scale
+  // and offset factors (#2176).
+  case icCmmStatCantAdjustPcs:
+    return "Cannot calculate PCS adjustment";
   default:
     return "Unknown CMM Status value";
 
