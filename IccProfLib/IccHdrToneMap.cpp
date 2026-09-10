@@ -1738,17 +1738,25 @@ bool icHagcApplyGainApplicationSpace(CIccHagcEvaluator &evaluator,
   // tolerance is the encoding's - the tag stores chromaticities as
   // MIN(v, 50000)/50000, so 1/50000 is the smallest difference it can express.
   const double kTol = 1.0 / 50000.0;
-  const icFloatNumber *a = &gain.xRed;
-  const icFloatNumber *b = &src.xRed;
-  bool bSame = true;
-  int i;
 
-  for (i = 0; i < 8; i++) {
-    if (fabs((double)a[i] - (double)b[i]) > kTol) {
-      bSame = false;
-      break;
-    }
-  }
+  /* Compared member by member on purpose.  This was `const icFloatNumber *a =
+   * &gain.xRed;` indexed a[0..7], which walks off the end of the object the
+   * pointer designates: icCicpPrimaries is eight separate scalar members, not
+   * an array, so only a[0] is in bounds under the C++ object model.  It
+   * happens to work because the members are adjacent and unpadded, but an
+   * optimiser is entitled to assume a[1..7] cannot be reached and fold this
+   * comparison away - which would either always take the short circuit or
+   * never take it, silently installing or omitting the ST 2094-50 Annex A
+   * gain-application matrix and changing every rendered colour. */
+  const bool bSame =
+      fabs((double)gain.xRed   - (double)src.xRed)   <= kTol &&
+      fabs((double)gain.yRed   - (double)src.yRed)   <= kTol &&
+      fabs((double)gain.xGreen - (double)src.xGreen) <= kTol &&
+      fabs((double)gain.yGreen - (double)src.yGreen) <= kTol &&
+      fabs((double)gain.xBlue  - (double)src.xBlue)  <= kTol &&
+      fabs((double)gain.yBlue  - (double)src.yBlue)  <= kTol &&
+      fabs((double)gain.xWhite - (double)src.xWhite) <= kTol &&
+      fabs((double)gain.yWhite - (double)src.yWhite) <= kTol;
 
   if (bSame)
     return true;

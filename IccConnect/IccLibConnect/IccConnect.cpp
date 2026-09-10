@@ -556,6 +556,29 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
       }
     }
 
+    // The HDR hint has to be built here too.  This function deliberately calls
+    // CIccCmm::AddXform directly rather than AddXformFromConfig, and
+    // AddXformFromConfig is the only other place m_hdrTargetHeadroom is read -
+    // so without this block CIccCfgSearchApply::fromArgs parsed -HDR and
+    // -HDRMAP, stored them, and nothing ever consumed them: iccApplySearch
+    // accepted the flags, rendered SDR, and exited 0 with no diagnostic.  A
+    // flag that silently does nothing is worse than one that is refused.
+    if (pCfg->m_hdrTargetHeadroom > 0.0) {
+      CIccCreateHdrXformHint* pHdrHint = new (std::nothrow) CIccCreateHdrXformHint();
+      if (!pHdrHint) {
+        sStageErr = "failed to allocate HDR tone-mapping hint for '" + pCfg->m_iccFile + "'";
+        stat = icCmmStatAllocErr;
+        goto search_stage_failed;
+      }
+      pHdrHint->m_targetHeadroom = pCfg->m_hdrTargetHeadroom;
+      pHdrHint->m_nPolicy = pCfg->m_hdrToneMap;
+      stat = AddHintNoThrow(Hint, pHdrHint);
+      if (stat != icCmmStatOk) {
+        sStageErr = "failed to attach HDR tone-mapping hint for '" + pCfg->m_iccFile + "'";
+        goto search_stage_failed;
+      }
+    }
+
     stat = pCmm->CIccCmm::AddXform(
       pCfg->m_iccFile.c_str(),
       pCfg->m_intent < 0 ? icUnknownIntent : (icRenderingIntent)pCfg->m_intent,

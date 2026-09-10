@@ -2243,7 +2243,18 @@ void AddHdrItems(std::vector<PawgItem> &items, CIccProfile *pIcc)
   {
     PawgVerdict verdict;
     std::string detail;
-    if (info.bHasAToB0 && !info.bHasBToA0) {
+    // Scoped to the Display class, because 8.10.6 is: "When a **Display** RGB HDR
+    // Profile contains an AToBxTag, the corresponding BToAxTag shall also be
+    // present" - wording unchanged in the 2026-09-06 revision.  Unscoped, this
+    // FAILed every Input-class HDR Profile carrying an AToB0Tag, including this
+    // branch's own HdrInputDisplayMeta fixture, whose header calls it conforming
+    // and which the library validator reports nothing about.  The FAIL text even
+    // said "a Display RGB HDR Profile" while firing on a 'scnr'.  It also
+    // short-circuited H6's real answer - which 8.10.3 descriptor is present -
+    // for every Input-class profile.  CIccProfile::CheckHdrProfile() applies the
+    // same class guard.
+    if (pIcc->m_Header.deviceClass == icSigDisplayClass &&
+        info.bHasAToB0 && !info.bHasBToA0) {
       verdict = PawgVerdict::Fail;
       detail = "AToB0Tag present without its paired BToA0Tag; clause 8.10.6 requires the pair "
                "when a Display RGB HDR Profile contains an AToBxTag";
