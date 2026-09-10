@@ -80,6 +80,31 @@ thread launches.
 - **No shared mutable xform state**: every worker allocates its own
   `CIccApplyCmm` from the wrapped CMM, so transforms that maintain
   per-apply scratch state (e.g. calculator stacks) stay isolated.
+- **Decorator CMMs must own their inner apply object.** A CMM that wraps
+  another one has to take its own `CIccApplyCmm` from the inner CMM in its
+  apply object, not call `innerCmm->Apply()`. `CIccCmm::Apply()` dispatches
+  through the inner CMM's single `m_pApply`, so every worker would share one
+  set of `m_Pixel` / `m_Pixel2` / `m_ChunkBuf` stage buffers. Both decorators
+  in the tree do this now: `CIccApplyCmmSearch` holds one apply object per
+  sub-chain, and `CIccApplyMruCmm` holds `m_pCachedApply` for the cached CMM.
+
+## Cached Apply: `CIccMruCmm`
+
+`CIccMruCmm::Attach(pCmm, nCacheSize, bDeleteCmm)` decorates a `Begin()`-ed CMM
+with a small most-recently-used cache, so a repeated source pixel skips the
+transform entirely. It is safe to thread: each `CIccApplyMruCmm` from
+`GetNewApplyCmm()` holds both its own cache and its own apply object for the
+cached CMM, so nothing is shared between workers. Nest it inside the threaded
+wrapper -- `CIccThreadedCmm::Attach(CIccMruCmm::Attach(cmm))` -- and each worker
+gets a private cache.
+
+The cache is a linear scan of at most `nCacheSize` entries (`icUInt8Number`, so
+1..255), and a miss scans the whole list before inserting. That bounds the
+worst case at a fraction of one transform for a chain of any real cost, but it
+does not scale: a much larger cache would need a hash rather than a longer
+walk. Hit rate depends entirely on image content -- exact bit equality of the
+source pixel -- so integer sources with flat regions do far better than
+high-entropy float data.
 
 ## Buffer Requirements
 

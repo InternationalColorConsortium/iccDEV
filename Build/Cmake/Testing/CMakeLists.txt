@@ -371,6 +371,60 @@ function(iccdev_add_createsearch_embedded_profile_test)
   endif()
 endfunction()
 
+function(iccdev_add_mru_apply_ownership_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMruApplyOwnershipTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/mru-cmm-apply-ownership.cpp"
+  )
+  target_compile_features(iccMruApplyOwnershipTest PRIVATE cxx_std_17)
+  target_link_libraries(iccMruApplyOwnershipTest PRIVATE ${TARGET_LIB_ICCPROFLIB}
+    ${CMAKE_THREAD_LIBS_INIT})
+
+  add_dependencies(check iccMruApplyOwnershipTest)
+
+  # sRGB_v4_ICC_preference.icc is a tracked v4 LUT profile: a real xform chain
+  # on both sides of the cache, so a hit that returned stale or untransformed
+  # data is separable from one that returned the right colour.
+  set(_mru_apply_profile "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc")
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.mru-cmm-apply-ownership
+      COMMAND "$<TARGET_FILE:iccMruApplyOwnershipTest>" "${_mru_apply_profile}"
+    )
+  else()
+    add_test(
+      NAME iccdev.mru-cmm-apply-ownership
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccMruApplyOwnershipTest>"
+        "${_mru_apply_profile}"
+    )
+  endif()
+  set_tests_properties(iccdev.mru-cmm-apply-ownership PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;mru;cache;threading;regression"
+  )
+  if(WIN32)
+    set(_mru_apply_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMruApplyOwnershipTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _mru_apply_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.mru-cmm-apply-ownership PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_mru_apply_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_cmmsearch_init_pcc_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -7255,6 +7309,7 @@ if(WIN32)
   iccdev_add_clut_avx512_sixteen_output_test()
   iccdev_add_iccconnect_config_parser_test()
   iccdev_add_createsearch_embedded_profile_test()
+  iccdev_add_mru_apply_ownership_test()
   iccdev_add_cmmsearch_init_pcc_test()
   iccdev_add_cmmsearch_rebegin_test()
   iccdev_add_ndlut_input_channel_mismatch_test()
@@ -7628,6 +7683,7 @@ iccdev_add_iccconnect_thread_test()
 iccdev_add_clut_avx512_sixteen_output_test()
 iccdev_add_iccconnect_config_parser_test()
 iccdev_add_createsearch_embedded_profile_test()
+iccdev_add_mru_apply_ownership_test()
 iccdev_add_cmmsearch_init_pcc_test()
 iccdev_add_cmmsearch_rebegin_test()
 iccdev_add_ndlut_input_channel_mismatch_test()
