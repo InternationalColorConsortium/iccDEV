@@ -207,7 +207,7 @@ jobs:
           python -m pip install `
             'build>=1.2,<1.4' `
             'cython>=3.0,<3.2' `
-            'setuptools>=64,<81' `
+            'setuptools>=64,<85' `
             'wheel>=0.46.2,<0.47'
 
           cd python
