@@ -112,11 +112,15 @@ class CIccCurve;
  * The largest A curve this bake will build.
  *
  * Not a policy of this file but a property of what it writes into:
- * CIccTagCurve::SetSize() refuses anything above 65536, and it does so by
- * freeing its buffer, setting its size to zero and returning *true*.  A
- * caller that trusts that return then writes nCurveSize floats through the
- * unchecked operator[] onto a NULL buffer.  Rejecting the size up front is
- * what keeps that contract from being load bearing here.
+ * CIccTagCurve::SetSize() refuses anything above 65536 (MAX_CURVE_ENTRIES).
+ *
+ * This comment used to say the refusal freed the buffer, zeroed the size and
+ * returned *true*, which is what made rejecting the size up front load
+ * bearing.  That is no longer the contract: #2006 made a refused resize
+ * return FALSE and leave the existing table intact.  The bound is kept
+ * anyway - icHdrBakeNewCurve() additionally verifies GetSize() rather than
+ * trusting the return - because a bake that silently produced a shorter
+ * curve than the caller asked for would be worse than one that refuses.
  */
 #define icHdrBakeMaxCurveSize      65536
 

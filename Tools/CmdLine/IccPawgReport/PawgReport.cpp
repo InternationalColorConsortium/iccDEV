@@ -1198,12 +1198,16 @@ static const icTagSignature kCommonOptional[] = {
   icSigCicpTag,
   icSigChromaticAdaptationTag,
   icSigChromaticityTag,
-  // cicpTag and headroomAdaptiveGainCurveTag are both permitted optional tags of
-  // an RGB Input or Display profile, and cicpTag is *required* of an HDR Profile
-  // (ICC.1 clause 8.10.1). Without them here, check C5 reports every profile
-  // carrying either as holding "standard tags outside the local class rule
-  // table" - the tags are recognised by IsSpecTag(), so they are not treated as
-  // private and fall straight through IsAllowedForClass() to the warning.
+  // headroomAdaptiveGainCurveTag is a permitted optional tag of an RGB Input or
+  // Display profile. Without it here, check C5 reports every profile carrying
+  // one as holding "standard tags outside the local class rule table" - it is
+  // recognised by IsSpecTag(), so it is not treated as private and falls
+  // straight through IsAllowedForClass() to the warning.
+  //
+  // cicpTag needs no entry of its own: it is already listed above, added by
+  // #2001 for exactly this reason. It was duplicated here when the HDR work
+  // landed, which was harmless but made this comment read as though the tag
+  // were absent from the table.
   //
   // This table is keyed on the profile *class* signature, which is why the HDR
   // Profile sub-class does not get a RuleTable of its own: an HDR Profile's
@@ -1212,7 +1216,6 @@ static const icTagSignature kCommonOptional[] = {
   // is the matrix/TRC set of its parent class plus cicpTag, and the cicpTag
   // requirement is enforced where it can see the whole profile, in
   // CIccProfile::CheckHdrProfile().
-  icSigCicpTag,
   icSigHeadroomAdaptiveGainCurveTag,
   icSigColorantTableTag,
   icSigColorantTableOutTag,

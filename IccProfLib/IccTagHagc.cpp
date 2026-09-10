@@ -1333,7 +1333,20 @@ void CIccTagHagc::Describe(std::string &sDescription, int nVerboseness)
      * someone is checking the curve itself, so it follows the same verboseness
      * threshold the LUT tags use for their sample data. */
     if (nVerboseness > 75) {
-      for (j = 0; j < (int)pAlt->m_nControlPoints; j++) {
+      /* m_nControlPoints is a public icUInt8Number on an exported class and
+       * GetMetadata() hands out a non-const reference, so a caller can set it
+       * to 255 without going through Pack()/Unpack().  No file can: the
+       * encoding carries a 5-bit last index, so the read path caps at 32.
+       * Validate() already refuses an out-of-range count and skips the
+       * alternate; Describe() indexed m_x/m_y/m_slope with the raw value and
+       * would have read past all three 32-element arrays.  Bound it here too
+       * rather than trusting every caller of a public setter. */
+      icUInt8Number nPoints = pAlt->m_nControlPoints;
+
+      if (nPoints > icHagcMaxControlPoints)
+        nPoints = icHagcMaxControlPoints;
+
+      for (j = 0; j < (int)nPoints; j++) {
         if (pAlt->m_bPchipSlope)
           snprintf(buf, bufSize, "    [%2d] x=%9.4f  y=%9.5f\r\n", j, pAlt->m_x[j], pAlt->m_y[j]);
         else

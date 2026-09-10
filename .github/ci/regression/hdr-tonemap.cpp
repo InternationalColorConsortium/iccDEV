@@ -418,7 +418,15 @@ void testComponentMixing()
 // ---------------------------------------------------------------------------
 void testPchipSlopes()
 {
-  icFloatNumber slope[4];
+  /* Sized to the tag's own maximum, not to the largest case below.  This was
+   * icFloatNumber[4] and the triple-abscissa case further down asks for FIVE
+   * slopes, so the library wrote one element past the end - a stack-buffer
+   * overflow WRITE that ASan catches and that corrupted whatever the compiler
+   * placed next, meaning every assertion after it was reading disturbed stack.
+   * icHagcDerivePchipSlopes() writes exactly n entries, so the buffer has to
+   * be the largest n the tag can carry, not the largest n this function
+   * currently passes. */
+  icFloatNumber slope[icHagcMaxControlPoints];
 
   // Monotonically decreasing data: every derived slope must be non-positive,
   // or the interpolant overshoots and stops being monotone - which is the one

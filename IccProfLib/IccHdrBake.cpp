@@ -438,6 +438,20 @@ bool CIccHdrBaker::IsInvertible() const
   return !m_bToneMap || m_evaluator.IsInvertible();
 }
 
+/**
+ ****************************************************************************
+ * Name: CIccHdrBaker::UsesDerivedSlopes
+ *
+ * Purpose: Reports whether the gain curve this bake evaluates had its control
+ *  point slopes reconstructed per SMPTE ST 2094-50 C.3.9 rather than read from
+ *  the tag.  A caller that is comparing two bakes needs to know: a derived
+ *  slope is a property of the decoder, not of the authored curve, so two
+ *  implementations can agree on the tag and still disagree here.
+ *
+ * Return: true when the evaluator derived the slopes; false when the tag
+ *  carried them, and false when the bake is unsupported.
+ *****************************************************************************
+ */
 bool CIccHdrBaker::UsesDerivedSlopes() const
 {
   return m_bSupported && m_evaluator.UsesDerivedSlopes();

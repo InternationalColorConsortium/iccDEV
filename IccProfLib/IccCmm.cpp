@@ -6789,6 +6789,22 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
       return status;
   }
   else {
+    // CIccXform::Begin() still has to run.  CIccXformMatrixTRC::Begin() calls
+    // it first and this branch skips that call, but nothing in it is about the
+    // matrix or the TRC tags: it refreshes the PCS port cache that
+    // NeedsSrcPcsAdjust()/NeedsDstPcsAdjust() read at Apply() time, and it
+    // builds the absolute-colorimetric media-white adjustment and the
+    // IIccAdjustPCSXform hint.  Skipping it silently dropped absolute
+    // colorimetric intent - and black point compensation with it - for every
+    // profile authored against the 29-08-2026 revision, which is the shape
+    // this branch exists to serve.  The base class's own comment at
+    // CIccXform::Begin() states the invariant that every derived override
+    // reaches it.
+    icStatusCMM baseStatus = CIccXform::Begin();
+
+    if (baseStatus != icCmmStatOk)
+      return baseStatus;
+
     // The base's own precondition for the output direction, which is about the
     // PCS rather than about any tag, so it holds either way.
     if (!m_bInput && m_pProfile->m_Header.pcs != icSigXYZData)
@@ -6861,9 +6877,27 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
       if (!m_bInput && !icMatrixInvert3x3(m_e))
         return icCmmStatInvalidProfile;
     }
-    // A failure to build is not fatal: the base's matrix from the colorant
-    // tags is what a pre-amendment CMM would have used, and for a profile
-    // that carries them it remains a defensible rendering.
+    else if (!bConventional) {
+      // WHETHER A FAILURE IS SURVIVABLE DEPENDS ON WHICH BRANCH RAN ABOVE.
+      // For a conventionally authored profile the base class has already
+      // filled m_e from the colorant tags, so falling back to it is what a
+      // pre-amendment CMM would have done and remains a defensible rendering.
+      // On the revision-shaped path there is no such fallback: the base class
+      // never ran, and CIccXformMatrixTRC's constructor value-initialises m_e
+      // to zero, so tolerating the failure would hand every pixel to an
+      // all-zero matrix and render the image BLACK while Begin() reported
+      // success.
+      //
+      // This is reachable from a conforming profile.  Clause 8.10.1 constrains
+      // TransferCharacteristics to {8, 16, 18} but says nothing about
+      // ColourPrimaries, and this implementation performs no CICP code-point
+      // validation, so a profile carrying a reserved H.273 primaries value -
+      // or lacking the mediaWhitePointTag icBuildHdrForwardMatrix needs - is
+      // accepted by the validator and reaches here.  Refusing is the only
+      // honest answer: the clause says the matrix "shall" come from the
+      // declared primaries, and we cannot compute it.
+      return icCmmStatInvalidProfile;
+    }
   }
 
   if (!m_transfer.Init(info.nTransferCharacteristics, info.contentReferenceWhite,
