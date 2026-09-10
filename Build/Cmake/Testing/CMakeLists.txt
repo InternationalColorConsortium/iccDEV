@@ -5013,6 +5013,58 @@ function(iccdev_add_signature_utils_contract_test)
   endif()
 endfunction()
 
+function(iccdev_add_utf8_converter_cursor_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccUtf8ConverterCursorTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/utf8-converter-cursor-contract.cpp"
+  )
+  target_compile_features(iccUtf8ConverterCursorTest PRIVATE cxx_std_17)
+
+  target_include_directories(iccUtf8ConverterCursorTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccUtf8ConverterCursorTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccUtf8ConverterCursorTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.utf8-converter-cursor-contract
+      COMMAND "$<TARGET_FILE:iccUtf8ConverterCursorTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.utf8-converter-cursor-contract
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccUtf8ConverterCursorTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.utf8-converter-cursor-contract PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;utf8;utf16;aliasing;issue-2504;regression"
+  )
+  if(WIN32)
+    # icWCharToUtf8 takes the UTF-16 arm of its WCHAR_MAX branch here, which no
+    # other test compiles or runs; the runtime paths must resolve for it to run.
+    set(_utf8cursor_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccUtf8ConverterCursorTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _utf8cursor_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.utf8-converter-cursor-contract PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_utf8cursor_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_mcs_colorspace_name_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -7344,6 +7396,7 @@ if(WIN32)
   iccdev_add_struct_name_spelling_test()
   iccdev_add_mcs_colorspace_name_test()
   iccdev_add_signature_utils_contract_test()
+  iccdev_add_utf8_converter_cursor_test()
   iccdev_add_console_sanitize_codepoint_test()
   iccdev_add_tiff_create_overflow_test()
   iccdev_add_tiff_separated_strips_test()
@@ -7718,6 +7771,7 @@ iccdev_add_tag_name_spelling_test()
 iccdev_add_struct_name_spelling_test()
 iccdev_add_mcs_colorspace_name_test()
 iccdev_add_signature_utils_contract_test()
+iccdev_add_utf8_converter_cursor_test()
 iccdev_add_console_sanitize_codepoint_test()
 iccdev_add_tiff_create_overflow_test()
 iccdev_add_tiff_separated_strips_test()
