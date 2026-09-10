@@ -1,5 +1,14 @@
 name: "iccDEV CodeQL Security Analysis"
 
+# NOTE: ci-codeql-security.yml does not consult this file. It drives the CodeQL
+# CLI directly (`codeql database create --source-root="."`) with no
+# codeql-action/init step, so the `paths`/`paths-ignore` keys below are inert
+# there; the workflow lists this file only as a `push:` trigger filter. Scan
+# scope is set by the CMake configure step in that workflow -- currently
+# -DENABLE_TESTS=OFF. Changing scope by editing the keys below will trigger a
+# green run that scans exactly what it did before. See #2494; whether to wire
+# this config up or retire it is an open maintainer decision.
+
 queries:
   - uses: ./.github/codeql-queries/iccdev-security-suite.qls
   - uses: ./.github/codeql-queries/iccdev-jsonlib-suite.qls
