@@ -244,6 +244,31 @@ public:
    * encoding carries this as a last index (count - 1). */
   icUInt8Number m_nControlPoints;
 
+  /**
+   * m_nControlPoints bounded to the extent of m_x/m_y/m_slope.
+   *
+   * Read from a file the raw count is always in range: the encoding carries a
+   * 5-bit last index, so Unpack() cannot produce more than 32, and Pack(),
+   * Validate() and CIccHagcEvaluator::Init() each refuse an out-of-range count
+   * rather than clamping it.  But this is an exported class with public members
+   * and CIccTagHagc::GetMetadata() hands out a mutable reference, so setting
+   * m_nControlPoints to 255 without going through the codec is a supported API
+   * call - and every reader that then indexes the three arrays walks 223
+   * icFloatNumber off the end of each.
+   *
+   * Anything that ITERATES the control points for output - Describe(), ToXml(),
+   * ToJson() - must use this rather than the raw field.  Clamping at each call
+   * site instead was tried and missed two of the three; a single accessor is
+   * what keeps a fourth site from repeating it.  Code that VALIDATES the count
+   * should keep reading m_nControlPoints directly, since the whole point there
+   * is to notice that it is wrong.
+   */
+  icUInt8Number SafeControlPointCount() const
+  {
+    return (m_nControlPoints > icHagcMaxControlPoints) ? (icUInt8Number)icHagcMaxControlPoints
+                                                       : m_nControlPoints;
+  }
+
   /** When true the control point slopes were not carried in the tag and are
    * to be derived per clause C.3.9 of SMPTE ST 2094-50:2026 (proposal
    * 1.1.3.5).  m_slope[] is left zeroed in that case and stays zeroed: this

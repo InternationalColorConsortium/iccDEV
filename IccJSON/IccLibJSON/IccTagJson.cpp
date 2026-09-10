@@ -669,7 +669,10 @@ bool CIccTagJsonHagc::ToJson(IccJson &j)
     }
 
     IccJson points = IccJson::array();
-    for (k = 0; k < (int)pAlt->m_nControlPoints; k++) {
+    /* SafeControlPointCount(), not the raw field: this loop indexes three
+     * 32-element arrays and the count is a public member of an exported class.
+     * See icHagcAlternateImage::SafeControlPointCount(). */
+    for (k = 0; k < (int)pAlt->SafeControlPointCount(); k++) {
       IccJson pt = IccJson::object();
       pt["x"] = (double)pAlt->m_x[k];
       pt["y"] = (double)pAlt->m_y[k];

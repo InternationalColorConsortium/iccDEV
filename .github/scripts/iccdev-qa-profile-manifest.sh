@@ -117,12 +117,32 @@ classify_rationale() {
       # status fell through to "unclassified". A noncompliant verdict is a
       # specification violation the profile still survives - iccDumpProfile even
       # exits 0 for it - so it is a distinct kind of negative from a critical one.
-      if grep -Fq 'not strictly increasing' "$log"; then
-        echo "negative fixture: HAGC gain curve control point X values must be strictly increasing"
-      elif grep -Fq 'HDR: cicp TransferCharacteristics' "$log"; then
-        echo "negative fixture: an HDR Profile may only declare TransferCharacteristics 8, 16 or 18"
-      elif grep -Fq 'without its paired BToA0Tag' "$log"; then
+      #
+      # EVERY NEEDLE HERE MUST BE A FRAGMENT OF A VALIDATOR MESSAGE, and one no
+      # fixture's own prose can supply.  The log is `iccDumpProfile -v`, i.e. the
+      # WHOLE dump including tag text, so a needle that also appears in a
+      # profileDescriptionTag matches the fixture describing itself rather than
+      # the library reporting anything - it would keep printing its label after
+      # the validator stopped reporting the defect entirely.  The first needle
+      # was exactly that: 'not strictly increasing' occurs three times inside
+      # HagcInvalidXOrder.xml's own description.  The other two named messages
+      # the library has never emitted ('HDR: cicp TransferCharacteristics' -
+      # the real ones are 'HDR: cicpTag ColourPrimaries' and 'HDR: cicpTag
+      # VideoFullRangeFlag'; and 'without its paired BToA0Tag' - the message
+      # substitutes the index, so the only fixture that reaches it says BToA1Tag).
+      #
+      # Check a new needle with: grep -c '<needle>' Testing/**/<fixture>.xml
+      # HdrMissingBToA1's description quotes the defect almost verbatim, so the
+      # pairing arm is additionally anchored on the 'HDR: ' prefix that only
+      # CheckHdrProfile() emits.
+      if grep -Fq 'control point X values decrease' "$log"; then
+        echo "negative fixture: HAGC gain curve control point X values decrease, or repeat with differing Y"
+      elif grep -Fq 'HDR: AToB' "$log" && grep -Fq 'present without its paired BToA' "$log"; then
         echo "negative fixture: an AToBx tag requires its paired BToAx tag"
+      elif grep -Fq 'BToA0Tag missing' "$log"; then
+        echo "negative fixture: a Display-class RGB HDR Profile requires a BToA0Tag"
+      elif grep -Fq 'is 2 (Unspecified) but the matrix column tags are' "$log"; then
+        echo "negative fixture: ColourPrimaries 2 requires the matrix column tags"
       else
         echo "negative fixture: profile violates the specification and must be reported"
       fi

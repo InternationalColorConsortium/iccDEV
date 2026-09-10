@@ -1545,7 +1545,10 @@ bool CIccTagXmlHagc::ToXml(std::string& xml, std::string blanks/* = ""*/)
     }
 
     xml += blanks + "  <ControlPoints>\n";
-    for (j = 0; j < (int)pAlt->m_nControlPoints; j++) {
+    /* SafeControlPointCount(), not the raw field: this loop indexes three
+     * 32-element arrays and the count is a public member of an exported class.
+     * See icHagcAlternateImage::SafeControlPointCount(). */
+    for (j = 0; j < (int)pAlt->SafeControlPointCount(); j++) {
       if (pAlt->m_bPchipSlope)
         snprintf(buf, bufSize, "<ControlPoint X=\"%.4f\" Y=\"%.5f\"/>\n", pAlt->m_x[j], pAlt->m_y[j]);
       else

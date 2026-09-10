@@ -1064,8 +1064,24 @@ icFloatNumber CIccHagcEvaluator::Curve::Gain(icFloatNumber v) const
     if (v == x[last])
       return y[last];
 
-    // x[last] is positive here (v > x[last] >= x[0] >= 0), so the ratio is
-    // well formed and the logarithm is of a value below 1, i.e. negative.
+    // THE OBVIOUS INVARIANT HERE IS FALSE.  This used to assert "x[last] is
+    // positive here (v > x[last] >= x[0] >= 0)", but v > x[last] proves only
+    // that x[last] is BELOW v, not that it is above zero.  A curve whose
+    // control points all sit at X = 0 is legal: 0 is a representable X code,
+    // and clause 6.5.2 permits x[i] == x[i+1] whenever y[i] == y[i+1], so
+    // Validate() and CIccHagcEvaluator::Init() both accept it.  log(0/v) is
+    // then -infinity, the gain 2^-inf collapses to 0, and every pixel of the
+    // image renders black with no diagnostic anywhere - the same silent-black
+    // shape as an unpopulated colour matrix.
+    //
+    // A degenerate curve has no extrapolation to offer, so clip to the last
+    // control point's own value, which is what the v == x[last] case above
+    // returns and keeps the function continuous there.
+    if (!(x[last] > 0.0))
+      return y[last];
+
+    // x[last] > 0 and v > x[last], so the ratio is well formed and the
+    // logarithm is of a value below 1, i.e. negative.
     return (icFloatNumber)((double)y[last] + log((double)x[last] / (double)v) / log(2.0));
   }
 
