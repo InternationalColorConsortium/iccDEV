@@ -2227,6 +2227,15 @@ protected:
   bool Init(CIccCmm *pCachedCmm, icUInt16Number nCacheSize);
 
   CIccCmm *m_pCachedCmm;
+
+  //Private apply object for the cached CMM, allocated in Init() and owned here.
+  //A cache miss must not drive m_pCachedCmm->Apply(): that dispatches through
+  //the cached CMM's single m_pApply, so every CIccApplyMruCmm sharing that CMM
+  //-- one per CIccThreadedCmm worker -- would race on the same scratch state
+  //while each held a private cache.  Mirrors the per-sub-chain apply objects
+  //CIccApplyCmmSearch owns for the same reason.
+  CIccApplyCmm *m_pCachedApply;
+
   CIccMruCacheFloat *m_pCache;
 };
 

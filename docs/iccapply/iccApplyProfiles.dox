@@ -42,6 +42,49 @@ The rendering-intent selector supports the documented base, transform,
 preview, gamut, BPC, BRDF, and MCS values printed by `Usage()`. Add 1000 for
 luminance-based PCS adjustment and 10000 to use a V5 sub-profile where present.
 
+\section profiles_search JSON inverse-search chains (connect.useSearch)
+
+Setting `useSearch` to `true` inside the JSON `connect` block builds a
+CIccCmmSearch instead of the forward CIccCmm, so an image can be reproduced
+through a spectral inverse search. It is `-cfg` only: the direct form has no
+room for the weighted PCC list or the reverse-search start, and `-exportcfg`
+output is unchanged.
+
+| Key | Location | Meaning |
+|---|---|---|
+| `useSearch` | `connect` | Build a CIccCmmSearch from `profileSequence`. Emitted by `toJson()` only when true, so existing configs round-trip byte-identically. |
+| `threads` | `connect` | Applies to a search chain as it does to a forward one. Each worker holds its own CIccApplyCmmSearch with private sub-chain apply objects, so a threaded result matches the scalar one. |
+| `searchApply` | top level | The search chain: `profileSequence`, `initial` and `pccWeights` in one object, spelled exactly as iccApplySearch spells it, so the block moves between the two tools verbatim. |
+| `pccWeights` | in `searchApply` | Weighted profile connection conditions the search optimises across. Required when `profileSequence` has three entries. |
+| `initial` | in `searchApply` | Optional initial-destination settings seeding the reverse search. Absent means the destination profile seeds it. |
+
+Under `useSearch` the chain is read from `searchApply`; a top-level
+`profileSequence` is the forward-mode spelling and is not consulted, so the
+chain is only ever written in one place. Naming a `searchApply` block with
+`useSearch` off is an error rather than a silent forward run. The schema
+(`docs/icc-connect-config.schema.json`) states the pair directly: the accepted
+top-level shapes include `imageFiles` + `profileSequence` for a forward chain
+and `imageFiles` + `searchApply` for a search. Rules the tool enforces before
+building the CMM:
+
+- Two or three profiles. CIccCmmSearch accepts a source, an optional mid, and a
+  destination; anything else is rejected by name.
+- Three profiles require at least one `pccWeights` entry, since the mid and
+  destination connect through the weighted PCC set.
+- With `useSearch` off, naming `initial` or `pccWeights` is an error rather than
+  a silent no-op.
+
+An empty first `iccFile` still selects the source image's embedded profile, and
+`useV5SubProfile` on that entry reaches a v5 multispectral sub-profile. That is
+the only way to drive an image whose colour description travels inside it, such
+as the 8-channel multispectral data in `Testing/hybrid`. A per-stage `pccFile`
+is discarded by the search CMM everywhere except the last entry, which supplies
+the initial-destination chain; the tool warns on stderr where it is inert.
+
+A search apply is orders of magnitude slower per pixel than a forward chain,
+because every pixel runs a Nelder-Mead search rather than a fixed sequence of
+xforms.
+
 \section profiles_runtime Transform and output behavior
 
 The tool opens the source TIFF, accepts source 8-bit, 16-bit, or 32-bit float
