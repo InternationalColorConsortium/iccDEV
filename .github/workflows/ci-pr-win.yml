@@ -590,7 +590,8 @@ jobs:
           pwd
           cd Build/Cmake
           Write-Host "========= Running CTest check ... ================`n"
-          cmake --build build --config Debug --target build-test-binaries -- /m /maxcpucount
+          # vcpkg z-applocal stages shared DLLs; parallel helper builds race.
+          cmake --build build --config Debug --target build-test-binaries --parallel 1
           python ..\..\.github\scripts\run-recent-ctests.py `
             --test-dir build `
             --config Debug `
@@ -797,11 +798,12 @@ jobs:
             '--config', 'Debug',
             '--parallel'
           ) $buildLog
+          # vcpkg z-applocal stages shared DLLs; parallel helper builds race.
           Invoke-NativeLogged cmake @(
             '--build', $buildDir,
             '--config', 'Debug',
             '--target', 'build-test-binaries',
-            '--parallel'
+            '--parallel', '1'
           ) $checkLog
           Invoke-NativeLogged python @(
             '.github\scripts\run-recent-ctests.py',
@@ -1145,10 +1147,11 @@ jobs:
             '--build', $buildDir,
             '--parallel'
           )
+          # vcpkg z-applocal stages shared DLLs; parallel helper builds race.
           Invoke-Native $cmake @(
             '--build', $buildDir,
             '--target', 'build-test-binaries',
-            '--parallel'
+            '--parallel', '1'
           )
           Invoke-Native python @(
             '.github\scripts\run-recent-ctests.py',
