@@ -1197,8 +1197,10 @@ jobs:
               continue
             fi
             approved_ref_pattern="github.ref == 'refs/heads/master'"
-            if [[ "$wf_base" == "ci-docker.yml" || "$wf_base" == "ci-latest-release.yml" ]]; then
+            if [[ "$wf_base" == "ci-docker.yml" ]]; then
               approved_ref_pattern="github.ref == 'refs/heads/(master|ci-qa-pr-docker-testing|ci-publish-colourbill-ctrl)'"
+            elif [[ "$wf_base" == "ci-latest-release.yml" ]]; then
+              approved_ref_pattern="github.ref == 'refs/heads/(master|ci-fix-windows-packaging-failure|ci-publish-colourbill-ctrl)'"
             fi
             has_approved_publish_ref=false
             has_environment=false
@@ -3461,8 +3463,10 @@ jobs:
             if ($triggerNames -notcontains 'workflow_dispatch') { continue }
             if ($content -notmatch '(?m)^\s+(contents|packages|attestations|artifact-metadata|id-token):\s*write') { continue }
             $approvedPublishRefPattern = "github\.ref == 'refs/heads/master'"
-            if (($wf.Name -eq "ci-docker.yml") -or ($wf.Name -eq "ci-latest-release.yml")) {
+            if ($wf.Name -eq "ci-docker.yml") {
               $approvedPublishRefPattern = "github\.ref == 'refs/heads/(master|ci-qa-pr-docker-testing|ci-publish-colourbill-ctrl)'"
+            } elseif ($wf.Name -eq "ci-latest-release.yml") {
+              $approvedPublishRefPattern = "github\.ref == 'refs/heads/(master|ci-fix-windows-packaging-failure|ci-publish-colourbill-ctrl)'"
             }
             $hasApprovedPublishRef = $content -match $approvedPublishRefPattern
             $hasEnvironment = $content -match '(?m)^\s+environment:'
