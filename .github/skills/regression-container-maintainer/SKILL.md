@@ -21,8 +21,9 @@ Use this skill for repeatable maintainer operations in
 ## Required Inputs
 
 1. Operation: basic smoke, PR validation, or issue reproduction.
-2. Image selector: choose `latest`, `ci-qa-pr-docker-testing`, a full-SHA tag,
-   or a release tag at run time; do not embed a particular SHA as a reusable
+2. Image selector: choose `latest`, `ci-qa-pr-docker-testing`,
+   `ci-publish-colourbill-ctrl`, a full-SHA tag, or a release tag at run time;
+   do not embed a particular SHA as a reusable
    default.
 3. PR, issue, branch, or commit reference.
 4. Affected tool and smallest focused regression.
@@ -40,8 +41,9 @@ Use this skill for repeatable maintainer operations in
 6. For an issue, reproduce with existing project tools and saved inputs.
 7. Rebuild the affected target, then run the focused regression and registered
    CTest wrapper.
-8. For local PR proof, pull the published `ci-qa-pr-docker-testing` image when
-   validating that integration branch; otherwise pull the selected published
+8. For local PR proof, pull the matching published integration image when
+   validating `ci-qa-pr-docker-testing` or `ci-publish-colourbill-ctrl`;
+   otherwise pull the selected published
    image. Record its resolved digest, mount the reviewed worktree read-only,
    and copy it to container-local scratch space. Run the local canonical-image
    build, reject compiler warnings, and run CTest excluding only the `slow` and
@@ -56,8 +58,8 @@ Use this skill for repeatable maintainer operations in
 12. Scan logs for compiler warnings, ASAN, UBSAN, and signal termination.
 13. Trigger `ci-pr-action.yml` explicitly for a pre-PR branch; a push alone does
     not trigger that workflow.
-14. Use only `latest`, `ci-qa-pr-docker-testing`, full-SHA, or release tags as
-    selectors. Resolve the selector at run time; never hardcode one SHA tag as
+14. Use only `latest`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`,
+    full-SHA, or release tags as selectors. Resolve the selector at run time; never hardcode one SHA tag as
     a long-lived workflow default. Existing legacy tags are continuity-only; do
     not introduce, recommend, or depend on other branch, run, or image-variant
     tags.

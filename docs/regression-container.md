@@ -14,6 +14,7 @@ included Clang 21 pair for compatible instrumentation.
 |-----|---------|
 | `latest` | Current image from `master`; convenient but mutable. |
 | `ci-qa-pr-docker-testing` | Mutable integration image published only by the protected Docker validation branch. |
+| `ci-publish-colourbill-ctrl` | Mutable integration image published by the reviewer-gated maintainer publishing branch. |
 | `sha-<40-character-commit>` | Immutable CI and investigation reference. |
 | `v<release>` | Immutable released image. |
 | Existing legacy tags | Retained temporarily for continuity; unsupported for new use. |
@@ -26,7 +27,8 @@ maintainer image advances. Replay prior evidence with its recorded digest.
 
 Existing short-SHA, branch, and image-variant tags remain available only to
 avoid breaking current users during the consolidation transition, except for
-the supported `ci-qa-pr-docker-testing` integration tag. Do not create,
+the supported `ci-qa-pr-docker-testing` and `ci-publish-colourbill-ctrl`
+integration tags. Do not create,
 recommend, or depend on new legacy tags. Re-evaluate their retention and
 removal through a separately announced tag-management change.
 
@@ -86,8 +88,8 @@ success or failure. Failure logs stay in the CI job log and the optional report
 directory; CI uploads those diagnostics on failure. Inventories and image
 identity are printed rather than asserting a fixed tool count. `ci-docker`
 uses the same helper, requiring native validation. It publishes only from
-`master`, `ci-qa-pr-docker-testing`, and release tags; other feature branches
-remain non-publishing.
+`master`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`, and release
+tags; other feature branches remain non-publishing.
 The read-only `ci-docker-pr` caller uses it when building the changed Dockerfile;
 its trusted-base-image-only path does not claim to test a new runtime. No PR
 runtime artifacts are uploaded. The MCP package workflow includes the shared
@@ -365,9 +367,10 @@ tree before running Memcheck. For concurrent code, replace the Memcheck
 arguments with `--tool helgrind --expect clean --runs 3`.
 
 `ci-docker` publishes the canonical package only from approved refs: `master`
-adds `latest` and the immutable SHA tag, `ci-qa-pr-docker-testing` adds its
-integration tag and the immutable SHA tag, and a `v*` ref adds its release tag
-and immutable SHA tag. Do not publish other branch, run, image-variant, or
+adds `latest` and the immutable SHA tag, `ci-qa-pr-docker-testing` and
+`ci-publish-colourbill-ctrl` add their integration tags and immutable SHA tags,
+and a `v*` ref adds its release tag and immutable SHA tag. Do not publish other
+branch, run, image-variant, or
 legacy-package tags. Publishing runs generate an SPDX SBOM with Anchore and
 create provenance with GitHub's `actions/attest-build-provenance` action.
 The separate GitHub SBOM attestation uses `actions/attest` only when the SBOM

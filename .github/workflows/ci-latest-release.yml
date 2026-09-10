@@ -1748,9 +1748,12 @@ jobs:
   release:
     name: "Publish Latest Release"
     needs: [linux, macos, windows, wasm, cpack-linux, doxygen]
-    if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-fix-windows-packaging-failure' }}
+    if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-fix-windows-packaging-failure' || github.ref == 'refs/heads/ci-publish-colourbill-ctrl' }}
     runs-on: ubuntu-latest
-    environment: release
+    environment:
+      name: >-
+        ${{ github.ref == 'refs/heads/ci-publish-colourbill-ctrl' &&
+            'ci-publishing-colourbill-ctrl' || 'release' }}
     timeout-minutes: 15
     permissions:
       contents: write  # Required to publish the latest release.

@@ -131,8 +131,8 @@ requesting review, check the PR against this list:
   equivalent for the changed surface. If a workflow tests a helper on push,
   the PR fast lane should test the same helper or document why it cannot.
 - Keep branch triggers and publish conditions aligned. `ci-docker` publishes
-  the canonical image only from `master`, `ci-qa-pr-docker-testing`, and
-  release tags; do not add
+  the canonical image only from `master`, `ci-qa-pr-docker-testing`,
+  `ci-publish-colourbill-ctrl`, and release tags; do not add
   branch-specific or variant image tags.
 - Keep Docker and regression-container docs reproducible from a fresh checkout
   or clean container. Fetch branch refs explicitly and avoid relying on local
@@ -275,9 +275,10 @@ For unified `Dockerfile` publishing:
 2. Publish through the maintainer-controlled container release path.
 3. Record the published immutable SHA tag, digest, and source revision from the
    release output.
-4. Publish `latest` only from `master`; publish the integration tag only from
-   `ci-qa-pr-docker-testing`, after all image smoke tests and regression CTest
-   checks succeed, then confirm it resolves to the immutable digest.
+4. Publish `latest` only from `master`; publish an integration tag only from
+   `ci-qa-pr-docker-testing` or `ci-publish-colourbill-ctrl`, after all image
+   smoke tests and regression CTest checks succeed, then confirm it resolves
+   to the immutable digest.
 5. Pass the immutable SHA tag to `ci-iccdev-tool-tests.yml` and rerun the
    regression gate.
 6. Do not create branch-specific or run-specific image tags.

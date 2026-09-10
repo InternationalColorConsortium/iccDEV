@@ -86,7 +86,7 @@ find IccProfLib IccXML IccJSON IccConnect Tools -type f \
 for component in IccProfLib IccXML IccJSON IccConnect Tools; do
   grep -z -E "^${component}/" "$LINT_REPORTS/changed_files.txt" \
     | xargs -r -0 run-clang-tidy -j "$(nproc)" -p "$LINT_BUILD" \
-      -checks='modernize-*,readability-*,cppcoreguidelines-*,clang-analyzer-core.*,clang-analyzer-security.*,clang-analyzer-alpha.core.*,clang-analyzer-alpha.security.*' \
+      -checks='modernize-*,readability-*,-readability-identifier-length,-readability-implicit-bool-conversion,-readability-braces-around-statements,-readability-uppercase-literal-suffix,cppcoreguidelines-*,clang-analyzer-core.*,clang-analyzer-security.*,clang-analyzer-alpha.core.*,clang-analyzer-alpha.security.*' \
       > "$LINT_REPORTS/clang_tidy_${component}.txt" 2>&1 || true
   cppcheck --language=c++ --std=c++17 \
     --enable=warning,performance,portability,style \
@@ -993,7 +993,7 @@ should change container package pins, published image tags, or GHCR workflows.
 
 | File | Maintainer purpose | Publish/validation path |
 |------|--------------------|-------------------------|
-| `Dockerfile` | Pinned Ubuntu unified image for runtime, MCP, and maintainer checks, with Clang/LLVM 22 defaults, a Clang 21 pair for the packaged AFL++ LLVM plugin, GCC 15.2+, sanitizer, debugger, fuzzing, git, curl, and GitHub CLI tooling. | Follow the [container maintainer preflight](regression-container.md#maintainer-preflight-and-security-checks) before publishing; AFL wrapper changes also need the `docs/afl-fuzzing.md` container bootstrap probe. Consumer workflows select `latest`, `ci-qa-pr-docker-testing`, an immutable SHA, or a release tag. |
+| `Dockerfile` | Pinned Ubuntu unified image for runtime, MCP, and maintainer checks, with Clang/LLVM 22 defaults, a Clang 21 pair for the packaged AFL++ LLVM plugin, GCC 15.2+, sanitizer, debugger, fuzzing, git, curl, and GitHub CLI tooling. | Follow the [container maintainer preflight](regression-container.md#maintainer-preflight-and-security-checks) before publishing; AFL wrapper changes also need the `docs/afl-fuzzing.md` container bootstrap probe. Consumer workflows select `latest`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`, an immutable SHA, or a release tag. |
 
 For reproducible maintainer checks, pass the immutable SHA tag to
 `ci-iccdev-tool-tests.yml`; use `latest` only for the current `master`
