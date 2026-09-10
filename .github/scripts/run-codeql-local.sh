@@ -62,6 +62,11 @@ Build configuration:
   The CodeQL database is built out-of-tree with ICC_JSON_ORDERED=ON so CI and
   local analysis use deterministic JSON key ordering.
 
+  Scope is the product build only: ENABLE_TESTS=OFF, matching
+  ci-codeql-security.yml. The regression suite under .github/ci/regression is
+  NOT in the database, so an alert reported there will not reproduce here --
+  that is expected, not evidence the alert is fixed.
+
 Examples:
   # Full analysis from scratch
   $(basename "$0")
@@ -137,9 +142,13 @@ if [ "$SKIP_BUILD" -eq 0 ]; then
 
     rm -rf "$BUILD_DIR"
     mkdir -p "$BUILD_DIR"
+    # ENABLE_TESTS=OFF to match ci-codeql-security.yml: the database covers
+    # whatever `all` builds, so without it a local scan sees the regression
+    # suite and reports alerts CI would not.
     cmake -S "$REPO_ROOT/Build/Cmake" -B "$BUILD_DIR" \
         -DCMAKE_BUILD_TYPE=Debug \
         -DENABLE_TOOLS=ON \
+        -DENABLE_TESTS=OFF \
         -DICC_JSON_ORDERED=ON \
         -DCMAKE_C_COMPILER=clang \
         -DCMAKE_CXX_COMPILER=clang++
