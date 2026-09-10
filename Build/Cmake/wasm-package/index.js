@@ -15,5 +15,6 @@ module.exports = {
   IccJpegDump: require('./IccJpegDump/iccJpegDump.js'),
   IccPngDump: require('./IccPngDump/iccPngDump.js'),
   IccSpecSepToTiff: require('./IccSpecSepToTiff/iccSpecSepToTiff.js'),
-  IccV5DspObsToV4Dsp: require('./IccV5DspObsToV4Dsp/iccV5DspObsToV4Dsp.js')
+  IccV5DspObsToV4Dsp: require('./IccV5DspObsToV4Dsp/iccV5DspObsToV4Dsp.js'),
+  IccHdrFallback: require('./IccHdrFallback/iccHdrFallback.js')
 };

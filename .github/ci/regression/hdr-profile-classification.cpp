@@ -64,6 +64,17 @@ namespace {
 
 int g_failures = 0;
 
+/* A SKIPPED fixture must not report as PASSED.  These tests open generated .icc
+ * under Testing/HDR; when one will not open they print SKIP and carry on, and
+ * main() used to return g_failures - which is 0 - so ctest recorded a green
+ * PASS for a run that asserted nothing.  Measured from a directory with no
+ * fixtures, three of these exited 0 having skipped 19, 7 and 2 checks.
+ * g_skips lets main() return 77 instead, which SKIP_RETURN_CODE turns into a
+ * ctest Skipped result.  A real failure still wins: 77 is only returned when
+ * nothing failed. */
+int g_skips = 0;
+
+
 void check(bool cond, const char *szWhat)
 {
   if (!cond) {
@@ -86,8 +97,10 @@ CIccProfile *openFixture(const char *szName)
   path += szName;
 
   CIccProfile *pProfile = ReadIccProfile(path.c_str());
-  if (!pProfile)
+  if (!pProfile) {
+    g_skips++;
     printf("SKIP: cannot open %s (run Testing/CreateAllProfiles.sh)\n", path.c_str());
+  }
 
   return pProfile;
 }
@@ -778,6 +791,7 @@ void testClassification()
     delete pSdr;
   }
   else {
+    g_skips++;
     printf("SKIP: Testing/V2/v2RgbMatrixTRC.icc absent\n");
   }
 }
@@ -798,6 +812,10 @@ int main()
     printf("hdr-profile-classification: %d assertion(s) failed\n", g_failures);
   else
     printf("hdr-profile-classification: all assertions passed\n");
+
+  /* 77 = ctest Skipped (see SKIP_RETURN_CODE); a real failure still wins. */
+  if (!g_failures && g_skips)
+    return 77;
 
   return g_failures;
 }

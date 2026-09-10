@@ -70,12 +70,22 @@ set(_fixtures
   HdrInvalidTransfer.icc
   HdrMissingBToA0.icc
 )
+# FATAL_ERROR, not a bare return().  This used to `return()`, which in `cmake -P`
+# is exit 0, so a run that asserted nothing reported a green PASS - the same
+# skip-to-green defect the C++ HDR tests had.  Those now exit 77 and let
+# SKIP_RETURN_CODE turn it into a ctest Skipped; a cmake script cannot, because
+# cmake_language(EXIT) needs 3.29 and this project requires 3.18.
+#
+# Failing is the right answer anyway now that the test declares
+# FIXTURES_REQUIRED iccdev_profiles: ctest runs the generation first, so a
+# fixture still absent here means the generation actually failed, and that
+# should be red rather than quietly skipped.
 foreach(_fixture IN LISTS _fixtures)
   if(NOT EXISTS "${ICCDEV_HDR_DIR}/${_fixture}")
-    message(STATUS
-      "SKIP ${ICCDEV_TEST_NAME}: ${ICCDEV_HDR_DIR}/${_fixture} is absent "
-      "(run Testing/CreateAllProfiles.sh to generate the HDR fixtures)")
-    return()
+    message(FATAL_ERROR
+      "${ICCDEV_TEST_NAME}: ${ICCDEV_HDR_DIR}/${_fixture} is absent. "
+      "FIXTURES_REQUIRED iccdev_profiles should have generated it; if you are "
+      "running this test directly, run Testing/CreateAllProfiles.sh first.")
   endif()
 endforeach()
 

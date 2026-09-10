@@ -2451,6 +2451,7 @@ function(iccdev_add_hagc_authoring_invariants_test)
   set_tests_properties(iccdev.hagc-authoring-invariants PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     FIXTURES_REQUIRED iccdev_profiles
+    SKIP_RETURN_CODE 77
     TIMEOUT 60
     LABELS "iccdev;validation;tag;xml;hdr;regression"
   )
@@ -2500,7 +2501,6 @@ function(iccdev_add_hagc_json_authoring_test)
   )
   set_tests_properties(iccdev.hagc-json-authoring PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
-    FIXTURES_REQUIRED iccdev_profiles
     TIMEOUT 60
     LABELS "iccdev;validation;tag;json;hdr;regression"
   )
@@ -2552,6 +2552,7 @@ function(iccdev_add_hdr_profile_test)
   set_tests_properties(iccdev.hdr-profile-classification PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     FIXTURES_REQUIRED iccdev_profiles
+    SKIP_RETURN_CODE 77
     TIMEOUT 60
     LABELS "iccdev;validation;hdr;cicp;regression"
   )
@@ -2606,6 +2607,7 @@ function(iccdev_add_hdr_bake_test)
   set_tests_properties(iccdev.hdr-bake PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     FIXTURES_REQUIRED iccdev_profiles
+    SKIP_RETURN_CODE 77
     TIMEOUT 120
     LABELS "iccdev;validation;cmm;hdr;regression"
   )
@@ -2661,6 +2663,7 @@ function(iccdev_add_hdr_tonemap_test)
   set_tests_properties(iccdev.hdr-tonemap PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     FIXTURES_REQUIRED iccdev_profiles
+    SKIP_RETURN_CODE 77
     TIMEOUT 60
     LABELS "iccdev;validation;cmm;hdr;regression"
   )

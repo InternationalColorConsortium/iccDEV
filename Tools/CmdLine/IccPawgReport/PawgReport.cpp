@@ -1138,6 +1138,24 @@ static const icTagSignature kCommonRequired[] = {
 
 static const icTagSignature kMatrixTrcAlternative[] = {
   icSigAToB0Tag,
+  // BToA0Tag belongs with AToB0Tag, and its absence was a plain gap in this
+  // table rather than anything HDR-specific.  ICC.1:2022 8.3.3/8.4.3 permit a
+  // LUT-based Input or Display profile, which is why AToB0Tag is here; for a
+  // Display profile ICC.1 then REQUIRES the paired BToA0Tag, so a profile that
+  // does what the specification demands was reported by C5 as carrying a
+  // "standard tag outside the local class rule table".  BToA0Tag appears only
+  // in kOutputRequired and kA2B0B2A0Required, neither of which the display or
+  // input rule uses.
+  //
+  // Every conforming Display RGB HDR Profile tripped this, because 8.10.6
+  // mandates the AToB0Tag and its paired BToA0Tag - so the whole HDR corpus
+  // warned - but the defect predates the HDR work and a plain LUT-based
+  // Display profile hits it too.  Fixed here, in the alternative set the input
+  // and display rules share, rather than by widening kCommonOptional, which
+  // the output and link rules also read and which would say the tag is merely
+  // optional where those classes require it.  Same shape as the cicpTag
+  // (#2001) and headroomAdaptiveGainCurveTag entries noted below.
+  icSigBToA0Tag,
   icSigRedMatrixColumnTag,
   icSigGreenMatrixColumnTag,
   icSigBlueMatrixColumnTag,
