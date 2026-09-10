@@ -16,7 +16,11 @@ permissions:
 
 env:
   PUBLISH_IMAGE: >-
-    ${{ github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v') }}
+    ${{
+      github.ref == 'refs/heads/master' ||
+      github.ref == 'refs/heads/ci-qa-pr-docker-testing' ||
+      startsWith(github.ref, 'refs/tags/v')
+    }}
 
 'on':
   push:
@@ -114,6 +118,7 @@ jobs:
           tags: |
             type=sha,format=long
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+            type=ref,event=branch,enable=${{ github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
             type=ref,event=tag
 
       # preflight: allow-token-exposure reason=publish-unified-iccdev-image
@@ -125,7 +130,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and publish
+      - name: Build image for validation
         id: build-push
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
         with:
@@ -136,10 +141,10 @@ jobs:
           pull: true
           build-args: |
             GIT_COMMIT=${{ github.sha }}
-          load: ${{ env.PUBLISH_IMAGE != 'true' }}
-          push: ${{ env.PUBLISH_IMAGE == 'true' }}
-          provenance: ${{ env.PUBLISH_IMAGE == 'true' && 'mode=max' || 'false' }}
-          sbom: ${{ env.PUBLISH_IMAGE == 'true' }}
+          load: true
+          push: false
+          provenance: false
+          sbom: false
           labels: |
             ${{ steps.meta.outputs.labels }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -149,8 +154,6 @@ jobs:
         id: test-image
         env:
           BASH_ENV: /dev/null
-          PUBLISH_IMAGE: ${{ env.PUBLISH_IMAGE }}
-          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           set -euo pipefail
@@ -158,11 +161,10 @@ jobs:
           unset GITHUB_TOKEN || true
           source .github/scripts/sanitize-sed.sh
 
-          if [ "$PUBLISH_IMAGE" = true ]; then
-            docker pull "$IMAGE_REF"
-            test_image="$IMAGE_REF"
-          else
-            test_image="$(sed -n '1p' <<< "$IMAGE_TAGS")"
+          test_image="$(sed -n '1p' <<< "$IMAGE_TAGS")"
+          if [ -z "$test_image" ]; then
+            echo "No image tag was generated for validation" >&2
+            exit 1
           fi
           printf 'image=%s\n' "$(sanitize_line "$test_image")" >> "$GITHUB_OUTPUT"
 
@@ -185,7 +187,8 @@ jobs:
           test "$image_ref_name" = "$EXPECTED_REF_NAME"
           docker run --rm "$TEST_IMAGE" bash -lc '
             set -euo pipefail
-            command -v git gh clang clang++ gcc g++ cmake afl-fuzz llvm-symbolizer
+            command -v git gh clang clang++ gcc g++ cmake cppcheck clang-tidy scan-build
+            command -v hadolint zizmor shellcheck afl-fuzz valgrind llvm-symbolizer
             command -v iccDumpProfile iccdev-fuzz-env iccdev-mcp iccdev-mcp-rest
             test "$PWD" = /workspace/iccDEV
             test -d .git
@@ -218,11 +221,43 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+      - name: Publish validated image
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
+        id: publish
+        env:
+          BASH_ENV: /dev/null
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          TEST_IMAGE: ${{ steps.test-image.outputs.image }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          pushed=0
+          while IFS= read -r image_tag; do
+            [ -n "$image_tag" ] || continue
+            docker push "$image_tag"
+            pushed=$((pushed + 1))
+          done <<< "$IMAGE_TAGS"
+          if [ "$pushed" -eq 0 ]; then
+            echo "No image tags were available to publish" >&2
+            exit 1
+          fi
+
+          image_digest_ref="$(docker image inspect "$TEST_IMAGE" --format '{{index .RepoDigests 0}}')"
+          image_digest="${image_digest_ref##*@}"
+          if [[ ! "$image_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Unable to resolve published image digest" >&2
+            exit 1
+          fi
+          printf 'digest=%s\n' "$(sanitize_line "$image_digest")" >> "$GITHUB_OUTPUT"
+
       - name: Generate SBOM
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26  # v0.24.2
         with:
-          image: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
+          image: ${{ steps.image.outputs.name }}@${{ steps.publish.outputs.digest }}
           format: spdx-json
           output-file: sbom.spdx.json
 
@@ -271,7 +306,7 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
         with:
           subject-name: ${{ steps.image.outputs.name }}
-          subject-digest: ${{ steps.build-push.outputs.digest }}
+          subject-digest: ${{ steps.publish.outputs.digest }}
           push-to-registry: true
 
       - name: Attest SBOM
@@ -283,7 +318,7 @@ jobs:
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
         with:
           subject-name: ${{ steps.image.outputs.name }}
-          subject-digest: ${{ steps.build-push.outputs.digest }}
+          subject-digest: ${{ steps.publish.outputs.digest }}
           sbom-path: sbom.spdx.json
           push-to-registry: true
 
@@ -293,7 +328,7 @@ jobs:
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
         with:
           subject-name: ${{ steps.image.outputs.name }}
-          subject-digest: ${{ steps.build-push.outputs.digest }}
+          subject-digest: ${{ steps.publish.outputs.digest }}
           sbom-path: sbom.spdx.json
           push-to-registry: true
 

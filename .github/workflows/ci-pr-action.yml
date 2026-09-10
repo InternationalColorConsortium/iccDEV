@@ -114,7 +114,6 @@ jobs:
       container_toolchain_required: ${{ steps.diffcheck.outputs.container_toolchain_required }}
       trusted_base_image_available: ${{ steps.diffcheck.outputs.trusted_base_image_available }}
       docs_only: ${{ steps.diffcheck.outputs.docs_only }}
-      native_changed: ${{ steps.diffcheck.outputs.native_changed }}
       risk_required: ${{ steps.diffcheck.outputs.risk_required }}
       run_windows_risk: ${{ steps.diffcheck.outputs.run_windows_risk }}
       example_consumer_changed: ${{ steps.diffcheck.outputs.example_consumer_changed }}
@@ -313,10 +312,9 @@ jobs:
             local ci_changed="$5"
             local container_changed="$6"
             local docs_only="$7"
-            local native_changed="$8"
-            local risk_required="$9"
-            local run_windows_risk="${10}"
-            local example_consumer_changed="${11}"
+            local risk_required="$8"
+            local run_windows_risk="${9}"
+            local example_consumer_changed="${10}"
 
             write_github_output() {
               local key="$1"
@@ -341,7 +339,6 @@ jobs:
             write_github_output container_toolchain_required "$container_toolchain_required"
             write_github_output trusted_base_image_available "$trusted_base_image_available"
             write_github_output docs_only "$docs_only"
-            write_github_output native_changed "$native_changed"
             write_github_output risk_required "$risk_required"
             write_github_output run_windows_risk "$run_windows_risk"
             write_github_output example_consumer_changed "$example_consumer_changed"
@@ -495,7 +492,7 @@ jobs:
             echo "Warning: invalid or missing PR commit SHA; assuming source changed for safety" >&2
             image_definition_changed=true
             container_toolchain_required=true
-            write_scope_outputs true true true true false true false true true true true
+            write_scope_outputs true true true true false true false true true true
             exit 0
           fi
 
@@ -510,7 +507,7 @@ jobs:
               ;;
             *)
               echo "Ref blocked or unsupported: $base_ref" >&2
-              write_scope_outputs false false false false false false false false false false false
+              write_scope_outputs false false false false false false false false false false
               exit 0
               ;;
           esac
@@ -526,7 +523,7 @@ jobs:
             echo "Warning: no merge base found; assuming source changed for safety" >&2
             image_definition_changed=true
             container_toolchain_required=true
-            write_scope_outputs true true true true false true false true true true true
+            write_scope_outputs true true true true false true false true true true
             exit 0
           fi
 
@@ -549,7 +546,6 @@ jobs:
           ci_changed=false
           container_changed=false
           docs_only=false
-          native_changed=false
           risk_required=false
           run_windows_risk=false
           example_consumer_changed=false
@@ -595,13 +591,6 @@ jobs:
             apply_docs_only_defaults
           fi
 
-          # Compiler and CTest jobs run only for native source edits. CMake,
-          # fixture, workflow, and documentation-only PRs do not need a native
-          # build to validate their changed surface.
-          if [[ "$source_changed" == "true" ]]; then
-            native_changed=true
-          fi
-
           if has_changed_file '^(examples/hello-iccdev/|IccProfLib/|IccXML/|IccJSON/|IccConnect/|Build/Cmake/(CMakeLists\.txt|IccProfLib/|IccXML/|IccJSON/|IccConnect/|RefIccMAX))'; then
             example_consumer_changed=true
           fi
@@ -630,7 +619,14 @@ jobs:
             full|source|fast-lane)
               run_full=true
               ;;
-            governance|docs|skip)
+            governance|docs)
+              # A manually selected reduced scope cannot suppress native
+              # validation for a native, build, or test-surface change.
+              if [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$testing_changed" == "true" ]]; then
+                run_full=true
+              fi
+              ;;
+            skip)
               run_full=false
               ;;
             auto)
@@ -640,7 +636,7 @@ jobs:
               ;;
           esac
 
-          write_scope_outputs "$run_full" "$source_changed" "$build_config_changed" "$testing_changed" "$ci_changed" "$container_changed" "$docs_only" "$native_changed" "$risk_required" "$run_windows_risk" "$example_consumer_changed"
+          write_scope_outputs "$run_full" "$source_changed" "$build_config_changed" "$testing_changed" "$ci_changed" "$container_changed" "$docs_only" "$risk_required" "$run_windows_risk" "$example_consumer_changed"
 
       - name: Generate Summary
         shell: bash --noprofile --norc {0}
@@ -1008,7 +1004,7 @@ jobs:
       run_windows_audit: ${{ needs.detect-src.outputs.run_windows_risk == 'true' }}
 
   gcc15-lto-ci:
-    if: ${{ needs.detect-src.outputs.native_changed == 'true' }}
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
     name: GCC 15.2 Strict Release LTO
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-gcc15.yml
@@ -1017,7 +1013,7 @@ jobs:
       target-sha: ${{ needs.detect-src.outputs.target_sha }}
 
   tool-tests:
-    if: ${{ needs.detect-src.outputs.native_changed == 'true' }}
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
     # Together with gcc15-lto-ci, this is the compact strict Unix coverage.
     name: Tool Smoke Tests (ASAN+UBSAN, Debug)
     needs: [detect-src, validate-inputs]
@@ -1032,7 +1028,7 @@ jobs:
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
 
   win-ci:
-    if: ${{ needs.detect-src.outputs.native_changed == 'true' && needs.validate-inputs.outputs.include-windows == 'true' }}
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.validate-inputs.outputs.include-windows == 'true' }}
     name: Windows Build & Test Profiles
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-win.yml
@@ -1040,7 +1036,7 @@ jobs:
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
 
   macos-release-lto:
-    if: ${{ needs.detect-src.outputs.native_changed == 'true' && needs.detect-src.outputs.ci_scope != 'fast-lane' }}
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.detect-src.outputs.ci_scope != 'fast-lane' }}
     name: macOS Clang Release LTO
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-unix.yml
@@ -1054,7 +1050,7 @@ jobs:
       target-sha: ${{ needs.detect-src.outputs.target_sha }}
 
   macos-debug:
-    if: ${{ needs.detect-src.outputs.native_changed == 'true' && needs.detect-src.outputs.ci_scope != 'fast-lane' }}
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.detect-src.outputs.ci_scope != 'fast-lane' }}
     name: macOS Clang Debug
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-unix.yml

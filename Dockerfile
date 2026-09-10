@@ -134,11 +134,13 @@ COPY --chown=iccdev-ci:iccdev-ci .github/ci/requirements /workspace/iccDEV/.gith
 
 RUN python3 -m venv /opt/iccdev-spectral-preview \
  && /opt/iccdev-spectral-preview/bin/python -m pip install \
+      --resume-retries 5 \
       --upgrade \
       'pip>=25.1.1' \
       'setuptools>=78.1.1' \
       --quiet \
  && /opt/iccdev-spectral-preview/bin/python -m pip install \
+      --resume-retries 5 \
       --only-binary=:all: \
       --no-cache-dir \
       -r /workspace/iccDEV/.github/ci/requirements/docker-spectral-preview.txt \
@@ -280,7 +282,7 @@ RUN chmod 0755 /usr/local/bin/iccdev-banner \
  && chown iccdev-ci:iccdev-ci /workspace/.bashrc
 
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
-  CMD ["bash", "-c", "clang --version >/dev/null && cmake --version >/dev/null && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null"]
+  CMD ["bash", "-c", "clang --version >/dev/null && cmake --version >/dev/null && command -v cppcheck >/dev/null && command -v clang-tidy >/dev/null && command -v scan-build >/dev/null && command -v hadolint >/dev/null && command -v zizmor >/dev/null && command -v shellcheck >/dev/null && command -v afl-fuzz >/dev/null && command -v valgrind >/dev/null && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null"]
 
 LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 ENV ICCDEV_SOURCE_REVISION="${GIT_COMMIT}"
