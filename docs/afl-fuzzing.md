@@ -1,8 +1,7 @@
 # AFL++ Smoke Fuzzing
 
-iccDEV has a maintainer-owned AFL++ smoke workflow for short, manual checks of
-command-line tool fuzzability. It is intentionally bounded and complements the
-CTest, sanitizer, CodeQL, and regression-container gates.
+iccDEV the maintainer-owned AFL++ smoke workflow for short, manual checks of
+command-line tool fuzzability. It is being Refactored.
 
 ## CI Status
 
