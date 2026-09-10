@@ -48,7 +48,10 @@ if(TARGET iccdev-stage-windows-runtime)
 endif()
 
 function(iccdev_add_regression_executable TARGET_NAME)
-  add_executable("${TARGET_NAME}" ${ARGN})
+  # Keep regression helpers out of the default product build.  On Windows,
+  # their vcpkg z-applocal hooks write the same runtime DLL concurrently;
+  # build-test-binaries is built serially by the CI test gate instead.
+  add_executable("${TARGET_NAME}" EXCLUDE_FROM_ALL ${ARGN})
   add_dependencies(build-test-binaries "${TARGET_NAME}")
 endfunction()
 

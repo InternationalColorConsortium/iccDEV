@@ -67,6 +67,7 @@ on:
         required: false
         default: ""
         type: string
+  workflow_dispatch:
 
 # Concurrency is set at job level so each matrix cell has its own group.
 # Workflow-level concurrency cannot use github.job (empty) or matrix.* values,
