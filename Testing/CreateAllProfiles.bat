@@ -255,11 +255,13 @@ if not "%1"=="clean" goto do_HDR
 del /F/Q *.icc 2>NUL:
 goto end_HDR
 :do_HDR
-REM #2328: HDR\mkprofiles.bat already builds exactly these ten profiles, so call it
-REM rather than keeping a second copy of the same command list here -- a duplicate
-REM list drifts silently and leaves iccdev.qa-profile-manifest short a profile or a
-REM manifest row depending on which copy was edited. CALL is required: invoking a
-REM .bat without it transfers control and never returns to this script.
+REM #2328: HDR\mkprofiles.bat already builds every HDR fixture, so call it rather
+REM than keeping a second copy of the same command list here -- a duplicate list
+REM drifts silently and leaves iccdev.qa-profile-manifest short a profile or a
+REM manifest row depending on which copy was edited.  Do not write the fixture count
+REM into this comment: it has already gone from ten to forty-two once.
+REM CALL is required: invoking a .bat without it transfers control and never
+REM returns to this script.
 @echo on
 call .\mkprofiles.bat
 @echo off

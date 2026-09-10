@@ -7695,6 +7695,15 @@ if(WIN32)
   iccdev_add_hagc_json_authoring_test()
   iccdev_add_hdr_profile_test()
   iccdev_add_hdr_tonemap_test()
+  # iccdev_add_hdr_corpus_manifest_test() is deliberately NOT called here, and this
+  # is the one HDR test that must stay off the Windows list.  iccdev.windows-create-profiles
+  # runs CreateAllProfiles.bat with WORKING_DIRECTORY ${ICCDEV_TEST_OUTDIR}, so on Windows
+  # the HDR .icc are generated under the BUILD tree, while the test resolves "Testing/HDR/"
+  # against ICCDEV_REPO_ROOT and would find an empty directory -- every manifest row would
+  # fail on a fixture that was in fact built.  Its siblings above survive that because they
+  # print SKIP and assert nothing when a fixture will not open; this test fails instead, by
+  # design, since a corpus that silently asserts nothing is the defect it exists to catch.
+  # Re-enable it here only together with a build-tree-aware fixture path, not on its own.
   iccdev_add_hdr_bake_test()
   iccdev_add_pcc_reflectance_observer_range_test()
   iccdev_add_pcs_edge_metadata_test()

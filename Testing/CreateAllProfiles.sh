@@ -304,11 +304,13 @@ cd HDR
 find . -iname "*\.icc" -delete
 if [ "$1" != "clean" ]
 then
-	# #2328: HDR/mkprofiles.sh already builds exactly these ten profiles and is what
-	# the CI workflows invoke directly, so call it rather than keeping a second copy
-	# of the same command list here. A duplicate list drifts silently: an eleventh
-	# HDR profile added to one copy would leave iccdev.qa-profile-manifest either
-	# short a profile or short a manifest row, depending on which copy was edited.
+	# #2328: HDR/mkprofiles.sh already builds every HDR fixture and is what the CI
+	# workflows invoke directly, so call it rather than keeping a second copy of the
+	# same command list here. A duplicate list drifts silently: a fixture added to
+	# one copy would leave iccdev.qa-profile-manifest either short a profile or short
+	# a manifest row, depending on which copy was edited. mkprofiles.sh is the single
+	# source -- do not reintroduce a command list here, and do not write the fixture
+	# count into a comment: it has already gone from ten to forty-two once.
 	# sh -x, not a bare sh: set -x does not cross the process boundary, and every
 	# other section of this script traces its iccFromXml calls into CreateAllProfiles.log.
 	sh -x mkprofiles.sh
