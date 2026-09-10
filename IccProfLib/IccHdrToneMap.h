@@ -129,7 +129,7 @@ namespace iccDEV {
  * not): no HDR Profile carries Lw, and because BT.2100 makes gamma a function
  * of it, fixing gamma at 1.2 implicitly pins Lw at 1000 cd/m^2 for every HLG
  * profile, whatever display the profile actually describes.  Clause 8.10.4
- * NOTE 9 licenses exactly this - a CMM lacking metadata "may rely on the
+ * NOTE 10 licenses exactly this - a CMM lacking metadata "may rely on the
  * conventions of the cicpTag.TransferCharacteristics (e.g. ... the nominal HLG
  * peak per Rec. ITU-R BT.2100)" - but it names no value, so the number below
  * is this implementation's choice and not a transcription.
@@ -150,7 +150,7 @@ namespace iccDEV {
  * the content decode this class implements.
  *
  * What remains open is only that the ICC amendment itself says none of this:
- * 8.10.4 NOTE 9 licenses "the conventions of the
+ * 8.10.4 NOTE 10 licenses "the conventions of the
  * cicpTag.TransferCharacteristics" without naming a value, so an implementer
  * reading only ICC documents still has to go and find A.2 to learn what the
  * conventions are.  That is the same gap HAGC-05 and HAGC-10 record, not a

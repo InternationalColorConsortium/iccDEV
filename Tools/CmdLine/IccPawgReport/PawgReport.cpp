@@ -2323,7 +2323,7 @@ void AddHdrItems(std::vector<PawgItem> &items, CIccProfile *pIcc)
   }
 
   // --- H8: which rule of 8.10.5 resolved the display headroom ----------------
-  // NOTE 13 makes the provenance normative, not merely informative: when DERH
+  // NOTE 14 makes the provenance normative, not merely informative: when DERH
   // and the DCV/DRWL derivation disagree, DERH wins and the derivation "shall
   // not be recomputed" -- so a consumer that is told only the number cannot
   // tell whether it is allowed to re-derive it.
@@ -2375,7 +2375,7 @@ void AddHdrItems(std::vector<PawgItem> &items, CIccProfile *pIcc)
           // conforming HDR image profile for doing the right thing.
           verdict = PawgVerdict::NotApplicable;
           oss << "the profile carries no clause 8.10.5 HDR Display entries, so 8.10.5 d) applies "
-                 "and a consumer takes the headroom from the destination device (NOTE 12)";
+                 "and a consumer takes the headroom from the destination device (NOTE 13)";
         }
         else if (meta.HasUnparsedEntries()) {
           // Measured, but not assessable here -- the same sense in which S14

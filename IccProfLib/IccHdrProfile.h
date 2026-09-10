@@ -153,6 +153,19 @@ typedef enum {
   icHdrProfileHdrContent = 2,
 } icHdrProfileClass;
 
+/* AMENDMENT NOTE NUMBERING CHANGED IN THE 2026-09-06 REVISION.  It inserted a
+ * new NOTE 7 in 8.10.2 - PCSXYZ values above the conventional SDR range are
+ * valid, and are not bounded by the ICC.1:2022 6.3.4.2 Table 11 fixed-point
+ * encoding - so every NOTE from the old 7 onward shifted up by one:
+ * old 7 -> 8, 8 -> 9, 9 -> 10, 10 -> 11, 11 -> 12, 12 -> 13, 13 -> 14.
+ * NOTES 1 to 6 are unchanged.  Citations in this tree were renumbered to match.
+ *
+ * Do NOT renumber a citation of SMPTE ST 2094-50 Annex A.2 NOTE 7: that is a
+ * different document whose numbering did not move, and IccHdrToneMap.{h,cpp}
+ * carry three of them.  Check which specification a NOTE belongs to before
+ * touching it.
+ */
+
 /**
  * Which rule of clause 8.10.5 produced the display headroom, in the
  * precedence order that clause defines. Reported alongside the value because
