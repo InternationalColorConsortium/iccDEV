@@ -93,3 +93,25 @@ def test_windows_prebuilt_static_library_links_vcpkg_zlib(monkeypatch, tmp_path)
 
     assert extension.extra_link_args == [str(zlib_library)]
     assert namespace["prebuilt_runtime_dlls"] == [str(zlib_runtime)]
+
+
+def test_windows_prebuilt_static_triplet_links_vcpkg_zlib(monkeypatch, tmp_path):
+    build_dir = tmp_path / "build"
+    library_dir = build_dir / "IccProfLib"
+    vcpkg_dir = build_dir / "vcpkg_installed" / "x64-windows-static"
+    library_dir.mkdir(parents=True)
+    (vcpkg_dir / "lib").mkdir(parents=True)
+    (library_dir / "IccProfLib2-static.lib").write_bytes(b"")
+    zlib_library = vcpkg_dir / "lib" / "zs.lib"
+    zlib_library.write_bytes(b"")
+    (build_dir / "CMakeCache.txt").write_text(
+        "VCPKG_TARGET_TRIPLET:STRING=x64-windows-static\n",
+        encoding="ascii",
+    )
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr("shutil.which", lambda _command: None)
+
+    _namespace, captured = _load_setup(monkeypatch, build_dir)
+    extension = captured["ext_modules"][0]
+
+    assert extension.extra_link_args == [str(zlib_library)]

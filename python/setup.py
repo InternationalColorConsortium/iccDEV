@@ -210,7 +210,7 @@ def _find_zlib_library(build_dir):
                 return part
 
     for lib_dir in _candidate_zlib_lib_dirs(build_dir):
-        for name in ("z.lib", "zlib.lib", "zlibstatic.lib", "zlib1.lib"):
+        for name in ("z.lib", "zs.lib", "zlib.lib", "zlibstatic.lib", "zlib1.lib"):
             candidate = os.path.join(lib_dir, name)
             if os.path.isfile(candidate):
                 return candidate
