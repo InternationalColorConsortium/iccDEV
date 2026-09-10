@@ -165,7 +165,11 @@ negative_cases = {
     "schema-alias-applyData": {"applyData": {}, "profileSequence": []},
     "schema-alias-applyImage": {"applyImage": {}, "profileSequence": []},
     "missing-profileSequence": {"dataFiles": {}},
-    "missing-search-initial": {"dataFiles": {}, "searchApply": {"profileSequence": []}},
+    # "initial" is optional: CIccCfgSearchApply::fromJsonInit accepts a null or
+    # absent value and leaves isInitialized() false, and CreateSearch guards
+    # every use of the initial-destination settings behind that flag.  What
+    # searchApply still requires is profileSequence, so that is what this pins.
+    "missing-search-profileSequence": {"dataFiles": {}, "searchApply": {}},
 }
 
 for name, data in negative_cases.items():

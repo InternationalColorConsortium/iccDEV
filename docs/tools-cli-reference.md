@@ -31,6 +31,21 @@ single index for common command shapes and shared option tables.
 concurrency, `N=1` is scalar, and larger values select workers up to
 `CIccThreadedCmm::GetMaxThreads()`; `-debugcalc` requires `N=1`.
 
+`iccApplyProfiles` also accepts `"useSearch": true` inside the JSON `connect`
+block, which builds a `CIccCmmSearch` inverse-search chain instead of a forward
+one. It is `-cfg` only and reads the chain from a `searchApply` block -- the
+same object `iccApplySearch` uses -- requiring 2 or 3 entries in its
+`profileSequence` (3 requires at least one `pccWeights` entry), with an optional
+`initial`. An
+empty first `iccFile` still means the source TIFF's embedded profile. A
+per-stage `pccFile` is ignored by the search CMM except on the last entry --
+use `pccWeights` instead -- and the tool warns on stderr where it is inert. A
+search apply is orders of magnitude slower per pixel than a forward chain since
+every pixel runs a Nelder-Mead search, so `connect.threads` matters more here
+than for a forward chain. See
+[the tool Readme](../Tools/CmdLine/IccApplyProfiles/Readme.md) for the full
+schema.
+
 For `iccApplyToLink`, `link_type=0` writes an ICC DeviceLink and `option`
 selects profile version (`0` for v4, `1` for v5). `link_type=1` writes a
 `.cube` text LUT and `option` is the precision (`0` through `20`). Other

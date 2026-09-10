@@ -312,6 +312,65 @@ function(iccdev_add_iccconnect_config_parser_test)
   endif()
 endfunction()
 
+function(iccdev_add_createsearch_embedded_profile_test)
+  if(NOT DEFINED TARGET_LIB_ICCCONNECT OR NOT TARGET "${TARGET_LIB_ICCCONNECT}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCreateSearchEmbeddedProfileTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/createsearch-embedded-profile.cpp"
+  )
+  target_compile_features(iccCreateSearchEmbeddedProfileTest PRIVATE cxx_std_17)
+  target_link_libraries(iccCreateSearchEmbeddedProfileTest PRIVATE ${TARGET_LIB_ICCCONNECT})
+
+  add_dependencies(check iccCreateSearchEmbeddedProfileTest)
+
+  # sRGB_D65_MAT.icc is a tracked v5 matrix/TRC profile, so a profile->itself
+  # search converges quickly and the run stays well inside the timeout below.
+  set(_createsearch_embedded_profile
+    "${ICCDEV_TESTING_DIR}/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc")
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.createsearch-embedded-profile
+      COMMAND "$<TARGET_FILE:iccCreateSearchEmbeddedProfileTest>"
+        "${_createsearch_embedded_profile}"
+    )
+  else()
+    add_test(
+      NAME iccdev.createsearch-embedded-profile
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccCreateSearchEmbeddedProfileTest>"
+        "${_createsearch_embedded_profile}"
+    )
+  endif()
+  # A Nelder-Mead search runs per sample and the helper drives five chains
+  # (scalar, embedded, threaded, embedded-threaded, and a rejection), so this
+  # needs the longer budget its CIccCmmSearch siblings use rather than the 60
+  # the parser-only IccConnect test gets.
+  set_tests_properties(iccdev.createsearch-embedded-profile PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 300
+    LABELS "iccdev;iccconnect;cmmsearch;embedded;regression"
+  )
+  if(WIN32)
+    set(_createsearch_embedded_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCreateSearchEmbeddedProfileTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCCONNECT}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _createsearch_embedded_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.createsearch-embedded-profile PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_createsearch_embedded_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_cmmsearch_init_pcc_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -7195,6 +7254,7 @@ if(WIN32)
   iccdev_add_iccconnect_thread_test()
   iccdev_add_clut_avx512_sixteen_output_test()
   iccdev_add_iccconnect_config_parser_test()
+  iccdev_add_createsearch_embedded_profile_test()
   iccdev_add_cmmsearch_init_pcc_test()
   iccdev_add_cmmsearch_rebegin_test()
   iccdev_add_ndlut_input_channel_mismatch_test()
@@ -7567,6 +7627,7 @@ set(ICCDEV_TEST_ENV
 iccdev_add_iccconnect_thread_test()
 iccdev_add_clut_avx512_sixteen_output_test()
 iccdev_add_iccconnect_config_parser_test()
+iccdev_add_createsearch_embedded_profile_test()
 iccdev_add_cmmsearch_init_pcc_test()
 iccdev_add_cmmsearch_rebegin_test()
 iccdev_add_ndlut_input_channel_mismatch_test()

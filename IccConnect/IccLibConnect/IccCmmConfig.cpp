@@ -590,6 +590,7 @@ CIccCfgConnectOptions::CIccCfgConnectOptions()
 void CIccCfgConnectOptions::reset()
 {
   m_nThreads = 1;
+  m_bUseSearch = false;
 }
 
 bool CIccCfgConnectOptions::fromJson(json j, bool bReset)
@@ -611,6 +612,13 @@ bool CIccCfgConnectOptions::fromJson(json j, bool bReset)
     m_nThreads = nThreads;
   }
 
+  if (j.find("useSearch") != j.end()) {
+    bool bUseSearch = m_bUseSearch;
+    if (!jsonToValue(j["useSearch"], bUseSearch))
+      return false;
+    m_bUseSearch = bUseSearch;
+  }
+
   return true;
 }
 
@@ -618,6 +626,10 @@ void CIccCfgConnectOptions::toJson(json& j) const
 {
   if (m_nThreads != 1)
     j["threads"] = m_nThreads;
+  // Emitted only when set so -exportcfg output stays byte-identical for the
+  // forward-chain configs that predate this option.
+  if (m_bUseSearch)
+    j["useSearch"] = m_bUseSearch;
 }
 
 CIccCfgCreateLink::CIccCfgCreateLink()
@@ -1654,6 +1666,14 @@ void CIccCfgSearchApply::toJsonInit(json &j) const
 
 bool CIccCfgSearchApply::fromJsonInit(json j)
 {
+  // An absent "initial" key yields a null value here.  The initial-destination
+  // block is optional: CIccConnectCmm::CreateSearch guards every use of it
+  // behind isInitialized(), and CIccCmmSearch::Begin() handles a null initial
+  // profile.  Rejecting the absent key made a search config that does not want
+  // a reverse-search starting point unparseable.
+  if (j.is_null())
+    return true;
+
   if (!j.is_object())
     return false;
 

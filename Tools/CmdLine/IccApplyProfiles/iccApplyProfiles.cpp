@@ -296,6 +296,12 @@ int main(int argc, const char** argv)
   CIccCfgImageApply cfgApply;
   CIccCfgConnectOptions cfgConnect;
   CIccCfgProfileSequence cfgProfiles;
+  // Only populated when connect.useSearch selects the spectral inverse-search
+  // CMM.  It is parsed from the "searchApply" block, the same object
+  // iccApplySearch reads, and carries the chain plus "initial" and
+  // "pccWeights".  In that mode the top-level profileSequence is not consulted,
+  // so cfgProfiles stays empty and the chain is read through m_profiles below.
+  CIccCfgSearchApply cfgSearch;
   bool bThreadArg = false;
   int nThreadArg = cfgConnect.m_nThreads;
 
@@ -347,15 +353,69 @@ int main(int argc, const char** argv)
       return -1;
     }
 
-    if (cfg.find("profileSequence") == cfg.end() || !cfgProfiles.fromJson(cfg["profileSequence"])) {
-      printf("Unable to parse profileSequence configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
-      return -1;
-    }
-
+    // Parsed ahead of the chain because connect.useSearch decides which factory
+    // consumes profileSequence, and which sibling keys are meaningful.
     auto connectOptions = cfg.find("connect");
     if (connectOptions != cfg.end() && !cfgConnect.fromJson(*connectOptions)) {
       printf("Unable to parse connect configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
       return -1;
+    }
+
+    if (cfgConnect.m_bUseSearch) {
+      // A search chain lives in "searchApply", exactly as iccApplySearch spells
+      // it: profileSequence, initial and pccWeights inside one object.  The
+      // block therefore moves between the two tools verbatim, and there is only
+      // ever one place the chain is written -- a top-level profileSequence is
+      // the forward-mode spelling and is not consulted here.
+      if (cfg.find("searchApply") == cfg.end() || !cfgSearch.fromJson(cfg["searchApply"])) {
+        printf("Unable to parse searchApply configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
+        return -1;
+      }
+
+      // CIccCmmSearch::AddXform only accepts a source, an optional mid, and a
+      // destination profile.  Naming the rule here beats the library's
+      // downstream status codes: a 4th profile surfaces as an AddXform failure
+      // and a single profile as icCmmStatBadXform out of Begin().
+      const size_t nSearchProfiles = cfgSearch.m_profiles.size();
+      if (nSearchProfiles < 2 || nSearchProfiles > 3) {
+        printf("useSearch requires 2 or 3 profiles in profileSequence (found %u)\n",
+               (unsigned)nSearchProfiles);
+        return -1;
+      }
+
+      // A 3-profile search connects source->mid and mid->destination through
+      // the weighted PCC set; with none attached Begin() returns
+      // icCmmStatBadConnection instead of saying what is missing.
+      if (nSearchProfiles == 3 && cfgSearch.m_pccWeights.empty()) {
+        printf("useSearch with 3 profiles requires at least one pccWeights entry\n");
+        return -1;
+      }
+
+
+      // CIccCmmSearch::AddXform discards its pPcc argument, so a per-stage
+      // pccFile is inert everywhere except the last entry, which CreateSearch
+      // reads for the initial-destination chain.
+      for (size_t nStage = 0; nStage + 1 < nSearchProfiles; nStage++) {
+        const CIccCfgProfile* pStage = cfgSearch.m_profiles[nStage].get();
+        if (pStage && !pStage->m_pccFile.empty()) {
+          fprintf(stderr,
+                  "Warning - profileSequence[%u] pccFile is ignored under useSearch; "
+                  "use pccWeights instead\n", (unsigned)nStage);
+        }
+      }
+    }
+    else {
+      // Forward mode: the chain is the top-level profileSequence.
+      if (cfg.find("profileSequence") == cfg.end() || !cfgProfiles.fromJson(cfg["profileSequence"])) {
+        printf("Unable to parse profileSequence configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
+        return -1;
+      }
+      // Silently ignoring a searchApply block would let a config that reads
+      // like a search chain run as a forward one and still report success.
+      if (cfg.find("searchApply") != cfg.end()) {
+        printf("'searchApply' requires connect.useSearch to be true\n");
+        return -1;
+      }
     }
   }
   else {
@@ -523,7 +583,12 @@ int main(int argc, const char** argv)
   // Use embedded ICC from source image when first profile entry has no file path.
   unsigned char* pEmbedded = nullptr;
   unsigned int nEmbeddedLen = 0;
-  if (!cfgProfiles.m_profiles.empty() && cfgProfiles.m_profiles[0]->m_iccFile.empty()) {
+  // Whichever mode built it, this is the chain the run applies: forward mode
+  // fills cfgProfiles, search mode fills cfgSearch from the searchApply block.
+  const CIccCfgProfileArray& activeProfiles =
+    cfgConnect.m_bUseSearch ? cfgSearch.m_profiles : cfgProfiles.m_profiles;
+
+  if (!activeProfiles.empty() && activeProfiles[0]->m_iccFile.empty()) {
     if (!bHasSrcProfile) {
       printf("Source image doesn't have embedded profile!\n");
       return -1;
@@ -534,8 +599,11 @@ int main(int argc, const char** argv)
 
   std::string sConnectError;
   std::unique_ptr<CIccConnectCmm> pConnect(
-    CIccConnectCmm::CreateStandard(cfgProfiles, pEmbedded, nEmbeddedLen,
-                                   cfgConnect.m_nThreads, &sConnectError));
+    cfgConnect.m_bUseSearch
+      ? CIccConnectCmm::CreateSearch(cfgSearch, pEmbedded, nEmbeddedLen,
+                                     cfgConnect.m_nThreads, &sConnectError)
+      : CIccConnectCmm::CreateStandard(cfgProfiles, pEmbedded, nEmbeddedLen,
+                                       cfgConnect.m_nThreads, &sConnectError));
 
   if (!pConnect) {
     if (!sConnectError.empty())
@@ -549,8 +617,8 @@ int main(int argc, const char** argv)
   const bool bUseRowApply = cfgConnect.m_nThreads != 1;
 
   // Set last_path to the last profile's file for downstream embed logic.
-  if (!cfgProfiles.m_profiles.empty())
-    last_path = cfgProfiles.m_profiles.back()->m_iccFile.c_str();
+  if (!activeProfiles.empty())
+    last_path = activeProfiles.back()->m_iccFile.c_str();
 
   //Get and validate the source color space from the Cmm.
   icColorSpaceSignature SrcspaceSig = pTheCmm->GetSourceSpace();

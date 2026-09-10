@@ -72,6 +72,12 @@
 @type Results\cmykGraysEst.txt
 
 @ECHO *****************************************************************
+@ECHO Spectral image reproduction: MS cows icon to hybrid CMYK by inverse search
+@ECHO *****************************************************************
+
+%TOOLDIR%iccApplyProfiles -cfg config/msCowsIconToCmyk.json
+%TOOLDIR%iccTiffDump Results\MS_smCowsIconCmyk.tif
+@ECHO *****************************************************************
 @ECHO Apply Overprint simulation to CMYKW image to get background previews
 @ECHO *****************************************************************
 

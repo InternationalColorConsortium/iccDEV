@@ -1,0 +1,57 @@
+{
+ "imageFiles": {
+  "srcImageFile": "Results/MS_smCows.tif",
+  "dstImageFile": "Results/MS_smCowsCmyk.tif",
+  "dstEncoding": "16Bit",
+  "dstCompression": true,
+  "dstEmbedIcc": true
+ },
+ "connect": {
+  "threads": 0,
+  "useSearch": true
+ },
+ "searchApply": {
+  "profileSequence": [
+   {
+    "iccFile": "",
+    "intent": "absolute",
+    "transform": "default",
+    "useV5SubProfile": true
+   },
+   {
+    "iccFile": "ICC/Lab_float-D50_2deg.icc",
+    "intent": "absolute",
+    "transform": "default"
+   },
+   {
+    "iccFile": "ICC/CMYK_Hybrid_Profile.icc",
+    "intent": "absolute",
+    "transform": "default",
+    "useV5SubProfile": true
+   }
+  ],
+  "initial": {
+   "intent": "absolute",
+   "interpolation": "tetrahedral",
+   "transform": "default"
+  },
+  "pccWeights": [
+   {
+    "pccFile": "ICC/Lab_float-D93_2deg-MAT.icc",
+    "weight": 1.0
+   },
+   {
+    "pccFile": "ICC/Lab_float-IllumA_2deg-MAT.icc",
+    "weight": 1.0
+   },
+   {
+    "pccFile": "ICC/Lab_float-D50_2deg.icc",
+    "weight": 1.0
+   },
+   {
+    "pccFile": "ICC/Lab_float-F11_2deg-MAT.icc",
+    "weight": 1.0
+   }
+  ]
+ }
+}

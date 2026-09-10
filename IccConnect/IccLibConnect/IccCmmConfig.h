@@ -92,6 +92,12 @@ public:
 
 	// 1 means use the normal scalar CMM. 0 means use hardware concurrency.
 	int m_nThreads;
+
+	// When true the consuming tool builds a CIccCmmSearch (spectral inverse
+	// search) from the profile sequence rather than a forward CIccCmm.  Only
+	// emitted by toJson() when set, so configs that never mention it round trip
+	// byte-identically.
+	bool m_bUseSearch;
 };
 
 typedef enum {

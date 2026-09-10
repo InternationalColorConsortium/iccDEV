@@ -475,6 +475,15 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
                                               std::string* pErrorMsg,
                                               int nThreads)
 {
+  return CreateSearch(searchApply, nullptr, 0, nThreads, pErrorMsg);
+}
+
+CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApply,
+                                              const unsigned char* pEmbeddedData,
+                                              unsigned int nEmbeddedLen,
+                                              int nThreads,
+                                              std::string* pErrorMsg)
+{
   std::string localErr;
   std::string& sErrorMsg = pErrorMsg ? *pErrorMsg : localErr;
 
@@ -495,10 +504,12 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
 
   // Add forward profile chain.  Explicitly scope to CIccCmm::AddXform to bypass
   // CIccCmmSearch's override which is reserved for the reverse/destination profile.
+  bool bFirst = true;
   size_t stageIdx = 0;
   for (const auto& profPtr : searchApply.m_profiles) {
     CIccCfgProfile* pCfg = profPtr.get();
     if (!pCfg) {
+      bFirst = false;
       ++stageIdx;
       continue;
     }
@@ -507,6 +518,31 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
     CIccCreateXformHintManager Hint;
     icStatusCMM stat = icCmmStatOk;
     std::string sStageErr;
+
+    // An empty first m_iccFile with embedded bytes in hand means "use the ICC
+    // profile carried by the source image".  The memory overload of
+    // CIccCmm::AddXform attaches a CIccMemIO and then dispatches virtually, so
+    // it still lands in CIccCmmSearch::AddXform; the bytes only have to outlive
+    // the Begin() below, which this function performs.  Unlike the file-path
+    // stages here, this branch builds the BPC and PCS-luminance hints, matching
+    // CreateStandard's embedded branch.
+    const bool bUseEmbedded = bFirst && pCfg->m_iccFile.empty() &&
+                              pEmbeddedData && nEmbeddedLen;
+
+    if (bUseEmbedded && pCfg->m_useBPC) {
+      stat = AddHintNoThrow(Hint, new (std::nothrow) CIccApplyBPCHint());
+      if (stat != icCmmStatOk) {
+        sStageErr = "failed to attach BPC hint for embedded source profile";
+        goto search_stage_failed;
+      }
+    }
+    if (bUseEmbedded && pCfg->m_adjustPcsLuminance) {
+      stat = AddHintNoThrow(Hint, new (std::nothrow) CIccLuminanceMatchingHint());
+      if (stat != icCmmStatOk) {
+        sStageErr = "failed to attach PCS-luminance hint for embedded source profile";
+        goto search_stage_failed;
+      }
+    }
 
     if (!pCfg->m_pccFile.empty()) {
       // Caller-selected config paths intentionally name ICC/PCC profile files.
@@ -535,26 +571,49 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
       }
     }
 
-    stat = pCmm->CIccCmm::AddXform(
-      pCfg->m_iccFile.c_str(),
-      pCfg->m_intent < 0 ? icUnknownIntent : (icRenderingIntent)pCfg->m_intent,
-      pCfg->m_interpolation,
-      pPcc,
-      pCfg->m_transform,
-      pCfg->m_useD2BxB2Dx,
-      &Hint,
-      pCfg->m_useV5SubProfile
-    );
-    if (stat == icCmmStatCantOpenProfile) {
-      sStageErr = "unable to open ICC profile '" + pCfg->m_iccFile + "'";
+    if (bUseEmbedded) {
+      stat = pCmm->CIccCmm::AddXform(
+        const_cast<unsigned char*>(pEmbeddedData),
+        (icUInt32Number)nEmbeddedLen,
+        pCfg->m_intent < 0 ? icUnknownIntent : (icRenderingIntent)pCfg->m_intent,
+        pCfg->m_interpolation,
+        pPcc,
+        pCfg->m_transform,
+        pCfg->m_useD2BxB2Dx,
+        &Hint,
+        pCfg->m_useV5SubProfile
+      );
+      if (stat != icCmmStatOk) {
+        // Same status decoding as AddXformFromConfig (issue #1323): report
+        // the icStatusCMM name, not just the raw number.
+        std::ostringstream oss;
+        oss << "AddXform failed for embedded source profile (status " << (int)stat
+            << ": " << CIccCmm::GetStatusText(stat) << ")";
+        sStageErr = oss.str();
+      }
     }
-    else if (stat != icCmmStatOk) {
-      // Same status decoding as AddXformFromConfig (issue #1323): report
-      // the icStatusCMM name, not just the raw number.
-      std::ostringstream oss;
-      oss << "AddXform failed for '" << pCfg->m_iccFile << "' (status " << (int)stat
-          << ": " << CIccCmm::GetStatusText(stat) << ")";
-      sStageErr = oss.str();
+    else {
+      stat = pCmm->CIccCmm::AddXform(
+        pCfg->m_iccFile.c_str(),
+        pCfg->m_intent < 0 ? icUnknownIntent : (icRenderingIntent)pCfg->m_intent,
+        pCfg->m_interpolation,
+        pPcc,
+        pCfg->m_transform,
+        pCfg->m_useD2BxB2Dx,
+        &Hint,
+        pCfg->m_useV5SubProfile
+      );
+      if (stat == icCmmStatCantOpenProfile) {
+        sStageErr = "unable to open ICC profile '" + pCfg->m_iccFile + "'";
+      }
+      else if (stat != icCmmStatOk) {
+        // Same status decoding as AddXformFromConfig (issue #1323): report
+        // the icStatusCMM name, not just the raw number.
+        std::ostringstream oss;
+        oss << "AddXform failed for '" << pCfg->m_iccFile << "' (status " << (int)stat
+            << ": " << CIccCmm::GetStatusText(stat) << ")";
+        sStageErr = oss.str();
+      }
     }
 
   search_stage_failed:
@@ -565,6 +624,7 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
       ReleasePccList(pccList);
       return nullptr;
     }
+    bFirst = false;
     ++stageIdx;
   }
 
@@ -653,6 +713,9 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
   }
 
   ReleasePccList(pccList);
+  // Each CIccThreadedCmm worker gets its own CIccApplyCmmSearch, which owns a
+  // private CIccApplyCmm for every sub-chain (m_srcToMidApply / m_dstToMidApply
+  // / m_pMidToDstApply), so strip partitioning is safe.
   std::unique_ptr<CIccCmm> baseCmm(pCmm.release());
   CIccConnectCmm* pConnect = AttachStandardCmm(baseCmm, nThreads);
   if (!pConnect)
