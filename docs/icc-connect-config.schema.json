@@ -2,7 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "icc-connect-config.schema.json",
   "title": "IccConnect Configuration Schema",
-  "description": "JSON Schema for IccConnect CMM configuration objects (IccCmmConfig.h/cpp)",
 
   "$defs": {
 
@@ -475,7 +474,7 @@
 
   },
 
-  "description": "Top-level IccConnect configuration document. Must contain an iccApplyNamedCmm data configuration (dataFiles + profileSequence), an iccApplyProfiles image configuration (imageFiles + profileSequence), an iccApplySearch configuration (dataFiles + searchApply), or a library create-link configuration (createLink + profileSequence).",
+  "description": "Top-level IccConnect configuration document, mirroring the CIccCfg* objects in IccCmmConfig.h/cpp. Must contain an iccApplyNamedCmm data configuration (dataFiles + profileSequence), an iccApplyProfiles image configuration (imageFiles + profileSequence), an iccApplySearch configuration (dataFiles + searchApply), or a library create-link configuration (createLink + profileSequence).",
   "type": "object",
   "anyOf": [
     { "required": ["dataFiles", "profileSequence"] },
