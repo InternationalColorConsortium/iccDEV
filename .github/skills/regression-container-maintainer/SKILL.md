@@ -21,8 +21,9 @@ Use this skill for repeatable maintainer operations in
 ## Required Inputs
 
 1. Operation: basic smoke, PR validation, or issue reproduction.
-2. Image selector: choose `latest`, a full-SHA tag, or a release tag at run
-   time; do not embed a particular SHA as a reusable default.
+2. Image selector: choose `latest`, `ci-qa-pr-docker-testing`, a full-SHA tag,
+   or a release tag at run time; do not embed a particular SHA as a reusable
+   default.
 3. PR, issue, branch, or commit reference.
 4. Affected tool and smallest focused regression.
 5. Expected pass and failure signals.
@@ -39,10 +40,12 @@ Use this skill for repeatable maintainer operations in
 6. For an issue, reproduce with existing project tools and saved inputs.
 7. Rebuild the affected target, then run the focused regression and registered
    CTest wrapper.
-8. For local PR proof, pull the published `latest` image, record its resolved
-   digest, mount the reviewed worktree read-only, and copy it to container-local
-   scratch space. Run the local canonical-image build, reject compiler warnings,
-   and run CTest excluding only the `slow` and `calculator` labels.
+8. For local PR proof, pull the published `ci-qa-pr-docker-testing` image when
+   validating that integration branch; otherwise pull the selected published
+   image. Record its resolved digest, mount the reviewed worktree read-only,
+   and copy it to container-local scratch space. Run the local canonical-image
+   build, reject compiler warnings, and run CTest excluding only the `slow` and
+   `calculator` labels.
 9. When the PR-specific behavior is in an excluded suite, run its focused CTest
    wrapper in addition to the local container envelope.
 10. For AFL/CFL work, run `iccdev-fuzz-env`, record the patch-stack counts, and
@@ -53,10 +56,11 @@ Use this skill for repeatable maintainer operations in
 12. Scan logs for compiler warnings, ASAN, UBSAN, and signal termination.
 13. Trigger `ci-pr-action.yml` explicitly for a pre-PR branch; a push alone does
     not trigger that workflow.
-14. Use only `latest`, full-SHA, or release tags as selectors. Resolve the
-    selector at run time; never hardcode one SHA tag as a long-lived workflow
-    default. Existing legacy tags are continuity-only; do not introduce,
-    recommend, or depend on branch, run, or image-variant tags.
+14. Use only `latest`, `ci-qa-pr-docker-testing`, full-SHA, or release tags as
+    selectors. Resolve the selector at run time; never hardcode one SHA tag as
+    a long-lived workflow default. Existing legacy tags are continuity-only; do
+    not introduce, recommend, or depend on other branch, run, or image-variant
+    tags.
 15. Confirm the canonical image digest and hosted validation explicitly.
 16. Report exact image tag, digest, source revision, commands, results, evidence,
     and workflow URLs.

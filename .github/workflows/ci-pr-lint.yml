@@ -290,7 +290,7 @@ jobs:
               -DICFLOATSFX='"f"' \
               -j "$(nproc)" \
               --project="$BUILD_DIR/compile_commands.json" \
-              --file-filter="${component}/*" \
+              --file-filter="*/${component}/*" \
               2> "$report" || true
             printf 'cppcheck %s: %s lines\n' \
               "$(sanitize_line "$component")" \
@@ -317,14 +317,34 @@ jobs:
           tidy_checks+=',clang-analyzer-core.*,clang-analyzer-security.*'
           tidy_checks+=',clang-analyzer-alpha.core.*,clang-analyzer-alpha.security.*'
 
-          xargs -0 run-clang-tidy \
-            -j "$(nproc)" \
-            -p "$BUILD_DIR" \
-            -checks="$tidy_checks" \
-            < changed_files.txt \
-            > lint_reports/clang_tidy.txt 2>&1 || true
-          printf 'clang-tidy: %s lines\n' \
-            "$(sanitize_line "$(wc -l < lint_reports/clang_tidy.txt | tr -d ' ')")"
+          components=(IccProfLib IccXML IccJSON IccConnect Tools)
+          for component in "${components[@]}"; do
+            report="lint_reports/clang_tidy_${component}.txt"
+            component_files="$(mktemp)"
+            if ! grep -z -E "^${component}/" changed_files.txt > "$component_files"; then
+              rm -f "$component_files"
+              : > "$report"
+              printf 'clang-tidy %s: 0 files\n' "$(sanitize_line "$component")"
+              continue
+            fi
+            tr '\0' '\n' < "$component_files" > "lint_reports/${component}.files"
+
+            xargs -r -0 run-clang-tidy \
+              -j "$(nproc)" \
+              -p "$BUILD_DIR" \
+              -checks="$tidy_checks" \
+              < "$component_files" \
+              > "$report" 2>&1 || true
+            rm -f "$component_files"
+            printf 'clang-tidy %s: %s lines\n' \
+              "$(sanitize_line "$component")" \
+              "$(sanitize_line "$(wc -l < "$report" | tr -d ' ')")"
+          done
+
+          : > lint_reports/clang_tidy.txt
+          for report in lint_reports/clang_tidy_*.txt; do
+            [ -f "$report" ] && cat "$report" >> lint_reports/clang_tidy.txt
+          done
 
       - name: Generate lint summary
         if: always()
@@ -364,14 +384,14 @@ jobs:
             echo ""
             echo "### Finding counts"
             echo ""
-            echo "| Tool | Lines | Warnings | Errors |"
-            echo "|------|------:|---------:|-------:|"
+            echo "| Tool | Lines | Diagnostics | Errors |"
+            echo "|------|------:|------------:|-------:|"
             cpp_lines="$(wc -l < lint_reports/cppcheck.txt | tr -d ' ')"
-            cpp_warns="$(grep -c 'warning:' lint_reports/cppcheck.txt || true)"
-            cpp_errs="$(grep -c 'error:' lint_reports/cppcheck.txt || true)"
+            cpp_warns="$(grep -Ec '^\[[^]]+:[0-9]+\]: \((warning|style|performance|portability|information)\)' lint_reports/cppcheck.txt || true)"
+            cpp_errs="$(grep -Ec '^\[[^]]+:[0-9]+\]: \(error\)' lint_reports/cppcheck.txt || true)"
             tidy_lines="$(wc -l < lint_reports/clang_tidy.txt | tr -d ' ')"
-            tidy_warns="$(grep -c 'warning:' lint_reports/clang_tidy.txt || true)"
-            tidy_errs="$(grep -c 'error:' lint_reports/clang_tidy.txt || true)"
+            tidy_warns="$(grep -Ec ':[0-9]+:[0-9]+: warning:' lint_reports/clang_tidy.txt || true)"
+            tidy_errs="$(grep -Ec ':[0-9]+:[0-9]+: error:' lint_reports/clang_tidy.txt || true)"
             printf '| cppcheck | %s | %s | %s |\n' \
               "$(sanitize_line "$cpp_lines")" \
               "$(sanitize_line "$cpp_warns")" \
@@ -380,6 +400,30 @@ jobs:
               "$(sanitize_line "$tidy_lines")" \
               "$(sanitize_line "$tidy_warns")" \
               "$(sanitize_line "$tidy_errs")"
+            echo ""
+            echo "### Component coverage"
+            echo ""
+            echo "| Component | Selected files | cppcheck lines | clang-tidy lines |"
+            echo "|-----------|---------------:|---------------:|-----------------:|"
+            for component in IccProfLib IccXML IccJSON IccConnect Tools; do
+              files=0
+              cpp_lines=0
+              tidy_lines=0
+              if [ -f "lint_reports/${component}.files" ]; then
+                files="$(wc -l < "lint_reports/${component}.files" | tr -d ' ')"
+              fi
+              if [ -f "lint_reports/cppcheck_${component}.txt" ]; then
+                cpp_lines="$(wc -l < "lint_reports/cppcheck_${component}.txt" | tr -d ' ')"
+              fi
+              if [ -f "lint_reports/clang_tidy_${component}.txt" ]; then
+                tidy_lines="$(wc -l < "lint_reports/clang_tidy_${component}.txt" | tr -d ' ')"
+              fi
+              printf '| %s | %s | %s | %s |\n' \
+                "$(sanitize_line "$component")" \
+                "$(sanitize_line "$files")" \
+                "$(sanitize_line "$cpp_lines")" \
+                "$(sanitize_line "$tidy_lines")"
+            done
             echo ""
             echo "<details><summary>cppcheck tail</summary>"
             echo ""

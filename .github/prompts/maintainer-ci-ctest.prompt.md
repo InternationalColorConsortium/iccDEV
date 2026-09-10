@@ -134,10 +134,13 @@ docker build -t iccdev-container-check -f <Dockerfile> .
 docker run --rm iccdev-container-check <smoke-command>
 ```
 
-For the unified `Dockerfile`, use a no-cache build and smoke `clang`,
-`clang++`, `gcc`, `g++`, `cmake`, `afl-fuzz`, and `/usr/bin/time`. If the image must be published,
-publish through the maintainer-controlled container release path, then pass the
-published branch or SHA tag to `ci-iccdev-tool-tests.yml`.
+For the unified `Dockerfile`, run the complete local development-environment
+preflight in `docs/regression-container.md#maintainer-preflight-and-security-checks`.
+It covers workflow and Dockerfile policy, a no-cache build, analyzer inventory,
+runtime smoke, image health, and Trivy vulnerability/secret triage. If the
+image must be published, publish through the maintainer-controlled container
+release path, then pass the published branch or SHA tag to
+`ci-iccdev-tool-tests.yml`.
 
 For PR or issue proof with the published maintainer image, follow
 [Prove a Local PR Worktree](../../docs/regression-container.md#prove-a-local-pr-worktree).

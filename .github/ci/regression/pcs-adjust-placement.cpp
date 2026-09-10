@@ -812,8 +812,12 @@ static void sparseMatrixStepWritesEveryOutputWithoutBeginStep()
     return;
 
   CIccPcsStep *pSparse = pDense->reduce();
-  check(pSparse != (CIccPcsStep *)pDense,
+  check(pSparse && pSparse != (CIccPcsStep *)pDense,
         "sparse step: a range map is sparse enough for reduce() to convert it");
+  if (!pSparse || pSparse == (CIccPcsStep *)pDense) {
+    delete pDense;
+    return;
+  }
   check(pSparse->GetType() == icPcsStepSparseMatrix,
         "sparse step: reduce() produced a CIccPcsStepSparseMatrix");
 

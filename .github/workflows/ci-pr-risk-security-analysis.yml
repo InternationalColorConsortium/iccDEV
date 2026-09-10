@@ -17,7 +17,6 @@ name: ci-risk-analysis
 
 permissions:
   contents: read
-  pull-requests: read  # Required to analyze PR workflow changes.
 
 on:
   workflow_call:
@@ -1186,7 +1185,7 @@ jobs:
             echo "" >> "$RISK_REPORT_PATH"
           fi
 
-          # H-5: privileged workflow_dispatch publish jobs must be master/environment gated.
+          # H-5: privileged workflow_dispatch publish jobs require an approved ref and environment gate.
           PUBLISH_GATE_GAPS=0
           while IFS= read -r wf; do
             wf_base=$(basename "$wf")
@@ -1197,22 +1196,26 @@ jobs:
             if ! grep -qE '^\s+(contents|packages|attestations|artifact-metadata|id-token):\s*write' "$wf"; then
               continue
             fi
-            has_master_gate=false
+            approved_ref_pattern="github.ref == 'refs/heads/master'"
+            if [[ "$wf_base" == "ci-docker.yml" ]]; then
+              approved_ref_pattern="github.ref == 'refs/heads/(master|ci-qa-pr-docker-testing)'"
+            fi
+            has_approved_publish_ref=false
             has_environment=false
-            if grep -q "github.ref == 'refs/heads/master'" "$wf"; then
-              has_master_gate=true
+            if grep -qE "$approved_ref_pattern" "$wf"; then
+              has_approved_publish_ref=true
             fi
             if grep -qE '^\s+environment:' "$wf"; then
               has_environment=true
             fi
-            if [[ "$has_master_gate" != "true" || "$has_environment" != "true" ]]; then
+            if [[ "$has_approved_publish_ref" != "true" || "$has_environment" != "true" ]]; then
               PUBLISH_GATE_GAPS=$((PUBLISH_GATE_GAPS + 1))
-              echo "[HIGH] \`$(sanitize_line "$wf_base")\` has privileged workflow_dispatch publish permissions without both master ref and environment gates" >> "$RISK_REPORT_PATH"
+              echo "[HIGH] \`$(sanitize_line "$wf_base")\` has privileged workflow_dispatch publish permissions without both an approved publish ref and environment gate" >> "$RISK_REPORT_PATH"
               echo "" >> "$RISK_REPORT_PATH"
             fi
           done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
           if [[ $PUBLISH_GATE_GAPS -eq 0 ]]; then
-            echo "[OK] Privileged workflow_dispatch publish jobs are master/environment gated" >> "$RISK_REPORT_PATH"
+            echo "[OK] Privileged workflow_dispatch publish jobs are approved-ref/environment gated" >> "$RISK_REPORT_PATH"
             echo "" >> "$RISK_REPORT_PATH"
           fi
 
@@ -2443,7 +2446,7 @@ jobs:
                 ;;
               *"id-token: write"*)
                 cause="OIDC federation is available in a context that can be influenced by untrusted workflow triggers."
-                remediation="Restrict id-token: write to master-only release/publish jobs protected by a GitHub environment."
+                remediation="Restrict id-token: write to approved protected publish refs and a GitHub environment."
                 ;;
               *"Dockerfile"*)
                 cause="A container build file contains a mutable base, remote execution, remote ADD, or secret-like ARG/ENV pattern."
@@ -2870,7 +2873,7 @@ jobs:
           $tagOnlyList = @()
           $unpinnedList = @()
 
-          $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue
+          $workflows = @(Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue; Get-ChildItem -Path ".github/workflows" -Filter "*.yaml" -ErrorAction SilentlyContinue)
           foreach ($wf in $workflows) {
             $lines = Get-Content $wf.FullName -ErrorAction SilentlyContinue
             $inRunBlock = $false
@@ -2961,7 +2964,7 @@ jobs:
           $findings = @()
           $infoFindings = @()
 
-          $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue
+          $workflows = @(Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue; Get-ChildItem -Path ".github/workflows" -Filter "*.yaml" -ErrorAction SilentlyContinue)
           foreach ($wf in $workflows) {
             $triggerNames = @(python $env:WORKFLOW_TRIGGER_HELPER $wf.FullName)
             $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
@@ -3041,7 +3044,7 @@ jobs:
           $tokenUnsetCount = 0
           $issues = @()
 
-          $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue
+          $workflows = @(Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue; Get-ChildItem -Path ".github/workflows" -Filter "*.yaml" -ErrorAction SilentlyContinue)
           foreach ($wf in $workflows) {
             $totalWf++
             $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
@@ -3121,7 +3124,7 @@ jobs:
           $pwshHardenedBlocks = 0
           $issues = @()
 
-          $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue
+          $workflows = @(Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue; Get-ChildItem -Path ".github/workflows" -Filter "*.yaml" -ErrorAction SilentlyContinue)
           foreach ($wf in $workflows) {
             $lines = Get-Content $wf.FullName -ErrorAction SilentlyContinue
             $inRunBlock = $false
@@ -3253,7 +3256,7 @@ jobs:
           )
           $findings = @()
 
-          $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue
+          $workflows = @(Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue; Get-ChildItem -Path ".github/workflows" -Filter "*.yaml" -ErrorAction SilentlyContinue)
           foreach ($wf in $workflows) {
             $lines = Get-Content $wf.FullName -ErrorAction SilentlyContinue
             $inRunBlock = $false
@@ -3326,7 +3329,7 @@ jobs:
             'Sanitize-Line', 'Sanitize-Print', 'Safe-EchoForSummary', 'Escape-Html',
             'elements-sanitized')
 
-          $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue
+          $workflows = @(Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue; Get-ChildItem -Path ".github/workflows" -Filter "*.yaml" -ErrorAction SilentlyContinue)
           foreach ($wf in $workflows) {
             $lines = Get-Content $wf.FullName -ErrorAction SilentlyContinue
             $lineNum = 0
@@ -3425,7 +3428,7 @@ jobs:
             function Sanitize-Line { param([string]$InputString = "") return $InputString.Replace("&","&amp;").Replace("<","&lt;").Replace(">","&gt;") }
           }
 
-          $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue
+          $workflows = @(Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue; Get-ChildItem -Path ".github/workflows" -Filter "*.yaml" -ErrorAction SilentlyContinue)
           $permJson = python "$env:TRUSTED_SCRIPTS/audit-workflow-permissions.py" --workflows-dir .github/workflows --format json | ConvertFrom-Json
           python "$env:TRUSTED_SCRIPTS/audit-workflow-permissions.py" --workflows-dir .github/workflows --format markdown |
             Out-File -FilePath $env:RISK_REPORT_PATH -Append -Encoding utf8
@@ -3450,22 +3453,26 @@ jobs:
             $report += "**id-token: write found in $(Sanitize-Line "$idTokenWrite") workflow(s)**"
           }
 
-          # H-5: privileged workflow_dispatch publish jobs must be master/environment gated.
+          # H-5: privileged workflow_dispatch publish jobs require an approved ref and environment gate.
           $publishGateGaps = 0
           foreach ($wf in $workflows) {
             $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
             $triggerNames = @(python $env:WORKFLOW_TRIGGER_HELPER $wf.FullName)
             if ($triggerNames -notcontains 'workflow_dispatch') { continue }
             if ($content -notmatch '(?m)^\s+(contents|packages|attestations|artifact-metadata|id-token):\s*write') { continue }
-            $hasMasterGate = $content -match "github\.ref == 'refs/heads/master'"
+            $approvedPublishRefPattern = "github\.ref == 'refs/heads/master'"
+            if ($wf.Name -eq "ci-docker.yml") {
+              $approvedPublishRefPattern = "github\.ref == 'refs/heads/(master|ci-qa-pr-docker-testing)'"
+            }
+            $hasApprovedPublishRef = $content -match $approvedPublishRefPattern
             $hasEnvironment = $content -match '(?m)^\s+environment:'
-            if (-not $hasMasterGate -or -not $hasEnvironment) {
+            if (-not $hasApprovedPublishRef -or -not $hasEnvironment) {
               $publishGateGaps++
-              $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` has privileged workflow_dispatch publish permissions without both master ref and environment gates"
+              $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` has privileged workflow_dispatch publish permissions without both an approved publish ref and environment gate"
             }
           }
           if ($publishGateGaps -eq 0) {
-            $report += "[OK] Privileged workflow_dispatch publish jobs are master/environment gated"
+            $report += "[OK] Privileged workflow_dispatch publish jobs are approved-ref/environment gated"
           }
 
           # H-6: workflow cache use is prohibited in every boundary.
@@ -3614,7 +3621,7 @@ jobs:
           $deductions = @()
           $advisories = @()
 
-          $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue
+          $workflows = @(Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue; Get-ChildItem -Path ".github/workflows" -Filter "*.yaml" -ErrorAction SilentlyContinue)
           $allContent = ""
           foreach ($wf in $workflows) {
             $allContent += Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
@@ -3847,7 +3854,7 @@ jobs:
           )
 
           $findings = @()
-          $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue
+          $workflows = @(Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue; Get-ChildItem -Path ".github/workflows" -Filter "*.yaml" -ErrorAction SilentlyContinue)
           foreach ($wf in $workflows) {
             # Skip self-workflow to avoid self-scan false positives
             if ($wf.Name -eq $selfWf) { continue }
@@ -4094,9 +4101,10 @@ jobs:
           $report += "| Workflow | Triggers | Explicit Permissions | Pinning |"
           $report += "|----------|----------|-------------|---------|"
 
-          $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue | Sort-Object Name
+          $workflows = @(Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue; Get-ChildItem -Path ".github/workflows" -Filter "*.yaml" -ErrorAction SilentlyContinue) | Sort-Object Name
           foreach ($wf in $workflows) {
             $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
+            $lines = Get-Content $wf.FullName -ErrorAction SilentlyContinue
 
             $triggerList = @(python $env:WORKFLOW_TRIGGER_HELPER $wf.FullName)
             $triggers = if ($triggerList.Count -gt 0) { $triggerList -join ", " } else { "unknown" }
@@ -4251,7 +4259,7 @@ jobs:
               $remediation = "Run PR head code only with read-only permissions, no secrets, and trusted scanner code checked out separately."
             } elseif ($Finding -like "*id-token: write*") {
               $cause = "OIDC federation is available in a context that can be influenced by untrusted workflow triggers."
-              $remediation = "Restrict id-token: write to master-only release/publish jobs protected by a GitHub environment."
+              $remediation = "Restrict id-token: write to approved protected publish refs and a GitHub environment."
             } elseif ($Finding -like "*hidden Unicode*") {
               $cause = "A ref or workflow value contains invisible Unicode that can hide intent or confuse review."
               $remediation = "Reject hidden Unicode and require normalized ASCII ref names for automation entry points."

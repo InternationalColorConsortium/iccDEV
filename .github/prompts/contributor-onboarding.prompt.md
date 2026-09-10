@@ -73,6 +73,15 @@ LD_LIBRARY_PATH=IccProfLib:IccXML \
   Tools/IccDumpProfile/iccDumpProfile ../Testing/Display/sRGB_D65_MAT.icc
 ```
 
+### Maintainer static analysis
+
+Install `clang-tidy`, `clang-tools`, and `cppcheck` on Ubuntu before running
+the reusable lint configuration. `docs/build.md#maintainer-static-analysis`
+contains the canonical local reproduction: it generates a compile database and
+separate cppcheck and clang-tidy reports for IccProfLib, IccXML, IccJSON,
+IccConnect, and Tools. Treat the reports as diagnostics, prioritizing memory
+safety, parser, and type-punning findings over modernization-only warnings.
+
 ### Windows
 
 ```powershell

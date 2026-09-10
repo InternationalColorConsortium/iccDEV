@@ -49,6 +49,63 @@ cmake --preset linux-clang -S Build/Cmake -B out/linux-clang
 cmake --build out/linux-clang -j"$(nproc)"
 ```
 
+## Maintainer static analysis
+
+The reusable `ci-pr-lint` workflow uses cppcheck and clang-tidy to report
+non-blocking diagnostics for `IccProfLib`, `IccXML`, `IccJSON`, `IccConnect`,
+and `Tools`. It creates separate component reports plus a combined report.
+Install the additional local tooling on Ubuntu:
+
+```bash
+sudo apt install -y clang-tidy clang-tools cppcheck
+```
+
+Run the same full-source lint configuration from the repository root:
+
+```bash
+LINT_BUILD=/tmp/iccdev-pr-lint-build
+LINT_REPORTS=/tmp/iccdev-pr-lint-reports
+cmake -S Build/Cmake -B "$LINT_BUILD" \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+  -DCMAKE_C_COMPILER=clang \
+  -DCMAKE_CXX_COMPILER=clang++ \
+  -DENABLE_TOOLS=ON \
+  -DENABLE_TESTS=ON \
+  -DENABLE_WXWIDGETS=OFF \
+  -DICC_USE_ZLIB=ON \
+  -DICCDEV_ENABLE_QA_FLAGS=ON \
+  -DICCDEV_ENABLE_STRICT_WARNINGS=ON \
+  -Wno-dev
+cmake --build "$LINT_BUILD" --target IccProfLib2 --parallel "$(nproc)"
+mkdir -p "$LINT_REPORTS"
+find IccProfLib IccXML IccJSON IccConnect Tools -type f \
+  \( -name '*.cpp' -o -name '*.cxx' -o -name '*.cc' -o -name '*.c' \
+     -o -name '*.h' -o -name '*.hpp' -o -name '*.hh' \) \
+  -print0 | sort -z > "$LINT_REPORTS/changed_files.txt"
+for component in IccProfLib IccXML IccJSON IccConnect Tools; do
+  grep -z -E "^${component}/" "$LINT_REPORTS/changed_files.txt" \
+    | xargs -r -0 run-clang-tidy -j "$(nproc)" -p "$LINT_BUILD" \
+      -checks='modernize-*,readability-*,cppcoreguidelines-*,clang-analyzer-core.*,clang-analyzer-security.*,clang-analyzer-alpha.core.*,clang-analyzer-alpha.security.*' \
+      > "$LINT_REPORTS/clang_tidy_${component}.txt" 2>&1 || true
+  cppcheck --language=c++ --std=c++17 \
+    --enable=warning,performance,portability,style \
+    --suppress=missingIncludeSystem --suppress=unusedStructMember \
+    --suppress=unknownMacro:Tools/wxWidget/wxProfileDump/wxProfileDump.cpp \
+    -DICCPROFLIBVER='"cppcheck"' -DICFLOATSFX='"f"' -j "$(nproc)" \
+    --project="$LINT_BUILD/compile_commands.json" \
+    --file-filter="*/${component}/*" \
+    2> "$LINT_REPORTS/cppcheck_${component}.txt" || true
+done
+cat "$LINT_REPORTS"/clang_tidy_*.txt > "$LINT_REPORTS/clang_tidy.txt"
+cat "$LINT_REPORTS"/cppcheck_*.txt > "$LINT_REPORTS/cppcheck.txt"
+```
+
+Each command emits reports rather than acting as a pass/fail quality gate.
+Review structured `file:line:column` diagnostics, prioritize memory safety,
+input handling, and type-punning defects, and do not treat source excerpts
+that merely contain the word `error:` as compiler errors.
+
 ## macOS
 
 ```bash
@@ -936,7 +993,7 @@ should change container package pins, published image tags, or GHCR workflows.
 
 | File | Maintainer purpose | Publish/validation path |
 |------|--------------------|-------------------------|
-| `Dockerfile` | Pinned Ubuntu unified image for runtime, MCP, and maintainer checks, with Clang/LLVM 22 defaults, a Clang 21 pair for the packaged AFL++ LLVM plugin, GCC 15.2+, sanitizer, debugger, fuzzing, git, curl, and GitHub CLI tooling. | Validate locally with a no-cache Docker build and toolchain smoke tests before maintainer publishing; AFL wrapper changes also need the `docs/afl-fuzzing.md` container bootstrap probe; consumer workflows select `latest`, an immutable SHA, or a release tag. |
+| `Dockerfile` | Pinned Ubuntu unified image for runtime, MCP, and maintainer checks, with Clang/LLVM 22 defaults, a Clang 21 pair for the packaged AFL++ LLVM plugin, GCC 15.2+, sanitizer, debugger, fuzzing, git, curl, and GitHub CLI tooling. | Follow the [container maintainer preflight](regression-container.md#maintainer-preflight-and-security-checks) before publishing; AFL wrapper changes also need the `docs/afl-fuzzing.md` container bootstrap probe. Consumer workflows select `latest`, `ci-qa-pr-docker-testing`, an immutable SHA, or a release tag. |
 
 For reproducible maintainer checks, pass the immutable SHA tag to
 `ci-iccdev-tool-tests.yml`; use `latest` only for the current `master`
