@@ -2386,10 +2386,15 @@ void AddHdrItems(std::vector<PawgItem> &items, CIccProfile *pIcc)
                       "8.10.5 c): Display Colour Volume maximum luminance / content HDR reference "
                       "white = %.4g cd/m^2 / %.4g cd/m^2 = %.4g",
                       (double)meta.GetDisplayMaxLuminance(),
-                      (double)meta.GetResolvedContentReferenceWhite(),
+                      (double)info.contentReferenceWhite,
                       (double)info.displayHeadroom);
         oss << buf;
-        if (!meta.HasContentReferenceWhite()) {
+        // The divisor is info.contentReferenceWhite - the value H7 reports -
+        // not the metadataTag CRWL.  This printed the reader's own CRWL until
+        // 2026-09-10, so a profile with an HAGC reference white of 300 and a
+        // CRWL entry of 203 was told "content HDR reference white = 300" in H7
+        // and then divided by 203 under that same name here.
+        if (!info.bContentReferenceWhiteFromProfile) {
           oss << " (the divisor is 8.10.4's 203 cd/m^2 default, not a stated value - see H7)";
         }
         oss << kHdrRegistryCaveat;
@@ -2418,7 +2423,8 @@ void AddHdrItems(std::vector<PawgItem> &items, CIccProfile *pIcc)
           verdict = PawgVerdict::Warn;
           oss << "HDR Display entries are present but none of 8.10.5 a) to c) resolves a headroom "
                  "from them (a Display HDR Reference White Luminance without a Display Colour "
-                 "Volume, for instance, determines nothing on its own)";
+                 "Volume, for instance, determines nothing on its own; nor does a Display Colour "
+                 "Volume whose maximum is 0.0, which the registration defines as unknown)";
         }
         break;
     }

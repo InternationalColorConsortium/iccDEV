@@ -14,7 +14,7 @@
 //    adaptation. The test pins a real BT.2020/D65 profile whose recovered white
 //    must come back at D65 and not at D50.
 //
-// 2. The display headroom precedence of clause 8.10.5. NOTE 13 makes it
+// 2. The display headroom precedence of clause 8.10.5. NOTE 14 makes it
 //    normative that DERH wins outright when all three entries are present and
 //    disagree, and that the DCV/DRWL derivation "shall not be recomputed". A
 //    reader that treats the list as a fallback chain gets the same answer when
@@ -48,6 +48,7 @@
 #include "IccHdrProfile.h"
 #include "IccProfile.h"
 #include "IccTag.h"
+#include "IccTagDict.h"
 #include "IccUtil.h"
 #include "IccDefs.h"
 
@@ -279,7 +280,7 @@ void testDisplayMetadata()
   check(!meta.HasUnparsedEntries(), "every entry in the fixture parsed");
 
   // The fixture's entries disagree on purpose: DERH says 4.0 while
-  // DCV.maxLuminance / DRWL works out to 1000/203 = 4.926. NOTE 13 says DERH
+  // DCV.maxLuminance / DRWL works out to 1000/203 = 4.926. NOTE 14 says DERH
   // wins and the derived value is not recomputed.
   icFloatNumber headroom = 0.0f;
   icHdrHeadroomSource src = meta.ResolveDisplayHeadroom(headroom);
@@ -796,6 +797,117 @@ void testClassification()
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// 8. Values the dictType Metadata Registry defines and the amendment does not
+// ---------------------------------------------------------------------------
+//
+// Found 2026-09-10 by reading the registry entries rather than the amendment,
+// which delegates "names, encodings and semantics" to the registry. Each case
+// edits one metadataTag entry of an existing fixture IN MEMORY, so the corpus
+// and its manifests are untouched, and each asserts a value that differed
+// before the fix - so none of them passes against the unfixed build.
+
+CIccTagDict *metaDict(CIccProfile *pProfile)
+{
+  CIccTag *pTag = pProfile->FindTag(icSigMetaDataTag);
+  if (!pTag || pTag->GetType() != icSigDictType)
+    return NULL;
+  return (CIccTagDict*)pTag;
+}
+
+void testRegistryDefinedValues()
+{
+  // (a) "Value of 0.0 means that the respective value is unknown" - CLL/MDCV.
+  // HdrLinearHagcWhite is Linear, HAGC reference white 300, CLL 600 -> 2.0.
+  // An unknown CLL maximum is not a peak: resolution must fall through, not
+  // report 0 - which is below every target and switched the target clamp off.
+  CIccProfile *pLin = openFixture("HdrLinearHagcWhite.icc");
+  if (pLin) {
+    CIccTagDict *pDict = metaDict(pLin);
+    check(pDict != NULL, "HdrLinearHagcWhite carries a metadataTag dict");
+    if (pDict) {
+      icHdrProfileInfo info;
+      pDict->Set("CLL", "0.0 0.0 9");
+      check(icGetHdrProfileInfo(pLin, info), "info with an unknown CLL maximum");
+      check(info.nContentHeadroomSource == icHdrContentHeadroomDefault,
+            "an unknown (0.0) CLL maximum falls through to 8.10.4 c), not rule a)");
+      checkClose(info.contentHeadroom, 1000.0 / 300.0, 1e-4,
+                 "and Hcontent is the 1000 cd/m^2 default over the HAGC white, not 0");
+
+      pDict->Set("MDCV", "1000.0 0.005 9");
+      check(icGetHdrProfileInfo(pLin, info), "info with unknown CLL and a known MDCV");
+      check(info.nContentHeadroomSource == icHdrContentHeadroomMdcv,
+            "an unknown CLL falls through to MDCV when MDCV has a peak");
+
+      pDict->Set("MDCV", "0.0 0.0 9");
+      check(icGetHdrProfileInfo(pLin, info), "info with CLL and MDCV both unknown");
+      check(info.nContentHeadroomSource == icHdrContentHeadroomDefault,
+            "an unknown MDCV maximum does not select rule b) either");
+    }
+    delete pLin;
+  }
+
+  // (b) The same rule for DCV (HDR Display registration). HdrHeadroomDcvDrwl
+  // resolves by 8.10.5 b), DCV 1000 / DRWL 500 = 2.0, with no DERH.
+  CIccProfile *pDisp = openFixture("HdrHeadroomDcvDrwl.icc");
+  if (pDisp) {
+    CIccTagDict *pDict = metaDict(pDisp);
+    if (pDict) {
+      icHdrProfileInfo info;
+      pDict->Set("DCV", "0.0 0.0 1");
+      check(icGetHdrProfileInfo(pDisp, info), "info with an unknown DCV maximum");
+      check(info.nHeadroomSource == icHdrHeadroomNone,
+            "an unknown (0.0) DCV maximum fires neither 8.10.5 b) nor c)");
+    }
+    delete pDisp;
+  }
+
+  // (c) The two headroom axes divide by the SAME reference white. Linear,
+  // HAGC white 300, CRWL entry 203, CLL 600, DCV 600 and no DRWL/DERH, so
+  // 8.10.4 a) and 8.10.5 c) share a numerator and the divisor is the only
+  // thing that can differ. Before the fix, content was 600/300 = 2 and
+  // display 600/203 = 2.956; one PAWG report called both divisors "content
+  // HDR reference white" and gave them different values.
+  CIccProfile *pX = openFixture("HdrLinearHagcWhite.icc");
+  if (pX) {
+    CIccTagDict *pDict = metaDict(pX);
+    if (pDict) {
+      icHdrProfileInfo info;
+      pDict->Set("CRWL", "203.0");
+      pDict->Set("DCV", "600.0 0.005 9");
+      check(icGetHdrProfileInfo(pX, info), "info for the cross-axis case");
+      checkClose(info.contentReferenceWhite, 300.0, 1e-4, "the HAGC reference white wins over CRWL");
+      check(info.nContentHeadroomSource == icHdrContentHeadroomCll, "content resolves by 8.10.4 a)");
+      check(info.nHeadroomSource == icHdrHeadroomDcvCrwl, "display resolves by 8.10.5 c)");
+      checkClose(info.contentHeadroom, 2.0, 1e-4, "Hcontent = CLL 600 / 300");
+      checkClose(info.displayHeadroom, 2.0, 1e-4,
+                 "Hdisplay = DCV 600 / 300 - the same white, not the CRWL entry's 203");
+    }
+    delete pX;
+  }
+
+  // (d) Primaries code 2 means different things per entry. CLL and CCV: "the
+  // primaries are defined by tags required by a three-component matrix-based
+  // display profile". MDCV: "reserved for future use". HdrCicpUnspecified
+  // carries the colorant tags, so CLL's 2 resolves - and an MDCV 2 must not.
+  CIccProfile *pP = openFixture("HdrCicpUnspecified.icc");
+  if (pP) {
+    CIccTagDict *pDict = metaDict(pP);
+    if (pDict) {
+      pDict->Set("MDCV", "1000.0 0.005 2");
+      CIccHdrMetadataReader meta;
+      check(meta.Read(pP), "metadata reads");
+      check(meta.ContentLightLevelPrimariesResolved(),
+            "CLL primaries 2 resolves against the colorant tags (registry, CLL entry)");
+      check(meta.HasMasteringDisplayColourVolume(), "MDCV with primaries 2 still parses - 2 is a legal 8-bit code");
+      check(!meta.MasteringPrimariesResolved(),
+            "MDCV primaries 2 is reserved and stays unresolved (registry, MDCV entry)");
+    }
+    delete pP;
+  }
+}
+
 } // namespace
 
 int main()
@@ -807,6 +919,7 @@ int main()
   testHdrForwardMatrix();
   testContentHeadroom();
   testClassification();
+  testRegistryDefinedValues();
 
   if (g_failures)
     printf("hdr-profile-classification: %d assertion(s) failed\n", g_failures);

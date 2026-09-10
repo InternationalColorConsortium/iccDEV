@@ -201,7 +201,7 @@ iccdev_run_pawg("${ICCDEV_HDR_DIR}/HdrDisplayMetadata.icc" _meta)
 iccdev_expect("${_meta}" "\\[OK[ \t]*\\][ \t]+H8[ \t]"
   "H8 did not resolve a display headroom from the HDR Display entries")
 iccdev_expect("${_meta}" "8\\.10\\.5 a\\)"
-  "H8 did not report DERH as the rule that fired; NOTE 13 makes the provenance normative")
+  "H8 did not report DERH as the rule that fired; NOTE 14 makes the provenance normative")
 iccdev_expect("${_meta}" "no HDR Display category until the amendment is accepted"
   "an unregistered HDR Display value was presented without its caveat")
 iccdev_expect_not("${_meta}" "Content HDR Reference White Luminance entry \\["

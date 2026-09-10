@@ -580,7 +580,8 @@ static bool icHdrGetDictValue(const CIccTagDict *pDict, const char *szKey,
  */
 static bool icHdrParseRegistryVolume(const CIccProfile *pProfile, const std::string &s,
                                      int nLums, double *pLums,
-                                     icCicpPrimaries &primaries, bool &bPrimariesResolved)
+                                     icCicpPrimaries &primaries, bool &bPrimariesResolved,
+                                     bool bCode2FromProfile)
 {
   double v[4];
   int i;
@@ -610,7 +611,15 @@ static bool icHdrParseRegistryVolume(const CIccProfile *pProfile, const std::str
   icUInt8Number nCode = (icUInt8Number)v[nLums];
 
   if (nCode == icCicpPrimariesUnspecified) {
-    /* The registry is explicit about this code, and it does NOT mean "unknown"
+    /* NOT FOR EVERY ENTRY - hence bCode2FromProfile.  The registry gives code 2
+     * two different meanings.  For MDCV: "At this point the primaries value of 2
+     * in the MDCV is reserved for future use."  A reserved value has no meaning
+     * to resolve, so MDCV passes false and code 2 stays unresolved.  This helper
+     * used to apply the CLL/CCV rule below to all three of its callers, because
+     * sharing the parser generalised the rule; the comment that follows cited
+     * only CLL and CCV and never mentioned MDCV.
+     *
+     * The registry is explicit about this code, and it does NOT mean "unknown"
      * here.  Its CLL and CCV entries say a primaries value of 2 "means that
      * the primaries are defined by tags required by [a] three component
      * matrix-based display profile containing this metadata", and the HDR
@@ -629,7 +638,7 @@ static bool icHdrParseRegistryVolume(const CIccProfile *pProfile, const std::str
      * false there, which leaves bPrimariesResolved false: the same answer as
      * before this branch existed, now for a stated reason rather than by
      * omission. */
-    bPrimariesResolved = icGetProfilePrimaries(pProfile, primaries);
+    bPrimariesResolved = bCode2FromProfile && icGetProfilePrimaries(pProfile, primaries);
   }
   else {
     bPrimariesResolved = icGetCicpPrimaries(nCode, primaries);
@@ -688,10 +697,15 @@ bool CIccHdrMetadataReader::Read(const CIccProfile *pProfile)
 
   /* --- HDR Image (8.10.4) --- */
 
-  /* ASSUMED: a single decimal luminance in cd/m^2. NOTE 10 says the encoding
-   * is "defined in accordance with ISO 22028-5", which this build does not
-   * have; a plain decimal is the only representation the amendment's own
-   * "203 cd/m^2" prose commits to. */
+  /* A single decimal luminance in cd/m^2 - DEFINED, not assumed.  This used to
+   * say ASSUMED, because 8.10.4 NOTE 11 says the encoding is "defined in
+   * accordance with ISO 22028-5", which this build does not have.  But the
+   * amendment makes the dictType Metadata Registry authoritative for entry
+   * encodings, the registry gives CRWL's Value as "Floating point number",
+   * and the dictType proposal makes that Value column the entry's mandatory
+   * format description.  The registry cites ISO 22028-5 for the QUANTITY -
+   * what HDR reference white luminance means - not for its encoding; that
+   * mismatch is PROPOSAL-ISSUE HDR-16. */
   bParseable = false;
   if (icHdrGetDictValue(pDict, kIccHdrKeyCrwl, value, bParseable)) {
     if (bParseable && icHdrParseNumbers(value, v, 1) && v[0] > 0.0) {
@@ -709,7 +723,7 @@ bool CIccHdrMetadataReader::Read(const CIccProfile *pProfile)
   if (icHdrGetDictValue(pDict, kIccHdrKeyCll, value, bParseable)) {
     double lums[2];
     if (bParseable && icHdrParseRegistryVolume(pProfile, value, 2, lums, m_cllPrimaries,
-                                               m_bCllPrimariesResolved)) {
+                                               m_bCllPrimariesResolved, true)) {
       m_maxCll = (icFloatNumber)lums[0];
       m_maxFall = (icFloatNumber)lums[1];
       m_bHasCll = true;
@@ -724,7 +738,7 @@ bool CIccHdrMetadataReader::Read(const CIccProfile *pProfile)
   if (icHdrGetDictValue(pDict, kIccHdrKeyMdcv, value, bParseable)) {
     double lums[2];
     if (bParseable && icHdrParseRegistryVolume(pProfile, value, 2, lums, m_mdcvPrimaries,
-                                               m_bMdcvPrimariesResolved)) {
+                                               m_bMdcvPrimariesResolved, false)) {
       m_mdcvMaxLuminance = (icFloatNumber)lums[0];
       m_mdcvMinLuminance = (icFloatNumber)lums[1];
       m_bHasMdcv = true;
@@ -782,7 +796,7 @@ bool CIccHdrMetadataReader::Read(const CIccProfile *pProfile)
   if (icHdrGetDictValue(pDict, kIccHdrKeyDcv, value, bParseable)) {
     double lums[2];
     if (bParseable && icHdrParseRegistryVolume(pProfile, value, 2, lums, m_dcvPrimaries,
-                                               m_bDcvPrimariesResolved)) {
+                                               m_bDcvPrimariesResolved, true)) {
       m_dcvMaxLuminance = (icFloatNumber)lums[0];
       m_dcvMinLuminance = (icFloatNumber)lums[1];
       m_bHasDcv = true;
@@ -837,7 +851,8 @@ bool CIccHdrMetadataReader::HasAnyHdrEntry() const
  *  the rule that produced the value
  *****************************************************************************
  */
-icHdrHeadroomSource CIccHdrMetadataReader::ResolveDisplayHeadroom(icFloatNumber &headroom) const
+icHdrHeadroomSource CIccHdrMetadataReader::ResolveDisplayHeadroom(icFloatNumber &headroom,
+                                                                  icFloatNumber crwl) const
 {
   /* a) DERH taken directly */
   if (m_bHasDerh) {
@@ -845,20 +860,25 @@ icHdrHeadroomSource CIccHdrMetadataReader::ResolveDisplayHeadroom(icFloatNumber 
     return icHdrHeadroomDerh;
   }
 
+  /* The HDR Display registration defines a DCV luminance of 0.0 as "unknown",
+   * so an unknown maximum is not a peak and must not feed b) or c): it would
+   * report a headroom of 0 as though the display had been measured at black. */
+  const bool bDcvPeak = m_bHasDcv && m_dcvMaxLuminance > 0.0f;
+
   /* b) DCV maximum luminance divided by DRWL */
-  if (m_bHasDcv && m_bHasDrwl && m_drwl > 0.0f) {
+  if (bDcvPeak && m_bHasDrwl && m_drwl > 0.0f) {
     headroom = m_dcvMaxLuminance / m_drwl;
     return icHdrHeadroomDcvDrwl;
   }
 
-  /* c) DCV maximum luminance divided by the content reference white, which
-   * carries 8.10.4's 203 cd/m^2 default when no CRWL entry is present. */
-  if (m_bHasDcv) {
-    icFloatNumber crwl = GetResolvedContentReferenceWhite();
-    if (crwl > 0.0f) {
-      headroom = m_dcvMaxLuminance / crwl;
-      return icHdrHeadroomDcvCrwl;
-    }
+  /* c) DCV maximum luminance divided by the content reference white.  crwl is
+   * the caller's: the profile-level path passes the value it resolved, HAGC
+   * tag first, so this divisor is the same quantity 8.10.4 divides by and
+   * the one reported as the content reference white.  It used to be this
+   * class's own metadataTag CRWL, which cannot see the HAGC tag. */
+  if (bDcvPeak && crwl > 0.0f) {
+    headroom = m_dcvMaxLuminance / crwl;
+    return icHdrHeadroomDcvCrwl;
   }
 
   /* d) not derivable from the profile */
@@ -904,8 +924,14 @@ icHdrContentHeadroomSource CIccHdrMetadataReader::ResolveContentHeadroom(icFloat
   if (crwl <= 0.0f)
     return icHdrContentHeadroomNone;
 
+  /* The dictType Metadata Registry defines a CLL or MDCV luminance of 0.0 as
+   * "unknown".  An unknown maximum is not a peak, so it does not select its
+   * rule; resolution falls through exactly as if the entry were absent.
+   * Taking it at face value gave Hcontent = 0, which is below every target
+   * headroom and so switched the transform's target-volume clamp off. */
+
   /* a) CLL maximum content light level */
-  if (m_bHasCll) {
+  if (m_bHasCll && m_maxCll > 0.0f) {
     headroom = m_maxCll / crwl;
     return icHdrContentHeadroomCll;
   }
@@ -914,7 +940,7 @@ icHdrContentHeadroomSource CIccHdrMetadataReader::ResolveContentHeadroom(icFloat
    * precedence and not a fallback chain: CLL measures the content, MDCV
    * measures the display it was mastered on, so a profile carrying both is
    * answered from the content and the mastering peak is not consulted. */
-  if (m_bHasMdcv) {
+  if (m_bHasMdcv && m_mdcvMaxLuminance > 0.0f) {
     headroom = m_mdcvMaxLuminance / crwl;
     return icHdrContentHeadroomMdcv;
   }
@@ -1428,8 +1454,11 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
     info.bContentReferenceWhiteFromProfile = true;
   }
 
+  /* The reference white resolved just above - HAGC tag first - is passed in,
+   * so 8.10.5 c) divides by the same quantity 8.10.4 does and H7 reports. */
   if (bHasMeta)
-    info.nHeadroomSource = meta.ResolveDisplayHeadroom(info.displayHeadroom);
+    info.nHeadroomSource = meta.ResolveDisplayHeadroom(info.displayHeadroom,
+                                                       info.contentReferenceWhite);
 
   /* Content headroom (8.10.4).  Gated on Linear because that is the only
    * transfer the priority order is stated for, and because rule c) would

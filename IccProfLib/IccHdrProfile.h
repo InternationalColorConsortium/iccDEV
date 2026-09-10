@@ -169,7 +169,7 @@ typedef enum {
 /**
  * Which rule of clause 8.10.5 produced the display headroom, in the
  * precedence order that clause defines. Reported alongside the value because
- * NOTE 13 makes the provenance normative: when all three entries are present
+ * NOTE 14 makes the provenance normative: when all three entries are present
  * and disagree, DERH wins and the DCV/DRWL derivation is explicitly *not* to
  * be recomputed, so a consumer needs to know which rule fired.
  */
@@ -187,7 +187,7 @@ typedef enum {
  * The order applies to the Linear (8) transfer only. PQ and HLG carry a peak
  * luminance in the transfer function itself, so a content headroom derived
  * from metadata would be answering a question those two transfers have
- * already answered; 8.10.4 states the order for Linear and NOTE 9 sends a CMM
+ * already answered; 8.10.4 states the order for Linear and NOTE 10 sends a CMM
  * that wants the others to "the conventions of the
  * cicpTag.TransferCharacteristics" instead.
  *
@@ -267,7 +267,7 @@ public:
   icFloatNumber GetContentReferenceWhite() const { return m_crwl; }
 
   /** CRWL with clause 8.10.4's 203 cd/m^2 default applied. This is the only
-   * entry the amendment gives a normative default to; NOTE 9 is explicit that
+   * entry the amendment gives a normative default to; NOTE 10 is explicit that
    * the others have none. */
   icFloatNumber GetResolvedContentReferenceWhite() const;
 
@@ -313,11 +313,32 @@ public:
   /**
    * Resolve the scalar display headroom by the precedence of clause 8.10.5.
    *
+   * crwl is the content HDR reference white rule c) divides by.  It is a
+   * parameter for the same reason it is one on ResolveContentHeadroom(): an
+   * HAGC tag carries its own reference white, which this class - a
+   * metadataTag reader - cannot see, and icGetHdrProfileInfo() prefers it.
+   * This overload did not exist until 2026-09-10, so rule c) divided by the
+   * metadataTag CRWL while 8.10.4 divided by the HAGC value, and one PAWG
+   * report stated the content reference white as 300 cd/m^2 in H7 and divided
+   * by 203 cd/m^2 under that same name in H8.
+   *
+   * A DCV maximum luminance of 0.0 supplies no peak: the HDR Display
+   * registration defines 0.0 as "unknown", so rules b) and c) do not fire on
+   * it and resolution falls through to d).
+   *
    * Returns the rule that fired. When it is icHdrHeadroomNone the profile
    * does not determine a headroom and the caller must take H_target from the
-   * destination device instead (8.10.5 d) and NOTE 12).
+   * destination device instead (8.10.5 d) and NOTE 13 - NOTE 12 before the
+   * 2026-09-06 revision renumbered it).
    */
-  icHdrHeadroomSource ResolveDisplayHeadroom(icFloatNumber &headroom) const;
+  icHdrHeadroomSource ResolveDisplayHeadroom(icFloatNumber &headroom,
+                                             icFloatNumber crwl) const;
+
+  /** ResolveDisplayHeadroom() against this class's own CRWL - the metadataTag
+   * entry, or clause 8.10.4's 203 cd/m^2 default when it is absent.  Correct
+   * for a profile with no HAGC tag; the profile-level path passes its own. */
+  icHdrHeadroomSource ResolveDisplayHeadroom(icFloatNumber &headroom) const
+  { return ResolveDisplayHeadroom(headroom, GetResolvedContentReferenceWhite()); }
 
   /**
    * Resolve the scalar content headroom Hcontent by the priority order of
@@ -330,6 +351,12 @@ public:
    * class's own: an HAGC tag carries its own reference white, and
    * icGetHdrProfileInfo() prefers it. Passing the value the caller resolved
    * keeps Hcontent consistent with the reference white reported beside it.
+   *
+   * A CLL or MDCV maximum of 0.0 supplies no peak.  The dictType Metadata
+   * Registry defines 0.0 in those entries as "unknown", so rules a) and b) do
+   * not fire on it and resolution falls through - to b), then to the default
+   * of c).  Treating it as a real peak gave Hcontent = 0, below every target,
+   * which switched CIccXformMatrixTrcHdr's target-volume clamp off.
    *
    * Returns the rule that fired; icHdrContentHeadroomNone means no value was
    * produced, which for a Linear profile can only happen when crwl is not
