@@ -316,6 +316,16 @@ jobs:
           tidy_checks='modernize-*,readability-*,cppcoreguidelines-*'
           tidy_checks+=',clang-analyzer-core.*,clang-analyzer-security.*'
           tidy_checks+=',clang-analyzer-alpha.core.*,clang-analyzer-alpha.security.*'
+          # The established ICC API and file-format terminology includes many
+          # intentional short identifiers (for example, 16-bit/32-bit fields),
+          # pointer/character truth tests, upper-case literal suffixes, and
+          # single-statement control flow.  These legacy-wide style baselines
+          # obscure actionable diagnostics; retain the other readability,
+          # guideline, and analyzer checks.
+          tidy_checks+=',-readability-identifier-length'
+          tidy_checks+=',-readability-implicit-bool-conversion'
+          tidy_checks+=',-readability-braces-around-statements'
+          tidy_checks+=',-readability-uppercase-literal-suffix'
 
           components=(IccProfLib IccXML IccJSON IccConnect Tools)
           for component in "${components[@]}"; do

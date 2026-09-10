@@ -86,7 +86,7 @@ find IccProfLib IccXML IccJSON IccConnect Tools -type f \
 for component in IccProfLib IccXML IccJSON IccConnect Tools; do
   grep -z -E "^${component}/" "$LINT_REPORTS/changed_files.txt" \
     | xargs -r -0 run-clang-tidy -j "$(nproc)" -p "$LINT_BUILD" \
-      -checks='modernize-*,readability-*,cppcoreguidelines-*,clang-analyzer-core.*,clang-analyzer-security.*,clang-analyzer-alpha.core.*,clang-analyzer-alpha.security.*' \
+      -checks='modernize-*,readability-*,-readability-identifier-length,-readability-implicit-bool-conversion,-readability-braces-around-statements,-readability-uppercase-literal-suffix,cppcoreguidelines-*,clang-analyzer-core.*,clang-analyzer-security.*,clang-analyzer-alpha.core.*,clang-analyzer-alpha.security.*' \
       > "$LINT_REPORTS/clang_tidy_${component}.txt" 2>&1 || true
   cppcheck --language=c++ --std=c++17 \
     --enable=warning,performance,portability,style \

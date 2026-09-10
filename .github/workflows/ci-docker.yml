@@ -19,6 +19,7 @@ env:
     ${{
       github.ref == 'refs/heads/master' ||
       github.ref == 'refs/heads/ci-qa-pr-docker-testing' ||
+      github.ref == 'refs/heads/ci-publish-colourbill-ctrl' ||
       startsWith(github.ref, 'refs/tags/v')
     }}
 
@@ -69,7 +70,10 @@ jobs:
       id-token: write
       attestations: write
       artifact-metadata: write
-    environment: ghcr-publish
+    environment:
+      name: >-
+        ${{ github.ref == 'refs/heads/ci-publish-colourbill-ctrl' &&
+            'ci-publishing-colourbill-ctrl' || 'ghcr-publish' }}
     defaults:
       run:
         shell: bash --noprofile --norc {0}
@@ -119,6 +123,7 @@ jobs:
             type=sha,format=long
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
             type=ref,event=branch,enable=${{ github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+            type=ref,event=branch,enable=${{ github.ref == 'refs/heads/ci-publish-colourbill-ctrl' }}
             type=ref,event=tag
 
       # preflight: allow-token-exposure reason=publish-unified-iccdev-image
