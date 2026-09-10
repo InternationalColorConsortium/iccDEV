@@ -5,13 +5,14 @@
 #                 https://color.org
 #
 # Reusable workflow: Build + Test iccDEV on Windows (MSVC)
-#
-# Uses vcpkg dependencies from the v2.3.1 release,
 # PowerShell sanitizer for GITHUB_STEP_SUMMARY.
 #
 ###############################################################
 
 name: "_build-test-windows"
+
+# The immutable release asset URL is intentionally kept on one PowerShell line.
+# yamllint disable rule:line-length
 
 permissions:
   contents: read
@@ -79,13 +80,11 @@ jobs:
           }
 
           Write-Host "Fetching vcpkg dependencies from release..."
-          $depsUrl = @(
-            "https://github.com/InternationalColorConsortium/iccDEV/releases/download"
-            "v2.3.1/vcpkg-exported-deps.zip"
-          ) -join "/"
-          Invoke-WebRequest `
-            -Uri $depsUrl `
-            -OutFile "deps.zip"
+          Start-BitsTransfer -Source https://github.com/InternationalColorConsortium/iccDEV/releases/download/vcpkg-win-2324-deps/iccdev-windows-vcpkg-classic-308e561.zip -Destination "deps.zip"
+          $actualDigest = (Get-FileHash -LiteralPath 'deps.zip' -Algorithm SHA256).Hash
+          if ($actualDigest -ne 'd3591ccfbdae65a908a8488030b270782942106e06093602f9d919e027cd2976') {
+            throw "vcpkg export digest mismatch: $actualDigest"
+          }
           Write-Host "Extracting dependencies..."
           tar -xf deps.zip
           Remove-Item deps.zip
