@@ -1,0 +1,195 @@
+// Coverage for icUtf16ToUtf8() and icWCharToUtf8() (IccProfLib/IccUtil.cpp),
+// added with the strict-aliasing fix in #2504.
+//
+// What this test does NOT do: it cannot observe the aliasing violation it was
+// written alongside.  Both converters used to hand icConvertUTF16toUTF8() a
+// (UTF8**) aimed at a char* object, so the callee stored a UTF8* through a
+// char* lvalue and the caller read it back as char*.  That is undefined, but
+// it was measured not to misbehave: gcc 13 and clang 18 at -O2 and at
+// -O3 -flto all produce identical output before and after the fix.  A runtime
+// test asserting "the bytes are right" therefore passes against the unfixed
+// build too, and would be worth nothing on its own.
+//
+// What it does do is guard the rewrite.  Removing the pun meant re-typing the
+// output cursor as UTF8* and recomputing the assigned length against a UTF8*
+// base:
+//
+//     buf.assign(szBuf, (size_t)(szDest - szBuf));          // was
+//     buf.assign(szBuf, (size_t)(szDest - (UTF8*)szBuf));   // now
+//
+// That arithmetic is the part a careless edit breaks, and icWCharToUtf8() had
+// NO coverage at all when the fix was written -- deliberately corrupting its
+// length by one byte left all 264 tests green, because no tracked XML fixture
+// contains a DictEntry and there is no dict CTest, so the one path that reaches
+// it (the dictType writers in IccTagXml.cpp and IccTagJson.cpp) is never
+// exercised.  icUtf16ToUtf8() was covered only indirectly, by four tests that
+// happen to route through it.
+//
+// The length assertions below are the point: each one pins the exact byte count
+// the converter reports, not merely that the text looks right.  A truncated or
+// over-long cursor changes size() while c_str() can still compare equal up to
+// the NUL.
+//
+// Returns 0 on success; the number of failed assertions otherwise.
+
+#include "IccUtil.h"
+#include "icProfileHeader.h"
+
+#include <string>
+#include <cstdio>
+#include <cstring>
+#include <cwchar>
+
+namespace {
+
+int g_fail = 0;
+
+void check(bool ok, const char *what)
+{
+  if (!ok) {
+    ++g_fail;
+    printf("FAIL: %s\n", what);
+  }
+}
+
+// Compares both the reported length and the bytes.  size() is checked first and
+// separately because that is what the cursor arithmetic decides; a converter
+// that writes correct bytes but reports the wrong length still fails here.
+void checkUtf16(const icUInt16Number *src, int len,
+                const char *expect, size_t expectLen, const char *what)
+{
+  std::string buf;
+  const char *rv = icUtf16ToUtf8(buf, src, len);
+  char msg[256];
+
+  snprintf(msg, sizeof(msg), "%s: length (got %zu, want %zu)", what, buf.size(), expectLen);
+  check(buf.size() == expectLen, msg);
+
+  snprintf(msg, sizeof(msg), "%s: bytes", what);
+  check(buf.size() == expectLen && memcmp(buf.data(), expect, expectLen) == 0, msg);
+
+  // This does NOT pin the cursor: c_str()[size()] is '\0' by std::string's own
+  // contract whatever length was assigned, so a short or long cursor still
+  // satisfies it -- the length and byte checks above are what catch that.  What
+  // it does guard is the return value's provenance: both converters build into
+  // a malloc'd scratch buffer, free it, and return buf.c_str().  A future edit
+  // that returned the scratch pointer instead would fail here.
+  snprintf(msg, sizeof(msg), "%s: returns the string's own storage", what);
+  check(rv == buf.c_str() && rv[buf.size()] == '\0', msg);
+}
+
+void checkWChar(const wchar_t *src, size_t len,
+                const char *expect, size_t expectLen, const char *what)
+{
+  std::string buf;
+  const char *rv = icWCharToUtf8(buf, src, len);
+  char msg[256];
+
+  snprintf(msg, sizeof(msg), "%s: length (got %zu, want %zu)", what, buf.size(), expectLen);
+  check(buf.size() == expectLen, msg);
+
+  snprintf(msg, sizeof(msg), "%s: bytes", what);
+  check(buf.size() == expectLen && memcmp(buf.data(), expect, expectLen) == 0, msg);
+
+  // See checkUtf16: provenance, not cursor position.
+  snprintf(msg, sizeof(msg), "%s: returns the string's own storage", what);
+  check(rv == buf.c_str() && rv[buf.size()] == '\0', msg);
+}
+
+} // namespace
+
+int main()
+{
+  // --- icUtf16ToUtf8 -------------------------------------------------------
+  {
+    // ASCII: one UTF-16 unit per byte out.  The simplest case that still moves
+    // the cursor, so a base-pointer mistake shows up immediately.
+    const icUInt16Number ascii[] = { 'i', 'c', 'c', 'D', 'E', 'V', 0 };
+    checkUtf16(ascii, 6, "iccDEV", 6, "utf16 ascii, explicit length");
+
+    // sizeSrc = 0 means "measure it" (CIccUTF16String::WStrlen), a separate
+    // entry path into the same cursor code.
+    checkUtf16(ascii, 0, "iccDEV", 6, "utf16 ascii, measured length");
+
+    // U+00E9 -> 2 bytes, U+20AC -> 3 bytes.  Output length now differs from
+    // input length, which is what makes the cursor arithmetic load-bearing.
+    const icUInt16Number mixed[] = { 'a', 0x00E9, 0x20AC, 'z', 0 };
+    checkUtf16(mixed, 4, "a\xC3\xA9\xE2\x82\xACz", 7, "utf16 2- and 3-byte sequences");
+
+    // U+1F600 as a surrogate pair: 2 input units collapse to 4 output bytes.
+    const icUInt16Number surrogate[] = { 0xD83D, 0xDE00, 0 };
+    checkUtf16(surrogate, 2, "\xF0\x9F\x98\x80", 4, "utf16 surrogate pair");
+
+    // A trailing unpaired high surrogate is DROPPED: the converter stops at the
+    // incomplete pair and never emits it, so two input units yield one byte.
+    // This is the case that actually pins the cursor -- the reported length
+    // reflects where the converter stopped, not how much input it was given, so
+    // a length derived from sizeSrc rather than from the cursor fails here.
+    const icUInt16Number truncated[] = { 'a', 0xD83D, 0 };
+    checkUtf16(truncated, 2, "a", 1, "utf16 trailing unpaired surrogate dropped");
+
+    // An unpaired surrogate NOT at the end is passed through as a 3-byte
+    // sequence (U+D83D -> ED A0 BD) rather than replaced.  That output is
+    // CESU-8, and iccDEV's own isLegalUTF8String() rejects it -- measured, and
+    // reported separately; this case pins today's behaviour so a later fix to
+    // that is a deliberate, visible change rather than a silent one.
+    const icUInt16Number cesu[] = { 0xD83D, 'a', 0 };
+    checkUtf16(cesu, 2, "\xED\xA0\xBD" "a", 4, "utf16 interior unpaired surrogate (CESU-8, current behaviour)");
+
+    // Interior NUL: the converter is length-driven, so it must not stop early.
+    // buf.assign(ptr, len) preserves it; a c_str()-based length would not.
+    const icUInt16Number embedded[] = { 'a', 0x0000, 'b', 0 };
+    checkUtf16(embedded, 3, "a\0b", 3, "utf16 interior NUL kept");
+
+    // Degenerate inputs take the early-return arms, which never touch the
+    // cursor at all.
+    {
+      std::string buf("stale");
+      icUtf16ToUtf8(buf, NULL, 4);
+      check(buf.empty(), "utf16 NULL source clears the buffer");
+    }
+    {
+      std::string buf("stale");
+      const icUInt16Number empty[] = { 0 };
+      icUtf16ToUtf8(buf, empty, 0);
+      check(buf.empty(), "utf16 empty source clears the buffer");
+    }
+  }
+
+  // --- icWCharToUtf8 -------------------------------------------------------
+  // Reached in production only through the dictType writers.  Which arm of the
+  // WCHAR_MAX branch runs is platform-dependent (UTF-32 where wchar_t is wide,
+  // UTF-16 on Windows); these cases are chosen to hold on both.
+  {
+    const wchar_t ascii[] = L"iccDEV";
+    checkWChar(ascii, 6, "iccDEV", 6, "wchar ascii, explicit length");
+
+    // sizeSrc = 0 means wcslen().
+    checkWChar(ascii, 0, "iccDEV", 6, "wchar ascii, measured length");
+
+    const wchar_t mixed[] = { L'a', 0x00E9, 0x20AC, L'z', 0 };
+    checkWChar(mixed, 4, "a\xC3\xA9\xE2\x82\xACz", 7, "wchar 2- and 3-byte sequences");
+
+    const wchar_t embedded[] = { L'a', 0, L'b', 0 };
+    checkWChar(embedded, 3, "a\0b", 3, "wchar interior NUL kept");
+
+    {
+      std::string buf("stale");
+      icWCharToUtf8(buf, NULL, 4);
+      check(buf.empty(), "wchar NULL source clears the buffer");
+    }
+    {
+      std::string buf("stale");
+      const wchar_t empty[] = L"";
+      icWCharToUtf8(buf, empty, 0);
+      check(buf.empty(), "wchar empty source clears the buffer");
+    }
+  }
+
+  if (g_fail)
+    printf("%d assertion(s) failed\n", g_fail);
+  else
+    printf("utf8 converter cursor contract: all assertions passed\n");
+
+  return g_fail;
+}
