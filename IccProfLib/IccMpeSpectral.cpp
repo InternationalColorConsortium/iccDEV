@@ -1718,10 +1718,23 @@ bool CIccMpeReflectanceCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElem
 
   pApplyMtx->VectorMult(xyzW, m_pWhite);
 
-  bool bUseAbsolute = (m_flags & icRelativeSpectralData)!=0;
+  // ICC.2:2023 11.2.12: the media white -> illuminant white normalization of
+  // Formulae (43) to (46) applies "for relative colorimetric processing (when
+  // the Absolute flag is zero)". Bit 0 of the flags is icAbsoluteSpectralData;
+  // this used to mask with icRelativeSpectralData, which is 0, so the test was
+  // always false and every element took the relative path whatever its Flags
+  // said (#2520). With the flag set, the product below is left as it is: the
+  // observer was normalized against the illuminant by getEmissiveObserver(),
+  // so a perfect reflector comes out at Y = 1. Formula (41) prints its k as
+  // 1 / sum(cy,i * wi); that difference is not addressed here.
+  bool bUseAbsolute = (m_flags & icAbsoluteSpectralData)!=0;
   bool bLab = (m_flags & icLabSpectralData) != 0;
 
-  icFloatNumber xyzscale[3];
+  // Only read under the same !bUseAbsolute test that fills it. While that test
+  // was constant, the compiler could see the array was always set; now that it
+  // is not, GCC 15's -Wmaybe-uninitialized cannot connect the two tests (an
+  // -Werror failure under LTO), so start from 1.0, which is "no adaptation".
+  icFloatNumber xyzscale[3] = {1.0f, 1.0f, 1.0f};
   if (!bUseAbsolute) {
     xyzscale[0] = xyzW[0] != 0.0f ? xyzi[0] / xyzW[0] : 0.0f;
     xyzscale[1] = xyzW[1] != 0.0f ? xyzi[1] / xyzW[1] : 0.0f;
@@ -1778,6 +1791,13 @@ CIccMpeSpectralObserver::CIccMpeSpectralObserver()
   m_Range.end=0;
   m_Range.steps=0;
 
+  // Neither this constructor nor the two copy paths below used to touch
+  // m_flags, so an observer that was never Read() from a file, and every copy
+  // of one, carried whatever the allocator left there. Apply() already read
+  // the Lab bit from it, and since #2520 bit 0 selects absolute processing
+  // too. The spectral CLUT constructors set and copy it the same way.
+  m_flags = 0;
+
   m_pApplyMtx = NULL;
 }
 
@@ -1800,6 +1820,12 @@ CIccMpeSpectralObserver::CIccMpeSpectralObserver(const CIccMpeSpectralObserver &
   m_nOutputChannels = matrix.m_nOutputChannels;
 
   m_Range = matrix.m_Range;
+
+  // See the default constructor (#2520). This is the path a profile copy
+  // takes: CIccProfile's copy constructor copies each tag, and the MPE tag
+  // copies each element with NewCopy(), as CIccCmm::AddXform(CIccProfile&)
+  // does.
+  m_flags = matrix.m_flags;
 
   if (matrix.m_pWhite) {
     int num = m_Range.steps*sizeof(icFloatNumber);
@@ -1831,6 +1857,9 @@ void CIccMpeSpectralObserver::copyData(const CIccMpeSpectralObserver &matrix)
   m_nOutputChannels = matrix.m_nOutputChannels;
 
   m_Range = matrix.m_Range;
+
+  // As in the copy constructor (#2520); operator= comes through here.
+  m_flags = matrix.m_flags;
 
   free(m_pWhite);
 
@@ -2068,7 +2097,13 @@ void CIccMpeSpectralObserver::Apply(CIccApplyMpe * /* pApply */, icFloatNumber *
     icFloatNumber xyz[3];
     m_pApplyMtx->VectorMult(xyz, srcPixel);
 
-    bool bUseAbsolute = (m_flags & icRelativeSpectralData)!=0;
+    // Same flag test as CIccMpeReflectanceCLUT::Begin() (#2520). Both observer
+    // elements share this Apply(): for the reflectance observer m_xyzscale holds
+    // the media white adaptation of Formulae (51) to (54); for the emission
+    // observer it is 1.0, because getEmissiveObserver() has already applied the
+    // relative k of Formula (26). Begin() leaves m_xyzscale unset when the flag
+    // is set, so it must not be read on that path.
+    bool bUseAbsolute = (m_flags & icAbsoluteSpectralData)!=0;
     bool bLab = (m_flags & icLabSpectralData) != 0;
 
     if (!bUseAbsolute) {
@@ -2191,9 +2226,16 @@ bool CIccMpeEmissionObserver::Begin(icElemInterp /* nInterp */, CIccTagMultiProc
 
   m_pApplyMtx->VectorMult(m_xyzw, m_pWhite);
 
+  // getEmissiveObserver() has already scaled the observer by the relative k of
+  // ICC.2:2023 Formula (26), so the white emission comes out at Y = 1 and
+  // Apply() has no further normalization to do: it multiplies by 1.0. This used
+  // to assign m_xyzscale[0] three times, and no constructor initializes the
+  // array, so Apply() multiplied Y and Z by whatever the allocator had left
+  // there (#2520). The Absolute flag (k = 1) is still not honoured here,
+  // because getEmissiveObserver() always applies the relative k.
   m_xyzscale[0] = 1.0;
-  m_xyzscale[0] = 1.0;
-  m_xyzscale[0] = 1.0;
+  m_xyzscale[1] = 1.0;
+  m_xyzscale[2] = 1.0;
 
   return true;
 }
@@ -2278,7 +2320,11 @@ bool CIccMpeReflectanceObserver::Begin(icElemInterp /* nInterp */, CIccTagMultiP
 
   m_pApplyMtx->VectorMult(xyzm, m_pWhite);
 
-  bool bUseAbsolute = (m_flags & icRelativeSpectralData)!=0;
+  // ICC.2:2023 11.2.13, as in CIccMpeReflectanceCLUT::Begin() (#2520): the
+  // media white adaptation of Formulae (51) to (54) applies only when the
+  // Absolute flag is zero. When it is set, m_xyzscale is left unset and
+  // Apply() does not read it.
+  bool bUseAbsolute = (m_flags & icAbsoluteSpectralData)!=0;
   //bool bLab = (m_flags & icLabSpectralData) != 0;
 
   if (!bUseAbsolute) {
