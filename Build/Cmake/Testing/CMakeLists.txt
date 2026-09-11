@@ -5085,7 +5085,7 @@ function(iccdev_add_utf8_converter_cursor_test)
   endif()
   set_tests_properties(iccdev.utf8-converter-cursor-contract PROPERTIES
     TIMEOUT 120
-    LABELS "iccdev;iccprofLib;utf8;utf16;aliasing;issue-2504;regression"
+    LABELS "iccdev;iccprofLib;utf8;utf16;aliasing;issue-2504;issue-2511;regression"
   )
   if(WIN32)
     # icWCharToUtf8 takes the UTF-16 arm of its WCHAR_MAX branch here, which no
