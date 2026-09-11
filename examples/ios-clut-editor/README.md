@@ -134,6 +134,20 @@ TEAM_ID="$TEAM_ID" DEVICE_ID="$DEVICE_ID" \
   examples/ios-clut-editor/build-ios.sh device --run-tests
 ```
 
+For Debug sanitizer QA, set `SANITIZERS=ON`. The helper builds separate
+`*-sanitizers` core and app trees with ASan, UBSan, IntegerSanitizer, and
+float sanitizer flags, bundles the required Apple sanitizer runtime, and
+requires the `ICCDEV_CLUTEDITOR_TESTS PASS` launch sentinel so a dynamic
+loader failure cannot be misread as a passing device run. The `--run-tests`
+launch waits up to `ICCDEV_LAUNCH_TIMEOUT_SECONDS` seconds (default `120`) and
+treats that sentinel as completion if the console attachment stays open after
+the tests pass.
+
+```bash
+BUILD_CONFIG=Debug SANITIZERS=ON TEAM_ID="$TEAM_ID" DEVICE_ID="$DEVICE_ID" \
+  examples/ios-clut-editor/build-ios.sh device --run-tests
+```
+
 ## Build and run on the simulator
 
 ```bash

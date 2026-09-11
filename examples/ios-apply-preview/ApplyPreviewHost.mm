@@ -71,6 +71,14 @@ static icUInt8Number IccDevUnitToByte(icFloatNumber value)
   return static_cast<icUInt8Number>(value * 255.0f + 0.5f);
 }
 
+static icUInt32Number IccDevFnv1aByte(icUInt32Number checksum,
+                                      icUInt8Number value)
+{
+  checksum ^= value;
+  return static_cast<icUInt32Number>(
+    (static_cast<icUInt64Number>(checksum) * 16777619u) & 0xffffffffu);
+}
+
 static UIImage *IccDevMakeImage(const std::vector<icUInt8Number>& rgba,
                                 NSUInteger width,
                                 NSUInteger height)
@@ -147,8 +155,7 @@ static void IccDevEncodeImages(const std::vector<icFloatNumber>& src,
       deltaRgba[p + c] =
         IccDevUnitToByte(static_cast<icFloatNumber>(
           std::fabs(static_cast<double>(dst[f + c] - src[f + c])) * 12.0));
-      checksum ^= dstByte;
-      checksum *= 16777619u;
+      checksum = IccDevFnv1aByte(checksum, dstByte);
       const double channelDelta =
         std::fabs(static_cast<double>(dst[f + c] - src[f + c]));
       sumChannelDelta += channelDelta;

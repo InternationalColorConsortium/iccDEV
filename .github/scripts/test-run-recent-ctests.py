@@ -113,6 +113,25 @@ def test_invalid_limits_fail_before_ctest() -> None:
             assert_true(not (workdir / "ctest-calls.txt").exists(), "ctest should not run")
 
 
+def test_parallel_level_is_validated_and_forwarded() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        workdir = Path(tmp)
+        result = run_runner(["--parallel", "7"], workdir)
+        assert_true(result.returncode == 0, result.stderr)
+        calls = read_calls(workdir)
+        assert_true("--parallel" in calls[1], f"missing --parallel in run: {calls[1]}")
+        parallel = calls[1][calls[1].index("--parallel") + 1]
+        assert_true(parallel == "7", f"wrong parallel level: {parallel}")
+
+    for level in ("0", "-1"):
+        with tempfile.TemporaryDirectory() as tmp:
+            workdir = Path(tmp)
+            result = run_runner(["--parallel", level], workdir)
+            assert_true(result.returncode == 2, f"parallel {level} returned {result.returncode}")
+            assert_true("--parallel must be at least 1" in result.stderr, result.stderr)
+            assert_true(not (workdir / "ctest-calls.txt").exists(), "ctest should not run")
+
+
 def test_label_excludes_are_combined() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         workdir = Path(tmp)
@@ -128,6 +147,7 @@ def test_label_excludes_are_combined() -> None:
 def test_workflow_omits_zero_limit() -> None:
     workflow = TOOL_WORKFLOW.read_text(encoding="utf-8")
     assert_true('case "$CTEST_RECENT_LIMIT" in' in workflow, "missing ctest limit validation")
+    assert_true('--parallel "$(nproc)"' in workflow, "Linux workflow must use detected CTest concurrency")
     assert_true('ctest_args+=(--limit "$CTEST_RECENT_LIMIT")' in workflow, "missing limit plumbing")
     assert_true('"0")' in workflow, "workflow must treat 0 as omit-limit")
     assert_true('--limit "$CTEST_RECENT_LIMIT"' not in workflow.replace('ctest_args+=(--limit "$CTEST_RECENT_LIMIT")', ''), "limit must be passed only through guarded ctest_args")
@@ -139,6 +159,7 @@ def main() -> int:
         test_limit_one_selects_last_test,
         test_limit_ten_selects_last_ten_tests,
         test_invalid_limits_fail_before_ctest,
+        test_parallel_level_is_validated_and_forwarded,
         test_label_excludes_are_combined,
         test_workflow_omits_zero_limit,
     ]

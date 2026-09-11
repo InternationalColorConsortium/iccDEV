@@ -431,6 +431,7 @@ jobs:
           fi
 
           ctest --test-dir Build/build-json \
+            --parallel "$(nproc)" \
             --output-on-failure \
             --no-tests=error \
             --output-junit Build/build-json/json-focused-ctest-results.xml \

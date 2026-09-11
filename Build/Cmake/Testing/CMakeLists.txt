@@ -5,8 +5,34 @@
 # target for local and CI use.
 
 include(CheckCCompilerFlag)
+include(ProcessorCount)
 
 find_program(BASH_EXECUTABLE bash)
+
+# LeakSanitizer is unavailable in MSVC ASan and in Darwin ASan (including
+# AppleClang). Leak-only regressions must not register there, and mixed
+# correctness/leak tests must retain their correctness assertions without
+# forcing the unsupported detect_leaks=1 option.
+set(ICCDEV_HAS_LEAK_SANITIZER TRUE)
+if(MSVC OR APPLE)
+  set(ICCDEV_HAS_LEAK_SANITIZER FALSE)
+endif()
+
+ProcessorCount(_iccdev_detected_ctest_jobs)
+if(NOT _iccdev_detected_ctest_jobs)
+  set(_iccdev_detected_ctest_jobs 1)
+endif()
+set(ICCDEV_CTEST_PARALLEL_LEVEL "${_iccdev_detected_ctest_jobs}" CACHE STRING
+  "Maximum number of CTests run concurrently by the check targets")
+if(NOT ICCDEV_CTEST_PARALLEL_LEVEL MATCHES "^[1-9][0-9]*$")
+  message(FATAL_ERROR
+    "ICCDEV_CTEST_PARALLEL_LEVEL must be a positive integer, got "
+    "'${ICCDEV_CTEST_PARALLEL_LEVEL}'")
+endif()
+set(_iccdev_aggregate_ctest_processors "${ICCDEV_CTEST_PARALLEL_LEVEL}")
+if(_iccdev_aggregate_ctest_processors GREATER 4)
+  set(_iccdev_aggregate_ctest_processors 4)
+endif()
 
 get_filename_component(ICCDEV_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
 set(ICCDEV_TOOLS_DIR "${CMAKE_BINARY_DIR}/Tools")
@@ -31,6 +57,7 @@ endif()
 add_custom_target(check
   COMMAND "${CMAKE_CTEST_COMMAND}"
           ${ICCDEV_CTEST_CONFIG_ARGS}
+          --parallel "${ICCDEV_CTEST_PARALLEL_LEVEL}"
           --label-exclude known-red
           --output-on-failure
           --no-tests=error
@@ -68,6 +95,7 @@ endfunction()
 add_custom_target(check-fast
   COMMAND "${CMAKE_CTEST_COMMAND}"
           ${ICCDEV_CTEST_CONFIG_ARGS}
+          --parallel "${ICCDEV_CTEST_PARALLEL_LEVEL}"
           --label-exclude "slow|known-red"
           --output-on-failure
           --no-tests=error
@@ -656,10 +684,10 @@ function(iccdev_add_cmmsearch_rebegin_test)
   # both the CI tool-test job and ICCDEV_TEST_ENV export
   # ASAN_OPTIONS=...detect_leaks=0, so run the same binary once more with
   # detect_leaks=1 forced for this process alone -- the same approach
-  # iccdev.cmmsearch-namedcolor-ownership uses, including its MSVC carve-out.
-  if(MSVC)
+  # iccdev.cmmsearch-namedcolor-ownership uses, including its platform carve-out.
+  if(NOT ICCDEV_HAS_LEAK_SANITIZER)
     message(STATUS
-      "Skipping iccdev.cmmsearch-rebegin-leak: MSVC AddressSanitizer "
+      "Skipping iccdev.cmmsearch-rebegin-leak: this platform's AddressSanitizer "
       "does not support LeakSanitizer detect_leaks=1")
     return()
   endif()
@@ -1362,9 +1390,9 @@ function(iccdev_add_cmmsearch_namedcolor_ownership_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
   endif()
-  if(MSVC)
+  if(NOT ICCDEV_HAS_LEAK_SANITIZER)
     message(STATUS
-      "Skipping iccdev.cmmsearch-namedcolor-ownership: MSVC AddressSanitizer "
+      "Skipping iccdev.cmmsearch-namedcolor-ownership: this platform's AddressSanitizer "
       "does not support LeakSanitizer detect_leaks=1")
     return()
   endif()
@@ -1470,9 +1498,9 @@ function(iccdev_add_xform_create_tag_ownership_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
   endif()
-  if(MSVC)
+  if(NOT ICCDEV_HAS_LEAK_SANITIZER)
     message(STATUS
-      "Skipping iccdev.xform-create-tag-ownership: MSVC AddressSanitizer "
+      "Skipping iccdev.xform-create-tag-ownership: this platform's AddressSanitizer "
       "does not support LeakSanitizer detect_leaks=1")
     return()
   endif()
@@ -3279,9 +3307,9 @@ function(iccdev_add_iccprofileplot_pdf_leak_test)
   if(NOT TARGET iccProfileVisualizePlot)
     return()
   endif()
-  if(MSVC)
+  if(NOT ICCDEV_HAS_LEAK_SANITIZER)
     message(STATUS
-      "Skipping iccdev.iccprofileplot-pdf-leak: MSVC AddressSanitizer "
+      "Skipping iccdev.iccprofileplot-pdf-leak: this platform's AddressSanitizer "
       "does not support LeakSanitizer detect_leaks=1")
     return()
   endif()
@@ -4462,10 +4490,10 @@ function(iccdev_add_xml_relaxng_validation_leak_test)
   #
   # The three existing leak regressions (cmmsearch-namedcolor-ownership,
   # xform-create-tag-ownership, iccprofileplot-pdf-leak) skip themselves entirely
-  # on MSVC, whose AddressSanitizer has no LeakSanitizer and would be handed an
-  # option it does not implement. This test is not skipped there, because its
+  # where AddressSanitizer has no LeakSanitizer and would be handed an option it
+  # does not implement. This test is not skipped there, because its
   # LoadXml return-value assertions pin the accept/reject behaviour at each of the
-  # four RelaxNG exits and are worth running on Windows even with no leak check;
+  # four RelaxNG exits and are worth running on those platforms even with no leak check;
   # only the detect_leaks=1 wrapper is dropped.
   set(_relaxng_leak_args
     "${ICCDEV_TESTING_DIR}/Display/sRGB_D65_MAT.xml"
@@ -4474,7 +4502,7 @@ function(iccdev_add_xml_relaxng_validation_leak_test)
     "${ICCDEV_REPO_ROOT}/.github/ci/test-data/relaxng-malformed.rng"
     "relaxng-calc-import-badroot-main.xml"
   )
-  if(MSVC)
+  if(NOT ICCDEV_HAS_LEAK_SANITIZER)
     add_test(
       NAME iccdev.xml-relaxng-validation-leak
       COMMAND "$<TARGET_FILE:iccXmlRelaxNGValidationLeakTest>" ${_relaxng_leak_args}
@@ -4544,7 +4572,7 @@ function(iccdev_add_xml_curve_oversize_file_test)
   # written into the source tree the way the hybrid pipeline does.
   set(_curve_oversize_scratch "${CMAKE_CURRENT_BINARY_DIR}/ctest-output/xml-curve-oversize-file")
 
-  if(WIN32)
+  if(NOT ICCDEV_HAS_LEAK_SANITIZER)
     add_test(
       NAME iccdev.xml-curve-oversize-file
       COMMAND "$<TARGET_FILE:iccXmlCurveOversizeFileTest>" "${_curve_oversize_scratch}"
@@ -6904,7 +6932,7 @@ if(TARGET iccBenchApply)
   # non-sanitizer build this degrades to a smoke test that the -PCC path still
   # runs. Measured on 2f329b79 with the ASan preset: pre-fix 123684 bytes in 129
   # allocations and exit 1, post-fix a clean exit 0.
-  if(WIN32)
+  if(NOT ICCDEV_HAS_LEAK_SANITIZER)
     add_test(
       NAME iccdev.apply-throughput-pcc
       COMMAND "$<TARGET_FILE:iccBenchApply>"
@@ -7729,6 +7757,10 @@ if(WIN32)
     )
     set_tests_properties(iccdev.windows-create-profiles PROPERTIES
       FIXTURES_SETUP iccdev_profiles
+      # The batch wrapper snapshots the source Testing tree to detect escaped
+      # output. Other registered tests still write there, so this setup must
+      # run alone even though its generated profiles live in the build tree.
+      RUN_SERIAL TRUE
     )
   endif()
 
@@ -8432,6 +8464,9 @@ iccdev_add_script_test(
 )
 set_tests_properties(iccdev.create-profiles PROPERTIES
   FIXTURES_SETUP iccdev_profiles
+  # CreateAllProfiles.sh writes its corpus into the source Testing tree. Keep
+  # the setup exclusive; dependent consumers can fan out after it completes.
+  RUN_SERIAL TRUE
 )
 
 iccdev_add_script_test(
@@ -8481,6 +8516,10 @@ if(ICCDEV_HAS_JSON_RUNTIME_CONFIG_TOOLS AND ICCDEV_HAS_JSON_TOOLS)
   )
   set_tests_properties(iccdev.tool-coverage PROPERTIES
     FIXTURES_REQUIRED iccdev_profiles
+    # This aggregate launches more than 100 sanitizer-instrumented tools and
+    # gives each command a bounded timeout.  Reserve a hosted runner's four
+    # CTest slots so unrelated tests cannot starve those subprocesses.
+    PROCESSORS "${_iccdev_aggregate_ctest_processors}"
   )
 
   iccdev_add_script_test(
@@ -8492,6 +8531,10 @@ if(ICCDEV_HAS_JSON_RUNTIME_CONFIG_TOOLS AND ICCDEV_HAS_JSON_TOOLS)
   )
   set_tests_properties(iccdev.hybrid-pipeline PROPERTIES
     FIXTURES_REQUIRED iccdev_profiles
+    # The six-phase sanitizer pipeline is the dominant full-suite workload.
+    # Reserve the hosted runner's CTest budget (capped at four) instead of
+    # stretching runtime by competing with other CPU-intensive tests.
+    PROCESSORS "${_iccdev_aggregate_ctest_processors}"
   )
 endif()
 
@@ -10015,6 +10058,11 @@ if(TARGET iccApplySearch)
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applysearch-cli-args-regression.sh"
    )
+  set_tests_properties(iccdev.applysearch-cli-args PROPERTIES
+    # The regression compares results from internal thread counts through 8.
+    # Keep that bounded workload from competing with another aggregate test.
+    PROCESSORS "${_iccdev_aggregate_ctest_processors}"
+  )
 endif()
 
 # The iccApplyProfiles third of the same family (#2126). Both of its usages
@@ -10156,6 +10204,12 @@ iccdev_add_script_test(
   "iccdev;tools;applytolink;security;issue-1781;regression;slow;pr-extended"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1781-applytolink-qa-matrix.sh"
+)
+set_tests_properties(iccdev.issue-1781-applytolink-qa-matrix PROPERTIES
+  # The grid-255 positive control processes 16,581,375 nodes under a bounded
+  # subprocess timeout. Reserve the hosted runner's CTest budget (capped at
+  # four) so sanitizer tests cannot starve it after reporting 100% progress.
+  PROCESSORS "${_iccdev_aggregate_ctest_processors}"
 )
 
 # #2011: the BT.2100 fixtures have to agree with themselves.  All four

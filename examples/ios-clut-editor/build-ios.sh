@@ -34,6 +34,7 @@ Environment:
   MAC_DESTINATION Xcode destination for Mac Catalyst. Defaults to
                   "generic/platform=macOS,variant=Mac Catalyst".
   ARCH            Target architecture. Defaults to arm64.
+  SANITIZERS      Set to ON for ASan, UBSan, IntSan, and float sanitizer builds.
   BUNDLE_ID       App bundle identifier. Defaults to
                   org.color.iccdev.ClutEditorPOC.
 
@@ -135,10 +136,23 @@ configuration="${BUILD_CONFIG:-Release}"
 deployment="${DEPLOYMENT:-17.0}"
 macos_deployment="${MACOS_DEPLOYMENT:-14.0}"
 arch="${ARCH:-arm64}"
+sanitizers="${SANITIZERS:-OFF}"
 default_bundle_id="org.color.iccdev.ClutEditorPOC"
 bundle_id="${BUNDLE_ID:-$default_bundle_id}"
 mac_destination="${MAC_DESTINATION:-generic/platform=macOS,variant=Mac Catalyst}"
 bundle_id_is_placeholder=0
+sanitizer_enabled=0
+case "$sanitizers" in
+  1|ON|On|on|YES|Yes|yes|TRUE|True|true)
+    sanitizer_enabled=1
+    ;;
+  ""|0|OFF|Off|off|NO|No|no|FALSE|False|false)
+    ;;
+  *)
+    echo "error: SANITIZERS must be ON or OFF" >&2
+    exit 2
+    ;;
+esac
 if is_placeholder_bundle_id "$bundle_id"; then
   bundle_id_is_placeholder=1
 fi
@@ -181,6 +195,19 @@ else
     exit 2
   fi
 fi
+if [[ "$sanitizer_enabled" -eq 1 ]]; then
+  core_dir="${core_dir}-sanitizers"
+  app_build_dir="${app_build_dir}-sanitizers"
+fi
+core_sanitizer_args=()
+app_sanitizer_args=()
+if [[ "$sanitizer_enabled" -eq 1 ]]; then
+  core_sanitizer_args=(
+    -DENABLE_SANITIZERS=ON
+    -DSANITIZER_RECOVER=ON
+  )
+  app_sanitizer_args=(-DICCDEV_CLUTEDITOR_ENABLE_SANITIZERS=ON)
+fi
 
 if [[ "$target" == "maccatalyst" ]]; then
   cmake -S "$repo_root/Build/Cmake" -B "$core_dir" -G Xcode \
@@ -198,6 +225,7 @@ if [[ "$target" == "maccatalyst" ]]; then
     -DENABLE_WXWIDGETS=OFF \
     -DENABLE_CMM_TOOLS=OFF \
     -DENABLE_IIS_TOOLS=OFF \
+    "${core_sanitizer_args[@]}" \
     -DCMAKE_XCODE_ATTRIBUTE_SUPPORTS_MACCATALYST=YES \
     -DCMAKE_XCODE_ATTRIBUTE_DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER=NO \
     -DCMAKE_XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET="$deployment" \
@@ -209,9 +237,11 @@ if [[ "$target" == "maccatalyst" ]]; then
     -destination "$mac_destination" \
     clean build
 else
-  cmake --preset "$core_preset" -S "$repo_root/Build/Cmake" \
+  cmake --preset "$core_preset" -S "$repo_root/Build/Cmake" -B "$core_dir" \
     -DCMAKE_OSX_ARCHITECTURES="$arch" \
-    -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment"
+    -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment" \
+    -DCMAKE_BUILD_TYPE="$configuration" \
+    "${core_sanitizer_args[@]}"
   cmake --build "$core_dir" --config "$configuration" --parallel
 fi
 
@@ -225,6 +255,7 @@ app_config_args=(
   -DICCDEV_CLUTEDITOR_BUNDLE_IDENTIFIER="$bundle_id"
   -DICCDEV_CLUTEDITOR_IOS_DEPLOYMENT_TARGET="$deployment"
   -DICCDEV_CLUTEDITOR_MACOS_DEPLOYMENT_TARGET="$macos_deployment"
+  "${app_sanitizer_args[@]}"
 )
 if [[ "$target" == "maccatalyst" ]]; then
   app_config_args+=("-DICCDEV_CLUTEDITOR_ENABLE_MACCATALYST=ON")
@@ -266,19 +297,97 @@ if [[ "$open_project" -eq 1 ]]; then
   open "$app_build_dir/IccClutEditorPOC.xcodeproj"
 fi
 
+run_launch_with_checks() {
+  local expected_sentinel launch_log launch_status timed_out launch_pid sentinel_seen
+  local timeout_seconds second
+  expected_sentinel="$1"
+  shift
+  timeout_seconds="${ICCDEV_LAUNCH_TIMEOUT_SECONDS:-120}"
+  if [[ "$timeout_seconds" == "" || "$timeout_seconds" == *[!0-9]* ]]; then
+    echo "error: ICCDEV_LAUNCH_TIMEOUT_SECONDS must be a positive integer" >&2
+    return 2
+  fi
+  timeout_seconds=$((10#$timeout_seconds))
+  if (( timeout_seconds == 0 )); then
+    echo "error: ICCDEV_LAUNCH_TIMEOUT_SECONDS must be a positive integer" >&2
+    return 2
+  fi
+  launch_log="$(mktemp "${TMPDIR:-/tmp}/iccdev-ios-launch.XXXXXX")"
+  launch_status=0
+  timed_out=0
+  sentinel_seen=0
+  set +e
+  "$@" > >(tee "$launch_log") 2>&1 &
+  launch_pid=$!
+  for ((second = 0; second < timeout_seconds; ++second)); do
+    if [[ -n "$expected_sentinel" ]] &&
+        grep -F "$expected_sentinel" "$launch_log" >/dev/null 2>&1; then
+      sentinel_seen=1
+      break
+    fi
+    if ! kill -0 "$launch_pid" 2>/dev/null; then
+      break
+    fi
+    sleep 1
+  done
+  if kill -0 "$launch_pid" 2>/dev/null; then
+    if [[ "$sentinel_seen" == 0 ]]; then
+      timed_out=1
+    fi
+    kill -TERM "$launch_pid"
+    sleep 1
+    if kill -0 "$launch_pid" 2>/dev/null; then
+      kill -KILL "$launch_pid"
+    fi
+  fi
+  wait "$launch_pid" || launch_status=$?
+  set -e
+  if [[ "$timed_out" == 1 ]]; then
+    echo "error: launch timed out after ${timeout_seconds}s" >&2
+    sed -n '1,160p' "$launch_log"
+    rm -f "$launch_log"
+    return 1
+  fi
+  if grep -E 'dyld\[[0-9]+\]: Library not loaded|AddressSanitizer:|UndefinedBehaviorSanitizer:|runtime error:' "$launch_log" >/dev/null; then
+    echo "error: launch output contained a dynamic loader or sanitizer failure" >&2
+    rm -f "$launch_log"
+    return 1
+  fi
+  if [[ -n "$expected_sentinel" ]] &&
+      ! grep -F "$expected_sentinel" "$launch_log" >/dev/null; then
+    echo "error: launch output did not include expected test sentinel: $expected_sentinel" >&2
+    rm -f "$launch_log"
+    return 1
+  fi
+  rm -f "$launch_log"
+  if [[ "$sentinel_seen" == 1 ]]; then
+    launch_status=0
+  fi
+  return "$launch_status"
+}
+
 if [[ -n "$launch_mode" ]]; then
   app_args=()
+  expected_sentinel=""
   if [[ "$launch_mode" == "tests" ]]; then
     app_args=(--exit-after-tests)
+    expected_sentinel="ICCDEV_CLUTEDITOR_TESTS PASS"
   fi
   if [[ "$target" == "simulator" ]]; then
     simulator="${SIMULATOR_UDID:-booted}"
     xcrun simctl install "$simulator" "$app_path"
-    xcrun simctl launch --console-pty --terminate-running-process \
-      "$simulator" "$bundle_id" "${app_args[@]}"
+    if [[ "$launch_mode" == "tests" ]]; then
+      run_launch_with_checks "$expected_sentinel" \
+        xcrun simctl launch --console-pty --terminate-running-process \
+        "$simulator" "$bundle_id" "${app_args[@]}"
+    else
+      xcrun simctl launch --console-pty --terminate-running-process \
+        "$simulator" "$bundle_id"
+    fi
   elif [[ "$target" == "maccatalyst" ]]; then
     if [[ "$launch_mode" == "tests" ]]; then
-      "$app_path/Contents/MacOS/IccClutEditorPOC" "${app_args[@]}"
+      run_launch_with_checks "$expected_sentinel" \
+        "$app_path/Contents/MacOS/IccClutEditorPOC" "${app_args[@]}"
     else
       open -n "$app_path"
     fi
@@ -289,8 +398,14 @@ if [[ -n "$launch_mode" ]]; then
       exit 2
     fi
     xcrun devicectl device install app --device "$DEVICE_ID" "$app_path"
-    xcrun devicectl device process launch --device "$DEVICE_ID" \
-      --console --terminate-existing --timeout 90 "$bundle_id" "${app_args[@]}"
+    if [[ "$launch_mode" == "tests" ]]; then
+      run_launch_with_checks "$expected_sentinel" \
+        xcrun devicectl device process launch --device "$DEVICE_ID" \
+        --console --terminate-existing --timeout 90 "$bundle_id" "${app_args[@]}"
+    else
+      xcrun devicectl device process launch --device "$DEVICE_ID" \
+        --console --terminate-existing "$bundle_id"
+    fi
   fi
 fi
 

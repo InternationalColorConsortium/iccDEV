@@ -506,14 +506,24 @@ MyChild::MyChild(wxMDIParentFrame *parent, const wxString& title, CIccProfile *p
 	sizerTop->Add(sizerBox, wxSizerFlags().Expand().Border(wxALL, 5));
 
 	wxSizer *sizerBtn = new wxBoxSizer(wxHORIZONTAL);
-    // Both reports re-read the profile from disk by path rather than using
-    // m_pIcc, so neither is available for a profile shown without a path.
-    if (!profilePath.IsEmpty()) {
-        if (IsRoundTripable(pIcc)) {
-  		    sizerBtn->Add(new wxButton(m_panel, ID_ROUND_TRIP, _("&Round Trip Report")), wxSizerFlags().Border(wxRIGHT, 5));
-        }
-        sizerBtn->Add(new wxButton(m_panel, ID_VALIDATE_PROFILE, _("&Validate Profile")), wxSizerFlags().Border(wxRIGHT, 5));
+  wxSize reportButtonSize = wxDefaultSize;
+#ifdef __WXOSX__
+  // wxDefaultSize enters SwiftUI sizing during an active AppKit commit on
+  // macOS 26. Use a DPI-scaled native control size for these fixed labels.
+  reportButtonSize = m_panel->FromDIP(wxSize(160, 30));
+#endif
+  // Both reports re-read the profile from disk by path rather than using
+  // m_pIcc, so neither is available for a profile shown without a path.
+  if (!profilePath.IsEmpty()) {
+    if (IsRoundTripable(pIcc)) {
+      sizerBtn->Add(new wxButton(m_panel, ID_ROUND_TRIP, _("&Round Trip Report"),
+                                wxDefaultPosition, reportButtonSize),
+                    wxSizerFlags().Border(wxRIGHT, 5));
     }
+    sizerBtn->Add(new wxButton(m_panel, ID_VALIDATE_PROFILE, _("&Validate Profile"),
+                              wxDefaultPosition, reportButtonSize),
+                  wxSizerFlags().Border(wxRIGHT, 5));
+  }
 
 	sizerTop->Add(sizerBtn, wxSizerFlags().Right());
 
@@ -535,9 +545,11 @@ MyChild::MyChild(wxMDIParentFrame *parent, const wxString& title, CIccProfile *p
 	m_tagsCtrl->InsertColumn(4, _("Size"), wxLIST_FORMAT_RIGHT, 100);
     m_tagsCtrl->InsertColumn(5, _("Padding"), wxLIST_FORMAT_RIGHT, 100);
 
-	// don't allow frame to get smaller than what the sizers tell it and also set
-	// the initial size as calculated by the sizers
-	sizerTop->SetSizeHints( this );
+  // The macOS frame already has fixed initial and minimum dimensions. Asking
+  // AppKit to refit it here opens a Core Animation transaction during commit.
+#ifndef __WXOSX__
+  sizerTop->SetSizeHints(this);
+#endif
 
 	m_panel->SetSizer(sizerTop);
 

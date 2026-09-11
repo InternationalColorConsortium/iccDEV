@@ -19,6 +19,7 @@ for config in Release Debug; do
   rm -f "$build/Testing/ctest-output/$config/iccdev-fromcube-cli-args/domain.icc"
   ctest --test-dir "$build" -C "$config" \
     -R '^iccdev\.(unix-runtime-layout|profile-write-failure|fromcube-cli-args)$' \
+    --parallel "$(sysctl -n hw.ncpu)" \
     --output-on-failure --no-tests=error
   # A legacy discovery failure is reported as SKIP by this script, so require
   # the successful operation's output as well as CTest's process status.

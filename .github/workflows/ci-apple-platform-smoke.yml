@@ -6,6 +6,16 @@ name: Apple platform smoke
 
 'on':
   workflow_dispatch:
+    inputs:
+      scope:
+        description: Apple smoke surface
+        required: true
+        default: core
+        type: choice
+        options:
+          - core
+          - examples
+          - all
 
 permissions:
   contents: read
@@ -17,7 +27,7 @@ concurrency:
 jobs:
   smoke:
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     defaults:
       run:
         shell: bash --noprofile --norc {0}
@@ -37,6 +47,7 @@ jobs:
 
       # preflight: allow-package-install reason=apple-mobile-extended-core-json-header-dependency
       - name: Install Apple extended-core dependency headers
+        if: inputs.scope != 'examples'
         env:
           BASH_ENV: /dev/null
         run: |
@@ -51,6 +62,7 @@ jobs:
 
       # preflight: allow-pr-script-execution reason=native-apple-host-test-only
       - name: Exercise native simulator and Xcode CTest hosts
+        if: inputs.scope != 'examples'
         env:
           BASH_ENV: /dev/null
           ICCDEV_APPLE_DOWNLOAD_RUNTIME: '1'
@@ -64,7 +76,20 @@ jobs:
           done
           bash .github/scripts/iccdev-xcode-ctest-smoke.sh
 
+      # preflight: allow-pr-script-execution reason=manual-ios-example-sanitizer-test-only
+      - name: Exercise manual iOS examples with sanitizers
+        if: inputs.scope != 'core'
+        env:
+          BASH_ENV: /dev/null
+          ICCDEV_APPLE_DOWNLOAD_RUNTIME: '1'
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          bash .github/scripts/iccdev-ios-example-smoke.sh sanitizers
+
       - name: Summarize Apple smoke results
+        if: inputs.scope != 'examples'
         env:
           BASH_ENV: /dev/null
         run: |
@@ -82,5 +107,20 @@ jobs:
               printf '\n'
             done
             sanitize_line "Xcode Release and Debug CTest runtime gates passed."
+            printf '\n'
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+      - name: Summarize iOS example results
+        if: inputs.scope != 'core'
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          # shellcheck source=.github/scripts/sanitize-sed.sh
+          source "$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
+          {
+            sanitize_line "Apply Preview, Bench Apply, and CLUT Editor sanitizer smokes passed."
             printf '\n'
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

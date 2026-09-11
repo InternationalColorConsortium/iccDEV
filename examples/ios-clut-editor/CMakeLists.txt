@@ -51,6 +51,8 @@ endif()
 
 set(ICCDEV_CLUTEDITOR_BUNDLE_IDENTIFIER "org.color.iccdev.ClutEditorPOC"
   CACHE STRING "Bundle identifier registered with your Apple development team")
+option(ICCDEV_CLUTEDITOR_ENABLE_SANITIZERS
+  "Build the app with ASan, UBSan, IntSan, and float sanitizers" OFF)
 set(ICCDEV_CLUTEDITOR_IOS_DEPLOYMENT_TARGET "17.0"
   CACHE STRING "Minimum iOS deployment target for the app")
 set(ICCDEV_CLUTEDITOR_MACOS_DEPLOYMENT_TARGET "14.0"
@@ -108,6 +110,10 @@ target_link_libraries(IccClutEditorPOC PRIVATE
 target_compile_features(IccClutEditorPOC PRIVATE cxx_std_17)
 target_compile_options(IccClutEditorPOC PRIVATE -Wall -Wextra -Werror)
 target_link_options(IccClutEditorPOC PRIVATE LINKER:-no_warn_duplicate_libraries)
+if(ICCDEV_CLUTEDITOR_ENABLE_SANITIZERS)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/IccDevAppleSanitizers.cmake")
+  iccdev_enable_apple_app_sanitizers(IccClutEditorPOC)
+endif()
 
 set_target_properties(IccClutEditorPOC PROPERTIES
   OBJCXX_STANDARD 17

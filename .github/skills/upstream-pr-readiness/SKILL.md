@@ -31,12 +31,15 @@ Do not call `gh pr create`, `gh pr reopen`, or an equivalent API.
 
 ## Workflow
 
-1. Work in a clean clone or worktree.
+1. Work in a clean clone or worktree. For maintainer branch grooming, apply
+   `../../../docs/linear-stack-workflow.md` local Git defaults first.
 2. Fetch the target branch and current base.
 3. Rebase onto the current base before PR creation or review.
 4. Verify linear history and review the rewrite:
 
    ```bash
+   git config --get pull.rebase
+   git config --get merge.ff
    git diff --check origin/master..HEAD
    test -z "$(git rev-list --merges origin/master..HEAD)"
    git range-diff origin/master origin/BRANCH HEAD
@@ -72,3 +75,7 @@ Only `readiness: PASS` plus explicit authorization permits PR creation.
 
 If a re-review finds any new blocker, including one in the repair, change the
 result to FAIL and return to branch-only grooming.
+
+## References
+
+- `../../../docs/linear-stack-workflow.md`

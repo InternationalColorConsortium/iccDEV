@@ -22,6 +22,8 @@ maintainer asks for `ci-pr-action` fast-lane validation.
 
 - Prefer a single linear stack for related changes. Each layer must contain one
   independently reviewable concern and target the branch immediately below it.
+- For non-stack branch grooming, use `../../../docs/linear-stack-workflow.md`
+  instead of ad hoc merges or pulls.
 - Use separate stacks for unrelated or parallel work. Do not use a stack to
   combine opportunistic cleanup with the requested change.
 - Before stack work, update the plugin and inspect the tracked state:

@@ -77,6 +77,14 @@ static icUInt8Number IccDevUnitToByte(double value)
   return static_cast<icUInt8Number>(IccDevClampUnit(value) * 255.0 + 0.5);
 }
 
+static icUInt32Number IccDevFnv1aByte(icUInt32Number checksum,
+                                      icUInt8Number value)
+{
+  checksum ^= value;
+  return static_cast<icUInt32Number>(
+    (static_cast<icUInt64Number>(checksum) * 16777619u) & 0xffffffffu);
+}
+
 static CGColorSpaceRef IccDevCreateSrgbColorSpace()
 {
   CGColorSpaceRef colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
@@ -407,8 +415,7 @@ static void IccDevMeasureEdit(const std::vector<icFloatNumber>& managed,
       pixelDelta = std::max(pixelDelta, channelDelta);
       delta[f + c] = static_cast<icFloatNumber>(
         IccDevClampUnit(channelDelta * 8.0));
-      checksum ^= IccDevUnitToByte(edited[f + c]);
-      checksum *= 16777619u;
+      checksum = IccDevFnv1aByte(checksum, IccDevUnitToByte(edited[f + c]));
     }
     maxDelta = std::max(maxDelta, pixelDelta);
   }

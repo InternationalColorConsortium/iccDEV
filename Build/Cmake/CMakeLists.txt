@@ -685,6 +685,10 @@ option(ICCDEV_ENABLE_AVX512
 option(ICCDEV_ENABLE_PERF_MONITORING
   "Build opt-in aggregate CLUT and threaded-CMM performance telemetry"
   OFF)
+set(ICCDEV_LIBCPP_HARDENING_MODE "none" CACHE STRING
+  "Apple libc++ hardening mode: none, fast, extensive, or debug")
+set_property(CACHE ICCDEV_LIBCPP_HARDENING_MODE PROPERTY STRINGS
+  none fast extensive debug)
 option(ENABLE_SANITIZERS          "Enable runtime sanitizers (ASan, UBSan, etc.)"       OFF)
 option(ENABLE_ASAN                "Enable AddressSanitizer only"                        OFF)
 option(ENABLE_FUZZING             "Enable libFuzzer harnesses (Clang only)"             OFF)
@@ -719,6 +723,66 @@ option(ENABLE_LTO                 "Enable Link-Time Optimization for Release bui
 # CMAKE_INTERPROCEDURAL_OPTIMIZATION variable.  Useful on Raspberry Pi,
 # constrained build environments, or when linking against third-party
 # archives that do not carry LTO bitcode.
+
+# libc++ hardening changes inline standard-library operations, so apply one
+# mode consistently to every C++ translation unit in the build. The default
+# leaves the SDK's configured mode untouched; the macOS sanitizer preset opts
+# into EXTENSIVE for QA. Probe the selected spelling so unsupported or
+# non-libc++ toolchains fail at configure time instead of silently dropping the
+# requested checks. _LIBCPP_ENABLE_ASSERTIONS is intentionally not used: it was
+# removed by the libc++ shipped with Xcode 26.
+string(TOLOWER "${ICCDEV_LIBCPP_HARDENING_MODE}"
+  _iccdev_libcpp_hardening_mode)
+set(_iccdev_libcpp_hardening_modes none fast extensive debug)
+list(FIND _iccdev_libcpp_hardening_modes
+  "${_iccdev_libcpp_hardening_mode}" _iccdev_libcpp_hardening_index)
+if(_iccdev_libcpp_hardening_index EQUAL -1)
+  message(FATAL_ERROR
+    "ICCDEV_LIBCPP_HARDENING_MODE must be none, fast, extensive, or debug "
+    "(got '${ICCDEV_LIBCPP_HARDENING_MODE}')")
+endif()
+set(ICCDEV_LIBCPP_HARDENING_MODE "${_iccdev_libcpp_hardening_mode}"
+  CACHE STRING "Apple libc++ hardening mode: none, fast, extensive, or debug" FORCE)
+set_property(CACHE ICCDEV_LIBCPP_HARDENING_MODE PROPERTY STRINGS
+  none fast extensive debug)
+
+if(NOT _iccdev_libcpp_hardening_mode STREQUAL "none")
+  if(NOT APPLE OR NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR
+      "ICCDEV_LIBCPP_HARDENING_MODE=${_iccdev_libcpp_hardening_mode} requires "
+      "an Apple Clang/libc++ target")
+  endif()
+
+  string(TOUPPER "${_iccdev_libcpp_hardening_mode}"
+    _iccdev_libcpp_hardening_mode_upper)
+  set(_iccdev_libcpp_hardening_macro
+    "_LIBCPP_HARDENING_MODE_${_iccdev_libcpp_hardening_mode_upper}")
+  set(_iccdev_saved_required_definitions "${CMAKE_REQUIRED_DEFINITIONS}")
+  list(APPEND CMAKE_REQUIRED_DEFINITIONS
+    "-D_LIBCPP_HARDENING_MODE=${_iccdev_libcpp_hardening_macro}")
+  set(_iccdev_libcpp_probe_var
+    "_ICCDEV_LIBCPP_HARDENING_${_iccdev_libcpp_hardening_mode_upper}_SUPPORTED")
+  check_cxx_source_compiles("#include <vector>
+#ifndef _LIBCPP_VERSION
+#error The selected C++ standard library is not libc++
+#endif
+#if _LIBCPP_HARDENING_MODE != ${_iccdev_libcpp_hardening_macro}
+#error The requested libc++ hardening mode was not selected
+#endif
+int main() { return 0; }
+" ${_iccdev_libcpp_probe_var})
+  set(CMAKE_REQUIRED_DEFINITIONS "${_iccdev_saved_required_definitions}")
+  if(NOT ${_iccdev_libcpp_probe_var})
+    message(FATAL_ERROR
+      "The selected Apple libc++ does not support "
+      "ICCDEV_LIBCPP_HARDENING_MODE=${_iccdev_libcpp_hardening_mode}")
+  endif()
+
+  add_compile_definitions(
+    $<$<COMPILE_LANGUAGE:CXX>:_LIBCPP_HARDENING_MODE=${_iccdev_libcpp_hardening_macro}>)
+  message(STATUS
+    "Apple libc++ hardening mode: ${_iccdev_libcpp_hardening_mode}")
+endif()
 
 # ----------------------------------------------------------------------
 # Third-Party Dependencies
@@ -949,6 +1013,7 @@ message(STATUS "ICCDEV_ENABLE_STRICT_WARNINGS = ${ICCDEV_ENABLE_STRICT_WARNINGS}
 message(STATUS "ICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS = ${ICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS}")
 message(STATUS "ICCDEV_ENABLE_AVX2         = ${ICCDEV_ENABLE_AVX2}")
 message(STATUS "ICCDEV_ENABLE_AVX512       = ${ICCDEV_ENABLE_AVX512}")
+message(STATUS "ICCDEV_LIBCPP_HARDENING_MODE = ${ICCDEV_LIBCPP_HARDENING_MODE}")
 message(STATUS "ENABLE_SANITIZERS          = ${ENABLE_SANITIZERS}")
 message(STATUS "ENABLE_ASAN                = ${ENABLE_ASAN}")
 message(STATUS "ENABLE_UBSAN               = ${ENABLE_UBSAN}")

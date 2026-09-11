@@ -595,6 +595,7 @@ jobs:
           python ..\..\.github\scripts\run-recent-ctests.py `
             --test-dir build `
             --config Debug `
+            --parallel ([Environment]::ProcessorCount) `
             --selection-output build\recent-ctests.txt
 
       - name: GitHub Summary
@@ -809,6 +810,7 @@ jobs:
             '.github\scripts\run-recent-ctests.py',
             '--test-dir', $buildDir,
             '--config', 'Debug',
+            '--parallel', ([string][Environment]::ProcessorCount),
             '--selection-output', (Join-Path $buildDir 'recent-ctests.txt')
           ) $checkLog
 
@@ -1156,6 +1158,7 @@ jobs:
           Invoke-Native python @(
             '.github\scripts\run-recent-ctests.py',
             '--test-dir', $buildDir,
+            '--parallel', ([string][Environment]::ProcessorCount),
             '--selection-output', (Join-Path $buildDir 'recent-ctests.txt')
           )
 
