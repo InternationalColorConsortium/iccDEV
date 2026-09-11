@@ -9296,6 +9296,25 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2097-nul-signature-roundtrip-regression.sh"
 )
 
+# #2512: until this test, no tracked XML carried a DictEntry, so the dictType
+# writers in IccTagXml.cpp and IccTagJson.cpp, and the XML reader, ran under no
+# test at all.  Corrupting icWCharToUtf8's output length by one byte left the
+# whole suite green.  The fixture lives in .github/ci/test-data rather than
+# Testing/, so the generated corpus is unchanged.  It has one entry per binary
+# record shape, including a value that is set but empty, which the round trip
+# must keep apart from an entry with no value.  Each direction is checked on
+# its own: the text each writer emits, and the bytes each reader rebuilds.
+# The fixture is BMP-only.  Not registered on Windows (see the WIN32 branch
+# above), which is the one platform where wchar_t is 16 bits.
+# Plain functional test -- skips cleanly if the tools/fixtures are absent.
+iccdev_add_script_test(
+  iccdev.issue-2512-dict-roundtrip
+  90
+  "iccdev;xml;json;dict;roundtrip;issue-2512;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2512-dict-roundtrip-regression.sh"
+)
+
 # #1355 - matrix/TRC (PCSXYZ) profiles must round-trip near-exactly. Guards the
 # two CMM/eval fixes (ConnectFirst actual->internal XYZ rescale; native-PCS
 # round-trip connection): iccRoundTrip RT1 mean dE was ~20 before, ~0 after.
