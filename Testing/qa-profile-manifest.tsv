@@ -175,6 +175,7 @@ Named/FluorescentNamedColor.icc	compatibility	warning	0	none	generated	-	baselin
 Named/NamedColor.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 Named/NamedColorV4.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 Named/SparseMatrixNamedColor.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+Named/SparseMatrixNamedColorTint.icc	compatibility	warning	0	none	generated	-	baselined: same spectralViewingConditions diagnostics as its single-matrix sibling (#1811); adds a 50% tint matrix per colour
 Overprint/17ChanPart1.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 PCC/Lab_float-D50_2deg.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 PCC/Lab_float-D93_2deg-MAT.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)

@@ -77,6 +77,7 @@
 #include <cstring>
 #include <cstdlib>
 #include "IccStructBasic.h"
+#include "IccTagBasic.h"
 #include "IccUtil.h"
 #include "IccStructFactory.h"
 
@@ -499,7 +500,37 @@ bool CIccStructNamedColor::GetTint(icFloatNumber *dstColor,
   if (!pData || !nSamples)
     return false;
 
-  icUInt32Number nEntries = pData->GetNumValues()/nSamples;
+  // CIccTagSparseMatrixArray implements CIccTagNumArray in a different dialect than every
+  // other subclass: its GetNumValues() counts MATRICES rather than floats, and its
+  // GetValues()/Interpolate() take nVectorSize in BYTES, refusing anything that is not
+  // exactly GetBytesPerMatrix().  Applying the plain-array arithmetic below to one of
+  // those divides an entry count by a sample count -- 1/768 for the sparse-matrix named
+  // colour in Testing/Named -- and bails here before reading any data, which is why such
+  // an entry could not be applied at all and CIccPcsStepSrcSparseMatrix::Apply() was
+  // never reached.  CIccArrayNamedColor::Validate() already branches the same way, on the
+  // same invariant: channels per matrix must equal the member's sample count.
+  const bool bMatrix = pData->IsMatrixArray();
+
+  icUInt32Number nEntries;
+  icUInt32Number nElemSize;   // one entry, in the units GetValues()/Interpolate() expect
+  icUInt32Number nZeroWords;  // icFloatNumber words one entry occupies
+
+  if (bMatrix) {
+    CIccTagSparseMatrixArray *pMatrixData = (CIccTagSparseMatrixArray*)pData;
+
+    if (pMatrixData->GetChannelsPerMatrix()!=nSamples)
+      return false;
+
+    nEntries = pMatrixData->GetNumMatrices();
+    nElemSize = pMatrixData->GetBytesPerMatrix();
+    nZeroWords = (nElemSize + sizeof(icFloatNumber) - 1)/sizeof(icFloatNumber);
+  }
+  else {
+    nEntries = pData->GetNumValues()/nSamples;
+    nElemSize = nSamples;
+    nZeroWords = nSamples;
+  }
+
   if (nEntries<1)
     return false;
 
@@ -531,23 +562,34 @@ bool CIccStructNamedColor::GetTint(icFloatNumber *dstColor,
   icFloatNumber *zeroVals=NULL;
 
   if (bNoZero) {
-    if (!pZero || pZero->GetNumValues()!=nSamples)
+    if (!pZero)
       return false;
 
-    if (bNeedZero) {
-      if (nSamples<256)
-        zeroVals = vals;
-      else if (bNeedZero)
-        zeroVals = new icFloatNumber[nSamples];
+    // The tint-zero member has to be the same kind of array as the data member, or
+    // nElemSize does not describe both of them.
+    if (bMatrix) {
+      if (!pZero->IsMatrixArray() ||
+          ((CIccTagSparseMatrixArray*)pZero)->GetBytesPerMatrix()!=nElemSize)
+        return false;
+    }
+    else if (pZero->GetNumValues()!=nSamples) {
+      return false;
+    }
 
-      pZero->GetValues(zeroVals, 0, nSamples);
+    if (bNeedZero) {
+      if (nZeroWords<256)
+        zeroVals = vals;
+      else
+        zeroVals = new icFloatNumber[nZeroWords];
+
+      pZero->GetValues(zeroVals, 0, nElemSize);
     }
     else {
       zeroVals = vals;
     }
   }
 
-  bool rv = pData->Interpolate(dstColor, pos, nSamples, zeroVals);
+  bool rv = pData->Interpolate(dstColor, pos, nElemSize, zeroVals);
 
   if (zeroVals!=vals)
     delete [] zeroVals;
