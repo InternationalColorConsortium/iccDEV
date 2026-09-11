@@ -637,6 +637,10 @@ jobs:
           git status
           Write-Host "========= Fetching Deps... ================`n"
           Start-BitsTransfer -Source "https://github.com/InternationalColorConsortium/iccDEV/releases/download/vcpkg-win-2324-deps/iccdev-windows-vcpkg-classic-308e561.zip" -Destination "deps.zip"
+          $actualDigest = (Get-FileHash -LiteralPath 'deps.zip' -Algorithm SHA256).Hash
+          if ($actualDigest -ne 'd3591ccfbdae65a908a8488030b270782942106e06093602f9d919e027cd2976') {
+            throw "vcpkg export digest mismatch: $actualDigest"
+          }
           Write-Host "========= Extracting Deps... ================`n"
           tar -xf deps.zip
           cd Build/Cmake
