@@ -40,6 +40,13 @@
 // the strict-mode cases pass on both and guard the branch that #2511
 // restructured.
 //
+// #2526 added the icWCharToUtf8 surrogate cases.  Where wchar_t is 32 bits,
+// that function read its input as UTF-32, but the dictType text it converts
+// holds UTF-16 code units, one per wchar_t -- so a valid U+1F600 came out as
+// six bytes of CESU-8.  Every case that gives a surrogate its own wchar_t
+// fails against that converter on Linux and macOS.  On Windows they pass
+// before and after: that arm already went through icConvertUTF16toUTF8().
+//
 // Returns 0 on success; the number of failed assertions otherwise.
 
 #include "IccUtil.h"
@@ -177,6 +184,9 @@ void checkWChar(const wchar_t *src, size_t len,
   // See checkUtf16: provenance, not cursor position.
   snprintf(msg, sizeof(msg), "%s: returns the string's own storage", what);
   check(rv == buf.c_str() && rv[buf.size()] == '\0', msg);
+
+  // #2526: as in checkUtf16, every case.
+  checkLegal(buf, what);
 }
 
 } // namespace
@@ -289,15 +299,11 @@ int main()
   }
 
   // --- icWCharToUtf8 -------------------------------------------------------
-  // Reached in production only through the dictType writers.  Which arm of the
-  // WCHAR_MAX branch runs is platform-dependent (UTF-32 where wchar_t is wide,
-  // UTF-16 on Windows); these cases are chosen to hold on both.
-  //
-  // #2511 has no lone-surrogate case here on purpose.  The Windows arm goes
-  // through the fixed icConvertUTF16toUTF8(); the UTF-32 arm goes through
-  // icConvertUTF32toUTF8(), which #2511 deliberately left alone (see the
-  // comment there, and #2526), so the same input gives different bytes per
-  // platform.
+  // Reached in production only through the dictType writers, whose text holds
+  // UTF-16 code units one per wchar_t on every platform.  Which arm of the
+  // WCHAR_MAX branch runs depends on the platform, but since #2526 both end in
+  // icConvertUTF16toUTF8(), so the cases in this block give the same bytes on
+  // both.  The block after it runs only where wchar_t is 32 bits.
   {
     const wchar_t ascii[] = L"iccDEV";
     checkWChar(ascii, 6, "iccDEV", 6, "wchar ascii, explicit length");
@@ -311,6 +317,26 @@ int main()
     const wchar_t embedded[] = { L'a', 0, L'b', 0 };
     checkWChar(embedded, 3, "a\0b", 3, "wchar interior NUL kept");
 
+    // #2526: U+1F600 as a surrogate pair, one unit per wchar_t -- the form a
+    // dict entry holds.  Read as UTF-32 it came out as ED A0 BD ED B8 80.
+    const wchar_t pairUnits[] = { L'a', 0xD83D, 0xDE00, L'b', 0 };
+    checkWChar(pairUnits, 4, "a\xF0\x9F\x98\x80" "b", 6, "wchar surrogate pair in two units");
+
+    // #2526 takes the #2511 lone-surrogate cases along with it.  The UTF-32
+    // arm passed them through as CESU-8; they now match icUtf16ToUtf8 above.
+    const wchar_t loneHigh[] = { 0xD83D, L'a', 0 };
+    checkWChar(loneHigh, 2, "\xEF\xBF\xBD" "a", 4, "wchar interior unpaired high surrogate -> U+FFFD");
+
+    const wchar_t loneLow[] = { L'a', 0xDE00, L'b', 0 };
+    checkWChar(loneLow, 3, "a" "\xEF\xBF\xBD" "b", 5, "wchar lone low surrogate -> U+FFFD");
+
+    const wchar_t reversed[] = { 0xDE00, 0xD83D, L'a', 0 };
+    checkWChar(reversed, 3, "\xEF\xBF\xBD" "\xEF\xBF\xBD" "a", 7, "wchar reversed pair -> two U+FFFD");
+
+    // A trailing high surrogate is dropped, as in icUtf16ToUtf8.
+    const wchar_t truncated[] = { L'a', 0xD83D, 0 };
+    checkWChar(truncated, 2, "a", 1, "wchar trailing unpaired surrogate dropped");
+
     {
       std::string buf("stale");
       icWCharToUtf8(buf, NULL, 4);
@@ -323,6 +349,30 @@ int main()
       check(buf.empty(), "wchar empty source clears the buffer");
     }
   }
+
+#if WCHAR_MAX > 65535
+  // --- icWCharToUtf8, 32-bit wchar_t only (#2526) ---------------------------
+  // Real UTF-32, a form a 16-bit wchar_t cannot hold.  These passed before
+  // #2526 as well; they guard the step it added, which splits a wchar_t above
+  // U+FFFF into a surrogate pair before the UTF-16 converter joins it again.
+  {
+    const wchar_t oneUnit[] = { L'a', (wchar_t)0x1F600, L'b', 0 };
+    checkWChar(oneUnit, 3, "a\xF0\x9F\x98\x80" "b", 6, "wchar U+1F600 as one UTF-32 unit");
+
+    // U+10FFFF is the last code point; one past it has no encoding.
+    const wchar_t last[] = { (wchar_t)0x10FFFF, 0 };
+    checkWChar(last, 1, "\xF4\x8F\xBF\xBF", 4, "wchar U+10FFFF as one UTF-32 unit");
+
+    const wchar_t beyond[] = { L'a', (wchar_t)0x110000, 0 };
+    checkWChar(beyond, 2, "a\xEF\xBF\xBD", 4, "wchar past U+10FFFF -> U+FFFD");
+
+    // Both forms in one string: a UTF-32 unit, then the same character as
+    // a pair of UTF-16 units.
+    const wchar_t bothForms[] = { (wchar_t)0x1F600, 0xD83D, 0xDE00, 0 };
+    checkWChar(bothForms, 3, "\xF0\x9F\x98\x80" "\xF0\x9F\x98\x80", 8,
+               "wchar U+1F600 as one unit, then as two");
+  }
+#endif
 
   if (g_fail)
     printf("%d assertion(s) failed\n", g_fail);
