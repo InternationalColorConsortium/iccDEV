@@ -646,8 +646,11 @@ bool CIccTagDict::Read(icUInt32Number size, CIccIO *pIO)
     //GetName
     if (pos[i].posName.offset) {
       if (!pos[i].posName.size) {
+        // #2527: this called SetValue, copied from the empty-value branch
+        // below, so an entry with an empty name and no value read back with
+        // an empty value that Write then stored.
         str.clear();
-        ptr.ptr->SetValue(str);
+        ptr.ptr->GetName() = str;
       }
       else {
         if (pos[i].posName.size > size || pos[i].posName.offset > size - pos[i].posName.size ||

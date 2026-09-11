@@ -29,6 +29,7 @@
 #   4. ICC -> JSON writes each entry's fields with the right values, and keeps
 #      "no value" apart from "empty value".
 #   5. JSON -> ICC reproduces the profile byte for byte.
+#   6. An entry with an empty name and no value keeps having no value (#2527).
 #
 # Steps 2 and 4 check the text as well as the bytes, because a byte comparison
 # alone passes when writer and reader are wrong in matching ways -- for
@@ -264,6 +265,31 @@ fi
 run fromjson "$FROMJSON" "$OUTDIR/dict.json" "$OUTDIR/dict-rt-json.icc"
 same_bytes "$OUTDIR/dict.icc" "$OUTDIR/dict-rt-json.icc" "an ICC -> JSON -> ICC round trip"
 echo "    JSON: writer emits every entry's fields; round trip is byte-exact$json_note"
+
+# ===========================================================================
+# 6. An empty name (#2527).
+#
+# The binary writer gives an empty name a nonzero offset and a zero size.
+# CIccTagDict::Read's branch for that case called SetValue, so an entry with
+# an empty name and no value read back with an empty value: iccToXml wrote
+# Value="", and the profile rebuilt from that XML differed from the first.
+# An empty name is not valid -- the dump warns about it, and #2088 is why that
+# is only a warning -- so it is a variant of the fixture here, not an entry
+# in it: step 1 requires the fixture to validate.
+# ===========================================================================
+sed 's|<DictEntry Name="NameOnly"/>|<DictEntry Name=""/>|' "$FIXTURE" > "$OUTDIR/empty-name.xml"
+grep -Fq '<DictEntry Name=""/>' "$OUTDIR/empty-name.xml" \
+  || fail "could not make the empty-name variant of the fixture"
+
+run empty-build "$FROMXML" "$OUTDIR/empty-name.xml" "$OUTDIR/empty-name.icc"
+run empty-toxml "$TOXML" "$OUTDIR/empty-name.icc" "$OUTDIR/empty-name-rt.xml"
+if ! grep -Fq '<DictEntry Name=""/>' "$OUTDIR/empty-name-rt.xml"; then
+  grep -F '<DictEntry Name=""' "$OUTDIR/empty-name-rt.xml" | sed 's/^/    /'
+  fail "an entry with an empty name and no value read back with a value (#2527)"
+fi
+run empty-fromxml "$FROMXML" "$OUTDIR/empty-name-rt.xml" "$OUTDIR/empty-name-rt.icc"
+same_bytes "$OUTDIR/empty-name.icc" "$OUTDIR/empty-name-rt.icc" "an empty-name ICC -> XML -> ICC round trip"
+echo "    empty name: read back without a value; round trip is byte-exact"
 
 echo "  [PASS] issue-2512-dict-roundtrip -- all $EXPECTED_ENTRIES dict entries survive XML and JSON"
 exit 0
