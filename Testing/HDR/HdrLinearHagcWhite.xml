@@ -30,13 +30,19 @@
 
     HAGC HDRReferenceWhite 300, CLL.max 600, no CRWL
 
-  PROPOSAL-ISSUE HDR-10: 8.10.4 states the 203 cd/m2 default twice with
-  different conditions. Its Default paragraph fires only when there is no HAGC
-  tag AND no CRWL entry - so for this profile it says nothing at all. The
-  priority order restates the default as "defaulting to 203 cd/m2 when absent"
-  with no HAGC qualifier - so for this profile it says 203. The tag itself says
-  300. Hcontent is therefore either 600/300 = 2,0 or 600/203 = 2,956 depending
-  on which sentence is read.
+  PROPOSAL-ISSUE HDR-10, and this fixture pins the SETTLED half of it. 8.10.4's
+  Default paragraph fires only when there is no HAGC tag AND no CRWL entry, so
+  for this profile it says nothing; rule a) then divides by "the value derived
+  above", which is that derivation - and its condition only makes sense if the
+  HAGC tag supplies the white when present. So Hcontent is 600/300 = 2,0, and a
+  reader who takes the priority order's shorter "defaulting to 203 cd/m2 when
+  absent" in isolation gets 600/203 = 2,956 and is wrong.
+
+  Read 2026-09-11: this was recorded as an open ambiguity between two readings.
+  It is not - 8.10.3 ranks the HAGC tag highest and a descriptor selected under
+  a) is applied as its own annex defines, which uses the tag's own reference
+  white. What remains of HDR-10 is 8.10.5 c), which names the CRWL ENTRY for the
+  DISPLAY axis; this fixture carries no DCV and so does not reach it.
 
   iccDEV rules for the tag: 2,0. The gain curve inside the HAGC tag was
   authored against that reference white, so evaluating it at any other one

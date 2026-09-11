@@ -58,7 +58,7 @@ HdrHlgBt709Primaries	conforming	4	derh	0	-	IMPL-04: the first HLG fixture not in
 HdrInputDisplayMeta	conforming	4	derh	0	-	HDR Display metadata on an Input-class profile; draws an Information note
 HdrInvalidTransfer	hdr-content	0	-	0	-	NEGATIVE, CONFOUNDED: non-HDR transfer AND TRC tags; kept as-is, de-confounded by the two fixtures below
 HdrLinearCll	conforming	0	-	2.95567	cll	8.10.4 rule a): CLL / CRWL
-HdrLinearHagcWhite	conforming	0	-	2	cll	HDR-10 ruling: the HAGC tag's reference white wins over a CRWL entry
+HdrLinearHagcWhite	conforming	0	-	2	cll	HDR-10: the HAGC tag's reference white governs, over 8.10.4's 203 default (no CRWL entry here)
 HdrLinearMdcv	conforming	0	-	40	mdcv	8.10.4 rule b): MDCV / CRWL
 HdrLinearNoMetadata	conforming	0	-	4.92611	default-1000	8.10.4 rule c): the 1000 cd/m2 default
 HdrMissingBToA0	conforming	0	-	0	-	NEGATIVE: 8.10.6 mandatory BToA0 absent
