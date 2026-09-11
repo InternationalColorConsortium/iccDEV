@@ -33,13 +33,18 @@ cmake -S Build/Cmake -B build \
   -DENABLE_WXWIDGETS=OFF \
   -DENABLE_SHARED_LIBS=ON \
   -DENABLE_STATIC_LIBS=ON
-cmake --build build --parallel "$(nproc)"
+jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)"
+cmake --build build --parallel "$jobs"
 ctest --test-dir build -N --no-tests=error
-ctest --test-dir build --output-on-failure --no-tests=error
-ctest --test-dir build --label-exclude slow --output-on-failure --no-tests=error
+ctest --test-dir build --parallel "$jobs" --output-on-failure --no-tests=error
+ctest --test-dir build --parallel "$jobs" --label-exclude slow --output-on-failure --no-tests=error
 cmake --build build --target check
 cmake --build build --target check-fast
 ```
+
+The `check` and `check-fast` targets use the host's detected logical processor
+count. Set `-DICCDEV_CTEST_PARALLEL_LEVEL=<N>` at configure time to cap their
+concurrency. CTest fixtures and `RUN_SERIAL` properties still take precedence.
 
 Windows Visual Studio multi-config generators:
 
@@ -49,7 +54,7 @@ cmake --preset vs2022-x64 -S Build/Cmake -B out/vs2022-x64 ^
   -DENABLE_TOOLS=ON
 cmake --build out/vs2022-x64 --config Release -- /m /maxcpucount
 ctest --test-dir out/vs2022-x64 -C Release -N --no-tests=error
-ctest --test-dir out/vs2022-x64 -C Release --output-on-failure --no-tests=error
+ctest --test-dir out/vs2022-x64 -C Release --parallel %NUMBER_OF_PROCESSORS% --output-on-failure --no-tests=error
 cmake --build out/vs2022-x64 --config Release --target check
 ```
 
@@ -64,6 +69,7 @@ cmake --preset macos-xcode -S Build/Cmake -B out/macos-xcode
 cmake --build out/macos-xcode --config Release --parallel
 ctest --test-dir out/macos-xcode -C Release \
   -R '^iccdev\.(unix-runtime-layout|clut-eight-output-regression)$' \
+  --parallel "$(sysctl -n hw.ncpu)" \
   --output-on-failure --no-tests=error
 ```
 
@@ -84,7 +90,9 @@ Each configuration has its own runtime directory and script-output directory;
 regeneration removes stale aliases without changing actual build artifacts.
 Single-config Unix and Windows runtime layouts are unchanged. Existing
 profile-generation scripts still operate in the source `Testing/` directory;
-do not run those fixtures concurrently against the same checkout.
+do not run those fixtures concurrently against the same checkout. The CTest
+registrations mark both Unix and Windows profile-generation setup fixtures
+`RUN_SERIAL`; their dependent consumers still run concurrently afterward.
 
 For the dependency-free Xcode CI reproduction, run
 `bash .github/scripts/iccdev-xcode-ctest-smoke.sh`. It covers Release and Debug
@@ -132,12 +140,11 @@ ctest --test-dir out/mingw-core-x64 -R "iccconnect|icc-dump-profile-smoke" --out
 Use `--no-tests=error` for discovery and execution so a registration regression
 cannot pass as a green no-op.
 
-The default `all` build includes CTest helper binaries such as
-`iccFileIoSeekTellTest` and `iccParserRestoreCallsTest`, so filtered CTest
-commands can run directly after a normal build. The `build-test-binaries`
-compatibility target remains available for scripts that explicitly request all
-helpers; `check` and `check-fast` build tool and test dependencies before
-running the suite.
+Regression-only CTest helper binaries such as `iccFileIoSeekTellTest` and
+`iccParserRestoreCallsTest` are intentionally excluded from the default `all`
+product build. Build `build-test-binaries` before a direct filtered CTest run,
+or use `check`/`check-fast`; both targets build their tool and test dependencies
+before running the suite.
 
 ## Registered Suites
 
@@ -213,6 +220,11 @@ running the suite.
 | `iccdev.iccviz-degenerate-detection` | `.github/ci/regression/iccviz-degenerate-detection.cpp` |
 | `iccdev.iccviz-pdf-axis-labels` | `Build/Cmake/Testing/RunIccVizPdfAxisTest.cmake` |
 
+`iccdev.issue-1781-applytolink-qa-matrix` reserves up to four CTest processor slots.
+Its grid-255 positive control processes 16,581,375 nodes under a bounded
+subprocess timeout, so the reservation prevents unrelated sanitizer tests from
+starving it without increasing that timeout.
+
 `iccdev.legacy-run-tests` requires `iccToJson` and `iccFromJson` under CTest.
 The JSON round-trip uses a temporary directory for generated `.json` and
 round-trip `.icc` files so a passing Unix run does not remove or modify tracked
@@ -222,13 +234,18 @@ files in `Testing/`.
 tracked RGB input and requires byte-identical output for the default path and
 `-threads 0`, `1`, `2`, `4`, and `8`. It also covers configuration mode,
 malformed thread counts, and the single-thread requirement for `-debugcalc`.
+Because those cases exercise up to eight internal threads, the aggregate
+reserves the runner's CTest budget, capped at four processor slots.
 
 `iccdev.tool-coverage` may add focused command-line regressions inside the
 existing script without changing the CTest suite count. When a bug is tied to an
 AFL-minimized crash or hang, embed the smallest stable reproducer in the script
 or generate it under `ICCDEV_TEST_OUTDIR`; do not require local AFL output
 directories or commit generated crash artifacts. Validate both the direct script
-path and the CTest wrapper when changing this suite. The JSON parser suite
+path and the CTest wrapper when changing this suite. The aggregate reserves up
+to four CTest processor slots because it launches more than 100 sanitizer-instrumented
+commands with bounded per-command timeouts; this lets the surrounding suite run
+in parallel without starving the aggregate's subprocesses. The JSON parser suite
 includes malformed curve gamma and out-of-range numeric narrowing coverage, and
 must reject invalid numeric fields before conversion without sanitizer findings.
 
@@ -250,8 +267,8 @@ integration test as a separate `slow` CTest label. The maintainer `check` target
 runs the full suite, including `slow`. Routine CI tool sweeps use the fast lane
 with `--label-exclude slow --label-exclude calculator`, and the `check-fast`
 target excludes `slow` and `known-red` with one label regular expression. Run
-full CTest or the hybrid gate
-explicitly when the slow and calculator suites are in scope:
+full CTest or the hybrid gate explicitly when the slow and calculator suites
+are in scope. The hybrid aggregate reserves up to four CTest processor slots:
 `ctest --test-dir build -R '^iccdev\.hybrid-pipeline$' --output-on-failure`.
 
 The normal `ci-pr-action` full lane additionally excludes the `pr-extended`
@@ -335,8 +352,11 @@ cause is cache parsing, so it reproduces anywhere and needs no build products.
 
 Windows MSVC AddressSanitizer uses comma-separated `ASAN_OPTIONS`
 (`detect_leaks=0,halt_on_error=1`) and does not support LeakSanitizer
-`detect_leaks=1`. Leak-only CTest regressions are therefore registered on
-LeakSanitizer-capable toolchains and skipped for MSVC builds.
+`detect_leaks=1`. Darwin AddressSanitizer, including AppleClang, also rejects
+`detect_leaks=1`. Leak-only CTest regressions are therefore registered only on
+LeakSanitizer-capable platforms; mixed correctness/leak regressions retain
+their correctness checks without forcing leak detection on MSVC or Apple
+builds.
 
 For issue #1948 `CIccIO` strict-aliasing writer divergence, use the manual
 registered `.github/workflows/ci-afl-issue-1677-repro.yml` workflow. The same

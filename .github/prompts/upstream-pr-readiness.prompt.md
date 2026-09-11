@@ -20,10 +20,12 @@ Audit `BRANCH_NAME` against `BASE_BRANCH` using
 
 1. Do not create, reopen, edit, or request review on a PR.
 2. Fail immediately when explicit authorization is absent.
-3. Use a clean worktree and current remote base.
-4. Verify rebase, linear history, range-diff, complete diff scope, normal and
-   excluded test builds, complete CTest, negative configurations, generated
-   artifact cleanup, and active plus suppressed findings.
+3. Use a clean worktree and current remote base. For maintainer branch
+   grooming, confirm the local Git defaults in `docs/linear-stack-workflow.md`.
+4. Verify rebase, linear history with no merge commits, range-diff, complete
+   diff scope, normal and excluded test builds, complete CTest, negative
+   configurations, generated artifact cleanup, and active plus suppressed
+   findings.
 5. Report only PASS or FAIL with command evidence and blockers.
 
 ## Output

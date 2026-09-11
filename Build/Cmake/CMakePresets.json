@@ -340,11 +340,12 @@
       "name": "macos-clang-sanitizers",
       "inherits": "macos-clang",
       "displayName": "macOS Clang with ASan, UBSan, IntSan, and float sanitizers",
-      "description": "Debug sanitizer build for crash and UB attribution. Keep this separate from GuardMalloc/libgmalloc runs.",
+      "description": "Debug sanitizer build with libc++ EXTENSIVE hardening for crash and UB attribution. Keep this separate from GuardMalloc/libgmalloc runs.",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_TOOLS": "ON",
-        "ENABLE_SANITIZERS": "ON"
+        "ENABLE_SANITIZERS": "ON",
+        "ICCDEV_LIBCPP_HARDENING_MODE": "extensive"
       }
     },
     {

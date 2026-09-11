@@ -22,6 +22,8 @@ endif()
 
 set(ICCDEV_BENCHAPPLY_BUNDLE_IDENTIFIER "org.color.iccdev.BenchApplyPOC" CACHE STRING
   "Bundle identifier registered with your Apple development team")
+option(ICCDEV_BENCHAPPLY_ENABLE_SANITIZERS
+  "Build the app with ASan, UBSan, IntSan, and float sanitizers" OFF)
 
 set(_source "${CMAKE_CURRENT_SOURCE_DIR}")
 set(_assets "${CMAKE_CURRENT_SOURCE_DIR}/Assets.xcassets")
@@ -45,6 +47,10 @@ target_link_libraries(IccBenchApplyPOC PRIVATE
   RefIccMAX::IccProfLib2-static "-framework UIKit")
 target_compile_features(IccBenchApplyPOC PRIVATE cxx_std_17)
 target_compile_options(IccBenchApplyPOC PRIVATE -Wall -Wextra -Werror)
+if(ICCDEV_BENCHAPPLY_ENABLE_SANITIZERS)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/IccDevAppleSanitizers.cmake")
+  iccdev_enable_apple_app_sanitizers(IccBenchApplyPOC)
+endif()
 
 set_target_properties(IccBenchApplyPOC PROPERTIES
   OBJCXX_STANDARD 17

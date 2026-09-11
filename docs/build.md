@@ -210,11 +210,13 @@ capabilities those tools depend on.
 
 The `Apple mobile core libraries` workflow discovers installed Apple SDKs,
 builds every matching minimal and extended mobile-core preset, and runs the
-simulator and Xcode CTest smoke gates below. Master pushes and manual runs
-upload the static libraries, generated version headers, and build manifest as
-`iccdev-apple-mobile-core`. Apple mobile and Apple smoke workflows are not
-pull-request triggers; dispatch `.github/workflows/ci-apple-mobile-core.yml`
-or `.github/workflows/ci-apple-platform-smoke.yml` when a PR needs this Apple
+simulator and Xcode CTest smoke gates below. Manual runs upload the static
+libraries, generated version headers, and build manifest as
+`iccdev-apple-mobile-core`. The workflow also remains callable by trusted
+workflow orchestration without uploading PR-controlled artifacts. Apple mobile
+and Apple smoke workflows are not push or pull-request triggers; dispatch
+`.github/workflows/ci-apple-mobile-core.yml` or
+`.github/workflows/ci-apple-platform-smoke.yml` when a change needs this Apple
 gate before review.
 
 ### Run the core smoke app on an iPhone, iPad, or Apple Watch
@@ -374,6 +376,17 @@ TEAM_ID="$TEAM_ID" DEVICE_ID="$DEVICE_ID" \
   examples/ios-clut-editor/build-ios.sh device --launch
 ```
 
+Maintainers can run all three example sentinels with the combined sanitizers
+on one disposable iOS simulator:
+
+```bash
+.github/scripts/iccdev-ios-example-smoke.sh sanitizers
+```
+
+The manually dispatched `Apple platform smoke` workflow exposes `core`,
+`examples`, and `all` scopes so example-only QA does not repeat the tvOS,
+watchOS, and Xcode CTest gates.
+
 Each helper removes bundle-ID drift by forwarding `BUNDLE_ID` to
 each app-specific CMake bundle variable, uses Release by default, and launches
 the simulator with `--console-pty --terminate-running-process` so repeated
@@ -381,6 +394,9 @@ terminal smokes exercise a fresh process. Device runs reject placeholder
 signing values before starting the build without blocking simulator or Mac
 Catalyst runs; unsigned simulator and Mac Catalyst runs ignore a globally
 exported placeholder `BUNDLE_ID` and use the default bundle ID instead. The
+`--run-tests` launch path is bounded by `ICCDEV_LAUNCH_TIMEOUT_SECONDS`
+(default `120`) and treats the app-specific PASS sentinel as completion, so a
+stuck console attachment cannot outlive a successful or failed smoke. The
 `ios-clut-editor` `maccatalyst` target builds a matching Mac Catalyst
 `IccProfLib2-static` archive and runs the same UIKit app on Apple Silicon Macs.
 
@@ -556,10 +572,10 @@ ctest --test-dir build -N --no-tests=error
 ctest --test-dir build --output-on-failure --no-tests=error
 ```
 
-The default `all` build includes CTest regression helper binaries, so direct
-CTest runs work after a normal build. The `build-test-binaries` compatibility
-target remains available for scripts that explicitly request all helpers. The
-`check` target runs the same CTest suite after building tool and test dependencies:
+Regression-only CTest helper binaries are intentionally excluded from the
+default `all` product build. Build the `build-test-binaries` target before a
+direct CTest run. The `check` target builds tool and test dependencies before
+running the same suite:
 
 ```bash
 cmake --build build --target check
@@ -984,6 +1000,15 @@ cmake --preset linux-clang-profiling -S Build/Cmake -B out/linux-clang-profiling
 cmake --preset macos-clang-sanitizers -S Build/Cmake -B out/macos-clang-sanitizers
 cmake --preset macos-clang-guard-malloc -S Build/Cmake -B out/macos-clang-guard-malloc
 ```
+
+The `macos-clang-sanitizers` preset also selects libc++ `EXTENSIVE` hardening.
+This adds standard-library precondition and bounds checks to the QA build while
+leaving normal and Release presets at the SDK default. To test another Apple
+libc++ tier explicitly, pass
+`-DICCDEV_LIBCPP_HARDENING_MODE=none|fast|extensive|debug`; non-Apple and
+non-libc++ toolchains reject non-`none` values at configure time. Use only
+`_LIBCPP_HARDENING_MODE`; current Xcode libc++ has removed
+`_LIBCPP_ENABLE_ASSERTIONS`.
 
 ## Maintainer Dockerfiles
 

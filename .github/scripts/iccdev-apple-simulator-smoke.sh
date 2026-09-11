@@ -89,8 +89,14 @@ cmake -S Build/AppleMobile -B "$build" -G Xcode \
   -DCMAKE_OSX_ARCHITECTURES="$(uname -m)" -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment" \
   -DICCDEV_APPLE_RUN_TARGET="$run_target" -DRefIccMAX_DIR="$repo_root/$core" \
   "${json_package_args[@]}"
+xcodebuild_log="$build/xcodebuild.log"
 xcodebuild -quiet -project "$build/IccDevCoreSmoke.xcodeproj" \
-  -target IccDevCoreSmoke -configuration Release -sdk "$sdk" CODE_SIGNING_ALLOWED=NO build
+  -target IccDevCoreSmoke -configuration Release -sdk "$sdk" CODE_SIGNING_ALLOWED=NO build \
+  2>&1 | tee "$xcodebuild_log"
+if grep -Fq 'warning:' "$xcodebuild_log"; then
+  echo "Unexpected Xcode build warning; see ${xcodebuild_log}." >&2
+  exit 1
+fi
 app="$repo_root/$build/Release-${sdk}/IccDevCoreSmoke.app"
 bundle="$(plutil -extract CFBundleIdentifier raw -o - "$app/Info.plist")"
 

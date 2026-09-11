@@ -482,7 +482,8 @@ jobs:
           git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
-          cmake --build "$env:RUNNER_TEMP\manifest-test\build" --config Release
+          cmake --build "$env:RUNNER_TEMP\manifest-test\build" --config Release `
+            --parallel ([Environment]::ProcessorCount)
           if ($LASTEXITCODE -ne 0) { throw "Build failed" }
 
       - name: Refresh trusted sanitizer helpers

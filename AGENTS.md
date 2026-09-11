@@ -52,6 +52,7 @@ shares one source of truth. Update rules here, not in the mirrors.
 | iOS CLUT editor POC | `examples/ios-clut-editor/README.md`, `.github/skills/ios-clut-editor/SKILL.md` |
 | AVX2 CLUT diagnostics and optimization handoff | `docs/avx2-clut-diagnostics.md` |
 | Pull request preparation and handoff | `docs/pre-pr-security-cycle.md` |
+| Maintainer local Git/devenv defaults | `docs/linear-stack-workflow.md` |
 | Pre-PR security skill | `.github/skills/pre-pr-security-cycle/SKILL.md` |
 | Pre-PR security prompt | `.github/prompts/pre-pr-security-cycle.prompt.md` |
 | Stacked PR and fast-lane workflow | `.github/skills/stacked-pr-fast-lane/SKILL.md` |
