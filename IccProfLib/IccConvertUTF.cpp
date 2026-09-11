@@ -754,14 +754,12 @@ icUtfConversionResult icConvertUTF32toUTF8 (const UTF32** sourceStart, const UTF
         break;
       }
     }
-    /* #2511 deliberately leaves lenient mode passing surrogates through here,
-       unlike icConvertUTF16toUTF8.  Where wchar_t is 32 bits, dictType text
-       reaches this function through icWCharToUtf8() and wstringToUTF8Converter()
-       as UTF-16 code units stored one per wchar_t, so a VALID character above
-       U+FFFF arrives as two lone surrogates.  Substituting U+FFFD here was
-       measured to turn U+1F600 in a dict name into two U+FFFD that iccFromXml
-       then accepts -- silent loss of valid text, where today the CESU-8 output
-       at least fails loudly.  The pairing has to be fixed first: #2526. */
+    /* Lenient mode still passes a surrogate through here as three bytes,
+       unlike icConvertUTF16toUTF8 since #2511.  No iccDEV code calls this
+       function any more.  The dictType text that used to reach it, through
+       icWCharToUtf8() where wchar_t is 32 bits, holds UTF-16 code units, and
+       it arrived here as two lone surrogates per character above U+FFFF.  It
+       now goes through icConvertUTF16toUTF8 on every platform (#2526). */
     /*
     * Figure out how many bytes the result will require. Turn any
     * illegally large UTF32 things (> Plane 17) into replacement chars.

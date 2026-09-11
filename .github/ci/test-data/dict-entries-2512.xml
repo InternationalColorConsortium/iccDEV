@@ -14,16 +14,16 @@
                         round trip
     Grüße               two- and three-byte UTF-8 in both name and value,
                         which is what reaches icWCharToUtf8
+    Astral 😀           a character above U+FFFF in both name and value.
+                        The entry holds it as a UTF-16 surrogate pair, one
+                        code unit per wchar_t, and where wchar_t is 32 bits
+                        the writers used to encode each half on its own as
+                        CESU-8, which iccFromXml then refused (#2526)
     Escapes             all five characters icFixXml escapes (& < > " ')
     Localized           localized names (two languages) and a localized value,
                         so the record is 32 bytes wide
     ValueLocalizedOnly  a localized value with no localized name, so the
                         localized-name slot of a 32-byte record is empty
-
-  Every character is inside the Basic Multilingual Plane.  A character above
-  U+FFFF does not survive the XML round trip on platforms with a 32-bit
-  wchar_t.  That is a separate defect, and this file is the control that
-  shows the BMP path works.
 
   The DictEntry lines are written exactly as CIccTagXmlDict::ToXml emits them
   (attribute order, CDATA sections), because the regression script compares
@@ -94,6 +94,7 @@
       <DictEntry Name="NameOnly"/>
       <DictEntry Name="EmptyValue" Value=""/>
       <DictEntry Name="Grüße" Value="Café 色"/>
+      <DictEntry Name="Astral 😀" Value="G clef 𝄞"/>
       <DictEntry Name="Escapes" Value="a &amp; b &lt;c&gt; &quot;q&quot; &apos;s&apos;"/>
       <DictEntry Name="Localized" Value="plain">
         <LocalizedName LanguageCountry="enUS"><![CDATA[Localized]]></LocalizedName>

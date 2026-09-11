@@ -5085,7 +5085,7 @@ function(iccdev_add_utf8_converter_cursor_test)
   endif()
   set_tests_properties(iccdev.utf8-converter-cursor-contract PROPERTIES
     TIMEOUT 120
-    LABELS "iccdev;iccprofLib;utf8;utf16;aliasing;issue-2504;issue-2511;regression"
+    LABELS "iccdev;iccprofLib;utf8;utf16;aliasing;issue-2504;issue-2511;issue-2526;regression"
   )
   if(WIN32)
     # icWCharToUtf8 takes the UTF-16 arm of its WCHAR_MAX branch here, which no
@@ -9304,13 +9304,15 @@ iccdev_add_script_test(
 # record shape, including a value that is set but empty, which the round trip
 # must keep apart from an entry with no value.  Each direction is checked on
 # its own: the text each writer emits, and the bytes each reader rebuilds.
-# The fixture is BMP-only.  Not registered on Windows (see the WIN32 branch
-# above), which is the one platform where wchar_t is 16 bits.
+# #2526 added an entry above U+FFFF, which the writers encoded as CESU-8
+# where wchar_t is 32 bits.  Not registered on Windows (see the WIN32 branch
+# above), which is the one platform where wchar_t is 16 bits; the icWCharToUtf8
+# cases in iccdev.utf8-converter-cursor-contract cover both widths.
 # Plain functional test -- skips cleanly if the tools/fixtures are absent.
 iccdev_add_script_test(
   iccdev.issue-2512-dict-roundtrip
   90
-  "iccdev;xml;json;dict;roundtrip;issue-2512;regression"
+  "iccdev;xml;json;dict;roundtrip;issue-2512;issue-2526;regression"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2512-dict-roundtrip-regression.sh"
 )

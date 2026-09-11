@@ -20,9 +20,10 @@
 # record shape the binary format can hold; its header lists them.  The test
 # builds a profile from it and then checks each direction separately:
 #
-#   1. The profile carries all seven entries and validates.  Without this, a
+#   1. The profile carries every entry and validates.  Without this, a
 #      reader that dropped the tag would make every later comparison pass on
-#      an empty dict.
+#      an empty dict.  The dump must also print the entry above U+FFFF as
+#      UTF-8, which checks the third writer, CIccDictEntry::Describe.
 #   2. ICC -> XML writes back exactly the DictEntry lines the fixture holds.
 #   3. XML -> ICC reproduces the profile byte for byte.
 #   4. ICC -> JSON writes each entry's fields with the right values, and keeps
@@ -32,6 +33,12 @@
 # Steps 2 and 4 check the text as well as the bytes, because a byte comparison
 # alone passes when writer and reader are wrong in matching ways -- for
 # example, both using the same misspelt key.
+#
+# #2526: the "Astral" entry holds characters above U+FFFF.  Where wchar_t is
+# 32 bits, all three writers used to encode each half of the surrogate pair
+# as its own three-byte sequence (CESU-8).  Step 1 then saw \xED\xA0\xBD in
+# the dump, step 2 a line that differed from the fixture, and step 4 six
+# U+FFFD where there should be one character.
 #
 # Environment variables:
 #   ICCDEV_TOOLS_DIR   -- path to Build/Tools or build/Tools
@@ -148,6 +155,12 @@ if ! grep -Fq "Profile is valid" "$OUTDIR/dump.log"; then
   sed -n '/Validation Report/,$p' "$OUTDIR/dump.log" | sed -n '1,10p' | sed 's/^/    /'
   fail "the fixture profile does not validate"
 fi
+# iccDumpProfile prints every byte outside ASCII as \xHH, so this is the
+# UTF-8 of U+1F600.  The CESU-8 the dump printed before #2526 starts \xED.
+if ! grep -Fq 'Name=Astral \xF0\x9F\x98\x80' "$OUTDIR/dump.log"; then
+  grep -a '^Name=Astral' "$OUTDIR/dump.log" | sed 's/^/    /'
+  fail "iccDumpProfile did not print U+1F600 in the Astral entry as UTF-8 (#2526)"
+fi
 echo "    built: $got dict entries, profile validates"
 
 # ===========================================================================
@@ -196,6 +209,7 @@ EXPECTED = [
     {"name": "NameOnly"},
     {"name": "EmptyValue", "value": ""},
     {"name": "Gr\u00fc\u00dfe", "value": "Caf\u00e9 \u8272"},
+    {"name": "Astral \U0001F600", "value": "G clef \U0001D11E"},
     {"name": "Escapes", "value": "a & b <c> \"q\" 's'"},
     {"name": "Localized", "value": "plain",
      "localizedNames": [loc("en", "US", "Localized"), loc("de", "DE", "Lokalisiert")],

@@ -231,27 +231,15 @@ std::string wstringToUTF8Converter( std::wstring &input )
 {
 
 #if 1
-  size_t maxBufferSize = 6 * ( input.size() + 1 );  // assume worst case conversion to UTF8
-  std::vector<char> outputBuffer ( maxBufferSize );
-  UTF8 *output_data( (UTF8 *)outputBuffer.data() );
-  UTF8 *output_end = output_data + maxBufferSize;
-  UTF8 *output_start = output_data;  // because this will be modified in the conversion routine
-
-  // wstring can be 16 or 32 bits depending on platform - so we need a conditional implementation to convert to UTF8
-  static_assert( sizeof(wchar_t) == 4 || sizeof(wchar_t) == 2, "wchar_t has an unexpected size." );
-  if (sizeof(wchar_t) == 4) {
-    const UTF32 *input_data( (const UTF32 *)input.data() );
-    const UTF32 *input_end = input_data + input.size();
-    (void) icConvertUTF32toUTF8 ( &input_data, input_end, &output_start, output_end, lenientConversion );
-  } else  {
-    const UTF16 *input_data( (const UTF16 *)input.data() );
-    const UTF16 *input_end = input_data + input.size();
-    (void) icConvertUTF16toUTF8 ( &input_data, input_end, &output_start, output_end, lenientConversion );
-  }
-
-// output_start has been moved to point to the end of the output, and should have a terminating NULL
-
-  return std::string ( (char *)output_data );     // this makes a copy of the output string data
+  // #2526: the entry text holds UTF-16 code units, one per wchar_t, on every
+  // platform.  The UTF-32 arm this function had for a 32-bit wchar_t encoded
+  // each half of a surrogate pair on its own, so iccDumpProfile printed six
+  // bytes of CESU-8 for a character above U+FFFF.  icWCharToUtf8 handles
+  // both widths.  Building the result from c_str() keeps the old behaviour at
+  // an embedded NUL: the text is still cut there.
+  std::string buf;
+  icWCharToUtf8(buf, input.c_str(), input.size());
+  return std::string(buf.c_str());
 #else
 // deprecated implementation that still works for now, but is marked for removal in C++26
 // saving this, just in case the new code fails in testing

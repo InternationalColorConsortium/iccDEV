@@ -3192,8 +3192,38 @@ const char *icWCharToUtf8(std::string &buf, const wchar_t *szSrc, size_t sizeSrc
     // the WCHAR_MAX branch.
     UTF8 *szDest = (UTF8*)szBuf;
 #if WCHAR_MAX > 65535
-    const UTF32 *szPtr = (const UTF32 *)szSrc;
-    icConvertUTF32toUTF8(&szPtr, &szPtr[sizeSrc], &szDest, (UTF8*)&szBuf[n], lenientConversion);
+    // #2526: a 32-bit wchar_t string is not always UTF-32 here.  The dictType
+    // names and values this function converts for IccTagXml.cpp and
+    // IccTagJson.cpp hold UTF-16 code units, one per wchar_t --
+    // CIccTagDict::Read and CIccUTF16String::ToWString store them that way,
+    // and CIccTagDict::Write narrows each wchar_t back to 16 bits.  Read as
+    // UTF-32, a character above U+FFFF arrived as two surrogates and came out
+    // as six bytes of CESU-8, which libxml2 refuses.
+    //
+    // So this arm now ends in icConvertUTF16toUTF8 too, as the Windows arm
+    // does.  A wchar_t above U+FFFF, which only real UTF-32 holds, is split
+    // into its surrogate pair first, and the UTF-16 converter joins a pair in
+    // whichever form it arrived.  Valid UTF-32 gives the same bytes as
+    // before.  Only surrogate values change, and UTF-32 cannot contain them:
+    // a pair is joined, and a lone one becomes U+FFFD -- or, if it is a high
+    // surrogate that ends the string, is dropped -- as on Windows (#2511).
+    // Every wchar_t yields at most 4 bytes, so n is still enough.
+    icUtf16Vector units;
+    units.reserve(sizeSrc);
+    for (size_t i = 0; i < sizeSrc; i++) {
+      UTF32 ch = (UTF32)szSrc[i];
+      if (ch <= 0xFFFF) {
+        units.push_back((UTF16)ch);
+      } else if (ch <= 0x10FFFF) {
+        ch -= 0x10000;
+        units.push_back((UTF16)(0xD800 + (ch >> 10)));
+        units.push_back((UTF16)(0xDC00 + (ch & 0x3FF)));
+      } else {
+        units.push_back(0xFFFD);  // past U+10FFFF, as icConvertUTF32toUTF8 did
+      }
+    }
+    const UTF16 *szPtr = units.data();
+    icConvertUTF16toUTF8(&szPtr, szPtr + units.size(), &szDest, (UTF8*)&szBuf[n], lenientConversion);
 #else
     const UTF16 *szPtr = (const UTF16 *)szSrc;
     icConvertUTF16toUTF8(&szPtr, &szPtr[sizeSrc], &szDest, (UTF8*)&szBuf[n], lenientConversion);
