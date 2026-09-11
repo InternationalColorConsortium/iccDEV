@@ -30,9 +30,20 @@
 // over-long cursor changes size() while c_str() can still compare equal up to
 // the NUL.
 //
+// #2511 added the lone-surrogate cases.  Lenient mode used to encode a UTF-16
+// surrogate with no partner as three bytes (U+D83D -> ED A0 BD) -- CESU-8, not
+// UTF-8 -- so iccToXml wrote XML that libxml2 refuses and iccFromXml could not
+// read back.  It now substitutes U+FFFD.  Each of those cases asserts the exact
+// bytes AND runs the output through isLegalUTF8String(), the library's own
+// validator, so a fix that produced some other ill-formed sequence would still
+// fail.  Every lone-surrogate case below fails against the unfixed converter;
+// the strict-mode cases pass on both and guard the branch that #2511
+// restructured.
+//
 // Returns 0 on success; the number of failed assertions otherwise.
 
 #include "IccUtil.h"
+#include "IccConvertUTF.h"
 #include "icProfileHeader.h"
 
 #include <string>
@@ -50,6 +61,16 @@ void check(bool ok, const char *what)
     ++g_fail;
     printf("FAIL: %s\n", what);
   }
+}
+
+// #2511: the converter's output must be well-formed UTF-8 by the library's own
+// definition.  isLegalUTF8String() rejects any encoded surrogate, so this is
+// the check that catches CESU-8 whatever the exact bytes are.
+void checkLegal(const std::string &buf, const char *what)
+{
+  char msg[256];
+  snprintf(msg, sizeof(msg), "%s: output is legal UTF-8", what);
+  check(isLegalUTF8String((const UTF8*)buf.data(), (int)buf.size()) != 0, msg);
 }
 
 // Compares both the reported length and the bytes.  size() is checked first and
@@ -76,6 +97,68 @@ void checkUtf16(const icUInt16Number *src, int len,
   // that returned the scratch pointer instead would fail here.
   snprintf(msg, sizeof(msg), "%s: returns the string's own storage", what);
   check(rv == buf.c_str() && rv[buf.size()] == '\0', msg);
+
+  // #2511: every case, not only the lone-surrogate ones -- the pre-existing
+  // cases are all well-formed, and must stay that way.
+  checkLegal(buf, what);
+}
+
+// Same pair of assertions for the std::vector overload of
+// icConvertUTF16toUTF8().  icUtf16ToUtf8() above reaches the pointer overload
+// only; the vector overload is the one CIccTagUtf16Text::GetText() and both
+// CIccTagUtf8Text/CIccTagZipUtf8Text::SetText(const icUChar16*) call, and #2511
+// changed both overloads.
+void checkUtf16Vector(const icUInt16Number *src, size_t len,
+                      const char *expect, size_t expectLen, const char *what)
+{
+  icUtf8Vector out;
+  icUtfConversionResult rc = icConvertUTF16toUTF8((const UTF16*)src, (const UTF16*)src + len,
+                                                  out, lenientConversion);
+  // Copy as bytes, not element by element: std::string(out.begin(), out.end())
+  // converts each UTF8 (unsigned char) to char implicitly.  Under clang,
+  // ENABLE_SANITIZERS adds -fsanitize=integer, whose implicit sign-change check
+  // stops on the first byte >= 0x80 -- measured, on the U+FFFD cases below.
+  std::string buf;
+  if (!out.empty())
+    buf.assign(reinterpret_cast<const char*>(out.data()), out.size());
+  char msg[256];
+
+  snprintf(msg, sizeof(msg), "%s: result (got %d, want conversionOK)", what, (int)rc);
+  check(rc == conversionOK, msg);
+
+  snprintf(msg, sizeof(msg), "%s: length (got %zu, want %zu)", what, buf.size(), expectLen);
+  check(buf.size() == expectLen, msg);
+
+  snprintf(msg, sizeof(msg), "%s: bytes", what);
+  check(buf.size() == expectLen && memcmp(buf.data(), expect, expectLen) == 0, msg);
+
+  checkLegal(buf, what);
+}
+
+// Strict mode must still stop at a lone surrogate and report it, with the
+// source cursor left ON the offending unit and nothing written for it.  #2511
+// moved the lone-low test out from under "if (flags == strictConversion)" so
+// that lenient mode could reach it; this pins that strict mode kept its old
+// behaviour through the move.
+void checkStrictStops(const icUInt16Number *src, size_t len, size_t stopAt,
+                      size_t bytesBefore, const char *what)
+{
+  UTF8 out[32];
+  const UTF16 *s = (const UTF16*)src;
+  UTF8 *d = out;
+  icUtfConversionResult rc = icConvertUTF16toUTF8(&s, (const UTF16*)src + len,
+                                                  &d, out + sizeof(out), strictConversion);
+  char msg[256];
+
+  snprintf(msg, sizeof(msg), "%s: result (got %d, want sourceIllegal)", what, (int)rc);
+  check(rc == sourceIllegal, msg);
+
+  snprintf(msg, sizeof(msg), "%s: source cursor (got %td, want %zu)", what,
+           s - (const UTF16*)src, stopAt);
+  check(s == (const UTF16*)src + stopAt, msg);
+
+  snprintf(msg, sizeof(msg), "%s: bytes written (got %td, want %zu)", what, d - out, bytesBefore);
+  check(d == out + bytesBefore, msg);
 }
 
 void checkWChar(const wchar_t *src, size_t len,
@@ -128,13 +211,31 @@ int main()
     const icUInt16Number truncated[] = { 'a', 0xD83D, 0 };
     checkUtf16(truncated, 2, "a", 1, "utf16 trailing unpaired surrogate dropped");
 
-    // An unpaired surrogate NOT at the end is passed through as a 3-byte
-    // sequence (U+D83D -> ED A0 BD) rather than replaced.  That output is
-    // CESU-8, and iccDEV's own isLegalUTF8String() rejects it -- measured, and
-    // reported separately; this case pins today's behaviour so a later fix to
-    // that is a deliberate, visible change rather than a silent one.
-    const icUInt16Number cesu[] = { 0xD83D, 'a', 0 };
-    checkUtf16(cesu, 2, "\xED\xA0\xBD" "a", 4, "utf16 interior unpaired surrogate (CESU-8, current behaviour)");
+    // #2511: an unpaired high surrogate NOT at the end becomes U+FFFD (EF BF BD).
+    // This case used to pin the CESU-8 output (ED A0 BD) that #2510 found, so
+    // the fix would be a visible change -- this is that change.  Same length
+    // as before (3 bytes for the surrogate, 1 for 'a'), so only the bytes and
+    // the legality check tell the two behaviours apart.
+    const icUInt16Number loneHigh[] = { 0xD83D, 'a', 0 };
+    checkUtf16(loneHigh, 2, "\xEF\xBF\xBD" "a", 4, "utf16 interior unpaired high surrogate -> U+FFFD");
+
+    // #2511: a lone LOW surrogate leaked the same way (U+DE00 -> ED B8 80).
+    // It takes a different arm of the converter from the high case above.
+    const icUInt16Number loneLow[] = { 'a', 0xDE00, 'b', 0 };
+    checkUtf16(loneLow, 3, "a" "\xEF\xBF\xBD" "b", 5, "utf16 lone low surrogate -> U+FFFD");
+
+    // #2511: the substitution must not swallow the unit after a lone high
+    // surrogate.  Here that unit is itself the start of a valid pair, so the
+    // right answer is U+FFFD followed by an intact U+1F600.  A fix that
+    // advanced past the unit it peeked at would lose the emoji.
+    const icUInt16Number highThenPair[] = { 0xD83D, 0xD83D, 0xDE00, 0 };
+    checkUtf16(highThenPair, 3, "\xEF\xBF\xBD" "\xF0\x9F\x98\x80", 7,
+               "utf16 lone high surrogate then a valid pair");
+
+    // #2511: a low surrogate before a high one is not a pair.  Both are lone,
+    // and the trailing 'a' is what makes the high one interior.
+    const icUInt16Number reversed[] = { 0xDE00, 0xD83D, 'a', 0 };
+    checkUtf16(reversed, 3, "\xEF\xBF\xBD" "\xEF\xBF\xBD" "a", 7, "utf16 reversed pair -> two U+FFFD");
 
     // Interior NUL: the converter is length-driven, so it must not stop early.
     // buf.assign(ptr, len) preserves it; a c_str()-based length would not.
@@ -156,10 +257,47 @@ int main()
     }
   }
 
+  // --- icConvertUTF16toUTF8, std::vector overload (#2511) ------------------
+  {
+    const icUInt16Number loneHigh[] = { 0xD83D, 'a' };
+    checkUtf16Vector(loneHigh, 2, "\xEF\xBF\xBD" "a", 4, "vector interior unpaired high surrogate -> U+FFFD");
+
+    const icUInt16Number loneLow[] = { 'a', 0xDE00, 'b' };
+    checkUtf16Vector(loneLow, 3, "a" "\xEF\xBF\xBD" "b", 5, "vector lone low surrogate -> U+FFFD");
+
+    const icUInt16Number highThenPair[] = { 0xD83D, 0xD83D, 0xDE00 };
+    checkUtf16Vector(highThenPair, 3, "\xEF\xBF\xBD" "\xF0\x9F\x98\x80", 7,
+                     "vector lone high surrogate then a valid pair");
+
+    const icUInt16Number reversed[] = { 0xDE00, 0xD83D, 'a' };
+    checkUtf16Vector(reversed, 3, "\xEF\xBF\xBD" "\xEF\xBF\xBD" "a", 7, "vector reversed pair -> two U+FFFD");
+
+    // A valid pair is untouched -- the control for the three cases above.
+    const icUInt16Number pair[] = { 0xD83D, 0xDE00 };
+    checkUtf16Vector(pair, 2, "\xF0\x9F\x98\x80", 4, "vector surrogate pair");
+  }
+
+  // --- icConvertUTF16toUTF8, strict mode (#2511 guard) ---------------------
+  {
+    // Stops on the lone high surrogate at index 1, after writing "a".
+    const icUInt16Number loneHigh[] = { 'a', 0xD83D, 'b' };
+    checkStrictStops(loneHigh, 3, 1, 1, "strict lone high surrogate");
+
+    // Stops on the lone low surrogate at index 1, after writing "a".
+    const icUInt16Number loneLow[] = { 'a', 0xDE00, 'b' };
+    checkStrictStops(loneLow, 3, 1, 1, "strict lone low surrogate");
+  }
+
   // --- icWCharToUtf8 -------------------------------------------------------
   // Reached in production only through the dictType writers.  Which arm of the
   // WCHAR_MAX branch runs is platform-dependent (UTF-32 where wchar_t is wide,
   // UTF-16 on Windows); these cases are chosen to hold on both.
+  //
+  // #2511 has no lone-surrogate case here on purpose.  The Windows arm goes
+  // through the fixed icConvertUTF16toUTF8(); the UTF-32 arm goes through
+  // icConvertUTF32toUTF8(), which #2511 deliberately left alone (see the
+  // comment there, and #2526), so the same input gives different bytes per
+  // platform.
   {
     const wchar_t ascii[] = L"iccDEV";
     checkWChar(ascii, 6, "iccDEV", 6, "wchar ascii, explicit length");
