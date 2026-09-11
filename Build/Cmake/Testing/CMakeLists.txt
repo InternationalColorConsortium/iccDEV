@@ -2187,6 +2187,184 @@ function(iccdev_add_pcs_birefl_illuminant_range_test)
   endif()
 endfunction()
 
+# CIccSparseMatrix::Union() is a near-verbatim copy of CIccSparseMatrix::Interp() and
+# carried the same five defects: Init() without bSetData (so the result has no row/column
+# header), each row's start overwritten with its end, the second matrix's per-row count
+# measured from the first matrix's row offset, neither single-sided merge tail advancing
+# i/j or the write cursor (an INFINITE LOOP, CWE-835), and both whole-row memcpy() calls
+# passing an entry count where bytes are required.
+#
+# Union()'s only caller is CIccTagSparseMatrixArray::Validate(), which unions each
+# consecutive pair in any sparseMatrixArrayType tag holding two or more.  Validation is
+# reached from iccDumpProfile and the public validation API on untrusted input, so a
+# profile with a two-matrix sparse tag whose matrices have different sparsity patterns --
+# the ordinary case, not a malformed one -- wedged the process instead of reporting
+# anything.  Every sparse tag in Testing/ held exactly one matrix, and with one matrix the
+# loop is never entered, so none of it had coverage.
+#
+# The TIMEOUT is the assertion for the hang: against unfixed sources the test does not
+# return.  In-memory fixtures only.
+function(iccdev_add_sparsematrix_union_validate_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSparseMatrixUnionValidateTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/sparsematrix-union-validate.cpp"
+  )
+  target_link_libraries(iccSparseMatrixUnionValidateTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccSparseMatrixUnionValidateTest)
+
+  add_test(
+    NAME iccdev.sparsematrix-union-validate
+    COMMAND "$<TARGET_FILE:iccSparseMatrixUnionValidateTest>"
+  )
+  set_tests_properties(iccdev.sparsematrix-union-validate PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;security;sparsematrix;cwe-835;regression"
+  )
+  if(WIN32)
+    set(_sparse_union_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSparseMatrixUnionValidateTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _sparse_union_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.sparsematrix-union-validate PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_sparse_union_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# A v5 NamedColor entry whose spectral member is a sparseMatrixArrayType could not be
+# applied at all, and CIccPcsStepSrcSparseMatrix::Apply() had therefore never executed.
+#
+# CIccTagSparseMatrixArray implements CIccTagNumArray in a different dialect than every
+# other subclass -- GetNumValues() counts matrices rather than floats, and
+# GetValues()/Interpolate() take nVectorSize in bytes.  CIccArrayNamedColor::Validate()
+# branches on IsMatrixArray() for exactly that reason; CIccStructNamedColor::GetTint()
+# never got the matching branch and divided a matrix count by a sample count, returning
+# false before reading any data, so CIccXformNamedColor::Apply() reported
+# icCmmStatBadTintXform for every colour.  Three further defects sat behind it in
+# CIccSparseMatrix::Interp(), which the tint path is the only caller of: the destination
+# was initialised without stamping its row/column header, each row's stored start was
+# overwritten with its end, the per-row count for the second matrix was measured from the
+# first matrix's row offset, both single-sided merge tails failed to advance and spun
+# forever, and the whole-row copies passed an entry count to memcpy() as a byte count.
+#
+# In-memory fixtures only, so a corpus change cannot disable it.  The real profile is
+# covered by iccdev_add_namedcolor_sparse_matrix_xml_test() below.
+function(iccdev_add_namedcolor_sparse_matrix_apply_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccNamedColorSparseMatrixApplyTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/namedcolor-sparse-matrix-apply.cpp"
+  )
+  target_link_libraries(iccNamedColorSparseMatrixApplyTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccNamedColorSparseMatrixApplyTest)
+
+  add_test(
+    NAME iccdev.namedcolor-sparse-matrix-apply
+    COMMAND "$<TARGET_FILE:iccNamedColorSparseMatrixApplyTest>"
+  )
+  set_tests_properties(iccdev.namedcolor-sparse-matrix-apply PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;spectral;namedcolor;sparsematrix;regression"
+  )
+  if(WIN32)
+    set(_nmcl_sparse_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccNamedColorSparseMatrixApplyTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _nmcl_sparse_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.namedcolor-sparse-matrix-apply PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_nmcl_sparse_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# The same defects, on the profile they were found in.  Testing/**/*.icc is gitignored --
+# CreateAllProfiles.sh generates it -- so all three inputs are the tracked XML documents,
+# parsed through the CIccProfileXml::LoadXml path iccFromXml uses, as
+# iccdev.v2-xml-fixtures does.  The chain is the one Testing/RunTests.sh already runs for
+# the dense bi-spectral FluorescentNamedColor; building the whole chain is what makes the
+# sparse PCS step run at all, since a lone named profile has no PCS connection.
+function(iccdev_add_namedcolor_sparse_matrix_xml_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccNamedColorSparseMatrixXmlTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/namedcolor-sparse-matrix-xml.cpp"
+  )
+  target_compile_features(iccNamedColorSparseMatrixXmlTest PRIVATE cxx_std_17)
+  target_include_directories(iccNamedColorSparseMatrixXmlTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccNamedColorSparseMatrixXmlTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccNamedColorSparseMatrixXmlTest)
+
+  # The second fixture is the first plus one extra matrix per colour, authored at the
+  # midpoint of that colour's tint-zero and full-tint matrices, plus a single 1e-4
+  # off-diagonal probe entry.  The midpoint is what lets the test assert the two profiles
+  # produce the same tint axis; the probe entry is what makes their sparsity patterns
+  # differ, without which CIccSparseMatrix::Union() -- reached from this profile's own
+  # Validate() -- is never wrong and stays unreached.  The test checks both properties
+  # hold, so neither can quietly lapse.
+  set(_nmcl_sparse_xml_args
+    "${ICCDEV_TESTING_DIR}/Named/SparseMatrixNamedColor.xml"
+    "${ICCDEV_TESTING_DIR}/Named/SparseMatrixNamedColorTint.xml"
+    "${ICCDEV_TESTING_DIR}/PCC/Spec400_10_700-D50_2deg-Abs.xml"
+    "${ICCDEV_TESTING_DIR}/SpecRef/SixChanCameraRef.xml"
+  )
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.namedcolor-sparse-matrix-xml
+      COMMAND "$<TARGET_FILE:iccNamedColorSparseMatrixXmlTest>" ${_nmcl_sparse_xml_args}
+    )
+  else()
+    add_test(
+      NAME iccdev.namedcolor-sparse-matrix-xml
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccNamedColorSparseMatrixXmlTest>" ${_nmcl_sparse_xml_args}
+    )
+  endif()
+  set_tests_properties(iccdev.namedcolor-sparse-matrix-xml PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;xml;spectral;namedcolor;sparsematrix;regression"
+  )
+  if(WIN32)
+    set(_nmcl_sparse_xml_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccNamedColorSparseMatrixXmlTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _nmcl_sparse_xml_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.namedcolor-sparse-matrix-xml PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_nmcl_sparse_xml_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1853 (ci-qa-flags bucket 4): the PCS step chain could be left disagreeing with itself,
 # and the temporaries it runs through were sized assuming it never is.
 #
@@ -7484,6 +7662,9 @@ if(WIN32)
   iccdev_add_gamut_xform_semantics_test()
   iccdev_add_rangemap_uninitialized_test()
   iccdev_add_pcs_birefl_illuminant_range_test()
+  iccdev_add_namedcolor_sparse_matrix_apply_test()
+  iccdev_add_namedcolor_sparse_matrix_xml_test()
+  iccdev_add_sparsematrix_union_validate_test()
   iccdev_add_pcs_applyillum_chain_sizing_test()
   iccdev_add_spectral_pcs_range_consistency_test()
   iccdev_add_spectral_media_white_test()
@@ -7865,6 +8046,9 @@ iccdev_add_pawg_c5_cicp_test()
 iccdev_add_gamut_xform_semantics_test()
 iccdev_add_rangemap_uninitialized_test()
 iccdev_add_pcs_birefl_illuminant_range_test()
+iccdev_add_namedcolor_sparse_matrix_apply_test()
+iccdev_add_namedcolor_sparse_matrix_xml_test()
+iccdev_add_sparsematrix_union_validate_test()
 iccdev_add_pcs_applyillum_chain_sizing_test()
 iccdev_add_spectral_pcs_range_consistency_test()
 iccdev_add_spectral_media_white_test()

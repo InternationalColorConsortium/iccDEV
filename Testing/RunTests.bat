@@ -73,6 +73,23 @@ echo Test Fluorescent under Illuminant A
 call :run iccApplyNamedCmm Named\FluorescentNamedColorTest.txt 2 0 Named\FluorescentNamedColor.icc 3 -pcc PCC\Spec400_10_700-IllumA_2deg-Abs.icc SpecRef\SixChanCameraRef.icc 1
 
 echo ===========================================================================
+rem Same colours and the same chain as the Fluorescent cases above, but the spectral
+rem PCS is a sparse matrix rather than a dense bi-spectral grid, so this drives
+rem CIccPcsStepSrcSparseMatrix.  The two profiles encode the same colours, so the
+rem output should track the Fluorescent output closely, allowing for the sparse
+rem profile storing its matrices in quantised UInt8/UInt16 encodings.
+echo Test Sparse Matrix Named Color under D50
+call :run iccApplyNamedCmm Named\FluorescentNamedColorTest.txt 2 0 Named\SparseMatrixNamedColor.icc 3 -pcc PCC\Spec400_10_700-D50_2deg-Abs.icc SpecRef\SixChanCameraRef.icc 1
+
+echo ===========================================================================
+rem The same profile plus an authored 50% tint matrix, which is the midpoint of each
+rem colour's tint-zero and full-tint matrices (plus one tiny off-diagonal probe entry
+rem so the two matrices differ in sparsity).  Its output should match the run above at
+rem every tint; the 0.5 rows are authored here and interpolated there.
+echo Test Sparse Matrix Named Color with authored 50%% tint step under D50
+call :run iccApplyNamedCmm Named\FluorescentNamedColorTest.txt 2 0 Named\SparseMatrixNamedColorTint.icc 3 -pcc PCC\Spec400_10_700-D50_2deg-Abs.icc SpecRef\SixChanCameraRef.icc 1
+
+echo ===========================================================================
 echo Test Six Channel Reflectance Camera
 call :run iccApplyNamedCmm SpecRef\sixChanTest.txt 2 0 SpecRef\SixChanCameraRef.icc 3 PCC\Spec400_10_700-D50_2deg-Abs.icc 3
 

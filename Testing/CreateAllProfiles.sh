@@ -154,6 +154,7 @@ then
 	iccFromXml FluorescentNamedColor.xml FluorescentNamedColor.icc
 	iccFromXml NamedColor.xml NamedColor.icc
 	iccFromXml SparseMatrixNamedColor.xml SparseMatrixNamedColor.icc
+	iccFromXml SparseMatrixNamedColorTint.xml SparseMatrixNamedColorTint.icc
 	iccFromXml NamedColorV4.xml NamedColorV4.icc
 	set +x
 fi
