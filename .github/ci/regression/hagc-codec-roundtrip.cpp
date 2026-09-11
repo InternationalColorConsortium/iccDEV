@@ -621,8 +621,8 @@ void testValidate()
     printf("  (clean tag report: %s)\n", report.c_str());
 
   // A duplicated abscissa whose Y values DISAGREE. SMPTE ST 2094-50:2026-08
-  // clause 6.5.2 permits x_i == x_i+1 only "if it is the case that y_i =
-  // y_i+1", and this pair does not satisfy that: the curve would have two
+  // clause 6.5.2 permits x_i == x_i+1 only when y_i == y_i+1 as well, and
+  // this pair does not satisfy that: the curve would have two
   // values at one abscissa, which is ambiguous rather than degenerate.
   icHagcMetadata badX = makeFullModel();
   badX.GetAlternate(0)->m_x[2] = badX.GetAlternate(0)->m_x[1];

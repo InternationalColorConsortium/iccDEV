@@ -479,8 +479,8 @@ void testPchipSlopes()
 
   // The endpoint limit of the published C.3.9. The same data is monotonically
   // INCREASING, yet the three-point estimate gives -0.5 at the last point: the
-  // final segment would dip below the value it starts from. "If sign(m_i) !=
-  // sign(s_i-1) then let m_i = 0" is what prevents it.
+  // final segment would dip below the value it starts from. C.3.9's rule that
+  // zeroes a slope whose sign differs from the preceding secant's prevents it.
   //
   // This assertion was written against the second public committee draft,
   // which had the estimate and NEITHER limit, and it read "the end slope is

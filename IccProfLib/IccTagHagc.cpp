@@ -1295,7 +1295,7 @@ void CIccTagHagc::Describe(std::string &sDescription, int nVerboseness)
   sDescription += buf;
 
   if (!m_metadata.GetNumAlternates()) {
-    sDescription += "  No tone mapping is to be performed; the baseline image should be\r\n"
+    sDescription += "  The tag asks for no tone mapping; the baseline image should be\r\n"
                     "  clamped to the target colour volume.\r\n";
   }
 
@@ -1512,9 +1512,10 @@ icValidateStatus CIccTagHagc::Validate(std::string sigPath, std::string &sReport
      * non-increasing X array is not merely unordered - it makes the piecewise
      * cubic undefined or infinite.  Equality is rejected for the same reason. */
     for (j = 1; j < (int)pAlt->m_nControlPoints; j++) {
-      /* SMPTE ST 2094-50:2026-08 clause 6.5.2: "For i in Z_Ncp-1 it shall be
-       * the case that x_i <= x_i+1.  If it is the case that x_i = x_i+1, then
-       * it shall also be the case that y_i = y_i+1."
+      /* SMPTE ST 2094-50:2026-08 clause 6.5.2 requires the control point X
+       * values to be non-decreasing, and lets two adjacent points share an X
+       * value only when they also share the same Y value.  (Described, not
+       * quoted: the SMPTE licence does not permit reproducing its text.)
        *
        * So a duplicated abscissa is legal when the two Y values agree, and the
        * published C.3.9 defines what its slope is - a degenerate control point

@@ -26,8 +26,8 @@
         primaries come from the named ITU-T H.273 entry and these carry
         nothing.
 
-  A count of zero is meaningful rather than empty: proposal 1.2.2.6 says no tone
-  mapping is to be performed and the baseline image should be clamped to the
+  A count of zero is meaningful rather than empty: proposal 1.2.2.6 says the tag
+  then asks for no tone mapping, and the baseline image is clamped to the
   target colour volume. It is also the one shape in which the tag carries no
   alternate image records at all, so it is the boundary of the record loop.
 
@@ -77,8 +77,8 @@
          chromaticities and D50 white, not D65, because there is no
          chromaticAdaptationTag and clause 10.3's first NOTE says the profile's actual
          adopted white is then the PCS adopted white. TransferCharacteristics 8
-         (Linear) pairs with the zero-alternate HAGC block below, which says no
-         tone mapping is to be performed. -->
+         (Linear) pairs with the zero-alternate HAGC block below, which asks for no
+         tone mapping. -->
     <cicpTag> <cicpType>
       <cicpFields ColorPrimaries="2" TransferCharacteristics="8" MatrixCoefficients="0" VideoFullRangeFlag="1"/>
     </cicpType> </cicpTag>

@@ -341,7 +341,7 @@ public:
   bool Pack(std::vector<icUInt8Number> &buf) const;
 
   /** Number of alternate images actually present, 0..icHagcMaxAlternates.
-   * Zero means no tone mapping is to be performed and the baseline image
+   * Zero means the tag asks for no tone mapping, and the baseline image
    * should be clamped to the target colour volume (proposal 1.2.2.6). */
   icUInt8Number GetNumAlternates() const { return m_nAlternates; }
 

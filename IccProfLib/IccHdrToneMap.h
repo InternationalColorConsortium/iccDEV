@@ -136,9 +136,9 @@ namespace iccDEV {
  *
  * RESOLVED 2026-09-02, and the values below are NOT this implementation's
  * choice after all.  SMPTE ST 2094-50 Annex A.2, specifying the very step
- * this class performs, says that for HLG content the EOTF is "the HLG
- * Reference EOTF as described in Table 5 of Recommendation ITU-R BT.2100-3,
- * with parameters L_W = 1000, L_B = 0, and gamma = 1,2".  Both constants are
+ * this class performs, specifies for HLG content the HLG reference EOTF of
+ * Rec. ITU-R BT.2100-3 Table 5 with a nominal peak L_W of 1000 cd/m^2, a
+ * black level L_B of 0 and a system gamma of 1.2.  Both constants are
  * pinned, at exactly the values here.
  *
  * So a per-profile Lw is not a missing feature; putting one in would
@@ -173,10 +173,9 @@ namespace iccDEV {
  * forms Y_s from primaries the profile does not use.
  *
  * RESOLVED 2026-09-02, and in the opposite direction to the one this comment
- * previously left open.  SMPTE ST 2094-50 Annex A.2 NOTE 7 is explicit: "The
- * HLG Reference OOTF in this formulation must be applied using the color
- * primaries indicated in Table 2 of Recommendation ITU-R BT.2100-3" - which
- * are BT.2020's.  Holding these coefficients at BT.2020 is therefore
+ * previously left open.  SMPTE ST 2094-50 Annex A.2 NOTE 7 is explicit that
+ * the HLG reference OOTF is applied in the colour primaries of Table 2 of
+ * Rec. ITU-R BT.2100-3 - which are BT.2020's.  Holding these coefficients at BT.2020 is therefore
  * REQUIRED, and deriving them from a profile's declared ColourPrimaries -
  * the alternative floated here a day earlier - is the thing the corpus rules
  * out.  H.273's chromaticity-derived K_R / K_B (equations 39 to 44) exists for
@@ -580,8 +579,8 @@ public:
 
   /**
    * True when the tag carries no alternate images.  HAGC proposal 1.2.2.6
-   * gives that case a meaning of its own: no tone mapping is to be performed
-   * and the baseline image is to be clamped to the target colour volume.  The
+   * gives that case a meaning of its own: the tag asks for no tone mapping,
+   * and the baseline image is clamped to the target colour volume.  The
    * clamp is the caller's to apply because it needs the target colour volume,
    * which is not in the tag.
    */

@@ -699,8 +699,8 @@ icFloatNumber CIccHdrTransfer::FromLinearChannel(icFloatNumber v) const
  * Name: icHagcSign
  *
  * Purpose: The sign function C.3.9's conditions are written in terms of, with
- *  zero as its own sign - which is what makes "sign(s_i-1) != sign(s_i)" catch
- *  a flat secant next to a rising one.
+ *  zero as its own sign - which is what makes the adjacent-secant sign
+ *  comparison catch a flat secant next to a rising one.
  ****************************************************************************
  */
 static int icHagcSign(double v)
