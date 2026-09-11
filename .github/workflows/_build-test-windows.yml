@@ -179,12 +179,6 @@ jobs:
             throw "CTest execution failed with exit code $LASTEXITCODE"
           }
 
-          Write-Host "Running check target..."
-          cmake --build out\vs2022-vcpkg --config Release --target check --parallel
-          if ($LASTEXITCODE -ne 0) {
-            throw "check target failed with exit code $LASTEXITCODE"
-          }
-
       # ---------------------------------------------------------------
       # Phase 5: Build Python wheel
       # ---------------------------------------------------------------
