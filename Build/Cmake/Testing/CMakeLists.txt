@@ -1584,6 +1584,45 @@ function(iccdev_add_reflectance_observer_illum_range_test)
   endif()
 endfunction()
 
+# Guards #2520: the reflectance CLUT and reflectance observer elements must honour
+# their Absolute flag (ICC.2:2023 11.2.12 and 11.2.13), which was tested against
+# icRelativeSpectralData (0) and so never read, and the emission observer must not
+# scale Y and Z by m_xyzscale entries its Begin() never set.
+function(iccdev_add_spectral_absolute_flag_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSpectralAbsoluteFlagTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/spectral-absolute-flag.cpp"
+  )
+  target_link_libraries(iccSpectralAbsoluteFlagTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccSpectralAbsoluteFlagTest)
+
+  add_test(
+    NAME iccdev.spectral-absolute-flag
+    COMMAND "$<TARGET_FILE:iccSpectralAbsoluteFlagTest>"
+  )
+  set_tests_properties(iccdev.spectral-absolute-flag PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;mpe;spectral;pcc;issue-2520;regression;asan"
+  )
+  if(WIN32)
+    set(_spectral_absolute_flag_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSpectralAbsoluteFlagTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _spectral_absolute_flag_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.spectral-absolute-flag PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_spectral_absolute_flag_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards the IccColorimetry spectral->XYZ reduction module (#1475): the registry-
 # aligned reduction methods (icXYZCalcDirectSum / icXYZCalcWeighting /
 # icXYZCalcSpragueTo1nm) and their range-reconciliation primitives
@@ -7435,6 +7474,7 @@ if(WIN32)
   iccdev_add_xform_abstorel_adjust_test()
   iccdev_add_bpc_d2b_tag_family_test()
   iccdev_add_reflectance_observer_illum_range_test()
+  iccdev_add_spectral_absolute_flag_test()
   iccdev_add_colorimetry_methods_test()
   iccdev_add_getvalues_nstart_test()
   iccdev_add_chromaticity_validate_test()
@@ -7813,6 +7853,7 @@ iccdev_add_xform_create_tag_ownership_test()
 iccdev_add_xform_abstorel_adjust_test()
 iccdev_add_bpc_d2b_tag_family_test()
 iccdev_add_reflectance_observer_illum_range_test()
+iccdev_add_spectral_absolute_flag_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_chromaticity_validate_test()
