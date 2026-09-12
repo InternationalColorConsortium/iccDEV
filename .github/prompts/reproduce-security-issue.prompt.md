@@ -53,6 +53,23 @@ Issue #769 required this flag. MSVC does not support it. Do not add coverage
 flags or `-DENABLE_COVERAGE=ON` when reproducing sanitizer findings; coverage
 instrumentation can mask a bug.
 
+For uninitialized-memory findings, do not keep suppressing frames when a JSON
+or threaded run stops in `libstdc++` or an ordinary distro `libc++`. That is an
+uninstrumented runtime boundary, not proof that the application frame is safe
+or unsafe. Build the pinned MSan libc++ runtime and run the paired controls:
+
+```bash
+.github/scripts/iccdev-build-msan-libcxx.sh --prefix /tmp/iccdev-msan-libcxx
+.github/scripts/iccdev-msan-taint-qa.sh \
+  --source-dir "$PWD" \
+  --build-dir /tmp/iccdev-msan-build \
+  --runtime-dir /tmp/iccdev-msan-libcxx
+```
+
+Keep the matrix distinct: ASAN/UBSAN for memory safety and undefined behavior,
+MSan or Memcheck for uninitialized reads, and TSan or Helgrind for races. Run
+Valgrind only on a non-sanitized binary.
+
 ## Step 3: Reproduce
 
 Before writing the one-liner, inspect the affected tool's argument handling.

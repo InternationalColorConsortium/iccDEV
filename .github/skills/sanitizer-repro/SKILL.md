@@ -1,7 +1,7 @@
 ---
 name: sanitizer-repro
 description: >
-  Reproduce and triage ASAN/UBSAN findings against iccDEV tools with
+  Reproduce and triage sanitizer and Valgrind findings against iccDEV tools with
   authoritative exit-code and stack-frame handling.
 allowed-tools:
   - bash
@@ -47,6 +47,36 @@ manual findings involving iccDEV command-line tools.
    binary and use literal arguments only; do not use shell variables, loops,
    `mktemp`, or copy helpers.
 10. File or update issues using the canonical security format.
+
+## Uninitialized-memory and race matrix
+
+Do not treat ASAN or UBSAN as coverage for uninitialized reads. Use each lane
+for its own signal:
+
+- Run Memcheck and Helgrind against a non-sanitized build. Do not stack
+  Valgrind on an ASAN build.
+- Run TSan separately for data races; it does not replace MSan or Memcheck.
+- Run MSan only when dependent C++ runtime code is also instrumented. A normal
+  distro `libstdc++` or `libc++` can stop origin tracking at an STL boundary and
+  produce misleading reports.
+- Do not suppress a sequence of STL frames to make MSan advance. Build the
+  pinned instrumented libc++ runtime, then rerun the same input and controls.
+
+Build the repository runtime and run the JSON plus threaded controls with:
+
+```bash
+.github/scripts/iccdev-build-msan-libcxx.sh --prefix /tmp/iccdev-msan-libcxx
+.github/scripts/iccdev-msan-taint-qa.sh \
+  --source-dir "$PWD" \
+  --build-dir /tmp/iccdev-msan-build \
+  --runtime-dir /tmp/iccdev-msan-libcxx
+```
+
+For Valgrind-assisted taint tracing, configure with
+`-DICCDEV_ENABLE_TAINT_TRACE=ON`, set `ICC_TAINT_TRACE=1`, and use
+`.github/scripts/iccdev-taint-trace-qa.sh`. The trace helpers inspect shadow
+state before formatting values, so logging must never dereference poisoned or
+unaddressable storage.
 
 ## Build
 

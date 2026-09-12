@@ -961,12 +961,21 @@ bool CIccTagParametricCurve::Read(icUInt32Number size, CIccIO *pIO)
     if (nHdrSize + nNumParam*sizeof(icS15Fixed16Number) > size)
       return false;
 
+    ICC_JSON_CURVE_TRACE("stage=reader.begin function_type=%u required=%u params=%p",
+                         (unsigned)m_nFunctionType, (unsigned)nNumParam,
+                         (void*)m_dParam);
     for (i=0; i<nNumParam; i++) {
       icS15Fixed16Number num;
       if (!pIO->Read32(&num, 1))
         return false;
       m_dParam[i]=icFtoD(num);
+      ICC_JSON_CURVE_TRACE("stage=reader.encoded index=%u count=%u encoded=0x%08x",
+                           (unsigned)i, (unsigned)nNumParam,
+                           (unsigned)num);
+      ICC_JSON_CURVE_TRACE_FLOAT("reader.decoded", i, nNumParam, &m_dParam[i]);
     }
+    ICC_JSON_CURVE_TRACE("stage=reader.end function_type=%u read=%u status=success",
+                         (unsigned)m_nFunctionType, (unsigned)nNumParam);
   }
 
   return true;
@@ -1005,11 +1014,20 @@ bool CIccTagParametricCurve::Write(CIccIO *pIO)
   if (m_nNumParam) {
     int i;
     const icUInt16Number nNumParam = m_nNumParam;
+    ICC_JSON_CURVE_TRACE("stage=writer.begin function_type=%u required=%u params=%p",
+                         (unsigned)m_nFunctionType, (unsigned)nNumParam,
+                         (void*)m_dParam);
     for (i=0; i<nNumParam; i++) {
+      ICC_JSON_CURVE_TRACE_FLOAT("writer.read", i, nNumParam, &m_dParam[i]);
       icS15Fixed16Number num = icDtoF(m_dParam[i]);
+      ICC_JSON_CURVE_TRACE("stage=writer.encoded index=%u count=%u encoded=0x%08x",
+                           (unsigned)i, (unsigned)nNumParam,
+                           (unsigned)num);
       if (!pIO->Write32(&num, 1))
         return false;
     }
+    ICC_JSON_CURVE_TRACE("stage=writer.end function_type=%u written=%u status=success",
+                         (unsigned)m_nFunctionType, (unsigned)nNumParam);
   }
 
   if (!pIO->Align32())
@@ -1178,6 +1196,10 @@ bool CIccTagParametricCurve::SetFunctionType(icUInt16Number nFunctionType)
   else
     m_dParam = NULL;
 
+  ICC_JSON_CURVE_TRACE("stage=curve.allocate function_type=%u required=%u params=%p initialization=none",
+                       (unsigned)m_nFunctionType, (unsigned)m_nNumParam,
+                       (void*)m_dParam);
+
   return true;
 }
 
@@ -1225,6 +1247,9 @@ bool CIccTagParametricCurve::IsIdentity()
 icFloatNumber CIccTagParametricCurve::Apply(icFloatNumber X) const
 {
   double a, b;
+
+  ICC_TAINT_TRACE_BUFFER("curve.apply", "source-read", m_dParam,
+                         m_nNumParam, sizeof(*m_dParam));
 
   switch(m_nFunctionType) {
     case 0x0000:
