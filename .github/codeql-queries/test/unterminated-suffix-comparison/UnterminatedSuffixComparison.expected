@@ -1,0 +1,1 @@
+| case.cpp:21:10:21:16 | call to strncmp | Suffix length $@ can exceed the color-name length before this offset is passed to strncmp(), producing a pointer before the input buffer. | case.cpp:17:10:17:22 | suffix_length | suffix_length |
