@@ -87,6 +87,7 @@ Copyright:  (c) see Software License
 #define _ICC_SIGNATURE_UTILS_H
 
 #include "IccDefs.h"
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
@@ -103,6 +104,170 @@ Copyright:  (c) see Software License
 
 #ifndef icSigSpectralPcsData
 #define icSigSpectralPcsData ((icColorSpaceSignature)0x73706320)  // 'spc '
+#endif
+
+// -----------------------------------------------------------------------------
+// TAINTED READ/WRITE TRACEPOINTS
+//
+// Define ICC_TAINT_TRACE_ENABLED in a diagnostic build, then set
+// ICC_TAINT_TRACE=1 at runtime. MemorySanitizer builds and executions under
+// Valgrind report whether a source or destination contains poisoned bytes
+// without first reading those bytes. Other builds report state=unknown; C++
+// has no portable initialized-memory query, and reading a suspected value just
+// to log it would reproduce the undefined behavior being investigated.
+// ICC_JSON_CURVE_TRACE remains a runtime alias for the original focused repro.
+// -----------------------------------------------------------------------------
+
+#if defined(ICC_TAINT_TRACE_ENABLED) || defined(ICC_JSON_CURVE_TRACE_ENABLED)
+#include <cstdlib>
+#include <cstring>
+#if defined(__has_feature)
+  #if __has_feature(memory_sanitizer)
+    #include <sanitizer/msan_interface.h>
+    #define ICC_TAINT_TRACE_HAS_MSAN 1
+  #endif
+#endif
+#if !defined(ICC_TAINT_TRACE_HAS_MSAN) && defined(__has_include)
+  #if __has_include(<valgrind/memcheck.h>)
+    #include <valgrind/memcheck.h>
+    #define ICC_TAINT_TRACE_HAS_VALGRIND 1
+  #endif
+#endif
+
+struct IccTaintMemoryResult {
+  const char *state;
+  intptr_t offset;
+};
+
+inline bool IccTaintTraceEnabled()
+{
+  const char *value = std::getenv("ICC_TAINT_TRACE");
+  if (value && value[0] && std::strcmp(value, "0"))
+    return true;
+
+  value = std::getenv("ICC_JSON_CURVE_TRACE");
+  return value && value[0] && std::strcmp(value, "0");
+}
+
+inline IccTaintMemoryResult IccTaintMemoryState(const void *data, size_t size)
+{
+  if (!data && size)
+    return {"unaddressable", 0};
+
+#ifdef ICC_TAINT_TRACE_HAS_MSAN
+  const intptr_t offset = data && size ? __msan_test_shadow(data, size) : -1;
+  return {offset < 0 ? "initialized" : "poisoned", offset};
+#elif defined(ICC_TAINT_TRACE_HAS_VALGRIND)
+  if (RUNNING_ON_VALGRIND && data && size) {
+    const uintptr_t address = (uintptr_t)data;
+    const uintptr_t badAddress =
+      (uintptr_t)VALGRIND_CHECK_MEM_IS_ADDRESSABLE(data, size);
+    if (badAddress)
+      return {"unaddressable", (intptr_t)(badAddress - address)};
+
+    const uintptr_t poisonedAddress =
+      (uintptr_t)VALGRIND_CHECK_MEM_IS_DEFINED(data, size);
+    if (poisonedAddress)
+      return {"poisoned", (intptr_t)(poisonedAddress - address)};
+
+    return {"initialized", -1};
+  }
+  return {"unknown", -2};
+#else
+  (void)data;
+  (void)size;
+  return {"unknown", -2};
+#endif
+}
+
+#define ICC_TAINT_TRACE(format, ...) \
+  do { \
+    if (IccTaintTraceEnabled()) \
+      ICC_LOG_INFO("TAINT_TRACE " format, __VA_ARGS__); \
+  } while(0)
+
+#define ICC_TAINT_TRACE_MEMORY_CONTEXT(stage, access, boundary, data, size) \
+  do { \
+    if (IccTaintTraceEnabled()) { \
+      const void *iccTaintData = (data); \
+      const size_t iccTaintSize = (size); \
+      const IccTaintMemoryResult iccTaintResult = \
+        IccTaintMemoryState(iccTaintData, iccTaintSize); \
+      if (iccTaintResult.offset >= 0) \
+        ICC_LOG_INFO("TAINT_TRACE stage=%s access=%s boundary=%s data=%p size=%zu state=%s first_bad=%td", \
+                     stage, access, boundary, iccTaintData, iccTaintSize, \
+                     iccTaintResult.state, (ptrdiff_t)iccTaintResult.offset); \
+      else \
+        ICC_LOG_INFO("TAINT_TRACE stage=%s access=%s boundary=%s data=%p size=%zu state=%s", \
+                     stage, access, boundary, iccTaintData, iccTaintSize, \
+                     iccTaintResult.state); \
+    } \
+  } while(0)
+
+#define ICC_TAINT_TRACE_MEMORY(stage, access, data, size) \
+  ICC_TAINT_TRACE_MEMORY_CONTEXT(stage, access, "internal", data, size)
+
+#define ICC_TAINT_TRACE_BUFFER(stage, access, data, count, elementSize) \
+  do { \
+    if (IccTaintTraceEnabled()) { \
+      const size_t iccTaintCount = (count); \
+      const size_t iccTaintElementSize = (elementSize); \
+      if (iccTaintElementSize && \
+          iccTaintCount > SIZE_MAX / iccTaintElementSize) \
+        ICC_LOG_INFO("TAINT_TRACE stage=%s access=%s data=%p count=%zu element_size=%zu state=invalid-size", \
+                     stage, access, (const void*)(data), iccTaintCount, \
+                     iccTaintElementSize); \
+      else \
+        ICC_TAINT_TRACE_MEMORY(stage, access, data, \
+                               iccTaintCount * iccTaintElementSize); \
+    } \
+  } while(0)
+
+#define ICC_TAINT_TRACE_INDEX(stage, access, index, count, data, elementSize) \
+  do { \
+    if (IccTaintTraceEnabled()) { \
+      const size_t iccTaintIndex = (index); \
+      const size_t iccTaintCount = (count); \
+      if (iccTaintIndex >= iccTaintCount) \
+        ICC_LOG_INFO("TAINT_TRACE stage=%s access=%s index=%zu count=%zu data=%p element_size=%zu bounds=out", \
+                     stage, access, iccTaintIndex, iccTaintCount, \
+                     (const void*)(data), (size_t)(elementSize)); \
+    } \
+  } while(0)
+
+#define ICC_JSON_CURVE_TRACE(format, ...) ICC_TAINT_TRACE(format, __VA_ARGS__)
+
+#define ICC_JSON_CURVE_TRACE_FLOAT(stage, index, count, valuePtr) \
+  do { \
+    if (IccTaintTraceEnabled()) { \
+      const icFloatNumber *iccTaintValue = (valuePtr); \
+      const IccTaintMemoryResult iccTaintResult = \
+        IccTaintMemoryState(iccTaintValue, sizeof(*iccTaintValue)); \
+      if (iccTaintResult.offset == -1) \
+        ICC_LOG_INFO("TAINT_TRACE stage=%s access=read index=%u count=%u data=%p size=%zu state=initialized value=%.9g", \
+                     stage, (unsigned)(index), (unsigned)(count), \
+                     (const void*)iccTaintValue, sizeof(*iccTaintValue), \
+                     (double)*iccTaintValue); \
+      else if (iccTaintResult.offset >= 0) \
+        ICC_LOG_INFO("TAINT_TRACE stage=%s access=read index=%u count=%u data=%p size=%zu state=%s first_bad=%td", \
+                     stage, (unsigned)(index), (unsigned)(count), \
+                     (const void*)iccTaintValue, sizeof(*iccTaintValue), \
+                     iccTaintResult.state, \
+                     (ptrdiff_t)iccTaintResult.offset); \
+      else \
+        ICC_LOG_INFO("TAINT_TRACE stage=%s access=read index=%u count=%u data=%p size=%zu state=unknown", \
+                     stage, (unsigned)(index), (unsigned)(count), \
+                     (const void*)iccTaintValue, sizeof(*iccTaintValue)); \
+    } \
+  } while(0)
+#else
+#define ICC_TAINT_TRACE(format, ...) ((void)0)
+#define ICC_TAINT_TRACE_MEMORY_CONTEXT(stage, access, boundary, data, size) ((void)0)
+#define ICC_TAINT_TRACE_MEMORY(stage, access, data, size) ((void)0)
+#define ICC_TAINT_TRACE_BUFFER(stage, access, data, count, elementSize) ((void)0)
+#define ICC_TAINT_TRACE_INDEX(stage, access, index, count, data, elementSize) ((void)0)
+#define ICC_JSON_CURVE_TRACE(format, ...) ((void)0)
+#define ICC_JSON_CURVE_TRACE_FLOAT(stage, index, count, valuePtr) ((void)0)
 #endif
 
 inline bool IsSpaceSpectralPCS(icColorSpaceSignature sig)
@@ -519,13 +684,13 @@ inline const char* ColorSpaceSignatureToStr(icUInt32Number sig)
     default: break;
   }
 
-  // v5/iccMAX: N-channel (0x6e63xxxx) — channels in low 16 bits
+  // v5/iccMAX: N-channel (0x6e63xxxx) - channels in low 16 bits
   icUInt32Number csType = sig & 0xffff0000;
   icUInt32Number nChan  = sig & 0x0000ffff;
   if (csType == 0x6e630000 && nChan > 0)
     return "NChannel";
 
-  // v5/iccMAX: MCS (0x6d63xxxx) — multiplex channel set
+  // v5/iccMAX: MCS (0x6d63xxxx) - multiplex channel set
   if (csType == 0x6d630000 && nChan > 0)
     return "MCS";
 
@@ -717,7 +882,7 @@ struct IccColorSpaceDescription {
 //
 // PURPOSE:
 //   Converts a signature into metadata: name, known/unknown, raw byte layout.
-//   Does NOT log — use DebugColorSpaceMeta() for diagnostic output.
+//   Does NOT log - use DebugColorSpaceMeta() for diagnostic output.
 //
 ///////////////////////////////////////////////////////////////////////////////
 inline IccColorSpaceDescription DescribeColorSpaceSignature(icUInt32Number sig)
@@ -725,7 +890,7 @@ inline IccColorSpaceDescription DescribeColorSpaceSignature(icUInt32Number sig)
   IccColorSpaceDescription desc;
   desc.name = ColorSpaceSignatureToStr(sig);
 
-  // Validate without triggering logs — inline the check directly
+  // Validate without triggering logs - inline the check directly
   bool known = false;
   switch (sig) {
     case (icUInt32Number)icSigXYZData:
