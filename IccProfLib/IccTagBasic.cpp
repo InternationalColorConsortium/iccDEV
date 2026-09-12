@@ -3759,6 +3759,13 @@ icInt32Number CIccTagNamedColor2::FindColor(const icChar *szColor) const
   j = (icInt32Number)strlen(m_szSufix);
   i = (icInt32Number)strlen(szColor);
   if (j != 0) {
+    // CWE-125 (#2534): the suffix compare starts j bytes from the end of
+    // szColor, so a name shorter than the suffix makes szColor+(i-j) point
+    // before the buffer and strncmp reads out of bounds.  A name that short
+    // cannot equal prefix+rootName+suffix -- that is at least j bytes long --
+    // so the answer is "not found" without inspecting any memory.
+    if (i < j)
+      return -1;
     if (strncmp(szColor+(i-j), m_szSufix, j))
       return -1;    
   }

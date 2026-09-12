@@ -1410,6 +1410,57 @@ function(iccdev_add_cmmsearch_namedcolor_ownership_test)
   endif()
 endfunction()
 
+# Guards CIccTagNamedColor2::FindColor against the #2534 out-of-bounds read: the
+# suffix fast-reject starts its compare j = strlen(m_szSufix) bytes from the end
+# of the queried name, so a name shorter than the suffix points strncmp before
+# the buffer (IccTagBasic.cpp:3762, unchanged since 2015).  A 31-byte suffix --
+# the longest icChar[32] can hold -- against a one-byte name reaches 30 bytes
+# back; iccApplyNamedCmm reaches it from a profile and a name file.
+#
+# The helper queries names it allocated on the heap at their exact length, so the
+# underflow crosses an allocator redzone: the pass/fail signal for the memory
+# safety is the ASan legs, where the pre-fix code aborts and the guarded code
+# exits 0.  Measured on a plain Release build the same helper exits 0 either way,
+# so on non-sanitizer legs cases 1 and 2 are a smoke test.  Cases 3, 4 and 6 are
+# deterministic everywhere: the name the tag really spells is still found, a
+# non-matching equal-length name is still compared, and -- case 6, the boundary
+# discriminator -- a name whose length is exactly strlen(m_szSufix) is a legal
+# colour that must still be found, which is what fails an off-by-one "i <= j".
+function(iccdev_add_namedcolor_findcolor_suffix_underflow_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccNamedColorFindColorSuffixUnderflowTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/namedcolor-findcolor-suffix-underflow.cpp"
+  )
+  target_link_libraries(iccNamedColorFindColorSuffixUnderflowTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccNamedColorFindColorSuffixUnderflowTest)
+
+  add_test(
+    NAME iccdev.namedcolor-findcolor-suffix-underflow
+    COMMAND "$<TARGET_FILE:iccNamedColorFindColorSuffixUnderflowTest>"
+  )
+  set_tests_properties(iccdev.namedcolor-findcolor-suffix-underflow PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 25
+    LABELS "iccdev;iccprofLib;namedcolor;oob;issue-2534;regression"
+  )
+  if(WIN32)
+    set(_namedcolor_findcolor_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccNamedColorFindColorSuffixUnderflowTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _namedcolor_findcolor_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.namedcolor-findcolor-suffix-underflow PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_namedcolor_findcolor_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards CIccXform::Create(CIccProfile*, CIccTag*) profile ownership (#1308):
 # AddXform hands its owned profile to the tag-based Create overload, which must
 # free it when no xform can be built.  The helper feeds a valid profile plus a
@@ -7648,6 +7699,7 @@ if(WIN32)
   iccdev_add_mpecalc_rotate_operand_test()
   iccdev_add_sparsematrix_set_roundtrip_test()
   iccdev_add_cmmsearch_namedcolor_ownership_test()
+  iccdev_add_namedcolor_findcolor_suffix_underflow_test()
   iccdev_add_xform_create_tag_ownership_test()
   iccdev_add_xform_abstorel_adjust_test()
   iccdev_add_bpc_d2b_tag_family_test()
@@ -8030,6 +8082,7 @@ iccdev_add_mpecalc_matrix_overflow_test()
 iccdev_add_mpecalc_rotate_operand_test()
 iccdev_add_sparsematrix_set_roundtrip_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
+iccdev_add_namedcolor_findcolor_suffix_underflow_test()
 iccdev_add_xform_create_tag_ownership_test()
 iccdev_add_xform_abstorel_adjust_test()
 iccdev_add_bpc_d2b_tag_family_test()
