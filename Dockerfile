@@ -14,6 +14,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ARG GIT_COMMIT=unknown
 ARG BUILD_JOBS=32
+ARG LLVM_MSAN_LIBCXX_COMMIT=1ab49a973e210e97d61e5db6557180dcb92c3e98
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -76,6 +77,7 @@ RUN for attempt in 1 2 3; do \
     make=4.4.1-3 \
     nano=8.7.1-1ubuntu0.1 \
     nlohmann-json3-dev=3.12.0.really.3.12.0.really.3.11.3-3build1 \
+    ninja-build=1.13.2-1 \
     openssl=3.5.5-1ubuntu3.5 \
     openssl-provider-legacy=3.5.5-1ubuntu3.5 \
     pkg-config=2.5.1-4 \
@@ -97,6 +99,7 @@ RUN for attempt in 1 2 3; do \
       fi; \
       sleep "$((attempt * 10))"; \
     done \
+ && test -f /usr/include/valgrind/memcheck.h \
  && rm -f /usr/bin/pebble \
  && rm -rf /var/lib/apt/lists/*
 
@@ -122,6 +125,7 @@ ENV CC=clang \
     ICCDEV_TOOLS_DIR=/workspace/build/Tools \
     ICCDEV_TESTING_DIR=/workspace/iccDEV/Testing \
     ICCDEV_MCP_PYTHON=/opt/iccdev-mcp/bin/python \
+    ICCDEV_MSAN_LIBCXX_DIR=/opt/iccdev-msan-libcxx \
     ICCDEV_SPECTRAL_PREVIEW_PYTHON=/opt/iccdev-spectral-preview/bin/python \
     ICCDEV_BUILD_LABEL="iccDEV unified image" \
     ICCDEV_IMAGE_PULL="docker pull ghcr.io/internationalcolorconsortium/iccdev:latest" \
@@ -181,6 +185,13 @@ RUN python3 -m venv /opt/iccdev-workflow-qa \
       /opt/iccdev-workflow-qa/lib/python*/site-packages/pip \
       /opt/iccdev-workflow-qa/lib/python*/site-packages/pip-*.dist-info
 
+COPY --chmod=0755 .github/scripts/iccdev-build-msan-libcxx.sh /usr/local/bin/iccdev-build-msan-libcxx
+
+RUN iccdev-build-msan-libcxx \
+      --prefix /opt/iccdev-msan-libcxx \
+      --llvm-commit "$LLVM_MSAN_LIBCXX_COMMIT" \
+      --jobs "$BUILD_JOBS"
+
 COPY --chown=iccdev-ci:iccdev-ci . /workspace/iccDEV
 COPY --chmod=0755 .github/ci/docker/iccdev-banner.sh /usr/local/bin/iccdev-banner
 COPY --chmod=0755 .github/ci/docker/iccdev-fuzz-env.sh /usr/local/bin/iccdev-fuzz-env
@@ -237,6 +248,7 @@ RUN rm -rf .git \
      -DCMAKE_SHARED_LINKER_FLAGS="$SAN_FLAGS" \
      -DENABLE_SANITIZERS=ON \
      -DSANITIZER_RECOVER=ON \
+     -DICCDEV_ENABLE_TAINT_TRACE=ON \
      -DENABLE_TOOLS=ON \
      -DENABLE_TESTS=ON \
      -DENABLE_WXWIDGETS=OFF \
@@ -282,7 +294,7 @@ RUN chmod 0755 /usr/local/bin/iccdev-banner \
  && chown iccdev-ci:iccdev-ci /workspace/.bashrc
 
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
-  CMD ["bash", "-c", "clang --version >/dev/null && cmake --version >/dev/null && command -v cppcheck >/dev/null && command -v clang-tidy >/dev/null && command -v scan-build >/dev/null && command -v hadolint >/dev/null && command -v zizmor >/dev/null && command -v shellcheck >/dev/null && command -v afl-fuzz >/dev/null && command -v valgrind >/dev/null && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null"]
+  CMD ["bash", "-c", "clang --version >/dev/null && cmake --version >/dev/null && command -v ninja >/dev/null && command -v cppcheck >/dev/null && command -v clang-tidy >/dev/null && command -v scan-build >/dev/null && command -v hadolint >/dev/null && command -v zizmor >/dev/null && command -v shellcheck >/dev/null && command -v afl-fuzz >/dev/null && command -v valgrind >/dev/null && command -v iccdev-build-msan-libcxx >/dev/null && test -f /usr/include/valgrind/memcheck.h && test -f /opt/iccdev-msan-libcxx/lib/libc++.so.1 && test -f /opt/iccdev-msan-libcxx/lib/libc++abi.so.1 && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null"]
 
 LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 ENV ICCDEV_SOURCE_REVISION="${GIT_COMMIT}"
