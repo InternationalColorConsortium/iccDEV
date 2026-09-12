@@ -28,6 +28,7 @@ They complement GitHub's standard `cpp-security-and-quality` suite. The
 | `json-raw-normalized-value` | CWE-682 | JSON serialization of raw normalized ICC value |
 | `json-recursive-parse` | CWE-674, CWE-400 | Recursive JSON structure without depth limit |
 | `json-size-overflow` | CWE-680, CWE-190 | JSON array size cast to narrow integer without bounds check |
+| `json-size-to-narrow-setsize` | CWE-680, CWE-190 | JSON array count converted to `icUInt32Number`, then implicitly narrowed by `SetSize()` |
 | `localized-text-unsafe-serialization` | CWE-116, CWE-20 | Localized ICC text emitted without XML/JSON hex fallback |
 | `multiplication-overflow-alloc` | CWE-190, CWE-680, CWE-787 | Multiplication overflow before allocation |
 | `new-array-delete-mismatch` | CWE-762 | `new[]` allocation released with scalar `delete` |
@@ -38,6 +39,7 @@ They complement GitHub's standard `cpp-security-and-quality` suite. The
 | `tell-subtraction-underflow` | CWE-191, CWE-681 | Writer offset/size field computed from unchecked `Tell()` subtraction and narrowed to `icUInt32Number` |
 | `u8fixed8-reconstruction-error` | CWE-682 | Incorrect u8Fixed8Number reconstruction from normalized float |
 | `unterminated-ucs2-settext` | CWE-125, CWE-170 | Unterminated UCS-2 buffer passed to `SetText()` |
+| `unterminated-suffix-comparison` | CWE-125, CWE-191 | Unchecked suffix length subtracted from color-name length before `strncmp()` |
 
 ## iccdev-mcp Python Queries
 
