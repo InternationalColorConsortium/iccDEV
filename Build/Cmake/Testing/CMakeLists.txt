@@ -4848,6 +4848,64 @@ function(iccdev_add_colorant_count_narrowing_xml_test)
   endif()
 endfunction()
 
+# Follow-up to #2535/#2536: CIccTagColorantOrder::Read() cast its declared count
+# straight to SetSize()'s icUInt16Number and then read the narrowed m_nCount
+# bytes, so a tag declaring 65537 positions loaded as one -- silently, while
+# CIccTagColorantTable::Read() next to it has always refused "nCount > 0xffff"
+# and every JSON and XML reader now does too. Pure library test -- the elements
+# are built in memory and read through CIccMemIO, no fixtures on disk and no
+# tool invocation -- so it needs only IccProfLib and no scratch directory. The
+# colorantTable cases are controls that pass before and after, pinning the two
+# binary readers' contracts side by side.
+function(iccdev_add_colorant_count_narrowing_binary_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccColorantCountNarrowingBinaryTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/colorant-count-narrowing-binary.cpp"
+  )
+  target_compile_features(iccColorantCountNarrowingBinaryTest PRIVATE cxx_std_17)
+  target_include_directories(iccColorantCountNarrowingBinaryTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccColorantCountNarrowingBinaryTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccColorantCountNarrowingBinaryTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.colorant-count-narrowing-binary
+      COMMAND "$<TARGET_FILE:iccColorantCountNarrowingBinaryTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.colorant-count-narrowing-binary
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccColorantCountNarrowingBinaryTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.colorant-count-narrowing-binary PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;colorant;regression"
+  )
+  if(WIN32)
+    set(_colorant_narrowing_binary_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccColorantCountNarrowingBinaryTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _colorant_narrowing_binary_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.colorant-count-narrowing-binary PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_colorant_narrowing_binary_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2006 part 4a: CIccTagCurve::SetSize() answered an over-cap request the same
 # way it answered SetSize(0) -- free the table, m_nSize = 0, return true -- so
 # the return value could not distinguish "emptied" (a success, and ICC.1 10.6's
@@ -7834,6 +7892,7 @@ if(WIN32)
   iccdev_add_namedcolor_findcolor_suffix_underflow_test()
   iccdev_add_colorant_count_narrowing_json_test()
   iccdev_add_colorant_count_narrowing_xml_test()
+  iccdev_add_colorant_count_narrowing_binary_test()
   iccdev_add_xform_create_tag_ownership_test()
   iccdev_add_xform_abstorel_adjust_test()
   iccdev_add_bpc_d2b_tag_family_test()
@@ -8219,6 +8278,7 @@ iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_namedcolor_findcolor_suffix_underflow_test()
 iccdev_add_colorant_count_narrowing_json_test()
 iccdev_add_colorant_count_narrowing_xml_test()
+iccdev_add_colorant_count_narrowing_binary_test()
 iccdev_add_xform_create_tag_ownership_test()
 iccdev_add_xform_abstorel_adjust_test()
 iccdev_add_bpc_d2b_tag_family_test()

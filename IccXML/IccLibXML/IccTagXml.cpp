@@ -1341,7 +1341,14 @@ bool CIccTagXmlChromaticity::ParseXml(xmlNode *pNode, std::string & /*parseStr*/
     m_nColorantType = icGetColorantValue(pNode->children ? (const icChar*)pNode->children->content : ""); 
 
 
-  icUInt16Number n = (icUInt16Number)icXmlNodeCount(pNode, "Channel");  
+  // The same silent truncation as CIccTagXmlColorantTable::ParseXml: the cast
+  // narrowed 65537 <Channel> elements to a one-channel tag.  The JSON reader
+  // refuses that count and the binary reader cannot express it, so refuse it.
+  icUInt32Number nCount = icXmlNodeCount(pNode, "Channel");
+  if (nCount > 0xFFFF)
+    return false;
+
+  icUInt16Number n = (icUInt16Number)nCount;
 
   if (n) {
     icUInt32Number i;
@@ -2366,9 +2373,10 @@ bool CIccTagXmlColorantOrder::ParseXml(xmlNode *pNode, std::string & /*parseStr*
     // given is the count, not the allocation.  Reject above the width the tag
     // can hold instead of narrowing into it.
     //
-    // CIccTagXmlColorantTable::ParseXml below is not affected: it casts to
-    // icUInt16Number explicitly and bounds its own loop by the same narrowed
-    // count, so it truncates the colorant list rather than overrunning it.
+    // CIccTagXmlColorantTable::ParseXml and CIccTagXmlChromaticity::ParseXml
+    // narrowed the same way but bounded their own loops by the narrowed count,
+    // so they truncated rather than overran; they refuse above 0xFFFF as well,
+    // so every reader of a 16-bit count gives the same answer.
     if (n > 0xFFFF)
       return false;
 
@@ -2432,7 +2440,16 @@ bool CIccTagXmlColorantTable::ParseXml(xmlNode *pNode, std::string & /*parseStr*
   if (pNode && pNode->children) {
     pNode = pNode->children;
 
-    icUInt16Number n = (icUInt16Number)icXmlNodeCount(pNode, "Colorant");
+    // The explicit cast used to narrow a count above 0xFFFF and the loop below
+    // was bounded by the narrowed value, so 65537 <Colorant> elements loaded as
+    // a one-colorant tag with no error.  That never overran, but it disagreed
+    // with the JSON reader and with CIccTagColorantTable::Read(), which have
+    // both refused such a table; refuse it here too rather than drop entries.
+    icUInt32Number nCount = icXmlNodeCount(pNode, "Colorant");
+    if (nCount > 0xFFFF)
+      return false;
+
+    icUInt16Number n = (icUInt16Number)nCount;
 
     if (n) {
       icUInt32Number i;
