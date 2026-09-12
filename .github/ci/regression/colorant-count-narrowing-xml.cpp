@@ -1,8 +1,11 @@
 /*
     File:       colorant-count-narrowing-xml.cpp
 
-    Contains:   CTest helper for the XML twin of the colorantOrder count
-                narrowing fixed for JSON in #2536.
+    Contains:   CTest helper for the XML readers of three tags whose SetSize()
+                takes an icUInt16Number: colorantOrderType, the XML twin of the
+                overrun fixed for JSON in #2536, and colorantTableType and
+                chromaticityType, which truncated instead and now refuse the
+                same over-wide count.
 
     CIccTagXmlColorantOrder::ParseXml() counted its <n> elements into an int and
     passed that to SetSize(), which takes an icUInt16Number, so 65537 elements
@@ -24,22 +27,26 @@
     other: this one is skipped where IccXML is not built, and the JSON coverage
     does not disappear with it.
 
-    CIccTagXmlColorantTable::ParseXml() is deliberately NOT asserted as a defect
-    here.  It was measured on the same tree with an equivalent 65537-colorant
-    document and does not overrun: it casts to icUInt16Number explicitly and
-    bounds its own write loop by that same narrowed count, so it silently
-    truncates the colorant list instead.
+    The same helper now also covers the two XML readers that did NOT overrun but
+    silently truncated instead, CIccTagXmlColorantTable::ParseXml() and
+    CIccTagXmlChromaticity::ParseXml().  Both counted with an explicit
+    (icUInt16Number) cast and bounded their own loops by that narrowed count, so
+    a 65537-entry document loaded as a one-entry tag with no error -- while the
+    JSON readers for the same two tags refused it outright.  Measured before the
+    follow-up change, and pinned there by the first version of this helper as
+    "measured, not endorsed"; those cases are now inverted to expect refusal,
+    matching the JSON readers, CIccTagXmlColorantOrder::ParseXml() above, and
+    CIccTagColorantTable::Read(), which has always refused a count above 0xffff.
 
-    The last case records that truncation.  Read it as a measurement, NOT as an
-    endorsement: its only job is to show that a fix aimed at the neighbouring
-    reader did not change this one.  Truncating is very likely the WRONG
-    answer -- it accepts a document and silently discards colorants -- and after
-    this commit the two front ends disagree about the same shape, because
-    CIccTagJsonColorantTable::ParseJson() now refuses a 65537-entry table that
-    this reader still accepts as one colorant.  Settling that is a spec and
-    compatibility question for the maintainers, not something a memory-safety
-    fix should decide by itself.  Whoever settles it should expect to INVERT
-    this case rather than to work around it.
+    Their red is an ordinary assertion failure on every lane, not an abort: the
+    unfixed readers return true for the oversize documents, which never touch
+    memory they do not own.  Each has a 65535 boundary case, and chromaticity
+    has an ordinary three-channel control -- no tracked profile carries a
+    chromaticityType in XML, so that control is the only proof the fixture's
+    element names reach the reader at all.
+
+    Fixtures are removed as soon as each case has read them; the oversize
+    colorantTable documents alone are several megabytes each.
 
     The oversize cases are the memory-safety cases, and the count that carries
     them is 65537, not 65536.  65537 narrows to 1, SetSize(1) is answered "true"
@@ -150,6 +157,15 @@ static bool loadXml(CIccProfileXml &profile, const std::string &file)
   return profile.LoadXml(file.c_str(), "", &parseStr);
 }
 
+// Load one generated document and remove it again, whatever the outcome.
+static bool loadAndRemove(CIccProfileXml &profile, const std::string &path)
+{
+  const bool bLoaded = loadXml(profile, path);
+  std::error_code ec;
+  std::filesystem::remove(path, ec);
+  return bLoaded;
+}
+
 static int orderCase(const std::filesystem::path &dir, size_t nEntries,
                      bool bExpectLoaded, const char *file, const char *label)
 {
@@ -161,7 +177,7 @@ static int orderCase(const std::filesystem::path &dir, size_t nEntries,
   }
 
   CIccProfileXml profile;
-  const bool bLoaded = loadXml(profile, path);
+  const bool bLoaded = loadAndRemove(profile, path);
 
   if (bLoaded != bExpectLoaded) {
     std::fprintf(stderr,
@@ -208,6 +224,107 @@ static int orderCase(const std::filesystem::path &dir, size_t nEntries,
   return check(true, label);
 }
 
+static bool writeChromaticityFixture(const std::string &path, size_t nEntries)
+{
+  std::ofstream f(path, std::ios::binary);
+  if (!f)
+    return false;
+
+  f << kHeader;
+  f << "    <chromaticityTag> <chromaticityType>\n      <Colorant>Unknown</Colorant>\n";
+  for (size_t i = 0; i < nEntries; i++)
+    f << "      <Channel x=\"0." << (unsigned)(i % 10) << "\" y=\"0.5\"/>\n";
+  f << "    </chromaticityType> </chromaticityTag>\n";
+  f << kFooter;
+
+  return f.good();
+}
+
+static int tableCase(const std::filesystem::path &dir, size_t nEntries,
+                     bool bExpectLoaded, const char *file, const char *label)
+{
+  const std::string path = (dir / file).string();
+  if (!writeTableFixture(path, nEntries)) {
+    std::fprintf(stderr, "colorant-count-narrowing-xml: could not write %s\n",
+                 path.c_str());
+    return 1;
+  }
+
+  CIccProfileXml profile;
+  const bool bLoaded = loadAndRemove(profile, path);
+  CIccTagColorantTable *pTag =
+    bLoaded ? (CIccTagColorantTable *)profile.FindTag(icSigColorantTableTag)
+            : nullptr;
+
+  if (bLoaded != bExpectLoaded) {
+    std::fprintf(stderr,
+                 "colorant-count-narrowing-xml: FAIL  %s (LoadXml returned %s, "
+                 "expected %s; GetSize %u)\n",
+                 label, bLoaded ? "true" : "false",
+                 bExpectLoaded ? "true" : "false",
+                 pTag ? (unsigned)pTag->GetSize() : 0u);
+    return 1;
+  }
+
+  if (!bExpectLoaded)
+    return check(true, label);
+
+  char expect[32];
+  std::snprintf(expect, sizeof(expect), "colorant-%u", (unsigned)(nEntries - 1));
+  const icColorantTableEntry *pEntry =
+    pTag ? pTag->GetEntry((icUInt32Number)(nEntries - 1)) : nullptr;
+  if (!pTag || pTag->GetSize() != nEntries || !pEntry ||
+      std::string(pEntry->name) != expect) {
+    std::fprintf(stderr,
+                 "colorant-count-narrowing-xml: FAIL  %s (GetSize %u, expected "
+                 "%u)\n", label, pTag ? (unsigned)pTag->GetSize() : 0u,
+                 (unsigned)nEntries);
+    return 1;
+  }
+
+  return check(true, label);
+}
+
+static int chromaCase(const std::filesystem::path &dir, size_t nEntries,
+                      bool bExpectLoaded, const char *file, const char *label)
+{
+  const std::string path = (dir / file).string();
+  if (!writeChromaticityFixture(path, nEntries)) {
+    std::fprintf(stderr, "colorant-count-narrowing-xml: could not write %s\n",
+                 path.c_str());
+    return 1;
+  }
+
+  CIccProfileXml profile;
+  const bool bLoaded = loadAndRemove(profile, path);
+  CIccTagChromaticity *pTag =
+    bLoaded ? (CIccTagChromaticity *)profile.FindTag(icSigChromaticityTag)
+            : nullptr;
+
+  if (bLoaded != bExpectLoaded) {
+    std::fprintf(stderr,
+                 "colorant-count-narrowing-xml: FAIL  %s (LoadXml returned %s, "
+                 "expected %s; GetSize %u)\n",
+                 label, bLoaded ? "true" : "false",
+                 bExpectLoaded ? "true" : "false",
+                 pTag ? (unsigned)pTag->GetSize() : 0u);
+    return 1;
+  }
+
+  if (!bExpectLoaded)
+    return check(true, label);
+
+  if (!pTag || pTag->GetSize() != nEntries) {
+    std::fprintf(stderr,
+                 "colorant-count-narrowing-xml: FAIL  %s (GetSize %u, expected "
+                 "%u)\n", label, pTag ? (unsigned)pTag->GetSize() : 0u,
+                 (unsigned)nEntries);
+    return 1;
+  }
+
+  return check(true, label);
+}
+
 int main(int argc, char *argv[])
 {
   if (argc < 2) {
@@ -243,27 +360,21 @@ int main(int argc, char *argv[])
   failures += orderCase(dir, 4, true, "colorant-order-4.xml",
                         "an ordinary colorantOrder is unaffected");
 
-  // The sibling reader, measured NOT to overrun.  This records that it still
-  // truncates, so the fix above can be shown not to have moved it -- see the
-  // header: truncation is being measured here, not endorsed, and it is the case
-  // to invert once the front-end divergence is ruled on.
-  {
-    const std::string path = (dir / "colorant-table-65537.xml").string();
-    if (!writeTableFixture(path, 65537)) {
-      std::fprintf(stderr, "colorant-count-narrowing-xml: could not write %s\n",
-                   path.c_str());
-      return 1;
-    }
+  // CIccTagXmlColorantTable::ParseXml() -- truncated before the follow-up.
+  failures += tableCase(dir, 65537, false, "colorant-table-65537.xml",
+                        "a colorantTable at 65537 is refused, not truncated to one colorant");
+  failures += tableCase(dir, 65535, true, "colorant-table-65535.xml",
+                        "a colorantTable at exactly 65535 still loads in full");
+  failures += tableCase(dir, 4, true, "colorant-table-4.xml",
+                        "an ordinary colorantTable is unaffected");
 
-    CIccProfileXml profile;
-    const bool bLoaded = loadXml(profile, path);
-    CIccTagColorantTable *pTag =
-      bLoaded ? (CIccTagColorantTable *)profile.FindTag(icSigColorantTableTag)
-              : nullptr;
-
-    failures += check(bLoaded && pTag && pTag->GetSize() == 1,
-                      "the colorantTable reader still truncates an oversize list rather than overrunning it (measured, not endorsed)");
-  }
+  // CIccTagXmlChromaticity::ParseXml() -- the same truncation, third tag.
+  failures += chromaCase(dir, 65537, false, "chromaticity-65537.xml",
+                         "a chromaticity at 65537 channels is refused, not truncated to one");
+  failures += chromaCase(dir, 65535, true, "chromaticity-65535.xml",
+                         "a chromaticity at exactly 65535 channels still loads in full");
+  failures += chromaCase(dir, 3, true, "chromaticity-3.xml",
+                         "an ordinary three-channel chromaticity loads (fixture control)");
 
   if (failures) {
     std::fprintf(stderr, "colorant-count-narrowing-xml: %d case(s) failed\n",

@@ -9616,7 +9616,12 @@ bool CIccTagColorantOrder::Read(icUInt32Number size, CIccIO *pIO)
 
   icUInt32Number nNum = (size - 3*sizeof(icUInt32Number))/sizeof(icUInt8Number);
 
-  if (nNum < nCount)
+  // SetSize() takes an icUInt16Number and the read below is of m_nCount, the
+  // narrowed count, so a declared count above 0xffff used to load silently as
+  // a shorter tag -- 65537 became one position and the rest of the element was
+  // never read.  CIccTagColorantTable::Read() has always refused such a count,
+  // and every JSON and XML reader of these tags now does too.
+  if (nNum < nCount || nCount > 0xffff)
     return false;
 
   if (!SetSize((icUInt16Number)nCount))
