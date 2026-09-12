@@ -1089,10 +1089,17 @@ bool CIccTagJsonColorantOrder::ParseJson(const IccJson &j, std::string & /*parse
 {
   if (jsonExistsField(j, "colorantOrder") && j["colorantOrder"].is_array()) {
     const IccJson &arr = j["colorantOrder"];
-    bool sizeOverflow = false;
-    icUInt32Number nValues = icJsonSafeU32(arr.size(), &sizeOverflow);
-    if (sizeOverflow || !SetSize(nValues)) return false;
-    for (icUInt32Number i = 0; i < nValues; i++) {
+    // #2536: CIccTagColorantOrder::SetSize() takes an icUInt16Number, so a
+    // count the icJsonSafeU32 guard passed was narrowed again at the call --
+    // 65537 became 1 -- while the loop below still ran arr.size() times and
+    // wrote past the one-entry allocation.  Guard at the width the tag can
+    // actually hold, as CIccTagJsonChromaticity::ParseJson already does for the
+    // third tag whose SetSize() is 16-bit; the icJsonSafeU32 guard this
+    // replaces is subsumed, since nothing above 0xFFFF now reaches SetSize().
+    icUInt16Number nValues = icJsonSafeU16(arr.size());
+    if (arr.size() > 0 && !nValues) return false;
+    if (!SetSize(nValues)) return false;
+    for (icUInt16Number i = 0; i < nValues; i++) {
       int value = 0;
       if (!jsonToValue(arr[i], value))
         return false;
@@ -1157,10 +1164,14 @@ bool CIccTagJsonColorantTable::ParseJson(const IccJson &j, std::string & /*parse
 
   if (jsonExistsField(j, "colorantTable") && j["colorantTable"].is_array()) {
     const IccJson &arr = j["colorantTable"];
-    bool sizeOverflow = false;
-    icUInt32Number nColorants = icJsonSafeU32(arr.size(), &sizeOverflow);
-    if (sizeOverflow || !SetSize(nColorants)) return false;
-    for (icUInt32Number i = 0; i < nColorants; i++) {
+    // #2535: the same narrowing as CIccTagJsonColorantOrder::ParseJson above.
+    // CIccTagColorantTable::SetSize() also takes an icUInt16Number, and here
+    // the overflowing write is the unconditional strncpy into
+    // m_pData[i].name, a 32-byte field of a 38-byte entry.
+    icUInt16Number nColorants = icJsonSafeU16(arr.size());
+    if (arr.size() > 0 && !nColorants) return false;
+    if (!SetSize(nColorants)) return false;
+    for (icUInt16Number i = 0; i < nColorants; i++) {
       const IccJson &c = arr[i];
       std::string name;
       if (jGetString(c, "name", name))

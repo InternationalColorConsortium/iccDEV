@@ -4716,6 +4716,138 @@ function(iccdev_add_calc_channel_ref_unterminated_index_json_test)
   endif()
 endfunction()
 
+# #2535/#2536: CIccTagJsonColorantOrder::ParseJson() and
+# CIccTagJsonColorantTable::ParseJson() sized their allocation from a count that
+# was narrowed a second time at the SetSize() call -- both tags' SetSize() takes
+# an icUInt16Number -- while the loop that fills the table still ran the
+# untruncated count of times. 65537 became a one-entry allocation written 65537
+# times: a 1-byte write past a 1-byte region for colorantOrder, and a 31-byte
+# strncpy past a 38-byte entry for colorantTable. The helper drives both readers
+# directly, since ParseJson() is the function under fix and the profile wrapper
+# adds nothing to the assertion. Its boundary cases are the discriminators: a
+# count of exactly 65535 is representable and must still be accepted in full, so
+# a guard spelled ">= 0xFFFF" fails them and passes everything else.
+function(iccdev_add_colorant_count_narrowing_json_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccColorantCountNarrowingJsonTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/colorant-count-narrowing-json.cpp"
+  )
+  target_compile_features(iccColorantCountNarrowingJsonTest PRIVATE cxx_std_17)
+  target_include_directories(iccColorantCountNarrowingJsonTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccColorantCountNarrowingJsonTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccColorantCountNarrowingJsonTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.colorant-count-narrowing-json
+      COMMAND "$<TARGET_FILE:iccColorantCountNarrowingJsonTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.colorant-count-narrowing-json
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccColorantCountNarrowingJsonTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.colorant-count-narrowing-json PROPERTIES
+    TIMEOUT 300
+    LABELS "iccdev;json;colorant;issue-2535;issue-2536;regression"
+  )
+  if(WIN32)
+    set(_colorant_narrowing_json_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccColorantCountNarrowingJsonTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _colorant_narrowing_json_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.colorant-count-narrowing-json PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_colorant_narrowing_json_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# The XML twin of #2536, found while fixing it and fixed in the same commit:
+# CIccTagXmlColorantOrder::ParseXml() narrowed the same way at SetSize() and then
+# handed the UNNARROWED count to CIccUInt8Array::ParseArray() as its buffer size,
+# so that function's own "n > nBufSize" test could not catch it -- the size it is
+# given is the element count, not the allocation. iccFromXml reaches it with no
+# JSON involved, so it is registered separately from the JSON helper rather than
+# folded into it: this one is skipped where IccXML is not built, and the JSON
+# coverage does not disappear with it. Its last case pins the sibling
+# colorantTable reader, measured NOT to overrun -- it casts explicitly and bounds
+# its own loop, so it truncates -- so that this fix is not read as licence to
+# change behaviour there.
+function(iccdev_add_colorant_count_narrowing_xml_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccColorantCountNarrowingXmlTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/colorant-count-narrowing-xml.cpp"
+  )
+  target_compile_features(iccColorantCountNarrowingXmlTest PRIVATE cxx_std_17)
+  target_include_directories(iccColorantCountNarrowingXmlTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccColorantCountNarrowingXmlTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccColorantCountNarrowingXmlTest)
+
+  # The helper writes its generated documents into this directory, so nothing
+  # lands in the source tree.
+  set(_colorant_narrowing_xml_scratch
+    "${CMAKE_CURRENT_BINARY_DIR}/ctest-output/colorant-count-narrowing-xml")
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.colorant-count-narrowing-xml
+      COMMAND "$<TARGET_FILE:iccColorantCountNarrowingXmlTest>"
+              "${_colorant_narrowing_xml_scratch}"
+    )
+  else()
+    add_test(
+      NAME iccdev.colorant-count-narrowing-xml
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccColorantCountNarrowingXmlTest>"
+        "${_colorant_narrowing_xml_scratch}"
+    )
+  endif()
+  set_tests_properties(iccdev.colorant-count-narrowing-xml PROPERTIES
+    TIMEOUT 300
+    LABELS "iccdev;xml;colorant;issue-2536;regression"
+  )
+  if(WIN32)
+    set(_colorant_narrowing_xml_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccColorantCountNarrowingXmlTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _colorant_narrowing_xml_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.colorant-count-narrowing-xml PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_colorant_narrowing_xml_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2006 part 4a: CIccTagCurve::SetSize() answered an over-cap request the same
 # way it answered SetSize(0) -- free the table, m_nSize = 0, return true -- so
 # the return value could not distinguish "emptied" (a success, and ICC.1 10.6's
@@ -7700,6 +7832,8 @@ if(WIN32)
   iccdev_add_sparsematrix_set_roundtrip_test()
   iccdev_add_cmmsearch_namedcolor_ownership_test()
   iccdev_add_namedcolor_findcolor_suffix_underflow_test()
+  iccdev_add_colorant_count_narrowing_json_test()
+  iccdev_add_colorant_count_narrowing_xml_test()
   iccdev_add_xform_create_tag_ownership_test()
   iccdev_add_xform_abstorel_adjust_test()
   iccdev_add_bpc_d2b_tag_family_test()
@@ -8083,6 +8217,8 @@ iccdev_add_mpecalc_rotate_operand_test()
 iccdev_add_sparsematrix_set_roundtrip_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_namedcolor_findcolor_suffix_underflow_test()
+iccdev_add_colorant_count_narrowing_json_test()
+iccdev_add_colorant_count_narrowing_xml_test()
 iccdev_add_xform_create_tag_ownership_test()
 iccdev_add_xform_abstorel_adjust_test()
 iccdev_add_bpc_d2b_tag_family_test()
