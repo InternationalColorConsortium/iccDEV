@@ -327,19 +327,39 @@ icUtfConversionResult icConvertUTF16toUTF8 (const UTF16** sourceStart, const UTF
           --source; /* return to the illegal value itself */
           result = sourceIllegal;
           break;
+        } else {
+          /* #2511: lenient mode used to fall out of this if-chain with ch still
+             holding the lone high surrogate, and the byte-count ladder below
+             encoded it as three bytes (U+D83D -> ED A0 BD).  That is CESU-8,
+             not UTF-8: surrogate code points have no UTF-8 encoding, libxml2
+             refuses the XML that iccToXml wrote from it, and this file's own
+             isLegalUTF8String() rejects it.  Lenient mode now substitutes
+             U+FFFD, which is what it already does in icConvertUTF32toUTF16
+             and icConvertUTF8toUTF16.  source is NOT advanced past ch2, so the
+             unit after a lone high surrogate is decoded on its own next time
+             round -- a valid pair straight after one still comes out intact.
+             Strict mode is unchanged (the arm above), and so is the trailing
+             case below: a high surrogate that ends the buffer is reported as
+             sourceExhausted and dropped, which yields well-formed output. */
+          ch = UNI_REPLACEMENT_CHAR;
         }
       } else { /* We don't have the 16 bits following the high surrogate. */
         --source; /* return to the high surrogate */
         result = sourceExhausted;
         break;
       }
-    } else if (flags == strictConversion) {
+    } else if (ch >= UNI_SUR_LOW_START && ch <= UNI_SUR_LOW_END) {
       /* UTF-16 surrogate values are illegal in UTF-32 */
-      if (ch >= UNI_SUR_LOW_START && ch <= UNI_SUR_LOW_END) {
+      if (flags == strictConversion) {
         --source; /* return to the illegal value itself */
         result = sourceIllegal;
         break;
       }
+      /* #2511: a lone low surrogate -- one not preceded by a high surrogate,
+         which the pairing arm above would have consumed -- is substituted
+         the same way.  This arm used to be reachable only in strict mode, so
+         lenient mode encoded the surrogate as CESU-8 exactly as above. */
+      ch = UNI_REPLACEMENT_CHAR;
     }
     /* Figure out how many bytes the result will require */
     if (ch < (UTF32)0x80) {	     bytesToWrite = 1;
@@ -394,19 +414,22 @@ icUtfConversionResult icConvertUTF16toUTF8 (const UTF16* source, const UTF16* so
           --source; /* return to the illegal value itself */
           result = sourceIllegal;
           break;
+        } else {
+          ch = UNI_REPLACEMENT_CHAR; /* #2511: see the pointer overload above */
         }
       } else { /* We don't have the 16 bits following the high surrogate. */
         --source; /* return to the high surrogate */
         result = sourceExhausted;
         break;
       }
-    } else if (flags == strictConversion) {
+    } else if (ch >= UNI_SUR_LOW_START && ch <= UNI_SUR_LOW_END) {
       /* UTF-16 surrogate values are illegal in UTF-32 */
-      if (ch >= UNI_SUR_LOW_START && ch <= UNI_SUR_LOW_END) {
+      if (flags == strictConversion) {
         --source; /* return to the illegal value itself */
         result = sourceIllegal;
         break;
       }
+      ch = UNI_REPLACEMENT_CHAR; /* #2511: see the pointer overload above */
     }
     /* Figure out how many bytes the result will require */
     if (ch < (UTF32)0x80) {	     bytesToWrite = 1;
@@ -731,6 +754,12 @@ icUtfConversionResult icConvertUTF32toUTF8 (const UTF32** sourceStart, const UTF
         break;
       }
     }
+    /* Lenient mode still passes a surrogate through here as three bytes,
+       unlike icConvertUTF16toUTF8 since #2511.  No iccDEV code calls this
+       function any more.  The dictType text that used to reach it, through
+       icWCharToUtf8() where wchar_t is 32 bits, holds UTF-16 code units, and
+       it arrived here as two lone surrogates per character above U+FFFF.  It
+       now goes through icConvertUTF16toUTF8 on every platform (#2526). */
     /*
     * Figure out how many bytes the result will require. Turn any
     * illegally large UTF32 things (> Plane 17) into replacement chars.

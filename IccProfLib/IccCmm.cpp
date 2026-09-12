@@ -13175,8 +13175,15 @@ CIccMruCmm::~CIccMruCmm()
 */
 CIccMruCmm* CIccMruCmm::Attach(CIccCmm *pCmm, icUInt8Number nCacheSize/* =4 */, bool bDeleteCmm/*=true*/)
 {
-  if (!pCmm || !nCacheSize)
+  // The documented contract is that pCmm is deleted on failure when bDeleteCmm
+  // is set.  The zero-cache-size rejection used to return without honouring
+  // that, so a caller who had handed over ownership leaked the CMM on exactly
+  // the argument most likely to be computed rather than literal.
+  if (!pCmm || !nCacheSize) {
+    if (pCmm && bDeleteCmm)
+      delete pCmm;
     return NULL;
+  }
 
   if (!pCmm->Valid()) {
     if (bDeleteCmm)
@@ -13368,9 +13375,17 @@ bool CIccMruCache<T>::Apply(T *DstPixel, const T *SrcPixel)
     if (!last)
       return false;
     assert( m_pFirst != NULL );
-    last->pNext = m_pFirst;
 
-    m_pFirst = last;
+    // A one-entry cache has last == m_pFirst, and prev == NULL so nothing was
+    // detached above.  Relinking then sets pNext to the node itself, and the
+    // next lookup walks that cycle forever.  The node is already the head and
+    // already the oldest, so reuse it in place.  For two or more entries prev
+    // has detached last, and moving it to the front is the eviction.
+    if (last != m_pFirst) {
+      last->pNext = m_pFirst;
+      m_pFirst = last;
+    }
+
     pixel = last->pPixelData;
   }
   
@@ -13396,6 +13411,7 @@ template class CIccMruCache<icUInt16Number>;
 CIccApplyMruCmm::CIccApplyMruCmm(CIccMruCmm *pCmm) : CIccApplyCmm(pCmm)
 {
   m_pCachedCmm = NULL;
+  m_pCachedApply = NULL;
   m_pCache = NULL;
 }
 
@@ -13408,6 +13424,9 @@ CIccApplyMruCmm::CIccApplyMruCmm(CIccMruCmm *pCmm) : CIccApplyCmm(pCmm)
 */
 CIccApplyMruCmm::~CIccApplyMruCmm()
 {
+  // m_pCachedApply is owned here; m_pCachedCmm is not (CIccMruCmm owns it, and
+  // frees it only when Attach() was told to).
+  delete m_pCachedApply;
   delete m_pCache;
 }
 
@@ -13428,6 +13447,21 @@ CIccApplyMruCmm::~CIccApplyMruCmm()
 bool CIccApplyMruCmm::Init(CIccCmm *pCachedCmm, icUInt16Number nCacheSize)
 {
   m_pCachedCmm = pCachedCmm;
+
+  if (!m_pCachedCmm)
+    return false;
+
+  // Take a private apply object for the cached CMM.  Without it a cache miss
+  // would call m_pCachedCmm->Apply(), which uses that CMM's single m_pApply --
+  // shared mutable scratch that concurrent CIccApplyMruCmm instances (one per
+  // CIccThreadedCmm worker) would race on, even though each holds its own
+  // cache.  GetNewApplyCmm() is valid here because CIccMruCmm::Attach()
+  // requires the cached CMM to have completed Begin().
+  icStatusCMM status = icCmmStatOk;
+  m_pCachedApply = m_pCachedCmm->GetNewApplyCmm(status);
+
+  if (!m_pCachedApply || status != icCmmStatOk)
+    return false;
 
   m_pCache = CIccMruCacheFloat::NewMruCache(m_pCmm->GetSourceSamples(), m_pCmm->GetDestSamples(), nCacheSize);
 
@@ -13459,8 +13493,15 @@ icStatusCMM CIccApplyMruCmm::Apply(icFloatNumber *DstPixel, const icFloatNumber 
 #endif
 
   if (!m_pCache->Apply(DstPixel, SrcPixel)) {
+    // Drive the private apply object, not m_pCachedCmm->Apply(): the latter
+    // routes through the cached CMM's shared m_pApply.  Propagate the status
+    // rather than discarding it -- a failed transform leaves DstPixel holding
+    // whatever the caller passed in, and caching that would poison every later
+    // hit on the same source pixel.
+    icStatusCMM rv = m_pCachedApply->Apply(DstPixel, SrcPixel);
 
-    m_pCachedCmm->Apply(DstPixel, SrcPixel);
+    if (rv != icCmmStatOk)
+      return rv;
 
     m_pCache->Update(DstPixel);
   }
@@ -13494,7 +13535,14 @@ icStatusCMM CIccApplyMruCmm::Apply(icFloatNumber *DstPixel, const icFloatNumber 
 
   for (k=0; k<nPixels;k++) {
     if (!m_pCache->Apply(DstPixel, SrcPixel)) {
-      m_pCachedCmm->Apply(DstPixel, SrcPixel);
+      // Same two corrections as the single-pixel overload: use the private
+      // apply object, and stop on a failure rather than reporting success over
+      // a buffer of partially transformed pixels.
+      icStatusCMM rv = m_pCachedApply->Apply(DstPixel, SrcPixel);
+
+      if (rv != icCmmStatOk)
+        return rv;
+
       m_pCache->Update(DstPixel);
     }
     SrcPixel += m_pCmm->GetSourceSamples();

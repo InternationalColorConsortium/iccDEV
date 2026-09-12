@@ -290,7 +290,7 @@ jobs:
               -DICFLOATSFX='"f"' \
               -j "$(nproc)" \
               --project="$BUILD_DIR/compile_commands.json" \
-              --file-filter="${component}/*" \
+              --file-filter="*/${component}/*" \
               2> "$report" || true
             printf 'cppcheck %s: %s lines\n' \
               "$(sanitize_line "$component")" \
@@ -316,15 +316,45 @@ jobs:
           tidy_checks='modernize-*,readability-*,cppcoreguidelines-*'
           tidy_checks+=',clang-analyzer-core.*,clang-analyzer-security.*'
           tidy_checks+=',clang-analyzer-alpha.core.*,clang-analyzer-alpha.security.*'
+          # The established ICC API and file-format terminology includes many
+          # intentional short identifiers (for example, 16-bit/32-bit fields),
+          # pointer/character truth tests, upper-case literal suffixes, and
+          # single-statement control flow.  These legacy-wide style baselines
+          # obscure actionable diagnostics; retain the other readability,
+          # guideline, and analyzer checks.
+          tidy_checks+=',-readability-identifier-length'
+          tidy_checks+=',-readability-implicit-bool-conversion'
+          tidy_checks+=',-readability-braces-around-statements'
+          tidy_checks+=',-readability-uppercase-literal-suffix'
 
-          xargs -0 run-clang-tidy \
-            -j "$(nproc)" \
-            -p "$BUILD_DIR" \
-            -checks="$tidy_checks" \
-            < changed_files.txt \
-            > lint_reports/clang_tidy.txt 2>&1 || true
-          printf 'clang-tidy: %s lines\n' \
-            "$(sanitize_line "$(wc -l < lint_reports/clang_tidy.txt | tr -d ' ')")"
+          components=(IccProfLib IccXML IccJSON IccConnect Tools)
+          for component in "${components[@]}"; do
+            report="lint_reports/clang_tidy_${component}.txt"
+            component_files="$(mktemp)"
+            if ! grep -z -E "^${component}/" changed_files.txt > "$component_files"; then
+              rm -f "$component_files"
+              : > "$report"
+              printf 'clang-tidy %s: 0 files\n' "$(sanitize_line "$component")"
+              continue
+            fi
+            tr '\0' '\n' < "$component_files" > "lint_reports/${component}.files"
+
+            xargs -r -0 run-clang-tidy \
+              -j "$(nproc)" \
+              -p "$BUILD_DIR" \
+              -checks="$tidy_checks" \
+              < "$component_files" \
+              > "$report" 2>&1 || true
+            rm -f "$component_files"
+            printf 'clang-tidy %s: %s lines\n' \
+              "$(sanitize_line "$component")" \
+              "$(sanitize_line "$(wc -l < "$report" | tr -d ' ')")"
+          done
+
+          : > lint_reports/clang_tidy.txt
+          for report in lint_reports/clang_tidy_*.txt; do
+            [ -f "$report" ] && cat "$report" >> lint_reports/clang_tidy.txt
+          done
 
       - name: Generate lint summary
         if: always()
@@ -343,14 +373,18 @@ jobs:
           [ -f lint_reports/cppcheck.txt ] || : > lint_reports/cppcheck.txt
           [ -f lint_reports/clang_tidy.txt ] || : > lint_reports/clang_tidy.txt
 
-          sanitize_code_line() {
-            local s="$1"
-            s="${s//$'\r'/}"
-            s="${s//$'\n'/ }"
-            s="$(printf '%s' "$s" | tr -d '\000-\011\013\014\016-\037\177')"
-            s="${s//\`\`\`/\` \` \`}"
-            sanitize_line "$s"
-          }
+          # The local sanitize_code_line() that stood here shadowed the trusted one from
+          # sanitize-sed.sh and finished by calling sanitize_line(), which runs
+          # escape_html(). Inside a ```text fence GitHub does not decode entities, so every
+          # quoted symbol in a diagnostic rendered literally as "&#39;strcpy&#39;" and
+          # cppcheck's template messages as "CIccTagFloatNum &lt; float &gt;". That was
+          # tolerable when only a 50-line tail was exposed; it is not, now that the whole
+          # analyzer view goes through it. The trusted sanitize_code_line() exists for
+          # exactly this case -- its own contract says "use it only inside fenced code
+          # blocks so JSON and command output remain readable" -- and it still strips CR/LF
+          # and every control character and still neutralizes ``` so a diagnostic cannot
+          # break out of the fence. It is the only difference: escaping is dropped, nothing
+          # else is.
 
           {
             echo "## ci-pr-lint Report"
@@ -364,14 +398,38 @@ jobs:
             echo ""
             echo "### Finding counts"
             echo ""
-            echo "| Tool | Lines | Warnings | Errors |"
-            echo "|------|------:|---------:|-------:|"
+            echo "| Tool | Lines | Diagnostics | Errors |"
+            echo "|------|------:|------------:|-------:|"
+
+            # cppcheck 2.x emits one diagnostic per line as
+            #   {file}:{line}:{column}: {severity}: {message} [{id}]
+            # followed by the offending source line and a caret. The patterns these
+            # replace anchored on cppcheck 1.x's "[{file}:{line}]: ({severity})" bracket
+            # template, which the installed cppcheck (2.x on ubuntu-24.04) never produces,
+            # so BOTH cppcheck counters reported 0 on every run. Measured on the reports
+            # of runs 34432960602 / 34483706504 / 34515122355: 47451 lines, 6854
+            # diagnostics, 1 error -- the error being the IccMpeSpectral.cpp:1693
+            # autovarInvalidDeallocation line that issue #2503 was opened from. The lane
+            # was therefore printing "Errors: 0" on the run carrying its only error.
+            # "note:" lines are cppcheck's secondary locations, not separate findings, and
+            # are deliberately excluded from the diagnostic total.
+            cpp_diag_re='^[^ ]+:[0-9]+:[0-9]+: (error|warning|style|performance|portability|information):'
+            cpp_err_re='^[^ ]+:[0-9]+:[0-9]+: error:'
             cpp_lines="$(wc -l < lint_reports/cppcheck.txt | tr -d ' ')"
-            cpp_warns="$(grep -c 'warning:' lint_reports/cppcheck.txt || true)"
-            cpp_errs="$(grep -c 'error:' lint_reports/cppcheck.txt || true)"
+            cpp_warns="$(grep -Ec "$cpp_diag_re" lint_reports/cppcheck.txt || true)"
+            cpp_errs="$(grep -Ec "$cpp_err_re" lint_reports/cppcheck.txt || true)"
+
+            # clang-tidy's pattern was correct for warnings; "error:" is added so the
+            # Diagnostics column means the same thing on both rows. It previously counted
+            # only warnings while the cppcheck column counted every severity, so summing
+            # Diagnostics + Errors was right for one row and double-counted the other.
+            # clang-tidy emitted 0 errors on run 34515122355, so the printed number is
+            # unchanged at 43759; the semantics are what this fixes.
+            tidy_diag_re=':[0-9]+:[0-9]+: (warning|error):'
+            tidy_err_re=':[0-9]+:[0-9]+: error:'
             tidy_lines="$(wc -l < lint_reports/clang_tidy.txt | tr -d ' ')"
-            tidy_warns="$(grep -c 'warning:' lint_reports/clang_tidy.txt || true)"
-            tidy_errs="$(grep -c 'error:' lint_reports/clang_tidy.txt || true)"
+            tidy_warns="$(grep -Ec "$tidy_diag_re" lint_reports/clang_tidy.txt || true)"
+            tidy_errs="$(grep -Ec "$tidy_err_re" lint_reports/clang_tidy.txt || true)"
             printf '| cppcheck | %s | %s | %s |\n' \
               "$(sanitize_line "$cpp_lines")" \
               "$(sanitize_line "$cpp_warns")" \
@@ -381,26 +439,164 @@ jobs:
               "$(sanitize_line "$tidy_warns")" \
               "$(sanitize_line "$tidy_errs")"
             echo ""
-            echo "<details><summary>cppcheck tail</summary>"
+
+            # A counter that quietly reads 0 against a non-empty report is exactly how the
+            # stale cppcheck pattern above survived unnoticed: the summary looked like a
+            # clean lane rather than a broken parser. Assert the two disagree loudly, so
+            # the next output-format change is visible in the run instead of latent.
+            # Both variables are consumed after this block to raise a log annotation.
+            cpp_parse_warning=""
+            tidy_parse_warning=""
+            if [ "$cpp_lines" -gt 0 ] && [ "$cpp_warns" -eq 0 ]; then
+              cpp_parse_warning="cppcheck report has ${cpp_lines} lines but 0 parsed diagnostics; the output template no longer matches the pattern in this workflow"
+              printf '> **cppcheck output unparsed** -- %s lines, 0 diagnostics matched.\n' \
+                "$(sanitize_line "$cpp_lines")"
+              echo ""
+            fi
+            if [ "$tidy_lines" -gt 0 ] && [ "$tidy_warns" -eq 0 ]; then
+              tidy_parse_warning="clang-tidy report has ${tidy_lines} lines but 0 parsed diagnostics; the output format no longer matches the pattern in this workflow"
+              printf '> **clang-tidy output unparsed** -- %s lines, 0 diagnostics matched.\n' \
+                "$(sanitize_line "$tidy_lines")"
+              echo ""
+            fi
+
+            echo "### Component coverage"
+            echo ""
+            echo "| Component | Selected files | cppcheck lines | clang-tidy lines |"
+            echo "|-----------|---------------:|---------------:|-----------------:|"
+            for component in IccProfLib IccXML IccJSON IccConnect Tools; do
+              files=0
+              cpp_lines=0
+              tidy_lines=0
+              if [ -f "lint_reports/${component}.files" ]; then
+                files="$(wc -l < "lint_reports/${component}.files" | tr -d ' ')"
+              fi
+              if [ -f "lint_reports/cppcheck_${component}.txt" ]; then
+                cpp_lines="$(wc -l < "lint_reports/cppcheck_${component}.txt" | tr -d ' ')"
+              fi
+              if [ -f "lint_reports/clang_tidy_${component}.txt" ]; then
+                tidy_lines="$(wc -l < "lint_reports/clang_tidy_${component}.txt" | tr -d ' ')"
+              fi
+              printf '| %s | %s | %s | %s |\n' \
+                "$(sanitize_line "$component")" \
+                "$(sanitize_line "$files")" \
+                "$(sanitize_line "$cpp_lines")" \
+                "$(sanitize_line "$tidy_lines")"
+            done
+            echo ""
+            # The two blocks below replace `tail -n 50` over each report. The reports are
+            # concatenated in component order, so a fixed tail showed only whichever
+            # component sorted last: measured on run 34515122355, the last 50 lines of a
+            # 213889-line clang-tidy report carry 10 diagnostics from one file, and 50 lines
+            # of the 47451-line cppcheck report names two. IccProfLib's 141105 clang-tidy
+            # lines were never visible. One diagnostic can consume the whole window on its
+            # own -- the note behind issue #2509 prints every enumerator of the enum it
+            # cites. Report the distribution of the whole file plus the findings that carry
+            # severity, rather than an arbitrary window into one component.
+            #
+            # emit_capped SRC LIMIT -- sanitize each line of SRC into the open code fence,
+            # stopping after LIMIT lines and saying how many were withheld. Keeps a
+            # pathological report from exhausting the 1 MB step-summary budget.
+            emit_capped() {
+              local src="$1" limit="$2" shown=0 total
+              total="$(wc -l < "$src" | tr -d ' ')"
+              while IFS= read -r line; do
+                if [ "$shown" -ge "$limit" ]; then
+                  printf '... %s more, see the ci-pr-lint-reports artifact\n' \
+                    "$(sanitize_code_line "$((total - shown))")"
+                  break
+                fi
+                sanitize_code_line "$line"
+                echo ""
+                shown=$((shown + 1))
+              done < "$src"
+              if [ "$total" -eq 0 ]; then
+                echo "(none)"
+              fi
+            }
+
+            # These derived views are named outside the cppcheck_*/clang_tidy_* prefixes on
+            # purpose: those globs are what the two tool steps concatenate their
+            # per-component reports with, and a file matching them would be folded into a
+            # later report as though it were tool output.
+            grep -E "$cpp_diag_re" lint_reports/cppcheck.txt \
+              > lint_reports/summary_cpp_diags.txt || true
+            sed -E 's/^[^ ]+:[0-9]+:[0-9]+: ([a-z]+):.*/\1/' lint_reports/summary_cpp_diags.txt \
+              | sort | uniq -c | sort -rn > lint_reports/summary_cpp_severity.txt || true
+            grep -E "$cpp_err_re" lint_reports/summary_cpp_diags.txt \
+              > lint_reports/summary_cpp_errors.txt || true
+            grep -oE '\[[A-Za-z][A-Za-z0-9_]*\]$' lint_reports/summary_cpp_diags.txt \
+              | sort | uniq -c | sort -rn | head -n 25 > lint_reports/summary_cpp_ids.txt || true
+
+            echo "<details><summary>cppcheck: severity counts, top ids, and error-severity findings</summary>"
             echo ""
             echo '```text'
-            tail -n 50 lint_reports/cppcheck.txt | while IFS= read -r line; do
-              sanitize_code_line "$line"
-              echo ""
-            done
+            emit_capped lint_reports/summary_cpp_severity.txt 20
+            echo ""
+            echo "-- top 25 message ids --"
+            emit_capped lint_reports/summary_cpp_ids.txt 25
+            echo ""
+            # Labelled with its own bound rather than "in full": a summary that overstates
+            # its own completeness is the failure this change exists to close. The cap is set
+            # far above the observed count (1 on a 203-file run) so it should not bite.
+            echo "-- error severity, up to 200 --"
+            emit_capped lint_reports/summary_cpp_errors.txt 200
             echo '```'
             echo "</details>"
             echo ""
-            echo "<details><summary>clang-tidy tail</summary>"
+
+            # clang-tidy's style checks dominate the line count, so the check histogram is
+            # the only view that shows where the findings actually are, and the analyzer
+            # findings are the subset that describes behaviour rather than style.
+            grep -E "$tidy_diag_re" lint_reports/clang_tidy.txt \
+              > lint_reports/summary_tidy_diags.txt || true
+            grep -oE '\[[a-z][A-Za-z0-9.-]*(,[a-z][A-Za-z0-9.-]*)*\]$' lint_reports/summary_tidy_diags.txt \
+              | sort | uniq -c | sort -rn | head -n 30 > lint_reports/summary_tidy_checks.txt || true
+            grep -F '[clang-analyzer-' lint_reports/summary_tidy_diags.txt \
+              > lint_reports/summary_tidy_analyzer.txt || true
+            grep -oE '\[clang-analyzer-[A-Za-z0-9.]+\]$' lint_reports/summary_tidy_analyzer.txt \
+              | sort | uniq -c | sort -rn > lint_reports/summary_tidy_ancounts.txt || true
+
+            # Cap the verbatim analyzer findings PER CHECKER rather than overall. One
+            # checker can dominate the class for reasons that are by design: on run
+            # 34515122355, 252 of the 330 analyzer findings are EnumCastOutOfRange, 211 of
+            # them in IccUtil.cpp's CIccInfo::Get*SigName chain, which casts a raw
+            # icUInt32Number into each signature enum in turn precisely to ask whether it is
+            # a known member. A flat cap would spend the whole budget there and hide the
+            # single-instance core.* findings, which are the reason to read this at all.
+            awk -v per=8 '
+              match($0, /\[clang-analyzer-[A-Za-z0-9.]+\]$/) {
+                checker = substr($0, RSTART, RLENGTH)
+                seen[checker]++
+                if (seen[checker] <= per)
+                  print
+                else if (seen[checker] == per + 1)
+                  printf "... further %s findings withheld, see the artifact\n", checker
+              }' lint_reports/summary_tidy_analyzer.txt \
+              > lint_reports/summary_tidy_ancapped.txt || true
+
+            echo "<details><summary>clang-tidy: top 30 checks, and the analyzer findings</summary>"
             echo ""
             echo '```text'
-            tail -n 50 lint_reports/clang_tidy.txt | while IFS= read -r line; do
-              sanitize_code_line "$line"
-              echo ""
-            done
+            emit_capped lint_reports/summary_tidy_checks.txt 30
+            echo ""
+            echo "-- clang-analyzer findings by checker --"
+            emit_capped lint_reports/summary_tidy_ancounts.txt 40
+            echo ""
+            echo "-- clang-analyzer findings, up to 8 per checker --"
+            emit_capped lint_reports/summary_tidy_ancapped.txt 150
             echo '```'
             echo "</details>"
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+          # Annotations have to reach the step log, not the step summary the block above
+          # redirects into, so the parser-disagreement guards are raised here.
+          if [ -n "${cpp_parse_warning:-}" ]; then
+            printf '::warning title=ci-pr-lint::%s\n' "$(sanitize_line "$cpp_parse_warning")"
+          fi
+          if [ -n "${tidy_parse_warning:-}" ]; then
+            printf '::warning title=ci-pr-lint::%s\n' "$(sanitize_line "$tidy_parse_warning")"
+          fi
 
       - name: Upload lint reports
         if: always() && github.event_name == 'workflow_dispatch'

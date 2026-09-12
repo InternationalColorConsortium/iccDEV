@@ -47,12 +47,15 @@ factory methods that load profiles, register hints, attach PCCs, and call
 | `CreateNamed(profiles, srcSpace=icSigUnknownData, bInputProfile=true, pErrorMsg=nullptr)` | `CIccCfgProfileSequence` | Named-color CMM (`CIccNamedColorCmm`) for named-color workflows. |
 | `CreateSearch(searchApply, pErrorMsg=nullptr)` | `CIccCfgSearchApply` | Spectral inverse-search CMM (`CIccCmmSearch`) with weighted PCC attach and optional destination init profile. |
 | `CreateSearch(searchApply, pErrorMsg, nThreads)` | `CIccCfgSearchApply` | Threaded inverse search; `0` selects hardware concurrency, `1` is scalar, and `2` through `GetMaxThreads()` select workers. |
+| `CreateSearch(searchApply, embeddedData, embeddedLen, nThreads, pErrorMsg=nullptr)` | `CIccCfgSearchApply` | Same search CMM, with `CreateStandard`'s embedded-profile argument: an empty first `iccFile` plus `embeddedData` loads that buffer as the source xform. Additive overload -- the two forms above delegate here with `nullptr, 0`, so existing call sites are unaffected. |
 | `Attach(pCmm)` | Any `CIccCmm*` | Wraps an externally constructed CMM; the wrapper takes ownership. |
 
 All factories return `nullptr` on any failure (profile load, hint allocation,
 PCC load, `AddXform`, `Begin`). Loaded PCC profiles are released before
 return whether the call succeeds or fails. Embedded raw profile bytes
-passed to `CreateStandard` are not retained by the library.
+passed to `CreateStandard` or `CreateSearch` are not retained by the library,
+but they must stay valid for the duration of the call, which performs `Begin()`
+before returning.
 
 ### Error Reporting
 
@@ -108,7 +111,8 @@ For a worked example, see
 which calls `CreateStandard(cfgProfiles, pEmbedded, nEmbeddedLen,
 cfgConnect.m_nThreads, &sConnectError)` and drives row-batched
 `Apply(dst, src, nPixels)` calls. The `-threads` CLI flag maps straight
-through to the `nThreads` argument.
+through to the `nThreads` argument. The same tool calls the four-argument
+`CreateSearch` instead when its JSON config sets `connect.useSearch`.
 
 ## Per-profile Hints Applied
 

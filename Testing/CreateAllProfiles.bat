@@ -111,6 +111,7 @@ goto end_Named
 iccFromXml FluorescentNamedColor.xml FluorescentNamedColor.icc
 iccFromXml NamedColor.xml NamedColor.icc
 iccFromXml SparseMatrixNamedColor.xml SparseMatrixNamedColor.icc
+iccFromXml SparseMatrixNamedColorTint.xml SparseMatrixNamedColorTint.icc
 iccFromXml NamedColorV4.xml NamedColorV4.icc
 @echo off
 :end_Named

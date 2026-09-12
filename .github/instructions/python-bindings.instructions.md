@@ -68,7 +68,7 @@ locations.
 - Python 3.9+
 - Cython >= 3.0,<3.2 for all source builds
 - NumPy >= 1.23,<3 for array operations
-- setuptools >= 64,<81
+- setuptools >= 64,<85
 - Dev extras: pytest, numpy, build, wheel, twine, cibuildwheel
 
 All GitHub Actions `pip install` lines for this package must use bounded

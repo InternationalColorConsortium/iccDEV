@@ -187,9 +187,12 @@ The unified `iccdev` image includes the Python MCP package, REST dependencies,
 CLI tools, runtime libraries, maintainer utilities, and `Testing/` profiles.
 Use it when you want the MCP server without a local CMake tool build.
 
-`ci-docker` publishes `latest` and an immutable SHA tag from `master`; a `v*`
-release also publishes its release tag. Branch and workflow-run tags are not
-published.
+`ci-docker` publishes `latest` and an immutable SHA tag from `master`.
+`ci-qa-pr-docker-testing` publishes its integration tag and an immutable SHA
+tag for pre-merge publication validation. `ci-publish-colourbill-ctrl` also
+publishes its reviewer-gated integration tag and an immutable SHA tag. A `v*`
+release also publishes its release tag. Other branch and workflow-run tags are
+not published.
 
 ```bash
 # MCP stdio mode

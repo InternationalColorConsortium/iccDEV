@@ -144,6 +144,12 @@ ICCDEV_TEST_OUTDIR=/tmp/iccdev-tool-output \
 ctest --test-dir build -R '^iccdev\.tool-coverage$' --output-on-failure
 ```
 
+For `ci-pr-lint.yml` updates, install `clang-tidy`, `clang-tools`, and
+`cppcheck`, then follow the canonical component-partitioned local reproduction
+in `docs/build.md#maintainer-static-analysis`. Verify that every selected
+component has its own cppcheck and clang-tidy report, and that the combined
+reports preserve the sum of the component output.
+
 For workflow YAML:
 
 ```bash
@@ -176,9 +182,12 @@ docker build -t iccdev-container-check -f <Dockerfile> .
 docker run --rm iccdev-container-check <smoke-command>
 ```
 
-For the unified `Dockerfile`, also run a no-cache build and smoke
-`clang`, `clang++`, `gcc`, `g++`, `cmake`, `afl-fuzz`, and `/usr/bin/time`. If the image is
-published, pass the published branch or SHA tag to `ci-iccdev-tool-tests.yml`.
+For the unified `Dockerfile`, follow the complete local development-environment
+preflight in `docs/regression-container.md#maintainer-preflight-and-security-checks`.
+It requires workflow and Dockerfile policy checks, a no-cache build, analyzer
+inventory and runtime smoke, a healthy image, and Trivy vulnerability/secret
+triage. If the image is published, pass the published branch or SHA tag to
+`ci-iccdev-tool-tests.yml`.
 
 ## GitHub Validation
 

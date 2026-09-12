@@ -131,7 +131,8 @@ requesting review, check the PR against this list:
   equivalent for the changed surface. If a workflow tests a helper on push,
   the PR fast lane should test the same helper or document why it cannot.
 - Keep branch triggers and publish conditions aligned. `ci-docker` publishes
-  the canonical image only from `master` and release tags; do not add
+  the canonical image only from `master`, `ci-qa-pr-docker-testing`,
+  `ci-publish-colourbill-ctrl`, and release tags; do not add
   branch-specific or variant image tags.
 - Keep Docker and regression-container docs reproducible from a fresh checkout
   or clean container. Fetch branch refs explicitly and avoid relying on local
@@ -266,7 +267,7 @@ separate from general source changes when practical.
 
 | File | Owner intent | Required local checks |
 |------|--------------|-----------------------|
-| `Dockerfile` | Unified image for runtime tools, MCP, ASAN/UBSAN CTest, fuzzing, review, and hybrid timing gates. Clang 22 is the default toolchain; the packaged AFL++ LLVM plugin is paired with Clang 21. | Run a no-cache build and smoke `git`, `gh`, `curl`, `clang`, `clang++`, `gcc`, `g++`, `lldb`, `gdb`, `cmake`, `afl-fuzz`, `afl-showmap`, `iccdev-fuzz-env`, MCP initialization, libFuzzer compilation, and `/usr/bin/time`; AFL wrapper changes also need the container bootstrap probe in `docs/afl-fuzzing.md`. |
+| `Dockerfile` | Unified image for runtime tools, MCP, ASAN/UBSAN CTest, fuzzing, review, and hybrid timing gates. Clang 22 is the default toolchain; the packaged AFL++ LLVM plugin is paired with Clang 21. | Run the [container maintainer preflight](regression-container.md#maintainer-preflight-and-security-checks), including no-cache build, policy/SAST checks, analyzer inventory, MCP/REST runtime smoke, health check, and image vulnerability/secret triage. AFL wrapper changes also need the container bootstrap probe in `docs/afl-fuzzing.md`. |
 
 For unified `Dockerfile` publishing:
 
@@ -274,9 +275,10 @@ For unified `Dockerfile` publishing:
 2. Publish through the maintainer-controlled container release path.
 3. Record the published immutable SHA tag, digest, and source revision from the
    release output.
-4. Publish `latest` only from `master` after all image smoke tests and
-   regression CTest checks succeed, then confirm it resolves to the immutable
-   digest.
+4. Publish `latest` only from `master`; publish an integration tag only from
+   `ci-qa-pr-docker-testing` or `ci-publish-colourbill-ctrl`, after all image
+   smoke tests and regression CTest checks succeed, then confirm it resolves
+   to the immutable digest.
 5. Pass the immutable SHA tag to `ci-iccdev-tool-tests.yml` and rerun the
    regression gate.
 6. Do not create branch-specific or run-specific image tags.

@@ -142,12 +142,28 @@ They create `ICC/`, `Results/`, and `config/`, then execute these phases:
 5. Apply the hybrid CMYK profile to spectral values with `iccApplyNamedCmm`,
    then estimate the values with `iccApplySearch -INIT`. Both commands export
    their parsed configuration and data to JSON for inspection.
-6. Render CMYKW and KW TIFF overprint previews. The background variants use
+6. Reproduce a multispectral image into the hybrid CMYK profile by inverse
+   search -- the image-based form of the estimate in phase 5, under the same
+   four observing conditions. `MS_smCowsIcon.tif` is 8-channel multispectral
+   data whose only colour description is the `mspc` sub-profile embedded in it,
+   so the chain's first entry has an empty `iccFile` with `useV5SubProfile`.
+   This step is driven by `config/msCowsIconToCmyk.json` rather than
+   `-exportcfg`, because `connect.useSearch` is `-cfg` only; that config and
+   `config/msCowsToCmyk.json` are the only tracked files in `config/`.
+7. Render CMYKW and KW TIFF overprint previews. The background variants use
    `-ENV:bkgX`, `-ENV:bkgY`, and `-ENV:bkgZ`; the MCS variants add the
    `-ENV:0ni? 1` control before the v5 MCS profile sequence.
 
 The generated TIFFs and JSON configuration exports are intentional local
 artifacts. Do not treat their presence as profile fixtures or commit them.
+
+`SpectralImageReproduction.sh` and `SpectralImageReproduction.bat` run the same
+inverse-search chain as phase 6 over the full 600x420 `MS_smCows.tif` that phase
+2 generates, rather than the 92x64 icon. They are deliberately separate from
+`BuildAndTest`: every pixel runs a Nelder-Mead search across four weighted PCCs,
+so the full image takes minutes where the icon takes seconds -- too long for the
+sanitizer legs that run the hybrid pipeline. Run `BuildAndTest` first; the
+scripts check for the inputs it produces.
 
 ## Profile Directory Reference
 

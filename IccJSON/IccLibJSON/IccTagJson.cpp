@@ -3142,7 +3142,7 @@ bool CIccTagJsonDict::ToJson(IccJson &j)
 
     IccJson entry;
 
-    // Name (stored as wstring / UTF-16 on Windows)
+    // Name (UTF-16 code units, one per wchar_t, on every platform -- #2526)
     std::string name;
     const std::wstring &wname = nv->GetName();
     bool nameOverflow = false;

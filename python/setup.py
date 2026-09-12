@@ -210,7 +210,7 @@ def _find_zlib_library(build_dir):
                 return part
 
     for lib_dir in _candidate_zlib_lib_dirs(build_dir):
-        for name in ("zlib.lib", "zlibstatic.lib", "zlib1.lib"):
+        for name in ("z.lib", "zs.lib", "zlib.lib", "zlibstatic.lib", "zlib1.lib"):
             candidate = os.path.join(lib_dir, name)
             if os.path.isfile(candidate):
                 return candidate
@@ -246,7 +246,7 @@ def _find_zlib_runtime_dll(build_dir):
             runtime_dirs.append(os.path.join(root, triplet, "bin"))
 
     for runtime_dir in runtime_dirs:
-        for name in ("zlib1.dll", "zlib.dll"):
+        for name in ("z.dll", "zlib1.dll", "zlib.dll"):
             candidate = os.path.join(runtime_dir, name)
             if os.path.isfile(candidate):
                 return candidate

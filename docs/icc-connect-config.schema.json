@@ -2,7 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "icc-connect-config.schema.json",
   "title": "IccConnect Configuration Schema",
-  "description": "JSON Schema for IccConnect CMM configuration objects (IccCmmConfig.h/cpp)",
 
   "$defs": {
 
@@ -180,6 +179,11 @@
           "maximum": 256,
           "default": 1,
           "description": "Thread count for standard CMM apply. 1 uses the scalar CMM; 0 uses capped hardware concurrency; values greater than 1 wrap the CMM with CIccThreadedCmm up to CIccThreadedCmm::GetMaxThreads()."
+        },
+        "useSearch": {
+          "type": "boolean",
+          "default": false,
+          "description": "Build a CIccCmmSearch (spectral inverse search) from the searchApply block instead of a forward CIccCmm. Read by iccApplyProfiles; -cfg only. Emitted by CIccCfgConnectOptions::toJson() only when true, so configs that never set it round-trip byte-identically."
         }
       }
     },
@@ -449,7 +453,7 @@
     "searchApply": {
       "type": "object",
       "description": "CIccCfgSearchApply - full configuration for iccApplySearch",
-      "required": ["profileSequence", "initial"],
+      "required": ["profileSequence"],
       "additionalProperties": false,
       "properties": {
         "profileSequence": {
@@ -470,11 +474,12 @@
 
   },
 
-  "description": "Top-level IccConnect configuration document. Must contain an iccApplyNamedCmm data configuration (dataFiles + profileSequence), an iccApplyProfiles image configuration (imageFiles + profileSequence), an iccApplySearch configuration (dataFiles + searchApply), or a library create-link configuration (createLink + profileSequence).",
+  "description": "Top-level IccConnect configuration document, mirroring the CIccCfg* objects in IccCmmConfig.h/cpp. Must contain an iccApplyNamedCmm data configuration (dataFiles + profileSequence), an iccApplyProfiles image configuration (imageFiles + profileSequence), an iccApplySearch configuration (dataFiles + searchApply), or a library create-link configuration (createLink + profileSequence).",
   "type": "object",
   "anyOf": [
     { "required": ["dataFiles", "profileSequence"] },
     { "required": ["imageFiles", "profileSequence"] },
+    { "required": ["imageFiles", "searchApply"] },
     { "required": ["dataFiles", "searchApply"] },
     { "required": ["createLink", "profileSequence"] }
   ],

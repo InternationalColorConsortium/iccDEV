@@ -13,6 +13,8 @@ included Clang 21 pair for compatible instrumentation.
 | Tag | Purpose |
 |-----|---------|
 | `latest` | Current image from `master`; convenient but mutable. |
+| `ci-qa-pr-docker-testing` | Mutable integration image published only by the protected Docker validation branch. |
+| `ci-publish-colourbill-ctrl` | Mutable integration image published by the reviewer-gated maintainer publishing branch. |
 | `sha-<40-character-commit>` | Immutable CI and investigation reference. |
 | `v<release>` | Immutable released image. |
 | Existing legacy tags | Retained temporarily for continuity; unsupported for new use. |
@@ -24,7 +26,9 @@ full-SHA tag as a long-lived workflow default; it becomes stale as the
 maintainer image advances. Replay prior evidence with its recorded digest.
 
 Existing short-SHA, branch, and image-variant tags remain available only to
-avoid breaking current users during the consolidation transition. Do not create,
+avoid breaking current users during the consolidation transition, except for
+the supported `ci-qa-pr-docker-testing` and `ci-publish-colourbill-ctrl`
+integration tags. Do not create,
 recommend, or depend on new legacy tags. Re-evaluate their retention and
 removal through a separately announced tag-management change.
 
@@ -83,8 +87,9 @@ Deadlines bound responses and startup; cleanup removes both named containers on
 success or failure. Failure logs stay in the CI job log and the optional report
 directory; CI uploads those diagnostics on failure. Inventories and image
 identity are printed rather than asserting a fixed tool count. `ci-docker`
-uses the same helper, requiring native validation. Its existing dispatch remains
-non-publishing on feature branches; only master and release tags publish.
+uses the same helper, requiring native validation. It publishes only from
+`master`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`, and release
+tags; other feature branches remain non-publishing.
 The read-only `ci-docker-pr` caller uses it when building the changed Dockerfile;
 its trusted-base-image-only path does not claim to test a new runtime. No PR
 runtime artifacts are uploaded. The MCP package workflow includes the shared
@@ -272,13 +277,106 @@ docker run --rm iccdev:local bash -lc '
 '
 ```
 
-`ci-docker` publishes only the canonical package: `master` adds `latest` and
-the immutable SHA tag; a `v*` ref adds its release tag and immutable SHA tag.
-Do not publish branch, run, image-variant, or legacy-package tags. Publishing
-runs create BuildKit SBOM and provenance attestations for the canonical digest.
-The separate GitHub SBOM attestation is emitted only when the SBOM is at most
-16 MiB; larger SBOMs remain available as artifacts and the workflow reports
-that GitHub attestation as skipped.
+## Maintainer preflight and security checks
+
+Run this complete local preflight from a clean checkout before pushing a
+Dockerfile, container workflow, published-image, or container-runtime change.
+It verifies the host development environment, workflow and Dockerfile policy,
+the no-cache image build, the shipped analyzer inventory, runtime behavior, and
+the image health check.
+
+```bash
+command -v docker gh actionlint zizmor hadolint trivy
+PREFLIGHT_BASE_REF=origin/master .github/scripts/preflight-safety-checks.sh --require-tools
+
+IMAGE=iccdev-container-check:local
+docker build --no-cache -t "$IMAGE" .
+docker run --rm "$IMAGE" bash -lc '
+  set -euo pipefail
+  command -v git gh clang clang++ gcc g++ cmake cppcheck clang-tidy scan-build
+  command -v hadolint zizmor shellcheck afl-fuzz valgrind llvm-symbolizer
+  command -v iccDumpProfile iccdev-fuzz-env iccdev-mcp iccdev-mcp-rest
+  iccDumpProfile -v Testing/sRGB_v4_ICC_preference.icc >/dev/null
+  ctest --test-dir /workspace/build -N --no-tests=error >/dev/null
+'
+python3 .github/scripts/iccdev-container-smoke.py "$IMAGE" \
+  --report-dir out/container-smoke
+
+container_id="$(docker run -d --entrypoint bash "$IMAGE" -lc 'sleep 45')"
+trap 'docker rm -f "$container_id" >/dev/null 2>&1 || true' EXIT
+sleep 35
+test "$(docker inspect --format '{{.State.Health.Status}}' "$container_id")" = healthy
+```
+
+### SAST and image scanning
+
+`preflight-safety-checks.sh --require-tools` runs the workflow, shell,
+Dockerfile, and configuration SAST checks, including actionlint, yamllint,
+zizmor, ShellCheck, hadolint, and Trivy configuration scanning. For
+component-partitioned cppcheck and clang-tidy reports, use the exact
+[maintainer static-analysis reproduction](build.md#maintainer-static-analysis).
+
+Scan the completed image for high and critical vulnerabilities and secrets:
+
+```bash
+trivy image --scanners vuln,secret --severity HIGH,CRITICAL "$IMAGE"
+```
+
+Treat the scan as a triage report, not an automatic package change. Record each
+affected package, installed version, advisory, and available fixed version.
+Update a pinned dependency or base image when a compatible fixed version is
+available. An unfixed distribution-package advisory must remain visible in the
+handoff with its fixed-version status; do not suppress it or claim the image is
+vulnerability-free.
+
+### Dynamic analysis: MCP/REST, AFL++, and Valgrind
+
+`iccdev-container-smoke.py` in the preflight performs the bounded MCP and REST
+DAST smoke. Run the maintained AFL++ driver for a short mutation smoke and the
+maintained Valgrind helper for a separate non-sanitized Memcheck build:
+
+```bash
+IMAGE=iccdev-container-check:local
+EVIDENCE="$PWD/out/container-dynamic-qa"
+mkdir -p "$EVIDENCE"
+
+docker run --rm "$IMAGE" bash -lc '
+  set -euo pipefail
+  cd /workspace/iccDEV
+  .github/scripts/iccdev-afl-smoke.sh \
+    --seconds 10 --targets dump --exec-timeout-ms 30000
+'
+container_id="$(docker create "$IMAGE" bash -lc '
+  set -euo pipefail
+  cd /workspace/iccDEV
+  .github/scripts/iccdev-valgrind-qa.sh \
+    --source-dir "$PWD" \
+    --build-dir /tmp/iccdev-valgrind \
+    --tool memcheck --expect clean --runs 1 \
+    --out-dir /tmp/iccdev-valgrind-logs --label container
+')"
+trap 'docker rm -f "$container_id" >/dev/null 2>&1 || true' EXIT
+docker start -a "$container_id"
+docker cp "$container_id:/tmp/iccdev-valgrind-logs" "$EVIDENCE/valgrind"
+docker rm "$container_id"
+```
+
+The shipped image binaries are sanitizer-instrumented; never run Valgrind
+around them. `iccdev-valgrind-qa.sh` configures its own non-sanitized Debug
+tree before running Memcheck. For concurrent code, replace the Memcheck
+arguments with `--tool helgrind --expect clean --runs 3`.
+
+`ci-docker` publishes the canonical package only from approved refs: `master`
+adds `latest` and the immutable SHA tag, `ci-qa-pr-docker-testing` and
+`ci-publish-colourbill-ctrl` add their integration tags and immutable SHA tags,
+and a `v*` ref adds its release tag and immutable SHA tag. Do not publish other
+branch, run, image-variant, or
+legacy-package tags. Publishing runs generate an SPDX SBOM with Anchore and
+create provenance with GitHub's `actions/attest-build-provenance` action.
+The separate GitHub SBOM attestation uses `actions/attest` only when the SBOM
+is at most 16 MiB; larger SBOMs remain available as artifacts and the workflow
+reports that GitHub attestation as skipped. BuildKit attestations are disabled
+for the image build.
 
 For detailed regression gate policy, use
 `docs/regression-workflow-governance.md`. For MCP developer setup, use

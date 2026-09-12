@@ -8,7 +8,7 @@ Canonical guide: `docs/regression-container.md`
 ## Inputs
 
 - Operation: basic smoke / PR validation / issue reproduction
-- Image selector (`latest`, full-SHA tag, or release tag; resolved at run time):
+- Image selector (`latest`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`, full-SHA tag, or release tag; resolved at run time):
 - PR number:
 - Issue number:
 - Branch or commit:
@@ -31,11 +31,13 @@ Canonical guide: `docs/regression-container.md`
 4. For an issue, use the smallest existing project input and project tool.
 5. Rebuild the affected target or the full configured build.
 6. Run the focused regression first and its CTest wrapper when registered.
-7. For local PR proof, pull the published `latest` image, record its resolved
-   digest, mount the reviewed worktree read-only, and copy it to container-local
-   scratch space. Run the local canonical-image build with the configured tool
-   and test target set, zero compiler warnings, and CTest excluding only the
-   `slow` and `calculator` labels.
+7. For local PR proof, pull the matching published integration image when
+   validating `ci-qa-pr-docker-testing` or `ci-publish-colourbill-ctrl`;
+   otherwise pull the selected published
+   image. Record its resolved digest, mount the reviewed worktree read-only,
+   and copy it to container-local scratch space. Run the local canonical-image
+   build with the configured tool and test target set, zero compiler warnings,
+   and CTest excluding only the `slow` and `calculator` labels.
 8. If the changed behavior is in an excluded suite, run its focused CTest in
    addition to the local container envelope.
 9. Scan output for compiler warnings, ASAN, UBSAN, and signal termination.
@@ -45,9 +47,10 @@ Canonical guide: `docs/regression-container.md`
 12. Save evidence outside the disposable container.
 13. If CI is requested, use the PR trigger or explicitly dispatch
     `ci-pr-action.yml`; do not assume a branch push triggers it.
-14. Use only `latest`, full-SHA, or release tags as selectors and resolve them
-    at run time. Existing legacy tags are continuity-only; do not create,
-    recommend, or depend on branch, run, or image-variant tags.
+14. Use only `latest`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`,
+    full-SHA, or release tags as selectors and resolve them at run time. Existing legacy tags are
+    continuity-only; do not create, recommend, or depend on other branch, run,
+    or image-variant tags.
 15. Include the canonical image digest and hosted run in the handoff.
 
 For MCP/REST container changes, run the reusable runtime gate before dispatch:

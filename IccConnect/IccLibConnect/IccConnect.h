@@ -123,6 +123,24 @@ public:
                                        std::string* pErrorMsg,
                                        int nThreads);
 
+  // Creates a spectral search CMM, optionally sourcing the first stage from an
+  // in-memory ICC profile.  Additive overload: the two forms above delegate
+  // here with nullptr, 0, so every existing call site keeps compiling.
+  // Parameter order mirrors CreateStandard.
+  // pEmbeddedData/nEmbeddedLen: when provided and the first profile config has
+  //   an empty m_iccFile, these embedded ICC profile bytes are used for the
+  //   first xform.  The bytes must stay valid until this call returns, which
+  //   performs Begin() before returning.
+  // nThreads: 1 for the scalar search CMM, 0 for hardware concurrency, or an
+  //   explicit worker count.
+  // pErrorMsg (optional): on failure, populated with a human-readable
+  //   description of the first failure encountered.  Callers print it.
+  static CIccConnectCmm* CreateSearch(const CIccCfgSearchApply& searchApply,
+                                       const unsigned char* pEmbeddedData,
+                                       unsigned int nEmbeddedLen,
+                                       int nThreads,
+                                       std::string* pErrorMsg = nullptr);
+
   // Wraps an already-initialized CMM (takes ownership).
   static CIccConnectCmm* Attach(CIccCmm* pCmm);
 

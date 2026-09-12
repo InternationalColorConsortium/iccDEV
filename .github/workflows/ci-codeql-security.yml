@@ -149,9 +149,19 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          # ENABLE_TESTS=OFF keeps the regression suite out of the database.
+          # `codeql database create --command=` builds the default target, so
+          # scan scope is whatever `all` compiles -- .github/codeql-config.yml
+          # is a push-trigger filter here and never reaches the CLI. Since #2480
+          # dropped EXCLUDE_FROM_ALL the suite is in `all`: its 105 test TUs
+          # entered the database and produced 29 of the 30 alerts on that scan.
+          # ENABLE_TESTS gates only ENABLE_TESTING() and the
+          # Testing subdirectory (Build/Cmake/CMakeLists.txt:2133-2136), so no
+          # product target is lost.
           cmake -S Build/Cmake -B /tmp/iccdev-codeql-build \
             -DCMAKE_BUILD_TYPE=Debug \
             -DENABLE_TOOLS=ON \
+            -DENABLE_TESTS=OFF \
             -DICC_JSON_ORDERED=ON \
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++

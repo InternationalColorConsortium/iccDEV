@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  #2512 fixture.  A well-formed RGB matrix/TRC display profile carrying a
+  metaDataTag of dictType.  Until this file, no tracked XML contained a
+  DictEntry, so the dict writers in IccTagXml.cpp and IccTagJson.cpp and the
+  XML reader never ran under any test.
+
+  Each entry exercises a different shape the binary format can represent:
+
+    ManufacturerName    name and value, plain ASCII
+    NameOnly            no value at all (value offset 0 in the binary record)
+    EmptyValue          a value that is set but empty.  The binary record
+                        keeps this apart from NameOnly, and so must the
+                        round trip
+    Grüße               two- and three-byte UTF-8 in both name and value,
+                        which is what reaches icWCharToUtf8
+    Astral 😀           a character above U+FFFF in both name and value.
+                        The entry holds it as a UTF-16 surrogate pair, one
+                        code unit per wchar_t, and where wchar_t is 32 bits
+                        the writers used to encode each half on its own as
+                        CESU-8, which iccFromXml then refused (#2526)
+    Escapes             all five characters icFixXml escapes (& < > " ')
+    Localized           localized names (two languages) and a localized value,
+                        so the record is 32 bytes wide
+    ValueLocalizedOnly  a localized value with no localized name, so the
+                        localized-name slot of a 32-byte record is empty
+
+  The DictEntry lines are written exactly as CIccTagXmlDict::ToXml emits them
+  (attribute order, CDATA sections), because the regression script compares
+  them against the writer's output line for line.  Keep that form if you add
+  an entry.
+-->
+<IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>4.30</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>now</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant> <XYZNumber X="0.96420288" Y="1.00000000" Z="0.82490540"/> </PCSIlluminant>
+    <ProfileCreator>ICCD</ProfileCreator>
+    <ProfileID>0</ProfileID>
+  </Header>
+
+  <Tags>
+    <profileDescriptionTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV #2512 dictType fixture]]></LocalizedText>
+    </multiLocalizedUnicodeType> </profileDescriptionTag>
+
+    <mediaWhitePointTag> <XYZArrayType>
+      <XYZNumber X="0.96420288" Y="1.00000000" Z="0.82490540"/>
+    </XYZArrayType> </mediaWhitePointTag>
+
+    <redColorantTag> <XYZArrayType>
+      <XYZNumber X="0.43606567" Y="0.22248840" Z="0.01391602"/>
+    </XYZArrayType> </redColorantTag>
+
+    <greenColorantTag> <XYZArrayType>
+      <XYZNumber X="0.38514709" Y="0.71687317" Z="0.09707642"/>
+    </XYZArrayType> </greenColorantTag>
+
+    <blueColorantTag> <XYZArrayType>
+      <XYZNumber X="0.14306641" Y="0.06060791" Z="0.71409607"/>
+    </XYZArrayType> </blueColorantTag>
+
+    <redTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="4">
+        2.39999390 0.94786072 0.05213928 0.07739258 0.04045105 0.00000000 0.00000000
+      </ParametricCurve>
+    </parametricCurveType> </redTRCTag>
+
+    <greenTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="4">
+        2.39999390 0.94786072 0.05213928 0.07739258 0.04045105 0.00000000 0.00000000
+      </ParametricCurve>
+    </parametricCurveType> </greenTRCTag>
+
+    <blueTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="4">
+        2.39999390 0.94786072 0.05213928 0.07739258 0.04045105 0.00000000 0.00000000
+      </ParametricCurve>
+    </parametricCurveType> </blueTRCTag>
+
+    <copyrightTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright 2026 International Color Consortium]]></LocalizedText>
+    </multiLocalizedUnicodeType> </copyrightTag>
+
+    <metaDataTag> <dictType>
+      <DictEntry Name="ManufacturerName" Value="iccDEV"/>
+      <DictEntry Name="NameOnly"/>
+      <DictEntry Name="EmptyValue" Value=""/>
+      <DictEntry Name="Grüße" Value="Café 色"/>
+      <DictEntry Name="Astral 😀" Value="G clef 𝄞"/>
+      <DictEntry Name="Escapes" Value="a &amp; b &lt;c&gt; &quot;q&quot; &apos;s&apos;"/>
+      <DictEntry Name="Localized" Value="plain">
+        <LocalizedName LanguageCountry="enUS"><![CDATA[Localized]]></LocalizedName>
+        <LocalizedName LanguageCountry="deDE"><![CDATA[Lokalisiert]]></LocalizedName>
+        <LocalizedValue LanguageCountry="enUS"><![CDATA[plain]]></LocalizedValue>
+      </DictEntry>
+      <DictEntry Name="ValueLocalizedOnly" Value="v">
+        <LocalizedValue LanguageCountry="frFR"><![CDATA[valeur]]></LocalizedValue>
+      </DictEntry>
+    </dictType> </metaDataTag>
+
+  </Tags>
+</IccProfile>

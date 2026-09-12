@@ -48,7 +48,10 @@ if(TARGET iccdev-stage-windows-runtime)
 endif()
 
 function(iccdev_add_regression_executable TARGET_NAME)
-  add_executable("${TARGET_NAME}" ${ARGN})
+  # Keep regression helpers out of the default product build.  On Windows,
+  # their vcpkg z-applocal hooks write the same runtime DLL concurrently;
+  # build-test-binaries is built serially by the CI test gate instead.
+  add_executable("${TARGET_NAME}" EXCLUDE_FROM_ALL ${ARGN})
   add_dependencies(build-test-binaries "${TARGET_NAME}")
 endfunction()
 
@@ -309,6 +312,119 @@ function(iccdev_add_iccconnect_config_parser_test)
     endforeach()
     set_tests_properties(iccdev.iccconnect-config-parser PROPERTIES
       ENVIRONMENT_MODIFICATION "${_iccconnect_config_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+function(iccdev_add_createsearch_embedded_profile_test)
+  if(NOT DEFINED TARGET_LIB_ICCCONNECT OR NOT TARGET "${TARGET_LIB_ICCCONNECT}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCreateSearchEmbeddedProfileTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/createsearch-embedded-profile.cpp"
+  )
+  target_compile_features(iccCreateSearchEmbeddedProfileTest PRIVATE cxx_std_17)
+  target_link_libraries(iccCreateSearchEmbeddedProfileTest PRIVATE ${TARGET_LIB_ICCCONNECT})
+
+  add_dependencies(check iccCreateSearchEmbeddedProfileTest)
+
+  # sRGB_D65_MAT.icc is a tracked v5 matrix/TRC profile, so a profile->itself
+  # search converges quickly and the run stays well inside the timeout below.
+  set(_createsearch_embedded_profile
+    "${ICCDEV_TESTING_DIR}/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc")
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.createsearch-embedded-profile
+      COMMAND "$<TARGET_FILE:iccCreateSearchEmbeddedProfileTest>"
+        "${_createsearch_embedded_profile}"
+    )
+  else()
+    add_test(
+      NAME iccdev.createsearch-embedded-profile
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccCreateSearchEmbeddedProfileTest>"
+        "${_createsearch_embedded_profile}"
+    )
+  endif()
+  # A Nelder-Mead search runs per sample and the helper drives five chains
+  # (scalar, embedded, threaded, embedded-threaded, and a rejection), so this
+  # needs the longer budget its CIccCmmSearch siblings use rather than the 60
+  # the parser-only IccConnect test gets.
+  set_tests_properties(iccdev.createsearch-embedded-profile PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 300
+    LABELS "iccdev;iccconnect;cmmsearch;embedded;regression"
+  )
+  if(WIN32)
+    set(_createsearch_embedded_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCreateSearchEmbeddedProfileTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCCONNECT}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _createsearch_embedded_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.createsearch-embedded-profile PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_createsearch_embedded_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+function(iccdev_add_mru_apply_ownership_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMruApplyOwnershipTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/mru-cmm-apply-ownership.cpp"
+  )
+  target_compile_features(iccMruApplyOwnershipTest PRIVATE cxx_std_17)
+  target_link_libraries(iccMruApplyOwnershipTest PRIVATE ${TARGET_LIB_ICCPROFLIB}
+    ${CMAKE_THREAD_LIBS_INIT})
+
+  add_dependencies(check iccMruApplyOwnershipTest)
+
+  # sRGB_v4_ICC_preference.icc is a tracked v4 LUT profile: a real xform chain
+  # on both sides of the cache, so a hit that returned stale or untransformed
+  # data is separable from one that returned the right colour.
+  set(_mru_apply_profile "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc")
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.mru-cmm-apply-ownership
+      COMMAND "$<TARGET_FILE:iccMruApplyOwnershipTest>" "${_mru_apply_profile}"
+    )
+  else()
+    add_test(
+      NAME iccdev.mru-cmm-apply-ownership
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccMruApplyOwnershipTest>"
+        "${_mru_apply_profile}"
+    )
+  endif()
+  set_tests_properties(iccdev.mru-cmm-apply-ownership PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;mru;cache;threading;regression"
+  )
+  if(WIN32)
+    set(_mru_apply_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMruApplyOwnershipTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _mru_apply_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.mru-cmm-apply-ownership PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_mru_apply_windows_env_mods}"
     )
   endif()
 endfunction()
@@ -1469,6 +1585,45 @@ function(iccdev_add_reflectance_observer_illum_range_test)
   endif()
 endfunction()
 
+# Guards #2520: the reflectance CLUT and reflectance observer elements must honour
+# their Absolute flag (ICC.2:2023 11.2.12 and 11.2.13), which was tested against
+# icRelativeSpectralData (0) and so never read, and the emission observer must not
+# scale Y and Z by m_xyzscale entries its Begin() never set.
+function(iccdev_add_spectral_absolute_flag_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSpectralAbsoluteFlagTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/spectral-absolute-flag.cpp"
+  )
+  target_link_libraries(iccSpectralAbsoluteFlagTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccSpectralAbsoluteFlagTest)
+
+  add_test(
+    NAME iccdev.spectral-absolute-flag
+    COMMAND "$<TARGET_FILE:iccSpectralAbsoluteFlagTest>"
+  )
+  set_tests_properties(iccdev.spectral-absolute-flag PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;mpe;spectral;pcc;issue-2520;regression;asan"
+  )
+  if(WIN32)
+    set(_spectral_absolute_flag_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSpectralAbsoluteFlagTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _spectral_absolute_flag_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.spectral-absolute-flag PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_spectral_absolute_flag_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards the IccColorimetry spectral->XYZ reduction module (#1475): the registry-
 # aligned reduction methods (icXYZCalcDirectSum / icXYZCalcWeighting /
 # icXYZCalcSpragueTo1nm) and their range-reconciliation primitives
@@ -2029,6 +2184,184 @@ function(iccdev_add_pcs_birefl_illuminant_range_test)
     endforeach()
     set_tests_properties(iccdev.pcs-birefl-illuminant-range PROPERTIES
       ENVIRONMENT_MODIFICATION "${_pcs_birefl_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# CIccSparseMatrix::Union() is a near-verbatim copy of CIccSparseMatrix::Interp() and
+# carried the same five defects: Init() without bSetData (so the result has no row/column
+# header), each row's start overwritten with its end, the second matrix's per-row count
+# measured from the first matrix's row offset, neither single-sided merge tail advancing
+# i/j or the write cursor (an INFINITE LOOP, CWE-835), and both whole-row memcpy() calls
+# passing an entry count where bytes are required.
+#
+# Union()'s only caller is CIccTagSparseMatrixArray::Validate(), which unions each
+# consecutive pair in any sparseMatrixArrayType tag holding two or more.  Validation is
+# reached from iccDumpProfile and the public validation API on untrusted input, so a
+# profile with a two-matrix sparse tag whose matrices have different sparsity patterns --
+# the ordinary case, not a malformed one -- wedged the process instead of reporting
+# anything.  Every sparse tag in Testing/ held exactly one matrix, and with one matrix the
+# loop is never entered, so none of it had coverage.
+#
+# The TIMEOUT is the assertion for the hang: against unfixed sources the test does not
+# return.  In-memory fixtures only.
+function(iccdev_add_sparsematrix_union_validate_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSparseMatrixUnionValidateTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/sparsematrix-union-validate.cpp"
+  )
+  target_link_libraries(iccSparseMatrixUnionValidateTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccSparseMatrixUnionValidateTest)
+
+  add_test(
+    NAME iccdev.sparsematrix-union-validate
+    COMMAND "$<TARGET_FILE:iccSparseMatrixUnionValidateTest>"
+  )
+  set_tests_properties(iccdev.sparsematrix-union-validate PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;security;sparsematrix;cwe-835;regression"
+  )
+  if(WIN32)
+    set(_sparse_union_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSparseMatrixUnionValidateTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _sparse_union_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.sparsematrix-union-validate PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_sparse_union_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# A v5 NamedColor entry whose spectral member is a sparseMatrixArrayType could not be
+# applied at all, and CIccPcsStepSrcSparseMatrix::Apply() had therefore never executed.
+#
+# CIccTagSparseMatrixArray implements CIccTagNumArray in a different dialect than every
+# other subclass -- GetNumValues() counts matrices rather than floats, and
+# GetValues()/Interpolate() take nVectorSize in bytes.  CIccArrayNamedColor::Validate()
+# branches on IsMatrixArray() for exactly that reason; CIccStructNamedColor::GetTint()
+# never got the matching branch and divided a matrix count by a sample count, returning
+# false before reading any data, so CIccXformNamedColor::Apply() reported
+# icCmmStatBadTintXform for every colour.  Three further defects sat behind it in
+# CIccSparseMatrix::Interp(), which the tint path is the only caller of: the destination
+# was initialised without stamping its row/column header, each row's stored start was
+# overwritten with its end, the per-row count for the second matrix was measured from the
+# first matrix's row offset, both single-sided merge tails failed to advance and spun
+# forever, and the whole-row copies passed an entry count to memcpy() as a byte count.
+#
+# In-memory fixtures only, so a corpus change cannot disable it.  The real profile is
+# covered by iccdev_add_namedcolor_sparse_matrix_xml_test() below.
+function(iccdev_add_namedcolor_sparse_matrix_apply_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccNamedColorSparseMatrixApplyTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/namedcolor-sparse-matrix-apply.cpp"
+  )
+  target_link_libraries(iccNamedColorSparseMatrixApplyTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccNamedColorSparseMatrixApplyTest)
+
+  add_test(
+    NAME iccdev.namedcolor-sparse-matrix-apply
+    COMMAND "$<TARGET_FILE:iccNamedColorSparseMatrixApplyTest>"
+  )
+  set_tests_properties(iccdev.namedcolor-sparse-matrix-apply PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;spectral;namedcolor;sparsematrix;regression"
+  )
+  if(WIN32)
+    set(_nmcl_sparse_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccNamedColorSparseMatrixApplyTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _nmcl_sparse_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.namedcolor-sparse-matrix-apply PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_nmcl_sparse_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# The same defects, on the profile they were found in.  Testing/**/*.icc is gitignored --
+# CreateAllProfiles.sh generates it -- so all three inputs are the tracked XML documents,
+# parsed through the CIccProfileXml::LoadXml path iccFromXml uses, as
+# iccdev.v2-xml-fixtures does.  The chain is the one Testing/RunTests.sh already runs for
+# the dense bi-spectral FluorescentNamedColor; building the whole chain is what makes the
+# sparse PCS step run at all, since a lone named profile has no PCS connection.
+function(iccdev_add_namedcolor_sparse_matrix_xml_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccNamedColorSparseMatrixXmlTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/namedcolor-sparse-matrix-xml.cpp"
+  )
+  target_compile_features(iccNamedColorSparseMatrixXmlTest PRIVATE cxx_std_17)
+  target_include_directories(iccNamedColorSparseMatrixXmlTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccNamedColorSparseMatrixXmlTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccNamedColorSparseMatrixXmlTest)
+
+  # The second fixture is the first plus one extra matrix per colour, authored at the
+  # midpoint of that colour's tint-zero and full-tint matrices, plus a single 1e-4
+  # off-diagonal probe entry.  The midpoint is what lets the test assert the two profiles
+  # produce the same tint axis; the probe entry is what makes their sparsity patterns
+  # differ, without which CIccSparseMatrix::Union() -- reached from this profile's own
+  # Validate() -- is never wrong and stays unreached.  The test checks both properties
+  # hold, so neither can quietly lapse.
+  set(_nmcl_sparse_xml_args
+    "${ICCDEV_TESTING_DIR}/Named/SparseMatrixNamedColor.xml"
+    "${ICCDEV_TESTING_DIR}/Named/SparseMatrixNamedColorTint.xml"
+    "${ICCDEV_TESTING_DIR}/PCC/Spec400_10_700-D50_2deg-Abs.xml"
+    "${ICCDEV_TESTING_DIR}/SpecRef/SixChanCameraRef.xml"
+  )
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.namedcolor-sparse-matrix-xml
+      COMMAND "$<TARGET_FILE:iccNamedColorSparseMatrixXmlTest>" ${_nmcl_sparse_xml_args}
+    )
+  else()
+    add_test(
+      NAME iccdev.namedcolor-sparse-matrix-xml
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccNamedColorSparseMatrixXmlTest>" ${_nmcl_sparse_xml_args}
+    )
+  endif()
+  set_tests_properties(iccdev.namedcolor-sparse-matrix-xml PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;xml;spectral;namedcolor;sparsematrix;regression"
+  )
+  if(WIN32)
+    set(_nmcl_sparse_xml_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccNamedColorSparseMatrixXmlTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _nmcl_sparse_xml_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.namedcolor-sparse-matrix-xml PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_nmcl_sparse_xml_env_mods}"
     )
   endif()
 endfunction()
@@ -5317,6 +5650,58 @@ function(iccdev_add_signature_utils_contract_test)
   endif()
 endfunction()
 
+function(iccdev_add_utf8_converter_cursor_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccUtf8ConverterCursorTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/utf8-converter-cursor-contract.cpp"
+  )
+  target_compile_features(iccUtf8ConverterCursorTest PRIVATE cxx_std_17)
+
+  target_include_directories(iccUtf8ConverterCursorTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccUtf8ConverterCursorTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccUtf8ConverterCursorTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.utf8-converter-cursor-contract
+      COMMAND "$<TARGET_FILE:iccUtf8ConverterCursorTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.utf8-converter-cursor-contract
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccUtf8ConverterCursorTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.utf8-converter-cursor-contract PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;utf8;utf16;aliasing;issue-2504;issue-2511;issue-2526;regression"
+  )
+  if(WIN32)
+    # icWCharToUtf8 takes the UTF-16 arm of its WCHAR_MAX branch here, which no
+    # other test compiles or runs; the runtime paths must resolve for it to run.
+    set(_utf8cursor_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccUtf8ConverterCursorTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _utf8cursor_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.utf8-converter-cursor-contract PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_utf8cursor_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_mcs_colorspace_name_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -7615,6 +8000,8 @@ if(WIN32)
   iccdev_add_iccconnect_thread_test()
   iccdev_add_clut_avx512_sixteen_output_test()
   iccdev_add_iccconnect_config_parser_test()
+  iccdev_add_createsearch_embedded_profile_test()
+  iccdev_add_mru_apply_ownership_test()
   iccdev_add_cmmsearch_init_pcc_test()
   iccdev_add_cmmsearch_rebegin_test()
   iccdev_add_ndlut_input_channel_mismatch_test()
@@ -7647,6 +8034,7 @@ if(WIN32)
   iccdev_add_struct_name_spelling_test()
   iccdev_add_mcs_colorspace_name_test()
   iccdev_add_signature_utils_contract_test()
+  iccdev_add_utf8_converter_cursor_test()
   iccdev_add_console_sanitize_codepoint_test()
   iccdev_add_tiff_create_overflow_test()
   iccdev_add_tiff_separated_strips_test()
@@ -7685,6 +8073,7 @@ if(WIN32)
   iccdev_add_xform_abstorel_adjust_test()
   iccdev_add_bpc_d2b_tag_family_test()
   iccdev_add_reflectance_observer_illum_range_test()
+  iccdev_add_spectral_absolute_flag_test()
   iccdev_add_colorimetry_methods_test()
   iccdev_add_getvalues_nstart_test()
   iccdev_add_chromaticity_validate_test()
@@ -7694,6 +8083,9 @@ if(WIN32)
   iccdev_add_gamut_xform_semantics_test()
   iccdev_add_rangemap_uninitialized_test()
   iccdev_add_pcs_birefl_illuminant_range_test()
+  iccdev_add_namedcolor_sparse_matrix_apply_test()
+  iccdev_add_namedcolor_sparse_matrix_xml_test()
+  iccdev_add_sparsematrix_union_validate_test()
   iccdev_add_pcs_applyillum_chain_sizing_test()
   iccdev_add_spectral_pcs_range_consistency_test()
   iccdev_add_spectral_media_white_test()
@@ -8003,6 +8395,8 @@ set(ICCDEV_TEST_ENV
 iccdev_add_iccconnect_thread_test()
 iccdev_add_clut_avx512_sixteen_output_test()
 iccdev_add_iccconnect_config_parser_test()
+iccdev_add_createsearch_embedded_profile_test()
+iccdev_add_mru_apply_ownership_test()
 iccdev_add_cmmsearch_init_pcc_test()
 iccdev_add_cmmsearch_rebegin_test()
 iccdev_add_ndlut_input_channel_mismatch_test()
@@ -8035,6 +8429,7 @@ iccdev_add_tag_name_spelling_test()
 iccdev_add_struct_name_spelling_test()
 iccdev_add_mcs_colorspace_name_test()
 iccdev_add_signature_utils_contract_test()
+iccdev_add_utf8_converter_cursor_test()
 iccdev_add_console_sanitize_codepoint_test()
 iccdev_add_tiff_create_overflow_test()
 iccdev_add_tiff_separated_strips_test()
@@ -8076,6 +8471,7 @@ iccdev_add_xform_create_tag_ownership_test()
 iccdev_add_xform_abstorel_adjust_test()
 iccdev_add_bpc_d2b_tag_family_test()
 iccdev_add_reflectance_observer_illum_range_test()
+iccdev_add_spectral_absolute_flag_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_chromaticity_validate_test()
@@ -8087,6 +8483,9 @@ iccdev_add_pawg_c5_cicp_test()
 iccdev_add_gamut_xform_semantics_test()
 iccdev_add_rangemap_uninitialized_test()
 iccdev_add_pcs_birefl_illuminant_range_test()
+iccdev_add_namedcolor_sparse_matrix_apply_test()
+iccdev_add_namedcolor_sparse_matrix_xml_test()
+iccdev_add_sparsematrix_union_validate_test()
 iccdev_add_pcs_applyillum_chain_sizing_test()
 iccdev_add_spectral_pcs_range_consistency_test()
 iccdev_add_spectral_media_white_test()
@@ -9523,6 +9922,27 @@ iccdev_add_script_test(
   "iccdev;xml;json;signature;roundtrip;issue-2097;regression"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2097-nul-signature-roundtrip-regression.sh"
+)
+
+# #2512: until this test, no tracked XML carried a DictEntry, so the dictType
+# writers in IccTagXml.cpp and IccTagJson.cpp, and the XML reader, ran under no
+# test at all.  Corrupting icWCharToUtf8's output length by one byte left the
+# whole suite green.  The fixture lives in .github/ci/test-data rather than
+# Testing/, so the generated corpus is unchanged.  It has one entry per binary
+# record shape, including a value that is set but empty, which the round trip
+# must keep apart from an entry with no value.  Each direction is checked on
+# its own: the text each writer emits, and the bytes each reader rebuilds.
+# #2526 added an entry above U+FFFF, which the writers encoded as CESU-8
+# where wchar_t is 32 bits.  Not registered on Windows (see the WIN32 branch
+# above), which is the one platform where wchar_t is 16 bits; the icWCharToUtf8
+# cases in iccdev.utf8-converter-cursor-contract cover both widths.
+# Plain functional test -- skips cleanly if the tools/fixtures are absent.
+iccdev_add_script_test(
+  iccdev.issue-2512-dict-roundtrip
+  90
+  "iccdev;xml;json;dict;roundtrip;issue-2512;issue-2526;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2512-dict-roundtrip-regression.sh"
 )
 
 # #1355 - matrix/TRC (PCSXYZ) profiles must round-trip near-exactly. Guards the

@@ -637,6 +637,10 @@ jobs:
           git status
           Write-Host "========= Fetching Deps... ================`n"
           Start-BitsTransfer -Source "https://github.com/InternationalColorConsortium/iccDEV/releases/download/vcpkg-win-2324-deps/iccdev-windows-vcpkg-classic-308e561.zip" -Destination "deps.zip"
+          $actualDigest = (Get-FileHash -LiteralPath 'deps.zip' -Algorithm SHA256).Hash
+          if ($actualDigest -ne 'd3591ccfbdae65a908a8488030b270782942106e06093602f9d919e027cd2976') {
+            throw "vcpkg export digest mismatch: $actualDigest"
+          }
           Write-Host "========= Extracting Deps... ================`n"
           tar -xf deps.zip
           cd Build/Cmake
@@ -962,12 +966,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      EMSDK_VERSION: 4.0.20
-      EMSDK_REF: e4fe26ef59168ff44f4c23c466e497bf60b3411e
-      ZLIB_REF: f9dd6009be3ed32415edf1e89d1bc38380ecb95d
-      LIBTIFF_REF: 97ae1f6f0bba8999326f084f04950ecfd6166580
-      LIBXML2_REF: 39b66eb2089f491eacf8e22a7965a235f7f5735e
-      NLOHMANN_JSON_REF: f0bf4c731a53aab29ebde0234385b9e63bf70dcd
+      EMSDK_VERSION: 4.0.21
+      EMSDK_REF: b2436aafa7351ee1b581f15841f1b45ed716a279
+      ZLIB_REF: da607da739fa6047df13e66a2af6b8bec7c2a498
+      LIBTIFF_REF: 5fe20d0e9aba49a6a350ed533459d1505203838f
+      LIBXML2_REF: b7fa62cbe8ef0df5869e000d5b690bdedd07f33e
+      NLOHMANN_JSON_REF: 55f93686c01528224f448c19128836e7df245f72
       WASM_DEPS_CACHE_VERSION: v2
     defaults:
       run:
@@ -1748,9 +1752,12 @@ jobs:
   release:
     name: "Publish Latest Release"
     needs: [linux, macos, windows, wasm, cpack-linux, doxygen]
-    if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-fix-windows-packaging-failure' }}
+    if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-fix-windows-packaging-failure' || github.ref == 'refs/heads/ci-publish-colourbill-ctrl' }}
     runs-on: ubuntu-latest
-    environment: release
+    environment:
+      name: >-
+        ${{ github.ref == 'refs/heads/ci-publish-colourbill-ctrl' &&
+            'ci-publishing-colourbill-ctrl' || 'release' }}
     timeout-minutes: 15
     permissions:
       contents: write  # Required to publish the latest release.
