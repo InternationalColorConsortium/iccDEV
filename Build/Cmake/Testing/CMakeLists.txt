@@ -4778,6 +4778,68 @@ function(iccdev_add_colorant_count_narrowing_json_test)
   endif()
 endfunction()
 
+# #2538: CIccTagJsonParametricCurve::ParseJson() accepted a parametricCurveType
+# with fewer parameters than its function type requires -- or none, or a
+# non-array "params" -- and returned true with the rest of the tag's parameter
+# array uninitialised, which Write() then encoded into the profile. A
+# functionType outside 16 bits (65540, -65532) reached the same state by
+# narrowing to type 4 after the parameter count had already been taken as 0.
+# The helper drives the reader directly and asserts the return value and every
+# parameter's value, so the unfixed reader fails it on a plain build, not only
+# where a sanitizer fills the heap. Its accepted cases cover all five known
+# function types at their exact counts, so a count table off by one for any type
+# fails that type's case.
+function(iccdev_add_parametric_curve_params_json_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccParametricCurveParamsJsonTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/parametric-curve-params-json.cpp"
+  )
+  target_compile_features(iccParametricCurveParamsJsonTest PRIVATE cxx_std_17)
+  target_include_directories(iccParametricCurveParamsJsonTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccParametricCurveParamsJsonTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccParametricCurveParamsJsonTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.parametric-curve-params-json
+      COMMAND "$<TARGET_FILE:iccParametricCurveParamsJsonTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.parametric-curve-params-json
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccParametricCurveParamsJsonTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.parametric-curve-params-json PROPERTIES
+    TIMEOUT 300
+    LABELS "iccdev;json;parametriccurve;issue-2538;regression"
+  )
+  if(WIN32)
+    set(_parametric_params_json_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccParametricCurveParamsJsonTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _parametric_params_json_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.parametric-curve-params-json PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_parametric_params_json_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # The XML twin of #2536, found while fixing it and fixed in the same commit:
 # CIccTagXmlColorantOrder::ParseXml() narrowed the same way at SetSize() and then
 # handed the UNNARROWED count to CIccUInt8Array::ParseArray() as its buffer size,
@@ -7892,6 +7954,7 @@ if(WIN32)
   iccdev_add_namedcolor_findcolor_suffix_underflow_test()
   iccdev_add_colorant_count_narrowing_json_test()
   iccdev_add_colorant_count_narrowing_xml_test()
+  iccdev_add_parametric_curve_params_json_test()
   iccdev_add_colorant_count_narrowing_binary_test()
   iccdev_add_xform_create_tag_ownership_test()
   iccdev_add_xform_abstorel_adjust_test()
@@ -8278,6 +8341,7 @@ iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_namedcolor_findcolor_suffix_underflow_test()
 iccdev_add_colorant_count_narrowing_json_test()
 iccdev_add_colorant_count_narrowing_xml_test()
+iccdev_add_parametric_curve_params_json_test()
 iccdev_add_colorant_count_narrowing_binary_test()
 iccdev_add_xform_create_tag_ownership_test()
 iccdev_add_xform_abstorel_adjust_test()
