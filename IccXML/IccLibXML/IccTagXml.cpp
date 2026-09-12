@@ -2356,15 +2356,38 @@ bool CIccTagXmlColorantOrder::ParseXml(xmlNode *pNode, std::string & /*parseStr*
   pNode = icXmlFindNode(pNode, "ColorantOrder");
 
   if (pNode) {
-    int n = icXmlNodeCount(pNode->children, "n");
+    icUInt32Number n = icXmlNodeCount(pNode->children, "n");
+
+    // The XML twin of #2536, reached through iccFromXml rather than
+    // iccFromJson: SetSize() takes an icUInt16Number, so 65537 <n> elements
+    // narrowed to a one-entry allocation while ParseArray() below was still
+    // handed the untruncated count as its buffer size and wrote every element.
+    // ParseArray()'s own "n > nBufSize" test cannot catch it -- the size it is
+    // given is the count, not the allocation.  Reject above the width the tag
+    // can hold instead of narrowing into it.
+    //
+    // CIccTagXmlColorantTable::ParseXml below is not affected: it casts to
+    // icUInt16Number explicitly and bounds its own loop by the same narrowed
+    // count, so it truncates the colorant list rather than overrunning it.
+    if (n > 0xFFFF)
+      return false;
 
     if (n) {
-      SetSize(n);
+      // SetSize()'s answer was discarded here.  That was never a use-after-free:
+      // icRealloc() frees the old block and returns NULL on failure, SetSize()
+      // stores that NULL, and the "if (m_pData)" that used to sit below
+      // therefore already caught a failed reallocation and fell through to the
+      // return false.  Testing the answer directly says so in one place, and
+      // retires that indirect guard rather than leaving it dead beside it: with
+      // n >= 1 and SetSize() true, m_nCount >= 1, and both the constructor and
+      // SetSize() zero m_nCount whenever the allocation fails, so the pointer
+      // test could no longer come out false.  The sibling ColorantTable reader
+      // spells the check the same way for #2106.
+      if (!SetSize((icUInt16Number)n))
+        return false;
 
-      if (m_pData) {
-        if (CIccUInt8Array::ParseArray(m_pData, n, pNode->children))
-          return true;
-      }
+      if (CIccUInt8Array::ParseArray(m_pData, n, pNode->children))
+        return true;
     }
   }  
   return false;
