@@ -1,0 +1,1 @@
+| case.cpp:28:20:28:26 | call to SetSize | JSON array count $@ is implicitly narrowed by SetSize() from icUInt32Number to icUInt16Number. Reject values above the SetSize() parameter maximum before allocation. | case.cpp:27:26:27:38 | call to icJsonSafeU32 | derived from JSON .size() |
