@@ -45,25 +45,30 @@ REM encoding takes: the full layout, the two sharing flags that delete fields fr
 REM every alternate after the first, the raw-byte authoring path, the component
 REM mixing types no other fixture reaches, and the C.3.8 reference-white tone map.
 REM HagcInvalidXOrder is a negative -- see Testing/expected-invalid-fromxml.tsv.
+REM iccFromXml saves a negative fixture but exits 1 because it validates invalid.
+REM The trailing ver>nul resets that exit code to 0, so a runner that executes each
+REM line on its own and stops on a nonzero exit still builds every fixture after it.
+REM Which negatives are expected, and why, is recorded in the .tsv, not here.
 iccFromXml HagcDisplay.xml HagcDisplay.icc
 iccFromXml HagcCommonParams.xml HagcCommonParams.icc
 iccFromXml HagcHexData.xml HagcHexData.icc
 iccFromXml HagcMixingTypes.xml HagcMixingTypes.icc
-iccFromXml HagcInvalidXOrder.xml HagcInvalidXOrder.icc
+iccFromXml HagcInvalidXOrder.xml HagcInvalidXOrder.icc || ver>nul
 iccFromXml HagcRefWhiteToneMap.xml HagcRefWhiteToneMap.icc
 
 REM Clause 8.10 HDR Profile coverage: metadata, the baked AToB0/BToA0 pair that makes
 REM 8.10.3's precedence observable, the ColourPrimaries-2 pair, and the Linear
 REM content-headroom order of 8.10.4 (rules a, b and c, plus the HAGC-white case).
 REM HdrInvalidTransfer, HdrMissingBToA0, HdrMissingLutPair and HdrCicp2NoColumns are
-REM negatives.
+REM negatives. The last three validate invalid, so iccFromXml exits 1 for them and
+REM their lines end in ver>nul for the reason given above the HAGC block.
 iccFromXml HdrCicpUnspecified.xml HdrCicpUnspecified.icc
 iccFromXml HdrDisplayMetadata.xml HdrDisplayMetadata.icc
 iccFromXml HdrBakedLut.xml HdrBakedLut.icc
 iccFromXml HdrInvalidTransfer.xml HdrInvalidTransfer.icc
-iccFromXml HdrMissingBToA0.xml HdrMissingBToA0.icc
-iccFromXml HdrMissingLutPair.xml HdrMissingLutPair.icc
-iccFromXml HdrCicp2NoColumns.xml HdrCicp2NoColumns.icc
+iccFromXml HdrMissingBToA0.xml HdrMissingBToA0.icc || ver>nul
+iccFromXml HdrMissingLutPair.xml HdrMissingLutPair.icc || ver>nul
+iccFromXml HdrCicp2NoColumns.xml HdrCicp2NoColumns.icc || ver>nul
 iccFromXml HdrInputDisplayMeta.xml HdrInputDisplayMeta.icc
 iccFromXml HdrLinearCll.xml HdrLinearCll.icc
 iccFromXml HdrLinearMdcv.xml HdrLinearMdcv.icc
@@ -99,7 +104,7 @@ iccFromXml HdrHeadroomDcvCrwl.xml HdrHeadroomDcvCrwl.icc
 REM Clause 8.10.6 pairing at x = 1. HdrMissingBToA0 covers x = 0, but x = 0 is the
 REM pair 8.10.6 makes mandatory outright, so an implementation that only ever looked
 REM for AToB0Tag/BToA0Tag passes it. A negative.
-iccFromXml HdrMissingBToA1.xml HdrMissingBToA1.icc
+iccFromXml HdrMissingBToA1.xml HdrMissingBToA1.icc || ver>nul
 
 REM IMPL-02: the VideoFullRangeFlag pair, identical in every byte but that field.
 REM Nothing reads the flag, so these render IDENTICALLY -- the pair pins the gap
