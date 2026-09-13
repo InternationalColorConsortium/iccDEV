@@ -102,6 +102,111 @@ static std::string fmt(double v)
   return buf;
 }
 
+/* The attribute value of name="..." inside one element's text, or "" when
+ * absent.  Requires the preceding character to be whitespace so that Name is
+ * never matched inside another attribute's name. */
+static std::string attrValue(const std::string &tag, const char *name)
+{
+  std::string key = std::string(name) + "=\"";
+  size_t pos = 0;
+  while ((pos = tag.find(key, pos)) != std::string::npos) {
+    if (pos > 0 && (tag[pos - 1] == ' ' || tag[pos - 1] == '\t' ||
+                    tag[pos - 1] == '\n' || tag[pos - 1] == '\r')) {
+      size_t start = pos + key.size();
+      size_t end = tag.find('"', start);
+      return end == std::string::npos ? std::string() : tag.substr(start, end - start);
+    }
+    pos += key.size();
+  }
+  return std::string();
+}
+
+/* Every HDR metadata entry in the corpus XML has the value count its registry
+ * entry defines: CRWL, DRWL and DERH one value; CLL (max, average, primaries),
+ * MDCV (max, min, primaries) and DCV (max, min, primaries) three; CCV (max,
+ * average, min, primaries) four.  Every value must also be a number.
+ *
+ * Checked on the tracked XML rather than through icGetHdrProfileInfo(),
+ * because the resolver reads only the entries its rule selects.  An entry no
+ * rule reads can have any shape while every value assertion in the manifest
+ * stays green - which is exactly how a ten-value DCV once passed a clean value
+ * check downstream, on a fixture whose display rule read no DCV at all.
+ *
+ * Returns the number of failures; entriesChecked receives how many entries
+ * were checked, so the caller can refuse a check that saw none. */
+static int checkEntryArity(const std::vector<std::string> &xmlFiles, int &entriesChecked)
+{
+  std::map<std::string, size_t> arity;
+  arity["CRWL"] = 1;
+  arity["DRWL"] = 1;
+  arity["DERH"] = 1;
+  arity["CLL"]  = 3;
+  arity["MDCV"] = 3;
+  arity["DCV"]  = 3;
+  arity["CCV"]  = 4;
+
+  int failures = 0;
+  entriesChecked = 0;
+
+  for (size_t i = 0; i < xmlFiles.size(); i++) {
+    std::string path = std::string("Testing/HDR/") + xmlFiles[i];
+    std::ifstream f(path.c_str());
+    if (!f) {
+      printf("FAIL %-28s cannot read %s\n", xmlFiles[i].c_str(), path.c_str());
+      failures++;
+      continue;
+    }
+    std::stringstream buf;
+    buf << f.rdbuf();
+    std::string text = buf.str();
+
+    /* Drop XML comments first: fixture headers discuss entries in prose, and a
+     * DictEntry written inside a comment is not an entry. */
+    size_t c;
+    while ((c = text.find("<!--")) != std::string::npos) {
+      size_t e = text.find("-->", c);
+      text.erase(c, e == std::string::npos ? std::string::npos : e + 3 - c);
+    }
+
+    size_t pos = 0;
+    while ((pos = text.find("<DictEntry", pos)) != std::string::npos) {
+      size_t end = text.find('>', pos);
+      if (end == std::string::npos)
+        break;
+      std::string tag = text.substr(pos, end - pos);
+      pos = end;
+
+      std::string name = attrValue(tag, "Name");
+      std::map<std::string, size_t>::const_iterator it = arity.find(name);
+      if (it == arity.end())
+        continue;
+
+      entriesChecked++;
+      std::string value = attrValue(tag, "Value");
+      std::stringstream vs(value);
+      std::string tok;
+      size_t n = 0;
+      bool numeric = true;
+      while (vs >> tok) {
+        n++;
+        char *stop = NULL;
+        strtod(tok.c_str(), &stop);
+        if (!stop || *stop)
+          numeric = false;
+      }
+
+      if (n != it->second || !numeric) {
+        printf("FAIL %-28s %s has %u value(s)%s; the registry defines %u: \"%s\"\n",
+               xmlFiles[i].c_str(), name.c_str(), (unsigned)n,
+               numeric ? "" : ", not all numeric", (unsigned)it->second, value.c_str());
+        failures++;
+      }
+    }
+  }
+
+  return failures;
+}
+
 int main()
 {
   const char *kManifest = "Testing/HDR/hdr-corpus-manifest.tsv";
@@ -173,12 +278,13 @@ int main()
    * row here is exactly how a corpus drifts into asserting nothing, which is
    * the condition this file was written to end. */
   int unlisted = 0;
+  int arityEntries = 0;
   {
     std::vector<std::string> found;
 
 #if defined(_WIN32)
     WIN32_FIND_DATAA fd;
-    HANDLE h = FindFirstFileA("Testing\\HDR\\*.icc", &fd);
+    HANDLE h = FindFirstFileA("Testing\\HDR\\*", &fd);
     if (h != INVALID_HANDLE_VALUE) {
       do {
         if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
@@ -207,10 +313,24 @@ int main()
         g_fail++;
       }
     }
+
+    std::vector<std::string> xmlFiles;
+    for (size_t i = 0; i < found.size(); i++) {
+      const std::string &fn = found[i];
+      if (fn.size() >= 5 && fn.compare(fn.size() - 4, 4, ".xml") == 0)
+        xmlFiles.push_back(fn);
+    }
+    g_fail += checkEntryArity(xmlFiles, arityEntries);
   }
 
-  printf("hdr-corpus-manifest: %d rows checked, %d unlisted, %d failures\n",
-         rows, unlisted, g_fail);
+  printf("hdr-corpus-manifest: %d rows checked, %d unlisted, %d metadata entries arity-checked, %d failures\n",
+         rows, unlisted, arityEntries, g_fail);
+
+  /* A check that saw no entries asserts nothing, which is not a pass. */
+  if (arityEntries == 0) {
+    printf("FAIL no HDR metadata entries found to arity-check\n");
+    return 1;
+  }
 
   if (rows == 0) {
     printf("FAIL manifest contained no rows\n");
