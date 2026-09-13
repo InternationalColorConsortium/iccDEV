@@ -1176,7 +1176,7 @@ bool CIccTagJsonColorantTable::ParseJson(const IccJson &j, std::string &parseStr
       std::string name;
       if (jGetString(c, "name", name))
         strncpy(m_pData[i].name, name.c_str(), sizeof(m_pData[i].name)-1);
-      if (jsonExistsField(c, "pcs") && c["pcs"].is_array() && c["pcs"].size() >= 3) {
+      if (jsonExistsField(c, "pcs") && c["pcs"].is_array() && c["pcs"].size() == 3) {
         if (pcsEncoding == "16bit") {
           icUInt16Number pcs[3];
           if (!jGetArray(c, "pcs", pcs, 3)) {
@@ -1198,6 +1198,9 @@ bool CIccTagJsonColorantTable::ParseJson(const IccJson &j, std::string &parseStr
           m_pData[i].data[1] = icFtoU16(pcs[1]);
           m_pData[i].data[2] = icFtoU16(pcs[2]);
         }
+      } else {
+        parseStr += "colorantTableType pcs must contain three numeric values\n";
+        return false;
       }
     }
   }
