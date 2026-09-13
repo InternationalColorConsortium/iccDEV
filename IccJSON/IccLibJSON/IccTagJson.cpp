@@ -2135,27 +2135,65 @@ bool CIccTagJsonParametricCurve::ParseJson(const IccJson &j, std::string &parseS
   return ParseJson(j, icConvertFloat, parseStr);
 }
 
-bool CIccTagJsonParametricCurve::ParseJson(const IccJson &j, icConvertType /*nType*/, std::string & /*parseStr*/)
+bool CIccTagJsonParametricCurve::ParseJson(const IccJson &j, icConvertType /*nType*/, std::string &parseStr)
 {
-  int funcType = 0;
-  if (!jGetValue(j, "functionType", funcType)) return false;
-  icUInt8Number nParam = 0;
-  // Determine param count from function type per ICC spec
-  switch (funcType) { case 0: nParam=1; break; case 1: nParam=3; break; case 2: nParam=4; break; case 3: nParam=5; break; case 4: nParam=7; break; default: nParam=0; }
-  if (!SetFunctionType((icUInt16Number)funcType)) return false;
-  if (jsonExistsField(j, "params") && j["params"].is_array()) {
-    const IccJson &params = j["params"];
-    bool paramsOverflow = false;
-    icUInt32Number nParams = icJsonSafeU32(params.size(), &paramsOverflow);
-    if (paramsOverflow)
+  // #2538: this reader used to accept a document that supplied fewer parameters
+  // than its function type requires, and returned true with the rest of
+  // m_dParam uninitialised.  SetFunctionType() allocates m_dParam with a bare
+  // new[] and fills nothing; the loop below only wrote min(supplied, required)
+  // entries, and a missing or non-array "params" wrote none at all.  Write()
+  // then encoded whatever the heap held, so iccFromJson + iccToJson on
+  // {"functionType": 4, "params": [2.4]} emitted six copies of ASan's 0xbebebebe
+  // fill (-0.3725...) and, on a Release build, whatever the allocator returned.
+  //
+  // A second way in reached the same state with no short array at all.
+  // functionType was read as an int, and the parameter count came from a local
+  // switch on that int while SetFunctionType() got it narrowed to 16 bits, so
+  // the two disagreed for any value outside 0..65535: 65540 found no case here
+  // (count 0, nothing read) but became function type 4 in the tag (7 slots
+  // allocated), leaving all seven uninitialised.  -65532 did the same.
+  //
+  // Reading functionType as icUInt16Number refuses anything that does not fit
+  // the field -- jsonToValue range-checks the conversion -- and taking the count
+  // from GetNumParam() makes SetFunctionType()'s table the only one, so the
+  // count this reader enforces is by construction the size of the allocation.
+  icUInt16Number nFunctionType = 0;
+  if (!jGetValue(j, "functionType", nFunctionType)) {
+    parseStr += "parametricCurveType functionType is missing or out of range\n";
+    return false;
+  }
+  if (!SetFunctionType(nFunctionType)) return false;
+
+  // SetFunctionType() knows the five function types ICC.1 defines for
+  // parametricCurveType (0-4) and gives any other type zero parameters.  Such a
+  // curve is still accepted, as it was before, since there is nothing to leave
+  // uninitialised; the binary reader likewise keeps unknown types rather than
+  // refusing them.
+  const icUInt16Number nParam = GetNumParam();
+  if (!nParam)
+    return true;
+
+  // The XML twin, CIccTagXmlParametricCurve::ParseXml(), has refused any count
+  // other than the exact one ("data.GetSize() != GetNumParam()") since the
+  // initial 2015 import, so a document it refuses was reaching the same tag
+  // through JSON.  Requiring the same exact count here closes the uninitialised
+  // read and the divergence together.  It also refuses a LONGER array, which
+  // this reader used to truncate silently; iccToJson always emits exactly
+  // GetNumParam() values, so no document it wrote is affected.
+  if (!jsonExistsField(j, "params") || !j["params"].is_array()) {
+    parseStr += "parametricCurveType params must be an array\n";
+    return false;
+  }
+  const IccJson &params = j["params"];
+  if (params.size() != nParam) {
+    parseStr += "parametricCurveType params count does not match functionType\n";
+    return false;
+  }
+  for (icUInt16Number i = 0; i < nParam; i++) {
+    double param = 0.0;
+    if (!jsonToValue(params[i], param))
       return false;
-    icUInt8Number nParamToRead = nParams < nParam ? (icUInt8Number)nParams : nParam;
-    for (icUInt8Number i = 0; i < nParamToRead; i++) {
-      double param = 0.0;
-      if (!jsonToValue(params[i], param))
-        return false;
-      m_dParam[i] = (icFloatNumber)param;
-    }
+    m_dParam[i] = (icFloatNumber)param;
   }
   return true;
 }
