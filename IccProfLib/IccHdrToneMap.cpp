@@ -258,7 +258,6 @@ icFloatNumber icHlgOotfGain(icFloatNumber sceneLuminance, icFloatNumber gamma)
 CIccHdrTransfer::CIccHdrTransfer()
 {
   m_bSupported = false;
-  m_bUseProfileCurves = false;
   m_nTransfer = 0;
   m_referenceWhite = (icFloatNumber)icHdrDefaultContentReferenceWhite;
   m_hlgGamma = (icFloatNumber)icHlgDefaultGamma;
@@ -288,7 +287,6 @@ bool CIccHdrTransfer::Init(icUInt8Number nTransferCharacteristics,
                            icUInt8Number nColourPrimaries /* =9 */)
 {
   m_bSupported = false;
-  m_bUseProfileCurves = false;
   m_nTransfer = nTransferCharacteristics;
 
   // A non-positive reference white would divide the whole chain by zero or
@@ -365,7 +363,6 @@ bool CIccHdrTransfer::Init(icUInt8Number nTransferCharacteristics,
       // division by CRWL, exactly as it is for PQ and HLG.  It is not a
       // deferral to the profile's TRC tags: the same revision prohibits those
       // tags, so there is nothing to defer to.  See ChannelToReference().
-      m_bUseProfileCurves = false;
       m_bSupported = true;
       break;
 

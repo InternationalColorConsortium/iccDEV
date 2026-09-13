@@ -135,19 +135,6 @@ static bool icHdrBakeGetColumn(const CIccProfile *pProfile, icTagSignature sig,
   return true;
 }
 
-/** One TRC tag as a curve, by the same test CIccXform uses. */
-static CIccCurve *icHdrBakeGetCurve(const CIccProfile *pProfile, icTagSignature sig)
-{
-  CIccTag *pTag = icHdrBakeFindTag(pProfile, sig);
-
-  if (pTag && (pTag->GetType() == icSigCurveType ||
-               pTag->GetType() == icSigParametricCurveType)) {
-    return (CIccCurve*)pTag;
-  }
-
-  return NULL;
-}
-
 /**
  ****************************************************************************
  * Name: icHdrBakeParamsInit
@@ -178,8 +165,6 @@ CIccHdrBaker::CIccHdrBaker()
   m_pProfile = NULL;
   m_bToneMap = false;
   m_bClampToTarget = false;
-  m_pTrc[0] = m_pTrc[1] = m_pTrc[2] = NULL;
-  m_peakLevel = (icFloatNumber)1.0;
   m_bInverseValid = false;
 
   icHdrBakeParamsInit(m_params);
@@ -220,7 +205,6 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
   m_pProfile = NULL;
   m_bToneMap = false;
   m_bClampToTarget = false;
-  m_pTrc[0] = m_pTrc[1] = m_pTrc[2] = NULL;
   m_bInverseValid = false;
 
   if (pParams)
@@ -295,47 +279,13 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
    * Linear, the identity"), its A-curve section ("or a linearly scaled identity
    * for the Linear case") and its "chosen for PQ and HLG" qualifier all assume
    * a third case.  Clause 8.10.1 permits TransferCharacteristics = 8, so it is
-   * a real one.  We support it -- and because Linear, unlike PQ and HLG, has no
-   * intrinsic peak for "linearly scaled" to refer to, the scale is taken from
-   * the profile itself below. */
-  if (m_transfer.UsesProfileCurves()) {
-    // TransferCharacteristics = 8 (Linear): the TRC tags are the
-    // linearisation, so their own output range is the headroom.  A sampled
-    // curveType clamps at 1.0 and so carries none - that is a property of the
-    // profile and not an error here, it just leaves the tone mapping nothing
-    // to do.
-    m_pTrc[0] = icHdrBakeGetCurve(pProfile, icSigRedTRCTag);
-    m_pTrc[1] = icHdrBakeGetCurve(pProfile, icSigGreenTRCTag);
-    m_pTrc[2] = icHdrBakeGetCurve(pProfile, icSigBlueTRCTag);
-
-    if (!m_pTrc[0] || !m_pTrc[1] || !m_pTrc[2]) {
-      m_szUnsupported = "Linear transfer characteristic with no TRC tags to linearise with";
-      return false;
-    }
-
-    icUInt8Number i;
-
-    m_peakLevel = (icFloatNumber)0.0;
-
-    for (i = 0; i < 3; i++) {
-      m_pTrc[i]->Begin();
-
-      icFloatNumber peak = m_pTrc[i]->Apply((icFloatNumber)1.0);
-
-      if (peak > m_peakLevel)
-        m_peakLevel = peak;
-    }
-
-    if (!(m_peakLevel > 0.0)) {
-      // Every channel maps full scale to zero, so there is no scale that
-      // brings the A curves into range and nothing to represent.
-      m_szUnsupported = "TRC tags map full scale to zero";
-      return false;
-    }
-  }
-  else {
-    m_peakLevel = m_transfer.GetPeakReferenceLevel();
-  }
+   * a real one.  We support it.  "Linearly scaled" needs a peak, which Linear,
+   * unlike PQ and HLG, has no intrinsic value for, and the profile cannot supply
+   * one either: 8.10.1 prohibits the TRC tags that used to carry it.  So Linear
+   * takes the same path as PQ and HLG - CIccHdrTransfer reads device values as
+   * cd/m^2, and GetPeakReferenceLevel() gives 1/CRWL - and what device 1.0
+   * should mean for a Linear signal is the open question recorded under this
+   * key. */
 
   // The gain curve, at the one target headroom a 16-bit tag can hold.
   CIccTag *pTag = icHdrBakeFindTag(pProfile, icSigHeadroomAdaptiveGainCurveTag);
@@ -466,19 +416,12 @@ bool CIccHdrBaker::UsesDerivedSlopes() const
  *  1.0 gives 1.0 - i.e. what an A curve holds before the fifth root.
  *
  * Args:
- *  nChannel = 0, 1 or 2; only the Linear case distinguishes them
+ *  nChannel = 0, 1 or 2; no transfer this bakes distinguishes them
  *  v = the device-encoded channel value
  *****************************************************************************
  */
-icFloatNumber CIccHdrBaker::LinearizeChannel(icUInt8Number nChannel, icFloatNumber v) const
+icFloatNumber CIccHdrBaker::LinearizeChannel(icUInt8Number /* nChannel */, icFloatNumber v) const
 {
-  if (m_transfer.UsesProfileCurves()) {
-    // Divided by the common peak rather than by the channel's own, because a
-    // per-channel scale here would be a per-channel gain the matrix does not
-    // know about and would move the profile's white point.
-    return m_pTrc[nChannel]->Apply(v) / m_peakLevel;
-  }
-
   return m_transfer.ToLinearChannel(v);
 }
 
@@ -493,13 +436,6 @@ icFloatNumber CIccHdrBaker::LinearizeChannel(icUInt8Number nChannel, icFloatNumb
  */
 void CIccHdrBaker::ToReference(icFloatNumber *dst, const icFloatNumber *src) const
 {
-  if (m_transfer.UsesProfileCurves()) {
-    dst[0] = src[0] * m_peakLevel;
-    dst[1] = src[1] * m_peakLevel;
-    dst[2] = src[2] * m_peakLevel;
-    return;
-  }
-
   m_transfer.ChannelToReference(dst, src);
 }
 
@@ -513,13 +449,6 @@ void CIccHdrBaker::ToReference(icFloatNumber *dst, const icFloatNumber *src) con
  */
 void CIccHdrBaker::FromReference(icFloatNumber *dst, const icFloatNumber *src) const
 {
-  if (m_transfer.UsesProfileCurves()) {
-    dst[0] = src[0] / m_peakLevel;
-    dst[1] = src[1] / m_peakLevel;
-    dst[2] = src[2] / m_peakLevel;
-    return;
-  }
-
   m_transfer.ReferenceToChannel(dst, src);
 }
 
@@ -652,21 +581,12 @@ bool CIccHdrBaker::BtoAClutOp(icFloatNumber *dst, const icFloatNumber *src) cons
  *  its device encoding.  This is what a BToA A curve holds.
  *
  * Args:
- *  nChannel = 0, 1 or 2; only the Linear case distinguishes them
+ *  nChannel = 0, 1 or 2; no transfer this bakes distinguishes them
  *  v = the peak-normalised linear channel value
  *****************************************************************************
  */
-icFloatNumber CIccHdrBaker::EncodeChannel(icUInt8Number nChannel, icFloatNumber v) const
+icFloatNumber CIccHdrBaker::EncodeChannel(icUInt8Number /* nChannel */, icFloatNumber v) const
 {
-  if (m_transfer.UsesProfileCurves()) {
-    // Find() bisects the curve rather than assuming a sampled inverse, so it
-    // works for a parametricCurveType as well as for a curveType.  Its domain
-    // is the curve's own output, which for the Linear case is reference white
-    // relative light - hence the peak scale that LinearizeChannel() divided
-    // by has to go back on first.
-    return icHdrBakeClampUnit(m_pTrc[nChannel]->Find(v * m_peakLevel));
-  }
-
   return m_transfer.FromLinearChannel(v);
 }
 

@@ -327,20 +327,6 @@ public:
 
   bool IsSupported() const { return m_bSupported; }
 
-  /**
-   * True when this transfer characteristic has no analytic EOTF of its own
-   * and the profile's own TRC tags are the linearisation.
-   *
-   * This is the Linear case (TransferCharacteristics = 8), where clause
-   * 8.10.2 a)'s "the EOTF implied by cicpTag.TransferCharacteristics" is the
-   * identity and the parenthetical "(equivalent to applying redTRCTag,
-   * greenTRCTag, blueTRCTag)" is the whole of the definition.  For PQ and HLG
-   * the two are *not* interchangeable and the analytic form is the one to
-   * use: a sampled curveType TRC clamps its output at 1.0, so it cannot
-   * represent display-linear light above reference white at all.
-   */
-  bool UsesProfileCurves() const { return m_bUseProfileCurves; }
-
   /** Convert device-encoded R'G'B' to display-linear RGB normalised so that
    * 1.0 is the content HDR reference white.  src and dst may alias. */
   void ToLinear(icFloatNumber *dst, const icFloatNumber *src) const;
@@ -381,7 +367,6 @@ public:
 
 protected:
   bool m_bSupported;
-  bool m_bUseProfileCurves;
   icUInt8Number m_nTransfer;
   /* The OOTF's luma coefficients.  BT.2020's unless the profile declares other
    * primaries; see IMPL-04.  Held rather than #defined because they now depend

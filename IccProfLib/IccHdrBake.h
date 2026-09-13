@@ -323,11 +323,9 @@ public:
    * ranked descriptor implies.
    *
    * LIFETIME.  The baker does not own pProfile and does not copy it.  It
-   * keeps the pointer, and it keeps raw CIccCurve pointers into the profile's
-   * own TRC tags, so pProfile and every tag reachable from it must outlive
-   * every later call on this object.  Init(p); delete p; CreateAtoB(); is a
-   * use after free, and so is deleting the profile's rTRC between the two.
-   * Re-Init() on a different profile is fine and drops the old pointers.
+   * keeps the pointer, so pProfile must outlive every later call on this
+   * object: Init(p); delete p; CreateAtoB(); is a use after free.  Re-Init()
+   * on a different profile is fine and drops the old pointer.
    */
   bool Init(const CIccProfile *pProfile, const icHdrBakeParams *pParams = NULL);
 
@@ -403,7 +401,8 @@ public:
 
 protected:
   /** The per-channel linearisation an A curve stores, before the fifth root:
-   * ToLinearChannel() for PQ and HLG, the profile's own TRC tag for Linear.
+   * ToLinearChannel() for all three transfers, Linear included, since 8.10.1
+   * prohibits the TRC tags that could otherwise have linearised it.
    * Normalised so that an encoded 1.0 gives 1.0. */
   icFloatNumber LinearizeChannel(icUInt8Number nChannel, icFloatNumber v) const;
 
@@ -411,7 +410,7 @@ protected:
   icFloatNumber EncodeChannel(icUInt8Number nChannel, icFloatNumber v) const;
 
   /** Complete a peak-normalised triplet into reference white relative linear
-   * light - ChannelToReference() plus the Linear case's own peak scale. */
+   * light - ChannelToReference(). */
   void ToReference(icFloatNumber *dst, const icFloatNumber *src) const;
 
   /** Inverse of ToReference(). */
@@ -431,14 +430,6 @@ protected:
 
   bool m_bToneMap;
   bool m_bClampToTarget;
-
-  /** The three TRC tags, borrowed from the profile and used only when the
-   * transfer characteristic is Linear.  Not owned. */
-  CIccCurve *m_pTrc[3];
-
-  /** The reference white relative value an encoded 1.0 produces.  For Linear
-   * it comes from the TRC tags; for PQ and HLG from the transfer. */
-  icFloatNumber m_peakLevel;
 
   /** Matrix columns, in XYZ and not yet scaled to the PCS encoding, and their
    * inverse. */

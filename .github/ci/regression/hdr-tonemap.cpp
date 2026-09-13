@@ -147,7 +147,6 @@ void testTransferNormalisation()
 
   check(pq.Init(icCicpTransferPQ, (icFloatNumber)icHdrDefaultContentReferenceWhite),
         "PQ transfer initialises");
-  check(!pq.UsesProfileCurves(), "PQ does not defer to the profile TRC tags");
 
   icFloatNumber src[3], dst[3];
 
@@ -197,7 +196,7 @@ void testTransferNormalisation()
   checkClose(dst[1], 0.4, 1e-4, "HLG round trip G");
   checkClose(dst[2], 0.2, 1e-4, "HLG round trip B");
 
-  // Linear defers to the profile's own curves and touches nothing itself.
+  // Linear: a luminance in cd/m^2, normalised like the other two.
   CIccHdrTransfer lin;
   check(lin.Init(icCicpTransferLinear, (icFloatNumber)icHdrDefaultContentReferenceWhite),
         "Linear transfer initialises");
@@ -206,8 +205,7 @@ void testTransferNormalisation()
   // Rec. ITU-R BT.2100, or, for Linear, DIRECTLY IN CD/M2". So Linear does not
   // defer to the profile's TRC tags - the same revision prohibits them - and
   // the change of normalisation is a division by the content reference white,
-  // exactly as it is for the other two.
-  check(!lin.UsesProfileCurves(), "Linear no longer defers to the profile TRC tags");
+  // exactly as it is for the other two. The value checks below pin that.
 
   src[0] = (icFloatNumber)3.5;
   lin.ToLinear(dst, src);

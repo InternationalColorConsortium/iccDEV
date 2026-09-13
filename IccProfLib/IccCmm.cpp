@@ -7029,18 +7029,7 @@ void CIccXformMatrixTrcHdr::Apply(CIccApplyXform*  /* pApply */, icFloatNumber *
   Pixel[2] = SrcPixel[2];
 
   if (m_bInput) {
-    if (m_transfer.UsesProfileCurves()) {
-      // TransferCharacteristics = 8 (Linear): the profile's own TRC tags are
-      // the linearisation, exactly as in the conventional chain.
-      if (m_ApplyCurvePtr) {
-        Pixel[0] = m_ApplyCurvePtr[0]->Apply(Pixel[0]);
-        Pixel[1] = m_ApplyCurvePtr[1]->Apply(Pixel[1]);
-        Pixel[2] = m_ApplyCurvePtr[2]->Apply(Pixel[2]);
-      }
-    }
-    else {
-      m_transfer.ToLinear(Pixel, Pixel);
-    }
+    m_transfer.ToLinear(Pixel, Pixel);
 
     if (m_bToneMap) {
       m_evaluator.Apply(Pixel, Pixel);
@@ -7080,28 +7069,10 @@ void CIccXformMatrixTrcHdr::Apply(CIccApplyXform*  /* pApply */, icFloatNumber *
       m_evaluator.Invert(Lin, Lin);
     }
 
-    if (m_transfer.UsesProfileCurves()) {
-      if (m_ApplyCurvePtr) {
-        // RGBClip is the base class's own guard and the right one here: for
-        // Linear transfer characteristics the values are already in the
-        // curve's 0..1 domain, and a sampled inverse curve outside it is
-        // undefined.
-        DstPixel[0] = RGBClip(Lin[0], m_ApplyCurvePtr[0]);
-        DstPixel[1] = RGBClip(Lin[1], m_ApplyCurvePtr[1]);
-        DstPixel[2] = RGBClip(Lin[2], m_ApplyCurvePtr[2]);
-      }
-      else {
-        DstPixel[0] = Lin[0];
-        DstPixel[1] = Lin[1];
-        DstPixel[2] = Lin[2];
-      }
-    }
-    else {
-      // No RGBClip: clamping display-linear light to 1.0 before the inverse
-      // EOTF is exactly the mistake that makes a sampled TRC unusable for HDR.
-      // CIccHdrTransfer::FromLinear applies the transfer's own ceiling instead.
-      m_transfer.FromLinear(DstPixel, Lin);
-    }
+    // No RGBClip: clamping display-linear light to 1.0 before the inverse
+    // EOTF is exactly the mistake that makes a sampled TRC unusable for HDR.
+    // CIccHdrTransfer::FromLinear applies the transfer's own ceiling instead.
+    m_transfer.FromLinear(DstPixel, Lin);
   }
 }
 
