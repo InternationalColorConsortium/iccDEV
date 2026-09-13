@@ -786,6 +786,13 @@ bool CIccTagJsonHagc::ParseJson(const IccJson &j, std::string &parseStr)
       for (i = 0; i < (int)alts.size(); i++) {
         const IccJson &alt = alts[i];
         icHagcAlternateImage *pAlt = m.GetAlternate((icUInt8Number)i);
+        // SetNumAlternates() above sized the array to alts.size(), so this
+        // cannot be NULL today; checked anyway because GetAlternate() is
+        // bounds-checked and GCC 15's -Wnull-dereference cannot see that.
+        if (!pAlt) {
+          parseStr += "headroomAdaptiveGainCurveType alternate image could not be allocated\n";
+          return false;
+        }
         double headroom = 0.0;
         int mixType = 0;
 

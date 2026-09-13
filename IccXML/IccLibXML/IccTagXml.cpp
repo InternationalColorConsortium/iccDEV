@@ -1679,6 +1679,13 @@ bool CIccTagXmlHagc::ParseXml(xmlNode* pNode, std::string& parseStr)
         }
 
         icHagcAlternateImage *pAlt = m.GetAlternate(nIndex);
+        // SetNumAlternates() just made nIndex valid, so this cannot be NULL
+        // today; checked anyway because GetAlternate() is bounds-checked and
+        // GCC 15's -Wnull-dereference cannot see the relationship.
+        if (!pAlt) {
+          parseStr += "HagcMetadata AlternateImage could not be allocated\n";
+          return false;
+        }
         icUInt8Number nMixType = 0;
 
         pAlt->m_headroom = icXmlStrToFloat((const xmlChar*)icXmlAttrValue(pChild, "Headroom", "0"));
