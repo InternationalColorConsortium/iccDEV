@@ -54,6 +54,7 @@ colorant_reject_fixture="$fixture_dir/json-colorant-table-nonnumeric-pcs.json"
 colorant_control_fixture="$fixture_dir/json-colorant-table-complete-pcs.json"
 from_json="$tools_dir/IccFromJson/iccFromJson"
 build_dir="$(dirname "$tools_dir")"
+memory_probe="$build_dir/Testing/iccTaintTraceMemoryStateProbe"
 out_dir="${out_dir:-${TMPDIR:-/tmp}/iccdev-taint-trace-qa}"
 
 for required_tool in valgrind grep; do
@@ -64,6 +65,10 @@ for required_tool in valgrind grep; do
 done
 if [ ! -x "$from_json" ]; then
   echo "[FAIL] iccFromJson is unavailable: $from_json" >&2
+  exit 2
+fi
+if [ ! -x "$memory_probe" ]; then
+  echo "[FAIL] memory-state probe is unavailable: $memory_probe (build target iccTaintTraceMemoryStateProbe)" >&2
   exit 2
 fi
 if [ ! -f "$build_dir/CMakeCache.txt" ] ||
@@ -134,6 +139,22 @@ run_rejected_case()
   fi
 }
 
+# Every fixture below is fail-closed or clean, so none of them proves the tracer
+# can see poison. The probe marks bytes 5..15 of a written buffer undefined and
+# traces it; Memcheck also reports that client check, hence 86.
+probe_status=0
+ICC_TAINT_TRACE=1 valgrind --quiet --tool=memcheck --track-origins=yes \
+  --error-exitcode=86 --num-callers=20 \
+  "$memory_probe" >"$out_dir/memory-probe.log" 2>&1 || probe_status=$?
+if [ "$probe_status" -ne 86 ] ||
+   ! grep -Eq 'stage=probe\.initialized .* state=initialized$' "$out_dir/memory-probe.log" ||
+   ! grep -Eq 'stage=probe\.poisoned .* state=poisoned first_bad=5$' "$out_dir/memory-probe.log" ||
+   ! grep -Fq 'Uninitialised value was created by a client request' "$out_dir/memory-probe.log"; then
+  echo "[FAIL] memory-state probe did not report initialized then poisoned at offset 5 (exit $probe_status)" >&2
+  sed -n '1,80p' "$out_dir/memory-probe.log" >&2
+  exit 2
+fi
+
 if ! run_rejected_case short "$short_fixture" \
        'parametricCurveType params count does not match functionType' ||
    ! run_rejected_case missing "$missing_fixture" \
@@ -182,6 +203,7 @@ if ! grep -Fq 'stage=io.write16 access=source-read' "$out_dir/colorant-control.l
   exit 2
 fi
 
+echo "[PASS] memory-state probe reported initialized, then poisoned at offset 5"
 echo "[PASS] short, missing, non-array, and long parameters were rejected cleanly"
 echo "[PASS] complete parameter control serialized initialized values"
 echo "[PASS] unknown function type was accepted and serialized"

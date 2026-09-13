@@ -154,7 +154,11 @@ always compile taint tracing out, including when
 `ICCDEV_ENABLE_TAINT_TRACE=ON` is requested. A later Debug reconfigure retains
 the requested option and enables tracing again. The malformed parametric-curve
 and nonnumeric colorant PCS fixtures are fail-closed controls; valid fixtures
-exercise the same paths and must remain MemorySanitizer-clean.
+exercise the same paths and must remain MemorySanitizer-clean. Because none of
+those fixtures leaves poisoned bytes, both QA scripts first run
+`iccTaintTraceMemoryStateProbe`, which poisons a buffer itself and must be
+traced as `state=poisoned first_bad=5`. The Memcheck script expects that target
+built in the same Debug tree as `iccFromJson`.
 
 Docker's default seccomp profile can block the personality call MSan uses to
 set up its shadow mapping. For this disposable diagnostic lane only, disable

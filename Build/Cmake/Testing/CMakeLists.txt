@@ -265,6 +265,24 @@ function(iccdev_add_iccconnect_thread_test)
   endif()
 endfunction()
 
+# Positive control for the ICC_TAINT_TRACE memory-state query. It is not a CTest:
+# its verdict needs Valgrind Memcheck or MemorySanitizer around it, so
+# iccdev-taint-trace-qa.sh and iccdev-msan-taint-qa.sh run it instead. It is
+# header-only and built only where tracing was requested.
+function(iccdev_add_taint_trace_memory_state_probe)
+  if(NOT ICCDEV_ENABLE_TAINT_TRACE OR WIN32)
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccTaintTraceMemoryStateProbe
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/taint-trace-memory-state.cpp"
+  )
+  target_compile_features(iccTaintTraceMemoryStateProbe PRIVATE cxx_std_17)
+  target_include_directories(iccTaintTraceMemoryStateProbe PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+endfunction()
+
 function(iccdev_add_clut_avx512_sixteen_output_test)
   if(NOT ICCDEV_AVX512_EFFECTIVE)
     return()
@@ -8334,6 +8352,7 @@ set(ICCDEV_TEST_ENV
 )
 
 iccdev_add_iccconnect_thread_test()
+iccdev_add_taint_trace_memory_state_probe()
 iccdev_add_clut_avx512_sixteen_output_test()
 iccdev_add_iccconnect_config_parser_test()
 iccdev_add_createsearch_embedded_profile_test()

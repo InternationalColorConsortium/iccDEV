@@ -105,11 +105,13 @@ CC=clang CXX=clang++ cmake -G Ninja \
   -DICCDEV_ENABLE_TAINT_TRACE=ON \
   -DENABLE_SHARED_LIBS=ON \
   -DENABLE_STATIC_LIBS=OFF
-cmake --build "$build_dir" --target iccFromJson iccConnectThreadTest \
+cmake --build "$build_dir" \
+  --target iccFromJson iccConnectThreadTest iccTaintTraceMemoryStateProbe \
   --parallel "${BUILD_JOBS:-$(nproc)}"
 
 from_json="$build_dir/Tools/IccFromJson/iccFromJson"
 thread_test="$build_dir/Testing/iccConnectThreadTest"
+memory_probe="$build_dir/Testing/iccTaintTraceMemoryStateProbe"
 msan_options="halt_on_error=1:exit_code=86:origin_history_size=7"
 
 for binary in "$from_json" "$thread_test"; do
@@ -137,6 +139,21 @@ run_from_json()
     -noid >"$out_dir/$name.stdout" 2>"$out_dir/$name.stderr" || status=$?
   echo "$status"
 }
+
+# Every fixture below is fail-closed or clean, so none of them proves the tracer
+# can see poison. The probe poisons bytes 5..15 of a written buffer itself;
+# __msan_test_shadow reports without reading, so MSan stays silent and exit is 0.
+probe_status=0
+MSAN_OPTIONS="$msan_options" ICC_TAINT_TRACE=1 "$memory_probe" \
+  >"$out_dir/memory-probe.stdout" 2>"$out_dir/memory-probe.stderr" || probe_status=$?
+if [ "$probe_status" -ne 0 ] ||
+   ! grep -Eq 'stage=probe\.initialized .* state=initialized$' "$out_dir/memory-probe.stderr" ||
+   ! grep -Eq 'stage=probe\.poisoned .* state=poisoned first_bad=5$' "$out_dir/memory-probe.stderr" ||
+   grep -Fq 'MemorySanitizer:' "$out_dir/memory-probe.stderr"; then
+  echo "[FAIL] memory-state probe did not report initialized then poisoned at offset 5 (exit $probe_status)" >&2
+  sed -n '1,80p' "$out_dir/memory-probe.stderr" >&2
+  exit 2
+fi
 
 short_status="$(run_from_json short "$short_fixture")"
 control_status="$(run_from_json control "$control_fixture")"
@@ -187,6 +204,7 @@ if [ "$thread_status" -ne 0 ] || grep -Fq 'MemorySanitizer:' "$out_dir/thread.st
   exit 2
 fi
 
+echo "[PASS] memory-state probe reported initialized, then poisoned at offset 5"
 echo "[PASS] short parametric parameters were rejected before serialization"
 echo "[PASS] non-numeric colorant PCS was rejected before serialization"
 echo "[PASS] complete JSON, colorant PCS, and threaded controls are MSan-clean"
