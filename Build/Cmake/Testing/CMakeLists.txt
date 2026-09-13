@@ -8409,7 +8409,12 @@ if(WIN32)
   iccdev_add_ziputf8_read_inflate_contract_test()
   iccdev_add_compression_describe_labels_test()
   iccdev_add_pawg_compression_paths_test()
-  iccdev_add_pawg_hdr_section_test()
+  # iccdev_add_pawg_hdr_section_test() is deliberately NOT called here, for the reason
+  # iccdev_add_hdr_corpus_manifest_test() is not (see below): on Windows the HDR .icc
+  # are generated under the BUILD tree, and RunPawgHdrSectionTest.cmake requires each
+  # fixture under ICCDEV_REPO_ROOT/Testing/HDR and fails with FATAL_ERROR when one is
+  # missing.  Both Windows CTest legs failed on HagcDisplay.icc for exactly that reason.
+  # Re-enable it here only together with a build-tree-aware fixture path.
   iccdev_add_json_sparsematrix_huaf_test()
   iccdev_add_xml_writer_graceful_degrade_test()
   iccdev_add_xml_relaxng_validation_leak_test()
@@ -8492,7 +8497,8 @@ if(WIN32)
   iccdev_add_hdr_profile_test()
   iccdev_add_hdr_tonemap_test()
   # iccdev_add_hdr_corpus_manifest_test() is deliberately NOT called here, and this
-  # is the one HDR test that must stay off the Windows list.  iccdev.windows-create-profiles
+  # is one of the two HDR tests that must stay off the Windows list (the other is
+  # iccdev_add_pawg_hdr_section_test(), above).  iccdev.windows-create-profiles
   # runs CreateAllProfiles.bat with WORKING_DIRECTORY ${ICCDEV_TEST_OUTDIR}, so on Windows
   # the HDR .icc are generated under the BUILD tree, while the test resolves "Testing/HDR/"
   # against ICCDEV_REPO_ROOT and would find an empty directory -- every manifest row would
