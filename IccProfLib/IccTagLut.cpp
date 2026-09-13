@@ -1211,6 +1211,37 @@ bool CIccTagParametricCurve::IsIdentity()
 
 /**
 ****************************************************************************
+* Name: icParametricPow
+*
+* Purpose: pow() for a parametric curve segment, holding a negative base at
+*  zero.
+*
+*  A negative base under a non-integer exponent makes pow() return NaN, which
+*  the matrix after a TRC carries into the PCS.  Type 0 tests nothing, and the
+*  thresholds of types 1 to 4 test X rather than the base, so a negative a or a
+*  d below the base's zero crossing still reaches pow() with one.  The base is
+*  given the value at zero instead, which is what types 1 and 2 already return
+*  below their zero crossing.  An integer exponent was always finite and is
+*  left alone: a gamma of 1.0 is how extended-range linear data passes a TRC.
+*
+* Args:
+*  base = the segment's base, X or aX + b
+*  gamma = the curve's exponent g
+*
+* Return: base raised to gamma, a negative base under a fractional exponent
+*  counting as zero.
+*****************************************************************************
+*/
+static double icParametricPow(double base, double gamma)
+{
+  if (base < 0.0 && gamma != floor(gamma))
+    base = 0.0;
+
+  return pow(base, gamma);
+}
+
+/**
+****************************************************************************
 * Name: CIccTagParametricCurve::Apply
 * 
 * Purpose: Applies the curve to the value passed.
@@ -1228,7 +1259,7 @@ icFloatNumber CIccTagParametricCurve::Apply(icFloatNumber X) const
 
   switch(m_nFunctionType) {
     case 0x0000:
-      return (icFloatNumber)pow(X, m_dParam[0]);
+      return (icFloatNumber)icParametricPow(X, m_dParam[0]);
 
     case 0x0001:
       a=m_dParam[1];
@@ -1237,7 +1268,7 @@ icFloatNumber CIccTagParametricCurve::Apply(icFloatNumber X) const
       if (a == 0.0)
         return 0;
       if (X >= -b/a) {
-        return (icFloatNumber)pow((double)a*X + b, (double)m_dParam[0]);
+        return (icFloatNumber)icParametricPow((double)a*X + b, (double)m_dParam[0]);
       }
       else {
         return 0;
@@ -1250,7 +1281,7 @@ icFloatNumber CIccTagParametricCurve::Apply(icFloatNumber X) const
       if (a == 0.0)
         return (icFloatNumber)m_dParam[3];
       if (X >= -b/a) {
-        return (icFloatNumber)pow((double)a*X + b, (double)m_dParam[0]) + m_dParam[3];
+        return (icFloatNumber)icParametricPow((double)a*X + b, (double)m_dParam[0]) + m_dParam[3];
       }
       else {
         return m_dParam[3];
@@ -1258,7 +1289,7 @@ icFloatNumber CIccTagParametricCurve::Apply(icFloatNumber X) const
 
     case 0x0003:
       if (X >= m_dParam[4]) {
-        return (icFloatNumber)pow((double)m_dParam[1]*X + m_dParam[2], (double)m_dParam[0]);
+        return (icFloatNumber)icParametricPow((double)m_dParam[1]*X + m_dParam[2], (double)m_dParam[0]);
       }
       else {
         return m_dParam[3]*X;
@@ -1266,7 +1297,7 @@ icFloatNumber CIccTagParametricCurve::Apply(icFloatNumber X) const
 
     case 0x0004:
       if (X >= m_dParam[4]) {
-        return (icFloatNumber)pow((double)m_dParam[1]*X + m_dParam[2], (double)m_dParam[0]) + m_dParam[5];
+        return (icFloatNumber)icParametricPow((double)m_dParam[1]*X + m_dParam[2], (double)m_dParam[0]) + m_dParam[5];
       }
       else {
         return m_dParam[3]*X + m_dParam[6];
