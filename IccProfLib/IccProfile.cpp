@@ -3686,13 +3686,13 @@ icValidateStatus CIccProfile::CheckHdrProfile(std::string &sReport) const
     rv = icMaxStatus(rv, icValidateNonCompliant);
   }
 
-  /* NOT CHECKED, and it cannot be: 8.10.6 also says the AToB0Tag "shall carry
-   * an HDR->SDR tone mapping (i.e. its target headroom shall be equal to
-   * 1.0)".  Nothing in a lutAToBType records the target headroom it was baked
-   * at, so no reader can tell a conforming bake from one made at any other
-   * headroom.  The predecessor tag had exactly this field - the ADGC header
-   * carries "Backward compatible A2B0/A2B1/A2B2 target headroom, 0.0: not
-   * created" - and the HAGC amendment dropped it without replacement. */
+  /* Nothing to check here: 8.10.6 also says the AToB0Tag "shall carry an
+   * HDR->SDR tone mapping (i.e. its target headroom shall be equal to 1.0)".
+   * The AToB0Tag exists for compatibility with pre-HDR workflows, which are
+   * SDR - target headroom 1.0 - by definition, so the parenthetical states
+   * what an AToB0Tag already means under ICC.1 rather than a property to
+   * verify from the file.  How good the HDR->SDR mapping is remains a
+   * rendering-quality matter, as it is for any AToB0Tag. */
 
   /* Clause 8.10.5 is addressed to one profile class and one only: "An HDR
    * Profile of the Display class ('mntr') may convey HDR display metadata via
