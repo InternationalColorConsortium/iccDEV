@@ -116,6 +116,17 @@ run_tool() {
   TOOL_RC=$?
 }
 
+has_sanitizer_finding() {
+  local log="$1"
+  grep -qE 'runtime error: |AddressSanitizer|UndefinedBehaviorSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer' "$log"
+}
+
+print_sanitizer_finding() {
+  local log="$1"
+  grep -E 'runtime error: |AddressSanitizer|UndefinedBehaviorSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|IccTagXml' "$log" |
+    head
+}
+
 # --- CONTROL: a legal FunctionType="4" curve must still convert --------------
 # Run first.  If the fix ever over-rejects, this fails loudly instead of the
 # two PoCs passing for the wrong reason; if the control cannot convert for an
@@ -128,9 +139,9 @@ fi
 run_tool "$CONTROL"
 CONTROL_ICC="$TOOL_ICC"
 if [ ! -f "$CONTROL_ICC" ]; then
-  if grep -qE "runtime error: |AddressSanitizer" "$TOOL_LOG"; then
+  if has_sanitizer_finding "$TOOL_LOG"; then
     echo "[FAIL] #1851 control: legal FunctionType=\"4\" curve tripped a sanitizer"
-    grep -E "runtime error: |AddressSanitizer|IccTagXml" "$TOOL_LOG" | head
+    print_sanitizer_finding "$TOOL_LOG"
     exit 2
   fi
   echo "[SKIP] control profile did not convert; environment issue, not #1851"
@@ -158,6 +169,10 @@ else
     echo "[FAIL] #1851 case A: implicit conversion of FunctionType reappeared"
     grep -E "runtime error: implicit conversion|IccTagXml" "$TOOL_LOG" | head
     status=2
+  elif has_sanitizer_finding "$TOOL_LOG"; then
+    echo "[FAIL] #1851 case A: unexpected sanitizer finding (rc=$TOOL_RC)"
+    print_sanitizer_finding "$TOOL_LOG"
+    status=2
   else
     echo "[PASS] #1851 case A: out-of-range FunctionType rejected, no profile written"
   fi
@@ -180,6 +195,10 @@ else
     status=2
   elif [ -f "$TOOL_ICC" ]; then
     echo "[FAIL] #1851 case B: profile written despite malformed FunctionType"
+    status=2
+  elif has_sanitizer_finding "$TOOL_LOG"; then
+    echo "[FAIL] #1851 case B: unexpected sanitizer finding (rc=$TOOL_RC)"
+    print_sanitizer_finding "$TOOL_LOG"
     status=2
   else
     echo "[PASS] #1851 case B: malformed FunctionType parsed without a narrowing conversion"

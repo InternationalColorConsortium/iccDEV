@@ -1,0 +1,27 @@
+{
+  "IccProfile": {
+    "Header": {
+      "ProfileFileSignature": "acsp",
+      "PreferredCMMType": "",
+      "ProfileVersion": "4.20",
+      "ProfileDeviceClass": "scnr",
+      "DataColourSpace": "RGB ",
+      "PCS": "XYZ ",
+      "CreationDateTime": "2026-09-12T04:56:13",
+      "RenderingIntent": "Perceptual",
+      "PCSIlluminant": [0.964202880859, 1.0, 0.824905395508]
+    },
+    "Tags": [
+      {
+        "redTRCTag": {
+          "sig": "rTRC",
+          "data": {
+            "type": "parametricCurveType",
+            "functionType": 4,
+            "params": [2.4, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 123.0]
+          }
+        }
+      }
+    ]
+  }
+}

@@ -838,6 +838,33 @@ write_responsecurve_json "$OUTDIR/responsecurve-count-overflow.json" 65537 1
 write_responsecurve_json "$OUTDIR/responsecurve-devicecode-overflow.json" 1 65537
 write_responsecurve_json "$OUTDIR/responsecurve-devicecode-negative.json" 1 -1
 
+python3 -c '
+import copy
+import json
+import os
+import sys
+
+source_path, outdir = sys.argv[1:3]
+with open(source_path, encoding="utf-8") as source:
+    control = json.load(source)
+
+for name, value in (
+    ("short", [50.0, 0.0]),
+    ("long", [50.0, 0.0, 0.0, 0.0]),
+    ("nonarray", 50.0),
+    ("missing", None),
+):
+    document = copy.deepcopy(control)
+    entry = document["IccProfile"]["Tags"][0]["colorantTableTag"]["data"]["colorantTable"][0]
+    if value is None:
+        del entry["pcs"]
+    else:
+        entry["pcs"] = value
+    with open(os.path.join(outdir, "colorant-table-" + name + "-pcs.json"),
+              "w", encoding="utf-8") as output:
+        json.dump(document, output, indent=2)
+' "$REPO_ROOT/.github/ci/test-data/json-colorant-table-complete-pcs.json" "$OUTDIR"
+
 echo "Using base profile: $PROFILE"
 echo "Using XML profile:  $XML_PROFILE"
 echo "Tools dir: $TOOLS_DIR"
@@ -855,6 +882,11 @@ run_reject_test "spectral-offset-short" "$OUTDIR/spectral-offset-short.json" "of
 run_reject_test "struct-bad-member" "$OUTDIR/struct-bad-member.json" "MemberTag 'badMember' missing 'type' field"
 run_fromjson_success_test "utf16-short-text" "$OUTDIR/utf16-short-text.json"
 run_reject_test "empty-tag-name" "$OUTDIR/empty-tag-name.json" "Tag entry has empty name"
+run_reject_test "colorant-table-nonnumeric-pcs" "$REPO_ROOT/.github/ci/test-data/json-colorant-table-nonnumeric-pcs.json" "colorantTableType pcs must contain three numeric values"
+run_reject_test "colorant-table-short-pcs" "$OUTDIR/colorant-table-short-pcs.json" "colorantTableType pcs must contain three numeric values"
+run_reject_test "colorant-table-long-pcs" "$OUTDIR/colorant-table-long-pcs.json" "colorantTableType pcs must contain three numeric values"
+run_reject_test "colorant-table-nonarray-pcs" "$OUTDIR/colorant-table-nonarray-pcs.json" "colorantTableType pcs must contain three numeric values"
+run_reject_test "colorant-table-missing-pcs" "$OUTDIR/colorant-table-missing-pcs.json" "colorantTableType pcs must contain three numeric values"
 
 # The control runs first and must convert: without it, a change that refused every
 # responseCurveSet16Type document would satisfy all three reject cases below while

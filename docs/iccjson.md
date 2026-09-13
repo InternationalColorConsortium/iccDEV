@@ -372,6 +372,10 @@ Because `ToJson`/`ParseJson` have no access to the profile header, the encoding 
 
 `ToJson` always writes `"pcsEncoding": "Lab"`. `ParseJson` defaults to `"Lab"` when the field is absent (backward compatible with files written before this field was added).
 
+Each colorant entry requires a `"pcs"` array containing exactly three numeric
+values. This matches the three PCS coordinates encoded for every
+`colorantTableType` entry by ICC.1.
+
 ```json
 {
   "colorantTableTag": {
