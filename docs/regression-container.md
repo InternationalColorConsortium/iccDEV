@@ -151,9 +151,10 @@ run the focused JSON and threaded controls with:
 
 This is a Debug-only diagnostic lane. Release, RelWithDebInfo, and MinSizeRel
 always compile taint tracing out, including when
-`ICCDEV_ENABLE_TAINT_TRACE=ON` is requested. The malformed parametric-curve
-fixture is a fail-closed control after #2543; the nonnumeric colorant PCS
-fixture supplies the positive uninitialized-read signal.
+`ICCDEV_ENABLE_TAINT_TRACE=ON` is requested. A later Debug reconfigure retains
+the requested option and enables tracing again. The malformed parametric-curve
+and nonnumeric colorant PCS fixtures are fail-closed controls; valid fixtures
+exercise the same paths and must remain MemorySanitizer-clean.
 
 Docker's default seccomp profile can block the personality call MSan uses to
 set up its shadow mapping. For this disposable diagnostic lane only, disable

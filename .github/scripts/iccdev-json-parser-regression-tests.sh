@@ -855,6 +855,7 @@ run_reject_test "spectral-offset-short" "$OUTDIR/spectral-offset-short.json" "of
 run_reject_test "struct-bad-member" "$OUTDIR/struct-bad-member.json" "MemberTag 'badMember' missing 'type' field"
 run_fromjson_success_test "utf16-short-text" "$OUTDIR/utf16-short-text.json"
 run_reject_test "empty-tag-name" "$OUTDIR/empty-tag-name.json" "Tag entry has empty name"
+run_reject_test "colorant-table-nonnumeric-pcs" "$REPO_ROOT/.github/ci/test-data/json-colorant-table-nonnumeric-pcs.json" "colorantTableType pcs must contain three numeric values"
 
 # The control runs first and must convert: without it, a change that refused every
 # responseCurveSet16Type document would satisfy all three reject cases below while

@@ -684,13 +684,13 @@ inline const char* ColorSpaceSignatureToStr(icUInt32Number sig)
     default: break;
   }
 
-  // v5/iccMAX: N-channel (0x6e63xxxx) - channels in low 16 bits
+  // v5/iccMAX: N-channel (0x6e63xxxx) — channels in low 16 bits
   icUInt32Number csType = sig & 0xffff0000;
   icUInt32Number nChan  = sig & 0x0000ffff;
   if (csType == 0x6e630000 && nChan > 0)
     return "NChannel";
 
-  // v5/iccMAX: MCS (0x6d63xxxx) - multiplex channel set
+  // v5/iccMAX: MCS (0x6d63xxxx) — multiplex channel set
   if (csType == 0x6d630000 && nChan > 0)
     return "MCS";
 
@@ -882,7 +882,7 @@ struct IccColorSpaceDescription {
 //
 // PURPOSE:
 //   Converts a signature into metadata: name, known/unknown, raw byte layout.
-//   Does NOT log - use DebugColorSpaceMeta() for diagnostic output.
+//   Does NOT log — use DebugColorSpaceMeta() for diagnostic output.
 //
 ///////////////////////////////////////////////////////////////////////////////
 inline IccColorSpaceDescription DescribeColorSpaceSignature(icUInt32Number sig)
@@ -890,7 +890,7 @@ inline IccColorSpaceDescription DescribeColorSpaceSignature(icUInt32Number sig)
   IccColorSpaceDescription desc;
   desc.name = ColorSpaceSignatureToStr(sig);
 
-  // Validate without triggering logs - inline the check directly
+  // Validate without triggering logs — inline the check directly
   bool known = false;
   switch (sig) {
     case (icUInt32Number)icSigXYZData:

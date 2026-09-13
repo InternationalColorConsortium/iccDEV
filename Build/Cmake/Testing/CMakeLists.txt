@@ -116,12 +116,20 @@ endif()
 
 find_program(ICCDEV_NINJA_EXECUTABLE ninja)
 if(ICCDEV_NINJA_EXECUTABLE)
+  set(ICCDEV_TAINT_TRACE_TEST_GENERATOR Ninja)
+  set(ICCDEV_TAINT_TRACE_TEST_MAKE_PROGRAM "${ICCDEV_NINJA_EXECUTABLE}")
+elseif(CMAKE_GENERATOR MATCHES "Makefiles$")
+  set(ICCDEV_TAINT_TRACE_TEST_GENERATOR "${CMAKE_GENERATOR}")
+  set(ICCDEV_TAINT_TRACE_TEST_MAKE_PROGRAM "${CMAKE_MAKE_PROGRAM}")
+endif()
+if(ICCDEV_TAINT_TRACE_TEST_GENERATOR)
   add_test(
     NAME iccdev.taint-trace-build-configuration
     COMMAND "${CMAKE_COMMAND}"
       "-DICCDEV_SOURCE_DIR=${ICCDEV_REPO_ROOT}"
       "-DICCDEV_TEST_BINARY_DIR=${ICCDEV_TEST_OUTDIR}/taint-trace-config"
-      "-DICCDEV_NINJA_EXECUTABLE=${ICCDEV_NINJA_EXECUTABLE}"
+      "-DICCDEV_TEST_GENERATOR=${ICCDEV_TAINT_TRACE_TEST_GENERATOR}"
+      "-DICCDEV_TEST_MAKE_PROGRAM=${ICCDEV_TAINT_TRACE_TEST_MAKE_PROGRAM}"
       "-DICCDEV_PARENT_CMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
       "-DICCDEV_PARENT_C_COMPILER=${CMAKE_C_COMPILER}"
       "-DICCDEV_PARENT_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
@@ -134,7 +142,7 @@ if(ICCDEV_NINJA_EXECUTABLE)
   )
 else()
   message(STATUS
-    "Ninja not found - skipping iccdev.taint-trace-build-configuration")
+    "No supported nested generator found - skipping iccdev.taint-trace-build-configuration")
 endif()
 
 # Issue #2276: this compiles a C-only consumer against IccCValidation.h and

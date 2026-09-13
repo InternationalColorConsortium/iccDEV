@@ -50,7 +50,7 @@ missing_fixture="$fixture_dir/json-parametric-missing-params.json"
 nonarray_fixture="$fixture_dir/json-parametric-nonarray-params.json"
 long_fixture="$fixture_dir/json-parametric-long-params.json"
 unknown_fixture="$fixture_dir/json-parametric-unknown-function.json"
-colorant_finding_fixture="$fixture_dir/json-colorant-table-nonnumeric-pcs.json"
+colorant_reject_fixture="$fixture_dir/json-colorant-table-nonnumeric-pcs.json"
 colorant_control_fixture="$fixture_dir/json-colorant-table-complete-pcs.json"
 from_json="$tools_dir/IccFromJson/iccFromJson"
 build_dir="$(dirname "$tools_dir")"
@@ -74,7 +74,7 @@ fi
 if [ ! -f "$short_fixture" ] || [ ! -f "$control_fixture" ] ||
    [ ! -f "$missing_fixture" ] || [ ! -f "$nonarray_fixture" ] ||
    [ ! -f "$long_fixture" ] || [ ! -f "$unknown_fixture" ] ||
-   [ ! -f "$colorant_finding_fixture" ] ||
+   [ ! -f "$colorant_reject_fixture" ] ||
    [ ! -f "$colorant_control_fixture" ]; then
   echo "[FAIL] taint-trace fixtures are unavailable" >&2
   exit 2
@@ -128,7 +128,7 @@ run_rejected_case()
      grep -Fq 'state=poisoned' "$log" ||
      grep -Fq 'Uninitialised byte(s)' "$log" ||
      grep -Fq 'Conditional jump or move depends on uninitialised value(s)' "$log"; then
-    echo "[FAIL] $name parameter case was not rejected cleanly: $log" >&2
+    echo "[FAIL] $name case was not rejected cleanly: $log" >&2
     sed -n '1,160p' "$log" >&2
     return 1
   fi
@@ -166,24 +166,18 @@ if grep -Fq 'state=poisoned' "$out_dir/unknown.log" ||
   exit 2
 fi
 
-if ! run_case colorant-finding "$colorant_finding_fixture" 86 ||
+if ! run_rejected_case colorant-nonnumeric "$colorant_reject_fixture" \
+       'colorantTableType pcs must contain three numeric values' ||
    ! run_case colorant-control "$colorant_control_fixture" 1; then
   exit 2
 fi
-if ! grep -Fq 'Uninitialised value was created by a stack allocation' "$out_dir/colorant-finding.log" ||
-   ! grep -Fq 'CIccTagJsonColorantTable::ParseJson' "$out_dir/colorant-finding.log" ||
-   ! grep -Fq 'CIccTagColorantTable::Write' "$out_dir/colorant-finding.log" ||
-   ! grep -Fq 'stage=io.write16 access=source-read' "$out_dir/colorant-finding.log" ||
-   ! grep -Fq 'state=poisoned first_bad=' "$out_dir/colorant-finding.log" ||
-   ! grep -Fq 'Syscall param write(buf) points to uninitialised byte(s)' "$out_dir/colorant-finding.log"; then
-  echo "[FAIL] non-numeric colorant PCS did not expose the expected stack-to-file poison chain" >&2
-  sed -n '1,220p' "$out_dir/colorant-finding.log" >&2
-  exit 2
-fi
-if grep -Fq 'state=poisoned' "$out_dir/colorant-control.log" ||
+if ! grep -Fq 'stage=io.write16 access=source-read' "$out_dir/colorant-control.log" ||
+   ! grep -Fq 'state=initialized' "$out_dir/colorant-control.log" ||
+   grep -Fq 'state=poisoned' "$out_dir/colorant-control.log" ||
+   grep -Fq 'state=unknown' "$out_dir/colorant-control.log" ||
    grep -Fq 'Uninitialised byte(s)' "$out_dir/colorant-control.log" ||
    grep -Fq 'Conditional jump or move depends on uninitialised value(s)' "$out_dir/colorant-control.log"; then
-  echo "[FAIL] complete colorant PCS control reported poisoned memory" >&2
+  echo "[FAIL] complete colorant PCS control lacked an initialized Valgrind trace" >&2
   sed -n '1,220p' "$out_dir/colorant-control.log" >&2
   exit 2
 fi
@@ -191,6 +185,6 @@ fi
 echo "[PASS] short, missing, non-array, and long parameters were rejected cleanly"
 echo "[PASS] complete parameter control serialized initialized values"
 echo "[PASS] unknown function type was accepted and serialized"
-echo "[PASS] non-numeric colorant PCS traced stack poison to the output file"
+echo "[PASS] non-numeric colorant PCS was rejected before serialization"
 echo "[PASS] complete colorant PCS control serialized initialized values"
 echo "[EVIDENCE] $out_dir"

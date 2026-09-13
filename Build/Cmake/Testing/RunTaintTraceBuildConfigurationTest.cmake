@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.18...3.29)
 
-foreach(_required ICCDEV_SOURCE_DIR ICCDEV_TEST_BINARY_DIR ICCDEV_NINJA_EXECUTABLE)
+foreach(_required ICCDEV_SOURCE_DIR ICCDEV_TEST_BINARY_DIR ICCDEV_TEST_GENERATOR)
   if(NOT DEFINED ${_required} OR "${${_required}}" STREQUAL "")
     message(FATAL_ERROR "[taint-trace-config] ${_required} not set")
   endif()
@@ -14,13 +14,14 @@ endforeach()
 
 function(iccdev_configure_trace_case CASE_NAME BUILD_TYPE TRACE_OPTION EXPECTED_OPTION EXPECTED_DEFINITION)
   set(_build_dir "${ICCDEV_TEST_BINARY_DIR}/${CASE_NAME}")
-  file(REMOVE_RECURSE "${_build_dir}")
+  if(NOT TRACE_OPTION STREQUAL "REUSE")
+    file(REMOVE_RECURSE "${_build_dir}")
+  endif()
 
   set(_configure_args
     -S "${ICCDEV_SOURCE_DIR}/Build/Cmake"
     -B "${_build_dir}"
-    -G Ninja
-    "-DCMAKE_MAKE_PROGRAM=${ICCDEV_NINJA_EXECUTABLE}"
+    -G "${ICCDEV_TEST_GENERATOR}"
     "-DCMAKE_BUILD_TYPE=${BUILD_TYPE}"
     -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
@@ -32,8 +33,17 @@ function(iccdev_configure_trace_case CASE_NAME BUILD_TYPE TRACE_OPTION EXPECTED_
     -DENABLE_CMM_TOOLS=OFF
     -DENABLE_IIS_TOOLS=OFF
     -DICC_USE_ZLIB=OFF
-    -DICCDEV_ENABLE_TAINT_TRACE=${TRACE_OPTION}
   )
+
+  if(NOT TRACE_OPTION STREQUAL "REUSE")
+    list(APPEND _configure_args
+      "-DICCDEV_ENABLE_TAINT_TRACE=${TRACE_OPTION}")
+  endif()
+  if(DEFINED ICCDEV_TEST_MAKE_PROGRAM AND
+     NOT "${ICCDEV_TEST_MAKE_PROGRAM}" STREQUAL "")
+    list(APPEND _configure_args
+      "-DCMAKE_MAKE_PROGRAM=${ICCDEV_TEST_MAKE_PROGRAM}")
+  endif()
 
   if(DEFINED ICCDEV_PARENT_CMAKE_TOOLCHAIN_FILE AND
      NOT "${ICCDEV_PARENT_CMAKE_TOOLCHAIN_FILE}" STREQUAL "" AND
@@ -83,19 +93,21 @@ function(iccdev_configure_trace_case CASE_NAME BUILD_TYPE TRACE_OPTION EXPECTED_
       "[taint-trace-config] ${CASE_NAME} enabled diagnostics in an optimized build")
   endif()
 
-  if(TRACE_OPTION AND NOT EXPECTED_OPTION AND
-     NOT _configure_stdout MATCHES "ICCDEV_ENABLE_TAINT_TRACE forced OFF")
+  if(TRACE_OPTION STREQUAL "ON" AND NOT EXPECTED_DEFINITION AND
+     NOT _configure_stdout MATCHES "ICCDEV_ENABLE_TAINT_TRACE inactive")
     message(FATAL_ERROR
-      "[taint-trace-config] ${CASE_NAME} did not explain why the option was forced OFF")
+      "[taint-trace-config] ${CASE_NAME} did not explain why tracing was inactive")
   endif()
 endfunction()
 
 iccdev_configure_trace_case(release-default Release OFF OFF FALSE)
 foreach(_build_type Release RelWithDebInfo MinSizeRel)
   string(TOLOWER "${_build_type}" _case_name)
-  iccdev_configure_trace_case("${_case_name}-explicit-on" "${_build_type}" ON OFF FALSE)
+  iccdev_configure_trace_case("${_case_name}-explicit-on" "${_build_type}" ON ON FALSE)
 endforeach()
 iccdev_configure_trace_case(debug-explicit-on Debug ON ON TRUE)
+iccdev_configure_trace_case(release-debug-transition Release ON ON FALSE)
+iccdev_configure_trace_case(release-debug-transition Debug REUSE ON TRUE)
 
 message(STATUS
-  "[taint-trace-config] optimized configurations compile diagnostics out; Debug retains them")
+  "[taint-trace-config] optimized configurations compile diagnostics out; Debug retains requested tracing after reconfigure")
