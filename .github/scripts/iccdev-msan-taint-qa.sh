@@ -52,6 +52,8 @@ done
 fixture_dir="$source_dir/.github/ci/test-data"
 short_fixture="$fixture_dir/json-parametric-short-params.json"
 control_fixture="$fixture_dir/json-parametric-complete-params.json"
+colorant_finding_fixture="$fixture_dir/json-colorant-table-nonnumeric-pcs.json"
+colorant_control_fixture="$fixture_dir/json-colorant-table-complete-pcs.json"
 out_dir="${out_dir:-$build_dir/msan-taint-logs}"
 
 for required_tool in clang clang++ cmake grep ldd nm; do
@@ -61,7 +63,9 @@ for required_tool in clang clang++ cmake grep ldd nm; do
   fi
 done
 if [ ! -f "$source_dir/Build/Cmake/CMakeLists.txt" ] ||
-   [ ! -f "$short_fixture" ] || [ ! -f "$control_fixture" ]; then
+   [ ! -f "$short_fixture" ] || [ ! -f "$control_fixture" ] ||
+   [ ! -f "$colorant_finding_fixture" ] ||
+   [ ! -f "$colorant_control_fixture" ]; then
   echo "[FAIL] --source-dir is not a complete taint-trace checkout" >&2
   exit 2
 fi
@@ -124,27 +128,30 @@ run_from_json()
   local name="$1"
   local fixture="$2"
   local status=0
+  local profile="$out_dir/$name.icc"
+
+  rm -f -- "$profile" "$out_dir/$name.stdout" "$out_dir/$name.stderr"
 
   MSAN_OPTIONS="$msan_options" ICC_TAINT_TRACE=1 \
-    "$from_json" "$fixture" "$out_dir/$name.icc" \
+    "$from_json" "$fixture" "$profile" \
     -noid >"$out_dir/$name.stdout" 2>"$out_dir/$name.stderr" || status=$?
   echo "$status"
 }
 
 short_status="$(run_from_json short "$short_fixture")"
 control_status="$(run_from_json control "$control_fixture")"
+colorant_finding_status="$(run_from_json colorant-finding "$colorant_finding_fixture")"
+colorant_control_status="$(run_from_json colorant-control "$colorant_control_fixture")"
 thread_status=0
 MSAN_OPTIONS="$msan_options" \
   "$thread_test" "$source_dir/Testing/sRGB_v4_ICC_preference.icc" \
   >"$out_dir/thread.stdout" 2>"$out_dir/thread.stderr" || thread_status=$?
 
-if [ "$short_status" -ne 86 ] ||
-   ! grep -Fq 'MemorySanitizer: use-of-uninitialized-value' "$out_dir/short.stderr" ||
-   ! grep -Fq 'stage=curve.apply access=source-read' "$out_dir/short.stderr" ||
-   ! grep -Fq 'state=poisoned first_bad=' "$out_dir/short.stderr" ||
-   ! grep -Fq 'CIccTagParametricCurve::Apply' "$out_dir/short.stderr" ||
-   ! grep -Fq 'CIccTagParametricCurve::SetFunctionType' "$out_dir/short.stderr"; then
-  echo "[FAIL] short parameter case did not reach the application MSan finding" >&2
+if [ "$short_status" -ne 1 ] || [ -e "$out_dir/short.icc" ] ||
+   ! grep -Fq 'parametricCurveType params count does not match functionType' \
+     "$out_dir/short.stderr" ||
+   grep -Fq 'MemorySanitizer:' "$out_dir/short.stderr"; then
+  echo "[FAIL] short parameter case was not rejected cleanly" >&2
   sed -n '1,160p' "$out_dir/short.stderr" >&2
   exit 2
 fi
@@ -153,12 +160,30 @@ if [ "$control_status" -ne 1 ] || grep -Fq 'MemorySanitizer:' "$out_dir/control.
   sed -n '1,160p' "$out_dir/control.stderr" >&2
   exit 2
 fi
+if [ "$colorant_finding_status" -ne 86 ] ||
+   ! grep -Fq 'MemorySanitizer: use-of-uninitialized-value' \
+     "$out_dir/colorant-finding.stderr" ||
+   ! grep -Fq 'CIccTagJsonColorantTable::ParseJson' \
+     "$out_dir/colorant-finding.stderr" ||
+   ! grep -Fq "Uninitialized value was created by an allocation of 'pcs'" \
+     "$out_dir/colorant-finding.stderr"; then
+  echo "[FAIL] non-numeric colorant PCS did not reach the MSan finding" >&2
+  sed -n '1,200p' "$out_dir/colorant-finding.stderr" >&2
+  exit 2
+fi
+if [ "$colorant_control_status" -ne 1 ] ||
+   grep -Fq 'MemorySanitizer:' "$out_dir/colorant-control.stderr"; then
+  echo "[FAIL] complete colorant PCS control was not MSan-clean" >&2
+  sed -n '1,160p' "$out_dir/colorant-control.stderr" >&2
+  exit 2
+fi
 if [ "$thread_status" -ne 0 ] || grep -Fq 'MemorySanitizer:' "$out_dir/thread.stderr"; then
   echo "[FAIL] threaded control was not MSan-clean" >&2
   sed -n '1,160p' "$out_dir/thread.stderr" >&2
   exit 2
 fi
 
-echo "[PASS] MSan reached CIccTagParametricCurve::Apply with allocation origin"
-echo "[PASS] complete JSON and threaded controls are MSan-clean"
+echo "[PASS] short parametric parameters were rejected before serialization"
+echo "[PASS] MSan traced non-numeric colorant PCS to its stack origin"
+echo "[PASS] complete JSON, colorant PCS, and threaded controls are MSan-clean"
 echo "[EVIDENCE] $out_dir"

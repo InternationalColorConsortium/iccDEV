@@ -114,6 +114,26 @@ if(TARGET iccDescribeSinkTest)
   add_dependencies(build-test-binaries iccDescribeSinkTest)
 endif()
 
+find_program(ICCDEV_NINJA_EXECUTABLE ninja)
+if(ICCDEV_NINJA_EXECUTABLE)
+  add_test(
+    NAME iccdev.taint-trace-build-configuration
+    COMMAND "${CMAKE_COMMAND}"
+      "-DICCDEV_SOURCE_DIR=${ICCDEV_REPO_ROOT}"
+      "-DICCDEV_TEST_BINARY_DIR=${ICCDEV_TEST_OUTDIR}/taint-trace-config"
+      "-DICCDEV_NINJA_EXECUTABLE=${ICCDEV_NINJA_EXECUTABLE}"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunTaintTraceBuildConfigurationTest.cmake"
+  )
+  set_tests_properties(iccdev.taint-trace-build-configuration PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;build;cmake;taint-trace;regression"
+  )
+else()
+  message(STATUS
+    "Ninja not found - skipping iccdev.taint-trace-build-configuration")
+endif()
+
 # Issue #2276: this compiles a C-only consumer against IccCValidation.h and
 # resolves the entry point at runtime. Linking the helper to IccProfLib would
 # hide both C++ name mangling and accidental C++ dependencies in the header.

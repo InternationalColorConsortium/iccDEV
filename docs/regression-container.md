@@ -149,6 +149,12 @@ run the focused JSON and threaded controls with:
 .github/scripts/iccdev-msan-taint-qa.sh --source-dir "$PWD" --build-dir /tmp/iccdev-msan --runtime-dir "${ICCDEV_MSAN_LIBCXX_DIR:-/opt/iccdev-msan-libcxx}" --out-dir /tmp/iccdev-msan-evidence
 ```
 
+This is a Debug-only diagnostic lane. Release, RelWithDebInfo, and MinSizeRel
+always compile taint tracing out, including when
+`ICCDEV_ENABLE_TAINT_TRACE=ON` is requested. The malformed parametric-curve
+fixture is a fail-closed control after #2543; the nonnumeric colorant PCS
+fixture supplies the positive uninitialized-read signal.
+
 Docker's default seccomp profile can block the personality call MSan uses to
 set up its shadow mapping. For this disposable diagnostic lane only, disable
 networking and relax seccomp for the one container; ordinary image use keeps

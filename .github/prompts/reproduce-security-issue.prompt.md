@@ -66,6 +66,11 @@ or unsafe. Build the pinned MSan libc++ runtime and run the paired controls:
   --runtime-dir /tmp/iccdev-msan-libcxx
 ```
 
+The taint-trace option is diagnostic-only. Configure it in Debug; Release,
+RelWithDebInfo, and MinSizeRel compile it out even when explicitly requested.
+Treat malformed parametric-curve arrays as fail-closed controls after #2543;
+use the nonnumeric colorant PCS fixture as the positive uninitialized-read case.
+
 Keep the matrix distinct: ASAN/UBSAN for memory safety and undefined behavior,
 MSan or Memcheck for uninitialized reads, and TSan or Helgrind for races. Run
 Valgrind only on a non-sanitized binary.

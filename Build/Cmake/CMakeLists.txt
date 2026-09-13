@@ -664,6 +664,16 @@ if(ICC_JSON_ORDERED AND _ICC_JSON_ORDERED_DEFAULT)
 endif()
 option(ICC_TRACE_NAN_ENABLED      "Enable tracing NaN inputs in debug builds"           OFF)
 option(ICCDEV_ENABLE_TAINT_TRACE  "Enable runtime-gated tainted read/write diagnostics" OFF)
+set(_ICCDEV_RELEASE_BUILD_TYPES RELEASE RELWITHDEBINFO MINSIZEREL)
+string(TOUPPER "${CMAKE_BUILD_TYPE}" _ICCDEV_BUILD_TYPE_UPPER)
+get_property(_ICCDEV_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(ICCDEV_ENABLE_TAINT_TRACE AND NOT _ICCDEV_IS_MULTI_CONFIG AND
+   _ICCDEV_BUILD_TYPE_UPPER IN_LIST _ICCDEV_RELEASE_BUILD_TYPES)
+  message(STATUS
+    "ICCDEV_ENABLE_TAINT_TRACE forced OFF: diagnostics are compiled out of ${CMAKE_BUILD_TYPE} builds")
+  set(ICCDEV_ENABLE_TAINT_TRACE OFF CACHE BOOL
+    "Enable runtime-gated tainted read/write diagnostics" FORCE)
+endif()
 option(ICC_CLUT_DEBUG             "Enable CLUT debugging support"                       OFF)
 option(ICC_AVX2_CLUT_DEBUG        "Enable AVX2 CLUT dispatch and timing diagnostics"    OFF)
 option(ICC_ENABLE_ASSERTS         "Enable ICC_ASSERT traps and debug assertions"        OFF)
@@ -898,7 +908,14 @@ if(ICC_TRACE_NAN_ENABLED)
 endif()
 
 if(ICCDEV_ENABLE_TAINT_TRACE)
-  add_compile_definitions(ICC_TAINT_TRACE_ENABLED=1)
+  if(_ICCDEV_IS_MULTI_CONFIG)
+    add_compile_definitions(
+      "$<$<NOT:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>>:ICC_TAINT_TRACE_ENABLED=1>")
+    message(STATUS
+      "ICCDEV_ENABLE_TAINT_TRACE enabled for non-Release configurations only")
+  else()
+    add_compile_definitions(ICC_TAINT_TRACE_ENABLED=1)
+  endif()
 endif()
 
 if(ICC_CLUT_DEBUG)

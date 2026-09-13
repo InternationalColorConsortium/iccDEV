@@ -73,10 +73,14 @@ Build the repository runtime and run the JSON plus threaded controls with:
 ```
 
 For Valgrind-assisted taint tracing, configure with
-`-DICCDEV_ENABLE_TAINT_TRACE=ON`, set `ICC_TAINT_TRACE=1`, and use
+`-DCMAKE_BUILD_TYPE=Debug -DICCDEV_ENABLE_TAINT_TRACE=ON`, set
+`ICC_TAINT_TRACE=1`, and use
 `.github/scripts/iccdev-taint-trace-qa.sh`. The trace helpers inspect shadow
 state before formatting values, so logging must never dereference poisoned or
-unaddressable storage.
+unaddressable storage. Release, RelWithDebInfo, and MinSizeRel builds always
+compile these diagnostics out, even if the option is explicitly requested.
+After #2543, malformed parametric-curve arrays are rejection controls; the
+nonnumeric colorant PCS fixture remains the positive uninitialized-read proof.
 
 ## Build
 
