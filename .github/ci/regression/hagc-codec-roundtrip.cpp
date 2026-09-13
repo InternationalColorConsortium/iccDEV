@@ -678,6 +678,83 @@ void testValidate()
 
 } // namespace
 
+// ---------------------------------------------------------------------------
+// 6. An oversized pad is measured on its length, not read byte by byte
+// ---------------------------------------------------------------------------
+// Only 0 to 3 pad bytes are legal: the pad exists to round the tag up to a
+// multiple of four.  Read() used to read the whole remainder one byte at a
+// time to learn whether any of it was non-null, so a directory entry claiming
+// a large tag made it walk every claimed byte.  Validate() already reports four
+// or more pad bytes as non-compliant on the count alone, so reading them bought
+// only a second message about the same defect.  Read() now reads a legal pad
+// and skips an illegal one, and must still leave the stream at the tag's end.
+void testOversizedPad()
+{
+  std::vector<icUInt8Number> meta = makeOnePointBlock(1000, 10000, 18000);
+
+  CIccTagHagc tag;
+  check(tag.SetRawMetadata(&meta[0], (icUInt32Number)meta.size()), "pad fixture metadata installs");
+
+  const size_t nExtra = 4096;
+  CIccMemIO io;
+  check(io.Alloc(64 + nExtra + 16, true), "pad fixture memory IO allocated");
+  check(tag.Write(&io), "pad fixture tag writes");
+
+  size_t nTag = io.GetLength();
+
+  // Non-null bytes past the tag's own pad, then a sentinel the read must not
+  // reach.  The claimed size covers the junk but not the sentinel.
+  std::vector<icUInt8Number> junk(nExtra, 0xAB);
+  check(io.Write8(&junk[0], nExtra) == nExtra, "junk appended after the tag");
+  icUInt8Number sentinel[4] = { 0xDE, 0xAD, 0xBE, 0xEF };
+  check(io.Write8(sentinel, sizeof(sentinel)) == sizeof(sentinel), "sentinel appended");
+
+  icUInt32Number nClaimed = (icUInt32Number)(nTag + nExtra);
+  check(io.Seek(0, icSeekSet) == 0, "rewound for the oversized read");
+
+  CIccTagHagc oversized;
+  check(oversized.Read(nClaimed, &io), "a tag with an oversized pad still reads");
+  check(oversized.GetPadSize() == nClaimed - 12 - meta.size(),
+        "the whole unaccounted remainder is counted as pad");
+  check(io.Tell() == (int64_t)nClaimed, "Read() leaves the stream at the end of the claimed tag");
+
+  std::string report;
+  oversized.Validate("HAGC", report, NULL);
+  check(report.find("unaccounted bytes") != std::string::npos,
+        "the oversized pad is reported on its length");
+  check(report.find("pad bytes are not null") == std::string::npos,
+        "and its content is not examined");
+
+  // The boundary, both sides of it: three pad bytes are legal and read, four
+  // are skipped.  The written tag has one pad byte and junk after it, so
+  // claiming two and three more bytes gives pads of three and four.
+  check(io.Seek(0, icSeekSet) == 0, "rewound for the three-byte pad");
+  CIccTagHagc pad3;
+  check(pad3.Read((icUInt32Number)(nTag + 2), &io), "a tag with a three-byte pad reads");
+  check(pad3.GetPadSize() == 3, "three pad bytes counted");
+  check(pad3.HasNonZeroPad(), "a three-byte pad is read, so its non-null bytes are seen");
+
+  check(io.Seek(0, icSeekSet) == 0, "rewound for the four-byte pad");
+  CIccTagHagc pad4;
+  check(pad4.Read((icUInt32Number)(nTag + 3), &io), "a tag with a four-byte pad reads");
+  check(pad4.GetPadSize() == 4, "four pad bytes counted");
+  check(!pad4.HasNonZeroPad(), "a four-byte pad is skipped, not read");
+  check(io.Tell() == (int64_t)(nTag + 3), "and the stream still ends at the tag's end");
+
+  // A legal pad is still read: one non-null pad byte is reported.
+  check(nTag == 12 + meta.size() + 1, "the written tag has exactly one pad byte");
+  io.GetData()[nTag - 1] = 0x01;
+  check(io.Seek(0, icSeekSet) == 0, "rewound for the legal-pad read");
+
+  CIccTagHagc dirtyPad;
+  check(dirtyPad.Read((icUInt32Number)nTag, &io), "a tag with a non-null legal pad reads");
+  check(dirtyPad.HasNonZeroPad(), "a non-null byte in a legal pad is seen");
+  report.clear();
+  dirtyPad.Validate("HAGC", report, NULL);
+  check(report.find("pad bytes are not null") != std::string::npos,
+        "and reported");
+}
+
 int main()
 {
   testRoundTrips();
@@ -686,6 +763,7 @@ int main()
   testMalformed();
   testTagEnvelope();
   testValidate();
+  testOversizedPad();
 
   if (g_failures)
     printf("hagc-codec-roundtrip: %d assertion(s) failed\n", g_failures);

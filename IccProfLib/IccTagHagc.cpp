@@ -1153,7 +1153,16 @@ bool CIccTagHagc::Read(icUInt32Number size, CIccIO *pIO)
   m_nPadSize = nAvail - nRead;
   m_bNonZeroPad = false;
 
-  if (m_nPadSize) {
+  /* Only a legal pad is read.  Four bytes or more is non-compliant on its
+   * length alone, which Validate() reports, so reading it would buy a second
+   * message about the same defect at the cost of one Read8() call for every
+   * byte a directory entry claims.  It is skipped instead, so the stream still
+   * ends where the tag does.  A failed skip is not propagated, for the same
+   * reason a short pad read never was: the metadata has already been read. */
+  if (m_nPadSize > 3) {
+    pIO->Seek((int64_t)m_nPadSize, icSeekCur);
+  }
+  else if (m_nPadSize) {
     icUInt32Number i;
     for (i = 0; i < m_nPadSize; i++) {
       icUInt8Number pad;
