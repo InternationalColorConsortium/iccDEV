@@ -631,6 +631,15 @@ ICCPROFLIB_API bool icBuildHdrForwardMatrix(const CIccProfile *pProfile,
  */
 ICCPROFLIB_API bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info);
 
+/**
+ * True when the header alone leaves a profile eligible for clause 8.10.1:
+ * version 4.5.0.0 or later within v4, RGB data colour space, and the Input or
+ * Display class.  These are the membership conditions that need no tag, so a
+ * caller can rule a profile out before icGetHdrProfileInfo() loads any.
+ * Returns false when pProfile is NULL.
+ */
+ICCPROFLIB_API bool icHdrHeaderAdmitsMembership(const CIccProfile *pProfile);
+
 /** Human-readable name of a TransferCharacteristics value, restricted to the
  * three an HDR Profile may use. Returns NULL for any other value. */
 ICCPROFLIB_API const icChar *icGetHdrTransferName(icUInt8Number nTransferCharacteristics);

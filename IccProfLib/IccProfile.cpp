@@ -3630,6 +3630,13 @@ icValidateStatus CIccProfile::CheckHdrProfile(std::string &sReport) const
   icValidateStatus rv = icValidateOK;
   icHdrProfileInfo info;
 
+  /* Validate() is const, and classifying loads every tag it reads - see
+   * icHdrFindTag().  A profile whose header already rules out membership has
+   * nothing for this function to check, so it returns before touching a tag,
+   * and a profile that was opened rather than read is left as it was opened. */
+  if (!icHdrHeaderAdmitsMembership(this))
+    return rv;
+
   if (!icGetHdrProfileInfo(this, info))
     return rv;
 

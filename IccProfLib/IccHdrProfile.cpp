@@ -227,6 +227,11 @@ static bool icHdrXyzToChromaticity(icFloatNumber X, icFloatNumber Y, icFloatNumb
  *  FindTag() exists rather than requiring callers to pre-load. Keeping the
  *  const on the interface is worth this much - a caller has no business being
  *  handed a mutable profile to ask whether it is an HDR Profile.
+ *
+ *  The load is still a side effect on a const object, so callers that must
+ *  not have one test icHdrHeaderAdmitsMembership() first: it needs no tag,
+ *  and CIccProfile::CheckHdrProfile() uses it so that validating a profile
+ *  whose header rules out membership loads nothing.
  *****************************************************************************
  */
 static const CIccTag *icHdrFindTag(const CIccProfile *pProfile, icSignature sig)
@@ -995,6 +1000,58 @@ static bool icHdrIsRgbMatrixBased(const CIccProfile *pProfile)
 
 /**
  ****************************************************************************
+ * Name: icHdrIsVersion4_5
+ *
+ * Purpose: Clause 8.10.1's version condition.
+ *
+ *  "4.5.0.0 or later within v4", not equality with 4.5.0.0.  An amendment is
+ *  one link in a chain of amendments against the base major version, and what
+ *  it introduces is available at its own version and at every higher one, so
+ *  a profile encoding 4.6.0.0 may use everything defined at 4.5.0.0 - clause
+ *  8.10 included.  An author encodes the version of the specification it
+ *  authored against; a consumer therefore has to accept that version or any
+ *  higher one within the major version.
+ *
+ *  Comparing the whole version word rather than the minor nibble alone keeps
+ *  a v5 profile - a different major version with its own tag model - out of
+ *  the HDR Profile sub-class.
+ ****************************************************************************
+ */
+static bool icHdrIsVersion4_5(const CIccProfile *pProfile)
+{
+  return pProfile->m_Header.version >= icVersionNumberV4_5 &&
+         pProfile->m_Header.version < icVersionNumberV5;
+}
+
+/**
+ ****************************************************************************
+ * Name: icHdrHeaderAdmitsMembership
+ *
+ * Purpose: The clause 8.10.1 membership conditions that need no tag.
+ *
+ *  Composed from the same two predicates icGetHdrProfileInfo() records, so
+ *  the early answer and the full classification cannot drift apart.  It
+ *  exists because classifying loads tags (see icHdrFindTag()), and a const
+ *  caller such as CIccProfile::Validate() should not load anything for a
+ *  profile its header has already ruled out.
+ *
+ * Args:
+ *  pProfile = the profile to test; may be NULL
+ *
+ * Return:
+ *  true when version, class and colour space all permit membership.
+ ****************************************************************************
+ */
+bool icHdrHeaderAdmitsMembership(const CIccProfile *pProfile)
+{
+  if (!pProfile)
+    return false;
+
+  return icHdrIsRgbInputOrDisplay(pProfile) && icHdrIsVersion4_5(pProfile);
+}
+
+/**
+ ****************************************************************************
  * Name: icBuildRgbToXyzMatrix
  *
  * Purpose: The columns of an RGB to XYZ matrix are the primaries' own
@@ -1382,19 +1439,7 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
                                pProfile->IsTagPresent(icSigGreenMatrixColumnTag) &&
                                pProfile->IsTagPresent(icSigBlueMatrixColumnTag);
 
-  /* "4.5.0.0 or later within v4", not equality with 4.5.0.0.  An amendment is
-   * one link in a chain of amendments against the base major version, and what
-   * it introduces is available at its own version and at every higher one, so
-   * a profile encoding 4.6.0.0 may use everything defined at 4.5.0.0 - clause
-   * 8.10 included.  An author encodes the version of the specification it
-   * authored against; a consumer therefore has to accept that version or any
-   * higher one within the major version.
-   *
-   * Comparing the whole version word rather than the minor nibble alone keeps
-   * a v5 profile - a different major version with its own tag model - out of
-   * the HDR Profile sub-class. */
-  info.bVersion4_5 = (pProfile->m_Header.version >= icVersionNumberV4_5 &&
-                      pProfile->m_Header.version < icVersionNumberV5);
+  info.bVersion4_5 = icHdrIsVersion4_5(pProfile);
 
   const CIccTag *pCicp = icHdrFindTag(pProfile, icSigCicpTag);
   if (pCicp && pCicp->GetType() == icSigCicpType) {

@@ -910,6 +910,63 @@ void testRegistryDefinedValues()
 
 } // namespace
 
+// ---------------------------------------------------------------------------
+// 9. Validate() loads no tag for a profile whose header rules out membership
+// ---------------------------------------------------------------------------
+// CIccProfile::Validate() is const, but CheckHdrProfile() classifies through
+// icHdrFindTag(), which loads a tag the profile has not loaded yet.  For a
+// profile that was OPENED rather than read, that made validating ANY profile
+// load its cicpTag, metadataTag and chromaticAdaptationTag - growing its tag
+// list and moving its attached IO - including profiles that clause 8.10.1
+// excludes on the header alone.  The header conditions (version, class,
+// colour space) now gate the classification, so those profiles are left as
+// they were opened.  The HDR Profile that follows is the control: gating must
+// not also stop an opened member from being held to 8.10.6.
+void testValidateLoadsNoTagForHeaderNonMembers()
+{
+  const char *szNonMembers[] = { "HdrVersion44.icc", "HdrNonRgbSpace.icc" };
+
+  for (size_t n = 0; n < sizeof(szNonMembers) / sizeof(szNonMembers[0]); n++) {
+    std::string path = "Testing/HDR/";
+    path += szNonMembers[n];
+
+    CIccProfile *pOpened = OpenIccProfile(path.c_str());
+    if (!pOpened) {
+      g_skips++;
+      printf("SKIP: cannot open %s (run Testing/CreateAllProfiles.sh)\n", path.c_str());
+      continue;
+    }
+
+    std::string what = szNonMembers[n];
+    check(pOpened->IsTagPresent(icSigCicpTag),
+          (what + " carries a cicpTag, so there is something to load").c_str());
+    check(pOpened->FindTagConst(icSigCicpTag) == NULL,
+          (what + " opened: its cicpTag is not loaded yet").c_str());
+
+    std::string report;
+    pOpened->Validate(report);
+
+    check(pOpened->FindTagConst(icSigCicpTag) == NULL,
+          (what + ": Validate() leaves its cicpTag unloaded").c_str());
+
+    delete pOpened;
+  }
+
+  CIccProfile *pMember = OpenIccProfile("Testing/HDR/HdrMissingBToA0.icc");
+  if (!pMember) {
+    g_skips++;
+    printf("SKIP: cannot open Testing/HDR/HdrMissingBToA0.icc (run Testing/CreateAllProfiles.sh)\n");
+    return;
+  }
+
+  std::string report;
+  pMember->Validate(report);
+  check(report.find("clause 8.10.6") != std::string::npos,
+        "an opened HDR Profile is still held to clause 8.10.6 by Validate()");
+
+  delete pMember;
+}
+
 int main()
 {
   testCicpTable();
@@ -920,6 +977,7 @@ int main()
   testContentHeadroom();
   testClassification();
   testRegistryDefinedValues();
+  testValidateLoadsNoTagForHeaderNonMembers();
 
   if (g_failures)
     printf("hdr-profile-classification: %d assertion(s) failed\n", g_failures);
