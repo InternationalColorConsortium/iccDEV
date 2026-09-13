@@ -77,6 +77,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -420,7 +421,9 @@ void testUnwidenableFields()
 
   check(ev.SetTargetHeadroom(1.0f), "a finite target is accepted");
 
-  const icFloatNumber nan = (icFloatNumber)(0.0 / 0.0);
+  // Not 0.0 / 0.0: MSVC rejects a constant division by zero (C2124) and the
+  // test executable would not build there.
+  const icFloatNumber nan = std::numeric_limits<icFloatNumber>::quiet_NaN();
   check(!ev.SetTargetHeadroom(nan), "a NaN target headroom is refused");
 
   // The refusal must leave the last good target in place, not a half-set one.
