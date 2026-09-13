@@ -20,12 +20,17 @@
     CIccCmm::ToInternalEncoding() no longer clamps icEncodeFloat - but did not
     create it.
 
-    The contract pinned here: a negative base evaluates as a base of zero,
-    which is what types 1 and 2 already return below their zero crossing, so
-    the segment saturates at its own zero instead of producing NaN.  Results
-    that were finite are unchanged, which matters for the identity: a gamma
-    1.0 curve is how extended-range linear data passes a TRC, and its negative
-    values must survive.
+    The contract pinned here: a negative base under a non-integer exponent
+    evaluates as a base of zero, so for a positive gamma the segment takes
+    its value at zero instead of producing NaN.  Results that were finite are
+    unchanged, which matters for the identity: a gamma 1.0 curve is how
+    extended-range linear data passes a TRC, and its negative values must
+    survive.
+
+    Types 1 and 2 with a negative a are asserted finite only, not a value.
+    Their X >= -b/a test then selects the side where the base is negative, so
+    the fix makes the whole curve 0 (or c); that is the formula's inversion,
+    and pinning it would get in the way of correcting the threshold later.
 */
 
 #include "IccCmm.h"
@@ -64,6 +69,14 @@ static void checkValue(double got, double want, const char* msg)
   check(ok, msg);
 }
 
+/* A NaN or infinite result must fail. */
+static void checkFinite(double got, const char* msg)
+{
+  if (!std::isfinite(got))
+    std::printf("      (got %.9g)\n", got);
+  check(std::isfinite(got), msg);
+}
+
 /* A parametric curve of the given type with its parameters in ICC order
  * (g, a, b, c, d, e, f).  The caller owns the result. */
 static CIccTagParametricCurve* make_curve(icUInt16Number nType, const double* params)
@@ -96,18 +109,19 @@ static void testCurveApply()
              "type 0, gamma 1.0: a negative input still passes through");
   delete pIdentity;
 
-  /* Type 1's threshold -b/a keeps the base non-negative only while a > 0. */
+  /* Type 1's threshold -b/a keeps the base non-negative only while a > 0;
+   * with a < 0 it selects the negative-base side.  Finite only - see the
+   * file header for why no value is pinned. */
   const double negA[] = { 2.2, -1.0, 0.0 };
   CIccTagParametricCurve* pNegA = make_curve(1, negA);
-  checkValue(pNegA->Apply((icFloatNumber)0.5), 0.0,
-             "type 1 with a < 0: the negative base above the threshold evaluates as zero");
+  checkFinite(pNegA->Apply((icFloatNumber)0.5),
+              "type 1 with a < 0: the negative base does not produce NaN");
   delete pNegA;
 
-  /* Type 2 is type 1 plus c, and saturates at c. */
   const double negA2[] = { 2.2, -1.0, 0.0, 0.25 };
   CIccTagParametricCurve* pNegA2 = make_curve(2, negA2);
-  checkValue(pNegA2->Apply((icFloatNumber)0.5), 0.25,
-             "type 2 with a < 0: the negative base evaluates as zero, leaving c");
+  checkFinite(pNegA2->Apply((icFloatNumber)0.5),
+              "type 2 with a < 0: the negative base does not produce NaN");
   delete pNegA2;
 
   /* Types 3 and 4 test X against d, which says nothing about aX + b once d

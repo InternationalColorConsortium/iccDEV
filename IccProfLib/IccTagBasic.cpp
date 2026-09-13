@@ -3759,6 +3759,13 @@ icInt32Number CIccTagNamedColor2::FindColor(const icChar *szColor) const
   j = (icInt32Number)strlen(m_szSufix);
   i = (icInt32Number)strlen(szColor);
   if (j != 0) {
+    // CWE-125 (#2534): the suffix compare starts j bytes from the end of
+    // szColor, so a name shorter than the suffix makes szColor+(i-j) point
+    // before the buffer and strncmp reads out of bounds.  A name that short
+    // cannot equal prefix+rootName+suffix -- that is at least j bytes long --
+    // so the answer is "not found" without inspecting any memory.
+    if (i < j)
+      return -1;
     if (strncmp(szColor+(i-j), m_szSufix, j))
       return -1;    
   }
@@ -9621,7 +9628,12 @@ bool CIccTagColorantOrder::Read(icUInt32Number size, CIccIO *pIO)
 
   icUInt32Number nNum = (size - 3*sizeof(icUInt32Number))/sizeof(icUInt8Number);
 
-  if (nNum < nCount)
+  // SetSize() takes an icUInt16Number and the read below is of m_nCount, the
+  // narrowed count, so a declared count above 0xffff used to load silently as
+  // a shorter tag -- 65537 became one position and the rest of the element was
+  // never read.  CIccTagColorantTable::Read() has always refused such a count,
+  // and every JSON and XML reader of these tags now does too.
+  if (nNum < nCount || nCount > 0xffff)
     return false;
 
   if (!SetSize((icUInt16Number)nCount))

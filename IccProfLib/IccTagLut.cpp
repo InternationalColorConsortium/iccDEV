@@ -1220,9 +1220,16 @@ bool CIccTagParametricCurve::IsIdentity()
 *  the matrix after a TRC carries into the PCS.  Type 0 tests nothing, and the
 *  thresholds of types 1 to 4 test X rather than the base, so a negative a or a
 *  d below the base's zero crossing still reaches pow() with one.  The base is
-*  given the value at zero instead, which is what types 1 and 2 already return
-*  below their zero crossing.  An integer exponent was always finite and is
-*  left alone: a gamma of 1.0 is how extended-range linear data passes a TRC.
+*  given the value at zero instead, so the segment takes the value it has where
+*  its base is zero.  For a positive gamma that is 0; for a gamma of zero or
+*  below it is 1 or +inf, which is what an input of exactly zero already gives
+*  such a curve.  An integer exponent was always finite for a negative base
+*  and is left alone: a gamma of 1.0 is how extended-range linear data passes
+*  a TRC.
+*
+*  With a negative a, types 1 and 2 test the side of -b/a where the base is
+*  negative, so this makes such a curve 0 (or c) everywhere.  That is the
+*  formula's own inversion, not something this function decides.
 *
 * Args:
 *  base = the segment's base, X or aX + b
