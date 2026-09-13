@@ -634,6 +634,12 @@ if(WIN32 AND ICCDEV_WINDOWS_UNIFIED_RUNTIME)
       CACHE PATH "Windows build-tree directory for iccDEV executable and DLL runtime artifacts")
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${ICCDEV_WINDOWS_RUNTIME_OUTPUT_DIR}")
   set(CMAKE_PDB_OUTPUT_DIRECTORY "${ICCDEV_WINDOWS_RUNTIME_OUTPUT_DIR}")
+  if(DEFINED VCPKG_TARGET_TRIPLET)
+    # iccdev-stage-windows-runtime owns dependency staging for the shared bin
+    # directory. Per-target applocal hooks race while copying the same DLLs.
+    set(VCPKG_APPLOCAL_DEPS OFF CACHE BOOL
+        "Let iccDEV stage vcpkg runtime dependencies into its unified bin directory" FORCE)
+  endif()
   message(STATUS "Windows runtime output directory: ${ICCDEV_WINDOWS_RUNTIME_OUTPUT_DIR}")
 endif()
 
