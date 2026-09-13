@@ -1548,6 +1548,41 @@ function(iccdev_add_xform_abstorel_adjust_test)
   endif()
 endfunction()
 
+function(iccdev_add_parametric_curve_negative_domain_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccParametricCurveNegativeDomainTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/parametric-curve-negative-domain.cpp"
+  )
+  target_link_libraries(iccParametricCurveNegativeDomainTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccParametricCurveNegativeDomainTest)
+
+  add_test(
+    NAME iccdev.parametric-curve-negative-domain
+    COMMAND "$<TARGET_FILE:iccParametricCurveNegativeDomainTest>"
+  )
+  set_tests_properties(iccdev.parametric-curve-negative-domain PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;cmm;curve;regression"
+  )
+  if(WIN32)
+    set(_parametric_negative_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccParametricCurveNegativeDomainTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _parametric_negative_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.parametric-curve-negative-domain PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_parametric_negative_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards #1671: reflectance observer setup must allocate temporary observer
 # matrices with the applied illuminant range, not the element reflectance range.
 function(iccdev_add_reflectance_observer_illum_range_test)
@@ -8071,6 +8106,7 @@ if(WIN32)
   iccdev_add_cmmsearch_namedcolor_ownership_test()
   iccdev_add_xform_create_tag_ownership_test()
   iccdev_add_xform_abstorel_adjust_test()
+  iccdev_add_parametric_curve_negative_domain_test()
   iccdev_add_bpc_d2b_tag_family_test()
   iccdev_add_reflectance_observer_illum_range_test()
   iccdev_add_spectral_absolute_flag_test()
@@ -8469,6 +8505,7 @@ iccdev_add_sparsematrix_set_roundtrip_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_xform_create_tag_ownership_test()
 iccdev_add_xform_abstorel_adjust_test()
+iccdev_add_parametric_curve_negative_domain_test()
 iccdev_add_bpc_d2b_tag_family_test()
 iccdev_add_reflectance_observer_illum_range_test()
 iccdev_add_spectral_absolute_flag_test()
