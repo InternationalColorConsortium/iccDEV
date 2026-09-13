@@ -115,6 +115,37 @@ if(TARGET iccDescribeSinkTest)
   add_dependencies(build-test-binaries iccDescribeSinkTest)
 endif()
 
+find_program(ICCDEV_NINJA_EXECUTABLE ninja)
+if(ICCDEV_NINJA_EXECUTABLE)
+  set(ICCDEV_TAINT_TRACE_TEST_GENERATOR Ninja)
+  set(ICCDEV_TAINT_TRACE_TEST_MAKE_PROGRAM "${ICCDEV_NINJA_EXECUTABLE}")
+elseif(CMAKE_GENERATOR MATCHES "Makefiles$")
+  set(ICCDEV_TAINT_TRACE_TEST_GENERATOR "${CMAKE_GENERATOR}")
+  set(ICCDEV_TAINT_TRACE_TEST_MAKE_PROGRAM "${CMAKE_MAKE_PROGRAM}")
+endif()
+if(ICCDEV_TAINT_TRACE_TEST_GENERATOR)
+  add_test(
+    NAME iccdev.taint-trace-build-configuration
+    COMMAND "${CMAKE_COMMAND}"
+      "-DICCDEV_SOURCE_DIR=${ICCDEV_REPO_ROOT}"
+      "-DICCDEV_TEST_BINARY_DIR=${ICCDEV_TEST_OUTDIR}/taint-trace-config"
+      "-DICCDEV_TEST_GENERATOR=${ICCDEV_TAINT_TRACE_TEST_GENERATOR}"
+      "-DICCDEV_TEST_MAKE_PROGRAM=${ICCDEV_TAINT_TRACE_TEST_MAKE_PROGRAM}"
+      "-DICCDEV_PARENT_CMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
+      "-DICCDEV_PARENT_C_COMPILER=${CMAKE_C_COMPILER}"
+      "-DICCDEV_PARENT_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunTaintTraceBuildConfigurationTest.cmake"
+  )
+  set_tests_properties(iccdev.taint-trace-build-configuration PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;build;cmake;taint-trace;regression"
+  )
+else()
+  message(STATUS
+    "No supported nested generator found - skipping iccdev.taint-trace-build-configuration")
+endif()
+
 # Issue #2276: this compiles a C-only consumer against IccCValidation.h and
 # resolves the entry point at runtime. Linking the helper to IccProfLib would
 # hide both C++ name mangling and accidental C++ dependencies in the header.
@@ -233,6 +264,24 @@ function(iccdev_add_iccconnect_thread_test)
       ENVIRONMENT_MODIFICATION "${_iccconnect_windows_env_mods}"
     )
   endif()
+endfunction()
+
+# Positive control for the ICC_TAINT_TRACE memory-state query. It is not a CTest:
+# its verdict needs Valgrind Memcheck or MemorySanitizer around it, so
+# iccdev-taint-trace-qa.sh and iccdev-msan-taint-qa.sh run it instead. It is
+# header-only and built only where tracing was requested.
+function(iccdev_add_taint_trace_memory_state_probe)
+  if(NOT ICCDEV_ENABLE_TAINT_TRACE OR WIN32)
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccTaintTraceMemoryStateProbe
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/taint-trace-memory-state.cpp"
+  )
+  target_compile_features(iccTaintTraceMemoryStateProbe PRIVATE cxx_std_17)
+  target_include_directories(iccTaintTraceMemoryStateProbe PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
 endfunction()
 
 function(iccdev_add_clut_avx512_sixteen_output_test)
@@ -3709,13 +3758,15 @@ function(iccdev_add_iccprofileplot_pdf_leak_test)
   # tool leaks.  Inheriting that would make this a false pass, so launch through
   # `cmake -E env ASAN_OPTIONS=detect_leaks=1` to force leak detection on for this
   # process only (same mechanism as the cmmsearch/xform ownership tests).  The
-  # tool writes its PDF/TIFF beside the CWD, so run inside the ctest output dir.
+  # tool writes its PDF/TIFF beside its input profile, so use a build-tree copy
+  # rather than passing the tracked source-tree fixture directly.
   add_test(
     NAME iccdev.iccprofileplot-pdf-leak
-    COMMAND "${CMAKE_COMMAND}" -E env
-      "ASAN_OPTIONS=detect_leaks=1"
-      "$<TARGET_FILE:iccProfileVisualizePlot>"
-      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+    COMMAND "${CMAKE_COMMAND}"
+      "-DVIZ_TOOL=$<TARGET_FILE:iccProfileVisualizePlot>"
+      "-DPROFILE=${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+      "-DWORKDIR=${ICCDEV_TEST_OUTDIR}/iccprofileplot-pdf-leak"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunIccProfilePlotPdfLeakTest.cmake"
   )
   set_tests_properties(iccdev.iccprofileplot-pdf-leak PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
@@ -8737,6 +8788,7 @@ set(ICCDEV_TEST_ENV
 )
 
 iccdev_add_iccconnect_thread_test()
+iccdev_add_taint_trace_memory_state_probe()
 iccdev_add_clut_avx512_sixteen_output_test()
 iccdev_add_iccconnect_config_parser_test()
 iccdev_add_createsearch_embedded_profile_test()

@@ -135,6 +135,52 @@ ASAN/UBSAN build. Issue #2380 provides a bounded manual workflow at
 scenario demonstrates the PR #2378 `GetNewApplyCmm()` race before and after the
 fix. It is a proof-of-concept workflow, not a hosted fuzzing service.
 
+## MemorySanitizer
+
+The image also includes an LLVM 22.1.2 libc++ and libc++abi built with
+MemorySanitizer origins under `/opt/iccdev-msan-libcxx`. This avoids false
+reports at uninstrumented libstdc++ boundaries. The system unwinder remains
+uninstrumented so MSan can report findings without recursively instrumenting
+its own stack unwinding. The QA link uses `-nostdlib++` and fails if `ldd`
+still resolves libstdc++ for either the JSON or threaded test binary. Build and
+run the focused JSON and threaded controls with:
+
+```bash
+.github/scripts/iccdev-msan-taint-qa.sh --source-dir "$PWD" --build-dir /tmp/iccdev-msan --runtime-dir "${ICCDEV_MSAN_LIBCXX_DIR:-/opt/iccdev-msan-libcxx}" --out-dir /tmp/iccdev-msan-evidence
+```
+
+This is a Debug-only diagnostic lane. Release, RelWithDebInfo, and MinSizeRel
+always compile taint tracing out, including when
+`ICCDEV_ENABLE_TAINT_TRACE=ON` is requested. A later Debug reconfigure retains
+the requested option and enables tracing again. The malformed parametric-curve
+and nonnumeric colorant PCS fixtures are fail-closed controls; valid fixtures
+exercise the same paths and must remain MemorySanitizer-clean. Because none of
+those fixtures leaves poisoned bytes, both QA scripts first run
+`iccTaintTraceMemoryStateProbe`, which poisons a buffer itself and must be
+traced as `state=poisoned first_bad=5`. The Memcheck script expects that target
+built in the same Debug tree as `iccFromJson`.
+
+Docker's default seccomp profile can block the personality call MSan uses to
+set up its shadow mapping. For this disposable diagnostic lane only, disable
+networking and relax seccomp for the one container; ordinary image use keeps
+the default sandbox:
+
+```bash
+docker run --rm --network none --security-opt seccomp=unconfined "$IMAGE" bash -lc '.github/scripts/iccdev-msan-taint-qa.sh --source-dir "$PWD" --build-dir /tmp/iccdev-msan --runtime-dir "$ICCDEV_MSAN_LIBCXX_DIR" --out-dir /tmp/iccdev-msan-evidence'
+```
+
+For a local host without the runtime, create it first from the pinned LLVM
+commit and then use the same QA command:
+
+```bash
+.github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/out/msan-libcxx"
+.github/scripts/iccdev-msan-taint-qa.sh --source-dir "$PWD" --build-dir "$PWD/out/linux-clang-msan-taint" --runtime-dir "$PWD/out/msan-libcxx" --out-dir "$PWD/out/msan-taint-evidence"
+```
+
+Do not substitute the distribution libc++ packages for this runtime. Their
+headers are useful for compilation, but their shared libraries are not built
+with MemorySanitizer and therefore preserve the same false-report boundary.
+
 For a local PR #2378 comparison, check out the default branch as `TOOLING` and
 the PR head as `TARGET`. These setup commands are each independently
 copyable one-liners; replace the three `/path/to` locations first:

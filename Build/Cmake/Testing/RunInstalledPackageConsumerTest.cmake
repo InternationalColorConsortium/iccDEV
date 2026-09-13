@@ -334,7 +334,11 @@ endif()
 if(DEFINED ICCDEV_MSVC_RUNTIME_LIBRARY AND NOT "${ICCDEV_MSVC_RUNTIME_LIBRARY}" STREQUAL "")
   list(APPEND _common_args "-DCMAKE_MSVC_RUNTIME_LIBRARY=${ICCDEV_MSVC_RUNTIME_LIBRARY}")
 endif()
-if(NOT ICCDEV_GENERATOR MATCHES "Visual Studio|Xcode|Multi-Config")
+if(ICCDEV_GENERATOR STREQUAL "Ninja Multi-Config")
+  # Ninja Multi-Config omits MinSizeRel from its default configuration set.
+  # Generate the exact parent configuration that --build --config requests.
+  list(APPEND _common_args "-DCMAKE_CONFIGURATION_TYPES=${ICCDEV_CONFIG}")
+elseif(NOT ICCDEV_GENERATOR MATCHES "Visual Studio|Xcode|Multi-Config")
   list(APPEND _common_args "-DCMAKE_BUILD_TYPE=${ICCDEV_CONFIG}")
 endif()
 

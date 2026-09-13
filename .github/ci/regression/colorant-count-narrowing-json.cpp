@@ -92,10 +92,9 @@ static IccJson makeOrder(size_t nEntries)
   return j;
 }
 
-// A colorantTable document carrying nEntries colorants.  Only "name" is
-// emitted: the overrunning write in the reader is the strncpy of that field,
-// and leaving "pcs" out keeps the boundary case from building 65535 further
-// sub-arrays for an assertion that does not read them.
+// A colorantTable document carrying nEntries valid colorants.  The overrunning
+// write in the reader is the strncpy of the name field, while each PCS array
+// keeps the positive boundary controls valid under the parser contract.
 static IccJson makeTable(size_t nEntries)
 {
   IccJson arr = IccJson::array();
@@ -104,6 +103,7 @@ static IccJson makeTable(size_t nEntries)
     char name[32];
     std::snprintf(name, sizeof(name), "colorant-%u", (unsigned)i);
     c["name"] = name;
+    c["pcs"] = IccJson::array({ 50.0, 0.0, 0.0 });
     arr.push_back(c);
   }
 

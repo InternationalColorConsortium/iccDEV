@@ -1448,7 +1448,7 @@ bool CIccTagJsonColorantTable::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonColorantTable::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonColorantTable::ParseJson(const IccJson &j, std::string &parseStr)
 {
   std::string pcsEncoding = "Lab";
   jGetString(j, "pcsEncoding", pcsEncoding);
@@ -1467,12 +1467,20 @@ bool CIccTagJsonColorantTable::ParseJson(const IccJson &j, std::string & /*parse
       std::string name;
       if (jGetString(c, "name", name))
         strncpy(m_pData[i].name, name.c_str(), sizeof(m_pData[i].name)-1);
-      if (jsonExistsField(c, "pcs") && c["pcs"].is_array() && c["pcs"].size() >= 3) {
+      if (jsonExistsField(c, "pcs") && c["pcs"].is_array() && c["pcs"].size() == 3) {
         if (pcsEncoding == "16bit") {
-          jGetArray(c, "pcs", m_pData[i].data, 3);
+          icUInt16Number pcs[3];
+          if (!jGetArray(c, "pcs", pcs, 3)) {
+            parseStr += "colorantTableType pcs must contain three numeric values\n";
+            return false;
+          }
+          memcpy(m_pData[i].data, pcs, sizeof(pcs));
         } else {
           icFloatNumber pcs[3];
-          jGetArray(c, "pcs", pcs, 3);
+          if (!jGetArray(c, "pcs", pcs, 3)) {
+            parseStr += "colorantTableType pcs must contain three numeric values\n";
+            return false;
+          }
           if (pcsEncoding == "XYZ")
             icXyzToPcs(pcs);
           else  // "Lab" (default)
@@ -1481,6 +1489,9 @@ bool CIccTagJsonColorantTable::ParseJson(const IccJson &j, std::string & /*parse
           m_pData[i].data[1] = icFtoU16(pcs[1]);
           m_pData[i].data[2] = icFtoU16(pcs[2]);
         }
+      } else {
+        parseStr += "colorantTableType pcs must contain three numeric values\n";
+        return false;
       }
     }
   }
