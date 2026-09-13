@@ -69,6 +69,7 @@ iccFromXml HdrLinearCll.xml HdrLinearCll.icc
 iccFromXml HdrLinearMdcv.xml HdrLinearMdcv.icc
 iccFromXml HdrLinearNoMetadata.xml HdrLinearNoMetadata.icc
 iccFromXml HdrLinearHagcWhite.xml HdrLinearHagcWhite.icc
+iccFromXml HdrLinearHagcCrwlDisagree.xml HdrLinearHagcCrwlDisagree.icc
 
 REM Clause 8.10.1 membership. Each flips exactly ONE membership condition and
 REM satisfies every other, so a classifier that drops one condition misclassifies

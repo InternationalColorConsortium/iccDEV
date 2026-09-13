@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A conforming RGB HDR Display profile, Linear (8), that carries BOTH carriers
+  of the content HDR reference white and makes them disagree:
+
+    HAGC HDRReferenceWhite 300, metadataTag CRWL 203, CLL.max 600,
+    DCV.max 1500 with no DRWL and no DERH
+
+  It exists because nothing else in this corpus asserts the PRECEDENCE between
+  the two carriers.  Every other fixture carries at most one of them, so a
+  reader that resolves the CRWL entry first and one that resolves the HAGC tag
+  first agree on every row: an independent checker built on the inverted order
+  matched this manifest on all 84 values before this fixture existed.
+
+  8.10.3 ranks the HAGC tag highest, and 8.10.4 a) divides by "the value
+  derived above", so the HAGC white governs (HDR-10, ruled 2026-09-11).  Both
+  headroom axes divide by that one resolved white:
+
+    content, 8.10.4 a):  600 / 300  = 2,0     (CRWL first: 600 / 203  = 2,956)
+    display, 8.10.5 c):  1500 / 300 = 5,0     (CRWL first: 1500 / 203 = 7,389)
+
+  PROPOSAL-ISSUE HDR-10: 8.10.5 c) names the CRWL ENTRY for the display axis.
+  iccDEV divides both axes by the same resolved white, so a profile's two
+  headrooms are in the same units; this fixture is what pins that choice.
+
+  DCV stands without DRWL or DERH, so rule c) is the one that fires: rule a)
+  needs DERH and rule b) needs DRWL.  iccPawgReport's H7 reports the two
+  carriers as disagreeing for this profile, and no other fixture reaches that
+  branch.
+-->
+<IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>4.50</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-09-01T00:00:00</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </PCSIlluminant>
+    <ProfileCreator>ICCD</ProfileCreator>
+  </Header>
+  <Tags>
+    <!-- The same sRGB/BT.709 colorants, chad and HAGC tag as HdrLinearHagcWhite,
+         so that the only thing distinguishing the two is the metadataTag: a CRWL
+         entry that disagrees with the tag, and a DCV entry for the display axis. -->
+    <redColorantTag> <XYZArrayType>
+      <XYZNumber X="0.436004638672" Y="0.222503662109" Z="0.013900756836"/>
+    </XYZArrayType> </redColorantTag>
+
+    <greenColorantTag> <XYZArrayType>
+      <XYZNumber X="0.385101318359" Y="0.716903686523" Z="0.097106933594"/>
+    </XYZArrayType> </greenColorantTag>
+
+    <blueColorantTag> <XYZArrayType>
+      <XYZNumber X="0.143096923828" Y="0.060592651367" Z="0.713897705078"/>
+    </XYZArrayType> </blueColorantTag>
+
+    <chromaticAdaptationTag> <s15Fixed16ArrayType>
+      <Array>
+        1.047882  0.022919 -0.050201
+        0.029587  0.990479 -0.017059
+       -0.009232  0.015076  0.751678
+      </Array>
+    </s15Fixed16ArrayType> </chromaticAdaptationTag>
+
+    <mediaWhitePointTag> <XYZArrayType>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </XYZArrayType> </mediaWhitePointTag>
+
+    <cicpTag> <cicpType>
+      <cicpFields ColorPrimaries="1" TransferCharacteristics="8" MatrixCoefficients="0" VideoFullRangeFlag="1"/>
+    </cicpType> </cicpTag>
+
+    <headroomAdaptiveGainCurveTag> <headroomAdaptiveGainCurveType>
+      <HagcMetadata ApplicationVersion="3" MinApplicationVersion="1"
+                    HDRReferenceWhite="300.0000"
+                    BaselineHeadroom="3.0000" HeadroomAdaptiveToneMap="true"
+                    ChromaticitiesMode="0" CommonComponentMixing="false" CommonCurveParameters="false">
+       <AlternateImage Headroom="0.0000" ComponentMixingType="3" PchipSlope="false">
+        <Coefficients kRed="0.250000" kGreen="0.500000" kBlue="0.000000" kMax="0.250000" kMin="0.000000" kComponent="0.000000"/>
+        <ControlPoints>
+         <ControlPoint X="0.2500" Y="-0.10000" M="-0.400000"/>
+         <ControlPoint X="0.5000" Y="-0.20000" M="-0.300000"/>
+         <ControlPoint X="0.7500" Y="-0.30000" M="-0.200000"/>
+         <ControlPoint X="1.0000" Y="-0.40000" M="-0.100000"/>
+        </ControlPoints>
+       </AlternateImage>
+      </HagcMetadata>
+    </headroomAdaptiveGainCurveType> </headroomAdaptiveGainCurveTag>
+
+    <metaDataTag> <dictType>
+      <DictEntry Name="CRWL" Value="203.0"/>
+      <DictEntry Name="CLL" Value="600.0 300.0 9"/>
+      <DictEntry Name="DCV" Value="1500.0 0.005 1"/>
+    </dictType> </metaDataTag>
+
+    <!-- Clause 8.10.1 of the 29-08-2026 revision: "the redTRCTag, greenTRCTag
+         and blueTRCTag shall not be present" in an HDR Profile. The transfer
+         function is conveyed by the cicpTag's TransferCharacteristics field
+         instead, and NOTE 3 makes their absence one of the two tag-level
+         features that distinguish an HDR Profile. This fixture was authored
+         against the previous revision and carried them.
+
+         The AToB0Tag/BToA0Tag pair below is what 8.10.6 makes mandatory, and
+         what NOTE 4 says gives a legacy CMM "a rendering path at all" once the
+         TRC tags are gone. Identity B curves: these fixtures exercise
+         classification and the tone-mapping chain, not the bake's accuracy. -->
+
+    <AToB0Tag> <lutAtoBType>
+      <Channels InputChannels="3" OutputChannels="3"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+    </lutAtoBType> </AToB0Tag>
+
+    <BToA0Tag> <lutBtoAType>
+      <Channels InputChannels="3" OutputChannels="3"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+    </lutBtoAType> </BToA0Tag>
+
+    <profileDescriptionTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV Linear HDR profile: HAGC reference white and CRWL entry disagree (clauses 8.10.4 and 8.10.5)]]></LocalizedText>
+    </multiLocalizedUnicodeType> </profileDescriptionTag>
+
+    <copyrightTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright (C) 2026 The International Color Consortium. Generated fixture, no measured data.]]></LocalizedText>
+    </multiLocalizedUnicodeType> </copyrightTag>
+  </Tags>
+</IccProfile>

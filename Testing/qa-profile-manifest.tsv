@@ -177,6 +177,7 @@ HDR/HdrHlgBt709Primaries.icc	positive	valid	0	none	generated	-	conforming HLG HD
 HDR/HdrInputDisplayMeta.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean. Input-class HDR Profile carrying HDR Display metadata, which clause 8.10.5 scopes to Display profiles - an informational note, not a defect
 HDR/HdrInvalidTransfer.icc	positive	valid	0	none	generated	-	classification fixture: TransferCharacteristics 13 puts it outside the clause 8.10 sub-class, which is not a defect - it is a valid Display profile carrying a cicpTag and a HAGC tag
 HDR/HdrLinearCll.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/HdrLinearHagcCrwlDisagree.icc	positive	valid	0	none	generated	-	conforming HDR Display profile; HAGC reference white 300 and CRWL 203 disagree, pinning the precedence both headroom axes divide by
 HDR/HdrLinearHagcWhite.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrLinearMdcv.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrLinearNoMetadata.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean

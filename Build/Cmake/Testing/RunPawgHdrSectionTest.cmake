@@ -68,6 +68,7 @@ set(_fixtures
   HdrCicpUnspecified.icc
   HdrDisplayMetadata.icc
   HdrInvalidTransfer.icc
+  HdrLinearHagcCrwlDisagree.icc
   HdrMissingBToA0.icc
 )
 # FATAL_ERROR, not a bare return().  This used to `return()`, which in `cmake -P`
@@ -237,5 +238,18 @@ iccdev_expect("${_unpaired}" "\\[FAIL[ \t]*\\][ \t]+H6[ \t]"
   "H6 did not fail an AToB0Tag with no paired BToA0Tag")
 iccdev_expect_not("${_unpaired}" "C3[^\n]*\n[ \t]*[^\n]*clause 8\\.10\\.6 requires the pair"
   "C3 still quotes the HDR pairing finding under its tag-type title")
+
+# --- 7. Two carriers of the content reference white that disagree ------------
+# HAGC HDRReferenceWhite 300 against a metadataTag CRWL of 203.  The only
+# fixture that reaches H7's disagreement branch: every other profile carries at
+# most one of the two, so the branch never ran.  The HAGC value is the one
+# reported, because 8.10.3 ranks the tag highest (HDR-10).
+iccdev_run_pawg("${ICCDEV_HDR_DIR}/HdrLinearHagcCrwlDisagree.icc" _disagree)
+iccdev_expect("${_disagree}" "\\[WARN[ \t]*\\][ \t]+H7[ \t]"
+  "H7 did not warn about two reference-white carriers that disagree")
+iccdev_expect("${_disagree}" "content HDR reference white = 300 cd/m\\^2"
+  "H7 did not report the headroomAdaptiveGainCurveTag's white as the resolved value")
+iccdev_expect("${_disagree}" "two carriers DISAGREE: the metadataTag CRWL entry says 203 cd/m\\^2"
+  "H7 did not name the disagreeing CRWL value")
 
 message(STATUS "${ICCDEV_TEST_NAME} completed successfully")
