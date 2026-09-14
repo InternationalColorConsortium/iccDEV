@@ -249,9 +249,11 @@ void Usage(FILE* stream)
   fprintf(stream, "    carried in the profile and cannot be inferred from it.\n\n");
 
   fprintf(stream, "  For -HDRMAP policy (only meaningful alongside -HDR):\n");
-  fprintf(stream, "    auto - the recommended descriptor ranking of clause 8.10.3 (default)\n");
-  fprintf(stream, "    hagc - always use the headroomAdaptiveGainCurveTag when present\n");
-  fprintf(stream, "    lut  - prefer the profile's baked AToB0/BToA0 pair\n");
+  fprintf(stream, "    auto - the descriptor ranking of clause 8.10.3: the headroomAdaptive-\n");
+  fprintf(stream, "           GainCurveTag, else this CMM's identity operator (default)\n");
+  fprintf(stream, "    hagc - the same choice as a fixed rule; never the baked LUT pair\n");
+  fprintf(stream, "    lut  - prefer the profile's baked AToB0/BToA0 pair; without one in\n");
+  fprintf(stream, "           the direction used, as hagc\n");
   fprintf(stream, "    off  - do not engage the HDR path\n\n");
 
   fprintf(stream, "  For interpolation:\n");

@@ -119,8 +119,11 @@ private:
 	// bUseD2BTags selects the same tag family the xform being adjusted was built
 	// from (CIccXform::UseD2BTags()).  Estimating black through the other family
 	// yields a black point from a pipeline the transform never applies.
+	// pHintManager carries the ICC.1 clause 8.10 HDR hint when the xform being
+	// adjusted is on the HDR chain, for the same reason; NULL otherwise.
 	bool pixelXfm(icFloatNumber *DstPixel, icFloatNumber *SrcPixel, icColorSpaceSignature SrcSpace, 
-								icRenderingIntent nIntent, const CIccProfile *pProfile, bool bUseD2BTags) const;
+								icRenderingIntent nIntent, const CIccProfile *pProfile, bool bUseD2BTags,
+								CIccCreateXformHintManager *pHintManager = NULL) const;
 
 	// PCS -> PCS round trip transform, always uses relative intent on the device -> pcs transform
 	CIccCmm* getBlackXfm(icRenderingIntent nIntent, const CIccProfile *pProfile, bool bUseD2BTags) const;

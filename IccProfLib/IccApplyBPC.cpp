@@ -288,6 +288,40 @@ bool CIccApplyBPC::calcBlackPoint(const CIccProfile* pProfile, const CIccXform* 
 
 /**
 **************************************************************************
+* Name: icBpcHdrHints
+*
+* Purpose:
+*  An xform on the ICC.1 clause 8.10.2 HDR chain renders through neither the
+*  profile's AToB/BToA LUTs nor its TRC tags, so a black point found through a
+*  hint-less CMM describes a pipeline the xform never applies: the SDR fallback
+*  pair, or nothing at all for a profile without one.  This builds the same HDR
+*  hint the xform was created with, for the black-point CMMs.  For any other
+*  xform pHints is NULL and black point compensation is unchanged.
+*
+* Return:
+*  false only when the xform is an HDR one and the hint could not be built.
+**************************************************************************
+*/
+static bool icBpcHdrHints(const CIccXform* pXform, CIccCreateXformHintManager& hints,
+                          CIccCreateXformHintManager*& pHints)
+{
+	pHints = NULL;
+	if (pXform->GetXformType() != icXformTypeMatrixTrcHdr)
+		return true;
+
+	CIccCreateHdrXformHint* pHint = new (std::nothrow) CIccCreateHdrXformHint();
+	if (!pHint)
+		return false;
+	((const CIccXformMatrixTrcHdr*)pXform)->GetHdrParams(*pHint);
+	if (!hints.AddHint(pHint))
+		return false;
+
+	pHints = &hints;
+	return true;
+}
+
+/**
+**************************************************************************
 * Name: CIccApplyBPC::calcSrcBlackPoint
 * 
 * Purpose:
@@ -297,6 +331,11 @@ bool CIccApplyBPC::calcBlackPoint(const CIccProfile* pProfile, const CIccXform* 
 */
 bool CIccApplyBPC::calcSrcBlackPoint(const CIccProfile* pProfile, const CIccXform* pXform, icFloatNumber* XYZb) const
 {
+	CIccCreateXformHintManager hdrHints;
+	CIccCreateXformHintManager* pHints;
+	if (!icBpcHdrHints(pXform, hdrHints, pHints))
+		return false;
+
 	icFloatNumber Pixel[16];
 	if ((pProfile->m_Header.colorSpace == icSigCmykData) && (pProfile->m_Header.deviceClass == icSigOutputClass)) {
 
@@ -307,7 +346,7 @@ bool CIccApplyBPC::calcSrcBlackPoint(const CIccProfile* pProfile, const CIccXfor
 		lab2pcs(XYZb, pProfile);
 
 		//convert the PCS value to CMYK
-		if (!pixelXfm(Pixel, XYZb, pProfile->m_Header.pcs, icPerceptual, pProfile, pXform->UseD2BTags())) {
+		if (!pixelXfm(Pixel, XYZb, pProfile->m_Header.pcs, icPerceptual, pProfile, pXform->UseD2BTags(), pHints)) {
 			return false;
 		}
 	}
@@ -353,7 +392,7 @@ bool CIccApplyBPC::calcSrcBlackPoint(const CIccProfile* pProfile, const CIccXfor
 	}
 
 	// convert the device value to PCS
-	if (!pixelXfm(XYZb, Pixel, pProfile->m_Header.colorSpace, pXform->GetIntent(), pProfile, pXform->UseD2BTags())) {
+	if (!pixelXfm(XYZb, Pixel, pProfile->m_Header.colorSpace, pXform->GetIntent(), pProfile, pXform->UseD2BTags(), pHints)) {
 		return false;
 	}
 
@@ -390,8 +429,11 @@ bool CIccApplyBPC::calcDstBlackPoint(const CIccProfile* pProfile, const CIccXfor
 	icFloatNumber Pixel[3];
 	icFloatNumber pcsPixel[3];
 
-	// check if the profile is lut based gray, rgb or cmyk
-	if (pProfile->IsTagPresent(icSigBToA0Tag) && 
+	// check if the profile is lut based gray, rgb or cmyk.  An xform on the
+	// clause 8.10.2 HDR chain is not: its BToA0Tag is the SDR fallback the chain
+	// never applies, and the chain itself is matrix-based, so it takes the
+	// source procedure below as a matrix/TRC destination does.
+	if (pXform->GetXformType() != icXformTypeMatrixTrcHdr && pProfile->IsTagPresent(icSigBToA0Tag) && 
 			(pProfile->m_Header.colorSpace==icSigGrayData || pProfile->m_Header.colorSpace==icSigRgbData || pProfile->m_Header.colorSpace==icSigCmykData))
 	{ // do the complicated and lengthy black point estimation
 
@@ -558,7 +600,8 @@ bool CIccApplyBPC::calcDstBlackPoint(const CIccProfile* pProfile, const CIccXfor
 **************************************************************************
 */
 bool CIccApplyBPC::pixelXfm(icFloatNumber *DstPixel, icFloatNumber *SrcPixel, icColorSpaceSignature SrcSpace, 
-														icRenderingIntent nIntent, const CIccProfile *pProfile, bool bUseD2BTags) const
+														icRenderingIntent nIntent, const CIccProfile *pProfile, bool bUseD2BTags,
+														CIccCreateXformHintManager *pHintManager/*=NULL*/) const
 {
 	// create the cmm object
 	CIccCmm cmm(SrcSpace, icSigUnknownData, !IsSpacePCS(SrcSpace));
@@ -569,7 +612,7 @@ bool CIccApplyBPC::pixelXfm(icFloatNumber *DstPixel, icFloatNumber *SrcPixel, ic
 
 	// add the xform
 	if (cmm.AddXform(pICC, nIntent, icInterpTetrahedral, NULL, icXformLutColorimetric,
-									 pICC->m_Header.version >= icVersionNumberV5 ? false : bUseD2BTags)!=icCmmStatOk) {
+									 pICC->m_Header.version >= icVersionNumberV5 ? false : bUseD2BTags, pHintManager)!=icCmmStatOk) {
 		return false;
 	}
 

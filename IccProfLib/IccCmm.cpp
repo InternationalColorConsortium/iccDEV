@@ -608,6 +608,28 @@ static bool icUseHdrToneMapPath(CIccProfile *pProfile, bool bInput,
 }
 
 /**
+**************************************************************************
+* Name: icHdrPreloadTags
+*
+* Purpose:
+*  Loads every tag CIccXformMatrixTrcHdr::Begin() and the classifier it calls
+*  read, while the profile still has an IO to read them from.
+**************************************************************************
+*/
+static void icHdrPreloadTags(CIccProfile *pProfile)
+{
+  static const icTagSignature sigs[] = {
+    icSigMediaWhitePointTag, icSigChromaticAdaptationTag,
+    icSigRedMatrixColumnTag, icSigGreenMatrixColumnTag, icSigBlueMatrixColumnTag,
+    icSigRedTRCTag, icSigGreenTRCTag, icSigBlueTRCTag,
+    icSigCicpTag, icSigMetaDataTag, icSigHeadroomAdaptiveGainCurveTag,
+  };
+
+  for (size_t i = 0; i < sizeof(sigs) / sizeof(sigs[0]); i++)
+    pProfile->FindTag(sigs[i]);
+}
+
+/**
  **************************************************************************
  * Name: CIccXform::Create
  *
@@ -707,6 +729,13 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
       // here, ahead of that cascade, and only when the consumer supplied a
       // CIccCreateHdrXformHint - so nothing about the hint-less path changes.
       if (icUseHdrToneMapPath(pProfile, bInput, pHintManager)) {
+        // As for the absolute-intent white point above, and for the same
+        // reason: a profile added by reference has its IO detached before
+        // Begin() - CIccCmm::AddXform(CIccProfile&), and every sub-chain
+        // CIccCmmSearch builds - so a tag CIccXformMatrixTrcHdr::Begin() reads
+        // that is not loaded now cannot be loaded then, and Begin() failed on
+        // a lazily opened HDR Profile.
+        icHdrPreloadTags(pProfile);
         rv = CIccXformCreator::CreateXform(icXformTypeMatrixTrcHdr, NULL, pHintManager);
       }
       else if (bInput) {
@@ -6740,6 +6769,23 @@ void CIccXformMatrixTrcHdr::SetHdrParams(const CIccCreateHdrXformHint *pHint)
 
 /**
  **************************************************************************
+ * Name: CIccXformMatrixTrcHdr::GetHdrParams
+ *
+ * Purpose:
+ *  Write the parameters SetHdrParams() recorded back into a hint, so a
+ *  caller can build another CMM on the same clause 8.10.2 chain.
+ **************************************************************************
+ */
+void CIccXformMatrixTrcHdr::GetHdrParams(CIccCreateHdrXformHint &hint) const
+{
+  hint.m_targetHeadroom = m_targetHeadroom;
+  hint.m_nPolicy = m_nPolicy;
+  hint.m_hlgGamma = m_hlgGamma;
+  hint.m_hlgPeakLuminance = m_hlgPeakLuminance;
+}
+
+/**
+ **************************************************************************
  * Name: CIccXformMatrixTrcHdr::Begin
  *
  * Purpose:
@@ -6925,10 +6971,16 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
   m_bClampToTarget = false;
 
   // Descriptor selection, per clause 8.10.3 and the policy the consumer set.
-  // icHdrToneMapPreferLut never reaches here - CIccXform::Create resolves it
-  // by leaving the LUT cascade alone - so the two cases below are the ones
-  // where the HAGC tag is to be consulted.
-  if (info.bHasHagc && m_nPolicy != icHdrToneMapPreferLut) {
+  // icHdrToneMapPreferLut does reach here: icUseHdrToneMapPath() hands it to
+  // the LUT cascade only when there is a LUT in this direction to prefer, and
+  // builds this xform when there is not.  The HAGC tag is then the one
+  // descriptor left, so it is consulted like any other - skipping it on the
+  // policy alone replaced the profile's gain curve with the identity.  The
+  // LUT test keeps a directly constructed xform consistent with that routing.
+  bool bLutPreferred = (m_nPolicy == icHdrToneMapPreferLut) &&
+                       (m_bInput ? info.bHasAToB0 : info.bHasBToA0);
+
+  if (info.bHasHagc && !bLutPreferred) {
     CIccTag *pTag = m_pProfile->FindTag(icSigHeadroomAdaptiveGainCurveTag);
 
     if (pTag && pTag->GetType() == icSigHeadroomAdaptiveGainCurveType) {

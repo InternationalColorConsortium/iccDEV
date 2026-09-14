@@ -3182,6 +3182,45 @@ function(iccdev_add_hdr_tonemap_test)
   endif()
 endfunction()
 
+# The routes the clause 8.10 HDR hint takes from a caller to the HDR xform, and
+# the CMM machinery beside it: IccConnect's embedded-source and search paths, a
+# lazily opened profile added by reference, icHdrToneMapPreferLut with no LUT,
+# and black point compensation.  Each of those dropped the hint, or ran an SDR
+# pipeline next to the HDR one, while reporting success.  Links IccConnect.
+#
+# Not on the Windows list: like iccdev.hdr-corpus-manifest it reads the
+# generated Testing/HDR/*.icc from the repository tree, which Windows generates
+# under the build tree instead.  It exits 77 when they are absent.
+function(iccdev_add_hdr_cmm_integration_test)
+  if(NOT DEFINED TARGET_LIB_ICCCONNECT OR NOT TARGET "${TARGET_LIB_ICCCONNECT}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccHdrCmmIntegrationTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/hdr-cmm-integration.cpp"
+  )
+  target_compile_features(iccHdrCmmIntegrationTest PRIVATE cxx_std_17)
+  target_link_libraries(iccHdrCmmIntegrationTest PRIVATE ${TARGET_LIB_ICCCONNECT})
+  add_dependencies(check iccHdrCmmIntegrationTest)
+
+  add_test(
+    NAME iccdev.hdr-cmm-integration
+    COMMAND
+      "${CMAKE_COMMAND}" -E env
+      ${ICCDEV_TEST_ENV}
+      "$<TARGET_FILE:iccHdrCmmIntegrationTest>"
+  )
+  # CreateSearch runs a Nelder-Mead search per sample, so this takes the budget
+  # its CIccCmmSearch siblings use.
+  set_tests_properties(iccdev.hdr-cmm-integration PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    FIXTURES_REQUIRED iccdev_profiles
+    SKIP_RETURN_CODE 77
+    TIMEOUT 300
+    LABELS "iccdev;iccconnect;cmm;hdr;regression"
+  )
+endfunction()
+
 # #1748: CIccPcsXform::ConnectFirst()/ConnectLast() build the PCS transforms at the two
 # outer edges of a CMM chain, and CheckPCSConnections() pushes them onto the xform list
 # like any other xform. Unlike Connect(), they left m_srcSpace/m_nSrcSamples/m_dstSpace/
@@ -8942,6 +8981,7 @@ iccdev_add_hdr_profile_test()
 iccdev_add_hdr_tonemap_test()
 iccdev_add_hdr_corpus_manifest_test()
 iccdev_add_hdr_bake_test()
+iccdev_add_hdr_cmm_integration_test()
 iccdev_add_pcc_reflectance_observer_range_test()
 iccdev_add_pcs_edge_metadata_test()
 iccdev_add_xyz_negative_z_test()

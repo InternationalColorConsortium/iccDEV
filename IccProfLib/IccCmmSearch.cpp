@@ -332,6 +332,33 @@ CIccCmmSearch::~CIccCmmSearch()
 
 //virtual CIccPCS *GetPCS() { return new CIccPCS(); }
 
+// Copies the clause 8.10 HDR hint, if the caller supplied one, out of a hint
+// manager that will not outlive AddXform().
+static void icSearchCopyHdrHint(CIccCreateXformHintManager* pHintManager, bool& bSet,
+                                CIccCreateHdrXformHint& hint)
+{
+  IIccCreateXformHint* pHint = pHintManager ? pHintManager->GetHint("CIccCreateHdrXformHint") : NULL;
+  bSet = (pHint != NULL);
+  if (bSet)
+    hint = *(CIccCreateHdrXformHint*)pHint;
+}
+
+// Builds a hint manager carrying a copy of a slot's HDR hint.  pHints is NULL
+// when the slot has none, so a sub-chain without one is built exactly as before.
+static bool icSearchHdrHints(CIccCreateXformHintManager& hints, bool bSet,
+                             const CIccCreateHdrXformHint& hint,
+                             CIccCreateXformHintManager*& pHints)
+{
+  pHints = NULL;
+  if (!bSet)
+    return true;
+  CIccCreateHdrXformHint* pHint = new (std::nothrow) CIccCreateHdrXformHint(hint);
+  if (!pHint || !hints.AddHint(pHint))
+    return false;
+  pHints = &hints;
+  return true;
+}
+
 ///Must make to or three calls to some form of AddXform() before calling Begin()
 icStatusCMM CIccCmmSearch::AddXform(CIccProfile* pProfile,
   icRenderingIntent nIntent,
@@ -339,7 +366,7 @@ icStatusCMM CIccCmmSearch::AddXform(CIccProfile* pProfile,
   IIccProfileConnectionConditions* /* pPc */,
   icXformLutType nLutType,
   bool bUseD2BxB2DxTags,
-  CIccCreateXformHintManager* /* pHintManager */)
+  CIccCreateXformHintManager* pHintManager)
 {
   // This override owns pProfile on every path, matching the base
   // CIccCmm::AddXform contract (#1327): the successful cases below store it and
@@ -359,6 +386,7 @@ icStatusCMM CIccCmmSearch::AddXform(CIccProfile* pProfile,
     m_nSrcInterp = nInterp;
     m_nSrcLutType = nLutType;
     m_bSrcUseD2BxB2DxTags = bUseD2BxB2DxTags;
+    icSearchCopyHdrHint(pHintManager, m_bSrcHdrHint, m_srcHdrHint);
     break;
   case 1:
     m_pDstProfile = pProfile;
@@ -366,6 +394,7 @@ icStatusCMM CIccCmmSearch::AddXform(CIccProfile* pProfile,
     m_nDstInterp = nInterp;
     m_nDstLutType = nLutType;
     m_bDstUseD2BxB2DxTags = bUseD2BxB2DxTags;
+    icSearchCopyHdrHint(pHintManager, m_bDstHdrHint, m_dstHdrHint);
     break;
   case 2:
     m_pMidProfile = m_pDstProfile;
@@ -373,12 +402,15 @@ icStatusCMM CIccCmmSearch::AddXform(CIccProfile* pProfile,
     m_nMidInterp = m_nDstInterp;
     m_nMidLutType = m_nDstLutType;
     m_bMidUseD2BxB2DxTags = m_bDstUseD2BxB2DxTags;
+    m_bMidHdrHint = m_bDstHdrHint;
+    m_midHdrHint = m_dstHdrHint;
 
     m_pDstProfile = pProfile;
     m_nDstIntent = nIntent;
     m_nDstInterp = nInterp;
     m_nDstLutType = nLutType;
     m_bDstUseD2BxB2DxTags = bUseD2BxB2DxTags;
+    icSearchCopyHdrHint(pHintManager, m_bDstHdrHint, m_dstHdrHint);
     break;
   default:
     delete pProfile;
@@ -490,10 +522,23 @@ icStatusCMM CIccCmmSearch::Begin(bool bAllocNewApply, bool /* bUsePcsConversion 
   if (m_pDstInitProfile)
     m_pDstInitProfile->ReadPccTags();
 
+  // Each sub-chain gets the ICC.1 clause 8.10 HDR hint its profile was added
+  // with.  They are built through CIccCmm::AddXform with no hint manager, so
+  // without these the search CMM rendered an HDR Profile through its SDR
+  // fallback LUTs while CIccConnectCmm::CreateSearch reported the hint applied.
+  CIccCreateXformHintManager srcHints, dstHints, midHints;
+  CIccCreateXformHintManager* pSrcHints = NULL;
+  CIccCreateXformHintManager* pDstHints = NULL;
+  CIccCreateXformHintManager* pMidHints = NULL;
+  if (!icSearchHdrHints(srcHints, m_bSrcHdrHint, m_srcHdrHint, pSrcHints) ||
+      !icSearchHdrHints(dstHints, m_bDstHdrHint, m_dstHdrHint, pDstHints) ||
+      !icSearchHdrHints(midHints, m_bMidHdrHint, m_midHdrHint, pMidHints))
+    return icCmmStatAllocErr;
+
   if (m_nAttached == 2) {
     //mid_to_dst
     CIccCmmPtr cmm = CIccCmmPtr(new CIccCmm); 
-    rv = cmm->AddXform(*m_pSrcProfile, m_nSrcIntent, m_nSrcInterp, m_pSrcPcc, m_nSrcLutType, m_bSrcUseD2BxB2DxTags);
+    rv = cmm->AddXform(*m_pSrcProfile, m_nSrcIntent, m_nSrcInterp, m_pSrcPcc, m_nSrcLutType, m_bSrcUseD2BxB2DxTags, pSrcHints);
     checkCmmStatus(rv);
 
     if (m_pDstInitProfile) {
@@ -502,7 +547,7 @@ icStatusCMM CIccCmmSearch::Begin(bool bAllocNewApply, bool /* bUsePcsConversion 
       checkCmmStatus(rv);
     }
     else {
-      rv = cmm->AddXform(*m_pDstProfile, m_nDstIntent, m_nDstInterp, m_pDstPcc, m_nDstLutType, m_bDstUseD2BxB2DxTags);
+      rv = cmm->AddXform(*m_pDstProfile, m_nDstIntent, m_nDstInterp, m_pDstPcc, m_nDstLutType, m_bDstUseD2BxB2DxTags, pDstHints);
       checkCmmStatus(rv);
     }
 
@@ -513,10 +558,10 @@ icStatusCMM CIccCmmSearch::Begin(bool bAllocNewApply, bool /* bUsePcsConversion 
 
     //dst_to_mid
     cmm = CIccCmmPtr(new CIccCmm);
-    rv = cmm->AddXform(*m_pDstProfile, m_nDstIntent, m_nDstInterp, m_pcc.size() ? m_pcc[0] : m_pDstPcc, m_nDstLutType, m_bDstUseD2BxB2DxTags);
+    rv = cmm->AddXform(*m_pDstProfile, m_nDstIntent, m_nDstInterp, m_pcc.size() ? m_pcc[0] : m_pDstPcc, m_nDstLutType, m_bDstUseD2BxB2DxTags, pDstHints);
     checkCmmStatus(rv);
 
-    rv = cmm->AddXform(*m_pSrcProfile, m_nSrcIntent, m_nSrcInterp, m_pcc.size() ? m_pcc[0] : m_pSrcPcc, m_nSrcLutType, m_bSrcUseD2BxB2DxTags);
+    rv = cmm->AddXform(*m_pSrcProfile, m_nSrcIntent, m_nSrcInterp, m_pcc.size() ? m_pcc[0] : m_pSrcPcc, m_nSrcLutType, m_bSrcUseD2BxB2DxTags, pSrcHints);
     checkCmmStatus(rv);
 
     delete m_pDstProfile;
@@ -540,7 +585,7 @@ icStatusCMM CIccCmmSearch::Begin(bool bAllocNewApply, bool /* bUsePcsConversion 
 
     //mid_to_dst
     CIccCmmPtr cmm = CIccCmmPtr(new CIccCmm);
-    rv = cmm->AddXform(*m_pMidProfile, m_nMidIntent, m_nMidInterp, m_pMidPcc, m_nMidLutType, m_bMidUseD2BxB2DxTags);
+    rv = cmm->AddXform(*m_pMidProfile, m_nMidIntent, m_nMidInterp, m_pMidPcc, m_nMidLutType, m_bMidUseD2BxB2DxTags, pMidHints);
     checkCmmStatus(rv);
 
     if (m_pDstInitProfile) {
@@ -549,7 +594,7 @@ icStatusCMM CIccCmmSearch::Begin(bool bAllocNewApply, bool /* bUsePcsConversion 
       checkCmmStatus(rv);
     }
     else {
-      rv = cmm->AddXform(*m_pDstProfile, m_nDstIntent, m_nDstInterp, m_pDstPcc, m_nDstLutType, m_bDstUseD2BxB2DxTags);
+      rv = cmm->AddXform(*m_pDstProfile, m_nDstIntent, m_nDstInterp, m_pDstPcc, m_nDstLutType, m_bDstUseD2BxB2DxTags, pDstHints);
       checkCmmStatus(rv);
     }
 
@@ -564,10 +609,10 @@ icStatusCMM CIccCmmSearch::Begin(bool bAllocNewApply, bool /* bUsePcsConversion 
       for (auto pcc : m_pcc) {
         //dst_to_mid
         cmm = CIccCmmPtr(new CIccCmm);
-        rv = cmm->AddXform(*m_pDstProfile, m_nDstIntent, m_nDstInterp, pcc, m_nDstLutType, m_bDstUseD2BxB2DxTags);
+        rv = cmm->AddXform(*m_pDstProfile, m_nDstIntent, m_nDstInterp, pcc, m_nDstLutType, m_bDstUseD2BxB2DxTags, pDstHints);
         checkCmmStatus(rv);
 
-        rv = cmm->AddXform(*m_pMidProfile, m_nMidIntent, m_nMidInterp, pcc, m_nMidLutType, m_bMidUseD2BxB2DxTags);
+        rv = cmm->AddXform(*m_pMidProfile, m_nMidIntent, m_nMidInterp, pcc, m_nMidLutType, m_bMidUseD2BxB2DxTags, pMidHints);
         checkCmmStatus(rv);
 
         rv = cmm->Begin();
@@ -576,10 +621,10 @@ icStatusCMM CIccCmmSearch::Begin(bool bAllocNewApply, bool /* bUsePcsConversion 
 
         //src_to_mid
         cmm = CIccCmmPtr(new CIccCmm);
-        rv = cmm->AddXform(*m_pSrcProfile, m_nSrcIntent, m_nSrcInterp, pcc, m_nSrcLutType, m_bSrcUseD2BxB2DxTags);
+        rv = cmm->AddXform(*m_pSrcProfile, m_nSrcIntent, m_nSrcInterp, pcc, m_nSrcLutType, m_bSrcUseD2BxB2DxTags, pSrcHints);
         checkCmmStatus(rv);
 
-        rv = cmm->AddXform(*m_pMidProfile, m_nMidIntent, m_nMidInterp, pcc, m_nMidLutType, m_bMidUseD2BxB2DxTags);
+        rv = cmm->AddXform(*m_pMidProfile, m_nMidIntent, m_nMidInterp, pcc, m_nMidLutType, m_bMidUseD2BxB2DxTags, pMidHints);
         checkCmmStatus(rv);
 
         rv = cmm->Begin();

@@ -403,21 +403,30 @@ public:
  **************************************************************************
  */
 typedef enum {
-  /** Follow the recommended ranking of 8.10.3: the HAGC tag when the profile
-   * carries one this build can evaluate; otherwise the profile's own
-   * pre-rendered AToB0/BToA0 when it has one; otherwise the matrix/TRC chain
-   * with an identity tone-mapping operator, which NOTE 6 of 8.10.2 permits
-   * and which still applies the analytic EOTF the cicpTag names. */
+  /** Follow the recommended ranking of 8.10.3: a) the HAGC tag when the
+   * profile carries one this build can evaluate; b) otherwise this CMM's own
+   * operator, the identity tone-mapping operator NOTE 6 of 8.10.2 permits,
+   * which still applies the analytic EOTF the cicpTag names; c) the
+   * pre-rendered AToB0/BToA0 last.  This build always supplies b), so c) is
+   * never reached and Auto currently renders exactly as
+   * icHdrToneMapPreferHagc does.  The 8.10.6 pair is the fallback for
+   * consumers that do not implement HDR processing (8.10.1 NOTE 4); use
+   * icHdrToneMapPreferLut to render it.  See icUseHdrToneMapPath() and
+   * PROPOSAL-ISSUE HDR-13 there. */
   icHdrToneMapAuto = 0,
 
-  /** Use the HAGC tag whenever it is present and evaluable, in preference to
-   * a pre-rendered AToB0 even when one exists.  This is the ranking 8.10.3
-   * recommends stated as a requirement. */
+  /** Use the HAGC tag whenever it is present and evaluable, otherwise the
+   * identity operator - never the pre-rendered AToB0/BToA0.  The same outcome
+   * as icHdrToneMapAuto today, kept as its own value because it is a fixed
+   * choice where Auto is a ranking: should the ranking change, this keeps its
+   * meaning. */
   icHdrToneMapPreferHagc = 1,
 
-  /** Use the profile's pre-rendered AToB0/BToA0 when present, in preference
-   * to the HAGC tag.  For a consumer that wants the author's baked rendering
-   * rather than a re-evaluation of the curve. */
+  /** Use the profile's pre-rendered AToB0/BToA0 when it has one in the
+   * direction being built, in preference to the HAGC tag.  For a consumer that
+   * wants the author's baked rendering rather than a re-evaluation of the
+   * curve.  Without a LUT in that direction the HDR chain is built and the
+   * HAGC tag, the one descriptor left, is applied. */
   icHdrToneMapPreferLut = 2,
 
   /** Do not engage the HDR path at all; behave exactly as a CMM that does not
@@ -1583,6 +1592,11 @@ public:
    * before the xform is handed a profile, so it records the parameters and
    * defers everything profile-dependent to Begin(). */
   void SetHdrParams(const CIccCreateHdrXformHint *pHint);
+
+  /** The parameters SetHdrParams() recorded, written back into a hint.
+   * CIccApplyBPC uses it so the CMMs it builds to find the black point run the
+   * same chain this xform applies rather than the SDR fallback LUTs. */
+  void GetHdrParams(CIccCreateHdrXformHint &hint) const;
 
   virtual icStatusCMM Begin();
   virtual void Apply(CIccApplyXform *pApplyXform, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const;

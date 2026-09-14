@@ -430,6 +430,25 @@ CIccConnectCmm* CIccConnectCmm::CreateStandard(const CIccCfgProfileSequence& pro
           goto stage_failed;
         }
       }
+      // ICC.1 clause 8.10: the HDR hint AddXformFromConfig builds for a profile
+      // named by path.  This branch assembles its own hint manager instead, and
+      // without this block -HDR on an image's embedded profile rendered SDR and
+      // exited 0 while the same profile named by path was tone mapped.
+      if (pCfg->m_hdrTargetHeadroom > 0.0) {
+        CIccCreateHdrXformHint* pHdrHint = new (std::nothrow) CIccCreateHdrXformHint();
+        if (!pHdrHint) {
+          sStageErr = "failed to allocate HDR tone-mapping hint for embedded source profile";
+          stat = icCmmStatAllocErr;
+          goto stage_failed;
+        }
+        pHdrHint->m_targetHeadroom = pCfg->m_hdrTargetHeadroom;
+        pHdrHint->m_nPolicy = pCfg->m_hdrToneMap;
+        stat = AddHintNoThrow(Hint, pHdrHint);
+        if (stat != icCmmStatOk) {
+          sStageErr = "failed to attach HDR tone-mapping hint for embedded source profile";
+          goto stage_failed;
+        }
+      }
 
       stat = pCmm->AddXform(
         const_cast<unsigned char*>(pEmbeddedData),

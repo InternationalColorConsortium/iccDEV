@@ -10,11 +10,12 @@
   possible outcome. Here the two lowest-ranked descriptors are the only ones
   present, which is what makes the choice observable:
 
-    - icHdrToneMapAuto ranks this build's own operator (the identity of NOTE 6
-      of 8.10.2) *below* a rendering the profile author actually baked, so the
-      ordinary A2B/B2A cascade resolves the profile and the HDR chain does not
-      engage.
-    - icHdrToneMapPreferHagc overrides that and takes the HDR chain anyway.
+    - icHdrToneMapAuto follows that ranking. This build always supplies an
+      operator of its own (the identity of NOTE 6 of 8.10.2), so the HDR
+      chain engages and the baked pair is not used - the same outcome as
+      icHdrToneMapPreferHagc.
+    - icHdrToneMapPreferLut takes the pair the profile author baked instead,
+      through the ordinary A2B/B2A cascade.
 
   Reverse those two and the profile still renders plausibly in both cases -
   which is exactly why it is worth a fixture rather than a review.
