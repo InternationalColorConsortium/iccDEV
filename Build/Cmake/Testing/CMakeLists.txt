@@ -833,6 +833,10 @@ function(iccdev_add_embedded_profile_onelevel_load_test)
     TIMEOUT 60
     LABELS "iccdev;iccprofLib;embedded-profile;wxProfileDump;regression"
     SKIP_RETURN_CODE 77
+    # Checks 1-3 load Testing/hybrid/ICC/CMYK_Hybrid_Profile.icc, which
+    # iccdev.hybrid-pipeline truncates and rewrites in place. Share its lock so
+    # a present-but-partial fixture is never read as a failure.
+    RESOURCE_LOCK iccdev_testing_hybrid_icc
   )
   if(WIN32)
     set(_embedded_profile_onelevel_load_windows_env_mods
@@ -8609,6 +8613,10 @@ if(ICCDEV_HAS_JSON_RUNTIME_CONFIG_TOOLS AND ICCDEV_HAS_JSON_TOOLS)
     # gives each command a bounded timeout.  Reserve a hosted runner's four
     # CTest slots so unrelated tests cannot starve those subprocesses.
     PROCESSORS "${_iccdev_aggregate_ctest_processors}"
+    # The script copies every Testing/hybrid/ICC and hybrid/Results profile
+    # (--skip-hybrid skips only running BuildAndTest.sh), so share
+    # iccdev.hybrid-pipeline's lock rather than copy a partial profile.
+    RESOURCE_LOCK iccdev_testing_hybrid_icc
   )
 
   iccdev_add_script_test(
@@ -8624,6 +8632,12 @@ if(ICCDEV_HAS_JSON_RUNTIME_CONFIG_TOOLS AND ICCDEV_HAS_JSON_TOOLS)
     # Reserve the hosted runner's CTest budget (capped at four) instead of
     # stretching runtime by competing with other CPU-intensive tests.
     PROCESSORS "${_iccdev_aggregate_ctest_processors}"
+    # BuildAndTest.sh rebuilds Testing/hybrid/ICC and hybrid/Results in the
+    # source tree; iccFromXml truncates each profile before rewriting it.
+    # PROCESSORS reserves at most four slots, so a wider ctest -j still starts
+    # other tests beside this one; tests that create or read those profiles
+    # share this lock.
+    RESOURCE_LOCK iccdev_testing_hybrid_icc
   )
 endif()
 
@@ -9372,6 +9386,10 @@ if(ICCDEV_HAS_ICCCONNECT)
   )
   set_tests_properties(iccdev.iccconnect-search-cost-regressions PROPERTIES
     FIXTURES_REQUIRED iccdev_profiles
+    # The script creates Testing/hybrid/ICC/Lab_float-D50_2deg.icc when it is
+    # missing and loads it as the PCC. iccdev.hybrid-pipeline rewrites that
+    # same file in place, so share its lock rather than read a partial profile.
+    RESOURCE_LOCK iccdev_testing_hybrid_icc
   )
 endif()
 
