@@ -11,7 +11,9 @@
 #   expected_sanitizer  none  (a sanitizer finding fails every suite, negatives included)
 #   source              tracked | generated
 #   sha256              digest of the tracked git blob, or - when generated
-#   rationale           why this row reads the way it does
+#   rationale           why this row reads the way it does; generate keeps a
+#                       hand-written one while the row's suite, status and exit
+#                       are unchanged, and derives one otherwise
 #
 # Suite policy:
 #   positive       must validate clean; any new diagnostic is a regression
@@ -27,9 +29,9 @@
 #   critical      "Profile has Critical Error(s) ..."           exit 255
 #   unknown       "Profile has unknown status!"                 exit 254
 # The manifest therefore records expected_status and expected_exit as independent
-# fields rather than deriving one from the other. No profile in the corpus currently
-# validates as overall noncompliant, so no row exercises that pairing today; the
-# mapping is recorded here so the contract is explicit if one appears.
+# fields rather than deriving one from the other. Three negative HDR fixtures -
+# HDR/HagcInvalidXOrder, HDR/HdrCicp2NoColumns and HDR/HdrMissingBToA1 - validate as
+# overall noncompliant, so those rows are what exercise the exit-0 pairing.
 #
 # sha256 is populated only for git-tracked profiles. The generated corpus resolves
 # <CreationDateTime>now</CreationDateTime> through localtime_r at conversion time and
@@ -161,7 +163,7 @@ HDR/BT2100PQSceneToDisplayLink.icc	positive	valid	0	none	generated	-	conformant 
 HDR/HagcCommonParams.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HagcDisplay.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HagcHexData.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
-HDR/HagcInvalidXOrder.icc	negative	noncompliant	0	none	generated	-	negative fixture: HAGC gain curve control point X values must be strictly increasing
+HDR/HagcInvalidXOrder.icc	negative	noncompliant	0	none	generated	-	negative fixture: HAGC gain curve control point X values must not decrease, and may repeat only with an equal Y
 HDR/HagcMixingTypes.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HagcRefWhiteToneMap.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrBakedLut.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean

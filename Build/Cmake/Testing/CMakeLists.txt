@@ -8761,6 +8761,7 @@ set(ICCDEV_TOOL_PATHS
   "${ICCDEV_TOOLS_DIR}/IccFromCube"
   "${ICCDEV_TOOLS_DIR}/IccFromJson"
   "${ICCDEV_TOOLS_DIR}/IccFromXml"
+  "${ICCDEV_TOOLS_DIR}/IccHdrFallback"
   "${ICCDEV_TOOLS_DIR}/IccJpegDump"
   "${ICCDEV_TOOLS_DIR}/IccPawgReport"
   "${ICCDEV_TOOLS_DIR}/IccPngDump"

@@ -42,7 +42,7 @@ BT2100PQSceneToDisplayLink	none	0	-	0	-	v5 DeviceLink; no cicpTag and no HDR met
 HagcCommonParams	conforming	0	-	0	-	HAGC common-parameter sharing flags; HLG
 HagcDisplay	conforming	0	-	0	-	HAGC full layout; PQ
 HagcHexData	conforming	0	-	4.92611	default-1000	HAGC raw-byte authoring path; Linear, so 8.10.4 rule c) also fires
-HagcInvalidXOrder	conforming	0	-	0	-	NEGATIVE: control-point X values not strictly increasing
+HagcInvalidXOrder	conforming	0	-	0	-	NEGATIVE: control-point X values decrease, or repeat with a differing Y
 HagcMixingTypes	conforming	0	-	0	-	HAGC component mixing types 1 and 3
 HagcRefWhiteToneMap	conforming	0	-	0	-	ST 2094-50 C.3.8 reference-white tone map
 HdrBakedLut	conforming	0	-	0	-	baked AToB0/BToA0 pair; makes 8.10.3's precedence observable

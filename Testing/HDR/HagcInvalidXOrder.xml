@@ -4,20 +4,27 @@
   reported non-compliant. Do not "fix" the control points below.
 
   The gain evaluator (proposal informative annex 1) defines each curve segment
-  as a cubic in t = (x - x_i) / (x_i+1 - x_i). Control point X values that are
-  not strictly increasing therefore do not merely produce an oddly ordered curve
-  - they make that parameter divide by zero or run backwards, and the piecewise
-  cubic is undefined. Nothing in the encoding prevents it: X is an independent
-  uInt16 per point with no ordering constraint on the wire, so the only place
-  the requirement can be enforced is CIccTagHagc::Validate().
+  as a cubic in t = (x - x_i) / (x_i+1 - x_i). Control point X values that go
+  backwards therefore do not merely produce an oddly ordered curve - they make
+  that parameter run backwards, and the piecewise cubic is undefined. Nothing
+  in the encoding prevents it: X is an independent uInt16 per point with no
+  ordering constraint on the wire, so the only place the requirement can be
+  enforced is CIccTagHagc::Validate().
 
-  Alternate 0 repeats X = 0.5000 at indices 1 and 2, which is the degenerate
-  case a naive check for "decreasing" would miss: the values never go down, but
-  the segment between them has zero width. Alternate 1 then goes strictly
-  backwards, so both shapes of the defect are covered.
+  A REPEATED X is not by itself the defect. SMPTE ST 2094-50 clause 6.5.2 lets
+  two adjacent points share an X value when they also share the same Y value -
+  a degenerate point, which is how an encoder pads a fixed-length array. What
+  it forbids is a repeat whose Y values differ, where the curve would have two
+  values at one abscissa.
+
+  Alternate 0 repeats X = 0.5000 at indices 1 and 2 with differing Y (-0.2 and
+  -0.3), which is the case a check for "decreasing" alone would miss.
+  Alternate 1 then goes strictly backwards, so both shapes of the defect are
+  covered.
 
   Expected: iccFromXml saves the profile, and iccDumpProfile -v reports
-    "HAGC alternate image 0 control point X values are not strictly increasing"
+    "HAGC alternate image 0 control point X values decrease, or repeat with
+     differing Y"
   See Testing/expected-invalid-fromxml.tsv.
 -->
 <IccProfile>
@@ -110,7 +117,7 @@
     </lutBtoAType> </BToA0Tag>
 
     <profileDescriptionTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR negative fixture: HAGC control point X values are not strictly increasing]]></LocalizedText>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR negative fixture: HAGC control point X values decrease or repeat with differing Y]]></LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>
 
     <copyrightTag> <multiLocalizedUnicodeType>

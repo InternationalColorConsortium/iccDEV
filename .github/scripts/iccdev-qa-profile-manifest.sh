@@ -223,7 +223,9 @@ write_header() {
 #   expected_sanitizer  none  (a sanitizer finding fails every suite, negatives included)
 #   source              tracked | generated
 #   sha256              digest of the tracked git blob, or - when generated
-#   rationale           why this row reads the way it does
+#   rationale           why this row reads the way it does; generate keeps a
+#                       hand-written one while the row's suite, status and exit
+#                       are unchanged, and derives one otherwise
 #
 # Suite policy:
 #   positive       must validate clean; any new diagnostic is a regression
@@ -239,9 +241,9 @@ write_header() {
 #   critical      "Profile has Critical Error(s) ..."           exit 255
 #   unknown       "Profile has unknown status!"                 exit 254
 # The manifest therefore records expected_status and expected_exit as independent
-# fields rather than deriving one from the other. No profile in the corpus currently
-# validates as overall noncompliant, so no row exercises that pairing today; the
-# mapping is recorded here so the contract is explicit if one appears.
+# fields rather than deriving one from the other. Three negative HDR fixtures -
+# HDR/HagcInvalidXOrder, HDR/HdrCicp2NoColumns and HDR/HdrMissingBToA1 - validate as
+# overall noncompliant, so those rows are what exercise the exit-0 pairing.
 #
 # sha256 is populated only for git-tracked profiles. The generated corpus resolves
 # <CreationDateTime>now</CreationDateTime> through localtime_r at conversion time and
@@ -262,6 +264,22 @@ tmp_log="$(mktemp)"
 trap 'rm -f "$tmp_log"' EXIT
 
 emit_rows() {
+  # The rationale column is mostly written by hand - the HDR fixture rows say
+  # what each negative pins - and classify_rationale() can only derive a generic
+  # one from the verdict.  Regenerating used to replace every hand-written
+  # rationale with that, silently, so keep the previous one wherever the
+  # verdict it explains has not changed.
+  local -A prev_verdict=()
+  local -A prev_rationale=()
+  if [ -f "$MANIFEST" ]; then
+    local p_path p_suite p_status p_exit p_san p_source p_sha p_rationale
+    while IFS=$'\t' read -r p_path p_suite p_status p_exit p_san p_source p_sha p_rationale; do
+      case "$p_path" in ''|'#'*) continue ;; esac
+      prev_verdict["$p_path"]="$p_suite"$'\t'"$p_status"$'\t'"$p_exit"
+      prev_rationale["$p_path"]="$p_rationale"
+    done < "$MANIFEST"
+  fi
+
   while IFS= read -r f; do
     local_rel="${f#"$TESTING_DIR"/}"
 
@@ -272,6 +290,10 @@ emit_rows() {
     san="$(classify_sanitizer "$tmp_log")"
     suite="$(classify_suite "$status")"
     rationale="$(classify_rationale "$status" "$tmp_log")"
+    if [ -n "${prev_rationale[$local_rel]:-}" ] &&
+       [ "${prev_verdict[$local_rel]}" = "$suite"$'\t'"$status"$'\t'"$rc" ]; then
+      rationale="${prev_rationale[$local_rel]}"
+    fi
 
     repo_rel="Testing/$local_rel"
     if [ -n "$REPO_ROOT" ] && git -C "$REPO_ROOT" ls-files --error-unmatch "$repo_rel" >/dev/null 2>&1; then

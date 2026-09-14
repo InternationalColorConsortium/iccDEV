@@ -13,8 +13,13 @@ REM This file is the SINGLE SOURCE of the Testing/HDR fixture list. Per #2328,
 REM Testing\CreateAllProfiles.bat CALLs this script rather than keeping a second
 REM copy of the list: a duplicate drifts silently and leaves
 REM iccdev.qa-profile-manifest either short a profile or short a manifest row,
-REM depending on which copy was edited. Add a fixture HERE and in
-REM Testing\qa-profile-manifest.tsv, and nowhere else.
+REM depending on which copy was edited. The LIST lives here and nowhere else.
+REM
+REM A new fixture also needs its expectations recorded, each CTest-enforced: a
+REM row in Testing\qa-profile-manifest.tsv (iccdev.qa-profile-manifest) and in
+REM Testing\HDR\hdr-corpus-manifest.tsv (iccdev.hdr-corpus-manifest), and - for a
+REM negative fixture iccFromXml saves but reports invalid - a row in
+REM Testing\expected-invalid-fromxml.tsv.
 REM
 REM The caller owns the .icc delete and the "clean" argument; this script only
 REM builds.

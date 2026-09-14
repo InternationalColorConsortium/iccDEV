@@ -13,8 +13,13 @@
 # Testing/CreateAllProfiles.sh calls this script rather than keeping a second
 # copy of the list: a duplicate drifts silently and leaves
 # iccdev.qa-profile-manifest either short a profile or short a manifest row,
-# depending on which copy was edited. Add a fixture HERE and in
-# Testing/qa-profile-manifest.tsv, and nowhere else.
+# depending on which copy was edited. The LIST lives here and nowhere else.
+#
+# A new fixture also needs its expectations recorded, each CTest-enforced: a
+# row in Testing/qa-profile-manifest.tsv (iccdev.qa-profile-manifest) and in
+# Testing/HDR/hdr-corpus-manifest.tsv (iccdev.hdr-corpus-manifest), and - for a
+# negative fixture iccFromXml saves but reports invalid - a row in
+# Testing/expected-invalid-fromxml.tsv.
 #
 # The caller owns the .icc delete and the "clean" argument; this script only
 # builds.

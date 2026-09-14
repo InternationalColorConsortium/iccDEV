@@ -186,6 +186,15 @@ before running the suite.
 | `iccdev.basic-string-regressions` | `.github/scripts/iccdev-basic-string-regression-tests.sh` |
 | `iccdev.pawg-report-regressions` | `.github/scripts/iccdev-pawg-report-regression-tests.sh` |
 | `iccdev.pawg-q1-quality-contract` | `.github/ci/regression/pawg-q1-quality-contract.cpp` |
+| `iccdev.pawg-hdr-section` | `Build/Cmake/Testing/RunPawgHdrSectionTest.cmake` |
+| `iccdev.hdr-profile-classification` | `.github/ci/regression/hdr-profile-classification.cpp` |
+| `iccdev.hdr-corpus-manifest` | `.github/ci/regression/hdr-corpus-manifest.cpp` |
+| `iccdev.hdr-tonemap` | `.github/ci/regression/hdr-tonemap.cpp` |
+| `iccdev.hdr-bake` | `.github/ci/regression/hdr-bake.cpp` |
+| `iccdev.hdr-cmm-integration` | `.github/ci/regression/hdr-cmm-integration.cpp` |
+| `iccdev.hagc-codec-roundtrip` | `.github/ci/regression/hagc-codec-roundtrip.cpp` |
+| `iccdev.hagc-authoring-invariants` | `.github/ci/regression/hagc-authoring-invariants.cpp` |
+| `iccdev.hagc-json-authoring` | `.github/ci/regression/hagc-json-authoring.cpp` |
 | `iccdev.json-cfg` | `.github/scripts/iccdev-json-cfg-tests.sh` |
 | `iccdev.json-cli-exercise` | `.github/scripts/json-cli-exercise.sh` |
 | `iccdev.json-parser-regressions` | `.github/scripts/iccdev-json-parser-regression-tests.sh` |
