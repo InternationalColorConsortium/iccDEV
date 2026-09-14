@@ -2708,7 +2708,10 @@ bool CIccMpeXmlCalculator::ToXml(std::string &xml, std::string blanks/* = ""*/)
         IIccExtensionMpe *pExt = m_SubElem[i]->GetExtension();
         if (pExt && !strcmp(pExt->GetExtClassName(), "CIccMpeXml")) {
           CIccMpeXml *pMpe = (CIccMpeXml*)pExt;
-          pMpe->ToXml(xml, blanks2+"  ");
+          // A sub-element that fails has already appended its opening markup,
+          // so carrying on would emit a document with an unclosed element.
+          if (!pMpe->ToXml(xml, blanks2+"  "))
+            return false;
         }
         else {
           return false;
@@ -3620,6 +3623,17 @@ void CIccMpeXmlCalculator::clean()
   m_mpeMap.clear();
   m_nNextVar = 0;
   m_nNextMpe = 0;
+}
+
+// Without this override a copy came from CIccMpeCalculator::NewCopy() and lost
+// the XML class.  CIccSampledCalculatorCurve's copy constructor copies its
+// calculator through NewCopy(), and ToXmlCurve() writes a sampled calculator
+// curve from exactly such a copy, so CIccSampledCalculatorCurveXml::ToXml()
+// found a plain CIccMpeCalculator, refused it after writing its opening
+// element, and iccToXml emitted an unclosed <SampledCalculatorCurve>.
+CIccMpeCalculator *CIccMpeXmlCalculator::NewCopy() const
+{
+  return new CIccMpeXmlCalculator(static_cast<const CIccMpeCalculator&>(*this));
 }
 
 bool CIccMpeXmlCalculator::ParseChanMap(ChanVarMap& chanMap, const char *szNames, int nChannels)

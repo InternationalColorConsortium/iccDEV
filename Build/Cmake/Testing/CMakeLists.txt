@@ -5092,6 +5092,71 @@ function(iccdev_add_xml_numeric_values_test)
   endif()
 endfunction()
 
+# iccToXml wrote an unclosed <SampledCalculatorCurve> for
+# Testing/Display/Rec2100HlgFullCC.xml and exited 0: CIccMpeXmlCalculator had no
+# NewCopy(), so the copy the curve writer works from was not the XML class and
+# was refused after its opening element, and the MPE tag and calculator writers
+# ignored that failure. The helper round-trips the corpus profile through the
+# XML factories as iccToXml does, and pins each defect with an in-memory case.
+# It reads the corpus from the source tree and writes only into its scratch
+# directory.
+function(iccdev_add_xml_calculator_curve_writer_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlCalculatorCurveWriterTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-calculator-curve-writer.cpp"
+  )
+  target_compile_features(iccXmlCalculatorCurveWriterTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlCalculatorCurveWriterTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlCalculatorCurveWriterTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlCalculatorCurveWriterTest)
+
+  set(_xml_calc_curve_writer_scratch
+    "${CMAKE_CURRENT_BINARY_DIR}/ctest-output/xml-calculator-curve-writer")
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-calculator-curve-writer
+      COMMAND "$<TARGET_FILE:iccXmlCalculatorCurveWriterTest>"
+              "${_xml_calc_curve_writer_scratch}" "${ICCDEV_REPO_ROOT}"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-calculator-curve-writer
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlCalculatorCurveWriterTest>"
+        "${_xml_calc_curve_writer_scratch}" "${ICCDEV_REPO_ROOT}"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-calculator-curve-writer PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;xml;mpe;calculator;regression"
+  )
+  if(WIN32)
+    set(_xml_calc_curve_writer_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlCalculatorCurveWriterTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _xml_calc_curve_writer_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-calculator-curve-writer PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_xml_calc_curve_writer_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Follow-up to #2535/#2536: CIccTagColorantOrder::Read() cast its declared count
 # straight to SetSize()'s icUInt16Number and then read the narrowed m_nCount
 # bytes, so a tag declaring 65537 positions loaded as one -- silently, while
@@ -8141,6 +8206,7 @@ if(WIN32)
   iccdev_add_colorant_count_narrowing_json_test()
   iccdev_add_colorant_count_narrowing_xml_test()
   iccdev_add_xml_numeric_values_test()
+  iccdev_add_xml_calculator_curve_writer_test()
   iccdev_add_parametric_curve_params_json_test()
   iccdev_add_colorant_count_narrowing_binary_test()
   iccdev_add_xform_create_tag_ownership_test()
@@ -8531,6 +8597,7 @@ iccdev_add_namedcolor_findcolor_suffix_underflow_test()
 iccdev_add_colorant_count_narrowing_json_test()
 iccdev_add_colorant_count_narrowing_xml_test()
 iccdev_add_xml_numeric_values_test()
+iccdev_add_xml_calculator_curve_writer_test()
 iccdev_add_parametric_curve_params_json_test()
 iccdev_add_colorant_count_narrowing_binary_test()
 iccdev_add_xform_create_tag_ownership_test()
