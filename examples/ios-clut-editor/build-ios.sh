@@ -404,7 +404,7 @@ if [[ -n "$launch_mode" ]]; then
         --console --terminate-existing --timeout 90 "$bundle_id" "${app_args[@]}"
     else
       xcrun devicectl device process launch --device "$DEVICE_ID" \
-        --console --terminate-existing "$bundle_id"
+        --console --terminate-existing --timeout 90 "$bundle_id"
     fi
   fi
 fi
