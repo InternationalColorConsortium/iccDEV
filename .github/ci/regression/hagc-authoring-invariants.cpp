@@ -115,6 +115,7 @@
 // Returns 0 on success; the number of failed assertions otherwise.
 
 #include "IccProfileXml.h"
+#include "IccTagXml.h"
 #include "IccTagXmlFactory.h"
 #include "IccMpeXmlFactory.h"
 #include "IccHdrBake.h"
@@ -126,6 +127,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <limits>
 #include <string>
 #include <vector>
@@ -482,6 +484,146 @@ void testUnwidenableFields()
     check(out[i] == out[i], "the refused NaN target did not reach the pixels");
 }
 
+// ---------------------------------------------------------------------------
+// 5. The XML parser refuses what it cannot read, and the writer never
+//    re-encodes away bytes the model does not keep.
+// ---------------------------------------------------------------------------
+
+const char *kXmlHagc =
+  "<HagcMetadata ApplicationVersion=\"1\" MinApplicationVersion=\"0\" HDRReferenceWhite=\"300.0\""
+  " BaselineHeadroom=\"3.0\" HeadroomAdaptiveToneMap=\"true\" ChromaticitiesMode=\"0\""
+  " CommonComponentMixing=\"false\" CommonCurveParameters=\"false\">"
+  "<AlternateImage Headroom=\"0.0\" ComponentMixingType=\"3\" PchipSlope=\"false\">"
+  "<Coefficients kRed=\"1.0\"/>"
+  "<ControlPoints>"
+  "<ControlPoint X=\"0.5\" Y=\"-0.2\" M=\"-0.3\"/>"
+  "<ControlPoint X=\"1.0\" Y=\"-0.4\" M=\"-0.1\"/>"
+  "</ControlPoints>"
+  "</AlternateImage>"
+  "</HagcMetadata>";
+
+std::string replaced(const char *szDoc, const char *szFrom, const char *szTo)
+{
+  std::string s = szDoc;
+  size_t pos = s.find(szFrom);
+  if (pos != std::string::npos)
+    s.replace(pos, strlen(szFrom), szTo);
+  else
+    printf("TEST BUG: '%s' not found in the document\n", szFrom);
+  return s;
+}
+
+bool parseXmlTag(const std::string &text, CIccTagXmlHagc &tag, std::string &parseStr)
+{
+  xmlDocPtr doc = xmlReadMemory(text.c_str(), (int)text.size(), "hagc.xml", NULL, 0);
+  if (!doc) {
+    parseStr = "not well-formed XML";
+    return false;
+  }
+  bool bOk = tag.ParseXml(xmlDocGetRootElement(doc), parseStr);
+  xmlFreeDoc(doc);
+  return bOk;
+}
+
+void expectXmlRefused(const std::string &text, const char *szWhat)
+{
+  CIccTagXmlHagc tag;
+  std::string parseStr;
+  if (parseXmlTag(text, tag, parseStr)) {
+    printf("FAIL: %s (the tag parsed)\n", szWhat);
+    g_failures++;
+  }
+}
+
+// 31 bytes: a canonical one-alternate, one-point block.
+const icUInt8Number kOnePointBlock[31] = {
+  0x00, 0x00, 0x00, 0x00, 0x10,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0x27, 0x10, 0x40, 0x00, 0x03, 0xE8, 0x27, 0x10, 0x46, 0x50
+};
+
+void checkXmlByteRoundTrip(const std::vector<icUInt8Number> &raw, const char *szWhat)
+{
+  CIccTagXmlHagc src;
+  src.SetRawMetadata(raw.empty() ? NULL : &raw[0], (icUInt32Number)raw.size());
+
+  std::string xml;
+  if (!src.ToXml(xml)) {
+    printf("FAIL: %s - ToXml failed\n", szWhat);
+    g_failures++;
+    return;
+  }
+  check(xml.find("<HexData>") != std::string::npos, szWhat);
+
+  CIccTagXmlHagc back;
+  std::string parseStr;
+  if (!parseXmlTag(xml, back, parseStr)) {
+    printf("FAIL: %s - the exported XML does not parse back (%s)\n", szWhat, parseStr.c_str());
+    g_failures++;
+    return;
+  }
+  check(back.GetRawMetadataSize() == raw.size() &&
+        (raw.empty() || memcmp(back.GetRawMetadata(), &raw[0], raw.size()) == 0),
+        "and the bytes survive the XML round trip exactly");
+}
+
+void testXmlStrictAndByteExact()
+{
+  {
+    CIccTagXmlHagc tag;
+    std::string parseStr;
+    check(parseXmlTag(kXmlHagc, tag, parseStr), "positive control: the strict-parse document parses");
+    checkClose(tag.GetMetadata().GetReferenceWhite(), 300.0, 1e-3, "and carries its reference white");
+  }
+
+  expectXmlRefused(replaced(kXmlHagc, "HDRReferenceWhite=\"300.0\"", "HDRReferenceWhite=\"abc\""),
+                   "a non-numeric HDRReferenceWhite is refused, not read as 0");
+  expectXmlRefused(replaced(kXmlHagc, "HDRReferenceWhite=\"300.0\"", "HDRReferenceWhite=\"3OO.0\""),
+                   "HDRReferenceWhite with letter O is refused, not read as 3");
+  expectXmlRefused(replaced(kXmlHagc, "BaselineHeadroom=\"3.0\"", "BaselineHeadroom=\"3.0x\""),
+                   "trailing garbage on BaselineHeadroom is refused");
+  expectXmlRefused(replaced(kXmlHagc, "kRed=\"1.0\"", "kRed=\"abc\""),
+                   "a non-numeric coefficient is refused");
+  expectXmlRefused(replaced(kXmlHagc, "Headroom=\"0.0\" ", ""),
+                   "an AlternateImage without Headroom is refused");
+  expectXmlRefused(replaced(kXmlHagc, "X=\"0.5\" ", ""),
+                   "a ControlPoint without X is refused");
+  expectXmlRefused(replaced(kXmlHagc, " M=\"-0.3\"", ""),
+                   "a ControlPoint without M is refused when slopes are carried");
+  expectXmlRefused(replaced(kXmlHagc, "HeadroomAdaptiveToneMap=\"true\"", "HeadroomAdaptiveToneMap=\"yes\""),
+                   "a boolean that is not true/false/1/0 is refused");
+  expectXmlRefused(replaced(kXmlHagc, "Y=\"-0.4\"", "Y=\"inf\""),
+                   "an infinite Y is refused");
+
+  {
+    std::string pchip = replaced(kXmlHagc, "PchipSlope=\"false\"", "PchipSlope=\"true\"");
+    pchip = replaced(pchip.c_str(), " M=\"-0.3\"", "");
+    pchip = replaced(pchip.c_str(), " M=\"-0.1\"", "");
+    CIccTagXmlHagc tag;
+    std::string parseStr;
+    check(parseXmlTag(pchip, tag, parseStr), "control: M may be omitted when slopes are derived");
+  }
+
+  std::vector<icUInt8Number> canonical(kOnePointBlock, kOnePointBlock + sizeof(kOnePointBlock));
+  {
+    CIccTagXmlHagc exact;
+    exact.SetRawMetadata(&canonical[0], (icUInt32Number)canonical.size());
+    std::string xml;
+    check(exact.ToXml(xml) && xml.find("<HagcMetadata") != std::string::npos,
+          "control: an exact tag still exports the structured form");
+  }
+
+  std::vector<icUInt8Number> trailing = canonical;
+  trailing.push_back(0xAB);
+  checkXmlByteRoundTrip(trailing, "a block with a trailing byte exports as HexData");
+
+  std::vector<icUInt8Number> reserved = canonical;
+  reserved[0] |= 0x03;
+  checkXmlByteRoundTrip(reserved, "a block with reserved bits set exports as HexData");
+
+  checkXmlByteRoundTrip(std::vector<icUInt8Number>(), "an empty block exports as HexData");
+}
+
 }  // namespace
 
 int main()
@@ -495,6 +637,7 @@ int main()
   testSetMetadataRoundTrip();
   testExportedEntryPointBounds();
   testUnwidenableFields();
+  testXmlStrictAndByteExact();
 
   if (g_failures)
     printf("%d assertion(s) failed\n", g_failures);

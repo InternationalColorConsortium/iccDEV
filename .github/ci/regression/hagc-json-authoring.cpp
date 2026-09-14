@@ -90,6 +90,7 @@
 // Returns 0 on success; the number of failed assertions otherwise.
 
 #include "IccProfileJson.h"
+#include "IccTagJson.h"
 #include "IccTagJsonFactory.h"
 #include "IccMpeJsonFactory.h"
 #include "IccProfile.h"
@@ -99,7 +100,9 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <string>
+#include <vector>
 
 #ifdef USEICCDEVNAMESPACE
 using namespace iccDEV;
@@ -279,6 +282,138 @@ void testJsonApplicationVersionRange()
         "a negative application version is refused");
 }
 
+// ---------------------------------------------------------------------------
+// The JSON parser fails closed on wrong-typed and missing values, and the
+// writer never re-encodes away bytes the model does not keep.
+// ---------------------------------------------------------------------------
+
+const char *kJsonHagc =
+  "{\"applicationVersion\":1,\"minApplicationVersion\":0,\"hdrReferenceWhite\":300.0,"
+  "\"baselineHeadroom\":3.0,\"headroomAdaptiveToneMap\":true,\"chromaticitiesMode\":0,"
+  "\"commonComponentMixing\":false,\"commonCurveParameters\":false,"
+  "\"alternateImages\":["
+  "{\"headroom\":0.0,\"componentMixingType\":3,\"pchipSlope\":false,\"coefficients\":{\"kRed\":1.0},"
+  "\"controlPoints\":[{\"x\":0.5,\"y\":-0.2,\"m\":-0.3},{\"x\":1.0,\"y\":-0.4,\"m\":-0.1}]},"
+  "{\"headroom\":5.0,\"componentMixingType\":1,\"pchipSlope\":true,"
+  "\"controlPoints\":[{\"x\":0.5,\"y\":0.2},{\"x\":1.0,\"y\":0.4}]}"
+  "]}";
+
+std::string replacedJson(const char *szDoc, const char *szFrom, const char *szTo)
+{
+  std::string s = szDoc;
+  size_t pos = s.find(szFrom);
+  if (pos != std::string::npos)
+    s.replace(pos, strlen(szFrom), szTo);
+  else
+    printf("TEST BUG: '%s' not found in the document\n", szFrom);
+  return s;
+}
+
+bool parseJsonTag(const std::string &text, CIccTagJsonHagc &tag, std::string &parseStr)
+{
+  IccJson j;
+  try {
+    j = IccJson::parse(text);
+  }
+  catch (...) {
+    parseStr = "not valid JSON";
+    return false;
+  }
+  return tag.ParseJson(j, parseStr);
+}
+
+void expectJsonRefused(const std::string &text, const char *szWhat)
+{
+  CIccTagJsonHagc tag;
+  std::string parseStr;
+  if (parseJsonTag(text, tag, parseStr)) {
+    printf("FAIL: %s (the tag parsed)\n", szWhat);
+    g_failures++;
+  }
+}
+
+const icUInt8Number kJsonOnePointBlock[31] = {
+  0x00, 0x00, 0x00, 0x00, 0x10,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0x27, 0x10, 0x40, 0x00, 0x03, 0xE8, 0x27, 0x10, 0x46, 0x50
+};
+
+void checkJsonByteRoundTrip(const std::vector<icUInt8Number> &raw, const char *szWhat)
+{
+  CIccTagJsonHagc src;
+  src.SetRawMetadata(raw.empty() ? NULL : &raw[0], (icUInt32Number)raw.size());
+
+  IccJson j = IccJson::object();
+  if (!src.ToJson(j)) {
+    printf("FAIL: %s - ToJson failed\n", szWhat);
+    g_failures++;
+    return;
+  }
+  check(j.contains("rawMetadata"), szWhat);
+
+  CIccTagJsonHagc back;
+  std::string parseStr;
+  if (!parseJsonTag(j.dump(), back, parseStr)) {
+    printf("FAIL: %s - the exported JSON does not parse back (%s)\n", szWhat, parseStr.c_str());
+    g_failures++;
+    return;
+  }
+  check(back.GetRawMetadataSize() == raw.size() &&
+        (raw.empty() || memcmp(back.GetRawMetadata(), &raw[0], raw.size()) == 0),
+        "and the bytes survive the JSON round trip exactly");
+}
+
+void testJsonStrictAndByteExact()
+{
+  {
+    CIccTagJsonHagc tag;
+    std::string parseStr;
+    check(parseJsonTag(kJsonHagc, tag, parseStr), "positive control: the strict-parse document parses");
+    const icHagcAlternateImage *pAlt1 = tag.GetMetadata().GetAlternate(1);
+    check(pAlt1 && pAlt1->m_headroom == 5.0f, "and alternate 1 keeps its headroom");
+  }
+
+  expectJsonRefused(replacedJson(kJsonHagc, "\"headroom\":5.0", "\"headroom\":\"5.0\""),
+                    "a quoted alternate headroom is refused, not read as 0");
+  expectJsonRefused(replacedJson(kJsonHagc, "\"hdrReferenceWhite\":300.0", "\"hdrReferenceWhite\":\"300\""),
+                    "a quoted hdrReferenceWhite is refused, not dropped to the default");
+  expectJsonRefused(replacedJson(kJsonHagc, "\"applicationVersion\":1", "\"applicationVersion\":\"1\""),
+                    "a quoted applicationVersion is refused, not read as 0");
+  expectJsonRefused(replacedJson(kJsonHagc, "\"kRed\":1.0", "\"kRed\":\"1.0\""),
+                    "a quoted coefficient is refused");
+  expectJsonRefused(replacedJson(kJsonHagc, "{\"headroom\":0.0,", "{"),
+                    "an alternate image without headroom is refused");
+  expectJsonRefused(replacedJson(kJsonHagc, "{\"x\":0.5,\"y\":-0.2", "{\"y\":-0.2"),
+                    "a control point without x is refused");
+  expectJsonRefused(replacedJson(kJsonHagc, ",\"m\":-0.3", ""),
+                    "a control point without m is refused when slopes are carried");
+  expectJsonRefused(replacedJson(kJsonHagc, "\"pchipSlope\":false", "\"pchipSlope\":\"no\""),
+                    "a non-boolean pchipSlope is refused");
+  expectJsonRefused(replacedJson(kJsonHagc, "\"chromaticitiesMode\":0,",
+                                 "\"chromaticitiesMode\":3,\"chromaticities\":[0,0,0,0,0,0,0,\"x\"],"),
+                    "a non-numeric chromaticity is refused");
+  expectJsonRefused("{\"rawMetadata\":5}", "a non-string rawMetadata is refused");
+
+  std::vector<icUInt8Number> canonical(kJsonOnePointBlock, kJsonOnePointBlock + sizeof(kJsonOnePointBlock));
+  {
+    CIccTagJsonHagc exact;
+    exact.SetRawMetadata(&canonical[0], (icUInt32Number)canonical.size());
+    IccJson j = IccJson::object();
+    check(exact.ToJson(j) && !j.contains("rawMetadata") && j.contains("alternateImages"),
+          "control: an exact tag still exports the structured form");
+  }
+
+  std::vector<icUInt8Number> trailing = canonical;
+  trailing.push_back(0xAB);
+  checkJsonByteRoundTrip(trailing, "a block with a trailing byte exports as rawMetadata");
+
+  std::vector<icUInt8Number> reserved = canonical;
+  reserved[0] |= 0x03;
+  checkJsonByteRoundTrip(reserved, "a block with reserved bits set exports as rawMetadata");
+
+  checkJsonByteRoundTrip(std::vector<icUInt8Number>(), "an empty block exports as rawMetadata");
+}
+
 }  // namespace
 
 int main()
@@ -290,6 +425,7 @@ int main()
 
   testJsonMixingTypeCoefficients();
   testJsonApplicationVersionRange();
+  testJsonStrictAndByteExact();
 
   if (g_failures)
     printf("%d assertion(s) failed\n", g_failures);

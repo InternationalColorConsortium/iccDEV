@@ -563,9 +563,15 @@ bool CIccTagJsonCicp::ParseJson(const IccJson &j, std::string & /*parseStr*/)
 // ===========================================================================
 // CIccTagJsonHagc
 //
-// Parity with CIccTagXmlHagc: a structured object for anything that decodes,
-// and a hex string under "rawMetadata" for anything that does not, so a block
-// this build cannot parse still survives a JSON round trip byte for byte.
+// Parity with CIccTagXmlHagc: a structured object when the decoded model
+// reproduces the retained bytes exactly (CIccTagHagc::IsModelExact()), and a
+// hex string under "rawMetadata" for anything else - a block that does not
+// decode, or one carrying bytes the model does not keep - so every tag
+// survives a JSON round trip byte for byte.
+//
+// ParseJson() fails closed: a field that is present but of the wrong type (a
+// quoted number, say) refuses the tag rather than being skipped, because a
+// skipped alternate headroom reads as 0 and silently inverts the gain curve.
 // ===========================================================================
 
 static const char *icHagcJsonCoefName[icHagcNumCoefficients] = {
@@ -612,12 +618,55 @@ static bool icHagcJsonFromHex(const std::string &s, std::vector<icUInt8Number> &
   return true;
 }
 
+// Absent: value is left as the caller preset it, unless bRequired.  Present:
+// must be a JSON number (a finite one - JSON has no NaN or infinity).
+static bool icHagcJsonNumber(const IccJson &obj, const char *szField, bool bRequired,
+                             double &value, std::string &parseStr)
+{
+  if (!jsonExistsField(obj, szField)) {
+    if (bRequired) {
+      parseStr += std::string("headroomAdaptiveGainCurveType: missing required field \"") + szField + "\"\n";
+      return false;
+    }
+    return true;
+  }
+  if (!jGetValue(obj, szField, value) || !std::isfinite(value)) {
+    parseStr += std::string("headroomAdaptiveGainCurveType: \"") + szField + "\" is not a number\n";
+    return false;
+  }
+  return true;
+}
+
+// Absent: value is left as preset.  Present: must be a whole JSON number.
+static bool icHagcJsonInt(const IccJson &obj, const char *szField, int &value, std::string &parseStr)
+{
+  if (!jsonExistsField(obj, szField))
+    return true;
+  if (!obj[szField].is_number() || !jGetValue(obj, szField, value)) {
+    parseStr += std::string("headroomAdaptiveGainCurveType: \"") + szField + "\" is not an integer\n";
+    return false;
+  }
+  return true;
+}
+
+// Absent: value is left as preset.  Present: a JSON boolean, or 0 or 1.
+static bool icHagcJsonBool(const IccJson &obj, const char *szField, bool &value, std::string &parseStr)
+{
+  if (!jsonExistsField(obj, szField))
+    return true;
+  if (!jGetValue(obj, szField, value)) {
+    parseStr += std::string("headroomAdaptiveGainCurveType: \"") + szField + "\" is not a boolean\n";
+    return false;
+  }
+  return true;
+}
+
 bool CIccTagJsonHagc::ToJson(IccJson &j)
 {
   const icHagcMetadata &m = GetMetadata();
   int i, k;
 
-  if (!m.m_bUnpacked) {
+  if (!IsModelExact()) {
     j["rawMetadata"] = icHagcJsonToHex(GetRawMetadata(), GetRawMetadataSize());
     return true;
   }
@@ -691,9 +740,18 @@ bool CIccTagJsonHagc::ToJson(IccJson &j)
 
 bool CIccTagJsonHagc::ParseJson(const IccJson &j, std::string &parseStr)
 {
-  if (jsonExistsField(j, "rawMetadata") && j["rawMetadata"].is_string()) {
+  if (jsonExistsField(j, "rawMetadata")) {
+    if (!j["rawMetadata"].is_string()) {
+      parseStr += "rawMetadata in headroomAdaptiveGainCurveType is not a hex string\n";
+      return false;
+    }
+
     std::vector<icUInt8Number> raw;
     const std::string hex = j["rawMetadata"].get<std::string>();
+
+    // An empty block is a legal tag, and ToJson() writes one as "".
+    if (hex.empty())
+      return SetRawMetadata(NULL, 0);
 
     // Bounded on the hex text, before the decode allocates half its length.
     // SetRawMetadata() enforces the same limit on the far side, but by then
@@ -718,13 +776,15 @@ bool CIccTagJsonHagc::ParseJson(const IccJson &j, std::string &parseStr)
   bool bFlag = false;
   int i, k;
 
-  jGetValue(j, "applicationVersion", applicationVersion);
-  jGetValue(j, "minApplicationVersion", minApplicationVersion);
-
   // Both fields are three bits on the wire, so 0..7 is the whole of what can
   // be authored.  Refused rather than masked, and refused the same way the
   // XML path refuses it: a document that says 8 and produces a profile saying
-  // 0 is worse than one that will not build.
+  // 0 is worse than one that will not build.  A value of the wrong type ("3")
+  // is refused the same way rather than read as the default.
+  if (!icHagcJsonInt(j, "applicationVersion", applicationVersion, parseStr) ||
+      !icHagcJsonInt(j, "minApplicationVersion", minApplicationVersion, parseStr))
+    return false;
+
   if (applicationVersion < 0 || applicationVersion > icHagcMaxApplicationVersion ||
       minApplicationVersion < 0 || minApplicationVersion > icHagcMaxApplicationVersion) {
     parseStr += "Invalid application version in headroomAdaptiveGainCurveType (0 to 7)\n";
@@ -734,46 +794,61 @@ bool CIccTagJsonHagc::ParseJson(const IccJson &j, std::string &parseStr)
   m.m_nApplicationVersion = (icUInt8Number)applicationVersion;
   m.m_nMinApplicationVersion = (icUInt8Number)minApplicationVersion;
 
-  if (jGetValue(j, "hdrReferenceWhite", hdrReferenceWhite)) {
+  if (jsonExistsField(j, "hdrReferenceWhite")) {
+    if (!icHagcJsonNumber(j, "hdrReferenceWhite", true, hdrReferenceWhite, parseStr))
+      return false;
     m.m_bCustomReferenceWhite = true;
     m.m_referenceWhite = (icFloatNumber)(hdrReferenceWhite);
   }
 
-  jGetValue(j, "baselineHeadroom", baselineHeadroom);
+  if (!icHagcJsonNumber(j, "baselineHeadroom", false, baselineHeadroom, parseStr))
+    return false;
   m.m_baselineHeadroom = (icFloatNumber)(baselineHeadroom);
 
-  bFlag = false; jGetValue(j, "headroomAdaptiveToneMap", bFlag);
+  bFlag = false;
+  if (!icHagcJsonBool(j, "headroomAdaptiveToneMap", bFlag, parseStr))
+    return false;
   m.m_bHeadroomAdaptiveToneMap = bFlag;
 
-  bFlag = false; jGetValue(j, "referenceWhiteToneMapping", bFlag);
+  bFlag = false;
+  if (!icHagcJsonBool(j, "referenceWhiteToneMapping", bFlag, parseStr))
+    return false;
   m.m_bReferenceWhiteToneMapping = bFlag;
 
   if (!m.m_bReferenceWhiteToneMapping) {
-    jGetValue(j, "chromaticitiesMode", chromaticitiesMode);
+    if (!icHagcJsonInt(j, "chromaticitiesMode", chromaticitiesMode, parseStr))
+      return false;
     if (chromaticitiesMode < 0 || chromaticitiesMode > 3) {
       parseStr += "Invalid chromaticitiesMode in headroomAdaptiveGainCurveType\n";
       return false;
     }
     m.m_nChromaticitiesMode = (icHagcChromaticitiesMode)chromaticitiesMode;
 
-    bFlag = false; jGetValue(j, "commonComponentMixing", bFlag);
+    bFlag = false;
+    if (!icHagcJsonBool(j, "commonComponentMixing", bFlag, parseStr))
+      return false;
     m.m_bCommonComponentMixing = bFlag;
-    bFlag = false; jGetValue(j, "commonCurveParameters", bFlag);
+    bFlag = false;
+    if (!icHagcJsonBool(j, "commonCurveParameters", bFlag, parseStr))
+      return false;
     m.m_bCommonCurveParameters = bFlag;
 
-    if (jsonExistsField(j, "chromaticities") && j["chromaticities"].is_array()) {
+    if (jsonExistsField(j, "chromaticities")) {
       const IccJson &chrom = j["chromaticities"];
-      if (chrom.size() != 8) {
-        parseStr += "headroomAdaptiveGainCurveType chromaticities needs exactly 8 values\n";
+      double vals[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+      if (!chrom.is_array() || chrom.size() != 8 || !jsonToArray(chrom, vals, 8)) {
+        parseStr += "headroomAdaptiveGainCurveType chromaticities needs exactly 8 numbers\n";
         return false;
       }
-      double vals[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-      jsonToArray(chrom, vals, 8);
       for (i = 0; i < 8; i++)
         m.m_chromaticities[i] = (icFloatNumber)(vals[i]);
     }
 
-    if (jsonExistsField(j, "alternateImages") && j["alternateImages"].is_array()) {
+    if (jsonExistsField(j, "alternateImages")) {
+      if (!j["alternateImages"].is_array()) {
+        parseStr += "headroomAdaptiveGainCurveType alternateImages is not an array\n";
+        return false;
+      }
       const IccJson &alts = j["alternateImages"];
 
       if (alts.size() > icHagcMaxAlternates) {
@@ -796,10 +871,18 @@ bool CIccTagJsonHagc::ParseJson(const IccJson &j, std::string &parseStr)
         double headroom = 0.0;
         int mixType = 0;
 
-        jGetValue(alt, "headroom", headroom);
+        if (!alt.is_object()) {
+          parseStr += "headroomAdaptiveGainCurveType alternate image is not an object\n";
+          return false;
+        }
+
+        // An alternate image is defined by its headroom: required, not read as 0.
+        if (!icHagcJsonNumber(alt, "headroom", true, headroom, parseStr))
+          return false;
         pAlt->m_headroom = (icFloatNumber)(headroom);
 
-        jGetValue(alt, "componentMixingType", mixType);
+        if (!icHagcJsonInt(alt, "componentMixingType", mixType, parseStr))
+          return false;
         if (mixType < 0 || mixType > 3) {
           parseStr += "Invalid componentMixingType in headroomAdaptiveGainCurveType\n";
           return false;
@@ -813,15 +896,22 @@ bool CIccTagJsonHagc::ParseJson(const IccJson &j, std::string &parseStr)
         // a type 3 alternate, and Pack() writes it out as a real coefficient.
         pAlt->SetMixingType((icHagcMixingType)mixType);
 
-        bFlag = false; jGetValue(alt, "pchipSlope", bFlag);
+        bFlag = false;
+        if (!icHagcJsonBool(alt, "pchipSlope", bFlag, parseStr))
+          return false;
         pAlt->m_bPchipSlope = bFlag;
 
-        if (jsonExistsField(alt, "coefficients") && alt["coefficients"].is_object()) {
+        if (jsonExistsField(alt, "coefficients")) {
+          if (!alt["coefficients"].is_object()) {
+            parseStr += "headroomAdaptiveGainCurveType coefficients is not an object\n";
+            return false;
+          }
           const IccJson &coef = alt["coefficients"];
           for (k = 0; k < icHagcNumCoefficients; k++) {
-            double v = 0.0;
-            if (jGetValue(coef, icHagcJsonCoefName[k], v))
-              pAlt->m_coef[k] = (icFloatNumber)(v);
+            double v = (double)pAlt->m_coef[k];
+            if (!icHagcJsonNumber(coef, icHagcJsonCoefName[k], false, v, parseStr))
+              return false;
+            pAlt->m_coef[k] = (icFloatNumber)(v);
           }
         }
 
@@ -838,9 +928,16 @@ bool CIccTagJsonHagc::ParseJson(const IccJson &j, std::string &parseStr)
 
         for (k = 0; k < (int)points.size(); k++) {
           double x = 0.0, y = 0.0, mm = 0.0;
-          jGetValue(points[k], "x", x);
-          jGetValue(points[k], "y", y);
-          jGetValue(points[k], "m", mm);
+          // x and y define the point; m is carried only when slopes are not
+          // derived, so it is required exactly then (and checked if present).
+          if (!points[k].is_object()) {
+            parseStr += "headroomAdaptiveGainCurveType control point is not an object\n";
+            return false;
+          }
+          if (!icHagcJsonNumber(points[k], "x", true, x, parseStr) ||
+              !icHagcJsonNumber(points[k], "y", true, y, parseStr) ||
+              !icHagcJsonNumber(points[k], "m", !pAlt->m_bPchipSlope, mm, parseStr))
+            return false;
           pAlt->m_x[k] = (icFloatNumber)(x);
           pAlt->m_y[k] = (icFloatNumber)(y);
           pAlt->m_slope[k] = (icFloatNumber)(mm);

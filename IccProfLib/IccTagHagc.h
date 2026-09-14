@@ -98,11 +98,14 @@ class CIccProfile;
  *    and the encoding contradicts it by construction, and the proposal does
  *    not say which governs - a tag declaring 5 alternate images is well
  *    formed against the bit layout and out of range against the prose.  This
- *    implementation reads such a tag (all 5 are decoded, so no data is lost)
- *    and reports it from Validate(), which is the reading that keeps a
- *    parser from rejecting bytes the encoding permits while still surfacing
- *    the disagreement.  A future revision that widens the prose to 7 would
- *    need only this constant changed.
+ *    implementation reads such a tag without failing the profile and keeps
+ *    its metadata block verbatim, so no data is lost and Write() reproduces
+ *    it - but it does NOT decode the alternate image records: the model holds
+ *    exactly icHagcMaxAlternates of them, and decoding a fifth would write
+ *    past that array.  Unpack() refuses the block, records the declared count
+ *    in icHagcMetadata::m_nDeclaredAlternates, and Validate() reports both the
+ *    undecodable block and the count.  Widening the prose to 7 would need this
+ *    constant changed, and with it the size of the model's array.
  *  - the gain curve point array last index occupies 5 bits, so it can hold
  *    0..31 and the count of control points is 1..32.  The proposal's
  *    "shall be >= 0 and <= 31" is therefore satisfied by construction.
@@ -250,11 +253,11 @@ public:
    * Read from a file the raw count is always in range: the encoding carries a
    * 5-bit last index, so Unpack() cannot produce more than 32, and Pack(),
    * Validate() and CIccHagcEvaluator::Init() each refuse an out-of-range count
-   * rather than clamping it.  But this is an exported class with public members
-   * and CIccTagHagc::GetMetadata() hands out a mutable reference, so setting
-   * m_nControlPoints to 255 without going through the codec is a supported API
-   * call - and every reader that then indexes the three arrays walks 223
-   * icFloatNumber off the end of each.
+   * rather than clamping it.  But this is an exported class with public members,
+   * so a caller building a model in memory - for CIccHagcEvaluator::Init(), or
+   * before handing it to SetMetadata() - can set m_nControlPoints to 255
+   * without going through the codec, and every reader that then indexes the
+   * three arrays walks 223 icFloatNumber off the end of each.
    *
    * Anything that ITERATES the control points for output - Describe(), ToXml(),
    * ToJson() - must use this rather than the raw field.  Clamping at each call
@@ -333,10 +336,11 @@ public:
    *
    * Returns false if the model cannot be represented: a control point count
    * outside 1..icHagcMaxControlPoints, an alternate count above
-   * icHagcMaxAlternates, or an application version above
-   * icHagcMaxApplicationVersion.  Everything else it clamps to the encodable
-   * range, which is why CIccTagHagc::SetMetadata() keeps a decode of these
-   * bytes rather than the model it was handed.
+   * icHagcMaxAlternates, an application version above
+   * icHagcMaxApplicationVersion, or a NaN or infinite value in any field the
+   * block would carry.  Everything else it clamps to the encodable range,
+   * which is why CIccTagHagc::SetMetadata() keeps a decode of these bytes
+   * rather than the model it was handed.
    */
   bool Pack(std::vector<icUInt8Number> &buf) const;
 
@@ -445,6 +449,12 @@ public:
    * is required to ignore exactly those bits. */
   bool m_bRefWhiteToneMapFieldsNonZero;
 
+  /** The alternate image count field as the block declared it, 0..7.  Kept
+   * even when Unpack() fails, because a count above icHagcMaxAlternates is
+   * exactly why it fails: the model has room for four records, so the block is
+   * refused rather than decoded, and this is what lets Validate() say so. */
+  icUInt8Number m_nDeclaredAlternates;
+
 protected:
   /** The field-by-field body of Unpack().  Split out so that Unpack() can
    * guarantee its contract - a failed decode leaves the object Reset() - from
@@ -499,9 +509,22 @@ public:
 
   virtual icValidateStatus Validate(std::string sigPath, std::string &sReport, const CIccProfile *pProfile = NULL) const;
 
-  /** The decoded SMPTE ST 2094-50:2026 model. */
+  /** The decoded SMPTE ST 2094-50:2026 model.  Read-only: Write() emits the
+   * retained raw bytes, not the model, so an edit made through a mutable
+   * reference would change what Describe(), Validate() and the evaluator see
+   * while the file kept the old bytes.  Build a model and call SetMetadata(). */
   const icHagcMetadata &GetMetadata() const { return m_metadata; }
-  icHagcMetadata &GetMetadata() { return m_metadata; }
+
+  /**
+   * True when the metadata decoded AND Pack() of the decoded model reproduces
+   * the retained raw bytes exactly.  False for a block that did not decode,
+   * and also for one that decoded but carries bytes the model does not keep -
+   * trailing bytes, non-zero reserved bits, a coefficient flagged present with
+   * an encoded zero.  The XML and JSON writers use it to choose between the
+   * structured form and the verbatim hex form, so an export never re-encodes
+   * away bytes the model cannot represent.
+   */
+  bool IsModelExact() const;
 
   /**
    * Replace the model and re-derive the raw bytes from it with Pack().
@@ -550,6 +573,11 @@ protected:
 
   icUInt32Number m_nPadSize;
   bool m_bNonZeroPad;
+
+  /** The tag's overall size as the directory gave it to Read(), or 0 for a tag
+   * built in memory.  Annex 1 note 2 requires this to be a multiple of four;
+   * Write() always pads to one, so only a tag read from a file can break it. */
+  icUInt32Number m_nTagSize;
 };
 
 #ifdef USEICCDEVNAMESPACE

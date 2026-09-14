@@ -1456,25 +1456,80 @@ bool CIccTagXmlCicp::ParseXml(xmlNode* pNode, std::string& parseStr)
 // block verbatim for the cases the structured form cannot express - a block
 // this build cannot decode, or one whose exact bytes are the point of the test.
 //
-// Round tripping through the structured form is a re-encode, not a byte copy:
-// a tag read from a profile and written out as XML then back is byte identical
-// only because the encode and decode formulas are exact inverses. A tag whose
-// metadata did not decode has nothing to write structurally, so it falls back
-// to <HexData> and stays byte exact that way.
+// Round tripping through the structured form is a re-encode, not a byte copy,
+// so ToXml() uses it only when CIccTagHagc::IsModelExact() says the re-encode
+// reproduces the retained bytes. Anything else - a block that did not decode,
+// or one carrying bytes the model does not keep (trailing bytes, reserved bits,
+// a zero-length block) - is written as <HexData> and stays byte exact that way.
+//
+// Every numeric and boolean attribute is parsed strictly: a present value that
+// is not a number (or true/false/1/0) refuses the tag rather than reading as
+// zero, because a mistyped HDRReferenceWhite that loads as 0 is a valid profile
+// with a reference white 1500 times too small.
 // ---------------------------------------------------------------------------
 
 static const char *icHagcCoefAttrName[icHagcNumCoefficients] = {
   "kRed", "kGreen", "kBlue", "kMax", "kMin", "kComponent"
 };
 
-static bool icXmlHagcBoolAttr(xmlNode *pNode, const char *szName, bool bDefault)
+// Absent: value is left as the caller preset it, unless bRequired.  Present:
+// strtod must consume all of it (surrounding whitespace aside) and the result
+// must be finite and fit an icFloatNumber.
+static bool icXmlHagcFloatAttr(xmlNode *pNode, const char *szName, bool bRequired,
+                               icFloatNumber &value, std::string &parseStr)
+{
+  xmlAttr *attr = icXmlFindAttr(pNode, szName);
+  if (!attr) {
+    if (bRequired) {
+      parseStr += std::string("headroomAdaptiveGainCurveType: <") + (const char*)pNode->name +
+                  "> is missing its " + szName + " attribute\n";
+      return false;
+    }
+    return true;
+  }
+
+  const char *szValue = icXmlAttrValue(attr, NULL);
+  char *szEnd = NULL;
+  double d = szValue ? strtod(szValue, &szEnd) : 0.0;
+  bool bOk = szValue && szEnd != szValue;
+
+  if (bOk) {
+    while (*szEnd == ' ' || *szEnd == '\t' || *szEnd == '\n' || *szEnd == '\r')
+      szEnd++;
+    bOk = !*szEnd && std::isfinite(d) &&
+          d <= std::numeric_limits<icFloatNumber>::max() &&
+          d >= -std::numeric_limits<icFloatNumber>::max();
+  }
+
+  if (!bOk) {
+    parseStr += std::string("headroomAdaptiveGainCurveType: <") + (const char*)pNode->name + "> " +
+                szName + "=\"" + (szValue ? szValue : "") + "\" is not a number\n";
+    return false;
+  }
+
+  value = (icFloatNumber)d;
+  return true;
+}
+
+// Absent: value is left as the caller preset it.  Present: exactly true, false,
+// 1 or 0.  Anything else used to read as false.
+static bool icXmlHagcBoolAttr(xmlNode *pNode, const char *szName, bool &value, std::string &parseStr)
 {
   xmlAttr *attr = icXmlFindAttr(pNode, szName);
   if (!attr)
-    return bDefault;
+    return true;
 
   const char *szValue = icXmlAttrValue(attr);
-  return !strcmp(szValue, "true") || !strcmp(szValue, "1");
+  if (!strcmp(szValue, "true") || !strcmp(szValue, "1"))
+    value = true;
+  else if (!strcmp(szValue, "false") || !strcmp(szValue, "0"))
+    value = false;
+  else {
+    parseStr += std::string("headroomAdaptiveGainCurveType: <") + (const char*)pNode->name + "> " +
+                szName + "=\"" + szValue + "\" is not true or false\n";
+    return false;
+  }
+  return true;
 }
 
 bool CIccTagXmlHagc::ToXml(std::string& xml, std::string blanks/* = ""*/)
@@ -1485,10 +1540,11 @@ bool CIccTagXmlHagc::ToXml(std::string& xml, std::string blanks/* = ""*/)
 
   const icHagcMetadata &m = GetMetadata();
 
-  // A block that would not decode has no structured form to emit. Writing the
-  // raw bytes keeps the XML a faithful representation of the tag rather than a
-  // silent truncation of it.
-  if (!m.m_bUnpacked) {
+  // A block that would not decode has no structured form to emit, and one that
+  // decoded but that the model cannot reproduce would lose bytes in the
+  // re-encode. Writing the raw bytes keeps the XML a faithful representation of
+  // the tag rather than a silent rewrite of it.
+  if (!IsModelExact()) {
     xml += blanks + "<HexData>\n";
     icXmlDumpHexData(xml, blanks + " ", (void*)GetRawMetadata(), GetRawMetadataSize());
     xml += blanks + "</HexData>\n";
@@ -1579,16 +1635,14 @@ bool CIccTagXmlHagc::ParseXml(xmlNode* pNode, std::string& parseStr)
   xmlNode *pHex = icXmlFindNode(pNode, "HexData");
 
   if (pHex) {
-    if (!pHex->children || !pHex->children->content) {
-      parseStr += "Empty HexData in headroomAdaptiveGainCurveType\n";
-      return false;
-    }
+    // An empty block is a legal tag - Read() accepts a declared size of zero -
+    // and ToXml() writes one as an empty <HexData>, so it has to parse back.
+    if (!pHex->children || !pHex->children->content)
+      return SetRawMetadata(NULL, 0);
 
     icUInt32Number nSize = icXmlGetHexDataSize((const icChar*)pHex->children->content);
-    if (!nSize) {
-      parseStr += "Empty HexData in headroomAdaptiveGainCurveType\n";
-      return false;
-    }
+    if (!nSize)
+      return SetRawMetadata(NULL, 0);
 
     // The size is checked before the buffer is taken, not after.
     // SetRawMetadata() applies the same limit and would reject this block
@@ -1619,7 +1673,6 @@ bool CIccTagXmlHagc::ParseXml(xmlNode* pNode, std::string& parseStr)
   }
 
   icHagcMetadata m;
-  xmlAttr *attr;
   xmlNode *pChild;
   int j;
 
@@ -1635,15 +1688,16 @@ bool CIccTagXmlHagc::ParseXml(xmlNode* pNode, std::string& parseStr)
     return false;
   }
 
-  attr = icXmlFindAttr(pMeta, "HDRReferenceWhite");
-  if (attr) {
+  if (icXmlFindAttr(pMeta, "HDRReferenceWhite")) {
     m.m_bCustomReferenceWhite = true;
-    m.m_referenceWhite = icXmlStrToFloat((const xmlChar*)icXmlAttrValue(attr));
+    if (!icXmlHagcFloatAttr(pMeta, "HDRReferenceWhite", true, m.m_referenceWhite, parseStr))
+      return false;
   }
 
-  m.m_baselineHeadroom = icXmlStrToFloat((const xmlChar*)icXmlAttrValue(pMeta, "BaselineHeadroom", "0"));
-  m.m_bHeadroomAdaptiveToneMap = icXmlHagcBoolAttr(pMeta, "HeadroomAdaptiveToneMap", false);
-  m.m_bReferenceWhiteToneMapping = icXmlHagcBoolAttr(pMeta, "ReferenceWhiteToneMapping", false);
+  if (!icXmlHagcFloatAttr(pMeta, "BaselineHeadroom", false, m.m_baselineHeadroom, parseStr) ||
+      !icXmlHagcBoolAttr(pMeta, "HeadroomAdaptiveToneMap", m.m_bHeadroomAdaptiveToneMap, parseStr) ||
+      !icXmlHagcBoolAttr(pMeta, "ReferenceWhiteToneMapping", m.m_bReferenceWhiteToneMapping, parseStr))
+    return false;
 
   if (!m.m_bReferenceWhiteToneMapping) {
     icUInt8Number nMode = 0;
@@ -1652,8 +1706,9 @@ bool CIccTagXmlHagc::ParseXml(xmlNode* pNode, std::string& parseStr)
       return false;
     }
     m.m_nChromaticitiesMode = (icHagcChromaticitiesMode)nMode;
-    m.m_bCommonComponentMixing = icXmlHagcBoolAttr(pMeta, "CommonComponentMixing", false);
-    m.m_bCommonCurveParameters = icXmlHagcBoolAttr(pMeta, "CommonCurveParameters", false);
+    if (!icXmlHagcBoolAttr(pMeta, "CommonComponentMixing", m.m_bCommonComponentMixing, parseStr) ||
+        !icXmlHagcBoolAttr(pMeta, "CommonCurveParameters", m.m_bCommonCurveParameters, parseStr))
+      return false;
 
     for (pChild = pMeta->children; pChild; pChild = pChild->next) {
       if (pChild->type != XML_ELEMENT_NODE)
@@ -1689,7 +1744,10 @@ bool CIccTagXmlHagc::ParseXml(xmlNode* pNode, std::string& parseStr)
         }
         icUInt8Number nMixType = 0;
 
-        pAlt->m_headroom = icXmlStrToFloat((const xmlChar*)icXmlAttrValue(pChild, "Headroom", "0"));
+        // An alternate image is defined by its headroom, so there is no default
+        // to fall back on: a missing Headroom is refused, not read as 0.
+        if (!icXmlHagcFloatAttr(pChild, "Headroom", true, pAlt->m_headroom, parseStr))
+          return false;
         if (!icXmlParseU8(icXmlAttrValue(pChild, "ComponentMixingType", "0"), nMixType) || nMixType > 3) {
           parseStr += "Invalid ComponentMixingType in AlternateImage\n";
           return false;
@@ -1702,7 +1760,8 @@ bool CIccTagXmlHagc::ParseXml(xmlNode* pNode, std::string& parseStr)
         // writes the arms each type needs - leaves a phantom kMax=1 behind on
         // a type 3 alternate, and Pack() writes it out as a real coefficient.
         pAlt->SetMixingType((icHagcMixingType)nMixType);
-        pAlt->m_bPchipSlope = icXmlHagcBoolAttr(pChild, "PchipSlope", false);
+        if (!icXmlHagcBoolAttr(pChild, "PchipSlope", pAlt->m_bPchipSlope, parseStr))
+          return false;
 
         xmlNode *pAltChild;
         for (pAltChild = pChild->children; pAltChild; pAltChild = pAltChild->next) {
@@ -1711,9 +1770,8 @@ bool CIccTagXmlHagc::ParseXml(xmlNode* pNode, std::string& parseStr)
 
           if (!icXmlStrCmp(pAltChild->name, "Coefficients")) {
             for (j = 0; j < icHagcNumCoefficients; j++) {
-              attr = icXmlFindAttr(pAltChild, icHagcCoefAttrName[j]);
-              if (attr)
-                pAlt->m_coef[j] = icXmlStrToFloat((const xmlChar*)icXmlAttrValue(attr));
+              if (!icXmlHagcFloatAttr(pAltChild, icHagcCoefAttrName[j], false, pAlt->m_coef[j], parseStr))
+                return false;
             }
           }
           else if (!icXmlStrCmp(pAltChild->name, "ControlPoints")) {
@@ -1729,9 +1787,13 @@ bool CIccTagXmlHagc::ParseXml(xmlNode* pNode, std::string& parseStr)
                 return false;
               }
 
-              pAlt->m_x[nPoints] = icXmlStrToFloat((const xmlChar*)icXmlAttrValue(pPoint, "X", "0"));
-              pAlt->m_y[nPoints] = icXmlStrToFloat((const xmlChar*)icXmlAttrValue(pPoint, "Y", "0"));
-              pAlt->m_slope[nPoints] = icXmlStrToFloat((const xmlChar*)icXmlAttrValue(pPoint, "M", "0"));
+              // X and Y define the point.  M is carried only when slopes are not
+              // derived, so it is required exactly then; with PchipSlope set a
+              // present M is still checked, and then ignored by the encoding.
+              if (!icXmlHagcFloatAttr(pPoint, "X", true, pAlt->m_x[nPoints], parseStr) ||
+                  !icXmlHagcFloatAttr(pPoint, "Y", true, pAlt->m_y[nPoints], parseStr) ||
+                  !icXmlHagcFloatAttr(pPoint, "M", !pAlt->m_bPchipSlope, pAlt->m_slope[nPoints], parseStr))
+                return false;
               nPoints++;
             }
 

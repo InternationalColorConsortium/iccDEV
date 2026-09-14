@@ -172,6 +172,7 @@
         { "allOf": [{ "properties": { "type": { "const": "sparseMatrixArrayType"        } } }, { "$ref": "#/$defs/NumericArrayTypeContent"              }] },
         { "allOf": [{ "properties": { "type": { "const": "chromaticityType"             } } }, { "$ref": "#/$defs/ChromaticityTypeContent"              }] },
         { "allOf": [{ "properties": { "type": { "const": "cicpType"                     } } }, { "$ref": "#/$defs/CicpTypeContent"                      }] },
+        { "allOf": [{ "properties": { "type": { "const": "headroomAdaptiveGainCurveType"} } }, { "$ref": "#/$defs/HagcTypeContent"                      }] },
         { "allOf": [{ "properties": { "type": { "const": "colorantOrderType"            } } }, { "$ref": "#/$defs/ColorantOrderTypeContent"             }] },
         { "allOf": [{ "properties": { "type": { "const": "colorantTableType"            } } }, { "$ref": "#/$defs/ColorantTableTypeContent"             }] },
         { "allOf": [{ "properties": { "type": { "const": "dataType"                     } } }, { "$ref": "#/$defs/DataTypeContent"                      }] },
@@ -328,6 +329,72 @@
         "matrixCoefficients":      { "type": "integer" },
         "videoFullRangeFlag":      { "type": "integer", "minimum": 0, "maximum": 1 }
       }
+    },
+
+    "HagcTypeContent": {
+      "type": "object",
+      "description": "headroomAdaptiveGainCurveType (SMPTE ST 2094-50 gain curve metadata). Either the metadata block verbatim as hex (written whenever the decoded model does not reproduce the block exactly), or the structured model.",
+      "oneOf": [
+        {
+          "required": ["rawMetadata"],
+          "properties": {
+            "rawMetadata": { "type": "string", "pattern": "^([0-9A-Fa-f]{2})*$" }
+          }
+        },
+        {
+          "not": { "required": ["rawMetadata"] },
+          "properties": {
+            "applicationVersion":        { "type": "integer", "minimum": 0, "maximum": 7 },
+            "minApplicationVersion":     { "type": "integer", "minimum": 0, "maximum": 7 },
+            "hdrReferenceWhite":         { "type": "number" },
+            "baselineHeadroom":          { "type": "number" },
+            "headroomAdaptiveToneMap":   { "type": "boolean" },
+            "referenceWhiteToneMapping": { "type": "boolean" },
+            "chromaticitiesMode":        { "type": "integer", "minimum": 0, "maximum": 3 },
+            "commonComponentMixing":     { "type": "boolean" },
+            "commonCurveParameters":     { "type": "boolean" },
+            "chromaticities":            { "type": "array", "items": { "type": "number" }, "minItems": 8, "maxItems": 8 },
+            "alternateImages": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+                "type": "object",
+                "required": ["headroom", "controlPoints"],
+                "properties": {
+                  "headroom":            { "type": "number" },
+                  "componentMixingType": { "type": "integer", "minimum": 0, "maximum": 3 },
+                  "pchipSlope":          { "type": "boolean" },
+                  "coefficients": {
+                    "type": "object",
+                    "properties": {
+                      "kRed":       { "type": "number" },
+                      "kGreen":     { "type": "number" },
+                      "kBlue":      { "type": "number" },
+                      "kMax":       { "type": "number" },
+                      "kMin":       { "type": "number" },
+                      "kComponent": { "type": "number" }
+                    }
+                  },
+                  "controlPoints": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 32,
+                    "items": {
+                      "type": "object",
+                      "required": ["x", "y"],
+                      "properties": {
+                        "x": { "type": "number" },
+                        "y": { "type": "number" },
+                        "m": { "type": "number" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
     },
 
     "ColorantOrderTypeContent": {

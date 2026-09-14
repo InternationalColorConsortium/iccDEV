@@ -83,12 +83,14 @@
 
 #include "IccTagHagc.h"
 #include "IccIO.h"
+#include "IccProfile.h"
 #include "IccUtil.h"
 #include "IccDefs.h"
 
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -808,6 +810,198 @@ void testOversizedPad()
         "and reported");
 }
 
+// ---------------------------------------------------------------------------
+// 7. A WELL-FORMED block declaring more than four alternate images
+// ---------------------------------------------------------------------------
+// The count-5..7 cases in testMalformed() use a header with no alternate image
+// records after it, so they are refused for being truncated whether or not the
+// count cap exists - deleting the cap left that test green.  These blocks carry
+// every record the count promises.  The cap is the only thing that stops
+// UnpackFields() writing a fifth record past m_alternates[4].
+namespace {
+
+std::vector<icUInt8Number> makeAlternatesBlock(int nCount)
+{
+  std::vector<icUInt8Number> v = makeMinimalBlock(false, 0, 0);
+  v[v.size() - 17] = (icUInt8Number)(nCount << 4);
+
+  for (int i = 0; i < nCount; i++) {
+    v.push_back(0x27); v.push_back(0x10);   // headroom 1.0
+    v.push_back(0x40);                      // mixing type 1, no coefficient flags
+    v.push_back(0x00);                      // one control point, PCHIP off
+    v.push_back(0x03); v.push_back(0xE8);   // X 1.0
+    v.push_back(0x27); v.push_back(0x10);   // Y 1.0
+    v.push_back(0x46); v.push_back(0x50);   // slope angle 18000
+  }
+  return v;
+}
+
+bool reportHas(const std::string &report, const char *szNeedle)
+{
+  return report.find(szNeedle) != std::string::npos;
+}
+
+// A tag written by hand: header, a declared metadata size, the metadata, then
+// nPad null bytes.  Returns the whole tag.
+std::vector<icUInt8Number> makeTagBytes(icUInt32Number nDeclared, const std::vector<icUInt8Number> &meta,
+                                        int nPad)
+{
+  std::vector<icUInt8Number> t;
+  icUInt32Number sig = icSigHeadroomAdaptiveGainCurveType;
+  const icUInt32Number fields[3] = { sig, 0, nDeclared };
+  for (int f = 0; f < 3; f++) {
+    for (int s = 24; s >= 0; s -= 8)
+      t.push_back((icUInt8Number)(fields[f] >> s));
+  }
+  t.insert(t.end(), meta.begin(), meta.end());
+  for (int p = 0; p < nPad; p++)
+    t.push_back(0);
+  return t;
+}
+
+bool readTag(CIccTagHagc &tag, const std::vector<icUInt8Number> &bytes)
+{
+  CIccMemIO io;
+  if (!io.Attach((icUInt8Number *)&bytes[0], (icUInt32Number)bytes.size()))
+    return false;
+  return tag.Read((icUInt32Number)bytes.size(), &io);
+}
+
+}  // namespace
+
+void testGroup2Codec()
+{
+  std::string report;
+
+  // --- Finding 12: the alternate-count cap, on a block that is otherwise whole.
+  std::vector<icUInt8Number> four = makeAlternatesBlock(4);
+  icHagcMetadata m4;
+  check(m4.Unpack(&four[0], (icUInt32Number)four.size()) && m4.GetNumAlternates() == 4 &&
+        m4.m_nTrailingBytes == 0,
+        "positive control: a four-alternate block built the same way decodes whole");
+
+  for (int n = 5; n <= 7; n++) {
+    std::vector<icUInt8Number> blk = makeAlternatesBlock(n);
+    icHagcMetadata t;
+    char szWhat[128];
+    snprintf(szWhat, sizeof(szWhat), "a well-formed %d-alternate block (%u bytes) is refused",
+             n, (unsigned)blk.size());
+    check(!t.Unpack(&blk[0], (icUInt32Number)blk.size()), szWhat);
+    check(!t.m_bUnpacked && t.GetNumAlternates() == 0, "and leaves no model behind");
+    check(t.m_nDeclaredAlternates == n, "and records the declared count");
+  }
+  check(makeAlternatesBlock(5).size() == 71, "the five-alternate block is the 71 bytes the review measured");
+
+  std::vector<icUInt8Number> five = makeAlternatesBlock(5);
+  CIccTagHagc fiveTag;
+  check(fiveTag.SetRawMetadata(&five[0], (icUInt32Number)five.size()), "the five-alternate block is kept");
+  check(fiveTag.GetRawMetadataSize() == five.size(), "verbatim");
+  report.clear();
+  check(fiveTag.Validate("HAGC", report, NULL) == icValidateNonCompliant, "and is non-compliant");
+  check(reportHas(report, "declares 5 alternate images; the maximum is 4"),
+        "and Validate() names the declared count");
+
+  // --- A declared size past the 1 MiB allocation limit no longer fails the read.
+  std::vector<icUInt8Number> onePoint = makeOnePointBlock(1000, 10000, 18000);
+  check(onePoint.size() == 31, "the one-point block is 31 bytes");
+  {
+    std::vector<icUInt8Number> bytes = makeTagBytes(0x00100001, onePoint, 1);
+    CIccTagHagc tag;
+    check(readTag(tag, bytes), "a declared size over 1 MiB with a small body still reads");
+    report.clear();
+    tag.Validate("HAGC", report, NULL);
+    check(reportHas(report, "exceeds the"), "and Validate() reports the declared size");
+  }
+
+  // --- Annex 1 note 2: the overall length, not only the pad.
+  {
+    CIccTagHagc t43;
+    check(readTag(t43, makeTagBytes(31, onePoint, 0)), "a 43-byte tag with no pad reads");
+    report.clear();
+    t43.Validate("HAGC", report, NULL);
+    check(reportHas(report, "tag length 43 is not a multiple of four"), "and its length is reported");
+
+    CIccTagHagc t44;
+    check(readTag(t44, makeTagBytes(31, onePoint, 1)), "the padded 44-byte tag reads");
+    report.clear();
+    t44.Validate("HAGC", report, NULL);
+    check(!reportHas(report, "not a multiple of four"), "control: a 44-byte tag is not reported");
+  }
+
+  // --- The profile checks run even when the metadata does not decode.
+  {
+    CIccProfile prof;
+    prof.m_Header.colorSpace = icSigCmykData;
+    prof.m_Header.deviceClass = icSigOutputClass;
+    icUInt8Number opaque[5] = { 0x00, 0x00, 0x00, 0x00, 0x50 };
+    CIccTagHagc tag;
+    tag.SetRawMetadata(opaque, sizeof(opaque));
+    report.clear();
+    tag.Validate("HAGC", report, &prof);
+    check(reportHas(report, "could not be decoded"), "undecodable block in a CMYK Output profile: decode reported");
+    check(reportHas(report, "data colour space is RGB"), "and the colour space is still checked");
+    check(reportHas(report, "Input or Display class"), "and the class is still checked");
+  }
+
+  // --- A coefficient that encodes to zero is not flagged present.
+  {
+    icHagcMetadata m = makeFullModel();
+    m.GetAlternate(0)->m_coef[icHagcCoefBlue] = 1e-6f;   // rounds to 0 on a 1/50000 grid
+    m.GetAlternate(0)->m_coef[icHagcCoefMin] = -0.5f;    // clamps to 0
+    checkRoundTrip(m, "coefficients that encode to zero (Pack -> Unpack -> Pack)");
+    CIccTagHagc tag;
+    check(tag.SetMetadata(m) && tag.IsModelExact(), "and the authored tag's model reproduces its bytes");
+  }
+
+  // --- A non-finite value cannot be packed, so it cannot reach a tag.
+  {
+    const icFloatNumber nan = std::numeric_limits<icFloatNumber>::quiet_NaN();
+    const icFloatNumber inf = std::numeric_limits<icFloatNumber>::infinity();
+    std::vector<icUInt8Number> buf;
+
+    icHagcMetadata mx = makeFullModel();
+    mx.GetAlternate(0)->m_x[1] = nan;
+    check(!mx.Pack(buf), "a NaN control point X is refused by Pack()");
+    CIccTagHagc tx;
+    check(!tx.SetMetadata(mx), "and by SetMetadata()");
+
+    icHagcMetadata mh = makeFullModel();
+    mh.GetAlternate(1)->m_headroom = inf;
+    buf.clear();
+    check(!mh.Pack(buf), "an infinite alternate headroom is refused by Pack()");
+
+    icHagcMetadata ms = makeFullModel();
+    ms.GetAlternate(0)->m_slope[0] = nan;
+    buf.clear();
+    check(!ms.Pack(buf), "a NaN carried slope is refused by Pack()");
+  }
+
+  // --- IsModelExact(): what the XML and JSON writers choose the form by.
+  {
+    CIccTagHagc exact;
+    exact.SetRawMetadata(&onePoint[0], (icUInt32Number)onePoint.size());
+    check(exact.IsModelExact(), "a canonical block's model is exact");
+
+    std::vector<icUInt8Number> trailing = onePoint;
+    trailing.push_back(0xAB);
+    CIccTagHagc t1;
+    t1.SetRawMetadata(&trailing[0], (icUInt32Number)trailing.size());
+    check(t1.GetMetadata().m_bUnpacked && !t1.IsModelExact(),
+          "a block with a trailing byte decodes but is not exact");
+
+    std::vector<icUInt8Number> reserved = onePoint;
+    reserved[0] |= 0x03;
+    CIccTagHagc t2;
+    t2.SetRawMetadata(&reserved[0], (icUInt32Number)reserved.size());
+    check(t2.GetMetadata().m_bUnpacked && !t2.IsModelExact(),
+          "a block with reserved bits set decodes but is not exact");
+
+    CIccTagHagc t3;
+    t3.SetRawMetadata(NULL, 0);
+    check(!t3.IsModelExact(), "an empty block is not exact");
+  }
+}
+
 int main()
 {
   testRoundTrips();
@@ -817,6 +1011,7 @@ int main()
   testTagEnvelope();
   testValidate();
   testOversizedPad();
+  testGroup2Codec();
 
   if (g_failures)
     printf("hagc-codec-roundtrip: %d assertion(s) failed\n", g_failures);

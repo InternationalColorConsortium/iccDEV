@@ -470,6 +470,7 @@ void icHagcMetadata::Reset()
   m_bUnpacked = false;
   m_nTrailingBytes = 0;
   m_bRefWhiteToneMapFieldsNonZero = false;
+  m_nDeclaredAlternates = 0;
 
   m_nAlternates = 0;
   for (i = 0; i < icHagcMaxAlternates; i++)
@@ -532,8 +533,12 @@ bool icHagcMetadata::Unpack(const icUInt8Number *pData, icUInt32Number nSize)
     /* Reset a second time so a partial decode never survives.  UnpackFields()
      * sets m_nAlternates from the count field before it reads a single
      * alternate image record, so a block truncated inside that loop would
-     * otherwise leave a model advertising alternates that were never read. */
+     * otherwise leave a model advertising alternates that were never read.
+     * The declared count is the one diagnostic carried across: it is not part
+     * of the model, and a count above the maximum is the reason for refusing. */
+    icUInt8Number nDeclared = m_nDeclaredAlternates;
     Reset();
+    m_nDeclaredAlternates = nDeclared;
     return false;
   }
 
@@ -619,7 +624,11 @@ bool icHagcMetadata::UnpackFields(const icUInt8Number *pData, icUInt32Number nSi
    * clamping is what keeps the rest of the parse honest: a count of 6 means
    * the byte stream contains six alternate image sections, so decoding only
    * the first four would leave the cursor mid record and mis-attribute every
-   * field after it. */
+   * field after it.  Nor can the records be decoded and kept: m_alternates has
+   * exactly icHagcMaxAlternates entries, so this test is also the only thing
+   * standing between a crafted count and a write past the end of that array.
+   * The count is recorded first so Validate() can name it. */
+  m_nDeclaredAlternates = (icUInt8Number)nCount;
   if (nCount > icHagcMaxAlternates)
     return false;
 
@@ -764,10 +773,73 @@ bool icHagcMetadata::UnpackFields(const icUInt8Number *pData, icUInt32Number nSi
  *  true = encoded, false = the model cannot be represented
  *****************************************************************************
  */
+/* Finite test without <cmath>: x - x is 0 for every finite value, and NaN for
+ * both infinities and for NaN itself. */
+static bool icHagcIsFinite(double d)
+{
+  return (d - d) == 0.0;
+}
+
+/* Every float field Pack() would put on the wire, checked before a byte is
+ * written.  The encoder maps NaN to the bottom of the field's range and
+ * clamps an infinity, so without this a model carrying a NaN control point -
+ * which no parser should produce, but the class is exported with public
+ * members - packs to a valid-looking block and SetMetadata() installs a curve
+ * the author never wrote, with nothing reporting it. */
+static bool icHagcModelIsFinite(const icHagcMetadata &m, const icHagcAlternateImage *pAlts,
+                                int nAlternates)
+{
+  int i, j;
+
+  if (m.m_bCustomReferenceWhite && !icHagcIsFinite(m.m_referenceWhite))
+    return false;
+  if (!icHagcIsFinite(m.m_baselineHeadroom))
+    return false;
+  if (m.m_bReferenceWhiteToneMapping)
+    return true;
+
+  if (m.m_nChromaticitiesMode == icHagcChromaticitiesCustom) {
+    for (i = 0; i < 8; i++) {
+      if (!icHagcIsFinite(m.m_chromaticities[i]))
+        return false;
+    }
+  }
+
+  for (i = 0; i < nAlternates; i++) {
+    const icHagcAlternateImage &alt = pAlts[i];
+    const icHagcAlternateImage &mix = (i && m.m_bCommonComponentMixing) ? pAlts[0] : alt;
+    const icHagcAlternateImage &crv = (i && m.m_bCommonCurveParameters) ? pAlts[0] : alt;
+
+    if (!icHagcIsFinite(alt.m_headroom))
+      return false;
+
+    if (mix.m_nMixingType == icHagcMixingCustom) {
+      for (j = 0; j < icHagcNumCoefficients; j++) {
+        if (!icHagcIsFinite(mix.m_coef[j]))
+          return false;
+      }
+    }
+
+    int nPoints = crv.SafeControlPointCount();
+    for (j = 0; j < nPoints; j++) {
+      if (!icHagcIsFinite(crv.m_x[j]) || !icHagcIsFinite(alt.m_y[j]))
+        return false;
+      if (!crv.m_bPchipSlope && !icHagcIsFinite(alt.m_slope[j]))
+        return false;
+    }
+  }
+
+  return true;
+}
+
 bool icHagcMetadata::Pack(std::vector<icUInt8Number> &buf) const
 {
   CIccHagcBitWriter w(buf);
   int i, j;
+
+  if (m_nAlternates > icHagcMaxAlternates ||
+      !icHagcModelIsFinite(*this, m_alternates, (int)m_nAlternates))
+    return false;
 
   /* Refused rather than masked.  Masking is how a model that says version 8
    * becomes a file that says version 0 with nothing reporting the change, and
@@ -802,9 +874,6 @@ bool icHagcMetadata::Pack(std::vector<icUInt8Number> &buf) const
     return true;
   }
 
-  if (m_nAlternates > icHagcMaxAlternates)
-    return false;
-
   w.WriteFlag(false);
   w.Write(3, m_nAlternates);
   w.Write(2, (icUInt32Number)m_nChromaticitiesMode & 0x03);
@@ -837,16 +906,21 @@ bool icHagcMetadata::Pack(std::vector<icUInt8Number> &buf) const
 
       /* Proposal 1.1.3.2.1 ties the flag to the value: a coefficient is
        * present in the array exactly when its flag is set, and a zero
-       * coefficient is meant to be omitted.  Deriving the flags from the
-       * values here is what keeps the two from ever disagreeing on output. */
-      for (j = 0; j < icHagcNumCoefficients; j++)
-        w.WriteFlag(mix.m_nMixingType == icHagcMixingCustom && mix.m_coef[j] != 0.0f);
+       * coefficient is meant to be omitted.  The flag is derived from the
+       * ENCODED value, not the float: a coefficient that encodes to zero - a
+       * tiny one, or a negative one the encoder clamps - would otherwise be
+       * flagged present and written as 0x0000, which decodes to a zero that
+       * the next Pack() omits, so the block would not be byte stable. */
+      icUInt16Number nCoef[icHagcNumCoefficients];
+      for (j = 0; j < icHagcNumCoefficients; j++) {
+        nCoef[j] = (mix.m_nMixingType == icHagcMixingCustom)
+                     ? icHagcEncodeScaled50k(mix.m_coef[j]) : (icUInt16Number)0;
+        w.WriteFlag(nCoef[j] != 0);
+      }
 
-      if (mix.m_nMixingType == icHagcMixingCustom) {
-        for (j = 0; j < icHagcNumCoefficients; j++) {
-          if (mix.m_coef[j] != 0.0f)
-            w.WriteU16(icHagcEncodeScaled50k(mix.m_coef[j]));
-        }
+      for (j = 0; j < icHagcNumCoefficients; j++) {
+        if (nCoef[j])
+          w.WriteU16(nCoef[j]);
       }
     }
 
@@ -885,6 +959,7 @@ CIccTagHagc::CIccTagHagc()
   m_nDeclaredSize = 0;
   m_nPadSize = 0;
   m_bNonZeroPad = false;
+  m_nTagSize = 0;
 }
 
 /**
@@ -904,6 +979,7 @@ CIccTagHagc::CIccTagHagc(const CIccTagHagc &ITHagc)
   m_nDeclaredSize = 0;
   m_nPadSize = 0;
   m_bNonZeroPad = false;
+  m_nTagSize = 0;
 
   *this = ITHagc;
 }
@@ -929,6 +1005,7 @@ CIccTagHagc &CIccTagHagc::operator=(const CIccTagHagc &HagcTag)
   m_nDeclaredSize = HagcTag.m_nDeclaredSize;
   m_nPadSize = HagcTag.m_nPadSize;
   m_bNonZeroPad = HagcTag.m_bNonZeroPad;
+  m_nTagSize = HagcTag.m_nTagSize;
   m_nReserved = HagcTag.m_nReserved;
 
   /* The raw block is copied rather than shared: NewCopy() exists so a profile
@@ -981,6 +1058,7 @@ void CIccTagHagc::Cleanup()
   m_nDeclaredSize = 0;
   m_nPadSize = 0;
   m_bNonZeroPad = false;
+  m_nTagSize = 0;
   m_metadata.Reset();
 }
 
@@ -1094,6 +1172,28 @@ bool CIccTagHagc::SetMetadata(const icHagcMetadata &metadata)
 
 /**
  ****************************************************************************
+ * Name: CIccTagHagc::IsModelExact
+ *
+ * Purpose: Report whether the decoded model reproduces the retained raw block
+ *  byte for byte, i.e. whether exporting the model instead of the bytes would
+ *  lose anything.
+ *****************************************************************************
+ */
+bool CIccTagHagc::IsModelExact() const
+{
+  if (!m_metadata.m_bUnpacked || !m_pRawData || !m_nRawSize)
+    return false;
+
+  std::vector<icUInt8Number> buf;
+  if (!m_metadata.Pack(buf))
+    return false;
+
+  return buf.size() == (size_t)m_nRawSize &&
+         memcmp(&buf[0], m_pRawData, m_nRawSize) == 0;
+}
+
+/**
+ ****************************************************************************
  * Name: CIccTagHagc::Read
  *
  * Purpose: Read in the tag contents into a data block
@@ -1126,14 +1226,20 @@ bool CIccTagHagc::Read(icUInt32Number size, CIccIO *pIO)
 
   icUInt32Number nAvail = size - icHagcHeaderSize;
 
-  if (m_nDeclaredSize > icHagcMaxMetadataSize)
-    return false;
-
   /* A declared size larger than the tag body is a defect, not a reason to
    * discard the tag: the bytes that are present still decode, and reporting
    * the shortfall from Validate() is more useful than a bare read failure
-   * that leaves the caller unable to say which tag was wrong. */
+   * that leaves the caller unable to say which tag was wrong.  That holds for
+   * a declared size past icHagcMaxMetadataSize too - a failed tag Read() fails
+   * the whole profile load, so refusing on the declared field alone let one
+   * corrupt size discard every other tag.  The allocation limit is applied to
+   * the bytes actually read, which is what it exists to bound. */
   icUInt32Number nRead = m_nDeclaredSize < nAvail ? m_nDeclaredSize : nAvail;
+
+  if (nRead > icHagcMaxMetadataSize)
+    return false;
+
+  m_nTagSize = size;
 
   if (nRead) {
     m_pRawData = new (std::nothrow) icUInt8Number[nRead];
@@ -1343,9 +1449,8 @@ void CIccTagHagc::Describe(std::string &sDescription, int nVerboseness)
      * threshold the LUT tags use for their sample data. */
     if (nVerboseness > 75) {
       /* SafeControlPointCount(), not the raw field: see its header comment.
-       * Validate() refuses an out-of-range count, but a caller reaching the
-       * public members through GetMetadata() can set one, and this loop indexes
-       * three 32-element arrays. */
+       * The tag's own model is always a decode, so its count is in range, but
+       * this loop indexes three 32-element arrays and the bound is cheap. */
       for (j = 0; j < (int)pAlt->SafeControlPointCount(); j++) {
         if (pAlt->m_bPchipSlope)
           snprintf(buf, bufSize, "    [%2d] x=%9.4f  y=%9.5f\r\n", j, pAlt->m_x[j], pAlt->m_y[j]);
@@ -1373,6 +1478,9 @@ void CIccTagHagc::Describe(std::string &sDescription, int nVerboseness)
  *  icValidateStatusOK if valid, or other error status.
  *****************************************************************************
  */
+static icValidateStatus icHagcValidateContext(const std::string &sSigPathName, std::string &sReport,
+                                              const CIccProfile *pProfile, icValidateStatus rv);
+
 icValidateStatus CIccTagHagc::Validate(std::string sigPath, std::string &sReport,
                                        const CIccProfile *pProfile /*=NULL*/) const
 {
@@ -1414,11 +1522,37 @@ icValidateStatus CIccTagHagc::Validate(std::string sigPath, std::string &sReport
     rv = icMaxStatus(rv, icValidateNonCompliant);
   }
 
+  /* Annex 1 note 2 constrains the tag's OVERALL length, which a pad of 0 to 3
+   * bytes cannot vouch for on its own: a 45-byte tag has no pad at all and is
+   * still not a multiple of four.  Only a tag read from a file carries a size
+   * to check; Write() always pads. */
+  if (m_nTagSize & 3) {
+    snprintf(buf, bufSize, " - HAGC tag length %u is not a multiple of four.\r\n", m_nTagSize);
+    sReport += icMsgValidateNonCompliant;
+    sReport += sSigPathName;
+    sReport += buf;
+    rv = icMaxStatus(rv, icValidateNonCompliant);
+  }
+
   if (!m_metadata.m_bUnpacked) {
     sReport += icMsgValidateNonCompliant;
     sReport += sSigPathName;
     sReport += " - HAGC SMPTE ST 2094-50:2026 metadata could not be decoded.\r\n";
-    return icMaxStatus(rv, icValidateNonCompliant);
+    rv = icMaxStatus(rv, icValidateNonCompliant);
+
+    /* The one reason for refusing a block that the encoding itself permits. */
+    if (m_metadata.m_nDeclaredAlternates > icHagcMaxAlternates) {
+      snprintf(buf, bufSize, " - HAGC declares %u alternate images; the maximum is %d.\r\n",
+               m_metadata.m_nDeclaredAlternates, icHagcMaxAlternates);
+      sReport += icMsgValidateNonCompliant;
+      sReport += sSigPathName;
+      sReport += buf;
+    }
+
+    /* Nothing below reads the model, but the profile checks do not need it:
+     * a HAGC tag in a CMYK Output profile is misplaced whether or not its
+     * metadata decodes. */
+    return icHagcValidateContext(sSigPathName, sReport, pProfile, rv);
   }
 
   if (m_metadata.m_nTrailingBytes) {
@@ -1471,14 +1605,9 @@ icValidateStatus CIccTagHagc::Validate(std::string sigPath, std::string &sReport
 
   /* --- Global tone mapping parameters (proposal Table 2) --- */
 
-  if (m_metadata.GetNumAlternates() > icHagcMaxAlternates) {
-    snprintf(buf, bufSize, " - HAGC declares %u alternate images; the maximum is %d.\r\n",
-             m_metadata.GetNumAlternates(), icHagcMaxAlternates);
-    sReport += icMsgValidateNonCompliant;
-    sReport += sSigPathName;
-    sReport += buf;
-    rv = icMaxStatus(rv, icValidateNonCompliant);
-  }
+  /* The alternate count needs no check here: a decoded model has at most
+   * icHagcMaxAlternates, and a block declaring more is refused by Unpack() and
+   * reported above. */
 
   if (m_metadata.m_nChromaticitiesMode == icHagcChromaticitiesCustom) {
     for (i = 0; i < 8; i++) {
@@ -1571,15 +1700,20 @@ icValidateStatus CIccTagHagc::Validate(std::string sigPath, std::string &sReport
     /* Note 1 of the informative annex requires every coefficient to lie in
      * [0.0, 1.0].  The decode formula already guarantees that, so this only
      * fires for a model built in memory, which is exactly where it is needed. */
+    /* The sum covers every coefficient, including any after an out-of-range
+     * one: breaking out of the loop on the first bad value used to leave the
+     * rest unsummed, so type 3 with kRed = -0.5 and kMax = 1 was reported as
+     * having all coefficients zero as well. */
     double pSum = 0.0;
+    bool bReportedRange = false;
     for (j = 0; j < icHagcNumCoefficients; j++) {
-      if (pAlt->m_coef[j] < 0.0f || pAlt->m_coef[j] > 1.0f) {
+      if (!bReportedRange && (pAlt->m_coef[j] < 0.0f || pAlt->m_coef[j] > 1.0f)) {
         snprintf(buf, bufSize, " - HAGC alternate image %d coefficient %d is outside 0.0 to 1.0.\r\n", i, j);
         sReport += icMsgValidateNonCompliant;
         sReport += sSigPathName;
         sReport += buf;
         rv = icMaxStatus(rv, icValidateNonCompliant);
-        break;
+        bReportedRange = true;
       }
       pSum += pAlt->m_coef[j];
     }
@@ -1599,6 +1733,21 @@ icValidateStatus CIccTagHagc::Validate(std::string sigPath, std::string &sReport
 
   /* --- Profile context (proposal 1.1) --- */
 
+  return icHagcValidateContext(sSigPathName, sReport, pProfile, rv);
+}
+
+/**
+ ****************************************************************************
+ * Name: icHagcValidateContext
+ *
+ * Purpose: The proposal 1.1 checks on the profile a HAGC tag sits in.  Shared
+ *  by both exits of CIccTagHagc::Validate(), because none of them depends on
+ *  whether the metadata decoded.
+ *****************************************************************************
+ */
+static icValidateStatus icHagcValidateContext(const std::string &sSigPathName, std::string &sReport,
+                                              const CIccProfile *pProfile, icValidateStatus rv)
+{
   if (!pProfile)
     return rv;
 
