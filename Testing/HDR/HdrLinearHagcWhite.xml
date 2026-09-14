@@ -14,15 +14,10 @@
     b) CLL absent, MDCV present  ->  Hcontent = MDCV.max / CRWL
     c) neither present           ->  Hcontent = 1000 cd/m2 / CRWL
 
-  The TRC tags are the 1.0 identity rather than the 2.2 the other fixtures
-  carry, because a Linear profile's encoding is already linear-light.
-
-  NOTE the wider fixture question this does not settle: the 29-08-2026 revision
-  of the amendment removes the TRC tags from an HDR Profile's required set, and
-  ten fixtures in this directory - these four included - still carry them. That
-  is register item B5 in docs/notes/2026-09-01-hdr-implementation-work-brief.md
-  and it is deliberately not decided here; these follow the existing style so
-  the whole set can be corrected in one pass once it is.
+  There are no TRC tags. Clause 8.10.1 prohibits them in an HDR Profile, and
+  the cicpTag's TransferCharacteristics (8, Linear) conveys the transfer
+  instead. In this directory only HdrTrcTagsPresent and HdrInvalidTransfer
+  still carry TRC tags, both deliberately, as negatives.
 
   THIS FIXTURE is the one that pins a ruling rather than a transcription. It
   carries a HAGC tag with a Custom HDR Reference White of 300 cd/m2, a CLL
@@ -67,9 +62,9 @@
     <ProfileCreator>ICCD</ProfileCreator>
   </Header>
   <Tags>
-    <!-- The same sRGB/BT.709 colorants, chad and TRC tags every other fixture in
-         this directory carries, so that the only thing distinguishing these four
-         from one another is the metadata the content-headroom order reads. -->
+    <!-- The same sRGB/BT.709 colorants and chad every other fixture in this
+         directory carries, so that the only thing distinguishing these four from
+         one another is the metadata the content-headroom order reads. -->
     <redColorantTag> <XYZArrayType>
       <XYZNumber X="0.436004638672" Y="0.222503662109" Z="0.013900756836"/>
     </XYZArrayType> </redColorantTag>
