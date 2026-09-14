@@ -84,11 +84,29 @@
 namespace iccDEV {
 #endif
 
-/* M_PI is not in the C++ standard headers and MSVC hides it behind
- * _USE_MATH_DEFINES, so IccProfLib does not use it anywhere.  The slope angle
- * decode needs pi in double precision, so name it locally rather than making
- * this the one translation unit with a platform dependent math header. */
-static const double icHagcPi = 3.14159265358979323846;
+/**
+ ****************************************************************************
+ * Name: icHagcControlPointOrderViolation
+ *
+ * Purpose:
+ *  The control point ordering rule of SMPTE ST 2094-50:2026-08 clause 6.5.2 -
+ *  see the header.  X going backwards would make the piecewise cubic
+ *  multi-valued, and a repeated X with two different Y values is ambiguous; a
+ *  repeated X with the same Y is a legal no-op point.
+ *
+ * Return:
+ *  0 when the n points satisfy the rule, otherwise the index of the first
+ *  point that breaks it, compared against the point before it.
+ ****************************************************************************
+ */
+int icHagcControlPointOrderViolation(const icFloatNumber *x, const icFloatNumber *y, int n)
+{
+  for (int j = 1; j < n; j++) {
+    if (x[j] < x[j - 1] || (x[j] == x[j - 1] && y[j] != y[j - 1]))
+      return j;
+  }
+  return 0;
+}
 
 /* Size of the fixed headroomAdaptiveGainCurveType header that precedes the
  * SMPTE ST 2094-50:2026 metadata: type signature, reserved, metadata size
@@ -272,7 +290,7 @@ static icFloatNumber icHagcDecodeY(icUInt16Number v, double s)
 static icFloatNumber icHagcDecodeSlope(icUInt16Number v)
 {
   double theta = (double)icHagcClampU32(v, 1, 35999);
-  return (icFloatNumber)tan((theta - 18000.0) * icHagcPi / 36000.0);
+  return (icFloatNumber)tan((theta - 18000.0) * icPiNum / 36000.0);
 }
 
 /*
@@ -336,7 +354,7 @@ static icUInt16Number icHagcEncodeY(icFloatNumber v)
 
 static icUInt16Number icHagcEncodeSlope(icFloatNumber v)
 {
-  double theta = atan((double)v) * 36000.0 / icHagcPi + 18000.0;
+  double theta = atan((double)v) * 36000.0 / icPiNum + 18000.0;
   return icHagcEncodeScaled((icFloatNumber)theta, 1.0, 1, 35999);
 }
 
@@ -1646,37 +1664,34 @@ icValidateStatus CIccTagHagc::Validate(std::string sigPath, std::string &sReport
       continue;
     }
 
-    /* The gain evaluator divides by (x[i+1] - x[i]) for every segment, so a
-     * non-increasing X array is not merely unordered - it makes the piecewise
-     * cubic undefined or infinite.  Equality is rejected for the same reason. */
-    for (j = 1; j < (int)pAlt->m_nControlPoints; j++) {
-      /* SMPTE ST 2094-50:2026-08 clause 6.5.2 requires the control point X
-       * values to be non-decreasing, and lets two adjacent points share an X
-       * value only when they also share the same Y value.  (Described, not
-       * quoted: the SMPTE licence does not permit reproducing its text.)
-       *
-       * So a duplicated abscissa is legal when the two Y values agree, and the
-       * published C.3.9 defines what its slope is - a degenerate control point
-       * gets zero.  This used to demand STRICTLY increasing X and report a
-       * duplicate as non-compliant, which refused a curve the standard permits;
-       * an encoder padding a fixed-length control point array by repeating the
-       * last point produces exactly that shape.  What remains non-compliant is
-       * X going backwards, and a duplicate whose Y values disagree - which is
-       * ambiguous rather than degenerate, since the curve would have two values
-       * at one abscissa. */
-      if (pAlt->m_x[j] < pAlt->m_x[j - 1] ||
-          (pAlt->m_x[j] == pAlt->m_x[j - 1] && pAlt->m_y[j] != pAlt->m_y[j - 1])) {
-        snprintf(buf, bufSize,
-                 " - HAGC alternate image %d control point X values decrease, or repeat with\r\n"
-                 "    differing Y, at index %d; clause 6.5.2 of SMPTE ST 2094-50 permits\r\n"
-                 "    x[i] == x[i+1] only when y[i] == y[i+1].\r\n",
-                 i, j);
-        sReport += icMsgValidateNonCompliant;
-        sReport += sSigPathName;
-        sReport += buf;
-        rv = icMaxStatus(rv, icValidateNonCompliant);
-        break;
-      }
+    /* SMPTE ST 2094-50:2026-08 clause 6.5.2 requires the control point X
+     * values to be non-decreasing, and lets two adjacent points share an X
+     * value only when they also share the same Y value.  (Described, not
+     * quoted: the SMPTE licence does not permit reproducing its text.)
+     *
+     * So a duplicated abscissa is legal when the two Y values agree, and the
+     * published C.3.9 defines what its slope is - a degenerate control point
+     * gets zero; the evaluator never forms the zero-width segment's parameter.
+     * This used to demand STRICTLY increasing X and report a duplicate as
+     * non-compliant, which refused a curve the standard permits; an encoder
+     * padding a fixed-length control point array by repeating the last point
+     * produces exactly that shape.  What remains non-compliant is X going
+     * backwards, and a duplicate whose Y values disagree - which is ambiguous
+     * rather than degenerate, since the curve would have two values at one
+     * abscissa.  icHagcControlPointOrderViolation() is the one statement of
+     * the rule; the evaluator and the slope derivation ask it too. */
+    j = icHagcControlPointOrderViolation(pAlt->m_x, pAlt->m_y, (int)pAlt->m_nControlPoints);
+
+    if (j) {
+      snprintf(buf, bufSize,
+               " - HAGC alternate image %d control point X values decrease, or repeat with\r\n"
+               "    differing Y, at index %d; clause 6.5.2 of SMPTE ST 2094-50 permits\r\n"
+               "    x[i] == x[i+1] only when y[i] == y[i+1].\r\n",
+               i, j);
+      sReport += icMsgValidateNonCompliant;
+      sReport += sSigPathName;
+      sReport += buf;
+      rv = icMaxStatus(rv, icValidateNonCompliant);
     }
 
     /* Proposal 0.1.3.6 fixes the sign of every Y from the headroom ordering,

@@ -322,10 +322,12 @@ public:
    * is a meaningful legacy rendering and the one clause 8.10.3's lowest
    * ranked descriptor implies.
    *
-   * LIFETIME.  The baker does not own pProfile and does not copy it.  It
-   * keeps the pointer, so pProfile must outlive every later call on this
-   * object: Init(p); delete p; CreateAtoB(); is a use after free.  Re-Init()
-   * on a different profile is fine and drops the old pointer.
+   * LIFETIME.  The baker does not own pProfile and keeps no pointer to it:
+   * Init() copies out everything the bake needs - the classification, the
+   * transfer, the gain curve and the matrix - so the profile may be modified
+   * or deleted afterwards without affecting a later CreateAtoB() or
+   * CreateBtoA().  (This used to require pProfile to outlive the baker, for a
+   * stored pointer nothing ever read.)
    */
   bool Init(const CIccProfile *pProfile, const icHdrBakeParams *pParams = NULL);
 
@@ -411,18 +413,12 @@ protected:
   /** The per-channel linearisation an A curve stores, before the fifth root:
    * ToLinearChannel() for all three transfers, Linear included, since 8.10.1
    * prohibits the TRC tags that could otherwise have linearised it.
-   * Normalised so that an encoded 1.0 gives 1.0. */
-  icFloatNumber LinearizeChannel(icUInt8Number nChannel, icFloatNumber v) const;
+   * Normalised so that an encoded 1.0 gives 1.0.  The same function for all
+   * three channels: no transfer this bakes distinguishes them. */
+  icFloatNumber LinearizeChannel(icFloatNumber v) const;
 
   /** Inverse of LinearizeChannel(): what a BToA A curve holds. */
-  icFloatNumber EncodeChannel(icUInt8Number nChannel, icFloatNumber v) const;
-
-  /** Complete a peak-normalised triplet into reference white relative linear
-   * light - ChannelToReference(). */
-  void ToReference(icFloatNumber *dst, const icFloatNumber *src) const;
-
-  /** Inverse of ToReference(). */
-  void FromReference(icFloatNumber *dst, const icFloatNumber *src) const;
+  icFloatNumber EncodeChannel(icFloatNumber v) const;
 
   /** The gain curve and the target-volume clamp, in place. */
   void ToneMap(icFloatNumber *pixel) const;
@@ -430,7 +426,6 @@ protected:
   bool m_bSupported;
   const icChar *m_szUnsupported;
 
-  const CIccProfile *m_pProfile;
   icHdrBakeParams m_params;
 
   CIccHdrTransfer m_transfer;

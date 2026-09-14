@@ -578,20 +578,6 @@ static const char *icHagcJsonCoefName[icHagcNumCoefficients] = {
   "kRed", "kGreen", "kBlue", "kMax", "kMin", "kComponent"
 };
 
-static std::string icHagcJsonToHex(const icUInt8Number *pData, icUInt32Number nSize)
-{
-  std::string s;
-  char buf[8];
-  for (icUInt32Number i = 0; i < nSize; i++) {
-    snprintf(buf, sizeof(buf), "%02x", pData[i]);
-    s += buf;
-  }
-  return s;
-}
-
-// Rejecting a non-hex character rather than treating it as zero matters here:
-// this string is the tag's entire content in the undecodable case, so a silent
-// substitution would write a different profile than the document described.
 static int icHagcHexDigit(char c)
 {
   if (c >= '0' && c <= '9') return c - '0';
@@ -600,22 +586,41 @@ static int icHagcHexDigit(char c)
   return -1;
 }
 
+// The writer is the shared icJsonDumpHexData(); the reader is not the shared
+// icJsonGetHexData(), deliberately.  That helper skips any character it cannot
+// read, which for most hex fields is harmless, but this string is the tag's
+// entire content in the undecodable case, so skipping a stray character - or
+// dropping an odd final nibble - would write a different profile than the
+// document described.  Whitespace between digits is the one thing skipped, as
+// XML HexData and the other JSON hex fields skip it.  An all-whitespace string
+// decodes to no bytes, which is the empty block.
 static bool icHagcJsonFromHex(const std::string &s, std::vector<icUInt8Number> &out)
 {
-  if (s.empty() || (s.size() & 1))
-    return false;
-
   out.clear();
   out.reserve(s.size() / 2);
 
-  for (size_t i = 0; i < s.size(); i += 2) {
-    int hi = icHagcHexDigit(s[i]);
-    int lo = icHagcHexDigit(s[i + 1]);
-    if (hi < 0 || lo < 0)
+  int hi = -1;
+
+  for (size_t i = 0; i < s.size(); i++) {
+    const char c = s[i];
+
+    if (c == ' ' || c == '\t' || c == '\r' || c == '\n')
+      continue;
+
+    const int d = icHagcHexDigit(c);
+
+    if (d < 0)
       return false;
-    out.push_back((icUInt8Number)((hi << 4) | lo));
+
+    if (hi < 0) {
+      hi = d;
+    }
+    else {
+      out.push_back((icUInt8Number)((hi << 4) | d));
+      hi = -1;
+    }
   }
-  return true;
+  return hi < 0;
 }
 
 // Absent: value is left as the caller preset it, unless bRequired.  Present:
@@ -667,7 +672,7 @@ bool CIccTagJsonHagc::ToJson(IccJson &j)
   int i, k;
 
   if (!IsModelExact()) {
-    j["rawMetadata"] = icHagcJsonToHex(GetRawMetadata(), GetRawMetadataSize());
+    j["rawMetadata"] = icJsonDumpHexData(GetRawMetadata(), GetRawMetadataSize());
     return true;
   }
 
@@ -749,10 +754,6 @@ bool CIccTagJsonHagc::ParseJson(const IccJson &j, std::string &parseStr)
     std::vector<icUInt8Number> raw;
     const std::string hex = j["rawMetadata"].get<std::string>();
 
-    // An empty block is a legal tag, and ToJson() writes one as "".
-    if (hex.empty())
-      return SetRawMetadata(NULL, 0);
-
     // Bounded on the hex text, before the decode allocates half its length.
     // SetRawMetadata() enforces the same limit on the far side, but by then
     // the buffer exists, and the only other thing bounding this string is the
@@ -766,6 +767,11 @@ bool CIccTagJsonHagc::ParseJson(const IccJson &j, std::string &parseStr)
       parseStr += "Invalid rawMetadata hex in headroomAdaptiveGainCurveType\n";
       return false;
     }
+
+    // An empty block is a legal tag, and ToJson() writes one as "".
+    if (raw.empty())
+      return SetRawMetadata(NULL, 0);
+
     return SetRawMetadata(&raw[0], (icUInt32Number)raw.size());
   }
 

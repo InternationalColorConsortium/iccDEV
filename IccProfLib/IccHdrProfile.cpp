@@ -1555,12 +1555,26 @@ icHdrMatrixSource icHdrSelectForwardMatrix(const CIccProfile *pProfile,
   if (icBuildHdrForwardMatrix(pProfile, nColourPrimaries, matrix))
     return icHdrMatrixFromCicp;
 
-  bool bConventional = bColumns &&
-                       pProfile->IsTagPresent(icSigRedTRCTag) &&
-                       pProfile->IsTagPresent(icSigGreenTRCTag) &&
-                       pProfile->IsTagPresent(icSigBlueTRCTag);
+  return icHdrIsConventionalMatrixTrc(pProfile) ? icHdrMatrixFromColumns : icHdrMatrixUnavailable;
+}
 
-  return bConventional ? icHdrMatrixFromColumns : icHdrMatrixUnavailable;
+/**
+ ****************************************************************************
+ * Name: icHdrIsConventionalMatrixTrc
+ *
+ * Purpose: The conventional matrix/TRC shape - see the header.  Presence only;
+ *  a caller reading the tags still has to refuse ones that do not read.
+ ****************************************************************************
+ */
+bool icHdrIsConventionalMatrixTrc(const CIccProfile *pProfile)
+{
+  return pProfile &&
+         pProfile->IsTagPresent(icSigRedMatrixColumnTag) &&
+         pProfile->IsTagPresent(icSigGreenMatrixColumnTag) &&
+         pProfile->IsTagPresent(icSigBlueMatrixColumnTag) &&
+         pProfile->IsTagPresent(icSigRedTRCTag) &&
+         pProfile->IsTagPresent(icSigGreenTRCTag) &&
+         pProfile->IsTagPresent(icSigBlueTRCTag);
 }
 
 /**

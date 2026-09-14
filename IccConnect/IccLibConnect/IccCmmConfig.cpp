@@ -908,6 +908,22 @@ static const char* icGetHdrToneMapName(icHdrToneMapPolicy nPolicy)
   return icHdrToneMapNames[0];
 }
 
+// The inverse, without regard to case.  The two -HDRMAP command line readers
+// matched with stricmp and the JSON reader with ==, so "HAGC" was accepted on
+// the command line and refused the whole profileSequence in a -cfg file.  All
+// three read the name through here.
+static bool icGetHdrToneMapPolicy(const char *szName, icHdrToneMapPolicy &nPolicy)
+{
+  int i;
+  for (i = 0; icHdrToneMapNames[i]; i++) {
+    if (!stricmp(szName, icHdrToneMapNames[i])) {
+      nPolicy = icHdrToneMapValues[i];
+      return true;
+    }
+  }
+  return false;
+}
+
 bool jsonToValue(const json& j, icCmmEnvSigMap& v)
 {
   if (!j.is_array())
@@ -1010,16 +1026,8 @@ bool CIccCfgProfile::fromJson(json j, bool bReset)
   str.clear();
   if (j.contains("hdrToneMap") && !jsonToValue(j["hdrToneMap"], str))
     return false;
-  if (!str.empty()) {
-    int i;
-    for (i = 0; icHdrToneMapNames[i]; i++) {
-      if (str == icHdrToneMapNames[i])
-        break;
-    }
-    if (!icHdrToneMapNames[i])
-      return false;
-    parsed.m_hdrToneMap = icHdrToneMapValues[i];
-  }
+  if (!str.empty() && !icGetHdrToneMapPolicy(str.c_str(), parsed.m_hdrToneMap))
+    return false;
 
   *this = parsed;
   return true;
@@ -1150,15 +1158,8 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
           return 0;
         pProf->m_hdrTargetHeadroom = headroom;
       }
-      else {
-        int i;
-        for (i = 0; icHdrToneMapNames[i]; i++) {
-          if (!stricmp(args[1], icHdrToneMapNames[i]))
-            break;
-        }
-        if (!icHdrToneMapNames[i])
-          return 0;
-        pProf->m_hdrToneMap = icHdrToneMapValues[i];
+      else if (!icGetHdrToneMapPolicy(args[1], pProf->m_hdrToneMap)) {
+        return 0;
       }
 
       args += 2;
@@ -1467,15 +1468,8 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
           return 0;
         pProf->m_hdrTargetHeadroom = headroom;
       }
-      else {
-        int i;
-        for (i = 0; icHdrToneMapNames[i]; i++) {
-          if (!stricmp(args[1], icHdrToneMapNames[i]))
-            break;
-        }
-        if (!icHdrToneMapNames[i])
-          return 0;
-        pProf->m_hdrToneMap = icHdrToneMapValues[i];
+      else if (!icGetHdrToneMapPolicy(args[1], pProf->m_hdrToneMap)) {
+        return 0;
       }
 
       args += 2;

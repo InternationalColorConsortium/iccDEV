@@ -6830,12 +6830,14 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
   // from the cicpTag's primaries (see the HDR-07 block below) or, when
   // ColourPrimaries is 2, from the matrix column tags that 8.10.1 then
   // requires.
-  bool bConventional = m_pProfile->IsTagPresent(icSigRedTRCTag) &&
-                       m_pProfile->IsTagPresent(icSigGreenTRCTag) &&
-                       m_pProfile->IsTagPresent(icSigBlueTRCTag) &&
-                       m_pProfile->IsTagPresent(icSigRedMatrixColumnTag) &&
-                       m_pProfile->IsTagPresent(icSigGreenMatrixColumnTag) &&
-                       m_pProfile->IsTagPresent(icSigBlueMatrixColumnTag);
+  //
+  // The conventional shape no longer arrives through CIccXform::Create(): its
+  // TRC tags cost it 8.10.1 membership, so icUseHdrToneMapPath() declines it.
+  // A caller that constructs this class directly still can, which is why the
+  // branch stays; icHdrIsConventionalMatrixTrc() is the same test
+  // icHdrSelectForwardMatrix() applies below, so the two cannot disagree about
+  // which profiles it covers.
+  bool bConventional = icHdrIsConventionalMatrixTrc(m_pProfile);
 
   if (bConventional) {
     icStatusCMM status = CIccXformMatrixTRC::Begin();

@@ -649,9 +649,13 @@ int main(int argc, const char* argv[])
 
     // #2150: the remap above has just rewritten a PCS signature to a device
     // one, so the value no longer meets ToInternalEncoding()'s 'XYZ '/'Lab '
-    // arms -- it meets the shared device default:, whose float and percent
-    // cases both clip to 0.0-1.0 whenever bClip. So this carve-out has to name
-    // every encoding whose PCS range exceeds 0.0-1.0, which is three, not one:
+    // arms -- it meets the shared device default:, whose unit float and
+    // percent cases clip to 0.0-1.0 whenever bClip. Its float case clipped too
+    // until f904ea62 made icEncodeFloat the unbounded encoding; it no longer
+    // does, so the icEncodeFloat term below is now redundant, and it is kept so
+    // that this carve-out does not silently depend on that change. So this
+    // carve-out has to name every encoding whose PCS range exceeds 0.0-1.0,
+    // which is three, not one:
     //
     //   icEncodeFloat      external PCS range ~0.0-2.0
     //   icEncodeUnitFloat  an exact synonym of it in both PCS arms since #2146

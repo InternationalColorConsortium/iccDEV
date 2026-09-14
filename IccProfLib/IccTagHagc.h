@@ -117,6 +117,18 @@ class CIccProfile;
 #define icHagcMaxControlPoints  32
 #define icHagcNumCoefficients    6
 
+/**
+ * The control point ordering rule of SMPTE ST 2094-50:2026-08 clause 6.5.2
+ * (described, not quoted): X may not decrease, and two adjacent points may
+ * share an X only when they also share a Y.
+ *
+ * Returns 0 when the n points x/y satisfy it, otherwise the index j of the
+ * first point that breaks it (compared against point j - 1).  The one
+ * statement of the rule: CIccTagHagc::Validate(), CIccHagcEvaluator::Init()
+ * and icHagcDerivePchipSlopes() all ask it, where each used to write it out.
+ */
+ICCPROFLIB_API int icHagcControlPointOrderViolation(const icFloatNumber *x, const icFloatNumber *y, int n);
+
 /** The largest metadata block CIccTagHagc will hold, in bytes.
  *
  * A single tag is not a plausible place for a megabyte of SMPTE metadata; the

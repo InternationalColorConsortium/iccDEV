@@ -514,11 +514,14 @@ int main(int argc, const char* argv[])
     // #2150: the iccApplyNamedCmm counterpart of this carve-out, with the same
     // reasoning -- once the remap above has rewritten the PCS signature to a
     // device one, ToInternalEncoding() applies the device default:'s 0.0-1.0
-    // clip to its float AND percent cases, so all three encodings whose PCS
-    // range exceeds 0.0-1.0 have to be named here (icEncodeUnitFloat has been
-    // an exact synonym of icEncodeFloat in both PCS arms since #2146; percent
-    // is the same range x100). Fixed here as well as there because the two
-    // tools carry independent copies of this block, not a shared helper.
+    // clip to its unit float AND percent cases (and to its float case too,
+    // until f904ea62 made icEncodeFloat unbounded; that term is now redundant
+    // and kept so this does not silently depend on the change), so all three
+    // encodings whose PCS range exceeds 0.0-1.0 have to be named here
+    // (icEncodeUnitFloat has been an exact synonym of icEncodeFloat in both
+    // PCS arms since #2146; percent is the same range x100). Fixed here as
+    // well as there because the two tools carry independent copies of this
+    // block, not a shared helper.
     if (srcEncoding == icEncodeFloat || srcEncoding == icEncodeUnitFloat ||
         srcEncoding == icEncodePercent)
       bClip = false;

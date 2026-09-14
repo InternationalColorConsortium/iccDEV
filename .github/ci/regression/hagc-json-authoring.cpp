@@ -395,6 +395,35 @@ void testJsonStrictAndByteExact()
   expectJsonRefused("{\"rawMetadata\":5}", "a non-string rawMetadata is refused");
 
   std::vector<icUInt8Number> canonical(kJsonOnePointBlock, kJsonOnePointBlock + sizeof(kJsonOnePointBlock));
+
+  // rawMetadata skips whitespace between its digits, as XML HexData and the
+  // other JSON hex fields do, so a block split into groups reads back as the
+  // same bytes.  Any other character, and an odd number of digits, is still
+  // refused: this string is the whole tag in the undecodable case, and the
+  // shared helper's habit of skipping what it cannot read would write a
+  // different profile than the document describes.
+  {
+    std::string doc = "{\"rawMetadata\":\"";
+    char buf[4];
+    for (size_t i = 0; i < canonical.size(); i++) {
+      snprintf(buf, sizeof(buf), "%02X", canonical[i]);
+      doc += buf;
+      if (i % 4 == 3)
+        doc += (i % 8 == 7) ? "\\n" : " ";
+    }
+    doc += "\"}";
+
+    CIccTagJsonHagc spaced;
+    std::string parseStr;
+    check(parseJsonTag(doc, spaced, parseStr) && spaced.GetRawMetadataSize() == canonical.size() &&
+          memcmp(spaced.GetRawMetadata(), &canonical[0], canonical.size()) == 0,
+          "a rawMetadata split by whitespace parses to the same bytes");
+  }
+  // An even number of digits around the stray character, so that skipping it
+  // would still decode to whole bytes: only a refusal can fail this.
+  expectJsonRefused("{\"rawMetadata\":\"00z00\"}", "a non-hex rawMetadata character is refused, not skipped");
+  expectJsonRefused("{\"rawMetadata\":\"000\"}", "an odd number of rawMetadata digits is refused");
+
   {
     CIccTagJsonHagc exact;
     exact.SetRawMetadata(&canonical[0], (icUInt32Number)canonical.size());

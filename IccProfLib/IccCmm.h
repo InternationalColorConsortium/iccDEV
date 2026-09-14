@@ -1574,8 +1574,12 @@ protected:
  *  three lines of matrix arithmetic.
  *
  *  What is shared, and inherited: the matrix column tags, their inversion for
- *  the output direction, the PCS absolute/relative handling, and - for
- *  TransferCharacteristics = 8 (Linear) only - the profile's own TRC curves.
+ *  the output direction, and the PCS absolute/relative handling.  The TRC
+ *  curves are not: every transfer, Linear included, is linearised
+ *  analytically from the cicpTag, 8.10.1 prohibiting the TRC tags, and a
+ *  conventionally authored profile that still carries them - reachable only by
+ *  constructing this class directly - has them loaded by the base Begin() but
+ *  never applied.
  *
  *  All numerics live in IccHdrToneMap; this class orchestrates them.
  **************************************************************************

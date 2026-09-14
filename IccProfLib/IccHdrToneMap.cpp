@@ -432,7 +432,9 @@ bool CIccHdrTransfer::Init(icUInt8Number nTransferCharacteristics,
  *  display light, and BT.2100's OOTF is scaled by the display peak luminance
  *  Lw.  The result is again absolute, so the same division by CRWL applies.
  *
- *  Linear: the caller applies the profile's TRC tags; here it is a copy.
+ *  Linear: the value is already a luminance in cd/m^2 (8.10.2 a), so the whole
+ *  of it is the division by CRWL.  8.10.1 prohibits the TRC tags that used to
+ *  linearise it.
  *
  * Args:
  *  dst = destination triplet, may alias src
@@ -516,22 +518,12 @@ icFloatNumber CIccHdrTransfer::ToLinearChannel(icFloatNumber v) const
  */
 void CIccHdrTransfer::ChannelToReference(icFloatNumber *dst, const icFloatNumber *src) const
 {
-  if (m_nTransfer == icCicpTransferPQ) {
-    icFloatNumber scale = (icFloatNumber)(icPqPeakLuminance / (double)m_referenceWhite);
-
-    dst[0] = src[0] * scale;
-    dst[1] = src[1] * scale;
-    dst[2] = src[2] * scale;
-    return;
-  }
-
   if (m_nTransfer == icCicpTransferHLG) {
     // Y_s uses the BT.2100 coefficients on the scene-linear triplet, before
     // the gain is applied - the OOTF is defined on scene luminance, not on
     // the display luminance it produces.
     icFloatNumber ys = (icFloatNumber)(m_lumaR * src[0] + m_lumaG * src[1] + m_lumaB * src[2]);
-    icFloatNumber scale = icHlgOotfGain(ys, m_hlgGamma) *
-                          (icFloatNumber)((double)m_hlgPeakLuminance / (double)m_referenceWhite);
+    icFloatNumber scale = icHlgOotfGain(ys, m_hlgGamma) * ReferenceScale();
 
     dst[0] = src[0] * scale;
     dst[1] = src[1] * scale;
@@ -539,13 +531,10 @@ void CIccHdrTransfer::ChannelToReference(icFloatNumber *dst, const icFloatNumber
     return;
   }
 
-  // Linear: the value is a luminance in cd/m^2 (8.10.2 a), so reference-white
-  // relative light is one division away.  m_referenceWhite is positive by
-  // construction - Init() takes the resolved CRWL, which carries 8.10.4's 203
-  // default - but the guard keeps a caller that built one by hand from
-  // producing infinities across a whole image.
-  if (m_nTransfer == icCicpTransferLinear && m_referenceWhite > 0.0) {
-    icFloatNumber scale = (icFloatNumber)(1.0 / (double)m_referenceWhite);
+  // PQ, and Linear: the value is a luminance in cd/m^2 (8.10.2 a), so
+  // reference-white relative light is one constant away for both.
+  if (m_nTransfer == icCicpTransferPQ || m_nTransfer == icCicpTransferLinear) {
+    icFloatNumber scale = ReferenceScale();
 
     dst[0] = src[0] * scale;
     dst[1] = src[1] * scale;
@@ -556,6 +545,38 @@ void CIccHdrTransfer::ChannelToReference(icFloatNumber *dst, const icFloatNumber
   dst[0] = src[0];
   dst[1] = src[1];
   dst[2] = src[2];
+}
+
+/**
+ ****************************************************************************
+ * Name: CIccHdrTransfer::ReferenceScale
+ *
+ * Purpose:
+ *  The constant that takes the transfer's peak-normalised light to reference
+ *  white relative light: 10 000 / CRWL for PQ, Lw / CRWL for HLG (applied
+ *  after the OOTF gain), 1 / CRWL for Linear, and 1.0 for a transfer Init()
+ *  did not accept.  ChannelToReference() and GetPeakReferenceLevel() both take
+ *  it from here, so the two cannot disagree about the scale.
+ *
+ *  m_referenceWhite is positive by construction: the constructor sets the
+ *  203 cd/m^2 default, and Init() stores either that default or a positive
+ *  value it has checked every one of these quotients is finite for, refusing
+ *  anything else before it is stored.  So none of the divisions here can be
+ *  by zero, and there is no guard for one.
+ ****************************************************************************
+ */
+icFloatNumber CIccHdrTransfer::ReferenceScale() const
+{
+  if (m_nTransfer == icCicpTransferPQ)
+    return (icFloatNumber)(icPqPeakLuminance / (double)m_referenceWhite);
+
+  if (m_nTransfer == icCicpTransferHLG)
+    return (icFloatNumber)((double)m_hlgPeakLuminance / (double)m_referenceWhite);
+
+  if (m_nTransfer == icCicpTransferLinear)
+    return (icFloatNumber)(1.0 / (double)m_referenceWhite);
+
+  return (icFloatNumber)1.0;
 }
 
 /**
@@ -573,26 +594,19 @@ void CIccHdrTransfer::ChannelToReference(icFloatNumber *dst, const icFloatNumber
  *  luminance and so a lower gain, never a higher one, which is what makes
  *  this a ceiling rather than a typical value.
  *
+ *  For Linear an encoded 1.0 is 1 cd/m^2 by 8.10.2 a), so its reference-white
+ *  relative value is 1 / CRWL - the same shape as the other two, and no longer
+ *  the 1.0 that was right only while the profile's TRC tags carried the
+ *  normalisation.
+ *
  * Return:
- *  10 000 / CRWL for PQ, Lw / CRWL for HLG, 1.0 for Linear.
+ *  10 000 / CRWL for PQ, Lw / CRWL for HLG, 1 / CRWL for Linear, and 1.0 for
+ *  a transfer Init() did not accept - ReferenceScale().
  ****************************************************************************
  */
 icFloatNumber CIccHdrTransfer::GetPeakReferenceLevel() const
 {
-  if (m_nTransfer == icCicpTransferPQ)
-    return (icFloatNumber)(icPqPeakLuminance / (double)m_referenceWhite);
-
-  if (m_nTransfer == icCicpTransferHLG)
-    return (icFloatNumber)((double)m_hlgPeakLuminance / (double)m_referenceWhite);
-
-  // Linear: an encoded 1.0 is 1 cd/m^2 by 8.10.2 a), so its reference-white
-  // relative value is 1 / CRWL - the same shape as the other two, and no
-  // longer the 1.0 that was right only while the profile's TRC tags carried
-  // the normalisation.
-  if (m_nTransfer == icCicpTransferLinear && m_referenceWhite > 0.0)
-    return (icFloatNumber)(1.0 / (double)m_referenceWhite);
-
-  return (icFloatNumber)1.0;
+  return ReferenceScale();
 }
 
 /**
@@ -689,8 +703,9 @@ void CIccHdrTransfer::ReferenceToChannel(icFloatNumber *dst, const icFloatNumber
 
   // Linear: the exact inverse of ChannelToReference()'s division - back from
   // reference-white-relative light to the luminance in cd/m^2 that 8.10.2 a)
-  // says a Linear value is.
-  if (m_nTransfer == icCicpTransferLinear && m_referenceWhite > 0.0) {
+  // says a Linear value is.  m_referenceWhite is positive by construction; see
+  // ReferenceScale().
+  if (m_nTransfer == icCicpTransferLinear) {
     dst[0] = src[0] * m_referenceWhite;
     dst[1] = src[1] * m_referenceWhite;
     dst[2] = src[2] * m_referenceWhite;
@@ -766,13 +781,14 @@ static int icHagcSign(double v)
  *  0/0 - are set out there with the numbers that separate them.
  *
  * Args:
- *  x, y = control points, x strictly increasing
+ *  x, y = control points, ordered as clause 6.5.2 requires: x non-decreasing,
+ *         and y[i] == y[i+1] wherever x[i] == x[i+1]
  *  n = number of control points
  *  slope = output, n values
  *
  * Return:
- *  false when n is zero, above icHagcMaxControlPoints, or x is not strictly
- *  increasing, in which case slope is left untouched.
+ *  false when n is zero, above icHagcMaxControlPoints, or the points break
+ *  that ordering, in which case slope is left untouched.
  ****************************************************************************
  */
 bool icHagcDerivePchipSlopes(const icFloatNumber *x, const icFloatNumber *y,
@@ -790,13 +806,8 @@ bool icHagcDerivePchipSlopes(const icFloatNumber *x, const icFloatNumber *y,
   // 6.5.2 permits x_i == x_i+1 when y_i == y_i+1, and C.3.9 is written to
   // handle it; what neither permits is X going backwards, which would make the
   // piecewise cubic multi-valued.
-  for (i = 1; i < n; i++) {
-    if (x[i] < x[i - 1])
-      return false;
-
-    if (x[i] == x[i - 1] && y[i] != y[i - 1])
-      return false;
-  }
+  if (icHagcControlPointOrderViolation(x, y, n))
+    return false;
 
   double h[icHagcMaxControlPoints];
   double s[icHagcMaxControlPoints];
@@ -1286,12 +1297,10 @@ bool CIccHagcEvaluator::Init(const icHagcMetadata &meta)
     // forming the zero-width segment's parameter, so a duplicate is a no-op
     // point rather than a defect.  X going backwards, or a duplicate whose Y
     // values differ, is neither.
-    for (j = 1; j < c.nPoints; j++) {
-      if (c.x[j] < c.x[j - 1] || (c.x[j] == c.x[j - 1] && c.y[j] != c.y[j - 1])) {
-        m_szUnsupported = "control point X coordinates decrease, or repeat with differing Y";
-        m_nCurves = 0;
-        return false;
-      }
+    if (icHagcControlPointOrderViolation(c.x, c.y, (int)c.nPoints)) {
+      m_szUnsupported = "control point X coordinates decrease, or repeat with differing Y";
+      m_nCurves = 0;
+      return false;
     }
 
     icFloatNumber slope[icHagcMaxControlPoints];
@@ -1875,10 +1884,25 @@ void CIccHagcEvaluator::Apply(icFloatNumber *dst, const icFloatNumber *src) cons
 
   const Curve &a = m_curves[m_nCurveA];
 
+  // Without a k_component term the three mixed values are one value, and so
+  // are the three gains, so Gain() - the costly step - runs once instead of
+  // three times.  The shortcut tests the mixed values rather than the
+  // coefficient, which keeps it exact by construction: a non-finite channel
+  // makes k_component * src NaN, the values then compare unequal, and they take
+  // the per-channel path as before.  +0 and -0 compare equal and Gain() cannot
+  // tell them apart, since no control point X is negative.
   if (!a.bBaseline) {
     a.Mix(mixed, in);
-    for (i = 0; i < 3; i++)
-      g[i] += (double)m_weightA * (double)a.Gain(mixed[i]);
+    if (mixed[0] == mixed[1] && mixed[1] == mixed[2]) {
+      const double ga = (double)m_weightA * (double)a.Gain(mixed[0]);
+      g[0] += ga;
+      g[1] += ga;
+      g[2] += ga;
+    }
+    else {
+      for (i = 0; i < 3; i++)
+        g[i] += (double)m_weightA * (double)a.Gain(mixed[i]);
+    }
   }
 
   if (m_nCurveB != m_nCurveA) {
@@ -1886,8 +1910,16 @@ void CIccHagcEvaluator::Apply(icFloatNumber *dst, const icFloatNumber *src) cons
 
     if (!b.bBaseline) {
       b.Mix(mixed, in);
-      for (i = 0; i < 3; i++)
-        g[i] += (double)m_weightB * (double)b.Gain(mixed[i]);
+      if (mixed[0] == mixed[1] && mixed[1] == mixed[2]) {
+        const double gb = (double)m_weightB * (double)b.Gain(mixed[0]);
+        g[0] += gb;
+        g[1] += gb;
+        g[2] += gb;
+      }
+      else {
+        for (i = 0; i < 3; i++)
+          g[i] += (double)m_weightB * (double)b.Gain(mixed[i]);
+      }
     }
   }
 

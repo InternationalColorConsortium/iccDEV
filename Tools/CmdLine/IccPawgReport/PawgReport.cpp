@@ -584,11 +584,14 @@ std::string FirstReportLine(const std::string &report)
 // the icMsgValidate* severity marker, and nothing else in the library opens a
 // report line that way -- so the test anchors at the start of the line rather
 // than searching for a substring, and a desc string that happens to mention HDR
-// cannot match.
+// cannot match.  The markers are the library's own exported icMsgValidate*
+// strings rather than copies of their text, so a change to one cannot leave
+// this matching nothing.
 bool IsHdrValidationLine(const std::string &line)
 {
-  static const char *kSeverityMarkers[] = {
-    "Warning! - ", "NonCompliant! - ", "Error! - ", "Information - "
+  const char *kSeverityMarkers[] = {
+    icMsgValidateWarning, icMsgValidateNonCompliant, icMsgValidateCriticalError,
+    icMsgValidateInformation
   };
   for (size_t i = 0; i < CountOf(kSeverityMarkers); ++i) {
     const size_t n = std::strlen(kSeverityMarkers[i]);

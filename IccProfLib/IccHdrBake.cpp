@@ -162,7 +162,6 @@ CIccHdrBaker::CIccHdrBaker()
 {
   m_bSupported = false;
   m_szUnsupported = "Not initialized";
-  m_pProfile = NULL;
   m_bToneMap = false;
   m_bClampToTarget = false;
   m_bInverseValid = false;
@@ -208,7 +207,6 @@ CIccHdrBaker::~CIccHdrBaker()
 bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pParams)
 {
   m_bSupported = false;
-  m_pProfile = NULL;
   m_bToneMap = false;
   m_bClampToTarget = false;
   m_bInverseValid = false;
@@ -400,8 +398,6 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
   m_bSupported = true;
   m_szUnsupported = NULL;
 
-  m_pProfile = pProfile;
-
   return true;
 }
 
@@ -456,40 +452,13 @@ bool CIccHdrBaker::UsesDerivedSlopes() const
  *  1.0 gives 1.0 - i.e. what an A curve holds before the fifth root.
  *
  * Args:
- *  nChannel = 0, 1 or 2; no transfer this bakes distinguishes them
- *  v = the device-encoded channel value
+ *  v = the device-encoded channel value; the same function serves all three
+ *      channels, since no transfer this bakes distinguishes them
  *****************************************************************************
  */
-icFloatNumber CIccHdrBaker::LinearizeChannel(icUInt8Number /* nChannel */, icFloatNumber v) const
+icFloatNumber CIccHdrBaker::LinearizeChannel(icFloatNumber v) const
 {
   return m_transfer.ToLinearChannel(v);
-}
-
-/**
- ****************************************************************************
- * Name: CIccHdrBaker::ToReference
- *
- * Purpose:
- *  Complete a peak-normalised triplet into reference white relative linear
- *  light, undoing exactly what LinearizeChannel() normalised by.
- *****************************************************************************
- */
-void CIccHdrBaker::ToReference(icFloatNumber *dst, const icFloatNumber *src) const
-{
-  m_transfer.ChannelToReference(dst, src);
-}
-
-/**
- ****************************************************************************
- * Name: CIccHdrBaker::FromReference
- *
- * Purpose:
- *  Exact inverse of ToReference().
- *****************************************************************************
- */
-void CIccHdrBaker::FromReference(icFloatNumber *dst, const icFloatNumber *src) const
-{
-  m_transfer.ReferenceToChannel(dst, src);
 }
 
 /**
@@ -546,7 +515,7 @@ void CIccHdrBaker::AtoBClutOp(icFloatNumber *dst, const icFloatNumber *src) cons
 {
   icFloatNumber pixel[3];
 
-  ToReference(pixel, src);
+  m_transfer.ChannelToReference(pixel, src);
   ToneMap(pixel);
 
   dst[0] = icHdrBakeClampUnit(pixel[0]);
@@ -607,7 +576,7 @@ bool CIccHdrBaker::BtoAClutOp(icFloatNumber *dst, const icFloatNumber *src) cons
       m_evaluator.InvertApproximate(pixel, pixel);
   }
 
-  FromReference(pixel, pixel);
+  m_transfer.ReferenceToChannel(pixel, pixel);
 
   icUInt8Number i;
 
@@ -626,11 +595,10 @@ bool CIccHdrBaker::BtoAClutOp(icFloatNumber *dst, const icFloatNumber *src) cons
  *  its device encoding.  This is what a BToA A curve holds.
  *
  * Args:
- *  nChannel = 0, 1 or 2; no transfer this bakes distinguishes them
- *  v = the peak-normalised linear channel value
+ *  v = the peak-normalised linear channel value, for any of the three channels
  *****************************************************************************
  */
-icFloatNumber CIccHdrBaker::EncodeChannel(icUInt8Number /* nChannel */, icFloatNumber v) const
+icFloatNumber CIccHdrBaker::EncodeChannel(icFloatNumber v) const
 {
   return m_transfer.FromLinearChannel(v);
 }
@@ -655,9 +623,9 @@ void CIccHdrBaker::ToPcs(icFloatNumber *dstXyz, const icFloatNumber *srcRgb) con
 {
   icFloatNumber lin[3];
 
-  lin[0] = LinearizeChannel(0, srcRgb[0]);
-  lin[1] = LinearizeChannel(1, srcRgb[1]);
-  lin[2] = LinearizeChannel(2, srcRgb[2]);
+  lin[0] = LinearizeChannel(srcRgb[0]);
+  lin[1] = LinearizeChannel(srcRgb[1]);
+  lin[2] = LinearizeChannel(srcRgb[2]);
 
   AtoBClutOp(lin, lin);
 
@@ -717,7 +685,7 @@ bool CIccHdrBaker::FromPcs(icFloatNumber *dstRgb, const icFloatNumber *srcXyz) c
   // The CLUT stage stops at the fifth-root domain the A curves expect, so the
   // reference pipeline has to finish the job the same way they do.
   for (row = 0; row < 3; row++)
-    dstRgb[row] = EncodeChannel(row, (icFloatNumber)pow((double)lin[row], icHdrBakeCurveExponent));
+    dstRgb[row] = EncodeChannel((icFloatNumber)pow((double)lin[row], icHdrBakeCurveExponent));
 
   return true;
 }
@@ -902,7 +870,7 @@ CIccTagLutAtoB *CIccHdrBaker::CreateAtoB() const
 
     for (n = 0; n < m_params.nCurveSize; n++) {
       icFloatNumber v = (icFloatNumber)((double)n / (double)(m_params.nCurveSize - 1));
-      icFloatNumber lin = icHdrBakeClampUnit(LinearizeChannel(i, v));
+      icFloatNumber lin = icHdrBakeClampUnit(LinearizeChannel(v));
 
       (*pCurve)[n] = (icFloatNumber)pow((double)lin, 1.0 / icHdrBakeCurveExponent);
     }
@@ -1094,7 +1062,7 @@ CIccTagLutBtoA *CIccHdrBaker::CreateBtoA() const
 
       // The inverse of the AToB's A curve, sampled over the same fifth-root
       // domain: undo the root, then encode.
-      (*pCurve)[n] = EncodeChannel(i, (icFloatNumber)pow((double)v, icHdrBakeCurveExponent));
+      (*pCurve)[n] = EncodeChannel((icFloatNumber)pow((double)v, icHdrBakeCurveExponent));
     }
   }
 

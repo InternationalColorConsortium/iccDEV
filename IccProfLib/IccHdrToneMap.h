@@ -382,6 +382,10 @@ public:
   icFloatNumber GetContentReferenceWhite() const { return m_referenceWhite; }
 
 protected:
+  /** The constant ChannelToReference() applies after any OOTF gain, and the
+   * whole of GetPeakReferenceLevel(); see its definition. */
+  icFloatNumber ReferenceScale() const;
+
   bool m_bSupported;
   icUInt8Number m_nTransfer;
   /* The OOTF's luma coefficients.  BT.2020's unless the profile declares other

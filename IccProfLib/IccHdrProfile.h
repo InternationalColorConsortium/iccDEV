@@ -649,6 +649,16 @@ ICCPROFLIB_API bool icBuildHdrForwardMatrix(const CIccProfile *pProfile,
  */
 ICCPROFLIB_API bool icHdrHasMalformedChad(const CIccProfile *pProfile);
 
+/**
+ * True for a CONVENTIONALLY authored matrix/TRC profile: all three matrix
+ * column tags and all three TRC tags, the shape the 29-08-2026 revision of
+ * 8.10.1 removed from HDR Profiles.  Such a profile never reaches the HDR chain
+ * through CIccXform::Create() - the TRC tags cost it membership - but a caller
+ * that constructs CIccXformMatrixTrcHdr directly can, and both its Begin() and
+ * icHdrSelectForwardMatrix() ask this so they agree on what the shape is.
+ */
+ICCPROFLIB_API bool icHdrIsConventionalMatrixTrc(const CIccProfile *pProfile);
+
 /** Where the RGB-to-PCSXYZ matrix of clause 8.10.2 c) comes from. */
 typedef enum {
   icHdrMatrixFromCicp = 0,    /* built from the cicpTag primaries; see below */
