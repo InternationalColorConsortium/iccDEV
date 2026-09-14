@@ -1,3 +1,56 @@
+/*
+ * The ICC Software License, Version 0.2
+ *
+ *
+ * Copyright (c) 2003-2026 The International Color Consortium. All rights
+ * reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *
+ * 3. In the absence of prior written permission, the names "ICC" and "The
+ *    International Color Consortium" must not be used to imply that the
+ *    ICC organization endorses or promotes products derived from this
+ *    software.
+ *
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE INTERNATIONAL COLOR CONSORTIUM OR
+ * ITS CONTRIBUTING MEMBERS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+ * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
+ * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ * ====================================================================
+ *
+ * This software consists of voluntary contributions made by many
+ * individuals on behalf of the The International Color Consortium.
+ *
+ *
+ * Membership in the ICC is encouraged when this software is used for
+ * commercial purposes.
+ *
+ *
+ * For more information on The International Color Consortium, please
+ * see <http://www.color.org/>.
+ *
+ *
+ */
+
 // Behavioural regression for the tone-mapping step of ICC.1 clause 8.10.2:
 // the analytic PQ and HLG transfer functions, the Headroom Adaptive Gain Curve
 // evaluator of the HAGC amendment's annex 1, and the CMM path that puts them
@@ -819,8 +872,11 @@ CIccProfile *openFixture(const char *szName)
 }
 
 // Build a device-to-PCS xform for a fixture, with or without the HDR hint,
-// and evaluate one pixel through it. Returns false when the xform could not be
-// created or begun, which every caller treats as a failure of its own.
+// and evaluate one pixel through it. Returns false for a fixture that could
+// not be opened (openFixture() counts that as a skip) or for an xform that
+// could not be created, begun or given an apply object. The latter three are
+// counted as failures HERE: every caller skips its own assertions on false, so
+// a CMM path that stopped working used to print FAIL and still exit 0.
 bool applyPixel(const char *szFixture, const CIccCreateHdrXformHint *pHint,
                 const icFloatNumber *src, icFloatNumber *dst, icXformType *pType,
                 bool bInput = true)
@@ -845,6 +901,7 @@ bool applyPixel(const char *szFixture, const CIccCreateHdrXformHint *pHint,
 
   if (!pXform) {
     printf("FAIL: no xform created for %s\n", szFixture);
+    g_failures++;
     return false;
   }
 
@@ -855,6 +912,7 @@ bool applyPixel(const char *szFixture, const CIccCreateHdrXformHint *pHint,
 
   if (status != icCmmStatOk) {
     printf("FAIL: Begin() returned %d for %s\n", (int)status, szFixture);
+    g_failures++;
     delete pXform;
     return false;
   }
@@ -863,6 +921,7 @@ bool applyPixel(const char *szFixture, const CIccCreateHdrXformHint *pHint,
 
   if (!pApply || status != icCmmStatOk) {
     printf("FAIL: GetNewApply() failed for %s\n", szFixture);
+    g_failures++;
     delete pApply;
     delete pXform;
     return false;
@@ -972,6 +1031,7 @@ void testGainApplicationSpaceFromProfile()
 void testEndToEnd()
 {
   icFloatNumber src[3], dst[3], noHint[3];
+  bool bHaveNoHint = false;   /* noHint[] is only written when step 1 succeeds */
   icXformType nType = icXformTypeUnknown;
 
   // The reference-white PQ code, which the chain should place at Y = 1.0
@@ -994,6 +1054,7 @@ void testEndToEnd()
   //    Before the revision this profile had TRC tags and this assertion read
   //    icXformTypeMatrixTRC.
   if (applyPixel("HagcDisplay.icc", NULL, src, noHint, &nType)) {
+    bHaveNoHint = true;
     check(nType == icXformType3DLut || nType == icXformTypeMatrixTRC,
           "without a hint an HDR profile falls back to its mandatory AToB0Tag");
   }
@@ -1009,7 +1070,8 @@ void testEndToEnd()
 
     // The two paths must not agree: if they did, the hint would be doing
     // nothing and every other assertion here would pass vacuously.
-    check(fabs(dst[1] - noHint[1]) > 1e-4, "the HDR chain changes the result");
+    if (bHaveNoHint)
+      check(fabs(dst[1] - noHint[1]) > 1e-4, "the HDR chain changes the result");
 
     // Reference white through the PQ EOTF is 1.0 in reference-white-relative
     // units. The gain curve's first control point is at x = 0.25 and its
@@ -1188,5 +1250,7 @@ int main(int /*argc*/, char * /*argv*/[])
   if (!g_failures && g_skips)
     return 77;
 
-  return g_failures;
+  /* Not the raw count: 77 failures would read as a ctest Skip, and a count
+   * that is a multiple of 256 as a pass. */
+  return g_failures ? 1 : 0;
 }

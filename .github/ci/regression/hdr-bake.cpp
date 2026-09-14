@@ -1,3 +1,56 @@
+/*
+ * The ICC Software License, Version 0.2
+ *
+ *
+ * Copyright (c) 2003-2026 The International Color Consortium. All rights
+ * reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *
+ * 3. In the absence of prior written permission, the names "ICC" and "The
+ *    International Color Consortium" must not be used to imply that the
+ *    ICC organization endorses or promotes products derived from this
+ *    software.
+ *
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE INTERNATIONAL COLOR CONSORTIUM OR
+ * ITS CONTRIBUTING MEMBERS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+ * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
+ * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ * ====================================================================
+ *
+ * This software consists of voluntary contributions made by many
+ * individuals on behalf of the The International Color Consortium.
+ *
+ *
+ * Membership in the ICC is encouraged when this software is used for
+ * commercial purposes.
+ *
+ *
+ * For more information on The International Color Consortium, please
+ * see <http://www.color.org/>.
+ *
+ *
+ */
+
 // Behavioural regression for the A2B0/B2A0 HDR fallback bake - the procedure
 // of the "Representation of HDR-to-SDR Tone Mapping from a Headroom Adaptive
 // Gain Curve in a v4 A2B0 Tag" white paper and of the HAGC amendment's
@@ -910,10 +963,27 @@ void testApproximateBtoA()
   printf("  approximate BToA round trip: worst channel error %.6f\n", worst);
   check(worst <= APPROX_TOLERANCE, "the approximate round trip stays close to the source");
 
+  // HagcDisplay already carries an identity AToB0/BToA0 placeholder, so a bare
+  // presence check passed even when nothing was attached, or only AToB0 was.
+  // Remove the pair first, then require BOTH tags back and require each to be
+  // a baked table - a CLUT - which the placeholder is not.
+  pProfile->DeleteTag(icSigAToB0Tag);
+  pProfile->DeleteTag(icSigBToA0Tag);
+  check(!pProfile->FindTag(icSigAToB0Tag) && !pProfile->FindTag(icSigBToA0Tag),
+        "the placeholder pair is removed before the bake");
+
   const icChar *szReason = NULL;
-  check(icAddHdrFallbackTags(pProfile, NULL, &szReason), "icAddHdrFallbackTags completes the pair");
-  check(pProfile->FindTag(icSigAToB0Tag) != NULL, "the AToB0Tag is attached");
-  check(pProfile->FindTag(icSigBToA0Tag) != NULL, "and so is the BToA0Tag");
+  bool bAdded = icAddHdrFallbackTags(pProfile, NULL, &szReason);
+  if (!bAdded)
+    printf("  icAddHdrFallbackTags refused: %s\n", szReason ? szReason : "(no reason)");
+  check(bAdded, "icAddHdrFallbackTags completes the pair");
+
+  CIccTag *pA2B = pProfile->FindTag(icSigAToB0Tag);
+  CIccTag *pB2A = pProfile->FindTag(icSigBToA0Tag);
+  check(pA2B && pA2B->GetType() == icSigLutAtoBType && ((CIccTagLutAtoB*)pA2B)->GetCLUT(),
+        "the AToB0Tag is attached, and is a baked table");
+  check(pB2A && pB2A->GetType() == icSigLutBtoAType && ((CIccTagLutBtoA*)pB2A)->GetCLUT(),
+        "and so is the BToA0Tag");
 
   delete pProfile;
 }
@@ -939,5 +1009,7 @@ int main()
   if (!g_failures && g_skips)
     return 77;
 
-  return g_failures;
+  /* Not the raw count: 77 failures would read as a ctest Skip, and a count
+   * that is a multiple of 256 as a pass. */
+  return g_failures ? 1 : 0;
 }

@@ -122,14 +122,27 @@ function getClutTestProfile() {
     const rc = mod.callMain(['hdr.icc', 'fallback.icc']);
     if (rc) throw new Error('bake exited ' + rc);
     const baked = mod.FS.readFile('fallback.icc');
-    if (baked.length <= hdrIcc.length) throw new Error('no tags added: ' + baked.length);
-    // Scan for the signatures: the size check above only proves the profile
-    // grew, and hagc has to still be there afterwards - the whole point of the
-    // bake is that an HDR-aware CMM keeps evaluating the curve.
-    const sigs = Buffer.from(baked).toString('latin1');
-    for (const sig of ['A2B0', 'B2A0', 'hagc']) {
-      if (!sigs.includes(sig)) throw new Error('missing ' + sig + ' tag');
+    // Read the tag table rather than scanning for signatures. HagcDisplay.xml
+    // already carries an identity A2B0/B2A0 placeholder (80 bytes each), so a
+    // signature scan or a grew-at-all check passes even when the bake attached
+    // nothing, or only one direction. A baked tag holds a 3-input CLUT, which
+    // at the default grid is tens of kilobytes at least; require both
+    // directions at that size, and the HAGC tag to survive - the whole point of
+    // the bake is that an HDR-aware CMM keeps evaluating the curve.
+    const view = Buffer.from(baked);
+    const count = view.length >= 132 ? view.readUInt32BE(128) : 0;
+    if (count === 0 || 132 + 12 * count > view.length) throw new Error('unreadable tag table');
+    const tags = {};
+    for (let i = 0; i < count; i++) {
+      const at = 132 + 12 * i;
+      tags[view.toString('latin1', at, at + 4)] = view.readUInt32BE(at + 8);
     }
+    for (const sig of ['A2B0', 'B2A0']) {
+      if (!(tags[sig] > 17 * 17 * 17 * 3)) {
+        throw new Error(sig + ' tag is ' + (tags[sig] === undefined ? 'absent' : tags[sig] + ' bytes') + ', not a baked table');
+      }
+    }
+    if (!tags['HAGC']) throw new Error('missing HAGC tag');
   })) pass++; else fail++;
 
   // Usage tests - tools that need multiple files, verify they load and print usage

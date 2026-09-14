@@ -70,6 +70,7 @@ set(_fixtures
   HdrInvalidTransfer.icc
   HdrLinearHagcCrwlDisagree.icc
   HdrMissingBToA0.icc
+  HdrMissingBToA1.icc
 )
 # FATAL_ERROR, not a bare return().  This used to `return()`, which in `cmake -P`
 # is exit 0, so a run that asserted nothing reported a green PASS - the same
@@ -225,10 +226,12 @@ iccdev_expect_not("${_bad_tc}" "\\[WARN[ \t]*\\][ \t]+H[0-9]"
   "a membership condition was reported as a warning")
 iccdev_expect_not("${_bad_tc}" "[ \t]+H[2-8][ \t]"
   "an HDR Profile question was asked of a profile outside the sub-class")
-# The C3 attribution fix: the clause-8.10 text must no longer be quoted under
-# the tag-type question.  The verdict there is intentionally left alone.
-iccdev_expect_not("${_bad_tc}" "C3[^\n]*\n[ \t]*[^\n]*clause 8\\.10\\.1 permits only"
-  "C3 still quotes an HDR finding under its tag-type title")
+# The C3 attribution fix: no clause-8.10 finding may be quoted under the
+# tag-type question.  Every such finding CheckHdrProfile() emits starts "HDR: ".
+# A profile outside the sub-class draws none, so this is a guard, not the pin;
+# section 6b below is the fixture that can actually fail.
+iccdev_expect_not("${_bad_tc}" "C3[^\n]*\n[ \t]*[^\n]*HDR: "
+  "C3 quotes an HDR finding under its tag-type title")
 
 # --- 6. The 8.10.6 pairing rule, the one shall an HDR Profile can break -------
 iccdev_run_pawg("${ICCDEV_HDR_DIR}/HdrMissingBToA0.icc" _unpaired)
@@ -236,8 +239,22 @@ iccdev_expect("${_unpaired}" "\\[OK[ \t]*\\][ \t]+H1[ \t]"
   "the pairing violation was folded into the H1 classification; 8.10.6 sits outside 8.10.1")
 iccdev_expect("${_unpaired}" "\\[FAIL[ \t]*\\][ \t]+H6[ \t]"
   "H6 did not fail an AToB0Tag with no paired BToA0Tag")
-iccdev_expect_not("${_unpaired}" "C3[^\n]*\n[ \t]*[^\n]*clause 8\\.10\\.6 requires the pair"
-  "C3 still quotes the HDR pairing finding under its tag-type title")
+iccdev_expect_not("${_unpaired}" "C3[^\n]*\n[ \t]*[^\n]*HDR: "
+  "C3 quotes the HDR pairing finding under its tag-type title")
+
+# --- 6b. C3 on a report whose ONLY findings are clause 8.10 ones --------------
+# The two C3 guards above cannot fail: HdrInvalidTransfer is outside the
+# sub-class, and HdrMissingBToA0's first report line is the non-HDR "Critical
+# tag(s) missing".  HdrMissingBToA1's first line IS the HDR pairing finding, so
+# a C3 that quoted the first report line (FirstReportLine() rather than
+# FirstNonHdrReportLine()) would quote it here.  The needles are the current
+# wording; the old ones ("clause 8.10.1 permits only", "clause 8.10.6 requires
+# the pair") were removed from the library in 44d5d590 and matched nothing.
+iccdev_run_pawg("${ICCDEV_HDR_DIR}/HdrMissingBToA1.icc" _hdr_only)
+iccdev_expect("${_hdr_only}" "C3[^\n]*\n[ \t]*profile validation reported only HDR Profile \\(ICC\\.1 clause 8\\.10\\) findings; see the HDR section"
+  "C3 did not refer an HDR-only validation report to the HDR section")
+iccdev_expect_not("${_hdr_only}" "C3[^\n]*\n[ \t]*[^\n]*HDR: "
+  "C3 quotes an HDR finding under its tag-type title")
 
 # --- 7. Two carriers of the content reference white that disagree ------------
 # HAGC HDRReferenceWhite 300 against a metadataTag CRWL of 203.  The only
