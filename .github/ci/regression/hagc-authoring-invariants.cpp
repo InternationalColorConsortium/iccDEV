@@ -344,8 +344,9 @@ void testSetMetadataRoundTrip()
           "no control point X survives SetMetadata outside the encodable range");
   }
 
-  // The evaluator now sees what a reader would see: three equal X values, which
-  // is not strictly increasing, so it refuses rather than returning NaN pixels.
+  // The evaluator now sees what a reader would see: three equal X values whose
+  // Y values differ, which clause 6.5.2's ordering rule does not permit, so it
+  // refuses rather than returning NaN pixels.
   CIccHagcEvaluator ev;
   bool bInit = ev.Init(tag.GetMetadata());
 
@@ -472,16 +473,27 @@ void testUnwidenableFields()
 
   check(ev.SetTargetHeadroom(1.0f), "a finite target is accepted");
 
+  // What the finite target set up, so the refusal can be compared against it.
+  icFloatNumber in[3] = { 0.5f, 0.25f, 0.75f }, before[3] = { 0, 0, 0 }, out[3] = { 0, 0, 0 };
+  ev.Apply(before, in);
+  const icFloatNumber targetBefore = ev.GetTargetHeadroom();
+  const bool bInvertibleBefore = ev.IsInvertible();
+
   // Not 0.0 / 0.0: MSVC rejects a constant division by zero (C2124) and the
   // test executable would not build there.
   const icFloatNumber nan = std::numeric_limits<icFloatNumber>::quiet_NaN();
   check(!ev.SetTargetHeadroom(nan), "a NaN target headroom is refused");
 
-  // The refusal must leave the last good target in place, not a half-set one.
-  icFloatNumber in[3] = { 0.5f, 0.25f, 0.75f }, out[3] = { 0, 0, 0 };
+  // The refusal must leave the last good target in place, not a half-set one:
+  // the same target, the same invertibility, and the same pixels bit for bit.
+  // Checking only that the pixels were finite passed a guard that ran after
+  // the target and the derived flags had already been overwritten, because
+  // the weights happen to survive that ordering.
+  check(ev.GetTargetHeadroom() == targetBefore, "the refused NaN target leaves the target as it was");
+  check(ev.IsInvertible() == bInvertibleBefore, "and leaves the invertibility as it was");
   ev.Apply(out, in);
   for (int i = 0; i < 3; i++)
-    check(out[i] == out[i], "the refused NaN target did not reach the pixels");
+    check(out[i] == before[i], "and leaves the pixels bit-identical to the last good target's");
 }
 
 // ---------------------------------------------------------------------------

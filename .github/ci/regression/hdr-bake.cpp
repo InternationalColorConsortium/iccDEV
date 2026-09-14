@@ -851,6 +851,85 @@ void testRefusals()
     delete pProfile;
   }
 
+  // What a refusal leaves behind on a profile that already HAS a pair.  The
+  // checks above run on a fixture with no LUT tags, so they could not tell a
+  // refusal that touched nothing from one that deleted the old pair before
+  // deciding to refuse.
+  pProfile = openFixture("HdrInvalidTransfer.icc");
+
+  if (pProfile) {
+    CIccTagLutAtoB *pOldAtoB = new CIccTagLutAtoB();
+    CIccTagLutBtoA *pOldBtoA = new CIccTagLutBtoA();
+
+    if (!pProfile->AttachTag(icSigAToB0Tag, pOldAtoB)) {
+      delete pOldAtoB;
+      pOldAtoB = NULL;
+    }
+    if (!pProfile->AttachTag(icSigBToA0Tag, pOldBtoA)) {
+      delete pOldBtoA;
+      pOldBtoA = NULL;
+    }
+    check(pOldAtoB && pOldBtoA, "a LUT pair attaches to the refused fixture");
+
+    check(!icAddHdrFallbackTags(pProfile), "a refused profile carrying a LUT pair is still refused");
+    check(pOldAtoB && pProfile->FindTag(icSigAToB0Tag) == pOldAtoB, "and keeps the AToB0Tag it had");
+    check(pOldBtoA && pProfile->FindTag(icSigBToA0Tag) == pOldBtoA, "and keeps the BToA0Tag it had");
+
+    delete pProfile;
+  }
+
+  // A singular colour matrix is the one thing that stops the pair once the
+  // bake itself is supported - a gain curve with no exact inverse still gets a
+  // best-effort BToA0Tag.  ColourPrimaries 2 takes the matrix column tags as
+  // they stand, so a red column equal to the green one makes the matrix
+  // singular and changes nothing else.  Nothing drove this refusal before.
+  pProfile = openFixture("HdrCicpUnspecified.icc");
+
+  if (pProfile) {
+    CIccTag *pGreen = pProfile->FindTag(icSigGreenMatrixColumnTag);
+    CIccTag *pRed = pGreen ? pGreen->NewCopy() : NULL;
+
+    pProfile->DeleteTag(icSigRedMatrixColumnTag);
+
+    if (pRed && !pProfile->AttachTag(icSigRedMatrixColumnTag, pRed)) {
+      delete pRed;
+      pRed = NULL;
+    }
+    check(pRed != NULL, "the singular-matrix profile builds");
+
+    // The pair the profile already carries, or one attached for the test, so
+    // that what the refusal leaves behind is observable.
+    CIccTag *pA0 = pProfile->FindTag(icSigAToB0Tag);
+    CIccTag *pB0 = pProfile->FindTag(icSigBToA0Tag);
+
+    if (!pA0) {
+      pA0 = new CIccTagLutAtoB();
+      if (!pProfile->AttachTag(icSigAToB0Tag, pA0)) {
+        delete pA0;
+        pA0 = NULL;
+      }
+    }
+    if (!pB0) {
+      pB0 = new CIccTagLutBtoA();
+      if (!pProfile->AttachTag(icSigBToA0Tag, pB0)) {
+        delete pB0;
+        pB0 = NULL;
+      }
+    }
+
+    check(baker.Init(pProfile), "a singular matrix does not stop the bake itself");
+    check(!baker.CanBuildBtoA(), "but no BToA can be built from it");
+
+    const icChar *szReason = NULL;
+
+    check(!icAddHdrFallbackTags(pProfile, NULL, &szReason), "so the tag pair is refused");
+    check(szReason && strstr(szReason, "no inverse") != NULL, "and the refusal names the matrix");
+    check(pA0 && pProfile->FindTag(icSigAToB0Tag) == pA0, "and the profile keeps the AToB0Tag it had");
+    check(pB0 && pProfile->FindTag(icSigBToA0Tag) == pB0, "and keeps the BToA0Tag it had");
+
+    delete pProfile;
+  }
+
   // A chromaticAdaptationTag that is present but cannot be read.  This fixture
   // also carries colorant tags, so once the forward matrix refuses the chad the
   // bake would fall back to them and store a rendering CIccXformMatrixTrcHdr

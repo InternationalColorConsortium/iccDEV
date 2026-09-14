@@ -157,9 +157,13 @@ void testTransferFunctions()
   checkClose(icPqInverseEotf(0.0), 0.0, 0.0, "PQ inverse EOTF at 0");
   checkClose(icPqInverseEotf(1.0), 1.0, 1e-9, "PQ inverse EOTF at 1");
 
-  // Independent anchor: PQ code 0.75 is the widely quoted ~983 cd/m^2. Any
-  // transcription error in m1, m2, c1, c2 or c3 moves this materially.
-  checkClose(icPqEotf(0.75) * icPqPeakLuminance, 982.96, 0.5, "PQ EOTF at code 0.75 is ~983 cd/m^2");
+  // Independent anchor: PQ code 0.75 is 983.3779 cd/m^2, evaluated in double
+  // precision from the exact rationals of m1, m2, c1, c2 and c3 (the value this
+  // used to assert, 982.96, was 0.42 low and sat inside a 0.5 window that
+  // missed every four-decimal rounding of a constant).  Rounding m1, c1 or c2 to
+  // four decimal places, or m2 to two, moves it by at least 0.019; the
+  // library's float evaluation is within 1e-4.
+  checkClose(icPqEotf(0.75) * icPqPeakLuminance, 983.3779, 5e-3, "PQ EOTF at code 0.75 is 983.378 cd/m^2");
 
   // The other end of the same anchor: 203 cd/m^2 - the BT.2408 HDR reference
   // white and clause 8.10.4's default - encodes at PQ code 0.5806, the "58%
@@ -212,11 +216,11 @@ void testTransferNormalisation()
   pq.ToLinear(dst, src);
   checkClose(dst[0], 1.0, 1e-4, "PQ reference white normalises to 1.0");
 
-  // ~983 cd/m^2 over 203 is 4.842 - almost 2.3 stops of headroom, and the
+  // 983.378 cd/m^2 over 203 is 4.8442 - almost 2.3 stops of headroom, and the
   // value a TRC-clamped implementation could not produce.
   src[0] = src[1] = src[2] = 0.75;
   pq.ToLinear(dst, src);
-  checkClose(dst[0], 982.96 / 203.0, 5e-3, "PQ code 0.75 is 4.84x reference white");
+  checkClose(dst[0], 983.3779 / 203.0, 5e-5, "PQ code 0.75 is 4.844x reference white");
 
   pq.FromLinear(dst, dst);
   checkClose(dst[0], 0.75, 1e-4, "PQ normalisation round trip");
@@ -1628,6 +1632,33 @@ void testMalformedChadRefused()
   }
 }
 
+// The unbounded float encoding (f904ea62).  CIccCmm::ToInternalEncoding()
+// clipped icEncodeFloat to 0.0-1.0 whenever bClip was set, so HDR device data
+// above SDR white was cut off before it reached the chain; icEncodeUnitFloat is
+// the encoding that carries the clip.  Nothing else pins either half: reverting
+// the change left every test green.  bClip is what both tools pass for device
+// data, so it is set here.
+void testFloatEncodingIsUnbounded()
+{
+  const icFloatNumber src[3] = { (icFloatNumber)1.5, (icFloatNumber)-0.25, (icFloatNumber)4.0 };
+  icFloatNumber dst[3] = { 0, 0, 0 };
+
+  check(CIccCmm::ToInternalEncoding(icSigRgbData, icEncodeFloat, dst, src, true) == icCmmStatOk,
+        "icEncodeFloat 'RGB ' converts");
+  checkClose(dst[0], 1.5, 0.0, "icEncodeFloat keeps a value above 1.0 with bClip set");
+  checkClose(dst[1], -0.25, 0.0, "icEncodeFloat keeps a value below 0.0 with bClip set");
+  checkClose(dst[2], 4.0, 0.0, "icEncodeFloat keeps two stops above SDR white");
+
+  check(CIccCmm::ToInternalEncoding(icSigRgbData, icEncodeUnitFloat, dst, src, true) == icCmmStatOk,
+        "icEncodeUnitFloat 'RGB ' converts");
+  checkClose(dst[0], 1.0, 0.0, "icEncodeUnitFloat still clips above 1.0 with bClip set");
+  checkClose(dst[1], 0.0, 0.0, "icEncodeUnitFloat still clips below 0.0 with bClip set");
+
+  check(CIccCmm::ToInternalEncoding(icSigRgbData, icEncodeUnitFloat, dst, src, false) == icCmmStatOk,
+        "icEncodeUnitFloat 'RGB ' converts without bClip");
+  checkClose(dst[0], 1.5, 0.0, "and without bClip it does not clip");
+}
+
 } // namespace
 
 int main(int /*argc*/, char * /*argv*/[])
@@ -1652,6 +1683,7 @@ int main(int /*argc*/, char * /*argv*/[])
   testHlgLumaFromResolvedPrimaries();
   testLabPcsGetsNoHdrChain();
   testMalformedChadRefused();
+  testFloatEncodingIsUnbounded();
 
   if (g_failures)
     printf("%d assertion(s) failed\n", g_failures);
