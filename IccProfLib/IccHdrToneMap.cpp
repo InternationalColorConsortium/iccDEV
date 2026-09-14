@@ -352,8 +352,9 @@ bool CIccHdrTransfer::Init(icUInt8Number nTransferCharacteristics,
 
   switch (nTransferCharacteristics) {
     case icCicpTransferLinear:
-      // PROPOSAL-ISSUE HDR-01, applied to the Linear case.  The identity is
-      // the EOTF, and the 29-08-2026 revision says what its output means:
+      // The reference-white ruling (see the class header), applied to the
+      // Linear case.  The identity is the EOTF, and the revision says what its
+      // output means:
       // step a) normalises "PQ in cd/m2 / 10 000, HLG in scene-referred units
       // per Rec. ITU-R BT.2100, or, for Linear, DIRECTLY IN CD/M2, consistent
       // with the CLL, MDCV and CRWL entries of 8.10.4".
@@ -1614,7 +1615,7 @@ icFloatNumber CIccHagcEvaluator::EvalGainExponent(icFloatNumber x, bool *bValid 
  *  gain application primaries; A.3 applies the tone map there; A.4's return
  *  leg is explicitly outside that document's scope.  This library's chain
  *  already delivers the first two thirds of that - CIccHdrTransfer produces
- *  reference-white-relative linear light, which is the HDR-01 ruling - so the
+ *  reference-white-relative linear light, per the reference-white ruling - so the
  *  only thing missing is the change of primaries, and the only thing this
  *  function adds is that matrix and its inverse around the gain.
  *
