@@ -5072,7 +5072,12 @@ bool CIccTagXmlMultiProcessElement::ToXml(std::string &xml, std::string blanks/*
         if (!strcmp(pMpeExt->GetExtClassName(), "CIccMpeXml")) {
           CIccMpeXml *pMpeXml = (CIccMpeXml*)pMpeExt;
 
-          pMpeXml->ToXml(xml, blanks + "  ");
+          // The result used to be ignored.  An element that fails part-way has
+          // already written its opening markup, so iccToXml reported success
+          // and wrote a document its own reader refuses.  Failing here lets
+          // CIccProfileXml::ToXml() rewind and skip the tag visibly instead.
+          if (!pMpeXml->ToXml(xml, blanks + "  "))
+            return false;
         }
         else {
           return false;

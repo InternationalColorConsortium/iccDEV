@@ -320,8 +320,16 @@ class ICCPROFLIB_API CIccMpeXmlCalculator : public CIccMpeCalculator, public CIc
 public:
   CIccMpeXmlCalculator() : CIccMpeCalculator() { m_sImport = "*"; }
 
+  // Copies only the calculator itself (channels, function, sub-elements).  The
+  // members below are parse-time scratch state, and m_mpeList/m_mpeMap own raw
+  // pointers that clean() deletes, so they start empty rather than shared.
+  explicit CIccMpeXmlCalculator(const CIccMpeCalculator &calc)
+    : CIccMpeCalculator(calc), m_nNextVar(0), m_nNextMpe(0) { m_sImport = "*"; }
+
 public:
   virtual ~CIccMpeXmlCalculator() {  clean(); }
+
+  virtual CIccMpeCalculator *NewCopy() const;
 
   virtual const char *GetClassName() const { return "CIccMpeXmlCalculator"; }
 
