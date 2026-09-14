@@ -171,6 +171,7 @@ jobs:
 
           Write-Host "Running CTest suites..."
           ctest --test-dir out\vs2022-vcpkg -C Release `
+            --parallel ([Environment]::ProcessorCount) `
             --label-exclude known-red `
             --output-on-failure `
             --no-tests=error `

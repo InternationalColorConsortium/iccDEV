@@ -86,6 +86,8 @@ policy warning.
 | `ENABLE_COVERAGE` | OFF | Clang source coverage or GCC gcov |
 | `ENABLE_PROFILING` | OFF | gprof/perf `-pg` profiling |
 | `ENABLE_MACOS_GUARD_MALLOC` | OFF | macOS GuardMalloc/libgmalloc debug configuration |
+| `ICCDEV_LIBCPP_HARDENING_MODE` | `none` | Apple libc++ mode: `none`, `fast`, `extensive`, or `debug` |
+| `ICCDEV_CTEST_PARALLEL_LEVEL` | detected logical CPUs | Maximum concurrent tests used by `check` and `check-fast` |
 
 `-fsanitize=undefined` does not catch unsigned overflow or float division by
 zero. For numeric bug hunting, use IntegerSanitizer plus
@@ -145,7 +147,7 @@ Preset equivalents live in `Build/Cmake/CMakePresets.json`:
 | `linux-clang-msan` | MSan-only Debug tool build |
 | `linux-clang-coverage` | Clang source coverage |
 | `linux-clang-profiling` | gprof/perf `-pg` profiling |
-| `macos-clang-sanitizers` | macOS ASan + UBSan + IntSan + float checks |
+| `macos-clang-sanitizers` | macOS ASan + UBSan + IntSan + float checks, with libc++ EXTENSIVE hardening |
 | `macos-clang-guard-malloc` | macOS Debug tool build for libgmalloc |
 | `vs2022-clangcl-x64-avx2-qa-flags` | Windows ClangCL QA build with runtime-dispatched AVX2 CLUT interpolation |
 | `vs2022-clangcl-x64-avx2-diagnostics` | Windows ClangCL AVX2 build with dispatch, kernel-input, and timing tracepoints |
@@ -161,6 +163,12 @@ Example:
 cmake --preset linux-clang-sanitizers -S Build/Cmake -B out/linux-clang-sanitizers
 cmake --build out/linux-clang-sanitizers -j"$(nproc)"
 ```
+
+The `macos-clang-sanitizers` preset sets
+`ICCDEV_LIBCPP_HARDENING_MODE=extensive`. The option is restricted to Apple
+Clang/libc++ and applies consistently to all C++ translation units in the
+build. `none` leaves the SDK default untouched. Do not use the removed
+`_LIBCPP_ENABLE_ASSERTIONS` macro; current Xcode libc++ rejects it.
 
 The AVX2 and AVX-512 presets are opt-in QA configurations. Their ISA-specific
 translation units use scoped compiler flags; do not apply `/arch:AVX2`,

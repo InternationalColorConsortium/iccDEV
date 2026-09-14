@@ -17,13 +17,58 @@ Use it for branch updates such as:
 1. Keep history linear. Use `git rebase` and `git cherry-pick`, not merge.
 2. Work in a clean clone or disposable worktree. Do not rewrite from a dirty
    development checkout.
-3. Fetch immediately before rewriting and immediately before pushing.
-4. Treat conflict preference as explicit. If a maintainer says to prefer the
+3. Set repository-local Git defaults that make accidental merge commits fail.
+4. Fetch immediately before rewriting and immediately before pushing.
+5. Treat conflict preference as explicit. If a maintainer says to prefer the
    stacked commit, `git cherry-pick -X theirs <commit>` makes `theirs` mean the
    commit being picked.
-5. Review the rewritten stack with `git range-diff`.
-6. Build and run CTest locally.
-7. Push with an exact `--force-with-lease`; never use plain `--force`.
+6. Review the rewritten stack with `git range-diff`.
+7. Build and run CTest locally.
+8. Push with an exact `--force-with-lease`; never use plain `--force`.
+
+## Recommended Local Git Configuration
+
+Maintainers should set these defaults once in each iccDEV clone used for branch
+grooming. Keep them local to the repository so they do not surprise unrelated
+projects.
+
+```bash
+git config --local pull.rebase true
+git config --local rebase.autoStash true
+git config --local rebase.updateRefs true
+git config --local branch.autosetuprebase always
+git config --local merge.ff only
+git config --local fetch.prune true
+git config --local rerere.enabled true
+git config --local core.hooksPath .githooks
+```
+
+These settings make normal `git pull` rebase, make future tracking branches
+prefer rebase, reject non-fast-forward `git merge`, prune deleted remote refs on
+fetch, remember repeated conflict resolutions, and enable the repository hook.
+`rebase.autoStash` is a convenience for small local edits; PR finalization still
+requires a clean worktree before rewrite, validation, and push.
+
+For branches protected by signed-commit rules, also configure commit signing in
+the maintainer's normal Git identity before amending or pushing:
+
+```bash
+git config --global gpg.format ssh
+git config --global user.signingkey <path-to-public-signing-key>
+git config --global commit.gpgsign true
+```
+
+Use the maintainer's actual signing key and verify the result before handoff:
+
+```bash
+git log --show-signature -1
+gh api "repos/InternationalColorConsortium/iccDEV/commits/$(git rev-parse HEAD)" \
+  --jq '.commit.verification | {verified, reason, verified_at}'
+```
+
+Do not use a merge commit to synchronize a PR branch. If a branch moved after
+local validation, fetch, rebase or reset to the exact remote head, rerun the
+changed evidence, and push with an exact lease.
 
 ## Example: Rebase and Stack One Commit
 
@@ -51,6 +96,7 @@ else
   git fetch --prune origin master "$target"
 fi
 git checkout -B "$target" "origin/$target"
+# Apply the repository-local config block above in new maintainer clones.
 git status --short --branch
 ```
 

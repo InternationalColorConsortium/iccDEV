@@ -113,6 +113,9 @@ use `.github/skills/regression-container-maintainer/SKILL.md` and
   `docs/governance/UPSTREAM_PR_READINESS.md` and use
   `.github/skills/upstream-pr-readiness/SKILL.md`. A branch push, CI request,
   or review request is not PR-creation authorization.
+- For maintainer branch grooming, set repository-local Git defaults from
+  `docs/linear-stack-workflow.md` so pulls rebase, non-fast-forward merges fail,
+  repository hooks run, and the final `base..HEAD` range remains merge-free.
 - Run the smallest complete validation for the changed surface. For workflow,
   Docker, release, CMake, parser, or security automation changes, follow the
   additional checks required by the path-specific instructions and pre-PR

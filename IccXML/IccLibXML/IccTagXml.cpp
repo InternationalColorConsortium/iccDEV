@@ -78,6 +78,7 @@
 #include <sstream>  // Make sure to include this header
 #include <iomanip>  // Include this header for setw and setfill
 #include <cmath>    // std::isfinite for NaN/Inf-safe float->int casts
+#include <limits>   // std::numeric_limits for the colorantTable channel bound
 
 typedef  std::map<icUInt32Number, icTagSignature> IccOffsetTagSigMap;
 
@@ -2754,7 +2755,38 @@ bool CIccTagXmlColorantTable::ToXml(std::string &xml, std::string blanks/* = ""*
 }
 
 
-bool CIccTagXmlColorantTable::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
+// #2548: Channel1-3 were converted with bare atof(), so "not-a-number" loaded as
+// 0 and "50abc" as 50 with no diagnostic, while CIccTagJsonColorantTable::
+// ParseJson() refuses both.  Accept a value only when strtod() consumes all of
+// it, trailing whitespace aside (atof() and strtod() both skip leading
+// whitespace), and the result is finite and fits icFloatNumber: a NaN, an
+// infinity or a double beyond FLT_MAX would otherwise reach icFtoU16() through a
+// float conversion whose result is undefined.
+static bool icXmlColorantChannel(xmlAttr *attr, icFloatNumber &value)
+{
+  const char *szValue = icXmlAttrValue(attr, NULL);
+  if (!szValue)
+    return false;
+
+  char *szEnd = NULL;
+  double d = strtod(szValue, &szEnd);
+  if (szEnd == szValue)
+    return false;
+
+  while (*szEnd == ' ' || *szEnd == '\t' || *szEnd == '\n' || *szEnd == '\r')
+    szEnd++;
+  if (*szEnd)
+    return false;
+
+  if (!std::isfinite(d) || d > std::numeric_limits<icFloatNumber>::max() ||
+      d < -std::numeric_limits<icFloatNumber>::max())
+    return false;
+
+  value = (icFloatNumber)d;
+  return true;
+}
+
+bool CIccTagXmlColorantTable::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   pNode = icXmlFindNode(pNode, "ColorantTable");
 
@@ -2799,9 +2831,12 @@ bool CIccTagXmlColorantTable::ParseXml(xmlNode *pNode, std::string & /*parseStr*
 
               icFloatNumber lab[3];
 
-              lab[0] = (icFloatNumber)atof(icXmlAttrValue(L));
-              lab[1] = (icFloatNumber)atof(icXmlAttrValue(a));
-              lab[2] = (icFloatNumber)atof(icXmlAttrValue(b));
+              if (!icXmlColorantChannel(L, lab[0]) ||
+                  !icXmlColorantChannel(a, lab[1]) ||
+                  !icXmlColorantChannel(b, lab[2])) {
+                parseStr += "ColorantTable Channel1, Channel2 and Channel3 must be finite numbers\n";
+                return false;
+              }
 
               icLabToPcs(lab);
               m_pData[i].data[0] = icFtoU16(lab[0]);

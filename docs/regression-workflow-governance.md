@@ -68,11 +68,13 @@ workflows use `iccdev-apple-simulator-smoke.sh` and
 console sentinel, a missing-fixture control must fail, the report must include
 the built extended-library checks, the public invalid-profile substitution
 control, and non-failing mobile gap notes; Xcode CTest must produce fresh CLI
-output in both configurations. The path-filtered PR workflow runs only for
-same-repository heads and keeps outputs in the job workspace. The
-master-push/manual core workflow additionally uploads the built static
-archives, generated version headers, and build manifest. A nonzero helper exit
-fails either gate.
+output in both configurations. The manual platform workflow accepts a focused
+`core`, `examples`, or `all` scope; the examples scope runs the three manual
+iOS apps with sanitizers on one disposable simulator. A manual core workflow
+dispatch additionally uploads the built static archives, generated version
+headers, and build manifest; reusable calls keep those products in the job
+workspace. Neither Apple workflow runs automatically on a push. A nonzero
+helper exit fails either gate.
 
 ## Workflow Governance Requirements
 

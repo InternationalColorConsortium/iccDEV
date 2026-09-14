@@ -1,3 +1,7 @@
+// Copyright (c) 2026 The International Color Consortium. All rights reserved.
+// Licensed under the BSD 3-Clause "New" or "Revised" License; see the ICC
+// Software License in the repository root and CONTRIBUTING.md.
+//
 // Companion to iccdev.namedcolor-sparse-matrix-apply, on the real corpus fixtures.
 //
 // That test builds its sparse-matrix NamedColor array in memory, deliberately, so a

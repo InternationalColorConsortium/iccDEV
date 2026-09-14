@@ -74,6 +74,12 @@ elseif(_iccdev_run_target STREQUAL "watch")
     message(FATAL_ERROR "ICCDEV_APPLE_RUN_TARGET=watch requires -DCMAKE_SYSTEM_NAME=watchOS")
   endif()
   enable_language(Swift)
+  # Swift owns the final link. Avoid duplicate libc++ flags and SDK Swift paths
+  # that Xcode expands into nonexistent configuration-specific directories.
+  list(REMOVE_ITEM CMAKE_CXX_IMPLICIT_LINK_LIBRARIES c++)
+  list(REMOVE_ITEM CMAKE_OBJCXX_IMPLICIT_LINK_LIBRARIES c++)
+  list(FILTER CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES EXCLUDE REGEX "/usr/lib/swift$")
+  list(FILTER CMAKE_OBJCXX_IMPLICIT_LINK_DIRECTORIES EXCLUDE REGEX "/usr/lib/swift$")
   set(_targeted_device_family "4")
   set(_bundle_default "org.color.iccdev.CoreSmoke.watch")
 else()

@@ -41,6 +41,15 @@ set(wxWidgets_CONFIGURATION mswu)
 
 add_executable(${TARGET_NAME} ${SOURCES})
 set_target_properties(${TARGET_NAME} PROPERTIES WIN32_EXECUTABLE ON)
+if(APPLE)
+  # Keep the tool path stable, but give AppKit a main bundle identifier.
+  set_target_properties(${TARGET_NAME} PROPERTIES
+    XCODE_ATTRIBUTE_CREATE_INFOPLIST_SECTION_IN_BINARY YES
+    XCODE_ATTRIBUTE_INFOPLIST_FILE
+      "${SRC_PATH}/Tools/wxWidget/wxProfileDump/Info.plist"
+    XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER
+      "org.color.iccdev.iccDumpProfileGui")
+endif()
 message(STATUS "  Linking libraries for target ${TARGET_NAME}:")
 message(STATUS "  ICCProfLib Library: ${WX_LINK_LIB}")
 message(STATUS "  wxWidgets Libraries: ${wxWidgets_LIBRARIES}")
