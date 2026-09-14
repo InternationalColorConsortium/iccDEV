@@ -117,7 +117,7 @@
       </ObserverFuncs>
       <StdIlluminant>Illuminant D50</StdIlluminant>
       <ColorTemperature>5000</ColorTemperature>
-      <IlluminantSPD start="380.00000000." end="780.00000000" steps="81">
+      <IlluminantSPD start="380.00000000" end="780.00000000" steps="81">
 		 24.457147   27.147280   29.837414   39.547443   49.257472   52.859364   56.461255
 		 58.222678   59.984100   58.878685   57.773270   66.274622   74.775973   80.987003
 		 87.198034   88.882488   90.566943   90.947782   91.328622   93.200755   95.072887

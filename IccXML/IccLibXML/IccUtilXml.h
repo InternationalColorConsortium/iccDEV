@@ -197,5 +197,14 @@ bool icXmlParseU16(const char *s, icUInt16Number &out,
 bool icXmlParseU32(const char *s, icUInt32Number &out,
                    icUInt32Number max_value = 0xFFFFFFFFu);
 
+// Safe floating-point parser for XML attribute values and element text, the
+// replacement for atof() (#2548).  Returns false (leaving `out` unchanged) when:
+//   - the string is NULL, empty or only whitespace,
+//   - strtod converts nothing, or anything but whitespace follows the number,
+//   - the value is a NaN or an infinity, or lies beyond icFloatNumber's range.
+// Surrounding whitespace is accepted, so pretty-printed element text such as
+// "\n  5000\n" parses; atof() read "50abc" as 50 and "not-a-number" as 0.
+bool icXmlParseFloat(const char *s, icFloatNumber &out);
+
 
 #endif //_ICCUTILXML_H

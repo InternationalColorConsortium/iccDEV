@@ -5028,6 +5028,70 @@ function(iccdev_add_colorant_count_narrowing_xml_test)
   endif()
 endfunction()
 
+# #2548, the class behind the colorantTable fix above: the XML readers converted
+# numbers with bare atof()/atoi()/atol(), so "50abc" loaded as 50 and
+# "not-a-number" as 0 with no diagnostic. The helper appends text to one value in
+# a tracked corpus document (or a small generated one, for readers no tracked
+# document reaches) and asserts the reader's own refusal message, with the
+# unmodified document as the control. It reads the corpus from the source tree
+# and writes only into its scratch directory.
+function(iccdev_add_xml_numeric_values_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlNumericValuesTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-numeric-values.cpp"
+  )
+  target_compile_features(iccXmlNumericValuesTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlNumericValuesTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlNumericValuesTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlNumericValuesTest)
+
+  set(_xml_numeric_values_scratch
+    "${CMAKE_CURRENT_BINARY_DIR}/ctest-output/xml-numeric-values")
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-numeric-values
+      COMMAND "$<TARGET_FILE:iccXmlNumericValuesTest>"
+              "${_xml_numeric_values_scratch}" "${ICCDEV_REPO_ROOT}"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-numeric-values
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlNumericValuesTest>"
+        "${_xml_numeric_values_scratch}" "${ICCDEV_REPO_ROOT}"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-numeric-values PROPERTIES
+    TIMEOUT 300
+    LABELS "iccdev;xml;issue-2548;regression"
+  )
+  if(WIN32)
+    set(_xml_numeric_values_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlNumericValuesTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _xml_numeric_values_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-numeric-values PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_xml_numeric_values_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Follow-up to #2535/#2536: CIccTagColorantOrder::Read() cast its declared count
 # straight to SetSize()'s icUInt16Number and then read the narrowed m_nCount
 # bytes, so a tag declaring 65537 positions loaded as one -- silently, while
@@ -8076,6 +8140,7 @@ if(WIN32)
   iccdev_add_namedcolor_findcolor_suffix_underflow_test()
   iccdev_add_colorant_count_narrowing_json_test()
   iccdev_add_colorant_count_narrowing_xml_test()
+  iccdev_add_xml_numeric_values_test()
   iccdev_add_parametric_curve_params_json_test()
   iccdev_add_colorant_count_narrowing_binary_test()
   iccdev_add_xform_create_tag_ownership_test()
@@ -8465,6 +8530,7 @@ iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_namedcolor_findcolor_suffix_underflow_test()
 iccdev_add_colorant_count_narrowing_json_test()
 iccdev_add_colorant_count_narrowing_xml_test()
+iccdev_add_xml_numeric_values_test()
 iccdev_add_parametric_curve_params_json_test()
 iccdev_add_colorant_count_narrowing_binary_test()
 iccdev_add_xform_create_tag_ownership_test()
