@@ -4862,10 +4862,12 @@ endfunction()
 # design, since clause 8.10's questions are report content rather than a
 # reusable measurement.  So it drives the built tool and reads its output -
 # which is also the shape a downstream consumer sees.  RunPawgHdrSectionTest.cmake
-# documents the three contracts it pins; the fixtures are generated, so the
-# script skips (not fails) when CreateAllProfiles.sh has not run.
+# documents the contracts it pins.  The fixtures are generated, and the test
+# requires the iccdev_profiles fixture, so a fixture still missing when it runs
+# is a failure, not a skip.  iccFromXml builds two variants the corpus does not
+# carry.
 function(iccdev_add_pawg_hdr_section_test)
-  if(NOT TARGET iccPawgReport)
+  if(NOT TARGET iccPawgReport OR NOT TARGET iccFromXml)
     return()
   endif()
 
@@ -4877,6 +4879,7 @@ function(iccdev_add_pawg_hdr_section_test)
       "-DICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/iccdev-pawg-hdr-section"
       "-DICCDEV_BUILD_DIR=${CMAKE_BINARY_DIR}"
       "-DICCDEV_PAWG_EXE=$<TARGET_FILE:iccPawgReport>"
+      "-DICCDEV_FROMXML_EXE=$<TARGET_FILE:iccFromXml>"
       "-DICCDEV_HDR_DIR=${ICCDEV_TESTING_DIR}/HDR"
       "-DICCDEV_SDR_PROFILE=${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
       # The count a non-HDR report has always had.  It is asserted, not derived,

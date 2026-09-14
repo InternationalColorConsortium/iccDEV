@@ -1138,24 +1138,11 @@ static const icTagSignature kCommonRequired[] = {
 
 static const icTagSignature kMatrixTrcAlternative[] = {
   icSigAToB0Tag,
-  // BToA0Tag belongs with AToB0Tag, and its absence was a plain gap in this
-  // table rather than anything HDR-specific.  ICC.1:2022 8.3.3/8.4.3 permit a
-  // LUT-based Input or Display profile, which is why AToB0Tag is here; for a
-  // Display profile ICC.1 then REQUIRES the paired BToA0Tag, so a profile that
-  // does what the specification demands was reported by C5 as carrying a
-  // "standard tag outside the local class rule table".  BToA0Tag appears only
-  // in kOutputRequired and kA2B0B2A0Required, neither of which the display or
-  // input rule uses.
-  //
-  // Every conforming Display RGB HDR Profile tripped this, because 8.10.6
-  // mandates the AToB0Tag and its paired BToA0Tag - so the whole HDR corpus
-  // warned - but the defect predates the HDR work and a plain LUT-based
-  // Display profile hits it too.  Fixed here, in the alternative set the input
-  // and display rules share, rather than by widening kCommonOptional, which
-  // the output and link rules also read and which would say the tag is merely
-  // optional where those classes require it.  Same shape as the cicpTag
-  // (#2001) and headroomAdaptiveGainCurveTag entries noted below.
-  icSigBToA0Tag,
+  // NOT BToA0Tag.  This is an ANY-OF set: HasAnyRequiredAlternative() is
+  // satisfied by one member, so a BToA0Tag here let C4 pass an Input or
+  // Display profile carrying no forward transform at all.  BToA0Tag is allowed
+  // in those classes through kInputDisplayOptional instead, which only C5
+  // reads.
   icSigRedMatrixColumnTag,
   icSigGreenMatrixColumnTag,
   icSigBlueMatrixColumnTag,
@@ -1216,25 +1203,9 @@ static const icTagSignature kCommonOptional[] = {
   icSigCicpTag,
   icSigChromaticAdaptationTag,
   icSigChromaticityTag,
-  // headroomAdaptiveGainCurveTag is a permitted optional tag of an RGB Input or
-  // Display profile. Without it here, check C5 reports every profile carrying
-  // one as holding "standard tags outside the local class rule table" - it is
-  // recognised by IsSpecTag(), so it is not treated as private and falls
-  // straight through IsAllowedForClass() to the warning.
-  //
-  // cicpTag needs no entry of its own: it is already listed above, added by
-  // #2001 for exactly this reason. It was duplicated here when the HDR work
-  // landed, which was harmless but made this comment read as though the tag
-  // were absent from the table.
-  //
-  // This table is keyed on the profile *class* signature, which is why the HDR
-  // Profile sub-class does not get a RuleTable of its own: an HDR Profile's
-  // class signature is still 'mntr' or 'scnr', so GetRuleTable() cannot
-  // distinguish it without being handed the whole profile. Its required-tag set
-  // is the matrix/TRC set of its parent class plus cicpTag, and the cicpTag
-  // requirement is enforced where it can see the whole profile, in
-  // CIccProfile::CheckHdrProfile().
-  icSigHeadroomAdaptiveGainCurveTag,
+  // headroomAdaptiveGainCurveTag is deliberately not here: every class rule
+  // reads this table, and the tag is permitted only in Input and Display
+  // profiles.  See kInputDisplayOptional.
   icSigColorantTableTag,
   icSigColorantTableOutTag,
   icSigDeviceMfgDescTag,
@@ -1260,6 +1231,31 @@ static const icTagSignature kCommonOptional[] = {
   icSigBToD0Tag,
   icSigBToD1Tag,
   icSigBToD2Tag
+};
+
+// Tags allowed, but required by nothing, in Input and Display profiles only.
+// Read by C5 through IsAllowedForClass(), never by C4.
+//
+// BToA0Tag: ICC.1:2022 8.3.3/8.4.3 permit a LUT-based Input or Display profile,
+// and for Display ICC.1 then requires the BToA0Tag paired with its AToB0Tag,
+// so a profile doing what the specification demands was reported by C5 as
+// carrying a "standard tag outside the local class rule table".  Every Display
+// RGB HDR Profile tripped it, since 8.10.6 mandates the pair.  It used to be
+// fixed by listing BToA0Tag in kMatrixTrcAlternative, which is an any-of set
+// for C4 and so let a profile with only a BToA0Tag pass C4.
+//
+// headroomAdaptiveGainCurveTag: a permitted optional tag of an RGB Input or
+// Display profile, and the library reports it in any other class.  It is
+// recognised by IsSpecTag(), so it is not treated as private; listing it in
+// kCommonOptional hid it from C5 in every class.
+//
+// The HDR Profile sub-class gets no RuleTable of its own: its class signature
+// is still 'mntr' or 'scnr', so GetRuleTable() cannot tell it apart without the
+// whole profile.  Its clause 8.10 requirements are enforced where the whole
+// profile is visible, in CIccProfile::CheckHdrProfile() and section H.
+static const icTagSignature kInputDisplayOptional[] = {
+  icSigBToA0Tag,
+  icSigHeadroomAdaptiveGainCurveTag
 };
 
 bool ContainsTag(const icTagSignature *tags, size_t count, icTagSignature sig)
@@ -1374,6 +1370,10 @@ bool IsAllowedForClass(icProfileClassSignature cls, icTagSignature sig)
   const RuleTable *rule = GetRuleTable(cls);
   if (!rule) {
     return false;
+  }
+  if ((cls == icSigInputClass || cls == icSigDisplayClass) &&
+      ContainsTag(kInputDisplayOptional, CountOf(kInputDisplayOptional), sig)) {
+    return true;
   }
   return IsRequiredForClass(cls, sig) ||
          ContainsTag(rule->optional, rule->optionalCount, sig);
@@ -2141,14 +2141,16 @@ void AddHdrItems(std::vector<PawgItem> &items, CIccProfile *pIcc)
     std::ostringstream oss;
     if (info.nClass == icHdrProfileConforming) {
       oss << "HDR Profile: meets clause 8.10.1 - version 4.5.0.0 or later, "
-          << "RGB " << (pIcc->m_Header.deviceClass == icSigInputClass ? "Input" : "Display")
+          << "RGB " << iccInfo.GetProfileClassSigName((icProfileClassSignature)pIcc->m_Header.deviceClass)
           << " class, three-component matrix-based, cicpTag TransferCharacteristics="
           << HdrTransferText(info.nTransferCharacteristics);
     }
     else {
       // Lead with what the profile is, and name the HDR-related content only
       // as the reason this section printed at all.
-      oss << (pIcc->m_Header.deviceClass == icSigInputClass ? "Input" : "Display")
+      // The actual class.  This used to print "Display" for every class other
+      // than Input, so a ColorSpace or Output profile was described as one.
+      oss << iccInfo.GetProfileClassSigName((icProfileClassSignature)pIcc->m_Header.deviceClass)
           << " profile, "
           << (info.bRgbMatrixBased ? "three-component matrix-based"
                                    : "not three-component matrix-based RGB")
@@ -2213,10 +2215,21 @@ void AddHdrItems(std::vector<PawgItem> &items, CIccProfile *pIcc)
   }
 
   {
+    // The library's IMPL-02 warning lands here, because it is about how this
+    // transfer is evaluated: C3 defers every clause 8.10 finding to this
+    // section, so a finding no H item states would appear nowhere.
+    PawgVerdict verdict = PawgVerdict::Ok;
+    std::string detail = "TransferCharacteristics=" + HdrTransferText(info.nTransferCharacteristics);
+    if (!info.bVideoFullRange) {
+      verdict = PawgVerdict::Warn;
+      detail += "; cicpTag VideoFullRangeFlag is 0 (narrow range). Clause 8.10 does not mention the "
+                "field, so this violates nothing, but this implementation does not expand "
+                "narrow-range values: the transfer function is evaluated on the encoded values as "
+                "received";
+    }
     AddItem(items, "H4",
             "Which of the transfer characteristics of clause 8.10.1 - 8 (Linear), 16 (PQ) or 18 (HLG) - does this HDR Profile use?",
-            PawgVerdict::Ok,
-            "TransferCharacteristics=" + HdrTransferText(info.nTransferCharacteristics));
+            verdict, detail);
   }
 
   // --- H5: source primaries -------------------------------------------------
@@ -2229,6 +2242,14 @@ void AddHdrItems(std::vector<PawgItem> &items, CIccProfile *pIcc)
     if (!info.bHasCicp) {
       verdict = PawgVerdict::NotRun;
       detail = "no cicpTag, so no ColourPrimaries field selects a resolution path (see H3)";
+    }
+    else if (info.nColourPrimaries == icCicpPrimariesUnspecified && !info.bMatrixColumnsPresent) {
+      // A requirement, not only a resolution question: the library reports it
+      // NonCompliant, and C3 defers that finding to this section.
+      verdict = PawgVerdict::Fail;
+      detail = "cicpTag ColourPrimaries is 2 (Unspecified) but the matrix column tags are not all "
+               "present; clause 8.10.6 requires them in that case, and 8.10.2 c) has no other "
+               "source for the RGB-to-PCSXYZ matrix";
     }
     else if (info.bPrimariesResolved) {
       verdict = PawgVerdict::Ok;
@@ -2253,29 +2274,61 @@ void AddHdrItems(std::vector<PawgItem> &items, CIccProfile *pIcc)
   }
 
   // --- H6: tone-mapping descriptor ------------------------------------------
-  // The pairing rule is tested first: it is the one requirement of clause 8.10
-  // that an HDR Profile can actually fail.  It sits outside 8.10.1's membership
-  // conditions - "When a Display RGB HDR Profile contains an AToBxTag, the
-  // corresponding BToAxTag shall also be present" (8.10.6) - so a profile that
-  // is squarely in the sub-class can still break it.
+  // Clause 8.10.6's tag requirements are tested first: they sit outside
+  // 8.10.1's membership conditions, so a profile squarely in the sub-class can
+  // still break them, and C3 defers the library's findings on them to this
+  // item.  All of CheckHdrProfile()'s 8.10.6 tag findings are stated here: the
+  // mandatory AToB0Tag in every class, the Display-class BToA0Tag, and the
+  // pairing rule for every x, not only x = 0.
   {
     PawgVerdict verdict;
     std::string detail;
+    std::vector<std::string> broken;
+    // The AToB0Tag is required "regardless of profile class".  A profile
+    // without one used to reach the no-descriptor branch below and be told
+    // that was "not a violation".
+    if (!info.bHasAToB0) {
+      broken.push_back("AToB0Tag missing; clause 8.10.6 requires it in every RGB HDR Profile, "
+                       "regardless of profile class, as the fallback for consumers that do not "
+                       "implement HDR processing");
+    }
     // Scoped to the Display class, because 8.10.6 is: "When a **Display** RGB HDR
     // Profile contains an AToBxTag, the corresponding BToAxTag shall also be
     // present" - wording unchanged in the 2026-09-06 revision.  Unscoped, this
     // FAILed every Input-class HDR Profile carrying an AToB0Tag, including this
     // branch's own HdrInputDisplayMeta fixture, whose header calls it conforming
     // and which the library validator reports nothing about.  The FAIL text even
-    // said "a Display RGB HDR Profile" while firing on a 'scnr'.  It also
-    // short-circuited H6's real answer - which 8.10.3 descriptor is present -
-    // for every Input-class profile.  CIccProfile::CheckHdrProfile() applies the
-    // same class guard.
-    if (pIcc->m_Header.deviceClass == icSigDisplayClass &&
-        info.bHasAToB0 && !info.bHasBToA0) {
+    // said "a Display RGB HDR Profile" while firing on a 'scnr'.
+    // CIccProfile::CheckHdrProfile() applies the same class guard.
+    if (pIcc->m_Header.deviceClass == icSigDisplayClass) {
+      if (!info.bHasAToB0 && !info.bHasBToA0) {
+        broken.push_back("BToA0Tag missing; clause 8.10.6 requires it in a Display-class RGB HDR "
+                         "Profile alongside the mandatory AToB0Tag");
+      }
+      static const struct {
+        icTagSignature aToB;
+        icTagSignature bToA;
+        const char *szIndex;
+      } kPairs[] = {
+        { icSigAToB0Tag, icSigBToA0Tag, "0" },
+        { icSigAToB1Tag, icSigBToA1Tag, "1" },
+        { icSigAToB2Tag, icSigBToA2Tag, "2" },
+      };
+      for (size_t i = 0; i < CountOf(kPairs); ++i) {
+        if (pIcc->IsTagPresent(kPairs[i].aToB) && !pIcc->IsTagPresent(kPairs[i].bToA)) {
+          std::snprintf(buf, sizeof(buf),
+                        "AToB%sTag present without its paired BToA%sTag; clause 8.10.6 requires "
+                        "the pair when a Display RGB HDR Profile contains an AToBxTag",
+                        kPairs[i].szIndex, kPairs[i].szIndex);
+          broken.push_back(buf);
+        }
+      }
+    }
+    if (!broken.empty()) {
       verdict = PawgVerdict::Fail;
-      detail = "AToB0Tag present without its paired BToA0Tag; clause 8.10.6 requires the pair "
-               "when a Display RGB HDR Profile contains an AToBxTag";
+      for (size_t i = 0; i < broken.size(); ++i) {
+        detail += (i ? "; " : "") + broken[i];
+      }
     }
     else if (info.bHasHagc) {
       verdict = PawgVerdict::Ok;
@@ -2285,19 +2338,12 @@ void AddHdrItems(std::vector<PawgItem> &items, CIccProfile *pIcc)
                   "prefer if it wants the author's baked rendering";
       }
     }
-    else if (info.bHasAToB0) {
+    else {
+      // Reached only with an AToB0Tag present: its absence is a finding above,
+      // so the old "no descriptor, not a violation" branch no longer exists.
       verdict = PawgVerdict::Ok;
       detail = "8.10.3 c): AToB0Tag/BToA0Tag pair - the lowest-ranked descriptor, a pre-rendered "
                "tone mapping rather than one the consumer evaluates";
-    }
-    else {
-      // Not a violation: 8.10.2 NOTE 6 allows an identity tone-mapping operator.
-      // It is still worth knowing, because it means the profile contributes no
-      // HDR-to-SDR rendering of its own and the consumer must supply one.
-      verdict = PawgVerdict::Warn;
-      detail = "no tone-mapping descriptor present; not a violation - NOTE 6 of clause 8.10.2 "
-               "permits an identity tone-mapping operator - but the profile then contributes no "
-               "HDR-to-SDR rendering of its own and a consumer must supply its own tone mapping";
     }
     AddItem(items, "H6",
             "Is a tone-mapping descriptor of clause 8.10.3 present, and which of its ranked options?",

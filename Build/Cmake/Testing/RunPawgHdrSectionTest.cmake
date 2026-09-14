@@ -9,7 +9,7 @@
 # drives the built tool end to end instead - which is also the shape a consumer
 # (profiletool) actually reads.
 #
-# Three contracts are pinned, and each one is invisible from a report that
+# Four contracts are pinned, and each one is invisible from a report that
 # merely "looks right":
 #
 #  1. ABSENCE for a non-HDR profile.  The section must not appear at all for an
@@ -17,9 +17,9 @@
 #     section existed - emitting eight NOT RUN placeholders would change every
 #     existing report's summary to say nothing.
 #
-#  2. The conforming/intended split, and that its consequences land on the right
-#     items.  A profile whose cicp TransferCharacteristics is outside {8,16,18}
-#     is an INTENDED HDR Profile (H1 WARN) with the violation on H4, not on H1.
+#  2. Membership is a classification, not a finding.  A profile outside the
+#     clause 8.10 sub-class - a TransferCharacteristics outside {8,16,18}, say -
+#     gets H1 as N/A with a description of what it is, and no H2-H8 at all.
 #
 #  3. That an HDR finding is no longer quoted under item C3's tag-type title.
 #     CIccProfile::Validate() calls CheckHdrProfile(), so before section H
@@ -27,16 +27,20 @@
 #     detail line - reading as though the clause-8.10 text were the tag-type
 #     finding.  The verdict is deliberately unchanged; only the attribution is.
 #
+#  4. The converse of 3: every clause 8.10 finding C3 defers is stated by some
+#     H item, so a deferred finding cannot vanish from the report.
+#
 # The fixtures are generated (Testing/HDR/mkprofiles.sh, driven by
-# Testing/CreateAllProfiles.sh).  Their absence means the generator has not run,
-# not that the code is wrong, so the test skips rather than fails - exactly as
-# the iccdev.hdr-profile-classification regression does.
+# Testing/CreateAllProfiles.sh).  The test declares FIXTURES_REQUIRED
+# iccdev_profiles, so a fixture still absent here means generation failed, and
+# the script fails rather than skipping - see the check below.
 
 set(_required_vars
   ICCDEV_TEST_NAME
   ICCDEV_TEST_OUTDIR
   ICCDEV_BUILD_DIR
   ICCDEV_PAWG_EXE
+  ICCDEV_FROMXML_EXE
   ICCDEV_HDR_DIR
   ICCDEV_SDR_PROFILE
   ICCDEV_SDR_ITEM_COUNT
@@ -52,6 +56,10 @@ if(NOT EXISTS "${ICCDEV_PAWG_EXE}")
   message(FATAL_ERROR "iccPawgReport not found: ${ICCDEV_PAWG_EXE}")
 endif()
 
+if(NOT EXISTS "${ICCDEV_FROMXML_EXE}")
+  message(FATAL_ERROR "iccFromXml not found: ${ICCDEV_FROMXML_EXE}")
+endif()
+
 if(NOT EXISTS "${ICCDEV_SDR_PROFILE}")
   message(FATAL_ERROR "SDR control profile not found: ${ICCDEV_SDR_PROFILE}")
 endif()
@@ -65,12 +73,16 @@ file(WRITE "${_log_file}" "CTest test: ${ICCDEV_TEST_NAME}\nTool: ${ICCDEV_PAWG_
 # generation skips as cleanly as no generation at all.
 set(_fixtures
   HagcDisplay.icc
+  HdrCicp2NoColumns.icc
   HdrCicpUnspecified.icc
+  HdrColorSpaceClass.icc
   HdrDisplayMetadata.icc
   HdrInvalidTransfer.icc
   HdrLinearHagcCrwlDisagree.icc
   HdrMissingBToA0.icc
   HdrMissingBToA1.icc
+  HdrMissingLutPair.icc
+  HdrNarrowRangeFlag.icc
 )
 # FATAL_ERROR, not a bare return().  This used to `return()`, which in `cmake -P`
 # is exit 0, so a run that asserted nothing reported a green PASS - the same
@@ -113,7 +125,11 @@ if(WIN32)
   list(APPEND _tool_path ${_runtime_path_entries})
   list(REMOVE_DUPLICATES _tool_path)
   list(JOIN _tool_path ";" _path_prefix)
-  set(_env_args "${CMAKE_COMMAND}" -E env "PATH=${_path_prefix};$ENV{PATH}")
+  # Escaped, because _env_args is a CMake list: an unescaped ";" inside the
+  # PATH value split it into separate arguments, so cmake -E env received a
+  # truncated PATH and the rest of the directories as the command to run.
+  string(REPLACE ";" "\\;" _path_value "${_path_prefix};$ENV{PATH}")
+  set(_env_args "${CMAKE_COMMAND}" -E env "PATH=${_path_value}")
 endif()
 
 # Runs the report over one profile into _report.  The tool exits 1 whenever any
@@ -268,5 +284,107 @@ iccdev_expect("${_disagree}" "content HDR reference white = 300 cd/m\\^2"
   "H7 did not report the headroomAdaptiveGainCurveTag's white as the resolved value")
 iccdev_expect("${_disagree}" "two carriers DISAGREE: the metadataTag CRWL entry says 203 cd/m\\^2"
   "H7 did not name the disagreeing CRWL value")
+
+# --- 8. Every clause 8.10 finding C3 defers is stated by an H item -----------
+# C3 refers an HDR-only validation report to this section (6b), so each finding
+# CheckHdrProfile() emits has to appear under some H item.  These used to appear
+# nowhere: H6 checked the pairing rule only at x = 0 and called a missing
+# AToB0Tag "not a violation", H5 said only that primaries were undetermined, and
+# the narrow-range warning had no item at all.
+iccdev_expect("${_hdr_only}" "\\[FAIL[ \t]*\\][ \t]+H6[ \t]"
+  "H6 did not fail an AToB1Tag with no paired BToA1Tag")
+iccdev_expect("${_hdr_only}" "AToB1Tag present without its paired BToA1Tag"
+  "H6 did not name the unpaired AToB1Tag")
+
+iccdev_run_pawg("${ICCDEV_HDR_DIR}/HdrMissingLutPair.icc" _pairless)
+iccdev_expect("${_pairless}" "\\[FAIL[ \t]*\\][ \t]+H6[ \t]"
+  "H6 did not fail an HDR Profile carrying no AToB0Tag")
+iccdev_expect("${_pairless}" "AToB0Tag missing; clause 8\\.10\\.6 requires it"
+  "H6 did not state the mandatory AToB0Tag")
+iccdev_expect("${_pairless}" "BToA0Tag missing; clause 8\\.10\\.6 requires it"
+  "H6 did not state the Display-class BToA0Tag requirement")
+iccdev_expect_not("${_pairless}" "not a violation"
+  "H6 still describes a missing AToB0Tag as not a violation")
+
+iccdev_run_pawg("${ICCDEV_HDR_DIR}/HdrCicp2NoColumns.icc" _nocolumns)
+iccdev_expect("${_nocolumns}" "\\[FAIL[ \t]*\\][ \t]+H5[ \t]"
+  "H5 did not fail ColourPrimaries 2 without the matrix column tags")
+
+iccdev_run_pawg("${ICCDEV_HDR_DIR}/HdrNarrowRangeFlag.icc" _narrow)
+iccdev_expect("${_narrow}" "\\[WARN[ \t]*\\][ \t]+H4[ \t]"
+  "H4 did not state the library's narrow-range warning")
+
+# --- 9. H1 names the profile's actual class ---------------------------------
+iccdev_run_pawg("${ICCDEV_HDR_DIR}/HdrColorSpaceClass.icc" _spac)
+iccdev_expect("${_spac}" "ColorSpace profile, "
+  "H1 did not name a ColorSpace-class profile's class")
+iccdev_expect_not("${_spac}" "Display profile, "
+  "H1 described a ColorSpace-class profile as a Display profile")
+
+# --- 10. C4 and C5 read the Input/Display allowances as allowances ----------
+# Both profiles are built here from the tracked fixture XML, since neither shape
+# is worth a corpus fixture of its own: one carries a BToA0Tag and no forward
+# transform, the other a HAGC tag in a class that may not carry one.
+function(iccdev_from_xml _xml_text _name _out_var)
+  set(_xml "${ICCDEV_TEST_OUTDIR}/${_name}.xml")
+  set(_icc "${ICCDEV_TEST_OUTDIR}/${_name}.icc")
+  file(WRITE "${_xml}" "${_xml_text}")
+  execute_process(
+    COMMAND ${_env_args} "${ICCDEV_FROMXML_EXE}" "${_xml}" "${_icc}"
+    RESULT_VARIABLE _rc
+    OUTPUT_VARIABLE _stdout
+    ERROR_VARIABLE _stderr
+  )
+  file(APPEND "${_log_file}"
+    "===== iccFromXml ${_name} (rc=${_rc}) =====\n${_stdout}\n${_stderr}\n")
+  if(NOT EXISTS "${_icc}")
+    message(FATAL_ERROR "iccFromXml did not write ${_icc}; see ${_log_file}")
+  endif()
+  set(${_out_var} "${_icc}" PARENT_SCOPE)
+endfunction()
+
+file(READ "${ICCDEV_HDR_DIR}/HagcDisplay.xml" _hagc_xml)
+string(REGEX MATCH "<headroomAdaptiveGainCurveTag>.*</headroomAdaptiveGainCurveTag>"
+  _hagc_block "${_hagc_xml}")
+string(REGEX MATCH "<BToA0Tag>.*</BToA0Tag>" _btoa0_block "${_hagc_xml}")
+if(_hagc_block STREQUAL "" OR _btoa0_block STREQUAL "")
+  message(FATAL_ERROR "HagcDisplay.xml no longer carries the tags section 10 copies")
+endif()
+
+# A BToA0Tag is allowed in a Display profile but is not a forward transform, so
+# it cannot stand in for "A2B0 or matrix/TRC".  It used to be listed among the
+# any-of alternatives, and C4 passed this profile.  The colorant tags are
+# removed as well: C4's alternative set is any-of per TAG, so one matrix column
+# tag alone would satisfy it whatever this test is about.
+file(READ "${ICCDEV_HDR_DIR}/HdrMissingLutPair.xml" _pairless_xml)
+foreach(_colorant red green blue)
+  string(REGEX REPLACE "<${_colorant}ColorantTag>.*</${_colorant}ColorantTag>" ""
+    _pairless_xml "${_pairless_xml}")
+endforeach()
+if(_pairless_xml MATCHES "ColorantTag>")
+  message(FATAL_ERROR "section 10 could not remove HdrMissingLutPair.xml's colorant tags")
+endif()
+string(REPLACE "<profileDescriptionTag>" "${_btoa0_block}\n\n    <profileDescriptionTag>"
+  _btoa0_only_xml "${_pairless_xml}")
+iccdev_from_xml("${_btoa0_only_xml}" "BToA0Only" _btoa0_only)
+iccdev_run_pawg("${_btoa0_only}" _btoa0_only_report)
+iccdev_expect("${_btoa0_only_report}" "\\[WARN[ \t]*\\][ \t]+C4[ \t]"
+  "C4 accepted a Display profile whose only transform tag is a BToA0Tag")
+iccdev_expect("${_btoa0_only_report}" "missing A2B0 or matrix/TRC transform"
+  "C4 did not name the missing forward transform")
+
+# And the allowance itself: a Display profile's BToA0Tag is not an extra tag.
+iccdev_expect_not("${_hagc}" "outside the local class rule table: [^\n]*B2A0"
+  "C5 reported a Display profile's BToA0Tag as outside its class")
+
+# The HAGC tag is permitted only in Input and Display profiles.  Listed among
+# the options every class shares, it was hidden from C5 in all of them.
+file(READ "${ICCDEV_HDR_DIR}/HdrColorSpaceClass.xml" _spac_xml)
+string(REPLACE "<profileDescriptionTag>" "${_hagc_block}\n\n    <profileDescriptionTag>"
+  _spac_hagc_xml "${_spac_xml}")
+iccdev_from_xml("${_spac_hagc_xml}" "ColorSpaceWithHagc" _spac_hagc)
+iccdev_run_pawg("${_spac_hagc}" _spac_hagc_report)
+iccdev_expect("${_spac_hagc_report}" "outside the local class rule table: [^\n]*HAGC"
+  "C5 did not report a HAGC tag in a ColorSpace-class profile")
 
 message(STATUS "${ICCDEV_TEST_NAME} completed successfully")
