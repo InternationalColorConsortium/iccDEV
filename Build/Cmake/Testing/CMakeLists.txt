@@ -5006,7 +5006,7 @@ function(iccdev_add_colorant_count_narrowing_xml_test)
   endif()
   set_tests_properties(iccdev.colorant-count-narrowing-xml PROPERTIES
     TIMEOUT 300
-    LABELS "iccdev;xml;colorant;issue-2536;regression"
+    LABELS "iccdev;xml;colorant;issue-2536;issue-2548;regression"
   )
   if(WIN32)
     set(_colorant_narrowing_xml_windows_env_mods

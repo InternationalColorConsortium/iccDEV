@@ -68,6 +68,17 @@
     representable and must still load in full, so a guard written ">= 0xFFFF"
     fails it while passing every other case here.
 
+    The colorantTable reader has a second, unrelated check pinned here too
+    (#2548): it converted Channel1-3 with bare atof(), so "not-a-number" loaded
+    as 0 and "50abc" as 50 with no diagnostic, while the JSON reader refuses
+    both.  Those cases are single-colorant documents.  The refusals alone would
+    pass if the fixture never reached the reader, so a plain "50" "0" "0"
+    control must load, and the accepted spellings (surrounding whitespace, an
+    exponent) must encode to the same bytes as that control -- a reader that
+    loaded them as 0 would fail there.  Each refused spelling targets one
+    condition of the check: trailing text, an empty value, "nan", and 1e39,
+    which is a finite double beyond FLT_MAX.
+
     Args:
       argv[1] - scratch directory to generate fixtures in (created if absent)
 
@@ -81,6 +92,7 @@
 #include "IccTagBasic.h"
 
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -325,6 +337,79 @@ static int chromaCase(const std::filesystem::path &dir, size_t nEntries,
   return check(true, label);
 }
 
+static bool writeChannelFixture(const std::string &path, const char *szChannel1,
+                                const char *szChannel2, const char *szChannel3)
+{
+  std::ofstream f(path, std::ios::binary);
+  if (!f)
+    return false;
+
+  f << kHeader;
+  f << "    <colorantTableTag> <colorantTableType>\n      <ColorantTable>\n";
+  f << "        <Colorant Name=\"cyan\" Channel1=\"" << szChannel1
+    << "\" Channel2=\"" << szChannel2 << "\" Channel3=\"" << szChannel3 << "\"/>\n";
+  f << "      </ColorantTable>\n    </colorantTableType> </colorantTableTag>\n";
+  f << kFooter;
+
+  return f.good();
+}
+
+// One single-colorant table with the given channel spellings.  When it is
+// expected to load, pExpect (if given) is the encoded PCS it must carry, and
+// pOut (if given) receives what it did carry.
+static int channelCase(const std::filesystem::path &dir, const char *szChannel1,
+                       const char *szChannel2, const char *szChannel3,
+                       bool bExpectLoaded, const icUInt16Number *pExpect,
+                       icUInt16Number *pOut, const char *file, const char *label)
+{
+  const std::string path = (dir / file).string();
+  if (!writeChannelFixture(path, szChannel1, szChannel2, szChannel3)) {
+    std::fprintf(stderr, "colorant-count-narrowing-xml: could not write %s\n",
+                 path.c_str());
+    return 1;
+  }
+
+  CIccProfileXml profile;
+  const bool bLoaded = loadAndRemove(profile, path);
+
+  if (bLoaded != bExpectLoaded) {
+    std::fprintf(stderr,
+                 "colorant-count-narrowing-xml: FAIL  %s (LoadXml returned %s, "
+                 "expected %s)\n",
+                 label, bLoaded ? "true" : "false",
+                 bExpectLoaded ? "true" : "false");
+    return 1;
+  }
+
+  if (!bExpectLoaded)
+    return check(true, label);
+
+  CIccTagColorantTable *pTag =
+    (CIccTagColorantTable *)profile.FindTag(icSigColorantTableTag);
+  const icColorantTableEntry *pEntry = pTag ? pTag->GetEntry(0) : nullptr;
+  if (!pTag || pTag->GetSize() != 1 || !pEntry) {
+    std::fprintf(stderr,
+                 "colorant-count-narrowing-xml: FAIL  %s (no single-entry "
+                 "colorantTableTag on the loaded profile)\n", label);
+    return 1;
+  }
+
+  if (pOut)
+    std::memcpy(pOut, pEntry->data, sizeof(pEntry->data));
+
+  if (pExpect && std::memcmp(pExpect, pEntry->data, sizeof(pEntry->data))) {
+    std::fprintf(stderr,
+                 "colorant-count-narrowing-xml: FAIL  %s (PCS %u %u %u, "
+                 "expected %u %u %u)\n", label,
+                 (unsigned)pEntry->data[0], (unsigned)pEntry->data[1],
+                 (unsigned)pEntry->data[2], (unsigned)pExpect[0],
+                 (unsigned)pExpect[1], (unsigned)pExpect[2]);
+    return 1;
+  }
+
+  return check(true, label);
+}
+
 int main(int argc, char *argv[])
 {
   if (argc < 2) {
@@ -375,6 +460,37 @@ int main(int argc, char *argv[])
                          "a chromaticity at exactly 65535 channels still loads in full");
   failures += chromaCase(dir, 3, true, "chromaticity-3.xml",
                          "an ordinary three-channel chromaticity loads (fixture control)");
+
+  // CIccTagXmlColorantTable::ParseXml() -- Channel1-3 values (#2548).
+  icUInt16Number control[3] = { 0, 0, 0 };
+  const int controlFailed =
+    channelCase(dir, "50", "0", "0", true, nullptr, control,
+                "channel-control.xml",
+                "a colorantTable with channels 50 0 0 loads (fixture control)");
+  failures += controlFailed;
+  if (!controlFailed) {
+    failures += channelCase(dir, " 50 ", "0", "0", true, control, nullptr,
+                            "channel-whitespace.xml",
+                            "a channel with surrounding whitespace loads as the same value");
+    failures += channelCase(dir, "5.0e1", "0", "0", true, control, nullptr,
+                            "channel-exponent.xml",
+                            "a channel written with an exponent loads as the same value");
+  }
+  failures += channelCase(dir, "50", "not-a-number", "0", false, nullptr, nullptr,
+                          "channel-text.xml",
+                          "a channel of \"not-a-number\" is refused, not loaded as 0");
+  failures += channelCase(dir, "50abc", "0", "0", false, nullptr, nullptr,
+                          "channel-trailing.xml",
+                          "a channel of \"50abc\" is refused, not loaded as 50");
+  failures += channelCase(dir, "50", "0", "", false, nullptr, nullptr,
+                          "channel-empty.xml",
+                          "an empty channel is refused, not loaded as 0");
+  failures += channelCase(dir, "nan", "0", "0", false, nullptr, nullptr,
+                          "channel-nan.xml",
+                          "a channel of \"nan\" is refused");
+  failures += channelCase(dir, "1e39", "0", "0", false, nullptr, nullptr,
+                          "channel-beyond-float.xml",
+                          "a channel beyond FLT_MAX is refused");
 
   if (failures) {
     std::fprintf(stderr, "colorant-count-narrowing-xml: %d case(s) failed\n",
