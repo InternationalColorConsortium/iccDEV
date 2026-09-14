@@ -32,7 +32,7 @@ classifiers = [
 [project.optional-dependencies]
 numpy = ["numpy>=1.23,<3"]
 dev = [
-    "build>=1.2,<1.4",
+    "build>=1.2,<1.7",
     "cibuildwheel>=2.23,<3",
     "cython>=3.0,<3.2",
     "numpy>=1.23,<3",
