@@ -192,6 +192,7 @@ jobs:
             'pawg-q1-quality-contract)$'
           )
           ctest --test-dir out\matlab -C Release `
+            --parallel ([Environment]::ProcessorCount) `
             -R $nativeRegressionPattern `
             --output-on-failure `
             --no-tests=error

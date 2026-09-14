@@ -1553,7 +1553,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          cmake --build build-cpack --target package-sha256
+          cmake --build build-cpack --target package-sha256 --parallel "$(nproc)"
 
       - name: Validate runtime package outputs
         run: |

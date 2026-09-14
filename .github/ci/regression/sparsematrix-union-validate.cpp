@@ -1,3 +1,7 @@
+// Copyright (c) 2026 The International Color Consortium. All rights reserved.
+// Licensed under the BSD 3-Clause "New" or "Revised" License; see the ICC
+// Software License in the repository root and CONTRIBUTING.md.
+//
 // Regression: CIccSparseMatrix::Union() never worked, and reaching it hung the validator.
 //
 // Union() is a near-verbatim copy of CIccSparseMatrix::Interp() and carries the same five
