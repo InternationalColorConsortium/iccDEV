@@ -708,9 +708,16 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
 			xmlAttr *z = icXmlFindAttr(xyzNode, "Z");
 
 			if (x && y && z) {
-			   m_Header.illuminant.X = icDtoF((icFloatNumber)atof(icXmlAttrValue(x)));
-			   m_Header.illuminant.Y = icDtoF((icFloatNumber)atof(icXmlAttrValue(y)));
-			   m_Header.illuminant.Z = icDtoF((icFloatNumber)atof(icXmlAttrValue(z)));
+			   icFloatNumber xyz[3];
+			   if (!icXmlParseFloat(icXmlAttrValue(x), xyz[0]) ||
+			       !icXmlParseFloat(icXmlAttrValue(y), xyz[1]) ||
+			       !icXmlParseFloat(icXmlAttrValue(z), xyz[2])) {
+			     parseStr += "Invalid PCSIlluminant XYZNumber\n";
+			     return false;
+			   }
+			   m_Header.illuminant.X = icDtoF(xyz[0]);
+			   m_Header.illuminant.Y = icDtoF(xyz[1]);
+			   m_Header.illuminant.Z = icDtoF(xyz[2]);
 			}
 		}
 		else if (!icXmlStrCmp(pNode->name, "ProfileCreator")) {
@@ -733,8 +740,14 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
       xmlAttr *steps = icXmlFindAttr(xyzNode, "steps");
 
       if (start && end && steps) {
-        m_Header.spectralRange.start = icFtoF16((icFloatNumber)atof(icXmlAttrValue(start)));
-        m_Header.spectralRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(end)));
+        icFloatNumber dStart = 0, dEnd = 0;
+        if (!icXmlParseFloat(icXmlAttrValue(start), dStart) ||
+            !icXmlParseFloat(icXmlAttrValue(end), dEnd)) {
+          parseStr += "Invalid SpectralRange Wavelengths start or end\n";
+          return false;
+        }
+        m_Header.spectralRange.start = icFtoF16(dStart);
+        m_Header.spectralRange.end = icFtoF16(dEnd);
 
         // steps is the sample count for the whole spectral PCS, so narrowing it
         // modulo 65536 substitutes a different spectrum rather than failing:
@@ -759,8 +772,14 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
       xmlAttr *steps = icXmlFindAttr(xyzNode, "steps");
 
       if (start && end && steps) {
-        m_Header.biSpectralRange.start = icFtoF16((icFloatNumber)atof(icXmlAttrValue(start)));
-        m_Header.biSpectralRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(end)));
+        icFloatNumber dStart = 0, dEnd = 0;
+        if (!icXmlParseFloat(icXmlAttrValue(start), dStart) ||
+            !icXmlParseFloat(icXmlAttrValue(end), dEnd)) {
+          parseStr += "Invalid BiSpectralRange Wavelengths start or end\n";
+          return false;
+        }
+        m_Header.biSpectralRange.start = icFtoF16(dStart);
+        m_Header.biSpectralRange.end = icFtoF16(dEnd);
 
         // Same defect and same reasoning as the spectralRange steps above; this
         // count sizes the bi-spectral (fluorescence) axis, which #1677 showed

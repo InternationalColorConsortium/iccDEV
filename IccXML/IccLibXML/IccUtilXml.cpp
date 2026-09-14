@@ -1667,3 +1667,24 @@ bool icXmlParseU32(const char *s, icUInt32Number &out, icUInt32Number max_value)
   out = static_cast<icUInt32Number>(v);
   return true;
 }
+
+bool icXmlParseFloat(const char *s, icFloatNumber &out)
+{
+  if (!s) return false;
+  char *end = nullptr;
+  double d = std::strtod(s, &end);
+  // strtod skips leading whitespace itself and leaves end at s when it
+  // converts nothing, which covers "" and all-whitespace input too.
+  if (end == s) return false;
+  while (*end == ' ' || *end == '\t' || *end == '\n' || *end == '\r')
+    end++;
+  if (*end != '\0') return false;
+  // A NaN, an infinity or a double beyond the float range would reach the
+  // fixed-point encoders through a conversion whose result is undefined.
+  if (!std::isfinite(d) ||
+      d > (double)std::numeric_limits<icFloatNumber>::max() ||
+      d < -(double)std::numeric_limits<icFloatNumber>::max())
+    return false;
+  out = static_cast<icFloatNumber>(d);
+  return true;
+}

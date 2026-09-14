@@ -108,7 +108,7 @@
 				0.000000    0.000000    0.000000    0.000000
 			</ObserverFuncs>
 			<StdIlluminant>F11</StdIlluminant>
-			<ColorTemperature>Unknown</ColorTemperature>
+			<ColorTemperature>0</ColorTemperature>
 			<IlluminantSPD start="380" end="780" steps="81">
 				 9.10000 6.30000 4.60000 3.70000 12.90000 126.80000 15.90000 17.90000 24.60000
 				 33.30000 44.90000 339.40000 121.30000 69.50000 71.90000 71.20000 67.20000

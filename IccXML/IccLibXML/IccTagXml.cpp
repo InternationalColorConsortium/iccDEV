@@ -78,7 +78,6 @@
 #include <sstream>  // Make sure to include this header
 #include <iomanip>  // Include this header for setw and setfill
 #include <cmath>    // std::isfinite for NaN/Inf-safe float->int casts
-#include <limits>   // std::numeric_limits for the colorantTable channel bound
 
 typedef  std::map<icUInt32Number, icTagSignature> IccOffsetTagSigMap;
 
@@ -86,26 +85,18 @@ typedef  std::map<icUInt32Number, icTagSignature> IccOffsetTagSigMap;
 namespace iccDEV {
 #endif
 
-// Parse a non-negative integer XML attribute value.
-//
-// atoi() returns a signed int, but the ParseXml handlers below store these
-// attributes into unsigned icUIntNN members/locals.  A negative attribute
-// therefore used to wrap to a huge unsigned value -- either implicitly (caught
-// by UBSan's implicit-integer-sign-change, e.g. #1342/#1343) or silently behind
-// an explicit (icUIntNN) cast (invisible to UBSan).  This helper centralizes
-// the fix: any negative (invalid) input is floored to 0 so the stored value is
-// always well-defined.
-//
-// Usage: replace `atoi(icXmlAttrValue(...))` with
-// `icXmlAttrToUInt(icXmlAttrValue(...))`.  The helper returns the widest
-// unsigned type (icUInt32Number); callers that target an 8- or 16-bit member
-// keep their explicit (icUInt8Number)/(icUInt16Number) cast exactly as before,
-// which both narrows the value and suppresses the implicit-integer-truncation
-// check, so no behavior other than the negative-wrap is changed (#1346).
-static icUInt32Number icXmlAttrToUInt(const char *szValue)
+// Parses szValue into value (#2548).  The readers below converted these with
+// bare atof(), which loads "50abc" as 50 and "not-a-number" as 0 with no
+// diagnostic; icXmlParseFloat() refuses both, and szWhat names the value in the
+// refusal.
+static bool icXmlFloatValue(const char *szValue, icFloatNumber &value,
+                            std::string &parseStr, const char *szWhat)
 {
-  int nValue = atoi(szValue);
-  return nValue < 0 ? 0u : (icUInt32Number)nValue;
+  if (icXmlParseFloat(szValue, value))
+    return true;
+
+  parseStr += std::string("Invalid number for ") + szWhat + "\n";
+  return false;
 }
 
 // Reads the "steps" attribute of a <Wavelengths> element into the
@@ -878,8 +869,12 @@ bool CIccTagXmlSpectralDataInfo::ParseXml(xmlNode *pNode, std::string &parseStr)
     return false;
   }
 
-  m_spectralRange.start = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "start")));
-  m_spectralRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "end")));
+  icFloatNumber dStart = 0, dEnd = 0;
+  if (!icXmlFloatValue(icXmlAttrValue(pChild, "start"), dStart, parseStr, "SpectralRange Wavelengths start") ||
+      !icXmlFloatValue(icXmlAttrValue(pChild, "end"), dEnd, parseStr, "SpectralRange Wavelengths end"))
+    return false;
+  m_spectralRange.start = icFtoF16(dStart);
+  m_spectralRange.end = icFtoF16(dEnd);
   if (!icXmlParseSpectralSteps(pChild, m_spectralRange.steps, "SpectralRange", parseStr))
     return false;
 
@@ -887,8 +882,12 @@ bool CIccTagXmlSpectralDataInfo::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   if (pChild) {
     if ((pChild = icXmlFindNode(pChild->children, "Wavelengths"))) {
-      m_biSpectralRange.start = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "start")));
-      m_biSpectralRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "end")));
+      icFloatNumber dBiStart = 0, dBiEnd = 0;
+      if (!icXmlFloatValue(icXmlAttrValue(pChild, "start"), dBiStart, parseStr, "BiSpectralRange Wavelengths start") ||
+          !icXmlFloatValue(icXmlAttrValue(pChild, "end"), dBiEnd, parseStr, "BiSpectralRange Wavelengths end"))
+        return false;
+      m_biSpectralRange.start = icFtoF16(dBiStart);
+      m_biSpectralRange.end = icFtoF16(dBiEnd);
       if (!icXmlParseSpectralSteps(pChild, m_biSpectralRange.steps, "BiSpectralRange", parseStr))
         return false;
     }
@@ -933,8 +932,12 @@ bool CIccTagXmlSpectralRange::ParseXml(xmlNode *pNode, std::string &parseStr)
     return false;
   }
 
-  m_spectralRange.start = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "start")));
-  m_spectralRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "end")));
+  icFloatNumber dStart = 0, dEnd = 0;
+  if (!icXmlFloatValue(icXmlAttrValue(pChild, "start"), dStart, parseStr, "SpectralRange Wavelengths start") ||
+      !icXmlFloatValue(icXmlAttrValue(pChild, "end"), dEnd, parseStr, "SpectralRange Wavelengths end"))
+    return false;
+  m_spectralRange.start = icFtoF16(dStart);
+  m_spectralRange.end = icFtoF16(dEnd);
   if (!icXmlParseSpectralSteps(pChild, m_spectralRange.steps, "SpectralRange", parseStr))
     return false;
 
@@ -942,8 +945,12 @@ bool CIccTagXmlSpectralRange::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   if (pChild) {
     if ((pChild = icXmlFindNode(pChild->children, "Wavelengths"))) {
-      m_biSpectralRange.start = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "start")));
-      m_biSpectralRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "end")));
+      icFloatNumber dBiStart = 0, dBiEnd = 0;
+      if (!icXmlFloatValue(icXmlAttrValue(pChild, "start"), dBiStart, parseStr, "BiSpectralRange Wavelengths start") ||
+          !icXmlFloatValue(icXmlAttrValue(pChild, "end"), dBiEnd, parseStr, "BiSpectralRange Wavelengths end"))
+        return false;
+      m_biSpectralRange.start = icFtoF16(dBiStart);
+      m_biSpectralRange.end = icFtoF16(dBiEnd);
       if (!icXmlParseSpectralSteps(pChild, m_biSpectralRange.steps, "BiSpectralRange", parseStr))
         return false;
     }
@@ -1039,7 +1046,7 @@ bool CIccTagXmlNamedColor2::ToXml(std::string &xml, std::string blanks/* = ""*/)
 }
 
 
-bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
+bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   pNode = icXmlFindNode(pNode, "NamedColors");
 
@@ -1070,11 +1077,8 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
         // "implicit conversion from type 'int' of value -1674115755 ... changed
         // the value to 2620851541" that UBSan reports here.
         //
-        // icXmlAttrToUInt() (the #1346 helper near the top of this file) is
-        // deliberately not used: it floors negatives to 0 but passes large
-        // positive counts through untouched, and this attribute sizes an
-        // allocation.  Bound it instead with the same two constants
-        // CIccTagNamedColor2::Read (IccTagBasic.cpp) and CIccTagXmlNamedColor2::
+        // This attribute sizes an allocation, so bound it with the same two
+        // constants CIccTagNamedColor2::Read (IccTagBasic.cpp) and CIccTagXmlNamedColor2::
         // ToXml above already enforce, so the XML reader stops being the one
         // entry point able to install counts that the binary reader and both
         // writers reject.
@@ -1115,9 +1119,10 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
               xmlAttr *b = icXmlFindAttr(pNode, "b");
 
               if (L && a && b) {
-                pNamedColor->pcsCoords[0] = (icFloatNumber)atof(icXmlAttrValue(L));
-                pNamedColor->pcsCoords[1] = (icFloatNumber)atof(icXmlAttrValue(a));
-                pNamedColor->pcsCoords[2] = (icFloatNumber)atof(icXmlAttrValue(b));
+                if (!icXmlFloatValue(icXmlAttrValue(L), pNamedColor->pcsCoords[0], parseStr, "NamedColor L") ||
+                    !icXmlFloatValue(icXmlAttrValue(a), pNamedColor->pcsCoords[1], parseStr, "NamedColor a") ||
+                    !icXmlFloatValue(icXmlAttrValue(b), pNamedColor->pcsCoords[2], parseStr, "NamedColor b"))
+                  return false;
 
                 icLabToPcs(pNamedColor->pcsCoords);
                 Lab4ToLab2(pNamedColor->pcsCoords, pNamedColor->pcsCoords);
@@ -1128,9 +1133,10 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
                 xmlAttr *z = icXmlFindAttr(pNode, "Z");
 
                 if (x && y && z) {
-                  pNamedColor->pcsCoords[0] = (icFloatNumber)atof(icXmlAttrValue(x));
-                  pNamedColor->pcsCoords[1] = (icFloatNumber)atof(icXmlAttrValue(y));
-                  pNamedColor->pcsCoords[2] = (icFloatNumber)atof(icXmlAttrValue(z));
+                  if (!icXmlFloatValue(icXmlAttrValue(x), pNamedColor->pcsCoords[0], parseStr, "NamedColor X") ||
+                      !icXmlFloatValue(icXmlAttrValue(y), pNamedColor->pcsCoords[1], parseStr, "NamedColor Y") ||
+                      !icXmlFloatValue(icXmlAttrValue(z), pNamedColor->pcsCoords[2], parseStr, "NamedColor Z"))
+                    return false;
 
                   icXyzToPcs(pNamedColor->pcsCoords);
                 }
@@ -1147,9 +1153,10 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
             xmlAttr *b = icXmlFindAttr(pNode, "b");
 
             if (L && a && b) {
-              pNamedColor->pcsCoords[0] = (icFloatNumber)atof(icXmlAttrValue(L));
-              pNamedColor->pcsCoords[1] = (icFloatNumber)atof(icXmlAttrValue(a));
-              pNamedColor->pcsCoords[2] = (icFloatNumber)atof(icXmlAttrValue(b));
+              if (!icXmlFloatValue(icXmlAttrValue(L), pNamedColor->pcsCoords[0], parseStr, "LabNamedColor L") ||
+                  !icXmlFloatValue(icXmlAttrValue(a), pNamedColor->pcsCoords[1], parseStr, "LabNamedColor a") ||
+                  !icXmlFloatValue(icXmlAttrValue(b), pNamedColor->pcsCoords[2], parseStr, "LabNamedColor b"))
+                return false;
 
               icLabToPcs(pNamedColor->pcsCoords);
               Lab4ToLab2(pNamedColor->pcsCoords, pNamedColor->pcsCoords);
@@ -1167,9 +1174,10 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
             xmlAttr *z = icXmlFindAttr(pNode, "Z");
 
             if (x && y && z) {
-              pNamedColor->pcsCoords[0] = (icFloatNumber)atof(icXmlAttrValue(x));
-              pNamedColor->pcsCoords[1] = (icFloatNumber)atof(icXmlAttrValue(y));
-              pNamedColor->pcsCoords[2] = (icFloatNumber)atof(icXmlAttrValue(z));
+              if (!icXmlFloatValue(icXmlAttrValue(x), pNamedColor->pcsCoords[0], parseStr, "XYZNamedColor X") ||
+                  !icXmlFloatValue(icXmlAttrValue(y), pNamedColor->pcsCoords[1], parseStr, "XYZNamedColor Y") ||
+                  !icXmlFloatValue(icXmlAttrValue(z), pNamedColor->pcsCoords[2], parseStr, "XYZNamedColor Z"))
+                return false;
 
               icXyzToPcs(pNamedColor->pcsCoords);
             }
@@ -1270,7 +1278,7 @@ bool CIccTagXmlXYZ::ToXml(std::string &xml, std::string blanks/* = ""*/)
 }
 
 
-bool CIccTagXmlXYZ::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
+bool CIccTagXmlXYZ::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   icUInt32Number n = icXmlNodeCount(pNode, "XYZNumber");
 
@@ -1298,9 +1306,14 @@ bool CIccTagXmlXYZ::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
           xmlAttr *z = icXmlFindAttr(pNode, "Z");
 
           if (x && y && z) {
-            m_XYZ[i].X = icDtoF((icFloatNumber)atof(icXmlAttrValue(x)));
-            m_XYZ[i].Y = icDtoF((icFloatNumber)atof(icXmlAttrValue(y)));
-            m_XYZ[i].Z = icDtoF((icFloatNumber)atof(icXmlAttrValue(z)));
+            icFloatNumber xyz[3];
+            if (!icXmlFloatValue(icXmlAttrValue(x), xyz[0], parseStr, "XYZNumber X") ||
+                !icXmlFloatValue(icXmlAttrValue(y), xyz[1], parseStr, "XYZNumber Y") ||
+                !icXmlFloatValue(icXmlAttrValue(z), xyz[2], parseStr, "XYZNumber Z"))
+              return false;
+            m_XYZ[i].X = icDtoF(xyz[0]);
+            m_XYZ[i].Y = icDtoF(xyz[1]);
+            m_XYZ[i].Z = icDtoF(xyz[2]);
             i++;
           }
           else
@@ -1324,7 +1337,7 @@ bool CIccTagXmlChromaticity::ToXml(std::string &xml, std::string blanks/* = ""*/
   xml += blanks + buf;
 
   for (i=0; i<(int)m_nChannels; i++) {
-    snprintf(buf, bufSize, "  <Channel x=\"" icXmlFloatFmt "f\" y=\"" icXmlFloatFmt "\"/>\n", (float)icUFtoD(m_xy[i].x),
+    snprintf(buf, bufSize, "  <Channel x=\"" icXmlFloatFmt "\" y=\"" icXmlFloatFmt "\"/>\n", (float)icUFtoD(m_xy[i].x),
       (float)icUFtoD(m_xy[i].y));
     xml += blanks + buf;
   }
@@ -1333,7 +1346,24 @@ bool CIccTagXmlChromaticity::ToXml(std::string &xml, std::string blanks/* = ""*/
 }
 
 
-bool CIccTagXmlChromaticity::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
+// The writer above printed every x as icXmlFloatFmt "f" until #2548, so the
+// chromaticityType documents iccToXml has already written carry
+// x="0.640000000000f".  Accept that one trailing 'f' so they still load;
+// anything else must be a number.
+static bool icXmlChromaticityValue(const char *szValue, icFloatNumber &value)
+{
+  if (icXmlParseFloat(szValue, value))
+    return true;
+
+  std::string str(szValue ? szValue : "");
+  if (str.empty() || str[str.size() - 1] != 'f')
+    return false;
+
+  str.erase(str.size() - 1);
+  return icXmlParseFloat(str.c_str(), value);
+}
+
+bool CIccTagXmlChromaticity::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
 
   pNode = icXmlFindNode(pNode, "Colorant");
@@ -1368,8 +1398,14 @@ bool CIccTagXmlChromaticity::ParseXml(xmlNode *pNode, std::string & /*parseStr*/
           xmlAttr *y = icXmlFindAttr(pNode, "y");
 
           if (x && y) {
-            m_xy[i].x = icDtoUF((icFloatNumber)atof(icXmlAttrValue(x)));
-            m_xy[i].y = icDtoUF((icFloatNumber)atof(icXmlAttrValue(y)));
+            icFloatNumber xy[2];
+            if (!icXmlChromaticityValue(icXmlAttrValue(x), xy[0]) ||
+                !icXmlChromaticityValue(icXmlAttrValue(y), xy[1])) {
+              parseStr += "Invalid number for chromaticityType Channel x or y\n";
+              return false;
+            }
+            m_xy[i].x = icDtoUF(xy[0]);
+            m_xy[i].y = icDtoUF(xy[1]);
             i++;
           }
           else
@@ -2164,7 +2200,7 @@ bool CIccTagXmlMeasurement::ToXml(std::string &xml, std::string blanks/* = ""*/)
 }
 
 
-bool CIccTagXmlMeasurement::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
+bool CIccTagXmlMeasurement::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   memset(&m_Data, 0, sizeof(m_Data));
 
@@ -2180,17 +2216,26 @@ bool CIccTagXmlMeasurement::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
 
     attr = icXmlFindAttr(pNode, "X");
     if (attr) {
-      m_Data.backing.X = icDtoF((icFloatNumber)atof(icXmlAttrValue(attr)));
+      icFloatNumber v = 0;
+      if (!icXmlFloatValue(icXmlAttrValue(attr), v, parseStr, "MeasurementBacking X"))
+        return false;
+      m_Data.backing.X = icDtoF(v);
     }
 
     attr = icXmlFindAttr(pNode, "Y");
     if (attr) {
-      m_Data.backing.Y = icDtoF((icFloatNumber)atof(icXmlAttrValue(attr)));
+      icFloatNumber v = 0;
+      if (!icXmlFloatValue(icXmlAttrValue(attr), v, parseStr, "MeasurementBacking Y"))
+        return false;
+      m_Data.backing.Y = icDtoF(v);
     }
 
     attr = icXmlFindAttr(pNode, "Z");
     if (attr) {
-      m_Data.backing.Z = icDtoF((icFloatNumber)atof(icXmlAttrValue(attr)));
+      icFloatNumber v = 0;
+      if (!icXmlFloatValue(icXmlAttrValue(attr), v, parseStr, "MeasurementBacking Z"))
+        return false;
+      m_Data.backing.Z = icDtoF(v);
     }
   }
 
@@ -2436,33 +2481,11 @@ bool CIccTagXmlColorantTable::ToXml(std::string &xml, std::string blanks/* = ""*
 
 // #2548: Channel1-3 were converted with bare atof(), so "not-a-number" loaded as
 // 0 and "50abc" as 50 with no diagnostic, while CIccTagJsonColorantTable::
-// ParseJson() refuses both.  Accept a value only when strtod() consumes all of
-// it, trailing whitespace aside (atof() and strtod() both skip leading
-// whitespace), and the result is finite and fits icFloatNumber: a NaN, an
-// infinity or a double beyond FLT_MAX would otherwise reach icFtoU16() through a
-// float conversion whose result is undefined.
+// ParseJson() refuses both.  icXmlParseFloat() holds that rule for every XML
+// reader now; this keeps the tag's own diagnostic at its call site.
 static bool icXmlColorantChannel(xmlAttr *attr, icFloatNumber &value)
 {
-  const char *szValue = icXmlAttrValue(attr, NULL);
-  if (!szValue)
-    return false;
-
-  char *szEnd = NULL;
-  double d = strtod(szValue, &szEnd);
-  if (szEnd == szValue)
-    return false;
-
-  while (*szEnd == ' ' || *szEnd == '\t' || *szEnd == '\n' || *szEnd == '\r')
-    szEnd++;
-  if (*szEnd)
-    return false;
-
-  if (!std::isfinite(d) || d > std::numeric_limits<icFloatNumber>::max() ||
-      d < -std::numeric_limits<icFloatNumber>::max())
-    return false;
-
-  value = (icFloatNumber)d;
-  return true;
+  return icXmlParseFloat(icXmlAttrValue(attr, NULL), value);
 }
 
 bool CIccTagXmlColorantTable::ParseXml(xmlNode *pNode, std::string &parseStr)
@@ -2556,7 +2579,7 @@ bool CIccTagXmlViewingConditions::ToXml(std::string &xml, std::string blanks/* =
   return true;
 }
 
-bool CIccTagXmlViewingConditions::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
+bool CIccTagXmlViewingConditions::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   xmlAttr *attr;
   xmlNode *pChild;
@@ -2570,17 +2593,26 @@ bool CIccTagXmlViewingConditions::ParseXml(xmlNode *pNode, std::string & /*parse
 
     attr = icXmlFindAttr(pChild, "X");
     if (attr) {
-      m_XYZIllum.X = icDtoF((icFloatNumber)atof(icXmlAttrValue(attr)));
+      icFloatNumber v = 0;
+      if (!icXmlFloatValue(icXmlAttrValue(attr), v, parseStr, "IlluminantXYZ X"))
+        return false;
+      m_XYZIllum.X = icDtoF(v);
     }
 
     attr = icXmlFindAttr(pChild, "Y");
     if (attr) {
-      m_XYZIllum.Y = icDtoF((icFloatNumber)atof(icXmlAttrValue(attr)));
+      icFloatNumber v = 0;
+      if (!icXmlFloatValue(icXmlAttrValue(attr), v, parseStr, "IlluminantXYZ Y"))
+        return false;
+      m_XYZIllum.Y = icDtoF(v);
     }
 
     attr = icXmlFindAttr(pChild, "Z");
     if (attr) {
-      m_XYZIllum.Z = icDtoF((icFloatNumber)atof(icXmlAttrValue(attr)));
+      icFloatNumber v = 0;
+      if (!icXmlFloatValue(icXmlAttrValue(attr), v, parseStr, "IlluminantXYZ Z"))
+        return false;
+      m_XYZIllum.Z = icDtoF(v);
     }
   }
 
@@ -2588,17 +2620,26 @@ bool CIccTagXmlViewingConditions::ParseXml(xmlNode *pNode, std::string & /*parse
   if (pChild) {
     attr = icXmlFindAttr(pChild, "X");
     if (attr) {
-      m_XYZSurround.X = icDtoF((icFloatNumber)atof(icXmlAttrValue(attr)));
+      icFloatNumber v = 0;
+      if (!icXmlFloatValue(icXmlAttrValue(attr), v, parseStr, "SurroundXYZ X"))
+        return false;
+      m_XYZSurround.X = icDtoF(v);
     }
 
     attr = icXmlFindAttr(pChild, "Y");
     if (attr) {
-      m_XYZSurround.Y = icDtoF((icFloatNumber)atof(icXmlAttrValue(attr)));
+      icFloatNumber v = 0;
+      if (!icXmlFloatValue(icXmlAttrValue(attr), v, parseStr, "SurroundXYZ Y"))
+        return false;
+      m_XYZSurround.Y = icDtoF(v);
     }
 
     attr = icXmlFindAttr(pChild, "Z");
     if (attr) {
-      m_XYZSurround.Z = icDtoF((icFloatNumber)atof(icXmlAttrValue(attr)));
+      icFloatNumber v = 0;
+      if (!icXmlFloatValue(icXmlAttrValue(attr), v, parseStr, "SurroundXYZ Z"))
+        return false;
+      m_XYZSurround.Z = icDtoF(v);
     }
   }
 
@@ -2696,7 +2737,7 @@ bool CIccTagXmlSpectralViewingConditions::ToXml(std::string &xml, std::string bl
   return true;
 }
 
-bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
+bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   xmlNode *pChild;
   xmlAttr *attr;
@@ -2719,17 +2760,20 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
 
     attr = icXmlFindAttr(pChild, "X");
     if (attr) {
-      m_illuminantXYZ.X = (icFloatNumber)atof(icXmlAttrValue(attr));
+      if (!icXmlFloatValue(icXmlAttrValue(attr), m_illuminantXYZ.X, parseStr, "IlluminantXYZ X"))
+        return false;
     }
 
     attr = icXmlFindAttr(pChild, "Y");
     if (attr) {
-      m_illuminantXYZ.Y = (icFloatNumber)atof(icXmlAttrValue(attr));
+      if (!icXmlFloatValue(icXmlAttrValue(attr), m_illuminantXYZ.Y, parseStr, "IlluminantXYZ Y"))
+        return false;
     }
 
     attr = icXmlFindAttr(pChild, "Z");
     if (attr) {
-      m_illuminantXYZ.Z = (icFloatNumber)atof(icXmlAttrValue(attr));
+      if (!icXmlFloatValue(icXmlAttrValue(attr), m_illuminantXYZ.Z, parseStr, "IlluminantXYZ Z"))
+        return false;
     }
   }
 
@@ -2737,7 +2781,10 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
   if (pChild) {
     attr = icXmlFindAttr(pChild, "start");
     if (attr) {
-      m_observerRange.start =icFtoF16((icFloatNumber)atof(icXmlAttrValue(attr)));
+      icFloatNumber v = 0;
+      if (!icXmlFloatValue(icXmlAttrValue(attr), v, parseStr, "ObserverFuncs start"))
+        return false;
+      m_observerRange.start = icFtoF16(v);
     }
     attr = icXmlFindAttr(pChild, "end");
     if (attr) {
@@ -2747,9 +2794,12 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
       // ObserverFuncs range ending at end="702.5" was stored as 702, and the
       // writer at the top of this file then emitted the truncated value.  The
       // matching "start" three lines above, and both endpoints of the
-      // IlluminantSPD range below, already use atof() -- this brings the odd one
-      // out in line with them.
-      m_observerRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(attr)));
+      // IlluminantSPD range below, already parse as floats -- this brings the
+      // odd one out in line with them.
+      icFloatNumber v = 0;
+      if (!icXmlFloatValue(icXmlAttrValue(attr), v, parseStr, "ObserverFuncs end"))
+        return false;
+      m_observerRange.end = icFtoF16(v);
     }
     attr = icXmlFindAttr(pChild, "steps");
     if (attr) {
@@ -2766,7 +2816,10 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
     }
     attr = icXmlFindAttr(pChild, "reserved");
     if (attr) {
-      m_reserved2 = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(attr));
+      if (!icXmlParseU16(icXmlAttrValue(attr), m_reserved2)) {
+        parseStr += "Invalid ObserverFuncs reserved\n";
+        return false;
+      }
     }
     
     // if these are not set correctly, then later allocations and calculations WILL fail
@@ -2798,18 +2851,25 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
 
   pChild = icXmlFindNode(pNode, "ColorTemperature");
   if (pChild && pChild->children && pChild->children->content) {
-    m_colorTemperature = (icFloatNumber)atof((icChar*)pChild->children->content);
+    if (!icXmlFloatValue((icChar*)pChild->children->content, m_colorTemperature, parseStr, "ColorTemperature"))
+      return false;
   }
 
   pChild = icXmlFindNode(pNode, "IlluminantSPD");
   if (pChild) {
     attr = icXmlFindAttr(pChild, "start");
     if (attr) {
-      m_illuminantRange.start = icFtoF16((icFloatNumber)atof(icXmlAttrValue(attr)));
+      icFloatNumber v = 0;
+      if (!icXmlFloatValue(icXmlAttrValue(attr), v, parseStr, "IlluminantSPD start"))
+        return false;
+      m_illuminantRange.start = icFtoF16(v);
     }
     attr = icXmlFindAttr(pChild, "end");
     if (attr) {
-      m_illuminantRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(attr)));
+      icFloatNumber v = 0;
+      if (!icXmlFloatValue(icXmlAttrValue(attr), v, parseStr, "IlluminantSPD end"))
+        return false;
+      m_illuminantRange.end = icFtoF16(v);
     }
     attr = icXmlFindAttr(pChild, "steps");
     if (attr) {
@@ -2822,7 +2882,10 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
     }
     attr = icXmlFindAttr(pChild, "reserved");
     if (attr) {
-      m_reserved3 = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(attr));
+      if (!icXmlParseU16(icXmlAttrValue(attr), m_reserved3)) {
+        parseStr += "Invalid IlluminantSPD reserved\n";
+        return false;
+      }
     }
     
     // if these are not set correctly, then later allocations and calculations WILL fail
@@ -2851,17 +2914,20 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
   if (pChild) {
     attr = icXmlFindAttr(pChild, "X");
     if (attr) {
-      m_surroundXYZ.X = (icFloatNumber)atof(icXmlAttrValue(attr));
+      if (!icXmlFloatValue(icXmlAttrValue(attr), m_surroundXYZ.X, parseStr, "SurroundXYZ X"))
+        return false;
     }
 
     attr = icXmlFindAttr(pChild, "Y");
     if (attr) {
-      m_surroundXYZ.Y = (icFloatNumber)atof(icXmlAttrValue(attr));
+      if (!icXmlFloatValue(icXmlAttrValue(attr), m_surroundXYZ.Y, parseStr, "SurroundXYZ Y"))
+        return false;
     }
 
     attr = icXmlFindAttr(pChild, "Z");
     if (attr) {
-      m_surroundXYZ.Z = (icFloatNumber)atof(icXmlAttrValue(attr));
+      if (!icXmlFloatValue(icXmlAttrValue(attr), m_surroundXYZ.Z, parseStr, "SurroundXYZ Z"))
+        return false;
     }
   }
 
@@ -3216,9 +3282,14 @@ bool CIccTagXmlResponseCurveSet16::ParseXml(xmlNode *pNode, std::string &parseSt
           if (!szX || !szY || !szZ || !*szX || !*szY || !*szZ)
             return false;
 
-          pXYZ->X = icDtoF((icFloatNumber)atof(szX));
-          pXYZ->Y = icDtoF((icFloatNumber)atof(szY));
-          pXYZ->Z = icDtoF((icFloatNumber)atof(szZ));
+          icFloatNumber xyz[3];
+          if (!icXmlFloatValue(szX, xyz[0], parseStr, "ChannelResponses X") ||
+              !icXmlFloatValue(szY, xyz[1], parseStr, "ChannelResponses Y") ||
+              !icXmlFloatValue(szZ, xyz[2], parseStr, "ChannelResponses Z"))
+            return false;
+          pXYZ->X = icDtoF(xyz[0]);
+          pXYZ->Y = icDtoF(xyz[1]);
+          pXYZ->Z = icDtoF(xyz[2]);
 
           for (pMeasurement = pChild->children; pMeasurement; pMeasurement = pMeasurement->next) {
             if (pMeasurement->type == XML_ELEMENT_NODE && !icXmlStrCmp(pMeasurement->name, "Measurement")) {
@@ -3250,7 +3321,10 @@ bool CIccTagXmlResponseCurveSet16::ParseXml(xmlNode *pNode, std::string &parseSt
                 parseStr += "Invalid Measurement DeviceCode in responseCurveSet16Type\n";
                 return false;
               }
-              response.measurementValue = icDtoF((icFloatNumber)atof(szValue));
+              icFloatNumber measValue = 0;
+              if (!icXmlFloatValue(szValue, measValue, parseStr, "Measurement MeasValue"))
+                return false;
+              response.measurementValue = icDtoF(measValue);
 
               if (szReserved && *szReserved) {
                 if (!icXmlParseU16(szReserved, response.reserved)) {
@@ -3728,8 +3802,8 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
           const char *szSize = icXmlAttrValue(pCurveNode, "IdentitySize");
 
           if (szSize && *szSize) {
-            icUInt32Number nSize = (icUInt32Number)atol(szSize);
-            if (nSize <= 1)
+            icUInt32Number nSize = 0;
+            if (!icXmlParseU32(szSize, nSize) || nSize <= 1)
               return false;
             
             if (!SetSize(nSize))
@@ -3779,8 +3853,8 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
           const char *szSize = icXmlAttrValue(pCurveNode, "IdentitySize");
 
           if (szSize && *szSize) {
-            icUInt32Number nSize = (icUInt32Number)atol(szSize);
-            if (nSize <= 1)
+            icUInt32Number nSize = 0;
+            if (!icXmlParseU32(szSize, nSize) || nSize <= 1)
               return false;
             
             if (!SetSize(nSize))
@@ -3823,8 +3897,8 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
           const char *szSize = icXmlAttrValue(pCurveNode, "IdentitySize");
 
           if (szSize && *szSize) {
-            icUInt32Number nSize = (icUInt32Number)atol(szSize);
-            if (nSize <= 1)
+            icUInt32Number nSize = 0;
+            if (!icXmlParseU32(szSize, nSize) || nSize <= 1)
               return false;
 
             if (!SetSize(nSize))
@@ -3970,7 +4044,8 @@ bool CIccTagXmlParametricCurve::ParseXml(xmlNode *pNode, std::string & /*parseSt
         xmlAttr *reserved2 = icXmlFindAttr(pCurveNode, "Reserved");
 
         if (reserved2) {
-          m_nReserved2 = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(reserved2));
+          if (!icXmlParseU16(icXmlAttrValue(reserved2), m_nReserved2))
+            return false;
         }
         return true;
       }
@@ -4258,14 +4333,16 @@ bool icMatrixFromXml(CIccMatrix *pMatrix, xmlNode *pNode)
     snprintf(attrName, nameSize, "e%d", i+1);
     xmlAttr *attr = icXmlFindAttr(pNode, attrName);
     if (attr) {
-      pMatrix->m_e[i] = (icFloatNumber)atof(icXmlAttrValue(attr));
+      if (!icXmlParseFloat(icXmlAttrValue(attr), pMatrix->m_e[i]))
+        return false;
     }
   }
   for (i=9; i<12; i++) {
     snprintf(attrName, nameSize, "e%d", i+1);
     xmlAttr *attr = icXmlFindAttr(pNode, attrName);
     if (attr) {
-      pMatrix->m_e[i] = (icFloatNumber)atof(icXmlAttrValue(attr));
+      if (!icXmlParseFloat(icXmlAttrValue(attr), pMatrix->m_e[i]))
+        return false;
       pMatrix->m_bUseConstants = true;
     }
   }
@@ -4359,8 +4436,16 @@ CIccCLUT *icCLutFromXml(xmlNode *pNode, int nIn, int nOut, icConvertType nType, 
 
   if (table) {
     if (nType == icConvertVariable) {
+      // atoi() read Precision="1abc" as 1 and any non-number as 2.  An absent
+      // attribute still selects 2-byte data; a present one must be a number.
       const char *precision = icXmlAttrValue(table, "Precision");
-      if (precision && atoi(precision) == 1) {
+      icUInt8Number nTablePrecision = 2;
+      if (precision && *precision && !icXmlParseU8(precision, nTablePrecision)) {
+        parseStr += "Invalid TableData Precision.\n";
+        delete pCLUT;
+        return NULL;
+      }
+      if (nTablePrecision == 1) {
         nType = icConvert8Bit;
         pCLUT->SetPrecision(1);
       }
@@ -6298,8 +6383,11 @@ bool CIccTagXmlEmbeddedHeightImage::ParseXml(xmlNode *pNode, std::string &parseS
   }
   m_nEncodingFormat = (icImageEncodingType)nEncodingFormat;
 
-  m_fMetersMinPixelValue = (icFloatNumber)atof(icXmlAttrValue(tagNode, "MetersMinPixelValue", "0.0"));
-  m_fMetersMaxPixelValue = (icFloatNumber)atof(icXmlAttrValue(tagNode, "MetersMaxPixelValue", "0.0"));
+  if (!icXmlFloatValue(icXmlAttrValue(tagNode, "MetersMinPixelValue", "0.0"),
+                       m_fMetersMinPixelValue, parseStr, "HeightImage MetersMinPixelValue") ||
+      !icXmlFloatValue(icXmlAttrValue(tagNode, "MetersMaxPixelValue", "0.0"),
+                       m_fMetersMaxPixelValue, parseStr, "HeightImage MetersMaxPixelValue"))
+    return false;
 
   xmlNode *pImageNode;
   pImageNode = icXmlFindNode(tagNode->children, "Image");
