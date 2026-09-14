@@ -268,7 +268,8 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
 
   if (!m_transfer.Init(info.nTransferCharacteristics, info.contentReferenceWhite,
                        m_params.hlgGamma, m_params.hlgPeakLuminance,
-                       info.nColourPrimaries)) {
+                       info.nColourPrimaries,
+                       info.bPrimariesResolved ? &info.primaries : NULL)) {
     m_szUnsupported = "Transfer characteristic has no analytic form here";
     return false;
   }
@@ -347,6 +348,16 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
   // adaptation that 8.10.1 NOTE 2 leaves out.
   if (info.nColourPrimaries != icCicpPrimariesUnspecified) {
     icFloatNumber fwd[9];
+
+    // A chromaticAdaptationTag that is present but unreadable makes the
+    // forward matrix unbuildable, and the colorant-tag fallback below would
+    // then bake around it with no diagnostic - the same refusal
+    // CIccXformMatrixTrcHdr::Begin() makes, so the bake cannot store a
+    // rendering the live path refuses.
+    if (icHdrHasMalformedChad(pProfile)) {
+      m_szUnsupported = "chromaticAdaptationTag is present but malformed";
+      return false;
+    }
 
     if (icBuildHdrForwardMatrix(pProfile, info.nColourPrimaries, fwd))
       memcpy(m_matrix, fwd, sizeof(m_matrix));

@@ -6762,6 +6762,15 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
   if (!icGetHdrProfileInfo(m_pProfile, info))
     return icCmmStatInvalidProfile;
 
+  // The chain ends in the RGB-to-PCSXYZ matrix of 8.10.2 c), so it produces and
+  // consumes XYZ in both directions.  icUseHdrToneMapPath() already declines a
+  // Lab-PCS profile - it is not an HDR Profile, see bPcsXyz - but this class
+  // can be reached without that gate, and the input direction used to be the
+  // unguarded one: it wrote XYZ numbers into a port GetDstSpace() reported as
+  // Lab, and the CMM decoded them as Lab.
+  if (m_pProfile->m_Header.pcs != icSigXYZData)
+    return icCmmStatBadSpaceLink;
+
   // TWO SHAPES REACH HERE, and the difference is the whole of clause 8.10.1's
   // revision.  A profile authored against the PREVIOUS revision carries the
   // conventional six matrix column and TRC tags, and the base class sets
@@ -6805,10 +6814,8 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
     if (baseStatus != icCmmStatOk)
       return baseStatus;
 
-    // The base's own precondition for the output direction, which is about the
-    // PCS rather than about any tag, so it holds either way.
-    if (!m_bInput && m_pProfile->m_Header.pcs != icSigXYZData)
-      return icCmmStatBadSpaceLink;
+    // The base's PCS precondition is enforced for both directions and both
+    // shapes at the top of this function.
 
     // No sampled curves: m_transfer supplies the linearisation below, and
     // leaving these NULL is what tells CIccXformMatrixTRC::Apply() to skip the
@@ -6867,6 +6874,14 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
   if (info.nColourPrimaries != icCicpPrimariesUnspecified) {
     icFloatNumber fwd[9];
 
+    // A chromaticAdaptationTag that is present but unreadable (wrong type, or
+    // fewer than nine values) makes the adopted white unrecoverable.  It is
+    // refused on BOTH shapes: the conventional profile's colorant-tag fallback
+    // below would otherwise render around it with no diagnostic, which is the
+    // silent-unadapted outcome icGetProfilePrimaries() already refuses.
+    if (icHdrHasMalformedChad(m_pProfile))
+      return icCmmStatInvalidProfile;
+
     if (icBuildHdrForwardMatrix(m_pProfile, info.nColourPrimaries, fwd)) {
       memcpy(m_e, fwd, sizeof(m_e));
 
@@ -6901,7 +6916,8 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
   }
 
   if (!m_transfer.Init(info.nTransferCharacteristics, info.contentReferenceWhite,
-                       m_hlgGamma, m_hlgPeakLuminance, info.nColourPrimaries)) {
+                       m_hlgGamma, m_hlgPeakLuminance, info.nColourPrimaries,
+                       info.bPrimariesResolved ? &info.primaries : NULL)) {
     return icCmmStatUnsupported;
   }
 

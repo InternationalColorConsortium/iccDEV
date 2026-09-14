@@ -439,6 +439,14 @@ typedef struct {
    * classification block in icGetHdrProfileInfo(). */
   bool bMatrixColumnsPresent;
   bool bVersion4_5;          /* profileVersionField declares 4.5.0.0 or later within v4 */
+
+  /** Header PCS is PCSXYZ.  A condition of membership: 8.10.1 makes an HDR
+   * Profile a three-component MATRIX-BASED Input or Display profile, and ICC.1
+   * 8.3.3 and 8.4.3 define that class on PCSXYZ - the matrix of 8.10.2 c)
+   * produces XYZ and nothing in the chain converts it to Lab.  A Lab-PCS
+   * profile classified as a member used to be given an xform that wrote XYZ
+   * numbers into a port reporting Lab. */
+  bool bPcsXyz;
   bool bHasCicp;
   icUInt8Number nColourPrimaries;
   icUInt8Number nTransferCharacteristics;
@@ -615,13 +623,31 @@ ICCPROFLIB_API bool icHagcGetGainApplicationPrimaries(icUInt8Number nMode,
  *
  * Returns false when ColourPrimaries names no chromaticities (0, 2, 3 and the
  * unassigned values), when the mediaWhitePointTag is absent, or when the
- * chromaticAdaptationTag is present but singular.  A caller that gets false
+ * chromaticAdaptationTag is present but singular or malformed (see
+ * icHdrHasMalformedChad()) - an absent one builds the unadapted matrix, which
+ * is then correct.  A caller that gets false
  * for ColourPrimaries equal to 2 should use the profile's own matrix column
  * tags, which is what 9.2.17 directs for that value.
  */
 ICCPROFLIB_API bool icBuildHdrForwardMatrix(const CIccProfile *pProfile,
                                             icUInt8Number nColourPrimaries,
                                             icFloatNumber *matrix);
+
+/**
+ * True when the profile carries a chromaticAdaptationTag that cannot be used:
+ * present, but not an s15Fixed16ArrayType or with fewer than nine values.
+ *
+ * Absent and malformed are different answers and have to stay apart.  An
+ * absent tag means the profile's adopted white IS the PCS adopted white, so
+ * the forward matrix is built unadapted and that is correct.  A malformed one
+ * means the adaptation exists and cannot be read; building unadapted then is a
+ * wrong matrix - 11% in X for a D65 profile - delivered with no diagnostic.
+ * icBuildHdrForwardMatrix() refuses that case, and a caller holding another
+ * matrix to fall back to (the colorant tags of a conventional profile) uses
+ * this to refuse it too rather than render around it, as
+ * icGetProfilePrimaries() already does.
+ */
+ICCPROFLIB_API bool icHdrHasMalformedChad(const CIccProfile *pProfile);
 
 /**
  * Classify a profile against clause 8.10 and resolve everything the clause
@@ -633,8 +659,9 @@ ICCPROFLIB_API bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfil
 
 /**
  * True when the header alone leaves a profile eligible for clause 8.10.1:
- * version 4.5.0.0 or later within v4, RGB data colour space, and the Input or
- * Display class.  These are the membership conditions that need no tag, so a
+ * version 4.5.0.0 or later within v4, RGB data colour space, the Input or
+ * Display class, and PCSXYZ (see bPcsXyz).  These are the membership
+ * conditions that need no tag, so a
  * caller can rule a profile out before icGetHdrProfileInfo() loads any.
  * Returns false when pProfile is NULL.
  */

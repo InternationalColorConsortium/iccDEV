@@ -108,6 +108,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <string>
 
 #ifdef USEICCDEVNAMESPACE
@@ -877,15 +878,15 @@ CIccProfile *openFixture(const char *szName)
 // could not be created, begun or given an apply object. The latter three are
 // counted as failures HERE: every caller skips its own assertions on false, so
 // a CMM path that stopped working used to print FAIL and still exit 0.
-bool applyPixel(const char *szFixture, const CIccCreateHdrXformHint *pHint,
-                const icFloatNumber *src, icFloatNumber *dst, icXformType *pType,
-                bool bInput = true)
+//
+// applyProfilePixel() is the same for a profile the caller has already opened
+// (and perhaps changed); it takes ownership of pProfile, and szFixture names it
+// in a failure message.
+bool applyProfilePixel(CIccProfile *pProfile, const char *szFixture,
+                       const CIccCreateHdrXformHint *pHint,
+                       const icFloatNumber *src, icFloatNumber *dst, icXformType *pType,
+                       bool bInput = true)
 {
-  CIccProfile *pProfile = openFixture(szFixture);
-
-  if (!pProfile)
-    return false;
-
   CIccCreateXformHintManager hints;
   CIccCreateHdrXformHint *pOwned = NULL;
 
@@ -933,6 +934,18 @@ bool applyPixel(const char *szFixture, const CIccCreateHdrXformHint *pHint,
   delete pXform;
 
   return true;
+}
+
+bool applyPixel(const char *szFixture, const CIccCreateHdrXformHint *pHint,
+                const icFloatNumber *src, icFloatNumber *dst, icXformType *pType,
+                bool bInput = true)
+{
+  CIccProfile *pProfile = openFixture(szFixture);
+
+  if (!pProfile)
+    return false;
+
+  return applyProfilePixel(pProfile, szFixture, pHint, src, dst, pType, bInput);
 }
 
 // The classifier has to work on a profile that was *opened* rather than read.
@@ -1222,6 +1235,399 @@ void testOutputDirection()
   checkClose(back[2], src[2], 1e-3, "device to PCS to device round trip B");
 }
 
+// ---------------------------------------------------------------------------
+// 9. The signal domain, the reference white, and exact target headrooms
+// ---------------------------------------------------------------------------
+
+// Float device input outside [0, 1].  icEncodeFloat is not clipped, so these
+// values reach ToLinearChannel().  PQ's EOTF has a pole at V = 1.992060 and
+// returns black past it; HLG's exponential overflows and the OOTF then forms
+// 0 * inf.  Both signals are defined on [0, 1], so above 1.0 the answer is the
+// value at 1.0: finite, and never below what a smaller input gives.
+void testTransferDomain()
+{
+  CIccHdrTransfer pq, hlg;
+
+  check(pq.Init(icCicpTransferPQ, (icFloatNumber)icHdrDefaultContentReferenceWhite),
+        "PQ transfer for the domain test");
+  check(hlg.Init(icCicpTransferHLG, (icFloatNumber)icHdrDefaultContentReferenceWhite),
+        "HLG transfer for the domain test");
+
+  const double above[] = { 1.5, 1.99, 1.992059, 1.99206, 2.0, 3.0, 17.0, 1.0e30, HUGE_VAL };
+  const icFloatNumber pqTop = pq.ToLinearChannel(1.0);
+  const icFloatNumber hlgTop = hlg.ToLinearChannel(1.0);
+  size_t n;
+
+  for (n = 0; n < sizeof(above) / sizeof(above[0]); n++) {
+    icFloatNumber v = (icFloatNumber)above[n];
+    icFloatNumber p = pq.ToLinearChannel(v);
+    icFloatNumber h = hlg.ToLinearChannel(v);
+
+    check(std::isfinite((double)p) && p == pqTop, "PQ above 1.0 gives the value at 1.0");
+    check(std::isfinite((double)h) && h == hlgTop, "HLG above 1.0 gives the value at 1.0");
+  }
+
+  check(pq.ToLinearChannel((icFloatNumber)NAN) == pq.ToLinearChannel(0.0),
+        "PQ takes a NaN channel to black");
+  check(hlg.ToLinearChannel((icFloatNumber)NAN) == hlg.ToLinearChannel(0.0),
+        "HLG takes a NaN channel to black");
+  check(pq.ToLinearChannel((icFloatNumber)-1.0) == 0.0, "PQ below 0 is black");
+
+  // Past the pole PQ used to return 0, so a brighter input rendered black.
+  double prevP = -1.0, prevH = -1.0;
+  bool bMonotone = true;
+
+  for (int i = 0; i <= 400; i++) {
+    icFloatNumber v = (icFloatNumber)(i / 100.0);
+    double p = (double)pq.ToLinearChannel(v);
+    double h = (double)hlg.ToLinearChannel(v);
+
+    if (!(p >= prevP) || !(h >= prevH))
+      bMonotone = false;
+
+    prevP = p;
+    prevH = h;
+  }
+
+  check(bMonotone, "PQ and HLG stay non-decreasing from 0 through 4");
+
+  // The whole HLG triplet, OOTF included: (17, 0, 0) was NaN.
+  icFloatNumber src[3] = { 17.0, 0.0, 0.0 }, dst[3];
+  hlg.ToLinear(dst, src);
+  check(std::isfinite((double)dst[0]) && std::isfinite((double)dst[1]) &&
+        std::isfinite((double)dst[2]), "an HLG triplet above 1.0 stays finite through the OOTF");
+}
+
+// A reference white the chain cannot divide by is refused rather than replaced.
+// Zero still means "not supplied" and takes the 203 cd/m^2 default.
+void testReferenceWhiteRange()
+{
+  CIccHdrTransfer t;
+
+  // 10 000 over this is twice the largest icFloatNumber: every PQ pixel would
+  // be infinite, and CRWL 1e-40 was measured doing exactly that.
+  const icFloatNumber tiny =
+    (icFloatNumber)(icPqPeakLuminance / (double)(std::numeric_limits<icFloatNumber>::max)() * 0.5);
+
+  check(tiny > 0.0, "the test's reference white is a positive icFloatNumber");
+  check(!t.Init(icCicpTransferPQ, tiny), "a white the PQ peak overflows against is refused");
+  check(!t.Init(icCicpTransferHLG, tiny), "and for HLG");
+  check(!t.Init(icCicpTransferPQ, (icFloatNumber)HUGE_VAL), "an infinite reference white is refused");
+
+  check(t.Init(icCicpTransferPQ, 0.0), "a zero reference white still means not supplied");
+  checkClose(t.GetContentReferenceWhite(), icHdrDefaultContentReferenceWhite, 0.0,
+             "and takes the 203 cd/m^2 default");
+
+  // "> 0" alone accepts +inf, which put inf and NaN through the HLG OOTF.
+  check(t.Init(icCicpTransferHLG, (icFloatNumber)icHdrDefaultContentReferenceWhite,
+               (icFloatNumber)HUGE_VAL, (icFloatNumber)HUGE_VAL),
+        "a non-finite HLG gamma and peak take their defaults");
+
+  icFloatNumber s[3] = { 1.0, 1.0, 1.0 }, d[3];
+  t.ToLinear(d, s);
+  checkClose(d[0], icHlgDefaultPeakLuminance / icHdrDefaultContentReferenceWhite, 1e-4,
+             "HLG peak white is then the default peak over reference white");
+}
+
+// Create and Begin an xform for a profile the caller hands over, with or
+// without the hint.  Unlike applyProfilePixel() nothing here counts as a
+// failure: the callers assert on the status, including refusals they expect.
+// The returned xform owns pProfile; on a NULL return Create() has freed it.
+CIccXform *beginXform(CIccProfile *pProfile, const CIccCreateHdrXformHint *pHint, bool bInput,
+                      icStatusCMM &status)
+{
+  CIccCreateXformHintManager hints;
+
+  if (pHint)
+    hints.AddHint(new CIccCreateHdrXformHint(*pHint));
+
+  CIccXform *pXform = CIccXform::Create(pProfile, bInput, icRelativeColorimetric, icInterpLinear,
+                                        NULL, icXformLutColor, true, pHint ? &hints : NULL);
+
+  status = pXform ? pXform->Begin() : icCmmStatAllocErr;
+  return pXform;
+}
+
+// Begin a CIccXformMatrixTrcHdr built directly, which is the one way to reach
+// Begin() without icUseHdrToneMapPath()'s membership gate.  Owns pProfile.
+icStatusCMM beginDirectHdrXform(CIccProfile *pProfile, const CIccCreateHdrXformHint *pHint, bool bInput)
+{
+  CIccXformMatrixTrcHdr *pXform = new CIccXformMatrixTrcHdr();
+
+  pXform->SetHdrParams(pHint);
+  pXform->SetParams(pProfile, bInput, icRelativeColorimetric, icRelativeColorimetric,
+                    false, icInterpLinear);
+
+  icStatusCMM status = pXform->Begin();
+  delete pXform;
+  return status;
+}
+
+// A target exactly on a curve's headroom is that curve alone.  Hints that are
+// powers of two land exactly, since log2 is exact for them, so the bracket
+// search's old pairing with the curve below at weight -0 was the common case.
+void testTargetOnACurve()
+{
+  icFloatNumber x[2] = { 0.0, 1.0 };
+  icFloatNumber yMax[2] = { 0.0, -1.0 };
+  icFloatNumber yWeighted[2] = { 0.0, (icFloatNumber)-0.5 };
+  icFloatNumber m[2] = { 0.0, 0.0 };
+  icUInt8Number i;
+
+  // A Max alternate at 0, a Weighted one at 1, the baseline at 2.
+  icHagcMetadata meta;
+  buildMetadata(meta, (icFloatNumber)2.0, (icFloatNumber)0.0, icHagcMixingMax, x, yMax, m, 2);
+  meta.SetNumAlternates(2);
+
+  icHagcAlternateImage *pAlt = meta.GetAlternate(1);
+  pAlt->m_headroom = 1.0;
+  pAlt->m_nMixingType = icHagcMixingWeighted;
+  pAlt->m_nControlPoints = 2;
+  pAlt->m_bPchipSlope = false;
+  memset(pAlt->m_coef, 0, sizeof(pAlt->m_coef));
+  pAlt->m_coef[icHagcCoefRed] = (icFloatNumber)(1.0 / 6.0);
+  pAlt->m_coef[icHagcCoefGreen] = (icFloatNumber)(1.0 / 6.0);
+  pAlt->m_coef[icHagcCoefBlue] = (icFloatNumber)(1.0 / 6.0);
+  pAlt->m_coef[icHagcCoefMax] = (icFloatNumber)0.5;
+  for (i = 0; i < 2; i++) {
+    pAlt->m_x[i] = x[i];
+    pAlt->m_y[i] = yWeighted[i];
+    pAlt->m_slope[i] = 0.0;
+  }
+
+  CIccHagcEvaluator ev;
+  check(ev.Init(meta), "an evaluator with two differently mixed alternates");
+
+  // Hermite midpoint of (0, 0)-(1, -0.5) with zero slopes: C3 = 1, C2 = -1.5,
+  // so G(0.5) = 0.125 - 0.375 = -0.25.
+  check(ev.SetTargetHeadroom(1.0), "target exactly on the Weighted alternate");
+  bool bValid = false;
+  checkClose(ev.EvalGainExponent(0.5, &bValid), -0.25, 1e-6,
+             "a target on the Weighted alternate evaluates that curve alone");
+  check(bValid, "one mixing drives it: the Max curve below is not in play");
+  check(ev.IsInvertible(), "so the exact hit is invertible");
+
+  // Strictly between the two the blend really does mix two ways, and has no
+  // single gain to search for.  InvertApproximate() used to copy the input and
+  // return true here.
+  check(ev.SetTargetHeadroom((icFloatNumber)0.5), "target between the two alternates");
+  check(!ev.IsInvertible(), "a blend of two mixings is not invertible");
+
+  icFloatNumber px[3] = { 0.4f, 0.3f, 0.2f };
+  icFloatNumber out[3] = { -1.0f, -1.0f, -1.0f };
+  check(!ev.InvertApproximate(out, px), "and InvertApproximate() says so rather than copying the input");
+  check(out[0] == -1.0f && out[1] == -1.0f && out[2] == -1.0f, "leaving dst untouched");
+
+  // An evaluator that was never initialised - or whose Init() failed, which
+  // leaves it in the same state - reports itself as the identity through
+  // IsIdentity(); neither inverse may treat that as one.
+  CIccHagcEvaluator unsupported;
+  check(!unsupported.Invert(out, px), "a never-initialised evaluator does not invert");
+  check(!unsupported.InvertApproximate(out, px), "nor approximately");
+
+  // HagcDisplay's layout: alternates at 0 and 5, the baseline between them at
+  // 3.  A target exactly on the baseline is the identity.
+  buildMetadata(meta, (icFloatNumber)3.0, (icFloatNumber)0.0, icHagcMixingMax, x, yMax, m, 2);
+  meta.SetNumAlternates(2);
+  pAlt = meta.GetAlternate(1);
+  pAlt->m_headroom = 5.0;
+  pAlt->m_nMixingType = icHagcMixingMax;
+  pAlt->m_nControlPoints = 2;
+  pAlt->m_bPchipSlope = false;
+  memset(pAlt->m_coef, 0, sizeof(pAlt->m_coef));
+  pAlt->m_coef[icHagcCoefMax] = 1.0;
+  for (i = 0; i < 2; i++) {
+    pAlt->m_x[i] = x[i];
+    pAlt->m_y[i] = yMax[i];
+    pAlt->m_slope[i] = 0.0;
+  }
+
+  check(ev.Init(meta), "an evaluator with the baseline between two alternates");
+  check(ev.SetTargetHeadroom(3.0), "target exactly on the interior baseline");
+  check(ev.IsIdentity(), "a target on an interior baseline is the identity");
+
+  // The same through the CMM: HagcDisplay's baseline headroom is 3, a hint of
+  // 8.0.  Begin() used to tone map it.
+  CIccProfile *pProfile = openFixture("HagcDisplay.icc");
+
+  if (pProfile) {
+    CIccCreateHdrXformHint hint;
+    hint.m_targetHeadroom = 8.0;
+    hint.m_nPolicy = icHdrToneMapAuto;
+
+    icStatusCMM status;
+    CIccXform *pXform = beginXform(pProfile, &hint, true, status);
+
+    check(pXform && pXform->GetXformType() == icXformTypeMatrixTrcHdr && status == icCmmStatOk,
+          "HagcDisplay at a hint of 8.0 builds the HDR chain");
+    if (pXform && pXform->GetXformType() == icXformTypeMatrixTrcHdr)
+      check(!((CIccXformMatrixTrcHdr*)pXform)->IsToneMapping(),
+            "and a hint exactly on its baseline headroom does not tone map");
+
+    delete pXform;
+  }
+}
+
+// ColourPrimaries 2 resolves its primaries from the profile, and the HLG OOTF
+// has to form its luminance from those.  The same BT.709 signal declared as 2
+// rather than 1 used to get BT.2020 luma: red 4,3% bright, blue 3,9% dark.
+void testHlgLumaFromResolvedPrimaries()
+{
+  const icFloatNumber pixels[][3] = {
+    { 0.75f, 0.0f,  0.0f  },
+    { 0.0f,  0.75f, 0.0f  },
+    { 0.0f,  0.0f,  0.75f },
+    { 0.8f,  0.3f,  0.1f  },
+  };
+
+  CIccCreateHdrXformHint hint;
+  hint.m_targetHeadroom = 1.0;
+  hint.m_nPolicy = icHdrToneMapAuto;
+
+  for (size_t n = 0; n < sizeof(pixels) / sizeof(pixels[0]); n++) {
+    CIccProfile *pCode1 = openFixture("HdrHlgBt709Primaries.icc");
+    CIccProfile *pCode2 = openFixture("HdrHlgBt709Primaries.icc");
+
+    if (!pCode1 || !pCode2) {
+      delete pCode1;
+      delete pCode2;
+      return;
+    }
+
+    CIccTag *pTag = pCode2->FindTag(icSigCicpTag);
+
+    if (!pTag || pTag->GetType() != icSigCicpType) {
+      check(false, "HdrHlgBt709Primaries carries a cicpTag");
+      delete pCode1;
+      delete pCode2;
+      return;
+    }
+
+    icUInt8Number cp, tc, mc, fr;
+    ((CIccTagCicp*)pTag)->GetFields(cp, tc, mc, fr);
+    ((CIccTagCicp*)pTag)->SetFields(icCicpPrimariesUnspecified, tc, mc, fr);
+
+    if (!n) {
+      icHdrProfileInfo info;
+      check(icGetHdrProfileInfo(pCode2, info) && info.nClass == icHdrProfileConforming &&
+            info.bPrimariesResolved && info.bPrimariesFromProfile,
+            "BT.709 declared as ColourPrimaries 2 is a member whose primaries come from its tags");
+    }
+
+    icFloatNumber want[3], got[3];
+    icXformType nType = icXformTypeUnknown;
+
+    if (!applyProfilePixel(pCode1, "HdrHlgBt709Primaries.icc", &hint, pixels[n], want, &nType)) {
+      delete pCode2;
+      return;
+    }
+
+    if (!applyProfilePixel(pCode2, "HdrHlgBt709Primaries.icc (ColourPrimaries 2)", &hint,
+                           pixels[n], got, &nType))
+      return;
+
+    // 5e-4 is the s15Fixed16 grid of the colorant tags the code 2 matrix is
+    // read from; the luma error it has to exclude is about 4e-3 in Y.
+    checkClose(got[0], want[0], 5e-4, "ColourPrimaries 2 renders as its resolved BT.709: X");
+    checkClose(got[1], want[1], 5e-4, "ColourPrimaries 2 renders as its resolved BT.709: Y");
+    checkClose(got[2], want[2], 5e-4, "ColourPrimaries 2 renders as its resolved BT.709: Z");
+  }
+}
+
+// The HDR chain produces XYZ.  A Lab-PCS profile is not an HDR Profile, gets no
+// HDR chain, and Begin() refuses it in both directions for a caller that
+// builds the class directly.
+void testLabPcsGetsNoHdrChain()
+{
+  CIccCreateHdrXformHint hint;
+  hint.m_targetHeadroom = 1.0;
+  hint.m_nPolicy = icHdrToneMapAuto;
+
+  CIccProfile *pProfile = openFixture("HagcCommonParams.icc");
+
+  if (!pProfile)
+    return;
+
+  pProfile->m_Header.pcs = icSigLabData;
+
+  icHdrProfileInfo info;
+  check(icGetHdrProfileInfo(pProfile, info) && !info.bPcsXyz && info.nClass != icHdrProfileConforming,
+        "a Lab-PCS profile is not a clause 8.10.1 member");
+
+  icStatusCMM status;
+  CIccXform *pXform = beginXform(pProfile, &hint, true, status);
+  check(pXform && pXform->GetXformType() != icXformTypeMatrixTrcHdr,
+        "the hint builds no HDR chain for it");
+  delete pXform;
+
+  const bool bDirections[2] = { true, false };
+
+  for (int d = 0; d < 2; d++) {
+    pProfile = openFixture("HagcCommonParams.icc");
+
+    if (!pProfile)
+      return;
+
+    pProfile->m_Header.pcs = icSigLabData;
+    check(beginDirectHdrXform(pProfile, &hint, bDirections[d]) == icCmmStatBadSpaceLink,
+          bDirections[d] ? "Begin() refuses a Lab PCS in the input direction"
+                         : "Begin() refuses a Lab PCS in the output direction");
+  }
+}
+
+// Replace a profile's chromaticAdaptationTag with one that cannot be read.
+void attachShortChad(CIccProfile *pProfile)
+{
+  CIccTagS15Fixed16 *pShort = new CIccTagS15Fixed16(8);
+
+  for (icUInt32Number i = 0; i < 8; i++)
+    (*pShort)[i] = icDtoF((i == 0 || i == 4) ? 1.0 : 0.0);
+
+  pProfile->DeleteTag(icSigChromaticAdaptationTag);
+  pProfile->AttachTag(icSigChromaticAdaptationTag, pShort);
+}
+
+// A chromaticAdaptationTag that is present but unreadable.  Treating it as
+// absent built an unadapted forward matrix - 11% high in X for this profile -
+// and Begin() reported success.
+void testMalformedChadRefused()
+{
+  CIccCreateHdrXformHint hint;
+  hint.m_targetHeadroom = 1.0;
+  hint.m_nPolicy = icHdrToneMapAuto;
+
+  // The revision shape, through the ordinary Create().
+  CIccProfile *pProfile = openFixture("HdrLinearNoMetadata.icc");
+
+  if (pProfile) {
+    attachShortChad(pProfile);
+
+    icStatusCMM status;
+    CIccXform *pXform = beginXform(pProfile, &hint, true, status);
+    check(pXform && pXform->GetXformType() == icXformTypeMatrixTrcHdr,
+          "a malformed chad does not change which chain is chosen");
+    check(status != icCmmStatOk, "but Begin() refuses it rather than rendering unadapted");
+    delete pXform;
+  }
+
+  // The conventional shape (TRC and colorant tags), which falls back to its
+  // colorant tags when the forward matrix cannot be built.  Only a caller that
+  // builds the class directly reaches it, since the TRC tags cost membership.
+  pProfile = openFixture("HdrTrcTagsPresent.icc");
+
+  if (pProfile)
+    check(beginDirectHdrXform(pProfile, &hint, true) == icCmmStatOk,
+          "the conventional shape begins with its chad intact");
+
+  pProfile = openFixture("HdrTrcTagsPresent.icc");
+
+  if (pProfile) {
+    attachShortChad(pProfile);
+    check(beginDirectHdrXform(pProfile, &hint, true) == icCmmStatInvalidProfile,
+          "and the colorant-tag fallback does not render around a malformed chad");
+  }
+}
+
 } // namespace
 
 int main(int /*argc*/, char * /*argv*/[])
@@ -1240,6 +1646,12 @@ int main(int /*argc*/, char * /*argv*/[])
   testGainApplicationSpaceFromProfile();
   testEndToEnd();
   testOutputDirection();
+  testTransferDomain();
+  testReferenceWhiteRange();
+  testTargetOnACurve();
+  testHlgLumaFromResolvedPrimaries();
+  testLabPcsGetsNoHdrChain();
+  testMalformedChadRefused();
 
   if (g_failures)
     printf("%d assertion(s) failed\n", g_failures);

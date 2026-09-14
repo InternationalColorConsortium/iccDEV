@@ -71,6 +71,7 @@
 #define _ICCHDRTONEMAP_H
 
 #include "IccDefs.h"
+#include "IccHdrProfile.h"
 #include "IccTagHagc.h"
 
 #ifdef USEICCDEVNAMESPACE
@@ -316,12 +317,29 @@ public:
    * derive the OOTF's luma coefficients - see IMPL-04 and the icHlgLuma block
    * above.  It defaults to 9 (BT.2020), which reproduces the fixed
    * coefficients exactly, so a caller that does not pass it gets the previous
-   * behaviour bit for bit. */
+   * behaviour bit for bit.
+   *
+   * pResolvedPrimaries, when not NULL, is the profile's source primaries as
+   * icGetResolvedPrimaries() resolved them, and takes precedence over
+   * nColourPrimaries.  It is what makes ColourPrimaries 2 correct: those
+   * primaries live in the profile's matrix column tags, which this class
+   * cannot see, so without them the OOTF fell back to BT.2020 luma for a
+   * signal in some other set.  Every in-library caller holds the resolved set
+   * and passes it; for the H.273 codes it is the same table entry the code
+   * would have looked up, so their results are unchanged.
+   *
+   * contentReferenceWhite <= 0 is taken as "not supplied" and replaced by the
+   * 203 cd/m^2 default.  A positive value the chain cannot divide by - one for
+   * which a peak over it is not a finite icFloatNumber - is refused instead
+   * (Init returns false): it is not an absent value, and substituting 203 for
+   * it would render at a white the caller did not ask for.  A non-finite HLG
+   * gamma or peak is replaced by its default, as a non-positive one is. */
   bool Init(icUInt8Number nTransferCharacteristics,
             icFloatNumber contentReferenceWhite,
             icFloatNumber hlgGamma = (icFloatNumber)icHlgDefaultGamma,
             icFloatNumber hlgPeakLuminance = (icFloatNumber)icHlgDefaultPeakLuminance,
-            icUInt8Number nColourPrimaries = 9);
+            icUInt8Number nColourPrimaries = 9,
+            const icCicpPrimaries *pResolvedPrimaries = NULL);
 
   bool IsSupported() const { return m_bSupported; }
 
@@ -678,8 +696,15 @@ public:
    * control point the result saturates at x_last, as it does for Invert().
    *
    * This is what a BToA0Tag wants: it is a compatibility backup for pre-HDR
-   * workflows, and an exact inverse is not possible in all cases.  Returns
-   * false only when a zero gain destroyed the value, leaving dst untouched.
+   * workflows, and an exact inverse is not possible in all cases.
+   *
+   * Returns false, leaving dst untouched, when there is nothing to search
+   * with: the evaluator is not supported, a zero gain destroyed the value, or
+   * the target blends two curves whose component mixings differ - there is
+   * then no single gain exponent, and copying the input would be a claim to
+   * have inverted it.  A target ON a curve is that curve alone (see
+   * SetTargetHeadroom()), so that last case needs a target strictly between
+   * two alternates that mix differently.
    */
   bool InvertApproximate(icFloatNumber *dst, const icFloatNumber *src) const;
 

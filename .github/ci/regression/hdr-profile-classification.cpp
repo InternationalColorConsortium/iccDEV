@@ -105,6 +105,7 @@
 #include "IccUtil.h"
 #include "IccDefs.h"
 
+#include <clocale>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -1026,6 +1027,231 @@ void testValidateLoadsNoTagForHeaderNonMembers()
   delete pMember;
 }
 
+namespace {
+
+// ---------------------------------------------------------------------------
+// 10. What a metadata value has to be before it is taken as stated
+// ---------------------------------------------------------------------------
+void testMetadataParsing()
+{
+  struct Case {
+    const char *szKey;
+    const char *szValue;
+    bool bParses;
+    const char *szWhat;
+  };
+
+  // CRWL divides 10 000 cd/m^2 (the PQ peak) and every metadata luminance, so
+  // "positive" is not enough: 1e-50 is 0.0 as a float, 1e-40 is subnormal and
+  // 1e-36 leaves 10 000 over it outside the float range.
+  const Case cases[] = {
+    { "CRWL", "203.0",          true,  "CRWL as a plain decimal" },
+    { "CRWL", " 203.0 ",        true,  "CRWL with surrounding separators" },
+    { "CRWL", "+203",           true,  "CRWL in signed integer form" },
+    { "CRWL", "1e-50",          false, "a CRWL that is 0.0 as a float" },
+    { "CRWL", "1e-40",          false, "a subnormal CRWL" },
+    { "CRWL", "1e-36",          false, "a CRWL 10 000 cd/m^2 cannot be divided by" },
+    { "CRWL", "abc",            false, "a CRWL that is text" },
+    { "CRWL", "203.0x",         false, "a CRWL with trailing text" },
+    { "CRWL", "inf",            false, "an infinite CRWL" },
+    { "CRWL", "nan",            false, "a NaN CRWL" },
+    { "CRWL", "203,0",          false, "a comma-decimal CRWL (two fields, not one)" },
+    { "CLL",  "1000.0.005 9",   false, "glued numbers, which strtod read as three" },
+    { "CLL",  "1000.0 400.0 9", true,  "the registered CLL shape" },
+    { "DERH", "1e-40",          false, "a subnormal DERH" },
+    { "DRWL", "1e-40",          false, "a subnormal DRWL" },
+  };
+
+  for (size_t n = 0; n < sizeof(cases) / sizeof(cases[0]); n++) {
+    CIccProfile *pProfile = openFixture("HdrDisplayMetadata.icc");
+    if (!pProfile)
+      return;
+
+    CIccTagDict *pDict = metaDict(pProfile);
+    check(pDict != NULL, "HdrDisplayMetadata carries a metadataTag dict");
+    if (!pDict) {
+      delete pProfile;
+      return;
+    }
+
+    pDict->Set(cases[n].szKey, cases[n].szValue);
+
+    CIccHdrMetadataReader meta;
+    check(meta.Read(pProfile), "metadataTag read");
+
+    bool bHas = false;
+    if (!strcmp(cases[n].szKey, "CRWL"))
+      bHas = meta.HasContentReferenceWhite();
+    else if (!strcmp(cases[n].szKey, "CLL"))
+      bHas = meta.HasContentLightLevel();
+    else if (!strcmp(cases[n].szKey, "DERH"))
+      bHas = meta.HasDisplayHeadroom();
+    else if (!strcmp(cases[n].szKey, "DRWL"))
+      bHas = meta.HasDisplayReferenceWhite();
+
+    std::string what = cases[n].szWhat;
+    check(bHas == cases[n].bParses,
+          (what + (cases[n].bParses ? " is taken as stated" : " is not taken as stated")).c_str());
+    check(meta.HasUnparsedEntries() == !cases[n].bParses,
+          (what + (cases[n].bParses ? " leaves nothing unparsed" : " is reported unparsed")).c_str());
+
+    if (!strcmp(cases[n].szKey, "CRWL") && !cases[n].bParses)
+      checkClose(meta.GetResolvedContentReferenceWhite(), 203.0, 0.0,
+                 (what + " resolves to the 203 default, not to its own value").c_str());
+
+    delete pProfile;
+  }
+
+  // A profile whose only HDR entry did not parse still carries one.
+  CIccProfile *pProfile = openFixture("HdrDisplayMetadata.icc");
+  if (pProfile) {
+    CIccTagDict *pDict = metaDict(pProfile);
+    if (pDict) {
+      pDict->Remove("CLL");
+      pDict->Remove("MDCV");
+      pDict->Remove("DERH");
+      pDict->Remove("DRWL");
+      pDict->Remove("DCV");
+      pDict->Set("CRWL", "abc");
+
+      CIccHdrMetadataReader meta;
+      check(meta.Read(pProfile), "metadataTag with one unparsed entry read");
+      check(!meta.HasContentReferenceWhite() && meta.HasAnyHdrEntry(),
+            "an HDR entry that did not parse still counts as an HDR entry");
+    }
+    delete pProfile;
+  }
+
+  // The same values in a host that set a comma-decimal locale.  strtod follows
+  // it; a registry value is not locale text.
+  std::string savedLocale;
+  const char *szLocale = setlocale(LC_NUMERIC, NULL);
+  savedLocale = szLocale ? szLocale : "C";
+
+  const char *szCommaLocales[] = { "de_DE.UTF-8", "de_DE.utf8", "de_DE", "fr_FR.UTF-8", "fr_FR" };
+  bool bSwitched = false;
+
+  for (size_t n = 0; n < sizeof(szCommaLocales) / sizeof(szCommaLocales[0]) && !bSwitched; n++)
+    bSwitched = setlocale(LC_NUMERIC, szCommaLocales[n]) != NULL;
+
+  if (bSwitched) {
+    pProfile = openFixture("HdrLinearMdcv.icc");
+    if (pProfile) {
+      icHdrProfileInfo info;
+      check(icGetHdrProfileInfo(pProfile, info), "info under a comma-decimal locale");
+      checkClose(info.contentReferenceWhite, 100.0, 1e-4,
+                 "the stated CRWL of 100.0 is read under a comma-decimal locale");
+      delete pProfile;
+    }
+    setlocale(LC_NUMERIC, savedLocale.c_str());
+  }
+  else {
+    printf("NOTE: no comma-decimal locale is installed; the locale case was not exercised\n");
+  }
+}
+
+// A rule that is selected but whose quotient is not a finite float yields no
+// value - not an infinity, and not the next rule's value.
+void testUnrepresentableHeadroom()
+{
+  CIccProfile *pProfile = openFixture("HdrHeadroomDcvDrwl.icc");
+  if (pProfile) {
+    CIccTagDict *pDict = metaDict(pProfile);
+    if (pDict) {
+      pDict->Set("DCV", "1e30 0.005 1");
+      pDict->Set("DRWL", "1e-30");
+
+      icHdrProfileInfo info;
+      check(icGetHdrProfileInfo(pProfile, info), "info with DCV 1e30 over DRWL 1e-30");
+      check(info.nHeadroomSource == icHdrHeadroomNone,
+            "8.10.5 b) with an unrepresentable quotient produces no display headroom");
+      check(std::isfinite((double)info.displayHeadroom), "and leaves no infinity behind");
+    }
+    delete pProfile;
+  }
+
+  pProfile = openFixture("HdrLinearCll.icc");
+  if (pProfile) {
+    CIccTagDict *pDict = metaDict(pProfile);
+    if (pDict) {
+      // 10 000 over 1e-34 still fits a float, so this CRWL is accepted; CLL
+      // 1e30 over it does not.
+      pDict->Set("CRWL", "1e-34");
+      pDict->Set("CLL", "1e30 0.0 9");
+
+      icHdrProfileInfo info;
+      check(icGetHdrProfileInfo(pProfile, info), "info with CLL 1e30 over CRWL 1e-34");
+      check(info.bContentReferenceWhiteFromProfile, "a CRWL of 1e-34 is taken as stated");
+      check(info.nContentHeadroomSource == icHdrContentHeadroomNone,
+            "8.10.4 a) with an unrepresentable quotient produces no content headroom, not MDCV's");
+      check(std::isfinite((double)info.contentHeadroom), "and leaves no infinity behind");
+    }
+    delete pProfile;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 11. Membership needs PCSXYZ; a malformed chad is not an absent one
+// ---------------------------------------------------------------------------
+void testLabPcsMembership()
+{
+  CIccProfile *pProfile = openFixture("HagcCommonParams.icc");
+  if (!pProfile)
+    return;
+
+  icHdrProfileInfo info;
+  check(icHdrHeaderAdmitsMembership(pProfile), "the XYZ-PCS fixture's header admits membership");
+  check(icGetHdrProfileInfo(pProfile, info) && info.bPcsXyz &&
+        info.nClass == icHdrProfileConforming, "and it is a conforming HDR Profile");
+
+  pProfile->m_Header.pcs = icSigLabData;
+  check(!icHdrHeaderAdmitsMembership(pProfile), "a Lab PCS header does not admit membership");
+  check(icGetHdrProfileInfo(pProfile, info) && !info.bPcsXyz, "bPcsXyz reports the Lab PCS");
+  check(info.nClass == icHdrProfileHdrContent,
+        "the Lab-PCS profile is HDR-related content, not an HDR Profile");
+
+  delete pProfile;
+}
+
+void testMalformedChad()
+{
+  CIccProfile *pProfile = openFixture("HdrLinearNoMetadata.icc");
+  if (!pProfile)
+    return;
+
+  icFloatNumber m[9];
+
+  check(!icHdrHasMalformedChad(pProfile), "a well-formed chromaticAdaptationTag is not malformed");
+  check(icBuildHdrForwardMatrix(pProfile, 1, m), "and the forward matrix builds");
+  const icFloatNumber adaptedX = m[0];
+
+  CIccTagS15Fixed16 *pShort = new CIccTagS15Fixed16(8);
+  for (icUInt32Number i = 0; i < 8; i++)
+    (*pShort)[i] = icDtoF((i == 0 || i == 4) ? 1.0 : 0.0);
+  pProfile->DeleteTag(icSigChromaticAdaptationTag);
+  pProfile->AttachTag(icSigChromaticAdaptationTag, pShort);
+
+  check(icHdrHasMalformedChad(pProfile), "an eight-value chromaticAdaptationTag is malformed");
+  check(!icBuildHdrForwardMatrix(pProfile, 1, m),
+        "and the forward matrix is refused rather than built unadapted");
+
+  pProfile->DeleteTag(icSigChromaticAdaptationTag);
+  pProfile->AttachTag(icSigChromaticAdaptationTag, new CIccTagXYZ());
+
+  check(icHdrHasMalformedChad(pProfile), "a chromaticAdaptationTag of the wrong type is malformed");
+  check(!icBuildHdrForwardMatrix(pProfile, 1, m), "and refused likewise");
+
+  pProfile->DeleteTag(icSigChromaticAdaptationTag);
+
+  check(!icHdrHasMalformedChad(pProfile), "an absent chromaticAdaptationTag is not malformed");
+  check(icBuildHdrForwardMatrix(pProfile, 1, m), "and builds the unadapted matrix");
+  check(fabs(m[0] - adaptedX) > 0.01, "which is a different matrix from the adapted one");
+
+  delete pProfile;
+}
+
+} // namespace
+
 int main()
 {
   testCicpTable();
@@ -1037,6 +1263,10 @@ int main()
   testClassification();
   testRegistryDefinedValues();
   testValidateLoadsNoTagForHeaderNonMembers();
+  testMetadataParsing();
+  testUnrepresentableHeadroom();
+  testLabPcsMembership();
+  testMalformedChad();
 
   if (g_failures)
     printf("hdr-profile-classification: %d assertion(s) failed\n", g_failures);

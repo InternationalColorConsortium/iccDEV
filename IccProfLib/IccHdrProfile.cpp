@@ -74,6 +74,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
+#include <limits>
+#include <locale>
+#include <sstream>
+#include <string>
 #include <vector>
 
 #include "IccHdrProfile.h"
@@ -81,6 +85,7 @@
 #include "IccTag.h"
 #include "IccTagDict.h"
 #include "IccTagHagc.h"
+#include "IccHdrToneMap.h"
 #include "IccMatrixMath.h"
 #include "IccUtil.h"
 
@@ -500,39 +505,110 @@ static bool icHdrNarrow(const std::wstring &src, std::string &dst)
  *  rather than read as its first few fields.
  *****************************************************************************
  */
+static bool icHdrIsNumberSeparator(char c)
+{
+  return c == ' ' || c == '\t' || c == ',' || c == ';' || c == '\r' || c == '\n';
+}
+
 static bool icHdrParseNumbers(const std::string &s, double *pVals, int nWanted)
 {
-  const char *p = s.c_str();
+  size_t pos = 0;
+  const size_t len = s.size();
   int n = 0;
 
-  while (*p) {
-    while (*p && (*p == ' ' || *p == '\t' || *p == ',' || *p == ';' ||
-                  *p == '\r' || *p == '\n'))
-      p++;
+  while (pos < len) {
+    while (pos < len && icHdrIsNumberSeparator(s[pos]))
+      pos++;
 
-    if (!*p)
+    if (pos >= len)
       break;
+
+    size_t end = pos;
+    while (end < len && !icHdrIsNumberSeparator(s[end]))
+      end++;
 
     if (n >= nWanted)
       return false;
 
-    char *pEnd = NULL;
-    double v = strtod(p, &pEnd);
+    /* Each separator-delimited field has to be ONE number, consumed whole.
+     * strtod stopped at the first character it could not use and the next
+     * field started there, so "1000.0.005 9" read as the three numbers 1000.0,
+     * 0.005 and 9.  And strtod follows the C locale the host last set: a host
+     * that called setlocale(LC_ALL, "") under a comma-decimal locale read
+     * "203.0" as 203 followed by an unparseable ".0", silently turning every
+     * stated luminance into "unparsed" and the resolved values into defaults.
+     * A registry value is not locale text, so it is parsed in the classic
+     * locale whatever the host has chosen. */
+    std::istringstream field(s.substr(pos, end - pos));
+    field.imbue(std::locale::classic());
 
-    if (pEnd == p)
+    double v = 0.0;
+
+    if (!(field >> v))
       return false;
 
-    /* strtod reports overflow and underflow through HUGE_VAL/0 plus errno; a
-     * non-finite luminance would poison every derivation downstream, so it is
-     * refused here rather than propagated. */
-    if (!(v == v) || v > 1.0e30 || v < -1.0e30)
+    if (field.peek() != std::char_traits<char>::eof())
+      return false;
+
+    /* A non-finite luminance would poison every derivation downstream, so it
+     * is refused here rather than propagated. */
+    if (!std::isfinite(v) || v > 1.0e30 || v < -1.0e30)
       return false;
 
     pVals[n++] = v;
-    p = pEnd;
+    pos = end;
   }
 
   return n == nWanted;
+}
+
+/**
+ ****************************************************************************
+ * Name: icHdrToPositiveFloat
+ *
+ * Purpose: Narrow a parsed luminance or ratio that has to be strictly positive
+ *  into icFloatNumber, refusing what does not survive the narrowing.
+ *
+ *  "> 0.0" on the double is not enough.  1e-50 is positive as a double and 0.0
+ *  as a float, so it used to be accepted as stated and then divided by; and a
+ *  subnormal float such as 1e-40 is nonzero but turns every ratio it divides
+ *  into an infinity.  The smallest normal float is the floor.
+ *****************************************************************************
+ */
+static bool icHdrToPositiveFloat(double v, icFloatNumber &out)
+{
+  if (!(v >= (double)(std::numeric_limits<icFloatNumber>::min)()) ||
+      !(v <= (double)(std::numeric_limits<icFloatNumber>::max)()))
+    return false;
+
+  out = (icFloatNumber)v;
+  return true;
+}
+
+/**
+ ****************************************************************************
+ * Name: icHdrRatio
+ *
+ * Purpose: num / den as a finite, non-negative icFloatNumber, or false.
+ *
+ *  Every headroom this file resolves is a luminance over a reference white,
+ *  and both come from the file.  A ratio that does not fit an icFloatNumber is
+ *  not a large headroom - it is no headroom anyone can render to - so the rule
+ *  that produced it yields no value rather than an infinity.
+ *****************************************************************************
+ */
+static bool icHdrRatio(double num, double den, icFloatNumber &out)
+{
+  if (!(den > 0.0))
+    return false;
+
+  double r = num / den;
+
+  if (!(r >= 0.0) || !(r <= (double)(std::numeric_limits<icFloatNumber>::max)()))
+    return false;
+
+  out = (icFloatNumber)r;
+  return true;
 }
 
 /**
@@ -713,8 +789,16 @@ bool CIccHdrMetadataReader::Read(const CIccProfile *pProfile)
    * mismatch is PROPOSAL-ISSUE HDR-16. */
   bParseable = false;
   if (icHdrGetDictValue(pDict, kIccHdrKeyCrwl, value, bParseable)) {
-    if (bParseable && icHdrParseNumbers(value, v, 1) && v[0] > 0.0) {
-      m_crwl = (icFloatNumber)v[0];
+    /* Stricter than a positive float: CRWL divides the transfer's own peak
+     * (10 000 cd/m^2 for PQ) and every metadata luminance, so a value those
+     * divisions cannot survive is refused here and reported unparsed.  Taking
+     * it as stated gave inf and NaN PCS from a profile Validate() called
+     * valid; letting it underflow to 0.0 left HasContentReferenceWhite() true
+     * while the transfer quietly substituted 203. */
+    icFloatNumber crwl = 0.0f, peak = 0.0f;
+    if (bParseable && icHdrParseNumbers(value, v, 1) && icHdrToPositiveFloat(v[0], crwl) &&
+        icHdrRatio(icPqPeakLuminance, (double)crwl, peak)) {
+      m_crwl = crwl;
       m_bHasCrwl = true;
     }
     else {
@@ -769,8 +853,7 @@ bool CIccHdrMetadataReader::Read(const CIccProfile *pProfile)
    * only the textual form is reconstructed here. */
   bParseable = false;
   if (icHdrGetDictValue(pDict, kIccHdrKeyDerh, value, bParseable)) {
-    if (bParseable && icHdrParseNumbers(value, v, 1) && v[0] > 0.0) {
-      m_derh = (icFloatNumber)v[0];
+    if (bParseable && icHdrParseNumbers(value, v, 1) && icHdrToPositiveFloat(v[0], m_derh)) {
       m_bHasDerh = true;
     }
     else {
@@ -778,11 +861,12 @@ bool CIccHdrMetadataReader::Read(const CIccProfile *pProfile)
     }
   }
 
-  /* ASSUMED: a single decimal luminance in cd/m^2, as for CRWL. */
+  /* ASSUMED: a single decimal luminance in cd/m^2, as for CRWL.  It is only
+   * ever a divisor (8.10.5 b), and ResolveDisplayHeadroom() refuses a quotient
+   * that is not finite, so the floor here is the normal-float one. */
   bParseable = false;
   if (icHdrGetDictValue(pDict, kIccHdrKeyDrwl, value, bParseable)) {
-    if (bParseable && icHdrParseNumbers(value, v, 1) && v[0] > 0.0) {
-      m_drwl = (icFloatNumber)v[0];
+    if (bParseable && icHdrParseNumbers(value, v, 1) && icHdrToPositiveFloat(v[0], m_drwl)) {
       m_bHasDrwl = true;
     }
     else {
@@ -831,8 +915,12 @@ icFloatNumber CIccHdrMetadataReader::GetResolvedContentReferenceWhite() const
  */
 bool CIccHdrMetadataReader::HasAnyHdrEntry() const
 {
+  /* "parsed or not", as the header says.  m_bUnparsed is only ever set for a
+   * recognised key that was present, so it counts as carrying the entry: a
+   * profile whose only HDR entry is a mistyped CRWL still states HDR intent,
+   * and leaving it out classified that profile as carrying nothing at all. */
   return m_bHasCrwl || m_bHasCll || m_bHasMdcv || m_bHasCcv ||
-         m_bHasDerh || m_bHasDrwl || m_bHasDcv;
+         m_bHasDerh || m_bHasDrwl || m_bHasDcv || m_bUnparsed;
 }
 
 /**
@@ -870,10 +958,17 @@ icHdrHeadroomSource CIccHdrMetadataReader::ResolveDisplayHeadroom(icFloatNumber 
    * report a headroom of 0 as though the display had been measured at black. */
   const bool bDcvPeak = m_bHasDcv && m_dcvMaxLuminance > 0.0f;
 
+  /* A rule whose inputs are present but whose quotient is not a finite float
+   * yields NO value rather than falling through to the next rule: the order
+   * is a precedence, so a later rule does not become authoritative because an
+   * earlier one overflowed.  DCV 1e30 over DRWL 1e-30 used to report an
+   * infinite headroom - the value IccCmm.h tells a caller to pass as the
+   * hint's target. */
+
   /* b) DCV maximum luminance divided by DRWL */
   if (bDcvPeak && m_bHasDrwl && m_drwl > 0.0f) {
-    headroom = m_dcvMaxLuminance / m_drwl;
-    return icHdrHeadroomDcvDrwl;
+    return icHdrRatio(m_dcvMaxLuminance, m_drwl, headroom) ? icHdrHeadroomDcvDrwl
+                                                          : icHdrHeadroomNone;
   }
 
   /* c) DCV maximum luminance divided by the content reference white.  crwl is
@@ -882,8 +977,8 @@ icHdrHeadroomSource CIccHdrMetadataReader::ResolveDisplayHeadroom(icFloatNumber 
    * the one reported as the content reference white.  It used to be this
    * class's own metadataTag CRWL, which cannot see the HAGC tag. */
   if (bDcvPeak && crwl > 0.0f) {
-    headroom = m_dcvMaxLuminance / crwl;
-    return icHdrHeadroomDcvCrwl;
+    return icHdrRatio(m_dcvMaxLuminance, crwl, headroom) ? icHdrHeadroomDcvCrwl
+                                                        : icHdrHeadroomNone;
   }
 
   /* d) not derivable from the profile */
@@ -926,19 +1021,24 @@ icHdrContentHeadroomSource CIccHdrMetadataReader::ResolveContentHeadroom(icFloat
    * parser rejects a non-positive CRWL and the default is 203 - but the value
    * is the caller's, and an HAGC tag's reference white reaches this function
    * without passing through that parser. */
-  if (crwl <= 0.0f)
+  if (!(crwl > 0.0f))
     return icHdrContentHeadroomNone;
 
   /* The dictType Metadata Registry defines a CLL or MDCV luminance of 0.0 as
    * "unknown".  An unknown maximum is not a peak, so it does not select its
    * rule; resolution falls through exactly as if the entry were absent.
    * Taking it at face value gave Hcontent = 0, which is below every target
-   * headroom and so switched the transform's target-volume clamp off. */
+   * headroom and so switched the transform's target-volume clamp off.
+   *
+   * A rule that IS selected but whose quotient is not a finite float yields no
+   * value, for the reason ResolveDisplayHeadroom() gives: CLL 1e30 over a CRWL
+   * of 1e-34 is not a headroom, and falling through to MDCV would make the
+   * mastering display authoritative because the content overflowed. */
 
   /* a) CLL maximum content light level */
   if (m_bHasCll && m_maxCll > 0.0f) {
-    headroom = m_maxCll / crwl;
-    return icHdrContentHeadroomCll;
+    return icHdrRatio(m_maxCll, crwl, headroom) ? icHdrContentHeadroomCll
+                                               : icHdrContentHeadroomNone;
   }
 
   /* b) MDCV maximum luminance, when CLL is absent.  The order is a real
@@ -946,13 +1046,13 @@ icHdrContentHeadroomSource CIccHdrMetadataReader::ResolveContentHeadroom(icFloat
    * measures the display it was mastered on, so a profile carrying both is
    * answered from the content and the mastering peak is not consulted. */
   if (m_bHasMdcv && m_mdcvMaxLuminance > 0.0f) {
-    headroom = m_mdcvMaxLuminance / crwl;
-    return icHdrContentHeadroomMdcv;
+    return icHdrRatio(m_mdcvMaxLuminance, crwl, headroom) ? icHdrContentHeadroomMdcv
+                                                         : icHdrContentHeadroomNone;
   }
 
   /* c) the assumed typical mastering peak */
-  headroom = (icFloatNumber)icHdrDefaultMasteringPeak / crwl;
-  return icHdrContentHeadroomDefault;
+  return icHdrRatio(icHdrDefaultMasteringPeak, crwl, headroom) ? icHdrContentHeadroomDefault
+                                                              : icHdrContentHeadroomNone;
 }
 
 /**
@@ -1047,7 +1147,8 @@ bool icHdrHeaderAdmitsMembership(const CIccProfile *pProfile)
   if (!pProfile)
     return false;
 
-  return icHdrIsRgbInputOrDisplay(pProfile) && icHdrIsVersion4_5(pProfile);
+  return icHdrIsRgbInputOrDisplay(pProfile) && icHdrIsVersion4_5(pProfile) &&
+         pProfile->m_Header.pcs == icSigXYZData;
 }
 
 /**
@@ -1308,6 +1409,23 @@ static bool icHdrGetChad(const CIccProfile *pProfile, icFloatNumber *chad)
 
 /**
  ****************************************************************************
+ * Name: icHdrHasMalformedChad
+ *
+ * Purpose: A chromaticAdaptationTag that is present but that icHdrGetChad()
+ *  cannot read.  See the header for why this is kept apart from absence.
+ *****************************************************************************
+ */
+bool icHdrHasMalformedChad(const CIccProfile *pProfile)
+{
+  if (!pProfile || !icHdrFindTag(pProfile, icSigChromaticAdaptationTag))
+    return false;
+
+  icFloatNumber chad[9];
+  return !icHdrGetChad(pProfile, chad);
+}
+
+/**
+ ****************************************************************************
  * Name: icBuildHdrForwardMatrix
  *
  * Purpose: Clause 8.10.2 c)'s RGB-to-PCSXYZ matrix, built from the cicpTag's
@@ -1342,6 +1460,13 @@ bool icBuildHdrForwardMatrix(const CIccProfile *pProfile, icUInt8Number nColourP
   icFloatNumber white[3];
 
   if (!icHdrGetXyzTag(pProfile, icSigMediaWhitePointTag, white))
+    return false;
+
+  /* Absent and malformed used to be the same false from icHdrGetChad(), so a
+   * chad of the wrong type or with fewer than nine values built the UNADAPTED
+   * matrix - 11% high in X for a D65 profile - and every caller rendered with
+   * it.  icGetProfilePrimaries() in this file already refuses that case. */
+  if (icHdrHasMalformedChad(pProfile))
     return false;
 
   icFloatNumber chad[9], chadInv[9];
@@ -1440,6 +1565,7 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
                                pProfile->IsTagPresent(icSigBlueMatrixColumnTag);
 
   info.bVersion4_5 = icHdrIsVersion4_5(pProfile);
+  info.bPcsXyz = (pProfile->m_Header.pcs == icSigXYZData);
 
   const CIccTag *pCicp = icHdrFindTag(pProfile, icSigCicpTag);
   if (pCicp && pCicp->GetType() == icSigCicpType) {
@@ -1555,7 +1681,7 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
    * class the profile turns out to belong to.  Linear (8) is deliberately not
    * a signal on its own: it is as common in SDR workflows as in HDR ones, and
    * treating it as one would open an HDR section on ordinary profiles. */
-  bool bMembership = info.bRgbInputOrDisplay && info.bVersion4_5 &&
+  bool bMembership = info.bRgbInputOrDisplay && info.bVersion4_5 && info.bPcsXyz &&
                      info.bHasCicp && info.bTransferIsHdr;
 
   /* 8.10.1's two tag-level conditions, which this revision states and the

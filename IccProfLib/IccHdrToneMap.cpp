@@ -73,6 +73,7 @@
 #endif
 #include <cmath>
 #include <cstring>
+#include <limits>
 
 #include "IccHdrToneMap.h"
 #include "IccHdrProfile.h"
@@ -284,10 +285,19 @@ bool CIccHdrTransfer::Init(icUInt8Number nTransferCharacteristics,
                            icFloatNumber contentReferenceWhite,
                            icFloatNumber hlgGamma /* =icHlgDefaultGamma */,
                            icFloatNumber hlgPeakLuminance /* =icHlgDefaultPeakLuminance */,
-                           icUInt8Number nColourPrimaries /* =9 */)
+                           icUInt8Number nColourPrimaries /* =9 */,
+                           const icCicpPrimaries *pResolvedPrimaries /* =NULL */)
 {
   m_bSupported = false;
   m_nTransfer = nTransferCharacteristics;
+
+  // gamma <= 0 would inverse-map to a non-monotone OOTF, and a non-positive
+  // peak luminance would zero the whole signal.  A non-finite one is no better,
+  // and "> 0" alone accepts +inf.
+  m_hlgGamma = (hlgGamma > 0.0 && std::isfinite((double)hlgGamma))
+                 ? hlgGamma : (icFloatNumber)icHlgDefaultGamma;
+  m_hlgPeakLuminance = (hlgPeakLuminance > 0.0 && std::isfinite((double)hlgPeakLuminance))
+                         ? hlgPeakLuminance : (icFloatNumber)icHlgDefaultPeakLuminance;
 
   // A non-positive reference white would divide the whole chain by zero or
   // flip its sign.  It is also already refused upstream - #1980 made a
@@ -295,16 +305,25 @@ bool CIccHdrTransfer::Init(icUInt8Number nTransferCharacteristics,
   // reaching here with one means the value came from somewhere other than a
   // validated profile, and falling back to the clause 8.10.4 default is
   // better than propagating it.
-  if (contentReferenceWhite > 0.0)
-    m_referenceWhite = contentReferenceWhite;
-  else
-    m_referenceWhite = (icFloatNumber)icHdrDefaultContentReferenceWhite;
+  //
+  // A POSITIVE value is different.  It was supplied, so substituting 203 for
+  // it would render at a white nobody asked for; but the chain divides the
+  // transfer's peak by it (ChannelToReference, GetPeakReferenceLevel), and a
+  // white small enough that the quotient is not a finite icFloatNumber - CRWL
+  // 1e-40 gave inf and NaN PCS - cannot be rendered at all.  So it is refused.
+  if (contentReferenceWhite > 0.0) {
+    const double maxFloat = (double)(std::numeric_limits<icFloatNumber>::max)();
+    const double white = (double)contentReferenceWhite;
 
-  // gamma <= 0 would inverse-map to a non-monotone OOTF, and a non-positive
-  // peak luminance would zero the whole signal.
-  m_hlgGamma = (hlgGamma > 0.0) ? hlgGamma : (icFloatNumber)icHlgDefaultGamma;
-  m_hlgPeakLuminance = (hlgPeakLuminance > 0.0) ? hlgPeakLuminance
-                                                : (icFloatNumber)icHlgDefaultPeakLuminance;
+    if (!std::isfinite(white) || icPqPeakLuminance / white > maxFloat ||
+        (double)m_hlgPeakLuminance / white > maxFloat || 1.0 / white > maxFloat)
+      return false;
+
+    m_referenceWhite = contentReferenceWhite;
+  }
+  else {
+    m_referenceWhite = (icFloatNumber)icHdrDefaultContentReferenceWhite;
+  }
 
   /* IMPL-04: the OOTF's luma coefficients.
    *
@@ -329,21 +348,33 @@ bool CIccHdrTransfer::Init(icUInt8Number nTransferCharacteristics,
    * bit for bit, and only a profile declaring other primaries moves.  BT.709
    * gives 0,2126 / 0,7152 / 0,0722.
    *
-   * Falls back to the BT.2020 constants whenever the primaries cannot be
-   * resolved, which includes ColourPrimaries 2: recovering those from the
-   * profile's matrix column tags needs the profile, which this class does not
-   * have, and BT.2020 is the value NOTE 7 names. */
+   * ColourPrimaries 2 needs the profile: its primaries are recovered from the
+   * matrix column tags, which this class does not hold.  The caller that does
+   * hold them passes them as pResolvedPrimaries, and both in-library callers
+   * do.  Without them the same BT.709 signal declared as code 2 rather than
+   * code 1 was given BT.2020 luma - red 4,3% bright, blue 3,9% dark - which is
+   * exactly the error this block exists to remove.
+   *
+   * Falls back to the BT.2020 constants only when no primaries can be
+   * resolved at all, BT.2020 being the value NOTE 7 names. */
   m_lumaR = (icFloatNumber)icHlgLumaR;
   m_lumaG = (icFloatNumber)icHlgLumaG;
   m_lumaB = (icFloatNumber)icHlgLumaB;
 
-  if (nTransferCharacteristics == icCicpTransferHLG &&
-      nColourPrimaries != icCicpPrimariesUnspecified) {
+  if (nTransferCharacteristics == icCicpTransferHLG) {
     icCicpPrimaries prim;
     icFloatNumber   rgb2xyz[9];
+    bool            bHavePrimaries = false;
 
-    if (icGetCicpPrimaries(nColourPrimaries, prim) &&
-        icBuildRgbToXyzMatrix(prim, rgb2xyz)) {
+    if (pResolvedPrimaries) {
+      prim = *pResolvedPrimaries;
+      bHavePrimaries = true;
+    }
+    else if (nColourPrimaries != icCicpPrimariesUnspecified) {
+      bHavePrimaries = icGetCicpPrimaries(nColourPrimaries, prim);
+    }
+
+    if (bHavePrimaries && icBuildRgbToXyzMatrix(prim, rgb2xyz)) {
       m_lumaR = rgb2xyz[3];
       m_lumaG = rgb2xyz[4];
       m_lumaB = rgb2xyz[5];
@@ -445,11 +476,19 @@ void CIccHdrTransfer::ToLinear(icFloatNumber *dst, const icFloatNumber *src) con
  */
 icFloatNumber CIccHdrTransfer::ToLinearChannel(icFloatNumber v) const
 {
+  // PQ and HLG signals are defined on [0, 1] and neither function is safe
+  // outside it: the PQ denominator reaches zero at V = 1.99206 - so the EOTF
+  // climbs to infinity and then returns black past the pole - and the HLG
+  // exponential overflows, after which the OOTF computes 0 * inf.  Float input
+  // above 1.0 reaches here since icEncodeFloat stopped clipping (f904ea62), so
+  // the domain is enforced where it is needed, matching FromLinearChannel().
+  // Linear is not clamped: its values are luminances in cd/m^2, which is
+  // exactly the range above 1.0 the unclipped float encoding exists to carry.
   if (m_nTransfer == icCicpTransferPQ)
-    return icPqEotf(v);
+    return icPqEotf(icHdrClampUnit(v));
 
   if (m_nTransfer == icCicpTransferHLG)
-    return icHlgInverseOetf(v);
+    return icHlgInverseOetf(icHdrClampUnit(v));
 
   return v;
 }
@@ -1453,6 +1492,23 @@ bool CIccHagcEvaluator::SetTargetHeadroom(icFloatNumber log2Headroom)
 
     m_nCurveA = i;
     m_nCurveB = (icUInt8Number)(i + 1);
+
+    // The search stops at the first curve whose headroom is NOT below the
+    // target, so a target exactly on an interior curve used to pair that curve
+    // with the one below it at weight -0.  Apply() came out the same, but
+    // everything derived from WHICH curves are in play did not: SharesMixing()
+    // compared against a curve contributing nothing, so a Weighted alternate
+    // at an exact hint of 2.0 was refused as non-invertible when paired with a
+    // Max one below it; and IsIdentity() saw two curves, so a target exactly
+    // on the baseline - HagcDisplay at a hint of 8.0 - tone mapped instead of
+    // passing through.  Hints that are powers of two land exactly, since log2
+    // is exact for them and headrooms decode exactly, so this was the common
+    // case rather than a rounding curiosity.  The header states the rule: a
+    // target on a curve is that curve alone.
+    if (log2Headroom == m_curves[m_nCurveB].headroom)
+      m_nCurveA = m_nCurveB;
+    else if (log2Headroom == m_curves[m_nCurveA].headroom)
+      m_nCurveB = m_nCurveA;
   }
 
   if (m_nCurveA == m_nCurveB) {
@@ -1926,6 +1982,15 @@ bool CIccHagcEvaluator::InvertSearch(icFloatNumber *dst, const icFloatNumber *sr
     return true;
   }
 
+  // Two contributing curves with different component mixing have no single
+  // gain exponent: EvalGainExponent() returns 0 for them, so the search below
+  // "solved" t * 2^0 = mix(output), recovered a gain of 1, and returned the
+  // input unchanged and true - an output that re-applied to about 62% of the
+  // target.  There is no one mixed value to search on, so no pre-image is
+  // offered.  InvertApproximate()'s callers treat false as "no inverse here".
+  if (!SharesMixing())
+    return false;
+
   const Curve &c = m_curves[m_nCurveA].bBaseline ? m_curves[m_nCurveB] : m_curves[m_nCurveA];
 
   // The top of the authored range, where the logarithmic extrapolation makes
@@ -2000,6 +2065,16 @@ bool CIccHagcEvaluator::InvertSearch(icFloatNumber *dst, const icFloatNumber *sr
 
     for (int it = 0; it < 60; it++) {
       t = 0.5 * (lo + hi);
+
+      // Once the midpoint equals an end the bracket cannot move again: the
+      // update below assigns t to lo or hi, both of which leave every later
+      // midpoint at this same t, so the remaining iterations only re-evaluate
+      // the curve.  Stopping here yields the identical t - and so the identical
+      // result, bit for bit - and it is reached in about half the 60 halvings.
+      // This is a per-pixel path on the output side of every HDR profile.
+      if (t == lo || t == hi)
+        break;
+
       double f = t * pow(2.0, (double)EvalGainExponent((icFloatNumber)t));
 
       if (f < (double)target[i])

@@ -851,6 +851,30 @@ void testRefusals()
     delete pProfile;
   }
 
+  // A chromaticAdaptationTag that is present but cannot be read.  This fixture
+  // also carries colorant tags, so once the forward matrix refuses the chad the
+  // bake would fall back to them and store a rendering CIccXformMatrixTrcHdr
+  // refuses - unless it refuses too.
+  pProfile = openFixture("HdrHlgBt709Primaries.icc");
+
+  if (pProfile) {
+    CIccTagS15Fixed16 *pShort = new CIccTagS15Fixed16(8);
+
+    for (icUInt32Number i = 0; i < 8; i++)
+      (*pShort)[i] = icDtoF((i == 0 || i == 4) ? 1.0 : 0.0);
+
+    pProfile->DeleteTag(icSigChromaticAdaptationTag);
+    pProfile->AttachTag(icSigChromaticAdaptationTag, pShort);
+
+    check(!baker.Init(pProfile), "a malformed chromaticAdaptationTag is refused");
+
+    const icChar *szReason = baker.GetUnsupportedReason();
+    check(szReason && strstr(szReason, "chromaticAdaptationTag") != NULL,
+          "and the refusal names the chromaticAdaptationTag");
+
+    delete pProfile;
+  }
+
   // The version policy is the one thing the bake changes about the header, and
   // only when asked.
   pProfile = openFixture("HagcDisplay.icc");
@@ -988,11 +1012,71 @@ void testApproximateBtoA()
   delete pProfile;
 }
 
+// ---------------------------------------------------------------------------
+// 5c. ColourPrimaries 2 bakes with the primaries it resolves
+// ---------------------------------------------------------------------------
+//
+// The HLG OOTF forms its luminance from the profile's primaries.  For code 2
+// those come from the colorant tags, which CIccHdrTransfer cannot see, so the
+// bake has to pass them in as the CMM does - otherwise a BT.709 signal
+// declared as 2 bakes with BT.2020 luma while the live path uses BT.709, and
+// the fallback tag disagrees with the rendering it stands in for.
+void testBakeUsesResolvedPrimaries()
+{
+  CIccProfile *pCode1 = openFixture("HdrHlgBt709Primaries.icc");
+  CIccProfile *pCode2 = openFixture("HdrHlgBt709Primaries.icc");
+
+  if (!pCode1 || !pCode2) {
+    delete pCode1;
+    delete pCode2;
+    return;
+  }
+
+  CIccTag *pTag = pCode2->FindTag(icSigCicpTag);
+
+  check(pTag && pTag->GetType() == icSigCicpType, "HdrHlgBt709Primaries carries a cicpTag");
+
+  if (pTag && pTag->GetType() == icSigCicpType) {
+    icUInt8Number cp, tc, mc, fr;
+    ((CIccTagCicp*)pTag)->GetFields(cp, tc, mc, fr);
+    ((CIccTagCicp*)pTag)->SetFields(icCicpPrimariesUnspecified, tc, mc, fr);
+
+    CIccHdrBaker bake1, bake2;
+
+    check(bake1.Init(pCode1), "the ColourPrimaries 1 profile bakes");
+    check(bake2.Init(pCode2), "the same profile declaring ColourPrimaries 2 bakes");
+
+    // Saturated but below reference white after the OOTF, so neither bake
+    // clamps; 5e-4 is the s15Fixed16 grid of the colorant tags code 2 reads.
+    const icFloatNumber pixels[][3] = {
+      { 0.5f, 0.0f, 0.0f },
+      { 0.0f, 0.5f, 0.0f },
+      { 0.0f, 0.0f, 0.5f },
+      { 0.5f, 0.3f, 0.1f },
+    };
+
+    for (size_t n = 0; n < sizeof(pixels) / sizeof(pixels[0]); n++) {
+      icFloatNumber want[3], got[3];
+
+      bake1.ToPcs(want, pixels[n]);
+      bake2.ToPcs(got, pixels[n]);
+
+      checkClose(got[0], want[0], 5e-4, "the ColourPrimaries 2 bake renders as its resolved BT.709 (X)");
+      checkClose(got[1], want[1], 5e-4, "the ColourPrimaries 2 bake renders as its resolved BT.709 (Y)");
+      checkClose(got[2], want[2], 5e-4, "the ColourPrimaries 2 bake renders as its resolved BT.709 (Z)");
+    }
+  }
+
+  delete pCode1;
+  delete pCode2;
+}
+
 int main()
 {
   testTransferSplit();
   testProfileCopyPreservesCicp();
   testBakerMatchesCmm();
+  testBakeUsesResolvedPrimaries();
   testBakedTags();
   testAnalyticRoundTrip();
   testTransferCoverage("HagcCommonParams.icc");   // HLG
