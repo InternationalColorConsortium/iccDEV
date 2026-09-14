@@ -2,18 +2,21 @@
 <!--
   NEGATIVE FIXTURE. Do not "fix" the missing BToA0Tag below.
 
-  Clause 8.10.3 c) says "Whenever an AToBxTag is present, its paired BToAxTag
-  shall also be present", and 8.10.6 repeats it for the Display case. This
-  profile has an AToB0Tag and no BToA0Tag.
+  Clause 8.10.6 requires a Display RGB HDR Profile to carry the BToA0Tag beside
+  its mandatory AToB0Tag, and requires the pair whenever an AToBxTag is present.
+  (8.10.3 c) says the same without the class condition, but 8.10.3 is
+  informative, so 8.10.6 governs - PROPOSAL-ISSUE HDR-09.) This profile has an
+  AToB0Tag and no BToA0Tag.
 
-  The general validator does not catch this. The Display branch of
-  CIccProfile::CheckRequiredTags() tests AToB0 and BToA0 only as a pair against
-  the matrix/TRC alternative: if either is absent it falls back to requiring the
-  matrix column and TRC tags, so a profile carrying A2B0, no B2A0, and a
-  complete matrix/TRC set satisfies it without comment. The HDR rule is what
-  makes the unpaired tag visible.
+  The general validator reports it too, and more severely. The Display branch
+  of CIccProfile::CheckRequiredTags() accepts the AToB0/BToA0 pair OR the six
+  matrix column and TRC tags; with the pair incomplete it falls back to
+  requiring the TRC tags, which an HDR Profile may not carry, so this profile is
+  a critical error there ("Critical tag(s) missing"). The HDR rules add what
+  that message cannot say: which clause 8.10 requirement is broken.
 
   Expected: iccFromXml saves the profile, and iccDumpProfile -v reports
+    "HDR: BToA0Tag missing" and
     "HDR: AToB0Tag present without its paired BToA0Tag"
   See Testing/expected-invalid-fromxml.tsv.
 -->

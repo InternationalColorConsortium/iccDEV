@@ -2752,7 +2752,11 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
       // conformance - a 4.4 profile carrying a HAGC tag is simply not an HDR
       // Profile. Failing here would make it non-compliant on tag-type grounds,
       // which the tag's own amendment does not say.
-      else if (m_Header.version < icVersionNumberV4_4 || m_Header.version==icVersionNumberV5)
+      //
+      // The upper bound is the whole of version 5, not the cicpTag's equality
+      // with 5.0.0.0: that test let a 5.1 profile carry the tag and validate
+      // clean, and no text places a version 4 tag in the version 5 tag model.
+      else if (m_Header.version < icVersionNumberV4_4 || m_Header.version >= icVersionNumberV5)
         return false;
 
       return true;
@@ -3675,11 +3679,14 @@ icValidateStatus CIccProfile::CheckHdrProfile(std::string &sReport) const
                "  implement HDR processing.\n";
     rv = icMaxStatus(rv, icValidateNonCompliant);
   }
-  else if (m_Header.deviceClass == icSigDisplayClass && !IsTagPresent(icSigBToA0Tag)) {
-    /* Reported by the pairing sweep below as well; kept separate because the
-     * two are different requirements - one is a required tag, the other is a
-     * rule about tags that are present - and a profile can fail this one with
-     * no AToBxTag at all. */
+
+  if (m_Header.deviceClass == icSigDisplayClass && !IsTagPresent(icSigBToA0Tag)) {
+    /* Reported by the pairing sweep below as well when the AToB0Tag is
+     * present; kept separate because the two are different requirements - one
+     * is a required tag, the other is a rule about tags that are present - and
+     * a profile can fail this one with no AToBxTag at all.  That is also why
+     * it is not an else of the AToB0Tag check above: a Display profile missing
+     * both tags breaks both requirements, and used to be told of only one. */
     sReport += icMsgValidateNonCompliant;
     sReport += "HDR: BToA0Tag missing; clause 8.10.6 requires it in a Display-class RGB HDR\n"
                "  Profile alongside the mandatory AToB0Tag.\n";

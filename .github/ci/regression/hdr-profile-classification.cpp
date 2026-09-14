@@ -723,6 +723,26 @@ void testClassification()
     check(rv >= icValidateNonCompliant, "the missing AToB0Tag is reported");
     check(report.find("AToB0Tag missing") != std::string::npos,
           "the report names the tag and the clause");
+    // A Display profile missing both breaks both requirements.  The BToA0Tag
+    // check used to be the else of the AToB0Tag one, so this profile was told
+    // only about the AToB0Tag.
+    check(report.find("HDR: BToA0Tag missing") != std::string::npos,
+          "the report also states the Display-class BToA0Tag requirement");
+    delete pProfile;
+  }
+
+  // The HAGC tag's version gate.  It was copied from the cicpTag's, which
+  // refuses only version 5.0.0.0 exactly, so a 5.1 profile carried the tag
+  // and validated clean.
+  pProfile = openFixture("HagcDisplay.icc");
+  if (pProfile) {
+    pProfile->m_Header.version = 0x05100000;
+
+    std::string report;
+    icValidateStatus rv = pProfile->Validate(report);
+    check(rv >= icValidateNonCompliant, "a version 5.1 profile carrying a HAGC tag is non-compliant");
+    check(report.find("headroomAdaptiveGainCurveType: Invalid tag type") != std::string::npos,
+          "and the report names the HAGC tag type");
     delete pProfile;
   }
 
