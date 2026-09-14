@@ -362,7 +362,7 @@ Segment types:
 
 #### `colorantTableType` - colorant names and PCS coordinates
 
-Because `ToJson`/`ParseJson` have no access to the profile header, the encoding of the `"pcs"` arrays is declared explicitly via a `"pcsEncoding"` field:
+The encoding of the `"pcs"` arrays is declared explicitly via a `"pcsEncoding"` field:
 
 | `pcsEncoding` | `pcs` array contents |
 |---------------|----------------------|
@@ -370,7 +370,7 @@ Because `ToJson`/`ParseJson` have no access to the profile header, the encoding 
 | `"XYZ"` | X, Y, Z floats (0-2 range) |
 | `"16bit"` | Raw ICC U16 integers (0-65535) |
 
-`ToJson` always writes `"pcsEncoding": "Lab"`. `ParseJson` defaults to `"Lab"` when the field is absent (backward compatible with files written before this field was added).
+`ParseJson` defaults to `"Lab"` when the field is absent (backward compatible with files written before this field was added).
 
 Each colorant entry requires a `"pcs"` array containing exactly three numeric
 values. This matches the three PCS coordinates encoded for every
