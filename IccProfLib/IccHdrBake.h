@@ -336,10 +336,17 @@ public:
    * diagnostics. */
   const icChar *GetUnsupportedReason() const { return m_szUnsupported; }
 
-  /** True when a BToA can be built, i.e. when the gain curve at this target
-   * has an inverse.  CreateBtoA() returns NULL when it does not; the AToB is
-   * unaffected. */
+  /** True when the BToA is an EXACT inverse: the colour matrix inverts and the
+   * gain curve at this target has an inverse.  When only the gain curve fails,
+   * CanBuildBtoA() is still true and the BToA is a best-effort approximation. */
   bool IsInvertible() const;
+
+  /** True when a BToA can be built at all, which needs only the colour matrix
+   * to invert.  The gain curve does not have to: a BToA0Tag is a compatibility
+   * backup for pre-HDR workflows, and where the curve has no exact inverse the
+   * bake uses CIccHagcEvaluator::InvertApproximate().  IsInvertible() says
+   * which of the two a caller got. */
+  bool CanBuildBtoA() const { return m_bSupported && m_bInverseValid; }
 
   /** True when the tone-mapping step is a no-op at this target and the bake
    * is the transfer, the clamp and the matrix alone. */
@@ -361,8 +368,8 @@ public:
    */
   void ToPcs(icFloatNumber *dstXyz, const icFloatNumber *srcRgb) const;
 
-  /** Inverse of ToPcs().  Returns false when IsInvertible() is false, leaving
-   * dstRgb untouched. */
+  /** Inverse of ToPcs(), exact when IsInvertible() and best effort otherwise.
+   * Returns false, leaving dstRgb untouched, only when CanBuildBtoA() is false. */
   bool FromPcs(icFloatNumber *dstRgb, const icFloatNumber *srcXyz) const;
 
   /**
@@ -378,8 +385,8 @@ public:
 
   /** The BToA CLUT's own stage: SDR linear RGB in [0, 1] to peak-normalised
    * linear RGB under the fifth root, which is what its A curves expand.
-   * Returns false, leaving dst untouched, when the gain curve has no
-   * inverse. */
+   * Approximate where the gain curve has no exact inverse.  Returns false,
+   * leaving dst untouched, only when CanBuildBtoA() is false. */
   bool BtoAClutOp(icFloatNumber *dst, const icFloatNumber *src) const;
 
   /** Build the AToB tag.  Caller owns the result; NULL means the bake is
@@ -394,8 +401,9 @@ public:
    * returns NULL for a reason other than OOM would otherwise be a UAF here. */
   CIccTagLutAtoB *CreateAtoB() const;
 
-  /** Build the BToA tag.  Caller owns the result; NULL also means the gain
-   * curve at this target has no inverse.  Same allocation caveat as
+  /** Build the BToA tag.  Caller owns the result; NULL also means the colour
+   * matrix has no inverse (CanBuildBtoA() false).  A gain curve with no exact
+   * inverse still gets a best-effort BToA.  Same allocation caveat as
    * CreateAtoB(). */
   CIccTagLutBtoA *CreateBtoA() const;
 

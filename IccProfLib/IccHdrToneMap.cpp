@@ -1877,6 +1877,47 @@ bool CIccHagcEvaluator::Invert(icFloatNumber *dst, const icFloatNumber *src) con
   if (!m_bInvertible)
     return false;
 
+  return InvertSearch(dst, src);
+}
+
+/**
+ ****************************************************************************
+ * Name: CIccHagcEvaluator::InvertApproximate
+ *
+ * Purpose:
+ *  Best-effort inverse for a configuration Invert() refuses; see the header
+ *  for what the approximation is in each non-invertible case.  An evaluator
+ *  with no curves has nothing to search and is refused, so an Init() that
+ *  failed cannot be mistaken for an identity.
+ *
+ * Args:
+ *  dst = destination triplet, untouched on failure; may alias src
+ *  src = the tone-mapped triplet
+ *
+ * Return:
+ *  false when there is nothing to invert, or a zero gain destroyed the value.
+ ****************************************************************************
+ */
+bool CIccHagcEvaluator::InvertApproximate(icFloatNumber *dst, const icFloatNumber *src) const
+{
+  if (!m_bInvertible && !m_nCurves)
+    return false;
+
+  return InvertSearch(dst, src);
+}
+
+/**
+ ****************************************************************************
+ * Name: CIccHagcEvaluator::InvertSearch
+ *
+ * Purpose:
+ *  The search Invert() and InvertApproximate() share.  Exact when
+ *  IsInvertible() holds; the monotonicity and common-gain premises below are
+ *  what make it exact, and InvertApproximate() runs it without them.
+ ****************************************************************************
+ */
+bool CIccHagcEvaluator::InvertSearch(icFloatNumber *dst, const icFloatNumber *src) const
+{
   if (!m_nCurves || IsIdentity()) {
     dst[0] = src[0];
     dst[1] = src[1];

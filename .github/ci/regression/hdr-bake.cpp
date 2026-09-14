@@ -40,15 +40,23 @@
 //    cannot be quietly removed or quietly widened.
 //
 // 5. The pair is a pair. ICC.1 8.3.2 and clause 8.10 both require an AToB0Tag
-//    to come with a BToA0Tag; a bake that cannot invert its gain curve has to
-//    refuse rather than attach half of one. Test 5 pins the refusal and that
-//    the profile is left untouched by it.
+//    to come with a BToA0Tag. A bake that cannot invert its colour matrix has
+//    to refuse rather than attach half of one; test 5 pins what is refused and
+//    that the profile is left untouched. A gain curve with no exact inverse is
+//    NOT a refusal: the BToA0Tag is a best-effort compatibility backup, and
+//    test 5b pins that the pair is still built.
 //
 // Returns 0 on success; the number of failed assertions otherwise.
 
 #include "IccHdrBake.h"
 #include "IccHdrProfile.h"
 #include "IccHdrToneMap.h"
+#include "IccTagHagc.h"
+
+// About three times the worst channel error measured on 2026-09-13 (0.0064):
+// loose enough for an approximation, tight enough that a BToA filled with the
+// untouched linear values instead of an inverse would fail it.
+#define APPROX_TOLERANCE 0.02
 #include "IccCmm.h"
 #include "IccIO.h"
 #include "IccProfile.h"
@@ -651,9 +659,8 @@ void testAnalyticRoundTrip()
 // HagcDisplay.icc is PQ, and PQ is the case every stage was designed around.
 // The other two exercise parts of the baker that it does not reach at all:
 // HLG puts the OOTF - the one piece of the linearisation with no per-channel
-// form - inside the CLUT, and Linear replaces the analytic transfer with the
-// profile's own TRC tags, so its A curves come from CIccCurve::Apply() and its
-// inverse from CIccCurve::Find() rather than from a closed form.
+// form - inside the CLUT, and Linear is the transfer with no intrinsic peak,
+// whose peak reference level is 1/CRWL rather than a constant of the transfer.
 //
 // The assertions here are the two that hold whatever the fixture is. The
 // per-pixel agreement with the live CMM path and the device-space round trip
@@ -815,6 +822,102 @@ void testRefusals()
 
 } // namespace
 
+// ---------------------------------------------------------------------------
+// 5b. A gain curve with no exact inverse still gets a best-effort BToA0
+// ---------------------------------------------------------------------------
+//
+// A component mix that couples the channels with different gains - explicit
+// weights with a component term alongside the others - has no exact inverse.
+// The bake used to refuse the whole BToA for it. The BToA0Tag is a
+// compatibility backup for pre-HDR workflows, and the HDR WG accepts that it
+// cannot be exact in all cases, so the pair is now built with the evaluator's
+// approximate inverse. The curve is changed in memory on HagcDisplay so no
+// fixture or manifest row moves.
+void testApproximateBtoA()
+{
+  CIccProfile *pProfile = openFixture("HagcDisplay.icc");
+
+  if (!pProfile)
+    return;
+
+  CIccTag *pTag = pProfile->FindTag(icSigHeadroomAdaptiveGainCurveTag);
+
+  if (!pTag || pTag->GetType() != icSigHeadroomAdaptiveGainCurveType) {
+    check(false, "HagcDisplay carries a HAGC tag");
+    delete pProfile;
+    return;
+  }
+
+  CIccTagHagc *pHagc = (CIccTagHagc*)pTag;
+  icHagcMetadata meta = pHagc->GetMetadata();
+  icUInt8Number n;
+
+  for (n = 0; n < meta.GetNumAlternates(); n++) {
+    icHagcAlternateImage *pAlt = meta.GetAlternate(n);
+    if (!pAlt)
+      continue;
+    pAlt->SetMixingType(icHagcMixingCustom);
+    pAlt->m_coef[icHagcCoefRed] = 0.25f;
+    pAlt->m_coef[icHagcCoefGreen] = 0.25f;
+    pAlt->m_coef[icHagcCoefMax] = 0.25f;
+    pAlt->m_coef[icHagcCoefComponent] = 0.25f;
+  }
+
+  check(pHagc->SetMetadata(meta), "the coupled-mix curve installs");
+
+  CIccHdrBaker baker;
+
+  if (!baker.Init(pProfile)) {
+    printf("FAIL: baker declined the coupled-mix profile: %s\n", baker.GetUnsupportedReason());
+    g_failures++;
+    delete pProfile;
+    return;
+  }
+
+  // The precondition, so this test cannot pass on a curve that was invertible.
+  check(!baker.IsInvertible(), "a coupled component mix has no exact inverse");
+  check(baker.CanBuildBtoA(), "but the colour matrix inverts, so a BToA can still be built");
+
+  CIccTagLutBtoA *pBtoA = baker.CreateBtoA();
+  check(pBtoA != NULL, "CreateBtoA() builds a best-effort BToA");
+  delete pBtoA;
+
+  double worst = 0.0;
+  int i;
+
+  for (i = 0; i < g_nLowPixels; i++) {
+    icFloatNumber pcs[3], back[3];
+
+    baker.ToPcs(pcs, g_lowPixels[i]);
+
+    if (!baker.FromPcs(back, pcs)) {
+      check(false, "FromPcs() answers for an in-gamut colour");
+      break;
+    }
+
+    for (int c = 0; c < 3; c++) {
+      bool ok = (back[c] == back[c]) && back[c] >= 0.0f && back[c] <= 1.0f;
+      if (!ok) {
+        printf("FAIL: approximate round trip left [0, 1] (pixel %d channel %d: %g)\n", i, c, (double)back[c]);
+        g_failures++;
+      }
+      double e = fabs((double)back[c] - (double)g_lowPixels[i][c]);
+      if (e > worst)
+        worst = e;
+    }
+  }
+
+  printf("  approximate BToA round trip: worst channel error %.6f\n", worst);
+  check(worst <= APPROX_TOLERANCE, "the approximate round trip stays close to the source");
+
+  const icChar *szReason = NULL;
+  check(icAddHdrFallbackTags(pProfile, NULL, &szReason), "icAddHdrFallbackTags completes the pair");
+  check(pProfile->FindTag(icSigAToB0Tag) != NULL, "the AToB0Tag is attached");
+  check(pProfile->FindTag(icSigBToA0Tag) != NULL, "and so is the BToA0Tag");
+
+  delete pProfile;
+}
+
 int main()
 {
   testTransferSplit();
@@ -825,6 +928,7 @@ int main()
   testTransferCoverage("HagcCommonParams.icc");   // HLG
   testTransferCoverage("HagcHexData.icc");        // Linear
   testRefusals();
+  testApproximateBtoA();
 
   if (g_failures)
     printf("hdr-bake: %d failure(s)\n", g_failures);

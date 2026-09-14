@@ -668,6 +668,33 @@ public:
   bool IsInvertible() const { return m_bInvertible; }
 
   /**
+   * Invert Apply() for one triplet on a best-effort basis, whether or not
+   * IsInvertible() holds.  Runs the same search as Invert() without its
+   * exactness gate, so where IsInvertible() is true the result is identical.
+   *
+   * Where it is false the answer is an approximation, and which one depends on
+   * why.  A curve for which t*2^G(t) is not strictly increasing has more than
+   * one pre-image for some outputs, and the bisection returns one of them.  A
+   * component mix that couples the channels with different gains is solved as
+   * if the gain were common, from the mix of the output.  Above the last
+   * control point the result saturates at x_last, as it does for Invert().
+   *
+   * This is what a BToA0Tag wants: it is a compatibility backup for pre-HDR
+   * workflows, and an exact inverse is not possible in all cases.  Returns
+   * false only when a zero gain destroyed the value, leaving dst untouched.
+   */
+  bool InvertApproximate(icFloatNumber *dst, const icFloatNumber *src) const;
+
+protected:
+  /** The pre-image search Invert() and InvertApproximate() share: bisection
+   * on t*2^G(t) = mix(output), per channel for component-only mixing and once
+   * otherwise.  Exact when IsInvertible() holds; see InvertApproximate() for
+   * what it returns when it does not. */
+  bool InvertSearch(icFloatNumber *dst, const icFloatNumber *src) const;
+
+public:
+
+  /**
    * The gain exponent G(x) at the configured target headroom - the blended
    * piecewise cubic, before the 2^G.  Public because the A2B0 baking path
    * and the regression tests both need to sample the curve directly rather

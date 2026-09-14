@@ -372,12 +372,11 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
  * Name: CIccHdrBaker::IsInvertible
  *
  * Purpose:
- *  Whether a BToA can be built.  Three things have to be invertible: the
- *  matrix, the gain curve when there is one, and the transfer.  The transfer
- *  always is - FromLinear() is closed form for PQ and HLG, and the Linear
- *  case goes through CIccCurve::Find(), whose bisection needs the TRC to be
- *  monotone, which a TRC that is not is a defect of the profile rather than
- *  of the bake.
+ *  Whether the BToA is an exact inverse.  That needs the matrix and the gain
+ *  curve, when there is one, to invert; the transfer always does, its inverse
+ *  being closed form for all three transfer characteristics.  A BToA is built
+ *  whenever the matrix inverts - see CanBuildBtoA() - and is best effort when
+ *  the gain curve does not.
  *****************************************************************************
  */
 bool CIccHdrBaker::IsInvertible() const
@@ -540,12 +539,12 @@ void CIccHdrBaker::AtoBClutOp(icFloatNumber *dst, const icFloatNumber *src) cons
  *  src = SDR linear RGB in [0, 1]
  *
  * Return:
- *  false when the gain curve has no inverse, leaving dst untouched.
+ *  false when the colour matrix has no inverse, leaving dst untouched.
  *****************************************************************************
  */
 bool CIccHdrBaker::BtoAClutOp(icFloatNumber *dst, const icFloatNumber *src) const
 {
-  if (!IsInvertible())
+  if (!CanBuildBtoA())
     return false;
 
   icFloatNumber pixel[3];
@@ -555,11 +554,16 @@ bool CIccHdrBaker::BtoAClutOp(icFloatNumber *dst, const icFloatNumber *src) cons
   pixel[2] = src[2];
 
   if (m_bToneMap) {
-    // A false return here is a value the gain curve destroyed - a zero gain -
-    // and not a configuration failure, which IsInvertible() already excluded.
-    // Leaving the linear values alone is the closest defined answer, and is
-    // what the CMM's output path does with the same case.
-    m_evaluator.Invert(pixel, pixel);
+    // Exact where the gain curve has an inverse, best effort where it does not:
+    // a BToA0Tag is a compatibility backup for pre-HDR workflows, and the HDR
+    // WG accepts that it cannot be exact in all cases.  A false return is a
+    // value a zero gain destroyed; leaving the linear values alone is the
+    // closest defined answer, and is what the CMM's output path does with the
+    // same case.
+    if (m_evaluator.IsInvertible())
+      m_evaluator.Invert(pixel, pixel);
+    else
+      m_evaluator.InvertApproximate(pixel, pixel);
   }
 
   FromReference(pixel, pixel);
@@ -645,7 +649,7 @@ void CIccHdrBaker::ToPcs(icFloatNumber *dstXyz, const icFloatNumber *srcRgb) con
  */
 bool CIccHdrBaker::FromPcs(icFloatNumber *dstRgb, const icFloatNumber *srcXyz) const
 {
-  if (!IsInvertible())
+  if (!CanBuildBtoA())
     return false;
 
   icFloatNumber xyz[3];
@@ -767,7 +771,7 @@ public:
       lin[i] = (icFloatNumber)pow((double)pGridAdr[i], icHdrBakeCurveExponent);
 
     if (!m_pBaker->BtoAClutOp(pData, lin)) {
-      // CreateBtoA() refuses a non-invertible bake before it gets here, so
+      // CreateBtoA() refuses a singular colour matrix before it gets here, so
       // this is unreachable; zeroing rather than leaving the node untouched
       // keeps an unwritten cell out of the tag if it ever becomes reachable.
       pData[0] = pData[1] = pData[2] = (icFloatNumber)0.0;
@@ -946,17 +950,21 @@ CIccTagLutAtoB *CIccHdrBaker::CreateAtoB() const
  *  that the curve is not always invertible: the gain is recoverable from the
  *  output only when one gain is common to all three channels or when mixing is
  *  component-only, and above the last control point the forward map is flat and
- *  has no inverse at all.  An implementer following the annex literally emits a
- *  BToA that silently does not invert its own AToB.  Resolved here by refusing.
+ *  has no inverse at all.  Resolved here with a best-effort BToA: where the
+ *  curve has no exact inverse the CLUT is filled from
+ *  CIccHagcEvaluator::InvertApproximate().  A BToA0Tag is a compatibility
+ *  backup for pre-HDR workflows, and the HDR WG accepts that it cannot be exact
+ *  in all cases (owner ruling 2026-09-13; the register item is editorial).
+ *  IsInvertible() reports whether a given bake was exact.
  *
  * Return:
- *  The tag, owned by the caller, or NULL - which includes the case of a gain
- *  curve with no inverse, where a BToA cannot be built at all.
+ *  The tag, owned by the caller, or NULL when the colour matrix has no
+ *  inverse or an allocation failed.
  *****************************************************************************
  */
 CIccTagLutBtoA *CIccHdrBaker::CreateBtoA() const
 {
-  if (!IsInvertible())
+  if (!CanBuildBtoA())
     return NULL;
 
   CIccTagLutBtoA *pLut = new (std::nothrow) CIccTagLutBtoA();
@@ -1104,9 +1112,9 @@ CIccTagLutBtoA *icCreateHdrFallbackBtoA(const CIccProfile *pProfile,
     return NULL;
   }
 
-  if (!baker.IsInvertible()) {
+  if (!baker.CanBuildBtoA()) {
     if (pReason)
-      *pReason = "Tone mapping at this target has no inverse, so no BToA can be built";
+      *pReason = "The colour matrix has no inverse, so no BToA can be built";
 
     return NULL;
   }
@@ -1147,13 +1155,15 @@ bool icAddHdrFallbackTags(CIccProfile *pProfile, const icHdrBakeParams *pParams,
     return false;
   }
 
-  if (!baker.IsInvertible()) {
+  if (!baker.CanBuildBtoA()) {
     // ICC.1 8.3.2 pairs AToB0Tag with BToA0Tag for a display profile, and
     // clause 8.10's own pairing rule says the same for an HDR Profile.
     // Attaching only the forward direction would leave a profile whose
-    // rendering cannot be undone, which is worse than not baking at all.
+    // rendering cannot be undone, which is worse than not baking at all.  Only
+    // a singular colour matrix stops the pair: a gain curve with no exact
+    // inverse gets a best-effort BToA0, which is all that tag is for.
     if (pReason)
-      *pReason = "Tone mapping at this target has no inverse, so the tag pair cannot be completed";
+      *pReason = "The colour matrix has no inverse, so the tag pair cannot be completed";
 
     return false;
   }
