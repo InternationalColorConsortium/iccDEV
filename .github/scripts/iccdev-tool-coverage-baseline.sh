@@ -1184,7 +1184,7 @@ fi
 echo ""
 
 # =============================================================================
-# 15. iccHdrFallback (7 tests)
+# 15. iccHdrFallback (10 tests)
 # =============================================================================
 echo "--- 15. iccHdrFallback ---"
 HDRFALLBACK="$TOOLS/IccHdrFallback/iccHdrFallback"
@@ -1208,6 +1208,23 @@ if [ -f "$HDR_HAGC" ]; then
 
   run_expect_exit "hdrfb-05" "Reject an unknown option" 1 \
     "$HDRFALLBACK" -nosuchoption "$HDR_HAGC" "$OUTDIR/hdrfb-bad.icc"
+
+  # strtod accepts "inf" and overflows "1e400" to infinity; neither is an HLG
+  # system gamma or peak luminance.
+  run_expect_exit "hdrfb-08" "Reject a non-finite HLG gamma" 1 \
+    "$HDRFALLBACK" -hlggamma inf "$HDR_HAGC" "$OUTDIR/hdrfb-bad.icc"
+
+  run_expect_exit "hdrfb-09" "Reject an HLG peak that overflows to infinity" 1 \
+    "$HDRFALLBACK" -hlgpeak 1e400 "$HDR_HAGC" "$OUTDIR/hdrfb-bad.icc"
+fi
+
+HDR_V5="$ICCDEV_TESTING/HDR/BT2100PQNarrowDisplay.icc"
+if [ -f "$HDR_V5" ]; then
+  # A v5 profile renders through its own multiProcessElement tags, never
+  # through the clause 8.10 chain, so a pair baked from its cicpTag would match
+  # no rendering.
+  run_expect_exit "hdrfb-10" "Refuse a version 5 multiProcessElement profile" 3 \
+    "$HDRFALLBACK" "$HDR_V5" "$OUTDIR/hdrfb-v5.icc"
 fi
 
 if [ -f "$HDR_NOHAGC" ]; then

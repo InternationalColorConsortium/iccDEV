@@ -66,6 +66,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -119,7 +120,9 @@ static bool parseUInt(const char *szArg, unsigned long nMin, unsigned long nMax,
   return true;
 }
 
-/** Parse a positive floating-point argument, on the same terms. */
+/** Parse a positive, finite floating-point argument, on the same terms.  strtod
+ * accepts "inf" and overflows "1e400" to infinity, and either reaches the HLG
+ * OOTF as a gamma or peak with no meaning. */
 static bool parsePositive(const char *szArg, double &value)
 {
   char *szEnd = NULL;
@@ -129,7 +132,7 @@ static bool parsePositive(const char *szArg, double &value)
 
   double v = strtod(szArg, &szEnd);
 
-  if (!szEnd || *szEnd || !(v > 0.0))
+  if (!szEnd || *szEnd || !(v > 0.0) || !std::isfinite(v))
     return false;
 
   value = v;

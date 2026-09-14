@@ -117,8 +117,9 @@ function getClutTestProfile() {
     const hdrIcc = fromXml.FS.readFile('hdr.icc');
     mod.FS.writeFile('hdr.icc', hdrIcc);
     // Check the status before reading: the tool refuses a profile it cannot
-    // bake (an MPE-based one, say) with a non-zero exit, and the readFile that
-    // would follow throws an error carrying no message at all.
+    // bake - a version 5 MPE-based one, a Lab-PCS one, or one whose HDR chain
+    // has no matrix - with a non-zero exit, and the readFile that would follow
+    // throws an error carrying no message at all.
     const rc = mod.callMain(['hdr.icc', 'fallback.icc']);
     if (rc) throw new Error('bake exited ' + rc);
     const baked = mod.FS.readFile('fallback.icc');

@@ -1529,6 +1529,42 @@ bool icBuildHdrForwardMatrix(const CIccProfile *pProfile, icUInt8Number nColourP
 
 /**
  ****************************************************************************
+ * Name: icHdrSelectForwardMatrix
+ *
+ * Purpose: The one decision about where an HDR rendering's RGB-to-PCSXYZ
+ *  matrix comes from - see the header for why there has to be only one.
+ ****************************************************************************
+ */
+icHdrMatrixSource icHdrSelectForwardMatrix(const CIccProfile *pProfile,
+                                           icUInt8Number nColourPrimaries,
+                                           icFloatNumber *matrix)
+{
+  if (!pProfile || !matrix)
+    return icHdrMatrixUnavailable;
+
+  bool bColumns = pProfile->IsTagPresent(icSigRedMatrixColumnTag) &&
+                  pProfile->IsTagPresent(icSigGreenMatrixColumnTag) &&
+                  pProfile->IsTagPresent(icSigBlueMatrixColumnTag);
+
+  if (nColourPrimaries == icCicpPrimariesUnspecified)
+    return bColumns ? icHdrMatrixFromColumns : icHdrMatrixMissingColumns;
+
+  if (icHdrHasMalformedChad(pProfile))
+    return icHdrMatrixMalformedChad;
+
+  if (icBuildHdrForwardMatrix(pProfile, nColourPrimaries, matrix))
+    return icHdrMatrixFromCicp;
+
+  bool bConventional = bColumns &&
+                       pProfile->IsTagPresent(icSigRedTRCTag) &&
+                       pProfile->IsTagPresent(icSigGreenTRCTag) &&
+                       pProfile->IsTagPresent(icSigBlueTRCTag);
+
+  return bConventional ? icHdrMatrixFromColumns : icHdrMatrixUnavailable;
+}
+
+/**
+ ****************************************************************************
  * Name: icGetHdrProfileInfo
  *
  * Purpose: Classify a profile against clause 8.10 and resolve everything the

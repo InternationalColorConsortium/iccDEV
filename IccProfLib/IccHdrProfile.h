@@ -649,6 +649,46 @@ ICCPROFLIB_API bool icBuildHdrForwardMatrix(const CIccProfile *pProfile,
  */
 ICCPROFLIB_API bool icHdrHasMalformedChad(const CIccProfile *pProfile);
 
+/** Where the RGB-to-PCSXYZ matrix of clause 8.10.2 c) comes from. */
+typedef enum {
+  icHdrMatrixFromCicp = 0,    /* built from the cicpTag primaries; see below */
+  icHdrMatrixFromColumns,     /* the profile's own matrix column tags */
+  icHdrMatrixMissingColumns,  /* ColourPrimaries 2 without all three columns */
+  icHdrMatrixMalformedChad,   /* see icHdrHasMalformedChad() */
+  icHdrMatrixUnavailable      /* no source the HDR chain can use */
+} icHdrMatrixSource;
+
+/**
+ * Decide which matrix an HDR rendering of this profile uses, and build it when
+ * it comes from the cicpTag.
+ *
+ * CIccXformMatrixTrcHdr::Begin() and CIccHdrBaker::Init() both take this one
+ * decision, so the bake can never store a rendering the live chain refuses,
+ * nor refuse one it renders.  They used to decide separately, and drifted:
+ * the baker fell back to any readable colorant tags when the cicpTag primaries
+ * could not be built (a reserved ColourPrimaries value, or no
+ * mediaWhitePointTag), while Begin() refuses that case unless the profile is a
+ * conventional matrix/TRC profile whose base class has already set up from
+ * those tags.
+ *
+ *  - ColourPrimaries 2: the matrix column tags, which 9.2.17 and 8.10.6 then
+ *    require - icHdrMatrixFromColumns, or icHdrMatrixMissingColumns.
+ *  - otherwise a malformed chromaticAdaptationTag is refused on every shape.
+ *  - otherwise icBuildHdrForwardMatrix() - icHdrMatrixFromCicp, with matrix
+ *    filled in.
+ *  - failing that, the colorant tags only for a CONVENTIONAL profile, one that
+ *    carries all six matrix column and TRC tags - what a pre-amendment CMM
+ *    would have rendered it with.  A revision-shaped profile has no such
+ *    fallback: rendering it with some other matrix than the one the clause's
+ *    "shall" names would be a different rendering reported as success.
+ *
+ * Presence is what is decided here; a caller reading the column tags still
+ * has to refuse ones that do not read.
+ */
+ICCPROFLIB_API icHdrMatrixSource icHdrSelectForwardMatrix(const CIccProfile *pProfile,
+                                                          icUInt8Number nColourPrimaries,
+                                                          icFloatNumber *matrix);
+
 /**
  * Classify a profile against clause 8.10 and resolve everything the clause
  * defines. Returns false only when pProfile is NULL; a profile that is not an

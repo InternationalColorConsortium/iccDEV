@@ -897,6 +897,173 @@ void testRefusals()
   }
 }
 
+// ---------------------------------------------------------------------------
+// 5c. The bake accepts exactly the profiles the HDR chain renders
+// ---------------------------------------------------------------------------
+//
+// CIccHdrBaker::Init() and CIccXformMatrixTrcHdr::Begin() used to decide
+// separately whether a profile has a matrix, and drifted: the bake fell back to
+// any readable colorant tags where Begin() refuses, so iccHdrFallback wrote a
+// pair for profiles whose HDR chain will not start - a reserved ColourPrimaries
+// value baked as if it were 2.  Each case below is checked against Begin() in
+// both directions, not only against an expected answer, so the two cannot
+// drift apart again without a failure.
+
+// Begin a CIccXformMatrixTrcHdr on a copy of pProfile, bypassing the membership
+// gate, so the answer is Begin()'s own.
+bool beginsHdrChain(const CIccProfile *pProfile, bool bInput)
+{
+  CIccCreateHdrXformHint hint;
+  CIccXformMatrixTrcHdr *pXform = new CIccXformMatrixTrcHdr();
+
+  pXform->SetHdrParams(&hint);
+  pXform->SetParams(new CIccProfile(*pProfile), bInput, icRelativeColorimetric,
+                    icRelativeColorimetric, false, icInterpLinear);
+
+  icStatusCMM status = pXform->Begin();
+  delete pXform;
+  return status == icCmmStatOk;
+}
+
+void checkBakeMatchesChain(const CIccProfile *pProfile, bool bExpectBake, const char *szWhat)
+{
+  CIccHdrBaker baker;
+  bool bBakes = baker.Init(pProfile);
+  std::string what = szWhat;
+
+  check(bBakes == bExpectBake,
+        (what + (bExpectBake ? ": the bake accepts it" : ": the bake refuses it")).c_str());
+  check(beginsHdrChain(pProfile, true) == bBakes,
+        (what + ": the input-direction HDR chain agrees with the bake").c_str());
+  check(beginsHdrChain(pProfile, false) == bBakes,
+        (what + ": the output-direction HDR chain agrees with the bake").c_str());
+}
+
+void testBakeMatchesChain()
+{
+  CIccProfile *pProfile = openFixture("HdrCicpUnspecified.icc");
+
+  if (pProfile) {
+    checkBakeMatchesChain(pProfile, true, "ColourPrimaries 2 with its matrix column tags");
+
+    CIccTag *pTag = pProfile->FindTag(icSigCicpTag);
+
+    if (pTag && pTag->GetType() == icSigCicpType) {
+      CIccTagCicp *pCicp = (CIccTagCicp*)pTag;
+      icUInt8Number prim = 0, tc = 0, mc = 0, full = 0;
+
+      pCicp->GetFields(prim, tc, mc, full);
+      pCicp->SetFields(3, tc, mc, full);
+
+      checkBakeMatchesChain(pProfile, false,
+                            "reserved ColourPrimaries 3 beside readable matrix column tags");
+
+      const icChar *szReason = NULL;
+      check(!icAddHdrFallbackTags(pProfile, NULL, &szReason),
+            "icAddHdrFallbackTags attaches nothing for reserved ColourPrimaries 3");
+    }
+    else {
+      check(false, "HdrCicpUnspecified carries a cicpTag");
+    }
+
+    delete pProfile;
+  }
+
+  pProfile = openFixture("HdrBakedLut.icc");
+
+  if (pProfile) {
+    checkBakeMatchesChain(pProfile, true, "a revision-shaped profile");
+    pProfile->DeleteTag(icSigMediaWhitePointTag);
+    checkBakeMatchesChain(pProfile, false, "the same profile without its mediaWhitePointTag");
+    delete pProfile;
+  }
+
+  pProfile = openFixture("HagcDisplay.icc");
+
+  if (pProfile) {
+    pProfile->m_Header.pcs = icSigLabData;
+    checkBakeMatchesChain(pProfile, false, "a Lab-PCS profile");
+    delete pProfile;
+  }
+
+  // Not compared with Begin(): the CMM never builds the HDR chain for a v5
+  // profile, which icUseHdrToneMapPath() declines by membership, and a v5
+  // profile renders through its own multiProcessElement tags instead.
+  pProfile = openFixture("BT2100PQNarrowDisplay.icc");
+
+  if (pProfile) {
+    CIccHdrBaker baker;
+
+    check(!baker.Init(pProfile), "a version 5 multiProcessElement profile is refused");
+
+    const icChar *szReason = baker.GetUnsupportedReason();
+    check(szReason && strstr(szReason, "version 5") != NULL, "and the refusal names the version");
+
+    delete pProfile;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5d. Attaching is all or nothing, and a re-used baker forgets its last profile
+// ---------------------------------------------------------------------------
+void testAttachAndReuse()
+{
+  CIccProfile *pProfile = openFixture("HagcDisplay.icc");
+
+  if (pProfile) {
+    TagEntryList::iterator it;
+
+    for (it = pProfile->m_Tags.begin(); it != pProfile->m_Tags.end(); ++it) {
+      if (it->TagInfo.sig == icSigAToB0Tag)
+        break;
+    }
+
+    if (it != pProfile->m_Tags.end()) {
+      // A second directory entry for the same tag object.  Cleanup() deletes
+      // through the tag list, not the directory, so the profile still frees it
+      // once.
+      IccTagEntry dup = *it;
+      pProfile->m_Tags.push_back(dup);
+
+      size_t nEntries = pProfile->m_Tags.size();
+      CIccTag *pBtoA = pProfile->FindTag(icSigBToA0Tag);
+      icHdrBakeParams small;
+      const icChar *szReason = NULL;
+
+      icHdrBakeParamsInit(small);
+      small.nGridPoints = 5;
+      small.nCurveSize = 32;
+
+      check(!icAddHdrFallbackTags(pProfile, &small, &szReason),
+            "a profile listing AToB0Tag twice is refused");
+      check(pProfile->m_Tags.size() == nEntries, "and its tag directory is left as it was");
+      check(pBtoA != NULL && pProfile->FindTag(icSigBToA0Tag) == pBtoA,
+            "including the BToA0Tag it already carried");
+    }
+    else {
+      check(false, "HagcDisplay carries an AToB0Tag");
+    }
+
+    delete pProfile;
+  }
+
+  CIccProfile *pHagc = openFixture("HagcDisplay.icc");
+  CIccProfile *pPlain = openFixture("HdrBakedLut.icc");
+
+  if (pHagc && pPlain) {
+    CIccHdrBaker baker;
+
+    check(baker.Init(pHagc) && baker.UsesDerivedSlopes(),
+          "HagcDisplay's gain curve reports derived slopes");
+    check(baker.Init(pPlain), "the same baker re-initialises on a profile with no HAGC tag");
+    check(!baker.UsesDerivedSlopes(),
+          "and no longer reports the previous profile's derived slopes");
+  }
+
+  delete pHagc;
+  delete pPlain;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -1082,6 +1249,8 @@ int main()
   testTransferCoverage("HagcCommonParams.icc");   // HLG
   testTransferCoverage("HagcHexData.icc");        // Linear
   testRefusals();
+  testBakeMatchesChain();
+  testAttachAndReuse();
   testApproximateBtoA();
 
   if (g_failures)

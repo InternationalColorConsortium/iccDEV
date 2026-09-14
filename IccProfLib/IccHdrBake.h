@@ -436,6 +436,11 @@ protected:
   CIccHdrTransfer m_transfer;
   CIccHagcEvaluator m_evaluator;
 
+  /** True when the last Init() initialised m_evaluator from a HAGC tag.  The
+   * evaluator is only re-initialised when there is one, so its state is
+   * otherwise the previous profile's. */
+  bool m_bHagcEvaluated;
+
   bool m_bToneMap;
   bool m_bClampToTarget;
 

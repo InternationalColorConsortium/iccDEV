@@ -169,6 +169,8 @@ CIccHdrBaker::CIccHdrBaker()
 
   icHdrBakeParamsInit(m_params);
 
+  m_bHagcEvaluated = false;
+
   memset(m_matrix, 0, sizeof(m_matrix));
   memset(m_inverse, 0, sizeof(m_inverse));
 }
@@ -185,11 +187,15 @@ CIccHdrBaker::~CIccHdrBaker()
  *  Resolve the whole pipeline once, so that sampling it is a pure function.
  *
  *  The profile requirements are deliberately the structural ones and not the
- *  full clause 8.10.1 conformance: matrix-based RGB with a cicpTag naming an
- *  HDR transfer characteristic.  The profile version is not among them
- *  because the bake exists precisely to serve consumers that will not accept
- *  the version an HDR Profile carries, and icHdrBakeVersionV4_4 may be about
- *  to change it anyway.
+ *  full clause 8.10.1 conformance: RGB Input or Display, PCSXYZ, a cicpTag
+ *  naming an HDR transfer characteristic, and the matrix
+ *  CIccXformMatrixTrcHdr::Begin() would use (icHdrSelectForwardMatrix()).
+ *  The 4.5.0.0 lower bound on the version is not among them because the bake
+ *  exists precisely to serve consumers that will not accept the version an
+ *  HDR Profile carries, and icHdrBakeVersionV4_4 may be about to change it
+ *  anyway.  A version 5 profile is refused: it has its own tag model, clause
+ *  8.10 is a version 4 construct, and the CMM never renders one through the
+ *  HDR chain - baking one would attach a pair that matches no rendering.
  *
  * Args:
  *  pProfile = the HDR profile to bake
@@ -206,6 +212,7 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
   m_bToneMap = false;
   m_bClampToTarget = false;
   m_bInverseValid = false;
+  m_bHagcEvaluated = false;
 
   if (pParams)
     m_params = *pParams;
@@ -256,6 +263,21 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
     return false;
   }
 
+  // The chain ends in an RGB-to-PCSXYZ matrix and CreateAtoB()/CreateBtoA()
+  // encode XYZ.  Attached to a Lab-PCS profile those tags are relabelled Lab
+  // when read, so white would come back as a dark saturated blue.
+  if (!info.bPcsXyz) {
+    m_szUnsupported = "The profile connection space is not PCSXYZ";
+    return false;
+  }
+
+  // See the header block above: v5 is outside clause 8.10, and a v5 profile
+  // renders through its own multiProcessElement tags, not through this chain.
+  if (pProfile->m_Header.version >= icVersionNumberV5) {
+    m_szUnsupported = "A version 5 profile is outside clause 8.10 and is not rendered by the HDR chain";
+    return false;
+  }
+
   if (!info.bHasCicp) {
     m_szUnsupported = "No cicpTag, so no transfer characteristic to invert";
     return false;
@@ -295,6 +317,8 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
     CIccTagHagc *pHagc = (CIccTagHagc*)pTag;
 
     if (m_evaluator.Init(pHagc->GetMetadata())) {
+      m_bHagcEvaluated = true;
+
       // PROPOSAL-ISSUE HAGC-10, PROVISIONAL - the same opt-in the CMM path
       // takes, and it has to be the same one: a bake that tone mapped in a
       // different space from the live path would not be the rendering it
@@ -311,18 +335,11 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
     // that cannot run the descriptor, which is what this tag's readers are.
   }
 
-  // The matrix column tags are optional in the revision shape.  When they are
-  // absent the cicpTag block below is the only source, so their absence is
-  // only fatal for ColourPrimaries 2 - where 8.10.1 requires them and nothing
-  // else can supply the matrix.
+  // The matrix column tags are optional in the revision shape.  Whether they
+  // are the matrix is decided below, by the same function Begin() asks.
   bool bHaveColumns = icHdrBakeGetColumn(pProfile, icSigRedMatrixColumnTag,   m_matrix + 0) &&
                       icHdrBakeGetColumn(pProfile, icSigGreenMatrixColumnTag, m_matrix + 3) &&
                       icHdrBakeGetColumn(pProfile, icSigBlueMatrixColumnTag,  m_matrix + 6);
-
-  if (!bHaveColumns && info.nColourPrimaries == icCicpPrimariesUnspecified) {
-    m_szUnsupported = "Missing or malformed matrix column tag";
-    return false;
-  }
 
   // icHdrBakeGetColumn() wrote each column's XYZ contiguously, which is the
   // transpose of what the matrix needs: column j holds the XYZ of primary j,
@@ -345,26 +362,36 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
   // an approximation of it - it is a different rendering wearing its name.
   // Clause 8.10.1's "shall" puts the cicpTag's primaries ahead of the colorant
   // tags read above, and icBuildHdrForwardMatrix() supplies the chromatic
-  // adaptation that 8.10.1 NOTE 2 leaves out.
-  if (info.nColourPrimaries != icCicpPrimariesUnspecified) {
-    icFloatNumber fwd[9];
+  // adaptation that 8.10.1 NOTE 2 leaves out.  icHdrSelectForwardMatrix() is
+  // the decision Begin() takes too, so a profile the live chain refuses is
+  // refused here rather than baked around.
+  icFloatNumber fwd[9];
 
-    // A chromaticAdaptationTag that is present but unreadable makes the
-    // forward matrix unbuildable, and the colorant-tag fallback below would
-    // then bake around it with no diagnostic - the same refusal
-    // CIccXformMatrixTrcHdr::Begin() makes, so the bake cannot store a
-    // rendering the live path refuses.
-    if (icHdrHasMalformedChad(pProfile)) {
+  switch (icHdrSelectForwardMatrix(pProfile, info.nColourPrimaries, fwd)) {
+    case icHdrMatrixFromCicp:
+      memcpy(m_matrix, fwd, sizeof(m_matrix));
+      break;
+
+    case icHdrMatrixFromColumns:
+      if (!bHaveColumns) {
+        m_szUnsupported = "Missing or malformed matrix column tag";
+        return false;
+      }
+      break;
+
+    case icHdrMatrixMissingColumns:
+      m_szUnsupported = "Missing or malformed matrix column tag";
+      return false;
+
+    case icHdrMatrixMalformedChad:
       m_szUnsupported = "chromaticAdaptationTag is present but malformed";
       return false;
-    }
 
-    if (icBuildHdrForwardMatrix(pProfile, info.nColourPrimaries, fwd))
-      memcpy(m_matrix, fwd, sizeof(m_matrix));
-    else if (!bHaveColumns) {
-      m_szUnsupported = "No matrix: neither cicpTag primaries nor matrix column tags";
+    default:
+      m_szUnsupported = "No matrix: the cicpTag primaries cannot be built into one, and the "
+                        "profile is not a conventional matrix/TRC profile whose colorant tags "
+                        "the HDR chain would use instead";
       return false;
-    }
   }
 
   memcpy(m_inverse, m_matrix, sizeof(m_inverse));
@@ -414,7 +441,10 @@ bool CIccHdrBaker::IsInvertible() const
  */
 bool CIccHdrBaker::UsesDerivedSlopes() const
 {
-  return m_bSupported && m_evaluator.UsesDerivedSlopes();
+  // m_evaluator keeps whatever the last Init() that reached it left there, so
+  // a baker re-initialised on a profile with no usable HAGC tag would
+  // otherwise report the previous profile's slopes.
+  return m_bSupported && m_bHagcEvaluated && m_evaluator.UsesDerivedSlopes();
 }
 
 /**
@@ -1162,6 +1192,27 @@ bool icAddHdrFallbackTags(CIccProfile *pProfile, const icHdrBakeParams *pParams,
   if (!baker.Init(pProfile, pParams)) {
     if (pReason)
       *pReason = baker.GetUnsupportedReason();
+
+    return false;
+  }
+
+  // All or nothing starts before anything is touched.  DeleteTag() removes only
+  // the FIRST directory entry for a signature and AttachTag() refuses one the
+  // profile still carries, so with a duplicated AToB0Tag or BToA0Tag entry the
+  // deletions below would succeed, the attach would fail, and the profile
+  // would be returned altered - one AToB0Tag fewer and no BToA0Tag at all.
+  int nAtoB = 0, nBtoA = 0;
+
+  for (TagEntryList::iterator it = pProfile->m_Tags.begin(); it != pProfile->m_Tags.end(); ++it) {
+    if (it->TagInfo.sig == icSigAToB0Tag)
+      nAtoB++;
+    else if (it->TagInfo.sig == icSigBToA0Tag)
+      nBtoA++;
+  }
+
+  if (nAtoB > 1 || nBtoA > 1) {
+    if (pReason)
+      *pReason = "The tag directory lists AToB0Tag or BToA0Tag more than once";
 
     return false;
   }

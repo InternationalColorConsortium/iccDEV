@@ -6920,44 +6920,46 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
   if (info.nColourPrimaries != icCicpPrimariesUnspecified) {
     icFloatNumber fwd[9];
 
-    // A chromaticAdaptationTag that is present but unreadable (wrong type, or
-    // fewer than nine values) makes the adopted white unrecoverable.  It is
-    // refused on BOTH shapes: the conventional profile's colorant-tag fallback
-    // below would otherwise render around it with no diagnostic, which is the
-    // silent-unadapted outcome icGetProfilePrimaries() already refuses.
-    if (icHdrHasMalformedChad(m_pProfile))
-      return icCmmStatInvalidProfile;
+    // icHdrSelectForwardMatrix() is also what CIccHdrBaker::Init() asks, so
+    // the baked fallback pair and this chain accept exactly the same profiles.
+    switch (icHdrSelectForwardMatrix(m_pProfile, info.nColourPrimaries, fwd)) {
+      case icHdrMatrixFromCicp:
+        memcpy(m_e, fwd, sizeof(m_e));
 
-    if (icBuildHdrForwardMatrix(m_pProfile, info.nColourPrimaries, fwd)) {
-      memcpy(m_e, fwd, sizeof(m_e));
+        // The base inverts m_e for the output direction, so a replacement has
+        // to be inverted too - and this is the one failure that must not be
+        // tolerated, since the xform would otherwise carry a forward matrix
+        // while claiming to run backwards.
+        if (!m_bInput && !icMatrixInvert3x3(m_e))
+          return icCmmStatInvalidProfile;
+        break;
 
-      // The base inverts m_e for the output direction, so a replacement has
-      // to be inverted too - and this is the one failure that must not be
-      // tolerated, since the xform would otherwise carry a forward matrix
-      // while claiming to run backwards.
-      if (!m_bInput && !icMatrixInvert3x3(m_e))
+      case icHdrMatrixFromColumns:
+        // Only returned for a conventionally authored profile here, whose base
+        // class has already filled m_e from the colorant tags - what a
+        // pre-amendment CMM would have done, and a defensible rendering.
+        break;
+
+      case icHdrMatrixMalformedChad:
+        // A chromaticAdaptationTag that is present but unreadable (wrong type,
+        // or fewer than nine values) makes the adopted white unrecoverable,
+        // and is refused on BOTH shapes: the conventional profile's
+        // colorant-tag fallback would otherwise render around it with no
+        // diagnostic, the silent-unadapted outcome icGetProfilePrimaries()
+        // already refuses.
         return icCmmStatInvalidProfile;
-    }
-    else if (!bConventional) {
-      // WHETHER A FAILURE IS SURVIVABLE DEPENDS ON WHICH BRANCH RAN ABOVE.
-      // For a conventionally authored profile the base class has already
-      // filled m_e from the colorant tags, so falling back to it is what a
-      // pre-amendment CMM would have done and remains a defensible rendering.
-      // On the revision-shaped path there is no such fallback: the base class
-      // never ran, and CIccXformMatrixTRC's constructor value-initialises m_e
-      // to zero, so tolerating the failure would hand every pixel to an
-      // all-zero matrix and render the image BLACK while Begin() reported
-      // success.
-      //
-      // This is reachable from a conforming profile.  Clause 8.10.1 constrains
-      // TransferCharacteristics to {8, 16, 18} but says nothing about
-      // ColourPrimaries, and this implementation performs no CICP code-point
-      // validation, so a profile carrying a reserved H.273 primaries value -
-      // or lacking the mediaWhitePointTag icBuildHdrForwardMatrix needs - is
-      // accepted by the validator and reaches here.  Refusing is the only
-      // honest answer: the clause says the matrix "shall" come from the
-      // declared primaries, and we cannot compute it.
-      return icCmmStatInvalidProfile;
+
+      default:
+        // A revision-shaped profile with no buildable matrix.  The base class
+        // never ran and CIccXformMatrixTRC's constructor value-initialises m_e
+        // to zero, so tolerating this would render every pixel BLACK while
+        // Begin() reported success.  It is reachable from a conforming
+        // profile: 8.10.1 constrains TransferCharacteristics but not
+        // ColourPrimaries, so a reserved H.273 primaries value - or a missing
+        // mediaWhitePointTag - validates and reaches here.  The clause says
+        // the matrix "shall" come from the declared primaries, and it cannot
+        // be computed.
+        return icCmmStatInvalidProfile;
     }
   }
 
