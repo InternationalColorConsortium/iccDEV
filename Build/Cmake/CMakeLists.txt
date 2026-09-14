@@ -748,6 +748,10 @@ option(ENABLE_LTO                 "Enable Link-Time Optimization for Release bui
 # non-libc++ toolchains fail at configure time instead of silently dropping the
 # requested checks. _LIBCPP_ENABLE_ASSERTIONS is intentionally not used: it was
 # removed by the libc++ shipped with Xcode 26.
+# A libc++ that predates hardening modes defines none of the
+# _LIBCPP_HARDENING_MODE_* macros. The preprocessor reads both sides of the mode comparison as 0 there,
+# so they match and the probe passes with hardening off. Require the selected
+# macro to exist before comparing against it.
 string(TOLOWER "${ICCDEV_LIBCPP_HARDENING_MODE}"
   _iccdev_libcpp_hardening_mode)
 set(_iccdev_libcpp_hardening_modes none fast extensive debug)
@@ -777,11 +781,18 @@ if(NOT _iccdev_libcpp_hardening_mode STREQUAL "none")
   set(_iccdev_saved_required_definitions "${CMAKE_REQUIRED_DEFINITIONS}")
   list(APPEND CMAKE_REQUIRED_DEFINITIONS
     "-D_LIBCPP_HARDENING_MODE=${_iccdev_libcpp_hardening_macro}")
+  # check_cxx_source_compiles() caches its result under this name and does not
+  # re-run when the probe source changes. The name changed when the probe gained
+  # its hardening-macro check, so a tree that cached the old false pass probes
+  # again.
   set(_iccdev_libcpp_probe_var
-    "_ICCDEV_LIBCPP_HARDENING_${_iccdev_libcpp_hardening_mode_upper}_SUPPORTED")
+    "_ICCDEV_LIBCPP_HARDENING_${_iccdev_libcpp_hardening_mode_upper}_MODE_DEFINED")
   check_cxx_source_compiles("#include <vector>
 #ifndef _LIBCPP_VERSION
 #error The selected C++ standard library is not libc++
+#endif
+#ifndef ${_iccdev_libcpp_hardening_macro}
+#error The selected libc++ does not define hardening modes
 #endif
 #if _LIBCPP_HARDENING_MODE != ${_iccdev_libcpp_hardening_macro}
 #error The requested libc++ hardening mode was not selected
