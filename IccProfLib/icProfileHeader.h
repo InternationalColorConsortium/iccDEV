@@ -367,6 +367,17 @@ typedef enum {
     icSigBRDFAToB1Tag                      = 0x62414231,  /* 'bAB1' */
     icSigBRDFAToB2Tag                      = 0x62414232,  /* 'bAB2' */
     icSigBRDFAToB3Tag                      = 0x62414233,  /* 'bAB3' */
+    /* ICC.2-2023 9.2.18-25 (#2564, #2027).  Signatures and names only: nothing in
+       IccProfLib reads, validates or applies these yet, so a profile carrying one
+       still loads it through the private-tag path in CIccProfile::IsTypeValid. */
+    icSigBRDFBToA0Tag                      = 0x62424130,  /* 'bBA0' */
+    icSigBRDFBToA1Tag                      = 0x62424131,  /* 'bBA1' */
+    icSigBRDFBToA2Tag                      = 0x62424132,  /* 'bBA2' */
+    icSigBRDFBToA3Tag                      = 0x62424133,  /* 'bBA3' */
+    icSigBRDFBToD0Tag                      = 0x62424430,  /* 'bBD0' */
+    icSigBRDFBToD1Tag                      = 0x62424431,  /* 'bBD1' */
+    icSigBRDFBToD2Tag                      = 0x62424432,  /* 'bBD2' */
+    icSigBRDFBToD3Tag                      = 0x62424433,  /* 'bBD3' */
     icSigBRDFDToB0Tag                      = 0x62444230,  /* 'bDB0' */
     icSigBRDFDToB1Tag                      = 0x62444231,  /* 'bDB1' */
     icSigBRDFDToB2Tag                      = 0x62444232,  /* 'bDB2' */
@@ -419,6 +430,26 @@ typedef enum {
     icSigBToD1Tag                          = 0x42324431,  /* 'B2D1' */
     icSigBToD2Tag                          = 0x42324432,  /* 'B2D2' */
     icSigBToD3Tag                          = 0x42324433,  /* 'B2D3' */
+    /* ICC.2-2023 9.2.61-76 directional transforms (#2564), signatures and names only.
+       9.2.71 prints directionalBToD2Tag's signature as 'bBD2', but its own hex
+       64424432h and the pattern of its 15 siblings are 'dBD2'; 'bBD2' is already
+       brdfBToD2Tag (9.2.24), so the hex is taken. */
+    icSigDirectionalAToB0Tag               = 0x64414230,  /* 'dAB0' */
+    icSigDirectionalAToB1Tag               = 0x64414231,  /* 'dAB1' */
+    icSigDirectionalAToB2Tag               = 0x64414232,  /* 'dAB2' */
+    icSigDirectionalAToB3Tag               = 0x64414233,  /* 'dAB3' */
+    icSigDirectionalBToA0Tag               = 0x64424130,  /* 'dBA0' */
+    icSigDirectionalBToA1Tag               = 0x64424131,  /* 'dBA1' */
+    icSigDirectionalBToA2Tag               = 0x64424132,  /* 'dBA2' */
+    icSigDirectionalBToA3Tag               = 0x64424133,  /* 'dBA3' */
+    icSigDirectionalBToD0Tag               = 0x64424430,  /* 'dBD0' */
+    icSigDirectionalBToD1Tag               = 0x64424431,  /* 'dBD1' */
+    icSigDirectionalBToD2Tag               = 0x64424432,  /* 'dBD2' */
+    icSigDirectionalBToD3Tag               = 0x64424433,  /* 'dBD3' */
+    icSigDirectionalDToB0Tag               = 0x64444230,  /* 'dDB0' */
+    icSigDirectionalDToB1Tag               = 0x64444231,  /* 'dDB1' */
+    icSigDirectionalDToB2Tag               = 0x64444232,  /* 'dDB2' */
+    icSigDirectionalDToB3Tag               = 0x64444233,  /* 'dDB3' */
     icSigGamutTag                          = 0x67616D74,  /* 'gamt' */
     icSigGamutBoundaryDescription0Tag      = 0x67626430,  /* 'gbd0' */
     icSigGamutBoundaryDescription1Tag      = 0x67626431,  /* 'gbd1' */
@@ -445,6 +476,11 @@ typedef enum {
     icSigMToS2Tag                          = 0x4d325332,  /* 'M2S2' */
     icSigMToS3Tag                          = 0x4d325333,  /* 'M2S3' */
     icSigMeasurementTag                    = 0x6D656173,  /* 'meas' */
+    /* ICC.2-2023 9.2.91-92 (#2564), signatures and names only.  Both carry a
+       tagStructType whose structure handler ('meas') already exists in
+       IccStructBasic.cpp; no tag-level validation is added for them here. */
+    icSigMeasurementInfoTag                = 0x6D696E66,  /* 'minf' */
+    icSigMeasurementInputInfoTag           = 0x6D69696E,  /* 'miin' */
     icSigMediaBlackPointTag                = 0x626B7074,  /* 'bkpt' */
     icSigMediaWhitePointTag                = 0x77747074,  /* 'wtpt' */
     icSigMetaDataTag                       = 0x6D657461,  /* 'meta' */
@@ -462,6 +498,10 @@ typedef enum {
     icSigProfileDescriptionTag             = 0x64657363,  /* 'desc' */
     icSigProfileSequenceDescTag            = 0x70736571,  /* 'pseq' */
     icSigProfileSequceIdTag                = 0x70736964,  /* 'psid' */
+    /* ICC.2-2023 9.2.107 (#2564), signature and name only.  A tagArrayType of
+       'pinf' profileInfoStructure elements; CIccStructProfileInfo already parses
+       each element, but no tag-level validation is added here. */
+    icSigProfileSequenceInformationTag     = 0x7073696E,  /* 'psin' */
     icSigPs2CRD0Tag                        = 0x70736430,  /* 'psd0' Removed in V4 */
     icSigPs2CRD1Tag                        = 0x70736431,  /* 'psd1' Removed in V4 */
     icSigPs2CRD2Tag                        = 0x70736432,  /* 'psd2' Removed in V4 */
@@ -475,6 +515,10 @@ typedef enum {
     icSigSaturationRenderingIntentGamutTag = 0x72696732,  /* 'rig2' */
     icSigScreeningDescTag                  = 0x73637264,  /* 'scrd' Removed in V4 */
     icSigScreeningTag                      = 0x7363726E,  /* 'scrn' Removed in V4 */
+    /* ICC.2-2023 9.2.110 (#2564), signature and name only.  A tagStructType of
+       pccStructure giving an abstract profile's source-side PCC overrides.  The
+       CMM does not consult it; it keeps using the header PCS. */
+    icSigSourcePccTag                      = 0x73504343,  /* 'sPCC' */
     icSigSpectralDataInfoTag               = 0x7364696e,  /* 'sdin' */
     icSigSpectralWhitePointTag             = 0x73777074,  /* 'swpt' */
     icSigSpectralViewingConditionsTag      = 0x7376636e,  /* 'svcn' */
