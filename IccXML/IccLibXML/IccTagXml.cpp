@@ -2814,7 +2814,14 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
       if (!icXmlParseU16(icXmlAttrValue(attr), m_observerRange.steps))
         return false;
     }
-    attr = icXmlFindAttr(pChild, "reserved");
+    // ToXml writes this attribute as "Reserved", but the reader only ever looked
+    // for "reserved", and icXmlStrCmp is strcmp -- so the two never met and a
+    // non-zero value was silently lost on every XML round trip.  Accept the
+    // spelling the writer emits, and keep the lower-case one the reader has
+    // always taken so a hand-authored document that works today still does.
+    attr = icXmlFindAttr(pChild, "Reserved");
+    if (!attr)
+      attr = icXmlFindAttr(pChild, "reserved");
     if (attr) {
       if (!icXmlParseU16(icXmlAttrValue(attr), m_reserved2)) {
         parseStr += "Invalid ObserverFuncs reserved\n";
@@ -2880,7 +2887,10 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
       if (!icXmlParseU16(icXmlAttrValue(attr), m_illuminantRange.steps))
         return false;
     }
-    attr = icXmlFindAttr(pChild, "reserved");
+    // Same spelling mismatch as ObserverFuncs above.
+    attr = icXmlFindAttr(pChild, "Reserved");
+    if (!attr)
+      attr = icXmlFindAttr(pChild, "reserved");
     if (attr) {
       if (!icXmlParseU16(icXmlAttrValue(attr), m_reserved3)) {
         parseStr += "Invalid IlluminantSPD reserved\n";

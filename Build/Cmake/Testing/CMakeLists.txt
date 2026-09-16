@@ -5934,6 +5934,58 @@ function(iccdev_add_mpexml_unknown_reserved_test)
   endif()
 endfunction()
 
+# #2560 item 2: CIccTagXmlSpectralViewingConditions::ToXml writes the ObserverFuncs
+# and IlluminantSPD reserved fields as Reserved="...", but ParseXml looked only for
+# "reserved". icXmlStrCmp is strcmp, so the two spellings never met and a non-zero
+# value was lost on every XML round trip, leaving no trace: the reloaded tag had
+# both fields zero, and the writer omits the attribute when it is zero. No tracked
+# document in Testing/ sets either field in either spelling, so the helper builds
+# its own documents -- nothing in the corpus reaches this code. Needs IccXML
+# (CIccTagXmlSpectralViewingConditions) + IccProfLib; skipped where IccXML is not
+# built.
+function(iccdev_add_svcn_xml_reserved_roundtrip_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSvcnXmlReservedRoundtripTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/svcn-xml-reserved-roundtrip.cpp"
+  )
+  target_compile_features(iccSvcnXmlReservedRoundtripTest PRIVATE cxx_std_17)
+  target_include_directories(iccSvcnXmlReservedRoundtripTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccSvcnXmlReservedRoundtripTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccSvcnXmlReservedRoundtripTest)
+
+  add_test(
+    NAME iccdev.svcn-xml-reserved-roundtrip
+    COMMAND "$<TARGET_FILE:iccSvcnXmlReservedRoundtripTest>"
+  )
+  set_tests_properties(iccdev.svcn-xml-reserved-roundtrip PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;xml;spectral;issue-2560;regression"
+  )
+  if(WIN32)
+    set(_svcn_reserved_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSvcnXmlReservedRoundtripTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _svcn_reserved_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.svcn-xml-reserved-roundtrip PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_svcn_reserved_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_calc_envsig_sign_extension_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -8172,6 +8224,7 @@ if(WIN32)
   iccdev_add_tiff_create_overflow_test()
   iccdev_add_tiff_separated_strips_test()
   iccdev_add_mpexml_unknown_reserved_test()
+  iccdev_add_svcn_xml_reserved_roundtrip_test()
   iccdev_add_calc_envsig_sign_extension_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
@@ -8560,6 +8613,7 @@ iccdev_add_console_sanitize_codepoint_test()
 iccdev_add_tiff_create_overflow_test()
 iccdev_add_tiff_separated_strips_test()
 iccdev_add_mpexml_unknown_reserved_test()
+iccdev_add_svcn_xml_reserved_roundtrip_test()
 iccdev_add_calc_envsig_sign_extension_test()
 iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_proflib_exported_global_definitions_test()
