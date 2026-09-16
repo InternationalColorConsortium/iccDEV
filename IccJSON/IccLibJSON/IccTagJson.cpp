@@ -516,24 +516,42 @@ bool CIccTagJsonChromaticity::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonChromaticity::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonChromaticity::ParseJson(const IccJson &j, std::string &parseStr)
 {
   int colorantType = 0;
   jGetValue(j, "colorantType", colorantType);
   m_nColorantType = (icColorantEncoding)colorantType;
-  if (jsonExistsField(j, "channels") && j["channels"].is_array()) {
-    const IccJson &ch = j["channels"];
-    icUInt16Number nCh = icJsonSafeU16(ch.size());
-    if (ch.size() > 0 && !nCh) return false;
-    if (!SetSize(nCh)) return false;
-    for (icUInt16Number i = 0; i < nCh; i++) {
-      if (ch[i].is_array() && ch[i].size() >= 2) {
-        double xy[2] = {0, 0};
-        jsonToArray(ch[i], xy, 2);
-        m_xy[i].x = icDtoUF(xy[0]);
-        m_xy[i].y = icDtoUF(xy[1]);
-      }
+
+  // #2541: every one of the refusals below used to be a silent skip that still
+  // returned true, so iccFromJson wrote a profile whose chromaticity channels
+  // were the zeros SetSize() left behind rather than the document's values.  The
+  // XML reader refuses each of these (IccTagXml.cpp), and a writer that emits a
+  // tag the reader would not accept is the divergence this closes.
+  if (!jsonExistsField(j, "channels") || !j["channels"].is_array()) {
+    parseStr += "chromaticityType requires a channels array\n";
+    return false;
+  }
+
+  const IccJson &ch = j["channels"];
+  icUInt16Number nCh = icJsonSafeU16(ch.size());
+  if (ch.size() > 0 && !nCh) return false;
+  if (!SetSize(nCh)) return false;
+  for (icUInt16Number i = 0; i < nCh; i++) {
+    // Exactly two coordinates: ">= 2" accepted a third and silently dropped it,
+    // which is the same fail-open shape one element further in.
+    if (!ch[i].is_array() || ch[i].size() != 2) {
+      parseStr += "chromaticityType channel must be a pair of numbers\n";
+      return false;
     }
+    double xy[2] = {0, 0};
+    // The result of this call was discarded, so a non-numeric coordinate
+    // encoded as 0 with no diagnostic.
+    if (!jsonToArray(ch[i], xy, 2)) {
+      parseStr += "chromaticityType channel must be a pair of numbers\n";
+      return false;
+    }
+    m_xy[i].x = icDtoUF(xy[0]);
+    m_xy[i].y = icDtoUF(xy[1]);
   }
   return true;
 }
@@ -1159,10 +1177,35 @@ bool CIccTagJsonColorantTable::ToJson(IccJson &j)
 
 bool CIccTagJsonColorantTable::ParseJson(const IccJson &j, std::string &parseStr)
 {
+  // #2550: an encoding this reader does not implement used to fall through to
+  // the Lab branch below, so "pcsEncoding":"sRGB" silently produced Lab-decoded
+  // values.  A missing field keeps its historical Lab default -- that is the
+  // shape of every document written before ToJson emitted the field, and what
+  // docs/icc-profile.schema.json documents -- but a field that IS present must
+  // be a string naming an encoding this reader honours.  jGetString() fails for
+  // a non-string value, so testing only its result would have let
+  // "pcsEncoding":7 keep the Lab default as well.
   std::string pcsEncoding = "Lab";
-  jGetString(j, "pcsEncoding", pcsEncoding);
+  if (jsonExistsField(j, "pcsEncoding") &&
+      (!jGetString(j, "pcsEncoding", pcsEncoding) ||
+       (pcsEncoding != "Lab" && pcsEncoding != "XYZ" && pcsEncoding != "16bit"))) {
+    parseStr += "colorantTableType pcsEncoding must be \"Lab\", \"XYZ\" or \"16bit\"\n";
+    return false;
+  }
 
-  if (jsonExistsField(j, "colorantTable") && j["colorantTable"].is_array()) {
+  // #2541: a missing or non-array colorantTable used to skip the whole body and
+  // still return true, writing a profile with an empty tag in place of the
+  // document's colorants.  The field is now required.  An EMPTY array is refused
+  // too, but by SetSize(0) below rather than here, and that predates this check:
+  // icRealloc(p, 0) returns NULL.  ToJson does emit [] for a tag with no entries,
+  // so that one document does not round-trip; whether an empty colorantTable is
+  // legal is left to ICC.1 rather than settled here.
+  if (!jsonExistsField(j, "colorantTable") || !j["colorantTable"].is_array()) {
+    parseStr += "colorantTableType requires a colorantTable array\n";
+    return false;
+  }
+
+  {
     const IccJson &arr = j["colorantTable"];
     // #2535: the same narrowing as CIccTagJsonColorantOrder::ParseJson above.
     // CIccTagColorantTable::SetSize() also takes an icUInt16Number, and here
@@ -1174,8 +1217,13 @@ bool CIccTagJsonColorantTable::ParseJson(const IccJson &j, std::string &parseStr
     for (icUInt16Number i = 0; i < nColorants; i++) {
       const IccJson &c = arr[i];
       std::string name;
-      if (jGetString(c, "name", name))
-        strncpy(m_pData[i].name, name.c_str(), sizeof(m_pData[i].name)-1);
+      // A missing or non-string name used to leave the entry's 32-byte name
+      // field at whatever SetSize() had put there, with no diagnostic.
+      if (!jGetString(c, "name", name)) {
+        parseStr += "colorantTableType entry requires a string name\n";
+        return false;
+      }
+      strncpy(m_pData[i].name, name.c_str(), sizeof(m_pData[i].name)-1);
       if (jsonExistsField(c, "pcs") && c["pcs"].is_array() && c["pcs"].size() == 3) {
         if (pcsEncoding == "16bit") {
           icUInt16Number pcs[3];

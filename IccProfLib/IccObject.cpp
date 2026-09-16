@@ -69,7 +69,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "IccObject.h"
-#include <cstring>
+#include "IccProfile.h"
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
@@ -78,10 +78,29 @@ namespace iccDEV {
 
 const CIccProfile* IIccObject::GetParentProfile() const
 {
-  const IIccObject* pObj = m_pParentObj;
-  while (pObj && strcmp(pObj->GetObjectType(), "CIccProfile"))
-    pObj = pObj->GetParentObject();
-  return (const CIccProfile*)pObj;
+  // Two defects met here, and each one alone was enough to lose the profile.
+  //
+  // The name test compared GetObjectType() -- which CIccProfile forwards to the
+  // virtual GetClassName() -- against the literal "CIccProfile".  Every subclass
+  // overrides that name, so CIccProfileJson and CIccProfileXml, the two classes
+  // the JSON and XML tools actually instantiate, never matched and the walk ran
+  // off the top of the tree.
+  //
+  // The cast was the other half.  IccObject.h only forward-declares CIccProfile
+  // (IccObject.h:81), so in this translation unit the type was incomplete and
+  // the C-style cast could not be a base-to-derived static_cast -- it degraded
+  // to a reinterpret_cast.  CIccProfile derives from IIccProfileConnectionConditions
+  // before IIccObject (IccProfile.h:146), so the IIccObject subobject does not sit
+  // at offset zero, and the unadjusted pointer was wrong by that offset even on the
+  // one path where the name did match.
+  //
+  // dynamic_cast fixes both at once: it recognises every subclass and performs the
+  // required adjustment.  The hierarchy is polymorphic and RTTI is enabled.
+  for (const IIccObject* pObj = m_pParentObj; pObj; pObj = pObj->GetParentObject()) {
+    if (const CIccProfile* pProfile = dynamic_cast<const CIccProfile*>(pObj))
+      return pProfile;
+  }
+  return nullptr;
 }
 
 #ifdef USEICCDEVNAMESPACE
