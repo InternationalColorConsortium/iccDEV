@@ -4834,6 +4834,60 @@ function(iccdev_add_calc_channel_ref_unterminated_index_json_test)
   endif()
 endfunction()
 
+# #2550 / #2541: IIccObject::GetParentProfile() compared GetObjectType() against
+# the literal "CIccProfile" -- which every subclass overrides -- and then C-cast
+# an incomplete type, so the JSON/XML profile classes were never recognised and
+# even the matching case returned a pointer off by the IIccObject subobject
+# offset. colorantTableType ToJson therefore always wrote "16bit". The same
+# helper pins the fail-open JSON readers for colorantTableType and
+# chromaticityType, which returned true after substituting zeros or defaults
+# where the XML readers refuse. Needs IccJSON + IccProfLib; skipped where IccJSON
+# is not built.
+function(iccdev_add_json_colorant_parent_profile_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccJsonColorantParentProfileTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/json-colorant-parent-profile.cpp"
+  )
+  target_compile_features(iccJsonColorantParentProfileTest PRIVATE cxx_std_17)
+  target_include_directories(iccJsonColorantParentProfileTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccJsonColorantParentProfileTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccJsonColorantParentProfileTest)
+
+  add_test(
+    NAME iccdev.json-colorant-parent-profile
+    COMMAND "$<TARGET_FILE:iccJsonColorantParentProfileTest>"
+  )
+  # Case 4 round-trips every 16-bit value through JSON text; ~30 s under a local
+  # ASan Debug build and past 60 s on the GCC ASAN+UBSAN CI leg, so it takes the
+  # same 300 s allowance as iccdev.colorant-count-narrowing-json.
+  set_tests_properties(iccdev.json-colorant-parent-profile PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 300
+    LABELS "iccdev;json;colorant;issue-2550;issue-2541;regression"
+  )
+  if(WIN32)
+    set(_json_colorant_parent_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccJsonColorantParentProfileTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _json_colorant_parent_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.json-colorant-parent-profile PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_json_colorant_parent_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2535/#2536: CIccTagJsonColorantOrder::ParseJson() and
 # CIccTagJsonColorantTable::ParseJson() sized their allocation from a count that
 # was narrowed a second time at the SetSize() call -- both tags' SetSize() takes
@@ -8225,6 +8279,7 @@ if(WIN32)
   iccdev_add_tiff_separated_strips_test()
   iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_svcn_xml_reserved_roundtrip_test()
+  iccdev_add_json_colorant_parent_profile_test()
   iccdev_add_calc_envsig_sign_extension_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
@@ -8614,6 +8669,7 @@ iccdev_add_tiff_create_overflow_test()
 iccdev_add_tiff_separated_strips_test()
 iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_svcn_xml_reserved_roundtrip_test()
+iccdev_add_json_colorant_parent_profile_test()
 iccdev_add_calc_envsig_sign_extension_test()
 iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_proflib_exported_global_definitions_test()

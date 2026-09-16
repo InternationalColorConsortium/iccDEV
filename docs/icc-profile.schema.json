@@ -306,13 +306,12 @@
         "colorantType": { "type": "integer" },
         "channels": {
           "type": "array",
+          "description": "One [x, y] chromaticity pair per channel, as ToJson writes it. ParseJson refuses any other shape.",
           "items": {
-            "type": "object",
-            "required": ["x", "y"],
-            "properties": {
-              "x": { "type": "number" },
-              "y": { "type": "number" }
-            }
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 2,
+            "maxItems": 2
           }
         }
       }

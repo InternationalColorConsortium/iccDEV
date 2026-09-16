@@ -370,11 +370,18 @@ The encoding of the `"pcs"` arrays is declared explicitly via a `"pcsEncoding"` 
 | `"XYZ"` | X, Y, Z floats (0-2 range) |
 | `"16bit"` | Raw ICC U16 integers (0-65535) |
 
-`ParseJson` defaults to `"Lab"` when the field is absent (backward compatible with files written before this field was added).
+`ParseJson` defaults to `"Lab"` when the field is absent (backward compatible with files written before this field was added). A `pcsEncoding` that is present but is not one of the three strings above is refused.
 
-Each colorant entry requires a `"pcs"` array containing exactly three numeric
+`ToJson` chooses the encoding from the PCS of the profile that owns the tag
+(ICC.1:2022 clause 10.5, Table 34): `"Lab"` for a Lab PCS, `"XYZ"` for an XYZ
+PCS, and `"16bit"` for any other PCS or for a tag with no owning profile. The
+Lab and XYZ forms round-trip every 16-bit value exactly.
+
+The `"colorantTable"` array is required. Each colorant entry must be an object
+with a string `"name"` and a `"pcs"` array containing exactly three numeric
 values. This matches the three PCS coordinates encoded for every
-`colorantTableType` entry by ICC.1.
+`colorantTableType` entry by ICC.1. A document that breaks any of these rules is
+refused rather than loaded with a default or zero-filled value.
 
 ```json
 {
