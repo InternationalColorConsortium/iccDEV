@@ -49,10 +49,13 @@
     survives the overrun would report -- and the case does not depend on a
     sanitizer either way.
 
-    The 65535 cases are the boundary discriminators.  That count is
-    representable and must still be accepted with every entry present, so a
-    guard written ">= 0xFFFF" instead of "> 0xFFFF" fails them while passing
-    every other case here.
+    The 65535 cases are the boundary discriminators.  That count is the widest
+    the tag stores, and it is accepted with every entry present, so a guard
+    written ">= 0xFFFF" instead of "> 0xFFFF" fails them while passing every
+    other case here.  They are storage and API bounds, not a conforming
+    profile: ICC.1:2022 10.4-10.5 tie the count to the header's data colour
+    space, which CIccProfile::Validate() checks and colorant-count-validate.cpp
+    pins (#2541).
 
     The empty-array cases pin behaviour this fix did NOT change: an empty array
     was refused before it, because SetSize(0) reallocates to nothing and reports
@@ -207,7 +210,7 @@ int main()
   failures += orderCase(65536, false,
                         "colorantOrder at 65536, which narrowed to 0, is refused for the same reason");
   failures += orderCase(65535, true,
-                        "colorantOrder at exactly 65535 is still accepted in full");
+                        "colorantOrder at 65535, the widest count stored, is accepted in full (storage bound)");
   failures += orderCase(4, true,
                         "an ordinary colorantOrder is unaffected");
   failures += orderCase(0, false,
@@ -219,7 +222,7 @@ int main()
   failures += tableCase(65536, false,
                         "colorantTable at 65536, which narrowed to 0, is refused for the same reason");
   failures += tableCase(65535, true,
-                        "colorantTable at exactly 65535 is still accepted in full");
+                        "colorantTable at 65535, the widest count stored, is accepted in full (storage bound)");
   failures += tableCase(4, true,
                         "an ordinary colorantTable is unaffected");
   failures += tableCase(0, false,

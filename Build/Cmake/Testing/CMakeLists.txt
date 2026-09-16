@@ -4897,8 +4897,9 @@ endfunction()
 # strncpy past a 38-byte entry for colorantTable. The helper drives both readers
 # directly, since ParseJson() is the function under fix and the profile wrapper
 # adds nothing to the assertion. Its boundary cases are the discriminators: a
-# count of exactly 65535 is representable and must still be accepted in full, so
-# a guard spelled ">= 0xFFFF" fails them and passes everything else.
+# count of 65535 is the widest the tag stores and is accepted in full, so a guard
+# spelled ">= 0xFFFF" fails them and passes everything else. That is a storage
+# bound, not a conforming count (#2541; see iccdev.colorant-count-validate).
 function(iccdev_add_colorant_count_narrowing_json_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
     return()
@@ -5265,6 +5266,63 @@ function(iccdev_add_colorant_count_narrowing_binary_test)
     endforeach()
     set_tests_properties(iccdev.colorant-count-narrowing-binary PROPERTIES
       ENVIRONMENT_MODIFICATION "${_colorant_narrowing_binary_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# #2541: the narrowing helpers above pin 65535 as the widest count the readers
+# store, not as a conforming count. ICC.1:2022 10.4 and 10.5 require a colorant
+# count to agree with the header's data colour space, and the library checks
+# that in CIccTagColorantOrder::Validate() and CIccTagColorantTable::Validate(),
+# not in the readers. This helper validates in-memory profiles whose data colour
+# space and PCS have different channel counts: a matching tag must leave the
+# report and status unchanged, and a mismatched one (65535 included) must add
+# "Incorrect number of colorants." for that tag. Pure library test, no fixtures.
+function(iccdev_add_colorant_count_validate_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccColorantCountValidateTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/colorant-count-validate.cpp"
+  )
+  target_compile_features(iccColorantCountValidateTest PRIVATE cxx_std_17)
+  target_include_directories(iccColorantCountValidateTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccColorantCountValidateTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccColorantCountValidateTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.colorant-count-validate
+      COMMAND "$<TARGET_FILE:iccColorantCountValidateTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.colorant-count-validate
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccColorantCountValidateTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.colorant-count-validate PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;colorant;issue-2541;regression"
+  )
+  if(WIN32)
+    set(_colorant_validate_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccColorantCountValidateTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _colorant_validate_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.colorant-count-validate PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_colorant_validate_windows_env_mods}"
     )
   endif()
 endfunction()
@@ -8425,6 +8483,7 @@ if(WIN32)
   iccdev_add_xml_calculator_curve_writer_test()
   iccdev_add_parametric_curve_params_json_test()
   iccdev_add_colorant_count_narrowing_binary_test()
+  iccdev_add_colorant_count_validate_test()
   iccdev_add_xform_create_tag_ownership_test()
   iccdev_add_xform_abstorel_adjust_test()
   iccdev_add_parametric_curve_negative_domain_test()
@@ -8820,6 +8879,7 @@ iccdev_add_xml_numeric_values_test()
 iccdev_add_xml_calculator_curve_writer_test()
 iccdev_add_parametric_curve_params_json_test()
 iccdev_add_colorant_count_narrowing_binary_test()
+iccdev_add_colorant_count_validate_test()
 iccdev_add_xform_create_tag_ownership_test()
 iccdev_add_xform_abstorel_adjust_test()
 iccdev_add_parametric_curve_negative_domain_test()

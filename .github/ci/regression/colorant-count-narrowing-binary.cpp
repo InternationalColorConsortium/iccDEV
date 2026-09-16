@@ -33,9 +33,12 @@
     the #2535/#2536 helpers its red is an ordinary assertion failure on every
     lane: before the fix Read() returns true with GetSize() == 1.
 
-    The 65535 cases are the boundary discriminators: that count is representable
-    and must still read in full, so a guard spelled ">= 0xffff" fails them while
-    passing every other case here.
+    The 65535 cases are the boundary discriminators: that count is the widest
+    the tag stores, and it reads in full, so a guard spelled ">= 0xffff" fails
+    them while passing every other case here.  They are storage and API bounds,
+    not a conforming profile: ICC.1:2022 10.4-10.5 tie the count to the header's
+    data colour space, which CIccProfile::Validate() checks and
+    colorant-count-validate.cpp pins (#2541).
 
     Exit codes:
       0 - expected results observed
@@ -188,7 +191,7 @@ int main()
   failures += orderCase(65536, false,
                         "colorantOrder declaring 65536, which narrowed to 0, is refused");
   failures += orderCase(65535, true,
-                        "colorantOrder declaring exactly 65535 still reads in full");
+                        "colorantOrder declaring 65535, the widest count stored, reads in full (storage bound)");
   failures += orderCase(4, true,
                         "an ordinary colorantOrder is unaffected");
 
@@ -197,7 +200,7 @@ int main()
   failures += tableCase(65537, false,
                         "colorantTable declaring 65537 is refused, as it already was");
   failures += tableCase(65535, true,
-                        "colorantTable declaring exactly 65535 still reads in full, as it already did");
+                        "colorantTable declaring 65535, the widest count stored, reads in full as it already did (storage bound)");
   failures += tableCase(4, true,
                         "an ordinary colorantTable is unaffected");
 
