@@ -6154,6 +6154,67 @@ function(iccdev_add_xml_embedded_image_empty_test)
   endif()
 endfunction()
 
+# #2572, from the #2571 post-merge report: the JSON and binary sides of the
+# zero-byte embedded image that #2571 fixed in XML. The JSON reader took
+# "ImageData" with no hex digits as "no data" and kept the constructor's one
+# zero byte, so iccFromJson saved an image the document never held; ToJson
+# omitted "ImageData" for a zero-byte image, which ParseJson refuses; Write()
+# saved a tag Read() refuses. The dataType and embedded image constructors
+# allocated nSize bytes under a size clamped to 1 (tested on the unsigned
+# member), so Write() read past a zero-byte allocation for nSize 0 (visible
+# under valgrind, not ASan) and the tag was left empty for nSize -1. Needs
+# IccJSON + IccProfLib; skipped where IccJSON is not built.
+function(iccdev_add_embedded_image_zero_byte_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccEmbeddedImageZeroByteTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/embedded-image-zero-byte.cpp"
+  )
+  target_compile_features(iccEmbeddedImageZeroByteTest PRIVATE cxx_std_17)
+  target_include_directories(iccEmbeddedImageZeroByteTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccEmbeddedImageZeroByteTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccEmbeddedImageZeroByteTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.embedded-image-zero-byte
+      COMMAND "$<TARGET_FILE:iccEmbeddedImageZeroByteTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.embedded-image-zero-byte
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccEmbeddedImageZeroByteTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.embedded-image-zero-byte PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;json;writer;issue-2572;regression"
+  )
+  if(WIN32)
+    set(_embedded_image_zero_byte_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccEmbeddedImageZeroByteTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _embedded_image_zero_byte_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.embedded-image-zero-byte PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_embedded_image_zero_byte_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2560: CIccMpeXmlReflectanceCLUT::ToXml named the element "ReflectanceCLutElem"
 # while the element factory only accepts "ReflectanceCLutElement", and never wrote
 # StorageType. The first tracked document holding a reflectance CLUT
@@ -8446,6 +8507,7 @@ if(WIN32)
   iccdev_add_json_colorant_parent_profile_test()
   iccdev_add_mpexml_reflectance_clut_writer_test()
   iccdev_add_xml_embedded_image_empty_test()
+  iccdev_add_embedded_image_zero_byte_test()
   iccdev_add_calc_envsig_sign_extension_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
@@ -8839,6 +8901,7 @@ iccdev_add_svcn_xml_reserved_roundtrip_test()
 iccdev_add_json_colorant_parent_profile_test()
 iccdev_add_mpexml_reflectance_clut_writer_test()
 iccdev_add_xml_embedded_image_empty_test()
+iccdev_add_embedded_image_zero_byte_test()
 iccdev_add_calc_envsig_sign_extension_test()
 iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_proflib_exported_global_definitions_test()

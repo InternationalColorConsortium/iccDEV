@@ -3625,12 +3625,17 @@ bool CIccTagJsonGamutBoundaryDesc::ParseJson(const IccJson &j, std::string &pars
 
 bool CIccTagJsonEmbeddedHeightImage::ToJson(IccJson &j)
 {
+  // A zero-byte image used to be written with no "ImageData", which ParseJson
+  // below refuses.  Read() refuses it too, so there is no document to write
+  // that anything will read back (#2572).
+  if (!m_pData || !m_nSize)
+    return false;
+
   j["SeamlessIndicator"] = (unsigned int)m_nSeamlesIndicator;
   j["EncodingFormat"]    = (unsigned int)m_nEncodingFormat;
   j["MetersMinPixelValue"] = (double)m_fMetersMinPixelValue;
   j["MetersMaxPixelValue"] = (double)m_fMetersMaxPixelValue;
-  if (m_pData && m_nSize)
-    j["ImageData"] = icJsonDumpHexData(m_pData, m_nSize);
+  j["ImageData"] = icJsonDumpHexData(m_pData, m_nSize);
   return true;
 }
 
@@ -3654,12 +3659,17 @@ bool CIccTagJsonEmbeddedHeightImage::ParseJson(const IccJson &j, std::string &pa
     return false;
   }
   icUInt32Number nSize = icJsonGetHexDataSize(hex.c_str());
-  if (nSize) {
-    SetSize(nSize);
-    if (icJsonGetHexData(m_pData, hex.c_str(), m_nSize) != m_nSize) {
-      parseStr += "Failed to decode HeightImage ImageData\n";
-      return false;
-    }
+  // "ImageData" with no hex digits used to leave the constructor's one zero
+  // byte in place, so iccFromJson saved a one-byte image nobody supplied.
+  // Refuse it, as the XML reader does since #2571 (#2572).
+  if (!nSize) {
+    parseStr += "HeightImage ImageData has no hex data: at least one byte is required.\n";
+    return false;
+  }
+  if (!SetSize(nSize) ||
+      icJsonGetHexData(m_pData, hex.c_str(), m_nSize) != m_nSize) {
+    parseStr += "Failed to decode HeightImage ImageData\n";
+    return false;
   }
   return true;
 }
@@ -3670,10 +3680,13 @@ bool CIccTagJsonEmbeddedHeightImage::ParseJson(const IccJson &j, std::string &pa
 
 bool CIccTagJsonEmbeddedNormalImage::ToJson(IccJson &j)
 {
+  // Same as CIccTagJsonEmbeddedHeightImage::ToJson: no readable form (#2572).
+  if (!m_pData || !m_nSize)
+    return false;
+
   j["SeamlessIndicator"] = (unsigned int)m_nSeamlesIndicator;
   j["EncodingFormat"]    = (unsigned int)m_nEncodingFormat;
-  if (m_pData && m_nSize)
-    j["ImageData"] = icJsonDumpHexData(m_pData, m_nSize);
+  j["ImageData"] = icJsonDumpHexData(m_pData, m_nSize);
   return true;
 }
 
@@ -3693,12 +3706,15 @@ bool CIccTagJsonEmbeddedNormalImage::ParseJson(const IccJson &j, std::string &pa
     return false;
   }
   icUInt32Number nSize = icJsonGetHexDataSize(hex.c_str());
-  if (nSize) {
-    SetSize(nSize);
-    if (icJsonGetHexData(m_pData, hex.c_str(), m_nSize) != m_nSize) {
-      parseStr += "Failed to decode NormalImage ImageData\n";
-      return false;
-    }
+  // Same as CIccTagJsonEmbeddedHeightImage::ParseJson (#2572).
+  if (!nSize) {
+    parseStr += "NormalImage ImageData has no hex data: at least one byte is required.\n";
+    return false;
+  }
+  if (!SetSize(nSize) ||
+      icJsonGetHexData(m_pData, hex.c_str(), m_nSize) != m_nSize) {
+    parseStr += "Failed to decode NormalImage ImageData\n";
+    return false;
   }
   return true;
 }
