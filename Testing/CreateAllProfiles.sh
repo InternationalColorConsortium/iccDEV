@@ -100,6 +100,8 @@ then
 	iccFromXml Rec2100HlgFull.xml Rec2100HlgFull.icc
 	iccFromXml Rec2100HlgNarrow.xml Rec2100HlgNarrow.icc
 	iccFromXml RgbGSDF.xml RgbGSDF.icc
+	iccFromXml SpectralObserverElements.xml SpectralObserverElements.icc
+	iccFromXml SpectralRangeTags.xml SpectralRangeTags.icc
 	iccFromXml sRGB_D65_MAT-300cdm2.xml sRGB_D65_MAT-300cdm2.icc
 	iccFromXml sRGB_D65_MAT-500cdm2.xml sRGB_D65_MAT-500cdm2.icc
 	iccFromXml sRGB_D65_MAT.xml       sRGB_D65_MAT.icc

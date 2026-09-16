@@ -3947,19 +3947,28 @@ bool CIccMpeXmlReflectanceCLUT::ToXml(std::string &xml, std::string blanks/* = "
   char buf[bufSize];
   std::string reserved;
 
-  xml += blanks + "<ReflectanceCLutElem";
+  // This wrote "ReflectanceCLutElem" (open and close tags), but the element
+  // factory in IccTagXml.cpp only recognises "ReflectanceCLutElement", so a
+  // binary profile holding a reflectance CLUT did not survive iccToXml |
+  // iccFromXml: the rebuilt profile failed with "Unknown Element Type".  No
+  // tracked document carried one until Testing/Display/SpectralObserverElements.xml
+  // (#2560), whose generated profile the CI XML round trip then rejected.
+  xml += blanks + "<ReflectanceCLutElement";
 
   if (m_nReserved) {
     snprintf(buf, bufSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml +=  buf;
   }
 
-  // 32-bit m_flags printed as signed, exactly as in CIccMpeXmlEmissionCLUT::ToXml.
-  snprintf(buf, bufSize, " InputChannels=\"%d\" OutputChannels=\"%d\" Flags=\"%u\">\n", NumInputChannels(), NumOutputChannels(), (unsigned int) m_flags);
+  // StorageType was never written here, although ParseXml reads it and
+  // CIccMpeXmlEmissionCLUT::ToXml writes it: a non-zero storage type came back
+  // as 0.  Same attribute set, and the same "%u" for the 32-bit m_flags, as the
+  // emission writer.
+  snprintf(buf, bufSize, " InputChannels=\"%d\" OutputChannels=\"%d\" Flags=\"%u\" StorageType=\"%d\">\n", NumInputChannels(), NumOutputChannels(), (unsigned int) m_flags, (unsigned int) m_nStorageType);
   xml += buf;
 
   snprintf(buf, bufSize, "  <Wavelengths start=\"" icXmlHalfFmt "\" end=\"" icXmlHalfFmt "\" steps=\"%d\"/>\n", icF16toF(m_Range.start), icF16toF(m_Range.end), m_Range.steps);
-  xml += buf;
+  xml += blanks + buf;
 
   int i;
 
@@ -3979,7 +3988,7 @@ bool CIccMpeXmlReflectanceCLUT::ToXml(std::string &xml, std::string blanks/* = "
   if (!icCLUTDataToXml(xml, m_pCLUT, icConvertFloat, blanks, true))
     return false;
 
-  xml += blanks + "</ReflectanceCLutElem>\n";
+  xml += blanks + "</ReflectanceCLutElement>\n";
 
   return true;
 }
@@ -3989,7 +3998,7 @@ bool CIccMpeXmlReflectanceCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
   // Same pair of fields, same widths, same defect as CIccMpeXmlEmissionCLUT
   // above -- both derive from CIccMpeSpectralCLUT, so m_flags is 32-bit here too.
   if (!icXmlParseU16(icXmlAttrValue(pNode, "StorageType", "0"), m_nStorageType)) {
-    parseStr += "Invalid StorageType in ReflectanceCLutElem\n";
+    parseStr += "Invalid StorageType in ReflectanceCLutElement\n";
     return false;
   }
 
@@ -3998,7 +4007,7 @@ bool CIccMpeXmlReflectanceCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
     return false;
   }
   if (!icXmlParseU32(icXmlAttrValue(pNode, "Flags", "0"), m_flags)) {
-    parseStr += "Invalid Flags in ReflectanceCLutElem\n";
+    parseStr += "Invalid Flags in ReflectanceCLutElement\n";
     return false;
   }
 

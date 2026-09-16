@@ -6040,6 +6040,56 @@ function(iccdev_add_svcn_xml_reserved_roundtrip_test)
   endif()
 endfunction()
 
+# #2560: CIccMpeXmlReflectanceCLUT::ToXml named the element "ReflectanceCLutElem"
+# while the element factory only accepts "ReflectanceCLutElement", and never wrote
+# StorageType. The first tracked document holding a reflectance CLUT
+# (Testing/Display/SpectralObserverElements.xml) made the CI XML round trip over
+# the generated corpus fail. The helper re-parses the writer's output with the
+# real reader, with the emission element as a control. Needs IccXML + IccProfLib;
+# skipped where IccXML is not built.
+function(iccdev_add_mpexml_reflectance_clut_writer_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMpeXmlReflectanceClutWriterTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/mpexml-reflectance-clut-writer.cpp"
+  )
+  target_compile_features(iccMpeXmlReflectanceClutWriterTest PRIVATE cxx_std_17)
+  target_include_directories(iccMpeXmlReflectanceClutWriterTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccMpeXmlReflectanceClutWriterTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccMpeXmlReflectanceClutWriterTest)
+
+  add_test(
+    NAME iccdev.mpexml-reflectance-clut-writer
+    COMMAND "$<TARGET_FILE:iccMpeXmlReflectanceClutWriterTest>"
+  )
+  set_tests_properties(iccdev.mpexml-reflectance-clut-writer PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;xml;writer;spectral;issue-2560;regression"
+  )
+  if(WIN32)
+    set(_mpexml_reflectance_clut_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMpeXmlReflectanceClutWriterTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _mpexml_reflectance_clut_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.mpexml-reflectance-clut-writer PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_mpexml_reflectance_clut_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_calc_envsig_sign_extension_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -8280,6 +8330,7 @@ if(WIN32)
   iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_svcn_xml_reserved_roundtrip_test()
   iccdev_add_json_colorant_parent_profile_test()
+  iccdev_add_mpexml_reflectance_clut_writer_test()
   iccdev_add_calc_envsig_sign_extension_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
@@ -8670,6 +8721,7 @@ iccdev_add_tiff_separated_strips_test()
 iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_svcn_xml_reserved_roundtrip_test()
 iccdev_add_json_colorant_parent_profile_test()
+iccdev_add_mpexml_reflectance_clut_writer_test()
 iccdev_add_calc_envsig_sign_extension_test()
 iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_proflib_exported_global_definitions_test()
