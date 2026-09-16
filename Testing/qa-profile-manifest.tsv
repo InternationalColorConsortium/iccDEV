@@ -140,6 +140,8 @@ Display/Rec2020rgbSpectral.icc	compatibility	warning	0	none	generated	-	baseline
 Display/Rec2100HlgFull.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 Display/Rec2100HlgNarrow.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 Display/RgbGSDF.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+Display/SpectralObserverElements.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811); Rec2020rgbSpectral plus a reflectance CLUT and emission/reflectance observer elements, the only tracked document reaching those XML readers (#2560)
+Display/SpectralRangeTags.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811); Rec2020rgbSpectral plus deviceSpectralRangeTag, a bispectral spectralDataInfoTag and surfaceMapTag, the only tracked document reaching those XML readers (#2560)
 Display/sRGB_D65_MAT-300cdm2.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 Display/sRGB_D65_MAT-500cdm2.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 Display/sRGB_D65_MAT.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
