@@ -6040,6 +6040,62 @@ function(iccdev_add_svcn_xml_reserved_roundtrip_test)
   endif()
 endfunction()
 
+# #2570: a zero-byte embedded height or normal image. Both binary Read() methods
+# need at least one image byte, but the XML readers took an <Image> holding only
+# whitespace, or a File= naming an empty file, as a zero-byte image, so iccFromXml
+# saved a profile it could not open again; and the XML writers wrote a zero-byte
+# image as a self-closing element that the readers refuse. The helper builds its
+# own documents and image files -- the one tracked HeightImage document embeds a
+# real image and no tracked document has a NormalImage. It chdir()s into the
+# scratch directory because File= resolves relative to the working directory and
+# IccXmlIsPathSafe rejects absolute paths. Needs IccXML + IccProfLib; skipped
+# where IccXML is not built.
+function(iccdev_add_xml_embedded_image_empty_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlEmbeddedImageEmptyTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-embedded-image-empty.cpp"
+  )
+  target_compile_features(iccXmlEmbeddedImageEmptyTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlEmbeddedImageEmptyTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlEmbeddedImageEmptyTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlEmbeddedImageEmptyTest)
+
+  set(_embedded_image_empty_scratch
+    "${CMAKE_CURRENT_BINARY_DIR}/ctest-output/xml-embedded-image-empty")
+
+  add_test(
+    NAME iccdev.xml-embedded-image-empty
+    COMMAND "$<TARGET_FILE:iccXmlEmbeddedImageEmptyTest>"
+            "${_embedded_image_empty_scratch}"
+  )
+  set_tests_properties(iccdev.xml-embedded-image-empty PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;writer;issue-2570;regression"
+  )
+  if(WIN32)
+    set(_embedded_image_empty_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlEmbeddedImageEmptyTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _embedded_image_empty_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-embedded-image-empty PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_embedded_image_empty_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2560: CIccMpeXmlReflectanceCLUT::ToXml named the element "ReflectanceCLutElem"
 # while the element factory only accepts "ReflectanceCLutElement", and never wrote
 # StorageType. The first tracked document holding a reflectance CLUT
@@ -8331,6 +8387,7 @@ if(WIN32)
   iccdev_add_svcn_xml_reserved_roundtrip_test()
   iccdev_add_json_colorant_parent_profile_test()
   iccdev_add_mpexml_reflectance_clut_writer_test()
+  iccdev_add_xml_embedded_image_empty_test()
   iccdev_add_calc_envsig_sign_extension_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
@@ -8722,6 +8779,7 @@ iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_svcn_xml_reserved_roundtrip_test()
 iccdev_add_json_colorant_parent_profile_test()
 iccdev_add_mpexml_reflectance_clut_writer_test()
+iccdev_add_xml_embedded_image_empty_test()
 iccdev_add_calc_envsig_sign_extension_test()
 iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_proflib_exported_global_definitions_test()
