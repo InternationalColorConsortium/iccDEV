@@ -9766,7 +9766,25 @@ icValidateStatus CIccTagColorantOrder::Validate(std::string sigPath, std::string
     return rv;
   }
 
-  if (m_nCount != icGetSpaceSamples(pProfile->m_Header.colorSpace)) {
+  // colorantOrderOutTag ('cloo') gives the laydown order of the colorants of
+  // the header's PCS field, and is for DeviceLink profiles only (ICC.2:2023
+  // 9.2.52).  colorantOrderTag follows the data colour space.  This mirrors
+  // CIccTagColorantTable::Validate()'s colorantTableOutTag branch.
+  if (icGetFirstSigPathSig(sigPath)==icSigColorantOrderOutTag) {
+    if (pProfile->m_Header.deviceClass!=icSigLinkClass) {
+      sReport += icMsgValidateNonCompliant;
+      sReport += sSigPathName;
+      sReport += " - Use of this tag is allowed only in DeviceLink Profiles.\n";
+      rv = icMaxStatus(rv, icValidateNonCompliant);
+    }
+    if (m_nCount != icGetSpaceSamples(pProfile->m_Header.pcs)) {
+      sReport += icMsgValidateNonCompliant;
+      sReport += sSigPathName;
+      sReport += " - Incorrect number of colorants.\n";
+      rv = icMaxStatus(rv, icValidateNonCompliant);
+    }
+  }
+  else if (m_nCount != icGetSpaceSamples(pProfile->m_Header.colorSpace)) {
     sReport += icMsgValidateNonCompliant;
     sReport += sSigPathName;
     sReport += " - Incorrect number of colorants.\n";
