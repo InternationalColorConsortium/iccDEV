@@ -6431,6 +6431,13 @@ bool CIccTagXmlEmbeddedHeightImage::ParseXml(xmlNode *pNode, std::string &parseS
         delete file;
         return false;
       }
+      if (!count) {
+        parseStr += "Error! - File '";
+        parseStr += filename;
+        parseStr += "' is empty: HeightImage needs at least one byte of image data.\n";
+        delete file;
+        return false;
+      }
 
       SetSize(count);
       icUInt8Number *dst = GetData(0);
@@ -6448,6 +6455,14 @@ bool CIccTagXmlEmbeddedHeightImage::ParseXml(xmlNode *pNode, std::string &parseS
     // no file
     else if (pImageNode->children && pImageNode->children->content){
       icUInt32Number nSize = icXmlGetHexDataSize((const icChar*)pImageNode->children->content);
+      // An <Image> with no hex digits used to load as a zero-byte image.
+      // iccFromXml then wrote a 24-byte tag, which Read() refuses (it needs at
+      // least one image byte), so the profile it saved could not be opened.
+      // Refuse it here, as the empty-file branch above does (#2570).
+      if (!nSize) {
+        parseStr += "HeightImage Image has no hex data: at least one byte is required.\n";
+        return false;
+      }
 
       SetSize(nSize);
       if (m_pData) {
@@ -6463,6 +6478,12 @@ bool CIccTagXmlEmbeddedHeightImage::ParseXml(xmlNode *pNode, std::string &parseS
 
 bool CIccTagXmlEmbeddedHeightImage::ToXml(std::string &xml, std::string blanks/*= ""*/)
 {
+  // A zero-byte image used to be written as a self-closing element with no
+  // <Image>, which ParseXml above refuses.  Read() refuses it too, so there is
+  // no document to write that anything will read back (#2570).
+  if (!m_nSize)
+    return false;
+
   const size_t bufSize = 200;
   char buf[bufSize];
 
@@ -6488,16 +6509,11 @@ bool CIccTagXmlEmbeddedHeightImage::ToXml(std::string &xml, std::string blanks/*
   snprintf(buf, bufSize, " MetersMaxPixelValue=\"%.12f\"", m_fMetersMaxPixelValue);
   xml += buf;
 
-  if (!m_nSize) {
-    xml += blanks + "/>\n";
-  }
-  else {
-    xml += ">\n";
-    xml += blanks + " <Image>\n";
-    icXmlDumpHexData(xml, blanks + "  ", m_pData, m_nSize);
-    xml += blanks + " </Image>\n";
-    xml += blanks + "</HeightImage>\n";
-  }
+  xml += ">\n";
+  xml += blanks + " <Image>\n";
+  icXmlDumpHexData(xml, blanks + "  ", m_pData, m_nSize);
+  xml += blanks + " </Image>\n";
+  xml += blanks + "</HeightImage>\n";
 
   return true;
 }
@@ -6555,6 +6571,13 @@ bool CIccTagXmlEmbeddedNormalImage::ParseXml(xmlNode *pNode, std::string &parseS
         delete file;
         return false;
       }
+      if (!count) {
+        parseStr += "Error! - File '";
+        parseStr += filename;
+        parseStr += "' is empty: NormalImage needs at least one byte of image data.\n";
+        delete file;
+        return false;
+      }
 
       SetSize(count);
       icUInt8Number *dst = GetData(0);
@@ -6572,6 +6595,10 @@ bool CIccTagXmlEmbeddedNormalImage::ParseXml(xmlNode *pNode, std::string &parseS
     // no file
     else if (pImageNode->children && pImageNode->children->content) {
       icUInt32Number nSize = icXmlGetHexDataSize((const icChar*)pImageNode->children->content);
+      if (!nSize) {
+        parseStr += "NormalImage Image has no hex data: at least one byte is required.\n";
+        return false;
+      }
 
       SetSize(nSize);
       if (m_pData) {
@@ -6586,6 +6613,10 @@ bool CIccTagXmlEmbeddedNormalImage::ParseXml(xmlNode *pNode, std::string &parseS
 
 bool CIccTagXmlEmbeddedNormalImage::ToXml(std::string &xml, std::string blanks/*= ""*/)
 {
+  // Same as CIccTagXmlEmbeddedHeightImage::ToXml: no readable form (#2570).
+  if (!m_nSize)
+    return false;
+
   const size_t bufSize = 200;
   char buf[bufSize];
 
@@ -6598,16 +6629,11 @@ bool CIccTagXmlEmbeddedNormalImage::ToXml(std::string &xml, std::string blanks/*
   snprintf(buf, bufSize, " EncodingFormat=\"%u\"", (unsigned int) m_nEncodingFormat);
   xml += buf;
 
-  if (!m_nSize) {
-    xml += blanks + "/>\n";
-  }
-  else {
-    xml += ">\n";
-    xml += blanks + " <Image>\n";
-    icXmlDumpHexData(xml, blanks + "  ", m_pData, m_nSize);
-    xml += blanks + " </Image>\n";
-    xml += blanks + "</NormalImage>\n";
-  }
+  xml += ">\n";
+  xml += blanks + " <Image>\n";
+  icXmlDumpHexData(xml, blanks + "  ", m_pData, m_nSize);
+  xml += blanks + " </Image>\n";
+  xml += blanks + "</NormalImage>\n";
 
   return true;
 }
