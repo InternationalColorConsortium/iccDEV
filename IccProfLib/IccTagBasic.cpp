@@ -8859,10 +8859,14 @@ void CIccTagMultiLocalizedUnicode::SetText(const icUInt32Number *sszUnicode32Tex
  */
 CIccTagData::CIccTagData(int nSize/*=1*/)
 {
+  // Clamp the signed argument, then allocate the clamped size.  The clamp used
+  // to test the unsigned m_nSize, so a negative nSize skipped it and the
+  // allocation failed, leaving an empty tag; and nSize 0 was recorded as 1
+  // over a zero-byte allocation that Write() read one byte past (#2572).
+  if (nSize < 1)
+    nSize = 1;
   m_nSize = nSize;
-  if (m_nSize <1)
-    m_nSize = 1;
-  m_pData = (icUInt8Number*)calloc(nSize, sizeof(icUInt8Number));
+  m_pData = (icUInt8Number*)calloc(m_nSize, sizeof(icUInt8Number));
   if (!m_pData)
     m_nSize = 0;
   m_nDataFlag = icAsciiData;
@@ -13211,10 +13215,11 @@ bool icGetTagText(const CIccTag *pTag, std::string &text)
 */
 CIccTagEmbeddedHeightImage::CIccTagEmbeddedHeightImage(int nSize/*=1*/)
 {
+  // Same as CIccTagData: clamp nSize, then allocate the clamped size (#2572).
+  if (nSize < 1)
+    nSize = 1;
   m_nSize = nSize;
-  if (m_nSize <1)
-    m_nSize = 1;
-  m_pData = (icUInt8Number*)calloc(nSize, sizeof(icUInt8Number));
+  m_pData = (icUInt8Number*)calloc(m_nSize, sizeof(icUInt8Number));
   if (!m_pData)
     m_nSize = 0;
   m_nSeamlesIndicator = 0;
@@ -13375,6 +13380,12 @@ bool CIccTagEmbeddedHeightImage::Write(CIccIO *pIO)
   icTagTypeSignature sig = GetType();
 
   if (!pIO)
+    return false;
+
+  // A zero-byte image used to be written as a 24-byte tag, which Read() above
+  // refuses (it needs at least one image byte), so the saved profile could not
+  // be opened again.  There is no form of it that loads (#2572).
+  if (!m_nSize)
     return false;
 
   if (!pIO->Write32(&sig))
@@ -13546,10 +13557,11 @@ icValidateStatus CIccTagEmbeddedHeightImage::Validate(std::string sigPath, std::
 */
 CIccTagEmbeddedNormalImage::CIccTagEmbeddedNormalImage(int nSize/*=1*/)
 {
+  // Same as CIccTagData: clamp nSize, then allocate the clamped size (#2572).
+  if (nSize < 1)
+    nSize = 1;
   m_nSize = nSize;
-  if (m_nSize < 1)
-    m_nSize = 1;
-  m_pData = (icUInt8Number*)calloc(nSize, sizeof(icUInt8Number));
+  m_pData = (icUInt8Number*)calloc(m_nSize, sizeof(icUInt8Number));
   if (!m_pData)
     m_nSize = 0;
   m_nSeamlesIndicator = 0;
@@ -13696,6 +13708,11 @@ bool CIccTagEmbeddedNormalImage::Write(CIccIO *pIO)
   icTagTypeSignature sig = GetType();
 
   if (!pIO)
+    return false;
+
+  // Same as CIccTagEmbeddedHeightImage::Write: a zero-byte image has no form
+  // Read() accepts (#2572).
+  if (!m_nSize)
     return false;
 
   if (!pIO->Write32(&sig))
