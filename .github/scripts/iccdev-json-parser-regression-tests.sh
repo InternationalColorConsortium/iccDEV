@@ -331,6 +331,99 @@ run_tojson_valid_json_test() {
   PASS=$((PASS + 1))
 }
 
+# Issues #2550 and #2541, through the tools. iccToJson used to write every
+# colorantTableType as raw "16bit" because the tag could not find its profile, so
+# its Lab and XYZ branches were unreachable from the CLI. This builds a profile
+# with iccFromJson, converts it back with iccToJson, and requires the declared
+# PCS encoding and the document's coordinates. It then rebuilds the profile from
+# that JSON and requires the 'clrt' tag bytes to match the first build exactly.
+# json-colorant-parent-profile.cpp covers every 16-bit value in-process; this
+# covers the shipped tools.
+run_colorant_table_cli_roundtrip_test() {
+  local name="$1"
+  local json_file="$2"
+  local encoding="$3"
+  local first_icc="$OUTDIR/${name}-first.icc"
+  local mid_json="$OUTDIR/${name}-tojson.json"
+  local second_icc="$OUTDIR/${name}-second.icc"
+  local logfile="$OUTDIR/${name}.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$first_icc" "$mid_json" "$second_icc" "$logfile"
+
+  {
+    timeout 30 "$FROMJSON" "$json_file" "$first_icc" &&
+    timeout 30 "$TOJSON" "$first_icc" "$mid_json" &&
+    timeout 30 "$FROMJSON" "$mid_json" "$second_icc"
+  } > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -ne 0 ] || [ ! -s "$first_icc" ] || [ ! -s "$mid_json" ] || [ ! -s "$second_icc" ]; then
+    echo "  [FAIL] $name -- iccFromJson/iccToJson/iccFromJson failed with exit=$exit_code"
+    sed -n '1,5p' "$logfile"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if ! python3 -c '
+import json
+import struct
+import sys
+
+source_path, mid_path, first_path, second_path, encoding = sys.argv[1:6]
+
+def colorant_table(path):
+    with open(path, encoding="utf-8") as fh:
+        doc = json.load(fh)
+    for entry in doc["IccProfile"]["Tags"]:
+        for tag in entry.values():
+            data = tag.get("data", {})
+            if data.get("type") == "colorantTableType":
+                return data
+    raise SystemExit(path + ": no colorantTableType tag")
+
+source = colorant_table(source_path)
+mid = colorant_table(mid_path)
+if mid.get("pcsEncoding") != encoding:
+    raise SystemExit("iccToJson wrote pcsEncoding %r, expected %r"
+                     % (mid.get("pcsEncoding"), encoding))
+if len(mid["colorantTable"]) != len(source["colorantTable"]):
+    raise SystemExit("iccToJson changed the number of colorants")
+for want, got in zip(source["colorantTable"], mid["colorantTable"]):
+    if got.get("name") != want["name"]:
+        raise SystemExit("colorant name %r came back as %r" % (want["name"], got.get("name")))
+    # One U16 step is about 0.0015 of L*, 0.0039 of a*/b*, and 0.00003 of XYZ.
+    for w, g in zip(want["pcs"], got["pcs"]):
+        if abs(w - g) > 0.005:
+            raise SystemExit("colorant %r pcs %r came back as %r" % (want["name"], want["pcs"], got["pcs"]))
+
+def clrt_bytes(path):
+    data = open(path, "rb").read()
+    count = struct.unpack(">I", data[128:132])[0]
+    for i in range(count):
+        sig, offset, size = struct.unpack(">III", data[132 + 12 * i:144 + 12 * i])
+        if sig == 0x636C7274:
+            return data[offset:offset + size]
+    raise SystemExit(path + ": no clrt tag")
+
+if clrt_bytes(first_path) != clrt_bytes(second_path):
+    raise SystemExit("clrt tag bytes differ after the JSON round trip")
+' "$json_file" "$mid_json" "$first_icc" "$second_icc" "$encoding" > "$OUTDIR/${name}-inspect.log" 2>&1; then
+    echo "  [FAIL] $name -- colorant table did not round-trip as $encoding"
+    sed -n '1,5p' "$OUTDIR/${name}-inspect.log"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  echo "  [PASS] $name (iccToJson wrote $encoding; clrt bytes survived the round trip)"
+  PASS=$((PASS + 1))
+}
+
 # Issue #1856. iccToJson emits, at its own documented -indent=4, a document that
 # the reader's former fixed 64 MiB cap refused, so the tool could write a file it
 # could not read back. This pins that round trip.
@@ -865,6 +958,79 @@ for name, value in (
         json.dump(document, output, indent=2)
 ' "$REPO_ROOT/.github/ci/test-data/json-colorant-table-complete-pcs.json" "$OUTDIR"
 
+# #2541/#2550: the structural refusals #2568 added to the colorantTable and
+# chromaticity JSON readers, driven through iccFromJson, plus the Lab and XYZ
+# documents for the tool round trip. The colorantTable refusals derive from the
+# tracked control above. Documents that must load add their tag to the base
+# profile instead, because iccFromJson exits 1 for a saved profile that fails
+# validation, and the tag-only control does.
+python3 -c '
+import copy
+import json
+import os
+import sys
+
+source_path, base_path, outdir = sys.argv[1:4]
+with open(source_path, encoding="utf-8") as source:
+    control = json.load(source)
+with open(base_path, encoding="utf-8") as source:
+    base = json.load(source)
+
+def save(name, document):
+    with open(os.path.join(outdir, name + ".json"), "w", encoding="utf-8") as output:
+        json.dump(document, output, indent=2)
+
+def table_variant(name, mutate):
+    document = copy.deepcopy(control)
+    mutate(document["IccProfile"]["Tags"][0]["colorantTableTag"]["data"])
+    save("colorant-table-" + name, document)
+
+table_variant("missing-table", lambda d: d.pop("colorantTable"))
+table_variant("nonarray-table", lambda d: d.__setitem__("colorantTable", {"name": "control"}))
+table_variant("nonobject-entry", lambda d: d["colorantTable"].__setitem__(0, "control"))
+table_variant("missing-name", lambda d: d["colorantTable"][0].pop("name"))
+table_variant("nonstring-name", lambda d: d["colorantTable"][0].__setitem__("name", 7))
+table_variant("unknown-encoding", lambda d: d.__setitem__("pcsEncoding", "Luv"))
+table_variant("nonstring-encoding", lambda d: d.__setitem__("pcsEncoding", 3))
+
+# Three colorants, matching the RGB data colour space of the base profile.
+def roundtrip(name, pcs, encoding, entries):
+    document = copy.deepcopy(base)
+    document["IccProfile"]["Header"]["PCS"] = pcs
+    document["IccProfile"]["Tags"].append({"colorantTableTag": {
+        "sig": "clrt",
+        "data": {
+            "type": "colorantTableType",
+            "pcsEncoding": encoding,
+            "colorantTable": [{"name": n, "pcs": v} for n, v in entries],
+        }
+    }})
+    save(name, document)
+
+roundtrip("colorant-table-lab-roundtrip", "Lab ", "Lab",
+          [("red", [54.29, 80.8, 69.89]), ("green", [87.82, -79.28, 80.99]),
+           ("blue", [29.57, 68.3, -112.03])])
+roundtrip("colorant-table-xyz-roundtrip", "XYZ ", "XYZ",
+          [("red", [0.4361, 0.2225, 0.0139]), ("green", [0.3851, 0.7169, 0.0971]),
+           ("blue", [0.1431, 0.0606, 0.7141])])
+
+def chroma(name, channels):
+    document = copy.deepcopy(base)
+    tag = {"sig": "chrm", "data": {"type": "chromaticityType", "colorantType": 0}}
+    if channels is not None:
+        tag["data"]["channels"] = channels
+    document["IccProfile"]["Tags"].append({"chromaticityTag": tag})
+    save("chromaticity-" + name, document)
+
+chroma("control", [[0.64, 0.33], [0.3, 0.6], [0.15, 0.06]])
+chroma("missing-channels", None)
+chroma("nonarray-channels", {"x": 0.64, "y": 0.33})
+chroma("three-coordinates", [[0.64, 0.33, 0.03], [0.3, 0.6], [0.15, 0.06]])
+chroma("one-coordinate", [[0.64], [0.3, 0.6], [0.15, 0.06]])
+chroma("nonnumeric-coordinate", [[0.64, "0.33"], [0.3, 0.6], [0.15, 0.06]])
+chroma("xy-object", [{"x": 0.64, "y": 0.33}, [0.3, 0.6], [0.15, 0.06]])
+' "$REPO_ROOT/.github/ci/test-data/json-colorant-table-complete-pcs.json" "$BASE_JSON" "$OUTDIR"
+
 echo "Using base profile: $PROFILE"
 echo "Using XML profile:  $XML_PROFILE"
 echo "Tools dir: $TOOLS_DIR"
@@ -887,6 +1053,22 @@ run_reject_test "colorant-table-short-pcs" "$OUTDIR/colorant-table-short-pcs.jso
 run_reject_test "colorant-table-long-pcs" "$OUTDIR/colorant-table-long-pcs.json" "colorantTableType pcs must contain three numeric values"
 run_reject_test "colorant-table-nonarray-pcs" "$OUTDIR/colorant-table-nonarray-pcs.json" "colorantTableType pcs must contain three numeric values"
 run_reject_test "colorant-table-missing-pcs" "$OUTDIR/colorant-table-missing-pcs.json" "colorantTableType pcs must contain three numeric values"
+run_reject_test "colorant-table-missing-table" "$OUTDIR/colorant-table-missing-table.json" "colorantTableType requires a colorantTable array"
+run_reject_test "colorant-table-nonarray-table" "$OUTDIR/colorant-table-nonarray-table.json" "colorantTableType requires a colorantTable array"
+run_reject_test "colorant-table-nonobject-entry" "$OUTDIR/colorant-table-nonobject-entry.json" "colorantTableType entry requires a string name"
+run_reject_test "colorant-table-missing-name" "$OUTDIR/colorant-table-missing-name.json" "colorantTableType entry requires a string name"
+run_reject_test "colorant-table-nonstring-name" "$OUTDIR/colorant-table-nonstring-name.json" "colorantTableType entry requires a string name"
+run_reject_test "colorant-table-unknown-encoding" "$OUTDIR/colorant-table-unknown-encoding.json" "colorantTableType pcsEncoding must be"
+run_reject_test "colorant-table-nonstring-encoding" "$OUTDIR/colorant-table-nonstring-encoding.json" "colorantTableType pcsEncoding must be"
+run_colorant_table_cli_roundtrip_test "colorant-table-lab-roundtrip" "$OUTDIR/colorant-table-lab-roundtrip.json" "Lab"
+run_colorant_table_cli_roundtrip_test "colorant-table-xyz-roundtrip" "$OUTDIR/colorant-table-xyz-roundtrip.json" "XYZ"
+run_fromjson_success_test "chromaticity-control" "$OUTDIR/chromaticity-control.json"
+run_reject_test "chromaticity-missing-channels" "$OUTDIR/chromaticity-missing-channels.json" "chromaticityType requires a channels array"
+run_reject_test "chromaticity-nonarray-channels" "$OUTDIR/chromaticity-nonarray-channels.json" "chromaticityType requires a channels array"
+run_reject_test "chromaticity-three-coordinates" "$OUTDIR/chromaticity-three-coordinates.json" "chromaticityType channel must be a pair of numbers"
+run_reject_test "chromaticity-one-coordinate" "$OUTDIR/chromaticity-one-coordinate.json" "chromaticityType channel must be a pair of numbers"
+run_reject_test "chromaticity-nonnumeric-coordinate" "$OUTDIR/chromaticity-nonnumeric-coordinate.json" "chromaticityType channel must be a pair of numbers"
+run_reject_test "chromaticity-xy-object" "$OUTDIR/chromaticity-xy-object.json" "chromaticityType channel must be a pair of numbers"
 
 # The control runs first and must convert: without it, a change that refused every
 # responseCurveSet16Type document would satisfy all three reject cases below while
