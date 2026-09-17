@@ -380,8 +380,20 @@ bool CIccFormulaCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
   if (!args.ParseArray(pNode->children))
     return false;
 
-  if (args.GetSize()<m_nParameters)
+  // The binary encoding has no parameter count: the function type fixes it
+  // (ICC.2-2023 Table 111).  Extra values used to be dropped silently, so the
+  // profile written was not the document read (#2547).
+  if (args.GetSize()!=m_nParameters) {
+    parseStr += "FormulaSegment parameter count does not match its FunctionType\n";
     return false;
+  }
+
+  for (icUInt32Number i=0; i<m_nParameters; i++) {
+    if (!std::isfinite(args.GetBuf()[i])) {
+      parseStr += "Non-finite parameter in FormulaSegment\n";
+      return false;
+    }
+  }
 
   free(m_params);
 

@@ -218,6 +218,34 @@ run_fromjson_success_test() {
   PASS=$((PASS + 1))
 }
 
+run_xml_success_test() {
+  local name="$1"
+  local xml_file="$2"
+  local output_file="$OUTDIR/${name}.icc"
+  local logfile="$OUTDIR/${name}.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$output_file" "$logfile"
+
+  timeout 30 "$FROMXML" "$xml_file" "$output_file" > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -ne 0 ] || [ ! -s "$output_file" ]; then
+    echo "  [FAIL] $name -- iccFromXml failed with exit=$exit_code"
+    sed -n '1,5p' "$logfile"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  echo "  [PASS] $name (iccFromXml completed without sanitizer findings)"
+  PASS=$((PASS + 1))
+}
+
 run_tojson_success_test() {
   local name="$1"
   local icc_file="$2"
@@ -739,6 +767,41 @@ write("struct-empty-member-name", {
         }
     }]
 })
+
+# #2547: a FormulaSegment needs an integer functionType and exactly the
+# parameter count that type defines (ICC.2-2023 Table 111). Each case changes
+# one thing from the control, so a refusal can only come from that change.
+def formula(name, **changes):
+    seg = {"start": "-infinity", "end": "+infinity", "type": "FormulaSegment",
+           "functionType": 0, "parameters": [2.0, 1.0, 0.0, 0.0]}
+    for key, value in changes.items():
+        if value is None:
+            del seg[key]
+        else:
+            seg[key] = value
+    write("formula-" + name, {
+        "type": "multiProcessElementType",
+        "inputChannels": 1,
+        "outputChannels": 1,
+        "elements": [{
+            "type": "CurveSetElement",
+            "inputChannels": 1,
+            "outputChannels": 1,
+            "curves": [{"type": "SegmentedCurve", "segments": [seg]}]
+        }]
+    })
+
+formula("control")
+formula("type6-control", functionType=6, parameters=[0.5, 0.5, 0.0, 1.0, 0.5, 1.0, 1.0])
+formula("missing-functiontype", functionType=None)
+formula("string-functiontype", functionType="0")
+formula("fractional-functiontype", functionType=1.5, parameters=[2.0, 1.0, 1.0, 1.0, 0.0])
+formula("missing-parameters", parameters=None)
+formula("nonarray-parameters", parameters={"gamma": 2.0})
+formula("short-parameters", parameters=[2.0, 1.0, 0.0])
+formula("long-parameters", parameters=[2.0, 1.0, 0.0, 0.0, 0.0])
+formula("nonnumeric-parameter", parameters=[2.0, "1.0", 0.0, 0.0])
+formula("nonfinite-parameter", parameters=[2.0, 1e39, 0.0, 0.0])
 ' "$BASE_JSON" "$OUTDIR"
 
 XML_MATRIX_HUGE="$OUTDIR/xml-matrix-huge-channels.xml"
@@ -775,6 +838,32 @@ if count != 1:
     raise SystemExit("No profileDescriptionTag found for private type mutation")
 pathlib.Path(dst_path).write_text(text, encoding="utf-8")
 ' "$XML_PROFILE" "$XML_EMPTY_PRIVATE_TYPE"
+
+# #2547: the XML FormulaSegment reader dropped parameters beyond the count the
+# FunctionType defines, and loaded "nan". Both mutate the first segment of a
+# tracked document with no external file references; the unmutated document is
+# the control.
+XML_FORMULA_SRC="$REPO_ROOT/Testing/Encoding/ISO22028-Encoded-sRGB.xml"
+XML_FORMULA_EXTRA="$OUTDIR/xml-formula-extra-parameter.xml"
+XML_FORMULA_NAN="$OUTDIR/xml-formula-nan-parameter.xml"
+python3 -c '
+import pathlib
+import re
+import sys
+
+src_path, extra_path, nan_path = sys.argv[1:4]
+text = pathlib.Path(src_path).read_text(encoding="utf-8")
+pattern = re.compile(r"(<FormulaSegment\b[^>]*\bFunctionType=\"0\">)1\.0 12\.92 0 0(</FormulaSegment>)")
+
+def mutate(path, body):
+    out, count = pattern.subn(lambda m: m.group(1) + body + m.group(2), text, count=1)
+    if count != 1:
+        raise SystemExit("No type 0 FormulaSegment \"1.0 12.92 0 0\" found")
+    pathlib.Path(path).write_text(out, encoding="utf-8")
+
+mutate(extra_path, "1.0 12.92 0 0 0")
+mutate(nan_path, "1.0 nan 0 0")
+' "$XML_FORMULA_SRC" "$XML_FORMULA_EXTRA" "$XML_FORMULA_NAN"
 
 TEXT_INVALID_ASCII="$OUTDIR/text-invalid-ascii.icc"
 python3 -c '
@@ -1080,6 +1169,20 @@ run_reject_test "responsecurve-devicecode-negative" "$OUTDIR/responsecurve-devic
 run_reject_test "struct-empty-member-name" "$OUTDIR/struct-empty-member-name.json" "MemberTag entry has empty name"
 run_xml_reject_test "xml-matrix-huge-channels" "$XML_MATRIX_HUGE" "Invalid InputChannels or OutputChannels In MatrixElement"
 run_xml_reject_test "xml-empty-private-type" "$XML_EMPTY_PRIVATE_TYPE" "Invalid private tag type attribute"
+run_fromjson_success_test "formula-control" "$OUTDIR/formula-control.json"
+run_fromjson_success_test "formula-type6-control" "$OUTDIR/formula-type6-control.json"
+run_reject_test "formula-missing-functiontype" "$OUTDIR/formula-missing-functiontype.json" "FormulaSegment requires an integer functionType"
+run_reject_test "formula-string-functiontype" "$OUTDIR/formula-string-functiontype.json" "FormulaSegment requires an integer functionType"
+run_reject_test "formula-fractional-functiontype" "$OUTDIR/formula-fractional-functiontype.json" "FormulaSegment requires an integer functionType"
+run_reject_test "formula-missing-parameters" "$OUTDIR/formula-missing-parameters.json" "FormulaSegment parameters must be an array of the count its functionType requires"
+run_reject_test "formula-nonarray-parameters" "$OUTDIR/formula-nonarray-parameters.json" "FormulaSegment parameters must be an array of the count its functionType requires"
+run_reject_test "formula-short-parameters" "$OUTDIR/formula-short-parameters.json" "FormulaSegment parameters must be an array of the count its functionType requires"
+run_reject_test "formula-long-parameters" "$OUTDIR/formula-long-parameters.json" "FormulaSegment parameters must be an array of the count its functionType requires"
+run_reject_test "formula-nonnumeric-parameter" "$OUTDIR/formula-nonnumeric-parameter.json" "parameters contains a non-numeric or non-finite value in FormulaSegment"
+run_reject_test "formula-nonfinite-parameter" "$OUTDIR/formula-nonfinite-parameter.json" "parameters contains a non-numeric or non-finite value in FormulaSegment"
+run_xml_success_test "xml-formula-control" "$XML_FORMULA_SRC"
+run_xml_reject_test "xml-formula-extra-parameter" "$XML_FORMULA_EXTRA" "FormulaSegment parameter count does not match its FunctionType"
+run_xml_reject_test "xml-formula-nan-parameter" "$XML_FORMULA_NAN" "Non-finite parameter in FormulaSegment"
 run_tojson_valid_json_test "text-invalid-ascii-tojson" "$TEXT_INVALID_ASCII"
 run_tojson_success_test "namedcolor-invalid-ascii-tojson" "$NAMED_INVALID_ASCII"
 run_large_indented_roundtrip_test "CMYK-W_Overprint_Profile.xml"

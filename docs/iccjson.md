@@ -358,6 +358,17 @@ Segment types:
 | `FormulaSegment`  | `functionType`, `parameters`  |
 | `SampledSegment`  | `samples`                     |
 
+A `FormulaSegment`'s `functionType` must be a JSON integer, and `parameters`
+must hold exactly the count that type defines (ICC.2-2023 Table 111), all
+finite numbers. Anything else is refused rather than zero-filled or truncated.
+
+| `functionType` | `parameters` count |
+|----------------|--------------------|
+| `0`            | 4                  |
+| `1`-`4`        | 5                  |
+| `5`, `7`       | 6                  |
+| `6`            | 7                  |
+
 ### Colorant Tags
 
 #### `colorantTableType` - colorant names and PCS coordinates
