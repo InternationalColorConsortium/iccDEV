@@ -4725,6 +4725,42 @@ icValidateStatus CIccTagChromaticity::Validate(std::string sigPath, std::string 
             break;
         }
 
+      // P3 and ITU-R BT.2020 are the two encodings ICC.1:2022 added to Table 31.
+      // Until they were listed here, both fell to the default case below, so a
+      // profile using either with the table's own values was reported as having
+      // an invalid encoding.
+      case icColorantP3:
+        {
+          if ( (m_xy[0].x != icDtoUF((icFloatNumber)0.680)) || (m_xy[0].y != icDtoUF((icFloatNumber)0.320)) ||
+               (m_xy[1].x != icDtoUF((icFloatNumber)0.265)) || (m_xy[1].y != icDtoUF((icFloatNumber)0.690)) ||
+               (m_xy[2].x != icDtoUF((icFloatNumber)0.150)) || (m_xy[2].y != icDtoUF((icFloatNumber)0.060)) ) {
+              sReport += icMsgValidateNonCompliant;
+              sReport += sSigPathName;
+              sReport += " - Chromaticity data does not match specification.\n";
+              rv = icMaxStatus(rv, icValidateNonCompliant);
+            }
+            break;
+        }
+
+      // ICC.1:2022 Table 31 prints the BT.2020 red primary as (0,780, 0,292).
+      // The standard it names, Recommendation ITU-R BT.2020-2 (Table 3, "System
+      // colorimetry"), gives red as x 0.708, y 0.292, and ICC.1:2022 cites that
+      // edition as reference [17]. Green and blue agree in both documents. The
+      // 0.780 reads as transposed digits, so the check uses the ITU value: a
+      // correct BT.2020 profile must not be reported non-compliant because of it.
+      case icColorantBT2020:
+        {
+          if ( (m_xy[0].x != icDtoUF((icFloatNumber)0.708)) || (m_xy[0].y != icDtoUF((icFloatNumber)0.292)) ||
+               (m_xy[1].x != icDtoUF((icFloatNumber)0.170)) || (m_xy[1].y != icDtoUF((icFloatNumber)0.797)) ||
+               (m_xy[2].x != icDtoUF((icFloatNumber)0.131)) || (m_xy[2].y != icDtoUF((icFloatNumber)0.046)) ) {
+              sReport += icMsgValidateNonCompliant;
+              sReport += sSigPathName;
+              sReport += " - Chromaticity data does not match specification.\n";
+              rv = icMaxStatus(rv, icValidateNonCompliant);
+            }
+            break;
+        }
+
       default:
         {
           sReport += icMsgValidateNonCompliant;

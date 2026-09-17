@@ -6152,6 +6152,57 @@ function(iccdev_add_svcn_xml_reserved_roundtrip_test)
   endif()
 endfunction()
 
+# chromaticityType colorant encodings 0005h (P3) and 0006h (ITU-R BT.2020), from
+# ICC.1:2022 Table 31. Before they were defined, Validate() reported both as an
+# invalid encoding and the XML writer named both "Customized Encoding", which the
+# reader takes as 0000h. The BT.2020 red primary follows Recommendation ITU-R
+# BT.2020-2 (x 0.708) rather than Table 31 as printed (0,780); the helper pins
+# both. No tracked document carries a chromaticityTag, so the helper builds its
+# own tags. Needs IccXML (CIccTagXmlChromaticity, icGetColorantValue) +
+# IccProfLib; skipped where IccXML is not built.
+function(iccdev_add_chromaticity_colorant_encodings_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccChromaticityColorantEncodingsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/chromaticity-colorant-encodings.cpp"
+  )
+  target_compile_features(iccChromaticityColorantEncodingsTest PRIVATE cxx_std_17)
+  target_include_directories(iccChromaticityColorantEncodingsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccChromaticityColorantEncodingsTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccChromaticityColorantEncodingsTest)
+
+  add_test(
+    NAME iccdev.chromaticity-colorant-encodings
+    COMMAND "$<TARGET_FILE:iccChromaticityColorantEncodingsTest>"
+  )
+  set_tests_properties(iccdev.chromaticity-colorant-encodings PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;xml;tag;chromaticity;regression"
+  )
+  if(WIN32)
+    set(_chromaticity_encodings_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccChromaticityColorantEncodingsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _chromaticity_encodings_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.chromaticity-colorant-encodings PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_chromaticity_encodings_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2570: a zero-byte embedded height or normal image. Both binary Read() methods
 # need at least one image byte, but the XML readers took an <Image> holding only
 # whitespace, or a File= naming an empty file, as a zero-byte image, so iccFromXml
@@ -8558,6 +8609,7 @@ if(WIN32)
   iccdev_add_tiff_separated_strips_test()
   iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_svcn_xml_reserved_roundtrip_test()
+  iccdev_add_chromaticity_colorant_encodings_test()
   iccdev_add_json_colorant_parent_profile_test()
   iccdev_add_mpexml_reflectance_clut_writer_test()
   iccdev_add_xml_embedded_image_empty_test()
@@ -8953,6 +9005,7 @@ iccdev_add_tiff_create_overflow_test()
 iccdev_add_tiff_separated_strips_test()
 iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_svcn_xml_reserved_roundtrip_test()
+iccdev_add_chromaticity_colorant_encodings_test()
 iccdev_add_json_colorant_parent_profile_test()
 iccdev_add_mpexml_reflectance_clut_writer_test()
 iccdev_add_xml_embedded_image_empty_test()
