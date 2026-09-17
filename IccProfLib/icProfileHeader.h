@@ -1419,6 +1419,8 @@ typedef enum {
   icColorantSMPTE                       = 0x0002, /* SMPTE RP145-1994 */
   icColorantEBU                         = 0x0003, /* EBU Tech.3213-E */
   icColorantP22                         = 0x0004, /* P22 */
+  icColorantP3                          = 0x0005, /* P3 */
+  icColorantBT2020                      = 0x0006, /* ITU-R BT.2020 */
 
 /* Convenience Enum Definitions - Not defined in ICC specification */
   icMaxEnumColorant                     = 0xFFFF,

@@ -1520,6 +1520,12 @@ icColorantEncoding icGetColorantValue(const icChar* str)
 	if (!strcmp(str, "P22"))  
 		return icColorantP22;  
 
+	if (!strcmp(str, "P3"))
+		return icColorantP3;
+
+	if (!strcmp(str, "ITU-R BT.2020"))
+		return icColorantBT2020;
+
   return icColorantUnknown;
 }
 

@@ -2546,6 +2546,12 @@ const icChar *CIccInfo::GetColorantEncoding(icColorantEncoding colorant)
     case icColorantP22:
       return "P22";
 
+    case icColorantP3:
+      return "P3";
+
+    case icColorantBT2020:
+      return "ITU-R BT.2020";
+
     default:
       return "Customized Encoding";
   }
