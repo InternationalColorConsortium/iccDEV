@@ -1714,6 +1714,60 @@ function(iccdev_add_parametric_curve_negative_domain_test)
   endif()
 endfunction()
 
+# #2547: CIccFormulaCurveSegment::Apply() returned NaN for a negative base under a
+# fractional exponent in formula types 0, 1 and 4-7.  The helper pins #2544's rule
+# for every one of those powers, and applies the two tracked transforms that reach
+# one: argbRef's B2D3 and LaserProjector's B2A1.
+#
+# Both profiles are generated, into the source tree by iccdev.create-profiles and
+# into ${ICCDEV_TEST_OUTDIR}/windows-testing by iccdev.windows-create-profiles, so
+# the path follows the platform.  Registered only with iccFromXml, which both
+# fixtures need.  The helper fails when a profile does not open, so a wrong root is
+# a red leg rather than a pass that measured nothing.
+function(iccdev_add_formula_segment_negative_domain_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET iccFromXml)
+    return()
+  endif()
+
+  if(WIN32)
+    set(_formula_profile_root "${ICCDEV_TEST_OUTDIR}/windows-testing")
+  else()
+    set(_formula_profile_root "${ICCDEV_TESTING_DIR}")
+  endif()
+
+  iccdev_add_regression_executable(iccFormulaSegmentNegativeDomainTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/formula-segment-negative-domain.cpp"
+  )
+  target_link_libraries(iccFormulaSegmentNegativeDomainTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccFormulaSegmentNegativeDomainTest)
+
+  add_test(
+    NAME iccdev.formula-segment-negative-domain
+    COMMAND "$<TARGET_FILE:iccFormulaSegmentNegativeDomainTest>"
+      "${_formula_profile_root}/SpecRef/argbRef.icc"
+      "${_formula_profile_root}/Display/LaserProjector.icc"
+  )
+  set_tests_properties(iccdev.formula-segment-negative-domain PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;cmm;curve;issue-2547;regression"
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+  if(WIN32)
+    set(_formula_negative_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccFormulaSegmentNegativeDomainTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _formula_negative_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.formula-segment-negative-domain PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_formula_negative_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards #1671: reflectance observer setup must allocate temporary observer
 # matrices with the applied illuminant range, not the element reflectance range.
 function(iccdev_add_reflectance_observer_illum_range_test)
@@ -8549,6 +8603,7 @@ if(WIN32)
   iccdev_add_xform_create_tag_ownership_test()
   iccdev_add_xform_abstorel_adjust_test()
   iccdev_add_parametric_curve_negative_domain_test()
+  iccdev_add_formula_segment_negative_domain_test()
   iccdev_add_bpc_d2b_tag_family_test()
   iccdev_add_reflectance_observer_illum_range_test()
   iccdev_add_spectral_absolute_flag_test()
@@ -8946,6 +9001,7 @@ iccdev_add_colorant_count_validate_test()
 iccdev_add_xform_create_tag_ownership_test()
 iccdev_add_xform_abstorel_adjust_test()
 iccdev_add_parametric_curve_negative_domain_test()
+iccdev_add_formula_segment_negative_domain_test()
 iccdev_add_bpc_d2b_tag_family_test()
 iccdev_add_reflectance_observer_illum_range_test()
 iccdev_add_spectral_absolute_flag_test()

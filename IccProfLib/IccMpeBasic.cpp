@@ -603,6 +603,39 @@ static icFloatNumber clipPow(double v, double g)
 
 /**
  ******************************************************************************
+ * Name: icFormulaPow
+ *
+ * Purpose: pow() for a formula segment, without the NaN a negative base gives
+ *  under a fractional exponent.
+ *
+ *  ICC.1-2022 Table 60 and ICC.2-2023 Table 111 require a segment to give
+ *  float32Number values over its whole range, and a first or last segment
+ *  reaches -inf or +inf.  A negative base under a fractional exponent is
+ *  given the value at zero instead, the rule icParametricPow() applies to a
+ *  parametricCurveType (#2544).  An integer exponent was always finite for a
+ *  negative base and is left alone, so a gamma of 1.0 still passes negative
+ *  values.
+ *
+ *  Type 3 keeps clipPow(), which also zeroes a negative base under an
+ *  integer exponent.
+ *
+ * Args:
+ *  base = the power's base: X, aX + b, or the ratio in types 6 and 7
+ *  g = the exponent
+ *
+ * Return: base raised to g, a negative base under a fractional exponent
+ *  counting as zero.
+ ******************************************************************************/
+static double icFormulaPow(double base, double g)
+{
+  if (base < 0.0 && g != floor(g))
+    base = 0.0;
+
+  return pow(base, g);
+}
+
+/**
+ ******************************************************************************
  * Name: CIccFormulaCurveSegment::Apply
  * 
  * Purpose: 
@@ -619,7 +652,7 @@ icFloatNumber CIccFormulaCurveSegment::Apply(icFloatNumber v) const
     switch (m_nShortcutType) {
     case 0:
     default:
-      return (icFloatNumber)(pow(m_params[1] * v + m_params[2], m_params[0]) + m_params[3]);
+      return (icFloatNumber)(icFormulaPow(m_params[1] * v + m_params[2], m_params[0]) + m_params[3]);
     case 1:
       return (m_params[1] * v);
     case 2:
@@ -632,7 +665,7 @@ icFloatNumber CIccFormulaCurveSegment::Apply(icFloatNumber v) const
 
   case 0x0001:
     // Y = a * log (b * X^g + c) + d      : g a b c d
-    return (icFloatNumber)(m_params[1] * log10(m_params[2] * pow(v, m_params[0]) + m_params[3]) + m_params[4]);
+    return (icFloatNumber)(m_params[1] * log10(m_params[2] * icFormulaPow(v, m_params[0]) + m_params[3]) + m_params[4]);
 
   case 0x0002:
     //Y = a * b^(c*X+d) + e               : a b c d e
@@ -645,7 +678,7 @@ icFloatNumber CIccFormulaCurveSegment::Apply(icFloatNumber v) const
   case 0x0004:
     //Y = a * ln(d * X^g - b) + c         : g a b c d
     if (m_nShortcutType != 1)
-      return (icFloatNumber)(m_params[1] * log(m_params[4] * pow(v, m_params[0]) - m_params[2]) + m_params[3]);
+      return (icFloatNumber)(m_params[1] * log(m_params[4] * icFormulaPow(v, m_params[0]) - m_params[2]) + m_params[3]);
     else
       return (icFloatNumber)(m_params[1] * log(m_params[4] * v - m_params[2]) + m_params[3]);
 
@@ -654,41 +687,41 @@ icFloatNumber CIccFormulaCurveSegment::Apply(icFloatNumber v) const
     if (m_params[1] == 0.0)
       return (icFloatNumber)m_params[2];
     if (m_nShortcutType != 1)
-      return (icFloatNumber)(m_params[5] * exp((m_params[4] * pow(v, m_params[0]) - m_params[3]) / m_params[1]) + m_params[2]);
+      return (icFloatNumber)(m_params[5] * exp((m_params[4] * icFormulaPow(v, m_params[0]) - m_params[3]) / m_params[1]) + m_params[2]);
     else
       return (icFloatNumber)(m_params[5] * exp((m_params[4] * v - m_params[3]) / m_params[1]) + m_params[2]);
 
   case 0x0006:
     //Y = d * (max(e * X^g - a, 0)/(b - c * X^g))^w  : w g a b c d e
     if (m_nShortcutType!=1) {
-      icFloatNumber denom6 = (icFloatNumber)(m_params[3] - m_params[4] * pow(v, m_params[1]));
+      icFloatNumber denom6 = (icFloatNumber)(m_params[3] - m_params[4] * icFormulaPow(v, m_params[1]));
       if (denom6 == 0.0f)
         return 0;
-      return (icFloatNumber)(m_params[5] * pow(icMax((icFloatNumber)(m_params[6] * pow(v, m_params[1]) - m_params[2]), 0.0f) /
+      return (icFloatNumber)(m_params[5] * icFormulaPow(icMax((icFloatNumber)(m_params[6] * icFormulaPow(v, m_params[1]) - m_params[2]), 0.0f) /
                                                denom6, m_params[0]));
     }
     else { //m_nShortcutType == 1
       icFloatNumber denom6s = (icFloatNumber)(m_params[3] - m_params[4] * v);
       if (denom6s == 0.0f)
         return 0;
-      return (icFloatNumber)(m_params[5] * pow(icMax((icFloatNumber)(m_params[6] * v - m_params[2]), 0.0f) /
+      return (icFloatNumber)(m_params[5] * icFormulaPow(icMax((icFloatNumber)(m_params[6] * v - m_params[2]), 0.0f) /
                                                denom6s, m_params[0]));
     }
 
   case 0x0007:
     //Y = d * ((a + b * X^g)/(1 + c * X^g)) ^ w     : w g a b c d
     if (m_nShortcutType != 1) {
-      icFloatNumber denom7 = (icFloatNumber)(1.0 + m_params[4] * pow(v, m_params[1]));
+      icFloatNumber denom7 = (icFloatNumber)(1.0 + m_params[4] * icFormulaPow(v, m_params[1]));
       if (denom7 == 0.0f)
         return 0;
-      return (icFloatNumber)(m_params[5] * pow((m_params[2] + m_params[3] * pow(v, m_params[1])) /
+      return (icFloatNumber)(m_params[5] * icFormulaPow((m_params[2] + m_params[3] * icFormulaPow(v, m_params[1])) /
                                                denom7, m_params[0]));
     }
     else { //m_nShortcutType == 1
       icFloatNumber denom7s = (icFloatNumber)(1.0 + m_params[4] * v);
       if (denom7s == 0.0f)
         return 0;
-      return (icFloatNumber)(m_params[5] * pow((m_params[2] + m_params[3] * v) /
+      return (icFloatNumber)(m_params[5] * icFormulaPow((m_params[2] + m_params[3] * v) /
                                                denom7s, m_params[0]));
     }
   }
