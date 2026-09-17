@@ -74,9 +74,11 @@
 
 #include <cstdio>
 #include <cmath>
+#include <cfloat>
 #include <cstring>
 #include <cstdlib>
 #include <new>
+#include <vector>
 #include "IccMpeBasic.h"
 #include "IccIO.h"
 #include <map>
@@ -660,6 +662,32 @@ static double icFormulaPow(double base, double g)
 
 /**
  ******************************************************************************
+ * Name: icFormulaLogArg
+ *
+ * Purpose: The argument a formula segment passes to log() or log10(), without
+ *  the NaN a negative argument gives or the -inf of zero.
+ *
+ *  Types 1 and 4 take the logarithm of b * X^g + c and d * X^g - b, which
+ *  parameters can put at or below zero for part of a segment.  Such an
+ *  argument is given the smallest positive float instead, so the logarithm
+ *  is large and negative but finite.  A NaN argument, which only an infinity
+ *  already in the expression makes, is passed through.
+ *
+ * Args:
+ *  arg = the logarithm's argument
+ *
+ * Return: arg, or FLT_MIN when arg is zero or negative.
+ ******************************************************************************/
+static double icFormulaLogArg(double arg)
+{
+  if (arg <= 0.0)
+    return FLT_MIN;
+
+  return arg;
+}
+
+/**
+ ******************************************************************************
  * Name: CIccFormulaCurveSegment::Apply
  * 
  * Purpose: 
@@ -689,22 +717,25 @@ icFloatNumber CIccFormulaCurveSegment::Apply(icFloatNumber v) const
 
   case 0x0001:
     // Y = a * log (b * X^g + c) + d      : g a b c d
-    return (icFloatNumber)(m_params[1] * log10(m_params[2] * icFormulaPow(v, m_params[0]) + m_params[3]) + m_params[4]);
+    return (icFloatNumber)(m_params[1] * log10(icFormulaLogArg(m_params[2] * icFormulaPow(v, m_params[0]) + m_params[3])) + m_params[4]);
 
   case 0x0002:
     //Y = a * b^(c*X+d) + e               : a b c d e
-    return (icFloatNumber)(m_params[0] * pow(m_params[1], m_params[2] * v + m_params[3]) + m_params[4]);
+    return (icFloatNumber)(m_params[0] * icFormulaPow(m_params[1], m_params[2] * v + m_params[3]) + m_params[4]);
 
   case 0x0003:
     //Y = a * (b * X + c) ^ g  + d        : g a b c d
+    // clipPow() rather than icFormulaPow(): it also zeroes a negative base
+    // under an integer exponent, and BT2100HlgNarrow's g = 2 segments over
+    // (-inf, 0.5] would change from 0 to their squared value below zero.
     return (icFloatNumber)(m_params[1] * clipPow(m_params[2] * v + m_params[3], m_params[0]) + m_params[4]);
 
   case 0x0004:
     //Y = a * ln(d * X^g - b) + c         : g a b c d
     if (m_nShortcutType != 1)
-      return (icFloatNumber)(m_params[1] * log(m_params[4] * icFormulaPow(v, m_params[0]) - m_params[2]) + m_params[3]);
+      return (icFloatNumber)(m_params[1] * log(icFormulaLogArg(m_params[4] * icFormulaPow(v, m_params[0]) - m_params[2])) + m_params[3]);
     else
-      return (icFloatNumber)(m_params[1] * log(m_params[4] * v - m_params[2]) + m_params[3]);
+      return (icFloatNumber)(m_params[1] * log(icFormulaLogArg(m_params[4] * v - m_params[2])) + m_params[3]);
 
   case 0x0005:
     //Y = e * exp((d * X^g - c) / a) + b  : g a b c d e
@@ -756,6 +787,304 @@ icFloatNumber CIccFormulaCurveSegment::Apply(icFloatNumber v) const
 
 /**
  ******************************************************************************
+ * Domain problems CIccFormulaCurveSegment::Validate() reports, one bit each.
+ ******************************************************************************/
+enum icFormulaDomainFlag {
+  icFormulaNegativeBase     = 0x01,  // negative base under a fractional exponent
+  icFormulaLogNotPositive   = 0x02,  // logarithm of zero or a negative value
+  icFormulaZeroNegativePow  = 0x04,  // zero raised to a negative exponent
+  icFormulaZeroDenominator  = 0x08,  // type 6 or 7 denominator of zero
+  icFormulaClipPow          = 0x10   // type 3 power with no value, clipPow() gives 0
+};
+
+/**
+ ******************************************************************************
+ * Name: icFormulaCheckPow
+ *
+ * Purpose: icFormulaPow(), recording in flags the domain problems it meets.
+ ******************************************************************************/
+static double icFormulaCheckPow(double base, double g, icUInt32Number &flags)
+{
+  if (base < 0.0 && g != floor(g)) {
+    flags |= icFormulaNegativeBase;
+    base = 0.0;
+  }
+  if (base == 0.0 && g < 0.0)
+    flags |= icFormulaZeroNegativePow;
+
+  return pow(base, g);
+}
+
+/**
+ ******************************************************************************
+ * Name: icFormulaCheckLog
+ *
+ * Purpose: icFormulaLogArg(), recording in flags an argument that is not
+ *  positive.
+ ******************************************************************************/
+static double icFormulaCheckLog(double arg, icUInt32Number &flags)
+{
+  if (arg <= 0.0)
+    flags |= icFormulaLogNotPositive;
+
+  return icFormulaLogArg(arg);
+}
+
+/**
+ ******************************************************************************
+ * Name: icFormulaDomainAt
+ *
+ * Purpose: Follow a formula segment's expression at v as Apply() does, and
+ *  return the domain problems met on the way.  The gamma-of-1.0 shortcuts
+ *  Begin() selects skip the power and do their arithmetic in float, so they
+ *  are followed here too: a sum that is zero in float is zero to Apply().
+ *
+ * Args:
+ *  nType = function type, 0 to 7
+ *  p = the function's parameters, at least as many as it reads
+ *  v = the input value
+ *  nDenomSign = for types 6 and 7, the sign of the denominator (-1, 0 or 1)
+ *   where the numerator is not zero, else 0
+ *
+ * Return: icFormulaDomainFlag bits.
+ ******************************************************************************/
+static icUInt32Number icFormulaDomainAt(icUInt16Number nType, const icFloatNumber *p, icFloatNumber v,
+                                        int &nDenomSign)
+{
+  icUInt32Number flags = 0;
+  nDenomSign = 0;
+
+  switch (nType) {
+  case 0x0000:
+    if (!icIsNear(p[0], 1.0))
+      icFormulaCheckPow(p[1] * v + p[2], p[0], flags);
+    break;
+
+  case 0x0001:
+    icFormulaCheckLog(p[2] * icFormulaCheckPow(v, p[0], flags) + p[3], flags);
+    break;
+
+  case 0x0002:
+    icFormulaCheckPow(p[1], p[2] * v + p[3], flags);
+    break;
+
+  case 0x0003:
+    {
+      // clipPow() gives 0 for any base <= 0.  Only where the formula itself
+      // has no value is reported, not where it has one clipPow() replaces.
+      double base = p[2] * v + p[3];
+      if ((base < 0.0 && p[0] != floor(p[0])) || (base == 0.0 && p[0] < 0.0))
+        flags |= icFormulaClipPow;
+    }
+    break;
+
+  case 0x0004:
+    if (icIsNear(p[0], 1.0))
+      icFormulaCheckLog(p[4] * v - p[2], flags);
+    else
+      icFormulaCheckLog(p[4] * icFormulaCheckPow(v, p[0], flags) - p[2], flags);
+    break;
+
+  case 0x0005:
+    if (p[1] != 0.0 && !icIsNear(p[0], 1.0))
+      icFormulaCheckPow(v, p[0], flags);
+    break;
+
+  case 0x0006:
+    {
+      // A numerator max() holds at zero has no pole where the denominator is
+      // zero; Apply() gives 0 on both sides.
+      icFloatNumber num, denom;
+      if (icIsNear(p[1], 1.0)) {
+        num = icMax((icFloatNumber)(p[6] * v - p[2]), 0.0f);
+        denom = (icFloatNumber)(p[3] - p[4] * v);
+      }
+      else {
+        double x = icFormulaCheckPow(v, p[1], flags);
+        num = icMax((icFloatNumber)(p[6] * x - p[2]), 0.0f);
+        denom = (icFloatNumber)(p[3] - p[4] * x);
+      }
+      if (num > 0.0f)
+        nDenomSign = denom < 0.0f ? -1 : denom > 0.0f ? 1 : 0;
+      if (denom == 0.0f) {
+        if (num > 0.0f)
+          flags |= icFormulaZeroDenominator;
+      }
+      else {
+        icFormulaCheckPow(num / denom, p[0], flags);
+      }
+    }
+    break;
+
+  case 0x0007:
+    {
+      double num;
+      icFloatNumber denom;
+      if (icIsNear(p[1], 1.0)) {
+        num = p[2] + p[3] * v;
+        denom = (icFloatNumber)(1.0 + p[4] * v);
+      }
+      else {
+        double x = icFormulaCheckPow(v, p[1], flags);
+        num = p[2] + p[3] * x;
+        denom = (icFloatNumber)(1.0 + p[4] * x);
+      }
+      if (num != 0.0)
+        nDenomSign = denom < 0.0f ? -1 : denom > 0.0f ? 1 : 0;
+      if (denom == 0.0f) {
+        if (num != 0.0)
+          flags |= icFormulaZeroDenominator;
+      }
+      else {
+        icFormulaCheckPow(num / denom, p[0], flags);
+      }
+    }
+    break;
+  }
+
+  return flags;
+}
+
+/**
+ ******************************************************************************
+ * Name: icFormulaDomainAddRoot
+ *
+ * Purpose: Add x and the floats either side of it to a list of values to
+ *  test, keeping those inside [lo, hi].
+ ******************************************************************************/
+static void icFormulaDomainAddRoot(std::vector<icFloatNumber> &xs, double x, icFloatNumber lo, icFloatNumber hi)
+{
+  if (!std::isfinite(x) || x < lo || x > hi)
+    return;
+
+  icFloatNumber f = (icFloatNumber)x;
+  const icFloatNumber cand[3] = { f, std::nextafter(f, icMinFloat32Number), std::nextafter(f, icMaxFloat32Number) };
+  for (int i = 0; i < 3; i++) {
+    if (cand[i] >= lo && cand[i] <= hi)
+      xs.push_back(cand[i]);
+  }
+}
+
+/**
+ ******************************************************************************
+ * Name: icFormulaDomainAddPowRoot
+ *
+ * Purpose: Add the values of X, on either side of zero, where X^g equals r.
+ ******************************************************************************/
+static void icFormulaDomainAddPowRoot(std::vector<icFloatNumber> &xs, double r, double g,
+                                      icFloatNumber lo, icFloatNumber hi)
+{
+  if (!std::isfinite(r) || g == 0.0)
+    return;
+
+  double m = icIsNear((icFloatNumber)g, 1.0) ? fabs(r) : pow(fabs(r), 1.0 / g);
+  icFormulaDomainAddRoot(xs, m, lo, hi);
+  icFormulaDomainAddRoot(xs, -m, lo, hi);
+}
+
+/**
+ ******************************************************************************
+ * Name: icFormulaDomain
+ *
+ * Purpose: Find the domain problems a formula segment meets anywhere in the
+ *  inputs it is applied to.
+ *
+ *  ICC.1-2022 Table 60 and ICC.2-2023 Table 111 require a segment to give
+ *  float32Number values over its whole range, and ICC.1-2022 4.3 excludes
+ *  infinities and NaN from float32Number.  Apply() gives a value where the
+ *  formula has none (#2547), and this reports each place it has to.
+ *
+ *  An infinity is reported where it comes from a pole: zero raised to a
+ *  negative power, or a denominator of zero.  Overflow is not: a segment
+ *  running to -inf or +inf with a slope or power above 1 overflows near
+ *  icMaxFloat32Number, and most tracked profiles have one.
+ *
+ *  The range is not sampled.  Each expression is continuous and monotonic
+ *  between the input's endpoints, zero, and the inputs where a base, a
+ *  logarithm's argument, a denominator or type 6's max() term reaches zero,
+ *  so a problem inside the range shows at one of those inputs or at a float
+ *  next to it.  A segment's start is exclusive: Apply() takes a value at a
+ *  breakpoint from the segment that ends there.  The first segment of a
+ *  binary profile starts at icMinFloat32Number, which is kept.
+ *
+ * Args:
+ *  nType = function type, 0 to 7
+ *  p = the function's parameters, as many as it reads
+ *  start, end = the segment's start and end points
+ *
+ * Return: icFormulaDomainFlag bits.
+ ******************************************************************************/
+static icUInt32Number icFormulaDomain(icUInt16Number nType, const icFloatNumber *p,
+                                      icFloatNumber start, icFloatNumber end)
+{
+  icFloatNumber lo = start <= icMinFloat32Number ? icMinFloat32Number : std::nextafter(start, icMaxFloat32Number);
+  icFloatNumber hi = end;
+  if (!(lo <= hi))
+    return 0;
+
+  std::vector<icFloatNumber> xs;
+  xs.push_back(lo);
+  xs.push_back(hi);
+  icFormulaDomainAddRoot(xs, 0.0, lo, hi);
+
+  switch (nType) {
+  case 0x0000:
+    if (p[1] != 0.0)
+      icFormulaDomainAddRoot(xs, -(double)p[2] / p[1], lo, hi);
+    break;
+  case 0x0001:
+    if (p[2] != 0.0)
+      icFormulaDomainAddPowRoot(xs, -(double)p[3] / p[2], p[0], lo, hi);
+    break;
+  case 0x0002:
+    if (p[2] != 0.0)
+      icFormulaDomainAddRoot(xs, -(double)p[3] / p[2], lo, hi);
+    break;
+  case 0x0003:
+    if (p[2] != 0.0)
+      icFormulaDomainAddRoot(xs, -(double)p[3] / p[2], lo, hi);
+    break;
+  case 0x0004:
+    if (p[4] != 0.0)
+      icFormulaDomainAddPowRoot(xs, (double)p[2] / p[4], p[0], lo, hi);
+    break;
+  case 0x0006:
+    if (p[6] != 0.0)
+      icFormulaDomainAddPowRoot(xs, (double)p[2] / p[6], p[1], lo, hi);
+    if (p[4] != 0.0)
+      icFormulaDomainAddPowRoot(xs, (double)p[3] / p[4], p[1], lo, hi);
+    break;
+  case 0x0007:
+    if (p[3] != 0.0)
+      icFormulaDomainAddPowRoot(xs, -(double)p[2] / p[3], p[1], lo, hi);
+    if (p[4] != 0.0)
+      icFormulaDomainAddPowRoot(xs, -1.0 / p[4], p[1], lo, hi);
+    break;
+  }
+
+  icUInt32Number flags = 0;
+  bool bNegDenom = false, bPosDenom = false;
+  for (size_t i = 0; i < xs.size(); i++) {
+    int nDenomSign;
+    flags |= icFormulaDomainAt(nType, p, xs[i], nDenomSign);
+
+    // A denominator that changes sign under a non-zero numerator has a pole
+    // between two floats, where it may never be exactly zero.  A root's
+    // neighbours are both tested, so a pole under a non-zero numerator shows
+    // both signs.
+    if (nDenomSign < 0)
+      bNegDenom = true;
+    else if (nDenomSign > 0)
+      bPosDenom = true;
+  }
+  if (bNegDenom && bPosDenom)
+    flags |= icFormulaZeroDenominator;
+
+  return flags;
+}
+
+/**
+ ******************************************************************************
  * Name: CIccFormulaCurveSegment::Validate
  * 
  * Purpose: 
@@ -775,6 +1104,42 @@ icValidateStatus CIccFormulaCurveSegment::Validate(std::string sigPath, std::str
     sReport += sSigPathName;
     sReport += " formula curve has non zero reserved data.\n";
     rv = icMaxStatus(rv, icValidateWarning);
+  }
+
+  // Where the formula has no value, Apply() gives one of its own or an
+  // infinity (#2547).  Only a function with its full, finite parameter list is
+  // examined.
+  static const icUInt8Number nRequired[8] = { 4, 5, 5, 5, 5, 6, 7, 6 };
+  bool bExamine = m_params && m_nFunctionType < 8 && m_nParameters >= nRequired[m_nFunctionType];
+  for (icUInt8Number i = 0; bExamine && i < m_nParameters; i++) {
+    if (!std::isfinite(m_params[i]))
+      bExamine = false;
+  }
+
+  if (bExamine) {
+    icUInt32Number flags = icFormulaDomain(m_nFunctionType, m_params, m_startPoint, m_endPoint);
+
+    static const struct {
+      icUInt32Number flag;
+      const char *szText;
+    } problems[] = {
+      { icFormulaNegativeBase, "raises a negative base to a fractional power for part of its range; the base is evaluated as zero" },
+      { icFormulaLogNotPositive, "takes the logarithm of a value that is not positive for part of its range; the smallest positive float is used" },
+      { icFormulaZeroNegativePow, "raises zero to a negative power for part of its range" },
+      { icFormulaZeroDenominator, "has a denominator that reaches zero for part of its range" },
+      { icFormulaClipPow, "raises a negative base to a fractional power, or zero to a negative power, for part of its range; the power is evaluated as zero" },
+    };
+
+    for (size_t i = 0; i < sizeof(problems) / sizeof(problems[0]); i++) {
+      if (flags & problems[i].flag) {
+        sReport += icMsgValidateWarning;
+        sReport += sSigPathName;
+        sReport += " formula curve segment ";
+        sReport += problems[i].szText;
+        sReport += ".\n";
+        rv = icMaxStatus(rv, icValidateWarning);
+      }
+    }
   }
 
   switch (m_nFunctionType) {

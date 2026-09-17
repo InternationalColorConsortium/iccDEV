@@ -85,12 +85,23 @@ static void checkSegment(const CIccFormulaCurveSegment& seg, bool bExpectRefused
     check(!bBegan, msg);
   }
   else {
-    std::snprintf(msg, sizeof(msg), "%s: Validate() reports no error", what);
-    check(status == icValidateOK && !bReported, msg);
+    // The control is about the PARAMETERS: every one is finite, so the non-finite
+    // report must be absent and the segment must be accepted.  It is deliberately
+    // declared over the whole float range, the shape a segmented curve's first and
+    // last segments actually take, and that range is not domain-clean for every
+    // formula: the type 6 and 7 controls carry a fractional g, so their base is
+    // negative below zero, and type 6's denominator reaches zero inside it.  Those
+    // are Warnings this file is not about -- iccdev.formula-segment-negative-domain
+    // owns them -- so the assertion is "accepted, and not reported as non-finite"
+    // rather than a bare icValidateOK, which would make this test fail whenever a
+    // sibling adds a true range diagnostic.
+    std::snprintf(msg, sizeof(msg), "%s: Validate() reports no parameter error", what);
+    check(status < icValidateCriticalError && !bReported, msg);
     std::snprintf(msg, sizeof(msg), "%s: Begin() accepts", what);
     check(bBegan, msg);
   }
-  if (!report.empty() && (bExpectRefused ? !bReported : status != icValidateOK))
+  if (!report.empty() &&
+      (bExpectRefused ? !bReported : status >= icValidateCriticalError))
     std::printf("      report: %s", report.c_str());
 }
 
