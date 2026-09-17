@@ -497,6 +497,27 @@ bool CIccFormulaCurveSegment::Write(CIccIO *pIO)
 
 /**
  ******************************************************************************
+ * Name: icFormulaParamsNonFinite
+ *
+ * Purpose: Report whether any formula segment parameter is NaN or infinite.
+ *
+ * Args:
+ *  params = the parameters, may be NULL when nParams is 0
+ *  nParams = the number of parameters
+ *
+ * Return: true if a parameter is not finite
+ ******************************************************************************/
+static bool icFormulaParamsNonFinite(const icFloatNumber *params, icUInt8Number nParams)
+{
+  for (icUInt8Number i = 0; i < nParams; i++) {
+    if (!std::isfinite(params[i]))
+      return true;
+  }
+  return false;
+}
+
+/**
+ ******************************************************************************
  * Name: CIccFormulaCurveSegment::Begin
  * 
  * Purpose: 
@@ -590,6 +611,9 @@ bool CIccFormulaCurveSegment::Begin(CIccCurveSegment * /* pPrevSeg = NULL */ )
   default:
     return false;
   }
+
+  if (icFormulaParamsNonFinite(m_params, m_nParameters))
+    return false;
 
   return true;
 }
@@ -884,6 +908,16 @@ icValidateStatus CIccFormulaCurveSegment::Validate(std::string sigPath, std::str
       sReport += buf;
       rv = icMaxStatus(rv, icValidateCriticalError);
     }
+  }
+
+  // A binary profile can carry a NaN or infinite parameter.  It is not a value
+  // the formula can use, it makes the output non-finite wherever the formula
+  // reads it, and Begin() refuses it (#2547).
+  if (m_params && icFormulaParamsNonFinite(m_params, m_nParameters)) {
+    sReport += icMsgValidateCriticalError;
+    sReport += sSigPathName;
+    sReport += " formula curve has a non-finite formulaCurveSegment parameter.\n";
+    rv = icMaxStatus(rv, icValidateCriticalError);
   }
 
   return rv;

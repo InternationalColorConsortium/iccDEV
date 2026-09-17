@@ -66,6 +66,7 @@
 #include "IccCAM.h"
 #include "IccMpeFactory.h"
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
@@ -247,7 +248,17 @@ public:
 
   bool ParseJson(const IccJson &j, std::string &parseStr) {
     int funcType = 0, reserved = 0, reserved2 = 0;
-    jGetValue(j, "functionType", funcType);
+    // functionType and parameters are both required (docs/iccjson.md).  A
+    // missing functionType used to read as type 0 and missing or short
+    // parameters as zeros, so a malformed segment loaded as a different curve
+    // (#2547).  functionType must be a JSON integer: jGetValue() alone would
+    // truncate 1.5 to 1.
+    if (!jsonExistsField(j, "functionType") ||
+        !(j["functionType"].is_number_integer() || j["functionType"].is_number_unsigned()) ||
+        !jGetValue(j, "functionType", funcType)) {
+      parseStr += "FormulaSegment requires an integer functionType\n";
+      return false;
+    }
     jGetValue(j, "reserved",     reserved);
     jGetValue(j, "reserved2",    reserved2);
     m_nFunctionType = (icUInt16Number)funcType;
@@ -259,27 +270,29 @@ public:
       parseStr += "Unsupported FunctionType in FormulaSegment\n";
       return false;
     }
+
+    // The binary encoding has no parameter count: the function type fixes it
+    // (ICC.2-2023 Table 111), so a JSON array of any other length cannot be
+    // written back as the same segment.
+    if (!jsonExistsField(j, "parameters") || !j["parameters"].is_array() ||
+        j["parameters"].size() != (size_t)nParams) {
+      parseStr += "FormulaSegment parameters must be an array of the count its functionType requires\n";
+      return false;
+    }
     m_nParameters = (icUInt8Number)nParams;
 
     if (m_params) { free(m_params); m_params = nullptr; }
-    if (nParams > 0) {
-      m_params = (icFloatNumber*)malloc(nParams * sizeof(icFloatNumber));
-      if (!m_params) return false;
-      for (int i = 0; i < nParams; i++) m_params[i] = 0.0f;
-      if (jsonExistsField(j, "parameters") && j["parameters"].is_array()) {
-        bool overflow = false;
-        icUInt32Number nJsonParams = icJsonSafeU32(j["parameters"].size(), &overflow);
-        if (overflow) {
-          parseStr += "parameters count exceeds supported range in FormulaSegment\n";
-          return false;
-        }
-        int cnt = std::min(nParams, (int)nJsonParams);
-        for (int i = 0; i < cnt; i++) {
-          if (!icJsonGetFloatNumber(j["parameters"][i], m_params[i])) {
-            parseStr += "parameters contains non-numeric value in FormulaSegment\n";
-            return false;
-          }
-        }
+    m_params = (icFloatNumber*)malloc(nParams * sizeof(icFloatNumber));
+    if (!m_params) {
+      m_nParameters = 0;
+      return false;
+    }
+    for (int i = 0; i < nParams; i++) {
+      // A finite JSON number beyond the float32 range casts to infinity.
+      if (!icJsonGetFloatNumber(j["parameters"][i], m_params[i]) ||
+          !std::isfinite(m_params[i])) {
+        parseStr += "parameters contains a non-numeric or non-finite value in FormulaSegment\n";
+        return false;
       }
     }
     return true;

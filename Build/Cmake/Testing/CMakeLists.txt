@@ -1805,6 +1805,46 @@ function(iccdev_add_reflectance_observer_illum_range_test)
   endif()
 endfunction()
 
+# #2547: a formulaCurveSegment with a NaN or infinite parameter gives a
+# non-finite output wherever the formula reads it.  Validate() must report it
+# as a critical error and Begin() must refuse it, for every function type and
+# parameter position, with finite controls; one case goes through Write() and
+# Read().
+function(iccdev_add_formula_segment_nonfinite_parameter_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccFormulaSegmentNonFiniteParameterTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/formula-segment-nonfinite-parameter.cpp"
+  )
+  target_link_libraries(iccFormulaSegmentNonFiniteParameterTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccFormulaSegmentNonFiniteParameterTest)
+
+  add_test(
+    NAME iccdev.formula-segment-nonfinite-parameter
+    COMMAND "$<TARGET_FILE:iccFormulaSegmentNonFiniteParameterTest>"
+  )
+  set_tests_properties(iccdev.formula-segment-nonfinite-parameter PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;mpe;curve;validate;issue-2547;regression"
+  )
+  if(WIN32)
+    set(_formula_nonfinite_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccFormulaSegmentNonFiniteParameterTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _formula_nonfinite_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.formula-segment-nonfinite-parameter PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_formula_nonfinite_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards #2520: the reflectance CLUT and reflectance observer elements must honour
 # their Absolute flag (ICC.2:2023 11.2.12 and 11.2.13), which was tested against
 # icRelativeSpectralData (0) and so never read, and the emission observer must not
@@ -8660,6 +8700,7 @@ if(WIN32)
   iccdev_add_reflectance_observer_illum_range_test()
   iccdev_add_spectral_absolute_flag_test()
   iccdev_add_colorimetry_methods_test()
+  iccdev_add_formula_segment_nonfinite_parameter_test()
   iccdev_add_getvalues_nstart_test()
   iccdev_add_chromaticity_validate_test()
   iccdev_add_cicp_copy_ctor_test()
@@ -9059,6 +9100,7 @@ iccdev_add_bpc_d2b_tag_family_test()
 iccdev_add_reflectance_observer_illum_range_test()
 iccdev_add_spectral_absolute_flag_test()
 iccdev_add_colorimetry_methods_test()
+iccdev_add_formula_segment_nonfinite_parameter_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_chromaticity_validate_test()
 iccdev_add_cicp_copy_ctor_test()
