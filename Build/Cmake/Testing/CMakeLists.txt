@@ -4982,6 +4982,81 @@ function(iccdev_add_json_colorant_parent_profile_test)
   endif()
 endfunction()
 
+# #2583: CIccProfileJson::ParseTag() attached lut and named colour tags without
+# giving them the header colour spaces the binary and XML readers both hand over,
+# so CIccArrayNamedColor::Validate() compared each colour against a zero sample
+# count and iccFromJson exited 1 on a profile it had reproduced byte for byte.
+# The inputs are the tracked XML documents -- Testing/**/*.icc is gitignored -- and
+# the helper drives the whole iccFromXml | iccToJson | iccFromJson chain, since the
+# defect is in the reader rather than in any one tag.  v2RgbLut8 is the fourth
+# fixture because the sparse named colour profiles carry no lut tag, and the
+# AToB/BToA/HToS arms of the dispatch reach Describe() only: an A/B of the tracked
+# corpus through the tools cannot see them, so without a fixture that reads a lut
+# back out of JSON those arms would ship untested.
+function(iccdev_add_json_namedcolor_colorspaces_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}"
+     OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccJsonNamedColorColorSpacesTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/json-namedcolor-colorspaces.cpp"
+  )
+  target_compile_features(iccJsonNamedColorColorSpacesTest PRIVATE cxx_std_17)
+  target_include_directories(iccJsonNamedColorColorSpacesTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccJsonNamedColorColorSpacesTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccJsonNamedColorColorSpacesTest)
+
+  set(_json_nmcl_cs_args
+    "${ICCDEV_TESTING_DIR}/Named/SparseMatrixNamedColor.xml"
+    "${ICCDEV_TESTING_DIR}/Named/SparseMatrixNamedColorTint.xml"
+    "${ICCDEV_TEST_OUTDIR}/json-namedcolor-colorspaces-scratch"
+    "${ICCDEV_TESTING_DIR}/V2/v2RgbLut8.xml"
+  )
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.json-namedcolor-colorspaces
+      COMMAND "$<TARGET_FILE:iccJsonNamedColorColorSpacesTest>" ${_json_nmcl_cs_args}
+    )
+  else()
+    add_test(
+      NAME iccdev.json-namedcolor-colorspaces
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccJsonNamedColorColorSpacesTest>" ${_json_nmcl_cs_args}
+    )
+  endif()
+  set_tests_properties(iccdev.json-namedcolor-colorspaces PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;json;xml;namedcolor;sparsematrix;issue-2583;regression"
+  )
+  if(WIN32)
+    set(_json_nmcl_cs_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccJsonNamedColorColorSpacesTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _json_nmcl_cs_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.json-namedcolor-colorspaces PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_json_nmcl_cs_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2535/#2536: CIccTagJsonColorantOrder::ParseJson() and
 # CIccTagJsonColorantTable::ParseJson() sized their allocation from a count that
 # was narrowed a second time at the SetSize() call -- both tags' SetSize() takes
@@ -8651,6 +8726,7 @@ if(WIN32)
   iccdev_add_svcn_xml_reserved_roundtrip_test()
   iccdev_add_chromaticity_colorant_encodings_test()
   iccdev_add_json_colorant_parent_profile_test()
+  iccdev_add_json_namedcolor_colorspaces_test()
   iccdev_add_mpexml_reflectance_clut_writer_test()
   iccdev_add_xml_embedded_image_empty_test()
   iccdev_add_embedded_image_zero_byte_test()
@@ -9048,6 +9124,7 @@ iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_svcn_xml_reserved_roundtrip_test()
 iccdev_add_chromaticity_colorant_encodings_test()
 iccdev_add_json_colorant_parent_profile_test()
+iccdev_add_json_namedcolor_colorspaces_test()
 iccdev_add_mpexml_reflectance_clut_writer_test()
 iccdev_add_xml_embedded_image_empty_test()
 iccdev_add_embedded_image_zero_byte_test()
