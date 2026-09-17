@@ -301,15 +301,32 @@ bool CIccSparseMatrix::MultiplyVector(icFloatNumber *pResult, const icFloatNumbe
 
   int r;
   icUInt32Number e, le;
-  icUInt16Number *ci=m_ColumnIndices;
 
+  // The row starts and column indices walked below come from the matrix data, which is
+  // pixel content on the CIccPcsStepSrcSparseMatrix path, so bound them here rather than
+  // trusting a caller to have validated them (#2581).
+  //
+  // Note the walk starts at slot 0 rather than at m_RowStart[0]: nothing requires a run
+  // of row starts to begin at zero, and the leading slots are read as row 0's entries,
+  // so they are bounded like every other entry (#2581 review).
   for (r=0, e=0; r<(int)m_nRows; r++) {
     icFloatNumber v=0.0f;
 
     le = m_RowStart[r+1];
 
-    for (; e<le; e++, ci++) {
-      v += m_Data->get(e)*pVector[*ci];
+    // m_nMaxEntries is the number of entry slots Init() sized from the raw buffer.
+    if (le>m_nMaxEntries)
+      return false;
+
+    for (; e<le; e++) {
+      // Column indices are zero-based, so m_nCols is one past the last column, and
+      // pVector holds m_nCols values by contract.
+      icUInt16Number c = m_ColumnIndices[e];
+
+      if (c>=m_nCols)
+        return false;
+
+      v += m_Data->get(e)*pVector[c];
     }
     pResult[r]=v;
   }
@@ -567,6 +584,7 @@ bool CIccSparseMatrix::IsValid()
     return false;
 
   int r, i;
+
   for (r=0; r<(int)m_nRows; r++) {
     // Bound every row-start against the allocated column-index capacity BEFORE
     // m_RowStart[r+1] is used as the inner-loop bound below. A corrupt, non-
@@ -591,10 +609,12 @@ bool CIccSparseMatrix::IsValid()
       continue;
 
     for (i=m_RowStart[r]; i<(int)m_RowStart[r+1]-1; i++) {
-      if (m_ColumnIndices[i]>=m_ColumnIndices[i+1] || m_ColumnIndices[i]>m_nCols)
+      if (m_ColumnIndices[i]>=m_ColumnIndices[i+1] || m_ColumnIndices[i]>=m_nCols)
         return false;
     }
-    if (m_ColumnIndices[i]>m_nCols)
+    // Column indices are zero-based, so m_nCols itself is one past the last column
+    // (#2581).
+    if (m_ColumnIndices[i]>=m_nCols)
       return false;
   }
   return true;
