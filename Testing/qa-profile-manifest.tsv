@@ -134,7 +134,7 @@ CalcTest/calcUnderStack_vor.icc	negative	critical	255	none	tracked	154a8645e48e3
 CalcTest/uio-CIccCalculatorFunc-CheckUnderflowOverflow-IccMpeCalc_cpp-Line4238.icc	negative	critical	255	none	tracked	e482d1defb841192735881d80b4b7ca0540f5b859164153f0be2080ce6167800	negative fixture: fuzz-derived malformed profile must be rejected
 Display/GrayGSDF.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 Display/LCDDisplay.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
-Display/LaserProjector.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+Display/LaserProjector.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811); a type 0 curve raises a negative base to a fractional power (#2547)
 Display/Rec2020rgbColorimetric.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 Display/Rec2020rgbSpectral.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 Display/Rec2100HlgFull.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
@@ -150,16 +150,16 @@ Encoding/ISO22028-Encoded-bg-sRGB.icc	positive	valid	0	none	generated	-	conforma
 Encoding/ISO22028-Encoded-sRGB.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 Encoding/sRgbEncoding.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 Encoding/sRgbEncodingOverrides.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
-HDR/BT2100HlgFullDisplay.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/BT2100HlgFullDisplay.icc	compatibility	warning	0	none	generated	-	baselined: tone map curve (type 3, g = -1/6) has no value for luminance below 0.00625 (#2547)
 HDR/BT2100HlgFullScene.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
-HDR/BT2100HlgNarrowDisplay.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/BT2100HlgNarrowDisplay.icc	compatibility	warning	0	none	generated	-	baselined: tone map curve (type 3, g = -1/6) has no value for luminance below 0.00625 (#2547)
 HDR/BT2100HlgNarrowScene.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/BT2100HlgSceneToDisplayLink.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
-HDR/BT2100PQFullDisplay.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
-HDR/BT2100PQFullScene.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
-HDR/BT2100PQNarrowDisplay.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
-HDR/BT2100PQNarrowScene.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
-HDR/BT2100PQSceneToDisplayLink.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/BT2100PQFullDisplay.icc	compatibility	warning	0	none	generated	-	baselined: PQ curve (type 6) - its denominator crosses zero at X = 1.992 and the ratio is negative above it, under a fractional power (#2547)
+HDR/BT2100PQFullScene.icc	compatibility	warning	0	none	generated	-	baselined: PQ curve (type 6) - its denominator crosses zero at X = 1.992 and the ratio is negative above it, under a fractional power (#2547)
+HDR/BT2100PQNarrowDisplay.icc	compatibility	warning	0	none	generated	-	baselined: PQ curve (type 6) - its denominator crosses zero at X = 1.992 and the ratio is negative above it, under a fractional power (#2547); its tone map curve (type 3, g = -1/6) has no value for luminance below 0.00625
+HDR/BT2100PQNarrowScene.icc	compatibility	warning	0	none	generated	-	baselined: PQ curve (type 6) - its denominator crosses zero at X = 1.992 and the ratio is negative above it, under a fractional power (#2547)
+HDR/BT2100PQSceneToDisplayLink.icc	compatibility	warning	0	none	generated	-	baselined: PQ curve (type 6) - its denominator crosses zero at X = 1.992 and the ratio is negative above it, under a fractional power (#2547)
 ICS/Lab_float-D65_2deg-Part1.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 ICS/Lab_float-IllumA_2deg-Part2.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 ICS/Lab_int-D65_2deg-Part1.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
@@ -253,7 +253,7 @@ SpecRef/RefDecH.icc	compatibility	warning	0	none	generated	-	baselined: spectral
 SpecRef/RefIncW.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 SpecRef/SixChanCameraRef.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 SpecRef/SixChanInputRef.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
-SpecRef/argbRef.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+SpecRef/argbRef.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811); a type 0 curve raises a negative base to a fractional power (#2547)
 SpecRef/srgbRef.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 V2/v2CmykLut16.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 V2/v2GrayTRC.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean

@@ -18,8 +18,17 @@
     fractional exponent, the same base under an integer exponent (always
     finite, and must not change), and an in-domain value.
 
-    Type 2's base is a parameter, not X, and type 3 keeps clipPow(); neither
-    is covered here.
+    Type 2's base is the parameter b, and a negative b under a fractional
+    exponent follows the same rule.  Type 3 keeps clipPow().
+
+    Types 1 and 4 take a logarithm, which is NaN below zero and -inf at it.
+    An argument at or below zero is given the smallest positive float.
+
+    CIccFormulaCurveSegment::Validate() reports, as a Warning, each of those
+    places a segment's range reaches, and a denominator or a power that has a
+    pole there.  The reports have clean controls, over a range that stays
+    clear of the problem or with the parameter that causes it changed, so a
+    check that reports everything fails.
 
     Given the generated argbRef.icc and LaserProjector.icc as arguments, it
     also applies the two tracked transforms that reach a negative base:
@@ -32,8 +41,10 @@
 #include "IccProfile.h"
 #include "IccTagMPE.h"
 
+#include <cfloat>
 #include <cmath>
 #include <cstdio>
+#include <string>
 
 #ifdef USEICCDEVNAMESPACE
 using namespace iccDEV;
@@ -76,6 +87,233 @@ static double applySegment(icUInt16Number nType, const double* params, int nPara
     return NAN;
   }
   return seg.Apply((icFloatNumber)v);
+}
+
+/* The logarithm of the clamped argument, as icFormulaLogArg() gives it,
+ * rounded to the float Apply() returns. */
+static const double kLogFltMin = (icFloatNumber)log(FLT_MIN);
+static const double kLog10FltMin = (icFloatNumber)log10(FLT_MIN);
+
+static void testType2()
+{
+  /* Y = a * b^(c * X + d) + e           : a b c d e */
+  const double frac[] = { 1.0, -2.0, 1.0, 0.0, 0.25 };
+  checkValue(applySegment(2, frac, 5, 0.5), 0.25,
+             "type 2, b -2: a fractional exponent evaluates as a zero base, leaving e");
+  checkValue(applySegment(2, frac, 5, 3.0), -8.0 + 0.25,
+             "type 2, b -2: an integer exponent is unchanged");
+  const double positive[] = { 1.0, 2.0, 1.0, 0.0, 0.25 };
+  checkValue(applySegment(2, positive, 5, 0.5), sqrt(2.0) + 0.25,
+             "type 2, b 2: an in-domain exponent is unchanged");
+}
+
+static void testType3()
+{
+  /* Y = a * (b * X + c)^g + d           : g a b c d
+   * clipPow() zeroes any base <= 0, even under an integer exponent. */
+  const double integer[] = { 2.0, 1.0, 1.0, 0.0, 0.25 };
+  checkValue(applySegment(3, integer, 5, -1.0), 0.25,
+             "type 3, g 2.0: a negative base still evaluates as zero through clipPow()");
+  checkValue(applySegment(3, integer, 5, 0.5), 0.5,
+             "type 3, g 2.0: an in-domain X is unchanged");
+}
+
+static void testLogArgument()
+{
+  /* Type 1, Y = log10(X - 1): the argument is negative below X = 1 and zero at
+   * it.  g 2.0 goes through the power, g 1.0 through the same expression. */
+  const double t1[] = { 1.0, 1.0, 1.0, -1.0, 0.0 };
+  checkValue(applySegment(1, t1, 5, 0.5), kLog10FltMin,
+             "type 1: a negative logarithm argument evaluates as FLT_MIN");
+  checkValue(applySegment(1, t1, 5, 1.0), kLog10FltMin,
+             "type 1: a zero logarithm argument evaluates as FLT_MIN, not -inf");
+  checkValue(applySegment(1, t1, 5, 11.0), 1.0,
+             "type 1: a positive logarithm argument is unchanged");
+
+  /* Type 4, Y = ln(X^g - 1).  g 1.0 takes Begin()'s shortcut, g 2.0 does not. */
+  const double t4short[] = { 1.0, 1.0, 1.0, 0.0, 1.0 };
+  checkValue(applySegment(4, t4short, 5, 0.5), kLogFltMin,
+             "type 4, g 1.0: a negative logarithm argument evaluates as FLT_MIN");
+  checkValue(applySegment(4, t4short, 5, 1.0), kLogFltMin,
+             "type 4, g 1.0: a zero logarithm argument evaluates as FLT_MIN, not -inf");
+  checkValue(applySegment(4, t4short, 5, 3.0), log(2.0),
+             "type 4, g 1.0: a positive logarithm argument is unchanged");
+  const double t4full[] = { 2.0, 1.0, 1.0, 0.0, 1.0 };
+  checkValue(applySegment(4, t4full, 5, 0.5), kLogFltMin,
+             "type 4, g 2.0: a negative logarithm argument evaluates as FLT_MIN");
+  checkValue(applySegment(4, t4full, 5, 2.0), log(3.0),
+             "type 4, g 2.0: a positive logarithm argument is unchanged");
+}
+
+/* Validate one formula segment over (start, end], with its parameters in the
+ * order Table 111 lists them.  Returns the status; the report goes to sReport. */
+static icValidateStatus validateSegment(icUInt16Number nType, const double* params, int nParams,
+                                        double start, double end, std::string& sReport)
+{
+  icFloatNumber p[7] = { 0, 0, 0, 0, 0, 0, 0 };
+  for (int i = 0; i < nParams; i++)
+    p[i] = (icFloatNumber)params[i];
+
+  CIccFormulaCurveSegment seg((icFloatNumber)start, (icFloatNumber)end);
+  seg.SetFunction(nType, (icUInt8Number)nParams, p);
+  sReport.clear();
+  return seg.Validate("", sReport);
+}
+
+static bool has(const std::string& s, const char* szText)
+{
+  return s.find(szText) != std::string::npos;
+}
+
+/* The segment reports szText as a Warning, and nothing else about its domain. */
+static void checkReported(icUInt16Number nType, const double* params, int nParams,
+                          double start, double end, const char* szText, const char* msg)
+{
+  std::string sReport;
+  icValidateStatus rv = validateSegment(nType, params, nParams, start, end, sReport);
+  size_t first = sReport.find("formula curve segment");
+  bool ok = rv == icValidateWarning && has(sReport, szText) && first != std::string::npos &&
+            sReport.find("formula curve segment", first + 1) == std::string::npos;
+  if (!ok)
+    std::printf("      (status %d, report: %s)\n", (int)rv, sReport.c_str());
+  check(ok, msg);
+}
+
+/* The segment validates clean. */
+static void checkClean(icUInt16Number nType, const double* params, int nParams,
+                       double start, double end, const char* msg)
+{
+  std::string sReport;
+  icValidateStatus rv = validateSegment(nType, params, nParams, start, end, sReport);
+  bool ok = rv == icValidateOK && sReport.empty();
+  if (!ok)
+    std::printf("      (status %d, report: %s)\n", (int)rv, sReport.c_str());
+  check(ok, msg);
+}
+
+static const char* kNegativeBase = "raises a negative base to a fractional power";
+static const char* kLog = "takes the logarithm of a value that is not positive";
+static const char* kZeroPow = "raises zero to a negative power";
+static const char* kDenominator = "has a denominator that reaches zero";
+static const char* kClipPow = "or zero to a negative power, for part of its range; the power is evaluated as zero";
+
+static void testValidate()
+{
+  const double inf = icMaxFloat32Number;
+
+  /* Negative base under a fractional exponent. */
+  const double t0frac[] = { 2.2, 1.0, 0.0, 0.0 };
+  checkReported(0, t0frac, 4, -inf, inf, kNegativeBase,
+                "validate type 0, g 2.2 over (-inf, +inf]: negative base reported");
+  checkClean(0, t0frac, 4, 0.0, inf, "validate type 0, g 2.2 over (0, +inf]: clean");
+  const double t0int[] = { 2.0, 1.0, 0.0, 0.0 };
+  checkClean(0, t0int, 4, -inf, inf, "validate type 0, g 2.0 over (-inf, +inf]: clean");
+
+  /* Type 2's base is b. */
+  const double t2neg[] = { 1.0, -2.0, 1.0, 0.0, 0.0 };
+  checkReported(2, t2neg, 5, 0.0, 1.0, kNegativeBase,
+                "validate type 2, b -2 over (0, 1]: negative base reported");
+  const double t2pos[] = { 1.0, 2.0, 1.0, 0.0, 0.0 };
+  checkClean(2, t2pos, 5, 0.0, 1.0, "validate type 2, b 2 over (0, 1]: clean");
+
+  /* Outer power of type 7: the ratio is -X. */
+  const double t7neg[] = { 2.2, 1.0, 0.0, -1.0, 0.0, 1.0 };
+  checkReported(7, t7neg, 6, 0.0, 1.0, kNegativeBase,
+                "validate type 7, w 2.2, ratio -X over (0, 1]: negative base reported");
+  const double t7int[] = { 2.0, 1.0, 0.0, -1.0, 0.0, 1.0 };
+  checkClean(7, t7int, 6, 0.0, 1.0, "validate type 7, w 2.0, ratio -X over (0, 1]: clean");
+
+  /* Logarithm.  Type 4 with ln(1 - X) over (0, 1] reaches zero only at X = 1,
+   * the segment's included end. */
+  const double t1log[] = { 1.0, 1.0, 1.0, -1.0, 0.0 };
+  checkReported(1, t1log, 5, 0.0, 1.0, kLog,
+                "validate type 1, log10(X - 1) over (0, 1]: logarithm reported");
+  checkClean(1, t1log, 5, 1.0, inf, "validate type 1, log10(X - 1) over (1, +inf]: clean");
+  const double t4zero[] = { 1.0, 1.0, -1.0, 0.0, -1.0 };
+  checkReported(4, t4zero, 5, 0.0, 1.0, kLog,
+                "validate type 4, ln(1 - X) over (0, 1]: a zero argument at the end is reported");
+  checkClean(4, t4zero, 5, 0.0, 0.5, "validate type 4, ln(1 - X) over (0, 0.5]: clean");
+
+  /* Type 5's X^-1 has its pole at X = 0, inside (-1, 1] but at neither end. */
+  const double t5pole[] = { -1.0, 1.0, 0.0, 0.0, 1.0, 1.0 };
+  checkReported(5, t5pole, 6, -1.0, 1.0, kZeroPow,
+                "validate type 5, exp(X^-1) over (-1, 1]: pole at zero reported");
+  checkClean(5, t5pole, 6, 0.0, 1.0, "validate type 5, exp(X^-1) over (0, 1]: clean");
+
+  /* Pole of X^g, g -1, at X = 0.  The start is exclusive, so (0, 1] is clean. */
+  const double t0pole[] = { -1.0, 1.0, 0.0, 0.0 };
+  checkReported(0, t0pole, 4, -1.0, 1.0, kZeroPow,
+                "validate type 0, g -1 over (-1, 1]: zero to a negative power reported");
+  checkClean(0, t0pole, 4, 0.0, 1.0, "validate type 0, g -1 over (0, 1]: clean");
+
+  /* (X - 0.5)^-1 has its pole inside the range, away from either end. */
+  const double t0inner[] = { -1.0, 1.0, -0.5, 0.0 };
+  checkReported(0, t0inner, 4, 0.0, 1.0, kZeroPow,
+                "validate type 0, (X - 0.5)^-1 over (0, 1]: interior pole reported");
+  checkClean(0, t0inner, 4, 0.5, 1.0, "validate type 0, (X - 0.5)^-1 over (0.5, 1]: clean");
+
+  /* Denominator 1 - X of type 7 reaches zero at X = 1, the included end,
+   * without changing sign; 1 - 3X^2 of type 6 changes sign at 1/sqrt(3),
+   * which no float reaches. */
+  const double t7den[] = { 1.0, 1.0, 1.0, 0.0, -1.0, 1.0 };
+  checkReported(7, t7den, 6, 0.0, 1.0, kDenominator,
+                "validate type 7, 1 / (1 - X) over (0, 1]: zero denominator at the end reported");
+  checkClean(7, t7den, 6, 0.0, 0.5, "validate type 7, 1 / (1 - X) over (0, 0.5]: clean");
+  const double t6den[] = { 1.0, 2.0, -1.0, 1.0, 3.0, 1.0, 1.0 };
+  checkReported(6, t6den, 7, 0.0, 1.0, kDenominator,
+                "validate type 6, (X^2 + 1) / (1 - 3X^2) over (0, 1]: sign change reported");
+  checkClean(6, t6den, 7, 0.0, 0.5, "validate type 6, (X^2 + 1) / (1 - 3X^2) over (0, 0.5]: clean");
+
+  /* Type 7's ratio (0.25 - X) / (1 - 2X) is negative only between its two
+   * roots, 0.25 and 0.5, which are both floats: the value at each root is 0
+   * or a zero denominator, so only the float after 0.25 shows the negative
+   * base. */
+  {
+    const double t7gap[] = { 2.2, 1.0, 0.25, -1.0, -2.0, 1.0 };
+    std::string sReport;
+    icValidateStatus rv = validateSegment(7, t7gap, 6, 0.0, 1.0, sReport);
+    check(rv == icValidateWarning && has(sReport, kNegativeBase) && has(sReport, kDenominator),
+          "validate type 7, w 2.2, (0.25 - X) / (1 - 2X) over (0, 1]: negative base between roots reported");
+  }
+
+  /* g 1.0 shortcuts do their arithmetic in float, and so must the check.
+   * Type 7's 1 - 3X is exactly 0 in float at X = 0.33333334, so w = -1 gives
+   * inf there, though the same sum in double is -3e-8.  Type 4's 3X - 1 is 0
+   * in float at that X and positive in double. */
+  const double t7float[] = { -1.0, 1.0, 1.0, -3.0, 0.0, 1.0 };
+  checkReported(7, t7float, 6, 0.0, 1.0, kZeroPow,
+                "validate type 7, g 1.0, (1 - 3X)^-1 over (0, 1]: float zero reported");
+  checkClean(7, t7float, 6, 0.5, 1.0, "validate type 7, g 1.0, (1 - 3X)^-1 over (0.5, 1]: clean");
+  const double t4float[] = { 1.0, 1.0, 1.0, 0.0, 3.0 };
+  checkReported(4, t4float, 5, 0.3333333134651184, 1.0, kLog,
+                "validate type 4, g 1.0, ln(3X - 1) from X = 0.33333334: float zero reported");
+  checkClean(4, t4float, 5, 0.5, 1.0, "validate type 4, g 1.0, ln(3X - 1) over (0.5, 1]: clean");
+
+  /* Type 6's numerator max(X - 10, 0) is 0 over (0, 1], so 1 - 3X changing
+   * sign at 1/3 is no pole: Apply() gives 0 throughout. */
+  const double t6flat[] = { 1.0, 1.0, 10.0, 1.0, 3.0, 1.0, 1.0 };
+  checkClean(6, t6flat, 7, 0.0, 1.0,
+             "validate type 6, max(X - 10, 0) / (1 - 3X) over (0, 1]: no pole, clean");
+
+  /* Type 3, clipPow(): the HLG OOTF shape, (1.00629 X - 0.00629)^(-1/6),
+   * has no value below X = 0.00625.  An integer g has one everywhere, even
+   * where clipPow() replaces it, as in BT2100HlgNarrow's g = 2 over (-inf, 0.5]. */
+  const double t3ootf[] = { -1.0 / 6.0, 1.0, 1.006289308, -0.006289308, 0.0 };
+  checkReported(3, t3ootf, 5, 0.0, 1.0, kClipPow,
+                "validate type 3, g -1/6 over (0, 1]: undefined power reported");
+  checkClean(3, t3ootf, 5, 0.01, 1.0, "validate type 3, g -1/6 over (0.01, 1]: clean");
+  const double t3int[] = { 2.0, 1.0 / 3.0, 1.0, 0.0, 0.0 };
+  checkClean(3, t3int, 5, -inf, 0.5, "validate type 3, g 2 over (-inf, 0.5]: clean");
+  const double t3pole[] = { -1.0, 1.0, 1.0, 0.0, 0.0 };
+  checkReported(3, t3pole, 5, -1.0, 1.0, kClipPow,
+                "validate type 3, g -1 over (-1, 1]: zero to a negative power reported");
+  checkClean(3, t3pole, 5, -1.0, -0.5, "validate type 3, g -1 over (-1, -0.5]: clean");
+
+  /* A non-finite parameter is not examined (and must not crash). */
+  const double t0nan[] = { NAN, 1.0, 0.0, 0.0 };
+  std::string sReport;
+  validateSegment(0, t0nan, 4, -inf, inf, sReport);
+  check(!has(sReport, "formula curve segment"), "validate type 0, g NaN: domain not examined");
 }
 
 static void testType0()
@@ -272,6 +510,12 @@ static void testArgbRef(const char* szPath)
     delete pWholeApply;
   }
 
+  if (pB2D3) {
+    std::string sReport;
+    pB2D3->Validate("", sReport, pProfile);
+    check(has(sReport, kNegativeBase), "argbRef B2D3: Validate reports the negative base");
+  }
+
   delete pMatrix;
   delete pWhole;
   delete pProfile;
@@ -304,6 +548,12 @@ static void testLaserProjector(const char* szPath)
     delete pApply;
   }
 
+  if (pB2A1) {
+    std::string sReport;
+    pB2A1->Validate("", sReport, pProfile);
+    check(has(sReport, kNegativeBase), "LaserProjector B2A1: Validate reports the negative base");
+  }
+
   delete pCurves;
   delete pProfile;
 }
@@ -312,10 +562,14 @@ int main(int argc, char* argv[])
 {
   testType0();
   testType1();
+  testType2();
+  testType3();
+  testLogArgument();
   testType4();
   testType5();
   testType6();
   testType7();
+  testValidate();
 
   if (argc == 3) {
     testArgbRef(argv[1]);
