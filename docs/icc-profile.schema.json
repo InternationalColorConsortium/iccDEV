@@ -169,7 +169,7 @@
         { "allOf": [{ "properties": { "type": { "const": "float16ArrayType"             } } }, { "$ref": "#/$defs/NumericArrayTypeContent"              }] },
         { "allOf": [{ "properties": { "type": { "const": "float32ArrayType"             } } }, { "$ref": "#/$defs/NumericArrayTypeContent"              }] },
         { "allOf": [{ "properties": { "type": { "const": "float64ArrayType"             } } }, { "$ref": "#/$defs/NumericArrayTypeContent"              }] },
-        { "allOf": [{ "properties": { "type": { "const": "sparseMatrixArrayType"        } } }, { "$ref": "#/$defs/NumericArrayTypeContent"              }] },
+        { "allOf": [{ "properties": { "type": { "const": "sparseMatrixArrayType"        } } }, { "$ref": "#/$defs/SparseMatrixArrayTypeContent"         }] },
         { "allOf": [{ "properties": { "type": { "const": "chromaticityType"             } } }, { "$ref": "#/$defs/ChromaticityTypeContent"              }] },
         { "allOf": [{ "properties": { "type": { "const": "cicpType"                     } } }, { "$ref": "#/$defs/CicpTypeContent"                      }] },
         { "allOf": [{ "properties": { "type": { "const": "colorantOrderType"            } } }, { "$ref": "#/$defs/ColorantOrderTypeContent"             }] },
@@ -291,10 +291,46 @@
 
     "NumericArrayTypeContent": {
       "type": "object",
-      "description": "Numeric array types (uInt8ArrayType, uInt16ArrayType, uInt32ArrayType, uInt64ArrayType, float16/32/64ArrayType, s15Fixed16ArrayType, u16Fixed16ArrayType, sparseMatrixArrayType)",
+      "description": "Numeric array types (uInt8ArrayType, uInt16ArrayType, uInt32ArrayType, uInt64ArrayType, float16/32/64ArrayType, s15Fixed16ArrayType, u16Fixed16ArrayType). sparseMatrixArrayType is NOT one of them -- see SparseMatrixArrayTypeContent.",
       "required": ["values"],
       "properties": {
         "values": { "type": "array", "items": { "type": "number" } }
+      }
+    },
+
+    "SparseMatrixArrayTypeContent": {
+      "type": "object",
+      "description": "sparseMatrixArrayType, as CIccTagJsonSparseMatrixArray::ToJson writes it and ParseJson reads it back. This type was mapped to NumericArrayTypeContent until #2583, which required a 'values' member the writer has never emitted, so the checked-in schema rejected iccToJson's own output for every profile carrying one.",
+      "required": ["outputChannels", "matrixType", "matrices"],
+      "properties": {
+        "outputChannels": { "type": "integer", "minimum": 0 },
+        "matrixType": { "type": "integer", "minimum": 0 },
+        "matrices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["rows", "cols", "sparseRows"],
+            "properties": {
+              "rows": { "type": "integer", "minimum": 0 },
+              "cols": { "type": "integer", "minimum": 0 },
+              "sparseRows": {
+                "type": "array",
+                "description": "One entry per row. A row with no stored entries may omit both members; ParseJson skips it and records an empty row.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "colIndices": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+                    "colData": { "type": "array", "items": { "type": "number" } }
+                  },
+                  "dependentRequired": {
+                    "colIndices": ["colData"],
+                    "colData": ["colIndices"]
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
 

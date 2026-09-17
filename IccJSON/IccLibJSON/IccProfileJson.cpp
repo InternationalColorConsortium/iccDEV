@@ -62,6 +62,7 @@
 #include "IccUtilJson.h"
 #include "IccUtil.h"
 #include "IccTagFactory.h"
+#include "IccArrayBasic.h"
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -505,6 +506,10 @@ bool CIccProfileJson::ParseTag(const std::string &key, const IccJson &tagValue,
       parseStr += "Unable to attach sameAs tag '" + key + "'\n";
       return false;
     }
+    //A shared tag takes the spaces of the signature it was last attached under,
+    //which is how the XML reader resolves a tag node carrying several
+    //TagSignature children.
+    SetTagColorSpaces(sig, pRefTag);
     keyToSig[key] = sig;
     return true;
   }
@@ -571,8 +576,84 @@ bool CIccProfileJson::ParseTag(const std::string &key, const IccJson &tagValue,
     return false;
   }
 
+  //A lut or named colour tag carries no colour spaces of its own: it takes them
+  //from the header of the profile it is attached to. The binary reader does this
+  //in LoadTag() and the XML reader at the end of ParseTag(); without it the tag
+  //keeps the constructor's zeroes, which Validate() then compares against the
+  //tag's real channel counts. Header is parsed before Tags, so m_Header is set.
+  SetTagColorSpaces(sig, pTag);
+
   keyToSig[key] = sig;
   return true;
+}
+
+/**
+******************************************************************************
+* Name: CIccProfileJson::SetTagColorSpaces
+*
+* Purpose: Give a freshly attached tag the header colour spaces its class needs,
+*  matching CIccProfileXml::ParseTag(). The XML set is used rather than the
+*  binary reader's because both are document readers: it carries AToB3/BToA3 and
+*  the HToS tags, which a v5 document can hold and the binary switch omits.
+*
+* Args:
+*  sig = the tag signature the tag was attached under
+*  pTag = the attached tag
+******************************************************************************/
+void CIccProfileJson::SetTagColorSpaces(icTagSignature sig, CIccTag *pTag)
+{
+  if (!pTag)
+    return;
+
+  switch (sig) {
+  case icSigAToB0Tag:
+  case icSigAToB1Tag:
+  case icSigAToB2Tag:
+  case icSigAToB3Tag:
+    if (pTag->IsMBBType())
+      ((CIccMBB*)pTag)->SetColorSpaces(m_Header.colorSpace, m_Header.pcs);
+    break;
+
+  case icSigBToA0Tag:
+  case icSigBToA1Tag:
+  case icSigBToA2Tag:
+  case icSigBToA3Tag:
+    if (pTag->IsMBBType())
+      ((CIccMBB*)pTag)->SetColorSpaces(m_Header.pcs, m_Header.colorSpace);
+    break;
+
+  case icSigHToS0Tag:
+  case icSigHToS1Tag:
+  case icSigHToS2Tag:
+  case icSigHToS3Tag:
+    if (pTag->IsMBBType())
+      ((CIccMBB*)pTag)->SetColorSpaces(m_Header.pcs, m_Header.pcs);
+    break;
+
+  case icSigGamutTag:
+    if (pTag->IsMBBType())
+      ((CIccMBB*)pTag)->SetColorSpaces(m_Header.pcs, icSigGamutData);
+    break;
+
+  case icSigNamedColor2Tag:
+    if (pTag->GetType() == icSigNamedColor2Type) {
+      ((CIccTagNamedColor2*)pTag)->SetColorSpaces(m_Header.pcs, m_Header.colorSpace);
+    }
+    else if (pTag->GetTagArrayType() == icSigNamedColorArray) {
+      CIccArrayNamedColor *pAry = (CIccArrayNamedColor*)icGetTagArrayHandler(pTag);
+
+      if (pAry) {
+        pAry->SetColorSpaces(m_Header.pcs, m_Header.colorSpace,
+                             m_Header.spectralPCS,
+                             &m_Header.spectralRange,
+                             &m_Header.biSpectralRange);
+      }
+    }
+    break;
+
+  default:
+    break;
+  }
 }
 
 bool CIccProfileJson::ParseJson(const IccJson &root, std::string &parseStr)

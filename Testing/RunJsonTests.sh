@@ -69,13 +69,21 @@ while IFS= read -r icc; do
   # FromJson
   # A non-zero iccFromJson no longer means "no profile".  Since #2384 the tool
   # exits non-zero for a profile that validates above icValidateWarning while
-  # still WRITING it, and four generated profiles round-trip that way --
-  # Named/SparseMatrixNamedColor.icc plus CalcTest/calcOverMem_t{get,put,sav}.icc.
-  # Treating status as the gate silently moved them from "byte-parity compared"
-  # to SKIP: the harness stayed green while covering less, and
-  # SparseMatrixNamedColor is a NON-CalcTest profile that had been counting
-  # toward the non-calc failure gate.  Gate on the artifact instead, so a written
-  # profile is always size-compared and only a genuinely absent one skips.
+  # still WRITING it, and CalcTest/calcOverMem_t{get,put,sav}.icc round-trip that
+  # way.  Treating status as the gate silently moved them from "byte-parity
+  # compared" to SKIP: the harness stayed green while covering less.  Gate on the
+  # artifact instead, so a written profile is always size-compared and only a
+  # genuinely absent one skips.
+  #
+  # Named/SparseMatrixNamedColor.icc was a fourth profile on that list until
+  # #2583.  Its non-zero status was a FALSE verdict -- CIccProfileJson::ParseTag()
+  # attached the named colour tag without the header colour spaces, so
+  # Validate() compared each colour against a zero spectral sample count -- and
+  # gating on the artifact kept its byte parity covered while normalising the bad
+  # diagnostic rather than surfacing it.  It now exits 0.  That is the limit of
+  # what this gate can see: it compares bytes, and a profile whose bytes are
+  # right cannot be distinguished here from one whose verdict is also right.
+  # iccdev.json-namedcolor-colorspaces is what asserts the verdict.
   rm -f /tmp/json-rt-test.icc
   fromjson_rc=0
   timeout 30 "$FROMJSON" /tmp/json-rt-test.json /tmp/json-rt-test.icc >/dev/null 2>&1 || fromjson_rc=$?
