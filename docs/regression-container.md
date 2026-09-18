@@ -12,25 +12,23 @@ included Clang 21 pair for compatible instrumentation.
 
 | Tag | Purpose |
 |-----|---------|
-| `latest` | Current image from `master`; convenient but mutable. |
-| `ci-qa-pr-docker-testing` | Mutable integration image published only by the protected Docker validation branch. |
-| `ci-publish-colourbill-ctrl` | Mutable integration image published by the reviewer-gated maintainer publishing branch. |
-| `sha-<40-character-commit>` | Immutable CI and investigation reference. |
-| `v<release>` | Immutable released image. |
-| Existing legacy tags | Retained temporarily for continuity; unsupported for new use. |
+| `latest` | Default image for all current maintainer validation. Resolve it to a digest before execution. |
+| `sha-<40-character-commit>` | Use only when reproducing, comparing, or retaining evidence for an explicit source revision. |
+| `ci-qa-pr-docker-testing` | Publication-only integration tag for the protected Docker validation branch; not a maintainer validation selector. |
+| `ci-publish-colourbill-ctrl` | Publication-only integration tag for the reviewer-gated publishing branch; not a maintainer validation selector. |
+| `v<release>` | Published release tag; do not select it for routine maintainer validation. |
+| Existing legacy tags | Retained temporarily for continuity; unsupported for new use or validation. |
 
-Resolve every selected tag to a digest and record that digest plus the source
-revision before automated or shared validation. Execute the resolved digest,
-not the tag, so a mutable tag cannot change during the run. Do not hardcode one
-full-SHA tag as a long-lived workflow default; it becomes stale as the
-maintainer image advances. Replay prior evidence with its recorded digest.
+Use `latest` for every current automated or shared validation, resolve it to a
+digest, and record that digest plus the source revision. Execute the resolved
+digest, not the mutable tag. Select a full SHA tag only when a specific
+historical image is necessary to reproduce, compare, or retain evidence. Do
+not hardcode a SHA image as a long-lived workflow default.
 
 Existing short-SHA, branch, and image-variant tags remain available only to
-avoid breaking current users during the consolidation transition, except for
-the supported `ci-qa-pr-docker-testing` and `ci-publish-colourbill-ctrl`
-integration tags. Do not create,
-recommend, or depend on new legacy tags. Re-evaluate their retention and
-removal through a separately announced tag-management change.
+avoid breaking current users during the consolidation transition. Do not
+create, recommend, or depend on them for validation. Re-evaluate their
+retention and removal through a separately announced tag-management change.
 
 ```bash
 IMAGE_TAG=ghcr.io/internationalcolorconsortium/iccdev:latest
