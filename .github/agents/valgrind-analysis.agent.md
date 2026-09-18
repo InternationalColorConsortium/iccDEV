@@ -13,8 +13,10 @@ Use `docs/valgrind-analysis.md` and
 4. Run the self-test after building `dump` for runner or image QA.
 5. Bound each analyzer run and retain all generated evidence.
 6. Compare Helgrind and DRD for synchronization investigations.
-7. Classify exit `1-127` as graceful failure and `128+` as signal termination.
-8. Report the exact commit, analyzer, target, command, exit code, error count,
+7. Use `.github/ci/valgrind/issue-2592-regression.sh` for threaded
+   row-application condition-variable notification changes.
+8. Classify exit `1-127` as graceful failure and `128+` as signal termination.
+9. Report the exact commit, analyzer, target, command, exit code, error count,
    evidence path, and any analyzer disagreement.
 
 Do not suppress findings or use `--allow-findings` unless the task explicitly

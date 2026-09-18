@@ -27,7 +27,9 @@ Canonical guide: `docs/valgrind-analysis.md`
    requests known-finding evidence.
 8. For a race investigation, compare Helgrind and DRD and state when their
    results differ.
-9. Report exact commands, source revision, exit codes, error counts, and paths.
+9. For issue #2592 or threaded row-application notification changes, run the
+   focused `issue-2592-regression.sh` wrapper and compare its generated TIFFs.
+10. Report exact commands, source revision, exit codes, error counts, and paths.
 
 Do not create a standalone C++ reproducer. Use registered project tools,
 regression executables, and durable ICC/XML/JSON/TIFF inputs.

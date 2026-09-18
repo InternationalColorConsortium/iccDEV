@@ -109,8 +109,8 @@ public:
     {
       std::lock_guard<std::mutex> lock(m_mutex);
       m_stop = true;
+      m_jobReady.notify_all();
     }
-    m_jobReady.notify_all();
 
     for (std::thread &worker : m_threads) {
       if (worker.joinable())
@@ -162,10 +162,10 @@ public:
       m_pending = m_jobCount;
       for (size_t i = 0; i < m_jobCount; i++)
         m_jobs[i] = i;
-    }
 
-    for (int i = 0; i < nActive - 1; i++)
-      m_jobReady.notify_one();
+      for (int i = 0; i < nActive - 1; i++)
+        m_jobReady.notify_one();
+    }
 
     icStatusCMM rv = workers[(size_t)nActive - 1]->Apply(
       dstPixel + offset * nDstSamples,
