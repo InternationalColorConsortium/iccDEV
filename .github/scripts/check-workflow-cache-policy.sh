@@ -51,7 +51,6 @@ import re
 import sys
 from pathlib import Path
 
-
 def code_lines(path):
     lines = Path(path).read_text(encoding="utf-8").splitlines()
     in_run = False
