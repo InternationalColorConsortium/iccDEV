@@ -850,6 +850,7 @@ jobs:
           PY_TAG="cp${PYTHON_VERSION//./}"
           export CIBW_BUILD="${PY_TAG}-*"
           export CIBW_ARCHS="auto"
+          export CIBW_DEPENDENCY_VERSIONS="latest"
           rm -rf build iccdev/*.so iccdev/*.pyd
           python vendor_iccproflib.py
           trap 'python vendor_iccproflib.py --clean; rm -rf build iccdev/*.so iccdev/*.pyd' EXIT
