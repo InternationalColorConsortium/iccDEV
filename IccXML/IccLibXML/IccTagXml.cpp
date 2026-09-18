@@ -495,6 +495,13 @@ bool CIccTagXmlZipUtf8Text::ParseXml(xmlNode *pNode, std::string &parseStr)
         if (m_nBufSize && m_pZipBuf) {
           memcpy(m_pZipBuf, buf.GetBuf(), m_nBufSize);
         }
+#ifdef ICC_USE_ZLIB
+        std::string text;
+        if (!GetText(text)) {
+          parseStr += "Invalid HexCompressedData zlib stream in compressed tag\n";
+          return false;
+        }
+#endif
         return true;
       }      
     }
@@ -531,6 +538,13 @@ bool CIccTagXmlZipXml::ParseXml(xmlNode *pNode, std::string &parseStr)
         if (m_nBufSize && m_pZipBuf) {
           memcpy(m_pZipBuf, buf.GetBuf(), m_nBufSize);
         }
+#ifdef ICC_USE_ZLIB
+        std::string text;
+        if (!GetText(text)) {
+          parseStr += "Invalid HexCompressedData zlib stream in compressed tag\n";
+          return false;
+        }
+#endif
         return true;
       }      
     }

@@ -335,6 +335,13 @@ bool CIccTagJsonZipUtf8Text::ParseJson(const IccJson &j, std::string &parseStr)
     icUChar *pBuf = AllocBuffer(sz);
     if (!pBuf) return false;
     icJsonGetHexData(pBuf, hex.c_str(), sz);
+#ifdef ICC_USE_ZLIB
+    std::string text;
+    if (!GetText(text)) {
+      parseStr += "Invalid compressedData zlib stream in compressed tag\n";
+      return false;
+    }
+#endif
   }
   return true;
 }
@@ -361,6 +368,13 @@ bool CIccTagJsonZipXml::ParseJson(const IccJson &j, std::string &parseStr)
     icUChar *pBuf = AllocBuffer(sz);
     if (!pBuf) return false;
     icJsonGetHexData(pBuf, hex.c_str(), sz);
+#ifdef ICC_USE_ZLIB
+    std::string text;
+    if (!GetText(text)) {
+      parseStr += "Invalid compressedData zlib stream in compressed tag\n";
+      return false;
+    }
+#endif
   }
   return true;
 }
