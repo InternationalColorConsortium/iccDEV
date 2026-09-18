@@ -63,6 +63,18 @@ on a mounted volume.
 the preferred concurrency lanes. Analyzer disagreement is evidence to retain,
 not a reason to suppress one result.
 
+Issue #2592 records DRD's condition-variable notification check for the
+threaded row-application pool. To keep this maintained DRD lane clean,
+notifications for `m_jobReady` occur while holding the mutex associated with
+its wait predicate. Run the focused native regression with:
+
+```bash
+ICCDEV_VALGRIND_BUILD_DIR="$PWD/out/issue-2592-valgrind" ICCDEV_VALGRIND_OUTPUT_DIR="$PWD/out/issue-2592-evidence" .github/ci/valgrind/issue-2592-regression.sh
+```
+
+The command requires zero DRD and Helgrind errors and byte-identical generated
+TIFFs. Choose fresh build and evidence paths when retaining multiple runs.
+
 The historical
 <a href="../.github/scripts/iccdev-valgrind-qa.sh">`iccdev-valgrind-qa.sh`</a>
 continues to provide the focused before/after expectation contract for the
@@ -77,6 +89,7 @@ shellcheck .github/ci/valgrind/*.sh .github/ci/valgrind/fixtures/*
 .github/ci/valgrind/validate.sh
 .github/ci/valgrind/build.sh --target dump
 .github/ci/valgrind/self-test.sh
+.github/ci/valgrind/issue-2592-regression.sh
 ```
 
 Inspect Massif data with `ms_print` and Callgrind data with

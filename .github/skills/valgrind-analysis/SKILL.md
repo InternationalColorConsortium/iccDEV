@@ -32,9 +32,12 @@ heap-growth, or call-profile investigations against iccDEV tools.
    generated work files.
 8. For concurrency, compare Helgrind and DRD rather than treating either as a
    substitute for TSan.
-9. Attribute findings to stack frames and observed synchronization behavior,
+9. For issue #2592 or `m_jobReady` notification changes, run
+   `.github/ci/valgrind/issue-2592-regression.sh`; require both analyzers to be
+   clean and their generated TIFFs to match.
+10. Attribute findings to stack frames and observed synchronization behavior,
    not input filenames.
-10. Report the exact source revision, command, exit code, error count, and
+11. Report the exact source revision, command, exit code, error count, and
    evidence directory.
 
 Use `--allow-findings` only when collecting a known or deliberately compared

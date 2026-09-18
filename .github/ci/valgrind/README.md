@@ -12,5 +12,8 @@ Use `build.sh` to configure the build, `run.sh` to execute named lanes,
 `dump` target is built. User and maintainer commands live in
 `docs/valgrind-analysis.md`.
 
+`issue-2592-regression.sh` builds `applyprofiles-row`, requires clean DRD and
+Helgrind runs, and verifies that both analyzers produce the same output TIFF.
+
 The older `.github/scripts/iccdev-valgrind-qa.sh` remains the focused
 before/after regression helper for the historical `GetNewApplyCmm()` race.
