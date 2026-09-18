@@ -218,7 +218,8 @@ Report:
   as authoritative evidence. Note whether per-run logs were bounded by
   `registry_qa_log_tail_lines`; use `0` only when full raw logs are needed.
   Developer reports must preserve downloaded profile payloads so reviewers can
-  inspect and rerun failing inputs without a second download step.
+  inspect and rerun failing inputs without a second download step. Package and
+  upload that report with `always()` so failed scans retain their evidence.
 - Remaining Windows, packaging, or release validation that requires hosted
   runners.
 

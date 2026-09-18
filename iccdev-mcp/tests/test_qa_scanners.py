@@ -8,12 +8,14 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 
 import pytest
 
 SCRIPTS = Path(__file__).resolve().parents[2] / ".github" / "scripts"
+TOOL_WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "ci-iccdev-tool-tests.yml"
 spec = importlib.util.spec_from_file_location("pawg_classifier", SCRIPTS / "icc-pawg-qa-classify.py")
 classifier = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(classifier)
@@ -126,7 +128,9 @@ def scan(tree, tmp_path, tool="pawg", env=None, args=()):
     (report("text"), 0, "PASS"), (report("text", ("WARN",)), 0, "QA-ISSUE"),
     ("", 0, "QA-ISSUE"), ("error", 1, "FAIL"),
     ("AddressSanitizer: test", 0, "CRASH"), ("runtime error: test", 0, "CRASH"),
-    ("SIGSEGV", 0, "CRASH"), ("", 132, "CRASH"), ("", 124, "TIMEOUT"),
+    ("SIGSEGV", 0, "CRASH"), ("", 129, "CRASH"), ("", 192, "CRASH"),
+    ("", 128, "FAIL"), ("", 193, "FAIL"), ("", 255, "FAIL"),
+    ("", 124, "TIMEOUT"),
 ])
 def test_scanner_classification(scanner_tree, tmp_path, output, code, expected):
     binary = stub(tmp_path / "tool", output, code)
@@ -209,3 +213,11 @@ def test_non_pawg_diagnostics_unchanged(scanner_tree, tmp_path):
                         args=("--tool", str(binary), "--variant", "basic"))
     assert result.returncode == 0 and rows[0]["status"] == "QA-ISSUE"
     assert rows[0]["errors"] == "1" and rows[0]["warnings"] == "1"
+
+
+@pytest.mark.parametrize("step_name", ["Package developer report", "Upload developer report"])
+def test_developer_report_is_retained_after_a_failed_registry_scan(step_name):
+    workflow = TOOL_WORKFLOW.read_text(encoding="utf-8")
+    match = re.search(rf"- name: {re.escape(step_name)}\n\s+if: (.+)", workflow)
+    assert match, f"missing workflow step: {step_name}"
+    assert match.group(1) == "${{ always() }}"
