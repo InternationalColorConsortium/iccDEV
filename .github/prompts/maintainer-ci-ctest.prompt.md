@@ -87,6 +87,8 @@ Choose the smallest gate that proves the behavior:
   log excerpts by default; rerun with `registry_qa_log_tail_lines=0` only when
   complete raw per-tool logs are required. Preserve downloaded registry profile
   payloads in developer reports so failing inputs remain available for review.
+  Package and upload the developer report with `always()` so a failed registry
+  scan retains its classifier counters and raw evidence.
 - Container changes require the local canonical-image build and smoke in
   `docs/regression-container.md`. The Docker PR verification job is disabled.
 - When adding cases inside an existing script-backed suite, document that the

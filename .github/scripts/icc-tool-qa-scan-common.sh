@@ -270,7 +270,7 @@ classify_exit() {
   local exit_code="$1" sanitizer="$2" signals="$3" issue_count="$4"
   if [[ "$sanitizer" -gt 0 || "$signals" -gt 0 ]]; then
     printf 'CRASH'
-  elif [[ "$exit_code" -ge 128 ]]; then
+  elif [[ "$exit_code" -ge 129 && "$exit_code" -le 192 ]]; then
     printf 'CRASH'
   elif [[ "$exit_code" -eq 124 ]]; then
     printf 'TIMEOUT'
