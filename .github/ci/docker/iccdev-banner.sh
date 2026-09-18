@@ -109,6 +109,11 @@ if command -v iccdev-fuzz-env >/dev/null 2>&1; then
   printf '%s\n' 'AFL/CFL helper: iccdev-fuzz-env'
 fi
 
+if command -v iccdev-valgrind-run >/dev/null 2>&1; then
+  printf '%s\n' ''
+  printf '%s\n' 'Valgrind helper: iccdev-valgrind-build / iccdev-valgrind-run'
+fi
+
 printf '%s\n' ''
 printf '%s\n' 'Open an Issue with Comments or Feedback at URL:'
 printf '%s\n' 'https://github.com/InternationalColorConsortium/iccDEV/issues'

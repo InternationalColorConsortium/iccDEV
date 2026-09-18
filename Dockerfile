@@ -127,6 +127,9 @@ ENV CC=clang \
     ICCDEV_MCP_PYTHON=/opt/iccdev-mcp/bin/python \
     ICCDEV_MSAN_LIBCXX_DIR=/opt/iccdev-msan-libcxx \
     ICCDEV_SPECTRAL_PREVIEW_PYTHON=/opt/iccdev-spectral-preview/bin/python \
+    ICCDEV_VALGRIND_SOURCE_DIR=/workspace/iccDEV \
+    ICCDEV_VALGRIND_BUILD_DIR=/workspace/valgrind/build \
+    ICCDEV_VALGRIND_OUTPUT_DIR=/workspace/valgrind/output \
     ICCDEV_BUILD_LABEL="iccDEV unified image" \
     ICCDEV_IMAGE_PULL="docker pull ghcr.io/internationalcolorconsortium/iccdev:latest" \
     PATH="/opt/iccdev-mcp/bin:${PATH}"
@@ -279,6 +282,12 @@ RUN chmod 0755 /usr/local/bin/iccdev-banner \
  && chmod 0755 /usr/local/bin/iccdev-fuzz-env \
  && chmod 0755 /usr/local/bin/iccdev-generate-profiles \
  && chmod 0755 /usr/local/bin/iccdev-mcp-entrypoint \
+ && ln -sf /workspace/iccDEV/.github/ci/valgrind/build.sh /usr/local/bin/iccdev-valgrind-build \
+ && ln -sf /workspace/iccDEV/.github/ci/valgrind/run.sh /usr/local/bin/iccdev-valgrind-run \
+ && ln -sf /workspace/iccDEV/.github/ci/valgrind/status.sh /usr/local/bin/iccdev-valgrind-status \
+ && ln -sf /workspace/iccDEV/.github/ci/valgrind/validate.sh /usr/local/bin/iccdev-valgrind-validate \
+ && ln -sf /workspace/iccDEV/.github/ci/valgrind/self-test.sh /usr/local/bin/iccdev-valgrind-self-test \
+ && iccdev-valgrind-validate \
  && find /workspace/build/Tools -mindepth 2 -maxdepth 2 -type f -executable \
      -exec ln -sf '{}' /usr/local/bin/ ';' \
  && printf '%s\n' \
@@ -294,7 +303,7 @@ RUN chmod 0755 /usr/local/bin/iccdev-banner \
  && chown iccdev-ci:iccdev-ci /workspace/.bashrc
 
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
-  CMD ["bash", "-c", "clang --version >/dev/null && cmake --version >/dev/null && command -v ninja >/dev/null && command -v cppcheck >/dev/null && command -v clang-tidy >/dev/null && command -v scan-build >/dev/null && command -v hadolint >/dev/null && command -v zizmor >/dev/null && command -v shellcheck >/dev/null && command -v afl-fuzz >/dev/null && command -v valgrind >/dev/null && command -v iccdev-build-msan-libcxx >/dev/null && test -f /usr/include/valgrind/memcheck.h && test -f /opt/iccdev-msan-libcxx/lib/libc++.so.1 && test -f /opt/iccdev-msan-libcxx/lib/libc++abi.so.1 && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null"]
+  CMD ["bash", "-c", "clang --version >/dev/null && cmake --version >/dev/null && command -v ninja >/dev/null && command -v cppcheck >/dev/null && command -v clang-tidy >/dev/null && command -v scan-build >/dev/null && command -v hadolint >/dev/null && command -v zizmor >/dev/null && command -v shellcheck >/dev/null && command -v afl-fuzz >/dev/null && command -v valgrind >/dev/null && command -v ms_print >/dev/null && command -v callgrind_annotate >/dev/null && command -v iccdev-valgrind-build >/dev/null && command -v iccdev-valgrind-run >/dev/null && command -v iccdev-valgrind-status >/dev/null && command -v iccdev-valgrind-validate >/dev/null && command -v iccdev-valgrind-self-test >/dev/null && command -v iccdev-build-msan-libcxx >/dev/null && test -f /usr/include/valgrind/memcheck.h && test -f /opt/iccdev-msan-libcxx/lib/libc++.so.1 && test -f /opt/iccdev-msan-libcxx/lib/libc++abi.so.1 && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null"]
 
 LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 ENV ICCDEV_SOURCE_REVISION="${GIT_COMMIT}"
