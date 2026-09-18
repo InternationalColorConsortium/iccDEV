@@ -298,6 +298,7 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.applyprofiles-evidence-matrix` | Unix wrapper and Windows Python runner; classify tracked positive and expected-negative conversions, validate TIFF and receipt digests, and retain command, PAWG, and measurement evidence |
 | `iccdev.namedcolor-apply-regressions` | `.github/scripts/iccdev-namedcolor-apply-regression-tests.sh` |
 | `iccdev.v5-namedcmm-regressions` | `.github/scripts/iccdev-v5-namedcmm-regression-tests.sh` |
+| `iccdev.v5-profile-validation` | `Build/Cmake/Testing/RunV5ProfileValidation.cmake` and `Testing/ICS/V5Coverage/*.xml` |
 | `iccdev.namedcolor-overprint-regressions` | `.github/scripts/iccdev-namedcolor-overprint-regression-tests.sh` |
 | `iccdev.named-colour-signature-v5` | `.github/ci/regression/named-colour-signature-v5.cpp`; the v5 named colour tag signature `nmcl` and array type identifier `ncol`, read as bytes, for issue #2562 |
 | `iccdev.tag-type-table` | `.github/ci/regression/tag-type-table.cpp`; the permitted tag types #3065 corrected in `CIccProfile::IsTypeValid()` (v4 DToB3/BToD3, preview0 lutAToBType, no legacy LUTs in v5 AToB/BToA, metaDataTag/psid/ciis) |
@@ -392,6 +393,16 @@ text and JSON output, rejects a generated ICC5 profile whose embedded ICC.2
 declared size differs from its payload, checks S10 against the generated
 calculator-operation fixture, runs malware-signature dynamic inputs, and fails
 on sanitizer findings.
+
+`iccdev.v5-profile-validation` synthesizes six profiles from compact XML
+sources and runs the serialized results through `iccDumpProfile -v 100`. Its
+accepted controls cover two-, 36-, and 81-channel reflectance spectral PCS
+signatures. Its rejection cases cover spectral signature/range mismatch, the
+one-step interpretation boundary, and an ICC.2 `ncXXXX` data space placed in an
+ICC.1 v4 profile. Invalid cases must be rejected by both `iccFromXml` and
+`iccDumpProfile`; the converter's preserved artifact is checked independently.
+See `v5-profile-validation-qa.md` for the specification correlation and the
+distinction between focused validator acceptance and full profile conformance.
 
 `iccdev.pawg-q1-quality-contract` validates the PAWG Q1 sample budget,
 CIEDE2000 reference vectors, and Gray/RGB/CMYK round-trip model selection.
