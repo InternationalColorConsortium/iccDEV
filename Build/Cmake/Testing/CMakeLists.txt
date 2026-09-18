@@ -2677,9 +2677,9 @@ function(iccdev_add_pcs_applyillum_chain_sizing_test)
   endif()
 endfunction()
 
-# #1932: CIccPcsXform::Connect() sized the spectral PCS steps it pushes from the header's
-# spectralRange while the pixel buffers those steps run in are sized from the channel
-# count in the spectralPCS signature, and never checked that the two agreed. A header
+# #1932 and #2579: CIccPcsXform::Connect() sized the spectral PCS steps it pushes from the header's
+# spectralRange while the pixel buffers those steps run in are sized from the effective
+# PCS port, and never checked that the two agreed. A header
 # declaring "rs" + 36 channels alongside spectralRange.steps == 184 produced a 3x184
 # observer matrix reading a 36-float pixel (CWE-125 heap over-read in
 # CIccSparseMatrix::MultiplyVector). CIccProfile::Validate() already calls that a critical
@@ -2707,7 +2707,7 @@ function(iccdev_add_spectral_pcs_range_consistency_test)
   set_tests_properties(iccdev.spectral-pcs-range-consistency PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     TIMEOUT 60
-    LABELS "iccdev;security;spectral;issue-1932;regression"
+    LABELS "iccdev;security;spectral;issue-1932;issue-2579;regression"
   )
   if(WIN32)
     set(_spectral_pcs_range_windows_env_mods
@@ -10298,11 +10298,11 @@ set_tests_properties(iccdev.namedcolor-apply-regressions PROPERTIES
   FIXTURES_REQUIRED iccdev_profiles
 )
 
-if(TARGET iccApplyNamedCmm AND TARGET iccRoundTrip)
+if(TARGET iccApplyNamedCmm AND TARGET iccRoundTrip AND TARGET iccFromXml)
   iccdev_add_script_test(
     iccdev.v5-namedcmm-regressions
     300
-    "iccdev;v5;namedcmm;regression;asan"
+    "iccdev;v5;namedcmm;spectral;issue-2579;regression;asan"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-v5-namedcmm-regression-tests.sh"
   )

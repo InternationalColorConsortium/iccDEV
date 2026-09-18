@@ -2168,12 +2168,11 @@ CIccPcsXform::~CIccPcsXform()
  * Name: icSpectralPcsMatchesRange
  *
  * Purpose:
- *  Reports whether a header's spectral PCS signature and its spectral range
+ *  Reports whether a spectral PCS port and its profile header's spectral range
  *  definition describe the same number of samples.
  *
- *  A spectral PCS signature carries its channel count in its low 16 bits, and that
- *  count is the pixel width the CMM moves across the connection: it is what
- *  CIccXform::GetNumSrcSamples()/GetNumDstSamples() report, and in turn what
+ *  nSamples is the pixel width the adjacent xform presents to the connection: it is
+ *  what CIccXform::GetNumSrcSamples()/GetNumDstSamples() report, and in turn what
  *  CIccApplyCmm::InitPixel() sizes m_Pixel/m_Pixel2 from. The PCS steps that
  *  CIccPcsXform::Connect() pushes are sized from the header's spectralRange /
  *  biSpectralRange instead. When the two disagree, a step operates on a wider
@@ -2191,21 +2190,21 @@ CIccPcsXform::~CIccPcsXform()
  *  (see CIccPcsStepSrcSparseMatrix, which takes the two separately).
  **************************************************************************
  */
-static bool icSpectralPcsMatchesRange(const icHeader &hdr)
+static bool icSpectralPcsMatchesRange(const icHeader &hdr,
+                                      icColorSpaceSignature pcs,
+                                      icUInt32Number nSamples)
 {
-  icColorSpaceSignature sig = (icColorSpaceSignature)hdr.spectralPCS;
-
-  switch (icGetColorSpaceType(sig)) {
+  switch (icGetColorSpaceType(pcs)) {
     case icSigReflectanceSpectralData:
     case icSigTransmisionSpectralData:
     case icSigRadiantSpectralData:
-      return icNumColorSpaceChannels(sig) == (icUInt32Number)hdr.spectralRange.steps;
+      return nSamples == (icUInt32Number)hdr.spectralRange.steps;
 
     case icSigBiSpectralReflectanceData:
       // One sample per (spectral, bi-spectral) wavelength pair. Widened before the
       // multiply so a large pair cannot wrap the 16-bit product into a value that
       // happens to match the channel count.
-      return icNumColorSpaceChannels(sig) ==
+      return nSamples ==
              (icUInt32Number)hdr.biSpectralRange.steps * (icUInt32Number)hdr.spectralRange.steps;
 
     default:
@@ -2325,8 +2324,10 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
     CIccProfile *pSpectralSrc = pFromXform->GetProfilePtr();
     CIccProfile *pSpectralDst = pToXform->GetProfilePtr();
 
-    if ((pSpectralSrc && !icSpectralPcsMatchesRange(pSpectralSrc->m_Header)) ||
-        (pSpectralDst && !icSpectralPcsMatchesRange(pSpectralDst->m_Header))) {
+    if ((pSpectralSrc && !icSpectralPcsMatchesRange(pSpectralSrc->m_Header,
+                                                   m_srcSpace, m_nSrcSamples)) ||
+        (pSpectralDst && !icSpectralPcsMatchesRange(pSpectralDst->m_Header,
+                                                   m_dstSpace, m_nDstSamples))) {
       return icCmmStatInvalidProfile;
     }
 
@@ -3931,7 +3932,9 @@ icStatusCMM CIccPcsXform::pushSpectralWhitePointConvert(const CIccXform *pXform,
 
   if (!nSamples ||
       nSamples != (icUInt32Number)nPortSamples ||
-      !icSpectralPcsMatchesRange(pProfile->m_Header) ||
+      !icSpectralPcsMatchesRange(pProfile->m_Header,
+                                 (icColorSpaceSignature)pProfile->m_Header.spectralPCS,
+                                 nSamples) ||
       pNumTag->GetNumValues() < nSamples)
     return icCmmStatInvalidProfile;
 
