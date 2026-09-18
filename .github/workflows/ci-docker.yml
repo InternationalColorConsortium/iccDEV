@@ -193,13 +193,20 @@ jobs:
           docker run --rm "$TEST_IMAGE" bash -lc '
             set -euo pipefail
             command -v git gh clang clang++ gcc g++ cmake cppcheck clang-tidy scan-build
-            command -v hadolint zizmor shellcheck afl-fuzz valgrind llvm-symbolizer
+            command -v hadolint zizmor shellcheck afl-fuzz valgrind ms_print callgrind_annotate llvm-symbolizer
             command -v iccDumpProfile iccdev-fuzz-env iccdev-mcp iccdev-mcp-rest
+            command -v iccdev-valgrind-build iccdev-valgrind-run
+            command -v iccdev-valgrind-status iccdev-valgrind-validate iccdev-valgrind-self-test
             test "$PWD" = /workspace/iccDEV
             test -d .git
             test -d "$ICCDEV_BUILD_DIR"
             test -d "$ICCDEV_TOOLS_DIR"
             test -f Testing/sRGB_v4_ICC_preference.icc
+            iccdev-valgrind-validate
+            iccdev-valgrind-build --jobs 4 --target dump
+            iccdev-valgrind-self-test --sanitized-binary "$ICCDEV_TOOLS_DIR/IccDumpProfile/iccDumpProfile"
+            iccdev-valgrind-run --tool memcheck --timeout 60 dump
+            iccdev-valgrind-status
             iccDumpProfile -v Testing/sRGB_v4_ICC_preference.icc >/dev/null
             ctest --test-dir "$ICCDEV_BUILD_DIR" -N --no-tests=error >/dev/null
           '

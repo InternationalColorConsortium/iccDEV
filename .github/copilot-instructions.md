@@ -235,6 +235,7 @@ Key safety rules:
 | Maintainer AFL smoke | `.github/prompts/maintainer-afl-smoke.prompt.md` |
 | Maintainer CTest selection | `.github/prompts/maintainer-ci-ctest.prompt.md` |
 | Maintainer regression container | `.github/prompts/regression-container-maintainer.prompt.md` |
+| Valgrind-family analysis | `.github/prompts/valgrind-analysis.prompt.md` |
 | Workflow governance audit | `.github/prompts/audit-workflow-governance.prompt.md` |
 | Pre-PR security cycle | `.github/prompts/pre-pr-security-cycle.prompt.md` |
 | Maintainer label triage | `.github/prompts/maintainer-label-triage.prompt.md` |
@@ -258,6 +259,7 @@ Key safety rules:
 | iOS CLUT editor app | `.github/skills/ios-clut-editor/SKILL.md` |
 | AFL smoke workflow | `.github/skills/afl-smoke/SKILL.md` |
 | Sanitizer reproduction | `.github/skills/sanitizer-repro/SKILL.md` |
+| Valgrind-family analysis | `.github/skills/valgrind-analysis/SKILL.md` |
 | iccSpecSepToTiff QA | `.github/skills/specsep-qa/SKILL.md` |
 | IIS ISAPI endpoint QA | `.github/skills/iis-isapi-qa/SKILL.md` |
 | JSON/config regressions | `.github/skills/json-config-regression/SKILL.md` |

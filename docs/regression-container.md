@@ -135,6 +135,11 @@ ASAN/UBSAN build. Issue #2380 provides a bounded manual workflow at
 scenario demonstrates the PR #2378 `GetNewApplyCmm()` race before and after the
 fix. It is a proof-of-concept workflow, not a hosted fuzzing service.
 
+For the maintained 13-target Memcheck, Helgrind, DRD, Massif, and Callgrind
+registry, use [Valgrind-Family Analysis](valgrind-analysis.md). The image
+installs that component as `iccdev-valgrind-build`, `iccdev-valgrind-run`,
+`iccdev-valgrind-status`, and `iccdev-valgrind-validate`.
+
 ## MemorySanitizer
 
 The image also includes an LLVM 22.1.2 libc++ and libc++abi built with

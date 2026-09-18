@@ -60,6 +60,7 @@ shares one source of truth. Update rules here, not in the mirrors.
 | Code-review bug hunting | `.github/prompts/code-review-hunting.prompt.md` |
 | Regression bisect workflow | `.github/prompts/bisect-regression.prompt.md` |
 | Unified maintainer container | `docs/regression-container.md` |
+| Memcheck, Helgrind, DRD, Massif, and Callgrind | `docs/valgrind-analysis.md`, `.github/skills/valgrind-analysis/SKILL.md` |
 | Regression container prompt | `.github/prompts/regression-container-maintainer.prompt.md` |
 | Maintainer CTest selection and CI budget | `.github/skills/maintainer-ci-ctest/SKILL.md` |
 | New CLI tool onboarding | `.github/prompts/add-new-tool.prompt.md` |
