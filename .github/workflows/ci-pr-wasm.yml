@@ -17,7 +17,7 @@
 # isolation per-step.
 #
 ###############################################################
-name: "ci-pr-wasm"
+name: "issue-1591"
 
 # Existing command summaries intentionally exceed the default yamllint line
 # length. Keep the disable local to this workflow.
@@ -30,10 +30,88 @@ permissions:
 on:
   workflow_call:
   workflow_dispatch:
+    inputs:
+      diagnostic_mode:
+        description: "Manual diagnostic mode"
+        required: true
+        default: issue1591
+        type: choice
+        options:
+          - issue1591
+          - wasm
+      issue1591_build_type:
+        description: "Issue #1591 CMake build type"
+        required: true
+        default: Debug
+        type: choice
+        options:
+          - Debug
+          - Release
+      issue1591_enable_sanitizers:
+        description: "Issue #1591: build tools with ASAN+UBSAN recovery"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      issue1591_profile_limit:
+        description: "Issue #1591 registry ICC profile limit; 0 means all issue profiles"
+        required: true
+        default: "0"
+        type: string
+      issue1591_include_local_fixtures:
+        description: "Issue #1591: include local ICC fixtures shown in sample output"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      issue1591_command_timeout:
+        description: "Issue #1591 per-tool timeout in seconds"
+        required: true
+        default: "180"
+        type: string
+      issue1591_strict_tool_failures:
+        description: "Issue #1591: fail when a reproduced tool command exits non-zero"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      issue1591_upload_generated_outputs:
+        description: "Issue #1591: upload generated XML/JSON/round-trip ICC outputs"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      issue1591_live_log_mode:
+        description: "Issue #1591 live action log detail"
+        required: true
+        default: key
+        type: choice
+        options:
+          - key
+          - full
+          - quiet
+      issue1591_live_log_interval:
+        description: "Issue #1591 heartbeat interval in seconds"
+        required: true
+        default: "15"
+        type: string
+      issue1591_parallel_jobs:
+        description: "Issue #1591 parallel profile jobs"
+        required: true
+        default: "4"
+        type: string
 
 concurrency:
-  group: pr-wasm-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: pr-wasm-${{ github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'issue1591' && github.run_id || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || inputs.diagnostic_mode == 'wasm' }}
 
 env:
   GH_REPO: ${{ github.repository }}
@@ -75,6 +153,7 @@ jobs:
 
   wasm-build-and-validate:
     name: "WASM Release Build + Parity"
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.diagnostic_mode == 'wasm' }}
     needs: cache-policy
     runs-on: ubuntu-24.04
     timeout-minutes: 35
@@ -423,3 +502,143 @@ jobs:
             echo "::error::WASM parity gate failed"
             exit 1
           fi
+
+  issue-1591-profile-registry-repro:
+    name: "Issue #1591 Profile Registry Repro"
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode != 'wasm' }}
+    needs: cache-policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+
+    env:
+      BUILD_DIR: ${{ github.workspace }}/Build/build-issue-1591
+      RESULT_DIR: ${{ github.workspace }}/Build/issue-1591-profile-registry
+      ISSUE_1591_BUILD_TYPE: ${{ inputs.issue1591_build_type || 'Debug' }}
+      ISSUE_1591_ENABLE_SANITIZERS: ${{ inputs.issue1591_enable_sanitizers || 'true' }}
+      ISSUE_1591_PROFILE_LIMIT: ${{ inputs.issue1591_profile_limit || '0' }}
+      ISSUE_1591_INCLUDE_LOCAL_FIXTURES: ${{ inputs.issue1591_include_local_fixtures || 'false' }}
+      ISSUE_1591_COMMAND_TIMEOUT: ${{ inputs.issue1591_command_timeout || '180' }}
+      ISSUE_1591_STRICT_TOOL_FAILURES: ${{ inputs.issue1591_strict_tool_failures || 'false' }}
+      ISSUE_1591_UPLOAD_GENERATED_OUTPUTS: ${{ inputs.issue1591_upload_generated_outputs || 'false' }}
+      ISSUE_1591_LIVE_LOG_MODE: ${{ inputs.issue1591_live_log_mode || 'key' }}
+      ISSUE_1591_LIVE_LOG_INTERVAL: ${{ inputs.issue1591_live_log_interval || '15' }}
+      ISSUE_1591_PARALLEL_JOBS: ${{ inputs.issue1591_parallel_jobs || '4' }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          fetch-depth: 50
+          persist-credentials: false
+
+      - name: Checkout trusted workflow helpers
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: .trusted-workflow
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Install diagnostic dependencies
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          export DEBIAN_FRONTEND=noninteractive
+          bash .trusted-workflow/.github/scripts/ci-safe-apt-update.sh
+          sudo apt-get \
+            -o Acquire::Retries=3 \
+            -o Dpkg::Use-Pty=0 \
+            install -y --no-install-recommends \
+            build-essential cmake gcc g++ clang clang-tools \
+            libpng-dev libxml2 libxml2-dev libtiff-dev \
+            nlohmann-json3-dev libjpeg-dev python3 curl git
+
+      - name: Configure issue 1591 diagnostic build
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          case "$ISSUE_1591_BUILD_TYPE" in
+            Debug|Release)
+              ;;
+            *)
+              echo "::error title=Invalid build type::${ISSUE_1591_BUILD_TYPE}"
+              exit 1
+              ;;
+          esac
+          case "$ISSUE_1591_ENABLE_SANITIZERS" in
+            true|false)
+              ;;
+            *)
+              echo "::error title=Invalid sanitizer toggle::${ISSUE_1591_ENABLE_SANITIZERS}"
+              exit 1
+              ;;
+          esac
+
+          sanitizer_args=(-DENABLE_SANITIZERS=OFF)
+          if [ "$ISSUE_1591_ENABLE_SANITIZERS" = "true" ]; then
+            sanitizer_args=(-DENABLE_SANITIZERS=ON -DSANITIZER_RECOVER=ON)
+          fi
+
+          cmake -S Build/Cmake -B "$BUILD_DIR" \
+            -DCMAKE_BUILD_TYPE="$ISSUE_1591_BUILD_TYPE" \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DENABLE_TOOLS=ON \
+            -DENABLE_TESTS=ON \
+            -DENABLE_WXWIDGETS=OFF \
+            -DENABLE_SHARED_LIBS=ON \
+            -DENABLE_STATIC_LIBS=ON \
+            -DICC_USE_ZLIB=ON \
+            -DICCDEV_ENABLE_QA_FLAGS=ON \
+            -DICCDEV_ENABLE_STRICT_WARNINGS=ON \
+            "${sanitizer_args[@]}" \
+            -Wno-dev
+
+      - name: Build issue 1591 diagnostic tools
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          cmake --build "$BUILD_DIR" --parallel "$(nproc)" 2>&1 | tee "$BUILD_DIR/build.log"
+          warning_count="$(grep -cE 'warning:' "$BUILD_DIR/build.log" || true)"
+          if [ "$warning_count" -gt 0 ]; then
+            echo "::warning title=Compiler warnings::${warning_count} warning(s) detected"
+            grep -E 'warning:' "$BUILD_DIR/build.log" | sort -u | sed -n '1,80p'
+          else
+            echo "[OK] Zero compiler warnings"
+          fi
+
+      - name: Reproduce issue 1591 profile registry diagnostics
+        env:
+          BASH_ENV: /dev/null
+          ICCDEV_TOOLS_DIR: ${{ github.workspace }}/Build/build-issue-1591/Tools
+          ISSUE_1591_RESULT_DIR: ${{ github.workspace }}/Build/issue-1591-profile-registry
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,print_stacktrace=1"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          bash .trusted-workflow/.github/scripts/issue-1591-profile-registry-repro.sh
