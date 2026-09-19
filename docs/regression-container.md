@@ -52,6 +52,25 @@ iccdev-fuzz-env
 ctest --test-dir /workspace/build -N --no-tests=error
 ```
 
+## Coverage and profiling tools
+
+The image includes `lcov`, `genhtml`, `gcovr`, `llvm-cov`, `llvm-profdata`,
+`gprof`, `perf`, `strace`, and a pinned FlameGraph checkout at
+`$ICCDEV_FLAMEGRAPH_DIR` (`/opt/FlameGraph`). Its exact revision is exposed as
+`ICCDEV_FLAMEGRAPH_REVISION`. Build coverage, profiling, and sanitizer modes in
+separate directories so their instrumentation does not contaminate results.
+LCOV uses the accelerated `JSON::XS` backend and treats unexecuted blocks on
+non-branch lines as zero-count blocks, avoiding inconsistent GCC standard
+library coverage records. `LCOV_HOME=/` makes LCOV load the checked system
+configuration from `/etc/lcovrc` for both interactive and scripted runs.
+
+An `ENABLE_PROFILING=ON` Linux build with tests enabled registers
+`iccdev.profiling-smoke`. It proves that `iccDumpProfile` writes a nonempty
+`gmon.out` and that `gprof` can read it. FlameGraph helpers use
+`ICCDEV_FLAMEGRAPH_DIR` automatically. Hardware `perf` events still depend on
+the host kernel and container permissions; unavailable counters are an
+environment limitation, not a correctness failure.
+
 ## MCP
 
 Start MCP stdio or the REST API explicitly; a single image deliberately has one
@@ -358,7 +377,11 @@ docker run --rm "$IMAGE" bash -lc '
   set -euo pipefail
   command -v git gh clang clang++ gcc g++ cmake cppcheck clang-tidy scan-build
   command -v hadolint zizmor shellcheck afl-fuzz valgrind llvm-symbolizer
+  command -v lcov genhtml gcovr llvm-cov llvm-profdata perf gprof strace
   command -v iccDumpProfile iccdev-fuzz-env iccdev-mcp iccdev-mcp-rest
+  test -x "$ICCDEV_FLAMEGRAPH_DIR/stackcollapse-perf.pl"
+  test -x "$ICCDEV_FLAMEGRAPH_DIR/flamegraph.pl"
+  test "$(git -C "$ICCDEV_FLAMEGRAPH_DIR" rev-parse HEAD)" = "$ICCDEV_FLAMEGRAPH_REVISION"
   iccDumpProfile -v Testing/sRGB_v4_ICC_preference.icc >/dev/null
   ctest --test-dir /workspace/build -N --no-tests=error >/dev/null
 '
@@ -434,12 +457,14 @@ adds `latest` and the immutable SHA tag, `ci-qa-pr-docker-testing` and
 `ci-publish-colourbill-ctrl` add their integration tags and immutable SHA tags,
 and a `v*` ref adds its release tag and immutable SHA tag. Do not publish other
 branch, run, image-variant, or
-legacy-package tags. Publishing runs generate an SPDX SBOM with Anchore and
-create provenance with GitHub's `actions/attest-build-provenance` action.
-The separate GitHub SBOM attestation uses `actions/attest` only when the SBOM
-is at most 16 MiB; larger SBOMs remain available as artifacts and the workflow
-reports that GitHub attestation as skipped. BuildKit attestations are disabled
-for the image build.
+legacy-package tags. Publishing runs generate a compact CycloneDX SBOM with
+Anchore and create provenance with GitHub's `actions/attest-build-provenance`
+action. The workflow validates that the SBOM is nonempty and at most 16 MiB,
+then requires `actions/attest` to publish the signed SBOM predicate to GitHub
+and the registry against an immutable SHA staging reference. Only after those
+attestations succeed does it promote the mutable integration, `latest`, or
+release tags. An invalid or oversized SBOM fails before staging. BuildKit
+attestations are disabled for the image build.
 
 For detailed regression gate policy, use
 `docs/regression-workflow-governance.md`. For MCP developer setup, use

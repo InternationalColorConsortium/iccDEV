@@ -46,6 +46,20 @@ The `check` and `check-fast` targets use the host's detected logical processor
 count. Set `-DICCDEV_CTEST_PARALLEL_LEVEL=<N>` at configure time to cap their
 concurrency. CTest fixtures and `RUN_SERIAL` properties still take precedence.
 
+Linux profiling configurations register `iccdev.profiling-smoke` when `gprof`
+is available. The test runs the instrumented `iccDumpProfile`, requires a
+nonempty `gmon.out`, and verifies that `gprof` produces a flat profile. Keep the
+profiling tree separate from sanitizer and coverage builds:
+
+```bash
+cmake -S Build/Cmake -B out/linux-profiling -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release -DENABLE_TOOLS=ON -DENABLE_TESTS=ON \
+  -DENABLE_PROFILING=ON
+cmake --build out/linux-profiling --target iccDumpProfile --parallel "$jobs"
+ctest --test-dir out/linux-profiling -R '^iccdev\.profiling-smoke$' \
+  --output-on-failure --no-tests=error
+```
+
 Windows Visual Studio multi-config generators:
 
 ```cmd

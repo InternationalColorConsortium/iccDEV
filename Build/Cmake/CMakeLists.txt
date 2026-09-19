@@ -1388,10 +1388,14 @@ endif()
 # Apply profiling instrumentation flags
 if(ENABLE_PROFILING)
   message(STATUS ">>> Profiling instrumentation enabled (-pg)")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg -fno-omit-frame-pointer")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pg -fno-omit-frame-pointer")
+  add_compile_options(-pg -fno-omit-frame-pointer)
+  # Executables need the profiling startup/runtime objects selected by -pg.
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pg")
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -pg")
+  # GCC accepts -pg for shared links. Clang does not need it there and emits an
+  # unused-command-line-argument warning when it is passed to a shared link.
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -pg")
+  endif()
 endif()
 
 # ----------------------------------------------------------------------
@@ -1414,7 +1418,9 @@ include(CheckCXXCompilerFlag)
 # aarch64 Clang 11) are correctly rejected rather than added to the build.
 # VAR is a unique cache variable name used to memoize the probe result.
 macro(_iccdev_add_cxx_flag_if_supported FLAG VAR)
-  set(CMAKE_REQUIRED_FLAGS "-Werror=unused-command-line-argument")
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(CMAKE_REQUIRED_FLAGS "-Werror=unused-command-line-argument")
+  endif()
   check_cxx_compiler_flag("${FLAG}" ${VAR})
   unset(CMAKE_REQUIRED_FLAGS)
   if(${VAR})

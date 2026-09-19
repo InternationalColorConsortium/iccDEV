@@ -77,9 +77,12 @@ hardware counters, syscall summary, and optional FlameGraph inputs:
 ICCDEV_CLUT_PROFILE_AFFINITY=0 \
 ICCDEV_CLUT_PROFILE_RUNS=21 \
 ICCDEV_CLUT_PROFILE_FLAMEGRAPH=1 \
-FLAMEGRAPH_DIR=/path/to/FlameGraph \
+ICCDEV_FLAMEGRAPH_DIR=/path/to/FlameGraph \
 ./.github/scripts/iccdev-clut-profile.sh out/clut-avx2 out/clut-profile
 ```
+
+Inside the unified container, use its preconfigured pinned
+`ICCDEV_FLAMEGRAPH_DIR` without overriding it.
 
 The script preserves a telemetry file per measured CTest run. Do not enable
 `ICC_AVX2_CLUT_DEBUG`, coverage, or strace while comparing cycle counts.

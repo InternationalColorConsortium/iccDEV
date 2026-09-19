@@ -126,7 +126,7 @@ point2D spectrumLabelOffset( int nm, float textSize, PDFTextAlignment &align )
 // https://en.wikipedia.org/wiki/Planckian_locus
 // Bongsoon Kang; Ohak Moon; Changhee Hong; Honam Lee; Bonghwan Cho; Youngsun Kim (December 2002).
 // "Design of Advanced Color Temperature Control System for HDTV Applications"
-// Journal of the Korean Physical Society. 41 (6): 865–871. S2CID 4489377
+// Journal of the Korean Physical Society. 41 (6): 865-871. S2CID 4489377
 static
 XYColor approx_planck( double t )
 {
@@ -773,22 +773,43 @@ size_t outputDataToPDF( profileVisualizationData &data, const std::string &basen
 
   // iterate over pages in data
   for (auto &page : data.pages ) {
+    if (!page) {
+      LogAnError(stderr, "%s: null visualization page\n", basename.c_str());
+      continue;
+    }
+
     std::string pageType = page->getDataType();
 
     if (pageType == std::string("lutPlotData")) {
       lutPlotData *lutData = dynamic_cast<lutPlotData*>(page);
+      if (!lutData) {
+        LogAnError(stderr, "%s: invalid lutPlotData page\n", basename.c_str());
+        continue;
+      }
       output1DLUTPDF( lutData, pdffile );
     }
     else if (pageType == std::string("abPlotData")) {
       abPlotData *abData = dynamic_cast<abPlotData*>(page);
+      if (!abData) {
+        LogAnError(stderr, "%s: invalid abPlotData page\n", basename.c_str());
+        continue;
+      }
       outputNamedColorsABPDF( abData, pdffile );
     }
     else if (pageType == std::string("xyPlotData")) {
       xyPlotData *xyData = dynamic_cast<xyPlotData*>(page);
+      if (!xyData) {
+        LogAnError(stderr, "%s: invalid xyPlotData page\n", basename.c_str());
+        continue;
+      }
       outputNamedColorsXYPDF( xyData, pdffile );
     }
     else if (pageType == std::string("imageData")) {
       imageData *image = dynamic_cast<imageData*>(page);
+      if (!image) {
+        LogAnError(stderr, "%s: invalid imageData page\n", basename.c_str());
+        continue;
+      }
       std::string tiffPath2 = image->object_name + ".tif";      // includes tag name
       if (!WriteTIFF( tiffPath2.c_str(), 100, image->mode, image->data,
                     image->width, image->height, image->channels, image->depth )) {

@@ -402,6 +402,8 @@ void PDFWriter::CreateOutlineFromPages()
 {
   PDFPageParent *pageParent = GetPageParent();
   PDFOutlineParent *outParent = GetOutlineParent();
+  if (!pageParent || !outParent)
+    return;
 
   const size_t pageCount = pageParent->m_pageObjectIndices.size();
   for ( size_t k = 0; k < pageCount; ++k ) {
@@ -449,6 +451,9 @@ void PDFWriter::CreateTOCFromPages()
   const float tocTextLeading = 1.5f * tocTextSize;
   
   PDFPageParent *pageParent = GetPageParent();
+  if (!pageParent)
+    return;
+
   size_t pageCount = pageParent->m_pageObjectIndices.size();
   
   if (pageCount == 0)
@@ -768,12 +773,16 @@ bool PDFWriter::xobjectExists( std::string name )
 
 void PDFWriter::AddPage( std::string name, size_t content, std::string xObjectName )
 {
+  PDFPageParent *pageParent = GetPageParent();
+  if (!pageParent)
+    return;
+
   size_t xindex = lookupXObjectByName( xObjectName );
   PDFPage *pageObj = new PDFPage( m_pageWidth, m_pageHeight,
                     m_pageParentIndex, content, m_procsetIndex,
                     m_fontIndex, xindex, xObjectName );
   m_objects.push_back( pageObj );
-  GetPageParent()->AddPage( ObjectCount(), name );
+  pageParent->AddPage( ObjectCount(), name );
   m_pageCount++;
 }
 

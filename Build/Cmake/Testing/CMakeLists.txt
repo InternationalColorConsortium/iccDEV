@@ -173,6 +173,28 @@ else()
     "No supported nested generator found - skipping iccdev.taint-trace-build-configuration")
 endif()
 
+find_program(ICCDEV_GPROF_EXECUTABLE gprof)
+if(ENABLE_PROFILING AND TARGET iccDumpProfile AND ICCDEV_GPROF_EXECUTABLE AND
+   UNIX AND NOT APPLE)
+  add_test(
+    NAME iccdev.profiling-smoke
+    COMMAND "${CMAKE_COMMAND}"
+      "-DICCDEV_DUMP_PROFILE=$<TARGET_FILE:iccDumpProfile>"
+      "-DICCDEV_PROFILE=${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+      "-DICCDEV_GPROF=${ICCDEV_GPROF_EXECUTABLE}"
+      "-DICCDEV_PROFILE_OUTPUT_DIR=${ICCDEV_TEST_OUTDIR}/profiling-smoke"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunProfilingSmokeTest.cmake"
+  )
+  set_tests_properties(iccdev.profiling-smoke PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;build;profiling;smoke;pr-2606"
+  )
+elseif(ENABLE_PROFILING)
+  message(STATUS
+    "gprof profiling smoke prerequisites unavailable - test not registered")
+endif()
+
 # Issue #2276: this compiles a C-only consumer against IccCValidation.h and
 # resolves the entry point at runtime. Linking the helper to IccProfLib would
 # hide both C++ name mangling and accidental C++ dependencies in the header.

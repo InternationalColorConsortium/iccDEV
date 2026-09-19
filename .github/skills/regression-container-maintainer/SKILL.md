@@ -55,16 +55,21 @@ Use this skill for repeatable maintainer operations in
     `.github/ci/cfl/build.sh --patches`) before broader validation.
 11. Run broader CTest or GCC 15.2 strict parity only after the focused check
     passes.
-12. Scan logs for compiler warnings, ASAN, UBSAN, and signal termination.
-13. Trigger `ci-pr-action.yml` explicitly for a pre-PR branch; a push alone does
+12. For coverage or profiling work, use a separate build tree and inventory
+    `lcov`, `genhtml`, `gcovr`, `llvm-cov`, `llvm-profdata`, `gprof`, `perf`,
+    `strace`, and the pinned `$ICCDEV_FLAMEGRAPH_DIR`. Run
+    `iccdev.profiling-smoke` for `ENABLE_PROFILING=ON` builds. Treat unavailable
+    hardware counters as environment evidence, not a correctness failure.
+13. Scan logs for compiler warnings, ASAN, UBSAN, and signal termination.
+14. Trigger `ci-pr-action.yml` explicitly for a pre-PR branch; a push alone does
     not trigger that workflow.
-14. Use only `latest`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`,
+15. Use only `latest`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`,
     full-SHA, or release tags as selectors. Resolve the selector at run time; never hardcode one SHA tag as
     a long-lived workflow default. Existing legacy tags are continuity-only; do
     not introduce, recommend, or depend on other branch, run, or image-variant
     tags.
-15. Confirm the canonical image digest and hosted validation explicitly.
-16. Report exact image tag, digest, source revision, commands, results, evidence,
+16. Confirm the canonical image digest and hosted validation explicitly.
+17. Report exact image tag, digest, source revision, commands, results, evidence,
     and workflow URLs.
 
 For container/MCP runtime changes, run

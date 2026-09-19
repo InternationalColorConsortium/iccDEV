@@ -19,6 +19,7 @@ output_dir="$2"
 runs="${ICCDEV_CLUT_PROFILE_RUNS:-21}"
 affinity="${ICCDEV_CLUT_PROFILE_AFFINITY:-}"
 enable_flamegraph="${ICCDEV_CLUT_PROFILE_FLAMEGRAPH:-0}"
+flamegraph_dir="${ICCDEV_FLAMEGRAPH_DIR:-${FLAMEGRAPH_DIR:-}}"
 
 case "$runs" in
     ''|*[!0-9]*|0)
@@ -273,11 +274,11 @@ if [ "$enable_flamegraph" = "1" ] && [ "$perf_available" -eq 1 ]; then
     perf record -o "$output_dir/perf.data" -g --call-graph dwarf -- \
         "${runner[@]}" "${ctest_command[@]}" > "$output_dir/perf-record.log" 2>&1
     perf script -i "$output_dir/perf.data" > "$output_dir/perf.script"
-    if [ -n "${FLAMEGRAPH_DIR:-}" ] &&
-       [ -x "$FLAMEGRAPH_DIR/stackcollapse-perf.pl" ] &&
-       [ -x "$FLAMEGRAPH_DIR/flamegraph.pl" ]; then
-        "$FLAMEGRAPH_DIR/stackcollapse-perf.pl" "$output_dir/perf.script" |
-            "$FLAMEGRAPH_DIR/flamegraph.pl" > "$output_dir/flamegraph.svg"
+    if [ -n "$flamegraph_dir" ] &&
+       [ -x "$flamegraph_dir/stackcollapse-perf.pl" ] &&
+       [ -x "$flamegraph_dir/flamegraph.pl" ]; then
+        "$flamegraph_dir/stackcollapse-perf.pl" "$output_dir/perf.script" |
+            "$flamegraph_dir/flamegraph.pl" > "$output_dir/flamegraph.svg"
     fi
 fi
 
