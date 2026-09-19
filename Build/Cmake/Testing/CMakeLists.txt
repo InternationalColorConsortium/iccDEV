@@ -1982,6 +1982,46 @@ function(iccdev_add_tonemap_functions_json_test)
   endif()
 endfunction()
 
+# Guards #2608: CIccMpeToneMap::Write() kept its tone function positions in a
+# 16-entry stack array, while Read() and the XML and JSON readers accept any
+# uInt16Number output count, so writing a toneMapElement with 17 or more outputs
+# wrote past the array.  Builds the element in memory, checks the position table
+# Write() produces, and reads and applies it; the assertions need no sanitizer.
+function(iccdev_add_tonemap_write_many_outputs_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccToneMapWriteManyOutputsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/tonemap-write-many-outputs.cpp"
+  )
+  target_link_libraries(iccToneMapWriteManyOutputsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccToneMapWriteManyOutputsTest)
+
+  add_test(
+    NAME iccdev.tonemap-write-many-outputs
+    COMMAND "$<TARGET_FILE:iccToneMapWriteManyOutputsTest>"
+  )
+  set_tests_properties(iccdev.tonemap-write-many-outputs PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;mpe;tonemap;write;issue-2608;regression"
+  )
+  if(WIN32)
+    set(_tonemap_write_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccToneMapWriteManyOutputsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _tonemap_write_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.tonemap-write-many-outputs PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_tonemap_write_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards #2520: the reflectance CLUT and reflectance observer elements must honour
 # their Absolute flag (ICC.2:2023 11.2.12 and 11.2.13), which was tested against
 # icRelativeSpectralData (0) and so never read, and the emission observer must not
@@ -9426,6 +9466,7 @@ if(WIN32)
   iccdev_add_extended_device_colorspace_test()
   iccdev_add_tonemap_functions_xml_test()
   iccdev_add_tonemap_functions_json_test()
+  iccdev_add_tonemap_write_many_outputs_test()
   iccdev_add_unsupported_profile_class_test()
   iccdev_add_pcs_adjust_status_test()
   iccdev_add_dpcc_pcc_replacement_test()
@@ -9839,6 +9880,7 @@ iccdev_add_utf8_textarray_test()
 iccdev_add_extended_device_colorspace_test()
 iccdev_add_tonemap_functions_xml_test()
 iccdev_add_tonemap_functions_json_test()
+iccdev_add_tonemap_write_many_outputs_test()
 iccdev_add_unsupported_profile_class_test()
 iccdev_add_pcs_adjust_status_test()
 iccdev_add_dpcc_pcc_replacement_test()

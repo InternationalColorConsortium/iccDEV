@@ -79,6 +79,7 @@
 #include <cstdlib>
 #include <new>
 #include <vector>
+#include <memory>
 #include "IccMpeBasic.h"
 #include "IccIO.h"
 #include <map>
@@ -5251,8 +5252,13 @@ bool CIccMpeToneMap::Write(CIccIO* pIO)
 
   lumPos.size = (icUInt32Number)(pIO->Tell() - (lumPos.offset + nTagStartPos));
 
-  //Keep track of tone function positions
-  icPositionNumber funcPos[ 16 ];   // maximum output channels
+  //Keep track of tone function positions, one per output channel.  Allocated
+  //rather than a fixed array: the channel count is a uInt16Number, and Read()
+  //and the XML and JSON readers all accept any count.  nothrow because every
+  //other failure in this function returns false, as Read() does.
+  std::unique_ptr<icPositionNumber[]> funcPos(new (std::nothrow) icPositionNumber[m_nOutputChannels]);
+  if (!funcPos)
+    return false;
 
   //write out first tone function
   funcPos[0].offset = (icUInt32Number)(pIO->Tell() - nTagStartPos);
