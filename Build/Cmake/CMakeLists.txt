@@ -1221,10 +1221,17 @@ else()
       message(FATAL_ERROR "MemorySanitizer not available on MSVC")
     else()
       list(APPEND SANITIZER_LIST "memory")
-      message(WARNING
-        "ENABLE_MSAN instruments iccDEV targets only. Distribution C++ and "
-        "libxml2 libraries can produce false reports. Use the MSan runtime "
-        "bootstrap and QA scripts for actionable evidence.")
+      if(DEFINED ENV{ICCDEV_MSAN_LIBCXX_DIR} AND
+         NOT "$ENV{ICCDEV_MSAN_LIBCXX_DIR}" STREQUAL "")
+        message(STATUS
+          "MemorySanitizer runtime: $ENV{ICCDEV_MSAN_LIBCXX_DIR}")
+      else()
+        message(WARNING
+          "ENABLE_MSAN instruments iccDEV targets only. Distribution C++ and "
+          "libxml2 libraries can produce false reports. Set "
+          "ICCDEV_MSAN_LIBCXX_DIR to an instrumented runtime and use the "
+          "MSan runtime bootstrap and QA scripts for actionable evidence.")
+      endif()
     endif()
   endif()
   if(ENABLE_LSAN)
