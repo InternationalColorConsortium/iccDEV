@@ -3035,7 +3035,7 @@ icValidateStatus CIccSampledCalculatorCurve::Validate(std::string sigPath, std::
     rv = icMaxStatus(rv, icValidateWarning);
   }
 
-  if (pProfile && pProfile->m_Header.version < icVersionNumberV5_1) {
+  if (pProfile && pProfile->m_Header.version < icVersionNumberV5) {
     sReport += icMsgValidateWarning;
     sReport += sSigPathName;
     sReport += " sampled calculator curve is not supported by version of profile.\n";

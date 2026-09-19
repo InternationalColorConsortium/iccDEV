@@ -12849,7 +12849,7 @@ icValidateStatus CIccTagSpectralViewingConditions::Validate(std::string sigPath,
   if (getObserver(range)) {
     rv = icMaxStatus(rv, Info.CheckData(sReport, range, sSigPathName + ":>observerRange"));
 
-    if (!m_observer && pProfile && pProfile->m_Header.version < icVersionNumberV5_1) {
+    if (!m_observer && pProfile && pProfile->m_Header.version < icVersionNumberV5) {
       sReport += icMsgValidateNonCompliant;
       sReport += sSigPathName;
       sReport += " - Missing Observer CMF not supported by profile version!\r\n";
@@ -12868,7 +12868,7 @@ icValidateStatus CIccTagSpectralViewingConditions::Validate(std::string sigPath,
   if (getIlluminant(range)) {
     rv = icMaxStatus(rv, Info.CheckData(sReport, range, sSigPathName + ":>illuminantRange"));
 
-    if (!m_illuminant && pProfile && pProfile->m_Header.version < icVersionNumberV5_1) {
+    if (!m_illuminant && pProfile && pProfile->m_Header.version < icVersionNumberV5) {
       sReport += icMsgValidateNonCompliant;
       sReport += sSigPathName;
       sReport += " - Missing illuminant SPD not supported by profile version!\r\n";

@@ -5104,6 +5104,70 @@ function(iccdev_add_clut_interpolation_hint_test)
   endif()
 endfunction()
 
+# #2561: ICC.2:2023 gives 5.0.0.0 as its profile version, but Validate() accepted
+# flag bit 3, cicpTag, zero-step spectral viewing conditions, the 'not ' and 'neq '
+# operators and the 'clcf' segment only from 5.1.0.0.  The last two never ran, because
+# CIccTagMultiProcessElement::Validate() did not pass the profile to its elements
+# (#2603).  The helper pins each gate at 4.40, 5.00 and 5.10 on two tracked
+# profiles.
+function(iccdev_add_icc2_version_gate_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccIcc2VersionGateTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/icc2-version-gate.cpp"
+  )
+  target_compile_features(iccIcc2VersionGateTest PRIVATE cxx_std_17)
+  target_include_directories(iccIcc2VersionGateTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccIcc2VersionGateTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccIcc2VersionGateTest)
+
+  set(_v5_gate_args
+    "${ICCDEV_TESTING_DIR}/Calc/srgbCalcTest.xml"
+    "${ICCDEV_TESTING_DIR}/Display/Rec2100HlgFullCC.xml"
+  )
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.icc2-version-gate
+      COMMAND "$<TARGET_FILE:iccIcc2VersionGateTest>" ${_v5_gate_args}
+    )
+  else()
+    add_test(
+      NAME iccdev.icc2-version-gate
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccIcc2VersionGateTest>" ${_v5_gate_args}
+    )
+  endif()
+  set_tests_properties(iccdev.icc2-version-gate PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;validate;version;issue-2561;issue-2603;regression"
+  )
+  if(WIN32)
+    set(_v5_gate_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccIcc2VersionGateTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _v5_gate_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.icc2-version-gate PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_v5_gate_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2583: CIccProfileJson::ParseTag() attached lut and named colour tags without
 # giving them the header colour spaces the binary and XML readers both hand over,
 # so CIccArrayNamedColor::Validate() compared each colour against a zero sample
@@ -9149,6 +9213,7 @@ if(WIN32)
   iccdev_add_json_namedcolor_colorspaces_test()
   iccdev_add_measurement_type_icc2_test()
   iccdev_add_clut_interpolation_hint_test()
+  iccdev_add_icc2_version_gate_test()
   iccdev_add_mpexml_reflectance_clut_writer_test()
   iccdev_add_xml_embedded_image_empty_test()
   iccdev_add_embedded_image_zero_byte_test()
@@ -9554,6 +9619,7 @@ iccdev_add_json_colorant_parent_profile_test()
 iccdev_add_json_namedcolor_colorspaces_test()
 iccdev_add_measurement_type_icc2_test()
 iccdev_add_clut_interpolation_hint_test()
+iccdev_add_icc2_version_gate_test()
 iccdev_add_mpexml_reflectance_clut_writer_test()
 iccdev_add_xml_embedded_image_empty_test()
 iccdev_add_embedded_image_zero_byte_test()

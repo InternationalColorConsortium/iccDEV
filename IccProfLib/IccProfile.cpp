@@ -2076,11 +2076,6 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
         sReport += "Reserved profile flags (bits 2-15) are non-zero.\n";
         rv = icMaxStatus(rv, icValidateNonCompliant);
     }
-    else if (m_Header.version == icVersionNumberV5 && m_Header.flags & 0x0000FFF8) {
-      sReport += icMsgValidateNonCompliant;
-      sReport += "Reserved profile flags (bits 3-15) are non-zero.\n";
-      rv = icMaxStatus(rv, icValidateNonCompliant);
-    }
     else if (m_Header.flags & 0x0000FFF0) {
       sReport += icMsgValidateNonCompliant;
       sReport += "Reserved profile flags (bits 4-15) are non-zero.\n";
@@ -2729,7 +2724,7 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
     {
       if (typeSig != icSigCicpType)
         return false;
-      else if (m_Header.version < icVersionNumberV4_4 || m_Header.version==icVersionNumberV5)
+      else if (m_Header.version < icVersionNumberV4_4)
         return false;
 
       return true;

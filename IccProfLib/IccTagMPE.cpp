@@ -1991,11 +1991,10 @@ icValidateStatus CIccTagMultiProcessElement::Validate(std::string sigPath, std::
     last = i->ptr;
 
     if (last) {
-        rv = icMaxStatus(rv, last->Validate(sigPath+icGetSigPath(GetType()), sReport, this));
+        rv = icMaxStatus(rv, last->Validate(sigPath+icGetSigPath(GetType()), sReport, this, pProfile));
 
         // The interpolation hint in byte 7 of a CLUT element is ICC.2's; ICC.1
-        // Table 63 reserves all of bytes 4-7.  The element is not given the
-        // profile, so the version is checked here.
+        // Table 63 reserves all of bytes 4-7.
         if (pProfile && pProfile->m_Header.version < icVersionNumberV5 &&
             last->GetType() == icSigCLutElemType && (last->m_nReserved & 0xFF)) {
           sReport += icMsgValidateNonCompliant;

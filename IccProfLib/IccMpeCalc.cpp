@@ -4637,7 +4637,7 @@ bool CIccCalculatorFunc::HasUnsupportedOperations(std::string &sReport, const CI
     // CWE-400/834: m_nOps is bounded by MAX_CALC_ELEMENTS at Read() and m_Op[] is
     // sized to it; mirror that bound here so the walk is provably finite.
     for (i = 0; i < m_nOps && i < MAX_CALC_ELEMENTS; i++) {
-      if (version < icVersionNumberV5_1 &&
+      if (version < icVersionNumberV5 &&
           (m_Op[i].sig == icSigNotOp ||
            m_Op[i].sig == icSigNotEqualOp)) {
         map[m_Op[i].sig] = NULL;
@@ -4647,7 +4647,9 @@ bool CIccCalculatorFunc::HasUnsupportedOperations(std::string &sReport, const CI
       icCalcOpMap::iterator sig;
       sReport += "Calculator operator(s) not supported by profile version:";
       for (sig = map.begin(); sig != map.end(); sig++) {
-        SIccCalcOp op;
+        // Value-initialised: Describe() reads the operand fields too, and only
+        // the operator's name belongs in this report.
+        SIccCalcOp op{};
         op.sig = sig->first;
         std::string opname;
         op.Describe(opname, 100);
