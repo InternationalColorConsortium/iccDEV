@@ -7643,6 +7643,7 @@ template class CIccTagFloatNum<icFloat64Number, icSigFloat64ArrayType>;
 CIccTagMeasurement::CIccTagMeasurement()
 {
   memset(&m_Data, 0, sizeof(m_Data));
+  m_nMeasurementCondition = 0;
 }
 
 
@@ -7659,6 +7660,7 @@ CIccTagMeasurement::CIccTagMeasurement()
 CIccTagMeasurement::CIccTagMeasurement(const CIccTagMeasurement &ITM)
 {
   memcpy(&m_Data, &ITM.m_Data, sizeof(m_Data));
+  m_nMeasurementCondition = ITM.m_nMeasurementCondition;
 }
 
 
@@ -7678,6 +7680,7 @@ CIccTagMeasurement &CIccTagMeasurement::operator=(const CIccTagMeasurement &Meas
     return *this;
 
   memcpy(&m_Data, &MeasTag.m_Data, sizeof(m_Data));
+  m_nMeasurementCondition = MeasTag.m_nMeasurementCondition;
 
   return *this;
 }
@@ -7735,6 +7738,14 @@ bool CIccTagMeasurement::Read(icUInt32Number size, CIccIO *pIO)
   if (pIO->Read32(&m_Data,nSize) != nSize)
     return false;
 
+  // ICC.2 Table 56: bytes 36-39 are an optional measurement condition, and a
+  // 36-byte tag has none.
+  m_nMeasurementCondition = 0;
+  if (size >= sizeof(icTagTypeSignature) + sizeof(icUInt32Number) + sizeof(m_Data) + sizeof(icUInt32Number)) {
+    if (!pIO->Read32(&m_nMeasurementCondition))
+      return false;
+  }
+
   return true;
 }
 
@@ -7770,6 +7781,10 @@ bool CIccTagMeasurement::Write(CIccIO *pIO)
   if (pIO->Write32(&m_Data,nSize) != nSize)
     return false;
 
+  // Written only when set, so a tag without one keeps the 36-byte ICC.1 layout.
+  if (m_nMeasurementCondition && !pIO->Write32(&m_nMeasurementCondition))
+    return false;
+
   return true;
 }
 
@@ -7799,6 +7814,13 @@ void CIccTagMeasurement::Describe(std::string &sDescription, int /* nVerboseness
    sDescription += Fmt.GetMeasurementGeometryName(m_Data.geometry); sDescription += "\n";
    sDescription += Fmt.GetMeasurementFlareName(m_Data.flare); sDescription += "\n";
    sDescription += Fmt.GetIlluminantName(m_Data.illuminant); sDescription += "\n";
+   if (m_nMeasurementCondition) {
+     if (m_nMeasurementCondition <= 4)
+       snprintf(buf, bufSize, "Measurement condition: M%u\n", (unsigned int)(m_nMeasurementCondition - 1));
+     else
+       snprintf(buf, bufSize, "Measurement condition: unknown encoding %08Xh\n", (unsigned int)m_nMeasurementCondition);
+     sDescription += buf;
+   }
 }
 
 
@@ -7849,6 +7871,9 @@ icValidateStatus CIccTagMeasurement::Validate(std::string sigPath, std::string &
     rv = icMaxStatus(rv, icValidateNonCompliant);
   }
 
+  // ICC.2 Table 60 adds encodings 9h-16h to ICC.1's 0h-8h.
+  bool bIcc2 = pProfile && pProfile->m_Header.version >= icVersionNumberV5;
+
   switch(m_Data.illuminant) {
   case icIlluminantUnknown:
   case icIlluminantD50:
@@ -7861,11 +7886,49 @@ icValidateStatus CIccTagMeasurement::Validate(std::string sigPath, std::string &
   case icIlluminantF8:
     break;
 
+  case icIlluminantBlackBody:
+  case icIlluminantDaylight:
+  case icIlluminantB:
+  case icIlluminantC:
+  case icIlluminantF1:
+  case icIlluminantF3:
+  case icIlluminantF4:
+  case icIlluminantF5:
+  case icIlluminantF6:
+  case icIlluminantF7:
+  case icIlluminantF9:
+  case icIlluminantF10:
+  case icIlluminantF11:
+  case icIlluminantF12:
+    if (bIcc2)
+      break;
+    sReport += icMsgValidateNonCompliant;
+    sReport += sSigPathName;
+    sReport += " - Standard illuminant encoding is defined by ICC.2 only.\n";
+    rv = icMaxStatus(rv, icValidateNonCompliant);
+    break;
+
   default:
     sReport += icMsgValidateNonCompliant;
     sReport += sSigPathName;
     sReport += " - Invalid standard illuminant encoding.\n";
     rv = icMaxStatus(rv, icValidateNonCompliant);
+  }
+
+  // ICC.2 Table 61: 0 unknown, 1-4 = M0-M3.  ICC.1 has no such field.
+  if (m_nMeasurementCondition) {
+    if (!bIcc2) {
+      sReport += icMsgValidateNonCompliant;
+      sReport += sSigPathName;
+      sReport += " - Measurement condition is defined by ICC.2 only.\n";
+      rv = icMaxStatus(rv, icValidateNonCompliant);
+    }
+    else if (m_nMeasurementCondition > 4) {
+      sReport += icMsgValidateNonCompliant;
+      sReport += sSigPathName;
+      sReport += " - Invalid measurement condition encoding.\n";
+      rv = icMaxStatus(rv, icValidateNonCompliant);
+    }
   }
 
   return rv;

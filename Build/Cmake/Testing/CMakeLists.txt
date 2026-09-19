@@ -4982,6 +4982,128 @@ function(iccdev_add_json_colorant_parent_profile_test)
   endif()
 endfunction()
 
+# #2565: ICC.2 Table 60 adds standard illuminant encodings 9h-16h to measurementType,
+# and Table 56 adds an optional measurement condition (M0-M3) in bytes 36-39.
+# Validate() accepted 0h-8h only, and the binary, XML and JSON paths all dropped
+# the condition.  The helper pins the verdict per encoding at v4 and v5, the
+# 36/40-byte binary layout, and the XML and JSON round trips.
+function(iccdev_add_measurement_type_icc2_test)
+  if(NOT TARGET "${TARGET_LIB_ICCJSON}" OR NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMeasurementTypeIcc2Test
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/measurement-type-icc2.cpp"
+  )
+  target_compile_features(iccMeasurementTypeIcc2Test PRIVATE cxx_std_17)
+  target_include_directories(iccMeasurementTypeIcc2Test PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccMeasurementTypeIcc2Test PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccMeasurementTypeIcc2Test)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.measurement-type-icc2
+      COMMAND "$<TARGET_FILE:iccMeasurementTypeIcc2Test>"
+    )
+  else()
+    add_test(
+      NAME iccdev.measurement-type-icc2
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccMeasurementTypeIcc2Test>"
+    )
+  endif()
+  set_tests_properties(iccdev.measurement-type-icc2 PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;validate;xml;json;tagtype;issue-2565;regression"
+  )
+  if(WIN32)
+    set(_meas_icc2_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMeasurementTypeIcc2Test>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _meas_icc2_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.measurement-type-icc2 PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_meas_icc2_env_mods}"
+    )
+  endif()
+endfunction()
+
+# #2565: in the four CLUT processing elements, byte 7 of the reserved word is an
+# ICC.2 interpolationHintType (0-2), and CIccMultiProcessElement::Validate()
+# required the whole word to be zero.  The helper pins hints 0-3 and the bits
+# around them per element type, with a matrix element as the control, and the
+# verdict of the tracked avx2 profile with the hint set.
+function(iccdev_add_clut_interpolation_hint_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccClutInterpolationHintTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/clut-interpolation-hint.cpp"
+  )
+  target_compile_features(iccClutInterpolationHintTest PRIVATE cxx_std_17)
+  target_include_directories(iccClutInterpolationHintTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccClutInterpolationHintTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccClutInterpolationHintTest)
+
+  set(_clut_hint_args
+    "${ICCDEV_TESTING_DIR}/CLUT/avx2-3d-8-output.xml"
+  )
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.clut-interpolation-hint
+      COMMAND "$<TARGET_FILE:iccClutInterpolationHintTest>" ${_clut_hint_args}
+    )
+  else()
+    add_test(
+      NAME iccdev.clut-interpolation-hint
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccClutInterpolationHintTest>" ${_clut_hint_args}
+    )
+  endif()
+  set_tests_properties(iccdev.clut-interpolation-hint PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;validate;mpe;clut;issue-2565;regression"
+  )
+  if(WIN32)
+    set(_clut_hint_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccClutInterpolationHintTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _clut_hint_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.clut-interpolation-hint PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_clut_hint_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2583: CIccProfileJson::ParseTag() attached lut and named colour tags without
 # giving them the header colour spaces the binary and XML readers both hand over,
 # so CIccArrayNamedColor::Validate() compared each colour against a zero sample
@@ -8912,6 +9034,8 @@ if(WIN32)
   iccdev_add_chromaticity_colorant_encodings_test()
   iccdev_add_json_colorant_parent_profile_test()
   iccdev_add_json_namedcolor_colorspaces_test()
+  iccdev_add_measurement_type_icc2_test()
+  iccdev_add_clut_interpolation_hint_test()
   iccdev_add_mpexml_reflectance_clut_writer_test()
   iccdev_add_xml_embedded_image_empty_test()
   iccdev_add_embedded_image_zero_byte_test()
@@ -9313,6 +9437,8 @@ iccdev_add_svcn_xml_reserved_roundtrip_test()
 iccdev_add_chromaticity_colorant_encodings_test()
 iccdev_add_json_colorant_parent_profile_test()
 iccdev_add_json_namedcolor_colorspaces_test()
+iccdev_add_measurement_type_icc2_test()
+iccdev_add_clut_interpolation_hint_test()
 iccdev_add_mpexml_reflectance_clut_writer_test()
 iccdev_add_xml_embedded_image_empty_test()
 iccdev_add_embedded_image_zero_byte_test()

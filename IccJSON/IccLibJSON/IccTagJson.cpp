@@ -590,10 +590,12 @@ bool CIccTagJsonMeasurement::ToJson(IccJson &j)
   j["geometry"]          = (int)m_Data.geometry;
   j["flare"]             = info.GetMeasurementFlareName(m_Data.flare);
   j["illuminant"]        = (int)m_Data.illuminant;
+  if (m_nMeasurementCondition)  // ICC.2 Table 61, written only when present
+    j["measurementCondition"] = m_nMeasurementCondition;
   return true;
 }
 
-bool CIccTagJsonMeasurement::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonMeasurement::ParseJson(const IccJson &j, std::string &parseStr)
 {
   int stdObserver = 0, geometry = 0, illuminant = 0;
   std::string flare;
@@ -613,6 +615,14 @@ bool CIccTagJsonMeasurement::ParseJson(const IccJson &j, std::string & /*parseSt
   else
     m_Data.flare = icFlare0;
   m_Data.illuminant  = (icIlluminant)illuminant;
+  // Refused, as the XML reader refuses it, rather than dropped when malformed.
+  icUInt32Number condition = 0;
+  if (j.contains("measurementCondition") &&
+      (!j["measurementCondition"].is_number_unsigned() || !jGetValue(j, "measurementCondition", condition))) {
+    parseStr += "Invalid measurementCondition\n";
+    return false;
+  }
+  m_nMeasurementCondition = condition;
   return true;
 }
 
