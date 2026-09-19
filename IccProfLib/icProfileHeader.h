@@ -216,6 +216,16 @@ authorization from SunSoft Inc.
 #define icMediaColour                   0x00000000     /* Bit position 3 */
 #define icMediaBlackAndWhite            0x00000008     /* Bit position 3 */
 
+/** Bits 4-7 are defined by ICC.2 (Table 19) only; ICC.1 reserves them. */
+#define icPaperBased                    0x00000000     /* Bit position 4 */
+#define icNonPaperBased                 0x00000010     /* Bit position 4 */
+#define icNonTextured                   0x00000000     /* Bit position 5 */
+#define icTextured                      0x00000020     /* Bit position 5 */
+#define icIsotropic                     0x00000000     /* Bit position 6 */
+#define icNonIsotropic                  0x00000040     /* Bit position 6 */
+#define icNonSelfLuminous               0x00000000     /* Bit position 7 */
+#define icSelfLuminous                  0x00000080     /* Bit position 7 */
+
 /**
  * Profile header flags, the low 16 bits are reserved for consortium
  * use.
@@ -957,6 +967,7 @@ typedef enum {
     icSigLuvData                        = 0x4C757620,  /* 'Luv ' */
     icSigYCbCrData                      = 0x59436272,  /* 'YCbr' */
     icSigYxyData                        = 0x59787920,  /* 'Yxy ' */
+    icSigLmsData                        = 0x4C4D5320,  /* 'LMS ', ICC.2 only */
     icSigRgbData                        = 0x52474220,  /* 'RGB ' */
     icSigGrayData                       = 0x47524159,  /* 'GRAY' */
     icSigHsvData                        = 0x48535620,  /* 'HSV ' */

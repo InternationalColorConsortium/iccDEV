@@ -1491,11 +1491,34 @@ icUInt64Number icGetDeviceAttrValue(xmlNode *pNode)
     devAttr |= icMediaNegative;
   }
 
+	// Before #2565 the writer spelled this "blackAndwhite", so accept both.
 	attr = icXmlFindAttr(pNode, "MediaColour");
-  if (attr && !strcmp(icXmlAttrValue(attr), "blackAndWhite")) {
+  if (attr && (!strcmp(icXmlAttrValue(attr), "blackAndWhite") ||
+               !strcmp(icXmlAttrValue(attr), "blackAndwhite"))) {
 		devAttr |= icMediaBlackAndWhite;
 	}
-	
+
+  // ICC.2 Table 19 bits 4-7.  The writer names them only when set.
+  attr = icXmlFindAttr(pNode, "MediaBase");
+  if (attr && !strcmp(icXmlAttrValue(attr), "nonPaper")) {
+    devAttr |= icNonPaperBased;
+  }
+
+  attr = icXmlFindAttr(pNode, "MediaTexture");
+  if (attr && !strcmp(icXmlAttrValue(attr), "textured")) {
+    devAttr |= icTextured;
+  }
+
+  attr = icXmlFindAttr(pNode, "MediaIsotropy");
+  if (attr && !strcmp(icXmlAttrValue(attr), "nonIsotropic")) {
+    devAttr |= icNonIsotropic;
+  }
+
+  attr = icXmlFindAttr(pNode, "SelfLuminous");
+  if (attr && !strcmp(icXmlAttrValue(attr), "true")) {
+    devAttr |= icSelfLuminous;
+  }
+
   attr = icXmlFindAttr(pNode, "VendorSpecific");
   if (attr) {
     icUInt64Number vendor = 0;
@@ -1558,12 +1581,24 @@ const std::string icGetDeviceAttrName(icUInt64Number devAttr)
 	xml += line;
 	
 	if (devAttr & icMediaBlackAndWhite)
-		snprintf(line, lineSize, " MediaColour=\"blackAndwhite\"");
+		snprintf(line, lineSize, " MediaColour=\"blackAndWhite\"");
 	else
 		snprintf(line, lineSize, " MediaColour=\"colour\"");
 	xml += line;
 
-  icUInt64Number otherAttr = ~((icUInt64Number)icTransparency|icMatte|icMediaNegative|icMediaBlackAndWhite);
+  // ICC.2 Table 19 bits 4-7, named only when set so that a profile without them
+  // writes the same four attributes as before.
+  if (devAttr & icNonPaperBased)
+    xml += " MediaBase=\"nonPaper\"";
+  if (devAttr & icTextured)
+    xml += " MediaTexture=\"textured\"";
+  if (devAttr & icNonIsotropic)
+    xml += " MediaIsotropy=\"nonIsotropic\"";
+  if (devAttr & icSelfLuminous)
+    xml += " SelfLuminous=\"true\"";
+
+  icUInt64Number otherAttr = ~((icUInt64Number)icTransparency|icMatte|icMediaNegative|icMediaBlackAndWhite|
+                               icNonPaperBased|icTextured|icNonIsotropic|icSelfLuminous);
 
   if (devAttr & otherAttr) {
     snprintf(line, lineSize, " VendorSpecific=\"%016llx\"", devAttr & otherAttr);

@@ -54,6 +54,7 @@ class ColorSpace(enum.IntEnum):
     Luv       = cicc.icSigLuvData
     YCbCr     = cicc.icSigYCbCrData
     Yxy       = cicc.icSigYxyData
+    LMS       = cicc.icSigLmsData
     RGB       = cicc.icSigRgbData
     Gray      = cicc.icSigGrayData
     HSV       = cicc.icSigHsvData

@@ -5734,6 +5734,188 @@ function(iccdev_add_tag_name_spelling_test)
   endif()
 endfunction()
 
+# #2565: CheckHeader() tested the 64-bit device attributes field with 32-bit masks,
+# so it refused the ICC.2 bits 4-7 (non-paper, textured, non-isotropic,
+# self-luminous) at every version, warned about reserved bits 16-31 as if they
+# were the vendor's bits 32-63, and never looked at bits 32-63.  The helper pins
+# the verdict per edition at each boundary, and the XML and JSON names for bits
+# 4-7.  It calls the IccXML and IccJSON attribute helpers directly, which both the
+# header and the profileSequenceDesc readers use.
+function(iccdev_add_device_attributes_icc2_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}"
+     OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccDeviceAttributesIcc2Test
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/device-attributes-icc2.cpp"
+  )
+  target_compile_features(iccDeviceAttributesIcc2Test PRIVATE cxx_std_17)
+  target_include_directories(iccDeviceAttributesIcc2Test PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccDeviceAttributesIcc2Test PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccDeviceAttributesIcc2Test)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.device-attributes-icc2
+      COMMAND "$<TARGET_FILE:iccDeviceAttributesIcc2Test>"
+    )
+  else()
+    add_test(
+      NAME iccdev.device-attributes-icc2
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccDeviceAttributesIcc2Test>"
+    )
+  endif()
+  set_tests_properties(iccdev.device-attributes-icc2 PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;header;validate;xml;json;issue-2565;regression"
+  )
+  if(WIN32)
+    set(_device_attr_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccDeviceAttributesIcc2Test>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _device_attr_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.device-attributes-icc2 PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_device_attr_env_mods}"
+    )
+  endif()
+endfunction()
+
+# #2565: ICC.2 Table 15 lists 'LMS ' (4C4D5320h) as a data colour space; ICC.1
+# does not.  iccDEV had no signature for it, so it counted as zero channels, a v5
+# profile carrying it was refused as an unknown colour space with a channel-count
+# error from every tag, and a lut-based tag on it fell to the N-dimensional
+# transform, which refuses three inputs.  The helper pins the utilities, the
+# header verdict at v4 and v5 (data space and DeviceLink PCS), the verdict of a
+# tracked profile with 'RGB ' swapped for 'LMS ', and a CMM apply against the same
+# profile as 'RGB '.
+function(iccdev_add_lms_colour_space_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccLmsColourSpaceTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/lms-colour-space.cpp"
+  )
+  target_compile_features(iccLmsColourSpaceTest PRIVATE cxx_std_17)
+  target_include_directories(iccLmsColourSpaceTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccLmsColourSpaceTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccLmsColourSpaceTest)
+
+  set(_lms_args
+    "${ICCDEV_TESTING_DIR}/Calc/srgbCalcTest.xml"
+    "${ICCDEV_TESTING_DIR}/V2/v2RgbLut8.xml"
+  )
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.lms-colour-space
+      COMMAND "$<TARGET_FILE:iccLmsColourSpaceTest>" ${_lms_args}
+    )
+  else()
+    add_test(
+      NAME iccdev.lms-colour-space
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccLmsColourSpaceTest>" ${_lms_args}
+    )
+  endif()
+  set_tests_properties(iccdev.lms-colour-space PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;header;validate;cmm;xml;issue-2565;regression"
+  )
+  if(WIN32)
+    set(_lms_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccLmsColourSpaceTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _lms_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.lms-colour-space PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_lms_env_mods}"
+    )
+  endif()
+endfunction()
+
+# #2565: ICC.2 9.2.56 permits multiLocalizedUnicodeType, textType and utf8Type for
+# the copyrightTag, and IsTypeValid() applied the v4 mluc-only rule to v5 too: a
+# utf8Type copyright was NonCompliant, and a textType one drew the warning meant
+# for a mislabelled v2 profile.  The helper pins each type at v2, v4 and v5.
+# Links IccProfLib only -- the rule is in CIccProfile::IsTypeValid().
+function(iccdev_add_copyright_tag_icc2_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCopyrightTagIcc2Test
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/copyright-tag-icc2.cpp"
+  )
+  target_compile_features(iccCopyrightTagIcc2Test PRIVATE cxx_std_17)
+  target_include_directories(iccCopyrightTagIcc2Test PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccCopyrightTagIcc2Test PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccCopyrightTagIcc2Test)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.copyright-tag-icc2
+      COMMAND "$<TARGET_FILE:iccCopyrightTagIcc2Test>"
+    )
+  else()
+    add_test(
+      NAME iccdev.copyright-tag-icc2
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccCopyrightTagIcc2Test>"
+    )
+  endif()
+  set_tests_properties(iccdev.copyright-tag-icc2 PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;validate;tagtype;issue-2565;regression"
+  )
+  if(WIN32)
+    set(_cprt_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCopyrightTagIcc2Test>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _cprt_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.copyright-tag-icc2 PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_cprt_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2028: g_icStructNames is the struct-name analogue of the tag table above and was
 # not covered by that sweep. It published brdfTransfromStructure and
 # colorantInfoStruct, each of which had a second entry for the same signature that
@@ -8715,6 +8897,9 @@ if(WIN32)
   iccdev_add_curve_gamma_u8fixed8_test()
   iccdev_add_luminance_normalization_test()
   iccdev_add_tag_name_spelling_test()
+  iccdev_add_device_attributes_icc2_test()
+  iccdev_add_lms_colour_space_test()
+  iccdev_add_copyright_tag_icc2_test()
   iccdev_add_struct_name_spelling_test()
   iccdev_add_mcs_colorspace_name_test()
   iccdev_add_signature_utils_contract_test()
@@ -9113,6 +9298,9 @@ iccdev_add_curve_setsize_contract_test()
 iccdev_add_curve_gamma_u8fixed8_test()
 iccdev_add_luminance_normalization_test()
 iccdev_add_tag_name_spelling_test()
+iccdev_add_device_attributes_icc2_test()
+iccdev_add_lms_colour_space_test()
+iccdev_add_copyright_tag_icc2_test()
 iccdev_add_struct_name_spelling_test()
 iccdev_add_mcs_colorspace_name_test()
 iccdev_add_signature_utils_contract_test()
