@@ -1272,6 +1272,10 @@ public:
 
 
   icMeasurement m_Data;
+
+  /** ICC.2 Table 61 measurement condition (0 unknown, 1-4 = M0-M3), from the
+   *  optional bytes 36-39.  A 36-byte tag carries none, and reads as 0. */
+  icUInt32Number m_nMeasurementCondition;
 };
 
 /**

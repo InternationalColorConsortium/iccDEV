@@ -2196,6 +2196,16 @@ bool CIccTagXmlMeasurement::ToXml(std::string &xml, std::string blanks/* = ""*/)
 
   snprintf(buf, bufSize, "<StandardIlluminant>%s</StandardIlluminant>\n",info.GetIlluminantName(m_Data.illuminant));
   xml += blanks + buf;
+
+  // ICC.2 Table 61, written only when present.  M0-M3 by name, anything else
+  // as its value so that it still round-trips for Validate() to report.
+  if (m_nMeasurementCondition) {
+    if (m_nMeasurementCondition <= 4)
+      snprintf(buf, bufSize, "<MeasurementCondition>M%u</MeasurementCondition>\n", (unsigned int)(m_nMeasurementCondition - 1));
+    else
+      snprintf(buf, bufSize, "<MeasurementCondition>%u</MeasurementCondition>\n", (unsigned int)m_nMeasurementCondition);
+    xml += blanks + buf;
+  }
   return true;
 }
 
@@ -2203,6 +2213,31 @@ bool CIccTagXmlMeasurement::ToXml(std::string &xml, std::string blanks/* = ""*/)
 bool CIccTagXmlMeasurement::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   memset(&m_Data, 0, sizeof(m_Data));
+  m_nMeasurementCondition = 0;
+
+  // Element text, so trim before the strict parse: a pretty-printed document
+  // has blanks around the value.
+  xmlNode *pCondNode = icXmlFindNode(pNode, "MeasurementCondition");
+  if (pCondNode) {
+    // An element child has no content, so check both.
+    std::string sCond((pCondNode->children && pCondNode->children->content) ?
+                      (const icChar*)pCondNode->children->content : "");
+    const char *szBlank = " \t\r\n\f\v";
+    std::string::size_type nFirst = sCond.find_first_not_of(szBlank);
+    if (nFirst != std::string::npos)
+      sCond = sCond.substr(nFirst, sCond.find_last_not_of(szBlank) - nFirst + 1);
+    else
+      sCond.clear();
+
+    if (sCond.size() == 2 && sCond[0] == 'M' && sCond[1] >= '0' && sCond[1] <= '3')
+      m_nMeasurementCondition = (icUInt32Number)(sCond[1] - '0' + 1);
+    else if (!icXmlParseU32(sCond.c_str(), m_nMeasurementCondition)) {
+      parseStr += "Invalid MeasurementCondition \"";
+      parseStr += sCond;
+      parseStr += "\"\n";
+      return false;
+    }
+  }
 
   pNode = icXmlFindNode(pNode, "StandardObserver");
   if (pNode) {

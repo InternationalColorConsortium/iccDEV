@@ -469,7 +469,30 @@ icValidateStatus CIccMultiProcessElement::Validate(std::string sigPath, std::str
 
   CIccInfo Info;
   std::string sSigPathName = Info.GetSigPathName(sigPath+icGetSigPath(GetType()));
-  if (m_nReserved!=0) {
+
+  // In the four CLUT elements, byte 7 of the reserved field is an
+  // interpolationHintType (ICC.2:2023 clause 4.2.5 Table 1; Tables 113, 114,
+  // 117 and 122), and only bytes 4-6 are reserved.
+  icUInt32Number nReserved = m_nReserved;
+  switch (GetType()) {
+  case icSigCLutElemType:
+  case icSigExtCLutElemType:
+  case icSigEmissionCLUTElemType:
+  case icSigReflectanceCLUTElemType:
+    if ((nReserved & 0xFF) > 2) {
+      sReport += icMsgValidateNonCompliant;
+      sReport += sSigPathName;
+      sReport += " - Invalid interpolation hint.\n";
+      rv = icValidateNonCompliant;
+    }
+    nReserved &= 0xFFFFFF00;
+    break;
+
+  default:
+    break;
+  }
+
+  if (nReserved!=0) {
     sReport += icMsgValidateNonCompliant;
     sReport += sSigPathName;
     sReport += " - Reserved Value must be zero.\n";
@@ -1967,8 +1990,20 @@ icValidateStatus CIccTagMultiProcessElement::Validate(std::string sigPath, std::
     }
     last = i->ptr;
 
-    if (last)
+    if (last) {
         rv = icMaxStatus(rv, last->Validate(sigPath+icGetSigPath(GetType()), sReport, this));
+
+        // The interpolation hint in byte 7 of a CLUT element is ICC.2's; ICC.1
+        // Table 63 reserves all of bytes 4-7.  The element is not given the
+        // profile, so the version is checked here.
+        if (pProfile && pProfile->m_Header.version < icVersionNumberV5 &&
+            last->GetType() == icSigCLutElemType && (last->m_nReserved & 0xFF)) {
+          sReport += icMsgValidateNonCompliant;
+          sReport += Info.GetSigPathName(sigPath+icGetSigPath(GetType())+icGetSigPath(last->GetType()));
+          sReport += " - Reserved Value must be zero; the interpolation hint is defined by ICC.2 only.\n";
+          rv = icMaxStatus(rv, icValidateNonCompliant);
+        }
+    }
   }
 
   if (bMatchChannels && last && last->NumOutputChannels() != m_nOutputChannels) {
