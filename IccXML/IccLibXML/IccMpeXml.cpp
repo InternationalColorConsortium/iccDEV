@@ -2700,6 +2700,13 @@ bool CIccMpeXmlCalculator::ToXml(std::string &xml, std::string blanks/* = ""*/)
   }
   xml += ">\n";
 
+  // ICC.2:2023 Table 85b calculatorLimits, written only when the element has one.
+  if (m_bHasLimits) {
+    snprintf(line, lineSize, "<CalculatorLimits MaxStackSize=\"%u\" MaxTempChannels=\"%u\" MaxOperations=\"%u\"/>\n",
+             (unsigned int)m_nMaxStackSize, (unsigned int)m_nMaxTempChannels, (unsigned int)m_nMaxOperations);
+    xml += blanks2 + line;
+  }
+
   int i;
 
   // CWE-400/CWE-834: the walk below iterates m_nSubElem over m_SubElem[].
@@ -3742,6 +3749,21 @@ bool CIccMpeXmlCalculator::ParseXml(xmlNode *pNode, std::string &parseStr)
   if (!ParseChanMap(m_outputMap, icXmlAttrValue(pNode, "OutputNames"), m_nOutputChannels)) {
     parseStr += "Invalid name for InputChannels";
     return false;
+  }
+
+  // ICC.2:2023 Table 85b calculatorLimits; a missing attribute is 0, no maximum.
+  m_bHasLimits = false;
+  m_nMaxStackSize = m_nMaxTempChannels = m_nMaxOperations = 0;
+  memset(m_nLimitsReserved, 0, sizeof(m_nLimitsReserved));
+  xmlNode *pLimits = icXmlFindNode(pNode->children, "CalculatorLimits");
+  if (pLimits) {
+    if (!icXmlParseU32(icXmlAttrValue(pLimits, "MaxStackSize", "0"), m_nMaxStackSize) ||
+        !icXmlParseU32(icXmlAttrValue(pLimits, "MaxTempChannels", "0"), m_nMaxTempChannels) ||
+        !icXmlParseU32(icXmlAttrValue(pLimits, "MaxOperations", "0"), m_nMaxOperations)) {
+      parseStr += "Invalid CalculatorLimits attribute\n";
+      return false;
+    }
+    m_bHasLimits = true;
   }
 
   if (!ParseImport(pNode, "*", parseStr))
