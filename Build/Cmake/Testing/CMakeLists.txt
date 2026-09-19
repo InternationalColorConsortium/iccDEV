@@ -188,7 +188,7 @@ if(ENABLE_PROFILING AND TARGET iccDumpProfile AND ICCDEV_GPROF_EXECUTABLE AND
   set_tests_properties(iccdev.profiling-smoke PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     TIMEOUT 60
-    LABELS "iccdev;build;profiling;smoke"
+    LABELS "iccdev;build;profiling;smoke;pr-2606"
   )
 elseif(ENABLE_PROFILING)
   message(STATUS

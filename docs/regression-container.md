@@ -461,7 +461,9 @@ legacy-package tags. Publishing runs generate a compact CycloneDX SBOM with
 Anchore and create provenance with GitHub's `actions/attest-build-provenance`
 action. The workflow validates that the SBOM is nonempty and at most 16 MiB,
 then requires `actions/attest` to publish the signed SBOM predicate to GitHub
-and the registry. An invalid or oversized SBOM fails publication. BuildKit
+and the registry against an immutable SHA staging reference. Only after those
+attestations succeed does it promote the mutable integration, `latest`, or
+release tags. An invalid or oversized SBOM fails before staging. BuildKit
 attestations are disabled for the image build.
 
 For detailed regression gate policy, use
