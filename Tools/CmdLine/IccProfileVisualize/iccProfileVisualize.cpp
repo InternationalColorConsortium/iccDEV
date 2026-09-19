@@ -819,6 +819,7 @@ int TIFFColorModelFromICCModel( icColorSpaceSignature colorSig )
     case icSigLuvData:
     case icSigYCbCrData:
     case icSigYxyData:
+    case icSigLmsData:
     case icSigHsvData:
     case icSigHlsData:
       return TIFF_MODE_RGB;
@@ -861,6 +862,7 @@ int TIFFEdgeColorModelFromICCModel( icColorSpaceSignature colorSig )
     case icSigLuvData:
     case icSigYCbCrData:
     case icSigYxyData:
+    case icSigLmsData:
     case icSigHsvData:
     case icSigHlsData:
     case icSigLabData:

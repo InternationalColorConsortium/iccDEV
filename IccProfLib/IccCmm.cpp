@@ -719,6 +719,7 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
             case icSigLuvData:
             case icSigYCbCrData:
             case icSigYxyData:
+            case icSigLmsData:
             case icSigRgbData:
             case icSigHsvData:
             case icSigHlsData:
@@ -1366,6 +1367,7 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
       case icSigLuvData:
       case icSigYCbCrData:
       case icSigYxyData:
+      case icSigLmsData:
       case icSigRgbData:
       case icSigHsvData:
       case icSigHlsData:
@@ -8464,6 +8466,7 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
             case icSigLuvData:
             case icSigYCbCrData:
             case icSigYxyData:
+            case icSigLmsData:
             case icSigRgbData:
             case icSigHsvData:
             case icSigHlsData:

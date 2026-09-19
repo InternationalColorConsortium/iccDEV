@@ -198,7 +198,7 @@ unsigned short clipU16(icFloatNumber v) {
 int photometricFromSpace(icColorSpaceSignature s) {
   switch (s) {
     case icSigRgbData: case icSigCmyData: case icSigXYZData: case icSigLuvData:
-    case icSigYCbCrData: case icSigYxyData: case icSigHsvData: case icSigHlsData:
+    case icSigYCbCrData: case icSigYxyData: case icSigLmsData: case icSigHsvData: case icSigHlsData:
       return 2;  // RGB
     case icSigCmykData: return 5;            // CMYK
     case icSigLabData:  return 8;            // CIELAB

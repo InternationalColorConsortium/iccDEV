@@ -112,7 +112,11 @@
         "GlossyOrMatte":            { "type": "string", "enum": ["glossy", "matte"] },
         "MediaPolarity":            { "type": "string", "enum": ["positive", "negative"] },
         "MediaColour":              { "type": "string", "enum": ["colour", "blackAndWhite"] },
-        "VendorSpecific":           { "$ref": "#/$defs/HexString", "description": "Remaining vendor-specific bits as 16 hex chars" }
+        "MediaBase":                { "type": "string", "enum": ["paper", "nonPaper"], "description": "ICC.2 bit 4; written only when set" },
+        "MediaTexture":             { "type": "string", "enum": ["nonTextured", "textured"], "description": "ICC.2 bit 5; written only when set" },
+        "MediaIsotropy":            { "type": "string", "enum": ["isotropic", "nonIsotropic"], "description": "ICC.2 bit 6; written only when set" },
+        "SelfLuminous":             { "type": "boolean", "description": "ICC.2 bit 7; written only when set" },
+        "VendorSpecific":           { "$ref": "#/$defs/HexString", "description": "Remaining bits as 16 hex chars: reserved bits 8-31 and vendor-specific bits 32-63" }
       }
     },
 
