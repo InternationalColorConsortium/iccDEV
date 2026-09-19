@@ -5179,6 +5179,119 @@ function(iccdev_add_json_namedcolor_colorspaces_test)
   endif()
 endfunction()
 
+# #2565: a calculatorElement may carry an ICC.2 calculatorLimits ('clmt') block after
+# its sub-element positions (Table 85b).  Read() followed the positions and stepped
+# over it, so the limits were never checked and Write() dropped them.  The helper
+# pins the binary layout, Validate() at each limit's boundary (sub-calculators
+# included), and the XML form.
+function(iccdev_add_calculator_limits_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCalculatorLimitsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/calculator-limits.cpp"
+  )
+  target_compile_features(iccCalculatorLimitsTest PRIVATE cxx_std_17)
+  target_include_directories(iccCalculatorLimitsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccCalculatorLimitsTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccCalculatorLimitsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.calculator-limits
+      COMMAND "$<TARGET_FILE:iccCalculatorLimitsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.calculator-limits
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccCalculatorLimitsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.calculator-limits PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;validate;mpe;calc;xml;issue-2565;regression"
+  )
+  if(WIN32)
+    set(_calc_limits_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCalculatorLimitsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _calc_limits_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.calculator-limits PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_calc_limits_env_mods}"
+    )
+  endif()
+endfunction()
+
+# #2565: the JSON form of calculatorLimits, in its own executable because IccMpeXml.h
+# and IccMpeJson.h cannot share a translation unit.
+function(iccdev_add_calculator_limits_json_test)
+  if(NOT TARGET "${TARGET_LIB_ICCJSON}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCalculatorLimitsJsonTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/calculator-limits-json.cpp"
+  )
+  target_compile_features(iccCalculatorLimitsJsonTest PRIVATE cxx_std_17)
+  target_include_directories(iccCalculatorLimitsJsonTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccCalculatorLimitsJsonTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccCalculatorLimitsJsonTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.calculator-limits-json
+      COMMAND "$<TARGET_FILE:iccCalculatorLimitsJsonTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.calculator-limits-json
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccCalculatorLimitsJsonTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.calculator-limits-json PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;mpe;calc;json;issue-2565;regression"
+  )
+  if(WIN32)
+    set(_calc_limits_json_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCalculatorLimitsJsonTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _calc_limits_json_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.calculator-limits-json PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_calc_limits_json_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2535/#2536: CIccTagJsonColorantOrder::ParseJson() and
 # CIccTagJsonColorantTable::ParseJson() sized their allocation from a count that
 # was narrowed a second time at the SetSize() call -- both tags' SetSize() takes
@@ -9071,6 +9184,8 @@ if(WIN32)
   iccdev_add_cmmsearch_namedcolor_ownership_test()
   iccdev_add_namedcolor_findcolor_suffix_underflow_test()
   iccdev_add_colorant_count_narrowing_json_test()
+  iccdev_add_calculator_limits_test()
+  iccdev_add_calculator_limits_json_test()
   iccdev_add_colorant_count_narrowing_xml_test()
   iccdev_add_xml_numeric_values_test()
   iccdev_add_xml_calculator_curve_writer_test()
@@ -9477,6 +9592,8 @@ iccdev_add_sparsematrix_set_roundtrip_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_namedcolor_findcolor_suffix_underflow_test()
 iccdev_add_colorant_count_narrowing_json_test()
+iccdev_add_calculator_limits_test()
+iccdev_add_calculator_limits_json_test()
 iccdev_add_colorant_count_narrowing_xml_test()
 iccdev_add_xml_numeric_values_test()
 iccdev_add_xml_calculator_curve_writer_test()

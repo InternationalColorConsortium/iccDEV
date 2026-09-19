@@ -2099,6 +2099,15 @@ bool CIccMpeJsonCalculator::ToJson(IccJson &j)
   j["inputChannels"]  = (int)NumInputChannels();
   j["outputChannels"] = (int)NumOutputChannels();
 
+  // ICC.2:2023 Table 85b calculatorLimits, written only when the element has one.
+  if (m_bHasLimits) {
+    IccJson limits;
+    limits["maxStackSize"]    = m_nMaxStackSize;
+    limits["maxTempChannels"] = m_nMaxTempChannels;
+    limits["maxOperations"]   = m_nMaxOperations;
+    j["calculatorLimits"] = limits;
+  }
+
   // Emit sub-elements (anonymous, in order)
   if (m_SubElem && m_nSubElem) {
     IccJson elems = IccJson::array();
@@ -2162,6 +2171,30 @@ bool CIccMpeJsonCalculator::ParseJson(const IccJson &j, std::string &parseStr)
   if (!ParseChanMap(m_outputMap, outputNames.c_str(), m_nOutputChannels)) {
     parseStr += "Invalid name for outputChannels\n";
     return false;
+  }
+
+  // ICC.2:2023 Table 85b calculatorLimits; a missing key is 0, no maximum.
+  m_bHasLimits = false;
+  m_nMaxStackSize = m_nMaxTempChannels = m_nMaxOperations = 0;
+  memset(m_nLimitsReserved, 0, sizeof(m_nLimitsReserved));
+  if (j.contains("calculatorLimits")) {
+    const IccJson &limits = j["calculatorLimits"];
+    const char *keys[3] = { "maxStackSize", "maxTempChannels", "maxOperations" };
+    icUInt32Number *vals[3] = { &m_nMaxStackSize, &m_nMaxTempChannels, &m_nMaxOperations };
+    if (!limits.is_object()) {
+      parseStr += "Invalid calculatorLimits in CalculatorElement\n";
+      return false;
+    }
+    for (int k = 0; k < 3; k++) {
+      if (limits.contains(keys[k]) &&
+          (!limits[keys[k]].is_number_unsigned() || !jGetValue(limits, keys[k], *vals[k]))) {
+        parseStr += "Invalid calculatorLimits ";
+        parseStr += keys[k];
+        parseStr += " in CalculatorElement\n";
+        return false;
+      }
+    }
+    m_bHasLimits = true;
   }
 
   // Load variables, macros, and sub-elements (including any imports)
