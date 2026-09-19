@@ -21,6 +21,8 @@ scripts/
 .ruff_cache/
 coverage.xml
 htmlcov/
+codeql-results/
+docs/generated/
 python/build/
 python/dist/
 python/*.egg-info/

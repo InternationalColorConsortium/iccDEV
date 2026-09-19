@@ -54,9 +54,10 @@ short_fixture="$fixture_dir/json-parametric-short-params.json"
 control_fixture="$fixture_dir/json-parametric-complete-params.json"
 colorant_reject_fixture="$fixture_dir/json-colorant-table-nonnumeric-pcs.json"
 colorant_control_fixture="$fixture_dir/json-colorant-table-complete-pcs.json"
+xml_control_fixture="$source_dir/Testing/V2/v2GrayTRC.xml"
 out_dir="${out_dir:-$build_dir/msan-taint-logs}"
 
-for required_tool in clang clang++ cmake grep ldd nm; do
+for required_tool in clang clang++ cmake grep ldd ninja nm; do
   if ! command -v "$required_tool" >/dev/null 2>&1; then
     echo "[FAIL] required tool is unavailable: $required_tool" >&2
     exit 127
@@ -65,19 +66,22 @@ done
 if [ ! -f "$source_dir/Build/Cmake/CMakeLists.txt" ] ||
    [ ! -f "$short_fixture" ] || [ ! -f "$control_fixture" ] ||
    [ ! -f "$colorant_reject_fixture" ] ||
-   [ ! -f "$colorant_control_fixture" ]; then
+   [ ! -f "$colorant_control_fixture" ] ||
+   [ ! -f "$xml_control_fixture" ]; then
   echo "[FAIL] --source-dir is not a complete taint-trace checkout" >&2
   exit 2
 fi
 if [ ! -f "$runtime_dir/include/c++/v1/string" ] ||
    [ ! -f "$runtime_dir/lib/libc++.so.1" ] ||
-   [ ! -f "$runtime_dir/lib/libc++abi.so.1" ]; then
-  echo "[FAIL] --runtime-dir is not a complete libc++ runtime: $runtime_dir" >&2
+   [ ! -f "$runtime_dir/lib/libc++abi.so.1" ] ||
+   [ ! -f "$runtime_dir/include/libxml2/libxml/parser.h" ] ||
+   [ ! -f "$runtime_dir/lib/libxml2.so" ]; then
+  echo "[FAIL] --runtime-dir is not a complete MSan runtime: $runtime_dir" >&2
   exit 2
 fi
 
 mkdir -p "$build_dir" "$out_dir"
-for runtime_library in libc++.so.1 libc++abi.so.1; do
+for runtime_library in libc++.so.1 libc++abi.so.1 libxml2.so; do
   nm -D "$runtime_dir/lib/$runtime_library" \
     > "$out_dir/$runtime_library.symbols"
   if ! grep -Fq '__msan_' "$out_dir/$runtime_library.symbols"; then
@@ -86,35 +90,23 @@ for runtime_library in libc++.so.1 libc++abi.so.1; do
   fi
 done
 
-compile_flags="-fsanitize=memory -fsanitize-memory-track-origins"
-compile_flags+=" -nostdinc++ -isystem $runtime_dir/include/c++/v1"
-link_flags="-fsanitize=memory -fsanitize-memory-track-origins -nostdlib++"
-link_flags+=" -L$runtime_dir/lib -Wl,-rpath,$runtime_dir/lib -lc++ -lc++abi"
-
-CC=clang CXX=clang++ cmake -G Ninja \
+ICCDEV_MSAN_LIBCXX_DIR="$runtime_dir" cmake \
+  --preset linux-clang-msan \
   -S "$source_dir/Build/Cmake" -B "$build_dir" \
-  -DCMAKE_BUILD_TYPE=Debug \
-  -DCMAKE_CXX_FLAGS="$compile_flags" \
-  -DCMAKE_EXE_LINKER_FLAGS="$link_flags" \
-  -DCMAKE_SHARED_LINKER_FLAGS="$link_flags" \
-  -DENABLE_TOOLS=ON \
-  -DENABLE_TESTS=ON \
-  -DENABLE_WXWIDGETS=OFF \
-  -DENABLE_IMAGE_TOOLS=OFF \
-  -DENABLE_MSAN=ON \
   -DICCDEV_ENABLE_TAINT_TRACE=ON \
   -DENABLE_SHARED_LIBS=ON \
   -DENABLE_STATIC_LIBS=OFF
 cmake --build "$build_dir" \
-  --target iccFromJson iccConnectThreadTest iccTaintTraceMemoryStateProbe \
+  --target iccFromJson iccFromXml iccConnectThreadTest iccTaintTraceMemoryStateProbe \
   --parallel "${BUILD_JOBS:-$(nproc)}"
 
 from_json="$build_dir/Tools/IccFromJson/iccFromJson"
+from_xml="$build_dir/Tools/IccFromXml/iccFromXml"
 thread_test="$build_dir/Testing/iccConnectThreadTest"
 memory_probe="$build_dir/Testing/iccTaintTraceMemoryStateProbe"
 msan_options="halt_on_error=1:exit_code=86:origin_history_size=7"
 
-for binary in "$from_json" "$thread_test"; do
+for binary in "$from_json" "$from_xml" "$thread_test"; do
   ldd "$binary" > "$out_dir/$(basename "$binary").ldd"
   if grep -Fq 'libstdc++.so' "$out_dir/$(basename "$binary").ldd" ||
      ! grep -Fq "$runtime_dir/lib/libc++.so.1" \
@@ -124,6 +116,11 @@ for binary in "$from_json" "$thread_test"; do
     exit 2
   fi
 done
+if ! grep -Fq "$runtime_dir/lib/libxml2.so" "$out_dir/iccFromXml.ldd"; then
+  echo "[FAIL] iccFromXml crossed an uninstrumented libxml2 boundary" >&2
+  cat "$out_dir/iccFromXml.ldd" >&2
+  exit 2
+fi
 
 run_from_json()
 {
@@ -163,6 +160,10 @@ thread_status=0
 MSAN_OPTIONS="$msan_options" \
   "$thread_test" "$source_dir/Testing/sRGB_v4_ICC_preference.icc" \
   >"$out_dir/thread.stdout" 2>"$out_dir/thread.stderr" || thread_status=$?
+xml_status=0
+MSAN_OPTIONS="$msan_options" \
+  "$from_xml" "$xml_control_fixture" "$out_dir/v2GrayTRC.icc" \
+  >"$out_dir/xml.stdout" 2>"$out_dir/xml.stderr" || xml_status=$?
 
 if [ "$short_status" -ne 1 ] || [ -e "$out_dir/short.icc" ] ||
    ! grep -Fq 'parametricCurveType params count does not match functionType' \
@@ -203,9 +204,16 @@ if [ "$thread_status" -ne 0 ] || grep -Fq 'MemorySanitizer:' "$out_dir/thread.st
   sed -n '1,160p' "$out_dir/thread.stderr" >&2
   exit 2
 fi
+if [ "$xml_status" -ne 0 ] || [ ! -s "$out_dir/v2GrayTRC.icc" ] ||
+   grep -Fq 'MemorySanitizer:' "$out_dir/xml.stderr"; then
+  echo "[FAIL] v2GrayTRC XML control was not MSan-clean" >&2
+  sed -n '1,160p' "$out_dir/xml.stderr" >&2
+  exit 2
+fi
 
 echo "[PASS] memory-state probe reported initialized, then poisoned at offset 5"
 echo "[PASS] short parametric parameters were rejected before serialization"
 echo "[PASS] non-numeric colorant PCS was rejected before serialization"
 echo "[PASS] complete JSON, colorant PCS, and threaded controls are MSan-clean"
+echo "[PASS] v2GrayTRC XML control is clean with instrumented libxml2"
 echo "[EVIDENCE] $out_dir"

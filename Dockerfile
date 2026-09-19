@@ -15,6 +15,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG GIT_COMMIT=unknown
 ARG BUILD_JOBS=32
 ARG LLVM_MSAN_LIBCXX_COMMIT=1ab49a973e210e97d61e5db6557180dcb92c3e98
+ARG LIBXML2_MSAN_COMMIT=3d840e17858de03a09fba8b202e3a89267d5795a
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -193,6 +194,7 @@ COPY --chmod=0755 .github/scripts/iccdev-build-msan-libcxx.sh /usr/local/bin/icc
 RUN iccdev-build-msan-libcxx \
       --prefix /opt/iccdev-msan-libcxx \
       --llvm-commit "$LLVM_MSAN_LIBCXX_COMMIT" \
+      --libxml2-commit "$LIBXML2_MSAN_COMMIT" \
       --jobs "$BUILD_JOBS"
 
 COPY --chown=iccdev-ci:iccdev-ci . /workspace/iccDEV
@@ -303,7 +305,7 @@ RUN chmod 0755 /usr/local/bin/iccdev-banner \
  && chown iccdev-ci:iccdev-ci /workspace/.bashrc
 
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
-  CMD ["bash", "-c", "clang --version >/dev/null && cmake --version >/dev/null && command -v ninja >/dev/null && command -v cppcheck >/dev/null && command -v clang-tidy >/dev/null && command -v scan-build >/dev/null && command -v hadolint >/dev/null && command -v zizmor >/dev/null && command -v shellcheck >/dev/null && command -v afl-fuzz >/dev/null && command -v valgrind >/dev/null && command -v ms_print >/dev/null && command -v callgrind_annotate >/dev/null && command -v iccdev-valgrind-build >/dev/null && command -v iccdev-valgrind-run >/dev/null && command -v iccdev-valgrind-status >/dev/null && command -v iccdev-valgrind-validate >/dev/null && command -v iccdev-valgrind-self-test >/dev/null && command -v iccdev-build-msan-libcxx >/dev/null && test -f /usr/include/valgrind/memcheck.h && test -f /opt/iccdev-msan-libcxx/lib/libc++.so.1 && test -f /opt/iccdev-msan-libcxx/lib/libc++abi.so.1 && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null"]
+  CMD ["bash", "-c", "clang --version >/dev/null && cmake --version >/dev/null && command -v ninja >/dev/null && command -v cppcheck >/dev/null && command -v clang-tidy >/dev/null && command -v scan-build >/dev/null && command -v hadolint >/dev/null && command -v zizmor >/dev/null && command -v shellcheck >/dev/null && command -v afl-fuzz >/dev/null && command -v valgrind >/dev/null && command -v ms_print >/dev/null && command -v callgrind_annotate >/dev/null && command -v iccdev-valgrind-build >/dev/null && command -v iccdev-valgrind-run >/dev/null && command -v iccdev-valgrind-status >/dev/null && command -v iccdev-valgrind-validate >/dev/null && command -v iccdev-valgrind-self-test >/dev/null && command -v iccdev-build-msan-libcxx >/dev/null && test -f /usr/include/valgrind/memcheck.h && test -f /opt/iccdev-msan-libcxx/lib/libc++.so.1 && test -f /opt/iccdev-msan-libcxx/lib/libc++abi.so.1 && test -f /opt/iccdev-msan-libcxx/lib/libxml2.so && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null"]
 
 LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 ENV ICCDEV_SOURCE_REVISION="${GIT_COMMIT}"

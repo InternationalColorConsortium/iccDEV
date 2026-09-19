@@ -224,6 +224,24 @@ jobs:
           python3 .github/scripts/iccdev-container-smoke.py "$TEST_IMAGE" \
             --report-dir out/container-smoke
 
+      - name: Verify MemorySanitizer runtime
+        env:
+          BASH_ENV: /dev/null
+          TEST_IMAGE: ${{ steps.test-image.outputs.image }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          docker run --rm --network none --security-opt seccomp=unconfined \
+            "$TEST_IMAGE" bash -lc '
+              .github/scripts/iccdev-msan-taint-qa.sh \
+                --source-dir "$PWD" \
+                --build-dir /tmp/iccdev-msan \
+                --runtime-dir "$ICCDEV_MSAN_LIBCXX_DIR" \
+                --out-dir /tmp/iccdev-msan-evidence
+            '
+
       - name: Upload runtime smoke diagnostics on failure
         if: ${{ failure() && steps.runtime-smoke.outcome == 'failure' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1

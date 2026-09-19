@@ -142,13 +142,14 @@ installs that component as `iccdev-valgrind-build`, `iccdev-valgrind-run`,
 
 ## MemorySanitizer
 
-The image also includes an LLVM 22.1.2 libc++ and libc++abi built with
+The image also includes LLVM 22.1.2 libc++, libc++abi, and libxml2 built with
 MemorySanitizer origins under `/opt/iccdev-msan-libcxx`. This avoids false
-reports at uninstrumented libstdc++ boundaries. The system unwinder remains
-uninstrumented so MSan can report findings without recursively instrumenting
-its own stack unwinding. The QA link uses `-nostdlib++` and fails if `ldd`
-still resolves libstdc++ for either the JSON or threaded test binary. Build and
-run the focused JSON and threaded controls with:
+reports at uninstrumented C++ and XML runtime boundaries. The system unwinder
+remains uninstrumented so MSan can report findings without recursively
+instrumenting its own stack unwinding. The QA link uses `-nostdlib++` and fails if `ldd`
+still resolves libstdc++ for the JSON, XML, or threaded test binaries, or if
+`iccFromXml` resolves the distribution libxml2. Build and run the focused JSON,
+XML, and threaded controls with:
 
 ```bash
 .github/scripts/iccdev-msan-taint-qa.sh --source-dir "$PWD" --build-dir /tmp/iccdev-msan --runtime-dir "${ICCDEV_MSAN_LIBCXX_DIR:-/opt/iccdev-msan-libcxx}" --out-dir /tmp/iccdev-msan-evidence
@@ -174,17 +175,28 @@ the default sandbox:
 docker run --rm --network none --security-opt seccomp=unconfined "$IMAGE" bash -lc '.github/scripts/iccdev-msan-taint-qa.sh --source-dir "$PWD" --build-dir /tmp/iccdev-msan --runtime-dir "$ICCDEV_MSAN_LIBCXX_DIR" --out-dir /tmp/iccdev-msan-evidence'
 ```
 
-For a local host without the runtime, create it first from the pinned LLVM
-commit and then use the same QA command:
+For a local host without the runtime, create it first from the pinned LLVM and
+libxml2 commits and then use the same QA command. The helper retains its
+historical name but installs all three runtime libraries:
 
 ```bash
 .github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/out/msan-libcxx"
 .github/scripts/iccdev-msan-taint-qa.sh --source-dir "$PWD" --build-dir "$PWD/out/linux-clang-msan-taint" --runtime-dir "$PWD/out/msan-libcxx" --out-dir "$PWD/out/msan-taint-evidence"
 ```
 
-Do not substitute the distribution libc++ packages for this runtime. Their
-headers are useful for compilation, but their shared libraries are not built
-with MemorySanitizer and therefore preserve the same false-report boundary.
+Do not substitute distribution libc++ or libxml2 packages for this runtime.
+Their headers are useful for compilation, but their shared libraries are not
+built with MemorySanitizer and therefore preserve the same false-report
+boundary. A report whose first frames are in distribution libxml2, with a
+poisoned span equal to the XML filename length plus its terminator, is this
+boundary artifact rather than evidence of an iccDEV uninitialized read.
+
+The matching CMake configure/build preset is `linux-clang-msan`; set
+`ICCDEV_MSAN_LIBCXX_DIR` to this runtime before configuring. Ordinary CTest
+does not bootstrap third-party runtimes, so the focused MSan QA script owns
+the linkage assertions and XML regression control. Use
+`linux-clang-valgrind` for a separate non-sanitized Debug tree and
+`linux-clang-tsan` for a separate race-detector tree.
 
 For a local PR #2378 comparison, check out the default branch as `TOOLING` and
 the PR head as `TARGET`. These setup commands are each independently
