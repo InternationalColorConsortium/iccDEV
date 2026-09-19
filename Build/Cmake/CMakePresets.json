@@ -246,18 +246,68 @@
       "name": "linux-clang-tsan",
       "inherits": "linux-clang",
       "displayName": "Linux Clang with ThreadSanitizer",
+      "description": "Standalone ThreadSanitizer Debug build. Do not combine with ASan, MSan, LSan, or Valgrind.",
+      "binaryDir": "${sourceDir}/../../out/${presetName}",
       "cacheVariables": {
         "ENABLE_TSAN": "ON",
+        "ENABLE_TESTS": "ON",
+        "ENABLE_TOOLS": "ON",
+        "ENABLE_WXWIDGETS": "OFF",
+        "ENABLE_LTO": "OFF",
         "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
       "name": "linux-clang-msan",
       "inherits": "linux-clang",
-      "displayName": "Linux Clang with MemorySanitizer",
+      "displayName": "Linux Clang with instrumented MSan runtime",
+      "description": "Requires ICCDEV_MSAN_LIBCXX_DIR from iccdev-build-msan-libcxx.sh; uses instrumented libc++, libc++abi, and libxml2.",
+      "binaryDir": "${sourceDir}/../../out/${presetName}",
+      "condition": {
+        "type": "notEquals",
+        "lhs": "$env{ICCDEV_MSAN_LIBCXX_DIR}",
+        "rhs": ""
+      },
       "cacheVariables": {
         "ENABLE_MSAN": "ON",
+        "ENABLE_TESTS": "ON",
+        "ENABLE_TOOLS": "ON",
+        "ENABLE_WXWIDGETS": "OFF",
+        "ENABLE_IMAGE_TOOLS": "OFF",
+        "ICC_USE_ZLIB": "OFF",
+        "ENABLE_LTO": "OFF",
+        "CMAKE_C_FLAGS": "-fsanitize=memory -fsanitize-memory-track-origins",
+        "CMAKE_CXX_FLAGS": "-fsanitize=memory -fsanitize-memory-track-origins -nostdinc++ -isystem $env{ICCDEV_MSAN_LIBCXX_DIR}/include/c++/v1",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=memory -fsanitize-memory-track-origins -nostdlib++ -L$env{ICCDEV_MSAN_LIBCXX_DIR}/lib -Wl,-rpath,$env{ICCDEV_MSAN_LIBCXX_DIR}/lib -lc++ -lc++abi",
+        "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=memory -fsanitize-memory-track-origins -nostdlib++ -L$env{ICCDEV_MSAN_LIBCXX_DIR}/lib -Wl,-rpath,$env{ICCDEV_MSAN_LIBCXX_DIR}/lib -lc++ -lc++abi",
+        "LIBXML2_INCLUDE_DIR": "$env{ICCDEV_MSAN_LIBCXX_DIR}/include/libxml2",
+        "LIBXML2_LIBRARY": "$env{ICCDEV_MSAN_LIBCXX_DIR}/lib/libxml2.so",
         "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "linux-clang-valgrind",
+      "inherits": "linux-clang",
+      "displayName": "Linux Clang Debug for Valgrind",
+      "description": "Non-sanitized Debug build for Memcheck, Helgrind, DRD, Massif, and Callgrind.",
+      "binaryDir": "${sourceDir}/../../out/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_TESTS": "ON",
+        "ENABLE_TOOLS": "ON",
+        "ENABLE_WXWIDGETS": "OFF",
+        "ENABLE_SANITIZERS": "OFF",
+        "ENABLE_ASAN": "OFF",
+        "ENABLE_UBSAN": "OFF",
+        "ENABLE_INTEGER_SANITIZER": "OFF",
+        "ENABLE_FLOAT_SANITIZER": "OFF",
+        "ENABLE_TSAN": "OFF",
+        "ENABLE_MSAN": "OFF",
+        "ENABLE_LSAN": "OFF",
+        "ENABLE_FUZZING": "OFF",
+        "ENABLE_COVERAGE": "OFF",
+        "ENABLE_PROFILING": "OFF",
+        "ENABLE_LTO": "OFF"
       }
     },
     {
@@ -551,6 +601,18 @@
     }
   ],
   "buildPresets": [
+    {
+      "name": "linux-clang-tsan",
+      "configurePreset": "linux-clang-tsan"
+    },
+    {
+      "name": "linux-clang-msan",
+      "configurePreset": "linux-clang-msan"
+    },
+    {
+      "name": "linux-clang-valgrind",
+      "configurePreset": "linux-clang-valgrind"
+    },
     {
       "name": "macos-clang",
       "configurePreset": "macos-clang",

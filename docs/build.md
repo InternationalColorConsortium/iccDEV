@@ -810,18 +810,18 @@ kept deliberately separate from `ICCPROFLIB_API` so real `dllexport`/`dllimport`
 could be added without flipping the ~308 incomplete `ICCPROFLIB_API` annotations
 and changing how every class and function is exported. The shared IccProfLib
 target defines `ICCPROFLIBDLL_DATA_EXPORTS` `PRIVATE` and
-`ICCPROFLIBDLL_DATA_IMPORTS` `INTERFACE`, so anything linking it — in-tree tools
-and `find_package()` consumers alike — sees `dllimport`. The static target
+`ICCPROFLIBDLL_DATA_IMPORTS` `INTERFACE`, so anything linking it -- in-tree tools
+and `find_package()` consumers alike -- sees `dllimport`. The static target
 deliberately gets neither and keeps a plain `extern`.
 
 Nothing special is needed to consume these symbols now. Link
 `RefIccMAX::IccProfLib2` and reference them; the workarounds the tree used to
 carry are gone (#2154):
 
-- **Tools** — `iccDumpProfile`, `iccProfilePlot` and `wxProfileDump` linked
+- **Tools** -- `iccDumpProfile`, `iccProfilePlot` and `wxProfileDump` linked
   `IccProfLib2-static` on Windows shared builds; all three now link
   `${TARGET_LIB_ICCPROFLIB}` on every platform.
-- **Regression executables** — the `${ICCDEV_TEST_LIB_ICCPROFLIB}` indirection
+- **Regression executables** -- the `${ICCDEV_TEST_LIB_ICCPROFLIB}` indirection
   that applied the same fallback is retired; tests link
   `${TARGET_LIB_ICCPROFLIB}` directly.
 - **Consumers that also link `IccXML`/`IccJson`** could never use that fallback
@@ -831,7 +831,7 @@ carry are gone (#2154):
 One case still needs a line of CMake: a **hand-built imported target**, which
 inherits nothing. `install(EXPORT)` carries the `INTERFACE` definition, and
 `Build/Cmake/Modules/FindRefIccMAX.cmake` and `examples/hello-iccdev` set it
-explicitly for the same reason — but a consumer that constructs its own
+explicitly for the same reason -- but a consumer that constructs its own
 `IMPORTED` target from a found library path must add
 `INTERFACE_COMPILE_DEFINITIONS "ICCPROFLIBDLL_DATA_IMPORTS"` to it, on the
 shared target only. Without it the macro compiles empty and Windows is back to
@@ -846,7 +846,7 @@ platforms) pins the linkage and the literal values, while
 test with the `LNK2019` in its log.
 
 A third test, `iccdev.installed-package-consumer`, covers the same annotation
-one step further out — on the *installed* package rather than the build tree.
+one step further out -- on the *installed* package rather than the build tree.
 It stages an install into a temporary prefix and then builds and runs three
 consumers against it: `find_package(RefIccMAX CONFIG)`, `find_package(RefIccMAX
 MODULE)` through `FindRefIccMAX.cmake`, and `examples/hello-iccdev` itself. A
@@ -862,11 +862,11 @@ arms are skipped, with a logged reason, on sanitizer builds (the out-of-tree
 consumers are not instrumented) and the MODULE arms on static-only builds.
 
 `IccUtil.h` also declared `icInfo` until #1897, but that one had no definition
-anywhere in the tree and so failed to link on every platform — a dangling
+anywhere in the tree and so failed to link on every platform -- a dangling
 declaration rather than an export problem. It is gone; construct a `CIccInfo`
 where one is needed. The `iccdev.proflib-exported-global-definitions` CTest
 checks every `ICCPROFLIB_API extern` **and** `ICCPROFLIB_DATA_API extern`
-declaration in these headers — in both macro orderings — against the built
+declaration in these headers -- in both macro orderings -- against the built
 library's symbol table, so a declaration added without a definition fails CI
 rather than reaching a consumer. Annotate a new exported *variable*
 `ICCPROFLIB_DATA_API`, not `ICCPROFLIB_API`: both are audited, but only the
@@ -976,11 +976,13 @@ cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake
 make -j"$(nproc)"
 ```
 
-For ThreadSanitizer and MemorySanitizer, use one sanitizer family per build:
+For ThreadSanitizer, use a standalone build. For MemorySanitizer, use the
+instrumented runtime and focused QA helper so distribution libc++, libc++abi,
+and libxml2 do not create false reports:
 
 ```bash
 cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_TSAN=ON
-cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_MSAN=ON
+.github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/out/msan-runtime" && .github/scripts/iccdev-msan-taint-qa.sh --source-dir "$PWD" --build-dir "$PWD/out/linux-clang-msan-taint" --runtime-dir "$PWD/out/msan-runtime" --out-dir "$PWD/out/msan-taint-evidence"
 ```
 
 Do not enable coverage while reproducing sanitizer findings; coverage
@@ -993,13 +995,20 @@ Preset equivalents are available for the same modes:
 ```bash
 cmake --preset linux-clang-sanitizers -S Build/Cmake -B out/linux-clang-sanitizers
 cmake --preset linux-clang-ubsan-int-float -S Build/Cmake -B out/linux-clang-ubsan-int-float
-cmake --preset linux-clang-tsan -S Build/Cmake -B out/linux-clang-tsan
-cmake --preset linux-clang-msan -S Build/Cmake -B out/linux-clang-msan
+cmake --preset linux-clang-tsan -S Build/Cmake && cmake --build out/linux-clang-tsan -j"$(nproc)"
+ICCDEV_MSAN_LIBCXX_DIR="$PWD/out/msan-runtime" cmake --preset linux-clang-msan -S Build/Cmake && cmake --build out/linux-clang-msan -j"$(nproc)"
+cmake --preset linux-clang-valgrind -S Build/Cmake && cmake --build out/linux-clang-valgrind -j"$(nproc)"
 cmake --preset linux-clang-coverage -S Build/Cmake -B out/linux-clang-coverage
 cmake --preset linux-clang-profiling -S Build/Cmake -B out/linux-clang-profiling
 cmake --preset macos-clang-sanitizers -S Build/Cmake -B out/macos-clang-sanitizers
 cmake --preset macos-clang-guard-malloc -S Build/Cmake -B out/macos-clang-guard-malloc
 ```
+
+Bootstrap `out/msan-runtime` with `iccdev-build-msan-libcxx.sh` before using
+the MSan preset. The preset is disabled when `ICCDEV_MSAN_LIBCXX_DIR` is unset
+rather than silently selecting distribution libraries. The Valgrind preset
+intentionally enables no compiler sanitizer; never run Valgrind against an
+ASan, MSan, TSan, or UBSan build.
 
 The `macos-clang-sanitizers` preset also selects libc++ `EXTENSIVE` hardening.
 This adds standard-library precondition and bounds checks to the QA build while
@@ -1071,6 +1080,6 @@ Use `CONFIG` mode for a static-only install, as above.
 `Build/Cmake/Modules/FindRefIccMAX.cmake` reports not-found for one on purpose:
 a static archive carries none of its own dependencies, and which ones the
 consumer has to repeat depends on the options the install was built with
-(`ICC_USE_ZLIB`, `ENABLE_ICCXML`) — something a hand-written find module cannot
+(`ICC_USE_ZLIB`, `ENABLE_ICCXML`) -- something a hand-written find module cannot
 see. The `CONFIG` package is generated from the build that produced it and
 carries them exactly.

@@ -89,11 +89,22 @@ Testing/RunTests.sh
 | `-DENABLE_INTEGER_SANITIZER=ON` | IntegerSanitizer (unsigned overflow, Clang only) |
 | `-DENABLE_FLOAT_SANITIZER=ON` | `float-divide-by-zero,float-cast-overflow` |
 | `-DENABLE_TSAN=ON` | ThreadSanitizer (conflicts with ASan) |
-| `-DENABLE_MSAN=ON` | MemorySanitizer (Clang only, conflicts with other sanitizers) |
+| `-DENABLE_MSAN=ON` | Low-level MemorySanitizer instrumentation; reportable runs require the instrumented runtime helper |
 | `-DENABLE_COVERAGE=ON` | LLVM source-based coverage |
 | `-DENABLE_PROFILING=ON` | gprof/perf `-pg` profiling |
 | `-DENABLE_FUZZING=ON` | LibFuzzer harnesses |
 | `-DENABLE_ICCXML=ON` | IccXML library |
+
+For actionable MemorySanitizer results, build the pinned instrumented libc++,
+libc++abi, and libxml2 runtime and run the focused controls:
+
+```bash
+.github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/out/msan-runtime" && .github/scripts/iccdev-msan-taint-qa.sh --source-dir "$PWD" --build-dir "$PWD/out/linux-clang-msan-taint" --runtime-dir "$PWD/out/msan-runtime" --out-dir "$PWD/out/msan-taint-evidence"
+```
+
+Equivalent standalone analysis presets are `linux-clang-tsan`,
+`linux-clang-msan` (requires `ICCDEV_MSAN_LIBCXX_DIR`), and
+`linux-clang-valgrind`. The Valgrind preset is deliberately non-sanitized.
 
 ## vcpkg Port Build
 
