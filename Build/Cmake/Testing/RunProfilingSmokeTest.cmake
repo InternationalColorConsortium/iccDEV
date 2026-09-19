@@ -2,6 +2,7 @@
 # gprof profiling smoke test
 # Copyright (c) 2026 The International Color Consortium.
 #                                        All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
 #################################################################################
 
 cmake_minimum_required(VERSION 3.18...3.29)

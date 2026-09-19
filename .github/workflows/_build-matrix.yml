@@ -130,7 +130,7 @@ jobs:
           - name: coverage
             options: "-DENABLE_COVERAGE=ON"
           - name: profiling
-            options: "-DENABLE_PROFILING=ON -DENABLE_TESTS=ON"
+            options: "-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DENABLE_PROFILING=ON -DENABLE_TESTS=ON"
           - name: asserts
             options: "-DICC_ENABLE_ASSERTS=ON"
           - name: trace-nan
