@@ -2066,8 +2066,10 @@ bool CIccXmlToneMapFunc::ParseXml(xmlNode* pNode, std::string& parseStr)
   if (!args.ParseArray(pNode->children))
     return false;
 
-  if (args.GetSize() < m_nParameters)
+  if (args.GetSize() < m_nParameters) {
+    parseStr += "Too few parameters in Tone Map Function\n";
     return false;
+  }
 
   free(m_params);
 
@@ -2172,7 +2174,7 @@ bool CIccMpeXmlToneMap::ParseXml(xmlNode* pNode, std::string& parseStr)
     }
   }
   else {
-    parseStr += "Missing Luminance Curve";
+    parseStr += "Missing Luminance Curve\n";
     return false;
   }
 
@@ -2186,7 +2188,7 @@ bool CIccMpeXmlToneMap::ParseXml(xmlNode* pNode, std::string& parseStr)
       pTfNode = pTfNode->next) {
       if (pTfNode->type == XML_ELEMENT_NODE) {
         if (nIndex >= nOutputChannels) {
-          parseStr += "Too many ToneFunctions";
+          parseStr += "Too many ToneFunctions\n";
           return false;
         }
         else if (!strcmp((const char*)pTfNode->name, "DuplicateFunction")) {
@@ -2195,7 +2197,11 @@ bool CIccMpeXmlToneMap::ParseXml(xmlNode* pNode, std::string& parseStr)
           if (attr) {
             icUInt32Number nCopyIndex = 0;
             if (icXmlParseU32(attr, nCopyIndex) && nCopyIndex < (icUInt32Number)nIndex) {
-              m_pToneFuncs[nIndex] = m_pToneFuncs[nCopyIndex];
+              // Insert() fills the next slot by m_nFunc, which a duplicate used to
+              // leave where it was: a ToneMapFunction after a DuplicateFunction
+              // overwrote the duplicate's channel and left the last one NULL.
+              m_pToneFuncs[m_nFunc] = m_pToneFuncs[nCopyIndex];
+              m_nFunc++;
               nIndex++;
             }
             else {
@@ -2215,8 +2221,11 @@ bool CIccMpeXmlToneMap::ParseXml(xmlNode* pNode, std::string& parseStr)
             delete pFunc;
             return false;
           }
-          if (!Insert(pFunc))
+          if (!Insert(pFunc)) {
+            delete pFunc;
+            parseStr += "Too many ToneMapFunctions\n";
             return false;
+          }
           nIndex++;
         }
         else {
@@ -2229,6 +2238,12 @@ bool CIccMpeXmlToneMap::ParseXml(xmlNode* pNode, std::string& parseStr)
       parseStr += "Missing ToneMap Functions\n";
       return false;
     }
+  }
+  else {
+    // An element with no container at all parsed with every function left
+    // NULL, which only Validate() went on to refuse.  #2609.
+    parseStr += "Missing ToneMapFunctions in ToneMapElement\n";
+    return false;
   }
 
   return true;

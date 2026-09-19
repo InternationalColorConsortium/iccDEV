@@ -1867,6 +1867,121 @@ function(iccdev_add_formula_segment_nonfinite_parameter_test)
   endif()
 endfunction()
 
+# Guards #2609 and #2612: the XML reader accepted a toneMapElement with no
+# ToneMapFunctions container and reported nothing for a short parameter list,
+# and a ToneMapFunction following a DuplicateFunction landed in the duplicate's
+# channel and left the last one NULL.  Element level, no fixture.
+function(iccdev_add_tonemap_functions_xml_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccToneMapFunctionsXmlTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/tonemap-functions-xml.cpp"
+  )
+  target_compile_features(iccToneMapFunctionsXmlTest PRIVATE cxx_std_17)
+  target_include_directories(iccToneMapFunctionsXmlTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccToneMapFunctionsXmlTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccToneMapFunctionsXmlTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.tonemap-functions-xml
+      COMMAND "$<TARGET_FILE:iccToneMapFunctionsXmlTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.tonemap-functions-xml
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccToneMapFunctionsXmlTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.tonemap-functions-xml PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;mpe;tonemap;xml;issue-2609;regression"
+  )
+  if(WIN32)
+    set(_tonemap_xml_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccToneMapFunctionsXmlTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _tonemap_xml_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.tonemap-functions-xml PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_tonemap_xml_env_mods}"
+    )
+  endif()
+endfunction()
+
+# Guards #2612 and #2609: the JSON reader zero-filled a missing or short tone
+# function parameter array and returned false without a diagnostic when the
+# array held fewer functions than the element has output channels.  Its own
+# executable because IccMpeXml.h and IccMpeJson.h cannot share a translation
+# unit.
+function(iccdev_add_tonemap_functions_json_test)
+  if(NOT TARGET "${TARGET_LIB_ICCJSON}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccToneMapFunctionsJsonTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/tonemap-functions-json.cpp"
+  )
+  target_compile_features(iccToneMapFunctionsJsonTest PRIVATE cxx_std_17)
+  target_include_directories(iccToneMapFunctionsJsonTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccToneMapFunctionsJsonTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccToneMapFunctionsJsonTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.tonemap-functions-json
+      COMMAND "$<TARGET_FILE:iccToneMapFunctionsJsonTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.tonemap-functions-json
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccToneMapFunctionsJsonTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.tonemap-functions-json PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;mpe;tonemap;json;issue-2612;regression"
+  )
+  if(WIN32)
+    set(_tonemap_json_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccToneMapFunctionsJsonTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _tonemap_json_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.tonemap-functions-json PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_tonemap_json_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards #2520: the reflectance CLUT and reflectance observer elements must honour
 # their Absolute flag (ICC.2:2023 11.2.12 and 11.2.13), which was tested against
 # icRelativeSpectralData (0) and so never read, and the emission observer must not
@@ -9309,6 +9424,8 @@ if(WIN32)
   iccdev_add_xyz_negative_z_test()
   iccdev_add_utf8_textarray_test()
   iccdev_add_extended_device_colorspace_test()
+  iccdev_add_tonemap_functions_xml_test()
+  iccdev_add_tonemap_functions_json_test()
   iccdev_add_unsupported_profile_class_test()
   iccdev_add_pcs_adjust_status_test()
   iccdev_add_dpcc_pcc_replacement_test()
@@ -9720,6 +9837,8 @@ iccdev_add_pcs_edge_metadata_test()
 iccdev_add_xyz_negative_z_test()
 iccdev_add_utf8_textarray_test()
 iccdev_add_extended_device_colorspace_test()
+iccdev_add_tonemap_functions_xml_test()
+iccdev_add_tonemap_functions_json_test()
 iccdev_add_unsupported_profile_class_test()
 iccdev_add_pcs_adjust_status_test()
 iccdev_add_dpcc_pcc_replacement_test()
