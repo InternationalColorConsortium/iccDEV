@@ -620,8 +620,12 @@ For local FlameGraph capture of the hybrid `iccApplyProfiles` path, use the
 profiling helper after building tools:
 
 ```bash
-ICCDEV_TOOLS_DIR=$PWD/build/Tools ICCDEV_TESTING_DIR=$PWD/Testing ICCDEV_PROFILE_MODE=record ICCDEV_FLAMEGRAPH_DIR=/tmp/FlameGraph .github/scripts/iccdev-hybrid-applyprofiles-profile.sh
+ICCDEV_TOOLS_DIR=$PWD/build/Tools ICCDEV_TESTING_DIR=$PWD/Testing ICCDEV_PROFILE_MODE=record ICCDEV_FLAMEGRAPH_DIR=/path/to/FlameGraph .github/scripts/iccdev-hybrid-applyprofiles-profile.sh
 ```
+
+The unified container sets `ICCDEV_FLAMEGRAPH_DIR=/opt/FlameGraph` to its
+pinned FlameGraph checkout, so the explicit directory is needed only for a
+host installation.
 
 The helper defaults to user-space samples, DWARF call graphs, a higher sample
 frequency, and a minimum sample threshold so short or kernel-heavy captures do
@@ -972,8 +976,9 @@ cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake
 make -j"$(nproc)"
 
 # Profiling build
-cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_PROFILING=ON
-make -j"$(nproc)"
+CC=clang CXX=clang++ cmake -S Build/Cmake -B out/linux-profiling -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_TOOLS=ON -DENABLE_TESTS=ON -DENABLE_PROFILING=ON
+cmake --build out/linux-profiling --target iccDumpProfile --parallel "$(nproc)"
+ctest --test-dir out/linux-profiling -R '^iccdev\.profiling-smoke$' --output-on-failure --no-tests=error
 ```
 
 For ThreadSanitizer, use a standalone build. For MemorySanitizer, use the

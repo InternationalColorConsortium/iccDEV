@@ -129,6 +129,8 @@ jobs:
         include:
           - name: coverage
             options: "-DENABLE_COVERAGE=ON"
+          - name: profiling
+            options: "-DENABLE_PROFILING=ON -DENABLE_TESTS=ON"
           - name: asserts
             options: "-DICC_ENABLE_ASSERTS=ON"
           - name: trace-nan
@@ -163,11 +165,15 @@ jobs:
           source .trusted-workflow/.github/scripts/sanitize-sed.sh
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            cmake clang libjpeg-dev libpng-dev libtiff-dev libxml2-dev nlohmann-json3-dev
+            binutils cmake clang libjpeg-dev libpng-dev libtiff-dev libxml2-dev nlohmann-json3-dev
           read -r -a cmake_options <<< "$MATRIX_OPTIONS"
           cmake -S Build/Cmake -B "out/option-${MATRIX_NAME}" \
             -DCMAKE_BUILD_TYPE=Release -DENABLE_TOOLS=ON "${cmake_options[@]}"
           cmake --build "out/option-${MATRIX_NAME}" --parallel "$(nproc)"
+          if [ "$MATRIX_NAME" = profiling ]; then
+            ctest --test-dir "out/option-${MATRIX_NAME}" \
+              -R '^iccdev\.profiling-smoke$' --output-on-failure --no-tests=error
+          fi
 
   windows-toolchains:
     if: inputs['include-windows']

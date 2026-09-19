@@ -20,6 +20,7 @@ Canonical guide: `docs/regression-container.md`
 - Expected failure signal:
 - Evidence directory:
 - AFL/CFL scope: none / AFL smoke / CFL smoke / both
+- Instrumentation scope: none / coverage / gprof / perf / FlameGraph
 
 ## Required Workflow
 
@@ -41,6 +42,9 @@ Canonical guide: `docs/regression-container.md`
 8. If the changed behavior is in an excluded suite, run its focused CTest in
    addition to the local container envelope.
 9. Scan output for compiler warnings, ASAN, UBSAN, and signal termination.
+   For instrumentation work, use a separate build tree, inventory the shipped
+   coverage/profiling commands and pinned FlameGraph revision, and run
+   `iccdev.profiling-smoke` for `ENABLE_PROFILING=ON` builds.
 10. Classify exit `1-127` as graceful and `128+` as signal termination.
 11. For AFL/CFL work, run `iccdev-fuzz-env`, verify patch-stack counts, and run
     the smallest patched or unpatched smoke that matches the requested scope.

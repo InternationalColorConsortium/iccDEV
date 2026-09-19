@@ -194,9 +194,16 @@ jobs:
             set -euo pipefail
             command -v git gh clang clang++ gcc g++ cmake cppcheck clang-tidy scan-build
             command -v hadolint zizmor shellcheck afl-fuzz valgrind ms_print callgrind_annotate llvm-symbolizer
+            command -v lcov genhtml gcovr llvm-cov llvm-profdata perf gprof strace
+            perl -MJSON::XS -e 1
+            test "$LCOV_HOME" = /
+            grep -Fqx "geninfo_unexecuted_blocks = 1" /etc/lcovrc
             command -v iccDumpProfile iccdev-fuzz-env iccdev-mcp iccdev-mcp-rest
             command -v iccdev-valgrind-build iccdev-valgrind-run
             command -v iccdev-valgrind-status iccdev-valgrind-validate iccdev-valgrind-self-test
+            test -x "$ICCDEV_FLAMEGRAPH_DIR/stackcollapse-perf.pl"
+            test -x "$ICCDEV_FLAMEGRAPH_DIR/flamegraph.pl"
+            test "$(git -C "$ICCDEV_FLAMEGRAPH_DIR" rev-parse HEAD)" = "$ICCDEV_FLAMEGRAPH_REVISION"
             test "$PWD" = /workspace/iccDEV
             test -d .git
             test -d "$ICCDEV_BUILD_DIR"
@@ -286,18 +293,19 @@ jobs:
       - name: Generate SBOM
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26  # v0.24.2
+        env:
+          SYFT_FILE_METADATA_SELECTION: none
         with:
           image: ${{ steps.image.outputs.name }}@${{ steps.publish.outputs.digest }}
-          format: spdx-json
-          output-file: sbom.spdx.json
+          format: cyclonedx-json
+          output-file: sbom.cyclonedx.json
 
-      - name: Measure SBOM attestation size
+      - name: Validate SBOM attestation size
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
-        id: sbom-size
         env:
           BASH_ENV: /dev/null
           MAX_ATTEST_BYTES: "16777216"
-          SBOM_PATH: sbom.spdx.json
+          SBOM_PATH: sbom.cyclonedx.json
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -309,6 +317,15 @@ jobs:
             exit 1
           fi
 
+          if ! jq -e '
+            .bomFormat == "CycloneDX" and
+            (.specVersion | type == "string" and length > 0) and
+            (.components | type == "array" and length > 0)
+          ' "$SBOM_PATH" >/dev/null; then
+            echo "::error::Invalid or empty CycloneDX SBOM: $SBOM_PATH"
+            exit 1
+          fi
+
           sbom_bytes="$(wc -c < "$SBOM_PATH" | tr -d ' ')"
           case "$sbom_bytes" in
             ''|*[!0-9]*)
@@ -317,12 +334,9 @@ jobs:
               ;;
           esac
 
-          echo "bytes=$sbom_bytes" >> "$GITHUB_OUTPUT"  # elements-sanitized
-          if [ "$sbom_bytes" -le "$MAX_ATTEST_BYTES" ]; then
-            echo "attestable=true" >> "$GITHUB_OUTPUT"  # elements-sanitized
-          else
-            echo "attestable=false" >> "$GITHUB_OUTPUT"  # elements-sanitized
-            echo "::notice title=SBOM Attestation Skipped::SBOM is ${sbom_bytes} bytes, above ${MAX_ATTEST_BYTES}"
+          if [ "$sbom_bytes" -gt "$MAX_ATTEST_BYTES" ]; then
+            echo "::error title=SBOM Attestation Too Large::SBOM is ${sbom_bytes} bytes, above ${MAX_ATTEST_BYTES}"
+            exit 1
           fi
 
           {
@@ -340,7 +354,7 @@ jobs:
           push-to-registry: true
 
       - name: Attest SBOM
-        if: ${{ env.PUBLISH_IMAGE == 'true' && steps.sbom-size.outputs.attestable == 'true' }}
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
         id: attest-sbom
         # Rekor's transparency-log endpoint can time out after image publication.
         # Retrying preserves a hard failure when the service remains unavailable.
@@ -349,7 +363,7 @@ jobs:
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.publish.outputs.digest }}
-          sbom-path: sbom.spdx.json
+          sbom-path: sbom.cyclonedx.json
           push-to-registry: true
 
       - name: Retry SBOM attestation
@@ -359,7 +373,7 @@ jobs:
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.publish.outputs.digest }}
-          sbom-path: sbom.spdx.json
+          sbom-path: sbom.cyclonedx.json
           push-to-registry: true
 
       - name: Require SBOM attestation
@@ -382,6 +396,6 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: iccdev-sbom
-          path: sbom.spdx.json
+          path: sbom.cyclonedx.json
           retention-days: 90
           if-no-files-found: error

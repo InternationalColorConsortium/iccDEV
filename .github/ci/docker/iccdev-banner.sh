@@ -94,7 +94,9 @@ if command -v bash >/dev/null 2>&1; then
 fi
 
 qa_tools=""
-for tool in clang-tidy cppcheck scan-build hadolint zizmor valgrind gdb lcov gcovr shellcheck afl-fuzz; do
+for tool in clang-tidy cppcheck scan-build hadolint zizmor valgrind gdb \
+            lcov genhtml gcovr llvm-cov llvm-profdata perf gprof strace \
+            shellcheck afl-fuzz; do
   if command -v "$tool" >/dev/null 2>&1; then
     qa_tools="${qa_tools}${qa_tools:+ }$tool"
   fi
@@ -102,6 +104,14 @@ done
 if [ -n "$qa_tools" ]; then
   printf '%s\n' ''
   printf 'Maintainer QA tools on PATH: %s\n' "$qa_tools"
+fi
+
+if [ -n "${ICCDEV_FLAMEGRAPH_DIR:-}" ] &&
+   [ -x "$ICCDEV_FLAMEGRAPH_DIR/stackcollapse-perf.pl" ] &&
+   [ -x "$ICCDEV_FLAMEGRAPH_DIR/flamegraph.pl" ]; then
+  printf '%s\n' ''
+  printf 'FlameGraph scripts: %s (%s)\n' \
+    "$ICCDEV_FLAMEGRAPH_DIR" "${ICCDEV_FLAMEGRAPH_REVISION:-unknown revision}"
 fi
 
 if command -v iccdev-fuzz-env >/dev/null 2>&1; then

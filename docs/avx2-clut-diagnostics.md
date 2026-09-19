@@ -72,9 +72,12 @@ On Linux, capture the focused regression in a fresh output directory:
 ICCDEV_CLUT_PROFILE_AFFINITY=0 \
 ICCDEV_CLUT_PROFILE_RUNS=21 \
 ICCDEV_CLUT_PROFILE_FLAMEGRAPH=1 \
-FLAMEGRAPH_DIR=/path/to/FlameGraph \
+ICCDEV_FLAMEGRAPH_DIR=/path/to/FlameGraph \
 ./.github/scripts/iccdev-clut-profile.sh out/clut-avx2 out/clut-profile
 ```
+
+The unified container supplies this variable and a pinned checkout at
+`/opt/FlameGraph`.
 
 The report includes per-run wall/user/system time and RSS, median and p95
 elapsed time, raw `perf stat` counters when permitted by the host, and derived
