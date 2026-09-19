@@ -29,8 +29,8 @@
     Case 2 is the whole profile the issue measured, Testing/CLUT/
     avx2-3d-8-output.xml, with the hint set in its CLUT element.  The same
     profile relabelled v4.4 must still report a hint: ICC.1 Table 63 reserves
-    all of bytes 4-7 of the CLUT element.  The element is not given the
-    profile, so CIccTagMultiProcessElement::Validate() makes that check.
+    all of bytes 4-7 of the CLUT element; CIccTagMultiProcessElement::Validate()
+    makes that check.
 
     Takes avx2-3d-8-output.xml as argv[1].
 */
