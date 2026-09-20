@@ -51,6 +51,9 @@
 #import "ApplyPreviewHost.h"
 
 @interface IccApplyPreviewAppDelegate : UIResponder <UIApplicationDelegate>
+@end
+
+@interface IccApplyPreviewSceneDelegate : UIResponder <UIWindowSceneDelegate>
 @property(nonatomic, strong) UIWindow *window;
 @end
 
@@ -76,16 +79,17 @@ static UIColor *IccDevBrandBlue(void)
                          alpha:1.0];
 }
 
-@implementation IccApplyPreviewAppDelegate
-- (BOOL)application:(UIApplication *)application
-    didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
+@implementation IccApplyPreviewSceneDelegate
+- (void)scene:(UIScene *)scene
+willConnectToSession:(UISceneSession *)session
+      options:(UISceneConnectionOptions *)connectionOptions
 {
-  (void)application;
-  (void)launchOptions;
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-  self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
-#pragma clang diagnostic pop
+  (void)session;
+  (void)connectionOptions;
+  if (![scene isKindOfClass:[UIWindowScene class]])
+    return;
+  UIWindowScene *windowScene = (UIWindowScene *)scene;
+  self.window = [[UIWindow alloc] initWithWindowScene:windowScene];
   UIViewController *controller = [[UIViewController alloc] init];
   controller.view.backgroundColor = [UIColor systemBackgroundColor];
   const BOOL isPad =
@@ -451,7 +455,29 @@ static UIColor *IccDevBrandBlue(void)
   self.window.rootViewController = controller;
   [self.window makeKeyAndVisible];
   runPreview();
+}
+@end
+
+@implementation IccApplyPreviewAppDelegate
+- (BOOL)application:(UIApplication *)application
+    didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
+{
+  (void)application;
+  (void)launchOptions;
   return YES;
+}
+
+- (UISceneConfiguration *)application:(UIApplication *)application
+configurationForConnectingSceneSession:(UISceneSession *)connectingSceneSession
+                               options:(UISceneConnectionOptions *)options
+{
+  (void)application;
+  (void)options;
+  UISceneConfiguration *configuration =
+    [[UISceneConfiguration alloc] initWithName:@"Default Configuration"
+                                   sessionRole:connectingSceneSession.role];
+  configuration.delegateClass = [IccApplyPreviewSceneDelegate class];
+  return configuration;
 }
 @end
 

@@ -40,6 +40,15 @@ apps.
   before building.
 - Unsigned simulator helpers should ignore a globally exported placeholder
   `BUNDLE_ID` and use the app's default bundle ID.
+- All three apps must adopt `UIScene` lifecycle: a `UIWindowSceneDelegate`
+  that builds `self.window` from the connecting `UIWindowScene`, an
+  `Info.plist.in` `UIApplicationSceneManifest` naming that delegate class, and
+  an `AppDelegate.application:configurationForConnectingSceneSession:options:`
+  that returns it. iOS 27 physical hardware raises a fatal
+  `SIGTRAP`/`EXC_BREAKPOINT` in
+  `UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption_block_invoke`
+  for apps without scene adoption; the iOS 18.x/26.x simulator runtimes
+  available locally do not enforce this, so simulator-only QA can miss it.
 - Keep generated Xcode projects and local signing data out of the repository.
 - Do not add CTest or workflow registration unless a maintainer explicitly
   requests it.

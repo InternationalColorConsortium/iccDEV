@@ -51,25 +51,23 @@
 #import "BenchApplyHost.h"
 
 @interface IccBenchApplyAppDelegate : UIResponder <UIApplicationDelegate>
+@end
+
+@interface IccBenchApplySceneDelegate : UIResponder <UIWindowSceneDelegate>
 @property(nonatomic, strong) UIWindow *window;
 @end
 
-@implementation IccBenchApplyAppDelegate
-- (BOOL)application:(UIApplication *)application
-    didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
+@implementation IccBenchApplySceneDelegate
+- (void)scene:(UIScene *)scene
+willConnectToSession:(UISceneSession *)session
+      options:(UISceneConnectionOptions *)connectionOptions
 {
-  (void)application;
-  (void)launchOptions;
-  // initWithFrame:[UIScreen mainScreen].bounds is deprecated starting iOS 26
-  // in favour of a windowScene-based initializer, but this POC intentionally
-  // keeps the app-delegate-owns-the-window pattern the Build/AppleMobile core
-  // smoke app also uses (Testing/AppleMobile/main.mm), rather than adding a
-  // full UIScene lifecycle for a proof of concept. Silenced narrowly, once,
-  // rather than disabling -Wdeprecated-declarations project-wide.
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-  self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
-#pragma clang diagnostic pop
+  (void)session;
+  (void)connectionOptions;
+  if (![scene isKindOfClass:[UIWindowScene class]])
+    return;
+  UIWindowScene *windowScene = (UIWindowScene *)scene;
+  self.window = [[UIWindow alloc] initWithWindowScene:windowScene];
   UIViewController *controller = [[UIViewController alloc] init];
   controller.view.backgroundColor = [UIColor systemBackgroundColor];
   NSString *logoPath = [[NSBundle mainBundle] pathForResource:@"icc-logo" ofType:@"png"];
@@ -204,7 +202,29 @@
   [self.window makeKeyAndVisible];
 
   runBenchmark();
+}
+@end
+
+@implementation IccBenchApplyAppDelegate
+- (BOOL)application:(UIApplication *)application
+    didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
+{
+  (void)application;
+  (void)launchOptions;
   return YES;
+}
+
+- (UISceneConfiguration *)application:(UIApplication *)application
+configurationForConnectingSceneSession:(UISceneSession *)connectingSceneSession
+                               options:(UISceneConnectionOptions *)options
+{
+  (void)application;
+  (void)options;
+  UISceneConfiguration *configuration =
+    [[UISceneConfiguration alloc] initWithName:@"Default Configuration"
+                                   sessionRole:connectingSceneSession.role];
+  configuration.delegateClass = [IccBenchApplySceneDelegate class];
+  return configuration;
 }
 @end
 
