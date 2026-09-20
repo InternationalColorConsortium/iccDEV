@@ -6255,6 +6255,17 @@ endfunction()
 # No serialized profile reaches these setters, so this is a library test only.
 # On an unfixed build the counted cases FAIL and the CAM and white-point cases
 # abort on a double free.
+#
+# #2637 extends it to the three CIccMpeSpectral* copyData() implementations,
+# which are the whole body of nine operator= overloads and release their
+# buffers before copying out of the source.  The CLUT one is a use-after-free
+# and is counted; the matrix and observer ones silently lose their contents
+# instead, so they are checked by value from index 0.  Those two go red on
+# glibc as well -- free() writes its tcache bookkeeping over the head of the
+# block it hands straight back -- but that is an allocator detail, so their
+# dependable red is the ASAN+UBSAN lanes.
+# #2638 adds the apply table SetData() releases after installing the table it
+# was handed, which is counted.
 function(iccdev_add_owning_setter_self_alias_contract_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -6287,7 +6298,7 @@ function(iccdev_add_owning_setter_self_alias_contract_test)
   endif()
   set_tests_properties(iccdev.owning-setter-self-alias-contract PROPERTIES
     TIMEOUT 120
-    LABELS "iccdev;mpe;tag;issue-2630;regression"
+    LABELS "iccdev;mpe;tag;issue-2630;issue-2637;issue-2638;regression"
   )
 
   if(WIN32)

@@ -184,6 +184,18 @@ CIccMpeSpectralMatrix::CIccMpeSpectralMatrix(const CIccMpeSpectralMatrix &matrix
  ******************************************************************************/
 void CIccMpeSpectralMatrix::copyData(const CIccMpeSpectralMatrix &matrix)
 {
+  // Assigning an element to itself must not disturb it.  Every buffer below is
+  // released and then re-copied out of the source, which is this same object.
+  // That is not a read through freed memory: malloc() has already overwritten
+  // the member by the time the memcpy reads the source pointer, so the copy is
+  // the new block onto itself and the element keeps its shape while silently
+  // losing its CONTENTS.  std::sort and any dedup loop assign an element to
+  // itself, and copyData() is the whole body of operator=.  Guarding here
+  // rather than in the three operator= bodies that reach this one also covers
+  // the callers that are not assignment operators.
+  if (this == &matrix)
+    return;
+
   m_nReserved = matrix.m_nReserved;
   m_nReserved2 = matrix.m_nReserved2;
 
@@ -226,6 +238,11 @@ void CIccMpeSpectralMatrix::copyData(const CIccMpeSpectralMatrix &matrix)
   else
     m_pWhite = NULL;
 
+  // The apply matrix belongs to this element, was built by Begin() out of the
+  // buffers being replaced above, and is deleted by the destructor.  Dropping
+  // the pointer without releasing it orphans it; SetSize() already releases it
+  // the same way before it resets.
+  delete m_pApplyMtx;
   m_pApplyMtx = NULL;
 }
 
@@ -880,6 +897,13 @@ CIccMpeSpectralCLUT::CIccMpeSpectralCLUT(const CIccMpeSpectralCLUT &clut)
  ******************************************************************************/
 void CIccMpeSpectralCLUT::copyData(const CIccMpeSpectralCLUT &clut)
 {
+  // As in CIccMpeSpectralMatrix::copyData above, but this one is worse: the
+  // three releases happen before anything is read, so the copy constructor
+  // below dereferences the table this call just freed.  CIccMpeCLUT::operator=
+  // already opens with the same guard.
+  if (this == &clut)
+    return;
+
   delete m_pCLUT;
   delete m_pApplyCLUT;
   free(m_pWhite);
@@ -957,7 +981,15 @@ void CIccMpeSpectralCLUT::SetData(CIccCLUT *pCLUT, icUInt16Number nStorageType,
 
   m_nStorageType = nStorageType;
 
-  delete m_pApplyCLUT;
+  // The apply table is a second CIccCLUT this element owns, built by Begin()
+  // and handed out by the public GetApplyCLUT().  m_pCLUT holds pCLUT by now,
+  // so this test is "the caller did not just hand us the apply table": when it
+  // did, releasing it here would leave m_pCLUT dangling for the destructor.
+  // Skipping the release is leak-free -- the two alias, so ownership has simply
+  // passed to m_pCLUT, and the source table this call installs is stale as an
+  // apply table either way.
+  if (m_pApplyCLUT != m_pCLUT)
+    delete m_pApplyCLUT;
   m_pApplyCLUT = NULL;
 
   m_Range = range;
@@ -1856,6 +1888,11 @@ CIccMpeSpectralObserver::CIccMpeSpectralObserver(const CIccMpeSpectralObserver &
  ******************************************************************************/
 void CIccMpeSpectralObserver::copyData(const CIccMpeSpectralObserver &matrix)
 {
+  // Same self-assignment contract as the two copyData() above: m_pWhite is
+  // freed and re-copied out of this same object, which loses the white point.
+  if (this == &matrix)
+    return;
+
   m_nReserved = matrix.m_nReserved;
 
   m_nInputChannels = matrix.m_nInputChannels;
@@ -1877,6 +1914,9 @@ void CIccMpeSpectralObserver::copyData(const CIccMpeSpectralObserver &matrix)
   else
     m_pWhite = NULL;
 
+  // Same ownership as CIccMpeSpectralMatrix::copyData above: release the apply
+  // matrix rather than just dropping the pointer to it.
+  delete m_pApplyMtx;
   m_pApplyMtx = NULL;
 }
 
