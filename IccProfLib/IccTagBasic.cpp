@@ -5850,7 +5850,7 @@ bool CIccTagSparseMatrixArray::Reset(icUInt32Number nNumMatrices, icUInt16Number
 */
 bool CIccTagSparseMatrixArray::GetSparseMatrix(CIccSparseMatrix &mtx, int nIndex, bool bInitFromData/*=true*/)
 {
-  if (nIndex<0 || nIndex>(int)m_nSize) {
+  if (!m_RawData || nIndex<0 || nIndex>=(int)m_nSize) {
     mtx.Reset(NULL, 0, icSparseMatrixFloatNum, false);
     return false;
   }

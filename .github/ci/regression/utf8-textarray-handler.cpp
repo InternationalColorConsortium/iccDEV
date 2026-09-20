@@ -30,6 +30,7 @@
 #include "IccDefs.h"
 
 #include <cstdio>
+#include <cstring>
 #include <string>
 
 #ifdef USEICCDEVNAMESPACE
@@ -72,10 +73,45 @@ CIccTagArray *buildMcta(icUInt32Number nText, int badIdx = -1)
   return arr;
 }
 
+int reproduceAttachOnePast()
+{
+  CIccTagArray *arr = buildMcta(2);
+  CIccTagUtf8Text *extra = new CIccTagUtf8Text();
+  extra->SetText("one-past-end");
+
+  const bool accepted = arr->AttachTag(2, extra);
+  delete extra;
+  delete arr;
+
+  return accepted ? 1 : 0;
+}
+
+int reproduceDetachOnePast()
+{
+  CIccTagArray *arr = buildMcta(2);
+  CIccTag *detached = arr->DetachTag(2);
+  const bool accepted = detached != NULL;
+  delete detached;
+  delete arr;
+
+  return accepted ? 1 : 0;
+}
+
 } // namespace
 
-int main()
+int main(int argc, char **argv)
 {
+  if (argc == 2 && !std::strcmp(argv[1], "--repro-attach-one-past"))
+    return reproduceAttachOnePast();
+  if (argc == 2 && !std::strcmp(argv[1], "--repro-detach-one-past"))
+    return reproduceDetachOnePast();
+  if (argc != 1) {
+    std::fprintf(stderr,
+                 "usage: %s [--repro-attach-one-past|--repro-detach-one-past]\n",
+                 argv[0]);
+    return 2;
+  }
+
   // 'mc' namespace with 5 channels; icGetMultiplexColorSpaceSamples maps this to 5.
   // Assert the encoding up front so the test fails loudly if that mapping changes.
   const icMultiplexColorSignature mcs5 = (icMultiplexColorSignature)0x6d630005;
@@ -133,6 +169,31 @@ int main()
           "a non-utf8Type element inside a utf8 text array is flagged (#1726)");
 
     delete arr;
+  }
+
+  // Case 4: indices equal to the element count are one past the allocation.
+  // AttachTag() and DetachTag() used `>` instead of `>=`, so this boundary
+  // reached m_TagVals[m_nSize].  Also cover an empty array, whose storage is
+  // NULL, so the public accessors fail closed without dereferencing it.
+  {
+    CIccTagArray *arr = buildMcta(2);
+    CIccTagUtf8Text *extra = new CIccTagUtf8Text();
+    extra->SetText("one-past-end");
+    check(!arr->AttachTag(2, extra),
+          "AttachTag refuses an index equal to the array size");
+    delete extra;
+    check(arr->DetachTag(2) == NULL,
+          "DetachTag refuses an index equal to the array size");
+    delete arr;
+
+    CIccTagArray empty(icSigUtf8TextTypeArray);
+    CIccTagUtf8Text *emptyExtra = new CIccTagUtf8Text();
+    emptyExtra->SetText("empty");
+    check(!empty.AttachTag(0, emptyExtra),
+          "AttachTag refuses index zero on an empty array");
+    delete emptyExtra;
+    check(empty.DetachTag(0) == NULL,
+          "DetachTag refuses index zero on an empty array");
   }
 
   if (g_fail) {

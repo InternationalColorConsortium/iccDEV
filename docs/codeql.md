@@ -18,7 +18,7 @@ Run local analysis with:
 ```
 
 The bootstrap path in `ci-codeql-security.yml`, `ci-preflight-safety.yml` and
-`ci-codeql-query-tests.yml` is pinned to CodeQL bundle 2.26.4 and verifies the
+`ci-codeql-query-tests.yml` is pinned to CodeQL bundle 2.27.0 and verifies the
 official Linux release-asset SHA-256 before extraction. Update the version and
 digest together in all three workflows -- a bump applied to only some of them
 fails the others at their next `sha256sum -c`.
@@ -48,6 +48,30 @@ type-and-field scope when maintaining them.
 The XML narrowing query is scoped to high-signal channel and spectral-step
 attributes; broader enum, reserved, storage-type, and explicit-cast cases are
 left for separate local experiments.
+
+`fixed-buffer-loop-bound` covers the #2608 stack-buffer-overflow shape: a
+fixed-size aggregate position table indexed by a loop whose member-count bound
+has a wider range than the array. The standard `cpp/static-buffer-overflow` query is
+not a substitute for this rule: its fixed-buffer helper is character-array
+specific, and its classic-loop model requires a literal bound. Keep the query
+test's 16-entry/16-iteration negative control so broad integer type ranges do
+not turn a safe fixed loop into an alert.
+
+`counted-buffer-off-by-one` covers the nearby counted-buffer family. Review the allocation count, loop count, and
+serialization count as one contract. In particular, `index > count` does not
+protect `buffer[index]` when `index == count`; valid indices end at
+`count - 1`. A query for that boundary family should require the same index,
+count field, and buffer access in one function. The query deliberately excludes
+arithmetic bounds such as `index > count - 1`; its fixture keeps that negative
+control because a repository-wide textual `>` rule is too noisy.
+
+Numerical accuracy findings need separate, semantics-aware queries. Prefer
+narrow rules for a named conversion family or formula, with an executable
+oracle that pins finite-domain, boundary, and round-trip error behavior. Do
+not combine NaN/Inf guards, fixed-point reconstruction, float-to-int range
+checks, and ICC encoding tolerances into one generic numeric query: the removed
+division-by-zero and broad float-range experiments are the false-positive
+baseline for why those contracts must remain separate.
 
 Workflow and Python-script governance uses the preflight CodeQL gates instead
 of the C/C++ database runner:
