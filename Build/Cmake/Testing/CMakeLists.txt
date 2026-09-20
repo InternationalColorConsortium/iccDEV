@@ -1929,6 +1929,15 @@ endfunction()
 # array held fewer functions than the element has output channels.  Its own
 # executable because IccMpeXml.h and IccMpeJson.h cannot share a translation
 # unit.
+#
+# Also guards #2633, two further defects in the same source file:
+# CIccToneMapFunc's = default copy constructor shallow-copied an owning
+# m_params, which CIccJsonToneMapFunc::NewCopy() reached by copy constructing
+# and so double freed; and icJsonSegPosFromStr() matched a trailing "inf"
+# before reading the sign, so "-inf" returned the positive maximum while
+# "+infinity" and "inf" fell through to atof() and were written back as null.
+# On an unfixed build the NewCopy case ABORTS on the double free and the
+# segment cases FAIL with the round-tripped document in the message.
 function(iccdev_add_tonemap_functions_json_test)
   if(NOT TARGET "${TARGET_LIB_ICCJSON}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -1964,7 +1973,7 @@ function(iccdev_add_tonemap_functions_json_test)
   endif()
   set_tests_properties(iccdev.tonemap-functions-json PROPERTIES
     TIMEOUT 60
-    LABELS "iccdev;mpe;tonemap;json;issue-2612;regression"
+    LABELS "iccdev;mpe;tonemap;json;issue-2612;issue-2609;issue-2633;regression"
   )
   if(WIN32)
     set(_tonemap_json_env_mods

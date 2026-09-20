@@ -4530,6 +4530,28 @@ CIccToneMapFunc::CIccToneMapFunc()
 }
 
 
+CIccToneMapFunc::CIccToneMapFunc(const CIccToneMapFunc& toneMapFunc)
+{
+  // The copy constructor used to be = default, which member-wise copied the
+  // owning m_params pointer: the copy and the original then both free()d the
+  // same buffer.  CIccToneMapFunc::NewCopy() never hit it because it default
+  // constructs and assigns, but CIccJsonToneMapFunc::NewCopy() copy constructs,
+  // so every copy of a JSON-loaded tone map function double freed (#2633).
+  // Fixing it here rather than in that one override covers every subclass.
+  m_nFunctionType = toneMapFunc.m_nFunctionType;
+  m_nParameters = toneMapFunc.m_nParameters;
+  m_nReserved = toneMapFunc.m_nReserved;
+  m_nReserved2 = toneMapFunc.m_nReserved2;
+
+  if (toneMapFunc.m_nParameters && toneMapFunc.m_params) {
+    m_params = (icFloatNumber*)malloc(m_nParameters * sizeof(icFloatNumber));
+    if (m_params)
+      memcpy(m_params, toneMapFunc.m_params, m_nParameters * sizeof(icFloatNumber));
+  }
+  else
+    m_params = NULL;
+}
+
 CIccToneMapFunc::~CIccToneMapFunc()
 {
   free(m_params);
@@ -4587,6 +4609,21 @@ bool CIccToneMapFunc::SetFunction(icUInt16Number nFunc, icUInt8Number nParams, i
     m_params = (icFloatNumber*)calloc(nArgs, sizeof(icFloatNumber));
     if (m_params)
       memcpy(m_params, pParams, icIntMin(nArgs, nParams) * sizeof(icFloatNumber));
+  }
+  else {
+    // The free() above does not clear m_params, so without this a call that
+    // supplies no parameters -- SetFunction(nFunc, n, NULL), or any function
+    // type whose NumArgs() is zero -- leaves the member dangling and the
+    // destructor frees it a second time.  Measured as a double free under
+    // ASan; adjacent to #2633 rather than part of it.
+    //
+    // The count is cleared with it.  m_nParameters was set from nParams above
+    // whether or not anything was allocated, so an object that took this branch
+    // claimed parameters it had no buffer for, and every reader of the pair --
+    // ToJson() at IccMpeJson.cpp:897 among them -- indexed a NULL.  Clearing
+    // only the pointer would trade the double free for a NULL dereference.
+    m_params = NULL;
+    m_nParameters = 0;
   }
 
   return nParams == NumArgs();

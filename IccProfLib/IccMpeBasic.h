@@ -507,7 +507,10 @@ class CIccToneMapFunc
 public:
   CIccToneMapFunc();
   virtual ~CIccToneMapFunc();
-  CIccToneMapFunc(const CIccToneMapFunc& toneMap) = default;
+  // Not defaulted: m_params is an owning raw pointer that the destructor
+  // free()s, so a member-wise copy hands two objects the same buffer and both
+  // release it.  Deep-copies exactly as operator= does.
+  CIccToneMapFunc(const CIccToneMapFunc& toneMap);
   CIccToneMapFunc& operator=(const CIccToneMapFunc& toneMap);
   virtual CIccToneMapFunc* NewCopy() const;
 

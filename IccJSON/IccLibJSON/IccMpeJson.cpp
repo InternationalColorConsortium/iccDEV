@@ -66,6 +66,7 @@
 #include "IccCAM.h"
 #include "IccMpeFactory.h"
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstring>
 #include <cstdio>
@@ -200,8 +201,45 @@ static void icJsonSetSegPos(IccJson &j, const char *field, icFloatNumber pos)
 
 static icFloatNumber icJsonSegPosFromStr(const std::string &s)
 {
-  if (s.size() >= 4 && s.substr(s.size()-3) == "inf") return icMaxFloat32Number;
-  if (!s.empty() && s[0] == '-' && s.size() >= 4)     return icMinFloat32Number;
+  // Read the sign FIRST, then the magnitude.  The previous version tested for a
+  // trailing "inf" before it looked at the sign, so "-inf" returned the positive
+  // maximum; it also required at least four characters, which "inf" does not
+  // have, and matched only the last three, which "+infinity" -- the spelling
+  // icJsonSetSegPos() above actually writes -- does not end with.  Every
+  // unmatched spelling fell through to atof(), which returns a real infinity
+  // that is not equal to either sentinel, so the writer then emitted null.
+  //
+  // Worse, and the reason this is not only about infinities: the sign test was
+  // `s[0] == '-' && s.size() >= 4` with no look at the rest, so EVERY
+  // string-encoded negative number of four or more characters returned the
+  // float32 minimum.  "-0.5", "-1.25" and "-123.5" all became -3.4028235e+38,
+  // while "-1" and "-12" were short enough to survive.
+  // Trim first.  atof() skips leading whitespace on its own, so a padded
+  // " inf" used to reach the old trailing-"inf" test and match; matching on a
+  // trimmed copy keeps that working rather than quietly narrowing it.
+  const char *kSpace = " \t\n\r\f\v";
+  std::size_t nBegin = s.find_first_not_of(kSpace);
+  if (nBegin == std::string::npos)
+    return (icFloatNumber)atof(s.c_str());
+  std::string t = s.substr(nBegin, s.find_last_not_of(kSpace) - nBegin + 1);
+
+  std::size_t i = 0;
+  bool bNegative = false;
+
+  if (i < t.size() && (t[i] == '+' || t[i] == '-')) {
+    bNegative = (t[i] == '-');
+    i++;
+  }
+
+  std::string mag = t.substr(i);
+  for (std::size_t n = 0; n < mag.size(); n++)
+    mag[n] = (char)tolower((unsigned char)mag[n]);
+
+  // atof() accepts both spellings in any case, so matching them here is what
+  // keeps a round trip on the sentinels rather than on a real infinity.
+  if (mag == "inf" || mag == "infinity")
+    return bNegative ? icMinFloat32Number : icMaxFloat32Number;
+
   return (icFloatNumber)atof(s.c_str());
 }
 
