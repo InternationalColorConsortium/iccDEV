@@ -174,7 +174,7 @@ before running the suite.
 | `iccdev.fileio-seek-tell` | `.github/ci/regression/fileio-seek-tell.cpp` |
 | `iccdev.iccconnect-config-parser` | `.github/ci/regression/iccconnect-config-parser.cpp` |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
-| `iccdev.owning-setter-self-alias-contract` | `.github/ci/regression/owning-setter-self-alias-contract.cpp`; ownership contract of five exported setters for issue #2630 |
+| `iccdev.owning-setter-self-alias-contract` | `.github/ci/regression/owning-setter-self-alias-contract.cpp`; ownership contract of five exported setters for issue #2630, the three `CIccMpeSpectral*` `copyData()` self-assignment cases for issue #2637, and the apply table `SetData()` releases for issue #2638 |
 | `iccdev.mpe-curveset-setcurve-contract` | `.github/ci/regression/mpe-curveset-setcurve-contract.cpp`; public API bounds and ownership contract for issue #2607 |
 | `iccdev.issue-2607-curveset-extra-xml` | `.github/ci/regression/issue-2607-curveset-too-many-curves.xml`; tool-level rejection control for an extra CurveSet child |
 | `iccdev.bench-apply-metrics` | `Build/Cmake/Testing/CMakeLists.txt`; asserts the deterministic one-profile, four-pixel metrics contract |
