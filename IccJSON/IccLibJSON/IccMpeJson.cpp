@@ -848,7 +848,16 @@ bool CIccJsonToneMapFunc::ToJson(IccJson &j)
 bool CIccJsonToneMapFunc::ParseJson(const IccJson &j, std::string &parseStr)
 {
   int funcType = 0, reserved2 = 0;
-  jGetValue(j, "functionType", funcType);
+  // A missing functionType read as type 0, the one supported type, so a
+  // function that names none at all loaded as a valid one.  The XML twin
+  // refuses it, as does the formula segment here (#2547).  It must be a JSON
+  // integer: jGetValue() alone would truncate 1.5 to 1.
+  if (!jsonExistsField(j, "functionType") ||
+      !(j["functionType"].is_number_integer() || j["functionType"].is_number_unsigned()) ||
+      !jGetValue(j, "functionType", funcType)) {
+    parseStr += "ToneMapFunction requires an integer functionType\n";
+    return false;
+  }
   jGetValue(j, "reserved2",    reserved2);
   m_nFunctionType = (icUInt16Number)funcType;
   m_nReserved2    = (icUInt16Number)reserved2;
@@ -866,19 +875,29 @@ bool CIccJsonToneMapFunc::ParseJson(const IccJson &j, std::string &parseStr)
   const int nParameters = (int)m_nParameters;
   for (int i = 0; i < nParameters; i++) m_params[i] = 0.0f;
 
-  if (j.contains("parameters") && j["parameters"].is_array()) {
-    bool overflow = false;
-    icUInt32Number nJsonParams = icJsonSafeU32(j["parameters"].size(), &overflow);
-    if (overflow) {
-      parseStr += "parameters count exceeds supported range in ToneMapFunction\n";
+  // The parameters used to be optional, and a short array was padded with the
+  // zeroes above, so a function with none at all was accepted and saved.  The
+  // XML twin requires at least the count the function type asks for, and drops
+  // any beyond it; both readers are kept to that rule here.  #2612.
+  if (!jsonExistsField(j, "parameters") || !j["parameters"].is_array()) {
+    parseStr += "Missing parameters in ToneMapFunction\n";
+    return false;
+  }
+
+  bool overflow = false;
+  icUInt32Number nJsonParams = icJsonSafeU32(j["parameters"].size(), &overflow);
+  if (overflow) {
+    parseStr += "parameters count exceeds supported range in ToneMapFunction\n";
+    return false;
+  }
+  if (nJsonParams < (icUInt32Number)nParameters) {
+    parseStr += "Too few parameters in ToneMapFunction\n";
+    return false;
+  }
+  for (int i = 0; i < nParameters; i++) {
+    if (!icJsonGetFloatNumber(j["parameters"][i], m_params[i])) {
+      parseStr += "parameters contains non-numeric value in ToneMapFunction\n";
       return false;
-    }
-    int cnt = std::min(nParameters, (int)nJsonParams);
-    for (int i = 0; i < cnt; i++) {
-      if (!icJsonGetFloatNumber(j["parameters"][i], m_params[i])) {
-        parseStr += "parameters contains non-numeric value in ToneMapFunction\n";
-        return false;
-      }
     }
   }
   return true;
@@ -995,7 +1014,15 @@ bool CIccMpeJsonToneMap::ParseJson(const IccJson &j, std::string &parseStr)
     nIndex++;
   }
 
-  return (nIndex == nOut);
+  // An array with fewer entries than the element has output channels, an empty
+  // one included, returned false here with nothing added to parseStr, so the
+  // caller had no reason to report.  #2609.
+  if (nIndex != nOut) {
+    parseStr += "Too few toneMapFunctions in ToneMapElement\n";
+    return false;
+  }
+
+  return true;
 }
 
 // ===========================================================================
