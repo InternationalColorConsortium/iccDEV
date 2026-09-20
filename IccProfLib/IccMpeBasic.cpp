@@ -6119,6 +6119,15 @@ CIccMpeCLUT::~CIccMpeCLUT()
  ******************************************************************************/
 void CIccMpeCLUT::SetCLUT(CIccCLUT *pCLUT)
 {
+  // Reinstalling the table this element already owns is a no-op.  Deleting it
+  // first would free the object the lines below then dereference, and leave
+  // m_pCLUT dangling for the destructor; GetCLUT() hands the member out, so
+  // SetCLUT(GetCLUT()) is reachable from any caller.  The channel counts
+  // already describe this table -- every path that sets m_pCLUT derives them
+  // from the same CIccCLUT -- so there is nothing left to refresh.
+  if (m_pCLUT == pCLUT)
+    return;
+
   delete m_pCLUT;
 
   m_pCLUT = pCLUT;
@@ -6912,6 +6921,12 @@ bool CIccMpeCAM::Begin(icElemInterp /* nInterp */, CIccTagMultiProcessElement * 
 
 void CIccMpeCAM::SetCAM(CIccCamConverter *pCAM)
 {
+  // Reinstalling the converter this element already owns is a no-op; deleting
+  // it first would leave m_pCAM dangling and delete it a second time in the
+  // destructor.  GetCAM() makes SetCAM(GetCAM()) reachable from any caller.
+  if (m_pCAM == pCAM)
+    return;
+
   delete m_pCAM;
   m_pCAM = pCAM;
 }

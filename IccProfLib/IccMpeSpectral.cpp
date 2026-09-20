@@ -942,7 +942,11 @@ void CIccMpeSpectralCLUT::SetData(CIccCLUT *pCLUT, icUInt16Number nStorageType,
                                   const icSpectralRange &range, icFloatNumber *pWhite,
                                   icUInt16Number nOutputChannels)
 {
-  delete m_pCLUT;
+  // GetCLUT() and GetWhite() both hand a member out, so SetData() must not
+  // release either one when it is handed back the pointer it already holds.
+  // Only the release is skipped; everything the call refreshes still runs.
+  if (m_pCLUT != pCLUT)
+    delete m_pCLUT;
 
   m_pCLUT = pCLUT;
   if (pCLUT) {
@@ -958,7 +962,8 @@ void CIccMpeSpectralCLUT::SetData(CIccCLUT *pCLUT, icUInt16Number nStorageType,
 
   m_Range = range;
 
-  free(m_pWhite);
+  if (m_pWhite != pWhite)
+    free(m_pWhite);
 
   m_pWhite = pWhite;
 }

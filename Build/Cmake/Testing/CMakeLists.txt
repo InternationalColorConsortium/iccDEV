@@ -6246,6 +6246,65 @@ function(iccdev_add_mpe_curveset_setcurve_contract_tests)
   endif()
 endfunction()
 
+# #2630: CIccTagSegmentedCurve::SetCurve, CIccMpeCLUT::SetCLUT,
+# CIccMpeCAM::SetCAM, CIccMpeSpectralCLUT::SetData and CIccMBB::SetCLUT each
+# released the object they held before storing the pointer handed in, so
+# SetX(GetX()) -- reachable because every one of those members has a public
+# getter -- freed the object and kept the dangling pointer.  CIccMBB::SetCLUT
+# is also reached as SetCLUT(NewCLUT(grid)), which carries no visible alias.
+# No serialized profile reaches these setters, so this is a library test only.
+# On an unfixed build the counted cases FAIL and the CAM and white-point cases
+# abort on a double free.
+function(iccdev_add_owning_setter_self_alias_contract_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccOwningSetterSelfAliasContractTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/owning-setter-self-alias-contract.cpp"
+  )
+  target_compile_features(iccOwningSetterSelfAliasContractTest PRIVATE cxx_std_17)
+  target_include_directories(iccOwningSetterSelfAliasContractTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccOwningSetterSelfAliasContractTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccOwningSetterSelfAliasContractTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.owning-setter-self-alias-contract
+      COMMAND "$<TARGET_FILE:iccOwningSetterSelfAliasContractTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.owning-setter-self-alias-contract
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccOwningSetterSelfAliasContractTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.owning-setter-self-alias-contract PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;mpe;tag;issue-2630;regression"
+  )
+
+  if(WIN32)
+    set(_owning_setter_contract_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccOwningSetterSelfAliasContractTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _owning_setter_contract_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.owning-setter-self-alias-contract PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_owning_setter_contract_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1811: spectralViewingConditions illuminantXYZ/surroundXYZ carry absolute
 # luminance in cd/m^2, and CIccInfo::CheckLuminance warns when Y is 1 because that
 # is what chromaticity normalization leaves behind. The check cannot be exact --
@@ -9586,6 +9645,7 @@ if(WIN32)
   iccdev_add_calc_channel_ref_unterminated_index_json_test()
   iccdev_add_curve_setsize_contract_test()
   iccdev_add_mpe_curveset_setcurve_contract_tests()
+  iccdev_add_owning_setter_self_alias_contract_test()
   iccdev_add_curve_gamma_u8fixed8_test()
   iccdev_add_luminance_normalization_test()
   iccdev_add_tag_name_spelling_test()
@@ -9998,6 +10058,7 @@ iccdev_add_calc_channel_ref_unterminated_index_test()
 iccdev_add_calc_channel_ref_unterminated_index_json_test()
 iccdev_add_curve_setsize_contract_test()
 iccdev_add_mpe_curveset_setcurve_contract_tests()
+iccdev_add_owning_setter_self_alias_contract_test()
 iccdev_add_curve_gamma_u8fixed8_test()
 iccdev_add_luminance_normalization_test()
 iccdev_add_tag_name_spelling_test()
