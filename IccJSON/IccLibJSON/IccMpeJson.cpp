@@ -862,7 +862,22 @@ bool CIccJsonToneMapFunc::ParseJson(const IccJson &j, std::string &parseStr)
     parseStr += "ToneMapFunction requires an integer functionType\n";
     return false;
   }
-  jGetValue(j, "reserved2",    reserved2);
+  // The switch below runs on m_nFunctionType, an icUInt16Number, so a value
+  // past 0xFFFF wrapped onto type 0 and loaded.  Named apart from the check
+  // above: the value IS an integer, it just does not fit.
+  if (funcType < 0 || funcType > 0xFFFF) {
+    parseStr += "functionType is out of range in ToneMapFunction\n";
+    return false;
+  }
+  // reserved2 is stored in an icUInt16Number too, and took the same silent
+  // wrap: 65536 loaded as 0, turning a malformed document into one Validate()
+  // has nothing to warn about.  The XML twin refuses it (icXmlParseU16).
+  if (jsonExistsField(j, "reserved2") &&
+      (!(j["reserved2"].is_number_integer() || j["reserved2"].is_number_unsigned()) ||
+       !jGetValue(j, "reserved2", reserved2) || reserved2 < 0 || reserved2 > 0xFFFF)) {
+    parseStr += "reserved2 is out of range in ToneMapFunction\n";
+    return false;
+  }
   m_nFunctionType = (icUInt16Number)funcType;
   m_nReserved2    = (icUInt16Number)reserved2;
 

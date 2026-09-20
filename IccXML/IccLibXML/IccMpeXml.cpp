@@ -2067,8 +2067,14 @@ bool CIccXmlToneMapFunc::ParseXml(xmlNode* pNode, std::string& parseStr)
 
   CIccFloatArray args;
 
-  if (!args.ParseArray(pNode->children))
+  // ParseArray() returns false for an empty or whitespace-only element, which
+  // is what <ToneMapFunction FunctionType="0"/> gives: the most common
+  // malformed spelling was the one left without a diagnostic when the short
+  // list below was given one (#2609).
+  if (!args.ParseArray(pNode->children)) {
+    parseStr += "Missing parameters in Tone Map Function\n";
     return false;
+  }
 
   if (args.GetSize() < m_nParameters) {
     parseStr += "Too few parameters in Tone Map Function\n";

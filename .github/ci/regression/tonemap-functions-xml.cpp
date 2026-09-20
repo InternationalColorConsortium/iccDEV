@@ -142,6 +142,27 @@ int main()
           ("no diagnostic, parseStr was: " + parseStr).c_str());
   }
 
+  /* An element with no parameters at all.  CIccFloatArray::ParseArray()
+     refuses an empty or whitespace-only node list, which was the one malformed
+     spelling still reported by nothing but the caller's generic line. */
+  {
+    std::string parseStr;
+    CIccMpeXmlToneMap elem;
+    std::string funcs = "<ToneMapFunctions><ToneMapFunction FunctionType=\"0\"/></ToneMapFunctions>";
+    check(!parseXml(elemDoc(1, funcs), elem, parseStr), "no parameters", "parsed with no parameters");
+    check(has(parseStr, "Missing parameters"), "no parameters",
+          ("no diagnostic, parseStr was: " + parseStr).c_str());
+  }
+  {
+    std::string parseStr;
+    CIccMpeXmlToneMap elem;
+    std::string funcs = "<ToneMapFunctions><ToneMapFunction FunctionType=\"0\"> </ToneMapFunction></ToneMapFunctions>";
+    check(!parseXml(elemDoc(1, funcs), elem, parseStr), "whitespace parameters",
+          "parsed with whitespace for parameters");
+    check(has(parseStr, "Missing parameters"), "whitespace parameters",
+          ("no diagnostic, parseStr was: " + parseStr).c_str());
+  }
+
   /* The control for both: the same element with its container and a full
      parameter list parses. */
   {

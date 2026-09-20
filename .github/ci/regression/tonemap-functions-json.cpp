@@ -121,6 +121,19 @@ const Refusal kRefusals[] = {
                                                                "integer functionType",    "fractional functionType" },
   { 1, "[{\"functionType\": 9, \"parameters\": [1.0, 0.0, 0.0]}]",
                                                                "Unsupported functionType", "unsupported functionType" },
+  /* m_nFunctionType is a uInt16Number and the switch runs on it, so a value
+     past 0xFFFF used to wrap onto type 0, the one supported type, and load.
+     The XML twin parses the attribute with icXmlParseU16, which refuses it
+     (#1954). */
+  { 1, "[{\"functionType\": 65536, \"parameters\": [1.0, 0.0, 0.0]}]",
+                                                               "functionType is out of range", "functionType past uInt16" },
+  { 1, "[{\"functionType\": -1, \"parameters\": [1.0, 0.0, 0.0]}]",
+                                                               "functionType is out of range", "negative functionType" },
+  /* reserved2 is stored in an icUInt16Number and took the same wrap. */
+  { 1, "[{\"functionType\": 0, \"reserved2\": 65536, \"parameters\": [1.0, 0.0, 0.0]}]",
+                                                               "reserved2 is out of range", "reserved2 past uInt16" },
+  { 1, "[{\"functionType\": 0, \"reserved2\": 1.5, \"parameters\": [1.0, 0.0, 0.0]}]",
+                                                               "reserved2 is out of range", "fractional reserved2" },
   { 1, "[{\"functionType\": 0}]",                              "Missing parameters",      "no parameters" },
   { 1, "[{\"functionType\": 0, \"parameters\": []}]",          "Too few parameters",      "empty parameters" },
   { 1, "[{\"functionType\": 0, \"parameters\": [1.0, 0.0]}]",  "Too few parameters",      "short parameters" },
@@ -160,6 +173,15 @@ int main()
     std::string funcs = std::string("[") + kFunc1 + "]";
     check(parse(elemDoc(1, funcs.c_str()), elem, parseStr), "control", ("refused: " + parseStr).c_str());
     checkChannels(elem, std::vector<icFloatNumber>(1, 1.0f), "control");
+  }
+
+  /* A reserved2 that fits is still read. */
+  {
+    std::string parseStr;
+    std::string funcs = "[{\"functionType\": 0, \"reserved2\": 3, \"parameters\": [1.0, 0.0, 1.0]}]";
+    CIccMpeJsonToneMap elem;
+    check(parse(elemDoc(1, funcs.c_str()), elem, parseStr), "reserved2 control",
+          ("a legal reserved2 was refused: " + parseStr).c_str());
   }
 
   /* A duplicate still shares the function it names. */
