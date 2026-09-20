@@ -21,6 +21,7 @@
 #
 ###############################################################
 
+---
 name: "ci-codeql-query-tests"
 
 # Pinned SHAs and CodeQL command strings exceed line length.
@@ -29,7 +30,7 @@ name: "ci-codeql-query-tests"
 permissions:
   contents: read
 
-on:
+"on":
   pull_request:
     branches:
       - master
