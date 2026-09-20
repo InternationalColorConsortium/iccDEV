@@ -20,8 +20,14 @@
 
     "HexString": {
       "type": "string",
-      "pattern": "^[0-9a-fA-F]*$",
-      "description": "Even-length lowercase hex string encoding binary data"
+      "pattern": "^(\\s*[0-9a-fA-F]{2})*\\s*$",
+      "description": "Hex string encoding binary data, written as digit pairs. icJsonDumpHexData() writes lowercase with nothing between the pairs; icJsonValidHexData() accepts either case and allows whitespace between pairs, as the XML twin's writer produces. An odd number of digits is refused."
+    },
+
+    "HexNumber": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]+$",
+      "description": "A hex integer, not a payload blob: written fixed-width by snprintf and read back by sscanf(\"%x\"), which accepts any digit count. Distinct from HexString, whose pair-wise rule does not apply here."
     },
 
     "DateTime": {
@@ -100,7 +106,7 @@
         "UseWithEmbeddedDataOnly": { "type": "boolean" },
         "ExtendedRangePCS":        { "type": "boolean" },
         "MCSNeedsSubset":          { "type": "boolean" },
-        "VendorFlags":             { "$ref": "#/$defs/HexString", "description": "Remaining vendor-specific flag bits as 8 hex chars" }
+        "VendorFlags":             { "$ref": "#/$defs/HexNumber", "description": "Remaining vendor-specific flag bits as 8 hex chars" }
       }
     },
 
@@ -116,7 +122,7 @@
         "MediaTexture":             { "type": "string", "enum": ["nonTextured", "textured"], "description": "ICC.2 bit 5; written only when set" },
         "MediaIsotropy":            { "type": "string", "enum": ["isotropic", "nonIsotropic"], "description": "ICC.2 bit 6; written only when set" },
         "SelfLuminous":             { "type": "boolean", "description": "ICC.2 bit 7; written only when set" },
-        "VendorSpecific":           { "$ref": "#/$defs/HexString", "description": "Remaining bits as 16 hex chars: reserved bits 8-31 and vendor-specific bits 32-63" }
+        "VendorSpecific":           { "$ref": "#/$defs/HexNumber", "description": "Remaining bits as 16 hex chars: reserved bits 8-31 and vendor-specific bits 32-63" }
       }
     },
 
@@ -413,7 +419,7 @@
       "description": "dataType — raw binary or ASCII data",
       "required": ["dataFlag", "data"],
       "properties": {
-        "dataFlag": { "type": "integer", "description": "0=binary, 1=ASCII" },
+        "dataFlag": { "type": "integer", "description": "icDataBlockType, written verbatim through a signed int. The low 16 bits (icDataTypeMask) give the encoding: 0 = ASCII (icAsciiData), 1 = binary (icBinaryData), 2 = UTF (icUtfData). Bit 0x00010000 (icCompressedData) marks the payload compressed. No bound is asserted here: the writer casts the icUInt32Number through int, so a value with the high bit set is spelled negative." },
         "data":     { "$ref": "#/$defs/HexString" }
       }
     },
