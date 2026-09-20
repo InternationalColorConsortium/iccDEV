@@ -91,6 +91,9 @@ icUInt32Number icXmlGetHexData(void *pBuf, const char *szText, icUInt32Number nB
 
 icUInt32Number icXmlGetHexDataSize(const char *szText);
 
+// True when szText is hex digits in pairs, with whitespace only between pairs.
+bool icXmlValidHexData(const char *szText);
+
 size_t icXmlDumpHexData(std::string &xml, std::string blanks, void *pBuf, size_t nBufSize);
 
 bool icXmlValidateFileCount(size_t value, icUInt32Number &count, std::string &parseStr, const char *filename);

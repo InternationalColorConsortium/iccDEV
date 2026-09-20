@@ -158,6 +158,8 @@ static bool icJsonGetLocalizedText(const IccJson &j, std::string &text)
 {
   std::string hex;
   if (jGetString(j, "textHex", hex)) {
+    if (!icJsonValidHexData(hex.c_str()))
+      return false;
     icUInt32Number hexSize = icJsonGetHexDataSize(hex.c_str());
     text.clear();
     if (hexSize) {
@@ -245,7 +247,7 @@ bool CIccTagJsonUnknown::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonUnknown::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonUnknown::ParseJson(const IccJson &j, std::string &parseStr)
 {
   // Cap hex blob size so a multi-MB string doesn't allocate a 4-GB
   // buffer. 16 MB is generous for any legitimate unknown-tag payload.
@@ -253,6 +255,10 @@ bool CIccTagJsonUnknown::ParseJson(const IccJson &j, std::string & /*parseStr*/)
 
   std::string hex;
   if (jGetString(j, "unknownData", hex)) {
+    if (!icJsonValidHexData(hex.c_str())) {
+      parseStr += "Malformed hex in unknownData\n";
+      return false;
+    }
     m_nSize = icJsonGetHexDataSize(hex.c_str());
     if (m_nSize > kMaxUnknownTagBytes) return false;
     delete[] m_pData;
@@ -317,10 +323,14 @@ bool CIccTagJsonZipUtf8Text::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonZipUtf8Text::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonZipUtf8Text::ParseJson(const IccJson &j, std::string &parseStr)
 {
   std::string hex;
   if (jGetString(j, "compressedData", hex)) {
+    if (!icJsonValidHexData(hex.c_str())) {
+      parseStr += "Malformed hex in compressedData\n";
+      return false;
+    }
     icUInt32Number sz = icJsonGetHexDataSize(hex.c_str());
     icUChar *pBuf = AllocBuffer(sz);
     if (!pBuf) return false;
@@ -339,10 +349,14 @@ bool CIccTagJsonZipXml::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonZipXml::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonZipXml::ParseJson(const IccJson &j, std::string &parseStr)
 {
   std::string hex;
   if (jGetString(j, "compressedData", hex)) {
+    if (!icJsonValidHexData(hex.c_str())) {
+      parseStr += "Malformed hex in compressedData\n";
+      return false;
+    }
     icUInt32Number sz = icJsonGetHexDataSize(hex.c_str());
     icUChar *pBuf = AllocBuffer(sz);
     if (!pBuf) return false;
@@ -1705,13 +1719,17 @@ bool CIccTagJsonTagData::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonTagData::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonTagData::ParseJson(const IccJson &j, std::string &parseStr)
 {
   int dataFlag = 0;
   if (jGetValue(j, "dataFlag", dataFlag))
     m_nDataFlag = (icDataBlockType)dataFlag;
   std::string hex;
   if (jGetString(j, "data", hex)) {
+    if (!icJsonValidHexData(hex.c_str())) {
+      parseStr += "Malformed hex in dataType data\n";
+      return false;
+    }
     icUInt32Number sz = icJsonGetHexDataSize(hex.c_str());
     if (!SetSize(sz)) return false;
     icJsonGetHexData(m_pData, hex.c_str(), sz);
@@ -3668,6 +3686,10 @@ bool CIccTagJsonEmbeddedHeightImage::ParseJson(const IccJson &j, std::string &pa
     parseStr += "Cannot find ImageData in HeightImage\n";
     return false;
   }
+  if (!icJsonValidHexData(hex.c_str())) {
+    parseStr += "Malformed hex in ImageData\n";
+    return false;
+  }
   icUInt32Number nSize = icJsonGetHexDataSize(hex.c_str());
   // "ImageData" with no hex digits used to leave the constructor's one zero
   // byte in place, so iccFromJson saved a one-byte image nobody supplied.
@@ -3713,6 +3735,10 @@ bool CIccTagJsonEmbeddedNormalImage::ParseJson(const IccJson &j, std::string &pa
   std::string hex;
   if (!jGetString(j, "ImageData", hex)) {
     parseStr += "Cannot find ImageData in NormalImage\n";
+    return false;
+  }
+  if (!icJsonValidHexData(hex.c_str())) {
+    parseStr += "Malformed hex in ImageData\n";
     return false;
   }
   icUInt32Number nSize = icJsonGetHexDataSize(hex.c_str());

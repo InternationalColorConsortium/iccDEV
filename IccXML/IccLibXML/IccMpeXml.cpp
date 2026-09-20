@@ -217,6 +217,10 @@ bool CIccMpeXmlUnknown::ParseXml(xmlNode *pNode, std::string &parseStr)
   m_nReserved = nReserved;
 
   if (pNode->children && pNode->children->type == XML_TEXT_NODE && pNode->children->content) {
+    if (!icXmlValidHexData((const char *)pNode->children->content)) {
+      parseStr += "Malformed hex in Unknown MPE element data\n";
+      return false;
+    }
     icUInt32Number nSize = icXmlGetHexDataSize((const char *)pNode->children->content);
 
     if (!SetDataSize(nSize, false)) 
@@ -2390,8 +2394,13 @@ bool CIccMpeXmlBAcs::ParseXml(xmlNode *pNode, std::string &parseStr)
   // today; it is fixed because ParseXml() reads as though it fully defines the
   // element, and the next caller to reuse one is entitled to that (#2181).
   icUInt32Number nSize = 0;
-  if (pNode->children && pNode->children->type == XML_TEXT_NODE && pNode->children->content)
+  if (pNode->children && pNode->children->type == XML_TEXT_NODE && pNode->children->content) {
+    if (!icXmlValidHexData((const char*)pNode->children->content)) {
+      parseStr += "Malformed hex in ACS element data\n";
+      return false;
+    }
     nSize = icXmlGetHexDataSize((const char*)pNode->children->content);
+  }
 
   if (!AllocData(nSize))
     return false;
@@ -2452,8 +2461,13 @@ bool CIccMpeXmlEAcs::ParseXml(xmlNode *pNode, std::string &parseStr)
   // today; it is fixed because ParseXml() reads as though it fully defines the
   // element, and the next caller to reuse one is entitled to that (#2181).
   icUInt32Number nSize = 0;
-  if (pNode->children && pNode->children->type == XML_TEXT_NODE && pNode->children->content)
+  if (pNode->children && pNode->children->type == XML_TEXT_NODE && pNode->children->content) {
+    if (!icXmlValidHexData((const char*)pNode->children->content)) {
+      parseStr += "Malformed hex in ACS element data\n";
+      return false;
+    }
     nSize = icXmlGetHexDataSize((const char*)pNode->children->content);
+  }
 
   if (!AllocData(nSize))
     return false;

@@ -67,6 +67,7 @@
 #include <new>      /* std::nothrow - icXmlReadFileBounded */
 #include <string>   /* std::string, std::to_string */
 #include <time.h>
+#include <cctype>
 #include "IccUtilXml.h"
 #include "IccConvertUTF.h"
 #include "IccTagFactory.h"
@@ -503,6 +504,29 @@ icUInt32Number icXmlGetHexData(void *pBuf, const char *szText, icUInt32Number nB
     }
   }
   return rv;
+}
+
+bool icXmlValidHexData(const char *szText)
+{
+  if (!szText)
+    return false;
+
+  // icXmlDumpHexData() writes the digits in pairs, 32 bytes to a line, so the
+  // only text between pairs is the line break and its indentation.  Both
+  // decoders skip anything they cannot read as a pair, one character at a
+  // time, so "0g11" silently gave the single byte 0x11 and a trailing digit
+  // was dropped: after one conversion a malformed payload could not be told
+  // from a shorter intentional one (#2610).
+  while (*szText) {
+    if (isspace((unsigned char)*szText)) {
+      szText++;
+      continue;
+    }
+    if (hexValue(szText[0]) < 0 || hexValue(szText[1]) < 0)
+      return false;
+    szText += 2;
+  }
+  return true;
 }
 
 icUInt32Number icXmlGetHexDataSize(const char *szText)

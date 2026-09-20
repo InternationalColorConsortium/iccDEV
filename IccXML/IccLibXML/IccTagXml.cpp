@@ -151,7 +151,7 @@ bool CIccTagXmlUnknown::ToXml(std::string &xml, std::string blanks/* = ""*/)
 }
 
 
-bool CIccTagXmlUnknown::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
+bool CIccTagXmlUnknown::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   if (pNode) {
     const char *tagType = icXmlAttrValue(pNode->parent, "type");
@@ -163,6 +163,10 @@ bool CIccTagXmlUnknown::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
   pNode = icXmlFindNode(pNode, "UnknownData");
 
   if (pNode && pNode->children && pNode->children->content) {
+    if (!icXmlValidHexData((const icChar*)pNode->children->content)) {
+      parseStr += "Malformed hex in UnknownData\n";
+      return false;
+    }
     m_nSize = icXmlGetHexDataSize((const icChar*)pNode->children->content);
 
     delete [] m_pData;
@@ -266,19 +270,34 @@ static xmlAttr *icXmlFindLanguageCountryAttr(xmlNode *pNode)
   return pAttr;
 }
 
-static bool icXmlParseLocalizedText(xmlNode *pNode, std::string &text)
+// Returns whether text was found.  A false return means the element carried
+// none, EXCEPT when pbMalformed is set: the callers below all treat "no text"
+// as an empty string, so a HexTextData payload the decoder refuses has to be
+// told apart from an absent one or it loads silently as "" (#2610).
+static bool icXmlParseLocalizedText(xmlNode *pNode, std::string &text, bool *pbMalformed = NULL)
 {
   bool haveText = false;
   text.clear();
+
+  if (pbMalformed)
+    *pbMalformed = false;
 
   for (xmlNode *pText = pNode ? pNode->children : NULL; pText; pText = pText->next) {
     if (pText->type == XML_ELEMENT_NODE && !icXmlStrCmp(pText->name, "HexTextData") &&
         pText->children && pText->children->content) {
       CIccUInt8Array buf;
+      if (!icXmlValidHexData((const icChar*)pText->children->content)) {
+        if (pbMalformed)
+          *pbMalformed = true;
+        return false;
+      }
       icUInt32Number hexSize = icXmlGetHexDataSize((const icChar*)pText->children->content);
       if (!buf.SetSize(hexSize+2) ||
-          icXmlGetHexData(buf.GetBuf(), (const icChar*)pText->children->content, hexSize)!=hexSize)
+          icXmlGetHexData(buf.GetBuf(), (const icChar*)pText->children->content, hexSize)!=hexSize) {
+        if (pbMalformed)
+          *pbMalformed = true;
         return false;
+      }
 
       uint8_t *strPtr = buf.GetBuf();
       strPtr[hexSize] = 0;
@@ -349,6 +368,10 @@ static bool icXmlParseTextString(xmlNode *pNode, std::string &parseStr, std::str
     if (pNode->type==XML_ELEMENT_NODE) {
       if (!icXmlStrCmp(pNode->name, "HexTextData") && pNode->children && pNode->children->content) {
         CIccUInt8Array buf;
+        if (!icXmlValidHexData((const icChar*)pNode->children->content)) {
+          parseStr += "Malformed hex in HexTextData\n";
+          return false;
+        }
         icUInt32Number hexSize = icXmlGetHexDataSize((const icChar*)pNode->children->content);
         if (!buf.SetSize(hexSize+2) ||
           icXmlGetHexData(buf.GetBuf(), (const icChar*)pNode->children->content, hexSize)!=hexSize)
@@ -460,6 +483,10 @@ bool CIccTagXmlZipUtf8Text::ParseXml(xmlNode *pNode, std::string &parseStr)
     if (pNode->type==XML_ELEMENT_NODE) {
       if (!icXmlStrCmp(pNode->name, "HexCompressedData") && pNode->children && pNode->children->content) {
         CIccUInt8Array buf;
+        if (!icXmlValidHexData((const icChar*)pNode->children->content)) {
+          parseStr += "Malformed hex in HexCompressedData\n";
+          return false;
+        }
         if (!buf.SetSize(icXmlGetHexDataSize((const icChar*)pNode->children->content)) ||
             icXmlGetHexData(buf.GetBuf(), (const icChar*)pNode->children->content, buf.GetSize())!=buf.GetSize())
           return false;
@@ -492,6 +519,10 @@ bool CIccTagXmlZipXml::ParseXml(xmlNode *pNode, std::string &parseStr)
     if (pNode->type==XML_ELEMENT_NODE) {
       if (!icXmlStrCmp(pNode->name, "HexCompressedData") && pNode->children && pNode->children->content) {
         CIccUInt8Array buf;
+        if (!icXmlValidHexData((const icChar*)pNode->children->content)) {
+          parseStr += "Malformed hex in HexCompressedData\n";
+          return false;
+        }
         if (!buf.SetSize(icXmlGetHexDataSize((const icChar*)pNode->children->content)) ||
           icXmlGetHexData(buf.GetBuf(), (const icChar*)pNode->children->content, buf.GetSize())!=buf.GetSize())
           return false;
@@ -744,6 +775,10 @@ bool CIccTagXmlTextDescription::ParseXml(xmlNode *pNode, std::string &parseStr)
             sscanf(pScript, "%x", &nCode);
             m_nScriptCode = (icUInt16Number)nCode;
             if (pNode->children && pNode->children->content) {
+              if (!icXmlValidHexData((const char*)pNode->children->content)) {
+                parseStr += "Malformed hex in MacScript\n";
+                return false;
+              }
               // set m_nScriptSize as receiver the return value of icXmlGetHexData
               // no need to add 1 since the return value is already exact.
               m_nScriptSize = (icUInt8Number) icXmlGetHexData(m_szScriptText, (const char*)pNode->children->content, sizeof(m_szScriptText));
@@ -2319,7 +2354,7 @@ bool CIccTagXmlMultiLocalizedUnicode::ToXml(std::string &xml, std::string blanks
 }
 
 
-bool CIccTagXmlMultiLocalizedUnicode::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
+bool CIccTagXmlMultiLocalizedUnicode::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   xmlAttr *langCode;
   int n = 0;
@@ -2328,11 +2363,16 @@ bool CIccTagXmlMultiLocalizedUnicode::ParseXml(xmlNode *pNode, std::string & /*p
     if ((langCode = icXmlFindLanguageCountryAttr(pNode))) {
       std::string text;
 
-      if (icXmlParseLocalizedText(pNode, text)) {
+      bool bMalformed = false;
+      if (icXmlParseLocalizedText(pNode, text, &bMalformed)) {
         icUInt32Number lc = icGetSigVal(icXmlAttrValue(langCode));
         if (!icXmlSetLocalizedUtf8(*this, text, (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff)))
           return false;
         n++;
+      }
+      else if (bMalformed) {
+        parseStr += "Malformed hex in HexTextData\n";
+        return false;
       }
       else {
         SetText("");
@@ -2361,7 +2401,7 @@ bool CIccTagXmlTagData::ToXml(std::string &xml, std::string blanks/* = ""*/)
 }
 
 
-bool CIccTagXmlTagData::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
+bool CIccTagXmlTagData::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   pNode = icXmlFindNode(pNode, "Data");
   if (pNode && pNode->children && pNode->children->content) {
@@ -2370,6 +2410,10 @@ bool CIccTagXmlTagData::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
     if (!strcmp(szFlag,"binary"))
       m_nDataFlag = icBinaryData;
 
+    if (!icXmlValidHexData((const char *)pNode->children->content)) {
+      parseStr += "Malformed hex in dataType Data\n";
+      return false;
+    }
     icUInt32Number nSize = icXmlGetHexDataSize((const char *)pNode->children->content);
     SetSize(nSize, false);
     if (nSize) {
@@ -5353,7 +5397,7 @@ bool CIccTagXmlProfileSequenceId::ToXml(std::string &xml, std::string blanks/* =
 }
 
 
-bool CIccTagXmlProfileSequenceId::ParseXml(xmlNode *pNode, std::string & /* parseStr */)
+bool CIccTagXmlProfileSequenceId::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   pNode = icXmlFindNode(pNode, "ProfileSequenceId");
 
@@ -5377,10 +5421,15 @@ bool CIccTagXmlProfileSequenceId::ParseXml(xmlNode *pNode, std::string & /* pars
         pSubNode->children) {
           std::string text;
 
-          if (icXmlParseLocalizedText(pSubNode, text)) {
+          bool bMalformed = false;
+          if (icXmlParseLocalizedText(pSubNode, text, &bMalformed)) {
             icUInt32Number lc = icGetSigVal(icXmlAttrValue(langCode));
             if (!icXmlSetLocalizedUtf8(desc.m_desc, text, (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff)))
               return false;
+          }
+          else if (bMalformed) {
+            parseStr += "Malformed hex in HexTextData\n";
+            return false;
           }
           else {
             desc.m_desc.SetText("");
@@ -5462,7 +5511,7 @@ bool CIccTagXmlDict::ToXml(std::string &xml, std::string blanks/* = ""*/)
 }
 
 
-bool CIccTagXmlDict::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
+bool CIccTagXmlDict::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   m_Dict->clear();
 
@@ -5508,12 +5557,19 @@ bool CIccTagXmlDict::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
           std::string text;
           icUInt32Number lc = icGetSigVal(icXmlAttrValue(pAttr));
 
-          if (icXmlParseLocalizedText(pChild, text)) {
+          bool bMalformed = false;
+          if (icXmlParseLocalizedText(pChild, text, &bMalformed)) {
             if (!icXmlSetLocalizedUtf8(*pTag, text, (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff))) {
               delete pDesc;
               ptr.ptr = NULL;
               return false;
             }
+          }
+          else if (bMalformed) {
+            parseStr += "Malformed hex in HexTextData\n";
+            delete pDesc;
+            ptr.ptr = NULL;
+            return false;
           }
           else {
             pTag->SetText("");
@@ -5536,12 +5592,19 @@ bool CIccTagXmlDict::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
           std::string text;
           icUInt32Number lc = icGetSigVal(icXmlAttrValue(pAttr));
 
-          if (icXmlParseLocalizedText(pChild, text)) {
+          bool bMalformed = false;
+          if (icXmlParseLocalizedText(pChild, text, &bMalformed)) {
             if (!icXmlSetLocalizedUtf8(*pTag, text, (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff))) {
               delete pDesc;
               ptr.ptr = NULL;
               return false;
             }
+          }
+          else if (bMalformed) {
+            parseStr += "Malformed hex in HexTextData\n";
+            delete pDesc;
+            ptr.ptr = NULL;
+            return false;
           }
           else {
             pTag->SetText("");
@@ -6489,6 +6552,10 @@ bool CIccTagXmlEmbeddedHeightImage::ParseXml(xmlNode *pNode, std::string &parseS
     }
     // no file
     else if (pImageNode->children && pImageNode->children->content){
+      if (!icXmlValidHexData((const icChar*)pImageNode->children->content)) {
+        parseStr += "Malformed hex in Image\n";
+        return false;
+      }
       icUInt32Number nSize = icXmlGetHexDataSize((const icChar*)pImageNode->children->content);
       // An <Image> with no hex digits used to load as a zero-byte image.
       // iccFromXml then wrote a 24-byte tag, which Read() refuses (it needs at
@@ -6629,6 +6696,10 @@ bool CIccTagXmlEmbeddedNormalImage::ParseXml(xmlNode *pNode, std::string &parseS
     }
     // no file
     else if (pImageNode->children && pImageNode->children->content) {
+      if (!icXmlValidHexData((const icChar*)pImageNode->children->content)) {
+        parseStr += "Malformed hex in Image\n";
+        return false;
+      }
       icUInt32Number nSize = icXmlGetHexDataSize((const icChar*)pImageNode->children->content);
       if (!nSize) {
         parseStr += "NormalImage Image has no hex data: at least one byte is required.\n";
