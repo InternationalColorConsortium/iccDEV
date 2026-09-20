@@ -428,6 +428,10 @@ public:
 
   bool SetSize(int nNewSize);
 
+  // Ownership of newCurve transfers to this object only when true is returned.
+  // The same curve may be installed in several slots -- iccApplyToLink and
+  // iccFromCube both do that deliberately -- because SetSize() and the
+  // destructor delete each distinct pointer once, not once per slot.
   bool SetCurve(int nIndex, icCurveSetCurvePtr newCurve);
 
   virtual icElemTypeSignature GetType() const { return icSigCurveSetElemType; }

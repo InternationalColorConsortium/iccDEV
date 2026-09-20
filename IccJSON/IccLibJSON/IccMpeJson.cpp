@@ -650,7 +650,10 @@ bool CIccMpeJsonCurveSet::ParseJson(const IccJson &j, std::string &parseStr)
   }
 
   icUInt16Number nChannels = (icUInt16Number)nIn;
-  SetSize(nChannels);
+  if (!SetSize(nChannels)) {
+    parseStr += "Unable to allocate curves in CurveSetElement\n";
+    return false;
+  }
 
   if (!j.contains("curves") || !j["curves"].is_array()) {
     parseStr += "Missing curves array in CurveSetElement\n";
@@ -681,8 +684,11 @@ bool CIccMpeJsonCurveSet::ParseJson(const IccJson &j, std::string &parseStr)
       icCurveSetCurvePtr pCurve = icFromJsonCurve(jCurve, parseStr);
       if (!pCurve)
         return false;
-      if (!SetCurve(nIndex, pCurve))
+      if (!SetCurve(nIndex, pCurve)) {
+        delete pCurve;
+        parseStr += "Unable to set curve in CurveSetElement\n";
         return false;
+      }
     }
     nIndex++;
   }

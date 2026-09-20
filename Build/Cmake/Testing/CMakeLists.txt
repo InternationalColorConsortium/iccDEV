@@ -6141,6 +6141,111 @@ function(iccdev_add_curve_setsize_contract_test)
   endif()
 endfunction()
 
+# #2607: CIccMpeCurveSet::SetCurve() accepted an index equal to the channel
+# count, reading and writing one pointer beyond m_curve.  It also deleted a
+# unique curve before assigning the same pointer back to its slot.  The library
+# test pins the exported API contract; the tool test pins that serialized XML
+# with a fourth curve for three channels is rejected before reaching the setter.
+function(iccdev_add_mpe_curveset_setcurve_contract_tests)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMpeCurveSetSetCurveContractTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/mpe-curveset-setcurve-contract.cpp"
+  )
+  target_compile_features(iccMpeCurveSetSetCurveContractTest PRIVATE cxx_std_17)
+  target_include_directories(iccMpeCurveSetSetCurveContractTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccMpeCurveSetSetCurveContractTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccMpeCurveSetSetCurveContractTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.mpe-curveset-setcurve-contract
+      COMMAND "$<TARGET_FILE:iccMpeCurveSetSetCurveContractTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.mpe-curveset-setcurve-contract
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccMpeCurveSetSetCurveContractTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.mpe-curveset-setcurve-contract PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;mpe;curveset;issue-2607;regression"
+  )
+
+  if(WIN32)
+    set(_curveset_contract_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMpeCurveSetSetCurveContractTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _curveset_contract_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.mpe-curveset-setcurve-contract PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_curveset_contract_windows_env_mods}"
+    )
+  endif()
+
+  if(NOT TARGET iccFromXml)
+    return()
+  endif()
+
+  add_dependencies(check iccFromXml)
+  if(WIN32)
+    add_test(
+      NAME iccdev.issue-2607-curveset-extra-xml
+      COMMAND "${CMAKE_COMMAND}"
+        "-DTOOL=$<TARGET_FILE:iccFromXml>"
+        "-DLABEL=issue-2607-curveset-extra-xml"
+        "-DTOOL_ARGS=${ICCDEV_REPO_ROOT}/.github/ci/regression/issue-2607-curveset-too-many-curves.xml;${ICCDEV_TEST_OUTDIR}/issue-2607-curveset-too-many-curves.icc"
+        "-DEXPECT_EXIT=nonzero"
+        "-DEXPECT_MATCH=Too many curves in CurveSetElement"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+    )
+  else()
+    add_test(
+      NAME iccdev.issue-2607-curveset-extra-xml
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "${CMAKE_COMMAND}"
+        "-DTOOL=$<TARGET_FILE:iccFromXml>"
+        "-DLABEL=issue-2607-curveset-extra-xml"
+        "-DTOOL_ARGS=${ICCDEV_REPO_ROOT}/.github/ci/regression/issue-2607-curveset-too-many-curves.xml;${ICCDEV_TEST_OUTDIR}/issue-2607-curveset-too-many-curves.icc"
+        "-DEXPECT_EXIT=nonzero"
+        "-DEXPECT_MATCH=Too many curves in CurveSetElement"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+    )
+  endif()
+  set_tests_properties(iccdev.issue-2607-curveset-extra-xml PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;xml;mpe;curveset;issue-2607;regression"
+  )
+
+  if(WIN32)
+    set(_curveset_xml_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccFromXml>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _curveset_xml_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.issue-2607-curveset-extra-xml PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_curveset_xml_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1811: spectralViewingConditions illuminantXYZ/surroundXYZ carry absolute
 # luminance in cd/m^2, and CIccInfo::CheckLuminance warns when Y is 1 because that
 # is what chromaticity normalization leaves behind. The check cannot be exact --
@@ -9480,6 +9585,7 @@ if(WIN32)
   iccdev_add_calc_channel_ref_unterminated_index_test()
   iccdev_add_calc_channel_ref_unterminated_index_json_test()
   iccdev_add_curve_setsize_contract_test()
+  iccdev_add_mpe_curveset_setcurve_contract_tests()
   iccdev_add_curve_gamma_u8fixed8_test()
   iccdev_add_luminance_normalization_test()
   iccdev_add_tag_name_spelling_test()
@@ -9891,6 +9997,7 @@ iccdev_add_xml_curve_oversize_file_test()
 iccdev_add_calc_channel_ref_unterminated_index_test()
 iccdev_add_calc_channel_ref_unterminated_index_json_test()
 iccdev_add_curve_setsize_contract_test()
+iccdev_add_mpe_curveset_setcurve_contract_tests()
 iccdev_add_curve_gamma_u8fixed8_test()
 iccdev_add_luminance_normalization_test()
 iccdev_add_tag_name_spelling_test()
