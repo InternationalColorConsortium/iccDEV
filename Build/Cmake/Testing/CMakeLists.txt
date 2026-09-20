@@ -2022,6 +2022,116 @@ function(iccdev_add_tonemap_write_many_outputs_test)
   endif()
 endfunction()
 
+# Guards #2610: both hex decoders skipped whatever they could not read as a
+# pair of hex digits, so a dataType payload of "0g11" loaded as the single byte
+# 0x11 with no diagnostic.  Pins the rule, drives it through the tag parser, and
+# pins the header ProfileID exclusion the corpus depends on.
+function(iccdev_add_hex_data_malformed_xml_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccHexDataMalformedXmlTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/hex-data-malformed-xml.cpp"
+  )
+  target_compile_features(iccHexDataMalformedXmlTest PRIVATE cxx_std_17)
+  target_include_directories(iccHexDataMalformedXmlTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccHexDataMalformedXmlTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccHexDataMalformedXmlTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.hex-data-malformed-xml
+      COMMAND "$<TARGET_FILE:iccHexDataMalformedXmlTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.hex-data-malformed-xml
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccHexDataMalformedXmlTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.hex-data-malformed-xml PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;hex;parse;issue-2610;regression"
+  )
+  if(WIN32)
+    set(_icchexdatamalformedxmltest_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccHexDataMalformedXmlTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _icchexdatamalformedxmltest_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.hex-data-malformed-xml PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_icchexdatamalformedxmltest_env_mods}"
+    )
+  endif()
+endfunction()
+
+# Guards #2610 on the JSON side, in its own executable because IccMpeXml.h and
+# IccMpeJson.h cannot share a translation unit.
+function(iccdev_add_hex_data_malformed_json_test)
+  if(NOT TARGET "${TARGET_LIB_ICCJSON}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccHexDataMalformedJsonTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/hex-data-malformed-json.cpp"
+  )
+  target_compile_features(iccHexDataMalformedJsonTest PRIVATE cxx_std_17)
+  target_include_directories(iccHexDataMalformedJsonTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccHexDataMalformedJsonTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccHexDataMalformedJsonTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.hex-data-malformed-json
+      COMMAND "$<TARGET_FILE:iccHexDataMalformedJsonTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.hex-data-malformed-json
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccHexDataMalformedJsonTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.hex-data-malformed-json PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;json;hex;parse;issue-2610;regression"
+  )
+  if(WIN32)
+    set(_icchexdatamalformedjsontest_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccHexDataMalformedJsonTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _icchexdatamalformedjsontest_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.hex-data-malformed-json PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_icchexdatamalformedjsontest_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards #2520: the reflectance CLUT and reflectance observer elements must honour
 # their Absolute flag (ICC.2:2023 11.2.12 and 11.2.13), which was tested against
 # icRelativeSpectralData (0) and so never read, and the emission observer must not
@@ -9464,6 +9574,8 @@ if(WIN32)
   iccdev_add_xyz_negative_z_test()
   iccdev_add_utf8_textarray_test()
   iccdev_add_extended_device_colorspace_test()
+  iccdev_add_hex_data_malformed_xml_test()
+  iccdev_add_hex_data_malformed_json_test()
   iccdev_add_tonemap_functions_xml_test()
   iccdev_add_tonemap_functions_json_test()
   iccdev_add_tonemap_write_many_outputs_test()
@@ -9878,6 +9990,8 @@ iccdev_add_pcs_edge_metadata_test()
 iccdev_add_xyz_negative_z_test()
 iccdev_add_utf8_textarray_test()
 iccdev_add_extended_device_colorspace_test()
+iccdev_add_hex_data_malformed_xml_test()
+iccdev_add_hex_data_malformed_json_test()
 iccdev_add_tonemap_functions_xml_test()
 iccdev_add_tonemap_functions_json_test()
 iccdev_add_tonemap_write_many_outputs_test()

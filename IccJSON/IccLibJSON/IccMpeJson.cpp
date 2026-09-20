@@ -168,6 +168,10 @@ bool CIccMpeJsonUnknown::ParseJson(const IccJson &j, std::string &parseStr)
   m_nOutputChannels = (icUInt16Number)nOut;
   if (j.contains("unknownData") && j["unknownData"].is_string()) {
     std::string hex = j["unknownData"].get<std::string>();
+    if (!icJsonValidHexData(hex.c_str())) {
+      parseStr += "Malformed hex in unknownData\n";
+      return false;
+    }
     m_nSize = icJsonGetHexDataSize(hex.c_str());
     if (m_pData) { free(m_pData); m_pData = nullptr; }
     if (m_nSize) {
@@ -1266,6 +1270,10 @@ bool CIccMpeJsonBAcs::ParseJson(const IccJson &j, std::string &parseStr)
   jGetString(j, "data", hex);
   if (!sig.empty())
     m_signature = (icAcsSignature)icGetSigVal(sig.c_str());
+  if (!icJsonValidHexData(hex.c_str())) {
+    parseStr += "Malformed hex in ACS element data\n";
+    return false;
+  }
   m_nDataSize = icJsonGetHexDataSize(hex.c_str());
   if (m_pData) { free(m_pData); m_pData = nullptr; }
   if (m_nDataSize) {
@@ -1308,6 +1316,10 @@ bool CIccMpeJsonEAcs::ParseJson(const IccJson &j, std::string &parseStr)
   jGetString(j, "data", hex);
   if (!sig.empty())
     m_signature = (icAcsSignature)icGetSigVal(sig.c_str());
+  if (!icJsonValidHexData(hex.c_str())) {
+    parseStr += "Malformed hex in ACS element data\n";
+    return false;
+  }
   m_nDataSize = icJsonGetHexDataSize(hex.c_str());
   if (m_pData) { free(m_pData); m_pData = nullptr; }
   if (m_nDataSize) {

@@ -57,6 +57,7 @@
  *
  */
 
+#include <cctype>
 #include "IccUtilJson.h"
 #include "IccUtil.h"
 #include "IccTagLut.h"
@@ -115,6 +116,27 @@ size_t icJsonGetHexData(void *pBuf, const char *szText, size_t nBufSize)
     szText++;
   }
   return rv;
+}
+
+bool icJsonValidHexData(const char *szText)
+{
+  if (!szText)
+    return false;
+
+  // icJsonDumpHexData() writes the digits in pairs with nothing between them.
+  // Whitespace is accepted between pairs, as the XML twin's writer produces,
+  // but a character the decoder cannot read as part of a pair is no longer
+  // skipped silently: "0g11" gave the single byte 0x11 (#2610).
+  while (*szText) {
+    if (isspace((unsigned char)*szText)) {
+      szText++;
+      continue;
+    }
+    if (hexVal(szText[0]) < 0 || !szText[1] || hexVal(szText[1]) < 0)
+      return false;
+    szText += 2;
+  }
+  return true;
 }
 
 icUInt32Number icJsonGetHexDataSize(const char *szText)
