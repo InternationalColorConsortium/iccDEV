@@ -16,6 +16,7 @@
  */
 
 import cpp
+import semmle.code.cpp.controlflow.Guards
 
 private predicate isProductSource(File f) {
   (
@@ -38,7 +39,8 @@ private predicate isCountMember(Variable countMember) {
 private predicate isDangerousUseAfter(Function f, Parameter index,
                                       ComparisonOperation check, Expr use) {
   use.getEnclosingFunction() = f and
-  use.getLocation().getStartLine() > check.getLocation().getStartLine() and
+  check instanceof GuardCondition and
+  check.(GuardCondition).controls(use.getBasicBlock(), false) and
   (
     exists(ArrayExpr access |
       use = access and
