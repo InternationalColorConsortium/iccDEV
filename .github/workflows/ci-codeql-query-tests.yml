@@ -15,9 +15,9 @@
 ## every PR that edits a query.  Adding them there would have meant
 ## widening that workflow's triggers for every PR.
 ##
-## NOTE: CODEQL_VER/CODEQL_SHA256 below are a THIRD pin site for the CodeQL
-## bundle, alongside ci-codeql-security.yml and ci-preflight-safety.yml.
-## Bump all three together; docs/codeql.md lists them.
+## NOTE: CODEQL_VER/CODEQL_SHA256 below are one of the three workflow pin sites
+## for the CodeQL bundle. Keep them synchronized with ci-codeql-security.yml,
+## ci-preflight-safety.yml, and the Dockerfile; see docs/codeql.md.
 #
 ###############################################################
 
@@ -72,8 +72,8 @@ jobs:
           # already on PATH.  Query-test output carries extractor line/column
           # locations that .expected files assert exactly, so an unpinned CLI
           # could flip these tests PASS/FAIL for reasons unrelated to the diff.
-          # CODEQL_SHA256 is the release asset digest for this exact bundle, so the
-          # two values below must always be refreshed together:
+          # CODEQL_SHA256 is the release asset digest for this exact bundle. Keep
+          # this pin synchronized with the other workflow pins and Dockerfile:
           #   gh api repos/github/codeql-action/releases/tags/codeql-bundle-v"$CODEQL_VER" \
           #     --jq '.assets[]|select(.name=="codeql-bundle-linux64.tar.gz").digest'
           CODEQL_VER="2.27.0"

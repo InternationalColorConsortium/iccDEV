@@ -1181,6 +1181,13 @@ else
   skip_or_fail "doxygen"
 fi
 
+if [ -f .github/scripts/check-codeql-bundle-pin-parity.py ]; then
+  run_check "CodeQL bundle pin parity" \
+    python3 .github/scripts/check-codeql-bundle-pin-parity.py
+else
+  skip_or_fail "check-codeql-bundle-pin-parity.py"
+fi
+
 if [ "$FAST_LANE" -eq 1 ]; then
   echo "[SKIP] CodeQL query resolution (fast lane)"
   echo ""

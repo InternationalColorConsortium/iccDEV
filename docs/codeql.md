@@ -17,11 +17,47 @@ Run local analysis with:
 .github/scripts/run-codeql-local.sh
 ```
 
-The bootstrap path in `ci-codeql-security.yml`, `ci-preflight-safety.yml` and
-`ci-codeql-query-tests.yml` is pinned to CodeQL bundle 2.27.0 and verifies the
-official Linux release-asset SHA-256 before extraction. Update the version and
-digest together in all three workflows -- a bump applied to only some of them
-fails the others at their next `sha256sum -c`.
+The local runner prefers a `codeql` executable on `PATH` and falls back to the
+GitHub CLI `gh codeql` extension. The unified container includes the pinned
+CodeQL bundle, so it can analyze the caller's current checkout without
+installing the extension. Resolve the selected image to a digest, mount the
+checkout read-only, copy it to container scratch, and copy the results back to
+the caller:
+
+```bash
+IMAGE_TAG=ghcr.io/internationalcolorconsortium/iccdev:latest
+WORKTREE="$PWD"
+RESULTS="$WORKTREE/codeql-results"
+docker pull "$IMAGE_TAG"
+IMAGE="$(docker image inspect "$IMAGE_TAG" --format '{{index .RepoDigests 0}}')"
+IMAGE_REVISION="$(docker image inspect "$IMAGE_TAG" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+printf 'digest=%s revision=%s\n' "$IMAGE" "$IMAGE_REVISION"
+mkdir -p "$RESULTS"
+docker run --rm --user "$(id -u):$(id -g)" \
+  -e HOME=/tmp \
+  -v "$WORKTREE:/src:ro" \
+  -v "$RESULTS:/results" \
+  "$IMAGE" bash -lc '
+    set -euo pipefail
+    work="$(mktemp -d)"
+    cp -a --no-preserve=ownership /src/. "$work/iccDEV"
+    cd "$work/iccDEV"
+    .github/scripts/run-codeql-local.sh --custom-only
+    cp -a codeql-results/. /results/
+  '
+```
+
+The bootstrap paths in `ci-codeql-security.yml`, `ci-preflight-safety.yml`,
+`ci-codeql-query-tests.yml`, and the Dockerfile are pinned to CodeQL bundle
+2.27.0 and verify the official Linux release-asset SHA-256 before extraction.
+Update the version and digest together in all four locations, then run:
+
+```bash
+python3 .github/scripts/check-codeql-bundle-pin-parity.py
+```
+
+The preflight gate runs this parity check for every invocation, so a partial
+bump fails before the separate checksum checks can succeed independently.
 
 `ci-codeql-query-tests.yml` runs the checked-in query unit tests under
 `.github/codeql-queries/test` on any PR touching `.github/codeql-queries/**`.

@@ -52,9 +52,9 @@ iccdev-fuzz-env
 ctest --test-dir /workspace/build -N --no-tests=error
 ```
 
-## Coverage and profiling tools
+## CodeQL, coverage, and profiling tools
 
-The image includes `lcov`, `genhtml`, `gcovr`, `llvm-cov`, `llvm-profdata`,
+The image includes the pinned CodeQL CLI bundle, `lcov`, `genhtml`, `gcovr`, `llvm-cov`, `llvm-profdata`,
 `gprof`, `perf`, `strace`, and a pinned FlameGraph checkout at
 `$ICCDEV_FLAMEGRAPH_DIR` (`/opt/FlameGraph`). Its exact revision is exposed as
 `ICCDEV_FLAMEGRAPH_REVISION`. Build coverage, profiling, and sanitizer modes in
@@ -63,6 +63,12 @@ LCOV uses the accelerated `JSON::XS` backend and treats unexecuted blocks on
 non-branch lines as zero-count blocks, avoiding inconsistent GCC standard
 library coverage records. `LCOV_HOME=/` makes LCOV load the checked system
 configuration from `/etc/lcovrc` for both interactive and scripted runs.
+
+`codeql` is available on `PATH`; `.github/scripts/run-codeql-local.sh` uses it
+directly and falls back to `gh codeql` only when no native CLI is present.
+For a caller checkout, resolve an image tag to a digest, mount the checkout
+read-only, and analyze a container-local copy; use the recipe in
+[CodeQL security analysis](codeql.md).
 
 An `ENABLE_PROFILING=ON` Linux build with tests enabled registers
 `iccdev.profiling-smoke`. It proves that `iccDumpProfile` writes a nonempty
