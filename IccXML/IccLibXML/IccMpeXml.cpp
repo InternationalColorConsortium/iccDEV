@@ -1469,13 +1469,17 @@ bool CIccMpeXmlCurveSet::ParseXml(xmlNode *pNode, std::string &parseStr)
     return false;
   }
 
-  SetSize(nChannels);
+  if (!SetSize(nChannels)) {
+    parseStr += "Unable to allocate curves in CurveSetElement\n";
+    return false;
+  }
   int nIndex = 0;
   for (pNode = pNode->children, nIndex = 0;
        pNode;
        pNode=pNode->next) {
     if (pNode->type == XML_ELEMENT_NODE) {
       if (nIndex >= nChannels) {
+        parseStr += "Too many curves in CurveSetElement\n";
         return false;
       }
       else if (!strcmp((const char*)pNode->name, "DuplicateCurve")) {
@@ -1503,8 +1507,11 @@ bool CIccMpeXmlCurveSet::ParseXml(xmlNode *pNode, std::string &parseStr)
         if (!pCurve)
           return false;
 
-        if (!SetCurve(nIndex, pCurve))
+        if (!SetCurve(nIndex, pCurve)) {
+          delete pCurve;
+          parseStr += "Unable to set curve in CurveSetElement\n";
           return false;
+        }
         nIndex++;
       }
     }

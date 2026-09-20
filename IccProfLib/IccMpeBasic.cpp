@@ -3735,24 +3735,25 @@ bool CIccMpeCurveSet::SetSize(int nNewSize)
  ******************************************************************************/
 bool CIccMpeCurveSet::SetCurve(int nIndex, icCurveSetCurvePtr newCurve)
 {
-  if (nIndex<0 || nIndex>m_nInputChannels)
+  if (nIndex < 0 || nIndex >= m_nInputChannels || !m_curve)
     return false;
 
-  if (m_curve) {
-    int i;
+  // Reinstalling the pointer already owned by this slot is a no-op.  Deleting
+  // it before assigning it back would leave the curve set holding a dangling
+  // pointer and cause a second delete when the set is destroyed.
+  if (m_curve[nIndex] == newCurve)
+    return true;
 
-    for (i = 0; i < m_nInputChannels; i++)
-      if (i != nIndex && m_curve[i] == m_curve[nIndex])
-        break;
+  int i;
 
-    if (i == m_nInputChannels) {
-      delete m_curve[nIndex];
-    }
+  for (i = 0; i < m_nInputChannels; i++)
+    if (i != nIndex && m_curve[i] == m_curve[nIndex])
+      break;
 
-    m_curve[nIndex] = newCurve;
-  }
-  else
-    return false;
+  if (i == m_nInputChannels)
+    delete m_curve[nIndex];
+
+  m_curve[nIndex] = newCurve;
   
   return true;
 }
