@@ -4141,7 +4141,8 @@ CIccMpeTintArray::CIccMpeTintArray(const CIccMpeTintArray &tintArray)
     m_Array = (CIccTagNumArray*)tintArray.m_Array->NewCopy();
     m_Array->SetParentObject(this);
   }
-
+  else
+    m_Array = NULL;
 }
 
 /**
@@ -4172,6 +4173,12 @@ CIccMpeTintArray &CIccMpeTintArray::operator=(const CIccMpeTintArray &tintArray)
   if (tintArray.m_Array) {
     m_Array = (CIccTagNumArray*)tintArray.m_Array->NewCopy();
     m_Array->SetParentObject(this);
+  }
+  else {
+    // The delete above does not clear m_Array, so without this the member is
+    // left dangling whenever the source has no array -- the destructor then
+    // writes through it in SetParentObject().  Measured as a use-after-free.
+    m_Array = NULL;
   }
 
   return *this;
@@ -4222,6 +4229,18 @@ void CIccMpeTintArray::SetVectorSize(int nVectorSize)
  ******************************************************************************/
 void CIccMpeTintArray::SetArray(CIccTagNumArray *pArray)
 {
+  // GetArray() hands this member out, so SetArray(GetArray()) is reachable from
+  // any caller.  Releasing first would free the object being installed and then
+  // write through it in SetParentObject() below -- measured as a heap
+  // use-after-free WRITE under ASan.  Returning early is the whole fix: the
+  // pointer is already stored, and the only other thing this function does is
+  // set the parent link, which cannot be re-established by freeing the object
+  // that holds it.  (Every route in this file links the array to its element,
+  // but IccMpeXml.cpp does not, so an XML-parsed tint array reaches here with
+  // no parent link -- that gap is IccXML's to close, not this setter's.)
+  if (m_Array == pArray)
+    return;
+
   if (m_Array) {
     m_Array->SetParentObject(nullptr);
     delete m_Array;

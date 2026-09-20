@@ -89,6 +89,7 @@
 #include "IccMpeSpectral.h"
 #include "IccPcc.h"
 #include "IccTagBasic.h"
+#include "IccTagDict.h"
 #include "IccTagLut.h"
 #include "IccTagMPE.h"
 #include "IccUtil.h"
@@ -100,6 +101,8 @@ static int g_failures = 0;
 static int g_curveDtors = 0;
 static int g_clutDtors = 0;
 static int g_matrixDtors = 0;
+static int g_mluDtors = 0;
+static int g_numArrayDtors = 0;
 
 static void check(bool condition, const char *label)
 {
@@ -603,6 +606,169 @@ static void testSpectralApplyMtx()
   check(g_matrixDtors == 1, "the observer element frees its apply matrix exactly once");
 }
 
+// #2634: the same ownership shape in three more exported setters, each with a
+// public getter, each reproduced under ASan as a use-after-free WRITE through
+// SetParentObject() on the freed object.  CIccDictEntry's two return whether a
+// value was held, so the guard has to preserve that for the alias case as well.
+class CountingMLU : public CIccTagMultiLocalizedUnicode
+{
+public:
+  virtual ~CountingMLU() { g_mluDtors++; }
+};
+
+class CountingNumArray : public CIccTagFloat32
+{
+public:
+  CountingNumArray() : CIccTagFloat32(4) {}
+  virtual ~CountingNumArray() { g_numArrayDtors++; }
+
+  // Load-bearing on Windows, and only there.  CIccTagFloat32 is a class
+  // template instantiation, and subclassing it puts the base's out-of-line
+  // virtuals in this subclass's vtable.  All three Windows legs -- MSVC,
+  // ClangCL and MinGW UCRT64 -- then fail to link with exactly one undefined
+  // reference:
+  //
+  //   CIccTagFloatNum<float, (icTagTypeSignature)1718367026>::GetClassName()
+  //
+  // Nine other inherited out-of-line virtuals of the same instantiation are
+  // referenced from here and all of them resolve, and the definition of this
+  // one (IccTagBasic.cpp:7186) is structurally no different from theirs, so
+  // what singles it out is not established.  Overriding it keeps the vtable
+  // slot inside this file, which is what actually fixes the link; Linux and
+  // macOS never needed it.
+  virtual const icChar *GetClassName() const { return "CountingNumArray"; }
+};
+
+static void testTintArraySetArray()
+{
+  {
+    CIccMpeTintArray elem;
+    CountingNumArray *array = new CountingNumArray;
+    elem.SetArray(array);
+
+    g_numArrayDtors = 0;
+    elem.SetArray(elem.GetArray());
+    check(g_numArrayDtors == 0, "SetArray(GetArray()) does not free the array");
+    check(elem.GetArray() == array, "SetArray(GetArray()) keeps the array installed");
+    g_numArrayDtors = 0;
+  }
+  check(g_numArrayDtors == 1, "the tint array element frees its array exactly once");
+
+  // Control: a different array must still be released.
+  {
+    CIccMpeTintArray elem;
+    elem.SetArray(new CountingNumArray);
+
+    g_numArrayDtors = 0;
+    elem.SetArray(new CountingNumArray);
+    check(g_numArrayDtors == 1, "SetArray with a new array frees the old one");
+    g_numArrayDtors = 0;
+  }
+}
+
+// Adjacent to #2634, found reviewing it: CIccMpeTintArray::operator= deletes
+// m_Array but only reassigns it inside `if (tintArray.m_Array)`, so a source
+// with no array leaves the member dangling and the destructor writes through it.
+// The copy constructor has the same missing else, which leaves the member
+// indeterminate rather than dangling -- undefined, but it did not reproduce.
+static void testTintArrayCopyFromEmpty()
+{
+  {
+    CIccMpeTintArray dst;
+    CIccMpeTintArray src;
+    dst.SetArray(new CountingNumArray);
+    check(src.GetArray() == NULL, "the source element has no array");
+
+    g_numArrayDtors = 0;
+    assignThroughRef(dst, src);
+    check(g_numArrayDtors == 1, "assigning an empty element releases the old array");
+    check(dst.GetArray() == NULL,
+          "assigning an empty element clears the array instead of leaving it dangling");
+    g_numArrayDtors = 0;
+  }
+  check(g_numArrayDtors == 0, "nothing is released a second time");
+
+  // NOT a discriminator, and deliberately kept anyway.  The copy constructor's
+  // missing else leaves m_Array indeterminate rather than dangling, and an
+  // indeterminate pointer reads as NULL often enough that this assertion passes
+  // on an unfixed build too -- verified by mutating the else branch out, which
+  // leaves the whole suite green.  It documents the contract; the fix for it
+  // rests on the standard, not on this line going red.
+  {
+    CIccMpeTintArray src;
+    CIccMpeTintArray copy(src);
+    check(copy.GetArray() == NULL, "copy-constructing an empty element leaves no array");
+  }
+
+  // Control: a non-empty source must still be deep-copied, not aliased.
+  {
+    CIccMpeTintArray dst;
+    CIccMpeTintArray src;
+    src.SetArray(new CountingNumArray);
+
+    assignThroughRef(dst, src);
+    check(dst.GetArray() != NULL, "assigning a non-empty element installs an array");
+    check(dst.GetArray() != src.GetArray(),
+          "assigning a non-empty element deep-copies rather than aliases");
+    g_numArrayDtors = 0;
+  }
+}
+
+static void testDictEntryLocalized()
+{
+  {
+    CIccDictEntry entry;
+    CountingMLU *name = new CountingMLU;
+    entry.SetNameLocalized(name);
+
+    g_mluDtors = 0;
+    check(entry.SetNameLocalized(entry.GetNameLocalized()),
+          "SetNameLocalized(GetNameLocalized()) still reports a value was held");
+    check(g_mluDtors == 0, "SetNameLocalized(GetNameLocalized()) does not free it");
+    check(entry.GetNameLocalized() == name,
+          "SetNameLocalized(GetNameLocalized()) keeps it installed");
+    g_mluDtors = 0;
+  }
+  check(g_mluDtors == 1, "the entry frees its localized name exactly once");
+
+  {
+    CIccDictEntry entry;
+    CountingMLU *value = new CountingMLU;
+    entry.SetValueLocalized(value);
+
+    g_mluDtors = 0;
+    check(entry.SetValueLocalized(entry.GetValueLocalized()),
+          "SetValueLocalized(GetValueLocalized()) still reports a value was held");
+    check(g_mluDtors == 0, "SetValueLocalized(GetValueLocalized()) does not free it");
+    check(entry.GetValueLocalized() == value,
+          "SetValueLocalized(GetValueLocalized()) keeps it installed");
+    g_mluDtors = 0;
+  }
+  check(g_mluDtors == 1, "the entry frees its localized value exactly once");
+
+  // Control: a different object must still be released, and the result must
+  // still distinguish "replaced something" from "there was nothing".
+  {
+    CIccDictEntry entry;
+    entry.SetNameLocalized(new CountingMLU);
+
+    g_mluDtors = 0;
+    check(entry.SetNameLocalized(new CountingMLU),
+          "SetNameLocalized with a new value reports the old one was replaced");
+    check(g_mluDtors == 1, "SetNameLocalized with a new value frees the old one");
+    g_mluDtors = 0;
+  }
+
+  // Control: the NULL alias must report that nothing was held, as before.
+  {
+    CIccDictEntry entry;
+    check(!entry.SetNameLocalized(NULL),
+          "SetNameLocalized(NULL) on an empty entry reports nothing was held");
+    check(!entry.SetValueLocalized(NULL),
+          "SetValueLocalized(NULL) on an empty entry reports nothing was held");
+  }
+}
+
 static void testMBBTag()
 {
   // CIccMBB::SetCLUT() is the same shape, and its dimension check cannot catch
@@ -701,6 +867,9 @@ int main()
   testSpectralMatrixSelfAssign();
   testSpectralObserverSelfAssign();
   testSpectralApplyMtx();
+  testTintArraySetArray();
+  testTintArrayCopyFromEmpty();
+  testDictEntryLocalized();
   testMBBTag();
   testMpeCAM();
 
