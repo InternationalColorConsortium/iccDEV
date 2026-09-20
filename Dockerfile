@@ -17,6 +17,8 @@ ARG BUILD_JOBS=32
 ARG FLAMEGRAPH_COMMIT=41fee1f99f9276008b7cd112fca19dc3ea84ac32
 ARG LLVM_MSAN_LIBCXX_COMMIT=1ab49a973e210e97d61e5db6557180dcb92c3e98
 ARG LIBXML2_MSAN_COMMIT=3d840e17858de03a09fba8b202e3a89267d5795a
+ARG CODEQL_VERSION=2.27.0
+ARG CODEQL_SHA256=8e870433e5c80d0e916c3c1aa9005fc88aab990bcdcc649fade9dfc4d7e94305
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -185,6 +187,16 @@ RUN hadolint_version="2.15.1" \
  && rm -f /tmp/hadolint \
  && hadolint --version
 
+RUN codeql_archive="/tmp/codeql-bundle-linux64.tar.gz" \
+ && curl -fsSLo "$codeql_archive" \
+      "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${CODEQL_VERSION}/codeql-bundle-linux64.tar.gz" \
+ && printf '%s  %s\n' "$CODEQL_SHA256" "$codeql_archive" | sha256sum -c - \
+ && tar -xzf "$codeql_archive" -C /opt \
+ && test -x /opt/codeql/codeql \
+ && ln -s /opt/codeql/codeql /usr/local/bin/codeql \
+ && rm -f "$codeql_archive" \
+ && codeql version
+
 RUN python3 -m venv /opt/iccdev-workflow-qa \
  && /opt/iccdev-workflow-qa/bin/python -m pip install \
       --upgrade \
@@ -322,7 +334,7 @@ RUN chmod 0755 /usr/local/bin/iccdev-banner \
  && chown iccdev-ci:iccdev-ci /workspace/.bashrc
 
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
-  CMD ["bash", "-c", "clang --version >/dev/null && cmake --version >/dev/null && command -v ninja >/dev/null && command -v cppcheck >/dev/null && command -v clang-tidy >/dev/null && command -v scan-build >/dev/null && command -v hadolint >/dev/null && command -v zizmor >/dev/null && command -v shellcheck >/dev/null && command -v afl-fuzz >/dev/null && command -v valgrind >/dev/null && command -v ms_print >/dev/null && command -v callgrind_annotate >/dev/null && command -v perf >/dev/null && command -v lcov >/dev/null && command -v genhtml >/dev/null && command -v gcovr >/dev/null && command -v llvm-cov >/dev/null && command -v llvm-profdata >/dev/null && perl -MJSON::XS -e 1 && test \"$LCOV_HOME\" = / && grep -Fqx 'geninfo_unexecuted_blocks = 1' /etc/lcovrc && test -x \"$ICCDEV_FLAMEGRAPH_DIR/stackcollapse-perf.pl\" && test -x \"$ICCDEV_FLAMEGRAPH_DIR/flamegraph.pl\" && test \"$(git -C \"$ICCDEV_FLAMEGRAPH_DIR\" rev-parse HEAD)\" = \"$ICCDEV_FLAMEGRAPH_REVISION\" && command -v iccdev-valgrind-build >/dev/null && command -v iccdev-valgrind-run >/dev/null && command -v iccdev-valgrind-status >/dev/null && command -v iccdev-valgrind-validate >/dev/null && command -v iccdev-valgrind-self-test >/dev/null && command -v iccdev-build-msan-libcxx >/dev/null && test -f /usr/include/valgrind/memcheck.h && test -f /opt/iccdev-msan-libcxx/lib/libc++.so.1 && test -f /opt/iccdev-msan-libcxx/lib/libc++abi.so.1 && test -f /opt/iccdev-msan-libcxx/lib/libxml2.so && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null"]
+  CMD ["bash", "-c", "clang --version >/dev/null && cmake --version >/dev/null && command -v ninja >/dev/null && command -v cppcheck >/dev/null && command -v clang-tidy >/dev/null && command -v scan-build >/dev/null && command -v hadolint >/dev/null && command -v codeql >/dev/null && command -v zizmor >/dev/null && command -v shellcheck >/dev/null && command -v afl-fuzz >/dev/null && command -v valgrind >/dev/null && command -v ms_print >/dev/null && command -v callgrind_annotate >/dev/null && command -v perf >/dev/null && command -v lcov >/dev/null && command -v genhtml >/dev/null && command -v gcovr >/dev/null && command -v llvm-cov >/dev/null && command -v llvm-profdata >/dev/null && perl -MJSON::XS -e 1 && test \"$LCOV_HOME\" = / && grep -Fqx 'geninfo_unexecuted_blocks = 1' /etc/lcovrc && test -x \"$ICCDEV_FLAMEGRAPH_DIR/stackcollapse-perf.pl\" && test -x \"$ICCDEV_FLAMEGRAPH_DIR/flamegraph.pl\" && test \"$(git -C \"$ICCDEV_FLAMEGRAPH_DIR\" rev-parse HEAD)\" = \"$ICCDEV_FLAMEGRAPH_REVISION\" && command -v iccdev-valgrind-build >/dev/null && command -v iccdev-valgrind-run >/dev/null && command -v iccdev-valgrind-status >/dev/null && command -v iccdev-valgrind-validate >/dev/null && command -v iccdev-valgrind-self-test >/dev/null && command -v iccdev-build-msan-libcxx >/dev/null && test -f /usr/include/valgrind/memcheck.h && test -f /opt/iccdev-msan-libcxx/lib/libc++.so.1 && test -f /opt/iccdev-msan-libcxx/lib/libc++abi.so.1 && test -f /opt/iccdev-msan-libcxx/lib/libxml2.so && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null"]
 
 LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 ENV ICCDEV_SOURCE_REVISION="${GIT_COMMIT}"

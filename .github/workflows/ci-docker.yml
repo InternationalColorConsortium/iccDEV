@@ -202,7 +202,10 @@ jobs:
             set -euo pipefail
             command -v git gh clang clang++ gcc g++ cmake cppcheck clang-tidy scan-build
             command -v hadolint zizmor shellcheck afl-fuzz valgrind ms_print callgrind_annotate llvm-symbolizer
-            command -v lcov genhtml gcovr llvm-cov llvm-profdata perf gprof strace
+            command -v codeql lcov genhtml gcovr llvm-cov llvm-profdata perf gprof strace
+            codeql version
+            codeql resolve queries .github/codeql-queries/iccdev-security-suite.qls
+            codeql resolve queries .github/codeql-queries/iccdev-mcp/iccdev-mcp-security-suite.qls
             perl -MJSON::XS -e 1
             test "$LCOV_HOME" = /
             grep -Fqx "geninfo_unexecuted_blocks = 1" /etc/lcovrc

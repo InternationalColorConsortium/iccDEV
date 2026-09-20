@@ -110,8 +110,8 @@ jobs:
           if command -v codeql >/dev/null 2>&1; then
             dirname "$(command -v codeql)" >> "$GITHUB_PATH"
           else
-            # Keep in lockstep with the same pin in ci-codeql-security.yml; the digest
-            # is the release asset's, so bump CODEQL_VER and CODEQL_SHA256 together:
+            # Keep this pin synchronized with the other workflow pins and Dockerfile.
+            # The digest is the release asset's, so bump CODEQL_VER and CODEQL_SHA256 together:
             #   gh api repos/github/codeql-action/releases/tags/codeql-bundle-v"$CODEQL_VER" \
             #     --jq '.assets[]|select(.name=="codeql-bundle-linux64.tar.gz").digest'
             CODEQL_VER="2.27.0"
