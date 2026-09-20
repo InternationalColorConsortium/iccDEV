@@ -65,7 +65,7 @@ or hosted preflight remains the final workflow security signal.
 | Workflow YAML | Workflow governance prompt, YAML parse, `actionlint`, `zizmor`, CodeQL Actions analysis, expression-in-run scan |
 | Python script | Python syntax check and CodeQL Python analysis |
 | Shell script | ShellCheck and `zizmor`; CodeQL Actions covers inline workflow `run:` blocks, not standalone shell scripts |
-| C/C++ or CMake security path | CodeQL local script or hosted `ci-codeql-security` |
+| C/C++ or CMake security path | CodeQL local script or hosted `ci-codeql-security`; query changes also require a positive fixture and a safe negative control |
 | Parser/profile/tool behavior | Code review hunting prompt plus sanitizer build where practical |
 | Release, WASM, vcpkg | Governance prompt plus package/runtime smoke logs |
 | Dockerfile or container image | `hadolint`, Trivy config/image scan, Dockle/Grype/Syft when practical |

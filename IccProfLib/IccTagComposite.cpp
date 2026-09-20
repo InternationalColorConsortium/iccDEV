@@ -1734,7 +1734,7 @@ CIccTag* CIccTagArray::GetIndex(icUInt32Number nIndex) const
 */
 bool CIccTagArray::AttachTag(icUInt32Number nIndex, CIccTag *pTag)
 {
-  if (nIndex>m_nSize || !pTag) {
+  if (!m_TagVals || nIndex>=m_nSize || !pTag) {
     return false;
   }
 
@@ -1764,7 +1764,7 @@ bool CIccTagArray::AttachTag(icUInt32Number nIndex, CIccTag *pTag)
 */
 CIccTag * CIccTagArray::DetachTag(icUInt32Number nIndex, bool bDeleteFlag)
 {
-   if (nIndex>m_nSize)
+   if (!m_TagVals || nIndex>=m_nSize)
      return NULL;
 
    CIccTag *rv = m_TagVals[nIndex].ptr;

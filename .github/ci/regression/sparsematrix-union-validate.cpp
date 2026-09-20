@@ -151,6 +151,17 @@ bool nearly(icFloatNumber a, icFloatNumber b)
   return d <= 1.0e-5f;
 }
 
+int reproduceGetSparseMatrixOnePast()
+{
+  CIccTagSparseMatrixArray tag(2, kWords);
+  tag.SetMatrixType(icSparseMatrixFloatNum);
+
+  CIccSparseMatrix boundary;
+  const bool accepted = tag.GetSparseMatrix(boundary, 2,
+                                             /*bInitFromData=*/true);
+  return accepted ? 1 : 0;
+}
+
 // ---------------------------------------------------------------------------
 // Levels 1 and 2: Union() semantics on differing patterns.
 // ---------------------------------------------------------------------------
@@ -230,6 +241,19 @@ void validateOfATwoMatrixSparseTagTerminates()
   tag.Validate("sigPath", report, NULL);
 
   check(true, "validate: Validate() returns on a two-matrix sparse tag instead of hanging");
+
+  // The valid indices are 0 and 1.  GetSparseMatrix() used `>` rather than
+  // `>=`, so index 2 constructed a matrix view one whole record past the
+  // allocation.  The public accessor must reject both boundary and empty-tag
+  // cases before doing pointer arithmetic.
+  CIccSparseMatrix boundary;
+  check(!tag.GetSparseMatrix(boundary, 2, /*bInitFromData=*/false),
+        "validate: matrix index equal to the matrix count is refused");
+
+  CIccTagSparseMatrixArray empty;
+  check(empty.Reset(0, 0), "validate: empty matrix-array fixture authored");
+  check(!empty.GetSparseMatrix(boundary, 0, /*bInitFromData=*/false),
+        "validate: matrix index zero on an empty tag is refused");
 }
 
 // ---------------------------------------------------------------------------
@@ -271,8 +295,17 @@ void unionOfIdenticalPatternsStillWorks()
 
 } // namespace
 
-int main()
+int main(int argc, char **argv)
 {
+  if (argc == 2 && !std::strcmp(argv[1], "--repro-get-sparse-matrix-one-past"))
+    return reproduceGetSparseMatrixOnePast();
+  if (argc != 1) {
+    std::fprintf(stderr,
+                 "usage: %s [--repro-get-sparse-matrix-one-past]\n",
+                 argv[0]);
+    return 2;
+  }
+
   unionOfDifferentPatternsIsTheMaskOfBothColumnSets();
   validateOfATwoMatrixSparseTagTerminates();
   unionOfIdenticalPatternsStillWorks();

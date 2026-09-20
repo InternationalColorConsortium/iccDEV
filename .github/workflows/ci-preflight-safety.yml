@@ -114,9 +114,9 @@ jobs:
             # is the release asset's, so bump CODEQL_VER and CODEQL_SHA256 together:
             #   gh api repos/github/codeql-action/releases/tags/codeql-bundle-v"$CODEQL_VER" \
             #     --jq '.assets[]|select(.name=="codeql-bundle-linux64.tar.gz").digest'
-            CODEQL_VER="2.26.4"
+            CODEQL_VER="2.27.0"
             CODEQL_ARCHIVE="/tmp/codeql-bundle-linux64.tar.gz"
-            CODEQL_SHA256="48e1ab8b874d57bd6fd7c90fefee75addc5a45e9bd063982df9beb45a62dd5d3"
+            CODEQL_SHA256="8e870433e5c80d0e916c3c1aa9005fc88aab990bcdcc649fade9dfc4d7e94305"
             CODEQL_URL="https://github.com/github/codeql-action/releases/download"
             curl -fsSL --retry 3 \
               -o "${CODEQL_ARCHIVE}" \
