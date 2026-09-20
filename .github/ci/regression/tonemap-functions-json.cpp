@@ -195,6 +195,92 @@ int main()
     checkChannels(elem, std::vector<icFloatNumber>(e, e + 3), "F D F");
   }
 
+  /* #2619: a finite JSON number beyond the float32 range casts to infinity.
+     Validate() only counts parameters, so the profile saved clean and
+     iccToJson wrote the parameter back as null -- a document this same reader
+     refuses with "non-numeric value".  The writer produced input its own
+     reader rejects, from a profile the library called valid. */
+  {
+    std::string parseStr;
+    CIccMpeJsonToneMap elem;
+    std::string funcs = "[{\"functionType\": 0, \"parameters\": [1e308, 0.0, 0.0]}]";
+    check(!parse(elemDoc(1, funcs.c_str()), elem, parseStr), "overflowing parameter",
+          "parsed a parameter beyond the float32 range");
+    check(has(parseStr, "non-finite"), "overflowing parameter",
+          ("no diagnostic, parseStr was: " + parseStr).c_str());
+  }
+  {
+    std::string parseStr;
+    CIccMpeJsonToneMap elem;
+    std::string funcs = "[{\"functionType\": 0, \"parameters\": [-1e308, 0.0, 0.0]}]";
+    check(!parse(elemDoc(1, funcs.c_str()), elem, parseStr), "negative overflow",
+          "parsed a parameter below the float32 range");
+  }
+  {
+    /* The largest value that still fits stays acceptable, so the guard is a
+       range test and not a magnitude cap. */
+    std::string parseStr;
+    CIccMpeJsonToneMap elem;
+    std::string funcs = "[{\"functionType\": 0, \"parameters\": [3.4028234663852886e38, 0.0, 1.0]}]";
+    check(parse(elemDoc(1, funcs.c_str()), elem, parseStr), "float32 maximum",
+          ("refused the largest representable float32: " + parseStr).c_str());
+  }
+
+  /* #2621: reserved was written by neither side, so a non-zero value could not
+     survive an ICC -> JSON -> ICC cycle.  It now round-trips, and is still
+     omitted when zero so no corpus document gains a key. */
+  {
+    std::string parseStr;
+    CIccMpeJsonToneMap elem;
+    std::string funcs = "[{\"functionType\": 0, \"reserved\": 9, \"parameters\": [1.0, 0.0, 1.0]}]";
+    check(parse(elemDoc(1, funcs.c_str()), elem, parseStr), "reserved round trip",
+          ("a legal reserved was refused: " + parseStr).c_str());
+
+    IccJson out;
+    check(elem.ToJson(out), "reserved round trip", "ToJson() refused the element");
+    std::string text = out.dump();
+    check(has(text, "\"reserved\":9") || has(text, "\"reserved\": 9"), "reserved round trip",
+          ("reserved was dropped; ToJson() wrote: " + text).c_str());
+  }
+  {
+    std::string parseStr;
+    CIccMpeJsonToneMap elem;
+    std::string funcs = std::string("[") + kFunc1 + "]";
+    check(parse(elemDoc(1, funcs.c_str()), elem, parseStr), "reserved omitted when zero",
+          ("refused: " + parseStr).c_str());
+    IccJson out;
+    check(elem.ToJson(out), "reserved omitted when zero", "ToJson() refused the element");
+    check(!has(out.dump(), "\"reserved\""), "reserved omitted when zero",
+          ("a zero reserved was written out: " + out.dump()).c_str());
+  }
+
+  /* reserved is held to the same rule as functionType and reserved2: a value
+     that is not an integer, or does not fit the icUInt32Number it is stored
+     in, is refused rather than truncated or wrapped. */
+  {
+    const char *bad[] = {
+      "[{\"functionType\": 0, \"reserved\": 1.5, \"parameters\": [1.0, 0.0, 1.0]}]",
+      "[{\"functionType\": 0, \"reserved\": -1, \"parameters\": [1.0, 0.0, 1.0]}]",
+      "[{\"functionType\": 0, \"reserved\": 4294967296, \"parameters\": [1.0, 0.0, 1.0]}]",
+    };
+    for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
+      std::string parseStr;
+      CIccMpeJsonToneMap elem;
+      check(!parse(elemDoc(1, bad[i]), elem, parseStr), "reserved out of range",
+            (std::string("parsed a malformed reserved: ") + bad[i]).c_str());
+      check(has(parseStr, "reserved is out of range"), "reserved out of range",
+            ("no diagnostic, parseStr was: " + parseStr).c_str());
+    }
+  }
+  {
+    /* The largest value that does fit is still read. */
+    std::string parseStr;
+    CIccMpeJsonToneMap elem;
+    std::string funcs = "[{\"functionType\": 0, \"reserved\": 4294967295, \"parameters\": [1.0, 0.0, 1.0]}]";
+    check(parse(elemDoc(1, funcs.c_str()), elem, parseStr), "reserved uInt32 maximum",
+          ("refused the largest representable reserved: " + parseStr).c_str());
+  }
+
   if (g_fail) {
     std::printf("%d check(s) failed\n", g_fail);
     return 1;

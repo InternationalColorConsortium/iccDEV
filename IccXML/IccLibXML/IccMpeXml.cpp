@@ -2057,6 +2057,14 @@ bool CIccXmlToneMapFunc::ParseXml(xmlNode* pNode, std::string& parseStr)
     parseStr += "Invalid Reserved2 in Tone Map Function\n";
     return false;
   }
+  // ToXml() writes Reserved when it is non-zero, but nothing read it back, so
+  // an ICC -> XML -> ICC cycle dropped it while Reserved2 survived.  The
+  // element's own Reserved is unaffected: IccTagXml.cpp parses that generically
+  // for every MPE element.  Same "0" default as above (#2621).
+  if (!icXmlParseU32(icXmlAttrValue(pNode, "Reserved", "0"), m_nReserved)) {
+    parseStr += "Invalid Reserved in Tone Map Function\n";
+    return false;
+  }
   if (!icXmlParseU16(icXmlAttrValue(funcType), m_nFunctionType)) {
     parseStr += "Invalid FunctionType in Tone Map Function\n";
     return false;
@@ -2086,6 +2094,19 @@ bool CIccXmlToneMapFunc::ParseXml(xmlNode* pNode, std::string& parseStr)
   if (args.GetSize() < m_nParameters) {
     parseStr += "Too few parameters in Tone Map Function\n";
     return false;
+  }
+
+  // icParseArrayValue() saturates an out-of-range magnitude to the float32
+  // limit, so "1e308" arrives finite here -- but it returns a real NaN for the
+  // literal "nan", which Validate() does not look at.  iccToJson then writes
+  // that parameter back as null, a document the JSON reader refuses.  The
+  // formula segment above has refused a non-finite parameter since #2547
+  // (#2619).
+  for (icUInt16Number i = 0; i < m_nParameters; i++) {
+    if (!std::isfinite(args.GetBuf()[i])) {
+      parseStr += "Non-finite parameter in Tone Map Function\n";
+      return false;
+    }
   }
 
   free(m_params);

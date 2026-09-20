@@ -220,6 +220,73 @@ int main()
     check(has(parseStr, "Too many"), "too many", ("no diagnostic, parseStr was: " + parseStr).c_str());
   }
 
+  /* #2619: icParseArrayValue() returns a real NaN for the literal "nan", and
+     Validate() only counts parameters, so the element used to load clean and
+     iccToJson then wrote the parameter back as null -- which the JSON reader
+     refuses.  An out-of-range magnitude is NOT the vector here: that same
+     helper saturates "1e308" to the float32 limit, so it arrives finite and
+     must still be accepted. */
+  {
+    std::string parseStr;
+    CIccMpeXmlToneMap elem;
+    std::string funcs =
+      std::string("<ToneMapFunctions>")
+      + "<ToneMapFunction FunctionType=\"0\">nan 0 0</ToneMapFunction>"
+      + "</ToneMapFunctions>";
+    check(!parseXml(elemDoc(1, funcs), elem, parseStr), "nan parameter",
+          "parsed a function whose first parameter is NaN");
+    check(has(parseStr, "Non-finite parameter"), "nan parameter",
+          ("no diagnostic, parseStr was: " + parseStr).c_str());
+  }
+  {
+    std::string parseStr;
+    CIccMpeXmlToneMap elem;
+    std::string funcs =
+      std::string("<ToneMapFunctions>")
+      + "<ToneMapFunction FunctionType=\"0\">1e308 0 0</ToneMapFunction>"
+      + "</ToneMapFunctions>";
+    check(parseXml(elemDoc(1, funcs), elem, parseStr), "saturating parameter",
+          ("refused a value the array parser saturates to a finite float: " + parseStr).c_str());
+  }
+
+  /* #2621: ToXml() wrote Reserved but ParseXml() never read it, so the value
+     was dropped on an ICC -> XML -> ICC cycle while Reserved2 survived. */
+  {
+    std::string parseStr;
+    CIccMpeXmlToneMap elem;
+    std::string funcs =
+      std::string("<ToneMapFunctions>")
+      + "<ToneMapFunction FunctionType=\"0\" Reserved=\"9\" Reserved2=\"3\">1 0 0</ToneMapFunction>"
+      + "</ToneMapFunctions>";
+    check(parseXml(elemDoc(1, funcs), elem, parseStr), "reserved round trip",
+          ("refused a function carrying Reserved: " + parseStr).c_str());
+
+    std::string xml;
+    check(elem.ToXml(xml, ""), "reserved round trip", "ToXml() refused the element");
+    check(has(xml, "Reserved=\"9\""), "reserved round trip",
+          ("Reserved was dropped; ToXml() wrote: " + xml).c_str());
+    check(has(xml, "Reserved2=\"3\""), "reserved round trip",
+          ("Reserved2 was dropped; ToXml() wrote: " + xml).c_str());
+  }
+
+  /* A Reserved that does not fit an icUInt32Number is refused rather than
+     wrapped, the rule FunctionType and Reserved2 already follow. */
+  {
+    std::string parseStr;
+    CIccMpeXmlToneMap elem;
+    std::string funcs =
+      std::string("<ToneMapFunctions>")
+      + "<ToneMapFunction FunctionType=\"0\" Reserved=\"4294967296\">1 0 0</ToneMapFunction>"
+      + "</ToneMapFunctions>";
+    check(!parseXml(elemDoc(1, funcs), elem, parseStr), "reserved out of range",
+          "parsed a Reserved past the uInt32 ceiling");
+    /* Matched in full: "Invalid Reserved" alone is a prefix of the
+       pre-existing "Invalid Reserved2 in Tone Map Function", so the shorter
+       needle would also pass if the Reserved2 branch were the one refusing. */
+    check(has(parseStr, "Invalid Reserved in Tone Map Function"), "reserved out of range",
+          ("no diagnostic, parseStr was: " + parseStr).c_str());
+  }
+
   if (g_fail) {
     std::printf("%d check(s) failed\n", g_fail);
     return 1;

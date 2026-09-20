@@ -845,6 +845,12 @@ CIccToneMapFunc* CIccJsonToneMapFunc::NewCopy() const
 bool CIccJsonToneMapFunc::ToJson(IccJson &j)
 {
   j["functionType"] = (int)m_nFunctionType;
+  // reserved was written by neither side, so a non-zero value could not
+  // survive an ICC -> JSON -> ICC cycle any more than it survived the XML one.
+  // Emitted only when set, as reserved2 is, so no corpus document gains a key
+  // (#2621).
+  if (m_nReserved)
+    j["reserved"] = (unsigned int)m_nReserved;
   if (m_nReserved2)
     j["reserved2"] = (int)m_nReserved2;
   IccJson params = IccJson::array();
@@ -858,6 +864,10 @@ bool CIccJsonToneMapFunc::ToJson(IccJson &j)
 bool CIccJsonToneMapFunc::ParseJson(const IccJson &j, std::string &parseStr)
 {
   int funcType = 0, reserved2 = 0;
+  // Widened past the int the two fields above use: m_nReserved is an
+  // icUInt32Number, so a value with bit 31 set is legal here and an int would
+  // not hold it.
+  icUInt64Number reserved = 0;
   // A missing functionType read as type 0, the one supported type, so a
   // function that names none at all loaded as a valid one.  The XML twin
   // refuses it, as does the formula segment here (#2547).  It must be a JSON
@@ -884,7 +894,21 @@ bool CIccJsonToneMapFunc::ParseJson(const IccJson &j, std::string &parseStr)
     parseStr += "reserved2 is out of range in ToneMapFunction\n";
     return false;
   }
+  // Held to the same rule as functionType and reserved2 above, rather than the
+  // bare jGetValue() the formula segment uses: this read is new here, and an
+  // unvalidated one sitting between two validated ones would let "reserved":
+  // 1.5 truncate and "reserved": -1 wrap to 0xFFFFFFFF in silence.
+  // is_number_unsigned() is the whole negativity test: nlohmann tags -1 as
+  // is_number_integer() but not unsigned, and 1.5 as neither, so the one
+  // predicate refuses both without a signed intermediate to wrap through.
+  if (jsonExistsField(j, "reserved") &&
+      (!j["reserved"].is_number_unsigned() ||
+       !jGetValue(j, "reserved", reserved) || reserved > 0xFFFFFFFFull)) {
+    parseStr += "reserved is out of range in ToneMapFunction\n";
+    return false;
+  }
   m_nFunctionType = (icUInt16Number)funcType;
+  m_nReserved     = (icUInt32Number)reserved;
   m_nReserved2    = (icUInt16Number)reserved2;
 
   switch (m_nFunctionType) {
@@ -920,8 +944,13 @@ bool CIccJsonToneMapFunc::ParseJson(const IccJson &j, std::string &parseStr)
     return false;
   }
   for (int i = 0; i < nParameters; i++) {
-    if (!icJsonGetFloatNumber(j["parameters"][i], m_params[i])) {
-      parseStr += "parameters contains non-numeric value in ToneMapFunction\n";
+    // A finite JSON number beyond the float32 range casts to infinity, which
+    // Validate() does not look at: the profile saved clean and iccToJson then
+    // wrote the parameter back as null, a document this same reader refuses.
+    // The formula segment above has refused this since #2547 (#2619).
+    if (!icJsonGetFloatNumber(j["parameters"][i], m_params[i]) ||
+        !std::isfinite(m_params[i])) {
+      parseStr += "parameters contains a non-numeric or non-finite value in ToneMapFunction\n";
       return false;
     }
   }
