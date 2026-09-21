@@ -200,8 +200,9 @@ The active `ci-qa-flags` ruleset requires the three `ci-pr-action` contexts.
 The `ci-qa-pr-docker-testing` integrity ruleset does not require hosted status
 contexts before a direct maintainer push. It requires signed commits, linear
 fast-forward history, and deletion protection; maintainers dispatch
-`ci-pr-action` and `ci-docker` immediately after pushing the testing branch.
-Pull requests targeting `ci-qa-pr-docker-testing` also run `ci-pr-action`.
+`ci-pr-action` and manually dispatch `ci-docker` immediately after pushing the
+testing branch. Pull requests targeting `ci-qa-pr-docker-testing` also run
+`ci-pr-action`.
 Container-surface changes select its workflow-security gates only; they do not
 create a job-local Docker image.
 

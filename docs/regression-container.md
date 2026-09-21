@@ -112,9 +112,10 @@ Deadlines bound responses and startup; cleanup removes both named containers on
 success or failure. Failure logs stay in the CI job log and the optional report
 directory; CI uploads those diagnostics on failure. Inventories and image
 identity are printed rather than asserting a fixed tool count. `ci-docker`
-uses the same helper, requiring native validation. It publishes only from
-`master`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`, and release
-tags; other feature branches remain non-publishing.
+uses the same helper, requiring native validation. It is manual-dispatch only;
+when dispatched from `master`, `ci-qa-pr-docker-testing`,
+`ci-publish-colourbill-ctrl`, or a release tag, it publishes the corresponding
+approved image tags. Other feature branches remain non-publishing.
 The read-only `ci-docker-pr` caller uses it when building the changed Dockerfile;
 its trusted-base-image-only path does not claim to test a new runtime. No PR
 runtime artifacts are uploaded. The MCP package workflow includes the shared
