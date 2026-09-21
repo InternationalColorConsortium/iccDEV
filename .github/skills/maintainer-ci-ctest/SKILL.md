@@ -184,10 +184,11 @@ docker run --rm iccdev-container-check <smoke-command>
 
 For the unified `Dockerfile`, follow the complete local development-environment
 preflight in `docs/regression-container.md#maintainer-preflight-and-security-checks`.
-It requires workflow and Dockerfile policy checks, a no-cache build, analyzer
-inventory and runtime smoke, a healthy image, and Trivy vulnerability/secret
-triage. If the image is published, pass the published branch or SHA tag to
-`ci-iccdev-tool-tests.yml`.
+Cached builds are permitted for development iterations. The final pre-push
+proof requires workflow and Dockerfile policy checks, a no-cache build,
+analyzer inventory and runtime smoke, a healthy image, and Trivy
+vulnerability/secret triage. If the image is published, pass the published
+branch or SHA tag to `ci-iccdev-tool-tests.yml`.
 
 ## GitHub Validation
 

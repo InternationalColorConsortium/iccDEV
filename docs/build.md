@@ -1029,10 +1029,15 @@ non-libc++ toolchains reject non-`none` values at configure time. Use only
 `Dockerfile*` files are maintainer-owned release and CI infrastructure. General
 source builds should use the platform package lists above; only maintainers
 should change container package pins, published image tags, or GHCR workflows.
+The canonical `ci-docker` workflow is manual-dispatch only.
 
 | File | Maintainer purpose | Publish/validation path |
 |------|--------------------|-------------------------|
 | `Dockerfile` | Pinned Ubuntu unified image for runtime, MCP, and maintainer checks, with Clang/LLVM 22 defaults, a Clang 21 pair for the packaged AFL++ LLVM plugin, GCC 15.2+, sanitizer, debugger, fuzzing, git, curl, and GitHub CLI tooling. | Follow the [container maintainer preflight](regression-container.md#maintainer-preflight-and-security-checks) before publishing; AFL wrapper changes also need the `docs/afl-fuzzing.md` container bootstrap probe. Consumer workflows select `latest`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`, an immutable SHA, or a release tag. |
+
+Local development builds may use Docker's build cache to shorten edit and test
+cycles. Run the final pre-push container preflight with `--no-cache` so the
+published dependency envelope is still verified from the canonical base.
 
 For reproducible maintainer checks, pass the immutable SHA tag to
 `ci-iccdev-tool-tests.yml`; use `latest` only for the current `master`

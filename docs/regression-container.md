@@ -112,9 +112,10 @@ Deadlines bound responses and startup; cleanup removes both named containers on
 success or failure. Failure logs stay in the CI job log and the optional report
 directory; CI uploads those diagnostics on failure. Inventories and image
 identity are printed rather than asserting a fixed tool count. `ci-docker`
-uses the same helper, requiring native validation. It publishes only from
-`master`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`, and release
-tags; other feature branches remain non-publishing.
+uses the same helper, requiring native validation. It is manual-dispatch only;
+when dispatched from `master`, `ci-qa-pr-docker-testing`,
+`ci-publish-colourbill-ctrl`, or a release tag, it publishes the corresponding
+approved image tags. Other feature branches remain non-publishing.
 The read-only `ci-docker-pr` caller uses it when building the changed Dockerfile;
 its trusted-base-image-only path does not claim to test a new runtime. No PR
 runtime artifacts are uploaded. The MCP package workflow includes the shared
@@ -353,10 +354,11 @@ operations.
 
 ## Building and Publishing
 
-Build the one Dockerfile locally before publishing:
+Use Docker's build cache for normal local development and repeated smoke-test
+iterations:
 
 ```bash
-docker build --no-cache -t iccdev:local .
+docker build -t iccdev:local .
 docker run --rm iccdev:local bash -lc '
   set -euo pipefail
   iccDumpProfile -v Testing/sRGB_v4_ICC_preference.icc >/dev/null
@@ -369,9 +371,11 @@ docker run --rm iccdev:local bash -lc '
 
 Run this complete local preflight from a clean checkout before pushing a
 Dockerfile, container workflow, published-image, or container-runtime change.
-It verifies the host development environment, workflow and Dockerfile policy,
-the no-cache image build, the shipped analyzer inventory, runtime behavior, and
-the image health check.
+Cached builds are permitted while developing and debugging the image. The final
+pre-push proof uses `--no-cache` to verify every pinned dependency and build
+step from the canonical base. The preflight also verifies the host development
+environment, workflow and Dockerfile policy, shipped analyzer inventory,
+runtime behavior, and image health check.
 
 ```bash
 command -v docker gh actionlint zizmor hadolint trivy
@@ -458,11 +462,11 @@ around them. `iccdev-valgrind-qa.sh` configures its own non-sanitized Debug
 tree before running Memcheck. For concurrent code, replace the Memcheck
 arguments with `--tool helgrind --expect clean --runs 3`.
 
-`ci-docker` publishes the canonical package only from approved refs: `master`
-adds `latest` and the immutable SHA tag, `ci-qa-pr-docker-testing` and
-`ci-publish-colourbill-ctrl` add their integration tags and immutable SHA tags,
-and a `v*` ref adds its release tag and immutable SHA tag. Do not publish other
-branch, run, image-variant, or
+`ci-docker` is manual-dispatch only and publishes the canonical package only
+when dispatched from approved refs: `master` adds `latest` and the immutable
+SHA tag, `ci-qa-pr-docker-testing` and `ci-publish-colourbill-ctrl` add their
+integration tags and immutable SHA tags, and a `v*` ref adds its release tag
+and immutable SHA tag. Do not publish other branch, run, image-variant, or
 legacy-package tags. Publishing runs generate a compact CycloneDX SBOM with
 Anchore and create provenance with GitHub's `actions/attest-build-provenance`
 action. The workflow validates that the SBOM is nonempty and at most 16 MiB,

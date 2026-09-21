@@ -99,8 +99,9 @@ When changing AFL++ bootstrap behavior, also run the regression-container
 bootstrap probe documented in `docs/afl-fuzzing.md`.
 
 When changing fuzz patch stacks, the patch checker, the patch applicator, or
-`.github/ci/cfl/` build behavior, verify that `.github/workflows/ci-docker.yml` still
-rebuilds and tests the unified image for those paths.
+`.github/ci/cfl/` build behavior, manually dispatch
+`.github/workflows/ci-docker.yml` from an approved publishing ref to rebuild
+and test the unified image.
 
 ## Handoff
 
