@@ -70,7 +70,7 @@ typedef enum {
 } icConvertType;
 
 #define icXmlHalfFmt "%.8f"
-#define icXmlFloatFmt "%.12f"
+#define icXmlFloatFmt "%.9g"
 #define icXmlDoubleFmt "%.24lf"
 
 // Library-wide opt-in for <tag File="..."/> / <tag Filename="..."/>
