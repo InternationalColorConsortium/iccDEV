@@ -33,6 +33,23 @@
 
     XML is iccdev.tonemap-functions-xml, since IccMpeXml.h and IccMpeJson.h
     cannot share a translation unit.
+
+    #2633 adds two more IccMpeJson.cpp defects, unrelated to each other beyond
+    the file.  They live here rather than in a file of their own because they
+    need the same IccJSON link and the same reader:
+
+      * CIccJsonToneMapFunc::NewCopy() copy constructed, and the base copy
+        constructor was = default over an owning icFloatNumber *m_params, so
+        the copy and the original both free()d the same buffer.  Fixed in the
+        base, which is why the control below copies through the base type too.
+
+      * icJsonSegPosFromStr() tested for a trailing "inf" BEFORE it looked at
+        the sign, so "-inf" came back as the positive maximum; it also wanted
+        at least four characters, which "inf" has not, and matched only the
+        last three, which "+infinity" -- what icJsonSetSegPos() writes -- does
+        not end with.  Anything unmatched reached atof(), which returns a real
+        infinity that equals neither sentinel, so the writer emitted null.
+        These cases drive CIccSegmentedCurveJson, not a tone map.
 */
 
 #include "IccMpeBasic.h"
@@ -279,6 +296,180 @@ int main()
     std::string funcs = "[{\"functionType\": 0, \"reserved\": 4294967295, \"parameters\": [1.0, 0.0, 1.0]}]";
     check(parse(elemDoc(1, funcs.c_str()), elem, parseStr), "reserved uInt32 maximum",
           ("refused the largest representable reserved: " + parseStr).c_str());
+  }
+
+  /* #2633: NewCopy() must deep copy.  The copy is released first and then the
+     original goes out of scope; on an unfixed build both free the same
+     m_params and the process aborts on a double free rather than reporting a
+     FAIL, so the red here is the abort. */
+  {
+    icFloatNumber params[3] = { 1.0f, 2.0f, 3.0f };
+    CIccJsonToneMapFunc f;
+    check(f.SetFunction(0, 3, params), "NewCopy deep copy", "SetFunction refused three parameters");
+
+    CIccToneMapFunc *pCopy = f.NewCopy();
+    check(pCopy != NULL, "NewCopy deep copy", "NewCopy returned NULL");
+    if (pCopy) {
+      /* The copy must carry the values, not merely a pointer to them. */
+      IccJson jCopy;
+      CIccJsonToneMapFunc *pJson = dynamic_cast<CIccJsonToneMapFunc *>(pCopy);
+      check(pJson != NULL, "NewCopy deep copy", "NewCopy did not return the JSON subclass");
+      if (pJson) {
+        check(pJson->ToJson(jCopy), "NewCopy deep copy", "ToJson refused the copy");
+        check(has(jCopy.dump(), "2.0"), "NewCopy deep copy",
+              ("the copy lost its parameters: " + jCopy.dump()).c_str());
+      }
+      delete pCopy;
+    }
+    /* ~f runs at the end of this scope and must not free the same buffer. */
+  }
+
+  /* Adjacent to #2633, from the review of this change: SetFunction() free()s
+     m_params and then only reassigns it inside `if (nArgs && pParams)`, so a
+     call that supplies no parameters left the member dangling and the
+     destructor freed it again.  On an unfixed build this block ABORTS on the
+     double free; the check below only records that the call was reached. */
+  {
+    icFloatNumber params[3] = { 1.0f, 2.0f, 3.0f };
+    CIccJsonToneMapFunc f;
+    check(f.SetFunction(0, 3, params), "SetFunction NULL parameters",
+          "SetFunction refused three parameters");
+    /* Dropping the parameters must clear the member, not dangle it. */
+    f.SetFunction(0, 3, NULL);
+    IccJson j;
+    check(f.ToJson(j), "SetFunction NULL parameters", "ToJson refused the emptied function");
+    /* The count is cleared with the pointer, so the object does not claim
+       parameters it has no buffer for -- clearing only the pointer would turn
+       the double free into a NULL dereference right here. */
+    check(has(j.dump(), "\"parameters\":[]"), "SetFunction NULL parameters",
+          ("the emptied function still claims parameters: " + j.dump()).c_str());
+    /* ~f runs at the end of this scope and must not free the same buffer. */
+  }
+
+  /* #2633: the copy must carry EVERY member, not just the parameters.  Driving
+     this from a parsed function is what puts non-zero reserved and reserved2 on
+     it -- SetFunction leaves both zero, and ToJson omits them when zero, so a
+     copy constructor that dropped them would go unnoticed. */
+  {
+    std::string parseStr;
+    CIccMpeJsonToneMap elem;
+    std::string funcs = "[{\"functionType\": 0, \"reserved\": 7, \"reserved2\": 5, "
+                        "\"parameters\": [1.0, 0.0, 1.0]}]";
+    check(parse(elemDoc(1, funcs.c_str()), elem, parseStr), "NewCopy reserved fields",
+          ("refused: " + parseStr).c_str());
+
+    IccJson jSrc;
+    check(elem.ToJson(jSrc), "NewCopy reserved fields", "ToJson refused the source element");
+
+    /* Copying the element copies its functions through the same NewCopy(). */
+    CIccMpeJsonToneMap copy(elem);
+    IccJson jCopy;
+    check(copy.ToJson(jCopy), "NewCopy reserved fields", "ToJson refused the copy");
+    check(jCopy.dump() == jSrc.dump(), "NewCopy reserved fields",
+          ("the copy differs from the source.\n  source: " + jSrc.dump() +
+           "\n  copy:   " + jCopy.dump()).c_str());
+  }
+
+  /* #2633: every spelling that reaches icJsonSegPosFromStr() must round trip to
+     the sentinel it names, with the sign read first.  "-inf" returning the
+     POSITIVE maximum is the wrong-sign case; "+infinity" and "inf" both used to
+     fall through to atof() and come back out as null. */
+  {
+    static const struct { const char *start; const char *end; } kSpellings[] = {
+      { "-infinity", "+infinity" },
+      { "-inf",      "+inf"      },
+      { "-INFINITY", "+Inf"      },
+      { "-infinity", "inf"       },
+    };
+    for (size_t i = 0; i < sizeof(kSpellings) / sizeof(kSpellings[0]); i++) {
+      std::string doc = std::string("{\"segments\":[{\"type\":\"FormulaSegment\",\"start\":\"") +
+                        kSpellings[i].start + "\",\"end\":\"" + kSpellings[i].end +
+                        "\",\"functionType\":0,\"parameters\":[1.0,0.0,0.0,0.0]}]}";
+      std::string label = std::string("segment position ") + kSpellings[i].start + "/" + kSpellings[i].end;
+
+      std::string parseStr;
+      CIccSegmentedCurveJson curve;
+      check(curve.ParseJson(IccJson::parse(doc), parseStr), label.c_str(),
+            ("refused: " + parseStr).c_str());
+
+      IccJson out;
+      check(curve.ToJson(out), label.c_str(), "ToJson refused the curve");
+      std::string text = out.dump();
+      check(has(text, "\"start\":\"-infinity\""), label.c_str(),
+            ("start did not round trip: " + text).c_str());
+      check(has(text, "\"end\":\"+infinity\""), label.c_str(),
+            ("end did not round trip: " + text).c_str());
+    }
+  }
+
+  /* #2633, the half the issue did not state: the old sign test was
+     `s[0] == '-' && s.size() >= 4` with no look at the rest, so EVERY
+     string-encoded negative number of four or more characters came back as the
+     float32 minimum.  This is silent corruption of ordinary input, not just of
+     the infinity spellings, and it is what these rows pin. */
+  {
+    static const struct { const char *text; const char *expect; } kNegatives[] = {
+      { "-0.5",   "-0.5"   },
+      { "-1.25",  "-1.25"  },
+      { "-123.5", "-123.5" },
+      { "-0.125", "-0.125" },
+    };
+    for (size_t i = 0; i < sizeof(kNegatives) / sizeof(kNegatives[0]); i++) {
+      std::string doc = std::string("{\"segments\":[{\"type\":\"FormulaSegment\",\"start\":\"") +
+                        kNegatives[i].text + "\",\"end\":0.75,"
+                        "\"functionType\":0,\"parameters\":[1.0,0.0,0.0,0.0]}]}";
+      std::string label = std::string("negative segment position ") + kNegatives[i].text;
+
+      std::string parseStr;
+      CIccSegmentedCurveJson curve;
+      check(curve.ParseJson(IccJson::parse(doc), parseStr), label.c_str(),
+            ("refused: " + parseStr).c_str());
+      IccJson out;
+      check(curve.ToJson(out), label.c_str(), "ToJson refused the curve");
+      std::string text = out.dump();
+      check(!has(text, "infinity"), label.c_str(),
+            ("an ordinary negative number became a sentinel: " + text).c_str());
+      check(has(text, kNegatives[i].expect), label.c_str(),
+            ("the value was not preserved: " + text).c_str());
+    }
+  }
+
+  /* Whitespace-padded sentinels were accepted before the rewrite and still are.
+     icJsonSetSegPos() never emits padding, so this only matters to hand-written
+     documents -- but silently turning one into null would be a narrowing. */
+  {
+    std::string doc = "{\"segments\":[{\"type\":\"FormulaSegment\",\"start\":\" -inf \","
+                      "\"end\":\"  +infinity\","
+                      "\"functionType\":0,\"parameters\":[1.0,0.0,0.0,0.0]}]}";
+    std::string parseStr;
+    CIccSegmentedCurveJson curve;
+    check(curve.ParseJson(IccJson::parse(doc), parseStr), "padded segment position",
+          ("refused: " + parseStr).c_str());
+    IccJson out;
+    check(curve.ToJson(out), "padded segment position", "ToJson refused the curve");
+    std::string text = out.dump();
+    check(has(text, "\"start\":\"-infinity\""), "padded segment position",
+          ("padded start did not round trip: " + text).c_str());
+    check(has(text, "\"end\":\"+infinity\""), "padded segment position",
+          ("padded end did not round trip: " + text).c_str());
+  }
+
+  /* Control: an ordinary finite endpoint is still written as a number, so the
+     fix did not turn every position into a sentinel. */
+  {
+    std::string doc = "{\"segments\":[{\"type\":\"FormulaSegment\",\"start\":0.25,\"end\":0.75,"
+                      "\"functionType\":0,\"parameters\":[1.0,0.0,0.0,0.0]}]}";
+    std::string parseStr;
+    CIccSegmentedCurveJson curve;
+    check(curve.ParseJson(IccJson::parse(doc), parseStr), "finite segment position",
+          ("refused: " + parseStr).c_str());
+    IccJson out;
+    check(curve.ToJson(out), "finite segment position", "ToJson refused the curve");
+    std::string text = out.dump();
+    check(!has(text, "infinity"), "finite segment position",
+          ("a finite position became a sentinel: " + text).c_str());
+    check(has(text, "0.25") && has(text, "0.75"), "finite segment position",
+          ("the finite positions were lost: " + text).c_str());
   }
 
   if (g_fail) {
