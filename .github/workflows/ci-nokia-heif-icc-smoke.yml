@@ -54,6 +54,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           gcc --version | sed -n '1p'
           g++ --version | sed -n '1p'
@@ -67,6 +68,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
 
           heif_source="$(mktemp -d "${RUNNER_TEMP:-/tmp}/iccdev-nokia-heif.XXXXXX")"
           trap 'rm -rf "$heif_source"' EXIT
@@ -121,8 +123,9 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
           {
-            printf '%s\n' 'Nokia HEIF v3.7.1 carrier QA passed with GCC ASAN+UBSAN.'
-            printf '%s\n' 'All tracked dependency patches applied and the build was warning-free.'
-            printf '%s\n' 'CTest labels: heif, icc, iccdev, issue-2647, regression.'
+            printf '%s\n' "$(sanitize_line 'Nokia HEIF v3.7.1 carrier QA passed with GCC ASAN+UBSAN.')"
+            printf '%s\n' "$(sanitize_line 'All tracked dependency patches applied and the build was warning-free.')"
+            printf '%s\n' "$(sanitize_line 'CTest labels: heif, icc, iccdev, issue-2647, regression.')"
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
