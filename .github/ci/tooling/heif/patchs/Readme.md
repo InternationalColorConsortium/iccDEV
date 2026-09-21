@@ -7,8 +7,9 @@
   `nalutil.hpp` the direct `<cstdint>` dependency required for `uint8_t` by
   newer GCC/libstdc++ combinations.
 - `nokia-heif-timestamp-sign-conversion.patch` rejects a decoded time span that
-  cannot fit the reader's signed timestamp type, then keeps repeated edit-list
-  arithmetic in that type. This resolves GCC 15 sign-conversion warnings
-  without silently wrapping an out-of-range duration.
+  cannot fit the reader's signed timestamp type. It computes repeating
+  edit-list milliseconds with quotient/remainder arithmetic, then keeps every
+  repeated timestamp addition checked in that type. This resolves GCC 15
+  sign-conversion warnings without silently wrapping an out-of-range duration.
 - Validate every patch with `git apply --check` against the pinned commit and
   rerun the sanitizer-backed `iccdev.heif-carrier-qa` CTest.

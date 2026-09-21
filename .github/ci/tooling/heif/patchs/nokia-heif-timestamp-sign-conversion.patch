@@ -1,5 +1,5 @@
 diff --git a/srcs/reader/heifreaderimpl.cpp b/srcs/reader/heifreaderimpl.cpp
-index 405272f..e40fd94 100644
+index 405272f..8d2be9f 100644
 --- a/srcs/reader/heifreaderimpl.cpp
 +++ b/srcs/reader/heifreaderimpl.cpp
 @@ -2581,7 +2581,13 @@ namespace HEIF
@@ -17,18 +17,25 @@ index 405272f..e40fd94 100644
          trackInfo.pMap       = decodePts.getTime(mediaTimeScale);
          trackInfo.pMapTS     = decodePts.getTimeTS();
  
-@@ -2604,8 +2610,21 @@ namespace HEIF
+@@ -2604,8 +2610,28 @@ namespace HEIF
                  DecodePts::PMap repeatingPMap;
                  DecodePts::PMapTS repeatingPMapTS;
                  const auto trackDuration      = static_cast<int64_t>(trackInfo.duration * 1000u);
 -                const auto editListDuration   = static_cast<int64_t>(decodePts.getSpan() * 1000u / mediaTimeScale);
 -                const auto editListDurationTS = decodePts.getSpan();
-+                if (decodeSpan > static_cast<std::uint64_t>(
-+                                      std::numeric_limits<DecodePts::PresentationTimeTS>::max() / 1000))
++                const auto mediaTimeScaleTS = static_cast<std::uint64_t>(mediaTimeScale);
++                const auto wholeMilliseconds = decodeSpan / mediaTimeScaleTS;
++                const auto fractionalMilliseconds =
++                    (decodeSpan % mediaTimeScaleTS) * 1000u / mediaTimeScaleTS;
++                const auto maxTimestamp =
++                    static_cast<std::uint64_t>(std::numeric_limits<DecodePts::PresentationTimeTS>::max());
++                if (wholeMilliseconds > maxTimestamp / 1000u ||
++                    fractionalMilliseconds > maxTimestamp - wholeMilliseconds * 1000u)
 +                {
 +                    throw FileReaderException(ErrorCode::FILE_HEADER_ERROR);
 +                }
-+                const auto editListDuration   = static_cast<int64_t>(decodeSpan * 1000u / mediaTimeScale);
++                const auto editListDuration = static_cast<DecodePts::PresentationTimeTS>(
++                    wholeMilliseconds * 1000u + fractionalMilliseconds);
 +                const auto editListDurationTS = decodeSpanTS;
 +                const auto checkedAdd = [](const int64_t left, const int64_t right) {
 +                    if ((right > 0 && left > std::numeric_limits<int64_t>::max() - right) ||
@@ -41,7 +48,7 @@ index 405272f..e40fd94 100644
                  trackInfo.repetitions         = double(trackDuration) / double(editListDuration);
                  auto iter                     = trackInfo.pMap.cbegin();
                  int64_t nextSampleTimestamp   = iter->first;
-@@ -2626,16 +2645,16 @@ namespace HEIF
+@@ -2626,16 +2652,16 @@ namespace HEIF
                      if (iter == trackInfo.pMap.cend())
                      {
                          iter = trackInfo.pMap.cbegin();
