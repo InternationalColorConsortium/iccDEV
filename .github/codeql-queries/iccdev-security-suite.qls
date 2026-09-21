@@ -1,3 +1,4 @@
+---
 - description: "iccDEV C/C++ security query suite (excludes JSON/Connect and MCP Python queries)"
 - queries: .
 - exclude:
@@ -5,6 +6,7 @@
       - json-raw-normalized-value.ql
       - json-recursive-parse.ql
       - json-size-overflow.ql
+      - json-size-to-narrow-setsize.ql
       - json-unchecked-type-access.ql
       - iccdev-mcp/api-path-traversal.ql
       - iccdev-mcp/missing-output-sanitization.ql

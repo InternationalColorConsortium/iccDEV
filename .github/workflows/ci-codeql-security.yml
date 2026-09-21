@@ -11,6 +11,7 @@
 #
 ###############################################################
 
+---
 name: "ci-codeql-security"
 
 # Existing pinned SHAs and CodeQL command strings exceed line length.
@@ -20,7 +21,7 @@ name: "ci-codeql-security"
 permissions:
   contents: read
 
-on:
+"on":
   pull_request:
     branches:
       - master

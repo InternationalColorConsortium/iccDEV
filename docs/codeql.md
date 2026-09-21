@@ -10,6 +10,9 @@ canonical query reference lives with the queries:
 The targeted JSON query suite covers both `IccJSON` and `IccConnect` JSON
 configuration code. Keep `.github/codeql-config.yml` and the local runner help
 text in sync when that scope changes.
+`iccdev-security-suite.qls` excludes JSON-derived queries, including
+`json-size-to-narrow-setsize.ql`; the JSON suite is their sole reporting
+surface.
 
 Run local analysis with:
 
@@ -64,6 +67,9 @@ bump fails before the separate checksum checks can succeed independently.
 It builds no database. Unlike the other two it never falls back to a `codeql`
 already on the runner's PATH, because `.expected` files assert extractor
 line/column locations exactly and an unpinned CLI can flip them.
+Each query fixture must include a reported vulnerable case and an unreported
+guarded case, so a passing query test proves both detection and its intended
+scope.
 
 The GitHub Actions CodeQL workflow uploads only the standard
 `cpp-security-and-quality` SARIF. Run custom iccDEV query suites locally and
@@ -100,6 +106,13 @@ protect `buffer[index]` when `index == count`; valid indices end at
 count field, and buffer access in one function. The query deliberately excludes
 arithmetic bounds such as `index > count - 1`; its fixture keeps that negative
 control because a repository-wide textual `>` rule is too noisy.
+
+`self-alias-owning-setter` covers the public owning-setter pattern in
+InternationalColorConsortium/iccDEV#2631: deleting a pointer member and then
+storing an unguarded pointer parameter allows `SetX(GetX())` to retain a
+dangling pointer. The rule requires both operations in the same member function
+and accepts an earlier equality-and-return guard, avoiding broad ownership or
+copy-semantics findings.
 
 Numerical accuracy findings need separate, semantics-aware queries. Prefer
 narrow rules for a named conversion family or formula, with an executable

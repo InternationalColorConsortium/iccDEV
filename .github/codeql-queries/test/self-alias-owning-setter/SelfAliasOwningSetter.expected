@@ -1,0 +1,1 @@
+| case.cpp:56:5:56:19 | ... = ... | Owning setter deletes member $@ before storing parameter $@. SetX(GetX()) would store a dangling pointer; reject self-aliasing before delete. | case.cpp:68:10:68:16 | m_value | m_value | case.cpp:53:24:53:28 | value | value |
