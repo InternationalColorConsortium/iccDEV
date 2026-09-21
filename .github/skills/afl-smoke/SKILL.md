@@ -89,9 +89,10 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
   needs a corpus that still contains a CLUT seed (#2120).
 - Use `.github/ci/fuzz-patches/afl` and `.github/ci/fuzz-patches/cfl` for
   maintainer-local patch stacks when `--patches` is requested.
-- Keep `ci-docker.yml` push paths and regression-image verification in sync
-  with AFL/CFL patch-stack helpers so container rebuilds happen when the
-  checker, applicator, smoke script, `.github/ci/cfl/`, or fuzz patches change.
+- Keep `ci-docker.yml` manual-dispatch publication and regression-image
+  verification in sync with AFL/CFL patch-stack helpers. Dispatch the container
+  rebuild after the checker, applicator, smoke script, `.github/ci/cfl/`, or
+  fuzz patches change.
 - Run `.github/scripts/check-fuzz-patches.sh` after editing either patch stack
   so malformed hunks or stale context are caught before workflow dispatch.
 - Keep manual AFL and CFL workflow inputs aligned: `target_ref` selects the

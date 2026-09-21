@@ -133,10 +133,10 @@ requesting review, check the PR against this list:
 - Keep push, pull-request, reusable, and manual-dispatch validation paths
   equivalent for the changed surface. If a workflow tests a helper on push,
   the PR fast lane should test the same helper or document why it cannot.
-- Keep branch triggers and publish conditions aligned. `ci-docker` publishes
-  the canonical image only from `master`, `ci-qa-pr-docker-testing`,
-  `ci-publish-colourbill-ctrl`, and release tags; do not add
-  branch-specific or variant image tags.
+- Keep manual-dispatch refs and publish conditions aligned. `ci-docker` is
+  manual-only and publishes the canonical image only when dispatched from
+  `master`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`, or a
+  release tag; do not add branch-specific or variant image tags.
 - Keep Docker and regression-container docs reproducible from a fresh checkout
   or clean container. Fetch branch refs explicitly and avoid relying on local
   remote-tracking state, generated files, or preexisting host permissions.
@@ -164,9 +164,9 @@ requesting review, check the PR against this list:
   application, `iccdev-fuzz-env`, and container healthcheck semantics.
 
 For every `Dockerfile` change, validate the one canonical image locally and
-through `ci-docker` on `master`. Keep its `latest`, immutable full-SHA, and
-release-tag behavior consistent; do not restore variant Dockerfiles or
-branch-specific image publication.
+through a manual `ci-docker` dispatch on `master`. Keep its `latest`, immutable
+full-SHA, and release-tag behavior consistent; do not restore variant
+Dockerfiles or branch-specific image publication.
 
 Branch protection should require stable aggregate contexts, not conditional
 lane job names. `PR Summary` must aggregate orchestration prerequisites and all
@@ -270,11 +270,12 @@ separate from general source changes when practical.
 
 | File | Owner intent | Required local checks |
 |------|--------------|-----------------------|
-| `Dockerfile` | Unified image for runtime tools, MCP, ASAN/UBSAN CTest, fuzzing, review, and hybrid timing gates. Clang 22 is the default toolchain; the packaged AFL++ LLVM plugin is paired with Clang 21. | Run the [container maintainer preflight](regression-container.md#maintainer-preflight-and-security-checks), including no-cache build, policy/SAST checks, analyzer inventory, MCP/REST runtime smoke, health check, and image vulnerability/secret triage. AFL wrapper changes also need the container bootstrap probe in `docs/afl-fuzzing.md`. |
+| `Dockerfile` | Unified image for runtime tools, MCP, ASAN/UBSAN CTest, fuzzing, review, and hybrid timing gates. Clang 22 is the default toolchain; the packaged AFL++ LLVM plugin is paired with Clang 21. | Use cached builds during development, then run the [container maintainer preflight](regression-container.md#maintainer-preflight-and-security-checks), including a final no-cache build, policy/SAST checks, analyzer inventory, MCP/REST runtime smoke, health check, and image vulnerability/secret triage. AFL wrapper changes also need the container bootstrap probe in `docs/afl-fuzzing.md`. |
 
 For unified `Dockerfile` publishing:
 
-1. Build and smoke the target image locally with no cache.
+1. Build and smoke the target image locally; cached development builds are
+   permitted, but the final pre-push proof must use no cache.
 2. Publish through the maintainer-controlled container release path.
 3. Record the published immutable SHA tag, digest, and source revision from the
    release output.
