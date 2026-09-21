@@ -99,7 +99,7 @@ jobs:
       BASH_ENV: /dev/null
       LIBPNG_REVISION: 3061454d980de7d53608f594194cfac722721d2a
       LIBPNG_TAG: v1.6.58
-      BUILD_DIR: build-libpng-iccp-smoke
+      BUILD_DIR: /tmp/iccdev-libpng-build
       IMAGE_REF: ${{ needs.resolve-image.outputs.image }}
       IMAGE_REVISION: ${{ needs.resolve-image.outputs.revision }}
 
