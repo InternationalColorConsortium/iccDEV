@@ -2628,6 +2628,18 @@ bool CIccSampledCalculatorCurve::SetExtensionType(icUInt16Number nExtensionType)
 ******************************************************************************/
 bool CIccSampledCalculatorCurve::SetCalculator(CIccMpeCalculator *pCalc)
 {
+  // Reinstalling the calculator this curve already owns is a no-op.  Releasing
+  // it first would free the object that SetParentObject() below then writes
+  // through, and leave m_pCalc dangling for the destructor to free a second
+  // time.  Unlike the setters fixed in #2630 and #2634 there is no public
+  // getter, but m_pCalc is protected and both front ends derive from this
+  // curve -- CIccSampledCalculatorCurveXml already assigns the member
+  // directly -- so SetCalculator(m_pCalc) is reachable from a subclass.  The
+  // parent link is the only thing this function establishes, and freeing the
+  // object that holds it cannot re-establish it.
+  if (m_pCalc == pCalc)
+    return true;
+
   if (m_pCalc) {
     m_pCalc->SetParentObject(nullptr);
     delete m_pCalc;

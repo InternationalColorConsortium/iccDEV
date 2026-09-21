@@ -4943,6 +4943,16 @@ void CIccMpeCalculator::SetSize(icUInt16Number nInputChannels, icUInt16Number nO
  ******************************************************************************/
 icFuncParseStatus CIccMpeCalculator::SetCalcFunc(icCalculatorFuncPtr newChannelFunc) 
 {
+  // Reinstalling the function this element already owns is a no-op.  Releasing
+  // it first would leave m_calcFunc dangling for the destructor and for every
+  // Begin(), Apply(), Describe() and Validate() that follows.  As with
+  // CIccSampledCalculatorCurve::SetCalculator there is no public getter, but
+  // m_calcFunc is protected and CIccMpeXmlCalculator and CIccMpeJsonCalculator
+  // both derive from this element, so SetCalcFunc(m_calcFunc) is reachable
+  // from a subclass.
+  if (m_calcFunc == newChannelFunc)
+    return icFuncParseNoError;
+
   delete m_calcFunc;
  
   m_calcFunc = newChannelFunc;

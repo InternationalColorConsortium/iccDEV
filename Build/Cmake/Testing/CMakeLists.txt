@@ -6372,7 +6372,7 @@ function(iccdev_add_owning_setter_self_alias_contract_test)
   endif()
   set_tests_properties(iccdev.owning-setter-self-alias-contract PROPERTIES
     TIMEOUT 120
-    LABELS "iccdev;mpe;tag;issue-2630;issue-2637;issue-2638;regression"
+    LABELS "iccdev;mpe;tag;issue-2630;issue-2637;issue-2638;issue-2645;regression"
   )
 
   if(WIN32)
