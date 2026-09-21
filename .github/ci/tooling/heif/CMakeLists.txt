@@ -60,5 +60,5 @@
  */
 
 add_executable(iccHeifDump IccHeifDump.cpp)
-set_property(TARGET heifIccDump PROPERTY CXX_STANDARD 11)
+set_property(TARGET iccHeifDump PROPERTY CXX_STANDARD 11)
 target_link_libraries(iccHeifDump heif_static)
