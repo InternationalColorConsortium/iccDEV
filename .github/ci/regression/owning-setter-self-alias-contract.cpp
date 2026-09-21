@@ -85,6 +85,7 @@
 
 #include "IccCAM.h"
 #include "IccMpeBasic.h"
+#include "IccMpeCalc.h"
 #include "IccMatrixMath.h"
 #include "IccMpeSpectral.h"
 #include "IccPcc.h"
@@ -103,6 +104,8 @@ static int g_clutDtors = 0;
 static int g_matrixDtors = 0;
 static int g_mluDtors = 0;
 static int g_numArrayDtors = 0;
+static int g_calcDtors = 0;
+static int g_calcFuncDtors = 0;
 
 static void check(bool condition, const char *label)
 {
@@ -848,6 +851,96 @@ static void testMpeCAM()
   check(elem.GetCAM() == NULL, "SetCAM(NULL) releases the converter");
 }
 
+// The two #2645 setters differ from every case above: their members are
+// protected and neither has a public getter, so SetX(GetX()) cannot be written
+// from outside the class.  A DERIVED class reaches them, which is not a
+// contrivance here -- CIccSampledCalculatorCurveXml, CIccSampledCalculatorCurveJson,
+// CIccMpeXmlCalculator and CIccMpeJsonCalculator all derive from these two, and
+// CIccSampledCalculatorCurveXml already assigns m_pCalc directly instead of
+// going through the setter (IccMpeXml.cpp).  These probes reach the member the
+// same way a front end would.
+class ProbeCalculator : public CIccMpeCalculator
+{
+public:
+  virtual ~ProbeCalculator() { g_calcDtors++; }
+  icCalculatorFuncPtr HeldFunc() const { return m_calcFunc; }
+};
+
+class ProbeSampledCalculatorCurve : public CIccSampledCalculatorCurve
+{
+public:
+  CIccMpeCalculator *HeldCalculator() const { return m_pCalc; }
+};
+
+class CountingCalcFunc : public CIccCalculatorFunc
+{
+public:
+  CountingCalcFunc(CIccMpeCalculator *pCalc) : CIccCalculatorFunc(pCalc) {}
+  virtual ~CountingCalcFunc() { g_calcFuncDtors++; }
+};
+
+static void testSampledCalculatorCurveSetCalculator()
+{
+  // Unfixed, this releases the calculator and then writes through it in
+  // SetParentObject() -- a use-after-free WRITE, and a second free in the
+  // destructor.  The destructor count reds it without a sanitizer.
+  ProbeSampledCalculatorCurve curve;
+  ProbeCalculator *kept = new ProbeCalculator;
+
+  check(curve.SetCalculator(kept), "SetCalculator installs the calculator");
+  check(curve.HeldCalculator() == kept, "the calculator is installed");
+
+  g_calcDtors = 0;
+  check(curve.SetCalculator(curve.HeldCalculator()),
+        "SetCalculator(m_pCalc) reports success");
+  check(g_calcDtors == 0,
+        "SetCalculator(m_pCalc) does not free the calculator it is handed");
+  check(curve.HeldCalculator() == kept,
+        "SetCalculator(m_pCalc) keeps the calculator installed");
+  check(kept->GetParentObject() == static_cast<const IIccObject *>(&curve),
+        "SetCalculator(m_pCalc) keeps the parent link");
+
+  // Control: a DIFFERENT calculator must still be released, so a change that
+  // simply stopped releasing anything cannot satisfy this case.
+  g_calcDtors = 0;
+  ProbeCalculator *replacement = new ProbeCalculator;
+  check(curve.SetCalculator(replacement), "SetCalculator takes a new calculator");
+  check(g_calcDtors == 1, "SetCalculator releases the calculator it replaces");
+  check(curve.HeldCalculator() == replacement, "the replacement is installed");
+  g_calcDtors = 0;
+}
+
+static void testCalculatorSetCalcFunc()
+{
+  // Unfixed, this is the narrower dangling-store shape: the function is freed
+  // and the freed pointer stored back, with no dereference inside the setter.
+  // It surfaces as a double free at destruction and in every Begin(), Apply(),
+  // Describe() and Validate() that follows.
+  ProbeCalculator calc;
+  CountingCalcFunc *kept = new CountingCalcFunc(&calc);
+
+  check(calc.SetCalcFunc(kept) == icFuncParseNoError,
+        "SetCalcFunc installs the function");
+  check(calc.HeldFunc() == kept, "the function is installed");
+
+  g_calcFuncDtors = 0;
+  check(calc.SetCalcFunc(calc.HeldFunc()) == icFuncParseNoError,
+        "SetCalcFunc(m_calcFunc) reports success");
+  check(g_calcFuncDtors == 0,
+        "SetCalcFunc(m_calcFunc) does not free the function it is handed");
+  check(calc.HeldFunc() == kept,
+        "SetCalcFunc(m_calcFunc) keeps the function installed");
+
+  // Control, as above.
+  g_calcFuncDtors = 0;
+  CountingCalcFunc *replacement = new CountingCalcFunc(&calc);
+  check(calc.SetCalcFunc(replacement) == icFuncParseNoError,
+        "SetCalcFunc takes a new function");
+  check(g_calcFuncDtors == 1, "SetCalcFunc releases the function it replaces");
+  check(calc.HeldFunc() == replacement, "the replacement is installed");
+  g_calcFuncDtors = 0;
+}
+
 int main()
 {
   // An unfixed build crashes partway through, so keep stdout unbuffered:
@@ -872,6 +965,11 @@ int main()
   testDictEntryLocalized();
   testMBBTag();
   testMpeCAM();
+  // The two #2645 cases run LAST.  Both reach a double free on an unfixed
+  // build -- the first through a use-after-free write inside the setter -- and
+  // an abort there must not cost the diagnostics of every case above it.
+  testSampledCalculatorCurveSetCalculator();
+  testCalculatorSetCalcFunc();
 
   return g_failures ? 1 : 0;
 }
