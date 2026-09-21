@@ -35,3 +35,19 @@ bool guarded(Colorants &colorants, const JsonArray &values)
     return false;
   return colorants.SetSize(count);
 }
+
+bool logging_only_guard(Colorants &colorants, const JsonArray &values)
+{
+  icUInt32Number count = icJsonSafeU32(values.size());
+  if (count > 65535)
+    count = count;
+  return colorants.SetSize(count);
+}
+
+bool inverted_guard(Colorants &colorants, const JsonArray &values)
+{
+  icUInt32Number count = icJsonSafeU32(values.size());
+  if (count <= 65535)
+    return false;
+  return colorants.SetSize(count);
+}

@@ -1,3 +1,12 @@
+/*
+ * Copyright (c) 2026 International Color Consortium.
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the conditions in the
+ * ICC Software License are met.
+ */
+
 class Value {
 };
 
@@ -70,6 +79,27 @@ public:
     m_g = v;
   }
 
+  // H: a compound predicate does not establish that equal pointers return.
+  //    Must alert.
+  void SetH(Value *v, bool ready)
+  {
+    if (m_h == v && ready)
+      return;
+    delete m_h;
+    m_h = v;
+  }
+
+  // I: a nested return can fall through after the pointers alias. Must alert.
+  void SetI(Value *v, bool ready)
+  {
+    if (m_i == v) {
+      if (ready)
+        return;
+    }
+    delete m_i;
+    m_i = v;
+  }
+
 private:
   Value *m_a;
   Value *m_b;
@@ -78,4 +108,6 @@ private:
   Value *m_e;
   Value *m_f;
   Value *m_g;
+  Value *m_h;
+  Value *m_i;
 };

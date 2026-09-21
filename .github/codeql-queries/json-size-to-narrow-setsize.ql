@@ -14,6 +14,7 @@
  */
 
 import cpp
+import semmle.code.cpp.controlflow.Guards
 
 class JsonSizeConversion extends FunctionCall {
   JsonSizeConversion() {
@@ -26,11 +27,19 @@ class JsonSizeConversion extends FunctionCall {
 }
 
 predicate hasPriorNarrowingGuard(FunctionCall setSize, Variable sizeValue) {
-  exists(IfStmt guard, Expr limit |
+  exists(ComparisonOperation guard, Expr limit |
     guard.getEnclosingFunction() = setSize.getEnclosingFunction() and
-    guard.getLocation().getStartLine() < setSize.getLocation().getStartLine() and
-    guard.getCondition().getAChild*().(VariableAccess).getTarget() = sizeValue and
-    limit = guard.getCondition().getAChild*() and
+    guard instanceof GuardCondition and
+    guard.(GuardCondition).controls(setSize.getBasicBlock(), false) and
+    (
+      guard.getOperator() = ">" and
+      guard.getLeftOperand().getAChild*().(VariableAccess).getTarget() = sizeValue and
+      limit = guard.getRightOperand()
+      or
+      guard.getOperator() = "<" and
+      limit = guard.getLeftOperand() and
+      guard.getRightOperand().getAChild*().(VariableAccess).getTarget() = sizeValue
+    ) and
     limit.getValue() in ["65535", "65535U", "0xffff", "0xFFFF", "UINT16_MAX"]
   )
 }

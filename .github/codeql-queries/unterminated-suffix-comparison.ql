@@ -14,6 +14,7 @@
  */
 
 import cpp
+import semmle.code.cpp.controlflow.Guards
 
 predicate isStrlenAssignment(Variable variable, AssignExpr assignment) {
   assignment.getLValue().(VariableAccess).getTarget() = variable and
@@ -28,12 +29,13 @@ predicate isStrlenAssignment(Variable variable, AssignExpr assignment) {
 
 predicate hasPriorLengthGuard(FunctionCall comparison, Variable nameLength,
     Variable suffixLength) {
-  exists(IfStmt guard |
+  exists(ComparisonOperation guard |
     guard.getEnclosingFunction() = comparison.getEnclosingFunction() and
-    guard.getLocation().getStartLine() < comparison.getLocation().getStartLine() and
-    guard.getCondition().getAChild*().(VariableAccess).getTarget() = nameLength and
-    guard.getCondition().getAChild*().(VariableAccess).getTarget() = suffixLength and
-    guard.getCondition().toString().matches("%<%")
+    guard instanceof GuardCondition and
+    guard.getOperator() = "<" and
+    guard.getLeftOperand().getAChild*().(VariableAccess).getTarget() = nameLength and
+    guard.getRightOperand().getAChild*().(VariableAccess).getTarget() = suffixLength and
+    guard.(GuardCondition).controls(comparison.getBasicBlock(), false)
   )
 }
 

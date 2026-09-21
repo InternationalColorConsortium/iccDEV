@@ -33,3 +33,27 @@ bool guarded(const char *color_name, const char *suffix)
   return strncmp(color_name + (color_name_length - suffix_length), suffix,
     suffix_length) == 0;
 }
+
+bool logging_only_guard(const char *color_name, const char *suffix)
+{
+  size_t suffix_length;
+  size_t color_name_length;
+  suffix_length = strlen(suffix);
+  color_name_length = strlen(color_name);
+  if (color_name_length < suffix_length)
+    color_name_length = color_name_length;
+  return strncmp(color_name + (color_name_length - suffix_length), suffix,
+    suffix_length) == 0;
+}
+
+bool reversed_guard(const char *color_name, const char *suffix)
+{
+  size_t suffix_length;
+  size_t color_name_length;
+  suffix_length = strlen(suffix);
+  color_name_length = strlen(color_name);
+  if (suffix_length < color_name_length)
+    return false;
+  return strncmp(color_name + (color_name_length - suffix_length), suffix,
+    suffix_length) == 0;
+}

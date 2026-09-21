@@ -16,6 +16,7 @@
  */
 
 import cpp
+import semmle.code.cpp.controlflow.Guards
 
 predicate deletesField(DeleteExpr deleteExpr, Field field) {
   deleteExpr.getExpr().(FieldAccess).getTarget() = field
@@ -27,6 +28,17 @@ predicate assignsParameterToField(AssignExpr assignment, Field field,
   assignment.getRValue().(VariableAccess).getTarget() = parameter
 }
 
+predicate nullCheckedSelfAliasControlsDelete(IfStmt guard,
+    EqualityOperation comparison, Parameter parameter, DeleteExpr deleteExpr) {
+  exists(LogicalAndExpr condition |
+    condition = guard.getCondition() and
+    comparison = condition.getAnOperand() and
+    condition.getAnOperand().(VariableAccess).getTarget() = parameter and
+    guard.getThen().getAChild*() instanceof ReturnStmt and
+    not deleteExpr.getEnclosingStmt().getParentStmt*() = guard.getThen()
+  )
+}
+
 predicate rejectsSelfAlias(MemberFunction setter, Field field,
     Parameter parameter, DeleteExpr deleteExpr) {
   exists(IfStmt guard, EqualityOperation comparison |
@@ -35,17 +47,19 @@ predicate rejectsSelfAlias(MemberFunction setter, Field field,
     comparison.getAnOperand().(FieldAccess).getTarget() = field and
     comparison.getAnOperand().(VariableAccess).getTarget() = parameter and
     (
-      // if (field == parameter) ... return;  -- leaving skips the delete, but
-      // only when the delete is not itself inside the branch that returns.
+      // The false continuation of an equality check has excluded the alias.
       comparison.getOperator() = "==" and
-      guard.getThen().getAChild*() instanceof ReturnStmt and
-      not deleteExpr.getEnclosingStmt().getParentStmt*() = guard.getThen() and
-      guard.getLocation().getStartLine() < deleteExpr.getLocation().getStartLine()
+      (
+        comparison instanceof GuardCondition and
+        comparison.(GuardCondition).controls(deleteExpr.getBasicBlock(), false)
+        or
+        nullCheckedSelfAliasControlsDelete(guard, comparison, parameter, deleteExpr)
+      )
       or
-      // if (field != parameter) delete field;  -- the delete runs only when
-      // the two are distinct, so the alias is never freed.
+      // The true continuation of an inequality check has excluded the alias.
       comparison.getOperator() = "!=" and
-      deleteExpr.getEnclosingStmt().getParentStmt*() = guard.getThen()
+      comparison instanceof GuardCondition and
+      comparison.(GuardCondition).controls(deleteExpr.getBasicBlock(), true)
     )
   )
 }
