@@ -1938,6 +1938,71 @@ endfunction()
 # "+infinity" and "inf" fell through to atof() and were written back as null.
 # On an unfixed build the NewCopy case ABORTS on the double free and the
 # segment cases FAIL with the round-tripped document in the message.
+# #2626: icXmlFloatFmt was "%.12f" and icSegPos "%.8f" -- fixed decimal places,
+# not significant digits -- so a value under 5e-13 was written as
+# 0.000000000000 and read back as zero, and a value needing more places was
+# rounded to a different float32.  Nine significant digits (max_digits10)
+# round-trips every float32.  The parser relaxation is coupled: the canonical
+# spelling of FLT_MAX resolves to a double just above it, which the old range
+# check refused.  Measured, not assumed: on a FULLY unfixed build cases 1, 2,
+# 2b and 4 fail and case 5 PASSES -- "%.12f" writes FLT_MAX's whole decimal
+# expansion, which strtod resolves to exactly FLT_MAX, so the old range test
+# accepts it.  Case 5 fires only in the mixed state, writer changed and parser
+# not; case 6 fires if the range check is dropped rather than relaxed.
+function(iccdev_add_xml_float_significant_digits_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlFloatSignificantDigitsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-float-significant-digits.cpp"
+  )
+  target_compile_features(iccXmlFloatSignificantDigitsTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlFloatSignificantDigitsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlFloatSignificantDigitsTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlFloatSignificantDigitsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-float-significant-digits
+      COMMAND "$<TARGET_FILE:iccXmlFloatSignificantDigitsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-float-significant-digits
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlFloatSignificantDigitsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-float-significant-digits PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;xml;float;issue-2626;regression"
+  )
+
+  if(WIN32)
+    set(_xml_float_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlFloatSignificantDigitsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _xml_float_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-float-significant-digits PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_xml_float_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_tonemap_functions_json_test)
   if(NOT TARGET "${TARGET_LIB_ICCJSON}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -9764,6 +9829,7 @@ if(WIN32)
   iccdev_add_hex_data_malformed_json_test()
   iccdev_add_tonemap_functions_xml_test()
   iccdev_add_tonemap_functions_json_test()
+  iccdev_add_xml_float_significant_digits_test()
   iccdev_add_tonemap_write_many_outputs_test()
   iccdev_add_unsupported_profile_class_test()
   iccdev_add_pcs_adjust_status_test()
@@ -10182,6 +10248,7 @@ iccdev_add_hex_data_malformed_xml_test()
 iccdev_add_hex_data_malformed_json_test()
 iccdev_add_tonemap_functions_xml_test()
 iccdev_add_tonemap_functions_json_test()
+iccdev_add_xml_float_significant_digits_test()
 iccdev_add_tonemap_write_many_outputs_test()
 iccdev_add_unsupported_profile_class_test()
 iccdev_add_pcs_adjust_status_test()
