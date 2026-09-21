@@ -92,4 +92,4 @@ add_test(
       "${CMAKE_CURRENT_LIST_DIR}/../fixtures/valid-hybrid-rgb.icc.b64"
     --work-dir "${CMAKE_CURRENT_BINARY_DIR}/libpng-iccp-qa")
 set_tests_properties(iccdev.libpng-iccp-qa PROPERTIES
-  LABELS "libpng;icc;iccp;regression")
+  LABELS "libpng;icc;iccp;issue-2657;regression")

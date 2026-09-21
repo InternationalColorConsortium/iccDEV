@@ -195,8 +195,8 @@ Valid and explicitly relaxed CRC-policy controls must remain byte-identical.
 Always run discovery and the focused patched test:
 
 ```bash
-ctest --test-dir /tmp/iccdev-libpng-qa -N --no-tests=error
-ctest --test-dir /tmp/iccdev-libpng-qa \
+ctest --test-dir /tmp/iccdev-libpng-build -N --no-tests=error
+ctest --test-dir /tmp/iccdev-libpng-build \
   -R '^iccdev\.libpng-iccp-qa$' \
   --output-on-failure \
   --no-tests=error

@@ -167,9 +167,17 @@ jobs:
               --profile .github/ci/tooling/libpng/fixtures/valid-hybrid-rgb.icc.b64 \
               --work-dir "$BUILD_DIR/vulnerable-contract"
 
-          libpng_patch="$GITHUB_WORKSPACE/.github/ci/tooling/libpng/patches/libpng-1.6.58-iccp-completion-crc.patch"
-          git -C "$libpng_source" apply --check "$libpng_patch"
-          git -C "$libpng_source" apply "$libpng_patch"
+          libpng_patch_dir="$GITHUB_WORKSPACE/.github/ci/tooling/libpng/patches"
+          shopt -s nullglob
+          libpng_patches=("$libpng_patch_dir"/*.patch)
+          if [ "${#libpng_patches[@]}" -eq 0 ]; then
+            echo "::error title=Missing libpng patch stack::No patches were found"
+            exit 1
+          fi
+          for libpng_patch in "${libpng_patches[@]}"; do
+            git -C "$libpng_source" apply --check "$libpng_patch"
+            git -C "$libpng_source" apply "$libpng_patch"
+          done
           cmake --build "$BUILD_DIR" \
             --target pngtest \
             --parallel "$(nproc)" 2>&1 | tee "$BUILD_DIR/build-patched.log"
@@ -180,6 +188,7 @@ jobs:
 
           libpng_ctest_list="$BUILD_DIR/ctest-list.txt"
           ctest --test-dir "$BUILD_DIR" -N --no-tests=error | tee "$libpng_ctest_list"
+          grep -Eq '^Total Tests: 38$' "$libpng_ctest_list"
           grep -Eq 'iccdev\.libpng-iccp-qa$' "$libpng_ctest_list"
           ASAN_OPTIONS=halt_on_error=1:detect_leaks=0 \
           UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
@@ -188,6 +197,23 @@ jobs:
               -R '^iccdev\.libpng-iccp-qa$' \
               --output-on-failure \
               --no-tests=error
+
+          profile_sha256="$(base64 --decode \
+            .github/ci/tooling/libpng/fixtures/valid-hybrid-rgb.icc.b64 \
+            | sha256sum | awk '{print $1}')"
+          {
+            printf '%s\n' 'libpng v1.6.58 iCCP fault QA evidence'
+            printf '%s\n' "iccDEV revision: $(git rev-parse HEAD)"
+            printf '%s\n' "libpng revision: ${actual_libpng_revision}"
+            printf '%s\n' 'Toolchain and sanitizers: GCC with ASAN+UBSAN'
+            printf '%s\n' "Fixture SHA-256: ${profile_sha256}"
+            printf '%s\n' 'Vulnerable matrix: extra-output, bad-adler, missing-adler, and bad-crc retained'
+            printf '%s\n' 'Patched matrix: extra-output, bad-adler, missing-adler, and bad-crc discarded'
+            printf '%s\n' 'Controls: valid and relaxed bad-crc profiles retained byte-identically'
+            printf '%s\n' 'CTest inventory: Total Tests: 38'
+            printf '%s\n' 'Patch SHA-256:'
+            sha256sum "${libpng_patches[@]}"
+          } > "$BUILD_DIR/qa-evidence.txt"
 
       - name: Summarize libpng iCCP smoke results
         env:
@@ -198,10 +224,10 @@ jobs:
           unset GITHUB_TOKEN || true
           source .github/scripts/sanitize-sed.sh
           {
-            printf '%s\n' "$(sanitize_line 'libpng v1.6.58 iCCP fault QA passed with GCC ASAN+UBSAN.')"
-            printf '%s\n' "$(sanitize_line 'The pinned source reproduced all four vulnerable outcomes before the tracked patch.')"
-            printf '%s\n' "$(sanitize_line 'The patched build discarded invalid profiles and preserved valid and explicitly relaxed profiles.')"
-            printf '%s\n' "$(sanitize_line 'CTest labels: libpng, icc, iccp, regression.')"
+            printf '%s\n' '### libpng iCCP fault QA evidence'
+            while IFS= read -r evidence_line; do
+              printf '%s\n' "$(sanitize_line "$evidence_line")"
+            done < "$BUILD_DIR/qa-evidence.txt"
             printf '%s\n' "Image digest: $(sanitize_line "$IMAGE_REF")"
             printf '%s\n' "Image source revision: $(sanitize_line "$IMAGE_REVISION")"
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
