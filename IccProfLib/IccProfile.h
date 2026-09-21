@@ -222,6 +222,7 @@ public:
   bool calcMediaWhiteXYZ(icFloatNumber *pXYZ, IIccProfileConnectionConditions *pObservingPCC);
 
 protected:
+  friend class CIccTagEmbeddedProfile;
 
   // Return the member sub-tag of the given signature/type from this profile's
   // devicePccTag ('dpcc') profileConnectionConditionsStructure, or NULL when the

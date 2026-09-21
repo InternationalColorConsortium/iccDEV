@@ -578,6 +578,19 @@ std::string FirstReportLine(const std::string &report)
   return "validation reported an issue without detail";
 }
 
+std::string FirstCriticalReportLine(const std::string &report)
+{
+  const std::string criticalPrefix = icMsgValidateCriticalError;
+  std::istringstream in(report);
+  std::string line;
+  while (std::getline(in, line)) {
+    const size_t pos = line.find(criticalPrefix);
+    if (pos != std::string::npos)
+      return FirstReportLine(line.substr(pos));
+  }
+  return FirstReportLine(report);
+}
+
 typedef bool (*SigValidator)(const RawProfile &raw, size_t offset, size_t end);
 
 bool ValidatePe(const RawProfile &raw, size_t offset, size_t end)
@@ -1031,6 +1044,7 @@ PawgVerdict CalculatorCostVerdict(CIccProfile *pIcc, const RawProfile &raw, std:
   int mpeTags = 0;
   uint64_t elements = 0;
   uint64_t calculatorElements = 0;
+  uint64_t calculatorOperations = 0;
   uint64_t estimatedCost = 0;
   for (TagEntryList::iterator it = pIcc->m_Tags.begin(); it != pIcc->m_Tags.end(); ++it) {
     CIccTagMultiProcessElement *mpe = dynamic_cast<CIccTagMultiProcessElement*>(pIcc->FindTag(*it));
@@ -1045,22 +1059,30 @@ PawgVerdict CalculatorCostVerdict(CIccProfile *pIcc, const RawProfile &raw, std:
       CIccMpeCalculator *calc = dynamic_cast<CIccMpeCalculator*>(elem);
       if (calc) {
         ++calculatorElements;
-        estimatedCost += (uint64_t)std::max<icUInt16Number>(calc->NumInputChannels(), 1) *
-                         (uint64_t)std::max<icUInt16Number>(calc->NumOutputChannels(), 1) *
-                         64ULL;
+        const uint64_t operations = calc->GetTotalOps();
+        calculatorOperations = operations > UINT64_MAX - calculatorOperations ?
+                               UINT64_MAX : calculatorOperations + operations;
+        const uint64_t elementCost =
+            (uint64_t)std::max<icUInt16Number>(calc->NumInputChannels(), 1) *
+            (uint64_t)std::max<icUInt16Number>(calc->NumOutputChannels(), 1) * 64ULL;
+        estimatedCost = elementCost > UINT64_MAX - estimatedCost ?
+                        UINT64_MAX : estimatedCost + elementCost;
       }
       else {
-        estimatedCost += 1;
+        if (estimatedCost != UINT64_MAX)
+          ++estimatedCost;
       }
     }
   }
 
   std::ostringstream oss;
   oss << mpeTags << " MPE tag(s), " << elements << " process element(s), "
-      << calculatorElements << " calculator element(s), estimated relative cost="
-      << estimatedCost;
+      << calculatorElements << " calculator element(s), "
+      << calculatorOperations << " calculator operation(s), estimated relative cost="
+      << estimatedCost << "; local warning threshold=65536 operations";
   detail = oss.str();
-  return (elements > 4096 || calculatorElements > 256 || estimatedCost > 65536) ?
+  return (elements > 4096 || calculatorElements > 256 ||
+          calculatorOperations > 65536 || estimatedCost > 65536) ?
          PawgVerdict::Warn : PawgVerdict::Ok;
 }
 
@@ -1930,7 +1952,9 @@ PawgVerdict QualityCharacterization(CIccProfile *pIcc, std::string &detail)
   return PawgVerdict::Ok;
 }
 
-std::vector<PawgItem> EvaluatePawg(const RawProfile &raw, CIccProfile *pIcc)
+std::vector<PawgItem> EvaluatePawg(const RawProfile &raw, CIccProfile *pIcc,
+                                   icValidateStatus validationStatus,
+                                   const std::string &validationReport)
 {
   std::vector<PawgItem> items;
   const uint64_t fileSize = raw.data.size();
@@ -2077,7 +2101,14 @@ std::vector<PawgItem> EvaluatePawg(const RawProfile &raw, CIccProfile *pIcc)
           compressionDetail);
 
   std::string tagValueDetail;
-  PawgVerdict tagValueVerdict = TagValueEncodingVerdict(pIcc, tagValueDetail);
+  PawgVerdict tagValueVerdict;
+  if (validationStatus == icValidateCriticalError) {
+    tagValueVerdict = PawgVerdict::Fail;
+    tagValueDetail = "IccProfLib critical validation: " + FirstCriticalReportLine(validationReport);
+  }
+  else {
+    tagValueVerdict = TagValueEncodingVerdict(pIcc, tagValueDetail);
+  }
   AddItem(items, "C1",
           "Are tag types correctly encoded (signature, structure, data types, ranges, encoded values)?",
           tagValueVerdict,
@@ -2404,16 +2435,14 @@ int DumpPawgReport(const char *szFilename, bool bJson)
   RawProfile raw;
   LoadRawProfile(szFilename, raw);
 
-  // sReport/nStatus exist only to satisfy ValidateIccProfile's out-parameters:
-  // this entry point reports the PAWG checklist, not the validation log, and the
-  // checklist derives its own verdict from the profile.  TagTypeAllowedVerdict()
-  // re-runs Validate() on the parsed profile and turns that status into the C-item
-  // the report actually prints, so nothing downstream of here reads either local.
+  // Preserve the library verdict even when parsing fails. Raw checks still run,
+  // but a critical validation result is an unusable profile and therefore makes
+  // C1 fail instead of allowing the report to succeed with only NOT RUN items.
   std::string sReport;
   icValidateStatus nStatus = icValidateOK;
   CIccProfile *pIcc = ValidateIccProfile(szFilename, sReport, nStatus);
 
-  std::vector<PawgItem> items = EvaluatePawg(raw, pIcc);
+  std::vector<PawgItem> items = EvaluatePawg(raw, pIcc, nStatus, sReport);
 
   if (bJson) {
     PrintJsonReport(szFilename, raw, pIcc, items);
@@ -2498,7 +2527,7 @@ int AssessPawgFromMemory(const unsigned char *data, size_t size)
       ? ValidateIccProfile((const icUInt8Number *)data, (icUInt32Number)size, sReport, nStatus)
       : nullptr;
 
-  std::vector<PawgItem> items = EvaluatePawg(raw, pIcc);
+  std::vector<PawgItem> items = EvaluatePawg(raw, pIcc, nStatus, sReport);
   const bool fail = HasFail(items);
   delete pIcc;
   return fail ? 1 : 0;

@@ -11023,13 +11023,18 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-basic-string-regression-tests.sh"
 )
 
-iccdev_add_script_test(
-  iccdev.pawg-report-regressions
-  120
-  "iccdev;pawg;report;regression;asan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-pawg-report-regression-tests.sh"
-)
+if(TARGET iccPawgReport)
+  iccdev_add_script_test(
+    iccdev.pawg-report-regressions
+    120
+    "iccdev;pawg;report;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-pawg-report-regression-tests.sh"
+  )
+  set_tests_properties(iccdev.pawg-report-regressions PROPERTIES
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+endif()
 
 if(TARGET iccApplyNamedCmm AND TARGET iccApplyProfiles AND TARGET iccApplySearch)
   iccdev_add_script_test(

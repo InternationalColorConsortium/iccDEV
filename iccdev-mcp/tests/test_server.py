@@ -499,6 +499,38 @@ class TestSubprocessTools:
         assert "returncode" in result
         assert "stdout" in result
 
+    @pytest.mark.skipif(
+        not _has_cli_tool("iccPawgReport"),
+        reason="iccPawgReport not available",
+    )
+    def test_pawg_report_preserves_malformed_mpe_failure(self, tmp_path):
+        import struct
+
+        from iccdev_mcp.server import pawg_report
+
+        profile = bytearray(160)
+        profile[0:4] = struct.pack(">I", len(profile))
+        profile[8:12] = struct.pack(">I", 0x05000000)
+        profile[12:16] = b"mntr"
+        profile[16:20] = b"RGB "
+        profile[20:24] = b"XYZ "
+        profile[36:40] = b"acsp"
+        profile[68:72] = struct.pack(">I", 0x0000F6D6)
+        profile[72:76] = struct.pack(">I", 0x00010000)
+        profile[76:80] = struct.pack(">I", 0x0000D32D)
+        profile[128:132] = struct.pack(">I", 1)
+        profile[132:136] = b"D2B0"
+        profile[136:140] = struct.pack(">I", 144)
+        profile[140:144] = struct.pack(">I", 16)
+        profile[144:148] = b"mpet"
+        profile[152:156] = struct.pack(">HH", 3, 3)
+        profile[156:160] = struct.pack(">I", 1)
+        path = tmp_path / "malformed-mpe.icc"
+        path.write_bytes(profile)
+
+        result = pawg_report(str(path))
+        assert result["returncode"] == 1
+
 
 # ---------------------------------------------------------------------------
 # Error handling tests
