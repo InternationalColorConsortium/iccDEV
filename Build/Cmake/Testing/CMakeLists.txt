@@ -8480,6 +8480,48 @@ function(iccdev_add_encoding_lumamtx_test)
   endif()
 endfunction()
 
+# #1990: CIccDefaultEncProfileConverter::ConvertFromParams inverted the
+# luma/chroma matrix for the B2A direction, then attached a matrix element to
+# BToA3 without sizing it or copying the inverse in, so a converted YCbCr
+# encoding profile had a 0-in, 0-out, data-less element for its reverse
+# transform.  The #1985 helper above uses an identity matrix, which cannot tell
+# an inverse from a copy; this one uses BT.709's and checks BToA3 holds the
+# matrix whose product with it is the identity.
+function(iccdev_add_encoding_inverse_lumamtx_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccEncodingInverseLumaMtxTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/encoding-inverse-lumamtx.cpp"
+  )
+  target_link_libraries(iccEncodingInverseLumaMtxTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccEncodingInverseLumaMtxTest)
+
+  add_test(
+    NAME iccdev.encoding-inverse-lumamtx
+    COMMAND "$<TARGET_FILE:iccEncodingInverseLumaMtxTest>"
+  )
+  set_tests_properties(iccdev.encoding-inverse-lumamtx PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;encoding;issue-1990;regression"
+  )
+  if(WIN32)
+    set(_encinvlumamtx_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccEncodingInverseLumaMtxTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _encinvlumamtx_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.encoding-inverse-lumamtx PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_encinvlumamtx_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # icConvertEncodingProfile layered a colour-encoding profile's local overrides by
 # calling DeleteElem then AttachElem on pStruct -- the struct it was iterating --
 # instead of on pParams, the copy of the base encoding profile's params. DeleteElem
@@ -9895,6 +9937,7 @@ if(WIN32)
   iccdev_add_datetime_parse_test()
   iccdev_add_encoding_surround_test()
   iccdev_add_encoding_lumamtx_test()
+  iccdev_add_encoding_inverse_lumamtx_test()
   iccdev_add_encoding_override_test()
   iccdev_add_parser_restore_calls_test()
   iccdev_add_tag_layout_shared_data_test()
@@ -10310,6 +10353,7 @@ iccdev_add_v2_xml_fixtures_test()
 iccdev_add_datetime_parse_test()
 iccdev_add_encoding_surround_test()
 iccdev_add_encoding_lumamtx_test()
+iccdev_add_encoding_inverse_lumamtx_test()
 iccdev_add_encoding_override_test()
 iccdev_add_parser_restore_calls_test()
 iccdev_add_tag_layout_shared_data_test()
