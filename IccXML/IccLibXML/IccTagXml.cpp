@@ -2005,13 +2005,16 @@ bool CIccTagXmlFloatNum<T, A, Tsig>::ToXml(std::string &xml, std::string blanks/
     return false;
 
   if (this->m_nSize==1) {
-#ifdef _WIN32
-    if (sizeof(T)==sizeof(icFloat32Number))
-      sprintf(buf, "<Data>" icXmlFloatFmt "</Data>\n", this->m_Num[0]);
-    else if (sizeof(T)==sizeof(icFloat64Number))
-      sprintf(buf, "<Data>" icXmlDoubleFmt "</Data>\n", this->m_Num[0]);
+    // Select by width on every platform.  This used to be a _WIN32-only block
+    // whose second arm tested sizeof(icFloat32Number) twice, so it never ran,
+    // and every other platform fell through to icXmlFloatFmt regardless -- which
+    // meant a float64 array was written with the float32 format.  That mattered
+    // little while both were fixed-decimal; with icXmlFloatFmt now at nine
+    // significant digits it would have cost a float64 three digits, so the
+    // selection is made real rather than left dead (#2626).
+    if (sizeof(T)==sizeof(icFloat64Number))
+      snprintf(buf, bufSize, "<Data>" icXmlDoubleFmt "</Data>", (double)this->m_Num[0]);
     else
-#endif
       snprintf(buf, bufSize, "<Data>" icXmlFloatFmt "</Data>", this->m_Num[0]);
     xml += blanks;
     xml += buf;
@@ -2029,14 +2032,10 @@ bool CIccTagXmlFloatNum<T, A, Tsig>::ToXml(std::string &xml, std::string blanks/
       else {
         xml += " ";
       }
-#ifdef _WIN32
-      if (sizeof(T)==sizeof(icFloat32Number))
-        sprintf(buf, icXmlFloatFmt, this->m_Num[i]);
-
-      else if (sizeof(T)==sizeof(icFloat32Number))
-        sprintf(buf, icXmlDoubleFmt, this->m_Num[i]);
+      // Same selection as the single-value branch above.
+      if (sizeof(T)==sizeof(icFloat64Number))
+        snprintf(buf, bufSize, icXmlDoubleFmt, (double)this->m_Num[i]);
       else
-#endif
         snprintf(buf, bufSize, icXmlFloatFmt, this->m_Num[i]);
       xml += buf;
     }
@@ -6605,10 +6604,10 @@ bool CIccTagXmlEmbeddedHeightImage::ToXml(std::string &xml, std::string blanks/*
   snprintf(buf, bufSize, " EncodingFormat=\"%u\"", (unsigned int) m_nEncodingFormat);
   xml += buf;
 
-  snprintf(buf, bufSize, " MetersMinPixelValue=\"%.12f\"", m_fMetersMinPixelValue);
+  snprintf(buf, bufSize, " MetersMinPixelValue=\"" icXmlFloatFmt "\"", m_fMetersMinPixelValue);
   xml += buf;
 
-  snprintf(buf, bufSize, " MetersMaxPixelValue=\"%.12f\"", m_fMetersMaxPixelValue);
+  snprintf(buf, bufSize, " MetersMaxPixelValue=\"" icXmlFloatFmt "\"", m_fMetersMaxPixelValue);
   xml += buf;
 
   xml += ">\n";
