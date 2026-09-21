@@ -5662,6 +5662,68 @@ function(iccdev_add_calculator_limits_test)
   endif()
 endfunction()
 
+# #2622: CIccMpeJsonCalculator did not override NewCopy(), so a copied JSON
+# calculator came back as a plain CIccMpeCalculator.  CIccSampledCalculatorCurveJson
+# copies its curve on the way to JSON, so a CurveSetElement holding a
+# SampledCalculatorCurve lost its "curves" array and iccToJson wrote a document
+# iccFromJson refused.  The profile that shows it (Testing/Display/
+# Rec2100HlgFullCC.xml) is not built by CreateAllProfiles.sh, so no corpus run
+# reached it.  The helper pins the copy's class, that the copy serializes
+# identically, and the curve-set path end to end.  In its own executable because
+# IccMpeXml.h and IccMpeJson.h cannot share a translation unit.
+function(iccdev_add_json_calculator_newcopy_test)
+  if(NOT TARGET "${TARGET_LIB_ICCJSON}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccJsonCalculatorNewCopyTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/json-calculator-newcopy.cpp"
+  )
+  target_compile_features(iccJsonCalculatorNewCopyTest PRIVATE cxx_std_17)
+  target_include_directories(iccJsonCalculatorNewCopyTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccJsonCalculatorNewCopyTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccJsonCalculatorNewCopyTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.json-calculator-newcopy
+      COMMAND "$<TARGET_FILE:iccJsonCalculatorNewCopyTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.json-calculator-newcopy
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccJsonCalculatorNewCopyTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.json-calculator-newcopy PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;mpe;calc;json;issue-2622;regression"
+  )
+  if(WIN32)
+    set(_json_calc_newcopy_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccJsonCalculatorNewCopyTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _json_calc_newcopy_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.json-calculator-newcopy PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_json_calc_newcopy_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2565: the JSON form of calculatorLimits, in its own executable because IccMpeXml.h
 # and IccMpeJson.h cannot share a translation unit.
 function(iccdev_add_calculator_limits_json_test)
@@ -9851,6 +9913,7 @@ if(WIN32)
   iccdev_add_colorant_count_narrowing_json_test()
   iccdev_add_calculator_limits_test()
   iccdev_add_calculator_limits_json_test()
+  iccdev_add_json_calculator_newcopy_test()
   iccdev_add_colorant_count_narrowing_xml_test()
   iccdev_add_xml_numeric_values_test()
   iccdev_add_xml_calculator_curve_writer_test()
@@ -10269,6 +10332,7 @@ iccdev_add_namedcolor_findcolor_suffix_underflow_test()
 iccdev_add_colorant_count_narrowing_json_test()
 iccdev_add_calculator_limits_test()
 iccdev_add_calculator_limits_json_test()
+iccdev_add_json_calculator_newcopy_test()
 iccdev_add_colorant_count_narrowing_xml_test()
 iccdev_add_xml_numeric_values_test()
 iccdev_add_xml_calculator_curve_writer_test()

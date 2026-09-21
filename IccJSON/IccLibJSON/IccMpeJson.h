@@ -296,7 +296,24 @@ class CIccMpeJsonCalculator : public CIccMpeCalculator, public CIccMpeJson
 {
 public:
   CIccMpeJsonCalculator() : CIccMpeCalculator(), m_sImport("*"), m_nNextVar(0), m_nNextMpe(0) {}
+
+  // Copies only the calculator itself (channels, function, sub-elements).  The
+  // members below are parse-time scratch state, and m_mpeList/m_mpeMap own raw
+  // pointers that clean() deletes, so they start empty rather than shared.
+  // ToJson() reads none of them, so the copy serializes identically.  Mirrors
+  // CIccMpeXmlCalculator (IccMpeXml.h).
+  explicit CIccMpeJsonCalculator(const CIccMpeCalculator &calc)
+    : CIccMpeCalculator(calc), m_sImport("*"), m_nNextVar(0), m_nNextMpe(0) {}
+
   virtual ~CIccMpeJsonCalculator() { clean(); }
+
+  // Without this override NewCopy() resolves to CIccMpeCalculator's, which
+  // returns a plain CIccMpeCalculator: a copied JSON calculator silently stops
+  // being one.  A calculator nested in a SampledCalculatorCurve is copied on the
+  // way to JSON (CIccSampledCalculatorCurveJson copies its curve), so that curve
+  // then failed to serialize and the whole CurveSetElement lost its "curves"
+  // array (#2622).  XML fixed the same case with the same override.
+  virtual CIccMpeCalculator *NewCopy() const;
 
   virtual const char *GetClassName() const { return "CIccMpeJsonCalculator"; }
   virtual IIccExtensionMpe *GetExtension() { return this; }
