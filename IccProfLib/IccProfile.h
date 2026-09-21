@@ -275,6 +275,9 @@ protected:
   icValidateStatus CheckRequiredTags(std::string &sReport, const CIccProfile *pParentProfile = NULL) const;
   bool CheckTagExclusion(std::string &sReport) const;
   icValidateStatus CheckHeader(std::string &sReport, const CIccProfile *pParentProfile = NULL) const;
+  // Validates a PCS field that carries a device colour space rather than a
+  // colorimetric one: DeviceLink (ICC.1 8.2) and MultiplexLink (ICC.2 7.2.9).
+  icValidateStatus CheckLinkPcsSpace(std::string &sReport) const;
   icValidateStatus CheckTagTypes(std::string &sReport) const;
   bool IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
                    icStructSignature structSig=icSigUndefinedStruct,
