@@ -66,6 +66,8 @@
 #include "IccCAM.h"
 #include "IccMpeFactory.h"
 #include <algorithm>
+#include <cctype>
+#include <cmath>
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
@@ -167,6 +169,10 @@ bool CIccMpeJsonUnknown::ParseJson(const IccJson &j, std::string &parseStr)
   m_nOutputChannels = (icUInt16Number)nOut;
   if (j.contains("unknownData") && j["unknownData"].is_string()) {
     std::string hex = j["unknownData"].get<std::string>();
+    if (!icJsonValidHexData(hex.c_str())) {
+      parseStr += "Malformed hex in unknownData\n";
+      return false;
+    }
     m_nSize = icJsonGetHexDataSize(hex.c_str());
     if (m_pData) { free(m_pData); m_pData = nullptr; }
     if (m_nSize) {
@@ -195,8 +201,45 @@ static void icJsonSetSegPos(IccJson &j, const char *field, icFloatNumber pos)
 
 static icFloatNumber icJsonSegPosFromStr(const std::string &s)
 {
-  if (s.size() >= 4 && s.substr(s.size()-3) == "inf") return icMaxFloat32Number;
-  if (!s.empty() && s[0] == '-' && s.size() >= 4)     return icMinFloat32Number;
+  // Read the sign FIRST, then the magnitude.  The previous version tested for a
+  // trailing "inf" before it looked at the sign, so "-inf" returned the positive
+  // maximum; it also required at least four characters, which "inf" does not
+  // have, and matched only the last three, which "+infinity" -- the spelling
+  // icJsonSetSegPos() above actually writes -- does not end with.  Every
+  // unmatched spelling fell through to atof(), which returns a real infinity
+  // that is not equal to either sentinel, so the writer then emitted null.
+  //
+  // Worse, and the reason this is not only about infinities: the sign test was
+  // `s[0] == '-' && s.size() >= 4` with no look at the rest, so EVERY
+  // string-encoded negative number of four or more characters returned the
+  // float32 minimum.  "-0.5", "-1.25" and "-123.5" all became -3.4028235e+38,
+  // while "-1" and "-12" were short enough to survive.
+  // Trim first.  atof() skips leading whitespace on its own, so a padded
+  // " inf" used to reach the old trailing-"inf" test and match; matching on a
+  // trimmed copy keeps that working rather than quietly narrowing it.
+  const char *kSpace = " \t\n\r\f\v";
+  std::size_t nBegin = s.find_first_not_of(kSpace);
+  if (nBegin == std::string::npos)
+    return (icFloatNumber)atof(s.c_str());
+  std::string t = s.substr(nBegin, s.find_last_not_of(kSpace) - nBegin + 1);
+
+  std::size_t i = 0;
+  bool bNegative = false;
+
+  if (i < t.size() && (t[i] == '+' || t[i] == '-')) {
+    bNegative = (t[i] == '-');
+    i++;
+  }
+
+  std::string mag = t.substr(i);
+  for (std::size_t n = 0; n < mag.size(); n++)
+    mag[n] = (char)tolower((unsigned char)mag[n]);
+
+  // atof() accepts both spellings in any case, so matching them here is what
+  // keeps a round trip on the sentinels rather than on a real infinity.
+  if (mag == "inf" || mag == "infinity")
+    return bNegative ? icMinFloat32Number : icMaxFloat32Number;
+
   return (icFloatNumber)atof(s.c_str());
 }
 
@@ -247,7 +290,17 @@ public:
 
   bool ParseJson(const IccJson &j, std::string &parseStr) {
     int funcType = 0, reserved = 0, reserved2 = 0;
-    jGetValue(j, "functionType", funcType);
+    // functionType and parameters are both required (docs/iccjson.md).  A
+    // missing functionType used to read as type 0 and missing or short
+    // parameters as zeros, so a malformed segment loaded as a different curve
+    // (#2547).  functionType must be a JSON integer: jGetValue() alone would
+    // truncate 1.5 to 1.
+    if (!jsonExistsField(j, "functionType") ||
+        !(j["functionType"].is_number_integer() || j["functionType"].is_number_unsigned()) ||
+        !jGetValue(j, "functionType", funcType)) {
+      parseStr += "FormulaSegment requires an integer functionType\n";
+      return false;
+    }
     jGetValue(j, "reserved",     reserved);
     jGetValue(j, "reserved2",    reserved2);
     m_nFunctionType = (icUInt16Number)funcType;
@@ -259,27 +312,29 @@ public:
       parseStr += "Unsupported FunctionType in FormulaSegment\n";
       return false;
     }
+
+    // The binary encoding has no parameter count: the function type fixes it
+    // (ICC.2-2023 Table 111), so a JSON array of any other length cannot be
+    // written back as the same segment.
+    if (!jsonExistsField(j, "parameters") || !j["parameters"].is_array() ||
+        j["parameters"].size() != (size_t)nParams) {
+      parseStr += "FormulaSegment parameters must be an array of the count its functionType requires\n";
+      return false;
+    }
     m_nParameters = (icUInt8Number)nParams;
 
     if (m_params) { free(m_params); m_params = nullptr; }
-    if (nParams > 0) {
-      m_params = (icFloatNumber*)malloc(nParams * sizeof(icFloatNumber));
-      if (!m_params) return false;
-      for (int i = 0; i < nParams; i++) m_params[i] = 0.0f;
-      if (jsonExistsField(j, "parameters") && j["parameters"].is_array()) {
-        bool overflow = false;
-        icUInt32Number nJsonParams = icJsonSafeU32(j["parameters"].size(), &overflow);
-        if (overflow) {
-          parseStr += "parameters count exceeds supported range in FormulaSegment\n";
-          return false;
-        }
-        int cnt = std::min(nParams, (int)nJsonParams);
-        for (int i = 0; i < cnt; i++) {
-          if (!icJsonGetFloatNumber(j["parameters"][i], m_params[i])) {
-            parseStr += "parameters contains non-numeric value in FormulaSegment\n";
-            return false;
-          }
-        }
+    m_params = (icFloatNumber*)malloc(nParams * sizeof(icFloatNumber));
+    if (!m_params) {
+      m_nParameters = 0;
+      return false;
+    }
+    for (int i = 0; i < nParams; i++) {
+      // A finite JSON number beyond the float32 range casts to infinity.
+      if (!icJsonGetFloatNumber(j["parameters"][i], m_params[i]) ||
+          !std::isfinite(m_params[i])) {
+        parseStr += "parameters contains a non-numeric or non-finite value in FormulaSegment\n";
+        return false;
       }
     }
     return true;
@@ -633,7 +688,10 @@ bool CIccMpeJsonCurveSet::ParseJson(const IccJson &j, std::string &parseStr)
   }
 
   icUInt16Number nChannels = (icUInt16Number)nIn;
-  SetSize(nChannels);
+  if (!SetSize(nChannels)) {
+    parseStr += "Unable to allocate curves in CurveSetElement\n";
+    return false;
+  }
 
   if (!j.contains("curves") || !j["curves"].is_array()) {
     parseStr += "Missing curves array in CurveSetElement\n";
@@ -664,8 +722,11 @@ bool CIccMpeJsonCurveSet::ParseJson(const IccJson &j, std::string &parseStr)
       icCurveSetCurvePtr pCurve = icFromJsonCurve(jCurve, parseStr);
       if (!pCurve)
         return false;
-      if (!SetCurve(nIndex, pCurve))
+      if (!SetCurve(nIndex, pCurve)) {
+        delete pCurve;
+        parseStr += "Unable to set curve in CurveSetElement\n";
         return false;
+      }
     }
     nIndex++;
   }
@@ -822,6 +883,12 @@ CIccToneMapFunc* CIccJsonToneMapFunc::NewCopy() const
 bool CIccJsonToneMapFunc::ToJson(IccJson &j)
 {
   j["functionType"] = (int)m_nFunctionType;
+  // reserved was written by neither side, so a non-zero value could not
+  // survive an ICC -> JSON -> ICC cycle any more than it survived the XML one.
+  // Emitted only when set, as reserved2 is, so no corpus document gains a key
+  // (#2621).
+  if (m_nReserved)
+    j["reserved"] = (unsigned int)m_nReserved;
   if (m_nReserved2)
     j["reserved2"] = (int)m_nReserved2;
   IccJson params = IccJson::array();
@@ -835,9 +902,51 @@ bool CIccJsonToneMapFunc::ToJson(IccJson &j)
 bool CIccJsonToneMapFunc::ParseJson(const IccJson &j, std::string &parseStr)
 {
   int funcType = 0, reserved2 = 0;
-  jGetValue(j, "functionType", funcType);
-  jGetValue(j, "reserved2",    reserved2);
+  // Widened past the int the two fields above use: m_nReserved is an
+  // icUInt32Number, so a value with bit 31 set is legal here and an int would
+  // not hold it.
+  icUInt64Number reserved = 0;
+  // A missing functionType read as type 0, the one supported type, so a
+  // function that names none at all loaded as a valid one.  The XML twin
+  // refuses it, as does the formula segment here (#2547).  It must be a JSON
+  // integer: jGetValue() alone would truncate 1.5 to 1.
+  if (!jsonExistsField(j, "functionType") ||
+      !(j["functionType"].is_number_integer() || j["functionType"].is_number_unsigned()) ||
+      !jGetValue(j, "functionType", funcType)) {
+    parseStr += "ToneMapFunction requires an integer functionType\n";
+    return false;
+  }
+  // The switch below runs on m_nFunctionType, an icUInt16Number, so a value
+  // past 0xFFFF wrapped onto type 0 and loaded.  Named apart from the check
+  // above: the value IS an integer, it just does not fit.
+  if (funcType < 0 || funcType > 0xFFFF) {
+    parseStr += "functionType is out of range in ToneMapFunction\n";
+    return false;
+  }
+  // reserved2 is stored in an icUInt16Number too, and took the same silent
+  // wrap: 65536 loaded as 0, turning a malformed document into one Validate()
+  // has nothing to warn about.  The XML twin refuses it (icXmlParseU16).
+  if (jsonExistsField(j, "reserved2") &&
+      (!(j["reserved2"].is_number_integer() || j["reserved2"].is_number_unsigned()) ||
+       !jGetValue(j, "reserved2", reserved2) || reserved2 < 0 || reserved2 > 0xFFFF)) {
+    parseStr += "reserved2 is out of range in ToneMapFunction\n";
+    return false;
+  }
+  // Held to the same rule as functionType and reserved2 above, rather than the
+  // bare jGetValue() the formula segment uses: this read is new here, and an
+  // unvalidated one sitting between two validated ones would let "reserved":
+  // 1.5 truncate and "reserved": -1 wrap to 0xFFFFFFFF in silence.
+  // is_number_unsigned() is the whole negativity test: nlohmann tags -1 as
+  // is_number_integer() but not unsigned, and 1.5 as neither, so the one
+  // predicate refuses both without a signed intermediate to wrap through.
+  if (jsonExistsField(j, "reserved") &&
+      (!j["reserved"].is_number_unsigned() ||
+       !jGetValue(j, "reserved", reserved) || reserved > 0xFFFFFFFFull)) {
+    parseStr += "reserved is out of range in ToneMapFunction\n";
+    return false;
+  }
   m_nFunctionType = (icUInt16Number)funcType;
+  m_nReserved     = (icUInt32Number)reserved;
   m_nReserved2    = (icUInt16Number)reserved2;
 
   switch (m_nFunctionType) {
@@ -853,19 +962,34 @@ bool CIccJsonToneMapFunc::ParseJson(const IccJson &j, std::string &parseStr)
   const int nParameters = (int)m_nParameters;
   for (int i = 0; i < nParameters; i++) m_params[i] = 0.0f;
 
-  if (j.contains("parameters") && j["parameters"].is_array()) {
-    bool overflow = false;
-    icUInt32Number nJsonParams = icJsonSafeU32(j["parameters"].size(), &overflow);
-    if (overflow) {
-      parseStr += "parameters count exceeds supported range in ToneMapFunction\n";
+  // The parameters used to be optional, and a short array was padded with the
+  // zeroes above, so a function with none at all was accepted and saved.  The
+  // XML twin requires at least the count the function type asks for, and drops
+  // any beyond it; both readers are kept to that rule here.  #2612.
+  if (!jsonExistsField(j, "parameters") || !j["parameters"].is_array()) {
+    parseStr += "Missing parameters in ToneMapFunction\n";
+    return false;
+  }
+
+  bool overflow = false;
+  icUInt32Number nJsonParams = icJsonSafeU32(j["parameters"].size(), &overflow);
+  if (overflow) {
+    parseStr += "parameters count exceeds supported range in ToneMapFunction\n";
+    return false;
+  }
+  if (nJsonParams < (icUInt32Number)nParameters) {
+    parseStr += "Too few parameters in ToneMapFunction\n";
+    return false;
+  }
+  for (int i = 0; i < nParameters; i++) {
+    // A finite JSON number beyond the float32 range casts to infinity, which
+    // Validate() does not look at: the profile saved clean and iccToJson then
+    // wrote the parameter back as null, a document this same reader refuses.
+    // The formula segment above has refused this since #2547 (#2619).
+    if (!icJsonGetFloatNumber(j["parameters"][i], m_params[i]) ||
+        !std::isfinite(m_params[i])) {
+      parseStr += "parameters contains a non-numeric or non-finite value in ToneMapFunction\n";
       return false;
-    }
-    int cnt = std::min(nParameters, (int)nJsonParams);
-    for (int i = 0; i < cnt; i++) {
-      if (!icJsonGetFloatNumber(j["parameters"][i], m_params[i])) {
-        parseStr += "parameters contains non-numeric value in ToneMapFunction\n";
-        return false;
-      }
     }
   }
   return true;
@@ -982,7 +1106,15 @@ bool CIccMpeJsonToneMap::ParseJson(const IccJson &j, std::string &parseStr)
     nIndex++;
   }
 
-  return (nIndex == nOut);
+  // An array with fewer entries than the element has output channels, an empty
+  // one included, returned false here with nothing added to parseStr, so the
+  // caller had no reason to report.  #2609.
+  if (nIndex != nOut) {
+    parseStr += "Too few toneMapFunctions in ToneMapElement\n";
+    return false;
+  }
+
+  return true;
 }
 
 // ===========================================================================
@@ -1226,6 +1358,10 @@ bool CIccMpeJsonBAcs::ParseJson(const IccJson &j, std::string &parseStr)
   jGetString(j, "data", hex);
   if (!sig.empty())
     m_signature = (icAcsSignature)icGetSigVal(sig.c_str());
+  if (!icJsonValidHexData(hex.c_str())) {
+    parseStr += "Malformed hex in ACS element data\n";
+    return false;
+  }
   m_nDataSize = icJsonGetHexDataSize(hex.c_str());
   if (m_pData) { free(m_pData); m_pData = nullptr; }
   if (m_nDataSize) {
@@ -1268,6 +1404,10 @@ bool CIccMpeJsonEAcs::ParseJson(const IccJson &j, std::string &parseStr)
   jGetString(j, "data", hex);
   if (!sig.empty())
     m_signature = (icAcsSignature)icGetSigVal(sig.c_str());
+  if (!icJsonValidHexData(hex.c_str())) {
+    parseStr += "Malformed hex in ACS element data\n";
+    return false;
+  }
   m_nDataSize = icJsonGetHexDataSize(hex.c_str());
   if (m_pData) { free(m_pData); m_pData = nullptr; }
   if (m_nDataSize) {
@@ -2086,6 +2226,15 @@ bool CIccMpeJsonCalculator::ToJson(IccJson &j)
   j["inputChannels"]  = (int)NumInputChannels();
   j["outputChannels"] = (int)NumOutputChannels();
 
+  // ICC.2:2023 Table 85b calculatorLimits, written only when the element has one.
+  if (m_bHasLimits) {
+    IccJson limits;
+    limits["maxStackSize"]    = m_nMaxStackSize;
+    limits["maxTempChannels"] = m_nMaxTempChannels;
+    limits["maxOperations"]   = m_nMaxOperations;
+    j["calculatorLimits"] = limits;
+  }
+
   // Emit sub-elements (anonymous, in order)
   if (m_SubElem && m_nSubElem) {
     IccJson elems = IccJson::array();
@@ -2149,6 +2298,30 @@ bool CIccMpeJsonCalculator::ParseJson(const IccJson &j, std::string &parseStr)
   if (!ParseChanMap(m_outputMap, outputNames.c_str(), m_nOutputChannels)) {
     parseStr += "Invalid name for outputChannels\n";
     return false;
+  }
+
+  // ICC.2:2023 Table 85b calculatorLimits; a missing key is 0, no maximum.
+  m_bHasLimits = false;
+  m_nMaxStackSize = m_nMaxTempChannels = m_nMaxOperations = 0;
+  memset(m_nLimitsReserved, 0, sizeof(m_nLimitsReserved));
+  if (j.contains("calculatorLimits")) {
+    const IccJson &limits = j["calculatorLimits"];
+    const char *keys[3] = { "maxStackSize", "maxTempChannels", "maxOperations" };
+    icUInt32Number *vals[3] = { &m_nMaxStackSize, &m_nMaxTempChannels, &m_nMaxOperations };
+    if (!limits.is_object()) {
+      parseStr += "Invalid calculatorLimits in CalculatorElement\n";
+      return false;
+    }
+    for (int k = 0; k < 3; k++) {
+      if (limits.contains(keys[k]) &&
+          (!limits[keys[k]].is_number_unsigned() || !jGetValue(limits, keys[k], *vals[k]))) {
+        parseStr += "Invalid calculatorLimits ";
+        parseStr += keys[k];
+        parseStr += " in CalculatorElement\n";
+        return false;
+      }
+    }
+    m_bHasLimits = true;
   }
 
   // Load variables, macros, and sub-elements (including any imports)

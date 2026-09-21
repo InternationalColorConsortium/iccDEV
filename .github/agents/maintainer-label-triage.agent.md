@@ -21,5 +21,9 @@ labels using `docs/label-system.md` and
    reachability evidence or false-positive rationale. Accept a false-positive
    classification only when it names the guarding setup method, shows failure
    propagation, and retains an unguarded query-test control.
+7. For SBO/HBO alerts, require the allocation count, access count, and boundary
+   equality to be recorded together. For accuracy or precision alerts, require
+   a named ICC encoding or formula plus an executable expected-value oracle;
+   generic floating-point suspicion is not completed technical triage.
 
 Return evidence and recommendations only. Do not edit labels or workflows.

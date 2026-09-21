@@ -81,7 +81,7 @@ policy warning.
 | `ENABLE_INTEGER_SANITIZER` | OFF | IntegerSanitizer for unsigned overflow |
 | `ENABLE_FLOAT_SANITIZER` | OFF | `float-divide-by-zero,float-cast-overflow` |
 | `ENABLE_TSAN` | OFF | ThreadSanitizer |
-| `ENABLE_MSAN` | OFF | MemorySanitizer (Clang only) |
+| `ENABLE_MSAN` | OFF | MemorySanitizer (Clang only; external runtime must also be instrumented) |
 | `ENABLE_LSAN` | OFF | LeakSanitizer standalone |
 | `ENABLE_COVERAGE` | OFF | Clang source coverage or GCC gcov |
 | `ENABLE_PROFILING` | OFF | gprof/perf `-pg` profiling |
@@ -119,8 +119,8 @@ cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake
 # ThreadSanitizer only; do not combine with ASan, LSan, fuzzing, or ENABLE_SANITIZERS
 cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_TSAN=ON
 
-# MemorySanitizer only; Clang-only and incompatible with other sanitizers here
-cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_MSAN=ON
+# MemorySanitizer with instrumented libc++, libc++abi, and libxml2
+.github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/out/msan-runtime" && .github/scripts/iccdev-msan-taint-qa.sh --source-dir "$PWD" --build-dir "$PWD/out/linux-clang-msan-taint" --runtime-dir "$PWD/out/msan-runtime" --out-dir "$PWD/out/msan-taint-evidence"
 
 # Source coverage; keep separate from sanitizer reproduction attempts
 cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_COVERAGE=ON
@@ -144,7 +144,8 @@ Preset equivalents live in `Build/Cmake/CMakePresets.json`:
 | `linux-clang-ubsan-int-float` | UBSan + IntSan + float checks, no ASan |
 | `linux-clang-sanitizers` | ASan + UBSan + IntSan + float checks |
 | `linux-clang-tsan` | TSan-only Debug tool build |
-| `linux-clang-msan` | MSan-only Debug tool build |
+| `linux-clang-msan` | MSan Debug build using `ICCDEV_MSAN_LIBCXX_DIR` for instrumented libc++, libc++abi, and libxml2 |
+| `linux-clang-valgrind` | Non-sanitized Debug tool/test build for Valgrind-family tools |
 | `linux-clang-coverage` | Clang source coverage |
 | `linux-clang-profiling` | gprof/perf `-pg` profiling |
 | `macos-clang-sanitizers` | macOS ASan + UBSan + IntSan + float checks, with libc++ EXTENSIVE hardening |
@@ -206,6 +207,11 @@ change optimizer and sanitizer behavior enough to mask a finding.
 TSan conflicts with ASan, LSan, fuzzing, and `ENABLE_SANITIZERS`. MSan conflicts
 with ASan, TSan, LSan, fuzzing, and `ENABLE_SANITIZERS`. CMake should reject
 incompatible combinations.
+
+`ENABLE_MSAN` instruments iccDEV targets only. Distribution C++ runtimes and
+libxml2 are normally uninstrumented and can create false reports when their
+writes do not update MSan shadow state. Use `iccdev-build-msan-libcxx.sh` and
+`iccdev-msan-taint-qa.sh` for reportable MSan evidence.
 
 ## LTO Behavior
 

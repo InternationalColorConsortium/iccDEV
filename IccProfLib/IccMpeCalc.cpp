@@ -4208,6 +4208,28 @@ icUInt32Number CIccCalculatorFunc::GetMaxTemp() const
 
 /**
 ******************************************************************************
+* Name: CIccCalculatorFunc::GetNumTempChannels
+*
+* Purpose: The number of temporary channels the main function addresses, 0 when
+*  it uses none.  GetMaxTemp() returns 0 in both of those cases.
+******************************************************************************
+*/
+icUInt32Number CIccCalculatorFunc::GetNumTempChannels() const
+{
+  icUInt32Number i, nChannels = 0;
+
+  for (i=0; i<m_nOps && i<MAX_CALC_ELEMENTS; i++) {
+    if (m_Op[i].sig == icSigTempGetChanOp || m_Op[i].sig == icSigTempPutChanOp || m_Op[i].sig == icSigTempSaveChanOp ) {
+      icUInt32Number n = (icUInt32Number)(m_Op[i].data.select.v1) + (icUInt32Number)(m_Op[i].data.select.v2) + 1;
+      if (n>nChannels)
+        nChannels = n;
+    }
+  }
+  return nChannels;
+}
+
+/**
+******************************************************************************
 * Name: CIccCalculatorFunc::NeedTempReset
 * 
 * Purpose: 
@@ -4367,7 +4389,8 @@ bool CIccCalculatorFunc::SequenceNeedTempReset(SIccCalcOp *op, icUInt32Number nO
 * 
 * Return: 
 ******************************************************************************/
-int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nOps, int nArgs, bool bCheckUnderflow, std::string &sReport) const
+int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nOps, int nArgs, bool bCheckUnderflow, std::string &sReport,
+                                               icUInt32Number nMaxStack) const
 {
   icUInt32Number pc = 0, p;
   int nIfArgs, nElseArgs, nSelArgs, nCaseArgs;
@@ -4405,7 +4428,7 @@ int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nO
     nArgs -= nArgsUsed;
     nArgs += op[i].ArgsPushed(m_pCalc);
 
-    if (nArgs>icMaxDataStackSize)
+    if (nArgs > 0 && (icUInt32Number)nArgs > nMaxStack)
       return -2;
 
     if (op[i].sig == icSigIfOp) {
@@ -4417,7 +4440,7 @@ int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nO
           return -1;
         if (!icCalcSubSequenceFits(p, op[i].data.size, nOps))
           return -1;
-        nIfArgs = CheckUnderflowOverflow(&op[p], op[i].data.size, nArgs, bCheckUnderflow, sReport);
+        nIfArgs = CheckUnderflowOverflow(&op[p], op[i].data.size, nArgs, bCheckUnderflow, sReport, nMaxStack);
         if (nIfArgs<0)
           return -1;
         incI = op[i].data.size;
@@ -4430,7 +4453,7 @@ int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nO
           return -1;
         if (!icCalcSubSequenceFits(p, op[i+1].data.size, nOps))
           return -1;
-        nElseArgs = CheckUnderflowOverflow(&op[p], op[i+1].data.size, nArgs, bCheckUnderflow, sReport);
+        nElseArgs = CheckUnderflowOverflow(&op[p], op[i+1].data.size, nArgs, bCheckUnderflow, sReport, nMaxStack);
         if (nElseArgs<0)
           return -1;
         if (!icCalcAddUInt32(incI, op[i+1].data.size, incI))
@@ -4448,7 +4471,7 @@ int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nO
           return -1;
         if (!icCalcSubSequenceFits(p, op[i].data.size, nOps))
           return -1;
-        nIfArgs = CheckUnderflowOverflow(&op[p], op[i].data.size, nArgs, bCheckUnderflow, sReport);
+        nIfArgs = CheckUnderflowOverflow(&op[p], op[i].data.size, nArgs, bCheckUnderflow, sReport, nMaxStack);
         if (nIfArgs<0)
           return -1;
         nArgs = bCheckUnderflow ? icIntMin(nArgs, nIfArgs) : icIntMax(nArgs, nIfArgs);
@@ -4490,7 +4513,7 @@ int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nO
           return -1;
         if (!icCalcSubSequenceFits(pos, len, nOps))
           return -1;
-        nCaseArgs = CheckUnderflowOverflow(&op[pos], len, nArgs, bCheckUnderflow, sReport);
+        nCaseArgs = CheckUnderflowOverflow(&op[pos], len, nArgs, bCheckUnderflow, sReport, nMaxStack);
         if (nCaseArgs<0)
           return -1;
 
@@ -4525,16 +4548,16 @@ int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nO
 * 
 * Return: 
 ******************************************************************************/
-icFuncParseStatus CIccCalculatorFunc::DoesStackUnderflowOverflow(std::string &sReport) const
+icFuncParseStatus CIccCalculatorFunc::DoesStackUnderflowOverflow(std::string &sReport, icUInt32Number nMaxStack) const
 {
-  int rv = CheckUnderflowOverflow(m_Op, m_nOps, 0, true, sReport); 
+  int rv = CheckUnderflowOverflow(m_Op, m_nOps, 0, true, sReport, nMaxStack);
 
   if (rv==-1)
     return icFuncParseStackUnderflow;
   else if (rv<0)
     return icFuncParseStackOverflow;
 
-  rv = CheckUnderflowOverflow(m_Op, m_nOps, 0, false, sReport); 
+  rv = CheckUnderflowOverflow(m_Op, m_nOps, 0, false, sReport, nMaxStack);
 
   if (rv==-1)
     return icFuncParseStackUnderflow;
@@ -4614,7 +4637,7 @@ bool CIccCalculatorFunc::HasUnsupportedOperations(std::string &sReport, const CI
     // CWE-400/834: m_nOps is bounded by MAX_CALC_ELEMENTS at Read() and m_Op[] is
     // sized to it; mirror that bound here so the walk is provably finite.
     for (i = 0; i < m_nOps && i < MAX_CALC_ELEMENTS; i++) {
-      if (version < icVersionNumberV5_1 &&
+      if (version < icVersionNumberV5 &&
           (m_Op[i].sig == icSigNotOp ||
            m_Op[i].sig == icSigNotEqualOp)) {
         map[m_Op[i].sig] = NULL;
@@ -4624,7 +4647,9 @@ bool CIccCalculatorFunc::HasUnsupportedOperations(std::string &sReport, const CI
       icCalcOpMap::iterator sig;
       sReport += "Calculator operator(s) not supported by profile version:";
       for (sig = map.begin(); sig != map.end(); sig++) {
-        SIccCalcOp op;
+        // Value-initialised: Describe() reads the operand fields too, and only
+        // the operator's name belongs in this report.
+        SIccCalcOp op{};
         op.sig = sig->first;
         std::string opname;
         op.Describe(opname, 100);
@@ -4711,6 +4736,12 @@ CIccMpeCalculator::CIccMpeCalculator(icUInt16Number nInputChannels /*=0*/,
   m_SubElem = NULL;
   m_calcFunc = NULL;
   m_pCmmEnvVarLookup = NULL;
+
+  m_bHasLimits = false;
+  m_nMaxStackSize = 0;
+  m_nMaxTempChannels = 0;
+  m_nMaxOperations = 0;
+  memset(m_nLimitsReserved, 0, sizeof(m_nLimitsReserved));
 }
 
 /**
@@ -4726,6 +4757,12 @@ CIccMpeCalculator::CIccMpeCalculator(icUInt16Number nInputChannels /*=0*/,
 CIccMpeCalculator::CIccMpeCalculator(const CIccMpeCalculator &channelGen)
 {
   m_nReserved = channelGen.m_nReserved;
+
+  m_bHasLimits = channelGen.m_bHasLimits;
+  m_nMaxStackSize = channelGen.m_nMaxStackSize;
+  m_nMaxTempChannels = channelGen.m_nMaxTempChannels;
+  m_nMaxOperations = channelGen.m_nMaxOperations;
+  memcpy(m_nLimitsReserved, channelGen.m_nLimitsReserved, sizeof(m_nLimitsReserved));
 
   m_nInputChannels = channelGen.m_nInputChannels;
   m_nOutputChannels = channelGen.m_nOutputChannels;
@@ -4788,6 +4825,12 @@ CIccMpeCalculator::CIccMpeCalculator(const CIccMpeCalculator &channelGen)
 CIccMpeCalculator &CIccMpeCalculator::operator=(const CIccMpeCalculator &channelGen)
 {
   m_nReserved = channelGen.m_nReserved;
+
+  m_bHasLimits = channelGen.m_bHasLimits;
+  m_nMaxStackSize = channelGen.m_nMaxStackSize;
+  m_nMaxTempChannels = channelGen.m_nMaxTempChannels;
+  m_nMaxOperations = channelGen.m_nMaxOperations;
+  memcpy(m_nLimitsReserved, channelGen.m_nLimitsReserved, sizeof(m_nLimitsReserved));
 
   SetSize(0,0);
 
@@ -4900,6 +4943,16 @@ void CIccMpeCalculator::SetSize(icUInt16Number nInputChannels, icUInt16Number nO
  ******************************************************************************/
 icFuncParseStatus CIccMpeCalculator::SetCalcFunc(icCalculatorFuncPtr newChannelFunc) 
 {
+  // Reinstalling the function this element already owns is a no-op.  Releasing
+  // it first would leave m_calcFunc dangling for the destructor and for every
+  // Begin(), Apply(), Describe() and Validate() that follows.  As with
+  // CIccSampledCalculatorCurve::SetCalculator there is no public getter, but
+  // m_calcFunc is protected and CIccMpeXmlCalculator and CIccMpeJsonCalculator
+  // both derive from this element, so SetCalcFunc(m_calcFunc) is reachable
+  // from a subclass.
+  if (m_calcFunc == newChannelFunc)
+    return icFuncParseNoError;
+
   delete m_calcFunc;
  
   m_calcFunc = newChannelFunc;
@@ -4956,6 +5009,12 @@ void CIccMpeCalculator::Describe(std::string &sDescription, int nVerboseness)
 
     snprintf(buf, bufSize, "BEGIN_CALC_ELEMENT %u %u\n", m_nInputChannels, m_nOutputChannels);
     sDescription += buf;
+
+    if (m_bHasLimits) {
+      snprintf(buf, bufSize, "CALC_LIMITS stack=%u temp=%u ops=%u\n",
+               (unsigned int)m_nMaxStackSize, (unsigned int)m_nMaxTempChannels, (unsigned int)m_nMaxOperations);
+      sDescription += buf;
+    }
 
     if (m_nSubElem && m_SubElem) {
       icUInt32Number i;
@@ -5077,6 +5136,36 @@ bool CIccMpeCalculator::Read(icUInt32Number size, CIccIO *pIO)
   if (pIO->Read32(posvals, n)!=n) {
     free(posvals);
     return false;
+  }
+
+  // ICC.2:2023 Table 85b: an optional calculatorLimits block follows the positions
+  // directly, and is told apart from element data by its 'clmt' signature.  The
+  // positions locate everything else, so without this the block was skipped and
+  // lost on Write().
+  m_bHasLimits = false;
+  m_nMaxStackSize = m_nMaxTempChannels = m_nMaxOperations = 0;
+  memset(m_nLimitsReserved, 0, sizeof(m_nLimitsReserved));
+
+  icUInt64Number nLimitsPos = (icUInt64Number)(headerSize - sizeof(icPositionNumber)) +
+                              (icUInt64Number)nPos*sizeof(icPositionNumber);
+  if (nLimitsPos + sizeof(icUInt32Number) <= size) {
+    icUInt32Number limitsSig = 0;
+    if (!pIO->Read32(&limitsSig)) {
+      free(posvals);
+      return false;
+    }
+    if (limitsSig == icSigCalcLimits) {
+      if (nLimitsPos + icCalcLimitsSize > size ||
+          !pIO->Read32(&m_nLimitsReserved[0]) ||
+          !pIO->Read32(&m_nMaxStackSize) ||
+          !pIO->Read32(&m_nMaxTempChannels) ||
+          !pIO->Read32(&m_nMaxOperations) ||
+          pIO->Read32(&m_nLimitsReserved[1], 2) != 2) {
+        free(posvals);
+        return false;
+      }
+      m_bHasLimits = true;
+    }
   }
 
   pos = &posvals[1];
@@ -5201,6 +5290,19 @@ bool CIccMpeCalculator::Write(CIccIO *pIO)
   if (pIO->Write32(posvals, np)!=np) {
     free(posvals);
     return false;
+  }
+
+  if (m_bHasLimits) {
+    icUInt32Number limitsSig = icSigCalcLimits;
+    if (!pIO->Write32(&limitsSig) ||
+        !pIO->Write32(&m_nLimitsReserved[0]) ||
+        !pIO->Write32(&m_nMaxStackSize) ||
+        !pIO->Write32(&m_nMaxTempChannels) ||
+        !pIO->Write32(&m_nMaxOperations) ||
+        pIO->Write32(&m_nLimitsReserved[1], 2) != 2) {
+      free(posvals);
+      return false;
+    }
   }
 
   if (m_calcFunc) {
@@ -5473,6 +5575,111 @@ icValidateStatus CIccMpeCalculator::Validate(std::string sigPath, std::string &s
     sReport += sSigPathName;
     sReport += " - Has an Empty Calculator Functions!\n";
     rv = icMaxStatus(rv, icValidateCriticalError);
+  }
+
+  if (m_bHasLimits)
+    rv = icMaxStatus(rv, ValidateLimits(this, sigPath, sReport));
+
+  return rv;
+}
+
+/**
+ ******************************************************************************
+ * Name: CIccMpeCalculator::GetTotalOps
+ *
+ * Purpose: Operations in the main function plus those of every sub-calculator,
+ *  the count ICC.2 Table 85b's maximum number of operations applies to.
+ ******************************************************************************/
+icUInt64Number CIccMpeCalculator::GetTotalOps() const
+{
+  icUInt64Number nOps = m_calcFunc ? m_calcFunc->GetNumOps() : 0;
+  icUInt32Number nSub = (m_nSubElem > MAX_CALC_ELEMENTS) ? MAX_CALC_ELEMENTS : m_nSubElem;
+
+  for (icUInt32Number i=0; m_SubElem && i<nSub; i++) {
+    const CIccMpeCalculator *pSub = dynamic_cast<const CIccMpeCalculator*>(m_SubElem ? m_SubElem[i] : NULL);
+    if (pSub)
+      nOps += pSub->GetTotalOps();
+  }
+  return nOps;
+}
+
+/**
+ ******************************************************************************
+ * Name: CIccMpeCalculator::ValidateLimits
+ *
+ * Purpose: Check this calculator's main function, and those of its
+ *  sub-calculators, against pLimits's calculatorLimits.  ICC.2:2023 11.2.1.1:
+ *  the limits "shall be used by main function validity checking" for the data
+ *  stack and temporary channels, and "shall also apply to any sub-calculator
+ *  elements".  The operation count is the total including sub-elements, so it is
+ *  checked once, at the calculator that carries the limits.  A limit of 0 means
+ *  no maximum.
+ ******************************************************************************/
+icValidateStatus CIccMpeCalculator::ValidateLimits(const CIccMpeCalculator *pLimits, const std::string &sigPath,
+                                                   std::string &sReport) const
+{
+  icValidateStatus rv = icValidateOK;
+  CIccInfo Info;
+  std::string sSigPathName = Info.GetSigPathName(sigPath + icGetSigPath(GetType()));
+  const size_t bufSize = 160;
+  char buf[bufSize];
+
+  if (pLimits == this) {
+    if (m_nLimitsReserved[0] || m_nLimitsReserved[1] || m_nLimitsReserved[2]) {
+      sReport += icMsgValidateNonCompliant;
+      sReport += sSigPathName;
+      sReport += " - calculatorLimits reserved fields must be zero.\n";
+      rv = icMaxStatus(rv, icValidateNonCompliant);
+    }
+
+    icUInt64Number nOps = GetTotalOps();
+    if (m_nMaxOperations && nOps > m_nMaxOperations) {
+      snprintf(buf, bufSize, " - Has %llu operations; calculatorLimits allows %u.\n",
+               (unsigned long long)nOps, (unsigned int)m_nMaxOperations);
+      sReport += icMsgValidateNonCompliant;
+      sReport += sSigPathName;
+      sReport += buf;
+      rv = icMaxStatus(rv, icValidateNonCompliant);
+    }
+  }
+
+  // A function with invalid operations is already reported by its own Validate(),
+  // and the stack analysis, like every other caller of it, expects valid ones.
+  std::string sOpsScratch;
+  if (m_calcFunc && m_calcFunc->HasValidOperations(sOpsScratch)) {
+    if (pLimits->m_nMaxStackSize && pLimits->m_nMaxStackSize < icMaxDataStackSize) {
+      // The bound is the only difference between the two checks, so a function that
+      // passes without it and fails with it exceeds the limit.  The status itself is
+      // not compared: an overflow inside an if, else or select block is returned as
+      // an underflow.
+      std::string sScratch;
+      if (m_calcFunc->DoesStackUnderflowOverflow(sScratch) == icFuncParseNoError &&
+          m_calcFunc->DoesStackUnderflowOverflow(sScratch, pLimits->m_nMaxStackSize) != icFuncParseNoError) {
+        snprintf(buf, bufSize, " - Main function needs a data stack larger than the calculatorLimits maximum of %u.\n",
+                 (unsigned int)pLimits->m_nMaxStackSize);
+        sReport += icMsgValidateNonCompliant;
+        sReport += sSigPathName;
+        sReport += buf;
+        rv = icMaxStatus(rv, icValidateNonCompliant);
+      }
+    }
+
+    icUInt32Number nTemp = m_calcFunc->GetNumTempChannels();
+    if (pLimits->m_nMaxTempChannels && nTemp > pLimits->m_nMaxTempChannels) {
+      snprintf(buf, bufSize, " - Main function uses %u temporary channels; calculatorLimits allows %u.\n",
+               (unsigned int)nTemp, (unsigned int)pLimits->m_nMaxTempChannels);
+      sReport += icMsgValidateNonCompliant;
+      sReport += sSigPathName;
+      sReport += buf;
+      rv = icMaxStatus(rv, icValidateNonCompliant);
+    }
+  }
+
+  icUInt32Number nSub = (m_nSubElem > MAX_CALC_ELEMENTS) ? MAX_CALC_ELEMENTS : m_nSubElem;
+  for (icUInt32Number i=0; m_SubElem && i<nSub; i++) {
+    const CIccMpeCalculator *pSub = dynamic_cast<const CIccMpeCalculator*>(m_SubElem[i]);
+    if (pSub)
+      rv = icMaxStatus(rv, pSub->ValidateLimits(pLimits, sigPath + icGetSigPath(GetType()), sReport));
   }
 
   return rv;

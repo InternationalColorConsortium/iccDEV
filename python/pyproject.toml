@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=64,<85", "cython>=3.0,<3.2", "wheel>=0.46.2,<0.49"]
+requires = ["setuptools>=64,<85", "cython>=3.0,<3.4", "wheel>=0.46.2,<0.49"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -32,13 +32,13 @@ classifiers = [
 [project.optional-dependencies]
 numpy = ["numpy>=1.23,<3"]
 dev = [
-    "build>=1.2,<1.4",
+    "build>=1.2,<1.7",
     "cibuildwheel>=2.23,<3",
-    "cython>=3.0,<3.2",
+    "cython>=3.0,<3.4",
     "numpy>=1.23,<3",
     "pytest>=7.0,<9; python_version < '3.10'",
     "pytest>=9.0.3,<10; python_version >= '3.10'",
-    "twine>=5.0,<7",
+    "twine>=5.0,<8",
     "wheel>=0.46.2,<0.49",
 ]
 
@@ -74,12 +74,12 @@ environment = { ICCDEV_REQUIRE_INSTALLED_PACKAGE = "1" }
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64", "aarch64"]
-before-build = "pip install \"cython>=3.0,<3.2\""
+before-build = "pip install \"cython>=3.0,<3.4\""
 
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64", "universal2"]
-before-build = "pip install \"cython>=3.0,<3.2\""
+before-build = "pip install \"cython>=3.0,<3.4\""
 
 [tool.cibuildwheel.windows]
 archs = ["AMD64", "ARM64"]
-before-build = "pip install \"cython>=3.0,<3.2\""
+before-build = "pip install \"cython>=3.0,<3.4\""

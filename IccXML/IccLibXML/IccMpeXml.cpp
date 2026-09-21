@@ -72,6 +72,7 @@
 #include <new>     /* std::nothrow */
 #include <cstring> /* C strings strcpy, memcpy ... */
 #include <cmath>
+#include <limits>
 
 #ifdef WIN32
 #include <windows.h>
@@ -130,11 +131,12 @@ static bool icXmlParseChannels(xmlNode *pNode, icUInt16Number &nInputChannels,
 static bool icXmlParseSpectralRange(xmlNode *pNode, icSpectralRange &range,
                                     std::string &parseStr)
 {
-  icFloatNumber dStart = (icFloatNumber)atof(icXmlAttrValue(pNode, "start"));
-  icFloatNumber dEnd = (icFloatNumber)atof(icXmlAttrValue(pNode, "end"));
+  icFloatNumber dStart = 0, dEnd = 0;
   icUInt16Number nSteps = 0;
 
-  if (dStart >= dEnd || !icXmlParseU16(icXmlAttrValue(pNode, "steps"), nSteps) || nSteps < 2) {
+  if (!icXmlParseFloat(icXmlAttrValue(pNode, "start"), dStart) ||
+      !icXmlParseFloat(icXmlAttrValue(pNode, "end"), dEnd) || dStart >= dEnd ||
+      !icXmlParseU16(icXmlAttrValue(pNode, "steps"), nSteps) || nSteps < 2) {
     parseStr += "Invalid Spectral Range\n";
     return false;
   }
@@ -215,6 +217,10 @@ bool CIccMpeXmlUnknown::ParseXml(xmlNode *pNode, std::string &parseStr)
   m_nReserved = nReserved;
 
   if (pNode->children && pNode->children->type == XML_TEXT_NODE && pNode->children->content) {
+    if (!icXmlValidHexData((const char *)pNode->children->content)) {
+      parseStr += "Malformed hex in Unknown MPE element data\n";
+      return false;
+    }
     icUInt32Number nSize = icXmlGetHexDataSize((const char *)pNode->children->content);
 
     if (!SetDataSize(nSize, false)) 
@@ -247,21 +253,31 @@ static char* icSegPos(char *buf, size_t bufSize, icFloatNumber pos)
   else if (pos==icMaxFloat32Number)
     strncpy(buf, "+infinity", bufSize);
   else
-    snprintf(buf, bufSize, "%.8" ICFLOATSFX, pos);
+    // Significant digits, not decimal places, for the same reason as
+    // icXmlFloatFmt: "%.8f" quantized a breakpoint to eight places, which moved
+    // the HLG 1/12 value 0.0833333358 to 0.08333334 and read back one float32
+    // ULP away.  Nine significant digits is max_digits10 for float, so every
+    // breakpoint now survives the round trip exactly.  Worst case is
+    // "-3.40282347e+38", fifteen characters, well inside the caller's buffer.
+    snprintf(buf, bufSize, "%.9g", pos);
 
   return buf;
 }
 
-icFloatNumber icGetSegPos(const char *str)
+// Returns false when a breakpoint is neither an infinity spelling nor a number;
+// atof() took "0.5abc" as 0.5 and "x" as 0 (#2548).
+bool icGetSegPos(const char *str, icFloatNumber &pos)
 {
   if (!strncmp(str, "-inf", 4)) {
-    return icMinFloat32Number;
+    pos = icMinFloat32Number;
+    return true;
   }
   if (!strncmp(str, "+inf", 4)) {
-    return icMaxFloat32Number;
+    pos = icMaxFloat32Number;
+    return true;
   }
 
-  return (icFloatNumber)atof(str);
+  return icXmlParseFloat(str, pos);
 }
 
 
@@ -374,8 +390,20 @@ bool CIccFormulaCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
   if (!args.ParseArray(pNode->children))
     return false;
 
-  if (args.GetSize()<m_nParameters)
+  // The binary encoding has no parameter count: the function type fixes it
+  // (ICC.2-2023 Table 111).  Extra values used to be dropped silently, so the
+  // profile written was not the document read (#2547).
+  if (args.GetSize()!=m_nParameters) {
+    parseStr += "FormulaSegment parameter count does not match its FunctionType\n";
     return false;
+  }
+
+  for (icUInt32Number i=0; i<m_nParameters; i++) {
+    if (!std::isfinite(args.GetBuf()[i])) {
+      parseStr += "Non-finite parameter in FormulaSegment\n";
+      return false;
+    }
+  }
 
   free(m_params);
 
@@ -762,7 +790,10 @@ bool CIccSampledCalculatorCurveXml::ParseXml(xmlNode *pNode, std::string &parseS
     return false;
   }
 
-  m_firstEntry = (icFloatNumber)atof(icXmlAttrValue(attr));
+  if (!icXmlParseFloat(icXmlAttrValue(attr), m_firstEntry)) {
+    parseStr += "Invalid FirstEntry in Sampled Calculator Curve\n";
+    return false;
+  }
 
   attr = icXmlFindAttr(pNode, "LastEntry");
 
@@ -771,7 +802,10 @@ bool CIccSampledCalculatorCurveXml::ParseXml(xmlNode *pNode, std::string &parseS
     return false;
   }
 
-  m_lastEntry = (icFloatNumber)atof(icXmlAttrValue(attr));
+  if (!icXmlParseFloat(icXmlAttrValue(attr), m_lastEntry)) {
+    parseStr += "Invalid LastEntry in Sampled Calculator Curve\n";
+    return false;
+  }
 
   attr = icXmlFindAttr(pNode, "DesiredSize");
 
@@ -869,7 +903,10 @@ bool CIccSingleSampledCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
     return false;
   }
 
-  m_firstEntry = (icFloatNumber)atof(icXmlAttrValue(attr));
+  if (!icXmlParseFloat(icXmlAttrValue(attr), m_firstEntry)) {
+    parseStr += "Invalid FirstEntry in Simple Sampled Segment\n";
+    return false;
+  }
 
   attr = icXmlFindAttr(pNode, "LastEntry");
 
@@ -878,7 +915,10 @@ bool CIccSingleSampledCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
     return false;
   }
 
-  m_lastEntry = (icFloatNumber)atof(icXmlAttrValue(attr));
+  if (!icXmlParseFloat(icXmlAttrValue(attr), m_lastEntry)) {
+    parseStr += "Invalid LastEntry in Simple Sampled Segment\n";
+    return false;
+  }
 
   // As above: the explicit casts made these three narrowings invisible to
   // UBSan without making them safe.  StorageType and ExtensionType each select
@@ -1275,8 +1315,12 @@ bool CIccSegmentedCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
   m_list->clear();
   for (pNode=pNode->children; pNode; pNode=pNode->next) {
     if (pNode->type == XML_ELEMENT_NODE) {
-      icFloatNumber start = icGetSegPos(icXmlAttrValue(pNode, "Start"));
-      icFloatNumber end = icGetSegPos(icXmlAttrValue(pNode, "End"));
+      icFloatNumber start = 0, end = 0;
+      if (!icGetSegPos(icXmlAttrValue(pNode, "Start"), start) ||
+          !icGetSegPos(icXmlAttrValue(pNode, "End"), end)) {
+        parseStr += "Invalid Start or End in SegmentedCurve segment\n";
+        return false;
+      }
 
       if (!icXmlStrCmp(pNode->name, "FormulaSegment")) {
         CIccFormulaCurveSegmentXml *pSegXml = new CIccFormulaCurveSegmentXml(start, end);
@@ -1431,21 +1475,25 @@ bool CIccMpeXmlCurveSet::ParseXml(xmlNode *pNode, std::string &parseStr)
     return false;
   }
 
-  SetSize(nChannels);
+  if (!SetSize(nChannels)) {
+    parseStr += "Unable to allocate curves in CurveSetElement\n";
+    return false;
+  }
   int nIndex = 0;
   for (pNode = pNode->children, nIndex = 0;
        pNode;
        pNode=pNode->next) {
     if (pNode->type == XML_ELEMENT_NODE) {
       if (nIndex >= nChannels) {
+        parseStr += "Too many curves in CurveSetElement\n";
         return false;
       }
       else if (!strcmp((const char*)pNode->name, "DuplicateCurve")) {
         const char *attr = icXmlAttrValue(pNode, "Index", NULL);
 
         if (attr) {
-          int nCopyIndex = atoi(attr);
-          if (nCopyIndex >= 0 && nCopyIndex < nIndex) {
+          icUInt32Number nCopyIndex = 0;
+          if (icXmlParseU32(attr, nCopyIndex) && nCopyIndex < (icUInt32Number)nIndex) {
             m_curve[nIndex] = m_curve[nCopyIndex];
             nIndex++;
           }
@@ -1465,8 +1513,11 @@ bool CIccMpeXmlCurveSet::ParseXml(xmlNode *pNode, std::string &parseStr)
         if (!pCurve)
           return false;
 
-        if (!SetCurve(nIndex, pCurve))
+        if (!SetCurve(nIndex, pCurve)) {
+          delete pCurve;
+          parseStr += "Unable to set curve in CurveSetElement\n";
           return false;
+        }
         nIndex++;
       }
     }
@@ -2012,6 +2063,14 @@ bool CIccXmlToneMapFunc::ParseXml(xmlNode* pNode, std::string& parseStr)
     parseStr += "Invalid Reserved2 in Tone Map Function\n";
     return false;
   }
+  // ToXml() writes Reserved when it is non-zero, but nothing read it back, so
+  // an ICC -> XML -> ICC cycle dropped it while Reserved2 survived.  The
+  // element's own Reserved is unaffected: IccTagXml.cpp parses that generically
+  // for every MPE element.  Same "0" default as above (#2621).
+  if (!icXmlParseU32(icXmlAttrValue(pNode, "Reserved", "0"), m_nReserved)) {
+    parseStr += "Invalid Reserved in Tone Map Function\n";
+    return false;
+  }
   if (!icXmlParseU16(icXmlAttrValue(funcType), m_nFunctionType)) {
     parseStr += "Invalid FunctionType in Tone Map Function\n";
     return false;
@@ -2029,11 +2088,32 @@ bool CIccXmlToneMapFunc::ParseXml(xmlNode* pNode, std::string& parseStr)
 
   CIccFloatArray args;
 
-  if (!args.ParseArray(pNode->children))
+  // ParseArray() returns false for an empty or whitespace-only element, which
+  // is what <ToneMapFunction FunctionType="0"/> gives: the most common
+  // malformed spelling was the one left without a diagnostic when the short
+  // list below was given one (#2609).
+  if (!args.ParseArray(pNode->children)) {
+    parseStr += "Missing parameters in Tone Map Function\n";
     return false;
+  }
 
-  if (args.GetSize() < m_nParameters)
+  if (args.GetSize() < m_nParameters) {
+    parseStr += "Too few parameters in Tone Map Function\n";
     return false;
+  }
+
+  // icParseArrayValue() saturates an out-of-range magnitude to the float32
+  // limit, so "1e308" arrives finite here -- but it returns a real NaN for the
+  // literal "nan", which Validate() does not look at.  iccToJson then writes
+  // that parameter back as null, a document the JSON reader refuses.  The
+  // formula segment above has refused a non-finite parameter since #2547
+  // (#2619).
+  for (icUInt16Number i = 0; i < m_nParameters; i++) {
+    if (!std::isfinite(args.GetBuf()[i])) {
+      parseStr += "Non-finite parameter in Tone Map Function\n";
+      return false;
+    }
+  }
 
   free(m_params);
 
@@ -2138,7 +2218,7 @@ bool CIccMpeXmlToneMap::ParseXml(xmlNode* pNode, std::string& parseStr)
     }
   }
   else {
-    parseStr += "Missing Luminance Curve";
+    parseStr += "Missing Luminance Curve\n";
     return false;
   }
 
@@ -2152,16 +2232,20 @@ bool CIccMpeXmlToneMap::ParseXml(xmlNode* pNode, std::string& parseStr)
       pTfNode = pTfNode->next) {
       if (pTfNode->type == XML_ELEMENT_NODE) {
         if (nIndex >= nOutputChannels) {
-          parseStr += "Too many ToneFunctions";
+          parseStr += "Too many ToneFunctions\n";
           return false;
         }
         else if (!strcmp((const char*)pTfNode->name, "DuplicateFunction")) {
           const char* attr = icXmlAttrValue(pTfNode, "Index", NULL);
 
           if (attr) {
-            int nCopyIndex = atoi(attr);
-            if (nCopyIndex >= 0 && nCopyIndex < nIndex) {
-              m_pToneFuncs[nIndex] = m_pToneFuncs[nCopyIndex];
+            icUInt32Number nCopyIndex = 0;
+            if (icXmlParseU32(attr, nCopyIndex) && nCopyIndex < (icUInt32Number)nIndex) {
+              // Insert() fills the next slot by m_nFunc, which a duplicate used to
+              // leave where it was: a ToneMapFunction after a DuplicateFunction
+              // overwrote the duplicate's channel and left the last one NULL.
+              m_pToneFuncs[m_nFunc] = m_pToneFuncs[nCopyIndex];
+              m_nFunc++;
               nIndex++;
             }
             else {
@@ -2181,8 +2265,11 @@ bool CIccMpeXmlToneMap::ParseXml(xmlNode* pNode, std::string& parseStr)
             delete pFunc;
             return false;
           }
-          if (!Insert(pFunc))
+          if (!Insert(pFunc)) {
+            delete pFunc;
+            parseStr += "Too many ToneMapFunctions\n";
             return false;
+          }
           nIndex++;
         }
         else {
@@ -2195,6 +2282,12 @@ bool CIccMpeXmlToneMap::ParseXml(xmlNode* pNode, std::string& parseStr)
       parseStr += "Missing ToneMap Functions\n";
       return false;
     }
+  }
+  else {
+    // An element with no container at all parsed with every function left
+    // NULL, which only Validate() went on to refuse.  #2609.
+    parseStr += "Missing ToneMapFunctions in ToneMapElement\n";
+    return false;
   }
 
   return true;
@@ -2341,8 +2434,13 @@ bool CIccMpeXmlBAcs::ParseXml(xmlNode *pNode, std::string &parseStr)
   // today; it is fixed because ParseXml() reads as though it fully defines the
   // element, and the next caller to reuse one is entitled to that (#2181).
   icUInt32Number nSize = 0;
-  if (pNode->children && pNode->children->type == XML_TEXT_NODE && pNode->children->content)
+  if (pNode->children && pNode->children->type == XML_TEXT_NODE && pNode->children->content) {
+    if (!icXmlValidHexData((const char*)pNode->children->content)) {
+      parseStr += "Malformed hex in ACS element data\n";
+      return false;
+    }
     nSize = icXmlGetHexDataSize((const char*)pNode->children->content);
+  }
 
   if (!AllocData(nSize))
     return false;
@@ -2403,8 +2501,13 @@ bool CIccMpeXmlEAcs::ParseXml(xmlNode *pNode, std::string &parseStr)
   // today; it is fixed because ParseXml() reads as though it fully defines the
   // element, and the next caller to reuse one is entitled to that (#2181).
   icUInt32Number nSize = 0;
-  if (pNode->children && pNode->children->type == XML_TEXT_NODE && pNode->children->content)
+  if (pNode->children && pNode->children->type == XML_TEXT_NODE && pNode->children->content) {
+    if (!icXmlValidHexData((const char*)pNode->children->content)) {
+      parseStr += "Malformed hex in ACS element data\n";
+      return false;
+    }
     nSize = icXmlGetHexDataSize((const char*)pNode->children->content);
+  }
 
   if (!AllocData(nSize))
     return false;
@@ -2470,12 +2573,10 @@ static bool icXmlParseColorAppearanceParams(xmlNode *pNode, std::string &parseSt
    xmlAttr *z = icXmlFindAttr(xyzNode, "Z");
 
    icFloatNumber xyz[3];
-   if (x && y && z) {
-     xyz[0] = (icFloatNumber)atof(icXmlAttrValue(x));
-     xyz[1] = (icFloatNumber)atof(icXmlAttrValue(y));
-     xyz[2] = (icFloatNumber)atof(icXmlAttrValue(z));
-   }
-   else {
+   if (!x || !y || !z ||
+       !icXmlParseFloat(icXmlAttrValue(x), xyz[0]) ||
+       !icXmlParseFloat(icXmlAttrValue(y), xyz[1]) ||
+       !icXmlParseFloat(icXmlAttrValue(z), xyz[2])) {
      parseStr += "Invalid CAM WhitePoint XYZNumber\n";
      return false;
    }
@@ -2486,22 +2587,34 @@ static bool icXmlParseColorAppearanceParams(xmlNode *pNode, std::string &parseSt
      parseStr += "Invalid CAM Luminance\n";
      return false;
    }
-   pCam->SetParameter_La((icFloatNumber)atof((const char*)pChild->children->content));
+   // Element text, so icXmlParseFloat's whitespace allowance matters here:
+   // pretty-printed "<Luminance>\n  20\n</Luminance>" must still load.
+   icFloatNumber camValue = 0;
+   if (!icXmlParseFloat((const char*)pChild->children->content, camValue)) {
+     parseStr += "Invalid CAM Luminance\n";
+     return false;
+   }
+   pCam->SetParameter_La(camValue);
 
    pChild = icXmlFindNode(pNode, "BackgroundLuminance");
    if (!pChild || !pChild->children || !pChild->children->content) {
      parseStr += "Invalid CAM Luminance\n";
      return false;
    }
-   pCam->SetParameter_Yb((icFloatNumber)atof((const char*)pChild->children->content));
+   if (!icXmlParseFloat((const char*)pChild->children->content, camValue)) {
+     parseStr += "Invalid CAM BackgroundLuminance\n";
+     return false;
+   }
+   pCam->SetParameter_Yb(camValue);
 
    pChild = icXmlFindNode(pNode, "ImpactSurround");
    if (!pChild || !pChild->children || !pChild->children->content) {
      parseStr += "Invalid CAM ImpactSurround\n";
      return false;
    }
-   icFloatNumber impactSurround = (icFloatNumber)atof((const char*)pChild->children->content);
-   if (!std::isfinite((double)impactSurround) || impactSurround < 0.0f || impactSurround > 1.0f) {
+   icFloatNumber impactSurround = 0;
+   if (!icXmlParseFloat((const char*)pChild->children->content, impactSurround) ||
+       impactSurround < 0.0f || impactSurround > 1.0f) {
      parseStr += "CAM ImpactSurround must be in [0.0, 1.0]\n";
      return false;
    }
@@ -2512,14 +2625,22 @@ static bool icXmlParseColorAppearanceParams(xmlNode *pNode, std::string &parseSt
      parseStr += "Invalid CAM ChromaticInductionFactor\n";
      return false;
    }
-   pCam->SetParameter_Nc((icFloatNumber)atof((const char*)pChild->children->content));
+   if (!icXmlParseFloat((const char*)pChild->children->content, camValue)) {
+     parseStr += "Invalid CAM ChromaticInductionFactor\n";
+     return false;
+   }
+   pCam->SetParameter_Nc(camValue);
 
    pChild = icXmlFindNode(pNode, "AdaptationFactor");
    if (!pChild || !pChild->children || !pChild->children->content) {
      parseStr += "Invalid CAM AdaptationFactor\n";
      return false;
    }
-   pCam->SetParameter_F((icFloatNumber)atof((const char*)pChild->children->content));
+   if (!icXmlParseFloat((const char*)pChild->children->content, camValue)) {
+     parseStr += "Invalid CAM AdaptationFactor\n";
+     return false;
+   }
+   pCam->SetParameter_F(camValue);
 
    return true;
 }
@@ -2648,6 +2769,13 @@ bool CIccMpeXmlCalculator::ToXml(std::string &xml, std::string blanks/* = ""*/)
   }
   xml += ">\n";
 
+  // ICC.2:2023 Table 85b calculatorLimits, written only when the element has one.
+  if (m_bHasLimits) {
+    snprintf(line, lineSize, "<CalculatorLimits MaxStackSize=\"%u\" MaxTempChannels=\"%u\" MaxOperations=\"%u\"/>\n",
+             (unsigned int)m_nMaxStackSize, (unsigned int)m_nMaxTempChannels, (unsigned int)m_nMaxOperations);
+    xml += blanks2 + line;
+  }
+
   int i;
 
   // CWE-400/CWE-834: the walk below iterates m_nSubElem over m_SubElem[].
@@ -2668,7 +2796,10 @@ bool CIccMpeXmlCalculator::ToXml(std::string &xml, std::string blanks/* = ""*/)
         IIccExtensionMpe *pExt = m_SubElem[i]->GetExtension();
         if (pExt && !strcmp(pExt->GetExtClassName(), "CIccMpeXml")) {
           CIccMpeXml *pMpe = (CIccMpeXml*)pExt;
-          pMpe->ToXml(xml, blanks2+"  ");
+          // A sub-element that fails has already appended its opening markup,
+          // so carrying on would emit a document with an unclosed element.
+          if (!pMpe->ToXml(xml, blanks2+"  "))
+            return false;
         }
         else {
           return false;
@@ -2821,15 +2952,21 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
             icUInt16Number size = 1;
 
             if ((attr = icXmlFindAttr(pNext, "Position"))) {
-              offset = atoi(icXmlAttrValue(attr));
+              icUInt32Number nPosition = 0;
+              if (!icXmlParseU32(icXmlAttrValue(attr), nPosition,
+                                 (icUInt32Number)(std::numeric_limits<int>::max)())) {
+                parseStr += "Invalid Position in calculator variable declaration\n";
+                return false;
+              }
+              offset = (int)nPosition;
               if (offset && importPath != "*") {
                 parseStr += "Position cannot be specified for imported variables";
                 return false;
               }
             }
-            // `offset` above is deliberately left as a signed int: CIccTempDeclVar
-            // stores it in an `int m_pos` whose -1 means "no position given", so
-            // atoi() there is reading a genuinely signed field and is correct.
+            // `offset` above stays a signed int: CIccTempDeclVar stores it in an
+            // `int m_pos` whose -1 means "no position given", which no document
+            // can select -- Position is parsed as a non-negative int (#2548).
             // `size` is the icUInt16Number, and it is the one that wrapped --
             // Size="-1" became 65535 and was accepted as a 65535-element
             // declaration rather than rejected (#1931).
@@ -3576,6 +3713,17 @@ void CIccMpeXmlCalculator::clean()
   m_nNextMpe = 0;
 }
 
+// Without this override a copy came from CIccMpeCalculator::NewCopy() and lost
+// the XML class.  CIccSampledCalculatorCurve's copy constructor copies its
+// calculator through NewCopy(), and ToXmlCurve() writes a sampled calculator
+// curve from exactly such a copy, so CIccSampledCalculatorCurveXml::ToXml()
+// found a plain CIccMpeCalculator, refused it after writing its opening
+// element, and iccToXml emitted an unclosed <SampledCalculatorCurve>.
+CIccMpeCalculator *CIccMpeXmlCalculator::NewCopy() const
+{
+  return new CIccMpeXmlCalculator(static_cast<const CIccMpeCalculator&>(*this));
+}
+
 bool CIccMpeXmlCalculator::ParseChanMap(ChanVarMap& chanMap, const char *szNames, int nChannels)
 {
   chanMap.clear();
@@ -3670,6 +3818,21 @@ bool CIccMpeXmlCalculator::ParseXml(xmlNode *pNode, std::string &parseStr)
   if (!ParseChanMap(m_outputMap, icXmlAttrValue(pNode, "OutputNames"), m_nOutputChannels)) {
     parseStr += "Invalid name for InputChannels";
     return false;
+  }
+
+  // ICC.2:2023 Table 85b calculatorLimits; a missing attribute is 0, no maximum.
+  m_bHasLimits = false;
+  m_nMaxStackSize = m_nMaxTempChannels = m_nMaxOperations = 0;
+  memset(m_nLimitsReserved, 0, sizeof(m_nLimitsReserved));
+  xmlNode *pLimits = icXmlFindNode(pNode->children, "CalculatorLimits");
+  if (pLimits) {
+    if (!icXmlParseU32(icXmlAttrValue(pLimits, "MaxStackSize", "0"), m_nMaxStackSize) ||
+        !icXmlParseU32(icXmlAttrValue(pLimits, "MaxTempChannels", "0"), m_nMaxTempChannels) ||
+        !icXmlParseU32(icXmlAttrValue(pLimits, "MaxOperations", "0"), m_nMaxOperations)) {
+      parseStr += "Invalid CalculatorLimits attribute\n";
+      return false;
+    }
+    m_bHasLimits = true;
   }
 
   if (!ParseImport(pNode, "*", parseStr))
@@ -3830,11 +3993,12 @@ bool CIccMpeXmlEmissionCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   pData = icXmlFindNode(pNode->children, "Wavelengths");
   if (pData) {
-    icFloatNumber dStart = (icFloatNumber)atof(icXmlAttrValue(pData, "start"));
-    icFloatNumber dEnd = (icFloatNumber)atof(icXmlAttrValue(pData, "end"));
+    icFloatNumber dStart = 0, dEnd = 0;
     icUInt16Number nSteps = 0;
 
-    if (dStart >= dEnd || !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) || !nSteps) {
+    if (!icXmlParseFloat(icXmlAttrValue(pData, "start"), dStart) ||
+        !icXmlParseFloat(icXmlAttrValue(pData, "end"), dEnd) || dStart >= dEnd ||
+        !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) || !nSteps) {
       parseStr += "Invalid Spectral Range\n";
       return false;
     }
@@ -3886,19 +4050,28 @@ bool CIccMpeXmlReflectanceCLUT::ToXml(std::string &xml, std::string blanks/* = "
   char buf[bufSize];
   std::string reserved;
 
-  xml += blanks + "<ReflectanceCLutElem";
+  // This wrote "ReflectanceCLutElem" (open and close tags), but the element
+  // factory in IccTagXml.cpp only recognises "ReflectanceCLutElement", so a
+  // binary profile holding a reflectance CLUT did not survive iccToXml |
+  // iccFromXml: the rebuilt profile failed with "Unknown Element Type".  No
+  // tracked document carried one until Testing/Display/SpectralObserverElements.xml
+  // (#2560), whose generated profile the CI XML round trip then rejected.
+  xml += blanks + "<ReflectanceCLutElement";
 
   if (m_nReserved) {
     snprintf(buf, bufSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml +=  buf;
   }
 
-  // 32-bit m_flags printed as signed, exactly as in CIccMpeXmlEmissionCLUT::ToXml.
-  snprintf(buf, bufSize, " InputChannels=\"%d\" OutputChannels=\"%d\" Flags=\"%u\">\n", NumInputChannels(), NumOutputChannels(), (unsigned int) m_flags);
+  // StorageType was never written here, although ParseXml reads it and
+  // CIccMpeXmlEmissionCLUT::ToXml writes it: a non-zero storage type came back
+  // as 0.  Same attribute set, and the same "%u" for the 32-bit m_flags, as the
+  // emission writer.
+  snprintf(buf, bufSize, " InputChannels=\"%d\" OutputChannels=\"%d\" Flags=\"%u\" StorageType=\"%d\">\n", NumInputChannels(), NumOutputChannels(), (unsigned int) m_flags, (unsigned int) m_nStorageType);
   xml += buf;
 
   snprintf(buf, bufSize, "  <Wavelengths start=\"" icXmlHalfFmt "\" end=\"" icXmlHalfFmt "\" steps=\"%d\"/>\n", icF16toF(m_Range.start), icF16toF(m_Range.end), m_Range.steps);
-  xml += buf;
+  xml += blanks + buf;
 
   int i;
 
@@ -3918,7 +4091,7 @@ bool CIccMpeXmlReflectanceCLUT::ToXml(std::string &xml, std::string blanks/* = "
   if (!icCLUTDataToXml(xml, m_pCLUT, icConvertFloat, blanks, true))
     return false;
 
-  xml += blanks + "</ReflectanceCLutElem>\n";
+  xml += blanks + "</ReflectanceCLutElement>\n";
 
   return true;
 }
@@ -3928,7 +4101,7 @@ bool CIccMpeXmlReflectanceCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
   // Same pair of fields, same widths, same defect as CIccMpeXmlEmissionCLUT
   // above -- both derive from CIccMpeSpectralCLUT, so m_flags is 32-bit here too.
   if (!icXmlParseU16(icXmlAttrValue(pNode, "StorageType", "0"), m_nStorageType)) {
-    parseStr += "Invalid StorageType in ReflectanceCLutElem\n";
+    parseStr += "Invalid StorageType in ReflectanceCLutElement\n";
     return false;
   }
 
@@ -3937,7 +4110,7 @@ bool CIccMpeXmlReflectanceCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
     return false;
   }
   if (!icXmlParseU32(icXmlAttrValue(pNode, "Flags", "0"), m_flags)) {
-    parseStr += "Invalid Flags in ReflectanceCLutElem\n";
+    parseStr += "Invalid Flags in ReflectanceCLutElement\n";
     return false;
   }
 
@@ -3945,11 +4118,12 @@ bool CIccMpeXmlReflectanceCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   pData = icXmlFindNode(pNode->children, "Wavelengths");
   if (pData) {
-    icFloatNumber dStart = (icFloatNumber)atof(icXmlAttrValue(pData, "start"));
-    icFloatNumber dEnd = (icFloatNumber)atof(icXmlAttrValue(pData, "end"));
+    icFloatNumber dStart = 0, dEnd = 0;
     icUInt16Number nSteps = 0;
 
-    if (dStart >= dEnd || !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) || !nSteps) {
+    if (!icXmlParseFloat(icXmlAttrValue(pData, "start"), dStart) ||
+        !icXmlParseFloat(icXmlAttrValue(pData, "end"), dEnd) || dStart >= dEnd ||
+        !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) || !nSteps) {
       parseStr += "Invalid Spectral Range\n";
       return false;
     }
@@ -4014,11 +4188,12 @@ bool CIccMpeXmlEmissionObserver::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   pData = icXmlFindNode(pNode->children, "Wavelengths");
   if (pData) {
-    icFloatNumber dStart = (icFloatNumber)atof(icXmlAttrValue(pData, "start"));
-    icFloatNumber dEnd = (icFloatNumber)atof(icXmlAttrValue(pData, "end"));
+    icFloatNumber dStart = 0, dEnd = 0;
     icUInt16Number nSteps = 0;
 
-    if (dStart >= dEnd || !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) ||
+    if (!icXmlParseFloat(icXmlAttrValue(pData, "start"), dStart) ||
+        !icXmlParseFloat(icXmlAttrValue(pData, "end"), dEnd) || dStart >= dEnd ||
+        !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) ||
         nSteps != nInputChannels) {
       parseStr += "Invalid Spectral Range\n";
       return false;
@@ -4100,11 +4275,12 @@ bool CIccMpeXmlReflectanceObserver::ParseXml(xmlNode *pNode, std::string &parseS
 
   pData = icXmlFindNode(pNode->children, "Wavelengths");
   if (pData) {
-    icFloatNumber dStart = (icFloatNumber)atof(icXmlAttrValue(pData, "start"));
-    icFloatNumber dEnd = (icFloatNumber)atof(icXmlAttrValue(pData, "end"));
+    icFloatNumber dStart = 0, dEnd = 0;
     icUInt16Number nSteps = 0;
 
-    if (dStart >= dEnd || !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) ||
+    if (!icXmlParseFloat(icXmlAttrValue(pData, "start"), dStart) ||
+        !icXmlParseFloat(icXmlAttrValue(pData, "end"), dEnd) || dStart >= dEnd ||
+        !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) ||
         nSteps != nInputChannels) {
       parseStr += "Invalid Spectral Range\n";
       return false;

@@ -39,14 +39,16 @@ Statuses are:
 | `PASS` | exit 0 and no matched diagnostic indicators |
 | `QA-ISSUE` | exit 0 plus warning/error/PAWG issue indicators |
 | `FAIL` | non-zero exit without sanitizer or signal evidence |
-| `CRASH` | sanitizer finding, signal text, or signal-like exit code |
+| `CRASH` | sanitizer finding, signal text, or Unix signal exit 129-192 |
 | `TIMEOUT` | `timeout(1)` exit 124 |
 
 By default, scanners exit non-zero only for `CRASH,TIMEOUT`. Use
 `--fail-on none` for inventory-only reporting, or `--fail-on CRASH,TIMEOUT,FAIL`
 for stricter gates. The registry workflow intentionally uses `--fail-on CRASH`
 because its source list includes malformed profiles and full-matrix variants
-that exercise expected non-pass validation paths.
+that exercise expected non-pass validation paths. Tool returns such as `-1`
+surface through the shell as exit 255 and remain graceful `FAIL` results unless
+the log contains independent sanitizer or signal evidence.
 
 PAWG classification requires Python 3 and reads checklist verdicts and checked
 summary counts, not words in questions or details. `OK`/`PASS` and `N/A` items
@@ -219,7 +221,11 @@ Large external profiles can produce hundreds of thousands of validation lines.
 The workflow keeps bounded log excerpts by default so artifacts stay reviewable;
 use `results.tsv`, `findings.txt`, and `summary.md` for authoritative status,
 and rerun with `registry_qa_log_tail_lines=0` only when complete raw output is
-needed for diagnosis.
+needed for diagnosis. The developer report is packaged and uploaded with
+`always()` after the registry scan, including when its `CRASH` or `TIMEOUT`
+policy fails the job. This retains the per-run logs, result rows, source
+manifest, and downloaded payloads needed to distinguish a genuine sanitizer or
+signal finding from a graceful tool failure.
 
 ## Sanitizer Suppression Maintenance
 
@@ -297,8 +303,9 @@ Record the issue number, before/after commands, exit codes, and whether the
 result depended on runtime suppression or compile-time ignorelist rebuild.
 
 The developer report artifact preserves downloaded `profiles/` payloads when
-registry QA is enabled. Keep `download-manifest.tsv` with the payloads so
-reviewers can verify source URLs, byte counts, and SHA-256 values.
+registry QA is enabled, whether the scan passes or fails. Keep
+`download-manifest.tsv` with the payloads so reviewers can verify source URLs,
+byte counts, and SHA-256 values.
 
 Suggested use:
 

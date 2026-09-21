@@ -56,13 +56,13 @@ for its own signal:
 - Run Memcheck and Helgrind against a non-sanitized build. Do not stack
   Valgrind on an ASAN build.
 - Run TSan separately for data races; it does not replace MSan or Memcheck.
-- Run MSan only when dependent C++ runtime code is also instrumented. A normal
-  distro `libstdc++` or `libc++` can stop origin tracking at an STL boundary and
-  produce misleading reports.
+- Run MSan only when dependent runtime code is also instrumented. A normal
+  distro `libstdc++`, `libc++`, or `libxml2` can leave destination shadow bytes
+  poisoned after initializing them and produce misleading reports.
 - Do not suppress a sequence of STL frames to make MSan advance. Build the
   pinned instrumented libc++ runtime, then rerun the same input and controls.
 
-Build the repository runtime and run the JSON plus threaded controls with:
+Build the repository runtime and run the JSON, XML, and threaded controls with:
 
 ```bash
 .github/scripts/iccdev-build-msan-libcxx.sh --prefix /tmp/iccdev-msan-libcxx
@@ -71,6 +71,11 @@ Build the repository runtime and run the JSON plus threaded controls with:
   --build-dir /tmp/iccdev-msan-build \
   --runtime-dir /tmp/iccdev-msan-libcxx
 ```
+
+Despite its historical name, `iccdev-build-msan-libcxx.sh` installs pinned,
+instrumented libc++, libc++abi, and libxml2. A plain `-DENABLE_MSAN=ON` build
+instruments iccDEV itself but not distribution dependencies; do not classify
+reports from those libraries as iccDEV bugs.
 
 For Valgrind-assisted taint tracing, configure with
 `-DCMAKE_BUILD_TYPE=Debug -DICCDEV_ENABLE_TAINT_TRACE=ON`, set

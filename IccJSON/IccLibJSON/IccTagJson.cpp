@@ -158,6 +158,8 @@ static bool icJsonGetLocalizedText(const IccJson &j, std::string &text)
 {
   std::string hex;
   if (jGetString(j, "textHex", hex)) {
+    if (!icJsonValidHexData(hex.c_str()))
+      return false;
     icUInt32Number hexSize = icJsonGetHexDataSize(hex.c_str());
     text.clear();
     if (hexSize) {
@@ -245,7 +247,7 @@ bool CIccTagJsonUnknown::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonUnknown::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonUnknown::ParseJson(const IccJson &j, std::string &parseStr)
 {
   // Cap hex blob size so a multi-MB string doesn't allocate a 4-GB
   // buffer. 16 MB is generous for any legitimate unknown-tag payload.
@@ -253,6 +255,10 @@ bool CIccTagJsonUnknown::ParseJson(const IccJson &j, std::string & /*parseStr*/)
 
   std::string hex;
   if (jGetString(j, "unknownData", hex)) {
+    if (!icJsonValidHexData(hex.c_str())) {
+      parseStr += "Malformed hex in unknownData\n";
+      return false;
+    }
     m_nSize = icJsonGetHexDataSize(hex.c_str());
     if (m_nSize > kMaxUnknownTagBytes) return false;
     delete[] m_pData;
@@ -317,10 +323,14 @@ bool CIccTagJsonZipUtf8Text::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonZipUtf8Text::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonZipUtf8Text::ParseJson(const IccJson &j, std::string &parseStr)
 {
   std::string hex;
   if (jGetString(j, "compressedData", hex)) {
+    if (!icJsonValidHexData(hex.c_str())) {
+      parseStr += "Malformed hex in compressedData\n";
+      return false;
+    }
     icUInt32Number sz = icJsonGetHexDataSize(hex.c_str());
     icUChar *pBuf = AllocBuffer(sz);
     if (!pBuf) return false;
@@ -339,10 +349,14 @@ bool CIccTagJsonZipXml::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonZipXml::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonZipXml::ParseJson(const IccJson &j, std::string &parseStr)
 {
   std::string hex;
   if (jGetString(j, "compressedData", hex)) {
+    if (!icJsonValidHexData(hex.c_str())) {
+      parseStr += "Malformed hex in compressedData\n";
+      return false;
+    }
     icUInt32Number sz = icJsonGetHexDataSize(hex.c_str());
     icUChar *pBuf = AllocBuffer(sz);
     if (!pBuf) return false;
@@ -516,24 +530,42 @@ bool CIccTagJsonChromaticity::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonChromaticity::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonChromaticity::ParseJson(const IccJson &j, std::string &parseStr)
 {
   int colorantType = 0;
   jGetValue(j, "colorantType", colorantType);
   m_nColorantType = (icColorantEncoding)colorantType;
-  if (jsonExistsField(j, "channels") && j["channels"].is_array()) {
-    const IccJson &ch = j["channels"];
-    icUInt16Number nCh = icJsonSafeU16(ch.size());
-    if (ch.size() > 0 && !nCh) return false;
-    if (!SetSize(nCh)) return false;
-    for (icUInt16Number i = 0; i < nCh; i++) {
-      if (ch[i].is_array() && ch[i].size() >= 2) {
-        double xy[2] = {0, 0};
-        jsonToArray(ch[i], xy, 2);
-        m_xy[i].x = icDtoUF(xy[0]);
-        m_xy[i].y = icDtoUF(xy[1]);
-      }
+
+  // #2541: every one of the refusals below used to be a silent skip that still
+  // returned true, so iccFromJson wrote a profile whose chromaticity channels
+  // were the zeros SetSize() left behind rather than the document's values.  The
+  // XML reader refuses each of these (IccTagXml.cpp), and a writer that emits a
+  // tag the reader would not accept is the divergence this closes.
+  if (!jsonExistsField(j, "channels") || !j["channels"].is_array()) {
+    parseStr += "chromaticityType requires a channels array\n";
+    return false;
+  }
+
+  const IccJson &ch = j["channels"];
+  icUInt16Number nCh = icJsonSafeU16(ch.size());
+  if (ch.size() > 0 && !nCh) return false;
+  if (!SetSize(nCh)) return false;
+  for (icUInt16Number i = 0; i < nCh; i++) {
+    // Exactly two coordinates: ">= 2" accepted a third and silently dropped it,
+    // which is the same fail-open shape one element further in.
+    if (!ch[i].is_array() || ch[i].size() != 2) {
+      parseStr += "chromaticityType channel must be a pair of numbers\n";
+      return false;
     }
+    double xy[2] = {0, 0};
+    // The result of this call was discarded, so a non-numeric coordinate
+    // encoded as 0 with no diagnostic.
+    if (!jsonToArray(ch[i], xy, 2)) {
+      parseStr += "chromaticityType channel must be a pair of numbers\n";
+      return false;
+    }
+    m_xy[i].x = icDtoUF(xy[0]);
+    m_xy[i].y = icDtoUF(xy[1]);
   }
   return true;
 }
@@ -973,10 +1005,12 @@ bool CIccTagJsonMeasurement::ToJson(IccJson &j)
   j["geometry"]          = (int)m_Data.geometry;
   j["flare"]             = info.GetMeasurementFlareName(m_Data.flare);
   j["illuminant"]        = (int)m_Data.illuminant;
+  if (m_nMeasurementCondition)  // ICC.2 Table 61, written only when present
+    j["measurementCondition"] = m_nMeasurementCondition;
   return true;
 }
 
-bool CIccTagJsonMeasurement::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonMeasurement::ParseJson(const IccJson &j, std::string &parseStr)
 {
   int stdObserver = 0, geometry = 0, illuminant = 0;
   std::string flare;
@@ -996,6 +1030,14 @@ bool CIccTagJsonMeasurement::ParseJson(const IccJson &j, std::string & /*parseSt
   else
     m_Data.flare = icFlare0;
   m_Data.illuminant  = (icIlluminant)illuminant;
+  // Refused, as the XML reader refuses it, rather than dropped when malformed.
+  icUInt32Number condition = 0;
+  if (j.contains("measurementCondition") &&
+      (!j["measurementCondition"].is_number_unsigned() || !jGetValue(j, "measurementCondition", condition))) {
+    parseStr += "Invalid measurementCondition\n";
+    return false;
+  }
+  m_nMeasurementCondition = condition;
   return true;
 }
 
@@ -1560,10 +1602,35 @@ bool CIccTagJsonColorantTable::ToJson(IccJson &j)
 
 bool CIccTagJsonColorantTable::ParseJson(const IccJson &j, std::string &parseStr)
 {
+  // #2550: an encoding this reader does not implement used to fall through to
+  // the Lab branch below, so "pcsEncoding":"sRGB" silently produced Lab-decoded
+  // values.  A missing field keeps its historical Lab default -- that is the
+  // shape of every document written before ToJson emitted the field, and what
+  // docs/icc-profile.schema.json documents -- but a field that IS present must
+  // be a string naming an encoding this reader honours.  jGetString() fails for
+  // a non-string value, so testing only its result would have let
+  // "pcsEncoding":7 keep the Lab default as well.
   std::string pcsEncoding = "Lab";
-  jGetString(j, "pcsEncoding", pcsEncoding);
+  if (jsonExistsField(j, "pcsEncoding") &&
+      (!jGetString(j, "pcsEncoding", pcsEncoding) ||
+       (pcsEncoding != "Lab" && pcsEncoding != "XYZ" && pcsEncoding != "16bit"))) {
+    parseStr += "colorantTableType pcsEncoding must be \"Lab\", \"XYZ\" or \"16bit\"\n";
+    return false;
+  }
 
-  if (jsonExistsField(j, "colorantTable") && j["colorantTable"].is_array()) {
+  // #2541: a missing or non-array colorantTable used to skip the whole body and
+  // still return true, writing a profile with an empty tag in place of the
+  // document's colorants.  The field is now required.  An EMPTY array is refused
+  // too, but by SetSize(0) below rather than here, and that predates this check:
+  // icRealloc(p, 0) returns NULL.  ToJson does emit [] for a tag with no entries,
+  // so that one document does not round-trip; whether an empty colorantTable is
+  // legal is left to ICC.1 rather than settled here.
+  if (!jsonExistsField(j, "colorantTable") || !j["colorantTable"].is_array()) {
+    parseStr += "colorantTableType requires a colorantTable array\n";
+    return false;
+  }
+
+  {
     const IccJson &arr = j["colorantTable"];
     // #2535: the same narrowing as CIccTagJsonColorantOrder::ParseJson above.
     // CIccTagColorantTable::SetSize() also takes an icUInt16Number, and here
@@ -1575,8 +1642,13 @@ bool CIccTagJsonColorantTable::ParseJson(const IccJson &j, std::string &parseStr
     for (icUInt16Number i = 0; i < nColorants; i++) {
       const IccJson &c = arr[i];
       std::string name;
-      if (jGetString(c, "name", name))
-        strncpy(m_pData[i].name, name.c_str(), sizeof(m_pData[i].name)-1);
+      // A missing or non-string name used to leave the entry's 32-byte name
+      // field at whatever SetSize() had put there, with no diagnostic.
+      if (!jGetString(c, "name", name)) {
+        parseStr += "colorantTableType entry requires a string name\n";
+        return false;
+      }
+      strncpy(m_pData[i].name, name.c_str(), sizeof(m_pData[i].name)-1);
       if (jsonExistsField(c, "pcs") && c["pcs"].is_array() && c["pcs"].size() == 3) {
         if (pcsEncoding == "16bit") {
           icUInt16Number pcs[3];
@@ -2048,13 +2120,17 @@ bool CIccTagJsonTagData::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonTagData::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonTagData::ParseJson(const IccJson &j, std::string &parseStr)
 {
   int dataFlag = 0;
   if (jGetValue(j, "dataFlag", dataFlag))
     m_nDataFlag = (icDataBlockType)dataFlag;
   std::string hex;
   if (jGetString(j, "data", hex)) {
+    if (!icJsonValidHexData(hex.c_str())) {
+      parseStr += "Malformed hex in dataType data\n";
+      return false;
+    }
     icUInt32Number sz = icJsonGetHexDataSize(hex.c_str());
     if (!SetSize(sz)) return false;
     icJsonGetHexData(m_pData, hex.c_str(), sz);
@@ -3978,12 +4054,17 @@ bool CIccTagJsonGamutBoundaryDesc::ParseJson(const IccJson &j, std::string &pars
 
 bool CIccTagJsonEmbeddedHeightImage::ToJson(IccJson &j)
 {
+  // A zero-byte image used to be written with no "ImageData", which ParseJson
+  // below refuses.  Read() refuses it too, so there is no document to write
+  // that anything will read back (#2572).
+  if (!m_pData || !m_nSize)
+    return false;
+
   j["SeamlessIndicator"] = (unsigned int)m_nSeamlesIndicator;
   j["EncodingFormat"]    = (unsigned int)m_nEncodingFormat;
   j["MetersMinPixelValue"] = (double)m_fMetersMinPixelValue;
   j["MetersMaxPixelValue"] = (double)m_fMetersMaxPixelValue;
-  if (m_pData && m_nSize)
-    j["ImageData"] = icJsonDumpHexData(m_pData, m_nSize);
+  j["ImageData"] = icJsonDumpHexData(m_pData, m_nSize);
   return true;
 }
 
@@ -4006,13 +4087,22 @@ bool CIccTagJsonEmbeddedHeightImage::ParseJson(const IccJson &j, std::string &pa
     parseStr += "Cannot find ImageData in HeightImage\n";
     return false;
   }
+  if (!icJsonValidHexData(hex.c_str())) {
+    parseStr += "Malformed hex in ImageData\n";
+    return false;
+  }
   icUInt32Number nSize = icJsonGetHexDataSize(hex.c_str());
-  if (nSize) {
-    SetSize(nSize);
-    if (icJsonGetHexData(m_pData, hex.c_str(), m_nSize) != m_nSize) {
-      parseStr += "Failed to decode HeightImage ImageData\n";
-      return false;
-    }
+  // "ImageData" with no hex digits used to leave the constructor's one zero
+  // byte in place, so iccFromJson saved a one-byte image nobody supplied.
+  // Refuse it, as the XML reader does since #2571 (#2572).
+  if (!nSize) {
+    parseStr += "HeightImage ImageData has no hex data: at least one byte is required.\n";
+    return false;
+  }
+  if (!SetSize(nSize) ||
+      icJsonGetHexData(m_pData, hex.c_str(), m_nSize) != m_nSize) {
+    parseStr += "Failed to decode HeightImage ImageData\n";
+    return false;
   }
   return true;
 }
@@ -4023,10 +4113,13 @@ bool CIccTagJsonEmbeddedHeightImage::ParseJson(const IccJson &j, std::string &pa
 
 bool CIccTagJsonEmbeddedNormalImage::ToJson(IccJson &j)
 {
+  // Same as CIccTagJsonEmbeddedHeightImage::ToJson: no readable form (#2572).
+  if (!m_pData || !m_nSize)
+    return false;
+
   j["SeamlessIndicator"] = (unsigned int)m_nSeamlesIndicator;
   j["EncodingFormat"]    = (unsigned int)m_nEncodingFormat;
-  if (m_pData && m_nSize)
-    j["ImageData"] = icJsonDumpHexData(m_pData, m_nSize);
+  j["ImageData"] = icJsonDumpHexData(m_pData, m_nSize);
   return true;
 }
 
@@ -4045,13 +4138,20 @@ bool CIccTagJsonEmbeddedNormalImage::ParseJson(const IccJson &j, std::string &pa
     parseStr += "Cannot find ImageData in NormalImage\n";
     return false;
   }
+  if (!icJsonValidHexData(hex.c_str())) {
+    parseStr += "Malformed hex in ImageData\n";
+    return false;
+  }
   icUInt32Number nSize = icJsonGetHexDataSize(hex.c_str());
-  if (nSize) {
-    SetSize(nSize);
-    if (icJsonGetHexData(m_pData, hex.c_str(), m_nSize) != m_nSize) {
-      parseStr += "Failed to decode NormalImage ImageData\n";
-      return false;
-    }
+  // Same as CIccTagJsonEmbeddedHeightImage::ParseJson (#2572).
+  if (!nSize) {
+    parseStr += "NormalImage ImageData has no hex data: at least one byte is required.\n";
+    return false;
+  }
+  if (!SetSize(nSize) ||
+      icJsonGetHexData(m_pData, hex.c_str(), m_nSize) != m_nSize) {
+    parseStr += "Failed to decode NormalImage ImageData\n";
+    return false;
   }
   return true;
 }

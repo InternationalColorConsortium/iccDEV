@@ -47,11 +47,11 @@
 				  <WhitePoint>
 					  <XYZNumber X="0.8920744919559823" Y="0.9999999999999997" Z="4.7469528485335415"/>
           </WhitePoint>
-          <Luminance>%f</Luminance>
-          <BackgroundLuminance>%.8f</BackgroundLuminance>
-          <ImpactSurround>%f</ImpactSurround>
-          <ChromaticInductionFactor>%f</ChromaticInductionFactor>
-          <AdaptationFactor>%f</AdaptationFactor>
+          <Luminance>0</Luminance>
+          <BackgroundLuminance>0</BackgroundLuminance>
+          <ImpactSurround>0</ImpactSurround>
+          <ChromaticInductionFactor>0</ChromaticInductionFactor>
+          <AdaptationFactor>0</AdaptationFactor>
          </ColorAppearanceParams>
 				</XYZToJabElement>
 				<JabToXYZElement InputChannels="3" OutputChannels="3">
@@ -59,10 +59,10 @@
 				  <WhitePoint>
 					  <XYZNumber X="0.964245565128246" Y="1.00000000" Z="0.824679094091967"/>
           </WhitePoint>
-          <Luminance>%f</Luminance>
-          <BackgroundLuminance>%.8f</BackgroundLuminance>
-          <ImpactSurround>%f</ImpactSurround>
-          <ChromaticInductionFactor>%f</ChromaticInductionFactor>
+          <Luminance>0</Luminance>
+          <BackgroundLuminance>0</BackgroundLuminance>
+          <ImpactSurround>0</ImpactSurround>
+          <ChromaticInductionFactor>0</ChromaticInductionFactor>
           <AdaptationFactor>1.0</AdaptationFactor>
          </ColorAppearanceParams>
 				</JabToXYZElement>
@@ -77,10 +77,10 @@
 				  <WhitePoint>
 					  <XYZNumber X="0.964245565128246" Y="1.00000000" Z="0.824679094091967"/>
           </WhitePoint>
-          <Luminance>%f</Luminance>
-          <BackgroundLuminance>%.8f</BackgroundLuminance>
-          <ImpactSurround>%f</ImpactSurround>
-          <ChromaticInductionFactor>%f</ChromaticInductionFactor>
+          <Luminance>0</Luminance>
+          <BackgroundLuminance>0</BackgroundLuminance>
+          <ImpactSurround>0</ImpactSurround>
+          <ChromaticInductionFactor>0</ChromaticInductionFactor>
           <AdaptationFactor>1.0</AdaptationFactor>
          </ColorAppearanceParams>
 				</XYZToJabElement>
@@ -89,11 +89,11 @@
 				  <WhitePoint>
 					  <XYZNumber X="0.8920744919559823" Y="0.9999999999999997" Z="4.7469528485335415"/>
           </WhitePoint>
-          <Luminance>%f</Luminance>
-          <BackgroundLuminance>%.8f</BackgroundLuminance>
-          <ImpactSurround>%f</ImpactSurround>
-          <ChromaticInductionFactor>%f</ChromaticInductionFactor>
-          <AdaptationFactor>%f</AdaptationFactor>
+          <Luminance>0</Luminance>
+          <BackgroundLuminance>0</BackgroundLuminance>
+          <ImpactSurround>0</ImpactSurround>
+          <ChromaticInductionFactor>0</ChromaticInductionFactor>
+          <AdaptationFactor>0</AdaptationFactor>
          </ColorAppearanceParams>
 				</JabToXYZElement>
 			</MultiProcessElements>

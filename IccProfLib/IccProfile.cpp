@@ -1834,11 +1834,12 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
     // of signature are *only* legal for iccMAX (v5) and must be rejected on a
     // v2/v4 profile: the zero "no data" space (0x00000000) and the N-channel
     // spaces ncXXXX (introduced by iccMAX 7.2.8 / Table 15 for MultiplexLink,
-    // MultiplexVisualization and abstract profiles).  IsValidSpace() is
-    // version-blind and accepts the ncXXXX family for any version, so gate them
-    // here by major version.
+    // MultiplexVisualization and abstract profiles).  'LMS ' is also in Table 15
+    // and not in ICC.1.  IsValidSpace() is version-blind and accepts these for
+    // any version, so gate them here by major version.
     bool bValidSpace = Info.IsValidSpace(m_Header.colorSpace);
     bool bIccMaxOnlySpace = (m_Header.colorSpace==icSigNoColorData) ||
+                            (m_Header.colorSpace==icSigLmsData) ||
                             (icGetColorSpaceType(m_Header.colorSpace)==icSigNChannelData);
     if (m_Header.version<icVersionNumberV5 && bIccMaxOnlySpace)
       bValidSpace = false;
@@ -1910,12 +1911,13 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
     if (m_Header.deviceClass==icSigLinkClass) {
       // A DeviceLink PCS holds the B-side connection (output) colour space. As
       // with the data colour space (#1359), the iccMAX N-channel spaces (ncXXXX)
-      // are only valid for v5/iccMAX; IsValidSpace() is version-blind, so gate
+      // and 'LMS ' are only valid for v5/iccMAX; IsValidSpace() is version-blind, so gate
       // them by major version for v2/v4 DeviceLink profiles and report the raw
       // value rather than the friendly descriptor when an iccMAX-only space
       // appears on a v2/v4 profile.
       bool bValidPcs = Info.IsValidSpace(m_Header.pcs);
-      bool bIccMaxOnlyPcs = icGetColorSpaceType(m_Header.pcs)==icSigNChannelData;
+      bool bIccMaxOnlyPcs = (m_Header.pcs==icSigLmsData) ||
+                            (icGetColorSpaceType(m_Header.pcs)==icSigNChannelData);
       if (m_Header.version<icVersionNumberV5 && bIccMaxOnlyPcs)
         bValidPcs = false;
       if (!bValidPcs) {
@@ -2075,11 +2077,6 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
         sReport += "Reserved profile flags (bits 2-15) are non-zero.\n";
         rv = icMaxStatus(rv, icValidateNonCompliant);
     }
-    else if (m_Header.version == icVersionNumberV5 && m_Header.flags & 0x0000FFF8) {
-      sReport += icMsgValidateNonCompliant;
-      sReport += "Reserved profile flags (bits 3-15) are non-zero.\n";
-      rv = icMaxStatus(rv, icValidateNonCompliant);
-    }
     else if (m_Header.flags & 0x0000FFF0) {
       sReport += icMsgValidateNonCompliant;
       sReport += "Reserved profile flags (bits 4-15) are non-zero.\n";
@@ -2092,13 +2089,19 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
         rv = icMaxStatus(rv, icValidateWarning);
     }
 
-    // Report on various bits of device attributes as per Table 22 in v4.3.0 
-    if(m_Header.attributes & 0x0000FFF0) {
+    // Report on various bits of device attributes as per ICC.1 Table 22, which
+    // reserves bits 4-31, and ICC.2 Table 19, which defines bits 4-7 and reserves 8-31.
+    if (m_Header.version < icVersionNumberV5 && m_Header.attributes & 0xFFFFFFF0) {
         sReport += icMsgValidateNonCompliant;
         sReport += "Reserved device attributes (bits 4-31) are non-zero.\n";
         rv = icMaxStatus(rv, icValidateNonCompliant);
     }
-    if(m_Header.attributes & 0xFFFF0000) {
+    else if (m_Header.version >= icVersionNumberV5 && m_Header.attributes & 0xFFFFFF00) {
+        sReport += icMsgValidateNonCompliant;
+        sReport += "Reserved device attributes (bits 8-31) are non-zero.\n";
+        rv = icMaxStatus(rv, icValidateNonCompliant);
+    }
+    if(m_Header.attributes & 0xFFFFFFFF00000000ULL) {
         sReport += icMsgValidateWarning;
         sReport += "Vendor-specific device attributes (bits 32-63) are non-zero.\n";
         rv = icMaxStatus(rv, icValidateWarning);
@@ -2734,7 +2737,7 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
     {
       if (typeSig != icSigCicpType)
         return false;
-      else if (m_Header.version < icVersionNumberV4_4 || m_Header.version==icVersionNumberV5)
+      else if (m_Header.version < icVersionNumberV4_4)
         return false;
 
       return true;
@@ -2790,7 +2793,15 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
     // Multi-localized Unicode type tags
   case icSigCopyrightTag:
     {
-      if (m_Header.version>=icVersionNumberV4) {
+      // ICC.2 9.2.56 permits multiLocalizedUnicodeType, textType and utf8Type.
+      if (m_Header.version>=icVersionNumberV5) {
+        if (typeSig!=icSigMultiLocalizedUnicodeType &&
+            typeSig!=icSigTextType &&
+            typeSig!=icSigUtf8TextType)
+          return false;
+        else return true;
+      }
+      else if (m_Header.version>=icVersionNumberV4) {
         if (typeSig!=icSigMultiLocalizedUnicodeType)
           return false;
         else return true;

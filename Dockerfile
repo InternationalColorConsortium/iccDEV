@@ -14,7 +14,11 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ARG GIT_COMMIT=unknown
 ARG BUILD_JOBS=32
+ARG FLAMEGRAPH_COMMIT=41fee1f99f9276008b7cd112fca19dc3ea84ac32
 ARG LLVM_MSAN_LIBCXX_COMMIT=1ab49a973e210e97d61e5db6557180dcb92c3e98
+ARG LIBXML2_MSAN_COMMIT=3d840e17858de03a09fba8b202e3a89267d5795a
+ARG CODEQL_VERSION=2.27.0
+ARG CODEQL_SHA256=8e870433e5c80d0e916c3c1aa9005fc88aab990bcdcc649fade9dfc4d7e94305
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -57,6 +61,7 @@ RUN for attempt in 1 2 3; do \
     libclang-rt-22-dev=1:22.1.2-1ubuntu1 \
     libclang-rt-21-dev=1:21.1.8-6ubuntu1 \
     libjpeg-dev=8c-2ubuntu12 \
+    libjson-xs-perl=4.040-1 \
     libtiff-tools=4.7.0-3ubuntu5 \
     liblzma-dev=5.8.3-1 \
     libpng-dev=1.6.57-1 \
@@ -71,6 +76,7 @@ RUN for attempt in 1 2 3; do \
     libxml2-16=2.15.2+dfsg-0.1ubuntu0.1 \
     libxml2-dev=2.15.2+dfsg-0.1ubuntu0.1 \
     lcov=2.4-3 \
+    linux-perf=7.0.0-31.31 \
     lsb-release=12.1-2build1 \
     llvm-22=1:22.1.2-1ubuntu1 \
     llvm-22-tools=1:22.1.2-1ubuntu1 \
@@ -100,6 +106,8 @@ RUN for attempt in 1 2 3; do \
       sleep "$((attempt * 10))"; \
     done \
  && test -f /usr/include/valgrind/memcheck.h \
+ && sed -i 's/^#geninfo_unexecuted_blocks = 0$/geninfo_unexecuted_blocks = 1/' /etc/lcovrc \
+ && grep -Fx 'geninfo_unexecuted_blocks = 1' /etc/lcovrc \
  && rm -f /usr/bin/pebble \
  && rm -rf /var/lib/apt/lists/*
 
@@ -116,6 +124,14 @@ RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-22 100 \
  && update-alternatives --install /usr/bin/llvm-symbolizer llvm-symbolizer /usr/bin/llvm-symbolizer-22 100 \
  && ln -s /usr/bin/nano /usr/local/bin/pico
 
+RUN git init --quiet /opt/FlameGraph \
+ && git -C /opt/FlameGraph remote add origin https://github.com/brendangregg/FlameGraph.git \
+ && git -C /opt/FlameGraph fetch --quiet --depth 1 origin "$FLAMEGRAPH_COMMIT" \
+ && git -C /opt/FlameGraph checkout --quiet --detach FETCH_HEAD \
+ && test "$(git -C /opt/FlameGraph rev-parse HEAD)" = "$FLAMEGRAPH_COMMIT" \
+ && test -x /opt/FlameGraph/stackcollapse-perf.pl \
+ && test -x /opt/FlameGraph/flamegraph.pl
+
 ENV CC=clang \
     CXX=clang++ \
     ASAN_SYMBOLIZER_PATH=/usr/bin/llvm-symbolizer \
@@ -127,7 +143,13 @@ ENV CC=clang \
     ICCDEV_MCP_PYTHON=/opt/iccdev-mcp/bin/python \
     ICCDEV_MSAN_LIBCXX_DIR=/opt/iccdev-msan-libcxx \
     ICCDEV_SPECTRAL_PREVIEW_PYTHON=/opt/iccdev-spectral-preview/bin/python \
+    ICCDEV_VALGRIND_SOURCE_DIR=/workspace/iccDEV \
+    ICCDEV_VALGRIND_BUILD_DIR=/workspace/valgrind/build \
+    ICCDEV_VALGRIND_OUTPUT_DIR=/workspace/valgrind/output \
     ICCDEV_BUILD_LABEL="iccDEV unified image" \
+    ICCDEV_FLAMEGRAPH_DIR=/opt/FlameGraph \
+    ICCDEV_FLAMEGRAPH_REVISION="${FLAMEGRAPH_COMMIT}" \
+    LCOV_HOME=/ \
     ICCDEV_IMAGE_PULL="docker pull ghcr.io/internationalcolorconsortium/iccdev:latest" \
     PATH="/opt/iccdev-mcp/bin:${PATH}"
 
@@ -165,6 +187,16 @@ RUN hadolint_version="2.15.1" \
  && rm -f /tmp/hadolint \
  && hadolint --version
 
+RUN codeql_archive="/tmp/codeql-bundle-linux64.tar.gz" \
+ && curl -fsSLo "$codeql_archive" \
+      "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${CODEQL_VERSION}/codeql-bundle-linux64.tar.gz" \
+ && printf '%s  %s\n' "$CODEQL_SHA256" "$codeql_archive" | sha256sum -c - \
+ && tar -xzf "$codeql_archive" -C /opt \
+ && test -x /opt/codeql/codeql \
+ && ln -s /opt/codeql/codeql /usr/local/bin/codeql \
+ && rm -f "$codeql_archive" \
+ && codeql version
+
 RUN python3 -m venv /opt/iccdev-workflow-qa \
  && /opt/iccdev-workflow-qa/bin/python -m pip install \
       --upgrade \
@@ -190,6 +222,7 @@ COPY --chmod=0755 .github/scripts/iccdev-build-msan-libcxx.sh /usr/local/bin/icc
 RUN iccdev-build-msan-libcxx \
       --prefix /opt/iccdev-msan-libcxx \
       --llvm-commit "$LLVM_MSAN_LIBCXX_COMMIT" \
+      --libxml2-commit "$LIBXML2_MSAN_COMMIT" \
       --jobs "$BUILD_JOBS"
 
 COPY --chown=iccdev-ci:iccdev-ci . /workspace/iccDEV
@@ -279,6 +312,13 @@ RUN chmod 0755 /usr/local/bin/iccdev-banner \
  && chmod 0755 /usr/local/bin/iccdev-fuzz-env \
  && chmod 0755 /usr/local/bin/iccdev-generate-profiles \
  && chmod 0755 /usr/local/bin/iccdev-mcp-entrypoint \
+ && git config --system --add safe.directory /opt/FlameGraph \
+ && ln -sf /workspace/iccDEV/.github/ci/valgrind/build.sh /usr/local/bin/iccdev-valgrind-build \
+ && ln -sf /workspace/iccDEV/.github/ci/valgrind/run.sh /usr/local/bin/iccdev-valgrind-run \
+ && ln -sf /workspace/iccDEV/.github/ci/valgrind/status.sh /usr/local/bin/iccdev-valgrind-status \
+ && ln -sf /workspace/iccDEV/.github/ci/valgrind/validate.sh /usr/local/bin/iccdev-valgrind-validate \
+ && ln -sf /workspace/iccDEV/.github/ci/valgrind/self-test.sh /usr/local/bin/iccdev-valgrind-self-test \
+ && iccdev-valgrind-validate \
  && find /workspace/build/Tools -mindepth 2 -maxdepth 2 -type f -executable \
      -exec ln -sf '{}' /usr/local/bin/ ';' \
  && printf '%s\n' \
@@ -294,7 +334,7 @@ RUN chmod 0755 /usr/local/bin/iccdev-banner \
  && chown iccdev-ci:iccdev-ci /workspace/.bashrc
 
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
-  CMD ["bash", "-c", "clang --version >/dev/null && cmake --version >/dev/null && command -v ninja >/dev/null && command -v cppcheck >/dev/null && command -v clang-tidy >/dev/null && command -v scan-build >/dev/null && command -v hadolint >/dev/null && command -v zizmor >/dev/null && command -v shellcheck >/dev/null && command -v afl-fuzz >/dev/null && command -v valgrind >/dev/null && command -v iccdev-build-msan-libcxx >/dev/null && test -f /usr/include/valgrind/memcheck.h && test -f /opt/iccdev-msan-libcxx/lib/libc++.so.1 && test -f /opt/iccdev-msan-libcxx/lib/libc++abi.so.1 && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null"]
+  CMD ["bash", "-c", "clang --version >/dev/null && cmake --version >/dev/null && command -v ninja >/dev/null && command -v cppcheck >/dev/null && command -v clang-tidy >/dev/null && command -v scan-build >/dev/null && command -v hadolint >/dev/null && command -v codeql >/dev/null && command -v zizmor >/dev/null && command -v shellcheck >/dev/null && command -v afl-fuzz >/dev/null && command -v valgrind >/dev/null && command -v ms_print >/dev/null && command -v callgrind_annotate >/dev/null && command -v perf >/dev/null && command -v lcov >/dev/null && command -v genhtml >/dev/null && command -v gcovr >/dev/null && command -v llvm-cov >/dev/null && command -v llvm-profdata >/dev/null && perl -MJSON::XS -e 1 && test \"$LCOV_HOME\" = / && grep -Fqx 'geninfo_unexecuted_blocks = 1' /etc/lcovrc && test -x \"$ICCDEV_FLAMEGRAPH_DIR/stackcollapse-perf.pl\" && test -x \"$ICCDEV_FLAMEGRAPH_DIR/flamegraph.pl\" && test \"$(git -C \"$ICCDEV_FLAMEGRAPH_DIR\" rev-parse HEAD)\" = \"$ICCDEV_FLAMEGRAPH_REVISION\" && command -v iccdev-valgrind-build >/dev/null && command -v iccdev-valgrind-run >/dev/null && command -v iccdev-valgrind-status >/dev/null && command -v iccdev-valgrind-validate >/dev/null && command -v iccdev-valgrind-self-test >/dev/null && command -v iccdev-build-msan-libcxx >/dev/null && test -f /usr/include/valgrind/memcheck.h && test -f /opt/iccdev-msan-libcxx/lib/libc++.so.1 && test -f /opt/iccdev-msan-libcxx/lib/libc++abi.so.1 && test -f /opt/iccdev-msan-libcxx/lib/libxml2.so && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null"]
 
 LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 ENV ICCDEV_SOURCE_REVISION="${GIT_COMMIT}"

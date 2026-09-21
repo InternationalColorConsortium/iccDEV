@@ -49,7 +49,7 @@ Verify:
 5. A new native tool dependency is wired through focused tests, Release build
    targets, CI, staged artifacts, and MATLAB documentation.
 
-## 4-Category Hunt
+## 6-Category Hunt
 
 ### Category 1: Serialization Mismatch (CWE-345)
 
@@ -110,6 +110,27 @@ grep -rn 'fromJson(' Tools/ IccProfLib/ | grep -v 'if.*fromJson'
 Pattern: `Begin()` can return `false` for invalid state, but callers
 proceed to `Apply()` on uninitialized data.
 
+### Category 5: Counted Buffers and Boundary Equality (CWE-121/CWE-122/CWE-787)
+
+Trace allocation count, loop count, and serialized count together. A fixed or
+heap buffer sized from one member is unsafe when indexed by a sibling channel,
+element, or function count. Issue #2608 is the reference shape: a 16-entry
+stack array indexed to `m_nOutputChannels`.
+
+Treat `index > count` before `buffer[index]` as suspect. The first invalid
+index is exactly `count`, so the rejection normally needs `index >= count` and
+a NULL-storage check. Run `iccdev/fixed-buffer-loop-bound` for fixed
+non-character arrays, then inspect pointer-backed arrays separately.
+
+### Category 6: Numeric Domain and Encoding Precision (CWE-190/CWE-681/CWE-682)
+
+For each conversion or formula, write down its input domain, finite-value
+contract, output encoding, and maximum acceptable round-trip error. Check NaN,
+infinity, negative fractional powers, zero denominators, fixed-point boundary
+values, and float-to-int casts independently. A broad "float looks risky"
+finding is not actionable; require a named ICC encoding/formula and an
+executable expected-value oracle.
+
 ## PoC Synthesis Requirements
 
 For iccRoundTrip-based PoCs (most common for Apply() bugs):
@@ -131,9 +152,10 @@ Types: `dbz` (div-by-zero), `hbo` (heap-buffer-overflow),
 `sbo` (stack-buffer-overflow), `npd` (null-pointer-deref),
 `ub` (undefined-behavior), `oom` (out-of-memory)
 
-Prefer a minimal standalone PoC file that can be attached to the issue or added
-to an upstream regression directory. Avoid inline generators in issues unless
-the generator itself is the clearest reproduction.
+Prefer a durable ICC, XML, JSON, TIFF, PNG, JPEG, or `.cube` artifact that an
+existing project tool consumes. Do not create a standalone C++ PoC. Direct
+library contracts belong in the nearest checked-in regression executable and
+must have a one-line CTest command.
 
 ## Quality Checklist
 

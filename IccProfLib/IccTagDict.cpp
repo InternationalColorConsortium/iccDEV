@@ -330,6 +330,15 @@ bool CIccDictEntry::SetNameLocalized(CIccTagMultiLocalizedUnicode *pNameLocalize
 {
   bool rv;
 
+  // GetNameLocalized() hands this member out -- the header says so explicitly --
+  // so SetNameLocalized(GetNameLocalized()) is reachable.  Releasing first would
+  // free the object being installed and then write through it in
+  // SetParentObject() below, a heap use-after-free WRITE measured under ASan.
+  // Returning whether a value was held keeps the documented result for both the
+  // NULL and the non-NULL alias.
+  if (m_pNameLocalized == pNameLocalized)
+    return m_pNameLocalized != NULL;
+
   if (m_pNameLocalized) {
     m_pNameLocalized->SetParentObject(nullptr);
     delete m_pNameLocalized;
@@ -359,6 +368,11 @@ bool CIccDictEntry::SetNameLocalized(CIccTagMultiLocalizedUnicode *pNameLocalize
 bool CIccDictEntry::SetValueLocalized(CIccTagMultiLocalizedUnicode *pValueLocalized)
 {
   bool rv;
+
+  // Same contract as SetNameLocalized above: GetValueLocalized() hands the
+  // member out, so reinstalling it must not release it first.
+  if (m_pValueLocalized == pValueLocalized)
+    return m_pValueLocalized != NULL;
 
   if (m_pValueLocalized) {
     m_pValueLocalized->SetParentObject(nullptr);

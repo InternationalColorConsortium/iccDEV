@@ -18,6 +18,14 @@ Use this prompt when adding or updating local build helpers for
   contains a placeholder value.
 - Simulator builds must not be blocked by stale exported device placeholders;
   ignore a placeholder `BUNDLE_ID` and use the default app ID.
+- Every app must adopt `UIScene` lifecycle (a `UIWindowSceneDelegate` that
+  builds the window from the connecting `UIWindowScene`, matching
+  `UIApplicationSceneManifest` in `Info.plist.in`, and
+  `configurationForConnectingSceneSession:` on the app delegate). iOS 27
+  physical hardware enforces this with a fatal `SIGTRAP` in
+  `UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption_block_invoke`;
+  the locally installed iOS 18.x/26.x simulator runtimes do not, so this
+  regression can pass simulator-only QA silently.
 - Do not commit signing files, generated Xcode output, device identifiers, or
   build output.
 - Do not add workflow or CTest coverage unless a maintainer requests it.

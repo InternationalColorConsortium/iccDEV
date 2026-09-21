@@ -218,6 +218,34 @@ run_fromjson_success_test() {
   PASS=$((PASS + 1))
 }
 
+run_xml_success_test() {
+  local name="$1"
+  local xml_file="$2"
+  local output_file="$OUTDIR/${name}.icc"
+  local logfile="$OUTDIR/${name}.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$output_file" "$logfile"
+
+  timeout 30 "$FROMXML" "$xml_file" "$output_file" > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -ne 0 ] || [ ! -s "$output_file" ]; then
+    echo "  [FAIL] $name -- iccFromXml failed with exit=$exit_code"
+    sed -n '1,5p' "$logfile"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  echo "  [PASS] $name (iccFromXml completed without sanitizer findings)"
+  PASS=$((PASS + 1))
+}
+
 run_tojson_success_test() {
   local name="$1"
   local icc_file="$2"
@@ -328,6 +356,99 @@ run_tojson_valid_json_test() {
   fi
 
   echo "  [PASS] $name (iccToJson emitted valid JSON)"
+  PASS=$((PASS + 1))
+}
+
+# Issues #2550 and #2541, through the tools. iccToJson used to write every
+# colorantTableType as raw "16bit" because the tag could not find its profile, so
+# its Lab and XYZ branches were unreachable from the CLI. This builds a profile
+# with iccFromJson, converts it back with iccToJson, and requires the declared
+# PCS encoding and the document's coordinates. It then rebuilds the profile from
+# that JSON and requires the 'clrt' tag bytes to match the first build exactly.
+# json-colorant-parent-profile.cpp covers every 16-bit value in-process; this
+# covers the shipped tools.
+run_colorant_table_cli_roundtrip_test() {
+  local name="$1"
+  local json_file="$2"
+  local encoding="$3"
+  local first_icc="$OUTDIR/${name}-first.icc"
+  local mid_json="$OUTDIR/${name}-tojson.json"
+  local second_icc="$OUTDIR/${name}-second.icc"
+  local logfile="$OUTDIR/${name}.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$first_icc" "$mid_json" "$second_icc" "$logfile"
+
+  {
+    timeout 30 "$FROMJSON" "$json_file" "$first_icc" &&
+    timeout 30 "$TOJSON" "$first_icc" "$mid_json" &&
+    timeout 30 "$FROMJSON" "$mid_json" "$second_icc"
+  } > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -ne 0 ] || [ ! -s "$first_icc" ] || [ ! -s "$mid_json" ] || [ ! -s "$second_icc" ]; then
+    echo "  [FAIL] $name -- iccFromJson/iccToJson/iccFromJson failed with exit=$exit_code"
+    sed -n '1,5p' "$logfile"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if ! python3 -c '
+import json
+import struct
+import sys
+
+source_path, mid_path, first_path, second_path, encoding = sys.argv[1:6]
+
+def colorant_table(path):
+    with open(path, encoding="utf-8") as fh:
+        doc = json.load(fh)
+    for entry in doc["IccProfile"]["Tags"]:
+        for tag in entry.values():
+            data = tag.get("data", {})
+            if data.get("type") == "colorantTableType":
+                return data
+    raise SystemExit(path + ": no colorantTableType tag")
+
+source = colorant_table(source_path)
+mid = colorant_table(mid_path)
+if mid.get("pcsEncoding") != encoding:
+    raise SystemExit("iccToJson wrote pcsEncoding %r, expected %r"
+                     % (mid.get("pcsEncoding"), encoding))
+if len(mid["colorantTable"]) != len(source["colorantTable"]):
+    raise SystemExit("iccToJson changed the number of colorants")
+for want, got in zip(source["colorantTable"], mid["colorantTable"]):
+    if got.get("name") != want["name"]:
+        raise SystemExit("colorant name %r came back as %r" % (want["name"], got.get("name")))
+    # One U16 step is about 0.0015 of L*, 0.0039 of a*/b*, and 0.00003 of XYZ.
+    for w, g in zip(want["pcs"], got["pcs"]):
+        if abs(w - g) > 0.005:
+            raise SystemExit("colorant %r pcs %r came back as %r" % (want["name"], want["pcs"], got["pcs"]))
+
+def clrt_bytes(path):
+    data = open(path, "rb").read()
+    count = struct.unpack(">I", data[128:132])[0]
+    for i in range(count):
+        sig, offset, size = struct.unpack(">III", data[132 + 12 * i:144 + 12 * i])
+        if sig == 0x636C7274:
+            return data[offset:offset + size]
+    raise SystemExit(path + ": no clrt tag")
+
+if clrt_bytes(first_path) != clrt_bytes(second_path):
+    raise SystemExit("clrt tag bytes differ after the JSON round trip")
+' "$json_file" "$mid_json" "$first_icc" "$second_icc" "$encoding" > "$OUTDIR/${name}-inspect.log" 2>&1; then
+    echo "  [FAIL] $name -- colorant table did not round-trip as $encoding"
+    sed -n '1,5p' "$OUTDIR/${name}-inspect.log"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  echo "  [PASS] $name (iccToJson wrote $encoding; clrt bytes survived the round trip)"
   PASS=$((PASS + 1))
 }
 
@@ -646,6 +767,41 @@ write("struct-empty-member-name", {
         }
     }]
 })
+
+# #2547: a FormulaSegment needs an integer functionType and exactly the
+# parameter count that type defines (ICC.2-2023 Table 111). Each case changes
+# one thing from the control, so a refusal can only come from that change.
+def formula(name, **changes):
+    seg = {"start": "-infinity", "end": "+infinity", "type": "FormulaSegment",
+           "functionType": 0, "parameters": [2.0, 1.0, 0.0, 0.0]}
+    for key, value in changes.items():
+        if value is None:
+            del seg[key]
+        else:
+            seg[key] = value
+    write("formula-" + name, {
+        "type": "multiProcessElementType",
+        "inputChannels": 1,
+        "outputChannels": 1,
+        "elements": [{
+            "type": "CurveSetElement",
+            "inputChannels": 1,
+            "outputChannels": 1,
+            "curves": [{"type": "SegmentedCurve", "segments": [seg]}]
+        }]
+    })
+
+formula("control")
+formula("type6-control", functionType=6, parameters=[0.5, 0.5, 0.0, 1.0, 0.5, 1.0, 1.0])
+formula("missing-functiontype", functionType=None)
+formula("string-functiontype", functionType="0")
+formula("fractional-functiontype", functionType=1.5, parameters=[2.0, 1.0, 1.0, 1.0, 0.0])
+formula("missing-parameters", parameters=None)
+formula("nonarray-parameters", parameters={"gamma": 2.0})
+formula("short-parameters", parameters=[2.0, 1.0, 0.0])
+formula("long-parameters", parameters=[2.0, 1.0, 0.0, 0.0, 0.0])
+formula("nonnumeric-parameter", parameters=[2.0, "1.0", 0.0, 0.0])
+formula("nonfinite-parameter", parameters=[2.0, 1e39, 0.0, 0.0])
 ' "$BASE_JSON" "$OUTDIR"
 
 XML_MATRIX_HUGE="$OUTDIR/xml-matrix-huge-channels.xml"
@@ -682,6 +838,32 @@ if count != 1:
     raise SystemExit("No profileDescriptionTag found for private type mutation")
 pathlib.Path(dst_path).write_text(text, encoding="utf-8")
 ' "$XML_PROFILE" "$XML_EMPTY_PRIVATE_TYPE"
+
+# #2547: the XML FormulaSegment reader dropped parameters beyond the count the
+# FunctionType defines, and loaded "nan". Both mutate the first segment of a
+# tracked document with no external file references; the unmutated document is
+# the control.
+XML_FORMULA_SRC="$REPO_ROOT/Testing/Encoding/ISO22028-Encoded-sRGB.xml"
+XML_FORMULA_EXTRA="$OUTDIR/xml-formula-extra-parameter.xml"
+XML_FORMULA_NAN="$OUTDIR/xml-formula-nan-parameter.xml"
+python3 -c '
+import pathlib
+import re
+import sys
+
+src_path, extra_path, nan_path = sys.argv[1:4]
+text = pathlib.Path(src_path).read_text(encoding="utf-8")
+pattern = re.compile(r"(<FormulaSegment\b[^>]*\bFunctionType=\"0\">)1\.0 12\.92 0 0(</FormulaSegment>)")
+
+def mutate(path, body):
+    out, count = pattern.subn(lambda m: m.group(1) + body + m.group(2), text, count=1)
+    if count != 1:
+        raise SystemExit("No type 0 FormulaSegment \"1.0 12.92 0 0\" found")
+    pathlib.Path(path).write_text(out, encoding="utf-8")
+
+mutate(extra_path, "1.0 12.92 0 0 0")
+mutate(nan_path, "1.0 nan 0 0")
+' "$XML_FORMULA_SRC" "$XML_FORMULA_EXTRA" "$XML_FORMULA_NAN"
 
 TEXT_INVALID_ASCII="$OUTDIR/text-invalid-ascii.icc"
 python3 -c '
@@ -865,6 +1047,79 @@ for name, value in (
         json.dump(document, output, indent=2)
 ' "$REPO_ROOT/.github/ci/test-data/json-colorant-table-complete-pcs.json" "$OUTDIR"
 
+# #2541/#2550: the structural refusals #2568 added to the colorantTable and
+# chromaticity JSON readers, driven through iccFromJson, plus the Lab and XYZ
+# documents for the tool round trip. The colorantTable refusals derive from the
+# tracked control above. Documents that must load add their tag to the base
+# profile instead, because iccFromJson exits 1 for a saved profile that fails
+# validation, and the tag-only control does.
+python3 -c '
+import copy
+import json
+import os
+import sys
+
+source_path, base_path, outdir = sys.argv[1:4]
+with open(source_path, encoding="utf-8") as source:
+    control = json.load(source)
+with open(base_path, encoding="utf-8") as source:
+    base = json.load(source)
+
+def save(name, document):
+    with open(os.path.join(outdir, name + ".json"), "w", encoding="utf-8") as output:
+        json.dump(document, output, indent=2)
+
+def table_variant(name, mutate):
+    document = copy.deepcopy(control)
+    mutate(document["IccProfile"]["Tags"][0]["colorantTableTag"]["data"])
+    save("colorant-table-" + name, document)
+
+table_variant("missing-table", lambda d: d.pop("colorantTable"))
+table_variant("nonarray-table", lambda d: d.__setitem__("colorantTable", {"name": "control"}))
+table_variant("nonobject-entry", lambda d: d["colorantTable"].__setitem__(0, "control"))
+table_variant("missing-name", lambda d: d["colorantTable"][0].pop("name"))
+table_variant("nonstring-name", lambda d: d["colorantTable"][0].__setitem__("name", 7))
+table_variant("unknown-encoding", lambda d: d.__setitem__("pcsEncoding", "Luv"))
+table_variant("nonstring-encoding", lambda d: d.__setitem__("pcsEncoding", 3))
+
+# Three colorants, matching the RGB data colour space of the base profile.
+def roundtrip(name, pcs, encoding, entries):
+    document = copy.deepcopy(base)
+    document["IccProfile"]["Header"]["PCS"] = pcs
+    document["IccProfile"]["Tags"].append({"colorantTableTag": {
+        "sig": "clrt",
+        "data": {
+            "type": "colorantTableType",
+            "pcsEncoding": encoding,
+            "colorantTable": [{"name": n, "pcs": v} for n, v in entries],
+        }
+    }})
+    save(name, document)
+
+roundtrip("colorant-table-lab-roundtrip", "Lab ", "Lab",
+          [("red", [54.29, 80.8, 69.89]), ("green", [87.82, -79.28, 80.99]),
+           ("blue", [29.57, 68.3, -112.03])])
+roundtrip("colorant-table-xyz-roundtrip", "XYZ ", "XYZ",
+          [("red", [0.4361, 0.2225, 0.0139]), ("green", [0.3851, 0.7169, 0.0971]),
+           ("blue", [0.1431, 0.0606, 0.7141])])
+
+def chroma(name, channels):
+    document = copy.deepcopy(base)
+    tag = {"sig": "chrm", "data": {"type": "chromaticityType", "colorantType": 0}}
+    if channels is not None:
+        tag["data"]["channels"] = channels
+    document["IccProfile"]["Tags"].append({"chromaticityTag": tag})
+    save("chromaticity-" + name, document)
+
+chroma("control", [[0.64, 0.33], [0.3, 0.6], [0.15, 0.06]])
+chroma("missing-channels", None)
+chroma("nonarray-channels", {"x": 0.64, "y": 0.33})
+chroma("three-coordinates", [[0.64, 0.33, 0.03], [0.3, 0.6], [0.15, 0.06]])
+chroma("one-coordinate", [[0.64], [0.3, 0.6], [0.15, 0.06]])
+chroma("nonnumeric-coordinate", [[0.64, "0.33"], [0.3, 0.6], [0.15, 0.06]])
+chroma("xy-object", [{"x": 0.64, "y": 0.33}, [0.3, 0.6], [0.15, 0.06]])
+' "$REPO_ROOT/.github/ci/test-data/json-colorant-table-complete-pcs.json" "$BASE_JSON" "$OUTDIR"
+
 echo "Using base profile: $PROFILE"
 echo "Using XML profile:  $XML_PROFILE"
 echo "Tools dir: $TOOLS_DIR"
@@ -887,6 +1142,22 @@ run_reject_test "colorant-table-short-pcs" "$OUTDIR/colorant-table-short-pcs.jso
 run_reject_test "colorant-table-long-pcs" "$OUTDIR/colorant-table-long-pcs.json" "colorantTableType pcs must contain three numeric values"
 run_reject_test "colorant-table-nonarray-pcs" "$OUTDIR/colorant-table-nonarray-pcs.json" "colorantTableType pcs must contain three numeric values"
 run_reject_test "colorant-table-missing-pcs" "$OUTDIR/colorant-table-missing-pcs.json" "colorantTableType pcs must contain three numeric values"
+run_reject_test "colorant-table-missing-table" "$OUTDIR/colorant-table-missing-table.json" "colorantTableType requires a colorantTable array"
+run_reject_test "colorant-table-nonarray-table" "$OUTDIR/colorant-table-nonarray-table.json" "colorantTableType requires a colorantTable array"
+run_reject_test "colorant-table-nonobject-entry" "$OUTDIR/colorant-table-nonobject-entry.json" "colorantTableType entry requires a string name"
+run_reject_test "colorant-table-missing-name" "$OUTDIR/colorant-table-missing-name.json" "colorantTableType entry requires a string name"
+run_reject_test "colorant-table-nonstring-name" "$OUTDIR/colorant-table-nonstring-name.json" "colorantTableType entry requires a string name"
+run_reject_test "colorant-table-unknown-encoding" "$OUTDIR/colorant-table-unknown-encoding.json" "colorantTableType pcsEncoding must be"
+run_reject_test "colorant-table-nonstring-encoding" "$OUTDIR/colorant-table-nonstring-encoding.json" "colorantTableType pcsEncoding must be"
+run_colorant_table_cli_roundtrip_test "colorant-table-lab-roundtrip" "$OUTDIR/colorant-table-lab-roundtrip.json" "Lab"
+run_colorant_table_cli_roundtrip_test "colorant-table-xyz-roundtrip" "$OUTDIR/colorant-table-xyz-roundtrip.json" "XYZ"
+run_fromjson_success_test "chromaticity-control" "$OUTDIR/chromaticity-control.json"
+run_reject_test "chromaticity-missing-channels" "$OUTDIR/chromaticity-missing-channels.json" "chromaticityType requires a channels array"
+run_reject_test "chromaticity-nonarray-channels" "$OUTDIR/chromaticity-nonarray-channels.json" "chromaticityType requires a channels array"
+run_reject_test "chromaticity-three-coordinates" "$OUTDIR/chromaticity-three-coordinates.json" "chromaticityType channel must be a pair of numbers"
+run_reject_test "chromaticity-one-coordinate" "$OUTDIR/chromaticity-one-coordinate.json" "chromaticityType channel must be a pair of numbers"
+run_reject_test "chromaticity-nonnumeric-coordinate" "$OUTDIR/chromaticity-nonnumeric-coordinate.json" "chromaticityType channel must be a pair of numbers"
+run_reject_test "chromaticity-xy-object" "$OUTDIR/chromaticity-xy-object.json" "chromaticityType channel must be a pair of numbers"
 
 # The control runs first and must convert: without it, a change that refused every
 # responseCurveSet16Type document would satisfy all three reject cases below while
@@ -898,6 +1169,20 @@ run_reject_test "responsecurve-devicecode-negative" "$OUTDIR/responsecurve-devic
 run_reject_test "struct-empty-member-name" "$OUTDIR/struct-empty-member-name.json" "MemberTag entry has empty name"
 run_xml_reject_test "xml-matrix-huge-channels" "$XML_MATRIX_HUGE" "Invalid InputChannels or OutputChannels In MatrixElement"
 run_xml_reject_test "xml-empty-private-type" "$XML_EMPTY_PRIVATE_TYPE" "Invalid private tag type attribute"
+run_fromjson_success_test "formula-control" "$OUTDIR/formula-control.json"
+run_fromjson_success_test "formula-type6-control" "$OUTDIR/formula-type6-control.json"
+run_reject_test "formula-missing-functiontype" "$OUTDIR/formula-missing-functiontype.json" "FormulaSegment requires an integer functionType"
+run_reject_test "formula-string-functiontype" "$OUTDIR/formula-string-functiontype.json" "FormulaSegment requires an integer functionType"
+run_reject_test "formula-fractional-functiontype" "$OUTDIR/formula-fractional-functiontype.json" "FormulaSegment requires an integer functionType"
+run_reject_test "formula-missing-parameters" "$OUTDIR/formula-missing-parameters.json" "FormulaSegment parameters must be an array of the count its functionType requires"
+run_reject_test "formula-nonarray-parameters" "$OUTDIR/formula-nonarray-parameters.json" "FormulaSegment parameters must be an array of the count its functionType requires"
+run_reject_test "formula-short-parameters" "$OUTDIR/formula-short-parameters.json" "FormulaSegment parameters must be an array of the count its functionType requires"
+run_reject_test "formula-long-parameters" "$OUTDIR/formula-long-parameters.json" "FormulaSegment parameters must be an array of the count its functionType requires"
+run_reject_test "formula-nonnumeric-parameter" "$OUTDIR/formula-nonnumeric-parameter.json" "parameters contains a non-numeric or non-finite value in FormulaSegment"
+run_reject_test "formula-nonfinite-parameter" "$OUTDIR/formula-nonfinite-parameter.json" "parameters contains a non-numeric or non-finite value in FormulaSegment"
+run_xml_success_test "xml-formula-control" "$XML_FORMULA_SRC"
+run_xml_reject_test "xml-formula-extra-parameter" "$XML_FORMULA_EXTRA" "FormulaSegment parameter count does not match its FunctionType"
+run_xml_reject_test "xml-formula-nan-parameter" "$XML_FORMULA_NAN" "Non-finite parameter in FormulaSegment"
 run_tojson_valid_json_test "text-invalid-ascii-tojson" "$TEXT_INVALID_ASCII"
 run_tojson_success_test "namedcolor-invalid-ascii-tojson" "$NAMED_INVALID_ASCII"
 run_large_indented_roundtrip_test "CMYK-W_Overprint_Profile.xml"

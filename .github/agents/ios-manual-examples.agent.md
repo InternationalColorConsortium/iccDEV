@@ -19,9 +19,14 @@ Audit `examples/ios-apply-preview`, `examples/ios-benchapply`,
 5. Verify launch commands use the repeatable `simctl` and `devicectl` flags.
 6. Verify persisted report names, PASS sentinels, and documented copy paths
    agree with the app code.
-7. Verify Doxygen includes the example README and Objective-C++ sources without
+7. Verify each app's `Info.plist.in` declares `UIApplicationSceneManifest`
+   naming a `UIWindowSceneDelegate`, and that its `AppDelegate` implements
+   `configurationForConnectingSceneSession:`. Apps without scene lifecycle
+   adoption trap with `SIGTRAP` on iOS 27 physical hardware even though
+   simulator runtimes below iOS 27 do not surface the failure.
+8. Verify Doxygen includes the example README and Objective-C++ sources without
    generated Xcode output.
-8. Report changed-line findings only; do not request cloud review as a
+9. Report changed-line findings only; do not request cloud review as a
    convergence mechanism.
 
 Return evidence and recommendations only. Do not edit files.

@@ -5,7 +5,7 @@
 #                 https://color.org
 #
 ## Intent: CodeQL security analysis with custom iccDEV queries
-##         Uploads SARIF and stores a local report artifact
+##         Uploads standard SARIF; custom results require local triage
 #
 ## Last Updated: 2026-04-09 by David Hoyt
 #
@@ -110,13 +110,13 @@ jobs:
           unset GITHUB_TOKEN || true
           source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           if ! command -v codeql >/dev/null 2>&1; then
-            # CODEQL_SHA256 is the release asset digest for this exact bundle, so the
-            # two values below must always be refreshed together:
+            # CODEQL_SHA256 is the release asset digest for this exact bundle. Keep
+            # this pin synchronized with the other workflow pins and Dockerfile:
             #   gh api repos/github/codeql-action/releases/tags/codeql-bundle-v"$CODEQL_VER" \
             #     --jq '.assets[]|select(.name=="codeql-bundle-linux64.tar.gz").digest'
-            CODEQL_VER="2.26.4"
+            CODEQL_VER="2.27.0"
             CODEQL_ARCHIVE="/tmp/codeql-bundle-linux64.tar.gz"
-            CODEQL_SHA256="48e1ab8b874d57bd6fd7c90fefee75addc5a45e9bd063982df9beb45a62dd5d3"
+            CODEQL_SHA256="8e870433e5c80d0e916c3c1aa9005fc88aab990bcdcc649fade9dfc4d7e94305"
             CODEQL_URL="https://github.com/github/codeql-action/releases/download"
             curl -fsSL --retry 3 \
               -o "${CODEQL_ARCHIVE}" \
@@ -235,21 +235,7 @@ jobs:
 
       - name: Upload standard CodeQL SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v4
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd  # v4.38.1
         with:
           sarif_file: codeql-results/cpp-security-and-quality.sarif
           category: iccdev-standard-cpp-security-and-quality
-
-      - name: Upload iccDEV custom SARIF
-        if: always()
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v4
-        with:
-          sarif_file: codeql-results/iccdev-security.sarif
-          category: iccdev-custom-security
-
-      - name: Upload IccJSON/IccConnect custom SARIF
-        if: always()
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v4
-        with:
-          sarif_file: codeql-results/iccdev-jsonlib-security.sarif
-          category: iccdev-jsonlib-security

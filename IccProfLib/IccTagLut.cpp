@@ -1591,6 +1591,12 @@ bool CIccTagSegmentedCurve::Write(CIccIO *pIO)
 */
 void CIccTagSegmentedCurve::SetCurve(CIccSegmentedCurve *pCurve)
 {
+  // Reinstalling the curve this tag already owns is a no-op.  Deleting it
+  // first would leave m_pCurve dangling and delete it a second time in the
+  // destructor, because GetCurve() hands the member out to any caller.
+  if (m_pCurve == pCurve)
+    return;
+
   delete m_pCurve;
   m_pCurve = pCurve;
 }
@@ -4595,6 +4601,17 @@ CIccCLUT* CIccMBB::NewCLUT(icUInt8Number *pGridPoints, icUInt8Number nPrecision/
 */
 CIccCLUT *CIccMBB::SetCLUT(CIccCLUT *clut)
 {
+  // Reinstalling the table this tag already owns is a no-op.  The dimension
+  // check below cannot catch it -- a table always matches its own tag -- so
+  // without this the delete frees the object being stored back.  NewCLUT()
+  // returns the INSTALLED table when the tag already has one, which makes
+  // SetCLUT(NewCLUT(grid)) a use-after-free with no self-alias visible at the
+  // call site; GetCLUT() is public as well.  This also answers the NULL that
+  // NewCLUT() returns when Init() refuses, which would otherwise be
+  // dereferenced on the next line.
+  if (m_CLUT == clut)
+    return clut;
+
   if (clut->GetInputDim() != m_nInput || clut->GetOutputChannels() != m_nOutput) {
     delete clut;
     return NULL;

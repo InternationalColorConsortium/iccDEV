@@ -866,6 +866,7 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
             case icSigLuvData:
             case icSigYCbCrData:
             case icSigYxyData:
+            case icSigLmsData:
             case icSigRgbData:
             case icSigHsvData:
             case icSigHlsData:
@@ -1513,6 +1514,7 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
       case icSigLuvData:
       case icSigYCbCrData:
       case icSigYxyData:
+      case icSigLmsData:
       case icSigRgbData:
       case icSigHsvData:
       case icSigHlsData:
@@ -2315,12 +2317,11 @@ CIccPcsXform::~CIccPcsXform()
  * Name: icSpectralPcsMatchesRange
  *
  * Purpose:
- *  Reports whether a header's spectral PCS signature and its spectral range
+ *  Reports whether a spectral PCS port and its profile header's spectral range
  *  definition describe the same number of samples.
  *
- *  A spectral PCS signature carries its channel count in its low 16 bits, and that
- *  count is the pixel width the CMM moves across the connection: it is what
- *  CIccXform::GetNumSrcSamples()/GetNumDstSamples() report, and in turn what
+ *  nSamples is the pixel width the adjacent xform presents to the connection: it is
+ *  what CIccXform::GetNumSrcSamples()/GetNumDstSamples() report, and in turn what
  *  CIccApplyCmm::InitPixel() sizes m_Pixel/m_Pixel2 from. The PCS steps that
  *  CIccPcsXform::Connect() pushes are sized from the header's spectralRange /
  *  biSpectralRange instead. When the two disagree, a step operates on a wider
@@ -2338,21 +2339,21 @@ CIccPcsXform::~CIccPcsXform()
  *  (see CIccPcsStepSrcSparseMatrix, which takes the two separately).
  **************************************************************************
  */
-static bool icSpectralPcsMatchesRange(const icHeader &hdr)
+static bool icSpectralPcsMatchesRange(const icHeader &hdr,
+                                      icColorSpaceSignature pcs,
+                                      icUInt32Number nSamples)
 {
-  icColorSpaceSignature sig = (icColorSpaceSignature)hdr.spectralPCS;
-
-  switch (icGetColorSpaceType(sig)) {
+  switch (icGetColorSpaceType(pcs)) {
     case icSigReflectanceSpectralData:
     case icSigTransmisionSpectralData:
     case icSigRadiantSpectralData:
-      return icNumColorSpaceChannels(sig) == (icUInt32Number)hdr.spectralRange.steps;
+      return nSamples == (icUInt32Number)hdr.spectralRange.steps;
 
     case icSigBiSpectralReflectanceData:
       // One sample per (spectral, bi-spectral) wavelength pair. Widened before the
       // multiply so a large pair cannot wrap the 16-bit product into a value that
       // happens to match the channel count.
-      return icNumColorSpaceChannels(sig) ==
+      return nSamples ==
              (icUInt32Number)hdr.biSpectralRange.steps * (icUInt32Number)hdr.spectralRange.steps;
 
     default:
@@ -2472,8 +2473,10 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
     CIccProfile *pSpectralSrc = pFromXform->GetProfilePtr();
     CIccProfile *pSpectralDst = pToXform->GetProfilePtr();
 
-    if ((pSpectralSrc && !icSpectralPcsMatchesRange(pSpectralSrc->m_Header)) ||
-        (pSpectralDst && !icSpectralPcsMatchesRange(pSpectralDst->m_Header))) {
+    if ((pSpectralSrc && !icSpectralPcsMatchesRange(pSpectralSrc->m_Header,
+                                                   m_srcSpace, m_nSrcSamples)) ||
+        (pSpectralDst && !icSpectralPcsMatchesRange(pSpectralDst->m_Header,
+                                                   m_dstSpace, m_nDstSamples))) {
       return icCmmStatInvalidProfile;
     }
 
@@ -4078,7 +4081,9 @@ icStatusCMM CIccPcsXform::pushSpectralWhitePointConvert(const CIccXform *pXform,
 
   if (!nSamples ||
       nSamples != (icUInt32Number)nPortSamples ||
-      !icSpectralPcsMatchesRange(pProfile->m_Header) ||
+      !icSpectralPcsMatchesRange(pProfile->m_Header,
+                                 (icColorSpaceSignature)pProfile->m_Header.spectralPCS,
+                                 nSamples) ||
       pNumTag->GetNumValues() < nSamples)
     return icCmmStatInvalidProfile;
 
@@ -5965,7 +5970,11 @@ void CIccPcsStepSparseMatrix::Apply(CIccApplyPcsStep * /* pApply */, icFloatNumb
   // Matrix built once in BeginStep(). This used to construct a CIccSparseMatrix
   // here, which allocated and freed on every pixel -- see BeginStep().
   if (m_pMtx) {
-    m_pMtx->MultiplyVector(pDst, pSrc);
+    // The matrix is built from a dense one this class reduced, so a refusal is not
+    // reachable from profile data; zero rather than leave pDst half written if it ever
+    // is (#2581 gave MultiplyVector() its bounds).
+    if (!m_pMtx->MultiplyVector(pDst, pSrc))
+      memset(pDst, 0, m_nRows*sizeof(icFloatNumber));
     return;
   }
 
@@ -5978,7 +5987,8 @@ void CIccPcsStepSparseMatrix::Apply(CIccApplyPcsStep * /* pApply */, icFloatNumb
   // exactly the cost the hoist removed, but it is correct and thread safe.
   CIccSparseMatrix mtx((icUInt8Number*)m_vals, m_nBytesPerMatrix, icSparseMatrixFloatNum, true);
 
-  mtx.MultiplyVector(pDst, pSrc);
+  if (!mtx.MultiplyVector(pDst, pSrc))
+    memset(pDst, 0, m_nRows*sizeof(icFloatNumber));
 }
 
 
@@ -6048,7 +6058,24 @@ void CIccPcsStepSrcSparseMatrix::Apply(CIccApplyPcsStep * /* pApply */, icFloatN
 {
   CIccSparseMatrix mtx((icUInt8Number*)pSrc, m_nBytesPerMatrix, icSparseMatrixFloatNum, true);
 
-  mtx.MultiplyVector(pDst, m_vals);
+  // pSrc is pixel data, not a tag, so nothing upstream has checked the matrix encoded in
+  // it. MultiplyVector() writes one float per encoded row into pDst, which holds m_nRows,
+  // and reads m_vals[] at each encoded column index, where m_vals holds m_nCols. A named
+  // colour whose sparseMatrixArrayType carried a column index equal to its column count
+  // read one float past m_vals (#2581), and a header whose biSpectralRange.steps is
+  // smaller than the tag's column count reads further. The dimensions are checked here;
+  // the row starts and column indices inside them are bounded by MultiplyVector(), which
+  // refuses the matrix rather than walking past a buffer.
+  //
+  // Apply() cannot report an error, so a matrix that does not fit the step yields zeros
+  // rather than the uninitialised (or half written) pDst. The zero fill is m_nRows
+  // floats, which is GetDstChannels() -- exactly what MultiplyVector() writes on the
+  // accepted path, so refusing a matrix reaches no further than applying a well formed
+  // one would.
+  if (mtx.Rows() != m_nRows || mtx.Cols() != m_nCols ||
+      !mtx.MultiplyVector(pDst, m_vals)) {
+    memset(pDst, 0, m_nRows*sizeof(icFloatNumber));
+  }
 }
 
 
@@ -9026,6 +9053,7 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
             case icSigLuvData:
             case icSigYCbCrData:
             case icSigYxyData:
+            case icSigLmsData:
             case icSigRgbData:
             case icSigHsvData:
             case icSigHlsData:

@@ -116,6 +116,9 @@ struct BenchStats {
 inline BenchStats icBenchRun(const std::function<void()> &fn,
                              icUInt32Number nUnits, int nRepeats)
 {
+  if (nRepeats <= 0)
+    return {0.0, 0.0, 0.0};
+
   fn();  // warm-up: first-touch page faults and cold caches land here
 
   std::vector<double> rates;

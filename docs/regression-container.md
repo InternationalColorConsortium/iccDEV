@@ -52,6 +52,31 @@ iccdev-fuzz-env
 ctest --test-dir /workspace/build -N --no-tests=error
 ```
 
+## CodeQL, coverage, and profiling tools
+
+The image includes the pinned CodeQL CLI bundle, `lcov`, `genhtml`, `gcovr`, `llvm-cov`, `llvm-profdata`,
+`gprof`, `perf`, `strace`, and a pinned FlameGraph checkout at
+`$ICCDEV_FLAMEGRAPH_DIR` (`/opt/FlameGraph`). Its exact revision is exposed as
+`ICCDEV_FLAMEGRAPH_REVISION`. Build coverage, profiling, and sanitizer modes in
+separate directories so their instrumentation does not contaminate results.
+LCOV uses the accelerated `JSON::XS` backend and treats unexecuted blocks on
+non-branch lines as zero-count blocks, avoiding inconsistent GCC standard
+library coverage records. `LCOV_HOME=/` makes LCOV load the checked system
+configuration from `/etc/lcovrc` for both interactive and scripted runs.
+
+`codeql` is available on `PATH`; `.github/scripts/run-codeql-local.sh` uses it
+directly and falls back to `gh codeql` only when no native CLI is present.
+For a caller checkout, resolve an image tag to a digest, mount the checkout
+read-only, and analyze a container-local copy; use the recipe in
+[CodeQL security analysis](codeql.md).
+
+An `ENABLE_PROFILING=ON` Linux build with tests enabled registers
+`iccdev.profiling-smoke`. It proves that `iccDumpProfile` writes a nonempty
+`gmon.out` and that `gprof` can read it. FlameGraph helpers use
+`ICCDEV_FLAMEGRAPH_DIR` automatically. Hardware `perf` events still depend on
+the host kernel and container permissions; unavailable counters are an
+environment limitation, not a correctness failure.
+
 ## MCP
 
 Start MCP stdio or the REST API explicitly; a single image deliberately has one
@@ -135,15 +160,21 @@ ASAN/UBSAN build. Issue #2380 provides a bounded manual workflow at
 scenario demonstrates the PR #2378 `GetNewApplyCmm()` race before and after the
 fix. It is a proof-of-concept workflow, not a hosted fuzzing service.
 
+For the maintained 13-target Memcheck, Helgrind, DRD, Massif, and Callgrind
+registry, use [Valgrind-Family Analysis](valgrind-analysis.md). The image
+installs that component as `iccdev-valgrind-build`, `iccdev-valgrind-run`,
+`iccdev-valgrind-status`, and `iccdev-valgrind-validate`.
+
 ## MemorySanitizer
 
-The image also includes an LLVM 22.1.2 libc++ and libc++abi built with
+The image also includes LLVM 22.1.2 libc++, libc++abi, and libxml2 built with
 MemorySanitizer origins under `/opt/iccdev-msan-libcxx`. This avoids false
-reports at uninstrumented libstdc++ boundaries. The system unwinder remains
-uninstrumented so MSan can report findings without recursively instrumenting
-its own stack unwinding. The QA link uses `-nostdlib++` and fails if `ldd`
-still resolves libstdc++ for either the JSON or threaded test binary. Build and
-run the focused JSON and threaded controls with:
+reports at uninstrumented C++ and XML runtime boundaries. The system unwinder
+remains uninstrumented so MSan can report findings without recursively
+instrumenting its own stack unwinding. The QA link uses `-nostdlib++` and fails if `ldd`
+still resolves libstdc++ for the JSON, XML, or threaded test binaries, or if
+`iccFromXml` resolves the distribution libxml2. Build and run the focused JSON,
+XML, and threaded controls with:
 
 ```bash
 .github/scripts/iccdev-msan-taint-qa.sh --source-dir "$PWD" --build-dir /tmp/iccdev-msan --runtime-dir "${ICCDEV_MSAN_LIBCXX_DIR:-/opt/iccdev-msan-libcxx}" --out-dir /tmp/iccdev-msan-evidence
@@ -169,17 +200,28 @@ the default sandbox:
 docker run --rm --network none --security-opt seccomp=unconfined "$IMAGE" bash -lc '.github/scripts/iccdev-msan-taint-qa.sh --source-dir "$PWD" --build-dir /tmp/iccdev-msan --runtime-dir "$ICCDEV_MSAN_LIBCXX_DIR" --out-dir /tmp/iccdev-msan-evidence'
 ```
 
-For a local host without the runtime, create it first from the pinned LLVM
-commit and then use the same QA command:
+For a local host without the runtime, create it first from the pinned LLVM and
+libxml2 commits and then use the same QA command. The helper retains its
+historical name but installs all three runtime libraries:
 
 ```bash
 .github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/out/msan-libcxx"
 .github/scripts/iccdev-msan-taint-qa.sh --source-dir "$PWD" --build-dir "$PWD/out/linux-clang-msan-taint" --runtime-dir "$PWD/out/msan-libcxx" --out-dir "$PWD/out/msan-taint-evidence"
 ```
 
-Do not substitute the distribution libc++ packages for this runtime. Their
-headers are useful for compilation, but their shared libraries are not built
-with MemorySanitizer and therefore preserve the same false-report boundary.
+Do not substitute distribution libc++ or libxml2 packages for this runtime.
+Their headers are useful for compilation, but their shared libraries are not
+built with MemorySanitizer and therefore preserve the same false-report
+boundary. A report whose first frames are in distribution libxml2, with a
+poisoned span equal to the XML filename length plus its terminator, is this
+boundary artifact rather than evidence of an iccDEV uninitialized read.
+
+The matching CMake configure/build preset is `linux-clang-msan`; set
+`ICCDEV_MSAN_LIBCXX_DIR` to this runtime before configuring. Ordinary CTest
+does not bootstrap third-party runtimes, so the focused MSan QA script owns
+the linkage assertions and XML regression control. Use
+`linux-clang-valgrind` for a separate non-sanitized Debug tree and
+`linux-clang-tsan` for a separate race-detector tree.
 
 For a local PR #2378 comparison, check out the default branch as `TOOLING` and
 the PR head as `TARGET`. These setup commands are each independently
@@ -341,7 +383,11 @@ docker run --rm "$IMAGE" bash -lc '
   set -euo pipefail
   command -v git gh clang clang++ gcc g++ cmake cppcheck clang-tidy scan-build
   command -v hadolint zizmor shellcheck afl-fuzz valgrind llvm-symbolizer
+  command -v lcov genhtml gcovr llvm-cov llvm-profdata perf gprof strace
   command -v iccDumpProfile iccdev-fuzz-env iccdev-mcp iccdev-mcp-rest
+  test -x "$ICCDEV_FLAMEGRAPH_DIR/stackcollapse-perf.pl"
+  test -x "$ICCDEV_FLAMEGRAPH_DIR/flamegraph.pl"
+  test "$(git -C "$ICCDEV_FLAMEGRAPH_DIR" rev-parse HEAD)" = "$ICCDEV_FLAMEGRAPH_REVISION"
   iccDumpProfile -v Testing/sRGB_v4_ICC_preference.icc >/dev/null
   ctest --test-dir /workspace/build -N --no-tests=error >/dev/null
 '
@@ -417,12 +463,14 @@ adds `latest` and the immutable SHA tag, `ci-qa-pr-docker-testing` and
 `ci-publish-colourbill-ctrl` add their integration tags and immutable SHA tags,
 and a `v*` ref adds its release tag and immutable SHA tag. Do not publish other
 branch, run, image-variant, or
-legacy-package tags. Publishing runs generate an SPDX SBOM with Anchore and
-create provenance with GitHub's `actions/attest-build-provenance` action.
-The separate GitHub SBOM attestation uses `actions/attest` only when the SBOM
-is at most 16 MiB; larger SBOMs remain available as artifacts and the workflow
-reports that GitHub attestation as skipped. BuildKit attestations are disabled
-for the image build.
+legacy-package tags. Publishing runs generate a compact CycloneDX SBOM with
+Anchore and create provenance with GitHub's `actions/attest-build-provenance`
+action. The workflow validates that the SBOM is nonempty and at most 16 MiB,
+then requires `actions/attest` to publish the signed SBOM predicate to GitHub
+and the registry against an immutable SHA staging reference. Only after those
+attestations succeed does it promote the mutable integration, `latest`, or
+release tags. An invalid or oversized SBOM fails before staging. BuildKit
+attestations are disabled for the image build.
 
 For detailed regression gate policy, use
 `docs/regression-workflow-governance.md`. For MCP developer setup, use

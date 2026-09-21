@@ -14,6 +14,7 @@ long command references.
 | `code-review` | Reviewing pull requests with changed-line evidence, including focused MATLAB MEX checks, without duplicate or speculative findings. |
 | `stacked-pr-fast-lane` | Managing related short-window PR stacks and guarded maintainer fast-lane validation. |
 | `sanitizer-repro` | Reproducing ASAN/UBSAN findings or security advisories. |
+| `valgrind-analysis` | Running registered Memcheck, Helgrind, DRD, Massif, or Callgrind lanes with preserved evidence. |
 | `specsep-qa` | Running or diagnosing the repository-owned `iccSpecSepToTiff` QA suites and fixtures. |
 | `json-config-regression` | Editing JSON/profile config parsing or tests. |
 | `iis-isapi-qa` | Building, deploying, and validating the Windows IIS ISAPI HTTP and browser assessment surface. |

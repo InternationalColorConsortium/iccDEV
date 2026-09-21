@@ -67,6 +67,7 @@
 #include <new>      /* std::nothrow - icXmlReadFileBounded */
 #include <string>   /* std::string, std::to_string */
 #include <time.h>
+#include <cctype>
 #include "IccUtilXml.h"
 #include "IccConvertUTF.h"
 #include "IccTagFactory.h"
@@ -503,6 +504,29 @@ icUInt32Number icXmlGetHexData(void *pBuf, const char *szText, icUInt32Number nB
     }
   }
   return rv;
+}
+
+bool icXmlValidHexData(const char *szText)
+{
+  if (!szText)
+    return false;
+
+  // icXmlDumpHexData() writes the digits in pairs, 32 bytes to a line, so the
+  // only text between pairs is the line break and its indentation.  Both
+  // decoders skip anything they cannot read as a pair, one character at a
+  // time, so "0g11" silently gave the single byte 0x11 and a trailing digit
+  // was dropped: after one conversion a malformed payload could not be told
+  // from a shorter intentional one (#2610).
+  while (*szText) {
+    if (isspace((unsigned char)*szText)) {
+      szText++;
+      continue;
+    }
+    if (hexValue(szText[0]) < 0 || hexValue(szText[1]) < 0)
+      return false;
+    szText += 2;
+  }
+  return true;
 }
 
 icUInt32Number icXmlGetHexDataSize(const char *szText)
@@ -1491,11 +1515,34 @@ icUInt64Number icGetDeviceAttrValue(xmlNode *pNode)
     devAttr |= icMediaNegative;
   }
 
+	// Before #2565 the writer spelled this "blackAndwhite", so accept both.
 	attr = icXmlFindAttr(pNode, "MediaColour");
-  if (attr && !strcmp(icXmlAttrValue(attr), "blackAndWhite")) {
+  if (attr && (!strcmp(icXmlAttrValue(attr), "blackAndWhite") ||
+               !strcmp(icXmlAttrValue(attr), "blackAndwhite"))) {
 		devAttr |= icMediaBlackAndWhite;
 	}
-	
+
+  // ICC.2 Table 19 bits 4-7.  The writer names them only when set.
+  attr = icXmlFindAttr(pNode, "MediaBase");
+  if (attr && !strcmp(icXmlAttrValue(attr), "nonPaper")) {
+    devAttr |= icNonPaperBased;
+  }
+
+  attr = icXmlFindAttr(pNode, "MediaTexture");
+  if (attr && !strcmp(icXmlAttrValue(attr), "textured")) {
+    devAttr |= icTextured;
+  }
+
+  attr = icXmlFindAttr(pNode, "MediaIsotropy");
+  if (attr && !strcmp(icXmlAttrValue(attr), "nonIsotropic")) {
+    devAttr |= icNonIsotropic;
+  }
+
+  attr = icXmlFindAttr(pNode, "SelfLuminous");
+  if (attr && !strcmp(icXmlAttrValue(attr), "true")) {
+    devAttr |= icSelfLuminous;
+  }
+
   attr = icXmlFindAttr(pNode, "VendorSpecific");
   if (attr) {
     icUInt64Number vendor = 0;
@@ -1519,6 +1566,12 @@ icColorantEncoding icGetColorantValue(const icChar* str)
 
 	if (!strcmp(str, "P22"))  
 		return icColorantP22;  
+
+	if (!strcmp(str, "P3"))
+		return icColorantP3;
+
+	if (!strcmp(str, "ITU-R BT.2020"))
+		return icColorantBT2020;
 
   return icColorantUnknown;
 }
@@ -1552,12 +1605,24 @@ const std::string icGetDeviceAttrName(icUInt64Number devAttr)
 	xml += line;
 	
 	if (devAttr & icMediaBlackAndWhite)
-		snprintf(line, lineSize, " MediaColour=\"blackAndwhite\"");
+		snprintf(line, lineSize, " MediaColour=\"blackAndWhite\"");
 	else
 		snprintf(line, lineSize, " MediaColour=\"colour\"");
 	xml += line;
 
-  icUInt64Number otherAttr = ~((icUInt64Number)icTransparency|icMatte|icMediaNegative|icMediaBlackAndWhite);
+  // ICC.2 Table 19 bits 4-7, named only when set so that a profile without them
+  // writes the same four attributes as before.
+  if (devAttr & icNonPaperBased)
+    xml += " MediaBase=\"nonPaper\"";
+  if (devAttr & icTextured)
+    xml += " MediaTexture=\"textured\"";
+  if (devAttr & icNonIsotropic)
+    xml += " MediaIsotropy=\"nonIsotropic\"";
+  if (devAttr & icSelfLuminous)
+    xml += " SelfLuminous=\"true\"";
+
+  icUInt64Number otherAttr = ~((icUInt64Number)icTransparency|icMatte|icMediaNegative|icMediaBlackAndWhite|
+                               icNonPaperBased|icTextured|icNonIsotropic|icSelfLuminous);
 
   if (devAttr & otherAttr) {
     snprintf(line, lineSize, " VendorSpecific=\"%016llx\"", devAttr & otherAttr);
@@ -1665,5 +1730,48 @@ bool icXmlParseU32(const char *s, icUInt32Number &out, icUInt32Number max_value)
   unsigned long long v = std::strtoull(s, &end, 10);
   if (*end != '\0' || errno == ERANGE || v > max_value) return false;
   out = static_cast<icUInt32Number>(v);
+  return true;
+}
+
+bool icXmlParseFloat(const char *s, icFloatNumber &out)
+{
+  if (!s) return false;
+  char *end = nullptr;
+  double d = std::strtod(s, &end);
+  // strtod skips leading whitespace itself and leaves end at s when it
+  // converts nothing, which covers "" and all-whitespace input too.
+  if (end == s) return false;
+  while (*end == ' ' || *end == '\t' || *end == '\n' || *end == '\r')
+    end++;
+  if (*end != '\0') return false;
+  // A NaN, an infinity or a double beyond the float range would reach the
+  // fixed-point encoders through a conversion whose result is undefined.
+  //
+  // The bound is the ROUND-TO-NEAREST overflow point, 2^128 - 2^103, not
+  // FLT_MAX and not 2^128.  Comparing against FLT_MAX refused the writer's own
+  // output: the canonical nine-significant-digit spelling of FLT_MAX is
+  // 3.40282347e+38, which strtod resolves to a double fractionally above the
+  // exact float maximum, yet rounds back to FLT_MAX rather than to infinity.
+  // Anything at or above this bound does round to infinity and is refused, so
+  // 1e39, 1e300 and 3.4028236e+38 are all still rejected.
+  //
+  // Tested BEFORE the cast rather than after it.  Converting an out-of-range
+  // double to float is undefined ([conv.double]/1), so ordering the test first
+  // keeps the conversion in range on every input.  Measured, because the
+  // obvious worry does not hold: -fsanitize=float-cast-overflow, which the
+  // sanitizer presets enable with -fno-sanitize-recover, instruments only
+  // float-to-INTEGER conversions -- a double-to-float narrowing of 1e300 is
+  // not diagnosed and simply yields infinity, verified against a
+  // double-to-int positive control on clang 21.1.3.  Nothing in the tree
+  // builds with -ffast-math either, so the post-cast isfinite() form was in
+  // fact safe.  This ordering is the cheaper way to be right rather than a
+  // fix for an observed failure, and the accept set is identical: measured
+  // equal on 3.40282347e+38, -3.40282347e+38, 3.4028235e+38, 3.4028236e+38,
+  // 1e39 and 1e300.
+  const double kFloatOverflow = 3.402823567797336616e38;  // 2^128 - 2^103
+  if (!std::isfinite(d) || d >= kFloatOverflow || d <= -kFloatOverflow)
+    return false;
+
+  out = static_cast<icFloatNumber>(d);
   return true;
 }

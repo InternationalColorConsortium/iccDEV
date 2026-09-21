@@ -1,17 +1,18 @@
 #!/bin/bash
 ###############################################################################
-# Build an MSan-instrumented libc++ and libc++abi runtime for iccDEV QA.
+# Build MSan-instrumented libc++, libc++abi, and libxml2 for iccDEV QA.
 ###############################################################################
 
 set -euo pipefail
 
 usage()
 {
-  echo "Usage: $0 --prefix DIR [--llvm-commit SHA] [--jobs N]"
+  echo "Usage: $0 --prefix DIR [--llvm-commit SHA] [--libxml2-commit SHA] [--jobs N]"
 }
 
 prefix=""
 llvm_commit="1ab49a973e210e97d61e5db6557180dcb92c3e98"
+libxml2_commit="3d840e17858de03a09fba8b202e3a89267d5795a"
 jobs="${BUILD_JOBS:-$(nproc)}"
 
 while [ "$#" -gt 0 ]; do
@@ -24,6 +25,11 @@ while [ "$#" -gt 0 ]; do
     --llvm-commit)
       [ "$#" -ge 2 ] || { usage >&2; exit 2; }
       llvm_commit="$2"
+      shift 2
+      ;;
+    --libxml2-commit)
+      [ "$#" -ge 2 ] || { usage >&2; exit 2; }
+      libxml2_commit="$2"
       shift 2
       ;;
     --jobs)
@@ -57,6 +63,16 @@ if [ "${#llvm_commit}" -ne 40 ]; then
   echo "[FAIL] --llvm-commit must contain exactly 40 hexadecimal characters" >&2
   exit 2
 fi
+case "$libxml2_commit" in
+  *[!0-9a-f]*|'')
+    echo "[FAIL] --libxml2-commit must be a lowercase hexadecimal commit" >&2
+    exit 2
+    ;;
+esac
+if [ "${#libxml2_commit}" -ne 40 ]; then
+  echo "[FAIL] --libxml2-commit must contain exactly 40 hexadecimal characters" >&2
+  exit 2
+fi
 case "$jobs" in
   ''|0*|*[!0-9]*)
     echo "[FAIL] --jobs must be a positive integer" >&2
@@ -80,6 +96,8 @@ trap cleanup EXIT
 
 source_dir="$work_dir/llvm-project"
 build_dir="$work_dir/build"
+libxml2_source_dir="$work_dir/libxml2"
+libxml2_build_dir="$work_dir/libxml2-build"
 
 git init --quiet "$source_dir"
 git -C "$source_dir" remote add origin https://github.com/llvm/llvm-project.git
@@ -127,5 +145,45 @@ for runtime_library in libc++.so.1 libc++abi.so.1; do
   fi
 done
 
-echo "[PASS] MSan libc++/libc++abi installed at $prefix"
+git init --quiet "$libxml2_source_dir"
+git -C "$libxml2_source_dir" remote add origin https://gitlab.gnome.org/GNOME/libxml2.git
+git -C "$libxml2_source_dir" fetch --quiet --depth=1 --filter=blob:none \
+  origin "$libxml2_commit"
+git -C "$libxml2_source_dir" checkout --quiet --detach FETCH_HEAD
+if [ "$(git -C "$libxml2_source_dir" rev-parse HEAD)" != "$libxml2_commit" ]; then
+  echo "[FAIL] fetched libxml2 commit does not match the requested revision" >&2
+  exit 2
+fi
+
+msan_flags="-fsanitize=memory -fsanitize-memory-track-origins"
+msan_flags+=" -fno-omit-frame-pointer"
+cmake -G Ninja -S "$libxml2_source_dir" -B "$libxml2_build_dir" \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_C_COMPILER=clang \
+  -DCMAKE_C_FLAGS="$msan_flags" \
+  -DCMAKE_EXE_LINKER_FLAGS="$msan_flags" \
+  -DCMAKE_SHARED_LINKER_FLAGS="$msan_flags" \
+  -DCMAKE_INSTALL_PREFIX="$prefix" \
+  -DCMAKE_INSTALL_LIBDIR=lib \
+  -DBUILD_SHARED_LIBS=ON \
+  -DLIBXML2_WITH_PYTHON=OFF \
+  -DLIBXML2_WITH_TESTS=OFF \
+  -DLIBXML2_WITH_PROGRAMS=OFF \
+  -DLIBXML2_WITH_ZLIB=OFF \
+  -DLIBXML2_WITH_ICONV=OFF
+cmake --build "$libxml2_build_dir" --target install --parallel "$jobs"
+
+if [ ! -f "$prefix/include/libxml2/libxml/parser.h" ] ||
+   [ ! -f "$prefix/lib/libxml2.so" ]; then
+  echo "[FAIL] instrumented libxml2 installation is incomplete: $prefix" >&2
+  exit 2
+fi
+nm -D "$prefix/lib/libxml2.so" > "$work_dir/libxml2.so.symbols"
+if ! grep -Fq '__msan_' "$work_dir/libxml2.so.symbols"; then
+  echo "[FAIL] libxml2.so does not reference MemorySanitizer" >&2
+  exit 2
+fi
+
+echo "[PASS] MSan libc++/libc++abi/libxml2 installed at $prefix"
 echo "[EVIDENCE] llvm_commit=$llvm_commit"
+echo "[EVIDENCE] libxml2_commit=$libxml2_commit"

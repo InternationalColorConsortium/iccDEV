@@ -132,6 +132,19 @@ icSigNamePair g_icTagNameTable[] = {
   {icSigBRDFDToB1Tag, "brdfDToB1Tag"},
   {icSigBRDFDToB2Tag, "brdfDToB2Tag"},
   {icSigBRDFDToB3Tag, "brdfDToB3Tag"},
+  // ICC.2-2023 9.2.18-25 (#2564).  Until these had entries, GetTagSigName returned NULL
+  // for them, so iccDumpProfile listed each as "Unknown 'bBA0'" and iccToXml wrote a
+  // <PrivateTag TagSignature="bBA0">.  A document written that way still reads: a name
+  // lookup misses on "PrivateTag", so the XML reader takes the TagSignature attribute
+  // and the JSON reader takes a PrivateTag_N entry's "sig" member instead.
+  {icSigBRDFBToA0Tag, "brdfBToA0Tag"},
+  {icSigBRDFBToA1Tag, "brdfBToA1Tag"},
+  {icSigBRDFBToA2Tag, "brdfBToA2Tag"},
+  {icSigBRDFBToA3Tag, "brdfBToA3Tag"},
+  {icSigBRDFBToD0Tag, "brdfBToD0Tag"},
+  {icSigBRDFBToD1Tag, "brdfBToD1Tag"},
+  {icSigBRDFBToD2Tag, "brdfBToD2Tag"},
+  {icSigBRDFBToD3Tag, "brdfBToD3Tag"},
   {icSigSurfaceMapTag, "surfaceMapTag"},
   {icSigBToA0Tag, "BToA0Tag"},
   {icSigBToA1Tag, "BToA1Tag"},
@@ -158,6 +171,24 @@ icSigNamePair g_icTagNameTable[] = {
   {icSigDToB1Tag, "DToB1Tag"},
   {icSigDToB2Tag, "DToB2Tag"},
   {icSigDToB3Tag, "DToB3Tag"},
+  // ICC.2-2023 9.2.61-76 (#2564).  The 9.2.63 heading misprints the name as
+  // "directionalfAToB2Tag"; the pattern of its 15 siblings is taken instead.
+  {icSigDirectionalAToB0Tag, "directionalAToB0Tag"},
+  {icSigDirectionalAToB1Tag, "directionalAToB1Tag"},
+  {icSigDirectionalAToB2Tag, "directionalAToB2Tag"},
+  {icSigDirectionalAToB3Tag, "directionalAToB3Tag"},
+  {icSigDirectionalBToA0Tag, "directionalBToA0Tag"},
+  {icSigDirectionalBToA1Tag, "directionalBToA1Tag"},
+  {icSigDirectionalBToA2Tag, "directionalBToA2Tag"},
+  {icSigDirectionalBToA3Tag, "directionalBToA3Tag"},
+  {icSigDirectionalBToD0Tag, "directionalBToD0Tag"},
+  {icSigDirectionalBToD1Tag, "directionalBToD1Tag"},
+  {icSigDirectionalBToD2Tag, "directionalBToD2Tag"},
+  {icSigDirectionalBToD3Tag, "directionalBToD3Tag"},
+  {icSigDirectionalDToB0Tag, "directionalDToB0Tag"},
+  {icSigDirectionalDToB1Tag, "directionalDToB1Tag"},
+  {icSigDirectionalDToB2Tag, "directionalDToB2Tag"},
+  {icSigDirectionalDToB3Tag, "directionalDToB3Tag"},
   {icSigGamutTag, "gamutTag"},
   {icSigGamutBoundaryDescription0Tag, "gamutBoundaryDescription0Tag"},
   {icSigGamutBoundaryDescription1Tag, "gamutBoundaryDescription1Tag"},
@@ -177,6 +208,9 @@ icSigNamePair g_icTagNameTable[] = {
   {icSigHToS3Tag, "HToS3Tag"},
   {icSigLuminanceTag, "luminanceTag"},
   {icSigMeasurementTag, "measurementTag"},
+  // ICC.2-2023 9.2.91-92 (#2564).
+  {icSigMeasurementInfoTag, "measurementInfoTag"},
+  {icSigMeasurementInputInfoTag, "measurementInputInfoTag"},
   {icSigMediaBlackPointTag, "mediaBlackPointTag"},
   {icSigMediaWhitePointTag, "mediaWhitePointTag"},
   {icSigMToA0Tag, "MToA0Tag"},
@@ -196,6 +230,8 @@ icSigNamePair g_icTagNameTable[] = {
   {icSigProfileDescriptionTag, "profileDescriptionTag"},
   {icSigProfileSequenceDescTag, "profileSequenceDescTag"},
   {icSigProfileSequceIdTag, "profileSequenceIdentifierTag"},
+  // ICC.2-2023 9.2.107 (#2564).
+  {icSigProfileSequenceInformationTag, "profileSequenceInformationTag"},
   {icSigPs2CRD0Tag, "ps2CRD0Tag"},
   {icSigPs2CRD1Tag, "ps2CRD1Tag"},
   {icSigPs2CRD2Tag, "ps2CRD2Tag"},
@@ -229,6 +265,8 @@ icSigNamePair g_icTagNameTable[] = {
   {icSigSpectralWhitePointTag, "spectralWhitePointTag"},
   {icSigCustomToStandardPccTag, "customToStandardPccTag"},
   {icSigStandardToCustomPccTag, "standardToCustomPccTag"},
+  // ICC.2-2023 9.2.110 (#2564).
+  {icSigSourcePccTag, "sourcePccTag"},
   {icSigColorEncodingParamsTag, "colorEncodingParamsTag"},
   {icSigColorSpaceNameTag, "colorSpaceNameTag"},
   {icSigReferenceNameTag, "referenceNameTag"},

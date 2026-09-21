@@ -1,0 +1,1 @@
+| case.cpp:20:21:20:41 | ... < ... | Loop counter 'i' can reach or exceed the 16 elements in fixed buffer 'positions'. Size the buffer from the loop bound or reject the larger count (CWE-121/CWE-787; see #2608). |

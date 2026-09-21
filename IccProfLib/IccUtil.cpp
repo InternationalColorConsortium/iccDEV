@@ -1442,6 +1442,7 @@ icUInt32Number icGetSpaceSamples(icColorSpaceSignature sig)
   case icSigLuvData:
   case icSigYCbCrData:
   case icSigYxyData:
+  case icSigLmsData:
   case icSigRgbData:
   case icSigHsvData:
   case icSigHlsData:
@@ -1829,6 +1830,9 @@ const icChar *CIccInfo::GetColorSpaceSigName(icColorSpaceSignature sig)
 
   case icSigYxyData:
     return "YxyData";
+
+  case icSigLmsData:
+    return "LmsData";
 
   case icSigRgbData:
     return "RgbData";
@@ -2546,6 +2550,12 @@ const icChar *CIccInfo::GetColorantEncoding(icColorantEncoding colorant)
     case icColorantP22:
       return "P22";
 
+    case icColorantP3:
+      return "P3";
+
+    case icColorantBT2020:
+      return "ITU-R BT.2020";
+
     default:
       return "Customized Encoding";
   }
@@ -2854,6 +2864,7 @@ bool CIccInfo::IsValidSpace(icColorSpaceSignature sig)
   case icSigLuvData:
   case icSigYCbCrData:
   case icSigYxyData:
+  case icSigLmsData:
   case icSigRgbData:
   case icSigGrayData:
   case icSigHsvData:

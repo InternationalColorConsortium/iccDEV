@@ -91,6 +91,9 @@ icUInt32Number icXmlGetHexData(void *pBuf, const char *szText, icUInt32Number nB
 
 icUInt32Number icXmlGetHexDataSize(const char *szText);
 
+// True when szText is hex digits in pairs, with whitespace only between pairs.
+bool icXmlValidHexData(const char *szText);
+
 size_t icXmlDumpHexData(std::string &xml, std::string blanks, void *pBuf, size_t nBufSize);
 
 bool icXmlValidateFileCount(size_t value, icUInt32Number &count, std::string &parseStr, const char *filename);
@@ -196,6 +199,15 @@ bool icXmlParseU16(const char *s, icUInt16Number &out,
                    icUInt16Number max_value = 0xFFFFu);
 bool icXmlParseU32(const char *s, icUInt32Number &out,
                    icUInt32Number max_value = 0xFFFFFFFFu);
+
+// Safe floating-point parser for XML attribute values and element text, the
+// replacement for atof() (#2548).  Returns false (leaving `out` unchanged) when:
+//   - the string is NULL, empty or only whitespace,
+//   - strtod converts nothing, or anything but whitespace follows the number,
+//   - the value is a NaN or an infinity, or lies beyond icFloatNumber's range.
+// Surrounding whitespace is accepted, so pretty-printed element text such as
+// "\n  5000\n" parses; atof() read "50abc" as 50 and "not-a-number" as 0.
+bool icXmlParseFloat(const char *s, icFloatNumber &out);
 
 
 #endif //_ICCUTILXML_H

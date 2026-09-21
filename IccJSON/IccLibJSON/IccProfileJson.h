@@ -95,6 +95,7 @@ protected:
   bool ParseTag(const std::string &key, const IccJson &tagValue,
                 KeyToSignatureMap &keyToSig,
                 std::string &parseStr);
+  void SetTagColorSpaces(icTagSignature sig, CIccTag *pTag);
 };
 
 #endif /* _ICCPROFILEJSON_H */

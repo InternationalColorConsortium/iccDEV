@@ -4725,6 +4725,42 @@ icValidateStatus CIccTagChromaticity::Validate(std::string sigPath, std::string 
             break;
         }
 
+      // P3 and ITU-R BT.2020 are the two encodings ICC.1:2022 added to Table 31.
+      // Until they were listed here, both fell to the default case below, so a
+      // profile using either with the table's own values was reported as having
+      // an invalid encoding.
+      case icColorantP3:
+        {
+          if ( (m_xy[0].x != icDtoUF((icFloatNumber)0.680)) || (m_xy[0].y != icDtoUF((icFloatNumber)0.320)) ||
+               (m_xy[1].x != icDtoUF((icFloatNumber)0.265)) || (m_xy[1].y != icDtoUF((icFloatNumber)0.690)) ||
+               (m_xy[2].x != icDtoUF((icFloatNumber)0.150)) || (m_xy[2].y != icDtoUF((icFloatNumber)0.060)) ) {
+              sReport += icMsgValidateNonCompliant;
+              sReport += sSigPathName;
+              sReport += " - Chromaticity data does not match specification.\n";
+              rv = icMaxStatus(rv, icValidateNonCompliant);
+            }
+            break;
+        }
+
+      // ICC.1:2022 Table 31 prints the BT.2020 red primary as (0,780, 0,292).
+      // The standard it names, Recommendation ITU-R BT.2020-2 (Table 3, "System
+      // colorimetry"), gives red as x 0.708, y 0.292, and ICC.1:2022 cites that
+      // edition as reference [17]. Green and blue agree in both documents. The
+      // 0.780 reads as transposed digits, so the check uses the ITU value: a
+      // correct BT.2020 profile must not be reported non-compliant because of it.
+      case icColorantBT2020:
+        {
+          if ( (m_xy[0].x != icDtoUF((icFloatNumber)0.708)) || (m_xy[0].y != icDtoUF((icFloatNumber)0.292)) ||
+               (m_xy[1].x != icDtoUF((icFloatNumber)0.170)) || (m_xy[1].y != icDtoUF((icFloatNumber)0.797)) ||
+               (m_xy[2].x != icDtoUF((icFloatNumber)0.131)) || (m_xy[2].y != icDtoUF((icFloatNumber)0.046)) ) {
+              sReport += icMsgValidateNonCompliant;
+              sReport += sSigPathName;
+              sReport += " - Chromaticity data does not match specification.\n";
+              rv = icMaxStatus(rv, icValidateNonCompliant);
+            }
+            break;
+        }
+
       default:
         {
           sReport += icMsgValidateNonCompliant;
@@ -5826,7 +5862,7 @@ bool CIccTagSparseMatrixArray::Reset(icUInt32Number nNumMatrices, icUInt16Number
 */
 bool CIccTagSparseMatrixArray::GetSparseMatrix(CIccSparseMatrix &mtx, int nIndex, bool bInitFromData/*=true*/)
 {
-  if (nIndex<0 || nIndex>(int)m_nSize) {
+  if (!m_RawData || nIndex<0 || nIndex>=(int)m_nSize) {
     mtx.Reset(NULL, 0, icSparseMatrixFloatNum, false);
     return false;
   }
@@ -7619,6 +7655,7 @@ template class CIccTagFloatNum<icFloat64Number, icSigFloat64ArrayType>;
 CIccTagMeasurement::CIccTagMeasurement()
 {
   memset(&m_Data, 0, sizeof(m_Data));
+  m_nMeasurementCondition = 0;
 }
 
 
@@ -7635,6 +7672,7 @@ CIccTagMeasurement::CIccTagMeasurement()
 CIccTagMeasurement::CIccTagMeasurement(const CIccTagMeasurement &ITM)
 {
   memcpy(&m_Data, &ITM.m_Data, sizeof(m_Data));
+  m_nMeasurementCondition = ITM.m_nMeasurementCondition;
 }
 
 
@@ -7654,6 +7692,7 @@ CIccTagMeasurement &CIccTagMeasurement::operator=(const CIccTagMeasurement &Meas
     return *this;
 
   memcpy(&m_Data, &MeasTag.m_Data, sizeof(m_Data));
+  m_nMeasurementCondition = MeasTag.m_nMeasurementCondition;
 
   return *this;
 }
@@ -7711,6 +7750,14 @@ bool CIccTagMeasurement::Read(icUInt32Number size, CIccIO *pIO)
   if (pIO->Read32(&m_Data,nSize) != nSize)
     return false;
 
+  // ICC.2 Table 56: bytes 36-39 are an optional measurement condition, and a
+  // 36-byte tag has none.
+  m_nMeasurementCondition = 0;
+  if (size >= sizeof(icTagTypeSignature) + sizeof(icUInt32Number) + sizeof(m_Data) + sizeof(icUInt32Number)) {
+    if (!pIO->Read32(&m_nMeasurementCondition))
+      return false;
+  }
+
   return true;
 }
 
@@ -7746,6 +7793,10 @@ bool CIccTagMeasurement::Write(CIccIO *pIO)
   if (pIO->Write32(&m_Data,nSize) != nSize)
     return false;
 
+  // Written only when set, so a tag without one keeps the 36-byte ICC.1 layout.
+  if (m_nMeasurementCondition && !pIO->Write32(&m_nMeasurementCondition))
+    return false;
+
   return true;
 }
 
@@ -7775,6 +7826,13 @@ void CIccTagMeasurement::Describe(std::string &sDescription, int /* nVerboseness
    sDescription += Fmt.GetMeasurementGeometryName(m_Data.geometry); sDescription += "\n";
    sDescription += Fmt.GetMeasurementFlareName(m_Data.flare); sDescription += "\n";
    sDescription += Fmt.GetIlluminantName(m_Data.illuminant); sDescription += "\n";
+   if (m_nMeasurementCondition) {
+     if (m_nMeasurementCondition <= 4)
+       snprintf(buf, bufSize, "Measurement condition: M%u\n", (unsigned int)(m_nMeasurementCondition - 1));
+     else
+       snprintf(buf, bufSize, "Measurement condition: unknown encoding %08Xh\n", (unsigned int)m_nMeasurementCondition);
+     sDescription += buf;
+   }
 }
 
 
@@ -7825,6 +7883,9 @@ icValidateStatus CIccTagMeasurement::Validate(std::string sigPath, std::string &
     rv = icMaxStatus(rv, icValidateNonCompliant);
   }
 
+  // ICC.2 Table 60 adds encodings 9h-16h to ICC.1's 0h-8h.
+  bool bIcc2 = pProfile && pProfile->m_Header.version >= icVersionNumberV5;
+
   switch(m_Data.illuminant) {
   case icIlluminantUnknown:
   case icIlluminantD50:
@@ -7837,11 +7898,49 @@ icValidateStatus CIccTagMeasurement::Validate(std::string sigPath, std::string &
   case icIlluminantF8:
     break;
 
+  case icIlluminantBlackBody:
+  case icIlluminantDaylight:
+  case icIlluminantB:
+  case icIlluminantC:
+  case icIlluminantF1:
+  case icIlluminantF3:
+  case icIlluminantF4:
+  case icIlluminantF5:
+  case icIlluminantF6:
+  case icIlluminantF7:
+  case icIlluminantF9:
+  case icIlluminantF10:
+  case icIlluminantF11:
+  case icIlluminantF12:
+    if (bIcc2)
+      break;
+    sReport += icMsgValidateNonCompliant;
+    sReport += sSigPathName;
+    sReport += " - Standard illuminant encoding is defined by ICC.2 only.\n";
+    rv = icMaxStatus(rv, icValidateNonCompliant);
+    break;
+
   default:
     sReport += icMsgValidateNonCompliant;
     sReport += sSigPathName;
     sReport += " - Invalid standard illuminant encoding.\n";
     rv = icMaxStatus(rv, icValidateNonCompliant);
+  }
+
+  // ICC.2 Table 61: 0 unknown, 1-4 = M0-M3.  ICC.1 has no such field.
+  if (m_nMeasurementCondition) {
+    if (!bIcc2) {
+      sReport += icMsgValidateNonCompliant;
+      sReport += sSigPathName;
+      sReport += " - Measurement condition is defined by ICC.2 only.\n";
+      rv = icMaxStatus(rv, icValidateNonCompliant);
+    }
+    else if (m_nMeasurementCondition > 4) {
+      sReport += icMsgValidateNonCompliant;
+      sReport += sSigPathName;
+      sReport += " - Invalid measurement condition encoding.\n";
+      rv = icMaxStatus(rv, icValidateNonCompliant);
+    }
   }
 
   return rv;
@@ -8871,10 +8970,14 @@ void CIccTagMultiLocalizedUnicode::SetText(const icUInt32Number *sszUnicode32Tex
  */
 CIccTagData::CIccTagData(int nSize/*=1*/)
 {
+  // Clamp the signed argument, then allocate the clamped size.  The clamp used
+  // to test the unsigned m_nSize, so a negative nSize skipped it and the
+  // allocation failed, leaving an empty tag; and nSize 0 was recorded as 1
+  // over a zero-byte allocation that Write() read one byte past (#2572).
+  if (nSize < 1)
+    nSize = 1;
   m_nSize = nSize;
-  if (m_nSize <1)
-    m_nSize = 1;
-  m_pData = (icUInt8Number*)calloc(nSize, sizeof(icUInt8Number));
+  m_pData = (icUInt8Number*)calloc(m_nSize, sizeof(icUInt8Number));
   if (!m_pData)
     m_nSize = 0;
   m_nDataFlag = icAsciiData;
@@ -9778,7 +9881,25 @@ icValidateStatus CIccTagColorantOrder::Validate(std::string sigPath, std::string
     return rv;
   }
 
-  if (m_nCount != icGetSpaceSamples(pProfile->m_Header.colorSpace)) {
+  // colorantOrderOutTag ('cloo') gives the laydown order of the colorants of
+  // the header's PCS field, and is for DeviceLink profiles only (ICC.2:2023
+  // 9.2.52).  colorantOrderTag follows the data colour space.  This mirrors
+  // CIccTagColorantTable::Validate()'s colorantTableOutTag branch.
+  if (icGetFirstSigPathSig(sigPath)==icSigColorantOrderOutTag) {
+    if (pProfile->m_Header.deviceClass!=icSigLinkClass) {
+      sReport += icMsgValidateNonCompliant;
+      sReport += sSigPathName;
+      sReport += " - Use of this tag is allowed only in DeviceLink Profiles.\n";
+      rv = icMaxStatus(rv, icValidateNonCompliant);
+    }
+    if (m_nCount != icGetSpaceSamples(pProfile->m_Header.pcs)) {
+      sReport += icMsgValidateNonCompliant;
+      sReport += sSigPathName;
+      sReport += " - Incorrect number of colorants.\n";
+      rv = icMaxStatus(rv, icValidateNonCompliant);
+    }
+  }
+  else if (m_nCount != icGetSpaceSamples(pProfile->m_Header.colorSpace)) {
     sReport += icMsgValidateNonCompliant;
     sReport += sSigPathName;
     sReport += " - Incorrect number of colorants.\n";
@@ -12740,7 +12861,7 @@ icValidateStatus CIccTagSpectralViewingConditions::Validate(std::string sigPath,
   if (getObserver(range)) {
     rv = icMaxStatus(rv, Info.CheckData(sReport, range, sSigPathName + ":>observerRange"));
 
-    if (!m_observer && pProfile && pProfile->m_Header.version < icVersionNumberV5_1) {
+    if (!m_observer && pProfile && pProfile->m_Header.version < icVersionNumberV5) {
       sReport += icMsgValidateNonCompliant;
       sReport += sSigPathName;
       sReport += " - Missing Observer CMF not supported by profile version!\r\n";
@@ -12759,7 +12880,7 @@ icValidateStatus CIccTagSpectralViewingConditions::Validate(std::string sigPath,
   if (getIlluminant(range)) {
     rv = icMaxStatus(rv, Info.CheckData(sReport, range, sSigPathName + ":>illuminantRange"));
 
-    if (!m_illuminant && pProfile && pProfile->m_Header.version < icVersionNumberV5_1) {
+    if (!m_illuminant && pProfile && pProfile->m_Header.version < icVersionNumberV5) {
       sReport += icMsgValidateNonCompliant;
       sReport += sSigPathName;
       sReport += " - Missing illuminant SPD not supported by profile version!\r\n";
@@ -13205,10 +13326,11 @@ bool icGetTagText(const CIccTag *pTag, std::string &text)
 */
 CIccTagEmbeddedHeightImage::CIccTagEmbeddedHeightImage(int nSize/*=1*/)
 {
+  // Same as CIccTagData: clamp nSize, then allocate the clamped size (#2572).
+  if (nSize < 1)
+    nSize = 1;
   m_nSize = nSize;
-  if (m_nSize <1)
-    m_nSize = 1;
-  m_pData = (icUInt8Number*)calloc(nSize, sizeof(icUInt8Number));
+  m_pData = (icUInt8Number*)calloc(m_nSize, sizeof(icUInt8Number));
   if (!m_pData)
     m_nSize = 0;
   m_nSeamlesIndicator = 0;
@@ -13369,6 +13491,12 @@ bool CIccTagEmbeddedHeightImage::Write(CIccIO *pIO)
   icTagTypeSignature sig = GetType();
 
   if (!pIO)
+    return false;
+
+  // A zero-byte image used to be written as a 24-byte tag, which Read() above
+  // refuses (it needs at least one image byte), so the saved profile could not
+  // be opened again.  There is no form of it that loads (#2572).
+  if (!m_nSize)
     return false;
 
   if (!pIO->Write32(&sig))
@@ -13540,10 +13668,11 @@ icValidateStatus CIccTagEmbeddedHeightImage::Validate(std::string sigPath, std::
 */
 CIccTagEmbeddedNormalImage::CIccTagEmbeddedNormalImage(int nSize/*=1*/)
 {
+  // Same as CIccTagData: clamp nSize, then allocate the clamped size (#2572).
+  if (nSize < 1)
+    nSize = 1;
   m_nSize = nSize;
-  if (m_nSize < 1)
-    m_nSize = 1;
-  m_pData = (icUInt8Number*)calloc(nSize, sizeof(icUInt8Number));
+  m_pData = (icUInt8Number*)calloc(m_nSize, sizeof(icUInt8Number));
   if (!m_pData)
     m_nSize = 0;
   m_nSeamlesIndicator = 0;
@@ -13690,6 +13819,11 @@ bool CIccTagEmbeddedNormalImage::Write(CIccIO *pIO)
   icTagTypeSignature sig = GetType();
 
   if (!pIO)
+    return false;
+
+  // Same as CIccTagEmbeddedHeightImage::Write: a zero-byte image has no form
+  // Read() accepts (#2572).
+  if (!m_nSize)
     return false;
 
   if (!pIO->Write32(&sig))

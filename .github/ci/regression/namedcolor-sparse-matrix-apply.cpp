@@ -336,6 +336,163 @@ private:
 };
 
 // ---------------------------------------------------------------------------
+// Level 1b: a source matrix that does not fit the step (#2581).
+//
+// The encoded matrix arrives as pixel data, so its row count, column count and column
+// indices are whatever the named colour's tag (or an interpolation of it) says.
+// MultiplyVector() writes one float per encoded row and reads the illuminant at every
+// column index, so each case below over-ran a buffer before the fix. Each one also
+// carries rows that multiply to non-zero values, so an unfixed build fails the
+// all-zeros check without a sanitizer.
+// ---------------------------------------------------------------------------
+
+const icFloatNumber kSentinel = -7.0f;
+
+// Encodes a nRows x nCols matrix with a 1.0 at (r, r % nCols) in every row.
+bool encodeDiagonal(icFloatNumber *pBlob, icUInt16Number nRows, icUInt16Number nCols)
+{
+  std::memset(pBlob, 0, kChannels * sizeof(icFloatNumber));
+
+  std::vector<icFloatNumber> full((size_t)nRows * nCols, 0.0f);
+  for (int r = 0; r < (int)nRows; r++)
+    full[(size_t)r * nCols + (size_t)(r % nCols)] = 1.0f;
+
+  CIccSparseMatrix mtx(pBlob, kChannels * sizeof(icFloatNumber),
+                       icSparseMatrixFloatNum, false);
+  if (!mtx.Init(nRows, nCols, /*bSetData=*/true))
+    return false;
+
+  return mtx.FillFromFullMatrix(&full[0]);
+}
+
+// Applies blob through a kRows x kCols step whose illuminant is all ones, into a
+// destination one float longer than the step's rows, and checks that the step's rows
+// are zero and the extra float is untouched.
+void checkRefusedAsZeros(const std::vector<icFloatNumber> &blob, const char *what)
+{
+  CIccPcsStepSrcSparseMatrix step(kRows, kCols, kChannels);
+  for (int c = 0; c < (int)kCols; c++)
+    step.data()[c] = 1.0f;
+
+  icFloatNumber got[kRows + 1];
+  for (int i = 0; i <= (int)kRows; i++)
+    got[i] = kSentinel;
+
+  step.Apply(NULL, got, &blob[0]);
+
+  bool zeros = true;
+  for (int r = 0; r < (int)kRows; r++)
+    zeros = zeros && got[r] == 0.0f;
+
+  char msg[200];
+  std::snprintf(msg, sizeof(msg), "L1b: %s gives zeros (row 0 %.6f)", what,
+                (double)got[0]);
+  check(zeros, msg);
+  std::snprintf(msg, sizeof(msg), "L1b: %s leaves the float after the step's rows alone",
+                what);
+  check(got[kRows] == kSentinel, msg);
+}
+
+void applyRefusesAColumnIndexEqualToTheColumnCount()
+{
+  std::vector<icFloatNumber> blob(kChannels, 0.0f);
+  check(encodeDiagonal(&blob[0], kRows, kCols), "L1b: encoded the column-index matrix");
+
+  // Row 0's only entry is column 0; move it to column kCols, one past the last. The
+  // #2581 reproducer is Testing/Named/SparseMatrixNamedColor.xml with this one change.
+  CIccSparseMatrix mtx(&blob[0], kChannels * sizeof(icFloatNumber),
+                       icSparseMatrixFloatNum, true);
+  check(mtx.GetNumRowColumns(0) == 1, "L1b: row 0 holds one entry");
+  mtx.GetColumnsForRow(0)[0] = kCols;
+  check(!mtx.IsValid(), "L1b: IsValid() refuses a column index equal to the column count");
+
+  checkRefusedAsZeros(blob, "a column index equal to the column count");
+}
+
+// MultiplyVector() walks the column indices from slot 0, but IsValid() only inspects the
+// slots inside a row's [m_RowStart[r], m_RowStart[r+1]) span.  With a monotonic run of
+// row starts offset by two, the two leading slots are multiplied and were never
+// validated, so bounding the indices in the walk itself is what covers them (#2581
+// review).
+void applyRefusesUnvalidatedLeadingColumnIndices()
+{
+  std::vector<icFloatNumber> blob(kChannels, 0.0f);
+  check(encodeDiagonal(&blob[0], kRows, kCols), "L1b: encoded the leading-slot matrix");
+
+  icUInt16Number *pRowStart =
+    (icUInt16Number *)((icUInt8Number *)&blob[0] + 2 * sizeof(icUInt16Number));
+  for (int r = 0; r <= (int)kRows; r++)
+    pRowStart[r] = (icUInt16Number)(pRowStart[r] + 2);
+
+  // Out-of-range columns in the two unreachable slots: before the fix the multiply read
+  // the illuminant at these indices.
+  icUInt16Number *pCols =
+    (icUInt16Number *)((icUInt8Number *)&blob[0] + (3 + kRows) * sizeof(icUInt16Number));
+  pCols[0] = 4000;
+  pCols[1] = 4000;
+
+  checkRefusedAsZeros(blob, "an out-of-range column below the first row start");
+}
+
+// Init() sizes the entry slots from the raw buffer; a row start past that capacity walks
+// the column indices and the data past the end of the encoded matrix.
+void applyRefusesRowStartsPastTheEntryCapacity()
+{
+  std::vector<icFloatNumber> blob(kChannels, 0.0f);
+  check(encodeDiagonal(&blob[0], kRows, kCols), "L1b: encoded the over-capacity matrix");
+
+  CIccSparseMatrix mtx(&blob[0], kChannels * sizeof(icFloatNumber),
+                       icSparseMatrixFloatNum, true);
+  const icUInt32Number nCapacity = mtx.GetMaxEntries();
+
+  icUInt16Number *pRowStart =
+    (icUInt16Number *)((icUInt8Number *)&blob[0] + 2 * sizeof(icUInt16Number));
+  pRowStart[kRows] = (icUInt16Number)(nCapacity + 1);
+
+  checkRefusedAsZeros(blob, "a row start past the entry capacity");
+}
+
+void applyRefusesAMatrixWiderThanTheIlluminant()
+{
+  // Every index is valid for the matrix's own four columns; the step's illuminant
+  // holds three.
+  std::vector<icFloatNumber> blob(kChannels, 0.0f);
+  check(encodeDiagonal(&blob[0], kRows, kCols + 1), "L1b: encoded the wide matrix");
+
+  checkRefusedAsZeros(blob, "a matrix with more columns than the illuminant");
+}
+
+void applyRefusesAMatrixTallerThanTheStep()
+{
+  std::vector<icFloatNumber> blob(kChannels, 0.0f);
+  check(encodeDiagonal(&blob[0], kRows + 1, kCols), "L1b: encoded the tall matrix");
+
+  checkRefusedAsZeros(blob, "a matrix with more rows than the step");
+}
+
+void applyStillMultipliesAMatrixThatFits()
+{
+  // Control for the three cases above: the same helper's matrix at the step's own
+  // shape still multiplies, so the refusals are not a step that zeroes everything.
+  std::vector<icFloatNumber> blob(kChannels, 0.0f);
+  check(encodeDiagonal(&blob[0], kRows, kCols), "L1b: encoded the control matrix");
+
+  CIccPcsStepSrcSparseMatrix step(kRows, kCols, kChannels);
+  for (int c = 0; c < (int)kCols; c++)
+    step.data()[c] = (icFloatNumber)(c + 2);
+
+  icFloatNumber got[kRows];
+  step.Apply(NULL, got, &blob[0]);
+
+  for (int r = 0; r < (int)kRows; r++) {
+    char msg[160];
+    std::snprintf(msg, sizeof(msg), "L1b: control row %d is illuminant[%d] (got %.6f)",
+                  r, r % kCols, (double)got[r]);
+    check(nearly(got[r], (icFloatNumber)(r % kCols + 2)), msg);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Level 2: GetSpectralTint() must hand back the encoded matrix, and that blob must
 // multiply out to the same answer the oracle computes.
 // ---------------------------------------------------------------------------
@@ -564,6 +721,12 @@ void channelsPerMatrixMustMatchTheSpectralSampleCount()
 int main()
 {
   applyMultipliesEncodedSourceMatrixByTheStepsIlluminant();
+  applyRefusesAColumnIndexEqualToTheColumnCount();
+  applyRefusesUnvalidatedLeadingColumnIndices();
+  applyRefusesRowStartsPastTheEntryCapacity();
+  applyRefusesAMatrixWiderThanTheIlluminant();
+  applyRefusesAMatrixTallerThanTheStep();
+  applyStillMultipliesAMatrixThatFits();
   spectralTintYieldsAnEncodedMatrixThatMultipliesCorrectly();
   tintZeroAndTintOneSelectTheTwoAuthoredMatrices();
   interpolatingDifferentSparsityPatternsBlendsBothMatrices();

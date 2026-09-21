@@ -46,6 +46,20 @@ The `check` and `check-fast` targets use the host's detected logical processor
 count. Set `-DICCDEV_CTEST_PARALLEL_LEVEL=<N>` at configure time to cap their
 concurrency. CTest fixtures and `RUN_SERIAL` properties still take precedence.
 
+Linux profiling configurations register `iccdev.profiling-smoke` when `gprof`
+is available. The test runs the instrumented `iccDumpProfile`, requires a
+nonempty `gmon.out`, and verifies that `gprof` produces a flat profile. Keep the
+profiling tree separate from sanitizer and coverage builds:
+
+```bash
+cmake -S Build/Cmake -B out/linux-profiling -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release -DENABLE_TOOLS=ON -DENABLE_TESTS=ON \
+  -DENABLE_PROFILING=ON
+cmake --build out/linux-profiling --target iccDumpProfile --parallel "$jobs"
+ctest --test-dir out/linux-profiling -R '^iccdev\.profiling-smoke$' \
+  --output-on-failure --no-tests=error
+```
+
 Windows Visual Studio multi-config generators:
 
 ```cmd
@@ -160,6 +174,9 @@ before running the suite.
 | `iccdev.fileio-seek-tell` | `.github/ci/regression/fileio-seek-tell.cpp` |
 | `iccdev.iccconnect-config-parser` | `.github/ci/regression/iccconnect-config-parser.cpp` |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
+| `iccdev.owning-setter-self-alias-contract` | `.github/ci/regression/owning-setter-self-alias-contract.cpp`; ownership contract of five exported setters for issue #2630, the three `CIccMpeSpectral*` `copyData()` self-assignment cases for issue #2637, the apply table `SetData()` releases for issue #2638, and the two protected-member setters `CIccSampledCalculatorCurve::SetCalculator()` and `CIccMpeCalculator::SetCalcFunc()` for issue #2645 |
+| `iccdev.mpe-curveset-setcurve-contract` | `.github/ci/regression/mpe-curveset-setcurve-contract.cpp`; public API bounds and ownership contract for issue #2607 |
+| `iccdev.issue-2607-curveset-extra-xml` | `.github/ci/regression/issue-2607-curveset-too-many-curves.xml`; tool-level rejection control for an extra CurveSet child |
 | `iccdev.bench-apply-metrics` | `Build/Cmake/Testing/CMakeLists.txt`; asserts the deterministic one-profile, four-pixel metrics contract |
 | `iccdev.applytolink-invalid-decoded-intent` | `Build/Cmake/Testing/CMakeLists.txt` |
 | `iccdev.applytolink-v4-missing-device-descriptions` | `Build/Cmake/Testing/CMakeLists.txt` |

@@ -718,7 +718,7 @@ IF(ICC_JSON_ORDERED)
   add_definitions(-DICC_JSON_ORDERED=1)
 ENDIF()
 option(ENABLE_TSAN                "Enable ThreadSanitizer (conflicts with ASan)"        OFF)
-option(ENABLE_MSAN                "Enable MemorySanitizer (Clang only)"                 OFF)
+option(ENABLE_MSAN                "Enable MemorySanitizer for iccDEV targets (instrumented external runtime required)" OFF)
 option(ENABLE_LSAN                "Enable LeakSanitizer standalone"                     OFF)
 option(ENABLE_COVERAGE            "Enable code coverage instrumentation"                OFF)
 option(ENABLE_PROFILING           "Enable gprof/perf profiling instrumentation"         OFF)
@@ -1221,6 +1221,17 @@ else()
       message(FATAL_ERROR "MemorySanitizer not available on MSVC")
     else()
       list(APPEND SANITIZER_LIST "memory")
+      if(DEFINED ENV{ICCDEV_MSAN_LIBCXX_DIR} AND
+         NOT "$ENV{ICCDEV_MSAN_LIBCXX_DIR}" STREQUAL "")
+        message(STATUS
+          "MemorySanitizer runtime: $ENV{ICCDEV_MSAN_LIBCXX_DIR}")
+      else()
+        message(WARNING
+          "ENABLE_MSAN instruments iccDEV targets only. Distribution C++ and "
+          "libxml2 libraries can produce false reports. Set "
+          "ICCDEV_MSAN_LIBCXX_DIR to an instrumented runtime and use the "
+          "MSan runtime bootstrap and QA scripts for actionable evidence.")
+      endif()
     endif()
   endif()
   if(ENABLE_LSAN)
@@ -1377,10 +1388,14 @@ endif()
 # Apply profiling instrumentation flags
 if(ENABLE_PROFILING)
   message(STATUS ">>> Profiling instrumentation enabled (-pg)")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg -fno-omit-frame-pointer")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pg -fno-omit-frame-pointer")
+  add_compile_options(-pg -fno-omit-frame-pointer)
+  # Executables need the profiling startup/runtime objects selected by -pg.
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pg")
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -pg")
+  # GCC accepts -pg for shared links. Clang does not need it there and emits an
+  # unused-command-line-argument warning when it is passed to a shared link.
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -pg")
+  endif()
 endif()
 
 # ----------------------------------------------------------------------
@@ -1403,7 +1418,9 @@ include(CheckCXXCompilerFlag)
 # aarch64 Clang 11) are correctly rejected rather than added to the build.
 # VAR is a unique cache variable name used to memoize the probe result.
 macro(_iccdev_add_cxx_flag_if_supported FLAG VAR)
-  set(CMAKE_REQUIRED_FLAGS "-Werror=unused-command-line-argument")
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(CMAKE_REQUIRED_FLAGS "-Werror=unused-command-line-argument")
+  endif()
   check_cxx_compiler_flag("${FLAG}" ${VAR})
   unset(CMAKE_REQUIRED_FLAGS)
   if(${VAR})

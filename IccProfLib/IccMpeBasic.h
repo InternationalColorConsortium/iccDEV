@@ -428,6 +428,10 @@ public:
 
   bool SetSize(int nNewSize);
 
+  // Ownership of newCurve transfers to this object only when true is returned.
+  // The same curve may be installed in several slots -- iccApplyToLink and
+  // iccFromCube both do that deliberately -- because SetSize() and the
+  // destructor delete each distinct pointer once, not once per slot.
   bool SetCurve(int nIndex, icCurveSetCurvePtr newCurve);
 
   virtual icElemTypeSignature GetType() const { return icSigCurveSetElemType; }
@@ -503,7 +507,10 @@ class CIccToneMapFunc
 public:
   CIccToneMapFunc();
   virtual ~CIccToneMapFunc();
-  CIccToneMapFunc(const CIccToneMapFunc& toneMap) = default;
+  // Not defaulted: m_params is an owning raw pointer that the destructor
+  // free()s, so a member-wise copy hands two objects the same buffer and both
+  // release it.  Deep-copies exactly as operator= does.
+  CIccToneMapFunc(const CIccToneMapFunc& toneMap);
   CIccToneMapFunc& operator=(const CIccToneMapFunc& toneMap);
   virtual CIccToneMapFunc* NewCopy() const;
 

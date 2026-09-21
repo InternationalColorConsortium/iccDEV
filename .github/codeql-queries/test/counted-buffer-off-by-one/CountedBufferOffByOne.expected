@@ -1,0 +1,2 @@
+| case.cpp:14:9:14:24 | ... > ... | Guard '... > ...' permits index == m_nSize, but that value is one past the counted buffer used on line 16. Reject equality with >= before the access (CWE-125/CWE-787). |
+| case.cpp:43:23:43:43 | ... > ... | Guard '... > ...' permits index == m_nSize, but that value is one past the counted buffer used on line 45. Reject equality with >= before the access (CWE-125/CWE-787). |

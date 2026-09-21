@@ -30,6 +30,8 @@ They complement GitHub's standard `cpp-security-and-quality` suite. The
 | `json-size-overflow` | CWE-680, CWE-190 | JSON array size cast to narrow integer without bounds check |
 | `localized-text-unsafe-serialization` | CWE-116, CWE-20 | Localized ICC text emitted without XML/JSON hex fallback |
 | `multiplication-overflow-alloc` | CWE-190, CWE-680, CWE-787 | Multiplication overflow before allocation |
+| `fixed-buffer-loop-bound` | CWE-121, CWE-787 | Fixed aggregate position table indexed by a member-count loop that can exceed the array (#2608) |
+| `counted-buffer-off-by-one` | CWE-125, CWE-787 | `index > count` guard permits a one-past-end counted-buffer access |
 | `new-array-delete-mismatch` | CWE-762 | `new[]` allocation released with scalar `delete` |
 | `null-after-read` | CWE-476 | Pointer dereferenced after `Read()` / `ParseXml()` without null check |
 | `recursive-parse-no-depth-limit` | CWE-674 | Recursive parse/read/apply call lacks depth guard |

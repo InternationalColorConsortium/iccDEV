@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+###############################################################################
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# This source file is licensed under the BSD 3-Clause "New" or "Revised"
+# License used by ICC software projects.
+#
+# Controlled analyzer failure for runner classification self-tests.
+###############################################################################
+
+set -euo pipefail
+
+log_file=""
+for argument in "$@"; do
+  case "$argument" in
+    --log-file=*) log_file="${argument#--log-file=}" ;;
+  esac
+done
+
+[ -n "$log_file" ] || exit 2
+printf '%s\n' 'ERROR SUMMARY: 0 errors from 0 contexts' > "$log_file"
+exit 1

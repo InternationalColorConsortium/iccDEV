@@ -57,6 +57,7 @@
  *
  */
 
+#include <cctype>
 #include "IccUtilJson.h"
 #include "IccUtil.h"
 #include "IccTagLut.h"
@@ -115,6 +116,27 @@ size_t icJsonGetHexData(void *pBuf, const char *szText, size_t nBufSize)
     szText++;
   }
   return rv;
+}
+
+bool icJsonValidHexData(const char *szText)
+{
+  if (!szText)
+    return false;
+
+  // icJsonDumpHexData() writes the digits in pairs with nothing between them.
+  // Whitespace is accepted between pairs, as the XML twin's writer produces,
+  // but a character the decoder cannot read as part of a pair is no longer
+  // skipped silently: "0g11" gave the single byte 0x11 (#2610).
+  while (*szText) {
+    if (isspace((unsigned char)*szText)) {
+      szText++;
+      continue;
+    }
+    if (hexVal(szText[0]) < 0 || !szText[1] || hexVal(szText[1]) < 0)
+      return false;
+    szText += 2;
+  }
+  return true;
 }
 
 icUInt32Number icJsonGetHexDataSize(const char *szText)
@@ -235,7 +257,13 @@ IccJson icJsonGetDeviceAttr(icUInt64Number devAttr)
   j["GlossyOrMatte"]            = (devAttr & icMatte)              ? "matte"         : "glossy";
   j["MediaPolarity"]            = (devAttr & icMediaNegative)      ? "negative"      : "positive";
   j["MediaColour"]              = (devAttr & icMediaBlackAndWhite) ? "blackAndWhite"  : "colour";
-  icUInt64Number knownBits = (icUInt64Number)(icTransparency | icMatte | icMediaNegative | icMediaBlackAndWhite);
+  // ICC.2 Table 19 bits 4-7, named only when set.
+  if (devAttr & icNonPaperBased) j["MediaBase"]     = "nonPaper";
+  if (devAttr & icTextured)      j["MediaTexture"]  = "textured";
+  if (devAttr & icNonIsotropic)  j["MediaIsotropy"] = "nonIsotropic";
+  if (devAttr & icSelfLuminous)  j["SelfLuminous"]  = true;
+  icUInt64Number knownBits = (icUInt64Number)(icTransparency | icMatte | icMediaNegative | icMediaBlackAndWhite |
+                                              icNonPaperBased | icTextured | icNonIsotropic | icSelfLuminous);
   icUInt64Number other = devAttr & ~knownBits;
   if (other) {
     char buf[32];
@@ -253,6 +281,10 @@ icUInt64Number icJsonParseDeviceAttr(const IccJson &j)
   s.clear(); jGetString(j, "GlossyOrMatte",  s); if (s == "matte")         attr |= icMatte;
   s.clear(); jGetString(j, "MediaPolarity",  s); if (s == "negative")      attr |= icMediaNegative;
   s.clear(); jGetString(j, "MediaColour",    s); if (s == "blackAndWhite") attr |= icMediaBlackAndWhite;
+  s.clear(); jGetString(j, "MediaBase",      s); if (s == "nonPaper")      attr |= icNonPaperBased;
+  s.clear(); jGetString(j, "MediaTexture",   s); if (s == "textured")      attr |= icTextured;
+  s.clear(); jGetString(j, "MediaIsotropy",  s); if (s == "nonIsotropic")  attr |= icNonIsotropic;
+  bool b = false; jGetValue(j, "SelfLuminous", b); if (b)                  attr |= icSelfLuminous;
   s.clear(); jGetString(j, "VendorSpecific", s);
   if (!s.empty()) {
     unsigned long long vendor = 0;

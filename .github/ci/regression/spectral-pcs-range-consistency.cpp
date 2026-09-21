@@ -1,6 +1,6 @@
-// Regression for #1932: CIccPcsXform::Connect() built a spectral PCS step chain from the
+// Regression for #1932 and #2579: CIccPcsXform::Connect() built a spectral PCS step chain from the
 // profile header's spectralRange while the pixel buffers those steps run in were sized
-// from the header's spectralPCS signature, and never checked that the two agreed.
+// from the effective PCS port, and never checked that the two agreed.
 //
 // A spectral PCS signature carries its channel count in its low 16 bits. That count is
 // what CIccXform::GetNumSrcSamples()/GetNumDstSamples() report, and in turn what
@@ -36,9 +36,10 @@
 // pixel rather than a sample count, so it is independent of the ranges by design (see
 // CIccPcsStepSrcSparseMatrix, which is handed the two separately).
 //
-// Red-green: on unfixed sources testMismatchedSpectralRangeIsRejected() fails, because
-// Connect() returns icCmmStatOk having built the chain that overflows at apply time. The
-// assertions are all on returned status, so they are visible without a sanitizer.
+// Red-green: on unfixed sources the source-side #1932 and destination-side #2579 mismatch
+// assertions fail because Connect() returns success having built the chain that overflows
+// at apply time. The assertions are all on returned status, so they are visible without a
+// sanitizer.
 //
 // Header + IccProfLib only, no fixture and no I/O.
 //
@@ -194,6 +195,38 @@ icStatusCMM connectSpectralSource(icColorSpaceSignature pcsType, icUInt16Number 
   return pcs.Connect(&from, &to);
 }
 
+// Reproduces #2579's destination-side shape. The neighbouring output xform presents a
+// 105-sample radiant PCS port derived from header.pcs, while pushSpecToRange() builds its
+// destination from spectralRange.steps == 128. The malformed profile's spectralPCS is an
+// unrelated unknown signature, so checking only that header member misses the mismatch.
+icStatusCMM connectMismatchedSpectralDestination()
+{
+  const icSpectralRange stdRange = makeRange(icRange380nm, icRange780nm, 36);
+  StubPcc pcc(stdRange, stdRange);
+
+  CIccProfile srcProf, dstProf;
+  setHeader(srcProf, icNColorSpaceSig(icSigReflectanceSpectralData, 36), stdRange,
+            makeRange(0, 0, 0));
+
+  std::memset(&dstProf.m_Header, 0, sizeof(dstProf.m_Header));
+  dstProf.m_Header.version = icVersionNumberV5;
+  dstProf.m_Header.deviceClass = icSigOutputClass;
+  dstProf.m_Header.colorSpace = icSigGrayData;
+  dstProf.m_Header.pcs = icNColorSpaceSig(icSigRadiantSpectralData, 105);
+  dstProf.m_Header.spectralPCS = (icColorSpaceSignature)0xb9800000;
+  dstProf.m_Header.spectralRange = makeRange(icRange380nm, icRange780nm, 128);
+
+  StubXform from(&srcProf, true,
+                 (icColorSpaceSignature)icNColorSpaceSig(icSigReflectanceSpectralData, 36),
+                 36, &pcc);
+  StubXform to(&dstProf, false,
+               (icColorSpaceSignature)icNColorSpaceSig(icSigRadiantSpectralData, 105),
+               105, &pcc);
+
+  CIccPcsXform pcs;
+  return pcs.Connect(&from, &to);
+}
+
 // The defect. Each of the three plain spectral PCS types states its sample count twice;
 // when the two disagree the profile must be refused rather than reinterpreted.
 void testMismatchedSpectralRangeIsRejected()
@@ -232,6 +265,15 @@ void testMismatchedSpectralRangeIsRejected()
                   cases[c].what);
     check(stat == icCmmStatInvalidProfile, msg);
   }
+}
+
+void testMismatchedDestinationRangeIsRejected()
+{
+  icStatusCMM stat = connectMismatchedSpectralDestination();
+
+  check(stat == icCmmStatInvalidProfile,
+        "radiant destination: a 105-float port against spectralRange.steps == 128 is "
+        "refused before pushSpecToRange() can write 128 floats");
 }
 
 // Bi-spectral carries one sample per (spectral, bi-spectral) wavelength pair, so the
@@ -340,6 +382,7 @@ void testNonSpectralConnectionIsUnaffected()
 int main()
 {
   testMismatchedSpectralRangeIsRejected();
+  testMismatchedDestinationRangeIsRejected();
   testMismatchedBiSpectralRangeIsRejected();
   testSparseMatrixPcsIsOutOfScope();
   testConformantHeadersStillConnect();

@@ -74,6 +74,8 @@ using IccJson = iccJson::json;
 // ---------------------------------------------------------------------------
 size_t icJsonGetHexData(void *pBuf, const char *szText, size_t nBufSize);
 icUInt32Number icJsonGetHexDataSize(const char *szText);
+// True when szText is hex digits in pairs, with whitespace only between pairs.
+bool           icJsonValidHexData(const char *szText);
 std::string    icJsonDumpHexData(const void *pBuf, size_t nBufSize);
 
 // ---------------------------------------------------------------------------

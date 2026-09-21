@@ -64,9 +64,12 @@
     case asks for is the weaker of its two signals -- what a build that survives
     the overrun would report -- and the case does not depend on a sanitizer.
 
-    The 65535 case is the boundary discriminator: that many elements are
-    representable and must still load in full, so a guard written ">= 0xFFFF"
-    fails it while passing every other case here.
+    The 65535 case is the boundary discriminator: that many elements is the
+    widest count the tag stores, and it loads in full, so a guard written
+    ">= 0xFFFF" fails it while passing every other case here.  It is a storage
+    and API bound, not a conforming profile: ICC.1:2022 10.4-10.5 tie a colorant
+    count to the header's data colour space, which CIccProfile::Validate()
+    checks and colorant-count-validate.cpp pins (#2541).
 
     The colorantTable reader has a second, unrelated check pinned here too
     (#2548): it converted Channel1-3 with bare atof(), so "not-a-number" loaded
@@ -441,7 +444,7 @@ int main(int argc, char *argv[])
   failures += orderCase(dir, 65536, false, "colorant-order-65536.xml",
                         "a colorantOrder at 65536, which narrowed to 0, is refused for the same reason");
   failures += orderCase(dir, 65535, true, "colorant-order-65535.xml",
-                        "a colorantOrder at exactly 65535 still loads in full");
+                        "a colorantOrder at 65535, the widest count stored, loads in full (storage bound)");
   failures += orderCase(dir, 4, true, "colorant-order-4.xml",
                         "an ordinary colorantOrder is unaffected");
 
@@ -449,7 +452,7 @@ int main(int argc, char *argv[])
   failures += tableCase(dir, 65537, false, "colorant-table-65537.xml",
                         "a colorantTable at 65537 is refused, not truncated to one colorant");
   failures += tableCase(dir, 65535, true, "colorant-table-65535.xml",
-                        "a colorantTable at exactly 65535 still loads in full");
+                        "a colorantTable at 65535, the widest count stored, loads in full (storage bound)");
   failures += tableCase(dir, 4, true, "colorant-table-4.xml",
                         "an ordinary colorantTable is unaffected");
 
@@ -457,7 +460,7 @@ int main(int argc, char *argv[])
   failures += chromaCase(dir, 65537, false, "chromaticity-65537.xml",
                          "a chromaticity at 65537 channels is refused, not truncated to one");
   failures += chromaCase(dir, 65535, true, "chromaticity-65535.xml",
-                         "a chromaticity at exactly 65535 channels still loads in full");
+                         "a chromaticity at 65535 channels, the widest count stored, loads in full (storage bound)");
   failures += chromaCase(dir, 3, true, "chromaticity-3.xml",
                          "an ordinary three-channel chromaticity loads (fixture control)");
 
