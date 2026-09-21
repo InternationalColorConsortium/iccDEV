@@ -397,6 +397,19 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
       delete pIcc;
       return icEncConvertMemoryError;
     }
+    // Size the element and copy the inverted matrix into it, as the A2B block
+    // above does with the forward one.  This block used to attach the element
+    // straight after creating it, so the inverse computed just above was
+    // discarded: BToA3 ended in a 0-in, 0-out matrix element with no data and
+    // the reverse transform had nothing to apply (#1990).  pMtx is not owned by
+    // pMpeTag until the Attach below, so the failure path deletes it too.
+    if (!pMtx->SetSize(3, 3)) {
+      delete pMtx;
+      delete pMpeTag;
+      delete pIcc;
+      return icEncConvertMemoryError;
+    }
+    memcpy(pMtx->GetMatrix(), &lumMtx[0], 9 * sizeof(icFloatNumber));
     pMpeTag->Attach(pMtx);
   }
   pIcc->AttachTag(icSigBToA3Tag, pMpeTag);
