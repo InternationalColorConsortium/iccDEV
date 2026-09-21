@@ -95,9 +95,16 @@ Script-based gates live in `.github/scripts/`, including:
 - `iccdev-v5-namedcmm-regression-tests.sh`
 - `iccdev-version-bcd-regression-tests.sh`
 - `iccdev-profile-visualize-tests.sh`
+- `iccdev-heif-carrier-qa.sh`
 
 When adding a new regression input, add the matching script or workflow assertion
 in the same change.
+
+The HEIF carrier suite is an external-dependency CTest and is not part of the
+main `Build/Cmake` test count. Configure `.github/ci/tooling/heif/qa` against
+the pinned Nokia HEIF checkout, apply the tracked patch stack, build
+`iccHeifDump`, and run `iccdev.heif-carrier-qa` with `--no-tests=error`. See
+`.github/ci/tooling/heif/Readme.md` for the exact revision and commands.
 
 The SpecSep wrapper preflights the checked-in sequences under
 `.github/ci/test-data/spectral/`, `.github/ci/test-data/specsep-harvest/`, and

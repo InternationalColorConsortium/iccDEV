@@ -68,6 +68,7 @@ shares one source of truth. Update rules here, not in the mirrors.
 | iOS CLUT editor planning | `.github/prompts/ios-clut-editor.prompt.md` |
 | Contributor onboarding | `.github/prompts/contributor-onboarding.prompt.md` |
 | Apply-path throughput benchmark | `Tools/CmdLine/IccBenchApply/Readme.md` |
+| HEIF ICC carrier build and QA | `.github/workflows/ci-nokia-heif-icc-smoke.yml`, `.github/ci/tooling/heif/Readme.md`, `.github/skills/heif-icc-qa/SKILL.md` |
 | Security repro | `.github/prompts/reproduce-security-issue.prompt.md` |
 | iccSpecSepToTiff QA | `.github/skills/specsep-qa/SKILL.md` |
 | IIS ISAPI endpoint QA | `.github/skills/iis-isapi-qa/SKILL.md` |
