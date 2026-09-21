@@ -495,7 +495,7 @@ run_invalid_mab_profile() {
     return
   fi
   if ! grep -F -q "[FAIL] C1" "$logfile" ||
-     ! grep -F -q "IccProfLib critical validation" "$logfile"; then
+     ! grep -F -q "IccProfLib critical validation: Error! -" "$logfile"; then
     fail_case "$name" "critical parser rejection was not exposed as C1 FAIL"
     return
   fi
@@ -521,7 +521,7 @@ c1 = next(item for item in report["items"] if item["id"] == "C1")
 assert report["summary"]["total"] == 32
 assert report["summary"]["fail"] >= 1
 assert c1["verdict"] == "FAIL"
-assert "IccProfLib critical validation" in c1["detail"]
+assert c1["detail"].startswith("IccProfLib critical validation: Error! - ")
 PY
   then
     fail_case "$name" "JSON report did not expose the critical C1 failure"

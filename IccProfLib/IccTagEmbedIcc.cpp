@@ -259,8 +259,14 @@ bool CIccTagEmbeddedProfile::Read(icUInt32Number size, CIccIO *pIO, CIccProfile 
   // file boundary, so accepting a different declared size hides trailing or
   // missing bytes from nested-profile validation.
   if (pProfile && pProfile->HasIO()) {
-    if (!m_pProfile->Attach(pEmbedIO) || m_pProfile->m_Header.size != size) {
+    if (!m_pProfile->Attach(pEmbedIO)) {
       delete pEmbedIO;
+      delete m_pProfile;
+      m_pProfile = NULL;
+
+      return false;
+    }
+    if (m_pProfile->m_Header.size != size) {
       delete m_pProfile;
       m_pProfile = NULL;
 

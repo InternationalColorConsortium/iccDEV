@@ -578,6 +578,19 @@ std::string FirstReportLine(const std::string &report)
   return "validation reported an issue without detail";
 }
 
+std::string FirstCriticalReportLine(const std::string &report)
+{
+  const std::string criticalPrefix = icMsgValidateCriticalError;
+  std::istringstream in(report);
+  std::string line;
+  while (std::getline(in, line)) {
+    const size_t pos = line.find(criticalPrefix);
+    if (pos != std::string::npos)
+      return FirstReportLine(line.substr(pos));
+  }
+  return FirstReportLine(report);
+}
+
 typedef bool (*SigValidator)(const RawProfile &raw, size_t offset, size_t end);
 
 bool ValidatePe(const RawProfile &raw, size_t offset, size_t end)
@@ -2091,7 +2104,7 @@ std::vector<PawgItem> EvaluatePawg(const RawProfile &raw, CIccProfile *pIcc,
   PawgVerdict tagValueVerdict;
   if (!pIcc && validationStatus == icValidateCriticalError) {
     tagValueVerdict = PawgVerdict::Fail;
-    tagValueDetail = "IccProfLib critical validation: " + FirstReportLine(validationReport);
+    tagValueDetail = "IccProfLib critical validation: " + FirstCriticalReportLine(validationReport);
   }
   else {
     tagValueVerdict = TagValueEncodingVerdict(pIcc, tagValueDetail);
