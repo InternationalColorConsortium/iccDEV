@@ -253,7 +253,13 @@ static char* icSegPos(char *buf, size_t bufSize, icFloatNumber pos)
   else if (pos==icMaxFloat32Number)
     strncpy(buf, "+infinity", bufSize);
   else
-    snprintf(buf, bufSize, "%.8" ICFLOATSFX, pos);
+    // Significant digits, not decimal places, for the same reason as
+    // icXmlFloatFmt: "%.8f" quantized a breakpoint to eight places, which moved
+    // the HLG 1/12 value 0.0833333358 to 0.08333334 and read back one float32
+    // ULP away.  Nine significant digits is max_digits10 for float, so every
+    // breakpoint now survives the round trip exactly.  Worst case is
+    // "-3.40282347e+38", fifteen characters, well inside the caller's buffer.
+    snprintf(buf, bufSize, "%.9g", pos);
 
   return buf;
 }

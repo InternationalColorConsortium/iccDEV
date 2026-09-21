@@ -1746,10 +1746,32 @@ bool icXmlParseFloat(const char *s, icFloatNumber &out)
   if (*end != '\0') return false;
   // A NaN, an infinity or a double beyond the float range would reach the
   // fixed-point encoders through a conversion whose result is undefined.
-  if (!std::isfinite(d) ||
-      d > (double)std::numeric_limits<icFloatNumber>::max() ||
-      d < -(double)std::numeric_limits<icFloatNumber>::max())
+  //
+  // The bound is the ROUND-TO-NEAREST overflow point, 2^128 - 2^103, not
+  // FLT_MAX and not 2^128.  Comparing against FLT_MAX refused the writer's own
+  // output: the canonical nine-significant-digit spelling of FLT_MAX is
+  // 3.40282347e+38, which strtod resolves to a double fractionally above the
+  // exact float maximum, yet rounds back to FLT_MAX rather than to infinity.
+  // Anything at or above this bound does round to infinity and is refused, so
+  // 1e39, 1e300 and 3.4028236e+38 are all still rejected.
+  //
+  // Tested BEFORE the cast rather than after it.  Converting an out-of-range
+  // double to float is undefined ([conv.double]/1), so ordering the test first
+  // keeps the conversion in range on every input.  Measured, because the
+  // obvious worry does not hold: -fsanitize=float-cast-overflow, which the
+  // sanitizer presets enable with -fno-sanitize-recover, instruments only
+  // float-to-INTEGER conversions -- a double-to-float narrowing of 1e300 is
+  // not diagnosed and simply yields infinity, verified against a
+  // double-to-int positive control on clang 21.1.3.  Nothing in the tree
+  // builds with -ffast-math either, so the post-cast isfinite() form was in
+  // fact safe.  This ordering is the cheaper way to be right rather than a
+  // fix for an observed failure, and the accept set is identical: measured
+  // equal on 3.40282347e+38, -3.40282347e+38, 3.4028235e+38, 3.4028236e+38,
+  // 1e39 and 1e300.
+  const double kFloatOverflow = 3.402823567797336616e38;  // 2^128 - 2^103
+  if (!std::isfinite(d) || d >= kFloatOverflow || d <= -kFloatOverflow)
     return false;
+
   out = static_cast<icFloatNumber>(d);
   return true;
 }
