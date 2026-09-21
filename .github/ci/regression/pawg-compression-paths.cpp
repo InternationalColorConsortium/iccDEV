@@ -19,6 +19,8 @@
 // Exit code 0 = pass, 1 = a case regressed.
 #include "PawgReport.h"
 
+#include "IccProfile.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <string>
@@ -61,6 +63,30 @@ static std::vector<uint8_t> makeProfile(uint32_t tagSig, uint32_t typeSig, uint3
   putU32BE(b, tagOffset, typeSig);                   // tag TYPE signature
   if (dataFlag)
     putU32BE(b, tagOffset + 8, dataFlag);            // [type][reserved][flags]
+  return b;
+}
+
+// Build a structurally readable profile whose A2B0 tag uses a forbidden text
+// type. ValidateIccProfile() returns a CIccProfile plus a critical status, so
+// this pins AssessPawgFromMemory() to library status rather than nullness.
+static std::vector<uint8_t> makeCriticalParsedProfile()
+{
+  std::vector<uint8_t> b(156, 0);
+  putU32BE(b, 0, (uint32_t)b.size());
+  putU32BE(b, 8, 0x04400000u);                     // ICC v4.4
+  putU32BE(b, 12, 0x6d6e7472u);                    // 'mntr'
+  putU32BE(b, 16, 0x52474220u);                    // 'RGB '
+  putU32BE(b, 20, 0x58595a20u);                    // 'XYZ '
+  putU32BE(b, 36, 0x61637370u);                    // 'acsp'
+  putU32BE(b, 68, 0x0000f6d6u);                    // D50 X
+  putU32BE(b, 72, 0x00010000u);                    // D50 Y
+  putU32BE(b, 76, 0x0000d32du);                    // D50 Z
+  putU32BE(b, 128, 1);                             // tag count
+  putU32BE(b, 132, 0x41324230u);                   // 'A2B0'
+  putU32BE(b, 136, 144);                           // tag data offset
+  putU32BE(b, 140, 12);                            // tag data size
+  putU32BE(b, 144, kText);                         // forbidden 'text' type
+  b[152] = 'x';
   return b;
 }
 
@@ -114,6 +140,20 @@ int main()
   // --- Controls: uncompressed tags must read as the empty case ----------------
   checkUncompressed(makeProfile(0x63707274u /*'cprt'*/, kText, 0), "text control");
   checkUncompressed(makeProfile(0x64657363u /*'desc'*/, kData, 0), "plain data ctrl");
+
+  // --- Full in-memory assessment must honor critical library status ----------
+  {
+    std::vector<uint8_t> critical = makeCriticalParsedProfile();
+    std::string report;
+    icValidateStatus status = icValidateOK;
+    CIccProfile *profile = ValidateIccProfile(critical.data(),
+                                              (icUInt32Number)critical.size(),
+                                              report, status);
+    CHECK(profile != nullptr);
+    CHECK(status == icValidateCriticalError);
+    delete profile;
+    CHECK(AssessPawgFromMemory(critical.data(), critical.size()) == 1);
+  }
 
   // --- Robustness: a too-small / header-only buffer must not crash ------------
   {

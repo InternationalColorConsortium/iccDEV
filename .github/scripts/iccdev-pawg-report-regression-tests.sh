@@ -51,7 +51,7 @@ STD_SHEBANG_TRUE_POSITIVE="$OUTDIR/standard-tag-valid-shebang-signature.icc"
 STD_TEXTSIG_FALSE_POSITIVE="$OUTDIR/standard-tag-invalid-textsig-signature.icc"
 STD_TEXTSIG_TRUE_POSITIVE="$OUTDIR/standard-tag-valid-textsig-signature.icc"
 REGISTERED_PRIVATE="$OUTDIR/registered-private-tag.icc"
-INVALID_MAB="$OUTDIR/invalid-mab-tag.icc"
+INVALID_TAG_TYPE="$OUTDIR/invalid-tag-type.icc"
 VALID_HYBRID="$OUTDIR/valid-hybrid.icc"
 NESTED_SIZE_MISMATCH="$OUTDIR/nested-size-mismatch.icc"
 CALCULATOR_PROFILE="$TESTING_DIR/CalcTest/calcExercizeOps.icc"
@@ -435,18 +435,18 @@ run_truncated_profile() {
   pass_case "$name" "truncated input rejected without crash and with truthful report counts"
 }
 
-generate_invalid_mab_profile() {
+generate_invalid_tag_type_profile() {
   if ! command -v python3 >/dev/null 2>&1; then
     return 1
   fi
 
-  python3 - "$INVALID_MAB" <<'PY'
+  python3 - "$INVALID_TAG_TYPE" <<'PY'
 import pathlib
 import struct
 import sys
 
 dst = pathlib.Path(sys.argv[1])
-size = 160
+size = 156
 data = bytearray(size)
 data[0:4] = struct.pack(">I", size)
 data[8:12] = bytes.fromhex("04400000")
@@ -460,28 +460,29 @@ data[76:80] = struct.pack(">I", 0x0000D32D)
 data[128:132] = struct.pack(">I", 1)
 data[132:136] = b"A2B0"
 data[136:140] = struct.pack(">I", 144)
-data[140:144] = struct.pack(">I", 16)
-data[144:148] = b"mAB "
+data[140:144] = struct.pack(">I", 12)
+data[144:148] = b"text"
+data[152:153] = b"x"
 dst.write_bytes(data)
 PY
 }
 
-run_invalid_mab_profile() {
+run_invalid_tag_type_profile() {
   local name="pawg-critical-tag-fail-closed"
-  local logfile="$OUTDIR/invalid-mab.log"
-  local jsonfile="$OUTDIR/invalid-mab.json"
-  local stderrfile="$OUTDIR/invalid-mab-json.stderr"
+  local logfile="$OUTDIR/invalid-tag-type.log"
+  local jsonfile="$OUTDIR/invalid-tag-type.json"
+  local stderrfile="$OUTDIR/invalid-tag-type-json.stderr"
   local exit_code=0
 
   TOTAL=$((TOTAL + 1))
-  rm -f "$logfile" "$jsonfile" "$stderrfile" "$INVALID_MAB"
+  rm -f "$logfile" "$jsonfile" "$stderrfile" "$INVALID_TAG_TYPE"
 
-  if ! generate_invalid_mab_profile; then
-    fail_case "$name" "failed to generate malformed lutAToB tag profile"
+  if ! generate_invalid_tag_type_profile; then
+    fail_case "$name" "failed to generate profile with forbidden A2B0 tag type"
     return
   fi
 
-  timeout 60 "$PAWG" "$INVALID_MAB" > "$logfile" 2>&1 || exit_code=$?
+  timeout 60 "$PAWG" "$INVALID_TAG_TYPE" > "$logfile" 2>&1 || exit_code=$?
   if ! check_sanitizers "$name" "$logfile"; then
     fail_case "$name" "sanitizer finding in text report"
     return
@@ -501,7 +502,7 @@ run_invalid_mab_profile() {
   fi
 
   exit_code=0
-  timeout 60 "$PAWG" --json "$INVALID_MAB" > "$jsonfile" 2> "$stderrfile" || exit_code=$?
+  timeout 60 "$PAWG" --json "$INVALID_TAG_TYPE" > "$jsonfile" 2> "$stderrfile" || exit_code=$?
   if ! check_sanitizers "$name" "$stderrfile"; then
     fail_case "$name" "sanitizer finding in JSON report"
     return
@@ -1724,7 +1725,7 @@ run_good_profile "pawg-valid-profile-fidelity" ""
 run_retired_read_option_rejected
 run_json_report
 run_truncated_profile
-run_invalid_mab_profile
+run_invalid_tag_type_profile
 run_nested_size_mismatch_profile
 run_calculator_operation_count
 run_private_malware_profile

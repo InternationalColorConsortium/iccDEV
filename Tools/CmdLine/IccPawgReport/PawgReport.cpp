@@ -2102,7 +2102,7 @@ std::vector<PawgItem> EvaluatePawg(const RawProfile &raw, CIccProfile *pIcc,
 
   std::string tagValueDetail;
   PawgVerdict tagValueVerdict;
-  if (!pIcc && validationStatus == icValidateCriticalError) {
+  if (validationStatus == icValidateCriticalError) {
     tagValueVerdict = PawgVerdict::Fail;
     tagValueDetail = "IccProfLib critical validation: " + FirstCriticalReportLine(validationReport);
   }
