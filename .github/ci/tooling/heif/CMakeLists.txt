@@ -1,7 +1,7 @@
 /** @file
     File:       CMakeLists.txt for iccHeifDump.cpp
 
-    Contains:   Header for implementation of the IIccProfileConnectionConditions interface class.
+    Contains:   CMake build rules for the iccHeifDump research tool
 
     Version:    V1
 
