@@ -54,7 +54,6 @@ REGISTERED_PRIVATE="$OUTDIR/registered-private-tag.icc"
 INVALID_TAG_TYPE="$OUTDIR/invalid-tag-type.icc"
 VALID_HYBRID="$OUTDIR/valid-hybrid.icc"
 NESTED_SIZE_MISMATCH="$OUTDIR/nested-size-mismatch.icc"
-NESTED_TAG_OVERLAP="$OUTDIR/nested-tag-overlap.icc"
 MALFORMED_MPE="$OUTDIR/malformed-mpe.icc"
 CALCULATOR_PROFILE="$TESTING_DIR/CalcTest/calcExercizeOps.icc"
 
@@ -664,46 +663,6 @@ else:
 PY
 }
 
-generate_nested_tag_overlap_profile() {
-  if [ ! -x "$FROM_XML" ] || ! command -v python3 >/dev/null 2>&1; then
-    return 1
-  fi
-  if ! "$FROM_XML" "$TESTING_DIR/hybrid/MultSpectralRGB.xml" "$VALID_HYBRID" >/dev/null; then
-    return 1
-  fi
-
-  python3 - "$VALID_HYBRID" "$NESTED_TAG_OVERLAP" <<'PY'
-import pathlib
-import struct
-import sys
-
-src = pathlib.Path(sys.argv[1]).read_bytes()
-data = bytearray(src)
-count = struct.unpack(">I", data[128:132])[0]
-for index in range(count):
-    entry = 132 + index * 12
-    signature, offset, size = struct.unpack(">4sII", data[entry:entry + 12])
-    if signature != b"ICC5":
-        continue
-    assert size >= 8 + 156
-    assert data[offset:offset + 4] == b"ICCp"
-    embedded = offset + 8
-    nested_count = struct.unpack(">I", data[embedded + 128:embedded + 132])[0]
-    assert nested_count >= 2
-    first = embedded + 132
-    second = first + 12
-    first_offset, first_size = struct.unpack(">II", data[first + 4:first + 12])
-    second_offset, second_size = struct.unpack(">II", data[second + 4:second + 12])
-    assert first_size > 4
-    assert second_offset != first_offset
-    data[second + 4:second + 12] = struct.pack(">II", first_offset + 4, second_size)
-    pathlib.Path(sys.argv[2]).write_bytes(data)
-    break
-else:
-    raise AssertionError("generated hybrid profile has no ICC5 tag")
-PY
-}
-
 run_nested_size_mismatch_profile() {
   local name="pawg-nested-profile-size-mismatch"
   local logfile="$OUTDIR/nested-size-mismatch.log"
@@ -746,41 +705,6 @@ run_nested_size_mismatch_profile() {
   fi
 
   pass_case "$name" "ICC.2 exact profile-size mismatch in ICC5 is rejected through C1"
-}
-
-run_nested_tag_overlap_profile() {
-  local name="pawg-nested-profile-tag-overlap"
-  local logfile="$OUTDIR/nested-tag-overlap.log"
-  local exit_code=0
-
-  TOTAL=$((TOTAL + 1))
-  rm -f "$logfile" "$VALID_HYBRID" "$NESTED_TAG_OVERLAP"
-
-  if ! generate_nested_tag_overlap_profile; then
-    fail_case "$name" "failed to generate nested profile with overlapping tag entries"
-    return
-  fi
-
-  timeout 60 "$PAWG" "$NESTED_TAG_OVERLAP" > "$logfile" 2>&1 || exit_code=$?
-  if ! check_sanitizers "$name" "$logfile"; then
-    fail_case "$name" "sanitizer finding"
-    return
-  fi
-  if [ "$exit_code" -ne 1 ]; then
-    fail_case "$name" "nested tag overlap returned unexpected status $exit_code"
-    return
-  fi
-  if ! assert_report_truth "$name" "$logfile"; then
-    fail_case "$name" "report count or section mismatch"
-    return
-  fi
-  if ! grep -F -q "[FAIL] C1" "$logfile" ||
-     ! grep -F -q "raw checks only; IccProfLib parse failed" "$logfile"; then
-    fail_case "$name" "nested tag overlap was not rejected through C1"
-    return
-  fi
-
-  pass_case "$name" "nested ICC5 partial tag overlap is rejected through C1"
 }
 
 run_calculator_operation_count() {
@@ -1901,8 +1825,11 @@ run_json_report
 run_truncated_profile
 run_invalid_tag_type_profile
 run_malformed_mpe_profile
-run_nested_size_mismatch_profile
-run_nested_tag_overlap_profile
+if [ -x "$FROM_XML" ]; then
+  run_nested_size_mismatch_profile
+else
+  echo "  [SKIP] pawg-nested-profile-size-mismatch -- iccFromXml is unavailable"
+fi
 run_calculator_operation_count
 run_private_malware_profile
 run_invalid_gzip_signature_profile

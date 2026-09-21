@@ -499,6 +499,10 @@ class TestSubprocessTools:
         assert "returncode" in result
         assert "stdout" in result
 
+    @pytest.mark.skipif(
+        not _has_cli_tool("iccPawgReport"),
+        reason="iccPawgReport not available",
+    )
     def test_pawg_report_preserves_malformed_mpe_failure(self, tmp_path):
         import struct
 

@@ -183,7 +183,6 @@ public:
   bool Read(CIccIO *pIO, bool bUseSubProfile=false);
   icValidateStatus ReadValidate(CIccIO *pIO, std::string &sReport);
   bool Write(CIccIO *pIO, icProfileIDSaveMethod nWriteId=icVersionBasedID);
-  icValidateStatus CheckTagLayout(CIccIO *pIO, std::string &sReport) const;
 
   bool ReadProfileID(icProfileID &profileID); //works if HasIO() is true 
 
@@ -223,6 +222,7 @@ public:
   bool calcMediaWhiteXYZ(icFloatNumber *pXYZ, IIccProfileConnectionConditions *pObservingPCC);
 
 protected:
+  friend class CIccTagEmbeddedProfile;
 
   // Return the member sub-tag of the given signature/type from this profile's
   // devicePccTag ('dpcc') profileConnectionConditionsStructure, or NULL when the
@@ -284,6 +284,7 @@ protected:
                    icStructSignature structSig=icSigUndefinedStruct,
                    icArraySignature arraySig=icSigUndefinedArray) const;
   bool CheckFileSize(CIccIO *pIO) const;
+  icValidateStatus CheckTagLayout(CIccIO *pIO, std::string &sReport) const;
 
 
 public:

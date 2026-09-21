@@ -11023,7 +11023,7 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-basic-string-regression-tests.sh"
 )
 
-if(TARGET iccPawgReport AND TARGET iccFromXml)
+if(TARGET iccPawgReport)
   iccdev_add_script_test(
     iccdev.pawg-report-regressions
     120
