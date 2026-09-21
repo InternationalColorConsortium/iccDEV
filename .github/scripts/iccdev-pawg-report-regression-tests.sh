@@ -54,6 +54,8 @@ REGISTERED_PRIVATE="$OUTDIR/registered-private-tag.icc"
 INVALID_TAG_TYPE="$OUTDIR/invalid-tag-type.icc"
 VALID_HYBRID="$OUTDIR/valid-hybrid.icc"
 NESTED_SIZE_MISMATCH="$OUTDIR/nested-size-mismatch.icc"
+NESTED_TAG_OVERLAP="$OUTDIR/nested-tag-overlap.icc"
+MALFORMED_MPE="$OUTDIR/malformed-mpe.icc"
 CALCULATOR_PROFILE="$TESTING_DIR/CalcTest/calcExercizeOps.icc"
 
 PASS=0
@@ -532,6 +534,103 @@ PY
   pass_case "$name" "critical tag rejection fails C1 and exits nonzero in text and JSON modes"
 }
 
+generate_malformed_mpe_profile() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+
+  python3 - "$MALFORMED_MPE" <<'PY'
+import pathlib
+import struct
+import sys
+
+dst = pathlib.Path(sys.argv[1])
+data = bytearray(160)
+data[0:4] = struct.pack(">I", len(data))
+data[8:12] = struct.pack(">I", 0x05000000)
+data[12:16] = b"mntr"
+data[16:20] = b"RGB "
+data[20:24] = b"XYZ "
+data[36:40] = b"acsp"
+data[68:72] = struct.pack(">I", 0x0000F6D6)
+data[72:76] = struct.pack(">I", 0x00010000)
+data[76:80] = struct.pack(">I", 0x0000D32D)
+data[128:132] = struct.pack(">I", 1)
+data[132:136] = b"D2B0"
+data[136:140] = struct.pack(">I", 144)
+data[140:144] = struct.pack(">I", 16)
+data[144:148] = b"mpet"
+data[152:156] = struct.pack(">HH", 3, 3)
+data[156:160] = struct.pack(">I", 1)
+dst.write_bytes(data)
+PY
+}
+
+run_malformed_mpe_profile() {
+  local name="pawg-malformed-mpe-fail-closed"
+  local logfile="$OUTDIR/malformed-mpe.log"
+  local jsonfile="$OUTDIR/malformed-mpe.json"
+  local stderrfile="$OUTDIR/malformed-mpe-json.stderr"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile" "$jsonfile" "$stderrfile" "$MALFORMED_MPE"
+
+  if ! generate_malformed_mpe_profile; then
+    fail_case "$name" "failed to generate malformed DToB0/mpe profile"
+    return
+  fi
+
+  timeout 60 "$PAWG" "$MALFORMED_MPE" > "$logfile" 2>&1 || exit_code=$?
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding in text report"
+    return
+  fi
+  if [ "$exit_code" -ne 1 ]; then
+    fail_case "$name" "text report returned unexpected status $exit_code"
+    return
+  fi
+  if ! assert_report_truth "$name" "$logfile"; then
+    fail_case "$name" "text report count or section mismatch"
+    return
+  fi
+  if ! grep -F -q "[FAIL] C1" "$logfile" ||
+     ! grep -F -q "raw checks only; IccProfLib parse failed" "$logfile"; then
+    fail_case "$name" "malformed MPE was not rejected through C1"
+    return
+  fi
+
+  exit_code=0
+  timeout 60 "$PAWG" --json "$MALFORMED_MPE" > "$jsonfile" 2> "$stderrfile" || exit_code=$?
+  if ! check_sanitizers "$name" "$stderrfile"; then
+    fail_case "$name" "sanitizer finding in JSON report"
+    return
+  fi
+  if [ "$exit_code" -ne 1 ]; then
+    fail_case "$name" "JSON report returned unexpected status $exit_code"
+    return
+  fi
+  if ! python3 - "$jsonfile" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="ascii") as handle:
+    report = json.load(handle)
+
+c1 = next(item for item in report["items"] if item["id"] == "C1")
+assert report["summary"]["total"] == 32
+assert report["summary"]["fail"] >= 1
+assert c1["verdict"] == "FAIL"
+assert c1["detail"].startswith("IccProfLib critical validation: Error! - ")
+PY
+  then
+    fail_case "$name" "JSON report did not expose the malformed MPE C1 failure"
+    return
+  fi
+
+  pass_case "$name" "malformed DToB0/mpe fails closed in text and JSON modes"
+}
+
 generate_nested_size_mismatch_profile() {
   if [ ! -x "$FROM_XML" ] || ! command -v python3 >/dev/null 2>&1; then
     return 1
@@ -560,6 +659,46 @@ for index in range(count):
         data[embedded:embedded + 4] = struct.pack(">I", declared + 4)
         pathlib.Path(sys.argv[2]).write_bytes(data)
         break
+else:
+    raise AssertionError("generated hybrid profile has no ICC5 tag")
+PY
+}
+
+generate_nested_tag_overlap_profile() {
+  if [ ! -x "$FROM_XML" ] || ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+  if ! "$FROM_XML" "$TESTING_DIR/hybrid/MultSpectralRGB.xml" "$VALID_HYBRID" >/dev/null; then
+    return 1
+  fi
+
+  python3 - "$VALID_HYBRID" "$NESTED_TAG_OVERLAP" <<'PY'
+import pathlib
+import struct
+import sys
+
+src = pathlib.Path(sys.argv[1]).read_bytes()
+data = bytearray(src)
+count = struct.unpack(">I", data[128:132])[0]
+for index in range(count):
+    entry = 132 + index * 12
+    signature, offset, size = struct.unpack(">4sII", data[entry:entry + 12])
+    if signature != b"ICC5":
+        continue
+    assert size >= 8 + 156
+    assert data[offset:offset + 4] == b"ICCp"
+    embedded = offset + 8
+    nested_count = struct.unpack(">I", data[embedded + 128:embedded + 132])[0]
+    assert nested_count >= 2
+    first = embedded + 132
+    second = first + 12
+    first_offset, first_size = struct.unpack(">II", data[first + 4:first + 12])
+    second_offset, second_size = struct.unpack(">II", data[second + 4:second + 12])
+    assert first_size > 4
+    assert second_offset != first_offset
+    data[second + 4:second + 12] = struct.pack(">II", first_offset + 4, second_size)
+    pathlib.Path(sys.argv[2]).write_bytes(data)
+    break
 else:
     raise AssertionError("generated hybrid profile has no ICC5 tag")
 PY
@@ -607,6 +746,41 @@ run_nested_size_mismatch_profile() {
   fi
 
   pass_case "$name" "ICC.2 exact profile-size mismatch in ICC5 is rejected through C1"
+}
+
+run_nested_tag_overlap_profile() {
+  local name="pawg-nested-profile-tag-overlap"
+  local logfile="$OUTDIR/nested-tag-overlap.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile" "$VALID_HYBRID" "$NESTED_TAG_OVERLAP"
+
+  if ! generate_nested_tag_overlap_profile; then
+    fail_case "$name" "failed to generate nested profile with overlapping tag entries"
+    return
+  fi
+
+  timeout 60 "$PAWG" "$NESTED_TAG_OVERLAP" > "$logfile" 2>&1 || exit_code=$?
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding"
+    return
+  fi
+  if [ "$exit_code" -ne 1 ]; then
+    fail_case "$name" "nested tag overlap returned unexpected status $exit_code"
+    return
+  fi
+  if ! assert_report_truth "$name" "$logfile"; then
+    fail_case "$name" "report count or section mismatch"
+    return
+  fi
+  if ! grep -F -q "[FAIL] C1" "$logfile" ||
+     ! grep -F -q "raw checks only; IccProfLib parse failed" "$logfile"; then
+    fail_case "$name" "nested tag overlap was not rejected through C1"
+    return
+  fi
+
+  pass_case "$name" "nested ICC5 partial tag overlap is rejected through C1"
 }
 
 run_calculator_operation_count() {
@@ -1726,7 +1900,9 @@ run_retired_read_option_rejected
 run_json_report
 run_truncated_profile
 run_invalid_tag_type_profile
+run_malformed_mpe_profile
 run_nested_size_mismatch_profile
+run_nested_tag_overlap_profile
 run_calculator_operation_count
 run_private_malware_profile
 run_invalid_gzip_signature_profile

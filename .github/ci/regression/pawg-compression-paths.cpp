@@ -90,6 +90,30 @@ static std::vector<uint8_t> makeCriticalParsedProfile()
   return b;
 }
 
+// Build a v5 DToB0 profile with an mpet tag whose one-element position table
+// is truncated. The library must reject it outright, yielding no profile.
+static std::vector<uint8_t> makeMalformedMpeProfile()
+{
+  std::vector<uint8_t> b(160, 0);
+  putU32BE(b, 0, (uint32_t)b.size());
+  putU32BE(b, 8, 0x05000000u);                     // ICC v5
+  putU32BE(b, 12, 0x6d6e7472u);                    // 'mntr'
+  putU32BE(b, 16, 0x52474220u);                    // 'RGB '
+  putU32BE(b, 20, 0x58595a20u);                    // 'XYZ '
+  putU32BE(b, 36, 0x61637370u);                    // 'acsp'
+  putU32BE(b, 68, 0x0000f6d6u);                    // D50 X
+  putU32BE(b, 72, 0x00010000u);                    // D50 Y
+  putU32BE(b, 76, 0x0000d32du);                    // D50 Z
+  putU32BE(b, 128, 1);                             // tag count
+  putU32BE(b, 132, 0x44324230u);                   // 'D2B0'
+  putU32BE(b, 136, 144);                           // tag data offset
+  putU32BE(b, 140, 16);                            // tag data size
+  putU32BE(b, 144, 0x6d706574u);                   // 'mpet'
+  putU32BE(b, 152, 0x00030003u);                   // 3 input, 3 output
+  putU32BE(b, 156, 1);                             // one element, no position
+  return b;
+}
+
 static bool contains(const std::string &s, const char *needle)
 {
   return s.find(needle) != std::string::npos;
@@ -153,6 +177,20 @@ int main()
     CHECK(status == icValidateCriticalError);
     delete profile;
     CHECK(AssessPawgFromMemory(critical.data(), critical.size()) == 1);
+  }
+
+  // A malformed mpet payload has no partially parsed profile to carry a
+  // critical validation status. The assessment must still fail closed.
+  {
+    std::vector<uint8_t> malformed = makeMalformedMpeProfile();
+    std::string report;
+    icValidateStatus status = icValidateOK;
+    CIccProfile *profile = ValidateIccProfile(malformed.data(),
+                                              (icUInt32Number)malformed.size(),
+                                              report, status);
+    CHECK(profile == nullptr);
+    CHECK(status == icValidateCriticalError);
+    CHECK(AssessPawgFromMemory(malformed.data(), malformed.size()) == 1);
   }
 
   // --- Robustness: a too-small / header-only buffer must not crash ------------

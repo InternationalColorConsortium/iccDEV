@@ -183,6 +183,7 @@ public:
   bool Read(CIccIO *pIO, bool bUseSubProfile=false);
   icValidateStatus ReadValidate(CIccIO *pIO, std::string &sReport);
   bool Write(CIccIO *pIO, icProfileIDSaveMethod nWriteId=icVersionBasedID);
+  icValidateStatus CheckTagLayout(CIccIO *pIO, std::string &sReport) const;
 
   bool ReadProfileID(icProfileID &profileID); //works if HasIO() is true 
 
@@ -283,7 +284,6 @@ protected:
                    icStructSignature structSig=icSigUndefinedStruct,
                    icArraySignature arraySig=icSigUndefinedArray) const;
   bool CheckFileSize(CIccIO *pIO) const;
-  icValidateStatus CheckTagLayout(CIccIO *pIO, std::string &sReport) const;
 
 
 public:

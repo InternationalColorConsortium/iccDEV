@@ -272,11 +272,27 @@ bool CIccTagEmbeddedProfile::Read(icUInt32Number size, CIccIO *pIO, CIccProfile 
 
       return false;
     }
+    std::string layoutReport;
+    icValidateStatus layoutStatus = m_pProfile->CheckTagLayout(pEmbedIO, layoutReport);
+    if (layoutStatus == icValidateNonCompliant ||
+        layoutStatus == icValidateCriticalError) {
+      delete m_pProfile;
+      m_pProfile = NULL;
+
+      return false;
+    }
   }
   else {
     bool stat = m_pProfile->Read(pEmbedIO);
     if (stat && m_pProfile->m_Header.size != size)
       stat = false;
+    if (stat) {
+      std::string layoutReport;
+      icValidateStatus layoutStatus = m_pProfile->CheckTagLayout(pEmbedIO, layoutReport);
+      if (layoutStatus == icValidateNonCompliant ||
+          layoutStatus == icValidateCriticalError)
+        stat = false;
+    }
     delete pEmbedIO;
 
     if (!stat) {
