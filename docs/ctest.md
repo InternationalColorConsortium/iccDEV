@@ -290,8 +290,11 @@ must reject invalid numeric fields before conversion without sanitizer findings.
 
 `iccdev.pawg-report-regressions` builds the standalone `iccPawgReport` tool,
 checks the 32-item PAWG report structure, verifies summary counts against the
-rendered item lines, runs malformed and malware-signature dynamic inputs, and
-fails on sanitizer findings.
+rendered item lines, verifies that critically malformed tag payloads fail C1 in
+text and JSON output, rejects a generated ICC5 profile whose embedded ICC.2
+declared size differs from its payload, checks S10 against the generated
+calculator-operation fixture, runs malware-signature dynamic inputs, and fails
+on sanitizer findings.
 
 `iccdev.pawg-q1-quality-contract` validates the PAWG Q1 sample budget,
 CIEDE2000 reference vectors, and Gray/RGB/CMYK round-trip model selection.

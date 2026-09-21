@@ -36,6 +36,7 @@ export UBSAN_OPTIONS="${UBSAN_OPTIONS:-halt_on_error=0,print_stacktrace=1}"
 export LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE:-/dev/null}"
 
 PAWG="$TOOLS_DIR/IccPawgReport/iccPawgReport"
+FROM_XML="$TOOLS_DIR/IccFromXml/iccFromXml"
 GOOD_PROFILE="$TESTING_DIR/sRGB_v4_ICC_preference.icc"
 TRUNCATED="$OUTDIR/truncated.icc"
 MALWARE="$OUTDIR/private-pe-signature.icc"
@@ -50,6 +51,10 @@ STD_SHEBANG_TRUE_POSITIVE="$OUTDIR/standard-tag-valid-shebang-signature.icc"
 STD_TEXTSIG_FALSE_POSITIVE="$OUTDIR/standard-tag-invalid-textsig-signature.icc"
 STD_TEXTSIG_TRUE_POSITIVE="$OUTDIR/standard-tag-valid-textsig-signature.icc"
 REGISTERED_PRIVATE="$OUTDIR/registered-private-tag.icc"
+INVALID_MAB="$OUTDIR/invalid-mab-tag.icc"
+VALID_HYBRID="$OUTDIR/valid-hybrid.icc"
+NESTED_SIZE_MISMATCH="$OUTDIR/nested-size-mismatch.icc"
+CALCULATOR_PROFILE="$TESTING_DIR/CalcTest/calcExercizeOps.icc"
 
 PASS=0
 FAIL=0
@@ -428,6 +433,220 @@ run_truncated_profile() {
   fi
 
   pass_case "$name" "truncated input rejected without crash and with truthful report counts"
+}
+
+generate_invalid_mab_profile() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+
+  python3 - "$INVALID_MAB" <<'PY'
+import pathlib
+import struct
+import sys
+
+dst = pathlib.Path(sys.argv[1])
+size = 160
+data = bytearray(size)
+data[0:4] = struct.pack(">I", size)
+data[8:12] = bytes.fromhex("04400000")
+data[12:16] = b"mntr"
+data[16:20] = b"RGB "
+data[20:24] = b"XYZ "
+data[36:40] = b"acsp"
+data[68:72] = struct.pack(">I", 0x0000F6D6)
+data[72:76] = struct.pack(">I", 0x00010000)
+data[76:80] = struct.pack(">I", 0x0000D32D)
+data[128:132] = struct.pack(">I", 1)
+data[132:136] = b"A2B0"
+data[136:140] = struct.pack(">I", 144)
+data[140:144] = struct.pack(">I", 16)
+data[144:148] = b"mAB "
+dst.write_bytes(data)
+PY
+}
+
+run_invalid_mab_profile() {
+  local name="pawg-critical-tag-fail-closed"
+  local logfile="$OUTDIR/invalid-mab.log"
+  local jsonfile="$OUTDIR/invalid-mab.json"
+  local stderrfile="$OUTDIR/invalid-mab-json.stderr"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile" "$jsonfile" "$stderrfile" "$INVALID_MAB"
+
+  if ! generate_invalid_mab_profile; then
+    fail_case "$name" "failed to generate malformed lutAToB tag profile"
+    return
+  fi
+
+  timeout 60 "$PAWG" "$INVALID_MAB" > "$logfile" 2>&1 || exit_code=$?
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding in text report"
+    return
+  fi
+  if [ "$exit_code" -ne 1 ]; then
+    fail_case "$name" "text report returned unexpected status $exit_code"
+    return
+  fi
+  if ! assert_report_truth "$name" "$logfile"; then
+    fail_case "$name" "text report count or section mismatch"
+    return
+  fi
+  if ! grep -F -q "[FAIL] C1" "$logfile" ||
+     ! grep -F -q "IccProfLib critical validation" "$logfile"; then
+    fail_case "$name" "critical parser rejection was not exposed as C1 FAIL"
+    return
+  fi
+
+  exit_code=0
+  timeout 60 "$PAWG" --json "$INVALID_MAB" > "$jsonfile" 2> "$stderrfile" || exit_code=$?
+  if ! check_sanitizers "$name" "$stderrfile"; then
+    fail_case "$name" "sanitizer finding in JSON report"
+    return
+  fi
+  if [ "$exit_code" -ne 1 ]; then
+    fail_case "$name" "JSON report returned unexpected status $exit_code"
+    return
+  fi
+  if ! python3 - "$jsonfile" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="ascii") as handle:
+    report = json.load(handle)
+
+c1 = next(item for item in report["items"] if item["id"] == "C1")
+assert report["summary"]["total"] == 32
+assert report["summary"]["fail"] >= 1
+assert c1["verdict"] == "FAIL"
+assert "IccProfLib critical validation" in c1["detail"]
+PY
+  then
+    fail_case "$name" "JSON report did not expose the critical C1 failure"
+    return
+  fi
+
+  pass_case "$name" "critical tag rejection fails C1 and exits nonzero in text and JSON modes"
+}
+
+generate_nested_size_mismatch_profile() {
+  if [ ! -x "$FROM_XML" ] || ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+  if ! "$FROM_XML" "$TESTING_DIR/hybrid/MultSpectralRGB.xml" "$VALID_HYBRID" >/dev/null; then
+    return 1
+  fi
+
+  python3 - "$VALID_HYBRID" "$NESTED_SIZE_MISMATCH" <<'PY'
+import pathlib
+import struct
+import sys
+
+src = pathlib.Path(sys.argv[1]).read_bytes()
+data = bytearray(src)
+count = struct.unpack(">I", data[128:132])[0]
+for index in range(count):
+    entry = 132 + index * 12
+    signature, offset, size = struct.unpack(">4sII", data[entry:entry + 12])
+    if signature == b"ICC5":
+        assert size >= 8 + 128
+        assert data[offset:offset + 4] == b"ICCp"
+        embedded = offset + 8
+        declared = struct.unpack(">I", data[embedded:embedded + 4])[0]
+        assert declared == size - 8
+        data[embedded:embedded + 4] = struct.pack(">I", declared + 4)
+        pathlib.Path(sys.argv[2]).write_bytes(data)
+        break
+else:
+    raise AssertionError("generated hybrid profile has no ICC5 tag")
+PY
+}
+
+run_nested_size_mismatch_profile() {
+  local name="pawg-nested-profile-size-mismatch"
+  local logfile="$OUTDIR/nested-size-mismatch.log"
+  local baseline="$OUTDIR/valid-hybrid.json"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile" "$baseline" "$VALID_HYBRID" "$NESTED_SIZE_MISMATCH"
+
+  if ! generate_nested_size_mismatch_profile; then
+    fail_case "$name" "failed to generate the ICC.1/ICC.2 hybrid profile"
+    return
+  fi
+  if ! timeout 60 "$PAWG" --json "$VALID_HYBRID" > "$baseline" 2>&1; then
+    fail_case "$name" "unmodified generated hybrid profile did not pass"
+    return
+  fi
+  if ! check_sanitizers "$name" "$baseline"; then
+    fail_case "$name" "sanitizer finding in unmodified hybrid baseline"
+    return
+  fi
+
+  timeout 60 "$PAWG" "$NESTED_SIZE_MISMATCH" > "$logfile" 2>&1 || exit_code=$?
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding"
+    return
+  fi
+  if [ "$exit_code" -ne 1 ]; then
+    fail_case "$name" "nested size mismatch returned unexpected status $exit_code"
+    return
+  fi
+  if ! assert_report_truth "$name" "$logfile"; then
+    fail_case "$name" "report count or section mismatch"
+    return
+  fi
+  if ! grep -F -q "[FAIL] C1" "$logfile" ||
+     ! grep -F -q "raw checks only; IccProfLib parse failed" "$logfile"; then
+    fail_case "$name" "embedded profile size mismatch was not rejected through C1"
+    return
+  fi
+
+  pass_case "$name" "ICC.2 exact profile-size mismatch in ICC5 is rejected through C1"
+}
+
+run_calculator_operation_count() {
+  local name="pawg-s10-calculator-operation-count"
+  local logfile="$OUTDIR/calculator-operations.log"
+  local operations
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile"
+
+  if [ ! -f "$CALCULATOR_PROFILE" ]; then
+    fail_case "$name" "generated profile is missing: $CALCULATOR_PROFILE"
+    return
+  fi
+
+  timeout 60 "$PAWG" "$CALCULATOR_PROFILE" > "$logfile" 2>&1 || exit_code=$?
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding"
+    return
+  fi
+  if [ "$exit_code" -ne 0 ]; then
+    fail_case "$name" "report returned unexpected status $exit_code"
+    return
+  fi
+  if ! assert_report_truth "$name" "$logfile"; then
+    fail_case "$name" "report count or section mismatch"
+    return
+  fi
+  if ! grep -F -q "[WARN] S10" "$logfile" ||
+     ! grep -F -q "local warning threshold=65536 operations" "$logfile"; then
+    fail_case "$name" "S10 did not report the local operation-count warning"
+    return
+  fi
+  operations="$(sed -n 's/.* \([0-9][0-9]*\) calculator operation(s).*/\1/p' "$logfile" | head -n 1)"
+  if [ -z "$operations" ] || [ "$operations" -le 65536 ]; then
+    fail_case "$name" "S10 operation count was missing or below the warning threshold"
+    return
+  fi
+
+  pass_case "$name" "S10 reported $operations calculator operations and applied the local warning threshold"
 }
 
 generate_private_pe_signature_profile() {
@@ -1505,6 +1724,9 @@ run_good_profile "pawg-valid-profile-fidelity" ""
 run_retired_read_option_rejected
 run_json_report
 run_truncated_profile
+run_invalid_mab_profile
+run_nested_size_mismatch_profile
+run_calculator_operation_count
 run_private_malware_profile
 run_invalid_gzip_signature_profile
 run_valid_gzip_signature_profile

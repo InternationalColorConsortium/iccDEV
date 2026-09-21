@@ -28,7 +28,10 @@ Options:
   evidence when built with `ICCDEV_ENABLE_QA_FLAGS=ON`
 
 A profile that IccProfLib refuses to parse is still assessed: the raw-byte checks run from the
-file contents directly, and the checks that need a parsed profile are reported as `NOT RUN`.
+file contents directly, C1 reports a critical library rejection as `FAIL`, and the remaining
+checks that need a parsed profile are reported as `NOT RUN`. The process exits nonzero when
+that critical rejection or another checklist failure is present. Embedded ICC5 profiles are
+also required to occupy exactly the byte count declared by their ICC.2 profile-size field.
 (A `--read` option previously claimed to load such a profile via `ReadIccProfile()`. It could
 never do so and was retired in #1977.)
 
@@ -51,7 +54,7 @@ The report prints 32 checklist items:
 
 ## Checklist coverage
 
-Security checks cover the PAWG goals for channel counts, 128-byte header encoding, registered or zero header signatures, D50 illuminant, PCS rules, tag-table bounds and layout, EOF placement, iccMAX calculator-element cost, private-tag presence, private-tag malware scans, private-tag NOP-sled detection, and DEFLATE-compressed tag (`zut8`/`zxml`/compressed `data`) measurement.
+Security checks cover the PAWG goals for channel counts, 128-byte header encoding, registered or zero header signatures, D50 illuminant, PCS rules, tag-table bounds and layout, EOF placement, iccMAX calculator-element cost, private-tag presence, private-tag malware scans, private-tag NOP-sled detection, and DEFLATE-compressed tag (`zut8`/`zxml`/compressed `data`) measurement. S10 reports the ICC.2 total calculator operation count, including sub-calculators. Its 65,536-operation warning threshold is a local assessment heuristic, not an ICC.2 conformance maximum or a replacement for profile-declared `calculatorLimits`.
 - Note that malware-signature scans are not implemented
 
 Conformance checks cover tag value encoding, `cprt`/`desc` text encoding, allowed tag types, required tags for profile class, unexpected additional tags, private-tag registration and documentation status, undocumented private-tag identification, profile-class and data-colour-space consistency, header conformance, profile-version/tag consistency, media white point encoding, reserved header bytes, and four-byte tag boundaries.
@@ -67,5 +70,5 @@ MATLAB QA compares these fields through `iccdev.qa.audit_pawg_q1`; build the
 - ICC PAWG checklist is a guide and not an exhaustive list
 - Report does not indicate that a profile is suitable for use
 - iccMAX profiles can have different conformance requirements
-  - iccMAX-specific calculator-cost estimate where applicable
+  - iccMAX-specific calculator operation count and cost estimate where applicable
 - Private-tag registration defined in source as ICC registry ranges

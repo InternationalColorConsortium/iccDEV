@@ -11030,6 +11030,9 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-pawg-report-regression-tests.sh"
 )
+set_tests_properties(iccdev.pawg-report-regressions PROPERTIES
+  FIXTURES_REQUIRED iccdev_profiles
+)
 
 if(TARGET iccApplyNamedCmm AND TARGET iccApplyProfiles AND TARGET iccApplySearch)
   iccdev_add_script_test(
