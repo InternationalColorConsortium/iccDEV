@@ -263,6 +263,7 @@ V2/v2RgbMatrixTRC.icc	positive	valid	0	none	generated	-	conformant example profi
 mcs/17ChanWithSpots-MVIS.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 mcs/18ChanWithSpots-MVIS.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 mcs/6ChanSelect-MID.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+mcs/Flexo-CMYKOGP/4ChanLink-MLNK.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 mcs/Flexo-CMYKOGP/4ChanSelect-MID.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 mcs/Flexo-CMYKOGP/7ChanSelect-MID.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 mcs/Flexo-CMYKOGP/CGYK-SelectMID.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean

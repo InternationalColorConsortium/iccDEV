@@ -1870,7 +1870,17 @@ icValidateStatus CIccTagMultiProcessElement::Validate(std::string sigPath, std::
           rv = icMaxStatus(rv, icValidateCriticalError);
         }
 
-        nOutput = icGetSpaceSamples(pProfile->m_Header.colorSpace);
+        // The A-side of an MToA0 transform is the profile's device space.  For a
+        // MultiplexLink that space is named by the PCS field, because ICC.2 7.2.8
+        // requires the data colour space field to be zero and 7.2.9 puts the
+        // output space in the PCS (#2563).  Reading the data colour space here
+        // gave a conforming MLNK profile an expected output count of zero, so
+        // every such profile was reported as having the wrong channel count.
+        // Every other class that can carry an MToA0 names its device space in the
+        // data colour space field, so that stays the source for them.
+        nOutput = (pProfile->m_Header.deviceClass==icSigMultiplexLinkClass)
+                    ? icGetSpaceSamples(pProfile->m_Header.pcs)
+                    : icGetSpaceSamples(pProfile->m_Header.colorSpace);
         if (m_nOutputChannels != nOutput) {
           sReport += icMsgValidateCriticalError;
           sReport += sSigPathName;

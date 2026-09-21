@@ -6697,6 +6697,67 @@ function(iccdev_add_lms_colour_space_test)
   endif()
 endfunction()
 
+# #2563: ICC.2 7.2.8 requires a MultiplexLink profile's data colour space signature
+# to be zero, and 7.2.9 requires its PCS to be "the appropriate data colour space",
+# i.e. the device output space the link produces.  CheckHeader() exempted
+# MultiplexVisualization from the known-data-space test but not MultiplexLink, then
+# required a zero PCS for MultiplexIdentification and MultiplexLink together, so a
+# conforming MLNK profile failed twice; the tag validator added a third report by
+# taking MToA0's output channel count from the data colour space, which the text
+# requires to be zero.  Testing/mcs has MID and MVIS fixtures and no MLNK, so none
+# of it was reachable from the corpus.  The helper pins the conforming profile as
+# clean and keeps the MID and MVIS verdicts as controls, so a fix that deleted the
+# checks instead of correcting them fails here.
+# Links IccProfLib only -- the rules are in CheckHeader() and the MPE tag validator.
+function(iccdev_add_mlnk_header_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMlnkHeaderTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/mlnk-header.cpp"
+  )
+  target_compile_features(iccMlnkHeaderTest PRIVATE cxx_std_17)
+  target_include_directories(iccMlnkHeaderTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccMlnkHeaderTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccMlnkHeaderTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.mlnk-header
+      COMMAND "$<TARGET_FILE:iccMlnkHeaderTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.mlnk-header
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccMlnkHeaderTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.mlnk-header PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;validate;header;issue-2563;regression"
+  )
+  if(WIN32)
+    set(_mlnk_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMlnkHeaderTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _mlnk_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.mlnk-header PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_mlnk_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2565: ICC.2 9.2.56 permits multiLocalizedUnicodeType, textType and utf8Type for
 # the copyrightTag, and IsTypeValid() applied the v4 mluc-only rule to v5 too: a
 # utf8Type copyright was NonCompliant, and a textType one drew the warning meant
@@ -9737,6 +9798,7 @@ if(WIN32)
   iccdev_add_device_attributes_icc2_test()
   iccdev_add_lms_colour_space_test()
   iccdev_add_copyright_tag_icc2_test()
+  iccdev_add_mlnk_header_test()
   iccdev_add_struct_name_spelling_test()
   iccdev_add_mcs_colorspace_name_test()
   iccdev_add_signature_utils_contract_test()
@@ -10151,6 +10213,7 @@ iccdev_add_tag_name_spelling_test()
 iccdev_add_device_attributes_icc2_test()
 iccdev_add_lms_colour_space_test()
 iccdev_add_copyright_tag_icc2_test()
+iccdev_add_mlnk_header_test()
 iccdev_add_struct_name_spelling_test()
 iccdev_add_mcs_colorspace_name_test()
 iccdev_add_signature_utils_contract_test()
