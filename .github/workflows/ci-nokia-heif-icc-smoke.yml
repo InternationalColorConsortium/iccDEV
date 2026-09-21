@@ -22,11 +22,66 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  resolve-image:
+    name: Resolve Nokia HEIF smoke image
+    runs-on: ubuntu-24.04
+    outputs:
+      image: ${{ steps.resolve.outputs.image }}
+      revision: ${{ steps.resolve.outputs.revision }}
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+
+    steps:
+      - name: Resolve trusted unified regression image
+        id: resolve
+        env:
+          BASH_ENV: /dev/null
+          IMAGE_TAG: ${{ inputs.regression_image_tag || 'latest' }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          if [[ "$IMAGE_TAG" != "latest" &&
+                "$IMAGE_TAG" != "ci-qa-pr-docker-testing" &&
+                "$IMAGE_TAG" != "ci-publish-colourbill-ctrl" &&
+                ! "$IMAGE_TAG" =~ ^sha-[0-9a-f]{40}$ &&
+                ! "$IMAGE_TAG" =~ ^v[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "::error title=Unsupported regression image tag::The requested image tag is not supported"
+            exit 1
+          fi
+
+          image_tag="ghcr.io/internationalcolorconsortium/iccdev:${IMAGE_TAG}"
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io \
+            --username "$GITHUB_ACTOR" --password-stdin
+          docker pull "$image_tag"
+
+          image_ref="$(docker image inspect "$image_tag" --format '{{index .RepoDigests 0}}')"
+          if [[ ! "$image_ref" =~ ^ghcr\.io/internationalcolorconsortium/iccdev@sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error title=Invalid regression image digest::The resolved image is not immutable"
+            exit 1
+          fi
+          image_revision="$(docker image inspect "$image_tag" \
+            --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+          if [[ ! "$image_revision" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error title=Invalid regression image revision::The resolved image lacks a valid source revision"
+            exit 1
+          fi
+
+          printf 'image=%s\n' "$(sanitize_line "$image_ref")" >> "$GITHUB_OUTPUT"
+          printf 'revision=%s\n' "$(sanitize_line "$image_revision")" >> "$GITHUB_OUTPUT"
+
   smoke:
     name: Nokia HEIF - GCC ASAN+UBSAN carrier QA
+    needs: resolve-image
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/internationalcolorconsortium/iccdev:${{ inputs.regression_image_tag || 'latest' }}
+      image: ${{ needs.resolve-image.outputs.image }}  # zizmor: ignore[unpinned-images] resolved immutable digest
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -40,6 +95,8 @@ jobs:
       HEIF_REVISION: 503194eb85e13434b54797bab9d82ad7f88fd35b
       HEIF_TAG: v3.7.1
       BUILD_DIR: build-nokia-heif-smoke
+      IMAGE_REF: ${{ needs.resolve-image.outputs.image }}
+      IMAGE_REVISION: ${{ needs.resolve-image.outputs.revision }}
 
     steps:
       - name: Checkout test sources
@@ -107,7 +164,7 @@ jobs:
 
           heif_ctest_list="$BUILD_DIR/ctest-list.txt"
           ctest --test-dir "$BUILD_DIR" -N --no-tests=error | tee "$heif_ctest_list"
-          grep -Fq "Total Tests: 1" "$heif_ctest_list"
+          grep -Eq '^Total Tests: 1$' "$heif_ctest_list"
           ASAN_OPTIONS=halt_on_error=1:detect_leaks=0 \
           UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
             ctest --test-dir "$BUILD_DIR" \
@@ -128,4 +185,6 @@ jobs:
             printf '%s\n' "$(sanitize_line 'Nokia HEIF v3.7.1 carrier QA passed with GCC ASAN+UBSAN.')"
             printf '%s\n' "$(sanitize_line 'All tracked dependency patches applied and the build was warning-free.')"
             printf '%s\n' "$(sanitize_line 'CTest labels: heif, icc, iccdev, issue-2647, regression.')"
+            printf '%s\n' "Image digest: $(sanitize_line "$IMAGE_REF")"
+            printf '%s\n' "Image source revision: $(sanitize_line "$IMAGE_REVISION")"
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

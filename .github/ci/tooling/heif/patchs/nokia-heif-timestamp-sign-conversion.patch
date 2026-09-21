@@ -1,8 +1,10 @@
 diff --git a/srcs/reader/heifreaderimpl.cpp b/srcs/reader/heifreaderimpl.cpp
-index 9365e81..89ca045 100644
+index 405272f..e40fd94 100644
 --- a/srcs/reader/heifreaderimpl.cpp
 +++ b/srcs/reader/heifreaderimpl.cpp
-@@ -2583,3 +2583,9 @@ namespace HEIF
+@@ -2581,7 +2581,13 @@ namespace HEIF
+         }
+ 
          // Always generate track duration regardless of the information in the header
 -        trackInfo.durationTS = DecodePts::PresentationTimeTS(decodePts.getSpan());
 +        const auto decodeSpan = decodePts.getSpan();
@@ -13,10 +15,50 @@ index 9365e81..89ca045 100644
 +        const auto decodeSpanTS = static_cast<DecodePts::PresentationTimeTS>(decodeSpan);
 +        trackInfo.durationTS = decodeSpanTS;
          trackInfo.pMap       = decodePts.getTime(mediaTimeScale);
-@@ -2606,4 +2612,4 @@ namespace HEIF
+         trackInfo.pMapTS     = decodePts.getTimeTS();
+ 
+@@ -2604,8 +2610,21 @@ namespace HEIF
+                 DecodePts::PMap repeatingPMap;
+                 DecodePts::PMapTS repeatingPMapTS;
                  const auto trackDuration      = static_cast<int64_t>(trackInfo.duration * 1000u);
 -                const auto editListDuration   = static_cast<int64_t>(decodePts.getSpan() * 1000u / mediaTimeScale);
 -                const auto editListDurationTS = decodePts.getSpan();
++                if (decodeSpan > static_cast<std::uint64_t>(
++                                      std::numeric_limits<DecodePts::PresentationTimeTS>::max() / 1000))
++                {
++                    throw FileReaderException(ErrorCode::FILE_HEADER_ERROR);
++                }
 +                const auto editListDuration   = static_cast<int64_t>(decodeSpan * 1000u / mediaTimeScale);
 +                const auto editListDurationTS = decodeSpanTS;
++                const auto checkedAdd = [](const int64_t left, const int64_t right) {
++                    if ((right > 0 && left > std::numeric_limits<int64_t>::max() - right) ||
++                        (right < 0 && left < std::numeric_limits<int64_t>::min() - right))
++                    {
++                        throw FileReaderException(ErrorCode::FILE_HEADER_ERROR);
++                    }
++                    return left + right;
++                };
                  trackInfo.repetitions         = double(trackDuration) / double(editListDuration);
+                 auto iter                     = trackInfo.pMap.cbegin();
+                 int64_t nextSampleTimestamp   = iter->first;
+@@ -2626,16 +2645,16 @@ namespace HEIF
+                     if (iter == trackInfo.pMap.cend())
+                     {
+                         iter = trackInfo.pMap.cbegin();
+-                        offset += editListDuration;
++                        offset = checkedAdd(offset, editListDuration);
+                     }
+-                    nextSampleTimestamp = iter->first + offset;
++                    nextSampleTimestamp = checkedAdd(iter->first, offset);
+ 
+                     if (iterTS == trackInfo.pMapTS.cend())
+                     {
+                         iterTS = trackInfo.pMapTS.cbegin();
+-                        offsetTS += editListDurationTS;
++                        offsetTS = checkedAdd(offsetTS, editListDurationTS);
+                     }
+-                    nextSampleTimestampTS = iterTS->first + offsetTS;
++                    nextSampleTimestampTS = checkedAdd(iterTS->first, offsetTS);
+                 }
+ 
+                 trackInfo.pMap   = repeatingPMap;

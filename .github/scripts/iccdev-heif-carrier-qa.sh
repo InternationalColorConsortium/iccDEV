@@ -177,6 +177,7 @@ run_case property-valid 0 "property=1 result=0" --colr-property 1 "$CORPUS/valid
 run_case property-missing 2 "property=99 result=17" --colr-property 99 "$CORPUS/valid-prof.heic"
 run_case property-non-colr 2 "property=2 result=17" --colr-property 2 "$CORPUS/valid-prof.heic"
 run_case property-invalid-text 3 "invalid property index: nope" --colr-property nope "$CORPUS/valid-prof.heic"
+rm -f "$OUTDIR/missing.heic"
 run_case missing-input 2 "unable to initialize HEIF reader: 7" "$OUTDIR/missing.heic"
 run_case bare-invocation 3 "Usage:"
 
