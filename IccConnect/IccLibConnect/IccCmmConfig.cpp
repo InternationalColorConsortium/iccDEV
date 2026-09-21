@@ -1077,6 +1077,19 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
       pProf->m_iccEnvVars[sig] = val;
     }
 
+    // -ENV: pairs apply to the profile that follows them.  The loop is only
+    // entered with at least one pair left, so arriving here with fewer than two
+    // arguments means -ENV: pairs consumed the rest and there is no profile.  The
+    // entry was then appended anyway, below, without ever receiving a file or a
+    // rendering intent (#2140).  Environment variables with no transform to apply
+    // them to are not a profile sequence, so refuse the command line -- as the
+    // -ENV: parse above already does for a malformed name, and for the same
+    // reason: accepting it accepts a command line that does not mean what it says.
+    // Testing the argument count, not the file name, keeps -embedded working: it
+    // legitimately leaves the file name empty inside the block below.
+    if (nArg < 2)
+      return 0;
+
     if (nArg >= 2) {
 
       pProf->m_iccFile = args[0];
@@ -1362,6 +1375,31 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
 
       pProf->m_iccEnvVars[sig] = val;
     }
+
+    // -ENV: pairs apply to the profile that follows them.  The loop is only
+    // entered with at least one pair left, so arriving here with fewer than two
+    // arguments means -ENV: pairs consumed the rest and there is no profile.  The
+    // entry was then appended anyway, below, without ever receiving a file or a
+    // rendering intent (#2140).  Environment variables with no transform to apply
+    // them to are not a profile sequence, so refuse the command line -- as the
+    // -ENV: parse above already does for a malformed name, and for the same
+    // reason: accepting it accepts a command line that does not mean what it says.
+    // Testing the argument count, not the file name, keeps -embedded working: it
+    // legitimately leaves the file name empty inside the block below.
+    if (nArg < 2)
+      return 0;
+
+    // The same rule when -ENV: pairs are followed by -INIT.  -INIT ends the
+    // profile list, but it is only recognised at the top of this loop, before any
+    // -ENV: pairs are consumed; after them it reached the block below as a file
+    // name.  "-ENV:abcd 1.0 -INIT 1" was accepted with a profile entry whose file
+    // was the literal string "-INIT", and the initializer the caller asked for
+    // was never applied.  -INIT takes an intent and no environment variables, so
+    // the pairs have nothing to apply to: refuse, as above.  Reaching here with
+    // -INIT next can only mean -ENV: pairs came first, since the top of the loop
+    // breaks on it otherwise.
+    if (!stricmp(args[0], "-INIT"))
+      return 0;
 
     if (nArg >= 2) {
 
