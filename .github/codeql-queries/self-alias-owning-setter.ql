@@ -29,14 +29,24 @@ predicate assignsParameterToField(AssignExpr assignment, Field field,
 
 predicate rejectsSelfAlias(MemberFunction setter, Field field,
     Parameter parameter, DeleteExpr deleteExpr) {
-  exists(IfStmt guard, Expr condition, ReturnStmt returnStmt |
+  exists(IfStmt guard, EqualityOperation comparison |
     guard.getEnclosingFunction() = setter and
-    condition = guard.getCondition() and
-    condition.getAChild*().(FieldAccess).getTarget() = field and
-    condition.getAChild*().(VariableAccess).getTarget() = parameter and
-    condition.toString().matches("%==%") and
-    returnStmt = guard.getThen().getAChild*() and
-    guard.getLocation().getStartLine() < deleteExpr.getLocation().getStartLine()
+    comparison = guard.getCondition().getAChild*() and
+    comparison.getAnOperand().(FieldAccess).getTarget() = field and
+    comparison.getAnOperand().(VariableAccess).getTarget() = parameter and
+    (
+      // if (field == parameter) ... return;  -- leaving skips the delete, but
+      // only when the delete is not itself inside the branch that returns.
+      comparison.getOperator() = "==" and
+      guard.getThen().getAChild*() instanceof ReturnStmt and
+      not deleteExpr.getEnclosingStmt().getParentStmt*() = guard.getThen() and
+      guard.getLocation().getStartLine() < deleteExpr.getLocation().getStartLine()
+      or
+      // if (field != parameter) delete field;  -- the delete runs only when
+      // the two are distinct, so the alias is never freed.
+      comparison.getOperator() = "!=" and
+      deleteExpr.getEnclosingStmt().getParentStmt*() = guard.getThen()
+    )
   )
 }
 
