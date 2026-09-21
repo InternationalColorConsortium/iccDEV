@@ -182,6 +182,26 @@ ctest --test-dir /tmp/iccdev-heif-qa \
   --no-tests=error
 ```
 
+## External libpng iCCP CTest
+
+`iccdev.libpng-iccp-qa` is registered by the standalone
+`.github/ci/tooling/libpng/qa` wrapper, not by the main `Build/Cmake` project.
+The wrapper builds `pngtest` from the exact libpng revision in
+`.github/ci/tooling/libpng/Readme.md`. Its manually dispatched workflow first
+requires the unpatched pin to reproduce four invalid-profile retention faults,
+then applies the tracked patch and requires those profiles to be discarded.
+Valid and explicitly relaxed CRC-policy controls must remain byte-identical.
+
+Always run discovery and the focused patched test:
+
+```bash
+ctest --test-dir /tmp/iccdev-libpng-build -N --no-tests=error
+ctest --test-dir /tmp/iccdev-libpng-build \
+  -R '^iccdev\.libpng-iccp-qa$' \
+  --output-on-failure \
+  --no-tests=error
+```
+
 ## Registered Suites
 
 | Test | Source |

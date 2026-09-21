@@ -69,6 +69,7 @@ shares one source of truth. Update rules here, not in the mirrors.
 | Contributor onboarding | `.github/prompts/contributor-onboarding.prompt.md` |
 | Apply-path throughput benchmark | `Tools/CmdLine/IccBenchApply/Readme.md` |
 | HEIF ICC carrier build and QA | `.github/workflows/ci-nokia-heif-icc-smoke.yml`, `.github/ci/tooling/heif/Readme.md`, `.github/skills/heif-icc-qa/SKILL.md` |
+| libpng iCCP fault build and QA | `.github/workflows/ci-libpng-iccp-smoke.yml`, `.github/ci/tooling/libpng/Readme.md`, `.github/skills/libpng-iccp-qa/SKILL.md` |
 | Security repro | `.github/prompts/reproduce-security-issue.prompt.md` |
 | iccSpecSepToTiff QA | `.github/skills/specsep-qa/SKILL.md` |
 | IIS ISAPI endpoint QA | `.github/skills/iis-isapi-qa/SKILL.md` |

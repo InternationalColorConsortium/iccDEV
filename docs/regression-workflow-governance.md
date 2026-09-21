@@ -29,6 +29,7 @@ new blocker returns the branch to branch-only grooming before another review.
 | CTest process guide | `docs/ctest.md` | Local commands, registered suites, and add-test workflow. |
 | Maintainer CI skill | `.github/skills/maintainer-ci-ctest/SKILL.md` | Repeatable maintainer workflow for CI, CTest, CPack, sanitizer, and release gates. |
 | Maintainer CI prompt | `.github/prompts/maintainer-ci-ctest.prompt.md` | Structured planning prompt for maintainer-owned infrastructure changes. |
+| External compatibility examples | `.github/workflows/ci-nokia-heif-icc-smoke.yml`, `.github/workflows/ci-libpng-iccp-smoke.yml` | Manual, pinned-dependency lanes with isolated wrapper CTests and immutable runtime resolution. |
 | Workflow rules | `.github/instructions/workflow-governance.instructions.md` | Shell hardening, output sanitization, and injection prevention. |
 | Workflow trust boundaries | `docs/workflow-security-trust-boundaries.md` | Trusted-base helper model, PR workflow canaries, and visual review aids. |
 | Testing rules | `.github/instructions/testing.instructions.md` | Test directories, script expectations, and regression flow. |
