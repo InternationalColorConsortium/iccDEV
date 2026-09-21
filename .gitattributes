@@ -7,7 +7,7 @@
 *.hh text eol=lf
 *.hpp text eol=lf
 *.hxx text eol=lf
-*.patch text eol=lf
+*.patch text eol=lf whitespace=-blank-at-eol
 *.md text eol=lf
 *.cmake text eol=lf
 CMakeLists.txt text eol=lf

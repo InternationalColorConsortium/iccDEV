@@ -1,0 +1,207 @@
+# Copyright (c) 2026 International Color Consortium.
+# SPDX-License-Identifier: BSD-3-Clause
+---
+# yamllint disable rule:line-length
+name: libpng iCCP fault smoke
+
+'on':
+  workflow_dispatch:
+    inputs:
+      regression_image_tag:
+        description: Trusted unified regression image tag
+        required: true
+        default: latest
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: libpng-iccp-smoke-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  resolve-image:
+    name: Resolve libpng iCCP smoke image
+    runs-on: ubuntu-24.04
+    outputs:
+      image: ${{ steps.resolve.outputs.image }}
+      revision: ${{ steps.resolve.outputs.revision }}
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+
+    steps:
+      - name: Checkout workflow helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          persist-credentials: false
+
+      - name: Resolve trusted unified regression image
+        id: resolve
+        env:
+          BASH_ENV: /dev/null
+          IMAGE_TAG: ${{ inputs.regression_image_tag || 'latest' }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          if [[ "$IMAGE_TAG" != "latest" &&
+                "$IMAGE_TAG" != "ci-qa-pr-docker-testing" &&
+                "$IMAGE_TAG" != "ci-publish-colourbill-ctrl" &&
+                ! "$IMAGE_TAG" =~ ^sha-[0-9a-f]{40}$ &&
+                ! "$IMAGE_TAG" =~ ^v[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "::error title=Unsupported regression image tag::The requested image tag is not supported"
+            exit 1
+          fi
+
+          image_tag="ghcr.io/internationalcolorconsortium/iccdev:${IMAGE_TAG}"
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io \
+            --username "$GITHUB_ACTOR" --password-stdin
+          docker pull "$image_tag"
+
+          image_ref="$(docker image inspect "$image_tag" --format '{{index .RepoDigests 0}}')"
+          if [[ ! "$image_ref" =~ ^ghcr\.io/internationalcolorconsortium/iccdev@sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error title=Invalid regression image digest::The resolved image is not immutable"
+            exit 1
+          fi
+          image_revision="$(docker image inspect "$image_tag" \
+            --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+          if [[ ! "$image_revision" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error title=Invalid regression image revision::The resolved image lacks a valid source revision"
+            exit 1
+          fi
+
+          printf 'image=%s\n' "$(sanitize_line "$image_ref")" >> "$GITHUB_OUTPUT"
+          printf 'revision=%s\n' "$(sanitize_line "$image_revision")" >> "$GITHUB_OUTPUT"
+
+  smoke:
+    name: libpng 1.6.58 - GCC ASAN+UBSAN iCCP QA
+    needs: resolve-image
+    runs-on: ubuntu-24.04
+    container:
+      image: ${{ needs.resolve-image.outputs.image }}  # zizmor: ignore[unpinned-images] resolved immutable digest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 0
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+      LIBPNG_REVISION: 3061454d980de7d53608f594194cfac722721d2a
+      LIBPNG_TAG: v1.6.58
+      BUILD_DIR: build-libpng-iccp-smoke
+      IMAGE_REF: ${{ needs.resolve-image.outputs.image }}
+      IMAGE_REVISION: ${{ needs.resolve-image.outputs.revision }}
+
+    steps:
+      - name: Checkout test sources
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          persist-credentials: false
+
+      - name: Verify libpng iCCP smoke environment
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          gcc --version | sed -n '1p'
+          cmake --version | sed -n '1p'
+          python3 --version
+
+      # preflight: allow-pr-script-execution reason=manual-pinned-libpng-iccp-regression
+      - name: Prove vulnerable and patched libpng iCCP contracts
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          libpng_source="$(mktemp -d "${RUNNER_TEMP:-/tmp}/iccdev-libpng.XXXXXX")"
+          trap 'rm -rf "$libpng_source"' EXIT
+          git -C "$libpng_source" init --quiet
+          git -C "$libpng_source" remote add origin https://github.com/pnggroup/libpng.git
+          git -C "$libpng_source" fetch --quiet --depth=1 origin \
+            "refs/tags/${LIBPNG_TAG}:refs/tags/${LIBPNG_TAG}"
+          git -C "$libpng_source" checkout --quiet --detach "${LIBPNG_TAG}^{commit}"
+
+          actual_libpng_revision="$(git -C "$libpng_source" rev-parse HEAD)"
+          if [ "$actual_libpng_revision" != "$LIBPNG_REVISION" ]; then
+            echo "::error title=libpng revision mismatch::${actual_libpng_revision} != ${LIBPNG_REVISION}"
+            exit 1
+          fi
+
+          cmake -S .github/ci/tooling/libpng/qa -B "$BUILD_DIR" \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=gcc \
+            -DLIBPNG_SOURCE_DIR="$libpng_source" \
+            -DICCDEV_LIBPNG_ENABLE_SANITIZERS=ON
+          cmake --build "$BUILD_DIR" \
+            --target pngtest \
+            --parallel "$(nproc)" 2>&1 | tee "$BUILD_DIR/build-vulnerable.log"
+          if grep -E '(^|: )[Ww]arning:' "$BUILD_DIR/build-vulnerable.log"; then
+            echo "::error title=libpng compiler warnings::The vulnerable smoke build must be warning-free"
+            exit 1
+          fi
+
+          ASAN_OPTIONS=halt_on_error=1:detect_leaks=0 \
+          UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+            python3 .github/ci/tooling/libpng/qa/libpng_iccp_qa.py \
+              --mode vulnerable \
+              --pngtest "$BUILD_DIR/libpng/pngtest" \
+              --profile .github/ci/tooling/libpng/fixtures/valid-hybrid-rgb.icc.b64 \
+              --work-dir "$BUILD_DIR/vulnerable-contract"
+
+          libpng_patch="$GITHUB_WORKSPACE/.github/ci/tooling/libpng/patches/libpng-1.6.58-iccp-completion-crc.patch"
+          git -C "$libpng_source" apply --check "$libpng_patch"
+          git -C "$libpng_source" apply "$libpng_patch"
+          cmake --build "$BUILD_DIR" \
+            --target pngtest \
+            --parallel "$(nproc)" 2>&1 | tee "$BUILD_DIR/build-patched.log"
+          if grep -E '(^|: )[Ww]arning:' "$BUILD_DIR/build-patched.log"; then
+            echo "::error title=libpng compiler warnings::The patched smoke build must be warning-free"
+            exit 1
+          fi
+
+          libpng_ctest_list="$BUILD_DIR/ctest-list.txt"
+          ctest --test-dir "$BUILD_DIR" -N --no-tests=error | tee "$libpng_ctest_list"
+          grep -Eq 'iccdev\.libpng-iccp-qa$' "$libpng_ctest_list"
+          ASAN_OPTIONS=halt_on_error=1:detect_leaks=0 \
+          UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+            ctest --test-dir "$BUILD_DIR" \
+              -L '^(libpng|icc|iccp|regression)$' \
+              -R '^iccdev\.libpng-iccp-qa$' \
+              --output-on-failure \
+              --no-tests=error
+
+      - name: Summarize libpng iCCP smoke results
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          {
+            printf '%s\n' "$(sanitize_line 'libpng v1.6.58 iCCP fault QA passed with GCC ASAN+UBSAN.')"
+            printf '%s\n' "$(sanitize_line 'The pinned source reproduced all four vulnerable outcomes before the tracked patch.')"
+            printf '%s\n' "$(sanitize_line 'The patched build discarded invalid profiles and preserved valid and explicitly relaxed profiles.')"
+            printf '%s\n' "$(sanitize_line 'CTest labels: libpng, icc, iccp, regression.')"
+            printf '%s\n' "Image digest: $(sanitize_line "$IMAGE_REF")"
+            printf '%s\n' "Image source revision: $(sanitize_line "$IMAGE_REVISION")"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

@@ -93,6 +93,9 @@ use `.github/skills/regression-container-maintainer/SKILL.md` and
 - HEIF ICC carrier research tooling: `.github/ci/tooling/heif/Readme.md`,
   `.github/skills/heif-icc-qa/SKILL.md`, and
   `.github/prompts/heif-icc-qa.prompt.md`
+- libpng iCCP fault research tooling: `.github/ci/tooling/libpng/Readme.md`,
+  `.github/skills/libpng-iccp-qa/SKILL.md`, and
+  `.github/prompts/libpng-iccp-qa.prompt.md`
 - Windows session helper: dot-source `.\.github\scripts\icc-session.ps1`, then
   run `icc-session` to create the next `DD-mmm-YYYY-NNN` workspace directory.
 - AVX2 CLUT debugging and optimization handoff:
@@ -239,6 +242,7 @@ Key safety rules:
 | Maintainer AFL smoke | `.github/prompts/maintainer-afl-smoke.prompt.md` |
 | Maintainer CTest selection | `.github/prompts/maintainer-ci-ctest.prompt.md` |
 | Maintainer regression container | `.github/prompts/regression-container-maintainer.prompt.md` |
+| libpng iCCP fault QA | `.github/prompts/libpng-iccp-qa.prompt.md` |
 | Valgrind-family analysis | `.github/prompts/valgrind-analysis.prompt.md` |
 | Workflow governance audit | `.github/prompts/audit-workflow-governance.prompt.md` |
 | Pre-PR security cycle | `.github/prompts/pre-pr-security-cycle.prompt.md` |
@@ -270,6 +274,7 @@ Key safety rules:
 | Regression workflow governance | `.github/skills/regression-workflow-governance/SKILL.md` |
 | Regression container maintainer | `.github/skills/regression-container-maintainer/SKILL.md` |
 | Maintainer CI and CTest | `.github/skills/maintainer-ci-ctest/SKILL.md` |
+| libpng iCCP fault QA | `.github/skills/libpng-iccp-qa/SKILL.md` |
 | Pre-PR security cycle | `.github/skills/pre-pr-security-cycle/SKILL.md` |
 | Focused pull request review | `.github/skills/code-review/SKILL.md` |
 | Stacked PR and fast-lane workflow | `.github/skills/stacked-pr-fast-lane/SKILL.md` |
