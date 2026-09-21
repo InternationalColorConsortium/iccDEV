@@ -1,9 +1,8 @@
 #[[ @file
-    File:       CMakeLists.txt for iccHeifDump.cpp
+    File:       HEIF QA CMakeLists.txt
 
-    Contains:   CMake build rules for the iccHeifDump research tool
-
-    Version:    V1
+    Contains:   Reproducible wrapper for the pinned Nokia HEIF reader and
+                iccHeifDump carrier regression tests
 
     Copyright:  (c) see Software License
 ]]
@@ -28,11 +27,10 @@
  *    ICC organization endorses or promotes products derived from this
  *    software.
  *
- *
  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
  * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE INTERNATIONAL COLOR CONSORTIUM OR
+ * DISCLAIMED. IN NO EVENT SHALL THE INTERNATIONAL COLOR CONSORTIUM OR
  * ITS CONTRIBUTING MEMBERS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
  * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
@@ -46,36 +44,43 @@
  * This software consists of voluntary contributions made by many
  * individuals on behalf of the The International Color Consortium.
  *
- *
  * Membership in the ICC is encouraged when this software is used for
  * commercial purposes.
  *
- *
  * For more information on The International Color Consortium, please
  * see <http://www.color.org/>.
- *
- *
- * Notes - Added 21-Sept-2026 by @xsscx
- *       - Research Tooling for HEIF InterOp
  ]]
 
-add_executable(iccHeifDump IccHeifDump.cpp)
-set_property(TARGET iccHeifDump PROPERTY CXX_STANDARD 11)
-target_link_libraries(iccHeifDump heif_static)
+cmake_minimum_required(VERSION 3.18)
+project(iccdev_heif_qa LANGUAGES C CXX)
 
-option(ICCDEV_HEIF_ENABLE_TESTS "Register the iccHeifDump carrier QA test" OFF)
-if(ICCDEV_HEIF_ENABLE_TESTS)
-  find_program(BASH_EXECUTABLE bash REQUIRED)
-  add_test(
-    NAME iccdev.heif-carrier-qa
-    COMMAND "${CMAKE_COMMAND}" -E env
-      "ICCDEV_HEIF_TOOL=$<TARGET_FILE:iccHeifDump>"
-      "ICCDEV_HEIF_CORPUS=${CMAKE_CURRENT_LIST_DIR}/img"
-      "ICCDEV_TEST_OUTDIR=${CMAKE_CURRENT_BINARY_DIR}/qa-output"
-      "${BASH_EXECUTABLE}"
-      "${CMAKE_CURRENT_LIST_DIR}/../../../scripts/iccdev-heif-carrier-qa.sh"
-  )
-  set_tests_properties(iccdev.heif-carrier-qa PROPERTIES
-    LABELS "iccdev;heif;icc;issue-2647;regression"
-    TIMEOUT 120)
+include(CTest)
+
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 4.0)
+  set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING
+    "Compatibility floor for the pinned Nokia HEIF CMake files" FORCE)
 endif()
+
+set(HEIF_SOURCE_DIR "" CACHE PATH "Path to a Nokia HEIF source checkout")
+if(NOT IS_ABSOLUTE "${HEIF_SOURCE_DIR}" OR
+   NOT EXISTS "${HEIF_SOURCE_DIR}/srcs/CMakeLists.txt")
+  message(FATAL_ERROR
+    "HEIF_SOURCE_DIR must be an absolute Nokia HEIF source checkout")
+endif()
+
+option(ICCDEV_HEIF_ENABLE_SANITIZERS
+  "Build the Nokia reader and iccHeifDump with ASan and UBSan" OFF)
+if(ICCDEV_HEIF_ENABLE_SANITIZERS)
+  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    message(FATAL_ERROR "HEIF sanitizers require Clang or GCC")
+  endif()
+  add_compile_options(
+    -fsanitize=address,undefined
+    -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=address,undefined)
+endif()
+
+set(BUILD_ONLY_STATIC_LIB ON CACHE BOOL "Build only Nokia HEIF static libraries" FORCE)
+set(ICCDEV_HEIF_ENABLE_TESTS ON CACHE BOOL "Register iccHeifDump carrier QA" FORCE)
+add_subdirectory("${HEIF_SOURCE_DIR}/srcs" nokia-heif)
+add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/.." iccdev-heif-tool)

@@ -1,0 +1,22 @@
+diff --git a/srcs/reader/heifreaderimpl.cpp b/srcs/reader/heifreaderimpl.cpp
+index 9365e81..89ca045 100644
+--- a/srcs/reader/heifreaderimpl.cpp
++++ b/srcs/reader/heifreaderimpl.cpp
+@@ -2583,3 +2583,9 @@ namespace HEIF
+         // Always generate track duration regardless of the information in the header
+-        trackInfo.durationTS = DecodePts::PresentationTimeTS(decodePts.getSpan());
++        const auto decodeSpan = decodePts.getSpan();
++        if (decodeSpan > static_cast<std::uint64_t>(std::numeric_limits<DecodePts::PresentationTimeTS>::max()))
++        {
++            throw FileReaderException(ErrorCode::FILE_HEADER_ERROR);
++        }
++        const auto decodeSpanTS = static_cast<DecodePts::PresentationTimeTS>(decodeSpan);
++        trackInfo.durationTS = decodeSpanTS;
+         trackInfo.pMap       = decodePts.getTime(mediaTimeScale);
+@@ -2606,4 +2612,4 @@ namespace HEIF
+                 const auto trackDuration      = static_cast<int64_t>(trackInfo.duration * 1000u);
+-                const auto editListDuration   = static_cast<int64_t>(decodePts.getSpan() * 1000u / mediaTimeScale);
+-                const auto editListDurationTS = decodePts.getSpan();
++                const auto editListDuration   = static_cast<int64_t>(decodeSpan * 1000u / mediaTimeScale);
++                const auto editListDurationTS = decodeSpanTS;
+                 trackInfo.repetitions         = double(trackDuration) / double(editListDuration);

@@ -160,6 +160,28 @@ product build. Build `build-test-binaries` before a direct filtered CTest run,
 or use `check`/`check-fast`; both targets build their tool and test dependencies
 before running the suite.
 
+## External HEIF carrier CTest
+
+`iccdev.heif-carrier-qa` is registered by the standalone
+`.github/ci/tooling/heif/qa` wrapper, not by the main `Build/Cmake` project, so
+it does not change the standard iccDEV CTest count. The wrapper builds
+`iccHeifDump` against the exact Nokia HEIF revision recorded in
+`.github/ci/tooling/heif/Readme.md`, and the test runs the 16-carrier corpus,
+property/CLI controls, sanitizer checks, and ICC extraction hash assertion.
+Hosted coverage is the manually dispatched `Nokia HEIF ICC carrier smoke`
+workflow. It is deliberately isolated from `ci-pr-action` and the reusable
+iccDEV tool-test gate because it builds a separately pinned upstream project.
+
+Always run discovery and the focused test:
+
+```bash
+ctest --test-dir /tmp/iccdev-heif-qa -N --no-tests=error
+ctest --test-dir /tmp/iccdev-heif-qa \
+  -R '^iccdev\.heif-carrier-qa$' \
+  --output-on-failure \
+  --no-tests=error
+```
+
 ## Registered Suites
 
 | Test | Source |

@@ -1,0 +1,128 @@
+# Copyright (c) 2026 International Color Consortium.
+# SPDX-License-Identifier: BSD-3-Clause
+---
+# yamllint disable rule:line-length
+name: Nokia HEIF ICC carrier smoke
+
+'on':
+  workflow_dispatch:
+    inputs:
+      regression_image_tag:
+        description: Trusted unified regression image tag
+        required: true
+        default: latest
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: nokia-heif-smoke-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Nokia HEIF - GCC ASAN+UBSAN carrier QA
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/internationalcolorconsortium/iccdev:${{ inputs.regression_image_tag || 'latest' }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 0
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+      HEIF_REVISION: 503194eb85e13434b54797bab9d82ad7f88fd35b
+      HEIF_TAG: v3.7.1
+      BUILD_DIR: build-nokia-heif-smoke
+
+    steps:
+      - name: Checkout test sources
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          persist-credentials: false
+
+      - name: Verify Nokia HEIF smoke environment
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          gcc --version | sed -n '1p'
+          g++ --version | sed -n '1p'
+          cmake --version | sed -n '1p'
+
+      # preflight: allow-pr-script-execution reason=manual-nokia-heif-carrier-regression
+      - name: Build and test Nokia HEIF ICC carrier tooling
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          heif_source="$(mktemp -d "${RUNNER_TEMP:-/tmp}/iccdev-nokia-heif.XXXXXX")"
+          trap 'rm -rf "$heif_source"' EXIT
+          git -C "$heif_source" init --quiet
+          git -C "$heif_source" remote add origin https://github.com/nokiatech/heif.git
+          git -C "$heif_source" fetch --quiet --depth=1 origin \
+            "refs/tags/${HEIF_TAG}:refs/tags/${HEIF_TAG}"
+          git -C "$heif_source" checkout --quiet --detach "${HEIF_TAG}^{commit}"
+
+          actual_heif_revision="$(git -C "$heif_source" rev-parse HEAD)"
+          if [ "$actual_heif_revision" != "$HEIF_REVISION" ]; then
+            echo "::error title=HEIF revision mismatch::${actual_heif_revision} != ${HEIF_REVISION}"
+            exit 1
+          fi
+
+          heif_patch_dir="$GITHUB_WORKSPACE/.github/ci/tooling/heif/patchs"
+          for heif_patch in "$heif_patch_dir"/*.patch; do
+            git -C "$heif_source" apply --check "$heif_patch"
+            git -C "$heif_source" apply "$heif_patch"
+          done
+
+          cmake -S .github/ci/tooling/heif/qa -B "$BUILD_DIR" \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DHEIF_SOURCE_DIR="$heif_source" \
+            -DICCDEV_HEIF_ENABLE_SANITIZERS=ON \
+            -Wno-deprecated
+          cmake --build "$BUILD_DIR" \
+            --target iccHeifDump \
+            --parallel "$(nproc)" 2>&1 | tee "$BUILD_DIR/build.log"
+          if grep -E '(^|: )[Ww]arning:' "$BUILD_DIR/build.log"; then
+            echo "::error title=Nokia HEIF compiler warnings::The smoke build must be warning-free"
+            exit 1
+          fi
+
+          heif_ctest_list="$BUILD_DIR/ctest-list.txt"
+          ctest --test-dir "$BUILD_DIR" -N --no-tests=error | tee "$heif_ctest_list"
+          grep -Fq "Total Tests: 1" "$heif_ctest_list"
+          ASAN_OPTIONS=halt_on_error=1:detect_leaks=0 \
+          UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+            ctest --test-dir "$BUILD_DIR" \
+              -L '^(heif|issue-2647)$' \
+              -R '^iccdev\.heif-carrier-qa$' \
+              --output-on-failure \
+              --no-tests=error
+
+      - name: Summarize Nokia HEIF smoke results
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          {
+            printf '%s\n' 'Nokia HEIF v3.7.1 carrier QA passed with GCC ASAN+UBSAN.'
+            printf '%s\n' 'All tracked dependency patches applied and the build was warning-free.'
+            printf '%s\n' 'CTest labels: heif, icc, iccdev, issue-2647, regression.'
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

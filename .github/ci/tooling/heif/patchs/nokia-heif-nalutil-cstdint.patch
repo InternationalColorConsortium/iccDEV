@@ -1,0 +1,8 @@
+diff --git a/srcs/common/nalutil.hpp b/srcs/common/nalutil.hpp
+index 1a61e04..fe7b611 100644
+--- a/srcs/common/nalutil.hpp
++++ b/srcs/common/nalutil.hpp
+@@ -18,1 +18,3 @@
++#include <cstdint>
++
+ #include "customallocator.hpp"

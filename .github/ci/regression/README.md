@@ -73,6 +73,7 @@ Test 18 (Regression Bisect).
 |----------|-------|---------|-------|
 | `.github/workflows/ci-pr-win.yml` | MinGW toolchain | Keep normal Windows PR CI from regressing MinGW CMake/tool support | Runs a UCRT64 MinGW Release static build and the full registered MinGW CTest set, including `iccdev.windows-icc-dump-profile-smoke` and `iccdev.iccconnect-threaded-cmm` |
 | `.github/workflows/ci-pr-win.yml` | #1025, #1036 | Keep Windows ClangCL warning output focused on source signal instead of known CRT/deprecation noise | Runs the ClangCL smoke build with ClangCL-only noise-control flags, classifies warning categories, and uploads sanitized warning logs |
+| `.github/workflows/ci-iccdev-tool-tests.yml` | #2647, #2654 | Keep `iccHeifDump` and the pinned Nokia HEIF reader safe across ICC `colr` carriers | Applies the tracked `largesize` overflow patch, builds with ASan+UBSan, and runs `iccdev.heif-carrier-qa` across 16 fixtures plus property, CLI, and extraction controls |
 
 ## Referencing exported IccProfLib globals (#1888, fixed in #2219)
 
