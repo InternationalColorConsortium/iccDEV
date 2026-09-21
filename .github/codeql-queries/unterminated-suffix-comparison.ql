@@ -16,12 +16,19 @@
 import cpp
 import semmle.code.cpp.controlflow.Guards
 
-predicate isStrlenAssignment(Variable variable, AssignExpr assignment) {
-  assignment.getLValue().(VariableAccess).getTarget() = variable and
+predicate isStrlenDerived(Variable variable) {
   exists(FunctionCall strlen |
     (
-      strlen = assignment.getRValue() or
-      strlen = assignment.getRValue().getAChild*()
+      exists(AssignExpr assignment |
+        assignment.getLValue().(VariableAccess).getTarget() = variable and
+        (
+          strlen = assignment.getRValue() or
+          strlen = assignment.getRValue().getAChild*()
+        )
+      )
+      or
+      strlen = variable.getInitializer().getExpr() or
+      strlen = variable.getInitializer().getExpr().getAChild*()
     ) and
     strlen.getTarget().getName() = "strlen"
   )
@@ -32,15 +39,21 @@ predicate hasPriorLengthGuard(FunctionCall comparison, Variable nameLength,
   exists(ComparisonOperation guard |
     guard.getEnclosingFunction() = comparison.getEnclosingFunction() and
     guard instanceof GuardCondition and
-    guard.getOperator() = "<" and
-    guard.getLeftOperand().getAChild*().(VariableAccess).getTarget() = nameLength and
-    guard.getRightOperand().getAChild*().(VariableAccess).getTarget() = suffixLength and
+    (
+      guard.getOperator() = "<" and
+      guard.getLeftOperand().(VariableAccess).getTarget() = nameLength and
+      guard.getRightOperand().(VariableAccess).getTarget() = suffixLength
+      or
+      guard.getOperator() = ">" and
+      guard.getLeftOperand().(VariableAccess).getTarget() = suffixLength and
+      guard.getRightOperand().(VariableAccess).getTarget() = nameLength
+    ) and
     guard.(GuardCondition).controls(comparison.getBasicBlock(), false)
   )
 }
 
 from FunctionCall comparison, Expr firstArgument, SubExpr offset,
-  Variable nameLength, Variable suffixLength, AssignExpr suffixAssignment
+  Variable nameLength, Variable suffixLength
 where
   comparison.getTarget().getName() = "strncmp" and
   firstArgument = comparison.getArgument(0) and
@@ -48,7 +61,7 @@ where
   offset.getLeftOperand().(VariableAccess).getTarget() = nameLength and
   offset.getRightOperand().(VariableAccess).getTarget() = suffixLength and
   comparison.getArgument(2).(VariableAccess).getTarget() = suffixLength and
-  isStrlenAssignment(suffixLength, suffixAssignment) and
+  isStrlenDerived(suffixLength) and
   not hasPriorLengthGuard(comparison, nameLength, suffixLength)
 select comparison,
   "Suffix length $@ can exceed the color-name length before this offset is " +

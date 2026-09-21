@@ -32,15 +32,32 @@ predicate hasPriorNarrowingGuard(FunctionCall setSize, Variable sizeValue) {
     guard instanceof GuardCondition and
     guard.(GuardCondition).controls(setSize.getBasicBlock(), false) and
     (
-      guard.getOperator() = ">" and
-      guard.getLeftOperand().getAChild*().(VariableAccess).getTarget() = sizeValue and
-      limit = guard.getRightOperand()
+      (
+        (
+          guard.getOperator() = ">" and
+          guard.getLeftOperand().(VariableAccess).getTarget() = sizeValue and
+          limit = guard.getRightOperand()
+          or
+          guard.getOperator() = "<" and
+          limit = guard.getLeftOperand() and
+          guard.getRightOperand().(VariableAccess).getTarget() = sizeValue
+        ) and
+        limit.getValue() in ["65535", "65535U", "0xffff", "0xFFFF", "UINT16_MAX"]
+      )
       or
-      guard.getOperator() = "<" and
-      limit = guard.getLeftOperand() and
-      guard.getRightOperand().getAChild*().(VariableAccess).getTarget() = sizeValue
-    ) and
-    limit.getValue() in ["65535", "65535U", "0xffff", "0xFFFF", "UINT16_MAX"]
+      (
+        (
+          guard.getOperator() = ">=" and
+          guard.getLeftOperand().(VariableAccess).getTarget() = sizeValue and
+          limit = guard.getRightOperand()
+          or
+          guard.getOperator() = "<=" and
+          limit = guard.getLeftOperand() and
+          guard.getRightOperand().(VariableAccess).getTarget() = sizeValue
+        ) and
+        limit.getValue() in ["65536", "65536U", "0x10000", "0x10000U"]
+      )
+    )
   )
 }
 

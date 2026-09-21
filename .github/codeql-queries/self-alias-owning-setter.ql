@@ -18,8 +18,16 @@
 import cpp
 import semmle.code.cpp.controlflow.Guards
 
-predicate deletesField(DeleteExpr deleteExpr, Field field) {
-  deleteExpr.getExpr().(FieldAccess).getTarget() = field
+predicate deletesField(Expr deleteExpr, Field field) {
+  exists(DeleteExpr del |
+    deleteExpr = del and
+    del.getExpr().(FieldAccess).getTarget() = field
+  )
+  or
+  exists(DeleteArrayExpr del |
+    deleteExpr = del and
+    del.getExpr().(FieldAccess).getTarget() = field
+  )
 }
 
 predicate assignsParameterToField(AssignExpr assignment, Field field,
@@ -29,18 +37,18 @@ predicate assignsParameterToField(AssignExpr assignment, Field field,
 }
 
 predicate nullCheckedSelfAliasControlsDelete(IfStmt guard,
-    EqualityOperation comparison, Parameter parameter, DeleteExpr deleteExpr) {
+    EqualityOperation comparison, Parameter parameter, Expr deleteExpr) {
   exists(LogicalAndExpr condition |
     condition = guard.getCondition() and
     comparison = condition.getAnOperand() and
     condition.getAnOperand().(VariableAccess).getTarget() = parameter and
-    guard.getThen().getAChild*() instanceof ReturnStmt and
-    not deleteExpr.getEnclosingStmt().getParentStmt*() = guard.getThen()
+    guard.getThen() instanceof ReturnStmt and
+    guard.getLocation().getStartLine() < deleteExpr.getLocation().getStartLine()
   )
 }
 
 predicate rejectsSelfAlias(MemberFunction setter, Field field,
-    Parameter parameter, DeleteExpr deleteExpr) {
+    Parameter parameter, Expr deleteExpr) {
   exists(IfStmt guard, EqualityOperation comparison |
     guard.getEnclosingFunction() = setter and
     comparison = guard.getCondition().getAChild*() and
@@ -64,7 +72,7 @@ predicate rejectsSelfAlias(MemberFunction setter, Field field,
   )
 }
 
-from MemberFunction setter, Field field, Parameter parameter, DeleteExpr deleteExpr,
+from MemberFunction setter, Field field, Parameter parameter, Expr deleteExpr,
   AssignExpr assignment
 where
   deletesField(deleteExpr, field) and
@@ -75,6 +83,10 @@ where
   field.getType().getUnspecifiedType() instanceof PointerType and
   parameter.getType().getUnspecifiedType() instanceof PointerType and
   deleteExpr.getLocation().getStartLine() < assignment.getLocation().getStartLine() and
+  (
+    deleteExpr.getBasicBlock() = assignment.getBasicBlock() or
+    deleteExpr.getBasicBlock().getASuccessor*() = assignment.getBasicBlock()
+  ) and
   not rejectsSelfAlias(setter, field, parameter, deleteExpr)
 select assignment,
   "Owning setter deletes member $@ before storing parameter $@. SetX(GetX()) " +
