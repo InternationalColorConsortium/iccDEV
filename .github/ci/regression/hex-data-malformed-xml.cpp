@@ -162,11 +162,21 @@ std::string pseqMlucDoc(const char *payload, bool testModel, bool unknown = fals
     "</IccProfile>\n";
 }
 
+std::string pseqMlucEntityDoc(bool testModel)
+{
+  std::string doc = pseqMlucDoc(NULL, testModel, false, "&placeholder;");
+  size_t root = doc.find("<IccProfile>");
+
+  return doc.insert(root, "<!DOCTYPE IccProfile [<!ENTITY placeholder \"entity\">]>\n");
+}
+
 /* profileSequenceIdentifierType carries a fixed 16-byte hexadecimal ID and a
    nested mluc description for each entry. The writer always emits 32 digits
    and places LocalizedText below ProfileIdDesc. */
 std::string psidDoc(const char *id, const char *text)
 {
+  const std::string idAttribute = id ? std::string(" id=\"") + id + "\"" : "";
+
   return std::string(
     "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
     "<IccProfile>\n"
@@ -181,7 +191,7 @@ std::string psidDoc(const char *id, const char *text)
     "  </Header>\n"
     "  <Tags>\n"
     "    <profileSequenceIdentifierTag><profileSequenceIdentifierType>\n"
-    "      <ProfileSequenceId><ProfileIdDesc id=\"") + id + "\">\n"
+    "      <ProfileSequenceId><ProfileIdDesc") + idAttribute + ">\n"
     "        <LocalizedText LanguageCountry=\"enUS\">" + text + "</LocalizedText>\n"
     "      </ProfileIdDesc></ProfileSequenceId>\n"
     "    </profileSequenceIdentifierType></profileSequenceIdentifierTag>\n"
@@ -392,6 +402,11 @@ int main()
   }
   {
     std::string parseStr;
+    check(!loadDoc(pseqMlucEntityDoc(false), parseStr, "pseq-mfg-entity"),
+          "pseq manufacturer entity", "an entity reference was treated as an empty placeholder");
+  }
+  {
+    std::string parseStr;
     check(!loadDoc(pseqMlucDoc(NULL, false, false, "garbage"), parseStr, "pseq-mfg-text"),
           "pseq manufacturer direct text", "nonblank text was treated as an empty placeholder");
   }
@@ -409,6 +424,20 @@ int main()
                    "psid-malformed-id"),
           "psid malformed id", "the profile loaded and changed the identifier");
     check(has(parseStr, "Invalid ProfileIdDesc id"), "psid malformed id",
+          ("no diagnostic, parseStr was: " + parseStr).c_str());
+  }
+  {
+    std::string parseStr;
+    check(!loadDoc(psidDoc(NULL, "missing id"), parseStr, "psid-missing-id"),
+          "psid missing id", "the profile loaded a missing fixed-width identifier");
+    check(has(parseStr, "Invalid ProfileIdDesc id"), "psid missing id",
+          ("no diagnostic, parseStr was: " + parseStr).c_str());
+  }
+  {
+    std::string parseStr;
+    check(!loadDoc(psidDoc("", "empty id"), parseStr, "psid-empty-id"),
+          "psid empty id", "the profile loaded an empty fixed-width identifier");
+    check(has(parseStr, "Invalid ProfileIdDesc id"), "psid empty id",
           ("no diagnostic, parseStr was: " + parseStr).c_str());
   }
   {

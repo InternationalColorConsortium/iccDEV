@@ -3118,7 +3118,7 @@ bool icProfDescToXml(std::string &xml, CIccProfileDescStruct &p, std::string bla
 static bool icXmlHasNonPlaceholderContent(xmlNode *pNode)
 {
   for (pNode = pNode ? pNode->children : NULL; pNode; pNode = pNode->next) {
-    if (pNode->type == XML_ELEMENT_NODE)
+    if (pNode->type == XML_ELEMENT_NODE || pNode->type == XML_ENTITY_REF_NODE)
       return true;
 
     if ((pNode->type == XML_TEXT_NODE || pNode->type == XML_CDATA_SECTION_NODE) &&
@@ -5441,13 +5441,12 @@ bool CIccTagXmlProfileSequenceId::ParseXml(xmlNode *pNode, std::string &parseStr
     CIccProfileIdDesc desc;
     const icChar *szDesc = icXmlAttrValue(pNode, "id");
 
-    if (szDesc && *szDesc) {
-      if (!icXmlValidHexData(szDesc) ||
-          icXmlGetHexDataSize(szDesc) != sizeof(desc.m_profileID) ||
-          icXmlGetHexData(&desc.m_profileID, szDesc, sizeof(desc.m_profileID)) != sizeof(desc.m_profileID)) {
-        parseStr += "Invalid ProfileIdDesc id\n";
-        return false;
-      }
+    if (!szDesc || !*szDesc ||
+        !icXmlValidHexData(szDesc) ||
+        icXmlGetHexDataSize(szDesc) != sizeof(desc.m_profileID) ||
+        icXmlGetHexData(&desc.m_profileID, szDesc, sizeof(desc.m_profileID)) != sizeof(desc.m_profileID)) {
+      parseStr += "Invalid ProfileIdDesc id\n";
+      return false;
     }
 
     xmlAttr *langCode;
