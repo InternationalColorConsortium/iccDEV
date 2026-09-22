@@ -18,6 +18,11 @@
     and indentation of its own output.  icXmlValidHexData() keeps exactly that
     and refuses the rest, and the blob parsers call it before decoding.
 
+    profileSequenceIdentifierType had two more reader/writer asymmetries.  Its
+    fixed 16-byte ProfileIdDesc id ignored the decoder's byte count and skipped
+    malformed characters, while its LocalizedText search started at the parent
+    instead of its children and therefore discarded every description.
+
     Part 1 is the rule itself, including what must stay legal.  Part 2 drives
     it through the tag parsers that call it, by loading a profile document.
     Part 3 pins the deliberate exclusion: the profile header's ProfileID is
@@ -102,6 +107,77 @@ std::string mlucDoc(const char *payload)
     "</IccProfile>\n";
 }
 
+/* profileSequenceDescType embeds complete manufacturer and model description
+   tags. An empty mluc is the placeholder ICC.1:2022 Table 70 permits, but a
+   present malformed record must not be silently converted into one. */
+std::string pseqMlucDoc(const char *payload, bool testModel, bool unknown = false)
+{
+  const std::string tested = unknown
+    ? "<multiLocalizedUnicodeType><Unknown/></multiLocalizedUnicodeType>"
+    : payload
+    ? std::string("<multiLocalizedUnicodeType><LocalizedText LanguageCountry=\"enUS\">"
+                  "<HexTextData>") + payload +
+                  "</HexTextData></LocalizedText></multiLocalizedUnicodeType>"
+    : "<multiLocalizedUnicodeType></multiLocalizedUnicodeType>";
+  const std::string valid =
+    "<multiLocalizedUnicodeType><LocalizedText LanguageCountry=\"enUS\">valid"
+    "</LocalizedText></multiLocalizedUnicodeType>";
+  const std::string manufacturer = testModel ? valid : tested;
+  const std::string model = testModel ? tested : valid;
+
+  return std::string(
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+    "<IccProfile>\n"
+    "  <Header>\n"
+    "    <ProfileVersion>4.30</ProfileVersion>\n"
+    "    <ProfileDeviceClass>link</ProfileDeviceClass>\n"
+    "    <DataColourSpace>RGB </DataColourSpace>\n"
+    "    <PCS>RGB </PCS>\n"
+    "    <CreationDateTime>now</CreationDateTime>\n"
+    "    <RenderingIntent>Perceptual</RenderingIntent>\n"
+    "    <PCSIlluminant><XYZNumber X=\"0.9642\" Y=\"1.0000\" Z=\"0.8249\"/></PCSIlluminant>\n"
+    "  </Header>\n"
+    "  <Tags>\n"
+    "    <profileSequenceDescTag><profileSequenceDescType><ProfileSequence><ProfileDesc>\n"
+    "      <DeviceManufacturerSignature>test</DeviceManufacturerSignature>\n"
+    "      <DeviceModelSignature>test</DeviceModelSignature>\n"
+    "      <DeviceAttributes ReflectiveOrTransparency=\"reflective\" GlossyOrMatte=\"glossy\""
+    " MediaPolarity=\"positive\" MediaColour=\"colour\"/>\n"
+    "      <Technology></Technology>\n"
+    "      <DeviceManufacturer>") + manufacturer + "</DeviceManufacturer>\n" +
+    "      <DeviceModel>" + model + "</DeviceModel>\n" +
+    "    </ProfileDesc></ProfileSequence></profileSequenceDescType></profileSequenceDescTag>\n"
+    "  </Tags>\n"
+    "</IccProfile>\n";
+}
+
+/* profileSequenceIdentifierType carries a fixed 16-byte hexadecimal ID and a
+   nested mluc description for each entry. The writer always emits 32 digits
+   and places LocalizedText below ProfileIdDesc. */
+std::string psidDoc(const char *id, const char *text)
+{
+  return std::string(
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+    "<IccProfile>\n"
+    "  <Header>\n"
+    "    <ProfileVersion>4.30</ProfileVersion>\n"
+    "    <ProfileDeviceClass>mntr</ProfileDeviceClass>\n"
+    "    <DataColourSpace>RGB </DataColourSpace>\n"
+    "    <PCS>Lab </PCS>\n"
+    "    <CreationDateTime>now</CreationDateTime>\n"
+    "    <RenderingIntent>Perceptual</RenderingIntent>\n"
+    "    <PCSIlluminant><XYZNumber X=\"0.9642\" Y=\"1.0000\" Z=\"0.8249\"/></PCSIlluminant>\n"
+    "  </Header>\n"
+    "  <Tags>\n"
+    "    <profileSequenceIdentifierTag><profileSequenceIdentifierType>\n"
+    "      <ProfileSequenceId><ProfileIdDesc id=\"") + id + "\">\n"
+    "        <LocalizedText LanguageCountry=\"enUS\">" + text + "</LocalizedText>\n"
+    "      </ProfileIdDesc></ProfileSequenceId>\n"
+    "    </profileSequenceIdentifierType></profileSequenceIdentifierTag>\n"
+    "  </Tags>\n"
+    "</IccProfile>\n";
+}
+
 /* A profile carrying one private dataType tag with the given payload. */
 std::string profileDoc(const char *payload, const char *profileId)
 {
@@ -152,6 +228,24 @@ bool loadDoc(const std::string &doc, std::string &parseStr, const char *label)
   bool bLoaded = profile.LoadXml(path.c_str(), "", &parseStr);
   std::remove(path.c_str());
   return bLoaded;
+}
+
+bool roundTripDoc(const std::string &doc, std::string &xml, std::string &parseStr, const char *label)
+{
+  std::string path = std::string("hex-data-malformed-xml-") + label + ".xml";
+  FILE *f = std::fopen(path.c_str(), "wb");
+  if (!f) {
+    check(false, label, "could not write the document");
+    return false;
+  }
+  std::fwrite(doc.c_str(), 1, doc.size(), f);
+  std::fclose(f);
+
+  CIccProfileXml profile;
+  bool bLoaded = profile.LoadXml(path.c_str(), "", &parseStr);
+  bool bSerialized = bLoaded && profile.ToXml(xml);
+  std::remove(path.c_str());
+  return bSerialized;
 }
 
 } // namespace
@@ -219,6 +313,61 @@ int main()
     std::string parseStr;
     check(loadDoc(mlucDoc("0011"), parseStr, "mluc-control"), "HexTextData control",
           ("a well formed payload was refused: " + parseStr).c_str());
+  }
+
+  /* 2c. The profile-sequence parser must propagate those nested failures for
+     both embedded descriptions while retaining the spec-defined placeholder. */
+  {
+    std::string parseStr;
+    check(!loadDoc(pseqMlucDoc("0g11", false), parseStr, "pseq-mfg-malformed"),
+          "pseq manufacturer HexTextData 0g11", "the profile loaded and lost the payload");
+    check(has(parseStr, "Malformed hex"), "pseq manufacturer HexTextData 0g11",
+          ("no diagnostic, parseStr was: " + parseStr).c_str());
+  }
+  {
+    std::string parseStr;
+    check(!loadDoc(pseqMlucDoc("0g11", true), parseStr, "pseq-model-malformed"),
+          "pseq model HexTextData 0g11", "the profile loaded and lost the payload");
+    check(has(parseStr, "Malformed hex"), "pseq model HexTextData 0g11",
+          ("no diagnostic, parseStr was: " + parseStr).c_str());
+  }
+  {
+    std::string parseStr;
+    check(loadDoc(pseqMlucDoc(NULL, false), parseStr, "pseq-placeholder"),
+          "pseq empty mluc placeholder", ("the legal placeholder was refused: " + parseStr).c_str());
+  }
+  {
+    std::string parseStr;
+    check(!loadDoc(pseqMlucDoc(NULL, false, true), parseStr, "pseq-unknown-child"),
+          "pseq mluc unknown child", "a present malformed child was treated as an empty placeholder");
+  }
+
+  /* 2d. The profile-sequence identifier parser must validate the complete
+     fixed-width ID and start its LocalizedText search at the entry's children. */
+  {
+    std::string parseStr;
+    check(!loadDoc(psidDoc("0g112233445566778899aabbccddeeff", "malformed id"), parseStr,
+                   "psid-malformed-id"),
+          "psid malformed id", "the profile loaded and changed the identifier");
+    check(has(parseStr, "Invalid ProfileIdDesc id"), "psid malformed id",
+          ("no diagnostic, parseStr was: " + parseStr).c_str());
+  }
+  {
+    std::string parseStr;
+    check(!loadDoc(psidDoc("00112233", "short id"), parseStr, "psid-short-id"),
+          "psid short id", "the profile loaded a short fixed-width identifier");
+    check(has(parseStr, "Invalid ProfileIdDesc id"), "psid short id",
+          ("no diagnostic, parseStr was: " + parseStr).c_str());
+  }
+  {
+    std::string parseStr, xml;
+    check(roundTripDoc(psidDoc("00112233445566778899aabbccddeeff", "preserved description"),
+                       xml, parseStr, "psid-control"),
+          "psid control", ("a valid entry was refused: " + parseStr).c_str());
+    check(has(xml, "id=\"00112233445566778899AABBCCDDEEFF\""), "psid control",
+          "the fixed-width identifier did not round-trip");
+    check(has(xml, "preserved description"), "psid control",
+          "the nested LocalizedText was discarded");
   }
 
   /* 3. The header's ProfileID is deliberately not checked: 176 tracked
