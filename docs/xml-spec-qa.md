@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 International Color Consortium
+SPDX-License-Identifier: BSD-3-Clause
+-->
+
 # ICC.2 XML header quality assurance
 
 The focused XML specification gate converts native repository XML inputs to
@@ -20,6 +25,8 @@ Generated ICC files, PAWG JSON, and logs are transient and go to
 `/tmp/iccdev-xml-spec-qa` by default. Set `ICCDEV_TEST_OUTDIR` to preserve an
 isolated evidence directory. The native XML inputs are checked in under
 `.github/ci/test-data/xml-spec-qa`; the script never changes them.
+Each tool invocation has a 60-second default bound; set
+`ICCDEV_COMMAND_TIMEOUT` to a different positive integer when needed.
 
 ## Specification and implementation cross-reference
 
@@ -52,8 +59,8 @@ Its normalized spectral viewing-condition warning is retained in the evidence;
 the gate requires the final v5 validation result and exact header values.
 
 `iccRoundTrip` is exercised with a generated ICC.1 RGB display control for all
-four rendering intents. Its current rejection of Abstract, NamedColor, and
-MultiplexIdentification profile classes is asserted as an explicit capability
+four rendering intents. Its current rejection of the NamedColor and
+MultiplexIdentification fixture classes is asserted as an explicit capability
 boundary, not reported as a spectral or MCS transformation success.
 
 `iccPawgReport --json` must parse every generated profile and produce a summary.

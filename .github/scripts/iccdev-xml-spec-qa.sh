@@ -8,6 +8,7 @@
 
 #
 # Copyright (c) International Color Consortium.
+# SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -45,6 +46,7 @@
 #   ICCDEV_TEST_OUTDIR output directory for temporary profiles and logs
 #   ICCDEV_XML_SPEC_FIXTURES optional fixture directory override
 #   ICCDEV_PYTHON       Python 3 interpreter used for PAWG JSON validation
+#   ICCDEV_COMMAND_TIMEOUT per-command timeout in seconds (default: 60)
 
 set -uo pipefail
 
@@ -55,7 +57,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 FIXTURE_DIR="${ICCDEV_XML_SPEC_FIXTURES:-$REPO_ROOT/.github/ci/test-data/xml-spec-qa}"
 PYTHON="${ICCDEV_PYTHON:-python3}"
+COMMAND_TIMEOUT="${ICCDEV_COMMAND_TIMEOUT:-60}"
 mkdir -p "$OUTDIR"
+
+case "$COMMAND_TIMEOUT" in
+  ""|*[!0-9]*|0)
+    echo "[FAIL] ICCDEV_COMMAND_TIMEOUT must be a positive integer"
+    exit 1
+    ;;
+esac
 
 export ASAN_OPTIONS="${ASAN_OPTIONS:-halt_on_error=0,detect_leaks=0}"
 export UBSAN_OPTIONS="${UBSAN_OPTIONS:-halt_on_error=0,print_stacktrace=1}"
@@ -66,13 +76,57 @@ CRASH=0
 TOTAL=0
 ASAN_FINDINGS=0
 UBSAN_FINDINGS=0
+TIMEOUT_TOOL=""
+PORTABLE_TIMEOUT_SEQUENCE=0
+
+if command -v timeout >/dev/null 2>&1; then
+  TIMEOUT_TOOL="$(command -v timeout)"
+elif command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT_TOOL="$(command -v gtimeout)"
+fi
+
+run_bounded() {
+  if [ -n "$TIMEOUT_TOOL" ]; then
+    "$TIMEOUT_TOOL" "$COMMAND_TIMEOUT" "$@"
+    return $?
+  fi
+
+  PORTABLE_TIMEOUT_SEQUENCE=$((PORTABLE_TIMEOUT_SEQUENCE + 1))
+  local marker="$OUTDIR/.timeout-$$-$PORTABLE_TIMEOUT_SEQUENCE"
+  local command_pid watchdog_pid rc=0
+
+  rm -f "$marker"
+  "$@" &
+  command_pid=$!
+  (
+    sleep "$COMMAND_TIMEOUT"
+    if kill -0 "$command_pid" 2>/dev/null; then
+      printf "timeout\n" > "$marker"
+      kill -TERM "$command_pid" 2>/dev/null || true
+      sleep 1
+      kill -KILL "$command_pid" 2>/dev/null || true
+    fi
+  ) &
+  watchdog_pid=$!
+
+  wait "$command_pid" || rc=$?
+  kill "$watchdog_pid" 2>/dev/null || true
+  wait "$watchdog_pid" 2>/dev/null || true
+
+  if [ -f "$marker" ]; then
+    rm -f "$marker"
+    return 124
+  fi
+
+  return "$rc"
+}
 
 run_test() {
   local id="$1" description="$2"
   shift 2
   local log="$OUTDIR/$id.log" rc=0
 
-  timeout 60 "$@" > "$log" 2>&1 || rc=$?
+  run_bounded "$@" > "$log" 2>&1 || rc=$?
   if grep -q "ERROR: AddressSanitizer" "$log" 2>/dev/null; then
     ASAN_FINDINGS=$((ASAN_FINDINGS + 1))
     CRASH=$((CRASH + 1))
@@ -168,7 +222,7 @@ expect_reject() {
   local id="$1" description="$2" xml="$3" expected="$4"
   local icc="$OUTDIR/$id.icc" log="$OUTDIR/$id.log" rc=0
 
-  timeout 60 "$FROMXML" "$xml" "$icc" > "$log" 2>&1 || rc=$?
+  run_bounded "$FROMXML" "$xml" "$icc" > "$log" 2>&1 || rc=$?
   if grep -q "ERROR: AddressSanitizer" "$log" 2>/dev/null; then
     ASAN_FINDINGS=$((ASAN_FINDINGS + 1))
     CRASH=$((CRASH + 1))
@@ -194,7 +248,7 @@ expect_roundtrip_unsupported() {
   local name="$1" profile="$2"
   local log="$OUTDIR/$name.roundtrip-unsupported.log" rc=0
 
-  timeout 60 "$ROUNDTRIP" "$profile" 1 1 > "$log" 2>&1 || rc=$?
+  run_bounded "$ROUNDTRIP" "$profile" 1 1 > "$log" 2>&1 || rc=$?
   if grep -q "ERROR: AddressSanitizer" "$log"; then
     ASAN_FINDINGS=$((ASAN_FINDINGS + 1))
     CRASH=$((CRASH + 1))
@@ -250,7 +304,7 @@ run_pawg_evidence() {
   local json="$OUTDIR/$name.pawg.json" log="$OUTDIR/$name.pawg.log" rc=0
   local json_error=""
 
-  timeout 60 "$PAWG" --json "$profile" > "$json" 2> "$log" || rc=$?
+  run_bounded "$PAWG" --json "$profile" > "$json" 2> "$log" || rc=$?
   if grep -q "ERROR: AddressSanitizer" "$log"; then
     ASAN_FINDINGS=$((ASAN_FINDINGS + 1))
     CRASH=$((CRASH + 1))
@@ -349,10 +403,27 @@ assert_contains "MCS profile includes multiplex type array" \
 
 assert_contains "spectral signature survives XML round trip" \
   "$OUTDIR/spectral.roundtrip.xml" "<SpectralPCS>rs0005</SpectralPCS>"
+assert_contains "spectral range survives XML round trip" \
+  "$OUTDIR/spectral.roundtrip.xml" \
+  '<Wavelengths start="410.00000000" end="690.00000000" steps="5"/>'
 assert_contains "bi-spectral signature survives XML round trip" \
   "$OUTDIR/bispectral.roundtrip.xml" "<SpectralPCS>bs0006</SpectralPCS>"
+assert_contains "bi-spectral reflected range survives XML round trip" \
+  "$OUTDIR/bispectral.roundtrip.xml" \
+  '<Wavelengths start="420.00000000" end="680.00000000" steps="2"/>'
+assert_contains "bi-spectral incident range survives XML round trip" \
+  "$OUTDIR/bispectral.roundtrip.xml" \
+  '<Wavelengths start="300.00000000" end="500.00000000" steps="3"/>'
 assert_contains "MCS signature survives XML round trip" \
   "$OUTDIR/mcs.roundtrip.xml" "<MCS>mc0003</MCS>"
+assert_contains "MCS channel array survives XML round trip" \
+  "$OUTDIR/mcs.roundtrip.xml" "<UTF8TextArray>"
+assert_contains "MCS cyan channel name survives XML round trip" \
+  "$OUTDIR/mcs.roundtrip.xml" "<TextData><![CDATA[QA Cyan]]></TextData>"
+assert_contains "MCS violet channel name survives XML round trip" \
+  "$OUTDIR/mcs.roundtrip.xml" "<TextData><![CDATA[QA Violet]]></TextData>"
+assert_contains "MCS gold channel name survives XML round trip" \
+  "$OUTDIR/mcs.roundtrip.xml" "<TextData><![CDATA[QA Gold]]></TextData>"
 
 run_pawg_evidence "spectral" "$OUTDIR/spectral.icc"
 run_pawg_evidence "bispectral" "$OUTDIR/bispectral.icc"
