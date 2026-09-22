@@ -41,6 +41,13 @@
 
 #include <cstdio>
 #include <string>
+#include <vector>
+
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 #ifdef USEICCDEVNAMESPACE
 using namespace iccDEV;
@@ -110,9 +117,13 @@ std::string mlucDoc(const char *payload)
 /* profileSequenceDescType embeds complete manufacturer and model description
    tags. An empty mluc is the placeholder ICC.1:2022 Table 70 permits, but a
    present malformed record must not be silently converted into one. */
-std::string pseqMlucDoc(const char *payload, bool testModel, bool unknown = false)
+std::string pseqMlucDoc(const char *payload, bool testModel, bool unknown = false,
+                        const char *directContent = NULL)
 {
-  const std::string tested = unknown
+  const std::string tested = directContent
+    ? std::string("<multiLocalizedUnicodeType>") + directContent +
+      "</multiLocalizedUnicodeType>"
+    : unknown
     ? "<multiLocalizedUnicodeType><Unknown/></multiLocalizedUnicodeType>"
     : payload
     ? std::string("<multiLocalizedUnicodeType><LocalizedText LanguageCountry=\"enUS\">"
@@ -206,23 +217,60 @@ std::string profileDoc(const char *payload, const char *profileId)
     "</IccProfile>\n";
 }
 
+bool writeTempDoc(const std::string &doc, std::string &path, const char *label)
+{
+#if defined(_WIN32)
+  char tempPath[MAX_PATH];
+  char tempFile[MAX_PATH];
+  DWORD tempPathLength = GetTempPathA(sizeof(tempPath), tempPath);
+  if (!tempPathLength || tempPathLength >= sizeof(tempPath) ||
+      !GetTempFileNameA(tempPath, "icx", 0, tempFile)) {
+    check(false, label, "could not create a temporary document");
+    return false;
+  }
+
+  path = tempFile;
+  FILE *f = std::fopen(path.c_str(), "wb");
+#else
+  std::string name = std::string("/tmp/hex-data-malformed-xml-") + label + "-XXXXXX";
+  std::vector<char> writable(name.begin(), name.end());
+  writable.push_back('\0');
+
+  int fd = mkstemp(writable.data());
+  if (fd == -1) {
+    check(false, label, "could not create a temporary document");
+    return false;
+  }
+
+  path = writable.data();
+  FILE *f = fdopen(fd, "wb");
+#endif
+  if (!f) {
+#if !defined(_WIN32)
+    close(fd);
+#endif
+    std::remove(path.c_str());
+    check(false, label, "could not open the temporary document");
+    return false;
+  }
+  bool writeOk = std::fwrite(doc.c_str(), 1, doc.size(), f) == doc.size();
+  bool closeOk = std::fclose(f) == 0;
+  if (!writeOk || !closeOk) {
+    std::remove(path.c_str());
+    check(false, label, "could not write the complete document");
+    return false;
+  }
+
+  return true;
+}
+
 /* Writes the document to a temporary file and loads it, the way iccFromXml
    does.  Returns whether it loaded, with the parser's report. */
 bool loadDoc(const std::string &doc, std::string &parseStr, const char *label)
 {
-  std::string path = std::string("hex-data-malformed-xml-") + label + ".xml";
-  for (size_t i = 0; i < path.size(); i++) {
-    if (path[i] == ' ')
-      path[i] = '-';
-  }
-
-  FILE *f = std::fopen(path.c_str(), "wb");
-  if (!f) {
-    check(false, label, "could not write the document");
+  std::string path;
+  if (!writeTempDoc(doc, path, label))
     return false;
-  }
-  std::fwrite(doc.c_str(), 1, doc.size(), f);
-  std::fclose(f);
 
   CIccProfileXml profile;
   bool bLoaded = profile.LoadXml(path.c_str(), "", &parseStr);
@@ -232,14 +280,9 @@ bool loadDoc(const std::string &doc, std::string &parseStr, const char *label)
 
 bool roundTripDoc(const std::string &doc, std::string &xml, std::string &parseStr, const char *label)
 {
-  std::string path = std::string("hex-data-malformed-xml-") + label + ".xml";
-  FILE *f = std::fopen(path.c_str(), "wb");
-  if (!f) {
-    check(false, label, "could not write the document");
+  std::string path;
+  if (!writeTempDoc(doc, path, label))
     return false;
-  }
-  std::fwrite(doc.c_str(), 1, doc.size(), f);
-  std::fclose(f);
 
   CIccProfileXml profile;
   bool bLoaded = profile.LoadXml(path.c_str(), "", &parseStr);
@@ -338,8 +381,24 @@ int main()
   }
   {
     std::string parseStr;
+    check(loadDoc(pseqMlucDoc(NULL, false, false, " \n\t "), parseStr, "pseq-placeholder-whitespace"),
+          "pseq whitespace mluc placeholder",
+          ("formatting whitespace was treated as malformed: " + parseStr).c_str());
+  }
+  {
+    std::string parseStr;
     check(!loadDoc(pseqMlucDoc(NULL, false, true), parseStr, "pseq-unknown-child"),
           "pseq mluc unknown child", "a present malformed child was treated as an empty placeholder");
+  }
+  {
+    std::string parseStr;
+    check(!loadDoc(pseqMlucDoc(NULL, false, false, "garbage"), parseStr, "pseq-mfg-text"),
+          "pseq manufacturer direct text", "nonblank text was treated as an empty placeholder");
+  }
+  {
+    std::string parseStr;
+    check(!loadDoc(pseqMlucDoc(NULL, true, false, "<![CDATA[garbage]]>"), parseStr, "pseq-model-cdata"),
+          "pseq model direct CDATA", "nonblank CDATA was treated as an empty placeholder");
   }
 
   /* 2d. The profile-sequence identifier parser must validate the complete
@@ -357,6 +416,14 @@ int main()
     check(!loadDoc(psidDoc("00112233", "short id"), parseStr, "psid-short-id"),
           "psid short id", "the profile loaded a short fixed-width identifier");
     check(has(parseStr, "Invalid ProfileIdDesc id"), "psid short id",
+          ("no diagnostic, parseStr was: " + parseStr).c_str());
+  }
+  {
+    std::string parseStr;
+    check(!loadDoc(psidDoc("00112233445566778899aabbccddeeff00", "oversized id"), parseStr,
+                   "psid-oversized-id"),
+          "psid oversized id", "the profile loaded a truncated fixed-width identifier");
+    check(has(parseStr, "Invalid ProfileIdDesc id"), "psid oversized id",
           ("no diagnostic, parseStr was: " + parseStr).c_str());
   }
   {

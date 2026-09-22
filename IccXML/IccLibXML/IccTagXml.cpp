@@ -3115,11 +3115,21 @@ bool icProfDescToXml(std::string &xml, CIccProfileDescStruct &p, std::string bla
   return true;
 }
 
-static bool icXmlHasElementChild(xmlNode *pNode)
+static bool icXmlHasNonPlaceholderContent(xmlNode *pNode)
 {
   for (pNode = pNode ? pNode->children : NULL; pNode; pNode = pNode->next) {
     if (pNode->type == XML_ELEMENT_NODE)
       return true;
+
+    if ((pNode->type == XML_TEXT_NODE || pNode->type == XML_CDATA_SECTION_NODE) &&
+        pNode->content) {
+      const xmlChar *pText;
+
+      for (pText = pNode->content; *pText; pText++) {
+        if (*pText != ' ' && *pText != '\t' && *pText != '\r' && *pText != '\n')
+          return true;
+      }
+    }
   }
 
   return false;
@@ -3173,7 +3183,7 @@ bool icXmlParseProfDesc(xmlNode *pNode, CIccProfileDescStruct &p, std::string &p
             // placeholder.
             if (!pExt->ParseXml(pDevManNode->children, parseStr) &&
                 (tagSig != icSigMultiLocalizedUnicodeType ||
-                 icXmlHasElementChild(pDevManNode)))
+                 icXmlHasNonPlaceholderContent(pDevManNode)))
               return false;
           }            
         }
@@ -3204,7 +3214,7 @@ bool icXmlParseProfDesc(xmlNode *pNode, CIccProfileDescStruct &p, std::string &p
             // model, but propagate every failed nested record parse.
             if (!pExt->ParseXml(pDevModNode->children, parseStr) &&
                 (tagSig != icSigMultiLocalizedUnicodeType ||
-                 icXmlHasElementChild(pDevModNode)))
+                 icXmlHasNonPlaceholderContent(pDevModNode)))
               return false;
           }
         }
@@ -5433,6 +5443,7 @@ bool CIccTagXmlProfileSequenceId::ParseXml(xmlNode *pNode, std::string &parseStr
 
     if (szDesc && *szDesc) {
       if (!icXmlValidHexData(szDesc) ||
+          icXmlGetHexDataSize(szDesc) != sizeof(desc.m_profileID) ||
           icXmlGetHexData(&desc.m_profileID, szDesc, sizeof(desc.m_profileID)) != sizeof(desc.m_profileID)) {
         parseStr += "Invalid ProfileIdDesc id\n";
         return false;
