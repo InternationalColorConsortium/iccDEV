@@ -8522,6 +8522,50 @@ function(iccdev_add_encoding_inverse_lumamtx_test)
   endif()
 endfunction()
 
+# #1993: a ColorEncodingSpace profile names its encoding with the required
+# referenceNameTag (ICC.2:2023, ColorEncodingSpace profile, 8.7).
+# icConvertEncodingProfile looked a registry encoding up by the optional
+# colorSpaceNameTag alone, so a conforming profile without it could not be
+# converted and the override path never ran; an unregistered name was refused
+# even with a colorEncodingParamsTag present; and the validator checked only that
+# referenceNameTag existed.  The helper installs a stand-in registry and a
+# stand-in converter, so each case checks which name was looked up and exactly
+# which parameter values reach the conversion.
+function(iccdev_add_encoding_profile_reference_name_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccEncodingProfileReferenceNameTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/encoding-profile-reference-name.cpp"
+  )
+  target_link_libraries(iccEncodingProfileReferenceNameTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccEncodingProfileReferenceNameTest)
+
+  add_test(
+    NAME iccdev.encoding-profile-reference-name
+    COMMAND "$<TARGET_FILE:iccEncodingProfileReferenceNameTest>"
+  )
+  set_tests_properties(iccdev.encoding-profile-reference-name PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;encoding;validate;issue-1993;regression"
+  )
+  if(WIN32)
+    set(_encrefname_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccEncodingProfileReferenceNameTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _encrefname_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.encoding-profile-reference-name PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_encrefname_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # icConvertEncodingProfile layered a colour-encoding profile's local overrides by
 # calling DeleteElem then AttachElem on pStruct -- the struct it was iterating --
 # instead of on pParams, the copy of the base encoding profile's params. DeleteElem
@@ -9938,6 +9982,7 @@ if(WIN32)
   iccdev_add_encoding_surround_test()
   iccdev_add_encoding_lumamtx_test()
   iccdev_add_encoding_inverse_lumamtx_test()
+  iccdev_add_encoding_profile_reference_name_test()
   iccdev_add_encoding_override_test()
   iccdev_add_parser_restore_calls_test()
   iccdev_add_tag_layout_shared_data_test()
@@ -10354,6 +10399,7 @@ iccdev_add_datetime_parse_test()
 iccdev_add_encoding_surround_test()
 iccdev_add_encoding_lumamtx_test()
 iccdev_add_encoding_inverse_lumamtx_test()
+iccdev_add_encoding_profile_reference_name_test()
 iccdev_add_encoding_override_test()
 iccdev_add_parser_restore_calls_test()
 iccdev_add_tag_layout_shared_data_test()

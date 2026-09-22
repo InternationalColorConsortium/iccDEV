@@ -3025,6 +3025,39 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
       sReport += "Required tags missing.\n";
       rv = icMaxStatus(rv, icValidateNonCompliant);
     }
+    else {
+      // The referenceNameTag decides what else is required (ICC.2:2023,
+      // ColorEncodingSpace profile, 8.7; referenceNameTag, 9.2.108;
+      // colorSpaceNameTag, 9.2.50).  "ISO 22028-1" means the profile defines the
+      // encoding itself, so colorEncodingParamsTag and colorSpaceNameTag are both
+      // required.  Any other name is a registry encoding, where colorSpaceNameTag
+      // is optional but, when present, shall contain the same text.  Only the
+      // presence of referenceNameTag was checked before (#1993).
+      const CIccTag *pRefTag = FindTagConst(icSigReferenceNameTag);
+      const CIccTag *pNameTag = FindTagConst(icSigColorSpaceNameTag);
+      const icUChar *szRef = (pRefTag && pRefTag->GetType()==icSigUtf8TextType) ?
+                               ((const CIccTagUtf8Text*)pRefTag)->GetText() : NULL;
+      const icUChar *szName = (pNameTag && pNameTag->GetType()==icSigUtf8TextType) ?
+                                ((const CIccTagUtf8Text*)pNameTag)->GetText() : NULL;
+
+      if (szRef && !strcmp((const char*)szRef, "ISO 22028-1")) {
+        if (!GetTag(icSigColorEncodingParamsTag)) {
+          sReport += icMsgValidateNonCompliant;
+          sReport += "referenceNameTag is \"ISO 22028-1\" but colorEncodingParamsTag is missing.\n";
+          rv = icMaxStatus(rv, icValidateNonCompliant);
+        }
+        if (!pNameTag) {
+          sReport += icMsgValidateNonCompliant;
+          sReport += "referenceNameTag is \"ISO 22028-1\" but colorSpaceNameTag is missing.\n";
+          rv = icMaxStatus(rv, icValidateNonCompliant);
+        }
+      }
+      else if (szRef && szName && strcmp((const char*)szRef, (const char*)szName)) {
+        sReport += icMsgValidateNonCompliant;
+        sReport += "colorSpaceNameTag does not contain the same text as referenceNameTag.\n";
+        rv = icMaxStatus(rv, icValidateNonCompliant);
+      }
+    }
     return rv;
   }
   else {
