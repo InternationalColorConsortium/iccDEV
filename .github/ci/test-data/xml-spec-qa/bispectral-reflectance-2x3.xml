@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <ProfileVersion>5.00</ProfileVersion>
+    <ProfileDeviceClass>nmcl</ProfileDeviceClass>
+    <CreationDateTime>2026-09-22T12:00:00</CreationDateTime>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.96420288" Y="1.00000000" Z="0.82490540"/>
+    </PCSIlluminant>
+    <SpectralPCS>bs0006</SpectralPCS>
+    <SpectralRange>
+      <Wavelengths start="420" end="680" steps="2"/>
+    </SpectralRange>
+    <BiSpectralRange>
+      <Wavelengths start="300" end="500" steps="3"/>
+    </BiSpectralRange>
+  </Header>
+  <Tags>
+    <multiLocalizedUnicodeType>
+      <TagSignature>desc</TagSignature>
+      <LocalizedText LanguageCountry="enUS">Two-by-three bi-spectral XML QA</LocalizedText>
+    </multiLocalizedUnicodeType>
+    <tagArrayType>
+      <TagSignature>ncl2</TagSignature>
+      <ArraySignature>nmcl</ArraySignature>
+      <ArrayTags>
+        <tagStructureType>
+          <StructureSignature>tnt0</StructureSignature>
+          <MemberTags>
+            <float16NumberType>
+              <TagSignature>spec</TagSignature>
+              <Data>0 0 0 0 0 0</Data>
+            </float16NumberType>
+          </MemberTags>
+        </tagStructureType>
+        <tagStructureType>
+          <StructureSignature>nmcl</StructureSignature>
+          <MemberTags>
+            <utf8TextType>
+              <TagSignature>name</TagSignature>
+              <TextData>QA Fluorescent</TextData>
+            </utf8TextType>
+            <float16NumberType>
+              <TagSignature>spec</TagSignature>
+              <Data>0.10 0.20 0.30 0.40 0.50 0.60</Data>
+            </float16NumberType>
+          </MemberTags>
+        </tagStructureType>
+      </ArrayTags>
+    </tagArrayType>
+    <multiLocalizedUnicodeType>
+      <TagSignature>cprt</TagSignature>
+      <LocalizedText LanguageCountry="enUS">Copyright 2026 International Color Consortium</LocalizedText>
+    </multiLocalizedUnicodeType>
+  </Tags>
+</IccProfile>

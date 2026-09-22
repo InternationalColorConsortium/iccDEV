@@ -352,6 +352,12 @@ without signed-conversion sanitizer findings.
 and fails if `iccFromXml` emits sanitizer diagnostics from string-size
 arithmetic.
 
+`iccdev.xml-spec-qa` converts canonical ICC.2 spectral, bi-spectral, and MCS
+XML fixtures and pins exact header signatures, ranges, channel relationships,
+XML fidelity, malformed-input rejection, PAWG JSON generation, and the current
+`iccRoundTrip` class boundary. It is a Unix-like bash-backed full-tool test;
+see `docs/xml-spec-qa.md` for the specification matrix and interpretation.
+
 Windows full tool builds register these tests when all targets are available:
 
 | Test | Source |

@@ -67,6 +67,7 @@ Canonical regression scripts:
 - `.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh`
 - `.github/scripts/iccdev-applysearch-cli-args-regression.sh`
 - `.github/scripts/iccdev-heif-carrier-qa.sh`
+- `.github/scripts/iccdev-xml-spec-qa.sh`
 
 For regression workflow updates, use
 `.github/skills/regression-workflow-governance/SKILL.md` and
@@ -239,6 +240,7 @@ Key safety rules:
 | Cross-platform CI | `.github/prompts/cross-platform-ci.prompt.md` |
 | Manual iOS examples | `.github/prompts/ios-manual-examples.prompt.md` |
 | Regression workflow gate | `.github/prompts/add-regression-workflow.prompt.md` |
+| ICC.2 XML specification QA | `.github/prompts/icc2-xml-spec-qa.prompt.md` |
 | Maintainer AFL smoke | `.github/prompts/maintainer-afl-smoke.prompt.md` |
 | Maintainer CTest selection | `.github/prompts/maintainer-ci-ctest.prompt.md` |
 | Maintainer regression container | `.github/prompts/regression-container-maintainer.prompt.md` |
@@ -271,6 +273,7 @@ Key safety rules:
 | iccSpecSepToTiff QA | `.github/skills/specsep-qa/SKILL.md` |
 | IIS ISAPI endpoint QA | `.github/skills/iis-isapi-qa/SKILL.md` |
 | JSON/config regressions | `.github/skills/json-config-regression/SKILL.md` |
+| ICC.2 XML specification QA | `.github/skills/icc2-xml-spec-qa/SKILL.md` |
 | Regression workflow governance | `.github/skills/regression-workflow-governance/SKILL.md` |
 | Regression container maintainer | `.github/skills/regression-container-maintainer/SKILL.md` |
 | Maintainer CI and CTest | `.github/skills/maintainer-ci-ctest/SKILL.md` |

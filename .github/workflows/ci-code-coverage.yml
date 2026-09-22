@@ -515,6 +515,12 @@ jobs:
           printf 'iccRoundTrip: %s\n' "${roundtrip:-NOT FOUND}"
 
           mkdir -p coverage-report
+          ICCDEV_TOOLS_DIR="$build_dir/Tools" \
+          ICCDEV_TESTING_DIR="$GITHUB_WORKSPACE/Testing" \
+          ICCDEV_TEST_OUTDIR="$WORKSPACE_DIR/coverage-report/xml-spec-qa" \
+            "$GITHUB_WORKSPACE/.github/scripts/iccdev-xml-spec-qa.sh"
+          printf 'xml_spec_qa=pass\n' >> "$GITHUB_ENV"
+
           xml_fail_log="coverage-report/xml-roundtrip-failures.txt"
           xml_from_fail_log="coverage-report/xml-fromxml-failures.txt"
           rt_fail_log="coverage-report/icc-roundtrip-failures.txt"
@@ -852,6 +858,7 @@ jobs:
             "| Large profile CTest | ${ctest_large_profile_seconds:-n/a}s | iccdev.hybrid-pipeline |"
           summary_line "| iccDumpProfile | ${dump_pass:-0}/${dump_total:-0} pass | ${dump_fail:-0} failures |"
           summary_line "| XML to ICC | ${xml_converted:-0} converted | ${xml_failed:-0} iccToXml failures |"
+          summary_line "| ICC.2 XML specification QA | ${xml_spec_qa:-not run} | spectral, bi-spectral, MCS |"
           summary_line "| iccFromXml | ${xml_from_failed:-0} non-blocking exits | see exercise review |"
           summary_line \
             "| iccRoundTrip | ${rt_pass:-0}/${rt_suitable:-0} suitable pass | ${rt_fail:-0} non-blocking exits |"

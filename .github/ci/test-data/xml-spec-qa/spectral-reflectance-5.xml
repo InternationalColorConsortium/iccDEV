@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <ProfileVersion>5.00</ProfileVersion>
+    <ProfileDeviceClass>nmcl</ProfileDeviceClass>
+    <CreationDateTime>2026-09-22T12:00:00</CreationDateTime>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.96420288" Y="1.00000000" Z="0.82490540"/>
+    </PCSIlluminant>
+    <SpectralPCS>rs0005</SpectralPCS>
+    <SpectralRange>
+      <Wavelengths start="410" end="690" steps="5"/>
+    </SpectralRange>
+  </Header>
+  <Tags>
+    <multiLocalizedUnicodeType>
+      <TagSignature>desc</TagSignature>
+      <LocalizedText LanguageCountry="enUS">Five-sample reflectance XML QA</LocalizedText>
+    </multiLocalizedUnicodeType>
+    <tagArrayType>
+      <TagSignature>ncl2</TagSignature>
+      <ArraySignature>nmcl</ArraySignature>
+      <ArrayTags>
+        <tagStructureType>
+          <StructureSignature>tnt0</StructureSignature>
+          <MemberTags>
+            <float16NumberType>
+              <TagSignature>spec</TagSignature>
+              <Data>0 0 0 0 0</Data>
+            </float16NumberType>
+          </MemberTags>
+        </tagStructureType>
+        <tagStructureType>
+          <StructureSignature>nmcl</StructureSignature>
+          <MemberTags>
+            <utf8TextType>
+              <TagSignature>name</TagSignature>
+              <TextData>QA Reflectance</TextData>
+            </utf8TextType>
+            <float16NumberType>
+              <TagSignature>spec</TagSignature>
+              <Data>0.10 0.25 0.50 0.75 0.90</Data>
+            </float16NumberType>
+          </MemberTags>
+        </tagStructureType>
+      </ArrayTags>
+    </tagArrayType>
+    <multiLocalizedUnicodeType>
+      <TagSignature>cprt</TagSignature>
+      <LocalizedText LanguageCountry="enUS">Copyright 2026 International Color Consortium</LocalizedText>
+    </multiLocalizedUnicodeType>
+  </Tags>
+</IccProfile>
