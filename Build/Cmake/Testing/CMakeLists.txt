@@ -11355,6 +11355,24 @@ if(TARGET iccFromXml AND TARGET iccToXml AND TARGET iccApplyToLink)
   )
 endif()
 
+# ICC.2 specification-driven XML coverage for spectral PCS, bi-spectral PCS,
+# and MCS header fields. The script also records the current iccRoundTrip class
+# boundary and requires iccPawgReport to emit parseable evidence for each
+# profile without treating its ICC.1 rule set as an ICC.2 conformance oracle.
+if(TARGET iccFromXml AND TARGET iccToXml AND TARGET iccDumpProfile
+   AND TARGET iccRoundTrip AND TARGET iccPawgReport)
+  iccdev_add_script_test(
+    iccdev.xml-spec-qa
+    300
+    "iccdev;xml;icc2;spectral;bispectral;mcs;validation;qa;asan;issue-2671"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-xml-spec-qa.sh"
+  )
+  set_tests_properties(iccdev.xml-spec-qa PROPERTIES
+    SKIP_RETURN_CODE 77
+  )
+endif()
+
 if(ICCDEV_HAS_ICCCONNECT)
   iccdev_add_script_test(
     iccdev.iccconnect-search-cost-regressions

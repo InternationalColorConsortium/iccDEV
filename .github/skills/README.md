@@ -18,6 +18,7 @@ long command references.
 | `specsep-qa` | Running or diagnosing the repository-owned `iccSpecSepToTiff` QA suites and fixtures. |
 | `json-config-regression` | Editing JSON/profile config parsing or tests. |
 | `iis-isapi-qa` | Building, deploying, and validating the Windows IIS ISAPI HTTP and browser assessment surface. |
+| `icc2-xml-spec-qa` | Validating ICC.2 spectral, bi-spectral, and MCS XML header contracts with the profile tools. |
 | `maintainer-ci-ctest` | Updating maintainer-owned CI, CTest, CPack, sanitizer, workflow, or release gates. |
 | `maintainer-label-system` | Maintaining label taxonomy, path labeler rules, issue triage, PR status labels, and CodeQL label routing. |
 | `matlab-bindings-test` | Building and validating the MATLAB MEX gateway, IccJSON conversion, profiles, examples, dependencies, and lifecycle tests. |

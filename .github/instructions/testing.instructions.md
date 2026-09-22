@@ -96,6 +96,7 @@ Script-based gates live in `.github/scripts/`, including:
 - `iccdev-version-bcd-regression-tests.sh`
 - `iccdev-profile-visualize-tests.sh`
 - `iccdev-heif-carrier-qa.sh`
+- `iccdev-xml-spec-qa.sh` (ICC.2 spectral, bi-spectral, and MCS XML header matrix)
 
 When adding a new regression input, add the matching script or workflow assertion
 in the same change.

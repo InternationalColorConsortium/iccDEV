@@ -63,6 +63,7 @@ shares one source of truth. Update rules here, not in the mirrors.
 | Memcheck, Helgrind, DRD, Massif, and Callgrind | `docs/valgrind-analysis.md`, `.github/skills/valgrind-analysis/SKILL.md` |
 | Regression container prompt | `.github/prompts/regression-container-maintainer.prompt.md` |
 | Maintainer CTest selection and CI budget | `.github/skills/maintainer-ci-ctest/SKILL.md` |
+| ICC.2 spectral, bi-spectral, and MCS XML QA | `docs/xml-spec-qa.md`, `.github/skills/icc2-xml-spec-qa/SKILL.md` |
 | New CLI tool onboarding | `.github/prompts/add-new-tool.prompt.md` |
 | Manual iOS examples | `.github/prompts/ios-manual-examples.prompt.md` |
 | iOS CLUT editor planning | `.github/prompts/ios-clut-editor.prompt.md` |
