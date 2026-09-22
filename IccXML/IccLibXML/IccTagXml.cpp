@@ -3115,6 +3115,26 @@ bool icProfDescToXml(std::string &xml, CIccProfileDescStruct &p, std::string bla
   return true;
 }
 
+static bool icXmlHasNonPlaceholderContent(xmlNode *pNode)
+{
+  for (pNode = pNode ? pNode->children : NULL; pNode; pNode = pNode->next) {
+    if (pNode->type == XML_ELEMENT_NODE || pNode->type == XML_ENTITY_REF_NODE)
+      return true;
+
+    if ((pNode->type == XML_TEXT_NODE || pNode->type == XML_CDATA_SECTION_NODE) &&
+        pNode->content) {
+      const xmlChar *pText;
+
+      for (pText = pNode->content; *pText; pText++) {
+        if (*pText != ' ' && *pText != '\t' && *pText != '\r' && *pText != '\n')
+          return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 bool icXmlParseProfDesc(xmlNode *pNode, CIccProfileDescStruct &p, std::string &parseStr)
 {
   if (pNode->type==XML_ELEMENT_NODE && !icXmlStrCmp(pNode->name, "ProfileDesc")) {
@@ -3157,7 +3177,14 @@ bool icXmlParseProfDesc(xmlNode *pNode, CIccProfileDescStruct &p, std::string &p
             if (!pExt || !pExt->GetExtClassName() || strcmp(pExt->GetExtClassName(), "CIccTagXml"))
               return false;
 
-            pExt->ParseXml(pDevManNode->children, parseStr);
+            // ICC.1:2022 Table 70 permits a placeholder manufacturer as an
+            // empty multiLocalizedUnicodeType. Any actual child record still
+            // has to parse, or malformed text is silently replaced by that
+            // placeholder.
+            if (!pExt->ParseXml(pDevManNode->children, parseStr) &&
+                (tagSig != icSigMultiLocalizedUnicodeType ||
+                 icXmlHasNonPlaceholderContent(pDevManNode)))
+              return false;
           }            
         }
         else if (!icXmlStrCmp(pDescNode->name, "DeviceModel")) {
@@ -3183,7 +3210,12 @@ bool icXmlParseProfDesc(xmlNode *pNode, CIccProfileDescStruct &p, std::string &p
             if (!pExt || !pExt->GetExtClassName() || strcmp(pExt->GetExtClassName(), "CIccTagXml"))
               return false;
 
-            pExt->ParseXml(pDevModNode->children, parseStr);
+            // Preserve the same spec-defined empty mluc placeholder for the
+            // model, but propagate every failed nested record parse.
+            if (!pExt->ParseXml(pDevModNode->children, parseStr) &&
+                (tagSig != icSigMultiLocalizedUnicodeType ||
+                 icXmlHasNonPlaceholderContent(pDevModNode)))
+              return false;
           }
         }
       }
@@ -5409,13 +5441,18 @@ bool CIccTagXmlProfileSequenceId::ParseXml(xmlNode *pNode, std::string &parseStr
     CIccProfileIdDesc desc;
     const icChar *szDesc = icXmlAttrValue(pNode, "id");
 
-    if (szDesc && *szDesc)
-      icXmlGetHexData(&desc.m_profileID, szDesc, sizeof(desc.m_profileID));
+    if (!szDesc || !*szDesc ||
+        !icXmlValidHexData(szDesc) ||
+        icXmlGetHexDataSize(szDesc) != sizeof(desc.m_profileID) ||
+        icXmlGetHexData(&desc.m_profileID, szDesc, sizeof(desc.m_profileID)) != sizeof(desc.m_profileID)) {
+      parseStr += "Invalid ProfileIdDesc id\n";
+      return false;
+    }
 
     xmlAttr *langCode;
 
     xmlNode* pSubNode;
-    for (pSubNode = icXmlFindNode(pNode, "LocalizedText"); pSubNode; pSubNode = icXmlFindNode(pSubNode->next, "LocalizedText")) {
+    for (pSubNode = icXmlFindNode(pNode->children, "LocalizedText"); pSubNode; pSubNode = icXmlFindNode(pSubNode->next, "LocalizedText")) {
       if ((langCode = icXmlFindLanguageCountryAttr(pSubNode)) &&
         pSubNode->children) {
           std::string text;

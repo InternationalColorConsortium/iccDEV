@@ -122,6 +122,8 @@ function(iccdev_add_check_dependencies)
       iccFromXml
       iccJpegDump
       iccPngDump
+      iccProfilePlot
+      iccProfileVisualizePlot
       iccRoundTrip
       iccSpecSepToTiff
       iccTiffDump
@@ -2098,8 +2100,10 @@ endfunction()
 
 # Guards #2610: both hex decoders skipped whatever they could not read as a
 # pair of hex digits, so a dataType payload of "0g11" loaded as the single byte
-# 0x11 with no diagnostic.  Pins the rule, drives it through the tag parser, and
-# pins the header ProfileID exclusion the corpus depends on.
+# 0x11 with no diagnostic.  Also pins propagation through both embedded
+# profileSequenceDesc descriptions while preserving the empty mluc placeholder
+# ICC.1:2022 Table 70 permits, and pins the header ProfileID exclusion the
+# corpus depends on.
 function(iccdev_add_hex_data_malformed_xml_test)
   if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -2135,7 +2139,7 @@ function(iccdev_add_hex_data_malformed_xml_test)
   endif()
   set_tests_properties(iccdev.hex-data-malformed-xml PROPERTIES
     TIMEOUT 60
-    LABELS "iccdev;xml;hex;parse;issue-2610;regression"
+    LABELS "iccdev;xml;hex;parse;pseq;psid;roundtrip;parser-symmetry;issue-2610;regression"
   )
   if(WIN32)
     set(_icchexdatamalformedxmltest_env_mods
