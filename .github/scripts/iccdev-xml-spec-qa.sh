@@ -83,6 +83,8 @@ run_test() {
     CRASH=$((CRASH + 1))
     TOTAL=$((TOTAL + 1))
     printf "  [CRASH  ] %-55s exit=%d UBSAN\n" "$description" "$rc"
+  elif is_timeout_or_signal_status "$rc"; then
+    record_abnormal_exit "$description" "$rc"
   elif [ "$rc" -ne 0 ]; then
     FAIL=$((FAIL + 1))
     TOTAL=$((TOTAL + 1))
@@ -259,6 +261,8 @@ run_pawg_evidence() {
     CRASH=$((CRASH + 1))
     TOTAL=$((TOTAL + 1))
     printf "  [CRASH  ] %s PAWG report generation -- UBSAN\n" "$name"
+  elif is_timeout_or_signal_status "$rc"; then
+    record_abnormal_exit "$name PAWG report generation" "$rc"
   elif [ "$rc" -gt 1 ]; then
     record_fail "$name PAWG report generation -- exit=$rc"
   elif ! json_error="$(validate_pawg_json "$json" 2>&1)"; then
