@@ -11364,9 +11364,12 @@ if(TARGET iccFromXml AND TARGET iccToXml AND TARGET iccDumpProfile
   iccdev_add_script_test(
     iccdev.xml-spec-qa
     300
-    "iccdev;xml;icc2;spectral;bispectral;mcs;validation;qa;asan"
+    "iccdev;xml;icc2;spectral;bispectral;mcs;validation;qa;asan;issue-2671"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-xml-spec-qa.sh"
+  )
+  set_tests_properties(iccdev.xml-spec-qa PROPERTIES
+    SKIP_RETURN_CODE 77
   )
 endif()
 

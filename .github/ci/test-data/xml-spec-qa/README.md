@@ -16,7 +16,7 @@ relationships remain reviewable by inspection.
 | `bispectral-nonfinite-end.xml` | Bi-spectral end wavelength is not finite |
 | `bispectral-channel-mismatch.xml` | `bs0007` conflicts with the declared two-by-three ranges |
 | `nonbispectral-with-bi-range.xml` | Normal `rs0002` spectral PCS illegally carries a bi-spectral range |
-| `mcs-channel-mismatch.xml` | `mc0002` conflicts with three multiplex channel names |
+| `mcs-channel-mismatch.xml` | `mc0002` conflicts with six multiplex channel names |
 
 The positive profiles correspond to ICC.2:2023 clauses 7.2.21 through 7.2.24
 and Tables 21 and 22. The negative profiles isolate parser-width and

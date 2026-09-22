@@ -12,6 +12,10 @@ ICCDEV_TOOLS_DIR="$PWD/Build/Tools" \
   .github/scripts/iccdev-xml-spec-qa.sh
 ```
 
+Python 3 is required to parse and validate the complete `iccPawgReport` JSON
+document. CTest reports the focused gate as skipped with return code 77 when
+the interpreter is unavailable.
+
 Generated ICC files, PAWG JSON, and logs are transient and go to
 `/tmp/iccdev-xml-spec-qa` by default. Set `ICCDEV_TEST_OUTDIR` to preserve an
 isolated evidence directory. The native XML inputs are checked in under

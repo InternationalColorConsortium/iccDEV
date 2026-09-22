@@ -44,6 +44,7 @@
 #   ICCDEV_TESTING_DIR path to Testing
 #   ICCDEV_TEST_OUTDIR output directory for temporary profiles and logs
 #   ICCDEV_XML_SPEC_FIXTURES optional fixture directory override
+#   ICCDEV_PYTHON       Python 3 interpreter used for PAWG JSON validation
 
 set -uo pipefail
 
@@ -53,6 +54,7 @@ OUTDIR="${ICCDEV_TEST_OUTDIR:-/tmp/iccdev-xml-spec-qa}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 FIXTURE_DIR="${ICCDEV_XML_SPEC_FIXTURES:-$REPO_ROOT/.github/ci/test-data/xml-spec-qa}"
+PYTHON="${ICCDEV_PYTHON:-python3}"
 mkdir -p "$OUTDIR"
 
 export ASAN_OPTIONS="${ASAN_OPTIONS:-halt_on_error=0,detect_leaks=0}"
@@ -144,6 +146,22 @@ assert_contains() {
   fi
 }
 
+record_abnormal_exit() {
+  local description="$1" rc="$2"
+  if [ "$rc" -eq 124 ]; then
+    record_fail "$description -- timed out"
+  else
+    CRASH=$((CRASH + 1))
+    TOTAL=$((TOTAL + 1))
+    printf "  [CRASH  ] %s -- signal-band exit=%d\n" "$description" "$rc"
+  fi
+}
+
+is_timeout_or_signal_status() {
+  local rc="$1"
+  [ "$rc" -eq 124 ] || { [ "$rc" -ge 128 ] && [ "$rc" -le 192 ]; }
+}
+
 expect_reject() {
   local id="$1" description="$2" xml="$3" expected="$4"
   local icc="$OUTDIR/$id.icc" log="$OUTDIR/$id.log" rc=0
@@ -159,6 +177,8 @@ expect_reject() {
     CRASH=$((CRASH + 1))
     TOTAL=$((TOTAL + 1))
     printf "  [CRASH  ] %s -- UndefinedBehaviorSanitizer\n" "$description"
+  elif is_timeout_or_signal_status "$rc"; then
+    record_abnormal_exit "$description" "$rc"
   elif [ "$rc" -eq 0 ]; then
     record_fail "$description -- malformed input was accepted"
   elif ! grep -Fq "$expected" "$log"; then
@@ -183,6 +203,8 @@ expect_roundtrip_unsupported() {
     CRASH=$((CRASH + 1))
     TOTAL=$((TOTAL + 1))
     printf "  [CRASH  ] %s round-trip capability probe -- UBSAN\n" "$name"
+  elif is_timeout_or_signal_status "$rc"; then
+    record_abnormal_exit "$name round-trip capability probe" "$rc"
   elif [ "$rc" -ne 0 ] && grep -Fq "Unsupported profile class" "$log"; then
     record_pass "$name round-trip capability limit is explicit"
   else
@@ -190,9 +212,41 @@ expect_roundtrip_unsupported() {
   fi
 }
 
+validate_pawg_json() {
+  "$PYTHON" - "$1" <<'PYEOF'
+import json
+import sys
+
+path = sys.argv[1]
+with open(path, "r", encoding="utf-8") as stream:
+    report = json.load(stream)
+
+if not isinstance(report, dict):
+    raise ValueError("top-level PAWG report is not an object")
+if report.get("tool") != "iccPawgReport":
+    raise ValueError("unexpected or missing tool field")
+if report.get("load") != "parsed by IccProfLib":
+    raise ValueError("profile load evidence is missing")
+
+summary = report.get("summary")
+if not isinstance(summary, dict):
+    raise ValueError("summary is missing or is not an object")
+for field in ("total", "pass", "warn", "fail", "notApplicable", "gap", "notRun"):
+    if not isinstance(summary.get(field), int):
+        raise ValueError("summary.%s is missing or is not an integer" % field)
+
+items = report.get("items")
+if not isinstance(items, list):
+    raise ValueError("items is missing or is not an array")
+if summary["total"] != len(items):
+    raise ValueError("summary.total does not match the item count")
+PYEOF
+}
+
 run_pawg_evidence() {
   local name="$1" profile="$2"
   local json="$OUTDIR/$name.pawg.json" log="$OUTDIR/$name.pawg.log" rc=0
+  local json_error=""
 
   timeout 60 "$PAWG" --json "$profile" > "$json" 2> "$log" || rc=$?
   if grep -q "ERROR: AddressSanitizer" "$log"; then
@@ -207,10 +261,8 @@ run_pawg_evidence() {
     printf "  [CRASH  ] %s PAWG report generation -- UBSAN\n" "$name"
   elif [ "$rc" -gt 1 ]; then
     record_fail "$name PAWG report generation -- exit=$rc"
-  elif ! grep -Fq '"load": "parsed by IccProfLib"' "$json"; then
-    record_fail "$name PAWG report generation -- missing parsed evidence"
-  elif ! grep -Fq '"summary"' "$json"; then
-    record_fail "$name PAWG report generation -- missing summary"
+  elif ! json_error="$(validate_pawg_json "$json" 2>&1)"; then
+    record_fail "$name PAWG report generation -- invalid JSON: $json_error"
   else
     record_pass "$name PAWG JSON evidence generated (assessment exit=$rc)"
   fi
@@ -222,6 +274,11 @@ for required in "$FROMXML" "$TOXML" "$DUMP" "$ROUNDTRIP" "$PAWG"; do
     exit 1
   fi
 done
+
+if ! command -v "$PYTHON" >/dev/null 2>&1; then
+  echo "[SKIP] Python 3 is required to validate PAWG JSON: $PYTHON"
+  exit 77
+fi
 
 for required in "$SPECTRAL_XML" "$BISPECTRAL_XML" "$MCS_XML" \
                 "$SPECTRAL_STEPS_OVERFLOW_XML" \
@@ -244,14 +301,19 @@ run_test "xmlspec-bispectral-fromxml" "Build 2x3 bi-spectral profile" \
 run_test "xmlspec-mcs-fromxml" "Build three-channel MCS profile" \
   "$FROMXML" "$MCS_XML" "$OUTDIR/mcs.icc"
 run_test "xmlspec-control-fromxml" "Build ICC.1 display control profile" \
-  env --chdir="$ROUNDTRIP_DIR" "$FROMXML" "$(basename "$ROUNDTRIP_XML")" \
-  "$ROUNDTRIP_CONTROL"
+  "$FROMXML" "$ROUNDTRIP_XML" "$ROUNDTRIP_CONTROL"
 
 for name in spectral bispectral mcs; do
   run_test "xmlspec-$name-dump" "Validate and dump $name profile" \
     "$DUMP" -v "$OUTDIR/$name.icc"
   run_test "xmlspec-$name-toxml" "Serialize $name profile back to XML" \
     "$TOXML" "$OUTDIR/$name.icc" "$OUTDIR/$name.roundtrip.xml"
+done
+
+for name in spectral bispectral mcs; do
+  assert_contains "$name profile validates as ICCmax" \
+    "$OUTDIR/xmlspec-$name-dump.log" \
+    "Profile is valid for version 5.00"
 done
 
 assert_contains "spectral signature has five channels" \
@@ -280,9 +342,6 @@ assert_contains "MCS signature has three channels" \
 assert_contains "MCS profile includes multiplex type array" \
   "$OUTDIR/xmlspec-mcs-dump.log" \
   "multiplexTypeArrayTag"
-assert_contains "MCS profile validates as ICCmax" \
-  "$OUTDIR/xmlspec-mcs-dump.log" \
-  "Profile is valid for version 5.00"
 
 assert_contains "spectral signature survives XML round trip" \
   "$OUTDIR/spectral.roundtrip.xml" "<SpectralPCS>rs0005</SpectralPCS>"
