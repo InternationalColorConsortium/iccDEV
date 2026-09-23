@@ -520,6 +520,10 @@ keeps dependency discovery in the already populated parent tree instead of
 falling back to vcpkg's unrelated global classic tree. The
 `build-test-binaries` target builds both shared and static library artifacts
 that the test stages, so the focused CTest can run without a prior full build.
+The reusable Windows workflow builds this helper target serially. Concurrent
+helper builds have raced while writing shared runtime outputs on hosted Windows
+runners, even though unified-runtime builds disable per-target vcpkg app-local
+hooks. Keep `--parallel 1` until each helper has an isolated runtime output.
 
 ## Fixtures and Logs
 
@@ -541,6 +545,10 @@ Linux tool workflow, the artifact is named
 `iccdev-developer-report-<BuildType>` and contains a presentation `index.html`,
 CTest data, optional hybrid timing data, and optional all-tool FlameGraph
 data/SVGs.
+The reusable Windows workflow also records configure, main-build, helper-build,
+CTest discovery, and CTest wall times in `phase-timings.tsv`. Its sanitized job
+summary reports the runner CPU and memory, dynamic JUnit totals, and the five
+slowest tests without hard-coding the registered suite count.
 
 ## Maintainer Add-Test Process
 

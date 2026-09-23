@@ -113,6 +113,9 @@ Every edited workflow `run:` block must keep these properties:
 - `unset GITHUB_TOKEN || true`.
 - No direct `${{ }}` expressions inside shell code; pass values through `env:`.
 - Sanitized writes to `GITHUB_STEP_SUMMARY` and `GITHUB_OUTPUT`.
+- The reusable Windows build/test workflow keeps sanitized phase wall times,
+  runner CPU and memory, dynamic JUnit totals, and slowest-test timings in its
+  job summary.
 - Least-privilege permissions.
 - `pull_request_target` and `workflow_run` automation must not checkout or run
   PR-controlled code before mutating trusted state such as labels or checks.
