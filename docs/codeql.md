@@ -52,7 +52,7 @@ docker run --rm --user "$(id -u):$(id -g)" \
 
 The bootstrap paths in `ci-codeql-security.yml`, `ci-preflight-safety.yml`,
 `ci-codeql-query-tests.yml`, and the Dockerfile are pinned to CodeQL bundle
-2.27.0 and verify the official Linux release-asset SHA-256 before extraction.
+2.27.1 and verify the official Linux release-asset SHA-256 before extraction.
 Update the version and digest together in all four locations, then run:
 
 ```bash

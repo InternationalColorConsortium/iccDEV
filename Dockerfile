@@ -17,8 +17,8 @@ ARG BUILD_JOBS=32
 ARG FLAMEGRAPH_COMMIT=41fee1f99f9276008b7cd112fca19dc3ea84ac32
 ARG LLVM_MSAN_LIBCXX_COMMIT=1ab49a973e210e97d61e5db6557180dcb92c3e98
 ARG LIBXML2_MSAN_COMMIT=3d840e17858de03a09fba8b202e3a89267d5795a
-ARG CODEQL_VERSION=2.27.0
-ARG CODEQL_SHA256=8e870433e5c80d0e916c3c1aa9005fc88aab990bcdcc649fade9dfc4d7e94305
+ARG CODEQL_VERSION=2.27.1
+ARG CODEQL_SHA256=1d380f79896ededc654c7b21fafb3360136f1aeb678ad4df4df9af3910c6b815
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -76,7 +76,7 @@ RUN for attempt in 1 2 3; do \
     libxml2-16=2.15.2+dfsg-0.1ubuntu0.2 \
     libxml2-dev=2.15.2+dfsg-0.1ubuntu0.2 \
     lcov=2.4-3 \
-    linux-perf=7.0.0-31.31 \
+    linux-perf=7.0.0-34.34 \
     lsb-release=12.1-2build1 \
     llvm-22=1:22.1.2-1ubuntu1 \
     llvm-22-tools=1:22.1.2-1ubuntu1 \
