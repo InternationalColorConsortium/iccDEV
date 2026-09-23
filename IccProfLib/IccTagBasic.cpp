@@ -3123,8 +3123,8 @@ CIccTagNamedColor2::CIccTagNamedColor2(int nSize/*=1*/, int nDeviceCoords/*=0*/)
   if (nDeviceCoords>0)
     nDeviceCoords--;
 
-  m_szPrefix[0] = '\0';
-  m_szSufix[0] = '\0';
+  memset(m_szPrefix, 0, sizeof(m_szPrefix));
+  memset(m_szSufix, 0, sizeof(m_szSufix));
   m_csPCS = icSigUnknownData;
   m_csDevice = icSigUnknownData;
 
