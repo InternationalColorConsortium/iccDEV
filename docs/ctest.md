@@ -202,6 +202,29 @@ ctest --test-dir /tmp/iccdev-libpng-build \
   --no-tests=error
 ```
 
+## External OpenImageIO ICC and EXIF CTest (#2657)
+
+`iccdev.openimageio-icc-qa` is registered by the standalone
+`.github/ci/tooling/openimageio/qa` wrapper, not by the main `Build/Cmake`
+project. The manually dispatched workflow pins OpenImageIO commit
+`8004015ace460bf7e9019514f6d8c6c677e6e7ae`, proves the unpatched fault
+contract, applies the tracked patch, and rebuilds with ASan+UBSan.
+
+The fixed CTest covers alignment-safe big-endian EXIF output, Canon MakerNote
+element sizing and endian propagation, strict JPEG ICC error propagation,
+declared `mluc` tag boundaries, JPEG2000 encoder failure propagation, all five
+progression orders, and a byte-identical JP2 ICC round-trip control.
+
+Always run discovery and the focused patched test:
+
+```bash
+ctest --test-dir /tmp/iccdev-openimageio-qa -N --no-tests=error
+ctest --test-dir /tmp/iccdev-openimageio-qa \
+  -R '^iccdev\.openimageio-icc-qa$' \
+  --output-on-failure \
+  --no-tests=error
+```
+
 ## Registered Suites
 
 | Test | Source |

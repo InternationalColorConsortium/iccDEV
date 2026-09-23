@@ -1,0 +1,288 @@
+diff --git a/src/jpeg.imageio/jpeginput.cpp b/src/jpeg.imageio/jpeginput.cpp
+index 56d52fe0b..1426e44d1 100644
+--- a/src/jpeg.imageio/jpeginput.cpp
++++ b/src/jpeg.imageio/jpeginput.cpp
+@@ -453,7 +453,9 @@ JpgInput::open(const std::string& name, ImageSpec& newspec)
+         }
+     }
+ 
+-    read_icc_profile(&m_cinfo, m_spec);  /// try to read icc profile
++    if (!read_icc_profile(&m_cinfo, m_spec)
++        && OIIO::get_int_attribute("imageinput:strict"))
++        return false;
+ 
+     // Try to interpret as Ultra HDR image.
+     // The libultrahdr API requires to load the whole file content in memory
+diff --git a/src/jpeg2000.imageio/jpeg2000output.cpp b/src/jpeg2000.imageio/jpeg2000output.cpp
+index 0054138fc..d390ff4e5 100644
+--- a/src/jpeg2000.imageio/jpeg2000output.cpp
++++ b/src/jpeg2000.imageio/jpeg2000output.cpp
+@@ -328,7 +328,7 @@ Jpeg2000Output::write_scanline(int y, int z, TypeDesc format, const void* data,
+             copy_scanline<uint16_t>(y, z, data);
+ 
+     if (y == m_spec.height - 1)
+-        save_image();
++        return save_image();
+ 
+     return true;
+ }
+@@ -644,7 +644,7 @@ Jpeg2000Output::setup_compression_params()
+     const ParamValue* progression_order
+         = m_spec.find_attribute("jpeg2000:ProgressionOrder", TypeDesc::STRING);
+     if (progression_order && progression_order->data()) {
+-        std::string prog_order((const char*)progression_order->data());
++        std::string prog_order = progression_order->get_string();
+         m_compression_parameters.prog_order = get_progression_order(prog_order);
+     }
+ 
+@@ -667,7 +667,7 @@ Jpeg2000Output::get_progression_order(const std::string& progression_order)
+         return OPJ_RPCL;
+     else if (progression_order == "PCRL")
+         return OPJ_PCRL;
+-    else if (progression_order == "PCRL")
++    else if (progression_order == "CPRL")
+         return OPJ_CPRL;
+     return OPJ_PROG_UNKNOWN;
+ }
+diff --git a/src/libOpenImageIO/exif-canon.cpp b/src/libOpenImageIO/exif-canon.cpp
+index 21e4e43de..9652a2714 100644
+--- a/src/libOpenImageIO/exif-canon.cpp
++++ b/src/libOpenImageIO/exif-canon.cpp
+@@ -975,7 +975,8 @@ encode_indexed_tag (int tifftag, TIFFDataType tifftype, // TIFF tag and type
+                     std::vector<char>& data,          // data blob to add to
+                     std::vector<TIFFDirEntry> &dirs,  // TIFF dirs to add to
+                     const ImageSpec& spec,            // spec to get attribs from
+-                    size_t offset_correction)         // offset correction
++                    size_t offset_correction,         // offset correction
++                    OIIO::endian endianreq)           // requested byte order
+ {
+     // array length is determined by highest index value
+     std::vector<T> array (indices.back().value + 1, T(0));
+@@ -992,16 +993,37 @@ encode_indexed_tag (int tifftag, TIFFDataType tifftype, // TIFF tag and type
+     if (anyfound)
+         append_tiff_dir_entry(dirs, data, tifftag, tifftype,
+                               array.size(), as_bytes(make_cspan(array)),
+-                              offset_correction);
++                              offset_correction, 0, endianreq);
+ }
+ 
+-
+-
++template<typename T>
++static void
++encode_integer_tag (int tifftag, TIFFDataType tifftype, size_t count,
++                    std::vector<char>& data,
++                    std::vector<TIFFDirEntry> &dirs,
++                    const ParamValue& param, size_t offset_correction,
++                    OIIO::endian endianreq)
++{
++    size_t nvalues = param.nvalues() * param.type().basevalues();
++    if (nvalues < count)
++        return;
++    std::vector<T> values(count);
++    cspan<T> source = param.as_cspan<T>();
++    if (source.size() >= count)
++        std::copy_n(source.begin(), count, values.begin());
++    else
++        for (size_t i = 0; i < count; ++i)
++            values[i] = T(param.get_int_indexed(i));
++    append_tiff_dir_entry(dirs, data, tifftag, tifftype, count,
++                          as_bytes(make_cspan(values)), offset_correction, 0,
++                          endianreq);
++}
+ 
+ void
+ encode_canon_makernote (std::vector<char>& data,
+                         std::vector<TIFFDirEntry> &makerdirs,
+-                        const ImageSpec& spec, size_t offset_correction)
++                        const ImageSpec& spec, size_t offset_correction,
++                        OIIO::endian endianreq)
+ {
+     // Easy ones that get coded straight from the attribs
+     for (const TagInfo& t : canon_maker_tag_table) {
+@@ -1009,35 +1031,51 @@ encode_canon_makernote (std::vector<char>& data,
+             continue;
+         if (const ParamValue* param = spec.find_attribute (t.name)) {
+             size_t count = t.tiffcount;
+-            const void* d = param->data();
+             if (t.tifftype == TIFF_ASCII) {
+                 // special case: strings need their real length, plus
+                 // trailing null, and the data must be the characters.
+-                d = param->get_ustring().c_str();
+-                count = param->get_ustring().size() + 1;
++                ustring s = param->get_ustring();
++                count = s.size() + 1;
++                append_tiff_dir_entry(makerdirs, data, t.tifftag, t.tifftype,
++                                      count, as_bytes(s.data(), count),
++                                      offset_correction, 0, endianreq);
++            } else if (t.tifftype == TIFF_BYTE) {
++                encode_integer_tag<uint8_t>(t.tifftag, t.tifftype, count, data,
++                                            makerdirs, *param,
++                                            offset_correction, endianreq);
++            } else if (t.tifftype == TIFF_SHORT) {
++                encode_integer_tag<uint16_t>(t.tifftag, t.tifftype, count, data,
++                                             makerdirs, *param,
++                                             offset_correction, endianreq);
++            } else if (t.tifftype == TIFF_LONG) {
++                encode_integer_tag<uint32_t>(t.tifftag, t.tifftype, count, data,
++                                             makerdirs, *param,
++                                             offset_correction, endianreq);
+             }
+-            append_tiff_dir_entry(makerdirs, data, t.tifftag, t.tifftype,
+-                                  count, as_bytes(d, count),
+-                                  offset_correction);
+         }
+     }
+ 
+     // Hard ones that need to fill in complicated structures
+     encode_indexed_tag<int16_t> (CANON_CAMERASETTINGS, TIFF_SSHORT,
+                                  canon_camerasettings_indices,
+-                                 data, makerdirs, spec, offset_correction);
++                                 data, makerdirs, spec, offset_correction,
++                                 endianreq);
+     encode_indexed_tag<uint16_t> (CANON_FOCALLENGTH, TIFF_SHORT,
+                                  canon_focallength_indices,
+-                                 data, makerdirs, spec, offset_correction);
++                                 data, makerdirs, spec, offset_correction,
++                                 endianreq);
+     encode_indexed_tag<int16_t> (CANON_SHOTINFO, TIFF_SSHORT,
+                                  canon_shotinfo_indices,
+-                                 data, makerdirs, spec, offset_correction);
++                                 data, makerdirs, spec, offset_correction,
++                                 endianreq);
+     encode_indexed_tag<int16_t> (CANON_SHOTINFO, TIFF_SSHORT,
+                                  canon_shotinfo_indices,
+-                                 data, makerdirs, spec, offset_correction);
++                                 data, makerdirs, spec, offset_correction,
++                                 endianreq);
+     encode_indexed_tag<int16_t> (CANON_PANORAMA, TIFF_SSHORT,
+                                  canon_panorama_indices,
+-                                 data, makerdirs, spec, offset_correction);
++                                 data, makerdirs, spec, offset_correction,
++                                 endianreq);
+ }
+ 
+ 
+diff --git a/src/libOpenImageIO/exif.cpp b/src/libOpenImageIO/exif.cpp
+index c98ebc803..7b9957b75 100644
+--- a/src/libOpenImageIO/exif.cpp
++++ b/src/libOpenImageIO/exif.cpp
+@@ -1164,6 +1164,19 @@ pvt::decode_ifd(cspan<uint8_t> buf, size_t ifd_offset, ImageSpec& spec,
+ 
+ 
+ 
++// Swap multi-byte values stored in a byte buffer that may not have the
++// alignment required by their underlying type.
++static void
++swap_endian_unaligned(char* data, size_t count, size_t valuesize)
++{
++    for (size_t i = 0; i < count; ++i) {
++        char* value = data + i * valuesize;
++        std::reverse(value, value + valuesize);
++    }
++}
++
++
++
+ void
+ pvt::append_tiff_dir_entry(std::vector<TIFFDirEntry>& dirs,
+                            std::vector<char>& data, int tag, TIFFDataType type,
+@@ -1211,15 +1224,15 @@ pvt::append_tiff_dir_entry(std::vector<TIFFDirEntry>& dirs,
+             OIIO::swap_endian(&dir.tdir_offset);
+         if (ptr) {
+             if (type == TIFF_SHORT || type == TIFF_SSHORT)
+-                OIIO::swap_endian((uint16_t*)ptr, count);
++                swap_endian_unaligned(ptr, count, sizeof(uint16_t));
+             if (type == TIFF_LONG || type == TIFF_SLONG || type == TIFF_FLOAT
+                 || type == TIFF_IFD)
+-                OIIO::swap_endian((uint32_t*)ptr, count);
++                swap_endian_unaligned(ptr, count, sizeof(uint32_t));
+             if (type == TIFF_LONG8 || type == TIFF_SLONG8 || type == TIFF_DOUBLE
+                 || type == TIFF_IFD8)
+-                OIIO::swap_endian((uint64_t*)ptr, count);
++                swap_endian_unaligned(ptr, count, sizeof(uint64_t));
+             if (type == TIFF_RATIONAL || type == TIFF_SRATIONAL)
+-                OIIO::swap_endian((uint32_t*)ptr, count * 2);
++                swap_endian_unaligned(ptr, count * 2, sizeof(uint32_t));
+         }
+     }
+     // Don't double-add
+@@ -1448,7 +1461,8 @@ encode_exif(const ImageSpec& spec, std::vector<char>& blob,
+     // If we're a canon camera, construct the dirs for the Makernote,
+     // with the data adding to the main blob.
+     if (Strutil::iequals(spec.get_string_attribute("Make"), "Canon"))
+-        OIIO::pvt::encode_canon_makernote(blob, makerdirs, spec, tiffstart);
++        OIIO::pvt::encode_canon_makernote(blob, makerdirs, spec, tiffstart,
++                                          endianreq);
+ 
+ #if DEBUG_EXIF_WRITE
+     std::cerr << "Blob header size " << blob.size() << "\n";
+diff --git a/src/libOpenImageIO/exif.h b/src/libOpenImageIO/exif.h
+index 361cef5c2..9ab10e0f0 100644
+--- a/src/libOpenImageIO/exif.h
++++ b/src/libOpenImageIO/exif.h
+@@ -168,9 +168,9 @@ bool decode_ifd (cspan<uint8_t> buf, size_t ifd_offset,
+ 
+ void encode_canon_makernote (std::vector<char>& exifblob,
+                              std::vector<TIFFDirEntry> &exifdirs,
+-                             const ImageSpec& spec, size_t offset_correction);
++                             const ImageSpec& spec, size_t offset_correction,
++                             OIIO::endian endianreq);
+ 
+ }  // end namespace pvt
+ 
+ OIIO_NAMESPACE_END
+-
+diff --git a/src/libOpenImageIO/icc.cpp b/src/libOpenImageIO/icc.cpp
+index 6b70d8c71..c6599262b 100644
+--- a/src/libOpenImageIO/icc.cpp
++++ b/src/libOpenImageIO/icc.cpp
+@@ -376,22 +376,23 @@ decode_icc_profile(cspan<uint8_t> iccdata, ImageSpec& spec, std::string& error)
+             // 4-byte offset (from the tag start, not from the ICC start!) to
+             // a zero-terminated big endian utf-16 string. We're just going to
+             // grab the english language version for now.
+-            size_t where = tag.offset + 4;  // we already read the "mluc"
++            cspan<uint8_t> tagdata = iccdata.subspan(tag.offset, tag.size);
++            size_t where = 4;  // we already read the "mluc"
+             where += 4;                     // skip zero bytes
+             uint32_t nrecords   = 0;
+             uint32_t recordsize = 0;
+-            if (!extract(iccdata, where, nrecords, error)
+-                || !extract(iccdata, where, recordsize, error)
++            if (!extract(tagdata, where, nrecords, error)
++                || !extract(tagdata, where, recordsize, error)
+                 || recordsize != 12) {
+                 return false;
+             }
+             for (uint32_t r = 0; r < nrecords; ++r) {
+                 uint16_t language = 0, country = 0;
+                 uint32_t len = 0, stroffset = 0;
+-                if (!extract(iccdata, where, language, error)
+-                    || !extract(iccdata, where, country, error)
+-                    || !extract(iccdata, where, len, error)
+-                    || !extract(iccdata, where, stroffset, error)) {
++                if (!extract(tagdata, where, language, error)
++                    || !extract(tagdata, where, country, error)
++                    || !extract(tagdata, where, len, error)
++                    || !extract(tagdata, where, stroffset, error)) {
+                     return false;
+                 }
+                 if (language == ('e' << 8) + 'n') {
+@@ -399,15 +400,13 @@ decode_icc_profile(cspan<uint8_t> iccdata, ImageSpec& spec, std::string& error)
+                     // Strutil::print(
+                     //     "eng len={} stfoffset={} ({:x}) wcharsize={}\n", len,
+                     //     stroffset, tag.offset + stroffset, sizeof(wchar_t));
+-                    if (!range_in_bounds(uint64_t(tag.offset) + stroffset, len,
+-                                         iccdata.size())) {
++                    if (!range_in_bounds(stroffset, len, tagdata.size())) {
+                         error = format(
+                             "ICC profile tag {} appears to contain corrupted/invalid data",
+                             signature);
+                         return false;  // Non-sensical: tag extends beyond icc data block
+                     }
+-                    const uint8_t* start = iccdata.data() + tag.offset
+-                                           + stroffset;
++                    const uint8_t* start = tagdata.data() + stroffset;
+                     // The actual data is UTF-16. Copy it out byte-wise (memcpy)
+                     // because `start` is at a file-controlled offset and may
+                     // not be 2-byte aligned (UBSan alignment).
