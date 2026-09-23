@@ -115,9 +115,9 @@ jobs:
             # this pin synchronized with the other workflow pins and Dockerfile:
             #   gh api repos/github/codeql-action/releases/tags/codeql-bundle-v"$CODEQL_VER" \
             #     --jq '.assets[]|select(.name=="codeql-bundle-linux64.tar.gz").digest'
-            CODEQL_VER="2.27.0"
+            CODEQL_VER="2.27.1"
             CODEQL_ARCHIVE="/tmp/codeql-bundle-linux64.tar.gz"
-            CODEQL_SHA256="8e870433e5c80d0e916c3c1aa9005fc88aab990bcdcc649fade9dfc4d7e94305"
+            CODEQL_SHA256="1d380f79896ededc654c7b21fafb3360136f1aeb678ad4df4df9af3910c6b815"
             CODEQL_URL="https://github.com/github/codeql-action/releases/download"
             curl -fsSL --retry 3 \
               -o "${CODEQL_ARCHIVE}" \
