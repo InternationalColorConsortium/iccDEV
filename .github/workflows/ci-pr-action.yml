@@ -594,7 +594,10 @@ jobs:
           fi
 
           declare -A classifier_keys_seen=()
-          if ! classifier_output="$(printf '%s\n' "$changed_files" | "$classifier")"; then
+          if ! classifier_output="$(
+            printf '%s\n' "$changed_files" |
+              env -u GH_TOKEN -u GITHUB_TOKEN "$classifier"
+          )"; then
             echo "PR path classifier failed" >&2
             exit 1
           fi

@@ -48,6 +48,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           IMAGE_TAG: ${{ inputs.regression_image_tag || 'latest' }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -64,6 +65,9 @@ jobs:
           fi
 
           image_tag="ghcr.io/internationalcolorconsortium/iccdev:${IMAGE_TAG}"
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io \
+            --username "$GITHUB_ACTOR" --password-stdin
+          unset GHCR_TOKEN
           docker pull "$image_tag"
 
           image_ref="$(docker image inspect "$image_tag" --format '{{index .RepoDigests 0}}')"
