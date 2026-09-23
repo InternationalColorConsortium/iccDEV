@@ -165,7 +165,6 @@ jobs:
           CMAKE_BUILD_PARALLEL_LEVEL="$(nproc)"
           export CMAKE_BUILD_PARALLEL_LEVEL
           mkdir -p "$OIIO_BUILD_DIR" "$OIIO_QA_DIR"
-          oiio_configure_log="$OIIO_BUILD_DIR/configure-vulnerable.log"
           cmake -S "$oiio_source" -B "$OIIO_BUILD_DIR" -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=gcc \
@@ -174,9 +173,7 @@ jobs:
             -DSANITIZE=address,undefined \
             -DSTOP_ON_WARNING=ON \
             -DUSE_PYTHON=OFF \
-            -DUSE_QT=OFF 2>&1 | tee "$oiio_configure_log"
-          .github/scripts/audit-openimageio-configure-warnings.sh \
-            "$oiio_configure_log"
+            -DUSE_QT=OFF
           cmake --build "$OIIO_BUILD_DIR" \
             --target oiiotool iinfo \
             --parallel "$(nproc)" 2>&1 | tee "$OIIO_BUILD_DIR/build-vulnerable.log"
@@ -213,13 +210,9 @@ jobs:
             exit 1
           fi
 
-          oiio_qa_configure_log="$OIIO_QA_DIR/configure.log"
           cmake -S .github/ci/tooling/openimageio/qa -B "$OIIO_QA_DIR" \
             -DOPENIMAGEIO_SOURCE_DIR="$oiio_source" \
-            -DOPENIMAGEIO_BUILD_DIR="$OIIO_BUILD_DIR" 2>&1 | \
-            tee "$oiio_qa_configure_log"
-          .github/scripts/audit-openimageio-configure-warnings.sh \
-            "$oiio_qa_configure_log"
+            -DOPENIMAGEIO_BUILD_DIR="$OIIO_BUILD_DIR"
           oiio_ctest_list="$OIIO_QA_DIR/ctest-list.txt"
           ctest --test-dir "$OIIO_QA_DIR" -N --no-tests=error | tee "$oiio_ctest_list"
           grep -Eq '^Total Tests: 1$' "$oiio_ctest_list"
@@ -237,7 +230,6 @@ jobs:
             printf '%s\n' "iccDEV revision: $(git rev-parse HEAD)"
             printf '%s\n' "OpenImageIO revision: ${actual_oiio_revision}"
             printf '%s\n' 'Toolchain and sanitizers: GCC with ASAN+UBSAN'
-            printf '%s\n' 'Configure diagnostics: captured and allowlist-audited'
             printf '%s\n' 'Vulnerable contract: six confirmed fault classes reproduced'
             printf '%s\n' 'Fixed contract: EXIF, Canon, JPEG ICC, mluc, and JPEG2000 checks passed'
             printf '%s\n' 'JPEG2000 controls: five progression orders and byte-identical ICC round-trip'

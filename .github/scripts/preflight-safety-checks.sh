@@ -1058,6 +1058,7 @@ else
 fi
 
 for file in "${unique_changed_files[@]}"; do
+  [ -f "$file" ] || continue
   case "$file" in
     .github/scripts/*.sh|.githooks/pre-commit|.githooks/pre-push)
       script_files+=("$file")

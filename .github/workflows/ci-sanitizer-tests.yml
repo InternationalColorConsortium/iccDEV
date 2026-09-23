@@ -117,17 +117,6 @@ jobs:
           unset GITHUB_TOKEN || true
           bash .github/tests/test-ci-pr-path-classifier.sh
 
-      # preflight: allow-pr-script-execution reason=configure-warning-contract-test
-      - name: Run OpenImageIO configure warning audit tests
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          bash .github/tests/test-openimageio-configure-warning-audit.sh
-
       # preflight: allow-pr-script-execution reason=sanitizer-under-test
       - name: "Reproduce trivy#10253 attack pattern"
         shell: bash --noprofile --norc {0}

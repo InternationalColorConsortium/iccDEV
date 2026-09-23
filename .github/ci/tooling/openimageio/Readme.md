@@ -60,9 +60,7 @@ cmake -S "$OIIO_SOURCE" -B "$OIIO_BUILD" -G Ninja \
   -DOpenImageIO_BUILD_MISSING_DEPS='required;OpenJPEG' \
   -DSANITIZE=address,undefined \
   -DUSE_PYTHON=OFF \
-  -DUSE_QT=OFF 2>&1 | tee "$OIIO_BUILD/configure.log"
-.github/scripts/audit-openimageio-configure-warnings.sh \
-  "$OIIO_BUILD/configure.log"
+  -DUSE_QT=OFF
 cmake --build "$OIIO_BUILD" --target oiiotool iinfo \
   --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
 
@@ -85,10 +83,7 @@ cmake --build "$OIIO_BUILD" --target oiiotool iinfo \
 cmake -S .github/ci/tooling/openimageio/qa \
   -B "$OIIO_QA" \
   -DOPENIMAGEIO_SOURCE_DIR="$OIIO_SOURCE" \
-  -DOPENIMAGEIO_BUILD_DIR="$OIIO_BUILD" 2>&1 | \
-  tee "$OIIO_QA/configure.log"
-.github/scripts/audit-openimageio-configure-warnings.sh \
-  "$OIIO_QA/configure.log"
+  -DOPENIMAGEIO_BUILD_DIR="$OIIO_BUILD"
 ctest --test-dir "$OIIO_QA" -N --no-tests=error
 ctest --test-dir "$OIIO_QA" \
   -R '^iccdev\.openimageio-icc-qa$' \

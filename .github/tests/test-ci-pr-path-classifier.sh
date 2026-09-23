@@ -134,6 +134,39 @@ openimageio_tooling_changed=false
 heif_tooling_changed=false
 libpng_tooling_changed=false'
 
+assert_case "IIS site runtime inputs are native" \
+  $'Tools/Winnt/IccIisIsapi/index.html\nTools/Winnt/IccIisIsapi/site.js\nTools/Winnt/IccIisIsapi/site.css\nTools/Winnt/IccIisIsapi/web.config' \
+  'source_changed=true
+build_config_changed=false
+testing_changed=false
+external_tooling_changed=false
+openimageio_tooling_changed=false
+heif_tooling_changed=false
+libpng_tooling_changed=false'
+
+assert_case "IIS PowerShell helper is native" \
+  "Tools/Winnt/IccIisIsapi/Test-IccIisIsapiEndpoints.ps1" \
+  'source_changed=true
+build_config_changed=false
+testing_changed=false
+external_tooling_changed=false
+openimageio_tooling_changed=false
+heif_tooling_changed=false
+libpng_tooling_changed=false'
+
+assert_case "IIS image asset is native" \
+  "Tools/Winnt/IccIisIsapi/assets/logo.png" \
+  'source_changed=true
+build_config_changed=false
+testing_changed=false
+external_tooling_changed=false
+openimageio_tooling_changed=false
+heif_tooling_changed=false
+libpng_tooling_changed=false'
+
+assert_case "IIS documentation remains non-native" \
+  "Tools/Winnt/IccIisIsapi/Readme.md" "$expected_all_false"
+
 assert_case "workflow is governance only" \
   ".github/workflows/example.yml" "$expected_all_false"
 

@@ -62,8 +62,10 @@ native_source_pattern+='.*\.(c|cc|cpp|cxx|h|hh|hpp|hxx|m|mm|rc|def|h\.in|xpm|ico
 native_regression_source_pattern='^\.github/ci/regression/'
 native_regression_source_pattern+='.*\.(c|cc|cpp|cxx|h|hh|hpp|hxx|m|mm|rc|def)$'
 native_regression_input_pattern='^\.github/ci/regression/.*\.(icc|xml|txt)$'
+iis_runtime_input_pattern='^Tools/Winnt/IccIisIsapi/'
+iis_runtime_input_pattern+='(assets/.*|[^/]+\.(html|js|css|config|ps1))$'
 
-if has_changed_file "${native_source_pattern}|${native_regression_source_pattern}"; then
+if has_changed_file "${native_source_pattern}|${native_regression_source_pattern}|${iis_runtime_input_pattern}"; then
   source_changed=true
 fi
 

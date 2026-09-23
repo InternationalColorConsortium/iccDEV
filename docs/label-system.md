@@ -203,16 +203,13 @@ covered by `PR Summary`. The summary must treat failed or cancelled detection,
 setup, and input-validation prerequisites as failures; only intentionally
 skipped mode-specific jobs are acceptable.
 
-The active `ci-qa-flags` ruleset requires the three `ci-pr-action` contexts.
-`ci-pr-action` therefore runs for pull requests targeting either `master` or
-`ci-qa-flags`. WASM parity remains a `master`-only required context.
+`ci-pr-action` runs automatically only for pull requests targeting `master`.
+Its PR-number workflow dispatch also accepts only open, same-repository pull
+requests targeting `master`. Integration branches are outside this workflow's
+required-check contract: their rulesets must not require these aggregate PR
+contexts and should use branch-owned validation when needed. WASM parity
+remains a `master`-only required context.
 
-The `ci-qa-pr-docker-testing` integrity ruleset does not require hosted status
-contexts before a direct maintainer push. It requires signed commits, linear
-fast-forward history, and deletion protection; maintainers dispatch
-`ci-pr-action` and manually dispatch `ci-docker` immediately after pushing the
-testing branch. Pull requests targeting `ci-qa-pr-docker-testing` also run
-`ci-pr-action`.
 Container-surface changes select its workflow-security gates only; they do not
 create a job-local Docker image.
 
