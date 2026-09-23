@@ -1,0 +1,255 @@
+# Copyright (c) 2026 International Color Consortium.
+# SPDX-License-Identifier: BSD-3-Clause
+---
+# yamllint disable rule:line-length
+name: OpenImageIO ICC EXIF JPEG2000 smoke
+
+'on':
+  workflow_dispatch:
+    inputs:
+      regression_image_tag:
+        description: Trusted unified regression image tag
+        required: true
+        default: latest
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: openimageio-icc-smoke-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  resolve-image:
+    name: Resolve OpenImageIO smoke image
+    runs-on: ubuntu-24.04
+    outputs:
+      image: ${{ steps.resolve.outputs.image }}
+      revision: ${{ steps.resolve.outputs.revision }}
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+
+    steps:
+      - name: Checkout workflow helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          persist-credentials: false
+
+      - name: Resolve trusted unified regression image
+        id: resolve
+        env:
+          BASH_ENV: /dev/null
+          IMAGE_TAG: ${{ inputs.regression_image_tag || 'latest' }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          if [[ "$IMAGE_TAG" != "latest" &&
+                "$IMAGE_TAG" != "ci-qa-pr-docker-testing" &&
+                "$IMAGE_TAG" != "ci-publish-colourbill-ctrl" &&
+                ! "$IMAGE_TAG" =~ ^sha-[0-9a-f]{40}$ &&
+                ! "$IMAGE_TAG" =~ ^v[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "::error title=Unsupported regression image tag::The requested image tag is not supported"
+            exit 1
+          fi
+
+          image_tag="ghcr.io/internationalcolorconsortium/iccdev:${IMAGE_TAG}"
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io \
+            --username "$GITHUB_ACTOR" --password-stdin
+          docker pull "$image_tag"
+
+          image_ref="$(docker image inspect "$image_tag" --format '{{index .RepoDigests 0}}')"
+          if [[ ! "$image_ref" =~ ^ghcr\.io/internationalcolorconsortium/iccdev@sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error title=Invalid regression image digest::The resolved image is not immutable"
+            exit 1
+          fi
+          image_revision="$(docker image inspect "$image_tag" \
+            --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+          if [[ ! "$image_revision" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error title=Invalid regression image revision::The resolved image lacks a valid source revision"
+            exit 1
+          fi
+
+          printf 'image=%s\n' "$(sanitize_line "$image_ref")" >> "$GITHUB_OUTPUT"
+          printf 'revision=%s\n' "$(sanitize_line "$image_revision")" >> "$GITHUB_OUTPUT"
+
+  smoke:
+    name: OpenImageIO - GCC ASAN+UBSAN ICC QA
+    needs: resolve-image
+    runs-on: ubuntu-24.04
+    container:
+      image: ${{ needs.resolve-image.outputs.image }}  # zizmor: ignore[unpinned-images] resolved immutable digest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 0
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+      CC: gcc
+      CXX: g++
+      OIIO_REVISION: 8004015ace460bf7e9019514f6d8c6c677e6e7ae
+      OIIO_BUILD_DIR: /tmp/iccdev-openimageio-build
+      OIIO_QA_DIR: /tmp/iccdev-openimageio-qa
+      IMAGE_REF: ${{ needs.resolve-image.outputs.image }}
+      IMAGE_REVISION: ${{ needs.resolve-image.outputs.revision }}
+
+    steps:
+      - name: Checkout test sources
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          persist-credentials: false
+
+      - name: Verify OpenImageIO smoke environment
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          gcc --version | sed -n '1p'
+          g++ --version | sed -n '1p'
+          cmake --version | sed -n '1p'
+          ninja --version
+          python3 --version
+
+      # preflight: allow-pr-script-execution reason=manual-pinned-openimageio-icc-regression
+      - name: Prove vulnerable and patched OpenImageIO contracts
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          oiio_source="$(mktemp -d "${RUNNER_TEMP:-/tmp}/iccdev-openimageio.XXXXXX")"
+          trap 'rm -rf "$oiio_source"' EXIT
+          git -C "$oiio_source" init --quiet
+          git -C "$oiio_source" remote add origin \
+            https://github.com/AcademySoftwareFoundation/OpenImageIO.git
+          git -C "$oiio_source" fetch --quiet --depth=1 origin "$OIIO_REVISION"
+          git -C "$oiio_source" checkout --quiet --detach FETCH_HEAD
+
+          actual_oiio_revision="$(git -C "$oiio_source" rev-parse HEAD)"
+          if [ "$actual_oiio_revision" != "$OIIO_REVISION" ]; then
+            echo "::error title=OpenImageIO revision mismatch::${actual_oiio_revision} != ${OIIO_REVISION}"
+            exit 1
+          fi
+
+          oiio_bootstrap_patch_dir="$GITHUB_WORKSPACE/.github/ci/tooling/openimageio/bootstrap-patches"
+          shopt -s nullglob
+          oiio_bootstrap_patches=("$oiio_bootstrap_patch_dir"/*.patch)
+          if [ "${#oiio_bootstrap_patches[@]}" -eq 0 ]; then
+            echo "::error title=Missing OpenImageIO bootstrap patch::No build bootstrap patches were found"
+            exit 1
+          fi
+          for oiio_bootstrap_patch in "${oiio_bootstrap_patches[@]}"; do
+            git -C "$oiio_source" apply --check "$oiio_bootstrap_patch"
+            git -C "$oiio_source" apply "$oiio_bootstrap_patch"
+          done
+
+          cmake -S "$oiio_source" -B "$OIIO_BUILD_DIR" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DOpenImageIO_BUILD_MISSING_DEPS='required;OpenJPEG' \
+            -DSANITIZE=address,undefined \
+            -DSTOP_ON_WARNING=ON \
+            -DUSE_PYTHON=OFF \
+            -DUSE_QT=OFF
+          cmake --build "$OIIO_BUILD_DIR" \
+            --target oiiotool iinfo \
+            --parallel "$(nproc)" 2>&1 | tee "$OIIO_BUILD_DIR/build-vulnerable.log"
+          if grep -E '(^|: )[Ww]arning:' "$OIIO_BUILD_DIR/build-vulnerable.log"; then
+            echo "::error title=OpenImageIO compiler warnings::The vulnerable smoke build must be warning-free"
+            exit 1
+          fi
+
+          ASAN_OPTIONS=halt_on_error=1:abort_on_error=1:detect_leaks=0 \
+          UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+            python3 .github/ci/tooling/openimageio/qa/openimageio_icc_qa.py \
+              --mode vulnerable \
+              --oiiotool "$OIIO_BUILD_DIR/bin/oiiotool" \
+              --iinfo "$OIIO_BUILD_DIR/bin/iinfo" \
+              --source-dir "$oiio_source" \
+              --work-dir "$OIIO_BUILD_DIR/vulnerable-contract"
+
+          oiio_patch_dir="$GITHUB_WORKSPACE/.github/ci/tooling/openimageio/patches"
+          oiio_patches=("$oiio_patch_dir"/*.patch)
+          if [ "${#oiio_patches[@]}" -eq 0 ]; then
+            echo "::error title=Missing OpenImageIO patch stack::No patches were found"
+            exit 1
+          fi
+          for oiio_patch in "${oiio_patches[@]}"; do
+            git -C "$oiio_source" apply --check "$oiio_patch"
+            git -C "$oiio_source" apply "$oiio_patch"
+          done
+
+          cmake --build "$OIIO_BUILD_DIR" \
+            --target oiiotool iinfo \
+            --parallel "$(nproc)" 2>&1 | tee "$OIIO_BUILD_DIR/build-patched.log"
+          if grep -E '(^|: )[Ww]arning:' "$OIIO_BUILD_DIR/build-patched.log"; then
+            echo "::error title=OpenImageIO compiler warnings::The patched smoke build must be warning-free"
+            exit 1
+          fi
+
+          cmake -S .github/ci/tooling/openimageio/qa -B "$OIIO_QA_DIR" \
+            -DOPENIMAGEIO_SOURCE_DIR="$oiio_source" \
+            -DOPENIMAGEIO_BUILD_DIR="$OIIO_BUILD_DIR"
+          oiio_ctest_list="$OIIO_QA_DIR/ctest-list.txt"
+          ctest --test-dir "$OIIO_QA_DIR" -N --no-tests=error | tee "$oiio_ctest_list"
+          grep -Eq '^Total Tests: 1$' "$oiio_ctest_list"
+          grep -Eq 'iccdev\.openimageio-icc-qa$' "$oiio_ctest_list"
+          ASAN_OPTIONS=halt_on_error=1:abort_on_error=1:detect_leaks=0 \
+          UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+            ctest --test-dir "$OIIO_QA_DIR" \
+              -L '^(openimageio|icc|exif|jpeg|jpeg2000|issue-2657|regression)$' \
+              -R '^iccdev\.openimageio-icc-qa$' \
+              --output-on-failure \
+              --no-tests=error
+
+          {
+            printf '%s\n' 'OpenImageIO ICC, EXIF, and JPEG2000 QA evidence'
+            printf '%s\n' "iccDEV revision: $(git rev-parse HEAD)"
+            printf '%s\n' "OpenImageIO revision: ${actual_oiio_revision}"
+            printf '%s\n' 'Toolchain and sanitizers: GCC with ASAN+UBSAN'
+            printf '%s\n' 'Vulnerable contract: six confirmed fault classes reproduced'
+            printf '%s\n' 'Fixed contract: EXIF, Canon, JPEG ICC, mluc, and JPEG2000 checks passed'
+            printf '%s\n' 'JPEG2000 controls: five progression orders and byte-identical ICC round-trip'
+            printf '%s\n' 'CTest inventory: Total Tests: 1'
+            printf '%s\n' 'CTest labels: openimageio, icc, exif, jpeg, jpeg2000, issue-2657, regression'
+            printf '%s\n' 'Patch SHA-256:'
+            sha256sum "${oiio_bootstrap_patches[@]}"
+            sha256sum "${oiio_patches[@]}"
+          } > "$OIIO_QA_DIR/qa-evidence.txt"
+
+      - name: Summarize OpenImageIO smoke results
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          {
+            printf '%s\n' '### OpenImageIO ICC, EXIF, and JPEG2000 QA evidence'
+            while IFS= read -r evidence_line; do
+              printf '%s\n' "$(sanitize_line "$evidence_line")"
+            done < "$OIIO_QA_DIR/qa-evidence.txt"
+            printf '%s\n' "Image digest: $(sanitize_line "$IMAGE_REF")"
+            printf '%s\n' "Image source revision: $(sanitize_line "$IMAGE_REVISION")"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
