@@ -161,6 +161,15 @@ ASAN/UBSAN build. Issue #2380 provides a bounded manual workflow at
 scenario demonstrates the PR #2378 `GetNewApplyCmm()` race before and after the
 fix. It is a proof-of-concept workflow, not a hosted fuzzing service.
 
+Issue #2673 is reproduced by
+`.github/workflows/ci-issue-2673-fromxml-valgrind-smoke.yml`. A push to
+`ci-qa-pr-docker-testing` runs it automatically; manual dispatch accepts a
+supported unified-image tag and resolves it to an immutable digest. The job
+builds a non-sanitized Debug `iccFromXml`, converts
+`Testing/Named/NamedColorV4.xml`, and passes only when Memcheck exits 77 with
+one `write(buf)` uninitialized-byte context while still producing a nonempty
+profile. The complete Memcheck report remains visible in the job log.
+
 For the maintained 13-target Memcheck, Helgrind, DRD, Massif, and Callgrind
 registry, use [Valgrind-Family Analysis](valgrind-analysis.md). The image
 installs that component as `iccdev-valgrind-build`, `iccdev-valgrind-run`,

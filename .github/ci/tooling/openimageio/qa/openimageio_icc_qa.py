@@ -313,11 +313,11 @@ def check_jpeg2000(mode, oiiotool, iinfo, source_dir, work_dir, env):
             env,
         )
         if mode == "vulnerable":
-            require(code == 0, f"vulnerable {order} write did not report success")
-            require(output.stat().st_size == 77, f"vulnerable {order} size changed")
-            read_code, read_log = run((iinfo, output), env)
-            require(read_code != 0, f"vulnerable {order} unexpectedly readable")
-            require("Expected a SOC marker" in read_log, f"missing {order} JP2 diagnostic")
+            require(code != 0, f"vulnerable {order} write unexpectedly succeeded")
+            require(
+                "Assertion `strlen(prog) > 0' failed" in log,
+                f"missing vulnerable {order} progression assertion:\n{log}",
+            )
         else:
             require(code == 0, f"fixed {order} write failed ({code}):\n{log}")
             require_clean(log, f"fixed {order} write")

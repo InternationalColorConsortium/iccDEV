@@ -7,9 +7,7 @@
 #
 ## Intent: iccDEV ci-pr-action
 #
-## Last Updated: 2026-04-05 23:40:35 UTC by David Hoyt
-#
-#
+# Main Entry Point for all PR. No Forks, Thank You
 #
 ###############################################################
 
@@ -29,8 +27,6 @@ on:
   pull_request:
     branches:
       - master
-      - ci-qa-flags
-      - ci-qa-pr-docker-testing
     types:
       - opened
       - synchronize
@@ -103,12 +99,16 @@ jobs:
       pull-requests: read  # Required to inspect changed files and PR metadata.
 
     outputs:
-      src_changed: ${{ steps.diffcheck.outputs.src_changed }}
+      run_native_matrix: ${{ steps.diffcheck.outputs.run_native_matrix }}
       ci_scope: ${{ steps.diffcheck.outputs.ci_scope }}
       source_changed: ${{ steps.diffcheck.outputs.source_changed }}
       build_config_changed: ${{ steps.diffcheck.outputs.build_config_changed }}
       testing_changed: ${{ steps.diffcheck.outputs.testing_changed }}
       ci_changed: ${{ steps.diffcheck.outputs.ci_changed }}
+      external_tooling_changed: ${{ steps.diffcheck.outputs.external_tooling_changed }}
+      openimageio_tooling_changed: ${{ steps.diffcheck.outputs.openimageio_tooling_changed }}
+      heif_tooling_changed: ${{ steps.diffcheck.outputs.heif_tooling_changed }}
+      libpng_tooling_changed: ${{ steps.diffcheck.outputs.libpng_tooling_changed }}
       container_changed: ${{ steps.diffcheck.outputs.container_changed }}
       image_definition_changed: ${{ steps.diffcheck.outputs.image_definition_changed }}
       container_toolchain_required: ${{ steps.diffcheck.outputs.container_toolchain_required }}
@@ -172,7 +172,7 @@ jobs:
 
           base_ref="$(jq -r '.base.ref' <<< "$pr_json")"
           case "$base_ref" in
-            master|ci-qa-flags|ci-qa-pr-docker-testing)
+            master)
               ;;
             *)
               echo "workflow_dispatch target PR uses an unsupported base: $DISPATCH_PR_NUMBER" >&2
@@ -249,6 +249,7 @@ jobs:
           unset GITHUB_TOKEN || true
           git config --add safe.directory "$PWD"
 
+      # preflight: allow-pr-script-execution reason=same-repository-classifier-bootstrap
       - name: Check for source changes
         id: diffcheck
         shell: bash --noprofile --norc {0}
@@ -291,6 +292,10 @@ jobs:
           image_definition_changed=false
           container_toolchain_required=false
           trusted_base_image_available=false
+          external_tooling_changed=false
+          openimageio_tooling_changed=false
+          heif_tooling_changed=false
+          libpng_tooling_changed=false
           # Default to the full PR CTest surface. The pr-extended tests
           # are deferred only by the PR caller and remain in regression runs.
           ctest_mode=full
@@ -328,12 +333,16 @@ jobs:
               printf '%s=%s\n' "$key" "$(sanitize_line "$value")" >> "$GITHUB_OUTPUT"
             }
 
-            write_github_output src_changed "$run_full"
+            write_github_output run_native_matrix "$run_full"
             write_github_output ci_scope "$ci_scope"
             write_github_output source_changed "$source_changed"
             write_github_output build_config_changed "$build_config_changed"
             write_github_output testing_changed "$testing_changed"
             write_github_output ci_changed "$ci_changed"
+            write_github_output external_tooling_changed "$external_tooling_changed"
+            write_github_output openimageio_tooling_changed "$openimageio_tooling_changed"
+            write_github_output heif_tooling_changed "$heif_tooling_changed"
+            write_github_output libpng_tooling_changed "$libpng_tooling_changed"
             write_github_output container_changed "$container_changed"
             write_github_output image_definition_changed "$image_definition_changed"
             write_github_output container_toolchain_required "$container_toolchain_required"
@@ -503,7 +512,7 @@ jobs:
 
           # Avoid fetching refs from user-controllable inputs like ($base_ref)
           case "$base_ref" in
-            master|ci-qa-flags|ci-qa-pr-docker-testing)
+            master)
               ;;
             *)
               echo "Ref blocked or unsupported: $base_ref" >&2
@@ -527,7 +536,10 @@ jobs:
             exit 0
           fi
 
-          changed_files="$(git diff --name-only "origin/${base_ref}"...HEAD)"
+          # Disable rename detection so both the removed and added paths are
+          # classified. A move out of an owned tree must still select the
+          # validation required by the source path.
+          changed_files="$(git diff --no-renames --name-only "origin/${base_ref}"...HEAD)"
 
           has_changed_file() {
             local pattern="$1"
@@ -550,17 +562,74 @@ jobs:
           run_windows_risk=false
           example_consumer_changed=false
 
-          if has_changed_file '\.(cpp|cxx|cc|c|h|hpp|hh)$'; then
-            source_changed=true
+          classifier="$GITHUB_WORKSPACE/base/.github/scripts/classify-pr-paths.sh"
+          classifier_bootstrap_actor=""
+          if [ "$GH_EVENT_NAME" = "workflow_dispatch" ]; then
+            classifier_bootstrap_actor="$GH_ACTOR"
+          elif [ "$GH_EVENT_NAME" = "pull_request" ] &&
+               [ "$PR_HEAD_REPO" = "$GH_REPOSITORY" ]; then
+            classifier_bootstrap_actor="$GH_ACTOR"
+          fi
+          if [ ! -x "$classifier" ] && [ -n "$classifier_bootstrap_actor" ]; then
+            classifier_permission_status=0
+            if ! is_trusted_maintainer "$classifier_bootstrap_actor"; then
+              classifier_permission_status=1
+            else
+              actor_has_write_permission "$classifier_bootstrap_actor" ||
+                classifier_permission_status=$?
+            fi
+            if [ "$classifier_permission_status" -eq 0 ]; then
+              # Bootstrap the first classifier change from a same-repository
+              # maintainer branch. Once merged, pull requests use the trusted
+              # base copy above. Fork pull requests never execute this job.
+              classifier="$GITHUB_WORKSPACE/.github/scripts/classify-pr-paths.sh"
+            elif [ "$classifier_permission_status" -eq 2 ]; then
+              echo "Unable to verify classifier bootstrap actor permission" >&2
+              exit 1
+            fi
+          fi
+          if [ ! -x "$classifier" ]; then
+            echo "Trusted PR path classifier is missing or not executable" >&2
+            exit 1
           fi
 
-          if has_changed_file '(^|/)(CMakeLists\.txt|[^/]+\.cmake)$|^Build/Cmake/|^cmake/'; then
-            build_config_changed=true
+          declare -A classifier_keys_seen=()
+          if ! classifier_output="$(
+            printf '%s\n' "$changed_files" |
+              env -u GH_TOKEN -u GITHUB_TOKEN "$classifier"
+          )"; then
+            echo "PR path classifier failed" >&2
+            exit 1
           fi
-
-          if has_changed_file '^(Testing/|\.github/ci/regression/)'; then
-            testing_changed=true
-          fi
+          while IFS='=' read -r classifier_key classifier_value; do
+            if [[ "$classifier_value" != "true" && "$classifier_value" != "false" ]]; then
+              echo "Invalid classifier value for $classifier_key" >&2
+              exit 1
+            fi
+            case "$classifier_key" in
+              source_changed|build_config_changed|testing_changed|external_tooling_changed|openimageio_tooling_changed|heif_tooling_changed|libpng_tooling_changed)
+                if [[ -v "classifier_keys_seen[$classifier_key]" ]]; then
+                  echo "Duplicate classifier output: $classifier_key" >&2
+                  exit 1
+                fi
+                classifier_keys_seen["$classifier_key"]=1
+                printf -v "$classifier_key" '%s' "$classifier_value"
+                ;;
+              *)
+                echo "Unexpected classifier output: $classifier_key" >&2
+                exit 1
+                ;;
+            esac
+          done <<< "$classifier_output"
+          for classifier_key in \
+            source_changed build_config_changed testing_changed \
+            external_tooling_changed openimageio_tooling_changed \
+            heif_tooling_changed libpng_tooling_changed; do
+            if [[ ! -v "classifier_keys_seen[$classifier_key]" ]]; then
+              echo "Missing classifier output: $classifier_key" >&2
+              exit 1
+            fi
+          done
 
           if has_changed_file '^\.github/(ci|workflows|scripts|actions|codeql-queries)/|^\.githooks/'; then
             ci_changed=true
@@ -648,12 +717,13 @@ jobs:
           GH_SHA: ${{ github.sha }}
           GH_ACTOR: ${{ github.actor }}
           GH_RUN_ID: ${{ github.run_id }}
-          RUN_FULL_BUILD: ${{ steps.diffcheck.outputs.src_changed }}
+          RUN_NATIVE_MATRIX: ${{ steps.diffcheck.outputs.run_native_matrix }}
           CI_SCOPE: ${{ steps.diffcheck.outputs.ci_scope }}
           SOURCE_CHANGED: ${{ steps.diffcheck.outputs.source_changed }}
           BUILD_CONFIG_CHANGED: ${{ steps.diffcheck.outputs.build_config_changed }}
           TESTING_CHANGED: ${{ steps.diffcheck.outputs.testing_changed }}
           CI_CHANGED: ${{ steps.diffcheck.outputs.ci_changed }}
+          EXTERNAL_TOOLING_CHANGED: ${{ steps.diffcheck.outputs.external_tooling_changed }}
           CONTAINER_CHANGED: ${{ steps.diffcheck.outputs.container_changed }}
           DOCS_ONLY: ${{ steps.diffcheck.outputs.docs_only }}
         run: |
@@ -701,11 +771,12 @@ jobs:
             echo "## CI Scope"
             echo ""
             echo "- **Requested scope:** \`$(sanitize_line "${CI_SCOPE:-full}")\`"
-            echo "- **Run full build matrix:** \`$(sanitize_line "${RUN_FULL_BUILD:-false}")\`"
+            echo "- **Run native build matrix:** \`$(sanitize_line "${RUN_NATIVE_MATRIX:-false}")\`"
             echo "- **Source changed:** \`$(sanitize_line "${SOURCE_CHANGED:-false}")\`"
             echo "- **Build config changed:** \`$(sanitize_line "${BUILD_CONFIG_CHANGED:-false}")\`"
             echo "- **Testing/regression changed:** \`$(sanitize_line "${TESTING_CHANGED:-false}")\`"
             echo "- **CI/governance changed:** \`$(sanitize_line "${CI_CHANGED:-false}")\`"
+            echo "- **External research tooling changed:** \`$(sanitize_line "${EXTERNAL_TOOLING_CHANGED:-false}")\`"
             echo "- **Container surface changed:** \`$(sanitize_line "${CONTAINER_CHANGED:-false}")\`"
             echo "- **Docs only:** \`$(sanitize_line "${DOCS_ONLY:-false}")\`"
             echo ""
@@ -771,12 +842,13 @@ jobs:
           GH_SHA: ${{ github.sha }}
           GH_ACTOR: ${{ github.actor }}
           GH_RUN_ID: ${{ github.run_id }}
-          SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed }}
+          RUN_NATIVE_MATRIX: ${{ needs.detect-src.outputs.run_native_matrix }}
           CI_SCOPE: ${{ needs.detect-src.outputs.ci_scope }}
           SOURCE_CHANGED: ${{ needs.detect-src.outputs.source_changed }}
           BUILD_CONFIG_CHANGED: ${{ needs.detect-src.outputs.build_config_changed }}
           TESTING_CHANGED: ${{ needs.detect-src.outputs.testing_changed }}
           CI_CHANGED: ${{ needs.detect-src.outputs.ci_changed }}
+          EXTERNAL_TOOLING_CHANGED: ${{ needs.detect-src.outputs.external_tooling_changed }}
           CONTAINER_CHANGED: ${{ needs.detect-src.outputs.container_changed }}
           DOCS_ONLY: ${{ needs.detect-src.outputs.docs_only }}
         run: |
@@ -817,12 +889,13 @@ jobs:
           echo "Actor: $(sanitize_print "$GH_ACTOR")"
           echo "Run ID: $(sanitize_print "$GH_RUN_ID")"
           echo "Start time: $(date)"
-          echo "Source changed: $(sanitize_print "$SRC_CHANGED")"
+          echo "Run native matrix: $(sanitize_print "$RUN_NATIVE_MATRIX")"
           echo "CI scope: $(sanitize_print "$CI_SCOPE")"
           echo "Source files changed: $(sanitize_print "$SOURCE_CHANGED")"
           echo "Build config changed: $(sanitize_print "$BUILD_CONFIG_CHANGED")"
           echo "Testing/regression changed: $(sanitize_print "$TESTING_CHANGED")"
           echo "CI/governance changed: $(sanitize_print "$CI_CHANGED")"
+          echo "External research tooling changed: $(sanitize_print "$EXTERNAL_TOOLING_CHANGED")"
           echo "Container surface changed: $(sanitize_print "$CONTAINER_CHANGED")"
           echo "Docs only: $(sanitize_print "$DOCS_ONLY")"
 
@@ -836,12 +909,13 @@ jobs:
           GITHUB_REF_NAME: ${{ github.ref_name }}
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_RUN_ID: ${{ github.run_id }}
-          SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed || 'false' }}
+          RUN_NATIVE_MATRIX: ${{ needs.detect-src.outputs.run_native_matrix || 'false' }}
           CI_SCOPE: ${{ needs.detect-src.outputs.ci_scope || 'auto' }}
           SOURCE_CHANGED: ${{ needs.detect-src.outputs.source_changed || 'false' }}
           BUILD_CONFIG_CHANGED: ${{ needs.detect-src.outputs.build_config_changed || 'false' }}
           TESTING_CHANGED: ${{ needs.detect-src.outputs.testing_changed || 'false' }}
           CI_CHANGED: ${{ needs.detect-src.outputs.ci_changed || 'false' }}
+          EXTERNAL_TOOLING_CHANGED: ${{ needs.detect-src.outputs.external_tooling_changed || 'false' }}
           CONTAINER_CHANGED: ${{ needs.detect-src.outputs.container_changed || 'false' }}
           DOCS_ONLY: ${{ needs.detect-src.outputs.docs_only || 'false' }}
         run: |
@@ -876,12 +950,13 @@ jobs:
           : "${GITHUB_REF_NAME:=<none>}"
           : "${GITHUB_SHA:=<none>}"
           : "${GITHUB_RUN_ID:=<none>}"
-          : "${SRC_CHANGED:=false}"
+          : "${RUN_NATIVE_MATRIX:=false}"
           : "${CI_SCOPE:=full}"
           : "${SOURCE_CHANGED:=false}"
           : "${BUILD_CONFIG_CHANGED:=false}"
           : "${TESTING_CHANGED:=false}"
           : "${CI_CHANGED:=false}"
+          : "${EXTERNAL_TOOLING_CHANGED:=false}"
           : "${CONTAINER_CHANGED:=false}"
           : "${DOCS_ONLY:=false}"
 
@@ -897,11 +972,12 @@ jobs:
             echo "- **Run ID:** \`$(sanitize_line "${GITHUB_RUN_ID}")\`"
             echo "- **Session start:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
             echo "- **CI scope:** \`$(sanitize_line "${CI_SCOPE}")\`"
-            echo "- **Run full build matrix:** \`$(sanitize_line "${SRC_CHANGED}")\`"
+            echo "- **Run native build matrix:** \`$(sanitize_line "${RUN_NATIVE_MATRIX}")\`"
             echo "- **Source files changed:** \`$(sanitize_line "${SOURCE_CHANGED}")\`"
             echo "- **Build config changed:** \`$(sanitize_line "${BUILD_CONFIG_CHANGED}")\`"
             echo "- **Testing/regression changed:** \`$(sanitize_line "${TESTING_CHANGED}")\`"
             echo "- **CI/governance changed:** \`$(sanitize_line "${CI_CHANGED}")\`"
+            echo "- **External research tooling changed:** \`$(sanitize_line "${EXTERNAL_TOOLING_CHANGED}")\`"
             echo "- **Container surface changed:** \`$(sanitize_line "${CONTAINER_CHANGED}")\`"
             echo "- **Docs only:** \`$(sanitize_line "${DOCS_ONLY}")\`"
             echo ""
@@ -1004,7 +1080,7 @@ jobs:
       run_windows_audit: ${{ needs.detect-src.outputs.run_windows_risk == 'true' }}
 
   gcc15-lto-ci:
-    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    if: ${{ needs.detect-src.outputs.run_native_matrix == 'true' }}
     name: GCC 15.2 Strict Release LTO
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-gcc15.yml
@@ -1013,7 +1089,7 @@ jobs:
       target-sha: ${{ needs.detect-src.outputs.target_sha }}
 
   tool-tests:
-    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    if: ${{ needs.detect-src.outputs.run_native_matrix == 'true' }}
     # Together with gcc15-lto-ci, this is the compact strict Unix coverage.
     name: Tool Smoke Tests (ASAN+UBSAN, Debug)
     needs: [detect-src, validate-inputs]
@@ -1028,7 +1104,7 @@ jobs:
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
 
   win-ci:
-    if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.validate-inputs.outputs.include-windows == 'true' }}
+    if: ${{ needs.detect-src.outputs.run_native_matrix == 'true' && needs.validate-inputs.outputs.include-windows == 'true' }}
     name: Windows Build & Test Profiles
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-win.yml
@@ -1036,7 +1112,7 @@ jobs:
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
 
   macos-release-lto:
-    if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.detect-src.outputs.ci_scope != 'fast-lane' }}
+    if: ${{ needs.detect-src.outputs.run_native_matrix == 'true' && needs.detect-src.outputs.ci_scope != 'fast-lane' }}
     name: macOS Clang Release LTO
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-unix.yml
@@ -1050,7 +1126,7 @@ jobs:
       target-sha: ${{ needs.detect-src.outputs.target_sha }}
 
   macos-debug:
-    if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.detect-src.outputs.ci_scope != 'fast-lane' }}
+    if: ${{ needs.detect-src.outputs.run_native_matrix == 'true' && needs.detect-src.outputs.ci_scope != 'fast-lane' }}
     name: macOS Clang Debug
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-unix.yml
@@ -1214,7 +1290,7 @@ jobs:
           GITHUB_REF: ${{ github.ref }}
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_RUN_ID: ${{ github.run_id }}
-          SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed }}
+          RUN_NATIVE_MATRIX: ${{ needs.detect-src.outputs.run_native_matrix }}
           CONTAINER_CHANGED: ${{ needs.detect-src.outputs.container_changed }}
           FAST_LANE: ${{ needs.validate-inputs.outputs.fast-lane }}
           DETECT_RESULT: ${{ needs.detect-src.result }}
@@ -1261,7 +1337,7 @@ jobs:
           DETECT_RESULT="${DETECT_RESULT:-failure}"
           SETUP_RESULT="${SETUP_RESULT:-failure}"
           VALIDATE_RESULT="${VALIDATE_RESULT:-failure}"
-          SRC_CHANGED="${SRC_CHANGED:-false}"
+          RUN_NATIVE_MATRIX="${RUN_NATIVE_MATRIX:-false}"
           CONTAINER_CHANGED="${CONTAINER_CHANGED:-false}"
           FAST_LANE="${FAST_LANE:-false}"
           LINT_RESULT="${LINT_RESULT:-success}"
@@ -1289,7 +1365,7 @@ jobs:
           DETECT_RESULT="$(trim_and_norm "$DETECT_RESULT")"
           SETUP_RESULT="$(trim_and_norm "$SETUP_RESULT")"
           VALIDATE_RESULT="$(trim_and_norm "$VALIDATE_RESULT")"
-          SRC_CHANGED="$(trim_and_norm "$SRC_CHANGED")"
+          RUN_NATIVE_MATRIX="$(trim_and_norm "$RUN_NATIVE_MATRIX")"
           CONTAINER_CHANGED="$(trim_and_norm "$CONTAINER_CHANGED")"
           FAST_LANE="$(trim_and_norm "$FAST_LANE")"
           LINT_RESULT="$(trim_and_norm "$LINT_RESULT")"
@@ -1306,7 +1382,7 @@ jobs:
           job_res=success
           required_results=("$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$RISK_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$MACOS_RELEASE_LTO_RESULT" "$MACOS_DEBUG_RESULT" "$EXAMPLE_RESULT")
           for s in "${required_results[@]}"; do
-            # 'skipped' is acceptable (jobs are skipped when src_changed is false)
+            # 'skipped' is acceptable when run_native_matrix is false.
             # only 'failure' or 'cancelled' should cause overall failure
             if [[ "$s" != "success" && "$s" != "skipped" ]]; then
               job_res=failure

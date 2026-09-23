@@ -1,0 +1,202 @@
+# Copyright (c) 2026 International Color Consortium.
+# SPDX-License-Identifier: BSD-3-Clause
+---
+# yamllint disable rule:line-length
+name: Issue 2673 FromXml Valgrind smoke
+
+'on':
+  push:
+    branches:
+      - ci-qa-pr-docker-testing
+  workflow_dispatch:
+    inputs:
+      regression_image_tag:
+        description: Trusted unified regression image tag
+        required: true
+        default: latest
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: issue-2673-fromxml-valgrind-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  resolve-image:
+    name: Resolve Issue 2673 smoke image
+    runs-on: ubuntu-24.04
+    outputs:
+      image: ${{ steps.resolve.outputs.image }}
+      revision: ${{ steps.resolve.outputs.revision }}
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+
+    steps:
+      - name: Checkout trusted workflow helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          ref: master
+          path: trusted-base
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Resolve trusted unified regression image
+        id: resolve
+        env:
+          BASH_ENV: /dev/null
+          IMAGE_TAG: ${{ inputs.regression_image_tag || 'latest' }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$GITHUB_WORKSPACE/trusted-base/.github/scripts/sanitize-sed.sh"
+
+          if [[ "$IMAGE_TAG" != "latest" &&
+                "$IMAGE_TAG" != "ci-qa-pr-docker-testing" &&
+                "$IMAGE_TAG" != "ci-publish-colourbill-ctrl" &&
+                ! "$IMAGE_TAG" =~ ^sha-[0-9a-f]{40}$ &&
+                ! "$IMAGE_TAG" =~ ^v[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "::error title=Unsupported regression image tag::The requested image tag is not supported"
+            exit 1
+          fi
+
+          image_tag="ghcr.io/internationalcolorconsortium/iccdev:${IMAGE_TAG}"
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io \
+            --username "$GITHUB_ACTOR" --password-stdin
+          unset GHCR_TOKEN
+          docker pull "$image_tag"
+
+          image_ref="$(docker image inspect "$image_tag" --format '{{index .RepoDigests 0}}')"
+          if [[ ! "$image_ref" =~ ^ghcr\.io/internationalcolorconsortium/iccdev@sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error title=Invalid regression image digest::The resolved image is not immutable"
+            exit 1
+          fi
+          image_revision="$(docker image inspect "$image_tag" \
+            --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+          if [[ ! "$image_revision" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error title=Invalid regression image revision::The resolved image lacks a valid source revision"
+            exit 1
+          fi
+
+          printf 'image=%s\n' "$(sanitize_line "$image_ref")" >> "$GITHUB_OUTPUT"
+          printf 'revision=%s\n' "$(sanitize_line "$image_revision")" >> "$GITHUB_OUTPUT"
+
+  smoke:
+    name: Issue 2673 - FromXml uninitialized padding
+    needs: resolve-image
+    runs-on: ubuntu-24.04
+    container:
+      image: ${{ needs.resolve-image.outputs.image }}  # zizmor: ignore[unpinned-images] resolved immutable digest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 0
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+      BUILD_DIR: /tmp/iccdev-issue-2673-valgrind
+      EVIDENCE_DIR: /tmp/iccdev-issue-2673-evidence
+      IMAGE_REF: ${{ needs.resolve-image.outputs.image }}
+      IMAGE_REVISION: ${{ needs.resolve-image.outputs.revision }}
+
+    steps:
+      - name: Checkout Issue 2673 test source
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          persist-credentials: false
+
+      - name: Verify Issue 2673 smoke environment
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          cmake --version | sed -n '1p'
+          valgrind --version
+
+      # preflight: allow-pr-script-execution reason=manual-issue-2673-valgrind-reproduction
+      - name: Reproduce Issue 2673 FromXml uninitialized write
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          rm -rf -- "$BUILD_DIR" "$EVIDENCE_DIR"
+          mkdir -p "$EVIDENCE_DIR"
+          trap 'rm -rf -- "$BUILD_DIR" "$EVIDENCE_DIR"' EXIT
+
+          bash .github/ci/valgrind/build.sh \
+            --source-dir "$GITHUB_WORKSPACE" \
+            --build-dir "$BUILD_DIR" \
+            --jobs 8 \
+            --target fromxml
+
+          valgrind_log="$EVIDENCE_DIR/issue-2673-memcheck.log"
+          output_profile="$EVIDENCE_DIR/issue-2673-namedcolor.icc"
+          valgrind_exit=0
+          set +e
+          timeout 300 valgrind \
+            --tool=memcheck \
+            --track-origins=yes \
+            --leak-check=no \
+            --error-exitcode=77 \
+            --log-file="$valgrind_log" \
+            "$BUILD_DIR/Tools/IccFromXml/iccFromXml" \
+            Testing/Named/NamedColorV4.xml \
+            "$output_profile"
+          valgrind_exit=$?
+          set -e
+
+          if [ "$valgrind_exit" -ne 77 ]; then
+            echo "::error title=Issue 2673 reproduction mismatch::Expected Valgrind exit 77, got ${valgrind_exit}"
+            sed -n '1,120p' "$valgrind_log"
+            exit 1
+          fi
+          if ! grep -Fq 'Syscall param write(buf) points to uninitialised byte(s)' "$valgrind_log"; then
+            echo "::error title=Issue 2673 diagnostic missing::Memcheck did not report the expected write buffer defect"
+            sed -n '1,120p' "$valgrind_log"
+            exit 1
+          fi
+          if ! grep -Eq 'ERROR SUMMARY: 1 errors from 1 contexts' "$valgrind_log"; then
+            echo "::error title=Issue 2673 context mismatch::Memcheck did not report exactly one error context"
+            sed -n '1,120p' "$valgrind_log"
+            exit 1
+          fi
+          if [ ! -s "$output_profile" ]; then
+            echo "::error title=Issue 2673 output missing::iccFromXml did not serialize the NamedColor2 profile"
+            exit 1
+          fi
+
+          printf '%s\n' '[PASS] Issue #2673 reproduced; complete Memcheck report follows'
+          cat "$valgrind_log"
+
+          fixture_sha256="$(sha256sum Testing/Named/NamedColorV4.xml | awk '{print $1}')"
+          output_bytes="$(stat -c '%s' "$output_profile")"
+          printf 'Serialized profile: %s bytes\n' "$output_bytes"
+          {
+            printf '%s\n' '### Issue #2673 FromXml Valgrind reproduction'
+            printf '%s\n' "iccDEV revision: $(sanitize_line "$(git rev-parse HEAD)")"
+            printf '%s\n' "Image digest: $(sanitize_line "$IMAGE_REF")"
+            printf '%s\n' "Image source revision: $(sanitize_line "$IMAGE_REVISION")"
+            printf '%s\n' "Fixture SHA-256: $(sanitize_line "$fixture_sha256")"
+            printf '%s\n' "Serialized profile bytes: $(sanitize_line "$output_bytes")"
+            printf '%s\n' 'Valgrind exit: 77'
+            printf '%s\n' 'Memcheck result: one uninitialized write buffer context reproduced'
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

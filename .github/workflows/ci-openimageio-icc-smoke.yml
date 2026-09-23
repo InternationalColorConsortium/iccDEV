@@ -162,6 +162,9 @@ jobs:
             git -C "$oiio_source" apply "$oiio_bootstrap_patch"
           done
 
+          CMAKE_BUILD_PARALLEL_LEVEL="$(nproc)"
+          export CMAKE_BUILD_PARALLEL_LEVEL
+          mkdir -p "$OIIO_BUILD_DIR" "$OIIO_QA_DIR"
           cmake -S "$oiio_source" -B "$OIIO_BUILD_DIR" -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=gcc \

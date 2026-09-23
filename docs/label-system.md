@@ -148,11 +148,21 @@ status label automation from starting another full CI run. Use labels for
 classification and review routing, not as CI controls.
 
 Pull requests and manual dispatches default to `ci_scope=auto`. In auto scope,
-the full matrix runs only for source, build, or test changes;
+the native matrix runs only for owned library/tool source and resources,
+`Testing/`, registered native regression sources and fixtures, or supported
+build entry points under `Build/Cmake`, `Build/AppleMobile`, and `Build/XCode`;
 documentation-only changes use the constrained fast-lane settings, and
 workflow-only changes receive the preflight and workflow-security gates.
 Container-only changes use workflow-security gates and local container
 validation.
+
+Maintainer research projects under `.github/ci/tooling/openimageio`,
+`.github/ci/tooling/heif`, and `.github/ci/tooling/libpng` are classified as
+external tooling. Their CMake wrappers and C/C++ helpers do not select the
+native iccDEV matrix. Their manual workflows remain separate research lanes and
+are not called by `ci-pr-action.yml`. Mixed diffs that also change an owned
+native path still select the native matrix. The table-driven contract is
+`.github/tests/test-ci-pr-path-classifier.sh`.
 Dispatch `ci_scope=full` explicitly for a long-cycle matrix. For the shortest
 same-repository PR lane, provide an open `pr_number`, choose
 `ci_scope=fast-lane`, and set `ctest_recent_limit`, `include_windows`,
@@ -193,16 +203,13 @@ covered by `PR Summary`. The summary must treat failed or cancelled detection,
 setup, and input-validation prerequisites as failures; only intentionally
 skipped mode-specific jobs are acceptable.
 
-The active `ci-qa-flags` ruleset requires the three `ci-pr-action` contexts.
-`ci-pr-action` therefore runs for pull requests targeting either `master` or
-`ci-qa-flags`. WASM parity remains a `master`-only required context.
+`ci-pr-action` runs automatically only for pull requests targeting `master`.
+Its PR-number workflow dispatch also accepts only open, same-repository pull
+requests targeting `master`. Integration branches are outside this workflow's
+required-check contract: their rulesets must not require these aggregate PR
+contexts and should use branch-owned validation when needed. WASM parity
+remains a `master`-only required context.
 
-The `ci-qa-pr-docker-testing` integrity ruleset does not require hosted status
-contexts before a direct maintainer push. It requires signed commits, linear
-fast-forward history, and deletion protection; maintainers dispatch
-`ci-pr-action` and manually dispatch `ci-docker` immediately after pushing the
-testing branch. Pull requests targeting `ci-qa-pr-docker-testing` also run
-`ci-pr-action`.
 Container-surface changes select its workflow-security gates only; they do not
 create a job-local Docker image.
 
