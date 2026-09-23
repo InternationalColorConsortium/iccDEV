@@ -108,7 +108,13 @@ jobs:
             Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
           }
 
+          $timingDir = "out\vs2022-vcpkg\Testing\ci"
+          $timingPath = Join-Path $timingDir "phase-timings.tsv"
+          New-Item -ItemType Directory -Force -Path $timingDir | Out-Null
+          "phase`tseconds" | Set-Content -Path $timingPath -Encoding ascii
+
           Write-Host "Configuring iccDEV..."
+          $configureTimer = [Diagnostics.Stopwatch]::StartNew()
           cmake -B out\vs2022-vcpkg -S Build\Cmake `
             -G "Visual Studio 17 2022" `
             -A x64 `
@@ -118,14 +124,23 @@ jobs:
             -DENABLE_TESTS=ON `
             -DCMAKE_COMPILE_WARNING_AS_ERROR=$env:STRICT_WARNINGS `
             -Wno-dev
-          if ($LASTEXITCODE -ne 0) {
-            throw "CMake configure failed with exit code $LASTEXITCODE"
+          $configureExit = $LASTEXITCODE
+          $configureTimer.Stop()
+          "configure`t$($configureTimer.Elapsed.TotalSeconds.ToString('F3', [Globalization.CultureInfo]::InvariantCulture))" |
+            Add-Content -Path $timingPath -Encoding ascii
+          if ($configureExit -ne 0) {
+            throw "CMake configure failed with exit code $configureExit"
           }
 
           Write-Host "Building iccDEV..."
+          $buildTimer = [Diagnostics.Stopwatch]::StartNew()
           cmake --build out\vs2022-vcpkg --config Release --parallel
-          if ($LASTEXITCODE -ne 0) {
-            throw "CMake build failed with exit code $LASTEXITCODE"
+          $buildExit = $LASTEXITCODE
+          $buildTimer.Stop()
+          "main-build`t$($buildTimer.Elapsed.TotalSeconds.ToString('F3', [Globalization.CultureInfo]::InvariantCulture))" |
+            Add-Content -Path $timingPath -Encoding ascii
+          if ($buildExit -ne 0) {
+            throw "CMake build failed with exit code $buildExit"
           }
 
           Write-Host ""
@@ -152,32 +167,48 @@ jobs:
           }
 
           New-Item -ItemType Directory -Force -Path "out\vs2022-vcpkg\Testing\ci" | Out-Null
+          $timingPath = "out\vs2022-vcpkg\Testing\ci\phase-timings.tsv"
 
           Write-Host "Building CTest helper binaries..."
-          # Regression helpers are EXCLUDE_FROM_ALL because vcpkg's z-applocal
-          # copies shared runtime DLLs beside every helper.  Build them only
-          # here, serially, to avoid concurrent writes to the same DLL.
+          # Keep this serial: concurrent helper builds have raced while writing
+          # shared runtime outputs on hosted Windows runners.
+          $helperTimer = [Diagnostics.Stopwatch]::StartNew()
           cmake --build out\vs2022-vcpkg --config Release --target build-test-binaries --parallel 1
-          if ($LASTEXITCODE -ne 0) {
-            throw "CTest helper binary build failed with exit code $LASTEXITCODE"
+          $helperExit = $LASTEXITCODE
+          $helperTimer.Stop()
+          "test-helper-build`t$($helperTimer.Elapsed.TotalSeconds.ToString('F3', [Globalization.CultureInfo]::InvariantCulture))" |
+            Add-Content -Path $timingPath -Encoding ascii
+          if ($helperExit -ne 0) {
+            throw "CTest helper binary build failed with exit code $helperExit"
           }
 
           Write-Host "Discovering CTest suites..."
+          $discoveryTimer = [Diagnostics.Stopwatch]::StartNew()
           $ctestList = ctest --test-dir out\vs2022-vcpkg -C Release -N --no-tests=error 2>&1
+          $discoveryExit = $LASTEXITCODE
+          $discoveryTimer.Stop()
           $ctestList | Tee-Object -FilePath "out\vs2022-vcpkg\Testing\ci\ctest-list.txt"
-          if ($LASTEXITCODE -ne 0) {
-            throw "CTest discovery failed with exit code $LASTEXITCODE"
+          "ctest-discovery`t$($discoveryTimer.Elapsed.TotalSeconds.ToString('F3', [Globalization.CultureInfo]::InvariantCulture))" |
+            Add-Content -Path $timingPath -Encoding ascii
+          if ($discoveryExit -ne 0) {
+            throw "CTest discovery failed with exit code $discoveryExit"
           }
 
           Write-Host "Running CTest suites..."
+          $ctestJunit = Join-Path $env:GITHUB_WORKSPACE "out\vs2022-vcpkg\Testing\ci\ctest-results.xml"
+          $ctestTimer = [Diagnostics.Stopwatch]::StartNew()
           ctest --test-dir out\vs2022-vcpkg -C Release `
             --parallel ([Environment]::ProcessorCount) `
             --label-exclude known-red `
             --output-on-failure `
             --no-tests=error `
-            --output-junit "out\vs2022-vcpkg\Testing\ci\ctest-results.xml"
-          if ($LASTEXITCODE -ne 0) {
-            throw "CTest execution failed with exit code $LASTEXITCODE"
+            --output-junit $ctestJunit
+          $ctestExit = $LASTEXITCODE
+          $ctestTimer.Stop()
+          "ctest`t$($ctestTimer.Elapsed.TotalSeconds.ToString('F3', [Globalization.CultureInfo]::InvariantCulture))" |
+            Add-Content -Path $timingPath -Encoding ascii
+          if ($ctestExit -ne 0) {
+            throw "CTest execution failed with exit code $ctestExit"
           }
 
       # ---------------------------------------------------------------
@@ -425,6 +456,11 @@ jobs:
             )
             $wheelCount = $wheelItems.Count
             $pyVer = [string]::Join("`n", @(python --version 2>&1))
+            $processor = Get-CimInstance Win32_Processor | Select-Object -First 1
+            $operatingSystem = Get-CimInstance Win32_OperatingSystem
+            $hostCpu = "$($processor.Name); $($processor.NumberOfCores) cores; $($processor.NumberOfLogicalProcessors) logical"
+            $hostMemoryGiB = ($operatingSystem.TotalVisibleMemorySize / 1MB).ToString(
+              'F1', [Globalization.CultureInfo]::InvariantCulture)
 
             try {
               $iccdevVer = [string]::Join("`n", @(python -c "import iccdev; print(iccdev.__version__)" 2>&1))
@@ -432,17 +468,63 @@ jobs:
               $iccdevVer = "not installed"
             }
 
-            $summary = @(
+            $summaryLines = @(
               "### Build + Test: Windows"
               ""
               "| Metric | Value |"
               "|--------|-------|"
               "| OS | Windows |"
+              "| CPU | $(Sanitize-Line $hostCpu) |"
+              "| Memory | $(Sanitize-Line $hostMemoryGiB) GiB |"
               "| Python | $(Sanitize-Line $pyVer) |"
               "| iccdev version | $(Sanitize-Line $iccdevVer) |"
               "| Wheels built | $wheelCount |"
               "| Test profiles | $profileCount |"
-            ) -join [Environment]::NewLine
+            )
+
+            $timingPath = "out\vs2022-vcpkg\Testing\ci\phase-timings.tsv"
+            if (Test-Path -LiteralPath $timingPath) {
+              $summaryLines += @(
+                ""
+                "#### CMake and CTest phase timings"
+                ""
+                "| Phase | Wall time |"
+                "|-------|----------:|"
+              )
+              foreach ($timing in @(Import-Csv -LiteralPath $timingPath -Delimiter "`t")) {
+                $phase = Sanitize-Line ([string]$timing.phase)
+                $seconds = Sanitize-Line ([string]$timing.seconds)
+                $summaryLines += "| $phase | $seconds s |"
+              }
+            }
+
+            $ctestJunit = "out\vs2022-vcpkg\Testing\ci\ctest-results.xml"
+            if (Test-Path -LiteralPath $ctestJunit) {
+              [xml]$ctestDocument = Get-Content -LiteralPath $ctestJunit -Raw
+              $ctestSuite = $ctestDocument.testsuite
+              $summaryLines += @(
+                ""
+                "#### CTest result"
+                ""
+                "| Metric | Value |"
+                "|--------|------:|"
+                "| Tests | $(Sanitize-Line ([string]$ctestSuite.tests)) |"
+                "| Failures | $(Sanitize-Line ([string]$ctestSuite.failures)) |"
+                "| Skipped | $(Sanitize-Line ([string]$ctestSuite.skipped)) |"
+                "| JUnit time | $(Sanitize-Line ([string]$ctestSuite.time)) s |"
+                ""
+                "| Slowest tests | Time |"
+                "|---------------|-----:|"
+              )
+              foreach ($testCase in @($ctestSuite.testcase) |
+                  Sort-Object { [double]$_.time } -Descending | Select-Object -First 5) {
+                $testName = Sanitize-Line ([string]$testCase.name)
+                $testTime = Sanitize-Line ([string]$testCase.time)
+                $summaryLines += "| $testName | $testTime s |"
+              }
+            }
+
+            $summary = $summaryLines -join [Environment]::NewLine
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $summary
           } catch {
             Write-Warning "Unable to generate Windows build summary: $($_.Exception.Message)"
