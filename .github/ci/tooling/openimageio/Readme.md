@@ -13,7 +13,8 @@ requires these confirmed outcomes:
 - strict JPEG input accepts an ICC profile whose header size exceeds its data;
 - an `mluc` description reads its record and string from the following tag;
 - a small JPEG2000 encoder failure is reported as a successful write; and
-- every supported `jpeg2000:ProgressionOrder` value produces a truncated JP2.
+- every supported `jpeg2000:ProgressionOrder` value reaches OpenJPEG with an
+  invalid empty progression string and terminates on its assertion.
 
 The tracked patch makes the EXIF endian conversion alignment-safe, preserves
 Canon element sizes and requested byte order, propagates strict JPEG and
@@ -33,6 +34,7 @@ document and `.github/ci/regression/README.md` when upstream identifiers exist.
 Run from the iccDEV repository root with an external pinned checkout:
 
 ```bash
+set -euo pipefail
 OIIO_REVISION=8004015ace460bf7e9019514f6d8c6c677e6e7ae
 OIIO_SOURCE="$(mktemp -d /tmp/iccdev-openimageio.XXXXXX)"
 git -C "$OIIO_SOURCE" init
@@ -47,6 +49,10 @@ git -C "$OIIO_SOURCE" apply \
   .github/ci/tooling/openimageio/bootstrap-patches/openimageio-yaml-cpp-cstdint.patch
 
 OIIO_BUILD=/tmp/iccdev-openimageio-build
+OIIO_QA=/tmp/iccdev-openimageio-qa
+CMAKE_BUILD_PARALLEL_LEVEL="$(nproc)"
+export CMAKE_BUILD_PARALLEL_LEVEL
+mkdir -p "$OIIO_BUILD" "$OIIO_QA"
 cmake -S "$OIIO_SOURCE" -B "$OIIO_BUILD" -G Ninja \
   -DCMAKE_BUILD_TYPE=Debug \
   -DCMAKE_C_COMPILER=gcc \
@@ -54,8 +60,11 @@ cmake -S "$OIIO_SOURCE" -B "$OIIO_BUILD" -G Ninja \
   -DOpenImageIO_BUILD_MISSING_DEPS='required;OpenJPEG' \
   -DSANITIZE=address,undefined \
   -DUSE_PYTHON=OFF \
-  -DUSE_QT=OFF
-cmake --build "$OIIO_BUILD" --target oiiotool iinfo --parallel
+  -DUSE_QT=OFF 2>&1 | tee "$OIIO_BUILD/configure.log"
+.github/scripts/audit-openimageio-configure-warnings.sh \
+  "$OIIO_BUILD/configure.log"
+cmake --build "$OIIO_BUILD" --target oiiotool iinfo \
+  --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
 
 ASAN_OPTIONS=halt_on_error=1:abort_on_error=1:detect_leaks=0 \
 UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
@@ -70,14 +79,18 @@ for patch_file in "$PWD"/.github/ci/tooling/openimageio/patches/*.patch; do
   git -C "$OIIO_SOURCE" apply --check "$patch_file"
   git -C "$OIIO_SOURCE" apply "$patch_file"
 done
-cmake --build "$OIIO_BUILD" --target oiiotool iinfo --parallel
+cmake --build "$OIIO_BUILD" --target oiiotool iinfo \
+  --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
 
 cmake -S .github/ci/tooling/openimageio/qa \
-  -B /tmp/iccdev-openimageio-qa \
+  -B "$OIIO_QA" \
   -DOPENIMAGEIO_SOURCE_DIR="$OIIO_SOURCE" \
-  -DOPENIMAGEIO_BUILD_DIR="$OIIO_BUILD"
-ctest --test-dir /tmp/iccdev-openimageio-qa -N --no-tests=error
-ctest --test-dir /tmp/iccdev-openimageio-qa \
+  -DOPENIMAGEIO_BUILD_DIR="$OIIO_BUILD" 2>&1 | \
+  tee "$OIIO_QA/configure.log"
+.github/scripts/audit-openimageio-configure-warnings.sh \
+  "$OIIO_QA/configure.log"
+ctest --test-dir "$OIIO_QA" -N --no-tests=error
+ctest --test-dir "$OIIO_QA" \
   -R '^iccdev\.openimageio-icc-qa$' \
   --output-on-failure \
   --no-tests=error

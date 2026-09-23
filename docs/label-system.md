@@ -148,11 +148,21 @@ status label automation from starting another full CI run. Use labels for
 classification and review routing, not as CI controls.
 
 Pull requests and manual dispatches default to `ci_scope=auto`. In auto scope,
-the full matrix runs only for source, build, or test changes;
+the native matrix runs only for owned library/tool source and resources,
+`Testing/`, registered native regression sources and fixtures, or supported
+build entry points under `Build/Cmake`, `Build/AppleMobile`, and `Build/XCode`;
 documentation-only changes use the constrained fast-lane settings, and
 workflow-only changes receive the preflight and workflow-security gates.
 Container-only changes use workflow-security gates and local container
 validation.
+
+Maintainer research projects under `.github/ci/tooling/openimageio`,
+`.github/ci/tooling/heif`, and `.github/ci/tooling/libpng` are classified as
+external tooling. Their CMake wrappers and C/C++ helpers do not select the
+native iccDEV matrix. Their manual workflows remain separate research lanes and
+are not called by `ci-pr-action.yml`. Mixed diffs that also change an owned
+native path still select the native matrix. The table-driven contract is
+`.github/tests/test-ci-pr-path-classifier.sh`.
 Dispatch `ci_scope=full` explicitly for a long-cycle matrix. For the shortest
 same-repository PR lane, provide an open `pr_number`, choose
 `ci_scope=fast-lane`, and set `ctest_recent_limit`, `include_windows`,
