@@ -126,11 +126,13 @@ def require_metadata(iinfo, image, expected, env, context):
 
 
 def write_fixtures(work_dir):
+    untagged = work_dir / "untagged.jpg"
     oversized = work_dir / "corrupt-icc-oversized.jpg"
     cross_tag = work_dir / "corrupt-icc-mluc-cross-tag.jpg"
+    untagged.write_bytes(BASE_JPEG)
     oversized.write_bytes(jpeg_with_icc(make_oversized_profile()))
     cross_tag.write_bytes(jpeg_with_icc(make_cross_tag_profile()))
-    return oversized, cross_tag
+    return untagged, oversized, cross_tag
 
 
 def check_exif(mode, oiiotool, iinfo, work_dir, env):
@@ -230,7 +232,22 @@ def check_exif(mode, oiiotool, iinfo, work_dir, env):
         require("Canon:MacroMode: 1" in metadata, "fixed Canon indexed value absent")
 
 
-def check_icc_decode(mode, oiiotool, iinfo, oversized, cross_tag, env):
+def check_icc_decode(mode, oiiotool, iinfo, untagged, oversized, cross_tag, env):
+    code, log = run(
+        (
+            oiiotool,
+            "-oiioattrib",
+            "imageinput:strict",
+            "1",
+            "-info",
+            "-v",
+            untagged,
+        ),
+        env,
+    )
+    require(code == 0, f"strict untagged JPEG read failed ({code}):\n{log}")
+    require_clean(log, "strict untagged JPEG")
+
     code, log = run(
         (
             oiiotool,
@@ -341,9 +358,17 @@ def main():
     env["ASAN_OPTIONS"] = "halt_on_error=1:abort_on_error=1:detect_leaks=0"
     env["UBSAN_OPTIONS"] = "halt_on_error=1:print_stacktrace=1"
 
-    oversized, cross_tag = write_fixtures(args.work_dir)
+    untagged, oversized, cross_tag = write_fixtures(args.work_dir)
     check_exif(args.mode, args.oiiotool, args.iinfo, args.work_dir, env)
-    check_icc_decode(args.mode, args.oiiotool, args.iinfo, oversized, cross_tag, env)
+    check_icc_decode(
+        args.mode,
+        args.oiiotool,
+        args.iinfo,
+        untagged,
+        oversized,
+        cross_tag,
+        env,
+    )
     profile_digest = check_jpeg2000(
         args.mode,
         args.oiiotool,

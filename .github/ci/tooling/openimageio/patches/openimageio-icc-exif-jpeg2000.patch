@@ -1,5 +1,5 @@
 diff --git a/src/jpeg.imageio/jpeginput.cpp b/src/jpeg.imageio/jpeginput.cpp
-index 56d52fe0b..1426e44d1 100644
+index 56d52fe0b..68c0bcc1a 100644
 --- a/src/jpeg.imageio/jpeginput.cpp
 +++ b/src/jpeg.imageio/jpeginput.cpp
 @@ -453,7 +453,9 @@ JpgInput::open(const std::string& name, ImageSpec& newspec)
@@ -13,6 +13,15 @@ index 56d52fe0b..1426e44d1 100644
  
      // Try to interpret as Ultra HDR image.
      // The libultrahdr API requires to load the whole file content in memory
+@@ -500,7 +502,7 @@ JpgInput::read_icc_profile(j_decompress_ptr cinfo, ImageSpec& spec)
+         }
+     }
+     if (num_markers == 0)
+-        return false;
++        return true;  // An ICC profile is optional.
+ 
+     // checking for missing markers
+     for (int seq_no = 1; seq_no <= num_markers; seq_no++) {
 diff --git a/src/jpeg2000.imageio/jpeg2000output.cpp b/src/jpeg2000.imageio/jpeg2000output.cpp
 index 0054138fc..d390ff4e5 100644
 --- a/src/jpeg2000.imageio/jpeg2000output.cpp
