@@ -568,7 +568,7 @@ jobs:
             classifier_bootstrap_actor="$GH_ACTOR"
           elif [ "$GH_EVENT_NAME" = "pull_request" ] &&
                [ "$PR_HEAD_REPO" = "$GH_REPOSITORY" ]; then
-            classifier_bootstrap_actor="$PR_AUTHOR"
+            classifier_bootstrap_actor="$GH_ACTOR"
           fi
           if [ ! -x "$classifier" ] && [ -n "$classifier_bootstrap_actor" ]; then
             classifier_permission_status=0

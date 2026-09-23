@@ -38,9 +38,13 @@ jobs:
       BASH_ENV: /dev/null
 
     steps:
-      - name: Checkout workflow helpers
+      - name: Checkout trusted workflow helpers
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
         with:
+          ref: master
+          path: trusted-base
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
           persist-credentials: false
 
       - name: Resolve trusted unified regression image
@@ -53,7 +57,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
+          source "$GITHUB_WORKSPACE/trusted-base/.github/scripts/sanitize-sed.sh"
 
           if [[ "$IMAGE_TAG" != "latest" &&
                 "$IMAGE_TAG" != "ci-qa-pr-docker-testing" &&
