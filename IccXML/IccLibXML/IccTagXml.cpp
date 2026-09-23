@@ -128,6 +128,7 @@ static void icXmlCopyFixedString(char *dst, size_t dstSize, const char *src)
   if (!dst || !dstSize) {
     return;
   }
+  memset(dst, 0, dstSize);
   if (!src) {
     src = "";
   }
@@ -137,7 +138,6 @@ static void icXmlCopyFixedString(char *dst, size_t dstSize, const char *src)
     len = dstSize - 1;
   }
   memcpy(dst, src, len);
-  dst[len] = '\0';
 }
 
 

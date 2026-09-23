@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 ---
 # yamllint disable rule:line-length
-name: Issue 2673 FromXml Valgrind smoke
+name: Issue 2673 FromXml Valgrind regression
 
 'on':
   push:
@@ -128,8 +128,8 @@ jobs:
           cmake --version | sed -n '1p'
           valgrind --version
 
-      # preflight: allow-pr-script-execution reason=manual-issue-2673-valgrind-reproduction
-      - name: Reproduce Issue 2673 FromXml uninitialized write
+      # preflight: allow-pr-script-execution reason=manual-issue-2673-valgrind-regression
+      - name: Verify Issue 2673 FromXml writes initialized bytes
         env:
           BASH_ENV: /dev/null
         run: |
@@ -164,18 +164,18 @@ jobs:
           valgrind_exit=$?
           set -e
 
-          if [ "$valgrind_exit" -ne 77 ]; then
-            echo "::error title=Issue 2673 reproduction mismatch::Expected Valgrind exit 77, got ${valgrind_exit}"
+          if [ "$valgrind_exit" -ne 0 ]; then
+            echo "::error title=Issue 2673 regression::Expected clean Valgrind exit 0, got ${valgrind_exit}"
             sed -n '1,120p' "$valgrind_log"
             exit 1
           fi
-          if ! grep -Fq 'Syscall param write(buf) points to uninitialised byte(s)' "$valgrind_log"; then
-            echo "::error title=Issue 2673 diagnostic missing::Memcheck did not report the expected write buffer defect"
+          if grep -Fq 'Syscall param write(buf) points to uninitialised byte(s)' "$valgrind_log"; then
+            echo "::error title=Issue 2673 regression::Memcheck reported an uninitialized write buffer"
             sed -n '1,120p' "$valgrind_log"
             exit 1
           fi
-          if ! grep -Eq 'ERROR SUMMARY: 1 errors from 1 contexts' "$valgrind_log"; then
-            echo "::error title=Issue 2673 context mismatch::Memcheck did not report exactly one error context"
+          if ! grep -Eq 'ERROR SUMMARY: 0 errors from 0 contexts' "$valgrind_log"; then
+            echo "::error title=Issue 2673 regression::Memcheck did not report a clean error summary"
             sed -n '1,120p' "$valgrind_log"
             exit 1
           fi
@@ -184,7 +184,7 @@ jobs:
             exit 1
           fi
 
-          printf '%s\n' '[PASS] Issue #2673 reproduced; complete Memcheck report follows'
+          printf '%s\n' '[PASS] Issue #2673 fixed; complete Memcheck report follows'
           cat "$valgrind_log"
 
           fixture_sha256="$(sha256sum Testing/Named/NamedColorV4.xml | awk '{print $1}')"
@@ -197,6 +197,6 @@ jobs:
             printf '%s\n' "Image source revision: $(sanitize_line "$IMAGE_REVISION")"
             printf '%s\n' "Fixture SHA-256: $(sanitize_line "$fixture_sha256")"
             printf '%s\n' "Serialized profile bytes: $(sanitize_line "$output_bytes")"
-            printf '%s\n' 'Valgrind exit: 77'
-            printf '%s\n' 'Memcheck result: one uninitialized write buffer context reproduced'
+            printf '%s\n' 'Valgrind exit: 0'
+            printf '%s\n' 'Memcheck result: zero errors from zero contexts'
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
