@@ -7,13 +7,14 @@ set -euo pipefail
 
 usage()
 {
-  echo "Usage: $0 --prefix DIR [--llvm-commit SHA] [--libxml2-commit SHA] [--jobs N]"
+  echo "Usage: $0 --prefix DIR [--llvm-commit SHA] [--libxml2-commit SHA] [--jobs N] [--skip-libxml2]"
 }
 
 prefix=""
 llvm_commit="1ab49a973e210e97d61e5db6557180dcb92c3e98"
 libxml2_commit="3d840e17858de03a09fba8b202e3a89267d5795a"
 jobs="${BUILD_JOBS:-$(nproc)}"
+build_libxml2=1
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -36,6 +37,10 @@ while [ "$#" -gt 0 ]; do
       [ "$#" -ge 2 ] || { usage >&2; exit 2; }
       jobs="$2"
       shift 2
+      ;;
+    --skip-libxml2)
+      build_libxml2=0
+      shift
       ;;
     -h|--help)
       usage
@@ -80,12 +85,17 @@ case "$jobs" in
     ;;
 esac
 
-for required_tool in clang clang++ cmake git ninja nproc; do
+for required_tool in clang clang++ cmake git nproc; do
   if ! command -v "$required_tool" >/dev/null 2>&1; then
     echo "[FAIL] required tool is unavailable: $required_tool" >&2
     exit 127
   fi
 done
+
+cmake_generator="Unix Makefiles"
+if command -v ninja >/dev/null 2>&1; then
+  cmake_generator="Ninja"
+fi
 
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/iccdev-msan-libcxx.XXXXXX")"
 cleanup()
@@ -105,14 +115,15 @@ git -C "$source_dir" sparse-checkout init --cone
 git -C "$source_dir" sparse-checkout set \
   runtimes libcxx libcxxabi libc cmake llvm/cmake \
   llvm/utils/gn/secondary llvm/utils/llvm-lit
-git -C "$source_dir" fetch --quiet --depth=1 --filter=blob:none origin "$llvm_commit"
+git -C "$source_dir" fetch --quiet --depth=1 --filter=blob:none \
+  origin "$llvm_commit"
 git -C "$source_dir" checkout --quiet --detach FETCH_HEAD
 if [ "$(git -C "$source_dir" rev-parse HEAD)" != "$llvm_commit" ]; then
   echo "[FAIL] fetched LLVM commit does not match the requested revision" >&2
   exit 2
 fi
 
-cmake -G Ninja -S "$source_dir/runtimes" -B "$build_dir" \
+cmake -G "$cmake_generator" -S "$source_dir/runtimes" -B "$build_dir" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER=clang \
   -DCMAKE_CXX_COMPILER=clang++ \
@@ -145,45 +156,52 @@ for runtime_library in libc++.so.1 libc++abi.so.1; do
   fi
 done
 
-git init --quiet "$libxml2_source_dir"
-git -C "$libxml2_source_dir" remote add origin https://gitlab.gnome.org/GNOME/libxml2.git
-git -C "$libxml2_source_dir" fetch --quiet --depth=1 --filter=blob:none \
-  origin "$libxml2_commit"
-git -C "$libxml2_source_dir" checkout --quiet --detach FETCH_HEAD
-if [ "$(git -C "$libxml2_source_dir" rev-parse HEAD)" != "$libxml2_commit" ]; then
-  echo "[FAIL] fetched libxml2 commit does not match the requested revision" >&2
-  exit 2
-fi
+if [ "$build_libxml2" -eq 1 ]; then
+  git init --quiet "$libxml2_source_dir"
+  git -C "$libxml2_source_dir" remote add origin https://gitlab.gnome.org/GNOME/libxml2.git
+  git -C "$libxml2_source_dir" fetch --quiet --depth=1 --filter=blob:none \
+    origin "$libxml2_commit"
+  git -C "$libxml2_source_dir" checkout --quiet --detach FETCH_HEAD
+  if [ "$(git -C "$libxml2_source_dir" rev-parse HEAD)" != "$libxml2_commit" ]; then
+    echo "[FAIL] fetched libxml2 commit does not match the requested revision" >&2
+    exit 2
+  fi
 
-msan_flags="-fsanitize=memory -fsanitize-memory-track-origins"
-msan_flags+=" -fno-omit-frame-pointer"
-cmake -G Ninja -S "$libxml2_source_dir" -B "$libxml2_build_dir" \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_C_COMPILER=clang \
-  -DCMAKE_C_FLAGS="$msan_flags" \
-  -DCMAKE_EXE_LINKER_FLAGS="$msan_flags" \
-  -DCMAKE_SHARED_LINKER_FLAGS="$msan_flags" \
-  -DCMAKE_INSTALL_PREFIX="$prefix" \
-  -DCMAKE_INSTALL_LIBDIR=lib \
-  -DBUILD_SHARED_LIBS=ON \
-  -DLIBXML2_WITH_PYTHON=OFF \
-  -DLIBXML2_WITH_TESTS=OFF \
-  -DLIBXML2_WITH_PROGRAMS=OFF \
-  -DLIBXML2_WITH_ZLIB=OFF \
-  -DLIBXML2_WITH_ICONV=OFF
-cmake --build "$libxml2_build_dir" --target install --parallel "$jobs"
+  msan_flags="-fsanitize=memory -fsanitize-memory-track-origins"
+  msan_flags+=" -fno-omit-frame-pointer"
+  cmake -G "$cmake_generator" -S "$libxml2_source_dir" -B "$libxml2_build_dir" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_COMPILER=clang \
+    -DCMAKE_C_FLAGS="$msan_flags" \
+    -DCMAKE_EXE_LINKER_FLAGS="$msan_flags" \
+    -DCMAKE_SHARED_LINKER_FLAGS="$msan_flags" \
+    -DCMAKE_INSTALL_PREFIX="$prefix" \
+    -DCMAKE_INSTALL_LIBDIR=lib \
+    -DBUILD_SHARED_LIBS=ON \
+    -DLIBXML2_WITH_PYTHON=OFF \
+    -DLIBXML2_WITH_TESTS=OFF \
+    -DLIBXML2_WITH_PROGRAMS=OFF \
+    -DLIBXML2_WITH_ZLIB=OFF \
+    -DLIBXML2_WITH_ICONV=OFF
+  cmake --build "$libxml2_build_dir" --target install --parallel "$jobs"
 
-if [ ! -f "$prefix/include/libxml2/libxml/parser.h" ] ||
-   [ ! -f "$prefix/lib/libxml2.so" ]; then
-  echo "[FAIL] instrumented libxml2 installation is incomplete: $prefix" >&2
-  exit 2
-fi
-nm -D "$prefix/lib/libxml2.so" > "$work_dir/libxml2.so.symbols"
-if ! grep -Fq '__msan_' "$work_dir/libxml2.so.symbols"; then
-  echo "[FAIL] libxml2.so does not reference MemorySanitizer" >&2
-  exit 2
-fi
+  if [ ! -f "$prefix/include/libxml2/libxml/parser.h" ] ||
+     [ ! -f "$prefix/lib/libxml2.so" ]; then
+    echo "[FAIL] instrumented libxml2 installation is incomplete: $prefix" >&2
+    exit 2
+  fi
+  nm -D "$prefix/lib/libxml2.so" > "$work_dir/libxml2.so.symbols"
+  if ! grep -Fq '__msan_' "$work_dir/libxml2.so.symbols"; then
+    echo "[FAIL] libxml2.so does not reference MemorySanitizer" >&2
+    exit 2
+  fi
 
-echo "[PASS] MSan libc++/libc++abi/libxml2 installed at $prefix"
+  echo "[PASS] MSan libc++/libc++abi/libxml2 installed at $prefix"
+else
+  echo "[PASS] MSan libc++/libc++abi installed at $prefix"
+fi
 echo "[EVIDENCE] llvm_commit=$llvm_commit"
-echo "[EVIDENCE] libxml2_commit=$libxml2_commit"
+echo "[EVIDENCE] cmake_generator=$cmake_generator"
+if [ "$build_libxml2" -eq 1 ]; then
+  echo "[EVIDENCE] libxml2_commit=$libxml2_commit"
+fi

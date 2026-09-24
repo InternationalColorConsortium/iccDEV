@@ -24,10 +24,17 @@ Use this skill for `.clusterfuzzlite/**`,
   supplies Clang 22; do not allow an older fallback.
 - Keep XML, JSON, tools, and zlib disabled in this lane so MSan does not mix the
   in-process target with uninstrumented system dependencies.
+- For `memory`, build the pinned MSan libc++ and libc++abi before compiling the
+  fuzzers. Reject libstdc++ or a libc++ outside that runtime in `ldd`, then
+  replay the pinned #2687 artifact through both targets. Do not classify a
+  standard-library-origin report from an uninstrumented runtime as iccDEV.
 - Package the tracked `.github/ci/test-data/*.icc` files as seed corpora and
   keep both `.options` files aligned with the explicit local CFL limits.
 - Keep the workflow limited to `workflow_dispatch` and pushes to
   `ci-qa-clusterfuzz` unless a maintainer explicitly broadens the trigger.
+- Keep the total manual fuzz duration selectable as whole minutes from 2
+  through 45, validate it before the sanitizer matrix, pass it to the runner as
+  the total budget, and retain a 2-minute total budget for push runs.
 - Pin every action to a full commit SHA and the builder image to a digest.
 
 ## Local Validation
@@ -63,4 +70,5 @@ actionlint -no-color .github/workflows/ci-clusterfuzzlite.yml
 
 Report each build, instrumentation check, and bounded run separately. An MSan
 failure is not equivalent to an ASan or UBSan failure and must not be hidden by
-fallback flags or an allowed-broken-target percentage.
+fallback flags or an allowed-broken-target percentage. Record the resolved C++
+runtime for both MSan fuzzers and the #2687 one-shot replay result.

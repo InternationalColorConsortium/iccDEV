@@ -77,6 +77,10 @@ For maintainer regression-container use, PR validation, and issue reproduction,
 use `.github/skills/regression-container-maintainer/SKILL.md` and
 `docs/regression-container.md`.
 
+ClusterFuzzLite `memory` builds must use the repository-pinned instrumented
+libc++/libc++abi, verify both fuzzer runtime boundaries, and replay the pinned
+#2687 artifact before fuzzing.
+
 ## Build, Test, and Safety
 
 - User build instructions: `docs/build.md`

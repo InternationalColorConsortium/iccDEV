@@ -334,8 +334,11 @@ must reject invalid numeric fields before conversion without sanitizer findings.
 `iccdev.clusterfuzzlite-configuration` is a fast, build-independent contract
 test for the official ClusterFuzzLite lane. It checks the pinned builder image,
 the manual and `ci-qa-clusterfuzz` push triggers, the three sanitizer matrix
-entries, immutable action references, and shell syntax for both the adapter and
-the shared CFL builder. Runtime sanitizer validation remains in
+entries, immutable action references, the pinned #2687 artifact hash, the
+validated 2-45 minute total manual duration passed directly to the runner,
+the 60-minute job envelope, the instrumented-libc++ bootstrap and linkage
+assertions, and shell syntax for both the adapter and the shared CFL builder.
+Runtime sanitizer validation remains in
 `.github/workflows/ci-clusterfuzzlite.yml` and the local OSS-Fuzz helper flow
 documented in `.github/ci/cfl/README.md`.
 
