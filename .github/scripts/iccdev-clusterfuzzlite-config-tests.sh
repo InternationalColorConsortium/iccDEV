@@ -18,8 +18,11 @@ workflow="$repo_root/.github/workflows/ci-clusterfuzzlite.yml"
 adapter="$repo_root/.clusterfuzzlite/build.sh"
 project="$repo_root/.clusterfuzzlite/project.yaml"
 dockerfile="$repo_root/.clusterfuzzlite/Dockerfile"
+msan_builder="$repo_root/.github/scripts/iccdev-build-msan-libcxx.sh"
+issue_2687_fixture="$repo_root/.github/ci/regression/issue-2687-profile-list-node.icc.base64"
 
-for required in "$workflow" "$adapter" "$project" "$dockerfile"; do
+for required in "$workflow" "$adapter" "$project" "$dockerfile" \
+  "$msan_builder" "$issue_2687_fixture"; do
   if [ ! -s "$required" ]; then
     echo "[FAIL] Missing ClusterFuzzLite file: $required" >&2
     exit 1
@@ -29,16 +32,37 @@ done
 bash -n "$adapter"
 bash -n "$repo_root/.github/ci/cfl/build.sh"
 bash -n "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
+bash -n "$msan_builder"
 
 grep -qx 'language: c++' "$project"
 grep -q '^FROM gcr.io/oss-fuzz-base/base-builder@sha256:[0-9a-f]\{64\}$' "$dockerfile"
 grep -q '^  actions: read$' "$workflow"
 grep -q '^  workflow_dispatch:$' "$workflow"
+grep -q '^      fuzz_minutes:$' "$workflow"
+grep -q '^        default: 2$' "$workflow"
+grep -q '^        type: number$' "$workflow"
 grep -q '^      - ci-qa-clusterfuzz$' "$workflow"
+grep -q '^  configure:$' "$workflow"
+# shellcheck disable=SC2016 # Match the literal Actions expression.
+grep -q '^      fuzz_seconds: \${{ steps.duration.outputs.fuzz_seconds }}$' "$workflow"
+grep -q '^          BASH_ENV: /dev/null$' "$workflow"
+grep -q '^          git config --global credential.helper ""$' "$workflow"
+grep -q '^          unset GITHUB_TOKEN || true$' "$workflow"
+# shellcheck disable=SC2016 # Match literal workflow shell variables.
+grep -q '^          if \[ "$minutes" -lt 2 \] || \[ "$minutes" -gt 45 \]; then$' "$workflow"
+grep -q '^          seconds_per_target=120$' "$workflow"
+# shellcheck disable=SC2016 # Match the literal budget calculation.
+grep -q '^            seconds_per_target=$((minutes \* 60 / 2))$' "$workflow"
+# shellcheck disable=SC2016 # Match the literal validated output write.
+grep -q '^          echo "fuzz_seconds=$seconds_per_target" >> "$GITHUB_OUTPUT"  # elements-sanitized$' "$workflow"
+grep -q '^    needs: configure$' "$workflow"
 grep -q '^  prune:$' "$workflow"
 grep -q '^    needs: fuzz$' "$workflow"
+grep -q '^    timeout-minutes: 60$' "$workflow"
 grep -q '^          MODE: prune$' "$workflow"
-test "$(grep -c '^          FUZZ_SECONDS: "120"$' "$workflow")" -eq 2
+test "$(grep -c '^          FUZZ_SECONDS: "120"$' "$workflow")" -eq 1
+# shellcheck disable=SC2016 # Match the literal Actions expression.
+grep -q '^          FUZZ_SECONDS: \${{ needs.configure.outputs.fuzz_seconds }}$' "$workflow"
 grep -Eq '^        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:[0-9a-f]{64}$' "$workflow"
 grep -Eq '^        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:[0-9a-f]{64}$' "$workflow"
 
@@ -48,6 +72,23 @@ done
 
 grep -q '^targets=( profilevisualize writerserialize )$' "$adapter"
 grep -q -- '--targets profilevisualize,writerserialize' "$adapter"
+grep -Fq 'iccdev-build-msan-libcxx.sh' "$adapter"
+grep -Fq -- '--skip-libxml2' "$adapter"
+grep -Fq 'CXXFLAGS//-stdlib=libc++/' "$adapter"
+grep -Fq 'ICCDEV_CFL_CXX_LINK_FLAGS' "$adapter"
+grep -Fq 'libstdc++.so' "$adapter"
+# shellcheck disable=SC2016 # Match the literal ELF loader token.
+grep -Fq '$ORIGIN' "$adapter"
+grep -Fq 'libc++.so.1.0' "$adapter"
+grep -Fq 'libc++abi.so.1' "$adapter"
+grep -Fq 'issue-2687-profile-list-node.icc.base64' "$adapter"
+grep -Fq 'origin_history_size=7' "$adapter"
+grep -Fq 'ICCDEV_CFL_CXX_LINK_FLAGS' "$repo_root/.github/ci/cfl/build.sh"
+grep -Fq -- '--skip-libxml2' < <("$msan_builder" --help)
+grep -Fq 'cmake_generator="Unix Makefiles"' "$msan_builder"
+issue_2687_sha="$(base64 --decode "$issue_2687_fixture" | sha256sum | cut -d' ' -f1)"
+test "$issue_2687_sha" = \
+  'bb9c4ad53f9269920947bac185a634da2971a94b17da6cff117dd7ad45bcfe85'
 # shellcheck disable=SC2016 # The adapter must retain this literal template.
 fuzzer_template='  fuzzer="icc_${target}_fuzzer"'
 grep -Fqx "$fuzzer_template" "$adapter"

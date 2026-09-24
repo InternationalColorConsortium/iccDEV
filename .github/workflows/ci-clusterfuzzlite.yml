@@ -19,15 +19,59 @@ permissions:
 
 'on':
   workflow_dispatch:
+    inputs:
+      fuzz_minutes:
+        description: "Total minutes across two sequential fuzz targets (2-45)"
+        required: true
+        default: 2
+        type: number
   push:
     branches:
       - ci-qa-clusterfuzz
 
 jobs:
+  configure:
+    name: "Validate fuzz duration"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    outputs:
+      fuzz_seconds: ${{ steps.duration.outputs.fuzz_seconds }}
+
+    steps:
+      - name: Resolve bounded duration
+        id: duration
+        env:
+          BASH_ENV: /dev/null
+          REQUESTED_MINUTES: ${{ inputs.fuzz_minutes }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          minutes=2
+          seconds_per_target=120
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            minutes="$REQUESTED_MINUTES"
+          fi
+          case "$minutes" in
+            ''|*[!0-9]*)
+              echo "fuzz_minutes must be a whole number from 2 through 45" >&2
+              exit 2
+              ;;
+          esac
+          if [ "$minutes" -lt 2 ] || [ "$minutes" -gt 45 ]; then
+            echo "fuzz_minutes must be from 2 through 45" >&2
+            exit 2
+          fi
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            seconds_per_target=$((minutes * 60 / 2))
+          fi
+          echo "fuzz_seconds=$seconds_per_target" >> "$GITHUB_OUTPUT"  # elements-sanitized
+
   fuzz:
     name: "libFuzzer (${{ matrix.sanitizer }})"
+    needs: configure
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     concurrency:
       group: clusterfuzzlite-${{ github.workflow }}-${{ matrix.sanitizer }}-${{ github.ref }}
       cancel-in-progress: true
@@ -67,7 +111,7 @@ jobs:
       - name: Run bounded batch fuzzing
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
         env:
-          FUZZ_SECONDS: "120"
+          FUZZ_SECONDS: ${{ needs.configure.outputs.fuzz_seconds }}
           MODE: batch
           LANGUAGE: c++
           DRY_RUN: "false"

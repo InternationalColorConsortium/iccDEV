@@ -184,6 +184,8 @@ if [ "$clusterfuzzlite_build" -eq 1 ]; then
   read -r -a fuzzer_compile_flags <<< "$CXXFLAGS"
   read -r -a fuzzer_link_flags <<< "$LIB_FUZZING_ENGINE"
   fuzzer_link_flags+=( "${fuzzer_compile_flags[@]}" )
+  read -r -a cxx_dependency_link_flags <<< \
+    "${ICCDEV_CFL_CXX_LINK_FLAGS:-}"
   cmake_feature_args=(
     -DENABLE_TOOLS=OFF
     -DENABLE_ICCXML=OFF
@@ -204,6 +206,7 @@ else
   )
   cmake_feature_args=( -DENABLE_TOOLS=ON )
   link_libraries=( -lz )
+  cxx_dependency_link_flags=()
 fi
 
 for tool in cmake "$cc" "$cxx"; do
@@ -328,7 +331,8 @@ for target in "${selected_targets[@]}"; do
     "$object_dir/icc_${target}_fuzzer.o" \
     "${objects[@]}" \
     -Wl,--whole-archive "$profile_lib" -Wl,--no-whole-archive \
-    "${link_libraries[@]}" -o "$bin_dir/icc_${target}_fuzzer"
+    "${link_libraries[@]}" "${cxx_dependency_link_flags[@]}" \
+    -o "$bin_dir/icc_${target}_fuzzer"
   cp "$script_dir/icc_${target}_fuzzer.options" \
     "$bin_dir/icc_${target}_fuzzer.options"
 done

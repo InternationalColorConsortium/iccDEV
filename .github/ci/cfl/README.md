@@ -61,9 +61,22 @@ python3 infra/helper.py run_fuzzer --external \
 
 Repeat the last three commands with `undefined` and `memory`. The
 ClusterFuzzLite build disables XML, JSON, tools, and zlib so the MSan binary
-does not mix the in-process target with uninstrumented system libraries. This
-lane covers the public `IccVizModel` and writer APIs; the existing local CFL
-smoke retains the broader tool and compressed-tag coverage.
+does not mix the in-process target with uninstrumented system libraries. The
+memory adapter also builds the repository-pinned MSan libc++ and libc++abi,
+rejects either fuzzer if `ldd` finds libstdc++ or cannot resolve that runtime,
+and replays the exact #2687 input before accepting the targets. This prevents
+uninstrumented standard-library writes from leaving poisoned shadow state and
+being misattributed to `CIccProfile`. The lane covers the public `IccVizModel`
+and writer APIs; the existing local CFL smoke retains the broader tool and
+compressed-tag coverage. See `docs/issue-2687-msan-runtime.md` for the report
+and producer-consumer contract.
+
+Manual workflow dispatch accepts a whole-number `fuzz_minutes` input from 2
+through 45 as the total fuzzing budget in every sanitizer matrix entry. The
+workflow divides that budget evenly between the two sequential targets, so a
+45-minute selection fits the 60-minute job limit with time left for build and
+MSan bootstrap overhead. Branch-push runs retain 2 minutes per target. Corpus
+pruning remains fixed at 2 minutes.
 
 All CFL modes require a matching Clang C/C++ pair at major version 21 or 22.
 The local builder prefers 22, falls back to 21, and rejects older or mismatched

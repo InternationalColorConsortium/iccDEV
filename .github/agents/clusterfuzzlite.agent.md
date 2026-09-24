@@ -17,5 +17,7 @@ Use `.github/skills/clusterfuzzlite/SKILL.md` and
    triggers limited to manual dispatch plus `ci-qa-clusterfuzz` pushes.
 6. Run configuration CTest, workflow governance checks, and local OSS-Fuzz
    build/check/run validation before reporting success.
-7. Record exact sanitizer results and treat MSan dependency-instrumentation
+7. Build the pinned instrumented libc++/libc++abi for MSan, reject an unexpected
+   runtime in both fuzzers, and replay the #2687 artifact before fuzzing.
+8. Record exact sanitizer results and treat MSan dependency-instrumentation
    failures as blockers rather than suppressing them.
