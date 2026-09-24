@@ -150,8 +150,61 @@ for target in "${requested_targets[@]}"; do
   done
   selected_targets+=("$target")
 done
-cc="${CC:-clang}"
-cxx="${CXX:-clang++}"
+if [ -n "${CC:-}" ]; then
+  cc="$CC"
+elif command -v clang-22 >/dev/null 2>&1; then
+  cc=clang-22
+elif command -v clang-21 >/dev/null 2>&1; then
+  cc=clang-21
+else
+  cc=clang
+fi
+if [ -n "${CXX:-}" ]; then
+  cxx="$CXX"
+elif command -v clang++-22 >/dev/null 2>&1; then
+  cxx=clang++-22
+elif command -v clang++-21 >/dev/null 2>&1; then
+  cxx=clang++-21
+else
+  cxx=clang++
+fi
+clusterfuzzlite_build="${ICCDEV_CLUSTERFUZZLITE_BUILD:-0}"
+
+if [ "$clusterfuzzlite_build" != "0" ] && [ "$clusterfuzzlite_build" != "1" ]; then
+  echo "ERROR: ICCDEV_CLUSTERFUZZLITE_BUILD must be 0 or 1" >&2
+  exit 2
+fi
+
+if [ "$clusterfuzzlite_build" -eq 1 ]; then
+  : "${CFLAGS:?ClusterFuzzLite must provide CFLAGS}"
+  : "${CXXFLAGS:?ClusterFuzzLite must provide CXXFLAGS}"
+  : "${LIB_FUZZING_ENGINE:?ClusterFuzzLite must provide LIB_FUZZING_ENGINE}"
+  cmake_c_flags="$CFLAGS"
+  cmake_cxx_flags="$CXXFLAGS"
+  read -r -a fuzzer_compile_flags <<< "$CXXFLAGS"
+  read -r -a fuzzer_link_flags <<< "$LIB_FUZZING_ENGINE"
+  fuzzer_link_flags+=( "${fuzzer_compile_flags[@]}" )
+  cmake_feature_args=(
+    -DENABLE_TOOLS=OFF
+    -DENABLE_ICCXML=OFF
+    -DENABLE_ICCJSON=OFF
+    -DICC_USE_ZLIB=OFF
+  )
+  link_libraries=()
+else
+  cmake_c_flags="-g -O1 -fno-omit-frame-pointer -fsanitize=address,undefined"
+  cmake_cxx_flags="$cmake_c_flags"
+  fuzzer_compile_flags=(
+    -g -O1 -fno-omit-frame-pointer
+    "-fsanitize=fuzzer-no-link,address,undefined"
+  )
+  fuzzer_link_flags=(
+    -g -O1 -fno-omit-frame-pointer
+    "-fsanitize=fuzzer,address,undefined"
+  )
+  cmake_feature_args=( -DENABLE_TOOLS=ON )
+  link_libraries=( -lz )
+fi
 
 for tool in cmake "$cc" "$cxx"; do
   if ! command -v "$tool" >/dev/null 2>&1; then
@@ -159,6 +212,17 @@ for tool in cmake "$cc" "$cxx"; do
     exit 127
   fi
 done
+
+cc_major="$($cc -dumpversion | cut -d. -f1)"
+cxx_major="$($cxx -dumpversion | cut -d. -f1)"
+case "$cc_major:$cxx_major" in
+  21:21|22:22)
+    ;;
+  *)
+    echo "ERROR: CFL requires matching Clang 21 or 22; found C=$cc_major CXX=$cxx_major" >&2
+    exit 2
+    ;;
+esac
 
 if [ "$apply_patches" != "0" ]; then
   patch_applicator="${ICCDEV_FUZZ_PATCH_APPLICATOR:-$repo_root/.github/scripts/iccdev-apply-fuzz-patches.sh}"
@@ -169,9 +233,9 @@ cmake -S "$repo_root/Build/Cmake" -B "$build_dir" \
   -DCMAKE_BUILD_TYPE=Debug \
   -DCMAKE_C_COMPILER="$cc" \
   -DCMAKE_CXX_COMPILER="$cxx" \
-  -DCMAKE_C_FLAGS="-g -O1 -fno-omit-frame-pointer -fsanitize=address,undefined" \
-  -DCMAKE_CXX_FLAGS="-g -O1 -fno-omit-frame-pointer -fsanitize=address,undefined" \
-  -DENABLE_TOOLS=ON \
+  -DCMAKE_C_FLAGS="$cmake_c_flags" \
+  -DCMAKE_CXX_FLAGS="$cmake_cxx_flags" \
+  "${cmake_feature_args[@]}" \
   -DENABLE_TESTS=OFF \
   -DENABLE_WXWIDGETS=OFF \
   -DENABLE_SHARED_LIBS=OFF \
@@ -189,8 +253,7 @@ for target in "${selected_targets[@]}"; do
   case "$target" in
     profilevisualize|writerserialize) continue ;;
   esac
-  "$cxx" -std=c++17 -g -O1 -fno-omit-frame-pointer \
-    -fsanitize=fuzzer,address,undefined \
+  "$cxx" -std=c++17 "${fuzzer_link_flags[@]}" \
     -DICCDEV_CFL_TARGET="\"$target\"" \
     "$script_dir/icc_cli_fuzzer.cpp" \
     -o "$bin_dir/icc_${target}_fuzzer"
@@ -244,9 +307,8 @@ for target in "${selected_targets[@]}"; do
   object_dir="$work_dir/objects/$target"
   mkdir -p "$object_dir"
   common_flags=(
-    "-std=c++17" "-g" "-O1" "-fno-omit-frame-pointer"
+    "-std=c++17" "${fuzzer_compile_flags[@]}"
     "-Wall" "-Wextra" "-Werror"
-    "-fsanitize=fuzzer-no-link,address,undefined"
     "-I$repo_root/IccProfLib"
     "-I$repo_root/Tools/CmdLine"
     "-I$local_viz_dir"
@@ -262,12 +324,11 @@ for target in "${selected_targets[@]}"; do
   "$cxx" "${common_flags[@]}" \
     -c "$script_dir/icc_${target}_fuzzer.cpp" \
     -o "$object_dir/icc_${target}_fuzzer.o"
-  "$cxx" -g -O1 -fno-omit-frame-pointer \
-    -fsanitize=fuzzer,address,undefined \
+  "$cxx" "${fuzzer_link_flags[@]}" \
     "$object_dir/icc_${target}_fuzzer.o" \
     "${objects[@]}" \
     -Wl,--whole-archive "$profile_lib" -Wl,--no-whole-archive \
-    -lz -o "$bin_dir/icc_${target}_fuzzer"
+    "${link_libraries[@]}" -o "$bin_dir/icc_${target}_fuzzer"
   cp "$script_dir/icc_${target}_fuzzer.options" \
     "$bin_dir/icc_${target}_fuzzer.options"
 done

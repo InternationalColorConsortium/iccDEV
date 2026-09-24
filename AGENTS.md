@@ -53,6 +53,7 @@ shares one source of truth. Update rules here, not in the mirrors.
 | AVX2 CLUT diagnostics and optimization handoff | `docs/avx2-clut-diagnostics.md` |
 | Pull request preparation and handoff | `docs/pre-pr-security-cycle.md` |
 | Maintainer local Git/devenv defaults | `docs/linear-stack-workflow.md` |
+| ClusterFuzzLite integration | `.github/ci/cfl/README.md`, `.github/skills/clusterfuzzlite/SKILL.md` |
 | Pre-PR security skill | `.github/skills/pre-pr-security-cycle/SKILL.md` |
 | Pre-PR security prompt | `.github/prompts/pre-pr-security-cycle.prompt.md` |
 | Stacked PR and fast-lane workflow | `.github/skills/stacked-pr-fast-lane/SKILL.md` |
@@ -108,6 +109,12 @@ CLI implementation or call `processLuts()`.
 
 Keep them separate rather than folding serialization into the model target, so
 a crash stays attributable to one layer.
+
+The official ClusterFuzzLite lane builds only these two in-process targets.
+Keep its `address`, `undefined`, and `memory` builds separate, pass all compiler
+and linker instrumentation through the OSS-Fuzz environment, require matching
+Clang 21 or 22 compilers across AFL, CFL, and ClusterFuzzLite, and keep the
+workflow manual plus branch-push-only until maintainers broaden that policy.
 
 An in-process target that needs a CLUT raster also needs a corpus that still
 contains one. `max_seed_bytes` and libFuzzer's `max_len` both removed the only

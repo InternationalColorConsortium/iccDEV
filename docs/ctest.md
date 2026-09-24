@@ -331,6 +331,14 @@ in parallel without starving the aggregate's subprocesses. The JSON parser suite
 includes malformed curve gamma and out-of-range numeric narrowing coverage, and
 must reject invalid numeric fields before conversion without sanitizer findings.
 
+`iccdev.clusterfuzzlite-configuration` is a fast, build-independent contract
+test for the official ClusterFuzzLite lane. It checks the pinned builder image,
+the manual and `ci-qa-clusterfuzz` push triggers, the three sanitizer matrix
+entries, immutable action references, and shell syntax for both the adapter and
+the shared CFL builder. Runtime sanitizer validation remains in
+`.github/workflows/ci-clusterfuzzlite.yml` and the local OSS-Fuzz helper flow
+documented in `.github/ci/cfl/README.md`.
+
 `iccdev.pawg-report-regressions` builds the standalone `iccPawgReport` tool,
 checks the 32-item PAWG report structure, verifies summary counts against the
 rendered item lines, verifies that critically malformed tag payloads fail C1 in

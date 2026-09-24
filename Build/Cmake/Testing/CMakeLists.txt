@@ -12359,6 +12359,20 @@ if(TARGET iccDescribeSinkTest)
   )
 endif()
 
+if(BASH_EXECUTABLE)
+  add_test(
+    NAME iccdev.clusterfuzzlite-configuration
+    COMMAND
+      "${BASH_EXECUTABLE}"
+      "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-clusterfuzzlite-config-tests.sh"
+  )
+  set_tests_properties(iccdev.clusterfuzzlite-configuration PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 30
+    LABELS "iccdev;clusterfuzzlite;libfuzzer;configuration"
+  )
+endif()
+
 # UnixMultiConfigRuntime.cmake bails out on WIN32 without defining the
 # iccdev_unix_runtime fixture, so this wiring must be skipped there too or
 # Windows multi-config (Visual Studio) CTest runs get unsatisfied fixtures.
