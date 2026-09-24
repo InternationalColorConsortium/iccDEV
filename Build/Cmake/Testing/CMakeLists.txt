@@ -6281,6 +6281,242 @@ function(iccdev_add_curve_setsize_contract_test)
   endif()
 endfunction()
 
+# #2686: CIccTagCurve::Begin() cached the gamma exponent for a one-entry curve,
+# but parsed curves reached Apply() without Begin() and the cache was never
+# initialized.  operator[] and GetData() also expose mutable curve storage, so
+# a cache could become stale after Begin().  Pin that construction, Read(),
+# SetGamma(), copy, assignment, and both public mutation paths all make Apply()
+# use the current encoded u8Fixed8 exponent without a Begin() prerequisite.
+function(iccdev_add_curve_apply_gamma_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCurveApplyGammaTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/curve-apply-gamma.cpp"
+  )
+  target_compile_features(iccCurveApplyGammaTest PRIVATE cxx_std_17)
+  target_include_directories(iccCurveApplyGammaTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccCurveApplyGammaTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccCurveApplyGammaTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.curve-apply-gamma
+      COMMAND "$<TARGET_FILE:iccCurveApplyGammaTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.curve-apply-gamma
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccCurveApplyGammaTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.curve-apply-gamma PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;curve;gamma;issue-2686;regression"
+  )
+  if(WIN32)
+    set(_curve_apply_gamma_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCurveApplyGammaTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _curve_apply_gamma_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.curve-apply-gamma PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_curve_apply_gamma_windows_env_mods}"
+    )
+  endif()
+
+  if(TARGET iccFromXml AND TARGET iccProfilePlot)
+    set(_curve_gamma_xml
+      "${ICCDEV_REPO_ROOT}/.github/ci/regression/issue-2686-curve-gamma.xml")
+    set(_curve_gamma_icc
+      "${ICCDEV_TEST_OUTDIR}/issue-2686-curve-gamma.icc")
+
+    if(WIN32)
+      add_test(
+        NAME iccdev.issue-2686-curve-gamma-xml
+        COMMAND "${CMAKE_COMMAND}"
+          "-DTOOL=$<TARGET_FILE:iccFromXml>"
+          "-DLABEL=issue-2686-curve-gamma-xml"
+          "-DTOOL_ARGS=${_curve_gamma_xml};${_curve_gamma_icc};-noid"
+          "-DEXPECT_EXIT=zero"
+          "-DEXPECT_MATCH=Profile parsed and saved correctly"
+          -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+      )
+      add_test(
+        NAME iccdev.issue-2686-curve-gamma-profileplot
+        COMMAND "${CMAKE_COMMAND}"
+          "-DTOOL=$<TARGET_FILE:iccProfilePlot>"
+          "-DLABEL=issue-2686-curve-gamma-profileplot"
+          "-DTOOL_ARGS=${_curve_gamma_icc};graph;curve:B2A1:B:2"
+          "-DEXPECT_EXIT=zero"
+          "-DEXPECT_MATCH=Y = X . 2[.]000031"
+          -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+      )
+    else()
+      add_test(
+        NAME iccdev.issue-2686-curve-gamma-xml
+        COMMAND
+          "${CMAKE_COMMAND}" -E env
+          ${ICCDEV_TEST_ENV}
+          "${CMAKE_COMMAND}"
+          "-DTOOL=$<TARGET_FILE:iccFromXml>"
+          "-DLABEL=issue-2686-curve-gamma-xml"
+          "-DTOOL_ARGS=${_curve_gamma_xml};${_curve_gamma_icc};-noid"
+          "-DEXPECT_EXIT=zero"
+          "-DEXPECT_MATCH=Profile parsed and saved correctly"
+          -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+      )
+      add_test(
+        NAME iccdev.issue-2686-curve-gamma-profileplot
+        COMMAND
+          "${CMAKE_COMMAND}" -E env
+          ${ICCDEV_TEST_ENV}
+          "${CMAKE_COMMAND}"
+          "-DTOOL=$<TARGET_FILE:iccProfilePlot>"
+          "-DLABEL=issue-2686-curve-gamma-profileplot"
+          "-DTOOL_ARGS=${_curve_gamma_icc};graph;curve:B2A1:B:2"
+          "-DEXPECT_EXIT=zero"
+          "-DEXPECT_MATCH=Y = X . 2[.]000031"
+          -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+      )
+    endif()
+    set_tests_properties(iccdev.issue-2686-curve-gamma-xml PROPERTIES
+      TIMEOUT 120
+      LABELS "iccdev;xml;curve;gamma;issue-2686;regression"
+      FIXTURES_SETUP iccdev_issue_2686_curve_gamma
+    )
+    set_tests_properties(iccdev.issue-2686-curve-gamma-profileplot PROPERTIES
+      TIMEOUT 120
+      LABELS "iccdev;tools;curve;gamma;issue-2686;regression"
+      FIXTURES_REQUIRED iccdev_issue_2686_curve_gamma
+    )
+
+    if(WIN32)
+      set(_curve_gamma_xml_windows_env_mods
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccFromXml>"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccProfilePlot>"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+      )
+      foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+        list(APPEND _curve_gamma_xml_windows_env_mods
+          "PATH=path_list_prepend:${_runtime_path}")
+      endforeach()
+      set_tests_properties(
+        iccdev.issue-2686-curve-gamma-xml
+        iccdev.issue-2686-curve-gamma-profileplot
+        PROPERTIES
+          ENVIRONMENT_MODIFICATION "${_curve_gamma_xml_windows_env_mods}"
+      )
+    endif()
+  endif()
+endfunction()
+
+# #2688: colorantTableType stores PCS values without an encoding field, so the
+# profile header supplies the XYZ/Lab interpretation. Pin the serialized path
+# through iccFromXml and iccDumpProfile; under MSan the unfixed dump reads the
+# uninitialized CIccTagColorantTable::m_PCS member.
+function(iccdev_add_colorant_table_pcs_test)
+  if(NOT TARGET iccFromXml OR NOT TARGET iccDumpProfile)
+    return()
+  endif()
+
+  set(_colorant_pcs_xml
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/issue-2688-colorant-table-pcs.xml")
+  set(_colorant_pcs_icc
+    "${ICCDEV_TEST_OUTDIR}/issue-2688-colorant-table-pcs.icc")
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.issue-2688-colorant-table-pcs-xml
+      COMMAND "${CMAKE_COMMAND}"
+        "-DTOOL=$<TARGET_FILE:iccFromXml>"
+        "-DLABEL=issue-2688-colorant-table-pcs-xml"
+        "-DTOOL_ARGS=${_colorant_pcs_xml};${_colorant_pcs_icc};-noid"
+        "-DEXPECT_EXIT=zero"
+        "-DEXPECT_MATCH=Profile parsed and saved correctly"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+    )
+    add_test(
+      NAME iccdev.issue-2688-colorant-table-pcs-dump
+      COMMAND "${CMAKE_COMMAND}"
+        "-DTOOL=$<TARGET_FILE:iccDumpProfile>"
+        "-DLABEL=issue-2688-colorant-table-pcs-dump"
+        "-DTOOL_ARGS=${_colorant_pcs_icc};ALL"
+        "-DEXPECT_EXIT=zero"
+        "-DEXPECT_MATCH=# NAME XYZ_X XYZ_Y XYZ_Z"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+    )
+  else()
+    add_test(
+      NAME iccdev.issue-2688-colorant-table-pcs-xml
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "${CMAKE_COMMAND}"
+        "-DTOOL=$<TARGET_FILE:iccFromXml>"
+        "-DLABEL=issue-2688-colorant-table-pcs-xml"
+        "-DTOOL_ARGS=${_colorant_pcs_xml};${_colorant_pcs_icc};-noid"
+        "-DEXPECT_EXIT=zero"
+        "-DEXPECT_MATCH=Profile parsed and saved correctly"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+    )
+    add_test(
+      NAME iccdev.issue-2688-colorant-table-pcs-dump
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "${CMAKE_COMMAND}"
+        "-DTOOL=$<TARGET_FILE:iccDumpProfile>"
+        "-DLABEL=issue-2688-colorant-table-pcs-dump"
+        "-DTOOL_ARGS=${_colorant_pcs_icc};ALL"
+        "-DEXPECT_EXIT=zero"
+        "-DEXPECT_MATCH=# NAME XYZ_X XYZ_Y XYZ_Z"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+    )
+  endif()
+
+  set_tests_properties(iccdev.issue-2688-colorant-table-pcs-xml PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;xml;colorant-table;pcs;issue-2688;regression"
+    FIXTURES_SETUP iccdev_issue_2688_colorant_table_pcs
+  )
+  set_tests_properties(iccdev.issue-2688-colorant-table-pcs-dump PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;tools;colorant-table;pcs;issue-2688;regression"
+    FIXTURES_REQUIRED iccdev_issue_2688_colorant_table_pcs
+  )
+
+  if(WIN32)
+    set(_colorant_pcs_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccFromXml>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccDumpProfile>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _colorant_pcs_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(
+      iccdev.issue-2688-colorant-table-pcs-xml
+      iccdev.issue-2688-colorant-table-pcs-dump
+      PROPERTIES
+        ENVIRONMENT_MODIFICATION "${_colorant_pcs_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2607: CIccMpeCurveSet::SetCurve() accepted an index equal to the channel
 # count, reading and writing one pointer beyond m_curve.  It also deleted a
 # unique curve before assigning the same pointer back to its slot.  The library
@@ -9942,6 +10178,8 @@ if(WIN32)
   iccdev_add_calc_channel_ref_unterminated_index_test()
   iccdev_add_calc_channel_ref_unterminated_index_json_test()
   iccdev_add_curve_setsize_contract_test()
+  iccdev_add_curve_apply_gamma_test()
+  iccdev_add_colorant_table_pcs_test()
   iccdev_add_mpe_curveset_setcurve_contract_tests()
   iccdev_add_owning_setter_self_alias_contract_test()
   iccdev_add_curve_gamma_u8fixed8_test()
@@ -10360,6 +10598,8 @@ iccdev_add_xml_curve_oversize_file_test()
 iccdev_add_calc_channel_ref_unterminated_index_test()
 iccdev_add_calc_channel_ref_unterminated_index_json_test()
 iccdev_add_curve_setsize_contract_test()
+iccdev_add_curve_apply_gamma_test()
+iccdev_add_colorant_table_pcs_test()
 iccdev_add_mpe_curveset_setcurve_contract_tests()
 iccdev_add_owning_setter_self_alias_contract_test()
 iccdev_add_curve_gamma_u8fixed8_test()

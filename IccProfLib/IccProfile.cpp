@@ -588,6 +588,14 @@ bool CIccProfile::AttachTag(icSignature sig, CIccTag *pTag)
     return false;
   }
 
+  if (pTag->GetType() == icSigColorantTableType) {
+    CIccTagColorantTable *pTable = (CIccTagColorantTable*)pTag;
+    if (sig == icSigColorantTableTag)
+      pTable->SetPCS(m_Header.pcs);
+    else if (sig == icSigColorantTableOutTag)
+      pTable->SetPCS(icSigLabData);
+  }
+
   IccTagEntry Entry = {};
   Entry.TagInfo.sig = (icTagSignature)sig;
   Entry.TagInfo.offset = 0;
@@ -1641,6 +1649,16 @@ bool CIccProfile::LoadTag(IccTagEntry *pTagEntry, CIccIO *pIO, bool bReadAll/*=f
   }
 
   switch(pTagEntry->TagInfo.sig) {
+  case icSigColorantTableTag:
+    if (pTag->GetType() == icSigColorantTableType)
+      ((CIccTagColorantTable*)pTag)->SetPCS(m_Header.pcs);
+    break;
+
+  case icSigColorantTableOutTag:
+    if (pTag->GetType() == icSigColorantTableType)
+      ((CIccTagColorantTable*)pTag)->SetPCS(icSigLabData);
+    break;
+
   case icSigAToB0Tag:
   case icSigAToB1Tag:
   case icSigAToB2Tag:
