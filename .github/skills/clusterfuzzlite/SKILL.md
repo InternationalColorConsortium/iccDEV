@@ -33,8 +33,8 @@ Use this skill for `.clusterfuzzlite/**`,
 - Keep the workflow limited to `workflow_dispatch` and pushes to
   `ci-qa-clusterfuzz` unless a maintainer explicitly broadens the trigger.
 - Keep the total manual fuzz duration selectable as whole minutes from 2
-  through 45, validate it before the sanitizer matrix, divide it evenly between
-  the two sequential targets, and retain 2 minutes per target for push runs.
+  through 45, validate it before the sanitizer matrix, pass it to the runner as
+  the total budget, and retain a 2-minute total budget for push runs.
 - Pin every action to a full commit SHA and the builder image to a digest.
 
 ## Local Validation

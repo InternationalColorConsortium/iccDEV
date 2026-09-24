@@ -42,7 +42,7 @@ profile once through `icc_profilevisualize_fuzzer` and
 | ClusterFuzzLite adapter | Shared CFL builder | Add instrumented headers and explicit final link libraries only for `memory` | OSS-Fuzz builder environment | Manual or `ci-qa-clusterfuzz` push | iccDEV CFL adapter | Configuration contract checks the flag handoff |
 | Shared CFL builder | Both in-process fuzzers | Link the explicit runtime after iccDEV and fuzzer objects | Linux ELF loader with `$ORIGIN` | `memory` matrix entry | iccDEV CFL builder | `ldd` resolves bundled libc++ and libc++abi with no libstdc++ |
 | #2687 base64 fixture | Both in-process fuzzers | Decode the exact input, verify its SHA-256, and execute one replay | MSan with origin tracking | `memory` matrix entry | iccDEV regression fixtures | Both one-shot replays exit zero with no report |
-| ClusterFuzzLite workflow | Memory adapter | Validate a 2-45 minute total manual budget, split it evenly across two sequential targets, and retain 2 minutes per target for push runs | GitHub Ubuntu 24.04 runner and pinned CFL containers | Manual or `ci-qa-clusterfuzz` push | iccDEV workflow maintainers | The matrix job fits the requested fuzzing within its 60-minute limit and passes targeted workflow lint |
+| ClusterFuzzLite workflow | Memory adapter | Validate a 2-45 minute total manual budget, pass it directly to the runner, and retain a 2-minute total budget for push runs | GitHub Ubuntu 24.04 runner and pinned CFL containers | Manual or `ci-qa-clusterfuzz` push | iccDEV workflow maintainers | The matrix job passes the requested total budget and targeted workflow lint |
 
 XML, JSON, tools, and zlib remain disabled in the official ClusterFuzzLite
 lane. The broader repository MSan QA continues to build instrumented libxml2 as

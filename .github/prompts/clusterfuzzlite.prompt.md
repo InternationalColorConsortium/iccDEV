@@ -9,8 +9,8 @@ Keep libFuzzer as the engine and validate distinct `address`, `undefined`, and
 immutable action and image pins, manual plus `ci-qa-clusterfuzz` push triggers,
 matching Clang 21 or 22 compilers, and repository workflow-governance rules.
 Preserve the validated total manual duration input from 2 through 45 whole
-minutes, divide it evenly between the two sequential targets to fit the
-60-minute job limit, and retain 2 minutes per target for branch-push runs.
+minutes, pass it to the runner as the total budget, and retain a 2-minute total
+budget for branch-push runs.
 For the memory build, require the pinned instrumented libc++/libc++abi, prove
 both fuzzers resolve that runtime rather than libstdc++, and replay the pinned
 #2687 artifact before accepting the build.

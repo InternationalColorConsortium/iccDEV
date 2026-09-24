@@ -45,16 +45,14 @@ grep -q '^      - ci-qa-clusterfuzz$' "$workflow"
 grep -q '^  configure:$' "$workflow"
 # shellcheck disable=SC2016 # Match the literal Actions expression.
 grep -q '^      fuzz_seconds: \${{ steps.duration.outputs.fuzz_seconds }}$' "$workflow"
+test "$(grep -c '^        shell: bash --noprofile --norc {0}$' "$workflow")" -eq 1
 grep -q '^          BASH_ENV: /dev/null$' "$workflow"
 grep -q '^          git config --global credential.helper ""$' "$workflow"
 grep -q '^          unset GITHUB_TOKEN || true$' "$workflow"
 # shellcheck disable=SC2016 # Match literal workflow shell variables.
 grep -q '^          if \[ "$minutes" -lt 2 \] || \[ "$minutes" -gt 45 \]; then$' "$workflow"
-grep -q '^          seconds_per_target=120$' "$workflow"
-# shellcheck disable=SC2016 # Match the literal budget calculation.
-grep -q '^            seconds_per_target=$((minutes \* 60 / 2))$' "$workflow"
 # shellcheck disable=SC2016 # Match the literal validated output write.
-grep -q '^          echo "fuzz_seconds=$seconds_per_target" >> "$GITHUB_OUTPUT"  # elements-sanitized$' "$workflow"
+grep -q '^          echo "fuzz_seconds=$((minutes \* 60))" >> "$GITHUB_OUTPUT"  # elements-sanitized$' "$workflow"
 grep -q '^    needs: configure$' "$workflow"
 grep -q '^  prune:$' "$workflow"
 grep -q '^    needs: fuzz$' "$workflow"
@@ -86,6 +84,7 @@ grep -Fq 'origin_history_size=7' "$adapter"
 grep -Fq 'ICCDEV_CFL_CXX_LINK_FLAGS' "$repo_root/.github/ci/cfl/build.sh"
 grep -Fq -- '--skip-libxml2' < <("$msan_builder" --help)
 grep -Fq 'cmake_generator="Unix Makefiles"' "$msan_builder"
+test "$(grep -c -- '--filter=blob:none' "$msan_builder")" -eq 2
 issue_2687_sha="$(base64 --decode "$issue_2687_fixture" | sha256sum | cut -d' ' -f1)"
 test "$issue_2687_sha" = \
   'bb9c4ad53f9269920947bac185a634da2971a94b17da6cff117dd7ad45bcfe85'

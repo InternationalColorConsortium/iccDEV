@@ -115,7 +115,8 @@ git -C "$source_dir" sparse-checkout init --cone
 git -C "$source_dir" sparse-checkout set \
   runtimes libcxx libcxxabi libc cmake llvm/cmake \
   llvm/utils/gn/secondary llvm/utils/llvm-lit
-git -C "$source_dir" fetch --quiet --depth=1 origin "$llvm_commit"
+git -C "$source_dir" fetch --quiet --depth=1 --filter=blob:none \
+  origin "$llvm_commit"
 git -C "$source_dir" checkout --quiet --detach FETCH_HEAD
 if [ "$(git -C "$source_dir" rev-parse HEAD)" != "$llvm_commit" ]; then
   echo "[FAIL] fetched LLVM commit does not match the requested revision" >&2
@@ -158,7 +159,7 @@ done
 if [ "$build_libxml2" -eq 1 ]; then
   git init --quiet "$libxml2_source_dir"
   git -C "$libxml2_source_dir" remote add origin https://gitlab.gnome.org/GNOME/libxml2.git
-  git -C "$libxml2_source_dir" fetch --quiet --depth=1 \
+  git -C "$libxml2_source_dir" fetch --quiet --depth=1 --filter=blob:none \
     origin "$libxml2_commit"
   git -C "$libxml2_source_dir" checkout --quiet --detach FETCH_HEAD
   if [ "$(git -C "$libxml2_source_dir" rev-parse HEAD)" != "$libxml2_commit" ]; then

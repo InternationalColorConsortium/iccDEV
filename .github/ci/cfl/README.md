@@ -73,10 +73,9 @@ and producer-consumer contract.
 
 Manual workflow dispatch accepts a whole-number `fuzz_minutes` input from 2
 through 45 as the total fuzzing budget in every sanitizer matrix entry. The
-workflow divides that budget evenly between the two sequential targets, so a
-45-minute selection fits the 60-minute job limit with time left for build and
-MSan bootstrap overhead. Branch-push runs retain 2 minutes per target. Corpus
-pruning remains fixed at 2 minutes.
+ClusterFuzzLite runner divides that total budget across the sequential targets.
+Branch-push runs use a 2-minute total budget. Corpus pruning remains fixed at 2
+minutes.
 
 All CFL modes require a matching Clang C/C++ pair at major version 21 or 22.
 The local builder prefers 22, falls back to 21, and rejects older or mismatched

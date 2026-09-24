@@ -40,6 +40,7 @@ jobs:
     steps:
       - name: Resolve bounded duration
         id: duration
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
           REQUESTED_MINUTES: ${{ inputs.fuzz_minutes }}
@@ -48,7 +49,6 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           minutes=2
-          seconds_per_target=120
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
             minutes="$REQUESTED_MINUTES"
           fi
@@ -62,10 +62,7 @@ jobs:
             echo "fuzz_minutes must be from 2 through 45" >&2
             exit 2
           fi
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            seconds_per_target=$((minutes * 60 / 2))
-          fi
-          echo "fuzz_seconds=$seconds_per_target" >> "$GITHUB_OUTPUT"  # elements-sanitized
+          echo "fuzz_seconds=$((minutes * 60))" >> "$GITHUB_OUTPUT"  # elements-sanitized
 
   fuzz:
     name: "libFuzzer (${{ matrix.sanitizer }})"
