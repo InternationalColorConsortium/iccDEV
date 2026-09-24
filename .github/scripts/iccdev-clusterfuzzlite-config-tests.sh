@@ -53,6 +53,11 @@ fuzzer_template='  fuzzer="icc_${target}_fuzzer"'
 grep -Fqx "$fuzzer_template" "$adapter"
 grep -Fq '21:21|22:22)' "$repo_root/.github/ci/cfl/build.sh"
 grep -Fq '21:21|22:22)' "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
+# shellcheck disable=SC2016 # Match the literal skip-build condition.
+skip_build_line="$(grep -n '^if \[ "$skip_build" -eq 0 \]; then$' "$repo_root/.github/scripts/iccdev-afl-smoke.sh" | cut -d: -f1)"
+# shellcheck disable=SC2016 # Match the literal compiler-gate condition.
+compiler_gate_line="$(grep -n '^    if \[ -z "${AFL_CC:-}" \]; then$' "$repo_root/.github/scripts/iccdev-afl-smoke.sh" | cut -d: -f1)"
+test "$compiler_gate_line" -gt "$skip_build_line"
 
 validate_action_reference() {
   local action_ref="$1"

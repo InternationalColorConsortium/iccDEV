@@ -214,41 +214,6 @@ require_tool afl-fuzz
 require_tool afl-clang-fast
 require_tool afl-clang-fast++
 
-if [ -z "${AFL_CC:-}" ]; then
-    if command -v clang-21 >/dev/null 2>&1; then
-        AFL_CC=clang-21
-    elif command -v clang-22 >/dev/null 2>&1; then
-        AFL_CC=clang-22
-    else
-        echo "ERROR: AFL++ requires clang-21 or clang-22" >&2
-        exit 127
-    fi
-fi
-if [ -z "${AFL_CXX:-}" ]; then
-    case "$AFL_CC" in
-        *clang-21) AFL_CXX="${AFL_CC%clang-21}clang++-21" ;;
-        *clang-22) AFL_CXX="${AFL_CC%clang-22}clang++-22" ;;
-        *)
-            echo "ERROR: set AFL_CXX to the matching Clang 21 or 22 compiler" >&2
-            exit 2
-            ;;
-    esac
-fi
-require_tool "$AFL_CC"
-require_tool "$AFL_CXX"
-
-afl_cc_major="$($AFL_CC -dumpversion | cut -d. -f1)"
-afl_cxx_major="$($AFL_CXX -dumpversion | cut -d. -f1)"
-case "$afl_cc_major:$afl_cxx_major" in
-    21:21|22:22)
-        ;;
-    *)
-        echo "ERROR: AFL++ requires matching Clang 21 or 22; found C=$afl_cc_major CXX=$afl_cxx_major" >&2
-        exit 2
-        ;;
-esac
-export AFL_CC AFL_CXX
-
 mkdir -p "$work_dir"
 
 core_pattern_is_safe=0
@@ -267,6 +232,41 @@ else
 fi
 
 if [ "$skip_build" -eq 0 ]; then
+    if [ -z "${AFL_CC:-}" ]; then
+        if command -v clang-21 >/dev/null 2>&1; then
+            AFL_CC=clang-21
+        elif command -v clang-22 >/dev/null 2>&1; then
+            AFL_CC=clang-22
+        else
+            echo "ERROR: AFL++ requires clang-21 or clang-22" >&2
+            exit 127
+        fi
+    fi
+    if [ -z "${AFL_CXX:-}" ]; then
+        case "$AFL_CC" in
+            *clang-21) AFL_CXX="${AFL_CC%clang-21}clang++-21" ;;
+            *clang-22) AFL_CXX="${AFL_CC%clang-22}clang++-22" ;;
+            *)
+                echo "ERROR: set AFL_CXX to the matching Clang 21 or 22 compiler" >&2
+                exit 2
+                ;;
+        esac
+    fi
+    require_tool "$AFL_CC"
+    require_tool "$AFL_CXX"
+
+    afl_cc_major="$($AFL_CC -dumpversion | cut -d. -f1)"
+    afl_cxx_major="$($AFL_CXX -dumpversion | cut -d. -f1)"
+    case "$afl_cc_major:$afl_cxx_major" in
+        21:21|22:22)
+            ;;
+        *)
+            echo "ERROR: AFL++ requires matching Clang 21 or 22; found C=$afl_cc_major CXX=$afl_cxx_major" >&2
+            exit 2
+            ;;
+    esac
+    export AFL_CC AFL_CXX
+
     if [ "$apply_patches" != "0" ]; then
         patch_applicator="${ICCDEV_FUZZ_PATCH_APPLICATOR:-$repo_root/.github/scripts/iccdev-apply-fuzz-patches.sh}"
         "$patch_applicator" --mode afl --patch-dir "$patch_dir"
