@@ -14,14 +14,14 @@ set -euo pipefail
 
 usage() {
   echo "Usage: $0 [--targets CSV] [--seconds N] [--build-dir DIR] [--work-dir DIR] [--patches [DIR]] [--skip-run]"
-  echo "Targets: dump, toxml, fromxml, tojson, fromjson, roundtrip, profilevisualize, writerserialize"
+  echo "Targets: dump, toxml, fromxml, tojson, fromjson, roundtrip, profileparse, cmmapply, xmlparse, jsonparse, connectconfig, pawgreport, profilevisualize, writerserialize"
 }
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 repo_root="$(cd "$script_dir/../../.." && pwd)"
 build_dir="${ICCDEV_CFL_BUILD_DIR:-$repo_root/build-cfl-smoke}"
 work_dir="${ICCDEV_CFL_WORK_DIR:-$repo_root/.cfl-smoke}"
-targets_csv="${ICCDEV_CFL_TARGETS:-dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize}"
+targets_csv="${ICCDEV_CFL_TARGETS:-dump,toxml,fromxml,tojson,fromjson,roundtrip,profileparse,cmmapply,xmlparse,jsonparse,connectconfig,pawgreport,profilevisualize,writerserialize}"
 seconds="${ICCDEV_CFL_SECONDS:-30}"
 # Raised from 49152 to admit the whole committed seed corpus (#2120). The old
 # default sat below exactly one file in .github/ci/test-data --
@@ -135,7 +135,7 @@ for target in "${requested_targets[@]}"; do
     exit 2
   fi
   case "$target" in
-    dump|toxml|fromxml|tojson|fromjson|roundtrip|profilevisualize|writerserialize)
+    dump|toxml|fromxml|tojson|fromjson|roundtrip|profileparse|cmmapply|xmlparse|jsonparse|connectconfig|pawgreport|profilevisualize|writerserialize)
       ;;
     *)
       echo "ERROR: unsupported CFL target: $target" >&2
@@ -150,6 +150,16 @@ for target in "${requested_targets[@]}"; do
   done
   selected_targets+=("$target")
 done
+
+needs_xml=0
+needs_json=0
+for target in "${selected_targets[@]}"; do
+  case "$target" in
+    xmlparse) needs_xml=1 ;;
+    jsonparse|connectconfig) needs_json=1 ;;
+  esac
+done
+
 if [ -n "${CC:-}" ]; then
   cc="$CC"
 elif command -v clang-22 >/dev/null 2>&1; then
@@ -186,12 +196,23 @@ if [ "$clusterfuzzlite_build" -eq 1 ]; then
   fuzzer_link_flags+=( "${fuzzer_compile_flags[@]}" )
   read -r -a cxx_dependency_link_flags <<< \
     "${ICCDEV_CFL_CXX_LINK_FLAGS:-}"
+  cmake_xml=OFF
+  cmake_json=OFF
+  [ "$needs_xml" -eq 0 ] || cmake_xml=ON
+  [ "$needs_json" -eq 0 ] || cmake_json=ON
   cmake_feature_args=(
     -DENABLE_TOOLS=OFF
-    -DENABLE_ICCXML=OFF
-    -DENABLE_ICCJSON=OFF
+    "-DENABLE_ICCXML=$cmake_xml"
+    "-DENABLE_ICCJSON=$cmake_json"
     -DICC_USE_ZLIB=OFF
   )
+  if [ "$needs_xml" -eq 1 ] && [ -n "${ICCDEV_CFL_LIBXML2_PREFIX:-}" ]; then
+    cmake_feature_args+=(
+      "-DLIBXML2_INCLUDE_DIR=$ICCDEV_CFL_LIBXML2_PREFIX/include/libxml2"
+      "-DLIBXML2_LIBRARY=$ICCDEV_CFL_LIBXML2_PREFIX/lib/libxml2.so"
+      "-DLIBXML2_LIBRARIES=$ICCDEV_CFL_LIBXML2_PREFIX/lib/libxml2.so"
+    )
+  fi
   link_libraries=()
 else
   cmake_c_flags="-g -O1 -fno-omit-frame-pointer -fsanitize=address,undefined"
@@ -204,7 +225,15 @@ else
     -g -O1 -fno-omit-frame-pointer
     "-fsanitize=fuzzer,address,undefined"
   )
-  cmake_feature_args=( -DENABLE_TOOLS=ON )
+  cmake_xml=OFF
+  cmake_json=OFF
+  [ "$needs_xml" -eq 0 ] || cmake_xml=ON
+  [ "$needs_json" -eq 0 ] || cmake_json=ON
+  cmake_feature_args=(
+    -DENABLE_TOOLS=ON
+    "-DENABLE_ICCXML=$cmake_xml"
+    "-DENABLE_ICCJSON=$cmake_json"
+  )
   link_libraries=( -lz )
   cxx_dependency_link_flags=()
 fi
@@ -254,7 +283,7 @@ for target in "${selected_targets[@]}"; do
   # iccDEV objects directly rather than fork/exec'ing a built CLI, so they do
   # not come from icc_cli_fuzzer.cpp.
   case "$target" in
-    profilevisualize|writerserialize) continue ;;
+    profileparse|cmmapply|xmlparse|jsonparse|connectconfig|pawgreport|profilevisualize|writerserialize) continue ;;
   esac
   "$cxx" -std=c++17 "${fuzzer_link_flags[@]}" \
     -DICCDEV_CFL_TARGET="\"$target\"" \
@@ -262,25 +291,39 @@ for target in "${selected_targets[@]}"; do
     -o "$bin_dir/icc_${target}_fuzzer"
 done
 
-# Library-linking harnesses. Each one links iccDEV translation units directly,
-# so unlike the icc_cli_fuzzer.cpp targets above it needs its own source list.
-# Kept as a single loop with a per-target list rather than one copied block per
-# target: the same hand-maintained-list drift that #2034 fixed in the sanitizer
-# silence files applies here the moment a third target arrives.
+# Locate a Debug or non-suffixed static library without teaching every target
+# about CMake's output-name convention.
+find_static_library() {
+  local directory="$1"
+  local stem="$2"
+
+  if [ -r "$directory/lib${stem}d.a" ]; then
+    printf '%s\n' "$directory/lib${stem}d.a"
+  elif [ -r "$directory/lib${stem}.a" ]; then
+    printf '%s\n' "$directory/lib${stem}.a"
+  else
+    echo "ERROR: static library $stem not found under $directory" >&2
+    return 1
+  fi
+}
+
+# Library-linking harnesses. These are the only targets published to
+# ClusterFuzzLite: each executes the instrumented library in-process, so
+# libFuzzer receives useful edge coverage and sanitizer attribution.
 for target in "${selected_targets[@]}"; do
   case "$target" in
-    profilevisualize|writerserialize) ;;
+    profileparse|cmmapply|xmlparse|jsonparse|connectconfig|pawgreport|profilevisualize|writerserialize) ;;
     *) continue ;;
   esac
 
-  profile_lib="$build_dir/IccProfLib/libIccProfLib2-staticd.a"
-  if [ ! -r "$profile_lib" ]; then
-    profile_lib="$build_dir/IccProfLib/libIccProfLib2-static.a"
-  fi
-  if [ ! -r "$profile_lib" ]; then
-    echo "ERROR: static IccProfLib library not found under $build_dir/IccProfLib" >&2
-    exit 1
-  fi
+  profile_lib="$(find_static_library "$build_dir/IccProfLib" IccProfLib2-static)"
+  static_libraries=( "$profile_lib" )
+  target_include_flags=(
+    "-I$repo_root/IccProfLib"
+    "-I$repo_root/Tools/CmdLine"
+    "-I$build_dir/IccProfLib"
+  )
+  target_link_flags=()
 
   # Translation units this target links beside its own harness source.
   # writerserialize adds the three writers because the serialization seam it
@@ -294,8 +337,55 @@ for target in "${selected_targets[@]}"; do
   # compile rather than silently fuzz the other tool.
   local_viz_dir="$repo_root/Tools/CmdLine/IccProfilePlot"
   case "$target" in
+    profileparse|cmmapply)
+      extra_sources=()
+      ;;
+    xmlparse)
+      xml_lib="$(find_static_library "$build_dir/IccXML" IccXML2-static)"
+      static_libraries=( "$xml_lib" "$profile_lib" )
+      target_include_flags+=(
+        "-I$repo_root/IccXML/IccLibXML"
+        "-I$build_dir/IccXML"
+      )
+      if [ -n "${ICCDEV_CFL_LIBXML2_PREFIX:-}" ]; then
+        target_include_flags+=( "-I$ICCDEV_CFL_LIBXML2_PREFIX/include/libxml2" )
+        target_link_flags+=( "$ICCDEV_CFL_LIBXML2_PREFIX/lib/libxml2.so" )
+      else
+        target_include_flags+=( "-I/usr/include/libxml2" )
+        target_link_flags+=( -lxml2 )
+      fi
+      extra_sources=()
+      ;;
+    jsonparse)
+      json_lib="$(find_static_library "$build_dir/IccJSON" IccJSON2-static)"
+      static_libraries=( "$json_lib" "$profile_lib" )
+      target_include_flags+=(
+        "-I$repo_root/IccJSON/IccLibJSON"
+        "-I$build_dir/IccJSON"
+      )
+      extra_sources=()
+      ;;
+    connectconfig)
+      connect_lib="$(find_static_library "$build_dir/IccConnect" IccConnect2-static)"
+      # IccConnect carries its own IccJsonUtil implementation. Linking the
+      # sibling IccJSON archive whole would define those helpers twice; the
+      # config parser needs only IccConnect plus IccProfLib.
+      static_libraries=( "$connect_lib" "$profile_lib" )
+      target_include_flags+=(
+        "-I$repo_root/IccConnect/IccLibConnect"
+        "-I$repo_root/IccJSON/IccLibJSON"
+        "-I$build_dir/IccConnect"
+        "-I$build_dir/IccJSON"
+      )
+      extra_sources=()
+      ;;
+    pawgreport)
+      target_include_flags+=( "-I$repo_root/Tools/CmdLine/IccPawgReport" )
+      extra_sources=( "$repo_root/Tools/CmdLine/IccPawgReport/PawgReport.cpp" )
+      ;;
     profilevisualize)
       extra_sources=( "$local_viz_dir/IccVizModel.cpp" )
+      target_include_flags+=( "-I$local_viz_dir" )
       ;;
     writerserialize)
       extra_sources=(
@@ -304,6 +394,7 @@ for target in "${selected_targets[@]}"; do
         "$local_viz_dir/MiniSVG.cpp"
         "$local_viz_dir/MiniTIFF.cpp"
       )
+      target_include_flags+=( "-I$local_viz_dir" )
       ;;
   esac
 
@@ -312,9 +403,7 @@ for target in "${selected_targets[@]}"; do
   common_flags=(
     "-std=c++17" "${fuzzer_compile_flags[@]}"
     "-Wall" "-Wextra" "-Werror"
-    "-I$repo_root/IccProfLib"
-    "-I$repo_root/Tools/CmdLine"
-    "-I$local_viz_dir"
+    "${target_include_flags[@]}"
   )
 
   objects=()
@@ -330,11 +419,31 @@ for target in "${selected_targets[@]}"; do
   "$cxx" "${fuzzer_link_flags[@]}" \
     "$object_dir/icc_${target}_fuzzer.o" \
     "${objects[@]}" \
-    -Wl,--whole-archive "$profile_lib" -Wl,--no-whole-archive \
-    "${link_libraries[@]}" "${cxx_dependency_link_flags[@]}" \
+    -Wl,--start-group -Wl,--whole-archive \
+    "${static_libraries[@]}" \
+    -Wl,--no-whole-archive -Wl,--end-group \
+    "${target_link_flags[@]}" "${link_libraries[@]}" \
+    "${cxx_dependency_link_flags[@]}" \
     -o "$bin_dir/icc_${target}_fuzzer"
-  cp "$script_dir/icc_${target}_fuzzer.options" \
+
+  case "$target" in
+    xmlparse)
+      option_family=text
+      dictionary_family=xml
+      ;;
+    jsonparse|connectconfig)
+      option_family=text
+      dictionary_family=json
+      ;;
+    *)
+      option_family=profile
+      dictionary_family=profile
+      ;;
+  esac
+  cp "$script_dir/icc_${option_family}_fuzzer.options" \
     "$bin_dir/icc_${target}_fuzzer.options"
+  cp "$script_dir/icc_${dictionary_family}_fuzzer.dict" \
+    "$bin_dir/icc_${target}_fuzzer.dict"
 done
 
 seed_root="$work_dir/seeds"
@@ -343,6 +452,7 @@ skipped_seeds_tsv="$work_dir/skipped-seeds.tsv"
 mkdir -p "$seed_root/icc" "$seed_root/xml" "$seed_root/json"
 cp "$repo_root"/.github/ci/test-data/*.icc "$seed_root/icc/"
 cp "$repo_root"/.github/ci/test-data/*.xml "$seed_root/xml/" 2>/dev/null || true
+cp "$repo_root"/.github/ci/test-data/*.json "$seed_root/json/" 2>/dev/null || true
 
 first_icc="$(find "$seed_root/icc" -maxdepth 1 -type f -name '*.icc' | sort | head -n 1)"
 if [ -n "$first_icc" ]; then
@@ -411,8 +521,8 @@ failures=0
 if [ "$skip_run" -eq 0 ]; then
   for target in "${selected_targets[@]}"; do
     case "$target" in
-      fromxml) corpus="$seed_root/xml" ;;
-        fromjson) corpus="$seed_root/json" ;;
+      fromxml|xmlparse) corpus="$seed_root/xml" ;;
+      fromjson|jsonparse|connectconfig) corpus="$seed_root/json" ;;
         *) corpus="$seed_root/icc" ;;
     esac
     log_file="$logs_dir/$target.log"
@@ -422,7 +532,7 @@ if [ "$skip_run" -eq 0 ]; then
       -max_total_time="$seconds"
     )
     case "$target" in
-      profilevisualize|writerserialize)
+      profileparse|cmmapply|pawgreport|profilevisualize|writerserialize)
         # max_len is load-bearing for BOTH in-process targets, and it is a
         # second, independent gate from the seed cap above: the cap decides
         # whether the file reaches the corpus, max_len decides how much of it
@@ -442,6 +552,14 @@ if [ "$skip_run" -eq 0 ]; then
         # real CMYK profiles.
         fuzzer_args+=(
           -max_len=262144
+          -timeout=30
+          -rss_limit_mb=4096
+          -use_value_profile=1
+        )
+        ;;
+      xmlparse|jsonparse|connectconfig)
+        fuzzer_args+=(
+          -max_len=1048576
           -timeout=30
           -rss_limit_mb=4096
           -use_value_profile=1

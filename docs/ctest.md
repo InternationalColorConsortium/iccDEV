@@ -331,13 +331,15 @@ in parallel without starving the aggregate's subprocesses. The JSON parser suite
 includes malformed curve gamma and out-of-range numeric narrowing coverage, and
 must reject invalid numeric fields before conversion without sanitizer findings.
 
-`iccdev.clusterfuzzlite-configuration` is a fast, build-independent contract
-test for the official ClusterFuzzLite lane. It checks the pinned builder image,
+`iccdev.clusterfuzzlite-configuration` and
+`iccdev.clusterfuzzlite-targets` are fast, build-independent contract tests for
+the official ClusterFuzzLite lane. They check the pinned builder image,
 the manual and `ci-qa-clusterfuzz` push triggers, the three sanitizer matrix
-entries, immutable action references, the pinned #2687 artifact hash, the
-validated 2-45 minute total manual duration passed directly to the runner,
-the 60-minute job envelope, the instrumented-libc++ bootstrap and linkage
-assertions, and shell syntax for both the adapter and the shared CFL builder.
+entries, three target groups, eight in-process harness sources, matching seed
+families, dictionaries and options, immutable action references, the pinned
+#2687 artifact hash, the validated 2-45 minute per-group manual duration, the
+60-minute job envelope, instrumented libc++/libxml2 bootstrap and linkage
+assertions, and shell syntax for the adapter and shared CFL builder.
 Runtime sanitizer validation remains in
 `.github/workflows/ci-clusterfuzzlite.yml` and the local OSS-Fuzz helper flow
 documented in `.github/ci/cfl/README.md`.

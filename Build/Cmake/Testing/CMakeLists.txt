@@ -12371,6 +12371,18 @@ if(BASH_EXECUTABLE)
     TIMEOUT 30
     LABELS "iccdev;clusterfuzzlite;libfuzzer;configuration"
   )
+
+  add_test(
+    NAME iccdev.clusterfuzzlite-targets
+    COMMAND
+      "${BASH_EXECUTABLE}"
+      "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-clusterfuzzlite-target-tests.sh"
+  )
+  set_tests_properties(iccdev.clusterfuzzlite-targets PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 30
+    LABELS "iccdev;clusterfuzzlite;libfuzzer;targets;corpus"
+  )
 endif()
 
 # UnixMultiConfigRuntime.cmake bails out on WIN32 without defining the
