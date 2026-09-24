@@ -239,6 +239,11 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.fileio-seek-tell` | `.github/ci/regression/fileio-seek-tell.cpp` |
 | `iccdev.iccconnect-config-parser` | `.github/ci/regression/iccconnect-config-parser.cpp` |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
+| `iccdev.curve-apply-gamma` | `.github/ci/regression/curve-apply-gamma.cpp`; direct one-entry gamma API contract for issue #2686 |
+| `iccdev.issue-2686-curve-gamma-xml` | `.github/ci/regression/issue-2686-curve-gamma.xml`; serialized profile setup for issue #2686 |
+| `iccdev.issue-2686-curve-gamma-profileplot` | `iccProfilePlot`; applies the generated BToA1 one-entry curve for issue #2686 |
+| `iccdev.issue-2688-colorant-table-pcs-xml` | `.github/ci/regression/issue-2688-colorant-table-pcs.xml`; serialized profile setup for issue #2688 |
+| `iccdev.issue-2688-colorant-table-pcs-dump` | `iccDumpProfile`; requires the generated XYZ-PCS colorant table to use XYZ column labels; see the [issue #2688 MSan reproduction](issue-2688-colorant-table-pcs.md) |
 | `iccdev.owning-setter-self-alias-contract` | `.github/ci/regression/owning-setter-self-alias-contract.cpp`; ownership contract of five exported setters for issue #2630, the three `CIccMpeSpectral*` `copyData()` self-assignment cases for issue #2637, the apply table `SetData()` releases for issue #2638, and the two protected-member setters `CIccSampledCalculatorCurve::SetCalculator()` and `CIccMpeCalculator::SetCalcFunc()` for issue #2645 |
 | `iccdev.mpe-curveset-setcurve-contract` | `.github/ci/regression/mpe-curveset-setcurve-contract.cpp`; public API bounds and ownership contract for issue #2607 |
 | `iccdev.issue-2607-curveset-extra-xml` | `.github/ci/regression/issue-2607-curveset-too-many-curves.xml`; tool-level rejection control for an extra CurveSet child |

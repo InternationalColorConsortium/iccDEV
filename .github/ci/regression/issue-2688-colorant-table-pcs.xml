@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Copyright (c) 2026 The International Color Consortium. All rights reserved.
+  Licensed under the BSD 3-Clause "New" or "Revised" License; see the ICC
+  Software License in the repository root and CONTRIBUTING.md.
+-->
+<IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>2.10</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-09-24T00:00:00</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Perceptual</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.9642" Y="1.0000" Z="0.8249"/>
+    </PCSIlluminant>
+    <ProfileCreator>ICCD</ProfileCreator>
+  </Header>
+  <Tags>
+    <redColorantTag> <XYZArrayType>
+      <XYZNumber X="0.436004638672" Y="0.222503662109" Z="0.013900756836"/>
+    </XYZArrayType> </redColorantTag>
+    <redTRCTag> <curveType> <Curve>563</Curve> </curveType> </redTRCTag>
+    <greenColorantTag> <XYZArrayType>
+      <XYZNumber X="0.385101318359" Y="0.716903686523" Z="0.097106933594"/>
+    </XYZArrayType> </greenColorantTag>
+    <greenTRCTag> <curveType> <Curve>563</Curve> </curveType> </greenTRCTag>
+    <blueColorantTag> <XYZArrayType>
+      <XYZNumber X="0.143096923828" Y="0.060592651367" Z="0.713897705078"/>
+    </XYZArrayType> </blueColorantTag>
+    <blueTRCTag> <curveType> <Curve>563</Curve> </curveType> </blueTRCTag>
+    <profileDescriptionTag> <textDescriptionType>
+      <TextData><![CDATA[Issue 2688 colorant table PCS]]></TextData>
+    </textDescriptionType> </profileDescriptionTag>
+    <copyrightTag> <textType>
+      <TextData><![CDATA[Copyright 2026 International Color Consortium]]></TextData>
+    </textType> </copyrightTag>
+    <colorantTableTag> <colorantTableType>
+      <ColorantTable>
+        <Colorant Name="Red" Channel1="50" Channel2="0" Channel3="0"/>
+        <Colorant Name="Green" Channel1="50" Channel2="0" Channel3="0"/>
+        <Colorant Name="Blue" Channel1="50" Channel2="0" Channel3="0"/>
+      </ColorantTable>
+    </colorantTableType> </colorantTableTag>
+    <mediaWhitePointTag> <XYZArrayType>
+      <XYZNumber X="0.9642" Y="1.0000" Z="0.8249"/>
+    </XYZArrayType> </mediaWhitePointTag>
+  </Tags>
+</IccProfile>

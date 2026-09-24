@@ -261,7 +261,7 @@
       "name": "linux-clang-msan",
       "inherits": "linux-clang",
       "displayName": "Linux Clang with instrumented MSan runtime",
-      "description": "Requires ICCDEV_MSAN_LIBCXX_DIR from iccdev-build-msan-libcxx.sh; uses instrumented libc++, libc++abi, and libxml2.",
+      "description": "Requires ICCDEV_MSAN_LIBCXX_DIR from iccdev-build-msan-libcxx.sh; uses instrumented libc++, libc++abi, and libxml2. Image tools stay off because their TIFF, PNG, and JPEG dependencies are not instrumented.",
       "binaryDir": "${sourceDir}/../../out/${presetName}",
       "condition": {
         "type": "notEquals",

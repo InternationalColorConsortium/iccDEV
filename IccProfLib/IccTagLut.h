@@ -168,10 +168,6 @@ protected:
   icFloatNumber *m_Curve;
   icUInt32Number m_nSize;
   icUInt16Number m_nMaxIndex;
-
-  /// Gamma for the single-entry form, decoded once by Begin(). Apply() rebuilt it
-  /// from m_Curve[0] on every call before handing it to pow().
-  icFloatNumber m_fGamma;
 };
 
 /**

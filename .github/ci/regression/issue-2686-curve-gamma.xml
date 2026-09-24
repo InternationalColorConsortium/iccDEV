@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Copyright (c) 2026 The International Color Consortium. All rights reserved.
+  Licensed under the BSD 3-Clause "New" or "Revised" License; see the ICC
+  Software License in the repository root and CONTRIBUTING.md.
+-->
+<IccProfile>
+  <Header>
+    <PreferredCMMType>RIMX</PreferredCMMType>
+    <ProfileVersion>5.00</ProfileVersion>
+    <ProfileSubClassVersion>1.00</ProfileSubClassVersion>
+    <ProfileDeviceClass>spac</ProfileDeviceClass>
+    <ProfileDeviceSubClass>pcc </ProfileDeviceSubClass>
+    <DataColourSpace>XYZ </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-09-24T00:00:00</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="true" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.9642" Y="1.0000" Z="0.8249"/>
+    </PCSIlluminant>
+    <ProfileCreator>RIMX</ProfileCreator>
+  </Header>
+  <Tags>
+    <profileDescriptionTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Issue 2686 one-entry gamma curve]]></LocalizedText>
+    </multiLocalizedUnicodeType> </profileDescriptionTag>
+    <copyrightTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright 2026 International Color Consortium]]></LocalizedText>
+    </multiLocalizedUnicodeType> </copyrightTag>
+    <AToB1Tag> <lutAtoBType>
+      <Channels InputChannels="3" OutputChannels="3"/>
+      <BCurves>
+        <Curve>0 65535</Curve>
+        <Curve>0 65535</Curve>
+        <Curve>0 65535</Curve>
+      </BCurves>
+    </lutAtoBType> </AToB1Tag>
+    <BToA1Tag> <lutBtoAType>
+      <Channels InputChannels="3" OutputChannels="3"/>
+      <BCurves>
+        <Curve>512</Curve>
+        <Curve>512</Curve>
+        <Curve>512</Curve>
+      </BCurves>
+    </lutBtoAType> </BToA1Tag>
+    <mediaWhitePointTag> <XYZArrayType>
+      <XYZNumber X="0.9642" Y="1.0000" Z="0.8249"/>
+    </XYZArrayType> </mediaWhitePointTag>
+  </Tags>
+</IccProfile>
