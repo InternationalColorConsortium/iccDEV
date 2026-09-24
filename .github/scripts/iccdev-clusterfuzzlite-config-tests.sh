@@ -69,6 +69,7 @@ grep -q '^          if \[ "$minutes" -lt 2 \] || \[ "$minutes" -gt 45 \]; then$'
 # shellcheck disable=SC2016 # Match the literal validated output write.
 grep -q '^          echo "fuzz_seconds=$((minutes \* 60))" >> "$GITHUB_OUTPUT"  # elements-sanitized$' "$workflow"
 grep -q '^    needs: configure$' "$workflow"
+grep -q '^      max-parallel: 3$' "$workflow"
 grep -q '^  prune:$' "$workflow"
 test "$(grep -c '^      - configure$' "$workflow")" -eq 2
 test "$(grep -c '^      - fuzz$' "$workflow")" -eq 1

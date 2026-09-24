@@ -57,7 +57,9 @@ their child processes is not visible to the parent libFuzzer process.
 The dedicated `ci-clusterfuzzlite` workflow runs on manual dispatch and pushes
 to `ci-qa-clusterfuzz`. Its matrix builds and fuzzes with `address`,
 `undefined`, and `memory`; libFuzzer is the engine for every matrix entry, not
-a fourth sanitizer. ICC, XML, and JSON targets receive only the matching
+a fourth sanitizer. The nine group/sanitizer combinations run at most three at
+a time to stay within hosted-runner and artifact API limits. ICC, XML, and JSON
+targets receive only the matching
 tracked seed family from `.github/ci/test-data/`, plus a format-specific
 dictionary and options file. The address-sanitizer prune job uses `always()`
 after configuration so one real finding does not indefinitely starve corpus
