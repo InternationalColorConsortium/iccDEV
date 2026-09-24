@@ -20,9 +20,14 @@ project="$repo_root/.clusterfuzzlite/project.yaml"
 dockerfile="$repo_root/.clusterfuzzlite/Dockerfile"
 msan_builder="$repo_root/.github/scripts/iccdev-build-msan-libcxx.sh"
 issue_2687_fixture="$repo_root/.github/ci/regression/issue-2687-profile-list-node.icc.base64"
+patch_mode_file="$repo_root/.clusterfuzzlite/known-bug-patch-mode"
+target_group_file="$repo_root/.clusterfuzzlite/target-group"
+known_bug_patch="$repo_root/.github/ci/fuzz-patches/cfl/001-known-msan-2686-2688.patch"
+target_test="$repo_root/.github/scripts/iccdev-clusterfuzzlite-target-tests.sh"
 
 for required in "$workflow" "$adapter" "$project" "$dockerfile" \
-  "$msan_builder" "$issue_2687_fixture"; do
+  "$msan_builder" "$issue_2687_fixture" "$patch_mode_file" \
+  "$target_group_file" "$known_bug_patch" "$target_test"; do
   if [ ! -s "$required" ]; then
     echo "[FAIL] Missing ClusterFuzzLite file: $required" >&2
     exit 1
@@ -33,19 +38,29 @@ bash -n "$adapter"
 bash -n "$repo_root/.github/ci/cfl/build.sh"
 bash -n "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
 bash -n "$msan_builder"
+bash -n "$target_test"
 
 grep -qx 'language: c++' "$project"
 grep -q '^FROM gcr.io/oss-fuzz-base/base-builder@sha256:[0-9a-f]\{64\}$' "$dockerfile"
-grep -q '^  actions: read$' "$workflow"
+grep -q '^      libxml2-dev=[^ ]* \\$' "$dockerfile"
+grep -q '^      nlohmann-json3-dev=[^ ]* && \\$' "$dockerfile"
+grep -q '^  actions: read  # ' "$workflow"
+grep -q '^concurrency:$' "$workflow"
 grep -q '^  workflow_dispatch:$' "$workflow"
 grep -q '^      fuzz_minutes:$' "$workflow"
 grep -q '^        default: 2$' "$workflow"
 grep -q '^        type: number$' "$workflow"
+grep -q '^      known_bug_patch_mode:$' "$workflow"
+grep -q '^        default: patched$' "$workflow"
+grep -q '^          - patched$' "$workflow"
+grep -q '^          - unpatched$' "$workflow"
+grep -q '^      generate_coverage:$' "$workflow"
+grep -q '^        type: boolean$' "$workflow"
 grep -q '^      - ci-qa-clusterfuzz$' "$workflow"
 grep -q '^  configure:$' "$workflow"
 # shellcheck disable=SC2016 # Match the literal Actions expression.
 grep -q '^      fuzz_seconds: \${{ steps.duration.outputs.fuzz_seconds }}$' "$workflow"
-test "$(grep -c '^        shell: bash --noprofile --norc {0}$' "$workflow")" -eq 1
+test "$(grep -c '^        shell: bash --noprofile --norc {0}$' "$workflow")" -eq 4
 grep -q '^          BASH_ENV: /dev/null$' "$workflow"
 grep -q '^          git config --global credential.helper ""$' "$workflow"
 grep -q '^          unset GITHUB_TOKEN || true$' "$workflow"
@@ -55,10 +70,13 @@ grep -q '^          if \[ "$minutes" -lt 2 \] || \[ "$minutes" -gt 45 \]; then$'
 grep -q '^          echo "fuzz_seconds=$((minutes \* 60))" >> "$GITHUB_OUTPUT"  # elements-sanitized$' "$workflow"
 grep -q '^    needs: configure$' "$workflow"
 grep -q '^  prune:$' "$workflow"
-grep -q '^    needs: fuzz$' "$workflow"
+test "$(grep -c '^      - configure$' "$workflow")" -eq 2
+test "$(grep -c '^      - fuzz$' "$workflow")" -eq 1
+test "$(grep -c '^      - prune$' "$workflow")" -eq 1
 grep -q '^    timeout-minutes: 60$' "$workflow"
 grep -q '^          MODE: prune$' "$workflow"
-test "$(grep -c '^          FUZZ_SECONDS: "120"$' "$workflow")" -eq 1
+grep -q '^          MODE: coverage$' "$workflow"
+test "$(grep -c '^          FUZZ_SECONDS: "120"$' "$workflow")" -eq 2
 # shellcheck disable=SC2016 # Match the literal Actions expression.
 grep -q '^          FUZZ_SECONDS: \${{ needs.configure.outputs.fuzz_seconds }}$' "$workflow"
 grep -Eq '^        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:[0-9a-f]{64}$' "$workflow"
@@ -67,11 +85,25 @@ grep -Eq '^        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzze
 for sanitizer in address undefined memory; do
   grep -q "^          - $sanitizer$" "$workflow"
 done
+for group in core formats assessment; do
+  grep -q "^          - $group$" "$workflow"
+done
 
-grep -q '^targets=( profilevisualize writerserialize )$' "$adapter"
-grep -q -- '--targets profilevisualize,writerserialize' "$adapter"
+grep -q '^  core)$' "$adapter"
+grep -q '^  formats)$' "$adapter"
+grep -q '^  assessment)$' "$adapter"
+# shellcheck disable=SC2016 # Match the literal adapter variable.
+grep -Fq -- '--targets "$targets_csv"' "$adapter"
+grep -qx 'patched' "$patch_mode_file"
+grep -qx 'all' "$target_group_file"
+grep -Fq 'ICCDEV_CFL_KNOWN_BUG_PATCH_MODE' "$adapter"
+grep -Fq '.github/ci/fuzz-patches/cfl' "$adapter"
+"$repo_root/.github/scripts/iccdev-apply-fuzz-patches.sh" \
+  --mode cfl --dry-run --strict
 grep -Fq 'iccdev-build-msan-libcxx.sh' "$adapter"
 grep -Fq -- '--skip-libxml2' "$adapter"
+grep -Fq 'ICCDEV_CFL_LIBXML2_PREFIX' "$adapter"
+grep -Fq 'libxml2_soname' "$adapter"
 grep -Fq 'CXXFLAGS//-stdlib=libc++/' "$adapter"
 grep -Fq 'ICCDEV_CFL_CXX_LINK_FLAGS' "$adapter"
 grep -Fq 'libstdc++.so' "$adapter"
@@ -82,6 +114,7 @@ grep -Fq 'libc++abi.so.1' "$adapter"
 grep -Fq 'issue-2687-profile-list-node.icc.base64' "$adapter"
 grep -Fq 'origin_history_size=7' "$adapter"
 grep -Fq 'ICCDEV_CFL_CXX_LINK_FLAGS' "$repo_root/.github/ci/cfl/build.sh"
+grep -Fq 'ICCDEV_CFL_LIBXML2_PREFIX' "$repo_root/.github/ci/cfl/build.sh"
 grep -Fq -- '--skip-libxml2' < <("$msan_builder" --help)
 grep -Fq 'cmake_generator="Unix Makefiles"' "$msan_builder"
 grep -Fq 'extensions.partialClone origin' "$msan_builder"
@@ -102,6 +135,8 @@ skip_build_line="$(grep -n '^if \[ "$skip_build" -eq 0 \]; then$' "$repo_root/.g
 # shellcheck disable=SC2016 # Match the literal compiler-gate condition.
 compiler_gate_line="$(grep -n '^    if \[ -z "${AFL_CC:-}" \]; then$' "$repo_root/.github/scripts/iccdev-afl-smoke.sh" | cut -d: -f1)"
 test "$compiler_gate_line" -gt "$skip_build_line"
+
+"$target_test"
 
 validate_action_reference() {
   local action_ref="$1"

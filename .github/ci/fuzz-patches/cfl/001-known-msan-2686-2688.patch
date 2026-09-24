@@ -1,0 +1,107 @@
+diff --git a/IccProfLib/IccProfile.cpp b/IccProfLib/IccProfile.cpp
+index 8d1c4697..2e3e20a5 100644
+--- a/IccProfLib/IccProfile.cpp
++++ b/IccProfLib/IccProfile.cpp
+@@ -588,6 +588,14 @@ bool CIccProfile::AttachTag(icSignature sig, CIccTag *pTag)
+     return false;
+   }
+ 
++  if (pTag->GetType() == icSigColorantTableType) {
++    CIccTagColorantTable *pTable = (CIccTagColorantTable*)pTag;
++    if (sig == icSigColorantTableTag)
++      pTable->SetPCS(m_Header.pcs);
++    else if (sig == icSigColorantTableOutTag)
++      pTable->SetPCS(icSigLabData);
++  }
++
+   IccTagEntry Entry = {};
+   Entry.TagInfo.sig = (icTagSignature)sig;
+   Entry.TagInfo.offset = 0;
+@@ -1641,6 +1649,16 @@ bool CIccProfile::LoadTag(IccTagEntry *pTagEntry, CIccIO *pIO, bool bReadAll/*=f
+   }
+ 
+   switch(pTagEntry->TagInfo.sig) {
++  case icSigColorantTableTag:
++    if (pTag->GetType() == icSigColorantTableType)
++      ((CIccTagColorantTable*)pTag)->SetPCS(m_Header.pcs);
++    break;
++
++  case icSigColorantTableOutTag:
++    if (pTag->GetType() == icSigColorantTableType)
++      ((CIccTagColorantTable*)pTag)->SetPCS(icSigLabData);
++    break;
++
+   case icSigAToB0Tag:
+   case icSigAToB1Tag:
+   case icSigAToB2Tag:
+diff --git a/IccProfLib/IccTagBasic.cpp b/IccProfLib/IccTagBasic.cpp
+index 31761b04..9e8aee3a 100644
+--- a/IccProfLib/IccTagBasic.cpp
++++ b/IccProfLib/IccTagBasic.cpp
+@@ -9912,6 +9912,10 @@ icValidateStatus CIccTagColorantOrder::Validate(std::string sigPath, std::string
+  */
+ CIccTagColorantTable::CIccTagColorantTable(int nSize/*=1*/)
+ {
++  // A standalone colorant table has no profile header from which to obtain its
++  // PCS. Lab preserves Describe()'s historical fallback; CIccProfile replaces
++  // it with the profile PCS when attaching or loading colorantTableTag.
++  m_PCS = icSigLabData;
+   m_nCount = nSize;
+   if (m_nCount<1)
+     m_nCount = 1;
+diff --git a/IccProfLib/IccTagLut.cpp b/IccProfLib/IccTagLut.cpp
+index 2a0fc50b..a13bba01 100644
+--- a/IccProfLib/IccTagLut.cpp
++++ b/IccProfLib/IccTagLut.cpp
+@@ -713,21 +713,12 @@ bool CIccTagCurve::IsIdentity()
+ ****************************************************************************
+ * Name: CIccTagCurve::Begin
+ *
+-* Purpose: Precomputes what Apply() would otherwise rederive per call.
+-*
+-*  m_nMaxIndex is the table's top index. m_fGamma decodes the single-entry form,
+-*  where m_Curve[0] is a u8Fixed8Number holding the gamma: Apply() used to redo
+-*  that decode on every call before handing the result to pow().
++* Purpose: Precomputes the table's top index for Apply().
+ *****************************************************************************
+ */
+ void CIccTagCurve::Begin()
+ {
+   m_nMaxIndex = m_nSize ? (icUInt16Number)(m_nSize - 1) : 0;
+-
+-  //Convert 0.0 to 1.0 float to 16bit and then convert from u8Fixed8Number
+-  m_fGamma = (m_nSize == 1 && m_Curve)
+-               ? (icFloatNumber)(m_Curve[0] * 65535.0 / 256.0)
+-               : (icFloatNumber)1.0;
+ }
+ 
+ icFloatNumber CIccTagCurve::Apply(icFloatNumber v) const
+@@ -746,8 +737,11 @@ icFloatNumber CIccTagCurve::Apply(icFloatNumber v) const
+     return v;
+   }
+   if (m_nSize==1) {
+-    // Gamma decoded once in Begin(); this rebuilt it from m_Curve[0] per call.
+-    return (icFloatNumber)pow(v, m_fGamma);
++    // m_Curve is publicly mutable through operator[] and GetData(), so the
++    // gamma cannot be cached without becoming stale between Begin() calls.
++    // Convert the normalized u16 sample back to its u8Fixed8 exponent here.
++    icFloatNumber dGamma = (icFloatNumber)(m_Curve[0] * 65535.0 / 256.0);
++    return (icFloatNumber)pow(v, dGamma);
+   }
+ 
+   icUInt32Number nIndex = static_cast<icUInt32Number>(v * m_nMaxIndex);
+diff --git a/IccProfLib/IccTagLut.h b/IccProfLib/IccTagLut.h
+index 882d1ebe..6e82891b 100644
+--- a/IccProfLib/IccTagLut.h
++++ b/IccProfLib/IccTagLut.h
+@@ -168,10 +168,6 @@ protected:
+   icFloatNumber *m_Curve;
+   icUInt32Number m_nSize;
+   icUInt16Number m_nMaxIndex;
+-
+-  /// Gamma for the single-entry form, decoded once by Begin(). Apply() rebuilt it
+-  /// from m_Curve[0] on every call before handing it to pow().
+-  icFloatNumber m_fGamma;
+ };
+ 
+ /**
