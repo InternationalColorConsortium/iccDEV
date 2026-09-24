@@ -32,8 +32,11 @@ bash -n "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
 
 grep -qx 'language: c++' "$project"
 grep -q '^FROM gcr.io/oss-fuzz-base/base-builder@sha256:[0-9a-f]\{64\}$' "$dockerfile"
+grep -q '^  actions: read$' "$workflow"
 grep -q '^  workflow_dispatch:$' "$workflow"
 grep -q '^      - ci-qa-clusterfuzz$' "$workflow"
+grep -Eq '^        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:[0-9a-f]{64}$' "$workflow"
+grep -Eq '^        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:[0-9a-f]{64}$' "$workflow"
 
 for sanitizer in address undefined memory; do
   grep -q "^          - $sanitizer$" "$workflow"
@@ -47,9 +50,34 @@ grep -Fqx "$fuzzer_template" "$adapter"
 grep -Fq '21:21|22:22)' "$repo_root/.github/ci/cfl/build.sh"
 grep -Fq '21:21|22:22)' "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
 
-if grep -qE 'uses: [^ ]+@(main|master|v[0-9]+)$' "$workflow"; then
-  echo "[FAIL] ClusterFuzzLite workflow contains a mutable action reference" >&2
-  exit 1
-fi
+validate_action_reference() {
+  local action_ref="$1"
+
+  if [[ "$action_ref" == ./* ]]; then
+    return 0
+  fi
+  if [[ "$action_ref" =~ ^docker://[^@[:space:]]+@sha256:[0-9a-f]{64}$ ]]; then
+    return 0
+  fi
+  [[ "$action_ref" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/[^@[:space:]]+)?@[0-9a-f]{40}$ ]]
+}
+
+while IFS= read -r action_ref; do
+  if ! validate_action_reference "$action_ref"; then
+    echo "[FAIL] Mutable or invalid action reference: $action_ref" >&2
+    exit 1
+  fi
+done < <(sed -nE 's/^[[:space:]]*uses:[[:space:]]*([^[:space:]#]+).*$/\1/p' "$workflow")
+
+for mutable_ref in \
+  'actions/checkout@v5.0.0' \
+  'actions/checkout@main' \
+  'actions/checkout@08c6903' \
+  'docker://gcr.io/example/action:v1'; do
+  if validate_action_reference "$mutable_ref"; then
+    echo "[FAIL] Pin validator accepted mutable reference: $mutable_ref" >&2
+    exit 1
+  fi
+done
 
 echo "[PASS] ClusterFuzzLite configuration contract"

@@ -14,6 +14,7 @@
 name: "ci-clusterfuzzlite"
 
 permissions:
+  actions: read
   contents: read
 
 'on':
@@ -46,20 +47,40 @@ jobs:
           persist-credentials: false
 
       - name: Build and check fuzzers
-        uses: google/clusterfuzzlite/actions/build_fuzzers@52ecc61cb587ee99c26825a112a21abf19c7448c  # main, 2026-02-12
-        with:
-          language: c++
-          sanitizer: ${{ matrix.sanitizer }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          keep-unaffected-fuzz-targets: true
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:fde96247c3488104b96822156a6e107d58487140115247a34e1f967c23df5604
+        env:
+          ALLOWED_BROKEN_TARGETS_PERCENTAGE: ""
+          BAD_BUILD_CHECK: "true"
+          UPLOAD_BUILD: "false"
+          LANGUAGE: c++
+          DRY_RUN: "false"
+          SANITIZER: ${{ matrix.sanitizer }}
+          PROJECT_SRC_PATH: ""
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIT_STORE_REPO: ""
+          GIT_STORE_BRANCH: ""
+          GIT_STORE_BRANCH_COVERAGE: ""
+          CFL_PLATFORM: github
+          LOW_DISK_SPACE: "True"
+          KEEP_UNAFFECTED_FUZZ_TARGETS: "true"
 
       - name: Run bounded batch fuzzing
-        uses: google/clusterfuzzlite/actions/run_fuzzers@52ecc61cb587ee99c26825a112a21abf19c7448c  # main, 2026-02-12
-        with:
-          language: c++
-          sanitizer: ${{ matrix.sanitizer }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: 120
-          mode: batch
-          parallel-fuzzing: false
-          minimize-crashes: false
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
+        env:
+          FUZZ_SECONDS: "120"
+          MODE: batch
+          LANGUAGE: c++
+          DRY_RUN: "false"
+          SANITIZER: ${{ matrix.sanitizer }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LOW_DISK_SPACE: "True"
+          GIT_STORE_REPO: ""
+          GIT_STORE_BRANCH: main
+          GIT_STORE_BRANCH_COVERAGE: gh-pages
+          REPORT_UNREPRODUCIBLE_CRASHES: "False"
+          OUTPUT_SARIF: "false"
+          MINIMIZE_CRASHES: "false"
+          CFL_PLATFORM: github
+          PARALLEL_FUZZING: "false"
+          REPORT_TIMEOUTS: "true"
+          REPORT_OOMS: "true"
