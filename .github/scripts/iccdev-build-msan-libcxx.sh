@@ -109,12 +109,23 @@ build_dir="$work_dir/build"
 libxml2_source_dir="$work_dir/libxml2"
 libxml2_build_dir="$work_dir/libxml2-build"
 
+configure_partial_clone()
+{
+  local source_path="$1"
+
+  git -C "$source_path" config core.repositoryFormatVersion 1
+  git -C "$source_path" config extensions.partialClone origin
+  git -C "$source_path" config remote.origin.promisor true
+  git -C "$source_path" config remote.origin.partialCloneFilter blob:none
+}
+
 git init --quiet "$source_dir"
 git -C "$source_dir" remote add origin https://github.com/llvm/llvm-project.git
 git -C "$source_dir" sparse-checkout init --cone
 git -C "$source_dir" sparse-checkout set \
   runtimes libcxx libcxxabi libc cmake llvm/cmake \
   llvm/utils/gn/secondary llvm/utils/llvm-lit
+configure_partial_clone "$source_dir"
 git -C "$source_dir" fetch --quiet --depth=1 --filter=blob:none \
   origin "$llvm_commit"
 git -C "$source_dir" checkout --quiet --detach FETCH_HEAD
@@ -159,6 +170,7 @@ done
 if [ "$build_libxml2" -eq 1 ]; then
   git init --quiet "$libxml2_source_dir"
   git -C "$libxml2_source_dir" remote add origin https://gitlab.gnome.org/GNOME/libxml2.git
+  configure_partial_clone "$libxml2_source_dir"
   git -C "$libxml2_source_dir" fetch --quiet --depth=1 --filter=blob:none \
     origin "$libxml2_commit"
   git -C "$libxml2_source_dir" checkout --quiet --detach FETCH_HEAD

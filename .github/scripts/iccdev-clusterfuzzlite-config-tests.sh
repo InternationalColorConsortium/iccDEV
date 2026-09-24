@@ -84,6 +84,10 @@ grep -Fq 'origin_history_size=7' "$adapter"
 grep -Fq 'ICCDEV_CFL_CXX_LINK_FLAGS' "$repo_root/.github/ci/cfl/build.sh"
 grep -Fq -- '--skip-libxml2' < <("$msan_builder" --help)
 grep -Fq 'cmake_generator="Unix Makefiles"' "$msan_builder"
+grep -Fq 'extensions.partialClone origin' "$msan_builder"
+grep -Fq 'remote.origin.promisor true' "$msan_builder"
+grep -Fq 'remote.origin.partialCloneFilter blob:none' "$msan_builder"
+test "$(grep -c 'configure_partial_clone "\$.*source_dir"' "$msan_builder")" -eq 2
 test "$(grep -c -- '--filter=blob:none' "$msan_builder")" -eq 2
 issue_2687_sha="$(base64 --decode "$issue_2687_fixture" | sha256sum | cut -d' ' -f1)"
 test "$issue_2687_sha" = \
