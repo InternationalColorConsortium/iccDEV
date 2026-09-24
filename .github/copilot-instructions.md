@@ -78,8 +78,8 @@ use `.github/skills/regression-container-maintainer/SKILL.md` and
 `docs/regression-container.md`.
 
 ClusterFuzzLite `memory` builds must use the repository-pinned instrumented
-libc++/libc++abi, verify both fuzzer runtime boundaries, and replay the pinned
-#2687 artifact before fuzzing.
+libc++/libc++abi and instrumented libxml2 for the XML target, verify every
+fuzzer runtime boundary, and replay the pinned #2687 artifact before fuzzing.
 
 ## Build, Test, and Safety
 

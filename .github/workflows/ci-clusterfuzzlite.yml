@@ -14,28 +14,46 @@
 name: "ci-clusterfuzzlite"
 
 permissions:
-  actions: read
-  contents: read
+  actions: read  # Download prior ClusterFuzzLite corpus artifacts.
+  contents: read  # Checkout source without repository mutation.
+
+concurrency:
+  group: clusterfuzzlite-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 'on':
   workflow_dispatch:
     inputs:
       fuzz_minutes:
-        description: "Total minutes across two sequential fuzz targets (2-45)"
+        description: "Minutes per sequential target group (2-45)"
         required: true
         default: 2
         type: number
+      known_bug_patch_mode:
+        description: "Apply temporary fixes for open MSan issues #2686 and #2688"
+        required: true
+        default: patched
+        type: choice
+        options:
+          - patched
+          - unpatched
+      generate_coverage:
+        description: "Generate a coverage-report artifact after fuzzing"
+        required: true
+        default: false
+        type: boolean
   push:
     branches:
       - ci-qa-clusterfuzz
 
 jobs:
   configure:
-    name: "Validate fuzz duration"
+    name: "Validate fuzz configuration"
     runs-on: ubuntu-24.04
     timeout-minutes: 1
     outputs:
       fuzz_seconds: ${{ steps.duration.outputs.fuzz_seconds }}
+      known_bug_patch_mode: ${{ steps.duration.outputs.known_bug_patch_mode }}
 
     steps:
       - name: Resolve bounded duration
@@ -44,6 +62,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           REQUESTED_MINUTES: ${{ inputs.fuzz_minutes }}
+          REQUESTED_PATCH_MODE: ${{ inputs.known_bug_patch_mode }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -62,19 +81,36 @@ jobs:
             echo "fuzz_minutes must be from 2 through 45" >&2
             exit 2
           fi
+          patch_mode=patched
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            patch_mode="$REQUESTED_PATCH_MODE"
+          fi
+          case "$patch_mode" in
+            patched|unpatched) ;;
+            *)
+              echo "known_bug_patch_mode must be patched or unpatched" >&2
+              exit 2
+              ;;
+          esac
           echo "fuzz_seconds=$((minutes * 60))" >> "$GITHUB_OUTPUT"  # elements-sanitized
+          echo "known_bug_patch_mode=$patch_mode" >> "$GITHUB_OUTPUT"  # elements-sanitized
 
   fuzz:
-    name: "libFuzzer (${{ matrix.sanitizer }})"
+    name: "libFuzzer (${{ matrix.group }}, ${{ matrix.sanitizer }})"
     needs: configure
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     concurrency:
-      group: clusterfuzzlite-${{ github.workflow }}-${{ matrix.sanitizer }}-${{ github.ref }}
+      group: clusterfuzzlite-${{ github.workflow }}-${{ matrix.group }}-${{ matrix.sanitizer }}-${{ github.ref }}
       cancel-in-progress: true
     strategy:
       fail-fast: false
+      max-parallel: 3
       matrix:
+        group:
+          - core
+          - formats
+          - assessment
         sanitizer:
           - address
           - undefined
@@ -86,6 +122,20 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Configure target group and temporary patches
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+          TARGET_GROUP: ${{ matrix.group }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          printf '%s\n' "$KNOWN_BUG_PATCH_MODE" > .clusterfuzzlite/known-bug-patch-mode
+          printf '%s\n' "$TARGET_GROUP" > .clusterfuzzlite/target-group
 
       - name: Build and check fuzzers
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:fde96247c3488104b96822156a6e107d58487140115247a34e1f967c23df5604
@@ -128,9 +178,12 @@ jobs:
 
   prune:
     name: "Prune persistent corpus"
-    needs: fuzz
+    needs:
+      - configure
+      - fuzz
+    if: ${{ !cancelled() && needs.configure.result == 'success' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     concurrency:
       group: clusterfuzzlite-${{ github.workflow }}-prune-${{ github.ref }}
       cancel-in-progress: true
@@ -141,6 +194,19 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Configure all targets and temporary patches
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          printf '%s\n' "$KNOWN_BUG_PATCH_MODE" > .clusterfuzzlite/known-bug-patch-mode
+          printf '%s\n' 'all' > .clusterfuzzlite/target-group
 
       - name: Build fuzzers for pruning
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:fde96247c3488104b96822156a6e107d58487140115247a34e1f967c23df5604
@@ -168,6 +234,77 @@ jobs:
           LANGUAGE: c++
           DRY_RUN: "false"
           SANITIZER: address
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LOW_DISK_SPACE: "True"
+          GIT_STORE_REPO: ""
+          GIT_STORE_BRANCH: main
+          GIT_STORE_BRANCH_COVERAGE: gh-pages
+          REPORT_UNREPRODUCIBLE_CRASHES: "False"
+          OUTPUT_SARIF: "false"
+          MINIMIZE_CRASHES: "false"
+          CFL_PLATFORM: github
+          PARALLEL_FUZZING: "false"
+          REPORT_TIMEOUTS: "true"
+          REPORT_OOMS: "true"
+
+  coverage:
+    name: "Generate libFuzzer coverage report"
+    needs:
+      - configure
+      - prune
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.generate_coverage && needs.configure.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    concurrency:
+      group: clusterfuzzlite-${{ github.workflow }}-coverage-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout iccDEV
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Configure all targets and temporary patches
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          printf '%s\n' "$KNOWN_BUG_PATCH_MODE" > .clusterfuzzlite/known-bug-patch-mode
+          printf '%s\n' 'all' > .clusterfuzzlite/target-group
+
+      - name: Build fuzzers for coverage
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:fde96247c3488104b96822156a6e107d58487140115247a34e1f967c23df5604
+        env:
+          ALLOWED_BROKEN_TARGETS_PERCENTAGE: ""
+          BAD_BUILD_CHECK: "false"
+          UPLOAD_BUILD: "false"
+          LANGUAGE: c++
+          DRY_RUN: "false"
+          SANITIZER: coverage
+          PROJECT_SRC_PATH: ""
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIT_STORE_REPO: ""
+          GIT_STORE_BRANCH: ""
+          GIT_STORE_BRANCH_COVERAGE: ""
+          CFL_PLATFORM: github
+          LOW_DISK_SPACE: "True"
+          KEEP_UNAFFECTED_FUZZ_TARGETS: "true"
+
+      - name: Generate coverage artifact
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
+        env:
+          FUZZ_SECONDS: "120"
+          MODE: coverage
+          LANGUAGE: c++
+          DRY_RUN: "false"
+          SANITIZER: coverage
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LOW_DISK_SPACE: "True"
           GIT_STORE_REPO: ""

@@ -17,6 +17,18 @@ input artifact.
 - `tojson`: `iccToJson input.icc output.json`
 - `fromjson`: `iccFromJson input.json output.icc`
 - `roundtrip`: `iccRoundTrip input.icc 1 0`
+- `profileparse`: validates an ICC buffer, forces tag loading, and calls every
+  loaded tag's public `Describe()` path
+- `cmmapply`: builds a `CIccCmm` directly from a memory-backed profile and
+  applies one bounded profile-derived pixel
+- `xmlparse`: parses an XML buffer with network and file includes disabled,
+  then drives `CIccProfileXml::ParseXml()` and validation
+- `jsonparse`: parses a JSON buffer and drives
+  `CIccProfileJson::ParseJson()` and validation
+- `connectconfig`: drives the public IccConnect `fromJson()` configuration
+  objects without launching a tool or opening a configured path
+- `pawgreport`: calls the purpose-built `AssessPawgFromMemory()` and
+  `PawgCompressionVerdict()` assessment seams
 - `profilevisualize`: parses an in-memory ICC profile, enumerates public
   `IccVizModel.hpp` descriptors, and renders every graph or raster descriptor
 - `writerserialize`: renders the same descriptors and then serializes them
@@ -32,19 +44,27 @@ Run the local smoke with:
 ## ClusterFuzzLite
 
 The official ClusterFuzzLite integration lives in `.clusterfuzzlite/` and
-builds the two in-process targets, `icc_profilevisualize_fuzzer` and
-`icc_writerserialize_fuzzer`. These targets provide useful coverage feedback
-inside one libFuzzer process; the six CLI-fidelity wrappers remain local smoke
-targets because coverage from their child processes is not visible to the
-parent libFuzzer process.
+builds eight in-process targets in three independently budgeted groups:
+
+- `core`: `profileparse`, `cmmapply`, `profilevisualize`, and
+  `writerserialize`
+- `formats`: `xmlparse`, `jsonparse`, and `connectconfig`
+- `assessment`: `pawgreport`
+
+The six CLI-fidelity wrappers remain local smoke targets because coverage from
+their child processes is not visible to the parent libFuzzer process.
 
 The dedicated `ci-clusterfuzzlite` workflow runs on manual dispatch and pushes
 to `ci-qa-clusterfuzz`. Its matrix builds and fuzzes with `address`,
 `undefined`, and `memory`; libFuzzer is the engine for every matrix entry, not
-a fourth sanitizer. Each build packages the tracked ICC files from
-`.github/ci/test-data/` as the seed corpus for both in-process targets.
-After the sanitizer matrix succeeds, one bounded address-sanitizer job prunes
-the persistent corpus so redundant inputs do not accumulate across batch runs.
+a fourth sanitizer. The nine group/sanitizer combinations run at most three at
+a time to stay within hosted-runner and artifact API limits. ICC, XML, and JSON
+targets receive only the matching
+tracked seed family from `.github/ci/test-data/`, plus a format-specific
+dictionary and options file. The address-sanitizer prune job uses `always()`
+after configuration so one real finding does not indefinitely starve corpus
+maintenance. An optional manual input builds all targets with the coverage
+sanitizer and uploads the ClusterFuzzLite coverage report artifact.
 
 Local validation uses an OSS-Fuzz checkout:
 
@@ -59,23 +79,23 @@ python3 infra/helper.py run_fuzzer --external \
   /path/to/iccDEV icc_profilevisualize_fuzzer -- -max_total_time=30
 ```
 
-Repeat the last three commands with `undefined` and `memory`. The
-ClusterFuzzLite build disables XML, JSON, tools, and zlib so the MSan binary
-does not mix the in-process target with uninstrumented system libraries. The
-memory adapter also builds the repository-pinned MSan libc++ and libc++abi,
-rejects either fuzzer if `ldd` finds libstdc++ or cannot resolve that runtime,
-and replays the exact #2687 input before accepting the targets. This prevents
-uninstrumented standard-library writes from leaving poisoned shadow state and
-being misattributed to `CIccProfile`. The lane covers the public `IccVizModel`
-and writer APIs; the existing local CFL smoke retains the broader tool and
-compressed-tag coverage. See `docs/issue-2687-msan-runtime.md` for the report
-and producer-consumer contract.
+Repeat the last three commands with every emitted target and with `undefined`
+and `memory`. The memory adapter builds the repository-pinned MSan libc++ and
+libc++abi. The `formats` group additionally builds pinned, instrumented
+libxml2; the adapter rejects `icc_xmlparse_fuzzer` if `ldd` resolves a system
+copy. Every MSan target is rejected if it resolves libstdc++ or cannot resolve
+the bundled libc++ runtime, and the exact #2687 input is replayed before the
+targets are accepted. This prevents uninstrumented standard-library or XML
+dependency writes from leaving poisoned shadow state and being misattributed
+to iccDEV.
+See `docs/issue-2687-msan-runtime.md` for the report and producer-consumer
+contract.
 
 Manual workflow dispatch accepts a whole-number `fuzz_minutes` input from 2
-through 45 as the total fuzzing budget in every sanitizer matrix entry. The
-ClusterFuzzLite runner divides that total budget across the sequential targets.
-Branch-push runs use a 2-minute total budget. Corpus pruning remains fixed at 2
-minutes.
+through 45 as the budget for each target group and sanitizer pair. The runner
+divides that group budget across only the sequential targets in that group, so
+adding a format target does not dilute core-profile fuzzing. Branch-push runs
+use 2 minutes per group. Corpus pruning remains fixed at 2 minutes.
 
 All CFL modes require a matching Clang C/C++ pair at major version 21 or 22.
 The local builder prefers 22, falls back to 21, and rejects older or mismatched
@@ -100,22 +120,43 @@ include a CLI implementation file or call `processLuts()` from either.
 `writerserialize` links `Mini{PDF,SVG,TIFF}.cpp` in addition, because the
 serialization entries it drives are not reachable from `IccVizModel` alone.
 
-Build and run only the in-process harnesses with:
+Build and run all in-process harnesses with:
 
 ```bash
-.github/ci/cfl/build.sh --targets profilevisualize,writerserialize --seconds 30
+.github/ci/cfl/build.sh \
+  --targets profileparse,cmmapply,profilevisualize,writerserialize,xmlparse,jsonparse,connectconfig,pawgreport \
+  --seconds 30
 ```
 
-A CLUT-bearing seed has to survive into the corpus for either one to render a
-raster, and two independent gates used to remove the only such seed (#2120):
+The official adapter reads `.clusterfuzzlite/target-group`; set it to `core`,
+`formats`, `assessment`, or `all`. `ICCDEV_CFL_TARGET_GROUP` provides the same
+override for direct local adapter invocations.
+
+The official ClusterFuzzLite adapter applies the temporary source-only patch
+stack in `.github/ci/fuzz-patches/cfl` by default. The current patch carries
+the fixes under review for open MSan issues #2686 and #2688 so those known
+findings do not stop exploration of the remaining surface. A manual
+`ci-clusterfuzzlite` dispatch can select `unpatched` to reconfirm the original
+signals. Local OSS-Fuzz builds can do the same by changing
+`.clusterfuzzlite/known-bug-patch-mode` to `unpatched`, or by exporting
+`ICCDEV_CFL_KNOWN_BUG_PATCH_MODE=unpatched` when invoking the adapter directly.
+Remove the corresponding patch as soon as each source fix lands on `master`;
+the strict patch dry-run in the configuration test makes stale patches fail
+visibly.
+
+A CLUT-bearing seed has to survive into the corpus for either visualization
+target to render a raster, and two independent gates used to remove the only
+such seed (#2120):
 `max_seed_bytes` deleted it from the corpus, and libFuzzer's `max_len`
 truncated whatever survived. Both defaults are now above it, and pruning a seed
 committed under `.github/ci/test-data` is a hard error rather than a silent
 `rm`, so a future oversized regression seed forces a decision about the cap
 instead of quietly costing coverage.
 
-Note the `.options` files are not read by `build.sh` -- libFuzzer binaries do not
-consume them; they are the ClusterFuzz/OSS-Fuzz runner convention. `build.sh`
+The shared `icc_profile_fuzzer.options` and `icc_text_fuzzer.options` templates
+are copied to target-specific names in the build output. They are not read by
+`build.sh` -- libFuzzer binaries do not consume them; they are the
+ClusterFuzz/OSS-Fuzz runner convention. `build.sh`
 passes `-max_len`, `-timeout`, `-rss_limit_mb` and `-use_value_profile`
 explicitly, so changing a value means changing it in both places.
 
