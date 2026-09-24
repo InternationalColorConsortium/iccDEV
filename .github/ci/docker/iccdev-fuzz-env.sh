@@ -21,7 +21,7 @@ printf 'Build dir: %s\n' "$build_dir"
 printf '\n'
 
 printf '%s\n' 'Toolchain:'
-for tool in clang clang++ clang-21 clang++-21 llvm-symbolizer afl-fuzz afl-showmap afl-clang-fast afl-clang-fast++; do
+for tool in clang clang++ clang-21 clang++-21 clang-22 clang++-22 llvm-symbolizer afl-fuzz afl-showmap afl-clang-fast afl-clang-fast++; do
   if command -v "$tool" >/dev/null 2>&1; then
     printf '  %-16s %s\n' "$tool" "$(command -v "$tool")"
   else

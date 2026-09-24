@@ -242,6 +242,7 @@ Key safety rules:
 | Regression workflow gate | `.github/prompts/add-regression-workflow.prompt.md` |
 | ICC.2 XML specification QA | `.github/prompts/icc2-xml-spec-qa.prompt.md` |
 | Maintainer AFL smoke | `.github/prompts/maintainer-afl-smoke.prompt.md` |
+| ClusterFuzzLite integration | `.github/prompts/clusterfuzzlite.prompt.md` |
 | Maintainer CTest selection | `.github/prompts/maintainer-ci-ctest.prompt.md` |
 | Maintainer regression container | `.github/prompts/regression-container-maintainer.prompt.md` |
 | libpng iCCP fault QA | `.github/prompts/libpng-iccp-qa.prompt.md` |
@@ -268,6 +269,7 @@ Key safety rules:
 | Manual iOS example app helpers | `.github/skills/ios-manual-examples/SKILL.md` |
 | iOS CLUT editor app | `.github/skills/ios-clut-editor/SKILL.md` |
 | AFL smoke workflow | `.github/skills/afl-smoke/SKILL.md` |
+| ClusterFuzzLite integration | `.github/skills/clusterfuzzlite/SKILL.md` |
 | Sanitizer reproduction | `.github/skills/sanitizer-repro/SKILL.md` |
 | Valgrind-family analysis | `.github/skills/valgrind-analysis/SKILL.md` |
 | iccSpecSepToTiff QA | `.github/skills/specsep-qa/SKILL.md` |

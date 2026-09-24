@@ -1,0 +1,65 @@
+###############################################################
+#
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: Bounded ClusterFuzzLite validation for the ICC fuzz targets.
+#
+###############################################################
+
+---
+# Action commit pins and expression-bearing concurrency keys exceed 80 columns.
+# yamllint disable rule:line-length
+name: "ci-clusterfuzzlite"
+
+permissions:
+  contents: read
+
+'on':
+  workflow_dispatch:
+  push:
+    branches:
+      - ci-qa-clusterfuzz
+
+jobs:
+  fuzz:
+    name: "libFuzzer (${{ matrix.sanitizer }})"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    concurrency:
+      group: clusterfuzzlite-${{ github.workflow }}-${{ matrix.sanitizer }}-${{ github.ref }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer:
+          - address
+          - undefined
+          - memory
+
+    steps:
+      - name: Checkout iccDEV
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Build and check fuzzers
+        uses: google/clusterfuzzlite/actions/build_fuzzers@52ecc61cb587ee99c26825a112a21abf19c7448c  # main, 2026-02-12
+        with:
+          language: c++
+          sanitizer: ${{ matrix.sanitizer }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          keep-unaffected-fuzz-targets: true
+
+      - name: Run bounded batch fuzzing
+        uses: google/clusterfuzzlite/actions/run_fuzzers@52ecc61cb587ee99c26825a112a21abf19c7448c  # main, 2026-02-12
+        with:
+          language: c++
+          sanitizer: ${{ matrix.sanitizer }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 120
+          mode: batch
+          parallel-fuzzing: false
+          minimize-crashes: false

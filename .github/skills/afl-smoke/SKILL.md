@@ -70,6 +70,9 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
 - The unified image packages the compiler runtime needed by its packaged
   `afl-clang-fast` for short local smoke checks. The AFL workflow must still
   rebuild and probe AFL++ wrappers against the selected LLVM version.
+- Require a matching Clang 21 or Clang 22 C/C++ pair. The packaged wrapper uses
+  21 and the rebuilt workflow wrapper uses 22; reject older or mismatched
+  `AFL_CC` and `AFL_CXX` values before configuring iccDEV.
 - Keep the workflow bootstrap narrow: build `afl-fuzz`, `afl-showmap`,
   `afl-cc`, `afl-compiler-rt.o`, `SanitizerCoveragePCGUARD.so`, and
   `cmplog-routines-pass.so`. Avoid broad AFL++ targets that enter optional GCC

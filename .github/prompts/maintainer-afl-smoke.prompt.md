@@ -38,6 +38,10 @@ version. For Clang/LLVM 22, build AFL++ `dev` with `CC=clang-22`,
 `afl-showmap`, `afl-cc`, `afl-compiler-rt.o`,
 `SanitizerCoveragePCGUARD.so`, and `cmplog-routines-pass.so`.
 
+Reject compiler pairs outside matching Clang 21 or Clang 22. The packaged
+AFL++ wrapper is paired with 21, while the workflow rebuild is paired with 22;
+do not silently fall back to an older system Clang.
+
 The target sets differ per lane, and are not interchangeable.
 
 - **AFL** accepts `dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube` — see

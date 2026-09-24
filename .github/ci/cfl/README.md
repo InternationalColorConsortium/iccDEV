@@ -29,6 +29,44 @@ Run the local smoke with:
 .github/ci/cfl/build.sh --seconds 30
 ```
 
+## ClusterFuzzLite
+
+The official ClusterFuzzLite integration lives in `.clusterfuzzlite/` and
+builds the two in-process targets, `icc_profilevisualize_fuzzer` and
+`icc_writerserialize_fuzzer`. These targets provide useful coverage feedback
+inside one libFuzzer process; the six CLI-fidelity wrappers remain local smoke
+targets because coverage from their child processes is not visible to the
+parent libFuzzer process.
+
+The dedicated `ci-clusterfuzzlite` workflow runs on manual dispatch and pushes
+to `ci-qa-clusterfuzz`. Its matrix builds and fuzzes with `address`,
+`undefined`, and `memory`; libFuzzer is the engine for every matrix entry, not
+a fourth sanitizer. Each build packages the tracked ICC files from
+`.github/ci/test-data/` as the seed corpus for both in-process targets.
+
+Local validation uses an OSS-Fuzz checkout:
+
+```bash
+python3 infra/helper.py build_image --external --pull /path/to/iccDEV
+python3 infra/helper.py build_fuzzers --external --clean \
+  --engine libfuzzer --sanitizer address /path/to/iccDEV
+python3 infra/helper.py check_build --external \
+  --engine libfuzzer --sanitizer address /path/to/iccDEV
+python3 infra/helper.py run_fuzzer --external \
+  --engine libfuzzer --sanitizer address \
+  /path/to/iccDEV icc_profilevisualize_fuzzer -- -max_total_time=30
+```
+
+Repeat the last three commands with `undefined` and `memory`. The
+ClusterFuzzLite build disables XML, JSON, tools, and zlib so the MSan binary
+does not mix the in-process target with uninstrumented system libraries. This
+lane covers the public `IccVizModel` and writer APIs; the existing local CFL
+smoke retains the broader tool and compressed-tag coverage.
+
+All CFL modes require a matching Clang C/C++ pair at major version 21 or 22.
+The local builder prefers 22, falls back to 21, and rejects older or mismatched
+compilers. The pinned ClusterFuzzLite builder currently supplies Clang 22.
+
 Apply the local CFL patch stack before configuring iccDEV with `--patches`.
 The
 `ci-cfl-smoke` workflow applies `.github/ci/fuzz-patches/cfl` by default so
