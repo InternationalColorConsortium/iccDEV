@@ -84,3 +84,58 @@ jobs:
           PARALLEL_FUZZING: "false"
           REPORT_TIMEOUTS: "true"
           REPORT_OOMS: "true"
+
+  prune:
+    name: "Prune persistent corpus"
+    needs: fuzz
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    concurrency:
+      group: clusterfuzzlite-${{ github.workflow }}-prune-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout iccDEV
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Build fuzzers for pruning
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:fde96247c3488104b96822156a6e107d58487140115247a34e1f967c23df5604
+        env:
+          ALLOWED_BROKEN_TARGETS_PERCENTAGE: ""
+          BAD_BUILD_CHECK: "true"
+          UPLOAD_BUILD: "false"
+          LANGUAGE: c++
+          DRY_RUN: "false"
+          SANITIZER: address
+          PROJECT_SRC_PATH: ""
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIT_STORE_REPO: ""
+          GIT_STORE_BRANCH: ""
+          GIT_STORE_BRANCH_COVERAGE: ""
+          CFL_PLATFORM: github
+          LOW_DISK_SPACE: "True"
+          KEEP_UNAFFECTED_FUZZ_TARGETS: "true"
+
+      - name: Prune persistent corpus
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
+        env:
+          FUZZ_SECONDS: "120"
+          MODE: prune
+          LANGUAGE: c++
+          DRY_RUN: "false"
+          SANITIZER: address
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LOW_DISK_SPACE: "True"
+          GIT_STORE_REPO: ""
+          GIT_STORE_BRANCH: main
+          GIT_STORE_BRANCH_COVERAGE: gh-pages
+          REPORT_UNREPRODUCIBLE_CRASHES: "False"
+          OUTPUT_SARIF: "false"
+          MINIMIZE_CRASHES: "false"
+          CFL_PLATFORM: github
+          PARALLEL_FUZZING: "false"
+          REPORT_TIMEOUTS: "true"
+          REPORT_OOMS: "true"

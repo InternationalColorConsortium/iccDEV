@@ -35,6 +35,10 @@ grep -q '^FROM gcr.io/oss-fuzz-base/base-builder@sha256:[0-9a-f]\{64\}$' "$docke
 grep -q '^  actions: read$' "$workflow"
 grep -q '^  workflow_dispatch:$' "$workflow"
 grep -q '^      - ci-qa-clusterfuzz$' "$workflow"
+grep -q '^  prune:$' "$workflow"
+grep -q '^    needs: fuzz$' "$workflow"
+grep -q '^          MODE: prune$' "$workflow"
+test "$(grep -c '^          FUZZ_SECONDS: "120"$' "$workflow")" -eq 2
 grep -Eq '^        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:[0-9a-f]{64}$' "$workflow"
 grep -Eq '^        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:[0-9a-f]{64}$' "$workflow"
 

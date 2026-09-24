@@ -20,7 +20,7 @@ input artifact.
 - `profilevisualize`: parses an in-memory ICC profile, enumerates public
   `IccVizModel.hpp` descriptors, and renders every graph or raster descriptor
 - `writerserialize`: renders the same descriptors and then serializes them
-  through `Mini{PDF,SVG,TIFF}` — the IFD layout and offset arithmetic, the PDF
+  through `Mini{PDF,SVG,TIFF}` -- the IFD layout and offset arithmetic, the PDF
   object graph and xref table, and `SVGOut` (#2116)
 
 Run the local smoke with:
@@ -43,6 +43,8 @@ to `ci-qa-clusterfuzz`. Its matrix builds and fuzzes with `address`,
 `undefined`, and `memory`; libFuzzer is the engine for every matrix entry, not
 a fourth sanitizer. Each build packages the tracked ICC files from
 `.github/ci/test-data/` as the seed corpus for both in-process targets.
+After the sanitizer matrix succeeds, one bounded address-sanitizer job prunes
+the persistent corpus so redundant inputs do not accumulate across batch runs.
 
 Local validation uses an OSS-Fuzz checkout:
 
@@ -100,7 +102,7 @@ committed under `.github/ci/test-data` is a hard error rather than a silent
 `rm`, so a future oversized regression seed forces a decision about the cap
 instead of quietly costing coverage.
 
-Note the `.options` files are not read by `build.sh` — libFuzzer binaries do not
+Note the `.options` files are not read by `build.sh` -- libFuzzer binaries do not
 consume them; they are the ClusterFuzz/OSS-Fuzz runner convention. `build.sh`
 passes `-max_len`, `-timeout`, `-rss_limit_mb` and `-use_value_profile`
 explicitly, so changing a value means changing it in both places.
