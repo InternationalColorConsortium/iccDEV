@@ -181,7 +181,7 @@ jobs:
     needs:
       - configure
       - fuzz
-    if: ${{ always() && needs.configure.result == 'success' }}
+    if: ${{ !cancelled() && needs.configure.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     concurrency:
@@ -252,7 +252,7 @@ jobs:
     needs:
       - configure
       - prune
-    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.generate_coverage && needs.configure.result == 'success' }}
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.generate_coverage && needs.configure.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     concurrency:

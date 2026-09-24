@@ -71,6 +71,12 @@ grep -q '^          echo "fuzz_seconds=$((minutes \* 60))" >> "$GITHUB_OUTPUT"  
 grep -q '^    needs: configure$' "$workflow"
 grep -q '^      max-parallel: 3$' "$workflow"
 grep -q '^  prune:$' "$workflow"
+# shellcheck disable=SC2016 # Match the literal Actions status expression.
+test "$(grep -Fc '    if: ${{ !cancelled() &&' "$workflow")" -eq 2
+if grep -q '^    if: .*always()' "$workflow"; then
+  echo "[FAIL] ClusterFuzzLite cleanup jobs must stop on cancellation" >&2
+  exit 1
+fi
 test "$(grep -c '^      - configure$' "$workflow")" -eq 2
 test "$(grep -c '^      - fuzz$' "$workflow")" -eq 1
 test "$(grep -c '^      - prune$' "$workflow")" -eq 1
