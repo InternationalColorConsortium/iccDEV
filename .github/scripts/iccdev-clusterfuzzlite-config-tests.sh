@@ -96,7 +96,8 @@ test "$(grep -c '^      - prune$' "$workflow")" -eq 1
 grep -q '^    timeout-minutes: 60$' "$workflow"
 grep -q '^          MODE: prune$' "$workflow"
 grep -q '^          MODE: coverage$' "$workflow"
-test "$(grep -c '^          FUZZ_SECONDS: "120"$' "$workflow")" -eq 2
+test "$(grep -c '^          FUZZ_SECONDS: "960"$' "$workflow")" -eq 1
+test "$(grep -c '^          FUZZ_SECONDS: "120"$' "$workflow")" -eq 1
 # shellcheck disable=SC2016 # Match the literal Actions expression.
 grep -q '^          FUZZ_SECONDS: \${{ needs.configure.outputs.fuzz_seconds }}$' "$workflow"
 grep -Eq '^        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:[0-9a-f]{64}$' "$workflow"
