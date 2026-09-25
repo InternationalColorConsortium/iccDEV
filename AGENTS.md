@@ -105,15 +105,16 @@ in-process targets are the intentional exceptions: consume only public headers,
 compile the engine sources as separate translation units, and never include a
 CLI implementation or call `processLuts()`.
 
-| target | consumes | covers |
+| group | targets | covers |
 | --- | --- | --- |
-| `icc_profilevisualize_fuzzer` | `IccVizModel.hpp` | the data-first model: `Enumerate`, `RenderGraph`, `RenderRaster` |
-| `icc_writerserialize_fuzzer` | `MiniPDF.hpp`, `MiniSVG.hpp`, `MiniTIFF.hpp` | the serialization layer the model feeds (#2116) |
+| `core` | `profileparse`, `cmmapply`, `profilevisualize`, `writerserialize` | profile parsing, bounded CMM application, visualization, and serialization |
+| `formats` | `xmlparse`, `jsonparse`, `connectconfig` | XML/JSON profile parsing and IccConnect configuration round trips |
+| `assessment` | `pawgreport` | in-memory PAWG assessment and compression verdicts |
 
 Keep them separate rather than folding serialization into the model target, so
 a crash stays attributable to one layer.
 
-The official ClusterFuzzLite lane builds only these two in-process targets.
+The official ClusterFuzzLite lane builds all eight in-process targets above.
 Keep its `address`, `undefined`, and `memory` builds separate, pass all compiler
 and linker instrumentation through the OSS-Fuzz environment, require matching
 Clang 21 or 22 compilers across AFL, CFL, and ClusterFuzzLite, and keep the
@@ -122,6 +123,12 @@ The ClusterFuzzLite memory build must bootstrap the pinned instrumented libc++
 and libc++abi, reject libstdc++ or another libc++ at runtime, and replay the
 pinned #2687 artifact before fuzzing. A report crossing an uninstrumented C++
 runtime boundary is not attributable to iccDEV.
+
+Keep `cmmapply` controls outside the ICC header: an optional three-byte trailer
+selects direction, intent, and interpolation without corrupting the encoded
+profile size. Keep at least one schema-shaped IccConnect configuration seed in
+`.github/ci/test-data`, use the dedicated config dictionary, and preserve
+round-trip coverage for top-level and nested `CIccCfg*` objects.
 
 Temporary CFL MSan workarounds live as individual issue patches under
 `.github/ci/fuzz-patches/cfl`. The default fuzz build attempts every patch and

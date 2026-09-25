@@ -28,6 +28,8 @@ for target in "${targets[@]}"; do
     exit 1
   fi
   grep -Fq 'LLVMFuzzerTestOneInput' "$source_file"
+  grep -Fq 'Redistribution and use in source and binary forms' "$source_file"
+  grep -Fq 'THIS SOFTWARE IS PROVIDED ``AS IS' "$source_file"
   grep -Fq "$target" "$adapter"
   grep -Fq "$target" "$builder"
 done
@@ -40,12 +42,40 @@ for family in profile text; do
   grep -qx 'use_value_profile = 1' "$options"
 done
 
-for family in profile xml json; do
+for family in profile xml json config; do
   dictionary="$cfl_dir/icc_${family}_fuzzer.dict"
   if [ ! -s "$dictionary" ]; then
     echo "[FAIL] Missing dictionary: $dictionary" >&2
     exit 1
   fi
+done
+
+config_seed="$repo_root/.github/ci/test-data/connect-config-complete.json"
+if [ ! -s "$config_seed" ]; then
+  echo "[FAIL] Missing schema-shaped IccConnect configuration seed" >&2
+  exit 1
+fi
+for key in dataFiles imageFiles connect createLink profileSequence \
+    searchApply pccWeights colorData; do
+  grep -Fq "\"$key\"" "$config_seed"
+  grep -Fq "\\\"$key\\\"" "$cfl_dir/icc_config_fuzzer.dict"
+done
+
+cmmapply="$cfl_dir/icc_cmmapply_fuzzer.cpp"
+grep -Fq 'readBigEndian32(data + 64)' "$cmmapply"
+grep -Fq 'const uint8_t *control = data + profile_size' "$cmmapply"
+grep -Fq 'size - profile_size >= 3' "$cmmapply"
+if grep -Fq 'const bool first_is_input = (data[0]' "$cmmapply" ||
+   grep -Fq 'static_cast<icRenderingIntent>(data[1]' "$cmmapply"; then
+  echo "[FAIL] CMM controls must not alias the ICC profile-size field" >&2
+  exit 1
+fi
+
+connectconfig="$cfl_dir/icc_connectconfig_fuzzer.cpp"
+for config_type in CIccCfgDataApply CIccCfgImageApply CIccCfgConnectOptions \
+    CIccCfgCreateLink CIccCfgProfile CIccCfgProfileSequence CIccCfgPccWeight \
+    CIccCfgSearchApply CIccCfgDataEntry CIccCfgColorData; do
+  grep -Fq "exerciseRoundTrip<$config_type>" "$connectconfig"
 done
 
 for extension in icc xml json; do
