@@ -17,6 +17,9 @@ Use this skill for `.clusterfuzzlite/**`,
   (`profileparse`, `cmmapply`, `profilevisualize`, `writerserialize`),
   `formats` (`xmlparse`, `jsonparse`, `connectconfig`), and `assessment`
   (`pawgreport`).
+- Forward the GitHub matrix group and patch mode through `CFL_EXTRA_*`; the
+  official action builds a fresh `GITHUB_SHA` clone, so pre-step checkout file
+  mutations do not reach the builder container.
 - Keep the CLI-fidelity wrappers in the local CFL smoke lane; they launch child
   tools and do not provide useful parent-process coverage feedback.
 - Consume `CC`, `CXX`, `CFLAGS`, `CXXFLAGS`, and `LIB_FUZZING_ENGINE` from the
