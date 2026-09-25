@@ -105,3 +105,23 @@ index 882d1ebe..6e82891b 100644
  };
  
  /**
+diff --git a/IccProfLib/IccTagMPE.cpp b/IccProfLib/IccTagMPE.cpp
+index 9a84ed5d..d115e4ae 100644
+--- a/IccProfLib/IccTagMPE.cpp
++++ b/IccProfLib/IccTagMPE.cpp
+@@ -779,6 +779,7 @@ CIccTagMultiProcessElement::CIccTagMultiProcessElement(const CIccTagMultiProcess
+   }
+   m_nInputChannels = lut.m_nInputChannels;
+   m_nOutputChannels = lut.m_nOutputChannels;
++  m_nBufChannels = lut.m_nBufChannels;
+ 
+   if (lut.m_nProcElements && lut.m_position) {
+     m_position = (icPositionNumber*)malloc(lut.m_nProcElements*sizeof(icPositionNumber));
+@@ -824,6 +825,7 @@ CIccTagMultiProcessElement &CIccTagMultiProcessElement::operator=(const CIccTagM
+   }
+   m_nInputChannels = lut.m_nInputChannels;
+   m_nOutputChannels = lut.m_nOutputChannels;
++  m_nBufChannels = lut.m_nBufChannels;
+ 
+   if (lut.m_nProcElements && lut.m_position) {
+     m_position = (icPositionNumber*)malloc(lut.m_nProcElements*sizeof(icPositionNumber));
