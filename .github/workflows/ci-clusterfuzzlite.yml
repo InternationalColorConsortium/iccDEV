@@ -233,7 +233,8 @@ jobs:
       - name: Prune persistent corpus
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
         env:
-          FUZZ_SECONDS: "120"
+          # ClusterFuzzLite divides this total across all eight targets.
+          FUZZ_SECONDS: "960"
           MODE: prune
           LANGUAGE: c++
           DRY_RUN: "false"
