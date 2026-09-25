@@ -50,7 +50,7 @@ for issue in 2686 2688 2699 2703 2704 2705; do
     exit 1
   fi
 done
-test "$(find "$patch_dir" -maxdepth 1 -type f -name '*.patch' | wc -l)" -eq 7
+test "$(find "$patch_dir" -maxdepth 1 -type f -name '*.patch' | wc -l)" -eq 8
 
 grep -qx 'language: c++' "$project"
 grep -q '^FROM gcr.io/oss-fuzz-base/base-builder@sha256:[0-9a-f]\{64\}$' "$dockerfile"

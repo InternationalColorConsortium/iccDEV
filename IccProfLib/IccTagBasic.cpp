@@ -384,7 +384,6 @@ CIccTagUnknown::CIccTagUnknown()
 {
   m_nType = icSigUnknownType;
   m_pData = NULL;
-  m_nSize = 0;
 }
 
 /**
