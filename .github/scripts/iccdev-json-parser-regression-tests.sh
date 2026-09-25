@@ -620,6 +620,11 @@ def write(name, tag):
     with open(os.path.join(outdir, name + ".json"), "w", encoding="utf-8") as f:
         json.dump(doc, f, indent=2)
 
+# Exercise serialization when unknownData is absent and the payload is empty.
+write("unknown-tag-empty-data", {
+    "type": "ut!16Type"
+})
+
 write("mpe-calculator-missing-main", {
     "type": "multiProcessElementType",
     "inputChannels": 1,
@@ -1136,6 +1141,7 @@ run_reject_test "spectral-matrix-huge-channels" "$OUTDIR/spectral-matrix-huge-ch
 run_reject_test "spectral-offset-short" "$OUTDIR/spectral-offset-short.json" "offsetData count does not match spectral element size"
 run_reject_test "struct-bad-member" "$OUTDIR/struct-bad-member.json" "MemberTag 'badMember' missing 'type' field"
 run_fromjson_success_test "utf16-short-text" "$OUTDIR/utf16-short-text.json"
+run_fromjson_success_test "unknown-tag-empty-data" "$OUTDIR/unknown-tag-empty-data.json"
 run_reject_test "empty-tag-name" "$OUTDIR/empty-tag-name.json" "Tag entry has empty name"
 run_reject_test "colorant-table-nonnumeric-pcs" "$REPO_ROOT/.github/ci/test-data/json-colorant-table-nonnumeric-pcs.json" "colorantTableType pcs must contain three numeric values"
 run_reject_test "colorant-table-short-pcs" "$OUTDIR/colorant-table-short-pcs.json" "colorantTableType pcs must contain three numeric values"
