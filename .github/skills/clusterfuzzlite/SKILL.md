@@ -45,6 +45,10 @@ Use this skill for `.clusterfuzzlite/**`,
 - Keep corpus pruning runnable after a fuzz finding. Keep coverage an explicit
   manual option that emits a ClusterFuzzLite artifact without broadening
   repository permissions.
+- Keep one temporary CFL patch per open MSan issue. Attempt patches in order,
+  report drift or already-integrated fixes, and continue the default workflow;
+  reserve `--strict` for local patch-stack maintenance. Remove only the patch
+  for an issue whose normal source fix has landed.
 - Pin every action to a full commit SHA and the builder image to a digest.
 
 ## Local Validation
@@ -73,6 +77,8 @@ bash -n .clusterfuzzlite/build.sh .github/ci/cfl/build.sh \
   .github/scripts/iccdev-clusterfuzzlite-config-tests.sh \
   .github/scripts/iccdev-clusterfuzzlite-target-tests.sh
 .github/scripts/iccdev-clusterfuzzlite-config-tests.sh
+.github/scripts/iccdev-fuzz-patch-check-tests.sh
+.github/scripts/check-fuzz-patches.sh
 ctest --test-dir Build -R '^iccdev\.clusterfuzzlite-(configuration|targets)$' \
   --output-on-failure --no-tests=error
 actionlint -no-color .github/workflows/ci-clusterfuzzlite.yml

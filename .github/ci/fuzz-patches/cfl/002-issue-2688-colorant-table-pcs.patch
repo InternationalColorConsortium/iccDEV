@@ -1,0 +1,51 @@
+diff --git a/IccProfLib/IccProfile.cpp b/IccProfLib/IccProfile.cpp
+index 8d1c4697..2e3e20a5 100644
+--- a/IccProfLib/IccProfile.cpp
++++ b/IccProfLib/IccProfile.cpp
+@@ -588,6 +588,14 @@ bool CIccProfile::AttachTag(icSignature sig, CIccTag *pTag)
+     return false;
+   }
+ 
++  if (pTag->GetType() == icSigColorantTableType) {
++    CIccTagColorantTable *pTable = (CIccTagColorantTable*)pTag;
++    if (sig == icSigColorantTableTag)
++      pTable->SetPCS(m_Header.pcs);
++    else if (sig == icSigColorantTableOutTag)
++      pTable->SetPCS(icSigLabData);
++  }
++
+   IccTagEntry Entry = {};
+   Entry.TagInfo.sig = (icTagSignature)sig;
+   Entry.TagInfo.offset = 0;
+@@ -1641,6 +1649,16 @@ bool CIccProfile::LoadTag(IccTagEntry *pTagEntry, CIccIO *pIO, bool bReadAll/*=f
+   }
+ 
+   switch(pTagEntry->TagInfo.sig) {
++  case icSigColorantTableTag:
++    if (pTag->GetType() == icSigColorantTableType)
++      ((CIccTagColorantTable*)pTag)->SetPCS(m_Header.pcs);
++    break;
++
++  case icSigColorantTableOutTag:
++    if (pTag->GetType() == icSigColorantTableType)
++      ((CIccTagColorantTable*)pTag)->SetPCS(icSigLabData);
++    break;
++
+   case icSigAToB0Tag:
+   case icSigAToB1Tag:
+   case icSigAToB2Tag:
+diff --git a/IccProfLib/IccTagBasic.cpp b/IccProfLib/IccTagBasic.cpp
+index 31761b04..9e8aee3a 100644
+--- a/IccProfLib/IccTagBasic.cpp
++++ b/IccProfLib/IccTagBasic.cpp
+@@ -9912,6 +9912,10 @@ icValidateStatus CIccTagColorantOrder::Validate(std::string sigPath, std::string
+  */
+ CIccTagColorantTable::CIccTagColorantTable(int nSize/*=1*/)
+ {
++  // A standalone colorant table has no profile header from which to obtain its
++  // PCS. Lab preserves Describe()'s historical fallback; CIccProfile replaces
++  // it with the profile PCS when attaching or loading colorantTableTag.
++  m_PCS = icSigLabData;
+   m_nCount = nSize;
+   if (m_nCount<1)
+     m_nCount = 1;
