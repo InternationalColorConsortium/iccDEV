@@ -18,7 +18,7 @@ set -euo pipefail
 
 repo_root="$SRC/iccDEV"
 target_group_file="$repo_root/.clusterfuzzlite/target-group"
-target_group="${ICCDEV_CFL_TARGET_GROUP:-}"
+target_group="${ICCDEV_CFL_TARGET_GROUP:-${CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP:-}}"
 if [ -z "$target_group" ]; then
   target_group="$(<"$target_group_file")"
 fi
@@ -48,7 +48,7 @@ msan_runtime_dir="$WORK/iccdev-msan-runtime"
 issue_2687_base64="$repo_root/.github/ci/regression/issue-2687-profile-list-node.icc.base64"
 issue_2687_profile="$WORK/issue-2687-profile-list-node.icc"
 patch_mode_file="$repo_root/.clusterfuzzlite/known-bug-patch-mode"
-patch_mode="${ICCDEV_CFL_KNOWN_BUG_PATCH_MODE:-}"
+patch_mode="${ICCDEV_CFL_KNOWN_BUG_PATCH_MODE:-${CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE:-}}"
 
 if [ -z "$patch_mode" ]; then
   patch_mode="$(<"$patch_mode_file")"

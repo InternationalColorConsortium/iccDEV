@@ -130,7 +130,10 @@ Build and run all in-process harnesses with:
 
 The official adapter reads `.clusterfuzzlite/target-group`; set it to `core`,
 `formats`, `assessment`, or `all`. `ICCDEV_CFL_TARGET_GROUP` provides the same
-override for direct local adapter invocations.
+override for direct local adapter invocations. The GitHub workflow forwards its
+matrix selection as `CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP`, because the official
+ClusterFuzzLite action builds a fresh clone of `GITHUB_SHA` and therefore does
+not see files rewritten in the Actions checkout before the container step.
 
 The official ClusterFuzzLite adapter applies the temporary source-only patch
 stack in `.github/ci/fuzz-patches/cfl` by default. The current patch carries

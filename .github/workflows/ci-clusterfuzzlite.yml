@@ -50,7 +50,7 @@ jobs:
   configure:
     name: "Validate fuzz configuration"
     runs-on: ubuntu-24.04
-    timeout-minutes: 1
+    timeout-minutes: 10
     outputs:
       fuzz_seconds: ${{ steps.duration.outputs.fuzz_seconds }}
       known_bug_patch_mode: ${{ steps.duration.outputs.known_bug_patch_mode }}
@@ -154,6 +154,8 @@ jobs:
           CFL_PLATFORM: github
           LOW_DISK_SPACE: "True"
           KEEP_UNAFFECTED_FUZZ_TARGETS: "true"
+          CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: ${{ matrix.group }}
+          CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
 
       - name: Run bounded batch fuzzing
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
@@ -225,6 +227,8 @@ jobs:
           CFL_PLATFORM: github
           LOW_DISK_SPACE: "True"
           KEEP_UNAFFECTED_FUZZ_TARGETS: "true"
+          CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: all
+          CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
 
       - name: Prune persistent corpus
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
@@ -296,6 +300,8 @@ jobs:
           CFL_PLATFORM: github
           LOW_DISK_SPACE: "True"
           KEEP_UNAFFECTED_FUZZ_TARGETS: "true"
+          CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: all
+          CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
 
       - name: Generate coverage artifact
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc

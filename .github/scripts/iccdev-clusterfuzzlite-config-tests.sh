@@ -58,6 +58,7 @@ grep -q '^      generate_coverage:$' "$workflow"
 grep -q '^        type: boolean$' "$workflow"
 grep -q '^      - ci-qa-clusterfuzz$' "$workflow"
 grep -q '^  configure:$' "$workflow"
+grep -q '^    timeout-minutes: 10$' "$workflow"
 # shellcheck disable=SC2016 # Match the literal Actions expression.
 grep -q '^      fuzz_seconds: \${{ steps.duration.outputs.fuzz_seconds }}$' "$workflow"
 test "$(grep -c '^        shell: bash --noprofile --norc {0}$' "$workflow")" -eq 4
@@ -96,6 +97,15 @@ for group in core formats assessment; do
   grep -q "^          - $group$" "$workflow"
 done
 
+# The official GitHub action clones GITHUB_SHA before building, so mutations
+# made to the checkout are not visible in its builder container. CFL_EXTRA_*
+# is the supported forwarding boundary for matrix-specific build settings.
+# shellcheck disable=SC2016 # Match literal Actions expressions.
+grep -Fq '          CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: ${{ matrix.group }}' "$workflow"
+# shellcheck disable=SC2016 # Match literal Actions expressions.
+test "$(grep -Fc '          CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}' "$workflow")" -eq 3
+test "$(grep -c '^          CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: all$' "$workflow")" -eq 2
+
 grep -q '^  core)$' "$adapter"
 grep -q '^  formats)$' "$adapter"
 grep -q '^  assessment)$' "$adapter"
@@ -104,6 +114,8 @@ grep -Fq -- '--targets "$targets_csv"' "$adapter"
 grep -qx 'patched' "$patch_mode_file"
 grep -qx 'all' "$target_group_file"
 grep -Fq 'ICCDEV_CFL_KNOWN_BUG_PATCH_MODE' "$adapter"
+grep -Fq 'CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP' "$adapter"
+grep -Fq 'CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE' "$adapter"
 grep -Fq '.github/ci/fuzz-patches/cfl' "$adapter"
 "$repo_root/.github/scripts/iccdev-apply-fuzz-patches.sh" \
   --mode cfl --dry-run --strict
