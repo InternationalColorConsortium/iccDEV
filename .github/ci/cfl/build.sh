@@ -431,9 +431,13 @@ for target in "${selected_targets[@]}"; do
       option_family=text
       dictionary_family=xml
       ;;
-    jsonparse|connectconfig)
+    jsonparse)
       option_family=text
       dictionary_family=json
+      ;;
+    connectconfig)
+      option_family=text
+      dictionary_family=config
       ;;
     *)
       option_family=profile
