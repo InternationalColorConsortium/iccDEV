@@ -136,16 +136,21 @@ ClusterFuzzLite action builds a fresh clone of `GITHUB_SHA` and therefore does
 not see files rewritten in the Actions checkout before the container step.
 
 The official ClusterFuzzLite adapter applies the temporary source-only patch
-stack in `.github/ci/fuzz-patches/cfl` by default. The current patch carries
-the fixes under review for open MSan issues #2686 and #2688 so those known
-findings do not stop exploration of the remaining surface. A manual
+stack in `.github/ci/fuzz-patches/cfl` by default. Each open libFuzzer MSan
+issue has an individual patch, including a duplicate atomic patch for the
+shared #2699/#2703 root cause. Every patch is attempted independently: stale
+or drifted patches warn and are skipped while later patches and the build
+continue. This lets a normal source fix land without stopping unrelated fuzz
+lanes. A manual
 `ci-clusterfuzzlite` dispatch can select `unpatched` to reconfirm the original
 signals. Local OSS-Fuzz builds can do the same by changing
 `.clusterfuzzlite/known-bug-patch-mode` to `unpatched`, or by exporting
 `ICCDEV_CFL_KNOWN_BUG_PATCH_MODE=unpatched` when invoking the adapter directly.
-Remove the corresponding patch as soon as each source fix lands on `master`;
-the strict patch dry-run in the configuration test makes stale patches fail
-visibly.
+Remove only the corresponding issue patch after its source fix lands on
+`master`. The strict patch dry-run remains a local maintenance gate, while the
+default workflow path is deliberately non-blocking. See
+`.github/ci/fuzz-patches/cfl/README.md` for the issue inventory and retirement
+rules.
 
 A CLUT-bearing seed has to survive into the corpus for either visualization
 target to render a raster, and two independent gates used to remove the only

@@ -339,7 +339,8 @@ entries, three target groups, eight in-process harness sources, matching seed
 families, dictionaries and options, immutable action references, the pinned
 #2687 artifact hash, the validated 2-45 minute per-group manual duration, the
 60-minute job envelope, instrumented libc++/libxml2 bootstrap and linkage
-assertions, and shell syntax for the adapter and shared CFL builder.
+assertions, individual open-issue MSan patch inventory, non-blocking patch
+continuation behavior, and shell syntax for the adapter and shared CFL builder.
 Runtime sanitizer validation remains in
 `.github/workflows/ci-clusterfuzzlite.yml` and the local OSS-Fuzz helper flow
 documented in `.github/ci/cfl/README.md`.

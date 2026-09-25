@@ -17,6 +17,10 @@ For the memory build, require the pinned instrumented libc++/libc++abi and the
 pinned instrumented libxml2 for the XML target. Prove every fuzzer resolves the
 expected runtime rather than libstdc++, prove the XML target resolves bundled
 libxml2, and replay the pinned #2687 artifact before accepting the build.
+Keep temporary open-issue MSan fixes as independent patches. The default fuzz
+path must attempt each patch, warn on drift or prior integration, and continue
+to later patches and the build. Use strict application only for maintaining the
+patch stack, and retire patches one issue at a time after normal fixes land.
 
 Before handoff, run the configuration CTest, workflow linters, preflight safety
 checks, and the OSS-Fuzz `build_fuzzers`, `check_build`, and bounded

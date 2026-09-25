@@ -123,6 +123,12 @@ and libc++abi, reject libstdc++ or another libc++ at runtime, and replay the
 pinned #2687 artifact before fuzzing. A report crossing an uninstrumented C++
 runtime boundary is not attributable to iccDEV.
 
+Temporary CFL MSan workarounds live as individual issue patches under
+`.github/ci/fuzz-patches/cfl`. The default fuzz build attempts every patch and
+continues after drift or prior integration; `--strict` is only for maintaining
+the patch inventory. Retire one issue patch at a time after its normal source
+fix lands.
+
 An in-process target that needs a CLUT raster also needs a corpus that still
 contains one. `max_seed_bytes` and libFuzzer's `max_len` both removed the only
 CLUT-bearing seed at their old defaults (#2120), which left such a target

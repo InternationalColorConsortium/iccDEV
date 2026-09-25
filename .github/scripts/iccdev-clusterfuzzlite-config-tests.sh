@@ -22,12 +22,14 @@ msan_builder="$repo_root/.github/scripts/iccdev-build-msan-libcxx.sh"
 issue_2687_fixture="$repo_root/.github/ci/regression/issue-2687-profile-list-node.icc.base64"
 patch_mode_file="$repo_root/.clusterfuzzlite/known-bug-patch-mode"
 target_group_file="$repo_root/.clusterfuzzlite/target-group"
-known_bug_patch="$repo_root/.github/ci/fuzz-patches/cfl/001-known-msan-2686-2688.patch"
+patch_dir="$repo_root/.github/ci/fuzz-patches/cfl"
+patch_readme="$patch_dir/README.md"
+patch_test="$repo_root/.github/scripts/iccdev-fuzz-patch-check-tests.sh"
 target_test="$repo_root/.github/scripts/iccdev-clusterfuzzlite-target-tests.sh"
 
 for required in "$workflow" "$adapter" "$project" "$dockerfile" \
   "$msan_builder" "$issue_2687_fixture" "$patch_mode_file" \
-  "$target_group_file" "$known_bug_patch" "$target_test"; do
+  "$target_group_file" "$patch_readme" "$patch_test" "$target_test"; do
   if [ ! -s "$required" ]; then
     echo "[FAIL] Missing ClusterFuzzLite file: $required" >&2
     exit 1
@@ -38,7 +40,17 @@ bash -n "$adapter"
 bash -n "$repo_root/.github/ci/cfl/build.sh"
 bash -n "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
 bash -n "$msan_builder"
+bash -n "$patch_test"
 bash -n "$target_test"
+
+for issue in 2686 2688 2699 2703 2704 2705; do
+  if ! find "$patch_dir" -maxdepth 1 -type f -name "*-issue-$issue-*.patch" \
+      -print -quit | grep -q .; then
+    echo "[FAIL] Missing individual temporary patch for issue #$issue" >&2
+    exit 1
+  fi
+done
+test "$(find "$patch_dir" -maxdepth 1 -type f -name '*.patch' | wc -l)" -eq 7
 
 grep -qx 'language: c++' "$project"
 grep -q '^FROM gcr.io/oss-fuzz-base/base-builder@sha256:[0-9a-f]\{64\}$' "$dockerfile"
@@ -156,6 +168,7 @@ compiler_gate_line="$(grep -n '^    if \[ -z "${AFL_CC:-}" \]; then$' "$repo_roo
 test "$compiler_gate_line" -gt "$skip_build_line"
 
 "$target_test"
+"$patch_test"
 
 validate_action_reference() {
   local action_ref="$1"
