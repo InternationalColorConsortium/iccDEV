@@ -26,3 +26,6 @@ Use `.github/skills/clusterfuzzlite/SKILL.md` and
    and the optional manual coverage-report artifact.
 9. Record exact sanitizer results and treat MSan dependency-instrumentation
    failures as blockers rather than suppressing them.
+10. Keep temporary MSan workarounds in individual issue patches. Default fuzz
+    builds warn and continue past drifted or integrated patches; use strict mode
+    only when maintaining the patch inventory.

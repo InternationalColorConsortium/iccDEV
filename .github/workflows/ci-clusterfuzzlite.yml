@@ -30,7 +30,7 @@ concurrency:
         default: 2
         type: number
       known_bug_patch_mode:
-        description: "Apply temporary fixes for open MSan issues #2686 and #2688"
+        description: "Attempt independent temporary fixes for open libFuzzer MSan issues"
         required: true
         default: patched
         type: choice

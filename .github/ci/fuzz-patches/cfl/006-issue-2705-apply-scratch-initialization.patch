@@ -1,0 +1,23 @@
+diff --git a/IccProfLib/IccCmm.cpp b/IccProfLib/IccCmm.cpp
+index 72d18d3b..2816539f 100644
+--- a/IccProfLib/IccCmm.cpp
++++ b/IccProfLib/IccCmm.cpp
+@@ -9013,14 +9013,14 @@ bool CIccApplyCmm::InitPixel()
+         nSamples=nXformSamples;
+     }
+   }
+-  m_Pixel = (icFloatNumber*)malloc(nSamples*sizeof(icFloatNumber));
+-  m_Pixel2 = (icFloatNumber*)malloc(nSamples*sizeof(icFloatNumber));
++  m_Pixel = (icFloatNumber*)calloc(nSamples, sizeof(icFloatNumber));
++  m_Pixel2 = (icFloatNumber*)calloc(nSamples, sizeof(icFloatNumber));
+ 
+   if (!m_Pixel || !m_Pixel2)
+     return false;
+ 
+-  m_ChunkBuf[0] = (icFloatNumber*)malloc(kCmmChunkPixels * nSamples * sizeof(icFloatNumber));
+-  m_ChunkBuf[1] = (icFloatNumber*)malloc(kCmmChunkPixels * nSamples * sizeof(icFloatNumber));
++  m_ChunkBuf[0] = (icFloatNumber*)calloc(kCmmChunkPixels * nSamples, sizeof(icFloatNumber));
++  m_ChunkBuf[1] = (icFloatNumber*)calloc(kCmmChunkPixels * nSamples, sizeof(icFloatNumber));
+ 
+   if (!m_ChunkBuf[0] || !m_ChunkBuf[1])
+     return false;
