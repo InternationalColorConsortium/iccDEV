@@ -101,7 +101,8 @@ Manual workflow dispatch accepts a whole-number `fuzz_minutes` input from 2
 through 45 as the budget for each target group and sanitizer pair. The runner
 divides that group budget across only the sequential targets in that group, so
 adding a format target does not dilute core-profile fuzzing. Branch-push runs
-use 2 minutes per group. Corpus pruning remains fixed at 2 minutes.
+use 2 minutes per group. Corpus pruning has a 2-minute minimum per sequential
+target, for a 16-minute total budget across all eight targets.
 
 All CFL modes require a matching Clang C/C++ pair at major version 21 or 22.
 The local builder prefers 22, falls back to 21, and rejects older or mismatched
