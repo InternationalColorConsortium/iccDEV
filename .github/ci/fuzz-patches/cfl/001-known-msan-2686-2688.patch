@@ -125,3 +125,17 @@ index 9a84ed5d..d115e4ae 100644
  
    if (lut.m_nProcElements && lut.m_position) {
      m_position = (icPositionNumber*)malloc(lut.m_nProcElements*sizeof(icPositionNumber));
+diff --git a/IccProfLib/IccMpeBasic.cpp b/IccProfLib/IccMpeBasic.cpp
+index c742e5c8..a5f11da8 100644
+--- a/IccProfLib/IccMpeBasic.cpp
++++ b/IccProfLib/IccMpeBasic.cpp
+@@ -3878,6 +3878,9 @@ bool CIccMpeCurveSet::Read(icUInt32Number size, CIccIO *pIO)
+       if (!pIO->Read32(&m_position[i].size)) {
+         return false;
+       }
++      if (m_position[i].size > size ||
++          m_position[i].offset > size - m_position[i].size)
++        return false;
+     }
+ 
+     icCurveOffsetMap map;
