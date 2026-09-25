@@ -5,9 +5,6 @@
 name: Issue 2673 FromXml Valgrind regression
 
 'on':
-  push:
-    branches:
-      - ci-qa-pr-docker-testing
   workflow_dispatch:
     inputs:
       regression_image_tag:
