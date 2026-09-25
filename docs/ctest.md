@@ -336,7 +336,9 @@ must reject invalid numeric fields before conversion without sanitizer findings.
 the official ClusterFuzzLite lane. They check the pinned builder image,
 the manual and `ci-qa-clusterfuzz` push triggers, the three sanitizer matrix
 entries, three target groups, eight in-process harness sources, matching seed
-families, dictionaries and options, immutable action references, the pinned
+families, dictionaries and options, complete source-license blocks, the
+schema-shaped IccConnect seed and its dedicated dictionary, independent CMM
+control trailer, config round-trip paths, immutable action references, the pinned
 #2687 artifact hash, the validated 2-45 minute per-group manual duration, the
 60-minute job envelope, instrumented libc++/libxml2 bootstrap and linkage
 assertions, individual open-issue MSan patch inventory, non-blocking patch

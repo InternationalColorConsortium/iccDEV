@@ -37,6 +37,11 @@ Use this skill for `.clusterfuzzlite/**`,
 - Package tracked ICC, XML, and JSON fixtures only for the matching target
   family. Keep the shared profile/text options and profile/XML/JSON
   dictionaries aligned with explicit local CFL limits.
+- Keep `cmmapply` control bytes outside the ICC header so direction, intent,
+  and interpolation can mutate without corrupting the profile-size field.
+- Keep a schema-shaped IccConnect seed and dedicated config dictionary. Drive
+  `fromJson()`/`toJson()` round trips for top-level and nested `CIccCfg*`
+  objects before adding another configuration target.
 - Keep the workflow limited to `workflow_dispatch` and pushes to
   `ci-qa-clusterfuzz` unless a maintainer explicitly broadens the trigger.
 - Keep the manual fuzz duration selectable as whole minutes from 2 through 45,
@@ -50,6 +55,14 @@ Use this skill for `.clusterfuzzlite/**`,
   reserve `--strict` for local patch-stack maintenance. Remove only the patch
   for an issue whose normal source fix has landed.
 - Pin every action to a full commit SHA and the builder image to a digest.
+
+## Expansion Order
+
+After strengthening an existing target, prefer a multi-profile CMM chain,
+separate XML/JSON serializers, and V5 display-observer conversion, in that
+order. Add image or carrier targets only with instrumented MSan dependencies.
+Do not copy the local research inventory wholesale; require a public
+in-process seam, structured seed, and distinct attribution boundary.
 
 ## Local Validation
 

@@ -20,13 +20,17 @@ input artifact.
 - `profileparse`: validates an ICC buffer, forces tag loading, and calls every
   loaded tag's public `Describe()` path
 - `cmmapply`: builds a `CIccCmm` directly from a memory-backed profile and
-  applies one bounded profile-derived pixel
+  applies one bounded profile-derived pixel. It always covers both
+  interpolation modes using the profile's declared rendering intent; when the
+  input contains bytes beyond its declared ICC size, the first three trailing
+  bytes independently select direction, intent, and interpolation
 - `xmlparse`: parses an XML buffer with network and file includes disabled,
   then drives `CIccProfileXml::ParseXml()` and validation
 - `jsonparse`: parses a JSON buffer and drives
   `CIccProfileJson::ParseJson()` and validation
-- `connectconfig`: drives the public IccConnect `fromJson()` configuration
-  objects without launching a tool or opening a configured path
+- `connectconfig`: drives the public IccConnect `fromJson()`/`toJson()`
+  round-trip paths for top-level and nested configuration objects without
+  launching a tool or opening a configured path
 - `pawgreport`: calls the purpose-built `AssessPawgFromMemory()` and
   `PawgCompressionVerdict()` assessment seams
 - `profilevisualize`: parses an in-memory ICC profile, enumerates public
@@ -61,9 +65,11 @@ a fourth sanitizer. The nine group/sanitizer combinations run at most three at
 a time to stay within hosted-runner and artifact API limits. ICC, XML, and JSON
 targets receive only the matching
 tracked seed family from `.github/ci/test-data/`, plus a format-specific
-dictionary and options file. The address-sanitizer prune job uses `always()`
-after configuration so one real finding does not indefinitely starve corpus
-maintenance. An optional manual input builds all targets with the coverage
+dictionary and options file. `connectconfig` has a schema-shaped seed and a
+dedicated configuration dictionary rather than relying on profile-JSON tokens.
+The address-sanitizer prune job uses `!cancelled()` after configuration so one
+real finding does not indefinitely starve corpus maintenance while cancellation
+still stops cleanup. An optional manual input builds all targets with the coverage
 sanitizer and uploads the ClusterFuzzLite coverage report artifact.
 
 Local validation uses an OSS-Fuzz checkout:
@@ -170,3 +176,21 @@ explicitly, so changing a value means changing it in both places.
 
 Do not commit generated `.github/ci/cfl/bin`, `.cfl-smoke`, build trees, crash artifacts,
 coverage output, or profiler data.
+
+## Expansion Order
+
+Improve an existing target before adding another target that reaches the same
+library surface. The next additions, in priority order, are:
+
+1. A separately attributable multi-profile CMM chain target covering hints,
+   NamedColor transforms, search weights, and boundary pixels.
+2. Separate XML and JSON serialization/round-trip targets so parser and writer
+   failures remain distinguishable.
+3. An in-process V5 display-observer conversion target using a fixed observer
+   profile and a fuzzed display profile.
+4. TIFF apply-row and TIFF/PNG/JPEG carrier targets only after every external
+   dependency has an instrumented MSan boundary.
+
+Do not port local research harnesses wholesale. Every official target needs a
+public in-process seam, a useful structured seed, sanitizer-compatible runtime
+dependencies, and a distinct attribution boundary.
