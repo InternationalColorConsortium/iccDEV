@@ -73,7 +73,7 @@ grep -q '^  configure:$' "$workflow"
 grep -q '^    timeout-minutes: 10$' "$workflow"
 # shellcheck disable=SC2016 # Match the literal Actions expression.
 grep -q '^      fuzz_seconds: \${{ steps.duration.outputs.fuzz_seconds }}$' "$workflow"
-test "$(grep -c '^        shell: bash --noprofile --norc {0}$' "$workflow")" -eq 4
+test "$(grep -c '^        shell: bash --noprofile --norc {0}$' "$workflow")" -eq 7
 grep -q '^          BASH_ENV: /dev/null$' "$workflow"
 grep -q '^          git config --global credential.helper ""$' "$workflow"
 grep -q '^          unset GITHUB_TOKEN || true$' "$workflow"
@@ -118,6 +118,14 @@ grep -Fq '          CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: ${{ matrix.group }}' "$wo
 # shellcheck disable=SC2016 # Match literal Actions expressions.
 test "$(grep -Fc '          CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}' "$workflow")" -eq 3
 test "$(grep -c '^          CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: all$' "$workflow")" -eq 2
+test "$(grep -c '^      - name: Verify built source and configuration$' "$workflow")" -eq 3
+test "$(grep -c '^          provenance=build-out/iccdev-cfl-build-provenance.txt$' "$workflow")" -eq 3
+# shellcheck disable=SC2016 # Match literal workflow shell variables.
+test "$(grep -Fc '          grep -Fqx "source_sha=$GITHUB_SHA" "$provenance"' "$workflow")" -eq 3
+# shellcheck disable=SC2016 # Match literal workflow shell variables.
+test "$(grep -Fc '          grep -Fqx "target_group=$EXPECTED_TARGET_GROUP" "$provenance"' "$workflow")" -eq 3
+# shellcheck disable=SC2016 # Match literal workflow shell variables.
+test "$(grep -Fc '          grep -Fqx "patch_mode=$EXPECTED_PATCH_MODE" "$provenance"' "$workflow")" -eq 3
 
 grep -q '^  core)$' "$adapter"
 grep -q '^  formats)$' "$adapter"
@@ -130,6 +138,10 @@ grep -Fq 'ICCDEV_CFL_KNOWN_BUG_PATCH_MODE' "$adapter"
 grep -Fq 'CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP' "$adapter"
 grep -Fq 'CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE' "$adapter"
 grep -Fq '.github/ci/fuzz-patches/cfl' "$adapter"
+grep -Fq 'iccdev-cfl-build-provenance.txt' "$adapter"
+grep -Fq "printf 'source_sha=%s\\n'" "$adapter"
+grep -Fq "printf 'target_group=%s\\n'" "$adapter"
+grep -Fq "printf 'patch_mode=%s\\n'" "$adapter"
 "$repo_root/.github/scripts/iccdev-apply-fuzz-patches.sh" \
   --mode cfl --dry-run --strict
 grep -Fq 'iccdev-build-msan-libcxx.sh' "$adapter"

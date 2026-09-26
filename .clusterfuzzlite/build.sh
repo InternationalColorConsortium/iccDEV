@@ -165,3 +165,10 @@ if [ "${SANITIZER:-}" = "memory" ]; then
       "$OUT/$fuzzer" -runs=1 "$issue_2687_profile"
   done
 fi
+
+provenance_file="$OUT/iccdev-cfl-build-provenance.txt"
+{
+  printf 'source_sha=%s\n' "$(git -C "$repo_root" rev-parse HEAD)"
+  printf 'target_group=%s\n' "$target_group"
+  printf 'patch_mode=%s\n' "$patch_mode"
+} > "$provenance_file"
