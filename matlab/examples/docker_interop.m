@@ -21,6 +21,9 @@ result = run_docker_qa(image);
 fprintf('MATLAB profile version: %s\n', header.versionString);
 fprintf('MATLAB color space: %s\n', ...
   iccdev.sig_to_str(uint32(header.colorSpace)));
+fprintf('Docker selector: %s\n', result.image);
+fprintf('Docker resolved digest: %s\n', result.resolvedImage);
+fprintf('Docker source revision: %s\n', result.sourceRevision);
 fprintf('Docker image ID: %s\n', result.imageId);
 fprintf('Docker dump status: %d\n', result.dumpStatus);
 fprintf('Docker round-trip status: %d\n', result.roundTripStatus);

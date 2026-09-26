@@ -750,7 +750,10 @@ MATLAB interoperates with the published Linux image through the Docker CLI and
 profile files. It does not load Linux libraries into the Windows MATLAB
 process.
 
-Interactive MATLAB QA follows the published `latest` tag by default:
+Interactive MATLAB QA selects the published `latest` tag by default. Each
+`run_docker_qa` invocation pulls that mutable tag once, resolves it to a
+repository digest, and executes the digest so both validation commands use the
+same image:
 
 ```powershell
 docker pull ghcr.io/internationalcolorconsortium/iccdev:latest
@@ -765,6 +768,8 @@ Run the MATLAB validation:
 
 ```matlab
 result = run_docker_qa();
+disp(result.resolvedImage);
+disp(result.sourceRevision);
 disp(result.imageId);
 repo_root = fileparts(fileparts(which('build_mex')));
 run(fullfile(repo_root, 'matlab', 'examples', 'docker_interop.m'));
@@ -795,12 +800,17 @@ disables container networking, drops Linux capabilities, enables
 `iccDumpProfile` and
 `iccRoundTrip` commands. Image references are limited to the official
 `ghcr.io/internationalcolorconsortium/iccdev` repository and may use a tag or
-an immutable SHA-256 digest.
+an immutable SHA-256 digest. The returned `image` is the requested selector,
+`resolvedImage` is the immutable reference actually executed, and
+`sourceRevision` is the image's OCI source-revision label. Direct calls to
+`iccdev.docker_validate` resolve a locally available selector before execution;
+pass `'Pull', true` when a mutable tag must first be refreshed.
 
 The output contract is recorded in
-`matlab/tests/fixtures/docker_expected.txt`. Interactive local QA uses the
-published `latest` tag by default; hosted CI uses the documented immutable
-digest so a tag move cannot change an in-progress or repeated CI result.
+`matlab/tests/fixtures/docker_expected.txt`. Interactive local QA refreshes the
+published `latest` tag and pins that invocation to its resolved digest. Hosted
+CI supplies the documented immutable digest so a repeated workflow tests the
+same image.
 
 ## Troubleshooting
 

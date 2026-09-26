@@ -440,9 +440,12 @@ run_docker_qa();
 run('matlab/examples/docker_interop.m');
 ```
 
-Interactive QA uses
-`ghcr.io/internationalcolorconsortium/iccdev:latest` by default. Hosted CI
-passes an immutable digest so repeated workflow runs test the same image.
+Interactive QA selects
+`ghcr.io/internationalcolorconsortium/iccdev:latest` by default, pulls it once,
+and executes its resolved repository digest. The result records the requested
+selector in `image`, the executed digest in `resolvedImage`, and the OCI source
+revision in `sourceRevision`. Hosted CI passes an immutable digest so repeated
+workflow runs test the same image.
 
 If Docker is installed but is not on the PATH inherited by MATLAB Desktop,
 select its CLI directory explicitly:

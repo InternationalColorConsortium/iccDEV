@@ -392,6 +392,12 @@ function test_docker_interop()
   assert(result.dumpStatus == 0);
   assert(result.roundTripStatus == 0);
   assert(exist(result.profile, 'file') == 2);
+  assert(strcmp(result.image, iccdev.default_docker_image()));
+  assert(~isempty(regexp(result.resolvedImage, ...
+    '@sha256:[A-Fa-f0-9]{64}$', 'once')), ...
+    'Docker QA must execute an immutable repository digest');
+  assert(~isempty(result.sourceRevision), ...
+    'Docker QA must record the source revision');
 end
 
 function delete_if_exists(path)
