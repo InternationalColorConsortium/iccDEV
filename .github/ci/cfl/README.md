@@ -159,6 +159,12 @@ default workflow path is deliberately non-blocking. See
 `.github/ci/fuzz-patches/cfl/README.md` for the issue inventory and retirement
 rules.
 
+Every successful adapter build writes its source SHA, target group, and patch
+mode to `build-out/iccdev-cfl-build-provenance.txt`. The workflow verifies that
+record before fuzzing, pruning, or coverage. If ClusterFuzzLite cannot fetch an
+in-flight commit after branch history is rewritten and falls back to another
+revision, the job stops before running mismatched fuzzers.
+
 A CLUT-bearing seed has to survive into the corpus for either visualization
 target to render a raster, and two independent gates used to remove the only
 such seed (#2120):

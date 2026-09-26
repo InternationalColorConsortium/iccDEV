@@ -157,6 +157,20 @@ jobs:
           CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: ${{ matrix.group }}
           CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
 
+      - name: Verify built source and configuration
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          EXPECTED_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+          EXPECTED_TARGET_GROUP: ${{ matrix.group }}
+        run: |
+          set -euo pipefail
+          source .github/scripts/sanitize-sed.sh
+          provenance=build-out/iccdev-cfl-build-provenance.txt
+          grep -Fqx "source_sha=$GITHUB_SHA" "$provenance"
+          grep -Fqx "target_group=$EXPECTED_TARGET_GROUP" "$provenance"
+          grep -Fqx "patch_mode=$EXPECTED_PATCH_MODE" "$provenance"
+
       - name: Run bounded batch fuzzing
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
         env:
@@ -229,6 +243,20 @@ jobs:
           KEEP_UNAFFECTED_FUZZ_TARGETS: "true"
           CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: all
           CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+
+      - name: Verify built source and configuration
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          EXPECTED_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+          EXPECTED_TARGET_GROUP: all
+        run: |
+          set -euo pipefail
+          source .github/scripts/sanitize-sed.sh
+          provenance=build-out/iccdev-cfl-build-provenance.txt
+          grep -Fqx "source_sha=$GITHUB_SHA" "$provenance"
+          grep -Fqx "target_group=$EXPECTED_TARGET_GROUP" "$provenance"
+          grep -Fqx "patch_mode=$EXPECTED_PATCH_MODE" "$provenance"
 
       - name: Prune persistent corpus
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
@@ -303,6 +331,20 @@ jobs:
           KEEP_UNAFFECTED_FUZZ_TARGETS: "true"
           CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: all
           CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+
+      - name: Verify built source and configuration
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          EXPECTED_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+          EXPECTED_TARGET_GROUP: all
+        run: |
+          set -euo pipefail
+          source .github/scripts/sanitize-sed.sh
+          provenance=build-out/iccdev-cfl-build-provenance.txt
+          grep -Fqx "source_sha=$GITHUB_SHA" "$provenance"
+          grep -Fqx "target_group=$EXPECTED_TARGET_GROUP" "$provenance"
+          grep -Fqx "patch_mode=$EXPECTED_PATCH_MODE" "$provenance"
 
       - name: Generate coverage artifact
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
