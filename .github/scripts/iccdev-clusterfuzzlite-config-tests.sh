@@ -43,14 +43,14 @@ bash -n "$msan_builder"
 bash -n "$patch_test"
 bash -n "$target_test"
 
-for issue in 2686 2688 2699 2703 2704 2705; do
+for issue in 2686 2688 2699 2703 2704 2705 2707; do
   if ! find "$patch_dir" -maxdepth 1 -type f -name "*-issue-$issue-*.patch" \
       -print -quit | grep -q .; then
     echo "[FAIL] Missing individual temporary patch for issue #$issue" >&2
     exit 1
   fi
 done
-test "$(find "$patch_dir" -maxdepth 1 -type f -name '*.patch' | wc -l)" -eq 8
+test "$(find "$patch_dir" -maxdepth 1 -type f -name '*.patch' | wc -l)" -eq 9
 
 grep -qx 'language: c++' "$project"
 grep -q '^FROM gcr.io/oss-fuzz-base/base-builder@sha256:[0-9a-f]\{64\}$' "$dockerfile"
