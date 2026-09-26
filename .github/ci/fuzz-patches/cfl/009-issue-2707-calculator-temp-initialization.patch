@@ -1,0 +1,8 @@
+diff --git a/IccProfLib/IccMpeCalc.cpp b/IccProfLib/IccMpeCalc.cpp
+--- a/IccProfLib/IccMpeCalc.cpp
++++ b/IccProfLib/IccMpeCalc.cpp
+@@ -5465,3 +5465,3 @@ CIccApplyMpe *CIccMpeCalculator::GetNewApply(CIccApplyTagMpe *pApplyTag)
+   if (m_nTempChannels) {
+-    pApply->m_temp = (icFloatNumber*)malloc(m_nTempChannels*sizeof(icFloatNumber));
++    pApply->m_temp = (icFloatNumber*)calloc(m_nTempChannels, sizeof(icFloatNumber));
+   }

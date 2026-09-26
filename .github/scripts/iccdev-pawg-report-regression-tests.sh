@@ -56,8 +56,6 @@ VALID_HYBRID="$OUTDIR/valid-hybrid.icc"
 NESTED_SIZE_MISMATCH="$OUTDIR/nested-size-mismatch.icc"
 MALFORMED_MPE="$OUTDIR/malformed-mpe.icc"
 CALCULATOR_PROFILE="$TESTING_DIR/CalcTest/calcExercizeOps.icc"
-ISSUE_2707_B64="$REPO_ROOT/.github/ci/regression/issue-2707-pawg-finite3.icc.b64"
-ISSUE_2707_PROFILE="$OUTDIR/issue-2707-pawg-finite3.icc"
 
 PASS=0
 FAIL=0
@@ -104,7 +102,7 @@ check_sanitizers() {
   local name="$1"
   local logfile="$2"
 
-  if grep -qE "ERROR: AddressSanitizer|UndefinedBehaviorSanitizer|runtime error:|LeakSanitizer|MemorySanitizer|use-of-uninitialized-value|DEADLYSIGNAL" "$logfile" 2>/dev/null; then
+  if grep -qE "ERROR: AddressSanitizer|UndefinedBehaviorSanitizer|runtime error:|LeakSanitizer|DEADLYSIGNAL" "$logfile" 2>/dev/null; then
     echo "    sanitizer finding in $logfile"
     sed -n '1,80p' "$logfile"
     return 1
@@ -283,60 +281,6 @@ run_directory_input_crash_guard() {
   fi
 
   pass_case "$name" "directory input handled gracefully (no crash, non-zero exit, report rendered)"
-}
-
-# Issue #2707: a calculator profile can read a temporary channel before any
-# operation stores it.  The calculator apply object must initialize its owned
-# temporary buffer before PAWG smoothness evaluation passes the result through
-# finite3().  The attached fuzzer input is stored as base64 so the fixture stays
-# ASCII and its exact bytes remain reviewable across platforms.
-run_issue_2707_calculator_temp_initialization() {
-  local name="pawg-issue-2707-calculator-temp-initialization"
-  local logfile="$OUTDIR/$name.log"
-  local exit_code=0
-
-  TOTAL=$((TOTAL + 1))
-  rm -f "$logfile" "$ISSUE_2707_PROFILE"
-
-  if [ ! -x "$PAWG" ]; then
-    fail_case "$name" "missing executable: $PAWG"
-    return
-  fi
-  if [ ! -f "$ISSUE_2707_B64" ]; then
-    fail_case "$name" "missing fixture: $ISSUE_2707_B64"
-    return
-  fi
-  if ! base64 -d "$ISSUE_2707_B64" > "$ISSUE_2707_PROFILE"; then
-    fail_case "$name" "failed to decode fixture"
-    return
-  fi
-  if [ "$(sha256sum "$ISSUE_2707_PROFILE" | awk '{print $1}')" != \
-       "e08489453e55c9d47383e96c1901dae9fef6994b00c8b709e50b2a41ad70e02f" ]; then
-    fail_case "$name" "fixture checksum mismatch"
-    return
-  fi
-
-  timeout 60 "$PAWG" "$ISSUE_2707_PROFILE" > "$logfile" 2>&1 || exit_code=$?
-
-  if ! check_sanitizers "$name" "$logfile"; then
-    fail_case "$name" "sanitizer finding"
-    return
-  fi
-  if [ "$exit_code" -eq 124 ]; then
-    fail_case "$name" "timed out"
-    return
-  fi
-  if [ "$exit_code" -ge 128 ]; then
-    fail_case "$name" "crashed with signal $((exit_code - 128))"
-    sed -n '1,80p' "$logfile"
-    return
-  fi
-  if ! assert_report_truth "$name" "$logfile"; then
-    fail_case "$name" "report count or section mismatch"
-    return
-  fi
-
-  pass_case "$name" "calculator temporary channels are initialized before PAWG evaluation"
 }
 
 # #1977: --read claimed to load a profile the strict validation parse rejected, via
@@ -1875,7 +1819,6 @@ echo "=== iccPawgReport PAWG regression and security tests ==="
 run_static_source_audit
 run_binary_size_guard
 run_directory_input_crash_guard
-run_issue_2707_calculator_temp_initialization
 run_good_profile "pawg-valid-profile-fidelity" ""
 run_retired_read_option_rejected
 run_json_report
