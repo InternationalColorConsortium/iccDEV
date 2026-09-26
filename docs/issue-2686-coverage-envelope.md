@@ -42,7 +42,13 @@ MSAN_OPTIONS='halt_on_error=1:exit_code=86:origin_history_size=7' ./Tools/IccPro
 ```
 
 The second command exits 86 under MSan at the unfixed base. It exits 0 on the
-patched MSan and TSan builds and describes the curve as `Y = X ^ 2.000031`.
+patched MSan and TSan builds and plots `x^2`: the points at 0.25, 0.5 and 0.75
+are 0.0625, 0.25 and 0.5625, against a flat 1.0 at every input on the unfixed
+build. That is what the CTest asserts, because it is what runs through `Apply()`.
+The graph subtitle it prints, `Y = X ^ 2.000031`, is built by `describeCurve()`
+straight from the curve sample and reads the same either way -- and it spells the
+exponent with the `sample * 256.0` decode the library retired in #808, where
+`Describe()` prints `Y = X ^ 2.0000000000` for this profile.
 The paired CTest registrations preserve the XML producer-to-ICC consumer
 dependency; the commands above remain the minimal copy-and-paste reproduction.
 

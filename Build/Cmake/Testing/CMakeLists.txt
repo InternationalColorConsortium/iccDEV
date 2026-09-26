@@ -6281,6 +6281,13 @@ function(iccdev_add_curve_setsize_contract_test)
   endif()
 endfunction()
 
+# The iccProfilePlot leg asserts plotted values, not the graph subtitle.  The
+# subtitle is built by describeCurve() straight from the curve sample, so it reads
+# the same on a build that has the defect and on one that does not; the plotted
+# points are what run through Apply().  It also spells the exponent with a decode
+# the library retired in #808, so asserting it would pin a number that is wrong
+# (see issue filed alongside this change).
+#
 # #2686: CIccTagCurve::Begin() cached the gamma exponent for a one-entry curve,
 # but parsed curves reached Apply() without Begin() and the cache was never
 # initialized.  operator[] and GetData() also expose mutable curve storage, so
@@ -6359,7 +6366,7 @@ function(iccdev_add_curve_apply_gamma_test)
           "-DLABEL=issue-2686-curve-gamma-profileplot"
           "-DTOOL_ARGS=${_curve_gamma_icc};graph;curve:B2A1:B:2"
           "-DEXPECT_EXIT=zero"
-          "-DEXPECT_MATCH=Y = X . 2[.]000031"
+          "-DEXPECT_MATCHES=0[.]25,0[.]0625,;0[.]5,0[.]25,;0[.]75,0[.]5625,"
           -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
       )
     else()
@@ -6386,7 +6393,7 @@ function(iccdev_add_curve_apply_gamma_test)
           "-DLABEL=issue-2686-curve-gamma-profileplot"
           "-DTOOL_ARGS=${_curve_gamma_icc};graph;curve:B2A1:B:2"
           "-DEXPECT_EXIT=zero"
-          "-DEXPECT_MATCH=Y = X . 2[.]000031"
+          "-DEXPECT_MATCHES=0[.]25,0[.]0625,;0[.]5,0[.]25,;0[.]75,0[.]5625,"
           -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
       )
     endif()
@@ -6513,6 +6520,104 @@ function(iccdev_add_colorant_table_pcs_test)
       iccdev.issue-2688-colorant-table-pcs-dump
       PROPERTIES
         ENVIRONMENT_MODIFICATION "${_colorant_pcs_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# ICC.1:2022 9.2.19 permits only PCSLAB values for colorantTableTag in a DeviceLink,
+# and 8.6 sets a DeviceLink's PCS field to the data colour space of the last profile
+# in the sequence -- a device space.  So the header PCS field decides the encoding
+# for every other class and must not decide it here.  This fixture is a DeviceLink
+# that spells XYZ in that field: reading its colorants as XYZ is the case the
+# sibling issue-2688 fixture cannot see, because a display profile's PCS field is
+# the right answer there.
+function(iccdev_add_colorant_table_devicelink_pcs_test)
+  if(NOT TARGET iccFromXml OR NOT TARGET iccDumpProfile)
+    return()
+  endif()
+
+  set(_colorant_link_xml
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/issue-2688-colorant-table-devicelink.xml")
+  set(_colorant_link_icc
+    "${ICCDEV_TEST_OUTDIR}/issue-2688-colorant-table-devicelink.icc")
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.issue-2688-colorant-table-devicelink-xml
+      COMMAND "${CMAKE_COMMAND}"
+        "-DTOOL=$<TARGET_FILE:iccFromXml>"
+        "-DLABEL=issue-2688-colorant-table-devicelink-xml"
+        "-DTOOL_ARGS=${_colorant_link_xml};${_colorant_link_icc};-noid"
+        "-DEXPECT_EXIT=zero"
+        "-DEXPECT_MATCH=Profile parsed and saved correctly"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+    )
+    add_test(
+      NAME iccdev.issue-2688-colorant-table-devicelink-dump
+      COMMAND "${CMAKE_COMMAND}"
+        "-DTOOL=$<TARGET_FILE:iccDumpProfile>"
+        "-DLABEL=issue-2688-colorant-table-devicelink-dump"
+        "-DTOOL_ARGS=${_colorant_link_icc};ALL"
+        "-DEXPECT_EXIT=zero"
+        "-DEXPECT_MATCHES=Profile Class:      Link;# NAME Lab_L Lab_a Lab_b"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+    )
+  else()
+    add_test(
+      NAME iccdev.issue-2688-colorant-table-devicelink-xml
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "${CMAKE_COMMAND}"
+        "-DTOOL=$<TARGET_FILE:iccFromXml>"
+        "-DLABEL=issue-2688-colorant-table-devicelink-xml"
+        "-DTOOL_ARGS=${_colorant_link_xml};${_colorant_link_icc};-noid"
+        "-DEXPECT_EXIT=zero"
+        "-DEXPECT_MATCH=Profile parsed and saved correctly"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+    )
+    add_test(
+      NAME iccdev.issue-2688-colorant-table-devicelink-dump
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "${CMAKE_COMMAND}"
+        "-DTOOL=$<TARGET_FILE:iccDumpProfile>"
+        "-DLABEL=issue-2688-colorant-table-devicelink-dump"
+        "-DTOOL_ARGS=${_colorant_link_icc};ALL"
+        "-DEXPECT_EXIT=zero"
+        "-DEXPECT_MATCHES=Profile Class:      Link;# NAME Lab_L Lab_a Lab_b"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplyCliTest.cmake"
+    )
+  endif()
+
+  set_tests_properties(iccdev.issue-2688-colorant-table-devicelink-xml PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;xml;colorant-table;pcs;devicelink;issue-2688;regression"
+    FIXTURES_SETUP iccdev_issue_2688_colorant_table_devicelink
+  )
+  set_tests_properties(iccdev.issue-2688-colorant-table-devicelink-dump PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;tools;colorant-table;pcs;devicelink;issue-2688;regression"
+    FIXTURES_REQUIRED iccdev_issue_2688_colorant_table_devicelink
+  )
+
+  if(WIN32)
+    set(_colorant_link_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccFromXml>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccDumpProfile>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _colorant_link_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(
+      iccdev.issue-2688-colorant-table-devicelink-xml
+      iccdev.issue-2688-colorant-table-devicelink-dump
+      PROPERTIES
+        ENVIRONMENT_MODIFICATION "${_colorant_link_windows_env_mods}"
     )
   endif()
 endfunction()
@@ -10180,6 +10285,7 @@ if(WIN32)
   iccdev_add_curve_setsize_contract_test()
   iccdev_add_curve_apply_gamma_test()
   iccdev_add_colorant_table_pcs_test()
+  iccdev_add_colorant_table_devicelink_pcs_test()
   iccdev_add_mpe_curveset_setcurve_contract_tests()
   iccdev_add_owning_setter_self_alias_contract_test()
   iccdev_add_curve_gamma_u8fixed8_test()
@@ -10600,6 +10706,7 @@ iccdev_add_calc_channel_ref_unterminated_index_json_test()
 iccdev_add_curve_setsize_contract_test()
 iccdev_add_curve_apply_gamma_test()
 iccdev_add_colorant_table_pcs_test()
+iccdev_add_colorant_table_devicelink_pcs_test()
 iccdev_add_mpe_curveset_setcurve_contract_tests()
 iccdev_add_owning_setter_self_alias_contract_test()
 iccdev_add_curve_gamma_u8fixed8_test()

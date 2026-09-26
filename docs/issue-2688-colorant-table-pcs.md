@@ -1,10 +1,15 @@
 # Issue 2688 Colorant Table PCS Reproduction
 
-`colorantTableType` does not carry its own PCS encoding. ICC.1 defines its
-values in the profile header PCS; `colorantTableOutTag` is the DeviceLink Lab
-exception. `CIccTagColorantTable::m_PCS` was left uninitialized and neither
-profile loading nor attachment supplied this context. `Describe()` therefore
-branched on uninitialized memory.
+`colorantTableType` does not carry its own PCS encoding, so the profile supplies
+it. ICC.1:2022 9.2.19 gives `colorantTableTag` "PCSXYZ or PCSLAB values. When
+used in DeviceLink profiles only the PCSLAB values shall be permitted", and
+9.2.20 gives `colorantTableOutTag` PCSLAB unconditionally. The header PCS field
+answers every case except a DeviceLink, where 8.6 sets that field to the data
+colour space of the last profile in the sequence -- a device space -- so a
+DeviceLink is Lab whatever it spells there.
+`CIccTagColorantTable::m_PCS` was left uninitialized and neither profile loading
+nor attachment supplied this context. `Describe()` therefore branched on
+uninitialized memory.
 
 ## Unfixed MSan reproduction
 
@@ -37,9 +42,11 @@ It generates a 684-byte ICC profile with SHA-256
 ## Fix contract
 
 The constructor gives standalone tables a deterministic Lab fallback.
-`CIccProfile` then supplies the profile header PCS for `colorantTableTag` and
-Lab for `colorantTableOutTag` when loading or attaching the tag. The patched
-MSan reproduction exits 0 and contains:
+`CIccProfile` then supplies the encoding when loading or attaching the tag: Lab
+for `colorantTableOutTag`, Lab for `colorantTableTag` in a DeviceLink, and the
+profile header PCS otherwise. `issue-2688-colorant-table-devicelink.xml` is the
+DeviceLink case -- a link profile whose PCS field spells XYZ, whose colorants
+must still be read as Lab. The patched MSan reproduction exits 0 and contains:
 
 ```text
 BEGIN_COLORANTS 3
