@@ -2,11 +2,11 @@
     File:       hdr-corpus-manifest.cpp
 
     Contains:   Enforces Testing/HDR/hdr-corpus-manifest.tsv - the expected
-                clause 8.10 CLASSIFICATION of every fixture in Testing/HDR.
+                clause 8.7.1 CLASSIFICATION of every fixture in Testing/HDR.
 
     Why this exists separately from iccdev.qa-profile-manifest: that test
     records the VALIDATION verdict, which cannot express what most of these
-    fixtures were built to pin.  Failing clause 8.10.1's membership conditions
+    fixtures were built to pin.  Failing clause 8.7.1.1's membership conditions
     does not make a profile invalid, so all six membership negatives validate
     `valid` and are indistinguishable there.  Without this test they assert
     nothing at all.
@@ -125,16 +125,12 @@ static const char *className(icHdrProfileClass c)
   return "?";
 }
 
-static const char *displaySourceName(icHdrHeadroomSource s)
-{
-  switch (s) {
-    case icHdrHeadroomNone:    return "-";
-    case icHdrHeadroomDerh:    return "derh";
-    case icHdrHeadroomDcvDrwl: return "dcv-drwl";
-    case icHdrHeadroomDcvCrwl: return "dcv-crwl";
-  }
-  return "?";
-}
+/* displaySourceName() WAS HERE, mapping the four rules of clause 8.10.5 onto
+ * the manifest's headroom_source column.  The 23-09-2026 revision deletes
+ * that clause - physical display characterization is out of scope for the
+ * sub-class - so both the display_headroom and headroom_source columns are
+ * gone from the manifest and there is nothing left to name.
+ */
 
 static const char *contentSourceName(icHdrContentHeadroomSource s)
 {
@@ -286,7 +282,11 @@ int main()
     while (std::getline(ss, cell, '\t'))
       f.push_back(cell);
 
-    if (f.size() < 6) {
+    /* Four columns now, not six: display_headroom and headroom_source went
+     * with clause 8.10.5.  The arity is checked rather than assumed so that a
+     * manifest left in the old six-column shape fails loudly here instead of
+     * silently comparing content_headroom against a display column. */
+    if (f.size() < 4) {
       printf("FAIL malformed row (%u fields): %s\n",
              (unsigned)f.size(), line.c_str());
       g_fail++;
@@ -311,17 +311,11 @@ int main()
     if (f[1] != className(info.nClass))
       failure(name, "class", f[1], className(info.nClass));
 
-    if (!closeEnough(atof(f[2].c_str()), (double)info.displayHeadroom))
-      failure(name, "display_headroom", f[2], fmt((double)info.displayHeadroom));
+    if (!closeEnough(atof(f[2].c_str()), (double)info.contentHeadroom))
+      failure(name, "content_headroom", f[2], fmt((double)info.contentHeadroom));
 
-    if (f[3] != displaySourceName(info.nHeadroomSource))
-      failure(name, "headroom_source", f[3], displaySourceName(info.nHeadroomSource));
-
-    if (!closeEnough(atof(f[4].c_str()), (double)info.contentHeadroom))
-      failure(name, "content_headroom", f[4], fmt((double)info.contentHeadroom));
-
-    if (f[5] != contentSourceName(info.nContentHeadroomSource))
-      failure(name, "content_source", f[5], contentSourceName(info.nContentHeadroomSource));
+    if (f[3] != contentSourceName(info.nContentHeadroomSource))
+      failure(name, "content_source", f[3], contentSourceName(info.nContentHeadroomSource));
 
     delete pProfile;
   }

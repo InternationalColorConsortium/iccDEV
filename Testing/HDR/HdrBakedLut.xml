@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  A conforming HDR Profile (ICC.1 clause 8.10.1) whose only tone-mapping
-  descriptor is the pre-rendered AToB0Tag/BToA0Tag pair of clause 8.10.3 c).
+  A conforming HDR ColorSpace Profile (ICC.1 clause 8.7.1.1) whose only tone-mapping
+  descriptor is the pre-rendered AToB0Tag/BToA0Tag pair of clause 8.7.1.3 c).
 
   It exists to pin descriptor precedence, which no other fixture can. Clause
-  8.10.3 ranks the HAGC tag above a CMM-supplied operator and both above a
+  8.7.1.3 ranks the HAGC tag above a CMM-supplied operator and both above a
   baked LUT, and every other HDR fixture in this directory either carries a
   HAGC tag or carries no LUT - so in every one of them the ranking has only one
   possible outcome. Here the two lowest-ranked descriptors are the only ones
   present, which is what makes the choice observable:
 
     - icHdrToneMapAuto follows that ranking. This build always supplies an
-      operator of its own (the identity of NOTE 6 of 8.10.2), so the HDR
+      operator of its own (the identity of NOTE 6 of 8.7.1.2), so the HDR
       chain engages and the baked pair is not used - the same outcome as
       icHdrToneMapPreferHagc.
     - icHdrToneMapPreferLut takes the pair the profile author baked instead,
@@ -22,7 +22,7 @@
 
   The AToB0Tag and BToA0Tag are identity B-curve LUTs. Their contents are
   irrelevant to what this fixture proves; what matters is that the pair is
-  present, complete (8.10.3 c) requires the pairing, and 8.10.6 repeats it),
+  present, complete (8.7.1.3 c) requires the pairing, and 8.7.1.5 repeats it),
   and that no headroomAdaptiveGainCurveTag accompanies them.
 
   Colorants, chromatic adaptation and TRCs are the same BT.709/D65 set as the
@@ -32,7 +32,7 @@
   <Header>
     <PreferredCMMType>ICCD</PreferredCMMType>
     <ProfileVersion>4.50</ProfileVersion>
-    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <ProfileDeviceClass>spac</ProfileDeviceClass>
     <DataColourSpace>RGB </DataColourSpace>
     <PCS>XYZ </PCS>
     <CreationDateTime>2026-08-05T00:00:00</CreationDateTime>
@@ -47,18 +47,6 @@
   <Tags>
     <!-- The canonical sRGB/BT.709 colorants adapted to the PCS adopted white,
          with the chromaticAdaptationTag that put them there. -->
-    <redColorantTag> <XYZArrayType>
-      <XYZNumber X="0.436004638672" Y="0.222503662109" Z="0.013900756836"/>
-    </XYZArrayType> </redColorantTag>
-
-    <greenColorantTag> <XYZArrayType>
-      <XYZNumber X="0.385101318359" Y="0.716903686523" Z="0.097106933594"/>
-    </XYZArrayType> </greenColorantTag>
-
-    <blueColorantTag> <XYZArrayType>
-      <XYZNumber X="0.143096923828" Y="0.060592651367" Z="0.713897705078"/>
-    </XYZArrayType> </blueColorantTag>
-
     <!-- Standard Bradford D65 to D50 adaptation. -->
     <chromaticAdaptationTag> <s15Fixed16ArrayType>
       <Array>

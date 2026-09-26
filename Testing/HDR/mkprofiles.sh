@@ -35,9 +35,9 @@ echo "====================== Entering HDR/mkprofiles.sh ========================
 echo "====================== Running iccFromXml Checks =========================="
 
 
-# The ten BT.2100 fixtures. v5 multiProcessElement profiles, not clause 8.10 HDR
+# The ten BT.2100 fixtures. v5 multiProcessElement profiles, not clause 8.7.1 HDR
 # Profiles: v5 is a different major version with its own tag model and is outside
-# 8.10.1's version window. Four are narrow-range and carry the range expansion as
+# 8.7.1.1's version window. Four are narrow-range and carry the range expansion as
 # an explicit curve, which is why they need no VideoFullRangeFlag handling.
 iccFromXml BT2100HlgFullScene.xml BT2100HlgFullScene.icc
 iccFromXml BT2100HlgNarrowScene.xml BT2100HlgNarrowScene.icc
@@ -62,18 +62,23 @@ iccFromXml HagcMixingTypes.xml HagcMixingTypes.icc
 iccFromXml HagcInvalidXOrder.xml HagcInvalidXOrder.icc
 iccFromXml HagcRefWhiteToneMap.xml HagcRefWhiteToneMap.icc
 
-# Clause 8.10 HDR Profile coverage: metadata, the baked AToB0/BToA0 pair that makes
-# 8.10.3's precedence observable, the ColourPrimaries-2 pair, and the Linear
-# content-headroom order of 8.10.4 (rules a, b and c, plus the HAGC-white case).
-# HdrInvalidTransfer, HdrMissingBToA0, HdrMissingLutPair and HdrCicp2NoColumns are
-# negatives.
+# Clause 8.7.1 HDR ColorSpace Profile coverage: metadata, the baked AToB0/BToA0
+# pair that makes 8.7.1.3's precedence observable, the ColourPrimaries-2 case,
+# and the Linear content-headroom order of 8.7.1.4 (rules a, b and c, plus the
+# HAGC-white case).  HdrInvalidTransfer, HdrMissingBToA0 and HdrMissingLutPair
+# are negatives.
+#
+# HdrCicp2NoColumns is GONE.  Its subject was the matrix column tags that
+# 8.10.1 required when ColourPrimaries was 2; the 23-09-2026 revision routes
+# that case to the cicpType custom chromaticity extension of 10.3 instead, and
+# a ColorSpace profile has no matrix column tags for the old rule to be about.
+# HdrCicpUnspecified covers ColourPrimaries 2 on its own now.
 iccFromXml HdrCicpUnspecified.xml HdrCicpUnspecified.icc
 iccFromXml HdrDisplayMetadata.xml HdrDisplayMetadata.icc
 iccFromXml HdrBakedLut.xml HdrBakedLut.icc
 iccFromXml HdrInvalidTransfer.xml HdrInvalidTransfer.icc
 iccFromXml HdrMissingBToA0.xml HdrMissingBToA0.icc
 iccFromXml HdrMissingLutPair.xml HdrMissingLutPair.icc
-iccFromXml HdrCicp2NoColumns.xml HdrCicp2NoColumns.icc
 iccFromXml HdrInputDisplayMeta.xml HdrInputDisplayMeta.icc
 iccFromXml HdrLinearCll.xml HdrLinearCll.icc
 iccFromXml HdrLinearMdcv.xml HdrLinearMdcv.icc
@@ -81,13 +86,26 @@ iccFromXml HdrLinearNoMetadata.xml HdrLinearNoMetadata.icc
 iccFromXml HdrLinearHagcWhite.xml HdrLinearHagcWhite.icc
 iccFromXml HdrLinearHagcCrwlDisagree.xml HdrLinearHagcCrwlDisagree.icc
 
-# Clause 8.10.1 membership. Each flips exactly ONE membership condition and
+# Clause 8.7.1.1 membership. Each flips exactly ONE membership condition and
 # satisfies every other, so a classifier that drops one condition misclassifies
-# exactly one fixture. Before these the only membership negative was
-# HdrInvalidTransfer, which fails two conditions at once (non-HDR transfer AND TRC
-# tags present) and so cannot say which was tested. All six are CONFORMANT
-# profiles that classify as icHdrProfileHdrContent -- failing 8.10.1 makes a
-# profile not an HDR Profile, it does not make it non-conformant.
+# exactly one fixture. All of them are CONFORMANT profiles that classify as
+# icHdrProfileHdrContent -- failing 8.7.1.1 makes a profile not an HDR
+# ColorSpace Profile, it does not make it non-conformant.
+#
+# THREE OF THESE INVERTED IN THE 23-09-2026 REVISION, and the inversions are
+# the discriminators the revision most needs:
+#   HdrColorSpaceClass  was the class negative; 'spac' is now the class the
+#                       sub-class is built on, so it is the class POSITIVE and
+#                       the base fixture.
+#   HdrVersion44        was below the 4.5.0.0 window; 4.7 withdraws the lower
+#                       bound, so it is a positive.
+#   HdrTrcTagsPresent   carried the prohibited TRC tags; 8.7 defines none for
+#                       a ColorSpace profile, so there is nothing to prohibit
+#                       and it is a positive (it still WARNS - a TRC tag has
+#                       no interpretation on 'spac' - which is a different
+#                       question from membership).
+# The class condition keeps negatives on the other side: HdrDisplayMetadata
+# ('mntr') and HdrInputDisplayMeta ('scnr') are below.
 iccFromXml HdrNonRgbSpace.xml HdrNonRgbSpace.icc
 iccFromXml HdrColorSpaceClass.xml HdrColorSpaceClass.icc
 iccFromXml HdrVersion44.xml HdrVersion44.icc
@@ -95,19 +113,20 @@ iccFromXml HdrNoCicpTag.xml HdrNoCicpTag.icc
 iccFromXml HdrTrcTagsPresent.xml HdrTrcTagsPresent.icc
 iccFromXml HdrTransferSdr.xml HdrTransferSdr.icc
 
-# The other edge of the version window: 4.6.0.0 is "4.5.0.0 or later within v4",
-# so this one IS an HDR Profile. The only fixture separating a correct
-# ">= 4.5 and < 5" test from a wrong "== 4.5".
+# 4.6.0.0. With HdrVersion44 it brackets the WITHDRAWN lower bound from both
+# sides: both are now HDR ColorSpace Profiles, and a classifier that still
+# carries a ">= 4.5" test fails the 4.4 row while this one keeps passing.
+# The surviving version rule is the UPPER bound - see icHdrIsVersion4() - and
+# the eight v5 BT2100 fixtures are what pin that.
 iccFromXml HdrVersion46.xml HdrVersion46.icc
 
-# Clause 8.10.5 display-headroom precedence, rules b) and c). HdrDisplayMetadata
-# fires rule a); these remove entries to expose the rules below it, with values
-# chosen so a reader firing the wrong rule returns a different number.
-iccFromXml HdrHeadroomDcvDrwl.xml HdrHeadroomDcvDrwl.icc
-iccFromXml HdrHeadroomDcvCrwl.xml HdrHeadroomDcvCrwl.icc
+# The clause 8.10.5 display-headroom fixtures HdrHeadroomDcvDrwl and
+# HdrHeadroomDcvCrwl are DELETED. The revision deletes the clause - physical
+# display characterization is out of scope for the sub-class - so rules b) and
+# c) no longer exist to be isolated.
 
-# Clause 8.10.6 pairing at x = 1. HdrMissingBToA0 covers x = 0, but x = 0 is the
-# pair 8.10.6 makes mandatory outright, so an implementation that only ever looked
+# Clause 8.7.1.5 pairing at x = 1. HdrMissingBToA0 covers x = 0, but x = 0 is the
+# pair 8.7.1.5 makes mandatory outright, so an implementation that only ever looked
 # for AToB0Tag/BToA0Tag passes it. A negative.
 iccFromXml HdrMissingBToA1.xml HdrMissingBToA1.icc
 

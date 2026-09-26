@@ -31,7 +31,7 @@
   <Header>
     <PreferredCMMType>ICCD</PreferredCMMType>
     <ProfileVersion>4.50</ProfileVersion>
-    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <ProfileDeviceClass>spac</ProfileDeviceClass>
     <DataColourSpace>RGB </DataColourSpace>
     <PCS>XYZ </PCS>
     <CreationDateTime>2026-08-05T00:00:00</CreationDateTime>
@@ -44,18 +44,6 @@
     <ProfileCreator>ICCD</ProfileCreator>
   </Header>
   <Tags>
-    <redColorantTag> <XYZArrayType>
-      <XYZNumber X="0.436004638672" Y="0.222503662109" Z="0.013900756836"/>
-    </XYZArrayType> </redColorantTag>
-
-    <greenColorantTag> <XYZArrayType>
-      <XYZNumber X="0.385101318359" Y="0.716903686523" Z="0.097106933594"/>
-    </XYZArrayType> </greenColorantTag>
-
-    <blueColorantTag> <XYZArrayType>
-      <XYZNumber X="0.143096923828" Y="0.060592651367" Z="0.713897705078"/>
-    </XYZArrayType> </blueColorantTag>
-
     <mediaWhitePointTag> <XYZArrayType>
       <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
     </XYZArrayType> </mediaWhitePointTag>
@@ -86,17 +74,21 @@
       </HagcMetadata>
     </headroomAdaptiveGainCurveType> </headroomAdaptiveGainCurveTag>
 
-    <!-- Clause 8.10.1 of the 29-08-2026 revision: "the redTRCTag, greenTRCTag
-         and blueTRCTag shall not be present" in an HDR Profile. The transfer
-         function is conveyed by the cicpTag's TransferCharacteristics field
-         instead, and NOTE 3 makes their absence one of the two tag-level
-         features that distinguish an HDR Profile. This fixture was authored
-         against the previous revision and carried them.
+    <!-- There are no TRC tags and no matrix column tags, and under the
+         23-09-2026 revision that is not a prohibition being obeyed - it is
+         what a ColorSpace profile IS. 8.7 never defines either set for this
+         class, so, in the revision's words, "there is nothing for this
+         amendment to prohibit". The transfer comes from the cicpTag's
+         TransferCharacteristics field and the primaries from its
+         ColourPrimaries field; 8.7.1.1 says the cicpTag "is the only tag that
+         can convey either".
 
-         The AToB0Tag/BToA0Tag pair below is what 8.10.6 makes mandatory, and
-         what NOTE 4 says gives a legacy CMM "a rendering path at all" once the
-         TRC tags are gone. Identity B curves: these fixtures exercise
-         classification and the tone-mapping chain, not the bake's accuracy. -->
+         The AToB0Tag/BToA0Tag pair below is required by 8.7 of every
+         ColorSpace profile, which 8.7.1.5 leans on rather than restates -
+         "both already unconditionally required of every ColorSpace profile by
+         8.7" - and it is what gives a legacy CMM a rendering path. Identity B
+         curves: these fixtures exercise classification and the tone-mapping
+         chain, not the bake's accuracy. -->
 
     <AToB0Tag> <lutAtoBType>
       <Channels InputChannels="3" OutputChannels="3"/>

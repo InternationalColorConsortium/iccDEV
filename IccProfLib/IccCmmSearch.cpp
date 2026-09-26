@@ -332,7 +332,7 @@ CIccCmmSearch::~CIccCmmSearch()
 
 //virtual CIccPCS *GetPCS() { return new CIccPCS(); }
 
-// Copies the clause 8.10 HDR hint, if the caller supplied one, out of a hint
+// Copies the clause 8.7.1 HDR hint, if the caller supplied one, out of a hint
 // manager that will not outlive AddXform().
 static void icSearchCopyHdrHint(CIccCreateXformHintManager* pHintManager, bool& bSet,
                                 CIccCreateHdrXformHint& hint)
@@ -522,9 +522,9 @@ icStatusCMM CIccCmmSearch::Begin(bool bAllocNewApply, bool /* bUsePcsConversion 
   if (m_pDstInitProfile)
     m_pDstInitProfile->ReadPccTags();
 
-  // Each sub-chain gets the ICC.1 clause 8.10 HDR hint its profile was added
+  // Each sub-chain gets the ICC.1 clause 8.7.1 HDR hint its profile was added
   // with.  They are built through CIccCmm::AddXform with no hint manager, so
-  // without these the search CMM rendered an HDR Profile through its SDR
+  // without these the search CMM rendered an HDR ColorSpace Profile through its SDR
   // fallback LUTs while CIccConnectCmm::CreateSearch reported the hint applied.
   CIccCreateXformHintManager srcHints, dstHints, midHints;
   CIccCreateXformHintManager* pSrcHints = NULL;

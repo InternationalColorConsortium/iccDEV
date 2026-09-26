@@ -887,7 +887,7 @@ static const char* icInterpNames[] = { "linear", "tetrahedral", nullptr };
 
 static icXformInterp icInterpValues[] = { icInterpLinear, icInterpTetrahedral, icInterpTetrahedral };
 
-// The tone-mapping descriptor policy of ICC.1 clause 8.10.3, by name.  The two
+// The tone-mapping descriptor policy of ICC.1 clause 8.7.1.3, by name.  The two
 // arrays are index-parallel and the trailing entry of the value array is the
 // fallback the writer uses for an unrecognised policy, matching the convention
 // icInterpValues above already sets.
@@ -1012,7 +1012,7 @@ bool CIccCfgProfile::fromJson(json j, bool bReset)
     parsed.m_interpolation = icInterpValues[i];
   }
 
-  // ICC.1 clause 8.10.  A headroom at or below zero has no log2 and is
+  // ICC.1 clause 8.7.1.  A headroom at or below zero has no log2 and is
   // rejected rather than silently corrected, because the two plausible
   // corrections - "treat as SDR" and "treat as unset" - differ in whether the
   // HDR path engages at all.
@@ -1143,11 +1143,11 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
       pProf->m_iccEnvVars[sig] = val;
     }
 
-    // -HDR <headroom> engages the tone-mapping step of ICC.1 clause 8.10.2 for
+    // -HDR <headroom> engages the tone-mapping step of ICC.1 clause 8.7.1.2 for
     // the profile that follows, with the target headroom as a linear ratio of
     // peak luminance to HDR reference white (1.0 SDR, 4.0 two stops).  An
     // optional -HDRMAP <auto|hagc|lut|off> selects the descriptor policy of
-    // 8.10.3.  Both sit in the same prefixed-flag position as -ENV: and -PCC,
+    // 8.7.1.3.  Both sit in the same prefixed-flag position as -ENV: and -PCC,
     // and both are per profile - a chain can tone map one stage and not another.
     // Without -HDR nothing changes, which is the whole point: the target
     // headroom is not in the profile and must be stated, not guessed.
@@ -1466,11 +1466,11 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
       pProf->m_iccEnvVars[sig] = val;
     }
 
-    // -HDR <headroom> engages the tone-mapping step of ICC.1 clause 8.10.2 for
+    // -HDR <headroom> engages the tone-mapping step of ICC.1 clause 8.7.1.2 for
     // the profile that follows, with the target headroom as a linear ratio of
     // peak luminance to HDR reference white (1.0 SDR, 4.0 two stops).  An
     // optional -HDRMAP <auto|hagc|lut|off> selects the descriptor policy of
-    // 8.10.3.  Both sit in the same prefixed-flag position as -ENV: and -PCC,
+    // 8.7.1.3.  Both sit in the same prefixed-flag position as -ENV: and -PCC,
     // and both are per profile - a chain can tone map one stage and not another.
     // Without -HDR nothing changes, which is the whole point: the target
     // headroom is not in the profile and must be stated, not guessed.

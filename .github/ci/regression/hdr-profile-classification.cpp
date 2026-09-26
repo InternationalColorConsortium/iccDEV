@@ -51,7 +51,7 @@
  *
  */
 
-// Regression for the HDR Profile machinery of ICC.1 clause 8.10 and for the
+// Regression for the HDR ColorSpace Profile machinery of ICC.1 clause 8.7.1 and for the
 // CICP ColourPrimaries amendment to clauses 9.2.17 / 10.3.
 //
 // Three things here are easy to get subtly wrong and impossible to notice from
@@ -74,22 +74,22 @@
 //    the entries agree and a different one when they do not, so only a
 //    deliberately inconsistent fixture can tell the two apart.
 //
-// 3. The content-headroom priority order of clause 8.10.4, which applies to the
+// 3. The content-headroom priority order of clause 8.7.1.4, which applies to the
 //    Linear (8) transfer alone. Its three rules divide three different
 //    numerators by the same CRWL, so a fixture whose CLL and MDCV agree, or
 //    whose CRWL is the 203 default, cannot tell a correct implementation from
 //    one that reached for the wrong entry - the arithmetic comes out the same.
 //    The four HdrLinear* fixtures are built so that every branch lands on a
 //    distinct value, and the fourth pins a ruling rather than a transcription:
-//    8.10.4 states its 203 default twice with different conditions and an HAGC
+//    8.7.1.4 states its 203 default twice with different conditions and an HAGC
 //    tag carrying a custom reference white makes them disagree (HDR-10).
 //
-// 4. The conforming/intended split. Clause 8.10.1's definition is
-//    self-satisfying - an HDR Profile is defined as carrying a cicpTag whose
+// 4. The conforming/intended split. Clause 8.7.1.1's definition is
+//    self-satisfying - an HDR ColorSpace Profile is defined as carrying a cicpTag whose
 //    TransferCharacteristics is 8, 16 or 18, so a profile that gets that field
-//    wrong is not an HDR Profile and violates nothing. The classifier's
+//    wrong is not an HDR ColorSpace Profile and violates nothing. The classifier's
 //    "intended" state is the non-circular hook that makes the rule reportable,
-//    and the pairing rule of 8.10.3 c) has to stay outside that split because a
+//    and the pairing rule of 8.7.1.3 c) has to stay outside that split because a
 //    fully conforming profile can still break it.
 //
 // The fixtures come from Testing/HDR and must be built first; the test skips
@@ -211,18 +211,29 @@ void testCicpTable()
 // ---------------------------------------------------------------------------
 void testProfilePrimaries()
 {
-  // HagcHexData declares ColourPrimaries 2 and carries sRGB/BT.709 colorants
-  // with no chromaticAdaptationTag. The first NOTE governs: the profile's actual
-  // adopted white is the PCS adopted white, so the encoded values are used as
-  // they stand and the recovered white is D50 - NOT the D65 those colorants
-  // would have had before adaptation.
-  CIccProfile *pProfile = openFixture("HagcHexData.icc");
+  // THE FIXTURE MOVED, because icGetProfilePrimaries() now has only one kind
+  // of caller left.  It reads a profile's matrix column tags, and after the
+  // 23-09-2026 revision no HDR ColorSpace Profile has any - 8.7 defines none
+  // for the ColorSpace class.  What still uses the procedure is the ICC
+  // dictType Metadata Registry, whose MDCV and CLL entries define their own
+  // primaries code 2 as "the containing profile's matrix column tags", and
+  // that rule is the registry's and untouched by this amendment.  So the
+  // fixtures under test here are the two that are NOT HDR ColorSpace Profiles
+  // and do carry colorants: HdrDisplayMetadata ('mntr') and
+  // HdrInputDisplayMeta ('scnr').
+  //
+  // Both carry a chromaticAdaptationTag, so the unadapted half is synthesized
+  // by deleting it in memory.  That is better than a fixture kept solely to
+  // have none: the two halves then differ in exactly one tag, which is the
+  // thing the adaptation direction is being tested against.
+  CIccProfile *pProfile = openFixture("HdrDisplayMetadata.icc");
   if (!pProfile)
     return;
 
   icCicpPrimaries p;
-  bool bFromProfile = false;
 
+  check(pProfile->DeleteTag(icSigChromaticAdaptationTag),
+        "the chromaticAdaptationTag is removed to synthesize the unadapted case");
   check(icGetProfilePrimaries(pProfile, p), "primaries recovered from an unadapted profile");
 
   // D50 is x = 0.3457, y = 0.3585. The tolerance is loose because the media
@@ -238,14 +249,14 @@ void testProfilePrimaries()
   check(p.yGreen > 0.55 && p.yGreen < 0.75, "recovered green y is in the sRGB neighbourhood");
 
   // The other branch, and the one that actually tests the adaptation direction.
-  // HdrCicpUnspecified carries the same sRGB colorants adapted to D50 *plus* the
-  // Bradford chromaticAdaptationTag that adapted them, so recovering the source
-  // primaries means applying that matrix inverted. Done correctly the result is
-  // the BT.709 primaries at D65 - the H.273 Table 2 entry for value 1. Skipping
-  // the inverse leaves the D50 values above, which differ by roughly 0.033 in
-  // white x: far outside these tolerances but entirely plausible-looking on its
-  // own, which is why this assertion exists.
-  CIccProfile *pAdapted = openFixture("HdrCicpUnspecified.icc");
+  // The same fixture read afresh, this time WITH its Bradford
+  // chromaticAdaptationTag, so recovering the source primaries means applying
+  // that matrix inverted. Done correctly the result is the BT.709 primaries
+  // at D65 - the H.273 Table 2 entry for value 1. Skipping the inverse leaves
+  // the D50 values above, which differ by roughly 0.033 in white x: far
+  // outside these tolerances but entirely plausible-looking on its own, which
+  // is why this assertion exists.
+  CIccProfile *pAdapted = openFixture("HdrDisplayMetadata.icc");
   if (pAdapted) {
     icCicpPrimaries recovered, table;
     check(icGetProfilePrimaries(pAdapted, recovered), "primaries recovered from an adapted profile");
@@ -268,26 +279,48 @@ void testProfilePrimaries()
     check(fabs(recovered.xWhite - 0.3457) > 0.01,
           "the adapted recovery is not the unadapted D50 answer");
 
-    icHdrProfileInfo adaptedInfo;
-    check(icGetHdrProfileInfo(pAdapted, adaptedInfo), "info resolved for the adapted profile");
-    check(adaptedInfo.bPrimariesResolved && adaptedInfo.bPrimariesFromProfile,
-          "ColourPrimaries 2 resolves through the profile in the info struct too");
-    checkClose(adaptedInfo.primaries.xWhite, table.xWhite, 1e-3,
-               "the info struct carries the D65 recovery");
+    // THE INFO STRUCT NO LONGER FOLLOWS.  icGetProfilePrimaries() above still
+    // recovers the primaries from the matrix column tags, because the ICC
+    // dictType Metadata Registry's MDCV and CLL entries define their own
+    // primaries code 2 that way and that rule is untouched.  What changed is
+    // that cicpTag.ColourPrimaries 2 no longer routes here: 8.7.1.1 sends it
+    // to the cicpType custom chromaticity extension of 10.3, which this build
+    // cannot read.  The two used to be the same procedure and are now
+    // different questions, so the assertion is that they DISAGREE.
+    CIccTag *pCicp = pAdapted->FindTag(icSigCicpTag);
+    if (pCicp && pCicp->GetType() == icSigCicpType) {
+      icUInt8Number cp, tc, mc, fr;
+      ((CIccTagCicp*)pCicp)->GetFields(cp, tc, mc, fr);
+      ((CIccTagCicp*)pCicp)->SetFields(icCicpPrimariesUnspecified, tc, mc, fr);
+
+      icHdrProfileInfo adaptedInfo;
+      check(icGetHdrProfileInfo(pAdapted, adaptedInfo), "info resolved for the adapted profile");
+      check(!adaptedInfo.bPrimariesResolved,
+            "cicpTag ColourPrimaries 2 resolves nothing in the info struct, even though "
+            "icGetProfilePrimaries() recovers from the very same tags for the registry");
+    }
 
     delete pAdapted;
   }
 
-  // icGetResolvedPrimaries must route value 2 to the profile and say so.
-  check(icGetResolvedPrimaries(pProfile, 2, p, &bFromProfile),
-        "value 2 resolves through the profile");
-  check(bFromProfile, "value 2 reports that it came from the profile");
+  // icGetResolvedPrimaries() must REFUSE value 2 now.  It used to route it to
+  // the profile's matrix column tags and set bFromProfile; 8.7.1.1 routes it
+  // to the cicpType extension of 10.3 instead, the out-parameter is gone with
+  // the second path, and this build cannot read the extension.  Refusing is
+  // the only honest answer, and it is what keeps a substitute matrix out of
+  // the rendering chain.
+  check(!icGetResolvedPrimaries(pProfile, 2, p),
+        "value 2 resolves nothing: 8.7.1.1 wants the 10.3 extension, unreadable here");
+  // The discriminator for that assertion: this profile DOES have the matrix
+  // column tags the old path read, so a build that still routed value 2 to
+  // them would resolve here and pass a weaker test.
+  check(icGetProfilePrimaries(pProfile, p),
+        "and the tags the old path would have used are present, so the refusal is the rule "
+        "and not a missing tag");
 
-  // Any other value must come from the table instead, even for the same profile.
-  bFromProfile = true;
-  check(icGetResolvedPrimaries(pProfile, 9, p, &bFromProfile),
+  // Any other value must still come from the table, for the same profile.
+  check(icGetResolvedPrimaries(pProfile, 9, p),
         "value 9 resolves through the H.273 table");
-  check(!bFromProfile, "value 9 reports that it did not come from the profile");
   checkClose(p.xRed, 0.708, 1e-6, "value 9 ignores the profile's own colorants");
 
   delete pProfile;
@@ -323,25 +356,19 @@ void testDisplayMetadata()
   checkClose(meta.GetMasteringMaxLuminance(), 1000.0, 1e-4, "MDCV max luminance");
   checkClose(meta.GetMasteringMinLuminance(), 0.005, 1e-6, "MDCV min luminance");
 
-  check(meta.HasDisplayColourVolume(), "DCV present");
-  check(meta.DisplayPrimariesResolved(), "DCV primaries code resolved");
-  checkClose(meta.GetDisplayPrimaries().xRed, 0.640, 1e-5, "DCV code 1 is BT.709");
-  checkClose(meta.GetDisplayMaxLuminance(), 1000.0, 1e-4, "DCV max luminance");
-
-  check(meta.HasDisplayReferenceWhite(), "DRWL present");
-  check(meta.HasDisplayHeadroom(), "DERH present");
-
+  // THE HDR DISPLAY HALF OF THIS TEST IS GONE.  It asserted the DCV, DRWL and
+  // DERH shapes and the four-rule display-headroom precedence of clause
+  // 8.10.5, and the 23-09-2026 revision deletes that clause outright:
+  // "Physical display characterization ... is intentionally out of scope for
+  // the HDR ColorSpace Profile sub-class defined by this amendment, which
+  // characterizes a colour encoding rather than a display."  The reader no
+  // longer parses the three entries and no longer resolves a display
+  // headroom, so there is nothing to assert - and asserting the old
+  // precedence would pin behaviour no clause backs.
+  //
+  // The fixtures went with it: HdrHeadroomDcvDrwl and HdrHeadroomDcvCrwl
+  // existed only to isolate rules b) and c).
   check(!meta.HasUnparsedEntries(), "every entry in the fixture parsed");
-
-  // The fixture's entries disagree on purpose: DERH says 4.0 while
-  // DCV.maxLuminance / DRWL works out to 1000/203 = 4.926. NOTE 14 says DERH
-  // wins and the derived value is not recomputed.
-  icFloatNumber headroom = 0.0f;
-  icHdrHeadroomSource src = meta.ResolveDisplayHeadroom(headroom);
-  check(src == icHdrHeadroomDerh, "rule a) fires when DERH is present");
-  checkClose(headroom, 4.0, 1e-5, "DERH wins outright over the DCV/DRWL derivation");
-  check(fabs(headroom - 1000.0 / 203.0) > 0.5,
-        "the derived value was not recomputed and averaged in");
 
   delete pProfile;
 }
@@ -351,7 +378,7 @@ void testDisplayMetadata()
 // ---------------------------------------------------------------------------
 //
 // These exist for SMPTE ST 2094-50 Annex A's gain application colour space,
-// and clause 8.10.1 NOTE 2's forward matrix will need the same construction.
+// and clause 8.7.1.1 NOTE 2's forward matrix will need the same construction.
 // Every expected value below is a published one - the canonical sRGB matrix
 // and the standard BT.709 to BT.2020 coefficients - rather than a capture of
 // what this implementation produces, which is the only way this test can
@@ -446,7 +473,7 @@ void testPrimariesMatrices()
 }
 
 // ---------------------------------------------------------------------------
-// 3c. Clause 8.10.2 c)'s forward matrix, built from the cicpTag (HDR-07)
+// 3c. Clause 8.7.1.2 c)'s forward matrix, built from the cicpTag (HDR-07)
 // ---------------------------------------------------------------------------
 //
 // The assertion that carries this one is not a number out of the standard: it
@@ -518,7 +545,7 @@ void testHdrForwardMatrix()
 }
 
 // ---------------------------------------------------------------------------
-// 4. The content-headroom priority order of clause 8.10.4 (Linear transfer)
+// 4. The content-headroom priority order of clause 8.7.1.4 (Linear transfer)
 // ---------------------------------------------------------------------------
 void testContentHeadroom()
 {
@@ -581,7 +608,7 @@ void testContentHeadroom()
     checkClose(info.contentHeadroom, 2.0, 1e-4,
                "Hcontent divides by the HAGC reference white, not by the 203 default");
     check(fabs(info.contentHeadroom - 600.0 / 203.0) > 0.5,
-          "the other reading of 8.10.4's default is not the one taken");
+          "the other reading of 8.7.1.4's default is not the one taken");
     delete pProfile;
   }
 
@@ -613,32 +640,68 @@ void testContentHeadroom()
 // ---------------------------------------------------------------------------
 // 5. Classification and resolution
 // ---------------------------------------------------------------------------
+// Defined below, next to the registry-value tests that were its first caller.
+CIccTagDict *metaDict(CIccProfile *pProfile);
+
 void testClassification()
 {
   icHdrProfileInfo info;
 
-  // A conforming HDR Profile: 4.5.0.0, RGB, Display, matrix-based, cicp with
-  // TransferCharacteristics 16.
-  CIccProfile *pProfile = openFixture("HdrDisplayMetadata.icc");
+  // A conforming HDR ColorSpace Profile: RGB, ColorSpace class, PCSXYZ, cicp
+  // with TransferCharacteristics 16.  THE BASE FIXTURE MOVED with the
+  // sub-class: HdrDisplayMetadata is 'mntr' and is now the class NEGATIVE
+  // (below), and HdrColorSpaceClass - which was the class negative under
+  // 8.10.1 - is the positive.
+  CIccProfile *pProfile = openFixture("HdrColorSpaceClass.icc");
   if (pProfile) {
     check(icGetHdrProfileInfo(pProfile, info), "info resolved");
-    check(info.nClass == icHdrProfileConforming, "metadata fixture is a conforming HDR Profile");
-    // The revision's structural conditions, not the previous one's. An HDR
-    // Profile is RGB and Input or Display; 8.10.1 then says the TRC tags
-    // "shall not be present", so requiring the conventional six - which is
-    // what bRgbMatrixBased still reports - would make every revision-shaped
-    // profile unclassifiable.
-    check(info.bRgbInputOrDisplay, "recognised as an RGB Input or Display profile");
-    check(!info.bTrcTagsPresent, "and carries none of the three prohibited TRC tags");
-    check(!info.bRgbMatrixBased, "so it is not the conventional six-tag shape NOTE 3 contrasts it with");
-    check(info.bVersion4_5, "recognised as declaring 4.5.0.0");
+    check(info.nClass == icHdrProfileConforming,
+          "the ColorSpace-class fixture is a conforming HDR ColorSpace Profile");
+    check(info.bRgbColorSpace, "recognised as an RGB ColorSpace-class profile");
+    check(info.bPcsXyz, "PCSXYZ, which the matrix of 8.7.1.2 c) produces");
+    check(info.bVersion4, "a version 4 profile, so an ICC.1 clause applies to it");
     check(info.bHasCicp && info.bTransferIsHdr, "cicp present with an HDR transfer");
-    check(!info.bHasHagc, "no HAGC tag, which 8.10.1 NOTE 3 makes optional");
-    check(info.nHeadroomSource == icHdrHeadroomDerh, "headroom resolved through DERH");
-    checkClose(info.displayHeadroom, 4.0, 1e-5, "resolved headroom");
-    check(info.bPrimariesResolved && !info.bPrimariesFromProfile,
-          "primaries resolved from the table, since ColourPrimaries is 9");
+    check(!info.bHasHagc, "no HAGC tag, which 8.7.1.1 NOTE 3 makes optional");
+    check(info.bHasAToB0 && info.bHasBToA0,
+          "and the AToB0/BToA0 pair that 8.7 requires of every ColorSpace profile");
+    check(info.bPrimariesResolved,
+          "primaries resolved from the H.273 table, since ColourPrimaries is not 2");
     delete pProfile;
+  }
+
+  // THE CLASS NEGATIVES.  A Display or Input profile carrying the very same
+  // cicpTag is not an HDR ColorSpace Profile - the amendment says so in as
+  // many words: such a profile "is not, however, an HDR ColorSpace Profile
+  // under clause 8.7.1".  Both classes are asserted, so a classifier that
+  // stopped testing the class would have to fail one of them; testing only
+  // one would let the other through.
+  {
+    static const struct { const char *szFixture; const char *szWhat; } kClassNegatives[] = {
+      { "HdrDisplayMetadata.icc",  "a Display-class ('mntr') profile" },
+      { "HdrInputDisplayMeta.icc", "an Input-class ('scnr') profile" },
+    };
+
+    for (size_t i = 0; i < sizeof(kClassNegatives) / sizeof(kClassNegatives[0]); i++) {
+      CIccProfile *pNeg = openFixture(kClassNegatives[i].szFixture);
+
+      if (!pNeg)
+        continue;
+
+      check(icGetHdrProfileInfo(pNeg, info), "info resolved for the class negative");
+      check(!info.bRgbColorSpace, kClassNegatives[i].szWhat);
+      check(info.nClass == icHdrProfileHdrContent,
+            "carries HDR content and is NOT an HDR ColorSpace Profile");
+      check(info.bHasCicp && info.bTransferIsHdr,
+            "and it is only the class that excludes it - every other condition is met");
+
+      // Not a defect.  Failing a definitional condition makes a profile a
+      // non-member, not a broken member, and nothing may be reported.
+      std::string report;
+      check(pNeg->Validate(report) < icValidateWarning,
+            "a class negative is a perfectly valid profile");
+
+      delete pNeg;
+    }
   }
 
   // The HAGC tag's own HDR reference white takes precedence over a CRWL entry,
@@ -646,7 +709,7 @@ void testClassification()
   pProfile = openFixture("HagcDisplay.icc");
   if (pProfile) {
     check(icGetHdrProfileInfo(pProfile, info), "info resolved for the HAGC fixture");
-    check(info.nClass == icHdrProfileConforming, "HAGC fixture is a conforming HDR Profile");
+    check(info.nClass == icHdrProfileConforming, "HAGC fixture is a conforming HDR ColorSpace Profile");
     check(info.bHasHagc, "HAGC tag seen");
     check(info.bContentReferenceWhiteFromProfile, "reference white came from the profile");
     checkClose(info.contentReferenceWhite, 300.0, 1e-3,
@@ -654,15 +717,15 @@ void testClassification()
     delete pProfile;
   }
 
-  // TransferCharacteristics 13 with a HAGC tag present.  Clause 8.10.1's
-  // conditions are definitional: this profile is simply not an HDR Profile.  It
+  // TransferCharacteristics 13 with a HAGC tag present.  Clause 8.7.1.1's
+  // conditions are definitional: this profile is simply not an HDR ColorSpace Profile.  It
   // is a valid ICC Display profile carrying two legal optional tags, so nothing
   // may be reported against it.  The classification is descriptive only.
   pProfile = openFixture("HdrInvalidTransfer.icc");
   if (pProfile) {
     check(icGetHdrProfileInfo(pProfile, info), "info resolved for the sRGB-transfer fixture");
     check(info.nClass == icHdrProfileHdrContent,
-          "TransferCharacteristics 13 is HDR-related content, not an HDR Profile");
+          "TransferCharacteristics 13 is HDR-related content, not an HDR ColorSpace Profile");
     check(info.bHasCicp, "cicp present");
     check(!info.bTransferIsHdr, "TransferCharacteristics 13 is not one of 8, 16 or 18");
     check(info.nTransferCharacteristics == 13, "the value is reported as-is");
@@ -670,21 +733,21 @@ void testClassification()
     std::string report;
     icValidateStatus rv = pProfile->Validate(report);
     check(rv < icValidateWarning,
-          "not being an HDR Profile is not a defect and draws no diagnostic");
+          "not being an HDR ColorSpace Profile is not a defect and draws no diagnostic");
     check(report.find("TransferCharacteristics") == std::string::npos,
           "no message is emitted about a membership condition");
     check(report.find("HDR:") == std::string::npos,
-          "clause 8.10 says nothing about a profile outside the sub-class");
+          "clause 8.7.1 says nothing about a profile outside the sub-class");
     delete pProfile;
   }
 
-  // An HDR Profile can still break the pairing rule of 8.10.6, which is the one
-  // requirement of clause 8.10 that a member of the sub-class can actually fail.
+  // An HDR ColorSpace Profile can still break the pairing rule of 8.7.1.5, which is the one
+  // requirement of clause 8.7.1 that a member of the sub-class can actually fail.
   pProfile = openFixture("HdrMissingBToA0.icc");
   if (pProfile) {
     check(icGetHdrProfileInfo(pProfile, info), "info resolved for the unpaired fixture");
     check(info.nClass == icHdrProfileConforming,
-          "the unpaired profile is still a conforming HDR Profile");
+          "the unpaired profile is still a conforming HDR ColorSpace Profile");
     check(info.bHasAToB0 && !info.bHasBToA0, "AToB0 present, BToA0 absent");
 
     std::string report;
@@ -692,21 +755,29 @@ void testClassification()
     check(rv >= icValidateNonCompliant, "the unpaired tag validates non-compliant");
     check(report.find("without its paired BToA0Tag") != std::string::npos,
           "the report names the missing tag");
-    // 8.10.6's Display-class BToA0Tag requirement has a message of its own,
-    // separate from the pairing sweep above. Without this check, deleting that
-    // branch of CheckHdrProfile() changed no test result: the sweep alone keeps
-    // the profile non-compliant.
-    check(report.find("HDR: BToA0Tag missing") != std::string::npos,
-          "the report states 8.10.6's Display-class BToA0Tag requirement");
+    // THE SEPARATE "HDR: BToA0Tag missing" MESSAGE IS GONE, and its absence
+    // is asserted rather than left untested.  It stated a requirement 8.10.6
+    // made of Display-class profiles on top of the parent class's; 8.7.1.5
+    // defers the pair to 8.7 instead - "both already unconditionally required
+    // of every ColorSpace profile by 8.7" - and CheckRequiredTags() raises
+    // that as a CRITICAL error for the ColorSpace class.  Emitting both would
+    // report one defect twice, at two severities.
+    check(report.find("HDR: BToA0Tag missing") == std::string::npos,
+          "and does NOT repeat it as a separate clause-8.7.1.5 requirement");
+    check(report.find("Critical tag(s) missing") != std::string::npos,
+          "because 8.7's own unconditional requirement has already raised it critically");
     delete pProfile;
   }
 
-  // Clause 8.10.6's mandatory backward-compatibility pair. The AToB0Tag is
-  // required "regardless of profile class" and nothing checked it: the Display
-  // branch of CheckRequiredTags() accepts the pair OR the six matrix/TRC tags,
-  // so a profile satisfying one alternative is never asked about the other.
-  // That was right for a conventional profile and wrong for an HDR Profile,
-  // where 8.10.6 requires the pair on top of everything else.
+  // Clause 8.7.1.5's backward-compatibility pair, AND WHERE IT IS NOW
+  // ENFORCED.  Under 8.10.6 the pair was an ADDITIONAL requirement the parent
+  // class did not make - the Input and Display branches of
+  // CheckRequiredTags() accept the LUT pair OR the six matrix/TRC tags, so a
+  // profile satisfying one alternative was never asked about the other, and
+  // CheckHdrProfile() was the only thing that asked.  8.7.1.5 defers to 8.7,
+  // whose ColorSpace branch requires both tags outright and raises a CRITICAL
+  // error.  The requirement did not weaken; it moved into the parent, where
+  // it is checked harder.
   pProfile = openFixture("HdrMissingLutPair.icc");
   if (pProfile) {
     check(icGetHdrProfileInfo(pProfile, info), "info resolved for the pairless fixture");
@@ -715,19 +786,22 @@ void testClassification()
     // classifier rejected would be judged by some other class's rules and this
     // requirement would never be reached.
     check(info.nClass == icHdrProfileConforming,
-          "a profile missing the pair is still an HDR Profile");
+          "a profile missing the pair is still an HDR ColorSpace Profile");
     check(!info.bHasAToB0 && !info.bHasBToA0, "and carries neither tag");
 
     std::string report;
     icValidateStatus rv = pProfile->Validate(report);
-    check(rv >= icValidateNonCompliant, "the missing AToB0Tag is reported");
-    check(report.find("AToB0Tag missing") != std::string::npos,
-          "the report names the tag and the clause");
-    // A Display profile missing both breaks both requirements.  The BToA0Tag
-    // check used to be the else of the AToB0Tag one, so this profile was told
-    // only about the AToB0Tag.
-    check(report.find("HDR: BToA0Tag missing") != std::string::npos,
-          "the report also states the Display-class BToA0Tag requirement");
+    check(rv >= icValidateCriticalError,
+          "a ColorSpace profile with neither tag is CRITICALLY invalid, not merely non-compliant");
+    check(report.find("Critical tag(s) missing") != std::string::npos,
+          "and 8.7's unconditional requirement is what reports it");
+    // Neither HDR-specific message fires any more, and both absences are
+    // asserted: leaving them untested is how a duplicated diagnostic survives
+    // a refactor.
+    check(report.find("HDR: AToB0Tag missing") == std::string::npos,
+          "CheckHdrProfile() does not repeat the AToB0Tag requirement");
+    check(report.find("HDR: BToA0Tag missing") == std::string::npos,
+          "nor the BToA0Tag one");
     delete pProfile;
   }
 
@@ -746,47 +820,71 @@ void testClassification()
     delete pProfile;
   }
 
-  // The one case where the matrix column tags ARE required: ColourPrimaries 2.
-  // Value 2 names no chromaticities, so 8.10.2 c) has nothing to compute a
-  // matrix from and the tags that would supply it directly are absent - the
-  // profile has no RGB-to-PCSXYZ matrix at all.
-  pProfile = openFixture("HdrCicp2NoColumns.icc");
+  // ColourPrimaries 2.  Under 8.10.1 the matrix column tags were required in
+  // this case and supplied the matrix directly; 8.7.1.1 routes it to the
+  // cicpType custom chromaticity extension of 10.3 instead, taking both the
+  // chromaticities and the white point from there rather than from
+  // mediaWhitePointTag.  A ColorSpace profile has no matrix column tags to
+  // fall back on, and this build cannot read the extension - ICC.1:2022 10.3
+  // Table 32 stops at twelve bytes - so the case is refused outright.
+  //
+  // HdrCicp2NoColumns is DELETED.  Its whole subject was the presence or
+  // absence of the matrix column tags, which no longer decides anything, so
+  // it and HdrCicpUnspecified had become the same test.
+  pProfile = openFixture("HdrCicpUnspecified.icc");
   if (pProfile) {
-    check(icGetHdrProfileInfo(pProfile, info), "info resolved for the columnless fixture");
+    check(icGetHdrProfileInfo(pProfile, info), "info resolved for the ColourPrimaries 2 fixture");
+    // MEMBERSHIP AND CONFORMANCE ARE DIFFERENT AXES, and this is the fixture
+    // that keeps them apart.  The amendment calls a ColourPrimaries 2 profile
+    // without the extension "non-conforming" - a broken member, like a
+    // profile missing a required tag - not a non-member.
     check(info.nClass == icHdrProfileConforming,
-          "missing matrix columns is a missing required tag, not a failure to qualify");
+          "ColourPrimaries 2 does not cost membership: the amendment calls such a "
+          "profile non-conforming, not a non-member");
     check(info.nColourPrimaries == 2, "the fixture declares ColourPrimaries 2");
-    check(!info.bMatrixColumnsPresent, "and carries none of the three");
+    check(!info.bPrimariesResolved, "and no primaries resolve from it");
 
-    // And the matrix genuinely cannot be built, which is why the clause
-    // requires them: icBuildHdrForwardMatrix refuses value 2 by design.
     icFloatNumber m[9];
     check(!icBuildHdrForwardMatrix(pProfile, info.nColourPrimaries, m),
           "no matrix can be derived for ColourPrimaries 2");
+    check(icHdrSelectForwardMatrix(pProfile, info.nColourPrimaries, m) == icHdrMatrixNeedsCicpExt,
+          "and the matrix selector names the missing 10.3 extension as the reason");
 
     std::string report;
     icValidateStatus rv = pProfile->Validate(report);
-    check(rv >= icValidateNonCompliant, "the missing matrix columns are reported");
+    check(rv >= icValidateNonCompliant, "the unreadable primaries are reported");
     check(report.find("ColourPrimaries is 2") != std::string::npos,
-          "the report names the condition that makes them required");
+          "the report names the condition");
+    check(report.find("10.3") != std::string::npos,
+          "and names the extension clause, so a reader whose profile HAS one can tell "
+          "the finding is this build's limitation rather than their file's defect");
     delete pProfile;
   }
 
-  // An Input-class HDR Profile with an AToB0Tag and no BToA0Tag is NOT
-  // reported, and that is a ruling rather than an oversight (HDR-09).
-  // 8.10.3 c) says "Whenever an AToBxTag is present, its paired BToAxTag shall
-  // also be present" with no class condition; 8.10.6 confines the requirement
-  // to Display. The two cannot both hold now that the AToB0Tag is mandatory in
-  // both classes - and 8.10.3's own heading, "Tone-mapping descriptors
-  // (informative precedence)", decides it: an informative clause cannot impose
-  // a requirement, so 8.10.6 governs. HdrMissingBToA0 is a Display profile, so
-  // it IS reported; this asserts the message says why.
+  // PROPOSAL-ISSUE HDR-09 IS RESOLVED BY THE REVISION, in the direction this
+  // tree had already ruled.  Under 8.10.x the pairing rule was stated twice -
+  // unscoped in informative 8.10.3 c), and confined to the Display class in
+  // normative 8.10.6 - and the ruling here followed 8.10.6 because an
+  // informative clause cannot impose a requirement.  8.7.1.5 states it once,
+  // normatively, with no class condition: "When an HDR ColorSpace Profile
+  // contains an AToBxTag, the corresponding BToAxTag shall also be present."
+  // There is only one class now, so the scope question dissolves.
+  //
+  // The assertion is therefore the inverse of the old one: the diagnostic must
+  // NOT be scoped to Display.
   pProfile = openFixture("HdrMissingBToA0.icc");
   if (pProfile) {
     std::string report;
     pProfile->Validate(report);
-    check(report.find("Display RGB HDR Profile") != std::string::npos,
-          "the pairing diagnostic is scoped to the Display class, per 8.10.6");
+    check(report.find("without its paired BToA0Tag") != std::string::npos,
+          "the pairing rule of 8.7.1.5 fires");
+    check(report.find("Display HDR ColorSpace Profile") == std::string::npos,
+          "and is no longer scoped to the Display class");
+    // The pair is ALSO a required tag of every ColorSpace profile by 8.7, so
+    // CheckRequiredTags() raises it critically.  That is the requirement
+    // moving into the parent class, not a second defect.
+    check(report.find("Critical tag(s) missing") != std::string::npos,
+          "and 8.7's own unconditional requirement is raised critically");
     delete pProfile;
   }
 
@@ -797,62 +895,72 @@ void testClassification()
   // of 2026-06-24 says of DCV that a value of 2 "has the same meaning as in
   // the cicpTag", which under the CICP amendment is the same recovery.
   //
-  // HdrCicpUnspecified is the one shape where that can be satisfied: it
-  // declares ColourPrimaries 2, so 8.10.1 requires the matrix column tags, and
-  // they are what resolves. Its colorants are sRGB with no chromatic
-  // adaptation, so NOTE 2's case applies and the recovered white is D50.
-  pProfile = openFixture("HdrCicpUnspecified.icc");
+  // THE PROFILE THAT CAN SATISFY IT IS NO LONGER AN HDR ColorSpace Profile.
+  // The registry rule reads the containing profile's matrix column tags, and
+  // an HDR ColorSpace Profile is a ColorSpace profile (8.7), which has none -
+  // this is PROPOSAL-ISSUE HDR-18, and the 23-09-2026 revision turns it from
+  // a corner case into the normal one.  So the pair of assertions is:
+  //
+  //   HdrDisplayMetadata ('mntr', carries colorant tags)  -> code 2 RESOLVES
+  //   HdrColorSpaceClass ('spac', has no colorant tags)   -> code 2 does NOT
+  //
+  // Both halves matter.  The first keeps the registry rule itself under test,
+  // so it cannot quietly stop working; the second pins that an entry the
+  // reader cannot resolve is reported unresolved rather than guessed at.
+  pProfile = openFixture("HdrDisplayMetadata.icc");
   if (pProfile) {
-    CIccHdrMetadataReader meta2;
-    check(meta2.Read(pProfile), "metadataTag read for the ColourPrimaries 2 fixture");
+    CIccTagDict *pDict = metaDict(pProfile);
+    check(pDict != NULL, "HdrDisplayMetadata carries a metadataTag dict");
+    if (pDict) {
+      pDict->Set("CLL", "1000.0 400.0 2");
+      CIccHdrMetadataReader meta2;
+      check(meta2.Read(pProfile), "metadataTag read for the matrix-based profile");
+      check(meta2.HasContentLightLevel(), "CLL present");
+      check(meta2.ContentLightLevelPrimariesResolved(),
+            "a CLL primaries code of 2 resolves against a profile that HAS matrix column tags");
+      checkClose(meta2.GetContentLightLevelPrimaries().xRed, 0.6400, 1e-3,
+                 "and gives the profile's red primary, not nothing");
+    }
+    delete pProfile;
+  }
 
-    check(meta2.HasContentLightLevel(), "CLL present");
-    check(meta2.ContentLightLevelPrimariesResolved(),
-          "a CLL primaries code of 2 resolves against the profile's own tags");
-    checkClose(meta2.GetContentLightLevelPrimaries().xRed, 0.6400, 1e-3,
-               "and gives the profile's red primary, not nothing");
+  pProfile = openFixture("HdrColorSpaceClass.icc");
+  if (pProfile) {
+    CIccTagDict *pDict = metaDict(pProfile);
+    check(pDict != NULL, "HdrColorSpaceClass carries a metadataTag dict");
+    if (pDict) {
+      pDict->Set("CLL", "1000.0 400.0 2");
+      CIccHdrMetadataReader meta2;
+      check(meta2.Read(pProfile), "metadataTag read for the HDR ColorSpace Profile");
+      check(meta2.HasContentLightLevel(), "CLL present");
+      check(!meta2.ContentLightLevelPrimariesResolved(),
+            "HDR-18: a CLL primaries code of 2 resolves NOTHING in an HDR ColorSpace "
+            "Profile, which by 8.7 has no matrix column tags for the registry rule to read");
+    }
+    delete pProfile;
+  }
 
-    check(meta2.HasDisplayColourVolume(), "DCV present");
-    check(meta2.DisplayPrimariesResolved(),
-          "a DCV primaries code of 2 resolves the same way");
-
-    // The discriminator: value 2 has no entry in H.273 Table 2 at all, so a
-    // reader that looked it up there rather than in the profile would report
-    // nothing resolved and no chromaticities.
+  // The discriminator for both halves: value 2 has no entry in H.273 Table 2
+  // at all, so a reader that looked it up there rather than in the profile
+  // would report nothing resolved in BOTH cases and pass the second half for
+  // entirely the wrong reason.
+  {
     icCicpPrimaries table;
     check(!icGetCicpPrimaries(2, table),
           "H.273 Table 2 has no chromaticities for value 2, which is the point");
-
-    delete pProfile;
   }
 
-  // HDR Display metadata in an Input-class profile. Clause 8.10.5 opens "An HDR
-  // Profile of the Display class ('mntr') may convey HDR display metadata",
-  // 8.10.1's bullet repeats the condition, and the ICC registration of
-  // 2026-06-24 files DCV, DRWL and DERH under a category named HDR Display. So
-  // the entries are outside the only clause that gives them meaning - but
-  // nothing forbids them, and they are Optional, so the profile is valid.
-  pProfile = openFixture("HdrInputDisplayMeta.icc");
-  if (pProfile) {
-    check(icGetHdrProfileInfo(pProfile, info), "info resolved for the Input-class fixture");
-    check(info.nClass == icHdrProfileConforming,
-          "an Input-class HDR Profile with AToB0 and no BToA0 is conforming");
-    check(info.bHasAToB0 && !info.bHasBToA0,
-          "8.10.6 requires the pair only for Display; this is HDR-09's ruling");
-
-    // The reader still reports what the file contains - it reports bytes, and
-    // scope belongs to the consumer.
-    CIccHdrMetadataReader meta3;
-    check(meta3.Read(pProfile), "the metadataTag is still read");
-    check(meta3.HasDisplayHeadroom(), "and the out-of-scope DERH is still reported");
-
-    std::string report;
-    icValidateStatus rv = pProfile->Validate(report);
-    check(rv < icValidateWarning, "the profile is valid: nothing forbids the bytes");
-    check(report.find("not of the Display class") != std::string::npos,
-          "but the scope note is emitted");
-    delete pProfile;
-  }
+  // THE HDR-DISPLAY-METADATA-OUT-OF-SCOPE NOTE IS GONE.  It reported HDR
+  // Display entries carried by a profile that was not 'mntr', on the strength
+  // of clause 8.10.5 opening "An HDR Profile of the Display class ('mntr')
+  // may convey HDR display metadata".  The 23-09-2026 revision deletes 8.10.5
+  // altogether, so there is no clause left to be outside of, the reader no
+  // longer parses DERH, DCV or DRWL at all, and a profile carrying them draws
+  // nothing.  Asserting the old note here would pin a diagnostic that no
+  // clause supports.
+  //
+  // HdrInputDisplayMeta survives as the Input-class membership negative, and
+  // is asserted with its Display-class twin further up.
 
   // A plain SDR profile must draw nothing. This is the false-positive guard:
   // the corpus is full of RGB display profiles, and a classifier that keyed on
@@ -911,7 +1019,7 @@ void testRegistryDefinedValues()
       pDict->Set("CLL", "0.0 0.0 9");
       check(icGetHdrProfileInfo(pLin, info), "info with an unknown CLL maximum");
       check(info.nContentHeadroomSource == icHdrContentHeadroomDefault,
-            "an unknown (0.0) CLL maximum falls through to 8.10.4 c), not rule a)");
+            "an unknown (0.0) CLL maximum falls through to 8.7.1.4 c), not rule a)");
       checkClose(info.contentHeadroom, 1000.0 / 300.0, 1e-4,
                  "and Hcontent is the 1000 cd/m^2 default over the HAGC white, not 0");
 
@@ -928,53 +1036,33 @@ void testRegistryDefinedValues()
     delete pLin;
   }
 
-  // (b) The same rule for DCV (HDR Display registration). HdrHeadroomDcvDrwl
-  // resolves by 8.10.5 b), DCV 1000 / DRWL 500 = 2.0, with no DERH.
-  CIccProfile *pDisp = openFixture("HdrHeadroomDcvDrwl.icc");
-  if (pDisp) {
-    CIccTagDict *pDict = metaDict(pDisp);
-    if (pDict) {
-      icHdrProfileInfo info;
-      pDict->Set("DCV", "0.0 0.0 1");
-      check(icGetHdrProfileInfo(pDisp, info), "info with an unknown DCV maximum");
-      check(info.nHeadroomSource == icHdrHeadroomNone,
-            "an unknown (0.0) DCV maximum fires neither 8.10.5 b) nor c)");
-    }
-    delete pDisp;
-  }
-
-  // (c) The two headroom axes divide by the SAME reference white. Linear,
-  // HAGC white 300, CRWL entry 203, CLL 600, DCV 600 and no DRWL/DERH, so
-  // 8.10.4 a) and 8.10.5 c) share a numerator and the divisor is the only
-  // thing that can differ. Before the fix, content was 600/300 = 2 and
-  // display 600/203 = 2.956; one PAWG report called both divisors "content
-  // HDR reference white" and gave them different values.
-  CIccProfile *pX = openFixture("HdrLinearHagcWhite.icc");
-  if (pX) {
-    CIccTagDict *pDict = metaDict(pX);
-    if (pDict) {
-      icHdrProfileInfo info;
-      pDict->Set("CRWL", "203.0");
-      pDict->Set("DCV", "600.0 0.005 9");
-      check(icGetHdrProfileInfo(pX, info), "info for the cross-axis case");
-      checkClose(info.contentReferenceWhite, 300.0, 1e-4, "the HAGC reference white wins over CRWL");
-      check(info.nContentHeadroomSource == icHdrContentHeadroomCll, "content resolves by 8.10.4 a)");
-      check(info.nHeadroomSource == icHdrHeadroomDcvCrwl, "display resolves by 8.10.5 c)");
-      checkClose(info.contentHeadroom, 2.0, 1e-4, "Hcontent = CLL 600 / 300");
-      checkClose(info.displayHeadroom, 2.0, 1e-4,
-                 "Hdisplay = DCV 600 / 300 - the same white, not the CRWL entry's 203");
-    }
-    delete pX;
-  }
+  // (b) AND (c) WERE ABOUT DCV, and are gone with clause 8.10.5.  (b) checked
+  // that a DCV maximum of 0.0 - "unknown" per the registration - fired
+  // neither rule b) nor rule c); (c) checked that the content and display
+  // axes divided by the SAME reference white, which was a real defect once
+  // (one PAWG report named both divisors "content HDR reference white" and
+  // gave them different values).  Neither has a subject now: the reader does
+  // not parse DCV and there is no display axis to cross.
+  //
+  // The half of (c) that survives - that the HAGC tag's reference white beats
+  // a CRWL entry - is the PROPOSAL-ISSUE HDR-10 ruling, and it is still
+  // covered by HdrLinearHagcCrwlDisagree in the corpus manifest and by the
+  // reference-white assertions in testClassification().
 
   // (d) Primaries code 2 means different things per entry. CLL and CCV: "the
   // primaries are defined by tags required by a three-component matrix-based
-  // display profile". MDCV: "reserved for future use". HdrCicpUnspecified
-  // carries the colorant tags, so CLL's 2 resolves - and an MDCV 2 must not.
-  CIccProfile *pP = openFixture("HdrCicpUnspecified.icc");
+  // display profile". MDCV: "reserved for future use".
+  //
+  // THE FIXTURE MOVED for the reason given at testProfilePrimaries(): the
+  // registry rule reads the containing profile's matrix column tags, and no
+  // HDR ColorSpace Profile has any.  HdrDisplayMetadata is 'mntr', carries
+  // them, and is therefore the shape where CLL's code 2 can resolve at all -
+  // so it is where the CLL-versus-MDCV distinction can still be seen.
+  CIccProfile *pP = openFixture("HdrDisplayMetadata.icc");
   if (pP) {
     CIccTagDict *pDict = metaDict(pP);
     if (pDict) {
+      pDict->Set("CLL", "1000.0 400.0 2");
       pDict->Set("MDCV", "1000.0 0.005 2");
       CIccHdrMetadataReader meta;
       check(meta.Read(pP), "metadata reads");
@@ -997,14 +1085,23 @@ void testRegistryDefinedValues()
 // icHdrFindTag(), which loads a tag the profile has not loaded yet.  For a
 // profile that was OPENED rather than read, that made validating ANY profile
 // load its cicpTag, metadataTag and chromaticAdaptationTag - growing its tag
-// list and moving its attached IO - including profiles that clause 8.10.1
+// list and moving its attached IO - including profiles that clause 8.7.1.1
 // excludes on the header alone.  The header conditions (version, class,
 // colour space) now gate the classification, so those profiles are left as
-// they were opened.  The HDR Profile that follows is the control: gating must
-// not also stop an opened member from being held to 8.10.6.
+// they were opened.  The HDR ColorSpace Profile that follows is the control: gating must
+// not also stop an opened member from being held to 8.7.1.5.
 void testValidateLoadsNoTagForHeaderNonMembers()
 {
-  const char *szNonMembers[] = { "HdrVersion44.icc", "HdrNonRgbSpace.icc" };
+  // HdrVersion44 USED TO BE ONE OF THESE, on the strength of the 4.5.0.0
+  // lower bound that 4.7 of the 23-09-2026 revision withdraws.  It is a
+  // member now, so it belongs to the control below rather than here; putting
+  // it back would assert that a member's tags are never loaded, which is the
+  // opposite of what this test exists to protect.
+  //
+  // The two that remain rule membership out from the HEADER alone, which is
+  // what icHdrHeaderAdmitsMembership() tests: the data colour space is not
+  // RGB, and the device class is not ColorSpace.
+  const char *szNonMembers[] = { "HdrNonRgbSpace.icc", "HdrDisplayMetadata.icc" };
 
   for (size_t n = 0; n < sizeof(szNonMembers) / sizeof(szNonMembers[0]); n++) {
     std::string path = "Testing/HDR/";
@@ -1041,8 +1138,8 @@ void testValidateLoadsNoTagForHeaderNonMembers()
 
   std::string report;
   pMember->Validate(report);
-  check(report.find("clause 8.10.6") != std::string::npos,
-        "an opened HDR Profile is still held to clause 8.10.6 by Validate()");
+  check(report.find("clause 8.7.1.5") != std::string::npos,
+        "an opened HDR ColorSpace Profile is still held to clause 8.7.1.5 by Validate()");
 
   delete pMember;
 }
@@ -1078,8 +1175,11 @@ void testMetadataParsing()
     { "CRWL", "203,0",          false, "a comma-decimal CRWL (two fields, not one)" },
     { "CLL",  "1000.0.005 9",   false, "glued numbers, which strtod read as three" },
     { "CLL",  "1000.0 400.0 9", true,  "the registered CLL shape" },
-    { "DERH", "1e-40",          false, "a subnormal DERH" },
-    { "DRWL", "1e-40",          false, "a subnormal DRWL" },
+    // The DERH and DRWL subnormal rows are gone with clause 8.10.5: the
+    // reader no longer parses either key, so "is it taken as stated" has no
+    // answer to assert.  MDCV keeps the multi-field shape under test.
+    { "MDCV", "1000.0 0.005 9", true,  "the registered MDCV shape" },
+    { "MDCV", "1e-40",          false, "an MDCV with too few fields" },
   };
 
   for (size_t n = 0; n < sizeof(cases) / sizeof(cases[0]); n++) {
@@ -1104,10 +1204,8 @@ void testMetadataParsing()
       bHas = meta.HasContentReferenceWhite();
     else if (!strcmp(cases[n].szKey, "CLL"))
       bHas = meta.HasContentLightLevel();
-    else if (!strcmp(cases[n].szKey, "DERH"))
-      bHas = meta.HasDisplayHeadroom();
-    else if (!strcmp(cases[n].szKey, "DRWL"))
-      bHas = meta.HasDisplayReferenceWhite();
+    else if (!strcmp(cases[n].szKey, "MDCV"))
+      bHas = meta.HasMasteringDisplayColourVolume();
 
     std::string what = cases[n].szWhat;
     check(bHas == cases[n].bParses,
@@ -1174,23 +1272,10 @@ void testMetadataParsing()
 // value - not an infinity, and not the next rule's value.
 void testUnrepresentableHeadroom()
 {
-  CIccProfile *pProfile = openFixture("HdrHeadroomDcvDrwl.icc");
-  if (pProfile) {
-    CIccTagDict *pDict = metaDict(pProfile);
-    if (pDict) {
-      pDict->Set("DCV", "1e30 0.005 1");
-      pDict->Set("DRWL", "1e-30");
-
-      icHdrProfileInfo info;
-      check(icGetHdrProfileInfo(pProfile, info), "info with DCV 1e30 over DRWL 1e-30");
-      check(info.nHeadroomSource == icHdrHeadroomNone,
-            "8.10.5 b) with an unrepresentable quotient produces no display headroom");
-      check(std::isfinite((double)info.displayHeadroom), "and leaves no infinity behind");
-    }
-    delete pProfile;
-  }
-
-  pProfile = openFixture("HdrLinearCll.icc");
+  // The DCV 1e30 / DRWL 1e-30 case went with clause 8.10.5 - there is no
+  // display headroom to overflow.  The content axis, which has the same
+  // arithmetic and the same rule, still carries the assertion.
+  CIccProfile *pProfile = openFixture("HdrLinearCll.icc");
   if (pProfile) {
     CIccTagDict *pDict = metaDict(pProfile);
     if (pDict) {
@@ -1203,7 +1288,7 @@ void testUnrepresentableHeadroom()
       check(icGetHdrProfileInfo(pProfile, info), "info with CLL 1e30 over CRWL 1e-34");
       check(info.bContentReferenceWhiteFromProfile, "a CRWL of 1e-34 is taken as stated");
       check(info.nContentHeadroomSource == icHdrContentHeadroomNone,
-            "8.10.4 a) with an unrepresentable quotient produces no content headroom, not MDCV's");
+            "8.7.1.4 a) with an unrepresentable quotient produces no content headroom, not MDCV's");
       check(std::isfinite((double)info.contentHeadroom), "and leaves no infinity behind");
     }
     delete pProfile;
@@ -1222,13 +1307,13 @@ void testLabPcsMembership()
   icHdrProfileInfo info;
   check(icHdrHeaderAdmitsMembership(pProfile), "the XYZ-PCS fixture's header admits membership");
   check(icGetHdrProfileInfo(pProfile, info) && info.bPcsXyz &&
-        info.nClass == icHdrProfileConforming, "and it is a conforming HDR Profile");
+        info.nClass == icHdrProfileConforming, "and it is a conforming HDR ColorSpace Profile");
 
   pProfile->m_Header.pcs = icSigLabData;
   check(!icHdrHeaderAdmitsMembership(pProfile), "a Lab PCS header does not admit membership");
   check(icGetHdrProfileInfo(pProfile, info) && !info.bPcsXyz, "bPcsXyz reports the Lab PCS");
   check(info.nClass == icHdrProfileHdrContent,
-        "the Lab-PCS profile is HDR-related content, not an HDR Profile");
+        "the Lab-PCS profile is HDR-related content, not an HDR ColorSpace Profile");
 
   delete pProfile;
 }

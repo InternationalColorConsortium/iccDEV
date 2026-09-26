@@ -51,7 +51,7 @@
  *
  */
 
-// Behavioural regression for the tone-mapping step of ICC.1 clause 8.10.2:
+// Behavioural regression for the tone-mapping step of ICC.1 clause 8.7.1.2:
 // the analytic PQ and HLG transfer functions, the Headroom Adaptive Gain Curve
 // evaluator of the HAGC amendment's annex 1, and the CMM path that puts them
 // between the TRC linearisation and the 3x3 matrix.
@@ -166,7 +166,7 @@ void testTransferFunctions()
   checkClose(icPqEotf(0.75) * icPqPeakLuminance, 983.3779, 5e-3, "PQ EOTF at code 0.75 is 983.378 cd/m^2");
 
   // The other end of the same anchor: 203 cd/m^2 - the BT.2408 HDR reference
-  // white and clause 8.10.4's default - encodes at PQ code 0.5806, the "58%
+  // white and clause 8.7.1.4's default - encodes at PQ code 0.5806, the "58%
   // signal level" that report states for HDR Reference White.
   checkClose(icPqInverseEotf((icFloatNumber)(203.0 / icPqPeakLuminance)), 0.5806, 5e-4,
              "PQ code for 203 cd/m^2");
@@ -259,7 +259,7 @@ void testTransferNormalisation()
   check(lin.Init(icCicpTransferLinear, (icFloatNumber)icHdrDefaultContentReferenceWhite),
         "Linear transfer initialises");
   // The 29-08-2026 revision settled what a Linear value means. Step a) of
-  // 8.10.2 normalises "PQ in cd/m2 / 10 000, HLG in scene-referred units per
+  // 8.7.1.2 normalises "PQ in cd/m2 / 10 000, HLG in scene-referred units per
   // Rec. ITU-R BT.2100, or, for Linear, DIRECTLY IN CD/M2". So Linear does not
   // defer to the profile's TRC tags - the same revision prohibits them - and
   // the change of normalisation is a division by the content reference white,
@@ -281,7 +281,7 @@ void testTransferNormalisation()
   lin.FromLinear(src, dst);
   checkClose(src[0], 406.0, 1e-3, "FromLinear returns cd/m^2");
 
-  // Anything clause 8.10.1 does not permit is refused rather than guessed at.
+  // Anything clause 8.7.1.1 does not permit is refused rather than guessed at.
   CIccHdrTransfer bad;
   check(!bad.Init(1, (icFloatNumber)203.0), "BT.709 transfer characteristics are refused");
   check(!bad.Init(13, (icFloatNumber)203.0), "sRGB transfer characteristics are refused");
@@ -424,7 +424,7 @@ void testComponentMixing()
 
   // Mixing type 0 takes the maximum component, so one gain drives all three
   // and the ratios between channels are preserved exactly - which is what
-  // clause 8.10.2 b) means by "shall preserve the RGB primaries".
+  // clause 8.7.1.2 b) means by "shall preserve the RGB primaries".
   buildMetadata(meta, (icFloatNumber)2.0, (icFloatNumber)0.0, icHagcMixingMax, x, y, m, 2);
   check(ev.Init(meta), "evaluator accepts the max-mixing curve");
   check(ev.SetTargetHeadroom(0.0), "target set");
@@ -1064,9 +1064,9 @@ void testEndToEnd()
 
   // 1. No hint: exactly the pre-amendment behaviour - except that under the
   //    29-08-2026 revision there is no longer a conventional chain to fall
-  //    back TO. An HDR Profile carries no TRC tags, so a consumer that does
+  //    back TO. An HDR ColorSpace Profile carries no TRC tags, so a consumer that does
   //    not ask for HDR processing gets the AToB0Tag, which is precisely what
-  //    8.10.1 NOTE 4 says the mandatory pair is for: "a backward-compatible
+  //    8.7.1.1 NOTE 4 says the mandatory pair is for: "a backward-compatible
   //    HDR->SDR fallback for consumers that do not implement HDR processing".
   //    Before the revision this profile had TRC tags and this assertion read
   //    icXformTypeMatrixTRC.
@@ -1140,12 +1140,15 @@ void testEndToEnd()
   }
 
   // 6. A conforming HDR profile with no tone-mapping descriptor at all. NOTE 6
-  //    of 8.10.2 permits the identity operator, and the chain still differs
+  //    of 8.7.1.2 permits the identity operator, and the chain still differs
   //    from the conventional one because the linearisation is the analytic
   //    EOTF rather than the profile's TRC tags.
   src[0] = src[1] = src[2] = (icFloatNumber)0.75;
 
-  if (applyPixel("HdrDisplayMetadata.icc", &hint, src, dst, &nType)) {
+  // THE FIXTURE MOVED with the sub-class.  HdrDisplayMetadata is 'mntr' and
+  // is now a class negative that gets no HDR chain at all; HdrColorSpaceClass
+  // is the descriptor-less conforming base ('spac', a PQ cicpTag, no HAGC).
+  if (applyPixel("HdrColorSpaceClass.icc", &hint, src, dst, &nType)) {
     check(nType == icXformTypeMatrixTrcHdr, "a descriptor-less HDR profile still uses the HDR chain");
 
     // 983 cd/m^2 over the 203 default is 4.842, and with no tone mapping that
@@ -1155,7 +1158,7 @@ void testEndToEnd()
                "the identity operator carries display-linear HDR light unchanged");
   }
 
-  // 7. Descriptor precedence, clause 8.10.3, on the two profiles where the
+  // 7. Descriptor precedence, clause 8.7.1.3, on the two profiles where the
   //    ranking has more than one possible outcome.
   //
   //    HdrMissingBToA0 carries both a HAGC tag and an AToB0Tag: descriptor a)
@@ -1167,16 +1170,16 @@ void testEndToEnd()
   }
 
   //    HdrBakedLut carries the AToB0/BToA0 pair and no HAGC, so the choice is
-  //    between descriptor c) and this build's own operator - and 8.10.3 ranks
+  //    between descriptor c) and this build's own operator - and 8.7.1.3 ranks
   //    the AToB0Tag LAST of the three. This assertion used to read the other
   //    way, on the reasoning that a rendering the author baked beats an
-  //    identity; 8.10.6 then made the pair MANDATORY, so that reading would
-  //    disable the 8.10.2 chain for every profile without a HAGC tag. NOTE 4
+  //    identity; 8.7.1.5 then made the pair MANDATORY, so that reading would
+  //    disable the 8.7.1.2 chain for every profile without a HAGC tag. NOTE 4
   //    settles it: the pair is the fallback "for consumers that do not
   //    implement HDR processing", which this is not.
   if (applyPixel("HdrBakedLut.icc", &hint, src, dst, &nType)) {
     check(nType == icXformTypeMatrixTrcHdr,
-          "Auto ranks the CMM's own operator above a baked AToB0, per 8.10.3");
+          "Auto ranks the CMM's own operator above a baked AToB0, per 8.7.1.3");
   }
 
   hint.m_nPolicy = icHdrToneMapPreferHagc;
@@ -1195,7 +1198,7 @@ void testEndToEnd()
 
   // 8. Disable is exactly the hint-less path: whatever a consumer that never
   //    asked for HDR processing would have got, which for a revision-shaped
-  //    HDR Profile is the mandatory AToB0Tag rather than a matrix/TRC chain
+  //    HDR ColorSpace Profile is the mandatory AToB0Tag rather than a matrix/TRC chain
   //    that no longer exists.
   hint.m_nPolicy = icHdrToneMapDisable;
   src[0] = src[1] = src[2] = vWhite;
@@ -1472,73 +1475,80 @@ void testTargetOnACurve()
   }
 }
 
-// ColourPrimaries 2 resolves its primaries from the profile, and the HLG OOTF
-// has to form its luminance from those.  The same BT.709 signal declared as 2
-// rather than 1 used to get BT.2020 luma: red 4,3% bright, blue 3,9% dark.
-void testHlgLumaFromResolvedPrimaries()
+// ColourPrimaries 2 RENDERS NOTHING, and this test is the inversion of the one
+// that stood here.
+//
+// It used to declare a BT.709 fixture as ColourPrimaries 2, check that the
+// primaries came back from the profile's own matrix column tags, and then
+// check that the rendering matched the BT.709 original to the s15Fixed16 grid
+// of those tags - the HLG OOTF forming its luminance from the resolved
+// primaries rather than from BT.2020's.
+//
+// The 23-09-2026 revision removes every premise of that.  8.7.1.1 routes
+// ColourPrimaries 2 to the cicpType custom chromaticity extension of 10.3, not
+// to the matrix column tags, and takes the white point from the extension as
+// well; a ColorSpace profile has no matrix column tags in any case.  This
+// build cannot read the extension - ICC.1:2022 10.3 Table 32 stops at twelve
+// bytes and the amendment that appends the array is not available here - so
+// the honest behaviour, and the one asserted below, is to refuse: no
+// primaries, no matrix, no chain, and a NonCompliant diagnostic that names
+// what is missing.
+//
+// WHEN THE EXTENSION LANDS this test inverts back, and the assertion to
+// restore is the rendering-equivalence one: a profile whose extension carries
+// the BT.709 chromaticities must render as the BT.709 original does.
+void testUnspecifiedPrimariesAreRefused()
 {
-  const icFloatNumber pixels[][3] = {
-    { 0.75f, 0.0f,  0.0f  },
-    { 0.0f,  0.75f, 0.0f  },
-    { 0.0f,  0.0f,  0.75f },
-    { 0.8f,  0.3f,  0.1f  },
-  };
+  CIccProfile *pProfile = openFixture("HdrHlgBt709Primaries.icc");
 
+  if (!pProfile)
+    return;
+
+  CIccTag *pTag = pProfile->FindTag(icSigCicpTag);
+
+  if (!pTag || pTag->GetType() != icSigCicpType) {
+    check(false, "HdrHlgBt709Primaries carries a cicpTag");
+    delete pProfile;
+    return;
+  }
+
+  icUInt8Number cp, tc, mc, fr;
+  ((CIccTagCicp*)pTag)->GetFields(cp, tc, mc, fr);
+  ((CIccTagCicp*)pTag)->SetFields(icCicpPrimariesUnspecified, tc, mc, fr);
+
+  // MEMBERSHIP IS UNAFFECTED.  The amendment calls a ColourPrimaries 2 profile
+  // without the extension "non-conforming", not a non-member - it is an HDR
+  // ColorSpace Profile that is broken, the way a profile missing a required
+  // tag is - and this build cannot tell it from one that carries the
+  // extension.  Asserting membership here is what keeps the two axes apart.
+  icHdrProfileInfo info;
+  check(icGetHdrProfileInfo(pProfile, info) && info.nClass == icHdrProfileConforming,
+        "ColourPrimaries 2 does not cost clause 8.7.1.1 membership");
+  check(!info.bPrimariesResolved,
+        "but its primaries do not resolve: 8.7.1.1 wants the 10.3 extension, which is unreadable here");
+
+  // And the matrix that 8.7.1.2 c) needs is refused rather than substituted.
+  icFloatNumber fwd[9];
+  check(icHdrSelectForwardMatrix(pProfile, icCicpPrimariesUnspecified, fwd) == icHdrMatrixNeedsCicpExt,
+        "icHdrSelectForwardMatrix reports the missing 10.3 extension rather than falling back");
+
+  // The chain refuses to begin.  This is the assertion that matters: the
+  // failure mode being guarded against is a matrix quietly left at zero,
+  // which renders every pixel black while Begin() reports success.
   CIccCreateHdrXformHint hint;
   hint.m_targetHeadroom = 1.0;
   hint.m_nPolicy = icHdrToneMapAuto;
 
-  for (size_t n = 0; n < sizeof(pixels) / sizeof(pixels[0]); n++) {
-    CIccProfile *pCode1 = openFixture("HdrHlgBt709Primaries.icc");
-    CIccProfile *pCode2 = openFixture("HdrHlgBt709Primaries.icc");
+  icStatusCMM status = icCmmStatOk;
+  CIccXform *pXform = beginXform(pProfile, &hint, true, status);
 
-    if (!pCode1 || !pCode2) {
-      delete pCode1;
-      delete pCode2;
-      return;
-    }
+  check(status != icCmmStatOk || !pXform || pXform->GetXformType() != icXformTypeMatrixTrcHdr,
+        "and no HDR chain is built for it");
 
-    CIccTag *pTag = pCode2->FindTag(icSigCicpTag);
-
-    if (!pTag || pTag->GetType() != icSigCicpType) {
-      check(false, "HdrHlgBt709Primaries carries a cicpTag");
-      delete pCode1;
-      delete pCode2;
-      return;
-    }
-
-    icUInt8Number cp, tc, mc, fr;
-    ((CIccTagCicp*)pTag)->GetFields(cp, tc, mc, fr);
-    ((CIccTagCicp*)pTag)->SetFields(icCicpPrimariesUnspecified, tc, mc, fr);
-
-    if (!n) {
-      icHdrProfileInfo info;
-      check(icGetHdrProfileInfo(pCode2, info) && info.nClass == icHdrProfileConforming &&
-            info.bPrimariesResolved && info.bPrimariesFromProfile,
-            "BT.709 declared as ColourPrimaries 2 is a member whose primaries come from its tags");
-    }
-
-    icFloatNumber want[3], got[3];
-    icXformType nType = icXformTypeUnknown;
-
-    if (!applyProfilePixel(pCode1, "HdrHlgBt709Primaries.icc", &hint, pixels[n], want, &nType)) {
-      delete pCode2;
-      return;
-    }
-
-    if (!applyProfilePixel(pCode2, "HdrHlgBt709Primaries.icc (ColourPrimaries 2)", &hint,
-                           pixels[n], got, &nType))
-      return;
-
-    // 5e-4 is the s15Fixed16 grid of the colorant tags the code 2 matrix is
-    // read from; the luma error it has to exclude is about 4e-3 in Y.
-    checkClose(got[0], want[0], 5e-4, "ColourPrimaries 2 renders as its resolved BT.709: X");
-    checkClose(got[1], want[1], 5e-4, "ColourPrimaries 2 renders as its resolved BT.709: Y");
-    checkClose(got[2], want[2], 5e-4, "ColourPrimaries 2 renders as its resolved BT.709: Z");
-  }
+  delete pXform;
 }
 
-// The HDR chain produces XYZ.  A Lab-PCS profile is not an HDR Profile, gets no
+// The HDR chain produces XYZ.  A Lab-PCS profile is not an HDR ColorSpace Profile, gets no
 // HDR chain, and Begin() refuses it in both directions for a caller that
 // builds the class directly.
 void testLabPcsGetsNoHdrChain()
@@ -1556,7 +1566,7 @@ void testLabPcsGetsNoHdrChain()
 
   icHdrProfileInfo info;
   check(icGetHdrProfileInfo(pProfile, info) && !info.bPcsXyz && info.nClass != icHdrProfileConforming,
-        "a Lab-PCS profile is not a clause 8.10.1 member");
+        "a Lab-PCS profile is not a clause 8.7.1.1 member");
 
   icStatusCMM status;
   CIccXform *pXform = beginXform(pProfile, &hint, true, status);
@@ -1663,7 +1673,7 @@ void testFloatEncodingIsUnbounded()
 
 int main(int /*argc*/, char * /*argv*/[])
 {
-  printf("HDR tone-mapping regression (ICC.1 clause 8.10.2)\n");
+  printf("HDR tone-mapping regression (ICC.1 clause 8.7.1.2)\n");
 
   testTransferFunctions();
   testTransferNormalisation();
@@ -1680,7 +1690,7 @@ int main(int /*argc*/, char * /*argv*/[])
   testTransferDomain();
   testReferenceWhiteRange();
   testTargetOnACurve();
-  testHlgLumaFromResolvedPrimaries();
+  testUnspecifiedPrimariesAreRefused();
   testLabPcsGetsNoHdrChain();
   testMalformedChadRefused();
   testFloatEncodingIsUnbounded();

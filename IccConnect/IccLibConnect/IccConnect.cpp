@@ -185,8 +185,8 @@ icStatusCMM CIccConnectCmm::AddXformFromConfig(CIccCmm* pCmm,
     }
   }
 
-  // ICC.1 clause 8.10: the target headroom is what engages the tone-mapping
-  // step, and a config that does not name one gets no hint - so an HDR Profile
+  // ICC.1 clause 8.7.1: the target headroom is what engages the tone-mapping
+  // step, and a config that does not name one gets no hint - so an HDR ColorSpace Profile
   // read through this path behaves exactly as it did before the amendment
   // unless the caller asked otherwise.  This is the path profiletool's WASM
   // build uses, which is why the switch is a config key rather than something
@@ -430,7 +430,7 @@ CIccConnectCmm* CIccConnectCmm::CreateStandard(const CIccCfgProfileSequence& pro
           goto stage_failed;
         }
       }
-      // ICC.1 clause 8.10: the HDR hint AddXformFromConfig builds for a profile
+      // ICC.1 clause 8.7.1: the HDR hint AddXformFromConfig builds for a profile
       // named by path.  This branch assembles its own hint manager instead, and
       // without this block -HDR on an image's embedded profile rendered SDR and
       // exited 0 while the same profile named by path was tone mapped.

@@ -2,7 +2,7 @@
     File:       IccHdrToneMap.cpp
 
     Contains:   Implementation of the HDR tone-mapping step of ICC.1 clause
-                8.10.2 - analytic PQ and HLG transfer functions, the
+                8.7.1.2 - analytic PQ and HLG transfer functions, the
                 reference white relative normalisation, and the Headroom
                 Adaptive Gain Curve evaluator of the HAGC amendment's annex 1
 
@@ -63,7 +63,7 @@
 //////////////////////////////////////////////////////////////////////
 // HISTORY:
 //
-// -Initial implementation of the clause 8.10.2 tone-mapping step
+// -Initial implementation of the clause 8.7.1.2 tone-mapping step
 //
 //////////////////////////////////////////////////////////////////////
 
@@ -274,7 +274,7 @@ CIccHdrTransfer::CIccHdrTransfer()
  *
  * Args:
  *  nTransferCharacteristics = the cicpTag field
- *  contentReferenceWhite = resolved CRWL in cd/m^2 (clause 8.10.4)
+ *  contentReferenceWhite = resolved CRWL in cd/m^2 (clause 8.7.1.4)
  *  hlgGamma, hlgPeakLuminance = HLG OOTF parameters, ignored otherwise
  *
  * Return:
@@ -303,7 +303,7 @@ bool CIccHdrTransfer::Init(icUInt8Number nTransferCharacteristics,
   // flip its sign.  It is also already refused upstream - #1980 made a
   // non-physical encoding white-point luminance a validation failure - so
   // reaching here with one means the value came from somewhere other than a
-  // validated profile, and falling back to the clause 8.10.4 default is
+  // validated profile, and falling back to the clause 8.7.1.4 default is
   // better than propagating it.
   //
   // A POSITIVE value is different.  It was supplied, so substituting 203 for
@@ -388,7 +388,7 @@ bool CIccHdrTransfer::Init(icUInt8Number nTransferCharacteristics,
       // output means:
       // step a) normalises "PQ in cd/m2 / 10 000, HLG in scene-referred units
       // per Rec. ITU-R BT.2100, or, for Linear, DIRECTLY IN CD/M2, consistent
-      // with the CLL, MDCV and CRWL entries of 8.10.4".
+      // with the CLL, MDCV and CRWL entries of 8.7.1.4".
       //
       // So the change of normalisation this class performs - from the
       // transfer's own convention to reference-white-relative light - is a
@@ -404,7 +404,7 @@ bool CIccHdrTransfer::Init(icUInt8Number nTransferCharacteristics,
       break;
 
     default:
-      // Clause 8.10.1 permits no other value in an HDR Profile.  Guessing a
+      // Clause 8.7.1.1 permits no other value in an HDR ColorSpace Profile.  Guessing a
       // transfer for one would silently render a profile that a conforming
       // implementation would refuse.
       break;
@@ -418,7 +418,7 @@ bool CIccHdrTransfer::Init(icUInt8Number nTransferCharacteristics,
  * Name: CIccHdrTransfer::ToLinear
  *
  * Purpose:
- *  Step a) of clause 8.10.2, followed by the change of normalisation the rest
+ *  Step a) of clause 8.7.1.2, followed by the change of normalisation the rest
  *  of the chain works in.
  *
  *  PQ: the EOTF gives luminance as a fraction of 10 000 cd/m^2, so the
@@ -432,8 +432,8 @@ bool CIccHdrTransfer::Init(icUInt8Number nTransferCharacteristics,
  *  display light, and BT.2100's OOTF is scaled by the display peak luminance
  *  Lw.  The result is again absolute, so the same division by CRWL applies.
  *
- *  Linear: the value is already a luminance in cd/m^2 (8.10.2 a), so the whole
- *  of it is the division by CRWL.  8.10.1 prohibits the TRC tags that used to
+ *  Linear: the value is already a luminance in cd/m^2 (8.7.1.2 a), so the whole
+ *  of it is the division by CRWL.  8.7.1.1 prohibits the TRC tags that used to
  *  linearise it.
  *
  * Args:
@@ -531,7 +531,7 @@ void CIccHdrTransfer::ChannelToReference(icFloatNumber *dst, const icFloatNumber
     return;
   }
 
-  // PQ, and Linear: the value is a luminance in cd/m^2 (8.10.2 a), so
+  // PQ, and Linear: the value is a luminance in cd/m^2 (8.7.1.2 a), so
   // reference-white relative light is one constant away for both.
   if (m_nTransfer == icCicpTransferPQ || m_nTransfer == icCicpTransferLinear) {
     icFloatNumber scale = ReferenceScale();
@@ -594,7 +594,7 @@ icFloatNumber CIccHdrTransfer::ReferenceScale() const
  *  luminance and so a lower gain, never a higher one, which is what makes
  *  this a ceiling rather than a typical value.
  *
- *  For Linear an encoded 1.0 is 1 cd/m^2 by 8.10.2 a), so its reference-white
+ *  For Linear an encoded 1.0 is 1 cd/m^2 by 8.7.1.2 a), so its reference-white
  *  relative value is 1 / CRWL - the same shape as the other two, and no longer
  *  the 1.0 that was right only while the profile's TRC tags carried the
  *  normalisation.
@@ -702,7 +702,7 @@ void CIccHdrTransfer::ReferenceToChannel(icFloatNumber *dst, const icFloatNumber
   }
 
   // Linear: the exact inverse of ChannelToReference()'s division - back from
-  // reference-white-relative light to the luminance in cd/m^2 that 8.10.2 a)
+  // reference-white-relative light to the luminance in cd/m^2 that 8.7.1.2 a)
   // says a Linear value is.  m_referenceWhite is positive by construction; see
   // ReferenceScale().
   if (m_nTransfer == icCicpTransferLinear) {
@@ -1213,7 +1213,7 @@ bool CIccHagcEvaluator::Init(const icHagcMetadata &meta)
   if (!meta.m_bHeadroomAdaptiveToneMap) {
     // Proposal 1.2.2.2: with the flag clear the tag carries no tone-mapping
     // metadata at all and the operator is left to the implementer.  That is
-    // descriptor b) of clause 8.10.3, not a) - so this evaluator declines.
+    // descriptor b) of clause 8.7.1.3, not a) - so this evaluator declines.
     m_szUnsupported = "Headroom Adaptive Tone Map flag is not set";
     return false;
   }
@@ -1792,7 +1792,7 @@ bool icHagcApplyGainApplicationSpace(CIccHagcEvaluator &evaluator,
 
   icCicpPrimaries src;
 
-  if (!icGetResolvedPrimaries(pProfile, info.nColourPrimaries, src, NULL))
+  if (!icGetResolvedPrimaries(pProfile, info.nColourPrimaries, src))
     return false;
 
   // Equality is tested on the chromaticities rather than on the resulting
@@ -1850,7 +1850,7 @@ bool icHagcApplyGainApplicationSpace(CIccHagcEvaluator &evaluator,
  *
  *  The gain multiplies the original component, not the mixed value - that is
  *  what makes the operator "preserve the RGB primaries" in the sense clause
- *  8.10.2 b) requires.
+ *  8.7.1.2 b) requires.
  *
  * Args:
  *  dst = destination triplet, may alias src
@@ -1929,7 +1929,7 @@ void CIccHagcEvaluator::Apply(icFloatNumber *dst, const icFloatNumber *src) cons
   // Back out of the gain application space.  Annex A.4's own return leg is
   // "outside the scope" of ST 2094-50 and is illustrative only, so what
   // happens here is just the inverse of A.2's change of primaries: clause
-  // 8.10.2 owns everything downstream, and it expects the profile's own
+  // 8.7.1.2 owns everything downstream, and it expects the profile's own
   // primaries, not the tag's.
   if (m_bGainSpace)
     icHagcApplyMatrix(dst, m_fromGain, dst);

@@ -1,12 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  A v4 RGB Display profile carrying a headroomAdaptiveGainCurveTag ('HAGC').
+  A v4 RGB ColorSpace profile carrying a headroomAdaptiveGainCurveTag ('HAGC'),
+  and therefore an HDR ColorSpace Profile under clause 8.7.1.1.
 
-  The profile itself is a plain BT.2020-primaries matrix/TRC display profile;
-  it exists to give the HAGC tag the profile context the proposal requires
-  (clause 1.1: RGB data colour space, Input or Display class). The embedded and
-  not-independent header flags are set because the curve here is authored as
-  image-specific.
+  The profile exists to give the HAGC tag a profile context. The HAGC
+  proposal's own clause 1.1 says "RGB data colour space, Input or Display
+  class", but the 23-09-2026 HDR amendment places the tag in a ColorSpace
+  profile - 8.7.1.3 a) ranks it first among tone-mapping descriptors and
+  8.7.1.5 lists it as permitted content - and that is PROPOSAL-ISSUE HDR-22,
+  ruled in favour of the HDR clauses. This fixture is the positive that pins
+  the ruling: a build that read the HAGC class list as exhaustive reports it
+  NonCompliant, and the qa manifest expects `valid`.
+
+  The embedded and not-independent header flags are set because the curve here
+  is authored as image-specific.
 
   The HAGC metadata exercises the full layout: a custom HDR reference white
   (which shifts every later field by two bytes), custom chromaticities (which
@@ -25,7 +32,7 @@
   <Header>
     <PreferredCMMType>ICCD</PreferredCMMType>
     <ProfileVersion>4.50</ProfileVersion>
-    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <ProfileDeviceClass>spac</ProfileDeviceClass>
     <DataColourSpace>RGB </DataColourSpace>
     <PCS>XYZ </PCS>
     <CreationDateTime>2026-08-05T00:00:00</CreationDateTime>
@@ -38,18 +45,6 @@
     <ProfileCreator>ICCD</ProfileCreator>
   </Header>
   <Tags>
-    <redColorantTag> <XYZArrayType>
-      <XYZNumber X="0.636962890625" Y="0.262695312500" Z="0.000000000000"/>
-    </XYZArrayType> </redColorantTag>
-
-    <greenColorantTag> <XYZArrayType>
-      <XYZNumber X="0.144622802734" Y="0.677978515625" Z="0.028076171875"/>
-    </XYZArrayType> </greenColorantTag>
-
-    <blueColorantTag> <XYZArrayType>
-      <XYZNumber X="0.168869018555" Y="0.059326171875" Z="1.060989379883"/>
-    </XYZArrayType> </blueColorantTag>
-
     <mediaWhitePointTag> <XYZArrayType>
       <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
     </XYZArrayType> </mediaWhitePointTag>
@@ -83,17 +78,21 @@
       </HagcMetadata>
     </headroomAdaptiveGainCurveType> </headroomAdaptiveGainCurveTag>
 
-    <!-- Clause 8.10.1 of the 29-08-2026 revision: "the redTRCTag, greenTRCTag
-         and blueTRCTag shall not be present" in an HDR Profile. The transfer
-         function is conveyed by the cicpTag's TransferCharacteristics field
-         instead, and NOTE 3 makes their absence one of the two tag-level
-         features that distinguish an HDR Profile. This fixture was authored
-         against the previous revision and carried them.
+    <!-- There are no TRC tags and no matrix column tags, and under the
+         23-09-2026 revision that is not a prohibition being obeyed - it is
+         what a ColorSpace profile IS. 8.7 never defines either set for this
+         class, so, in the revision's words, "there is nothing for this
+         amendment to prohibit". The transfer comes from the cicpTag's
+         TransferCharacteristics field and the primaries from its
+         ColourPrimaries field; 8.7.1.1 says the cicpTag "is the only tag that
+         can convey either".
 
-         The AToB0Tag/BToA0Tag pair below is what 8.10.6 makes mandatory, and
-         what NOTE 4 says gives a legacy CMM "a rendering path at all" once the
-         TRC tags are gone. Identity B curves: these fixtures exercise
-         classification and the tone-mapping chain, not the bake's accuracy. -->
+         The AToB0Tag/BToA0Tag pair below is required by 8.7 of every
+         ColorSpace profile, which 8.7.1.5 leans on rather than restates -
+         "both already unconditionally required of every ColorSpace profile by
+         8.7" - and it is what gives a legacy CMM a rendering path. Identity B
+         curves: these fixtures exercise classification and the tone-mapping
+         chain, not the bake's accuracy. -->
 
     <AToB0Tag> <lutAtoBType>
       <Channels InputChannels="3" OutputChannels="3"/>

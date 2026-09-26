@@ -1773,11 +1773,28 @@ static icValidateStatus icHagcValidateContext(const std::string &sSigPathName, s
     rv = icMaxStatus(rv, icValidateNonCompliant);
   }
 
+  /* PROPOSAL-ISSUE HDR-22.  The HAGC amendment's own class sentence is "Input
+   * or Display", and the HDR ColorSpace Profiles amendment does NOT extend it
+   * the way its 4.4 extends the cicpTag's 9.2.17 - yet 8.7.1.3 a) ranks the
+   * HAGC tag as the FIRST tone-mapping descriptor of an HDR ColorSpace
+   * Profile, 8.7.1.5 lists it among what such a profile "may additionally
+   * contain", and 8.7.1.5 fixes that profile's class as ColorSpace ('spac').
+   * Read strictly, the two amendments make the highest-ranked descriptor of
+   * the new sub-class non-compliant in the only class the sub-class admits.
+   *
+   * RULED in favour of the HDR clauses: they are the later and the more
+   * specific statement, and an amendment that lists a tag twice as permitted
+   * content cannot intend it to be rejected.  The HAGC amendment needs a
+   * companion sentence; raise it.  CIccProfile::CheckTagExclusion() and the
+   * PAWG C5 class rule take the same ruling, and all three have to agree -
+   * a tag permitted by one pass and rejected by another is worse than either
+   * answer on its own. */
   if (pProfile->m_Header.deviceClass != icSigInputClass &&
-      pProfile->m_Header.deviceClass != icSigDisplayClass) {
+      pProfile->m_Header.deviceClass != icSigDisplayClass &&
+      pProfile->m_Header.deviceClass != icSigColorSpaceClass) {
     sReport += icMsgValidateNonCompliant;
     sReport += sSigPathName;
-    sReport += " - HAGC is only permitted in Input or Display class profiles.\r\n";
+    sReport += " - HAGC is only permitted in Input, Display or ColorSpace class profiles.\r\n";
     rv = icMaxStatus(rv, icValidateNonCompliant);
   }
 

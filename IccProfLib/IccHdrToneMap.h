@@ -1,7 +1,7 @@
 /** @file
     File:       IccHdrToneMap.h
 
-    Contains:   Header for the HDR tone-mapping step of ICC.1 clause 8.10.2 -
+    Contains:   Header for the HDR tone-mapping step of ICC.1 clause 8.7.1.2 -
                 the analytic PQ and HLG transfer functions, the reference
                 white relative normalisation they feed, and the Headroom
                 Adaptive Gain Curve evaluator of the HAGC amendment's annex 1
@@ -63,7 +63,7 @@
 //////////////////////////////////////////////////////////////////////
 // HISTORY:
 //
-// -Initial implementation of the clause 8.10.2 tone-mapping step
+// -Initial implementation of the clause 8.7.1.2 tone-mapping step
 //
 //////////////////////////////////////////////////////////////////////
 
@@ -100,7 +100,7 @@ namespace iccDEV {
 
 /** Peak luminance of the PQ system in cd/m^2.  The PQ EOTF's output is
  * normalised to this, so it is the constant that turns a PQ EOTF result into
- * an absolute luminance (ICC.1 clause 8.10.2 a): "PQ in cd/m^2 / 10 000"). */
+ * an absolute luminance (ICC.1 clause 8.7.1.2 a): "PQ in cd/m^2 / 10 000"). */
 #define icPqPeakLuminance 10000.0
 
 /**
@@ -127,9 +127,9 @@ namespace iccDEV {
  * the 1000 cd/m^2 reference the standard tabulates.
  *
  * PROPOSAL-ISSUE (no register key -- the ICC corpus is silent; BT.2100 is
- * not): no HDR Profile carries Lw, and because BT.2100 makes gamma a function
+ * not): no HDR ColorSpace Profile carries Lw, and because BT.2100 makes gamma a function
  * of it, fixing gamma at 1.2 implicitly pins Lw at 1000 cd/m^2 for every HLG
- * profile, whatever display the profile actually describes.  Clause 8.10.4
+ * profile, whatever display the profile actually describes.  Clause 8.7.1.4
  * NOTE 10 licenses exactly this - a CMM lacking metadata "may rely on the
  * conventions of the cicpTag.TransferCharacteristics (e.g. ... the nominal HLG
  * peak per Rec. ITU-R BT.2100)" - but it names no value, so the number below
@@ -151,7 +151,7 @@ namespace iccDEV {
  * the content decode this class implements.
  *
  * What remains open is only that the ICC amendment itself says none of this:
- * 8.10.4 NOTE 10 licenses "the conventions of the
+ * 8.7.1.4 NOTE 10 licenses "the conventions of the
  * cicpTag.TransferCharacteristics" without naming a value, so an implementer
  * reading only ICC documents still has to go and find A.2 to learn what the
  * conventions are.  That is the same gap HAGC-05 and HAGC-10 record, not a
@@ -165,7 +165,7 @@ namespace iccDEV {
  * them regardless of what primaries the profile itself carries, so they are
  * deliberately *not* derived from the profile's matrix column tags.
  *
- * PROPOSAL-ISSUE (no register key): clause 8.10 never says which luma
+ * PROPOSAL-ISSUE (no register key): clause 8.7.1 never says which luma
  * coefficients the HLG OOTF uses, and a cicpTag may declare any
  * ColourPrimaries alongside TransferCharacteristics 18.  Holding these at
  * BT.2020 is defensible - BT.2100-3 defines the OOTF in exactly these terms,
@@ -225,10 +225,10 @@ ICCPROFLIB_API icFloatNumber icHlgOotfGain(icFloatNumber sceneLuminance, icFloat
  * Class: CIccHdrTransfer
  *
  * Purpose:
- *  Step a) of clause 8.10.2 - the HDR EOTF - together with the change of
+ *  Step a) of clause 8.7.1.2 - the HDR EOTF - together with the change of
  *  normalisation that makes its output usable by the rest of the chain.
  *
- *  The two are one object because they are not separable.  Clause 8.10.2 a)
+ *  The two are one object because they are not separable.  Clause 8.7.1.2 a)
  *  defines each transfer characteristic's output in its own convention (PQ in
  *  cd/m^2 / 10 000, HLG in scene-referred BT.2100 units, Linear as-is), while
  *  steps b) and c) both need display-linear values normalised so that 1.0 is
@@ -236,7 +236,7 @@ ICCPROFLIB_API icFloatNumber icHlgOotfGain(icFloatNumber sceneLuminance, icFloat
  *  are in that scale (their decode caps them at 64.0, i.e. six stops of
  *  headroom over reference white), and the matrix column tags produce
  *  PCSXYZ Y = 1.0 for the media white point.  Converting between the two
- *  conventions needs the content reference white luminance of clause 8.10.4,
+ *  conventions needs the content reference white luminance of clause 8.7.1.4,
  *  which is why it is a member here rather than a caller's concern.
  *
  *  RULING (owner, 2026-09-13): the division by the content reference white
@@ -250,7 +250,7 @@ ICCPROFLIB_API icFloatNumber icHlgOotfGain(icFloatNumber sceneLuminance, icFloat
  *  49x by default, for a smooth and uniformly wrong image nothing detects.
  *
  *  With an IDENTITY operator this deliberately differs from a literal reading
- *  of the chain.  8.10.2 NOTE 6 says that chain reduces to the Annex F.3
+ *  of the chain.  8.7.1.2 NOTE 6 says that chain reduces to the Annex F.3
  *  matrix/TRC transform applied to step a)'s output, which is true by
  *  construction and makes no claim about where reference white lands; here a
  *  PQ code for the reference white gives PCSXYZ Y = 1.0 rather than
@@ -265,11 +265,11 @@ ICCPROFLIB_API icFloatNumber icHlgOotfGain(icFloatNumber sceneLuminance, icFloat
  *  the inverse OETF is per channel, the OOTF is not.
  *
  *  PROPOSAL-ISSUE HDR-08 (design-level) -- the same split is the ruling for
- *  clause 8.10.2 a), and for the same reason.  That step calls code point 18's
+ *  clause 8.7.1.2 a), and for the same reason.  That step calls code point 18's
  *  function an EOTF, requires it per channel, and asks for a scene-referred
  *  output; the HLG EOTF is OOTF o OETF^-1, which is neither per channel nor
  *  scene referred, while the per-channel scene-referred function - the inverse
- *  OETF - is what 8.10.6 names and what H.273 code point 18 identifies.
+ *  OETF - is what 8.7.1.5 names and what H.273 code point 18 identifies.
  *
  *  H.273 settles this in its own words, checked 2026-09-01 against the (V4)
  *  (07/2024) text: clause 8.2 says a TransferCharacteristics value indicates
@@ -277,7 +277,7 @@ ICCPROFLIB_API icFloatNumber icHlgOotfGain(icFloatNumber sceneLuminance, icFloat
  *  linear optical intensity Lc, OR the inverse of the reference
  *  electro-optical function as a function of output linear optical intensity
  *  Lo - and Table 3 writes code point 16 (PQ) in Lo and code point 18 (HLG) in
- *  Lc, remarking "ARIB STD-B67".  So 8.10.2 a) is contradicted by the document
+ *  Lc, remarking "ARIB STD-B67".  So 8.7.1.2 a) is contradicted by the document
  *  it cites for the function, not merely by BT.2100.  The
  *  29-08-2026 revision removes the TRC tags, so no tag remains that could have
  *  carried a per-channel curve and the step has to be read literally.  Ruled
@@ -302,10 +302,10 @@ public:
    * Configure from a profile's resolved HDR parameters.
    *
    * nTransferCharacteristics is the cicpTag field; only the three values
-   * clause 8.10.1 permits an HDR Profile to carry are supported and anything
+   * clause 8.7.1.1 permits an HDR ColorSpace Profile to carry are supported and anything
    * else leaves the object unsupported rather than guessing at a transfer.
    *
-   * contentReferenceWhite is the resolved CRWL of clause 8.10.4 in cd/m^2
+   * contentReferenceWhite is the resolved CRWL of clause 8.7.1.4 in cd/m^2
    * (the 203 cd/m^2 default already applied by the caller).
    *
    * hlgGamma and hlgPeakLuminance parameterise the HLG OOTF and are ignored
@@ -525,7 +525,7 @@ ICCPROFLIB_API bool icHagcDeriveReferenceWhiteToneMap(icFloatNumber baselineHead
  *  pixel of an image without per-pixel state, and by multiple threads
  *  without synchronisation.
  *
- *  H_target is never encoded in the profile (clause 8.10.2 NOTE 5); it comes
+ *  H_target is never encoded in the profile (clause 8.7.1.2 NOTE 5); it comes
  *  from the consumer, which is why setting it is a separate call.
  *
  *  All headroom values here are in log2 space, as the tag encodes them: 0.0
@@ -545,7 +545,7 @@ public:
    *
    * Returns IsSupported().  A false return is not an error: it is the signal
    * for the caller to move down the tone-mapping descriptor precedence of
-   * clause 8.10.3, which is exactly what a CMM that does not implement this
+   * clause 8.7.1.3, which is exactly what a CMM that does not implement this
    * descriptor would do.  GetUnsupportedReason() says which condition fired.
    */
   bool Init(const icHagcMetadata &meta);

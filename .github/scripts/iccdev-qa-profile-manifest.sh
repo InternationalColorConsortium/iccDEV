@@ -140,7 +140,7 @@ classify_rationale() {
       elif grep -Fq 'HDR: AToB' "$log" && grep -Fq 'present without its paired BToA' "$log"; then
         echo "negative fixture: an AToBx tag requires its paired BToAx tag"
       elif grep -Fq 'BToA0Tag missing' "$log"; then
-        echo "negative fixture: a Display-class RGB HDR Profile requires a BToA0Tag"
+        echo "negative fixture: an HDR ColorSpace Profile requires the BToA0Tag that 8.7 requires of every ColorSpace profile"
       elif grep -Fq 'is 2 (Unspecified) but the matrix column tags are' "$log"; then
         echo "negative fixture: ColourPrimaries 2 requires the matrix column tags"
       else

@@ -41,7 +41,7 @@ The report prints 32 checklist items:
 - `C1` through `C14`: conformance checks
 - `Q1` through `Q4`: quality checks
 
-A profile of the HDR Profile sub-class of ICC.1 clause 8.10 gets a further eight, `H1` through
+A profile of the HDR ColorSpace Profile sub-class of ICC.1 clause 8.7.1 gets a further eight, `H1` through
 `H8`. That section is **absent** — not `NOT RUN` — for every other profile, so a non-HDR report
 is byte-for-byte what it was before the section existed and still totals 32 items.
 
@@ -70,19 +70,28 @@ and second-pass average and maximum CIEDE2000 metrics, and the final verdict.
 MATLAB QA compares these fields through `iccdev.qa.audit_pawg_q1`; build the
 `iccPawgReport` and `iccPawgQ1QualityContractTest` targets for that workflow.
 
-HDR checks (`H1`–`H8`, ICC.1 clause 8.10) report the HDR Profile classification (conforming or
-merely intended), the 4.5.0.0 version requirement, presence of the `cicpTag`, whether its
-`TransferCharacteristics` is one of the three an HDR Profile may use, how the source primaries
-resolved (ITU-T H.273 table or the profile's own matrix columns, per clause 9.2.17), which of
-clause 8.10.3's ranked tone-mapping descriptors is present, and — the two provenance items —
-where the content HDR reference white came from and which rule of clause 8.10.5 produced the
-display headroom. The last two read entries out of the `metadataTag` whose names and encodings
-are reconstructed pending publication of the ICC dictType Metadata Registry, and the detail text
-says so rather than presenting a derived number as settled.
+HDR checks (`H1`–`H7`, ICC.1 clause 8.7.1) report the HDR ColorSpace Profile classification
+(conforming or merely intended), the header conditions of clause 8.7.1.5 (RGB data colour space,
+the ColorSpace `'spac'` class, PCSXYZ), presence of the `cicpTag`, whether its
+`TransferCharacteristics` is one of the three an HDR ColorSpace Profile may use, whether the
+source primaries resolve from the ITU-T H.273 Table 2 entry the `ColourPrimaries` field names,
+which of clause 8.7.1.3's ranked tone-mapping descriptors is present, and — the provenance item —
+where the content HDR reference white came from. `H7` reads entries out of the `metadataTag`
+whose names and encodings come from the ICC dictType Metadata Registry.
+
+Two changes came from the 23-09-2026 revision of the HDR amendment, which moved the sub-class
+from the Input/Display matrix-based profile (clause 8.10) to the ColorSpace profile (8.7):
+
+* `H8` is **removed**. It reported which rule of clause 8.10.5 produced the display headroom,
+  and that clause is deleted — physical display characterization is explicitly out of scope for
+  the sub-class. `H1`–`H7` keep their IDs.
+* `H2` asked which profile format version the profile declared, on the strength of a 4.5.0.0
+  membership condition that clause 4.7 of the revision withdraws. It now reports the header
+  conditions of 8.7.1.5 instead, and prints the version as a fact rather than as a condition.
 
 The section is PAWG's own selection, not a rendering of the IccProfLib validation report: the
-two overlap but their intent differs, and `H5`, `H7` and `H8` are not spec violations at all, so
-they could never appear in a validation log.
+two overlap but their intent differs, and `H7` is not a spec violation at all, so it could never
+appear in a validation log.
 
 ## Notes
 - ICC PAWG checklist is a guide and not an exhaustive list

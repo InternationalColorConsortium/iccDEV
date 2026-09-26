@@ -1189,7 +1189,13 @@ echo ""
 echo "--- 15. iccHdrFallback ---"
 HDRFALLBACK="$TOOLS/IccHdrFallback/iccHdrFallback"
 HDR_HAGC="$ICCDEV_TESTING/HDR/HagcDisplay.icc"
-HDR_NOHAGC="$ICCDEV_TESTING/HDR/HdrDisplayMetadata.icc"
+# The descriptor-less conforming fixture.  This was HdrDisplayMetadata until
+# the 23-09-2026 revision moved the HDR sub-class onto the ColorSpace profile,
+# which makes that 'mntr' fixture a class negative the baker refuses outright -
+# so the case stopped exercising the no-gain-curve bake path and became a
+# refusal test wearing its name.  HdrColorSpaceClass is the same shape on
+# 'spac': a PQ cicpTag, HDR Image metadata, and no HAGC tag.
+HDR_NOHAGC="$ICCDEV_TESTING/HDR/HdrColorSpaceClass.icc"
 
 if [ -f "$HDR_HAGC" ]; then
   run_test "hdrfb-01" "Bake a PQ profile carrying a gain curve" \
@@ -1221,7 +1227,7 @@ fi
 HDR_V5="$ICCDEV_TESTING/HDR/BT2100PQNarrowDisplay.icc"
 if [ -f "$HDR_V5" ]; then
   # A v5 profile renders through its own multiProcessElement tags, never
-  # through the clause 8.10 chain, so a pair baked from its cicpTag would match
+  # through the clause 8.7.1 chain, so a pair baked from its cicpTag would match
   # no rendering.
   run_expect_exit "hdrfb-10" "Refuse a version 5 multiProcessElement profile" 3 \
     "$HDRFALLBACK" "$HDR_V5" "$OUTDIR/hdrfb-v5.icc"

@@ -114,27 +114,6 @@ static icFloatNumber icHdrBakeClampUnit(icFloatNumber v)
   return v;
 }
 
-/** One matrix column tag as an XYZ triplet. */
-static bool icHdrBakeGetColumn(const CIccProfile *pProfile, icTagSignature sig,
-                               icFloatNumber *pXYZ)
-{
-  CIccTag *pTag = icHdrBakeFindTag(pProfile, sig);
-
-  if (!pTag || pTag->GetType() != icSigXYZType)
-    return false;
-
-  CIccTagXYZ *pXyzTag = (CIccTagXYZ*)pTag;
-
-  if (!pXyzTag->GetSize())
-    return false;
-
-  pXYZ[0] = icFtoD((*pXyzTag)[0].X);
-  pXYZ[1] = icFtoD((*pXyzTag)[0].Y);
-  pXYZ[2] = icFtoD((*pXyzTag)[0].Z);
-
-  return true;
-}
-
 /**
  ****************************************************************************
  * Name: icHdrBakeParamsInit
@@ -186,14 +165,14 @@ CIccHdrBaker::~CIccHdrBaker()
  *  Resolve the whole pipeline once, so that sampling it is a pure function.
  *
  *  The profile requirements are deliberately the structural ones and not the
- *  full clause 8.10.1 conformance: RGB Input or Display, PCSXYZ, a cicpTag
+ *  full clause 8.7.1.1 conformance: RGB Input or Display, PCSXYZ, a cicpTag
  *  naming an HDR transfer characteristic, and the matrix
  *  CIccXformMatrixTrcHdr::Begin() would use (icHdrSelectForwardMatrix()).
  *  The 4.5.0.0 lower bound on the version is not among them because the bake
  *  exists precisely to serve consumers that will not accept the version an
- *  HDR Profile carries, and icHdrBakeVersionV4_4 may be about to change it
+ *  HDR ColorSpace Profile carries, and icHdrBakeVersionV4_4 may be about to change it
  *  anyway.  A version 5 profile is refused: it has its own tag model, clause
- *  8.10 is a version 4 construct, and the CMM never renders one through the
+ *  8.7.1 is a version 4 construct, and the CMM never renders one through the
  *  HDR chain - baking one would attach a pair that matches no rendering.
  *
  * Args:
@@ -250,14 +229,26 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
     return false;
   }
 
-  // bRgbInputOrDisplay, not bRgbMatrixBased: an HDR Profile authored to the
-  // 29-08-2026 revision carries no TRC tags and, unless ColourPrimaries is 2,
-  // no matrix column tags either, so the conventional six-tag test would
-  // decline exactly the profiles this bake exists for.  What the bake actually
-  // needs is the header shape plus a matrix, and the matrix is built below
-  // from the cicpTag.
-  if (!info.bRgbInputOrDisplay) {
-    m_szUnsupported = "Not an RGB Input or Display profile";
+  // VERSION FIRST, and the order is deliberate.  A v5 profile that declares
+  // 'spac' would also fail the class test below with "Not an RGB
+  // ColorSpace-class profile", which is true but is not the useful thing to
+  // say: the reason an ICC.2 profile is not rendered by this chain is that
+  // the chain is an ICC.1 clause, not that its class signature is wrong.
+  // Reporting the class first sent a reader looking at the wrong field.
+  //
+  // See the header block above: v5 is outside clause 8.7.1, and a v5 profile
+  // renders through its own multiProcessElement tags, not through this chain.
+  if (pProfile->m_Header.version >= icVersionNumberV5) {
+    m_szUnsupported = "A version 5 profile is outside clause 8.7.1 and is not rendered by the HDR chain";
+    return false;
+  }
+
+  // The header shape of 8.7.1.5: RGB data colour space, ColorSpace ('spac')
+  // class.  What the bake needs beyond that is a matrix, and the matrix is
+  // built below from the cicpTag - a ColorSpace profile has no matrix column
+  // tags to read one from.
+  if (!info.bRgbColorSpace) {
+    m_szUnsupported = "Not an RGB ColorSpace-class profile";
     return false;
   }
 
@@ -269,20 +260,13 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
     return false;
   }
 
-  // See the header block above: v5 is outside clause 8.10, and a v5 profile
-  // renders through its own multiProcessElement tags, not through this chain.
-  if (pProfile->m_Header.version >= icVersionNumberV5) {
-    m_szUnsupported = "A version 5 profile is outside clause 8.10 and is not rendered by the HDR chain";
-    return false;
-  }
-
   if (!info.bHasCicp) {
     m_szUnsupported = "No cicpTag, so no transfer characteristic to invert";
     return false;
   }
 
   if (!info.bTransferIsHdr) {
-    m_szUnsupported = "cicpTag TransferCharacteristics is not one clause 8.10.1 permits";
+    m_szUnsupported = "cicpTag TransferCharacteristics is not one clause 8.7.1.1 permits";
     return false;
   }
 
@@ -299,10 +283,10 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
    * but its abstract ("PQ, HLG or linear RGB profile"), its step 1 ("for
    * Linear, the identity"), its A-curve section ("or a linearly scaled identity
    * for the Linear case") and its "chosen for PQ and HLG" qualifier all assume
-   * a third case.  Clause 8.10.1 permits TransferCharacteristics = 8, so it is
+   * a third case.  Clause 8.7.1.1 permits TransferCharacteristics = 8, so it is
    * a real one.  We support it.  "Linearly scaled" needs a peak, which Linear,
    * unlike PQ and HLG, has no intrinsic value for, and the profile cannot supply
-   * one either: 8.10.1 prohibits the TRC tags that used to carry it.  So Linear
+   * one either: 8.7.1.1 prohibits the TRC tags that used to carry it.  So Linear
    * takes the same path as PQ and HLG - CIccHdrTransfer reads device values as
    * cd/m^2, and GetPeakReferenceLevel() gives 1/CRWL - and what device 1.0
    * should mean for a Linear signal is the open question recorded under this
@@ -329,40 +313,18 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
       m_bToneMap = !m_evaluator.IsIdentity();
     }
     // An evaluator that declines the tag leaves the bake as the transfer, the
-    // SDR clamp and the matrix - the same fallback clause 8.10.3 gives a CMM
+    // SDR clamp and the matrix - the same fallback clause 8.7.1.3 gives a CMM
     // that cannot run the descriptor, which is what this tag's readers are.
   }
 
-  // The matrix column tags are optional in the revision shape.  Whether they
-  // are the matrix is decided below, by the same function Begin() asks.
-  bool bHaveColumns = icHdrBakeGetColumn(pProfile, icSigRedMatrixColumnTag,   m_matrix + 0) &&
-                      icHdrBakeGetColumn(pProfile, icSigGreenMatrixColumnTag, m_matrix + 3) &&
-                      icHdrBakeGetColumn(pProfile, icSigBlueMatrixColumnTag,  m_matrix + 6);
 
-  // icHdrBakeGetColumn() wrote each column's XYZ contiguously, which is the
-  // transpose of what the matrix needs: column j holds the XYZ of primary j,
-  // and row i of the matrix holds component i of all three primaries.
-  if (bHaveColumns) {
-    icFloatNumber columns[9];
-    memcpy(columns, m_matrix, sizeof(columns));
-
-    icUInt8Number row, col;
-
-    for (row = 0; row < 3; row++) {
-      for (col = 0; col < 3; col++)
-        m_matrix[row * 3 + col] = columns[col * 3 + row];
-    }
-  }
-
-  // PROPOSAL-ISSUE HDR-07.  The same replacement CIccXformMatrixTrcHdr::Begin()
-  // makes, and it HAS to be the same one: this bake exists to store that path's
-  // rendering in a lutAToBType, so a matrix that differs from the CMM's is not
-  // an approximation of it - it is a different rendering wearing its name.
-  // Clause 8.10.1's "shall" puts the cicpTag's primaries ahead of the colorant
-  // tags read above, and icBuildHdrForwardMatrix() supplies the chromatic
-  // adaptation that 8.10.1 NOTE 2 leaves out.  icHdrSelectForwardMatrix() is
-  // the decision Begin() takes too, so a profile the live chain refuses is
-  // refused here rather than baked around.
+  // The RGB-to-PCSXYZ matrix of 8.7.1.2 c), and it HAS to be the one
+  // CIccXformMatrixTrcHdr::Begin() builds: this bake exists to store that
+  // path's rendering in a lutAToBType, so a matrix that differs from the
+  // CMM's is not an approximation of it - it is a different rendering wearing
+  // its name.  icHdrSelectForwardMatrix() is the decision Begin() takes too,
+  // so a profile the live chain refuses is refused here rather than baked
+  // around.
   icFloatNumber fwd[9];
 
   switch (icHdrSelectForwardMatrix(pProfile, info.nColourPrimaries, fwd)) {
@@ -370,15 +332,10 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
       memcpy(m_matrix, fwd, sizeof(m_matrix));
       break;
 
-    case icHdrMatrixFromColumns:
-      if (!bHaveColumns) {
-        m_szUnsupported = "Missing or malformed matrix column tag";
-        return false;
-      }
-      break;
-
-    case icHdrMatrixMissingColumns:
-      m_szUnsupported = "Missing or malformed matrix column tag";
+    case icHdrMatrixNeedsCicpExt:
+      m_szUnsupported = "cicpTag ColourPrimaries is 2 (Unspecified): clause 8.7.1.1 requires the "
+                        "cicpType custom chromaticity extension of 10.3, which this build cannot "
+                        "read";
       return false;
 
     case icHdrMatrixMalformedChad:
@@ -386,9 +343,8 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
       return false;
 
     default:
-      m_szUnsupported = "No matrix: the cicpTag primaries cannot be built into one, and the "
-                        "profile is not a conventional matrix/TRC profile whose colorant tags "
-                        "the HDR chain would use instead";
+      m_szUnsupported = "No matrix: the cicpTag primaries cannot be built into one, and a "
+                        "ColorSpace profile has no matrix column tags to use instead";
       return false;
   }
 
@@ -466,7 +422,7 @@ icFloatNumber CIccHdrBaker::LinearizeChannel(icFloatNumber v) const
  * Name: CIccHdrBaker::ToneMap
  *
  * Purpose:
- *  Step b) of clause 8.10.2 at the fixed target, in place.  The two branches
+ *  Step b) of clause 8.7.1.2 at the fixed target, in place.  The two branches
  *  are the same ones CIccXformMatrixTrcHdr::Apply() takes, so that the bake
  *  and the live path agree by construction.
  *****************************************************************************
@@ -608,7 +564,7 @@ icFloatNumber CIccHdrBaker::EncodeChannel(icFloatNumber v) const
  * Name: CIccHdrBaker::ToPcs
  *
  * Purpose:
- *  The whole reference pipeline: the three steps of clause 8.10.2 at a target
+ *  The whole reference pipeline: the three steps of clause 8.7.1.2 at a target
  *  headroom of 1.0, ending in the profile's PCSXYZ encoding.
  *
  *  This is what the AToB tag approximates, so the difference between the two
@@ -1187,7 +1143,7 @@ bool icAddHdrFallbackTags(CIccProfile *pProfile, const icHdrBakeParams *pParams,
 
   if (!baker.CanBuildBtoA()) {
     // ICC.1 8.3.2 pairs AToB0Tag with BToA0Tag for a display profile, and
-    // clause 8.10's own pairing rule says the same for an HDR Profile.
+    // clause 8.7.1's own pairing rule says the same for an HDR ColorSpace Profile.
     // Attaching only the forward direction would leave a profile whose
     // rendering cannot be undone, which is worse than not baking at all.  Only
     // a singular colour matrix stops the pair: a gain curve with no exact

@@ -157,10 +157,10 @@ public:
 	bool m_useV5SubProfile;
 	icXformInterp m_interpolation;
 
-	// ICC.1 clause 8.10 HDR Profiles.  The target headroom of 8.10.2 is a
+	// ICC.1 clause 8.7.1 HDR ColorSpace Profiles.  The target headroom of 8.7.1.2 is a
 	// linear ratio of peak luminance to HDR reference white - 1.0 for SDR, 4.0
 	// for two stops - and is the switch for the whole HDR path: zero means no
-	// CIccCreateHdrXformHint is attached and an HDR Profile is processed exactly
+	// CIccCreateHdrXformHint is attached and an HDR ColorSpace Profile is processed exactly
 	// as a pre-amendment CMM would process it.  That default is deliberate; see
 	// CIccCreateHdrXformHint.  m_hdrToneMap only matters when a headroom is set.
 	//

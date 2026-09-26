@@ -57,7 +57,7 @@
 // informative annex 2.
 //
 // The bake is a change of representation, not a second rendering algorithm:
-// what goes into the tag is the clause 8.10.2 chain the CMM already evaluates,
+// what goes into the tag is the clause 8.7.1.2 chain the CMM already evaluates,
 // resampled at a target headroom of 1.0. That is the property worth testing,
 // because it is the one a plausible-looking implementation loses.
 //
@@ -92,7 +92,7 @@
 //    fits, and a deliberate disagreement where it does not, so that the clamp
 //    cannot be quietly removed or quietly widened.
 //
-// 5. The pair is a pair. ICC.1 8.3.2 and clause 8.10 both require an AToB0Tag
+// 5. The pair is a pair. ICC.1 8.3.2 and clause 8.7.1 both require an AToB0Tag
 //    to come with a BToA0Tag. A bake that cannot invert its colour matrix has
 //    to refuse rather than attach half of one; test 5 pins what is refused and
 //    that the profile is left untouched. A gain curve with no exact inverse is
@@ -287,8 +287,8 @@ void testTransferSplit()
 //
 // CIccTagCicp's copy constructor had an empty body, so a copied cicpTag came
 // out with four uninitialized fields. That is invisible until something reads
-// them, and clause 8.10 is the first thing in the library that does: the
-// transfer characteristic decides whether a profile is an HDR Profile at all.
+// them, and clause 8.7.1 is the first thing in the library that does: the
+// transfer characteristic decides whether a profile is an HDR ColorSpace Profile at all.
 // CIccXform::Create(CIccProfile&) copies the profile it is lent, so a
 // consumer that used that overload got the ordinary matrix/TRC chain for a
 // conforming HDR profile, with no diagnostic and a plausible-looking picture.
@@ -313,7 +313,7 @@ void testProfileCopyPreservesCicp()
   check(copied.nTransferCharacteristics == original.nTransferCharacteristics,
         "a copied profile keeps its CICP transfer characteristic");
   check(copied.nClass == original.nClass,
-        "a copied profile keeps its clause 8.10 classification");
+        "a copied profile keeps its clause 8.7.1 classification");
 
   delete pProfile;
 }
@@ -322,7 +322,7 @@ void testProfileCopyPreservesCicp()
 // 2. The baked pipeline is the CMM's own HDR path at a target headroom of 1.0
 // ---------------------------------------------------------------------------
 
-// Evaluate one pixel through the CMM's clause 8.10.2 path for a profile.
+// Evaluate one pixel through the CMM's clause 8.7.1.2 path for a profile.
 bool applyHdrPath(CIccProfile &profile, const icFloatNumber *src, icFloatNumber *dst)
 {
   CIccCreateXformHintManager hints;
@@ -471,7 +471,7 @@ CIccProfile *roundTripThroughMemory(CIccProfile *pProfile)
   return pRead;
 }
 
-// Evaluate one pixel the way a CMM that knows nothing about clause 8.10 would:
+// Evaluate one pixel the way a CMM that knows nothing about clause 8.7.1 would:
 // no hint at all, so CIccXform::Create() takes the A2B0 tag.
 bool applyLutPath(CIccProfile &profile, const icFloatNumber *src, icFloatNumber *dst,
                   bool bInput, icXformType *pType)
@@ -835,7 +835,7 @@ void testRefusals()
   delete pProfile;
 
   // A profile whose cicpTag names a transfer characteristic outside clause
-  // 8.10.1 has no HDR EOTF to invert, and the bake has to say so rather than
+  // 8.7.1.1 has no HDR EOTF to invert, and the bake has to say so rather than
   // fall back to something plausible.
   pProfile = openFixture("HdrInvalidTransfer.icc");
 
@@ -844,91 +844,59 @@ void testRefusals()
 
     const icChar *szReason = NULL;
 
+    // WHAT A REFUSAL LEAVES BEHIND.  This used to be two blocks: one on a
+    // fixture with no LUT tags, asserting that none appeared, and one that
+    // attached a pair first so that a refusal which DELETED the old pair
+    // before refusing could be told from one that touched nothing.
+    //
+    // HdrInvalidTransfer now carries the pair from the outset - 8.7 requires
+    // it of every ColorSpace profile, and without it the fixture is
+    // critically invalid for a reason that has nothing to do with the
+    // transfer characteristic it exists to test - so the second block's setup
+    // is the fixture's own shape and the two collapse into one.  The
+    // assertion that matters is the second one's: the tags the profile
+    // arrived with are still there, and are the SAME objects.
+    CIccTag *pOldAtoB = pProfile->FindTag(icSigAToB0Tag);
+    CIccTag *pOldBtoA = pProfile->FindTag(icSigBToA0Tag);
+
+    check(pOldAtoB && pOldBtoA, "the refused fixture carries the pair 8.7 requires of it");
+
     check(!icAddHdrFallbackTags(pProfile, NULL, &szReason), "and no tags are attached");
-    check(pProfile->FindTag(icSigAToB0Tag) == NULL, "the refused profile keeps no AToB0Tag");
-    check(pProfile->FindTag(icSigBToA0Tag) == NULL, "the refused profile keeps no BToA0Tag");
+    check(pOldAtoB && pProfile->FindTag(icSigAToB0Tag) == pOldAtoB,
+          "the refused profile keeps the AToB0Tag it had, unreplaced");
+    check(pOldBtoA && pProfile->FindTag(icSigBToA0Tag) == pOldBtoA,
+          "and the BToA0Tag it had");
 
     delete pProfile;
   }
 
-  // What a refusal leaves behind on a profile that already HAS a pair.  The
-  // checks above run on a fixture with no LUT tags, so they could not tell a
-  // refusal that touched nothing from one that deleted the old pair before
-  // deciding to refuse.
-  pProfile = openFixture("HdrInvalidTransfer.icc");
-
-  if (pProfile) {
-    CIccTagLutAtoB *pOldAtoB = new CIccTagLutAtoB();
-    CIccTagLutBtoA *pOldBtoA = new CIccTagLutBtoA();
-
-    if (!pProfile->AttachTag(icSigAToB0Tag, pOldAtoB)) {
-      delete pOldAtoB;
-      pOldAtoB = NULL;
-    }
-    if (!pProfile->AttachTag(icSigBToA0Tag, pOldBtoA)) {
-      delete pOldBtoA;
-      pOldBtoA = NULL;
-    }
-    check(pOldAtoB && pOldBtoA, "a LUT pair attaches to the refused fixture");
-
-    check(!icAddHdrFallbackTags(pProfile), "a refused profile carrying a LUT pair is still refused");
-    check(pOldAtoB && pProfile->FindTag(icSigAToB0Tag) == pOldAtoB, "and keeps the AToB0Tag it had");
-    check(pOldBtoA && pProfile->FindTag(icSigBToA0Tag) == pOldBtoA, "and keeps the BToA0Tag it had");
-
-    delete pProfile;
-  }
-
-  // A singular colour matrix is the one thing that stops the pair once the
-  // bake itself is supported - a gain curve with no exact inverse still gets a
-  // best-effort BToA0Tag.  ColourPrimaries 2 takes the matrix column tags as
-  // they stand, so a red column equal to the green one makes the matrix
-  // singular and changes nothing else.  Nothing drove this refusal before.
-  pProfile = openFixture("HdrCicpUnspecified.icc");
-
-  if (pProfile) {
-    CIccTag *pGreen = pProfile->FindTag(icSigGreenMatrixColumnTag);
-    CIccTag *pRed = pGreen ? pGreen->NewCopy() : NULL;
-
-    pProfile->DeleteTag(icSigRedMatrixColumnTag);
-
-    if (pRed && !pProfile->AttachTag(icSigRedMatrixColumnTag, pRed)) {
-      delete pRed;
-      pRed = NULL;
-    }
-    check(pRed != NULL, "the singular-matrix profile builds");
-
-    // The pair the profile already carries, or one attached for the test, so
-    // that what the refusal leaves behind is observable.
-    CIccTag *pA0 = pProfile->FindTag(icSigAToB0Tag);
-    CIccTag *pB0 = pProfile->FindTag(icSigBToA0Tag);
-
-    if (!pA0) {
-      pA0 = new CIccTagLutAtoB();
-      if (!pProfile->AttachTag(icSigAToB0Tag, pA0)) {
-        delete pA0;
-        pA0 = NULL;
-      }
-    }
-    if (!pB0) {
-      pB0 = new CIccTagLutBtoA();
-      if (!pProfile->AttachTag(icSigBToA0Tag, pB0)) {
-        delete pB0;
-        pB0 = NULL;
-      }
-    }
-
-    check(baker.Init(pProfile), "a singular matrix does not stop the bake itself");
-    check(!baker.CanBuildBtoA(), "but no BToA can be built from it");
-
-    const icChar *szReason = NULL;
-
-    check(!icAddHdrFallbackTags(pProfile, NULL, &szReason), "so the tag pair is refused");
-    check(szReason && strstr(szReason, "no inverse") != NULL, "and the refusal names the matrix");
-    check(pA0 && pProfile->FindTag(icSigAToB0Tag) == pA0, "and the profile keeps the AToB0Tag it had");
-    check(pB0 && pProfile->FindTag(icSigBToA0Tag) == pB0, "and keeps the BToA0Tag it had");
-
-    delete pProfile;
-  }
+  // A SINGULAR COLOUR MATRIX IS NO LONGER REACHABLE, and that is worth saying
+  // in the file that used to reach it rather than leaving a deleted test.
+  //
+  // The block here took HdrCicpUnspecified, whose ColourPrimaries 2 made the
+  // matrix column tags the RGB-to-PCSXYZ matrix verbatim, and set the red
+  // column equal to the green one.  That gave a supported bake
+  // (baker.Init() true) whose matrix had no inverse, so CanBuildBtoA() was
+  // false and icAddHdrFallbackTags() refused with "no inverse" - the one
+  // failure that stops the pair once the bake itself is supported.
+  //
+  // After the 23-09-2026 revision there is no verbatim path.  Every matrix
+  // comes from icBuildHdrForwardMatrix(), which builds it from the H.273
+  // chromaticities and the adopted white: icBuildRgbToXyzMatrix() already
+  // refuses a degenerate primary set (a zero y, or three collinear
+  // chromaticities), every H.273 Table 2 entry is well formed, and a
+  // chromaticAdaptationTag that cannot be inverted is refused at the step
+  // that recovers the actual adopted white.  So icHdrMatrixFromCicp cannot
+  // yield a singular matrix, and ColourPrimaries 2 yields no matrix at all.
+  //
+  // CONSEQUENCE, RECORDED DELIBERATELY: CIccHdrBaker::CanBuildBtoA()'s
+  // m_bInverseValid term is now unreachable for every profile that reaches
+  // it.  The guard is kept - it is one line, it is correct, and it is the
+  // right thing to have if the cicpType chromaticity extension of 10.3 ever
+  // lets an author supply arbitrary chromaticities - but nothing exercises
+  // it, and a reader should not infer from its presence that something does.
+  // When that extension lands it becomes reachable again (an author can then
+  // write three collinear primaries), and a fixture for it belongs here.
 
   // A chromaticAdaptationTag that is present but cannot be read.  This fixture
   // also carries colorant tags, so once the forward matrix refuses the chad the
@@ -1023,7 +991,11 @@ void testBakeMatchesChain()
   CIccProfile *pProfile = openFixture("HdrCicpUnspecified.icc");
 
   if (pProfile) {
-    checkBakeMatchesChain(pProfile, true, "ColourPrimaries 2 with its matrix column tags");
+    // ColourPrimaries 2 is REFUSED by both, which is the invariant this
+    // function exists for: the baker and the live chain must accept and
+    // refuse the same profiles, and 8.7.1.1 gives neither of them
+    // chromaticities to work from without the 10.3 extension.
+    checkBakeMatchesChain(pProfile, false, "ColourPrimaries 2 without the 10.3 extension");
 
     CIccTag *pTag = pProfile->FindTag(icSigCicpTag);
 
@@ -1262,12 +1234,26 @@ void testApproximateBtoA()
 // 5c. ColourPrimaries 2 bakes with the primaries it resolves
 // ---------------------------------------------------------------------------
 //
-// The HLG OOTF forms its luminance from the profile's primaries.  For code 2
-// those come from the colorant tags, which CIccHdrTransfer cannot see, so the
-// bake has to pass them in as the CMM does - otherwise a BT.709 signal
-// declared as 2 bakes with BT.2020 luma while the live path uses BT.709, and
-// the fallback tag disagrees with the rendering it stands in for.
-void testBakeUsesResolvedPrimaries()
+// ColourPrimaries 2 REFUSES TO BAKE, and this test is the inversion of the one
+// that stood here.
+//
+// It used to declare a BT.709 fixture as ColourPrimaries 2 and check that the
+// bake rendered identically to the code-1 original: the HLG OOTF forms its
+// luminance from the profile's primaries, and for code 2 those came from the
+// colorant tags, which CIccHdrTransfer cannot see - so the baker had to pass
+// them in exactly as the CMM does, or the fallback tag would disagree with
+// the rendering it stands in for.
+//
+// The 23-09-2026 revision removes the premise.  8.7.1.1 routes ColourPrimaries
+// 2 to the cicpType custom chromaticity extension of 10.3 rather than to the
+// colorant tags, and a ColorSpace profile has none; this build cannot read
+// that extension, so there are no primaries, no matrix, and nothing to bake.
+//
+// WHAT THIS TEST PROTECTS NOW is the property the old one shared: the baker
+// and the live chain must accept and refuse exactly the same profiles.  A
+// baker that substituted some other matrix here would store a rendering the
+// CMM refuses to produce - a fallback tag that is not a fallback for anything.
+void testBakeRefusesUnspecifiedPrimaries()
 {
   CIccProfile *pCode1 = openFixture("HdrHlgBt709Primaries.icc");
   CIccProfile *pCode2 = openFixture("HdrHlgBt709Primaries.icc");
@@ -1289,28 +1275,19 @@ void testBakeUsesResolvedPrimaries()
 
     CIccHdrBaker bake1, bake2;
 
+    // The control: the same profile at ColourPrimaries 1 still bakes, so the
+    // refusal below is about the primaries and not about the fixture.
     check(bake1.Init(pCode1), "the ColourPrimaries 1 profile bakes");
-    check(bake2.Init(pCode2), "the same profile declaring ColourPrimaries 2 bakes");
+    check(!bake2.Init(pCode2), "the same profile declaring ColourPrimaries 2 does NOT bake");
+    check(bake2.GetUnsupportedReason() != NULL &&
+          strstr(bake2.GetUnsupportedReason(), "10.3") != NULL,
+          "and the reason names the cicpType extension of 10.3 that it cannot read");
 
-    // Saturated but below reference white after the OOTF, so neither bake
-    // clamps; 5e-4 is the s15Fixed16 grid of the colorant tags code 2 reads.
-    const icFloatNumber pixels[][3] = {
-      { 0.5f, 0.0f, 0.0f },
-      { 0.0f, 0.5f, 0.0f },
-      { 0.0f, 0.0f, 0.5f },
-      { 0.5f, 0.3f, 0.1f },
-    };
-
-    for (size_t n = 0; n < sizeof(pixels) / sizeof(pixels[0]); n++) {
-      icFloatNumber want[3], got[3];
-
-      bake1.ToPcs(want, pixels[n]);
-      bake2.ToPcs(got, pixels[n]);
-
-      checkClose(got[0], want[0], 5e-4, "the ColourPrimaries 2 bake renders as its resolved BT.709 (X)");
-      checkClose(got[1], want[1], 5e-4, "the ColourPrimaries 2 bake renders as its resolved BT.709 (Y)");
-      checkClose(got[2], want[2], 5e-4, "the ColourPrimaries 2 bake renders as its resolved BT.709 (Z)");
-    }
+    // And the live chain refuses it too, which is the invariant that matters:
+    // icHdrSelectForwardMatrix() is the one decision both take.
+    icFloatNumber fwd[9];
+    check(icHdrSelectForwardMatrix(pCode2, icCicpPrimariesUnspecified, fwd) == icHdrMatrixNeedsCicpExt,
+          "the baker and the CMM refuse it through the same decision");
   }
 
   delete pCode1;
@@ -1322,7 +1299,7 @@ int main()
   testTransferSplit();
   testProfileCopyPreservesCicp();
   testBakerMatchesCmm();
-  testBakeUsesResolvedPrimaries();
+  testBakeRefusesUnspecifiedPrimaries();
   testBakedTags();
   testAnalyticRoundTrip();
   testTransferCoverage("HagcCommonParams.icc");   // HLG

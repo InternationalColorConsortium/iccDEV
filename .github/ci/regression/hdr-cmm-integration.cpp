@@ -1,7 +1,7 @@
 /** @file
     File:       hdr-cmm-integration.cpp
 
-    Contains:   CTest helper for the places the clause 8.10 HDR hint has to
+    Contains:   CTest helper for the places the clause 8.7.1 HDR hint has to
                 survive on its way from a caller to CIccXformMatrixTrcHdr, and
                 for the CMM machinery that runs beside that xform.
 
@@ -106,7 +106,12 @@
 #include <vector>
 
 static const char *kHagcDisplay = "Testing/HDR/HagcDisplay.icc";
-static const char *kHdrDisplayMetadata = "Testing/HDR/HdrDisplayMetadata.icc";
+// The descriptor-less conforming base.  It was HdrDisplayMetadata until the
+// 23-09-2026 revision moved the sub-class onto the ColorSpace profile, which
+// makes that 'mntr' fixture a class negative with no HDR chain to test.
+// HdrColorSpaceClass is the same shape on 'spac': a PQ cicpTag, HDR Image
+// metadata, no HAGC tag, and the AToB0/BToA0 pair 8.7 requires.
+static const char *kHdrDisplayMetadata = "Testing/HDR/HdrColorSpaceClass.icc";
 static const char *kSdrDst = "Testing/sRGB_v4_ICC_preference.icc";
 
 static int g_failures = 0;
@@ -216,7 +221,7 @@ static void TestEmbeddedStandard()
 
   CIccXform *pFirst = embHdr->GetCmm() ? embHdr->GetCmm()->GetFirstXform() : NULL;
   check(pFirst && pFirst->GetXformType() == icXformTypeMatrixTrcHdr,
-        "embedded: -HDR builds the clause 8.10.2 xform for the embedded source profile");
+        "embedded: -HDR builds the clause 8.7.1.2 xform for the embedded source profile");
 
   icFloatNumber a[16] = { 0 }, b[16] = { 0 }, c[16] = { 0 };
   bool ok = ApplyConnect(fileHdr.get(), src, a) && ApplyConnect(embHdr.get(), src, b) &&
@@ -363,9 +368,20 @@ static void TestPreferLutWithoutLut()
     return;
   }
 
-  // An Input-class HDR Profile needs no BToA0Tag (8.10.6 requires the pair for
-  // Display class only), so as a destination it has no LUT in that direction.
-  p->m_Header.deviceClass = icSigInputClass;
+  // THE CLASS SWITCH IS GONE.  This used to set the class to Input, because
+  // under 8.10.6 the BToA0Tag was required of Display profiles only and an
+  // Input-class HDR Profile could legitimately lack one.  After the
+  // 23-09-2026 revision an Input-class profile is not a member at all, so the
+  // switch built no HDR xform and the test asserted nothing.
+  //
+  // The tag is simply deleted instead, and the profile stays 'spac'.  That
+  // leaves it non-conforming as a ColorSpace profile - 8.7 requires the pair,
+  // and CheckRequiredTags() says so critically - but MEMBERSHIP is unaffected,
+  // which is the whole reason icGetHdrProfileInfo() keeps the two apart.  What
+  // this test is about is the descriptor policy: with no LUT in the output
+  // direction there is nothing for icHdrToneMapPreferLut to prefer, so it must
+  // still build the 8.7.1.2 chain rather than decline and leave the caller
+  // with no HDR rendering at all.
   p->DeleteTag(icSigBToA0Tag);
 
   CIccXform *pOwnLut = NULL, *pOwnHagc = NULL;
@@ -494,7 +510,7 @@ static void TestBpc()
     check(okO && okL, label);
     snprintf(label, sizeof(label), "bpc (HDR %s): BPC does not depend on the SDR fallback LUT's black", side);
     check(okO && okL && maxDiff(o, l) < 1.0e-5, label);
-    snprintf(label, sizeof(label), "bpc (HDR %s): BPC works on an HDR Profile with no LUT pair", side);
+    snprintf(label, sizeof(label), "bpc (HDR %s): BPC works on an HDR ColorSpace Profile with no LUT pair", side);
     check(okN && okO && maxDiff(n, o) < 1.0e-5, label);
     (void)okNb;
   }

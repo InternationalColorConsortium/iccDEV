@@ -239,17 +239,17 @@ void Usage(FILE* stream)
   fprintf(stream, "    FmtPrecision - formatting for # of digits after decimal (default=4)\n");
   fprintf(stream, "    FmtDigits - formatting for total # of digits (default=5+FmtPrecision)\n\n");
 
-  // ICC.1 clause 8.10.  Documented as a pair because -HDRMAP alone does
+  // ICC.1 clause 8.7.1.  Documented as a pair because -HDRMAP alone does
   // nothing: the target headroom is what engages the HDR path at all.
-  fprintf(stream, "  For -HDR headroom (ICC.1 clause 8.10 HDR Profiles):\n");
+  fprintf(stream, "  For -HDR headroom (ICC.1 clause 8.7.1 HDR ColorSpace Profiles):\n");
   fprintf(stream, "    The target headroom as a ratio of peak luminance to HDR reference white:\n");
   fprintf(stream, "    1.0 = SDR, 2.0 = one stop, 4.0 = two stops. Applies to the profile that\n");
-  fprintf(stream, "    follows it. Without -HDR an HDR Profile is processed exactly as it is by a\n");
-  fprintf(stream, "    CMM that does not implement clause 8.10, because the target headroom is not\n");
+  fprintf(stream, "    follows it. Without -HDR an HDR ColorSpace Profile is processed exactly as it is by a\n");
+  fprintf(stream, "    CMM that does not implement clause 8.7.1, because the target headroom is not\n");
   fprintf(stream, "    carried in the profile and cannot be inferred from it.\n\n");
 
   fprintf(stream, "  For -HDRMAP policy (only meaningful alongside -HDR):\n");
-  fprintf(stream, "    auto - the descriptor ranking of clause 8.10.3: the headroomAdaptive-\n");
+  fprintf(stream, "    auto - the descriptor ranking of clause 8.7.1.3: the headroomAdaptive-\n");
   fprintf(stream, "           GainCurveTag, else this CMM's identity operator (default)\n");
   fprintf(stream, "    hagc - the same choice as a fixed rule; never the baked LUT pair\n");
   fprintf(stream, "    lut  - prefer the profile's baked AToB0/BToA0 pair; without one in\n");

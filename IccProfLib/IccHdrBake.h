@@ -1,9 +1,9 @@
 /** @file
     File:       IccHdrBake.h
 
-    Contains:   Header for baking an HDR Profile's tone-mapped rendering into
+    Contains:   Header for baking an HDR ColorSpace Profile's tone-mapped rendering into
                 a lutAToBType/lutBToAType pair, so that a CMM which implements
-                none of clause 8.10 still produces the SDR reproduction the
+                none of clause 8.7.1 still produces the SDR reproduction the
                 profile's author intended
 
     Version:    V1
@@ -154,7 +154,7 @@ class CIccCurve;
  * CIccCreateHdrXformHint uses: 1.0, i.e. a display whose peak luminance is
  * the HDR reference white.
  *
- * 1.0 is what clause 8.10.6 requires, not a choice this implementation made.
+ * 1.0 is what clause 8.7.1.5 requires, not a choice this implementation made.
  * Including the AToB0Tag/BToA0Tag pair is only strongly recommended, but the
  * clause is normative about its content once it is there: "When included, the
  * AToB0Tag shall carry an HDR-to-SDR tone mapping (i.e. its target headroom
@@ -163,7 +163,7 @@ class CIccCurve;
  *
  * NOTE 5 keeps H_target out of the profile, so nothing in a baked tag records
  * the headroom it was built at and no consumer can read it back.  That costs
- * nothing here precisely because 8.10.6 fixes the value: a consumer does not
+ * nothing here precisely because 8.7.1.5 fixes the value: a consumer does not
  * need to recover what the clause already determines.
  *
  * This is not a parameter and should not become one.  A baked CLUT's samples
@@ -190,26 +190,26 @@ class CIccCurve;
  ***********************************************************************
  */
 typedef enum {
-  /** Leave the version as authored.  The default, because an HDR Profile is
-   * a v4.5 profile by clause 8.10.1 and lowering its version would strip it
+  /** Leave the version as authored.  The default, because an HDR ColorSpace Profile is
+   * a v4.5 profile by clause 8.7.1.1 and lowering its version would strip it
    * of the sub-class it conforms to. */
   icHdrBakeVersionKeep = 0,
 
   /** PROPOSAL-ISSUE WP-04 (an item against the paper) -- ICC White Paper #62
-   * (produced 2026-08-05) writes header version 4.4, and clause 8.10.1
+   * (produced 2026-08-05) writes header version 4.4, and clause 8.7.1.1
    * (2026-07-13) had already made 4.5.0.0 a requirement of the class, so
    * following the paper strips a conforming profile of the classification the
    * amendment gives it.  The paper's own parenthetical "(or 4.5 after
    * acceptance...)" reads as speculative about an amendment that existed three
    * weeks before the paper was produced, and it names the wrong document: the
-   * HAGC tag proposal changes no version, the HDR Profiles amendment does.  The
+   * HAGC tag proposal changes no version, the HDR ColorSpace Profiles amendment does.  The
    * set needs reconciling; until then this is opt-in and the default leaves the
    * version alone.
    *
    * Set the header to 4.4.0.0, as the white paper's "Tag assembly and
    * profile patching" does, for consumers that reject a version they do not
-   * know.  The profile then no longer classifies as an HDR Profile under
-   * clause 8.10.1 - the fallback tags are all such a consumer would have
+   * know.  The profile then no longer classifies as an HDR ColorSpace Profile under
+   * clause 8.7.1.1 - the fallback tags are all such a consumer would have
    * used anyway, but an HDR-aware one loses the classification too. */
   icHdrBakeVersionV4_4 = 1,
 } icHdrBakeVersionPolicy;
@@ -246,7 +246,7 @@ ICCPROFLIB_API void icHdrBakeParamsInit(icHdrBakeParams &params);
  * Class: CIccHdrBaker
  *
  * Purpose:
- *  Build the static SDR rendering of an HDR Profile - the procedure of the
+ *  Build the static SDR rendering of an HDR ColorSpace Profile - the procedure of the
  *  "Representation of HDR-to-SDR Tone Mapping from a Headroom Adaptive Gain
  *  Curve in a v4 A2B0 Tag" white paper, and of the HAGC amendment's
  *  informative annex 2.
@@ -291,7 +291,7 @@ ICCPROFLIB_API void icHdrBakeParamsInit(icHdrBakeParams &params);
  *  damage - see BtoAClutOp().
  *
  *  PROPOSAL-ISSUE WP-05 (gap across the set) -- the white paper covers only the
- *  AToB0, while ICC.1 8.3.2 and clause 8.10.6 both want the pair, so an author
+ *  AToB0, while ICC.1 8.3.2 and clause 8.7.1.5 both want the pair, so an author
  *  following it produces half of what the amendment asks for.  The only
  *  guidance for the other half is HAGC annex 2.2, two sentences that do not
  *  mention where the compression belongs; the shortcut it reads as produces a
@@ -319,7 +319,7 @@ public:
    *
    * Returns IsSupported().  A profile that carries no HAGC tag is still
    * supported: the bake is then the EOTF and a clamp to the SDR volume, which
-   * is a meaningful legacy rendering and the one clause 8.10.3's lowest
+   * is a meaningful legacy rendering and the one clause 8.7.1.3's lowest
    * ranked descriptor implies.
    *
    * LIFETIME.  The baker does not own pProfile and keeps no pointer to it:
@@ -411,7 +411,7 @@ public:
 
 protected:
   /** The per-channel linearisation an A curve stores, before the fifth root:
-   * ToLinearChannel() for all three transfers, Linear included, since 8.10.1
+   * ToLinearChannel() for all three transfers, Linear included, since 8.7.1.1
    * prohibits the TRC tags that could otherwise have linearised it.
    * Normalised so that an encoded 1.0 gives 1.0.  The same function for all
    * three channels: no transfer this bakes distinguishes them. */

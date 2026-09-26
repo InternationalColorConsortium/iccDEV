@@ -73,7 +73,7 @@
 #include "IccTag.h"
 #include "IccUtil.h"
 #include "IccMatrixMath.h"
-// The clause 8.10 tone-mapping step, for CIccXformMatrixTrcHdr's members and
+// The clause 8.7.1 tone-mapping step, for CIccXformMatrixTrcHdr's members and
 // for the BT.2100 defaults CIccCreateHdrXformHint starts from.  Costs nothing
 // extra to include here: IccTag.h above already pulls in IccTagHagc.h, which
 // is the only heavy dependency this adds.
@@ -201,9 +201,9 @@ typedef enum {
   icXformTypeMpe        = 5,
 	icXformTypeMonochrome = 6,
 
-  // The matrix/TRC chain of an ICC.1 clause 8.10 HDR Profile: the same three
+  // The matrix/TRC chain of an ICC.1 clause 8.7.1 HDR ColorSpace Profile: the same three
   // matrix column tags, but with the analytic EOTF named by the cicpTag in
-  // place of the sampled TRCs and the tone-mapping step of 8.10.2 inserted
+  // place of the sampled TRCs and the tone-mapping step of 8.7.1.2 inserted
   // between the linearisation and the matrix.  A distinct type rather than a
   // mode of icXformTypeMatrixTRC because the two share only the matrix, and
   // because CIccXformCreator's factory chain is how an application replaces
@@ -396,21 +396,21 @@ public:
 
 /**
  **************************************************************************
- * How the tone-mapping descriptors of ICC.1 clause 8.10.3 are to be chosen
+ * How the tone-mapping descriptors of ICC.1 clause 8.7.1.3 are to be chosen
  * between.  The clause states a recommended ranking, not a requirement, and
  * names cases where a consumer would sensibly depart from it - so the choice
  * belongs to the consumer rather than to the library.
  **************************************************************************
  */
 typedef enum {
-  /** Follow the recommended ranking of 8.10.3: a) the HAGC tag when the
+  /** Follow the recommended ranking of 8.7.1.3: a) the HAGC tag when the
    * profile carries one this build can evaluate; b) otherwise this CMM's own
-   * operator, the identity tone-mapping operator NOTE 6 of 8.10.2 permits,
+   * operator, the identity tone-mapping operator NOTE 6 of 8.7.1.2 permits,
    * which still applies the analytic EOTF the cicpTag names; c) the
    * pre-rendered AToB0/BToA0 last.  This build always supplies b), so c) is
    * never reached and Auto currently renders exactly as
-   * icHdrToneMapPreferHagc does.  The 8.10.6 pair is the fallback for
-   * consumers that do not implement HDR processing (8.10.1 NOTE 4); use
+   * icHdrToneMapPreferHagc does.  The 8.7.1.5 pair is the fallback for
+   * consumers that do not implement HDR processing (8.7.1.1 NOTE 4); use
    * icHdrToneMapPreferLut to render it.  See icUseHdrToneMapPath() and
    * PROPOSAL-ISSUE HDR-13 there. */
   icHdrToneMapAuto = 0,
@@ -430,7 +430,7 @@ typedef enum {
   icHdrToneMapPreferLut = 2,
 
   /** Do not engage the HDR path at all; behave exactly as a CMM that does not
-   * implement clause 8.10. */
+   * implement clause 8.7.1. */
   icHdrToneMapDisable = 3,
 } icHdrToneMapPolicy;
 
@@ -439,13 +439,13 @@ typedef enum {
  * Type: Class
  *
  * Purpose:
- *  Hint that engages the tone-mapping step of ICC.1 clause 8.10.2 and
+ *  Hint that engages the tone-mapping step of ICC.1 clause 8.7.1.2 and
  *  supplies the target headroom it needs.
  *
  *  THE HINT IS THE SWITCH.  Without it a profile is processed exactly as it
  *  is today, whatever it declares in its cicpTag: a baked AToB0 wins, and a
  *  profile without one falls through to the conventional matrix/TRC chain.
- *  That is deliberate.  H_target is not encoded in the profile (8.10.2
+ *  That is deliberate.  H_target is not encoded in the profile (8.7.1.2
  *  NOTE 5) and cannot be inferred from it, so a CMM that engaged HDR
  *  processing on its own would have to invent one, and the same profile would
  *  render differently depending on which build read it.  Requiring the
@@ -466,16 +466,22 @@ public:
   virtual const char *GetHintType() const { return "CIccCreateHdrXformHint"; }
 
   /** Target headroom as a linear ratio of peak luminance to HDR reference
-   * white, matching the encoding of the DERH entry of clause 8.10.5. 1.0 is
-   * SDR; 4.0 is two stops of headroom. The evaluator works in log2 space,
+   * white. 1.0 is SDR; 4.0 is two stops of headroom. The evaluator works in log2 space,
    * as the HAGC tag encodes headrooms, and the conversion happens once at
    * Begin(). A value at or below zero is treated as 1.0. */
   icFloatNumber m_targetHeadroom;
 
   /* REMOVED 2026-09-08 (IMPL-01): m_bHasDisplayHeadroom and m_displayHeadroom.
    *
+   * SUPERSEDED BY THE 23-09-2026 REVISION, which settles the question this
+   * note left open by deleting clause 8.10.5 outright: there is no HDR
+   * Display metadata for a profile to resolve a display headroom from, and
+   * physical display characterization is out of scope for the sub-class.
+   * What follows is kept because it records why the fields went and what
+   * would have to be argued to bring anything like them back.
+   *
    * They were an override for the display headroom a profile's own HDR
-   * Display metadata resolves to under clause 8.10.5, and they carried a doc
+   * Display metadata resolved to under clause 8.10.5, and they carried a doc
    * comment stating that contract.  Nothing ever honoured it.  SetHdrParams()
    * copied four fields off this hint and never those two, from the commit
    * that introduced the class (0733a80f) to the one that removed them - a
@@ -483,12 +489,13 @@ public:
    * So this was not a feature that regressed; it was never wired at all, and
    * the comment made it read as though it had been.
    *
-   * Deleted rather than finished, FOR NOW, and the distinction is worth
-   * keeping: the concept is real.  When an HDR Profile is the DESTINATION its
-   * 8.10.5 metadata describes the display being rendered to, so "default the
-   * target to the destination profile's declared headroom" is a coherent
-   * behaviour someone may well want.  What ruled it out here is the paragraph
-   * at the top of this class: 8.10.2 NOTE 5 says H_target is not encoded in
+   * Deleted rather than finished, and the concept is now out of scope twice
+   * over.  The argument then was that when an HDR Profile is the DESTINATION
+   * its 8.10.5 metadata describes the display being rendered to, so
+   * "default the target to the destination profile's declared headroom" was
+   * a coherent behaviour someone might want.  That metadata no longer
+   * exists.  What ruled it out here is the paragraph
+   * at the top of this class: 8.7.1.2 NOTE 5 says H_target is not encoded in
    * the profile and cannot be inferred from it, and having the CMM resolve it
    * from the profile is exactly the inference that paragraph exists to
    * forbid.  Adding it back is therefore a deliberate softening of that rule,
@@ -1559,9 +1566,9 @@ protected:
  **************************************************************************
  * Type: Class
  *
- * Purpose: The matrix/TRC Xform of an ICC.1 clause 8.10 HDR Profile - the
+ * Purpose: The matrix/TRC Xform of an ICC.1 clause 8.7.1 HDR ColorSpace Profile - the
  *  conventional chain of Annex F.3 augmented by the tone-mapping step of
- *  clause 8.10.2.
+ *  clause 8.7.1.2.
  *
  *  A subclass rather than a branch inside CIccXformMatrixTRC::Apply().  That
  *  Apply() is the hot path of every legacy matrix profile in existence, and
@@ -1576,7 +1583,7 @@ protected:
  *  What is shared, and inherited: the matrix column tags, their inversion for
  *  the output direction, and the PCS absolute/relative handling.  The TRC
  *  curves are not: every transfer, Linear included, is linearised
- *  analytically from the cicpTag, 8.10.1 prohibiting the TRC tags, and a
+ *  analytically from the cicpTag, 8.7.1.1 prohibiting the TRC tags, and a
  *  conventionally authored profile that still carries them - reachable only by
  *  constructing this class directly - has them loaded by the base Begin() but
  *  never applied.
@@ -1606,7 +1613,7 @@ public:
   virtual void Apply(CIccApplyXform *pApplyXform, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const;
 
   /** True when a gain curve is actually being evaluated, as opposed to the
-   * identity tone-mapping operator NOTE 6 of 8.10.2 permits. Exposed for
+   * identity tone-mapping operator NOTE 6 of 8.7.1.2 permits. Exposed for
    * trace and test output: "the HDR path engaged" and "the HDR path changed
    * any value" are different claims and both are worth being able to make. */
   bool IsToneMapping() const { return m_bToneMap; }
@@ -2024,7 +2031,7 @@ public:
       scaled by 32768/65535, so X,Y,Z of 1.0 encodes as 0.5000076...; a value
       above the 1.999969482421875 that icU1Fixed15 holds stays representable
       internally but cannot be serialized through the 16 bit encodings below,
-      which is the ceiling an HDR Profile meets above diffuse white.
+      which is the ceiling an HDR ColorSpace Profile meets above diffuse white.
     icEncode16Bit: ICC 16 bit XYZ Encoding - (icU1Fixed15) See ICC Specification
     icEncode16BitV2: ICC 16 bit XYZ Encoding - (icU1Fixed15) See ICC Specification
 

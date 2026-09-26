@@ -30,9 +30,9 @@ echo ====================== Running iccFromXml Checks ==========================
 @echo on
 
 
-REM The ten BT.2100 fixtures. v5 multiProcessElement profiles, not clause 8.10 HDR
+REM The ten BT.2100 fixtures. v5 multiProcessElement profiles, not clause 8.7.1 HDR
 REM Profiles: v5 is a different major version with its own tag model and is outside
-REM 8.10.1's version window. Four are narrow-range and carry the range expansion as
+REM 8.7.1.1's version window. Four are narrow-range and carry the range expansion as
 REM an explicit curve, which is why they need no VideoFullRangeFlag handling.
 iccFromXml BT2100HlgFullScene.xml BT2100HlgFullScene.icc
 iccFromXml BT2100HlgNarrowScene.xml BT2100HlgNarrowScene.icc
@@ -61,9 +61,9 @@ iccFromXml HagcMixingTypes.xml HagcMixingTypes.icc
 iccFromXml HagcInvalidXOrder.xml HagcInvalidXOrder.icc || ver>nul
 iccFromXml HagcRefWhiteToneMap.xml HagcRefWhiteToneMap.icc
 
-REM Clause 8.10 HDR Profile coverage: metadata, the baked AToB0/BToA0 pair that makes
-REM 8.10.3's precedence observable, the ColourPrimaries-2 pair, and the Linear
-REM content-headroom order of 8.10.4 (rules a, b and c, plus the HAGC-white case).
+REM Clause 8.7.1 HDR ColorSpace Profile coverage: metadata, the baked AToB0/BToA0 pair that makes
+REM 8.7.1.3's precedence observable, the ColourPrimaries-2 pair, and the Linear
+REM content-headroom order of 8.7.1.4 (rules a, b and c, plus the HAGC-white case).
 REM HdrInvalidTransfer, HdrMissingBToA0, HdrMissingLutPair and HdrCicp2NoColumns are
 REM negatives. The last three validate invalid, so iccFromXml exits 1 for them and
 REM their lines end in ver>nul for the reason given above the HAGC block.
@@ -73,7 +73,6 @@ iccFromXml HdrBakedLut.xml HdrBakedLut.icc
 iccFromXml HdrInvalidTransfer.xml HdrInvalidTransfer.icc
 iccFromXml HdrMissingBToA0.xml HdrMissingBToA0.icc || ver>nul
 iccFromXml HdrMissingLutPair.xml HdrMissingLutPair.icc || ver>nul
-iccFromXml HdrCicp2NoColumns.xml HdrCicp2NoColumns.icc || ver>nul
 iccFromXml HdrInputDisplayMeta.xml HdrInputDisplayMeta.icc
 iccFromXml HdrLinearCll.xml HdrLinearCll.icc
 iccFromXml HdrLinearMdcv.xml HdrLinearMdcv.icc
@@ -81,13 +80,13 @@ iccFromXml HdrLinearNoMetadata.xml HdrLinearNoMetadata.icc
 iccFromXml HdrLinearHagcWhite.xml HdrLinearHagcWhite.icc
 iccFromXml HdrLinearHagcCrwlDisagree.xml HdrLinearHagcCrwlDisagree.icc
 
-REM Clause 8.10.1 membership. Each flips exactly ONE membership condition and
+REM Clause 8.7.1.1 membership. Each flips exactly ONE membership condition and
 REM satisfies every other, so a classifier that drops one condition misclassifies
 REM exactly one fixture. Before these the only membership negative was
 REM HdrInvalidTransfer, which fails two conditions at once (non-HDR transfer AND TRC
 REM tags present) and so cannot say which was tested. All six are CONFORMANT
-REM profiles that classify as icHdrProfileHdrContent -- failing 8.10.1 makes a
-REM profile not an HDR Profile, it does not make it non-conformant.
+REM profiles that classify as icHdrProfileHdrContent -- failing 8.7.1.1 makes a
+REM profile not an HDR ColorSpace Profile, it does not make it non-conformant.
 iccFromXml HdrNonRgbSpace.xml HdrNonRgbSpace.icc
 iccFromXml HdrColorSpaceClass.xml HdrColorSpaceClass.icc
 iccFromXml HdrVersion44.xml HdrVersion44.icc
@@ -96,18 +95,16 @@ iccFromXml HdrTrcTagsPresent.xml HdrTrcTagsPresent.icc
 iccFromXml HdrTransferSdr.xml HdrTransferSdr.icc
 
 REM The other edge of the version window: 4.6.0.0 is "4.5.0.0 or later within v4",
-REM so this one IS an HDR Profile. The only fixture separating a correct
+REM so this one IS an HDR ColorSpace Profile. The only fixture separating a correct
 REM ">= 4.5 and < 5" test from a wrong "== 4.5".
 iccFromXml HdrVersion46.xml HdrVersion46.icc
 
 REM Clause 8.10.5 display-headroom precedence, rules b) and c). HdrDisplayMetadata
 REM fires rule a); these remove entries to expose the rules below it, with values
 REM chosen so a reader firing the wrong rule returns a different number.
-iccFromXml HdrHeadroomDcvDrwl.xml HdrHeadroomDcvDrwl.icc
-iccFromXml HdrHeadroomDcvCrwl.xml HdrHeadroomDcvCrwl.icc
 
-REM Clause 8.10.6 pairing at x = 1. HdrMissingBToA0 covers x = 0, but x = 0 is the
-REM pair 8.10.6 makes mandatory outright, so an implementation that only ever looked
+REM Clause 8.7.1.5 pairing at x = 1. HdrMissingBToA0 covers x = 0, but x = 0 is the
+REM pair 8.7.1.5 makes mandatory outright, so an implementation that only ever looked
 REM for AToB0Tag/BToA0Tag passes it. A negative.
 iccFromXml HdrMissingBToA1.xml HdrMissingBToA1.icc || ver>nul
 

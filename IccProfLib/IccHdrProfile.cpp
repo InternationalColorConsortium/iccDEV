@@ -1,7 +1,7 @@
 /** @file
     File:       IccHdrProfile.cpp
 
-    Contains:   Implementation of HDR Profile (ICC.1 clause 8.10) recognition,
+    Contains:   Implementation of HDR ColorSpace Profile (ICC.1 clause 8.7.1) recognition,
                 CICP ColourPrimaries resolution, and the HDR Image /
                 HDR Display metadataTag reader
 
@@ -62,7 +62,7 @@
 //////////////////////////////////////////////////////////////////////
 // HISTORY:
 //
-// -Initial implementation of HDR Profile recognition and CICP primaries
+// -Initial implementation of HDR ColorSpace Profile recognition and CICP primaries
 //
 //////////////////////////////////////////////////////////////////////
 
@@ -223,7 +223,7 @@ static bool icHdrXyzToChromaticity(icFloatNumber X, icFloatNumber Y, icFloatNumb
  *  what CIccCmm does for every profile it is given a path to - carries a tag
  *  directory and no tag objects, so FindTagConst() returns NULL for tags that
  *  are demonstrably present and every question this module answers comes back
- *  "no cicpTag, not an HDR Profile". The failure is silent and direction
+ *  "no cicpTag, not an HDR ColorSpace Profile". The failure is silent and direction
  *  dependent: read the same file eagerly and the answers are right.
  *
  *  So the lookup goes through FindTag(), which loads on demand, via a cast.
@@ -231,7 +231,7 @@ static bool icHdrXyzToChromaticity(icFloatNumber X, icFloatNumber Y, icFloatNumb
  *  and changes nothing about the profile's value, which is exactly the reason
  *  FindTag() exists rather than requiring callers to pre-load. Keeping the
  *  const on the interface is worth this much - a caller has no business being
- *  handed a mutable profile to ask whether it is an HDR Profile.
+ *  handed a mutable profile to ask whether it is an HDR ColorSpace Profile.
  *
  *  The load is still a side effect on a const object, so callers that must
  *  not have one test icHdrHeaderAdmitsMembership() first: it needs no tag,
@@ -377,22 +377,22 @@ bool icGetProfilePrimaries(const CIccProfile *pProfile, icCicpPrimaries &primari
  * Purpose: Resolve the source primaries the way a cicpTag consumer should.
  *****************************************************************************
  */
-bool icGetResolvedPrimaries(const CIccProfile *pProfile, icUInt8Number nColourPrimaries,
-                            icCicpPrimaries &primaries, bool *bFromProfile /*=NULL*/)
+bool icGetResolvedPrimaries(const CIccProfile * /* pProfile */,
+                            icUInt8Number nColourPrimaries,
+                            icCicpPrimaries &primaries)
 {
-  if (bFromProfile)
-    *bFromProfile = false;
-
-  if (nColourPrimaries != icCicpPrimariesUnspecified)
-    return icGetCicpPrimaries(nColourPrimaries, primaries);
-
-  if (!icGetProfilePrimaries(pProfile, primaries))
+  /* ColourPrimaries 2 resolves nothing.  8.7.1.1 puts the chromaticities and
+   * the white point in the cicpType custom chromaticity extension of 10.3,
+   * which this build cannot read, and the matrix-column recovery that used to
+   * answer here has no tags to read in a ColorSpace profile.  See
+   * icCicpPrimariesUnspecified.
+   *
+   * pProfile is where the extension will be read from once its wire format is
+   * known, which is why it stays in the signature. */
+  if (nColourPrimaries == icCicpPrimariesUnspecified)
     return false;
 
-  if (bFromProfile)
-    *bFromProfile = true;
-
-  return true;
+  return icGetCicpPrimaries(nColourPrimaries, primaries);
 }
 
 /**
@@ -412,29 +412,29 @@ const icChar *icGetHdrTransferName(icUInt8Number nTransferCharacteristics)
 
 /*
  * ===========================================================================
- * HDR Image and HDR Display metadata (clauses 8.10.4 and 8.10.5)
+ * HDR Image metadata (clause 8.7.1.4)
  *
  * The four HDR Image entries are taken from the ICC dictType Metadata Registry
- * (HDR Image category, registered by Apple Inc. 2025-06-04), which 8.10.4 names
+ * (HDR Image category, registered by Apple Inc. 2025-06-04), which 8.7.1.4 names
  * as authoritative: CRWL, CLL, MDCV and CCV, with the field lists each entry's
  * Value column gives.  Those are read facts, not reconstructions.
  *
- * The three HDR Display entries - DCV, DRWL, DERH - now have a registration
- * document of their own: "dictType metadata entry: Display Color Volume" and
- * its two siblings, owner ICC, change date 2026-06-24, category HDR Display.
- * It gives DCV as "Floating point number, floating point number, 8-bit number"
- * - the display's luminance range and its primaries per ITU-T H.273 - and DRWL
- * and DERH as one floating point number each.  That is field for field what
- * this reader had derived from 8.10.5's prose on the shape of MDCV, so nothing
- * about the parse changes.
+ * THE HDR DISPLAY ENTRIES ARE NOT READ.  DCV, DRWL and DERH were read here
+ * under clause 8.10.5, which the 23-09-2026 revision deletes: "Physical
+ * display characterization (peak luminance, extended-range headroom, and
+ * similar measurement-derived properties of a specific display) is
+ * intentionally out of scope for the HDR ColorSpace Profile sub-class defined
+ * by this amendment, which characterizes a colour encoding rather than a
+ * display."  Nothing in 8.7.1 consumes a display headroom, so nothing here
+ * derives one.
  *
- * PROPOSAL-ISSUE HDR-11: the registration is still not the registry.  Read live
- * 2026-09-06, registry.color.org/dicttype-metadata carries HDR image and
- * Printing and no HDR Display category, and none of the three has an entry
- * page - two and a half months after the registration's own change date, and
- * a week after an amendment revision that speaks of "the entries REGISTERED in
- * the HDR Display category" in the present tense.  So these three still feed
- * no diagnostic about anyone else's profile beyond the scope note below.
+ * PROPOSAL-ISSUE HDR-11 is WITHDRAWN with that clause.  It recorded that the
+ * three entries had a registration document (owner ICC, change date
+ * 2026-06-24) but were still absent from the registry itself, so their shapes
+ * had to be reconstructed from 8.10.5's prose against the registered sibling
+ * MDCV.  With no clause to give them meaning there is nothing left to rule
+ * on.  The registration document is unaffected by this amendment; if a future
+ * one gives the entries a clause again, this is the section that reads them.
  * ===========================================================================
  */
 
@@ -443,9 +443,6 @@ static const char *kIccHdrKeyCrwl = "CRWL";   /* Content HDR Reference White Lum
 static const char *kIccHdrKeyCll  = "CLL";    /* Content Light Level */
 static const char *kIccHdrKeyMdcv = "MDCV";   /* Mastering Display Colour Volume */
 static const char *kIccHdrKeyCcv  = "CCV";    /* Content Colour Volume */
-static const char *kIccHdrKeyDerh = "DERH";   /* Display Extended Range Headroom */
-static const char *kIccHdrKeyDrwl = "DRWL";   /* Display HDR Reference White Luminance */
-static const char *kIccHdrKeyDcv  = "DCV";    /* Display Colour Volume */
 
 /* The registrations also specify a Display name element for each of these seven
  * keys - the human-readable string an authoring path puts in a dictType
@@ -647,9 +644,10 @@ static bool icHdrGetDictValue(const CIccTagDict *pDict, const char *szKey,
  *    MDCV  max luminance, min luminance, primaries
  *    CLL   max light level, average light level, primaries
  *
- *  8.10.5's DCV is described in the same terms as MDCV - "its colour volume
- *  (maximum and minimum luminance and primaries)" - and is read on that shape
- *  pending its registration.
+ *  DCV was read on the same shape while clause 8.10.5 existed.  The
+ *  23-09-2026 revision deletes that clause, so this helper now serves MDCV
+ *  and CLL only - both registered, both read on the shape the registry gives
+ *  rather than on a reconstruction.
  *
  *  Two registry semantics are carried through rather than rejected. A
  *  luminance of 0.0 means the author did not know the value, so it is stored
@@ -711,10 +709,10 @@ static bool icHdrParseRegistryVolume(const CIccProfile *pProfile, const std::str
      * does for the cicpTag itself.
      *
      * PROPOSAL-ISSUE HDR-18: in a profile authored to the 29-08-2026 revision
-     * this usually cannot be satisfied.  8.10.1 removes the matrix column tags
-     * from an HDR Profile unless the cicpTag's own ColourPrimaries is 2, so a
+     * this usually cannot be satisfied.  8.7.1.1 removes the matrix column tags
+     * from an HDR ColorSpace Profile unless the cicpTag's own ColourPrimaries is 2, so a
      * metadata entry carrying primaries 2 has nothing to resolve against in
-     * every other conforming HDR Profile - and these entries are Optional, so
+     * every other conforming HDR ColorSpace Profile - and these entries are Optional, so
      * nothing prevents one being written.  icGetProfilePrimaries() returns
      * false there, which leaves bPrimariesResolved false: the same answer as
      * before this branch existed, now for a stated reason rather than by
@@ -736,27 +734,22 @@ static bool icHdrParseRegistryVolume(const CIccProfile *pProfile, const std::str
 CIccHdrMetadataReader::CIccHdrMetadataReader()
 {
   m_bHasCrwl = m_bHasCll = m_bHasMdcv = m_bHasCcv = false;
-  m_bHasDerh = m_bHasDrwl = m_bHasDcv = false;
-  m_bCllPrimariesResolved = m_bMdcvPrimariesResolved = m_bDcvPrimariesResolved = false;
+  m_bCllPrimariesResolved = m_bMdcvPrimariesResolved = false;
   m_bUnparsed = false;
 
   m_crwl = (icFloatNumber)icHdrDefaultContentReferenceWhite;
   m_maxCll = m_maxFall = 0.0f;
   m_mdcvMaxLuminance = m_mdcvMinLuminance = 0.0f;
-  m_derh = m_drwl = 0.0f;
-  m_dcvMaxLuminance = m_dcvMinLuminance = 0.0f;
 
   memset(&m_cllPrimaries, 0, sizeof(m_cllPrimaries));
   memset(&m_mdcvPrimaries, 0, sizeof(m_mdcvPrimaries));
-  memset(&m_dcvPrimaries, 0, sizeof(m_dcvPrimaries));
 }
 
 /**
  ****************************************************************************
  * Name: CIccHdrMetadataReader::Read
  *
- * Purpose: Read the HDR Image and HDR Display entries out of a profile's
- *  metadataTag.
+ * Purpose: Read the HDR Image entries out of a profile's metadataTag.
  *
  * Return:
  *  true when a metadataTag was found and read, false when there is none
@@ -776,10 +769,10 @@ bool CIccHdrMetadataReader::Read(const CIccProfile *pProfile)
   bool bParseable;
   double v[2];
 
-  /* --- HDR Image (8.10.4) --- */
+  /* --- HDR Image (8.7.1.4) --- */
 
   /* A single decimal luminance in cd/m^2 - DEFINED, not assumed.  This used to
-   * say ASSUMED, because 8.10.4 NOTE 11 says the encoding is "defined in
+   * say ASSUMED, because 8.7.1.4 NOTE 11 says the encoding is "defined in
    * accordance with ISO 22028-5", which this build does not have.  But the
    * amendment makes the dictType Metadata Registry authoritative for entry
    * encodings, the registry gives CRWL's Value as "Floating point number",
@@ -846,54 +839,13 @@ bool CIccHdrMetadataReader::Read(const CIccProfile *pProfile)
       m_bUnparsed = true;
   }
 
-  /* --- HDR Display (8.10.5) --- */
-
-  /* ASSUMED: a single decimal ratio. 8.10.5 defines the quantity itself
-   * unambiguously - peak luminance over HDR reference white luminance - so
-   * only the textual form is reconstructed here. */
-  bParseable = false;
-  if (icHdrGetDictValue(pDict, kIccHdrKeyDerh, value, bParseable)) {
-    if (bParseable && icHdrParseNumbers(value, v, 1) && icHdrToPositiveFloat(v[0], m_derh)) {
-      m_bHasDerh = true;
-    }
-    else {
-      m_bUnparsed = true;
-    }
-  }
-
-  /* ASSUMED: a single decimal luminance in cd/m^2, as for CRWL.  It is only
-   * ever a divisor (8.10.5 b), and ResolveDisplayHeadroom() refuses a quotient
-   * that is not finite, so the floor here is the normal-float one. */
-  bParseable = false;
-  if (icHdrGetDictValue(pDict, kIccHdrKeyDrwl, value, bParseable)) {
-    if (bParseable && icHdrParseNumbers(value, v, 1) && icHdrToPositiveFloat(v[0], m_drwl)) {
-      m_bHasDrwl = true;
-    }
-    else {
-      m_bUnparsed = true;
-    }
-  }
-
-  /* DCV's shape is no longer a reconstruction.  The ICC HDR Display dictType
-   * registration of 2026-06-24 gives its Value as "Floating point number,
-   * floating point number, 8-bit number", the floats being "the luminance
-   * range (maximum and minimum) of the display" and the byte "color primaries
-   * as per ITU-T H.273" - which is what was read here from 8.10.5's prose on
-   * the registered sibling MDCV's shape, confirmed field for field.  See
-   * HDR-11 for why the registration is still not the registry. */
-  bParseable = false;
-  if (icHdrGetDictValue(pDict, kIccHdrKeyDcv, value, bParseable)) {
-    double lums[2];
-    if (bParseable && icHdrParseRegistryVolume(pProfile, value, 2, lums, m_dcvPrimaries,
-                                               m_bDcvPrimariesResolved, true)) {
-      m_dcvMaxLuminance = (icFloatNumber)lums[0];
-      m_dcvMinLuminance = (icFloatNumber)lums[1];
-      m_bHasDcv = true;
-    }
-    else {
-      m_bUnparsed = true;
-    }
-  }
+  /* DCV, DRWL and DERH are deliberately NOT read.  Their clause, 8.10.5, is
+   * deleted by the 23-09-2026 revision; see the section banner above.  A
+   * profile that still carries them is not thereby defective and draws no
+   * diagnostic - a metadataTag may carry any entry - but nothing in 8.7.1
+   * gives them a meaning, so this reader does not claim one.  They also no
+   * longer count towards HasAnyHdrEntry(): an HDR Display entry on its own is
+   * no longer a statement of HDR intent under any clause. */
 
   return true;
 }
@@ -919,77 +871,14 @@ bool CIccHdrMetadataReader::HasAnyHdrEntry() const
    * recognised key that was present, so it counts as carrying the entry: a
    * profile whose only HDR entry is a mistyped CRWL still states HDR intent,
    * and leaving it out classified that profile as carrying nothing at all. */
-  return m_bHasCrwl || m_bHasCll || m_bHasMdcv || m_bHasCcv ||
-         m_bHasDerh || m_bHasDrwl || m_bHasDcv || m_bUnparsed;
-}
-
-/**
- ****************************************************************************
- * Name: CIccHdrMetadataReader::ResolveDisplayHeadroom
- *
- * Purpose: Apply the precedence of clause 8.10.5 a) to d).
- *
- *  The order is not a fallback chain that stops at the first available value
- *  - it is normative about which value wins when several are available. NOTE
- *  13 is explicit: when all three entries are present and disagree, DERH is
- *  authoritative and the DCV/DRWL derivation "shall not be recomputed". So
- *  the DERH branch returns immediately rather than cross-checking, and the
- *  disagreement is the profile author's to resolve.
- *
- * Args:
- *  headroom = receives the resolved value when the return is not
- *             icHdrHeadroomNone
- *
- * Return:
- *  the rule that produced the value
- *****************************************************************************
- */
-icHdrHeadroomSource CIccHdrMetadataReader::ResolveDisplayHeadroom(icFloatNumber &headroom,
-                                                                  icFloatNumber crwl) const
-{
-  /* a) DERH taken directly */
-  if (m_bHasDerh) {
-    headroom = m_derh;
-    return icHdrHeadroomDerh;
-  }
-
-  /* The HDR Display registration defines a DCV luminance of 0.0 as "unknown",
-   * so an unknown maximum is not a peak and must not feed b) or c): it would
-   * report a headroom of 0 as though the display had been measured at black. */
-  const bool bDcvPeak = m_bHasDcv && m_dcvMaxLuminance > 0.0f;
-
-  /* A rule whose inputs are present but whose quotient is not a finite float
-   * yields NO value rather than falling through to the next rule: the order
-   * is a precedence, so a later rule does not become authoritative because an
-   * earlier one overflowed.  DCV 1e30 over DRWL 1e-30 used to report an
-   * infinite headroom - the value IccCmm.h tells a caller to pass as the
-   * hint's target. */
-
-  /* b) DCV maximum luminance divided by DRWL */
-  if (bDcvPeak && m_bHasDrwl && m_drwl > 0.0f) {
-    return icHdrRatio(m_dcvMaxLuminance, m_drwl, headroom) ? icHdrHeadroomDcvDrwl
-                                                          : icHdrHeadroomNone;
-  }
-
-  /* c) DCV maximum luminance divided by the content reference white.  crwl is
-   * the caller's: the profile-level path passes the value it resolved, HAGC
-   * tag first, so this divisor is the same quantity 8.10.4 divides by and
-   * the one reported as the content reference white.  It used to be this
-   * class's own metadataTag CRWL, which cannot see the HAGC tag. */
-  if (bDcvPeak && crwl > 0.0f) {
-    return icHdrRatio(m_dcvMaxLuminance, crwl, headroom) ? icHdrHeadroomDcvCrwl
-                                                        : icHdrHeadroomNone;
-  }
-
-  /* d) not derivable from the profile */
-  return icHdrHeadroomNone;
+  return m_bHasCrwl || m_bHasCll || m_bHasMdcv || m_bHasCcv || m_bUnparsed;
 }
 
 /**
  ****************************************************************************
  * Name: CIccHdrMetadataReader::ResolveContentHeadroom
  *
- * Purpose: Apply the priority order of clause 8.10.4 a) to c), which the
+ * Purpose: Apply the priority order of clause 8.7.1.4 a) to c), which the
  *  clause states for the Linear (8) transfer only.
  *
  *  Unlike 8.10.5's display order this one always produces a value: c) has no
@@ -1031,9 +920,11 @@ icHdrContentHeadroomSource CIccHdrMetadataReader::ResolveContentHeadroom(icFloat
    * headroom and so switched the transform's target-volume clamp off.
    *
    * A rule that IS selected but whose quotient is not a finite float yields no
-   * value, for the reason ResolveDisplayHeadroom() gives: CLL 1e30 over a CRWL
-   * of 1e-34 is not a headroom, and falling through to MDCV would make the
-   * mastering display authoritative because the content overflowed. */
+   * value rather than falling through: the order is a precedence, so a later
+   * rule does not become authoritative because an earlier one overflowed.
+   * CLL 1e30 over a CRWL of 1e-34 is not a headroom, and falling through to
+   * MDCV would make the mastering display authoritative because the content
+   * overflowed. */
 
   /* a) CLL maximum content light level */
   if (m_bHasCll && m_maxCll > 0.0f) {
@@ -1057,77 +948,72 @@ icHdrContentHeadroomSource CIccHdrMetadataReader::ResolveContentHeadroom(icFloat
 
 /**
  ****************************************************************************
- * Name: icHdrIsRgbInputOrDisplay
+ * Name: icHdrIsRgbColorSpace
  *
- * Purpose: 8.10.1's first membership condition - "An HDR Profile shall be a
- *  three-component matrix-based Input profile (see 8.3.3) or a
- *  three-component matrix-based Display profile (see 8.4.3)" - reduced to the
- *  part of it this revision still requires unconditionally.
+ * Purpose: The structural half of 8.7.1.1's membership test, as 8.7.1.5
+ *  states it: "The data colour space in the profile header shall be RGB.  The
+ *  profile class shall be ColorSpace ('spac')."
  *
- *  The clause names the parent class by its tag set, and then removes six of
- *  that set's tags from an HDR Profile.  What survives is the header: RGB, and
- *  Input or Display.
+ *  This is the whole of it.  Under the previous revision the parent class was
+ *  the three-component matrix-based Input or Display profile, and the clause
+ *  named that parent by its tag set and then removed six of those tags again,
+ *  so the test had to be assembled from what survived.  The ColorSpace
+ *  profile of 8.7 needs no such reconstruction: an HDR ColorSpace Profile
+ *  "shall be a ColorSpace profile (see 8.7) and shall therefore contain all
+ *  tags required of that profile class", with nothing taken away.  The
+ *  required-tag rules of 8.7 are CIccProfile::CheckRequiredTags()'s business,
+ *  as they are for any ColorSpace profile.
  ****************************************************************************
  */
-static bool icHdrIsRgbInputOrDisplay(const CIccProfile *pProfile)
+static bool icHdrIsRgbColorSpace(const CIccProfile *pProfile)
 {
   return pProfile->m_Header.colorSpace == icSigRgbData &&
-         (pProfile->m_Header.deviceClass == icSigInputClass ||
-          pProfile->m_Header.deviceClass == icSigDisplayClass);
+         pProfile->m_Header.deviceClass == icSigColorSpaceClass;
 }
 
 /**
  ****************************************************************************
- * Name: icHdrIsRgbMatrixBased
+ * Name: icHdrIsVersion4
  *
- * Purpose: The CONVENTIONAL three-component matrix-based shape - all six of
- *  the tags 8.3.3 and 8.4.3 require.  This is what 8.10.1 NOTE 3 distinguishes
- *  an HDR Profile from, not a condition of being one.
+ * Purpose: Keep ICC.2 profiles out of an ICC.1 clause.
+ *
+ *  THE LOWER BOUND IS GONE, THE UPPER BOUND IS NOT, and the two came from
+ *  different places.  The previous revision required profileVersionField
+ *  4.5.0.0, and 4.7 of the 23-09-2026 revision withdraws that: the amendment
+ *  is a minor-version change "without requiring any change to the
+ *  profileVersionField".  So a 4.4 or a 4.0 ColorSpace profile carrying a
+ *  conforming cicpTag is an HDR ColorSpace Profile, and Testing/HDR pins that
+ *  with HdrVersion44.
+ *
+ *  The upper bound was never the amendment's; it is what keeps an ICC.1
+ *  clause from being applied to an ICC.2 profile.  This amendment amends
+ *  ICC.1:2022 - its scope sentence, its normative references and every clause
+ *  it touches are ICC.1's - and 8.7, the ColorSpace profile it builds the
+ *  sub-class on, is ICC.1's 8.7.  ICC.2 has its own profile model, its own
+ *  required-tag rules and its own notion of a ColorSpace-class profile, and
+ *  nothing in this amendment reaches into it.  A v5 profile that happens to
+ *  declare 'spac' and carry a PQ cicpTag is therefore not an HDR ColorSpace
+ *  Profile under 8.7.1, and saying otherwise would apply a chain the v5 tag
+ *  model does not define to a profile whose author never asked for it.
+ *
+ *  This is a RULING, not a reading: the revision states no version condition
+ *  at either end.  It is the conservative one - it narrows what this build
+ *  claims rather than widening it - and it is the one that keeps the eight
+ *  v5 BT2100 fixtures in Testing/HDR out of the sub-class, which is what they
+ *  were added to check.  If the ICC extends the sub-class to ICC.2, this
+ *  predicate is the single place that changes.
  ****************************************************************************
  */
-static bool icHdrIsRgbMatrixBased(const CIccProfile *pProfile)
+static bool icHdrIsVersion4(const CIccProfile *pProfile)
 {
-  if (!icHdrIsRgbInputOrDisplay(pProfile))
-    return false;
-
-  return pProfile->IsTagPresent(icSigRedMatrixColumnTag) &&
-         pProfile->IsTagPresent(icSigGreenMatrixColumnTag) &&
-         pProfile->IsTagPresent(icSigBlueMatrixColumnTag) &&
-         pProfile->IsTagPresent(icSigRedTRCTag) &&
-         pProfile->IsTagPresent(icSigGreenTRCTag) &&
-         pProfile->IsTagPresent(icSigBlueTRCTag);
-}
-
-/**
- ****************************************************************************
- * Name: icHdrIsVersion4_5
- *
- * Purpose: Clause 8.10.1's version condition.
- *
- *  "4.5.0.0 or later within v4", not equality with 4.5.0.0.  An amendment is
- *  one link in a chain of amendments against the base major version, and what
- *  it introduces is available at its own version and at every higher one, so
- *  a profile encoding 4.6.0.0 may use everything defined at 4.5.0.0 - clause
- *  8.10 included.  An author encodes the version of the specification it
- *  authored against; a consumer therefore has to accept that version or any
- *  higher one within the major version.
- *
- *  Comparing the whole version word rather than the minor nibble alone keeps
- *  a v5 profile - a different major version with its own tag model - out of
- *  the HDR Profile sub-class.
- ****************************************************************************
- */
-static bool icHdrIsVersion4_5(const CIccProfile *pProfile)
-{
-  return pProfile->m_Header.version >= icVersionNumberV4_5 &&
-         pProfile->m_Header.version < icVersionNumberV5;
+  return pProfile->m_Header.version < icVersionNumberV5;
 }
 
 /**
  ****************************************************************************
  * Name: icHdrHeaderAdmitsMembership
  *
- * Purpose: The clause 8.10.1 membership conditions that need no tag.
+ * Purpose: The clause 8.7.1.1 membership conditions that need no tag.
  *
  *  Composed from the same two predicates icGetHdrProfileInfo() records, so
  *  the early answer and the full classification cannot drift apart.  It
@@ -1147,7 +1033,7 @@ bool icHdrHeaderAdmitsMembership(const CIccProfile *pProfile)
   if (!pProfile)
     return false;
 
-  return icHdrIsRgbInputOrDisplay(pProfile) && icHdrIsVersion4_5(pProfile) &&
+  return icHdrIsRgbColorSpace(pProfile) && icHdrIsVersion4(pProfile) &&
          pProfile->m_Header.pcs == icSigXYZData;
 }
 
@@ -1428,7 +1314,7 @@ bool icHdrHasMalformedChad(const CIccProfile *pProfile)
  ****************************************************************************
  * Name: icBuildHdrForwardMatrix
  *
- * Purpose: Clause 8.10.2 c)'s RGB-to-PCSXYZ matrix, built from the cicpTag's
+ * Purpose: Clause 8.7.1.2 c)'s RGB-to-PCSXYZ matrix, built from the cicpTag's
  *  primaries, with the chromatic adaptation NOTE 2 leaves out.
  *
  *  READ THE HEADER.  The three-step order there is a ruling against defective
@@ -1542,12 +1428,13 @@ icHdrMatrixSource icHdrSelectForwardMatrix(const CIccProfile *pProfile,
   if (!pProfile || !matrix)
     return icHdrMatrixUnavailable;
 
-  bool bColumns = pProfile->IsTagPresent(icSigRedMatrixColumnTag) &&
-                  pProfile->IsTagPresent(icSigGreenMatrixColumnTag) &&
-                  pProfile->IsTagPresent(icSigBlueMatrixColumnTag);
-
+  /* ColourPrimaries 2 needs the cicpType custom chromaticity extension of
+   * 10.3, which this build cannot read - see icCicpPrimariesUnspecified.  It
+   * used to route to the matrix column tags; a ColorSpace profile has none,
+   * and 8.7.1.1 NOTE 2 would take the white point from the extension rather
+   * than from mediaWhitePointTag even if it did. */
   if (nColourPrimaries == icCicpPrimariesUnspecified)
-    return bColumns ? icHdrMatrixFromColumns : icHdrMatrixMissingColumns;
+    return icHdrMatrixNeedsCicpExt;
 
   if (icHdrHasMalformedChad(pProfile))
     return icHdrMatrixMalformedChad;
@@ -1555,33 +1442,19 @@ icHdrMatrixSource icHdrSelectForwardMatrix(const CIccProfile *pProfile,
   if (icBuildHdrForwardMatrix(pProfile, nColourPrimaries, matrix))
     return icHdrMatrixFromCicp;
 
-  return icHdrIsConventionalMatrixTrc(pProfile) ? icHdrMatrixFromColumns : icHdrMatrixUnavailable;
-}
-
-/**
- ****************************************************************************
- * Name: icHdrIsConventionalMatrixTrc
- *
- * Purpose: The conventional matrix/TRC shape - see the header.  Presence only;
- *  a caller reading the tags still has to refuse ones that do not read.
- ****************************************************************************
- */
-bool icHdrIsConventionalMatrixTrc(const CIccProfile *pProfile)
-{
-  return pProfile &&
-         pProfile->IsTagPresent(icSigRedMatrixColumnTag) &&
-         pProfile->IsTagPresent(icSigGreenMatrixColumnTag) &&
-         pProfile->IsTagPresent(icSigBlueMatrixColumnTag) &&
-         pProfile->IsTagPresent(icSigRedTRCTag) &&
-         pProfile->IsTagPresent(icSigGreenTRCTag) &&
-         pProfile->IsTagPresent(icSigBlueTRCTag);
+  /* No second matrix to fall back to.  The conventional matrix/TRC fallback
+   * that stood here served the Input/Display parent class of the previous
+   * revision; a ColorSpace profile carries neither matrix column nor TRC
+   * tags, so there is nothing to fall back to and nothing to be gained by
+   * pretending otherwise. */
+  return icHdrMatrixUnavailable;
 }
 
 /**
  ****************************************************************************
  * Name: icGetHdrProfileInfo
  *
- * Purpose: Classify a profile against clause 8.10 and resolve everything the
+ * Purpose: Classify a profile against clause 8.7.1 and resolve everything the
  *  clause defines a precedence for.
  *
  * Args:
@@ -1597,24 +1470,13 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
   memset(&info, 0, sizeof(info));
   info.nClass = icHdrProfileNone;
   info.contentReferenceWhite = (icFloatNumber)icHdrDefaultContentReferenceWhite;
-  info.nHeadroomSource = icHdrHeadroomNone;
   info.nContentHeadroomSource = icHdrContentHeadroomNone;
 
   if (!pProfile)
     return false;
 
-  info.bRgbInputOrDisplay = icHdrIsRgbInputOrDisplay(pProfile);
-  info.bRgbMatrixBased = icHdrIsRgbMatrixBased(pProfile);
-
-  info.bTrcTagsPresent = pProfile->IsTagPresent(icSigRedTRCTag) ||
-                         pProfile->IsTagPresent(icSigGreenTRCTag) ||
-                         pProfile->IsTagPresent(icSigBlueTRCTag);
-
-  info.bMatrixColumnsPresent = pProfile->IsTagPresent(icSigRedMatrixColumnTag) &&
-                               pProfile->IsTagPresent(icSigGreenMatrixColumnTag) &&
-                               pProfile->IsTagPresent(icSigBlueMatrixColumnTag);
-
-  info.bVersion4_5 = icHdrIsVersion4_5(pProfile);
+  info.bRgbColorSpace = icHdrIsRgbColorSpace(pProfile);
+  info.bVersion4 = icHdrIsVersion4(pProfile);
   info.bPcsXyz = (pProfile->m_Header.pcs == icSigXYZData);
 
   const CIccTag *pCicp = icHdrFindTag(pProfile, icSigCicpTag);
@@ -1640,13 +1502,13 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
   info.bHasAToB0 = pProfile->IsTagPresent(icSigAToB0Tag);
   info.bHasBToA0 = pProfile->IsTagPresent(icSigBToA0Tag);
 
-  /* Content reference white (8.10.4). The HAGC tag carries its own HDR
+  /* Content reference white (8.7.1.4). The HAGC tag carries its own HDR
    * reference white, and when both it and a CRWL entry are present they are
    * describing the same quantity; the HAGC value is preferred because it is
    * the one the gain curve in that same tag was authored against, so using
    * the other would evaluate the curve at a white it was not built for.
    *
-   * PROPOSAL-ISSUE HDR-10: 8.10.4 states no precedence between the two, and
+   * PROPOSAL-ISSUE HDR-10: 8.7.1.4 states no precedence between the two, and
    * its 203 cd/m^2 default is stated twice with different conditions - the
    * Default paragraph fires only when there is neither an HAGC tag nor a CRWL
    * entry, while the Linear priority order restates it as "defaulting to 203
@@ -1675,13 +1537,7 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
     info.bContentReferenceWhiteFromProfile = true;
   }
 
-  /* The reference white resolved just above - HAGC tag first - is passed in,
-   * so 8.10.5 c) divides by the same quantity 8.10.4 does and H7 reports. */
-  if (bHasMeta)
-    info.nHeadroomSource = meta.ResolveDisplayHeadroom(info.displayHeadroom,
-                                                       info.contentReferenceWhite);
-
-  /* Content headroom (8.10.4).  Gated on Linear because that is the only
+  /* Content headroom (8.7.1.4).  Gated on Linear because that is the only
    * transfer the priority order is stated for, and because rule c) would
    * otherwise assert a 1000 cd/m^2 peak for a PQ profile whose transfer
    * already fixes one at 10 000.
@@ -1689,7 +1545,7 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
    * The divisor is info.contentReferenceWhite, resolved just above, not the
    * reader's own CRWL.
    *
-   * PROPOSAL-ISSUE HDR-10: 8.10.4 states the 203 cd/m^2 default twice with
+   * PROPOSAL-ISSUE HDR-10: 8.7.1.4 states the 203 cd/m^2 default twice with
    * different conditions.  The Default paragraph fires only when there is no
    * HAGC tag AND no CRWL entry; the priority order restates it as "defaulting
    * to 203 cd/m^2 when absent" with no HAGC qualifier.  A Linear profile with
@@ -1714,15 +1570,33 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
    * profile's own matrix columns. */
   if (info.bHasCicp) {
     info.bPrimariesResolved = icGetResolvedPrimaries(pProfile, info.nColourPrimaries,
-                                                     info.primaries, &info.bPrimariesFromProfile);
+                                                     info.primaries);
   }
 
-  /* Classification.  The conforming test is the full set of 8.10.1 membership
-   * conditions, and 8.10.1 states them together: the class sentence, the
-   * version sentence, and the cicpTag requirement with its permitted transfer
-   * values.  NOTE 3's "sole tag-level requirement" is scoped to TAGS, which is
-   * why the version is a second, independent marker rather than a redundant
-   * one.
+  /* Classification.  The conforming test is the full set of 8.7.1.1
+   * membership conditions: the ColorSpace class and RGB data colour space of
+   * 8.7.1.5, PCSXYZ (see bPcsXyz in the header for why that one is here), and
+   * the cicpTag requirement with its permitted transfer values.
+   *
+   * THE 23-09-2026 REVISION DELETED THREE TERMS FROM THIS EXPRESSION, and
+   * each deletion is the removal of a test rather than a relaxation of one -
+   * the clause that stated it is gone:
+   *
+   *  - bVersion4_5.  The previous revision required profileVersionField
+   *    4.5.0.0; 4.7 of this one says the amendment is a minor-version change
+   *    "without requiring any change to the profileVersionField".
+   *  - bTrcTagsPresent.  The previous revision prohibited the three TRC tags,
+   *    and their absence was a membership condition.  8.7 defines no TRC tag
+   *    for a ColorSpace profile, so, in the revision's words, "there is
+   *    nothing for this amendment to prohibit".  A ColorSpace profile that
+   *    carries one anyway is already reported by
+   *    CIccProfile::CheckTagExclusion(), which is where a tag with no defined
+   *    interpretation for a class belongs.
+   *  - the matrix column tags.  8.7 defines none, and the ColourPrimaries 2
+   *    case they served now routes to the cicpType extension of 10.3.
+   *    PROPOSAL-ISSUE HDR-15, which recorded that 8.10.1 stated the matrix
+   *    column rule three times at three different strengths, is WITHDRAWN:
+   *    the sentences that disagreed are all gone.
    *
    * Missing a condition is not a defect and is never reported as one - see the
    * icHdrProfileClass comment in the header.  The second state below exists
@@ -1731,49 +1605,17 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
    * class the profile turns out to belong to.  Linear (8) is deliberately not
    * a signal on its own: it is as common in SDR workflows as in HDR ones, and
    * treating it as one would open an HDR section on ordinary profiles. */
-  bool bMembership = info.bRgbInputOrDisplay && info.bVersion4_5 && info.bPcsXyz &&
+  bool bMembership = info.bRgbColorSpace && info.bVersion4 && info.bPcsXyz &&
                      info.bHasCicp && info.bTransferIsHdr;
 
-  /* 8.10.1's two tag-level conditions, which this revision states and the
-   * previous one did not.  Getting these backwards is what made
-   * icHdrProfileConforming unreachable for any profile authored to this
-   * revision: the old test required the six matrix and TRC tags to be
-   * PRESENT, where the clause now requires three of them to be ABSENT.
-   *
-   * The TRC prohibition is unambiguous - "except that the redTRCTag,
-   * greenTRCTag and blueTRCTag shall not be present", and NOTE 3 makes their
-   * absence a distinguishing feature "always" - so it is a condition of
-   * membership here.
-   *
-   * PROPOSAL-ISSUE HDR-15: the matrix column rule is not stated with the same
-   * force, and 8.10.1 gives it three different strengths in three sentences.
-   * The body says they "are likewise NOT REQUIRED"; the next paragraph calls
-   * the pair of rules "Both PROHIBITIONS"; and NOTE 3 relies on their absence
-   * as a discriminator, which only works if it is one.  "Not required" and
-   * "prohibited" are different rules with different consequences: under the
-   * first a profile may carry matrix columns that duplicate what the cicpTag
-   * says, which is exactly the "represents each piece of colorimetric
-   * information exactly once" the same paragraph gives as the rationale.
-   *
-   * Ruled the lenient way: their presence does not cost membership when
-   * ColourPrimaries is not 2, because "not required" is the only one of the
-   * three formulations that is actually a rule about a profile.  Their
-   * ABSENCE does cost membership when ColourPrimaries IS 2, because there the
-   * clause says "shall be present" and without them there is no matrix at
-   * all.  A redundant matrix column tag is a conformance question and belongs
-   * to Validate(), not to whether the profile is an HDR Profile - see
-   * icHdrProfileClass in the header on why membership and conformance are
-   * kept apart. */
-  if (info.bTrcTagsPresent)
-    bMembership = false;
-
-  /* The matrix column tags are deliberately NOT a membership condition, even
-   * when ColourPrimaries is 2 where 8.10.1 says they "shall be present".
-   * NOTE 3 names the two things that DISTINGUISH an HDR Profile - a conforming
-   * cicpTag, and the absence of the TRC tags - and the matrix columns are not
-   * among them; they are a required tag, like the mediaWhitePointTag, and a
-   * profile missing a required tag is a broken member of its class rather than
-   * a non-member.  CIccProfile::CheckHdrProfile() reports their absence. */
+  /* ColourPrimaries 2 is deliberately NOT a membership condition, even though
+   * this build can neither read the cicpType extension 8.7.1.1 requires there
+   * nor build a matrix without it.  The amendment calls such a profile
+   * "non-conforming", not a non-member - it is an HDR ColorSpace Profile that
+   * is broken, exactly as a profile missing a required tag is - and
+   * membership and conformance are kept apart here for the reason
+   * icHdrProfileClass gives.  CIccProfile::CheckHdrProfile() reports it, and
+   * icHdrSelectForwardMatrix() refuses to render it. */
 
   if (bMembership) {
     info.nClass = icHdrProfileConforming;

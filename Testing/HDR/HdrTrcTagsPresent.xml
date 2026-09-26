@@ -1,48 +1,38 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  MEMBERSHIP NEGATIVE for clause 8.10.1: the TRC tags are present.
+  A CONFORMING HDR ColorSpace Profile that carries redTRCTag, greenTRCTag and
+  blueTRCTag, and the fixture that pins the WITHDRAWAL of the TRC prohibition.
 
-  8.10.1 of the 29-08-2026 revision: "the redTRCTag, greenTRCTag and blueTRCTag
-  shall not be present" in an HDR Profile.  The transfer is conveyed by the
-  cicpTag's TransferCharacteristics field instead, and NOTE 3 makes their
-  absence one of the two tag-level features that distinguish an HDR Profile.
+  Under clause 8.10.1 the three TRC tags "shall not be present" in an HDR
+  Profile, their absence was one of the two tag-level features NOTE 3 used to
+  distinguish one, and this fixture was the membership NEGATIVE that proved a
+  classifier still tested for them.  The 23-09-2026 revision builds the
+  sub-class on the ColorSpace profile of 8.7, which never defined those tags
+  for the class in the first place, and says so directly: "there is nothing
+  for this amendment to prohibit".  The prohibition is gone, and with it the
+  membership condition.
 
-  The cicpTag here still declares PQ, so the transfer condition is satisfied and
-  the TRC tags are the only reason this is not an HDR Profile.  That matters:
-  HdrInvalidTransfer.xml also carries TRC tags, but it declares a non-HDR
-  transfer as well, so it fails two conditions at once and cannot tell you which
-  one a classifier stopped testing.  This fixture is what de-confounds it.
+  SO THE FIXTURE INVERTS - but only on one axis, and that is the point of
+  keeping it.  It is now a conforming MEMBER, and it still draws a WARNING:
 
-  Identity curves: what is under test is the presence of the tags, not their
-  content.
+    Warning! - ColorSpaceTag exclusion test failed.
 
-  NOTE: such a profile is a conventional three-component matrix-based Display
-  profile - it has TRC tags, colorants and a cicpTag - so it is well formed and
-  a CMM has a complete rendering path through it.  It is simply not an HDR
-  Profile.
+  CIccProfile::CheckTagExclusion() reports a TRC tag on any class that has no
+  interpretation for one, which ColorSpace has not.  That is a tag-exclusion
+  question about the profile, not a membership question about the sub-class,
+  and this fixture is the only place the two are asserted to differ: a build
+  that conflated them would either refuse membership (the old behaviour) or
+  stop warning (which would lose a real diagnostic).  Its row in
+  Testing/qa-profile-manifest.tsv is `compatibility` for exactly that reason.
 
-  Everything else 8.10.1 requires is satisfied, so this fixture isolates that
-  one condition: a classifier that stopped testing it would misclassify this
-  profile as an HDR Profile, and would still pass every positive in the corpus.
-
-  This profile remains a CONFORMANT ICC profile - see above for any diagnostic
-  this particular fixture is expected to draw.  Failing a membership condition
-  means the profile is not an HDR Profile; it does not make the profile
-  non-conformant, and nothing in 8.10 says otherwise.  That ruling is recorded
-  against HDR-02/HDR-03, both withdrawn on it.
-
-  EXPECTED CLASSIFICATION is icHdrProfileHdrContent - NOT icHdrProfileNone.
-  This profile still carries HDR Image and HDR Display metadata, and that is
-  precisely what the middle bucket of icHdrProfileClass exists for: HDR content
-  a consumer may legitimately act on, sitting in a profile that is not an HDR
-  Profile.  A classifier reduced to a yes/no could not express this verdict at
-  all, which is the second thing these fixtures pin.
+  EXPECTED CLASSIFICATION is icHdrProfileConforming; expected validation
+  verdict is `warning`.
 -->
 <IccProfile>
   <Header>
     <PreferredCMMType>ICCD</PreferredCMMType>
     <ProfileVersion>4.50</ProfileVersion>
-    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <ProfileDeviceClass>spac</ProfileDeviceClass>
     <DataColourSpace>RGB </DataColourSpace>
     <PCS>XYZ </PCS>
     <CreationDateTime>2026-08-05T00:00:00</CreationDateTime>
@@ -55,24 +45,6 @@
     <ProfileCreator>ICCD</ProfileCreator>
   </Header>
   <Tags>
-    <!-- The canonical sRGB/BT.709 colorants adapted to the PCS adopted white,
-         which is what a conforming v4 matrix profile carries: the encoded values
-         are relative to D50, not to the display's own D65. The
-         chromaticAdaptationTag below is the matrix that put them there, so a
-         consumer recovering the source primaries per clause 10.3 NOTE 1 has to
-         apply its inverse to get back to D65. -->
-    <redColorantTag> <XYZArrayType>
-      <XYZNumber X="0.436004638672" Y="0.222503662109" Z="0.013900756836"/>
-    </XYZArrayType> </redColorantTag>
-
-    <greenColorantTag> <XYZArrayType>
-      <XYZNumber X="0.385101318359" Y="0.716903686523" Z="0.097106933594"/>
-    </XYZArrayType> </greenColorantTag>
-
-    <blueColorantTag> <XYZArrayType>
-      <XYZNumber X="0.143096923828" Y="0.060592651367" Z="0.713897705078"/>
-    </XYZArrayType> </blueColorantTag>
-
     <!-- Standard Bradford D65 to D50 adaptation. -->
     <chromaticAdaptationTag> <s15Fixed16ArrayType>
       <Array>
@@ -98,22 +70,23 @@
       <DictEntry Name="CRWL" Value="203.0"/>
       <DictEntry Name="CLL" Value="1000.0 400.0 9"/>
       <DictEntry Name="MDCV" Value="1000.0 0.005 9"/>
-      <DictEntry Name="DERH" Value="4.0"/>
-      <DictEntry Name="DRWL" Value="203.0"/>
-      <DictEntry Name="DCV" Value="1000.0 0.005 1"/>
     </dictType> </metaDataTag>
 
-    <!-- Clause 8.10.1 of the 29-08-2026 revision: "the redTRCTag, greenTRCTag
-         and blueTRCTag shall not be present" in an HDR Profile. The transfer
-         function is conveyed by the cicpTag's TransferCharacteristics field
-         instead, and NOTE 3 makes their absence one of the two tag-level
-         features that distinguish an HDR Profile. This fixture was authored
-         against the previous revision and carried them.
+    <!-- There are no TRC tags and no matrix column tags, and under the
+         23-09-2026 revision that is not a prohibition being obeyed - it is
+         what a ColorSpace profile IS. 8.7 never defines either set for this
+         class, so, in the revision's words, "there is nothing for this
+         amendment to prohibit". The transfer comes from the cicpTag's
+         TransferCharacteristics field and the primaries from its
+         ColourPrimaries field; 8.7.1.1 says the cicpTag "is the only tag that
+         can convey either".
 
-         The AToB0Tag/BToA0Tag pair below is what 8.10.6 makes mandatory, and
-         what NOTE 4 says gives a legacy CMM "a rendering path at all" once the
-         TRC tags are gone. Identity B curves: these fixtures exercise
-         classification and the tone-mapping chain, not the bake's accuracy. -->
+         The AToB0Tag/BToA0Tag pair below is required by 8.7 of every
+         ColorSpace profile, which 8.7.1.5 leans on rather than restates -
+         "both already unconditionally required of every ColorSpace profile by
+         8.7" - and it is what gives a legacy CMM a rendering path. Identity B
+         curves: these fixtures exercise classification and the tone-mapping
+         chain, not the bake's accuracy. -->
 
     <AToB0Tag> <lutAtoBType>
       <Channels InputChannels="3" OutputChannels="3"/>

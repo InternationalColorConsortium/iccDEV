@@ -5,12 +5,12 @@
 
   A three-component matrix-based RGB Display profile at version 4.5.0.0,
   carrying a HAGC tone-mapping descriptor and a cicpTag that declares
-  TransferCharacteristics 13 (IEC 61966-2-1 sRGB). Clause 8.10.1 admits only
-  8 (Linear), 16 (PQ) and 18 (HLG), so this profile is NOT of the clause 8.10
-  HDR Profile sub-class.
+  TransferCharacteristics 13 (IEC 61966-2-1 sRGB). Clause 8.7.1.1 admits only
+  8 (Linear), 16 (PQ) and 18 (HLG), so this profile is NOT of the clause 8.7.1
+  HDR ColorSpace Profile sub-class.
 
-  That is the whole point of the fixture. Clause 8.10.1's conditions are
-  definitional - they say which profiles are HDR Profiles, not what a profile
+  That is the whole point of the fixture. Clause 8.7.1.1's conditions are
+  definitional - they say which profiles are HDR ColorSpace Profiles, not what a profile
   must do - so missing one is not a violation. This is a perfectly valid ICC
   Display profile that happens to carry a cicpTag and a HAGC tag, both of which
   are legal optional tags of its class. It pins the rule that neither
@@ -28,7 +28,7 @@
   <Header>
     <PreferredCMMType>ICCD</PreferredCMMType>
     <ProfileVersion>4.50</ProfileVersion>
-    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <ProfileDeviceClass>spac</ProfileDeviceClass>
     <DataColourSpace>RGB </DataColourSpace>
     <PCS>XYZ </PCS>
     <CreationDateTime>2026-08-05T00:00:00</CreationDateTime>
@@ -41,24 +41,6 @@
     <ProfileCreator>ICCD</ProfileCreator>
   </Header>
   <Tags>
-    <!-- The canonical sRGB/BT.709 colorants adapted to the PCS adopted white,
-         which is what a conforming v4 matrix profile carries: the encoded values
-         are relative to D50, not to the display's own D65. The
-         chromaticAdaptationTag below is the matrix that put them there, so a
-         consumer recovering the source primaries per clause 10.3 NOTE 1 has to
-         apply its inverse to get back to D65. -->
-    <redColorantTag> <XYZArrayType>
-      <XYZNumber X="0.436004638672" Y="0.222503662109" Z="0.013900756836"/>
-    </XYZArrayType> </redColorantTag>
-
-    <greenColorantTag> <XYZArrayType>
-      <XYZNumber X="0.385101318359" Y="0.716903686523" Z="0.097106933594"/>
-    </XYZArrayType> </greenColorantTag>
-
-    <blueColorantTag> <XYZArrayType>
-      <XYZNumber X="0.143096923828" Y="0.060592651367" Z="0.713897705078"/>
-    </XYZArrayType> </blueColorantTag>
-
     <!-- Standard Bradford D65 to D50 adaptation. -->
     <chromaticAdaptationTag> <s15Fixed16ArrayType>
       <Array>
@@ -67,18 +49,6 @@
        -0.009232  0.015076  0.751678
       </Array>
     </s15Fixed16ArrayType> </chromaticAdaptationTag>
-
-    <redTRCTag> <parametricCurveType>
-      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
-    </parametricCurveType> </redTRCTag>
-
-    <greenTRCTag> <parametricCurveType>
-      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
-    </parametricCurveType> </greenTRCTag>
-
-    <blueTRCTag> <parametricCurveType>
-      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
-    </parametricCurveType> </blueTRCTag>
 
     <mediaWhitePointTag> <XYZArrayType>
       <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
@@ -101,8 +71,30 @@
       </HagcMetadata>
     </headroomAdaptiveGainCurveType> </headroomAdaptiveGainCurveTag>
 
+    <!-- The AToB0Tag/BToA0Tag pair that 8.7 requires unconditionally of every
+         ColorSpace profile.  Without it this fixture is critically invalid as a
+         ColorSpace profile, which would confound the one thing it is for:
+         isolating the TransferCharacteristics membership condition. -->
+    <AToB0Tag> <lutAtoBType>
+      <Channels InputChannels="3" OutputChannels="3"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+    </lutAtoBType> </AToB0Tag>
+
+    <BToA0Tag> <lutBtoAType>
+      <Channels InputChannels="3" OutputChannels="3"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+    </lutBtoAType> </BToA0Tag>
+
     <profileDescriptionTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR negative fixture: cicp TransferCharacteristics 13 is not permitted in an HDR Profile]]></LocalizedText>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR negative fixture: cicp TransferCharacteristics 13 is not permitted in an HDR ColorSpace Profile]]></LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>
 
     <copyrightTag> <multiLocalizedUnicodeType>

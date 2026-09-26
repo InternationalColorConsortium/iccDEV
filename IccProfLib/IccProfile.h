@@ -281,7 +281,7 @@ protected:
   icValidateStatus CheckLinkPcsSpace(std::string &sReport) const;
   icValidateStatus CheckTagTypes(std::string &sReport) const;
 
-  // ICC.1 clause 8.10 HDR Profiles. Kept out of CheckRequiredTags() because
+  // ICC.1 clause 8.7.1 HDR ColorSpace Profiles. Kept out of CheckRequiredTags() because
   // what it checks is not tag presence: the rules span the header version, a
   // cicpTag field value, and the pairing of AToBx with BToAx, and each needs a
   // message naming the clause it comes from rather than the shared

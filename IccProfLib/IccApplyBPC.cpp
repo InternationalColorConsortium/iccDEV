@@ -291,7 +291,7 @@ bool CIccApplyBPC::calcBlackPoint(const CIccProfile* pProfile, const CIccXform* 
 * Name: icBpcHdrHints
 *
 * Purpose:
-*  An xform on the ICC.1 clause 8.10.2 HDR chain renders through neither the
+*  An xform on the ICC.1 clause 8.7.1.2 HDR chain renders through neither the
 *  profile's AToB/BToA LUTs nor its TRC tags, so a black point found through a
 *  hint-less CMM describes a pipeline the xform never applies: the SDR fallback
 *  pair, or nothing at all for a profile without one.  This builds the same HDR
@@ -430,7 +430,7 @@ bool CIccApplyBPC::calcDstBlackPoint(const CIccProfile* pProfile, const CIccXfor
 	icFloatNumber pcsPixel[3];
 
 	// check if the profile is lut based gray, rgb or cmyk.  An xform on the
-	// clause 8.10.2 HDR chain is not: its BToA0Tag is the SDR fallback the chain
+	// clause 8.7.1.2 HDR chain is not: its BToA0Tag is the SDR fallback the chain
 	// never applies, and the chain itself is matrix-based, so it takes the
 	// source procedure below as a matrix/TRC destination does.
 	if (pXform->GetXformType() != icXformTypeMatrixTrcHdr && pProfile->IsTagPresent(icSigBToA0Tag) && 

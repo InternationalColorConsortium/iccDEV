@@ -2192,9 +2192,9 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
         break;
     case 0x04:
         bcdpair = (icUInt8Number)((m_Header.version & 0x00FF0000) >> 16);
-        // Raised from 0x40 to 0x50 for the HDR Profiles amendment, which advances
+        // Raised from 0x40 to 0x50 for the HDR ColorSpace Profiles amendment, which advances
         // the ICC.1 profile format version to 4.5.0.0 (its clause 4.7). Without
-        // this every conforming HDR Profile would draw "Version 4 minor number is
+        // this every conforming HDR ColorSpace Profile would draw "Version 4 minor number is
         // unexpected" purely for declaring the version the amendment requires of
         // it. The low nibble test is unchanged: the minor number is BCD, so 0x45
         // stays as invalid as it was.
@@ -2335,19 +2335,66 @@ bool CIccProfile::CheckTagExclusion(std::string &sReport) const
   snprintf(buf, bufSize, "%s", Info.GetSigName(m_Header.deviceClass));
   if (m_Header.deviceClass!=icSigInputClass && m_Header.deviceClass!=icSigDisplayClass &&
       m_Header.deviceClass != icSigColorEncodingClass) {
-    // headroomAdaptiveGainCurveTag joins this list because its own amendment
-    // restricts it the same way the tags already here are restricted: it "may
-    // be present when the data colour space in the profile header is RGB, and
-    // the profile class in the profile header is Input or Display", and "shall
-    // not be present for other data colour spaces or profile classes".
+    // THE cicpTag AND THE HAGC TAG ARE NO LONGER PART OF THIS GROUP, because
+    // the ColorSpace class may now carry both and the six matrix/TRC tags
+    // beside them may not.  They are tested separately, below, on their own
+    // class lists.
     if (GetTag(icSigGrayTRCTag) || GetTag(icSigRedTRCTag) || GetTag(icSigGreenTRCTag) ||
        GetTag(icSigBlueTRCTag) || GetTag(icSigRedColorantTag) || GetTag(icSigGreenColorantTag) ||
-       GetTag(icSigBlueColorantTag) || GetTag(icSigCicpTag) ||
-       GetTag(icSigHeadroomAdaptiveGainCurveTag))
+       GetTag(icSigBlueColorantTag))
     {
       sReport += icMsgValidateWarning;
       sReport += buf;
       sReport += "Tag exclusion test failed.\n";
+      rv = false;
+    }
+  }
+
+  // cicpTag, per 9.2.17 AS AMENDED BY 4.4 of the HDR ColorSpace Profiles
+  // amendment: "This tag may be present when the data colour space in the
+  // profile header is RGB, YCbCr, or XYZ, and the profile class in the
+  // profile header is Input, Display, or ColorSpace.  The tag shall not be
+  // present for other data colour spaces or profile classes indicated in the
+  // profile header."  The amendment's sole change to 9.2.17 is the addition
+  // of "or ColorSpace", which the sub-class of 8.7.1 depends on entirely: the
+  // cicpTag is the only tag a ColorSpace profile can carry that identifies a
+  // transfer function or a set of primaries.
+  //
+  // icSigColorEncodingClass is kept from the group above.  That is a v5
+  // class, outside ICC.1's 9.2.17 altogether, and nothing in this amendment
+  // touches it.
+  if (m_Header.deviceClass != icSigInputClass && m_Header.deviceClass != icSigDisplayClass &&
+      m_Header.deviceClass != icSigColorSpaceClass &&
+      m_Header.deviceClass != icSigColorEncodingClass) {
+    if (GetTag(icSigCicpTag)) {
+      sReport += icMsgValidateWarning;
+      sReport += buf;
+      sReport += "Tag exclusion test failed (cicpTag).\n";
+      rv = false;
+    }
+  }
+
+  // headroomAdaptiveGainCurveTag.  Its own amendment restricts it to "Input
+  // or Display", and this amendment does NOT extend that sentence the way its
+  // 4.4 extends 9.2.17's - but 8.7.1.3 a) ranks the HAGC tag as the FIRST
+  // tone-mapping descriptor of an HDR ColorSpace Profile and 8.7.1.5 lists it
+  // among what such a profile "may additionally contain", and an HDR
+  // ColorSpace Profile is by 8.7.1.5 a 'spac' profile.
+  //
+  // PROPOSAL-ISSUE HDR-22, and this is the ruling that decides it: the HDR
+  // clauses govern.  They are the later and the more specific statement, and
+  // reading the HAGC amendment's class list as exhaustive would make the
+  // highest-ranked descriptor of 8.7.1.3 unusable in the only class 8.7.1
+  // admits - which cannot be what an amendment that lists the tag twice as
+  // permitted content intends.  The amendment needs a companion sentence for
+  // the HAGC tag's own class permission; raise it.
+  if (m_Header.deviceClass != icSigInputClass && m_Header.deviceClass != icSigDisplayClass &&
+      m_Header.deviceClass != icSigColorSpaceClass &&
+      m_Header.deviceClass != icSigColorEncodingClass) {
+    if (GetTag(icSigHeadroomAdaptiveGainCurveTag)) {
+      sReport += icMsgValidateWarning;
+      sReport += buf;
+      sReport += "Tag exclusion test failed (headroomAdaptiveGainCurveTag).\n";
       rv = false;
     }
   }
@@ -2805,8 +2852,8 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
       // Gated at 4.4 rather than at 4.5, matching the cicpTag above. The HAGC
       // amendment describes itself as adding "an optional version 4 tag" and
       // supersedes the adaptiveGainCurveTag that shipped in 4.4; it never ties
-      // itself to 4.5. Version 4.5.0.0 is one of clause 8.10.1's conditions for
-      // being an HDR Profile, which is a question of classification and not of
+      // itself to 4.5. Version 4.5.0.0 is one of clause 8.7.1.1's conditions for
+      // being an HDR ColorSpace Profile, which is a question of classification and not of
       // conformance - a 4.4 profile carrying a HAGC tag is simply not an HDR
       // Profile. Failing here would make it non-compliant on tag-type grounds,
       // which the tag's own amendment does not say.
@@ -3699,27 +3746,37 @@ icValidateStatus CIccProfile::CheckTagLayout(CIccIO *pIO, std::string &sReport) 
 ******************************************************************************
 * Name: CIccProfile::CheckHdrProfile
 *
-* Purpose: Apply the rules of ICC.1 clause 8.10 (HDR Profiles) to this profile.
+* Purpose: Apply the rules of ICC.1 clause 8.7.1 (HDR ColorSpace Profiles) to this profile.
 *
-*  Clause 8.10.1's four conditions - version 4.5.0.0, a three-component
+*  Clause 8.7.1.1's four conditions - version 4.5.0.0, a three-component
 *  matrix-based RGB Input or Display profile, a cicpTag, and a
 *  TransferCharacteristics of 8, 16 or 18 - are DEFINITIONAL. They say which
-*  profiles are HDR Profiles; they are not requirements a profile can fail.
+*  profiles are HDR ColorSpace Profiles; they are not requirements a profile can fail.
 *  A matrix/TRC profile whose cicpTag says TransferCharacteristics 13 is an
 *  ordinary Display profile that carries a cicpTag, and it is a perfectly valid
 *  ICC profile. Reporting an error or a warning against it would be inventing a
 *  defect, so nothing here does. Non-membership produces no message at all.
 *
-*  What is left for this function is the one requirement clause 8.10 places on
-*  a profile that IS an HDR Profile and that ICC.1's other checks do not
-*  already cover: the AToBx / BToAx pairing rule of 8.10.6. Every other "shall"
-*  in clause 8.10 is either one of the membership conditions above or is
-*  addressed to the consuming CMM (8.10.2's derivation of the operator, 8.10.4
-*  and 8.10.5's "shall be made available", the 203 cd/m^2 default), and none of
-*  those is testable against a file.
+*  TWO requirements are left for this function - the ones clause 8.7.1 places
+*  on a profile that IS an HDR ColorSpace Profile and that ICC.1's other checks
+*  do not already cover:
 *
-*  Levels follow the amendment's own wording: the pairing rule is a "shall" in
-*  8.10.6, so it is NonCompliant.
+*    - the cicpType custom chromaticity extension of 10.3, which 8.7.1.1
+*      requires when ColourPrimaries is 2;
+*    - the AToBx / BToAx pairing rule of 8.7.1.5, for x = 1 and x = 2.
+*
+*  The AToB0/BToA0 pair is NOT among them any more.  8.7.1.5 defers it to 8.7,
+*  which requires it of every ColorSpace profile, and CheckRequiredTags()
+*  raises that as a critical error - so checking it here too would report one
+*  defect twice at two severities.
+*
+*  Every other "shall" in clause 8.7.1 is either one of the membership
+*  conditions above or is addressed to the consuming CMM (8.7.1.2's derivation
+*  of the operator, 8.7.1.4's "shall be made available", the 203 cd/m^2
+*  default), and none of those is testable against a file.
+*
+*  Levels follow the amendment's own wording: both surviving rules are
+*  "shall"s, so both are NonCompliant.
 *
 * Args:
 *  sReport = String to add report information to
@@ -3743,8 +3800,8 @@ icValidateStatus CIccProfile::CheckHdrProfile(std::string &sReport) const
   if (!icGetHdrProfileInfo(this, info))
     return rv;
 
-  /* Only an HDR Profile is subject to clause 8.10's requirements. A profile
-   * that carries HDR-related content without meeting 8.10.1 belongs to some
+  /* Only an HDR ColorSpace Profile is subject to clause 8.7.1's requirements. A profile
+   * that carries HDR-related content without meeting 8.7.1.1 belongs to some
    * other class and is judged by that class's rules, which the rest of
    * Validate() already applies. */
   if (info.nClass != icHdrProfileConforming)
@@ -3753,122 +3810,89 @@ icValidateStatus CIccProfile::CheckHdrProfile(std::string &sReport) const
   const size_t hdrBufSize = 320;
   icChar hdrBuf[hdrBufSize];
 
-  /* Clause 8.10.6's required tags, the HDR-specific ones that nothing else in
+  /* Clause 8.7.1.5's required tags, the HDR-specific ones that nothing else in
    * Validate() covers.
    *
-   * "An RGB HDR Profile shall additionally contain, for backward
-   * compatibility with consumers that do not implement HDR processing:
-   * AToB0Tag (9.2.1), REQUIRED REGARDLESS OF PROFILE CLASS; when the profile
-   * class is Display ('mntr'), the paired BToA0Tag (9.2.6) is also required."
+   * THE AToB0Tag / BToA0Tag PAIR IS NO LONGER CHECKED HERE.  8.7.1.5 still
+   * requires it - "AToB0Tag (9.2.1) and BToA0Tag (9.2.6)" - but adds, in the
+   * same sentence, "both already unconditionally required of every ColorSpace
+   * profile by 8.7", and CheckRequiredTags() enforces exactly that for the
+   * ColorSpace class: its v4 branch raises a CRITICAL error when either is
+   * absent.  Repeating it here would report one defect twice, at a lower
+   * severity than the pass that already has it.
    *
-   * CheckRequiredTags() does not catch either.  Its Display branch accepts the
-   * pair OR the six matrix/TRC tags, and its Input branch likewise, so a
-   * profile that satisfies one alternative is never asked about the other -
-   * which is right for a conventional profile and wrong for an HDR Profile,
-   * where 8.10.6 requires the pair on top of everything else.
+   * That is a real change and not a simplification.  Under the previous
+   * revision the pair was an ADDITIONAL requirement the parent class did not
+   * make - CheckRequiredTags()'s Input and Display branches accept the LUT
+   * pair OR the six matrix/TRC tags, so a matrix/TRC profile satisfying one
+   * alternative was never asked about the other - and this function was the
+   * only thing that asked.  Building the sub-class on the ColorSpace profile
+   * moves the requirement into the parent, where it is checked harder.
    *
-   * NOTE 4 explains why it is mandatory rather than recommended: without it "a
-   * legacy CMM would have no matrix/TRC path to fall back to and could not
-   * produce a rendering from the profile at all", the TRC tags being
-   * prohibited. */
-  if (!IsTagPresent(icSigAToB0Tag)) {
+   * 8.7.1.5 also says the AToB0Tag "shall carry an HDR->SDR tone mapping
+   * (i.e. its target headroom shall be equal to 1.0)".  Nothing to check: the
+   * AToB0Tag exists for pre-HDR consumers, which are SDR - target headroom
+   * 1.0 - by definition, so the parenthetical states what an AToB0Tag already
+   * means under ICC.1 rather than a property verifiable from the file.  How
+   * good the HDR->SDR mapping is remains a rendering-quality matter, as it is
+   * for any AToB0Tag. */
+
+  /* Clause 8.7.1.1, ColourPrimaries 2: "When ColourPrimaries is equal to 2
+   * (Unspecified), the cicpType shall carry the custom chromaticity extension
+   * of 10.3", and NOTE 2 is explicit about the consequence - "An HDR
+   * ColorSpace Profile whose ColourPrimaries is 2 without that extension
+   * present is non-conforming, because 8.7.1.2 c) would then have no
+   * chromaticities to compute the matrix from."
+   *
+   * BLOCKED, AND THE DIAGNOSTIC SAYS SO.  ICC.1:2022 10.3 Table 32 is twelve
+   * bytes ending at VideoFullRangeFlag, and the amendment that appends the
+   * chromaticity array - the CICP Unspecified Primaries Amendment Proposal
+   * v2, named in this amendment's normative references - is not available to
+   * this build, so CIccTagCicp reads twelve bytes and cannot tell a profile
+   * that carries the extension from one that omits it.
+   *
+   * Reported as NonCompliant rather than passed over, because the outcome is
+   * the same either way: with no readable chromaticities there is no matrix,
+   * and icHdrSelectForwardMatrix() refuses to render the profile.  Saying
+   * nothing here would leave a profile that cannot be rendered validating
+   * clean.  The wording names what is missing on both sides so that a reader
+   * whose profile does carry the extension knows the finding is this build's
+   * limitation and not their file's defect.
+   *
+   * This replaces the matrix-column-tag check that stood here.  Under the
+   * previous revision ColourPrimaries 2 required redMatrixColumnTag,
+   * greenMatrixColumnTag and blueMatrixColumnTag to be present and used
+   * directly as the matrix; a ColorSpace profile defines none of the three,
+   * and 8.7.1.1 NOTE 2 now takes the white point from the extension rather
+   * than from mediaWhitePointTag even where they existed. */
+  if (info.nColourPrimaries == icCicpPrimariesUnspecified) {
     sReport += icMsgValidateNonCompliant;
-    sReport += "HDR: AToB0Tag missing; clause 8.10.6 requires it in every RGB HDR Profile,\n"
-               "  regardless of profile class, as the fallback for consumers that do not\n"
-               "  implement HDR processing.\n";
+    sReport += "HDR: cicpTag ColourPrimaries is 2 (Unspecified). Clause 8.7.1.1 requires the\n"
+               "  cicpType to carry the custom chromaticity extension of 10.3 in that case, and\n"
+               "  8.7.1.2 c) has no other source for the RGB-to-PCSXYZ matrix. This build reads\n"
+               "  only the twelve bytes of ICC.1:2022 10.3 Table 32 and cannot read that\n"
+               "  extension, so it can neither confirm one is present nor derive a matrix from\n"
+               "  it; the profile will not render through the clause 8.7.1.2 chain.\n";
     rv = icMaxStatus(rv, icValidateNonCompliant);
   }
 
-  if (m_Header.deviceClass == icSigDisplayClass && !IsTagPresent(icSigBToA0Tag)) {
-    /* Reported by the pairing sweep below as well when the AToB0Tag is
-     * present; kept separate because the two are different requirements - one
-     * is a required tag, the other is a rule about tags that are present - and
-     * a profile can fail this one with no AToBxTag at all.  That is also why
-     * it is not an else of the AToB0Tag check above: a Display profile missing
-     * both tags breaks both requirements, and used to be told of only one. */
-    sReport += icMsgValidateNonCompliant;
-    sReport += "HDR: BToA0Tag missing; clause 8.10.6 requires it in a Display-class RGB HDR\n"
-               "  Profile alongside the mandatory AToB0Tag.\n";
-    rv = icMaxStatus(rv, icValidateNonCompliant);
-  }
-
-  /* Nothing to check here: 8.10.6 also says the AToB0Tag "shall carry an
-   * HDR->SDR tone mapping (i.e. its target headroom shall be equal to 1.0)".
-   * The AToB0Tag exists for compatibility with pre-HDR workflows, which are
-   * SDR - target headroom 1.0 - by definition, so the parenthetical states
-   * what an AToB0Tag already means under ICC.1 rather than a property to
-   * verify from the file.  How good the HDR->SDR mapping is remains a
-   * rendering-quality matter, as it is for any AToB0Tag. */
-
-  /* Clause 8.10.5 is addressed to one profile class and one only: "An HDR
-   * Profile of the Display class ('mntr') may convey HDR display metadata via
-   * the metadataTag", and 8.10.1's bullet repeats the condition - HDR display
-   * metadata is "applicable when the profile is of the Display class
-   * ('mntr')".  The registration of 2026-06-24 files all three under a
-   * category named HDR Display for the same reason.
+  /* Clause 8.7.1.5: "When an HDR ColorSpace Profile contains an AToBxTag (see
+   * 9.2.1), the corresponding BToAxTag (see 9.2.6) shall also be present."
    *
-   * An Input-class HDR Profile carrying DERH, DCV or DRWL is therefore outside
-   * the only clause that gives those entries meaning.  Nothing forbids the
-   * bytes - the entries are Optional and a metadataTag may carry anything -
-   * so this is INFORMATION, not a defect: the profile is well formed and a
-   * consumer simply has no rule telling it what to do with them.
+   * PROPOSAL-ISSUE HDR-09 IS RESOLVED BY THE REVISION, in the direction the
+   * ruling here had already taken.  Under the previous revision 8.10.3 c)
+   * stated the pairing rule with no class condition while 8.10.6 confined it
+   * to Display, and the two could not both hold; this function followed
+   * 8.10.6 on the ground that 8.10.3 is headed "informative" and an
+   * informative clause cannot impose a requirement.  The revision states the
+   * rule once, in normative 8.7.1.5, with no class condition at all - there
+   * is only the one class now - so the class guard that used to stand here is
+   * gone and the sweep applies to every HDR ColorSpace Profile.
    *
-   * CIccHdrMetadataReader still reads and reports them, deliberately.  It
-   * reports what the file contains; suppressing an entry that is present would
-   * make it lie about the bytes, and it is the consumer that owns scope. */
-  if (m_Header.deviceClass != icSigDisplayClass) {
-    CIccHdrMetadataReader meta;
-
-    if (meta.Read(this) &&
-        (meta.HasDisplayHeadroom() || meta.HasDisplayColourVolume() ||
-         meta.HasDisplayReferenceWhite())) {
-      sReport += icMsgValidateInformation;
-      sReport += "HDR: the metadataTag carries HDR Display entries (DERH, DCV or DRWL) in a\r\n"
-                 "  profile that is not of the Display class; clause 8.10.5 applies them only to\r\n"
-                 "  'mntr' profiles, so nothing in clause 8.10 gives them a meaning here.\r\n";
-    }
-  }
-
-  /* Clause 8.10.6, and the matrix columns it makes conditional: "the
-   * redMatrixColumnTag, greenMatrixColumnTag and blueMatrixColumnTag are
-   * required if and only if the cicpTag's ColourPrimaries field is equal to 2
-   * (Unspecified)".  Only the "if" half is checked here.  The "only if" half
-   * is PROPOSAL-ISSUE HDR-15: 8.10.1 states the same rule three ways, once as
-   * "not required" and twice as a prohibition, and a redundant matrix column
-   * tag is not reported on the strength of the two that disagree with the
-   * one that is actually a rule about a profile. */
-  if (info.nColourPrimaries == icCicpPrimariesUnspecified &&
-      (!IsTagPresent(icSigRedMatrixColumnTag) || !IsTagPresent(icSigGreenMatrixColumnTag) ||
-       !IsTagPresent(icSigBlueMatrixColumnTag))) {
-    sReport += icMsgValidateNonCompliant;
-    sReport += "HDR: cicpTag ColourPrimaries is 2 (Unspecified) but the matrix column tags are\n"
-               "  not all present; clause 8.10.6 requires them in that case, and 8.10.2 c) has\n"
-               "  no other source for the RGB-to-PCSXYZ matrix.\n";
-    rv = icMaxStatus(rv, icValidateNonCompliant);
-  }
-
-  /* Clause 8.10.6: "When a Display RGB HDR Profile contains an AToBxTag (see
-   * 9.2.1), the corresponding BToAxTag (see 9.2.5) shall also be present."
-   *
-   * PROPOSAL-ISSUE HDR-09 - and this is the ruling that decides it.  8.10.3 c)
-   * says "Whenever an AToBxTag is present, its paired BToAxTag shall also be
-   * present", with no class condition, which would extend the rule to Input
-   * profiles.  8.10.6 confines it to Display.  The two cannot both hold now
-   * that the AToB0Tag is mandatory in both classes.
-   *
-   * 8.10.3's own heading resolves it: "Tone-mapping descriptors (INFORMATIVE
-   * precedence)".  An informative clause cannot impose a requirement, so its
-   * "shall" has no force and 8.10.6 - which is normative - governs.  That an
-   * informative clause contains a "shall" at all is itself worth raising, and
-   * is recorded under HDR-09.
-   *
-   * Not already covered: the Display branch of CheckRequiredTags() tests A2B0
-   * and B2A0 only as a *pair* against the matrix/TRC alternative, so a profile
-   * with A2B0, no B2A0 and a complete matrix/TRC set passes it without
-   * comment. Scoped to the Display class and swept over all three x, both as
-   * the clause states it - an Input HDR Profile is outside the sentence, and
-   * the rule is not specific to x = 0. */
-  if (m_Header.deviceClass == icSigDisplayClass) {
+   * Not already covered: CheckRequiredTags() tests A2B0 and B2A0 for the
+   * ColorSpace class, but says nothing about x = 1 and x = 2.  Swept over all
+   * three because the rule is not specific to x = 0. */
+  {
     static const struct {
       icTagSignature aToB;
       icTagSignature bToA;
@@ -3883,8 +3907,8 @@ icValidateStatus CIccProfile::CheckHdrProfile(std::string &sReport) const
     for (i = 0; i < sizeof(pairs) / sizeof(pairs[0]); i++) {
       if (IsTagPresent(pairs[i].aToB) && !IsTagPresent(pairs[i].bToA)) {
         snprintf(hdrBuf, hdrBufSize,
-                 "HDR: AToB%sTag present without its paired BToA%sTag; clause 8.10.6 requires the\n"
-                 "  pair when a Display RGB HDR Profile contains an AToBxTag.\n",
+                 "HDR: AToB%sTag present without its paired BToA%sTag; clause 8.7.1.5 requires the\n"
+                 "  pair whenever an HDR ColorSpace Profile contains an AToBxTag.\n",
                  pairs[i].szIndex, pairs[i].szIndex);
         sReport += icMsgValidateNonCompliant;
         sReport += hdrBuf;
@@ -3896,11 +3920,11 @@ icValidateStatus CIccProfile::CheckHdrProfile(std::string &sReport) const
   /* IMPL-02: VideoFullRangeFlag is not acted on anywhere in this
    * implementation, and a reader has no other way to find that out.
    *
-   * This is a WARNING about US, not about the file.  Clause 8.10 never
-   * mentions the field, so a narrow-range HDR Profile violates nothing, and
+   * This is a WARNING about US, not about the file.  Clause 8.7.1 never
+   * mentions the field, so a narrow-range HDR ColorSpace Profile violates nothing, and
    * the wording below says so.  It is not merely Information because the
    * consequence is a wrong rendering rather than a fact worth knowing: the
-   * transfer of a clause 8.10 profile is implied by
+   * transfer of a clause 8.7.1 profile is implied by
    * cicpTag.TransferCharacteristics and applied directly, with no curve to
    * carry a range expansion the way a v5 multiProcessElement pipeline does,
    * so the EOTF is evaluated on unexpanded code values.
@@ -3917,7 +3941,7 @@ icValidateStatus CIccProfile::CheckHdrProfile(std::string &sReport) const
    * this field and are what pin the behaviour either way. */
   if (info.bHasCicp && !info.bVideoFullRange) {
     sReport += icMsgValidateWarning;
-    sReport += "HDR: cicpTag VideoFullRangeFlag is 0 (narrow range). Clause 8.10 does not\r\n"
+    sReport += "HDR: cicpTag VideoFullRangeFlag is 0 (narrow range). Clause 8.7.1 does not\r\n"
                "  mention the field, so this profile violates nothing, but this implementation\r\n"
                "  does not expand narrow-range values: the transfer function is evaluated on\r\n"
                "  the encoded values as received.\r\n";
@@ -3945,7 +3969,7 @@ icValidateStatus CIccProfile::Validate(std::string &sReport, std::string sSigPat
   // Check Required Tags which includes exclusion tests
   rv = icMaxStatus(rv, CheckRequiredTags(sReport, pParentProfile));
 
-  // ICC.1 clause 8.10 HDR Profiles. Runs after the required-tag pass so that a
+  // ICC.1 clause 8.7.1 HDR ColorSpace Profiles. Runs after the required-tag pass so that a
   // profile already missing critical tags is reported for that first; the HDR
   // rules assume a structurally complete profile and would otherwise pile a
   // second, less useful message on top of the same defect.

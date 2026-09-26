@@ -86,7 +86,7 @@
 #include "IccSparseMatrix.h"
 #include "IccEncoding.h"
 #include "IccMatrixMath.h"
-// Clause 8.10 HDR Profile classification and the resolved cicp/metadata
+// Clause 8.7.1 HDR ColorSpace Profile classification and the resolved cicp/metadata
 // values CIccXformMatrixTrcHdr::Begin() sets itself up from.
 #include "IccHdrProfile.h"
 #include <cassert>
@@ -505,12 +505,12 @@ void CIccXform::DetachAll()
 * Name: icUseHdrToneMapPath
 *
 * Purpose:
-*  Decide whether to build the clause 8.10.2 tone-mapping chain for this
+*  Decide whether to build the clause 8.7.1.2 tone-mapping chain for this
 *  profile instead of resolving it through the ordinary A2B/B2A cascade.
 *
 *  This runs *before* the cascade, not after it, because the cascade's whole
 *  job is to find a LUT and the HDR path's whole point is that a LUT is the
-*  last-choice descriptor (8.10.3 c), below both the HAGC tag and a
+*  last-choice descriptor (8.7.1.3 c), below both the HAGC tag and a
 *  CMM-supplied operator.  Asking afterwards would mean the question is only
 *  ever reached for profiles that have no LUT at all.
 *
@@ -550,10 +550,10 @@ static bool icUseHdrToneMapPath(CIccProfile *pProfile, bool bInput,
   if (!icGetHdrProfileInfo(pProfile, info))
     return false;
 
-  // Only a profile that satisfies clause 8.10.1 in full.  icHdrProfileHdrContent
+  // Only a profile that satisfies clause 8.7.1.1 in full.  icHdrProfileHdrContent
   // is not enough: a profile carrying HDR-related content without the version,
   // the matrix-based RGB structure or a cicpTag naming a permitted transfer is
-  // not an HDR Profile at all, so clause 8.10.2 gives it no tone-mapping step
+  // not an HDR ColorSpace Profile at all, so clause 8.7.1.2 gives it no tone-mapping step
   // to insert.  Augmenting its chain anyway would render it unlike every other
   // implementation, which follows the class it actually belongs to.
   if (info.nClass != icHdrProfileConforming)
@@ -563,7 +563,7 @@ static bool icUseHdrToneMapPath(CIccProfile *pProfile, bool bInput,
 
   switch (pHdrHint->m_nPolicy) {
     case icHdrToneMapPreferHagc:
-      // The recommended ranking of 8.10.3 stated as a requirement.  Note this
+      // The recommended ranking of 8.7.1.3 stated as a requirement.  Note this
       // still engages when the profile carries no HAGC tag: the chain is then
       // the identity tone-mapping operator of NOTE 6, which is not a no-op -
       // it is the analytic EOTF applied without a sampled TRC's 1.0 ceiling.
@@ -576,29 +576,29 @@ static bool icUseHdrToneMapPath(CIccProfile *pProfile, bool bInput,
 
     case icHdrToneMapAuto:
     default:
-      // 8.10.3's ranking, followed as stated: a) the HAGC tag, b) the
+      // 8.7.1.3's ranking, followed as stated: a) the HAGC tag, b) the
       // application or CMM operator, c) the AToB0Tag, last.
       //
       // This used to return `bHasHagc || !bHasLut`, ranking the baked LUT
       // ABOVE this build's own operator on the grounds that a LUT the author
       // rendered beats an identity.  That reasoning was written when the
-      // AToB0Tag was optional.  8.10.6 now makes the pair MANDATORY, so every
-      // conforming HDR Profile carries one and the old test would have
-      // disabled the 8.10.2 chain for every profile without a HAGC tag - the
+      // AToB0Tag was optional.  8.7.1.5 now makes the pair MANDATORY, so every
+      // conforming HDR ColorSpace Profile carries one and the old test would have
+      // disabled the 8.7.1.2 chain for every profile without a HAGC tag - the
       // amendment's central mechanism, dead in the common case.
       //
-      // 8.10.1 NOTE 4 settles which way round it goes: the mandatory pair is
+      // 8.7.1.1 NOTE 4 settles which way round it goes: the mandatory pair is
       // "A backward-compatible HDR->SDR fallback for consumers that do not
       // implement HDR processing", and where no descriptor is present "the
-      // choice of how to perform the tone-mapping step of 8.10.2 is left to
+      // choice of how to perform the tone-mapping step of 8.7.1.2 is left to
       // the consuming application or CMM (for example: identity pass-through
       // producing HDR-linear PCSXYZ)".  This CMM does implement HDR
       // processing, so the fallback is not for it.
       //
       // PROPOSAL-ISSUE HDR-13 lives here.  An N-component LUT-based Display
-      // profile can satisfy every condition of 8.10.1 - the required tag sets
+      // profile can satisfy every condition of 8.7.1.1 - the required tag sets
       // are contained in each other and 9.2.17 permits a cicpTag anywhere - so
-      // this branch can take the 8.10.2 chain on a profile whose author meant
+      // this branch can take the 8.7.1.2 chain on a profile whose author meant
       // its LUT to be the rendering.  A consumer that would rather trust the
       // LUT has icHdrToneMapPreferLut; there is no test the corpus supplies
       // that would let this one decide for itself.
@@ -723,7 +723,7 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
         //load media white point tag into profile object so we have it if we need it
         pProfile->FindTag(icSigMediaWhitePointTag); //we don't really need the return value. just need it associated with the profile
       }
-      // ICC.1 clause 8.10: an HDR Profile's chain is the matrix/TRC one with a
+      // ICC.1 clause 8.7.1: an HDR ColorSpace Profile's chain is the matrix/TRC one with a
       // tone-mapping step inserted, and the tone-mapping descriptor it uses
       // outranks the AToB0/BToA0 pair the cascade below would find.  Asked
       // here, ahead of that cascade, and only when the consumer supplied a
@@ -734,7 +734,7 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
         // Begin() - CIccCmm::AddXform(CIccProfile&), and every sub-chain
         // CIccCmmSearch builds - so a tag CIccXformMatrixTrcHdr::Begin() reads
         // that is not loaded now cannot be loaded then, and Begin() failed on
-        // a lazily opened HDR Profile.
+        // a lazily opened HDR ColorSpace Profile.
         icHdrPreloadTags(pProfile);
         rv = CIccXformCreator::CreateXform(icXformTypeMatrixTrcHdr, NULL, pHintManager);
       }
@@ -6800,7 +6800,7 @@ void CIccXformMatrixTrcHdr::SetHdrParams(const CIccCreateHdrXformHint *pHint)
  *
  * Purpose:
  *  Write the parameters SetHdrParams() recorded back into a hint, so a
- *  caller can build another CMM on the same clause 8.10.2 chain.
+ *  caller can build another CMM on the same clause 8.7.1.2 chain.
  **************************************************************************
  */
 void CIccXformMatrixTrcHdr::GetHdrParams(CIccCreateHdrXformHint &hint) const
@@ -6816,7 +6816,7 @@ void CIccXformMatrixTrcHdr::GetHdrParams(CIccCreateHdrXformHint &hint) const
  * Name: CIccXformMatrixTrcHdr::Begin
  *
  * Purpose:
- *  Set up the augmented chain of clause 8.10.2: the base class's matrix and
+ *  Set up the augmented chain of clause 8.7.1.2: the base class's matrix and
  *  curves, the analytic EOTF the cicpTag names, and - when the selected
  *  tone-mapping descriptor is the HAGC tag - a gain evaluator fixed at the
  *  consumer's target headroom.
@@ -6835,118 +6835,69 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
   if (!icGetHdrProfileInfo(m_pProfile, info))
     return icCmmStatInvalidProfile;
 
-  // The chain ends in the RGB-to-PCSXYZ matrix of 8.10.2 c), so it produces and
+  // The chain ends in the RGB-to-PCSXYZ matrix of 8.7.1.2 c), so it produces and
   // consumes XYZ in both directions.  icUseHdrToneMapPath() already declines a
-  // Lab-PCS profile - it is not an HDR Profile, see bPcsXyz - but this class
+  // Lab-PCS profile - it is not an HDR ColorSpace Profile, see bPcsXyz - but this class
   // can be reached without that gate, and the input direction used to be the
   // unguarded one: it wrote XYZ numbers into a port GetDstSpace() reported as
   // Lab, and the CMM decoded them as Lab.
   if (m_pProfile->m_Header.pcs != icSigXYZData)
     return icCmmStatBadSpaceLink;
 
-  // TWO SHAPES REACH HERE, and the difference is the whole of clause 8.10.1's
-  // revision.  A profile authored against the PREVIOUS revision carries the
-  // conventional six matrix column and TRC tags, and the base class sets
-  // everything up from them.  A profile authored against this one carries no
-  // TRC tags at all - 8.10.1 says they "shall not be present" - so the base
-  // would fail with icCmmStatProfileMissingTag on a perfectly conforming
-  // profile, which is what made the HDR path unreachable for them.
+  // ONE SHAPE REACHES HERE.  An HDR ColorSpace Profile is a ColorSpace profile
+  // (8.7), which defines no redTRCTag/greenTRCTag/blueTRCTag and no matrix
+  // column tag, so CIccXformMatrixTRC::Begin() - which loads exactly those six
+  // tags - would fail with icCmmStatProfileMissingTag on every conforming
+  // profile.  It is deliberately not called.
   //
-  // The revision shape needs less, not more: the transfer comes from the
-  // cicpTag analytically, so there are no curves to load, and the matrix comes
-  // from the cicpTag's primaries (see the HDR-07 block below) or, when
-  // ColourPrimaries is 2, from the matrix column tags that 8.10.1 then
-  // requires.
+  // The previous revision built the sub-class on the three-component
+  // matrix-based Input/Display profile, and this function had to serve two
+  // shapes: a conventionally authored profile whose six tags the base class
+  // set everything up from, and a revision-shaped one that carried none of
+  // them.  The 23-09-2026 revision leaves only the second.  A conventional
+  // matrix/TRC profile is now simply a profile of another class, it fails
+  // icHdrIsRgbColorSpace(), icUseHdrToneMapPath() declines it, and the
+  // conventional branch that stood here had no remaining caller.
   //
-  // The conventional shape no longer arrives through CIccXform::Create(): its
-  // TRC tags cost it 8.10.1 membership, so icUseHdrToneMapPath() declines it.
-  // A caller that constructs this class directly still can, which is why the
-  // branch stays; icHdrIsConventionalMatrixTrc() is the same test
-  // icHdrSelectForwardMatrix() applies below, so the two cannot disagree about
-  // which profiles it covers.
-  bool bConventional = icHdrIsConventionalMatrixTrc(m_pProfile);
+  // CIccXform::Begin() still has to run.  CIccXformMatrixTRC::Begin() would
+  // have called it first, and nothing in it is about the matrix or the TRC
+  // tags: it refreshes the PCS port cache that NeedsSrcPcsAdjust() and
+  // NeedsDstPcsAdjust() read at Apply() time, and it builds the
+  // absolute-colorimetric media-white adjustment and the IIccAdjustPCSXform
+  // hint.  Skipping it silently dropped absolute colorimetric intent - and
+  // black point compensation with it - for every revision-shaped profile.
+  // The base class's own comment at CIccXform::Begin() states the invariant
+  // that every derived override reaches it.
+  icStatusCMM baseStatus = CIccXform::Begin();
 
-  if (bConventional) {
-    icStatusCMM status = CIccXformMatrixTRC::Begin();
+  if (baseStatus != icCmmStatOk)
+    return baseStatus;
 
-    if (status != icCmmStatOk)
-      return status;
-  }
-  else {
-    // CIccXform::Begin() still has to run.  CIccXformMatrixTRC::Begin() calls
-    // it first and this branch skips that call, but nothing in it is about the
-    // matrix or the TRC tags: it refreshes the PCS port cache that
-    // NeedsSrcPcsAdjust()/NeedsDstPcsAdjust() read at Apply() time, and it
-    // builds the absolute-colorimetric media-white adjustment and the
-    // IIccAdjustPCSXform hint.  Skipping it silently dropped absolute
-    // colorimetric intent - and black point compensation with it - for every
-    // profile authored against the 29-08-2026 revision, which is the shape
-    // this branch exists to serve.  The base class's own comment at
-    // CIccXform::Begin() states the invariant that every derived override
-    // reaches it.
-    icStatusCMM baseStatus = CIccXform::Begin();
-
-    if (baseStatus != icCmmStatOk)
-      return baseStatus;
-
-    // The base's PCS precondition is enforced for both directions and both
-    // shapes at the top of this function.
-
-    // No sampled curves: m_transfer supplies the linearisation below, and
-    // leaving these NULL is what tells CIccXformMatrixTRC::Apply() to skip the
-    // per-channel curve step entirely.
-    m_Curve[0] = m_Curve[1] = m_Curve[2] = NULL;
-    m_ApplyCurvePtr = NULL;
-
-    if (info.nColourPrimaries == icCicpPrimariesUnspecified) {
-      // 8.10.1's exception: with ColourPrimaries 2 the matrix column tags
-      // "shall be present and shall be used directly as the RGB-to-PCSXYZ
-      // matrix", so this is the one revision-shaped case the HDR-07 block
-      // below does not cover.
-      const CIccTagXYZ *pXYZ;
-      int col;
-      icTagSignature sigs[3] = { icSigRedMatrixColumnTag, icSigGreenMatrixColumnTag,
-                                 icSigBlueMatrixColumnTag };
-
-      for (col = 0; col < 3; col++) {
-        pXYZ = GetColumn(sigs[col]);
-
-        if (!pXYZ)
-          return icCmmStatProfileMissingTag;
-
-        m_e[col]     = icFtoD((*pXYZ)[0].X);
-        m_e[3 + col] = icFtoD((*pXYZ)[0].Y);
-        m_e[6 + col] = icFtoD((*pXYZ)[0].Z);
-      }
-
-      if (!m_bInput && !icMatrixInvert3x3(m_e))
-        return icCmmStatInvalidProfile;
-    }
-  }
+  // No sampled curves: m_transfer supplies the linearisation below, and
+  // leaving these NULL is what tells CIccXformMatrixTRC::Apply() to skip the
+  // per-channel curve step entirely.
+  m_Curve[0] = m_Curve[1] = m_Curve[2] = NULL;
+  m_ApplyCurvePtr = NULL;
 
   if (!info.bHasCicp) {
-    // Clause 8.10.1 requires the cicpTag of every HDR Profile.  Without it
+    // Clause 8.7.1.1 requires the cicpTag of every HDR ColorSpace Profile.  Without it
     // there is no EOTF to apply and no way to know what the TRC output means.
     return icCmmStatProfileMissingTag;
   }
 
-  // PROPOSAL-ISSUE HDR-07.  Clause 8.10.1 is a "shall": when ColourPrimaries
-  // is not 2, the RGB-to-PCSXYZ matrix of 8.10.2 c) is computed from the
-  // H.273 chromaticities and the profile's adopted white, NOT from the matrix
-  // column tags - which this revision no longer requires a profile to carry.
-  // The base class has just built m_e from those tags, so this replaces it.
+  // The RGB-to-PCSXYZ matrix of 8.7.1.2 c).  There is exactly one source for
+  // it: 8.7.1.1 NOTE 2 computes it from the cicpTag's ColourPrimaries
+  // chromaticities and the profile's adopted white.  Nothing falls back to
+  // matrix column tags any more, because a ColorSpace profile has none -
+  // which also retires PROPOSAL-ISSUE HDR-07, raised when the clause's
+  // "shall" had to be reconciled with a parent class that still carried them.
   //
   // icBuildHdrForwardMatrix() adds the chromatic adaptation NOTE 2 omits; see
-  // its header.  For a conventionally authored profile the two agree to the
-  // s15Fixed16 quantisation of the colorant tags, which is the check that the
-  // ruling is right - dropping the adaptation moves the result by about 0,024
-  // in X, twenty times the disagreement that remains.
-  //
-  // A profile whose declared primaries and colorant tags genuinely disagree
-  // renders differently from here on, and by the clause's own "shall" that is
-  // the intended outcome: the cicpTag is the statement of what the encoding
-  // is, and the colorant tags are then stale.
-  if (info.nColourPrimaries != icCicpPrimariesUnspecified) {
+  // its header.  The check that the reading is right was that, on a
+  // conventionally authored profile, the computed matrix agreed with the
+  // colorant tags to the s15Fixed16 quantisation, where dropping the
+  // adaptation moved the result about twenty times further.
+  {
     icFloatNumber fwd[9];
 
     // icHdrSelectForwardMatrix() is also what CIccHdrBaker::Init() asks, so
@@ -6955,39 +6906,38 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
       case icHdrMatrixFromCicp:
         memcpy(m_e, fwd, sizeof(m_e));
 
-        // The base inverts m_e for the output direction, so a replacement has
-        // to be inverted too - and this is the one failure that must not be
-        // tolerated, since the xform would otherwise carry a forward matrix
-        // while claiming to run backwards.
+        // A forward matrix has to be inverted for the output direction - and
+        // this is the one failure that must not be tolerated, since the xform
+        // would otherwise carry a forward matrix while claiming to run
+        // backwards.
         if (!m_bInput && !icMatrixInvert3x3(m_e))
           return icCmmStatInvalidProfile;
         break;
 
-      case icHdrMatrixFromColumns:
-        // Only returned for a conventionally authored profile here, whose base
-        // class has already filled m_e from the colorant tags - what a
-        // pre-amendment CMM would have done, and a defensible rendering.
-        break;
+      case icHdrMatrixNeedsCicpExt:
+        // ColourPrimaries 2.  8.7.1.1 puts the chromaticities and the white
+        // point in the cicpType custom chromaticity extension of 10.3, which
+        // this build cannot read, so there is no matrix.  Refused rather than
+        // rendered with a substitute: see icCicpPrimariesUnspecified, and
+        // CIccProfile::CheckHdrProfile(), which says so in a diagnostic.
+        return icCmmStatInvalidProfile;
 
       case icHdrMatrixMalformedChad:
         // A chromaticAdaptationTag that is present but unreadable (wrong type,
-        // or fewer than nine values) makes the adopted white unrecoverable,
-        // and is refused on BOTH shapes: the conventional profile's
-        // colorant-tag fallback would otherwise render around it with no
-        // diagnostic, the silent-unadapted outcome icGetProfilePrimaries()
-        // already refuses.
+        // or fewer than nine values) makes the adopted white unrecoverable.
+        // Refused rather than rendered unadapted with no diagnostic, which is
+        // what icGetProfilePrimaries() already refuses.
         return icCmmStatInvalidProfile;
 
       default:
-        // A revision-shaped profile with no buildable matrix.  The base class
-        // never ran and CIccXformMatrixTRC's constructor value-initialises m_e
-        // to zero, so tolerating this would render every pixel BLACK while
-        // Begin() reported success.  It is reachable from a conforming
-        // profile: 8.10.1 constrains TransferCharacteristics but not
-        // ColourPrimaries, so a reserved H.273 primaries value - or a missing
-        // mediaWhitePointTag - validates and reaches here.  The clause says
-        // the matrix "shall" come from the declared primaries, and it cannot
-        // be computed.
+        // No buildable matrix.  CIccXformMatrixTRC's constructor
+        // value-initialises m_e to zero, so tolerating this would render every
+        // pixel BLACK while Begin() reported success.  It is reachable from a
+        // conforming profile: 8.7.1.1 constrains TransferCharacteristics but
+        // not ColourPrimaries, so a reserved H.273 primaries value - or a
+        // missing mediaWhitePointTag - validates and reaches here.  The clause
+        // says the matrix "shall" come from the declared primaries, and it
+        // cannot be computed.
         return icCmmStatInvalidProfile;
     }
   }
@@ -7001,7 +6951,7 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
   m_bToneMap = false;
   m_bClampToTarget = false;
 
-  // Descriptor selection, per clause 8.10.3 and the policy the consumer set.
+  // Descriptor selection, per clause 8.7.1.3 and the policy the consumer set.
   // icHdrToneMapPreferLut does reach here: icUseHdrToneMapPath() hands it to
   // the LUT cascade only when there is a LUT in this direction to prefer, and
   // builds this xform when there is not.  The HAGC tag is then the one
@@ -7033,15 +6983,15 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
         m_bClampToTarget = m_evaluator.ClampsToTargetVolume();
         m_bToneMap = !m_evaluator.IsIdentity();
       }
-      // An evaluator that declines the tag is not an error: clause 8.10.3
+      // An evaluator that declines the tag is not an error: clause 8.7.1.3
       // ranks descriptors so that a CMM which cannot run one falls to the
       // next, and the next here is the identity operator NOTE 6 permits.
     }
   }
 
-  /* IMPL-03: the content headroom of clause 8.10.4 was resolved and consumed
+  /* IMPL-03: the content headroom of clause 8.7.1.4 was resolved and consumed
    * by nothing.  It is consulted here, and ONLY to decide whether a clamp is
-   * needed - no curve, no operator.  8.10 specifies no tone-mapping operator
+   * needed - no curve, no operator.  8.7.1 specifies no tone-mapping operator
    * for this case, so inventing one would make our renders differ from
    * another implementation's for the same file; deciding whether the content
    * already fits the target volume needs no operator at all.
@@ -7054,7 +7004,7 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
    *
    * SCOPE.  This can only fire for a Linear transfer: icGetHdrProfileInfo()
    * resolves the content headroom for TransferCharacteristics 8 alone,
-   * because that is the only transfer 8.10.4 states the priority order for -
+   * because that is the only transfer 8.7.1.4 states the priority order for -
    * PQ and HLG carry a peak in the transfer function itself.  For every other
    * transfer nContentHeadroomSource is icHdrContentHeadroomNone and this
    * block does nothing, which is why the guard is on the SOURCE and not on
@@ -7089,7 +7039,7 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
  * Name: CIccXformMatrixTrcHdr::Apply
  *
  * Purpose:
- *  The augmented chain of clause 8.10.2, in its three named steps.
+ *  The augmented chain of clause 8.7.1.2, in its three named steps.
  *
  *  Input direction (device to PCS):
  *    a) HDR EOTF - the analytic transfer the cicpTag names, renormalised so

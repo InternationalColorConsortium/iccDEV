@@ -2,18 +2,18 @@
 <!--
   NEGATIVE FIXTURE. Do not "fix" the missing BToA0Tag below.
 
-  Clause 8.10.6 requires a Display RGB HDR Profile to carry the BToA0Tag beside
+  Clause 8.7.1.5 requires a Display HDR ColorSpace Profile to carry the BToA0Tag beside
   its mandatory AToB0Tag, and requires the pair whenever an AToBxTag is present.
-  (8.10.3 c) says the same without the class condition, but 8.10.3 is
-  informative, so 8.10.6 governs - PROPOSAL-ISSUE HDR-09.) This profile has an
+  (8.7.1.3 c) says the same without the class condition, but 8.7.1.3 is
+  informative, so 8.7.1.5 governs - PROPOSAL-ISSUE HDR-09.) This profile has an
   AToB0Tag and no BToA0Tag.
 
   The general validator reports it too, and more severely. The Display branch
   of CIccProfile::CheckRequiredTags() accepts the AToB0/BToA0 pair OR the six
   matrix column and TRC tags; with the pair incomplete it falls back to
-  requiring the TRC tags, which an HDR Profile may not carry, so this profile is
+  requiring the TRC tags, which an HDR ColorSpace Profile may not carry, so this profile is
   a critical error there ("Critical tag(s) missing"). The HDR rules add what
-  that message cannot say: which clause 8.10 requirement is broken.
+  that message cannot say: which clause 8.7.1 requirement is broken.
 
   Expected: iccFromXml saves the profile, and iccDumpProfile -v reports
     "HDR: BToA0Tag missing" and
@@ -24,7 +24,7 @@
   <Header>
     <PreferredCMMType>ICCD</PreferredCMMType>
     <ProfileVersion>4.50</ProfileVersion>
-    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <ProfileDeviceClass>spac</ProfileDeviceClass>
     <DataColourSpace>RGB </DataColourSpace>
     <PCS>XYZ </PCS>
     <CreationDateTime>2026-08-05T00:00:00</CreationDateTime>
@@ -37,24 +37,6 @@
     <ProfileCreator>ICCD</ProfileCreator>
   </Header>
   <Tags>
-    <!-- The canonical sRGB/BT.709 colorants adapted to the PCS adopted white,
-         which is what a conforming v4 matrix profile carries: the encoded values
-         are relative to D50, not to the display's own D65. The
-         chromaticAdaptationTag below is the matrix that put them there, so a
-         consumer recovering the source primaries per clause 10.3 NOTE 1 has to
-         apply its inverse to get back to D65. -->
-    <redColorantTag> <XYZArrayType>
-      <XYZNumber X="0.436004638672" Y="0.222503662109" Z="0.013900756836"/>
-    </XYZArrayType> </redColorantTag>
-
-    <greenColorantTag> <XYZArrayType>
-      <XYZNumber X="0.385101318359" Y="0.716903686523" Z="0.097106933594"/>
-    </XYZArrayType> </greenColorantTag>
-
-    <blueColorantTag> <XYZArrayType>
-      <XYZNumber X="0.143096923828" Y="0.060592651367" Z="0.713897705078"/>
-    </XYZArrayType> </blueColorantTag>
-
     <!-- Standard Bradford D65 to D50 adaptation. -->
     <chromaticAdaptationTag> <s15Fixed16ArrayType>
       <Array>

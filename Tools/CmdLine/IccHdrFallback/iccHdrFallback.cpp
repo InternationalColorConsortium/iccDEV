@@ -3,7 +3,7 @@
 
     Contains:   Console app that bakes an HDR profile's tone-mapped SDR
                 rendering into an A2B0/B2A0 pair, so that a CMM implementing
-                none of ICC.1 clause 8.10 still reproduces it
+                none of ICC.1 clause 8.7.1 still reproduces it
 
     Version:    V1
 
@@ -95,8 +95,8 @@ static void usage()
   printf("  -hlgpeak L  HLG nominal display peak luminance in cd/m^2 (default %g)\n",
          (double)icHlgDefaultPeakLuminance);
   printf("  -v44        rewrite the header version as 4.4, for consumers that reject\n");
-  printf("              the version an HDR Profile carries.  The profile then no\n");
-  printf("              longer classifies under clause 8.10.1.\n");
+  printf("              the version an HDR ColorSpace Profile carries.  The profile then no\n");
+  printf("              longer classifies under clause 8.7.1.1.\n");
   printf("\nBuilt with IccProfLib version " ICCPROFLIBVER "\n");
 }
 
@@ -156,7 +156,7 @@ static void describeSource(const CIccProfile *pIcc, const CIccHdrBaker &baker)
          (unsigned)info.nTransferCharacteristics, szTransfer ? szTransfer : "unsupported");
   printf("  content reference white : %g cd/m^2 (%s)\n",
          (double)info.contentReferenceWhite,
-         info.bContentReferenceWhiteFromProfile ? "from the profile" : "clause 8.10.4 default");
+         info.bContentReferenceWhiteFromProfile ? "from the profile" : "clause 8.7.1.4 default");
   printf("  gain curve              : %s\n",
          !info.bHasHagc ? "none - baking the transfer and an SDR clamp only" :
          baker.IsToneMapIdentity() ? "present, identity at this target" : "present");

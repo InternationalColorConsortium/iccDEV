@@ -3270,10 +3270,10 @@ endfunction()
 # over-count blocks, and the raw-blob retention that lets a block this build
 # cannot parse still survive a load/save cycle byte for byte.
 # T1c (HDR profiles): enforces Testing/HDR/hdr-corpus-manifest.tsv, the expected
-# clause 8.10 CLASSIFICATION of every fixture in Testing/HDR.
+# clause 8.7.1 CLASSIFICATION of every fixture in Testing/HDR.
 #
 # This is the axis iccdev.qa-profile-manifest cannot express. That test records
-# the validation verdict, and failing clause 8.10.1's membership conditions does
+# the validation verdict, and failing clause 8.7.1.1's membership conditions does
 # not make a profile invalid -- all six membership negatives validate `valid`
 # and are indistinguishable there. Without this test they assert nothing.
 #
@@ -3479,20 +3479,25 @@ function(iccdev_add_hagc_json_authoring_test)
   endif()
 endfunction()
 
-# T2 (HDR profiles): the clause 8.10 HDR Profile classifier, the ITU-T H.273
-# Table 2 primaries lookup, the ColourPrimaries = 2 recovery of clauses
-# 9.2.17/10.3, and the HDR Display headroom precedence of 8.10.5.
+# T2 (HDR profiles): the clause 8.7.1 HDR ColorSpace Profile classifier, the
+# ITU-T H.273 Table 2 primaries lookup, and the matrix-column primaries
+# recovery that the ICC dictType Metadata Registry's MDCV and CLL entries
+# still define for their own primaries code 2.
 #
-# Three of those are silently wrong-able. The chromatic adaptation in the
-# ColourPrimaries = 2 recovery has to be applied *inverted* - the matrix column
-# tags are encoded against the PCS adopted white and the chad matrix is what put
+# Two of those are silently wrong-able. The chromatic adaptation in the
+# matrix-column recovery has to be applied *inverted* - the matrix column tags
+# are encoded against the PCS adopted white and the chad matrix is what put
 # them there - and getting the direction wrong still yields plausible
-# chromaticities, just D50 ones instead of the display's own. The 8.10.5
-# precedence is normative about which value wins when the entries disagree
-# (NOTE 13: DERH wins and the DCV/DRWL derivation "shall not be recomputed"), so
-# only a deliberately inconsistent fixture distinguishes a correct reader from a
-# fallback chain. And the conforming/intended split has to keep the 8.10.3 c)
-# pairing rule outside it, because a fully conforming profile can still break it.
+# chromaticities, just D50 ones instead of the profile's own. And the
+# conforming/intended split has to keep the 8.7.1.5 pairing rule outside it,
+# because a fully conforming profile can still break it.
+#
+# THE 8.10.5 DISPLAY-HEADROOM PRECEDENCE IS GONE, with its clause. So is the
+# cicpTag ColourPrimaries = 2 recovery: 8.7.1.1 routes that to the cicpType
+# custom chromaticity extension of 10.3, which no build here can read, and a
+# ColorSpace profile has no matrix column tags to fall back on. The recovery
+# procedure itself survives only for the registry rule above, and the test
+# asserts that the two now DISAGREE for the same profile.
 function(iccdev_add_hdr_profile_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -3532,7 +3537,7 @@ endfunction()
 
 # T4 (HDR profiles): the A2B0/B2A0 fallback bake - the white paper procedure
 # that stores an HDR profile's tone-mapped SDR rendering in a lutAToBType, so
-# that a CMM implementing none of clause 8.10 still reproduces it.
+# that a CMM implementing none of clause 8.7.1 still reproduces it.
 #
 # The bake is a change of representation, not a second rendering algorithm, and
 # that is what this pins. Three things it catches that look right otherwise.
@@ -3585,7 +3590,7 @@ function(iccdev_add_hdr_bake_test)
   endif()
 endfunction()
 
-# T3 (HDR profiles): the tone-mapping step of clause 8.10.2 - the analytic PQ
+# T3 (HDR profiles): the tone-mapping step of clause 8.7.1.2 - the analytic PQ
 # and HLG transfer functions, the Headroom Adaptive Gain Curve evaluator, and
 # the CMM path that inserts them between the TRC linearisation and the 3x3
 # matrix.
@@ -3641,7 +3646,7 @@ function(iccdev_add_hdr_tonemap_test)
   endif()
 endfunction()
 
-# The routes the clause 8.10 HDR hint takes from a caller to the HDR xform, and
+# The routes the clause 8.7.1 HDR hint takes from a caller to the HDR xform, and
 # the CMM machinery beside it: IccConnect's embedded-source and search paths, a
 # lazily opened profile added by reference, icHdrToneMapPreferLut with no LUT,
 # and black point compensation.  Each of those dropped the hint, or ran an SDR
@@ -5314,11 +5319,11 @@ function(iccdev_add_pawg_compression_paths_test)
   endif()
 endfunction()
 
-# iccPawgReport section H, the HDR Profile items of ICC.1 clause 8.10.
+# iccPawgReport section H, the HDR ColorSpace Profile items of ICC.1 clause 8.7.1.
 #
 # Unlike the compression test above, this one cannot link PawgReport.cpp and
 # call an exposed entry: the H items live in that file's anonymous namespace by
-# design, since clause 8.10's questions are report content rather than a
+# design, since clause 8.7.1's questions are report content rather than a
 # reusable measurement.  So it drives the built tool and reads its output -
 # which is also the shape a downstream consumer sees.  RunPawgHdrSectionTest.cmake
 # documents the contracts it pins.  The fixtures are generated, and the test

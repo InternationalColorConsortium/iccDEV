@@ -30,7 +30,7 @@
 #   unknown       "Profile has unknown status!"                 exit 254
 # The manifest therefore records expected_status and expected_exit as independent
 # fields rather than deriving one from the other. Three negative HDR fixtures -
-# HDR/HagcInvalidXOrder, HDR/HdrCicp2NoColumns and HDR/HdrMissingBToA1 - validate as
+# HDR/HagcInvalidXOrder, HDR/HdrCicpUnspecified and HDR/HdrMissingBToA1 - validate as
 # overall noncompliant, so those rows are what exercise the exit-0 pairing.
 #
 # sha256 is populated only for git-tracked profiles. The generated corpus resolves
@@ -162,39 +162,36 @@ HDR/BT2100PQFullScene.icc	compatibility	warning	0	none	generated	-	baselined: PQ
 HDR/BT2100PQNarrowDisplay.icc	compatibility	warning	0	none	generated	-	baselined: PQ curve (type 6) - its denominator crosses zero at X = 1.992 and the ratio is negative above it, under a fractional power (#2547); its tone map curve (type 3, g = -1/6) has no value for luminance below 0.00625
 HDR/BT2100PQNarrowScene.icc	compatibility	warning	0	none	generated	-	baselined: PQ curve (type 6) - its denominator crosses zero at X = 1.992 and the ratio is negative above it, under a fractional power (#2547)
 HDR/BT2100PQSceneToDisplayLink.icc	compatibility	warning	0	none	generated	-	baselined: PQ curve (type 6) - its denominator crosses zero at X = 1.992 and the ratio is negative above it, under a fractional power (#2547)
-HDR/HagcCommonParams.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/HagcCommonParams.icc	positive	valid	0	none	generated	-	conforming HDR ColorSpace Profile; HAGC common-parameter sharing flags, HLG. Also the HDR-22 control: a HAGC tag on a ColorSpace profile draws no class diagnostic from CIccTagHagc::Validate, CheckTagExclusion or PAWG C5
 HDR/HagcDisplay.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
-HDR/HagcHexData.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
-HDR/HagcInvalidXOrder.icc	negative	noncompliant	0	none	generated	-	negative fixture: HAGC gain curve control point X values must not decrease, and may repeat only with an equal Y
+HDR/HagcHexData.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean. ColourPrimaries moved 2 -> 1 with the 23-09-2026 revision, which makes 2 NonCompliant until the 10.3 chromaticity extension is readable; this fixture is for the HAGC raw-byte path, not for the primaries case
+HDR/HagcInvalidXOrder.icc	negative	noncompliant	0	none	generated	-	negative fixture: HAGC gain curve control point X values must not decrease, and must not repeat with a differing Y
 HDR/HagcMixingTypes.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HagcRefWhiteToneMap.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrBakedLut.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
-HDR/HdrCicp2NoColumns.icc	negative	noncompliant	0	none	generated	-	negative fixture: ColourPrimaries 2 requires the matrix column tags, which supply the only RGB-to-PCSXYZ matrix such a profile can have
-HDR/HdrCicpUnspecified.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
-HDR/HdrColorSpaceClass.icc	compatibility	warning	0	none	generated	-	baselined: 8.10.1 membership negative (device class not Input/Display); the warning IS the expected result -- CheckTagExclusion bars cicpTag outside Input/Display/ColorEncoding, the same restriction 8.10.1 states from the other side
-HDR/HdrDisplayMetadata.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
-HDR/HdrFullRangeFlag.icc	positive	valid	0	none	generated	-	conforming HDR Display profile, VideoFullRangeFlag=1; paired with HdrNarrowRangeFlag and identical to it but for that field -- see IMPL-02, the two render identically because nothing reads the flag
-HDR/HdrHeadroomDcvCrwl.icc	positive	valid	0	none	generated	-	conforming HDR Display profile; isolates clause 8.10.5 rule c) DCV/CRWL, CRWL deliberately 250 so a reader firing the wrong rule returns a different number
-HDR/HdrHeadroomDcvDrwl.icc	positive	valid	0	none	generated	-	conforming HDR Display profile; isolates clause 8.10.5 rule b) DCV/DRWL, DRWL deliberately 500 so a fall-through to rule c) returns 4,926 instead of 2,0
-HDR/HdrHlgBt2020Primaries.icc	positive	valid	0	none	generated	-	the IMPL-04 control: identical but for ColourPrimaries 9, whose luminance row IS the constants used before the fix, so this fixture moving is a regression rather than the fix
-HDR/HdrHlgBt709Primaries.icc	positive	valid	0	none	generated	-	conforming HLG HDR Display profile declaring ColourPrimaries 1; the first HLG fixture in the corpus that is not BT.2020, which is what makes IMPL-04's OOTF luma coefficients reachable at all
-HDR/HdrInputDisplayMeta.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean. Input-class HDR Profile carrying HDR Display metadata, which clause 8.10.5 scopes to Display profiles - an informational note, not a defect
-HDR/HdrInvalidTransfer.icc	positive	valid	0	none	generated	-	classification fixture: TransferCharacteristics 13 puts it outside the clause 8.10 sub-class, which is not a defect - it is a valid Display profile carrying a cicpTag and a HAGC tag
+HDR/HdrCicpUnspecified.icc	negative	noncompliant	0	none	generated	-	negative fixture: ColourPrimaries 2 (Unspecified). Clause 8.7.1.1 requires the cicpType custom chromaticity extension of 10.3, which ICC.1:2022 Table 32 does not define and no build here can read, so 8.7.1.2 c) has no chromaticities. WAS a positive: under 8.10.1 the matrix column tags supplied them
+HDR/HdrColorSpaceClass.icc	positive	valid	0	none	generated	-	THE CLASS POSITIVE and the base conforming fixture. Was the 8.10.1 class negative; the 23-09-2026 revision builds the sub-class on the ColorSpace profile, so the same file now validates clean as a member
+HDR/HdrDisplayMetadata.icc	positive	valid	0	none	generated	-	CLASS NEGATIVE for 8.7.1.1 and a conformant Display profile: carries a PQ cicpTag and HDR Image metadata, is not an HDR ColorSpace Profile, and nothing is reported against it
+HDR/HdrFullRangeFlag.icc	positive	valid	0	none	generated	-	conforming HDR ColorSpace Profile, VideoFullRangeFlag=1; paired with HdrNarrowRangeFlag as the IMPL-02 control
+HDR/HdrHlgBt2020Primaries.icc	positive	valid	0	none	generated	-	the IMPL-04 control: identical but for ColourPrimaries 9, whose luminance row IS the BT.2020 constants
+HDR/HdrHlgBt709Primaries.icc	positive	valid	0	none	generated	-	conforming HLG HDR ColorSpace Profile declaring ColourPrimaries 1; the first HLG fixture not in BT.2020 primaries
+HDR/HdrInputDisplayMeta.icc	positive	valid	0	none	generated	-	CLASS NEGATIVE for 8.7.1.1 and a conformant Input profile; the scnr half of the pair with HdrDisplayMetadata, so neither surviving non-ColorSpace class can be admitted by a classifier testing only one
+HDR/HdrInvalidTransfer.icc	positive	valid	0	none	generated	-	classification fixture: TransferCharacteristics 13 puts it outside the clause 8.7.1 sub-class, and it is a conformant profile. De-confounded by the revision - the TRC tags that were a second disqualifier are dropped, and an AToB0/BToA0 pair added so 8.7 does not make it critical
 HDR/HdrLinearCll.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
-HDR/HdrLinearHagcCrwlDisagree.icc	positive	valid	0	none	generated	-	conforming HDR Display profile; HAGC reference white 300 and CRWL 203 disagree, pinning the precedence both headroom axes divide by
+HDR/HdrLinearHagcCrwlDisagree.icc	positive	valid	0	none	generated	-	conforming HDR ColorSpace Profile; HAGC reference white 300 and CRWL 203 disagree, pinning the HDR-10 precedence
 HDR/HdrLinearHagcWhite.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrLinearMdcv.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HdrLinearNoMetadata.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
-HDR/HdrMissingBToA0.icc	negative	critical	255	none	generated	-	negative fixture: an AToBx tag requires its paired BToAx tag. Critical rather than noncompliant since the 8.10.1 migration: an HDR Profile carries no TRC tags, so a Display profile missing BToA0 also fails ICC.1's required-tag rule
-HDR/HdrMissingBToA1.icc	negative	noncompliant	0	none	generated	-	negative fixture: clause 8.10.6 pairing at x=1, which HdrMissingBToA0 cannot reach because x=0 is mandatory outright
-HDR/HdrMissingLutPair.icc	negative	critical	255	none	generated	-	negative fixture: clause 8.10.6's AToB0Tag is mandatory regardless of profile class; without it and the TRC tags a Display profile also fails ICC.1's required-tag rule
-HDR/HdrNarrowRangeFlag.icc	compatibility	warning	0	none	generated	-	baselined: conforming HDR Display profile with VideoFullRangeFlag=0. Clause 8.10 never mentions the field so the profile violates nothing; the warning is IMPL-02 reporting that this implementation does not expand narrow range. Its twin HdrFullRangeFlag stays valid, which is what proves the diagnostic keys on the flag alone
-HDR/HdrNoCicpTag.icc	positive	valid	0	none	generated	-	8.10.1 membership negative (no cicpTag) and a conformant profile; metadataTag retained so a classifier keying off metadata rather than the cicpTag misclassifies it
-HDR/HdrNonRgbSpace.icc	positive	valid	0	none	generated	-	8.10.1 membership negative (3CLR data colour space) and a conformant profile; 3CLR keeps the channel count at three so every other tag is unchanged
-HDR/HdrTransferSdr.icc	positive	valid	0	none	generated	-	8.10.1 membership negative (TransferCharacteristics 1, not 8/16/18) and a conformant profile; no TRC tags, which is what isolates it from HdrInvalidTransfer
-HDR/HdrTrcTagsPresent.icc	positive	valid	0	none	generated	-	8.10.1 membership negative (TRC tags present) and a conformant profile; de-confounds HdrInvalidTransfer, which fails this condition and the transfer condition at once
-HDR/HdrVersion44.icc	positive	valid	0	none	generated	-	8.10.1 membership negative (version 4.4, below the 4.5 window) and a conformant profile
-HDR/HdrVersion46.icc	compatibility	warning	0	none	generated	-	conforming HDR Profile at 4.6.0.0, the 'or later within v4' edge that separates '>= 4.5' from '== 4.5'; the unexpected-minor-number warning is unavoidable since 4.5 is the highest defined v4 minor
+HDR/HdrMissingBToA0.icc	negative	critical	255	none	generated	-	negative fixture: no BToA0Tag. The REQUIREMENT MOVED - 8.7.1.5 defers the pair to 8.7, which requires it of every ColorSpace profile - so CheckRequiredTags() now raises this critically where CheckHdrProfile() raised NonCompliant
+HDR/HdrMissingBToA1.icc	negative	noncompliant	0	none	generated	-	negative fixture: clause 8.7.1.5 pairing at x=1, which HdrMissingBToA0 cannot reach because x=0 is required outright. The revision drops the Display-class scope the rule used to carry
+HDR/HdrMissingLutPair.icc	negative	critical	255	none	generated	-	negative fixture: neither half of the x=0 pair. Critical from 8.7, as for HdrMissingBToA0
+HDR/HdrNarrowRangeFlag.icc	compatibility	warning	0	none	generated	-	baselined: conforming HDR ColorSpace Profile with VideoFullRangeFlag=0. Clause 8.7.1 does not mention the field, so this violates nothing; the warning records that this build does not expand narrow-range values (IMPL-02)
+HDR/HdrNoCicpTag.icc	positive	valid	0	none	generated	-	8.7.1.1 membership negative (no cicpTag) and a conformant profile; metadataTag retained so a metadata-keyed classifier fails
+HDR/HdrNonRgbSpace.icc	positive	valid	0	none	generated	-	8.7.1.1 membership negative (3CLR data colour space) and a conformant profile
+HDR/HdrTransferSdr.icc	positive	valid	0	none	generated	-	8.7.1.1 membership negative (TransferCharacteristics 1, not 8/16/18) and a conformant profile
+HDR/HdrTrcTagsPresent.icc	compatibility	warning	0	none	generated	-	baselined, and INVERTED by the revision: TRC tags cost 8.10.1 membership and cost nothing under 8.7.1, which prohibits nothing because 8.7 defines nothing to prohibit. Now a conforming member that still WARNS - a TRC tag has no interpretation on a ColorSpace profile - which is a tag-exclusion question, not a membership one
+HDR/HdrVersion44.icc	positive	valid	0	none	generated	-	INVERTED by the revision: 4.4 was below the withdrawn 4.5.0.0 lower bound, so this is now a conforming HDR ColorSpace Profile. The cicpTag tag-type gate at >= 4.4 is what still applies
+HDR/HdrVersion46.icc	compatibility	warning	0	none	generated	-	baselined on "Version 4 minor number is unexpected": conforming HDR ColorSpace Profile at 4.6.0.0. With HdrVersion44 it brackets the withdrawn lower bound from both sides
 ICS/Lab_float-D65_2deg-Part1.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 ICS/Lab_float-IllumA_2deg-Part2.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 ICS/Lab_int-D65_2deg-Part1.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)

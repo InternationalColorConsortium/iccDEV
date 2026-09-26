@@ -1,33 +1,38 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  MEMBERSHIP NEGATIVE for clause 8.10.1: the profile version is below 4.5.0.0.
+  A CONFORMING HDR ColorSpace Profile at profile version 4.4.0.0, and the
+  fixture that pins the WITHDRAWAL of the version condition.
 
-  Clause 8.10 arrived as an amendment against v4.5, so a profile encoding 4.4
-  cannot be claiming it.  This is the lower edge of the version window the
-  classifier tests; HdrVersion46.xml is the fixture that pins the other edge.
+  Under clause 8.10.1 this was a membership NEGATIVE: the clause required
+  profileVersionField 4.5.0.0, and a 4.4 profile could not be claiming it.
+  4.7 of the 23-09-2026 revision withdraws that outright - the amendment
+  "satisfies the minor-version criterion of 7.2.4 without requiring any change
+  to the profileVersionField" - and there is no version condition anywhere in
+  the new normative text.  So the same bytes are now a member.
 
-  Everything else 8.10.1 requires is satisfied, so this fixture isolates that
-  one condition: a classifier that stopped testing it would misclassify this
-  profile as an HDR Profile, and would still pass every positive in the corpus.
+  A classifier still carrying a ">= 4.5" test fails this row.  HdrVersion46 is
+  the other side of the bracket: both are members now, so a build that passes
+  one and fails the other has kept half the old window.
 
-  This profile remains a CONFORMANT ICC profile - see above for any diagnostic
-  this particular fixture is expected to draw.  Failing a membership condition
-  means the profile is not an HDR Profile; it does not make the profile
-  non-conformant, and nothing in 8.10 says otherwise.  That ruling is recorded
-  against HDR-02/HDR-03, both withdrawn on it.
+  WHAT DOES STILL BOUND THE VERSION, and is not this amendment's: the UPPER
+  bound.  icHdrIsVersion4() refuses v5, because this amendment amends ICC.1
+  and 8.7 - the ColorSpace profile it builds on - is ICC.1's, while ICC.2 has
+  its own profile model.  That is a ruling and is documented as one; the eight
+  v5 BT2100 fixtures in this directory are what pin it.
 
-  EXPECTED CLASSIFICATION is icHdrProfileHdrContent - NOT icHdrProfileNone.
-  This profile still carries HDR Image and HDR Display metadata, and that is
-  precisely what the middle bucket of icHdrProfileClass exists for: HDR content
-  a consumer may legitimately act on, sitting in a profile that is not an HDR
-  Profile.  A classifier reduced to a yes/no could not express this verdict at
-  all, which is the second thing these fixtures pin.
+  4.4 is not arbitrary at the bottom either: the cicpTag's own tag-type gate
+  in CIccProfile::CheckTagTypes() requires >= 4.4, so 4.4 is the lowest
+  version at which a profile can carry the tag that makes it an HDR ColorSpace
+  Profile at all.  That gate is untouched by this amendment.
+
+  EXPECTED CLASSIFICATION is icHdrProfileConforming; expected validation
+  verdict is `valid`.
 -->
 <IccProfile>
   <Header>
     <PreferredCMMType>ICCD</PreferredCMMType>
     <ProfileVersion>4.40</ProfileVersion>
-    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <ProfileDeviceClass>spac</ProfileDeviceClass>
     <DataColourSpace>RGB </DataColourSpace>
     <PCS>XYZ </PCS>
     <CreationDateTime>2026-08-05T00:00:00</CreationDateTime>
@@ -40,24 +45,6 @@
     <ProfileCreator>ICCD</ProfileCreator>
   </Header>
   <Tags>
-    <!-- The canonical sRGB/BT.709 colorants adapted to the PCS adopted white,
-         which is what a conforming v4 matrix profile carries: the encoded values
-         are relative to D50, not to the display's own D65. The
-         chromaticAdaptationTag below is the matrix that put them there, so a
-         consumer recovering the source primaries per clause 10.3 NOTE 1 has to
-         apply its inverse to get back to D65. -->
-    <redColorantTag> <XYZArrayType>
-      <XYZNumber X="0.436004638672" Y="0.222503662109" Z="0.013900756836"/>
-    </XYZArrayType> </redColorantTag>
-
-    <greenColorantTag> <XYZArrayType>
-      <XYZNumber X="0.385101318359" Y="0.716903686523" Z="0.097106933594"/>
-    </XYZArrayType> </greenColorantTag>
-
-    <blueColorantTag> <XYZArrayType>
-      <XYZNumber X="0.143096923828" Y="0.060592651367" Z="0.713897705078"/>
-    </XYZArrayType> </blueColorantTag>
-
     <!-- Standard Bradford D65 to D50 adaptation. -->
     <chromaticAdaptationTag> <s15Fixed16ArrayType>
       <Array>
@@ -79,22 +66,23 @@
       <DictEntry Name="CRWL" Value="203.0"/>
       <DictEntry Name="CLL" Value="1000.0 400.0 9"/>
       <DictEntry Name="MDCV" Value="1000.0 0.005 9"/>
-      <DictEntry Name="DERH" Value="4.0"/>
-      <DictEntry Name="DRWL" Value="203.0"/>
-      <DictEntry Name="DCV" Value="1000.0 0.005 1"/>
     </dictType> </metaDataTag>
 
-    <!-- Clause 8.10.1 of the 29-08-2026 revision: "the redTRCTag, greenTRCTag
-         and blueTRCTag shall not be present" in an HDR Profile. The transfer
-         function is conveyed by the cicpTag's TransferCharacteristics field
-         instead, and NOTE 3 makes their absence one of the two tag-level
-         features that distinguish an HDR Profile. This fixture was authored
-         against the previous revision and carried them.
+    <!-- There are no TRC tags and no matrix column tags, and under the
+         23-09-2026 revision that is not a prohibition being obeyed - it is
+         what a ColorSpace profile IS. 8.7 never defines either set for this
+         class, so, in the revision's words, "there is nothing for this
+         amendment to prohibit". The transfer comes from the cicpTag's
+         TransferCharacteristics field and the primaries from its
+         ColourPrimaries field; 8.7.1.1 says the cicpTag "is the only tag that
+         can convey either".
 
-         The AToB0Tag/BToA0Tag pair below is what 8.10.6 makes mandatory, and
-         what NOTE 4 says gives a legacy CMM "a rendering path at all" once the
-         TRC tags are gone. Identity B curves: these fixtures exercise
-         classification and the tone-mapping chain, not the bake's accuracy. -->
+         The AToB0Tag/BToA0Tag pair below is required by 8.7 of every
+         ColorSpace profile, which 8.7.1.5 leans on rather than restates -
+         "both already unconditionally required of every ColorSpace profile by
+         8.7" - and it is what gives a legacy CMM a rendering path. Identity B
+         curves: these fixtures exercise classification and the tone-mapping
+         chain, not the bake's accuracy. -->
 
     <AToB0Tag> <lutAtoBType>
       <Channels InputChannels="3" OutputChannels="3"/>

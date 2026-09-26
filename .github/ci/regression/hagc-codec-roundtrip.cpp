@@ -940,7 +940,13 @@ void testGroup2Codec()
     tag.Validate("HAGC", report, &prof);
     check(reportHas(report, "could not be decoded"), "undecodable block in a CMYK Output profile: decode reported");
     check(reportHas(report, "data colour space is RGB"), "and the colour space is still checked");
-    check(reportHas(report, "Input or Display class"), "and the class is still checked");
+    // PROPOSAL-ISSUE HDR-22: the permitted classes are now Input, Display or
+    // ColorSpace.  The HAGC amendment's own sentence says "Input or Display",
+    // but 8.7.1.3 a) and 8.7.1.5 of the HDR ColorSpace Profiles amendment both
+    // place a HAGC tag in a 'spac' profile, and the later, more specific
+    // clauses govern.  An Output profile is outside all three either way,
+    // which is what keeps this assertion meaningful.
+    check(reportHas(report, "Input, Display or ColorSpace class"), "and the class is still checked");
   }
 
   // --- A coefficient that encodes to zero is not flagged present.

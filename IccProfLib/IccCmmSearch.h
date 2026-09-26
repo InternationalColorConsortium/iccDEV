@@ -256,7 +256,7 @@ protected:
   icXformLutType m_nMidLutType;
   bool m_bMidUseD2BxB2DxTags;
 
-  // The ICC.1 clause 8.10 HDR hint each profile was added with.  AddXform()
+  // The ICC.1 clause 8.7.1 HDR hint each profile was added with.  AddXform()
   // only borrows the caller's hint manager and Begin() builds the sub-chains
   // after it is gone, so the hint is copied by value here.  Only this hint is
   // kept; the search CMM has never honoured the others.
