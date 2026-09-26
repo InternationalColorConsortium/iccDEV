@@ -46,7 +46,7 @@ Use this skill for `.clusterfuzzlite/**`,
 - Keep a schema-shaped IccConnect seed and dedicated config dictionary. Drive
   `fromJson()`/`toJson()` round trips for top-level and nested `CIccCfg*`
   objects before adding another configuration target.
-- Keep the workflow limited to manual dispatch and the weekly schedule. Manual
+- Keep the workflow limited to manual dispatch and the nightly schedule. Manual
   dispatch defaults to one `address`/`core` smoke job; `run_mode=full` and the
   schedule use all nine group/sanitizer combinations.
 - Keep the manual fuzz duration selectable as whole minutes from 2 through 45,

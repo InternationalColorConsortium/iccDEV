@@ -7,7 +7,7 @@ ClusterFuzzLite lane.
 Keep libFuzzer as the engine and validate distinct `address`, `undefined`, and
 `memory` builds. Preserve the `core`, `formats`, and `assessment` in-process
 target groups, matching tracked seed families, target dictionaries,
-immutable action and image pins, manual plus weekly scheduled triggers,
+immutable action and image pins, manual plus nightly scheduled triggers,
 matching Clang 21 or 22 compilers, and repository workflow-governance rules.
 Keep CMM control bytes beyond the declared ICC payload so mutations do not
 corrupt the profile-size header. Keep a schema-shaped IccConnect seed, a

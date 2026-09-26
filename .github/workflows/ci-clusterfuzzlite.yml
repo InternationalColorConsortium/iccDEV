@@ -51,7 +51,7 @@ concurrency:
         default: false
         type: boolean
   schedule:
-    - cron: '17 5 * * 1'
+    - cron: '17 5 * * *'
 
 jobs:
   configure:

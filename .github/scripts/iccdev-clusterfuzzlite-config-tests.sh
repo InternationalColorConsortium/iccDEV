@@ -68,7 +68,7 @@ grep -q '^      actions: write  # Remove superseded corpus artifacts from this r
 grep -q '^concurrency:$' "$workflow"
 grep -q '^  workflow_dispatch:$' "$workflow"
 grep -q '^  schedule:$' "$workflow"
-grep -q "^    - cron: '17 5 \* \* 1'$" "$workflow"
+grep -q "^    - cron: '17 5 \* \* \*'$" "$workflow"
 if grep -q '^  push:$' "$workflow"; then
   echo "[FAIL] ClusterFuzzLite must remain manual or scheduled" >&2
   exit 1

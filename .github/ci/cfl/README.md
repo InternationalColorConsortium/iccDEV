@@ -59,7 +59,7 @@ The six CLI-fidelity wrappers remain local smoke targets because coverage from
 their child processes is not visible to the parent libFuzzer process.
 
 The dedicated `ci-clusterfuzzlite` workflow runs on manual dispatch and a
-weekly schedule. Manual dispatch defaults to one `address`/`core` smoke job;
+nightly schedule. Manual dispatch defaults to one `address`/`core` smoke job;
 select `run_mode=full` for the complete matrix. Scheduled runs always use the
 full `address`, `undefined`, and `memory` matrix; libFuzzer is the engine for
 every matrix entry, not a fourth sanitizer. The nine full-mode group/sanitizer

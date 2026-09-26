@@ -39,10 +39,10 @@ accepted.
 | Producer | Consumer | Build/runtime behavior | Platform/toolchain boundary | CI trigger | Dependency owner | Local evidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | `iccdev-build-msan-libcxx.sh` | ClusterFuzzLite adapter | Build pinned MSan libc++ and libc++abi; build pinned instrumented libxml2 for the formats group | Linux x86-64, OSS-Fuzz Clang 22 | `memory` matrix entry | LLVM and libxml2 at pinned commits | Runtime libraries export MSan references |
-| ClusterFuzzLite adapter | Shared CFL builder | Add instrumented headers and explicit final link libraries only for `memory` | OSS-Fuzz builder environment | Manual or weekly scheduled full run | iccDEV CFL adapter | Configuration contract checks the flag handoff |
+| ClusterFuzzLite adapter | Shared CFL builder | Add instrumented headers and explicit final link libraries only for `memory` | OSS-Fuzz builder environment | Manual or nightly scheduled full run | iccDEV CFL adapter | Configuration contract checks the flag handoff |
 | Shared CFL builder | In-process fuzzers | Link the explicit runtime after iccDEV and fuzzer objects | Linux ELF loader with `$ORIGIN` | `memory` matrix entry | iccDEV CFL builder | `ldd` resolves bundled libc++/libc++abi with no libstdc++; XML resolves bundled libxml2 |
 | #2687 base64 fixture | In-process fuzzers | Decode the exact input, verify its SHA-256, and execute one replay | MSan with origin tracking | `memory` matrix entry | iccDEV regression fixtures | One-shot replays exit zero with no report |
-| ClusterFuzzLite workflow | Memory adapter | Validate a 2-45 minute per-group manual budget, a one-job smoke mode, and a 2-minute per-group scheduled full budget | GitHub Ubuntu 24.04 runner and pinned CFL containers | Manual or weekly schedule | iccDEV workflow maintainers | The matrix passes the requested group budget and targeted workflow lint |
+| ClusterFuzzLite workflow | Memory adapter | Validate a 2-45 minute per-group manual budget, a one-job smoke mode, and a 2-minute per-group scheduled full budget | GitHub Ubuntu 24.04 runner and pinned CFL containers | Manual or nightly schedule | iccDEV workflow maintainers | The matrix passes the requested group budget and targeted workflow lint |
 
 Tools and zlib remain disabled in the official ClusterFuzzLite lane. XML and
 JSON are enabled only for the formats group, whose memory build uses the same
