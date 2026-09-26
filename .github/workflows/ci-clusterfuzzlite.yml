@@ -165,11 +165,14 @@ jobs:
           EXPECTED_TARGET_GROUP: ${{ matrix.group }}
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           source .github/scripts/sanitize-sed.sh
           provenance=build-out/iccdev-cfl-build-provenance.txt
           grep -Fqx "source_sha=$GITHUB_SHA" "$provenance"
           grep -Fqx "target_group=$EXPECTED_TARGET_GROUP" "$provenance"
           grep -Fqx "patch_mode=$EXPECTED_PATCH_MODE" "$provenance"
+          sed 's/^/[EVIDENCE] cfl_/' "$provenance"
 
       - name: Run bounded batch fuzzing
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
@@ -252,11 +255,14 @@ jobs:
           EXPECTED_TARGET_GROUP: all
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           source .github/scripts/sanitize-sed.sh
           provenance=build-out/iccdev-cfl-build-provenance.txt
           grep -Fqx "source_sha=$GITHUB_SHA" "$provenance"
           grep -Fqx "target_group=$EXPECTED_TARGET_GROUP" "$provenance"
           grep -Fqx "patch_mode=$EXPECTED_PATCH_MODE" "$provenance"
+          sed 's/^/[EVIDENCE] cfl_/' "$provenance"
 
       - name: Prune persistent corpus
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
@@ -279,6 +285,36 @@ jobs:
           PARALLEL_FUZZING: "false"
           REPORT_TIMEOUTS: "true"
           REPORT_OOMS: "true"
+
+  cleanup-artifacts:
+    name: "Remove superseded corpus artifacts"
+    needs: prune
+    if: ${{ !cancelled() && needs.prune.result == 'success' }}
+    permissions:
+      actions: write  # Remove superseded corpus artifacts from this run.
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout iccDEV
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Remove superseded same-run corpus artifacts
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          .github/scripts/iccdev-cfl-artifact-cleanup.sh \
+            --delete-current-run "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
 
   coverage:
     name: "Generate libFuzzer coverage report"
@@ -340,11 +376,14 @@ jobs:
           EXPECTED_TARGET_GROUP: all
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           source .github/scripts/sanitize-sed.sh
           provenance=build-out/iccdev-cfl-build-provenance.txt
           grep -Fqx "source_sha=$GITHUB_SHA" "$provenance"
           grep -Fqx "target_group=$EXPECTED_TARGET_GROUP" "$provenance"
           grep -Fqx "patch_mode=$EXPECTED_PATCH_MODE" "$provenance"
+          sed 's/^/[EVIDENCE] cfl_/' "$provenance"
 
       - name: Generate coverage artifact
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc

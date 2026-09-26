@@ -71,6 +71,10 @@ The address-sanitizer prune job uses `!cancelled()` after configuration so one
 real finding does not indefinitely starve corpus maintenance while cancellation
 still stops cleanup. An optional manual input builds all targets with the coverage
 sanitizer and uploads the ClusterFuzzLite coverage report artifact.
+The official GitHub artifact backend emits one identically named corpus per
+sanitizer. After pruning, only a separate cleanup job receives `actions: write`;
+it preserves the newest same-run corpus for each of the eight exact target
+names and deletes only the superseded duplicates from that run.
 
 Local validation uses an OSS-Fuzz checkout:
 
@@ -164,6 +168,12 @@ mode to `build-out/iccdev-cfl-build-provenance.txt`. The workflow verifies that
 record before fuzzing, pruning, or coverage. If ClusterFuzzLite cannot fetch an
 in-flight commit after branch history is rewritten and falls back to another
 revision, the job stops before running mismatched fuzzers.
+
+Successful MSan builds print the resolved libc++, libc++abi, and, for the XML
+target, libxml2 paths before reporting the result of each pinned #2687 replay.
+The XML harness installs process-local libxml error callbacks so routine
+malformed-input diagnostics do not bury sanitizer output; sanitizer reports and
+iccDEV validation behavior remain unchanged.
 
 A CLUT-bearing seed has to survive into the corpus for either visualization
 target to render a raster, and two independent gates used to remove the only
