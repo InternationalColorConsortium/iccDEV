@@ -15,6 +15,7 @@
 
 VG_TARGETS=(
   connect-thread
+  pawg
   dump
   roundtrip
   fromxml
@@ -31,6 +32,7 @@ VG_TARGETS=(
 
 VG_BUILD_TARGETS=(
   iccConnectThreadTest
+  iccPawgReport
   iccDumpProfile
   iccRoundTrip
   iccFromXml
@@ -49,6 +51,7 @@ vg_print_targets()
 {
   echo "Available targets:"
   echo "  connect-thread    - threaded CMM regression (best Helgrind/DRD target)"
+  echo "  pawg              - PAWG security, conformance, and quality report"
   echo "  dump              - binary profile load, validate, and dump"
   echo "  roundtrip         - MPE profile load/write/reload path"
   echo "  fromxml           - XML profile parser and binary writer"
@@ -95,6 +98,13 @@ vg_configure_target()
       VG_REQUIRED_FILES=("$profile")
       VG_RECOMMENDED_TOOL="helgrind"
       VG_NOTE="Exercises concurrent CIccCmm apply-object creation."
+      ;;
+    pawg)
+      VG_CMAKE_TARGET="iccPawgReport"
+      VG_BINARY="$(vg_tool_binary IccPawgReport iccPawgReport)"
+      VG_ARGS=("$profile")
+      VG_REQUIRED_FILES=("$profile")
+      VG_NOTE="Exercises PAWG security, conformance, and quality reporting."
       ;;
     dump)
       VG_CMAKE_TARGET="iccDumpProfile"
