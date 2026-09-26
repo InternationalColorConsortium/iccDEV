@@ -19,6 +19,7 @@ missing, empty, or drifted stack must fail.
 | `006-issue-2705-apply-scratch-initialization.patch` | #2705 | Zero-initialize CMM apply scratch and chunk buffers. |
 | `007-mpe-curve-position-bounds.patch` | CFL follow-up | Reject MPE curve positions outside their enclosing element. |
 | `008-unknown-tag-size-initialization.patch` | CFL follow-up | Initialize empty unknown-tag payload size before serialization. |
+| `009-issue-2707-calculator-temp-initialization.patch` | #2707 | Zero-initialize calculator temporary-channel storage. |
 
 When a normal source fix lands, remove only its issue patch. If #2699 or #2703
 lands first, the duplicate shared-root patch remains independently applicable;
