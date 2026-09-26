@@ -36,3 +36,5 @@ Use `.github/skills/clusterfuzzlite/SKILL.md` and
 12. Strengthen existing targets before adding multi-profile CMM, serializer,
     or V5 display-observer targets. Require an instrumented MSan boundary before
     adding image or carrier dependencies.
+13. Verify the builder snapshot's deterministic source-content digest against
+    the Actions checkout and reject fallback source after a history rewrite.

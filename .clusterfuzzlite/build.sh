@@ -28,6 +28,24 @@ if [ "${#source_sha}" -ne 40 ]; then
   echo "ERROR: ICCDEV_CFL_SOURCE_SHA must contain exactly 40 characters" >&2
   exit 2
 fi
+expected_source_digest="${ICCDEV_CFL_SOURCE_DIGEST:-${CFL_EXTRA_ICCDEV_CFL_SOURCE_DIGEST:-}}"
+case "$expected_source_digest" in
+  ''|*[!0-9a-f]*)
+    echo "ERROR: ICCDEV_CFL_SOURCE_DIGEST must be a lowercase SHA-256 digest" >&2
+    exit 2
+    ;;
+esac
+if [ "${#expected_source_digest}" -ne 64 ]; then
+  echo "ERROR: ICCDEV_CFL_SOURCE_DIGEST must contain exactly 64 characters" >&2
+  exit 2
+fi
+actual_source_digest="$("$repo_root/.github/scripts/iccdev-cfl-source-digest.sh" "$repo_root")"
+if [ "$actual_source_digest" != "$expected_source_digest" ]; then
+  echo "ERROR: ClusterFuzzLite source snapshot does not match the Actions checkout" >&2
+  echo "expected_source_digest=$expected_source_digest" >&2
+  echo "actual_source_digest=$actual_source_digest" >&2
+  exit 2
+fi
 target_group_file="$repo_root/.clusterfuzzlite/target-group"
 target_group="${ICCDEV_CFL_TARGET_GROUP:-${CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP:-}}"
 if [ -z "$target_group" ]; then
@@ -193,6 +211,7 @@ fi
 provenance_file="$OUT/iccdev-cfl-build-provenance.txt"
 {
   printf 'source_sha=%s\n' "$source_sha"
+  printf 'source_digest=%s\n' "$actual_source_digest"
   printf 'target_group=%s\n' "$target_group"
   printf 'patch_mode=%s\n' "$patch_mode"
 } > "$provenance_file"

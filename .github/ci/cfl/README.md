@@ -163,13 +163,15 @@ default workflow path is deliberately non-blocking. See
 `.github/ci/fuzz-patches/cfl/README.md` for the issue inventory and retirement
 rules.
 
-Every successful adapter build writes its source SHA, target group, and patch
-mode to `build-out/iccdev-cfl-build-provenance.txt`. The workflow forwards the
-checked-out SHA through `CFL_EXTRA_ICCDEV_CFL_SOURCE_SHA` because the source
-snapshot inside the build container has no Git metadata. It verifies the
-record against `GITHUB_SHA` before fuzzing, pruning, or coverage. This records
-the exact revision requested from the official builder without pretending the
-containerized source snapshot can independently recover Git provenance.
+Every successful adapter build writes its requested source SHA, verified
+source-content digest, target group, and patch mode to
+`build-out/iccdev-cfl-build-provenance.txt`. The workflow computes the digest
+from the Actions checkout and forwards it with the SHA through `CFL_EXTRA_*`.
+The adapter recomputes the digest from the snapshot supplied by the official
+builder and rejects a mismatch before compiling. This catches the builder's
+fallback to its current clone when a queued run's commit becomes unreachable
+after branch history is rewritten. The workflow verifies the complete record
+before fuzzing, pruning, or coverage and reports any fallback binaries by name.
 
 Successful MSan builds print the resolved libc++, libc++abi, and, for the XML
 target, libxml2 paths before reporting the result of each pinned #2687 replay.

@@ -25,6 +25,8 @@ Keep temporary open-issue MSan fixes as independent patches. The default fuzz
 path must attempt each patch, warn on drift or prior integration, and continue
 to later patches and the build. Use strict application only for maintaining the
 patch stack, and retire patches one issue at a time after normal fixes land.
+Require the builder snapshot's deterministic content digest to match the
+Actions checkout before accepting source SHA, target-group, or patch evidence.
 
 Strengthen existing targets before expanding the matrix. Prioritize a
 multi-profile CMM chain target, separate XML/JSON serializer targets, and V5

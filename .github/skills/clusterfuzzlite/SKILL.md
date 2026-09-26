@@ -20,6 +20,10 @@ Use this skill for `.clusterfuzzlite/**`,
 - Forward the GitHub matrix group and patch mode through `CFL_EXTRA_*`; the
   official action builds a fresh `GITHUB_SHA` clone, so pre-step checkout file
   mutations do not reach the builder container.
+- Forward and independently recompute the deterministic source-content digest.
+  Reject a builder snapshot that differs from the Actions checkout; the
+  official action may otherwise fall back to its current clone when a queued
+  commit becomes unreachable after a history rewrite.
 - Keep the CLI-fidelity wrappers in the local CFL smoke lane; they launch child
   tools and do not provide useful parent-process coverage feedback.
 - Consume `CC`, `CXX`, `CFLAGS`, `CXXFLAGS`, and `LIB_FUZZING_ENGINE` from the

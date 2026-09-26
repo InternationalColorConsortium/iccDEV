@@ -124,6 +124,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure target group and temporary patches
+        id: source_config
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -136,6 +137,8 @@ jobs:
           source .github/scripts/sanitize-sed.sh
           printf '%s\n' "$KNOWN_BUG_PATCH_MODE" > .clusterfuzzlite/known-bug-patch-mode
           printf '%s\n' "$TARGET_GROUP" > .clusterfuzzlite/target-group
+          source_digest="$(.github/scripts/iccdev-cfl-source-digest.sh)"
+          echo "source_digest=$source_digest" >> "$GITHUB_OUTPUT"  # elements-sanitized
 
       - name: Build and check fuzzers
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:fde96247c3488104b96822156a6e107d58487140115247a34e1f967c23df5604
@@ -155,6 +158,7 @@ jobs:
           LOW_DISK_SPACE: "True"
           KEEP_UNAFFECTED_FUZZ_TARGETS: "true"
           CFL_EXTRA_ICCDEV_CFL_SOURCE_SHA: ${{ github.sha }}
+          CFL_EXTRA_ICCDEV_CFL_SOURCE_DIGEST: ${{ steps.source_config.outputs.source_digest }}
           CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: ${{ matrix.group }}
           CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
 
@@ -163,6 +167,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           EXPECTED_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+          EXPECTED_SOURCE_DIGEST: ${{ steps.source_config.outputs.source_digest }}
           EXPECTED_TARGET_GROUP: ${{ matrix.group }}
         run: |
           set -euo pipefail
@@ -170,7 +175,15 @@ jobs:
           unset GITHUB_TOKEN || true
           source .github/scripts/sanitize-sed.sh
           provenance=build-out/iccdev-cfl-build-provenance.txt
+          if [ ! -s "$provenance" ]; then
+            echo "[FAIL] ClusterFuzzLite did not build the requested source snapshot" >&2
+            echo "The builder may have fallen back after GITHUB_SHA became unreachable." >&2
+            find build-out -maxdepth 1 -type f -name 'icc_*_fuzzer' -printf '%f\n' |
+              LC_ALL=C sort >&2
+            exit 1
+          fi
           grep -Fqx "source_sha=$GITHUB_SHA" "$provenance"
+          grep -Fqx "source_digest=$EXPECTED_SOURCE_DIGEST" "$provenance"
           grep -Fqx "target_group=$EXPECTED_TARGET_GROUP" "$provenance"
           grep -Fqx "patch_mode=$EXPECTED_PATCH_MODE" "$provenance"
           sed 's/^/[EVIDENCE] cfl_/' "$provenance"
@@ -216,6 +229,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure all targets and temporary patches
+        id: source_config
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -227,6 +241,8 @@ jobs:
           source .github/scripts/sanitize-sed.sh
           printf '%s\n' "$KNOWN_BUG_PATCH_MODE" > .clusterfuzzlite/known-bug-patch-mode
           printf '%s\n' 'all' > .clusterfuzzlite/target-group
+          source_digest="$(.github/scripts/iccdev-cfl-source-digest.sh)"
+          echo "source_digest=$source_digest" >> "$GITHUB_OUTPUT"  # elements-sanitized
 
       - name: Build fuzzers for pruning
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:fde96247c3488104b96822156a6e107d58487140115247a34e1f967c23df5604
@@ -246,6 +262,7 @@ jobs:
           LOW_DISK_SPACE: "True"
           KEEP_UNAFFECTED_FUZZ_TARGETS: "true"
           CFL_EXTRA_ICCDEV_CFL_SOURCE_SHA: ${{ github.sha }}
+          CFL_EXTRA_ICCDEV_CFL_SOURCE_DIGEST: ${{ steps.source_config.outputs.source_digest }}
           CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: all
           CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
 
@@ -254,6 +271,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           EXPECTED_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+          EXPECTED_SOURCE_DIGEST: ${{ steps.source_config.outputs.source_digest }}
           EXPECTED_TARGET_GROUP: all
         run: |
           set -euo pipefail
@@ -261,7 +279,15 @@ jobs:
           unset GITHUB_TOKEN || true
           source .github/scripts/sanitize-sed.sh
           provenance=build-out/iccdev-cfl-build-provenance.txt
+          if [ ! -s "$provenance" ]; then
+            echo "[FAIL] ClusterFuzzLite did not build the requested source snapshot" >&2
+            echo "The builder may have fallen back after GITHUB_SHA became unreachable." >&2
+            find build-out -maxdepth 1 -type f -name 'icc_*_fuzzer' -printf '%f\n' |
+              LC_ALL=C sort >&2
+            exit 1
+          fi
           grep -Fqx "source_sha=$GITHUB_SHA" "$provenance"
+          grep -Fqx "source_digest=$EXPECTED_SOURCE_DIGEST" "$provenance"
           grep -Fqx "target_group=$EXPECTED_TARGET_GROUP" "$provenance"
           grep -Fqx "patch_mode=$EXPECTED_PATCH_MODE" "$provenance"
           sed 's/^/[EVIDENCE] cfl_/' "$provenance"
@@ -338,6 +364,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure all targets and temporary patches
+        id: source_config
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -349,6 +376,8 @@ jobs:
           source .github/scripts/sanitize-sed.sh
           printf '%s\n' "$KNOWN_BUG_PATCH_MODE" > .clusterfuzzlite/known-bug-patch-mode
           printf '%s\n' 'all' > .clusterfuzzlite/target-group
+          source_digest="$(.github/scripts/iccdev-cfl-source-digest.sh)"
+          echo "source_digest=$source_digest" >> "$GITHUB_OUTPUT"  # elements-sanitized
 
       - name: Build fuzzers for coverage
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:fde96247c3488104b96822156a6e107d58487140115247a34e1f967c23df5604
@@ -368,6 +397,7 @@ jobs:
           LOW_DISK_SPACE: "True"
           KEEP_UNAFFECTED_FUZZ_TARGETS: "true"
           CFL_EXTRA_ICCDEV_CFL_SOURCE_SHA: ${{ github.sha }}
+          CFL_EXTRA_ICCDEV_CFL_SOURCE_DIGEST: ${{ steps.source_config.outputs.source_digest }}
           CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: all
           CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
 
@@ -376,6 +406,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           EXPECTED_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+          EXPECTED_SOURCE_DIGEST: ${{ steps.source_config.outputs.source_digest }}
           EXPECTED_TARGET_GROUP: all
         run: |
           set -euo pipefail
@@ -383,7 +414,15 @@ jobs:
           unset GITHUB_TOKEN || true
           source .github/scripts/sanitize-sed.sh
           provenance=build-out/iccdev-cfl-build-provenance.txt
+          if [ ! -s "$provenance" ]; then
+            echo "[FAIL] ClusterFuzzLite did not build the requested source snapshot" >&2
+            echo "The builder may have fallen back after GITHUB_SHA became unreachable." >&2
+            find build-out -maxdepth 1 -type f -name 'icc_*_fuzzer' -printf '%f\n' |
+              LC_ALL=C sort >&2
+            exit 1
+          fi
           grep -Fqx "source_sha=$GITHUB_SHA" "$provenance"
+          grep -Fqx "source_digest=$EXPECTED_SOURCE_DIGEST" "$provenance"
           grep -Fqx "target_group=$EXPECTED_TARGET_GROUP" "$provenance"
           grep -Fqx "patch_mode=$EXPECTED_PATCH_MODE" "$provenance"
           sed 's/^/[EVIDENCE] cfl_/' "$provenance"

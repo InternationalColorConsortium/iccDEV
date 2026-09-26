@@ -28,11 +28,12 @@ patch_test="$repo_root/.github/scripts/iccdev-fuzz-patch-check-tests.sh"
 target_test="$repo_root/.github/scripts/iccdev-clusterfuzzlite-target-tests.sh"
 artifact_cleanup="$repo_root/.github/scripts/iccdev-cfl-artifact-cleanup.sh"
 artifact_cleanup_test="$repo_root/.github/scripts/iccdev-cfl-artifact-cleanup-tests.sh"
+source_digest="$repo_root/.github/scripts/iccdev-cfl-source-digest.sh"
 
 for required in "$workflow" "$adapter" "$project" "$dockerfile" \
   "$msan_builder" "$issue_2687_fixture" "$patch_mode_file" \
   "$target_group_file" "$patch_readme" "$patch_test" "$target_test" \
-  "$artifact_cleanup" "$artifact_cleanup_test"; do
+  "$artifact_cleanup" "$artifact_cleanup_test" "$source_digest"; do
   if [ ! -s "$required" ]; then
     echo "[FAIL] Missing ClusterFuzzLite file: $required" >&2
     exit 1
@@ -47,6 +48,7 @@ bash -n "$patch_test"
 bash -n "$target_test"
 bash -n "$artifact_cleanup"
 bash -n "$artifact_cleanup_test"
+bash -n "$source_digest"
 
 for issue in 2686 2688 2699 2703 2704 2705 2707; do
   if ! find "$patch_dir" -maxdepth 1 -type f -name "*-issue-$issue-*.patch" \
@@ -123,6 +125,8 @@ done
 # shellcheck disable=SC2016 # Match literal Actions expressions.
 test "$(grep -Fc '          CFL_EXTRA_ICCDEV_CFL_SOURCE_SHA: ${{ github.sha }}' "$workflow")" -eq 3
 # shellcheck disable=SC2016 # Match literal Actions expressions.
+test "$(grep -Fc '          CFL_EXTRA_ICCDEV_CFL_SOURCE_DIGEST: ${{ steps.source_config.outputs.source_digest }}' "$workflow")" -eq 3
+# shellcheck disable=SC2016 # Match literal Actions expressions.
 grep -Fq '          CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: ${{ matrix.group }}' "$workflow"
 # shellcheck disable=SC2016 # Match literal Actions expressions.
 test "$(grep -Fc '          CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}' "$workflow")" -eq 3
@@ -153,8 +157,12 @@ grep -Fq 'ICCDEV_CFL_KNOWN_BUG_PATCH_MODE' "$adapter"
 grep -Fq 'CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP' "$adapter"
 grep -Fq 'CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE' "$adapter"
 grep -Fq 'CFL_EXTRA_ICCDEV_CFL_SOURCE_SHA' "$adapter"
+grep -Fq 'CFL_EXTRA_ICCDEV_CFL_SOURCE_DIGEST' "$adapter"
 grep -Fq 'ICCDEV_CFL_SOURCE_SHA must be a lowercase Git commit SHA' "$adapter"
 grep -Fq 'ICCDEV_CFL_SOURCE_SHA must contain exactly 40 characters' "$adapter"
+grep -Fq 'ICCDEV_CFL_SOURCE_DIGEST must be a lowercase SHA-256 digest' "$adapter"
+grep -Fq 'ICCDEV_CFL_SOURCE_DIGEST must contain exactly 64 characters' "$adapter"
+grep -Fq 'ClusterFuzzLite source snapshot does not match the Actions checkout' "$adapter"
 # shellcheck disable=SC2016 # Match the literal adapter command.
 if grep -Fq 'git -C "$repo_root" rev-parse HEAD' "$adapter"; then
   echo "adapter must not depend on Git metadata inside the build container" >&2
@@ -163,6 +171,7 @@ fi
 grep -Fq '.github/ci/fuzz-patches/cfl' "$adapter"
 grep -Fq 'iccdev-cfl-build-provenance.txt' "$adapter"
 grep -Fq "printf 'source_sha=%s\\n'" "$adapter"
+grep -Fq "printf 'source_digest=%s\\n'" "$adapter"
 grep -Fq "printf 'target_group=%s\\n'" "$adapter"
 grep -Fq "printf 'patch_mode=%s\\n'" "$adapter"
 "$repo_root/.github/scripts/iccdev-apply-fuzz-patches.sh" \
