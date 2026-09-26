@@ -121,6 +121,8 @@ done
 # made to the checkout are not visible in its builder container. CFL_EXTRA_*
 # is the supported forwarding boundary for matrix-specific build settings.
 # shellcheck disable=SC2016 # Match literal Actions expressions.
+test "$(grep -Fc '          CFL_EXTRA_ICCDEV_CFL_SOURCE_SHA: ${{ github.sha }}' "$workflow")" -eq 3
+# shellcheck disable=SC2016 # Match literal Actions expressions.
 grep -Fq '          CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: ${{ matrix.group }}' "$workflow"
 # shellcheck disable=SC2016 # Match literal Actions expressions.
 test "$(grep -Fc '          CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}' "$workflow")" -eq 3
@@ -150,6 +152,14 @@ grep -qx 'all' "$target_group_file"
 grep -Fq 'ICCDEV_CFL_KNOWN_BUG_PATCH_MODE' "$adapter"
 grep -Fq 'CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP' "$adapter"
 grep -Fq 'CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE' "$adapter"
+grep -Fq 'CFL_EXTRA_ICCDEV_CFL_SOURCE_SHA' "$adapter"
+grep -Fq 'ICCDEV_CFL_SOURCE_SHA must be a lowercase Git commit SHA' "$adapter"
+grep -Fq 'ICCDEV_CFL_SOURCE_SHA must contain exactly 40 characters' "$adapter"
+# shellcheck disable=SC2016 # Match the literal adapter command.
+if grep -Fq 'git -C "$repo_root" rev-parse HEAD' "$adapter"; then
+  echo "adapter must not depend on Git metadata inside the build container" >&2
+  exit 1
+fi
 grep -Fq '.github/ci/fuzz-patches/cfl' "$adapter"
 grep -Fq 'iccdev-cfl-build-provenance.txt' "$adapter"
 grep -Fq "printf 'source_sha=%s\\n'" "$adapter"

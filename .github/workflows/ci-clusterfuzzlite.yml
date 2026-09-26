@@ -154,6 +154,7 @@ jobs:
           CFL_PLATFORM: github
           LOW_DISK_SPACE: "True"
           KEEP_UNAFFECTED_FUZZ_TARGETS: "true"
+          CFL_EXTRA_ICCDEV_CFL_SOURCE_SHA: ${{ github.sha }}
           CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: ${{ matrix.group }}
           CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
 
@@ -244,6 +245,7 @@ jobs:
           CFL_PLATFORM: github
           LOW_DISK_SPACE: "True"
           KEEP_UNAFFECTED_FUZZ_TARGETS: "true"
+          CFL_EXTRA_ICCDEV_CFL_SOURCE_SHA: ${{ github.sha }}
           CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: all
           CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
 
@@ -365,6 +367,7 @@ jobs:
           CFL_PLATFORM: github
           LOW_DISK_SPACE: "True"
           KEEP_UNAFFECTED_FUZZ_TARGETS: "true"
+          CFL_EXTRA_ICCDEV_CFL_SOURCE_SHA: ${{ github.sha }}
           CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: all
           CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
 

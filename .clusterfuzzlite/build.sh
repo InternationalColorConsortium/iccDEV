@@ -17,6 +17,17 @@ set -euo pipefail
 : "${WORK:?ClusterFuzzLite must provide WORK}"
 
 repo_root="$SRC/iccDEV"
+source_sha="${ICCDEV_CFL_SOURCE_SHA:-${CFL_EXTRA_ICCDEV_CFL_SOURCE_SHA:-}}"
+case "$source_sha" in
+  ''|*[!0-9a-f]*)
+    echo "ERROR: ICCDEV_CFL_SOURCE_SHA must be a lowercase Git commit SHA" >&2
+    exit 2
+    ;;
+esac
+if [ "${#source_sha}" -ne 40 ]; then
+  echo "ERROR: ICCDEV_CFL_SOURCE_SHA must contain exactly 40 characters" >&2
+  exit 2
+fi
 target_group_file="$repo_root/.clusterfuzzlite/target-group"
 target_group="${ICCDEV_CFL_TARGET_GROUP:-${CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP:-}}"
 if [ -z "$target_group" ]; then
@@ -181,7 +192,7 @@ fi
 
 provenance_file="$OUT/iccdev-cfl-build-provenance.txt"
 {
-  printf 'source_sha=%s\n' "$(git -C "$repo_root" rev-parse HEAD)"
+  printf 'source_sha=%s\n' "$source_sha"
   printf 'target_group=%s\n' "$target_group"
   printf 'patch_mode=%s\n' "$patch_mode"
 } > "$provenance_file"
