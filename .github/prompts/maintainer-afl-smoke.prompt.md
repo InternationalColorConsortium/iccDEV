@@ -38,6 +38,10 @@ version. For Clang/LLVM 22, build AFL++ `dev` with `CC=clang-22`,
 `afl-showmap`, `afl-cc`, `afl-compiler-rt.o`,
 `SanitizerCoveragePCGUARD.so`, and `cmplog-routines-pass.so`.
 
+Reject compiler pairs outside matching Clang 21 or Clang 22. The packaged
+AFL++ wrapper is paired with 21, while the workflow rebuild is paired with 22;
+do not silently fall back to an older system Clang.
+
 The target sets differ per lane, and are not interchangeable.
 
 - **AFL** accepts `dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube` — see
@@ -99,8 +103,9 @@ When changing AFL++ bootstrap behavior, also run the regression-container
 bootstrap probe documented in `docs/afl-fuzzing.md`.
 
 When changing fuzz patch stacks, the patch checker, the patch applicator, or
-`.github/ci/cfl/` build behavior, verify that `.github/workflows/ci-docker.yml` still
-rebuilds and tests the unified image for those paths.
+`.github/ci/cfl/` build behavior, manually dispatch
+`.github/workflows/ci-docker.yml` from an approved publishing ref to rebuild
+and test the unified image.
 
 ## Handoff
 

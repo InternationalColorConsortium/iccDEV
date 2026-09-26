@@ -191,9 +191,12 @@ int runOverrideTest()
   icc.m_Header.deviceClass = icSigColorEncodingClass;
 
   // Anything other than "ISO 22028-1" selects the base-profile-plus-overrides
-  // branch; the colorSpaceName is what the cache handler would resolve to a file.
+  // branch; the referenceName is what the cache handler resolves (#1993).  The
+  // colorSpaceName, when present, shall contain the same text -- a mismatch is
+  // refused before the cache is consulted -- so the two agree here.  This test's
+  // cache ignores the name, so the text itself does not matter.
   if (!attachText(&icc, icSigReferenceNameTag, "local override test") ||
-      !attachText(&icc, icSigColorSpaceNameTag, "TestSpace")) {
+      !attachText(&icc, icSigColorSpaceNameTag, "local override test")) {
     printf("[FAIL] could not build the encoding profile's text tags\n");
     return 1;
   }

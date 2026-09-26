@@ -1,4 +1,4 @@
-/** @file
+#[[ @file
     File:       CMakeLists.txt for iccHeifDump.cpp
 
     Contains:   CMake build rules for the iccHeifDump research tool
@@ -6,9 +6,9 @@
     Version:    V1
 
     Copyright:  (c) see Software License
-*/
+]]
 
-/*
+#[[
  * Copyright (c) International Color Consortium.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,8 +57,25 @@
  *
  * Notes - Added 21-Sept-2026 by @xsscx
  *       - Research Tooling for HEIF InterOp
- */
+ ]]
 
 add_executable(iccHeifDump IccHeifDump.cpp)
 set_property(TARGET iccHeifDump PROPERTY CXX_STANDARD 11)
 target_link_libraries(iccHeifDump heif_static)
+
+option(ICCDEV_HEIF_ENABLE_TESTS "Register the iccHeifDump carrier QA test" OFF)
+if(ICCDEV_HEIF_ENABLE_TESTS)
+  find_program(BASH_EXECUTABLE bash REQUIRED)
+  add_test(
+    NAME iccdev.heif-carrier-qa
+    COMMAND "${CMAKE_COMMAND}" -E env
+      "ICCDEV_HEIF_TOOL=$<TARGET_FILE:iccHeifDump>"
+      "ICCDEV_HEIF_CORPUS=${CMAKE_CURRENT_LIST_DIR}/img"
+      "ICCDEV_TEST_OUTDIR=${CMAKE_CURRENT_BINARY_DIR}/qa-output"
+      "${BASH_EXECUTABLE}"
+      "${CMAKE_CURRENT_LIST_DIR}/../../../scripts/iccdev-heif-carrier-qa.sh"
+  )
+  set_tests_properties(iccdev.heif-carrier-qa PROPERTIES
+    LABELS "iccdev;heif;icc;issue-2647;regression"
+    TIMEOUT 120)
+endif()

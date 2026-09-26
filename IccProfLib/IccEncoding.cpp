@@ -397,6 +397,19 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
       delete pIcc;
       return icEncConvertMemoryError;
     }
+    // Size the element and copy the inverted matrix into it, as the A2B block
+    // above does with the forward one.  This block used to attach the element
+    // straight after creating it, so the inverse computed just above was
+    // discarded: BToA3 ended in a 0-in, 0-out matrix element with no data and
+    // the reverse transform had nothing to apply (#1990).  pMtx is not owned by
+    // pMpeTag until the Attach below, so the failure path deletes it too.
+    if (!pMtx->SetSize(3, 3)) {
+      delete pMtx;
+      delete pMpeTag;
+      delete pIcc;
+      return icEncConvertMemoryError;
+    }
+    memcpy(pMtx->GetMatrix(), &lumMtx[0], 9 * sizeof(icFloatNumber));
     pMpeTag->Attach(pMtx);
   }
   pIcc->AttachTag(icSigBToA3Tag, pMpeTag);
@@ -635,15 +648,40 @@ icStatusEncConvert icConvertEncodingProfile(CIccProfilePtr &newIcc, CIccProfile 
         pParams = (CIccTagStruct*)pTag->NewCopy();
     }
     else {
+      // Any other reference name names an encoding in the ICC 3-component colour
+      // encoding registry, and it is the required referenceNameTag that names it
+      // (ICC.2:2023, ColorEncodingSpace profile, 8.7).  The optional
+      // colorSpaceNameTag, when present, shall contain the same text.  This used
+      // to look the encoding up by colorSpaceNameTag alone, so a conforming
+      // profile that omitted that optional tag -- Testing/Encoding/sRgbEncoding.xml
+      // and sRgbEncodingOverrides.xml -- could not be converted at all (#1993).
+      //
+      // Per 8.7 paragraphs 3 and 4, the colorEncodingParamsTag, when present,
+      // always overrides: its elements are the values used to interpret the
+      // encoding, whether or not the name is known to the registry.  A known name
+      // only supplies the values for elements the tag does not carry; an unknown
+      // one supplies none.  So a name the registry cannot resolve is refused only
+      // when there is no colorEncodingParamsTag either.  If the tag's values alone
+      // are incomplete, the conversion below refuses them.
+      //
+      // colorSpaceNameTag is only a name -- it is the colorEncodingParamsTag values
+      // that override -- and when present it shall contain the same text as
+      // referenceNameTag.  A profile whose two names disagree does not say which
+      // encoding it means, so refuse it rather than guess.  A name that cannot be
+      // read (an allocation failure) is treated the same way.
       CIccTag *pNameTag = pEncodeIcc->FindTagOfType(icSigColorSpaceNameTag, icSigUtf8TextType);
-      if (pNameTag) {
-        pText = (CIccTagUtf8Text *)pNameTag;
-        const icUChar *szName = pText->GetText();
+      const icUChar *szName = pNameTag ? ((CIccTagUtf8Text*)pNameTag)->GetText() : NULL;
+      if (pNameTag && (!szName || strcmp((const char*)szName, (const char*)szRefName)))
+        return icEncConvertBadProfile;
 
-        CIccProfile *pBaseIcc = IIccEncProfileCacheHandler::GetHandler()->GetEncodingProfile(szName);
-        if (!pBaseIcc) {
+      CIccProfile *pBaseIcc = IIccEncProfileCacheHandler::GetHandler()->GetEncodingProfile(szRefName);
+      if (!pBaseIcc) {
+        CIccTag *pOwnParams = pEncodeIcc->FindTagOfType(icSigColorEncodingParamsTag, icSigTagStructType);
+        if (!pOwnParams)
           return icEncConvertNoBaseProfile;
-        }
+        pParams = (CIccTagStruct*)pOwnParams->NewCopy();
+      }
+      else {
         
         pTag = pBaseIcc->FindTagOfType(icSigColorEncodingParamsTag, icSigTagStructType);
         if (!pTag) {

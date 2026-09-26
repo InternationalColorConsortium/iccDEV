@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <ProfileVersion>5.00</ProfileVersion>
+    <ProfileDeviceClass>mid </ProfileDeviceClass>
+    <ProfileDeviceSubClass>nink</ProfileDeviceSubClass>
+    <DataColourSpace>nc0003</DataColourSpace>
+    <CreationDateTime>2026-09-22T12:00:00</CreationDateTime>
+    <MCS>mc0003</MCS>
+  </Header>
+  <Tags>
+    <multiLocalizedUnicodeType>
+      <TagSignature>desc</TagSignature>
+      <LocalizedText LanguageCountry="enUS">Three-channel MCS XML QA</LocalizedText>
+    </multiLocalizedUnicodeType>
+    <multiProcessElementType>
+      <TagSignature>A2M0</TagSignature>
+      <MultiProcessElements InputChannels="3" OutputChannels="3">
+        <CalculatorElement InputChannels="3" OutputChannels="3">
+          <SubElements/>
+          <MainFunction>{ in(0,3) out(0,3) }</MainFunction>
+        </CalculatorElement>
+      </MultiProcessElements>
+    </multiProcessElementType>
+    <tagArrayType>
+      <TagSignature>mcta</TagSignature>
+      <ArraySignature>utf8</ArraySignature>
+      <ArrayTags>
+        <utf8TextType><TextData>QA Cyan</TextData></utf8TextType>
+        <utf8TextType><TextData>QA Violet</TextData></utf8TextType>
+        <utf8TextType><TextData>QA Gold</TextData></utf8TextType>
+      </ArrayTags>
+    </tagArrayType>
+    <multiLocalizedUnicodeType>
+      <TagSignature>cprt</TagSignature>
+      <LocalizedText LanguageCountry="enUS">Copyright 2026 International Color Consortium</LocalizedText>
+    </multiLocalizedUnicodeType>
+  </Tags>
+</IccProfile>

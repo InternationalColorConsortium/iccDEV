@@ -112,9 +112,10 @@ Deadlines bound responses and startup; cleanup removes both named containers on
 success or failure. Failure logs stay in the CI job log and the optional report
 directory; CI uploads those diagnostics on failure. Inventories and image
 identity are printed rather than asserting a fixed tool count. `ci-docker`
-uses the same helper, requiring native validation. It publishes only from
-`master`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`, and release
-tags; other feature branches remain non-publishing.
+uses the same helper, requiring native validation. It is manual-dispatch only;
+when dispatched from `master`, `ci-qa-pr-docker-testing`,
+`ci-publish-colourbill-ctrl`, or a release tag, it publishes the corresponding
+approved image tags. Other feature branches remain non-publishing.
 The read-only `ci-docker-pr` caller uses it when building the changed Dockerfile;
 its trusted-base-image-only path does not claim to test a new runtime. No PR
 runtime artifacts are uploaded. The MCP package workflow includes the shared
@@ -159,6 +160,15 @@ ASAN/UBSAN build. Issue #2380 provides a bounded manual workflow at
 `.github/workflows/ci-issue-2380-valgrind-repro.yml`. Its default
 scenario demonstrates the PR #2378 `GetNewApplyCmm()` race before and after the
 fix. It is a proof-of-concept workflow, not a hosted fuzzing service.
+
+Issue #2673 is guarded by
+`.github/workflows/ci-issue-2673-fromxml-valgrind-smoke.yml`. A push to
+`ci-qa-pr-docker-testing` runs it automatically; manual dispatch accepts a
+supported unified-image tag and resolves it to an immutable digest. The job
+builds a non-sanitized Debug `iccFromXml`, converts
+`Testing/Named/NamedColorV4.xml`, and passes only when Memcheck exits cleanly
+with zero error contexts while still producing a nonempty profile. The complete
+Memcheck report remains visible in the job log.
 
 For the maintained 13-target Memcheck, Helgrind, DRD, Massif, and Callgrind
 registry, use [Valgrind-Family Analysis](valgrind-analysis.md). The image
@@ -353,10 +363,11 @@ operations.
 
 ## Building and Publishing
 
-Build the one Dockerfile locally before publishing:
+Use Docker's build cache for normal local development and repeated smoke-test
+iterations:
 
 ```bash
-docker build --no-cache -t iccdev:local .
+docker build -t iccdev:local .
 docker run --rm iccdev:local bash -lc '
   set -euo pipefail
   iccDumpProfile -v Testing/sRGB_v4_ICC_preference.icc >/dev/null
@@ -369,9 +380,11 @@ docker run --rm iccdev:local bash -lc '
 
 Run this complete local preflight from a clean checkout before pushing a
 Dockerfile, container workflow, published-image, or container-runtime change.
-It verifies the host development environment, workflow and Dockerfile policy,
-the no-cache image build, the shipped analyzer inventory, runtime behavior, and
-the image health check.
+Cached builds are permitted while developing and debugging the image. The final
+pre-push proof uses `--no-cache` to verify every pinned dependency and build
+step from the canonical base. The preflight also verifies the host development
+environment, workflow and Dockerfile policy, shipped analyzer inventory,
+runtime behavior, and image health check.
 
 ```bash
 command -v docker gh actionlint zizmor hadolint trivy
@@ -407,6 +420,10 @@ Dockerfile, and configuration SAST checks, including actionlint, yamllint,
 zizmor, ShellCheck, hadolint, and Trivy configuration scanning. For
 component-partitioned cppcheck and clang-tidy reports, use the exact
 [maintainer static-analysis reproduction](build.md#maintainer-static-analysis).
+Path-scoped Trivy exceptions belong in `.trivyignore.yaml` with a concrete
+statement. Keep build-only image exceptions separate from the unified runtime
+image, and treat changes to the exception file as maintainer-owned container
+policy.
 
 Scan the completed image for high and critical vulnerabilities and secrets:
 
@@ -458,11 +475,11 @@ around them. `iccdev-valgrind-qa.sh` configures its own non-sanitized Debug
 tree before running Memcheck. For concurrent code, replace the Memcheck
 arguments with `--tool helgrind --expect clean --runs 3`.
 
-`ci-docker` publishes the canonical package only from approved refs: `master`
-adds `latest` and the immutable SHA tag, `ci-qa-pr-docker-testing` and
-`ci-publish-colourbill-ctrl` add their integration tags and immutable SHA tags,
-and a `v*` ref adds its release tag and immutable SHA tag. Do not publish other
-branch, run, image-variant, or
+`ci-docker` is manual-dispatch only and publishes the canonical package only
+when dispatched from approved refs: `master` adds `latest` and the immutable
+SHA tag, `ci-qa-pr-docker-testing` and `ci-publish-colourbill-ctrl` add their
+integration tags and immutable SHA tags, and a `v*` ref adds its release tag
+and immutable SHA tag. Do not publish other branch, run, image-variant, or
 legacy-package tags. Publishing runs generate a compact CycloneDX SBOM with
 Anchore and create provenance with GitHub's `actions/attest-build-provenance`
 action. The workflow validates that the SBOM is nonempty and at most 16 MiB,

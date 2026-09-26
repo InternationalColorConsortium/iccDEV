@@ -8,7 +8,7 @@
 #
 ###############################################################
 
-FROM ubuntu:26.04@sha256:2260313b31c8c011cd2eebe728008efac1b3982be73eb71348ea2648d2c0e09b
+FROM ubuntu:26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -17,8 +17,8 @@ ARG BUILD_JOBS=32
 ARG FLAMEGRAPH_COMMIT=41fee1f99f9276008b7cd112fca19dc3ea84ac32
 ARG LLVM_MSAN_LIBCXX_COMMIT=1ab49a973e210e97d61e5db6557180dcb92c3e98
 ARG LIBXML2_MSAN_COMMIT=3d840e17858de03a09fba8b202e3a89267d5795a
-ARG CODEQL_VERSION=2.27.0
-ARG CODEQL_SHA256=8e870433e5c80d0e916c3c1aa9005fc88aab990bcdcc649fade9dfc4d7e94305
+ARG CODEQL_VERSION=2.27.1
+ARG CODEQL_SHA256=1d380f79896ededc654c7b21fafb3360136f1aeb678ad4df4df9af3910c6b815
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -46,7 +46,7 @@ RUN for attempt in 1 2 3; do \
     clang-tools-22=1:22.1.2-1ubuntu1 \
     cmake=4.2.3-2ubuntu2 \
     cppcheck=2.19.0-3 \
-    curl=8.18.0-1ubuntu2.5 \
+    curl=8.18.0-1ubuntu2.7 \
     diffutils=1:3.12-1ubuntu0.1 \
     file=1:5.46-5build2 \
     g++=4:15.2.0-5ubuntu1 \
@@ -65,7 +65,7 @@ RUN for attempt in 1 2 3; do \
     libtiff-tools=4.7.0-3ubuntu5 \
     liblzma-dev=5.8.3-1 \
     libpng-dev=1.6.57-1 \
-    libcurl4t64=8.18.0-1ubuntu2.5 \
+    libcurl4t64=8.18.0-1ubuntu2.7 \
     libssl-dev=3.5.5-1ubuntu3.5 \
     libssl3t64=3.5.5-1ubuntu3.5 \
     libtiff-dev=4.7.0-3ubuntu5 \
@@ -73,10 +73,10 @@ RUN for attempt in 1 2 3; do \
     zlib1g=1:1.3.dfsg+really1.3.1-1ubuntu3.1 \
     lld-22=1:22.1.2-1ubuntu1 \
     lldb-22=1:22.1.2-1ubuntu1 \
-    libxml2-16=2.15.2+dfsg-0.1ubuntu0.1 \
-    libxml2-dev=2.15.2+dfsg-0.1ubuntu0.1 \
+    libxml2-16=2.15.2+dfsg-0.1ubuntu0.2 \
+    libxml2-dev=2.15.2+dfsg-0.1ubuntu0.2 \
     lcov=2.4-3 \
-    linux-perf=7.0.0-31.31 \
+    linux-perf=7.0.0-34.34 \
     lsb-release=12.1-2build1 \
     llvm-22=1:22.1.2-1ubuntu1 \
     llvm-22-tools=1:22.1.2-1ubuntu1 \

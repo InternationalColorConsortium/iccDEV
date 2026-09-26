@@ -70,6 +70,9 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
 - The unified image packages the compiler runtime needed by its packaged
   `afl-clang-fast` for short local smoke checks. The AFL workflow must still
   rebuild and probe AFL++ wrappers against the selected LLVM version.
+- Require a matching Clang 21 or Clang 22 C/C++ pair. The packaged wrapper uses
+  21 and the rebuilt workflow wrapper uses 22; reject older or mismatched
+  `AFL_CC` and `AFL_CXX` values before configuring iccDEV.
 - Keep the workflow bootstrap narrow: build `afl-fuzz`, `afl-showmap`,
   `afl-cc`, `afl-compiler-rt.o`, `SanitizerCoveragePCGUARD.so`, and
   `cmplog-routines-pass.so`. Avoid broad AFL++ targets that enter optional GCC
@@ -89,9 +92,10 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
   needs a corpus that still contains a CLUT seed (#2120).
 - Use `.github/ci/fuzz-patches/afl` and `.github/ci/fuzz-patches/cfl` for
   maintainer-local patch stacks when `--patches` is requested.
-- Keep `ci-docker.yml` push paths and regression-image verification in sync
-  with AFL/CFL patch-stack helpers so container rebuilds happen when the
-  checker, applicator, smoke script, `.github/ci/cfl/`, or fuzz patches change.
+- Keep `ci-docker.yml` manual-dispatch publication and regression-image
+  verification in sync with AFL/CFL patch-stack helpers. Dispatch the container
+  rebuild after the checker, applicator, smoke script, `.github/ci/cfl/`, or
+  fuzz patches change.
 - Run `.github/scripts/check-fuzz-patches.sh` after editing either patch stack
   so malformed hunks or stale context are caught before workflow dispatch.
 - Keep manual AFL and CFL workflow inputs aligned: `target_ref` selects the

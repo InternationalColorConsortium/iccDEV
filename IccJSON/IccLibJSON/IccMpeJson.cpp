@@ -1535,6 +1535,11 @@ bool CIccMpeJsonXYZToJab::ParseJson(const IccJson &j, std::string &parseStr)
 // CIccMpeJsonCalculator
 // ===========================================================================
 
+CIccMpeCalculator *CIccMpeJsonCalculator::NewCopy() const
+{
+  return new CIccMpeJsonCalculator(static_cast<const CIccMpeCalculator&>(*this));
+}
+
 void CIccMpeJsonCalculator::clean()
 {
   m_sImport = "*";

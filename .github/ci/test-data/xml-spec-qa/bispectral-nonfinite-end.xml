@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <ProfileVersion>5.00</ProfileVersion>
+    <ProfileDeviceClass>nmcl</ProfileDeviceClass>
+    <SpectralPCS>bs0006</SpectralPCS>
+    <SpectralRange>
+      <Wavelengths start="420" end="680" steps="2"/>
+    </SpectralRange>
+    <BiSpectralRange>
+      <Wavelengths start="300" end="inf" steps="3"/>
+    </BiSpectralRange>
+  </Header>
+  <Tags/>
+</IccProfile>

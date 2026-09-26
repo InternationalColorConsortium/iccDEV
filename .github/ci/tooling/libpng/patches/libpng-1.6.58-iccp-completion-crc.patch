@@ -1,0 +1,100 @@
+diff --git a/pngrutil.c b/pngrutil.c
+index 3a35fe9d..7ec64c5e 100644
+--- a/pngrutil.c
++++ b/pngrutil.c
+@@ -1329,6 +1329,7 @@ png_handle_iCCP(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+ {
+    png_const_charp errmsg = NULL; /* error message output, or no error */
+    int finished = 0; /* crc checked */
++   int crc_error = 0; /* profile must be discarded under the CRC policy */
+ 
+    png_debug(1, "in png_handle_iCCP");
+ 
+@@ -1435,19 +1436,44 @@ png_handle_iCCP(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+                                  size = profile_length - (sizeof profile_header)
+                                      - 12 * tag_count;
+ 
+-                                 (void)png_inflate_read(png_ptr, local_buffer,
+-                                     (sizeof local_buffer), &length,
+-                                     profile + (sizeof profile_header) +
+-                                     12 * tag_count, &size, 1/*finish*/);
++                                 {
++                                    int ret = png_inflate_read(png_ptr,
++                                        local_buffer, (sizeof local_buffer),
++                                        &length,
++                                        profile + (sizeof profile_header) +
++                                        12 * tag_count, &size, 1/*finish*/);
++
++                                    if ((ret == Z_OK || ret == Z_BUF_ERROR) &&
++                                        size == 0)
++                                    {
++                                       Byte extra_byte;
++                                       png_alloc_size_t extra_size = 1;
++
++                                       ret = png_inflate_read(png_ptr,
++                                           local_buffer,
++                                           (sizeof local_buffer), &length,
++                                           &extra_byte, &extra_size,
++                                           1/*finish*/);
++
++                                       if (extra_size == 0)
++                                          errmsg = "extra decompressed data";
++                                    }
++
++                                    if (errmsg == NULL && ret != Z_STREAM_END)
++                                       errmsg = png_ptr->zstream.msg;
+ 
+-                                 if (length > 0 && !(png_ptr->flags &
+-                                     PNG_FLAG_BENIGN_ERRORS_WARN))
+-                                    errmsg = "extra compressed data";
++                                    else if ((length > 0 ||
++                                        png_ptr->zstream.avail_in > 0) &&
++                                        !(png_ptr->flags &
++                                        PNG_FLAG_BENIGN_ERRORS_WARN))
++                                       errmsg = "extra compressed data";
++                                 }
+ 
+                                  /* But otherwise allow extra data: */
+-                                 else if (size == 0)
++                                 if (errmsg == NULL && size == 0)
+                                  {
+-                                    if (length > 0)
++                                    if (length > 0 ||
++                                        png_ptr->zstream.avail_in > 0)
+                                     {
+                                        /* This can be handled completely, so
+                                         * keep going.
+@@ -1456,11 +1482,15 @@ png_handle_iCCP(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+                                            "extra compressed data");
+                                     }
+ 
+-                                    png_crc_finish(png_ptr, length);
++                                    if (png_crc_finish(png_ptr, length) != 0 &&
++                                        !(png_ptr->flags &
++                                        PNG_FLAG_CRC_ANCILLARY_USE))
++                                       crc_error = 1;
++
+                                     finished = 1;
+ 
+                                     /* Steal the profile for info_ptr. */
+-                                    if (info_ptr != NULL)
++                                    if (crc_error == 0 && info_ptr != NULL)
+                                     {
+                                        png_free_data(png_ptr, info_ptr,
+                                            PNG_FREE_ICCP, 0);
+@@ -1489,13 +1519,13 @@ png_handle_iCCP(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+                                      * chunks.
+                                      */
+ 
+-                                    if (errmsg == NULL)
++                                    if (errmsg == NULL && crc_error == 0)
+                                     {
+                                        png_ptr->zowner = 0;
+                                        return handled_ok;
+                                     }
+                                  }
+-                                 if (errmsg == NULL)
++                                 if (errmsg == NULL && crc_error == 0)
+                                     errmsg = png_ptr->zstream.msg;
+                               }
+                               /* else png_icc_check_tag_table output an error */

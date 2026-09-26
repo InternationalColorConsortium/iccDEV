@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <ProfileVersion>5.00</ProfileVersion>
+    <ProfileDeviceClass>abst</ProfileDeviceClass>
+    <SpectralPCS>rs0005</SpectralPCS>
+    <SpectralRange>
+      <Wavelengths start="410" end="690" steps="65541"/>
+    </SpectralRange>
+  </Header>
+  <Tags/>
+</IccProfile>

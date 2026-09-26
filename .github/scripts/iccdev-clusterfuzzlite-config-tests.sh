@@ -1,0 +1,136 @@
+#!/bin/bash
+###############################################################################
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# This source file is licensed under the BSD 3-Clause "New" or "Revised"
+# License used by ICC software projects.
+#
+# Validate the checked-in ClusterFuzzLite build and workflow contract.
+###############################################################################
+
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+repo_root="$(cd "$script_dir/../.." && pwd)"
+workflow="$repo_root/.github/workflows/ci-clusterfuzzlite.yml"
+adapter="$repo_root/.clusterfuzzlite/build.sh"
+project="$repo_root/.clusterfuzzlite/project.yaml"
+dockerfile="$repo_root/.clusterfuzzlite/Dockerfile"
+msan_builder="$repo_root/.github/scripts/iccdev-build-msan-libcxx.sh"
+issue_2687_fixture="$repo_root/.github/ci/regression/issue-2687-profile-list-node.icc.base64"
+
+for required in "$workflow" "$adapter" "$project" "$dockerfile" \
+  "$msan_builder" "$issue_2687_fixture"; do
+  if [ ! -s "$required" ]; then
+    echo "[FAIL] Missing ClusterFuzzLite file: $required" >&2
+    exit 1
+  fi
+done
+
+bash -n "$adapter"
+bash -n "$repo_root/.github/ci/cfl/build.sh"
+bash -n "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
+bash -n "$msan_builder"
+
+grep -qx 'language: c++' "$project"
+grep -q '^FROM gcr.io/oss-fuzz-base/base-builder@sha256:[0-9a-f]\{64\}$' "$dockerfile"
+grep -q '^  actions: read$' "$workflow"
+grep -q '^  workflow_dispatch:$' "$workflow"
+grep -q '^      fuzz_minutes:$' "$workflow"
+grep -q '^        default: 2$' "$workflow"
+grep -q '^        type: number$' "$workflow"
+grep -q '^      - ci-qa-clusterfuzz$' "$workflow"
+grep -q '^  configure:$' "$workflow"
+# shellcheck disable=SC2016 # Match the literal Actions expression.
+grep -q '^      fuzz_seconds: \${{ steps.duration.outputs.fuzz_seconds }}$' "$workflow"
+test "$(grep -c '^        shell: bash --noprofile --norc {0}$' "$workflow")" -eq 1
+grep -q '^          BASH_ENV: /dev/null$' "$workflow"
+grep -q '^          git config --global credential.helper ""$' "$workflow"
+grep -q '^          unset GITHUB_TOKEN || true$' "$workflow"
+# shellcheck disable=SC2016 # Match literal workflow shell variables.
+grep -q '^          if \[ "$minutes" -lt 2 \] || \[ "$minutes" -gt 45 \]; then$' "$workflow"
+# shellcheck disable=SC2016 # Match the literal validated output write.
+grep -q '^          echo "fuzz_seconds=$((minutes \* 60))" >> "$GITHUB_OUTPUT"  # elements-sanitized$' "$workflow"
+grep -q '^    needs: configure$' "$workflow"
+grep -q '^  prune:$' "$workflow"
+grep -q '^    needs: fuzz$' "$workflow"
+grep -q '^    timeout-minutes: 60$' "$workflow"
+grep -q '^          MODE: prune$' "$workflow"
+test "$(grep -c '^          FUZZ_SECONDS: "120"$' "$workflow")" -eq 1
+# shellcheck disable=SC2016 # Match the literal Actions expression.
+grep -q '^          FUZZ_SECONDS: \${{ needs.configure.outputs.fuzz_seconds }}$' "$workflow"
+grep -Eq '^        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:[0-9a-f]{64}$' "$workflow"
+grep -Eq '^        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:[0-9a-f]{64}$' "$workflow"
+
+for sanitizer in address undefined memory; do
+  grep -q "^          - $sanitizer$" "$workflow"
+done
+
+grep -q '^targets=( profilevisualize writerserialize )$' "$adapter"
+grep -q -- '--targets profilevisualize,writerserialize' "$adapter"
+grep -Fq 'iccdev-build-msan-libcxx.sh' "$adapter"
+grep -Fq -- '--skip-libxml2' "$adapter"
+grep -Fq 'CXXFLAGS//-stdlib=libc++/' "$adapter"
+grep -Fq 'ICCDEV_CFL_CXX_LINK_FLAGS' "$adapter"
+grep -Fq 'libstdc++.so' "$adapter"
+# shellcheck disable=SC2016 # Match the literal ELF loader token.
+grep -Fq '$ORIGIN' "$adapter"
+grep -Fq 'libc++.so.1.0' "$adapter"
+grep -Fq 'libc++abi.so.1' "$adapter"
+grep -Fq 'issue-2687-profile-list-node.icc.base64' "$adapter"
+grep -Fq 'origin_history_size=7' "$adapter"
+grep -Fq 'ICCDEV_CFL_CXX_LINK_FLAGS' "$repo_root/.github/ci/cfl/build.sh"
+grep -Fq -- '--skip-libxml2' < <("$msan_builder" --help)
+grep -Fq 'cmake_generator="Unix Makefiles"' "$msan_builder"
+grep -Fq 'extensions.partialClone origin' "$msan_builder"
+grep -Fq 'remote.origin.promisor true' "$msan_builder"
+grep -Fq 'remote.origin.partialCloneFilter blob:none' "$msan_builder"
+test "$(grep -c 'configure_partial_clone "\$.*source_dir"' "$msan_builder")" -eq 2
+test "$(grep -c -- '--filter=blob:none' "$msan_builder")" -eq 2
+issue_2687_sha="$(base64 --decode "$issue_2687_fixture" | sha256sum | cut -d' ' -f1)"
+test "$issue_2687_sha" = \
+  'bb9c4ad53f9269920947bac185a634da2971a94b17da6cff117dd7ad45bcfe85'
+# shellcheck disable=SC2016 # The adapter must retain this literal template.
+fuzzer_template='  fuzzer="icc_${target}_fuzzer"'
+grep -Fqx "$fuzzer_template" "$adapter"
+grep -Fq '21:21|22:22)' "$repo_root/.github/ci/cfl/build.sh"
+grep -Fq '21:21|22:22)' "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
+# shellcheck disable=SC2016 # Match the literal skip-build condition.
+skip_build_line="$(grep -n '^if \[ "$skip_build" -eq 0 \]; then$' "$repo_root/.github/scripts/iccdev-afl-smoke.sh" | cut -d: -f1)"
+# shellcheck disable=SC2016 # Match the literal compiler-gate condition.
+compiler_gate_line="$(grep -n '^    if \[ -z "${AFL_CC:-}" \]; then$' "$repo_root/.github/scripts/iccdev-afl-smoke.sh" | cut -d: -f1)"
+test "$compiler_gate_line" -gt "$skip_build_line"
+
+validate_action_reference() {
+  local action_ref="$1"
+
+  if [[ "$action_ref" == ./* ]]; then
+    return 0
+  fi
+  if [[ "$action_ref" =~ ^docker://[^@[:space:]]+@sha256:[0-9a-f]{64}$ ]]; then
+    return 0
+  fi
+  [[ "$action_ref" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/[^@[:space:]]+)?@[0-9a-f]{40}$ ]]
+}
+
+while IFS= read -r action_ref; do
+  if ! validate_action_reference "$action_ref"; then
+    echo "[FAIL] Mutable or invalid action reference: $action_ref" >&2
+    exit 1
+  fi
+done < <(sed -nE 's/^[[:space:]]*uses:[[:space:]]*([^[:space:]#]+).*$/\1/p' "$workflow")
+
+for mutable_ref in \
+  'actions/checkout@v5.0.0' \
+  'actions/checkout@main' \
+  'actions/checkout@08c6903' \
+  'docker://gcr.io/example/action:v1'; do
+  if validate_action_reference "$mutable_ref"; then
+    echo "[FAIL] Pin validator accepted mutable reference: $mutable_ref" >&2
+    exit 1
+  fi
+done
+
+echo "[PASS] ClusterFuzzLite configuration contract"

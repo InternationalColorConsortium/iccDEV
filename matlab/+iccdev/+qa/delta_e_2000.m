@@ -1,12 +1,31 @@
 function de = delta_e_2000(lab1, lab2)
 %DELTA_E_2000 Calculate CIEDE2000 colour differences.
+%   DE = ICCDEV.QA.DELTA_E_2000(LAB1, LAB2) compares corresponding
+%   CIELAB colours in equal-sized N-by-3 arrays. Each row is [L* a* b*],
+%   and DE contains one colour-difference value per row.
+%
+%   Compare one colour pair:
+%     delta_e = iccdev.qa.delta_e_2000( ...
+%       [50 2.6772 -79.7751], [50 0 -82.7485]);
+%
+%   Compare multiple colour pairs:
+%     lab1 = [50 2.6772 -79.7751; 60 10 20];
+%     lab2 = [50 0 -82.7485; 62 12 18];
+%     delta_e = iccdev.qa.delta_e_2000(lab1, lab2);
 %
 % Copyright (c) 2026 International Color Consortium.
 % BSD 3-Clause License. See LICENSE.md for details.
 
+  if nargin < 2
+    error('iccdev:deltaEInputsRequired', ...
+      'Provide two equal-sized N-by-3 CIELAB arrays.\n%s', ...
+      usage_message());
+  end
+
   if ~isequal(size(lab1), size(lab2)) || size(lab1, 2) ~= 3
     error('iccdev:pawgQ1InvalidLabSamples', ...
-      'CIELAB inputs must be equal-sized N-by-3 arrays.');
+      'CIELAB inputs must be equal-sized N-by-3 arrays. %s', ...
+      usage_message());
   end
 
   lab1 = double(lab1);
@@ -59,4 +78,16 @@ function de = delta_e_2000(lab1, lab2)
   term_h = big_dhp ./ sh;
   de = sqrt(max(0, term_l .^ 2 + term_c .^ 2 + term_h .^ 2 + ...
     rt .* term_c .* term_h));
+end
+
+function message = usage_message()
+  message = sprintf([ ...
+    'Each row is [L* a* b*].\n\n' ...
+    'Single pair:\n' ...
+    '  delta_e = iccdev.qa.delta_e_2000(' ...
+    '[50 2.6772 -79.7751], [50 0 -82.7485]);\n\n' ...
+    'Multiple pairs:\n' ...
+    '  lab1 = [50 2.6772 -79.7751; 60 10 20];\n' ...
+    '  lab2 = [50 0 -82.7485; 62 12 18];\n' ...
+    '  delta_e = iccdev.qa.delta_e_2000(lab1, lab2);']);
 end

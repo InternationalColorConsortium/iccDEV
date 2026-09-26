@@ -254,6 +254,10 @@ bool CIccTagEmbeddedProfile::Read(icUInt32Number size, CIccIO *pIO, CIccProfile 
 
   m_pProfile = pProfile ? pProfile->NewProfile() : new CIccProfile();
 
+  // ICC.2:2023 7.2.4 requires the profile-size field to equal the exact
+  // profile extent. The ICC5 tag's payload boundary is the embedded profile's
+  // file boundary, so accepting a different declared size hides trailing or
+  // missing bytes from nested-profile validation.
   if (pProfile && pProfile->HasIO()) {
     if (!m_pProfile->Attach(pEmbedIO)) {
       delete pEmbedIO;
@@ -262,9 +266,33 @@ bool CIccTagEmbeddedProfile::Read(icUInt32Number size, CIccIO *pIO, CIccProfile 
 
       return false;
     }
+    if (m_pProfile->m_Header.size != size) {
+      delete m_pProfile;
+      m_pProfile = NULL;
+
+      return false;
+    }
+    std::string layoutReport;
+    icValidateStatus layoutStatus = m_pProfile->CheckTagLayout(pEmbedIO, layoutReport);
+    if (layoutStatus == icValidateNonCompliant ||
+        layoutStatus == icValidateCriticalError) {
+      delete m_pProfile;
+      m_pProfile = NULL;
+
+      return false;
+    }
   }
   else {
     bool stat = m_pProfile->Read(pEmbedIO);
+    if (stat && m_pProfile->m_Header.size != size)
+      stat = false;
+    if (stat) {
+      std::string layoutReport;
+      icValidateStatus layoutStatus = m_pProfile->CheckTagLayout(pEmbedIO, layoutReport);
+      if (layoutStatus == icValidateNonCompliant ||
+          layoutStatus == icValidateCriticalError)
+        stat = false;
+    }
     delete pEmbedIO;
 
     if (!stat) {

@@ -60,15 +60,18 @@ jobs:
         with:
           release: R2026a
 
-      - name: Reproduce specification calculations
+      - name: Run dependency-free MATLAB checks
         # matlab-actions/run-command v3
-        # Both checks are pure arithmetic over checked-in tables and fixtures, so
+        # These checks use MATLAB code plus checked-in tables and fixtures, so
         # they run before the native build rather than depending on it.
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5
         with:
           command: >-
             addpath('matlab');
             addpath(fullfile('matlab', 'tests'));
+            test_usage_guidance();
+            test_delta_e_2000();
+            run(fullfile('matlab', 'examples', 'ciede2000.m'));
             test_luminance_normalization();
             run(fullfile('matlab', 'examples', 'luminance_normalization.m'));
             test_colorimetry_issue_1475();
@@ -217,6 +220,7 @@ jobs:
             addpath('matlab');
             addpath(fullfile('matlab', 'tests'));
             test_usage_guidance();
+            test_delta_e_2000();
             test_json_bindings();
             test_lut_type_range();
             run_local_qa();
@@ -224,7 +228,8 @@ jobs:
             test_plot();
             run(fullfile('matlab', 'examples', 'read_profile.m'));
             run(fullfile('matlab', 'examples', 'color_transform.m'));
-            run(fullfile('matlab', 'examples', 'gamma_curve.m'))
+            run(fullfile('matlab', 'examples', 'gamma_curve.m'));
+            run(fullfile('matlab', 'examples', 'ciede2000.m'))
           generate-summary: false
 
   docker-interop:
@@ -233,7 +238,7 @@ jobs:
     timeout-minutes: 30
     env:
       ICCDEV_IMAGE_REPOSITORY: ghcr.io/internationalcolorconsortium/iccdev
-      ICCDEV_IMAGE_DIGEST: sha256:0a54b8ad1ca73e294ecf9c71323e6385c8812945c6ca3b40ba98d9f82b89c0fc
+      ICCDEV_IMAGE_DIGEST: sha256:0504c43e0204e36aa36377fceee1de9c5f49468d578202c388525c75d42da079
 
     steps:
       - name: Checkout repository

@@ -153,7 +153,7 @@ actionlint -no-color "$FILE"
 yamllint -d '{extends: default, rules: {document-start: disable, truthy: disable, line-length: {max: 120}}}' "$FILE"
 zizmor "$FILE"
 hadolint Dockerfile*
-trivy config --severity HIGH,CRITICAL .
+trivy config --ignorefile .trivyignore.yaml --severity HIGH,CRITICAL .
 gh codeql resolve queries .github/codeql-queries/iccdev-security-suite.qls
 ```
 
@@ -166,7 +166,7 @@ For Dockerfile or container-policy changes, also run:
 
 ```bash
 hadolint Dockerfile Dockerfile.*
-trivy config --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 .
+trivy config --ignorefile .trivyignore.yaml --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 .
 docker build -f Dockerfile -t iccdev-local:ubuntu .
 trivy image --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 iccdev-local:ubuntu
 ```

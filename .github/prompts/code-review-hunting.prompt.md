@@ -98,17 +98,27 @@ These findings should be LOW/informational, not CRITICAL.
 
 ### Category 4: Unchecked Return Values (CWE-252)
 
-Search for `Read()`, `Begin()`, `fromJson()` calls where the return
-value is discarded.
+Search for `Read()`, `Begin()`, `ParseXml()`, `ParseJson()`, and `fromJson()`
+calls where the return value is discarded. For paired XML/JSON readers, compare
+failure propagation at every nested parse boundary. A spec-defined empty
+placeholder may need an explicit exception, but a present malformed child must
+not be silently converted into that placeholder.
 
 ```bash
 grep -rn 'Read(' IccProfLib/ | grep -v 'if.*Read\|!.*Read\|==.*Read'
 grep -rn '\.Begin(' IccProfLib/ | grep -v 'if.*Begin\|!.*Begin'
 grep -rn 'fromJson(' Tools/ IccProfLib/ | grep -v 'if.*fromJson'
+grep -rn 'ParseXml\|ParseJson' IccXML/ IccJSON/
 ```
 
 Pattern: `Begin()` can return `false` for invalid state, but callers
 proceed to `Apply()` on uninitialized data.
+
+For reader/writer symmetry, also verify that fixed-width hexadecimal fields
+require the writer's exact decoded byte count and that a nested-node search
+starts at the parent's children rather than scanning the parent and its
+siblings. A successful parse that normalizes an invalid ID or drops nested
+text is a failure even when no sanitizer fires.
 
 ### Category 5: Counted Buffers and Boundary Equality (CWE-121/CWE-122/CWE-787)
 

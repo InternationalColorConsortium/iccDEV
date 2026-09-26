@@ -86,7 +86,11 @@ high-confidence, actionable findings over low-value comments.
 4. For workflow changes, run the applicable YAML parser, `actionlint`,
    `yamllint`, `zizmor`, CodeQL Actions, and trust-boundary checks.
 5. For parser and input-handling changes, use the nearest regression and
-   sanitizer coverage.
+   sanitizer coverage. Compare XML and JSON nested-call failure propagation,
+   and distinguish spec-defined empty placeholders from present malformed
+   children. For fixed-width hexadecimal fields, require the exact decoded
+   byte count; for nested XML fields, verify child traversal rather than a
+   sibling-only search from the parent.
 6. For new or relocated C/C++ sources and headers, compare the complete ICC
    Software License block with an adjacent established file; report a missing,
    abbreviated, or placeholder block as a blocking finding.

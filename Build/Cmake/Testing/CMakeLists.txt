@@ -123,6 +123,8 @@ function(iccdev_add_check_dependencies)
       iccFromXml
       iccJpegDump
       iccPngDump
+      iccProfilePlot
+      iccProfileVisualizePlot
       iccRoundTrip
       iccSpecSepToTiff
       iccTiffDump
@@ -2099,8 +2101,10 @@ endfunction()
 
 # Guards #2610: both hex decoders skipped whatever they could not read as a
 # pair of hex digits, so a dataType payload of "0g11" loaded as the single byte
-# 0x11 with no diagnostic.  Pins the rule, drives it through the tag parser, and
-# pins the header ProfileID exclusion the corpus depends on.
+# 0x11 with no diagnostic.  Also pins propagation through both embedded
+# profileSequenceDesc descriptions while preserving the empty mluc placeholder
+# ICC.1:2022 Table 70 permits, and pins the header ProfileID exclusion the
+# corpus depends on.
 function(iccdev_add_hex_data_malformed_xml_test)
   if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -2136,7 +2140,7 @@ function(iccdev_add_hex_data_malformed_xml_test)
   endif()
   set_tests_properties(iccdev.hex-data-malformed-xml PROPERTIES
     TIMEOUT 60
-    LABELS "iccdev;xml;hex;parse;issue-2610;regression"
+    LABELS "iccdev;xml;hex;parse;pseq;psid;roundtrip;parser-symmetry;issue-2610;regression"
   )
   if(WIN32)
     set(_icchexdatamalformedxmltest_env_mods
@@ -6124,6 +6128,68 @@ function(iccdev_add_calculator_limits_test)
   endif()
 endfunction()
 
+# #2622: CIccMpeJsonCalculator did not override NewCopy(), so a copied JSON
+# calculator came back as a plain CIccMpeCalculator.  CIccSampledCalculatorCurveJson
+# copies its curve on the way to JSON, so a CurveSetElement holding a
+# SampledCalculatorCurve lost its "curves" array and iccToJson wrote a document
+# iccFromJson refused.  The profile that shows it (Testing/Display/
+# Rec2100HlgFullCC.xml) is not built by CreateAllProfiles.sh, so no corpus run
+# reached it.  The helper pins the copy's class, that the copy serializes
+# identically, and the curve-set path end to end.  In its own executable because
+# IccMpeXml.h and IccMpeJson.h cannot share a translation unit.
+function(iccdev_add_json_calculator_newcopy_test)
+  if(NOT TARGET "${TARGET_LIB_ICCJSON}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccJsonCalculatorNewCopyTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/json-calculator-newcopy.cpp"
+  )
+  target_compile_features(iccJsonCalculatorNewCopyTest PRIVATE cxx_std_17)
+  target_include_directories(iccJsonCalculatorNewCopyTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccJsonCalculatorNewCopyTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccJsonCalculatorNewCopyTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.json-calculator-newcopy
+      COMMAND "$<TARGET_FILE:iccJsonCalculatorNewCopyTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.json-calculator-newcopy
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccJsonCalculatorNewCopyTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.json-calculator-newcopy PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;mpe;calc;json;issue-2622;regression"
+  )
+  if(WIN32)
+    set(_json_calc_newcopy_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccJsonCalculatorNewCopyTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _json_calc_newcopy_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.json-calculator-newcopy PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_json_calc_newcopy_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2565: the JSON form of calculatorLimits, in its own executable because IccMpeXml.h
 # and IccMpeJson.h cannot share a translation unit.
 function(iccdev_add_calculator_limits_json_test)
@@ -7155,6 +7221,67 @@ function(iccdev_add_lms_colour_space_test)
     endforeach()
     set_tests_properties(iccdev.lms-colour-space PROPERTIES
       ENVIRONMENT_MODIFICATION "${_lms_env_mods}"
+    )
+  endif()
+endfunction()
+
+# #2563: ICC.2 7.2.8 requires a MultiplexLink profile's data colour space signature
+# to be zero, and 7.2.9 requires its PCS to be "the appropriate data colour space",
+# i.e. the device output space the link produces.  CheckHeader() exempted
+# MultiplexVisualization from the known-data-space test but not MultiplexLink, then
+# required a zero PCS for MultiplexIdentification and MultiplexLink together, so a
+# conforming MLNK profile failed twice; the tag validator added a third report by
+# taking MToA0's output channel count from the data colour space, which the text
+# requires to be zero.  Testing/mcs has MID and MVIS fixtures and no MLNK, so none
+# of it was reachable from the corpus.  The helper pins the conforming profile as
+# clean and keeps the MID and MVIS verdicts as controls, so a fix that deleted the
+# checks instead of correcting them fails here.
+# Links IccProfLib only -- the rules are in CheckHeader() and the MPE tag validator.
+function(iccdev_add_mlnk_header_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMlnkHeaderTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/mlnk-header.cpp"
+  )
+  target_compile_features(iccMlnkHeaderTest PRIVATE cxx_std_17)
+  target_include_directories(iccMlnkHeaderTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccMlnkHeaderTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccMlnkHeaderTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.mlnk-header
+      COMMAND "$<TARGET_FILE:iccMlnkHeaderTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.mlnk-header
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccMlnkHeaderTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.mlnk-header PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;validate;header;issue-2563;regression"
+  )
+  if(WIN32)
+    set(_mlnk_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMlnkHeaderTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _mlnk_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.mlnk-header PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_mlnk_env_mods}"
     )
   endif()
 endfunction()
@@ -8819,6 +8946,92 @@ function(iccdev_add_encoding_lumamtx_test)
   endif()
 endfunction()
 
+# #1990: CIccDefaultEncProfileConverter::ConvertFromParams inverted the
+# luma/chroma matrix for the B2A direction, then attached a matrix element to
+# BToA3 without sizing it or copying the inverse in, so a converted YCbCr
+# encoding profile had a 0-in, 0-out, data-less element for its reverse
+# transform.  The #1985 helper above uses an identity matrix, which cannot tell
+# an inverse from a copy; this one uses BT.709's and checks BToA3 holds the
+# matrix whose product with it is the identity.
+function(iccdev_add_encoding_inverse_lumamtx_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccEncodingInverseLumaMtxTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/encoding-inverse-lumamtx.cpp"
+  )
+  target_link_libraries(iccEncodingInverseLumaMtxTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccEncodingInverseLumaMtxTest)
+
+  add_test(
+    NAME iccdev.encoding-inverse-lumamtx
+    COMMAND "$<TARGET_FILE:iccEncodingInverseLumaMtxTest>"
+  )
+  set_tests_properties(iccdev.encoding-inverse-lumamtx PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;encoding;issue-1990;regression"
+  )
+  if(WIN32)
+    set(_encinvlumamtx_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccEncodingInverseLumaMtxTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _encinvlumamtx_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.encoding-inverse-lumamtx PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_encinvlumamtx_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# #1993: a ColorEncodingSpace profile names its encoding with the required
+# referenceNameTag (ICC.2:2023, ColorEncodingSpace profile, 8.7).
+# icConvertEncodingProfile looked a registry encoding up by the optional
+# colorSpaceNameTag alone, so a conforming profile without it could not be
+# converted and the override path never ran; an unregistered name was refused
+# even with a colorEncodingParamsTag present; and the validator checked only that
+# referenceNameTag existed.  The helper installs a stand-in registry and a
+# stand-in converter, so each case checks which name was looked up and exactly
+# which parameter values reach the conversion.
+function(iccdev_add_encoding_profile_reference_name_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccEncodingProfileReferenceNameTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/encoding-profile-reference-name.cpp"
+  )
+  target_link_libraries(iccEncodingProfileReferenceNameTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccEncodingProfileReferenceNameTest)
+
+  add_test(
+    NAME iccdev.encoding-profile-reference-name
+    COMMAND "$<TARGET_FILE:iccEncodingProfileReferenceNameTest>"
+  )
+  set_tests_properties(iccdev.encoding-profile-reference-name PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;encoding;validate;issue-1993;regression"
+  )
+  if(WIN32)
+    set(_encrefname_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccEncodingProfileReferenceNameTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _encrefname_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.encoding-profile-reference-name PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_encrefname_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # icConvertEncodingProfile layered a colour-encoding profile's local overrides by
 # calling DeleteElem then AttachElem on pStruct -- the struct it was iterating --
 # instead of on pParams, the copy of the base encoding profile's params. DeleteElem
@@ -10205,6 +10418,7 @@ if(WIN32)
   iccdev_add_device_attributes_icc2_test()
   iccdev_add_lms_colour_space_test()
   iccdev_add_copyright_tag_icc2_test()
+  iccdev_add_mlnk_header_test()
   iccdev_add_struct_name_spelling_test()
   iccdev_add_mcs_colorspace_name_test()
   iccdev_add_signature_utils_contract_test()
@@ -10239,6 +10453,8 @@ if(WIN32)
   iccdev_add_datetime_parse_test()
   iccdev_add_encoding_surround_test()
   iccdev_add_encoding_lumamtx_test()
+  iccdev_add_encoding_inverse_lumamtx_test()
+  iccdev_add_encoding_profile_reference_name_test()
   iccdev_add_encoding_override_test()
   iccdev_add_parser_restore_calls_test()
   iccdev_add_tag_layout_shared_data_test()
@@ -10257,6 +10473,7 @@ if(WIN32)
   iccdev_add_colorant_count_narrowing_json_test()
   iccdev_add_calculator_limits_test()
   iccdev_add_calculator_limits_json_test()
+  iccdev_add_json_calculator_newcopy_test()
   iccdev_add_colorant_count_narrowing_xml_test()
   iccdev_add_xml_numeric_values_test()
   iccdev_add_xml_calculator_curve_writer_test()
@@ -10637,6 +10854,7 @@ iccdev_add_tag_name_spelling_test()
 iccdev_add_device_attributes_icc2_test()
 iccdev_add_lms_colour_space_test()
 iccdev_add_copyright_tag_icc2_test()
+iccdev_add_mlnk_header_test()
 iccdev_add_struct_name_spelling_test()
 iccdev_add_mcs_colorspace_name_test()
 iccdev_add_signature_utils_contract_test()
@@ -10670,6 +10888,8 @@ iccdev_add_v2_xml_fixtures_test()
 iccdev_add_datetime_parse_test()
 iccdev_add_encoding_surround_test()
 iccdev_add_encoding_lumamtx_test()
+iccdev_add_encoding_inverse_lumamtx_test()
+iccdev_add_encoding_profile_reference_name_test()
 iccdev_add_encoding_override_test()
 iccdev_add_parser_restore_calls_test()
 iccdev_add_tag_layout_shared_data_test()
@@ -10692,6 +10912,7 @@ iccdev_add_namedcolor_findcolor_suffix_underflow_test()
 iccdev_add_colorant_count_narrowing_json_test()
 iccdev_add_calculator_limits_test()
 iccdev_add_calculator_limits_json_test()
+iccdev_add_json_calculator_newcopy_test()
 iccdev_add_colorant_count_narrowing_xml_test()
 iccdev_add_xml_numeric_values_test()
 iccdev_add_xml_calculator_curve_writer_test()
@@ -11346,13 +11567,18 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-basic-string-regression-tests.sh"
 )
 
-iccdev_add_script_test(
-  iccdev.pawg-report-regressions
-  120
-  "iccdev;pawg;report;regression;asan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-pawg-report-regression-tests.sh"
-)
+if(TARGET iccPawgReport)
+  iccdev_add_script_test(
+    iccdev.pawg-report-regressions
+    120
+    "iccdev;pawg;report;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-pawg-report-regression-tests.sh"
+  )
+  set_tests_properties(iccdev.pawg-report-regressions PROPERTIES
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+endif()
 
 if(TARGET iccApplyNamedCmm AND TARGET iccApplyProfiles AND TARGET iccApplySearch)
   iccdev_add_script_test(
@@ -11620,6 +11846,24 @@ if(TARGET iccFromXml AND TARGET iccToXml AND TARGET iccApplyToLink)
   )
   set_tests_properties(iccdev.xml-parser-regressions PROPERTIES
     FIXTURES_REQUIRED iccdev_profiles
+  )
+endif()
+
+# ICC.2 specification-driven XML coverage for spectral PCS, bi-spectral PCS,
+# and MCS header fields. The script also records the current iccRoundTrip class
+# boundary and requires iccPawgReport to emit parseable evidence for each
+# profile without treating its ICC.1 rule set as an ICC.2 conformance oracle.
+if(TARGET iccFromXml AND TARGET iccToXml AND TARGET iccDumpProfile
+   AND TARGET iccRoundTrip AND TARGET iccPawgReport)
+  iccdev_add_script_test(
+    iccdev.xml-spec-qa
+    300
+    "iccdev;xml;icc2;spectral;bispectral;mcs;validation;qa;asan;issue-2671"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-xml-spec-qa.sh"
+  )
+  set_tests_properties(iccdev.xml-spec-qa PROPERTIES
+    SKIP_RETURN_CODE 77
   )
 endif()
 
@@ -12606,6 +12850,20 @@ if(TARGET iccDescribeSinkTest)
   set_tests_properties(iccdev.describe-sink-api PROPERTIES
     TIMEOUT 60
     LABELS  "iccdev;describe;api;sink;options"
+  )
+endif()
+
+if(BASH_EXECUTABLE)
+  add_test(
+    NAME iccdev.clusterfuzzlite-configuration
+    COMMAND
+      "${BASH_EXECUTABLE}"
+      "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-clusterfuzzlite-config-tests.sh"
+  )
+  set_tests_properties(iccdev.clusterfuzzlite-configuration PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 30
+    LABELS "iccdev;clusterfuzzlite;libfuzzer;configuration"
   )
 endif()
 

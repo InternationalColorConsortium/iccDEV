@@ -1,5 +1,13 @@
 function result = docker_validate(profile_path, varargin)
 %DOCKER_VALIDATE Validate a profile with the published iccDEV Docker image.
+%   RESULT = iccdev.docker_validate(PROFILE_PATH) resolves the locally
+%   available default image to an immutable digest before validation.
+%
+%   RESULT = iccdev.docker_validate(PROFILE_PATH, 'Image', IMAGE, ...
+%   'Pull', true) refreshes a mutable tag (or obtains a missing digest), then
+%   executes the resolved digest. RESULT records the requested selector in
+%   image, the executed reference in resolvedImage, and the OCI source label
+%   in sourceRevision.
 %
 % Copyright (c) International Color Consortium.
 % BSD 3-Clause License. See LICENSE.md for details.
@@ -30,20 +38,7 @@ function result = docker_validate(profile_path, varargin)
   profile_path = attributes.Name;
   validate_host_path(profile_path);
 
-  [docker_ready, docker_details] = iccdev.docker_available(image);
-  if ~docker_ready && p.Results.Pull
-    pull_command = docker_command({'docker', 'pull', image});
-    [pull_status, pull_output] = system(pull_command);
-    if pull_status ~= 0
-      error('iccdev:dockerPullFailed', ...
-        'Unable to pull %s:\n%s', image, pull_output);
-    end
-    [docker_ready, docker_details] = iccdev.docker_available(image);
-  end
-  if ~docker_ready
-    error('iccdev:dockerUnavailable', ...
-      'Docker or image %s is unavailable:\n%s', image, docker_details);
-  end
+  image_details = docker_resolve_image(image, p.Results.Pull);
 
   mount_spec = ['type=bind,source=' profile_path ...
     ',target=/profile.icc,readonly'];
@@ -67,7 +62,7 @@ function result = docker_validate(profile_path, varargin)
     '2'
     '--mount'
     mount_spec
-    image
+    image_details.resolvedImage
   };
 
   dump_command = docker_command([common; {
@@ -89,8 +84,10 @@ function result = docker_validate(profile_path, varargin)
   [roundtrip_status, roundtrip_output] = system(roundtrip_command);
 
   result = struct( ...
-    'image', image, ...
-    'imageId', docker_details, ...
+    'image', image_details.selector, ...
+    'resolvedImage', image_details.resolvedImage, ...
+    'imageId', image_details.imageId, ...
+    'sourceRevision', image_details.sourceRevision, ...
     'profile', profile_path, ...
     'dumpStatus', dump_status, ...
     'dumpOutput', dump_output, ...

@@ -40,6 +40,7 @@ matlab/
   examples/
     read_profile.m        # Profile reading example
     color_transform.m     # Color transform example
+    ciede2000.m            # Single- and multiple-pair CIEDE2000 example
     luminance_normalization.m # Explain issue #1811 fixture scaling
     colorimetry_issue_1475.m  # Explain issue #1475 D50 reduction differences
     gamma_curve.m         # curveType u8Fixed8 gamma calculation example
@@ -51,6 +52,7 @@ matlab/
     test_luminance_normalization.m # Dependency-free issue #1811 check
     test_colorimetry_issue_1475.m  # Dependency-free issue #1475 check
     test_pawg_q1.m             # MATLAB/native PAWG Q1 agreement
+    test_delta_e_2000.m        # CIEDE2000 single/batch reference examples
     test_usage_guidance.m      # Actionable missing-argument usage examples
     fixtures/default_usage_examples.txt # Expected identifiers and commands
   README.md               # Usage documentation
@@ -158,14 +160,18 @@ addpath('matlab');
 run_local_qa();
 run_gamma_qa();
 test_usage_guidance();
+test_delta_e_2000();
 test_add_docker_path();
 test_plot();
+run('matlab/examples/ciede2000.m');
 ```
 
 Public constructors and functions that require arguments must reject a bare
 invocation with a stable `iccdev:*Required` identifier and a working example.
 Keep `test_usage_guidance.m` and its fixture synchronized when adding or
-renaming a public entry point.
+renaming a public entry point. Shape-validation errors must state how rows map
+to results and provide copy/paste-ready single-item and batch examples. Show
+interactive UI defaults before automation-only hidden or headless variants.
 
 For MATLAB-only workflow or documentation iteration, use
 `.github/scripts/preflight-safety-checks.sh --fast-lane=matlab` and the focused

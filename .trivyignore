@@ -1,0 +1,4 @@
+# Temporary bootstrap for trusted-base scanners that predate YAML policy support.
+# Path-scoped rationale remains canonical in .trivyignore.yaml. Remove after merge.
+AVD-DS-0002 exp:2026-11-01
+AVD-DS-0026 exp:2026-11-01

@@ -1,0 +1,15 @@
+diff --git a/srcs/reader/heifreaderimpl.cpp b/srcs/reader/heifreaderimpl.cpp
+index 9365e81..e4a8aad 100644
+--- a/srcs/reader/heifreaderimpl.cpp
++++ b/srcs/reader/heifreaderimpl.cpp
+@@ -1088,5 +1088,8 @@ namespace HEIF
+-        int64_t boxEndOffset = startLocation + boxSize;
+-        if (boxSize < 8 || (boxEndOffset < 8) || ((io.size > 0) && (boxEndOffset > io.size)))
++        if (startLocation < 0 || boxSize < 8 ||
++            boxSize > std::numeric_limits<std::int64_t>::max() - startLocation ||
++            ((io.size > 0) &&
++             ((startLocation > io.size) ||
++              (boxSize > io.size - startLocation))))
+         {
+             return ErrorCode::FILE_READ_ERROR;
+         }

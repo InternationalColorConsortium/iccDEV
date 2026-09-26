@@ -29,10 +29,34 @@ new blocker returns the branch to branch-only grooming before another review.
 | CTest process guide | `docs/ctest.md` | Local commands, registered suites, and add-test workflow. |
 | Maintainer CI skill | `.github/skills/maintainer-ci-ctest/SKILL.md` | Repeatable maintainer workflow for CI, CTest, CPack, sanitizer, and release gates. |
 | Maintainer CI prompt | `.github/prompts/maintainer-ci-ctest.prompt.md` | Structured planning prompt for maintainer-owned infrastructure changes. |
+| External compatibility examples | `.github/workflows/ci-nokia-heif-icc-smoke.yml`, `.github/workflows/ci-libpng-iccp-smoke.yml` | Manual, pinned-dependency lanes with isolated wrapper CTests and immutable runtime resolution. |
 | Workflow rules | `.github/instructions/workflow-governance.instructions.md` | Shell hardening, output sanitization, and injection prevention. |
 | Workflow trust boundaries | `docs/workflow-security-trust-boundaries.md` | Trusted-base helper model, PR workflow canaries, and visual review aids. |
 | Testing rules | `.github/instructions/testing.instructions.md` | Test directories, script expectations, and regression flow. |
 | Unified Dockerfile | `Dockerfile` | Published runtime, MCP, and pinned CI dependency image. |
+
+## PR Path Classification
+
+`ci-pr-action.yml` reports factual path classes separately from the
+`run_native_matrix` execution decision. Native source ownership is limited to
+`IccProfLib/`, `IccXML/`, `IccJSON/`, `IccConnect/`, `Tools/`, and registered
+C/C++ sources under `.github/ci/regression/`. Generated header templates and
+native tool resources under the owned source directories are included. Native
+regression fixtures under `.github/ci/regression/` select the testing surface.
+Native build configuration is
+limited to `Build/Cmake/`, `Build/AppleMobile/`, `Build/XCode/BuildAll.sh`, and
+the root `vcpkg.json`. `Testing/` changes also select the native matrix.
+
+Examples, ports, bindings, documentation, and unrelated CMake wrappers do not
+select the native matrix merely because of a file extension or basename.
+OpenImageIO, HEIF, and libpng paths under `.github/ci/tooling/` are reported as
+external research tooling and retain their separate manual workflows; the PR
+orchestrator does not call those research projects. Mixed external/native diffs
+still run the native matrix. Keep this contract table-driven in
+`.github/tests/test-ci-pr-path-classifier.sh` and source the classifier from the
+trusted base checkout for pull requests. Path discovery disables Git rename
+detection so a move is classified against both its removed source path and its
+added destination path.
 
 ## When to Add a Script
 
@@ -132,10 +156,10 @@ requesting review, check the PR against this list:
 - Keep push, pull-request, reusable, and manual-dispatch validation paths
   equivalent for the changed surface. If a workflow tests a helper on push,
   the PR fast lane should test the same helper or document why it cannot.
-- Keep branch triggers and publish conditions aligned. `ci-docker` publishes
-  the canonical image only from `master`, `ci-qa-pr-docker-testing`,
-  `ci-publish-colourbill-ctrl`, and release tags; do not add
-  branch-specific or variant image tags.
+- Keep manual-dispatch refs and publish conditions aligned. `ci-docker` is
+  manual-only and publishes the canonical image only when dispatched from
+  `master`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`, or a
+  release tag; do not add branch-specific or variant image tags.
 - Keep Docker and regression-container docs reproducible from a fresh checkout
   or clean container. Fetch branch refs explicitly and avoid relying on local
   remote-tracking state, generated files, or preexisting host permissions.
@@ -163,9 +187,9 @@ requesting review, check the PR against this list:
   application, `iccdev-fuzz-env`, and container healthcheck semantics.
 
 For every `Dockerfile` change, validate the one canonical image locally and
-through `ci-docker` on `master`. Keep its `latest`, immutable full-SHA, and
-release-tag behavior consistent; do not restore variant Dockerfiles or
-branch-specific image publication.
+through a manual `ci-docker` dispatch on `master`. Keep its `latest`, immutable
+full-SHA, and release-tag behavior consistent; do not restore variant
+Dockerfiles or branch-specific image publication.
 
 Branch protection should require stable aggregate contexts, not conditional
 lane job names. `PR Summary` must aggregate orchestration prerequisites and all
@@ -269,11 +293,12 @@ separate from general source changes when practical.
 
 | File | Owner intent | Required local checks |
 |------|--------------|-----------------------|
-| `Dockerfile` | Unified image for runtime tools, MCP, ASAN/UBSAN CTest, fuzzing, review, and hybrid timing gates. Clang 22 is the default toolchain; the packaged AFL++ LLVM plugin is paired with Clang 21. | Run the [container maintainer preflight](regression-container.md#maintainer-preflight-and-security-checks), including no-cache build, policy/SAST checks, analyzer inventory, MCP/REST runtime smoke, health check, and image vulnerability/secret triage. AFL wrapper changes also need the container bootstrap probe in `docs/afl-fuzzing.md`. |
+| `Dockerfile` | Unified image for runtime tools, MCP, ASAN/UBSAN CTest, fuzzing, review, and hybrid timing gates. Clang 22 is the default toolchain; the packaged AFL++ LLVM plugin is paired with Clang 21. | Use cached builds during development, then run the [container maintainer preflight](regression-container.md#maintainer-preflight-and-security-checks), including a final no-cache build, policy/SAST checks, analyzer inventory, MCP/REST runtime smoke, health check, and image vulnerability/secret triage. AFL wrapper changes also need the container bootstrap probe in `docs/afl-fuzzing.md`. |
 
 For unified `Dockerfile` publishing:
 
-1. Build and smoke the target image locally with no cache.
+1. Build and smoke the target image locally; cached development builds are
+   permitted, but the final pre-push proof must use no cache.
 2. Publish through the maintainer-controlled container release path.
 3. Record the published immutable SHA tag, digest, and source revision from the
    release output.

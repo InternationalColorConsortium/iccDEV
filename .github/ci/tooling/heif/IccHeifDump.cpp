@@ -315,16 +315,6 @@ int main(int argc, char* argv[])
         return 2;
     }
 
-    if (propertyProbe)
-    {
-        HEIF::ColourInformation colourInformation{};
-        const HEIF::ErrorCode propertyResult =
-            reader->getProperty(HEIF::PropertyId(propertyIndex), colourInformation);
-        std::cout << "property=" << propertyIndex << " result=" << static_cast<int>(propertyResult) << std::endl;
-        HEIF::Reader::Destroy(reader);
-        return propertyResult == HEIF::ErrorCode::OK ? 0 : 2;
-    }
-
     HEIF::FileInformation fileInformation;
     const HEIF::ErrorCode informationResult = reader->getFileInformation(fileInformation);
     if (informationResult != HEIF::ErrorCode::OK)
@@ -333,6 +323,55 @@ int main(int argc, char* argv[])
                   << std::endl;
         HEIF::Reader::Destroy(reader);
         return 2;
+    }
+
+    if (propertyProbe)
+    {
+        bool isColourProperty = false;
+        for (const auto& item : fileInformation.rootMetaBoxInformation.itemInformations)
+        {
+            HEIF::Array<HEIF::ItemPropertyInfo> properties;
+            const HEIF::ErrorCode propertiesResult = reader->getItemProperties(item.itemId, properties);
+            if (propertiesResult == HEIF::ErrorCode::INVALID_ITEM_ID)
+            {
+                continue;
+            }
+            if (propertiesResult != HEIF::ErrorCode::OK)
+            {
+                std::cerr << "Error: unable to read properties for item " << item.itemId.get() << ": "
+                          << static_cast<int>(propertiesResult) << std::endl;
+                HEIF::Reader::Destroy(reader);
+                return 2;
+            }
+
+            for (const auto& property : properties)
+            {
+                if (property.index.get() == propertyIndex && property.type == HEIF::ItemPropertyType::COLR)
+                {
+                    isColourProperty = true;
+                    break;
+                }
+            }
+            if (isColourProperty)
+            {
+                break;
+            }
+        }
+
+        if (!isColourProperty)
+        {
+            std::cout << "property=" << propertyIndex << " result="
+                      << static_cast<int>(HEIF::ErrorCode::INVALID_PROPERTY_INDEX) << std::endl;
+            HEIF::Reader::Destroy(reader);
+            return 2;
+        }
+
+        HEIF::ColourInformation colourInformation{};
+        const HEIF::ErrorCode propertyResult =
+            reader->getProperty(HEIF::PropertyId(propertyIndex), colourInformation);
+        std::cout << "property=" << propertyIndex << " result=" << static_cast<int>(propertyResult) << std::endl;
+        HEIF::Reader::Destroy(reader);
+        return propertyResult == HEIF::ErrorCode::OK ? 0 : 2;
     }
 
     std::size_t profileCount = 0;

@@ -193,6 +193,7 @@ if [ "$1" != "clean" ]
 then
 	set -x
 	iccFromXml 4ChanSelect-MID.xml 4ChanSelect-MID.icc
+	iccFromXml 4ChanLink-MLNK.xml 4ChanLink-MLNK.icc
 	iccFromXml 7ChanSelect-MID.xml 7ChanSelect-MID.icc
 	iccFromXml CGYK-SelectMID.xml  CGYK-SelectMID.icc
 	iccFromXml CMPK-SelectMID.xml  CMPK-SelectMID.icc

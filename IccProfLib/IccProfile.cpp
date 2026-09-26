@@ -1761,11 +1761,63 @@ static inline bool compare_float(double x, double y, double eps=0.0000001f) {
 
 /**
 ****************************************************************************
+* Name: CIccProfile::CheckLinkPcsSpace
+*
+* Purpose: Validates the PCS field of a profile class whose PCS carries a device
+*  colour space rather than a colorimetric one.  ICC.1 8.2/Table 19 for DeviceLink
+*  and ICC.2 7.2.9 for DeviceLink and MultiplexLink both say the value of the PCS
+*  shall be the appropriate data colour space, i.e. the B-side (output) space that
+*  the link produces.
+*
+*  A DeviceLink PCS holds the B-side connection (output) colour space. As with the
+*  data colour space (#1359), the iccMAX N-channel spaces (ncXXXX) and 'LMS ' are
+*  only valid for v5/iccMAX; IsValidSpace() is version-blind, so gate them by major
+*  version for v2/v4 DeviceLink profiles and report the raw value rather than the
+*  friendly descriptor when an iccMAX-only space appears on a v2/v4 profile.
+*
+*  Shared with MultiplexLink since #2563.  A MultiplexLink is v5-only, so the v2/v4
+*  arms below cannot fire for one, but the test is written once rather than copied
+*  so the two classes cannot drift apart.
+*
+* Return:
+*  icValidateOK if valid, or other error status.
+*****************************************************************************
+*/
+icValidateStatus CIccProfile::CheckLinkPcsSpace(std::string &sReport) const
+{
+  icValidateStatus rv = icValidateOK;
+
+  const size_t bufSize = 128;
+  icChar buf[bufSize];
+  CIccInfo Info;
+
+  bool bValidPcs = Info.IsValidSpace(m_Header.pcs);
+  bool bIccMaxOnlyPcs = (m_Header.pcs==icSigLmsData) ||
+                        (icGetColorSpaceType(m_Header.pcs)==icSigNChannelData);
+  if (m_Header.version<icVersionNumberV5 && bIccMaxOnlyPcs)
+    bValidPcs = false;
+
+  if (!bValidPcs) {
+    sReport += icMsgValidateCriticalError;
+    if (m_Header.version<icVersionNumberV5 && bIccMaxOnlyPcs)
+      snprintf(buf, bufSize, " - Invalid pcs colour space (0x%08X) for a v2/v4 profile; only iccMAX (v5) permits this!\n", (unsigned int)m_Header.pcs);
+    else
+      snprintf(buf, bufSize, " - %s: Unknown pcs colour space!\n", Info.GetColorSpaceSigName(m_Header.pcs));
+    sReport += buf;
+    rv = icMaxStatus(rv, icValidateCriticalError);
+  }
+
+  return rv;
+}
+
+
+/**
+****************************************************************************
 * Name: CIccProfile::CheckHeader
-* 
+*
 * Purpose: Validates profile header.
-* 
-* Return: 
+*
+* Return:
 *  icValidateOK if valid, or other error status.
 *****************************************************************************
 */
@@ -1824,10 +1876,21 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
     rv = icMaxStatus(rv, icValidateNonCompliant);
   }
  
+  // ICC.2 7.2.8: "For MultiplexLink and MultiplexVisualization profiles the data
+  // colour space signature shall be zero."  A MultiplexLink identifies its device
+  // channels through the MCS, exactly as MultiplexVisualization does, so the zero
+  // data colour space is conforming and must not be reported as an unknown space.
+  // MultiplexVisualization was already exempt here and MultiplexLink was not, so a
+  // conforming MLNK profile drew a critical "Unknown colour space!" (#2563).
+  // MultiplexIdentification is left in the exemption list as it was found: the text
+  // does not grant MID a zero data colour space (its field names the device space
+  // being identified, and every tracked MID fixture carries an ncXXXX there), but
+  // removing it is a separate tightening and is not part of this change.
   if (m_Header.colorSpace!=icSigNoColorData ||
-        m_Header.version<icVersionNumberV5 || 
+        m_Header.version<icVersionNumberV5 ||
         (m_Header.deviceClass!=icSigNamedColorClass &&
          m_Header.deviceClass!=icSigMultiplexIdentificationClass &&
+         m_Header.deviceClass!=icSigMultiplexLinkClass &&
          m_Header.deviceClass!=icSigMultiplexVisualizationClass)) {
     // A v2/v4 profile's data colour space must be one of the signatures
     // positively enumerated in ICC.1 (v4.4.0.0) 7.2.6 / Table 19.  Two families
@@ -1873,14 +1936,25 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
     }
   }
 
-  if (m_Header.deviceClass==icSigMultiplexIdentificationClass ||
-      m_Header.deviceClass==icSigMultiplexLinkClass) {
+  if (m_Header.deviceClass==icSigMultiplexIdentificationClass) {
+    // A MultiplexIdentification profile has no B-side connection: it names the
+    // device space it identifies in the data colour space field, and its PCS
+    // field shall be zero.
     if (m_Header.pcs!=icSigNoColorData) {
       sReport += icMsgValidateNonCompliant;
       snprintf(buf, bufSize, "Invalid PCS designator for %s\n", Info.GetProfileClassSigName(m_Header.deviceClass));
       sReport += buf;
       rv = icMaxStatus(rv, icValidateNonCompliant);
     }
+  }
+  else if (m_Header.deviceClass==icSigMultiplexLinkClass) {
+    // ICC.2 7.2.9: for a DeviceLink or a MultiplexLink "the value of the PCS shall
+    // be the appropriate data colour space".  A MultiplexLink carries its device
+    // (B-side) output space here, because 7.2.8 requires its data colour space
+    // field to be zero.  Before #2563 this class shared the MID test above, which
+    // demanded the opposite - a zero PCS - so a conforming MLNK profile was
+    // reported NonCompliant for the very field the text tells it to fill in.
+    rv = icMaxStatus(rv, CheckLinkPcsSpace(sReport));
   }
   else if (m_Header.deviceClass==icSigColorEncodingClass) {
     if (m_Header.cmmId ||
@@ -1909,26 +1983,7 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
   }
   else {
     if (m_Header.deviceClass==icSigLinkClass) {
-      // A DeviceLink PCS holds the B-side connection (output) colour space. As
-      // with the data colour space (#1359), the iccMAX N-channel spaces (ncXXXX)
-      // and 'LMS ' are only valid for v5/iccMAX; IsValidSpace() is version-blind, so gate
-      // them by major version for v2/v4 DeviceLink profiles and report the raw
-      // value rather than the friendly descriptor when an iccMAX-only space
-      // appears on a v2/v4 profile.
-      bool bValidPcs = Info.IsValidSpace(m_Header.pcs);
-      bool bIccMaxOnlyPcs = (m_Header.pcs==icSigLmsData) ||
-                            (icGetColorSpaceType(m_Header.pcs)==icSigNChannelData);
-      if (m_Header.version<icVersionNumberV5 && bIccMaxOnlyPcs)
-        bValidPcs = false;
-      if (!bValidPcs) {
-        sReport += icMsgValidateCriticalError;
-        if (m_Header.version<icVersionNumberV5 && bIccMaxOnlyPcs)
-          snprintf(buf, bufSize, " - Invalid pcs colour space (0x%08X) for a v2/v4 profile; only iccMAX (v5) permits this!\n", (unsigned int)m_Header.pcs);
-        else
-          snprintf(buf, bufSize, " - %s: Unknown pcs colour space!\n", Info.GetColorSpaceSigName(m_Header.pcs));
-        sReport += buf;
-        rv = icMaxStatus(rv, icValidateCriticalError);
-      }
+      rv = icMaxStatus(rv, CheckLinkPcsSpace(sReport));
     }
     else {
       switch(m_Header.pcs) {
@@ -3004,6 +3059,39 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
       sReport += icMsgValidateNonCompliant;
       sReport += "Required tags missing.\n";
       rv = icMaxStatus(rv, icValidateNonCompliant);
+    }
+    else {
+      // The referenceNameTag decides what else is required (ICC.2:2023,
+      // ColorEncodingSpace profile, 8.7; referenceNameTag, 9.2.108;
+      // colorSpaceNameTag, 9.2.50).  "ISO 22028-1" means the profile defines the
+      // encoding itself, so colorEncodingParamsTag and colorSpaceNameTag are both
+      // required.  Any other name is a registry encoding, where colorSpaceNameTag
+      // is optional but, when present, shall contain the same text.  Only the
+      // presence of referenceNameTag was checked before (#1993).
+      const CIccTag *pRefTag = FindTagConst(icSigReferenceNameTag);
+      const CIccTag *pNameTag = FindTagConst(icSigColorSpaceNameTag);
+      const icUChar *szRef = (pRefTag && pRefTag->GetType()==icSigUtf8TextType) ?
+                               ((const CIccTagUtf8Text*)pRefTag)->GetText() : NULL;
+      const icUChar *szName = (pNameTag && pNameTag->GetType()==icSigUtf8TextType) ?
+                                ((const CIccTagUtf8Text*)pNameTag)->GetText() : NULL;
+
+      if (szRef && !strcmp((const char*)szRef, "ISO 22028-1")) {
+        if (!GetTag(icSigColorEncodingParamsTag)) {
+          sReport += icMsgValidateNonCompliant;
+          sReport += "referenceNameTag is \"ISO 22028-1\" but colorEncodingParamsTag is missing.\n";
+          rv = icMaxStatus(rv, icValidateNonCompliant);
+        }
+        if (!pNameTag) {
+          sReport += icMsgValidateNonCompliant;
+          sReport += "referenceNameTag is \"ISO 22028-1\" but colorSpaceNameTag is missing.\n";
+          rv = icMaxStatus(rv, icValidateNonCompliant);
+        }
+      }
+      else if (szRef && szName && strcmp((const char*)szRef, (const char*)szName)) {
+        sReport += icMsgValidateNonCompliant;
+        sReport += "colorSpaceNameTag does not contain the same text as referenceNameTag.\n";
+        rv = icMaxStatus(rv, icValidateNonCompliant);
+      }
     }
     return rv;
   }

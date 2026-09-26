@@ -55,6 +55,11 @@ AFL_PATH=/path/to/AFLplusplus AFL_CC=clang-22 AFL_CXX=clang++-22 \
   /path/to/AFLplusplus/afl-clang-fast++ -c test.cpp -o testxx.o
 ```
 
+The smoke driver accepts only a matching Clang 21 or Clang 22 C/C++ pair. When
+the caller does not set `AFL_CC` and `AFL_CXX`, it prefers the packaged Clang
+21 pair and falls back to Clang 22. Older or mismatched compiler pairs fail
+before the iccDEV build starts.
+
 The workflow intentionally builds only the AFL++ pieces needed by the smoke
 job: `afl-fuzz`, `afl-showmap`, `afl-cc`, `afl-compiler-rt.o`,
 `SanitizerCoveragePCGUARD.so`, and `cmplog-routines-pass.so`. The

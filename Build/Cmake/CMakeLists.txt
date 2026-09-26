@@ -411,7 +411,7 @@ message(STATUS "Processor Architecture : ${CMAKE_SYSTEM_PROCESSOR}")
 execute_process(COMMAND hostname OUTPUT_VARIABLE BUILD_HOST OUTPUT_STRIP_TRAILING_WHITESPACE)
 execute_process(COMMAND whoami OUTPUT_VARIABLE BUILD_USER OUTPUT_STRIP_TRAILING_WHITESPACE)
 message(STATUS "Build Host             : ${BUILD_HOST} (${BUILD_USER})")
-message(STATUS "MSBuild Path            : $ENV{MSBUILD_PATH}")
+message(STATUS "Build Program           : ${CMAKE_MAKE_PROGRAM}")
 message(STATUS "=========================================")
 message(STATUS "")
 
@@ -504,34 +504,31 @@ if(WIN32)
   # ----------------------------------------------------------------------
   # MSBuild Detection for Windows
   # ----------------------------------------------------------------------
-  if(NOT DEFINED ENV{MSBUILD_PATH})
-    # Attempt to auto-detect common VS2022+ MSBuild paths.
-    set(_msbuild_candidates)
-    foreach(_vs_edition Enterprise Professional Community BuildTools)
-      list(APPEND _msbuild_candidates
-        "C:/Program Files/Microsoft Visual Studio/2022/${_vs_edition}/MSBuild/Current/Bin/MSBuild.exe"
-        "C:/Program Files (x86)/Microsoft Visual Studio/2022/${_vs_edition}/MSBuild/Current/Bin/MSBuild.exe"
-      )
-    endforeach()
-
-    foreach(_msbuild_candidate IN LISTS _msbuild_candidates)
-      if(EXISTS "${_msbuild_candidate}")
-        set(ENV{MSBUILD_PATH} "${_msbuild_candidate}")
-        if(VERBOSE_CONFIG)
-          message(STATUS "MSBuild path auto-detected and set to: ${_msbuild_candidate}")
-        endif()
-        break()
-      endif()
-    endforeach()
-
-    if(NOT DEFINED ENV{MSBUILD_PATH})
-      message(WARNING "MSBuild Path is not defined in environment variables and default path not found.")
+  # CMake owns the selected build program. setup-msbuild also places MSBuild
+  # on PATH, so a separate MSBUILD_PATH environment contract is unnecessary.
+  # MinGW and Ninja generators do not require MSBuild and must not warn about it.
+  if(CMAKE_GENERATOR MATCHES "^Visual Studio")
+    unset(_iccdev_msbuild_path)
+    unset(_iccdev_msbuild_path CACHE)
+    get_filename_component(_iccdev_build_program_name
+      "${CMAKE_MAKE_PROGRAM}" NAME)
+    if(_iccdev_build_program_name MATCHES "^[Mm][Ss][Bb]uild(\\.exe)?$")
+      set(_iccdev_msbuild_path "${CMAKE_MAKE_PROGRAM}")
+    else()
+      find_program(_iccdev_msbuild_path NAMES MSBuild.exe MSBuild msbuild)
     endif()
+
+    if(_iccdev_msbuild_path)
+      message(STATUS "MSBuild Path            : ${_iccdev_msbuild_path}")
+    else()
+      message(WARNING
+        "Visual Studio generator selected, but MSBuild was not found by CMake or on PATH.")
+    endif()
+  elseif(VERBOSE_CONFIG)
+    message(STATUS "MSBuild Path            : not required for ${CMAKE_GENERATOR}")
   endif()
 
-  # Always print final value
   if(VERBOSE_CONFIG)
-    message(STATUS "MSBuild Path            : $ENV{MSBUILD_PATH}")
     message(STATUS "Linker Flags            : ${CMAKE_EXE_LINKER_FLAGS}")
   endif()
 endif()

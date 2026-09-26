@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <ProfileVersion>5.00</ProfileVersion>
+    <ProfileDeviceClass>mid </ProfileDeviceClass>
+    <ProfileDeviceSubClass>nink</ProfileDeviceSubClass>
+    <DataColourSpace>nc0006</DataColourSpace>
+    <MCS>mc0002</MCS>
+  </Header>
+  <Tags>
+    <tagArrayType>
+      <TagSignature>mcta</TagSignature>
+      <ArraySignature>utf8</ArraySignature>
+      <ArrayTags>
+        <utf8TextType><TextData>Process Cyan</TextData></utf8TextType>
+        <utf8TextType><TextData>Violet</TextData></utf8TextType>
+        <utf8TextType><TextData>Orange</TextData></utf8TextType>
+        <utf8TextType><TextData>White</TextData></utf8TextType>
+        <utf8TextType><TextData>Blue</TextData></utf8TextType>
+        <utf8TextType><TextData>Gold</TextData></utf8TextType>
+      </ArrayTags>
+    </tagArrayType>
+  </Tags>
+</IccProfile>

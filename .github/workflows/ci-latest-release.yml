@@ -747,10 +747,12 @@ jobs:
             'matlab\tests\test_json_bindings.m',
             'matlab\tests\test_lut_type_range.m',
             'matlab\tests\test_usage_guidance.m',
+            'matlab\tests\test_delta_e_2000.m',
             'matlab\tests\fixtures\default_usage_examples.txt',
             'matlab\tests\test_luminance_normalization.m',
             'matlab\tests\test_colorimetry_issue_1475.m',
             'matlab\examples\gamma_curve.m',
+            'matlab\examples\ciede2000.m',
             'matlab\examples\luminance_normalization.m',
             'matlab\examples\colorimetry_issue_1475.m',
             'matlab\examples\docker_interop.m',
@@ -901,6 +903,7 @@ jobs:
             addpath(fullfile(matlab_dir, 'tests'));
             setenv('PATH', [stage pathsep getenv('PATH')]);
             test_usage_guidance();
+            test_delta_e_2000();
             test_json_bindings();
             test_lut_type_range();
             test_luminance_normalization();
@@ -917,6 +920,7 @@ jobs:
             run(fullfile(matlab_dir, 'examples', 'read_profile.m'));
             run(fullfile(matlab_dir, 'examples', 'color_transform.m'));
             run(fullfile(matlab_dir, 'examples', 'gamma_curve.m'));
+            run(fullfile(matlab_dir, 'examples', 'ciede2000.m'));
             run(fullfile(matlab_dir, 'examples', 'luminance_normalization.m'));
             run(fullfile(matlab_dir, 'examples', 'colorimetry_issue_1475.m'))
           generate-summary: false
@@ -1859,10 +1863,12 @@ jobs:
             "matlab/tests/test_json_bindings.m"
             "matlab/tests/test_lut_type_range.m"
             "matlab/tests/test_usage_guidance.m"
+            "matlab/tests/test_delta_e_2000.m"
             "matlab/tests/fixtures/default_usage_examples.txt"
             "matlab/tests/test_luminance_normalization.m"
             "matlab/tests/test_colorimetry_issue_1475.m"
             "matlab/examples/gamma_curve.m"
+            "matlab/examples/ciede2000.m"
             "matlab/examples/luminance_normalization.m"
             "matlab/examples/colorimetry_issue_1475.m"
             "matlab/examples/docker_interop.m"

@@ -4,11 +4,6 @@
 #                 All rights reserved.
 #                 https://color.org
 #
-#
-# Intent: Test sanitize-sed.sh and PowerShell sanitizer
-#
-# Last Updated: 2026-03-02 01:07Z by David Hoyt
-#
 #               Runs Bash and PowerShell sanitizer tests against the
 #               canonical sanitizer helpers.
 #
@@ -28,10 +23,12 @@ env:
 
 on:
   pull_request:
-    branches: [master]
+    branches:
+      - master
     paths:
       - '.github/scripts/sanitize-sed.sh'
       - '.github/scripts/sanitize.ps1'
+      - '.github/scripts/classify-pr-paths.sh'
       - '.github/tests/**'
       - '.github/workflows/ci-sanitizer-tests.yml'
 
@@ -108,6 +105,17 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           bash .github/tests/test-xss-extended.sh
+
+      # preflight: allow-pr-script-execution reason=path-classifier-contract-test
+      - name: Run PR path classifier tests
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          bash .github/tests/test-ci-pr-path-classifier.sh
 
       # preflight: allow-pr-script-execution reason=sanitizer-under-test
       - name: "Reproduce trivy#10253 attack pattern"

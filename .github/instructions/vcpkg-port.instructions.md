@@ -2,15 +2,15 @@
 applyTo: "ports/**"
 ---
 
-# vcpkg Port — Auto-Loaded Instructions
+# vcpkg Port - Auto-Loaded Instructions
 
 ## Port Structure
 
 ```
 ports/iccdev/
-├── portfile.cmake   — Build logic and feature flags
-├── usage            — CMake consumption hint printed by vcpkg
-└── vcpkg.json       — Port manifest (version, port-version, deps, features)
+|-- portfile.cmake   - Build logic and feature flags
+|-- usage            - CMake consumption hint printed by vcpkg
+`-- vcpkg.json       - Port manifest (version, port-version, deps, features)
 ```
 
 ## Architecture Decisions
@@ -29,7 +29,7 @@ libtiff/libpng/libjpeg causes transitive dependency failures across
 platforms (e.g., deflate, lzma, jpeg symbols unresolved on Linux).
 
 ### wxWidgets Disabled
-wxProfileDump GUI is excluded (`ENABLE_WXWIDGETS=OFF`) — the port
+wxProfileDump GUI is excluded (`ENABLE_WXWIDGETS=OFF`) - the port
 targets library consumers and headless CLI usage.
 
 ## Upstream CMake Options
@@ -85,10 +85,9 @@ not duplicate its transitive dependencies.
 
 ## CI Workflow
 
-`ci-vcpkg-ports.yml` validates the port on 3 platforms:
-- windows-latest (x64-windows, MSVC)
-- ubuntu-24.04 (x64-linux, GCC)
-- macos-14 (arm64-osx, Apple Clang)
+`ci-vcpkg-ports.yml` validates the port on Windows 2022 with the
+`x64-windows` triplet and MSVC. Linux and macOS vcpkg diagnostics remain
+manual until those lanes stabilize.
 
 Verification checks: headers present, static libs exist, CMake config
 resolves, and core/XML/JSON/connect tools execute: iccDumpProfile,

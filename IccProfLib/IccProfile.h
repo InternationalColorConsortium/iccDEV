@@ -222,6 +222,7 @@ public:
   bool calcMediaWhiteXYZ(icFloatNumber *pXYZ, IIccProfileConnectionConditions *pObservingPCC);
 
 protected:
+  friend class CIccTagEmbeddedProfile;
 
   // Return the member sub-tag of the given signature/type from this profile's
   // devicePccTag ('dpcc') profileConnectionConditionsStructure, or NULL when the
@@ -275,6 +276,9 @@ protected:
   icValidateStatus CheckRequiredTags(std::string &sReport, const CIccProfile *pParentProfile = NULL) const;
   bool CheckTagExclusion(std::string &sReport) const;
   icValidateStatus CheckHeader(std::string &sReport, const CIccProfile *pParentProfile = NULL) const;
+  // Validates a PCS field that carries a device colour space rather than a
+  // colorimetric one: DeviceLink (ICC.1 8.2) and MultiplexLink (ICC.2 7.2.9).
+  icValidateStatus CheckLinkPcsSpace(std::string &sReport) const;
   icValidateStatus CheckTagTypes(std::string &sReport) const;
 
   // ICC.1 clause 8.10 HDR Profiles. Kept out of CheckRequiredTags() because

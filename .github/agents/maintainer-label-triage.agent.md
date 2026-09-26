@@ -25,5 +25,10 @@ labels using `docs/label-system.md` and
    equality to be recorded together. For accuracy or precision alerts, require
    a named ICC encoding or formula plus an executable expected-value oracle;
    generic floating-point suspicion is not completed technical triage.
+8. For parser alerts, require the nested failure-propagation path, the matching
+   XML or JSON behavior, and any ICC-defined empty-placeholder exception to be
+   recorded separately from malformed-child handling. For fixed-width fields,
+   record the required decoded width; for nested XML fields, record whether the
+   search begins at the parent's children or only scans its siblings.
 
 Return evidence and recommendations only. Do not edit labels or workflows.

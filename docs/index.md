@@ -9,4 +9,5 @@ tabs.
 - [Libraries](libraries.md)
 - [Tools](tools.md)
 - [Testing and CTest](testing.md)
+- [ICC.2 XML Header QA](xml-spec-qa.md)
 - [Valgrind-Family Analysis](valgrind-analysis.md)

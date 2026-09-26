@@ -160,6 +160,71 @@ product build. Build `build-test-binaries` before a direct filtered CTest run,
 or use `check`/`check-fast`; both targets build their tool and test dependencies
 before running the suite.
 
+## External HEIF carrier CTest
+
+`iccdev.heif-carrier-qa` is registered by the standalone
+`.github/ci/tooling/heif/qa` wrapper, not by the main `Build/Cmake` project, so
+it does not change the standard iccDEV CTest count. The wrapper builds
+`iccHeifDump` against the exact Nokia HEIF revision recorded in
+`.github/ci/tooling/heif/Readme.md`, and the test runs the 16-carrier corpus,
+property/CLI controls, sanitizer checks, and ICC extraction hash assertion.
+Hosted coverage is the manually dispatched `Nokia HEIF ICC carrier smoke`
+workflow. It is deliberately isolated from `ci-pr-action` and the reusable
+iccDEV tool-test gate because it builds a separately pinned upstream project.
+
+Always run discovery and the focused test:
+
+```bash
+ctest --test-dir /tmp/iccdev-heif-qa -N --no-tests=error
+ctest --test-dir /tmp/iccdev-heif-qa \
+  -R '^iccdev\.heif-carrier-qa$' \
+  --output-on-failure \
+  --no-tests=error
+```
+
+## External libpng iCCP CTest
+
+`iccdev.libpng-iccp-qa` is registered by the standalone
+`.github/ci/tooling/libpng/qa` wrapper, not by the main `Build/Cmake` project.
+The wrapper builds `pngtest` from the exact libpng revision in
+`.github/ci/tooling/libpng/Readme.md`. Its manually dispatched workflow first
+requires the unpatched pin to reproduce four invalid-profile retention faults,
+then applies the tracked patch and requires those profiles to be discarded.
+Valid and explicitly relaxed CRC-policy controls must remain byte-identical.
+
+Always run discovery and the focused patched test:
+
+```bash
+ctest --test-dir /tmp/iccdev-libpng-build -N --no-tests=error
+ctest --test-dir /tmp/iccdev-libpng-build \
+  -R '^iccdev\.libpng-iccp-qa$' \
+  --output-on-failure \
+  --no-tests=error
+```
+
+## External OpenImageIO ICC and EXIF CTest (#2657)
+
+`iccdev.openimageio-icc-qa` is registered by the standalone
+`.github/ci/tooling/openimageio/qa` wrapper, not by the main `Build/Cmake`
+project. The manually dispatched workflow pins OpenImageIO commit
+`8004015ace460bf7e9019514f6d8c6c677e6e7ae`, proves the unpatched fault
+contract, applies the tracked patch, and rebuilds with ASan+UBSan.
+
+The fixed CTest covers alignment-safe big-endian EXIF output, Canon MakerNote
+element sizing and endian propagation, strict JPEG ICC error propagation,
+declared `mluc` tag boundaries, JPEG2000 encoder failure propagation, all five
+progression orders, and a byte-identical JP2 ICC round-trip control.
+
+Always run discovery and the focused patched test:
+
+```bash
+ctest --test-dir /tmp/iccdev-openimageio-qa -N --no-tests=error
+ctest --test-dir /tmp/iccdev-openimageio-qa \
+  -R '^iccdev\.openimageio-icc-qa$' \
+  --output-on-failure \
+  --no-tests=error
+```
+
 ## Registered Suites
 
 | Test | Source |
@@ -275,10 +340,24 @@ in parallel without starving the aggregate's subprocesses. The JSON parser suite
 includes malformed curve gamma and out-of-range numeric narrowing coverage, and
 must reject invalid numeric fields before conversion without sanitizer findings.
 
+`iccdev.clusterfuzzlite-configuration` is a fast, build-independent contract
+test for the official ClusterFuzzLite lane. It checks the pinned builder image,
+the manual and `ci-qa-clusterfuzz` push triggers, the three sanitizer matrix
+entries, immutable action references, the pinned #2687 artifact hash, the
+validated 2-45 minute total manual duration passed directly to the runner,
+the 60-minute job envelope, the instrumented-libc++ bootstrap and linkage
+assertions, and shell syntax for both the adapter and the shared CFL builder.
+Runtime sanitizer validation remains in
+`.github/workflows/ci-clusterfuzzlite.yml` and the local OSS-Fuzz helper flow
+documented in `.github/ci/cfl/README.md`.
+
 `iccdev.pawg-report-regressions` builds the standalone `iccPawgReport` tool,
 checks the 32-item PAWG report structure, verifies summary counts against the
-rendered item lines, runs malformed and malware-signature dynamic inputs, and
-fails on sanitizer findings.
+rendered item lines, verifies that critically malformed tag payloads fail C1 in
+text and JSON output, rejects a generated ICC5 profile whose embedded ICC.2
+declared size differs from its payload, checks S10 against the generated
+calculator-operation fixture, runs malware-signature dynamic inputs, and fails
+on sanitizer findings.
 
 `iccdev.pawg-q1-quality-contract` validates the PAWG Q1 sample budget,
 CIEDE2000 reference vectors, and Gray/RGB/CMYK round-trip model selection.
@@ -315,6 +394,12 @@ without signed-conversion sanitizer findings.
 `iccdev.basic-string-regressions` replays the XML conversions from issue #1055
 and fails if `iccFromXml` emits sanitizer diagnostics from string-size
 arithmetic.
+
+`iccdev.xml-spec-qa` converts canonical ICC.2 spectral, bi-spectral, and MCS
+XML fixtures and pins exact header signatures, ranges, channel relationships,
+XML fidelity, malformed-input rejection, PAWG JSON generation, and the current
+`iccRoundTrip` class boundary. It is a Unix-like bash-backed full-tool test;
+see `docs/xml-spec-qa.md` for the specification matrix and interpretation.
 
 Windows full tool builds register these tests when all targets are available:
 

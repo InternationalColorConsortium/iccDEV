@@ -41,6 +41,9 @@ shares one source of truth. Update rules here, not in the mirrors.
   discovered capabilities. Do not hard-code a total tool count.
 - MATLAB public entry points that require arguments must provide actionable
   bare-invocation errors pinned by `matlab/tests/test_usage_guidance.m`.
+  Interactive examples must show visible UI defaults first; label hidden or
+  headless options as automation-only. Shape errors must explain row semantics
+  and include copy/paste-ready single-item and batch examples.
 
 ## Navigation
 
@@ -53,6 +56,7 @@ shares one source of truth. Update rules here, not in the mirrors.
 | AVX2 CLUT diagnostics and optimization handoff | `docs/avx2-clut-diagnostics.md` |
 | Pull request preparation and handoff | `docs/pre-pr-security-cycle.md` |
 | Maintainer local Git/devenv defaults | `docs/linear-stack-workflow.md` |
+| ClusterFuzzLite integration | `.github/ci/cfl/README.md`, `.github/skills/clusterfuzzlite/SKILL.md` |
 | Pre-PR security skill | `.github/skills/pre-pr-security-cycle/SKILL.md` |
 | Pre-PR security prompt | `.github/prompts/pre-pr-security-cycle.prompt.md` |
 | Stacked PR and fast-lane workflow | `.github/skills/stacked-pr-fast-lane/SKILL.md` |
@@ -63,11 +67,14 @@ shares one source of truth. Update rules here, not in the mirrors.
 | Memcheck, Helgrind, DRD, Massif, and Callgrind | `docs/valgrind-analysis.md`, `.github/skills/valgrind-analysis/SKILL.md` |
 | Regression container prompt | `.github/prompts/regression-container-maintainer.prompt.md` |
 | Maintainer CTest selection and CI budget | `.github/skills/maintainer-ci-ctest/SKILL.md` |
+| ICC.2 spectral, bi-spectral, and MCS XML QA | `docs/xml-spec-qa.md`, `.github/skills/icc2-xml-spec-qa/SKILL.md` |
 | New CLI tool onboarding | `.github/prompts/add-new-tool.prompt.md` |
 | Manual iOS examples | `.github/prompts/ios-manual-examples.prompt.md` |
 | iOS CLUT editor planning | `.github/prompts/ios-clut-editor.prompt.md` |
 | Contributor onboarding | `.github/prompts/contributor-onboarding.prompt.md` |
 | Apply-path throughput benchmark | `Tools/CmdLine/IccBenchApply/Readme.md` |
+| HEIF ICC carrier build and QA | `.github/workflows/ci-nokia-heif-icc-smoke.yml`, `.github/ci/tooling/heif/Readme.md`, `.github/skills/heif-icc-qa/SKILL.md` |
+| libpng iCCP fault build and QA | `.github/workflows/ci-libpng-iccp-smoke.yml`, `.github/ci/tooling/libpng/Readme.md`, `.github/skills/libpng-iccp-qa/SKILL.md` |
 | Security repro | `.github/prompts/reproduce-security-issue.prompt.md` |
 | iccSpecSepToTiff QA | `.github/skills/specsep-qa/SKILL.md` |
 | IIS ISAPI endpoint QA | `.github/skills/iis-isapi-qa/SKILL.md` |
@@ -105,6 +112,16 @@ CLI implementation or call `processLuts()`.
 
 Keep them separate rather than folding serialization into the model target, so
 a crash stays attributable to one layer.
+
+The official ClusterFuzzLite lane builds only these two in-process targets.
+Keep its `address`, `undefined`, and `memory` builds separate, pass all compiler
+and linker instrumentation through the OSS-Fuzz environment, require matching
+Clang 21 or 22 compilers across AFL, CFL, and ClusterFuzzLite, and keep the
+workflow manual plus branch-push-only until maintainers broaden that policy.
+The ClusterFuzzLite memory build must bootstrap the pinned instrumented libc++
+and libc++abi, reject libstdc++ or another libc++ at runtime, and replay the
+pinned #2687 artifact before fuzzing. A report crossing an uninstrumented C++
+runtime boundary is not attributable to iccDEV.
 
 An in-process target that needs a CLUT raster also needs a corpus that still
 contains one. `max_seed_bytes` and libFuzzer's `max_len` both removed the only
