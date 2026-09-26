@@ -18,6 +18,10 @@ Use `docs/valgrind-analysis.md` and
 8. Classify exit `1-127` as graceful failure and `128+` as signal termination.
 9. Report the exact commit, analyzer, target, command, exit code, error count,
    evidence path, and any analyzer disagreement.
+10. Use `corpus.sh` for PAWG or dump sweeps so profile paths are not split and
+    every input retains its own analyzer output.
+11. For Docker reproductions, record the image digest, preserve evidence on the
+    host, and never wrap the image's sanitizer-instrumented default binaries.
 
 Do not suppress findings or use `--allow-findings` unless the task explicitly
 requests evidence for a known finding.
