@@ -562,6 +562,25 @@ CIccMemIO* CIccProfile::GetTagIO(icSignature sig)
 }
 
 
+// colorantTableType carries no encoding field of its own, so the profile decides
+// how its values are read.  ICC.1:2022 9.2.20 gives colorantTableOutTag PCSLAB
+// unconditionally, and 9.2.19 gives colorantTableTag "PCSXYZ or PCSLAB values.
+// When used in DeviceLink profiles only the PCSLAB values shall be permitted."
+// The header PCS field cannot answer the DeviceLink case: 8.6 sets it to the data
+// colour space of the last profile in the sequence, which is a device space, so a
+// DeviceLink that spells XYZ there would have its Lab colorants read as XYZ.
+static icColorSpaceSignature icGetColorantTablePCS(const icHeader &header,
+                                                   icSignature sig)
+{
+  if (sig == icSigColorantTableOutTag)
+    return icSigLabData;
+
+  if (header.deviceClass == icSigLinkClass)
+    return icSigLabData;
+
+  return header.pcs;
+}
+
 /**
  ******************************************************************************
  * Name: CIccProfile::AttachTag
@@ -587,6 +606,11 @@ bool CIccProfile::AttachTag(icSignature sig, CIccTag *pTag)
       return true;
 
     return false;
+  }
+
+  if (pTag->GetType() == icSigColorantTableType &&
+      (sig == icSigColorantTableTag || sig == icSigColorantTableOutTag)) {
+    ((CIccTagColorantTable*)pTag)->SetPCS(icGetColorantTablePCS(m_Header, sig));
   }
 
   IccTagEntry Entry = {};
@@ -1642,6 +1666,13 @@ bool CIccProfile::LoadTag(IccTagEntry *pTagEntry, CIccIO *pIO, bool bReadAll/*=f
   }
 
   switch(pTagEntry->TagInfo.sig) {
+  case icSigColorantTableTag:
+  case icSigColorantTableOutTag:
+    if (pTag->GetType() == icSigColorantTableType)
+      ((CIccTagColorantTable*)pTag)->SetPCS(
+        icGetColorantTablePCS(m_Header, pTagEntry->TagInfo.sig));
+    break;
+
   case icSigAToB0Tag:
   case icSigAToB1Tag:
   case icSigAToB2Tag:

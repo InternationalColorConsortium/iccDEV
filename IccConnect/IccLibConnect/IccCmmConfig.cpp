@@ -1167,19 +1167,6 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
       nUsed += 2;
     }
 
-    // -ENV: pairs apply to the profile that follows them.  The loop is only
-    // entered with at least one pair left, so arriving here with fewer than two
-    // arguments means -ENV: pairs consumed the rest and there is no profile.  The
-    // entry was then appended anyway, below, without ever receiving a file or a
-    // rendering intent (#2140).  Environment variables with no transform to apply
-    // them to are not a profile sequence, so refuse the command line -- as the
-    // -ENV: parse above already does for a malformed name, and for the same
-    // reason: accepting it accepts a command line that does not mean what it says.
-    // Testing the argument count, not the file name, keeps -embedded working: it
-    // legitimately leaves the file name empty inside the block below.
-    if (nArg < 2)
-      return 0;
-
     if (nArg >= 2) {
 
       pProf->m_iccFile = args[0];
@@ -1293,6 +1280,25 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
       args += 2;
       nArg -= 2;
       nUsed += 2;
+    }
+    else {
+      // -ENV: pairs apply to the profile that follows them.  The loop is only
+      // entered with at least one pair left, so reaching this branch means -ENV:
+      // pairs consumed the rest of the arguments and there is no profile.  The
+      // entry was appended anyway, below, without ever receiving a file or a
+      // rendering intent (#2140).  Environment variables with no transform to
+      // apply them to are not a profile sequence, so refuse the command line --
+      // as the -ENV: parse above already does for a malformed name, and for the
+      // same reason: accepting it accepts a command line that does not mean what
+      // it says.  Refusing on the argument count, not the file name, keeps
+      // -embedded working: it legitimately leaves the file name empty in the
+      // block above.
+      //
+      // The refusal was first written as an "if (nArg < 2) return 0" guard ahead
+      // of that block, which made the block's own test always true
+      // (cpp/constant-comparison, code-scanning alert 2424).  It belongs here,
+      // where one test serves both paths.
+      return 0;
     }
 
     if (nArg >= 2 && !stricmp(args[0], "-PCC")) {
@@ -1490,32 +1496,21 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
       nUsed += 2;
     }
 
-    // -ENV: pairs apply to the profile that follows them.  The loop is only
-    // entered with at least one pair left, so arriving here with fewer than two
-    // arguments means -ENV: pairs consumed the rest and there is no profile.  The
-    // entry was then appended anyway, below, without ever receiving a file or a
-    // rendering intent (#2140).  Environment variables with no transform to apply
-    // them to are not a profile sequence, so refuse the command line -- as the
-    // -ENV: parse above already does for a malformed name, and for the same
-    // reason: accepting it accepts a command line that does not mean what it says.
-    // Testing the argument count, not the file name, keeps -embedded working: it
-    // legitimately leaves the file name empty inside the block below.
-    if (nArg < 2)
-      return 0;
-
-    // The same rule when -ENV: pairs are followed by -INIT.  -INIT ends the
-    // profile list, but it is only recognised at the top of this loop, before any
-    // -ENV: pairs are consumed; after them it reached the block below as a file
-    // name.  "-ENV:abcd 1.0 -INIT 1" was accepted with a profile entry whose file
-    // was the literal string "-INIT", and the initializer the caller asked for
-    // was never applied.  -INIT takes an intent and no environment variables, so
-    // the pairs have nothing to apply to: refuse, as above.  Reaching here with
-    // -INIT next can only mean -ENV: pairs came first, since the top of the loop
-    // breaks on it otherwise.
-    if (!stricmp(args[0], "-INIT"))
-      return 0;
-
     if (nArg >= 2) {
+      // The same rule when -ENV: pairs are followed by -INIT.  -INIT ends the
+      // profile list, but it is only recognised at the top of this loop, before
+      // any -ENV: pairs are consumed; after them it reached the decode below as a
+      // file name.  "-ENV:abcd 1.0 -INIT 1" was accepted with a profile entry
+      // whose file was the literal string "-INIT", and the initializer the caller
+      // asked for was never applied.  -INIT takes an intent and no environment
+      // variables, so the pairs have nothing to apply to: refuse, as the else
+      // branch does.  Reaching here with -INIT next can only mean -ENV: pairs came
+      // first, since the top of the loop breaks on it otherwise.  The test reads
+      // args[0], so it sits inside the argument-count branch rather than ahead of
+      // it, where an -ENV: run that consumed every remaining argument would leave
+      // nothing to read.
+      if (!stricmp(args[0], "-INIT"))
+        return 0;
 
       pProf->m_iccFile = args[0];
       if (bFirst) {
@@ -1622,6 +1617,25 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
       args += 2;
       nArg -= 2;
       nUsed += 2;
+    }
+    else {
+      // -ENV: pairs apply to the profile that follows them.  The loop is only
+      // entered with at least one pair left, so reaching this branch means -ENV:
+      // pairs consumed the rest of the arguments and there is no profile.  The
+      // entry was appended anyway, below, without ever receiving a file or a
+      // rendering intent (#2140).  Environment variables with no transform to
+      // apply them to are not a profile sequence, so refuse the command line --
+      // as the -ENV: parse above already does for a malformed name, and for the
+      // same reason: accepting it accepts a command line that does not mean what
+      // it says.  Refusing on the argument count, not the file name, keeps
+      // -embedded working: it legitimately leaves the file name empty in the
+      // block above.
+      //
+      // The refusal was first written as an "if (nArg < 2) return 0" guard ahead
+      // of that block, which made the block's own test always true
+      // (cpp/constant-comparison, code-scanning alert 2423).  It belongs here,
+      // where one test serves both paths.
+      return 0;
     }
 
     if (nArg >= 2 && !stricmp(args[0], "-PCC")) {

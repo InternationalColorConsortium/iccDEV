@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Copyright (c) 2026 The International Color Consortium. All rights reserved.
+  Licensed under the BSD 3-Clause "New" or "Revised" License; see the ICC
+  Software License in the repository root and CONTRIBUTING.md.
+
+  A DeviceLink whose header PCS field is XYZ, carrying a colorantTableTag.
+  ICC.1:2022 9.2.19 permits only PCSLAB values for that tag in a DeviceLink,
+  so the PCS field must not decide its encoding here.  The sibling fixture
+  issue-2688-colorant-table-pcs.xml covers the ordinary case, where the header
+  PCS does decide it.
+-->
+<IccProfile>
+  <Header>
+    <PreferredCMMType></PreferredCMMType>
+    <ProfileVersion>5.10</ProfileVersion>
+    <ProfileDeviceClass>link</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-09-26T00:00:00</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.9642" Y="1.0000" Z="0.8249"/>
+    </PCSIlluminant>
+    <ProfileCreator>ICC </ProfileCreator>
+  </Header>
+  <Tags>
+    <multiLocalizedUnicodeType>
+      <TagSignature>desc</TagSignature>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Issue 2688 DeviceLink colorant table encoding]]></LocalizedText>
+    </multiLocalizedUnicodeType>
+    <multiLocalizedUnicodeType>
+      <TagSignature>cprt</TagSignature>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright 2026 International Color Consortium]]></LocalizedText>
+    </multiLocalizedUnicodeType>
+    <colorantTableTag>
+      <colorantTableType>
+        <ColorantTable>
+          <Colorant Name="Red" Channel1="50" Channel2="0" Channel3="0"/>
+          <Colorant Name="Green" Channel1="50" Channel2="0" Channel3="0"/>
+          <Colorant Name="Blue" Channel1="50" Channel2="0" Channel3="0"/>
+        </ColorantTable>
+      </colorantTableType>
+    </colorantTableTag>
+    <multiProcessElementType>
+      <TagSignature>A2B0</TagSignature>
+      <MultiProcessElements InputChannels="3" OutputChannels="3">
+        <CLutElement InputChannels="3" OutputChannels="3">
+          <GridPoints>2 2 2</GridPoints>
+          <TableData>
+            0.00 0.01 0.02
+            0.03 0.04 0.05
+            0.06 0.07 0.08
+            0.09 0.10 0.11
+            0.12 0.13 0.14
+            0.15 0.16 0.17
+            0.18 0.19 0.20
+            0.21 0.22 0.23
+          </TableData>
+        </CLutElement>
+      </MultiProcessElements>
+    </multiProcessElementType>
+  </Tags>
+</IccProfile>
