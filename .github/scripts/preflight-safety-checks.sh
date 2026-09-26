@@ -965,6 +965,7 @@ workflow_files=()
 script_files=()
 python_files=()
 docker_files=()
+trivy_policy_files=()
 changed_files=()
 deleted_workflow_files=()
 base_ref="${PREFLIGHT_BASE_REF:-origin/master}"
@@ -1071,6 +1072,9 @@ for file in "${unique_changed_files[@]}"; do
     Dockerfile|Dockerfile.*)
       docker_files+=("$file")
       ;;
+    .trivyignore*)
+      trivy_policy_files+=("$file")
+      ;;
   esac
 done
 
@@ -1166,15 +1170,19 @@ if [ "${#docker_files[@]}" -gt 0 ]; then
   else
     skip_or_fail "hadolint or docker"
   fi
+else
+  echo "[SKIP] No changed Dockerfile files"
+  echo ""
+fi
 
+if [ "${#docker_files[@]}" -gt 0 ] || [ "${#trivy_policy_files[@]}" -gt 0 ]; then
   if command -v trivy >/dev/null 2>&1 || command -v docker >/dev/null 2>&1; then
     run_check "Trivy config" run_trivy_config "${docker_files[@]}"
   else
     skip_or_fail "trivy or docker"
   fi
-
 else
-  echo "[SKIP] No changed Dockerfile files"
+  echo "[SKIP] No changed Dockerfile or Trivy policy files"
   echo ""
 fi
 

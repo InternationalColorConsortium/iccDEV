@@ -189,6 +189,10 @@ jobs:
             printf '%s\n' "${changed_files[@]}" |
               awk '/^Dockerfile$/ || /^Dockerfile\./'
           )
+          mapfile -t trivy_policy_files < <(
+            printf '%s\n' "${changed_files[@]}" |
+              awk '/^\.trivyignore/'
+          )
 
           failures=0
           if [ "${#workflow_files[@]}" -gt 0 ]; then
@@ -288,19 +292,21 @@ jobs:
             echo "[SKIP] No changed Python scripts"
           fi
 
-          if [ "${#docker_files[@]}" -gt 0 ]; then
+          if [ "${#docker_files[@]}" -gt 0 ] || [ "${#trivy_policy_files[@]}" -gt 0 ]; then
             if ! command -v docker >/dev/null 2>&1; then
-              echo "[FAIL] docker is required for Dockerfile security checks" >&2
+              echo "[FAIL] docker is required for container policy security checks" >&2
               failures=$((failures + 1))
             else
               hadolint_image='hadolint/hadolint@sha256:fdf19d026b54834f88c62774fdf2a61ff3b586a42632e5070674d41a796bfdf3'
               trivy_image='aquasec/trivy@sha256:ee940acbf1f58ebadb42d01434ce4609530bf1b52536afbd1eee66cd7123c5c9'
-              if ! docker run --rm \
-                -v "$PWD":/repo:ro \
-                -w /repo \
-                "$hadolint_image" \
-                hadolint --failure-threshold warning "${docker_files[@]}"; then
-                failures=$((failures + 1))
+              if [ "${#docker_files[@]}" -gt 0 ]; then
+                if ! docker run --rm \
+                  -v "$PWD":/repo:ro \
+                  -w /repo \
+                  "$hadolint_image" \
+                  hadolint --failure-threshold warning "${docker_files[@]}"; then
+                  failures=$((failures + 1))
+                fi
               fi
               rm -rf "${RUNNER_TEMP:-/tmp}/trivy-cache"
               mkdir -p "${RUNNER_TEMP:-/tmp}/trivy-cache"
@@ -315,7 +321,7 @@ jobs:
               fi
             fi
           else
-            echo "[SKIP] No changed Dockerfile files"
+            echo "[SKIP] No changed Dockerfile or Trivy policy files"
           fi
 
           if [ -f .github/codeql-queries/iccdev-security-suite.qls ]; then
