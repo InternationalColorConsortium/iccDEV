@@ -46,7 +46,7 @@ RUN for attempt in 1 2 3; do \
     clang-tools-22=1:22.1.2-1ubuntu1 \
     cmake=4.2.3-2ubuntu2 \
     cppcheck=2.19.0-3 \
-    curl=8.18.0-1ubuntu2.5 \
+    curl=8.18.0-1ubuntu2.7 \
     diffutils=1:3.12-1ubuntu0.1 \
     file=1:5.46-5build2 \
     g++=4:15.2.0-5ubuntu1 \
@@ -65,7 +65,7 @@ RUN for attempt in 1 2 3; do \
     libtiff-tools=4.7.0-3ubuntu5 \
     liblzma-dev=5.8.3-1 \
     libpng-dev=1.6.57-1 \
-    libcurl4t64=8.18.0-1ubuntu2.5 \
+    libcurl4t64=8.18.0-1ubuntu2.7 \
     libssl-dev=3.5.5-1ubuntu3.5 \
     libssl3t64=3.5.5-1ubuntu3.5 \
     libtiff-dev=4.7.0-3ubuntu5 \

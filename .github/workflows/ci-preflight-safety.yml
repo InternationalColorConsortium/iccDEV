@@ -26,6 +26,7 @@ on:
       - 'Dockerfile'
       - 'Dockerfile.*'
       - '.dockerignore'
+      - '.trivyignore*'
   pull_request:
     branches:
       - master
@@ -38,6 +39,7 @@ on:
       - 'Dockerfile'
       - 'Dockerfile.*'
       - '.dockerignore'
+      - '.trivyignore*'
   workflow_dispatch:
 
 concurrency:
@@ -169,7 +171,7 @@ jobs:
           cd target
           mapfile -t changed_files < <(
             git diff --name-only --diff-filter=ACMRT origin/master...HEAD -- \
-              .github .githooks Dockerfile 'Dockerfile.*' .dockerignore | sort
+              .github .githooks Dockerfile 'Dockerfile.*' .dockerignore '.trivyignore*' | sort
           )
           mapfile -t workflow_files < <(
             find .github/workflows -maxdepth 1 -type f \
@@ -186,6 +188,10 @@ jobs:
           mapfile -t docker_files < <(
             printf '%s\n' "${changed_files[@]}" |
               awk '/^Dockerfile$/ || /^Dockerfile\./'
+          )
+          mapfile -t trivy_policy_files < <(
+            printf '%s\n' "${changed_files[@]}" |
+              awk '/^\.trivyignore/'
           )
 
           failures=0
@@ -286,19 +292,21 @@ jobs:
             echo "[SKIP] No changed Python scripts"
           fi
 
-          if [ "${#docker_files[@]}" -gt 0 ]; then
+          if [ "${#docker_files[@]}" -gt 0 ] || [ "${#trivy_policy_files[@]}" -gt 0 ]; then
             if ! command -v docker >/dev/null 2>&1; then
-              echo "[FAIL] docker is required for Dockerfile security checks" >&2
+              echo "[FAIL] docker is required for container policy security checks" >&2
               failures=$((failures + 1))
             else
               hadolint_image='hadolint/hadolint@sha256:fdf19d026b54834f88c62774fdf2a61ff3b586a42632e5070674d41a796bfdf3'
               trivy_image='aquasec/trivy@sha256:ee940acbf1f58ebadb42d01434ce4609530bf1b52536afbd1eee66cd7123c5c9'
-              if ! docker run --rm \
-                -v "$PWD":/repo:ro \
-                -w /repo \
-                "$hadolint_image" \
-                hadolint --failure-threshold warning "${docker_files[@]}"; then
-                failures=$((failures + 1))
+              if [ "${#docker_files[@]}" -gt 0 ]; then
+                if ! docker run --rm \
+                  -v "$PWD":/repo:ro \
+                  -w /repo \
+                  "$hadolint_image" \
+                  hadolint --failure-threshold warning "${docker_files[@]}"; then
+                  failures=$((failures + 1))
+                fi
               fi
               rm -rf "${RUNNER_TEMP:-/tmp}/trivy-cache"
               mkdir -p "${RUNNER_TEMP:-/tmp}/trivy-cache"
@@ -307,12 +315,13 @@ jobs:
                 -v "${RUNNER_TEMP:-/tmp}/trivy-cache":/root/.cache/ \
                 -w /repo \
                 "$trivy_image" \
-                config --skip-check-update --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 /repo; then
+                config --ignorefile /repo/.trivyignore.yaml --skip-check-update \
+                --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 /repo; then
                 failures=$((failures + 1))
               fi
             fi
           else
-            echo "[SKIP] No changed Dockerfile files"
+            echo "[SKIP] No changed Dockerfile or Trivy policy files"
           fi
 
           if [ -f .github/codeql-queries/iccdev-security-suite.qls ]; then

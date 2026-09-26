@@ -83,7 +83,8 @@ run_hadolint() {
 
 run_trivy_config() {
   if command -v trivy >/dev/null 2>&1; then
-    trivy config --skip-check-update --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 .
+    trivy config --ignorefile .trivyignore.yaml --skip-check-update \
+      --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 .
     return
   fi
   if command -v docker >/dev/null 2>&1; then
@@ -94,7 +95,8 @@ run_trivy_config() {
       -v "$TRIVY_CACHE_DIR":/root/.cache/ \
       -w /repo \
       "$TRIVY_IMAGE" \
-      config --skip-check-update --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 /repo
+      config --ignorefile /repo/.trivyignore.yaml --skip-check-update \
+      --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 /repo
     return
   fi
   return 127
@@ -963,11 +965,12 @@ workflow_files=()
 script_files=()
 python_files=()
 docker_files=()
+trivy_policy_files=()
 changed_files=()
 deleted_workflow_files=()
 base_ref="${PREFLIGHT_BASE_REF:-origin/master}"
 base_ref_available=0
-scan_paths=(.github .githooks Dockerfile 'Dockerfile.*' .dockerignore)
+scan_paths=(.github .githooks Dockerfile 'Dockerfile.*' .dockerignore '.trivyignore*')
 if [ "$FAST_SCOPE" = "matlab" ]; then
   scan_paths=(
     .github/workflows/ci-matlab.yml
@@ -1012,7 +1015,7 @@ else
     done < <(
       {
         find .github .githooks -type f 2>/dev/null
-        find . -maxdepth 1 -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '.dockerignore' \)
+        find . -maxdepth 1 -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '.dockerignore' -o -name '.trivyignore*' \)
       } | sed 's#^\./##' | sort
     )
   fi
@@ -1068,6 +1071,9 @@ for file in "${unique_changed_files[@]}"; do
       ;;
     Dockerfile|Dockerfile.*)
       docker_files+=("$file")
+      ;;
+    .trivyignore*)
+      trivy_policy_files+=("$file")
       ;;
   esac
 done
@@ -1164,15 +1170,19 @@ if [ "${#docker_files[@]}" -gt 0 ]; then
   else
     skip_or_fail "hadolint or docker"
   fi
+else
+  echo "[SKIP] No changed Dockerfile files"
+  echo ""
+fi
 
+if [ "${#docker_files[@]}" -gt 0 ] || [ "${#trivy_policy_files[@]}" -gt 0 ]; then
   if command -v trivy >/dev/null 2>&1 || command -v docker >/dev/null 2>&1; then
     run_check "Trivy config" run_trivy_config "${docker_files[@]}"
   else
     skip_or_fail "trivy or docker"
   fi
-
 else
-  echo "[SKIP] No changed Dockerfile files"
+  echo "[SKIP] No changed Dockerfile or Trivy policy files"
   echo ""
 fi
 
