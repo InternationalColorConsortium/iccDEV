@@ -78,6 +78,12 @@ for config_type in CIccCfgDataApply CIccCfgImageApply CIccCfgConnectOptions \
   grep -Fq "exerciseRoundTrip<$config_type>" "$connectconfig"
 done
 
+xmlparse="$cfl_dir/icc_xmlparse_fuzzer.cpp"
+grep -Fq 'xmlSetGenericErrorFunc(nullptr, discardXmlDiagnostic)' "$xmlparse"
+grep -Fq 'xmlSetStructuredErrorFunc(nullptr, discardXmlStructuredDiagnostic)' \
+  "$xmlparse"
+grep -Fq 'XML_PARSE_NOERROR | XML_PARSE_NOWARNING' "$xmlparse"
+
 for extension in icc xml json; do
   if ! find "$repo_root/.github/ci/test-data" -maxdepth 1 \
       -type f -name "*.$extension" -print -quit | grep -q .; then

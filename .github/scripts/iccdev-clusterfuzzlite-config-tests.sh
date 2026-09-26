@@ -26,10 +26,13 @@ patch_dir="$repo_root/.github/ci/fuzz-patches/cfl"
 patch_readme="$patch_dir/README.md"
 patch_test="$repo_root/.github/scripts/iccdev-fuzz-patch-check-tests.sh"
 target_test="$repo_root/.github/scripts/iccdev-clusterfuzzlite-target-tests.sh"
+artifact_cleanup="$repo_root/.github/scripts/iccdev-cfl-artifact-cleanup.sh"
+artifact_cleanup_test="$repo_root/.github/scripts/iccdev-cfl-artifact-cleanup-tests.sh"
 
 for required in "$workflow" "$adapter" "$project" "$dockerfile" \
   "$msan_builder" "$issue_2687_fixture" "$patch_mode_file" \
-  "$target_group_file" "$patch_readme" "$patch_test" "$target_test"; do
+  "$target_group_file" "$patch_readme" "$patch_test" "$target_test" \
+  "$artifact_cleanup" "$artifact_cleanup_test"; do
   if [ ! -s "$required" ]; then
     echo "[FAIL] Missing ClusterFuzzLite file: $required" >&2
     exit 1
@@ -42,6 +45,8 @@ bash -n "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
 bash -n "$msan_builder"
 bash -n "$patch_test"
 bash -n "$target_test"
+bash -n "$artifact_cleanup"
+bash -n "$artifact_cleanup_test"
 
 for issue in 2686 2688 2699 2703 2704 2705 2707; do
   if ! find "$patch_dir" -maxdepth 1 -type f -name "*-issue-$issue-*.patch" \
@@ -57,6 +62,7 @@ grep -q '^FROM gcr.io/oss-fuzz-base/base-builder@sha256:[0-9a-f]\{64\}$' "$docke
 grep -q '^      libxml2-dev=[^ ]* \\$' "$dockerfile"
 grep -q '^      nlohmann-json3-dev=[^ ]* && \\$' "$dockerfile"
 grep -q '^  actions: read  # ' "$workflow"
+grep -q '^      actions: write  # Remove superseded corpus artifacts from this run\.$' "$workflow"
 grep -q '^concurrency:$' "$workflow"
 grep -q '^  workflow_dispatch:$' "$workflow"
 grep -q '^      fuzz_minutes:$' "$workflow"
@@ -73,7 +79,7 @@ grep -q '^  configure:$' "$workflow"
 grep -q '^    timeout-minutes: 10$' "$workflow"
 # shellcheck disable=SC2016 # Match the literal Actions expression.
 grep -q '^      fuzz_seconds: \${{ steps.duration.outputs.fuzz_seconds }}$' "$workflow"
-test "$(grep -c '^        shell: bash --noprofile --norc {0}$' "$workflow")" -eq 7
+test "$(grep -c '^        shell: bash --noprofile --norc {0}$' "$workflow")" -eq 8
 grep -q '^          BASH_ENV: /dev/null$' "$workflow"
 grep -q '^          git config --global credential.helper ""$' "$workflow"
 grep -q '^          unset GITHUB_TOKEN || true$' "$workflow"
@@ -84,8 +90,9 @@ grep -q '^          echo "fuzz_seconds=$((minutes \* 60))" >> "$GITHUB_OUTPUT"  
 grep -q '^    needs: configure$' "$workflow"
 grep -q '^      max-parallel: 3$' "$workflow"
 grep -q '^  prune:$' "$workflow"
+grep -q '^  cleanup-artifacts:$' "$workflow"
 # shellcheck disable=SC2016 # Match the literal Actions status expression.
-test "$(grep -Fc '    if: ${{ !cancelled() &&' "$workflow")" -eq 2
+test "$(grep -Fc '    if: ${{ !cancelled() &&' "$workflow")" -eq 3
 if grep -q '^    if: .*always()' "$workflow"; then
   echo "[FAIL] ClusterFuzzLite cleanup jobs must stop on cancellation" >&2
   exit 1
@@ -119,6 +126,11 @@ grep -Fq '          CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: ${{ matrix.group }}' "$wo
 test "$(grep -Fc '          CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}' "$workflow")" -eq 3
 test "$(grep -c '^          CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: all$' "$workflow")" -eq 2
 test "$(grep -c '^      - name: Verify built source and configuration$' "$workflow")" -eq 3
+test "$(grep -c '^    name: "Remove superseded corpus artifacts"$' "$workflow")" -eq 1
+grep -q '^    needs: prune$' "$workflow"
+test "$(grep -c '^      - name: Remove superseded same-run corpus artifacts$' "$workflow")" -eq 1
+# shellcheck disable=SC2016 # Match literal GitHub runner variables.
+grep -Fq -- '--delete-current-run "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"' "$workflow"
 test "$(grep -c '^          provenance=build-out/iccdev-cfl-build-provenance.txt$' "$workflow")" -eq 3
 # shellcheck disable=SC2016 # Match literal workflow shell variables.
 test "$(grep -Fc '          grep -Fqx "source_sha=$GITHUB_SHA" "$provenance"' "$workflow")" -eq 3
@@ -126,6 +138,7 @@ test "$(grep -Fc '          grep -Fqx "source_sha=$GITHUB_SHA" "$provenance"' "$
 test "$(grep -Fc '          grep -Fqx "target_group=$EXPECTED_TARGET_GROUP" "$provenance"' "$workflow")" -eq 3
 # shellcheck disable=SC2016 # Match literal workflow shell variables.
 test "$(grep -Fc '          grep -Fqx "patch_mode=$EXPECTED_PATCH_MODE" "$provenance"' "$workflow")" -eq 3
+test "$(grep -Fc "          sed 's/^/[EVIDENCE] cfl_/' \"\$provenance\"" "$workflow")" -eq 3
 
 grep -q '^  core)$' "$adapter"
 grep -q '^  formats)$' "$adapter"
@@ -151,12 +164,19 @@ grep -Fq 'libxml2_soname' "$adapter"
 grep -Fq 'CXXFLAGS//-stdlib=libc++/' "$adapter"
 grep -Fq 'ICCDEV_CFL_CXX_LINK_FLAGS' "$adapter"
 grep -Fq 'libstdc++.so' "$adapter"
+grep -Fq '[EVIDENCE] msan_runtime fuzzer=' "$adapter"
+grep -Fq '[EVIDENCE] msan_xml_runtime fuzzer=' "$adapter"
+grep -Fq '[PASS] MSan replay fuzzer=' "$adapter"
 # shellcheck disable=SC2016 # Match the literal ELF loader token.
 grep -Fq '$ORIGIN' "$adapter"
 grep -Fq 'libc++.so.1.0' "$adapter"
 grep -Fq 'libc++abi.so.1' "$adapter"
 grep -Fq 'issue-2687-profile-list-node.icc.base64' "$adapter"
 grep -Fq 'origin_history_size=7' "$adapter"
+grep -Fq 'xmlSetGenericErrorFunc(nullptr, discardXmlDiagnostic)' \
+  "$repo_root/.github/ci/cfl/icc_xmlparse_fuzzer.cpp"
+grep -Fq 'xmlSetStructuredErrorFunc(nullptr, discardXmlStructuredDiagnostic)' \
+  "$repo_root/.github/ci/cfl/icc_xmlparse_fuzzer.cpp"
 grep -Fq 'ICCDEV_CFL_CXX_LINK_FLAGS' "$repo_root/.github/ci/cfl/build.sh"
 grep -Fq 'ICCDEV_CFL_LIBXML2_PREFIX' "$repo_root/.github/ci/cfl/build.sh"
 grep -Fq -- '--skip-libxml2' < <("$msan_builder" --help)
@@ -181,6 +201,7 @@ compiler_gate_line="$(grep -n '^    if \[ -z "${AFL_CC:-}" \]; then$' "$repo_roo
 test "$compiler_gate_line" -gt "$skip_build_line"
 
 "$target_test"
+"$artifact_cleanup_test"
 "$patch_test"
 
 validate_action_reference() {

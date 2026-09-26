@@ -146,23 +146,36 @@ if [ "${SANITIZER:-}" = "memory" ]; then
 
   for target in "${targets[@]}"; do
     fuzzer="icc_${target}_fuzzer"
-    ldd "$OUT/$fuzzer" > "$WORK/$fuzzer.ldd"
-    if grep -Fq 'libstdc++.so' "$WORK/$fuzzer.ldd" ||
-       ! grep -Fq "$OUT/libc++.so.1" "$WORK/$fuzzer.ldd" ||
-       ! grep -Fq "$OUT/libc++abi.so.1" "$WORK/$fuzzer.ldd"; then
+    ldd_report="$WORK/$fuzzer.ldd"
+    ldd "$OUT/$fuzzer" > "$ldd_report"
+    if grep -Fq 'libstdc++.so' "$ldd_report" ||
+       ! grep -Fq "$OUT/libc++.so.1" "$ldd_report" ||
+       ! grep -Fq "$OUT/libc++abi.so.1" "$ldd_report"; then
       echo "ERROR: $fuzzer crossed an uninstrumented C++ runtime boundary" >&2
-      cat "$WORK/$fuzzer.ldd" >&2
+      cat "$ldd_report" >&2
       exit 1
     fi
     if [ "$target" = "xmlparse" ] &&
-       ! grep -Fq "$OUT/$libxml2_soname" "$WORK/$fuzzer.ldd"; then
+       ! grep -Fq "$OUT/$libxml2_soname" "$ldd_report"; then
       echo "ERROR: $fuzzer crossed an uninstrumented libxml2 boundary" >&2
-      cat "$WORK/$fuzzer.ldd" >&2
+      cat "$ldd_report" >&2
       exit 1
+    fi
+
+    libcxx_path="$(awk '$1 == "libc++.so.1" { print $3; exit }' "$ldd_report")"
+    libcxxabi_path="$(awk '$1 == "libc++abi.so.1" { print $3; exit }' "$ldd_report")"
+    printf '[EVIDENCE] msan_runtime fuzzer=%s libcxx=%s libcxxabi=%s\n' \
+      "$fuzzer" "$libcxx_path" "$libcxxabi_path"
+    if [ "$target" = "xmlparse" ]; then
+      libxml2_path="$(awk '$1 ~ /^libxml2\.so/ { print $3; exit }' "$ldd_report")"
+      printf '[EVIDENCE] msan_xml_runtime fuzzer=%s libxml2=%s\n' \
+        "$fuzzer" "$libxml2_path"
     fi
 
     MSAN_OPTIONS=halt_on_error=1:exit_code=86:origin_history_size=7 \
       "$OUT/$fuzzer" -runs=1 "$issue_2687_profile"
+    printf '[PASS] MSan replay fuzzer=%s fixture=issue-2687-profile-list-node.icc\n' \
+      "$fuzzer"
   done
 fi
 

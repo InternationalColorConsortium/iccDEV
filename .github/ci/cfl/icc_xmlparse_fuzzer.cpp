@@ -40,6 +40,7 @@
 
 #include <libxml/parser.h>
 #include <libxml/tree.h>
+#include <libxml/xmlerror.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -49,9 +50,26 @@
 
 static constexpr size_t kMaxTextInputSize = 1024 * 1024;
 
+static void discardXmlDiagnostic(void *, const char *, ...)
+{
+}
+
+#if LIBXML_VERSION >= 21400
+static void discardXmlStructuredDiagnostic(void *, const xmlError *)
+#else
+static void discardXmlStructuredDiagnostic(void *, xmlErrorPtr)
+#endif
+{
+}
+
 static void initializeXmlFactories()
 {
   static const bool initialized = []() {
+    // Mutated XML is expected to be malformed. Keep routine parser rejection
+    // diagnostics out of sanitizer logs while leaving sanitizer reports and
+    // the harness validation report untouched.
+    xmlSetGenericErrorFunc(nullptr, discardXmlDiagnostic);
+    xmlSetStructuredErrorFunc(nullptr, discardXmlStructuredDiagnostic);
     IccXmlSetAllowFileIncludes(false);
     CIccTagCreator::PushFactory(new (std::nothrow) CIccTagXmlFactory());
     CIccMpeCreator::PushFactory(new (std::nothrow) CIccMpeXmlFactory());
