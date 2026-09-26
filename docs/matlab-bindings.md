@@ -176,6 +176,8 @@ repository-relative support paths used by QA and examples:
 - `matlab/tests/test_usage_guidance.m` and
   `matlab/tests/fixtures/default_usage_examples.txt` for actionable default
   command errors.
+- `matlab/tests/test_delta_e_2000.m` and `matlab/examples/ciede2000.m` for
+  single- and multiple-pair CIEDE2000 teaching and regression coverage.
 - `.github/ci/regression/gamma-2.20703125.icc` for gamma QA.
 - `IccProfLib/IccTagBasic.cpp` and `IccProfLib/IccColorimetry.cpp` for the
   independent issue #1475 table check.
@@ -235,6 +237,7 @@ assert(exist(fullfile(build_dir, 'bin', 'Release', ...
   'iccFromJson.exe'), 'file') == 2, 'Build iccFromJson before MATLAB QA.');
 
 test_usage_guidance();
+test_delta_e_2000();
 test_json_bindings();
 test_lut_type_range();
 test_pawg_q1();
@@ -334,7 +337,27 @@ rgb_signature = uint32(hex2dec('52474220'));
 disp(iccdev.sig_to_str(rgb_signature));
 ```
 
-Render the profile graphs without leaving figures open:
+Compare one CIELAB colour pair, then multiple corresponding pairs:
+
+```matlab
+single_delta = iccdev.qa.delta_e_2000( ...
+  [50 2.6772 -79.7751], [50 0 -82.7485]);
+
+lab1 = [50 2.6772 -79.7751; 50 3.1571 -77.2803];
+lab2 = [50 0 -82.7485; 50 0 -82.7485];
+multiple_delta = iccdev.qa.delta_e_2000(lab1, lab2);
+disp(single_delta);
+disp(multiple_delta);
+```
+
+Display the profile graphs interactively. `Visible` defaults to `on`:
+
+```matlab
+plots = iccdev.plot(profile_path);
+```
+
+For automated checks or export, create hidden figures and close them when
+finished:
 
 ```matlab
 plots = iccdev.plot(profile_path, 'Visible', 'off');
@@ -346,6 +369,7 @@ Run the focused and complete automated checks:
 
 ```matlab
 test_usage_guidance();
+test_delta_e_2000();
 test_plot();
 summary = test_iccdev();
 assert(summary.failed == 0 && summary.skipped == 0);
@@ -399,7 +423,9 @@ plots = iccdev.plot(profile_path);
 
 The function renders curves, chromaticity diagrams, named-color plots, and
 other graph descriptors. Raster CLUT descriptors are intentionally left to
-`iccProfilePlot raster` or `iccProfileVisualizePlot`. For noninteractive use:
+`iccProfilePlot raster` or `iccProfileVisualizePlot`. The default `Visible`
+value is `on`, so the first command above opens figures on the desktop. For
+noninteractive checks or export, explicitly hide and then close the figures:
 
 ```matlab
 plots = iccdev.plot(profile_path, 'Visible', 'off');
@@ -409,6 +435,33 @@ close([plots.figure]);
 The tool is discovered through `ICCDEV_BUILD_DIR`, common repository build
 directories, or `PATH`. Pass `BuildDir` or `PlotTool` when selecting another
 build explicitly.
+
+## CIEDE2000 Colour Difference
+
+`iccdev.qa.delta_e_2000` compares corresponding CIELAB colours. Both inputs
+must be equal-sized `N`-by-3 arrays, and every row must use `[L* a* b*]`
+ordering. A single pair therefore uses two 1-by-3 row vectors:
+
+```matlab
+delta_e = iccdev.qa.delta_e_2000( ...
+  [50 2.6772 -79.7751], [50 0 -82.7485]);
+```
+
+For multiple pairs, row 1 is compared with row 1, row 2 with row 2, and so on.
+The result is an `N`-by-1 column vector:
+
+```matlab
+lab1 = [50 2.6772 -79.7751; 50 3.1571 -77.2803];
+lab2 = [50 0 -82.7485; 50 0 -82.7485];
+delta_e = iccdev.qa.delta_e_2000(lab1, lab2);
+```
+
+Run the focused teaching example and regression with:
+
+```matlab
+run(fullfile(repo_root, 'matlab', 'examples', 'ciede2000.m'));
+test_delta_e_2000();
+```
 
 ## PAWG Check Q1 Audit
 
@@ -492,6 +545,7 @@ Run the demonstrations:
 run(fullfile(repo_root, 'matlab', 'examples', 'read_profile.m'));
 run(fullfile(repo_root, 'matlab', 'examples', 'color_transform.m'));
 run(fullfile(repo_root, 'matlab', 'examples', 'gamma_curve.m'));
+run(fullfile(repo_root, 'matlab', 'examples', 'ciede2000.m'));
 ```
 
 Reproduce the spectral-viewing luminance calculations from issue #1811
@@ -696,11 +750,16 @@ MATLAB interoperates with the published Linux image through the Docker CLI and
 profile files. It does not load Linux libraries into the Windows MATLAB
 process.
 
-Download the image:
+Interactive MATLAB QA follows the published `latest` tag by default:
 
 ```powershell
-docker pull ghcr.io/internationalcolorconsortium/iccdev@sha256:0a54b8ad1ca73e294ecf9c71323e6385c8812945c6ca3b40ba98d9f82b89c0fc
+docker pull ghcr.io/internationalcolorconsortium/iccdev:latest
 ```
+
+Hosted CI resolves that release to an immutable digest. The current hosted
+reference is
+`ghcr.io/internationalcolorconsortium/iccdev@sha256:0504c43e0204e36aa36377fceee1de9c5f49468d578202c388525c75d42da079`.
+Pass the same digest through the `Image` option when reproducing CI exactly.
 
 Run the MATLAB validation:
 
@@ -739,8 +798,9 @@ disables container networking, drops Linux capabilities, enables
 an immutable SHA-256 digest.
 
 The output contract is recorded in
-`matlab/tests/fixtures/docker_expected.txt`. Hosted CI and interactive local use
-the same digest-pinned image by default.
+`matlab/tests/fixtures/docker_expected.txt`. Interactive local QA uses the
+published `latest` tag by default; hosted CI uses the documented immutable
+digest so a tag move cannot change an in-progress or repeated CI result.
 
 ## Troubleshooting
 

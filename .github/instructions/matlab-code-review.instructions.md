@@ -20,6 +20,11 @@ changed-line defects with a concrete trigger and impact.
 
 - Check public required-argument entry points for an actionable bare-invocation
   error and a matching `test_usage_guidance` fixture entry.
+- Require function help and validation errors for array APIs to explain row
+  semantics and include runnable single-item and batch examples.
+- Show visible interactive behavior first in user-facing examples. Require
+  hidden figures or headless options to be explicitly labelled for automation
+  and paired with cleanup instructions.
 - Require `inputParser` validators to reject nonscalar paths, malformed option
   pairs, and unsupported values before calling the MEX gateway or a tool.
 - Preserve `uint8` binary profile data and UTF-8 JSON text without implicit
