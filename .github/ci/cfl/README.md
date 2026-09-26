@@ -164,10 +164,12 @@ default workflow path is deliberately non-blocking. See
 rules.
 
 Every successful adapter build writes its source SHA, target group, and patch
-mode to `build-out/iccdev-cfl-build-provenance.txt`. The workflow verifies that
-record before fuzzing, pruning, or coverage. If ClusterFuzzLite cannot fetch an
-in-flight commit after branch history is rewritten and falls back to another
-revision, the job stops before running mismatched fuzzers.
+mode to `build-out/iccdev-cfl-build-provenance.txt`. The workflow forwards the
+checked-out SHA through `CFL_EXTRA_ICCDEV_CFL_SOURCE_SHA` because the source
+snapshot inside the build container has no Git metadata. It verifies the
+record against `GITHUB_SHA` before fuzzing, pruning, or coverage. This records
+the exact revision requested from the official builder without pretending the
+containerized source snapshot can independently recover Git provenance.
 
 Successful MSan builds print the resolved libc++, libc++abi, and, for the XML
 target, libxml2 paths before reporting the result of each pinned #2687 replay.
