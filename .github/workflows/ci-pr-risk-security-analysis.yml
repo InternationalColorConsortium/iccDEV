@@ -181,7 +181,7 @@ jobs:
           cd "$SCAN_ROOT"
           git fetch --no-tags --depth=1 origin "$BASE_SHA"
           mapfile -t changed_files < <(git diff --name-only "$BASE_SHA"...HEAD -- \
-            .github .githooks 'Dockerfile*' 'Dockerfile.*' Build/Cmake 2>/dev/null || true)
+            .github .githooks 'Dockerfile*' 'Dockerfile.*' '.trivyignore*' Build/Cmake 2>/dev/null || true)
 
           if [ "${#changed_files[@]}" -eq 0 ]; then
             echo "[OK] Fork PR does not change maintainer-owned automation"

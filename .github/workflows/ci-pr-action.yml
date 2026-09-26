@@ -635,7 +635,7 @@ jobs:
             ci_changed=true
           fi
 
-          if has_changed_file '^(Dockerfile|\.dockerignore|\.github/ci/(docker|requirements)/|iccdev-mcp/|\.github/workflows/ci-docker-pr\.yml|\.github/scripts/(check-workflow-cache-policy|sanitize-sed)\.sh)'; then
+          if has_changed_file '^(Dockerfile|\.dockerignore|\.trivyignore(\.yaml)?$|\.github/ci/(docker|requirements)/|iccdev-mcp/|\.github/workflows/ci-docker-pr\.yml|\.github/scripts/(check-workflow-cache-policy|sanitize-sed)\.sh)'; then
             image_definition_changed=true
           fi
 

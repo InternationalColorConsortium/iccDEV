@@ -1,0 +1,9 @@
+misconfigurations:
+  - id: AVD-DS-0002
+    paths:
+      - .clusterfuzzlite/Dockerfile
+    statement: OSS-Fuzz base-builder images intentionally run build steps as root.
+  - id: AVD-DS-0026
+    paths:
+      - .clusterfuzzlite/Dockerfile
+    statement: This build-only image exposes no long-running service to health-check.

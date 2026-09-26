@@ -26,6 +26,7 @@ on:
       - 'Dockerfile'
       - 'Dockerfile.*'
       - '.dockerignore'
+      - '.trivyignore*'
   pull_request:
     branches:
       - master
@@ -38,6 +39,7 @@ on:
       - 'Dockerfile'
       - 'Dockerfile.*'
       - '.dockerignore'
+      - '.trivyignore*'
   workflow_dispatch:
 
 concurrency:
@@ -169,7 +171,7 @@ jobs:
           cd target
           mapfile -t changed_files < <(
             git diff --name-only --diff-filter=ACMRT origin/master...HEAD -- \
-              .github .githooks Dockerfile 'Dockerfile.*' .dockerignore | sort
+              .github .githooks Dockerfile 'Dockerfile.*' .dockerignore '.trivyignore*' | sort
           )
           mapfile -t workflow_files < <(
             find .github/workflows -maxdepth 1 -type f \
@@ -307,7 +309,8 @@ jobs:
                 -v "${RUNNER_TEMP:-/tmp}/trivy-cache":/root/.cache/ \
                 -w /repo \
                 "$trivy_image" \
-                config --skip-check-update --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 /repo; then
+                config --ignorefile /repo/.trivyignore.yaml --skip-check-update \
+                --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 /repo; then
                 failures=$((failures + 1))
               fi
             fi
