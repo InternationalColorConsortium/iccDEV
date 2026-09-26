@@ -41,6 +41,9 @@ shares one source of truth. Update rules here, not in the mirrors.
   discovered capabilities. Do not hard-code a total tool count.
 - MATLAB public entry points that require arguments must provide actionable
   bare-invocation errors pinned by `matlab/tests/test_usage_guidance.m`.
+  Interactive examples must show visible UI defaults first; label hidden or
+  headless options as automation-only. Shape errors must explain row semantics
+  and include copy/paste-ready single-item and batch examples.
 
 ## Navigation
 
