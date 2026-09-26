@@ -5463,7 +5463,7 @@ CIccApplyMpe *CIccMpeCalculator::GetNewApply(CIccApplyTagMpe *pApplyTag)
     return NULL;
 
   if (m_nTempChannels) {
-    pApply->m_temp = (icFloatNumber*)malloc(m_nTempChannels*sizeof(icFloatNumber));
+    pApply->m_temp = (icFloatNumber*)calloc(m_nTempChannels, sizeof(icFloatNumber));
   }
   pApply->m_stack = new CIccFloatVector;
   pApply->m_scratch = new CIccFloatVector;
