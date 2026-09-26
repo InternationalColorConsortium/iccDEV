@@ -1,0 +1,4 @@
+# Bootstrap compatibility for trusted-base scanners that predate YAML policy support.
+# Path-scoped rationale remains canonical in .trivyignore.yaml.
+AVD-DS-0002
+AVD-DS-0026
