@@ -46,11 +46,12 @@ Use this skill for `.clusterfuzzlite/**`,
 - Keep a schema-shaped IccConnect seed and dedicated config dictionary. Drive
   `fromJson()`/`toJson()` round trips for top-level and nested `CIccCfg*`
   objects before adding another configuration target.
-- Keep the workflow limited to `workflow_dispatch` and pushes to
-  `ci-qa-clusterfuzz` unless a maintainer explicitly broadens the trigger.
+- Keep the workflow limited to manual dispatch and the weekly schedule. Manual
+  dispatch defaults to one `address`/`core` smoke job; `run_mode=full` and the
+  schedule use all nine group/sanitizer combinations.
 - Keep the manual fuzz duration selectable as whole minutes from 2 through 45,
   validate it before the sanitizer matrix, pass it as the budget for each
-  target group, and retain a 2-minute per-group budget for push runs.
+  target group, and retain a 2-minute per-group budget for scheduled runs.
 - Keep corpus pruning runnable after a fuzz finding. Keep coverage an explicit
   manual option that emits a ClusterFuzzLite artifact without broadening
   repository permissions.

@@ -24,6 +24,14 @@ concurrency:
 'on':
   workflow_dispatch:
     inputs:
+      run_mode:
+        description: "Run one address/core smoke lane or the full matrix"
+        required: true
+        default: smoke
+        type: choice
+        options:
+          - smoke
+          - full
       fuzz_minutes:
         description: "Minutes per sequential target group (2-45)"
         required: true
@@ -42,9 +50,8 @@ concurrency:
         required: true
         default: false
         type: boolean
-  push:
-    branches:
-      - ci-qa-clusterfuzz
+  schedule:
+    - cron: '17 5 * * 1'
 
 jobs:
   configure:
@@ -54,6 +61,8 @@ jobs:
     outputs:
       fuzz_seconds: ${{ steps.duration.outputs.fuzz_seconds }}
       known_bug_patch_mode: ${{ steps.duration.outputs.known_bug_patch_mode }}
+      matrix: ${{ steps.duration.outputs.matrix }}
+      run_mode: ${{ steps.duration.outputs.run_mode }}
 
     steps:
       - name: Resolve bounded duration
@@ -63,6 +72,7 @@ jobs:
           BASH_ENV: /dev/null
           REQUESTED_MINUTES: ${{ inputs.fuzz_minutes }}
           REQUESTED_PATCH_MODE: ${{ inputs.known_bug_patch_mode }}
+          REQUESTED_RUN_MODE: ${{ inputs.run_mode }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -92,8 +102,28 @@ jobs:
               exit 2
               ;;
           esac
-          echo "fuzz_seconds=$((minutes * 60))" >> "$GITHUB_OUTPUT"  # elements-sanitized
-          echo "known_bug_patch_mode=$patch_mode" >> "$GITHUB_OUTPUT"  # elements-sanitized
+          run_mode=full
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            run_mode="$REQUESTED_RUN_MODE"
+          fi
+          case "$run_mode" in
+            smoke)
+              matrix='{"include":[{"group":"core","sanitizer":"address"}]}'
+              ;;
+            full)
+              matrix='{"include":[{"group":"core","sanitizer":"address"},{"group":"core","sanitizer":"undefined"},{"group":"core","sanitizer":"memory"},{"group":"formats","sanitizer":"address"},{"group":"formats","sanitizer":"undefined"},{"group":"formats","sanitizer":"memory"},{"group":"assessment","sanitizer":"address"},{"group":"assessment","sanitizer":"undefined"},{"group":"assessment","sanitizer":"memory"}]}'
+              ;;
+            *)
+              echo "run_mode must be smoke or full" >&2
+              exit 2
+              ;;
+          esac
+          {
+            echo "fuzz_seconds=$((minutes * 60))"
+            echo "known_bug_patch_mode=$patch_mode"
+            echo "matrix=$matrix"
+            echo "run_mode=$run_mode"
+          } >> "$GITHUB_OUTPUT"  # elements-sanitized
 
   fuzz:
     name: "libFuzzer (${{ matrix.group }}, ${{ matrix.sanitizer }})"
@@ -107,14 +137,7 @@ jobs:
       fail-fast: false
       max-parallel: 3
       matrix:
-        group:
-          - core
-          - formats
-          - assessment
-        sanitizer:
-          - address
-          - undefined
-          - memory
+        include: ${{ fromJSON(needs.configure.outputs.matrix).include }}
 
     steps:
       - name: Checkout iccDEV
@@ -214,7 +237,7 @@ jobs:
     needs:
       - configure
       - fuzz
-    if: ${{ !cancelled() && needs.configure.result == 'success' }}
+    if: ${{ !cancelled() && needs.configure.result == 'success' && needs.configure.outputs.run_mode == 'full' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     concurrency:
@@ -349,7 +372,7 @@ jobs:
     needs:
       - configure
       - prune
-    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.generate_coverage && needs.configure.result == 'success' }}
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.generate_coverage && needs.configure.result == 'success' && needs.configure.outputs.run_mode == 'full' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     concurrency:

@@ -67,6 +67,16 @@ grep -q '^  actions: read  # ' "$workflow"
 grep -q '^      actions: write  # Remove superseded corpus artifacts from this run\.$' "$workflow"
 grep -q '^concurrency:$' "$workflow"
 grep -q '^  workflow_dispatch:$' "$workflow"
+grep -q '^  schedule:$' "$workflow"
+grep -q "^    - cron: '17 5 \* \* 1'$" "$workflow"
+if grep -q '^  push:$' "$workflow"; then
+  echo "[FAIL] ClusterFuzzLite must remain manual or scheduled" >&2
+  exit 1
+fi
+grep -q '^      run_mode:$' "$workflow"
+grep -q '^        default: smoke$' "$workflow"
+grep -q '^          - smoke$' "$workflow"
+grep -q '^          - full$' "$workflow"
 grep -q '^      fuzz_minutes:$' "$workflow"
 grep -q '^        default: 2$' "$workflow"
 grep -q '^        type: number$' "$workflow"
@@ -76,11 +86,14 @@ grep -q '^          - patched$' "$workflow"
 grep -q '^          - unpatched$' "$workflow"
 grep -q '^      generate_coverage:$' "$workflow"
 grep -q '^        type: boolean$' "$workflow"
-grep -q '^      - ci-qa-clusterfuzz$' "$workflow"
 grep -q '^  configure:$' "$workflow"
 grep -q '^    timeout-minutes: 10$' "$workflow"
 # shellcheck disable=SC2016 # Match the literal Actions expression.
 grep -q '^      fuzz_seconds: \${{ steps.duration.outputs.fuzz_seconds }}$' "$workflow"
+# shellcheck disable=SC2016 # Match the literal Actions expression.
+grep -q '^      matrix: \${{ steps.duration.outputs.matrix }}$' "$workflow"
+# shellcheck disable=SC2016 # Match the literal Actions expression.
+grep -q '^      run_mode: \${{ steps.duration.outputs.run_mode }}$' "$workflow"
 test "$(grep -c '^        shell: bash --noprofile --norc {0}$' "$workflow")" -eq 8
 grep -q '^          BASH_ENV: /dev/null$' "$workflow"
 grep -q '^          git config --global credential.helper ""$' "$workflow"
@@ -88,7 +101,9 @@ grep -q '^          unset GITHUB_TOKEN || true$' "$workflow"
 # shellcheck disable=SC2016 # Match literal workflow shell variables.
 grep -q '^          if \[ "$minutes" -lt 2 \] || \[ "$minutes" -gt 45 \]; then$' "$workflow"
 # shellcheck disable=SC2016 # Match the literal validated output write.
-grep -q '^          echo "fuzz_seconds=$((minutes \* 60))" >> "$GITHUB_OUTPUT"  # elements-sanitized$' "$workflow"
+grep -q '^            echo "fuzz_seconds=$((minutes \* 60))"$' "$workflow"
+# shellcheck disable=SC2016 # Match the literal validated output target.
+grep -q '^          } >> "$GITHUB_OUTPUT"  # elements-sanitized$' "$workflow"
 grep -q '^    needs: configure$' "$workflow"
 grep -q '^      max-parallel: 3$' "$workflow"
 grep -q '^  prune:$' "$workflow"
@@ -112,12 +127,11 @@ grep -q '^          FUZZ_SECONDS: \${{ needs.configure.outputs.fuzz_seconds }}$'
 grep -Eq '^        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:[0-9a-f]{64}$' "$workflow"
 grep -Eq '^        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:[0-9a-f]{64}$' "$workflow"
 
-for sanitizer in address undefined memory; do
-  grep -q "^          - $sanitizer$" "$workflow"
-done
-for group in core formats assessment; do
-  grep -q "^          - $group$" "$workflow"
-done
+grep -Fq 'matrix='\''{"include":[{"group":"core","sanitizer":"address"}]}'\''' "$workflow"
+test "$(grep -o '"group":"[^"]*","sanitizer":"[^"]*"' "$workflow" | sort -u | wc -l)" -eq 9
+# shellcheck disable=SC2016 # Match the literal Actions expression.
+grep -Fq 'include: ${{ fromJSON(needs.configure.outputs.matrix).include }}' "$workflow"
+grep -Fq "needs.configure.outputs.run_mode == 'full'" "$workflow"
 
 # The official GitHub action clones GITHUB_SHA before building, so mutations
 # made to the checkout are not visible in its builder container. CFL_EXTRA_*

@@ -38,19 +38,20 @@ maintainers unless an iccDEV maintainer explicitly approves the change.
 
 Choose the smallest gate that proves the behavior:
 
-- `ci-pr-action` full: explicit long-cycle Unix GCC/Clang Release and Debug,
-  exact GCC 15.2 strict Release LTO, GCC 15.2 ASAN+UBSAN tool tests, and
-  Windows validation. Its tool-test caller excludes the `pr-extended`
-  CTest label; labelled tests remain enabled in `ci-regression-checks`.
-- `ci-pr-action` fast lane: exact GCC 15.2 strict Release LTO plus GCC 15.2
-  ASAN+UBSAN Release tool validation and the latest CTest by default, with
+- `ci-pr-action` full: deterministic Unix GCC/Clang Release and Debug, exact
+  GCC 15.2 strict Release LTO, non-sanitized GCC core tool tests, and Windows
+  validation. Its tool-test caller excludes `pr-extended` and
+  `ci-infrastructure` CTests.
+- `ci-pr-action` fast lane: exact GCC 15.2 strict Release LTO plus
+  non-sanitized GCC core tool validation and the latest CTest by default, with
   Windows opt-in. It does not run Docker verification for a container-surface
   change.
 - `ci-pr-action` auto: default path-scoped selection. Source, build, and test
   changes select the full matrix; documentation-only changes use the constrained
-  fast-lane settings, while workflow-only changes use preflight and
-  workflow-security gates. Container-only changes use workflow-security gates
-  and local container validation.
+  fast-lane settings. Workflow-only changes keep the core orchestrator at setup
+  and finalization while standalone preflight and risk-analysis checks remain
+  required. Container-only changes use those standalone security gates and local
+  container validation.
 - CTest suite: cross-platform tool/profile behavior that belongs in the normal
   local and CI test surface.
 - Focused `.github/scripts/*.sh` regression: reusable Linux regression logic or
@@ -64,7 +65,8 @@ Choose the smallest gate that proves the behavior:
 - CPack or package smoke: install/export/uninstall, bundled consumers, or
   release artifact structure.
 - Sanitizer gate: memory-safety, parser, or profile-controlled undefined
-  behavior where sanitizer output is the pass/fail signal.
+  behavior where sanitizer output is the pass/fail signal. Use the standalone
+  path-scoped/manual `ci-regression-checks` workflow, not `ci-pr-action`.
 - vcpkg gate: overlay port, triplet, static CRT, or packaged consumer behavior.
 
 ## Required Updates
@@ -183,8 +185,8 @@ gh run watch <run-id> --repo InternationalColorConsortium/iccDEV --exit-status
 Trigger workflows with shared concurrency sequentially. Use `ci-pr-action` for
 normal maintainer validation; it defaults to `ci_scope=auto`. Use
 `ci_scope=fast-lane` with an open same-repository PR number for the shortest
-exact GCC 15.2 lane. Use `ci-regression-checks` through the orchestrator for
-ASAN/UBSAN CTest coverage.
+exact GCC 15.2 core lane. Use the standalone `ci-regression-checks` workflow
+for ASAN/UBSAN CTest coverage.
 
 ## Handoff Format
 

@@ -339,10 +339,11 @@ includes malformed curve gamma and out-of-range numeric narrowing coverage, and
 must reject invalid numeric fields before conversion without sanitizer findings.
 
 `iccdev.clusterfuzzlite-configuration` and
-`iccdev.clusterfuzzlite-targets` are fast, build-independent contract tests for
+`iccdev.clusterfuzzlite-targets` are build-independent `ci-infrastructure`
+contract tests for
 the official ClusterFuzzLite lane. They check the pinned builder image,
-the manual and `ci-qa-clusterfuzz` push triggers, the three sanitizer matrix
-entries, three target groups, eight in-process harness sources, matching seed
+the manual and weekly scheduled triggers, the single-job manual smoke mode,
+the three full-mode sanitizer entries, three target groups, eight in-process harness sources, matching seed
 families, dictionaries and options, complete source-license blocks, the
 schema-shaped IccConnect seed and its dedicated dictionary, independent CMM
 control trailer, config round-trip paths, immutable action references, the pinned
@@ -352,7 +353,9 @@ assertions, individual open-issue MSan patch inventory, non-blocking patch
 continuation behavior, and shell syntax for the adapter and shared CFL builder.
 Runtime sanitizer validation remains in
 `.github/workflows/ci-clusterfuzzlite.yml` and the local OSS-Fuzz helper flow
-documented in `.github/ci/cfl/README.md`.
+documented in `.github/ci/cfl/README.md`. Core PR and path-scoped sanitizer
+lanes exclude `ci-infrastructure`; run these two CTests directly when their
+workflow, adapter, target, patch, or corpus contract changes.
 
 `iccdev.pawg-report-regressions` builds the standalone `iccPawgReport` tool,
 checks the 32-item PAWG report structure, verifies summary counts against the
@@ -379,12 +382,12 @@ full CTest or the hybrid gate explicitly when the slow and calculator suites
 are in scope. The hybrid aggregate reserves up to four CTest processor slots:
 `ctest --test-dir build -R '^iccdev\.hybrid-pipeline$' --output-on-failure`.
 
-The normal `ci-pr-action` full lane additionally excludes the `pr-extended`
-label to keep its average runtime in the 8-12 minute envelope. Label membership
-defines the deferred tests; all other slow tests remain in the PR lane.
-`ci-regression-checks` leaves the label enabled, so deferred tests remain
-covered by the full regression surface. Run any deferred test directly when the
-change affects it.
+The normal `ci-pr-action` full lane excludes the `pr-extended` and
+`ci-infrastructure` labels to keep core PR results deterministic. Label
+membership defines the deferred tests; all other slow tests remain in the PR
+lane. The separate sanitizer workflow also excludes infrastructure by default.
+Manual `ci-regression-checks` dispatch can include infrastructure tests
+explicitly. Run any deferred test directly when the change affects it.
 
 Use a standalone CTest row for focused crash regressions that need clear
 maintainer visibility in CTest output. For example,

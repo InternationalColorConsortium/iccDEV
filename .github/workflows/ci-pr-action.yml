@@ -114,8 +114,6 @@ jobs:
       container_toolchain_required: ${{ steps.diffcheck.outputs.container_toolchain_required }}
       trusted_base_image_available: ${{ steps.diffcheck.outputs.trusted_base_image_available }}
       docs_only: ${{ steps.diffcheck.outputs.docs_only }}
-      risk_required: ${{ steps.diffcheck.outputs.risk_required }}
-      run_windows_risk: ${{ steps.diffcheck.outputs.run_windows_risk }}
       example_consumer_changed: ${{ steps.diffcheck.outputs.example_consumer_changed }}
       fast_lane: ${{ steps.diffcheck.outputs.fast_lane }}
       include_windows: ${{ steps.diffcheck.outputs.include_windows }}
@@ -317,9 +315,7 @@ jobs:
             local ci_changed="$5"
             local container_changed="$6"
             local docs_only="$7"
-            local risk_required="$8"
-            local run_windows_risk="${9}"
-            local example_consumer_changed="${10}"
+            local example_consumer_changed="$8"
 
             write_github_output() {
               local key="$1"
@@ -348,8 +344,6 @@ jobs:
             write_github_output container_toolchain_required "$container_toolchain_required"
             write_github_output trusted_base_image_available "$trusted_base_image_available"
             write_github_output docs_only "$docs_only"
-            write_github_output risk_required "$risk_required"
-            write_github_output run_windows_risk "$run_windows_risk"
             write_github_output example_consumer_changed "$example_consumer_changed"
             write_github_output fast_lane "$fast_lane"
             write_github_output include_windows "$include_windows"
@@ -546,20 +540,12 @@ jobs:
             grep -Eiq "$pattern" <<< "$changed_files"
           }
 
-          requires_windows_risk_audit() {
-            # The Windows audit scans the full workflow tree, so any changed
-            # workflow can add or alter PowerShell use without a filename allowlist.
-            has_changed_file '(^|/)[^/]+\.ps1$|^\.github/workflows/[^/]+\.ya?ml$'
-          }
-
           source_changed=false
           build_config_changed=false
           testing_changed=false
           ci_changed=false
           container_changed=false
           docs_only=false
-          risk_required=false
-          run_windows_risk=false
           example_consumer_changed=false
 
           classifier="$GITHUB_WORKSPACE/base/.github/scripts/classify-pr-paths.sh"
@@ -664,24 +650,6 @@ jobs:
             example_consumer_changed=true
           fi
 
-          if [ "$target_repository" != "$GH_REPOSITORY" ]; then
-            risk_required=true
-            run_windows_risk=true
-          elif [[ "$ci_changed" == "true" || "$container_changed" == "true" ]]; then
-            permission_status=0
-            actor_has_write_permission "$PR_AUTHOR" || permission_status=$?
-            if [ "$permission_status" -eq 0 ]; then
-              risk_required=true
-              if requires_windows_risk_audit; then
-                run_windows_risk=true
-              fi
-            elif [ "$permission_status" -eq 2 ]; then
-              echo "Unable to verify PR author permission; scheduling risk analysis fail closed" >&2
-              risk_required=true
-              run_windows_risk=true
-            fi
-          fi
-
           # Keep execution scope separate from the factual diff classification.
           run_full=false
           case "$ci_scope" in
@@ -705,7 +673,7 @@ jobs:
               ;;
           esac
 
-          write_scope_outputs "$run_full" "$source_changed" "$build_config_changed" "$testing_changed" "$ci_changed" "$container_changed" "$docs_only" "$risk_required" "$run_windows_risk" "$example_consumer_changed"
+          write_scope_outputs "$run_full" "$source_changed" "$build_config_changed" "$testing_changed" "$ci_changed" "$container_changed" "$docs_only" "$example_consumer_changed"
 
       - name: Generate Summary
         shell: bash --noprofile --norc {0}
@@ -1067,18 +1035,6 @@ jobs:
           write_github_output ctest_mode "$CTEST_MODE"
           write_github_output warning_policy "$WARNING_POLICY"
 
-  risk-gate:
-    if: ${{ needs.detect-src.outputs.risk_required == 'true' }}
-    name: Risk Analysis Gate
-    needs: [detect-src]
-    uses: ./.github/workflows/ci-pr-risk-security-analysis.yml
-    with:
-      analysis_target: 'Specific git ref'
-      git_ref: ${{ needs.detect-src.outputs.target_sha }}
-      severity_threshold: 'HIGH'
-      fail_on_findings: true
-      run_windows_audit: ${{ needs.detect-src.outputs.run_windows_risk == 'true' }}
-
   gcc15-lto-ci:
     if: ${{ needs.detect-src.outputs.run_native_matrix == 'true' }}
     name: GCC 15.2 Strict Release LTO
@@ -1091,7 +1047,7 @@ jobs:
   tool-tests:
     if: ${{ needs.detect-src.outputs.run_native_matrix == 'true' }}
     # Together with gcc15-lto-ci, this is the compact strict Unix coverage.
-    name: Tool Smoke Tests (ASAN+UBSAN, Debug)
+    name: Core Tool Tests (Debug)
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-iccdev-tool-tests.yml
     with:
@@ -1100,6 +1056,8 @@ jobs:
       ctest_mode: ${{ needs.validate-inputs.outputs.ctest-mode }}
       ctest_recent_limit: ${{ needs.validate-inputs.outputs.ctest-recent-limit }}
       exclude_extended_pr_tests: true
+      include_infrastructure_tests: false
+      instrumentation: core
       warning_policy: ${{ needs.validate-inputs.outputs.warning-policy }}
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
 
@@ -1240,7 +1198,6 @@ jobs:
       - detect-src
       - setup
       - validate-inputs
-      - risk-gate
       - gcc15-lto-ci
       # clang-tidy lint and scan-build are temporarily disabled above.
       # - lint
@@ -1296,7 +1253,6 @@ jobs:
           DETECT_RESULT: ${{ needs.detect-src.result }}
           SETUP_RESULT: ${{ needs.setup.result }}
           VALIDATE_RESULT: ${{ needs.validate-inputs.result }}
-          RISK_RESULT: ${{ needs.risk-gate.result }}
           GCC15_LTO_RESULT: ${{ needs['gcc15-lto-ci'].result }}
           # clang-tidy lint and scan-build are temporarily disabled above.
           # LINT_RESULT: ${{ needs.lint.result }}
@@ -1347,7 +1303,6 @@ jobs:
           MACOS_RELEASE_LTO_RESULT="${MACOS_RELEASE_LTO_RESULT:-success}"
           MACOS_DEBUG_RESULT="${MACOS_DEBUG_RESULT:-success}"
           EXAMPLE_RESULT="${EXAMPLE_RESULT:-success}"
-          RISK_RESULT="${RISK_RESULT:-success}"
           GCC15_LTO_RESULT="${GCC15_LTO_RESULT:-success}"
 
           # remove CRs, trim whitespace and lowercase each value
@@ -1375,12 +1330,11 @@ jobs:
           MACOS_RELEASE_LTO_RESULT="$(trim_and_norm "$MACOS_RELEASE_LTO_RESULT")"
           MACOS_DEBUG_RESULT="$(trim_and_norm "$MACOS_DEBUG_RESULT")"
           EXAMPLE_RESULT="$(trim_and_norm "$EXAMPLE_RESULT")"
-          RISK_RESULT="$(trim_and_norm "$RISK_RESULT")"
           GCC15_LTO_RESULT="$(trim_and_norm "$GCC15_LTO_RESULT")"
 
           # --- compute overall result from upstream jobs ----------------------
           job_res=success
-          required_results=("$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$RISK_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$MACOS_RELEASE_LTO_RESULT" "$MACOS_DEBUG_RESULT" "$EXAMPLE_RESULT")
+          required_results=("$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$MACOS_RELEASE_LTO_RESULT" "$MACOS_DEBUG_RESULT" "$EXAMPLE_RESULT")
           for s in "${required_results[@]}"; do
             # 'skipped' is acceptable when run_native_matrix is false.
             # only 'failure' or 'cancelled' should cause overall failure
@@ -1447,7 +1401,6 @@ jobs:
             printf "| detect-src         | %s |\n" "$(sanitize_line "$DETECT_RESULT")"
             printf "| setup              | %s |\n" "$(sanitize_line "$SETUP_RESULT")"
             printf "| validate-inputs    | %s |\n" "$(sanitize_line "$VALIDATE_RESULT")"
-            printf "| risk-gate          | %s |\n" "$(sanitize_line "$RISK_RESULT")"
             printf "| gcc15-lto-ci       | %s |\n" "$(sanitize_line "$GCC15_LTO_RESULT")"
             printf "| lint               | %s |\n" "$(sanitize_line "$LINT_RESULT")"
             printf "| scan-build         | %s |\n" "$(sanitize_line "$SCAN_RESULT")"

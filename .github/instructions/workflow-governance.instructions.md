@@ -203,8 +203,8 @@ pinning, dangerous triggers, credential hygiene, shell hardening, matrix
 expression injection, output sanitization, permissions, Dockerfile security, and
 supply-chain risk.
 It is the required PR security canary for workflow and container risk, and runs
-with read-only permissions against every pull request through the
-`ci-pr-action.yml` risk-gate job. It also supports manual `workflow_dispatch`
+with read-only permissions through the standalone
+`ci-risk-analysis-gate.yml` caller. It also supports manual `workflow_dispatch`
 runs and reusable `workflow_call` invocation from other CI workflows. Prefer
 calling it over copying scanner logic, and avoid adding a second direct PR
 trigger unless the caller gate is removed to prevent duplicate checks.

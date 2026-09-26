@@ -58,11 +58,13 @@ builds eight in-process targets in three independently budgeted groups:
 The six CLI-fidelity wrappers remain local smoke targets because coverage from
 their child processes is not visible to the parent libFuzzer process.
 
-The dedicated `ci-clusterfuzzlite` workflow runs on manual dispatch and pushes
-to `ci-qa-clusterfuzz`. Its matrix builds and fuzzes with `address`,
-`undefined`, and `memory`; libFuzzer is the engine for every matrix entry, not
-a fourth sanitizer. The nine group/sanitizer combinations run at most three at
-a time to stay within hosted-runner and artifact API limits. ICC, XML, and JSON
+The dedicated `ci-clusterfuzzlite` workflow runs on manual dispatch and a
+weekly schedule. Manual dispatch defaults to one `address`/`core` smoke job;
+select `run_mode=full` for the complete matrix. Scheduled runs always use the
+full `address`, `undefined`, and `memory` matrix; libFuzzer is the engine for
+every matrix entry, not a fourth sanitizer. The nine full-mode group/sanitizer
+combinations run at most three at a time to stay within hosted-runner and
+artifact API limits. ICC, XML, and JSON
 targets receive only the matching
 tracked seed family from `.github/ci/test-data/`, plus a format-specific
 dictionary and options file. `connectconfig` has a schema-shaped seed and a
@@ -102,11 +104,13 @@ See `docs/issue-2687-msan-runtime.md` for the report and producer-consumer
 contract.
 
 Manual workflow dispatch accepts a whole-number `fuzz_minutes` input from 2
-through 45 as the budget for each target group and sanitizer pair. The runner
-divides that group budget across only the sequential targets in that group, so
-adding a format target does not dilute core-profile fuzzing. Branch-push runs
-use 2 minutes per group. Corpus pruning has a 2-minute minimum per sequential
-target, for a 16-minute total budget across all eight targets.
+through 45 as the budget for each selected target group and sanitizer pair.
+The smoke mode therefore consumes one two-minute `address`/`core` fuzz budget
+by default and skips pruning and coverage. The runner divides a full-mode group
+budget across only the sequential targets in that group, so adding a format
+target does not dilute core-profile fuzzing. Scheduled full runs use 2 minutes
+per group. Corpus pruning has a 2-minute minimum per sequential target, for a
+16-minute total budget across all eight targets.
 
 All CFL modes require a matching Clang C/C++ pair at major version 21 or 22.
 The local builder prefers 22, falls back to 21, and rejects older or mismatched
