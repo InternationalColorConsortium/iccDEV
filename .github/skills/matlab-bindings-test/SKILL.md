@@ -142,6 +142,7 @@ profiles, examples, and native handle lifecycle behavior.
    addpath(fullfile(repo_root, 'matlab'));
    addpath(fullfile(repo_root, 'matlab', 'tests'));
    test_usage_guidance();
+   test_delta_e_2000();
    test_json_bindings();
    test_lut_type_range();
    test_iccdev();
@@ -153,6 +154,7 @@ profiles, examples, and native handle lifecycle behavior.
    run('matlab/examples/read_profile.m');
    run('matlab/examples/color_transform.m');
    run('matlab/examples/gamma_curve.m');
+   run('matlab/examples/ciede2000.m');
    run('matlab/examples/colorimetry_issue_1475.m');
    run('matlab/examples/docker_interop.m');
    ```
@@ -187,14 +189,15 @@ profiles, examples, and native handle lifecycle behavior.
     `.github/ci/regression/gamma-2.20703125.icc`, and the two C++ table sources
     used by the colorimetry check at their repository-relative paths. Require
     zero skipped test groups before publishing unless Docker interoperability
-    is the sole skip because the pinned image is unavailable. Require the
+    is the sole skip because the default published image is unavailable. Require the
     staged bundle to contain `iccToJson.exe`, `iccFromJson.exe`,
     `iccPawgReport.exe`, `matlab/tests/test_json_bindings.m`,
     `matlab/tests/test_lut_type_range.m`,
     `matlab/+iccdev/+qa/audit_pawg_q1.m`, `bounded_grid.m`,
-    `delta_e_2000.m`, `pcs_to_lab.m`, `matlab/tests/test_pawg_q1.m`, and
-    `matlab/tests/test_usage_guidance.m`,
-    `matlab/tests/fixtures/default_usage_examples.txt`, and
+    `delta_e_2000.m`, `pcs_to_lab.m`, `matlab/tests/test_pawg_q1.m`,
+    `matlab/tests/test_usage_guidance.m`, `matlab/tests/test_delta_e_2000.m`,
+    `matlab/tests/fixtures/default_usage_examples.txt`,
+    `matlab/examples/ciede2000.m`,
     `Testing/sRGB_v4_ICC_preference.icc` plus
     `Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc`. Add the staged
     bundle root to the
@@ -217,6 +220,9 @@ profiles, examples, and native handle lifecycle behavior.
 - Close native handles before `clear mex`.
 - Public entry points that require arguments must return an actionable
   `iccdev:*Required` error with a working example when invoked bare.
+- Array-shape errors must explain row semantics and include runnable single and
+  batch examples. Interactive examples must show visible UI defaults first;
+  hidden figures are for automation or export and must include cleanup.
 
 ## Completion Evidence
 

@@ -10,6 +10,7 @@ ICC color profile library, built as a MEX extension.
 - **Thread-safe apply** - create per-thread apply handles
 - **MATLAB OOP** - classes in `+iccdev` package namespace
 - **Profile plots** - render data from the `iccProfilePlot` visualization model
+- **CIEDE2000** - compare one or more corresponding CIELAB colour pairs
 - **IccJSON conversion** - convert profiles to editable JSON and JSON back to ICC bytes
 - **PAWG Q1 audit** - independently calculate metrics over shared CMM transforms and compare structured native results
 - **NumPy-compatible** - handles column-major <-> row-major transpose automatically
@@ -145,6 +146,7 @@ cmm.close();
 | `iccdev.to_json(profile, ...)` | Convert an ICC profile to IccJSON text with `iccToJson` |
 | `iccdev.from_json(json, ...)` | Convert IccJSON text or a JSON file to ICC bytes with `iccFromJson` |
 | `iccdev.plot(profile, ...)` | Render all graph visualizations exposed by `iccProfilePlot` |
+| `iccdev.qa.delta_e_2000(lab1, lab2)` | Calculate CIEDE2000 for equal-sized `N`-by-3 CIELAB arrays |
 | `iccdev.qa.audit_pawg_q1(profile, ...)` | Calculate PAWG Q1 metrics and compare them with `iccPawgReport --json` |
 | `iccdev.qa.check_luminance_normalization()` | Reproduce spectral-viewing luminance scaling and warning-window checks |
 | `iccdev.qa.check_colorimetry_issue_1475()` | Compare legacy and registry D50 spectral reductions |
@@ -186,6 +188,31 @@ version-specific reserved fields, creation date/time ranges, tag-table bounds,
 four-byte alignment, shared data, overlap and padding rules, and Profile ID
 MD5 when an ID is present. These are binary container checks, not a claim of
 complete class-specific or tag-type conformance.
+
+### CIEDE2000 colour difference
+
+Each CIELAB colour is a row in `[L* a* b*]` order. Compare one pair with two
+1-by-3 row vectors:
+
+```matlab
+delta_e = iccdev.qa.delta_e_2000( ...
+  [50 2.6772 -79.7751], [50 0 -82.7485]);
+```
+
+Compare multiple corresponding pairs with equal-sized `N`-by-3 arrays. The
+result contains one Delta E value per row:
+
+```matlab
+lab1 = [50 2.6772 -79.7751; 50 3.1571 -77.2803];
+lab2 = [50 0 -82.7485; 50 0 -82.7485];
+delta_e = iccdev.qa.delta_e_2000(lab1, lab2);
+```
+
+For a narrated, executable example:
+
+```matlab
+run('matlab/examples/ciede2000.m');
+```
 
 ### iccdev.IccProfile
 
@@ -300,7 +327,16 @@ Then render every graph exposed by a profile:
 plots = iccdev.plot(profile_path);
 ```
 
-Use `'Visible', 'off'` for automated checks. `iccdev.plot` searches
+`Visible` defaults to `on`, so this displays figures interactively. Use
+`'Visible', 'off'` only for automated checks or export, and close the hidden
+figures when finished:
+
+```matlab
+plots = iccdev.plot(profile_path, 'Visible', 'off');
+close([plots.figure]);
+```
+
+`iccdev.plot` searches
 `ICCDEV_BUILD_DIR`, common repository build directories, and `PATH`; use the
 `BuildDir` or `PlotTool` option to select an explicit build.
 
@@ -339,6 +375,8 @@ assert(isfile(fullfile(build_dir, 'bin', 'Release', ...
   'iccFromJson.exe')), 'Build iccFromJson before MATLAB QA.');
 addpath('matlab');
 addpath('matlab/tests');
+test_usage_guidance();
+test_delta_e_2000();
 test_iccdev();
 ```
 
@@ -348,6 +386,7 @@ missing-profile smoke checks with:
 ```matlab
 run_local_qa();
 test_plot();
+run('matlab/examples/ciede2000.m');
 ```
 
 Run the PAWG Q1 audit directly when investigating round-trip quality:
@@ -400,6 +439,10 @@ Validate the same profile with the published container:
 run_docker_qa();
 run('matlab/examples/docker_interop.m');
 ```
+
+Interactive QA uses
+`ghcr.io/internationalcolorconsortium/iccdev:latest` by default. Hosted CI
+passes an immutable digest so repeated workflow runs test the same image.
 
 If Docker is installed but is not on the PATH inherited by MATLAB Desktop,
 select its CLI directory explicitly:

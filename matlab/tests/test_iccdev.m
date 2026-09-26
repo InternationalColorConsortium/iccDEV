@@ -34,7 +34,9 @@ function summary = test_iccdev()
   [nPass, nFail] = run_test(@test_build_mex_dependency_paths, ...
     'build dependency path selection', nPass, nFail);
   [nPass, nFail] = run_test(@test_usage_guidance, ...
-    'default usage guidance', nPass, nFail);
+    'usage guidance', nPass, nFail);
+  [nPass, nFail] = run_test(@test_delta_e_2000, ...
+    'CIEDE2000 examples', nPass, nFail);
 
   % --- Profile tests (need test profiles) ---
   profilePath = find_test_profile();
@@ -366,7 +368,7 @@ function test_docker_input_validation(profilePath)
     identifier = '';
     try
       iccdev.docker_validate(string(profilePath), 'Image', ... %#ok<STRQUOT>
-        string([iccdev.default_docker_image() ';invalid'])); %#ok<STRQUOT>
+        string([iccdev.default_docker_image() ';invalid']));
     catch e
       identifier = e.identifier;
     end
@@ -376,7 +378,7 @@ function test_docker_input_validation(profilePath)
     identifier = '';
     try
       iccdev.docker_available( ...
-        string([iccdev.default_docker_image() ';invalid'])); %#ok<STRQUOT>
+        string([iccdev.default_docker_image() ';invalid']));
     catch e
       identifier = e.identifier;
     end
