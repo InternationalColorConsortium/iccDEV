@@ -9912,6 +9912,10 @@ icValidateStatus CIccTagColorantOrder::Validate(std::string sigPath, std::string
  */
 CIccTagColorantTable::CIccTagColorantTable(int nSize/*=1*/)
 {
+  // A standalone colorant table has no profile header from which to obtain its
+  // PCS. Lab preserves Describe()'s historical fallback; CIccProfile replaces
+  // it with the profile PCS when attaching or loading colorantTableTag.
+  m_PCS = icSigLabData;
   m_nCount = nSize;
   if (m_nCount<1)
     m_nCount = 1;
