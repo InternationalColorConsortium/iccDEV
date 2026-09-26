@@ -9,6 +9,7 @@ Canonical guide: `docs/valgrind-analysis.md`
 - Source branch and commit:
 - Analyzer: Memcheck / Helgrind / DRD / Massif / Callgrind
 - Registered target or targets:
+- Optional ICC corpus and report tool (`pawg` or `dump`):
 - Native host or unified image:
 - Per-target timeout:
 - Expected clean or finding state:
@@ -30,6 +31,11 @@ Canonical guide: `docs/valgrind-analysis.md`
 9. For issue #2592 or threaded row-application notification changes, run the
    focused `issue-2592-regression.sh` wrapper and compare its generated TIFFs.
 10. Report exact commands, source revision, exit codes, error counts, and paths.
+11. For a corpus task, use `corpus.sh`, verify paths containing spaces, and
+    preserve the per-profile analyzer logs and summary.
+12. For a Docker task, preserve evidence outside the container and record the
+    image digest and source revision. Prefer tar streaming when host and image
+    user IDs differ.
 
 Do not create a standalone C++ reproducer. Use registered project tools,
 regression executables, and durable ICC/XML/JSON/TIFF inputs.
