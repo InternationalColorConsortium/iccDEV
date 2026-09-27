@@ -1509,7 +1509,7 @@ bool CIccHagcEvaluator::SetTargetHeadroom(icFloatNumber log2Headroom)
     // compared against a curve contributing nothing, so a Weighted alternate
     // at an exact hint of 2.0 was refused as non-invertible when paired with a
     // Max one below it; and IsIdentity() saw two curves, so a target exactly
-    // on the baseline - HagcDisplay at a hint of 8.0 - tone mapped instead of
+    // on the baseline - HagcColorSpace at a hint of 8.0 - tone mapped instead of
     // passing through.  Hints that are powers of two land exactly, since log2
     // is exact for them and headrooms decode exactly, so this was the common
     // case rather than a rounding curiosity.  The header states the rule: a

@@ -118,7 +118,7 @@
     </lutBtoAType> </BToA0Tag>
 
     <profileDescriptionTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR VideoFullRangeFlag pair: narrow range (0)]]></LocalizedText>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR ColorSpace Profile, VideoFullRangeFlag pair: narrow range (0)]]></LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>
 
     <copyrightTag> <multiLocalizedUnicodeType>

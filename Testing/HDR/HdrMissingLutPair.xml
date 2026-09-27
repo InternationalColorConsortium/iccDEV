@@ -77,7 +77,7 @@
 
 
     <profileDescriptionTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR negative fixture: the mandatory AToB0Tag/BToA0Tag pair is absent]]></LocalizedText>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR ColorSpace Profile, negative: neither half of the AToB0Tag/BToA0Tag pair 8.7 requires]]></LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>
 
     <copyrightTag> <multiLocalizedUnicodeType>

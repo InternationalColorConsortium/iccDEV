@@ -1,54 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  CLASS NEGATIVE for clause 8.7.1.1: the device class is Display ('mntr'), not
-  ColorSpace.
+  VERSION NEGATIVE for clause 8.7.1.1: profile version 5.0.0.0.
 
-  A conformant v4 three-component matrix-based Display profile carrying a
-  conforming PQ cicpTag and HDR Image metadata.  Every other membership
-  condition of 8.7.1.1 is satisfied, so this fixture isolates the class
-  condition alone: a classifier that stopped testing it would report this
-  profile as an HDR ColorSpace Profile and would still pass every positive in
-  the corpus.  HdrInputDisplayMeta is the 'scnr' half of the same pair, so
-  neither surviving non-ColorSpace class can be admitted by a classifier that
-  tests only one of them.
+  This is the only fixture that isolates the v5 CEILING.  The eight BT2100*
+  fixtures are v5 as well, but they are also 'mntr'/'scnr', so they fail on
+  class AND version and would keep passing if the version test were dropped.
 
-  THE AMENDMENT SAYS THIS IN AS MANY WORDS.  Its Introduction and its Issues
-  section both address exactly this shape: a Display or Input profile carrying
-  cicpTag and HAGC "is functionally similar, in terms of tone-mapping
-  capability, to an HDR ColorSpace Profile under this clause, but is not one:
-  it does not carry the guarantees of 8.7.1.1 and 8.7.1.2".  The profile is a
-  perfectly ordinary Display profile and nothing is reported against it.
+  The ceiling is a RULING, not the amendment's text - the 23-09-2026 revision
+  states no version condition at either end.  It is icHdrIsVersion4(): this
+  amendment amends ICC.1, the ColorSpace profile it builds on is ICC.1's 8.7,
+  and ICC.2 has its own profile model, so an ICC.1 clause is not applied to a
+  v5 profile.  If the ICC extends the sub-class to ICC.2, this fixture flips to
+  a positive and the predicate is the single place to change.
 
-  THIS FIXTURE WAS THE CONFORMING BASE of the corpus under clause 8.10, where
-  the sub-class was built on the Input and Display classes.  It is unchanged
-  in intent and inverted in verdict, as HdrColorSpaceClass - now the positive
-  - is inverted the other way.
+  Built as a SINGLE-ATTRIBUTE DELTA of HdrColorSpaceClass.xml, the conforming
+  base: the profile version and nothing else is changed - same cicpTag, same HDR Image
+  metadata, same AToB0Tag/BToA0Tag pair, same description style.  That is what
+  lets the fixture isolate one membership condition: a classifier that stopped
+  testing it would admit this profile and would still pass every positive in
+  the corpus, which is the failure Testing/HDR/hdr-corpus-manifest.tsv exists to
+  catch.  Failing a membership condition makes a profile a non-member, not a
+  defective profile, so nothing is reported against it.
 
-  IT KEEPS ITS COLORANT TAGS, deliberately and unlike every 'spac' fixture
-  here: it is a matrix-based Display profile, 8.4.3 defines those tags for it,
-  and it is the fixture the registry's "primaries code 2 resolves against the
-  containing profile's matrix column tags" rule is tested against in
-  hdr-profile-classification.cpp.  An HDR ColorSpace Profile has no such tags,
-  which is PROPOSAL-ISSUE HDR-18 and is asserted alongside it.
-
-  THE HDR DISPLAY ENTRIES ARE GONE.  DERH, DCV and DRWL and their headroom
-  precedence were clause 8.10.5, which the 23-09-2026 revision deletes:
-  physical display characterization is out of scope for the sub-class.  The
-  HDR Image entries - CRWL, CLL, MDCV - are registered and unaffected, and are
-  what this fixture still exercises.
-
-  EXPECTED CLASSIFICATION is icHdrProfileHdrContent - NOT icHdrProfileNone.
-  The profile carries HDR Image metadata and a PQ cicpTag, which is precisely
-  what the middle bucket of icHdrProfileClass exists for: HDR content a
-  consumer may legitimately act on, in a profile that is not an HDR ColorSpace
-  Profile.  A classifier reduced to a yes/no could not express this verdict at
-  all, which is the second thing these fixtures pin.
+  EXPECTED: icHdrProfileHdrContent.  The validation verdict is whatever v5
+  header and tag rules make of an ICC.1-shaped body, and is recorded, measured,
+  in Testing/qa-profile-manifest.tsv; it is not what this fixture is for.
 -->
 <IccProfile>
   <Header>
     <PreferredCMMType>ICCD</PreferredCMMType>
-    <ProfileVersion>4.50</ProfileVersion>
-    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <ProfileVersion>5.00</ProfileVersion>
+    <ProfileDeviceClass>spac</ProfileDeviceClass>
     <DataColourSpace>RGB </DataColourSpace>
     <PCS>XYZ </PCS>
     <CreationDateTime>2026-08-05T00:00:00</CreationDateTime>
@@ -61,18 +43,6 @@
     <ProfileCreator>ICCD</ProfileCreator>
   </Header>
   <Tags>
-    <redColorantTag> <XYZArrayType>
-      <XYZNumber X="0.436004638672" Y="0.222503662109" Z="0.013900756836"/>
-    </XYZArrayType> </redColorantTag>
-
-    <greenColorantTag> <XYZArrayType>
-      <XYZNumber X="0.385101318359" Y="0.716903686523" Z="0.097106933594"/>
-    </XYZArrayType> </greenColorantTag>
-
-    <blueColorantTag> <XYZArrayType>
-      <XYZNumber X="0.143096923828" Y="0.060592651367" Z="0.713897705078"/>
-    </XYZArrayType> </blueColorantTag>
-
     <!-- Standard Bradford D65 to D50 adaptation. -->
     <chromaticAdaptationTag> <s15Fixed16ArrayType>
       <Array>
@@ -131,7 +101,7 @@
     </lutBtoAType> </BToA0Tag>
 
     <profileDescriptionTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR display profile with HDR Image and HDR Display metadata]]></LocalizedText>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV version negative: v5.0 ColorSpace profile with a PQ cicpTag, outside ICC.1 clause 8.7.1]]></LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>
 
     <copyrightTag> <multiLocalizedUnicodeType>

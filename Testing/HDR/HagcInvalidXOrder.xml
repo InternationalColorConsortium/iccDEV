@@ -109,7 +109,7 @@
     </lutBtoAType> </BToA0Tag>
 
     <profileDescriptionTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR negative fixture: HAGC control point X values decrease or repeat with differing Y]]></LocalizedText>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR ColorSpace Profile, negative: HAGC control point X values decrease or repeat with differing Y]]></LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>
 
     <copyrightTag> <multiLocalizedUnicodeType>

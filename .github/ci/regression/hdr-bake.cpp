@@ -194,7 +194,7 @@ const int g_nPixels = (int)(sizeof(g_pixels) / sizeof(g_pixels[0]));
 // The same idea confined to the part of the encoding the fixture's gain curve
 // is a bijection over.
 //
-// Two separate ceilings meet at nearly the same place for HagcDisplay.icc, and
+// Two separate ceilings meet at nearly the same place for HagcColorSpace.icc, and
 // both are properties of the tag rather than of this implementation. Above its
 // last control point - reference white relative 1.0, which for a 300 cd/m^2
 // reference white is PQ code 0.6218 - the annex's extrapolation makes
@@ -294,7 +294,7 @@ void testTransferSplit()
 // conforming HDR profile, with no diagnostic and a plausible-looking picture.
 void testProfileCopyPreservesCicp()
 {
-  CIccProfile *pProfile = openFixture("HagcDisplay.icc");
+  CIccProfile *pProfile = openFixture("HagcColorSpace.icc");
 
   if (!pProfile)
     return;
@@ -371,7 +371,7 @@ bool applyHdrPath(CIccProfile &profile, const icFloatNumber *src, icFloatNumber 
 
 void testBakerMatchesCmm()
 {
-  CIccProfile *pProfile = openFixture("HagcDisplay.icc");
+  CIccProfile *pProfile = openFixture("HagcColorSpace.icc");
 
   if (!pProfile)
     return;
@@ -379,7 +379,7 @@ void testBakerMatchesCmm()
   CIccHdrBaker baker;
 
   if (!baker.Init(pProfile)) {
-    printf("FAIL: baker declined HagcDisplay.icc: %s\n", baker.GetUnsupportedReason());
+    printf("FAIL: baker declined HagcColorSpace.icc: %s\n", baker.GetUnsupportedReason());
     g_failures++;
     delete pProfile;
     return;
@@ -517,7 +517,7 @@ bool applyLutPath(CIccProfile &profile, const icFloatNumber *src, icFloatNumber 
 
 void testBakedTags()
 {
-  CIccProfile *pProfile = openFixture("HagcDisplay.icc");
+  CIccProfile *pProfile = openFixture("HagcColorSpace.icc");
 
   if (!pProfile)
     return;
@@ -525,7 +525,7 @@ void testBakedTags()
   CIccHdrBaker baker;
 
   if (!baker.Init(pProfile)) {
-    printf("FAIL: baker declined HagcDisplay.icc: %s\n", baker.GetUnsupportedReason());
+    printf("FAIL: baker declined HagcColorSpace.icc: %s\n", baker.GetUnsupportedReason());
     g_failures++;
     delete pProfile;
     return;
@@ -668,7 +668,7 @@ void testBakedTags()
 // ---------------------------------------------------------------------------
 void testAnalyticRoundTrip()
 {
-  CIccProfile *pProfile = openFixture("HagcDisplay.icc");
+  CIccProfile *pProfile = openFixture("HagcColorSpace.icc");
 
   if (!pProfile)
     return;
@@ -676,7 +676,7 @@ void testAnalyticRoundTrip()
   CIccHdrBaker baker;
 
   if (!baker.Init(pProfile)) {
-    printf("FAIL: baker declined HagcDisplay.icc: %s\n", baker.GetUnsupportedReason());
+    printf("FAIL: baker declined HagcColorSpace.icc: %s\n", baker.GetUnsupportedReason());
     g_failures++;
     delete pProfile;
     return;
@@ -709,7 +709,7 @@ void testAnalyticRoundTrip()
 // 4b. The other two transfer characteristics, end to end
 // ---------------------------------------------------------------------------
 //
-// HagcDisplay.icc is PQ, and PQ is the case every stage was designed around.
+// HagcColorSpace.icc is PQ, and PQ is the case every stage was designed around.
 // The other two exercise parts of the baker that it does not reach at all:
 // HLG puts the OOTF - the one piece of the linearisation with no per-channel
 // form - inside the CLUT, and Linear is the transfer with no intrinsic peak,
@@ -814,7 +814,7 @@ void testRefusals()
   check(!baker.Init(NULL), "a null profile is refused");
   check(baker.GetUnsupportedReason() != NULL, "a refusal names its reason");
 
-  CIccProfile *pProfile = openFixture("HagcDisplay.icc");
+  CIccProfile *pProfile = openFixture("HagcColorSpace.icc");
 
   if (!pProfile)
     return;
@@ -924,7 +924,7 @@ void testRefusals()
 
   // The version policy is the one thing the bake changes about the header, and
   // only when asked.
-  pProfile = openFixture("HagcDisplay.icc");
+  pProfile = openFixture("HagcColorSpace.icc");
 
   if (pProfile) {
     icHdrBakeParams v44;
@@ -1029,7 +1029,7 @@ void testBakeMatchesChain()
     delete pProfile;
   }
 
-  pProfile = openFixture("HagcDisplay.icc");
+  pProfile = openFixture("HagcColorSpace.icc");
 
   if (pProfile) {
     pProfile->m_Header.pcs = icSigLabData;
@@ -1059,7 +1059,7 @@ void testBakeMatchesChain()
 // ---------------------------------------------------------------------------
 void testAttachAndReuse()
 {
-  CIccProfile *pProfile = openFixture("HagcDisplay.icc");
+  CIccProfile *pProfile = openFixture("HagcColorSpace.icc");
 
   if (pProfile) {
     TagEntryList::iterator it;
@@ -1092,20 +1092,20 @@ void testAttachAndReuse()
             "including the BToA0Tag it already carried");
     }
     else {
-      check(false, "HagcDisplay carries an AToB0Tag");
+      check(false, "HagcColorSpace carries an AToB0Tag");
     }
 
     delete pProfile;
   }
 
-  CIccProfile *pHagc = openFixture("HagcDisplay.icc");
+  CIccProfile *pHagc = openFixture("HagcColorSpace.icc");
   CIccProfile *pPlain = openFixture("HdrBakedLut.icc");
 
   if (pHagc && pPlain) {
     CIccHdrBaker baker;
 
     check(baker.Init(pHagc) && baker.UsesDerivedSlopes(),
-          "HagcDisplay's gain curve reports derived slopes");
+          "HagcColorSpace's gain curve reports derived slopes");
     check(baker.Init(pPlain), "the same baker re-initialises on a profile with no HAGC tag");
     check(!baker.UsesDerivedSlopes(),
           "and no longer reports the previous profile's derived slopes");
@@ -1126,11 +1126,11 @@ void testAttachAndReuse()
 // The bake used to refuse the whole BToA for it. The BToA0Tag is a
 // compatibility backup for pre-HDR workflows, and the HDR WG accepts that it
 // cannot be exact in all cases, so the pair is now built with the evaluator's
-// approximate inverse. The curve is changed in memory on HagcDisplay so no
+// approximate inverse. The curve is changed in memory on HagcColorSpace so no
 // fixture or manifest row moves.
 void testApproximateBtoA()
 {
-  CIccProfile *pProfile = openFixture("HagcDisplay.icc");
+  CIccProfile *pProfile = openFixture("HagcColorSpace.icc");
 
   if (!pProfile)
     return;
@@ -1138,7 +1138,7 @@ void testApproximateBtoA()
   CIccTag *pTag = pProfile->FindTag(icSigHeadroomAdaptiveGainCurveTag);
 
   if (!pTag || pTag->GetType() != icSigHeadroomAdaptiveGainCurveType) {
-    check(false, "HagcDisplay carries a HAGC tag");
+    check(false, "HagcColorSpace carries a HAGC tag");
     delete pProfile;
     return;
   }
@@ -1205,7 +1205,7 @@ void testApproximateBtoA()
   printf("  approximate BToA round trip: worst channel error %.6f\n", worst);
   check(worst <= APPROX_TOLERANCE, "the approximate round trip stays close to the source");
 
-  // HagcDisplay already carries an identity AToB0/BToA0 placeholder, so a bare
+  // HagcColorSpace already carries an identity AToB0/BToA0 placeholder, so a bare
   // presence check passed even when nothing was attached, or only AToB0 was.
   // Remove the pair first, then require BOTH tags back and require each to be
   // a baked table - a CLUT - which the placeholder is not.

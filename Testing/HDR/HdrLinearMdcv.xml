@@ -103,7 +103,7 @@
     </lutBtoAType> </BToA0Tag>
 
     <profileDescriptionTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV Linear HDR profile: content headroom from MDCV (clause 8.7.1.4 b)]]></LocalizedText>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV Linear HDR ColorSpace Profile: content headroom from MDCV (clause 8.7.1.4 b)]]></LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>
 
     <copyrightTag> <multiLocalizedUnicodeType>

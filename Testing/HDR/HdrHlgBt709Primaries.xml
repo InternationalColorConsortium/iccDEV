@@ -122,7 +122,7 @@
     </lutBtoAType> </BToA0Tag>
 
     <profileDescriptionTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR HLG with BT.709 primaries: the OOTF luma-coefficient case]]></LocalizedText>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR ColorSpace Profile, HLG with BT.709 primaries: the OOTF luma-coefficient case]]></LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>
 
     <copyrightTag> <multiLocalizedUnicodeType>

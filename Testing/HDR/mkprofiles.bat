@@ -54,7 +54,7 @@ REM iccFromXml saves a negative fixture but exits 1 because it validates invalid
 REM The trailing ver>nul resets that exit code to 0, so a runner that executes each
 REM line on its own and stops on a nonzero exit still builds every fixture after it.
 REM Which negatives are expected, and why, is recorded in the .tsv, not here.
-iccFromXml HagcDisplay.xml HagcDisplay.icc
+iccFromXml HagcColorSpace.xml HagcColorSpace.icc
 iccFromXml HagcCommonParams.xml HagcCommonParams.icc
 iccFromXml HagcHexData.xml HagcHexData.icc
 iccFromXml HagcMixingTypes.xml HagcMixingTypes.icc
@@ -68,12 +68,12 @@ REM HdrInvalidTransfer, HdrMissingBToA0, HdrMissingLutPair and HdrCicp2NoColumns
 REM negatives. The last three validate invalid, so iccFromXml exits 1 for them and
 REM their lines end in ver>nul for the reason given above the HAGC block.
 iccFromXml HdrCicpUnspecified.xml HdrCicpUnspecified.icc
-iccFromXml HdrDisplayMetadata.xml HdrDisplayMetadata.icc
+iccFromXml HdrClassDisplayNegative.xml HdrClassDisplayNegative.icc
 iccFromXml HdrBakedLut.xml HdrBakedLut.icc
 iccFromXml HdrInvalidTransfer.xml HdrInvalidTransfer.icc
 iccFromXml HdrMissingBToA0.xml HdrMissingBToA0.icc || ver>nul
 iccFromXml HdrMissingLutPair.xml HdrMissingLutPair.icc || ver>nul
-iccFromXml HdrInputDisplayMeta.xml HdrInputDisplayMeta.icc
+iccFromXml HdrClassInputNegative.xml HdrClassInputNegative.icc
 iccFromXml HdrLinearCll.xml HdrLinearCll.icc
 iccFromXml HdrLinearMdcv.xml HdrLinearMdcv.icc
 iccFromXml HdrLinearNoMetadata.xml HdrLinearNoMetadata.icc
@@ -99,9 +99,15 @@ REM so this one IS an HDR ColorSpace Profile. The only fixture separating a corr
 REM ">= 4.5 and < 5" test from a wrong "== 4.5".
 iccFromXml HdrVersion46.xml HdrVersion46.icc
 
-REM Clause 8.10.5 display-headroom precedence, rules b) and c). HdrDisplayMetadata
-REM fires rule a); these remove entries to expose the rules below it, with values
-REM chosen so a reader firing the wrong rule returns a different number.
+REM The v5 ceiling and the PCS condition, each isolated.  Both are single-
+REM attribute deltas of HdrColorSpaceClass.  Before these, the eight v5 BT2100
+REM fixtures failed on class AND version, and nothing failed on the PCS alone,
+REM so a classifier that dropped either test still read the whole manifest clean.
+iccFromXml HdrVersion5.xml HdrVersion5.icc
+iccFromXml HdrPcsLab.xml HdrPcsLab.icc
+
+REM The clause 8.10.5 display-headroom fixtures HdrHeadroomDcvDrwl and
+REM HdrHeadroomDcvCrwl are DELETED: the revision deletes the clause.
 
 REM Clause 8.7.1.5 pairing at x = 1. HdrMissingBToA0 covers x = 0, but x = 0 is the
 REM pair 8.7.1.5 makes mandatory outright, so an implementation that only ever looked

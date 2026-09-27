@@ -55,7 +55,7 @@ iccFromXml BT2100PQSceneToDisplayLink.xml BT2100PQSceneToDisplayLink.icc
 # every alternate after the first, the raw-byte authoring path, the component
 # mixing types no other fixture reaches, and the C.3.8 reference-white tone map.
 # HagcInvalidXOrder is a negative -- see Testing/expected-invalid-fromxml.tsv.
-iccFromXml HagcDisplay.xml HagcDisplay.icc
+iccFromXml HagcColorSpace.xml HagcColorSpace.icc
 iccFromXml HagcCommonParams.xml HagcCommonParams.icc
 iccFromXml HagcHexData.xml HagcHexData.icc
 iccFromXml HagcMixingTypes.xml HagcMixingTypes.icc
@@ -74,12 +74,12 @@ iccFromXml HagcRefWhiteToneMap.xml HagcRefWhiteToneMap.icc
 # a ColorSpace profile has no matrix column tags for the old rule to be about.
 # HdrCicpUnspecified covers ColourPrimaries 2 on its own now.
 iccFromXml HdrCicpUnspecified.xml HdrCicpUnspecified.icc
-iccFromXml HdrDisplayMetadata.xml HdrDisplayMetadata.icc
+iccFromXml HdrClassDisplayNegative.xml HdrClassDisplayNegative.icc
 iccFromXml HdrBakedLut.xml HdrBakedLut.icc
 iccFromXml HdrInvalidTransfer.xml HdrInvalidTransfer.icc
 iccFromXml HdrMissingBToA0.xml HdrMissingBToA0.icc
 iccFromXml HdrMissingLutPair.xml HdrMissingLutPair.icc
-iccFromXml HdrInputDisplayMeta.xml HdrInputDisplayMeta.icc
+iccFromXml HdrClassInputNegative.xml HdrClassInputNegative.icc
 iccFromXml HdrLinearCll.xml HdrLinearCll.icc
 iccFromXml HdrLinearMdcv.xml HdrLinearMdcv.icc
 iccFromXml HdrLinearNoMetadata.xml HdrLinearNoMetadata.icc
@@ -104,8 +104,12 @@ iccFromXml HdrLinearHagcCrwlDisagree.xml HdrLinearHagcCrwlDisagree.icc
 #                       and it is a positive (it still WARNS - a TRC tag has
 #                       no interpretation on 'spac' - which is a different
 #                       question from membership).
-# The class condition keeps negatives on the other side: HdrDisplayMetadata
-# ('mntr') and HdrInputDisplayMeta ('scnr') are below.
+# The class condition keeps negatives on the other side: HdrClassDisplayNegative
+# ('mntr') and HdrClassInputNegative ('scnr'), single-attribute deltas of the
+# base.  They replace HdrDisplayMetadata and HdrInputDisplayMeta, which modelled
+# the Display-class format this revision retires - the owner directed that the
+# corpus model ColorSpace-class usage only.  A class NEGATIVE is not
+# compatibility: it is the test that Display and Input are rejected.
 iccFromXml HdrNonRgbSpace.xml HdrNonRgbSpace.icc
 iccFromXml HdrColorSpaceClass.xml HdrColorSpaceClass.icc
 iccFromXml HdrVersion44.xml HdrVersion44.icc
@@ -119,6 +123,13 @@ iccFromXml HdrTransferSdr.xml HdrTransferSdr.icc
 # The surviving version rule is the UPPER bound - see icHdrIsVersion4() - and
 # the eight v5 BT2100 fixtures are what pin that.
 iccFromXml HdrVersion46.xml HdrVersion46.icc
+
+# The v5 ceiling and the PCS condition, each isolated.  Both are single-
+# attribute deltas of HdrColorSpaceClass.  Before these, the eight v5 BT2100
+# fixtures failed on class AND version, and nothing failed on the PCS alone,
+# so a classifier that dropped either test still read the whole manifest clean.
+iccFromXml HdrVersion5.xml HdrVersion5.icc
+iccFromXml HdrPcsLab.xml HdrPcsLab.icc
 
 # The clause 8.10.5 display-headroom fixtures HdrHeadroomDcvDrwl and
 # HdrHeadroomDcvCrwl are DELETED. The revision deletes the clause - physical

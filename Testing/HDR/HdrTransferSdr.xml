@@ -105,7 +105,7 @@
     </lutBtoAType> </BToA0Tag>
 
     <profileDescriptionTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR membership negative: BT.709 transfer characteristics]]></LocalizedText>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV ColorSpace profile, BT.709 transfer: NOT an HDR ColorSpace Profile]]></LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>
 
     <copyrightTag> <multiLocalizedUnicodeType>

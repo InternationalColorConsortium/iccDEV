@@ -10747,7 +10747,7 @@ if(WIN32)
   # iccdev_add_hdr_corpus_manifest_test() is not (see below): on Windows the HDR .icc
   # are generated under the BUILD tree, and RunPawgHdrSectionTest.cmake requires each
   # fixture under ICCDEV_REPO_ROOT/Testing/HDR and fails with FATAL_ERROR when one is
-  # missing.  Both Windows CTest legs failed on HagcDisplay.icc for exactly that reason.
+  # missing.  Both Windows CTest legs failed on HagcColorSpace.icc for exactly that reason.
   # Re-enable it here only together with a build-tree-aware fixture path.
   iccdev_add_json_sparsematrix_huaf_test()
   iccdev_add_xml_writer_graceful_degrade_test()

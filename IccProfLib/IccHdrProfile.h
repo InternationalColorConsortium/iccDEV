@@ -492,12 +492,25 @@ ICCPROFLIB_API bool icGetCicpPrimaries(icUInt8Number nColourPrimaries, icCicpPri
  * values are relative to the profile's actual adopted white rather than to
  * the PCS adopted white, then convert each to (x, y).
  *
+ * PROVENANCE: this procedure is ICC.1 clause 10.3 as amended by the CICP
+ * Unspecified-Primaries amendment in docs/notes/hdr-proposals/ ("Amendment to
+ * the cicpTag: interpretation of ColourPrimaries value 2 (Unspecified) as
+ * referring to the profile's redMatrixColumnTag, greenMatrixColumnTag, and
+ * blueMatrixColumnTag").  This tree has recorded that amendment as APPROVED
+ * 2026-08-20; that approval promoted the procedure out of a NOTE and into
+ * normative text, so cite the clause and not a note number.  The document
+ * itself carries no version label - it is NOT marked "v1".
+ *
  * THIS IS NO LONGER THE cicpTag's ColourPrimaries 2 PROCEDURE for an HDR
- * ColorSpace Profile.  It was, under the first CICP Unspecified-Primaries
- * amendment and the 8.10 revision of the HDR proposal; the 23-09-2026
- * revision builds the sub-class on the ColorSpace profile of 8.7, which has
- * no matrix column tags, and routes ColourPrimaries 2 to the cicpType custom
- * chromaticity extension of 10.3 instead (8.7.1.1 NOTE 2).
+ * ColorSpace Profile.  It was, under that amendment and the 8.10 revision of
+ * the HDR proposal; the 23-09-2026 revision builds the sub-class on the
+ * ColorSpace profile of 8.7, which has no matrix column tags, and routes
+ * ColourPrimaries 2 to "the custom chromaticity extension of 10.3" instead
+ * (8.7.1.1 NOTE 2).  That extension is defined by neither ICC.1:2022 10.3 nor
+ * the approved amendment: the only pointer to it is one bibliography entry,
+ * "ICC CICP Unspecified Primaries Amendment Proposal (v2)", in the HDR
+ * amendment's clause 6.  If the approval date above is right, that proposal
+ * reverses an approved amendment.
  *
  * What still uses it is the ICC dictType Metadata Registry: the MDCV and CLL
  * entries define their own primaries code 2 as "the containing profile's

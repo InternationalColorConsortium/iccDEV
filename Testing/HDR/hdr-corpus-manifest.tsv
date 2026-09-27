@@ -30,6 +30,15 @@
 # HdrCicp2NoColumns, whose subject was the matrix column tags that a ColorSpace
 # profile does not have.
 #
+# THE CORPUS MODELS COLORSPACE-CLASS USAGE ONLY (owner direction, 2026-09-26).
+# HdrDisplayMetadata and HdrInputDisplayMeta, which carried the retired
+# Display-class shape, are replaced by HdrClassDisplayNegative and
+# HdrClassInputNegative: single-attribute deltas of HdrColorSpaceClass with the
+# class changed and nothing else.  HagcDisplay is renamed HagcColorSpace.
+# HdrVersion5 and HdrPcsLab isolate the two membership terms no row could fail
+# on alone.  EVERY membership condition now has at least one negative that
+# fails on it and nothing else.
+#
 # Floats compare to a relative tolerance of 1e-5, because these are icFloatNumber
 # (float, not double) and an exact compare would fail on values like 4,92611.
 #
@@ -46,20 +55,20 @@ BT2100PQFullScene	hdr-content	0	-	v5 BT.2100 PQ scene; outside the version bound
 BT2100PQNarrowDisplay	hdr-content	0	-	v5 narrow-range PQ display; range expansion is an explicit MPE curve
 BT2100PQNarrowScene	hdr-content	0	-	v5 narrow-range PQ scene; range expansion is an explicit MPE curve
 BT2100PQSceneToDisplayLink	none	0	-	v5 DeviceLink; no cicpTag and no HDR metadata
+HagcColorSpace	conforming	0	-	HAGC full layout; PQ
 HagcCommonParams	conforming	0	-	HAGC common-parameter sharing flags; HLG. Also pins HDR-22: a HAGC tag on 'spac' draws no tag-exclusion warning
-HagcDisplay	conforming	0	-	HAGC full layout; PQ
 HagcHexData	conforming	4.92611	default-1000	HAGC raw-byte authoring path; Linear, so 8.7.1.4 rule c) also fires
 HagcInvalidXOrder	conforming	0	-	NEGATIVE: control-point X values decrease, or repeat with a differing Y
 HagcMixingTypes	conforming	0	-	HAGC component mixing types 1 and 3
 HagcRefWhiteToneMap	conforming	0	-	ST 2094-50 C.3.8 reference-white tone map
 HdrBakedLut	conforming	0	-	baked AToB0/BToA0 pair; makes 8.7.1.3's precedence observable
 HdrCicpUnspecified	conforming	0	-	ColourPrimaries 2. MEMBER but NON-CONFORMING: 8.7.1.1 requires the cicpType custom chromaticity extension of 10.3, which this build cannot read, so it validates NonCompliant and will not render. Membership is unaffected - the amendment calls such a profile non-conforming, not a non-member
+HdrClassDisplayNegative	hdr-content	0	-	CLASS NEGATIVE: 'mntr', a single-attribute delta of HdrColorSpaceClass. Replaces HdrDisplayMetadata, which modelled the retired Display-class format; the class test itself is not compatibility, it is the proof that Display is rejected
+HdrClassInputNegative	hdr-content	0	-	CLASS NEGATIVE: 'scnr', a single-attribute delta of HdrColorSpaceClass. The Input half of the pair, so a classifier testing only one of the two non-ColorSpace classes still fails a row
 HdrColorSpaceClass	conforming	0	-	THE CLASS POSITIVE, and the base fixture. Was the 8.10.1 class NEGATIVE before the 23-09-2026 revision moved the sub-class onto the ColorSpace profile; the file is unchanged in intent and inverted in verdict, which is exactly the discriminator the revision needs
-HdrDisplayMetadata	hdr-content	0	-	CLASS NEGATIVE: 'mntr'. Carries a conforming PQ cicpTag and HDR Image metadata and is still not an HDR ColorSpace Profile - 8.7.1 says so in as many words. The amendment's Issues section calls this shape "functionally similar ... but is not one"
 HdrFullRangeFlag	conforming	0	-	IMPL-02 pair, full-range half; control for the narrow half
 HdrHlgBt2020Primaries	conforming	0	-	IMPL-04 control: HLG at ColourPrimaries 9, whose Y row IS the old constants
 HdrHlgBt709Primaries	conforming	0	-	IMPL-04: the first HLG fixture not in BT.2020 primaries
-HdrInputDisplayMeta	hdr-content	0	-	CLASS NEGATIVE: 'scnr'. The Input-class half of the pair with HdrDisplayMetadata, so that neither surviving non-ColorSpace class can be admitted by a classifier that tests only one of them
 HdrInvalidTransfer	hdr-content	0	-	NEGATIVE: TransferCharacteristics outside {8, 16, 18}. De-confounded by the revision - it used to also carry TRC tags, which were a second disqualifier and are no longer one
 HdrLinearCll	conforming	2.95567	cll	8.7.1.4 rule a): CLL / CRWL
 HdrLinearHagcCrwlDisagree	conforming	2	cll	HDR-10 precedence: HAGC white 300 and CRWL 203 disagree, and the content axis divides by the HAGC value (CRWL first would give 2,956)
@@ -72,7 +81,9 @@ HdrMissingLutPair	conforming	0	-	NEGATIVE: both halves of the x=0 pair absent; C
 HdrNarrowRangeFlag	conforming	0	-	IMPL-02: VideoFullRangeFlag 0; warns that this build does not expand it
 HdrNoCicpTag	hdr-content	0	-	MEMBERSHIP NEGATIVE: no cicpTag; HDR Image metadata RETAINED so a metadata-keyed classifier fails
 HdrNonRgbSpace	hdr-content	0	-	MEMBERSHIP NEGATIVE: data colour space 3CLR, not RGB
+HdrPcsLab	hdr-content	0	-	PCS NEGATIVE, the only one that isolates bPcsXyz: HdrColorSpaceClass with PCS Lab. Without it the manifest could not fail a row on the one membership term that did not go away with the old parent
 HdrTransferSdr	hdr-content	0	-	MEMBERSHIP NEGATIVE: TransferCharacteristics 1; no other disqualifier, so isolated
 HdrTrcTagsPresent	conforming	0	-	INVERTED BY THE REVISION: TRC tags cost membership under 8.10.1 and do not under 8.7.1, which prohibits nothing because 8.7 defines nothing to prohibit. Still draws a tag-exclusion WARNING - a TRC tag has no interpretation on 'spac' - which is the point: not a member-or-not question
 HdrVersion44	conforming	0	-	INVERTED BY THE REVISION: 4.4 was below the old 4.5.0.0 window and there is no lower bound now (4.7). The cicpTag's own >= 4.4 tag-type gate is what still applies
 HdrVersion46	conforming	0	-	4.6; with HdrVersion44 it brackets the withdrawn lower bound from both sides
+HdrVersion5	hdr-content	0	-	VERSION NEGATIVE, the only one that isolates the v5 ceiling: HdrColorSpaceClass at 5.0. The BT2100 set fails on class too, so dropping icHdrIsVersion4() left every other row passing. The ceiling is a ruling; see icHdrIsVersion4()

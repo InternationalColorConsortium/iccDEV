@@ -111,7 +111,7 @@ function getClutTestProfile() {
   // WASM heap, and assert on the tags rather than just on a clean exit.
   if (await test('IccHdrFallback', require('./IccHdrFallback/iccHdrFallback.js'), async mod => {
     const fromXml = await require('./IccFromXml/iccFromXml.js')({ noExitRuntime: true, noInitialRun: true, print: () => {}, printErr: () => {} });
-    const hdrXml = fs.readFileSync(path.join(__dirname, 'Testing', 'HDR', 'HagcDisplay.xml'));
+    const hdrXml = fs.readFileSync(path.join(__dirname, 'Testing', 'HDR', 'HagcColorSpace.xml'));
     fromXml.FS.writeFile('hdr.xml', hdrXml);
     fromXml.callMain(['hdr.xml', 'hdr.icc']);
     const hdrIcc = fromXml.FS.readFile('hdr.icc');
@@ -123,7 +123,7 @@ function getClutTestProfile() {
     const rc = mod.callMain(['hdr.icc', 'fallback.icc']);
     if (rc) throw new Error('bake exited ' + rc);
     const baked = mod.FS.readFile('fallback.icc');
-    // Read the tag table rather than scanning for signatures. HagcDisplay.xml
+    // Read the tag table rather than scanning for signatures. HagcColorSpace.xml
     // already carries an identity A2B0/B2A0 placeholder (80 bytes each), so a
     // signature scan or a grew-at-all check passes even when the bake attached
     // nothing, or only one direction. A baked tag holds a 3-input CLUT, which

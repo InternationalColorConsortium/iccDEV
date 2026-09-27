@@ -5,7 +5,7 @@
   uncovered.
 
   The profile body is the same BT.2020-primaries matrix/TRC display profile as
-  HagcDisplay.xml; only the HAGC metadata differs. Two things are being pinned
+  HagcColorSpace.xml; only the HAGC metadata differs. Two things are being pinned
   here, and both are about what the *parser* does with an alternate image's
   coefficient array rather than about the profile:
 
@@ -18,7 +18,7 @@
     array's length is the number of set presence flags, and Pack() derives
     those flags from the values, so the phantom entry just lengthens the record
     and doubles the coefficient sum - halving every mixed value the gain curve
-    sees. HagcDisplay.xml cannot catch this because it spells out all six
+    sees. HagcColorSpace.xml cannot catch this because it spells out all six
     attributes.
 
   - alternate 1 is component mixing type 1 (component), which no other fixture
@@ -115,7 +115,7 @@
     </lutBtoAType> </BToA0Tag>
 
     <profileDescriptionTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR display profile pinning HAGC component mixing types 1 and 3]]></LocalizedText>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR ColorSpace Profile pinning HAGC component mixing types 1 and 3]]></LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>
 
     <copyrightTag> <multiLocalizedUnicodeType>

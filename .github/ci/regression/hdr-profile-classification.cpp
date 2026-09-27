@@ -160,6 +160,55 @@ CIccProfile *openFixture(const char *szName)
   return pProfile;
 }
 
+/**
+ * Attach the D50-adapted sRGB/BT.709 matrix column tags to a profile, IN
+ * MEMORY, and return true when all three attached.
+ *
+ * WHY THIS EXISTS.  No fixture in Testing/HDR carries matrix column tags any
+ * more.  The 23-09-2026 revision moved the HDR sub-class onto the ColorSpace
+ * profile, which defines none, and the owner directed that the corpus model
+ * ColorSpace-class usage only - so the Display-class fixture that used to
+ * carry them (HdrDisplayMetadata) is gone.  But two things in the library still
+ * read them and still need testing:
+ *
+ *  - icGetProfilePrimaries(), which the ICC dictType Metadata Registry's MDCV
+ *    and CLL entries still use for their own primaries code 2 - a registry
+ *    rule this amendment does not touch;
+ *  - the proof that the forward matrix follows the cicpTag rather than the
+ *    colorant tags, which needs colorant tags that DISAGREE with it.
+ *
+ * Synthesizing them here keeps that coverage without keeping an old-format
+ * fixture in the corpus, and makes each test a single-variable comparison: the
+ * same profile with and without the tags.  icGetProfilePrimaries() tests for
+ * the tags, not for the class, so the profile's 'spac' class is left alone.
+ *
+ * The values are the canonical sRGB colorants adapted to the D50 PCS white by
+ * the Bradford matrix every fixture here carries as its chromaticAdaptationTag
+ * - exactly what HdrDisplayMetadata carried, so every numeric expectation below
+ * is unchanged by the move.
+ */
+static void attachXyz(CIccProfile *pProfile, icTagSignature sig, double x, double y, double z)
+{
+  CIccTagXYZ *pTag = new CIccTagXYZ;
+  (*pTag)[0].X = icDtoF((icFloatNumber)x);
+  (*pTag)[0].Y = icDtoF((icFloatNumber)y);
+  (*pTag)[0].Z = icDtoF((icFloatNumber)z);
+  pProfile->DeleteTag(sig);
+  if (!pProfile->AttachTag(sig, pTag))
+    delete pTag;
+}
+
+static bool attachSrgbColorants(CIccProfile *pProfile)
+{
+  attachXyz(pProfile, icSigRedMatrixColumnTag,   0.436004638672, 0.222503662109, 0.013900756836);
+  attachXyz(pProfile, icSigGreenMatrixColumnTag, 0.385101318359, 0.716903686523, 0.097106933594);
+  attachXyz(pProfile, icSigBlueMatrixColumnTag,  0.143096923828, 0.060592651367, 0.713897705078);
+
+  return pProfile->IsTagPresent(icSigRedMatrixColumnTag) &&
+         pProfile->IsTagPresent(icSigGreenMatrixColumnTag) &&
+         pProfile->IsTagPresent(icSigBlueMatrixColumnTag);
+}
+
 // ---------------------------------------------------------------------------
 // 1. The ITU-T H.273 Table 2 lookup
 // ---------------------------------------------------------------------------
@@ -218,19 +267,20 @@ void testProfilePrimaries()
   // dictType Metadata Registry, whose MDCV and CLL entries define their own
   // primaries code 2 as "the containing profile's matrix column tags", and
   // that rule is the registry's and untouched by this amendment.  So the
-  // fixtures under test here are the two that are NOT HDR ColorSpace Profiles
-  // and do carry colorants: HdrDisplayMetadata ('mntr') and
-  // HdrInputDisplayMeta ('scnr').
+  // fixture under test is the conforming base, HdrColorSpaceClass, with the
+  // matrix column tags attached in memory - see attachSrgbColorants() for why
+  // no corpus fixture carries them any more.
   //
-  // Both carry a chromaticAdaptationTag, so the unadapted half is synthesized
-  // by deleting it in memory.  That is better than a fixture kept solely to
-  // have none: the two halves then differ in exactly one tag, which is the
-  // thing the adaptation direction is being tested against.
-  CIccProfile *pProfile = openFixture("HdrDisplayMetadata.icc");
+  // It carries a chromaticAdaptationTag, so the unadapted half is synthesized
+  // by deleting it in memory.  The two halves then differ in exactly one tag,
+  // which is the thing the adaptation direction is being tested against.
+  CIccProfile *pProfile = openFixture("HdrColorSpaceClass.icc");
   if (!pProfile)
     return;
 
   icCicpPrimaries p;
+
+  check(attachSrgbColorants(pProfile), "the matrix column tags attach to the base fixture");
 
   check(pProfile->DeleteTag(icSigChromaticAdaptationTag),
         "the chromaticAdaptationTag is removed to synthesize the unadapted case");
@@ -256,7 +306,12 @@ void testProfilePrimaries()
   // the D50 values above, which differ by roughly 0.033 in white x: far
   // outside these tolerances but entirely plausible-looking on its own, which
   // is why this assertion exists.
-  CIccProfile *pAdapted = openFixture("HdrDisplayMetadata.icc");
+  CIccProfile *pAdapted = openFixture("HdrColorSpaceClass.icc");
+  if (pAdapted && !attachSrgbColorants(pAdapted)) {
+    check(false, "the matrix column tags attach to the adapted copy");
+    delete pAdapted;
+    pAdapted = NULL;
+  }
   if (pAdapted) {
     icCicpPrimaries recovered, table;
     check(icGetProfilePrimaries(pAdapted, recovered), "primaries recovered from an adapted profile");
@@ -331,7 +386,9 @@ void testProfilePrimaries()
 // ---------------------------------------------------------------------------
 void testDisplayMetadata()
 {
-  CIccProfile *pProfile = openFixture("HdrDisplayMetadata.icc");
+  // The base fixture carries the same three HDR Image entries - CRWL 203, CLL
+  // 1000/400/9, MDCV 1000/0.005/9 - that HdrDisplayMetadata did.
+  CIccProfile *pProfile = openFixture("HdrColorSpaceClass.icc");
   if (!pProfile)
     return;
 
@@ -491,16 +548,18 @@ void testHdrForwardMatrix()
 {
   icFloatNumber m[9];
 
-  CIccProfile *pProfile = openFixture("HdrDisplayMetadata.icc");
+  CIccProfile *pProfile = openFixture("HdrColorSpaceClass.icc");
 
   if (pProfile) {
-    // BT.709 in the cicpTag, sRGB colorants, and a Bradford D65-to-D50
-    // chromaticAdaptationTag - the ordinary shape.
+    // BT.709 in the cicpTag and a Bradford D65-to-D50 chromaticAdaptationTag -
+    // the ordinary shape.  The base carries no colorant tags, and the matrix
+    // is not read from any: it is built from the cicpTag and the adopted white.
     check(icBuildHdrForwardMatrix(pProfile, 1, m), "the forward matrix builds for BT.709");
 
-    // The profile's own red colorant, for comparison. 1e-4 is the s15Fixed16
-    // grid the colorant tags are quantised onto plus the chad's own rounding;
-    // it is not a loose tolerance, it is the exact one this can be checked to.
+    // What a conventional sRGB profile's red colorant is, for comparison. 1e-4
+    // is the s15Fixed16 grid colorant tags are quantised onto plus the chad's
+    // own rounding; it is not a loose tolerance, it is the exact one this can
+    // be checked to.
     checkClose(m[0], 0.436005, 1e-4, "derived matrix reproduces the red colorant X");
     checkClose(m[3], 0.222504, 1e-4, "derived matrix reproduces the red colorant Y");
     checkClose(m[1], 0.385101, 1e-4, "derived matrix reproduces the green colorant X");
@@ -514,9 +573,9 @@ void testHdrForwardMatrix()
     check(fabs(m[0] - 0.412391) > 0.02,
           "the result is adapted to the PCS white, not left at the display's own");
 
-    // Value 2 has no chromaticities to build from: 9.2.17 sends it to the
-    // profile's own matrix column tags instead, and this must say so rather
-    // than inventing a matrix.
+    // Value 2 has no chromaticities to build from.  8.7.1.1 sends it to the
+    // cicpType custom chromaticity extension of 10.3, which this build cannot
+    // read, so this must refuse rather than invent a matrix.
     check(!icBuildHdrForwardMatrix(pProfile, 2, m), "ColourPrimaries 2 is not built here");
     check(!icBuildHdrForwardMatrix(pProfile, 0, m), "Reserved (0) builds nothing");
     check(!icBuildHdrForwardMatrix(pProfile, 13, m), "an unassigned value builds nothing");
@@ -528,10 +587,21 @@ void testHdrForwardMatrix()
   // A profile whose declared primaries and colorant tags genuinely disagree is
   // where the clause's "shall" bites: BT.2020 in the cicpTag against colorants
   // that are not BT.2020. The derived matrix must follow the cicpTag.
+  //
+  // THE DISAGREEMENT IS NOW SYNTHESIZED.  HagcMixingTypes used to carry sRGB
+  // colorants beside its BT.2020 cicpTag; the retarget stripped them, as it
+  // stripped them from every ColorSpace fixture, and this block then went on
+  // passing with nothing to disagree with - the assertion below still held,
+  // but a builder that read the colorant tags would have passed it too.
+  // Attaching sRGB colorants restores the premise: a builder that followed
+  // them would now return sRGB's red X of 0.436, not BT.2020's.
   pProfile = openFixture("HagcMixingTypes.icc");
 
   if (pProfile) {
+    check(attachSrgbColorants(pProfile), "sRGB colorants attach beside the BT.2020 cicpTag");
     check(icBuildHdrForwardMatrix(pProfile, 9, m), "the forward matrix builds for BT.2020");
+    check(fabs(m[0] - 0.436005) > 0.02,
+          "the matrix is not the attached sRGB colorants: the cicpTag wins");
     check(fabs(m[0] - 0.636963) > 0.02,
           "a disagreeing profile follows its cicpTag, not its colorant tags");
 
@@ -616,7 +686,7 @@ void testContentHeadroom()
   // must report no metadata-derived content headroom at all: PQ fixes a peak
   // in the transfer function, and asserting 1000 cd/m^2 for it - which rule c)
   // would do, since it has no metadata precondition - would contradict it.
-  pProfile = openFixture("HdrDisplayMetadata.icc");
+  pProfile = openFixture("HdrColorSpaceClass.icc");
   if (pProfile) {
     check(icGetHdrProfileInfo(pProfile, info), "info resolved for the PQ fixture");
     check(info.nTransferCharacteristics == icCicpTransferPQ, "the fixture is PQ");
@@ -649,9 +719,9 @@ void testClassification()
 
   // A conforming HDR ColorSpace Profile: RGB, ColorSpace class, PCSXYZ, cicp
   // with TransferCharacteristics 16.  THE BASE FIXTURE MOVED with the
-  // sub-class: HdrDisplayMetadata is 'mntr' and is now the class NEGATIVE
-  // (below), and HdrColorSpaceClass - which was the class negative under
-  // 8.10.1 - is the positive.
+  // sub-class: HdrColorSpaceClass - which was the class negative under 8.10.1
+  // - is the positive, and the class negatives below are single-attribute
+  // deltas of it.
   CIccProfile *pProfile = openFixture("HdrColorSpaceClass.icc");
   if (pProfile) {
     check(icGetHdrProfileInfo(pProfile, info), "info resolved");
@@ -677,8 +747,8 @@ void testClassification()
   // one would let the other through.
   {
     static const struct { const char *szFixture; const char *szWhat; } kClassNegatives[] = {
-      { "HdrDisplayMetadata.icc",  "a Display-class ('mntr') profile" },
-      { "HdrInputDisplayMeta.icc", "an Input-class ('scnr') profile" },
+      { "HdrClassDisplayNegative.icc", "a Display-class ('mntr') profile" },
+      { "HdrClassInputNegative.icc",   "an Input-class ('scnr') profile" },
     };
 
     for (size_t i = 0; i < sizeof(kClassNegatives) / sizeof(kClassNegatives[0]); i++) {
@@ -706,7 +776,7 @@ void testClassification()
 
   // The HAGC tag's own HDR reference white takes precedence over a CRWL entry,
   // because the gain curve in that same tag was authored against it.
-  pProfile = openFixture("HagcDisplay.icc");
+  pProfile = openFixture("HagcColorSpace.icc");
   if (pProfile) {
     check(icGetHdrProfileInfo(pProfile, info), "info resolved for the HAGC fixture");
     check(info.nClass == icHdrProfileConforming, "HAGC fixture is a conforming HDR ColorSpace Profile");
@@ -808,7 +878,7 @@ void testClassification()
   // The HAGC tag's version gate.  It was copied from the cicpTag's, which
   // refuses only version 5.0.0.0 exactly, so a 5.1 profile carried the tag
   // and validated clean.
-  pProfile = openFixture("HagcDisplay.icc");
+  pProfile = openFixture("HagcColorSpace.icc");
   if (pProfile) {
     pProfile->m_Header.version = 0x05100000;
 
@@ -899,22 +969,32 @@ void testClassification()
   // The registry rule reads the containing profile's matrix column tags, and
   // an HDR ColorSpace Profile is a ColorSpace profile (8.7), which has none -
   // this is PROPOSAL-ISSUE HDR-18, and the 23-09-2026 revision turns it from
-  // a corner case into the normal one.  So the pair of assertions is:
+  // a corner case into the normal one.
   //
-  //   HdrDisplayMetadata ('mntr', carries colorant tags)  -> code 2 RESOLVES
-  //   HdrColorSpaceClass ('spac', has no colorant tags)   -> code 2 does NOT
+  // So the pair of assertions is ONE fixture with and without the tags:
   //
-  // Both halves matter.  The first keeps the registry rule itself under test,
-  // so it cannot quietly stop working; the second pins that an entry the
-  // reader cannot resolve is reported unresolved rather than guessed at.
-  pProfile = openFixture("HdrDisplayMetadata.icc");
+  //   HdrColorSpaceClass + matrix column tags attached in memory -> RESOLVES
+  //   HdrColorSpaceClass as shipped, no matrix column tags       -> does NOT
+  //
+  // That is a single-variable comparison, which is stronger than the
+  // two-fixture pair it replaces (a 'mntr' and a 'spac' profile differed in
+  // class as well as in tags).  Both halves matter.  The first keeps the
+  // registry rule itself under test, so it cannot quietly stop working; the
+  // second pins that an entry the reader cannot resolve is reported
+  // unresolved rather than guessed at.
+  pProfile = openFixture("HdrColorSpaceClass.icc");
+  if (pProfile && !attachSrgbColorants(pProfile)) {
+    check(false, "the matrix column tags attach for the registry case");
+    delete pProfile;
+    pProfile = NULL;
+  }
   if (pProfile) {
     CIccTagDict *pDict = metaDict(pProfile);
-    check(pDict != NULL, "HdrDisplayMetadata carries a metadataTag dict");
+    check(pDict != NULL, "HdrColorSpaceClass carries a metadataTag dict");
     if (pDict) {
       pDict->Set("CLL", "1000.0 400.0 2");
       CIccHdrMetadataReader meta2;
-      check(meta2.Read(pProfile), "metadataTag read for the matrix-based profile");
+      check(meta2.Read(pProfile), "metadataTag read with the matrix column tags attached");
       check(meta2.HasContentLightLevel(), "CLL present");
       check(meta2.ContentLightLevelPrimariesResolved(),
             "a CLL primaries code of 2 resolves against a profile that HAS matrix column tags");
@@ -959,8 +1039,8 @@ void testClassification()
   // nothing.  Asserting the old note here would pin a diagnostic that no
   // clause supports.
   //
-  // HdrInputDisplayMeta survives as the Input-class membership negative, and
-  // is asserted with its Display-class twin further up.
+  // The Input class is still asserted as a membership negative, by
+  // HdrClassInputNegative alongside its Display-class twin further up.
 
   // A plain SDR profile must draw nothing. This is the false-positive guard:
   // the corpus is full of RGB display profiles, and a classifier that keyed on
@@ -1053,12 +1133,17 @@ void testRegistryDefinedValues()
   // primaries are defined by tags required by a three-component matrix-based
   // display profile". MDCV: "reserved for future use".
   //
-  // THE FIXTURE MOVED for the reason given at testProfilePrimaries(): the
-  // registry rule reads the containing profile's matrix column tags, and no
-  // HDR ColorSpace Profile has any.  HdrDisplayMetadata is 'mntr', carries
-  // them, and is therefore the shape where CLL's code 2 can resolve at all -
-  // so it is where the CLL-versus-MDCV distinction can still be seen.
-  CIccProfile *pP = openFixture("HdrDisplayMetadata.icc");
+  // The registry rule reads the containing profile's matrix column tags, and
+  // no HDR ColorSpace Profile has any, so they are attached in memory - see
+  // attachSrgbColorants().  Without them CLL's code 2 could not resolve at
+  // all, and the CLL-versus-MDCV distinction would be invisible: both would
+  // read as unresolved for the same, uninteresting reason.
+  CIccProfile *pP = openFixture("HdrColorSpaceClass.icc");
+  if (pP && !attachSrgbColorants(pP)) {
+    check(false, "the matrix column tags attach for the CLL-versus-MDCV case");
+    delete pP;
+    pP = NULL;
+  }
   if (pP) {
     CIccTagDict *pDict = metaDict(pP);
     if (pDict) {
@@ -1098,10 +1183,13 @@ void testValidateLoadsNoTagForHeaderNonMembers()
   // it back would assert that a member's tags are never loaded, which is the
   // opposite of what this test exists to protect.
   //
-  // The two that remain rule membership out from the HEADER alone, which is
-  // what icHdrHeaderAdmitsMembership() tests: the data colour space is not
-  // RGB, and the device class is not ColorSpace.
-  const char *szNonMembers[] = { "HdrNonRgbSpace.icc", "HdrDisplayMetadata.icc" };
+  // These rule membership out from the HEADER alone, which is what
+  // icHdrHeaderAdmitsMembership() tests - one fixture per header condition,
+  // now that each has a single-attribute negative of its own: the data colour
+  // space is not RGB, the device class is not ColorSpace, the version is v5,
+  // and the PCS is not XYZ.
+  const char *szNonMembers[] = { "HdrNonRgbSpace.icc", "HdrClassDisplayNegative.icc",
+                                 "HdrVersion5.icc", "HdrPcsLab.icc" };
 
   for (size_t n = 0; n < sizeof(szNonMembers) / sizeof(szNonMembers[0]); n++) {
     std::string path = "Testing/HDR/";
@@ -1183,12 +1271,12 @@ void testMetadataParsing()
   };
 
   for (size_t n = 0; n < sizeof(cases) / sizeof(cases[0]); n++) {
-    CIccProfile *pProfile = openFixture("HdrDisplayMetadata.icc");
+    CIccProfile *pProfile = openFixture("HdrColorSpaceClass.icc");
     if (!pProfile)
       return;
 
     CIccTagDict *pDict = metaDict(pProfile);
-    check(pDict != NULL, "HdrDisplayMetadata carries a metadataTag dict");
+    check(pDict != NULL, "HdrColorSpaceClass carries a metadataTag dict");
     if (!pDict) {
       delete pProfile;
       return;
@@ -1221,7 +1309,7 @@ void testMetadataParsing()
   }
 
   // A profile whose only HDR entry did not parse still carries one.
-  CIccProfile *pProfile = openFixture("HdrDisplayMetadata.icc");
+  CIccProfile *pProfile = openFixture("HdrColorSpaceClass.icc");
   if (pProfile) {
     CIccTagDict *pDict = metaDict(pProfile);
     if (pDict) {

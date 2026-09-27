@@ -1188,13 +1188,11 @@ echo ""
 # =============================================================================
 echo "--- 15. iccHdrFallback ---"
 HDRFALLBACK="$TOOLS/IccHdrFallback/iccHdrFallback"
-HDR_HAGC="$ICCDEV_TESTING/HDR/HagcDisplay.icc"
-# The descriptor-less conforming fixture.  This was HdrDisplayMetadata until
-# the 23-09-2026 revision moved the HDR sub-class onto the ColorSpace profile,
-# which makes that 'mntr' fixture a class negative the baker refuses outright -
-# so the case stopped exercising the no-gain-curve bake path and became a
-# refusal test wearing its name.  HdrColorSpaceClass is the same shape on
-# 'spac': a PQ cicpTag, HDR Image metadata, and no HAGC tag.
+HDR_HAGC="$ICCDEV_TESTING/HDR/HagcColorSpace.icc"
+# The descriptor-less conforming fixture: a PQ cicpTag, HDR Image metadata,
+# and no HAGC tag.  This was HdrDisplayMetadata until the 23-09-2026 revision
+# moved the HDR sub-class onto the ColorSpace profile and that Display-class
+# fixture was retired.
 HDR_NOHAGC="$ICCDEV_TESTING/HDR/HdrColorSpaceClass.icc"
 
 if [ -f "$HDR_HAGC" ]; then

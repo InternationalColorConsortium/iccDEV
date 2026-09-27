@@ -72,10 +72,11 @@ file(WRITE "${_log_file}" "CTest test: ${ICCDEV_TEST_NAME}\nTool: ${ICCDEV_PAWG_
 # The generated HDR fixtures this test needs.  Checked up front so a partial
 # generation skips as cleanly as no generation at all.
 set(_fixtures
-  HagcDisplay.icc
+  HagcColorSpace.icc
   HdrCicpUnspecified.icc
   HdrColorSpaceClass.icc
-  HdrDisplayMetadata.icc
+  HdrClassDisplayNegative.icc
+  HdrClassInputNegative.icc
   HdrInvalidTransfer.icc
   HdrLinearHagcCrwlDisagree.icc
   HdrMissingBToA0.icc
@@ -177,7 +178,7 @@ iccdev_expect("${_sdr}" "Total checklist items:[ \t]+${ICCDEV_SDR_ITEM_COUNT}"
   "the SDR control item count changed; section H must not alter a non-HDR report")
 
 # --- 2. A conforming HDR ColorSpace Profile: all eight items, HAGC tone mapping ----------
-iccdev_run_pawg("${ICCDEV_HDR_DIR}/HagcDisplay.icc" _hagc)
+iccdev_run_pawg("${ICCDEV_HDR_DIR}/HagcColorSpace.icc" _hagc)
 iccdev_expect("${_hagc}" "\\[ HDR \\(ICC.1 clause 8.7.1\\) \\]"
   "a conforming HDR ColorSpace Profile did not print the HDR section")
 # H8 IS GONE: it asked which rule of clause 8.10.5 resolved the display
@@ -227,13 +228,13 @@ iccdev_expect("${_unspec}" "\\[WARN[ \t]*\\][ \t]+H7[ \t]"
   "H7 presented the 203 cd/m^2 default as a stated value")
 
 # --- 4. The class negative: a Display profile is not an HDR ColorSpace Profile
-# This fixture WAS the conforming base and the 8.10.5 display-headroom case.
-# Both went: the sub-class is built on the ColorSpace profile now, so 'mntr' is
-# outside it, and clause 8.10.5 is deleted.  What it pins now is that carrying
-# a conforming PQ cicpTag and HDR Image metadata does NOT make a Display
-# profile a member - the amendment's Issues section says exactly this shape
-# "is not one" - and that nothing is reported against it for that.
-iccdev_run_pawg("${ICCDEV_HDR_DIR}/HdrDisplayMetadata.icc" _meta)
+# HdrClassDisplayNegative is HdrColorSpaceClass with the class set to 'mntr' and
+# nothing else changed.  It pins that carrying a conforming PQ cicpTag and HDR
+# Image metadata does NOT make a Display profile a member - the amendment's
+# Issues section says exactly this shape "is not one" - and that nothing is
+# reported against it for that.  It replaces HdrDisplayMetadata, which was the
+# conforming base under clause 8.10 and modelled the retired Display format.
+iccdev_run_pawg("${ICCDEV_HDR_DIR}/HdrClassDisplayNegative.icc" _meta)
 iccdev_expect("${_meta}" "\\[N/A[ \t]*\\][ \t]+H1[ \t]"
   "a Display-class profile was admitted to the clause 8.7.1 sub-class")
 iccdev_expect("${_meta}" "Display profile, "
@@ -345,10 +346,10 @@ iccdev_expect("${_narrow}" "\\[WARN[ \t]*\\][ \t]+H4[ \t]"
 # line at all, so the assertion had nothing to read.  The defect it guards is
 # unchanged: H1 once printed "Display" for every class that was not Input.
 #
-# HdrInputDisplayMeta is the Input half.  The class that is neither Input nor
+# HdrClassInputNegative is the Input half.  The class that is neither Input nor
 # Display - the shape that actually caught the bug - is asserted in section 10
 # below, where an Output-class profile is already built.
-iccdev_run_pawg("${ICCDEV_HDR_DIR}/HdrInputDisplayMeta.icc" _scnr)
+iccdev_run_pawg("${ICCDEV_HDR_DIR}/HdrClassInputNegative.icc" _scnr)
 iccdev_expect("${_scnr}" "Input profile, "
   "H1 did not name an Input-class profile's class")
 iccdev_expect_not("${_scnr}" "Display profile, "
@@ -376,12 +377,12 @@ function(iccdev_from_xml _xml_text _name _out_var)
   set(${_out_var} "${_icc}" PARENT_SCOPE)
 endfunction()
 
-file(READ "${ICCDEV_HDR_DIR}/HagcDisplay.xml" _hagc_xml)
+file(READ "${ICCDEV_HDR_DIR}/HagcColorSpace.xml" _hagc_xml)
 string(REGEX MATCH "<headroomAdaptiveGainCurveTag>.*</headroomAdaptiveGainCurveTag>"
   _hagc_block "${_hagc_xml}")
 string(REGEX MATCH "<BToA0Tag>.*</BToA0Tag>" _btoa0_block "${_hagc_xml}")
 if(_hagc_block STREQUAL "" OR _btoa0_block STREQUAL "")
-  message(FATAL_ERROR "HagcDisplay.xml no longer carries the tags section 10 copies")
+  message(FATAL_ERROR "HagcColorSpace.xml no longer carries the tags section 10 copies")
 endif()
 
 # A BToA0Tag is allowed in a Display profile but is not a forward transform, so

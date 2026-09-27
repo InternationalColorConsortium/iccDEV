@@ -1,43 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  MEMBERSHIP NEGATIVE for clause 8.7.1.1: the data colour space is not RGB.
+  CLASS NEGATIVE for clause 8.7.1.1: the device class is Display ('mntr').
 
-  8.7.1.1's first condition reduces to a header test - RGB, and Input or
-  Display.  This profile is a Display profile carrying a conforming PQ cicpTag
-  and no TRC tags, but its data colour space is 3CLR, so it is not an HDR
-  Profile.
+  8.7.1.5: "The profile class shall be ColorSpace ('spac')."  A Display profile
+  carrying a conforming cicpTag is not an HDR ColorSpace Profile - the
+  amendment's own Issues section says that shape "is functionally similar ... but
+  is not one".  The 'scnr' half of this pair is HdrClassInputNegative, so a
+  classifier that tested only one of the two non-ColorSpace classes would still
+  fail a row.
 
-  3CLR rather than CMYK deliberately: it keeps the channel count at three, so
-  the AToB0Tag/BToA0Tag pair, the colorant tags and every other tag stay
-  byte-identical to the conforming base fixture.  A CMYK variant would have had
-  to change the LUT shapes too, and would then no longer isolate one condition.
+  Built as a SINGLE-ATTRIBUTE DELTA of HdrColorSpaceClass.xml, the conforming
+  base: the device class and nothing else is changed - same cicpTag, same HDR Image
+  metadata, same AToB0Tag/BToA0Tag pair, same description style.  That is what
+  lets the fixture isolate one membership condition: a classifier that stopped
+  testing it would admit this profile and would still pass every positive in
+  the corpus, which is the failure Testing/HDR/hdr-corpus-manifest.tsv exists to
+  catch.  Failing a membership condition makes a profile a non-member, not a
+  defective profile, so nothing is reported against it.
 
-  Everything else 8.7.1.1 requires is satisfied, so this fixture isolates that
-  one condition: a classifier that stopped testing it would misclassify this
-  profile as an HDR ColorSpace Profile, and would still pass every positive in the corpus.
+  Replaces HdrDisplayMetadata, which was the conforming base under clause 8.10
+  and carried matrix column tags and the deleted 8.10.5 HDR Display entries.
 
-  This profile remains a CONFORMANT ICC profile - see above for any diagnostic
-  this particular fixture is expected to draw.  Failing a membership condition
-  means the profile is not an HDR ColorSpace Profile; it does not make the profile
-  non-conformant, and nothing in 8.7.1 says otherwise.  That ruling is recorded
-  against HDR-02/HDR-03, both withdrawn on it.
-
-  EXPECTED CLASSIFICATION is icHdrProfileHdrContent - NOT icHdrProfileNone.
-  This profile still carries HDR Image metadata and a PQ cicpTag, and that is
-  precisely what the middle bucket of icHdrProfileClass exists for: HDR content
-  a consumer may legitimately act on, sitting in a profile that is not an HDR
-  ColorSpace Profile.  A classifier reduced to a yes/no could not express this
-  verdict at all, which is the second thing these fixtures pin.
-
-  (The HDR Display entries this paragraph used to name went with clause
-  8.10.5, which the 23-09-2026 revision deletes.)
+  EXPECTED: icHdrProfileHdrContent; validates `valid`.
 -->
 <IccProfile>
   <Header>
     <PreferredCMMType>ICCD</PreferredCMMType>
     <ProfileVersion>4.50</ProfileVersion>
-    <ProfileDeviceClass>spac</ProfileDeviceClass>
-    <DataColourSpace>3CLR</DataColourSpace>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
     <PCS>XYZ </PCS>
     <CreationDateTime>2026-08-05T00:00:00</CreationDateTime>
     <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
@@ -107,7 +98,7 @@
     </lutBtoAType> </BToA0Tag>
 
     <profileDescriptionTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV 3CLR ColorSpace profile: NOT an HDR ColorSpace Profile]]></LocalizedText>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV class negative: Display-class profile with a PQ cicpTag, NOT an HDR ColorSpace Profile]]></LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>
 
     <copyrightTag> <multiLocalizedUnicodeType>

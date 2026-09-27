@@ -964,7 +964,7 @@ bool applyPixel(const char *szFixture, const CIccCreateHdrXformHint *pHint,
 // the CLI, not by running the suite, which is exactly why it is pinned here.
 void testLazyLoadedProfile()
 {
-  std::string path = "Testing/HDR/HagcDisplay.icc";
+  std::string path = "Testing/HDR/HagcColorSpace.icc";
 
   CIccProfile *pOpened = OpenIccProfile(path.c_str());
 
@@ -1058,7 +1058,7 @@ void testEndToEnd()
 
   src[0] = src[1] = src[2] = vWhite;
 
-  // HagcDisplay declares a custom HDR reference white of 300 cd/m^2, so that
+  // HagcColorSpace declares a custom HDR reference white of 300 cd/m^2, so that
   // is the luminance its own chain normalises to - not the 203 default. A
   // reader that ignored the tag's custom value would put this pixel 48% high.
 
@@ -1070,7 +1070,7 @@ void testEndToEnd()
   //    HDR->SDR fallback for consumers that do not implement HDR processing".
   //    Before the revision this profile had TRC tags and this assertion read
   //    icXformTypeMatrixTRC.
-  if (applyPixel("HagcDisplay.icc", NULL, src, noHint, &nType)) {
+  if (applyPixel("HagcColorSpace.icc", NULL, src, noHint, &nType)) {
     bHaveNoHint = true;
     check(nType == icXformType3DLut || nType == icXformTypeMatrixTRC,
           "without a hint an HDR profile falls back to its mandatory AToB0Tag");
@@ -1082,7 +1082,7 @@ void testEndToEnd()
   hint.m_targetHeadroom = 1.0;              /* SDR */
   hint.m_nPolicy = icHdrToneMapAuto;
 
-  if (applyPixel("HagcDisplay.icc", &hint, src, dst, &nType)) {
+  if (applyPixel("HagcColorSpace.icc", &hint, src, dst, &nType)) {
     check(nType == icXformTypeMatrixTrcHdr, "with a hint an HDR profile uses the tone-mapping chain");
 
     // The two paths must not agree: if they did, the hint would be doing
@@ -1106,7 +1106,7 @@ void testEndToEnd()
   //    chain's 2.2 TRC cannot represent at all.
   src[0] = src[1] = src[2] = (icFloatNumber)0.75;
 
-  if (applyPixel("HagcDisplay.icc", &hint, src, dst, &nType)) {
+  if (applyPixel("HagcColorSpace.icc", &hint, src, dst, &nType)) {
     // 3.2765 is above the curve's last control point at x = 1.0, so the
     // extrapolation clips it: gain * x = 2^-0.4 * 1.0 = 0.757858.
     double want = 0.757858 * (32768.0 / 65535.0);
@@ -1117,7 +1117,7 @@ void testEndToEnd()
   //    whole chain rather than through the evaluator alone.
   hint.m_targetHeadroom = (icFloatNumber)4.0;   /* log2 = 2.0, between 0.0 and the 3.0 baseline */
 
-  if (applyPixel("HagcDisplay.icc", &hint, src, dst, &nType)) {
+  if (applyPixel("HagcColorSpace.icc", &hint, src, dst, &nType)) {
     // W_alt = (2 - 3)/(0 - 3) = 1/3 and the baseline contributes zero, so the
     // gain exponent is a third of the alternate's. At the clipped input the
     // alternate's exponent is G(1.0) + log2(1.0/3.2765) = -0.4 - 1.7124, so
@@ -1145,9 +1145,9 @@ void testEndToEnd()
   //    EOTF rather than the profile's TRC tags.
   src[0] = src[1] = src[2] = (icFloatNumber)0.75;
 
-  // THE FIXTURE MOVED with the sub-class.  HdrDisplayMetadata is 'mntr' and
-  // is now a class negative that gets no HDR chain at all; HdrColorSpaceClass
-  // is the descriptor-less conforming base ('spac', a PQ cicpTag, no HAGC).
+  // HdrColorSpaceClass is the descriptor-less conforming base ('spac', a PQ
+  // cicpTag, no HAGC).  This used HdrDisplayMetadata until the sub-class moved
+  // onto the ColorSpace profile and that Display-class fixture was retired.
   if (applyPixel("HdrColorSpaceClass.icc", &hint, src, dst, &nType)) {
     check(nType == icXformTypeMatrixTrcHdr, "a descriptor-less HDR profile still uses the HDR chain");
 
@@ -1203,7 +1203,7 @@ void testEndToEnd()
   hint.m_nPolicy = icHdrToneMapDisable;
   src[0] = src[1] = src[2] = vWhite;
 
-  if (applyPixel("HagcDisplay.icc", &hint, src, dst, &nType)) {
+  if (applyPixel("HagcColorSpace.icc", &hint, src, dst, &nType)) {
     check(nType != icXformTypeMatrixTrcHdr, "the Disable policy engages no HDR chain");
   }
 }
@@ -1432,7 +1432,7 @@ void testTargetOnACurve()
   check(!unsupported.Invert(out, px), "a never-initialised evaluator does not invert");
   check(!unsupported.InvertApproximate(out, px), "nor approximately");
 
-  // HagcDisplay's layout: alternates at 0 and 5, the baseline between them at
+  // HagcColorSpace's layout: alternates at 0 and 5, the baseline between them at
   // 3.  A target exactly on the baseline is the identity.
   buildMetadata(meta, (icFloatNumber)3.0, (icFloatNumber)0.0, icHagcMixingMax, x, yMax, m, 2);
   meta.SetNumAlternates(2);
@@ -1453,9 +1453,9 @@ void testTargetOnACurve()
   check(ev.SetTargetHeadroom(3.0), "target exactly on the interior baseline");
   check(ev.IsIdentity(), "a target on an interior baseline is the identity");
 
-  // The same through the CMM: HagcDisplay's baseline headroom is 3, a hint of
+  // The same through the CMM: HagcColorSpace's baseline headroom is 3, a hint of
   // 8.0.  Begin() used to tone map it.
-  CIccProfile *pProfile = openFixture("HagcDisplay.icc");
+  CIccProfile *pProfile = openFixture("HagcColorSpace.icc");
 
   if (pProfile) {
     CIccCreateHdrXformHint hint;
@@ -1466,7 +1466,7 @@ void testTargetOnACurve()
     CIccXform *pXform = beginXform(pProfile, &hint, true, status);
 
     check(pXform && pXform->GetXformType() == icXformTypeMatrixTrcHdr && status == icCmmStatOk,
-          "HagcDisplay at a hint of 8.0 builds the HDR chain");
+          "HagcColorSpace at a hint of 8.0 builds the HDR chain");
     if (pXform && pXform->GetXformType() == icXformTypeMatrixTrcHdr)
       check(!((CIccXformMatrixTrcHdr*)pXform)->IsToneMapping(),
             "and a hint exactly on its baseline headroom does not tone map");

@@ -80,7 +80,7 @@
     </headroomAdaptiveGainCurveType> </headroomAdaptiveGainCurveTag>
 
     <profileDescriptionTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR negative fixture: AToB0Tag present without its paired BToA0Tag]]></LocalizedText>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR ColorSpace Profile, negative: AToB0Tag present without its paired BToA0Tag]]></LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>
 
     <copyrightTag> <multiLocalizedUnicodeType>

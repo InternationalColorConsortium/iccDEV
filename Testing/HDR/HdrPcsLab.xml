@@ -1,41 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  CLASS NEGATIVE for clause 8.7.1.1: the device class is Input ('scnr'), not
-  ColorSpace.
+  PCS NEGATIVE for clause 8.7.1.1: the connection space is PCSLAB.
 
-  The 'scnr' half of a pair with HdrDisplayMetadata ('mntr'), so that neither
-  class surviving outside the sub-class can be admitted by a classifier that
-  tests only one of them.  Everything else 8.7.1.1 requires is satisfied -
-  RGB, PCSXYZ, a conforming PQ cicpTag - so each fixture isolates the class
-  condition alone.
+  This is the only fixture that isolates bPcsXyz.  8.7 lets a ColorSpace
+  profile connect through either PCS, so a PCSLAB ColorSpace profile is a
+  perfectly ordinary profile - but the chain of 8.7.1.2 ends in the RGB-to-PCSXYZ
+  matrix of step c), which produces XYZ, and nothing in the chain converts it to
+  Lab.  A PCSLAB profile classified as a member was once given an xform that
+  wrote XYZ numbers into a port reporting Lab.  8.7.1.2 NOTE 7's handling of a
+  PCSLAB-connected DESTINATION (tone map to H_target = 1.0 first) is about where
+  the chain's output goes, not licence to end the chain in Lab.
 
-  The amendment addresses this shape directly: a Display or Input profile
-  carrying cicpTag and HAGC "is functionally similar, in terms of tone-mapping
-  capability, to an HDR ColorSpace Profile under this clause, but is not one".
-  Nothing is reported against it; it is an ordinary Input profile.
+  Without this fixture, bPcsXyz was the one membership term the corpus manifest
+  could not fail a row on: a classifier that dropped it would still read 40/40.
 
-  WHAT THIS FIXTURE USED TO BE.  Under clause 8.10 it was a CONFORMING
-  Input-class HDR Profile carrying HDR Display metadata, and it pinned two
-  things that no longer exist: the 8.10.5 scope note (HDR Display entries in a
-  profile that is not 'mntr' drew an Information diagnostic) and the HDR-09
-  ruling (the AToBx/BToAx pairing rule was confined to the Display class, so
-  an Input profile with AToB0 and no BToA0 was conforming).  The revision
-  deletes 8.10.5 outright and states the pairing rule once, unscoped, in
-  8.7.1.5 - there is only one class now - so both are gone.  Its DERH, DCV and
-  DRWL entries went with the clause.
+  Built as a SINGLE-ATTRIBUTE DELTA of HdrColorSpaceClass.xml, the conforming
+  base: the PCS and nothing else is changed - same cicpTag, same HDR Image
+  metadata, same AToB0Tag/BToA0Tag pair, same description style.  That is what
+  lets the fixture isolate one membership condition: a classifier that stopped
+  testing it would admit this profile and would still pass every positive in
+  the corpus, which is the failure Testing/HDR/hdr-corpus-manifest.tsv exists to
+  catch.  Failing a membership condition makes a profile a non-member, not a
+  defective profile, so nothing is reported against it.
 
-  It keeps AToB0 without BToA0, which is legal for an Input profile and is now
-  simply not this amendment's business.
-
-  EXPECTED CLASSIFICATION is icHdrProfileHdrContent; expected validation
-  verdict is `valid`.
---><IccProfile>
+  EXPECTED: icHdrProfileHdrContent.
+-->
+<IccProfile>
   <Header>
     <PreferredCMMType>ICCD</PreferredCMMType>
     <ProfileVersion>4.50</ProfileVersion>
-    <ProfileDeviceClass>scnr</ProfileDeviceClass>
+    <ProfileDeviceClass>spac</ProfileDeviceClass>
     <DataColourSpace>RGB </DataColourSpace>
-    <PCS>XYZ </PCS>
+    <PCS>Lab </PCS>
     <CreationDateTime>2026-08-05T00:00:00</CreationDateTime>
     <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
     <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
@@ -46,18 +42,6 @@
     <ProfileCreator>ICCD</ProfileCreator>
   </Header>
   <Tags>
-    <redColorantTag> <XYZArrayType>
-      <XYZNumber X="0.436004638672" Y="0.222503662109" Z="0.013900756836"/>
-    </XYZArrayType> </redColorantTag>
-
-    <greenColorantTag> <XYZArrayType>
-      <XYZNumber X="0.385101318359" Y="0.716903686523" Z="0.097106933594"/>
-    </XYZArrayType> </greenColorantTag>
-
-    <blueColorantTag> <XYZArrayType>
-      <XYZNumber X="0.143096923828" Y="0.060592651367" Z="0.713897705078"/>
-    </XYZArrayType> </blueColorantTag>
-
     <!-- Standard Bradford D65 to D50 adaptation. -->
     <chromaticAdaptationTag> <s15Fixed16ArrayType>
       <Array>
@@ -106,9 +90,17 @@
       </BCurves>
     </lutAtoBType> </AToB0Tag>
 
+    <BToA0Tag> <lutBtoAType>
+      <Channels InputChannels="3" OutputChannels="3"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+    </lutBtoAType> </BToA0Tag>
 
     <profileDescriptionTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV Input-class HDR profile carrying HDR Display metadata out of its scope]]></LocalizedText>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV PCS negative: PCSLAB ColorSpace profile with a PQ cicpTag, NOT an HDR ColorSpace Profile]]></LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>
 
     <copyrightTag> <multiLocalizedUnicodeType>
