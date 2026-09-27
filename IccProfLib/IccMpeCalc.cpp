@@ -4285,6 +4285,15 @@ bool CIccCalculatorFunc::SequenceNeedTempReset(SIccCalcOp *op, icUInt32Number nO
         return true;
       memset(tempUsage+p, 1, n);
     }
+    else if (sig==icSigSelectOp) {
+      // A select runs one of its case or default bodies, or none.  Walked in a
+      // line, as this loop would, a write in one case masks a read in another
+      // case or after the select, and the reset is skipped for a temporary that
+      // was never written (#2707).  CheckUnderflowOverflow models the branches;
+      // here a reset is always correct -- ICC.2 wants temporaries zero at each
+      // invocation -- and costs one memset, so answer conservatively.
+      return true;
+    }
     else if (sig==icSigIfOp) {
       bool rv = false;
       icUInt8Number *ifTemps = (icUInt8Number *)malloc(nMaxTemp);
@@ -4294,7 +4303,17 @@ bool CIccCalculatorFunc::SequenceNeedTempReset(SIccCalcOp *op, icUInt32Number nO
 
       memcpy(ifTemps, tempUsage, nMaxTemp);
 
-      if (!icCalcAddUInt32(i, 2, p)) {
+      icUInt32Number elseIndex = 0;
+      bool hasElse = icCalcAddUInt32(i, 1, elseIndex) &&
+                     elseIndex < nOps &&
+                     op[elseIndex].sig==icSigElseOp;
+
+      // The true branch follows the else op when there is one, and the if op
+      // itself when there is not -- the layout ParseFuncDef builds and
+      // ApplySequence runs.  Starting it at i+2 without an else skipped the
+      // branch's first op, so a tget there was never seen and the temporaries
+      // were not reset between invocations (#2707).
+      if (!icCalcAddUInt32(i, hasElse ? 2 : 1, p)) {
         free(ifTemps);
         return true;
       }
@@ -4308,10 +4327,6 @@ bool CIccCalculatorFunc::SequenceNeedTempReset(SIccCalcOp *op, icUInt32Number nO
       }
       rv = rv || SequenceNeedTempReset(&op[p], op[i].data.size, ifTemps, nMaxTemp);
 
-      icUInt32Number elseIndex = 0;
-      bool hasElse = icCalcAddUInt32(i, 1, elseIndex) &&
-                     elseIndex < nOps &&
-                     op[elseIndex].sig==icSigElseOp;
       if (hasElse) {
         icUInt8Number *elseTemps = (icUInt8Number *)malloc(nMaxTemp);
         if (!elseTemps) {
