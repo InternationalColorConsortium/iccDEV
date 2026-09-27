@@ -31,8 +31,8 @@
     </multiLocalizedUnicodeType>
 	
 	<tagArrayType>
-	  <TagSignature>ncl2</TagSignature>
-	  <ArraySignature>nmcl</ArraySignature>
+	  <TagSignature>nmcl</TagSignature>
+	  <ArraySignature>ncol</ArraySignature>
 	  <ArrayTags>
 	  
 	    <tagStructureType>

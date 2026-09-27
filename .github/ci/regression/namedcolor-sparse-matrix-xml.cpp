@@ -133,7 +133,9 @@ CIccProfileXml *loadXml(const char *szXml)
 // and prove nothing.
 icUInt32Number matricesPerColour(CIccProfile *pProfile)
 {
-  CIccTag *pTag = pProfile->FindTag(icSigNamedColor2Tag);
+  // The fixtures here are v5, whose named colour tag is namedColorTag
+  // ('nmcl') per ICC.2-2023 8.10 (#2562), not ICC.1's namedColor2Tag.
+  CIccTag *pTag = pProfile->FindTag(icSigNamedColorTag);
 
   // Not IsArrayType(): CIccTagArray does not override it, so it inherits CIccTag's
   // "false" and would reject every tag array there is.  The type signature is what
@@ -166,7 +168,7 @@ std::vector<icUInt16Number> matrixEntryCounts(CIccProfile *pProfile)
 {
   std::vector<icUInt16Number> counts;
 
-  CIccTag *pTag = pProfile->FindTag(icSigNamedColor2Tag);
+  CIccTag *pTag = pProfile->FindTag(icSigNamedColorTag);
   if (!pTag || pTag->GetType() != icSigTagArrayType)
     return counts;
 

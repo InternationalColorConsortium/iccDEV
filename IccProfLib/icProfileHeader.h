@@ -700,7 +700,11 @@ typedef enum {
  */
 typedef enum {
     icSigUndefinedArray              = 0x00000000,
-    icSigNamedColorArray             = 0x6e6d636c,  /* 'nmcl' */
+    /* ICC.2-2023 13.2.1 (#2562): the namedColorArray array type identifier
+       is 'ncol'.  'nmcl' is the namedColorTag signature (9.2, see
+       icSigNamedColorTag) and the namedColorStructure struct type
+       identifier (12.2.5.1, see icSigNamedColorStruct); it is not this. */
+    icSigNamedColorArray             = 0x6e636f6c,  /* 'ncol' */
     icSigColorantInfoArray           = 0x63696e66,  /* 'cinf' */
     icSigUtf8TextTypeArray           = 0x75746638,  /* 'utf8' */
 

@@ -292,6 +292,7 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.namedcolor-apply-regressions` | `.github/scripts/iccdev-namedcolor-apply-regression-tests.sh` |
 | `iccdev.v5-namedcmm-regressions` | `.github/scripts/iccdev-v5-namedcmm-regression-tests.sh` |
 | `iccdev.namedcolor-overprint-regressions` | `.github/scripts/iccdev-namedcolor-overprint-regression-tests.sh` |
+| `iccdev.named-colour-signature-v5` | `.github/ci/regression/named-colour-signature-v5.cpp`; the v5 named colour tag signature `nmcl` and array type identifier `ncol`, read as bytes, for issue #2562 |
 | `iccdev.version-bcd-regressions` | `.github/scripts/iccdev-version-bcd-regression-tests.sh` |
 | `iccdev.profile-visualize-regressions` | `.github/scripts/iccdev-profile-visualize-tests.sh` |
 | `iccdev.issue-1148-writer-device-regression` | `.github/scripts/iccdev-issue-1148-writer-device-regression.sh` |

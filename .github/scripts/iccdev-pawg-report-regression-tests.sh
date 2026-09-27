@@ -1815,6 +1815,62 @@ run_s3_header_signature_tests() {
     "00000000" "49434320" "WARN" "International Color Consortium reference-profile signature"
 }
 
+# #2562: ICC.2-2023 8.10 names a v5 NamedColor profile's tag namedColorTag
+# ("nmcl"); ICC.1's is namedColor2Tag ("ncl2").  The class rule tables in
+# PawgReport are ICC.1's, so C4 and C5 have to match the named colour tag under
+# the spelling the profile's version defines.  Without that, a conforming v5
+# profile reported "missing 'ncl2'" at C4 and listed 'nmcl' at C5.  The v4
+# profile is the control: its verdicts must not move.
+run_named_colour_version_spelling() {
+  local name="pawg-named-colour-version-spelling"
+  local v5="$TESTING_DIR/Named/NamedColor.icc"
+  local v4="$TESTING_DIR/Named/NamedColorV4.icc"
+  local profile jsonfile
+
+  TOTAL=$((TOTAL + 1))
+  if [ ! -x "$PAWG" ]; then
+    fail_case "$name" "missing executable: $PAWG"
+    return
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    fail_case "$name" "python3 is required to read the JSON report"
+    return
+  fi
+  for profile in "$v5" "$v4"; do
+    if [ ! -f "$profile" ]; then
+      fail_case "$name" "missing generated profile: $profile"
+      return
+    fi
+  done
+
+  for profile in "$v5" "$v4"; do
+    jsonfile="$OUTDIR/$name-$(basename "$profile" .icc).json"
+    timeout 60 "$PAWG" --json "$profile" > "$jsonfile" 2> "$jsonfile.stderr"
+    if ! check_sanitizers "$name" "$jsonfile.stderr"; then
+      fail_case "$name" "sanitizer finding for $(basename "$profile")"
+      return
+    fi
+    if ! python3 - "$jsonfile" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="ascii") as handle:
+    report = json.load(handle)
+
+items = {item["id"]: item for item in report["items"]}
+assert items["C4"]["verdict"] == "OK", items["C4"]
+assert "'nmcl'" not in items["C5"]["detail"], items["C5"]
+assert "'ncl2'" not in items["C5"]["detail"], items["C5"]
+PY
+    then
+      fail_case "$name" "$(basename "$profile"): C4 not OK, or C5 lists the named colour tag"
+      return
+    fi
+  done
+
+  pass_case "$name" "C4 finds the named colour tag under its version's spelling (v5 nmcl, v4 ncl2)"
+}
+
 echo "=== iccPawgReport PAWG regression and security tests ==="
 run_static_source_audit
 run_binary_size_guard
@@ -1843,6 +1899,7 @@ run_standard_tag_valid_shebang_signature_profile
 run_standard_tag_invalid_textsig_signature_profile
 run_standard_tag_valid_textsig_signature_profile
 run_registered_private_profile
+run_named_colour_version_spelling
 run_s3_header_signature_tests
 echo "iccPawgReport PAWG regression and security tests: $PASS passed, $FAIL failed, $TOTAL total"
 

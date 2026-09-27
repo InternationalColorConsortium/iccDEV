@@ -635,6 +635,7 @@ void CIccProfileJson::SetTagColorSpaces(icTagSignature sig, CIccTag *pTag)
       ((CIccMBB*)pTag)->SetColorSpaces(m_Header.pcs, icSigGamutData);
     break;
 
+  case icSigNamedColorTag:
   case icSigNamedColor2Tag:
     if (pTag->GetType() == icSigNamedColor2Type) {
       ((CIccTagNamedColor2*)pTag)->SetColorSpaces(m_Header.pcs, m_Header.colorSpace);

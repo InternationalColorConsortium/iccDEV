@@ -1089,6 +1089,7 @@ bool CIccProfileXml::ParseTag(xmlNode *pNode, std::string &parseStr)
       ((CIccMBB*)pTag)->SetColorSpaces(m_Header.pcs, icSigGamutData);
     break;
 
+  case icSigNamedColorTag:
   case icSigNamedColor2Tag:
     {
       if (pTag && pTag->GetType()==icSigNamedColor2Type) {

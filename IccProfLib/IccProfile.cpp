@@ -1691,6 +1691,7 @@ bool CIccProfile::LoadTag(IccTagEntry *pTagEntry, CIccIO *pIO, bool bReadAll/*=f
       ((CIccMBB*)pTag)->SetColorSpaces(m_Header.pcs, icSigGamutData);
     break;
 
+  case icSigNamedColorTag:
   case icSigNamedColor2Tag:
     if (pTag->GetTagArrayType()==icSigNamedColorArray) {
       CIccArrayNamedColor *pNamed = (CIccArrayNamedColor*)icGetTagArrayHandler(pTag);
@@ -2391,7 +2392,7 @@ bool CIccProfile::CheckTagExclusion(std::string &sReport) const
     {
       if (GetTag(icSigAToB0Tag) || GetTag(icSigAToB1Tag) || GetTag(icSigAToB2Tag) ||
         GetTag(icSigBToA0Tag) || GetTag(icSigBToA1Tag) || GetTag(icSigBToA2Tag) ||
-        GetTag(icSigProfileSequenceDescTag) || GetTag(icSigGamutTag) || GetTag(icSigNamedColor2Tag))
+        GetTag(icSigProfileSequenceDescTag) || GetTag(icSigGamutTag) || GetTag(icSigNamedColor2Tag) || GetTag(icSigNamedColorTag))
       {
         sReport += icMsgValidateWarning;
         sReport += buf;
@@ -2402,7 +2403,7 @@ bool CIccProfile::CheckTagExclusion(std::string &sReport) const
     }
   case icSigAbstractClass:
     {
-      if (GetTag(icSigNamedColor2Tag) ||
+      if (GetTag(icSigNamedColor2Tag) || GetTag(icSigNamedColorTag) ||
         GetTag(icSigAToB1Tag) || GetTag(icSigAToB2Tag) ||
         GetTag(icSigBToA1Tag) || GetTag(icSigBToA2Tag) || GetTag(icSigGamutTag))
       {
@@ -2416,7 +2417,7 @@ bool CIccProfile::CheckTagExclusion(std::string &sReport) const
 
   case icSigLinkClass:
     {
-      if (GetTag(icSigMediaWhitePointTag) || GetTag(icSigNamedColor2Tag) ||
+      if (GetTag(icSigMediaWhitePointTag) || GetTag(icSigNamedColor2Tag) || GetTag(icSigNamedColorTag) ||
         GetTag(icSigAToB1Tag) || GetTag(icSigAToB2Tag) ||
         GetTag(icSigBToA1Tag) || GetTag(icSigBToA2Tag) || GetTag(icSigGamutTag))
       {
@@ -2929,15 +2930,24 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
       else return true;
     }
 
-  case icSigNamedColor2Tag:
+  // ICC.2-2023 8.10 (#2562): each spelling of the named colour tag belongs to one
+  // version.  The other version's spelling is an unrecognized tag there, so it is
+  // not type-checked here; CheckRequiredTags reports the missing tag instead.
+  case icSigNamedColorTag:
     {
-      if (typeSig==icSigNamedColor2Type)
-        return true;
-      if (m_Header.version >= icVersionNumberV5 &&
-          arraySig==icSigNamedColorArray)
+      if (m_Header.version < icVersionNumberV5)
         return true;
 
-      return false;
+      // 13.2.1: a tagArrayType whose array type identifier is 'ncol'.
+      return arraySig==icSigNamedColorArray;
+    }
+
+  case icSigNamedColor2Tag:
+    {
+      if (m_Header.version >= icVersionNumberV5)
+        return true;
+
+      return typeSig==icSigNamedColor2Type;
     }
 
   case icSigOutputResponseTag:
@@ -3428,7 +3438,10 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         break;
 
       case icSigNamedColorClass:
-        if (!GetTag(icSigNamedColor2Tag)) {
+        // ICC.2-2023 8.10 (#2562): a v5 NamedColor profile shall contain
+        // namedColorTag.  namedColor2Tag is ICC.1's spelling and at v5 is
+        // an unrecognized tag, not a substitute for it.
+        if (!GetTag(icSigNamedColorTag)) {
           sReport += icMsgValidateCriticalError;
           sReport += "Critical tag(s) missing.\n";
           rv = icMaxStatus(rv, icValidateCriticalError);
