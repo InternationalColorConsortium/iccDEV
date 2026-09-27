@@ -29,6 +29,8 @@ target_test="$repo_root/.github/scripts/iccdev-clusterfuzzlite-target-tests.sh"
 artifact_cleanup="$repo_root/.github/scripts/iccdev-cfl-artifact-cleanup.sh"
 artifact_cleanup_test="$repo_root/.github/scripts/iccdev-cfl-artifact-cleanup-tests.sh"
 source_digest="$repo_root/.github/scripts/iccdev-cfl-source-digest.sh"
+readme="$repo_root/.github/ci/cfl/README.md"
+skill="$repo_root/.github/skills/clusterfuzzlite/SKILL.md"
 
 for required in "$workflow" "$adapter" "$project" "$dockerfile" \
   "$msan_builder" "$issue_2687_fixture" "$patch_mode_file" \
@@ -177,6 +179,12 @@ grep -Fq 'ICCDEV_CFL_SOURCE_SHA must contain exactly 40 characters' "$adapter"
 grep -Fq 'ICCDEV_CFL_SOURCE_DIGEST must be a lowercase SHA-256 digest' "$adapter"
 grep -Fq 'ICCDEV_CFL_SOURCE_DIGEST must contain exactly 64 characters' "$adapter"
 grep -Fq 'ClusterFuzzLite source snapshot does not match the Actions checkout' "$adapter"
+for local_guide in "$readme" "$skill"; do
+  # shellcheck disable=SC2016 # Match literal documented shell variables.
+  grep -Fq -- '-e "ICCDEV_CFL_SOURCE_SHA=$source_sha"' "$local_guide"
+  # shellcheck disable=SC2016 # Match literal documented shell variables.
+  grep -Fq -- '-e "ICCDEV_CFL_SOURCE_DIGEST=$source_digest"' "$local_guide"
+done
 # shellcheck disable=SC2016 # Match the literal adapter command.
 if grep -Fq 'git -C "$repo_root" rev-parse HEAD' "$adapter"; then
   echo "adapter must not depend on Git metadata inside the build container" >&2

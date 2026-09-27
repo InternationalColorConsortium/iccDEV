@@ -75,16 +75,21 @@ From an OSS-Fuzz checkout, run for each sanitizer in `address`, `undefined`,
 and `memory`:
 
 ```bash
-python3 infra/helper.py build_image --external --pull /path/to/iccDEV
+iccdev_source=/path/to/iccDEV
+source_sha="$(git -C "$iccdev_source" rev-parse HEAD)"
+source_digest="$("$iccdev_source/.github/scripts/iccdev-cfl-source-digest.sh" "$iccdev_source")"
+python3 infra/helper.py build_image --external --pull "$iccdev_source"
 python3 infra/helper.py build_fuzzers --external --clean \
-  --engine libfuzzer --sanitizer SANITIZER /path/to/iccDEV
+  -e "ICCDEV_CFL_SOURCE_SHA=$source_sha" \
+  -e "ICCDEV_CFL_SOURCE_DIGEST=$source_digest" \
+  --engine libfuzzer --sanitizer SANITIZER "$iccdev_source"
 python3 infra/helper.py check_build --external \
-  --engine libfuzzer --sanitizer SANITIZER /path/to/iccDEV
+  --engine libfuzzer --sanitizer SANITIZER "$iccdev_source"
 for target in profileparse cmmapply profilevisualize writerserialize \
   xmlparse jsonparse connectconfig pawgreport; do
   python3 infra/helper.py run_fuzzer --external \
     --engine libfuzzer --sanitizer SANITIZER \
-    /path/to/iccDEV "icc_${target}_fuzzer" -- -max_total_time=30
+    "$iccdev_source" "icc_${target}_fuzzer" -- -max_total_time=30
 done
 ```
 

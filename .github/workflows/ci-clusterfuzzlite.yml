@@ -354,6 +354,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      # preflight: allow-token-exposure reason=clusterfuzzlite-artifact-cleanup
       - name: Remove superseded same-run corpus artifacts
         shell: bash --noprofile --norc {0}
         env:

@@ -31,6 +31,8 @@ permissions:
       - 'Testing/**'
       - 'Build/Cmake/**'
       - '.github/ci/regression/**'
+      - '.github/ci/test-data/**'
+      - '.github/scripts/**'
       - '.github/workflows/ci-iccdev-tool-tests.yml'
       - '.github/workflows/ci-sanitizer-regression.yml'
 

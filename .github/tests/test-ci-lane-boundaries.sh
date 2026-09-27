@@ -58,6 +58,8 @@ fi
 grep -Fq 'default: sanitizers' "$tool_workflow"
 grep -Fq 'ctest_args+=(--label-exclude ci-infrastructure)' "$tool_workflow"
 grep -q '^  pull_request:$' "$sanitizer_workflow"
+grep -Fq "      - '.github/ci/test-data/**'" "$sanitizer_workflow"
+grep -Fq "      - '.github/scripts/**'" "$sanitizer_workflow"
 grep -Fq 'uses: ./.github/workflows/ci-iccdev-tool-tests.yml' "$sanitizer_workflow"
 grep -Fq 'instrumentation: sanitizers' "$sanitizer_workflow"
 grep -Fq 'include_infrastructure_tests: false' "$sanitizer_workflow"

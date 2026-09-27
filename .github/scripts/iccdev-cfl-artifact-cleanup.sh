@@ -4,6 +4,9 @@
 #                 All rights reserved.
 #                 https://color.org
 #
+# This source file is licensed under the BSD 3-Clause "New" or "Revised"
+# License used by ICC software projects.
+#
 # Retain only the newest same-run ClusterFuzzLite corpus for each target.
 ###############################################################################
 

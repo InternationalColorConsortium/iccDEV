@@ -81,14 +81,19 @@ names and deletes only the superseded duplicates from that run.
 Local validation uses an OSS-Fuzz checkout:
 
 ```bash
-python3 infra/helper.py build_image --external --pull /path/to/iccDEV
+iccdev_source=/path/to/iccDEV
+source_sha="$(git -C "$iccdev_source" rev-parse HEAD)"
+source_digest="$("$iccdev_source/.github/scripts/iccdev-cfl-source-digest.sh" "$iccdev_source")"
+python3 infra/helper.py build_image --external --pull "$iccdev_source"
 python3 infra/helper.py build_fuzzers --external --clean \
-  --engine libfuzzer --sanitizer address /path/to/iccDEV
+  -e "ICCDEV_CFL_SOURCE_SHA=$source_sha" \
+  -e "ICCDEV_CFL_SOURCE_DIGEST=$source_digest" \
+  --engine libfuzzer --sanitizer address "$iccdev_source"
 python3 infra/helper.py check_build --external \
-  --engine libfuzzer --sanitizer address /path/to/iccDEV
+  --engine libfuzzer --sanitizer address "$iccdev_source"
 python3 infra/helper.py run_fuzzer --external \
   --engine libfuzzer --sanitizer address \
-  /path/to/iccDEV icc_profilevisualize_fuzzer -- -max_total_time=30
+  "$iccdev_source" icc_profilevisualize_fuzzer -- -max_total_time=30
 ```
 
 Repeat the last three commands with every emitted target and with `undefined`

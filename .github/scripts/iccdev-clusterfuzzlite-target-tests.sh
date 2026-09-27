@@ -4,6 +4,9 @@
 #                 All rights reserved.
 #                 https://color.org
 #
+# This source file is licensed under the BSD 3-Clause "New" or "Revised"
+# License used by ICC software projects.
+#
 # Validate the source, options, dictionaries, and seed families for every
 # in-process ClusterFuzzLite target without requiring a sanitizer toolchain.
 ###############################################################################
