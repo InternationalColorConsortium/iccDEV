@@ -2544,6 +2544,59 @@ function(iccdev_add_cicp_copy_ctor_test)
   endif()
 endfunction()
 
+# #2562: four rows of CheckRequiredTags' v5 branch disagreed with ICC.2-2023 clause 8
+# (Input 8.3, xCLR output 8.5, DeviceLink 8.6, and the three multiplex classes
+# 8.11-8.13).  Each accepting case is paired with a control that must still be
+# refused, so the test cannot pass by no longer reaching the check.
+function(iccdev_add_v5_required_tag_sets_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccV5RequiredTagSetsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/v5-required-tag-sets.cpp"
+  )
+  target_compile_features(iccV5RequiredTagSetsTest PRIVATE cxx_std_17)
+  target_include_directories(iccV5RequiredTagSetsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccV5RequiredTagSetsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccV5RequiredTagSetsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.v5-required-tag-sets
+      COMMAND "$<TARGET_FILE:iccV5RequiredTagSetsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.v5-required-tag-sets
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccV5RequiredTagSetsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.v5-required-tag-sets PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;validation;icc2;issue-2562;regression"
+  )
+  if(WIN32)
+    set(_v5_req_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccV5RequiredTagSetsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _v5_req_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.v5-required-tag-sets PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_v5_req_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2181: two defects in the ACS multi-process elements.
 #
 # CIccMpeAcs::Describe() picked its label with "if (GetBAcsSig())", which returns
@@ -10861,6 +10914,7 @@ iccdev_add_chromaticity_validate_test()
 iccdev_add_cicp_copy_ctor_test()
 iccdev_add_islegalutf8_bound_test()
 iccdev_add_json_escape_codepoint_test()
+iccdev_add_v5_required_tag_sets_test()
 iccdev_add_mpe_acs_zero_signature_test()
 iccdev_add_pawg_c5_cicp_test()
 iccdev_add_gamut_xform_semantics_test()
