@@ -288,8 +288,8 @@ emit_rows() {
   local -A prev_verdict=()
   local -A prev_rationale=()
   if [ -f "$MANIFEST" ]; then
-    local p_path p_suite p_status p_exit p_san p_source p_sha p_rationale
-    while IFS=$'\t' read -r p_path p_suite p_status p_exit p_san p_source p_sha p_rationale; do
+    local p_path p_suite p_status p_exit p_rationale
+    while IFS=$'\t' read -r p_path p_suite p_status p_exit _ _ _ p_rationale; do
       case "$p_path" in ''|'#'*) continue ;; esac
       prev_verdict["$p_path"]="$p_suite"$'\t'"$p_status"$'\t'"$p_exit"
       prev_rationale["$p_path"]="$p_rationale"
