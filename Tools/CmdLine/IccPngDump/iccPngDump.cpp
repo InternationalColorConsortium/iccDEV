@@ -91,6 +91,7 @@
 #include "IccDefs.h"
 #include "IccProfLibVer.h"
 #include "IccCmdLineUtil.h"
+#include "IccSameFile.h"
 #include "IccFileUtil.h"
 #include <zlib.h>
 #if !defined(_WIN32)
@@ -225,6 +226,12 @@ if (injectIccFile) {
         safe_exit("Missing --output argument for write mode.");
     }
 
+    // #2692: --write-icc names an INPUT here, the profile to embed, so the
+    // output is refused if it is either input.
+    if (icOutputIsInput(outputPngFile, inputFile) ||
+        icOutputIsInput(outputPngFile, injectIccFile))
+        return EXIT_FAILURE;
+
     // #2414: the operands are echoed here and below, so a path carrying
     // terminal control sequences reached the console verbatim (#2406).
     printf("[INFO] Injecting ICC profile '%s' into PNG: '%s'\n",
@@ -240,6 +247,9 @@ if (injectIccFile) {
 }
 
     // --- Extraction Mode ---
+    // #2692: extracting over the image replaced it with its own profile.
+    if (outputIccFile && icOutputIsInput(outputIccFile, inputFile))
+        return EXIT_FAILURE;
     printf("[INFO] Opening PNG file: %s\n",
            icSanitizeConsoleText(inputFile).c_str());
     FILE *fp = fopen(inputFile, "rb");

@@ -4672,6 +4672,46 @@ function(iccdev_add_fileio_getlength_position_test)
   endif()
 endfunction()
 
+# #2692: icIsSameFile() compares file identity so the image tools can refuse an
+# output that is one of their inputs.  Registered for Windows as well as POSIX: the
+# tools' own same-file regression is a bash script, which Windows CTest does not
+# run, so this is the only CI execution of the Win32 half.  Header-only, so it
+# links nothing.
+function(iccdev_add_same_file_identity_test)
+  iccdev_add_regression_executable(iccSameFileIdentityTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/same-file-identity.cpp"
+  )
+  target_compile_features(iccSameFileIdentityTest PRIVATE cxx_std_17)
+  target_include_directories(iccSameFileIdentityTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  add_dependencies(check iccSameFileIdentityTest)
+
+  set(_same_file_scratch "${CMAKE_CURRENT_BINARY_DIR}/ctest-output/same-file-identity")
+  file(MAKE_DIRECTORY "${_same_file_scratch}")
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.same-file-identity
+      COMMAND "$<TARGET_FILE:iccSameFileIdentityTest>" "${_same_file_scratch}"
+    )
+  else()
+    add_test(
+      NAME iccdev.same-file-identity
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccSameFileIdentityTest>" "${_same_file_scratch}"
+    )
+  endif()
+  set_tests_properties(iccdev.same-file-identity PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;tools;io;windows;issue-2692;regression"
+  )
+endfunction()
+
 function(iccdev_add_fileio_seek_tell_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -10496,6 +10536,7 @@ if(WIN32)
   iccdev_add_profile_shared_io_detach_test()
   iccdev_add_fileio_getlength_position_test()
   iccdev_add_profile_write_failure_test()
+  iccdev_add_same_file_identity_test()
   iccdev_add_fileio_seek_tell_test()
   iccdev_add_fileio_reopen_nonregular_test()
   iccdev_add_iccio_write_float_aliasing_test()
@@ -10917,6 +10958,7 @@ iccdev_add_embedded_profile_detachio_test()
 iccdev_add_profile_shared_io_detach_test()
 iccdev_add_fileio_getlength_position_test()
 iccdev_add_profile_write_failure_test()
+iccdev_add_same_file_identity_test()
 iccdev_add_fileio_seek_tell_test()
 iccdev_add_fileio_reopen_nonregular_test()
 iccdev_add_iccio_write_float_aliasing_test()
@@ -11577,6 +11619,23 @@ if(TARGET iccApplyProfiles)
   )
   set_tests_properties(iccdev.issue-2379-tiff-sameassource-regression PROPERTIES
     SKIP_RETURN_CODE 77
+  )
+endif()
+
+# #2692: five tools destroyed an input when their output named the same file --
+# the two TIFF streamers faulted in libtiff after truncating a source still being
+# read, the three dump tools replaced the image with its own profile and exited 0.
+# The dump tools are driven through ./name, a hard link and a symlink as well, so
+# the test pins file identity rather than spelling.  Guarded on all five targets
+# because the script drives every one of them.
+if(TARGET iccApplyProfiles AND TARGET iccSpecSepToTiff AND TARGET iccTiffDump
+   AND TARGET iccJpegDump AND TARGET iccPngDump)
+  iccdev_add_script_test(
+    iccdev.issue-2692-same-file-output-regression
+    300
+    "iccdev;tools;tiff;jpeg;png;applyprofiles;specsep;issue-2692;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2692-same-file-output-regression.sh"
   )
 endif()
 

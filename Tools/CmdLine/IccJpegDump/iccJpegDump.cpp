@@ -85,6 +85,7 @@
 #include <vector>
 #include <fstream>
 #include "IccCmdLineUtil.h"
+#include "IccSameFile.h"
 #if defined(_WIN32)
   #include <winsock2.h>
 #else
@@ -461,6 +462,11 @@ int main(int argc, char* argv[]) {
     // ICC Injection Mode: Embed ICC profile into a JPEG
     // ------------------------------------------------------------------------
     if (injectIccFile && outputJpegFile) {
+        // #2692: --write-icc names an INPUT here, the profile to embed, so the
+        // output is refused if it is either input.
+        if (icOutputIsInput(outputJpegFile, inputFile) ||
+            icOutputIsInput(outputJpegFile, injectIccFile))
+            return EXIT_FAILURE;
         if (!InjectIccIntoJpeg(inputFile, injectIccFile, outputJpegFile)) {
             safe_exit("Failed to inject ICC profile.");
         }
@@ -470,6 +476,9 @@ int main(int argc, char* argv[]) {
     // ICC Extraction Mode: Extract ICC profile from a JPEG
     // ------------------------------------------------------------------------
     } else if (extractIccOut) {
+        // #2692: extracting over the image replaced it with its own profile.
+        if (icOutputIsInput(extractIccOut, inputFile))
+            return EXIT_FAILURE;
         if (!ExtractIccFromJpeg(inputFile, extractIccOut)) {
             safe_exit("Failed to extract ICC profile.");
         }
