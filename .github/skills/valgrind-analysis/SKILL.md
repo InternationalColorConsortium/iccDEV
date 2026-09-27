@@ -36,9 +36,11 @@ heap-growth, or call-profile investigations against iccDEV tools.
    `.github/ci/valgrind/issue-2592-regression.sh`; require both analyzers to be
    clean and their generated TIFFs to match.
 10. Attribute findings to stack frames and observed synchronization behavior,
-   not input filenames.
-11. Report the exact source revision, command, exit code, error count, and
-   evidence directory.
+    not input filenames.
+11. For `.icc` corpus sweeps, build `pawg` or `dump` and use `corpus.sh`; do not
+    use word-splitting command substitution around `find`.
+12. Report the exact source revision, command, exit code, error count, and
+    evidence directory.
 
 Use `--allow-findings` only when collecting a known or deliberately compared
 finding. Never use it to turn an unexplained result into a clean gate.
@@ -49,6 +51,10 @@ The unified image exposes `iccdev-valgrind-build`, `iccdev-valgrind-run`,
 `iccdev-valgrind-status`, `iccdev-valgrind-validate`, and
 `iccdev-valgrind-self-test`. These commands write to `/workspace/valgrind` by
 default and must not wrap `/workspace/build`.
+
+The repository's `.github/ci/valgrind/corpus.sh` supports mounted corpus paths
+inside the unified image. Preserve per-profile evidence outside the container;
+prefer tar streaming when a writable bind mount has a different owner.
 
 ## References
 

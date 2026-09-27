@@ -1,0 +1,39 @@
+---
+###############################################################
+# Copyright (c) 2026 International Color Consortium
+#
+# Intent: Standalone required PR risk-analysis gate.
+###############################################################
+
+name: "ci-risk-analysis-gate"
+
+# Expression-bearing concurrency keys exceed 80 columns.
+# yamllint disable rule:line-length
+
+permissions:
+  contents: read
+
+'on':
+  pull_request:
+    branches:
+      - master
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+concurrency:
+  group: "risk-gate-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}"
+  cancel-in-progress: true
+
+jobs:
+  risk-gate:
+    name: Risk Analysis Gate
+    uses: ./.github/workflows/ci-pr-risk-security-analysis.yml
+    with:
+      analysis_target: 'Specific git ref'
+      git_ref: ${{ github.event.pull_request.head.sha }}
+      severity_threshold: 'HIGH'
+      fail_on_findings: true
+      run_windows_audit: true

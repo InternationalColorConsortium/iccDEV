@@ -263,6 +263,22 @@ EOF
 tmp_log="$(mktemp)"
 trap 'rm -f "$tmp_log"' EXIT
 
+previous_rationale() {
+  local path="$1" suite="$2" status="$3" expected_exit="$4"
+  [ -f "$MANIFEST" ] || return 0
+
+  awk -F'\t' \
+    -v path="$path" \
+    -v suite="$suite" \
+    -v status="$status" \
+    -v expected_exit="$expected_exit" '
+      $0 !~ /^#/ && $1 == path && $2 == suite && $3 == status && $4 == expected_exit {
+        print $8
+        exit
+      }
+    ' "$MANIFEST"
+}
+
 emit_rows() {
   # The rationale column is mostly written by hand - the HDR fixture rows say
   # what each negative pins - and classify_rationale() can only derive a generic
@@ -290,9 +306,9 @@ emit_rows() {
     san="$(classify_sanitizer "$tmp_log")"
     suite="$(classify_suite "$status")"
     rationale="$(classify_rationale "$status" "$tmp_log")"
-    if [ -n "${prev_rationale[$local_rel]:-}" ] &&
-       [ "${prev_verdict[$local_rel]}" = "$suite"$'\t'"$status"$'\t'"$rc" ]; then
-      rationale="${prev_rationale[$local_rel]}"
+    preserved="$(previous_rationale "$local_rel" "$suite" "$status" "$rc")"
+    if [ -n "$preserved" ]; then
+      rationale="$preserved"
     fi
 
     repo_rel="Testing/$local_rel"

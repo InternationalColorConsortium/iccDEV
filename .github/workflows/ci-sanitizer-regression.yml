@@ -1,0 +1,55 @@
+---
+###############################################################
+# Copyright (c) 2026 International Color Consortium
+#
+# Intent: Standalone path-scoped ASAN+UBSAN regression gate.
+###############################################################
+
+name: "ci-sanitizer-regression"
+
+# yamllint disable rule:line-length
+
+permissions:
+  contents: read
+  packages: read
+
+'on':
+  pull_request:
+    branches:
+      - master
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths:
+      - 'IccProfLib/**'
+      - 'IccXML/**'
+      - 'IccJSON/**'
+      - 'IccConnect/**'
+      - 'Tools/**'
+      - 'Testing/**'
+      - 'Build/Cmake/**'
+      - '.github/ci/regression/**'
+      - '.github/ci/test-data/**'
+      - '.github/scripts/**'
+      - '.github/workflows/ci-iccdev-tool-tests.yml'
+      - '.github/workflows/ci-sanitizer-regression.yml'
+
+concurrency:
+  group: "sanitizer-regression-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}"
+  cancel-in-progress: true
+
+jobs:
+  sanitizer-regression:
+    name: Sanitizer Regression
+    uses: ./.github/workflows/ci-iccdev-tool-tests.yml
+    with:
+      target_sha: ${{ github.event.pull_request.head.sha }}
+      tool_build_type: Debug
+      ctest_mode: full
+      ctest_recent_limit: '0'
+      exclude_extended_pr_tests: true
+      include_infrastructure_tests: false
+      instrumentation: sanitizers
+      warning_policy: fail

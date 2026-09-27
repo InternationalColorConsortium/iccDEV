@@ -22,7 +22,9 @@ new blocker returns the branch to branch-only grooming before another review.
 |------|----------|---------|
 | Focused reusable regression scripts | `.github/scripts/` | Scripted checks shared by one or more workflows. |
 | Regression PoC inventory | `.github/ci/regression/README.md` | Maps regression inputs and scripts to issues. |
-| Tool test gate | `.github/workflows/ci-iccdev-tool-tests.yml` | ASAN/UBSAN tool coverage, JSON gates, regression scripts, and broad generated-profile CLI coverage. |
+| Tool test gate | `.github/workflows/ci-iccdev-tool-tests.yml` | Reusable/manual core or ASAN/UBSAN regression coverage. |
+| Sanitizer PR gate | `.github/workflows/ci-sanitizer-regression.yml` | Standalone path-scoped ASAN/UBSAN caller for native source, build, and test changes. |
+| Risk-analysis gate | `.github/workflows/ci-risk-analysis-gate.yml` | Standalone PR caller for the required reusable Linux and Windows workflow-security audits. |
 | MATLAB Windows gate | `.github/workflows/ci-matlab.yml` | PowerShell-native MSVC build, MATLAB MEX QA, native focused regressions, and Docker interoperability. |
 | Apple platform gates | `.github/workflows/ci-apple-platform-smoke.yml`, `.github/workflows/ci-apple-mobile-core.yml` | iOS/watchOS simulator hosts and Xcode Release/Debug CTest runtime layouts; [local commands](build.md). |
 | CTest registration | `Build/Cmake/Testing/CMakeLists.txt` | CTest names, labels, fixtures, timeouts, and check target. |
@@ -57,6 +59,16 @@ still run the native matrix. Keep this contract table-driven in
 trusted base checkout for pull requests. Path discovery disables Git rename
 detection so a move is classified against both its removed source path and its
 added destination path.
+
+`ci-pr-action` owns deterministic core builds and tests only. Its reusable tool
+suite passes `instrumentation=core` and excludes `ci-infrastructure` CTests.
+The standalone sanitizer caller runs the reusable tool workflow independently
+for native source, build, testing, or regression-fixture changes; the reusable
+workflow also remains manually dispatchable.
+Pre-flight and risk analysis are standalone PR workflows so scanner or
+infrastructure failures cannot be mistaken for core build failures. External
+compatibility, dynamic-analysis tooling, and ClusterFuzzLite remain manual or
+scheduled lanes.
 
 ## When to Add a Script
 
@@ -192,11 +204,12 @@ full-SHA, and release-tag behavior consistent; do not restore variant
 Dockerfiles or branch-specific image publication.
 
 Branch protection should require stable aggregate contexts, not conditional
-lane job names. `PR Summary` must aggregate orchestration prerequisites and all
-selected full, fast-lane, auto, governance, docs, and path-gated jobs. Do not
+lane job names. `PR Summary` must aggregate only the deterministic core
+orchestration prerequisites and selected full, fast-lane, auto, governance,
+docs, and path-gated core jobs. Do not
 require removed lane names or initialization jobs as branch contexts. Require
-WASM parity separately on `master`, where that workflow runs outside the
-orchestrator. See `docs/label-system.md` for the current context list.
+the standalone Pre-flight checks, risk-analysis contexts, and WASM parity
+separately on `master`. See `docs/label-system.md` for the current context list.
 
 When `image_definition_changed` is true, `ci-pr-action` selects
 workflow-security gates only. It does not run a Docker Clang verification job,

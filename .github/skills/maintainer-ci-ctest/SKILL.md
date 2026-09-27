@@ -79,19 +79,18 @@ when practical.
 ## Workflow Rules
 
 - Follow `.github/instructions/workflow-governance.instructions.md`.
-- Treat `ci-pr-action` `full` as the explicit long-cycle maintainer gate. It runs
+- Treat `ci-pr-action` `full` as the deterministic core maintainer gate. It runs
   Unix GCC/Clang Release and Debug builds, exact GCC 15.2 strict Release LTO in
-  the regression container, GCC 15.2 ASAN+UBSAN tool tests, and Windows.
-  Its tool-test caller excludes the `pr-extended` CTest label to stay within
-  the PR runtime budget; `ci-regression-checks` continues to run the labelled
-  tests.
+  the regression container, non-sanitized GCC core tool tests, and Windows.
+  Its tool-test caller excludes `pr-extended` and `ci-infrastructure` CTests.
 - `ci_scope=auto` is the default. It selects the full matrix for source, build,
   and test changes; documentation-only changes use the constrained fast-lane
-  settings, while workflow-only changes run the preflight and workflow-security
-  gates. Container-only changes use workflow-security gates and local container
-  validation.
-- Use `ci_scope=fast-lane` for the exact GCC 15.2 Release LTO and ASAN+UBSAN
-  Release tool lanes. Fast lane defaults to the latest CTest with Windows
+  settings. Workflow-only changes keep the core orchestrator limited to setup
+  and finalization while the standalone preflight and risk-analysis workflows
+  provide their required contexts. Container-only changes use those standalone
+  security gates and local container validation.
+- Use `ci_scope=fast-lane` for the exact GCC 15.2 Release LTO and non-sanitized
+  core tool lanes. Fast lane defaults to the latest CTest with Windows
   disabled; it does not run a Docker verification job.
 - Container changes require the local canonical-image build and smoke in
   `docs/regression-container.md`; the Docker PR verification job is disabled.
@@ -109,8 +108,8 @@ when practical.
   both PR and manual-dispatch events, so a manual lane cannot cancel its PR
   counterpart.
 - Trigger shared-concurrency workflows sequentially to avoid canceling your own
-  run. Use `ci-pr-action` for normal maintainer validation and
-  `ci-regression-checks` through that orchestrator for ASAN/UBSAN CTest coverage.
+  run. Use `ci-pr-action` for normal core validation and the standalone
+  path-scoped/manual `ci-regression-checks` workflow for ASAN/UBSAN coverage.
 
 ## Local Validation
 

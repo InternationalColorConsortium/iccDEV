@@ -193,8 +193,8 @@ fail-closed policy:
 | Required context | Purpose |
 |------------------|---------|
 | `PR Summary` | Aggregates orchestration prerequisites and every selected build/test lane. |
-| `Risk Analysis Gate / Workflow Security Audit` | Enforces Linux workflow and container security canaries. |
-| `Risk Analysis Gate / Windows Security Audit (PowerShell)` | Enforces PowerShell and Windows workflow security canaries. |
+| `Risk Analysis Gate / Workflow Security Audit` | Standalone Linux workflow and container security canary. |
+| `Risk Analysis Gate / Windows Security Audit (PowerShell)` | Standalone PowerShell and Windows workflow security canary. |
 | `WASM Release Build + Parity` | Required separately on `master` because it is outside `ci-pr-action`. |
 
 Do not require individual Unix, GCC 15.2, tool-test, Windows, or Docker job

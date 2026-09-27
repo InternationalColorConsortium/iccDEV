@@ -1,0 +1,80 @@
+{
+  "colorData": {
+    "data": [
+      {
+        "i": 0,
+        "l": "neutral",
+        "n": "destination",
+        "sn": "source",
+        "sv": [0.5, 0.5, 0.5],
+        "v": [0.5, 0.5, 0.5]
+      }
+    ],
+    "encoding": "float",
+    "space": "RGB ",
+    "srcEncoding": "float",
+    "srcSpace": "RGB "
+  },
+  "connect": {
+    "threads": 1,
+    "useSearch": true
+  },
+  "createLink": {
+    "linkFile": "fuzz.icc",
+    "linkGridSize": 17,
+    "linkMaxRange": 1.0,
+    "linkMinRange": 0.0,
+    "linkPrecision": 4,
+    "linkTitle": "ClusterFuzzLite",
+    "linkType": "iccDeviceLinkV5",
+    "useSourceTransform": false
+  },
+  "dataFiles": {
+    "dstEncoding": "float",
+    "dstType": "colorData",
+    "srcType": "colorData"
+  },
+  "imageFiles": {
+    "dstCompression": false,
+    "dstEmbedIcc": true,
+    "dstEncoding": "16Bit",
+    "dstImageFile": "output.tif",
+    "dstPlanar": false,
+    "srcImageFile": "input.tif"
+  },
+  "profileSequence": [
+    {
+      "iccFile": "input.icc",
+      "intent": "relative",
+      "interpolation": "tetrahedral",
+      "transform": "default",
+      "useBPC": true
+    }
+  ],
+  "searchApply": {
+    "initial": {
+      "intent": "relative",
+      "interpolation": "linear",
+      "transform": "default"
+    },
+    "pccWeights": [
+      {
+        "pccFile": "observer.icc",
+        "weight": 1.0
+      }
+    ],
+    "profileSequence": [
+      {
+        "iccFile": "input.icc",
+        "intent": "perceptual",
+        "transform": "default",
+        "useBPC": true
+      },
+      {
+        "iccFile": "output.icc",
+        "intent": "absolute",
+        "transform": "default"
+      }
+    ]
+  }
+}

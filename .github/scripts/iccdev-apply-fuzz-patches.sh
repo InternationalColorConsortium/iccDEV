@@ -77,15 +77,27 @@ if [ -z "$patch_dir" ]; then
 fi
 
 if [ ! -d "$patch_dir" ]; then
-  echo "ERROR: fuzz patch directory not present: $patch_dir" >&2
-  exit 2
+  if [ "$strict" -eq 1 ]; then
+    echo "ERROR: fuzz patch directory not present: $patch_dir" >&2
+    exit 2
+  fi
+  echo "[WARN] fuzz patch directory not present; continuing without $mode patches: $patch_dir" >&2
+  exit 0
 fi
 
 mapfile -t patches < <(find "$patch_dir" -maxdepth 1 -type f -name '*.patch' | sort)
 if [ "${#patches[@]}" -eq 0 ]; then
-  echo "ERROR: no $mode fuzz patches found in $patch_dir" >&2
-  exit 2
+  if [ "$strict" -eq 1 ]; then
+    echo "ERROR: no $mode fuzz patches found in $patch_dir" >&2
+    exit 2
+  fi
+  echo "[WARN] no $mode fuzz patches found; continuing: $patch_dir" >&2
+  exit 0
 fi
+
+applied=0
+integrated=0
+skipped=0
 
 for patch_file in "${patches[@]}"; do
   echo "Applying $mode fuzz patch: $(basename "$patch_file")"
@@ -93,6 +105,7 @@ for patch_file in "${patches[@]}"; do
     001-json-config-parser-no-sanitize.patch)
       if grep -q 'icJsonParseConfig(json& j' "$repo_root/IccConnect/IccLibConnect/IccJsonUtil.cpp"; then
         echo "  already integrated"
+        integrated=$((integrated + 1))
         continue
       fi
       ;;
@@ -100,28 +113,36 @@ for patch_file in "${patches[@]}"; do
   if [ "$dry_run" -eq 1 ]; then
     if run_patch_check "$patch_file" >/dev/null; then
       echo "  dry-run: applies cleanly"
+      applied=$((applied + 1))
     elif run_reverse_check "$patch_file" >/dev/null; then
       echo "  dry-run: already applied"
+      integrated=$((integrated + 1))
     else
       if [ "$strict" -eq 1 ]; then
         echo "  [ERROR] dry-run: patch did not apply"
         run_patch_check "$patch_file"
       fi
       echo "  [WARN] dry-run: patch did not apply; skipping"
+      skipped=$((skipped + 1))
       run_patch_check "$patch_file" || true
     fi
   else
     if run_patch_check "$patch_file" >/dev/null; then
       patch --batch --forward --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file"
+      applied=$((applied + 1))
     elif run_reverse_check "$patch_file" >/dev/null; then
       echo "  already applied"
+      integrated=$((integrated + 1))
     else
       if [ "$strict" -eq 1 ]; then
         echo "  [ERROR] patch did not apply"
         run_patch_check "$patch_file"
       fi
       echo "  [WARN] patch did not apply; skipping"
+      skipped=$((skipped + 1))
       run_patch_check "$patch_file" || true
     fi
   fi
 done
+
+echo "Patch summary: applied=$applied integrated=$integrated skipped=$skipped"

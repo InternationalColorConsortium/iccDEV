@@ -4,7 +4,7 @@
 #                 All rights reserved.
 #                 https://color.org
 #
-# Intent: Reusable iccDEV ASAN+UBSAN tool regression gate.
+# Intent: Reusable iccDEV core and ASAN+UBSAN tool regression gate.
 #         Builds the CMake/CTest test surface and runs the
 #         script-backed suites through standard CTest entry points.
 #
@@ -99,6 +99,16 @@ on:
         required: false
         default: ''
         type: string
+      instrumentation:
+        description: 'Build instrumentation: core or sanitizers'
+        required: false
+        default: sanitizers
+        type: string
+      include_infrastructure_tests:
+        description: 'Include infrastructure-only CTests'
+        required: false
+        default: false
+        type: boolean
       regression_image_tag:
         description: 'Trusted unified image tag'
         required: false
@@ -189,6 +199,19 @@ on:
         options:
           - Release
           - Debug
+      instrumentation:
+        description: 'Build instrumentation'
+        required: true
+        default: sanitizers
+        type: choice
+        options:
+          - sanitizers
+          - core
+      include_infrastructure_tests:
+        description: 'Include infrastructure-only CTests'
+        required: true
+        default: false
+        type: boolean
       ctest_mode:
         description: 'CTest mode to run'
         required: false
@@ -263,12 +286,12 @@ on:
         type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.tool_build_type || 'Debug' }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.tool_build_type || 'Debug' }}-${{ inputs.instrumentation || 'sanitizers' }}
   cancel-in-progress: true
 
 jobs:
   tool-tests:
-    name: "iccDEV Tools - GCC Strict ASAN+UBSAN (${{ inputs.tool_build_type || 'Debug' }})"
+    name: "iccDEV Tools - GCC Strict ${{ inputs.instrumentation == 'core' && 'Core' || 'ASAN+UBSAN' }} (${{ inputs.tool_build_type || 'Debug' }})"
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/internationalcolorconsortium/iccdev:${{ inputs.regression_image_tag || 'latest' }}
@@ -288,6 +311,8 @@ jobs:
       CTEST_MODE: ${{ inputs.ctest_mode || 'fast' }}
       CTEST_RECENT_LIMIT: ${{ inputs.ctest_recent_limit || '0' }}
       EXCLUDE_EXTENDED_PR_TESTS: ${{ inputs.exclude_extended_pr_tests && 'true' || 'false' }}
+      INCLUDE_INFRASTRUCTURE_TESTS: ${{ inputs.include_infrastructure_tests && 'true' || 'false' }}
+      INSTRUMENTATION: ${{ inputs.instrumentation || 'sanitizers' }}
       WARNING_POLICY: ${{ inputs.warning_policy || 'warn' }}
       BUILD_DIR: build
       SPECTRAL_PREVIEW_VENV: /tmp/iccdev-spectral-preview-venv
@@ -432,12 +457,24 @@ jobs:
               ;;
           esac
 
+          instrumentation_args=(-DENABLE_SANITIZERS=OFF -DSANITIZER_RECOVER=OFF)
+          case "$INSTRUMENTATION" in
+            core)
+              ;;
+            sanitizers)
+              instrumentation_args=(-DENABLE_SANITIZERS=ON -DSANITIZER_RECOVER=ON)
+              ;;
+            *)
+              echo "::error title=Invalid instrumentation::${INSTRUMENTATION}"
+              exit 1
+              ;;
+          esac
+
           cmake -S Build/Cmake -B "${BUILD_DIR}" \
             -DCMAKE_BUILD_TYPE="${TOOL_BUILD_TYPE}" \
             -DCMAKE_C_COMPILER=gcc \
             -DCMAKE_CXX_COMPILER=g++ \
-            -DENABLE_SANITIZERS=ON \
-            -DSANITIZER_RECOVER=ON \
+            "${instrumentation_args[@]}" \
             -DENABLE_TOOLS=ON \
             -DENABLE_TESTS=ON \
             -DENABLE_WXWIDGETS=OFF \
@@ -536,6 +573,17 @@ jobs:
               ;;
             *)
               echo "::error title=Invalid extended PR test exclusion::${EXCLUDE_EXTENDED_PR_TESTS}"
+              exit 1
+              ;;
+          esac
+          case "$INCLUDE_INFRASTRUCTURE_TESTS" in
+            true)
+              ;;
+            false)
+              ctest_args+=(--label-exclude ci-infrastructure)
+              ;;
+            *)
+              echo "::error title=Invalid infrastructure test selection::${INCLUDE_INFRASTRUCTURE_TESTS}"
               exit 1
               ;;
           esac
@@ -758,6 +806,9 @@ jobs:
           if [ "$EXCLUDE_EXTENDED_PR_TESTS" = "true" ]; then
             test_cmd="${test_cmd} --label-exclude pr-extended"
           fi
+          if [ "$INCLUDE_INFRASTRUCTURE_TESTS" = "false" ]; then
+            test_cmd="${test_cmd} --label-exclude ci-infrastructure"
+          fi
           if [ "$CTEST_RECENT_LIMIT" != "0" ]; then
             test_cmd="${test_cmd} --limit ${CTEST_RECENT_LIMIT}"
           fi
@@ -770,6 +821,20 @@ jobs:
           applytolink_debug_dir="${BUILD_DIR}/Testing/ctest-output/iccdev-applytolink-nan-sixchan-debug"
           applytolink_stack_report="${applytolink_debug_dir}/stack-analysis.txt"
           container_ref="ghcr.io/internationalcolorconsortium/iccdev:${REGRESSION_IMAGE_TAG}"
+          case "$INSTRUMENTATION" in
+            core)
+              instrumentation_label="core, non-sanitized"
+              sanitizer_cmake="-DENABLE_SANITIZERS=OFF -DSANITIZER_RECOVER=OFF"
+              ;;
+            sanitizers)
+              instrumentation_label="ASAN+UBSAN"
+              sanitizer_cmake="-DENABLE_SANITIZERS=ON -DSANITIZER_RECOVER=ON"
+              ;;
+            *)
+              instrumentation_label="invalid"
+              sanitizer_cmake="-DENABLE_SANITIZERS=OFF -DSANITIZER_RECOVER=OFF"
+              ;;
+          esac
 
           {
             echo "### iccDEV CTest Tool Suites"
@@ -779,7 +844,7 @@ jobs:
             echo "| Runner | ubuntu-24.04 |"
             echo "| Container | \`$(sanitize_line "$container_ref")\` |"
             echo "| Build type | $(sanitize_line "$TOOL_BUILD_TYPE") |"
-            echo "| Compiled at | $(sanitize_line "$TOOL_BUILD_TYPE") with ASAN+UBSAN, zlib zipUtf8Text support, QA target flags, debug symbols, frame pointers, and CMake strict warnings |"
+            echo "| Compiled at | $(sanitize_line "$TOOL_BUILD_TYPE") with $(sanitize_line "$instrumentation_label"), zlib zipUtf8Text support, QA target flags, debug symbols, frame pointers, and CMake strict warnings |"
             echo "| Compiler | $(sanitize_line "$(g++ --version 2>/dev/null | sed -n '1,1p')") |"
             echo "| GCC | $(sanitize_line "$(gcc --version 2>/dev/null | sed -n '1,1p')") |"
             echo "| CMake | $(sanitize_line "$(cmake --version 2>/dev/null | sed -n '1,1p')") |"
@@ -787,6 +852,7 @@ jobs:
             echo "| CTest mode | \`${CTEST_MODE}\` |"
             echo "| CTest recent limit | \`${CTEST_RECENT_LIMIT}\` |"
             echo "| Extended PR tests | \`${EXCLUDE_EXTENDED_PR_TESTS}\` |"
+            echo "| Infrastructure tests | \`${INCLUDE_INFRASTRUCTURE_TESTS}\` |"
             echo "| Warning policy | \`${WARNING_POLICY}\` |"
             echo "| Test command | \`${test_cmd}\` |"
             echo ""
@@ -796,8 +862,8 @@ jobs:
             echo "TOOL_BUILD_TYPE='${TOOL_BUILD_TYPE}'"
             echo "cmake -S Build/Cmake -B build -DCMAKE_BUILD_TYPE=\"\${TOOL_BUILD_TYPE}\" \\"
             echo "  -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \\"
-            echo "  -DENABLE_SANITIZERS=ON \\"
-            echo "  -DSANITIZER_RECOVER=ON -DENABLE_TOOLS=ON -DENABLE_TESTS=ON \\"
+            echo "  ${sanitizer_cmake} \\"
+            echo "  -DENABLE_TOOLS=ON -DENABLE_TESTS=ON \\"
             echo "  -DENABLE_WXWIDGETS=OFF -DENABLE_SHARED_LIBS=ON -DENABLE_STATIC_LIBS=ON \\"
             echo "  -DICC_USE_ZLIB=ON -DICCDEV_ENABLE_QA_FLAGS=ON \\"
             echo "  -DICCDEV_ENABLE_STRICT_WARNINGS=ON"
