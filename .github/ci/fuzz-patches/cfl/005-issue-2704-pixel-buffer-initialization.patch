@@ -1,0 +1,13 @@
+diff --git a/IccProfLib/IccUtil.cpp b/IccProfLib/IccUtil.cpp
+index 562a9198..181e5d8c 100644
+--- a/IccProfLib/IccUtil.cpp
++++ b/IccProfLib/IccUtil.cpp
+@@ -2923,7 +2923,7 @@ bool CIccInfo::IsValidSpectralSpace(icColorSpaceSignature sig)
+ CIccPixelBuf::CIccPixelBuf(int nChan/* =icDefaultPixelBufSize */) : m_buf{}
+ {
+   if (nChan>icDefaultPixelBufSize) {
+-    m_pixel = new icFloatNumber[nChan];
++    m_pixel = new icFloatNumber[nChan]();
+   }
+   else {
+     m_pixel = m_buf;

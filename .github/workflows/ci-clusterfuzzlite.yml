@@ -14,28 +14,55 @@
 name: "ci-clusterfuzzlite"
 
 permissions:
-  actions: read
-  contents: read
+  actions: read  # Download prior ClusterFuzzLite corpus artifacts.
+  contents: read  # Checkout source without repository mutation.
+
+concurrency:
+  group: clusterfuzzlite-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 'on':
   workflow_dispatch:
     inputs:
+      run_mode:
+        description: "Run one address/core smoke lane or the full matrix"
+        required: true
+        default: smoke
+        type: choice
+        options:
+          - smoke
+          - full
       fuzz_minutes:
-        description: "Total minutes across two sequential fuzz targets (2-45)"
+        description: "Minutes per sequential target group (2-45)"
         required: true
         default: 2
         type: number
-  push:
-    branches:
-      - ci-qa-clusterfuzz
+      known_bug_patch_mode:
+        description: "Attempt independent temporary fixes for open libFuzzer MSan issues"
+        required: true
+        default: patched
+        type: choice
+        options:
+          - patched
+          - unpatched
+      generate_coverage:
+        description: "Generate a coverage-report artifact after fuzzing"
+        required: true
+        default: false
+        type: boolean
+  schedule:
+    - cron: '17 5 * * *'
 
 jobs:
   configure:
-    name: "Validate fuzz duration"
+    name: "Validate fuzz configuration"
     runs-on: ubuntu-24.04
-    timeout-minutes: 1
+    timeout-minutes: 10
     outputs:
       fuzz_seconds: ${{ steps.duration.outputs.fuzz_seconds }}
+      known_bug_patch_mode: ${{ steps.duration.outputs.known_bug_patch_mode }}
+      matrix: ${{ steps.duration.outputs.matrix }}
+      run_mode: ${{ steps.duration.outputs.run_mode }}
 
     steps:
       - name: Resolve bounded duration
@@ -44,6 +71,8 @@ jobs:
         env:
           BASH_ENV: /dev/null
           REQUESTED_MINUTES: ${{ inputs.fuzz_minutes }}
+          REQUESTED_PATCH_MODE: ${{ inputs.known_bug_patch_mode }}
+          REQUESTED_RUN_MODE: ${{ inputs.run_mode }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -62,23 +91,53 @@ jobs:
             echo "fuzz_minutes must be from 2 through 45" >&2
             exit 2
           fi
-          echo "fuzz_seconds=$((minutes * 60))" >> "$GITHUB_OUTPUT"  # elements-sanitized
+          patch_mode=patched
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            patch_mode="$REQUESTED_PATCH_MODE"
+          fi
+          case "$patch_mode" in
+            patched|unpatched) ;;
+            *)
+              echo "known_bug_patch_mode must be patched or unpatched" >&2
+              exit 2
+              ;;
+          esac
+          run_mode=full
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            run_mode="$REQUESTED_RUN_MODE"
+          fi
+          case "$run_mode" in
+            smoke)
+              matrix='{"include":[{"group":"core","sanitizer":"address"}]}'
+              ;;
+            full)
+              matrix='{"include":[{"group":"core","sanitizer":"address"},{"group":"core","sanitizer":"undefined"},{"group":"core","sanitizer":"memory"},{"group":"formats","sanitizer":"address"},{"group":"formats","sanitizer":"undefined"},{"group":"formats","sanitizer":"memory"},{"group":"assessment","sanitizer":"address"},{"group":"assessment","sanitizer":"undefined"},{"group":"assessment","sanitizer":"memory"}]}'
+              ;;
+            *)
+              echo "run_mode must be smoke or full" >&2
+              exit 2
+              ;;
+          esac
+          {
+            echo "fuzz_seconds=$((minutes * 60))"
+            echo "known_bug_patch_mode=$patch_mode"
+            echo "matrix=$matrix"
+            echo "run_mode=$run_mode"
+          } >> "$GITHUB_OUTPUT"  # elements-sanitized
 
   fuzz:
-    name: "libFuzzer (${{ matrix.sanitizer }})"
+    name: "libFuzzer (${{ matrix.group }}, ${{ matrix.sanitizer }})"
     needs: configure
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     concurrency:
-      group: clusterfuzzlite-${{ github.workflow }}-${{ matrix.sanitizer }}-${{ github.ref }}
+      group: clusterfuzzlite-${{ github.workflow }}-${{ matrix.group }}-${{ matrix.sanitizer }}-${{ github.ref }}
       cancel-in-progress: true
     strategy:
       fail-fast: false
+      max-parallel: 3
       matrix:
-        sanitizer:
-          - address
-          - undefined
-          - memory
+        include: ${{ fromJSON(needs.configure.outputs.matrix).include }}
 
     steps:
       - name: Checkout iccDEV
@@ -86,6 +145,23 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Configure target group and temporary patches
+        id: source_config
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+          TARGET_GROUP: ${{ matrix.group }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          printf '%s\n' "$KNOWN_BUG_PATCH_MODE" > .clusterfuzzlite/known-bug-patch-mode
+          printf '%s\n' "$TARGET_GROUP" > .clusterfuzzlite/target-group
+          source_digest="$(.github/scripts/iccdev-cfl-source-digest.sh)"
+          echo "source_digest=$source_digest" >> "$GITHUB_OUTPUT"  # elements-sanitized
 
       - name: Build and check fuzzers
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:fde96247c3488104b96822156a6e107d58487140115247a34e1f967c23df5604
@@ -104,6 +180,36 @@ jobs:
           CFL_PLATFORM: github
           LOW_DISK_SPACE: "True"
           KEEP_UNAFFECTED_FUZZ_TARGETS: "true"
+          CFL_EXTRA_ICCDEV_CFL_SOURCE_SHA: ${{ github.sha }}
+          CFL_EXTRA_ICCDEV_CFL_SOURCE_DIGEST: ${{ steps.source_config.outputs.source_digest }}
+          CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: ${{ matrix.group }}
+          CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+
+      - name: Verify built source and configuration
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          EXPECTED_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+          EXPECTED_SOURCE_DIGEST: ${{ steps.source_config.outputs.source_digest }}
+          EXPECTED_TARGET_GROUP: ${{ matrix.group }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          provenance=build-out/iccdev-cfl-build-provenance.txt
+          if [ ! -s "$provenance" ]; then
+            echo "[FAIL] ClusterFuzzLite did not build the requested source snapshot" >&2
+            echo "The builder may have fallen back after GITHUB_SHA became unreachable." >&2
+            find build-out -maxdepth 1 -type f -name 'icc_*_fuzzer' -printf '%f\n' |
+              LC_ALL=C sort >&2
+            exit 1
+          fi
+          grep -Fqx "source_sha=$GITHUB_SHA" "$provenance"
+          grep -Fqx "source_digest=$EXPECTED_SOURCE_DIGEST" "$provenance"
+          grep -Fqx "target_group=$EXPECTED_TARGET_GROUP" "$provenance"
+          grep -Fqx "patch_mode=$EXPECTED_PATCH_MODE" "$provenance"
+          sed 's/^/[EVIDENCE] cfl_/' "$provenance"
 
       - name: Run bounded batch fuzzing
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
@@ -128,9 +234,12 @@ jobs:
 
   prune:
     name: "Prune persistent corpus"
-    needs: fuzz
+    needs:
+      - configure
+      - fuzz
+    if: ${{ !cancelled() && needs.configure.result == 'success' && needs.configure.outputs.run_mode == 'full' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     concurrency:
       group: clusterfuzzlite-${{ github.workflow }}-prune-${{ github.ref }}
       cancel-in-progress: true
@@ -141,6 +250,22 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Configure all targets and temporary patches
+        id: source_config
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          printf '%s\n' "$KNOWN_BUG_PATCH_MODE" > .clusterfuzzlite/known-bug-patch-mode
+          printf '%s\n' 'all' > .clusterfuzzlite/target-group
+          source_digest="$(.github/scripts/iccdev-cfl-source-digest.sh)"
+          echo "source_digest=$source_digest" >> "$GITHUB_OUTPUT"  # elements-sanitized
 
       - name: Build fuzzers for pruning
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:fde96247c3488104b96822156a6e107d58487140115247a34e1f967c23df5604
@@ -159,15 +284,181 @@ jobs:
           CFL_PLATFORM: github
           LOW_DISK_SPACE: "True"
           KEEP_UNAFFECTED_FUZZ_TARGETS: "true"
+          CFL_EXTRA_ICCDEV_CFL_SOURCE_SHA: ${{ github.sha }}
+          CFL_EXTRA_ICCDEV_CFL_SOURCE_DIGEST: ${{ steps.source_config.outputs.source_digest }}
+          CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: all
+          CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+
+      - name: Verify built source and configuration
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          EXPECTED_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+          EXPECTED_SOURCE_DIGEST: ${{ steps.source_config.outputs.source_digest }}
+          EXPECTED_TARGET_GROUP: all
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          provenance=build-out/iccdev-cfl-build-provenance.txt
+          if [ ! -s "$provenance" ]; then
+            echo "[FAIL] ClusterFuzzLite did not build the requested source snapshot" >&2
+            echo "The builder may have fallen back after GITHUB_SHA became unreachable." >&2
+            find build-out -maxdepth 1 -type f -name 'icc_*_fuzzer' -printf '%f\n' |
+              LC_ALL=C sort >&2
+            exit 1
+          fi
+          grep -Fqx "source_sha=$GITHUB_SHA" "$provenance"
+          grep -Fqx "source_digest=$EXPECTED_SOURCE_DIGEST" "$provenance"
+          grep -Fqx "target_group=$EXPECTED_TARGET_GROUP" "$provenance"
+          grep -Fqx "patch_mode=$EXPECTED_PATCH_MODE" "$provenance"
+          sed 's/^/[EVIDENCE] cfl_/' "$provenance"
 
       - name: Prune persistent corpus
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
         env:
-          FUZZ_SECONDS: "120"
+          # ClusterFuzzLite divides this total across all eight targets.
+          FUZZ_SECONDS: "960"
           MODE: prune
           LANGUAGE: c++
           DRY_RUN: "false"
           SANITIZER: address
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LOW_DISK_SPACE: "True"
+          GIT_STORE_REPO: ""
+          GIT_STORE_BRANCH: main
+          GIT_STORE_BRANCH_COVERAGE: gh-pages
+          REPORT_UNREPRODUCIBLE_CRASHES: "False"
+          OUTPUT_SARIF: "false"
+          MINIMIZE_CRASHES: "false"
+          CFL_PLATFORM: github
+          PARALLEL_FUZZING: "false"
+          REPORT_TIMEOUTS: "true"
+          REPORT_OOMS: "true"
+
+  cleanup-artifacts:
+    name: "Remove superseded corpus artifacts"
+    needs: prune
+    if: ${{ !cancelled() && needs.prune.result == 'success' }}
+    permissions:
+      actions: write  # Remove superseded corpus artifacts from this run.
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout iccDEV
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # preflight: allow-token-exposure reason=clusterfuzzlite-artifact-cleanup
+      - name: Remove superseded same-run corpus artifacts
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          .github/scripts/iccdev-cfl-artifact-cleanup.sh \
+            --delete-current-run "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+
+  coverage:
+    name: "Generate libFuzzer coverage report"
+    needs:
+      - configure
+      - prune
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.generate_coverage && needs.configure.result == 'success' && needs.configure.outputs.run_mode == 'full' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    concurrency:
+      group: clusterfuzzlite-${{ github.workflow }}-coverage-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout iccDEV
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Configure all targets and temporary patches
+        id: source_config
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          printf '%s\n' "$KNOWN_BUG_PATCH_MODE" > .clusterfuzzlite/known-bug-patch-mode
+          printf '%s\n' 'all' > .clusterfuzzlite/target-group
+          source_digest="$(.github/scripts/iccdev-cfl-source-digest.sh)"
+          echo "source_digest=$source_digest" >> "$GITHUB_OUTPUT"  # elements-sanitized
+
+      - name: Build fuzzers for coverage
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:fde96247c3488104b96822156a6e107d58487140115247a34e1f967c23df5604
+        env:
+          ALLOWED_BROKEN_TARGETS_PERCENTAGE: ""
+          BAD_BUILD_CHECK: "false"
+          UPLOAD_BUILD: "false"
+          LANGUAGE: c++
+          DRY_RUN: "false"
+          SANITIZER: coverage
+          PROJECT_SRC_PATH: ""
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIT_STORE_REPO: ""
+          GIT_STORE_BRANCH: ""
+          GIT_STORE_BRANCH_COVERAGE: ""
+          CFL_PLATFORM: github
+          LOW_DISK_SPACE: "True"
+          KEEP_UNAFFECTED_FUZZ_TARGETS: "true"
+          CFL_EXTRA_ICCDEV_CFL_SOURCE_SHA: ${{ github.sha }}
+          CFL_EXTRA_ICCDEV_CFL_SOURCE_DIGEST: ${{ steps.source_config.outputs.source_digest }}
+          CFL_EXTRA_ICCDEV_CFL_TARGET_GROUP: all
+          CFL_EXTRA_ICCDEV_CFL_KNOWN_BUG_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+
+      - name: Verify built source and configuration
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          EXPECTED_PATCH_MODE: ${{ needs.configure.outputs.known_bug_patch_mode }}
+          EXPECTED_SOURCE_DIGEST: ${{ steps.source_config.outputs.source_digest }}
+          EXPECTED_TARGET_GROUP: all
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          provenance=build-out/iccdev-cfl-build-provenance.txt
+          if [ ! -s "$provenance" ]; then
+            echo "[FAIL] ClusterFuzzLite did not build the requested source snapshot" >&2
+            echo "The builder may have fallen back after GITHUB_SHA became unreachable." >&2
+            find build-out -maxdepth 1 -type f -name 'icc_*_fuzzer' -printf '%f\n' |
+              LC_ALL=C sort >&2
+            exit 1
+          fi
+          grep -Fqx "source_sha=$GITHUB_SHA" "$provenance"
+          grep -Fqx "source_digest=$EXPECTED_SOURCE_DIGEST" "$provenance"
+          grep -Fqx "target_group=$EXPECTED_TARGET_GROUP" "$provenance"
+          grep -Fqx "patch_mode=$EXPECTED_PATCH_MODE" "$provenance"
+          sed 's/^/[EVIDENCE] cfl_/' "$provenance"
+
+      - name: Generate coverage artifact
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
+        env:
+          FUZZ_SECONDS: "120"
+          MODE: coverage
+          LANGUAGE: c++
+          DRY_RUN: "false"
+          SANITIZER: coverage
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LOW_DISK_SPACE: "True"
           GIT_STORE_REPO: ""

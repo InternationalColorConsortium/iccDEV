@@ -12716,7 +12716,19 @@ if(BASH_EXECUTABLE)
   set_tests_properties(iccdev.clusterfuzzlite-configuration PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     TIMEOUT 30
-    LABELS "iccdev;clusterfuzzlite;libfuzzer;configuration"
+    LABELS "iccdev;clusterfuzzlite;libfuzzer;configuration;ci-infrastructure"
+  )
+
+  add_test(
+    NAME iccdev.clusterfuzzlite-targets
+    COMMAND
+      "${BASH_EXECUTABLE}"
+      "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-clusterfuzzlite-target-tests.sh"
+  )
+  set_tests_properties(iccdev.clusterfuzzlite-targets PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 30
+    LABELS "iccdev;clusterfuzzlite;libfuzzer;targets;corpus;ci-infrastructure"
   )
 endif()
 

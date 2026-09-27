@@ -170,7 +170,7 @@ builds a non-sanitized Debug `iccFromXml`, converts
 with zero error contexts while still producing a nonempty profile. The complete
 Memcheck report remains visible in the job log.
 
-For the maintained 13-target Memcheck, Helgrind, DRD, Massif, and Callgrind
+For the maintained 14-target Memcheck, Helgrind, DRD, Massif, and Callgrind
 registry, use [Valgrind-Family Analysis](valgrind-analysis.md). The image
 installs that component as `iccdev-valgrind-build`, `iccdev-valgrind-run`,
 `iccdev-valgrind-status`, and `iccdev-valgrind-validate`.

@@ -13,29 +13,61 @@ Use this skill for `.clusterfuzzlite/**`,
 
 - Treat libFuzzer as the single fuzzing engine and `address`, `undefined`, and
   `memory` as three separate sanitizer builds.
-- Build only `icc_profilevisualize_fuzzer` and
-  `icc_writerserialize_fuzzer` in ClusterFuzzLite. They are the in-process
-  targets whose coverage is visible to libFuzzer.
+- Build all three in-process groups in ClusterFuzzLite: `core`
+  (`profileparse`, `cmmapply`, `profilevisualize`, `writerserialize`),
+  `formats` (`xmlparse`, `jsonparse`, `connectconfig`), and `assessment`
+  (`pawgreport`).
+- Forward the GitHub matrix group and patch mode through `CFL_EXTRA_*`; the
+  official action builds a fresh `GITHUB_SHA` clone, so pre-step checkout file
+  mutations do not reach the builder container.
+- Forward and independently recompute the deterministic source-content digest.
+  Reject a builder snapshot that differs from the Actions checkout; the
+  official action may otherwise fall back to its current clone when a queued
+  commit becomes unreachable after a history rewrite.
 - Keep the CLI-fidelity wrappers in the local CFL smoke lane; they launch child
   tools and do not provide useful parent-process coverage feedback.
 - Consume `CC`, `CXX`, `CFLAGS`, `CXXFLAGS`, and `LIB_FUZZING_ENGINE` from the
   OSS-Fuzz build environment. Do not combine hard-coded ASan flags with MSan.
 - Require matching Clang 21 or Clang 22 compilers. The pinned OSS-Fuzz builder
   supplies Clang 22; do not allow an older fallback.
-- Keep XML, JSON, tools, and zlib disabled in this lane so MSan does not mix the
-  in-process target with uninstrumented system dependencies.
+- Keep tools and zlib disabled. Enable XML/JSON only for targets that consume
+  those libraries. The XML memory build must use the pinned instrumented
+  libxml2 produced by the repository bootstrap.
 - For `memory`, build the pinned MSan libc++ and libc++abi before compiling the
-  fuzzers. Reject libstdc++ or a libc++ outside that runtime in `ldd`, then
-  replay the pinned #2687 artifact through both targets. Do not classify a
-  standard-library-origin report from an uninstrumented runtime as iccDEV.
-- Package the tracked `.github/ci/test-data/*.icc` files as seed corpora and
-  keep both `.options` files aligned with the explicit local CFL limits.
-- Keep the workflow limited to `workflow_dispatch` and pushes to
-  `ci-qa-clusterfuzz` unless a maintainer explicitly broadens the trigger.
-- Keep the total manual fuzz duration selectable as whole minutes from 2
-  through 45, validate it before the sanitizer matrix, pass it to the runner as
-  the total budget, and retain a 2-minute total budget for push runs.
+  fuzzers. Reject libstdc++ or a libc++ outside that runtime in `ldd`; for
+  `xmlparse`, also reject libxml2 outside the bundled runtime. Replay the pinned
+  #2687 artifact through every emitted target. Do not classify a dependency
+  report from an uninstrumented runtime as iccDEV.
+- Package tracked ICC, XML, and JSON fixtures only for the matching target
+  family. Keep the shared profile/text options and profile/XML/JSON
+  dictionaries aligned with explicit local CFL limits.
+- Keep `cmmapply` control bytes outside the ICC header so direction, intent,
+  and interpolation can mutate without corrupting the profile-size field.
+- Keep a schema-shaped IccConnect seed and dedicated config dictionary. Drive
+  `fromJson()`/`toJson()` round trips for top-level and nested `CIccCfg*`
+  objects before adding another configuration target.
+- Keep the workflow limited to manual dispatch and the nightly schedule. Manual
+  dispatch defaults to one `address`/`core` smoke job; `run_mode=full` and the
+  schedule use all nine group/sanitizer combinations.
+- Keep the manual fuzz duration selectable as whole minutes from 2 through 45,
+  validate it before the sanitizer matrix, pass it as the budget for each
+  target group, and retain a 2-minute per-group budget for scheduled runs.
+- Keep corpus pruning runnable after a fuzz finding. Keep coverage an explicit
+  manual option that emits a ClusterFuzzLite artifact without broadening
+  repository permissions.
+- Keep one temporary CFL patch per open MSan issue. Attempt patches in order,
+  report drift or already-integrated fixes, and continue the default workflow;
+  reserve `--strict` for local patch-stack maintenance. Remove only the patch
+  for an issue whose normal source fix has landed.
 - Pin every action to a full commit SHA and the builder image to a digest.
+
+## Expansion Order
+
+After strengthening an existing target, prefer a multi-profile CMM chain,
+separate XML/JSON serializers, and V5 display-observer conversion, in that
+order. Add image or carrier targets only with instrumented MSan dependencies.
+Do not copy the local research inventory wholesale; require a public
+in-process seam, structured seed, and distinct attribution boundary.
 
 ## Local Validation
 
@@ -43,26 +75,34 @@ From an OSS-Fuzz checkout, run for each sanitizer in `address`, `undefined`,
 and `memory`:
 
 ```bash
-python3 infra/helper.py build_image --external --pull /path/to/iccDEV
+iccdev_source=/path/to/iccDEV
+source_sha="$(git -C "$iccdev_source" rev-parse HEAD)"
+source_digest="$("$iccdev_source/.github/scripts/iccdev-cfl-source-digest.sh" "$iccdev_source")"
+python3 infra/helper.py build_image --external --pull "$iccdev_source"
 python3 infra/helper.py build_fuzzers --external --clean \
-  --engine libfuzzer --sanitizer SANITIZER /path/to/iccDEV
+  -e "ICCDEV_CFL_SOURCE_SHA=$source_sha" \
+  -e "ICCDEV_CFL_SOURCE_DIGEST=$source_digest" \
+  --engine libfuzzer --sanitizer SANITIZER "$iccdev_source"
 python3 infra/helper.py check_build --external \
-  --engine libfuzzer --sanitizer SANITIZER /path/to/iccDEV
-python3 infra/helper.py run_fuzzer --external \
-  --engine libfuzzer --sanitizer SANITIZER \
-  /path/to/iccDEV icc_profilevisualize_fuzzer -- -max_total_time=30
-python3 infra/helper.py run_fuzzer --external \
-  --engine libfuzzer --sanitizer SANITIZER \
-  /path/to/iccDEV icc_writerserialize_fuzzer -- -max_total_time=30
+  --engine libfuzzer --sanitizer SANITIZER "$iccdev_source"
+for target in profileparse cmmapply profilevisualize writerserialize \
+  xmlparse jsonparse connectconfig pawgreport; do
+  python3 infra/helper.py run_fuzzer --external \
+    --engine libfuzzer --sanitizer SANITIZER \
+    "$iccdev_source" "icc_${target}_fuzzer" -- -max_total_time=30
+done
 ```
 
 Also run:
 
 ```bash
 bash -n .clusterfuzzlite/build.sh .github/ci/cfl/build.sh \
-  .github/scripts/iccdev-clusterfuzzlite-config-tests.sh
+  .github/scripts/iccdev-clusterfuzzlite-config-tests.sh \
+  .github/scripts/iccdev-clusterfuzzlite-target-tests.sh
 .github/scripts/iccdev-clusterfuzzlite-config-tests.sh
-ctest --test-dir Build -R '^iccdev\.clusterfuzzlite-configuration$' \
+.github/scripts/iccdev-fuzz-patch-check-tests.sh
+.github/scripts/check-fuzz-patches.sh
+ctest --test-dir Build -R '^iccdev\.clusterfuzzlite-(configuration|targets)$' \
   --output-on-failure --no-tests=error
 actionlint -no-color .github/workflows/ci-clusterfuzzlite.yml
 .github/scripts/preflight-safety-checks.sh --require-tools
@@ -71,4 +111,5 @@ actionlint -no-color .github/workflows/ci-clusterfuzzlite.yml
 Report each build, instrumentation check, and bounded run separately. An MSan
 failure is not equivalent to an ASan or UBSan failure and must not be hidden by
 fallback flags or an allowed-broken-target percentage. Record the resolved C++
-runtime for both MSan fuzzers and the #2687 one-shot replay result.
+runtime for every MSan fuzzer, the XML target's resolved libxml2, and the #2687
+one-shot replay result.
