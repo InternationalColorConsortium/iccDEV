@@ -3379,6 +3379,60 @@ function(iccdev_add_mpe_empty_identity_test)
   endif()
 endfunction()
 
+# #2563: CheckHeader's class-independent checks sat where MultiplexIdentification and
+# MultiplexLink could not reach them, and MID had a zero data colour space ICC.2-2023
+# 7.2.8 does not grant it.  No tracked profile exercises either, so this in-memory
+# test is the only evidence; its controls pin the ColorEncodingSpace guard and the
+# two multiplex classes that keep the zero data colour space.
+function(iccdev_add_mid_mlnk_header_checks_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMidMlnkHeaderChecksTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/mid-mlnk-header-checks.cpp"
+  )
+  target_compile_features(iccMidMlnkHeaderChecksTest PRIVATE cxx_std_17)
+  target_include_directories(iccMidMlnkHeaderChecksTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccMidMlnkHeaderChecksTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccMidMlnkHeaderChecksTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.mid-mlnk-header-checks
+      COMMAND "$<TARGET_FILE:iccMidMlnkHeaderChecksTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.mid-mlnk-header-checks
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccMidMlnkHeaderChecksTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.mid-mlnk-header-checks PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;validation;icc2;mcs;issue-2563;regression"
+  )
+  if(WIN32)
+    set(_mid_mlnk_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMidMlnkHeaderChecksTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _mid_mlnk_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.mid-mlnk-header-checks PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_mid_mlnk_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1748: CIccPcsXform::ConnectFirst()/ConnectLast() build the PCS transforms at the two
 # outer edges of a CMM chain, and CheckPCSConnections() pushes them onto the xform list
 # like any other xform. Unlike Connect(), they left m_srcSpace/m_nSrcSamples/m_dstSpace/
@@ -10930,6 +10984,7 @@ iccdev_add_spectral_media_white_test()
 iccdev_add_gbd_zero_pcs_test()
 iccdev_add_mpe_empty_identity_test()
 iccdev_add_pcc_reflectance_observer_range_test()
+iccdev_add_mid_mlnk_header_checks_test()
 iccdev_add_pcs_edge_metadata_test()
 iccdev_add_xyz_negative_z_test()
 iccdev_add_utf8_textarray_test()

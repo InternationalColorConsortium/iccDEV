@@ -1913,14 +1913,14 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
   // data colour space is conforming and must not be reported as an unknown space.
   // MultiplexVisualization was already exempt here and MultiplexLink was not, so a
   // conforming MLNK profile drew a critical "Unknown colour space!" (#2563).
-  // MultiplexIdentification is left in the exemption list as it was found: the text
-  // does not grant MID a zero data colour space (its field names the device space
-  // being identified, and every tracked MID fixture carries an ncXXXX there), but
-  // removing it is a separate tightening and is not part of this change.
+  // MultiplexIdentification is not exempt: 7.2.8 grants a zero data colour space
+  // to abstract, MultiplexLink and MultiplexVisualization profiles, and a MID's
+  // data colour space names the device space it identifies.  The list below still
+  // differs from 7.2.8 in two places, left as they were: NamedColor is exempt with
+  // no 7.2.8 grant, and abstract, which 7.2.8 does grant, is not.
   if (m_Header.colorSpace!=icSigNoColorData ||
         m_Header.version<icVersionNumberV5 ||
         (m_Header.deviceClass!=icSigNamedColorClass &&
-         m_Header.deviceClass!=icSigMultiplexIdentificationClass &&
          m_Header.deviceClass!=icSigMultiplexLinkClass &&
          m_Header.deviceClass!=icSigMultiplexVisualizationClass)) {
     // A v2/v4 profile's data colour space must be one of the signatures
@@ -2138,7 +2138,13 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
       }
 
     }
+  }
 
+  // The checks below do not depend on the profile class.  ColorEncodingSpace
+  // requires these fields to be zero and tests that itself above.  Every other
+  // class runs them: MultiplexIdentification and MultiplexLink used to skip them,
+  // because they sat in the final else of the chain above (#2563).
+  if (m_Header.deviceClass!=icSigColorEncodingClass) {
     rv = icMaxStatus(rv, Info.CheckData(sReport, m_Header.date, "Header date"));
 
     switch(m_Header.platform) {
