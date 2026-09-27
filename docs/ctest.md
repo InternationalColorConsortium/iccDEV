@@ -259,6 +259,7 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.spectral-absolute-flag` | `.github/ci/regression/spectral-absolute-flag.cpp` |
 | `iccdev.pcs-edge-metadata` | `.github/ci/regression/pcs-edge-metadata.cpp` |
 | `iccdev.parser-restore-calls` | `.github/ci/regression/parser-restore-calls.cpp` |
+| `iccdev.mid-mlnk-header-checks` | `.github/ci/regression/mid-mlnk-header-checks.cpp`; MultiplexIdentification and MultiplexLink run the class-independent header checks, and MultiplexIdentification has no zero data colour space, for issue #2563 |
 | `iccdev.legacy-run-tests` | `Testing/RunTests.sh` |
 | `iccdev.profile-write-failure` | `.github/ci/regression/profile-write-failure.cpp` |
 | `iccdev.tool-coverage` | `.github/scripts/iccdev-tool-coverage-baseline.sh --asan --skip-hybrid` |
