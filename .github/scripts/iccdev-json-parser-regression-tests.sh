@@ -926,7 +926,11 @@ for idx in range(tag_count):
         raise SystemExit("tag table truncated")
     sig = bytes(data[pos:pos + 4])
     offset, size = struct.unpack(">II", data[pos + 4:pos + 12])
-    if sig != b"ncl2":
+    # Testing/Named/NamedColor.xml is v5, so its named colour tag is
+    # namedColorTag ("nmcl") per ICC.2-2023 8.10 (#2562).  The payload
+    # written below is still a namedColor2Type body, deliberately: this
+    # fixture exists to exercise the ASCII checks on that layout.
+    if sig != b"nmcl":
         continue
     if offset + size > len(data) or size < 122:
         raise SystemExit("namedColor2 tag is truncated")

@@ -2918,6 +2918,73 @@ function(iccdev_add_namedcolor_sparse_matrix_apply_test)
   endif()
 endfunction()
 
+# #2562: ICC.2-2023 8.10 requires a v5 NamedColor profile to carry namedColorTag
+# ('nmcl'), and 13.2.1 gives the namedColorArray array type identifier as 'ncol'.
+# iccDEV spelled both wrong.  The negative cases patch each field back on its own
+# in a profile saved with no profile ID -- with one, any patched byte draws "Bad
+# Profile ID" and masks the check under test -- and match the specific diagnostic.
+function(iccdev_add_named_colour_signature_v5_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccNamedColourSignatureV5Test
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/named-colour-signature-v5.cpp"
+  )
+  target_compile_features(iccNamedColourSignatureV5Test PRIVATE cxx_std_17)
+  target_include_directories(iccNamedColourSignatureV5Test PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccNamedColourSignatureV5Test PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccNamedColourSignatureV5Test)
+
+  set(_nmcl_sig_scratch "${CMAKE_CURRENT_BINARY_DIR}/ctest-output/named-colour-signature-v5")
+  file(MAKE_DIRECTORY "${_nmcl_sig_scratch}")
+
+  set(_nmcl_sig_args
+    "${ICCDEV_TESTING_DIR}/Named/NamedColor.xml"
+    "${ICCDEV_TESTING_DIR}/Named/NamedColorV4.xml"
+    "${_nmcl_sig_scratch}"
+  )
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.named-colour-signature-v5
+      COMMAND "$<TARGET_FILE:iccNamedColourSignatureV5Test>" ${_nmcl_sig_args}
+    )
+  else()
+    add_test(
+      NAME iccdev.named-colour-signature-v5
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccNamedColourSignatureV5Test>" ${_nmcl_sig_args}
+    )
+  endif()
+  set_tests_properties(iccdev.named-colour-signature-v5 PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;xml;namedcolor;validation;icc2;issue-2562;regression"
+  )
+  if(WIN32)
+    set(_nmcl_sig_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccNamedColourSignatureV5Test>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _nmcl_sig_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.named-colour-signature-v5 PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_nmcl_sig_env_mods}"
+    )
+  endif()
+endfunction()
+
 # The same defects, on the profile they were found in.  Testing/**/*.icc is gitignored --
 # CreateAllProfiles.sh generates it -- so all three inputs are the tracked XML documents,
 # parsed through the CIccProfileXml::LoadXml path iccFromXml uses, as
@@ -10800,6 +10867,7 @@ iccdev_add_gamut_xform_semantics_test()
 iccdev_add_rangemap_uninitialized_test()
 iccdev_add_pcs_birefl_illuminant_range_test()
 iccdev_add_namedcolor_sparse_matrix_apply_test()
+iccdev_add_named_colour_signature_v5_test()
 iccdev_add_namedcolor_sparse_matrix_xml_test()
 iccdev_add_sparsematrix_union_validate_test()
 iccdev_add_pcs_applyillum_chain_sizing_test()

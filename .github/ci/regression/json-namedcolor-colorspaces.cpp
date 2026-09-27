@@ -150,7 +150,9 @@ bool hasMpeTag(CIccProfile *pProfile)
 
 CIccArrayNamedColor *namedColorArray(CIccProfile *pProfile)
 {
-  CIccTag *pTag = pProfile->FindTag(icSigNamedColor2Tag);
+  // The fixtures here are v5, whose named colour tag is namedColorTag
+  // ('nmcl') per ICC.2-2023 8.10 (#2562), not ICC.1's namedColor2Tag.
+  CIccTag *pTag = pProfile->FindTag(icSigNamedColorTag);
 
   if (!pTag || pTag->GetTagArrayType() != icSigNamedColorArray)
     return NULL;
@@ -285,8 +287,8 @@ void runFixture(const char *szXml, const std::string &scratch)
   check(pJsonAry->Begin(), (name + ": JSON-loaded named colour array Begin()").c_str());
   check(pBinAry->Begin(),  (name + ": binary named colour array Begin()").c_str());
 
-  CIccTag *pJsonTag = fromJson.FindTag(icSigNamedColor2Tag);
-  CIccTag *pBinTag  = pBin->FindTag(icSigNamedColor2Tag);
+  CIccTag *pJsonTag = fromJson.FindTag(icSigNamedColorTag);
+  CIccTag *pBinTag  = pBin->FindTag(icSigNamedColorTag);
   CIccTagArray *pJsonArr = (pJsonTag && pJsonTag->GetType() == icSigTagArrayType)
                          ? (CIccTagArray*)pJsonTag : NULL;
   CIccTagArray *pBinArr  = (pBinTag  && pBinTag->GetType()  == icSigTagArrayType)

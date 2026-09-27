@@ -498,6 +498,29 @@ void CIccXform::DetachAll()
 }
 
 /**
+ ****************************************************************************
+ * Name: icFindNamedColorTag
+ *
+ * Purpose: Find a profile's named colour tag under the spelling its version
+ *  defines.  ICC.2-2023 8.10 requires namedColorTag ('nmcl') of a v5
+ *  NamedColor profile; ICC.1 profiles carry namedColor2Tag ('ncl2').  The
+ *  other version's spelling is an unrecognized tag for this profile and is
+ *  ignored for computation (#2562).
+ *
+ * Args:
+ *  pProfile = the profile to search
+ *
+ * Return: the named colour tag, or NULL if the profile has none.
+ *****************************************************************************
+ */
+static CIccTag *icFindNamedColorTag(CIccProfile *pProfile)
+{
+  return pProfile->FindTag(pProfile->m_Header.version >= icVersionNumberV5 ?
+                             icSigNamedColorTag : icSigNamedColor2Tag);
+}
+
+
+/**
  **************************************************************************
  * Name: CIccXform::Create
  * 
@@ -869,7 +892,7 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
 
     case icXformLutNamedColor:
       {
-        CIccTag *pTag = pProfile->FindTag(icSigNamedColor2Tag);
+        CIccTag *pTag = icFindNamedColorTag(pProfile);
         if (!pTag) {
           if (bOwnsProfile)
             delete pProfile;
@@ -8556,7 +8579,7 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
 
     case icXformLutNamedColor:
       {
-        CIccTag *pTag = pProfile->FindTag(icSigNamedColor2Tag);
+        CIccTag *pTag = icFindNamedColorTag(pProfile);
         if (!pTag) {
           if (bOwnsProfile)
             delete pProfile;
@@ -12146,7 +12169,7 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
     case icXformLutNamedSpectral:
     case icXformLutNamedDevice:
     {
-      CIccTag *pTag = pProfile->FindTag(icSigNamedColor2Tag);
+      CIccTag *pTag = icFindNamedColorTag(pProfile);
 
       if (pTag && (pProfile->m_Header.deviceClass==icSigNamedColorClass || bExplicitNamed)) {
         if (bInput) {
