@@ -1829,6 +1829,60 @@ function(iccdev_add_reflectance_observer_illum_range_test)
   endif()
 endfunction()
 
+# #2707: CIccCalculatorFunc::SequenceNeedTempReset started an if's true branch at i+2
+# even with no else, skipping the branch's first op, so a tget there left the
+# temporaries unreset between invocations.  ICC.2-2023 requires them to be zero at
+# each invocation; the test asserts the SECOND invocation, which a one-off calloc
+# would not fix.
+function(iccdev_add_calc_temp_reset_if_no_else_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCalcTempResetIfNoElseTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/calc-temp-reset-if-no-else.cpp"
+  )
+  target_compile_features(iccCalcTempResetIfNoElseTest PRIVATE cxx_std_17)
+  target_include_directories(iccCalcTempResetIfNoElseTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccCalcTempResetIfNoElseTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccCalcTempResetIfNoElseTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.calc-temp-reset-if-no-else
+      COMMAND "$<TARGET_FILE:iccCalcTempResetIfNoElseTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.calc-temp-reset-if-no-else
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccCalcTempResetIfNoElseTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.calc-temp-reset-if-no-else PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;calculator;mpe;msan;issue-2707;regression"
+  )
+  if(WIN32)
+    set(_calc_temp_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCalcTempResetIfNoElseTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _calc_temp_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.calc-temp-reset-if-no-else PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_calc_temp_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2547: a formulaCurveSegment with a NaN or infinite parameter gives a
 # non-finite output wherever the formula reads it.  Validate() must report it
 # as a critical error and Begin() must refuse it, for every function type and
@@ -10962,6 +11016,7 @@ iccdev_add_bpc_d2b_tag_family_test()
 iccdev_add_reflectance_observer_illum_range_test()
 iccdev_add_spectral_absolute_flag_test()
 iccdev_add_colorimetry_methods_test()
+iccdev_add_calc_temp_reset_if_no_else_test()
 iccdev_add_formula_segment_nonfinite_parameter_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_chromaticity_validate_test()
