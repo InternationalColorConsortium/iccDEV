@@ -256,7 +256,7 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.applytolink-invalid-decoded-intent` | `Build/Cmake/Testing/CMakeLists.txt` |
 | `iccdev.applytolink-v4-missing-device-descriptions` | `Build/Cmake/Testing/CMakeLists.txt` |
 | `iccdev.xform-abstorel-adjust` | `.github/ci/regression/xform-abstorel-adjust.cpp` |
-| `iccdev.v5-required-tag-sets` | `.github/ci/regression/v5-required-tag-sets.cpp`; four v5 required-tag rows against ICC.2-2023 clause 8 (Input, xCLR output, DeviceLink, MultiplexIdentification/Link/Visualization) for issue #2562 |
+| `iccdev.v5-required-tag-sets` | `.github/ci/regression/v5-required-tag-sets.cpp`; six v5 required-tag rows against ICC.2-2023 clause 8 (Input, Display, Output and its xCLR colorant tags, DeviceLink, MultiplexIdentification/Link/Visualization) for issue #2562 |
 | `iccdev.pcs-adjust-placement` | `.github/ci/regression/pcs-adjust-placement.cpp` |
 | `iccdev.reflectance-observer-illum-range` | `.github/ci/regression/reflectance-observer-illum-range.cpp` |
 | `iccdev.spectral-absolute-flag` | `.github/ci/regression/spectral-absolute-flag.cpp` |
