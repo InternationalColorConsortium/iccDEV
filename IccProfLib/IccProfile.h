@@ -279,9 +279,11 @@ protected:
   // Validates a PCS field that carries a device colour space rather than a
   // colorimetric one: DeviceLink (ICC.1 8.2) and MultiplexLink (ICC.2 7.2.9).
   icValidateStatus CheckLinkPcsSpace(std::string &sReport) const;
-  // "one or more of" the device-to-PCS transform set ICC.2 8.3 requires of an
-  // input profile: AToB0-3 and DToB0-3 (#2562).
+  // "one or more of" the device-to-PCS and PCS-to-device transform sets that
+  // ICC.2 8.3, 8.4 and 8.5 require.  Each is a separate "shall" bullet, so a
+  // class that lists both needs both (#2562).
   bool HasDeviceToPcsTransform() const;
+  bool HasPcsToDeviceTransform() const;
   icValidateStatus CheckTagTypes(std::string &sReport) const;
   bool IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
                    icStructSignature structSig=icSigUndefinedStruct,

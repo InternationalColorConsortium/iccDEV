@@ -2,11 +2,15 @@
 // Licensed under the BSD 3-Clause "New" or "Revised" License; see the ICC
 // Software License in the repository root and CONTRIBUTING.md.
 //
-// #2562.  Four rows of CIccProfile::CheckRequiredTags' v5 branch disagreed with
+// #2562.  Six rows of CIccProfile::CheckRequiredTags' v5 branch disagreed with
 // ICC.2-2023 clause 8:
 //
 //   Input (8.3)        "one or more of" AToB0-3 or DToB0-3; only AToB0, AToB1
 //                      and AToB3 were accepted.
+//   Display (8.4)      one or more A-side tags AND one or more B-side tags; the
+//                      B-side test was commented out, and only AToB0, AToB1
+//                      and AToB3 counted as the A-side.
+//   Output (8.5)       the same two bullets; either side alone was accepted.
 //   xCLR output (8.5)  colorantInfoTag is "a recommended tag"; a missing
 //                      colorantTableTag, which 8.5 does not name, was reported
 //                      as non-compliant.
@@ -32,8 +36,12 @@
 // row is tested with each colorant tag alone, and a v4 profile pins the owner
 // ruling that the ICC.1 path stays non-compliant.
 //
-// Display (8.4) and Output (8.5) both-sides requirements are deliberately not
-// asserted: they are held for a ruling on embedded sub-profiles.
+// Display and Output are tested the same way, A-side alone and B-side alone.
+// Input, Display and Output are also tested with a spectral PCS and a zero PCS
+// field: that header used to skip these rows entirely.
+//
+// The grayTRCTag and matrix/TRC alternatives this function already accepted are
+// left as they were and are not asserted here; ICC.2 clause 8 does not list them.
 
 #include <cstdio>
 #include <cstring>
@@ -42,6 +50,7 @@
 #include "IccProfile.h"
 #include "IccTagMPE.h"
 #include "IccTagComposite.h"
+#include "IccTagBasic.h"
 #include "IccUtil.h"
 
 int g_fail = 0;
@@ -71,6 +80,15 @@ static CIccProfile *newProfile(icProfileClassSignature cls,
   return p;
 }
 
+// The same, with a 36-channel reflectance spectral PCS and a zero PCS field.
+static CIccProfile *newSpectralProfile(icProfileClassSignature cls,
+                                       icColorSpaceSignature data)
+{
+  CIccProfile *p = newProfile(cls, data, (icColorSpaceSignature)0);
+  p->m_Header.spectralPCS = (icColorSpaceSignature)(icSigReflectanceSpectralPcsData | 36);
+  return p;
+}
+
 // Presence is all CheckRequiredTags tests, so an empty transform will do.
 static void addMpe(CIccProfile *p, icTagSignature sig)
 {
@@ -89,6 +107,17 @@ static void addArray(CIccProfile *p, icTagSignature sig, icArraySignature arr)
 static void addFiller(CIccProfile *p)
 {
   p->AttachTag(icSigCopyrightTag, new CIccTagMultiProcessElement(3, 3));
+}
+
+// The matrix/TRC display model: three colorant columns and three curves.
+static void addMatrixTrc(CIccProfile *p)
+{
+  p->AttachTag(icSigRedMatrixColumnTag, new CIccTagXYZ);
+  p->AttachTag(icSigGreenMatrixColumnTag, new CIccTagXYZ);
+  p->AttachTag(icSigBlueMatrixColumnTag, new CIccTagXYZ);
+  p->AttachTag(icSigRedTRCTag, new CIccTagCurve);
+  p->AttachTag(icSigGreenTRCTag, new CIccTagCurve);
+  p->AttachTag(icSigBlueTRCTag, new CIccTagCurve);
 }
 
 static std::string report(CIccProfile *p)
@@ -134,6 +163,128 @@ int main()
     addFiller(p);
     check(hasCritical(report(p)),
           "control: gray Input with no transform and no grayTRCTag is refused");
+  }
+
+  // ---- Display (8.4) ----
+  {
+    CIccProfile *p = newProfile(icSigDisplayClass, icSigRgbData, icSigXYZData);
+    addMpe(p, icSigAToB0Tag);
+    check(hasCritical(report(p)), "Display with only AToB0Tag is refused");
+  }
+  {
+    CIccProfile *p = newProfile(icSigDisplayClass, icSigRgbData, icSigXYZData);
+    addMpe(p, icSigBToA0Tag);
+    check(hasCritical(report(p)), "Display with only BToA0Tag is refused");
+  }
+  {
+    CIccProfile *p = newProfile(icSigDisplayClass, icSigRgbData, icSigXYZData);
+    addMpe(p, icSigAToB2Tag);
+    addMpe(p, icSigBToA2Tag);
+    check(!hasCritical(report(p)), "Display with AToB2Tag and BToA2Tag is accepted");
+  }
+  {
+    CIccProfile *p = newProfile(icSigDisplayClass, icSigRgbData, icSigXYZData);
+    addMpe(p, icSigDToB1Tag);
+    addMpe(p, icSigBToD3Tag);
+    check(!hasCritical(report(p)), "Display with DToB1Tag and BToD3Tag is accepted");
+  }
+  {
+    CIccProfile *p = newProfile(icSigDisplayClass, icSigGrayData, icSigXYZData);
+    addMpe(p, icSigAToB0Tag);
+    check(hasCritical(report(p)), "gray Display with only AToB0Tag is refused");
+  }
+  {
+    CIccProfile *p = newProfile(icSigDisplayClass, icSigGrayData, icSigXYZData);
+    addMpe(p, icSigBToA1Tag);
+    check(hasCritical(report(p)), "gray Display with only BToA1Tag is refused");
+  }
+  {
+    CIccProfile *p = newProfile(icSigDisplayClass, icSigGrayData, icSigXYZData);
+    addMpe(p, icSigDToB0Tag);
+    addMpe(p, icSigBToD0Tag);
+    check(!hasCritical(report(p)), "gray Display with DToB0Tag and BToD0Tag is accepted");
+  }
+
+  // ---- Output (8.5) ----
+  {
+    CIccProfile *p = newProfile(icSigOutputClass, icSigCmykData, icSigLabData);
+    addMpe(p, icSigAToB0Tag);
+    check(hasCritical(report(p)), "Output with only AToB0Tag is refused");
+  }
+  {
+    CIccProfile *p = newProfile(icSigOutputClass, icSigCmykData, icSigLabData);
+    addMpe(p, icSigBToA0Tag);
+    check(hasCritical(report(p)), "Output with only BToA0Tag is refused");
+  }
+  {
+    CIccProfile *p = newProfile(icSigOutputClass, icSigCmykData, icSigLabData);
+    addMpe(p, icSigDToB3Tag);
+    addMpe(p, icSigBToD1Tag);
+    check(!hasCritical(report(p)), "Output with DToB3Tag and BToD1Tag is accepted");
+  }
+  {
+    CIccProfile *p = newProfile(icSigOutputClass, icSigGrayData, icSigLabData);
+    addMpe(p, icSigAToB1Tag);
+    check(hasCritical(report(p)), "gray Output with only AToB1Tag is refused");
+  }
+  {
+    CIccProfile *p = newProfile(icSigOutputClass, icSigGrayData, icSigLabData);
+    addMpe(p, icSigBToA1Tag);
+    check(hasCritical(report(p)), "gray Output with only BToA1Tag is refused");
+  }
+  {
+    CIccProfile *p = newProfile(icSigOutputClass, icSigGrayData, icSigLabData);
+    addMpe(p, icSigAToB2Tag);
+    addMpe(p, icSigBToD2Tag);
+    check(!hasCritical(report(p)), "gray Output with AToB2Tag and BToD2Tag is accepted");
+  }
+  {
+    // Display's matrix/TRC alternative does not extend to Output.
+    CIccProfile *p = newProfile(icSigOutputClass, icSigRgbData, icSigLabData);
+    addMatrixTrc(p);
+    check(hasCritical(report(p)),
+          "Output with matrix/TRC tags and no transform is refused");
+  }
+
+  // ---- spectral PCS, zero PCS field ----
+  {
+    CIccProfile *p = newSpectralProfile(icSigInputClass, icSigRgbData);
+    addMpe(p, icSigDToB1Tag);
+    check(!hasCritical(report(p)), "spectral Input with only DToB1Tag is accepted");
+  }
+  {
+    CIccProfile *p = newSpectralProfile(icSigInputClass, icSigRgbData);
+    addFiller(p);
+    check(hasCritical(report(p)), "spectral Input with no transform is refused");
+  }
+  {
+    CIccProfile *p = newSpectralProfile(icSigDisplayClass, icSigRgbData);
+    addMpe(p, icSigDToB0Tag);
+    check(hasCritical(report(p)), "spectral Display with only DToB0Tag is refused");
+  }
+  {
+    CIccProfile *p = newSpectralProfile(icSigDisplayClass, icSigRgbData);
+    addMpe(p, icSigDToB0Tag);
+    addMpe(p, icSigBToD0Tag);
+    check(!hasCritical(report(p)),
+          "spectral Display with DToB0Tag and BToD0Tag is accepted");
+  }
+  {
+    CIccProfile *p = newSpectralProfile(icSigOutputClass, icSigCmykData);
+    addMpe(p, icSigDToB3Tag);
+    check(hasCritical(report(p)), "spectral Output with only DToB3Tag is refused");
+  }
+  {
+    CIccProfile *p = newSpectralProfile(icSigOutputClass, icSigCmykData);
+    addMpe(p, icSigBToD3Tag);
+    check(hasCritical(report(p)), "spectral Output with only BToD3Tag is refused");
+  }
+  {
+    CIccProfile *p = newSpectralProfile(icSigOutputClass, icSigCmykData);
+    addMpe(p, icSigDToB3Tag);
+    addMpe(p, icSigBToD3Tag);
+    check(!hasCritical(report(p)),
+          "spectral Output with DToB3Tag and BToD3Tag is accepted");
   }
 
   // ---- DeviceLink (8.6) ----

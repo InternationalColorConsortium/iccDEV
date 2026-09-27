@@ -263,6 +263,9 @@ run_case uint64-float-token uInt64NumberType Array Q 2 \
 # are identical apart from the spelling, so their payloads must be byte-equal.
 TOTAL=$((TOTAL + 1))
 MPE="$OUTDIR/mpe-f-element.xml"
+# A display profile needs a B-side as well as an A-side (ICC.2-2023 8.4, #2562), so
+# the fixture carries an identity BToA0Tag.  The test compares only A2B0 and A2B1,
+# which it reads back by signature.
 cat > "$MPE" <<'XMLEOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <IccProfile>
@@ -296,6 +299,13 @@ cat > "$MPE" <<'XMLEOF'
         </MatrixElement>
       </MultiProcessElements>
     </multiProcessElementType> </AToB1Tag>
+    <BToA0Tag> <multiProcessElementType>
+      <MultiProcessElements InputChannels="3" OutputChannels="3">
+        <MatrixElement InputChannels="3" OutputChannels="3">
+          <MatrixData>1 0 0 0 1 0 0 0 1</MatrixData>
+        </MatrixElement>
+      </MultiProcessElements>
+    </multiProcessElementType> </BToA0Tag>
     <profileDescriptionTag> <multiLocalizedUnicodeType>
       <LocalizedText LanguageCountry="enUS">#2401 f-element fixture</LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>

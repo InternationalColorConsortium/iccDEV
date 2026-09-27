@@ -32000,6 +32000,24 @@
           <SurroundXYZ X="154.279281616211" Y="160.000000000000" Z="131.948654174805"/>
         </spectralViewingConditionsType> </spectralViewingConditionsTag>
 
+        <!-- ICC.2-2023 8.5 requires an output profile to carry a PCS-to-device
+             transform as well as a device-to-PCS one (#2562).  This BToD3Tag is a
+             placeholder so the embedded profile conforms: it maps every spectral
+             PCS value to zero on all four channels and is NOT an inverse of
+             DToB3Tag.  This profile is only used as a source. -->
+        <BToD3Tag> <multiProcessElementType>
+          <MultiProcessElements InputChannels="36" OutputChannels="4">
+            <MatrixElement InputChannels="36" OutputChannels="4">
+              <MatrixData>
+                0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+                0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+                0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+                0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+              </MatrixData>
+            </MatrixElement>
+          </MultiProcessElements>
+        </multiProcessElementType> </BToD3Tag>
+
         <customToStandardPccTag> <multiProcessElementType>
           <MultiProcessElements InputChannels="3" OutputChannels="3">
             <MatrixElement InputChannels="3" OutputChannels="3">

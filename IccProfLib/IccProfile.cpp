@@ -3048,7 +3048,7 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
  * Name: CIccProfile::HasDeviceToPcsTransform
  *
  * Purpose: Report whether the profile carries one or more of the device-to-PCS
- *  transform tags ICC.2-2023 8.3 offers an input profile: AToB0-3 and DToB0-3.
+ *  transform tags ICC.2-2023 8.3, 8.4 and 8.5 offer: AToB0-3 and DToB0-3.
  *
  * Return: true if at least one is present.
  *****************************************************************************
@@ -3059,6 +3059,25 @@ bool CIccProfile::HasDeviceToPcsTransform() const
          GetTag(icSigAToB2Tag) || GetTag(icSigAToB3Tag) ||
          GetTag(icSigDToB0Tag) || GetTag(icSigDToB1Tag) ||
          GetTag(icSigDToB2Tag) || GetTag(icSigDToB3Tag);
+}
+
+
+/**
+ ****************************************************************************
+ * Name: CIccProfile::HasPcsToDeviceTransform
+ *
+ * Purpose: Report whether the profile carries one or more of the PCS-to-device
+ *  transform tags ICC.2-2023 8.4 and 8.5 require: BToA0-3 and BToD0-3.
+ *
+ * Return: true if at least one is present.
+ *****************************************************************************
+ */
+bool CIccProfile::HasPcsToDeviceTransform() const
+{
+  return GetTag(icSigBToA0Tag) || GetTag(icSigBToA1Tag) ||
+         GetTag(icSigBToA2Tag) || GetTag(icSigBToA3Tag) ||
+         GetTag(icSigBToD0Tag) || GetTag(icSigBToD1Tag) ||
+         GetTag(icSigBToD2Tag) || GetTag(icSigBToD3Tag);
 }
 
 
@@ -3299,10 +3318,8 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
   else {
     switch(sig) {
       case icSigInputClass:
-        if (m_Header.spectralPCS) {
-          //????
-        }
-        if (m_Header.pcs) {
+        // A profile whose only PCS is spectral has the same required tags.
+        if (m_Header.pcs || m_Header.spectralPCS) {
           if (m_Header.colorSpace == icSigGrayData) {
             if (!HasDeviceToPcsTransform() && !GetTag(icSigGrayTRCTag)) {
               sReport += icMsgValidateCriticalError;
@@ -3327,20 +3344,20 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         break;
 
       case icSigDisplayClass:
-        if (m_Header.spectralPCS) {
-          //????
-        }
-        if (m_Header.pcs) {
+        // A profile whose only PCS is spectral has the same required tags.
+        if (m_Header.pcs || m_Header.spectralPCS) {
           if (m_Header.colorSpace == icSigGrayData) {
-            if (!GetTag(icSigAToB0Tag) && !GetTag(icSigAToB1Tag) && !GetTag(icSigAToB3Tag) && !GetTag(icSigGrayTRCTag)) {
+            // ICC.2-2023 8.4: one or more A-side tags and one or more B-side tags.
+            if ((!HasDeviceToPcsTransform() || !HasPcsToDeviceTransform()) &&
+                !GetTag(icSigGrayTRCTag)) {
               sReport += icMsgValidateCriticalError;
               sReport += "Critical tag(s) missing.\n";
               rv = icMaxStatus(rv, icValidateCriticalError);
             }
           }
           else {
-            if ((!GetTag(icSigAToB0Tag) && !GetTag(icSigAToB1Tag) && !GetTag(icSigAToB3Tag)) /*|| 
-                (!GetTag(icSigBToA0Tag) && !GetTag(icSigBToA1Tag) && !GetTag(icSigBToA3Tag))*/) {
+            // ICC.2-2023 8.4: one or more A-side tags and one or more B-side tags.
+            if (!HasDeviceToPcsTransform() || !HasPcsToDeviceTransform()) {
               if (!GetTag(icSigRedMatrixColumnTag) || !GetTag(icSigGreenMatrixColumnTag) ||
                 !GetTag(icSigBlueMatrixColumnTag) || !GetTag(icSigRedTRCTag) ||
                 !GetTag(icSigGreenTRCTag) || !GetTag(icSigBlueTRCTag)) {
@@ -3354,23 +3371,20 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         break;
 
       case icSigOutputClass:
-        if (m_Header.spectralPCS) {
-          //????
-        }
-        if (m_Header.pcs) {
+        // A profile whose only PCS is spectral has the same required tags.
+        if (m_Header.pcs || m_Header.spectralPCS) {
           if (m_Header.colorSpace == icSigGrayData) {
-            if (!GetTag(icSigAToB0Tag) && !GetTag(icSigBToA0Tag) &&
-                !GetTag(icSigAToB1Tag) && !GetTag(icSigBToA1Tag) &&
-                !GetTag(icSigAToB3Tag) && !GetTag(icSigBToA3Tag) && !GetTag(icSigGrayTRCTag)) {
+            // ICC.2-2023 8.5: one or more A-side tags and one or more B-side tags.
+            if ((!HasDeviceToPcsTransform() || !HasPcsToDeviceTransform()) &&
+                !GetTag(icSigGrayTRCTag)) {
               sReport += icMsgValidateCriticalError;
               sReport += "Critical tag(s) missing.\n";
               rv = icMaxStatus(rv, icValidateCriticalError);
             }
           }
           else {
-            if (!GetTag(icSigAToB0Tag) && !GetTag(icSigBToA0Tag) &&
-                !GetTag(icSigAToB1Tag) && !GetTag(icSigBToA1Tag) &&
-                !GetTag(icSigAToB3Tag) && !GetTag(icSigBToA3Tag)) {
+            // ICC.2-2023 8.5: one or more A-side tags and one or more B-side tags.
+            if (!HasDeviceToPcsTransform() || !HasPcsToDeviceTransform()) {
                 sReport += icMsgValidateCriticalError;
                 sReport += "Critical tag(s) missing.\n";
                 rv = icMaxStatus(rv, icValidateCriticalError);
