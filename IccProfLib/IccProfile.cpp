@@ -3048,7 +3048,7 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
  * Name: CIccProfile::HasDeviceToPcsTransform
  *
  * Purpose: Report whether the profile carries one or more of the device-to-PCS
- *  transform tags ICC.2-2023 8.3, 8.4 and 8.5 offer: AToB0-3 and DToB0-3.
+ *  transform tags ICC.2-2023 8.3, 8.4, 8.5 and 8.8 offer: AToB0-3 and DToB0-3.
  *
  * Return: true if at least one is present.
  *****************************************************************************
@@ -3067,7 +3067,7 @@ bool CIccProfile::HasDeviceToPcsTransform() const
  * Name: CIccProfile::HasPcsToDeviceTransform
  *
  * Purpose: Report whether the profile carries one or more of the PCS-to-device
- *  transform tags ICC.2-2023 8.4 and 8.5 require: BToA0-3 and BToD0-3.
+ *  transform tags ICC.2-2023 8.4, 8.5 and 8.8 require: BToA0-3 and BToD0-3.
  *
  * Return: true if at least one is present.
  *****************************************************************************
@@ -3459,12 +3459,11 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         break;
 
       case icSigColorSpaceClass:
-        if (m_Header.spectralPCS) {
-          //????
-        }
-        if (m_Header.pcs) {
-          if ((!GetTag(icSigAToB0Tag) && !GetTag(icSigAToB1Tag) && !GetTag(icSigAToB3Tag)) || 
-              (!GetTag(icSigBToA0Tag) && !GetTag(icSigBToA1Tag) && !GetTag(icSigBToA3Tag))) {
+        // ICC.2-2023 8.8: one or more of AToB0-3 or DToB0-3, and one or more of
+        // BToA0-3 or BToD0-3.  Only AToB0/1/3 and BToA0/1/3 were accepted, and
+        // a profile whose only PCS is spectral was not checked.
+        if (m_Header.pcs || m_Header.spectralPCS) {
+          if (!HasDeviceToPcsTransform() || !HasPcsToDeviceTransform()) {
             sReport += icMsgValidateCriticalError;
             sReport += "Critical tag(s) missing.\n";
             rv = icMaxStatus(rv, icValidateCriticalError);
@@ -3473,11 +3472,11 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         break;
 
       case icSigAbstractClass:
-        if (m_Header.spectralPCS) {
-          //????
-        }
-        if (m_Header.pcs) {
-          if (!GetTag(icSigAToB0Tag) && !GetTag(icSigAToB3Tag)) {
+        // ICC.2-2023 8.9: one or more of AToB0Tag, DToB0Tag.  AToB3Tag was
+        // accepted in place of DToB0Tag, and a profile whose only PCS is
+        // spectral was not checked.
+        if (m_Header.pcs || m_Header.spectralPCS) {
+          if (!GetTag(icSigAToB0Tag) && !GetTag(icSigDToB0Tag)) {
             sReport += icMsgValidateCriticalError;
             sReport += "Critical tag(s) missing.\n";
             rv = icMaxStatus(rv, icValidateCriticalError);

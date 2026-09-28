@@ -83,6 +83,17 @@
 // Input, Display and Output are also tested with a spectral PCS and a zero PCS
 // field: that header used to skip these rows entirely.
 //
+// #2730.  Two more rows were narrower than clause 8:
+//
+//   ColorSpace (8.8)   one or more of AToB0-3 or DToB0-3, AND one or more of
+//                      BToA0-3 or BToD0-3; only AToB0/1/3 and BToA0/1/3
+//                      counted.
+//   Abstract (8.9)     "one or more of" AToB0Tag, DToB0Tag; AToB3Tag was
+//                      accepted in place of DToB0Tag.
+//
+// Both rows skipped a spectral PCS with a zero PCS field too, so each is also
+// tested with that header.
+
 // The grayTRCTag and matrix/TRC alternatives this function already accepted are
 // left as they were and are not asserted here; ICC.2 clause 8 does not list them.
 
@@ -418,6 +429,76 @@ int main()
     addMpe(p, icSigMToB0Tag);
     check(hasCritical(report(p)),
           "MVIS with MToB0Tag but no multiplexTypeArrayTag is refused");
+  }
+
+  // ---- ColorSpace (8.8) ----
+  {
+    CIccProfile *p = newProfile(icSigColorSpaceClass, icSigRgbData, icSigLabData);
+    addMpe(p, icSigAToB2Tag);
+    addMpe(p, icSigBToA2Tag);
+    check(!hasCritical(report(p)), "ColorSpace with AToB2Tag and BToA2Tag is accepted");
+  }
+  {
+    CIccProfile *p = newProfile(icSigColorSpaceClass, icSigRgbData, icSigLabData);
+    addMpe(p, icSigDToB0Tag);
+    addMpe(p, icSigBToD2Tag);
+    check(!hasCritical(report(p)), "ColorSpace with DToB0Tag and BToD2Tag is accepted");
+  }
+  {
+    CIccProfile *p = newProfile(icSigColorSpaceClass, icSigRgbData, icSigLabData);
+    addMpe(p, icSigDToB3Tag);
+    check(hasCritical(report(p)), "ColorSpace with only DToB3Tag is refused");
+  }
+  {
+    CIccProfile *p = newProfile(icSigColorSpaceClass, icSigRgbData, icSigLabData);
+    addMpe(p, icSigBToD1Tag);
+    check(hasCritical(report(p)), "ColorSpace with only BToD1Tag is refused");
+  }
+  {
+    CIccProfile *p = newSpectralProfile(icSigColorSpaceClass, icSigRgbData);
+    addMpe(p, icSigDToB1Tag);
+    check(hasCritical(report(p)), "spectral ColorSpace with only DToB1Tag is refused");
+  }
+  {
+    CIccProfile *p = newSpectralProfile(icSigColorSpaceClass, icSigRgbData);
+    addMpe(p, icSigDToB1Tag);
+    addMpe(p, icSigBToD1Tag);
+    check(!hasCritical(report(p)),
+          "spectral ColorSpace with DToB1Tag and BToD1Tag is accepted");
+  }
+
+  // ---- Abstract (8.9) ----
+  {
+    // Passes on master too.  It pins the AToB0Tag half of the row against a
+    // mutant that keeps only DToB0Tag.
+    CIccProfile *p = newProfile(icSigAbstractClass, icSigLabData, icSigLabData);
+    addMpe(p, icSigAToB0Tag);
+    check(!hasCritical(report(p)), "Abstract with only AToB0Tag is accepted");
+  }
+  {
+    CIccProfile *p = newProfile(icSigAbstractClass, icSigLabData, icSigLabData);
+    addMpe(p, icSigDToB0Tag);
+    check(!hasCritical(report(p)), "Abstract with only DToB0Tag is accepted");
+  }
+  {
+    CIccProfile *p = newProfile(icSigAbstractClass, icSigLabData, icSigLabData);
+    addMpe(p, icSigAToB3Tag);
+    check(hasCritical(report(p)), "Abstract with only AToB3Tag is refused");
+  }
+  {
+    CIccProfile *p = newProfile(icSigAbstractClass, icSigLabData, icSigLabData);
+    addFiller(p);
+    check(hasCritical(report(p)), "control: Abstract with no transform is refused");
+  }
+  {
+    CIccProfile *p = newSpectralProfile(icSigAbstractClass, icSigLabData);
+    addFiller(p);
+    check(hasCritical(report(p)), "spectral Abstract with no transform is refused");
+  }
+  {
+    CIccProfile *p = newSpectralProfile(icSigAbstractClass, icSigLabData);
+    addMpe(p, icSigDToB0Tag);
+    check(!hasCritical(report(p)), "spectral Abstract with only DToB0Tag is accepted");
   }
 
   // ---- xCLR output (8.5) ----
