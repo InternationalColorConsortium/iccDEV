@@ -52,13 +52,11 @@ bash -n "$artifact_cleanup"
 bash -n "$artifact_cleanup_test"
 bash -n "$source_digest"
 
-for issue in 2707; do
-  if ! find "$patch_dir" -maxdepth 1 -type f -name "*-issue-$issue-*.patch" \
-      -print -quit | grep -q .; then
-    echo "[FAIL] Missing individual temporary patch for issue #$issue" >&2
-    exit 1
-  fi
-done
+if ! find "$patch_dir" -maxdepth 1 -type f -name '*-issue-2707-*.patch' \
+    -print -quit | grep -q .; then
+  echo "[FAIL] Missing individual temporary patch for issue #2707" >&2
+  exit 1
+fi
 test "$(find "$patch_dir" -maxdepth 1 -type f -name '*.patch' | wc -l)" -eq 2
 
 grep -qx 'language: c++' "$project"
