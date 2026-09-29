@@ -69,10 +69,15 @@ run_case() {
   fi
 }
 
+# run_reject_case ID DESCRIPTION EXPECTED_DIAGNOSTIC COMMAND...
+# Passes when the command exits 1, prints EXPECTED_DIAGNOSTIC and raises no
+# sanitizer finding.  The diagnostic is an argument because it names the check
+# that refused the chain, and that is part of what the case pins.
 run_reject_case() {
   local test_id="$1"
   local description="$2"
-  shift 2
+  local expected="$3"
+  shift 3
 
   TOTAL=$((TOTAL + 1))
   local logfile="$OUTDIR/${test_id}.log"
@@ -88,8 +93,8 @@ run_reject_case() {
     echo "  [FAIL] $description - expected exit 1, got $exit_code"
     sed -n '1,80p' "$logfile"
     FAIL=$((FAIL + 1))
-  elif ! grep -q "Invalid profile" "$logfile"; then
-    echo "  [FAIL] $description - missing invalid-profile diagnostic"
+  elif ! grep -qF "$expected" "$logfile"; then
+    echo "  [FAIL] $description - missing diagnostic: $expected"
     sed -n '1,80p' "$logfile"
     FAIL=$((FAIL + 1))
   else
@@ -140,8 +145,16 @@ HYBRID_PROFILE="$OUTDIR/profiles/CMYK_Hybrid_Profile.icc"
 run_case "v5-hybrid-fromxml" "iccFromXml regenerates the CMYK hybrid profile" \
   "$FROMXML" "$HYBRID_XML" "$HYBRID_PROFILE"
 
+# The #2579 destination is a Gray profile with only a grayTRC and a 105-channel
+# radiant spectral PCS.  It was first refused by the spectral-range check in
+# CIccPcsXform::Connect() ("Invalid profile").  Since #2738, the monochrome
+# transform's own Begin() refuses it earlier: ICC.1:2022 F.2 defines the
+# grayTRC model for PCSXYZ and PCSLAB only, so the chain never reaches Connect().
+# The Connect() check is still pinned directly by
+# iccdev.spectral-pcs-range-consistency.
 run_reject_case "v5-issue-2579-reject" \
   "iccApplyNamedCmm rejects the 105-to-128 spectral destination before writing out of bounds" \
+  "Invalid space link" \
   "$APPLYNCM" -exportcfganddata "$OUTDIR/issue-2579-chain.json" \
   "$HYBRID_DATA" 3 1 "$HYBRID_PROFILE" 10103 "$ISSUE_2579_PROFILE" 10
 

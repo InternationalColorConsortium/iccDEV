@@ -6697,6 +6697,62 @@ function(iccdev_add_curve_apply_gamma_test)
   endif()
 endfunction()
 
+# #2738: CIccXformMatrixTRC and CIccXformMonochrome move three PCS values in
+# Apply(), but only the matrix/TRC output direction checked the header PCS.  A
+# profile declaring a one-channel PCS ('gamt') passed Begin() and Apply() then
+# wrote past a destination sized from CIccCmm::GetDestSamples().  Pin the
+# spec rule (matrix/TRC: PCSXYZ only; monochrome: PCSXYZ or PCSLAB) in both
+# directions, with positive controls.  Library only; called in both the
+# Windows and the main list.
+function(iccdev_add_matrixtrc_monochrome_pcs_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMatrixTrcMonochromePcsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/matrixtrc-monochrome-pcs.cpp"
+  )
+  target_compile_features(iccMatrixTrcMonochromePcsTest PRIVATE cxx_std_17)
+  target_include_directories(iccMatrixTrcMonochromePcsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccMatrixTrcMonochromePcsTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccMatrixTrcMonochromePcsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.matrixtrc-monochrome-pcs
+      COMMAND "$<TARGET_FILE:iccMatrixTrcMonochromePcsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.matrixtrc-monochrome-pcs
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccMatrixTrcMonochromePcsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.matrixtrc-monochrome-pcs PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;cmm;matrixtrc;monochrome;issue-2738;regression"
+  )
+  if(WIN32)
+    set(_matrixtrc_monochrome_pcs_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMatrixTrcMonochromePcsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _matrixtrc_monochrome_pcs_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.matrixtrc-monochrome-pcs PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_matrixtrc_monochrome_pcs_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2688: colorantTableType stores PCS values without an encoding field, so the
 # profile header supplies the XYZ/Lab interpretation. Pin the serialized path
 # through iccFromXml and iccDumpProfile; under MSan the unfixed dump reads the
@@ -10553,6 +10609,7 @@ if(WIN32)
   iccdev_add_calc_channel_ref_unterminated_index_json_test()
   iccdev_add_curve_setsize_contract_test()
   iccdev_add_curve_apply_gamma_test()
+  iccdev_add_matrixtrc_monochrome_pcs_test()
   iccdev_add_colorant_table_pcs_test()
   iccdev_add_colorant_table_devicelink_pcs_test()
   iccdev_add_mpe_curveset_setcurve_contract_tests()
@@ -10975,6 +11032,7 @@ iccdev_add_calc_channel_ref_unterminated_index_test()
 iccdev_add_calc_channel_ref_unterminated_index_json_test()
 iccdev_add_curve_setsize_contract_test()
 iccdev_add_curve_apply_gamma_test()
+iccdev_add_matrixtrc_monochrome_pcs_test()
 iccdev_add_colorant_table_pcs_test()
 iccdev_add_colorant_table_devicelink_pcs_test()
 iccdev_add_mpe_curveset_setcurve_contract_tests()
