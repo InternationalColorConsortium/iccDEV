@@ -237,6 +237,7 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.fileio-getlength-preserves-position` | `.github/ci/regression/fileio-getlength-position.cpp` |
 | `iccdev.fileio-reopen-nonregular` | `.github/ci/regression/fileio-reopen-nonregular.cpp` |
 | `iccdev.fileio-seek-tell` | `.github/ci/regression/fileio-seek-tell.cpp` |
+| `iccdev.unknown-tag-size` | `.github/ci/regression/unknown-tag-size.cpp`; `CIccTagUnknown` empty state after construction, JSON without `unknownData`, failed `Read()` and oversize JSON, and copies of an empty tag, for issue #2706 |
 | `iccdev.same-file-identity` | `.github/ci/regression/same-file-identity.cpp`; `icIsSameFile()` compares file identity, not spelling, for issue #2692: the same path, `./`, a hard link and a symlink match, a byte-for-byte copy does not. Registered for Windows too, so the Win32 half runs in CI |
 | `iccdev.issue-2692-same-file-output-regression` | `.github/scripts/iccdev-issue-2692-same-file-output-regression.sh`; iccApplyProfiles, iccSpecSepToTiff, iccTiffDump, iccJpegDump and iccPngDump refuse an output that is one of their inputs, with the input left byte-identical (#2692) |
 | `iccdev.iccconnect-config-parser` | `.github/ci/regression/iccconnect-config-parser.cpp` |
@@ -258,6 +259,7 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.applytolink-v4-missing-device-descriptions` | `Build/Cmake/Testing/CMakeLists.txt` |
 | `iccdev.xform-abstorel-adjust` | `.github/ci/regression/xform-abstorel-adjust.cpp` |
 | `iccdev.v5-required-tag-sets` | `.github/ci/regression/v5-required-tag-sets.cpp`; six v5 required-tag rows against ICC.2-2023 clause 8 (Input, Display, Output and its xCLR colorant tags, DeviceLink, MultiplexIdentification/Link/Visualization) for issue #2562 |
+| `iccdev.matrixtrc-monochrome-pcs` | `.github/ci/regression/matrixtrc-monochrome-pcs.cpp`; matrix/TRC accepts only a PCSXYZ connection and monochrome only PCSXYZ or PCSLAB, including after a fallback from an unsupported DToB0, for issue #2738 |
 | `iccdev.pcs-adjust-placement` | `.github/ci/regression/pcs-adjust-placement.cpp` |
 | `iccdev.reflectance-observer-illum-range` | `.github/ci/regression/reflectance-observer-illum-range.cpp` |
 | `iccdev.spectral-absolute-flag` | `.github/ci/regression/spectral-absolute-flag.cpp` |
