@@ -1,0 +1,25 @@
+diff --git a/IccProfLib/IccMpeCalc.cpp b/IccProfLib/IccMpeCalc.cpp
+--- a/IccProfLib/IccMpeCalc.cpp
++++ b/IccProfLib/IccMpeCalc.cpp
+@@ -4812,3 +4812,5 @@ CIccMpeCalculator::CIccMpeCalculator(const CIccMpeCalculator &channelGen)
+-  if (ptr)
++  if (ptr) {
+     m_calcFunc = ptr->NewCopy();
++    m_calcFunc->SetCalculator(this);
++  }
+   else
+@@ -4876,3 +4878,5 @@ CIccMpeCalculator &CIccMpeCalculator::operator=(const CIccMpeCalculator &channel
+-  if (ptr)
++  if (ptr) {
+     m_calcFunc = ptr->NewCopy();
++    m_calcFunc->SetCalculator(this);
++  }
+   else
+diff --git a/IccProfLib/IccMpeCalc.h b/IccProfLib/IccMpeCalc.h
+--- a/IccProfLib/IccMpeCalc.h
++++ b/IccProfLib/IccMpeCalc.h
+@@ -404,3 +404,4 @@ public:
+   CIccCalculatorFunc(const CIccCalculatorFunc &ICF);
+   CIccCalculatorFunc &operator=(const CIccCalculatorFunc &ICF);
++  void SetCalculator(CIccMpeCalculator *pCalc) { m_pCalc = pCalc; }
+   virtual CIccCalculatorFunc *NewCopy() const { return new CIccCalculatorFunc(*this);}
