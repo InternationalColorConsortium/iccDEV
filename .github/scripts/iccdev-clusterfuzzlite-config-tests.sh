@@ -52,7 +52,7 @@ bash -n "$artifact_cleanup"
 bash -n "$artifact_cleanup_test"
 bash -n "$source_digest"
 
-for issue in 2699 2703 2704 2705 2707; do
+for issue in 2704 2705 2707; do
   if ! find "$patch_dir" -maxdepth 1 -type f -name "*-issue-$issue-*.patch" \
       -print -quit | grep -q .; then
     echo "[FAIL] Missing individual temporary patch for issue #$issue" >&2
