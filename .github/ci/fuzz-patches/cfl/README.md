@@ -12,7 +12,6 @@ missing, empty, or drifted stack must fail.
 | Patch | Tracks | Temporary guard |
 | --- | --- | --- |
 | `005-issue-2704-pixel-buffer-initialization.patch` | #2704 | Zero-initialize heap-backed `CIccPixelBuf` storage. |
-| `006-issue-2705-apply-scratch-initialization.patch` | #2705 | Zero-initialize CMM apply scratch and chunk buffers. |
 | `007-mpe-curve-position-bounds.patch` | CFL follow-up | Reject MPE curve positions outside their enclosing element. |
 | `009-issue-2707-calculator-temp-initialization.patch` | #2707 | Zero-initialize calculator temporary-channel storage. |
 

@@ -1883,6 +1883,61 @@ function(iccdev_add_calc_temp_reset_if_no_else_test)
   endif()
 endfunction()
 
+# #2702/#2705: a calculator's output channels kept the caller's buffer contents
+# wherever the main function did not reach an out() operation, and
+# MemorySanitizer reported the reads downstream (CIccApplyBPC's stack black
+# point, a CMM pixel buffer).  CIccMpeCalculator::Apply() now zeroes them at
+# each invocation, the rule ICC.2-2023 11.2.1 gives temporaries.  Library only;
+# called in both the Windows and the main list.
+function(iccdev_add_calc_output_init_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCalcOutputInitTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/calc-output-init.cpp"
+  )
+  target_compile_features(iccCalcOutputInitTest PRIVATE cxx_std_17)
+  target_include_directories(iccCalcOutputInitTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccCalcOutputInitTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccCalcOutputInitTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.calc-output-init
+      COMMAND "$<TARGET_FILE:iccCalcOutputInitTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.calc-output-init
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccCalcOutputInitTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.calc-output-init PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;calculator;mpe;msan;issue-2702;issue-2705;regression"
+  )
+  if(WIN32)
+    set(_calc_output_init_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCalcOutputInitTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _calc_output_init_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.calc-output-init PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_calc_output_init_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2547: a formulaCurveSegment with a NaN or infinite parameter gives a
 # non-finite output wherever the formula reads it.  Validate() must report it
 # as a critical error and Begin() must refuse it, for every function type and
@@ -10741,6 +10796,7 @@ if(WIN32)
   iccdev_add_mpe_copy_bufchannels_test()
   iccdev_add_owning_setter_self_alias_contract_test()
   iccdev_add_curve_gamma_u8fixed8_test()
+  iccdev_add_calc_output_init_test()
   iccdev_add_luminance_normalization_test()
   iccdev_add_tag_name_spelling_test()
   iccdev_add_device_attributes_icc2_test()
@@ -11245,6 +11301,7 @@ iccdev_add_reflectance_observer_illum_range_test()
 iccdev_add_spectral_absolute_flag_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_calc_temp_reset_if_no_else_test()
+iccdev_add_calc_output_init_test()
 iccdev_add_formula_segment_nonfinite_parameter_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_chromaticity_validate_test()
