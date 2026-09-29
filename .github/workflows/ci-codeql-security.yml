@@ -5,7 +5,7 @@
 #                 https://color.org
 #
 ## Intent: CodeQL security analysis with custom iccDEV queries
-##         Uploads standard SARIF; custom results require local triage
+##         Uploads standard and custom iccDEV SARIF
 #
 ## Last Updated: 2026-04-09 by David Hoyt
 #
@@ -240,3 +240,17 @@ jobs:
         with:
           sarif_file: codeql-results/cpp-security-and-quality.sarif
           category: iccdev-standard-cpp-security-and-quality
+
+      - name: Upload iccDEV custom SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd  # v4.38.1
+        with:
+          sarif_file: codeql-results/iccdev-security.sarif
+          category: iccdev-custom-security
+
+      - name: Upload IccJSON/IccConnect custom SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd  # v4.38.1
+        with:
+          sarif_file: codeql-results/iccdev-jsonlib-security.sarif
+          category: iccdev-jsonlib-security
