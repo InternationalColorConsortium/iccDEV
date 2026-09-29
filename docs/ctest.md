@@ -242,6 +242,7 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.issue-2692-same-file-output-regression` | `.github/scripts/iccdev-issue-2692-same-file-output-regression.sh`; iccApplyProfiles, iccSpecSepToTiff, iccTiffDump, iccJpegDump and iccPngDump refuse an output that is one of their inputs, with the input left byte-identical (#2692) |
 | `iccdev.iccconnect-config-parser` | `.github/ci/regression/iccconnect-config-parser.cpp` |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
+| `iccdev.namedcmm-sample-guards` | `.github/ci/regression/namedcmm-sample-guards.cpp`; `CIccNamedColorCmm::Begin()` refuses a spectral source or destination that a colorimetric AToB3/BToA3 fallback cannot serve, as `CIccCmm::Begin()` does, for issue #2704 |
 | `iccdev.curve-apply-gamma` | `.github/ci/regression/curve-apply-gamma.cpp`; direct one-entry gamma API contract for issue #2686 |
 | `iccdev.calc-temp-reset-if-no-else` | `.github/ci/regression/calc-temp-reset-if-no-else.cpp`; calculator temporaries read as zero at each invocation, after an `if` with no `else` and after a `select`, for issue #2707 |
 | `iccdev.calc-output-init` | `.github/ci/regression/calc-output-init.cpp`; calculator output channels a program does not write read as zero at each invocation (alone, reused, and mid-chain), and an in-place call still reads its inputs, for issues #2702 and #2705 |
