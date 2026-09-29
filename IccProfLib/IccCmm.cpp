@@ -6026,6 +6026,34 @@ icStatusCMM CIccXformMonochrome::Begin()
 
 	m_ApplyCurvePtr = NULL;
 
+	// ICC.1:2022 F.2: "Multiplying the normalized TRC value between 0 and 1,0 by
+	// the PCSXYZ or PCSLAB values of the PCS white point derives the PCSXYZ or
+	// PCSLAB value." Those are the only two PCS encodings the model defines.
+	//
+	// Apply() handles three PCS values: it writes DstPixel[0..2] when m_bInput is
+	// set, and otherwise reads SrcPixel[0] (Lab) or SrcPixel[1] (XYZ). The CMM
+	// sizes the PCS side of the caller's buffer from the space this transform
+	// connects to, so a one-channel PCS such as 'gamt' made the input direction
+	// write two floats past the destination, and a spectral PCS (when
+	// CIccXform::Create() fell back here with m_bUseSpectralPCS set) left all
+	// but three of its channels unwritten. This is the sibling of the check in
+	// CIccXformMatrixTRC::Begin() (#2738).
+	//
+	// The connected space is GetDstSpace() going out and GetSrcSpace() coming in;
+	// without m_bUseSpectralPCS both are the header PCS. Checked once the
+	// grayTRC is known to exist, so a profile without one still reports
+	// icCmmStatProfileMissingTag, but before the output branch builds its inverse
+	// curve. The device side needs no check: CIccXform::Create() picks this
+	// transform only when the header colour space is icSigGrayData.
+	if (!GetCurve(icSigGrayTRCTag)) {
+		return icCmmStatProfileMissingTag;
+	}
+
+	icColorSpaceSignature pcs = m_bInput ? GetDstSpace() : GetSrcSpace();
+	if (pcs!=icSigXYZData && pcs!=icSigLabData) {
+		return icCmmStatBadSpaceLink;
+	}
+
 	if (m_bInput) {
 		m_Curve = GetCurve(icSigGrayTRCTag);
 
@@ -6343,6 +6371,28 @@ icStatusCMM CIccXformMatrixTRC::Begin()
       return icCmmStatProfileMissingTag;
     }
 
+    // ICC.1:2022 8.3.3, 8.4.3 and F.3 each say: "Only the PCSXYZ encoding can
+    // be used with matrix/TRC models."
+    //
+    // The output branch below has always refused any other PCS; this direction
+    // did not. Apply() writes three XYZ values to DstPixel[0..2], and the CMM
+    // sizes the destination from the space this transform connects to. A
+    // profile declaring a one-channel PCS such as 'gamt' therefore passed
+    // Begin(), and Apply() wrote two floats past a one-float destination
+    // (#2738). A Lab PCS was accepted too, and got XYZ values labelled as Lab.
+    //
+    // The connected space is GetDstSpace(), not the header PCS: when
+    // CIccXform::Create() falls back here from an unsupported DToBx with
+    // m_bUseSpectralPCS set, it is the spectral PCS, and Apply() filled three of
+    // its channels. Without that flag it is the header PCS.
+    //
+    // Checked after the tag lookups so that a profile missing its matrix/TRC
+    // tags still reports icCmmStatProfileMissingTag, as it did before. The
+    // device side needs no check: every creator in CIccXform::Create() picks
+    // this transform only when the header colour space is icSigRgbData.
+    if (GetDstSpace()!=icSigXYZData) {
+      return icCmmStatBadSpaceLink;
+    }
   }
   else {
     if (m_pProfile->m_Header.pcs!=icSigXYZData) {
