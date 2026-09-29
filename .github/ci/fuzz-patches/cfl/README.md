@@ -11,18 +11,14 @@ missing, empty, or drifted stack must fail.
 
 | Patch | Tracks | Temporary guard |
 | --- | --- | --- |
-| `003-issue-2699-mpe-buffer-channels.patch` | #2699 | Copy the MPE scratch-channel count. |
-| `004-issue-2703-mpe-buffer-channels.patch` | #2703 | Same root fix as #2699, kept separate so either issue patch can retire independently. |
 | `005-issue-2704-pixel-buffer-initialization.patch` | #2704 | Zero-initialize heap-backed `CIccPixelBuf` storage. |
 | `006-issue-2705-apply-scratch-initialization.patch` | #2705 | Zero-initialize CMM apply scratch and chunk buffers. |
 | `007-mpe-curve-position-bounds.patch` | CFL follow-up | Reject MPE curve positions outside their enclosing element. |
 | `008-unknown-tag-size-initialization.patch` | CFL follow-up | Initialize empty unknown-tag payload size before serialization. |
 | `009-issue-2707-calculator-temp-initialization.patch` | #2707 | Zero-initialize calculator temporary-channel storage. |
 
-When a normal source fix lands, remove only its issue patch. If #2699 or #2703
-lands first, the duplicate shared-root patch remains independently applicable;
-if the common fix lands, both report as already integrated until they are
-removed. Run these checks after changing the inventory:
+When a normal source fix lands, remove only its issue patch. Run these checks
+after changing the inventory:
 
 ```bash
 .github/scripts/iccdev-fuzz-patch-check-tests.sh

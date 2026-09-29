@@ -6995,6 +6995,67 @@ function(iccdev_add_mpe_curveset_setcurve_contract_tests)
   endif()
 endfunction()
 
+# #2699/#2703: CIccTagMultiProcessElement's copy constructor left
+# m_nBufChannels uninitialised and operator= kept the destination's old value.
+# Begin() returns early for an empty element list, so GetNewApply() sized its
+# pixel buffer from that value (MemorySanitizer, through CIccProfile's copy
+# constructor).  The test copies over 0xAB-filled storage so the uninitialised
+# member is visible without MSan.  Library only; called in both the Windows and
+# the main list.
+function(iccdev_add_mpe_copy_bufchannels_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMpeCopyBufChannelsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/mpe-copy-bufchannels.cpp"
+  )
+  target_compile_features(iccMpeCopyBufChannelsTest PRIVATE cxx_std_17)
+  target_include_directories(iccMpeCopyBufChannelsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccMpeCopyBufChannelsTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  # The test poisons storage before placement new; keep GCC from treating
+  # those stores as dead (see the source).
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(iccMpeCopyBufChannelsTest PRIVATE -fno-lifetime-dse)
+  endif()
+  add_dependencies(check iccMpeCopyBufChannelsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.mpe-copy-bufchannels
+      COMMAND "$<TARGET_FILE:iccMpeCopyBufChannelsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.mpe-copy-bufchannels
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccMpeCopyBufChannelsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.mpe-copy-bufchannels PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;mpe;msan;issue-2699;issue-2703;regression"
+  )
+  if(WIN32)
+    set(_mpe_copy_bufchannels_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMpeCopyBufChannelsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _mpe_copy_bufchannels_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.mpe-copy-bufchannels PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_mpe_copy_bufchannels_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2630: CIccTagSegmentedCurve::SetCurve, CIccMpeCLUT::SetCLUT,
 # CIccMpeCAM::SetCAM, CIccMpeSpectralCLUT::SetData and CIccMBB::SetCLUT each
 # released the object they held before storing the pointer handed in, so
@@ -10556,6 +10617,7 @@ if(WIN32)
   iccdev_add_colorant_table_pcs_test()
   iccdev_add_colorant_table_devicelink_pcs_test()
   iccdev_add_mpe_curveset_setcurve_contract_tests()
+  iccdev_add_mpe_copy_bufchannels_test()
   iccdev_add_owning_setter_self_alias_contract_test()
   iccdev_add_curve_gamma_u8fixed8_test()
   iccdev_add_luminance_normalization_test()
@@ -10978,6 +11040,7 @@ iccdev_add_curve_apply_gamma_test()
 iccdev_add_colorant_table_pcs_test()
 iccdev_add_colorant_table_devicelink_pcs_test()
 iccdev_add_mpe_curveset_setcurve_contract_tests()
+iccdev_add_mpe_copy_bufchannels_test()
 iccdev_add_owning_setter_self_alias_contract_test()
 iccdev_add_curve_gamma_u8fixed8_test()
 iccdev_add_luminance_normalization_test()

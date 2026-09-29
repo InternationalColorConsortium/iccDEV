@@ -251,6 +251,7 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.issue-2688-colorant-table-devicelink-dump` | `iccDumpProfile`; requires a DeviceLink's colorant table to use Lab column labels even though its PCS field spells XYZ, per ICC.1:2022 9.2.19 |
 | `iccdev.owning-setter-self-alias-contract` | `.github/ci/regression/owning-setter-self-alias-contract.cpp`; ownership contract of five exported setters for issue #2630, the three `CIccMpeSpectral*` `copyData()` self-assignment cases for issue #2637, the apply table `SetData()` releases for issue #2638, and the two protected-member setters `CIccSampledCalculatorCurve::SetCalculator()` and `CIccMpeCalculator::SetCalcFunc()` for issue #2645 |
 | `iccdev.mpe-curveset-setcurve-contract` | `.github/ci/regression/mpe-curveset-setcurve-contract.cpp`; public API bounds and ownership contract for issue #2607 |
+| `iccdev.mpe-copy-bufchannels` | `.github/ci/regression/mpe-copy-bufchannels.cpp`; apply-buffer width of a copied, assigned, self-assigned and re-read-empty multiProcessElementType tag, for issues #2699 and #2703 |
 | `iccdev.issue-2607-curveset-extra-xml` | `.github/ci/regression/issue-2607-curveset-too-many-curves.xml`; tool-level rejection control for an extra CurveSet child |
 | `iccdev.bench-apply-metrics` | `Build/Cmake/Testing/CMakeLists.txt`; asserts the deterministic one-profile, four-pixel metrics contract |
 | `iccdev.applytolink-invalid-decoded-intent` | `Build/Cmake/Testing/CMakeLists.txt` |
