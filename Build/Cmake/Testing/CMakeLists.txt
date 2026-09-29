@@ -5268,6 +5268,69 @@ function(iccdev_add_json_sparsematrix_huaf_test)
   endif()
 endfunction()
 
+# #2706: CIccTagUnknown's default constructor left m_nSize uninitialised, and
+# CIccTagJsonUnknown::ParseJson() accepts a document without "unknownData"
+# without setting it, so iccFromJson wrote a tag after testing a garbage count
+# (MemorySanitizer).  The copy constructor and operator= copied an empty tag
+# from a NULL source.  The test constructs over 0xAB-filled storage so an
+# uninitialised member is visible without MSan.  Needs IccJSON + IccProfLib;
+# called in both the Windows and the main list.
+function(iccdev_add_unknown_tag_size_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccUnknownTagSizeTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/unknown-tag-size.cpp"
+  )
+  target_compile_features(iccUnknownTagSizeTest PRIVATE cxx_std_17)
+  target_include_directories(iccUnknownTagSizeTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccUnknownTagSizeTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  # The test poisons storage before placement new; keep GCC from treating
+  # those stores as dead (see the source).
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(iccUnknownTagSizeTest PRIVATE -fno-lifetime-dse)
+  endif()
+  add_dependencies(check iccUnknownTagSizeTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.unknown-tag-size
+      COMMAND "$<TARGET_FILE:iccUnknownTagSizeTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.unknown-tag-size
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccUnknownTagSizeTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.unknown-tag-size PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;json;tag;msan;issue-2706;regression"
+  )
+  if(WIN32)
+    set(_unknown_tag_size_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccUnknownTagSizeTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _unknown_tag_size_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.unknown-tag-size PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_unknown_tag_size_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards the XML writer's failure policy (#1779): a single tag whose serialize
 # returned false made CIccProfileXml::ToXml abandon the ENTIRE document, so
 # iccToXml wrote no file at all where iccToJson -- which skips the offending tag
@@ -6752,6 +6815,62 @@ function(iccdev_add_curve_apply_gamma_test)
   endif()
 endfunction()
 
+# #2738: CIccXformMatrixTRC and CIccXformMonochrome move three PCS values in
+# Apply(), but only the matrix/TRC output direction checked the header PCS.  A
+# profile declaring a one-channel PCS ('gamt') passed Begin() and Apply() then
+# wrote past a destination sized from CIccCmm::GetDestSamples().  Pin the
+# spec rule (matrix/TRC: PCSXYZ only; monochrome: PCSXYZ or PCSLAB) in both
+# directions, with positive controls.  Library only; called in both the
+# Windows and the main list.
+function(iccdev_add_matrixtrc_monochrome_pcs_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMatrixTrcMonochromePcsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/matrixtrc-monochrome-pcs.cpp"
+  )
+  target_compile_features(iccMatrixTrcMonochromePcsTest PRIVATE cxx_std_17)
+  target_include_directories(iccMatrixTrcMonochromePcsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccMatrixTrcMonochromePcsTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccMatrixTrcMonochromePcsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.matrixtrc-monochrome-pcs
+      COMMAND "$<TARGET_FILE:iccMatrixTrcMonochromePcsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.matrixtrc-monochrome-pcs
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccMatrixTrcMonochromePcsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.matrixtrc-monochrome-pcs PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;cmm;matrixtrc;monochrome;issue-2738;regression"
+  )
+  if(WIN32)
+    set(_matrixtrc_monochrome_pcs_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMatrixTrcMonochromePcsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _matrixtrc_monochrome_pcs_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.matrixtrc-monochrome-pcs PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_matrixtrc_monochrome_pcs_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2688: colorantTableType stores PCS values without an encoding field, so the
 # profile header supplies the XYZ/Lab interpretation. Pin the serialized path
 # through iccFromXml and iccDumpProfile; under MSan the unfixed dump reads the
@@ -7046,6 +7165,67 @@ function(iccdev_add_mpe_curveset_setcurve_contract_tests)
     endforeach()
     set_tests_properties(iccdev.issue-2607-curveset-extra-xml PROPERTIES
       ENVIRONMENT_MODIFICATION "${_curveset_xml_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# #2699/#2703: CIccTagMultiProcessElement's copy constructor left
+# m_nBufChannels uninitialised and operator= kept the destination's old value.
+# Begin() returns early for an empty element list, so GetNewApply() sized its
+# pixel buffer from that value (MemorySanitizer, through CIccProfile's copy
+# constructor).  The test copies over 0xAB-filled storage so the uninitialised
+# member is visible without MSan.  Library only; called in both the Windows and
+# the main list.
+function(iccdev_add_mpe_copy_bufchannels_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMpeCopyBufChannelsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/mpe-copy-bufchannels.cpp"
+  )
+  target_compile_features(iccMpeCopyBufChannelsTest PRIVATE cxx_std_17)
+  target_include_directories(iccMpeCopyBufChannelsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccMpeCopyBufChannelsTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  # The test poisons storage before placement new; keep GCC from treating
+  # those stores as dead (see the source).
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(iccMpeCopyBufChannelsTest PRIVATE -fno-lifetime-dse)
+  endif()
+  add_dependencies(check iccMpeCopyBufChannelsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.mpe-copy-bufchannels
+      COMMAND "$<TARGET_FILE:iccMpeCopyBufChannelsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.mpe-copy-bufchannels
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccMpeCopyBufChannelsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.mpe-copy-bufchannels PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;mpe;msan;issue-2699;issue-2703;regression"
+  )
+  if(WIN32)
+    set(_mpe_copy_bufchannels_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMpeCopyBufChannelsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _mpe_copy_bufchannels_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.mpe-copy-bufchannels PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_mpe_copy_bufchannels_windows_env_mods}"
     )
   endif()
 endfunction()
@@ -10601,6 +10781,7 @@ if(WIN32)
   iccdev_add_compression_describe_labels_test()
   iccdev_add_pawg_compression_paths_test()
   iccdev_add_json_sparsematrix_huaf_test()
+  iccdev_add_unknown_tag_size_test()
   iccdev_add_xml_writer_graceful_degrade_test()
   iccdev_add_xml_relaxng_validation_leak_test()
   iccdev_add_xml_curve_oversize_file_test()
@@ -10608,9 +10789,11 @@ if(WIN32)
   iccdev_add_calc_channel_ref_unterminated_index_json_test()
   iccdev_add_curve_setsize_contract_test()
   iccdev_add_curve_apply_gamma_test()
+  iccdev_add_matrixtrc_monochrome_pcs_test()
   iccdev_add_colorant_table_pcs_test()
   iccdev_add_colorant_table_devicelink_pcs_test()
   iccdev_add_mpe_curveset_setcurve_contract_tests()
+  iccdev_add_mpe_copy_bufchannels_test()
   iccdev_add_owning_setter_self_alias_contract_test()
   iccdev_add_curve_gamma_u8fixed8_test()
   iccdev_add_calc_output_init_test()
@@ -11024,6 +11207,7 @@ iccdev_add_ziputf8_read_inflate_contract_test()
 iccdev_add_compression_describe_labels_test()
 iccdev_add_pawg_compression_paths_test()
 iccdev_add_json_sparsematrix_huaf_test()
+iccdev_add_unknown_tag_size_test()
 iccdev_add_xml_writer_graceful_degrade_test()
 iccdev_add_xml_relaxng_validation_leak_test()
 iccdev_add_xml_curve_oversize_file_test()
@@ -11031,9 +11215,11 @@ iccdev_add_calc_channel_ref_unterminated_index_test()
 iccdev_add_calc_channel_ref_unterminated_index_json_test()
 iccdev_add_curve_setsize_contract_test()
 iccdev_add_curve_apply_gamma_test()
+iccdev_add_matrixtrc_monochrome_pcs_test()
 iccdev_add_colorant_table_pcs_test()
 iccdev_add_colorant_table_devicelink_pcs_test()
 iccdev_add_mpe_curveset_setcurve_contract_tests()
+iccdev_add_mpe_copy_bufchannels_test()
 iccdev_add_owning_setter_self_alias_contract_test()
 iccdev_add_curve_gamma_u8fixed8_test()
 iccdev_add_luminance_normalization_test()
