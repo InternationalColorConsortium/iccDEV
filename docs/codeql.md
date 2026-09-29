@@ -71,9 +71,10 @@ Each query fixture must include a reported vulnerable case and an unreported
 guarded case, so a passing query test proves both detection and its intended
 scope.
 
-The GitHub Actions CodeQL workflow uploads only the standard
-`cpp-security-and-quality` SARIF. Run custom iccDEV query suites locally and
-attach report excerpts to issues or PRs only after maintainer triage.
+The GitHub Actions CodeQL workflow uploads three SARIF categories:
+`iccdev-standard-cpp-security-and-quality`, `iccdev-custom-security` and
+`iccdev-jsonlib-security`. Custom-query alerts still need maintainer triage
+before they are cited in issues or PRs.
 This includes the division-by-zero profile query, which has produced useful
 fixes but also guard-sensitive false positives.
 For `unbounded-profile-loop`, trace the full profile-to-tool path before
