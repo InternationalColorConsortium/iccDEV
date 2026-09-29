@@ -2889,6 +2889,62 @@ function(iccdev_add_gamut_xform_semantics_test)
   endif()
 endfunction()
 
+# #2704: CIccNamedColorCmm::Begin() lacked the two sample-count guards
+# CIccCmm::Begin() has.  A profile whose header carries a spectral PCS but whose
+# only transform is a colorimetric AToBx made the named CMM advertise the
+# spectral channel count while Apply() wrote three, and iccApplyNamedCmm read the
+# rest (MemorySanitizer).  Pins both guards against CIccCmm's verdict, with a
+# colorimetric control.  Library only; called in both the Windows and the main
+# list.
+function(iccdev_add_namedcmm_sample_guards_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccNamedCmmSampleGuardsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/namedcmm-sample-guards.cpp"
+  )
+  target_compile_features(iccNamedCmmSampleGuardsTest PRIVATE cxx_std_17)
+  target_include_directories(iccNamedCmmSampleGuardsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccNamedCmmSampleGuardsTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccNamedCmmSampleGuardsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.namedcmm-sample-guards
+      COMMAND "$<TARGET_FILE:iccNamedCmmSampleGuardsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.namedcmm-sample-guards
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccNamedCmmSampleGuardsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.namedcmm-sample-guards PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;cmm;namedcolor;msan;issue-2704;regression"
+  )
+  if(WIN32)
+    set(_namedcmm_sample_guards_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccNamedCmmSampleGuardsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _namedcmm_sample_guards_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.namedcmm-sample-guards PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_namedcmm_sample_guards_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1853: CIccMatrixMath::rangeMap() discarded SetRange()'s verdict and returned a matrix
 # whose coefficients were never written, so a rejected spectral range pair fed
 # uninitialized heap into the colour math (CWE-908). Pins the corrected NULL return, the
@@ -10844,6 +10900,7 @@ if(WIN32)
   iccdev_add_curve_apply_gamma_test()
   iccdev_add_matrixtrc_monochrome_pcs_test()
   iccdev_add_colorant_table_pcs_test()
+  iccdev_add_namedcmm_sample_guards_test()
   iccdev_add_colorant_table_devicelink_pcs_test()
   iccdev_add_mpe_curveset_setcurve_contract_tests()
   iccdev_add_mpe_copy_bufchannels_test()
@@ -11271,6 +11328,7 @@ iccdev_add_curve_setsize_contract_test()
 iccdev_add_curve_apply_gamma_test()
 iccdev_add_matrixtrc_monochrome_pcs_test()
 iccdev_add_colorant_table_pcs_test()
+iccdev_add_namedcmm_sample_guards_test()
 iccdev_add_colorant_table_devicelink_pcs_test()
 iccdev_add_mpe_curveset_setcurve_contract_tests()
 iccdev_add_mpe_copy_bufchannels_test()

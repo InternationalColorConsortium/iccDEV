@@ -12509,6 +12509,33 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
   icStatusCMM rv;
   CIccXformList::iterator i;
 
+  // #2704: the two sample-count guards CIccCmm::Begin() has, which this
+  // override never had. The caller sizes its pixel buffers from
+  // GetSourceSamples() and GetDestSamples(), which come from the spaces
+  // AddXform() recorded; the transforms move GetNumSrcSamples() and
+  // GetNumDstSamples(). Those can disagree. AddXform() records a profile's
+  // spectral PCS as the destination whenever the header carries one, while
+  // CIccXform::Create() falls back to a colorimetric AToBx tag when there is no
+  // DToBx. MemorySanitizer's profile declared an 18209-channel spectral PCS and
+  // had only an AToB3, so this CMM advertised 18209 destination samples and
+  // Apply() wrote 3; iccApplyNamedCmm then formatted 18206 floats nobody wrote.
+  // CIccCmm::Begin() refuses the same profile with icCmmStatBadSpaceLink.
+  //
+  // A named-colour side carries a colour name rather than samples, so each
+  // guard applies only when its side is pixel data. A CIccXformNamedColor is
+  // skipped too: it overrides GetSrcSpace() and GetDstSpace() with the spaces
+  // this CMM hands it, but not GetNumSrcSamples() or GetNumDstSamples(), which
+  // fall back to CIccXform's header-derived counts and do not describe it, so
+  // comparing them refuses valid named-colour chains. Whether a named-colour
+  // tag's own device-coordinate count can disagree with those spaces is a
+  // separate question these guards do not answer.
+  i = m_Xforms->begin();
+  if (i != m_Xforms->end() && m_nSrcSpace != icSigNamedData &&
+      i->ptr->GetXformType() != icXformTypeNamedColor) {
+    if (i->ptr->GetNumSrcSamples() != GetSourceSamples())
+      return icCmmStatBadSpaceLink;
+  }
+
   for (i=m_Xforms->begin(); i!=m_Xforms->end(); i++) {
     rv = i->ptr->Begin();
 
@@ -12520,6 +12547,15 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
   rv = CheckPCSConnections(bUsePcsConversion);
   if (rv != icCmmStatOk && rv!=icCmmStatIdentityXform)
     return rv;
+
+  // Checked after CheckPCSConnections(), which can append a transform, as in
+  // CIccCmm::Begin().
+  CIccXform *pLastXform = GetLastXform();
+  if (pLastXform && m_nDestSpace != icSigNamedData &&
+      pLastXform->GetXformType() != icXformTypeNamedColor) {
+    if (pLastXform->GetNumDstSamples() != GetDestSamples())
+      return icCmmStatBadSpaceLink;
+  }
 
   if (bAllocNewApply) {
     rv = icCmmStatOk;
