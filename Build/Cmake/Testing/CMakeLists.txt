@@ -7300,6 +7300,59 @@ function(iccdev_add_owning_setter_self_alias_contract_test)
   endif()
 endfunction()
 
+# #2731: icValidOverlap() accepted any two overlapping positions of equal size,
+# and any two at the same offset, under a "TODO - double check this logic!".
+# Pins the rule: disjoint, or identical when bAllowSame.  Library only; called
+# in both the Windows and the main list.
+function(iccdev_add_valid_overlap_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccValidOverlapTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/valid-overlap.cpp"
+  )
+  target_compile_features(iccValidOverlapTest PRIVATE cxx_std_17)
+  target_include_directories(iccValidOverlapTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccValidOverlapTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccValidOverlapTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.valid-overlap
+      COMMAND "$<TARGET_FILE:iccValidOverlapTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.valid-overlap
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccValidOverlapTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.valid-overlap PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;util;tonemap;issue-2731;regression"
+  )
+  if(WIN32)
+    set(_valid_overlap_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccValidOverlapTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _valid_overlap_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.valid-overlap PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_valid_overlap_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1811: spectralViewingConditions illuminantXYZ/surroundXYZ carry absolute
 # luminance in cd/m^2, and CIccInfo::CheckLuminance warns when Y is 1 because that
 # is what chromaticity normalization leaves behind. The check cannot be exact --
@@ -10795,6 +10848,7 @@ if(WIN32)
   iccdev_add_mpe_curveset_setcurve_contract_tests()
   iccdev_add_mpe_copy_bufchannels_test()
   iccdev_add_owning_setter_self_alias_contract_test()
+  iccdev_add_valid_overlap_test()
   iccdev_add_curve_gamma_u8fixed8_test()
   iccdev_add_calc_output_init_test()
   iccdev_add_luminance_normalization_test()
@@ -11221,6 +11275,7 @@ iccdev_add_colorant_table_devicelink_pcs_test()
 iccdev_add_mpe_curveset_setcurve_contract_tests()
 iccdev_add_mpe_copy_bufchannels_test()
 iccdev_add_owning_setter_self_alias_contract_test()
+iccdev_add_valid_overlap_test()
 iccdev_add_curve_gamma_u8fixed8_test()
 iccdev_add_luminance_normalization_test()
 iccdev_add_tag_name_spelling_test()
