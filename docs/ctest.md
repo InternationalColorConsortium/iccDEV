@@ -237,6 +237,7 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.fileio-getlength-preserves-position` | `.github/ci/regression/fileio-getlength-position.cpp` |
 | `iccdev.fileio-reopen-nonregular` | `.github/ci/regression/fileio-reopen-nonregular.cpp` |
 | `iccdev.fileio-seek-tell` | `.github/ci/regression/fileio-seek-tell.cpp` |
+| `iccdev.unknown-tag-size` | `.github/ci/regression/unknown-tag-size.cpp`; `CIccTagUnknown` empty state after construction, JSON without `unknownData`, failed `Read()` and oversize JSON, and copies of an empty tag, for issue #2706 |
 | `iccdev.same-file-identity` | `.github/ci/regression/same-file-identity.cpp`; `icIsSameFile()` compares file identity, not spelling, for issue #2692: the same path, `./`, a hard link and a symlink match, a byte-for-byte copy does not. Registered for Windows too, so the Win32 half runs in CI |
 | `iccdev.issue-2692-same-file-output-regression` | `.github/scripts/iccdev-issue-2692-same-file-output-regression.sh`; iccApplyProfiles, iccSpecSepToTiff, iccTiffDump, iccJpegDump and iccPngDump refuse an output that is one of their inputs, with the input left byte-identical (#2692) |
 | `iccdev.iccconnect-config-parser` | `.github/ci/regression/iccconnect-config-parser.cpp` |

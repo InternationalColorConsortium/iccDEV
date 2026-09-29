@@ -5213,6 +5213,69 @@ function(iccdev_add_json_sparsematrix_huaf_test)
   endif()
 endfunction()
 
+# #2706: CIccTagUnknown's default constructor left m_nSize uninitialised, and
+# CIccTagJsonUnknown::ParseJson() accepts a document without "unknownData"
+# without setting it, so iccFromJson wrote a tag after testing a garbage count
+# (MemorySanitizer).  The copy constructor and operator= copied an empty tag
+# from a NULL source.  The test constructs over 0xAB-filled storage so an
+# uninitialised member is visible without MSan.  Needs IccJSON + IccProfLib;
+# called in both the Windows and the main list.
+function(iccdev_add_unknown_tag_size_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccUnknownTagSizeTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/unknown-tag-size.cpp"
+  )
+  target_compile_features(iccUnknownTagSizeTest PRIVATE cxx_std_17)
+  target_include_directories(iccUnknownTagSizeTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccUnknownTagSizeTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  # The test poisons storage before placement new; keep GCC from treating
+  # those stores as dead (see the source).
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(iccUnknownTagSizeTest PRIVATE -fno-lifetime-dse)
+  endif()
+  add_dependencies(check iccUnknownTagSizeTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.unknown-tag-size
+      COMMAND "$<TARGET_FILE:iccUnknownTagSizeTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.unknown-tag-size
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccUnknownTagSizeTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.unknown-tag-size PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;json;tag;msan;issue-2706;regression"
+  )
+  if(WIN32)
+    set(_unknown_tag_size_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccUnknownTagSizeTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _unknown_tag_size_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.unknown-tag-size PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_unknown_tag_size_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards the XML writer's failure policy (#1779): a single tag whose serialize
 # returned false made CIccProfileXml::ToXml abandon the ENTIRE document, so
 # iccToXml wrote no file at all where iccToJson -- which skips the offending tag
@@ -10602,6 +10665,7 @@ if(WIN32)
   iccdev_add_compression_describe_labels_test()
   iccdev_add_pawg_compression_paths_test()
   iccdev_add_json_sparsematrix_huaf_test()
+  iccdev_add_unknown_tag_size_test()
   iccdev_add_xml_writer_graceful_degrade_test()
   iccdev_add_xml_relaxng_validation_leak_test()
   iccdev_add_xml_curve_oversize_file_test()
@@ -11025,6 +11089,7 @@ iccdev_add_ziputf8_read_inflate_contract_test()
 iccdev_add_compression_describe_labels_test()
 iccdev_add_pawg_compression_paths_test()
 iccdev_add_json_sparsematrix_huaf_test()
+iccdev_add_unknown_tag_size_test()
 iccdev_add_xml_writer_graceful_degrade_test()
 iccdev_add_xml_relaxng_validation_leak_test()
 iccdev_add_xml_curve_oversize_file_test()
