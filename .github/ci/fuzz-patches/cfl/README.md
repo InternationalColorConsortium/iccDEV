@@ -12,7 +12,6 @@ missing, empty, or drifted stack must fail.
 | Patch | Tracks | Temporary guard |
 | --- | --- | --- |
 | `007-mpe-curve-position-bounds.patch` | CFL follow-up | Reject MPE curve positions outside their enclosing element. |
-| `009-issue-2707-calculator-temp-initialization.patch` | #2707 | Zero-initialize calculator temporary-channel storage. |
 
 When a normal source fix lands, remove only its issue patch. Run these checks
 after changing the inventory:
