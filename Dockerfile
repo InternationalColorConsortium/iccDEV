@@ -66,8 +66,8 @@ RUN for attempt in 1 2 3; do \
     liblzma-dev=5.8.3-1 \
     libpng-dev=1.6.57-1 \
     libcurl4t64=8.18.0-1ubuntu2.7 \
-    libssl-dev=3.5.5-1ubuntu3.5 \
-    libssl3t64=3.5.5-1ubuntu3.5 \
+    libssl-dev=3.5.5-1ubuntu3.6 \
+    libssl3t64=3.5.5-1ubuntu3.6 \
     libtiff-dev=4.7.0-3ubuntu5 \
     libwxgtk3.2-dev=3.2.9+dfsg-1 \
     zlib1g=1:1.3.dfsg+really1.3.1-1ubuntu3.1 \
@@ -84,8 +84,8 @@ RUN for attempt in 1 2 3; do \
     nano=8.7.1-1ubuntu0.1 \
     nlohmann-json3-dev=3.12.0.really.3.12.0.really.3.11.3-3build1 \
     ninja-build=1.13.2-1 \
-    openssl=3.5.5-1ubuntu3.5 \
-    openssl-provider-legacy=3.5.5-1ubuntu3.5 \
+    openssl=3.5.5-1ubuntu3.6 \
+    openssl-provider-legacy=3.5.5-1ubuntu3.6 \
     pkg-config=2.5.1-4 \
     python3=3.14.3-0ubuntu2 \
     python3-dev=3.14.3-0ubuntu2 \
