@@ -674,11 +674,6 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
               if (pTag)
                 nTagIntent = icRelativeColorimetric;
             }
-
-            //Apparently Using DtoB0 is not prescribed here by the v4 ICC Specification
-            if (!pTag && pProfile->m_Header.version >= icVersionNumberV5) {
-              pTag = pProfile->FindTag(icSigDToB0Tag);
-            }
           }
         }
 
@@ -809,7 +804,7 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
           if (pTag && !pTag->IsSupported())
             pTag = NULL;
 
-          if (pTag)
+          if (pTag && pProfile->m_Header.spectralPCS)
             bUseSpectralPCS = true;
 
           if (!pTag && nTagIntent == icAbsoluteColorimetric && pProfile->m_Header.version < icVersionNumberV5) {
