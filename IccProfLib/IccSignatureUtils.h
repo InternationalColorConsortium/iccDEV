@@ -420,14 +420,32 @@ enum IccPerfClutPath {
   icPerfClutPathCount
 };
 
+enum IccPerfClutKind {
+  icPerfClut1d,
+  icPerfClut2d,
+  icPerfClut3dLinear,
+  icPerfClut3dTetra,
+  icPerfClut4d,
+  icPerfClut5d,
+  icPerfClut6d,
+  icPerfClutNd,
+  icPerfClutKindCount
+};
+
 struct IccPerfStats {
   std::atomic<unsigned long long> clutCalls[icPerfClutPathCount] = {};
   std::atomic<unsigned long long> clutOutputChannels[17] = {};
   std::atomic<unsigned long long> clutElapsedNanoseconds = {};
+  std::atomic<unsigned long long> clutAllCalls[icPerfClutKindCount] = {};
+  std::atomic<unsigned long long> clutAllTimedSamples[icPerfClutKindCount] = {};
+  std::atomic<unsigned long long> clutAllElapsedNanoseconds[icPerfClutKindCount] = {};
+  std::atomic<unsigned long long> clutAllOutputChannels[17] = {};
+  std::atomic<unsigned long long> clutAllOutputChannelsOver16 = {};
   std::atomic<unsigned long long> threadedCalls = {};
   std::atomic<unsigned long long> threadedPixels = {};
   std::atomic<unsigned long long> threadedWorkerStrips = {};
   std::atomic<unsigned long long> threadedActiveWorkers = {};
+  std::atomic<unsigned long long> threadedElapsedNanoseconds = {};
 };
 
 inline IccPerfStats g_iccPerfStats;
@@ -439,6 +457,21 @@ inline bool IccPerfMonitoringEnabled()
     return value && value[0] && std::strcmp(value, "0");
   }();
   return enabled;
+}
+
+inline unsigned int IccPerfClutTimingStride()
+{
+  static const unsigned int stride = []() {
+    const char *value = std::getenv("ICC_PERF_CLUT_TIMING_STRIDE");
+    if (!value || !value[0])
+      return 1U;
+    char *end = nullptr;
+    const unsigned long parsed = std::strtoul(value, &end, 10);
+    return end && !end[0] && parsed >= 1 && parsed <= 1024 &&
+        !(parsed & (parsed - 1))
+      ? static_cast<unsigned int>(parsed) : 1U;
+  }();
+  return stride;
 }
 
 inline void IccPerfWriteReport()
@@ -454,6 +487,7 @@ inline void IccPerfWriteReport()
   }
 
   std::fprintf(stream, "format=iccdev-perf-v1\n");
+  std::fprintf(stream, "clut_timing_stride=%u\n", IccPerfClutTimingStride());
   std::fprintf(stream, "clut_elapsed_ns=%llu\n",
                g_iccPerfStats.clutElapsedNanoseconds.load(std::memory_order_relaxed));
   for (int pathIndex = 0; pathIndex < icPerfClutPathCount; pathIndex++) {
@@ -467,6 +501,44 @@ inline void IccPerfWriteReport()
     if (calls)
       std::fprintf(stream, "clut_calls_outputs_%d=%llu\n", outputChannels, calls);
   }
+  static const char *const kindNames[] = {
+    "1d", "2d", "3d_linear", "3d_tetra", "4d", "5d", "6d", "nd"
+  };
+  unsigned long long allCalls = 0;
+  unsigned long long allElapsedNanoseconds = 0;
+  for (int kind = 0; kind < icPerfClutKindCount; kind++) {
+    const unsigned long long calls =
+      g_iccPerfStats.clutAllCalls[kind].load(std::memory_order_relaxed);
+    const unsigned long long elapsed =
+      g_iccPerfStats.clutAllElapsedNanoseconds[kind].load(std::memory_order_relaxed);
+    std::fprintf(stream, "clut_all_calls_%s=%llu\n", kindNames[kind], calls);
+    std::fprintf(stream, "clut_all_timed_samples_%s=%llu\n", kindNames[kind],
+                 g_iccPerfStats.clutAllTimedSamples[kind].load(std::memory_order_relaxed));
+    std::fprintf(stream, "clut_all_elapsed_ns_%s=%llu\n", kindNames[kind], elapsed);
+    allCalls += calls;
+    allElapsedNanoseconds += elapsed;
+  }
+  std::fprintf(stream, "clut_all_calls_total=%llu\n", allCalls);
+  std::fprintf(stream, "clut_all_elapsed_ns_total=%llu\n", allElapsedNanoseconds);
+  const unsigned long long sse2Calls =
+    g_iccPerfStats.clutCalls[icPerfClutSse2].load(std::memory_order_relaxed);
+  const unsigned long long avx2Calls =
+    g_iccPerfStats.clutCalls[icPerfClutAvx2].load(std::memory_order_relaxed);
+  const unsigned long long avx512Calls =
+    g_iccPerfStats.clutCalls[icPerfClutAvx512].load(std::memory_order_relaxed);
+  std::fprintf(stream, "clut_all_calls_scalar=%llu\n",
+               allCalls - sse2Calls - avx2Calls - avx512Calls);
+  std::fprintf(stream, "clut_all_calls_sse2=%llu\n", sse2Calls);
+  std::fprintf(stream, "clut_all_calls_avx2=%llu\n", avx2Calls);
+  std::fprintf(stream, "clut_all_calls_avx512=%llu\n", avx512Calls);
+  for (int outputChannels = 0; outputChannels <= 16; outputChannels++) {
+    const unsigned long long calls =
+      g_iccPerfStats.clutAllOutputChannels[outputChannels].load(std::memory_order_relaxed);
+    if (calls)
+      std::fprintf(stream, "clut_all_calls_outputs_%d=%llu\n", outputChannels, calls);
+  }
+  std::fprintf(stream, "clut_all_calls_outputs_over_16=%llu\n",
+               g_iccPerfStats.clutAllOutputChannelsOver16.load(std::memory_order_relaxed));
   std::fprintf(stream, "threaded_calls=%llu\n",
                g_iccPerfStats.threadedCalls.load(std::memory_order_relaxed));
   std::fprintf(stream, "threaded_pixels=%llu\n",
@@ -475,6 +547,8 @@ inline void IccPerfWriteReport()
                g_iccPerfStats.threadedWorkerStrips.load(std::memory_order_relaxed));
   std::fprintf(stream, "threaded_active_workers=%llu\n",
                g_iccPerfStats.threadedActiveWorkers.load(std::memory_order_relaxed));
+  std::fprintf(stream, "threaded_elapsed_ns=%llu\n",
+               g_iccPerfStats.threadedElapsedNanoseconds.load(std::memory_order_relaxed));
   std::fclose(stream);
 }
 
@@ -494,13 +568,16 @@ inline void IccPerfEnsureReportWriter()
 
 class IccPerfClutScope {
 public:
-  explicit IccPerfClutScope(int outputChannels)
-    : m_outputChannels(outputChannels), m_path(icPerfClutScalar),
-      m_enabled(IccPerfMonitoringEnabled())
+  explicit IccPerfClutScope(int outputChannels, IccPerfClutKind kind)
+    : m_outputChannels(outputChannels), m_kind(kind), m_path(icPerfClutScalar),
+      m_enabled(IccPerfMonitoringEnabled()), m_timed(false)
   {
     if (m_enabled) {
       IccPerfEnsureReportWriter();
-      m_start = std::chrono::steady_clock::now();
+      static thread_local unsigned long long callsByKind[icPerfClutKindCount] = {};
+      m_timed = (++callsByKind[m_kind] & (IccPerfClutTimingStride() - 1)) == 0;
+      if (m_timed)
+        m_start = std::chrono::steady_clock::now();
     }
   }
 
@@ -509,15 +586,34 @@ public:
     if (!m_enabled)
       return;
 
-    const unsigned long long elapsedNanoseconds =
-      static_cast<unsigned long long>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::steady_clock::now() - m_start).count());
-    g_iccPerfStats.clutCalls[m_path].fetch_add(1, std::memory_order_relaxed);
-    if (m_outputChannels >= 0 && m_outputChannels <= 16)
-      g_iccPerfStats.clutOutputChannels[m_outputChannels].fetch_add(
+    unsigned long long elapsedNanoseconds = 0;
+    if (m_timed) {
+      elapsedNanoseconds =
+        static_cast<unsigned long long>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+          std::chrono::steady_clock::now() - m_start).count()) *
+        IccPerfClutTimingStride();
+    }
+    g_iccPerfStats.clutAllCalls[m_kind].fetch_add(1, std::memory_order_relaxed);
+    if (m_timed) {
+      g_iccPerfStats.clutAllTimedSamples[m_kind].fetch_add(
         1, std::memory_order_relaxed);
-    g_iccPerfStats.clutElapsedNanoseconds.fetch_add(
-      elapsedNanoseconds, std::memory_order_relaxed);
+      g_iccPerfStats.clutAllElapsedNanoseconds[m_kind].fetch_add(
+        elapsedNanoseconds, std::memory_order_relaxed);
+    }
+    if (m_outputChannels >= 0 && m_outputChannels <= 16)
+      g_iccPerfStats.clutAllOutputChannels[m_outputChannels].fetch_add(
+        1, std::memory_order_relaxed);
+    else if (m_outputChannels > 16)
+      g_iccPerfStats.clutAllOutputChannelsOver16.fetch_add(1, std::memory_order_relaxed);
+    if (m_kind == icPerfClut3dLinear) {
+      g_iccPerfStats.clutCalls[m_path].fetch_add(1, std::memory_order_relaxed);
+      if (m_outputChannels >= 0 && m_outputChannels <= 16)
+        g_iccPerfStats.clutOutputChannels[m_outputChannels].fetch_add(
+          1, std::memory_order_relaxed);
+      if (m_timed)
+        g_iccPerfStats.clutElapsedNanoseconds.fetch_add(
+          elapsedNanoseconds, std::memory_order_relaxed);
+    }
   }
 
   void SetPath(IccPerfClutPath path)
@@ -527,8 +623,10 @@ public:
 
 private:
   int m_outputChannels;
+  IccPerfClutKind m_kind;
   IccPerfClutPath m_path;
   bool m_enabled;
+  bool m_timed;
   std::chrono::steady_clock::time_point m_start;
 };
 
@@ -546,15 +644,44 @@ inline void IccPerfRecordThreadedCmm(icUInt32Number pixels, int activeWorkers)
     static_cast<unsigned long long>(activeWorkers), std::memory_order_relaxed);
 }
 
+class IccPerfThreadedScope {
+public:
+  IccPerfThreadedScope() : m_enabled(IccPerfMonitoringEnabled())
+  {
+    if (m_enabled)
+      m_start = std::chrono::steady_clock::now();
+  }
+
+  ~IccPerfThreadedScope()
+  {
+    if (m_enabled) {
+      const unsigned long long elapsedNanoseconds =
+        static_cast<unsigned long long>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+          std::chrono::steady_clock::now() - m_start).count());
+      g_iccPerfStats.threadedElapsedNanoseconds.fetch_add(
+        elapsedNanoseconds, std::memory_order_relaxed);
+    }
+  }
+
+private:
+  bool m_enabled;
+  std::chrono::steady_clock::time_point m_start;
+};
+
+#define ICC_PERF_CLUT_SCOPE_KIND(outputChannels, kind) \
+  IccPerfClutScope iccPerfClutScope(outputChannels, kind)
 #define ICC_PERF_CLUT_SCOPE(outputChannels) \
-  IccPerfClutScope iccPerfClutScope(outputChannels)
+  ICC_PERF_CLUT_SCOPE_KIND(outputChannels, icPerfClut3dLinear)
 #define ICC_PERF_CLUT_PATH(path) iccPerfClutScope.SetPath(path)
 #define ICC_PERF_THREADED_CMM(pixels, activeWorkers) \
   IccPerfRecordThreadedCmm(pixels, activeWorkers)
+#define ICC_PERF_THREADED_SCOPE() IccPerfThreadedScope iccPerfThreadedScope
 #else
+#define ICC_PERF_CLUT_SCOPE_KIND(outputChannels, kind) ((void)0)
 #define ICC_PERF_CLUT_SCOPE(outputChannels) ((void)0)
 #define ICC_PERF_CLUT_PATH(path) ((void)0)
 #define ICC_PERF_THREADED_CMM(pixels, activeWorkers) ((void)0)
+#define ICC_PERF_THREADED_SCOPE() ((void)0)
 #endif
 
   // -----------------------------------------------------------------------------
@@ -684,13 +811,13 @@ inline const char* ColorSpaceSignatureToStr(icUInt32Number sig)
     default: break;
   }
 
-  // v5/iccMAX: N-channel (0x6e63xxxx) — channels in low 16 bits
+  // v5/iccMAX: N-channel (0x6e63xxxx) - channels in low 16 bits
   icUInt32Number csType = sig & 0xffff0000;
   icUInt32Number nChan  = sig & 0x0000ffff;
   if (csType == 0x6e630000 && nChan > 0)
     return "NChannel";
 
-  // v5/iccMAX: MCS (0x6d63xxxx) — multiplex channel set
+  // v5/iccMAX: MCS (0x6d63xxxx) - multiplex channel set
   if (csType == 0x6d630000 && nChan > 0)
     return "MCS";
 
@@ -882,7 +1009,7 @@ struct IccColorSpaceDescription {
 //
 // PURPOSE:
 //   Converts a signature into metadata: name, known/unknown, raw byte layout.
-//   Does NOT log — use DebugColorSpaceMeta() for diagnostic output.
+//   Does NOT log - use DebugColorSpaceMeta() for diagnostic output.
 //
 ///////////////////////////////////////////////////////////////////////////////
 inline IccColorSpaceDescription DescribeColorSpaceSignature(icUInt32Number sig)
@@ -890,7 +1017,7 @@ inline IccColorSpaceDescription DescribeColorSpaceSignature(icUInt32Number sig)
   IccColorSpaceDescription desc;
   desc.name = ColorSpaceSignatureToStr(sig);
 
-  // Validate without triggering logs — inline the check directly
+  // Validate without triggering logs - inline the check directly
   bool known = false;
   switch (sig) {
     case (icUInt32Number)icSigXYZData:

@@ -699,6 +699,9 @@ option(ICCDEV_ENABLE_AVX512
 option(ICCDEV_ENABLE_PERF_MONITORING
   "Build opt-in aggregate CLUT and threaded-CMM performance telemetry"
   OFF)
+option(ICCDEV_ENABLE_APPLY_BATCH_TIMING
+  "Build opt-in iccApplyProfiles per-batch debug timing"
+  OFF)
 set(ICCDEV_LIBCPP_HARDENING_MODE "none" CACHE STRING
   "Apple libc++ hardening mode: none, fast, extensive, or debug")
 set_property(CACHE ICCDEV_LIBCPP_HARDENING_MODE PROPERTY STRINGS

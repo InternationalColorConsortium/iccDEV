@@ -40,6 +40,24 @@ iccApplyToLink GRACoL_to_sRGB.icc 0 2 1 "GRACoL_to_sRGB" 0 1 1 0 GRACoL2006_Coat
 `.cube` output requires both source and destination spaces to have exactly three
 channels.
 
+## Telemetry and Evidence
+
+Global options can appear before or after the positional command form:
+
+```sh
+iccApplyToLink output.cube 1 17 6 "sRGB cube" 0 1 0 0 sRGB.icc 1 \
+  --telemetry=jsonl --telemetry-file link.jsonl \
+  --evidence-file link-evidence.json
+```
+
+Use `--telemetry=off|human|jsonl`, `--telemetry-file FILE`, and
+`--evidence-file FILE`; legacy single-dash spellings remain accepted. Human
+telemetry uses UTC timestamps and is written to stderr. JSONL records
+`run_started`, `transform_ready`,
+and completion or failure; the evidence sidecar includes the link output, grid
+size/node count, elapsed time, and node throughput. Human telemetry replaces
+the legacy percentage display so a combined console log has one progress view.
+
 ## See Also
 
 - [CLI tool reference](../../../docs/tools-cli-reference.md)

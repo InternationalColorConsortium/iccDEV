@@ -23,6 +23,6 @@ iccFromXml 18ChanWithSpots-MVIS.xml 18ChanWithSpots-MVIS.icc
 
 echo "====================== Running iccApplyProfiles CMYKSS-Numbered-Overprint.tif prev.tif =========================="
 
-iccApplyProfiles CMYKSS-Numbered-Overprint.tif prev.tif 1 0 1 0 1 6ChanSelect-MID.icc 0 -ENV:bkgX 0.4014 -ENV:bkgY 0.2391 -ENV:bkgZ 0.0272 18ChanWithSpots-MVIS.icc 0 ../sRGB_v4_ICC_preference.icc 1
+iccApplyProfiles -threads 0 --telemetry=human CMYKSS-Numbered-Overprint.tif prev.tif 1 0 1 0 1 6ChanSelect-MID.icc 0 -ENV:bkgX 0.4014 -ENV:bkgY 0.2391 -ENV:bkgZ 0.0272 18ChanWithSpots-MVIS.icc 0 ../sRGB_v4_ICC_preference.icc 1
 
 echo "====================== Exiting mcs/updateprevWithBkgd.sh =========================="

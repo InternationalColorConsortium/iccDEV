@@ -64,7 +64,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             build-essential \
-            clang-18 \
+            clang-22 \
             cloc \
             cmake \
             curl \
@@ -73,7 +73,7 @@ jobs:
             libpng-dev \
             libtiff-dev \
             libxml2-dev \
-            llvm-18 \
+            llvm-22 \
             nlohmann-json3-dev \
             zlib1g-dev
 
@@ -85,9 +85,9 @@ jobs:
           source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
 
           echo "::group::Toolchain versions"
-          printf 'clang: %s\n' "$(clang-18 --version | head -1)"
-          printf 'llvm-cov: %s\n' "$(llvm-cov-18 --version | head -1)"
-          printf 'llvm-profdata: %s\n' "$(llvm-profdata-18 show --version 2>&1 | head -1 || printf unknown)"
+          printf 'clang: %s\n' "$(clang-22 --version | head -1)"
+          printf 'llvm-cov: %s\n' "$(llvm-cov-22 --version | head -1)"
+          printf 'llvm-profdata: %s\n' "$(llvm-profdata-22 show --version 2>&1 | head -1 || printf unknown)"
           printf 'cmake: %s\n' "$(cmake --version | head -1)"
           printf 'runner: %s\n' "$(uname -srm)"
           echo "::endgroup::"
@@ -166,8 +166,8 @@ jobs:
 
       - name: "Build with coverage instrumentation"
         env:
-          CC: clang-18
-          CXX: clang++-18
+          CC: clang-22
+          CXX: clang++-22
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -181,8 +181,8 @@ jobs:
           cmake "${WORKSPACE_DIR}/Build/Cmake" \
             -B "$BUILD_DIR" \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_COMPILER=clang-18 \
-            -DCMAKE_CXX_COMPILER=clang++-18 \
+            -DCMAKE_C_COMPILER=clang-22 \
+            -DCMAKE_CXX_COMPILER=clang++-22 \
             -DENABLE_COVERAGE=ON \
             -DENABLE_STATIC_LIBS=ON \
             -DENABLE_TESTS=ON \
@@ -867,7 +867,7 @@ jobs:
           summary_line "### Build"
           summary_line "| Component | Value |"
           summary_line "|-----------|-------|"
-          summary_line "| Compiler | clang-18 source-based coverage |"
+          summary_line "| Compiler | clang-22 source-based coverage |"
           summary_line "| Tools built | ${tool_count:-n/a} |"
           summary_line "| Profraw files | ${profraw_count:-n/a} |"
           summary_line "| HTML pages | ${html_count:-n/a} |"

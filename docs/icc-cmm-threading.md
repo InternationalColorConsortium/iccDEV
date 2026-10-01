@@ -1,4 +1,4 @@
-# CIccThreadedCmm — Parallel CMM Apply
+# CIccThreadedCmm - Parallel CMM Apply
 
 `CIccThreadedCmm` is a decorator over an existing `CIccCmm` that runs
 multi-pixel `Apply()` calls in parallel by splitting the pixel buffer into
@@ -50,7 +50,7 @@ delete tcmm;   // deletes the wrapped cmm when bDeleteCmm=true
 | `nThreads` | `0` selects `std::thread::hardware_concurrency()`; clamped to `>= 1`. |
 | `bDeleteCmm` | Take ownership of `pCmm`. Also deletes `pCmm` if `Attach` fails. |
 
-`AddXform()` is disabled on the wrapper — every overload returns
+`AddXform()` is disabled on the wrapper - every overload returns
 `icCmmStatBad`. Build the transform chain on the wrapped CMM before calling
 `Attach()`.
 
@@ -113,7 +113,7 @@ high-entropy float data.
 - Strip partitioning is contiguous, so callers do not need to align on any
   boundary; `dst` and `src` must not alias the same memory region.
 
-## CLI Example: `iccApplyProfiles -threads`
+## CLI Example: `iccApplyProfiles --threads`
 
 [`iccApplyProfiles`](../Tools/CmdLine/IccApplyProfiles/iccApplyProfiles.cpp)
 exposes the wrapper through a `-threads` flag. The value is forwarded
@@ -122,7 +122,7 @@ parameter; the connect factory installs the `CIccThreadedCmm` wrapper
 when `nThreads != 1` and returns the underlying CMM otherwise.
 
 ```text
-iccApplyProfiles -threads N -cfg config.json
+iccApplyProfiles --threads N --cfg config.json
 ```
 
 | Value | Behaviour |
@@ -198,8 +198,8 @@ delete conn;                                 // tears down wrapper + underlying 
 
 ## See Also
 
-- [IccConnect library](icc-connect.md) — factory that constructs a
+- [IccConnect library](icc-connect.md) - factory that constructs a
   `Begin()`-ed CMM from JSON config, with an `nThreads` parameter on
   `CreateStandard` and `CreateSearch` for parallel apply.
-- [CLI tool reference](tools-cli-reference.md) — shared option tables for
+- [CLI tool reference](tools-cli-reference.md) - shared option tables for
   the `iccApply*` tools.

@@ -1,6 +1,6 @@
 #
 # IccApplyProfiles CMakeLists.txt | DemoIccMAX Project
-# Copyright (©) 2024-2025 The International Color Consortium. All rights reserved.
+# Copyright (c) 2024-2025 The International Color Consortium. All rights reserved.
 #
 #
 # Last Updated: 10-AUGUST-2025 at 1500Z by David Hoyt
@@ -32,6 +32,9 @@ if(NOT TARGET iccApplyProfiles)
 
   set(TARGET_NAME iccApplyProfiles)
   add_executable(${TARGET_NAME} ${SOURCES})
+  if(ICCDEV_ENABLE_APPLY_BATCH_TIMING)
+    target_compile_definitions(${TARGET_NAME} PRIVATE ICC_APPLY_BATCH_TIMING=1)
+  endif()
 
   # Normalize TIFF link name
   if(TARGET TIFF::TIFF)

@@ -1,0 +1,138 @@
+{
+  "schema": "iccdev-applyprofiles-matrix/v1",
+  "policy": {
+    "color_baseline": "measure_only",
+    "enforcement_scope": "framework_only",
+    "profile_assessment": "expected_warnings_enforced"
+  },
+  "known_profile_warnings": {
+    "317a85b01c29550c5289e505079a549c12aaf92cfebc80d04b6626f717675fce": {
+      "owner": "iccDEV QA maintainers",
+      "expected_checklist_warn_ids": [
+        "S3", "S4", "C1", "C3", "C4", "C5", "C10", "C12"
+      ],
+      "purpose": "transformation smoke only"
+    }
+  },
+  "rows": [
+    {
+      "id": "rgb8-tagged",
+      "source": "Testing/ApplyDataFiles/seed-tiff-none-rgb-8x8.tif",
+      "profiles": [
+        {
+          "intent": 1,
+          "path": "",
+          "role": "source_embedded"
+        },
+        {
+          "intent": 1,
+          "path": "Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc",
+          "role": "destination"
+        }
+      ],
+      "options": {
+        "compression": 0,
+        "embed_icc": 1,
+        "encoding": 1,
+        "interpolation": 0,
+        "planar": 0,
+        "threads": 1
+      },
+      "expected_outcome": "PASS",
+      "output_contract": {
+        "bits_per_sample": [8, 8, 8],
+        "compression": 1,
+        "embedded_profile": true,
+        "embedded_profile_matches": "destination",
+        "extra_samples": [],
+        "pages": 1,
+        "photometric": 2,
+        "pixel_sha256_equals_source": true,
+        "planar_configuration": 1,
+        "sample_format": [1, 1, 1],
+        "samples_per_pixel": 3,
+        "source_equal": [
+          "height",
+          "orientation",
+          "resolution_unit",
+          "width",
+          "x_resolution",
+          "y_resolution"
+        ]
+      },
+      "color_measurement": "same_channel_error"
+    },
+    {
+      "id": "rgb8-untagged",
+      "source": "Testing/ApplyDataFiles/seed-tiff-none-rgb-8x8.tif",
+      "profiles": [
+        {
+          "intent": 1,
+          "path": "",
+          "role": "source_embedded"
+        },
+        {
+          "intent": 1,
+          "path": "Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc",
+          "role": "destination"
+        }
+      ],
+      "options": {
+        "compression": 0,
+        "embed_icc": 0,
+        "encoding": 1,
+        "interpolation": 0,
+        "planar": 0,
+        "threads": 1
+      },
+      "expected_outcome": "PASS",
+      "output_contract": {
+        "bits_per_sample": [8, 8, 8],
+        "compression": 1,
+        "embedded_profile": false,
+        "extra_samples": [],
+        "pages": 1,
+        "photometric": 2,
+        "pixel_sha256_equals_source": true,
+        "planar_configuration": 1,
+        "sample_format": [1, 1, 1],
+        "samples_per_pixel": 3,
+        "source_equal": [
+          "height",
+          "orientation",
+          "resolution_unit",
+          "width",
+          "x_resolution",
+          "y_resolution"
+        ]
+      },
+      "color_measurement": "same_channel_error"
+    },
+    {
+      "id": "missing-embedded-source-profile",
+      "source": "artifact:rgb8-untagged/output",
+      "profiles": [
+        {
+          "intent": 1,
+          "path": "",
+          "role": "source_embedded"
+        }
+      ],
+      "options": {
+        "compression": 0,
+        "embed_icc": 0,
+        "encoding": 1,
+        "interpolation": 0,
+        "planar": 0,
+        "threads": 1
+      },
+      "expected_message": "Source image doesn't have embedded profile!",
+      "missing_precondition": "source_embedded_profile",
+      "expected_outcome": "EXPECTED_REJECTION",
+      "output_contract": {
+        "output_absent": true
+      },
+      "color_measurement": "not_applicable"
+    }
+  ]
+}

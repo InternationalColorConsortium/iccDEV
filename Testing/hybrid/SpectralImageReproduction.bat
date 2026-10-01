@@ -26,7 +26,7 @@
 @ECHO This runs an inverse search per pixel; expect minutes, not seconds.
 @ECHO *****************************************************************
 
-%TOOLDIR%iccApplyProfiles -cfg config/msCowsToCmyk.json
+%TOOLDIR%iccApplyProfiles -threads 0 --telemetry=human -cfg config/msCowsToCmyk.json
 %TOOLDIR%iccTiffDump Results\MS_smCowsCmyk.tif
 
 @ECHO Wrote Results\MS_smCowsCmyk.tif

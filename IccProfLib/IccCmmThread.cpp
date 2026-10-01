@@ -395,6 +395,7 @@ icStatusCMM CIccApplyThreadedCmm::Apply(icFloatNumber *DstPixel, const icFloatNu
     return icCmmStatAllocErr;
 
   ICC_PERF_THREADED_CMM(nPixels, nActive);
+  ICC_PERF_THREADED_SCOPE();
   return m_pool->Apply(m_workers, DstPixel, SrcPixel, nPixels, nActive,
                        nSrcSamples, nDstSamples);
 }

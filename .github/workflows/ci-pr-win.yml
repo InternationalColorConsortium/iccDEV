@@ -524,7 +524,10 @@ jobs:
                   $targetDir = $Matches[1].Trim()
                 }
                 $targetDir = $targetDir.Trim('"')
-                if ([System.IO.Path]::IsPathRooted($targetDir)) {
+                if ($targetDir -ieq '%~dp0') {
+                  # Resolve the batch-file directory against the staged copy.
+                  $candidateDir = $workDir
+                } elseif ([System.IO.Path]::IsPathRooted($targetDir)) {
                   $candidateDir = $targetDir
                 } else {
                   $candidateDir = Join-Path $currentWorkDir $targetDir

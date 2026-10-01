@@ -90,6 +90,7 @@
 #include "IccTagMPE.h"
 #include "IccMpeBasic.h"
 #include "IccCmdLineUtil.h"
+#include "IccApplyTelemetry.h"
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -774,8 +775,9 @@ protected:
 void Usage(FILE* stream) 
 {
   fprintf(stream, "iccApplyToLink built with IccProfLib version " ICCPROFLIBVER "\n\n");
-
-  fprintf(stream, "Usage: iccApplyToLink dst_link_file link_type lut_size option title range_min range_max first_transform interp {{-ENV:sig value} profile_file_path rendering_intent {-PCC connection_conditions_path}}\n\n");
+  fprintf(stream, "Usage: iccApplyToLink {--telemetry=off|human|jsonl --telemetry-file FILE --evidence-file FILE} dst_link_file link_type lut_size option title range_min range_max first_transform interp {{-ENV:sig value} profile_file_path rendering_intent {-PCC connection_conditions_path}}\n\n");
+  fprintf(stream, "  Global options may appear in any order. Legacy single-dash forms remain accepted.\n");
+  fprintf(stream, "  --telemetry=jsonl requires --telemetry-file. --telemetry=human writes to stderr.\n\n");
   fprintf(stream, "  dst_link_file is path of file to create\n\n");
   
   fprintf(stream, "  For link_type:\n");
@@ -915,6 +917,9 @@ static void releasePccList(IccProfilePtrList& pccList)
 int main(int argc, icChar* argv[])
 {
   int minargs = 10; // minimum number of arguments
+  icApplyTelemetryMode telemetryMode = icApplyTelemetryOff;
+  std::string telemetryFile;
+  std::string evidenceFile;
 
   // An explicit help request is the one invocation here that is not an error, so
   // it prints on stdout and exits 0; every malformed form below prints on stderr
@@ -923,6 +928,80 @@ int main(int argc, icChar* argv[])
   if (argc == 2 && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help"))) {
     Usage(stdout);
     return 0;
+  }
+
+  std::vector<icChar*> commandArgs;
+  commandArgs.push_back(argv[0]);
+  for (int arg = 1; arg < argc; arg++) {
+    icChar* value = argv[arg];
+    if (!strnicmp(value, "--telemetry=", 12) ||
+        !strnicmp(value, "-telemetry=", 11)) {
+      const char* mode = strchr(value, '=') + 1;
+      if (!stricmp(mode, "off"))
+        telemetryMode = icApplyTelemetryOff;
+      else if (!stricmp(mode, "human"))
+        telemetryMode = icApplyTelemetryHuman;
+      else if (!stricmp(mode, "jsonl"))
+        telemetryMode = icApplyTelemetryJsonl;
+      else {
+        fprintf(stderr, "Invalid --telemetry value '%s': expected off, human, or jsonl\n",
+                icSanitizeConsoleText(mode).c_str());
+        return EXIT_FAILURE;
+      }
+    }
+    else if (!stricmp(value, "--telemetry") || !stricmp(value, "-telemetry")) {
+      if (++arg >= argc) {
+        fprintf(stderr, "Missing mode for --telemetry\n");
+        return EXIT_FAILURE;
+      }
+      if (!stricmp(argv[arg], "off"))
+        telemetryMode = icApplyTelemetryOff;
+      else if (!stricmp(argv[arg], "human"))
+        telemetryMode = icApplyTelemetryHuman;
+      else if (!stricmp(argv[arg], "jsonl"))
+        telemetryMode = icApplyTelemetryJsonl;
+      else {
+        fprintf(stderr, "Invalid --telemetry value '%s': expected off, human, or jsonl\n",
+                icSanitizeConsoleText(argv[arg]).c_str());
+        return EXIT_FAILURE;
+      }
+    }
+    else if (!stricmp(value, "--telemetry-file") || !stricmp(value, "-telemetry-file")) {
+      if (++arg >= argc) {
+        fprintf(stderr, "Missing path for --telemetry-file\n");
+        return EXIT_FAILURE;
+      }
+      telemetryFile = argv[arg];
+    }
+    else if (!stricmp(value, "--evidence-file") || !stricmp(value, "-evidence-file")) {
+      if (++arg >= argc) {
+        fprintf(stderr, "Missing path for --evidence-file\n");
+        return EXIT_FAILURE;
+      }
+      evidenceFile = argv[arg];
+    }
+    else {
+      commandArgs.push_back(value);
+    }
+  }
+  argc = (int)commandArgs.size();
+  argv = commandArgs.data();
+
+  if (argc == 2 && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help"))) {
+    Usage(stdout);
+    return 0;
+  }
+  if (telemetryMode == icApplyTelemetryJsonl && telemetryFile.empty()) {
+    fprintf(stderr, "--telemetry=jsonl requires --telemetry-file\n");
+    return EXIT_FAILURE;
+  }
+  if (telemetryMode != icApplyTelemetryJsonl && !telemetryFile.empty()) {
+    fprintf(stderr, "--telemetry-file requires --telemetry=jsonl\n");
+    return EXIT_FAILURE;
+  }
+  if (telemetryFile == evidenceFile && !telemetryFile.empty()) {
+    fprintf(stderr, "Telemetry and evidence files must be different\n");
+    return EXIT_FAILURE;
   }
 
   if(argc<minargs) {
@@ -934,6 +1013,12 @@ int main(int argc, icChar* argv[])
             minargs - 1, argc > 0 ? argc - 1 : 0);
     Usage(stderr);
     return -1;
+  }
+
+  if ((!telemetryFile.empty() && telemetryFile == argv[1]) ||
+      (!evidenceFile.empty() && evidenceFile == argv[1])) {
+    fprintf(stderr, "Telemetry and evidence files must not alias the link output\n");
+    return EXIT_FAILURE;
   }
 
   int nNumProfiles, temp;
@@ -1279,9 +1364,49 @@ int main(int argc, icChar* argv[])
   }
   const size_t lutCount = (size_t)nLutNodes;
 
+  CIccApplyToolTelemetry telemetry;
+  telemetry.m_mode = telemetryMode;
+  if (telemetryMode == icApplyTelemetryJsonl && !telemetry.Open(telemetryFile))
+    return EXIT_FAILURE;
+
+  const std::string linkOutput = argv[1];
+  const std::string linkType = nLinkType == 0 ? "device_link" : "cube";
+  const std::string runStartedFields =
+    "\"tool\":\"iccApplyToLink\",\"output\":" +
+    CIccApplyToolTelemetry::JsonString(linkOutput) +
+    ",\"link_type\":" + CIccApplyToolTelemetry::JsonString(linkType) +
+    ",\"grid_size\":" + std::to_string(nLutSize) +
+    ",\"profile_argument_pairs\":" + std::to_string(nNumProfiles);
+  if (!telemetry.Emit("run_started", runStartedFields))
+    return EXIT_FAILURE;
+  if (telemetryMode == icApplyTelemetryHuman) {
+    fprintf(stderr, "[%s] iccApplyToLink: started output=%s link_type=%s grid_size=%d\n",
+            CIccApplyToolTelemetry::TimestampUtc().c_str(),
+            icSanitizeConsoleText(linkOutput.c_str()).c_str(), linkType.c_str(),
+            nLutSize);
+  }
+
+  const std::string transformReadyFields =
+    "\"source_samples\":" + std::to_string(nSrcSamples) +
+    ",\"destination_samples\":" + std::to_string(nDestSamples) +
+    ",\"grid_size\":" + std::to_string(nLutSize) +
+    ",\"grid_nodes\":" + std::to_string(nLutNodes) +
+    ",\"input_range_min\":" + std::to_string(loRange) +
+    ",\"input_range_max\":" + std::to_string(hiRange);
+  if (!telemetry.Emit("transform_ready", transformReadyFields))
+    return EXIT_FAILURE;
+  if (telemetryMode == icApplyTelemetryHuman) {
+    fprintf(stderr,
+            "[%s] iccApplyToLink: transform ready source_samples=%d destination_samples=%d grid_nodes=%llu\n",
+            CIccApplyToolTelemetry::TimestampUtc().c_str(),
+            nSrcSamples, nDestSamples, (unsigned long long)nLutNodes);
+  }
+
   if (!pWriter->begin(theCmm.GetSourceSpace(), theCmm.GetDestSpace())) {
     printf("Unable to begin writing LUT\n");
-      return -1;
+    telemetry.Emit("run_failed",
+                   "\"status\":\"tool_failure\",\"reason\":\"unable_to_begin_writing_lut\"");
+    return -1;
   }
 
   // Avoid vector(size, value) here: libstdc++ 15's fill_n countdown trips
@@ -1332,7 +1457,10 @@ int main(int argc, icChar* argv[])
     }
  
     //Display status of how much we have accomplished
-    if (lutCount > 0) {     // explicit check to avoid divide by zero
+    if (telemetryMode != icApplyTelemetryHuman && lutCount > 0) {
+      // Human telemetry is the progress view for an opted-in run. Keep the
+      // legacy percentage for the default and JSONL modes, but do not render
+      // both views into a combined console log.
         int curPer = GetProgressPercent(c + 1, lutCount);
         if (curPer != lastPer) {
           printf("\r%d%%", curPer);
@@ -1343,11 +1471,40 @@ int main(int argc, icChar* argv[])
   }
 
   if (pWriter->finish()) {
-    printf("\nLUT successfully written to '%s'\n", icSanitizeConsoleText(argv[1]).c_str());
+    printf("%sLUT successfully written to '%s'\n",
+           telemetryMode == icApplyTelemetryHuman ? "" : "\n",
+           icSanitizeConsoleText(argv[1]).c_str());
   }
   else {
-    printf("\nUnable to write LUT to '%s'\n", icSanitizeConsoleText(argv[1]).c_str());
+    printf("%sUnable to write LUT to '%s'\n",
+           telemetryMode == icApplyTelemetryHuman ? "" : "\n",
+           icSanitizeConsoleText(argv[1]).c_str());
+    telemetry.Emit("run_failed",
+                   "\"status\":\"tool_failure\",\"reason\":\"unable_to_write_lut\"");
     return -1;
+  }
+
+  const long long elapsedMs = telemetry.ElapsedMs();
+  const double throughputNodesPerSecond =
+    elapsedMs > 0 ? (double)nLutNodes * 1000.0 / (double)elapsedMs : 0.0;
+  const std::string completedFields =
+    "\"status\":\"success\",\"output\":" +
+    CIccApplyToolTelemetry::JsonString(linkOutput) +
+    ",\"link_type\":" + CIccApplyToolTelemetry::JsonString(linkType) +
+    ",\"grid_size\":" + std::to_string(nLutSize) +
+    ",\"grid_nodes\":" + std::to_string(nLutNodes) +
+    ",\"elapsed_ms\":" + std::to_string(elapsedMs) +
+    ",\"throughput_nodes_per_second\":" + std::to_string(throughputNodesPerSecond);
+  if (!evidenceFile.empty() && !telemetry.WriteEvidence(evidenceFile, completedFields))
+    return EXIT_FAILURE;
+  if (!telemetry.Emit("run_completed", completedFields))
+    return EXIT_FAILURE;
+  if (telemetryMode == icApplyTelemetryHuman) {
+    fprintf(stderr,
+            "[%s] iccApplyToLink: completed output=%s grid_nodes=%llu elapsed_ms=%lld throughput_nodes_per_second=%.3f\n",
+            CIccApplyToolTelemetry::TimestampUtc().c_str(),
+            icSanitizeConsoleText(linkOutput.c_str()).c_str(),
+            (unsigned long long)nLutNodes, elapsedMs, throughputNodesPerSecond);
   }
 
   return 0;

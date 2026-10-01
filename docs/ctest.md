@@ -300,6 +300,8 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.lut16-zero-curve-regressions` | `.github/scripts/iccdev-lut16-zero-curve-regression-tests.sh` |
 | `iccdev.applynamedcmm-cli-args` | `.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh` |
 | `iccdev.applysearch-cli-args` | `.github/scripts/iccdev-applysearch-cli-args-regression.sh` |
+| `iccdev.applyprofiles-headless-receipts` | `.github/ci/quality-assurance/scripts/iccApplyProfiles-quick-check.sh`; verifies JSONL lifecycle receipts, post-close JSON evidence, sidecar path rejection, and byte-identical TIFF output with telemetry enabled |
+| `iccdev.applyprofiles-evidence-matrix` | `.github/ci/quality-assurance/scripts/iccApplyProfiles-matrix.sh`; classifies tracked positive and expected-negative image conversions, validates semantic TIFF contracts, and retains command, hash, PAWG, receipt, and measurement evidence |
 | `iccdev.namedcolor-apply-regressions` | `.github/scripts/iccdev-namedcolor-apply-regression-tests.sh` |
 | `iccdev.v5-namedcmm-regressions` | `.github/scripts/iccdev-v5-namedcmm-regression-tests.sh` |
 | `iccdev.namedcolor-overprint-regressions` | `.github/scripts/iccdev-namedcolor-overprint-regression-tests.sh` |

@@ -12,6 +12,50 @@ Run without arguments to print the current command syntax and supported options:
 iccApplySearch
 ```
 
+## Export and Replay Example
+
+`iccApplySearch` supports both configuration export forms:
+
+- `-exportcfg FILE` writes the resolved operation settings.
+- `-exportcfganddata FILE` also embeds the input color data, so `-cfg FILE`
+  replays without a separate data file.
+
+Run the following command from `Testing/hybrid` after its profiles are built.
+It exports a portable configuration and writes transformed text data to
+standard output:
+
+```sh
+iccApplySearch -exportcfganddata config/cmykGraysEst.json \
+  Results/cmykGraysRef.txt 0 1 \
+  ICC/Spec380_10_730-D50_2deg.icc 3 \
+  ICC/Lab_float-D50_2deg.icc 3 \
+  ICC/CMYK_Hybrid_Profile.icc 10003 -INIT 3 \
+  ICC/Lab_float-D50_2deg.icc 1 \
+  ICC/Lab_float-D93_2deg-MAT.icc 1 \
+  ICC/Lab_float-F11_2deg-MAT.icc 1 \
+  ICC/Lab_float-IllumA_2deg-MAT.icc 1 \
+  > Results/cmykGraysEst.txt
+
+iccApplySearch -cfg config/cmykGraysEst.json > Results/cmykGraysEst-replay.txt
+```
+
+`iccApplySearch` accepts `--telemetry=off|human|jsonl`,
+`--telemetry-file FILE`, and `--evidence-file FILE` anywhere in the command.
+Legacy single-dash spellings remain accepted. Human telemetry uses UTC
+timestamps and is written to stderr, so transform data on stdout remains
+unchanged. Threaded lifecycle lines report requested and effective threads.
+JSONL records
+`run_started`, `transform_ready`, and a terminal event; the evidence file
+records input/output record counts, requested/effective threads, elapsed time,
+and throughput:
+
+```sh
+iccApplySearch --telemetry=jsonl --telemetry-file search.jsonl \
+  --evidence-file search-evidence.json -cfg config/cmykGraysEst.json \
+  > Results/cmykGraysEst-replay.txt \
+  2> Results/cmykGraysEst-replay.log
+```
+
 ## Search Cost and Metamerism Index
 
 The underlying [`CIccCmmSearch`](../../../IccProfLib/IccCmmSearch.h) class
