@@ -64,6 +64,42 @@ set. Every `qa_run` also writes a sibling `.cmd` file with the exact tool argc
 and shell-escaped argv. Set `QA_TIMEOUT_SECONDS` to override the 30-second
 per-command limit.
 
+The ApplyProfiles quick check also verifies the headless receipt contract. It
+requires JSONL telemetry with monotonic event sequence numbers, one terminal
+`run_completed` event, a final JSON evidence receipt with the output digest,
+rejection of a pre-existing sidecar path, and byte-identical TIFF output with
+telemetry enabled. Tool-owned JSONL and evidence remain separate from the raw
+stdout/stderr logs so sanitizer scanners keep their existing authority.
+
+The tracked `manifests/iccApplyProfiles-smoke-matrix.json` adds conversion-level
+evidence. Its wrapper records exact argv, revision and file hashes, structured
+outcome classifications, semantic TIFF metadata, `iccTiffDump` output, PAWG
+JSON for each available source and destination profile, and measurement-only
+channel error. Run it directly with:
+
+```sh
+ICCDEV_BUILD_DIR=/path/to/build \
+  .github/ci/quality-assurance/scripts/iccApplyProfiles-matrix.sh \
+  --out-dir /tmp/iccapply-evidence
+python3 .github/ci/quality-assurance/scripts/test_icc_apply_profiles_matrix.py
+```
+
+The first policy phase is `framework_only`: command failures, timeouts,
+sanitizer findings, crashes, TIFF contract failures, and unexpected PAWG findings
+block. The smoke profile's known checklist warnings are pinned by profile digest,
+owner, purpose, and warning IDs in the manifest. These RGB conversions use the
+embedded source profile and a destination profile; the TIFF contract checks RGB
+photometric interpretation, alpha absence, embedding, and exact decoded pixel
+identity for this same-profile fixture. The channel-error measurement is
+code-value drift, not a colorimetric
+conformance result. Profile-aware color thresholds remain measurement-only until
+profile owners approve them.
+
+This matrix uses `iccPawgReport --json` for checklist verdicts and IDs.
+`ICCDEV_ENABLE_QA_FLAGS=ON` exposes a separate load/validation receipt through
+`--qa-flags --evidence-json`; that receipt does not contain the checklist IDs
+needed by this manifest, so it is not required for the smoke matrix.
+
 ## Per-tool drivers
 
 ```sh

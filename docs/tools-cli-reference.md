@@ -22,7 +22,7 @@ single index for common command shapes and shared option tables.
 | Tool | Purpose | Example |
 |------|---------|---------|
 | `iccApplyNamedCmm` | Apply named CMM profile chains to text data | `iccApplyNamedCmm -cfg config.json` |
-| `iccApplyProfiles` | Apply profile chains to TIFF images | `iccApplyProfiles -cfg config.json` |
+| `iccApplyProfiles` | Apply profile chains to TIFF images | `iccApplyProfiles --cfg config.json` |
 | `iccApplySearch` | Apply a profile sequence using inverse search | `iccApplySearch -cfg config.json` |
 | `iccApplyToLink` | Build DeviceLink profiles or `.cube` LUTs | `iccApplyToLink output.icc 0 33 1 "Link" 0.0 1.0 1 1 src.icc 1 dst.icc 1` |
 | `iccRoundTrip` | Evaluate round-trip behavior | `iccRoundTrip profile.icc` |
@@ -31,9 +31,37 @@ single index for common command shapes and shared option tables.
 concurrency, `N=1` is scalar, and larger values select workers up to
 `CIccThreadedCmm::GetMaxThreads()`; `-debugcalc` requires `N=1`.
 
+### iccApplySearch export and replay
+
+`iccApplySearch -exportcfg FILE` saves resolved settings. Use
+`-exportcfganddata FILE` when the configuration must include the input color
+data for standalone `-cfg FILE` replay:
+
+```sh
+cd Testing/hybrid
+iccApplySearch -exportcfganddata config/cmykGraysEst.json \
+  Results/cmykGraysRef.txt 0 1 \
+  ICC/Spec380_10_730-D50_2deg.icc 3 \
+  ICC/Lab_float-D50_2deg.icc 3 \
+  ICC/CMYK_Hybrid_Profile.icc 10003 -INIT 3 \
+  ICC/Lab_float-D50_2deg.icc 1 \
+  ICC/Lab_float-D93_2deg-MAT.icc 1 \
+  ICC/Lab_float-F11_2deg-MAT.icc 1 \
+  ICC/Lab_float-IllumA_2deg-MAT.icc 1 \
+  > Results/cmykGraysEst.txt
+iccApplySearch -cfg config/cmykGraysEst.json > Results/cmykGraysEst-replay.txt
+```
+
+`iccApplySearch` also accepts `--telemetry=off|human|jsonl`,
+`--telemetry-file FILE`, and `--evidence-file FILE` in any order with its
+configuration or positional form. Its human telemetry uses UTC timestamps and
+goes to stderr, so transform data on stdout remains byte-compatible. Lifecycle
+lines and JSONL include input/output record counts and requested/effective
+threads.
+
 `iccApplyProfiles` also accepts `"useSearch": true` inside the JSON `connect`
 block, which builds a `CIccCmmSearch` inverse-search chain instead of a forward
-one. It is `-cfg` only and reads the chain from a `searchApply` block -- the
+one. It is `--cfg` only and reads the chain from a `searchApply` block -- the
 same object `iccApplySearch` uses -- requiring 2 or 3 entries in its
 `profileSequence` (3 requires at least one `pccWeights` entry), with an optional
 `initial`. An
@@ -46,12 +74,45 @@ than for a forward chain. See
 [the tool Readme](../Tools/CmdLine/IccApplyProfiles/Readme.md) for the full
 schema.
 
+### iccApplyProfiles headless receipts
+
+`iccApplyProfiles` preserves its existing default stdout progress. Use
+`--version` for stable tool and library identity, `--verbose` for a concise
+stderr receipt, `--debug` for rate-limited batch progress on stderr, and
+`--quiet` to suppress normal progress. Human telemetry and debug progress use
+UTC timestamps and replace the legacy percentage display so they do not report
+the same progress twice. `--telemetry-interval-ms N` controls their minimum
+interval and defaults to 1000 ms.
+Threaded receipts distinguish `requested_threads` from `effective_threads`;
+`--threads 0` resolves to the runtime worker-pool size. The final receipt also
+reports `throughput_pixels_per_second`, while progress telemetry records batch
+rows, pixels, percentage, elapsed time, measured throughput, estimated remaining
+and total time, execution mode, thread counts, and total batch count. Time
+estimates remain unavailable until measurable work has completed.
+
+For machine evidence, use a separate sidecar rather than stdout or stderr:
+
+```sh
+iccApplyProfiles --telemetry=jsonl --telemetry-file run.jsonl \
+  --evidence-file receipt.json --quiet --cfg config.json
+```
+
+The JSONL sidecar records lifecycle events with monotonically increasing
+sequence numbers. The final evidence JSON is written only after output close
+and includes the output digest. Both receipt paths must be new and must not
+alias any transform input or output. A partial sidecar without a terminal event
+is interruption evidence, not a crash classification; the outer QA runner owns
+signal and sanitizer classification.
+
 For `iccApplyToLink`, `link_type=0` writes an ICC DeviceLink and `option`
 selects profile version (`0` for v4, `1` for v5). `link_type=1` writes a
 `.cube` text LUT and `option` is the precision (`0` through `20`). Other
 `link_type` values are rejected. `lut_size` must be `2` through `255`.
 `first_transform=1` uses the source transform from the first profile; `0` uses
-its destination transform.
+its destination transform. It accepts the same telemetry/evidence options in
+any order; human telemetry uses UTC timestamps and goes to stderr, while
+JSONL/evidence record the link output, grid size/node count, elapsed time, and
+node throughput.
 
 ## Image and Specialty Tools
 

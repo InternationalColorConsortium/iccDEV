@@ -12,9 +12,9 @@
 #   HYBRID_TIMING_KEEP_CASES -- set to 1 to keep copied per-case workspaces
 #   HYBRID_TIMING_HEARTBEAT -- progress interval in seconds, default 15
 #   HYBRID_TIMING_AFFINITY  -- optional taskset CPU list, e.g. 0-15
-#   HYBRID_TIMING_CASES     -- comma-separated cmykw,kw-mcs, default both
+#   HYBRID_TIMING_CASES     -- comma-separated cmykw,kw-mcs,cows-search; default first two
 #   HYBRID_TIMING_BAND_ROWS -- optional ICC_APPLY_PROFILES_BAND_ROWS value
-#   HYBRID_TIMING_INSTRUMENT -- set to 1 for apply/thread timing lines
+#   HYBRID_TIMING_INSTRUMENT -- set to 1 for --debug and opt-in perf stats
 ###############################################################################
 
 set -euo pipefail
@@ -84,6 +84,10 @@ case "$BAND_ROWS" in
     fi
     ;;
 esac
+if [ -n "$BAND_ROWS" ] && { [ "$BAND_ROWS" -lt 1 ] || [ "$BAND_ROWS" -gt 64 ]; }; then
+  echo "[FAIL] HYBRID_TIMING_BAND_ROWS must be 1..64" >&2
+  exit 1
+fi
 
 BUILD_ROOT="$(cd "$TOOLS/.." 2>/dev/null && pwd -P)"
 export LD_LIBRARY_PATH="$BUILD_ROOT/IccProfLib:$BUILD_ROOT/IccXML:$BUILD_ROOT/IccJSON:$BUILD_ROOT/IccConnect${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
@@ -131,8 +135,10 @@ if [ ! -f "$ICCDEV_TESTING/sRGB_v4_ICC_preference.icc" ]; then
 fi
 
 mkdir -p "$OUTDIR"
+OUTDIR="$(cd "$OUTDIR" && pwd -P)"
 SUMMARY="$OUTDIR/hybrid-applyprofiles-timing.tsv"
-printf 'case\tthreads\tcommand\tstatus\telapsed_s\tuser_s\tsystem_s\tmax_rss_kb\tminor_faults\tvoluntary_ctx\tinvoluntary_ctx\tlog\n' > "$SUMMARY"
+printf 'case\tthreads\tcommand\tstatus\telapsed_s\tuser_s\tsystem_s\tmax_rss_kb\tminor_faults\tvoluntary_ctx\tinvoluntary_ctx\tsha256\tlog\n' > "$SUMMARY"
+declare -A CASE_HASH=()
 
 IFS=, read -r -a TIMING_VARIANTS <<< "$THREADS_CSV"
 IFS=, read -r -a TIMING_CASES <<< "$CASES_CSV"
@@ -147,12 +153,37 @@ if [ "${#TIMING_CASES[@]}" -eq 0 ]; then
   exit 1
 fi
 
+FIXTURE_DIR="$(mktemp -d "$OUTDIR/fixture.XXXXXX")"
+cp -a "$ICCDEV_TESTING/hybrid" "$FIXTURE_DIR/hybrid"
+(
+  cd "$FIXTURE_DIR/hybrid"
+  mkdir -p ICC Results config
+  "$ICC_FROM_XML" CMYK-S_Overprint_Profile.xml ICC/CMYK-S_Overprint_Profile.icc >/dev/null
+  "$ICC_FROM_XML" MS-Mid_Overprint.xml ICC/MS-Mid_Overprint.icc >/dev/null
+)
+for timing_case in "${TIMING_CASES[@]}"; do
+  if [ "$timing_case" = cows-search ]; then
+    (
+      cd "$FIXTURE_DIR/hybrid"
+      mkdir -p ICC Results config
+      for profile in CMYK_Hybrid_Profile Lab_float-D50_2deg \
+                     Lab_float-D93_2deg-MAT Lab_float-F11_2deg-MAT \
+                     Lab_float-IllumA_2deg-MAT; do
+        xml="$profile.xml"
+        if [ "$profile" != CMYK_Hybrid_Profile ]; then xml="Data/$xml"; fi
+        "$ICC_FROM_XML" "$xml" "ICC/$profile.icc" >/dev/null
+      done
+    )
+    break
+  fi
+done
+
 prepare_case_dir()
 {
   local case_dir="$1"
   rm -rf "$case_dir"
   mkdir -p "$case_dir/testing"
-  cp -a "$ICCDEV_TESTING/hybrid" "$case_dir/testing/hybrid"
+  cp -a "$FIXTURE_DIR/hybrid" "$case_dir/testing/hybrid"
   cp "$ICCDEV_TESTING/sRGB_v4_ICC_preference.icc" "$case_dir/testing/"
   mkdir -p "$case_dir/testing/hybrid/ICC" "$case_dir/testing/hybrid/Results" "$case_dir/testing/hybrid/config"
   (
@@ -183,7 +214,10 @@ run_case()
   local log="$OUTDIR/$label-$command_name.log"
   local time_log="$OUTDIR/$label-$command_name.time"
   local status=0
+  local output_file=""
+  local output_hash="n/a"
   local -a thread_args=()
+  local -a instrument_args=()
 
   prepare_case_dir "$case_dir"
 
@@ -196,8 +230,8 @@ run_case()
   (
     cd "$case_dir/testing/hybrid"
     if [ "$INSTRUMENT" -eq 1 ]; then
-      export ICC_APPLY_PROFILES_TIMING=1
-      export ICC_CMM_THREAD_TIMING=1
+      export ICC_PERF_STATS_FILE="$OUTDIR/$label-$command_name.perf.txt"
+      instrument_args=(--debug)
     fi
     if [ -n "$BAND_ROWS" ]; then
       export ICC_APPLY_PROFILES_BAND_ROWS="$BAND_ROWS"
@@ -205,7 +239,8 @@ run_case()
     /usr/bin/time \
       -f 'elapsed_s=%e\nuser_s=%U\nsystem_s=%S\nmax_rss_kb=%M\nminor_faults=%R\nvoluntary_ctx=%w\ninvoluntary_ctx=%c' \
       -o "$time_log" \
-      timeout "$TIMEOUT_SEC" "${RUNNER[@]}" "$ICC_APPLY_PROFILES" "${thread_args[@]}" "$@"
+      timeout "$TIMEOUT_SEC" "${RUNNER[@]}" "$ICC_APPLY_PROFILES" \
+        "${thread_args[@]}" "${instrument_args[@]}" "$@"
   ) > "$log" 2>&1 &
   local run_pid=$!
   local start_epoch
@@ -219,6 +254,26 @@ run_case()
     fi
   done
   wait "$run_pid" || status=$?
+
+  case "$command_name" in
+    cmykw|kw-mcs) output_file="$case_dir/testing/hybrid/Results/timing-$label-$command_name.tif" ;;
+    cows-search) output_file="$case_dir/testing/hybrid/Results/MS_smCowsIconCmyk.tif" ;;
+  esac
+  if [ "$status" -eq 0 ]; then
+    if [ ! -s "$output_file" ]; then
+      echo "[FAIL] missing TIFF output: $output_file" >&2
+      status=1
+    else
+      output_hash="$(sha256sum "$output_file" | awk '{print $1}')"
+      if [ -n "${CASE_HASH[$command_name]:-}" ] &&
+         [ "${CASE_HASH[$command_name]}" != "$output_hash" ]; then
+        echo "[FAIL] $command_name TIFF differs across thread variants" >&2
+        status=1
+      else
+        CASE_HASH[$command_name]="$output_hash"
+      fi
+    fi
+  fi
 
   local elapsed
   local user_time
@@ -236,10 +291,10 @@ run_case()
   voluntary_ctx="$(time_value voluntary_ctx= "$time_log")"
   involuntary_ctx="$(time_value involuntary_ctx= "$time_log")"
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$label" "$threads" "$command_name" "$status" "${elapsed:-n/a}" \
     "${user_time:-n/a}" "${system_time:-n/a}" "$max_rss" "$minor_faults" \
-    "$voluntary_ctx" "$involuntary_ctx" "$log" >> "$SUMMARY"
+    "$voluntary_ctx" "$involuntary_ctx" "$output_hash" "$log" >> "$SUMMARY"
 
   if [ "$status" -ne 0 ]; then
     if [ "$status" -eq 124 ]; then
@@ -296,6 +351,10 @@ for requested in "${TIMING_VARIANTS[@]}"; do
           -ENV:bkgX 0.0985 -ENV:bkgY 0.159 -ENV:bkgZ 0.122 '-ENV:0ni?' 1 \
           ICC/CMYK-S_Overprint_Profile.icc 10080 ../sRGB_v4_ICC_preference.icc 1 || failures=$((failures + 1))
         ;;
+      cows-search)
+        run_case "$label" "$threads" cows-search \
+          -cfg config/msCowsIconToCmyk.json || failures=$((failures + 1))
+        ;;
       *)
         echo "[FAIL] invalid HYBRID_TIMING_CASES entry: $timing_case" >&2
         failures=$((failures + 1))
@@ -311,5 +370,7 @@ if [ "$failures" -ne 0 ]; then
   echo "[FAIL] hybrid applyprofiles timing matrix failures: $failures"
   exit 1
 fi
+
+rm -rf "$FIXTURE_DIR"
 
 echo "[PASS] hybrid applyprofiles timing matrix completed"

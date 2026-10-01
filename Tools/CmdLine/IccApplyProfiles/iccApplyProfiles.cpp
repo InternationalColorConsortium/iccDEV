@@ -73,9 +73,12 @@
 #include <cstdio>
 #include <cstdlib>  // EXIT_FAILURE, used by the argument-contract guards in main()
 #include <cerrno>
+#include <chrono>
 #include <cstring>  // strcmp, used by the -h/--help contract guard in main()
+#include <ctime>
 #include <memory>
 #include <string>
+#include <vector>
 #include "IccCmm.h"
 #include "IccCmmThread.h"
 #include "IccUtil.h"
@@ -85,6 +88,7 @@
 #include "IccProfLibVer.h"
 #include "IccLibConnectVer.h"
 #include "IccCmdLineUtil.h"
+#include "IccApplyTelemetry.h"
 #include "IccSameFile.h"
 #if !defined(_WIN32)
 #include <fcntl.h>
@@ -98,6 +102,140 @@ static FILE* OpenWriteTextFile(const std::string& path)
 
   // codeql[cpp/path-injection]
   return icOpenRegularWriteTextFile(path.c_str());
+}
+
+enum icTelemetryMode {
+  icTelemetryOff,
+  icTelemetryHuman,
+  icTelemetryJsonl
+};
+
+struct CIccApplyTelemetry {
+  CIccApplyTelemetry() : m_mode(icTelemetryOff), m_file(nullptr), m_sequence(0) {}
+
+  ~CIccApplyTelemetry()
+  {
+    if (m_file)
+      fclose(m_file);
+  }
+
+  bool Open(const std::string& path)
+  {
+    if (path.empty())
+      return false;
+
+    m_file = icOpenNewRegularWriteTextFile(path.c_str());
+    if (!m_file) {
+      if (errno == EEXIST) {
+        fprintf(stderr, "Telemetry file already exists: '%s'\n",
+                icSanitizeConsoleText(path.c_str()).c_str());
+      }
+      else {
+        fprintf(stderr, "Unable to create telemetry file '%s'\n",
+                icSanitizeConsoleText(path.c_str()).c_str());
+      }
+      return false;
+    }
+    return true;
+  }
+
+  bool Emit(const char* event, json record)
+  {
+    if (m_mode != icTelemetryJsonl)
+      return true;
+
+    record["schema"] = "iccdev-apply-telemetry/v1";
+    record["event"] = event;
+    record["sequence"] = ++m_sequence;
+    record["timestamp_utc"] = TimestampUtc();
+    record["monotonic_elapsed_ms"] = ElapsedMs();
+
+    const std::string line = record.dump();
+    if (fwrite(line.data(), 1, line.size(), m_file) != line.size() ||
+        fputc('\n', m_file) == EOF || fflush(m_file)) {
+      fprintf(stderr, "Unable to write telemetry event '%s'\n", event);
+      return false;
+    }
+    return true;
+  }
+
+  long long ElapsedMs() const
+  {
+    const std::chrono::steady_clock::duration elapsed =
+      std::chrono::steady_clock::now() - m_started;
+    return std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+  }
+
+  static std::string TimestampUtc()
+  {
+    const std::time_t now = std::time(nullptr);
+    struct tm utc;
+#if defined(_WIN32)
+    if (gmtime_s(&utc, &now))
+      return std::string();
+#else
+    if (!gmtime_r(&now, &utc))
+      return std::string();
+#endif
+    char text[32];
+    if (!strftime(text, sizeof(text), "%Y-%m-%dT%H:%M:%SZ", &utc))
+      return std::string();
+    return text;
+  }
+
+  icTelemetryMode m_mode;
+  FILE* m_file;
+  unsigned long long m_sequence;
+  std::chrono::steady_clock::time_point m_started = std::chrono::steady_clock::now();
+};
+
+static bool ParseUnsignedMilliseconds(const char* value, unsigned long& parsed)
+{
+  char* end = nullptr;
+  errno = 0;
+  const unsigned long candidate = strtoul(value, &end, 10);
+  if (errno || end == value || *end || !candidate || candidate > 3600000)
+    return false;
+  parsed = candidate;
+  return true;
+}
+
+static bool ParseBandRows(const char* value, unsigned long& parsed)
+{
+  char* end = nullptr;
+  errno = 0;
+  const unsigned long candidate = strtoul(value, &end, 10);
+  if (errno || end == value || *end || !candidate || candidate > 64 ||
+      strspn(value, "0123456789") != strlen(value))
+    return false;
+  parsed = candidate;
+  return true;
+}
+
+static bool OutputPathMustBeNew(const std::string& path, const char* description)
+{
+#if !defined(_WIN32)
+  struct stat fileStatus;
+  if (!lstat(path.c_str(), &fileStatus)) {
+    fprintf(stderr, "%s already exists: '%s'\n", description,
+            icSanitizeConsoleText(path.c_str()).c_str());
+    return false;
+  }
+  if (errno != ENOENT) {
+    fprintf(stderr, "Unable to inspect %s '%s'\n", description,
+            icSanitizeConsoleText(path.c_str()).c_str());
+    return false;
+  }
+#else
+  FILE* existing = fopen(path.c_str(), "rb");
+  if (existing) {
+    fclose(existing);
+    fprintf(stderr, "%s already exists: '%s'\n", description,
+            icSanitizeConsoleText(path.c_str()).c_str());
+    return false;
+  }
+#endif
+  return true;
 }
 
 static bool GetFloatRowByteCount(unsigned int nWidth, int nSamples, size_t& nBytes)
@@ -187,15 +325,28 @@ void Usage(FILE* stream)
 {
   fprintf(stream, "iccApplyProfiles built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
 
-  fprintf(stream, "Usage: iccApplyProfiles {-threads N} -cfg config_file\n\n");
-  fprintf(stream, "  Optional: -threads [N] (use 0..%d worker threads; 0=hardware concurrency, 1=single-threaded)\n",
+  fprintf(stream, "Usage: iccApplyProfiles {--verbose|--debug|--quiet} {--telemetry=off|human|jsonl --telemetry-file FILE} {--evidence-file FILE} {--threads N} --cfg config_file\n\n");
+  fprintf(stream, "  --version prints tool and linked-library versions only.\n");
+  fprintf(stream, "  --verbose writes a resolved-operation receipt to stderr.\n");
+  fprintf(stream, "  --debug writes verbose receipt plus batch progress to stderr.\n");
+#ifdef ICC_APPLY_BATCH_TIMING
+  fprintf(stream, "  This build also logs batch start, completion, and elapsed time with --debug.\n");
+#endif
+  fprintf(stream, "  --quiet suppresses normal progress output.\n");
+  fprintf(stream, "  --telemetry=jsonl requires --telemetry-file and writes JSONL sidecar events.\n");
+  fprintf(stream, "  --telemetry-interval-ms N sets the minimum progress interval (default 1000 ms).\n");
+  fprintf(stream, "  --evidence-file writes the final immutable JSON receipt after output close.\n");
+  fprintf(stream, "  Legacy --evidence-json remains accepted as an alias for --evidence-file.\n\n");
+  fprintf(stream, "  Global options may be combined in any order before --cfg or the alternate-form arguments.\n");
+  fprintf(stream, "  Optional: --threads [N] (use 0..%d worker threads; 0=hardware concurrency, 1=single-threaded)\n",
          CIccThreadedCmm::GetMaxThreads());
-  fprintf(stream, "  Optional: -cfg config_file (use JSON formatted configuration file to define apply options)\n\n");
+  fprintf(stream, "  Optional: --cfg config_file (use JSON formatted configuration file to define apply options)\n\n");
 
-  fprintf(stream, "Alt-Usage: iccApplyProfiles {-threads N} {-exportcfg config_file} src_tiff_file dst_tiff_file dst_sample_encoding dst_compression dst_planar dst_embed_icc interpolation {{-ENV:sig value} profile_file_path rendering_intent {-PCC connection_conditions_path}}\n\n");
-  fprintf(stream, "  Optional: -threads [N] (use 0..%d worker threads; 0=hardware concurrency, 1=single-threaded)\n",
+  fprintf(stream, "Alt-Usage: iccApplyProfiles {--threads N} {--exportcfg config_file} src_tiff_file dst_tiff_file dst_sample_encoding dst_compression dst_planar dst_embed_icc interpolation {{-ENV:sig value} profile_file_path rendering_intent {-PCC connection_conditions_path}}\n\n");
+  fprintf(stream, "  Optional: --threads [N] (use 0..%d worker threads; 0=hardware concurrency, 1=single-threaded)\n",
          CIccThreadedCmm::GetMaxThreads());
-  fprintf(stream, "  Optional: -exportcfg config_file (create config_file based on rest of arguments)\n\n");
+  fprintf(stream, "  Optional: --exportcfg config_file (create config_file based on rest of arguments)\n");
+  fprintf(stream, "  Legacy single-dash forms (-threads, -cfg, and -exportcfg) remain accepted.\n\n");
   fprintf(stream, "  For dst_sample_encoding:\n");
   fprintf(stream, "    0 - Same as src\n");
   fprintf(stream, "    1 - icEncode8Bit\n");
@@ -269,7 +420,7 @@ void Usage(FILE* stream)
 
 //===================================================
 
-// #2692: every file a run reads -- the source image, the -cfg document, each
+// #2692: every file a run reads -- the source image, the --cfg document, each
 // profile in the chain with its PCC file, and search mode's pccWeights.  An
 // output naming any of them destroyed it: the source TIFF is still being read
 // when the output is created, a profile is re-read afterwards to be embedded,
@@ -299,6 +450,17 @@ static bool OutputIsAnInput(const char *szOut, const CIccCfgImageApply &cfgApply
 int main(int argc, const char** argv)
 {
   int minargs = 2;
+  const int originalArgc = argc;
+  const char** originalArgv = argv;
+  bool bVerbose = false;
+  bool bDebug = false;
+  bool bQuiet = false;
+  icTelemetryMode telemetryMode = icTelemetryOff;
+  std::string telemetryFile;
+  std::string evidenceFile;
+  unsigned long telemetryIntervalMs = 1000;
+  bool bThreadArg = false;
+  int nThreadArg = 0;
 
   // An explicit help request is the one invocation here that is not an error, so
   // it prints on stdout and exits 0; every malformed form below prints on stderr
@@ -307,6 +469,101 @@ int main(int argc, const char** argv)
   if (argc == 2 && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help"))) {
     Usage(stdout);
     return 0;
+  }
+
+  if (argc == 2 && !strcmp(argv[1], "--version")) {
+    printf("iccApplyProfiles IccProfLib=" ICCPROFLIBVER
+           " IccLibConnect=" ICCLIBCONNECTVER "\n");
+    return 0;
+  }
+
+  while (argc > 1) {
+    if (!strcmp(argv[1], "--verbose")) {
+      bVerbose = true;
+    }
+    else if (!strcmp(argv[1], "--debug")) {
+      bVerbose = true;
+      bDebug = true;
+    }
+    else if (!strcmp(argv[1], "--quiet")) {
+      bQuiet = true;
+    }
+    else if (!stricmp(argv[1], "--threads") || !stricmp(argv[1], "-threads")) {
+      if (argc < 3) {
+        fprintf(stderr, "Missing thread count for --threads\n");
+        return EXIT_FAILURE;
+      }
+
+      char *end = nullptr;
+      errno = 0;
+      long parsed = strtol(argv[2], &end, 10);
+      if (errno || end == argv[2] || *end || parsed < 0 ||
+          parsed > CIccThreadedCmm::GetMaxThreads()) {
+        printf("Invalid thread count '%s': expected 0..%d\n",
+               icSanitizeConsoleText(argv[2]).c_str(),
+               CIccThreadedCmm::GetMaxThreads());
+        return EXIT_FAILURE;
+      }
+      nThreadArg = (int)parsed;
+      bThreadArg = true;
+      argv += 2;
+      argc -= 2;
+      continue;
+    }
+    else if (!strcmp(argv[1], "--telemetry=off")) {
+      telemetryMode = icTelemetryOff;
+    }
+    else if (!strcmp(argv[1], "--telemetry=human")) {
+      telemetryMode = icTelemetryHuman;
+      bVerbose = true;
+    }
+    else if (!strcmp(argv[1], "--telemetry=jsonl")) {
+      telemetryMode = icTelemetryJsonl;
+    }
+    else if (!strcmp(argv[1], "--telemetry-file")) {
+      if (argc < 3) {
+        fprintf(stderr, "Missing path for --telemetry-file\n");
+        return EXIT_FAILURE;
+      }
+      telemetryFile = argv[2];
+      argv += 2;
+      argc -= 2;
+      continue;
+    }
+    else if (!strcmp(argv[1], "--telemetry-interval-ms")) {
+      if (argc < 3 || !ParseUnsignedMilliseconds(argv[2], telemetryIntervalMs)) {
+        fprintf(stderr, "Invalid --telemetry-interval-ms: expected 1..3600000\n");
+        return EXIT_FAILURE;
+      }
+      argv += 2;
+      argc -= 2;
+      continue;
+    }
+    else if (!strcmp(argv[1], "--evidence-file") ||
+             !strcmp(argv[1], "--evidence-json")) {
+      if (argc < 3) {
+        fprintf(stderr, "Missing path for --evidence-file\n");
+        return EXIT_FAILURE;
+      }
+      evidenceFile = argv[2];
+      argv += 2;
+      argc -= 2;
+      continue;
+    }
+    else {
+      break;
+    }
+    argv++;
+    argc--;
+  }
+
+  if (telemetryMode == icTelemetryJsonl && telemetryFile.empty()) {
+    fprintf(stderr, "--telemetry=jsonl requires --telemetry-file\n");
+    return EXIT_FAILURE;
+  }
+  if (telemetryMode != icTelemetryJsonl && !telemetryFile.empty()) {
+    fprintf(stderr, "--telemetry-file requires --telemetry=jsonl\n");
+    return EXIT_FAILURE;
   }
 
   if (argc < minargs) {
@@ -330,44 +587,20 @@ int main(int argc, const char** argv)
   // "pccWeights".  In that mode the top-level profileSequence is not consulted,
   // so cfgProfiles stays empty and the chain is read through m_profiles below.
   CIccCfgSearchApply cfgSearch;
-  std::string cfgFile;   // the -cfg document, when there is one
-  bool bThreadArg = false;
-  int nThreadArg = cfgConnect.m_nThreads;
+  std::string cfgFile;   // the --cfg document, when there is one
 
-  if (!stricmp(argv[1], "-threads")) {
-    if (argc < 3) {
-      // #2405: stderr, matching the byte-identical guard in iccApplySearch.
-      fprintf(stderr, "Missing thread count for -threads\n");
-      return EXIT_FAILURE;
-    }
-
-    char *end = nullptr;
-    errno = 0;
-    long parsed = strtol(argv[2], &end, 10);
-    if (errno || end == argv[2] || *end || parsed < 0 ||
-        parsed > CIccThreadedCmm::GetMaxThreads()) {
-      printf("Invalid thread count '%s': expected 0..%d\n", icSanitizeConsoleText(argv[2]).c_str(),
-             CIccThreadedCmm::GetMaxThreads());
-      return EXIT_FAILURE;
-    }
-    nThreadArg = (int)parsed;
-    bThreadArg = true;
-    argv += 2;
-    argc -= 2;
-  }
-
-  if (argc > 2 && !stricmp(argv[1], "-cfg")) {
-    // Usage 1 is exactly "-cfg <path>"; every setting comes from the JSON file, so
+  if (argc > 2 && (!stricmp(argv[1], "--cfg") || !stricmp(argv[1], "-cfg"))) {
+    // Usage 1 is exactly "--cfg <path>"; every setting comes from the JSON file, so
     // there is nothing a further argument could mean. Anything beyond argv[2] was
     // silently discarded and the run still reported success, so a caller could not
     // tell an honoured argument list from an ignored one. Same defect and same
     // guard as the sibling tools: iccApplyNamedCmm (#1906) and iccApplySearch
     // (#2075). The argc test above has already established argc >= 3, so argv[2] is
     // readable here and only a longer list can reach this branch. Note argc is the
-    // count left after the optional "-threads N" pair above, which is why the
+    // count left after the optional "--threads N" pair above, which is why the
     // comparison is against 3 rather than the process-entry argc.
     if (argc != 3) {
-      printf("Unexpected extra arguments for -cfg\n");
+      printf("Unexpected extra arguments for --cfg\n");
       return EXIT_FAILURE;
     }
 
@@ -454,7 +687,7 @@ int main(int argc, const char** argv)
     argv++;
     argc--;
 
-    if (argc > 2 && !stricmp(argv[0], "-exportcfg")) {
+    if (argc > 2 && (!stricmp(argv[0], "--exportcfg") || !stricmp(argv[0], "-exportcfg"))) {
       exportFile = argv[1];
       argv += 2;
       argc -= 2;
@@ -540,6 +773,35 @@ int main(int argc, const char** argv)
 
   if (bThreadArg)
     cfgConnect.m_nThreads = nThreadArg;
+
+  const CIccCfgProfileArray& reportProfiles =
+    cfgConnect.m_bUseSearch ? cfgSearch.m_profiles : cfgProfiles.m_profiles;
+
+  if ((!telemetryFile.empty() &&
+       OutputIsAnInput(telemetryFile.c_str(), cfgApply, cfgFile, reportProfiles,
+                       cfgSearch.m_pccWeights)) ||
+      (!evidenceFile.empty() &&
+       OutputIsAnInput(evidenceFile.c_str(), cfgApply, cfgFile, reportProfiles,
+                       cfgSearch.m_pccWeights)) ||
+      (!telemetryFile.empty() &&
+       icOutputIsInput(telemetryFile.c_str(), cfgApply.m_dstImgFile.c_str())) ||
+      (!evidenceFile.empty() &&
+       icOutputIsInput(evidenceFile.c_str(), cfgApply.m_dstImgFile.c_str())) ||
+      (!telemetryFile.empty() && !evidenceFile.empty() &&
+       icOutputIsInput(telemetryFile.c_str(), evidenceFile.c_str()))) {
+    fprintf(stderr, "Telemetry or evidence output aliases an input or another receipt\n");
+    return EXIT_FAILURE;
+  }
+  if ((telemetryMode == icTelemetryJsonl &&
+       !OutputPathMustBeNew(telemetryFile, "Telemetry file")) ||
+      (!evidenceFile.empty() &&
+       !OutputPathMustBeNew(evidenceFile, "Evidence file")))
+    return EXIT_FAILURE;
+
+  CIccApplyTelemetry telemetry;
+  telemetry.m_mode = telemetryMode;
+  if (telemetryMode == icTelemetryJsonl && !telemetry.Open(telemetryFile))
+    return EXIT_FAILURE;
 
   int i, j, k;
   unsigned int sn, sen, photo, bps, dbps;
@@ -649,6 +911,45 @@ int main(int argc, const char** argv)
 
   CIccCmm* pTheCmm = pConnect->GetCmm();
   const bool bUseRowApply = cfgConnect.m_nThreads != 1;
+  const CIccThreadedCmm* pThreadedCmm =
+    dynamic_cast<const CIccThreadedCmm*>(pTheCmm);
+  const int effectiveThreads =
+    pThreadedCmm ? pThreadedCmm->GetNumThreads() : 1;
+  const unsigned int inputWidth = SrcImg.GetWidth();
+  const unsigned int inputHeight = SrcImg.GetHeight();
+
+  if (telemetryMode == icTelemetryJsonl) {
+    json requestedArgv = json::array();
+    for (int arg = 0; arg < originalArgc; arg++)
+      requestedArgv.push_back(originalArgv[arg]);
+
+    json started = {
+      {"tool", "iccApplyProfiles"},
+      {"tool_version", ICCPROFLIBVER},
+      {"library_versions", {
+        {"IccProfLib", ICCPROFLIBVER},
+        {"IccLibConnect", ICCLIBCONNECTVER}
+      }},
+      {"requested_argv", requestedArgv},
+      {"config_file", cfgFile.empty() ? json(nullptr) : json(cfgFile)},
+      {"input", cfgApply.m_srcImgFile},
+      {"output", cfgApply.m_dstImgFile},
+      {"requested_threads", cfgConnect.m_nThreads},
+      {"effective_threads", effectiveThreads},
+      {"execution_mode", bUseRowApply ? "threaded-row-batch" : "single-pixel"}
+    };
+    if (!telemetry.Emit("run_started", started))
+      return EXIT_FAILURE;
+  }
+  if (bVerbose && !bQuiet) {
+    fprintf(stderr, "[%s] iccApplyProfiles: started input=%s output=%s requested_threads=%d effective_threads=%d mode=%s\n",
+            CIccApplyTelemetry::TimestampUtc().c_str(),
+            icSanitizeConsoleText(cfgApply.m_srcImgFile.c_str()).c_str(),
+            icSanitizeConsoleText(cfgApply.m_dstImgFile.c_str()).c_str(),
+            cfgConnect.m_nThreads,
+            effectiveThreads,
+            bUseRowApply ? "threaded-row-batch" : "single-pixel");
+  }
 
   // Set last_path to the last profile's file for downstream embed logic.
   if (!activeProfiles.empty())
@@ -795,6 +1096,23 @@ int main(int argc, const char** argv)
       nBatchRows = 1;
     if (nBatchRows > 64)
       nBatchRows = 64;
+    const char* bandRowsEnv = getenv("ICC_APPLY_PROFILES_BAND_ROWS");
+    if (bandRowsEnv && *bandRowsEnv) {
+      unsigned long requestedRows = 0;
+      if (!ParseBandRows(bandRowsEnv, requestedRows)) {
+        fprintf(stderr, "Invalid ICC_APPLY_PROFILES_BAND_ROWS: expected 1..64\n");
+        free(pSBuf);
+        free(pDBuf);
+        return EXIT_FAILURE;
+      }
+      if (nBatchRows > requestedRows)
+        nBatchRows = requestedRows;
+    }
+    else if (cfgConnect.m_bUseSearch && nBatchRows > 16) {
+      // Search is expensive per pixel. Commit TIFF rows and emit progress
+      // between short calls instead of running a whole small image in one call.
+      nBatchRows = 16;
+    }
     if (SrcImg.GetWidth() && nBatchRows > UINT32_MAX / SrcImg.GetWidth())
       nBatchRows = UINT32_MAX / SrcImg.GetWidth();
     if (!nBatchRows)
@@ -824,11 +1142,125 @@ int main(int argc, const char** argv)
       return -1;
     }
   }
+  const unsigned long long pixelsPerApply =
+    (unsigned long long)inputWidth * nRowsPerApply;
+  const unsigned int totalBatches =
+    inputHeight / nRowsPerApply +
+    (inputHeight % nRowsPerApply ? 1 : 0);
+
+  if (telemetryMode == icTelemetryJsonl &&
+      !telemetry.Emit("transform_ready", {
+        {"input_width", inputWidth},
+        {"input_height", inputHeight},
+        {"input_bits_per_sample", bps},
+        {"source_samples", nSrcSamples},
+        {"destination_samples", nDestSamples},
+        {"requested_threads", cfgConnect.m_nThreads},
+        {"effective_threads", effectiveThreads},
+        {"execution_mode", bUseRowApply ? "threaded-row-batch" : "single-pixel"},
+        {"rows_per_apply", nRowsPerApply},
+        {"pixels_per_apply", pixelsPerApply},
+        {"total_batches", totalBatches},
+        {"source_row_buffer_bytes", SrcImg.GetBytesPerLine()},
+        {"destination_row_buffer_bytes", DstImg.GetBytesPerLine()}
+      }))
+    return EXIT_FAILURE;
 
   //Allocate pixel buffers for performing encoding transformations
   CIccPixelBuf SrcPixel(nSrcSamples+16), DestPixel(nDestSamples+16), Pixel(icIntMax(nSrcSamples, nDestSamples)+16);
   int lastPer = -1;
   int curper;
+  long long lastStructuredProgressMs = -1;
+  long long lastHumanProgressMs = -1;
+
+  auto emitProgress = [&](unsigned int completedRows) -> bool {
+    const bool wantsStructured = telemetryMode == icTelemetryJsonl;
+    const bool wantsHuman = (bDebug || telemetryMode == icTelemetryHuman) && !bQuiet;
+    if (!wantsStructured && !wantsHuman)
+      return true;
+
+    const long long elapsedMs = telemetry.ElapsedMs();
+    const bool emitStructured = wantsStructured &&
+      (lastStructuredProgressMs < 0 ||
+       elapsedMs - lastStructuredProgressMs >= (long long)telemetryIntervalMs ||
+       completedRows == inputHeight);
+    const bool emitHuman = wantsHuman &&
+      (lastHumanProgressMs < 0 ||
+       elapsedMs - lastHumanProgressMs >= (long long)telemetryIntervalMs ||
+       completedRows == inputHeight);
+    if (!emitStructured && !emitHuman)
+      return true;
+
+    const unsigned long long completedPixels =
+      (unsigned long long)completedRows * inputWidth;
+    const unsigned long long totalPixels =
+      (unsigned long long)inputWidth * inputHeight;
+    const double percentComplete = totalPixels ?
+      (double)completedPixels * 100.0 / (double)totalPixels : 100.0;
+    const bool hasMeasuredRate = elapsedMs > 0 && completedPixels > 0;
+    const double throughputPixelsPerSecond = hasMeasuredRate ?
+      (double)completedPixels * 1000.0 / (double)elapsedMs : 0.0;
+    json estimatedRemainingMs = nullptr;
+    json estimatedTotalMs = nullptr;
+    if (completedPixels >= totalPixels)
+      estimatedRemainingMs = 0;
+    if (hasMeasuredRate) {
+      estimatedTotalMs = (long long)((double)elapsedMs * (double)totalPixels /
+                                     (double)completedPixels);
+      if (completedPixels < totalPixels) {
+        estimatedRemainingMs =
+          (long long)((double)elapsedMs * (double)(totalPixels - completedPixels) /
+                      (double)completedPixels);
+      }
+    }
+    if (emitStructured) {
+      lastStructuredProgressMs = elapsedMs;
+      if (!telemetry.Emit("progress", {
+            {"completed_rows", completedRows},
+            {"total_rows", inputHeight},
+            {"completed_pixels", completedPixels},
+            {"total_pixels", totalPixels},
+            {"percent_complete", percentComplete},
+            {"elapsed_ms", elapsedMs},
+            {"throughput_pixels_per_second", throughputPixelsPerSecond},
+            {"estimated_remaining_ms", estimatedRemainingMs},
+            {"estimated_total_ms", estimatedTotalMs},
+            {"requested_threads", cfgConnect.m_nThreads},
+            {"effective_threads", effectiveThreads},
+            {"execution_mode", bUseRowApply ? "threaded-row-batch" : "single-pixel"},
+            {"rows_per_apply", nRowsPerApply},
+            {"completed_batches", completedRows / nRowsPerApply +
+                                  (completedRows % nRowsPerApply ? 1 : 0)},
+            {"total_batches", totalBatches}
+          }))
+        return false;
+    }
+    if (emitHuman) {
+      lastHumanProgressMs = elapsedMs;
+      const std::string timestamp = CIccApplyTelemetry::TimestampUtc();
+      if (estimatedTotalMs.is_number_integer()) {
+        fprintf(stderr,
+                "[%s] iccApplyProfiles: progress rows=%u/%u pixels=%llu/%llu percent=%.3f elapsed_ms=%lld throughput_pixels_per_second=%.3f eta_ms=%lld estimated_total_ms=%lld requested_threads=%d effective_threads=%d mode=%s\n",
+                timestamp.c_str(), completedRows, inputHeight, completedPixels,
+                totalPixels, percentComplete, elapsedMs, throughputPixelsPerSecond,
+                estimatedRemainingMs.is_number_integer() ?
+                  estimatedRemainingMs.get<long long>() : -1,
+                estimatedTotalMs.get<long long>(), cfgConnect.m_nThreads,
+                effectiveThreads,
+                bUseRowApply ? "threaded-row-batch" : "single-pixel");
+      }
+      else {
+        fprintf(stderr,
+                "[%s] iccApplyProfiles: progress rows=%u/%u pixels=%llu/%llu percent=%.3f elapsed_ms=%lld throughput_pixels_per_second=%.3f eta_ms=%s estimated_total_ms=unavailable requested_threads=%d effective_threads=%d mode=%s\n",
+                timestamp.c_str(), completedRows, inputHeight, completedPixels,
+                totalPixels, percentComplete, elapsedMs, throughputPixelsPerSecond,
+                estimatedRemainingMs.is_number_integer() ? "0" : "unavailable",
+                cfgConnect.m_nThreads, effectiveThreads,
+                bUseRowApply ? "threaded-row-batch" : "single-pixel");
+      }
+    }
+    return true;
+  };
 
   // Boundary rule (per Max Derhak): TIFF pixel values use a *device encoding*
   // regardless of color space. Integer formats map linearly to [0, 1] via
@@ -936,8 +1368,27 @@ int main(int argc, const char** argv)
 
       const icUInt32Number nBatchPixels =
         (icUInt32Number)(SrcImg.GetWidth() * nBatchRows);
+#ifdef ICC_APPLY_BATCH_TIMING
+      std::chrono::steady_clock::time_point batchStarted;
+      if (bDebug && !bQuiet)
+        batchStarted = std::chrono::steady_clock::now();
+      if (bDebug && !bQuiet)
+        fprintf(stderr, "[%s] iccApplyProfiles: batch_started rows=%d-%u pixels=%u\n",
+                CIccApplyTelemetry::TimestampUtc().c_str(), i,
+                (unsigned int)i + nBatchRows - 1, nBatchPixels);
+#endif
       icStatusCMM applyStatus =
         pTheCmm->Apply(pDstRowBuf, pSrcRowBuf, nBatchPixels);
+#ifdef ICC_APPLY_BATCH_TIMING
+      if (bDebug && !bQuiet) {
+        const auto batchMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now() - batchStarted).count();
+        fprintf(stderr, "[%s] iccApplyProfiles: batch_completed rows=%d-%u pixels=%u elapsed_ms=%lld status=%d\n",
+                CIccApplyTelemetry::TimestampUtc().c_str(), i,
+                (unsigned int)i + nBatchRows - 1, nBatchPixels,
+                (long long)batchMs, (int)applyStatus);
+      }
+#endif
       if (applyStatus != icCmmStatOk) {
         printf("Profile application failed for lines %d-%u (status %d).\n", i,
                (unsigned int)i + nBatchRows - 1, (int)applyStatus);
@@ -967,10 +1418,15 @@ int main(int argc, const char** argv)
 
         curper = static_cast<int>((static_cast<float>(i + nRow + 1) * 100.0f) /
                                   static_cast<float>(SrcImg.GetHeight()));
-        if (curper != lastPer) {
+        if (!bQuiet && !bDebug && telemetry.m_mode != icTelemetryHuman &&
+            curper != lastPer) {
           printf("\r%d%%", curper);
           lastPer = curper;
         }
+      }
+      if (!emitProgress((unsigned int)i + nBatchRows)) {
+        bApplySuccess = false;
+        break;
       }
       if (!bApplySuccess)
         break;
@@ -1027,13 +1483,19 @@ int main(int argc, const char** argv)
     //Display status of how much we have accomplished
     curper = static_cast<int>((static_cast<float>(i + 1) * 100.0f) /
                               static_cast<float>(SrcImg.GetHeight()));
-    if (curper !=lastPer) {
+    if (!bQuiet && !bDebug && telemetry.m_mode != icTelemetryHuman &&
+        curper != lastPer) {
       printf("\r%d%%", curper);
       lastPer = curper;
     }
+    if (!emitProgress((unsigned int)i + 1)) {
+      bApplySuccess = false;
+      break;
+    }
     i++;
   }
-  printf("\n");
+  if (!bQuiet && !bDebug && telemetry.m_mode != icTelemetryHuman)
+    printf("\n");
 
   //Clean everything up by closeing files and freeing buffers
   SrcImg.Close();
@@ -1044,6 +1506,89 @@ int main(int argc, const char** argv)
   free(pDstRowBuf);
 
   DstImg.Close();
+
+  std::string outputDigest;
+  const bool hasOutputDigest =
+    bApplySuccess && (telemetryMode == icTelemetryJsonl || !evidenceFile.empty()) &&
+    icSha256File(cfgApply.m_dstImgFile.c_str(), outputDigest);
+  if (bApplySuccess && telemetryMode == icTelemetryJsonl &&
+      !telemetry.Emit("output_closed", {
+        {"output", cfgApply.m_dstImgFile},
+        {"output_digest", hasOutputDigest ? json(outputDigest) : json(nullptr)},
+        {"elapsed_ms", telemetry.ElapsedMs()}
+      }))
+    bApplySuccess = false;
+
+  const long long elapsedMs = telemetry.ElapsedMs();
+  const unsigned long long completedPixels =
+    (unsigned long long)i * inputWidth;
+  const double throughputPixelsPerSecond =
+    elapsedMs > 0 ? (double)completedPixels * 1000.0 / (double)elapsedMs : 0.0;
+  if (telemetryMode == icTelemetryJsonl &&
+      !telemetry.Emit(bApplySuccess ? "run_completed" : "run_failed", {
+        {"status", bApplySuccess ? "success" : "tool_failure"},
+        {"exit_code", bApplySuccess ? 0 : -1},
+        {"completed_rows", i},
+        {"total_rows", inputHeight},
+        {"requested_threads", cfgConnect.m_nThreads},
+        {"effective_threads", effectiveThreads},
+        {"rows_per_apply", nRowsPerApply},
+        {"pixels_per_apply", pixelsPerApply},
+        {"total_batches", totalBatches},
+        {"completed_pixels", completedPixels},
+        {"total_pixels", (unsigned long long)inputWidth * inputHeight},
+        {"elapsed_ms", elapsedMs},
+        {"throughput_pixels_per_second", throughputPixelsPerSecond}
+      }))
+    bApplySuccess = false;
+
+  if (bApplySuccess && !evidenceFile.empty()) {
+    FILE* evidence = icOpenNewRegularWriteTextFile(evidenceFile.c_str());
+    if (!evidence) {
+      fprintf(stderr, "Unable to create evidence file '%s'\n",
+              icSanitizeConsoleText(evidenceFile.c_str()).c_str());
+      bApplySuccess = false;
+    }
+    else {
+      json receipt = {
+        {"schema", "iccdev-apply-evidence/v1"},
+        {"tool", "iccApplyProfiles"},
+        {"status", "success"},
+        {"input", cfgApply.m_srcImgFile},
+        {"output", cfgApply.m_dstImgFile},
+        {"output_digest", hasOutputDigest ? json(outputDigest) : json(nullptr)},
+        {"requested_threads", cfgConnect.m_nThreads},
+        {"effective_threads", effectiveThreads},
+        {"execution_mode", bUseRowApply ? "threaded-row-batch" : "single-pixel"},
+        {"rows_per_apply", nRowsPerApply},
+        {"pixels_per_apply", pixelsPerApply},
+        {"total_batches", totalBatches},
+        {"completed_pixels", completedPixels},
+        {"total_pixels", (unsigned long long)inputWidth * inputHeight},
+        {"elapsed_ms", elapsedMs},
+        {"throughput_pixels_per_second", throughputPixelsPerSecond}
+      };
+      const std::string text = receipt.dump(2) + "\n";
+      const bool wrote = fwrite(text.data(), 1, text.size(), evidence) == text.size();
+      const bool closed = icFlushAndClose(evidence);
+      if (!wrote || !closed) {
+        fprintf(stderr, "Unable to write evidence file '%s'\n",
+                icSanitizeConsoleText(evidenceFile.c_str()).c_str());
+        bApplySuccess = false;
+      }
+    }
+  }
+
+  if (bVerbose && !bQuiet) {
+    fprintf(stderr,
+            "[%s] iccApplyProfiles: completed status=%s elapsed_ms=%lld throughput_pixels_per_second=%.3f completed_pixels=%llu total_pixels=%llu requested_threads=%d effective_threads=%d mode=%s\n",
+            CIccApplyTelemetry::TimestampUtc().c_str(),
+            bApplySuccess ? "success" : "tool_failure", elapsedMs,
+            throughputPixelsPerSecond, completedPixels,
+            (unsigned long long)inputWidth * inputHeight,
+            cfgConnect.m_nThreads, effectiveThreads,
+            bUseRowApply ? "threaded-row-batch" : "single-pixel");
+  }
 
   return bApplySuccess ? 0 : -1;
 }

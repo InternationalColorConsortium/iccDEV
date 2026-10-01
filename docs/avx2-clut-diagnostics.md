@@ -63,8 +63,24 @@ Configure a separate release build with
 telemetry. The library remains silent unless `ICC_PERF_STATS_FILE` names a
 report file. The report records CLUT calls by scalar/SSE2/AVX2/AVX-512 path,
 output-channel counts, aggregate CLUT elapsed nanoseconds, and threaded-CMM
-call, pixel, strip, and active-worker totals. Each process appends one report
-block, so a CTest run preserves its child-process telemetry in one file.
+call, pixel, strip, active-worker, and elapsed-time totals. The original
+`clut_calls_*`, `clut_calls_outputs_*`, and `clut_elapsed_ns` fields count only
+linear 3D interpolation. Additive `clut_all_*` fields count every CLUT entry
+point: 1D, 2D, linear and tetrahedral 3D, 4D, 5D, 6D, and ND. They include
+per-kind calls and elapsed nanoseconds, total calls and elapsed nanoseconds,
+aggregate scalar/SSE2/AVX2/AVX-512 dispatch counts, output-channel counts
+through 16, and an over-16 count. The elapsed totals
+sum call durations; when calls overlap across threads, they are not wall time.
+`threaded_elapsed_ns` measures the wall duration inside the worker-pool Apply
+calls and includes synchronization. Each process appends one report block, so
+a CTest run preserves its child-process telemetry in one file. The focused
+`iccdev.clut-perf-counters` test is registered only for a perf-enabled build.
+For lower profiling cost, set `ICC_PERF_CLUT_TIMING_STRIDE` to a power of two
+from 2 through 1024. Call and output-channel counts remain exact. The elapsed
+fields then estimate full-workload time from one timed call per stride within
+each thread and interpolation kind; `clut_all_timed_samples_*` shows the sample
+count. The default stride of 1 times every call. A kind with fewer calls than
+the stride on each thread can have zero timed samples and no elapsed estimate.
 
 On Linux, capture the focused regression in a fresh output directory:
 

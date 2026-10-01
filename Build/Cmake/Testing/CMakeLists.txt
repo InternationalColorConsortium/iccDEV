@@ -10751,6 +10751,38 @@ if(TARGET iccBenchApply)
   add_dependencies(build-test-binaries iccBenchApply)
 
   if(TARGET iccFromXml)
+    if(ICCDEV_ENABLE_PERF_MONITORING)
+      add_dependencies(build-test-binaries iccFromXml)
+      add_test(
+        NAME iccdev.clut-perf-counters
+        COMMAND "${CMAKE_COMMAND}"
+          "-DICCDEV_FROM_XML=$<TARGET_FILE:iccFromXml>"
+          "-DICCDEV_BENCH_APPLY=$<TARGET_FILE:iccBenchApply>"
+          "-DICCDEV_RGB_XML=${ICCDEV_REPO_ROOT}/Testing/V2/v2RgbLut8.xml"
+          "-DICCDEV_CMYK_XML=${ICCDEV_REPO_ROOT}/Testing/V2/v2CmykLut16.xml"
+          "-DICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/clut-perf-counters/$<CONFIG>"
+          -P "${CMAKE_CURRENT_LIST_DIR}/RunClutPerfCounters.cmake"
+      )
+      set_tests_properties(iccdev.clut-perf-counters PROPERTIES
+        WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+        TIMEOUT 120
+        LABELS "iccdev;iccprofLib;benchmark;telemetry;regression"
+      )
+      if(WIN32)
+        set(_clut_perf_windows_env_mods
+          "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccFromXml>"
+          "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccBenchApply>"
+        )
+        foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+          list(APPEND _clut_perf_windows_env_mods
+            "PATH=path_list_prepend:${_runtime_path}")
+        endforeach()
+        set_tests_properties(iccdev.clut-perf-counters PROPERTIES
+          ENVIRONMENT_MODIFICATION "${_clut_perf_windows_env_mods}"
+        )
+      endif()
+    endif()
+
     if(WIN32)
       add_test(
         NAME iccdev.apply-throughput
@@ -14230,6 +14262,37 @@ if(TARGET iccApplyProfiles)
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applyprofiles-cli-args-regression.sh"
    )
+
+  iccdev_add_script_test(
+    iccdev.applyprofiles-headless-receipts
+    120
+    "iccdev;cmm;config;cli;telemetry;evidence;issue-2736;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/ci/quality-assurance/scripts/iccApplyProfiles-quick-check.sh"
+  )
+
+  if(TARGET iccTiffDump AND TARGET iccPawgReport)
+    find_program(ICCDEV_MATRIX_PYTHON3_EXECUTABLE python3)
+    if(ICCDEV_MATRIX_PYTHON3_EXECUTABLE)
+      add_test(
+        NAME iccdev.applyprofiles-matrix-contracts
+        COMMAND "${ICCDEV_MATRIX_PYTHON3_EXECUTABLE}"
+          "${ICCDEV_REPO_ROOT}/.github/ci/quality-assurance/scripts/test_icc_apply_profiles_matrix.py"
+      )
+      set_tests_properties(iccdev.applyprofiles-matrix-contracts PROPERTIES
+        WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+        TIMEOUT 30
+        LABELS "iccdev;cmm;image;qa;evidence;issue-2736;regression"
+      )
+    endif()
+    iccdev_add_script_test(
+      iccdev.applyprofiles-evidence-matrix
+      120
+      "iccdev;cmm;image;qa;evidence;issue-2736;regression"
+      "${ICCDEV_REPO_ROOT}"
+      "${ICCDEV_REPO_ROOT}/.github/ci/quality-assurance/scripts/iccApplyProfiles-matrix.sh"
+    )
+  endif()
 endif()
 
 # #2262 - the same three tools publish the same decimal rendering-intent table,

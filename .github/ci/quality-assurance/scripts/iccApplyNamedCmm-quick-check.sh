@@ -54,10 +54,18 @@ qa_run debug success "" "$BIN" -debugcalc "$FLOAT_DATA" 3:8:12 0 "$CALC" 0
 qa_run environment success "" "$BIN" "$DATA" 0 0 \
     -ENV:bkgX 0.0985 -ENV:bkgY 0.159 -ENV:bkgZ 0.122 "$PROFILE" 1
 qa_run pcc success "" "$BIN" "$DATA" 0 0 "$PROFILE" 1 -PCC "$PROFILE"
-qa_run export-config success "" "$BIN" -exportcfganddata "$CFG" "$DATA" 0 0 "$PROFILE" 1
+qa_run telemetry-human success "iccApplyNamedCmm: completed" \
+    "$BIN" --telemetry=human "$DATA8" 0 0 "$PROFILE" 1
+if ! grep -Eq '^\[[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\] iccApplyNamedCmm: completed ' "$QA_LAST_LOG"; then
+    qa_fail "NamedCmm human telemetry completion is missing its UTC timestamp"
+fi
+if [[ "$(tail -c 1 "$QA_LAST_LOG" | od -An -tu1 | tr -d '[:space:]')" != "10" ]]; then
+    qa_fail "NamedCmm human telemetry output does not end with a newline"
+fi
+qa_run export-config success "" "$BIN" --exportcfganddata "$CFG" "$DATA" 0 0 "$PROFILE" 1
 qa_require_file "$CFG"
-qa_run replay-config success "" "$BIN" -cfg "$CFG"
-qa_run config-extra reject "Unexpected extra arguments for -cfg" "$BIN" -cfg "$CFG" ignored-extra
+qa_run replay-config success "" "$BIN" --cfg "$CFG"
+qa_run config-extra reject "Unexpected extra arguments for --cfg" "$BIN" --cfg "$CFG" ignored-extra
 qa_run legacy-extra reject "Unexpected extra arguments" "$BIN" "$DATA" 0 0 "$PROFILE" 1 ignored-extra
 
 qa_finish

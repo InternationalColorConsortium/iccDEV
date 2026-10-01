@@ -86,6 +86,11 @@ Inside the unified container, use its preconfigured pinned
 
 The script preserves a telemetry file per measured CTest run. Do not enable
 `ICC_AVX2_CLUT_DEBUG`, coverage, or strace while comparing cycle counts.
+Record `clut_timing_stride` with each counter report. The default of 1 times
+every CLUT call; use a power-of-two `ICC_PERF_CLUT_TIMING_STRIDE` up to 1024
+when lower overhead matters, and treat elapsed fields as estimates then.
+Call counters remain exact. Keep instrumented timings separate from the
+ordinary throughput baseline.
 
 ## Handoff
 

@@ -385,8 +385,10 @@ jobs:
             "$warning_probe"
 
           clang_cxx=""
-          if command -v clang++-18 >/dev/null 2>&1; then
-            clang_cxx="clang++-18"
+          if command -v clang++-22 >/dev/null 2>&1; then
+            clang_cxx="clang++-22"
+          elif command -v clang++-21 >/dev/null 2>&1; then
+            clang_cxx="clang++-21"
           elif command -v clang++ >/dev/null 2>&1; then
             clang_cxx="clang++"
           fi
@@ -1161,18 +1163,35 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          source .github/scripts/sanitize-sed.sh
+          llvm_key="$RUNNER_TEMP/llvm-snapshot.gpg.key"
+          llvm_keyring="$RUNNER_TEMP/llvm-snapshot.gpg"
+          curl --fail --location --silent --show-error \
+            https://apt.llvm.org/llvm-snapshot.gpg.key \
+            --output "$llvm_key"
+          gpg --show-keys --with-colons "$llvm_key" > "$RUNNER_TEMP/llvm-key-info"
+          llvm_fingerprint="$(awk -F: '$1 == "fpr" {print $10; exit}' "$RUNNER_TEMP/llvm-key-info")"
+          if [ "$llvm_fingerprint" != "6084F3CF814B57C1CF12EFD515CF4D18AF4F7421" ]; then
+            echo "Unexpected LLVM APT key fingerprint: $llvm_fingerprint" >&2
+            exit 1
+          fi
+          gpg --dearmor --output "$llvm_keyring" "$llvm_key"
+          sudo install -m 0644 "$llvm_keyring" /usr/share/keyrings/llvm-snapshot.gpg
+          printf '%s\n' \
+            'deb [signed-by=/usr/share/keyrings/llvm-snapshot.gpg] https://apt.llvm.org/noble/ llvm-toolchain-noble-22 main' |
+            sudo tee /etc/apt/sources.list.d/llvm-toolchain-22.list >/dev/null
           bash .github/scripts/ci-safe-apt-update.sh
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake \
-            clang-18 clang++-18 llvm-18 \
+            clang-22 clang++-22 llvm-22 \
             libxml2-dev libtiff-dev libjpeg-dev libpng-dev \
             zlib1g-dev liblzma-dev nlohmann-json3-dev
 
       - name: Check RefIccMAX thread linkage
         env:
           BASH_ENV: /dev/null
-          CC: clang-18
-          CXX: clang++-18
+          CC: clang-22
+          CXX: clang++-22
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -1211,8 +1230,8 @@ jobs:
           run_case "configure ${THREAD_LINKAGE_BUILD_TYPE} ipo=${ipo_value}" \
             cmake -S Build/Cmake -B "${BUILD_DIR}" \
               -DCMAKE_BUILD_TYPE="${THREAD_LINKAGE_BUILD_TYPE}" \
-              -DCMAKE_C_COMPILER=clang-18 \
-              -DCMAKE_CXX_COMPILER=clang++-18 \
+              -DCMAKE_C_COMPILER=clang-22 \
+              -DCMAKE_CXX_COMPILER=clang++-22 \
               -DCMAKE_INTERPROCEDURAL_OPTIMIZATION="${ipo_value}" \
               -DENABLE_LTO="${ipo_value}" \
               -DENABLE_SANITIZERS=OFF \
