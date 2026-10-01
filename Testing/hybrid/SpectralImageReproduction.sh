@@ -44,10 +44,11 @@ done
 echo "========== Spectral image reproduction (full 600x420) =========="
 echo "This runs an inverse search per pixel; expect minutes, not seconds."
 
-# connect.threads is 0 (hardware concurrency) in the config.  A search CMM gives
-# every worker its own CIccApplyCmmSearch with private sub-chain apply objects,
-# so the threaded result is identical to the scalar one -- only faster.
-iccApplyProfiles -cfg config/msCowsToCmyk.json
+# The config defaults connect.threads to 0 (hardware concurrency); this driver
+# overrides it with four repeatable workers.  A search CMM gives every worker
+# its own CIccApplyCmmSearch with private sub-chain apply objects, so the
+# threaded result is identical to the scalar one -- only faster.
+iccApplyProfiles -threads 0 -cfg config/msCowsToCmyk.json
 iccTiffDump   Results/MS_smCowsCmyk.tif
 
 echo "Wrote Results/MS_smCowsCmyk.tif"

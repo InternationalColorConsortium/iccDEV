@@ -25,6 +25,9 @@ set(SOURCES
 
 # Define the executable
 add_executable(iccApplySearch ${SOURCES})
+if(ICCDEV_ENABLE_TELEMETRY)
+  target_compile_definitions(iccApplySearch PRIVATE ICCDEV_TELEMETRY=1)
+endif()
 
 # Link libraries
 target_link_libraries(iccApplySearch PRIVATE

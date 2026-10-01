@@ -2829,6 +2829,7 @@ CIccApplyCLUT* CIccCLUT::GetNewApply()
 */
 void CIccCLUT::Interp1d(icFloatNumber *destPixel, const icFloatNumber *srcPixel) const
 {
+  ICC_PERF_CLUT_SCOPE_KIND((int)m_nOutput, icPerfClut1d);
   icUInt8Number mx = m_MaxGridPoint[0];
 
   icFloatNumber x = icClutGridClamp(srcPixel[0], mx);
@@ -2873,6 +2874,7 @@ void CIccCLUT::Interp1d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
 */
 void CIccCLUT::Interp2d(icFloatNumber *destPixel, const icFloatNumber *srcPixel) const
 {
+  ICC_PERF_CLUT_SCOPE_KIND((int)m_nOutput, icPerfClut2d);
   icUInt8Number mx = m_MaxGridPoint[0];
   icUInt8Number my = m_MaxGridPoint[1];
 
@@ -2934,6 +2936,7 @@ void CIccCLUT::Interp2d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
  */
 void CIccCLUT::Interp3dTetra(icFloatNumber *destPixel, const icFloatNumber *srcPixel) const
 {
+  ICC_PERF_CLUT_SCOPE_KIND((int)m_nOutput, icPerfClut3dTetra);
   // NOTE FOR ANYONE ADDING A BOUNDS CHECK HERE -- please don't; this one was a
   // defect.
   //
@@ -3203,6 +3206,7 @@ void CIccCLUT::Interp3d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
  */
 void CIccCLUT::Interp4d(icFloatNumber *destPixel, const icFloatNumber *srcPixel) const
 {
+  ICC_PERF_CLUT_SCOPE_KIND((int)m_nOutput, icPerfClut4d);
   icUInt8Number mw = m_MaxGridPoint[0];
   icUInt8Number mx = m_MaxGridPoint[1];
   icUInt8Number my = m_MaxGridPoint[2];
@@ -3291,6 +3295,7 @@ void CIccCLUT::Interp4d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
  */
 void CIccCLUT::Interp5d(icFloatNumber *destPixel, const icFloatNumber *srcPixel) const
 {
+  ICC_PERF_CLUT_SCOPE_KIND((int)m_nOutput, icPerfClut5d);
   icUInt8Number m0 = m_MaxGridPoint[0];
   icUInt8Number m1 = m_MaxGridPoint[1];
   icUInt8Number m2 = m_MaxGridPoint[2];
@@ -3408,6 +3413,7 @@ void CIccCLUT::Interp5d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
  */
 void CIccCLUT::Interp6d(icFloatNumber *destPixel, const icFloatNumber *srcPixel) const
 {
+  ICC_PERF_CLUT_SCOPE_KIND((int)m_nOutput, icPerfClut6d);
   icUInt8Number m0 = m_MaxGridPoint[0];
   icUInt8Number m1 = m_MaxGridPoint[1];
   icUInt8Number m2 = m_MaxGridPoint[2];
@@ -3565,6 +3571,7 @@ void CIccCLUT::Interp6d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
  */
 void CIccCLUT::InterpND(icFloatNumber *destPixel, const icFloatNumber *srcPixel, CIccApplyCLUT *pApply) const
 {
+  ICC_PERF_CLUT_SCOPE_KIND((int)m_nOutput, icPerfClutNd);
   icUInt32Number i,j, index = 0;
   icFloatNumber* df = pApply->m_df;
   icFloatNumber* g = pApply->m_g;

@@ -1,11 +1,6 @@
 #!/bin/bash
 ##
 ## Copyright (c) 2025 International Color Consortium. All rights reserved.
-##
-## Written by David Hoyt
-## Date: 21-OCT-2025 1700Z by David Hoyt
-##
-## Updated: 2026-04-09 -- add path.sh, fix -PCC to -pcc
 
 # Auto-source path.sh if present (sets PATH and LD_LIBRARY_PATH/DYLD_LIBRARY_PATH)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

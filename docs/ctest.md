@@ -311,6 +311,10 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.lut16-zero-curve-regressions` | `.github/scripts/iccdev-lut16-zero-curve-regression-tests.sh` |
 | `iccdev.applynamedcmm-cli-args` | `.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh` |
 | `iccdev.applysearch-cli-args` | `.github/scripts/iccdev-applysearch-cli-args-regression.sh` |
+| `iccdev.iccApply*-build-toggle` | Four apply-tool checks run with telemetry both enabled and disabled; help exposes telemetry only when built, and disabled builds reject telemetry options. Configure separate build trees with `ICCDEV_ENABLE_TELEMETRY=ON` and `OFF` to cover both cases. |
+| `iccdev.applyprofiles-headless-receipts` | Unix quick check and Windows Python smoke; verify JSONL lifecycle receipts, post-close JSON evidence, sidecar path rejection, and byte-identical TIFF output with telemetry enabled |
+| `iccdev.applyprofiles-matrix-contracts` | Python unit checks for classification and receipt validation on Unix and Windows |
+| `iccdev.applyprofiles-evidence-matrix` | Unix wrapper and Windows Python runner; classify tracked positive and expected-negative conversions, validate TIFF and receipt digests, and retain command, PAWG, and measurement evidence |
 | `iccdev.namedcolor-apply-regressions` | `.github/scripts/iccdev-namedcolor-apply-regression-tests.sh` |
 | `iccdev.v5-namedcmm-regressions` | `.github/scripts/iccdev-v5-namedcmm-regression-tests.sh` |
 | `iccdev.namedcolor-overprint-regressions` | `.github/scripts/iccdev-namedcolor-overprint-regression-tests.sh` |
@@ -450,6 +454,9 @@ Windows full tool builds register these tests when all targets are available:
 | `iccdev.issue-987-shared-mpe-export` | `Build/Cmake/Testing/RunWindowsSharedExportTest.cmake` |
 | `iccdev.issue-1009-iccjson-profilejson-export` | `Build/Cmake/Testing/RunWindowsIccJsonExportTest.cmake` |
 | `iccdev.installed-package-consumer` | `Build/Cmake/Testing/RunInstalledPackageConsumerTest.cmake` |
+| `iccdev.applyprofiles-headless-receipts` | `.github/ci/quality-assurance/scripts/test_icc_apply_profiles_receipts.py` |
+| `iccdev.applyprofiles-matrix-contracts` | `.github/ci/quality-assurance/scripts/test_icc_apply_profiles_matrix.py` |
+| `iccdev.applyprofiles-evidence-matrix` | `.github/ci/quality-assurance/scripts/icc_apply_profiles_matrix.py` |
 
 The batch-backed Windows tests run through
 `Build/Cmake/Testing/RunWindowsBatchTest.cmake`. The wrapper copies `Testing/`
@@ -460,7 +467,7 @@ unified `bin` runtime directory and falls back to the older per-tool
 `Tools/<Tool>/<Config>` layout for existing build trees.
 
 Windows CTest wrappers collect build-tree DLL directories plus runtime
-dependency directories from `CMakeCache.txt`, including `CMAKE_PREFIX_PATH`,
+dependency directories from live CMake variables and `CMakeCache.txt`, including `CMAKE_PREFIX_PATH`,
 vcpkg installed triplets, compiler `bin` directories, and common dependency
 library prefixes. Per-configuration trees are covered on both counts: vcpkg
 keeps release DLLs in `<installed>/<triplet>/bin` and debug DLLs in

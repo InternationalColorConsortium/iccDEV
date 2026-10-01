@@ -1,6 +1,6 @@
 #
 # IccApplyNamedCmm CMakeLists.txt | iccDEV Project
-# Copyright (©) 2024-2026 The International Color Consortium. All rights reserved.
+# Copyright (C) 2024-2026 The International Color Consortium. All rights reserved.
 #
 #
 # Last Updated: 02-JAN-2026 at 0230Z by David Hoyt
@@ -24,6 +24,9 @@ if(NOT TARGET iccApplyNamedCmm)
   )
 
   add_executable(iccApplyNamedCmm ${SOURCES})
+  if(ICCDEV_ENABLE_TELEMETRY)
+    target_compile_definitions(iccApplyNamedCmm PRIVATE ICCDEV_TELEMETRY=1)
+  endif()
 
   set_target_properties(iccApplyNamedCmm PROPERTIES
     LINKER_LANGUAGE CXX

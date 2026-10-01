@@ -474,8 +474,9 @@ CTiffImg::~CTiffImg()
   Close();
 }
 
-void CTiffImg::Close()
+bool CTiffImg::Close()
 {
+  bool outputFlushed = true;
   // Close() is both the public reset and the destructor's cleanup (~CTiffImg
   // calls it), and Create()/Open() call it up front to recycle an instance.
   // Previously it released the two heap resources but only zeroed five of the
@@ -494,6 +495,8 @@ void CTiffImg::Close()
   // route the ICC payload through libtiff's own TIFFTAG_ICCPROFILE storage and
   // never assign m_pProfile, so nulling it (below) frees nothing and cannot leak.
   if (m_hTif) {
+    if (!m_bRead)
+      outputFlushed = TIFFFlush(m_hTif) != 0;
     TIFFClose(m_hTif);
     m_hTif = NULL;
   }
@@ -543,6 +546,7 @@ void CTiffImg::Close()
   m_nCurStrip = 0;
   m_pProfile = NULL;
   m_nProfileLength = 0;
+  return outputFlushed;
 }
 
 bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHeight,

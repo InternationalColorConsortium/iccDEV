@@ -697,8 +697,26 @@ option(ICCDEV_ENABLE_AVX512
   "Build runtime-dispatched AVX-512 CLUT interpolation on supported x86-64 toolchains"
   OFF)
 option(ICCDEV_ENABLE_PERF_MONITORING
-  "Build opt-in aggregate CLUT and threaded-CMM performance telemetry"
+  "Deprecated alias for ICCDEV_ENABLE_TELEMETRY"
   OFF)
+if(ICCDEV_ENABLE_PERF_MONITORING AND NOT DEFINED ICCDEV_ENABLE_TELEMETRY)
+  set(ICCDEV_ENABLE_TELEMETRY ON CACHE BOOL
+    "Build apply-tool receipts and aggregate CLUT/threaded-CMM telemetry")
+endif()
+option(ICCDEV_ENABLE_TELEMETRY
+  "Build apply-tool receipts and aggregate CLUT/threaded-CMM telemetry"
+  OFF)
+if(ICCDEV_ENABLE_PERF_MONITORING)
+  message(DEPRECATION
+    "ICCDEV_ENABLE_PERF_MONITORING is deprecated; use ICCDEV_ENABLE_TELEMETRY")
+endif()
+option(ICCDEV_ENABLE_APPLY_BATCH_TIMING
+  "Build opt-in iccApplyProfiles per-batch debug timing"
+  OFF)
+if(ICCDEV_ENABLE_APPLY_BATCH_TIMING AND NOT ICCDEV_ENABLE_TELEMETRY)
+  message(FATAL_ERROR
+    "ICCDEV_ENABLE_APPLY_BATCH_TIMING requires ICCDEV_ENABLE_TELEMETRY=ON")
+endif()
 set(ICCDEV_LIBCPP_HARDENING_MODE "none" CACHE STRING
   "Apple libc++ hardening mode: none, fast, extensive, or debug")
 set_property(CACHE ICCDEV_LIBCPP_HARDENING_MODE PROPERTY STRINGS
@@ -1050,6 +1068,7 @@ message(STATUS "ICCDEV_ENABLE_STRICT_WARNINGS = ${ICCDEV_ENABLE_STRICT_WARNINGS}
 message(STATUS "ICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS = ${ICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS}")
 message(STATUS "ICCDEV_ENABLE_AVX2         = ${ICCDEV_ENABLE_AVX2}")
 message(STATUS "ICCDEV_ENABLE_AVX512       = ${ICCDEV_ENABLE_AVX512}")
+message(STATUS "ICCDEV_ENABLE_TELEMETRY     = ${ICCDEV_ENABLE_TELEMETRY}")
 message(STATUS "ICCDEV_LIBCPP_HARDENING_MODE = ${ICCDEV_LIBCPP_HARDENING_MODE}")
 message(STATUS "ENABLE_SANITIZERS          = ${ENABLE_SANITIZERS}")
 message(STATUS "ENABLE_ASAN                = ${ENABLE_ASAN}")

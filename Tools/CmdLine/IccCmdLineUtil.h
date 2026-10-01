@@ -349,7 +349,8 @@ inline ICC_CMDLINE_NO_SANITIZE_INTEGER unsigned int icSha256Rotr(unsigned int x,
   return (x >> n) | (x << (32 - n));
 }
 
-inline ICC_CMDLINE_NO_SANITIZE_INTEGER std::string icSha256Bytes(const unsigned char* data, size_t len)
+inline ICC_CMDLINE_NO_SANITIZE_INTEGER void icSha256Block(
+    unsigned int h[8], const unsigned char* block)
 {
   static const unsigned int k[64] = {
     0x428a2f98U, 0x71374491U, 0xb5c0fbcfU, 0xe9b5dba5U,
@@ -369,26 +370,13 @@ inline ICC_CMDLINE_NO_SANITIZE_INTEGER std::string icSha256Bytes(const unsigned 
     0x748f82eeU, 0x78a5636fU, 0x84c87814U, 0x8cc70208U,
     0x90befffaU, 0xa4506cebU, 0xbef9a3f7U, 0xc67178f2U
   };
-  unsigned int h[8] = {
-    0x6a09e667U, 0xbb67ae85U, 0x3c6ef372U, 0xa54ff53aU,
-    0x510e527fU, 0x9b05688cU, 0x1f83d9abU, 0x5be0cd19U
-  };
-  std::vector<unsigned char> msg(data, data + len);
-  unsigned long long bitLen = (unsigned long long)len * 8ULL;
-  msg.push_back(0x80);
-  while ((msg.size() % 64) != 56)
-    msg.push_back(0);
-  for (int i = 7; i >= 0; i--)
-    msg.push_back((unsigned char)((bitLen >> (i * 8)) & 0xff));
-
-  for (size_t chunk = 0; chunk < msg.size(); chunk += 64) {
     unsigned int w[64];
     for (int i = 0; i < 16; i++) {
-      size_t j = chunk + (size_t)i * 4;
-      w[i] = ((unsigned int)msg[j] << 24) |
-             ((unsigned int)msg[j + 1] << 16) |
-             ((unsigned int)msg[j + 2] << 8) |
-             ((unsigned int)msg[j + 3]);
+      size_t j = (size_t)i * 4;
+      w[i] = ((unsigned int)block[j] << 24) |
+             ((unsigned int)block[j + 1] << 16) |
+             ((unsigned int)block[j + 2] << 8) |
+             ((unsigned int)block[j + 3]);
     }
     for (int i = 16; i < 64; i++) {
       unsigned int s0 = icSha256Rotr(w[i - 15], 7) ^
@@ -420,13 +408,34 @@ inline ICC_CMDLINE_NO_SANITIZE_INTEGER std::string icSha256Bytes(const unsigned 
     }
     h[0] += a; h[1] += b; h[2] += c; h[3] += d;
     h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
-  }
+}
 
+inline std::string icSha256Hex(const unsigned int h[8])
+{
   std::ostringstream out;
   out << "sha256:";
   for (int i = 0; i < 8; i++)
     out << std::hex << std::setfill('0') << std::setw(8) << h[i];
   return out.str();
+}
+
+inline ICC_CMDLINE_NO_SANITIZE_INTEGER std::string icSha256Bytes(const unsigned char* data, size_t len)
+{
+  unsigned int h[8] = {
+    0x6a09e667U, 0xbb67ae85U, 0x3c6ef372U, 0xa54ff53aU,
+    0x510e527fU, 0x9b05688cU, 0x1f83d9abU, 0x5be0cd19U
+  };
+  std::vector<unsigned char> msg(data, data + len);
+  const unsigned long long bitLen = (unsigned long long)len * 8ULL;
+  msg.push_back(0x80);
+  while ((msg.size() % 64) != 56)
+    msg.push_back(0);
+  for (int i = 7; i >= 0; i--)
+    msg.push_back((unsigned char)((bitLen >> (i * 8)) & 0xff));
+
+  for (size_t chunk = 0; chunk < msg.size(); chunk += 64)
+    icSha256Block(h, msg.data() + chunk);
+  return icSha256Hex(h);
 }
 
 inline bool icReadFileBytes(const char* path, std::vector<unsigned char>& bytes)
@@ -449,14 +458,55 @@ inline bool icReadFileBytes(const char* path, std::vector<unsigned char>& bytes)
   return ok;
 }
 
-inline bool icSha256File(const char* path, std::string& digest)
+inline ICC_CMDLINE_NO_SANITIZE_INTEGER bool icSha256File(
+    const char* path, std::string& digest)
 {
-  std::vector<unsigned char> bytes;
-  if (!icReadFileBytes(path, bytes))
+  if (!path || !path[0])
+    return false;
+  FILE* f = fopen(path, "rb");
+  if (!f)
     return false;
 
-  digest = icSha256Bytes(bytes.empty() ? (const unsigned char*)"" : &bytes[0],
-                         bytes.size());
+  unsigned int h[8] = {
+    0x6a09e667U, 0xbb67ae85U, 0x3c6ef372U, 0xa54ff53aU,
+    0x510e527fU, 0x9b05688cU, 0x1f83d9abU, 0x5be0cd19U
+  };
+  unsigned char block[64];
+  size_t used = 0;
+  unsigned long long totalBytes = 0;
+  unsigned char readBuffer[4096];
+  size_t n;
+  while ((n = fread(readBuffer, 1, sizeof(readBuffer), f)) > 0) {
+    totalBytes += (unsigned long long)n;
+    for (size_t offset = 0; offset < n;) {
+      const size_t take = (n - offset < sizeof(block) - used)
+        ? n - offset : sizeof(block) - used;
+      memcpy(block + used, readBuffer + offset, take);
+      used += take;
+      offset += take;
+      if (used == sizeof(block)) {
+        icSha256Block(h, block);
+        used = 0;
+      }
+    }
+  }
+  const bool readOk = ferror(f) == 0;
+  fclose(f);
+  if (!readOk)
+    return false;
+
+  block[used++] = 0x80;
+  if (used > 56) {
+    memset(block + used, 0, sizeof(block) - used);
+    icSha256Block(h, block);
+    used = 0;
+  }
+  memset(block + used, 0, 56 - used);
+  const unsigned long long bitLen = totalBytes * 8ULL;
+  for (int i = 7; i >= 0; i--)
+    block[56 + (7 - i)] = (unsigned char)((bitLen >> (i * 8)) & 0xff);
+  icSha256Block(h, block);
+  digest = icSha256Hex(h);
   return true;
 }
 

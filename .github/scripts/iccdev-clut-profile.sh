@@ -44,10 +44,10 @@ if [ "$build_type" != "Release" ] || [ "$avx2_debug" != "OFF" ]; then
     exit 2
 fi
 perf_monitoring="$(awk -F= '
-    $1 == "ICCDEV_ENABLE_PERF_MONITORING:BOOL" { print $2; exit }
+    $1 == "ICCDEV_ENABLE_TELEMETRY:BOOL" { print $2; exit }
 ' "$build_dir/CMakeCache.txt")"
 if [ "$perf_monitoring" != "ON" ]; then
-    echo "BUILD_DIR must enable ICCDEV_ENABLE_PERF_MONITORING: $build_dir" >&2
+    echo "BUILD_DIR must enable ICCDEV_ENABLE_TELEMETRY: $build_dir" >&2
     exit 2
 fi
 if [ -e "$output_dir" ]; then

@@ -55,6 +55,9 @@
 #include "IccSearch.h"
 #include "IccConnect.h"
 #include "IccCmdLineUtil.h"
+#ifdef ICCDEV_TELEMETRY
+#include "IccApplyTelemetry.h"
+#endif
 #include <cerrno>
 #include <cstring>  // strcmp, used by the -h/--help contract guard in main()
 #include <cstdlib>  // EXIT_FAILURE, used by the -cfg argument guard added in #2075
@@ -185,10 +188,17 @@ bool IsSpacePCS( const icColorSpaceSignature &x )
 void Usage(FILE* stream)
 {
   fprintf(stream, "iccApplySearch built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
-  fprintf(stream, "Usage 1: iccApplySearch {-threads N} -cfg config_file_path\n");
-  fprintf(stream, "  Optional: -threads N (0=hardware concurrency, 1=single-threaded)\n");
+  fprintf(stream, "Usage 1: iccApplySearch {--threads N} --cfg config_file_path\n");
+#ifdef ICCDEV_TELEMETRY
+  fprintf(stream, "  Global options, in any order: --telemetry=off|human|jsonl --telemetry-file FILE --evidence-file FILE\n");
+  fprintf(stream, "  --telemetry=jsonl requires --telemetry-file; human receipts use stderr.\n");
+#endif
+  fprintf(stream, "  Legacy single-dash forms remain accepted.\n");
+  fprintf(stream, "  Optional: --threads N (0=hardware concurrency, 1=single-threaded)\n");
   fprintf(stream, "  Where config_file_path is a json formatted ICC profile application configuration file\n\n");
-  fprintf(stream, "Usage 2: iccApplySearch {-threads N} {-debugcalc} data_file_path encoding[:precision[:digits]] interpolation {-ENV:tag value} profile1_path intent1 {{-ENV:tag value} middle_profile_path mid_intent} {-ENV:tag value} profile2_path intent2 -INIT init_intent2 {pcc_path1 weight1 ...}\n");
+  fprintf(stream, "Usage 2: iccApplySearch {-threads N} {-exportcfg|-exportcfganddata config_file_path} {-debugcalc} data_file_path encoding[:precision[:digits]] interpolation {-ENV:tag value} profile1_path intent1 {{-ENV:tag value} middle_profile_path mid_intent} {-ENV:tag value} profile2_path intent2 -INIT init_intent2 {pcc_path1 weight1 ...}\n");
+  fprintf(stream, "  -exportcfg writes the resolved configuration; -exportcfganddata also embeds input data for -cfg replay.\n");
+  fprintf(stream, "  Example: iccApplySearch -exportcfganddata search.json values.txt 0 1 src.icc 3 dst.icc 3 -INIT 3 pcc.icc 1\n");
   
   fprintf(stream, "  For final_data_encoding:\n");
   fprintf(stream, "    0 - icEncodeValue (converts to/from lab encoding when samples=3)\n");
@@ -226,6 +236,13 @@ void Usage(FILE* stream)
 int main(int argc, const char* argv[])
 {
   int minargs = 3;  // name -cfg file.json
+#ifdef ICCDEV_TELEMETRY
+  icApplyTelemetryMode telemetryMode = icApplyTelemetryOff;
+  std::string telemetryFile;
+  std::string evidenceFile;
+#endif
+  int nThreads = 1;
+  bool bThreadOption = false;
 
   // An explicit help request is the one invocation here that is not an error, so
   // it prints on stdout and exits 0; every malformed form below prints on stderr
@@ -236,17 +253,119 @@ int main(int argc, const char* argv[])
     return 0;
   }
 
-  if (argc > 1 && !stricmp(argv[1], "-threads") && argc < 3) {
-    fprintf(stderr, "Missing thread count for -threads\n");
+  std::vector<const char*> commandArgs;
+  commandArgs.push_back(argv[0]);
+  for (int arg = 1; arg < argc; arg++) {
+    const char* value = argv[arg];
+    if (!stricmp(value, "--threads") || !stricmp(value, "-threads")) {
+      if (++arg >= argc) {
+        fprintf(stderr, "Missing thread count for --threads\n");
+        return EXIT_FAILURE;
+      }
+      char* end = nullptr;
+      errno = 0;
+      long parsed = strtol(argv[arg], &end, 10);
+      if (errno || !end || end == argv[arg] || *end || parsed < 0 ||
+          parsed > CIccThreadedCmm::GetMaxThreads()) {
+        fprintf(stderr, "Invalid thread count '%s': expected 0..%d\n",
+                icSanitizeConsoleText(argv[arg]).c_str(),
+                CIccThreadedCmm::GetMaxThreads());
+        return EXIT_FAILURE;
+      }
+      nThreads = (int)parsed;
+      bThreadOption = true;
+    }
+#ifdef ICCDEV_TELEMETRY
+    else if (!strnicmp(value, "--telemetry=", 12) ||
+             !strnicmp(value, "-telemetry=", 11)) {
+      const char* mode = strchr(value, '=') + 1;
+      if (!stricmp(mode, "off"))
+        telemetryMode = icApplyTelemetryOff;
+      else if (!stricmp(mode, "human"))
+        telemetryMode = icApplyTelemetryHuman;
+      else if (!stricmp(mode, "jsonl"))
+        telemetryMode = icApplyTelemetryJsonl;
+      else {
+        fprintf(stderr, "Invalid --telemetry value '%s': expected off, human, or jsonl\n",
+                icSanitizeConsoleText(mode).c_str());
+        return EXIT_FAILURE;
+      }
+    }
+    else if (!stricmp(value, "--telemetry") || !stricmp(value, "-telemetry")) {
+      if (++arg >= argc) {
+        fprintf(stderr, "Missing mode for --telemetry\n");
+        return EXIT_FAILURE;
+      }
+      if (!stricmp(argv[arg], "off"))
+        telemetryMode = icApplyTelemetryOff;
+      else if (!stricmp(argv[arg], "human"))
+        telemetryMode = icApplyTelemetryHuman;
+      else if (!stricmp(argv[arg], "jsonl"))
+        telemetryMode = icApplyTelemetryJsonl;
+      else {
+        fprintf(stderr, "Invalid --telemetry value '%s': expected off, human, or jsonl\n",
+                icSanitizeConsoleText(argv[arg]).c_str());
+        return EXIT_FAILURE;
+      }
+    }
+    else if (!stricmp(value, "--telemetry-file") || !stricmp(value, "-telemetry-file")) {
+      if (++arg >= argc) {
+        fprintf(stderr, "Missing path for --telemetry-file\n");
+        return EXIT_FAILURE;
+      }
+      telemetryFile = argv[arg];
+    }
+    else if (!stricmp(value, "--evidence-file") || !stricmp(value, "-evidence-file")) {
+      if (++arg >= argc) {
+        fprintf(stderr, "Missing path for --evidence-file\n");
+        return EXIT_FAILURE;
+      }
+      evidenceFile = argv[arg];
+    }
+#else
+    else if (!strnicmp(value, "--telemetry", 11) ||
+             !strnicmp(value, "-telemetry", 10) ||
+             !stricmp(value, "--evidence-file") ||
+             !stricmp(value, "-evidence-file")) {
+      fprintf(stderr, "Telemetry is not built; configure ICCDEV_ENABLE_TELEMETRY=ON\n");
+      return EXIT_FAILURE;
+    }
+#endif
+    else {
+      commandArgs.push_back(value);
+    }
+  }
+  argc = (int)commandArgs.size();
+  argv = commandArgs.data();
+
+#ifdef ICCDEV_TELEMETRY
+  if (telemetryMode == icApplyTelemetryJsonl && telemetryFile.empty()) {
+    fprintf(stderr, "--telemetry=jsonl requires --telemetry-file\n");
     return EXIT_FAILURE;
   }
+  if (telemetryMode != icApplyTelemetryJsonl && !telemetryFile.empty()) {
+    fprintf(stderr, "--telemetry-file requires --telemetry=jsonl\n");
+    return EXIT_FAILURE;
+  }
+  if (telemetryFile == evidenceFile && !telemetryFile.empty()) {
+    fprintf(stderr, "Telemetry and evidence files must be different\n");
+    return EXIT_FAILURE;
+  }
+#endif
+
   if (argc < minargs) {
     // #2405: usage on stdout plus exit 0 reported success for an invocation that
     // applied nothing.  Fail like the identical post-"-threads" guard below,
     // which already returned EXIT_FAILURE -- the two disagreed only because the
     // shifted copy was written later.
-    fprintf(stderr, "Missing arguments: expected at least %d, received %d.\n",
-            minargs - 1, argc > 0 ? argc - 1 : 0);
+    if (bThreadOption) {
+      fprintf(stderr, "Missing arguments after -threads: expected at least %d, received %d.\n",
+              minargs - 1, argc > 0 ? argc - 1 : 0);
+    }
+    else {
+      fprintf(stderr, "Missing arguments: expected at least %d, received %d.\n",
+              minargs - 1, argc > 0 ? argc - 1 : 0);
+    }
     Usage(stderr);
     return EXIT_FAILURE;
   }
@@ -254,40 +373,8 @@ int main(int argc, const char* argv[])
   CIccCfgDataApply cfgApply;
   CIccCfgSearchApply cfgSearchApply;
   CIccCfgColorData cfgData;
-  int nThreads = 1;
-
-  if (!stricmp(argv[1], "-threads")) {
-    char* end = nullptr;
-    errno = 0;
-    long parsed = strtol(argv[2], &end, 10);
-    if (errno || !end || end == argv[2] || *end || parsed < 0 ||
-        parsed > CIccThreadedCmm::GetMaxThreads()) {
-      printf("Invalid thread count '%s': expected 0..%d\n", icSanitizeConsoleText(argv[2]).c_str(),
-             CIccThreadedCmm::GetMaxThreads());
-      return EXIT_FAILURE;
-    }
-    nThreads = (int)parsed;
-    argv += 2;
-    argc -= 2;
-
-    if (argc < minargs) {
-      // No `argc > 0 ?` clamp here, unlike the sibling message at the top of main().
-      // That guard runs before any adjustment, where argc is only bounded from above,
-      // so a process entered with argc == 0 would reach it and report "received -1" --
-      // well-defined arithmetic, just a nonsensical count -- and the clamp earns its
-      // place.  This copy runs after the minargs test has established argc >= 3 and
-      // after `argc -= 2`, so argc >= 1 on every path that reaches this line and the
-      // clamp's else branch was unreachable -- a dead bound the -threads shift created
-      // (code-scanning alert 2365, cpp/constant-comparison).
-      fprintf(stderr, "Missing arguments after -threads: expected at least %d, received %d.\n",
-              minargs - 1, argc - 1);
-      Usage(stderr);
-      return EXIT_FAILURE;
-    }
-  }
-
-  if (!stricmp(argv[1], "-cfg")) {
-    // Usage 1 is exactly "-cfg <path>"; every setting comes from the JSON file, so
+  if (!stricmp(argv[1], "--cfg") || !stricmp(argv[1], "-cfg")) {
+    // Usage 1 is exactly "--cfg <path>"; every setting comes from the JSON file, so
     // there is nothing a further argument could mean. Anything beyond argv[2] was
     // silently discarded, and the run then reported success, so a caller could not
     // tell an honoured argument list from an ignored one. That is the same defect
@@ -296,7 +383,7 @@ int main(int argc, const char* argv[])
     // The minargs test above has already established argc >= 3, so argv[2] is
     // readable here and only a longer list can reach this branch.
     if (argc != 3) {
-      printf("Unexpected extra arguments for -cfg\n");
+      printf("Unexpected extra arguments for --cfg\n");
       return EXIT_FAILURE;
     }
 
@@ -461,6 +548,25 @@ int main(int argc, const char* argv[])
   //Setup source encoding
   srcEncoding = cfgData.m_encoding;
 
+#ifdef ICCDEV_TELEMETRY
+  const std::string inputName =
+    cfgApply.m_srcFile.empty() ? "embedded_color_data" : cfgApply.m_srcFile;
+  const std::string outputName =
+    cfgApply.m_dstFile.empty() ? "stdout" : cfgApply.m_dstFile;
+  if ((!telemetryFile.empty() &&
+       (telemetryFile == inputName || telemetryFile == outputName)) ||
+      (!evidenceFile.empty() &&
+       (evidenceFile == inputName || evidenceFile == outputName))) {
+    fprintf(stderr, "Telemetry and evidence files must not alias transform input or output\n");
+    return EXIT_FAILURE;
+  }
+
+  CIccApplyToolTelemetry telemetry;
+  telemetry.m_mode = telemetryMode;
+  if (telemetryMode == icApplyTelemetryJsonl && !telemetry.Open(telemetryFile))
+    return EXIT_FAILURE;
+#endif
+
   std::string sConnectError;
   std::unique_ptr<CIccConnectCmm> pConnect(
     CIccConnectCmm::CreateSearch(cfgSearchApply, &sConnectError, nThreads));
@@ -474,6 +580,30 @@ int main(int argc, const char* argv[])
 
   CIccCmmSearch* pCmm = pConnect->GetSearchCmm();
   CIccCmm *pMruCmm = NULL;
+#ifdef ICCDEV_TELEMETRY
+  const CIccThreadedCmm* pThreadedCmm =
+    dynamic_cast<const CIccThreadedCmm*>(pConnect->GetCmm());
+  const int effectiveThreads = pThreadedCmm ? pThreadedCmm->GetNumThreads() : 1;
+  const size_t recordCount = cfgData.m_data.size();
+
+  const std::string runStartedFields =
+    "\"tool\":\"iccApplySearch\",\"input\":" +
+    CIccApplyToolTelemetry::JsonString(inputName) +
+    ",\"output\":" + CIccApplyToolTelemetry::JsonString(outputName) +
+    ",\"requested_threads\":" + std::to_string(nThreads) +
+    ",\"effective_threads\":" + std::to_string(effectiveThreads) +
+    ",\"input_record_count\":" + std::to_string(recordCount);
+  if (!telemetry.Emit("run_started", runStartedFields))
+    return EXIT_FAILURE;
+  if (telemetryMode == icApplyTelemetryHuman) {
+    fprintf(stderr,
+            "[%s] iccApplySearch: started input=%s output=%s requested_threads=%d effective_threads=%d records=%zu\n",
+            CIccApplyToolTelemetry::TimestampUtc().c_str(),
+            icSanitizeConsoleText(inputName.c_str()).c_str(),
+            icSanitizeConsoleText(outputName.c_str()).c_str(), nThreads,
+            effectiveThreads, recordCount);
+  }
+#endif
 
   //Get and validate the source color space from the CMM.
   icColorSpaceSignature SrcspaceSig = pCmm->GetSourceSpace();
@@ -517,6 +647,23 @@ int main(int argc, const char* argv[])
   outData.m_srcSpace = SrcspaceSig;
 
   outData.m_srcEncoding = srcEncoding;
+
+#ifdef ICCDEV_TELEMETRY
+  const std::string transformReadyFields =
+    "\"source_samples\":" + std::to_string(nSrcSamples) +
+    ",\"destination_samples\":" + std::to_string(nDestSamples) +
+    ",\"input_record_count\":" + std::to_string(recordCount) +
+    ",\"requested_threads\":" + std::to_string(nThreads) +
+    ",\"effective_threads\":" + std::to_string(effectiveThreads);
+  if (!telemetry.Emit("transform_ready", transformReadyFields))
+    return EXIT_FAILURE;
+  if (telemetryMode == icApplyTelemetryHuman) {
+    fprintf(stderr,
+            "[%s] iccApplySearch: transform ready source_samples=%u destination_samples=%u requested_threads=%d effective_threads=%d\n",
+            CIccApplyToolTelemetry::TimestampUtc().c_str(),
+            nSrcSamples, nDestSamples, nThreads, effectiveThreads);
+  }
+#endif
 
   if (nThreads != 1) {
     std::vector<CIccCfgDataEntry*> entries;
@@ -657,6 +804,31 @@ int main(int argc, const char* argv[])
   }
 
   delete pMruCmm;
+
+#ifdef ICCDEV_TELEMETRY
+  const long long elapsedMs = telemetry.ElapsedMs();
+  const size_t outputRecordCount = outData.m_data.size();
+  const double throughputRecordsPerSecond =
+    elapsedMs > 0 ? (double)outputRecordCount * 1000.0 / (double)elapsedMs : 0.0;
+  const std::string completedFields =
+    "\"status\":\"success\",\"input_record_count\":" + std::to_string(recordCount) +
+    ",\"output_record_count\":" + std::to_string(outputRecordCount) +
+    ",\"requested_threads\":" + std::to_string(nThreads) +
+    ",\"effective_threads\":" + std::to_string(effectiveThreads) +
+    ",\"elapsed_ms\":" + std::to_string(elapsedMs) +
+    ",\"throughput_records_per_second\":" + std::to_string(throughputRecordsPerSecond);
+  if (!evidenceFile.empty() && !telemetry.WriteEvidence(evidenceFile, completedFields))
+    return EXIT_FAILURE;
+  if (!telemetry.Emit("run_completed", completedFields))
+    return EXIT_FAILURE;
+  if (telemetryMode == icApplyTelemetryHuman) {
+    fprintf(stderr,
+            "[%s] iccApplySearch: completed records=%zu elapsed_ms=%lld throughput_records_per_second=%.3f requested_threads=%d effective_threads=%d\n",
+            CIccApplyToolTelemetry::TimestampUtc().c_str(),
+            outputRecordCount, elapsedMs, throughputRecordsPerSecond,
+            nThreads, effectiveThreads);
+  }
+#endif
 
   return 0;
 }

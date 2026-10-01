@@ -25,6 +25,16 @@
       }
     },
     {
+      "name": "telemetry-base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/../../out/${presetName}",
+      "cacheVariables": {
+        "ENABLE_TESTS": "ON",
+        "ENABLE_TOOLS": "ON",
+        "ICCDEV_ENABLE_TELEMETRY": "ON"
+      }
+    },
+    {
       "name": "vs2022-x64",
       "inherits": "default-base",
       "displayName": "Windows MSVC (VS2022)",
@@ -43,6 +53,17 @@
       "displayName": "Windows ClangCL (VS2022)",
       "description": "Builds with the Visual Studio LLVM toolset and the same unified bin/<Config> runtime layout as vs2022-x64.",
       "toolset": "ClangCL"
+    },
+    {
+      "name": "vs2022-x64-telemetry",
+      "inherits": ["vs2022-x64", "telemetry-base"],
+      "displayName": "Windows MSVC telemetry",
+      "description": "Separate opt-in telemetry build; choose Release, MinSizeRel, or Debug at build time."
+    },
+    {
+      "name": "vs2022-clangcl-x64-telemetry",
+      "inherits": ["vs2022-clangcl-x64", "telemetry-base"],
+      "displayName": "Windows ClangCL telemetry"
     },
     {
       "name": "vs2022-x64-qa-flags",
@@ -131,6 +152,11 @@
       "displayName": "Windows MinGW UCRT64 QA flags"
     },
     {
+      "name": "mingw-x64-telemetry",
+      "inherits": ["mingw-x64", "telemetry-base"],
+      "displayName": "Windows MinGW UCRT64 telemetry"
+    },
+    {
       "name": "mingw-core-x64",
       "inherits": "mingw-ucrt64-base",
       "displayName": "Windows MinGW UCRT64 core static",
@@ -164,6 +190,22 @@
       "cacheVariables": {
         "CMAKE_C_COMPILER": "clang",
         "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "linux-gcc-telemetry",
+      "inherits": ["linux-gcc", "telemetry-base"],
+      "displayName": "Linux GCC telemetry",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "linux-clang-telemetry",
+      "inherits": ["linux-clang", "telemetry-base"],
+      "displayName": "Linux Clang telemetry",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
@@ -387,6 +429,19 @@
       }
     },
     {
+      "name": "macos-clang-telemetry",
+      "inherits": ["default-base", "telemetry-base"],
+      "displayName": "macOS Clang telemetry",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
       "name": "macos-clang-sanitizers",
       "inherits": "macos-clang",
       "displayName": "macOS Clang with ASan, UBSan, IntSan, and float sanitizers",
@@ -404,6 +459,16 @@
       "displayName": "macOS (Xcode)",
       "generator": "Xcode",
       "binaryDir": "${sourceDir}/../../out/${presetName}"
+    },
+    {
+      "name": "macos-xcode-telemetry",
+      "inherits": ["macos-xcode", "telemetry-base"],
+      "displayName": "macOS Xcode telemetry",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
     },
     {
       "name": "apple-mobile-core-base",
@@ -601,6 +666,38 @@
     }
   ],
   "buildPresets": [
+    {
+      "name": "vs2022-x64-telemetry",
+      "configurePreset": "vs2022-x64-telemetry",
+      "configuration": "Release"
+    },
+    {
+      "name": "vs2022-clangcl-x64-telemetry",
+      "configurePreset": "vs2022-clangcl-x64-telemetry",
+      "configuration": "Release"
+    },
+    {
+      "name": "mingw-x64-telemetry",
+      "configurePreset": "mingw-x64-telemetry"
+    },
+    {
+      "name": "linux-gcc-telemetry",
+      "configurePreset": "linux-gcc-telemetry"
+    },
+    {
+      "name": "linux-clang-telemetry",
+      "configurePreset": "linux-clang-telemetry"
+    },
+    {
+      "name": "macos-clang-telemetry",
+      "configurePreset": "macos-clang-telemetry",
+      "configuration": "Release"
+    },
+    {
+      "name": "macos-xcode-telemetry",
+      "configurePreset": "macos-xcode-telemetry",
+      "configuration": "Release"
+    },
     {
       "name": "linux-clang-tsan",
       "configurePreset": "linux-clang-tsan"

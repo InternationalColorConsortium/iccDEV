@@ -249,9 +249,12 @@ IF(ENABLE_SHARED_LIBS)
   )
 
   # Shared library symbol visibility:
-  # - On MSVC: WINDOWS_EXPORT_ALL_SYMBOLS handles exports automatically.
-  # - On GCC/Clang: ICCPROFLIBDLL_EXPORTS activates visibility("default")
-  #   on classes/functions marked ICCPROFLIB_API (see IccProfLibConf.h).
+  # - On MSVC: WINDOWS_EXPORT_ALL_SYMBOLS handles incomplete C++ exports.
+  # - On MinGW: --export-all-symbols includes unannotated C++ functions in
+  #   the import library even when other symbols use explicit dllexport.
+  # - On non-Windows GCC/Clang: ICCPROFLIBDLL_EXPORTS activates
+  #   visibility("default") on classes/functions marked ICCPROFLIB_API
+  #   (see IccProfLibConf.h).
   # - Do not add -fvisibility=hidden here. IccProfLib export annotations are
   #   still incomplete, so shared builds intentionally keep default visibility.
   if(NOT MSVC)
@@ -261,9 +264,10 @@ IF(ENABLE_SHARED_LIBS)
     PRIVATE ICC_C_API_EXPORTS
     INTERFACE ICC_C_API_IMPORTS)
 
-  # Exported global DATA (#2154, from #1888). WINDOWS_EXPORT_ALL_SYMBOLS below
-  # auto-exports functions but not data, so the eight ICCPROFLIB_DATA_API globals
-  # need real dllexport here and real dllimport in consumers. Kept separate from
+  # Exported global DATA (#2154, from #1888). Windows auto-exports do not give
+  # consumers the required data-import annotation, so the eight
+  # ICCPROFLIB_DATA_API globals need real dllexport here and real dllimport in
+  # consumers. Kept separate from
   # ICCPROFLIBDLL_EXPORTS so this does not flip the ~308 incomplete
   # ICCPROFLIB_API annotations and change how every class and function exports.
   #
@@ -280,6 +284,8 @@ IF(ENABLE_SHARED_LIBS)
 
   if(MSVC)
     set_target_properties(${TARGET_NAME} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+  elseif(MINGW)
+    target_link_options(${TARGET_NAME} PRIVATE LINKER:--export-all-symbols)
   endif()
 
   # NOTE: -fvisibility=hidden is intentionally NOT used here.
@@ -297,7 +303,7 @@ IF(ENABLE_SHARED_LIBS)
   if(ICC_AVX2_CLUT_DEBUG)
     target_compile_definitions(${TARGET_NAME} PRIVATE ICC_AVX2_CLUT_DEBUG=1)
   endif()
-  if(ICCDEV_ENABLE_PERF_MONITORING)
+  if(ICCDEV_ENABLE_TELEMETRY)
     target_compile_definitions(${TARGET_NAME} PRIVATE ICC_PERF_MONITORING=1)
   endif()
   if(ICCDEV_AVX512_ENABLED)
@@ -343,7 +349,7 @@ IF(ENABLE_STATIC_LIBS)
   if(ICC_AVX2_CLUT_DEBUG)
     target_compile_definitions(${TARGET_NAME}-static PRIVATE ICC_AVX2_CLUT_DEBUG=1)
   endif()
-  if(ICCDEV_ENABLE_PERF_MONITORING)
+  if(ICCDEV_ENABLE_TELEMETRY)
     target_compile_definitions(${TARGET_NAME}-static PRIVATE ICC_PERF_MONITORING=1)
   endif()
   if(ICCDEV_AVX512_ENABLED)

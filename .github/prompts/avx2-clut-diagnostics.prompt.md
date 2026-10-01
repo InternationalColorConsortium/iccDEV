@@ -40,10 +40,13 @@ Set source breakpoints in `IccTraceAvx2ClutDispatch()` and
    repeatable improvement; the supported Windows AVX2 measurement compiler is
    ClangCL.
 9. On Linux, configure a separate Release build with
-   `-DICCDEV_ENABLE_PERF_MONITORING=ON`, then collect at least 21 pinned
+   `-DICCDEV_ENABLE_TELEMETRY=ON`, then collect at least 21 pinned
    samples with `.github/scripts/iccdev-clut-profile.sh`. Preserve its timing,
    `perf stat`, syscall, and optional FlameGraph artifacts; never compare
-   coverage- or trace-instrumented results with release timings.
+   coverage- or trace-instrumented results with release timings. Record the
+   counter report's `clut_timing_stride`; its default of 1 times every call,
+   while a larger power-of-two stride retains exact calls but estimates elapsed
+   CLUT time from samples.
 
 ## Handoff
 

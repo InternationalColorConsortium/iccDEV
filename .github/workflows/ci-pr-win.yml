@@ -262,6 +262,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" `
             -DVCPKG_MANIFEST_MODE=OFF `
             -DCMAKE_BUILD_TYPE=Debug `
+            -DICCDEV_ENABLE_TELEMETRY=ON `
             -Wno-dev
 
       - name: Build iccDEV
@@ -524,7 +525,10 @@ jobs:
                   $targetDir = $Matches[1].Trim()
                 }
                 $targetDir = $targetDir.Trim('"')
-                if ([System.IO.Path]::IsPathRooted($targetDir)) {
+                if ($targetDir -ieq '%~dp0') {
+                  # Resolve the batch-file directory against the staged copy.
+                  $candidateDir = $workDir
+                } elseif ([System.IO.Path]::IsPathRooted($targetDir)) {
                   $candidateDir = $targetDir
                 } else {
                   $candidateDir = Join-Path $currentWorkDir $targetDir
@@ -596,6 +600,9 @@ jobs:
             --test-dir build `
             --config Debug `
             --parallel ([Environment]::ProcessorCount) `
+            --require-test iccdev.applyprofiles-headless-receipts `
+            --require-test iccdev.applyprofiles-matrix-contracts `
+            --require-test iccdev.applyprofiles-evidence-matrix `
             --selection-output build\recent-ctests.txt
 
       - name: GitHub Summary
@@ -790,6 +797,7 @@ jobs:
             '-DENABLE_TOOLS=ON',
             '-DENABLE_CMM_TOOLS=ON',
             '-DENABLE_TESTS=ON',
+            '-DICCDEV_ENABLE_TELEMETRY=ON',
             '-DICCDEV_SUPPRESS_LEGACY_CRT_WARNINGS=ON',
             '-DICCDEV_ENABLE_AVX2=ON',
             '-Wno-dev'
@@ -811,6 +819,9 @@ jobs:
             '--test-dir', $buildDir,
             '--config', 'Debug',
             '--parallel', ([string][Environment]::ProcessorCount),
+            '--require-test', 'iccdev.applyprofiles-headless-receipts',
+            '--require-test', 'iccdev.applyprofiles-matrix-contracts',
+            '--require-test', 'iccdev.applyprofiles-evidence-matrix',
             '--selection-output', (Join-Path $buildDir 'recent-ctests.txt')
           ) $checkLog
 
@@ -1035,7 +1046,7 @@ jobs:
   mingw-smoke:
     name: MinGW UCRT64 smoke
     runs-on: windows-2022
-    timeout-minutes: 15
+    timeout-minutes: 20
     defaults:
       run:
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
@@ -1142,6 +1153,7 @@ jobs:
             '-DENABLE_CMM_TOOLS=ON',
             '-DENABLE_IIS_TOOLS=OFF',
             '-DENABLE_TESTS=ON',
+            '-DICCDEV_ENABLE_TELEMETRY=ON',
             '-DENABLE_SHARED_LIBS=OFF',
             '-DENABLE_STATIC_LIBS=ON'
           )
@@ -1159,7 +1171,38 @@ jobs:
             '.github\scripts\run-recent-ctests.py',
             '--test-dir', $buildDir,
             '--parallel', ([string][Environment]::ProcessorCount),
+            '--require-test', 'iccdev.applyprofiles-headless-receipts',
+            '--require-test', 'iccdev.applyprofiles-matrix-contracts',
+            '--require-test', 'iccdev.applyprofiles-evidence-matrix',
             '--selection-output', (Join-Path $buildDir 'recent-ctests.txt')
+          )
+
+          # The static build cannot detect missing symbols in MinGW DLL import
+          # libraries. Link the shared core and its direct consumers as well.
+          $sharedBuildDir = Join-Path $sourceDir 'build-mingw-pr-shared'
+          Invoke-Native $cmake @(
+            '-S', $sourceDir,
+            '-B', $sharedBuildDir,
+            '-G', 'Ninja',
+            '-DCMAKE_BUILD_TYPE=Release',
+            "-DCMAKE_C_COMPILER=$gcc",
+            "-DCMAKE_CXX_COMPILER=$gxx",
+            "-DCMAKE_PREFIX_PATH=$ucrtRoot",
+            '-DENABLE_TOOLS=ON',
+            '-DENABLE_ICCXML=ON',
+            '-DENABLE_ICCJSON=ON',
+            '-DENABLE_IMAGE_TOOLS=ON',
+            '-DENABLE_WXWIDGETS=OFF',
+            '-DENABLE_CMM_TOOLS=OFF',
+            '-DENABLE_IIS_TOOLS=OFF',
+            '-DENABLE_TESTS=OFF',
+            '-DENABLE_SHARED_LIBS=ON',
+            '-DENABLE_STATIC_LIBS=OFF'
+          )
+          Invoke-Native $cmake @(
+            '--build', $sharedBuildDir,
+            '--target', 'iccApplyProfiles', 'iccFromJson', 'iccFromXml',
+            '--parallel'
           )
 
           $compilerLine = (& $gxx --version)[0]
@@ -1167,9 +1210,9 @@ jobs:
             '### Windows MinGW UCRT64 smoke',
             '',
             "- Compiler: ``$(Sanitize-Line $compilerLine)``",
-            "- Build scope: ``full configured command-line project plus Windows CMM DLL``",
+            "- Build scope: ``full static project and targeted shared consumers``",
             "- Build type: ``Release``",
-            "- Linkage: ``static``",
+            "- Linkage: ``static full test and shared link smoke``",
             "- CTest: ``all registered MinGW suites``",
             "- Result: ``passed``"
           )

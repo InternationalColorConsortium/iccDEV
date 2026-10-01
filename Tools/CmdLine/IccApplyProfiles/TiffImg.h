@@ -82,7 +82,7 @@ public:
   CTiffImg();
   virtual ~CTiffImg();
 
-  void Close();
+  bool Close();
 
   // nResolutionUnit names the unit fXRes/fYRes are expressed in (one of libtiff's
   // RESUNIT_* codes).  It is a defaulted trailing parameter so the existing callers

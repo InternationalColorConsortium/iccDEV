@@ -15,6 +15,8 @@ qa_init "iccApplyToLink-quick-check"
 
 BIN="$ICCDEV_TOOLS_DIR/IccApplyToLink/iccApplyToLink"
 PROFILE="$ICCDEV_ROOT/Testing/sRGB_v4_ICC_preference.icc"
+TELEMETRY="$QA_OUTDIR/link.jsonl"
+EVIDENCE="$QA_OUTDIR/link-evidence.json"
 
 qa_require_tool "$BIN"
 qa_require_file "$PROFILE"
@@ -43,5 +45,25 @@ qa_run v5-device-link success "" "$BIN" "$QA_OUTDIR/v5-device-link.icc" \
     0 9 1 "AFL v5 DeviceLink" -0.25 1.25 1 0 "$PROFILE" 1 "$PROFILE" 1
 qa_run cube-intent-13 success "" "$BIN" "$QA_OUTDIR/cube-intent-13.cube" \
     1 2 4 "AFL" 0 1 0 0 "$PROFILE" 13
+qa_run telemetry-jsonl success "" "$BIN" "$QA_OUTDIR/telemetry.cube" \
+    1 2 4 "QA telemetry" 0 1 0 0 "$PROFILE" 1 \
+    --telemetry=jsonl --telemetry-file "$TELEMETRY" --evidence-file "$EVIDENCE"
+qa_require_file "$TELEMETRY"
+qa_require_file "$EVIDENCE"
+qa_assert_contains "$TELEMETRY" "\"event\":\"run_started\"" "Link telemetry starts"
+qa_assert_contains "$TELEMETRY" "\"event\":\"transform_ready\"" "Link telemetry is ready"
+qa_assert_contains "$TELEMETRY" "\"event\":\"run_completed\"" "Link telemetry completes"
+qa_assert_contains "$EVIDENCE" "\"grid_nodes\":" "Link evidence records grid nodes"
+qa_run telemetry-human success "iccApplyToLink: completed" "$BIN" \
+    -telemetry=human "$QA_OUTDIR/human.cube" 1 2 4 "QA human" 0 1 0 0 "$PROFILE" 1
+if ! grep -Eq '^\[[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\] iccApplyToLink: completed ' "$QA_LAST_LOG"; then
+    qa_fail "ApplyToLink human telemetry completion is missing its UTC timestamp"
+fi
+if grep -Eq '[0-9]+%' "$QA_LAST_LOG"; then
+    qa_fail "ApplyToLink human telemetry duplicated the legacy percentage"
+fi
+if [[ "$(tail -c 1 "$QA_LAST_LOG" | od -An -tu1 | tr -d '[:space:]')" != "10" ]]; then
+    qa_fail "ApplyToLink human telemetry output does not end with a newline"
+fi
 
 qa_finish

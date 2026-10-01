@@ -173,7 +173,7 @@ Runtime AVX2 dispatch is limited to 15 outputs. Require
 `output_vector_match=True` for every benchmark row.
 
 For Linux evidence collection, configure a separate Release build with
-`ICCDEV_ENABLE_PERF_MONITORING=ON` and use
+`ICCDEV_ENABLE_TELEMETRY=ON` and use
 `.github/scripts/iccdev-clut-profile.sh`. The script writes timing
 distributions, hardware-counter CSVs, syscall summaries, and optional
 FlameGraph inputs; keep profiling and source-coverage builds separate from

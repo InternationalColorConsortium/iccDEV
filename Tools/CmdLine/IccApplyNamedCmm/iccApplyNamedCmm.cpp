@@ -55,6 +55,9 @@
 #include "IccLibConnectVer.h"
 #include "IccConnect.h"
 #include "IccCmdLineUtil.h"
+#ifdef ICCDEV_TELEMETRY
+#include "../IccApplyTelemetry.h"
+#endif
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -177,9 +180,13 @@ void Usage(FILE* stream)
 {
   fprintf(stream, "iccApplyNamedCmm built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
 
-  fprintf(stream, "Usage 1: iccApplyNamedCmm {--evidence-json} -cfg config_file_path\n");
+  fprintf(stream, "Usage 1: iccApplyNamedCmm {--evidence-json} --cfg config_file_path\n");
+#ifdef ICCDEV_TELEMETRY
+  fprintf(stream, "  Optional telemetry: --telemetry=off|human|jsonl --telemetry-file FILE --evidence-file FILE\n");
+#endif
   fprintf(stream, "  Where config_file_path is a json formatted ICC profile application configuration file\n\n");
-  fprintf(stream, "Usage 2: iccApplyNamedCmm (-exportcfg/-exportcfganddata config_file_path} {-debugcalc} data_file_path final_data_encoding{:FmtPrecision{:FmtDigits}} interpolation {{-ENV:Name value} profile_file_path Rendering_intent {-PCC connection_conditions_path}}\n\n");
+  fprintf(stream, "Usage 2: iccApplyNamedCmm {--exportcfg|--exportcfganddata FILE} {--debugcalc} data_file_path final_data_encoding{:FmtPrecision{:FmtDigits}} interpolation {{-ENV:Name value} profile_file_path Rendering_intent {-PCC connection_conditions_path}}\n\n");
+  fprintf(stream, "  Legacy single-dash forms remain accepted.\n\n");
   
   fprintf(stream, "  For final_data_encoding:\n");
   fprintf(stream, "    0 - icEncodeValue (converts to/from lab encoding when samples=3)\n");
@@ -347,6 +354,11 @@ int main(int argc, const char* argv[])
 {
   int minargs = 2;
   bool bEvidenceJson = false;
+#ifdef ICCDEV_TELEMETRY
+  icApplyTelemetryMode telemetryMode = icApplyTelemetryOff;
+  std::string telemetryFile;
+  std::string evidenceFile;
+#endif
 
   // An explicit help request is the one invocation here that is not an error, so
   // it prints on stdout and exits 0; every malformed form below prints on stderr
@@ -357,11 +369,65 @@ int main(int argc, const char* argv[])
     return 0;
   }
 
-  if (argc > 1 && !stricmp(argv[1], "--evidence-json")) {
-    bEvidenceJson = true;
+  while (argc > 1) {
+#ifndef ICCDEV_TELEMETRY
+    if (!strnicmp(argv[1], "--telemetry", 11) ||
+        !stricmp(argv[1], "--evidence-file")) {
+      fprintf(stderr, "Telemetry is not built; configure ICCDEV_ENABLE_TELEMETRY=ON\n");
+      return EXIT_FAILURE;
+    }
+#endif
+    if (!stricmp(argv[1], "--evidence-json")) {
+      bEvidenceJson = true;
+    }
+#ifdef ICCDEV_TELEMETRY
+    else if (!stricmp(argv[1], "--telemetry=off")) {
+      telemetryMode = icApplyTelemetryOff;
+    }
+    else if (!stricmp(argv[1], "--telemetry=human")) {
+      telemetryMode = icApplyTelemetryHuman;
+    }
+    else if (!stricmp(argv[1], "--telemetry=jsonl")) {
+      telemetryMode = icApplyTelemetryJsonl;
+    }
+    else if (!stricmp(argv[1], "--telemetry-file")) {
+      if (argc < 3) {
+        fprintf(stderr, "Missing path for --telemetry-file\n");
+        return EXIT_FAILURE;
+      }
+      telemetryFile = argv[2];
+      argv += 2;
+      argc -= 2;
+      continue;
+    }
+    else if (!stricmp(argv[1], "--evidence-file")) {
+      if (argc < 3) {
+        fprintf(stderr, "Missing path for --evidence-file\n");
+        return EXIT_FAILURE;
+      }
+      evidenceFile = argv[2];
+      argv += 2;
+      argc -= 2;
+      continue;
+    }
+#endif
+    else {
+      break;
+    }
     argv++;
     argc--;
   }
+
+#ifdef ICCDEV_TELEMETRY
+  if (telemetryMode == icApplyTelemetryJsonl && telemetryFile.empty()) {
+    fprintf(stderr, "--telemetry=jsonl requires --telemetry-file\n");
+    return EXIT_FAILURE;
+  }
+  if (telemetryMode != icApplyTelemetryJsonl && !telemetryFile.empty()) {
+    fprintf(stderr, "--telemetry-file requires --telemetry=jsonl\n");
+    return EXIT_FAILURE;
+  }
+#endif
 
   if (argc < minargs) {
     // #2405: usage on stdout plus exit 0 told a wrapper the apply had succeeded
@@ -379,12 +445,12 @@ int main(int argc, const char* argv[])
   CIccCfgProfileSequence cfgProfiles;
   CIccCfgColorData cfgData;
 
-  if (argc > 2 && !stricmp(argv[1], "-cfg")) {
+  if (argc > 2 && (!stricmp(argv[1], "--cfg") || !stricmp(argv[1], "-cfg"))) {
     // Usage 1 is exactly "-cfg <path>"; every setting comes from the JSON file, so
     // there is nothing a further argument could mean. Anything beyond argv[2] was
     // read as configured-and-applied when it had in fact been ignored (#1674).
     if (argc != 3) {
-      printf("Unexpected extra arguments for -cfg\n");
+      printf("Unexpected extra arguments for --cfg\n");
       return EXIT_FAILURE;
     }
 
@@ -441,16 +507,20 @@ int main(int argc, const char* argv[])
     argc--;
 
     if (argc > 2 && 
-        (!stricmp(argv[0], "-exportcfg") ||
+        (!stricmp(argv[0], "--exportcfg") ||
+         !stricmp(argv[0], "--exportcfganddata") ||
+         !stricmp(argv[0], "-exportcfg") ||
          !stricmp(argv[0], "-exportcfganddata"))) {
       exportFile = argv[1];
-      if (!stricmp(argv[0], "-exportcfganddata"))
+      if (!stricmp(argv[0], "--exportcfganddata") ||
+          !stricmp(argv[0], "-exportcfganddata"))
         bExportData = true;
       argv += 2;
       argc -= 2;
     }
 
-    if (argc > 1 && !stricmp(argv[0], "-debugcalc")) {
+    if (argc > 1 && (!stricmp(argv[0], "--debugcalc") ||
+                     !stricmp(argv[0], "-debugcalc"))) {
       cfgApply.m_debugCalc = true;
 
       argv++;
@@ -547,6 +617,28 @@ int main(int argc, const char* argv[])
                     " the transform output would share stdout with the evidence\n");
     return EXIT_FAILURE;
   }
+
+#ifdef ICCDEV_TELEMETRY
+  CIccApplyToolTelemetry telemetry;
+  telemetry.m_mode = telemetryMode;
+  if (telemetryMode == icApplyTelemetryJsonl && !telemetry.Open(telemetryFile))
+    return EXIT_FAILURE;
+  const unsigned long long inputRecords = cfgData.m_data.size();
+  if (!telemetry.Emit("run_started",
+                      "\"tool\":\"iccApplyNamedCmm\",\"input\":" +
+                      CIccApplyToolTelemetry::JsonString(cfgApply.m_srcFile) +
+                      ",\"output\":" + (cfgApply.m_dstFile.empty() ? "null" :
+                        CIccApplyToolTelemetry::JsonString(cfgApply.m_dstFile)) +
+                      ",\"input_records\":" + std::to_string(inputRecords) +
+                      ",\"profile_count\":" +
+                      std::to_string(cfgProfiles.m_profiles.size())))
+    return EXIT_FAILURE;
+  if (telemetryMode == icApplyTelemetryHuman) {
+    fprintf(stderr, "[%s] iccApplyNamedCmm: started input_records=%llu profile_count=%u\n",
+            CIccApplyToolTelemetry::TimestampUtc().c_str(),
+            inputRecords, (unsigned)cfgProfiles.m_profiles.size());
+  }
+#endif
 
   LogDebuggerPtr pDebugger;
   
@@ -827,6 +919,44 @@ int main(int argc, const char* argv[])
 
     return EXIT_FAILURE;
   }
+
+#ifdef ICCDEV_TELEMETRY
+  const long long elapsedMs = telemetry.ElapsedMs();
+  const double throughputRecordsPerSecond =
+    elapsedMs > 0 ? (double)inputRecords * 1000.0 / (double)elapsedMs : 0.0;
+  if (telemetryMode == icApplyTelemetryJsonl || !evidenceFile.empty()) {
+    std::string outputDigest;
+    const bool hasOutputDigest = !cfgApply.m_dstFile.empty() &&
+      icSha256File(cfgApply.m_dstFile.c_str(), outputDigest);
+    if (!cfgApply.m_dstFile.empty() && !hasOutputDigest) {
+      telemetry.Emit("run_failed",
+                     "\"tool\":\"iccApplyNamedCmm\",\"status\":\"tool_failure\","
+                     "\"reason\":\"output_digest_failed\"");
+      return EXIT_FAILURE;
+    }
+    const std::string completion =
+      "\"tool\":\"iccApplyNamedCmm\",\"status\":\"success\",\"input_records\":" +
+      std::to_string(inputRecords) + ",\"output_records\":" +
+      std::to_string(outData.m_data.size()) + ",\"elapsed_ms\":" +
+      std::to_string(elapsedMs) + ",\"throughput_records_per_second\":" +
+      std::to_string(throughputRecordsPerSecond) + ",\"output_digest\":" +
+      (hasOutputDigest ? CIccApplyToolTelemetry::JsonString(outputDigest) : "null");
+    if (!evidenceFile.empty() && !telemetry.WriteEvidence(evidenceFile, completion)) {
+      telemetry.Emit("run_failed",
+                     "\"tool\":\"iccApplyNamedCmm\",\"status\":\"tool_failure\","
+                     "\"reason\":\"evidence_write_failed\"");
+      return EXIT_FAILURE;
+    }
+    if (!telemetry.Emit("run_completed", completion))
+      return EXIT_FAILURE;
+  }
+  if (telemetryMode == icApplyTelemetryHuman) {
+    fprintf(stderr,
+            "[%s] iccApplyNamedCmm: completed status=success elapsed_ms=%lld throughput_records_per_second=%.3f\n",
+            CIccApplyToolTelemetry::TimestampUtc().c_str(),
+            elapsedMs, throughputRecordsPerSecond);
+  }
+#endif
 
   if (bEvidenceJson) {
     const char* profilePath = cfgProfiles.m_profiles.empty() ? "" :

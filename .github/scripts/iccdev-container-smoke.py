@@ -151,12 +151,13 @@ def smoke_mcp(image, timeout, require_validation, report_dir=None):
             services = health["service_tools"]
             assert set(native + services) <= names, health
             assert health["python_api"]["tools"] == len(native), health
+            # Health counts usable backends; tools/list may also advertise
+            # transform methods whose optional bindings are unavailable.
             assert health["total_tools"] == len(native) + len(expected_cli) + len(services), health
             validation = health["validation_api"]["available"]
             record(report_dir, "mcp", {"mcp_tools": sorted(names), "health": health})
             if require_validation:
                 assert validation, health
-                assert health["total_tools"] == len(names), health
             header = rpc.call("inspect_header", {"path": PROFILE})
             assert header["color_space"] == "RGB ", header
             if validation:

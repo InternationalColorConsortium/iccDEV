@@ -54,6 +54,7 @@ for script in \
   "$SCRIPT_DIR/icc_ci_tool_path_exercise.sh" \
   "$SCRIPT_DIR/iccApplyNamedCmm_ci_path_exercise.sh" \
   "$SCRIPT_DIR/iccApplyNamedCmm-quick-check.sh" \
+  "$SCRIPT_DIR/iccApplyProfiles-matrix.sh" \
   "$SCRIPT_DIR/iccApplyProfiles-quick-check.sh" \
   "$SCRIPT_DIR/iccApplySearch-quick-check.sh" \
   "$SCRIPT_DIR/iccApplyToLink-quick-check.sh" \
@@ -93,6 +94,7 @@ failures=0
 run_step bench env QA_OUTDIR="$LOG_DIR/bench" "$SCRIPT_DIR/iccBenchApply-quick-check.sh" || failures=$((failures + 1))
 run_step named-contracts env QA_OUTDIR="$LOG_DIR/named-contracts" "$SCRIPT_DIR/iccApplyNamedCmm-quick-check.sh" || failures=$((failures + 1))
 run_step profiles-contracts env QA_OUTDIR="$LOG_DIR/profiles-contracts" "$SCRIPT_DIR/iccApplyProfiles-quick-check.sh" || failures=$((failures + 1))
+run_step profiles-evidence-matrix env ICCDEV_TEST_OUTDIR="$LOG_DIR/profiles-evidence-matrix" "$SCRIPT_DIR/iccApplyProfiles-matrix.sh" || failures=$((failures + 1))
 run_step search-contracts env QA_OUTDIR="$LOG_DIR/search-contracts" "$SCRIPT_DIR/iccApplySearch-quick-check.sh" || failures=$((failures + 1))
 run_step tolink-contracts env QA_OUTDIR="$LOG_DIR/tolink-contracts" "$SCRIPT_DIR/iccApplyToLink-quick-check.sh" || failures=$((failures + 1))
 run_step tolink "$SCRIPT_DIR/tolink-script-random-001.sh" --tests "$MUTATIONS" --log-dir "$LOG_DIR/tolink" --link-dir "$LOG_DIR/Links/tolink" || failures=$((failures + 1))

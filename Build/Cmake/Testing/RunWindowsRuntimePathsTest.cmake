@@ -200,6 +200,21 @@ iccdev_probe_entries(_library_only_release "${_library_only_dir}" "Release")
 iccdev_expect_order("library-only-release" "${_library_only_release}"
   "${_expect_dep_release}" "${_expect_dep_debug}")
 
+# A fresh CMake configure may call the collector before CMakeCache.txt contains
+# the vcpkg toolchain values. Live variables must still provide the runtime DLL
+# path for tests registered during that configure.
+iccdev_write_fixture_cache(_live_only_dir live-only "")
+function(iccdev_probe_live_entries OUT_VAR)
+  set(VCPKG_INSTALLED_DIR "${_vcpkg_root}")
+  set(VCPKG_TARGET_TRIPLET "${_triplet}")
+  set(ICCDEV_CONFIG "Release")
+  iccdev_collect_cache_runtime_path_entries(_entries "${_live_only_dir}")
+  set(${OUT_VAR} "${_entries}" PARENT_SCOPE)
+endfunction()
+iccdev_probe_live_entries(_live_entries)
+iccdev_expect_entry("live-vcpkg-variables" "${_live_entries}"
+  "${_expect_vcpkg_release}")
+
 # ---------------------------------------------------------------------------
 # Anti-vacuity: a cache naming trees that do not exist must yield none of them.
 # Without this, a collector that appended candidates unconditionally would pass

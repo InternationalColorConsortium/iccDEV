@@ -81,7 +81,7 @@ void expectDigest(const char *what, const std::string &in, const char *want)
 
 } // namespace
 
-int main()
+int main(int argc, char **argv)
 {
   // FIPS 180-4 / RFC 6234 published vectors.
   expectDigest("sha256 empty", std::string(),
@@ -108,6 +108,36 @@ int main()
   // digests are taken over profile and image files, which are full of them.
   expectDigest("sha256 embedded NUL", std::string("a\0b", 3),
     "59b271ae1bbcb1d31d41929817f4b16fb439eb4f31520b5ad1d5ce98920a7138");
+
+  if (argc > 1) {
+    FILE *file = std::fopen(argv[1], "wb");
+    if (!file) {
+      std::fprintf(stderr, "[qa-evidence-helpers] cannot create file vector\n");
+      g_failures++;
+    }
+    else {
+      const std::string million(1000000, 'a');
+      const bool wrote =
+        std::fwrite(million.data(), 1, million.size(), file) == million.size();
+      const bool closed = std::fclose(file) == 0;
+      if (!wrote || !closed) {
+        std::fprintf(stderr, "[qa-evidence-helpers] cannot write file vector\n");
+        g_failures++;
+      }
+      else {
+        std::string digest;
+        if (!icSha256File(argv[1], digest)) {
+          std::fprintf(stderr, "[qa-evidence-helpers] cannot hash file vector\n");
+          g_failures++;
+        }
+        else {
+          expect("sha256 streamed 1e6 bytes", digest,
+            "sha256:cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0");
+        }
+      }
+      std::remove(argv[1]);
+    }
+  }
 
   expect("json plain", icJsonEscape("plain"), "plain");
   expect("json quote and backslash", icJsonEscape("a\"b\\c"), "a\\\"b\\\\c");

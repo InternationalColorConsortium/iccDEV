@@ -10560,10 +10560,8 @@ endfunction()
 # confirm the reduction matches an independently computed fmod, and that the
 # NaN/infinity/L-range rejections are unchanged. IccProfLib only.
 function(iccdev_add_qa_evidence_helpers_test)
-  # Header-only: IccCmdLineUtil.h is all inline, so this links no library and
-  # needs no Windows runtime PATH entries.  It is therefore platform-agnostic
-  # and registers on both the WIN32 and non-WIN32 paths below -- the omission
-  # #2237 fixed for two other tests.
+  # Header-only: IccCmdLineUtil.h is all inline, so this links no iccDEV
+  # library. MinGW still needs its compiler runtime DLLs on PATH.
   iccdev_add_regression_executable(iccQaEvidenceHelpersTest
     "${ICCDEV_REPO_ROOT}/.github/ci/regression/qa-evidence-helpers.cpp"
   )
@@ -10577,12 +10575,25 @@ function(iccdev_add_qa_evidence_helpers_test)
   add_test(
     NAME iccdev.qa-evidence-helpers
     COMMAND "$<TARGET_FILE:iccQaEvidenceHelpersTest>"
+      "${ICCDEV_TEST_OUTDIR}/qa-evidence-helpers-$<CONFIG>.bin"
   )
   set_tests_properties(iccdev.qa-evidence-helpers PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     TIMEOUT 60
     LABELS "iccdev;qa-flags;issue-1853;regression"
   )
+  if(WIN32)
+    set(_qa_evidence_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccQaEvidenceHelpersTest>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _qa_evidence_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.qa-evidence-helpers PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_qa_evidence_windows_env_mods}"
+    )
+  endif()
 endfunction()
 
 function(iccdev_add_prmg_hue_normalization_test)
@@ -10754,6 +10765,36 @@ if(TARGET ${TARGET_LIB_ICCPROFLIB})
 endif()
 
 
+# Verify that the single build toggle controls all four apply-tool interfaces.
+foreach(_telemetry_tool IN ITEMS
+    iccApplyProfiles iccApplyNamedCmm iccApplySearch iccApplyToLink)
+  if(TARGET ${_telemetry_tool})
+    add_test(
+      NAME iccdev.${_telemetry_tool}-build-toggle
+      COMMAND "${CMAKE_COMMAND}"
+        "-DICCDEV_TOOL=$<TARGET_FILE:${_telemetry_tool}>"
+        "-DICCDEV_EXPECT_TELEMETRY=${ICCDEV_ENABLE_TELEMETRY}"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunTelemetryBuildToggle.cmake"
+    )
+    set_tests_properties(iccdev.${_telemetry_tool}-build-toggle PROPERTIES
+      WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+      TIMEOUT 30
+      LABELS "iccdev;telemetry;build-toggle;regression"
+    )
+    if(WIN32)
+      set(_telemetry_toggle_env_mods
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:${_telemetry_tool}>")
+      foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+        list(APPEND _telemetry_toggle_env_mods
+          "PATH=path_list_prepend:${_runtime_path}")
+      endforeach()
+      set_tests_properties(iccdev.${_telemetry_tool}-build-toggle PROPERTIES
+        ENVIRONMENT_MODIFICATION "${_telemetry_toggle_env_mods}"
+      )
+    endif()
+  endif()
+endforeach()
+
 # Throughput harness for the IccProfLib apply paths (iccBenchApply).
 #
 # NOTE: this must stay ABOVE the if(WIN32) branch immediately below. That branch
@@ -10815,6 +10856,38 @@ if(TARGET iccBenchApply)
   add_dependencies(build-test-binaries iccBenchApply)
 
   if(TARGET iccFromXml)
+    if(ICCDEV_ENABLE_TELEMETRY)
+      add_dependencies(build-test-binaries iccFromXml)
+      add_test(
+        NAME iccdev.clut-perf-counters
+        COMMAND "${CMAKE_COMMAND}"
+          "-DICCDEV_FROM_XML=$<TARGET_FILE:iccFromXml>"
+          "-DICCDEV_BENCH_APPLY=$<TARGET_FILE:iccBenchApply>"
+          "-DICCDEV_RGB_XML=${ICCDEV_REPO_ROOT}/Testing/V2/v2RgbLut8.xml"
+          "-DICCDEV_CMYK_XML=${ICCDEV_REPO_ROOT}/Testing/V2/v2CmykLut16.xml"
+          "-DICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/clut-perf-counters/$<CONFIG>"
+          -P "${CMAKE_CURRENT_LIST_DIR}/RunClutPerfCounters.cmake"
+      )
+      set_tests_properties(iccdev.clut-perf-counters PROPERTIES
+        WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+        TIMEOUT 120
+        LABELS "iccdev;iccprofLib;benchmark;telemetry;regression"
+      )
+      if(WIN32)
+        set(_clut_perf_windows_env_mods
+          "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccFromXml>"
+          "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccBenchApply>"
+        )
+        foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+          list(APPEND _clut_perf_windows_env_mods
+            "PATH=path_list_prepend:${_runtime_path}")
+        endforeach()
+        set_tests_properties(iccdev.clut-perf-counters PROPERTIES
+          ENVIRONMENT_MODIFICATION "${_clut_perf_windows_env_mods}"
+        )
+      endif()
+    endif()
+
     if(WIN32)
       add_test(
         NAME iccdev.apply-throughput
@@ -12135,6 +12208,65 @@ if(WIN32)
       )
     endif()
     add_dependencies(check iccFromXml iccDumpProfile iccApplyNamedCmm)
+  endif()
+
+  if(ICCDEV_ENABLE_TELEMETRY AND TARGET iccApplyProfiles)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+      add_test(
+        NAME iccdev.applyprofiles-headless-receipts
+        COMMAND "${Python3_EXECUTABLE}"
+          "${ICCDEV_REPO_ROOT}/.github/ci/quality-assurance/scripts/test_icc_apply_profiles_receipts.py"
+          --apply-tool "$<TARGET_FILE:iccApplyProfiles>"
+          --source "${ICCDEV_TESTING_DIR}/ApplyDataFiles/seed-tiff-none-rgb-8x8.tif"
+          --profile "${ICCDEV_TESTING_DIR}/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc"
+      )
+      add_test(
+        NAME iccdev.applyprofiles-matrix-contracts
+        COMMAND "${Python3_EXECUTABLE}"
+          "${ICCDEV_REPO_ROOT}/.github/ci/quality-assurance/scripts/test_icc_apply_profiles_matrix.py"
+      )
+      set_tests_properties(
+        iccdev.applyprofiles-headless-receipts
+        iccdev.applyprofiles-matrix-contracts
+        PROPERTIES WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+          TIMEOUT 120
+          LABELS "iccdev;cmm;image;qa;evidence;regression"
+      )
+      set(_applyprofiles_windows_env_mods
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccApplyProfiles>"
+      )
+      foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+        list(APPEND _applyprofiles_windows_env_mods
+          "PATH=path_list_prepend:${_runtime_path}")
+      endforeach()
+      set_tests_properties(iccdev.applyprofiles-headless-receipts PROPERTIES
+        ENVIRONMENT_MODIFICATION "${_applyprofiles_windows_env_mods}")
+      add_dependencies(check iccApplyProfiles)
+
+      if(TARGET iccTiffDump AND TARGET iccPawgReport)
+        add_test(
+          NAME iccdev.applyprofiles-evidence-matrix
+          COMMAND "${Python3_EXECUTABLE}"
+            "${ICCDEV_REPO_ROOT}/.github/ci/quality-assurance/scripts/icc_apply_profiles_matrix.py"
+            --repo-root "${ICCDEV_REPO_ROOT}"
+            --manifest "${ICCDEV_REPO_ROOT}/.github/ci/quality-assurance/manifests/iccApplyProfiles-smoke-matrix.json"
+            --out-dir "${ICCDEV_TEST_OUTDIR}/applyprofiles-evidence-matrix/$<CONFIG>"
+            --reuse-out-root
+            --apply-tool "$<TARGET_FILE:iccApplyProfiles>"
+            --tiffdump-tool "$<TARGET_FILE:iccTiffDump>"
+            --pawg-tool "$<TARGET_FILE:iccPawgReport>"
+            --timeout 30
+        )
+        set_tests_properties(iccdev.applyprofiles-evidence-matrix PROPERTIES
+          WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+          TIMEOUT 180
+          LABELS "iccdev;cmm;image;qa;evidence;regression"
+          ENVIRONMENT_MODIFICATION "${_applyprofiles_windows_env_mods}"
+        )
+        add_dependencies(check iccTiffDump iccPawgReport)
+      endif()
+    endif()
   endif()
 
   return()
@@ -14295,7 +14427,40 @@ if(TARGET iccApplyProfiles)
     "iccdev;cmm;config;cli;security;issue-1674;issue-2126;regression"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applyprofiles-cli-args-regression.sh"
-   )
+  )
+
+  if(ICCDEV_ENABLE_TELEMETRY)
+    iccdev_add_script_test(
+      iccdev.applyprofiles-headless-receipts
+      120
+      "iccdev;cmm;config;cli;telemetry;evidence;issue-2736;regression"
+      "${ICCDEV_REPO_ROOT}"
+      "${ICCDEV_REPO_ROOT}/.github/ci/quality-assurance/scripts/iccApplyProfiles-quick-check.sh"
+    )
+
+    if(TARGET iccTiffDump AND TARGET iccPawgReport)
+      find_program(ICCDEV_MATRIX_PYTHON3_EXECUTABLE python3)
+      if(ICCDEV_MATRIX_PYTHON3_EXECUTABLE)
+        add_test(
+          NAME iccdev.applyprofiles-matrix-contracts
+          COMMAND "${ICCDEV_MATRIX_PYTHON3_EXECUTABLE}"
+            "${ICCDEV_REPO_ROOT}/.github/ci/quality-assurance/scripts/test_icc_apply_profiles_matrix.py"
+        )
+        set_tests_properties(iccdev.applyprofiles-matrix-contracts PROPERTIES
+          WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+          TIMEOUT 30
+          LABELS "iccdev;cmm;image;qa;evidence;issue-2736;regression"
+        )
+      endif()
+      iccdev_add_script_test(
+        iccdev.applyprofiles-evidence-matrix
+        120
+        "iccdev;cmm;image;qa;evidence;issue-2736;regression"
+        "${ICCDEV_REPO_ROOT}"
+        "${ICCDEV_REPO_ROOT}/.github/ci/quality-assurance/scripts/iccApplyProfiles-matrix.sh"
+      )
+    endif()
+  endif()
 endif()
 
 # #2262 - the same three tools publish the same decimal rendering-intent table,

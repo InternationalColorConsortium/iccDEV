@@ -285,10 +285,14 @@ if [ -f "$MPE_XML" ]; then
       /\}/  { if (buf ~ "\"type\": \"" e "\"") printf "%s", buf; buf = "" }
     ' "$file")"
     [ -n "$block" ] || fail "$elem is missing from the JSON entirely (#1843)"
-    printf '%s' "$block" | grep -qF '"inputChannels": 3' \
-      || fail "$elem lost its inputChannels in the JSON writer (#1843)"
-    printf '%s' "$block" | grep -qF '"outputChannels": 3' \
-      || fail "$elem lost its outputChannels in the JSON writer (#1843)"
+    case "$block" in
+      *'"inputChannels": 3'*) ;;
+      *) printf '%s\n' "$block"; fail "$elem lost its inputChannels in the JSON writer (#1843)" ;;
+    esac
+    case "$block" in
+      *'"outputChannels": 3'*) ;;
+      *) printf '%s\n' "$block"; fail "$elem lost its outputChannels in the JSON writer (#1843)" ;;
+    esac
   }
   assert_acs_counts "$OUTDIR/acs.json" BAcsElement
   assert_acs_counts "$OUTDIR/acs.json" EAcsElement

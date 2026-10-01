@@ -442,7 +442,7 @@ Three tools support `-cfg config.json` for complex multi-profile operations:
 
 - `iccApplyNamedCmm -cfg config.json`
 - `iccApplyProfiles -cfg config.json`
-- `iccApplySearch -cfg config.json`
+- `iccApplySearch --cfg config.json`
 
 JSON config objects include `profileSequence`, `dataFiles`/`imageFiles`,
 `colorData`, and optional `pccWeights`/`searchApply` sections. See the

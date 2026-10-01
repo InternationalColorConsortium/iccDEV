@@ -1,6 +1,6 @@
 # 
 # IccApplyToLink CMakeLists.txt | DemoIccMAX Project
-# Copyright (©) 2024 The International Color Consortium. All rights reserved.
+# Copyright (C) 2024 The International Color Consortium. All rights reserved.
 # 
 #
 # Last Updated: 02-DEC-2024 by David Hoyt
@@ -24,6 +24,9 @@ IF(NOT TARGET iccApplyToLink)
 
   # Define the executable target
   ADD_EXECUTABLE(${TARGET_NAME} ${SOURCES})
+  if(ICCDEV_ENABLE_TELEMETRY)
+    target_compile_definitions(${TARGET_NAME} PRIVATE ICCDEV_TELEMETRY=1)
+  endif()
 
   # Link the necessary libraries to the target
   TARGET_LINK_LIBRARIES(${TARGET_NAME} ${TARGET_LIB_ICCPROFLIB})

@@ -86,6 +86,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("--output-junit", default="", help="Optional CTest JUnit output path")
     parser.add_argument("--selection-output", default="", help="Write selected test names to this file")
+    parser.add_argument("--require-test", action="append", default=[],
+                        help="Fail if this test is not registered; may be repeated")
     return parser.parse_args(argv)
 
 
@@ -103,6 +105,12 @@ def main(argv: list[str]) -> int:
         tests = list_tests(args.test_dir, args.config or None, label_exclude)
     except RuntimeError as exc:
         print(f"[FAIL] {exc}", file=sys.stderr)
+        return 1
+
+    missing = sorted(set(args.require_test) - set(tests))
+    if missing:
+        print("[FAIL] required CTests not registered: " + ", ".join(missing),
+              file=sys.stderr)
         return 1
 
     selected_tests = tests[-args.limit :] if args.limit is not None else tests

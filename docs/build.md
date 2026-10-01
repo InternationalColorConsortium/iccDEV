@@ -650,6 +650,31 @@ cmake --preset vs2022-clangcl-x64-qa-flags -S Build/Cmake -B out/vs2022-clangcl-
 cmake --preset mingw-x64-qa-flags -S Build/Cmake -B out/mingw-x64-qa-flags
 ```
 
+### Opt-in telemetry builds
+
+`ICCDEV_ENABLE_TELEMETRY` defaults to `OFF` for every configuration. With it
+off, apply-tool JSONL/evidence code and library CLUT/threaded-CMM counters are
+excluded at compile time. The apply tools reject telemetry options in these
+builds. Set it to `ON` in a separate build tree to include both surfaces;
+`ICC_PERF_STATS_FILE` then selects a library counter report at runtime. The
+older `ICCDEV_ENABLE_PERF_MONITORING=ON` option remains a deprecated alias.
+
+The telemetry presets keep their outputs separate from ordinary builds:
+
+```sh
+cmake --preset linux-clang-telemetry -S Build/Cmake
+cmake --build --preset linux-clang-telemetry
+cmake --preset macos-clang-telemetry -S Build/Cmake
+cmake --build --preset macos-clang-telemetry
+```
+
+Linux GCC, Windows MSVC, ClangCL and MinGW, and macOS Xcode have matching
+`*-telemetry` configure and build presets. Single-config presets select
+Release by default; override with `-DCMAKE_BUILD_TYPE=MinSizeRel` or `Debug`.
+For Visual Studio or Xcode, select the configuration at build time with
+`--config Release`, `--config MinSizeRel`, or `--config Debug`. Use distinct
+build directories when comparing enabled and disabled binaries.
+
 ### Linux AVX2 and AVX-512 CLUT build
 
 Linux and WSL2 can use paired Clang presets for portable, AVX2, and AVX-512
@@ -787,9 +812,12 @@ smoke and uploads the `reficcmax-runtime-packages-linux` artifact.
 ## Shared library exports
 
 `ENABLE_SHARED_LIBS` defaults to `ON`, so a default Windows build links against
-`IccProfLib2.dll`. Its exports come from CMake's `WINDOWS_EXPORT_ALL_SYMBOLS`
-rather than from `__declspec` annotations: MSVC is deliberately excluded from the
-`ICCPROFLIBDLL_EXPORTS` definition in `Build/Cmake/IccProfLib/CMakeLists.txt`.
+`IccProfLib2.dll`. MSVC exports come from CMake's
+`WINDOWS_EXPORT_ALL_SYMBOLS`, while MinGW uses the linker
+`--export-all-symbols` option so its import library contains unannotated C++
+functions even when other symbols have explicit exports. MSVC is deliberately
+excluded from the `ICCPROFLIBDLL_EXPORTS` definition in
+`Build/Cmake/IccProfLib/CMakeLists.txt`.
 That arrangement dates from #764, and the same file records why hidden visibility
 is not used on GCC/Clang -- `ICCPROFLIB_API` annotations are incomplete
 (~308 partial uses across 43 headers) and `IccXML` has none at all.
