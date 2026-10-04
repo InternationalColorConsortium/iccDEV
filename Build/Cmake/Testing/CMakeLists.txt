@@ -1886,9 +1886,10 @@ endfunction()
 # #2702/#2705: a calculator's output channels kept the caller's buffer contents
 # wherever the main function did not reach an out() operation, and
 # MemorySanitizer reported the reads downstream (CIccApplyBPC's stack black
-# point, a CMM pixel buffer).  CIccMpeCalculator::Apply() now zeroes them at
-# each invocation, the rule ICC.2-2023 11.2.1 gives temporaries.  Library only;
-# called in both the Windows and the main list.
+# point, a CMM pixel buffer).  CIccCalculatorFunc::Apply() now zeroes them at
+# each invocation, as ICC.2-2023 11.2.1.2 requires ("Output channels shall be
+# assumed to be zero until set by the main calculator function").  Library
+# only; called in both the Windows and the main list.
 function(iccdev_add_calc_output_init_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()

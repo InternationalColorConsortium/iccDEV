@@ -4106,11 +4106,14 @@ bool CIccCalculatorFunc::Apply(CIccApplyMpeCalculator *pApply) const
   // reported the reads further down the chain. A sequence that fails still
   // sets every output to -1, below.
   //
-  // ICC.2-2023 11.2.1 says temporaries "shall be assumed" zero at each
-  // invocation and says nothing about outputs; this gives outputs the same
-  // starting value. Skipped when the output buffer is the input buffer, which
-  // the MPE tag never passes but a direct caller of the public Apply() can:
-  // zeroing would erase the inputs before in() reads them.
+  // ICC.2-2023 11.2.1.2: "Output channels shall be assumed to be zero until
+  // set by the main calculator function."  (#2702/#2705's comments said the
+  // clause covered only temporaries; it covers outputs here.)  Skipped when the
+  // output buffer is the input buffer, which the MPE tag never passes but a
+  // direct caller of the public Apply() can: zeroing would erase the inputs
+  // before in() reads them.  Such a call is already outside the model, which
+  // says "Input channels are read only and therefore the use of the out channel
+  // operator shall not affect input channel values" (11.2.1.3).
   if (pOut != pApply->GetInput())
     memset(pOut, 0, m_pCalc->NumOutputChannels()*sizeof(icFloatNumber));
 
