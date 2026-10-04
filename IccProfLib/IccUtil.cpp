@@ -1508,6 +1508,39 @@ icUInt32Number icGetSpectralSpaceSamples(const icHeader *pHdr)
     return icGetSpaceSamples(pHdr->pcs);
 }
 
+/**
+ ******************************************************************************
+ * Name: icGetDataSpaceSamples
+ *
+ * Purpose: Number of samples on the A side of a profile's AToBx/DToBx
+ *  transforms, as the tag validators expect it.
+ *
+ *  Normally that is the data colour space.  ICC.2-2023 7.2.8 lets an abstract
+ *  profile's data colour space be zero: "If set to zero the spectral PCS
+ *  signature and spectral range fields shall be used to define the A side of
+ *  the transform."  The validators used icGetSpaceSamples(colorSpace) there
+ *  and expected 0 inputs, so once CIccProfile::CheckHeader() accepted the zero
+ *  field (#2725) a conforming profile was refused at its AToB0/DToB0 tag
+ *  instead.
+ *
+ * Args:
+ *  pHdr - profile header
+ *
+ * Return:
+ *  The A-side sample count.
+ ******************************************************************************
+ */
+icUInt32Number icGetDataSpaceSamples(const icHeader *pHdr)
+{
+  if (pHdr->version >= icVersionNumberV5 &&
+      pHdr->deviceClass == icSigAbstractClass &&
+      pHdr->colorSpace == icSigNoColorData &&
+      pHdr->spectralPCS)
+    return icGetSpaceSamples((icColorSpaceSignature)pHdr->spectralPCS);
+
+  return icGetSpaceSamples(pHdr->colorSpace);
+}
+
 icUInt8Number icGetStorageTypeBytes(icUInt16Number nStorageType)
 {
   switch (nStorageType) {

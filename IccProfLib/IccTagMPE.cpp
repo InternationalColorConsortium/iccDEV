@@ -1700,7 +1700,9 @@ icValidateStatus CIccTagMultiProcessElement::Validate(std::string sigPath, std::
     case icSigAToB2Tag:
     case icSigAToB3Tag:
       {
-        nInput = icGetSpaceSamples(pProfile->m_Header.colorSpace);
+        // icGetDataSpaceSamples(): a v5 abstract profile with a zero data colour
+        // space takes its A side from the spectral PCS (7.2.8, #2725).
+        nInput = icGetDataSpaceSamples(&pProfile->m_Header);
         if (m_nInputChannels != nInput) {
           sReport += icMsgValidateCriticalError;
           sReport += sSigPathName;
@@ -1746,7 +1748,9 @@ icValidateStatus CIccTagMultiProcessElement::Validate(std::string sigPath, std::
     case icSigDToB2Tag:
     case icSigDToB3Tag:
       {
-        nInput = icGetSpaceSamples(pProfile->m_Header.colorSpace);
+        // icGetDataSpaceSamples(): a v5 abstract profile with a zero data colour
+        // space takes its A side from the spectral PCS (7.2.8, #2725).
+        nInput = icGetDataSpaceSamples(&pProfile->m_Header);
         if (m_nInputChannels != nInput) {
           sReport += icMsgValidateCriticalError;
           sReport += sSigPathName;
