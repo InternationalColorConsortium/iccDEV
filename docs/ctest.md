@@ -270,7 +270,7 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.spectral-absolute-flag` | `.github/ci/regression/spectral-absolute-flag.cpp` |
 | `iccdev.pcs-edge-metadata` | `.github/ci/regression/pcs-edge-metadata.cpp` |
 | `iccdev.parser-restore-calls` | `.github/ci/regression/parser-restore-calls.cpp` |
-| `iccdev.mid-mlnk-header-checks` | `.github/ci/regression/mid-mlnk-header-checks.cpp`; MultiplexIdentification and MultiplexLink run the class-independent header checks, and MultiplexIdentification has no zero data colour space, for issue #2563; v5 NamedColor and Abstract accept a zero data colour space, a zero-data Abstract's AToB0Tag needs a spectral PCS and range, and the tag validators take its A side from the spectral PCS, for issue #2725 |
+| `iccdev.mid-mlnk-header-checks` | `.github/ci/regression/mid-mlnk-header-checks.cpp`; MultiplexIdentification and MultiplexLink run the class-independent header checks, and MultiplexIdentification has no zero data colour space, for issue #2563; v5 NamedColor and Abstract accept a zero data colour space, a zero-data Abstract's AToB0Tag needs a spectral PCS and range, and the tag validators take its A side from the spectral PCS, for issue #2725; a zero-PCS Abstract's data colour space must be a colorimetric PCS or a spectral colour space to define its DToB0Tag's D side, for issue #2756 |
 | `iccdev.legacy-run-tests` | `Testing/RunTests.sh` |
 | `iccdev.profile-write-failure` | `.github/ci/regression/profile-write-failure.cpp` |
 | `iccdev.tool-coverage` | `.github/scripts/iccdev-tool-coverage-baseline.sh --asan --skip-hybrid` |

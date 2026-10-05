@@ -1912,8 +1912,8 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
   // the transform."  Only an AToB0Tag has an A side.  8.9 lets an abstract
   // profile carry an AToB0Tag, a DToB0Tag, or both, so with a zero data colour
   // space the spectral PCS and spectral range must both be set whenever an
-  // AToB0Tag is present, and are not needed for a DToB0Tag alone (#2725, ruling
-  // of the ICC chair).  The zero data colour space itself is accepted below.
+  // AToB0Tag is present, and are not needed for a DToB0Tag alone (#2725,
+  // maintainer ruling).  The zero data colour space itself is accepted below.
   if (m_Header.version>=icVersionNumberV5 &&
       m_Header.deviceClass==icSigAbstractClass &&
       m_Header.colorSpace==icSigNoColorData &&
@@ -1921,6 +1921,37 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
       (!m_Header.spectralPCS || !m_Header.spectralRange.steps)) {
     sReport += icMsgValidateCriticalError;
     sReport += " - Abstract profile with a zero data colour space and an AToB0Tag has no spectral PCS and spectral range to define the A side.\n";
+    rv = icMaxStatus(rv, icValidateCriticalError);
+  }
+
+  // ICC.2-2023 7.2.9, for abstract profiles: "When the profile/device class is
+  // an Abstract profile and the value of the PCS field is zero, the data field
+  // is non-zero, and the spectral PCS signature is non-zero then the abstract
+  // transform shall be defined by the DToB0 tag with the D side of the
+  // transform defined by the colorimetric colour space defined by the data
+  // field".  8.9: "Colour transformations using abstract profiles are
+  // performed from PCS to PCS", so that D side is a PCS: 'XYZ ' or 'Lab '
+  // (Table 16), or a spectral colour space, since the Extended Device Colour
+  // Space amendment (passed by the ICC Steering Committee 30 October 2025;
+  // #626, #1558) added the Table 21 signatures to Table 15.  7.2.9 predates
+  // the amendment; the reading given on #2756 is that its "colorimetric" is
+  // to be deleted so the clause covers both forms.  Any other Table 15
+  // signature is not a PCS and is refused here.  Spectral signatures and
+  // unknown values are left to the data colour space block below, which
+  // accepts the former with a range and reports the latter once; IsValidSpace()
+  // is false for both.  The DToB0Tag itself is required in CheckRequiredTags().
+  if (m_Header.version>=icVersionNumberV5 &&
+      m_Header.deviceClass==icSigAbstractClass &&
+      !m_Header.pcs &&
+      m_Header.colorSpace!=icSigNoColorData &&
+      m_Header.spectralPCS &&
+      m_Header.colorSpace!=icSigXYZData &&
+      m_Header.colorSpace!=icSigLabData &&
+      Info.IsValidSpace(m_Header.colorSpace)) {
+    sReport += icMsgValidateCriticalError;
+    sReport += " - Abstract profile with a zero PCS: data colour space ";
+    sReport += Info.GetColorSpaceSigName(m_Header.colorSpace);
+    sReport += " is neither a colorimetric PCS (XYZ, Lab) nor a spectral colour space, so it cannot define the D side of the DToB0Tag.\n";
     rv = icMaxStatus(rv, icValidateCriticalError);
   }
 
@@ -1934,7 +1965,7 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
   // device space it identifies.
   //
   // NamedColor and Abstract profiles are exempt because a single data colour
-  // space does not describe either (#2725, ruling of the ICC chair):
+  // space does not describe either (#2725, maintainer ruling):
   //  - NamedColor: the active data is carried in the namedColorTag, not in AToB
   //    or BToA tags, so there is no A side for the field to describe.  (8.10:
   //    "There might be multiple NamedColor profiles to account for different
@@ -1969,12 +2000,16 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
 
     if (!bValidSpace) {
       // A spectral colour space signature (Table 21) is permitted as the data
-      // colour space of a v5 profile.  The pre-amendment form was an abstract
-      // profile carrying a DToB0 tag.  The iccMAX extended device colour space
-      // amendment (7.2.8) additionally allows spectral device colour spaces for
-      // other classes, in which case the spectral range shall be defined by a
-      // deviceSpectralRangeTag ('dsrn') or by the header spectral/bi-spectral
-      // range fields (7.2.22/7.2.23); a spectral space with neither is rejected.
+      // colour space of a v5 profile.  Before the Extended Device Colour Space
+      // amendment to ICC.2-2023 (passed by the ICC Steering Committee 30
+      // October 2025; implemented by #1558 for #626) iccDEV accepted that form
+      // only on an abstract profile carrying a DToB0 tag, and it still accepts
+      // that one without a range.  The amendment (7.2.8) allows a spectral
+      // device colour space for every class, with its spectral range defined by
+      // a deviceSpectralRangeTag ('dsrn') or, when that tag is absent, by the
+      // header spectral/bi-spectral range fields (7.2.22/7.2.23); a spectral
+      // space with neither is rejected.  The three Testing/SpecRef abstract
+      // fixtures (#2756) carry the header range and pass either way.
       bool bV5Spectral = (m_Header.version>=icVersionNumberV5 && Info.IsValidSpectralSpace(m_Header.colorSpace));
       bool bAbstractSpectral = bV5Spectral && m_Header.deviceClass==icSigAbstractClass && IsTagPresent(icSigDToB0Tag);
       bool bDeviceSpectral = bV5Spectral && (IsTagPresent(icSigDeviceSpectralRangeTag) ||
@@ -3511,8 +3546,8 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         // signature is non-zero then the abstract transform shall be defined by
         // the DToB0 tag".  The same clause says "The PCS for AToBx/BToAx tags
         // shall always be defined by the PCS field", so with a zero PCS an
-        // AToB0Tag has no B side and cannot stand in for the DToB0Tag.  The ICC
-        // chair has confirmed the DToB0Tag is normatively required there.  The
+        // AToB0Tag has no B side and cannot stand in for the DToB0Tag.  The
+        // maintainers confirmed the DToB0Tag is normatively required there.  The
         // enclosing test already guarantees a non-zero spectral PCS whenever
         // the PCS field is zero, so the third condition needs no test of its own.
         if (m_Header.pcs || m_Header.spectralPCS) {

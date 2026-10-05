@@ -74,6 +74,15 @@
 //     common block away from the one class that tests these fields itself.
 //   - MID and MLNK are also checked for reserved profile flag bits, a second
 //     check from the same block, so moving only the intent switch would fail.
+//
+// #2756.  ICC.2-2023 7.2.9: an abstract profile with a zero PCS, a non-zero
+// data colour space and a non-zero spectral PCS defines its transform in the
+// DToB0Tag, whose D side is "the colour space defined by the data field".  That
+// field must therefore be a colorimetric PCS ('XYZ ', 'Lab ', Table 16) or,
+// under the Extended Device Colour Space amendment, a spectral colour space
+// (Table 21); a device space such as 'RGB ' is refused.  Controls: a non-zero
+// PCS, a zero data colour space and a zero spectral PCS each put the header
+// outside 7.2.9 and draw no such message.
 
 #include <cstdio>
 #include <string>
@@ -223,7 +232,7 @@ int main()
         "control: MID with an ncXXXX data colour space is accepted");
 
   // ---- #2725: NamedColor and Abstract need no data colour space ----
-  // Ruling of the ICC chair: a single data colour space describes neither
+  // Maintainer ruling: a single data colour space describes neither
   // class.  NamedColor carries its data in namedColorTag (and several of them
   // may use different device spaces); an abstract profile "does not represent
   // any device model" (ICC.2-2023 8.9), and 7.2.8 lets its data colour space be
@@ -339,6 +348,91 @@ int main()
     p->AttachTag(icSigAToB0Tag, new CIccTagMultiProcessElement(3, 3));
     check(!has(report(p), kNoASide),
           "control: Lab-data Abstract with AToB0Tag needs no spectral fields");
+  }
+
+  // ---- #2756: 7.2.9's D side with a zero PCS ----
+  // PCS zero, data colour space non-zero, spectral PCS non-zero: the DToB0Tag's
+  // D side is "the colour space defined by the data field", so that field must
+  // be a colorimetric PCS ('XYZ ', 'Lab ', Table 16) or, under the Extended
+  // Device Colour Space amendment, a spectral colour space (Table 21).  The
+  // DToB0Tag requirement itself is pinned in v5-required-tag-sets.
+  const char *kNoDSide = "cannot define the D side of the DToB0Tag";
+  const icColorSpaceSignature refl36 =
+      (icColorSpaceSignature)(icSigReflectanceSpectralData | 36);
+  {
+    CIccProfile *p = zeroDataSpectralAbstract(36);
+    p->m_Header.pcs = none;
+    p->m_Header.colorSpace = icSigLabData;
+    check(!has(report(p), kNoDSide),
+          "zero-PCS Abstract with a Lab data colour space is accepted");
+  }
+  {
+    CIccProfile *p = zeroDataSpectralAbstract(36);
+    p->m_Header.pcs = none;
+    p->m_Header.colorSpace = icSigXYZData;
+    check(!has(report(p), kNoDSide),
+          "zero-PCS Abstract with an XYZ data colour space is accepted");
+  }
+  {
+    // The Testing/SpecRef RefDecC/RefDecH/RefIncW header shape: reflectance
+    // in, reflectance out, one header range for both (those fixtures use 31
+    // steps; the helper's 36 are kept so the data space matches its range).
+    CIccProfile *p = zeroDataSpectralAbstract(36);
+    p->m_Header.pcs = none;
+    p->m_Header.colorSpace = refl36;
+    std::string s = report(p);
+    check(!has(s, kNoDSide),
+          "zero-PCS Abstract with a reflectance data colour space is accepted");
+    check(!has(s, "Unknown colour space"),
+          "control: that reflectance data colour space is a known space");
+  }
+  {
+    CIccProfile *p = zeroDataSpectralAbstract(36);
+    p->m_Header.pcs = none;
+    p->m_Header.colorSpace = icSigRgbData;
+    check(has(report(p), kNoDSide),
+          "zero-PCS Abstract with an RGB data colour space is refused");
+  }
+  {
+    CIccProfile *p = zeroDataSpectralAbstract(36);
+    p->m_Header.pcs = none;
+    p->m_Header.colorSpace = nc3;
+    check(has(report(p), kNoDSide),
+          "zero-PCS Abstract with an ncXXXX data colour space is refused");
+  }
+  {
+    // An unknown signature is reported once, by the data colour space block,
+    // and not a second time here.
+    CIccProfile *p = zeroDataSpectralAbstract(36);
+    p->m_Header.pcs = none;
+    p->m_Header.colorSpace = (icColorSpaceSignature)0x7a7a7a7a;
+    std::string s = report(p);
+    check(has(s, "Unknown colour space") && !has(s, kNoDSide),
+          "zero-PCS Abstract with an unknown data colour space draws only the unknown-space message");
+  }
+  {
+    // A non-zero PCS is outside 7.2.9: the AToBx/BToAx tags take it as their
+    // B side and the data field is an ordinary A side.
+    CIccProfile *p = zeroDataSpectralAbstract(36);
+    p->m_Header.colorSpace = icSigRgbData;
+    check(!has(report(p), kNoDSide),
+          "control: Lab-PCS Abstract with an RGB data colour space draws no D-side message");
+  }
+  {
+    // A zero data colour space is 7.2.8's form, tested above.
+    CIccProfile *p = zeroDataSpectralAbstract(36);
+    p->m_Header.pcs = none;
+    check(!has(report(p), kNoDSide),
+          "control: zero-PCS zero-data Abstract draws no D-side message");
+  }
+  {
+    // A zero spectral PCS fails 7.2.9's third condition.
+    CIccProfile *p = zeroDataSpectralAbstract(36);
+    p->m_Header.pcs = none;
+    p->m_Header.colorSpace = icSigRgbData;
+    p->m_Header.spectralPCS = none;
+    check(!has(report(p), kNoDSide),
+          "control: zero-PCS Abstract without a spectral PCS draws no D-side message");
   }
 
   if (g_fail) {
