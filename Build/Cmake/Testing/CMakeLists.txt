@@ -4305,6 +4305,50 @@ function(iccdev_add_iccprofileplot_exitcode_test)
   endif()
 endfunction()
 
+# Guards the "Y = X ^ g" label both curve-describing tools print for a one-entry
+# curveType (#2717).  The gamma is a u8Fixed8Number, raw/256; the library
+# normalises the sample by 65535 on read, so the exponent is sample*65535/256
+# (CIccTagCurve::Describe, #808).  iccProfilePlot and iccProfileVisualize used
+# sample*256, the spelling #808 retired, so every label was high by 65536/65535.
+# The script runs both built tools over the four #808 gamma fixtures and checks
+# each label's exponent against raw/256 to within 2e-6; the retired decode is
+# off by gamma/65535, at least 1.5e-5.
+function(iccdev_add_curve_gamma_tool_labels_test)
+  if(NOT TARGET iccProfilePlot OR NOT TARGET iccProfileVisualize)
+    return()
+  endif()
+  add_dependencies(check iccProfilePlot iccProfileVisualize)
+
+  add_test(
+    NAME iccdev.curve-gamma-tool-labels
+    COMMAND "${CMAKE_COMMAND}"
+      "-DPLOT_TOOL=$<TARGET_FILE:iccProfilePlot>"
+      "-DVIZ_TOOL=$<TARGET_FILE:iccProfileVisualize>"
+      "-DFIXTURE_DIR=${ICCDEV_REPO_ROOT}/.github/ci/regression"
+      "-DWORKDIR=${ICCDEV_TEST_OUTDIR}/curve-gamma-tool-labels"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunCurveGammaToolLabelsTest.cmake"
+  )
+  set_tests_properties(iccdev.curve-gamma-tool-labels PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofileplot;iccprofilevisualize;curve;gamma;issue-2717;regression"
+  )
+  if(WIN32)
+    set(_gamma_labels_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccProfilePlot>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccProfileVisualize>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _gamma_labels_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.curve-gamma-tool-labels PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_gamma_labels_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_applytolink_invalid_arg_test)
   if(NOT TARGET iccApplyToLink)
     return()
@@ -11023,6 +11067,7 @@ if(WIN32)
   iccdev_add_iccprofileplot_clut_oob_test()
   iccdev_add_iccprofileplot_pdf_leak_test()
   iccdev_add_iccprofileplot_exitcode_test()
+  iccdev_add_curve_gamma_tool_labels_test()
   iccdev_add_applytolink_invalid_arg_test()
   iccdev_add_applytolink_negative_intent_tests()
   iccdev_add_applytolink_transform_type_tests()
@@ -11460,6 +11505,7 @@ iccdev_add_iccviz_writer_serialization_test()
 iccdev_add_iccprofileplot_clut_oob_test()
 iccdev_add_iccprofileplot_pdf_leak_test()
 iccdev_add_iccprofileplot_exitcode_test()
+iccdev_add_curve_gamma_tool_labels_test()
 iccdev_add_prmg_hue_normalization_test()
 iccdev_add_qa_evidence_helpers_test()
 iccdev_add_zip_utf8_text_zlib_test()
