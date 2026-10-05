@@ -1939,6 +1939,61 @@ function(iccdev_add_calc_output_init_test)
   endif()
 endfunction()
 
+# #2751: CIccMpeCalculator's copy constructor and operator= left the copied
+# function pointing at the SOURCE calculator, so its calc()/curv()/mtx()
+# operations read the source's sub-elements, freed once the source was deleted
+# (iccApplySearch copies a profile and deletes the original).  operator= also
+# dropped every sub-element.  Library only; called in both the Windows and the
+# main list.
+function(iccdev_add_calc_copy_owner_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCalcCopyOwnerTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/calc-copy-owner.cpp"
+  )
+  target_compile_features(iccCalcCopyOwnerTest PRIVATE cxx_std_17)
+  target_include_directories(iccCalcCopyOwnerTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccCalcCopyOwnerTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccCalcCopyOwnerTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.calc-copy-owner
+      COMMAND "$<TARGET_FILE:iccCalcCopyOwnerTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.calc-copy-owner
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccCalcCopyOwnerTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.calc-copy-owner PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;calculator;mpe;asan;issue-2751;regression"
+  )
+  if(WIN32)
+    set(_calc_copy_owner_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCalcCopyOwnerTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _calc_copy_owner_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.calc-copy-owner PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_calc_copy_owner_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2547: a formulaCurveSegment with a NaN or infinite parameter gives a
 # non-finite output wherever the formula reads it.  Validate() must report it
 # as a critical error and Begin() must refuse it, for every function type and
@@ -10909,6 +10964,7 @@ if(WIN32)
   iccdev_add_valid_overlap_test()
   iccdev_add_curve_gamma_u8fixed8_test()
   iccdev_add_calc_output_init_test()
+  iccdev_add_calc_copy_owner_test()
   iccdev_add_luminance_normalization_test()
   iccdev_add_tag_name_spelling_test()
   iccdev_add_device_attributes_icc2_test()
@@ -11416,6 +11472,7 @@ iccdev_add_spectral_absolute_flag_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_calc_temp_reset_if_no_else_test()
 iccdev_add_calc_output_init_test()
+iccdev_add_calc_copy_owner_test()
 iccdev_add_formula_segment_nonfinite_parameter_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_chromaticity_validate_test()

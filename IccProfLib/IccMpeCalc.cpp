@@ -3092,6 +3092,12 @@ CIccCalculatorFunc::CIccCalculatorFunc(const CIccCalculatorFunc &func)
  ******************************************************************************/
 CIccCalculatorFunc &CIccCalculatorFunc::operator=(const CIccCalculatorFunc &func)
 {
+  // On self-assignment func.m_Op is m_Op, so after the free below the copy
+  // would fill the new buffer from itself and leave the operations
+  // uninitialised.
+  if (this == &func)
+    return *this;
+
   m_pCalc = func.m_pCalc;
 
   m_nReserved= func.m_nReserved;
@@ -4812,8 +4818,13 @@ CIccMpeCalculator::CIccMpeCalculator(const CIccMpeCalculator &channelGen)
 
   icCalculatorFuncPtr ptr = channelGen.m_calcFunc;
 
-  if (ptr)
+  // NewCopy() keeps the source's calculator pointer, which the function uses
+  // to look up its sub-elements.  Point it at this copy, which owns its own
+  // copies of them; channelGen may be destroyed first (#2751).
+  if (ptr) {
     m_calcFunc = ptr->NewCopy();
+    m_calcFunc->SetCalculator(this);
+  }
   else
     m_calcFunc = NULL;
 
@@ -4859,6 +4870,11 @@ CIccMpeCalculator::CIccMpeCalculator(const CIccMpeCalculator &channelGen)
  ******************************************************************************/
 CIccMpeCalculator &CIccMpeCalculator::operator=(const CIccMpeCalculator &channelGen)
 {
+  // SetSize(0,0) below releases the function and sub-elements, which on
+  // self-assignment are the ones to copy.
+  if (this == &channelGen)
+    return *this;
+
   m_nReserved = channelGen.m_nReserved;
 
   m_bHasLimits = channelGen.m_bHasLimits;
@@ -4874,12 +4890,23 @@ CIccMpeCalculator &CIccMpeCalculator::operator=(const CIccMpeCalculator &channel
 
   m_pCmmEnvVarLookup = channelGen.m_pCmmEnvVarLookup;
 
+  m_nTempChannels = channelGen.m_nTempChannels;
+  m_bNeedTempReset = channelGen.m_bNeedTempReset;
+
   icCalculatorFuncPtr ptr = channelGen.m_calcFunc;
 
-  if (ptr)
+  // As in the copy constructor, the copied function must look up its
+  // sub-elements in this calculator, not in channelGen.
+  if (ptr) {
     m_calcFunc = ptr->NewCopy();
+    m_calcFunc->SetCalculator(this);
+  }
   else
     m_calcFunc = NULL;
+
+  // m_nSubElem still holds this calculator's old count, zero after the
+  // SetSize(0,0) above.  The copy below is sized by it, so take channelGen's.
+  m_nSubElem = channelGen.m_nSubElem;
 
   if (channelGen.m_nSubElem) {
     icUInt32Number i;
@@ -4989,9 +5016,14 @@ icFuncParseStatus CIccMpeCalculator::SetCalcFunc(icCalculatorFuncPtr newChannelF
     return icFuncParseNoError;
 
   delete m_calcFunc;
- 
+
   m_calcFunc = newChannelFunc;
-  
+
+  // The function looks up its sub-elements through its calculator pointer, so
+  // it must be this element's, whichever calculator it was built for (#2751).
+  if (m_calcFunc)
+    m_calcFunc->SetCalculator(this);
+
   return icFuncParseNoError;
 }
 
