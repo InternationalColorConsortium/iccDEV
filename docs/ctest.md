@@ -261,14 +261,14 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.applytolink-v4-missing-device-descriptions` | `Build/Cmake/Testing/CMakeLists.txt` |
 | `iccdev.xform-abstorel-adjust` | `.github/ci/regression/xform-abstorel-adjust.cpp` |
 | `iccdev.valid-overlap` | `.github/ci/regression/valid-overlap.cpp`; `icValidOverlap()` accepts disjoint positions, or positions at the same offset when `bAllowSame` is set, and nothing else, for issue #2731 |
-| `iccdev.v5-required-tag-sets` | `.github/ci/regression/v5-required-tag-sets.cpp`; six v5 required-tag rows against ICC.2-2023 clause 8 (Input, Display, Output and its xCLR colorant tags, DeviceLink, MultiplexIdentification/Link/Visualization) for issue #2562 |
+| `iccdev.v5-required-tag-sets` | `.github/ci/regression/v5-required-tag-sets.cpp`; v5 required-tag rows against ICC.2-2023 clause 8 (Input, Display, Output and its xCLR colorant tags, DeviceLink, MultiplexIdentification/Link/Visualization, ColorSpace, Abstract) for issues #2562 and #2730, and the 7.2.9 Abstract header (PCS zero, data colour space and spectral PCS non-zero) that requires DToB0Tag |
 | `iccdev.matrixtrc-monochrome-pcs` | `.github/ci/regression/matrixtrc-monochrome-pcs.cpp`; matrix/TRC accepts only a PCSXYZ connection and monochrome only PCSXYZ or PCSLAB, including after a fallback from an unsupported DToB0, for issue #2738 |
 | `iccdev.pcs-adjust-placement` | `.github/ci/regression/pcs-adjust-placement.cpp` |
 | `iccdev.reflectance-observer-illum-range` | `.github/ci/regression/reflectance-observer-illum-range.cpp` |
 | `iccdev.spectral-absolute-flag` | `.github/ci/regression/spectral-absolute-flag.cpp` |
 | `iccdev.pcs-edge-metadata` | `.github/ci/regression/pcs-edge-metadata.cpp` |
 | `iccdev.parser-restore-calls` | `.github/ci/regression/parser-restore-calls.cpp` |
-| `iccdev.mid-mlnk-header-checks` | `.github/ci/regression/mid-mlnk-header-checks.cpp`; MultiplexIdentification and MultiplexLink run the class-independent header checks, and MultiplexIdentification has no zero data colour space, for issue #2563 |
+| `iccdev.mid-mlnk-header-checks` | `.github/ci/regression/mid-mlnk-header-checks.cpp`; MultiplexIdentification and MultiplexLink run the class-independent header checks, and MultiplexIdentification has no zero data colour space, for issue #2563; v5 NamedColor and Abstract accept a zero data colour space, a zero-data Abstract's AToB0Tag needs a spectral PCS and range, and the tag validators take its A side from the spectral PCS, for issue #2725 |
 | `iccdev.legacy-run-tests` | `Testing/RunTests.sh` |
 | `iccdev.profile-write-failure` | `.github/ci/regression/profile-write-failure.cpp` |
 | `iccdev.tool-coverage` | `.github/scripts/iccdev-tool-coverage-baseline.sh --asan --skip-hybrid` |

@@ -1907,20 +1907,49 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
     rv = icMaxStatus(rv, icValidateNonCompliant);
   }
  
+  // ICC.2-2023 7.2.8, for abstract profiles: "If set to zero the spectral PCS
+  // signature and spectral range fields shall be used to define the A side of
+  // the transform."  Only an AToB0Tag has an A side.  8.9 lets an abstract
+  // profile carry an AToB0Tag, a DToB0Tag, or both, so with a zero data colour
+  // space the spectral PCS and spectral range must both be set whenever an
+  // AToB0Tag is present, and are not needed for a DToB0Tag alone (#2725, ruling
+  // of the ICC chair).  The zero data colour space itself is accepted below.
+  if (m_Header.version>=icVersionNumberV5 &&
+      m_Header.deviceClass==icSigAbstractClass &&
+      m_Header.colorSpace==icSigNoColorData &&
+      GetTag(icSigAToB0Tag) &&
+      (!m_Header.spectralPCS || !m_Header.spectralRange.steps)) {
+    sReport += icMsgValidateCriticalError;
+    sReport += " - Abstract profile with a zero data colour space and an AToB0Tag has no spectral PCS and spectral range to define the A side.\n";
+    rv = icMaxStatus(rv, icValidateCriticalError);
+  }
+
   // ICC.2 7.2.8: "For MultiplexLink and MultiplexVisualization profiles the data
   // colour space signature shall be zero."  A MultiplexLink identifies its device
   // channels through the MCS, exactly as MultiplexVisualization does, so the zero
   // data colour space is conforming and must not be reported as an unknown space.
   // MultiplexVisualization was already exempt here and MultiplexLink was not, so a
   // conforming MLNK profile drew a critical "Unknown colour space!" (#2563).
-  // MultiplexIdentification is not exempt: 7.2.8 grants a zero data colour space
-  // to abstract, MultiplexLink and MultiplexVisualization profiles, and a MID's
-  // data colour space names the device space it identifies.  The list below still
-  // differs from 7.2.8 in two places, left as they were: NamedColor is exempt with
-  // no 7.2.8 grant, and abstract, which 7.2.8 does grant, is not.
+  // MultiplexIdentification is not exempt: a MID's data colour space names the
+  // device space it identifies.
+  //
+  // NamedColor and Abstract profiles are exempt because a single data colour
+  // space does not describe either (#2725, ruling of the ICC chair):
+  //  - NamedColor: the active data is carried in the namedColorTag, not in AToB
+  //    or BToA tags, so there is no A side for the field to describe.  (8.10:
+  //    "There might be multiple NamedColor profiles to account for different
+  //    consumables or multiple named colour vendors.")
+  //  - Abstract: ICC.2-2023 8.9, "This profile represents an abstract transform
+  //    and does not represent any device model."  7.2.8 permits zero here: "If
+  //    set to zero the spectral PCS signature and spectral range fields shall be
+  //    used to define the A side of the transform."  Abstract was not on this
+  //    list, so a v5 abstract profile with a zero data colour space drew a
+  //    critical "NoData: Unknown colour space!".
+  // A non-zero data colour space on either class is still checked below.
   if (m_Header.colorSpace!=icSigNoColorData ||
         m_Header.version<icVersionNumberV5 ||
         (m_Header.deviceClass!=icSigNamedColorClass &&
+         m_Header.deviceClass!=icSigAbstractClass &&
          m_Header.deviceClass!=icSigMultiplexLinkClass &&
          m_Header.deviceClass!=icSigMultiplexVisualizationClass)) {
     // A v2/v4 profile's data colour space must be one of the signatures
@@ -3475,8 +3504,20 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         // ICC.2-2023 8.9: one or more of AToB0Tag, DToB0Tag.  AToB3Tag was
         // accepted in place of DToB0Tag, and a profile whose only PCS is
         // spectral was not checked.
+        //
+        // ICC.2-2023 7.2.9 narrows that for one header: "When the
+        // profile/device class is an Abstract profile and the value of the PCS
+        // field is zero, the data field is non-zero, and the spectral PCS
+        // signature is non-zero then the abstract transform shall be defined by
+        // the DToB0 tag".  The same clause says "The PCS for AToBx/BToAx tags
+        // shall always be defined by the PCS field", so with a zero PCS an
+        // AToB0Tag has no B side and cannot stand in for the DToB0Tag.  The ICC
+        // chair has confirmed the DToB0Tag is normatively required there.  The
+        // enclosing test already guarantees a non-zero spectral PCS whenever
+        // the PCS field is zero, so the third condition needs no test of its own.
         if (m_Header.pcs || m_Header.spectralPCS) {
-          if (!GetTag(icSigAToB0Tag) && !GetTag(icSigDToB0Tag)) {
+          bool bNeedDToB0 = !m_Header.pcs && m_Header.colorSpace;
+          if (!GetTag(icSigDToB0Tag) && (bNeedDToB0 || !GetTag(icSigAToB0Tag))) {
             sReport += icMsgValidateCriticalError;
             sReport += "Critical tag(s) missing.\n";
             rv = icMaxStatus(rv, icValidateCriticalError);

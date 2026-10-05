@@ -501,6 +501,34 @@ int main()
     check(!hasCritical(report(p)), "spectral Abstract with only DToB0Tag is accepted");
   }
 
+  // ---- Abstract, ICC.2-2023 7.2.9 ----
+  // PCS zero, data colour space non-zero, spectral PCS non-zero: "the abstract
+  // transform shall be defined by the DToB0 tag", and an AToB0Tag has no B side
+  // because "The PCS for AToBx/BToAx tags shall always be defined by the PCS
+  // field".  Confirmed normative by the ICC chair.
+  {
+    CIccProfile *p = newSpectralProfile(icSigAbstractClass, icSigLabData);
+    addMpe(p, icSigAToB0Tag);
+    check(hasCritical(report(p)), "7.2.9 Abstract with only AToB0Tag is refused");
+  }
+  {
+    // A zero data colour space is outside 7.2.9 (7.2.8: the spectral fields
+    // then define the A side), so 8.9's AToB0Tag-or-DToB0Tag applies: an
+    // AToB0Tag alone, a DToB0Tag alone, or both.  An AToB0Tag here needs the
+    // spectral PCS and range set, which this header has (#2725, ruling of the
+    // ICC chair; that requirement is pinned in mid-mlnk-header-checks).
+    CIccProfile *p = newSpectralProfile(icSigAbstractClass, (icColorSpaceSignature)0);
+    addMpe(p, icSigAToB0Tag);
+    check(!hasCritical(report(p)), "control: zero-data spectral Abstract with only AToB0Tag is accepted");
+  }
+  {
+    // A non-zero PCS is outside 7.2.9 too, spectral PCS or not.
+    CIccProfile *p = newSpectralProfile(icSigAbstractClass, icSigLabData);
+    p->m_Header.pcs = icSigLabData;
+    addMpe(p, icSigAToB0Tag);
+    check(!hasCritical(report(p)), "control: Abstract with a PCS and a spectral PCS, only AToB0Tag, is accepted");
+  }
+
   // ---- xCLR output (8.5) ----
   {
     CIccProfile *p = newProfile(icSigOutputClass, icSig6colorData, icSigLabData);
