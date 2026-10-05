@@ -8,7 +8,7 @@
 #
 ###############################################################
 
-FROM ubuntu:26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78
+FROM ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -66,8 +66,8 @@ RUN for attempt in 1 2 3; do \
     liblzma-dev=5.8.3-1 \
     libpng-dev=1.6.57-1 \
     libcurl4t64=8.18.0-1ubuntu2.7 \
-    libssl-dev=3.5.5-1ubuntu3.6 \
-    libssl3t64=3.5.5-1ubuntu3.6 \
+    libssl-dev=3.5.5-1ubuntu3.7 \
+    libssl3t64=3.5.5-1ubuntu3.7 \
     libtiff-dev=4.7.0-3ubuntu5 \
     libwxgtk3.2-dev=3.2.9+dfsg-1 \
     zlib1g=1:1.3.dfsg+really1.3.1-1ubuntu3.1 \
@@ -76,7 +76,7 @@ RUN for attempt in 1 2 3; do \
     libxml2-16=2.15.2+dfsg-0.1ubuntu0.2 \
     libxml2-dev=2.15.2+dfsg-0.1ubuntu0.2 \
     lcov=2.4-3 \
-    linux-perf=7.0.0-34.34 \
+    linux-perf=7.0.0-38.38 \
     lsb-release=12.1-2build1 \
     llvm-22=1:22.1.2-1ubuntu1 \
     llvm-22-tools=1:22.1.2-1ubuntu1 \
@@ -84,8 +84,8 @@ RUN for attempt in 1 2 3; do \
     nano=8.7.1-1ubuntu0.1 \
     nlohmann-json3-dev=3.12.0.really.3.12.0.really.3.11.3-3build1 \
     ninja-build=1.13.2-1 \
-    openssl=3.5.5-1ubuntu3.6 \
-    openssl-provider-legacy=3.5.5-1ubuntu3.6 \
+    openssl=3.5.5-1ubuntu3.7 \
+    openssl-provider-legacy=3.5.5-1ubuntu3.7 \
     pkg-config=2.5.1-4 \
     python3=3.14.3-0ubuntu2 \
     python3-dev=3.14.3-0ubuntu2 \

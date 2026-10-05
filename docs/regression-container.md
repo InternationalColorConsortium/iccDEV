@@ -8,6 +8,27 @@ reference profiles, the MCP runtime, and the maintainer compiler and QA tools.
 Clang 22 is the default compiler; the packaged AFL++ LLVM plugin uses the
 included Clang 21 pair for compatible instrumentation.
 
+## Dependency refresh
+
+The Dockerfile pins the Ubuntu base digest and package versions. Ubuntu's live
+APT repositories can replace security-update versions even when the base digest
+is unchanged. An unavailable exact version is a dependency-refresh failure;
+retries cannot restore a superseded package. Keep exact pins rather than
+silently falling back to an unreviewed version.
+
+Review every APT pin against fresh indexes from the Dockerfile's pinned base.
+Update related packages together, including `libssl-dev`, `libssl3t64`,
+`openssl`, and `openssl-provider-legacy`. Also check the Docker-only Python
+requirements under `.github/ci/requirements/` and the checksummed QA tool
+releases before rebuilding. Keep the instrumented LLVM and libxml2 source
+revisions aligned with their documented runtime contracts.
+
+Validate a refresh with a local image build using `--no-cache --pull`, then run
+the unified-image, MCP/REST, and MemorySanitizer checks from `ci-docker` before
+pushing. For a local unpublished change, omit `GIT_COMMIT` so the image tests
+the copied checkout rather than fetching an older remote revision. Record the
+reviewed versions, image identity, and local results with the handoff.
+
 ## Tags
 
 | Tag | Purpose |
