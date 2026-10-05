@@ -10990,6 +10990,17 @@ if(WIN32)
   iccdev_add_xml_embedded_image_empty_test()
   iccdev_add_embedded_image_zero_byte_test()
   iccdev_add_calc_envsig_sign_extension_test()
+  # Six regression tests whose functions carry their own if(WIN32) branches were
+  # called only from the main list below this block, which the return() after it
+  # never reaches on Windows (#2237).  They never registered, so never built or
+  # ran, on the MSVC, ClangCL and MinGW legs: the four from #2720-#2723 and the
+  # two from #2451/#2461.  Call them here as well so the Windows legs run them.
+  iccdev_add_calc_temp_reset_if_no_else_test()
+  iccdev_add_v5_required_tag_sets_test()
+  iccdev_add_named_colour_signature_v5_test()
+  iccdev_add_mid_mlnk_header_checks_test()
+  iccdev_add_islegalutf8_bound_test()
+  iccdev_add_json_escape_codepoint_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
   iccdev_add_installed_package_consumer_test()
