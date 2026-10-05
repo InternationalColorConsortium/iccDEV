@@ -77,6 +77,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <sstream>
+#include <cstdio>
 #include <string>
 #include <utility>
 #include <vector>
@@ -1795,6 +1796,64 @@ inline void normalize_device_rows(std::vector<std::array<double, kQualityMaxDevi
   }
 }
 
+// What a profile carries that Q4's forward transform could be built from, in
+// words a reader of the report can act on.  Q4 asks for an absolute-
+// colorimetric transform through the colorimetric LUT path with the D2Bx tags
+// OPTED OUT (see the AddXform call below), so CIccXform::Create considers, in
+// order: an AToBx tag (AToB1, then AToB0, then AToB3), and failing that the
+// matrix/TRC model for RGB or the grayTRC model for Gray.  It does not consider
+// a DToBx tag for a profile with a colorimetric PCS, v4 or v5, which is why a
+// profile whose only forward transform is a DToBx tag gets no transform here.
+// Naming what is present lets a reader tell "the profile has no transform Q4
+// can use" from "the tool failed".
+inline std::string describe_forward_transform_tags(CIccProfile *pIcc) {
+  static const struct { icTagSignature sig; const char *name; } kAToB[] = {
+    { icSigAToB0Tag, "AToB0" }, { icSigAToB1Tag, "AToB1" },
+    { icSigAToB2Tag, "AToB2" }, { icSigAToB3Tag, "AToB3" },
+  };
+  static const struct { icTagSignature sig; const char *name; } kDToB[] = {
+    { icSigDToB0Tag, "DToB0" }, { icSigDToB1Tag, "DToB1" },
+    { icSigDToB2Tag, "DToB2" }, { icSigDToB3Tag, "DToB3" },
+  };
+  static const struct { icTagSignature sig; const char *name; } kMatrixTrc[] = {
+    { icSigRedMatrixColumnTag, "rXYZ" }, { icSigGreenMatrixColumnTag, "gXYZ" },
+    { icSigBlueMatrixColumnTag, "bXYZ" }, { icSigRedTRCTag, "rTRC" },
+    { icSigGreenTRCTag, "gTRC" }, { icSigBlueTRCTag, "bTRC" },
+  };
+
+  std::string atob, dtob, missing;
+  int nMatrixTrc = 0;
+  for (const auto &t : kAToB)
+    if (pIcc->IsTagPresent(t.sig)) atob += std::string(atob.empty() ? "" : ", ") + t.name;
+  for (const auto &t : kDToB)
+    if (pIcc->IsTagPresent(t.sig)) dtob += std::string(dtob.empty() ? "" : ", ") + t.name;
+  for (const auto &t : kMatrixTrc) {
+    if (pIcc->IsTagPresent(t.sig)) ++nMatrixTrc;
+    else missing += std::string(missing.empty() ? "" : ", ") + t.name;
+  }
+
+  std::string out = "The profile carries ";
+  out += atob.empty() ? "no AToBx tag" : atob;
+
+  if (pIcc->m_Header.colorSpace == icSigRgbData) {
+    if (nMatrixTrc == 6) out += "; a complete matrix/TRC set";
+    else if (nMatrixTrc == 0) out += "; no matrix/TRC tags";
+    else out += "; an incomplete matrix/TRC set (missing " + missing + ")";
+  }
+  else if (pIcc->m_Header.colorSpace == icSigGrayData) {
+    out += pIcc->IsTagPresent(icSigGrayTRCTag) ? "; a grayTRC" : "; no grayTRC";
+  }
+
+  if (!dtob.empty()) {
+    out += "; and " + dtob + ", which Q4 does not use";
+    if (atob.empty())
+      out += " - it evaluates the AToBx, matrix/TRC or grayTRC transform only, so a profile "
+             "whose forward transform exists only as a DToBx tag cannot be evaluated here";
+  }
+  out += ".";
+  return out;
+}
+
 inline bool evaluate_characterization(CIccProfile *pIcc,
                                       CharacterizationMetrics &metrics,
                                       std::string &reason) {
@@ -1954,23 +2013,46 @@ inline bool evaluate_characterization(CIccProfile *pIcc,
   // A2B LUT read (which would yield media-relative numbers and reintroduce the
   // very error this fixes); if an absolute transform cannot be built we report
   // N/A rather than a wrong number.
+  //
+  // When it cannot be built, the reason names the step that failed, carries
+  // the CMM's own status text, and - for the two steps that depend on what the
+  // profile contains - says what forward-transform tags it does carry.  The
+  // three failures below used to collapse into one sentence with the status
+  // discarded, so a reader could not tell a profile Q4 has no path for from a
+  // transform that failed for some other reason.
+  static const char kQ4Lead[] =
+      "Characterization data present but an absolute-colorimetric forward transform could not be built";
   CIccCmm cmmForward(colorSpace, pcs, true);
   icStatusCMM st = cmmForward.AddXform(*pIcc, icAbsoluteColorimetric, icInterpTetrahedral,
                                        NULL, icXformLutColorimetric, false);
-  if (st == icCmmStatOk) {
-    st = cmmForward.Begin();
-  }
-  if (st == icCmmStatOk) {
-    CIccXform *xform = cmmForward.GetLastXform();
-    if (!xform ||
-        xform->GetNumSrcSamples() != cmmForward.GetSourceSamples() ||
-        xform->GetNumDstSamples() != cmmForward.GetDestSamples()) {
-      st = icCmmStatBadXform;
-    }
-  }
   if (st != icCmmStatOk) {
-    reason = "Characterization data present but an absolute-colorimetric forward transform could not be built";
+    reason = std::string(kQ4Lead) + ": creating the transform failed (" +
+             CIccCmm::GetStatusText(st) + "). " + describe_forward_transform_tags(pIcc);
     return false;
+  }
+  st = cmmForward.Begin();
+  if (st != icCmmStatOk) {
+    reason = std::string(kQ4Lead) + ": the transform was created but could not be started (" +
+             CIccCmm::GetStatusText(st) + "). " + describe_forward_transform_tags(pIcc);
+    return false;
+  }
+  {
+    CIccXform *xform = cmmForward.GetLastXform();
+    if (!xform) {
+      reason = std::string(kQ4Lead) + ": the CMM started but holds no transform.";
+      return false;
+    }
+    if (xform->GetNumSrcSamples() != cmmForward.GetSourceSamples() ||
+        xform->GetNumDstSamples() != cmmForward.GetDestSamples()) {
+      char buf[200];
+      std::snprintf(buf, sizeof(buf),
+                    ": the transform's channel counts (%u in, %u out) do not match the "
+                    "profile's data and connection spaces (%u in, %u out).",
+                    (unsigned)xform->GetNumSrcSamples(), (unsigned)xform->GetNumDstSamples(),
+                    (unsigned)cmmForward.GetSourceSamples(), (unsigned)cmmForward.GetDestSamples());
+      reason = std::string(kQ4Lead) + buf;
+      return false;
+    }
   }
 
   const size_t limit = std::min<size_t>(deviceRows.size(), kMaxCharacterizationSamples);
