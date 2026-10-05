@@ -406,6 +406,8 @@ public:
   virtual CIccCalculatorFunc *NewCopy() const { return new CIccCalculatorFunc(*this);}
   virtual ~CIccCalculatorFunc();
 
+  void SetCalculator(CIccMpeCalculator *pCalc) { m_pCalc = pCalc; }
+
   virtual icChannelFuncSignature GetType() const { return icSigChannelFunction; }
   virtual const icChar *GetClassName() const { return "CIccChannelFunction"; }
 
