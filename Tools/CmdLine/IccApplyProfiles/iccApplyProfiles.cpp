@@ -85,6 +85,7 @@
 #include "IccProfLibVer.h"
 #include "IccLibConnectVer.h"
 #include "IccCmdLineUtil.h"
+#include "IccSameFile.h"
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -285,6 +286,33 @@ void Usage(FILE* stream)
 
 //===================================================
 
+// #2692: every file a run reads -- the source image, the -cfg document, each
+// profile in the chain with its PCC file, and search mode's pccWeights.  An
+// output naming any of them destroyed it: the source TIFF is still being read
+// when the output is created, a profile is re-read afterwards to be embedded,
+// and a PCC profile is opened for loading tags on demand.
+static bool OutputIsAnInput(const char *szOut, const CIccCfgImageApply &cfgApply,
+                            const std::string &cfgFile,
+                            const CIccCfgProfileArray &profiles,
+                            const CIccCfgPccWeightArray &pccWeights)
+{
+  if (icOutputIsInput(szOut, cfgApply.m_srcImgFile.c_str()) ||
+      icOutputIsInput(szOut, cfgFile.c_str()))
+    return true;
+
+  for (size_t i = 0; i < profiles.size(); i++) {
+    if (profiles[i] &&
+        (icOutputIsInput(szOut, profiles[i]->m_iccFile.c_str()) ||
+         icOutputIsInput(szOut, profiles[i]->m_pccFile.c_str())))
+      return true;
+  }
+  for (size_t i = 0; i < pccWeights.size(); i++) {
+    if (pccWeights[i] && icOutputIsInput(szOut, pccWeights[i]->m_pccPath.c_str()))
+      return true;
+  }
+  return false;
+}
+
 int main(int argc, const char** argv)
 {
   int minargs = 2;
@@ -319,6 +347,7 @@ int main(int argc, const char** argv)
   // "pccWeights".  In that mode the top-level profileSequence is not consulted,
   // so cfgProfiles stays empty and the chain is read through m_profiles below.
   CIccCfgSearchApply cfgSearch;
+  std::string cfgFile;   // the -cfg document, when there is one
   bool bThreadArg = false;
   int nThreadArg = cfgConnect.m_nThreads;
 
@@ -359,6 +388,7 @@ int main(int argc, const char** argv)
       return EXIT_FAILURE;
     }
 
+    cfgFile = argv[2];
     json cfg;
     if (!loadJsonFrom(cfg, argv[2]) || !cfg.is_object()) {
       printf("Unable to read configuration from '%s'\n", icSanitizeConsoleText(argv[2]).c_str());
@@ -488,6 +518,10 @@ int main(int argc, const char** argv)
       cfgConnect.m_nThreads = nThreadArg;
 
     if (!exportFile.empty()) {
+      if (OutputIsAnInput(exportFile.c_str(), cfgApply, cfgFile,
+                          cfgConnect.m_bUseSearch ? cfgSearch.m_profiles : cfgProfiles.m_profiles,
+                          cfgSearch.m_pccWeights))
+        return -1;
       FILE* f = OpenWriteTextFile(exportFile);
       if (f) {
         json cfgJson;
@@ -702,6 +736,12 @@ int main(int argc, const char** argv)
 
   unsigned long sbpp = (nSrcSamples * bps + 7) / 8;
   unsigned long dbpp = (nDestSamples * dbps  + 7)/ 8;
+
+  // #2692: the output must not be any of this run's inputs, checked before
+  // DstImg.Create() truncates it.
+  if (OutputIsAnInput(cfgApply.m_dstImgFile.c_str(), cfgApply, cfgFile, activeProfiles,
+                      cfgSearch.m_pccWeights))
+    return -1;
 
   //Open up output image using information from SrcImg and theCmm
   // GetXRes()/GetYRes() are taken from the source, so its RESOLUTIONUNIT has to come

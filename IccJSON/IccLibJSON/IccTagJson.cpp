@@ -259,10 +259,13 @@ bool CIccTagJsonUnknown::ParseJson(const IccJson &j, std::string &parseStr)
       parseStr += "Malformed hex in unknownData\n";
       return false;
     }
-    m_nSize = icJsonGetHexDataSize(hex.c_str());
-    if (m_nSize > kMaxUnknownTagBytes) return false;
+    // #2706: the cap is checked before m_nSize changes. Assigning first
+    // returned false with the new, larger count over the old buffer.
+    icUInt32Number nSize = icJsonGetHexDataSize(hex.c_str());
+    if (nSize > kMaxUnknownTagBytes) return false;
     delete[] m_pData;
     m_pData = NULL;
+    m_nSize = nSize;
     if (m_nSize) {
       m_pData = new(std::nothrow) icUInt8Number[m_nSize];
       if (!m_pData) { m_nSize = 0; return false; }

@@ -27094,6 +27094,25 @@ out(0,3) ; store XYZ results
 
         <MToB0Tag SameAs="AToB1Tag"/>
 
+        <!-- ICC.2-2023 8.5 requires an output profile to carry a PCS-to-device
+             transform as well as a device-to-PCS one (#2562).  This BToA1Tag is a
+             placeholder so the embedded profile conforms: it maps every PCS value
+             to zero on all five channels and is NOT an inverse of AToB1Tag.  These
+             profiles are only used as sources. -->
+        <BToA1Tag> <multiProcessElementType>
+          <MultiProcessElements InputChannels="3" OutputChannels="5">
+            <MatrixElement InputChannels="3" OutputChannels="5">
+              <MatrixData>
+                0 0 0
+                0 0 0
+                0 0 0
+                0 0 0
+                0 0 0
+              </MatrixData>
+            </MatrixElement>
+          </MultiProcessElements>
+        </multiProcessElementType> </BToA1Tag>
+
         <colorantTableTag> <colorantTableType>
           <ColorantTable>
             <Colorant Name="ProcessCyan" Channel1="0.161031760868729" Channel2="0.239114617541466" Channel3="0.573227297545916"/>

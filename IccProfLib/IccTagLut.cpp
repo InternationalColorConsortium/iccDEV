@@ -412,7 +412,7 @@ bool CIccTagCurve::Write(CIccIO *pIO)
 void CIccTagCurve::Describe(std::string &sDescription, int nVerboseness)
 {
   const size_t bufSize = 128;
-  icChar buf[bufSize], *ptr;
+  icChar buf[bufSize];
 
   if (!m_nSize) {
     snprintf(buf, bufSize, "BEGIN_CURVE In_Out\n");
@@ -440,21 +440,21 @@ void CIccTagCurve::Describe(std::string &sDescription, int nVerboseness)
         return;
 
       for (icUInt32Number i=0; i<m_nSize; i++) {
-        ptr = buf;
-
+        // #2731: each column is formatted into its own buffer and the line is
+        // assembled with one bounded snprintf. The second column used to be
+        // formatted mid-buffer with the whole buffer's size as its limit, and
+        // the separators were strcpy'd unbounded (the "TODO - this length is
+        // wrong" in DumpLut() below). Not reachable as an overflow before:
+        // icColorValue() prints at most 46 characters for any float (a sign,
+        // 41 digits of FLT_MAX * 100 and ".000"). 48-byte columns hold that,
+        // and two of them plus a space and a newline (97 bytes) fit buf, so
+        // GCC's -Wformat-truncation can prove the line is never cut.
+        icChar szIn[48], szOut[48];
         icFloatNumber fraction = (m_nSize > 1) ? ((icFloatNumber)i/(m_nSize-1)) : 1.0f;
-        icColorValue(buf, bufSize, fraction, icSigMCH1Data, 1);
-        ptr += strlen(buf);
-
-        strcpy(ptr, " ");
-        ptr ++;
-
-        icColorValue(ptr, bufSize, m_Curve[i], icSigMCH1Data, 1);
-
-        ptr += strlen(ptr);
-
-        strcpy(ptr, "\n");
-       sDescription += buf;
+        icColorValue(szIn, sizeof(szIn), fraction, icSigMCH1Data, 1);
+        icColorValue(szOut, sizeof(szOut), m_Curve[i], icSigMCH1Data, 1);
+        snprintf(buf, bufSize, "%s %s\n", szIn, szOut);
+        sDescription += buf;
       }
     }
   }
@@ -479,7 +479,7 @@ void CIccTagCurve::DumpLut(std::string &sDescription, const icChar *szName,
   icColorSpaceSignature csSig, int nIndex, int nVerboseness)
 {
   const size_t bufSize = 128;
-  icChar buf[bufSize], *ptr;
+  icChar buf[bufSize];
 
   if (!m_nSize) {
     snprintf(buf, bufSize, "BEGIN_CURVE %s\n", szName);
@@ -511,22 +511,16 @@ void CIccTagCurve::DumpLut(std::string &sDescription, const icChar *szName,
         return;
 
       for (i=0; i<(int)m_nSize; i++) {
-        ptr = buf;
+        // #2731: same line assembly as Describe() above. This replaces the
+        // "TODO - this length is wrong because we're mid buffer" that stood
+        // here.
+        icChar szIn[48], szOut[48];
 
         // m_nSize is guaranteed to be > 1 here
         icFloatNumber fraction = (icFloatNumber)i/(m_nSize-1);
-        icColorValue(buf, bufSize, fraction, csSig, nIndex);
-        ptr += strlen(buf);
-
-        strcpy(ptr, " ");
-        ptr ++;
-
-// TODO - this length is wrong because we're mid buffer, needs work
-        icColorValue(ptr, bufSize, m_Curve[i], csSig, nIndex);
-
-        ptr += strlen(ptr);
-
-        strcpy(ptr, "\n");
+        icColorValue(szIn, sizeof(szIn), fraction, csSig, nIndex);
+        icColorValue(szOut, sizeof(szOut), m_Curve[i], csSig, nIndex);
+        snprintf(buf, bufSize, "%s %s\n", szIn, szOut);
 
         sDescription += buf;
       }

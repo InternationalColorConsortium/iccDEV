@@ -25,7 +25,7 @@
       <LocalizedText LanguageCountry="enUS"><![CDATA[Extended Named Color Example]]></LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>
 
-    <namedColor2Tag> <tagArrayType>
+    <namedColorTag> <tagArrayType>
       <namedColorArray> <ArrayTags>
          <tagStructType>
            <tintZeroStructure> <MemberTags>
@@ -215,7 +215,7 @@
 				 </tagStructType>
 
       </ArrayTags> </namedColorArray>
-    </tagArrayType> </namedColor2Tag>
+    </tagArrayType> </namedColorTag>
 
     <spectralViewingConditionsTag> <spectralViewingConditionsType>
       <StdObserver>CIE 1931 (two degree) standard observer</StdObserver>

@@ -90,6 +90,7 @@
 #include "IccApplyBPC.h"
 #include "TiffImg.h"
 #include "IccCmdLineUtil.h"
+#include "IccSameFile.h"
 #include "IccProfLibVer.h"
 
 //===================================================
@@ -541,6 +542,12 @@ int main(int argc, char* argv[]) {
   for (size_t i=0; i<nSamples; i++) {
     long long channelNum = (long long)start + (long long)i * (long long)step;
     std::string filename = std::string(argv[4]) + std::to_string(channelNum);
+    // #2692: every separation is still open and unread when outfile.Create()
+    // truncates argv[1] below, so an output naming one of them faulted inside
+    // libtiff on the first read.  Checked per channel, since the names are only
+    // built here.
+    if (icOutputIsInput(argv[1], filename.c_str()))
+      return -1;
     if (!infile[i].Open(filename.c_str())) {
       fprintf(stderr, "Cannot open input %s\n",
               icSanitizeConsoleText(filename).c_str());
@@ -696,6 +703,10 @@ int main(int argc, char* argv[]) {
   // carried across with them.  Leaving it to default meant a centimetre-based source
   // produced an output with no RESOLUTIONUNIT tag at all, which every reader takes as
   // inches -- the same numbers, a physical size 2.54x off (#2220).
+  //
+  // #2692: the optional profile in argv[8] is an input as well.
+  if (argc > 8 && icOutputIsInput(argv[1], argv[8]))
+    return -1;
   if (!outfile.Create(argv[1], f->GetWidth(), f->GetHeight(), f->GetBitsPerSample(), PHOTO_MINISBLACK,
                      (unsigned int)nSamples, nExtraSamples, xRes, yRes, bCompress, bSep,
                      f->GetResolutionUnit())) {

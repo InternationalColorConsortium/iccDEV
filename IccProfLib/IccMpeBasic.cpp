@@ -558,9 +558,14 @@ bool CIccFormulaCurveSegment::Begin(CIccCurveSegment * /* pPrevSeg = NULL */ )
 
   case 0x0002:
   case 0x0003:
+    // Types 2 and 3 both take five parameters (ICC.2-2023 Table 111: a, b, c,
+    // d, e and gamma, a, b, c, d), and neither has a shortcut, so 2 falls into
+    // 3 and 3 stops here. Falling on into 4 would be wrong: case 4 derives
+    // m_nShortcutType from m_params[0] for a different formula, and Apply()
+    // never reads it for type 3. (#2731 resolves the "TODO - was this supposed
+    // to fall through" that stood here: no.)
     if (!m_params || m_nParameters < 5)
       return false;
-    // TODO - was this supposed to fall through, doesn't seem like it
     break;  // and return true below
 
   case 0x0004:

@@ -633,6 +633,29 @@ static void icHdrPreloadTags(CIccProfile *pProfile)
 }
 
 /**
+ ****************************************************************************
+ * Name: icFindNamedColorTag
+ *
+ * Purpose: Find a profile's named colour tag under the spelling its version
+ *  defines.  ICC.2-2023 8.10 requires namedColorTag ('nmcl') of a v5
+ *  NamedColor profile; ICC.1 profiles carry namedColor2Tag ('ncl2').  The
+ *  other version's spelling is an unrecognized tag for this profile and is
+ *  ignored for computation (#2562).
+ *
+ * Args:
+ *  pProfile = the profile to search
+ *
+ * Return: the named colour tag, or NULL if the profile has none.
+ *****************************************************************************
+ */
+static CIccTag *icFindNamedColorTag(CIccProfile *pProfile)
+{
+  return pProfile->FindTag(pProfile->m_Header.version >= icVersionNumberV5 ?
+                             icSigNamedColorTag : icSigNamedColor2Tag);
+}
+
+
+/**
  **************************************************************************
  * Name: CIccXform::Create
  *
@@ -801,11 +824,6 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
               if (pTag)
                 nTagIntent = icRelativeColorimetric;
             }
-
-            //Apparently Using DtoB0 is not prescribed here by the v4 ICC Specification
-            if (!pTag && pProfile->m_Header.version >= icVersionNumberV5) {
-              pTag = pProfile->FindTag(icSigDToB0Tag);
-            }
           }
         }
 
@@ -936,7 +954,7 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
           if (pTag && !pTag->IsSupported())
             pTag = NULL;
 
-          if (pTag)
+          if (pTag && pProfile->m_Header.spectralPCS)
             bUseSpectralPCS = true;
 
           if (!pTag && nTagIntent == icAbsoluteColorimetric && pProfile->m_Header.version < icVersionNumberV5) {
@@ -1019,7 +1037,7 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
 
     case icXformLutNamedColor:
       {
-        CIccTag *pTag = pProfile->FindTag(icSigNamedColor2Tag);
+        CIccTag *pTag = icFindNamedColorTag(pProfile);
         if (!pTag) {
           if (bOwnsProfile)
             delete pProfile;
@@ -6153,6 +6171,34 @@ icStatusCMM CIccXformMonochrome::Begin()
 
 	m_ApplyCurvePtr = NULL;
 
+	// ICC.1:2022 F.2: "Multiplying the normalized TRC value between 0 and 1,0 by
+	// the PCSXYZ or PCSLAB values of the PCS white point derives the PCSXYZ or
+	// PCSLAB value." Those are the only two PCS encodings the model defines.
+	//
+	// Apply() handles three PCS values: it writes DstPixel[0..2] when m_bInput is
+	// set, and otherwise reads SrcPixel[0] (Lab) or SrcPixel[1] (XYZ). The CMM
+	// sizes the PCS side of the caller's buffer from the space this transform
+	// connects to, so a one-channel PCS such as 'gamt' made the input direction
+	// write two floats past the destination, and a spectral PCS (when
+	// CIccXform::Create() fell back here with m_bUseSpectralPCS set) left all
+	// but three of its channels unwritten. This is the sibling of the check in
+	// CIccXformMatrixTRC::Begin() (#2738).
+	//
+	// The connected space is GetDstSpace() going out and GetSrcSpace() coming in;
+	// without m_bUseSpectralPCS both are the header PCS. Checked once the
+	// grayTRC is known to exist, so a profile without one still reports
+	// icCmmStatProfileMissingTag, but before the output branch builds its inverse
+	// curve. The device side needs no check: CIccXform::Create() picks this
+	// transform only when the header colour space is icSigGrayData.
+	if (!GetCurve(icSigGrayTRCTag)) {
+		return icCmmStatProfileMissingTag;
+	}
+
+	icColorSpaceSignature pcs = m_bInput ? GetDstSpace() : GetSrcSpace();
+	if (pcs!=icSigXYZData && pcs!=icSigLabData) {
+		return icCmmStatBadSpaceLink;
+	}
+
 	if (m_bInput) {
 		m_Curve = GetCurve(icSigGrayTRCTag);
 
@@ -6470,6 +6516,28 @@ icStatusCMM CIccXformMatrixTRC::Begin()
       return icCmmStatProfileMissingTag;
     }
 
+    // ICC.1:2022 8.3.3, 8.4.3 and F.3 each say: "Only the PCSXYZ encoding can
+    // be used with matrix/TRC models."
+    //
+    // The output branch below has always refused any other PCS; this direction
+    // did not. Apply() writes three XYZ values to DstPixel[0..2], and the CMM
+    // sizes the destination from the space this transform connects to. A
+    // profile declaring a one-channel PCS such as 'gamt' therefore passed
+    // Begin(), and Apply() wrote two floats past a one-float destination
+    // (#2738). A Lab PCS was accepted too, and got XYZ values labelled as Lab.
+    //
+    // The connected space is GetDstSpace(), not the header PCS: when
+    // CIccXform::Create() falls back here from an unsupported DToBx with
+    // m_bUseSpectralPCS set, it is the spectral PCS, and Apply() filled three of
+    // its channels. Without that flag it is the header PCS.
+    //
+    // Checked after the tag lookups so that a profile missing its matrix/TRC
+    // tags still reports icCmmStatProfileMissingTag, as it did before. The
+    // device side needs no check: every creator in CIccXform::Create() picks
+    // this transform only when the header colour space is icSigRgbData.
+    if (GetDstSpace()!=icSigXYZData) {
+      return icCmmStatBadSpaceLink;
+    }
   }
   else {
     if (m_pProfile->m_Header.pcs!=icSigXYZData) {
@@ -9098,7 +9166,7 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
 
     case icXformLutNamedColor:
       {
-        CIccTag *pTag = pProfile->FindTag(icSigNamedColor2Tag);
+        CIccTag *pTag = icFindNamedColorTag(pProfile);
         if (!pTag) {
           if (bOwnsProfile)
             delete pProfile;
@@ -12701,7 +12769,7 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
     case icXformLutNamedSpectral:
     case icXformLutNamedDevice:
     {
-      CIccTag *pTag = pProfile->FindTag(icSigNamedColor2Tag);
+      CIccTag *pTag = icFindNamedColorTag(pProfile);
 
       if (pTag && (pProfile->m_Header.deviceClass==icSigNamedColorClass || bExplicitNamed)) {
         if (bInput) {
@@ -12991,6 +13059,33 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
   icStatusCMM rv;
   CIccXformList::iterator i;
 
+  // #2704: the two sample-count guards CIccCmm::Begin() has, which this
+  // override never had. The caller sizes its pixel buffers from
+  // GetSourceSamples() and GetDestSamples(), which come from the spaces
+  // AddXform() recorded; the transforms move GetNumSrcSamples() and
+  // GetNumDstSamples(). Those can disagree. AddXform() records a profile's
+  // spectral PCS as the destination whenever the header carries one, while
+  // CIccXform::Create() falls back to a colorimetric AToBx tag when there is no
+  // DToBx. MemorySanitizer's profile declared an 18209-channel spectral PCS and
+  // had only an AToB3, so this CMM advertised 18209 destination samples and
+  // Apply() wrote 3; iccApplyNamedCmm then formatted 18206 floats nobody wrote.
+  // CIccCmm::Begin() refuses the same profile with icCmmStatBadSpaceLink.
+  //
+  // A named-colour side carries a colour name rather than samples, so each
+  // guard applies only when its side is pixel data. A CIccXformNamedColor is
+  // skipped too: it overrides GetSrcSpace() and GetDstSpace() with the spaces
+  // this CMM hands it, but not GetNumSrcSamples() or GetNumDstSamples(), which
+  // fall back to CIccXform's header-derived counts and do not describe it, so
+  // comparing them refuses valid named-colour chains. Whether a named-colour
+  // tag's own device-coordinate count can disagree with those spaces is a
+  // separate question these guards do not answer.
+  i = m_Xforms->begin();
+  if (i != m_Xforms->end() && m_nSrcSpace != icSigNamedData &&
+      i->ptr->GetXformType() != icXformTypeNamedColor) {
+    if (i->ptr->GetNumSrcSamples() != GetSourceSamples())
+      return icCmmStatBadSpaceLink;
+  }
+
   for (i=m_Xforms->begin(); i!=m_Xforms->end(); i++) {
     rv = i->ptr->Begin();
 
@@ -13002,6 +13097,15 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
   rv = CheckPCSConnections(bUsePcsConversion);
   if (rv != icCmmStatOk && rv!=icCmmStatIdentityXform)
     return rv;
+
+  // Checked after CheckPCSConnections(), which can append a transform, as in
+  // CIccCmm::Begin().
+  CIccXform *pLastXform = GetLastXform();
+  if (pLastXform && m_nDestSpace != icSigNamedData &&
+      pLastXform->GetXformType() != icXformTypeNamedColor) {
+    if (pLastXform->GetNumDstSamples() != GetDestSamples())
+      return icCmmStatBadSpaceLink;
+  }
 
   if (bAllocNewApply) {
     rv = icCmmStatOk;

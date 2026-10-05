@@ -174,8 +174,11 @@ bool CIccTagXmlUnknown::ParseXml(xmlNode *pNode, std::string &parseStr)
 
     if (m_nSize) {
       m_pData = new (std::nothrow) icUInt8Number[m_nSize];
-      if (!m_pData)
+      if (!m_pData) {
+        // #2706: no buffer means an empty tag, as in CIccTagUnknown::Read().
+        m_nSize = 0;
         return false;
+      }
 
       if (icXmlGetHexData(m_pData, (const icChar*)pNode->children->content, m_nSize)!=m_nSize)
         return false;

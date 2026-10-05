@@ -237,9 +237,15 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.fileio-getlength-preserves-position` | `.github/ci/regression/fileio-getlength-position.cpp` |
 | `iccdev.fileio-reopen-nonregular` | `.github/ci/regression/fileio-reopen-nonregular.cpp` |
 | `iccdev.fileio-seek-tell` | `.github/ci/regression/fileio-seek-tell.cpp` |
+| `iccdev.unknown-tag-size` | `.github/ci/regression/unknown-tag-size.cpp`; `CIccTagUnknown` empty state after construction, JSON without `unknownData`, failed `Read()` and oversize JSON, and copies of an empty tag, for issue #2706 |
+| `iccdev.same-file-identity` | `.github/ci/regression/same-file-identity.cpp`; `icIsSameFile()` compares file identity, not spelling, for issue #2692: the same path, `./`, a hard link and a symlink match, a byte-for-byte copy does not. Registered for Windows too, so the Win32 half runs in CI |
+| `iccdev.issue-2692-same-file-output-regression` | `.github/scripts/iccdev-issue-2692-same-file-output-regression.sh`; iccApplyProfiles, iccSpecSepToTiff, iccTiffDump, iccJpegDump and iccPngDump refuse an output that is one of their inputs, with the input left byte-identical (#2692) |
 | `iccdev.iccconnect-config-parser` | `.github/ci/regression/iccconnect-config-parser.cpp` |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
+| `iccdev.namedcmm-sample-guards` | `.github/ci/regression/namedcmm-sample-guards.cpp`; `CIccNamedColorCmm::Begin()` refuses a spectral source or destination that a colorimetric AToB3/BToA3 fallback cannot serve, as `CIccCmm::Begin()` does, for issue #2704 |
 | `iccdev.curve-apply-gamma` | `.github/ci/regression/curve-apply-gamma.cpp`; direct one-entry gamma API contract for issue #2686 |
+| `iccdev.calc-temp-reset-if-no-else` | `.github/ci/regression/calc-temp-reset-if-no-else.cpp`; calculator temporaries read as zero at each invocation, after an `if` with no `else` and after a `select`, for issue #2707 |
+| `iccdev.calc-output-init` | `.github/ci/regression/calc-output-init.cpp`; calculator output channels a program does not write read as zero at each invocation (alone, reused, and mid-chain), and an in-place call still reads its inputs, for issues #2702 and #2705 |
 | `iccdev.issue-2686-curve-gamma-xml` | `.github/ci/regression/issue-2686-curve-gamma.xml`; serialized profile setup for issue #2686 |
 | `iccdev.issue-2686-curve-gamma-profileplot` | `iccProfilePlot`; applies the generated BToA1 one-entry curve for issue #2686 and asserts the plotted values, not the graph subtitle, which is built without applying the curve |
 | `iccdev.issue-2688-colorant-table-pcs-xml` | `.github/ci/regression/issue-2688-colorant-table-pcs.xml`; serialized profile setup for issue #2688 |
@@ -248,16 +254,21 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.issue-2688-colorant-table-devicelink-dump` | `iccDumpProfile`; requires a DeviceLink's colorant table to use Lab column labels even though its PCS field spells XYZ, per ICC.1:2022 9.2.19 |
 | `iccdev.owning-setter-self-alias-contract` | `.github/ci/regression/owning-setter-self-alias-contract.cpp`; ownership contract of five exported setters for issue #2630, the three `CIccMpeSpectral*` `copyData()` self-assignment cases for issue #2637, the apply table `SetData()` releases for issue #2638, and the two protected-member setters `CIccSampledCalculatorCurve::SetCalculator()` and `CIccMpeCalculator::SetCalcFunc()` for issue #2645 |
 | `iccdev.mpe-curveset-setcurve-contract` | `.github/ci/regression/mpe-curveset-setcurve-contract.cpp`; public API bounds and ownership contract for issue #2607 |
+| `iccdev.mpe-copy-bufchannels` | `.github/ci/regression/mpe-copy-bufchannels.cpp`; apply-buffer width of a copied, assigned, self-assigned and re-read-empty multiProcessElementType tag, for issues #2699 and #2703 |
 | `iccdev.issue-2607-curveset-extra-xml` | `.github/ci/regression/issue-2607-curveset-too-many-curves.xml`; tool-level rejection control for an extra CurveSet child |
 | `iccdev.bench-apply-metrics` | `Build/Cmake/Testing/CMakeLists.txt`; asserts the deterministic one-profile, four-pixel metrics contract |
 | `iccdev.applytolink-invalid-decoded-intent` | `Build/Cmake/Testing/CMakeLists.txt` |
 | `iccdev.applytolink-v4-missing-device-descriptions` | `Build/Cmake/Testing/CMakeLists.txt` |
 | `iccdev.xform-abstorel-adjust` | `.github/ci/regression/xform-abstorel-adjust.cpp` |
+| `iccdev.valid-overlap` | `.github/ci/regression/valid-overlap.cpp`; `icValidOverlap()` accepts disjoint positions, or positions at the same offset when `bAllowSame` is set, and nothing else, for issue #2731 |
+| `iccdev.v5-required-tag-sets` | `.github/ci/regression/v5-required-tag-sets.cpp`; six v5 required-tag rows against ICC.2-2023 clause 8 (Input, Display, Output and its xCLR colorant tags, DeviceLink, MultiplexIdentification/Link/Visualization) for issue #2562 |
+| `iccdev.matrixtrc-monochrome-pcs` | `.github/ci/regression/matrixtrc-monochrome-pcs.cpp`; matrix/TRC accepts only a PCSXYZ connection and monochrome only PCSXYZ or PCSLAB, including after a fallback from an unsupported DToB0, for issue #2738 |
 | `iccdev.pcs-adjust-placement` | `.github/ci/regression/pcs-adjust-placement.cpp` |
 | `iccdev.reflectance-observer-illum-range` | `.github/ci/regression/reflectance-observer-illum-range.cpp` |
 | `iccdev.spectral-absolute-flag` | `.github/ci/regression/spectral-absolute-flag.cpp` |
 | `iccdev.pcs-edge-metadata` | `.github/ci/regression/pcs-edge-metadata.cpp` |
 | `iccdev.parser-restore-calls` | `.github/ci/regression/parser-restore-calls.cpp` |
+| `iccdev.mid-mlnk-header-checks` | `.github/ci/regression/mid-mlnk-header-checks.cpp`; MultiplexIdentification and MultiplexLink run the class-independent header checks, and MultiplexIdentification has no zero data colour space, for issue #2563 |
 | `iccdev.legacy-run-tests` | `Testing/RunTests.sh` |
 | `iccdev.profile-write-failure` | `.github/ci/regression/profile-write-failure.cpp` |
 | `iccdev.tool-coverage` | `.github/scripts/iccdev-tool-coverage-baseline.sh --asan --skip-hybrid` |
@@ -301,6 +312,7 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.namedcolor-apply-regressions` | `.github/scripts/iccdev-namedcolor-apply-regression-tests.sh` |
 | `iccdev.v5-namedcmm-regressions` | `.github/scripts/iccdev-v5-namedcmm-regression-tests.sh` |
 | `iccdev.namedcolor-overprint-regressions` | `.github/scripts/iccdev-namedcolor-overprint-regression-tests.sh` |
+| `iccdev.named-colour-signature-v5` | `.github/ci/regression/named-colour-signature-v5.cpp`; the v5 named colour tag signature `nmcl` and array type identifier `ncol`, read as bytes, for issue #2562 |
 | `iccdev.version-bcd-regressions` | `.github/scripts/iccdev-version-bcd-regression-tests.sh` |
 | `iccdev.profile-visualize-regressions` | `.github/scripts/iccdev-profile-visualize-tests.sh` |
 | `iccdev.issue-1148-writer-device-regression` | `.github/scripts/iccdev-issue-1148-writer-device-regression.sh` |

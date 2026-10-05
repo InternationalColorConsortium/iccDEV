@@ -4092,12 +4092,29 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
 bool CIccCalculatorFunc::Apply(CIccApplyMpeCalculator *pApply) const
 {
   CIccFloatVector *pStack = pApply->GetStack();
+  icFloatNumber *pOut = pApply->GetOutput();
+  icUInt32Number i;
 
   pStack->clear();
 
+  // #2702/#2705: output channels start at zero on every invocation. Only an
+  // out() operation writes them, and nothing requires the main function to
+  // reach one for every channel: a program can end before its out() or branch
+  // around it, and a program with no out() at all is accepted. The channels it
+  // skipped kept whatever the caller's buffer held -- a CMM pixel buffer from
+  // malloc, or CIccApplyBPC's XYZbp on the stack -- and MemorySanitizer
+  // reported the reads further down the chain. A sequence that fails still
+  // sets every output to -1, below.
+  //
+  // ICC.2-2023 11.2.1 says temporaries "shall be assumed" zero at each
+  // invocation and says nothing about outputs; this gives outputs the same
+  // starting value. Skipped when the output buffer is the input buffer, which
+  // the MPE tag never passes but a direct caller of the public Apply() can:
+  // zeroing would erase the inputs before in() reads them.
+  if (pOut != pApply->GetInput())
+    memset(pOut, 0, m_pCalc->NumOutputChannels()*sizeof(icFloatNumber));
+
   if (!ApplySequence(pApply, m_nOps, m_Op)) {
-    icFloatNumber *pOut = pApply->GetOutput();
-    icUInt32Number i;
     for (i=0; i<m_pCalc->NumOutputChannels(); i++)
       pOut[i] = -1;
     return false;
@@ -4285,6 +4302,15 @@ bool CIccCalculatorFunc::SequenceNeedTempReset(SIccCalcOp *op, icUInt32Number nO
         return true;
       memset(tempUsage+p, 1, n);
     }
+    else if (sig==icSigSelectOp) {
+      // A select runs one of its case or default bodies, or none.  Walked in a
+      // line, as this loop would, a write in one case masks a read in another
+      // case or after the select, and the reset is skipped for a temporary that
+      // was never written (#2707).  CheckUnderflowOverflow models the branches;
+      // here a reset is always correct -- ICC.2 wants temporaries zero at each
+      // invocation -- and costs one memset, so answer conservatively.
+      return true;
+    }
     else if (sig==icSigIfOp) {
       bool rv = false;
       icUInt8Number *ifTemps = (icUInt8Number *)malloc(nMaxTemp);
@@ -4294,7 +4320,17 @@ bool CIccCalculatorFunc::SequenceNeedTempReset(SIccCalcOp *op, icUInt32Number nO
 
       memcpy(ifTemps, tempUsage, nMaxTemp);
 
-      if (!icCalcAddUInt32(i, 2, p)) {
+      icUInt32Number elseIndex = 0;
+      bool hasElse = icCalcAddUInt32(i, 1, elseIndex) &&
+                     elseIndex < nOps &&
+                     op[elseIndex].sig==icSigElseOp;
+
+      // The true branch follows the else op when there is one, and the if op
+      // itself when there is not -- the layout ParseFuncDef builds and
+      // ApplySequence runs.  Starting it at i+2 without an else skipped the
+      // branch's first op, so a tget there was never seen and the temporaries
+      // were not reset between invocations (#2707).
+      if (!icCalcAddUInt32(i, hasElse ? 2 : 1, p)) {
         free(ifTemps);
         return true;
       }
@@ -4308,10 +4344,6 @@ bool CIccCalculatorFunc::SequenceNeedTempReset(SIccCalcOp *op, icUInt32Number nO
       }
       rv = rv || SequenceNeedTempReset(&op[p], op[i].data.size, ifTemps, nMaxTemp);
 
-      icUInt32Number elseIndex = 0;
-      bool hasElse = icCalcAddUInt32(i, 1, elseIndex) &&
-                     elseIndex < nOps &&
-                     op[elseIndex].sig==icSigElseOp;
       if (hasElse) {
         icUInt8Number *elseTemps = (icUInt8Number *)malloc(nMaxTemp);
         if (!elseTemps) {

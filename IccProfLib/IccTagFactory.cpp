@@ -222,6 +222,8 @@ icSigNamePair g_icTagNameTable[] = {
   {icSigMToS1Tag, "MToS1Tag"},
   {icSigMToS2Tag, "MToS2Tag"},
   {icSigMToS3Tag, "MToS3Tag"},
+  // ICC.2-2023 8.10 (#2562): a v5 NamedColor profile requires namedColorTag.
+  {icSigNamedColorTag, "namedColorTag"},
   {icSigNamedColor2Tag, "namedColor2Tag"},
   {icSigPreview0Tag, "preview0Tag"},
   {icSigPreview1Tag, "preview1Tag"},

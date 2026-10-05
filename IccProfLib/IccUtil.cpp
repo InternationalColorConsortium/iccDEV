@@ -195,20 +195,28 @@ bool icValidTagPos(const icPositionNumber& pos, size_t nTagHeaderSize, size_t nT
 * Args:
 *  pos1 - first positionNumber
 *  pos2 - second positionNumber
-*  bAllowSame - allow to positions to cover the same area
+*  bAllowSame - allow the two positions to start at the same offset, i.e.
+*               to reference the same data
 *
 * Return:
-*  true if v1 is near v2 within range
+*  true if the ranges are disjoint, or start at the same offset and
+*  bAllowSame is set
 ******************************************************************************
 */
 bool icValidOverlap(const icPositionNumber& pos1, const icPositionNumber &pos2, bool bAllowSame)
 {
+  // Disjoint ranges never conflict.
   if ((icUInt64Number)pos1.offset + pos1.size <= (icUInt64Number)pos2.offset ||
       (icUInt64Number)pos1.offset >= (icUInt64Number)pos2.offset + pos2.size)
     return true;
 
-// TODO - double check this logic!
-  if ( (bAllowSame && pos1.offset == pos2.offset) || pos1.size == pos2.size)
+  // Overlapping ranges are acceptable only when bAllowSame is set and they
+  // start at the same offset, i.e. reference the same data.
+  //
+  // #2731: this also accepted any two overlapping ranges of equal size,
+  // whatever their offsets and even with bAllowSame false (the "TODO - double
+  // check this logic!" that stood here).
+  if (bAllowSame && pos1.offset == pos2.offset)
     return true;
 
   return false;

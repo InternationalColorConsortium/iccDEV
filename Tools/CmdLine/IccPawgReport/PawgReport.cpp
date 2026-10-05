@@ -1208,6 +1208,16 @@ static const icTagSignature kA2B0Required[] = {
   icSigAToB0Tag
 };
 
+// ICC.2-2023 8.10 (#2562): a v5 NamedColor profile carries namedColorTag
+// ('nmcl') where ICC.1 has namedColor2Tag ('ncl2').  The rule tables here are
+// ICC.1's, so the named colour tag is matched under the spelling the profile's
+// version defines.
+static icTagSignature NamedColorTagFor(const CIccProfile *pIcc)
+{
+  return (pIcc && pIcc->m_Header.version >= icVersionNumberV5) ?
+    icSigNamedColorTag : icSigNamedColor2Tag;
+}
+
 static const icTagSignature kNamedColorRequired[] = {
   icSigProfileDescriptionTag,
   icSigCopyrightTag,
@@ -1458,7 +1468,10 @@ bool HasRequiredTags(CIccProfile *pIcc, std::string &detail)
   const size_t nMaxRuleTags = 64;
   size_t nReq = (rule->requiredCount > nMaxRuleTags) ? nMaxRuleTags : rule->requiredCount;
   for (size_t i = 0; i < nReq; ++i) {
-    requireTag(rule->required[i], SigString(rule->required[i]).c_str());
+    icTagSignature sig = rule->required[i];
+    if (sig == icSigNamedColor2Tag)
+      sig = NamedColorTagFor(pIcc);
+    requireTag(sig, SigString(sig).c_str());
   }
 
   if (!HasAnyRequiredAlternative(pIcc, *rule)) {
@@ -2669,7 +2682,10 @@ std::vector<PawgItem> EvaluatePawg(const RawProfile &raw, CIccProfile *pIcc,
   if (pIcc) {
     icProfileClassSignature cls = (icProfileClassSignature)pIcc->m_Header.deviceClass;
     for (TagEntryList::iterator it = pIcc->m_Tags.begin(); it != pIcc->m_Tags.end(); ++it) {
-      if (IsSpecTag(it->TagInfo.sig) && !IsAllowedForClass(cls, it->TagInfo.sig)) {
+      icTagSignature ruleSig = it->TagInfo.sig;
+      if (ruleSig == NamedColorTagFor(pIcc))
+        ruleSig = icSigNamedColor2Tag;
+      if (IsSpecTag(it->TagInfo.sig) && !IsAllowedForClass(cls, ruleSig)) {
         if (extraTags) {
           extraTagDetail << ", ";
         }

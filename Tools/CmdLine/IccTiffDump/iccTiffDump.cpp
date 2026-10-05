@@ -79,6 +79,7 @@
 #include "IccApplyBPC.h"
 #include "TiffImg.h"
 #include "IccCmdLineUtil.h"
+#include "IccSameFile.h"
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -452,6 +453,11 @@ int main(int argc, icChar* argv[])
     Usage();
     return 1;
   }
+
+  // #2692: the extracted profile is written to argv[2].  Naming the input TIFF
+  // there replaced the image with its own profile and exited 0.
+  if (argc > 2 && icOutputIsInput(argv[2], argv[1]))
+    return 1;
 
   std::string srcName = icSanitizeConsoleText(argv[1]);
 

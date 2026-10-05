@@ -1,4 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ARCHIVAL.  This file records the form NamedColor.xml had before #1197
+  (4f24d93ac) rewrote it for V5 named colours over black/gray; the two differed
+  only in trailing whitespace.  Nothing reads it: it is in neither
+  CreateAllProfiles.sh nor CreateAllProfiles.bat, not in
+  Testing/qa-profile-manifest.tsv, and no test, doc or script references it.
+
+  It is deliberately NOT converted by #2562.  It keeps the pre-#2562 spellings,
+  tag signature 'ncl2' with an <ArraySignature> of 'nmcl', because converting
+  them would falsify it as a record of the old form.  A v5 profile written today
+  uses namedColorTag ('nmcl') with an <ArraySignature> of 'ncol', per
+  ICC.2-2023 8.10 and 13.2.1.
+
+  Note the trap this file preserves in 30 lines: 'nmcl' is correct as the
+  profile class signature and as each element's <StructureSignature>, and wrong
+  as the <ArraySignature>.  Do not sed it.
+-->
 <IccProfile>
   <Header>
     <PreferredCMMType></PreferredCMMType>

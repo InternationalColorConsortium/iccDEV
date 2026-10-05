@@ -775,6 +775,14 @@ CIccTagMultiProcessElement::CIccTagMultiProcessElement(const CIccTagMultiProcess
   m_nInputChannels = lut.m_nInputChannels;
   m_nOutputChannels = lut.m_nOutputChannels;
 
+  // #2699/#2703: m_nBufChannels was the one member this constructor left
+  // uninitialised. Begin() sets it from the element list, but returns early for
+  // an empty list, so a copied tag with no elements reached GetNewApply() and
+  // sized its CIccDblPixelBuffer from garbage (MemorySanitizer, via
+  // CIccProfile's copy constructor -> NewCopy()). Copied like the other cached
+  // Begin() state below; for a tag never begun it is the constructor's 0.
+  m_nBufChannels = lut.m_nBufChannels;
+
   if (lut.m_nProcElements && lut.m_position) {
     m_position = (icPositionNumber*)malloc(lut.m_nProcElements*sizeof(icPositionNumber));
     if (m_position) {
@@ -801,6 +809,11 @@ CIccTagMultiProcessElement::CIccTagMultiProcessElement(const CIccTagMultiProcess
  ******************************************************************************/
 CIccTagMultiProcessElement &CIccTagMultiProcessElement::operator=(const CIccTagMultiProcessElement &lut)
 {
+  // Clean() below frees the element list and positions before they are copied
+  // from lut, so assigning a tag to itself used to empty it.
+  if (&lut == this)
+    return *this;
+
   Clean();
 
   m_nReserved = lut.m_nReserved;
@@ -819,6 +832,10 @@ CIccTagMultiProcessElement &CIccTagMultiProcessElement::operator=(const CIccTagM
   }
   m_nInputChannels = lut.m_nInputChannels;
   m_nOutputChannels = lut.m_nOutputChannels;
+
+  // Same as the copy constructor (#2699). Clean() does not reset it, so without
+  // this an assigned tag kept the buffer width of whatever it held before.
+  m_nBufChannels = lut.m_nBufChannels;
 
   if (lut.m_nProcElements && lut.m_position) {
     m_position = (icPositionNumber*)malloc(lut.m_nProcElements*sizeof(icPositionNumber));
@@ -1381,6 +1398,11 @@ bool CIccTagMultiProcessElement::Begin(icElemInterp nInterp /*=icElemInterpLinea
                                        IIccCmmEnvVarLookup *pCmmEnvVarLookup /*= NULL*/)
 {
   if (!m_list || !m_list->size()) {
+    // #2699: an empty list needs no apply buffer. The width is reset here too,
+    // not only computed below: a tag that was begun with elements and has since
+    // been emptied or re-read would otherwise keep the old width.
+    m_nBufChannels = 0;
+
     if (m_nInputChannels != m_nOutputChannels)
       return false;
     else

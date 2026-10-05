@@ -384,6 +384,13 @@ CIccTagUnknown::CIccTagUnknown()
 {
   m_nType = icSigUnknownType;
   m_pData = NULL;
+
+  // #2706: m_nSize was left uninitialised. Read() and the XML/JSON parsers set
+  // it only when they find data, and CIccTagJsonUnknown::ParseJson() returns
+  // success without touching it when the document has no "unknownData" key.
+  // Write() then tested the garbage count before the NULL m_pData, which
+  // MemorySanitizer reports; GetSize() returned it to callers as a byte count.
+  m_nSize = 0;
 }
 
 /**
@@ -398,11 +405,21 @@ CIccTagUnknown::CIccTagUnknown()
  */
 CIccTagUnknown::CIccTagUnknown(const CIccTagUnknown &ITU)
 {
-  m_nSize = ITU.m_nSize;
   m_nType = ITU.m_nType;
 
-  m_pData = new icUInt8Number[m_nSize];
-  memcpy(m_pData, ITU.m_pData, sizeof(icUInt8Number)*m_nSize);
+  // Copy only a payload that exists. An empty tag (m_nSize 0, m_pData NULL)
+  // used to reach memcpy() with a NULL source; its copy is an empty tag, which
+  // is what Write() emits for it. The m_pData test is defensive: Read() and the
+  // XML/JSON parsers leave m_nSize 0 whenever they leave no buffer.
+  if (ITU.m_nSize && ITU.m_pData) {
+    m_nSize = ITU.m_nSize;
+    m_pData = new icUInt8Number[m_nSize];
+    memcpy(m_pData, ITU.m_pData, sizeof(icUInt8Number)*m_nSize);
+  }
+  else {
+    m_nSize = 0;
+    m_pData = NULL;
+  }
 }
 
 /**
@@ -420,12 +437,21 @@ CIccTagUnknown &CIccTagUnknown::operator=(const CIccTagUnknown &UnknownTag)
   if (&UnknownTag == this)
     return *this;
 
-  m_nSize = UnknownTag.m_nSize;
-  m_nType = UnknownTag.m_nType;
+  // Same rule as the copy constructor: copy only a payload that exists. The
+  // new buffer is allocated before the old one is released, so a throwing
+  // new[] leaves this tag as it was.
+  icUInt8Number *pData = NULL;
+  icUInt32Number nSize = 0;
+  if (UnknownTag.m_nSize && UnknownTag.m_pData) {
+    nSize = UnknownTag.m_nSize;
+    pData = new icUInt8Number[nSize];
+    memcpy(pData, UnknownTag.m_pData, sizeof(icUInt8Number)*nSize);
+  }
 
   delete [] m_pData;
-  m_pData = new icUInt8Number[m_nSize];
-  memcpy(m_pData, UnknownTag.m_pData, sizeof(icUInt8Number)*m_nSize);
+  m_pData = pData;
+  m_nSize = nSize;
+  m_nType = UnknownTag.m_nType;
 
   return *this;
 }
@@ -462,6 +488,13 @@ bool CIccTagUnknown::Read(icUInt32Number size, CIccIO *pIO)
   delete [] m_pData;
   m_pData = NULL;
 
+  // #2706: every failure below leaves an empty tag, m_nSize 0 with no buffer.
+  // m_nSize used to keep the previous payload's count on an early return, and
+  // the new count after a failed allocation, so Describe(), ToJson() and
+  // ToXml() could dump that many bytes from NULL; a short read left a buffer
+  // that was partly never written.
+  m_nSize = 0;
+
   if (size<sizeof(icTagTypeSignature) || !pIO) {
     return false;
   }
@@ -469,22 +502,26 @@ bool CIccTagUnknown::Read(icUInt32Number size, CIccIO *pIO)
   if (!pIO->Read32(&m_nType))
     return false;
 
-  m_nSize = size - sizeof(icTagTypeSignature);
+  icUInt32Number nSize = size - sizeof(icTagTypeSignature);
 
   // Prevent excessive allocation - limit to 256MB
   const icUInt32Number MAX_UNKNOWN_TAG_SIZE = 268435456;
-  if (m_nSize > MAX_UNKNOWN_TAG_SIZE)
+  if (nSize > MAX_UNKNOWN_TAG_SIZE)
     return false;
 
-  if (m_nSize > 0) { // size could be stored as smaller than expected value, therefore the size check
+  if (nSize > 0) { // size could be stored as smaller than expected value, therefore the size check
 
-    m_pData = new (std::nothrow) icUInt8Number[m_nSize];
-    if (!m_pData)
+    icUInt8Number *pData = new (std::nothrow) icUInt8Number[nSize];
+    if (!pData)
       return false;
 
-    if (pIO->Read8(m_pData, m_nSize) != m_nSize) {
+    if (pIO->Read8(pData, nSize) != nSize) {
+      delete [] pData;
       return false;
     }
+
+    m_pData = pData;
+    m_nSize = nSize;
   } else {
       return false;
   }
