@@ -411,8 +411,10 @@ typedef enum {
    * never reached and Auto currently renders exactly as
    * icHdrToneMapPreferHagc does.  The 8.7.1.5 pair is the fallback for
    * consumers that do not implement HDR processing (8.7.1.1 NOTE 4); use
-   * icHdrToneMapPreferLut to render it.  See icUseHdrToneMapPath() and
-   * PROPOSAL-ISSUE HDR-13 there. */
+   * icHdrToneMapPreferLut to render it.  Because every HDR ColorSpace
+   * Profile carries that pair, the choice between the chain and the LUT
+   * arises for every member, not just an unusual few - see
+   * icUseHdrToneMapPath() and PROPOSAL-ISSUE HDR-13 there. */
   icHdrToneMapAuto = 0,
 
   /** Use the HAGC tag whenever it is present and evaluable, otherwise the

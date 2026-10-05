@@ -595,13 +595,16 @@ static bool icUseHdrToneMapPath(CIccProfile *pProfile, bool bInput,
       // producing HDR-linear PCSXYZ)".  This CMM does implement HDR
       // processing, so the fallback is not for it.
       //
-      // PROPOSAL-ISSUE HDR-13 lives here.  An N-component LUT-based Display
-      // profile can satisfy every condition of 8.7.1.1 - the required tag sets
-      // are contained in each other and 9.2.17 permits a cicpTag anywhere - so
-      // this branch can take the 8.7.1.2 chain on a profile whose author meant
-      // its LUT to be the rendering.  A consumer that would rather trust the
-      // LUT has icHdrToneMapPreferLut; there is no test the corpus supplies
-      // that would let this one decide for itself.
+      // PROPOSAL-ISSUE HDR-13 lives here, and the 23-09-2026 revision makes it
+      // the normal case rather than an edge.  Every HDR ColorSpace Profile
+      // carries an AToB0Tag/BToA0Tag pair - 8.7 requires it of every
+      // ColorSpace profile - so every member offers both a LUT rendering and
+      // the 8.7.1.2 chain, and which one runs is left to the CMM by 8.7.1.3,
+      // a clause headed "informative precedence".  This branch takes the chain,
+      // because the pair is the fallback "for consumers that do not implement
+      // HDR processing" (8.7.1.1 NOTE 4) and this CMM does.  A consumer that
+      // would rather trust the LUT has icHdrToneMapPreferLut; nothing in a
+      // profile lets this branch tell which rendering its author intended.
       (void)bHasLut;
       return true;
   }
@@ -6886,14 +6889,16 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
   }
 
   // The RGB-to-PCSXYZ matrix of 8.7.1.2 c).  There is exactly one source for
-  // it: 8.7.1.1 NOTE 2 computes it from the cicpTag's ColourPrimaries
-  // chromaticities and the profile's adopted white.  Nothing falls back to
-  // matrix column tags any more, because a ColorSpace profile has none -
-  // which also retires PROPOSAL-ISSUE HDR-07, raised when the clause's
-  // "shall" had to be reconciled with a parent class that still carried them.
+  // it: the cicpTag's ColourPrimaries chromaticities and the profile's adopted
+  // white, as 8.7.1.1 NOTE 2 describes.  Nothing falls back to matrix column
+  // tags any more, because a ColorSpace profile has none.
   //
+  // PROPOSAL-ISSUE HDR-07 STILL STANDS under the 23-09-2026 revision.  Step c)
+  // requires M_PCS "to yield display-linear XYZ in PCSXYZ", but NOTE 2's
+  // procedure stops at a primary matrix built at the profile's ADOPTED white,
+  // which leaves the result off by the whole adopted-to-PCS adaptation.
   // icBuildHdrForwardMatrix() adds the chromatic adaptation NOTE 2 omits; see
-  // its header.  The check that the reading is right was that, on a
+  // its header for the ruling.  The check that the reading is right was that, on a
   // conventionally authored profile, the computed matrix agreed with the
   // colorant tags to the s15Fixed16 quantisation, where dropping the
   // adaptation moved the result about twenty times further.

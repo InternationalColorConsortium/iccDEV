@@ -96,7 +96,7 @@ class CIccTagDict;
  * ColorSpace profile (8.7) defines no matrix column tag, so there is nothing
  * to recover from.
  *
- * BLOCKED: this build does not implement the extension.  ICC.1:2022 10.3
+ * BLOCKED, PROPOSAL-ISSUE HDR-23: this build does not implement the extension.  ICC.1:2022 10.3
  * Table 32 is a fixed twelve bytes ending at VideoFullRangeFlag, and the
  * amendment that appends the chromaticity array to it - the CICP Unspecified
  * Primaries Amendment Proposal v2, named in the HDR amendment's normative
@@ -598,13 +598,17 @@ ICCPROFLIB_API bool icHagcGetGainApplicationPrimaries(icUInt8Number nMode,
  * Build the RGB-to-PCSXYZ matrix that clause 8.7.1.2 c) needs, for an HDR
  * Profile whose cicpTag names a set of primaries.
  *
- * 8.7.1.1 makes this mandatory and not optional: when ColourPrimaries is not 2,
- * the matrix "shall be computed from the chromaticity coordinates associated
- * with ColourPrimaries (see Rec. ITU-T H.273, Table 2) and the profile's
- * adopted white point", and the matrix column tags are no longer required to
- * be present at all.
+ * 8.7.1.2 c) is the normative requirement: the tone-mapped display-linear
+ * RGB "are multiplied by a 3x3 matrix M_PCS, computed from the chromaticities
+ * and white point described in NOTE 2 of 8.7.1.1 ... to yield display-linear
+ * XYZ in PCSXYZ".  For a ColourPrimaries that names a set, NOTE 2 gives those
+ * as the H.273 Table 2 chromaticities and the profile's adopted white.  (The
+ * sentence this comment quoted before the 23-09-2026 revision - "shall be
+ * computed from the chromaticity coordinates associated with ColourPrimaries"
+ * - was 8.10.1's and is not in the current text.)
  *
- * PROPOSAL-ISSUE HDR-07: NOTE 2's stated procedure cannot produce that matrix.
+ * PROPOSAL-ISSUE HDR-07, STILL OPEN after the 23-09-2026 revision: NOTE 2's
+ * stated procedure cannot produce a matrix that yields PCSXYZ.
  * It asks for the H.273 chromaticities and the profile's adopted white point
  * and then stops, which yields a matrix whose columns sit at the H.273
  * chromaticities - but 8.7.1.2 c) feeds PCSXYZ, whose values are relative to

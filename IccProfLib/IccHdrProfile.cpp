@@ -997,7 +997,7 @@ static bool icHdrIsRgbColorSpace(const CIccProfile *pProfile)
  *  model does not define to a profile whose author never asked for it.
  *
  *  This is a RULING, not a reading: the revision states no version condition
- *  at either end.  It is the conservative one - it narrows what this build
+ *  at either end (PROPOSAL-ISSUE HDR-24).  It is the conservative one - it narrows what this build
  *  claims rather than widening it - and it is the one that keeps the eight
  *  v5 BT2100 fixtures in Testing/HDR out of the sub-class, which is what they
  *  were added to check.  If the ICC extends the sub-class to ICC.2, this
