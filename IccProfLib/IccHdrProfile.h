@@ -106,6 +106,11 @@ class CIccTagDict;
  * ColourPrimaries 2 as a profile whose primaries it cannot obtain.  See
  * CIccProfile::CheckHdrProfile(), which reports it.
  *
+ * TEMPORARY MEASURE: an HDR request on such a profile falls back to its
+ * AToB0Tag/BToA0Tag pair (descriptor c of 8.7.1.3) instead of failing - see
+ * icUseHdrToneMapPath() in IccCmm.cpp.  Revisit before hdr-profiles merges to
+ * master.
+ *
  * The matrix-column recovery of icGetProfilePrimaries() survives for the ICC
  * dictType Metadata Registry, whose MDCV and CLL entries define their own
  * primaries code 2 that way; that is a registry rule and not this one. */

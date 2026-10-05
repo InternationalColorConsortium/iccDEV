@@ -1497,7 +1497,7 @@ void testTargetOnACurve()
 // WHEN THE EXTENSION LANDS this test inverts back, and the assertion to
 // restore is the rendering-equivalence one: a profile whose extension carries
 // the BT.709 chromaticities must render as the BT.709 original does.
-void testUnspecifiedPrimariesAreRefused()
+void testUnspecifiedPrimariesFallBackToLut()
 {
   CIccProfile *pProfile = openFixture("HdrHlgBt709Primaries.icc");
 
@@ -1532,20 +1532,72 @@ void testUnspecifiedPrimariesAreRefused()
   check(icHdrSelectForwardMatrix(pProfile, icCicpPrimariesUnspecified, fwd) == icHdrMatrixNeedsCicpExt,
         "icHdrSelectForwardMatrix reports the missing 10.3 extension rather than falling back");
 
-  // The chain refuses to begin.  This is the assertion that matters: the
-  // failure mode being guarded against is a matrix quietly left at zero,
-  // which renders every pixel black while Begin() reports success.
-  CIccCreateHdrXformHint hint;
-  hint.m_targetHeadroom = 1.0;
-  hint.m_nPolicy = icHdrToneMapAuto;
+  // ROUTING: an HDR request falls back to the AToB0Tag/BToA0Tag pair.
+  //
+  // TEMPORARY MEASURE, PROPOSAL-ISSUE HDR-23 - revisit before hdr-profiles
+  // merges to master; see icUseHdrToneMapPath().  This used to assert that no
+  // HDR chain was built, as a disjunction - "failed, or no xform, or not the
+  // HDR type" - which the fallback would ALSO satisfy, so it could not tell a
+  // hard failure from a fallback.  Each outcome is now asserted exactly, and
+  // under every policy that engages the chain, since the fallback sits ahead
+  // of the policy switch: descriptors a) and b) both need the matrix.
+  static const struct { icHdrToneMapPolicy nPolicy; const char *szName; } kPolicies[] = {
+    { icHdrToneMapAuto,       "Auto" },
+    { icHdrToneMapPreferHagc, "PreferHagc" },
+  };
 
-  icStatusCMM status = icCmmStatOk;
-  CIccXform *pXform = beginXform(pProfile, &hint, true, status);
+  for (size_t i = 0; i < sizeof(kPolicies) / sizeof(kPolicies[0]); i++) {
+    std::string what = std::string("policy ") + kPolicies[i].szName;
 
-  check(status != icCmmStatOk || !pXform || pXform->GetXformType() != icXformTypeMatrixTrcHdr,
-        "and no HDR chain is built for it");
+    CIccCreateHdrXformHint hint;
+    hint.m_targetHeadroom = 1.0;
+    hint.m_nPolicy = kPolicies[i].nPolicy;
 
-  delete pXform;
+    // beginXform() hands its profile to CIccXform::Create(), and the xform
+    // OWNS it - deleting the xform deletes the profile.  This loop and the
+    // direct construction below each reuse pProfile, so every call gets a copy
+    // and this function keeps, and finally deletes, the original.
+    icStatusCMM status = icCmmStatOk;
+    CIccXform *pXform = beginXform(new CIccProfile(*pProfile), &hint, true, status);
+
+    check(status == icCmmStatOk && pXform != NULL,
+          (what + ": ColourPrimaries 2 still renders when HDR is requested - no hard failure").c_str());
+    check(pXform && pXform->GetXformType() != icXformTypeMatrixTrcHdr,
+          (what + ": and renders through the AToB0Tag (descriptor c), not the 8.7.1.2 chain").c_str());
+    delete pXform;
+
+    // The discriminator: the SAME fixture at its own ColourPrimaries 1 still
+    // gets the HDR chain under the same hint.  Without this, a routing change
+    // that sent EVERY member to the LUT cascade would pass the two checks
+    // above.
+    CIccProfile *pControl = openFixture("HdrHlgBt709Primaries.icc");
+    if (pControl) {
+      status = icCmmStatOk;
+      pXform = beginXform(pControl, &hint, true, status);
+      check(status == icCmmStatOk && pXform && pXform->GetXformType() == icXformTypeMatrixTrcHdr,
+            (what + ": control - the same fixture at ColourPrimaries 1 still takes the HDR chain").c_str());
+      delete pXform;
+    }
+  }
+
+  // The class itself still refuses to begin.  This is the guard against the
+  // failure mode that matters most: a matrix quietly left at zero, rendering
+  // every pixel black while Begin() reports success.  The fallback is in the
+  // ROUTING; a caller constructing CIccXformMatrixTrcHdr directly is still
+  // refused, because the class genuinely has no matrix to run with.
+  {
+    CIccCreateHdrXformHint hint;
+    CIccXformMatrixTrcHdr *pDirect = new CIccXformMatrixTrcHdr();
+
+    pDirect->SetHdrParams(&hint);
+    pDirect->SetParams(new CIccProfile(*pProfile), true, icRelativeColorimetric,
+                       icRelativeColorimetric, false, icInterpLinear);
+    check(pDirect->Begin() != icCmmStatOk,
+          "a directly constructed HDR xform still refuses ColourPrimaries 2 - no zero matrix");
+    delete pDirect;
+  }
+
+  delete pProfile;
 }
 
 // The HDR chain produces XYZ.  A Lab-PCS profile is not an HDR ColorSpace Profile, gets no
@@ -1690,7 +1742,7 @@ int main(int /*argc*/, char * /*argv*/[])
   testTransferDomain();
   testReferenceWhiteRange();
   testTargetOnACurve();
-  testUnspecifiedPrimariesAreRefused();
+  testUnspecifiedPrimariesFallBackToLut();
   testLabPcsGetsNoHdrChain();
   testMalformedChadRefused();
   testFloatEncodingIsUnbounded();

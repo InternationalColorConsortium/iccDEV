@@ -559,6 +559,59 @@ static bool icUseHdrToneMapPath(CIccProfile *pProfile, bool bInput,
   if (info.nClass != icHdrProfileConforming)
     return false;
 
+  // ==========================================================================
+  // TEMPORARY MEASURE - PROPOSAL-ISSUE HDR-23.  REVISIT BEFORE hdr-profiles
+  // MERGES TO MASTER, and remove once the spec settles how ColourPrimaries 2
+  // supplies its chromaticities.
+  //
+  // A member whose RGB-to-PCSXYZ matrix cannot be built falls back to the
+  // ordinary LUT cascade - descriptor c) of 8.7.1.3, the AToB0Tag/BToA0Tag
+  // pair - instead of being given an HDR xform that then fails Begin().
+  //
+  // Today the only way to get here is ColourPrimaries 2.  8.7.1.1 requires the
+  // cicpType "custom chromaticity extension of 10.3" for it, which neither
+  // ICC.1:2022 10.3 nor Ballot 202604 defines (see icCicpPrimariesUnspecified
+  // in IccHdrProfile.h), so icHdrSelectForwardMatrix() returns
+  // icHdrMatrixNeedsCicpExt and no matrix exists.  Without this fallback, a
+  // consumer that ASKED for HDR processing got a hard error ("Begin() failed,
+  // Invalid profile") on a profile that carries a usable SDR rendering, while a
+  // consumer that did not ask got that rendering.
+  //
+  // Why falling back is the amendment's own ranking and not a workaround:
+  // 8.7.1.3 says a CMM "should select the highest-ranked descriptor that it
+  // supports".  Descriptors a) (the HAGC tag) and b) (this CMM's operator)
+  // both run through the 8.7.1.2 chain and so both need the matrix; c) does
+  // not.  For this profile c) is the highest-ranked descriptor this build
+  // supports.
+  //
+  // What it costs, and why it is temporary: the caller asked for HDR and
+  // receives the profile's SDR rendering, with nothing in the xform to say so.
+  // The profile still validates NonCompliant (CIccProfile::CheckHdrProfile())
+  // and PAWG H5 still FAILs, so the condition is reported - just not at
+  // rendering time.  Whether that is the right trade depends on how the WG
+  // resolves HDR-23: if ColourPrimaries 2 is deferred for HDR ColorSpace
+  // Profiles it becomes plainly non-conforming, and a hard failure may be the
+  // better answer; if the extension is defined, this branch stops being taken
+  // at all, because icHdrSelectForwardMatrix() will then build the matrix.
+  //
+  // Keyed on the matrix selector rather than on ColourPrimaries == 2 so that
+  // routing, CIccXformMatrixTrcHdr::Begin() and CIccHdrBaker::Init() keep
+  // taking the one decision, and so that implementing the extension switches
+  // this off without anyone having to remember it is here.  Begin() itself
+  // still refuses a direct construction: the class genuinely cannot run.
+  //
+  // Scoped to this one source on purpose.  The other icHdrSelectForwardMatrix()
+  // refusals - a malformed chromaticAdaptationTag, a reserved ColourPrimaries
+  // value, no mediaWhitePointTag - are defects in the file, not gaps in the
+  // spec, and still fail loudly.
+  // ==========================================================================
+  {
+    icFloatNumber fwd[9];
+
+    if (icHdrSelectForwardMatrix(pProfile, info.nColourPrimaries, fwd) == icHdrMatrixNeedsCicpExt)
+      return false;
+  }
+
   bool bHasLut = bInput ? info.bHasAToB0 : info.bHasBToA0;
 
   switch (pHdrHint->m_nPolicy) {
@@ -6993,6 +7046,11 @@ icStatusCMM CIccXformMatrixTrcHdr::Begin()
         // this build cannot read, so there is no matrix.  Refused rather than
         // rendered with a substitute: see icCicpPrimariesUnspecified, and
         // CIccProfile::CheckHdrProfile(), which says so in a diagnostic.
+        //
+        // Reached only by a caller that constructs this class directly.  The
+        // CMM's own routing no longer sends such a profile here: under the
+        // TEMPORARY MEASURE in icUseHdrToneMapPath() it falls back to the
+        // profile's AToB0Tag/BToA0Tag pair before an HDR xform is created.
         return icCmmStatInvalidProfile;
 
       case icHdrMatrixMalformedChad:
