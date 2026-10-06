@@ -1983,6 +1983,8 @@ PawgVerdict QualityCharacterization(CIccProfile *pIcc, std::string &detail)
                 kCharacterizationWarnAvg, kCharacterizationWarnMax,
                 kCharacterizationFailAvg, kCharacterizationFailMax);
   detail = buf;
+  if (metrics.viaDToBx)
+    detail += "; forward transform taken from the DToBx tags (no AToBx, matrix/TRC or grayTRC present)";
   if (metrics.avgDe00 > kCharacterizationFailAvg ||
       metrics.maxDe00 > kCharacterizationFailMax) {
     return PawgVerdict::Fail;
