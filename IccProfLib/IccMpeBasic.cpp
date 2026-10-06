@@ -2638,8 +2638,7 @@ bool CIccSampledCalculatorCurve::SetCalculator(CIccMpeCalculator *pCalc)
   // through, and leave m_pCalc dangling for the destructor to free a second
   // time.  Unlike the setters fixed in #2630 and #2634 there is no public
   // getter, but m_pCalc is protected and both front ends derive from this
-  // curve -- CIccSampledCalculatorCurveXml already assigns the member
-  // directly -- so SetCalculator(m_pCalc) is reachable from a subclass.  The
+  // curve, so SetCalculator(m_pCalc) is reachable from a subclass.  The
   // parent link is the only thing this function establishes, and freeing the
   // object that holds it cannot re-establish it.
   if (m_pCalc == pCalc)
@@ -4252,9 +4251,7 @@ void CIccMpeTintArray::SetArray(CIccTagNumArray *pArray)
   // use-after-free WRITE under ASan.  Returning early is the whole fix: the
   // pointer is already stored, and the only other thing this function does is
   // set the parent link, which cannot be re-established by freeing the object
-  // that holds it.  (Every route in this file links the array to its element,
-  // but IccMpeXml.cpp does not, so an XML-parsed tint array reaches here with
-  // no parent link -- that gap is IccXML's to close, not this setter's.)
+  // that holds it.
   if (m_Array == pArray)
     return;
 
