@@ -1268,8 +1268,8 @@ static const icTagSignature kCommonOptional[] = {
   icSigChromaticAdaptationTag,
   icSigChromaticityTag,
   // headroomAdaptiveGainCurveTag is deliberately not here: every class rule
-  // reads this table, and the tag is permitted only in Input and Display
-  // profiles.  See kInputDisplayOptional.
+  // reads this table, and the tag is permitted only in Input, Display and
+  // ColorSpace profiles.  See kInputDisplayOptional and kColorSpaceOptional.
   icSigColorantTableTag,
   icSigColorantTableOutTag,
   icSigDeviceMfgDescTag,
@@ -1297,28 +1297,67 @@ static const icTagSignature kCommonOptional[] = {
   icSigBToD2Tag
 };
 
-// Tags allowed, but required by nothing, in Input and Display profiles only.
-// Read by C5 through IsAllowedForClass(), never by C4.
+// kCommonOptional plus the tags allowed only in Input and Display profiles,
+// for C5.  C4 does not read it.  Keep it, kCommonOptional and
+// kColorSpaceOptional in step.
 //
-// BToA0Tag: ICC.1:2022 8.3.3/8.4.3 permit a LUT-based Input or Display profile,
-// and for Display ICC.1 then requires the BToA0Tag paired with its AToB0Tag,
-// so a profile doing what the specification demands was reported by C5 as
-// carrying a "standard tag outside the local class rule table".  Every Display
-// HDR ColorSpace Profile tripped it, since 8.7.1.5 mandates the pair.  It used to be
-// fixed by listing BToA0Tag in kMatrixTrcAlternative, which is an any-of set
-// for C4 and so let a profile with only a BToA0Tag pass C4.
+// BToA0Tag: ICC.1:2022 permits it in every Input and Display profile (8.3.2 to
+// 8.3.4, 8.4.3, 8.4.4) and requires it of an N-component LUT-based Display
+// profile (8.4.2), so C5 reported a profile doing what the specification
+// demands as carrying a "standard tag outside the local class rule table".
+// C4 does not require it for 8.4.2: by class alone it cannot tell a LUT-based
+// Display profile from a matrix-based one.  It cannot go in kCommonOptional,
+// which every class reads, or in kMatrixTrcAlternative, C4's any-of set, where
+// it would let C4 pass an Input or Display profile with no forward transform.
 //
 // headroomAdaptiveGainCurveTag: a permitted optional tag of an RGB Input or
 // Display profile, and the library reports it in any other class.  It is
 // recognised by IsSpecTag(), so it is not treated as private; listing it in
-// kCommonOptional hid it from C5 in every class.
+// kCommonOptional hid it from C5 in every class.  See kColorSpaceOptional for
+// the one other class that admits it.
+static const icTagSignature kInputDisplayOptional[] = {
+  icSigCalibrationDateTimeTag,
+  icSigCharTargetTag,
+  icSigCicpTag,
+  icSigChromaticAdaptationTag,
+  icSigChromaticityTag,
+  icSigColorantTableTag,
+  icSigColorantTableOutTag,
+  icSigDeviceMfgDescTag,
+  icSigDeviceModelDescTag,
+  icSigGamutTag,
+  icSigLuminanceTag,
+  icSigMeasurementTag,
+  icSigMediaBlackPointTag,
+  icSigMetaDataTag,
+  icSigOutputResponseTag,
+  icSigPerceptualRenderingIntentGamutTag,
+  icSigProfileSequceIdTag,
+  icSigSaturationRenderingIntentGamutTag,
+  icSigTechnologyTag,
+  icSigViewingConditionsTag,
+  icSigAToB1Tag,
+  icSigAToB2Tag,
+  icSigBToA1Tag,
+  icSigBToA2Tag,
+  icSigDToB0Tag,
+  icSigDToB1Tag,
+  icSigDToB2Tag,
+  icSigBToD0Tag,
+  icSigBToD1Tag,
+  icSigBToD2Tag,
+  icSigBToA0Tag,
+  icSigHeadroomAdaptiveGainCurveTag
+};
+
+// kCommonOptional plus the HAGC tag, for the ColorSpace class.  BToA0Tag is not
+// here: kA2B0B2A0Required already requires it of a ColorSpace profile.
 //
-// THE COLORSPACE CLASS NOW NEEDS IT TOO.  The 23-09-2026 revision builds the
-// HDR ColorSpace Profile sub-class on the ColorSpace profile of 8.7, and
-// 8.7.1.5 says such a profile "may additionally contain: the HAGC Headroom
-// Adaptive Gain Curve tag".  Without the entry below, C5 warned "tag not
-// permitted for this profile class" on every HDR ColorSpace Profile that
-// carries the descriptor clause 8.7.1.3 ranks FIRST.
+// The 23-09-2026 revision builds the HDR ColorSpace Profile sub-class on the
+// ColorSpace profile of 8.7, and 8.7.1.5 says such a profile "may additionally
+// contain: the HAGC Headroom Adaptive Gain Curve tag".  Without it here, C5
+// warned on every HDR ColorSpace Profile that carries the descriptor clause
+// 8.7.1.3 ranks FIRST.
 //
 // PROPOSAL-ISSUE HDR-22.  The HDR amendment does not amend the HAGC tag's own
 // class permission the way its 4.4 amends the cicpTag's.  The HAGC amendment
@@ -1331,17 +1370,44 @@ static const icTagSignature kCommonOptional[] = {
 // needs a companion sentence for the HAGC tag.
 //
 // The sub-class still gets no RuleTable of its own.  Its class signature is
-// now 'spac', shared with every ordinary ColorSpace profile, and the clause
-// 8.7.1 requirements that need the whole profile are enforced where the whole
+// 'spac', shared with every ordinary ColorSpace profile, and the clause 8.7.1
+// requirements that need the whole profile are enforced where the whole
 // profile is visible - in CIccProfile::CheckHdrProfile() and section H.
-static const icTagSignature kInputDisplayOptional[] = {
-  icSigBToA0Tag,
-  icSigHeadroomAdaptiveGainCurveTag
-};
-
-// The ColorSpace class's share of the above.  BToA0Tag is not here: it is
-// already REQUIRED of a ColorSpace profile by kA2B0B2A0Required.
+//
+// These are tables, not early returns in IsAllowedForClass(): that form made
+// a strict GCC 15.2 build without LTO fail PawgReport.cpp with a false
+// -Werror=free-nonheap-object (found on #2788).
 static const icTagSignature kColorSpaceOptional[] = {
+  icSigCalibrationDateTimeTag,
+  icSigCharTargetTag,
+  icSigCicpTag,
+  icSigChromaticAdaptationTag,
+  icSigChromaticityTag,
+  icSigColorantTableTag,
+  icSigColorantTableOutTag,
+  icSigDeviceMfgDescTag,
+  icSigDeviceModelDescTag,
+  icSigGamutTag,
+  icSigLuminanceTag,
+  icSigMeasurementTag,
+  icSigMediaBlackPointTag,
+  icSigMetaDataTag,
+  icSigOutputResponseTag,
+  icSigPerceptualRenderingIntentGamutTag,
+  icSigProfileSequceIdTag,
+  icSigSaturationRenderingIntentGamutTag,
+  icSigTechnologyTag,
+  icSigViewingConditionsTag,
+  icSigAToB1Tag,
+  icSigAToB2Tag,
+  icSigBToA1Tag,
+  icSigBToA2Tag,
+  icSigDToB0Tag,
+  icSigDToB1Tag,
+  icSigDToB2Tag,
+  icSigBToD0Tag,
+  icSigBToD1Tag,
+  icSigBToD2Tag,
   icSigHeadroomAdaptiveGainCurveTag
 };
 
@@ -1375,14 +1441,14 @@ const RuleTable *GetRuleTable(icProfileClassSignature cls)
   static const RuleTable inputRule = {
     kCommonRequired, CountOf(kCommonRequired),
     kMatrixTrcAlternative, CountOf(kMatrixTrcAlternative),
-    kCommonOptional, CountOf(kCommonOptional),
+    kInputDisplayOptional, CountOf(kInputDisplayOptional),
     "A2B0 or matrix/TRC transform",
     "ICC.1-2022-05 section 8.2"
   };
   static const RuleTable displayRule = {
     kCommonRequired, CountOf(kCommonRequired),
     kMatrixTrcAlternative, CountOf(kMatrixTrcAlternative),
-    kCommonOptional, CountOf(kCommonOptional),
+    kInputDisplayOptional, CountOf(kInputDisplayOptional),
     "A2B0 or matrix/TRC transform",
     "ICC.1-2022-05 section 8.3"
   };
@@ -1403,7 +1469,7 @@ const RuleTable *GetRuleTable(icProfileClassSignature cls)
   static const RuleTable colorSpaceRule = {
     kA2B0B2A0Required, CountOf(kA2B0B2A0Required),
     NULL, 0,
-    kCommonOptional, CountOf(kCommonOptional),
+    kColorSpaceOptional, CountOf(kColorSpaceOptional),
     NULL,
     "ICC.1-2022-05 section 8.6"
   };
@@ -1457,14 +1523,6 @@ bool IsAllowedForClass(icProfileClassSignature cls, icTagSignature sig)
   const RuleTable *rule = GetRuleTable(cls);
   if (!rule) {
     return false;
-  }
-  if ((cls == icSigInputClass || cls == icSigDisplayClass) &&
-      ContainsTag(kInputDisplayOptional, CountOf(kInputDisplayOptional), sig)) {
-    return true;
-  }
-  if (cls == icSigColorSpaceClass &&
-      ContainsTag(kColorSpaceOptional, CountOf(kColorSpaceOptional), sig)) {
-    return true;
   }
   return IsRequiredForClass(cls, sig) ||
          ContainsTag(rule->optional, rule->optionalCount, sig);

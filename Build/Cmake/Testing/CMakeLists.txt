@@ -3059,6 +3059,65 @@ function(iccdev_add_pawg_c5_cicp_test)
   endif()
 endfunction()
 
+# #2787: C5 warned on a BToA0Tag in an Input or Display profile, which ICC.1:2022
+# permits in every Input and Display profile and requires of an N-component
+# LUT-based Display profile (8.4.2).  Same machinery as the #2001 test above:
+# PawgReport.cpp compiled in, DumpPawgReport driven, the C4 and C5 lines read
+# back.  The tracked sRGB v4 preference profile, a ColorSpace profile with
+# AToB0 and BToA0, is re-classed as Display and as Input; two controls keep C5
+# warning on a tag outside the table and C4 refusing BToA0Tag as the only
+# transform.  Needs IccProfLib only.
+function(iccdev_add_pawg_c5_btoa0_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPawgC5BToA0Test
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pawg-c5-btoa0-input-display.cpp"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport/PawgReport.cpp"
+  )
+  target_compile_features(iccPawgC5BToA0Test PRIVATE cxx_std_17)
+  target_include_directories(iccPawgC5BToA0Test PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport"
+  )
+  target_link_libraries(iccPawgC5BToA0Test PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  # Linked without LTO.  With it, GCC 15.2 reports -Werror=free-nonheap-object
+  # in std::vector's deallocate, inlined from SortedUniqueTagRegions() into
+  # EvaluatePawg(), for this executable alone, and with PawgReport.cpp as it
+  # was before #2787 too; the same source links cleanly into iccPawgReport and
+  # iccPawgC5CicpTest, and compiles cleanly without LTO.  The test checks report
+  # text, not code generation.
+  set_target_properties(iccPawgC5BToA0Test PROPERTIES INTERPROCEDURAL_OPTIMIZATION OFF)
+  add_dependencies(check iccPawgC5BToA0Test)
+
+  add_test(
+    NAME iccdev.pawg-c5-btoa0-input-display
+    COMMAND "$<TARGET_FILE:iccPawgC5BToA0Test>"
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+  )
+  # Runs in the ctest output dir because it writes its subject profiles and
+  # captured reports beside itself.
+  set_tests_properties(iccdev.pawg-c5-btoa0-input-display PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;pawg;issue-2787;regression"
+  )
+  if(WIN32)
+    set(_pawg_c5_btoa0_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPawgC5BToA0Test>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pawg_c5_btoa0_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pawg-c5-btoa0-input-display PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pawg_c5_btoa0_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1976: two defects on the gamt path. CIccXform::Create() forces bInput false to walk
 # the B-to-A shaped gamut tag, but m_bInput also drove GetDstSpace()/GetNumDstSamples(),
 # so the xform advertised the profile's device space while CIccCmm::AddXform() had
@@ -6373,6 +6432,64 @@ function(iccdev_add_xml_struct_member_sameas_test)
     )
   endif()
 endfunction()
+
+# #2645: CIccSampledCalculatorCurveXml::ParseXml and CIccMpeXmlTintArray::ParseXml
+# assigned m_pCalc and m_Array directly instead of through SetCalculator() and
+# SetArray(), as the binary and JSON readers do, so an XML-parsed calculator or
+# tint array had no parent, a second ParseXml leaked the first array, and a
+# calculator whose own parse failed was leaked.  The parent checks fail on any
+# platform; the two leaks are seen only by the LeakSanitizer at-exit scan, so
+# detect_leaks=1 is forced where LeakSanitizer exists, as for
+# iccdev.xml-relaxng-validation-leak.
+function(iccdev_add_xml_mpe_reader_setters_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlMpeReaderSettersTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-mpe-reader-setters.cpp"
+  )
+  target_include_directories(iccXmlMpeReaderSettersTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlMpeReaderSettersTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlMpeReaderSettersTest)
+
+  if(NOT ICCDEV_HAS_LEAK_SANITIZER)
+    add_test(
+      NAME iccdev.xml-mpe-reader-setters
+      COMMAND "$<TARGET_FILE:iccXmlMpeReaderSettersTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-mpe-reader-setters
+      COMMAND "${CMAKE_COMMAND}" -E env
+        "ASAN_OPTIONS=detect_leaks=1"
+        "$<TARGET_FILE:iccXmlMpeReaderSettersTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-mpe-reader-setters PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;mpe;calculator;tint;leak;issue-2645;regression"
+  )
+  if(WIN32)
+    set(_xmlmpereadersetters_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlMpeReaderSettersTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _xmlmpereadersetters_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-mpe-reader-setters PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_xmlmpereadersetters_env_mods}"
+    )
+  endif()
+endfunction()
 # #2006: CIccTagCurve::SetSize() reports a request above its 65536-entry cap as success
 # after freeing the table, and the three File=/Format="text" branches of
 # CIccTagXmlCurve::ParseXml neither checked the return nor compared the resulting
@@ -8251,6 +8368,63 @@ function(iccdev_add_owning_setter_self_alias_contract_test)
     endforeach()
     set_tests_properties(iccdev.owning-setter-self-alias-contract PROPERTIES
       ENVIRONMENT_MODIFICATION "${_owning_setter_contract_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# The reserved words of a tint array's number array and of a calculator's
+# sub-elements were lost through XML: CIccMpeXmlTintArray::ToXml never wrote
+# the reserved attribute its ParseXml reads from the array's type node, and the
+# calculator's SubElements loop read each sub-element's Reserved from the
+# enclosing CalculatorElement node.  Pins both round trips, and that a zero
+# reserved word writes no attribute.
+function(iccdev_add_xml_mpe_reserved_roundtrip_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlMpeReservedRoundTripTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-mpe-reserved-roundtrip.cpp"
+  )
+  target_include_directories(iccXmlMpeReservedRoundTripTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlMpeReservedRoundTripTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlMpeReservedRoundTripTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-mpe-reserved-roundtrip
+      COMMAND "$<TARGET_FILE:iccXmlMpeReservedRoundTripTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-mpe-reserved-roundtrip
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlMpeReservedRoundTripTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-mpe-reserved-roundtrip PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;mpe;calculator;tint;reserved;regression"
+  )
+  if(WIN32)
+    set(_xmlmpereserved_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlMpeReservedRoundTripTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _xmlmpereserved_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-mpe-reserved-roundtrip PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_xmlmpereserved_env_mods}"
     )
   endif()
 endfunction()
@@ -11895,6 +12069,7 @@ if(WIN32)
   iccdev_add_xml_shared_tags_inmemory_test()
   iccdev_add_xml_relaxng_validation_leak_test()
   iccdev_add_xml_struct_member_sameas_test()
+  iccdev_add_xml_mpe_reader_setters_test()
   iccdev_add_xml_curve_oversize_file_test()
   iccdev_add_calc_channel_ref_unterminated_index_test()
   iccdev_add_calc_channel_ref_unterminated_index_json_test()
@@ -11907,6 +12082,7 @@ if(WIN32)
   iccdev_add_mpe_curveset_setcurve_contract_tests()
   iccdev_add_mpe_copy_bufchannels_test()
   iccdev_add_owning_setter_self_alias_contract_test()
+  iccdev_add_xml_mpe_reserved_roundtrip_test()
   iccdev_add_valid_overlap_test()
   iccdev_add_curve_gamma_u8fixed8_test()
   iccdev_add_calc_output_init_test()
@@ -12008,6 +12184,7 @@ if(WIN32)
   iccdev_add_pcc_standard_observer_and_illuminant_test()
   iccdev_add_mpe_acs_zero_signature_test()
   iccdev_add_pawg_c5_cicp_test()
+  iccdev_add_pawg_c5_btoa0_test()
   iccdev_add_gamut_xform_semantics_test()
   iccdev_add_rangemap_uninitialized_test()
   iccdev_add_pcs_birefl_illuminant_range_test()
@@ -12362,6 +12539,7 @@ iccdev_add_xml_writer_graceful_degrade_test()
 iccdev_add_xml_shared_tags_inmemory_test()
 iccdev_add_xml_relaxng_validation_leak_test()
 iccdev_add_xml_struct_member_sameas_test()
+iccdev_add_xml_mpe_reader_setters_test()
 iccdev_add_xml_curve_oversize_file_test()
 iccdev_add_calc_channel_ref_unterminated_index_test()
 iccdev_add_calc_channel_ref_unterminated_index_json_test()
@@ -12374,6 +12552,7 @@ iccdev_add_colorant_table_devicelink_pcs_test()
 iccdev_add_mpe_curveset_setcurve_contract_tests()
 iccdev_add_mpe_copy_bufchannels_test()
 iccdev_add_owning_setter_self_alias_contract_test()
+iccdev_add_xml_mpe_reserved_roundtrip_test()
 iccdev_add_valid_overlap_test()
 iccdev_add_curve_gamma_u8fixed8_test()
 iccdev_add_luminance_normalization_test()
@@ -12471,6 +12650,7 @@ iccdev_add_json_escape_codepoint_test()
 iccdev_add_v5_required_tag_sets_test()
 iccdev_add_mpe_acs_zero_signature_test()
 iccdev_add_pawg_c5_cicp_test()
+iccdev_add_pawg_c5_btoa0_test()
 iccdev_add_gamut_xform_semantics_test()
 iccdev_add_rangemap_uninitialized_test()
 iccdev_add_pcs_birefl_illuminant_range_test()
