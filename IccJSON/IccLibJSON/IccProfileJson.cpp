@@ -368,7 +368,7 @@ static icUInt32Number icJsonParseBCDVersionStr(const char *szVer)
   return (hi << 8) | lo;
 }
 
-bool CIccProfileJson::ParseBasic(const IccJson &header, std::string & /*parseStr*/)
+bool CIccProfileJson::ParseBasic(const IccJson &header, std::string &parseStr)
 {
   CIccInfo info;
 
@@ -434,20 +434,34 @@ bool CIccProfileJson::ParseBasic(const IccJson &header, std::string & /*parseStr
   if (jGetString(header, "SpectralPCS", str))
     m_Header.spectralPCS = (icColorSpaceSignature)icGetSigVal(str.c_str());
 
-  auto parseSpectralRange = [&](const char *field, icSpectralRange &range) {
+  // steps is the sample count of the whole spectral PCS, stored in a
+  // uInt16Number.  This cast narrowed it modulo 65536, so "steps": 65567
+  // was stored, and written back out, as 31 while iccFromJson reported
+  // success; the XML reader rejects the same value with a checked 16-bit
+  // parse (#2674).  Out of range, or not an integer, is a parse failure here
+  // too, with the XML reader's wording.
+  auto parseSpectralRange = [&](const char *field, icSpectralRange &range) -> bool {
     if (header.contains(field) && header[field].is_object()) {
       const IccJson &sr = header[field];
-      double start = 0, end = 0; int steps = 0;
+      double start = 0, end = 0;
       jGetValue(sr, "start", start);
       jGetValue(sr, "end",   end);
-      jGetValue(sr, "steps", steps);
       range.start = icFtoF16((icFloat32Number)start);
       range.end   = icFtoF16((icFloat32Number)end);
-      range.steps = (icUInt16Number)steps;
+      if (sr.contains("steps")) {
+        const IccJson &st = sr["steps"];
+        if (!st.is_number_integer() || st.get<long long>() < 0 || st.get<long long>() > 0xFFFF) {
+          parseStr += std::string("Invalid ") + field + " Wavelengths steps\n";
+          return false;
+        }
+        range.steps = (icUInt16Number)st.get<long long>();
+      }
     }
+    return true;
   };
-  parseSpectralRange("SpectralRange",   m_Header.spectralRange);
-  parseSpectralRange("BiSpectralRange", m_Header.biSpectralRange);
+  if (!parseSpectralRange("SpectralRange",   m_Header.spectralRange) ||
+      !parseSpectralRange("BiSpectralRange", m_Header.biSpectralRange))
+    return false;
 
   if (jGetString(header, "MCS", str))
     m_Header.mcs = (icMultiplexColorSignature)icGetSigVal(str.c_str());
@@ -690,9 +704,15 @@ bool CIccProfileJson::ParseJson(const IccJson &root, std::string &parseStr)
 
     KeyToSignatureMap keyToSig;
     for (const auto &entry : tags) {
+      // A failure, not a warning: this appended to parseStr and went on, and
+      // iccFromJson prints parseStr only when the load fails, so an entry
+      // with a second member was dropped, the requested tag never reached
+      // the profile, and the tool reported "parsed and saved correctly"
+      // (#2695).  The XML reader refuses a tag element with a second type
+      // child the same way.
       if (!entry.is_object() || entry.size() != 1) {
-        parseStr += "Warning: tag entry must be a single-member object, skipping\n";
-        continue;
+        parseStr += "Tags entry must be a single-member object\n";
+        return false;
       }
       auto it = entry.begin();
       const std::string &key   = it.key();
