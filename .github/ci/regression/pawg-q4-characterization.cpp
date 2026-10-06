@@ -383,10 +383,103 @@ static void test_failure_reasons() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// A CMYK->Lab profile whose AToB1 is a lut16 ('mft2') table, as in most
+// published print profiles.  Begin() appends a step after the table that
+// converts its legacy Lab encoding, so the chain is 4 -> 3 -> 3 and its LAST
+// step takes 3 channels, not 4.  Q4 compared that step's source count with
+// the CMM's and reported every such profile as a Gap ("channel counts (3 in,
+// 3 out) do not match ... (4 in, 3 out)"); it must reach a dE verdict.
+// ---------------------------------------------------------------------------
+static CIccTagLut16 *make_cmyk_lab_lut16() {
+  CIccTagLut16 *lut = new CIccTagLut16;
+  lut->Init(4, 3);
+  lut->SetColorSpaces(icSigCmykData, icSigLabData);
+  LPIccCurve *in = lut->NewCurvesB();
+  LPIccCurve *out = lut->NewCurvesA();
+  for (int i = 0; i < 4; ++i) in[i] = new CIccTagCurve(0);
+  for (int i = 0; i < 3; ++i) out[i] = new CIccTagCurve(0);
+
+  icUInt8Number grid[16] = {2, 2, 2, 2};
+  lut->NewCLUT(grid, 3);
+  icFloatNumber *data = lut->GetCLUT()->GetData(0);
+  // Grid node n has C, M, Y, K = bits 3, 2, 1, 0 of n.  Darker with more ink,
+  // and a and b move with the chromatic inks, so the patches differ.
+  for (int n = 0; n < 16; ++n) {
+    const double c = (n >> 3) & 1, m = (n >> 2) & 1, y = (n >> 1) & 1, k = n & 1;
+    data[n * 3 + 0] = static_cast<icFloatNumber>(0.95 - 0.15 * (c + m + y) - 0.4 * k);
+    data[n * 3 + 1] = static_cast<icFloatNumber>(0.5 + 0.2 * m - 0.15 * c);
+    data[n * 3 + 2] = static_cast<icFloatNumber>(0.5 + 0.2 * y - 0.1 * c);
+  }
+  return lut;
+}
+
+static void test_lut16_cmyk_lab() {
+  std::printf("\n[ lut16 CMYK->Lab profile ]\n");
+
+  CIccProfile p;
+  p.InitHeader();
+  p.m_Header.deviceClass = icSigOutputClass;
+  p.m_Header.colorSpace = icSigCmykData;
+  p.m_Header.pcs = icSigLabData;
+  p.m_Header.version = 0x02400000;  // v2.4, like the ECI/FOGRA print profiles
+  attach_xyz(p, icSigMediaWhitePointTag, 0.9310, 0.9660, 0.7900);  // paper white
+  p.AttachTag(icSigAToB1Tag, make_cmyk_lab_lut16());
+
+  // The chain this test exists for: the profile's table, then a conversion
+  // step whose source count differs from the CMM's.  Without it the test
+  // would pass on the old check too.
+  static const double kCmyk[][4] = {
+      {0, 0, 0, 0},     {100, 0, 0, 0},  {0, 100, 0, 0},  {0, 0, 100, 0},
+      {0, 0, 0, 100},   {100, 100, 0, 0}, {40, 30, 20, 10}, {100, 100, 100, 100},
+  };
+  const int nPatches = static_cast<int>(sizeof(kCmyk) / sizeof(kCmyk[0]));
+  CIccCmm cmm(icSigCmykData, icSigLabData, true);
+  bool built = cmm.AddXform(p, icAbsoluteColorimetric, icInterpTetrahedral, NULL,
+                            icXformLutColorimetric, false) == icCmmStatOk &&
+               cmm.Begin() == icCmmStatOk;
+  check(built, "  the absolute-colorimetric lut16 transform builds");
+  if (!built) return;
+  check(cmm.GetFirstXform() != cmm.GetLastXform() &&
+            cmm.GetLastXform()->GetNumSrcSamples() != cmm.GetSourceSamples(),
+        "  the chain's last step does not take the CMM's source channels");
+
+  // "Measured" Lab = what the profile itself predicts, so a correct Q4 finds
+  // agreement to within rounding.
+  std::string targ =
+      "CGATS.17\nNUMBER_OF_FIELDS 8\nBEGIN_DATA_FORMAT\n"
+      "SAMPLE_ID CMYK_C CMYK_M CMYK_Y CMYK_K LAB_L LAB_A LAB_B\nEND_DATA_FORMAT\nBEGIN_DATA\n";
+  for (int i = 0; i < nPatches; ++i) {
+    icFloatNumber in[4], lab[3] = {0, 0, 0};
+    for (int c = 0; c < 4; ++c) in[c] = static_cast<icFloatNumber>(kCmyk[i][c] / 100.0);
+    cmm.Apply(lab, in);
+    icLabFromPcs(lab);
+    char line[160];
+    std::snprintf(line, sizeof(line), "%d %.1f %.1f %.1f %.1f %.4f %.4f %.4f\n", i + 1,
+                  kCmyk[i][0], kCmyk[i][1], kCmyk[i][2], kCmyk[i][3], lab[0], lab[1], lab[2]);
+    targ += line;
+  }
+  targ += "END_DATA\n";
+
+  CIccTagText *t = new CIccTagText;
+  t->SetText(targ.c_str());
+  p.AttachTag(icSigCharTargetTag, t);
+  CharacterizationMetrics m;
+  std::string reason;
+  bool ok = evaluate_characterization(&p, m, reason);
+  if (!ok) std::printf("    reason: %s\n", reason.c_str());
+  check(ok, "  Q4 evaluates a lut16 profile instead of reporting a Gap");
+  check(ok && m.rowsUsed == nPatches, "  every patch is evaluated");
+  check(ok && m.avgDe00 < 0.1 && m.maxDe00 < 0.5,
+        "  the profile agrees with data generated from it");
+  std::printf("    avg %.4f, max %.4f dE00 over %d patches\n", m.avgDe00, m.maxDe00, m.rowsUsed);
+}
+
 int main() {
   test_cgats_parser();
   test_absolute_intent();
   test_failure_reasons();
+  test_lut16_cmyk_lab();
 
   if (g_failures) {
     std::printf("\n%d check(s) FAILED\n", g_failures);

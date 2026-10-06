@@ -567,6 +567,47 @@ inline bool status_ok(icStatusCMM status, const std::string &phase, std::string 
   return false;
 }
 
+// Why a started CMM cannot be applied with source and destination buffers of
+// nMaxSamples floats, or an empty string if it can.
+//
+// The chain is checked at its ENDS.  Begin() may append steps after the
+// profile's own transform - a CIccPcsXform that converts a lut8/lut16 table's
+// legacy Lab encoding, for one - so GetLastXform() is not necessarily the
+// profile's transform, and its source count says nothing about the CMM's
+// source.  Comparing the two (#1633) rejected every lut8/lut16 profile: a
+// CMYK->Lab 'mft2' chain ends in a 3-in, 3-out conversion, not 4-in.
+//
+// What #1633 guards against is Apply() reading GetSourceSamples() floats from,
+// and writing GetDestSamples() floats to, fixed-size buffers, so those two
+// counts are bounded against the buffer size directly.
+inline std::string cmm_chain_mismatch(const CIccCmm &cmm, size_t nMaxSamples) {
+  const CIccXform *first = cmm.GetFirstXform();
+  const CIccXform *last = cmm.GetLastXform();
+  if (!first || !last) {
+    return "the CMM started but holds no transform";
+  }
+
+  char buf[200];
+  if (first->GetNumSrcSamples() != cmm.GetSourceSamples() ||
+      last->GetNumDstSamples() != cmm.GetDestSamples()) {
+    std::snprintf(buf, sizeof(buf),
+                  "the transform chain's channel counts (%u in, %u out) do not match the "
+                  "profile's data and connection spaces (%u in, %u out)",
+                  (unsigned)first->GetNumSrcSamples(), (unsigned)last->GetNumDstSamples(),
+                  (unsigned)cmm.GetSourceSamples(), (unsigned)cmm.GetDestSamples());
+    return buf;
+  }
+  if (cmm.GetSourceSamples() > nMaxSamples || cmm.GetDestSamples() > nMaxSamples) {
+    std::snprintf(buf, sizeof(buf),
+                  "the profile's data and connection spaces (%u in, %u out) have more than "
+                  "the %u channels this evaluation supports",
+                  (unsigned)cmm.GetSourceSamples(), (unsigned)cmm.GetDestSamples(),
+                  (unsigned)nMaxSamples);
+    return buf;
+  }
+  return std::string();
+}
+
 // Build a CMM step for the round-trip / smoothness metrics.  The intent defaults
 // to RELATIVE COLORIMETRIC and callers should leave it that way unless they have a
 // specific reason: these metrics measure how invertible / smooth the transform is,
@@ -607,11 +648,10 @@ inline bool begin_profile_cmm(CIccProfile *pIcc,
     return false;
   }
 
-  CIccXform *xform = cmm.GetLastXform();
-  if (!xform ||
-      xform->GetNumSrcSamples() != cmm.GetSourceSamples() ||
-      xform->GetNumDstSamples() != cmm.GetDestSamples()) {
-    reason = "CIccCmm " + std::string(direction) + " selected a transform with incompatible channel counts";
+  // The callers apply this CMM with 16-float buffers.
+  const std::string mismatch = cmm_chain_mismatch(cmm, 16);
+  if (!mismatch.empty()) {
+    reason = "CIccCmm " + std::string(direction) + ": " + mismatch;
     return false;
   }
 
@@ -2036,27 +2076,16 @@ inline bool evaluate_characterization(CIccProfile *pIcc,
              CIccCmm::GetStatusText(st) + "). " + describe_forward_transform_tags(pIcc);
     return false;
   }
+  std::array<icFloatNumber, 16> pcsPred{};
   {
-    CIccXform *xform = cmmForward.GetLastXform();
-    if (!xform) {
-      reason = std::string(kQ4Lead) + ": the CMM started but holds no transform.";
-      return false;
-    }
-    if (xform->GetNumSrcSamples() != cmmForward.GetSourceSamples() ||
-        xform->GetNumDstSamples() != cmmForward.GetDestSamples()) {
-      char buf[200];
-      std::snprintf(buf, sizeof(buf),
-                    ": the transform's channel counts (%u in, %u out) do not match the "
-                    "profile's data and connection spaces (%u in, %u out).",
-                    (unsigned)xform->GetNumSrcSamples(), (unsigned)xform->GetNumDstSamples(),
-                    (unsigned)cmmForward.GetSourceSamples(), (unsigned)cmmForward.GetDestSamples());
-      reason = std::string(kQ4Lead) + buf;
+    const std::string mismatch = cmm_chain_mismatch(cmmForward, pcsPred.size());
+    if (!mismatch.empty()) {
+      reason = std::string(kQ4Lead) + ": " + mismatch + ".";
       return false;
     }
   }
 
   const size_t limit = std::min<size_t>(deviceRows.size(), kMaxCharacterizationSamples);
-  std::array<icFloatNumber, 16> pcsPred{};
   std::array<icFloatNumber, 3> labPred{};
   std::array<icFloatNumber, 3> labMeasured{};
 
