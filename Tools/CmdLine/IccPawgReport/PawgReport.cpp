@@ -1220,6 +1220,51 @@ static const icTagSignature kCommonOptional[] = {
   icSigBToD2Tag
 };
 
+// kCommonOptional plus the tags allowed only in Input and Display profiles,
+// for C5.  C4 does not read it.  Keep the two lists in step.
+//
+// BToA0Tag: ICC.1:2022 permits it in every Input and Display profile (8.3.2 to
+// 8.3.4, 8.4.3, 8.4.4) and requires it of an N-component LUT-based Display
+// profile (8.4.2), so C5 reported a profile doing what the specification
+// demands as carrying a "standard tag outside the local class rule table".
+// C4 does not require it for 8.4.2: by class alone it cannot tell a LUT-based
+// Display profile from a matrix-based one.  It cannot go in kCommonOptional,
+// which every class reads, or in kMatrixTrcAlternative, C4's any-of set, where
+// it would let C4 pass an Input or Display profile with no forward transform.
+static const icTagSignature kInputDisplayOptional[] = {
+  icSigCalibrationDateTimeTag,
+  icSigCharTargetTag,
+  icSigCicpTag,
+  icSigChromaticAdaptationTag,
+  icSigChromaticityTag,
+  icSigColorantTableTag,
+  icSigColorantTableOutTag,
+  icSigDeviceMfgDescTag,
+  icSigDeviceModelDescTag,
+  icSigGamutTag,
+  icSigLuminanceTag,
+  icSigMeasurementTag,
+  icSigMediaBlackPointTag,
+  icSigMetaDataTag,
+  icSigOutputResponseTag,
+  icSigPerceptualRenderingIntentGamutTag,
+  icSigProfileSequceIdTag,
+  icSigSaturationRenderingIntentGamutTag,
+  icSigTechnologyTag,
+  icSigViewingConditionsTag,
+  icSigAToB1Tag,
+  icSigAToB2Tag,
+  icSigBToA1Tag,
+  icSigBToA2Tag,
+  icSigDToB0Tag,
+  icSigDToB1Tag,
+  icSigDToB2Tag,
+  icSigBToD0Tag,
+  icSigBToD1Tag,
+  icSigBToD2Tag,
+  icSigBToA0Tag
+};
+
 bool ContainsTag(const icTagSignature *tags, size_t count, icTagSignature sig)
 {
   for (size_t i = 0; i < count; ++i) {
@@ -1250,14 +1295,14 @@ const RuleTable *GetRuleTable(icProfileClassSignature cls)
   static const RuleTable inputRule = {
     kCommonRequired, CountOf(kCommonRequired),
     kMatrixTrcAlternative, CountOf(kMatrixTrcAlternative),
-    kCommonOptional, CountOf(kCommonOptional),
+    kInputDisplayOptional, CountOf(kInputDisplayOptional),
     "A2B0 or matrix/TRC transform",
     "ICC.1-2022-05 section 8.2"
   };
   static const RuleTable displayRule = {
     kCommonRequired, CountOf(kCommonRequired),
     kMatrixTrcAlternative, CountOf(kMatrixTrcAlternative),
-    kCommonOptional, CountOf(kCommonOptional),
+    kInputDisplayOptional, CountOf(kInputDisplayOptional),
     "A2B0 or matrix/TRC transform",
     "ICC.1-2022-05 section 8.3"
   };
