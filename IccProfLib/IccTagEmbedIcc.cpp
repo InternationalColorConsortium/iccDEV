@@ -620,7 +620,46 @@ icValidateStatus CIccTagEmbeddedProfile::Validate(std::string sigPath, std::stri
 
   rv = icMaxStatus(rv, m_pProfile->Validate(sReport, sigPath, m_pProfile));
 
+  // ICC Technical Note 04-2018, "ICC.2 Profile header requirements": bit 0
+  // of the embedded profile's flags "should be set to 1 to indicate that
+  // the profile is embedded in another file", and "only ICC.2 profiles
+  // containing 0 in bit position 1 should be embedded in other profiles".
+  // Both are "should", so each draws a warning (#2693).
+  if (!(m_pProfile->m_Header.flags & icEmbeddedProfileTrue)) {
+    sReport += icMsgValidateWarning;
+    sReport += Info.GetSigPathName(sigPath);
+    sReport += " - Embedded profile header flags do not mark it as embedded in another file.\n";
+
+    rv = icMaxStatus(rv, icValidateWarning);
+  }
+  if (m_pProfile->m_Header.flags & icUseWithEmbeddedDataOnly) {
+    sReport += icMsgValidateWarning;
+    sReport += Info.GetSigPathName(sigPath);
+    sReport += " - Embedded profile header flags say it cannot be used independently of embedded colour data.\n";
+
+    rv = icMaxStatus(rv, icValidateWarning);
+  }
+
   if (pProfile) {
+    // Technical Note 04-2018: the embedded profile "shall be considered a
+    // logical replacement for the profile that it is embedded into.
+    // Therefore it shall be of the same profile class, and have the same
+    // device space."  This used to accept any device space with at least
+    // the host's channel count, which let an nc0005 or 8CLR child stand in
+    // for a CMYK or RGB host; the device space is now compared as the note
+    // says (#2693).  The channel comparison below is kept for the message
+    // it gives when the count is what differs.
+    if (m_pProfile->m_Header.colorSpace != pProfile->m_Header.colorSpace) {
+      sReport += icMsgValidateCriticalError;
+      sReport += Info.GetSigPathName(sigPath);
+      sReport += " - Embedded profile device space ";
+      sReport += Info.GetColorSpaceSigName(m_pProfile->m_Header.colorSpace);
+      sReport += " does not match the parent profile's ";
+      sReport += Info.GetColorSpaceSigName(pProfile->m_Header.colorSpace);
+      sReport += ".\n";
+
+      rv = icMaxStatus(rv, icValidateCriticalError);
+    }
     if (icGetSpaceSamples(m_pProfile->m_Header.colorSpace) < icGetSpaceSamples(pProfile->m_Header.colorSpace)) {
       sReport += icMsgValidateCriticalError;
       sReport += Info.GetSigPathName(sigPath);
