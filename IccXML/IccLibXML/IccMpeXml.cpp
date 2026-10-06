@@ -1900,8 +1900,17 @@ bool CIccMpeXmlTintArray::ToXml(std::string &xml, std::string blanks/* = ""*/)
     CIccTagXml *pTagXml = (CIccTagXml*)pTagEx;
     const icChar* tagSig = icGetTagSigTypeName(m_Array->GetType());
 
-    snprintf(line, bufSize, "  <%s>\n",  tagSig); //parent node is the tag type
+    // ParseXml reads the number array's own reserved word from a lower-case
+    // reserved attribute on this node, in decimal, but nothing wrote one, so an
+    // ICC -> XML -> ICC cycle set it to zero.  Written only when non-zero, as
+    // the element's Reserved above is, so a document without one is unchanged.
+    snprintf(line, bufSize, "  <%s",  tagSig); //parent node is the tag type
     xml += line;
+    if (m_Array->m_nReserved) {
+      snprintf(line, bufSize, " reserved=\"%u\"", (unsigned int) m_Array->m_nReserved);
+      xml += line;
+    }
+    xml += ">\n";
 
     //convert the rest of the tag to xml
     // Left strict on purpose while the profile-level and struct-member loops
@@ -3146,7 +3155,10 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
             CIccMpeXml* pXmlMpe = (CIccMpeXml*)pExt;
 
             if (pXmlMpe->ParseXml(pNext, parseStr)) {
-              if ((attr = icXmlFindAttr(pNode, "Reserved"))) {
+              // The sub-element's own node, not the enclosing CalculatorElement:
+              // reading pNode lost every sub-element's Reserved and copied the
+              // calculator's onto each of them.
+              if ((attr = icXmlFindAttr(pNext, "Reserved"))) {
                 sscanf(icXmlAttrValue(attr), "%u", &pMpe->m_nReserved);
               }
 
