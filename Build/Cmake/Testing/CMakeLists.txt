@@ -9474,6 +9474,48 @@ function(iccdev_add_json_writer_move_test)
   endif()
 endfunction()
 
+function(iccdev_add_json_text_control_bytes_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccJsonTextControlBytesTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/json-text-control-bytes.cpp"
+  )
+  target_compile_features(iccJsonTextControlBytesTest PRIVATE cxx_std_17)
+  target_include_directories(iccJsonTextControlBytesTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccJsonTextControlBytesTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccJsonTextControlBytesTest)
+
+  add_test(
+    NAME iccdev.json-text-control-bytes
+    COMMAND "$<TARGET_FILE:iccJsonTextControlBytesTest>"
+  )
+  set_tests_properties(iccdev.json-text-control-bytes PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;json;text;issue-2770;regression"
+  )
+  if(WIN32)
+    set(_json_text_control_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccJsonTextControlBytesTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _json_text_control_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.json-text-control-bytes PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_json_text_control_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # CodeQL #2343: CIccTagJsonFixedNum::ToJson was the only m_nSize-driven walk in the
 # JSON writer without an explicit upper bound -- its Num/FloatNum siblings and its XML
 # mirror CIccTagXmlFixedNum::ToXml all cap at 0xffffff. This pins the cap in both
@@ -11400,6 +11442,7 @@ if(WIN32)
   iccdev_add_json_bcd_version_test()
   iccdev_add_xml_version_parse_test()
   iccdev_add_json_writer_move_test()
+  iccdev_add_json_text_control_bytes_test()
   iccdev_add_json_fixednum_size_cap_test()
   iccdev_add_json_srng_uf32_test()
   iccdev_add_v2_legacy_pcs_test()
@@ -11832,6 +11875,7 @@ iccdev_add_installed_package_consumer_test()
 iccdev_add_json_bcd_version_test()
 iccdev_add_xml_version_parse_test()
 iccdev_add_json_writer_move_test()
+iccdev_add_json_text_control_bytes_test()
 iccdev_add_json_fixednum_size_cap_test()
 iccdev_add_json_srng_uf32_test()
 iccdev_add_v2_legacy_pcs_test()
