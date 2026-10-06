@@ -1888,7 +1888,7 @@ public:
   bool setObserver(icStandardObserver observerId, const icSpectralRange &observerRange, const icFloatNumber *observer);
 
   bool isStandardPcc() const {
-    return m_stdObserver == icStdObs1931TwoDegrees || m_stdIlluminant == icIlluminantD50;
+    return m_stdObserver == icStdObs1931TwoDegrees && m_stdIlluminant == icIlluminantD50;
   }
     
   icFloatXYZNumber m_illuminantXYZ;
