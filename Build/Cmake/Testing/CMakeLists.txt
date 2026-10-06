@@ -5965,6 +5965,65 @@ function(iccdev_add_xml_struct_member_sameas_test)
   endif()
 endfunction()
 
+# The reserved word of a tag array entry and of a struct member was lost
+# through XML: CIccTagXmlArray and CIccTagXmlStruct wrote no reserved attribute
+# on the entry's or member's type node, and CIccTagXmlArray::ParseXml read the
+# entry's reserved and private type from a node of the enclosing array rather
+# than the entry's own.  Pins both round trips, the reader alone, and that a
+# zero reserved word writes no attribute.
+function(iccdev_add_xml_tag_reserved_roundtrip_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlTagReservedRoundTripTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-tag-reserved-roundtrip.cpp"
+  )
+  target_compile_features(iccXmlTagReservedRoundTripTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlTagReservedRoundTripTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlTagReservedRoundTripTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlTagReservedRoundTripTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-tag-reserved-roundtrip
+      COMMAND "$<TARGET_FILE:iccXmlTagReservedRoundTripTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-tag-reserved-roundtrip
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlTagReservedRoundTripTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-tag-reserved-roundtrip PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;struct;array;reserved;regression"
+  )
+  if(WIN32)
+    set(_iccxmltagreservedroundtriptest_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlTagReservedRoundTripTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccxmltagreservedroundtriptest_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-tag-reserved-roundtrip PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccxmltagreservedroundtriptest_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2645: CIccSampledCalculatorCurveXml::ParseXml and CIccMpeXmlTintArray::ParseXml
 # assigned m_pCalc and m_Array directly instead of through SetCalculator() and
 # SetArray(), as the binary and JSON readers do, so an XML-parsed calculator or
@@ -6657,6 +6716,63 @@ function(iccdev_add_json_calculator_newcopy_test)
     endforeach()
     set_tests_properties(iccdev.json-calculator-newcopy PROPERTIES
       ENVIRONMENT_MODIFICATION "${_json_calc_newcopy_env_mods}"
+    )
+  endif()
+endfunction()
+
+# The reserved word of a tint array's number array and of a calculator's
+# sub-elements was lost through JSON: the tint array wrote and read none of
+# its array tag's reserved word (now "arrayReserved"), and the calculator
+# wrote each sub-element's "Reserved" but never read it back.
+function(iccdev_add_json_mpe_reserved_roundtrip_test)
+  if(NOT TARGET "${TARGET_LIB_ICCJSON}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccJsonMpeReservedRoundTripTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/json-mpe-reserved-roundtrip.cpp"
+  )
+  target_compile_features(iccJsonMpeReservedRoundTripTest PRIVATE cxx_std_17)
+  target_include_directories(iccJsonMpeReservedRoundTripTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccJsonMpeReservedRoundTripTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccJsonMpeReservedRoundTripTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.json-mpe-reserved-roundtrip
+      COMMAND "$<TARGET_FILE:iccJsonMpeReservedRoundTripTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.json-mpe-reserved-roundtrip
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccJsonMpeReservedRoundTripTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.json-mpe-reserved-roundtrip PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;json;mpe;calc;tint;reserved;regression"
+  )
+  if(WIN32)
+    set(_iccjsonmpereservedroundtriptest_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccJsonMpeReservedRoundTripTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccjsonmpereservedroundtriptest_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.json-mpe-reserved-roundtrip PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccjsonmpereservedroundtriptest_env_mods}"
     )
   endif()
 endfunction()
@@ -11595,6 +11711,7 @@ if(WIN32)
   iccdev_add_xml_shared_tags_inmemory_test()
   iccdev_add_xml_relaxng_validation_leak_test()
   iccdev_add_xml_struct_member_sameas_test()
+  iccdev_add_xml_tag_reserved_roundtrip_test()
   iccdev_add_xml_mpe_reader_setters_test()
   iccdev_add_xml_curve_oversize_file_test()
   iccdev_add_calc_channel_ref_unterminated_index_test()
@@ -11688,6 +11805,7 @@ if(WIN32)
   iccdev_add_calculator_limits_test()
   iccdev_add_calculator_limits_json_test()
   iccdev_add_json_calculator_newcopy_test()
+  iccdev_add_json_mpe_reserved_roundtrip_test()
   iccdev_add_colorant_count_narrowing_xml_test()
   iccdev_add_xml_reader_strictness_test()
   iccdev_add_xml_numeric_values_test()
@@ -12047,6 +12165,7 @@ iccdev_add_xml_writer_graceful_degrade_test()
 iccdev_add_xml_shared_tags_inmemory_test()
 iccdev_add_xml_relaxng_validation_leak_test()
 iccdev_add_xml_struct_member_sameas_test()
+iccdev_add_xml_tag_reserved_roundtrip_test()
 iccdev_add_xml_mpe_reader_setters_test()
 iccdev_add_xml_curve_oversize_file_test()
 iccdev_add_calc_channel_ref_unterminated_index_test()
@@ -12129,6 +12248,7 @@ iccdev_add_colorant_count_narrowing_json_test()
 iccdev_add_calculator_limits_test()
 iccdev_add_calculator_limits_json_test()
 iccdev_add_json_calculator_newcopy_test()
+iccdev_add_json_mpe_reserved_roundtrip_test()
 iccdev_add_colorant_count_narrowing_xml_test()
 iccdev_add_xml_reader_strictness_test()
 iccdev_add_xml_numeric_values_test()

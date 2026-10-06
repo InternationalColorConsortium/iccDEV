@@ -759,6 +759,11 @@ bool CIccMpeJsonTintArray::ToJson(IccJson &j)
       return false;
     if (!static_cast<CIccTagJson*>(pExt)->ToJson(j))
       return false;
+    // The array tag's own reserved word.  "Reserved" in this object is the
+    // element's, written by the caller, so it needs a key of its own; omitted
+    // when zero, as "Reserved" is.
+    if (m_Array->m_nReserved)
+      j["arrayReserved"] = (unsigned int)m_Array->m_nReserved;
   }
   return true;
 }
@@ -866,6 +871,19 @@ bool CIccMpeJsonTintArray::ParseJson(const IccJson &j, std::string &parseStr)
     // Inline: the tag's ParseJson reads "values" from j
     if (!pTagJson->ParseJson(j, parseStr)) { delete pTag; return false; }
   }
+
+  // An unsigned JSON integer that fits the 32-bit word, held to the rule the
+  // tone map reader states for "reserved": a bare jGetValue() would truncate
+  // 1.5 to 1 and leave -1 or "7" as 0, all without a parse error.
+  icUInt64Number arrayReserved = 0;
+  if (jsonExistsField(j, "arrayReserved") &&
+      (!j["arrayReserved"].is_number_unsigned() ||
+       !jGetValue(j, "arrayReserved", arrayReserved) || arrayReserved > 0xFFFFFFFFull)) {
+    parseStr += "arrayReserved is out of range in TintArrayElement\n";
+    delete pTag;
+    return false;
+  }
+  pTag->m_nReserved = (icUInt32Number)arrayReserved;
 
   SetArray(static_cast<CIccTagNumArray*>(pTag));
   return true;
@@ -2206,6 +2224,19 @@ bool CIccMpeJsonCalculator::ParseImport(const IccJson &j, std::string importPath
         return false;
       }
 
+      // ToJson writes each sub-element's "Reserved", but nothing read it back.
+      // An unsigned JSON integer that fits the 32-bit word, as for the tint
+      // array's "arrayReserved".
+      icUInt64Number nReserved = 0;
+      if (jsonExistsField(jElem, "Reserved") &&
+          (!jElem["Reserved"].is_number_unsigned() ||
+           !jGetValue(jElem, "Reserved", nReserved) || nReserved > 0xFFFFFFFFull)) {
+        parseStr += "Reserved is out of range in SubElement '" + typeName + "'\n";
+        delete pMpe;
+        return false;
+      }
+      pMpe->m_nReserved = (icUInt32Number)nReserved;
+
       CIccMpeJson *pJsonMpe = static_cast<CIccMpeJson*>(pExt);
       if (!pJsonMpe->ParseJson(jElem, parseStr)) {
         parseStr += "Unable to parse SubElement '" + typeName + "'\n";
@@ -2259,8 +2290,10 @@ bool CIccMpeJsonCalculator::ToJson(IccJson &j)
       elemObj["type"]           = icJsonGetElemTypeName(m_SubElem[i]->GetType());
       elemObj["inputChannels"]  = (int)m_SubElem[i]->NumInputChannels();
       elemObj["outputChannels"] = (int)m_SubElem[i]->NumOutputChannels();
+      // Unsigned, as the schema and the reader take it: an int cast wrote a
+      // value with bit 31 set as a negative number.
       if (m_SubElem[i]->m_nReserved)
-        elemObj["Reserved"] = (int)m_SubElem[i]->m_nReserved;
+        elemObj["Reserved"] = (unsigned int)m_SubElem[i]->m_nReserved;
       if (!pJsonMpe->ToJson(elemObj))
         return false;
       elems.push_back(elemObj);
