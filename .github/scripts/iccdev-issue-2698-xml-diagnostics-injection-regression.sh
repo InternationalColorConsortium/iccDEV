@@ -12,14 +12,12 @@
 #
 # Environment variables:
 #   ICCDEV_TOOLS_DIR   -- path to Build/Tools or build/Tools
-#   ICCDEV_TESTING_DIR -- path to Testing
 #   ICCDEV_TEST_OUTDIR -- output directory for temporary files and logs
 ###############################################################################
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TOOLS_DIR="${ICCDEV_TOOLS_DIR:-$REPO_ROOT/Build/Tools}"
-TESTING_DIR="${ICCDEV_TESTING_DIR:-$REPO_ROOT/Testing}"
 OUTDIR="${ICCDEV_TEST_OUTDIR:-/tmp/iccdev-issue-2698-xml-diagnostics-injection}"
 mkdir -p "$OUTDIR"
 if [ ! -d "$TOOLS_DIR" ]; then
