@@ -8,9 +8,11 @@
 #include "IccIO.h"
 #include "IccUtil.h"
 #include "IccProfLibVer.h"
+#include "IccFileUtil.h"
 #include "IccLibJSONVer.h"
 #include <cstring>
 #include <cstdlib>
+#include <string>
 
 #ifdef _WIN32
   #define ICC_STRICMP _stricmp
@@ -19,13 +21,44 @@
   #define ICC_STRICMP strcasecmp
 #endif
 
+// The usage screen, shared by the help path and the incomplete-invocation path so
+// the two cannot drift.  The STREAM separates them, as in iccFromXml (#2387): a help
+// request prints to stdout and succeeds, a malformed invocation prints to stderr and
+// fails.
+static void Usage(FILE *out)
+{
+  fprintf(out, "IccFromJson built with IccProfLib Version " ICCPROFLIBVER ", IccLibJSON Version " ICCLIBJSONVER "\n\n");
+  fprintf(out, "Usage: IccFromJson json_file saved_profile_file {-noid}\n");
+  fprintf(out, "       IccFromJson -h | --help\n");
+}
+
+static bool isHelpRequest(const char *szArg)
+{
+  return !ICC_STRICMP(szArg, "-h") || !ICC_STRICMP(szArg, "--help") ||
+         !ICC_STRICMP(szArg, "-help") || !ICC_STRICMP(szArg, "-?");
+}
+
 int main(int argc, char* argv[])
 {
-  if (argc <= 2) {
-    printf("IccFromJson built with IccProfLib Version " ICCPROFLIBVER ", IccLibJSON Version " ICCLIBJSONVER "\n\n");
-    printf("Usage: IccFromJson json_file saved_profile_file {-noid}\n");
-    return 0;
+  // The same contract as iccFromXml (#2387), applied here for #2676: this tool
+  // printed its usage and returned 0 for a bare invocation and for one missing
+  // its output path, so `iccFromJson base.json` reported success to automation
+  // while converting nothing.  Only the lone-argument form is a help request.
+  if (argc == 2 && isHelpRequest(argv[1])) {
+    Usage(stdout);
+    return EXIT_SUCCESS;
   }
+
+  if (argc <= 2) {
+    Usage(stderr);
+    fprintf(stderr, "\nError: an input JSON file and an output profile path are both required\n");
+    return EXIT_FAILURE;
+  }
+
+  // Sanitized once here rather than at each print site; the paths handed to
+  // LoadJson()/SaveIccProfile() stay untouched (#2406).
+  std::string srcName = icSanitizeConsoleText(argv[1]);
+  std::string dstName = icSanitizeConsoleText(argv[2]);
 
   CIccTagCreator::PushFactory(new(std::nothrow) CIccTagJsonFactory());
   CIccMpeCreator::PushFactory(new(std::nothrow) CIccMpeJsonFactory());
@@ -35,17 +68,35 @@ int main(int argc, char* argv[])
 
   bool bNoId = false;
   for (int i = 3; i < argc; i++) {
-    if (!ICC_STRICMP(argv[i], "-noid"))
+    if (!ICC_STRICMP(argv[i], "-noid")) {
       bNoId = true;
+    }
+    else {
+      // An unrecognised option used to be skipped in silence, so the "-no-id"
+      // typo converted with the ID left in and reported success (#2676).  The
+      // XML twin refuses it.
+      Usage(stderr);
+      fprintf(stderr, "Error: unrecognized option '%s'\n",
+              icSanitizeConsoleText(argv[i]).c_str());
+      return EXIT_FAILURE;
+    }
   }
 
   // On stderr, like the XML twin: this returned EXIT_FAILURE already but answered
   // on stdout, so a caller that separates the streams saw nothing (#2384).
   if (!profile.LoadJson(argv[1], &reason)) {
     fprintf(stderr, "%s", reason.c_str());
-    fprintf(stderr, "Unable to Parse '%s'\n", argv[1]);
+    fprintf(stderr, "Unable to Parse '%s'\n", srcName.c_str());
     return EXIT_FAILURE;
   }
+
+  // -noid has to mean the saved profile carries NO profile ID.  icNeverWriteID
+  // alone does not achieve that: CIccProfile::Write() emits m_Header.profileID as
+  // part of the header and the switch only decides whether CalcProfileID() then
+  // recalculates it, so a document carrying a ProfileID kept it through -noid
+  // (#2676).  Cleared here, as iccFromXml clears it (#2387).
+  if (bNoId)
+    memset(&profile.m_Header.profileID, 0, sizeof(profile.m_Header.profileID));
 
   std::string valid_report;
 
@@ -59,7 +110,7 @@ int main(int argc, char* argv[])
       printf("Profile parsed and saved correctly\n");
     }
     else {
-      fprintf(stderr, "Unable to save profile as '%s'\n", argv[2]);
+      fprintf(stderr, "Unable to save profile as '%s'\n", dstName.c_str());
       return EXIT_FAILURE;
     }
   }
