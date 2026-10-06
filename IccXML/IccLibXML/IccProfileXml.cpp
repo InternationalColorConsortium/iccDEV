@@ -69,8 +69,6 @@
 #include <cstring> /* C strings strcpy, memcpy ... */
 #include <map>
 
-typedef  std::map<icUInt32Number, icTagSignature> IccOffsetTagSigMap;
-
 bool CIccProfileXml::ToXml(std::string &xml)
 {
   CIccInfo info;
@@ -246,18 +244,29 @@ bool CIccProfileXml::ToXmlWithBlanks(std::string &xml, std::string blanks)
   TagEntryList::iterator i, j;
   std::set<icTagSignature> sigSet;
   CIccInfo Fmt;
-  IccOffsetTagSigMap offsetTags;
+  // A tag attached under several signatures is one CIccTag object, and that
+  // is what every other path shares on: CIccProfile::Write() compares pTag,
+  // the SameAs reader re-attaches the object it finds, and the JSON writer
+  // keys its sameAs map on the pointer.  This used to key on the tag-table
+  // offset, which only Write() and Read() set: a profile built with
+  // AttachTag() or loaded with LoadXml() has every offset at 0, so every tag
+  // after the first came out as SameAs the first (#2767).
+  std::map<CIccTag*, icTagSignature> sharedTags;
 
   for (i=m_Tags.begin(); i!=m_Tags.end(); i++) {
     if (sigSet.find(i->TagInfo.sig)==sigSet.end()) {
+      // A signature repeated in the tag table is written once, as the JSON
+      // writer does: FindTag() returns the first entry's object for both, so
+      // a second pass would now write the tag as SameAs itself.
+      sigSet.insert(i->TagInfo.sig);
       CIccTag *pTag = FindTag(i->TagInfo.sig);
 
       if (pTag) {
         CIccTagXml *pTagXml = (CIccTagXml*)(pTag->GetExtension());
         if (pTagXml) {
-          IccOffsetTagSigMap::iterator prevTag = offsetTags.find(i->TagInfo.offset);
+          std::map<CIccTag*, icTagSignature>::iterator prevTag = sharedTags.find(pTag);
           const icChar *tagName = Fmt.GetTagSigName(i->TagInfo.sig);
-          if (prevTag == offsetTags.end()) {
+          if (prevTag == sharedTags.end()) {
             const icChar* tagSig = icGetTagSigTypeName(pTag->GetType());
 
             // Remember where this tag's markup begins.  The opening elements are
@@ -339,14 +348,14 @@ bool CIccProfileXml::ToXmlWithBlanks(std::string &xml, std::string blanks)
                        icFixXmlComment(typeFix, tagSig ? tagSig : ""));
               xml += blanks + line;
 
-              // Deliberately not recorded in offsetTags: a later tag sharing this
-              // offset must serialize itself in full rather than emit a SameAs
-              // reference pointing at a tag that is no longer in the document.
+              // Deliberately not recorded in sharedTags: a later signature on
+              // this same tag object must serialize itself in full rather than
+              // emit a SameAs reference to a tag that is no longer in the document.
               continue;
             }
             snprintf(line, bufSize, "    </%s> </%s>\n\n", tagSig, tagName);
             xml += blanks + line;
-            offsetTags[i->TagInfo.offset] = i->TagInfo.sig;
+            sharedTags[pTag] = i->TagInfo.sig;
           }
           else {
             const icChar *prevTagName = Fmt.GetTagSigName(prevTag->second);

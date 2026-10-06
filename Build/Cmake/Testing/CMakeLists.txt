@@ -5600,6 +5600,66 @@ function(iccdev_add_xml_writer_graceful_degrade_test)
   endif()
 endfunction()
 
+# CIccProfileXml::ToXml() and CIccTagXmlStruct::ToXml() detected a tag attached
+# under several signatures by its tag-table offset, which only Write() and
+# Read() set.  A profile built with AttachTag() or loaded with LoadXml() has
+# every offset at 0, so every tag after the first was written as SameAs the
+# first and the document was silently wrong.  Both writers now share on the
+# CIccTag object, as the binary writer, the SameAs reader and the JSON writer
+# do.  Pins an in-memory profile and struct, LoadXml() then ToXml(), and that
+# the <Tags> section matches the one a binary write and read gives.
+function(iccdev_add_xml_shared_tags_inmemory_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlSharedTagsInmemoryTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-shared-tags-inmemory.cpp"
+  )
+  target_compile_features(iccXmlSharedTagsInmemoryTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlSharedTagsInmemoryTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlSharedTagsInmemoryTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlSharedTagsInmemoryTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-shared-tags-inmemory
+      COMMAND "$<TARGET_FILE:iccXmlSharedTagsInmemoryTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-shared-tags-inmemory
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlSharedTagsInmemoryTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-shared-tags-inmemory PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;sameas;writer;regression"
+  )
+  if(WIN32)
+    set(_iccxmlsharedtagsinmemorytest_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlSharedTagsInmemoryTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccxmlsharedtagsinmemorytest_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-shared-tags-inmemory PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccxmlsharedtagsinmemorytest_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1999: CIccProfileXml::LoadXml's RelaxNG validation block (iccFromXml -v) created an
 # xmlRelaxNGParserCtxt, an xmlRelaxNG and an xmlRelaxNGValidCtxt and freed none
 # of them on any path -- four bare `return false` exits and a fall-through, so
@@ -11050,6 +11110,7 @@ if(WIN32)
   iccdev_add_json_sparsematrix_huaf_test()
   iccdev_add_unknown_tag_size_test()
   iccdev_add_xml_writer_graceful_degrade_test()
+  iccdev_add_xml_shared_tags_inmemory_test()
   iccdev_add_xml_relaxng_validation_leak_test()
   iccdev_add_xml_curve_oversize_file_test()
   iccdev_add_calc_channel_ref_unterminated_index_test()
@@ -11492,6 +11553,7 @@ iccdev_add_pawg_compression_paths_test()
 iccdev_add_json_sparsematrix_huaf_test()
 iccdev_add_unknown_tag_size_test()
 iccdev_add_xml_writer_graceful_degrade_test()
+iccdev_add_xml_shared_tags_inmemory_test()
 iccdev_add_xml_relaxng_validation_leak_test()
 iccdev_add_xml_curve_oversize_file_test()
 iccdev_add_calc_channel_ref_unterminated_index_test()
