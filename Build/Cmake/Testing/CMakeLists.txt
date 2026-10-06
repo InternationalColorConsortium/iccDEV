@@ -12145,6 +12145,24 @@ if(TARGET iccFromXml)
     SKIP_RETURN_CODE 77)
 endif()
 
+# The iccFromJson half of the same family (#2676): the JSON tool printed its usage
+# and returned 0 for a bare invocation and for one missing its output path,
+# skipped an unrecognised option in silence, and left a document's ProfileID in
+# place under -noid, where iccFromXml refuses each (#2387).  Not labelled "slow"
+# for the same reason as the XML block above.
+if(TARGET iccFromJson)
+  iccdev_add_script_test(
+    iccdev.fromjson-cli-contract-regression
+    120
+    "iccdev;json;fromjson;cli;args;usage;exitcode;issue-2676;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2676-fromjson-cli-contract-regression.sh"
+  )
+  # 77 when iccFromJson is absent or nothing was measured, as for the XML block.
+  set_tests_properties(iccdev.fromjson-cli-contract-regression PROPERTIES
+    SKIP_RETURN_CODE 77)
+endif()
+
 # #2401: the element (<n>) and text spellings of one XML array must agree.  Not
 # labelled "slow": check-fast and the dispatch-only Unix and fast-lane
 # runs all exclude that label, so applying it would drop this suite from each.
