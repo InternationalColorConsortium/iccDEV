@@ -838,9 +838,10 @@ bool CIccSampledCalculatorCurveXml::ParseXml(xmlNode *pNode, std::string &parseS
 
     if (!pCalc->ParseXml(pCalcNode, parseStr)) {
       parseStr += "Unable to parse calculator element in Sampled Calculator Curve\n";
+      delete pCalc;
       return false;
     }
-    m_pCalc = pCalc;
+    SetCalculator(pCalc);
   }
   else {
     parseStr += "Missing Calculator Element in Sampled Calculator Curve\n";
@@ -1970,7 +1971,7 @@ bool CIccMpeXmlTintArray::ParseXml(xmlNode *pNode, std::string &parseStr)
         if ((attr=icXmlFindAttr(pNode, "reserved"))) {
           sscanf(icXmlAttrValue(attr), "%u", &pTag->m_nReserved);
         }
-        m_Array = (CIccTagNumArray*)pTag;
+        SetArray((CIccTagNumArray*)pTag);
       }
       else {
         parseStr += "Unable to Parse \"";

@@ -5905,6 +5905,64 @@ function(iccdev_add_xml_struct_member_sameas_test)
     )
   endif()
 endfunction()
+
+# #2645: CIccSampledCalculatorCurveXml::ParseXml and CIccMpeXmlTintArray::ParseXml
+# assigned m_pCalc and m_Array directly instead of through SetCalculator() and
+# SetArray(), as the binary and JSON readers do, so an XML-parsed calculator or
+# tint array had no parent, a second ParseXml leaked the first array, and a
+# calculator whose own parse failed was leaked.  The parent checks fail on any
+# platform; the two leaks are seen only by the LeakSanitizer at-exit scan, so
+# detect_leaks=1 is forced where LeakSanitizer exists, as for
+# iccdev.xml-relaxng-validation-leak.
+function(iccdev_add_xml_mpe_reader_setters_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlMpeReaderSettersTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-mpe-reader-setters.cpp"
+  )
+  target_include_directories(iccXmlMpeReaderSettersTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlMpeReaderSettersTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlMpeReaderSettersTest)
+
+  if(NOT ICCDEV_HAS_LEAK_SANITIZER)
+    add_test(
+      NAME iccdev.xml-mpe-reader-setters
+      COMMAND "$<TARGET_FILE:iccXmlMpeReaderSettersTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-mpe-reader-setters
+      COMMAND "${CMAKE_COMMAND}" -E env
+        "ASAN_OPTIONS=detect_leaks=1"
+        "$<TARGET_FILE:iccXmlMpeReaderSettersTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-mpe-reader-setters PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;mpe;calculator;tint;leak;issue-2645;regression"
+  )
+  if(WIN32)
+    set(_xmlmpereadersetters_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlMpeReaderSettersTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _xmlmpereadersetters_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-mpe-reader-setters PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_xmlmpereadersetters_env_mods}"
+    )
+  endif()
+endfunction()
 # #2006: CIccTagCurve::SetSize() reports a request above its 65536-entry cap as success
 # after freeing the table, and the three File=/Format="text" branches of
 # CIccTagXmlCurve::ParseXml neither checked the return nor compared the resulting
@@ -11421,6 +11479,7 @@ if(WIN32)
   iccdev_add_xml_shared_tags_inmemory_test()
   iccdev_add_xml_relaxng_validation_leak_test()
   iccdev_add_xml_struct_member_sameas_test()
+  iccdev_add_xml_mpe_reader_setters_test()
   iccdev_add_xml_curve_oversize_file_test()
   iccdev_add_calc_channel_ref_unterminated_index_test()
   iccdev_add_calc_channel_ref_unterminated_index_json_test()
@@ -11870,6 +11929,7 @@ iccdev_add_xml_writer_graceful_degrade_test()
 iccdev_add_xml_shared_tags_inmemory_test()
 iccdev_add_xml_relaxng_validation_leak_test()
 iccdev_add_xml_struct_member_sameas_test()
+iccdev_add_xml_mpe_reader_setters_test()
 iccdev_add_xml_curve_oversize_file_test()
 iccdev_add_calc_channel_ref_unterminated_index_test()
 iccdev_add_calc_channel_ref_unterminated_index_json_test()
