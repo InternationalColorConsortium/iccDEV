@@ -894,7 +894,18 @@ bool CIccProfileXml::ParseTag(xmlNode *pNode, std::string &parseStr)
       }
       pTag = this->FindTag(sigParentTag);
       if (pTag) {
-        AttachTag(sigTag, pTag);
+        // AttachTag() refuses a signature that already holds a different
+        // object.  That result was discarded, so a document carrying a tag
+        // in full and then again as SameAs some other tag loaded as the
+        // first one and the SameAs was silently ignored; the JSON reader
+        // fails the same conflict (#2675).
+        if (!AttachTag(sigTag, pTag)) {
+          parseStr += "SameAs tag ";
+          parseStr += sameAs;
+          parseStr += " for ";
+          parseStr += nodeName + " conflicts with an earlier " + nodeName + "\n";
+          return false;
+        }
       }
       else {
         parseStr += "SameAs tag ";
@@ -919,6 +930,23 @@ bool CIccProfileXml::ParseTag(xmlNode *pNode, std::string &parseStr)
         parseStr += nodeName;
         parseStr += "\n";
         return false;
+      }
+
+      // A tag element holds exactly one type element.  A second one used to
+      // be ignored, so a document with two types under one tag loaded as the
+      // first and reported success (#2696).  The JSON reader refuses a Tags
+      // entry with a second member the same way.
+      for (xmlNode *pExtra = pTypeNode->next; pExtra; pExtra = pExtra->next) {
+        if (pExtra->type == XML_ELEMENT_NODE) {
+          parseStr += "More than one type element for ";
+          parseStr += nodeName;
+          parseStr += ": ";
+          parseStr += (const char*)pTypeNode->name;
+          parseStr += " and ";
+          parseStr += (const char*)pExtra->name;
+          parseStr += "\n";
+          return false;
+        }
       }
 
       // get the tag type signature

@@ -5890,7 +5890,15 @@ bool CIccTagXmlStruct::ParseTag(xmlNode *pNode, std::string &parseStr)
       }
       pTag = this->FindElem(sigParentTag);
       if (pTag) {
-        AttachElem(sigTag, pTag);
+        // As at profile level: a member already holding a different object
+        // is a conflict, not a no-op (#2675).
+        if (!AttachElem(sigTag, pTag)) {
+          parseStr += "SameAs tag ";
+          parseStr += sameAs;
+          parseStr += " for ";
+          parseStr += nodeName + " conflicts with an earlier " + nodeName + "\n";
+          return false;
+        }
       }
       else {
         parseStr += "SameAs tag ";
