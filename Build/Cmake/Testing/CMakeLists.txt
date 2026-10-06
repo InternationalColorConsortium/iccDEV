@@ -5749,6 +5749,63 @@ function(iccdev_add_xml_relaxng_validation_leak_test)
   endif()
 endfunction()
 
+# #2770: CIccTagXmlStruct::ToXml() wrote a shared member's SameAsSignature
+# under a guard that was true for every member name and false only for an
+# empty one, the one case the reader needs it for (a struct with no handler).
+# The attribute is now always written.  Pins the round trip of a member
+# attached under two signatures, in a private struct and a colorantInfo
+# struct, through a binary write and read and back through LoadXml().
+function(iccdev_add_xml_struct_member_sameas_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlStructMemberSameAsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-struct-member-sameas.cpp"
+  )
+  target_compile_features(iccXmlStructMemberSameAsTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlStructMemberSameAsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlStructMemberSameAsTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlStructMemberSameAsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-struct-member-sameas
+      COMMAND "$<TARGET_FILE:iccXmlStructMemberSameAsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-struct-member-sameas
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlStructMemberSameAsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-struct-member-sameas PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;struct;sameas;writer;issue-2770;regression"
+  )
+  if(WIN32)
+    set(_iccxmlstructmembersameastest_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlStructMemberSameAsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccxmlstructmembersameastest_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-struct-member-sameas PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccxmlstructmembersameastest_env_mods}"
+    )
+  endif()
+endfunction()
 # #2006: CIccTagCurve::SetSize() reports a request above its 65536-entry cap as success
 # after freeing the table, and the three File=/Format="text" branches of
 # CIccTagXmlCurve::ParseXml neither checked the return nor compared the resulting
@@ -11112,6 +11169,7 @@ if(WIN32)
   iccdev_add_xml_writer_graceful_degrade_test()
   iccdev_add_xml_shared_tags_inmemory_test()
   iccdev_add_xml_relaxng_validation_leak_test()
+  iccdev_add_xml_struct_member_sameas_test()
   iccdev_add_xml_curve_oversize_file_test()
   iccdev_add_calc_channel_ref_unterminated_index_test()
   iccdev_add_calc_channel_ref_unterminated_index_json_test()
@@ -11555,6 +11613,7 @@ iccdev_add_unknown_tag_size_test()
 iccdev_add_xml_writer_graceful_degrade_test()
 iccdev_add_xml_shared_tags_inmemory_test()
 iccdev_add_xml_relaxng_validation_leak_test()
+iccdev_add_xml_struct_member_sameas_test()
 iccdev_add_xml_curve_oversize_file_test()
 iccdev_add_calc_channel_ref_unterminated_index_test()
 iccdev_add_calc_channel_ref_unterminated_index_json_test()
