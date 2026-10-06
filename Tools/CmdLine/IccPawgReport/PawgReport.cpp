@@ -74,6 +74,7 @@
 #include "IccCmdLineUtil.h"
 #include "IccProfile.h"
 #include "IccMpeCalc.h"
+#include "IccTagEmbedIcc.h"
 #include "IccTag.h"
 #include "IccTagBasic.h"
 #include "IccTagLut.h"
@@ -1030,9 +1031,37 @@ PawgVerdict ChannelCountVerdict(CIccProfile *pIcc, std::string &detail)
   return PawgVerdict::Ok;
 }
 
+// The ICC.2 profile an ICC.1 profile embeds under 'ICC5' (ICC Technical Note
+// 04-2018), when the outer profile is below v5 and carries one that loaded.
+static CIccProfile *EmbeddedV5Profile(CIccProfile *pIcc)
+{
+  if (!pIcc)
+    return NULL;
+  CIccTagEmbeddedProfile *pTag = dynamic_cast<CIccTagEmbeddedProfile*>(pIcc->FindTag(icSigEmbeddedV5ProfileTag));
+  if (!pTag || !pTag->GetProfile())
+    return NULL;
+  if ((pTag->GetProfile()->m_Header.version >> 24) < 5)
+    return NULL;
+  return pTag->GetProfile();
+}
+
 PawgVerdict CalculatorCostVerdict(CIccProfile *pIcc, const RawProfile &raw, std::string &detail)
 {
-  if (!raw.hasHeader || ((raw.version >> 24) < 5)) {
+  // A v4 host with an embedded v5 sub-profile is where the calculators are:
+  // the outer tags carry none, and this returned "not an iccMAX profile"
+  // without looking inside (#2694).  The child is measured in its place,
+  // and the detail says so.
+  const char *scope = "";
+  if (raw.hasHeader && ((raw.version >> 24) < 5)) {
+    CIccProfile *pChild = EmbeddedV5Profile(pIcc);
+    if (!pChild) {
+      detail = "not an iccMAX profile";
+      return PawgVerdict::NotApplicable;
+    }
+    pIcc = pChild;
+    scope = "embedded v5 sub-profile: ";
+  }
+  else if (!raw.hasHeader) {
     detail = "not an iccMAX profile";
     return PawgVerdict::NotApplicable;
   }
@@ -1076,7 +1105,7 @@ PawgVerdict CalculatorCostVerdict(CIccProfile *pIcc, const RawProfile &raw, std:
   }
 
   std::ostringstream oss;
-  oss << mpeTags << " MPE tag(s), " << elements << " process element(s), "
+  oss << scope << mpeTags << " MPE tag(s), " << elements << " process element(s), "
       << calculatorElements << " calculator element(s), "
       << calculatorOperations << " calculator operation(s), estimated relative cost="
       << estimatedCost << "; local warning threshold=65536 operations";
