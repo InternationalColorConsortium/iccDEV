@@ -3058,6 +3058,65 @@ function(iccdev_add_pawg_c5_cicp_test)
   endif()
 endfunction()
 
+# #2787: C5 warned on a BToA0Tag in an Input or Display profile, which ICC.1:2022
+# permits in every Input and Display profile and requires of an N-component
+# LUT-based Display profile (8.4.2).  Same machinery as the #2001 test above:
+# PawgReport.cpp compiled in, DumpPawgReport driven, the C4 and C5 lines read
+# back.  The tracked sRGB v4 preference profile, a ColorSpace profile with
+# AToB0 and BToA0, is re-classed as Display and as Input; two controls keep C5
+# warning on a tag outside the table and C4 refusing BToA0Tag as the only
+# transform.  Needs IccProfLib only.
+function(iccdev_add_pawg_c5_btoa0_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPawgC5BToA0Test
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pawg-c5-btoa0-input-display.cpp"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport/PawgReport.cpp"
+  )
+  target_compile_features(iccPawgC5BToA0Test PRIVATE cxx_std_17)
+  target_include_directories(iccPawgC5BToA0Test PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport"
+  )
+  target_link_libraries(iccPawgC5BToA0Test PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  # Linked without LTO.  With it, GCC 15.2 reports -Werror=free-nonheap-object
+  # in std::vector's deallocate, inlined from SortedUniqueTagRegions() into
+  # EvaluatePawg(), for this executable alone, and with PawgReport.cpp as it
+  # was before #2787 too; the same source links cleanly into iccPawgReport and
+  # iccPawgC5CicpTest, and compiles cleanly without LTO.  The test checks report
+  # text, not code generation.
+  set_target_properties(iccPawgC5BToA0Test PROPERTIES INTERPROCEDURAL_OPTIMIZATION OFF)
+  add_dependencies(check iccPawgC5BToA0Test)
+
+  add_test(
+    NAME iccdev.pawg-c5-btoa0-input-display
+    COMMAND "$<TARGET_FILE:iccPawgC5BToA0Test>"
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+  )
+  # Runs in the ctest output dir because it writes its subject profiles and
+  # captured reports beside itself.
+  set_tests_properties(iccdev.pawg-c5-btoa0-input-display PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;pawg;issue-2787;regression"
+  )
+  if(WIN32)
+    set(_pawg_c5_btoa0_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPawgC5BToA0Test>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pawg_c5_btoa0_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pawg-c5-btoa0-input-display PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pawg_c5_btoa0_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1976: two defects on the gamt path. CIccXform::Create() forces bInput false to walk
 # the B-to-A shaped gamut tag, but m_bInput also drove GetDstSpace()/GetNumDstSamples(),
 # so the xform advertised the profile's device space while CIccCmm::AddXform() had
@@ -11651,6 +11710,7 @@ if(WIN32)
   iccdev_add_pcc_standard_observer_and_illuminant_test()
   iccdev_add_mpe_acs_zero_signature_test()
   iccdev_add_pawg_c5_cicp_test()
+  iccdev_add_pawg_c5_btoa0_test()
   iccdev_add_gamut_xform_semantics_test()
   iccdev_add_rangemap_uninitialized_test()
   iccdev_add_pcs_birefl_illuminant_range_test()
@@ -12098,6 +12158,7 @@ iccdev_add_json_escape_codepoint_test()
 iccdev_add_v5_required_tag_sets_test()
 iccdev_add_mpe_acs_zero_signature_test()
 iccdev_add_pawg_c5_cicp_test()
+iccdev_add_pawg_c5_btoa0_test()
 iccdev_add_gamut_xform_semantics_test()
 iccdev_add_rangemap_uninitialized_test()
 iccdev_add_pcs_birefl_illuminant_range_test()
