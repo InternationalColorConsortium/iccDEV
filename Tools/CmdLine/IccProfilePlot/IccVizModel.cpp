@@ -232,7 +232,12 @@ std::string describeCurve(CIccCurve* curve) {
       return "Y = X";
     } else if (size == 1) {
       icFloatNumber value0 = (*tc)[0];
-      icFloatNumber dGamma = (icFloatNumber)(value0 * 256.0f);
+      // value0 is the stored u8Fixed8Number after ReadUInt16Float() divided it by
+      // 65535, so the exponent is value0 * 65535 / 256, the decode IccProfLib uses in
+      // CIccTagCurve::Describe() (which prints it to ten decimals; this label keeps
+      // std::to_string's six).  value0 * 256 is the spelling #808 retired: it is high
+      // by 65536/65535, so gamma 2 printed as 2.000031 (#2717).
+      icFloatNumber dGamma = (icFloatNumber)(value0 * 65535.0 / 256.0);
       return "Y = X ^ " + std::to_string(dGamma);
     } else {
       return "LookupTable[" + std::to_string(size) + "]";

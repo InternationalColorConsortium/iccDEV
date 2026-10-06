@@ -79,8 +79,6 @@
 #include <iomanip>  // Include this header for setw and setfill
 #include <cmath>    // std::isfinite for NaN/Inf-safe float->int casts
 
-typedef  std::map<icUInt32Number, icTagSignature> IccOffsetTagSigMap;
-
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
 #endif
@@ -1021,10 +1019,10 @@ bool CIccTagXmlNamedColor2::ToXml(std::string &xml, std::string blanks/* = ""*/)
   snprintf(line, bufSize, "<NamedColors VendorFlag=\"%08x\" CountOfDeviceCoords=\"%d\" DeviceEncoding=\"int16\"", (unsigned int) m_nVendorFlags, (unsigned int) m_nDeviceCoords);
   xml += blanks + line;
 
-  snprintf(line, bufSize, " Prefix=\"%s\"", icFixXml(fix, icAnsiToUtf8(str, m_szPrefix)));
+  snprintf(line, bufSize, " Prefix=\"%s\"", icFixXml(fix, icAnsiToUtf8(str, m_szPrefix, sizeof(m_szPrefix))));
   xml += line;
 
-  snprintf(line, bufSize, " Suffix=\"%s\">\n", icFixXml(fix, icAnsiToUtf8(str, m_szSufix)));
+  snprintf(line, bufSize, " Suffix=\"%s\">\n", icFixXml(fix, icAnsiToUtf8(str, m_szSufix, sizeof(m_szSufix))));
   xml += line;
 
   for (i=0; i<(int)m_nSize; i++) {
@@ -1040,7 +1038,7 @@ bool CIccTagXmlNamedColor2::ToXml(std::string &xml, std::string blanks/* = ""*/)
         icLabFromPcs(lab);
         szNodeName = "LabNamedColor";
         snprintf(line, bufSize, "  <%s Name=\"%s\" L=\"" icXmlFloatFmt "\" a=\"" icXmlFloatFmt "\" b=\"" icXmlFloatFmt "\"", szNodeName,
-          icFixXml(fix, icAnsiToUtf8(str, pEntry->rootName)), lab[0], lab[1], lab[2]);
+          icFixXml(fix, icAnsiToUtf8(str, pEntry->rootName, sizeof(pEntry->rootName))), lab[0], lab[1], lab[2]);
         xml += blanks + line;
       }
       else {
@@ -1050,7 +1048,7 @@ bool CIccTagXmlNamedColor2::ToXml(std::string &xml, std::string blanks/* = ""*/)
         icXyzFromPcs(xyz);
         szNodeName = "XYZNamedColor";
         snprintf(line, bufSize, "  <%s Name=\"%s\" X=\"" icXmlFloatFmt "\" Y=\"" icXmlFloatFmt "\" Z=\"" icXmlFloatFmt "\"", szNodeName,
-          icFixXml(fix, icAnsiToUtf8(str, pEntry->rootName)), xyz[0], xyz[1], xyz[2]);
+          icFixXml(fix, icAnsiToUtf8(str, pEntry->rootName, sizeof(pEntry->rootName))), xyz[0], xyz[1], xyz[2]);
         xml += blanks + line;
       }
 
@@ -2933,7 +2931,7 @@ bool CIccTagXmlColorantTable::ToXml(std::string &xml, std::string blanks/* = ""*
     lab[2] = icU16toF(m_pData[i].data[2]);
     icLabFromPcs(lab);
     snprintf(buf, bufSize, "  <Colorant Name=\"%s\" Channel1=\"" icXmlFloatFmt "\" Channel2=\"" icXmlFloatFmt "\" Channel3=\"" icXmlFloatFmt "\"/>\n",
-      icFixXml(fix, icAnsiToUtf8(str, m_pData[i].name)), lab[0], lab[1], lab[2]);
+      icFixXml(fix, icAnsiToUtf8(str, (const char*)m_pData[i].name, sizeof(m_pData[i].name))), lab[0], lab[1], lab[2]);
     xml += blanks + buf;
   }
   //xml += "\n";
@@ -6070,18 +6068,25 @@ bool CIccTagXmlStruct::ToXml(std::string &xml, std::string blanks/* = ""*/)
   TagEntryList::iterator i, j;
   std::set<icTagSignature> sigSet;
   CIccInfo Fmt;
-  IccOffsetTagSigMap offsetTags;
+  // Shared members are one CIccTag object, as at profile level (see
+  // CIccProfileXml::ToXml): CIccTagStruct::Write() compares pTag and the
+  // SameAs reader re-attaches the object.  Keyed on the element offset, this
+  // emitted every member after the first of a struct built in memory or
+  // loaded from XML as SameAs the first (#2767).
+  std::map<CIccTag*, icTagSignature> sharedTags;
 
   for (i=m_ElemEntries->begin(); i!=m_ElemEntries->end(); i++) {
     if (sigSet.find(i->TagInfo.sig)==sigSet.end()) {
+      // A repeated member signature is written once, as at profile level.
+      sigSet.insert(i->TagInfo.sig);
       CIccTag *pTag = FindElem(i->TagInfo.sig);
 
       if (pTag) {
         CIccTagXml *pTagXml = (CIccTagXml*)(pTag->GetExtension());
         if (pTagXml) {
-          IccOffsetTagSigMap::iterator prevTag = offsetTags.find(i->TagInfo.offset);
+          std::map<CIccTag*, icTagSignature>::iterator prevTag = sharedTags.find(pTag);
           std::string tagName = ((pStruct!=NULL) ? pStruct->GetElemName((icSignature)i->TagInfo.sig) : "");
-          if (prevTag == offsetTags.end()) {
+          if (prevTag == sharedTags.end()) {
             const icChar* tagSig = icGetTagSigTypeName(pTag->GetType());
 
             // Start of this member's markup, kept so the skip path below can
@@ -6149,14 +6154,14 @@ bool CIccTagXmlStruct::ToXml(std::string &xml, std::string blanks/* = ""*/)
                        icFixXmlComment(typeFix, tagSig ? tagSig : ""));
               xml += blanks + line;
 
-              // As at profile level, not recorded in offsetTags so that a later
-              // member at the same offset does not emit a SameAs reference to a
-              // member that was dropped.
+              // As at profile level, not recorded in sharedTags so that a later
+              // signature on this same object does not emit a SameAs reference
+              // to a member that was dropped.
               continue;
             }
             snprintf(line, bufSize, "  </%s> </%s>\n", tagSig, tagName.c_str());
             xml += blanks + line;
-            offsetTags[i->TagInfo.offset] = i->TagInfo.sig;
+            sharedTags[pTag] = i->TagInfo.sig;
           }
           else {
             std::string prevTagName = ((pStruct != NULL) ? pStruct->GetElemName(prevTag->second) : "");

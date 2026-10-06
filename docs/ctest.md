@@ -244,8 +244,10 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
 | `iccdev.namedcmm-sample-guards` | `.github/ci/regression/namedcmm-sample-guards.cpp`; `CIccNamedColorCmm::Begin()` refuses a spectral source or destination that a colorimetric AToB3/BToA3 fallback cannot serve, as `CIccCmm::Begin()` does, for issue #2704 |
 | `iccdev.curve-apply-gamma` | `.github/ci/regression/curve-apply-gamma.cpp`; direct one-entry gamma API contract for issue #2686 |
+| `iccdev.curve-gamma-tool-labels` | `Build/Cmake/Testing/RunCurveGammaToolLabelsTest.cmake`; the `Y = X ^ g` label `iccProfilePlot` and `iccProfileVisualize` print for a one-entry curve carries the stored u8Fixed8 exponent (sample * 65535 / 256, not sample * 256), checked on the four `gamma-*.icc` fixtures, for issue #2717 |
 | `iccdev.calc-temp-reset-if-no-else` | `.github/ci/regression/calc-temp-reset-if-no-else.cpp`; calculator temporaries read as zero at each invocation, after an `if` with no `else` and after a `select`, for issue #2707 |
 | `iccdev.calc-output-init` | `.github/ci/regression/calc-output-init.cpp`; calculator output channels a program does not write read as zero at each invocation (alone, reused, and mid-chain), and an in-place call still reads its inputs, for issues #2702 and #2705 |
+| `iccdev.calc-copy-owner` | `.github/ci/regression/calc-copy-owner.cpp`; a copied or assigned calculator's function looks up the copy's own sub-elements, a copied tag applies after the original is deleted, assignment keeps the sub-elements, and self-assignment keeps the function and its operations, for issue #2751 |
 | `iccdev.issue-2686-curve-gamma-xml` | `.github/ci/regression/issue-2686-curve-gamma.xml`; serialized profile setup for issue #2686 |
 | `iccdev.issue-2686-curve-gamma-profileplot` | `iccProfilePlot`; applies the generated BToA1 one-entry curve for issue #2686 and asserts the plotted values, not the graph subtitle, which is built without applying the curve |
 | `iccdev.issue-2688-colorant-table-pcs-xml` | `.github/ci/regression/issue-2688-colorant-table-pcs.xml`; serialized profile setup for issue #2688 |
@@ -261,14 +263,14 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.applytolink-v4-missing-device-descriptions` | `Build/Cmake/Testing/CMakeLists.txt` |
 | `iccdev.xform-abstorel-adjust` | `.github/ci/regression/xform-abstorel-adjust.cpp` |
 | `iccdev.valid-overlap` | `.github/ci/regression/valid-overlap.cpp`; `icValidOverlap()` accepts disjoint positions, or positions at the same offset when `bAllowSame` is set, and nothing else, for issue #2731 |
-| `iccdev.v5-required-tag-sets` | `.github/ci/regression/v5-required-tag-sets.cpp`; six v5 required-tag rows against ICC.2-2023 clause 8 (Input, Display, Output and its xCLR colorant tags, DeviceLink, MultiplexIdentification/Link/Visualization) for issue #2562 |
+| `iccdev.v5-required-tag-sets` | `.github/ci/regression/v5-required-tag-sets.cpp`; v5 required-tag rows against ICC.2-2023 clause 8 (Input, Display, Output and its xCLR colorant tags, DeviceLink, MultiplexIdentification/Link/Visualization, ColorSpace, Abstract) for issues #2562 and #2730, and the 7.2.9 Abstract header (PCS zero, data colour space and spectral PCS non-zero) that requires DToB0Tag |
 | `iccdev.matrixtrc-monochrome-pcs` | `.github/ci/regression/matrixtrc-monochrome-pcs.cpp`; matrix/TRC accepts only a PCSXYZ connection and monochrome only PCSXYZ or PCSLAB, including after a fallback from an unsupported DToB0, for issue #2738 |
 | `iccdev.pcs-adjust-placement` | `.github/ci/regression/pcs-adjust-placement.cpp` |
 | `iccdev.reflectance-observer-illum-range` | `.github/ci/regression/reflectance-observer-illum-range.cpp` |
 | `iccdev.spectral-absolute-flag` | `.github/ci/regression/spectral-absolute-flag.cpp` |
 | `iccdev.pcs-edge-metadata` | `.github/ci/regression/pcs-edge-metadata.cpp` |
 | `iccdev.parser-restore-calls` | `.github/ci/regression/parser-restore-calls.cpp` |
-| `iccdev.mid-mlnk-header-checks` | `.github/ci/regression/mid-mlnk-header-checks.cpp`; MultiplexIdentification and MultiplexLink run the class-independent header checks, and MultiplexIdentification has no zero data colour space, for issue #2563 |
+| `iccdev.mid-mlnk-header-checks` | `.github/ci/regression/mid-mlnk-header-checks.cpp`; MultiplexIdentification and MultiplexLink run the class-independent header checks, and MultiplexIdentification has no zero data colour space, for issue #2563; v5 NamedColor and Abstract accept a zero data colour space, a zero-data Abstract's AToB0Tag needs a spectral PCS and range, and the tag validators take its A side from the spectral PCS, for issue #2725; a zero-PCS Abstract's data colour space must be a colorimetric PCS or a spectral colour space to define its DToB0Tag's D side, for issue #2756 |
 | `iccdev.legacy-run-tests` | `Testing/RunTests.sh` |
 | `iccdev.profile-write-failure` | `.github/ci/regression/profile-write-failure.cpp` |
 | `iccdev.tool-coverage` | `.github/scripts/iccdev-tool-coverage-baseline.sh --asan --skip-hybrid` |

@@ -1887,9 +1887,10 @@ endfunction()
 # #2702/#2705: a calculator's output channels kept the caller's buffer contents
 # wherever the main function did not reach an out() operation, and
 # MemorySanitizer reported the reads downstream (CIccApplyBPC's stack black
-# point, a CMM pixel buffer).  CIccMpeCalculator::Apply() now zeroes them at
-# each invocation, the rule ICC.2-2023 11.2.1 gives temporaries.  Library only;
-# called in both the Windows and the main list.
+# point, a CMM pixel buffer).  CIccCalculatorFunc::Apply() now zeroes them at
+# each invocation, as ICC.2-2023 11.2.1.2 requires ("Output channels shall be
+# assumed to be zero until set by the main calculator function").  Library
+# only; called in both the Windows and the main list.
 function(iccdev_add_calc_output_init_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -1935,6 +1936,61 @@ function(iccdev_add_calc_output_init_test)
     endforeach()
     set_tests_properties(iccdev.calc-output-init PROPERTIES
       ENVIRONMENT_MODIFICATION "${_calc_output_init_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# #2751: CIccMpeCalculator's copy constructor and operator= left the copied
+# function pointing at the SOURCE calculator, so its calc()/curv()/mtx()
+# operations read the source's sub-elements, freed once the source was deleted
+# (iccApplySearch copies a profile and deletes the original).  operator= also
+# dropped every sub-element.  Library only; called in both the Windows and the
+# main list.
+function(iccdev_add_calc_copy_owner_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCalcCopyOwnerTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/calc-copy-owner.cpp"
+  )
+  target_compile_features(iccCalcCopyOwnerTest PRIVATE cxx_std_17)
+  target_include_directories(iccCalcCopyOwnerTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccCalcCopyOwnerTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccCalcCopyOwnerTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.calc-copy-owner
+      COMMAND "$<TARGET_FILE:iccCalcCopyOwnerTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.calc-copy-owner
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccCalcCopyOwnerTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.calc-copy-owner PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;calculator;mpe;asan;issue-2751;regression"
+  )
+  if(WIN32)
+    set(_calc_copy_owner_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCalcCopyOwnerTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _calc_copy_owner_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.calc-copy-owner PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_calc_copy_owner_env_mods}"
     )
   endif()
 endfunction()
@@ -2204,6 +2260,64 @@ function(iccdev_add_tonemap_write_many_outputs_test)
     endforeach()
     set_tests_properties(iccdev.tonemap-write-many-outputs PROPERTIES
       ENVIRONMENT_MODIFICATION "${_tonemap_write_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# The 256-byte text cap in icAnsiToUtf8()/icUtf8ToAnsi() (#740's strnlen
+# bound) silently truncated every textType and v2 textDescriptionType longer
+# than 256 bytes on non-Windows builds, in both XML directions - a
+# charTargetTag's CGATS data came back as 256 bytes.  Pins byte-exact round
+# trips of a 35 KB charTargetTag and a 1 KB description, each direction on its
+# own, and that the bounded overloads read no further than a fixed-size field.
+function(iccdev_add_xml_text_long_roundtrip_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlTextLongRoundtripTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-text-long-roundtrip.cpp"
+  )
+  target_compile_features(iccXmlTextLongRoundtripTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlTextLongRoundtripTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlTextLongRoundtripTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlTextLongRoundtripTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-text-long-roundtrip
+      COMMAND "$<TARGET_FILE:iccXmlTextLongRoundtripTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-text-long-roundtrip
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlTextLongRoundtripTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-text-long-roundtrip PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;text;roundtrip;parser-symmetry;regression"
+  )
+  if(WIN32)
+    set(_iccxmltextlongroundtriptest_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlTextLongRoundtripTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccxmltextlongroundtriptest_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-text-long-roundtrip PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccxmltextlongroundtriptest_env_mods}"
     )
   endif()
 endfunction()
@@ -4731,6 +4845,50 @@ function(iccdev_add_iccprofileplot_exitcode_test)
   endif()
 endfunction()
 
+# Guards the "Y = X ^ g" label both curve-describing tools print for a one-entry
+# curveType (#2717).  The gamma is a u8Fixed8Number, raw/256; the library
+# normalises the sample by 65535 on read, so the exponent is sample*65535/256
+# (CIccTagCurve::Describe, #808).  iccProfilePlot and iccProfileVisualize used
+# sample*256, the spelling #808 retired, so every label was high by 65536/65535.
+# The script runs both built tools over the four #808 gamma fixtures and checks
+# each label's exponent against raw/256 to within 2e-6; the retired decode is
+# off by gamma/65535, at least 1.5e-5.
+function(iccdev_add_curve_gamma_tool_labels_test)
+  if(NOT TARGET iccProfilePlot OR NOT TARGET iccProfileVisualize)
+    return()
+  endif()
+  add_dependencies(check iccProfilePlot iccProfileVisualize)
+
+  add_test(
+    NAME iccdev.curve-gamma-tool-labels
+    COMMAND "${CMAKE_COMMAND}"
+      "-DPLOT_TOOL=$<TARGET_FILE:iccProfilePlot>"
+      "-DVIZ_TOOL=$<TARGET_FILE:iccProfileVisualize>"
+      "-DFIXTURE_DIR=${ICCDEV_REPO_ROOT}/.github/ci/regression"
+      "-DWORKDIR=${ICCDEV_TEST_OUTDIR}/curve-gamma-tool-labels"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunCurveGammaToolLabelsTest.cmake"
+  )
+  set_tests_properties(iccdev.curve-gamma-tool-labels PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofileplot;iccprofilevisualize;curve;gamma;issue-2717;regression"
+  )
+  if(WIN32)
+    set(_gamma_labels_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccProfilePlot>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccProfileVisualize>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _gamma_labels_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.curve-gamma-tool-labels PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_gamma_labels_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_applytolink_invalid_arg_test)
   if(NOT TARGET iccApplyToLink)
     return()
@@ -5906,6 +6064,66 @@ function(iccdev_add_xml_writer_graceful_degrade_test)
     endforeach()
     set_tests_properties(iccdev.xml-writer-graceful-degrade PROPERTIES
       ENVIRONMENT_MODIFICATION "${_xml_degrade_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# CIccProfileXml::ToXml() and CIccTagXmlStruct::ToXml() detected a tag attached
+# under several signatures by its tag-table offset, which only Write() and
+# Read() set.  A profile built with AttachTag() or loaded with LoadXml() has
+# every offset at 0, so every tag after the first was written as SameAs the
+# first and the document was silently wrong.  Both writers now share on the
+# CIccTag object, as the binary writer, the SameAs reader and the JSON writer
+# do.  Pins an in-memory profile and struct, LoadXml() then ToXml(), and that
+# the <Tags> section matches the one a binary write and read gives.
+function(iccdev_add_xml_shared_tags_inmemory_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlSharedTagsInmemoryTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-shared-tags-inmemory.cpp"
+  )
+  target_compile_features(iccXmlSharedTagsInmemoryTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlSharedTagsInmemoryTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlSharedTagsInmemoryTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlSharedTagsInmemoryTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-shared-tags-inmemory
+      COMMAND "$<TARGET_FILE:iccXmlSharedTagsInmemoryTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-shared-tags-inmemory
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlSharedTagsInmemoryTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-shared-tags-inmemory PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;sameas;writer;regression"
+  )
+  if(WIN32)
+    set(_iccxmlsharedtagsinmemorytest_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlSharedTagsInmemoryTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccxmlsharedtagsinmemorytest_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-shared-tags-inmemory PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccxmlsharedtagsinmemorytest_env_mods}"
     )
   endif()
 endfunction()
@@ -11366,6 +11584,7 @@ if(WIN32)
   iccdev_add_json_sparsematrix_huaf_test()
   iccdev_add_unknown_tag_size_test()
   iccdev_add_xml_writer_graceful_degrade_test()
+  iccdev_add_xml_shared_tags_inmemory_test()
   iccdev_add_xml_relaxng_validation_leak_test()
   iccdev_add_xml_curve_oversize_file_test()
   iccdev_add_calc_channel_ref_unterminated_index_test()
@@ -11382,6 +11601,7 @@ if(WIN32)
   iccdev_add_valid_overlap_test()
   iccdev_add_curve_gamma_u8fixed8_test()
   iccdev_add_calc_output_init_test()
+  iccdev_add_calc_copy_owner_test()
   iccdev_add_luminance_normalization_test()
   iccdev_add_tag_name_spelling_test()
   iccdev_add_device_attributes_icc2_test()
@@ -11407,6 +11627,17 @@ if(WIN32)
   iccdev_add_xml_embedded_image_empty_test()
   iccdev_add_embedded_image_zero_byte_test()
   iccdev_add_calc_envsig_sign_extension_test()
+  # Six regression tests whose functions carry their own if(WIN32) branches were
+  # called only from the main list below this block, which the return() after it
+  # never reaches on Windows (#2237).  They never registered, so never built or
+  # ran, on the MSVC, ClangCL and MinGW legs: the four from #2720-#2723 and the
+  # two from #2451/#2461.  Call them here as well so the Windows legs run them.
+  iccdev_add_calc_temp_reset_if_no_else_test()
+  iccdev_add_v5_required_tag_sets_test()
+  iccdev_add_named_colour_signature_v5_test()
+  iccdev_add_mid_mlnk_header_checks_test()
+  iccdev_add_islegalutf8_bound_test()
+  iccdev_add_json_escape_codepoint_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
   iccdev_add_installed_package_consumer_test()
@@ -11495,6 +11726,7 @@ if(WIN32)
   iccdev_add_xyz_negative_z_test()
   iccdev_add_utf8_textarray_test()
   iccdev_add_extended_device_colorspace_test()
+  iccdev_add_xml_text_long_roundtrip_test()
   iccdev_add_hex_data_malformed_xml_test()
   iccdev_add_hex_data_malformed_json_test()
   iccdev_add_tonemap_functions_xml_test()
@@ -11512,6 +11744,7 @@ if(WIN32)
   iccdev_add_iccprofileplot_clut_oob_test()
   iccdev_add_iccprofileplot_pdf_leak_test()
   iccdev_add_iccprofileplot_exitcode_test()
+  iccdev_add_curve_gamma_tool_labels_test()
   iccdev_add_applytolink_invalid_arg_test()
   iccdev_add_applytolink_negative_intent_tests()
   iccdev_add_applytolink_transform_type_tests()
@@ -11812,6 +12045,7 @@ iccdev_add_pawg_hdr_section_test()
 iccdev_add_json_sparsematrix_huaf_test()
 iccdev_add_unknown_tag_size_test()
 iccdev_add_xml_writer_graceful_degrade_test()
+iccdev_add_xml_shared_tags_inmemory_test()
 iccdev_add_xml_relaxng_validation_leak_test()
 iccdev_add_xml_curve_oversize_file_test()
 iccdev_add_calc_channel_ref_unterminated_index_test()
@@ -11907,6 +12141,7 @@ iccdev_add_spectral_absolute_flag_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_calc_temp_reset_if_no_else_test()
 iccdev_add_calc_output_init_test()
+iccdev_add_calc_copy_owner_test()
 iccdev_add_formula_segment_nonfinite_parameter_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_chromaticity_validate_test()
@@ -11942,6 +12177,7 @@ iccdev_add_pcs_edge_metadata_test()
 iccdev_add_xyz_negative_z_test()
 iccdev_add_utf8_textarray_test()
 iccdev_add_extended_device_colorspace_test()
+iccdev_add_xml_text_long_roundtrip_test()
 iccdev_add_hex_data_malformed_xml_test()
 iccdev_add_hex_data_malformed_json_test()
 iccdev_add_tonemap_functions_xml_test()
@@ -11959,6 +12195,7 @@ iccdev_add_iccviz_writer_serialization_test()
 iccdev_add_iccprofileplot_clut_oob_test()
 iccdev_add_iccprofileplot_pdf_leak_test()
 iccdev_add_iccprofileplot_exitcode_test()
+iccdev_add_curve_gamma_tool_labels_test()
 iccdev_add_prmg_hue_normalization_test()
 iccdev_add_qa_evidence_helpers_test()
 iccdev_add_zip_utf8_text_zlib_test()

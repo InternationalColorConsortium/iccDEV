@@ -73,8 +73,13 @@
 const char *icFixXml(char *szDest, const char *szStr);
 const char *icFixXml(std::string &buf, const char *szStr);
 const char *icFixXmlComment(std::string &buf, const char *szStr);
+// szSrc is a NUL-terminated string, converted whole; NULL gives "".
 const char *icAnsiToUtf8(std::string &buf, const char *szSrc);
 const char *icUtf8ToAnsi(std::string &buf, const char *szSrc);
+// szSrc is a fixed-size field that need not be NUL-terminated: at most
+// nMaxLen bytes are read.  Use these for the 32-byte name fields; NULL gives "".
+const char *icAnsiToUtf8(std::string &buf, const char *szSrc, size_t nMaxLen);
+const char *icUtf8ToAnsi(std::string &buf, const char *szSrc, size_t nMaxLen);
 
 bool icCLUTDataToXml(std::string &xml, CIccCLUT *pCLUT, icConvertType nType, std::string blanks,
                      bool bSaveGridPoints=false);

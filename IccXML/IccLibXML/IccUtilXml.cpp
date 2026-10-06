@@ -198,6 +198,10 @@ const char *icFixXml(char *szDest, const char *szStr)
 
 const char *icAnsiToUtf8(std::string &buf, const char *szSrc)
 {
+  if (!szSrc) {
+    buf.clear();
+    return buf.c_str();
+  }
 #ifdef WIN32
   size_t len = strlen(szSrc)+1;
   wchar_t *szUnicodeBuf = (wchar_t*)malloc(len*sizeof(icUInt16Number)*2);
@@ -216,19 +220,27 @@ const char *icAnsiToUtf8(std::string &buf, const char *szSrc)
   free(szBuf);
   free(szUnicodeBuf);
 #else
-  // CFL-001: Use bounded copy to prevent strlen overread (CWE-126)
-  if (szSrc) {
-    size_t srcLen = strnlen(szSrc, 256);
-    buf.assign(szSrc, srcLen);
-  } else {
-    buf.clear();
-  }
+  // The source is a NUL-terminated string: CIccTagText's buffer, libxml2 node
+  // content, or a file buffer its reader terminates.  This used to be
+  // strnlen(szSrc, 256) (#740, "CFL-001"), which silently truncated every
+  // text longer than 256 bytes on non-Windows builds - a charTargetTag's
+  // CGATS data, any textType - while the Windows branch above copied it whole.
+  // The overread #740 guarded against comes from FIXED-SIZE name fields, not
+  // from text, and a constant was the wrong bound for both: it truncated text
+  // and still let a full 32-byte field be read 224 bytes past its end.  A
+  // caller holding a fixed-size field passes its size to the bounded overload
+  // below instead.
+  buf = szSrc;
 #endif
   return buf.c_str();
 }
 
 const char *icUtf8ToAnsi(std::string &buf, const char *szSrc)
 {
+  if (!szSrc) {
+    buf.clear();
+    return buf.c_str();
+  }
 #ifdef WIN32
   size_t len = strlen(szSrc)+1;
   wchar_t *szUnicodeBuf = (wchar_t*)malloc(len*sizeof(icUInt16Number)*2);
@@ -247,15 +259,43 @@ const char *icUtf8ToAnsi(std::string &buf, const char *szSrc)
   free(szBuf);
   free(szUnicodeBuf);
 #else
-  // CFL-001: Use bounded copy to prevent strlen overread (CWE-126)
-  if (szSrc) {
-    size_t srcLen = strnlen(szSrc, 256);
-    buf.assign(szSrc, srcLen);
-  } else {
-    buf.clear();
-  }
+  // Converted whole, for the reasons given in icAnsiToUtf8() above; a
+  // fixed-size field goes through the bounded overload below.
+  buf = szSrc;
 #endif
   return buf.c_str();
+}
+
+/**
+ * icAnsiToUtf8() / icUtf8ToAnsi() for a source that is a FIXED-SIZE field and
+ * need not be NUL-terminated - a colorant name, a named-colour prefix, suffix
+ * or root name, each 32 bytes.  At most nMaxLen bytes of szSrc are read; the
+ * conversion stops at the first NUL within them, or after nMaxLen.
+ *
+ * The bounded prefix is copied into a terminated string and handed to the
+ * unbounded conversion, so both platforms' code paths are shared rather than
+ * duplicated, and the WIN32 branch gains the same bound without new
+ * platform-specific code.
+ */
+static std::string icXmlBoundedCopy(const char *szSrc, size_t nMaxLen)
+{
+  if (!szSrc)
+    return std::string();
+
+  const void *pNul = memchr(szSrc, '\0', nMaxLen);
+  size_t n = pNul ? (size_t)((const char*)pNul - szSrc) : nMaxLen;
+
+  return std::string(szSrc, n);
+}
+
+const char *icAnsiToUtf8(std::string &buf, const char *szSrc, size_t nMaxLen)
+{
+  return icAnsiToUtf8(buf, icXmlBoundedCopy(szSrc, nMaxLen).c_str());
+}
+
+const char *icUtf8ToAnsi(std::string &buf, const char *szSrc, size_t nMaxLen)
+{
+  return icUtf8ToAnsi(buf, icXmlBoundedCopy(szSrc, nMaxLen).c_str());
 }
 
 class CIccDumpXmlCLUT : public IIccCLUTExec

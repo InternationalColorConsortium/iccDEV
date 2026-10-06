@@ -53,8 +53,9 @@
 // skips used to keep whatever the caller's buffer held: a CMM pixel buffer from
 // malloc, or CIccApplyBPC's XYZbp on the stack, which MemorySanitizer reported
 // further down the chain. CIccCalculatorFunc::Apply() now zeroes them at every
-// invocation, the rule ICC.2-2023 11.2.1 states for temporary channels, except
-// when the output buffer is the input buffer.
+// invocation, as ICC.2-2023 11.2.1.2 requires: "Output channels shall be
+// assumed to be zero until set by the main calculator function." The one
+// exception is a call whose output buffer is its input buffer.
 //
 // Each program runs through its enclosing tag's apply object with a
 // destination pre-filled with a sentinel, so an unwritten channel shows as the
