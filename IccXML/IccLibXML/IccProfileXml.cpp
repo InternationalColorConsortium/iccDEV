@@ -64,6 +64,7 @@
 #include "IccProfileXml.h"
 #include "IccTagXml.h"
 #include "IccUtilXml.h"
+#include "IccFileUtil.h" /* icSanitizeConsoleText (#2698) */
 #include "IccArrayBasic.h"
 #include <set>
 #include <cstring> /* C strings strcpy, memcpy ... */
@@ -1226,20 +1227,27 @@ bool CIccProfileXml::LoadXml(const char *szFilename, const char *szRelaxNGDir, s
      * they are released innermost-first.
      */
     bool bValid = false;
+    // The schema file's own XML parse, inside xmlRelaxNGParse(), reports
+    // through the global handler, not the parser context's (#2698).
+    icXmlSetGlobalSanitizedErrorHandler(true);
     xmlRelaxNGParserCtxt* rlxParser = xmlRelaxNGNewParserCtxt(szRelaxNGDir);
 
     //validate the xml file
     if (rlxParser) {
+      // Schema and validation diagnostics name the schema and document files;
+      // through libxml2's default handler they reached stderr unescaped (#2698).
+      icXmlSetSanitizedErrorHandlers(rlxParser, NULL);
       xmlRelaxNG* relaxNG = xmlRelaxNGParse(rlxParser);
 
       if (relaxNG) {
         xmlRelaxNGValidCtxt* validCtxt = xmlRelaxNGNewValidCtxt(relaxNG);
 
         if (validCtxt) {
+          icXmlSetSanitizedErrorHandlers(NULL, validCtxt);
           int result = xmlRelaxNGValidateDoc(validCtxt, doc);
 
           if (result != 0)
-            printf("\nError: %d: '%s' is an invalid XML file.\n", result, szFilename);
+            printf("\nError: %d: '%s' is an invalid XML file.\n", result, icSanitizeConsoleText(szFilename).c_str());
           else
             bValid = true;
 
@@ -1251,6 +1259,7 @@ bool CIccProfileXml::LoadXml(const char *szFilename, const char *szRelaxNGDir, s
 
       xmlRelaxNGFreeParserCtxt(rlxParser);
     }
+    icXmlSetGlobalSanitizedErrorHandler(false);
 
     /* Same rejection as before for a schema that will not load, will not
      * compile, or that the document fails - only now the document goes back
