@@ -2826,6 +2826,46 @@ function(iccdev_add_cicp_copy_ctor_test)
   endif()
 endfunction()
 
+# CIccTagSpectralViewingConditions::isStandardPcc() joined "1931 observer" and
+# "illuminant D50" with || instead of &&, so CIccProfile::getNormIlluminantXYZ()
+# answered the standard D50 white for a 1931 observer under D65, D93 or A, and
+# for D50 under the 1964 or a custom observer. Each non-standard case is paired
+# with the standard one. Header + IccProfLib only.
+function(iccdev_add_pcc_standard_observer_and_illuminant_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPccStandardObserverAndIlluminantTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pcc-standard-requires-observer-and-illuminant.cpp"
+  )
+  target_link_libraries(iccPccStandardObserverAndIlluminantTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPccStandardObserverAndIlluminantTest)
+
+  add_test(
+    NAME iccdev.pcc-standard-requires-observer-and-illuminant
+    COMMAND "$<TARGET_FILE:iccPccStandardObserverAndIlluminantTest>"
+  )
+  set_tests_properties(iccdev.pcc-standard-requires-observer-and-illuminant PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;pcc;pcs;regression"
+  )
+  if(WIN32)
+    set(_pcc_standard_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPccStandardObserverAndIlluminantTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pcc_standard_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pcc-standard-requires-observer-and-illuminant PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pcc_standard_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2562: four rows of CheckRequiredTags' v5 branch disagreed with ICC.2-2023 clause 8
 # (Input 8.3, xCLR output 8.5, DeviceLink 8.6, and the three multiplex classes
 # 8.11-8.13).  Each accepting case is paired with a control that must still be
@@ -11491,6 +11531,7 @@ if(WIN32)
   iccdev_add_getvalues_nstart_test()
   iccdev_add_chromaticity_validate_test()
   iccdev_add_cicp_copy_ctor_test()
+  iccdev_add_pcc_standard_observer_and_illuminant_test()
   iccdev_add_mpe_acs_zero_signature_test()
   iccdev_add_pawg_c5_cicp_test()
   iccdev_add_gamut_xform_semantics_test()
@@ -11931,6 +11972,7 @@ iccdev_add_formula_segment_nonfinite_parameter_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_chromaticity_validate_test()
 iccdev_add_cicp_copy_ctor_test()
+iccdev_add_pcc_standard_observer_and_illuminant_test()
 iccdev_add_islegalutf8_bound_test()
 iccdev_add_json_reader_strictness_test()
 iccdev_add_json_escape_codepoint_test()
