@@ -6754,6 +6754,63 @@ function(iccdev_add_colorant_count_narrowing_xml_test)
   endif()
 endfunction()
 
+# #2675, #2696: two places where the XML profile reader accepted a malformed
+# document and built a different profile from it, each refused by the JSON
+# reader's twin: a SameAs onto a signature that already holds a different
+# object was silently ignored (AttachTag()'s refusal was discarded, at
+# profile level and for struct members), and a second type element under one
+# tag was never looked at.  Both now fail the parse; the controls still load.
+function(iccdev_add_xml_reader_strictness_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlReaderStrictnessTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-reader-strictness.cpp"
+  )
+  target_compile_features(iccXmlReaderStrictnessTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlReaderStrictnessTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlReaderStrictnessTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlReaderStrictnessTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-reader-strictness
+      COMMAND "$<TARGET_FILE:iccXmlReaderStrictnessTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-reader-strictness
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlReaderStrictnessTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-reader-strictness PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;parser-symmetry;issue-2675;issue-2696;regression"
+  )
+  if(WIN32)
+    set(_iccxmlreaderstrictnesstest_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlReaderStrictnessTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccxmlreaderstrictnesstest_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-reader-strictness PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccxmlreaderstrictnesstest_env_mods}"
+    )
+  endif()
+endfunction()
 # #2548, the class behind the colorantTable fix above: the XML readers converted
 # numbers with bare atof()/atoi()/atol(), so "50abc" loaded as 50 and
 # "not-a-number" as 0 with no diagnostic. The helper appends text to one value in
@@ -11319,6 +11376,7 @@ if(WIN32)
   iccdev_add_calculator_limits_json_test()
   iccdev_add_json_calculator_newcopy_test()
   iccdev_add_colorant_count_narrowing_xml_test()
+  iccdev_add_xml_reader_strictness_test()
   iccdev_add_xml_numeric_values_test()
   iccdev_add_xml_calculator_curve_writer_test()
   iccdev_add_parametric_curve_params_json_test()
@@ -11753,6 +11811,7 @@ iccdev_add_calculator_limits_test()
 iccdev_add_calculator_limits_json_test()
 iccdev_add_json_calculator_newcopy_test()
 iccdev_add_colorant_count_narrowing_xml_test()
+iccdev_add_xml_reader_strictness_test()
 iccdev_add_xml_numeric_values_test()
 iccdev_add_xml_calculator_curve_writer_test()
 iccdev_add_parametric_curve_params_json_test()
