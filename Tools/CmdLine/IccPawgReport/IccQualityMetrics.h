@@ -140,6 +140,9 @@ struct CharacterizationMetrics {
   int rowsUsed = 0;
   double avgDe00 = 0.0;
   double maxDe00 = 0.0;
+  // True when the forward transform was built from a DToBx tag because the
+  // profile carries no AToBx tag and no matrix/TRC or grayTRC model.
+  bool viaDToBx = false;
 };
 
 constexpr int kQualityMaxDeviceChannels = 4;
@@ -608,6 +611,62 @@ inline std::string cmm_chain_mismatch(const CIccCmm &cmm, size_t nMaxSamples) {
   return std::string();
 }
 
+// Whether the quality metrics should build their CMM from the DToBx/BToDx
+// tags.  They opt out of those tags by default (the bUseD2BxB2DxTags=false
+// below, from #1633): with the colorimetric LUT path CIccXform::Create
+// then considers the AToBx tags, the matrix/TRC model for RGB and the grayTRC
+// model for Gray, and a DToBx whose output is spectral never reaches the
+// fixed 16-float buffers.  A profile whose forward transform exists ONLY as
+// a DToBx tag got no transform at all and reported a Gap.  Such profiles
+// are evaluated now, through the DToBx tags, when
+//   - no AToBx tag, no complete matrix/TRC set and no grayTRC is present,
+//     so the result for every profile evaluated before is unchanged;
+//   - the header has no spectral PCS, so the DToBx emits the colorimetric
+//     PCS the target data is compared in (CIccXform::Create switches a
+//     DToBx to spectral output whenever the header carries one), which
+//     keeps #1633's buffers safe; the chain bound in cmm_chain_mismatch
+//     stays as a second guard.
+// When a profile carries both, the AToBx path is kept: it is what every
+// v2/v4 CMM applies, and Q4 is a characterization check of that transform.
+inline bool use_dtobx_tags(CIccProfile *pIcc) {
+  if (!pIcc) {
+    return false;
+  }
+  static const icTagSignature kAToB[] = {icSigAToB0Tag, icSigAToB1Tag, icSigAToB2Tag, icSigAToB3Tag};
+  for (icTagSignature sig : kAToB) {
+    if (pIcc->FindTag(sig)) {
+      return false;
+    }
+  }
+  if (pIcc->m_Header.colorSpace == icSigRgbData) {
+    static const icTagSignature kMatrixTrc[] = {
+        icSigRedMatrixColumnTag, icSigGreenMatrixColumnTag, icSigBlueMatrixColumnTag,
+        icSigRedTRCTag, icSigGreenTRCTag, icSigBlueTRCTag};
+    bool complete = true;
+    for (icTagSignature sig : kMatrixTrc) {
+      if (!pIcc->FindTag(sig)) {
+        complete = false;
+      }
+    }
+    if (complete) {
+      return false;
+    }
+  }
+  if (pIcc->m_Header.colorSpace == icSigGrayData && pIcc->FindTag(icSigGrayTRCTag)) {
+    return false;
+  }
+  if (pIcc->m_Header.spectralPCS) {
+    return false;
+  }
+  static const icTagSignature kDToB[] = {icSigDToB0Tag, icSigDToB1Tag, icSigDToB2Tag, icSigDToB3Tag};
+  for (icTagSignature sig : kDToB) {
+    if (pIcc->FindTag(sig)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Build a CMM step for the round-trip / smoothness metrics.  The intent defaults
 // to RELATIVE COLORIMETRIC and callers should leave it that way unless they have a
 // specific reason: these metrics measure how invertible / smooth the transform is,
@@ -637,8 +696,13 @@ inline bool begin_profile_cmm(CIccProfile *pIcc,
     return false;
   }
 
+  // icXformLutColorimetric turns the DToBx tags off again for a v5 profile
+  // inside CIccXform::Create, so the DToBx path asks for icXformLutColor;
+  // use_dtobx_tags() has already ruled out a spectral PCS, which is what
+  // icXformLutColorimetric exists to exclude.
+  const bool bDToBx = use_dtobx_tags(pIcc);
   icStatusCMM status = cmm.AddXform(*pIcc, intent, icInterpLinear, NULL,
-                                    icXformLutColorimetric, false);
+                                    bDToBx ? icXformLutColor : icXformLutColorimetric, bDToBx);
   if (!status_ok(status, std::string(direction) + " AddXform", reason)) {
     return false;
   }
@@ -1838,14 +1902,12 @@ inline void normalize_device_rows(std::vector<std::array<double, kQualityMaxDevi
 
 // What a profile carries that Q4's forward transform could be built from, in
 // words a reader of the report can act on.  Q4 asks for an absolute-
-// colorimetric transform through the colorimetric LUT path with the D2Bx tags
-// OPTED OUT (see the AddXform call below), so CIccXform::Create considers, in
-// order: an AToBx tag (AToB1, then AToB0, then AToB3), and failing that the
-// matrix/TRC model for RGB or the grayTRC model for Gray.  It does not consider
-// a DToBx tag for a profile with a colorimetric PCS, v4 or v5, which is why a
-// profile whose only forward transform is a DToBx tag gets no transform here.
-// Naming what is present lets a reader tell "the profile has no transform Q4
-// can use" from "the tool failed".
+// colorimetric transform through the colorimetric LUT path; with the D2Bx
+// tags opted out CIccXform::Create considers, in order: an AToBx tag (AToB1,
+// then AToB0, then AToB3), and failing that the matrix/TRC model for RGB or
+// the grayTRC model for Gray.  The DToBx tags are used only under the
+// conditions use_dtobx_tags() states.  Naming what is present lets a reader
+// tell "the profile has no transform Q4 can use" from "the tool failed".
 inline std::string describe_forward_transform_tags(CIccProfile *pIcc) {
   static const struct { icTagSignature sig; const char *name; } kAToB[] = {
     { icSigAToB0Tag, "AToB0" }, { icSigAToB1Tag, "AToB1" },
@@ -1885,10 +1947,14 @@ inline std::string describe_forward_transform_tags(CIccProfile *pIcc) {
   }
 
   if (!dtob.empty()) {
-    out += "; and " + dtob + ", which Q4 does not use";
-    if (atob.empty())
-      out += " - it evaluates the AToBx, matrix/TRC or grayTRC transform only, so a profile "
-             "whose forward transform exists only as a DToBx tag cannot be evaluated here";
+    out += "; and " + dtob;
+    if (use_dtobx_tags(pIcc))
+      out += ", which Q4 used here because the profile carries no other forward transform";
+    else if (pIcc->m_Header.spectralPCS)
+      out += ", which Q4 does not use for a profile with a spectral PCS - the DToBx would emit "
+             "spectral samples, which cannot be compared with colorimetric target data";
+    else
+      out += ", which Q4 uses only when no AToBx, matrix/TRC or grayTRC transform is present";
   }
   out += ".";
   return out;
@@ -2063,8 +2129,13 @@ inline bool evaluate_characterization(CIccProfile *pIcc,
   static const char kQ4Lead[] =
       "Characterization data present but an absolute-colorimetric forward transform could not be built";
   CIccCmm cmmForward(colorSpace, pcs, true);
-  icStatusCMM st = cmmForward.AddXform(*pIcc, icAbsoluteColorimetric, icInterpTetrahedral,
-                                       NULL, icXformLutColorimetric, false);
+  // As in begin_profile_cmm(): icXformLutColorimetric turns the DToBx tags
+  // off again for a v5 profile inside CIccXform::Create, so the DToBx path
+  // asks for icXformLutColor; use_dtobx_tags() has ruled out a spectral PCS.
+  metrics.viaDToBx = use_dtobx_tags(pIcc);
+  icStatusCMM st = cmmForward.AddXform(*pIcc, icAbsoluteColorimetric, icInterpTetrahedral, NULL,
+                                       metrics.viaDToBx ? icXformLutColor : icXformLutColorimetric,
+                                       metrics.viaDToBx);
   if (st != icCmmStatOk) {
     reason = std::string(kQ4Lead) + ": creating the transform failed (" +
              CIccCmm::GetStatusText(st) + "). " + describe_forward_transform_tags(pIcc);

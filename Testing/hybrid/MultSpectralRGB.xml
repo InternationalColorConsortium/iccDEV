@@ -83,7 +83,7 @@
         <DataColourSpace>8CLR</DataColourSpace>
         <PCS></PCS>
         <CreationDateTime>now</CreationDateTime>
-        <ProfileFlags EmbeddedInFile="true" UseWithEmbeddedDataOnly="true"/>
+        <ProfileFlags EmbeddedInFile="true" UseWithEmbeddedDataOnly="false"/>
         <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="negative" MediaColour="colour"/>
         <RenderingIntent>Perceptual</RenderingIntent>
         <PCSIlluminant>

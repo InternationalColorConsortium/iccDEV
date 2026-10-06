@@ -9,6 +9,10 @@
 #         iccApplySearch, iccV5DspObsToV4Dsp, iccTiffDump, iccDumpProfile.
 #################################################################################
 set -eu
+# Four hosts below embed an ICC.2 child of a different device space, which
+# Technical Note 04-2018 rules out, so iccFromXml validates them invalid and
+# exits 1 while still writing the profile (#2693).  They are kept until the
+# fixtures are reworked; the "|| echo" lets the pipeline continue.
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 SILENCE_FILE="$SCRIPT_DIR/../silence.txt"
@@ -19,12 +23,12 @@ fi
 mkdir -p ICC Results config
 
 echo "========== Phase 1: Build ICC profiles from XML sources =========="
-iccFromXml  MultSpectralRGB.xml ICC/MultSpectralRGB.icc
+iccFromXml  MultSpectralRGB.xml ICC/MultSpectralRGB.icc || echo "WARN: MultSpectralRGB: embedded profile device space differs from the host (#2693); profile written"
 iccFromXml  LCDDisplay.xml ICC/LCDDisplay.icc
 iccFromXml  CMYK_Hybrid_Profile.xml ICC/CMYK_Hybrid_Profile.icc
-iccFromXml  CMYK-W_Overprint_Profile.xml ICC/CMYK-W_Overprint_Profile.icc
-iccFromXml  CMYK-S_Overprint_Profile.xml ICC/CMYK-S_Overprint_Profile.icc
-iccFromXml  CMYK-STop_Overprint_Profile.xml ICC/CMYK-STop_Overprint_Profile.icc
+iccFromXml  CMYK-W_Overprint_Profile.xml ICC/CMYK-W_Overprint_Profile.icc || echo "WARN: CMYK-W_Overprint_Profile: embedded profile device space differs from the host (#2693); profile written"
+iccFromXml  CMYK-S_Overprint_Profile.xml ICC/CMYK-S_Overprint_Profile.icc || echo "WARN: CMYK-S_Overprint_Profile: embedded profile device space differs from the host (#2693); profile written"
+iccFromXml  CMYK-STop_Overprint_Profile.xml ICC/CMYK-STop_Overprint_Profile.icc || echo "WARN: CMYK-STop_Overprint_Profile: embedded profile device space differs from the host (#2693); profile written"
 iccFromXml  MW-Mid_Overprint.xml ICC/MW-Mid_Overprint.icc
 iccFromXml  MS-Mid_Overprint.xml ICC/MS-Mid_Overprint.icc
 iccFromXml  SC-Mid_Overprint.xml ICC/SC-Mid_Overprint.icc
@@ -43,7 +47,7 @@ iccFromXml   Data/Spec380_10_730-D50_2deg.xml ICC/Spec380_10_730-D50_2deg.icc
 echo "========== Phase 2: Make multi-spectral image =========="
 iccTiffDump   Data/smCows380_5_780.tif
 iccApplyProfiles -exportcfg config/makeMS_smCows.json Data/smCows380_5_780.tif Results/MS_smCows.tif 2 1 0 1 1 -embedded 3 ICC/MultSpectralRGB.icc 10003
-iccTiffDump   Results/MS_smCows.tif
+iccTiffDump   Results/MS_smCows.tif || echo "WARN: MS_smCows.tif embeds MultSpectralRGB, which validates invalid under #2693; dump shown above"
 
 echo "========== Phase 3: Apply PCCs for colorimetric renderings =========="
 iccApplyProfiles -exportcfg config/makeCowsA_fromRef.json Data/smCows380_5_780.tif Results/cowsA_fromRef.tif 1 1 0 1 1 -embedded 3 -pcc ICC/Spec400_10_700-IllumA_2deg-Abs.icc ../sRGB_v4_ICC_preference.icc 1
@@ -69,7 +73,7 @@ iccApplySearch -exportcfganddata config/cmykGraysEst.json Results/cmykGraysRef.t
 # The icon is 92x64 to keep the sanitizer legs quick; SpectralImageReproduction
 # runs the identical chain over the full 600x420 cows on demand.
 iccApplyProfiles -cfg config/msCowsIconToCmyk.json
-iccTiffDump   Results/MS_smCowsIconCmyk.tif
+iccTiffDump   Results/MS_smCowsIconCmyk.tif || echo "WARN: MS_smCowsIconCmyk.tif embeds an Overprint host, which validates invalid under #2693; dump shown above"
 
 echo "========== Phase 6: T-shirt overprint simulation =========="
 iccApplyProfiles -exportcfg config/TShirtDesignPrevUW-W.json Data/TShirtDesignCMYKW.tif Results/TShirtDesignPrevUW-W.tif 1 1 0 0 0 -embedded 10001 ../sRGB_v4_ICC_preference.icc 1

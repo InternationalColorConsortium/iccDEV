@@ -2677,6 +2677,65 @@ function(iccdev_add_islegalutf8_bound_test)
 
 endfunction()
 
+# #2674, #2695, #2697: three places where the JSON profile reader accepted a
+# malformed document and built a different profile from it, each refused by
+# the XML reader's twin: a spectral-range step count cast to uInt16Number
+# (65567 stored as 31), a Tags entry with a second member skipped with an
+# unprinted warning, and a multiProcessElementType element with no, an
+# unknown, or a non-JSON type dropped from the tag.  All three now fail the
+# parse with the XML reader's wording; the controls still load.
+function(iccdev_add_json_reader_strictness_test)
+  if(NOT TARGET "${TARGET_LIB_ICCJSON}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccJsonReaderStrictnessTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/json-reader-strictness.cpp"
+  )
+  target_compile_features(iccJsonReaderStrictnessTest PRIVATE cxx_std_17)
+  target_include_directories(iccJsonReaderStrictnessTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccJsonReaderStrictnessTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccJsonReaderStrictnessTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.json-reader-strictness
+      COMMAND "$<TARGET_FILE:iccJsonReaderStrictnessTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.json-reader-strictness
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccJsonReaderStrictnessTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.json-reader-strictness PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;json;parser-symmetry;issue-2674;issue-2695;issue-2697;regression"
+  )
+  if(WIN32)
+    set(_iccjsonreaderstrictnesstest_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccJsonReaderStrictnessTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccjsonreaderstrictnesstest_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.json-reader-strictness PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccjsonreaderstrictnesstest_env_mods}"
+    )
+  endif()
+endfunction()
 # #2454: icJsonEscape() appended well-formed UTF-8 unchanged, so --json and
 # --evidence-json emitted live U+202E and the C1 controls while the text sink
 # escaped the same string.  Twelve hand-written cases, not an exhaustive walk:
@@ -2764,6 +2823,46 @@ function(iccdev_add_cicp_copy_ctor_test)
     endforeach()
     set_tests_properties(iccdev.cicp-copy-ctor-uninitialized PROPERTIES
       ENVIRONMENT_MODIFICATION "${_cicp_copy_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# CIccTagSpectralViewingConditions::isStandardPcc() joined "1931 observer" and
+# "illuminant D50" with || instead of &&, so CIccProfile::getNormIlluminantXYZ()
+# answered the standard D50 white for a 1931 observer under D65, D93 or A, and
+# for D50 under the 1964 or a custom observer. Each non-standard case is paired
+# with the standard one. Header + IccProfLib only.
+function(iccdev_add_pcc_standard_observer_and_illuminant_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPccStandardObserverAndIlluminantTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pcc-standard-requires-observer-and-illuminant.cpp"
+  )
+  target_link_libraries(iccPccStandardObserverAndIlluminantTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPccStandardObserverAndIlluminantTest)
+
+  add_test(
+    NAME iccdev.pcc-standard-requires-observer-and-illuminant
+    COMMAND "$<TARGET_FILE:iccPccStandardObserverAndIlluminantTest>"
+  )
+  set_tests_properties(iccdev.pcc-standard-requires-observer-and-illuminant PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;pcc;pcs;regression"
+  )
+  if(WIN32)
+    set(_pcc_standard_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPccStandardObserverAndIlluminantTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pcc_standard_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pcc-standard-requires-observer-and-illuminant PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pcc_standard_windows_env_mods}"
     )
   endif()
 endfunction()
@@ -6217,6 +6316,63 @@ function(iccdev_add_xml_relaxng_validation_leak_test)
   endif()
 endfunction()
 
+# #2770: CIccTagXmlStruct::ToXml() wrote a shared member's SameAsSignature
+# under a guard that was true for every member name and false only for an
+# empty one, the one case the reader needs it for (a struct with no handler).
+# The attribute is now always written.  Pins the round trip of a member
+# attached under two signatures, in a private struct and a colorantInfo
+# struct, through a binary write and read and back through LoadXml().
+function(iccdev_add_xml_struct_member_sameas_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlStructMemberSameAsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-struct-member-sameas.cpp"
+  )
+  target_compile_features(iccXmlStructMemberSameAsTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlStructMemberSameAsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlStructMemberSameAsTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlStructMemberSameAsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-struct-member-sameas
+      COMMAND "$<TARGET_FILE:iccXmlStructMemberSameAsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-struct-member-sameas
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlStructMemberSameAsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-struct-member-sameas PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;struct;sameas;writer;issue-2770;regression"
+  )
+  if(WIN32)
+    set(_iccxmlstructmembersameastest_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlStructMemberSameAsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccxmlstructmembersameastest_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-struct-member-sameas PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccxmlstructmembersameastest_env_mods}"
+    )
+  endif()
+endfunction()
 # #2006: CIccTagCurve::SetSize() reports a request above its 65536-entry cap as success
 # after freeing the table, and the three File=/Format="text" branches of
 # CIccTagXmlCurve::ParseXml neither checked the return nor compared the resulting
@@ -7106,6 +7262,63 @@ function(iccdev_add_colorant_count_narrowing_xml_test)
   endif()
 endfunction()
 
+# #2675, #2696: two places where the XML profile reader accepted a malformed
+# document and built a different profile from it, each refused by the JSON
+# reader's twin: a SameAs onto a signature that already holds a different
+# object was silently ignored (AttachTag()'s refusal was discarded, at
+# profile level and for struct members), and a second type element under one
+# tag was never looked at.  Both now fail the parse; the controls still load.
+function(iccdev_add_xml_reader_strictness_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlReaderStrictnessTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-reader-strictness.cpp"
+  )
+  target_compile_features(iccXmlReaderStrictnessTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlReaderStrictnessTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlReaderStrictnessTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlReaderStrictnessTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-reader-strictness
+      COMMAND "$<TARGET_FILE:iccXmlReaderStrictnessTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-reader-strictness
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlReaderStrictnessTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-reader-strictness PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;parser-symmetry;issue-2675;issue-2696;regression"
+  )
+  if(WIN32)
+    set(_iccxmlreaderstrictnesstest_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlReaderStrictnessTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccxmlreaderstrictnesstest_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-reader-strictness PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccxmlreaderstrictnesstest_env_mods}"
+    )
+  endif()
+endfunction()
 # #2548, the class behind the colorantTable fix above: the XML readers converted
 # numbers with bare atof()/atoi()/atol(), so "50abc" loaded as 50 and
 # "not-a-number" as 0 with no diagnostic. The helper appends text to one value in
@@ -8945,6 +9158,59 @@ function(iccdev_add_mcs_colorspace_name_test)
   endif()
 endfunction()
 
+# #2693: CIccTagEmbeddedProfile::Validate() checked the embedded ICC.2 profile's
+# channel count and device class against the host and nothing about its header
+# flags.  ICC Technical Note 04-2018 says bit 0 should mark it as embedded in
+# another file and only profiles with bit 1 clear should be embedded; both are
+# "should", so each now draws a warning.  Pins the four flag combinations on a
+# v4 display host holding a v5 display child.  IccProfLib only.
+function(iccdev_add_embedded_profile_flags_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccEmbeddedProfileFlagsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/embedded-profile-flags.cpp"
+  )
+  target_compile_features(iccEmbeddedProfileFlagsTest PRIVATE cxx_std_17)
+  target_include_directories(iccEmbeddedProfileFlagsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccEmbeddedProfileFlagsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccEmbeddedProfileFlagsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.embedded-profile-flags
+      COMMAND "$<TARGET_FILE:iccEmbeddedProfileFlagsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.embedded-profile-flags
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccEmbeddedProfileFlagsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.embedded-profile-flags PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;validate;embedded;issue-2693;regression"
+  )
+  if(WIN32)
+    set(_iccembeddedprofileflagstest_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccEmbeddedProfileFlagsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccembeddedprofileflagstest_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.embedded-profile-flags PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccembeddedprofileflagstest_env_mods}"
+    )
+  endif()
+endfunction()
 # #1886: CIccMpeXmlUnknown::ToXml formatted the Reserved attribute into `line`
 # and then appended `buf`, which still held the element's type signature from the
 # icGetSigStr call above it. The value was dropped and the signature was injected
@@ -9712,6 +9978,48 @@ function(iccdev_add_json_writer_move_test)
     endforeach()
     set_tests_properties(iccdev.json-writer-move-integrity PROPERTIES
       ENVIRONMENT_MODIFICATION "${_json_move_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+function(iccdev_add_json_text_control_bytes_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccJsonTextControlBytesTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/json-text-control-bytes.cpp"
+  )
+  target_compile_features(iccJsonTextControlBytesTest PRIVATE cxx_std_17)
+  target_include_directories(iccJsonTextControlBytesTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccJsonTextControlBytesTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccJsonTextControlBytesTest)
+
+  add_test(
+    NAME iccdev.json-text-control-bytes
+    COMMAND "$<TARGET_FILE:iccJsonTextControlBytesTest>"
+  )
+  set_tests_properties(iccdev.json-text-control-bytes PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;json;text;issue-2770;regression"
+  )
+  if(WIN32)
+    set(_json_text_control_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccJsonTextControlBytesTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _json_text_control_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.json-text-control-bytes PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_json_text_control_windows_env_mods}"
     )
   endif()
 endfunction()
@@ -11586,6 +11894,7 @@ if(WIN32)
   iccdev_add_xml_writer_graceful_degrade_test()
   iccdev_add_xml_shared_tags_inmemory_test()
   iccdev_add_xml_relaxng_validation_leak_test()
+  iccdev_add_xml_struct_member_sameas_test()
   iccdev_add_xml_curve_oversize_file_test()
   iccdev_add_calc_channel_ref_unterminated_index_test()
   iccdev_add_calc_channel_ref_unterminated_index_json_test()
@@ -11615,6 +11924,7 @@ if(WIN32)
   iccdev_add_console_sanitize_codepoint_test()
   iccdev_add_tiff_create_overflow_test()
   iccdev_add_tiff_separated_strips_test()
+  iccdev_add_embedded_profile_flags_test()
   iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_svcn_xml_reserved_roundtrip_test()
   iccdev_add_chromaticity_colorant_encodings_test()
@@ -11637,6 +11947,7 @@ if(WIN32)
   iccdev_add_named_colour_signature_v5_test()
   iccdev_add_mid_mlnk_header_checks_test()
   iccdev_add_islegalutf8_bound_test()
+  iccdev_add_json_reader_strictness_test()
   iccdev_add_json_escape_codepoint_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
@@ -11645,6 +11956,7 @@ if(WIN32)
   iccdev_add_json_bcd_version_test()
   iccdev_add_xml_version_parse_test()
   iccdev_add_json_writer_move_test()
+  iccdev_add_json_text_control_bytes_test()
   iccdev_add_json_fixednum_size_cap_test()
   iccdev_add_json_srng_uf32_test()
   iccdev_add_v2_legacy_pcs_test()
@@ -11675,6 +11987,7 @@ if(WIN32)
   iccdev_add_calculator_limits_json_test()
   iccdev_add_json_calculator_newcopy_test()
   iccdev_add_colorant_count_narrowing_xml_test()
+  iccdev_add_xml_reader_strictness_test()
   iccdev_add_xml_numeric_values_test()
   iccdev_add_xml_calculator_curve_writer_test()
   iccdev_add_parametric_curve_params_json_test()
@@ -11692,6 +12005,7 @@ if(WIN32)
   iccdev_add_getvalues_nstart_test()
   iccdev_add_chromaticity_validate_test()
   iccdev_add_cicp_copy_ctor_test()
+  iccdev_add_pcc_standard_observer_and_illuminant_test()
   iccdev_add_mpe_acs_zero_signature_test()
   iccdev_add_pawg_c5_cicp_test()
   iccdev_add_gamut_xform_semantics_test()
@@ -12047,6 +12361,7 @@ iccdev_add_unknown_tag_size_test()
 iccdev_add_xml_writer_graceful_degrade_test()
 iccdev_add_xml_shared_tags_inmemory_test()
 iccdev_add_xml_relaxng_validation_leak_test()
+iccdev_add_xml_struct_member_sameas_test()
 iccdev_add_xml_curve_oversize_file_test()
 iccdev_add_calc_channel_ref_unterminated_index_test()
 iccdev_add_calc_channel_ref_unterminated_index_json_test()
@@ -12074,6 +12389,7 @@ iccdev_add_utf8_converter_cursor_test()
 iccdev_add_console_sanitize_codepoint_test()
 iccdev_add_tiff_create_overflow_test()
 iccdev_add_tiff_separated_strips_test()
+iccdev_add_embedded_profile_flags_test()
 iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_svcn_xml_reserved_roundtrip_test()
 iccdev_add_chromaticity_colorant_encodings_test()
@@ -12092,6 +12408,7 @@ iccdev_add_installed_package_consumer_test()
 iccdev_add_json_bcd_version_test()
 iccdev_add_xml_version_parse_test()
 iccdev_add_json_writer_move_test()
+iccdev_add_json_text_control_bytes_test()
 iccdev_add_json_fixednum_size_cap_test()
 iccdev_add_json_srng_uf32_test()
 iccdev_add_v2_legacy_pcs_test()
@@ -12126,6 +12443,7 @@ iccdev_add_calculator_limits_test()
 iccdev_add_calculator_limits_json_test()
 iccdev_add_json_calculator_newcopy_test()
 iccdev_add_colorant_count_narrowing_xml_test()
+iccdev_add_xml_reader_strictness_test()
 iccdev_add_xml_numeric_values_test()
 iccdev_add_xml_calculator_curve_writer_test()
 iccdev_add_parametric_curve_params_json_test()
@@ -12146,7 +12464,9 @@ iccdev_add_formula_segment_nonfinite_parameter_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_chromaticity_validate_test()
 iccdev_add_cicp_copy_ctor_test()
+iccdev_add_pcc_standard_observer_and_illuminant_test()
 iccdev_add_islegalutf8_bound_test()
+iccdev_add_json_reader_strictness_test()
 iccdev_add_json_escape_codepoint_test()
 iccdev_add_v5_required_tag_sets_test()
 iccdev_add_mpe_acs_zero_signature_test()
@@ -12411,6 +12731,24 @@ if(TARGET iccFromXml)
     SKIP_RETURN_CODE 77)
 endif()
 
+# The iccFromJson half of the same family (#2676): the JSON tool printed its usage
+# and returned 0 for a bare invocation and for one missing its output path,
+# skipped an unrecognised option in silence, and left a document's ProfileID in
+# place under -noid, where iccFromXml refuses each (#2387).  Not labelled "slow"
+# for the same reason as the XML block above.
+if(TARGET iccFromJson)
+  iccdev_add_script_test(
+    iccdev.fromjson-cli-contract-regression
+    120
+    "iccdev;json;fromjson;cli;args;usage;exitcode;issue-2676;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2676-fromjson-cli-contract-regression.sh"
+  )
+  # 77 when iccFromJson is absent or nothing was measured, as for the XML block.
+  set_tests_properties(iccdev.fromjson-cli-contract-regression PROPERTIES
+    SKIP_RETURN_CODE 77)
+endif()
+
 # #2401: the element (<n>) and text spellings of one XML array must agree.  Not
 # labelled "slow": check-fast and the dispatch-only Unix and fast-lane
 # runs all exclude that label, so applying it would drop this suite from each.
@@ -12448,6 +12786,24 @@ if(TARGET iccApplyProfiles AND TARGET iccApplySearch
   # Exits 77 when no tool is built, the apply data files are missing, or nothing
   # was measured.
   set_tests_properties(iccdev.apply-console-injection-regression PROPERTIES
+    SKIP_RETURN_CODE 77)
+endif()
+
+# #2698: the parse and RelaxNG diagnostics libxml2 emits name the document and
+# schema files, and through its default handler they reached stderr unescaped,
+# where every path the tools print themselves has been escaped since #2406.
+# IccLibXML now routes them through a sanitising structured handler.  Three
+# routes: the parser naming an unparseable document, the schema parser naming
+# an uncompilable schema, and the validator naming a rejected document.
+if(TARGET iccFromXml)
+  iccdev_add_script_test(
+    iccdev.xml-diagnostics-injection-regression
+    120
+    "iccdev;xml;fromxml;security;console;injection;issue-2698;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2698-xml-diagnostics-injection-regression.sh"
+  )
+  set_tests_properties(iccdev.xml-diagnostics-injection-regression PROPERTIES
     SKIP_RETURN_CODE 77)
 endif()
 

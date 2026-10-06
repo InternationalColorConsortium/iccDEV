@@ -201,6 +201,28 @@ static std::string icJsonFixedAsciiString(const icChar *szText, size_t nMaxLen)
   return text;
 }
 
+// The free-length text tags (textType, textDescriptionType's ASCII field) are
+// 7-bit ASCII (ICC.1:2022 10.24), and a charTargetTag carries CGATS data whose
+// lines end in CR LF and whose fields are tab-separated. Keep those three
+// control characters: the JSON serialiser escapes them as \r, \n and \t, so
+// they reach no console as raw bytes. Every other control character, DEL and
+// every byte above 7 bits still becomes '?', as it does for the fixed-size
+// fields above (#2770).
+static std::string icJsonAsciiTextString(const icChar *szText, size_t nMaxLen)
+{
+  std::string text;
+  if (!szText || !nMaxLen)
+    return text;
+
+  for (size_t i = 0; i < nMaxLen && szText[i]; i++) {
+    unsigned char ch = static_cast<unsigned char>(szText[i]);
+    bool bKeep = (ch >= 0x20 && ch <= 0x7e) || ch == '\t' || ch == '\n' || ch == '\r';
+    text.push_back(bKeep ? static_cast<char>(ch) : '?');
+  }
+
+  return text;
+}
+
 static void icJsonCopyFixedAsciiString(icChar *szDst, size_t nMaxLen, const std::string &text)
 {
   if (!szDst || !nMaxLen)
@@ -281,7 +303,7 @@ bool CIccTagJsonUnknown::ParseJson(const IccJson &j, std::string &parseStr)
 
 bool CIccTagJsonText::ToJson(IccJson &j)
 {
-  j["text"] = m_szText ? icJsonFixedAsciiString(m_szText, strlen(m_szText)) : "";
+  j["text"] = m_szText ? icJsonAsciiTextString(m_szText, strlen(m_szText)) : "";
   return true;
 }
 
@@ -289,7 +311,7 @@ bool CIccTagJsonText::ParseJson(const IccJson &j, std::string & /*parseStr*/)
 {
   std::string text;
   if (jGetString(j, "text", text)) {
-    std::string ascii = icJsonFixedAsciiString(text.c_str(), text.size());
+    std::string ascii = icJsonAsciiTextString(text.c_str(), text.size());
     SetText(ascii.c_str());
   }
   return true;
@@ -403,7 +425,7 @@ bool CIccTagJsonUtf16Text::ParseJson(const IccJson &j, std::string & /*parseStr*
 
 bool CIccTagJsonTextDescription::ToJson(IccJson &j)
 {
-  j["description"] = m_szText ? icJsonFixedAsciiString(m_szText, strlen(m_szText)) : "";
+  j["description"] = m_szText ? icJsonAsciiTextString(m_szText, strlen(m_szText)) : "";
   return true;
 }
 
@@ -411,7 +433,7 @@ bool CIccTagJsonTextDescription::ParseJson(const IccJson &j, std::string & /*par
 {
   std::string desc;
   if (jGetString(j, "description", desc)) {
-    std::string ascii = icJsonFixedAsciiString(desc.c_str(), desc.size());
+    std::string ascii = icJsonAsciiTextString(desc.c_str(), desc.size());
     SetText(ascii.c_str());
   }
   return true;
@@ -3283,22 +3305,51 @@ bool CIccTagJsonMultiProcessElement::ParseJson(const IccJson &j, std::string &pa
 
   if (!jsonExistsField(j, "elements") || !j["elements"].is_array()) return true;
 
+  // Each of these used to "continue": an element that was not an object,
+  // had no type, an unknown type, or a type without a JSON extension was
+  // dropped and the tag built without it, while a tag whose element parser
+  // returned false failed the profile.  Dropping an element silently changes
+  // the transform (#2697).  The XML reader fails on an unknown element type
+  // ("Unknown Element Type"); these now fail the same way.
   for (const auto &elemObj : j["elements"]) {
-    if (!elemObj.is_object() || elemObj.empty()) continue;
+    if (!elemObj.is_object() || elemObj.empty()) {
+      parseStr += "multiProcessElementType element must be a non-empty object\n";
+      return false;
+    }
     std::string typeName;
     jGetString(elemObj, "type", typeName);
-    if (typeName.empty()) continue;
+    if (typeName.empty()) {
+      parseStr += "multiProcessElementType element has no type\n";
+      return false;
+    }
 
+    // A type is a listed element name, the four-character signature of a
+    // private element, or "UnknownElement", the spelling the writer gives an
+    // element it has no name for.  Anything else used to reach
+    // icGetSigVal(), which turned "ignoredType" into a signature and built
+    // an unknown element in its place.
     icElemTypeSignature sig = icJsonGetElemTypeNameSig(typeName.c_str());
+    if (strcmp(icJsonGetElemTypeName(sig), typeName.c_str()) != 0 &&
+        typeName.size() != 4 && typeName != "UnknownElement") {
+      parseStr += "Unknown Element Type (" + typeName + ")\n";
+      return false;
+    }
     CIccMultiProcessElement *pElem = CIccMpeCreator::CreateElement(sig);
-    if (!pElem) continue;
+    if (!pElem) {
+      parseStr += "Unknown Element Type (" + typeName + ")\n";
+      return false;
+    }
 
     int nReserved = 0;
     if (jGetValue(elemObj, "Reserved", nReserved))
       pElem->m_nReserved = (icUInt32Number)nReserved;
 
     IIccExtensionMpe *pExt = pElem->GetExtension();
-    if (!pExt || strcmp(pExt->GetExtClassName(), "CIccMpeJson") != 0) { delete pElem; continue; }
+    if (!pExt || strcmp(pExt->GetExtClassName(), "CIccMpeJson") != 0) {
+      parseStr += "Element " + typeName + " isn't of type CIccMpeJson\n";
+      delete pElem;
+      return false;
+    }
 
     CIccMpeJson *pJsonElem = static_cast<CIccMpeJson*>(pExt);
     if (!pJsonElem->ParseJson(elemObj, parseStr)) {

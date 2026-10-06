@@ -66,6 +66,7 @@
 #include "libxml/parser.h"
 #include <vector>
 #include <string>
+#include "libxml/relaxng.h"
 
 // CIccUTF16String, icUtf16ToUtf8, icUtf8ToUtf16 are now declared in IccUtil.h
 // and available here via the #include "IccUtil.h" above.
@@ -120,6 +121,18 @@ static const size_t icXmlMaxTextFileBytes = 256ULL * 1024 * 1024;
 // round-trip - the writer bounding its own text nodes is (issue #2160).
 // Diagnostics are appended to parseStr when one is supplied.
 xmlDoc *icXmlReadFileBounded(const char *szFilename, int nOptions, std::string *parseStr = NULL);
+
+// Points a RelaxNG parser and validation context at the same sanitising
+// error handler icXmlReadFileBounded uses for the document parse (#2698).
+// Either pointer may be NULL.
+void icXmlSetSanitizedErrorHandlers(xmlRelaxNGParserCtxt *pParser, xmlRelaxNGValidCtxt *pValid);
+
+// Installs (true) or removes (false) the same handler as the process-wide
+// structured error handler, for the libxml2 calls that take no context:
+// the document parse, and the XML parse of a RelaxNG schema file inside
+// xmlRelaxNGParse(), which reports through the global handler rather than
+// the parser context's.  Scoped to the call by the caller (#2698).
+void icXmlSetGlobalSanitizedErrorHandler(bool bOn);
 
 #define icXmlStrCmp(x, y) strcmp((const char *)(x), (const char*)(y))
 

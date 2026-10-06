@@ -493,7 +493,11 @@ run_large_indented_roundtrip_test() {
     FAIL=$((FAIL + 1))
     return
   fi
-  if [ "$exit_code" -ne 0 ] || [ ! -s "$profile" ]; then
+  # This host embeds an nc0005 child, which the device-space check from #2693
+  # validates invalid (#2781), so iccFromXml exits 1 while still writing the
+  # profile.  The fixture is wanted for its size, not its validity: require
+  # the file, and accept exit 1 only when the log says the profile was saved.
+  if [ ! -s "$profile" ] || { [ "$exit_code" -ne 0 ] && ! grep -Fq "Profile is invalid, but saved correctly" "$fromxml_log"; }; then
     echo "  [FAIL] $name -- iccFromXml failed to build the fixture with exit=$exit_code"
     sed -n '1,5p' "$fromxml_log"
     FAIL=$((FAIL + 1))
@@ -539,7 +543,11 @@ run_large_indented_roundtrip_test() {
     FAIL=$((FAIL + 1))
     return
   fi
-  if [ "$exit_code" -ne 0 ] || [ ! -s "$output_file" ]; then
+  # The round-tripped profile validates invalid for the same reason as its
+  # source (#2693, #2781), so iccFromJson too exits 1 after saving it; the
+  # size limit is what this case measures, so accept that exit when the log
+  # says the profile was saved.
+  if [ ! -s "$output_file" ] || { [ "$exit_code" -ne 0 ] && ! grep -Fq "Profile is invalid, but saved correctly" "$fromjson_log"; }; then
     echo "  [FAIL] $name -- iccFromJson rejected $json_size bytes under a ${JSON_MAX_FILE_MB} MiB limit (exit=$exit_code)"
     sed -n '1,5p' "$fromjson_log"
     FAIL=$((FAIL + 1))

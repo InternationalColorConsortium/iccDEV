@@ -6167,16 +6167,28 @@ bool CIccTagXmlStruct::ToXml(std::string &xml, std::string blanks/* = ""*/)
             std::string prevTagName = ((pStruct != NULL) ? pStruct->GetElemName(prevTag->second) : "");
             char fix2[200];
 
+            // A struct with no handler names nothing: CreateStruct() allocates
+            // the handler with nothrow, and a NULL one left this branch
+            // writing SameAs="" with no signature, which the reader does not
+            // take as a SameAs at all.  It gets the private spelling, as a
+            // private struct's handler gives every member (#2770).
+            if (prevTagName.empty())
+              prevTagName = "PrivateSubTag";
+
             if (tagName.size() && strncmp(tagName.c_str(), "PrivateSubTag", 13))
               snprintf(line, bufSize, "    <%s SameAs=\"%s\"", icFixXml(fix, tagName.c_str()), icFixXml(fix2, prevTagName.c_str())); //parent node is the tag type
             else
               snprintf(line, bufSize, "    <PrivateSubTag TagSignature=\"%s\" SameAs=\"%s\"", icFixXml(fix2, icGetSigStr(buf, bufSize, i->TagInfo.sig)), icFixXml(fix, prevTagName.c_str()));
 
             xml += line;
-            if (prevTagName.size() || !strncmp(prevTagName.c_str(), "PrivateSubTag", 13)) {
-              snprintf(line, bufSize, " SameAsSignature=\"%s\"", icFixXml(fix2, icGetSigStr(buf, bufSize, prevTag->second)));
-              xml += line;
-            }
+
+            // Always written.  The reader resolves SameAs through the profile
+            // tag-name table, which holds no member name, so it falls back to
+            // SameAsSignature for every member; the former guard,
+            // size() || !strncmp(..., "PrivateSubTag", 13), was true for every
+            // name and false only for the empty one, the one case that needed it.
+            snprintf(line, bufSize, " SameAsSignature=\"%s\"", icFixXml(fix2, icGetSigStr(buf, bufSize, prevTag->second)));
+            xml += line;
 
             xml += "/>\n";
           }
@@ -6261,7 +6273,15 @@ bool CIccTagXmlStruct::ParseTag(xmlNode *pNode, std::string &parseStr)
       }
       pTag = this->FindElem(sigParentTag);
       if (pTag) {
-        AttachElem(sigTag, pTag);
+        // As at profile level: a member already holding a different object
+        // is a conflict, not a no-op (#2675).
+        if (!AttachElem(sigTag, pTag)) {
+          parseStr += "SameAs tag ";
+          parseStr += sameAs;
+          parseStr += " for ";
+          parseStr += nodeName + " conflicts with an earlier " + nodeName + "\n";
+          return false;
+        }
       }
       else {
         parseStr += "SameAs tag ";

@@ -248,6 +248,7 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.calc-temp-reset-if-no-else` | `.github/ci/regression/calc-temp-reset-if-no-else.cpp`; calculator temporaries read as zero at each invocation, after an `if` with no `else` and after a `select`, for issue #2707 |
 | `iccdev.calc-output-init` | `.github/ci/regression/calc-output-init.cpp`; calculator output channels a program does not write read as zero at each invocation (alone, reused, and mid-chain), and an in-place call still reads its inputs, for issues #2702 and #2705 |
 | `iccdev.calc-copy-owner` | `.github/ci/regression/calc-copy-owner.cpp`; a copied or assigned calculator's function looks up the copy's own sub-elements, a copied tag applies after the original is deleted, assignment keeps the sub-elements, and self-assignment keeps the function and its operations, for issue #2751 |
+| `iccdev.json-text-control-bytes` | `.github/ci/regression/json-text-control-bytes.cpp`; tab, LF and CR in a `textType` and in a `textDescriptionType`'s ASCII field survive the JSON writer and reader, the document carries them as escapes, and ESC, DEL and high bytes still become `?`, for issue #2770 |
 | `iccdev.issue-2686-curve-gamma-xml` | `.github/ci/regression/issue-2686-curve-gamma.xml`; serialized profile setup for issue #2686 |
 | `iccdev.issue-2686-curve-gamma-profileplot` | `iccProfilePlot`; applies the generated BToA1 one-entry curve for issue #2686 and asserts the plotted values, not the graph subtitle, which is built without applying the curve |
 | `iccdev.issue-2688-colorant-table-pcs-xml` | `.github/ci/regression/issue-2688-colorant-table-pcs.xml`; serialized profile setup for issue #2688 |
@@ -268,6 +269,7 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.pcs-adjust-placement` | `.github/ci/regression/pcs-adjust-placement.cpp` |
 | `iccdev.reflectance-observer-illum-range` | `.github/ci/regression/reflectance-observer-illum-range.cpp` |
 | `iccdev.spectral-absolute-flag` | `.github/ci/regression/spectral-absolute-flag.cpp` |
+| `iccdev.pcc-standard-requires-observer-and-illuminant` | `.github/ci/regression/pcc-standard-requires-observer-and-illuminant.cpp`; connection conditions are standard only for the 1931 observer and D50 together, and any other pairing keeps its own illuminant XYZ as the normalized white |
 | `iccdev.pcs-edge-metadata` | `.github/ci/regression/pcs-edge-metadata.cpp` |
 | `iccdev.parser-restore-calls` | `.github/ci/regression/parser-restore-calls.cpp` |
 | `iccdev.mid-mlnk-header-checks` | `.github/ci/regression/mid-mlnk-header-checks.cpp`; MultiplexIdentification and MultiplexLink run the class-independent header checks, and MultiplexIdentification has no zero data colour space, for issue #2563; v5 NamedColor and Abstract accept a zero data colour space, a zero-data Abstract's AToB0Tag needs a spectral PCS and range, and the tag validators take its A side from the spectral PCS, for issue #2725; a zero-PCS Abstract's data colour space must be a colorimetric PCS or a spectral colour space to define its DToB0Tag's D side, for issue #2756 |

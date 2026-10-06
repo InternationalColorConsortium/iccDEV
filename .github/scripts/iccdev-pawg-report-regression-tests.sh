@@ -634,7 +634,9 @@ generate_nested_size_mismatch_profile() {
   if [ ! -x "$FROM_XML" ] || ! command -v python3 >/dev/null 2>&1; then
     return 1
   fi
-  if ! "$FROM_XML" "$TESTING_DIR/hybrid/MultSpectralRGB.xml" "$VALID_HYBRID" >/dev/null; then
+  # CMYK_Hybrid_Profile embeds a CMYK child in a CMYK host, which validates
+  # clean; MultSpectralRGB (8CLR in RGB) no longer does (#2693).
+  if ! "$FROM_XML" "$TESTING_DIR/hybrid/CMYK_Hybrid_Profile.xml" "$VALID_HYBRID" >/dev/null; then
     return 1
   fi
 
@@ -748,6 +750,70 @@ run_calculator_operation_count() {
   pass_case "$name" "S10 reported $operations calculator operations and applied the local warning threshold"
 }
 
+HYBRID_CALC_XML="$TESTING_DIR/hybrid/CMYK-W_Overprint_Profile.xml"
+HYBRID_CALC="$OUTDIR/hybrid-embedded-calculator.icc"
+# #2694: a v4 host whose embedded v5 sub-profile carries the calculators.  S10
+# returned "not an iccMAX profile" from the outer version without looking
+# inside; it now measures the child and says so.
+run_hybrid_embedded_calculator_cost() {
+  local name="pawg-s10-hybrid-embedded-calculator"
+  local logfile="$OUTDIR/hybrid-embedded-calculator.log"
+  local calculators
+  local exit_code=0
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile" "$HYBRID_CALC"
+  if [ ! -x "$FROM_XML" ]; then
+    fail_case "$name" "iccFromXml is not built, cannot generate the hybrid profile"
+    return
+  fi
+  if [ ! -f "$HYBRID_CALC_XML" ]; then
+    fail_case "$name" "tracked fixture is missing: $HYBRID_CALC_XML"
+    return
+  fi
+  # From the fixture's own directory: the document resolves relative paths.
+  # The exit status is not checked: this host embeds an nc0005 child, which
+  # the device-space check from #2693 validates invalid, and iccFromXml then
+  # exits 1 while still writing the profile.  S10 is measured on the file.
+  ( cd "$(dirname "$HYBRID_CALC_XML")" && "$FROM_XML" "$(basename "$HYBRID_CALC_XML")" "$HYBRID_CALC" >/dev/null 2>&1 ) || true
+  if [ ! -s "$HYBRID_CALC" ]; then
+    fail_case "$name" "iccFromXml could not build the hybrid profile"
+    return
+  fi
+  timeout 120 "$PAWG" "$HYBRID_CALC" > "$logfile" 2>&1 || exit_code=$?
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding"
+    return
+  fi
+  # The generated host deliberately retains the fixture's embedded-profile
+  # device-space mismatch. PAWG must therefore fail C1 and return 1 while
+  # still assessing S10 against the loaded embedded v5 sub-profile.
+  if [ "$exit_code" -ne 1 ]; then
+    fail_case "$name" "report returned unexpected status $exit_code (expected 1 for the fixture's C1 failure)"
+    return
+  fi
+  if ! assert_report_truth "$name" "$logfile"; then
+    fail_case "$name" "report count or section mismatch"
+    return
+  fi
+  if ! grep -F -q "[FAIL] C1" "$logfile"; then
+    fail_case "$name" "expected C1 failure for the deliberate embedded-profile device-space mismatch"
+    return
+  fi
+  if grep -F -q "[N/A ] S10" "$logfile"; then
+    fail_case "$name" "S10 still reports the v4 host as not an iccMAX profile"
+    return
+  fi
+  if ! grep -F -q "embedded v5 sub-profile:" "$logfile"; then
+    fail_case "$name" "S10 does not say it measured the embedded v5 sub-profile"
+    return
+  fi
+  calculators="$(sed -n 's/.*embedded v5 sub-profile: .* \([0-9][0-9]*\) calculator element(s).*/\1/p' "$logfile" | head -n 1)"
+  if [ -z "$calculators" ] || [ "$calculators" -lt 1 ]; then
+    fail_case "$name" "S10 measured the child but found no calculator element"
+    return
+  fi
+  pass_case "$name" "S10 measured $calculators calculator element(s) inside the embedded v5 sub-profile of a v4 host"
+}
 generate_private_pe_signature_profile() {
   if ! command -v python3 >/dev/null 2>&1; then
     return 1
@@ -1887,6 +1953,7 @@ else
   echo "  [SKIP] pawg-nested-profile-size-mismatch -- iccFromXml is unavailable"
 fi
 run_calculator_operation_count
+run_hybrid_embedded_calculator_cost
 run_private_malware_profile
 run_invalid_gzip_signature_profile
 run_valid_gzip_signature_profile
