@@ -12130,6 +12130,24 @@ if(TARGET iccApplyProfiles AND TARGET iccApplySearch
     SKIP_RETURN_CODE 77)
 endif()
 
+# #2698: the parse and RelaxNG diagnostics libxml2 emits name the document and
+# schema files, and through its default handler they reached stderr unescaped,
+# where every path the tools print themselves has been escaped since #2406.
+# IccLibXML now routes them through a sanitising structured handler.  Three
+# routes: the parser naming an unparseable document, the schema parser naming
+# an uncompilable schema, and the validator naming a rejected document.
+if(TARGET iccFromXml)
+  iccdev_add_script_test(
+    iccdev.xml-diagnostics-injection-regression
+    120
+    "iccdev;xml;fromxml;security;console;injection;issue-2698;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2698-xml-diagnostics-injection-regression.sh"
+  )
+  set_tests_properties(iccdev.xml-diagnostics-injection-regression PROPERTIES
+    SKIP_RETURN_CODE 77)
+endif()
+
 # #2414: fopen() succeeds on a directory, so a directory argument reaches code
 # that believes it opened a file.  #2411 hit this in iccFromXml's schema lookup;
 # the same shape HANGS iccFromCube (isEOF() tested feof() alone, while a failed

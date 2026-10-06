@@ -64,6 +64,8 @@
 #include <cstdlib>  /* std::strtoul, std::strtoull */
 #include <cerrno>   /* errno, ERANGE */
 #include <cstdio>   /* fopen, fseek, ftell, fread - icXmlReadFileBounded */
+#include "IccFileUtil.h" /* icSanitizeConsoleText - icXmlSanitizedErrorHandler (#2698) */
+#include "libxml/relaxng.h"
 #include <new>      /* std::nothrow - icXmlReadFileBounded */
 #include <string>   /* std::string, std::to_string */
 #include <time.h>
@@ -622,6 +624,65 @@ bool icXmlValidateFileCount(size_t value, icUInt32Number &count, std::string &pa
   return true;
 }
 
+/* libxml2 reports a parse or validation error through its own handler, and
+ * the default one writes the message, which starts with the document's
+ * file name, to stderr as given.  A file name carrying terminal control
+ * sequences therefore reached the console raw (#2698), where every path the
+ * tools print themselves has been escaped since #2406.  This handler
+ * renders the same line as libxml2's default, "file:line: message", with
+ * each part passed through icSanitizeConsoleText, so a CSI payload shows as
+ * \x1B[... rather than being interpreted.
+ *
+ * The callback's parameter is const xmlError* from libxml2 2.12 and
+ * xmlErrorPtr before it; the typedef decides which signature compiles. */
+#if LIBXML_VERSION >= 21200
+static void icXmlSanitizedErrorHandler(void *, const xmlError *pError)
+#else
+static void icXmlSanitizedErrorHandler(void *, xmlErrorPtr pError)
+#endif
+{
+  if (!pError)
+    return;
+  std::string raw = pError->message ? pError->message : "";
+  while (!raw.empty() && (raw[raw.size() - 1] == '\n' || raw[raw.size() - 1] == '\r'))
+    raw.erase(raw.size() - 1);
+  std::string msg = icSanitizeConsoleText(raw);
+
+  // The module and level words libxml2's own reporter puts between the
+  // location and the message ("Relax-NG validity error : ...").  Kept, so a
+  // caller that looks for them, as the #2387 contract test does, still
+  // finds them.
+  const char *szDomain = "";
+  switch (pError->domain) {
+    case XML_FROM_PARSER:    szDomain = "parser "; break;
+    case XML_FROM_NAMESPACE: szDomain = "namespace "; break;
+    case XML_FROM_VALID:     szDomain = "validity "; break;
+    case XML_FROM_RELAXNGP:  szDomain = "Relax-NG parser "; break;
+    case XML_FROM_RELAXNGV:  szDomain = "Relax-NG validity "; break;
+    case XML_FROM_IO:        szDomain = "I/O "; break;
+    default: break;
+  }
+  const char *szLevel = (pError->level == XML_ERR_WARNING) ? "warning : " : "error : ";
+
+  if (pError->file && pError->file[0])
+    fprintf(stderr, "%s:%d: %s%s%s\n", icSanitizeConsoleText(pError->file).c_str(), pError->line, szDomain, szLevel, msg.c_str());
+  else
+    fprintf(stderr, "%s%s%s\n", szDomain, szLevel, msg.c_str());
+}
+
+void icXmlSetSanitizedErrorHandlers(xmlRelaxNGParserCtxt *pParser, xmlRelaxNGValidCtxt *pValid)
+{
+  if (pParser)
+    xmlRelaxNGSetParserStructuredErrors(pParser, icXmlSanitizedErrorHandler, NULL);
+  if (pValid)
+    xmlRelaxNGSetValidStructuredErrors(pValid, icXmlSanitizedErrorHandler, NULL);
+}
+
+void icXmlSetGlobalSanitizedErrorHandler(bool bOn)
+{
+  xmlSetStructuredErrorFunc(NULL, bOn ? icXmlSanitizedErrorHandler : NULL);
+}
+
 xmlDoc *icXmlReadFileBounded(const char *szFilename, int nOptions, std::string *parseStr)
 {
   // Reading the whole document into one buffer replaces libxml2's per-node
@@ -723,7 +784,14 @@ xmlDoc *icXmlReadFileBounded(const char *szFilename, int nOptions, std::string *
   // libxml2 copies the buffer into the document, so releasing it here does
   // not leave the returned tree pointing at freed memory. Verified under
   // ASAN by clobbering and freeing the buffer before walking the tree.
+  /* The parser has no per-call error hook before libxml2 2.13, so the
+   * process-wide structured handler is set for the duration of the parse
+   * and put back afterwards; xmlSetStructuredErrorFunc with NULL restores
+   * the default.  A host that installed its own handler keeps it outside
+   * this call. */
+  icXmlSetGlobalSanitizedErrorHandler(true);
   xmlDoc *doc = xmlReadMemory(buf, (int)len, szFilename, NULL, nOptions);
+  icXmlSetGlobalSanitizedErrorHandler(false);
   delete[] buf;
 
   return doc;
