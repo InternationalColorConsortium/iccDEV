@@ -14,3 +14,5 @@
 calcUnderStack_*	parse-fail	Unable to parse element of type CIccMpeXmlCalculator	calculator under-stack negative profiles intentionally reject invalid stack operations
 uio-CIccCalculatorFunc-CheckUnderflowOverflow-IccMpeCalc_cpp-Line4238	parse-fail	Unable to Parse	calculator underflow/overflow fixture intentionally emits malformed unknown-element XML
 calcOverMem_*	invalid-saved	accesses illegal temporary channels	calculator over-memory negative profiles intentionally validate illegal temporary channel access
+CMYK-*_Overprint_Profile	invalid-saved	Embedded profile device space	#2693: the embedded ICC.2 child is nc0005 under a CMYK host; Technical Note 04-2018 requires the same device space. Fixture rework pending
+MultSpectralRGB	invalid-saved	Embedded profile device space	#2693: the embedded ICC.2 child is 8CLR under an RGB host; Technical Note 04-2018 requires the same device space. Fixture rework pending

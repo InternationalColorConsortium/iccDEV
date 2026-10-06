@@ -8650,6 +8650,59 @@ function(iccdev_add_mcs_colorspace_name_test)
   endif()
 endfunction()
 
+# #2693: CIccTagEmbeddedProfile::Validate() checked the embedded ICC.2 profile's
+# channel count and device class against the host and nothing about its header
+# flags.  ICC Technical Note 04-2018 says bit 0 should mark it as embedded in
+# another file and only profiles with bit 1 clear should be embedded; both are
+# "should", so each now draws a warning.  Pins the four flag combinations on a
+# v4 display host holding a v5 display child.  IccProfLib only.
+function(iccdev_add_embedded_profile_flags_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccEmbeddedProfileFlagsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/embedded-profile-flags.cpp"
+  )
+  target_compile_features(iccEmbeddedProfileFlagsTest PRIVATE cxx_std_17)
+  target_include_directories(iccEmbeddedProfileFlagsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccEmbeddedProfileFlagsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccEmbeddedProfileFlagsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.embedded-profile-flags
+      COMMAND "$<TARGET_FILE:iccEmbeddedProfileFlagsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.embedded-profile-flags
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccEmbeddedProfileFlagsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.embedded-profile-flags PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;validate;embedded;issue-2693;regression"
+  )
+  if(WIN32)
+    set(_iccembeddedprofileflagstest_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccEmbeddedProfileFlagsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccembeddedprofileflagstest_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.embedded-profile-flags PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccembeddedprofileflagstest_env_mods}"
+    )
+  endif()
+endfunction()
 # #1886: CIccMpeXmlUnknown::ToXml formatted the Reserved attribute into `line`
 # and then appended `buf`, which still held the element's type signature from the
 # icGetSigStr call above it. The value was dropped and the signature was injected
@@ -11315,6 +11368,7 @@ if(WIN32)
   iccdev_add_console_sanitize_codepoint_test()
   iccdev_add_tiff_create_overflow_test()
   iccdev_add_tiff_separated_strips_test()
+  iccdev_add_embedded_profile_flags_test()
   iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_svcn_xml_reserved_roundtrip_test()
   iccdev_add_chromaticity_colorant_encodings_test()
@@ -11759,6 +11813,7 @@ iccdev_add_utf8_converter_cursor_test()
 iccdev_add_console_sanitize_codepoint_test()
 iccdev_add_tiff_create_overflow_test()
 iccdev_add_tiff_separated_strips_test()
+iccdev_add_embedded_profile_flags_test()
 iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_svcn_xml_reserved_roundtrip_test()
 iccdev_add_chromaticity_colorant_encodings_test()

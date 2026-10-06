@@ -157,7 +157,10 @@ prepare_case_dir()
   mkdir -p "$case_dir/testing/hybrid/ICC" "$case_dir/testing/hybrid/Results" "$case_dir/testing/hybrid/config"
   (
     cd "$case_dir/testing/hybrid"
-    "$ICC_FROM_XML" CMYK-S_Overprint_Profile.xml ICC/CMYK-S_Overprint_Profile.icc >/dev/null
+    # The host embeds an nc0005 child, which validates invalid under #2693
+    # (#2781); iccFromXml exits 1 while still writing the profile the timing
+    # matrix applies, so its status is not allowed to stop the run.
+    "$ICC_FROM_XML" CMYK-S_Overprint_Profile.xml ICC/CMYK-S_Overprint_Profile.icc >/dev/null || true
     "$ICC_FROM_XML" MS-Mid_Overprint.xml ICC/MS-Mid_Overprint.icc >/dev/null
   )
 }

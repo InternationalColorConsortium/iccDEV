@@ -634,7 +634,9 @@ generate_nested_size_mismatch_profile() {
   if [ ! -x "$FROM_XML" ] || ! command -v python3 >/dev/null 2>&1; then
     return 1
   fi
-  if ! "$FROM_XML" "$TESTING_DIR/hybrid/MultSpectralRGB.xml" "$VALID_HYBRID" >/dev/null; then
+  # CMYK_Hybrid_Profile embeds a CMYK child in a CMYK host, which validates
+  # clean; MultSpectralRGB (8CLR in RGB) no longer does (#2693).
+  if ! "$FROM_XML" "$TESTING_DIR/hybrid/CMYK_Hybrid_Profile.xml" "$VALID_HYBRID" >/dev/null; then
     return 1
   fi
 

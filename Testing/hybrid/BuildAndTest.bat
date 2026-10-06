@@ -1,5 +1,9 @@
 @REM setup directory to the tools used in this script
 @if exist ..\iccFromXml.exe (SET TOOLDIR=..\) else (SET TOOLDIR=)
+@rem Four hosts below embed an ICC.2 child of a different device space, which
+@rem Technical Note 04-2018 rules out, so iccFromXml validates them invalid and
+@rem exits 1 while still writing the profile (#2693, #2781).  The "|| echo"
+@rem lets the build go on; CI runs each iccFromXml line through cmd /c.
 
 @if not exist ICC mkdir ICC
 @if not exist Results mkdir Results
@@ -7,12 +11,12 @@
 
 @ECHO First lets build some useful ICC profiles 
 
-%TOOLDIR%iccFromXml MultSpectralRGB.xml ICC\MultSpectralRGB.icc
+%TOOLDIR%iccFromXml MultSpectralRGB.xml ICC\MultSpectralRGB.icc || echo WARN: MultSpectralRGB: embedded profile device space differs from the host (#2693); profile written
 %TOOLDIR%iccFromXml LCDDisplay.xml ICC\LCDDisplay.icc
 %TOOLDIR%iccFromXml CMYK_Hybrid_Profile.xml ICC\CMYK_Hybrid_Profile.icc
-%TOOLDIR%iccFromXml CMYK-W_Overprint_Profile.xml ICC\CMYK-W_Overprint_Profile.icc
-%TOOLDIR%iccFromXml CMYK-S_Overprint_Profile.xml ICC\CMYK-S_Overprint_Profile.icc
-%TOOLDIR%iccFromXml CMYK-STop_Overprint_Profile.xml ICC\CMYK-STop_Overprint_Profile.icc
+%TOOLDIR%iccFromXml CMYK-W_Overprint_Profile.xml ICC\CMYK-W_Overprint_Profile.icc || echo WARN: CMYK-W_Overprint_Profile: embedded profile device space differs from the host (#2693); profile written
+%TOOLDIR%iccFromXml CMYK-S_Overprint_Profile.xml ICC\CMYK-S_Overprint_Profile.icc || echo WARN: CMYK-S_Overprint_Profile: embedded profile device space differs from the host (#2693); profile written
+%TOOLDIR%iccFromXml CMYK-STop_Overprint_Profile.xml ICC\CMYK-STop_Overprint_Profile.icc || echo WARN: CMYK-STop_Overprint_Profile: embedded profile device space differs from the host (#2693); profile written
 %TOOLDIR%iccFromXml MW-Mid_Overprint.xml ICC\MW-Mid_Overprint.icc
 %TOOLDIR%iccFromXml MS-Mid_Overprint.xml ICC\MS-Mid_Overprint.icc
 %TOOLDIR%iccFromXml SC-Mid_Overprint.xml ICC\SC-Mid_Overprint.icc
