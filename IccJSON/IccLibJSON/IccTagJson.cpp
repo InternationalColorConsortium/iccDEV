@@ -2882,22 +2882,51 @@ bool CIccTagJsonMultiProcessElement::ParseJson(const IccJson &j, std::string &pa
 
   if (!jsonExistsField(j, "elements") || !j["elements"].is_array()) return true;
 
+  // Each of these used to "continue": an element that was not an object,
+  // had no type, an unknown type, or a type without a JSON extension was
+  // dropped and the tag built without it, while a tag whose element parser
+  // returned false failed the profile.  Dropping an element silently changes
+  // the transform (#2697).  The XML reader fails on an unknown element type
+  // ("Unknown Element Type"); these now fail the same way.
   for (const auto &elemObj : j["elements"]) {
-    if (!elemObj.is_object() || elemObj.empty()) continue;
+    if (!elemObj.is_object() || elemObj.empty()) {
+      parseStr += "multiProcessElementType element must be a non-empty object\n";
+      return false;
+    }
     std::string typeName;
     jGetString(elemObj, "type", typeName);
-    if (typeName.empty()) continue;
+    if (typeName.empty()) {
+      parseStr += "multiProcessElementType element has no type\n";
+      return false;
+    }
 
+    // A type is a listed element name, the four-character signature of a
+    // private element, or "UnknownElement", the spelling the writer gives an
+    // element it has no name for.  Anything else used to reach
+    // icGetSigVal(), which turned "ignoredType" into a signature and built
+    // an unknown element in its place.
     icElemTypeSignature sig = icJsonGetElemTypeNameSig(typeName.c_str());
+    if (strcmp(icJsonGetElemTypeName(sig), typeName.c_str()) != 0 &&
+        typeName.size() != 4 && typeName != "UnknownElement") {
+      parseStr += "Unknown Element Type (" + typeName + ")\n";
+      return false;
+    }
     CIccMultiProcessElement *pElem = CIccMpeCreator::CreateElement(sig);
-    if (!pElem) continue;
+    if (!pElem) {
+      parseStr += "Unknown Element Type (" + typeName + ")\n";
+      return false;
+    }
 
     int nReserved = 0;
     if (jGetValue(elemObj, "Reserved", nReserved))
       pElem->m_nReserved = (icUInt32Number)nReserved;
 
     IIccExtensionMpe *pExt = pElem->GetExtension();
-    if (!pExt || strcmp(pExt->GetExtClassName(), "CIccMpeJson") != 0) { delete pElem; continue; }
+    if (!pExt || strcmp(pExt->GetExtClassName(), "CIccMpeJson") != 0) {
+      parseStr += "Element " + typeName + " isn't of type CIccMpeJson\n";
+      delete pElem;
+      return false;
+    }
 
     CIccMpeJson *pJsonElem = static_cast<CIccMpeJson*>(pExt);
     if (!pJsonElem->ParseJson(elemObj, parseStr)) {

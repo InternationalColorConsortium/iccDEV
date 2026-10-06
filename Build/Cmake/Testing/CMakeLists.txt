@@ -2676,6 +2676,65 @@ function(iccdev_add_islegalutf8_bound_test)
 
 endfunction()
 
+# #2674, #2695, #2697: three places where the JSON profile reader accepted a
+# malformed document and built a different profile from it, each refused by
+# the XML reader's twin: a spectral-range step count cast to uInt16Number
+# (65567 stored as 31), a Tags entry with a second member skipped with an
+# unprinted warning, and a multiProcessElementType element with no, an
+# unknown, or a non-JSON type dropped from the tag.  All three now fail the
+# parse with the XML reader's wording; the controls still load.
+function(iccdev_add_json_reader_strictness_test)
+  if(NOT TARGET "${TARGET_LIB_ICCJSON}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccJsonReaderStrictnessTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/json-reader-strictness.cpp"
+  )
+  target_compile_features(iccJsonReaderStrictnessTest PRIVATE cxx_std_17)
+  target_include_directories(iccJsonReaderStrictnessTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccJsonReaderStrictnessTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccJsonReaderStrictnessTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.json-reader-strictness
+      COMMAND "$<TARGET_FILE:iccJsonReaderStrictnessTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.json-reader-strictness
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccJsonReaderStrictnessTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.json-reader-strictness PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;json;parser-symmetry;issue-2674;issue-2695;issue-2697;regression"
+  )
+  if(WIN32)
+    set(_iccjsonreaderstrictnesstest_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccJsonReaderStrictnessTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccjsonreaderstrictnesstest_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.json-reader-strictness PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccjsonreaderstrictnesstest_env_mods}"
+    )
+  endif()
+endfunction()
 # #2454: icJsonEscape() appended well-formed UTF-8 unchanged, so --json and
 # --evidence-json emitted live U+202E and the C1 controls while the text sink
 # escaped the same string.  Twelve hand-written cases, not an exhaustive walk:
@@ -11221,6 +11280,7 @@ if(WIN32)
   iccdev_add_named_colour_signature_v5_test()
   iccdev_add_mid_mlnk_header_checks_test()
   iccdev_add_islegalutf8_bound_test()
+  iccdev_add_json_reader_strictness_test()
   iccdev_add_json_escape_codepoint_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
@@ -11714,6 +11774,7 @@ iccdev_add_getvalues_nstart_test()
 iccdev_add_chromaticity_validate_test()
 iccdev_add_cicp_copy_ctor_test()
 iccdev_add_islegalutf8_bound_test()
+iccdev_add_json_reader_strictness_test()
 iccdev_add_json_escape_codepoint_test()
 iccdev_add_v5_required_tag_sets_test()
 iccdev_add_mpe_acs_zero_signature_test()
