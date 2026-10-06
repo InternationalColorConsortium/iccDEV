@@ -32,6 +32,7 @@
 #include "IccCmm.h"
 #include "IccUtil.h"
 #include "IccDefs.h"
+#include "IccTagMPE.h"
 
 #include "IccQualityMetrics.h"
 
@@ -281,9 +282,204 @@ static void test_absolute_intent() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// When the absolute-colorimetric forward transform cannot be built, the reason
+// names the failing step, carries the CMM's status text, and says what
+// forward-transform tags the profile carries.  These used to collapse into one
+// sentence with the status discarded, so a reader could not tell a profile Q4
+// has no path for from a transform that failed for another reason.
+//
+// Q4 builds through the colorimetric LUT path with the D2Bx tags opted out, so
+// it considers AToBx, then the matrix/TRC model (RGB) or grayTRC (Gray), and
+// never a DToBx tag for a colorimetric-PCS profile.
+// ---------------------------------------------------------------------------
+static bool has(const std::string &s, const char *what) {
+  return s.find(what) != std::string::npos;
+}
+
+static std::string reason_for(CIccProfile &p, const std::string &targ) {
+  CIccTagText *t = new CIccTagText;
+  t->SetText(targ.c_str());
+  p.AttachTag(icSigCharTargetTag, t);
+  CharacterizationMetrics m;
+  std::string reason;
+  bool ok = evaluate_characterization(&p, m, reason);
+  check(!ok, "  a profile with no usable forward transform is not evaluated");
+  std::printf("    reason: %s\n", reason.c_str());
+  return reason;
+}
+
+static void strip_matrix_trc(CIccProfile &p) {
+  for (icSignature s : {icSigRedColorantTag, icSigGreenColorantTag, icSigBlueColorantTag,
+                        icSigRedTRCTag, icSigGreenTRCTag, icSigBlueTRCTag})
+    p.DeleteTag(static_cast<icSignature>(s));
+}
+
+static void test_failure_reasons() {
+  std::printf("\n[ forward-transform failure reasons ]\n");
+
+  std::vector<std::array<double, 3>> xyz(kNumPatches, {0.5, 0.5, 0.5});
+  const std::string rgbTarg = make_targ(xyz);
+
+  // RGB, no AToBx and no matrix/TRC: CIccXform::Create still returns a
+  // matrix/TRC transform for RGB, which then fails to START - the step that
+  // is now named.
+  {
+    CIccProfile p;
+    build_matrix_profile(p);
+    strip_matrix_trc(p);
+    std::string r = reason_for(p, rgbTarg);
+    check(has(r, "an absolute-colorimetric forward transform could not be built"),
+          "  the established lead sentence is kept");
+    check(has(r, "created but could not be started ("), "  RGB, no tags: the failing step is Begin()");
+    check(has(r, "no AToBx tag") && has(r, "no matrix/TRC tags"),
+          "  RGB, no tags: the reason says what the profile does not carry");
+  }
+
+  // RGB with an incomplete matrix/TRC set: the missing tags are named.
+  {
+    CIccProfile p;
+    build_matrix_profile(p);
+    p.DeleteTag(icSigBlueTRCTag);
+    std::string r = reason_for(p, rgbTarg);
+    check(has(r, "an incomplete matrix/TRC set (missing bTRC)"),
+          "  RGB, incomplete set: the missing tag is named");
+  }
+
+  // RGB whose only forward transform is a DToB0 tag.  Q4 does not use DToBx
+  // for a colorimetric-PCS profile, and the reason says so - the case a
+  // reader most needs told apart from a broken profile.
+  {
+    CIccProfile p;
+    build_matrix_profile(p);
+    strip_matrix_trc(p);
+    p.m_Header.version = icVersionNumberV5;
+    p.AttachTag(icSigDToB0Tag, new CIccTagMultiProcessElement(3, 3));
+    std::string r = reason_for(p, rgbTarg);
+    check(has(r, "DToB0, which Q4 does not use"), "  DToB0-only: the DToB0 tag is named as unused");
+    check(has(r, "cannot be evaluated here"),
+          "  DToB0-only: the reason says such a profile cannot be evaluated by Q4");
+  }
+
+  // CMYK with no AToBx: no transform is created at all - a different step,
+  // and the one the RGB cases above cannot reach.
+  {
+    CIccProfile p;
+    p.InitHeader();
+    p.m_Header.deviceClass = icSigOutputClass;
+    p.m_Header.colorSpace = icSigCmykData;
+    p.m_Header.pcs = icSigXYZData;
+    p.m_Header.version = icVersionNumberV4_2;
+    attach_xyz(p, icSigMediaWhitePointTag, 0.9642, 1.0, 0.8249);
+    std::string targ =
+        "CGATS.17\nNUMBER_OF_FIELDS 8\nBEGIN_DATA_FORMAT\n"
+        "SAMPLE_ID CMYK_C CMYK_M CMYK_Y CMYK_K XYZ_X XYZ_Y XYZ_Z\nEND_DATA_FORMAT\nBEGIN_DATA\n"
+        "1 0 0 0 0 0.9 0.9 0.8\n2 100 0 0 0 0.2 0.3 0.6\n3 0 100 0 0 0.4 0.2 0.3\n"
+        "4 0 0 100 0 0.8 0.9 0.1\n5 0 0 0 100 0.01 0.01 0.01\nEND_DATA\n";
+    std::string r = reason_for(p, targ);
+    check(has(r, "creating the transform failed ("), "  CMYK, no AToBx: the failing step is creation");
+    check(has(r, "The profile carries no AToBx tag."),
+          "  CMYK, no AToBx: the reason says what the profile does not carry");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// A CMYK->Lab profile whose AToB1 is a lut16 ('mft2') table, as in most
+// published print profiles.  Begin() appends a step after the table that
+// converts its legacy Lab encoding, so the chain is 4 -> 3 -> 3 and its LAST
+// step takes 3 channels, not 4.  Q4 compared that step's source count with
+// the CMM's and reported every such profile as a Gap ("channel counts (3 in,
+// 3 out) do not match ... (4 in, 3 out)"); it must reach a dE verdict.
+// ---------------------------------------------------------------------------
+static CIccTagLut16 *make_cmyk_lab_lut16() {
+  CIccTagLut16 *lut = new CIccTagLut16;
+  lut->Init(4, 3);
+  lut->SetColorSpaces(icSigCmykData, icSigLabData);
+  LPIccCurve *in = lut->NewCurvesB();
+  LPIccCurve *out = lut->NewCurvesA();
+  for (int i = 0; i < 4; ++i) in[i] = new CIccTagCurve(0);
+  for (int i = 0; i < 3; ++i) out[i] = new CIccTagCurve(0);
+
+  icUInt8Number grid[16] = {2, 2, 2, 2};
+  lut->NewCLUT(grid, 3);
+  icFloatNumber *data = lut->GetCLUT()->GetData(0);
+  // Grid node n has C, M, Y, K = bits 3, 2, 1, 0 of n.  Darker with more ink,
+  // and a and b move with the chromatic inks, so the patches differ.
+  for (int n = 0; n < 16; ++n) {
+    const double c = (n >> 3) & 1, m = (n >> 2) & 1, y = (n >> 1) & 1, k = n & 1;
+    data[n * 3 + 0] = static_cast<icFloatNumber>(0.95 - 0.15 * (c + m + y) - 0.4 * k);
+    data[n * 3 + 1] = static_cast<icFloatNumber>(0.5 + 0.2 * m - 0.15 * c);
+    data[n * 3 + 2] = static_cast<icFloatNumber>(0.5 + 0.2 * y - 0.1 * c);
+  }
+  return lut;
+}
+
+static void test_lut16_cmyk_lab() {
+  std::printf("\n[ lut16 CMYK->Lab profile ]\n");
+
+  CIccProfile p;
+  p.InitHeader();
+  p.m_Header.deviceClass = icSigOutputClass;
+  p.m_Header.colorSpace = icSigCmykData;
+  p.m_Header.pcs = icSigLabData;
+  p.m_Header.version = 0x02400000;  // v2.4, like the ECI/FOGRA print profiles
+  attach_xyz(p, icSigMediaWhitePointTag, 0.9310, 0.9660, 0.7900);  // paper white
+  p.AttachTag(icSigAToB1Tag, make_cmyk_lab_lut16());
+
+  // The chain this test exists for: the profile's table, then a conversion
+  // step whose source count differs from the CMM's.  Without it the test
+  // would pass on the old check too.
+  static const double kCmyk[][4] = {
+      {0, 0, 0, 0},     {100, 0, 0, 0},  {0, 100, 0, 0},  {0, 0, 100, 0},
+      {0, 0, 0, 100},   {100, 100, 0, 0}, {40, 30, 20, 10}, {100, 100, 100, 100},
+  };
+  const int nPatches = static_cast<int>(sizeof(kCmyk) / sizeof(kCmyk[0]));
+  CIccCmm cmm(icSigCmykData, icSigLabData, true);
+  bool built = cmm.AddXform(p, icAbsoluteColorimetric, icInterpTetrahedral, NULL,
+                            icXformLutColorimetric, false) == icCmmStatOk &&
+               cmm.Begin() == icCmmStatOk;
+  check(built, "  the absolute-colorimetric lut16 transform builds");
+  if (!built) return;
+  check(cmm.GetFirstXform() != cmm.GetLastXform() &&
+            cmm.GetLastXform()->GetNumSrcSamples() != cmm.GetSourceSamples(),
+        "  the chain's last step does not take the CMM's source channels");
+
+  // "Measured" Lab = what the profile itself predicts, so a correct Q4 finds
+  // agreement to within rounding.
+  std::string targ =
+      "CGATS.17\nNUMBER_OF_FIELDS 8\nBEGIN_DATA_FORMAT\n"
+      "SAMPLE_ID CMYK_C CMYK_M CMYK_Y CMYK_K LAB_L LAB_A LAB_B\nEND_DATA_FORMAT\nBEGIN_DATA\n";
+  for (int i = 0; i < nPatches; ++i) {
+    icFloatNumber in[4], lab[3] = {0, 0, 0};
+    for (int c = 0; c < 4; ++c) in[c] = static_cast<icFloatNumber>(kCmyk[i][c] / 100.0);
+    cmm.Apply(lab, in);
+    icLabFromPcs(lab);
+    char line[160];
+    std::snprintf(line, sizeof(line), "%d %.1f %.1f %.1f %.1f %.4f %.4f %.4f\n", i + 1,
+                  kCmyk[i][0], kCmyk[i][1], kCmyk[i][2], kCmyk[i][3], lab[0], lab[1], lab[2]);
+    targ += line;
+  }
+  targ += "END_DATA\n";
+
+  CIccTagText *t = new CIccTagText;
+  t->SetText(targ.c_str());
+  p.AttachTag(icSigCharTargetTag, t);
+  CharacterizationMetrics m;
+  std::string reason;
+  bool ok = evaluate_characterization(&p, m, reason);
+  if (!ok) std::printf("    reason: %s\n", reason.c_str());
+  check(ok, "  Q4 evaluates a lut16 profile instead of reporting a Gap");
+  check(ok && m.rowsUsed == nPatches, "  every patch is evaluated");
+  check(ok && m.avgDe00 < 0.1 && m.maxDe00 < 0.5,
+        "  the profile agrees with data generated from it");
+  std::printf("    avg %.4f, max %.4f dE00 over %d patches\n", m.avgDe00, m.maxDe00, m.rowsUsed);
+}
+
 int main() {
   test_cgats_parser();
   test_absolute_intent();
+  test_failure_reasons();
+  test_lut16_cmyk_lab();
 
   if (g_failures) {
     std::printf("\n%d check(s) FAILED\n", g_failures);
