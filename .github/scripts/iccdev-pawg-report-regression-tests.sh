@@ -784,12 +784,19 @@ run_hybrid_embedded_calculator_cost() {
     fail_case "$name" "sanitizer finding"
     return
   fi
-  if [ "$exit_code" -ne 0 ]; then
-    fail_case "$name" "report returned unexpected status $exit_code"
+  # The generated host deliberately retains the fixture's embedded-profile
+  # device-space mismatch. PAWG must therefore fail C1 and return 1 while
+  # still assessing S10 against the loaded embedded v5 sub-profile.
+  if [ "$exit_code" -ne 1 ]; then
+    fail_case "$name" "report returned unexpected status $exit_code (expected 1 for the fixture's C1 failure)"
     return
   fi
   if ! assert_report_truth "$name" "$logfile"; then
     fail_case "$name" "report count or section mismatch"
+    return
+  fi
+  if ! grep -F -q "[FAIL] C1" "$logfile"; then
+    fail_case "$name" "expected C1 failure for the deliberate embedded-profile device-space mismatch"
     return
   fi
   if grep -F -q "[N/A ] S10" "$logfile"; then
