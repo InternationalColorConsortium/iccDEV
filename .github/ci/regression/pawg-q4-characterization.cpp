@@ -27,6 +27,7 @@
 // Exit code 0 = pass, 1 = a guarded regression reappeared.
 
 #include "IccProfile.h"
+#include "IccMpeBasic.h"
 #include "IccTag.h"
 #include "IccTagBasic.h"
 #include "IccCmm.h"
@@ -315,6 +316,8 @@ static void strip_matrix_trc(CIccProfile &p) {
     p.DeleteTag(static_cast<icSignature>(s));
 }
 
+static CIccTagMultiProcessElement *make_unstartable_dtob0();
+
 static void test_failure_reasons() {
   std::printf("\n[ forward-transform failure reasons ]\n");
 
@@ -346,19 +349,33 @@ static void test_failure_reasons() {
           "  RGB, incomplete set: the missing tag is named");
   }
 
-  // RGB whose only forward transform is a DToB0 tag.  Q4 does not use DToBx
-  // for a colorimetric-PCS profile, and the reason says so - the case a
-  // reader most needs told apart from a broken profile.
+  // RGB whose only forward transform is a DToB0 tag that cannot start.  Q4
+  // now takes the DToBx path for such a profile (see test_dtobx_only below),
+  // so the failure is the element's, and the reason says the DToB0 was used.
   {
     CIccProfile p;
     build_matrix_profile(p);
     strip_matrix_trc(p);
     p.m_Header.version = icVersionNumberV5;
-    p.AttachTag(icSigDToB0Tag, new CIccTagMultiProcessElement(3, 3));
+    p.AttachTag(icSigDToB0Tag, make_unstartable_dtob0());
     std::string r = reason_for(p, rgbTarg);
-    check(has(r, "DToB0, which Q4 does not use"), "  DToB0-only: the DToB0 tag is named as unused");
-    check(has(r, "cannot be evaluated here"),
-          "  DToB0-only: the reason says such a profile cannot be evaluated by Q4");
+    check(has(r, "could not be started ("), "  unstartable DToB0-only: the failing step is Begin()");
+    check(has(r, "DToB0, which Q4 used here because the profile carries no other forward transform"),
+          "  unstartable DToB0-only: the reason says the DToB0 was the transform Q4 used");
+    check(!has(r, "cannot be evaluated here"), "  unstartable DToB0-only: the old refusal is gone");
+  }
+  // The same, with a spectral PCS in the header: the DToBx would emit spectral
+  // samples, so Q4 does not use it, and the reason says why.
+  {
+    CIccProfile p;
+    build_matrix_profile(p);
+    strip_matrix_trc(p);
+    p.m_Header.version = icVersionNumberV5;
+    p.m_Header.spectralPCS = icSigReflectanceSpectralPcsData;
+    p.AttachTag(icSigDToB0Tag, make_unstartable_dtob0());
+    std::string r = reason_for(p, rgbTarg);
+    check(has(r, "does not use for a profile with a spectral PCS"),
+          "  DToB0-only with a spectral PCS: the reason says the DToBx is not used and why");
   }
 
   // CMYK with no AToBx: no transform is created at all - a different step,
@@ -475,11 +492,98 @@ static void test_lut16_cmyk_lab() {
   std::printf("    avg %.4f, max %.4f dE00 over %d patches\n", m.avgDe00, m.maxDe00, m.rowsUsed);
 }
 
+// A DToB0 that cannot start: its only element takes four inputs where the
+// tag has three, so CIccTagMultiProcessElement::Begin() refuses the chain.
+// An EMPTY element list would apply as an identity and reach a verdict.
+static CIccTagMultiProcessElement *make_unstartable_dtob0() {
+  CIccTagMultiProcessElement *mpe = new CIccTagMultiProcessElement(3, 3);
+  CIccMpeMatrix *m = new CIccMpeMatrix;
+  m->SetSize(4, 3);
+  mpe->Attach(m);
+  return mpe;
+}
+
+// A v5 RGB->XYZ profile whose only forward transform is a DToB0 holding a
+// matrixElement with the same sRGB primaries build_matrix_profile() uses.
+static void build_dtob0_only_profile(CIccProfile &p) {
+  build_matrix_profile(p);
+  strip_matrix_trc(p);
+  p.m_Header.version = icVersionNumberV5;
+  CIccTagMultiProcessElement *mpe = new CIccTagMultiProcessElement(3, 3);
+  CIccMpeMatrix *m = new CIccMpeMatrix;
+  m->SetSize(3, 3);
+  static const double kSrgbToXyzD50[9] = {0.4361, 0.3851, 0.1431,
+                                          0.2225, 0.7169, 0.0606,
+                                          0.0139, 0.0971, 0.7141};
+  for (int i = 0; i < 9; ++i) m->GetMatrix()[i] = static_cast<icFloatNumber>(kSrgbToXyzD50[i]);
+  for (int i = 0; i < 3; ++i) m->GetConstants()[i] = 0.0f;
+  mpe->Attach(m);
+  p.AttachTag(icSigDToB0Tag, mpe);
+}
+
+// Q4 evaluates a profile whose forward transform exists only as a DToBx tag,
+// and prefers the AToBx / matrix/TRC path when one is present.
+static void test_dtobx_only() {
+  std::printf("\n[ DToBx-only profiles ]\n");
+  {
+    CIccProfile p;
+    build_dtob0_only_profile(p);
+    std::vector<std::array<double, 3>> xyz;
+    check(forward_xyz(p, icAbsoluteColorimetric, xyz), "  DToB0-only: the CMM applies the DToB0");
+    CIccTagText *t = new CIccTagText;
+    t->SetText(make_targ(xyz).c_str());
+    p.AttachTag(icSigCharTargetTag, t);
+    CharacterizationMetrics m;
+    std::string reason;
+    bool ok = evaluate_characterization(&p, m, reason);
+    check(ok, "  DToB0-only: Q4 reaches a verdict (was a Gap)");
+    if (!ok) std::printf("    reason: %s\n", reason.c_str());
+    check(m.viaDToBx, "  DToB0-only: the metrics say the DToBx path was taken");
+    check(m.rowsUsed == kNumPatches, "  DToB0-only: every patch is used");
+    check(m.maxDe00 < 0.05, "  DToB0-only: the target authored from the same transform agrees");
+  }
+  {
+    // Both present: the matrix/TRC model is evaluated, not the DToB0.  The
+    // DToB0 cannot start, so taking it would fail; reaching a verdict with
+    // viaDToBx false pins the preference.
+    CIccProfile p;
+    build_matrix_profile(p);
+    p.m_Header.version = icVersionNumberV5;
+    p.AttachTag(icSigDToB0Tag, make_unstartable_dtob0());
+    std::vector<std::array<double, 3>> xyz;
+    {
+      CIccCmm cmm(icSigRgbData, icSigXYZData, true);
+      check(cmm.AddXform(p, icAbsoluteColorimetric, icInterpTetrahedral, NULL,
+                         icXformLutColorimetric, false) == icCmmStatOk &&
+            cmm.Begin() == icCmmStatOk, "  both present: the matrix/TRC transform builds");
+      for (int i = 0; i < kNumPatches; ++i) {
+        icFloatNumber in[3] = {static_cast<icFloatNumber>(kPatches[i][0]),
+                               static_cast<icFloatNumber>(kPatches[i][1]),
+                               static_cast<icFloatNumber>(kPatches[i][2])};
+        icFloatNumber out[3] = {0, 0, 0};
+        cmm.Apply(out, in);
+        icXyzFromPcs(out);
+        xyz.push_back({out[0], out[1], out[2]});
+      }
+    }
+    CIccTagText *t = new CIccTagText;
+    t->SetText(make_targ(xyz).c_str());
+    p.AttachTag(icSigCharTargetTag, t);
+    CharacterizationMetrics m;
+    std::string reason;
+    bool ok = evaluate_characterization(&p, m, reason);
+    check(ok, "  both present: Q4 reaches a verdict through the matrix/TRC model");
+    if (!ok) std::printf("    reason: %s\n", reason.c_str());
+    check(!m.viaDToBx, "  both present: the DToBx path is not taken");
+  }
+}
+
 int main() {
   test_cgats_parser();
   test_absolute_intent();
   test_failure_reasons();
   test_lut16_cmyk_lab();
+  test_dtobx_only();
 
   if (g_failures) {
     std::printf("\n%d check(s) FAILED\n", g_failures);
