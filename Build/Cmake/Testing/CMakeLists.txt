@@ -2263,6 +2263,64 @@ function(iccdev_add_tonemap_write_many_outputs_test)
   endif()
 endfunction()
 
+# The 256-byte text cap in icAnsiToUtf8()/icUtf8ToAnsi() (#740's strnlen
+# bound) silently truncated every textType and v2 textDescriptionType longer
+# than 256 bytes on non-Windows builds, in both XML directions - a
+# charTargetTag's CGATS data came back as 256 bytes.  Pins byte-exact round
+# trips of a 35 KB charTargetTag and a 1 KB description, each direction on its
+# own, and that the bounded overloads read no further than a fixed-size field.
+function(iccdev_add_xml_text_long_roundtrip_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlTextLongRoundtripTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-text-long-roundtrip.cpp"
+  )
+  target_compile_features(iccXmlTextLongRoundtripTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlTextLongRoundtripTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlTextLongRoundtripTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlTextLongRoundtripTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-text-long-roundtrip
+      COMMAND "$<TARGET_FILE:iccXmlTextLongRoundtripTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-text-long-roundtrip
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlTextLongRoundtripTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-text-long-roundtrip PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;text;roundtrip;parser-symmetry;regression"
+  )
+  if(WIN32)
+    set(_iccxmltextlongroundtriptest_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlTextLongRoundtripTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccxmltextlongroundtriptest_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-text-long-roundtrip PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccxmltextlongroundtriptest_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards #2610: both hex decoders skipped whatever they could not read as a
 # pair of hex digits, so a dataType payload of "0g11" loaded as the single byte
 # 0x11 with no diagnostic.  Also pins propagation through both embedded
@@ -11117,6 +11175,7 @@ if(WIN32)
   iccdev_add_xyz_negative_z_test()
   iccdev_add_utf8_textarray_test()
   iccdev_add_extended_device_colorspace_test()
+  iccdev_add_xml_text_long_roundtrip_test()
   iccdev_add_hex_data_malformed_xml_test()
   iccdev_add_hex_data_malformed_json_test()
   iccdev_add_tonemap_functions_xml_test()
@@ -11556,6 +11615,7 @@ iccdev_add_pcs_edge_metadata_test()
 iccdev_add_xyz_negative_z_test()
 iccdev_add_utf8_textarray_test()
 iccdev_add_extended_device_colorspace_test()
+iccdev_add_xml_text_long_roundtrip_test()
 iccdev_add_hex_data_malformed_xml_test()
 iccdev_add_hex_data_malformed_json_test()
 iccdev_add_tonemap_functions_xml_test()
