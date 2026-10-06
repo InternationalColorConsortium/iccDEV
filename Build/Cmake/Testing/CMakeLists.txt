@@ -7845,6 +7845,63 @@ function(iccdev_add_owning_setter_self_alias_contract_test)
   endif()
 endfunction()
 
+# The reserved words of a tint array's number array and of a calculator's
+# sub-elements were lost through XML: CIccMpeXmlTintArray::ToXml never wrote
+# the reserved attribute its ParseXml reads from the array's type node, and the
+# calculator's SubElements loop read each sub-element's Reserved from the
+# enclosing CalculatorElement node.  Pins both round trips, and that a zero
+# reserved word writes no attribute.
+function(iccdev_add_xml_mpe_reserved_roundtrip_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlMpeReservedRoundTripTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-mpe-reserved-roundtrip.cpp"
+  )
+  target_include_directories(iccXmlMpeReservedRoundTripTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlMpeReservedRoundTripTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlMpeReservedRoundTripTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-mpe-reserved-roundtrip
+      COMMAND "$<TARGET_FILE:iccXmlMpeReservedRoundTripTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-mpe-reserved-roundtrip
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlMpeReservedRoundTripTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-mpe-reserved-roundtrip PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;mpe;calculator;tint;reserved;regression"
+  )
+  if(WIN32)
+    set(_xmlmpereserved_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlMpeReservedRoundTripTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _xmlmpereserved_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-mpe-reserved-roundtrip PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_xmlmpereserved_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2731: icValidOverlap() accepted any two overlapping positions of equal size,
 # and any two at the same offset, under a "TODO - double check this logic!".
 # Pins the rule: disjoint, or identical when bAllowSame.  Library only; called
@@ -11492,6 +11549,7 @@ if(WIN32)
   iccdev_add_mpe_curveset_setcurve_contract_tests()
   iccdev_add_mpe_copy_bufchannels_test()
   iccdev_add_owning_setter_self_alias_contract_test()
+  iccdev_add_xml_mpe_reserved_roundtrip_test()
   iccdev_add_valid_overlap_test()
   iccdev_add_curve_gamma_u8fixed8_test()
   iccdev_add_calc_output_init_test()
@@ -11942,6 +12000,7 @@ iccdev_add_colorant_table_devicelink_pcs_test()
 iccdev_add_mpe_curveset_setcurve_contract_tests()
 iccdev_add_mpe_copy_bufchannels_test()
 iccdev_add_owning_setter_self_alias_contract_test()
+iccdev_add_xml_mpe_reserved_roundtrip_test()
 iccdev_add_valid_overlap_test()
 iccdev_add_curve_gamma_u8fixed8_test()
 iccdev_add_luminance_normalization_test()
