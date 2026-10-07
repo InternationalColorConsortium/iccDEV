@@ -3117,6 +3117,59 @@ function(iccdev_add_pawg_c5_btoa0_test)
   endif()
 endfunction()
 
+# DToB3Tag and BToD3Tag were missing from three PawgReport.cpp lists: C5's
+# optional tag tables, S1's channel-count checks, and C11's v5-only list.
+# ICC.1:2022 permits the 3 pair in LUT-based Input, Display and Output profiles
+# and in ColorSpace profiles (8.3.2, 8.4.2, 8.5.2, 8.7).  Same machinery as the
+# #2787 test above: the tracked sRGB v4 preference profile re-classed in memory,
+# with 3 pair tags added, and the C5, C11 and S1 lines read back, including S1
+# against a v5 spectral PCS; controls keep a DeviceLink DToB3 and a v4 AToB3
+# reported.  Needs IccProfLib only.
+function(iccdev_add_pawg_dtob3_btod3_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPawgDToB3BToD3Test
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pawg-dtob3-btod3.cpp"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport/PawgReport.cpp"
+  )
+  target_compile_features(iccPawgDToB3BToD3Test PRIVATE cxx_std_17)
+  target_include_directories(iccPawgDToB3BToD3Test PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport"
+  )
+  target_link_libraries(iccPawgDToB3BToD3Test PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  # Linked without LTO, for the GCC 15.2 false positive described at
+  # iccPawgC5BToA0Test above.
+  set_target_properties(iccPawgDToB3BToD3Test PROPERTIES INTERPROCEDURAL_OPTIMIZATION OFF)
+  add_dependencies(check iccPawgDToB3BToD3Test)
+
+  add_test(
+    NAME iccdev.pawg-dtob3-btod3
+    COMMAND "$<TARGET_FILE:iccPawgDToB3BToD3Test>"
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+  )
+  set_tests_properties(iccdev.pawg-dtob3-btod3 PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;pawg;regression"
+  )
+  if(WIN32)
+    set(_pawg_dtob3_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPawgDToB3BToD3Test>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pawg_dtob3_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pawg-dtob3-btod3 PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pawg_dtob3_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1976: two defects on the gamt path. CIccXform::Create() forces bInput false to walk
 # the B-to-A shaped gamut tag, but m_bInput also drove GetDstSpace()/GetNumDstSamples(),
 # so the xform advertised the profile's device space while CIccCmm::AddXform() had
@@ -11829,6 +11882,7 @@ if(WIN32)
   iccdev_add_mpe_acs_zero_signature_test()
   iccdev_add_pawg_c5_cicp_test()
   iccdev_add_pawg_c5_btoa0_test()
+  iccdev_add_pawg_dtob3_btod3_test()
   iccdev_add_gamut_xform_semantics_test()
   iccdev_add_rangemap_uninitialized_test()
   iccdev_add_pcs_birefl_illuminant_range_test()
@@ -12279,6 +12333,7 @@ iccdev_add_v5_required_tag_sets_test()
 iccdev_add_mpe_acs_zero_signature_test()
 iccdev_add_pawg_c5_cicp_test()
 iccdev_add_pawg_c5_btoa0_test()
+iccdev_add_pawg_dtob3_btod3_test()
 iccdev_add_gamut_xform_semantics_test()
 iccdev_add_rangemap_uninitialized_test()
 iccdev_add_pcs_birefl_illuminant_range_test()
