@@ -84,6 +84,5 @@ HdrNonRgbSpace	hdr-content	0	-	MEMBERSHIP NEGATIVE: data colour space 3CLR, not 
 HdrPcsLab	hdr-content	0	-	PCS NEGATIVE, the only one that isolates bPcsXyz: HdrColorSpaceClass with PCS Lab. Without it the manifest could not fail a row on the one membership term that did not go away with the old parent
 HdrTransferSdr	hdr-content	0	-	MEMBERSHIP NEGATIVE: TransferCharacteristics 1; no other disqualifier, so isolated
 HdrTrcTagsPresent	conforming	0	-	INVERTED BY THE REVISION: TRC tags cost membership under 8.10.1 and do not under 8.7.1, which prohibits nothing because 8.7 defines nothing to prohibit. Still draws a tag-exclusion WARNING - a TRC tag has no interpretation on 'spac' - which is the point: not a member-or-not question
-HdrVersion44	conforming	0	-	INVERTED BY THE REVISION: 4.4 was below the old 4.5.0.0 window and there is no lower bound now (4.7). The cicpTag's own >= 4.4 tag-type gate is what still applies
-HdrVersion46	conforming	0	-	4.6; with HdrVersion44 it brackets the withdrawn lower bound from both sides
+HdrVersion46	conforming	0	-	4.6, above the published 4.4 every other fixture carries; still a member, since 8.7.1.1 sets no lower or exact v4 version
 HdrVersion5	hdr-content	0	-	VERSION NEGATIVE, the only one that isolates the v5 ceiling: HdrColorSpaceClass at 5.0. The BT2100 set fails on class too, so dropping icHdrIsVersion4() left every other row passing. The ceiling is a ruling; see icHdrIsVersion4()

@@ -2,8 +2,8 @@
 <!--
   NEGATIVE FIXTURE for clause 8.7.1.5's mandatory backward-compatibility pair.
 
-  Everything about this profile satisfies 8.7.1.1: RGB, Display class, version
-  4.5.0.0, a cicpTag declaring PQ, and no redTRCTag/greenTRCTag/blueTRCTag. So
+  Everything about this profile satisfies 8.7.1.1: RGB, ColorSpace class, version
+  4.4.0.0, a cicpTag declaring PQ, and no redTRCTag/greenTRCTag/blueTRCTag. So
   it IS an HDR ColorSpace Profile - membership is not in question - and that is what makes
   it a useful negative: the defect has to be reported against a profile the
   classifier accepts, or it is not reported at all.
@@ -21,7 +21,7 @@
 --><IccProfile>
   <Header>
     <PreferredCMMType>iccd</PreferredCMMType>
-    <ProfileVersion>4.50</ProfileVersion>
+    <ProfileVersion>4.40</ProfileVersion>
     <ProfileDeviceClass>spac</ProfileDeviceClass>
     <DataColourSpace>RGB </DataColourSpace>
     <PCS>XYZ </PCS>

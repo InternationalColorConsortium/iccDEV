@@ -1177,11 +1177,11 @@ void testRegistryDefinedValues()
 // not also stop an opened member from being held to 8.7.1.5.
 void testValidateLoadsNoTagForHeaderNonMembers()
 {
-  // HdrVersion44 USED TO BE ONE OF THESE, on the strength of the 4.5.0.0
-  // lower bound that 4.7 of the 23-09-2026 revision withdraws.  It is a
-  // member now, so it belongs to the control below rather than here; putting
-  // it back would assert that a member's tags are never loaded, which is the
-  // opposite of what this test exists to protect.
+  // A 4.4 profile USED TO BE ONE OF THESE, on the strength of the 4.5.0.0
+  // lower bound that 4.7 of the 23-09-2026 revision withdraws.  Every HDR
+  // fixture is 4.4 now (owner ruling 2026-10-07), so the control below is
+  // one; putting a 4.4 member here would assert that a member's tags are
+  // never loaded, which is the opposite of what this test exists to protect.
   //
   // These rule membership out from the HEADER alone, which is what
   // icHdrHeaderAdmitsMembership() tests - one fixture per header condition,

@@ -165,13 +165,11 @@ CIccHdrBaker::~CIccHdrBaker()
  *  Resolve the whole pipeline once, so that sampling it is a pure function.
  *
  *  The profile requirements are deliberately the structural ones and not the
- *  full clause 8.7.1.1 conformance: RGB Input or Display, PCSXYZ, a cicpTag
- *  naming an HDR transfer characteristic, and the matrix
+ *  full clause 8.7.1.1 conformance: an RGB ColorSpace profile, PCSXYZ, a
+ *  cicpTag naming an HDR transfer characteristic, and the matrix
  *  CIccXformMatrixTrcHdr::Begin() would use (icHdrSelectForwardMatrix()).
- *  The 4.5.0.0 lower bound on the version is not among them because the bake
- *  exists precisely to serve consumers that will not accept the version an
- *  HDR ColorSpace Profile carries, and icHdrBakeVersionV4_4 may be about to change it
- *  anyway.  A version 5 profile is refused: it has its own tag model, clause
+ *  No v4 version is among them: 8.7.1.1 sets none.  A version 5 profile is
+ *  refused: it has its own tag model, clause
  *  8.7.1 is a version 4 construct, and the CMM never renders one through the
  *  HDR chain - baking one would attach a pair that matches no rendering.
  *

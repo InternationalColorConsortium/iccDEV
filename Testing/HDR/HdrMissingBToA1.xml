@@ -20,7 +20,7 @@
 <IccProfile>
   <Header>
     <PreferredCMMType>iccd</PreferredCMMType>
-    <ProfileVersion>4.50</ProfileVersion>
+    <ProfileVersion>4.40</ProfileVersion>
     <ProfileDeviceClass>spac</ProfileDeviceClass>
     <DataColourSpace>RGB </DataColourSpace>
     <PCS>XYZ </PCS>

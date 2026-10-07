@@ -2294,13 +2294,7 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
         break;
     case 0x04:
         bcdpair = (icUInt8Number)((m_Header.version & 0x00FF0000) >> 16);
-        // Raised from 0x40 to 0x50 for the HDR ColorSpace Profiles amendment, which advances
-        // the ICC.1 profile format version to 4.5.0.0 (its clause 4.7). Without
-        // this every conforming HDR ColorSpace Profile would draw "Version 4 minor number is
-        // unexpected" purely for declaring the version the amendment requires of
-        // it. The low nibble test is unchanged: the minor number is BCD, so 0x45
-        // stays as invalid as it was.
-        if ((bcdpair > 0x50) || (bcdpair & 0x0F)) {
+        if ((bcdpair > 0x40) || (bcdpair & 0x0F)) {
             sReport += icMsgValidateWarning;
             sReport += "Version 4 minor number is unexpected.\n";
             rv = icMaxStatus(rv, icValidateWarning);
@@ -2954,11 +2948,11 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
       // Gated at 4.4 rather than at 4.5, matching the cicpTag above. The HAGC
       // amendment describes itself as adding "an optional version 4 tag" and
       // supersedes the adaptiveGainCurveTag that shipped in 4.4; it never ties
-      // itself to 4.5. Version 4.5.0.0 is one of clause 8.7.1.1's conditions for
-      // being an HDR ColorSpace Profile, which is a question of classification and not of
-      // conformance - a 4.4 profile carrying a HAGC tag is simply not an HDR
-      // Profile. Failing here would make it non-compliant on tag-type grounds,
-      // which the tag's own amendment does not say.
+      // itself to 4.5. Nor does clause 8.7.1: 4.7 of the 23-09-2026 revision
+      // sets no v4 version, and HDR ColorSpace Profiles carry 4.4 until the ICC
+      // issues the next edition (owner ruling 2026-10-07). Failing a 4.4
+      // profile here would make it non-compliant on tag-type grounds, which the
+      // tag's own amendment does not say.
       //
       // The upper bound is the whole of version 5, not the cicpTag's equality
       // with 5.0.0.0: that test let a 5.1 profile carry the tag and validate
@@ -3925,12 +3919,12 @@ icValidateStatus CIccProfile::CheckTagLayout(CIccIO *pIO, std::string &sReport) 
 *
 * Purpose: Apply the rules of ICC.1 clause 8.7.1 (HDR ColorSpace Profiles) to this profile.
 *
-*  Clause 8.7.1.1's four conditions - version 4.5.0.0, a three-component
-*  matrix-based RGB Input or Display profile, a cicpTag, and a
-*  TransferCharacteristics of 8, 16 or 18 - are DEFINITIONAL. They say which
+*  Clause 8.7.1.1's membership conditions - an RGB ColorSpace profile with a
+*  PCSXYZ connection space, below version 5, carrying a cicpTag whose
+*  TransferCharacteristics is 8, 16 or 18 - are DEFINITIONAL. They say which
 *  profiles are HDR ColorSpace Profiles; they are not requirements a profile can fail.
-*  A matrix/TRC profile whose cicpTag says TransferCharacteristics 13 is an
-*  ordinary Display profile that carries a cicpTag, and it is a perfectly valid
+*  A ColorSpace profile whose cicpTag says TransferCharacteristics 13 is an
+*  ordinary ColorSpace profile that carries a cicpTag, and it is a perfectly valid
 *  ICC profile. Reporting an error or a warning against it would be inventing a
 *  defect, so nothing here does. Non-membership produces no message at all.
 *

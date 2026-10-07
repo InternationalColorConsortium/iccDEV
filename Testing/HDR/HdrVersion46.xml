@@ -11,11 +11,14 @@
   entirely: the amendment "satisfies the minor-version criterion of 7.2.4
   without requiring any change to the profileVersionField".
 
-  It is kept, paired with HdrVersion44.xml, because together they bracket the
-  withdrawal from both sides - 4.4 below the old floor and 4.6 above it, both
-  members now.  A build that still carries any lower bound fails the 4.4 row
-  while this one keeps passing, which is what makes the pair a discriminator
-  rather than two fixtures saying the same thing.
+  It is kept for the side of the withdrawal ABOVE the old floor.  The side
+  below it is the base fixture itself: HdrColorSpaceClass and every other
+  fixture are at 4.4.0.0, the published ICC.1 version HDR ColorSpace Profiles
+  carry until the ICC issues the next edition, which will be 4.5 (owner
+  ruling 2026-10-07, on Phil Green's account that a tag proposal cannot
+  advance the spec version by itself).  A build that still carries a ">= 4.5"
+  bound fails the base row while this one keeps passing.  HdrVersion44, which
+  used to hold the 4.4 side, is retired: it no longer differed from the base.
 
   The UPPER bound survives and is not this amendment's: icHdrIsVersion4()
   refuses v5, because clause 8.7.1 is ICC.1's and ICC.2 has its own profile
@@ -24,7 +27,7 @@
   EXPECTED DIAGNOSTIC - this fixture validates with a WARNING.  4.6.0.0 is not a
   published ICC version, so CheckHeader reports the minor number as unexpected.
   There is no way to author the "later within v4" case without doing that, since
-  4.5 is currently the highest v4 minor number defined.  The row in
+  4.4 is currently the highest v4 minor number published.  The row in
   Testing/qa-profile-manifest.tsv baselines it.
 -->
 <IccProfile>

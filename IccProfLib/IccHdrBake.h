@@ -190,27 +190,17 @@ class CIccCurve;
  ***********************************************************************
  */
 typedef enum {
-  /** Leave the version as authored.  The default, because an HDR ColorSpace Profile is
-   * a v4.5 profile by clause 8.7.1.1 and lowering its version would strip it
-   * of the sub-class it conforms to. */
+  /** Leave the version as authored.  The default: the bake has no reason to
+   * touch the header. */
   icHdrBakeVersionKeep = 0,
 
-  /** PROPOSAL-ISSUE WP-04 (an item against the paper) -- ICC White Paper #62
-   * (produced 2026-08-05) writes header version 4.4, and clause 8.7.1.1
-   * (2026-07-13) had already made 4.5.0.0 a requirement of the class, so
-   * following the paper strips a conforming profile of the classification the
-   * amendment gives it.  The paper's own parenthetical "(or 4.5 after
-   * acceptance...)" reads as speculative about an amendment that existed three
-   * weeks before the paper was produced, and it names the wrong document: the
-   * HAGC tag proposal changes no version, the HDR ColorSpace Profiles amendment does.  The
-   * set needs reconciling; until then this is opt-in and the default leaves the
-   * version alone.
-   *
-   * Set the header to 4.4.0.0, as the white paper's "Tag assembly and
-   * profile patching" does, for consumers that reject a version they do not
-   * know.  The profile then no longer classifies as an HDR ColorSpace Profile under
-   * clause 8.7.1.1 - the fallback tags are all such a consumer would have
-   * used anyway, but an HDR-aware one loses the classification too. */
+  /** Set the header to 4.4.0.0, as ICC White Paper #62's "Tag assembly and
+   * profile patching" does, for a profile authored at a later v4 minor
+   * version that a consumer may reject.  The profile still classifies as an
+   * HDR ColorSpace Profile: clause 8.7.1.1 sets no v4 version (4.7 of the
+   * 23-09-2026 revision), and 4.4 is the version HDR ColorSpace Profiles carry
+   * until the ICC issues the next edition (owner ruling 2026-10-07).  That
+   * ruling also settles PROPOSAL-ISSUE WP-04: the paper's 4.4 was right. */
   icHdrBakeVersionV4_4 = 1,
 } icHdrBakeVersionPolicy;
 

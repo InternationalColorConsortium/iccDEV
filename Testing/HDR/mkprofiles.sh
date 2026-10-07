@@ -97,8 +97,6 @@ iccFromXml HdrLinearHagcCrwlDisagree.xml HdrLinearHagcCrwlDisagree.icc
 #   HdrColorSpaceClass  was the class negative; 'spac' is now the class the
 #                       sub-class is built on, so it is the class POSITIVE and
 #                       the base fixture.
-#   HdrVersion44        was below the 4.5.0.0 window; 4.7 withdraws the lower
-#                       bound, so it is a positive.
 #   HdrTrcTagsPresent   carried the prohibited TRC tags; 8.7 defines none for
 #                       a ColorSpace profile, so there is nothing to prohibit
 #                       and it is a positive (it still WARNS - a TRC tag has
@@ -112,14 +110,17 @@ iccFromXml HdrLinearHagcCrwlDisagree.xml HdrLinearHagcCrwlDisagree.icc
 # compatibility: it is the test that Display and Input are rejected.
 iccFromXml HdrNonRgbSpace.xml HdrNonRgbSpace.icc
 iccFromXml HdrColorSpaceClass.xml HdrColorSpaceClass.icc
-iccFromXml HdrVersion44.xml HdrVersion44.icc
 iccFromXml HdrNoCicpTag.xml HdrNoCicpTag.icc
 iccFromXml HdrTrcTagsPresent.xml HdrTrcTagsPresent.icc
 iccFromXml HdrTransferSdr.xml HdrTransferSdr.icc
 
-# 4.6.0.0. With HdrVersion44 it brackets the WITHDRAWN lower bound from both
-# sides: both are now HDR ColorSpace Profiles, and a classifier that still
-# carries a ">= 4.5" test fails the 4.4 row while this one keeps passing.
+# 4.6.0.0, a v4 minor version above the published 4.4. It is still an HDR
+# ColorSpace Profile - 8.7.1.1 sets no lower or exact v4 version - and it
+# draws the validator's "Version 4 minor number is unexpected", a header
+# diagnostic, not a membership one. Every other fixture is at 4.4, the
+# published ICC.1 version HDR ColorSpace Profiles carry until the ICC issues
+# the next edition (owner ruling 2026-10-07), so HdrColorSpaceClass itself is
+# what fails a classifier still carrying a ">= 4.5" test.
 # The surviving version rule is the UPPER bound - see icHdrIsVersion4() - and
 # the eight v5 BT2100 fixtures are what pin that.
 iccFromXml HdrVersion46.xml HdrVersion46.icc

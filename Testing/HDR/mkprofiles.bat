@@ -89,14 +89,15 @@ REM profiles that classify as icHdrProfileHdrContent -- failing 8.7.1.1 makes a
 REM profile not an HDR ColorSpace Profile, it does not make it non-conformant.
 iccFromXml HdrNonRgbSpace.xml HdrNonRgbSpace.icc
 iccFromXml HdrColorSpaceClass.xml HdrColorSpaceClass.icc
-iccFromXml HdrVersion44.xml HdrVersion44.icc
 iccFromXml HdrNoCicpTag.xml HdrNoCicpTag.icc
 iccFromXml HdrTrcTagsPresent.xml HdrTrcTagsPresent.icc
 iccFromXml HdrTransferSdr.xml HdrTransferSdr.icc
 
-REM The other edge of the version window: 4.6.0.0 is "4.5.0.0 or later within v4",
-REM so this one IS an HDR ColorSpace Profile. The only fixture separating a correct
-REM ">= 4.5 and < 5" test from a wrong "== 4.5".
+REM 4.6.0.0, a v4 minor version above the published 4.4: still an HDR ColorSpace
+REM Profile (8.7.1.1 sets no lower or exact v4 version), and it draws the
+REM validator's "Version 4 minor number is unexpected". The other fixtures are
+REM at 4.4, the published version HDR ColorSpace Profiles carry until the ICC
+REM issues the next edition (owner ruling 2026-10-07).
 iccFromXml HdrVersion46.xml HdrVersion46.icc
 
 REM The v5 ceiling and the PCS condition, each isolated.  Both are single-

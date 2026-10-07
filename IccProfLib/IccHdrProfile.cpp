@@ -982,8 +982,10 @@ static bool icHdrIsRgbColorSpace(const CIccProfile *pProfile)
  *  4.5.0.0, and 4.7 of the 23-09-2026 revision withdraws that: the amendment
  *  is a minor-version change "without requiring any change to the
  *  profileVersionField".  So a 4.4 or a 4.0 ColorSpace profile carrying a
- *  conforming cicpTag is an HDR ColorSpace Profile, and Testing/HDR pins that
- *  with HdrVersion44.
+ *  conforming cicpTag is an HDR ColorSpace Profile.  Every Testing/HDR
+ *  fixture is at 4.4, the published ICC.1 version HDR ColorSpace Profiles
+ *  carry until the ICC issues the next edition (owner ruling 2026-10-07), so
+ *  the base fixture pins it.
  *
  *  The upper bound was never the amendment's; it is what keeps an ICC.1
  *  clause from being applied to an ICC.2 profile.  This amendment amends

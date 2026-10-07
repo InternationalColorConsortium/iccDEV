@@ -533,6 +533,10 @@ void testBakedTags()
 
   const icChar *szReason = NULL;
 
+  // A header version the default policy could plausibly rewrite: the fixture
+  // itself is at 4.4, which a "set it to 4.4" bug would leave looking right.
+  pProfile->m_Header.version = 0x04600000;
+
   if (!icAddHdrFallbackTags(pProfile, NULL, &szReason)) {
     printf("FAIL: icAddHdrFallbackTags declined: %s\n", szReason ? szReason : "no reason");
     g_failures++;
@@ -544,7 +548,7 @@ void testBakedTags()
   // made from and the profile has become SDR-only.
   check(pProfile->FindTag(icSigHeadroomAdaptiveGainCurveTag) != NULL,
         "the HAGC tag survives the bake");
-  check(pProfile->m_Header.version == icVersionNumberV4_5,
+  check(pProfile->m_Header.version == 0x04600000,
         "the default version policy leaves the header alone");
 
   CIccTag *pAtoB = pProfile->FindTag(icSigAToB0Tag);
@@ -935,6 +939,9 @@ void testRefusals()
     // would cost a second of test time for nothing.
     v44.nGridPoints = 5;
     v44.nCurveSize = 32;
+    // Every HDR fixture is already 4.4 (owner ruling 2026-10-07), so start
+    // from a later v4 minor version or the rewrite is unobservable.
+    pProfile->m_Header.version = 0x04600000;
 
     check(icAddHdrFallbackTags(pProfile, &v44, NULL), "the v4.4 policy bakes");
     check(pProfile->m_Header.version == icVersionNumberV4_4,

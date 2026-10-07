@@ -135,7 +135,7 @@ const char *kProfileTemplate =
 "{"
 "  \"IccProfile\": {"
 "    \"Header\": {"
-"      \"ProfileVersion\": \"4.50\","
+"      \"ProfileVersion\": \"4.40\","
 "      \"ProfileDeviceClass\": \"mntr\","
 "      \"DataColourSpace\": \"RGB \","
 "      \"PCS\": \"XYZ \","

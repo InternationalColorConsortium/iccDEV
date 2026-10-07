@@ -94,9 +94,9 @@ static void usage()
   printf("  -hlggamma g HLG OOTF system gamma (default %g)\n", (double)icHlgDefaultGamma);
   printf("  -hlgpeak L  HLG nominal display peak luminance in cd/m^2 (default %g)\n",
          (double)icHlgDefaultPeakLuminance);
-  printf("  -v44        rewrite the header version as 4.4, for consumers that reject\n");
-  printf("              the version an HDR ColorSpace Profile carries.  The profile then no\n");
-  printf("              longer classifies under clause 8.7.1.1.\n");
+  printf("  -v44        rewrite the header version as 4.4, for a profile authored at a\n");
+  printf("              later v4 minor version.  It still classifies under clause\n");
+  printf("              8.7.1.1, which sets no v4 version.\n");
   printf("\nBuilt with IccProfLib version " ICCPROFLIBVER "\n");
 }
 

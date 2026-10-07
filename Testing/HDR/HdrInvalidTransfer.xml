@@ -3,7 +3,7 @@
   CLASSIFICATION FIXTURE. Do not "fix" the TransferCharacteristics value below,
   and note that despite the file name nothing about this profile is invalid.
 
-  An RGB ColorSpace profile with a PCSXYZ connection space at version 4.5.0.0,
+  An RGB ColorSpace profile with a PCSXYZ connection space at version 4.4.0.0,
   carrying a HAGC tone-mapping descriptor and a cicpTag that declares
   TransferCharacteristics 13 (IEC 61966-2-1 sRGB). Clause 8.7.1.1 admits only
   8 (Linear), 16 (PQ) and 18 (HLG), so this profile is NOT of the clause 8.7.1
@@ -28,7 +28,7 @@
 <IccProfile>
   <Header>
     <PreferredCMMType>iccd</PreferredCMMType>
-    <ProfileVersion>4.50</ProfileVersion>
+    <ProfileVersion>4.40</ProfileVersion>
     <ProfileDeviceClass>spac</ProfileDeviceClass>
     <DataColourSpace>RGB </DataColourSpace>
     <PCS>XYZ </PCS>
