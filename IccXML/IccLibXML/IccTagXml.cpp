@@ -6104,11 +6104,20 @@ bool CIccTagXmlStruct::ToXml(std::string &xml, std::string blanks/* = ""*/)
 
             // PrivateType - a type that does not belong to the list in the icc specs - custom for vendor.
             if (!strcmp("PrivateType", tagSig))
-              snprintf(line, bufSize, " <PrivateType type=\"%s\">\n", icFixXml(fix, icGetSigStr(buf, bufSize, pTag->GetType())));
+              snprintf(line, bufSize, " <PrivateType type=\"%s\"", icFixXml(fix, icGetSigStr(buf, bufSize, pTag->GetType())));
             else
-              snprintf(line, bufSize, " <%s>\n", tagSig); //parent node is the tag type
-
+              snprintf(line, bufSize, " <%s", tagSig); //parent node is the tag type
             xml += line;
+
+            // ParseTag() reads the member's reserved word from a lower-case,
+            // decimal reserved attribute on this node, but nothing wrote one,
+            // so ICC -> XML -> ICC set it to zero.  Written only when non-zero,
+            // so a document without one is unchanged.
+            if (pTag->m_nReserved) {
+              snprintf(line, bufSize, " reserved=\"%u\"", (unsigned int) pTag->m_nReserved);
+              xml += line;
+            }
+            xml += ">\n";
             j = i;
 #if 0
             // print out the tag signature (there is at least one)
@@ -6541,11 +6550,20 @@ bool CIccTagXmlArray::ToXml(std::string &xml, std::string blanks/* = ""*/)
 
         // PrivateType - a type that does not belong to the list in the icc specs - custom for vendor.
         if ( !strcmp("PrivateType", tagSig) )
-          snprintf(line, bufSize, " <PrivateType type=\"%s\">\n",  icFixXml(fix, icGetSigStr(buf, bufSize, pTag->GetType())));
+          snprintf(line, bufSize, " <PrivateType type=\"%s\"",  icFixXml(fix, icGetSigStr(buf, bufSize, pTag->GetType())));
         else
-          snprintf(line, bufSize, " <%s>\n", tagSig); //parent node is the tag type
+          snprintf(line, bufSize, " <%s", tagSig); //parent node is the tag type
 
-        xml += blanks + arrayBlanks + line; 				
+        xml += blanks + arrayBlanks + line;
+        // ParseXml() reads the entry's reserved word from a lower-case,
+        // decimal reserved attribute on this node, but nothing wrote one, so
+        // ICC -> XML -> ICC set it to zero.  Written only when non-zero, so a
+        // document without one is unchanged.
+        if (pTag->m_nReserved) {
+          snprintf(line, bufSize, " reserved=\"%u\"", (unsigned int) pTag->m_nReserved);
+          xml += line;
+        }
+        xml += ">\n";
 
         //convert the rest of the tag to xml
         // Unlike the profile-level and struct-member loops, this one deliberately
@@ -6645,8 +6663,11 @@ bool CIccTagXmlArray::ParseXml(xmlNode *pNode, std::string &parseStr)
       // get the tag signature
       icTagTypeSignature sigType = icGetTypeNameTagSig ((icChar*) tagNode->name);
 
+      // The entry's own node.  pNode is a node of the enclosing array, so
+      // reading it lost every entry's reserved word and private type, and
+      // would have copied an attribute of that node onto every entry.
       if (sigType==icSigUnknownType){
-        attr = icXmlFindAttr(pNode, "type");
+        attr = icXmlFindAttr(tagNode, "type");
         sigType = (icTagTypeSignature)icGetSigVal((icChar*) icXmlAttrValue(attr));
       }
 
@@ -6661,7 +6682,7 @@ bool CIccTagXmlArray::ParseXml(xmlNode *pNode, std::string &parseStr)
         CIccTagXml* pXmlTag = (CIccTagXml*)pExt;
 
         if (pXmlTag->ParseXml(tagNode->children, parseStr)) {
-          if ((attr=icXmlFindAttr(pNode, "reserved"))) {
+          if ((attr=icXmlFindAttr(tagNode, "reserved"))) {
             sscanf(icXmlAttrValue(attr), "%u", &pTag->m_nReserved);
           }
 

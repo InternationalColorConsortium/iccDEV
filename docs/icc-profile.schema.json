@@ -971,6 +971,7 @@
       "required": ["inputChannels", "outputChannels"],
       "properties": {
         "arrayType": { "type": "string", "description": "Tag type name of the embedded array" },
+        "arrayReserved": { "type": "integer", "minimum": 0, "maximum": 4294967295, "description": "Reserved word of the embedded array tag (omitted when zero)" },
         "values":    { "type": "array", "items": { "type": "number" } },
         "file":      { "type": "string", "description": "External file path (alternative to inline values)" },
         "format":    { "type": "string", "enum": ["text", "binary"] }

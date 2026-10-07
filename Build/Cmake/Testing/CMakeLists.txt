@@ -3118,6 +3118,59 @@ function(iccdev_add_pawg_c5_btoa0_test)
   endif()
 endfunction()
 
+# DToB3Tag and BToD3Tag were missing from three PawgReport.cpp lists: C5's
+# optional tag tables, S1's channel-count checks, and C11's v5-only list.
+# ICC.1:2022 permits the 3 pair in LUT-based Input, Display and Output profiles
+# and in ColorSpace profiles (8.3.2, 8.4.2, 8.5.2, 8.7).  Same machinery as the
+# #2787 test above: the tracked sRGB v4 preference profile re-classed in memory,
+# with 3 pair tags added, and the C5, C11 and S1 lines read back, including S1
+# against a v5 spectral PCS; controls keep a DeviceLink DToB3 and a v4 AToB3
+# reported.  Needs IccProfLib only.
+function(iccdev_add_pawg_dtob3_btod3_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPawgDToB3BToD3Test
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pawg-dtob3-btod3.cpp"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport/PawgReport.cpp"
+  )
+  target_compile_features(iccPawgDToB3BToD3Test PRIVATE cxx_std_17)
+  target_include_directories(iccPawgDToB3BToD3Test PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport"
+  )
+  target_link_libraries(iccPawgDToB3BToD3Test PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  # Linked without LTO, for the GCC 15.2 false positive described at
+  # iccPawgC5BToA0Test above.
+  set_target_properties(iccPawgDToB3BToD3Test PROPERTIES INTERPROCEDURAL_OPTIMIZATION OFF)
+  add_dependencies(check iccPawgDToB3BToD3Test)
+
+  add_test(
+    NAME iccdev.pawg-dtob3-btod3
+    COMMAND "$<TARGET_FILE:iccPawgDToB3BToD3Test>"
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+  )
+  set_tests_properties(iccdev.pawg-dtob3-btod3 PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;pawg;regression"
+  )
+  if(WIN32)
+    set(_pawg_dtob3_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPawgDToB3BToD3Test>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pawg_dtob3_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pawg-dtob3-btod3 PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pawg_dtob3_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1976: two defects on the gamt path. CIccXform::Create() forces bInput false to walk
 # the B-to-A shaped gamut tag, but m_bInput also drove GetDstSpace()/GetNumDstSamples(),
 # so the xform advertised the profile's device space while CIccCmm::AddXform() had
@@ -6433,6 +6486,65 @@ function(iccdev_add_xml_struct_member_sameas_test)
   endif()
 endfunction()
 
+# The reserved word of a tag array entry and of a struct member was lost
+# through XML: CIccTagXmlArray and CIccTagXmlStruct wrote no reserved attribute
+# on the entry's or member's type node, and CIccTagXmlArray::ParseXml read the
+# entry's reserved and private type from a node of the enclosing array rather
+# than the entry's own.  Pins both round trips, the reader alone, and that a
+# zero reserved word writes no attribute.
+function(iccdev_add_xml_tag_reserved_roundtrip_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlTagReservedRoundTripTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-tag-reserved-roundtrip.cpp"
+  )
+  target_compile_features(iccXmlTagReservedRoundTripTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlTagReservedRoundTripTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlTagReservedRoundTripTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlTagReservedRoundTripTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-tag-reserved-roundtrip
+      COMMAND "$<TARGET_FILE:iccXmlTagReservedRoundTripTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-tag-reserved-roundtrip
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlTagReservedRoundTripTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-tag-reserved-roundtrip PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;struct;array;reserved;regression"
+  )
+  if(WIN32)
+    set(_iccxmltagreservedroundtriptest_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlTagReservedRoundTripTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccxmltagreservedroundtriptest_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-tag-reserved-roundtrip PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccxmltagreservedroundtriptest_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2645: CIccSampledCalculatorCurveXml::ParseXml and CIccMpeXmlTintArray::ParseXml
 # assigned m_pCalc and m_Array directly instead of through SetCalculator() and
 # SetArray(), as the binary and JSON readers do, so an XML-parsed calculator or
@@ -7125,6 +7237,63 @@ function(iccdev_add_json_calculator_newcopy_test)
     endforeach()
     set_tests_properties(iccdev.json-calculator-newcopy PROPERTIES
       ENVIRONMENT_MODIFICATION "${_json_calc_newcopy_env_mods}"
+    )
+  endif()
+endfunction()
+
+# The reserved word of a tint array's number array and of a calculator's
+# sub-elements was lost through JSON: the tint array wrote and read none of
+# its array tag's reserved word (now "arrayReserved"), and the calculator
+# wrote each sub-element's "Reserved" but never read it back.
+function(iccdev_add_json_mpe_reserved_roundtrip_test)
+  if(NOT TARGET "${TARGET_LIB_ICCJSON}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccJsonMpeReservedRoundTripTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/json-mpe-reserved-roundtrip.cpp"
+  )
+  target_compile_features(iccJsonMpeReservedRoundTripTest PRIVATE cxx_std_17)
+  target_include_directories(iccJsonMpeReservedRoundTripTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccJsonMpeReservedRoundTripTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccJsonMpeReservedRoundTripTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.json-mpe-reserved-roundtrip
+      COMMAND "$<TARGET_FILE:iccJsonMpeReservedRoundTripTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.json-mpe-reserved-roundtrip
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccJsonMpeReservedRoundTripTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.json-mpe-reserved-roundtrip PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;json;mpe;calc;tint;reserved;regression"
+  )
+  if(WIN32)
+    set(_iccjsonmpereservedroundtriptest_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccJsonMpeReservedRoundTripTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccjsonmpereservedroundtriptest_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.json-mpe-reserved-roundtrip PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccjsonmpereservedroundtriptest_env_mods}"
     )
   endif()
 endfunction()
@@ -12069,6 +12238,7 @@ if(WIN32)
   iccdev_add_xml_shared_tags_inmemory_test()
   iccdev_add_xml_relaxng_validation_leak_test()
   iccdev_add_xml_struct_member_sameas_test()
+  iccdev_add_xml_tag_reserved_roundtrip_test()
   iccdev_add_xml_mpe_reader_setters_test()
   iccdev_add_xml_curve_oversize_file_test()
   iccdev_add_calc_channel_ref_unterminated_index_test()
@@ -12162,6 +12332,7 @@ if(WIN32)
   iccdev_add_calculator_limits_test()
   iccdev_add_calculator_limits_json_test()
   iccdev_add_json_calculator_newcopy_test()
+  iccdev_add_json_mpe_reserved_roundtrip_test()
   iccdev_add_colorant_count_narrowing_xml_test()
   iccdev_add_xml_reader_strictness_test()
   iccdev_add_xml_numeric_values_test()
@@ -12185,6 +12356,7 @@ if(WIN32)
   iccdev_add_mpe_acs_zero_signature_test()
   iccdev_add_pawg_c5_cicp_test()
   iccdev_add_pawg_c5_btoa0_test()
+  iccdev_add_pawg_dtob3_btod3_test()
   iccdev_add_gamut_xform_semantics_test()
   iccdev_add_rangemap_uninitialized_test()
   iccdev_add_pcs_birefl_illuminant_range_test()
@@ -12539,6 +12711,7 @@ iccdev_add_xml_writer_graceful_degrade_test()
 iccdev_add_xml_shared_tags_inmemory_test()
 iccdev_add_xml_relaxng_validation_leak_test()
 iccdev_add_xml_struct_member_sameas_test()
+iccdev_add_xml_tag_reserved_roundtrip_test()
 iccdev_add_xml_mpe_reader_setters_test()
 iccdev_add_xml_curve_oversize_file_test()
 iccdev_add_calc_channel_ref_unterminated_index_test()
@@ -12621,6 +12794,7 @@ iccdev_add_colorant_count_narrowing_json_test()
 iccdev_add_calculator_limits_test()
 iccdev_add_calculator_limits_json_test()
 iccdev_add_json_calculator_newcopy_test()
+iccdev_add_json_mpe_reserved_roundtrip_test()
 iccdev_add_colorant_count_narrowing_xml_test()
 iccdev_add_xml_reader_strictness_test()
 iccdev_add_xml_numeric_values_test()
@@ -12651,6 +12825,7 @@ iccdev_add_v5_required_tag_sets_test()
 iccdev_add_mpe_acs_zero_signature_test()
 iccdev_add_pawg_c5_cicp_test()
 iccdev_add_pawg_c5_btoa0_test()
+iccdev_add_pawg_dtob3_btod3_test()
 iccdev_add_gamut_xform_semantics_test()
 iccdev_add_rangemap_uninitialized_test()
 iccdev_add_pcs_birefl_illuminant_range_test()

@@ -1056,8 +1056,16 @@ PawgVerdict ChannelCountVerdict(CIccProfile *pIcc, std::string &detail)
     return PawgVerdict::NotApplicable;
   }
 
-  const icUInt32Number dataChannels = icGetSpaceSamples((icColorSpaceSignature)pIcc->m_Header.colorSpace);
+  // The A side as the tag validators take it: the data colour space, or the
+  // spectral PCS of a v5 abstract profile whose data colour space is zero
+  // (ICC.2:2023 7.2.8, #2725).
+  const icUInt32Number dataChannels = icGetDataSpaceSamples(&pIcc->m_Header);
   const icUInt32Number pcsChannels = icGetSpaceSamples((icColorSpaceSignature)pIcc->m_Header.pcs);
+  // The DToBx and BToDx tags connect to the spectral PCS in a v5 profile whose
+  // header sets one (ICC.2:2023 9.2.42, "from a spectrally-based PCS ... to
+  // Device"), and to the colorimetric PCS otherwise, as in ICC.1:2022.
+  const icUInt32Number dPcsChannels = pIcc->m_Header.version >= icVersionNumberV5 ?
+    icGetSpectralSpaceSamples(&pIcc->m_Header) : pcsChannels;
   int checked = 0;
 
   auto check_mbb = [&](icTagSignature sig, icUInt32Number expectedIn, icUInt32Number expectedOut) -> bool {
@@ -1084,12 +1092,14 @@ PawgVerdict ChannelCountVerdict(CIccProfile *pIcc, std::string &detail)
   ok = check_mbb(icSigBToA0Tag, pcsChannels, dataChannels) && ok;
   ok = check_mbb(icSigBToA1Tag, pcsChannels, dataChannels) && ok;
   ok = check_mbb(icSigBToA2Tag, pcsChannels, dataChannels) && ok;
-  ok = check_mpe(icSigDToB0Tag, dataChannels, pcsChannels) && ok;
-  ok = check_mpe(icSigDToB1Tag, dataChannels, pcsChannels) && ok;
-  ok = check_mpe(icSigDToB2Tag, dataChannels, pcsChannels) && ok;
-  ok = check_mpe(icSigBToD0Tag, pcsChannels, dataChannels) && ok;
-  ok = check_mpe(icSigBToD1Tag, pcsChannels, dataChannels) && ok;
-  ok = check_mpe(icSigBToD2Tag, pcsChannels, dataChannels) && ok;
+  ok = check_mpe(icSigDToB0Tag, dataChannels, dPcsChannels) && ok;
+  ok = check_mpe(icSigDToB1Tag, dataChannels, dPcsChannels) && ok;
+  ok = check_mpe(icSigDToB2Tag, dataChannels, dPcsChannels) && ok;
+  ok = check_mpe(icSigDToB3Tag, dataChannels, dPcsChannels) && ok;
+  ok = check_mpe(icSigBToD0Tag, dPcsChannels, dataChannels) && ok;
+  ok = check_mpe(icSigBToD1Tag, dPcsChannels, dataChannels) && ok;
+  ok = check_mpe(icSigBToD2Tag, dPcsChannels, dataChannels) && ok;
+  ok = check_mpe(icSigBToD3Tag, dPcsChannels, dataChannels) && ok;
 
   if (!ok) {
     detail = "one or more transform tags have channel counts inconsistent with data colour space or PCS";
@@ -1254,52 +1264,69 @@ static const icTagSignature kNamedColorRequired[] = {
   icSigNamedColor2Tag
 };
 
-static const icTagSignature kCommonOptional[] = {
-  icSigCalibrationDateTimeTag,
-  icSigCharTargetTag,
-  // #2000-adjacent, filed as #2001: cicpTag was missing here, so C5 warned on
-  // every profile that carries one. The reason it reached the warning rather
-  // than the private-tag bucket is not obvious from this array: IsSpecTag()
-  // asks CIccInfo::GetTagSigName, which resolves 'cicp' to "cicpTag" via
-  // CIccTagCreator, so the name does not begin with "Unknown" and the tag is
-  // never treated as private -- it falls straight through IsAllowedForClass()
-  // to the C5 warning. This affects ordinary SDR profiles, not just HDR ones.
-  icSigCicpTag,
-  icSigChromaticAdaptationTag,
-  icSigChromaticityTag,
-  // headroomAdaptiveGainCurveTag is deliberately not here: every class rule
-  // reads this table, and the tag is permitted only in Input, Display and
-  // ColorSpace profiles.  See kInputDisplayOptional and kColorSpaceOptional.
-  icSigColorantTableTag,
-  icSigColorantTableOutTag,
-  icSigDeviceMfgDescTag,
-  icSigDeviceModelDescTag,
-  icSigGamutTag,
-  icSigLuminanceTag,
-  icSigMeasurementTag,
-  icSigMediaBlackPointTag,
-  icSigMetaDataTag,
-  icSigOutputResponseTag,
-  icSigPerceptualRenderingIntentGamutTag,
-  icSigProfileSequceIdTag,
-  icSigSaturationRenderingIntentGamutTag,
-  icSigTechnologyTag,
-  icSigViewingConditionsTag,
-  icSigAToB1Tag,
-  icSigAToB2Tag,
-  icSigBToA1Tag,
-  icSigBToA2Tag,
-  icSigDToB0Tag,
-  icSigDToB1Tag,
-  icSigDToB2Tag,
-  icSigBToD0Tag,
-  icSigBToD1Tag,
+// The optional tags every class allows, expanded into kCommonOptional and into
+// the per-class lists below, so the lists cannot drift apart.
+//
+// #2000-adjacent, filed as #2001: cicpTag was missing here, so C5 warned on
+// every profile that carries one. The reason it reached the warning rather
+// than the private-tag bucket is not obvious from this array: IsSpecTag()
+// asks CIccInfo::GetTagSigName, which resolves 'cicp' to "cicpTag" via
+// CIccTagCreator, so the name does not begin with "Unknown" and the tag is
+// never treated as private -- it falls straight through IsAllowedForClass()
+// to the C5 warning. This affects ordinary SDR profiles, not just HDR ones.
+#define PAWG_COMMON_OPTIONAL_TAGS \
+  icSigCalibrationDateTimeTag, \
+  icSigCharTargetTag, \
+  icSigCicpTag, \
+  icSigChromaticAdaptationTag, \
+  icSigChromaticityTag, \
+  icSigColorantTableTag, \
+  icSigColorantTableOutTag, \
+  icSigDeviceMfgDescTag, \
+  icSigDeviceModelDescTag, \
+  icSigGamutTag, \
+  icSigLuminanceTag, \
+  icSigMeasurementTag, \
+  icSigMediaBlackPointTag, \
+  icSigMetaDataTag, \
+  icSigOutputResponseTag, \
+  icSigPerceptualRenderingIntentGamutTag, \
+  icSigProfileSequceIdTag, \
+  icSigSaturationRenderingIntentGamutTag, \
+  icSigTechnologyTag, \
+  icSigViewingConditionsTag, \
+  icSigAToB1Tag, \
+  icSigAToB2Tag, \
+  icSigBToA1Tag, \
+  icSigBToA2Tag, \
+  icSigDToB0Tag, \
+  icSigDToB1Tag, \
+  icSigDToB2Tag, \
+  icSigBToD0Tag, \
+  icSigBToD1Tag, \
   icSigBToD2Tag
+
+static const icTagSignature kCommonOptional[] = {
+  PAWG_COMMON_OPTIONAL_TAGS
 };
 
-// kCommonOptional plus the tags allowed only in Input and Display profiles,
-// for C5.  C4 does not read it.  Keep it, kCommonOptional and
-// kColorSpaceOptional in step.
+// ICC.1:2022 permits DToB0Tag to DToB3Tag and BToD0Tag to BToD3Tag in an
+// N-component LUT-based Input, Display or Output profile and in a ColorSpace
+// profile (8.3.2, 8.4.2, 8.5.2, 8.7), DToB0Tag alone in a DeviceLink or
+// Abstract profile (8.6, 8.8), and none in a NamedColor profile.  The 3 pair,
+// which 9.1 gives the absolute rendering intent, is added here for the four
+// classes that allow it; as for the 0 to 2 pairs, C5 cannot tell a LUT-based
+// profile from a matrix-based or monochrome one by class alone.
+// kCommonOptional is not narrowed here: it still lets every class, DeviceLink,
+// Abstract and NamedColor included, carry the 0 to 2 pairs.
+static const icTagSignature kOutputColorSpaceOptional[] = {
+  PAWG_COMMON_OPTIONAL_TAGS,
+  icSigDToB3Tag,
+  icSigBToD3Tag
+};
+
+// kOutputColorSpaceOptional plus BToA0Tag, for Input and Display.  Only C5 reads
+// optional lists; C4 reads the required and alternative ones.
 //
 // BToA0Tag: ICC.1:2022 permits it in every Input and Display profile (8.3.2 to
 // 8.3.4, 8.4.3, 8.4.4) and requires it of an N-component LUT-based Display
@@ -1313,45 +1340,19 @@ static const icTagSignature kCommonOptional[] = {
 // headroomAdaptiveGainCurveTag: a permitted optional tag of an RGB Input or
 // Display profile, and the library reports it in any other class.  It is
 // recognised by IsSpecTag(), so it is not treated as private; listing it in
-// kCommonOptional hid it from C5 in every class.  See kColorSpaceOptional for
-// the one other class that admits it.
+// PAWG_COMMON_OPTIONAL_TAGS would hide it from C5 in every class.  See
+// kColorSpaceOptional for the one other class that admits it.
 static const icTagSignature kInputDisplayOptional[] = {
-  icSigCalibrationDateTimeTag,
-  icSigCharTargetTag,
-  icSigCicpTag,
-  icSigChromaticAdaptationTag,
-  icSigChromaticityTag,
-  icSigColorantTableTag,
-  icSigColorantTableOutTag,
-  icSigDeviceMfgDescTag,
-  icSigDeviceModelDescTag,
-  icSigGamutTag,
-  icSigLuminanceTag,
-  icSigMeasurementTag,
-  icSigMediaBlackPointTag,
-  icSigMetaDataTag,
-  icSigOutputResponseTag,
-  icSigPerceptualRenderingIntentGamutTag,
-  icSigProfileSequceIdTag,
-  icSigSaturationRenderingIntentGamutTag,
-  icSigTechnologyTag,
-  icSigViewingConditionsTag,
-  icSigAToB1Tag,
-  icSigAToB2Tag,
-  icSigBToA1Tag,
-  icSigBToA2Tag,
-  icSigDToB0Tag,
-  icSigDToB1Tag,
-  icSigDToB2Tag,
-  icSigBToD0Tag,
-  icSigBToD1Tag,
-  icSigBToD2Tag,
+  PAWG_COMMON_OPTIONAL_TAGS,
+  icSigDToB3Tag,
+  icSigBToD3Tag,
   icSigBToA0Tag,
   icSigHeadroomAdaptiveGainCurveTag
 };
 
-// kCommonOptional plus the HAGC tag, for the ColorSpace class.  BToA0Tag is not
-// here: kA2B0B2A0Required already requires it of a ColorSpace profile.
+// kOutputColorSpaceOptional plus the HAGC tag, for the ColorSpace class.
+// BToA0Tag is not here: kA2B0B2A0Required already requires it of a
+// ColorSpace profile.
 //
 // The 23-09-2026 revision builds the HDR ColorSpace Profile sub-class on the
 // ColorSpace profile of 8.7, and 8.7.1.5 says such a profile "may additionally
@@ -1378,38 +1379,13 @@ static const icTagSignature kInputDisplayOptional[] = {
 // a strict GCC 15.2 build without LTO fail PawgReport.cpp with a false
 // -Werror=free-nonheap-object (found on #2788).
 static const icTagSignature kColorSpaceOptional[] = {
-  icSigCalibrationDateTimeTag,
-  icSigCharTargetTag,
-  icSigCicpTag,
-  icSigChromaticAdaptationTag,
-  icSigChromaticityTag,
-  icSigColorantTableTag,
-  icSigColorantTableOutTag,
-  icSigDeviceMfgDescTag,
-  icSigDeviceModelDescTag,
-  icSigGamutTag,
-  icSigLuminanceTag,
-  icSigMeasurementTag,
-  icSigMediaBlackPointTag,
-  icSigMetaDataTag,
-  icSigOutputResponseTag,
-  icSigPerceptualRenderingIntentGamutTag,
-  icSigProfileSequceIdTag,
-  icSigSaturationRenderingIntentGamutTag,
-  icSigTechnologyTag,
-  icSigViewingConditionsTag,
-  icSigAToB1Tag,
-  icSigAToB2Tag,
-  icSigBToA1Tag,
-  icSigBToA2Tag,
-  icSigDToB0Tag,
-  icSigDToB1Tag,
-  icSigDToB2Tag,
-  icSigBToD0Tag,
-  icSigBToD1Tag,
-  icSigBToD2Tag,
+  PAWG_COMMON_OPTIONAL_TAGS,
+  icSigDToB3Tag,
+  icSigBToD3Tag,
   icSigHeadroomAdaptiveGainCurveTag
 };
+
+#undef PAWG_COMMON_OPTIONAL_TAGS
 
 bool ContainsTag(const icTagSignature *tags, size_t count, icTagSignature sig)
 {
@@ -1455,7 +1431,7 @@ const RuleTable *GetRuleTable(icProfileClassSignature cls)
   static const RuleTable outputRule = {
     kOutputRequired, CountOf(kOutputRequired),
     NULL, 0,
-    kCommonOptional, CountOf(kCommonOptional),
+    kOutputColorSpaceOptional, CountOf(kOutputColorSpaceOptional),
     NULL,
     "ICC.1-2022-05 section 8.4"
   };
@@ -1873,7 +1849,9 @@ PawgVerdict TagsVersionVerdict(CIccProfile *pIcc, std::string &detail)
 
   if (version < 0x05000000 &&
       HasAnyTag(pIcc, {
-        icSigAToB3Tag, icSigBToA3Tag, icSigDToB3Tag, icSigBToD3Tag,
+        // DToB3Tag and BToD3Tag are not here: ICC.1:2022 defines them (9.2.27
+        // and 9.2.12).  AToB3Tag and BToA3Tag are ICC.2's.
+        icSigAToB3Tag, icSigBToA3Tag,
         icSigBRDFMToB0Tag, icSigBRDFMToB1Tag, icSigBRDFMToB2Tag,
         icSigBRDFMToB3Tag, icSigBRDFAToB0Tag, icSigBRDFAToB1Tag,
         icSigBRDFAToB2Tag, icSigBRDFAToB3Tag
