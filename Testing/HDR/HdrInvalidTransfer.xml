@@ -3,7 +3,7 @@
   CLASSIFICATION FIXTURE. Do not "fix" the TransferCharacteristics value below,
   and note that despite the file name nothing about this profile is invalid.
 
-  A three-component matrix-based RGB Display profile at version 4.5.0.0,
+  An RGB ColorSpace profile with a PCSXYZ connection space at version 4.5.0.0,
   carrying a HAGC tone-mapping descriptor and a cicpTag that declares
   TransferCharacteristics 13 (IEC 61966-2-1 sRGB). Clause 8.7.1.1 admits only
   8 (Linear), 16 (PQ) and 18 (HLG), so this profile is NOT of the clause 8.7.1
@@ -12,8 +12,9 @@
   That is the whole point of the fixture. Clause 8.7.1.1's conditions are
   definitional - they say which profiles are HDR ColorSpace Profiles, not what a profile
   must do - so missing one is not a violation. This is a perfectly valid ICC
-  Display profile that happens to carry a cicpTag and a HAGC tag, both of which
-  are legal optional tags of its class. It pins the rule that neither
+  ColorSpace profile that happens to carry a cicpTag and a HAGC tag, both of
+  which this build accepts on its class (the HAGC tag on ColorSpace is
+  proposal issue HDR-22). It pins the rule that neither
   CIccProfile::Validate() nor the PAWG report may report anything against it.
 
   (The HAGC tag is what makes the profile HDR-RELATED enough for the PAWG report
@@ -26,7 +27,7 @@
 -->
 <IccProfile>
   <Header>
-    <PreferredCMMType>ICCD</PreferredCMMType>
+    <PreferredCMMType>iccd</PreferredCMMType>
     <ProfileVersion>4.50</ProfileVersion>
     <ProfileDeviceClass>spac</ProfileDeviceClass>
     <DataColourSpace>RGB </DataColourSpace>
@@ -38,7 +39,7 @@
     <PCSIlluminant>
       <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
     </PCSIlluminant>
-    <ProfileCreator>ICCD</ProfileCreator>
+    <ProfileCreator>iccd</ProfileCreator>
   </Header>
   <Tags>
     <!-- Standard Bradford D65 to D50 adaptation. -->
@@ -94,11 +95,11 @@
     </lutBtoAType> </BToA0Tag>
 
     <profileDescriptionTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV negative: cicp TransferCharacteristics 13 is not one clause 8.7.1.1 permits]]></LocalizedText>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Test profile (synthetic): ColorSpace profile with sRGB transfer (13), not an HDR ColorSpace Profile]]></LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>
 
     <copyrightTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright (C) 2026 The International Color Consortium. Generated fixture, no measured data.]]></LocalizedText>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright (c) 2026 International Color Consortium. This profile is made available by International Color Consortium, with permission of International Color Consortium, and may be copied, distributed, embedded, made, used, and sold without restriction. Altered versions of this profile shall have the original identification and copyright information removed and shall not be misrepresented as the original profile.]]></LocalizedText>
     </multiLocalizedUnicodeType> </copyrightTag>
   </Tags>
 </IccProfile>

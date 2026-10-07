@@ -29,7 +29,7 @@
 -->
 <IccProfile>
   <Header>
-    <PreferredCMMType>ICCD</PreferredCMMType>
+    <PreferredCMMType>iccd</PreferredCMMType>
     <ProfileVersion>4.60</ProfileVersion>
     <ProfileDeviceClass>spac</ProfileDeviceClass>
     <DataColourSpace>RGB </DataColourSpace>
@@ -41,7 +41,7 @@
     <PCSIlluminant>
       <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
     </PCSIlluminant>
-    <ProfileCreator>ICCD</ProfileCreator>
+    <ProfileCreator>iccd</ProfileCreator>
   </Header>
   <Tags>
     <!-- Standard Bradford D65 to D50 adaptation. -->
@@ -102,11 +102,11 @@
     </lutBtoAType> </BToA0Tag>
 
     <profileDescriptionTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR ColorSpace Profile at version 4.6: the other side of the withdrawn floor]]></LocalizedText>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[HDR ColorSpace Profile test (synthetic): PQ, version 4.6 header]]></LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>
 
     <copyrightTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright (C) 2026 The International Color Consortium. Generated fixture, no measured data.]]></LocalizedText>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright (c) 2026 International Color Consortium. This profile is made available by International Color Consortium, with permission of International Color Consortium, and may be copied, distributed, embedded, made, used, and sold without restriction. Altered versions of this profile shall have the original identification and copyright information removed and shall not be misrepresented as the original profile.]]></LocalizedText>
     </multiLocalizedUnicodeType> </copyrightTag>
   </Tags>
 </IccProfile>
