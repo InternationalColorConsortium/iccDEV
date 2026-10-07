@@ -466,6 +466,14 @@ bool TagInBounds(const RawTag &tag, uint64_t fileSize)
   return tag.offset >= 132 && end >= tag.offset && end <= fileSize;
 }
 
+// GCC 15 at -O3 without LTO reports -Wfree-nonheap-object on this function's
+// vectors once it is inlined into EvaluatePawg, which other changes to this
+// file or IccQualityMetrics.h can bring about.  The allocations are ordinary;
+// the warning is a false positive.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wfree-nonheap-object"
+#endif
 std::vector<RawTag> SortedUniqueTagRegions(const RawProfile &raw)
 {
   std::vector<RawTag> tags = raw.tags;
@@ -488,6 +496,9 @@ std::vector<RawTag> SortedUniqueTagRegions(const RawProfile &raw)
   }
   return unique;
 }
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
 int CountPrivateTags(const RawProfile &raw)
 {
