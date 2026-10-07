@@ -330,6 +330,51 @@ inline double delta_e_2000(const icFloatNumber *lab1, const icFloatNumber *lab2)
   return value > 0.0 ? std::sqrt(value) : 0.0;
 }
 
+// A discontinuity is one step between smoothness samples, or two adjacent
+// steps, where the largest step is over kSmoothDiscontinuityDe00 and the mean
+// is more than kSmoothJumpRatio times the steps either side.  Two steps are
+// taken together because a jump in a sampled table rises over one table
+// interval, which can hold a sample.  The threshold alone also counts steep but
+// smooth regions: L* rises as the cube root of Y near black, CIEDE2000 weighs a
+// steady change of a* or b* most near neutral, and an extended-range PCS can
+// span more than 64 * 6 units of L*.  The steepest of these, a cube root from
+// zero, makes a first step 1 / (2^(1/3) - 1) = 3.85 times the next.
+constexpr double kSmoothDiscontinuityDe00 = 6.0;
+constexpr double kSmoothJumpRatio = 4.0;
+
+// steps holds one sampled path's steps in order; a step beyond either end of
+// the path counts as zero.
+inline int count_smoothness_discontinuities(const std::vector<double> &steps) {
+  int count = 0;
+  size_t i = 0;
+  while (i < steps.size()) {
+    size_t width = 0;
+    for (size_t w = 1; w <= 2 && i + w <= steps.size(); ++w) {
+      double largest = 0.0;
+      double sum = 0.0;
+      for (size_t k = i; k < i + w; ++k) {
+        largest = std::max(largest, steps[k]);
+        sum += steps[k];
+      }
+      const double before = i > 0 ? steps[i - 1] : 0.0;
+      const double after = i + w < steps.size() ? steps[i + w] : 0.0;
+      if (largest > kSmoothDiscontinuityDe00 &&
+          sum / static_cast<double>(w) > kSmoothJumpRatio * std::max(before, after)) {
+        width = w;
+        break;
+      }
+    }
+
+    if (width) {
+      ++count;
+      i += width;
+    } else {
+      ++i;
+    }
+  }
+  return count;
+}
+
 template <typename Fn>
 inline void visit_bounded_grid_points_impl(int axis,
                                            int channels,
@@ -897,6 +942,7 @@ inline bool measure_cmm_forward_smoothness(CIccProfile *pIcc,
   int stepCount = 0;
 
   auto accumulate_path = [&](bool diagonal, int axis) {
+    std::vector<double> steps;
     bool havePrev = false;
     double prevStep = -1.0;
 
@@ -934,9 +980,7 @@ inline bool measure_cmm_forward_smoothness(CIccProfile *pIcc,
           metrics.maxCurvatureDe00 =
               std::max(metrics.maxCurvatureDe00, std::fabs(step - prevStep));
         }
-        if (step > 6.0) {
-          ++metrics.discontinuities;
-        }
+        steps.push_back(step);
         prevStep = step;
         ++stepCount;
       } else {
@@ -945,6 +989,8 @@ inline bool measure_cmm_forward_smoothness(CIccProfile *pIcc,
 
       prevLab = currLab;
     }
+
+    metrics.discontinuities += count_smoothness_discontinuities(steps);
   };
 
   if (deviceChannels == 1) {
@@ -1392,6 +1438,7 @@ inline bool measure_forward_smoothness_matrix_trc(CIccProfile *pIcc,
   int stepCount = 0;
 
   auto accumulate_path = [&](bool diagonal, int axis) {
+    std::vector<double> steps;
     bool havePrev = false;
     double prevStep = -1.0;
 
@@ -1425,9 +1472,7 @@ inline bool measure_forward_smoothness_matrix_trc(CIccProfile *pIcc,
           metrics.maxCurvatureDe00 =
               std::max(metrics.maxCurvatureDe00, std::fabs(step - prevStep));
         }
-        if (step > 6.0) {
-          ++metrics.discontinuities;
-        }
+        steps.push_back(step);
         prevStep = step;
         ++stepCount;
       } else {
@@ -1436,6 +1481,8 @@ inline bool measure_forward_smoothness_matrix_trc(CIccProfile *pIcc,
 
       prevLab = currLab;
     }
+
+    metrics.discontinuities += count_smoothness_discontinuities(steps);
   };
 
   if (xform.channels == 1) {
@@ -1484,6 +1531,7 @@ inline bool measure_forward_smoothness_classic_lut(CIccProfile *pIcc,
   int stepCount = 0;
 
   auto accumulate_path = [&](bool diagonal, int axis) {
+    std::vector<double> steps;
     bool havePrev = false;
     double prevStep = -1.0;
 
@@ -1517,9 +1565,7 @@ inline bool measure_forward_smoothness_classic_lut(CIccProfile *pIcc,
           metrics.maxCurvatureDe00 =
               std::max(metrics.maxCurvatureDe00, std::fabs(step - prevStep));
         }
-        if (step > 6.0) {
-          ++metrics.discontinuities;
-        }
+        steps.push_back(step);
         prevStep = step;
         ++stepCount;
       } else {
@@ -1528,6 +1574,8 @@ inline bool measure_forward_smoothness_classic_lut(CIccProfile *pIcc,
 
       prevLab = currLab;
     }
+
+    metrics.discontinuities += count_smoothness_discontinuities(steps);
   };
 
   if (forward.inputChannels == 1) {
