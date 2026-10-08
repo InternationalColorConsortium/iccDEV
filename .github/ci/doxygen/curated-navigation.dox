@@ -15,6 +15,7 @@ tabs.
 /**
 \page curateddocumentation Documentation and Reports
 
+\subpage md_docs_2using-iccdev "Using iccDEV"
 \subpage md_docs_2install "Install"
 \subpage md_docs_2build "Build"
 \subpage md_docs_2bisect "Bisecting regressions"

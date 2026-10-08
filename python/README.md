@@ -21,11 +21,11 @@ ICC color profile library, built with [Cython](https://cython.org/).
 ## Current Status
 
 The `iccdev` package is in alpha development.  Until release automation
-publishes signed wheels to PyPI, install from this branch or from a local
-checkout for validation:
+publishes signed wheels to PyPI, install from the repository or from a local
+checkout. This compiles the extension, so a C++17 compiler is required:
 
 ```bash
-pip install "git+https://github.com/InternationalColorConsortium/iccDEV.git@pip-install-iccdev#subdirectory=python"
+pip install "git+https://github.com/InternationalColorConsortium/iccDEV.git#subdirectory=python"
 ```
 
 ### From PyPI (after production release)
