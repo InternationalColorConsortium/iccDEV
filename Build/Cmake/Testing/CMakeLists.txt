@@ -11452,6 +11452,58 @@ function(iccdev_add_sampled_curve_nonfinite_range_test)
   endif()
 endfunction()
 
+# #2795: the five Testing/HDR/BT2100PQ*.xml fixtures did not encode BT.2100 PQ.
+# Their EOTF carried w = m1 where function type 6 needs 1/m1, the inverse EOTF was fed
+# cd/m^2 where it takes luminance / 10000 and started at HLG's 1/12 breakpoint, the
+# Scene inverse OOTF had a 10x breakpoint typo, the OOTF lacked its 100 * E'^2.4 half,
+# and the Narrow Scene reverse scale was HLG's.  #2011 corrected the same files' cicp
+# label; nothing checked the numbers, and every fixture validated the same before and
+# after.  This test applies each tag of the tracked XML, through the CIccProfileXml
+# path iccFromXml uses, against Rec. ITU-R BT.2100 computed independently.  Needs
+# IccXML + IccProfLib; skipped where IccXML is not built.
+function(iccdev_add_bt2100_pq_fixtures_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccBt2100PqFixturesTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/bt2100-pq-fixtures.cpp"
+  )
+  target_compile_features(iccBt2100PqFixturesTest PRIVATE cxx_std_17)
+  target_include_directories(iccBt2100PqFixturesTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccBt2100PqFixturesTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccBt2100PqFixturesTest)
+
+  add_test(
+    NAME iccdev.bt2100-pq-fixtures
+    COMMAND "$<TARGET_FILE:iccBt2100PqFixturesTest>" "${ICCDEV_TESTING_DIR}/HDR"
+  )
+  set_tests_properties(iccdev.bt2100-pq-fixtures PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;xml;fixtures;hdr;mpe;issue-2795;regression"
+  )
+  if(WIN32)
+    set(_bt2100_pq_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccBt2100PqFixturesTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _bt2100_pq_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.bt2100-pq-fixtures PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_bt2100_pq_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_clut_apply_guard_retirement_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -11979,6 +12031,7 @@ if(WIN32)
   iccdev_add_spectral_clut_xml_channel_mismatch_test()
   iccdev_add_clut_apply_guard_retirement_test()
   iccdev_add_sampled_curve_nonfinite_range_test()
+  iccdev_add_bt2100_pq_fixtures_test()
 
   if(TARGET iccFromXml AND TARGET iccDumpProfile AND TARGET iccApplyNamedCmm)
     add_test(
@@ -12427,6 +12480,7 @@ iccdev_add_spectral_clut_channel_count_test()
 iccdev_add_spectral_clut_xml_channel_mismatch_test()
 iccdev_add_clut_apply_guard_retirement_test()
 iccdev_add_sampled_curve_nonfinite_range_test()
+iccdev_add_bt2100_pq_fixtures_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")
