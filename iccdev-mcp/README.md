@@ -27,11 +27,15 @@ docker run --rm -i ghcr.io/internationalcolorconsortium/iccdev:latest \
 ```
 
 Use `pip install` when integrating with a local source checkout or a locally
-built iccDEV toolchain:
+built iccDEV toolchain. `iccdev-mcp` is not published on PyPI yet, so install it
+from the repository:
 
 ```bash
-pip install iccdev-mcp
+pip install "git+https://github.com/InternationalColorConsortium/iccDEV.git#subdirectory=iccdev-mcp"
 ```
+
+Install it in its own virtual environment. The wheel ships a module named
+`iccdev` that conflicts with the Cython `iccdev` Python bindings.
 
 For full functionality with the pip-installed package, seven Python-native tools
 are included in the `iccdev-mcp` wheel. The `validate_profile` tool dynamically

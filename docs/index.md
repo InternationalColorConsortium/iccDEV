@@ -5,6 +5,7 @@ color profiles. Use the curated sections below to navigate the public release
 documentation; source-level API indexes remain available through the navigation
 tabs.
 
+- [Using iccDEV](using-iccdev.md)
 - [Documentation and Reports](documentation.md)
 - [Libraries](libraries.md)
 - [Tools](tools.md)

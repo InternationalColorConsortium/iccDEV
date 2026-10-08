@@ -9,6 +9,7 @@ point to deeper references.
 | Topic | Canonical source |
 |-------|------------------|
 | User install and packaging | `docs/install.md` |
+| Hands-on use of prebuilt tools, Python, MATLAB, WebAssembly, and MCP | `docs/using-iccdev.md` |
 | User build instructions | `docs/build.md` |
 | Apple mobile static cores and smoke app | `docs/build.md`, `.github/instructions/build-system.instructions.md`, and `.github/skills/maintainer-ci-ctest/SKILL.md` |
 | Manual iOS example apps | `docs/build.md`, `examples/ios-*/README.md`, and app-specific skills or prompts |

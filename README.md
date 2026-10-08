@@ -9,6 +9,24 @@
 | **Docker Pull** | `docker pull ghcr.io/internationalcolorconsortium/iccdev:latest` |
 | **Docker Run** | `docker run -it ghcr.io/internationalcolorconsortium/iccdev:latest` |
 
+Prebuilt Windows, Linux, and macOS tool bundles are on the
+[latest release page](https://github.com/InternationalColorConsortium/iccDEV/releases/latest).
+
+## Using iccDEV
+
+You do not need to build iccDEV to use it. The
+[Using iccDEV guide](docs/using-iccdev.md) is a hands-on walkthrough that starts
+from prebuilt downloads:
+
+| I want to... | Start here |
+|--------------|------------|
+| Install and run the command-line tools | [Install the tools](docs/using-iccdev.md#install-the-tools), then [First steps](docs/using-iccdev.md#first-steps-with-the-tools) |
+| Browse a profile in a graphical viewer | [iccDumpProfileGui](docs/using-iccdev.md#icc-dump-profile-gui) |
+| Use iccDEV from my Python code | [Python](docs/using-iccdev.md#python) |
+| Use iccDEV from MATLAB | [MATLAB](docs/using-iccdev.md#matlab) |
+| Use iccDEV from Node.js (WebAssembly) | [WebAssembly and Node.js](docs/using-iccdev.md#webassembly-and-nodejs) |
+| Connect an AI assistant through MCP | [MCP server](docs/using-iccdev.md#mcp-server) |
+
 To build from source, see: [Build documentation](docs/build.md)
 
 API docs:
