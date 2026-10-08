@@ -1195,6 +1195,53 @@ function(iccdev_add_pawg_q2_tonecurves_test)
   endif()
 endfunction()
 
+# Guards iccPawgReport's Q3 discontinuity count: a step over 6.0 CIEDE2000
+# between smoothness samples counted as a discontinuity, so a smooth but steep
+# transform (a linear RGB to XYZ transform near black, an axis crossing
+# neutral, an extended-range PCS) warned.  A discontinuity is now one step, or
+# two adjacent steps, with the largest over 6.0 and a mean more than four times
+# the steps either side.  The test gives the counter step sequences directly,
+# and builds linear and stepped matrix/TRC and lut16 transforms in memory for
+# the three ways Q3 measures.  Header-only metrics, so it just needs the
+# IccPawgReport include dir + IccProfLib.
+function(iccdev_add_pawg_q3_steep_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPawgQ3SteepTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pawg-q3-steep-not-discontinuous.cpp"
+  )
+  target_include_directories(iccPawgQ3SteepTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport"
+  )
+  target_link_libraries(iccPawgQ3SteepTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPawgQ3SteepTest)
+
+  add_test(
+    NAME iccdev.pawg-q3-steep-not-discontinuous
+    COMMAND "$<TARGET_FILE:iccPawgQ3SteepTest>"
+  )
+  set_tests_properties(iccdev.pawg-q3-steep-not-discontinuous PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;pawg;quality;smoothness;regression"
+  )
+  if(WIN32)
+    set(_pawg_q3_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPawgQ3SteepTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pawg_q3_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pawg-q3-steep-not-discontinuous PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pawg_q3_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards iccPawgReport's Q4 characterization round-trip
 # (iccquality::evaluate_characterization): it must (1) compare predicted output
 # against the embedded measurement data in ABSOLUTE colorimetric -- the only
@@ -12317,6 +12364,7 @@ if(WIN32)
   iccdev_add_parser_restore_calls_test()
   iccdev_add_tag_layout_shared_data_test()
   iccdev_add_pawg_q2_tonecurves_test()
+  iccdev_add_pawg_q3_steep_test()
   iccdev_add_pawg_q4_characterization_test()
   iccdev_add_pawg_q4_xyz_pcs_decode_test()
   iccdev_add_tointernal_fixedint_roundtrip_test()
@@ -12775,6 +12823,7 @@ iccdev_add_encoding_override_test()
 iccdev_add_parser_restore_calls_test()
 iccdev_add_tag_layout_shared_data_test()
 iccdev_add_pawg_q2_tonecurves_test()
+iccdev_add_pawg_q3_steep_test()
 iccdev_add_pawg_q4_characterization_test()
 iccdev_add_pawg_q4_xyz_pcs_decode_test()
 # Same single-call-site omission as iccdev_add_applytolink_invalid_arg_test() above: this
