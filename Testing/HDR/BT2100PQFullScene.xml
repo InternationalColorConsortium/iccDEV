@@ -23,11 +23,11 @@
 	
 	<AToB1Tag> <multiProcessElementType>
 	  <MultiProcessElements InputChannels="3" OutputChannels="3">
-		  <!-- Apply PQ EOTF -->
+		  <!-- Apply PQ EOTF (ST 2084): function type 6 with w = 1/m1 and g = 1/m2 -->
 		  <CurveSetElement InputChannels="3" OutputChannels="3">
 			  <SegmentedCurve>
 				  <FormulaSegment Start="-infinity" End="0.0" FunctionType="0">1 0 0 0</FormulaSegment>
-				  <FormulaSegment Start="0" End="+infinity" FunctionType="6">0.1593017578125 0.01268331351565597 0.8359375 18.8515625 18.6875 10000 1.0</FormulaSegment>
+				  <FormulaSegment Start="0" End="+infinity" FunctionType="6">6.277394636015326 0.01268331351565597 0.8359375 18.8515625 18.6875 10000 1.0</FormulaSegment>
 				</SegmentedCurve>
 			  <DuplicateCurve Index="0"/>
 			  <DuplicateCurve Index="0"/>
@@ -47,8 +47,8 @@
 		  <CurveSetElement InputChannels="3" OutputChannels="3">
 			  <SegmentedCurve>
 				  <FormulaSegment Start="-infinity" End="0.0" FunctionType="0">1 0 0 0</FormulaSegment>
-				  <FormulaSegment Start="0" End="0.408996170511594" FunctionType="0">1 0.03733572281959379 0 0 </FormulaSegment>
-				  <FormulaSegment Start="0.408996170511594" End="+infinity" FunctionType="3">2.222222222222222 0.01680084945094824 0.909918107370337 0.09008189262966333 0 </FormulaSegment>
+				  <FormulaSegment Start="0" End="0.081" FunctionType="0">1 0.003733572281959379 0 0 </FormulaSegment>
+				  <FormulaSegment Start="0.081" End="+infinity" FunctionType="3">2.222222222222222 0.01680084945094824 0.909918107370337 0.09008189262966333 0 </FormulaSegment>
 				</SegmentedCurve>
 			  <DuplicateCurve Index="0"/>
 			  <DuplicateCurve Index="0"/>
@@ -95,12 +95,22 @@
 				</MatrixData>
 			</MatrixElement>
 		
-		  <!-- Apply PQ OOTF / 10000 -->
+		  <!-- Apply PQ OOTF Part 1 (E' = BT.709 OETF of 59.5208 * E) -->
 		  <CurveSetElement InputChannels="3" OutputChannels="3">
 			  <SegmentedCurve>
 				  <FormulaSegment Start="-infinity" End="0.0" FunctionType="0">1 0 0 0</FormulaSegment>
-				  <FormulaSegment Start="0" End="0.0003024" FunctionType="0">1 0.026784 0 0</FormulaSegment>
-				  <FormulaSegment Start="0.0003024" End="+infinity" FunctionType="3">0.45 0.0001099 59.5208 0 -0.0000099 </FormulaSegment>
+				  <FormulaSegment Start="0" End="0.0003024" FunctionType="0">1 267.84 0 0</FormulaSegment>
+				  <FormulaSegment Start="0.0003024" End="+infinity" FunctionType="3">0.45 1.099 59.5208 0 -0.099 </FormulaSegment>
+				</SegmentedCurve>
+			  <DuplicateCurve Index="0"/>
+			  <DuplicateCurve Index="0"/>
+			</CurveSetElement>
+
+		  <!-- Apply PQ OOTF Part 2 / 10000 (100 * E'^2.4 / 10000) -->
+		  <CurveSetElement InputChannels="3" OutputChannels="3">
+			  <SegmentedCurve>
+				  <FormulaSegment Start="-infinity" End="0.0" FunctionType="0">1 0 0 0</FormulaSegment>
+				  <FormulaSegment Start="0" End="+infinity" FunctionType="3">2.4 0.01 1 0 0</FormulaSegment>
 				</SegmentedCurve>
 			  <DuplicateCurve Index="0"/>
 			  <DuplicateCurve Index="0"/>
@@ -110,7 +120,7 @@
 		  <CurveSetElement InputChannels="3" OutputChannels="3">
 			  <SegmentedCurve>
 				  <FormulaSegment Start="-infinity" End="0.0" FunctionType="0">1 0 0 0</FormulaSegment>
-				  <FormulaSegment Start="0.08333333333333333" End="+infinity" FunctionType="7">78.84375 0.1593017578125 0.8359375 18.8515625 18.6875 1.0</FormulaSegment>
+				  <FormulaSegment Start="0" End="+infinity" FunctionType="7">78.84375 0.1593017578125 0.8359375 18.8515625 18.6875 1.0</FormulaSegment>
 				</SegmentedCurve>
 			  <DuplicateCurve Index="0"/>
 			  <DuplicateCurve Index="0"/>

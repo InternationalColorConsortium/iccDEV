@@ -7,6 +7,9 @@
 | **Docker Pull** | `docker pull ghcr.io/internationalcolorconsortium/iccdev:latest` |
 | **Docker Run** | `docker run -it ghcr.io/internationalcolorconsortium/iccdev:latest` |
 
+For step-by-step use of the prebuilt tools and the Python, MATLAB,
+WebAssembly, and MCP interfaces, see [Using iccDEV](using-iccdev.md).
+
 ## Docker Quick Verification
 
 ```bash

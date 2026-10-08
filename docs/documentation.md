@@ -1,5 +1,6 @@
 # Documentation and Reports
 
+- [Using iccDEV](using-iccdev.md)
 - [Install](install.md)
 - [Build](build.md)
 - [Bisecting regressions](bisect.md)
