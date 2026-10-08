@@ -106,7 +106,7 @@ jobs:
             --quiet
           echo "/tmp/iccdev-preflight/bin" >> "$GITHUB_PATH"
 
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.10
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
           if command -v codeql >/dev/null 2>&1; then

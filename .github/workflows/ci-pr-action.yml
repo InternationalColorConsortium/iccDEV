@@ -282,6 +282,7 @@ jobs:
           head_sha="${PR_HEAD_SHA}"
           base_sha="$(git -C "$GITHUB_WORKSPACE/base" rev-parse HEAD)"
           target_repository="${PR_HEAD_REPO}"
+          # shellcheck disable=SC2153
           pr_number="${PR_NUMBER}"
           fast_lane=false
           include_windows=true
