@@ -32,11 +32,11 @@
 			  <DuplicateCurve Index="0"/>
 			</CurveSetElement>
 
-		  <!-- Apply PQ EOTF -->
+		  <!-- Apply PQ EOTF (ST 2084): function type 6 with w = 1/m1 and g = 1/m2 -->
 		  <CurveSetElement InputChannels="3" OutputChannels="3">
 			  <SegmentedCurve>
 				  <FormulaSegment Start="-infinity" End="0.0" FunctionType="0">1 0 0 0</FormulaSegment>
-				  <FormulaSegment Start="0" End="+infinity" FunctionType="6">0.1593017578125 0.01268331351565597 0.8359375 18.8515625 18.6875 10000 1.0</FormulaSegment>
+				  <FormulaSegment Start="0" End="+infinity" FunctionType="6">6.277394636015326 0.01268331351565597 0.8359375 18.8515625 18.6875 10000 1.0</FormulaSegment>
 				</SegmentedCurve>
 			  <DuplicateCurve Index="0"/>
 			  <DuplicateCurve Index="0"/>
@@ -81,12 +81,21 @@
           0 0 203
 				</MatrixData>
 			</MatrixElement>
-		
-		  <!-- Apply Inverse PQ EOTF -->
+
+		  <!-- Apply Inverse PQ EOTF (Part 1 - divide input by 10000) -->
+			<MatrixElement InputChannels="3" OutputChannels="3">
+			  <MatrixData>
+				  0.0001 0 0
+          0 0.0001 0
+          0 0 0.0001
+				</MatrixData>
+			</MatrixElement>
+
+		  <!-- Apply Inverse PQ EOTF (Part 2) -->
 		  <CurveSetElement InputChannels="3" OutputChannels="3">
 			  <SegmentedCurve>
 				  <FormulaSegment Start="-infinity" End="0.0" FunctionType="0">1 0 0 0</FormulaSegment>
-				  <FormulaSegment Start="0.08333333333333333" End="+infinity" FunctionType="7">78.84375 0.1593017578125 0.8359375 18.8515625 18.6875 1.0</FormulaSegment>
+				  <FormulaSegment Start="0" End="+infinity" FunctionType="7">78.84375 0.1593017578125 0.8359375 18.8515625 18.6875 1.0</FormulaSegment>
 				</SegmentedCurve>
 			  <DuplicateCurve Index="0"/>
 			  <DuplicateCurve Index="0"/>

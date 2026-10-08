@@ -56,6 +56,7 @@ jobs:
           unset GITHUB_TOKEN || true
           source "$GITHUB_WORKSPACE/trusted-base/.github/scripts/sanitize-sed.sh"
 
+          # shellcheck disable=SC2153
           if [[ "$IMAGE_TAG" != "latest" &&
                 "$IMAGE_TAG" != "ci-qa-pr-docker-testing" &&
                 "$IMAGE_TAG" != "ci-publish-colourbill-ctrl" &&
