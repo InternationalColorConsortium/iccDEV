@@ -64,7 +64,7 @@ RUN for attempt in 1 2 3; do \
     libjson-xs-perl=4.040-1 \
     libtiff-tools=4.7.0-3ubuntu5 \
     liblzma-dev=5.8.3-1 \
-    libpng-dev=1.6.57-1 \
+    libpng-dev=1.6.57-1ubuntu0.1 \
     libcurl4t64=8.18.0-1ubuntu2.7 \
     libssl-dev=3.5.5-1ubuntu3.7 \
     libssl3t64=3.5.5-1ubuntu3.7 \
@@ -73,8 +73,8 @@ RUN for attempt in 1 2 3; do \
     zlib1g=1:1.3.dfsg+really1.3.1-1ubuntu3.1 \
     lld-22=1:22.1.2-1ubuntu1 \
     lldb-22=1:22.1.2-1ubuntu1 \
-    libxml2-16=2.15.2+dfsg-0.1ubuntu0.2 \
-    libxml2-dev=2.15.2+dfsg-0.1ubuntu0.2 \
+    libxml2-16=2.15.2+dfsg-0.1ubuntu0.3 \
+    libxml2-dev=2.15.2+dfsg-0.1ubuntu0.3 \
     lcov=2.4-3 \
     linux-perf=7.0.0-38.38 \
     lsb-release=12.1-2build1 \
