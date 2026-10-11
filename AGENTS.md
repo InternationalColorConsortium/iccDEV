@@ -34,9 +34,11 @@ shares one source of truth. Update rules here, not in the mirrors.
   local evidence. A later update still requires the complete contract matrix,
   not a delta-only review. Any newly found blocker returns the branch to
   branch-only grooming before another review.
-- Every new or relocated C/C++ source or header must retain the complete ICC
-  Software License block used by adjacent files; abbreviated, placeholder, or
-  omitted license text is a blocking defect.
+- Every new or relocated ICC-owned C/C++ source or header must retain the
+  complete BSD-3-Clause notice derived from `LICENSE.md`; run
+  `.github/scripts/check-license-notices.py` before review. Abbreviated,
+  placeholder, or omitted notices are blocking defects. Preserve third-party
+  and generated-file attribution as directed by their provenance.
 - For MCP runtime checks, validate every Docker image variant against its
   discovered capabilities. Do not hard-code a total tool count.
 - MATLAB public entry points that require arguments must provide actionable

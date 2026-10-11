@@ -28,9 +28,11 @@ the complete contract matrix are renewed. If a re-review finds any new blocker,
 including in the repair, stop serial automated review and require maintainer
 direction. Prefer no comment to low-value review volume.
 
-For every new or relocated C/C++ source or header, verify the complete ICC
-Software License block is retained. A missing, abbreviated, or placeholder
-block is a blocking changed-line defect.
+For every new or relocated ICC-owned C/C++ source or header, verify the
+complete BSD-3-Clause notice derived from `LICENSE.md` with
+`.github/scripts/check-license-notices.py`. A missing, abbreviated, or
+placeholder notice is a blocking changed-line defect; preserve third-party and
+generated-file attribution.
 
 ## MATLAB MEX Review Pass
 

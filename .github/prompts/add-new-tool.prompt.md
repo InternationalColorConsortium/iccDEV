@@ -18,11 +18,12 @@ Create `Tools/CmdLine/IccNewTool/iccNewTool.cpp`:
  */
 
 /*
- * Copyright (c) 2024-2026 The International Color Consortium.
- *                           All rights reserved.
+ * Copyright (c) International Color Consortium.
+ * SPDX-License-Identifier: BSD-3-Clause
  *
- * Copy the complete ICC Software License block from an adjacent existing
- * C++ source file. Do not use an abbreviated or placeholder license banner.
+ * Run .github/scripts/check-license-notices.py --write to replace this
+ * bootstrap notice with the complete canonical BSD-3-Clause text from
+ * LICENSE.md. Do not copy a legacy, abbreviated, or placeholder banner.
  */
 
 #include <cstdio>

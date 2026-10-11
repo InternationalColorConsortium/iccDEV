@@ -8,6 +8,7 @@ dynamic = ["version"]
 description = "MCP server for ICC color profile tools (iccDEV)"
 readme = "README.md"
 license = "BSD-3-Clause"
+license-files = ["LICENSE.md"]
 requires-python = ">=3.10"
 authors = [
     { name = "International Color Consortium" },

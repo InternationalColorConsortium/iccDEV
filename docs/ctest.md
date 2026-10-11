@@ -364,7 +364,8 @@ contract tests for
 the official ClusterFuzzLite lane. They check the pinned builder image,
 the manual and nightly scheduled triggers, the single-job manual smoke mode,
 the three full-mode sanitizer entries, three target groups, eight in-process harness sources, matching seed
-families, dictionaries and options, complete source-license blocks, the
+families, dictionaries and options, complete canonical BSD-3-Clause notices,
+the
 schema-shaped IccConnect seed and its dedicated dictionary, independent CMM
 control trailer, config round-trip paths, immutable action references, the pinned
 #2687 artifact hash, the validated 2-45 minute per-group manual duration, the

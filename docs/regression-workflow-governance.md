@@ -163,8 +163,9 @@ requesting review, check the PR against this list:
 
 - Keep the PR scope narrow. Split unrelated registry QA, Docker, CodeQL, and
   C/C++ hardening work unless one failing gate requires the combination.
-- For every new executable script, include the ICC copyright and BSD 3-Clause
-  notice expected by `CONTRIBUTING.md`, run ShellCheck, and verify ASCII.
+- For every new executable script, include the ICC copyright, an
+  SPDX BSD-3-Clause identifier, and a reference to `LICENSE.md` as required by
+  `CONTRIBUTING.md`; run ShellCheck and verify ASCII.
 - Keep push, pull-request, reusable, and manual-dispatch validation paths
   equivalent for the changed surface. If a workflow tests a helper on push,
   the PR fast lane should test the same helper or document why it cannot.

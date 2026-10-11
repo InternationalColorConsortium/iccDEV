@@ -68,9 +68,11 @@ point to deeper references.
 - Run `doxygen .github/ci/doxygen/Doxyfile` for documentation changes and
   require `docs/generated/doxygen-warnings.log` to be empty before handoff.
 - Do not add generated artifacts, logs, crash files, or local environment paths.
-- New or relocated C/C++ sources and headers must retain the complete ICC
-  Software License block from an adjacent established file. Do not use
-  abbreviated or placeholder license text; review this before handoff.
+- New or relocated ICC-owned C/C++ sources and headers must retain the complete
+  BSD-3-Clause notice derived from `LICENSE.md`. Run
+  `.github/scripts/check-license-notices.py` before handoff; do not use
+  abbreviated or placeholder notice text, and preserve third-party and
+  generated-file attribution.
 - Follow `.gitattributes`: use LF for documentation, prompts, skills, MATLAB,
   CMake, YAML/JSON, Dockerfiles, and Unix scripts; preserve CRLF for
   Windows-native PowerShell, batch, and command scripts.

@@ -9,3 +9,4 @@ recursive-include vendor/IccProfLib *.cpp *.h *.sha256
 
 # Include documentation
 include README.md
+include LICENSE.md

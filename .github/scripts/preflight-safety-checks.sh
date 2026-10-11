@@ -1138,6 +1138,13 @@ else
   skip_or_fail "check-workflow-bash-prologue.py"
 fi
 
+if [ -f .github/scripts/check-license-notices.py ]; then
+  run_check "canonical BSD-3-Clause C/C++ notices" \
+    python3 .github/scripts/check-license-notices.py
+else
+  skip_or_fail "check-license-notices.py"
+fi
+
 if [ "${#script_files[@]}" -gt 0 ]; then
   if command -v shellcheck >/dev/null 2>&1; then
     run_check "shellcheck" shellcheck "${script_files[@]}"

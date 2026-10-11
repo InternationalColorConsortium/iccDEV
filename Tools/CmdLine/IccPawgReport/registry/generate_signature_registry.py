@@ -37,6 +37,7 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.normpath(os.path.join(HERE, "..", "..", "..", ".."))
 RAW = os.path.join(HERE, "_raw")
 SNAP = os.path.join(HERE, "snapshot")
 OUT = os.path.join(HERE, "..", "IccSignatureRegistry.h")
@@ -144,9 +145,27 @@ def c_escape(s):
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
 
+def bsd_license_header():
+    with open(os.path.join(REPO_ROOT, "LICENSE.md"), encoding="ascii") as fh:
+        license_lines = fh.read().strip().splitlines()
+
+    if not license_lines or license_lines[0] != "Copyright (c) International Color Consortium.":
+        raise ValueError("LICENSE.md does not contain the canonical ICC copyright notice")
+
+    lines = [
+        "/*",
+        " * " + license_lines[0],
+        " * SPDX-License-Identifier: BSD-3-Clause",
+    ]
+    lines.extend(" * " + line if line else " *" for line in license_lines[1:])
+    lines.append(" */")
+    return lines
+
+
 def emit(manuf, cmm, ranges, fetched_on, notes):
-    lines = []
+    lines = bsd_license_header()
     w = lines.append
+    w("")
     w("/** @file")
     w("    File:       IccSignatureRegistry.h")
     w("")
@@ -211,11 +230,39 @@ def emit(manuf, cmm, ranges, fetched_on, notes):
     return "\n".join(lines)
 
 
+def normalize_license_notice():
+    with open(OUT, encoding="utf-8") as fh:
+        generated = fh.read()
+
+    notice = "\n".join(bsd_license_header()) + "\n\n"
+    if generated.startswith(notice):
+        return False
+    if not generated.startswith("/** @file"):
+        raise ValueError("generated registry header has an unexpected prologue")
+
+    with open(OUT, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(notice + generated)
+    return True
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--fetch", action="store_true",
                     help="re-download CSVs from registry.color.org before generating")
+    ap.add_argument(
+        "--normalize-license-notice",
+        action="store_true",
+        help="add the canonical LICENSE.md notice to the committed generated header",
+    )
     args = ap.parse_args()
+
+    if args.normalize_license_notice:
+        if args.fetch:
+            ap.error("--fetch cannot be combined with --normalize-license-notice")
+        changed = normalize_license_notice()
+        print("normalized %s" % os.path.normpath(OUT) if changed else
+              "license notice already canonical: %s" % os.path.normpath(OUT))
+        return 0
 
     if args.fetch:
         fetch()

@@ -171,8 +171,11 @@ agent-policy surfaces.
   compatibility, or maintainability impact. Do not report pre-existing code
   unless the change makes it newly reachable or materially worsens it.
 - Verify each finding with the smallest relevant evidence before commenting.
-- Treat a missing, abbreviated, or placeholder ICC Software License block in a
-  new or relocated C/C++ source/header as a blocking changed-line finding.
+- Treat a missing, abbreviated, or placeholder canonical BSD-3-Clause notice
+  derived from `LICENSE.md` in a new or relocated ICC-owned C/C++ source/header
+  as a blocking changed-line finding. Verify with
+  `.github/scripts/check-license-notices.py` and preserve third-party and
+  generated-file attribution.
   Avoid speculative concerns, style-only comments, duplicate findings, and
   generic requests for broader tests when focused validation covers the diff.
 - Use one comment for one root cause. State the affected path, triggering
@@ -223,7 +226,9 @@ Key safety rules:
 - 2-space C++ indentation, K&R braces, no tabs.
 - Member prefix `m_`; match nearby naming and ownership patterns.
 - Error handling uses return values, not exceptions.
-- New files need ICC copyright and BSD 3-Clause header unless generated.
+- New ICC-owned C/C++ files need the complete canonical BSD-3-Clause notice
+  derived from `LICENSE.md` unless generated; run
+  `.github/scripts/check-license-notices.py`.
 - Validate all file-controlled sizes, offsets, counts, and loop bounds.
 - Bounds check pattern: `if (size > limit || offset > limit - size)`.
 - Exit 1-127 is graceful failure, not a crash; exit 128+ is signal termination.

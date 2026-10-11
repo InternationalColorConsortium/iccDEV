@@ -64,7 +64,7 @@ document explains our contribution processes and procedures, so please review it
 
 ## License
 
-iccDEV is licensed under the BSD 3-Clause “New” or “Revised” License
+iccDEV is licensed under the [BSD 3-Clause "New" or "Revised" License](LICENSE.md).
 
 Membership in the ICC is encouraged when this software is used for commercial purposes.
 For more information on The International Color Consortium,

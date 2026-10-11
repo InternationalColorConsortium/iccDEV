@@ -91,9 +91,11 @@ high-confidence, actionable findings over low-value comments.
    children. For fixed-width hexadecimal fields, require the exact decoded
    byte count; for nested XML fields, verify child traversal rather than a
    sibling-only search from the parent.
-6. For new or relocated C/C++ sources and headers, compare the complete ICC
-   Software License block with an adjacent established file; report a missing,
-   abbreviated, or placeholder block as a blocking finding.
+6. For new or relocated ICC-owned C/C++ sources and headers, run
+   `.github/scripts/check-license-notices.py` and require the complete
+   BSD-3-Clause notice derived from `LICENSE.md`; report a missing,
+   abbreviated, or placeholder notice as a blocking finding. Preserve
+   third-party and generated-file attribution.
 7. For MATLAB changes, check the MEX argument and handle boundary, public API
    usage guidance, wrapper cleanup, native-tool status handling, and any
    Release, CI, or documentation dependency added by the diff.

@@ -59,11 +59,17 @@ There is no cost or membership requirement to sign the ICC Contributor License A
 
 ### License
 
-ICC software is licensed under the BSD 3-Clause "New" or "Revised" License. Contributions to ICC software projects should abide by that license unless otherwised specified or approved by the ICC.
+ICC software is licensed under the [BSD 3-Clause "New" or "Revised" License](LICENSE.md). Contributions to ICC software projects should abide by that license unless otherwise specified or approved by the ICC.
 
 ### Copyright Notices
 
-All new source files must begin with the ICC Copyright notice and include or reference the BSD 3-Clause "New" or "Revised" License.
+All new source files must begin with the ICC copyright notice and identify the
+BSD 3-Clause "New" or "Revised" License. New or relocated C/C++ sources and
+headers must use the complete comment-wrapped text derived from `LICENSE.md`;
+run `.github/scripts/check-license-notices.py --write` before review and
+`.github/scripts/check-license-notices.py` to verify the result. Preserve
+third-party, generated, fixture, and binary-file attribution instead of
+applying the project notice to those materials.
 
 ### INTELLECTUAL PROPERTY & PATENTS
 

@@ -151,7 +151,8 @@ that define complex color transforms. Each `CIccMultiProcessElement` has
 
 - C++17, 2-space indent, K&R braces, `m_` prefix for members
 - Return-value error handling (no C++ exceptions)
-- ICC copyright + BSD 3-Clause header on all new files
+- ICC copyright + canonical BSD-3-Clause notice on all new owned source files;
+  run `.github/scripts/check-license-notices.py` for C/C++ files
 - Match existing patterns in the file you're modifying
 - Zero compiler warnings on all platforms
 

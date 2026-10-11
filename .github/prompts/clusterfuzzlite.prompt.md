@@ -12,7 +12,9 @@ matching Clang 21 or 22 compilers, and repository workflow-governance rules.
 Keep CMM control bytes beyond the declared ICC payload so mutations do not
 corrupt the profile-size header. Keep a schema-shaped IccConnect seed, a
 dedicated config dictionary, and top-level plus nested configuration round
-trips. Require the complete ICC Software License block in every harness source.
+trips. Require the complete canonical BSD-3-Clause notice derived from
+`LICENSE.md` in every ICC-owned C/C++ harness source; verify it with
+`.github/scripts/check-license-notices.py`.
 Preserve the validated manual duration input from 2 through 45 whole minutes,
 pass it as a separate budget for each target group, and retain a 2-minute
 per-group budget for scheduled runs. Default manual dispatch to one
