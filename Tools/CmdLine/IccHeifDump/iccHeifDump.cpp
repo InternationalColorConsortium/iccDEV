@@ -58,48 +58,50 @@
 #include <limits>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "IccProfile.h"
-#include "heifreader.h"
+#include <libheif/heif.h>
 
 namespace
 {
   std::string outputPath(const std::string& directory,
-                         const std::uint32_t itemId,
-                         const std::uint32_t propertyIndex,
-                         const char* colourType)
+                         const heif_item_id itemId,
+                         const heif_color_profile_type colourType)
   {
     std::ostringstream path;
     path << directory;
     if (!directory.empty() && directory.back() != '/') {
       path << '/';
     }
-    path << "item-" << itemId << "-property-" << propertyIndex << '-' << colourType << ".icc";
+    path << "item-" << itemId << '-'
+         << (colourType == heif_color_profile_type_rICC ? "rICC" : "prof") << ".icc";
     return path.str();
   }
 
-  bool writeProfile(const std::string& path, const HEIF::Array<std::uint8_t>& profile)
+  bool writeProfile(const std::string& path, const std::vector<std::uint8_t>& profile)
   {
     std::ofstream output(path, std::ios::binary);
     if (!output) {
       return false;
     }
-    output.write(reinterpret_cast<const char*>(profile.elements), static_cast<std::streamsize>(profile.size));
+    output.write(reinterpret_cast<const char*>(profile.data()),
+                 static_cast<std::streamsize>(profile.size()));
     return output.good();
   }
 
-  const char* parseProfile(const HEIF::Array<std::uint8_t>& profile)
+  const char* parseProfile(const std::vector<std::uint8_t>& profile)
   {
-    if (profile.size == 0) {
+    if (profile.empty()) {
       return "empty";
     }
-    if (profile.size > std::numeric_limits<icUInt32Number>::max()) {
+    if (profile.size() > std::numeric_limits<icUInt32Number>::max()) {
       return "too-large";
     }
 
     CIccProfile* parsedProfile =
-        ReadIccProfile(reinterpret_cast<const icUInt8Number*>(profile.elements),
-                       static_cast<icUInt32Number>(profile.size));
+        ReadIccProfile(reinterpret_cast<const icUInt8Number*>(profile.data()),
+                       static_cast<icUInt32Number>(profile.size()));
     if (parsedProfile == nullptr) {
       return "failed";
     }
@@ -121,84 +123,74 @@ int main(int argc, char* argv[])
     return 3;
   }
 
-  HEIF::Reader* reader = HEIF::Reader::Create();
-  if (reader == nullptr) {
-    std::cerr << "Error: unable to create HEIF reader" << std::endl;
+  heif_context* context = heif_context_alloc();
+  if (context == nullptr) {
+    std::cerr << "Error: unable to create HEIF context" << std::endl;
     return 2;
   }
 
-  const HEIF::ErrorCode initializeResult = reader->initialize(argv[1]);
-  if (initializeResult != HEIF::ErrorCode::OK) {
-    std::cerr << "Error: unable to initialize HEIF reader: " << static_cast<int>(initializeResult) << std::endl;
-    HEIF::Reader::Destroy(reader);
+  const heif_error readResult = heif_context_read_from_file(context, argv[1], nullptr);
+  if (readResult.code != heif_error_Ok) {
+    std::cerr << "Error: unable to read HEIF file: " << readResult.message << std::endl;
+    heif_context_free(context);
     return 2;
   }
 
-  HEIF::FileInformation fileInformation;
-  const HEIF::ErrorCode informationResult = reader->getFileInformation(fileInformation);
-  if (informationResult != HEIF::ErrorCode::OK) {
-    std::cerr << "Error: unable to read HEIF file information: " << static_cast<int>(informationResult)
-              << std::endl;
-    HEIF::Reader::Destroy(reader);
-    return 2;
-  }
+  const int imageCount = heif_context_get_number_of_top_level_images(context);
+  std::vector<heif_item_id> imageIds(imageCount);
+  heif_context_get_list_of_top_level_image_IDs(context, imageIds.data(), imageCount);
 
   std::size_t profileCount = 0;
-  for (const auto& item : fileInformation.rootMetaBoxInformation.itemInformations) {
-    HEIF::Array<HEIF::ItemPropertyInfo> properties;
-    const HEIF::ErrorCode propertiesResult = reader->getItemProperties(item.itemId, properties);
-    if (propertiesResult == HEIF::ErrorCode::INVALID_ITEM_ID) {
-      continue;
-    }
-    if (propertiesResult != HEIF::ErrorCode::OK) {
-      std::cerr << "Error: unable to read properties for item " << item.itemId.get() << ": "
-                << static_cast<int>(propertiesResult) << std::endl;
-      HEIF::Reader::Destroy(reader);
+  for (const heif_item_id imageId : imageIds) {
+    heif_image_handle* imageHandle = nullptr;
+    const heif_error handleResult = heif_context_get_image_handle(context, imageId, &imageHandle);
+    if (handleResult.code != heif_error_Ok) {
+      std::cerr << "Error: unable to read image " << imageId << ": " << handleResult.message << std::endl;
+      heif_context_free(context);
       return 2;
     }
 
-    for (const auto& property : properties) {
-      if (property.type != HEIF::ItemPropertyType::COLR) {
-        continue;
-      }
+    const heif_color_profile_type colourType =
+        heif_image_handle_get_color_profile_type(imageHandle);
+    if (colourType != heif_color_profile_type_rICC &&
+        colourType != heif_color_profile_type_prof) {
+      heif_image_handle_release(imageHandle);
+      continue;
+    }
 
-      HEIF::ColourInformation colourInformation{};
-      const HEIF::ErrorCode propertyResult = reader->getProperty(property.index, colourInformation);
-      if (propertyResult != HEIF::ErrorCode::OK) {
-        std::cerr << "Error: unable to read colr property " << property.index.get() << " for item "
-                  << item.itemId.get() << ": " << static_cast<int>(propertyResult) << std::endl;
-        HEIF::Reader::Destroy(reader);
+    std::vector<std::uint8_t> profile(heif_image_handle_get_raw_color_profile_size(imageHandle));
+    const heif_error profileResult = profile.empty()
+        ? heif_error{heif_error_Ok, heif_suberror_Unspecified, "success"}
+        : heif_image_handle_get_raw_color_profile(imageHandle, profile.data());
+    if (profileResult.code != heif_error_Ok) {
+      std::cerr << "Error: unable to read ICC profile from image " << imageId << ": "
+                << profileResult.message << std::endl;
+      heif_image_handle_release(imageHandle);
+      heif_context_free(context);
+      return 2;
+    }
+
+    ++profileCount;
+    std::cout << "item=" << imageId
+              << " colour_type=" << (colourType == heif_color_profile_type_rICC ? "rICC" : "prof")
+              << " profile_bytes=" << profile.size();
+
+    if (argc == 3) {
+      const std::string path = outputPath(argv[2], imageId, colourType);
+      if (!writeProfile(path, profile)) {
+        std::cerr << "Error: unable to write extracted ICC profile: " << path << std::endl;
+        heif_image_handle_release(imageHandle);
+        heif_context_free(context);
         return 2;
       }
-
-      const bool isIcc = colourInformation.colourType == HEIF::FourCC("rICC") ||
-                         colourInformation.colourType == HEIF::FourCC("prof");
-      if (!isIcc) {
-        continue;
-      }
-
-      ++profileCount;
-      std::cout << "item=" << item.itemId.get() << " property=" << property.index.get()
-                << " essential=" << (property.essential ? 1 : 0)
-                << " colour_type=" << colourInformation.colourType.value
-                << " profile_bytes=" << colourInformation.iccProfile.size;
-
-      if (argc == 3) {
-        const std::string path = outputPath(argv[2], item.itemId.get(), property.index.get(),
-                                            colourInformation.colourType.value);
-        if (!writeProfile(path, colourInformation.iccProfile)) {
-          std::cerr << "Error: unable to write extracted ICC profile: " << path << std::endl;
-          HEIF::Reader::Destroy(reader);
-          return 2;
-        }
-        std::cout << " output=" << path;
-      }
-
-      std::cout << " proflib_parse=" << parseProfile(colourInformation.iccProfile) << std::endl;
+      std::cout << " output=" << path;
     }
+
+    std::cout << " proflib_parse=" << parseProfile(profile) << std::endl;
+    heif_image_handle_release(imageHandle);
   }
 
   std::cout << "icc_profiles=" << profileCount << std::endl;
-  HEIF::Reader::Destroy(reader);
+  heif_context_free(context);
   return 0;
 }
