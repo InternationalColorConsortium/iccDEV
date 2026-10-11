@@ -115,4 +115,34 @@ fi
 rm -f -- "$oversized"
 echo "[PASS] oversized carrier rejected before buffering"
 
+amplified="$outdir/amplified-associations.heic"
+amplified_log="$outdir/amplified-associations.log"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+generator="$script_dir/../ci/tooling/heif/qa/make-association-stress.py"
+python3 "$generator" "$amplified" 65
+amplified_status=0
+"$native_tool" "$amplified" >"$amplified_log" 2>&1 || amplified_status=$?
+if (( amplified_status == 0 || amplified_status >= 128 )) ||
+   ! grep -Fq 'Error: unable to read HEIF colour properties' "$amplified_log" ||
+   ! check_runtime_findings "$amplified_log"; then
+  echo "[FAIL] repeated ICC associations were not bounded safely"
+  sed -n '1,80p' "$amplified_log"
+  exit 1
+fi
+rm -f -- "$amplified"
+echo "[PASS] repeated ICC associations rejected before extraction"
+
+python3 "$generator" "$amplified" 64
+within_status=0
+"$native_tool" "$amplified" >"$amplified_log" 2>&1 || within_status=$?
+if (( within_status == 0 || within_status >= 128 )) ||
+   ! grep -Fq 'Error: unable to read HEIF file:' "$amplified_log" ||
+   ! check_runtime_findings "$amplified_log"; then
+  echo "[FAIL] parser rejected associations at the 256 MiB extraction limit"
+  sed -n '1,80p' "$amplified_log"
+  exit 1
+fi
+rm -f -- "$amplified"
+echo "[PASS] associations at the extraction limit reached libheif validation"
+
 echo "[PASS] HEIF carrier and IccProfLib A/B QA"

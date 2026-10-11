@@ -42,6 +42,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <new>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -67,29 +68,30 @@ namespace
     return path.str();
   }
 
-  bool writeProfile(const std::string& path, const std::vector<std::uint8_t>& profile)
+  bool writeProfile(const std::string& path, const std::uint8_t* profile,
+                    std::size_t profileSize)
   {
     std::ofstream output(path, std::ios::binary);
     if (!output) {
       return false;
     }
-    output.write(reinterpret_cast<const char*>(profile.data()),
-                 static_cast<std::streamsize>(profile.size()));
+    output.write(reinterpret_cast<const char*>(profile),
+                 static_cast<std::streamsize>(profileSize));
     return output.good();
   }
 
-  const char* parseProfile(const std::vector<std::uint8_t>& profile)
+  const char* parseProfile(const std::uint8_t* profile, std::size_t profileSize)
   {
-    if (profile.empty()) {
+    if (profileSize == 0) {
       return "empty";
     }
-    if (profile.size() > std::numeric_limits<icUInt32Number>::max()) {
+    if (profileSize > std::numeric_limits<icUInt32Number>::max()) {
       return "too-large";
     }
 
     CIccProfile* parsedProfile =
-        ReadIccProfile(reinterpret_cast<const icUInt8Number*>(profile.data()),
-                       static_cast<icUInt32Number>(profile.size()));
+        ReadIccProfile(reinterpret_cast<const icUInt8Number*>(profile),
+                       static_cast<icUInt32Number>(profileSize));
     if (parsedProfile == nullptr) {
       return "failed";
     }
@@ -112,7 +114,15 @@ int main(int argc, char* argv[])
   }
 
   std::vector<iccdev_heif::IccProperty> properties;
-  if (!iccdev_heif::collectIccProperties(argv[1], properties)) {
+  std::vector<std::uint8_t> bytes;
+  bool collected = false;
+  try {
+    collected = iccdev_heif::collectIccProperties(argv[1], properties, bytes);
+  } catch (const std::bad_alloc&) {
+    std::cerr << "Error: insufficient memory for HEIF colour properties" << std::endl;
+    return 2;
+  }
+  if (!collected) {
     std::cerr << "Error: unable to read HEIF colour properties" << std::endl;
     return 2;
   }
@@ -132,18 +142,18 @@ int main(int argc, char* argv[])
 
   std::size_t profileCount = 0;
   for (const auto& property : properties) {
-    const std::vector<std::uint8_t>& profile = property.profile;
+    const std::uint8_t* profile = bytes.data() + property.profileOffset;
     ++profileCount;
     std::cout << "item=" << property.itemId
               << " property=" << property.propertyIndex
               << " essential=" << (property.essential ? 1 : 0)
               << " colour_type=" << property.colourType
-              << " profile_bytes=" << profile.size();
+              << " profile_bytes=" << property.profileSize;
 
     if (argc == 3) {
       const std::string path = outputPath(argv[2], property.itemId,
                                           property.propertyIndex, property.colourType);
-      if (!writeProfile(path, profile)) {
+      if (!writeProfile(path, profile, property.profileSize)) {
         std::cerr << "Error: unable to write extracted ICC profile: " << path << std::endl;
         heif_context_free(context);
         return 2;
@@ -151,7 +161,8 @@ int main(int argc, char* argv[])
       std::cout << " output=" << path;
     }
 
-    std::cout << " proflib_parse=" << parseProfile(profile) << std::endl;
+    std::cout << " proflib_parse=" << parseProfile(profile, property.profileSize)
+              << std::endl;
   }
 
   std::cout << "icc_profiles=" << profileCount << std::endl;

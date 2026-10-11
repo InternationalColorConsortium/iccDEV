@@ -5,7 +5,9 @@ ICC `colr` property association from the file's `iprp` boxes, writes each raw
 blob unchanged, and reports whether IccProfLib can parse it. This includes
 profiles on non-top-level items. It is built with the default native tools
 when `ENABLE_TOOLS=ON`. Files larger than 256 MiB are rejected before the
-property parser buffers the carrier.
+property parser buffers the carrier. The parser also limits property
+associations to 4096 and cumulative extracted ICC bytes to 256 MiB; profile
+views share the carrier buffer rather than copying each association's payload.
 
 The Nokia reader A/B research tool remains under `.github/ci/tooling/heif/`.
 Its pinned reader is isolated in the standalone CTest wrapper and manually

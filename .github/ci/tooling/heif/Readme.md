@@ -60,7 +60,9 @@ The carrier CTest runs all 16 tracked carriers, valid and invalid property
 probes, CLI error controls, and a byte-for-byte extraction check. The A/B
 CTest compares the raw blobs emitted by Nokia and the release parser across
 valid and malformed carrier fixtures, requires IccProfLib parse status from
-the release tool, and rejects a sparse carrier over the 256 MiB parser limit.
+the release tool, rejects a sparse carrier over the 256 MiB parser limit, and
+rejects a generated carrier with repeated associations exceeding the 256 MiB
+cumulative extraction limit.
 It treats exit values 128 and above or any ASan/UBSan diagnostic as a failure.
 
 The manually dispatched `Nokia HEIF ICC carrier smoke` workflow in

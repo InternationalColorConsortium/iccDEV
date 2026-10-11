@@ -26,9 +26,9 @@ fixtures, the pinned Nokia HEIF integration, or issue #2647 follow-up.
    hosted validation; do not add this external build to the general iccDEV
    pull-request or tool-test workflows.
 6. Treat exit values 128 and above, sanitizer diagnostics, missing fixtures,
-   hash drift, raw extraction divergence, a failed oversized-carrier rejection,
-   or a missing CTest registration as failures. Exit 1-127 is a graceful tool
-   failure only when the matrix expects it.
+   hash drift, raw extraction divergence, failed carrier-size or repeated
+   association limits, or a missing CTest registration as failures. Exit 1-127
+   is a graceful tool failure only when the matrix expects it.
 7. Report the iccDEV revision, Nokia revision, compiler/sanitizer envelope,
    carrier matrix result, A/B byte comparison, native parse statuses, known
    third-party warnings, and all local changes. New compiler warnings are

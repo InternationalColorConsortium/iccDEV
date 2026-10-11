@@ -13,6 +13,7 @@ Use `.github/skills/heif-icc-qa/SKILL.md` and report:
 - property-probe and CLI exit behavior;
 - extracted ICC byte count and SHA-256;
 - byte-for-byte A/B extraction comparison and IccProfLib parse statuses;
+- bounded carrier and repeated-association rejection results;
 - every upstream patch applied, the warning-free dedicated smoke result, and
   any test skipped.
 

@@ -52,7 +52,8 @@ namespace iccdev_heif
     std::uint32_t propertyIndex;
     bool essential;
     std::string colourType;
-    std::vector<std::uint8_t> profile;
+    std::size_t profileOffset;
+    std::size_t profileSize;
   };
 
   inline std::uint32_t read32(const std::vector<std::uint8_t>& bytes, std::size_t offset)
@@ -110,10 +111,14 @@ namespace iccdev_heif
     return false;
   }
 
-  inline bool collectIccProperties(const char* path, std::vector<IccProperty>& profiles)
+  inline bool collectIccProperties(const char* path, std::vector<IccProperty>& profiles,
+                                   std::vector<std::uint8_t>& bytes)
   {
-    // Cap the duplicate carrier buffer before allocating or parsing untrusted boxes.
+    // Bound the carrier, association table, and total bytes eligible for output.
     constexpr std::streamoff maxCarrierBytes = 256 * 1024 * 1024;
+    constexpr std::size_t maxAssociations = 4096;
+    constexpr std::size_t maxExtractedBytes = 256 * 1024 * 1024;
+    constexpr std::size_t maxProperties = 32767;
     std::ifstream input(path, std::ios::binary | std::ios::ate);
     if (!input) {
       return false;
@@ -123,8 +128,9 @@ namespace iccdev_heif
       return false;
     }
     input.seekg(0, std::ios::beg);
-    std::vector<std::uint8_t> bytes(static_cast<std::size_t>(length));
-    if (!input.read(reinterpret_cast<char*>(bytes.data()), length)) {
+    bytes.resize(static_cast<std::size_t>(length));
+    if (!input.read(reinterpret_cast<char*>(bytes.data()),
+                    static_cast<std::streamsize>(length))) {
       return false;
     }
     Box meta;
@@ -147,9 +153,15 @@ namespace iccdev_heif
       if (!nextBox(bytes, offset, ipco.end, box)) {
         return false;
       }
+      if (properties.size() >= maxProperties) {
+        return false;
+      }
       properties.push_back(box);
     }
 
+    std::size_t associationCount = 0;
+    std::size_t entryCount = 0;
+    std::size_t extractedBytes = 0;
     for (std::size_t boxOffset = iprp.payload; boxOffset < iprp.end;) {
       Box ipma;
       if (!nextBox(bytes, boxOffset, iprp.end, ipma)) {
@@ -170,6 +182,10 @@ namespace iccdev_heif
       offset += 4;
       const std::uint32_t entries = read32(bytes, offset);
       offset += 4;
+      if (entries > maxAssociations - entryCount) {
+        return false;
+      }
+      entryCount += entries;
       for (std::uint32_t entry = 0; entry < entries; ++entry) {
         const std::size_t idSize = version == 0 ? 2 : 4;
         if (ipma.end - offset < idSize + 1) {
@@ -180,6 +196,10 @@ namespace iccdev_heif
             : read32(bytes, offset);
         offset += idSize;
         const std::uint8_t count = bytes[offset++];
+        if (count > maxAssociations - associationCount) {
+          return false;
+        }
+        associationCount += count;
         for (std::uint8_t association = 0; association < count; ++association) {
           const std::size_t indexSize = widePropertyIndex ? 2 : 1;
           if (ipma.end - offset < indexSize) {
@@ -205,13 +225,18 @@ namespace iccdev_heif
           if (colourType != "prof" && colourType != "rICC") {
             continue;
           }
+          const std::size_t profileSize = property.end - property.payload - 4;
+          if (profileSize > maxExtractedBytes - extractedBytes) {
+            return false;
+          }
+          extractedBytes += profileSize;
           IccProperty profile;
           profile.itemId = itemId;
           profile.propertyIndex = index - 1;
           profile.essential = (value & (widePropertyIndex ? 0x8000 : 0x80)) != 0;
           profile.colourType = colourType;
-          profile.profile.assign(bytes.begin() + property.payload + 4,
-                                 bytes.begin() + property.end);
+          profile.profileOffset = property.payload + 4;
+          profile.profileSize = profileSize;
           profiles.push_back(profile);
         }
       }
