@@ -59,9 +59,9 @@
  *       - Research Tooling for HEIF InterOp
  ]]
 
-add_executable(iccHeifDump IccHeifDump.cpp)
-set_property(TARGET iccHeifDump PROPERTY CXX_STANDARD 11)
-target_link_libraries(iccHeifDump heif_static)
+add_executable(heifIccDump IccHeifDump.cpp)
+set_property(TARGET heifIccDump PROPERTY CXX_STANDARD 11)
+target_link_libraries(heifIccDump heif_static)
 
 option(ICCDEV_HEIF_ENABLE_TESTS "Register the iccHeifDump carrier QA test" OFF)
 if(ICCDEV_HEIF_ENABLE_TESTS)
@@ -69,7 +69,7 @@ if(ICCDEV_HEIF_ENABLE_TESTS)
   add_test(
     NAME iccdev.heif-carrier-qa
     COMMAND "${CMAKE_COMMAND}" -E env
-      "ICCDEV_HEIF_TOOL=$<TARGET_FILE:iccHeifDump>"
+      "ICCDEV_HEIF_TOOL=$<TARGET_FILE:heifIccDump>"
       "ICCDEV_HEIF_CORPUS=${CMAKE_CURRENT_LIST_DIR}/img"
       "ICCDEV_TEST_OUTDIR=${CMAKE_CURRENT_BINARY_DIR}/qa-output"
       "${BASH_EXECUTABLE}"
@@ -78,4 +78,51 @@ if(ICCDEV_HEIF_ENABLE_TESTS)
   set_tests_properties(iccdev.heif-carrier-qa PROPERTIES
     LABELS "iccdev;heif;icc;issue-2647;regression"
     TIMEOUT 120)
+endif()
+
+option(ICCDEV_HEIF_BUILD_NATIVE_TOOL
+  "Build the IccProfLib-backed iccHeifDump comparison tool" OFF)
+set(ICCDEV_PROFLIB_LIBRARY "" CACHE FILEPATH
+  "Path to a locally built IccProfLib2 static library")
+set(ICCDEV_PROFLIB_INCLUDE_DIR "" CACHE PATH
+  "Directory containing generated IccProfLib build headers")
+
+if(ICCDEV_HEIF_BUILD_NATIVE_TOOL)
+  if(NOT EXISTS "${ICCDEV_PROFLIB_LIBRARY}" OR
+     NOT EXISTS "${ICCDEV_PROFLIB_INCLUDE_DIR}/IccProfLibVer.h")
+    message(FATAL_ERROR
+      "ICCDEV_HEIF_BUILD_NATIVE_TOOL requires ICCDEV_PROFLIB_LIBRARY and "
+      "ICCDEV_PROFLIB_INCLUDE_DIR from a local iccDEV build")
+  endif()
+
+  find_package(Threads REQUIRED)
+  find_package(ZLIB REQUIRED)
+
+  set(ICCDEV_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../..")
+  add_executable(iccHeifDump
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccHeifDump/iccHeifDump.cpp")
+  target_compile_features(iccHeifDump PRIVATE cxx_std_17)
+  target_include_directories(iccHeifDump PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    "${ICCDEV_PROFLIB_INCLUDE_DIR}")
+  target_link_libraries(iccHeifDump PRIVATE
+    heif_static
+    "${ICCDEV_PROFLIB_LIBRARY}"
+    Threads::Threads
+    ZLIB::ZLIB)
+
+  if(ICCDEV_HEIF_ENABLE_TESTS)
+    add_test(
+      NAME iccdev.heif-carrier-ab-qa
+      COMMAND "${CMAKE_COMMAND}" -E env
+        "ICCDEV_HEIF_CARRIER_TOOL=$<TARGET_FILE:heifIccDump>"
+        "ICCDEV_HEIF_NATIVE_TOOL=$<TARGET_FILE:iccHeifDump>"
+        "ICCDEV_HEIF_CORPUS=${CMAKE_CURRENT_LIST_DIR}/img"
+        "ICCDEV_TEST_OUTDIR=${CMAKE_CURRENT_BINARY_DIR}/ab-qa-output"
+        "${BASH_EXECUTABLE}"
+        "${CMAKE_CURRENT_LIST_DIR}/../../../scripts/iccdev-heif-ab-qa.sh")
+    set_tests_properties(iccdev.heif-carrier-ab-qa PROPERTIES
+      LABELS "iccdev;heif;icc;ab;local"
+      TIMEOUT 120)
+  endif()
 endif()

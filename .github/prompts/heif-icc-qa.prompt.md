@@ -1,7 +1,8 @@
 # HEIF ICC Carrier QA
 
-Build and quality-assure `iccHeifDump` against the pinned Nokia HEIF reader and
-the tracked HEIF/AVIF carrier corpus for issue #2647.
+Build and quality-assure carrier-only `heifIccDump` and IccProfLib-backed
+`iccHeifDump` against the pinned Nokia HEIF reader and tracked HEIF/AVIF
+carrier corpus for issue #2647.
 
 Use `.github/skills/heif-icc-qa/SKILL.md` and report:
 
@@ -11,6 +12,7 @@ Use `.github/skills/heif-icc-qa/SKILL.md` and report:
   overflow carrier outcomes;
 - property-probe and CLI exit behavior;
 - extracted ICC byte count and SHA-256;
+- byte-for-byte A/B extraction comparison and IccProfLib parse statuses;
 - every upstream patch applied, the warning-free dedicated smoke result, and
   any test skipped.
 

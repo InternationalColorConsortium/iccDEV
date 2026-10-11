@@ -69,18 +69,20 @@ if(NOT IS_ABSOLUTE "${HEIF_SOURCE_DIR}" OR
 endif()
 
 option(ICCDEV_HEIF_ENABLE_SANITIZERS
-  "Build the Nokia reader and iccHeifDump with ASan and UBSan" OFF)
+  "Build the Nokia reader and HEIF ICC tools with ASan and UBSan" OFF)
 if(ICCDEV_HEIF_ENABLE_SANITIZERS)
-  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-    message(FATAL_ERROR "HEIF sanitizers require Clang or GCC")
+  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR
+      "ICCDEV_HEIF_ENABLE_SANITIZERS requires Clang for -fsanitize=integer")
   endif()
   add_compile_options(
-    -fsanitize=address,undefined
+    -fsanitize=address,undefined,integer
     -fno-omit-frame-pointer)
-  add_link_options(-fsanitize=address,undefined)
+  add_link_options(-fsanitize=address,undefined,integer)
 endif()
 
 set(BUILD_ONLY_STATIC_LIB ON CACHE BOOL "Build only Nokia HEIF static libraries" FORCE)
+set(ENABLE_TOOLS OFF CACHE BOOL "Do not build Nokia HEIF command-line tools" FORCE)
 set(ICCDEV_HEIF_ENABLE_TESTS ON CACHE BOOL "Register iccHeifDump carrier QA" FORCE)
 add_subdirectory("${HEIF_SOURCE_DIR}/srcs" nokia-heif)
 add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/.." iccdev-heif-tool)

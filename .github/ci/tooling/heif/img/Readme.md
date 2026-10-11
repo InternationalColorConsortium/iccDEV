@@ -1,6 +1,7 @@
 ## HEIF ICC QA Test Files (PoC)
 
-These files exercise `colr` properties through the Nokia HEIF reader & `iccHeifDump` tool.
+These files exercise `colr` properties through the Nokia HEIF reader,
+carrier-only `heifIccDump`, and IccProfLib-aware `iccHeifDump`.
 
 - `valid-prof.heic`: HEVC HEIF with a valid unrestricted ICC profile
 - `valid-rICC.heic`: Same carrier and profile with restricted ICC colour type
@@ -24,4 +25,6 @@ The valid `prof`/`rICC` carriers embed the same 540-byte profile with SHA-256
 The malformed 540-byte profile has SHA-256
 `015748e9d8583e2a9ed81b131f39e25c5cbfb79cecaf474e63c27be547f51506`.
 Run `.github/scripts/iccdev-heif-carrier-qa.sh` through the HEIF QA CTest; the
-script also pins the empty and seven-byte payload hashes.
+script also pins the empty and seven-byte payload hashes. Run
+`.github/scripts/iccdev-heif-ab-qa.sh` through the same wrapper to require
+byte-identical profiles from both tools and native parse-status reporting.

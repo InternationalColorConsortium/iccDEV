@@ -60,6 +60,7 @@ its destination transform.
 | `iccTiffDump` | Inspect TIFF metadata and embedded ICC | `iccTiffDump image.tif` |
 | `iccPngDump` | Inspect PNG metadata and embedded ICC | `iccPngDump image.png` |
 | `iccJpegDump` | Inspect JPEG metadata and embedded ICC | `iccJpegDump image.jpg` |
+| `iccHeifDump` | Locally compare HEIF carrier ICC blobs with IccProfLib parsing | See [the tool Readme](../Tools/CmdLine/IccHeifDump/Readme.md) |
 | `iccPawgReport` | Emit an ICC PAWG profile assessment checklist report for security, conformance, and quality review | `iccPawgReport Testing/sRGB_v4_ICC_preference.icc` |
 | `iccPawgReport` | Emit machine-readable assessment results; Q1 includes structured, unrounded round-trip metrics | `iccPawgReport --json Testing/sRGB_v4_ICC_preference.icc` |
 | `iccPawgReport` | Emit gated QA evidence flags | `iccPawgReport --qa-flags --evidence-json Testing/sRGB_v4_ICC_preference.icc` |
