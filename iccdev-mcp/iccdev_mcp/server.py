@@ -4,11 +4,11 @@
 # BSD 3-Clause License. See LICENSE.md for details.
 
 """
-MCP server exposing 26 tools for ICC color profile operations.
+MCP server exposing ICC color profile operations.
 
 Phase 1 (Python-native): inspect_header, profile_summary, validate_profile,
     color_transform, roundtrip_delta, icc_sig_to_str, enum_spaces
-Phase 2 (subprocess): 17 CLI tool wrappers (see cli_tools.py)
+Phase 2 (subprocess): CLI tool wrappers (see cli_tools.py)
 """
 
 from __future__ import annotations
@@ -507,7 +507,7 @@ def health_check() -> dict:
 
 
 # -------------------------------------------------------------------------
-# Subprocess tools (Phase 2) -- 17 CLI tool wrappers
+# Subprocess tools (Phase 2) -- CLI tool wrappers
 # -------------------------------------------------------------------------
 
 @mcp.tool()
@@ -634,6 +634,17 @@ def png_dump(path: str) -> dict:
     """
     p = resolve_profile_path(path)
     return cli_tools.run_png_dump(str(p))
+
+
+@mcp.tool()
+def heif_dump(path: str) -> dict:
+    """Dump HEIF, HEIC, or AVIF metadata and embedded ICC profiles (iccHeifDump).
+
+    Args:
+        path: HEIF, HEIC, or AVIF image path.
+    """
+    p = resolve_profile_path(path)
+    return cli_tools.run_heif_dump(str(p))
 
 
 @mcp.tool()

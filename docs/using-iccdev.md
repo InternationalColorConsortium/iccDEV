@@ -570,7 +570,7 @@ report".
 | Check conformance and quality | `validate_profile`, `pawg_report`, `round_trip_test` |
 | Read or edit a profile as text | `profile_to_json`, `json_to_profile`, `profile_to_xml`, `xml_to_profile` |
 | Convert colours or images | `apply_named_cmm`, `apply_profiles`, `create_link` |
-| Inspect an image's embedded profile | `tiff_dump`, `jpeg_dump`, `png_dump` |
+| Inspect an image's embedded profile | `tiff_dump`, `jpeg_dump`, `png_dump`, `heif_dump` |
 
 **For real colour conversion use `apply_named_cmm` or `apply_profiles`.** The
 `color_transform` and `roundtrip_delta` tools currently run a placeholder that

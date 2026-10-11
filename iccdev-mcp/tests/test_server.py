@@ -203,6 +203,9 @@ class TestCLIToolDiscovery:
     def test_pawg_report_is_tracked(self):
         assert "iccPawgReport" in TOOL_BINARIES
 
+    def test_heif_dump_is_tracked(self):
+        assert "iccHeifDump" in TOOL_BINARIES
+
     def test_tools_dir_multiconfig_layout_is_discovered(self, monkeypatch, tmp_path):
         """ICCDEV_TOOLS_DIR=Build/Tools should find MSVC Debug/Release binaries."""
         tools_dir = tmp_path / "Build" / "Tools"
@@ -500,6 +503,15 @@ class TestSubprocessTools:
         assert "stdout" in result
 
     @pytest.mark.skipif(
+        not _has_cli_tool("iccHeifDump"),
+        reason="iccHeifDump not available",
+    )
+    def test_heif_dump_missing_file(self):
+        from iccdev_mcp.server import heif_dump
+        with pytest.raises(FileNotFoundError):
+            heif_dump("nonexistent_12345.heic")
+
+    @pytest.mark.skipif(
         not _has_cli_tool("iccPawgReport"),
         reason="iccPawgReport not available",
     )
@@ -605,6 +617,28 @@ def test_dump_profile_passes_cli_options(monkeypatch, tmp_path):
         "verbosity": 100,
         "tag": "desc",
     }
+
+
+def test_heif_dump_passes_resolved_path(monkeypatch, tmp_path):
+    """MCP stdio heif_dump should resolve paths before invoking the CLI."""
+    image = tmp_path / "test.heic"
+    image.write_bytes(b"ftyp")
+    captured = {}
+
+    def fake_run_heif_dump(path):
+        captured["path"] = path
+        return {"returncode": 0, "stdout": "", "stderr": ""}
+
+    monkeypatch.setattr(
+        "iccdev_mcp.server.cli_tools.run_heif_dump",
+        fake_run_heif_dump,
+    )
+
+    from iccdev_mcp.server import heif_dump
+    result = heif_dump(str(image))
+
+    assert result["returncode"] == 0
+    assert captured == {"path": str(image.resolve())}
 
 
 def test_round_trip_test_passes_cli_options(monkeypatch, tmp_path):

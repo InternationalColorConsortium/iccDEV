@@ -78,7 +78,7 @@ class TestWebUi(unittest.TestCase):
             "inspect_header", "profile_summary", "color_transform", "roundtrip_delta",
             "validate_profile", "sig_to_str", "enum_spaces", "profiles", "dump_profile", "pawg_report",
             "to_xml", "from_xml", "to_json", "from_json", "roundtrip",
-            "tiff_dump", "jpeg_dump", "png_dump", "from_cube",
+            "tiff_dump", "jpeg_dump", "png_dump", "heif_dump", "from_cube",
             "apply_profiles", "apply_named_cmm", "create_link",
             "v5_to_v4", "spec_sep", "apply_search", "upload",
         ]:
@@ -138,6 +138,7 @@ class TestHealthEndpoints(unittest.TestCase):
         names = {tool["name"] for tool in data["tools"]}
         self.assertIn("round_trip_test", names)
         self.assertIn("pawg_report", names)
+        self.assertIn("heif_dump", names)
         self.assertIn("profile_summary", names)
         self.assertIn("validate_profile", names)
         utility_names = {route["name"] for route in data["rest_utility_routes"]}
@@ -590,6 +591,10 @@ class TestSubprocessEndpoints(unittest.TestCase):
 
     def test_png_dump_missing_path(self):
         resp = self.client.get("/api/png-dump")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_heif_dump_missing_path(self):
+        resp = self.client.get("/api/heif-dump")
         self.assertEqual(resp.status_code, 400)
 
     def test_roundtrip_missing_path(self):

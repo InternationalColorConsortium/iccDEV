@@ -18,6 +18,6 @@
 
 ## REST Inventory
 
-`GET /api/tools` returns the stable 26-tool MCP inventory and a separate
+`GET /api/tools` returns the stable MCP inventory and a separate
 `rest_utility_routes` list for REST-only helpers such as `/api/files` and
 `/api/upload`.

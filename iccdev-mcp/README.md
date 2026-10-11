@@ -3,12 +3,12 @@
 MCP server for ICC color profile tools from the International Color
 Consortium's RefIccMAX (iccDEV) library.
 
-Exposes 26 tools to AI assistants (Claude, Copilot, Cursor) via the
+Exposes tools to AI assistants (Claude, Copilot, Cursor) via the
 Model Context Protocol, covering profile inspection, color transforms,
 and format conversion for ICC v2/v4 and iccMAX v5 profiles.
 
-The static MCP inventory has 26 tools, but `health_check` reports tools
-available in the running environment. Optional native capabilities can differ
+The static MCP inventory lists supported tools; `health_check` reports the
+tools available in the running environment. Optional native capabilities can differ
 between container variants, so clients and CI must inspect capability flags and
 the discovered CLI inventory rather than assume a fixed health-tool total.
 The response includes the available native, CLI, and service inventories so
@@ -37,10 +37,10 @@ pip install "git+https://github.com/InternationalColorConsortium/iccDEV.git#subd
 Install it in its own virtual environment. The wheel ships a module named
 `iccdev` that conflicts with the Cython `iccdev` Python bindings.
 
-For full functionality with the pip-installed package, seven Python-native tools
-are included in the `iccdev-mcp` wheel. The `validate_profile` tool dynamically
+For full functionality with the pip-installed package, Python-native tools are
+included in the `iccdev-mcp` wheel. The `validate_profile` tool dynamically
 loads the public C validation ABI, so it also needs a shared IccProfLib build.
-The 17 CLI-backed tools require iccDEV CLI binaries. Build iccDEV locally or
+CLI-backed tools require iccDEV CLI binaries. Build iccDEV locally or
 set `ICCDEV_TOOLS_DIR` and `ICCDEV_BUILD_DIR` to an existing build. The REST
 health endpoint reports the bundled Python API and CLI discovery separately, so
 incomplete local builds are visible at startup.
@@ -70,7 +70,7 @@ docker run --rm -p 127.0.0.1:8080:8080 \
 ```
 
 Open <http://127.0.0.1:8080/> for the bundled REST dashboard. The dashboard
-groups the 26 MCP-backed API routes, shows REST-only utility routes such as
+groups MCP-backed API routes, shows REST-only utility routes such as
 file browsing and upload, and runs tools without requiring a separate client.
 
 Supported container modes are `mcp`/`stdio`, `rest`/`api`, `sse`, and
@@ -197,6 +197,7 @@ Add this repository MCP configuration under
         "tiff_dump",
         "jpeg_dump",
         "png_dump",
+        "heif_dump",
         "from_cube",
         "apply_profiles",
         "apply_named_cmm",
@@ -221,7 +222,7 @@ iccdev-mcp --transport sse --port 8080
 
 ## Tools
 
-### Python-Native (7)
+### Python-Native
 
 | Tool | Description |
 |------|-------------|
@@ -233,7 +234,7 @@ iccdev-mcp --transport sse --port 8080
 | `icc_sig_to_str` | 4-byte ICC signature to string |
 | `enum_spaces` | List all 32 ICC color space identifiers |
 
-### CLI-Backed (17) -- require iccDEV tools
+### CLI-Backed -- require iccDEV tools
 
 | Tool | CLI Binary | Description |
 |------|-----------|-------------|
@@ -247,6 +248,7 @@ iccdev-mcp --transport sse --port 8080
 | `tiff_dump` | iccTiffDump | TIFF metadata + embedded ICC |
 | `jpeg_dump` | iccJpegDump | JPEG metadata + embedded ICC |
 | `png_dump` | iccPngDump | PNG metadata + embedded ICC |
+| `heif_dump` | iccHeifDump | HEIF, HEIC, and AVIF metadata + embedded ICC |
 | `from_cube` | iccFromCube | .cube LUT to ICC profile |
 | `apply_profiles` | iccApplyProfiles | Multi-profile TIFF transform |
 | `apply_named_cmm` | iccApplyNamedCmm | Named color CMM |
@@ -271,8 +273,8 @@ the command line; see the repository
 | `list_available_profiles` | Browse ICC test profiles |
 
 The REST dashboard at `/` and `/ui` provides Testing/ directory and filename
-selectors for ICC, XML, JSON, TIFF, JPEG, PNG, and cube inputs. `/api/tools`
-returns the stable 26-tool MCP inventory and separately lists REST-only utility
+selectors for ICC, XML, JSON, TIFF, JPEG, PNG, HEIF, HEIC, AVIF, and cube inputs. `/api/tools`
+returns the stable MCP inventory and separately lists REST-only utility
 routes (`/api/tools`, `/api/files`, and `/api/upload`). Core CLI-backed forms
 expose documented options for `iccDumpProfile` validation/verbosity/tag
 selection, `iccPawgReport` profile assessment, `iccRoundTrip` intent/MPE

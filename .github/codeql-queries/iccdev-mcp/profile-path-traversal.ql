@@ -24,7 +24,7 @@ class ProfilePathSource extends DataFlow::Node {
     exists(Function f, Name n |
       f.getName() in [
         "dump_profile", "profile_to_xml", "profile_to_json",
-        "round_trip_test", "tiff_dump", "jpeg_dump", "png_dump",
+        "round_trip_test", "tiff_dump", "jpeg_dump", "png_dump", "heif_dump",
         "from_cube", "inspect_header", "color_transform",
         "roundtrip_delta", "v5_to_v4", "create_link",
         "apply_profiles", "spec_sep_to_tiff"

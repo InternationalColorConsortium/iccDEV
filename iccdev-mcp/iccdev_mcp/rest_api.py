@@ -1,6 +1,6 @@
 """REST API layer for iccdev-mcp.
 
-Mirrors all 26 MCP tools as HTTP endpoints using Starlette.
+Mirrors MCP tools as HTTP endpoints using Starlette.
 Each endpoint delegates to the same function backing the MCP tool,
 ensuring MCP and REST always return identical results.
 
@@ -60,6 +60,7 @@ _FILE_KINDS = {
     "tiff": ("*.tif", "*.tiff", "*.TIF", "*.TIFF"),
     "jpeg": ("*.jpg", "*.jpeg", "*.JPG", "*.JPEG"),
     "png": ("*.png", "*.PNG"),
+    "heif": ("*.heif", "*.heic", "*.avif", "*.HEIF", "*.HEIC", "*.AVIF"),
     "cube": ("*.cube", "*.CUBE"),
 }
 
@@ -308,13 +309,13 @@ const TOOL_GROUPS = [
   { title: 'Status', tools: ['health', 'tools', 'profiles', 'enum_spaces'] },
   { title: 'Python native', tools: ['inspect_header', 'profile_summary', 'validate_profile', 'sig_to_str', 'color_transform', 'roundtrip_delta'] },
   { title: 'ICC profile CLI', tools: ['dump_profile', 'pawg_report', 'to_xml', 'to_json', 'roundtrip'] },
-  { title: 'Image and conversion CLI', tools: ['tiff_dump', 'jpeg_dump', 'png_dump', 'from_xml', 'from_json', 'from_cube'] },
+  { title: 'Image and conversion CLI', tools: ['tiff_dump', 'jpeg_dump', 'png_dump', 'heif_dump', 'from_xml', 'from_json', 'from_cube'] },
   { title: 'Advanced CLI', tools: ['apply_profiles', 'apply_named_cmm', 'create_link', 'v5_to_v4', 'spec_sep', 'apply_search'] },
   { title: 'File management', tools: ['upload'] }
 ];
 const TOOLS = {
   health: { label: 'Health', method: 'GET', path: '/api/health', desc: 'Server status, Python binding availability, and CLI discovery.', fields: [] },
-  tools: { label: 'Tool discovery', method: 'GET', path: '/api/tools', desc: 'List the 26 MCP tools plus REST-only utility routes exposed by iccdev-mcp.', fields: [] },
+  tools: { label: 'Tool discovery', method: 'GET', path: '/api/tools', desc: 'List MCP tools plus REST-only utility routes exposed by iccdev-mcp.', fields: [] },
   profiles: { label: 'Profile browser', method: 'GET', path: '/api/profiles', desc: 'List bundled or configured ICC profiles by Testing/ directory and filename.', fields: [{ name: 'directory', label: 'Directory', type: 'profile_directory', kind: 'profile' }, { name: 'filename', label: 'Filename', type: 'testing_file', kind: 'profile', directoryField: 'directory' }] },
   enum_spaces: { label: 'Enum color spaces', method: 'GET', path: '/api/enum-spaces', desc: 'List Python ColorSpace enum values.', fields: [] },
   inspect_header: { label: 'Inspect header', method: 'GET', path: '/api/inspect-header', desc: 'Read ICC profile header fields with computed names.', fields: [{ name: 'path', label: 'ICC profile', type: 'profile', required: true }] },
@@ -331,6 +332,7 @@ const TOOLS = {
   tiff_dump: { label: 'TIFF dump', method: 'GET', path: '/api/tiff-dump', desc: 'Run iccTiffDump on a TIFF image.', fields: [{ name: 'path', label: 'TIFF path', type: 'testing_file', kind: 'tiff', required: true }] },
   jpeg_dump: { label: 'JPEG dump', method: 'GET', path: '/api/jpeg-dump', desc: 'Run iccJpegDump on a JPEG image.', fields: [{ name: 'path', label: 'JPEG path', type: 'testing_file', kind: 'jpeg', required: true }] },
   png_dump: { label: 'PNG dump', method: 'GET', path: '/api/png-dump', desc: 'Run iccPngDump on a PNG image.', fields: [{ name: 'path', label: 'PNG path', type: 'testing_file', kind: 'png', required: true }] },
+  heif_dump: { label: 'HEIF dump', method: 'GET', path: '/api/heif-dump', desc: 'Run iccHeifDump on a HEIF, HEIC, or AVIF image.', fields: [{ name: 'path', label: 'HEIF, HEIC, or AVIF path', type: 'testing_file', kind: 'heif', required: true }] },
   from_xml: { label: 'XML to ICC', method: 'POST', path: '/api/from-xml', desc: 'Run iccFromXml on an XML file and return an ICC blob as base64.', fields: [{ name: 'xml_path', label: 'XML path', type: 'testing_file', kind: 'xml', required: true }] },
   from_json: { label: 'JSON to ICC', method: 'POST', path: '/api/from-json', desc: 'Run iccFromJson on a JSON file and return an ICC blob as base64.', fields: [{ name: 'json_path', label: 'JSON path', type: 'testing_file', kind: 'json', required: true }] },
   from_cube: { label: 'Cube to ICC', method: 'POST', path: '/api/from-cube', desc: 'Run iccFromCube on a .cube LUT.', fields: [{ name: 'cube_path', label: '.cube path', type: 'testing_file', kind: 'cube', required: true }] },
@@ -855,6 +857,8 @@ API_TOOLS = [
      "description": "JPEG metadata and embedded ICC", "type": "cli"},
     {"name": "png_dump", "method": "GET", "path": "/api/png-dump",
      "description": "PNG metadata and embedded ICC", "type": "cli"},
+    {"name": "heif_dump", "method": "GET", "path": "/api/heif-dump",
+     "description": "HEIF, HEIC, and AVIF metadata and embedded ICC", "type": "cli"},
     {"name": "from_cube", "method": "POST", "path": "/api/from-cube",
      "description": ".cube LUT to ICC profile", "type": "cli"},
     {"name": "apply_profiles", "method": "POST", "path": "/api/apply-profiles",
@@ -1368,6 +1372,23 @@ async def api_png_dump(request: Request) -> JSONResponse:
         return _error(str(e), 500)
 
 
+async def api_heif_dump(request: Request) -> JSONResponse:
+    """GET /api/heif-dump?path= -- HEIF, HEIC, or AVIF metadata and ICC."""
+    path = request.query_params.get("path", "")
+    if not path:
+        return _error("Missing required parameter: path")
+    try:
+        resolved = profiles.resolve_profile_path(path)
+        result = cli_tools.run_heif_dump(str(resolved))
+        return _json(result)
+    except FileNotFoundError as e:
+        return _error(str(e), 404)
+    except ValueError as e:
+        return _error(str(e), 400)
+    except Exception as e:
+        return _error(str(e), 500)
+
+
 async def api_from_cube(request: Request) -> JSONResponse:
     """POST /api/from-cube -- Convert .cube LUT to ICC profile."""
     body = await _json_body(request)
@@ -1679,6 +1700,7 @@ def _build_routes() -> list:
         Route("/api/tiff-dump", api_tiff_dump, methods=["GET"]),
         Route("/api/jpeg-dump", api_jpeg_dump, methods=["GET"]),
         Route("/api/png-dump", api_png_dump, methods=["GET"]),
+        Route("/api/heif-dump", api_heif_dump, methods=["GET"]),
         Route("/api/from-cube", api_from_cube, methods=["POST"]),
         Route("/api/apply-profiles", api_apply_profiles, methods=["POST"]),
         Route("/api/apply-named-cmm", api_apply_named_cmm, methods=["POST"]),

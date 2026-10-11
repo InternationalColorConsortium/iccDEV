@@ -45,7 +45,7 @@ class ToolFunction extends Function {
     this.getName() in [
       "run_dump_profile", "run_to_xml", "run_from_xml",
       "run_to_json", "run_from_json", "run_round_trip",
-      "run_tiff_dump", "run_jpeg_dump", "run_png_dump",
+      "run_tiff_dump", "run_jpeg_dump", "run_png_dump", "run_heif_dump",
       "run_from_cube", "run_apply_profiles",
       "run_apply_named_cmm", "run_apply_to_link",
       "run_v5_to_v4", "run_spec_sep_to_tiff",
@@ -53,7 +53,7 @@ class ToolFunction extends Function {
       // REST API handlers
       "api_dump_profile", "api_inspect_header",
       "api_to_xml", "api_from_xml", "api_round_trip",
-      "api_tiff_dump", "api_jpeg_dump", "api_png_dump",
+      "api_tiff_dump", "api_jpeg_dump", "api_png_dump", "api_heif_dump",
       "api_from_cube", "api_apply_profiles",
       "api_apply_named_cmm", "api_apply_search",
       "api_create_link", "api_v5_to_v4",

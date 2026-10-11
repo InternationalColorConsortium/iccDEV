@@ -29,7 +29,7 @@ class McpToolParameter extends DataFlow::Node {
         // CLI-backed tools
         "dump_profile", "profile_to_xml", "xml_to_profile",
         "profile_to_json", "json_to_profile", "round_trip_test",
-        "tiff_dump", "jpeg_dump", "png_dump", "from_cube",
+        "tiff_dump", "jpeg_dump", "png_dump", "heif_dump", "from_cube",
         "apply_profiles", "apply_named_cmm", "create_link",
         "v5_to_v4", "spec_sep_to_tiff", "apply_search"
       ] and

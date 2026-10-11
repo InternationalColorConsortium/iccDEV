@@ -149,7 +149,7 @@ iccRoundTrip Testing/sRGB_D65_MAT.icc 1
 
 Use the regression Docker image below when you want MCP tools without building
 iccDEV locally. Source installs are for development and require a local
-`ICCDEV_TOOLS_DIR` for the 17 CLI-backed tools.
+`ICCDEV_TOOLS_DIR` for CLI-backed tools.
 
 ### From Source (Development)
 
@@ -224,8 +224,8 @@ The container entrypoint accepts `mcp`/`stdio`, `rest`/`api`, `sse`, and
 
 ### Validate Runtime Capabilities
 
-The static MCP inventory has 26 tools, while `health_check` reports the tools
-available in a specific runtime. An image without the optional native
+The static MCP inventory lists supported tools; `health_check` reports the
+tools available in a specific runtime. An image without the optional native
 validation ABI can correctly report fewer available tools. Validate discovered
 capabilities instead of a fixed total:
 

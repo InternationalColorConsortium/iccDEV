@@ -6,9 +6,9 @@
 """
 Discover and invoke iccDEV CLI tools via subprocess.
 
-Supports 17 CLI tools:
+Supports CLI tools:
 - iccDumpProfile, iccToXml, iccFromXml, iccToJson, iccFromJson
-- iccTiffDump, iccJpegDump, iccPngDump, iccFromCube
+- iccTiffDump, iccJpegDump, iccPngDump, iccHeifDump, iccFromCube
 - iccApplyProfiles, iccApplyNamedCmm, iccApplyToLink
 - iccV5DspObsToV4Dsp, iccSpecSepToTiff, iccApplySearch, iccRoundTrip
 - iccPawgReport
@@ -42,6 +42,7 @@ TOOL_BINARIES = {
     "iccTiffDump": "iccTiffDump",
     "iccJpegDump": "iccJpegDump",
     "iccPngDump": "iccPngDump",
+    "iccHeifDump": "iccHeifDump",
     "iccFromCube": "iccFromCube",
     "iccApplyProfiles": "iccApplyProfiles",
     "iccApplyNamedCmm": "iccApplyNamedCmm",
@@ -329,6 +330,11 @@ def run_jpeg_dump(path: str) -> dict:
 def run_png_dump(path: str) -> dict:
     """Run iccPngDump on a PNG image."""
     return _run_tool("iccPngDump", [path])
+
+
+def run_heif_dump(path: str) -> dict:
+    """Run iccHeifDump on a HEIF, HEIC, or AVIF image."""
+    return _run_tool("iccHeifDump", [path])
 
 
 def run_from_cube(

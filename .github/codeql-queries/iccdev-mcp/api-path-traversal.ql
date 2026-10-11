@@ -3,7 +3,7 @@
  * @description Detects REST API endpoints in rest_api.py that extract path
  *              parameters from HTTP requests and pass them to file or subprocess
  *              operations without validation. Several endpoints (tiff_dump,
- *              jpeg_dump, png_dump) accept path query params that bypass
+ *              jpeg_dump, png_dump, heif_dump) accept path query params that bypass
  *              resolve_profile_path().
  * @kind path-problem
  * @problem.severity error
