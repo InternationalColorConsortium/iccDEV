@@ -34,11 +34,10 @@ from the repository:
 pip install "git+https://github.com/InternationalColorConsortium/iccDEV.git#subdirectory=iccdev-mcp"
 ```
 
-Install it in its own virtual environment. The wheel ships a module named
-`iccdev` that conflicts with the Cython `iccdev` Python bindings.
-
-For full functionality with the pip-installed package, Python-native tools are
-included in the `iccdev-mcp` wheel. The `validate_profile` tool dynamically
+The wheel ships only the `iccdev_mcp` namespace, so it can share an environment
+with the separate Cython `iccdev` bindings. Header inspection and signature
+helpers are included. Pixel transforms require installing the native bindings
+from `python/` in the same environment. The `validate_profile` tool dynamically
 loads the public C validation ABI, so it also needs a shared IccProfLib build.
 CLI-backed tools require iccDEV CLI binaries. Build iccDEV locally or
 set `ICCDEV_TOOLS_DIR` and `ICCDEV_BUILD_DIR` to an existing build. The REST
@@ -229,8 +228,8 @@ iccdev-mcp --transport sse --port 8080
 | `inspect_header` | ICC profile header (22 fields + 6 computed names) |
 | `profile_summary` | Compact profile classification and routing metadata |
 | `validate_profile` | In-memory validation status and report from the native C API; requires a shared IccProfLib build |
-| `color_transform` | Multi-profile color transform via CMM |
-| `roundtrip_delta` | Round-trip fidelity measurement (delta-E) |
+| `color_transform` | Multi-profile CMM transform; requires the native `iccdev` bindings |
+| `roundtrip_delta` | Device-channel round-trip Euclidean distance, not CIE Delta E; requires native bindings |
 | `icc_sig_to_str` | 4-byte ICC signature to string |
 | `enum_spaces` | List all 32 ICC color space identifiers |
 

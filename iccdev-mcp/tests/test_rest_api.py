@@ -111,6 +111,7 @@ class TestHealthEndpoints(unittest.TestCase):
         self.assertTrue(data["ok"])
         self.assertEqual(data["server"], "iccdev-mcp")
         self.assertTrue(data["python_api_available"])
+        self.assertIsInstance(data["transform_api_available"], bool)
         self.assertIn("cli_tools", data)
         self.assertEqual(data["tools_count"], len(API_TOOLS))
 
@@ -342,7 +343,7 @@ class TestNativeToolEndpoints(unittest.TestCase):
         self.assertIn("traversal", resp.json()["error"])
 
     def test_validate_profile_returns_native_result(self):
-        import iccdev
+        from iccdev_mcp import _native as iccdev
         if not iccdev.native_validation_available():
             self.skipTest("Native C validation ABI is not available")
         profiles = self.client.get("/api/profiles").json()["profiles"]
@@ -410,6 +411,29 @@ class TestNativeToolEndpoints(unittest.TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertIn("pixels must be a list", resp.json()["error"])
 
+    def test_color_transform_requires_native_bindings(self):
+        from iccdev_mcp.server import NativeBindingsUnavailable
+        with patch("iccdev_mcp.server._transform_bindings",
+                   side_effect=NativeBindingsUnavailable("native bindings unavailable")):
+            resp = self.client.post(
+                "/api/color-transform",
+                json={"src_profile": "src.icc", "dst_profile": "dst.icc",
+                      "pixels": [[0.5, 0.4, 0.3]]},
+            )
+        self.assertEqual(resp.status_code, 503)
+        self.assertIn("native bindings unavailable", resp.json()["error"])
+
+    def test_color_transform_runtime_failure_is_server_error(self):
+        with patch("iccdev_mcp.server._transform_bindings",
+                   side_effect=RuntimeError("CMM failed")):
+            resp = self.client.post(
+                "/api/color-transform",
+                json={"src_profile": "src.icc", "dst_profile": "dst.icc",
+                      "pixels": [[0.5, 0.4, 0.3]]},
+            )
+        self.assertEqual(resp.status_code, 500)
+        self.assertIn("CMM failed", resp.json()["error"])
+
     def test_color_transform_rejects_oversized_json_body(self):
         from iccdev_mcp import rest_api
 
@@ -454,6 +478,17 @@ class TestNativeToolEndpoints(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 400)
         self.assertIn("pixels", resp.json()["error"])
+
+    def test_roundtrip_delta_requires_native_bindings(self):
+        from iccdev_mcp.server import NativeBindingsUnavailable
+        with patch("iccdev_mcp.server._transform_bindings",
+                   side_effect=NativeBindingsUnavailable("native bindings unavailable")):
+            resp = self.client.post(
+                "/api/roundtrip-delta",
+                json={"profile": "profile.icc", "pixels": [[0.5, 0.4, 0.3]]},
+            )
+        self.assertEqual(resp.status_code, 503)
+        self.assertIn("native bindings unavailable", resp.json()["error"])
 
     def test_enum_spaces_returns_color_spaces(self):
         resp = self.client.get("/api/enum-spaces")

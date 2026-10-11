@@ -313,7 +313,7 @@ RUN git checkout -- silence.txt \
 USER 0
 RUN bash /workspace/iccDEV/.github/ci/docker/build-validation-library.sh \
       /workspace/iccDEV /opt/iccdev-validation/lib "$BUILD_JOBS" \
- && /opt/iccdev-mcp/bin/python -c "import iccdev; from pathlib import Path; assert iccdev.native_validation_available(); result = iccdev.validate_profile_file(Path(\"/workspace/iccDEV/Testing/sRGB_v4_ICC_preference.icc\")); assert result.status == iccdev.ValidationStatus.OK, result"
+ && /opt/iccdev-mcp/bin/python -c "from iccdev_mcp import _native as iccdev; from pathlib import Path; assert iccdev.native_validation_available(); result = iccdev.validate_profile_file(Path(\"/workspace/iccDEV/Testing/sRGB_v4_ICC_preference.icc\")); assert result.status == iccdev.ValidationStatus.OK, result"
 
 RUN chmod 0755 /usr/local/bin/iccdev-banner \
  && chmod 0755 /usr/local/bin/iccdev-fuzz-env \

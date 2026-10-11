@@ -51,7 +51,7 @@ Documentation = "https://github.com/InternationalColorConsortium/iccDEV/tree/mas
 Issues = "https://github.com/InternationalColorConsortium/iccDEV/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["iccdev_mcp", "iccdev"]
+packages = ["iccdev_mcp"]
 
 [tool.hatch.version]
 path = "iccdev_mcp/__init__.py"

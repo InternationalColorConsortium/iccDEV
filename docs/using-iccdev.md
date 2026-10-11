@@ -522,9 +522,9 @@ claude mcp add iccdev -- docker run --rm -i ghcr.io/internationalcolorconsortium
 ### Option B: pip plus a tools bundle (no Docker)
 
 `iccdev-mcp` is pure Python (3.10 or newer) and installs without a compiler,
-but it is **not on PyPI yet**, so install it from the repository. Give it its
-own virtual environment: it ships a module that is also named `iccdev`, and it
-must not share an environment with the Python bindings above.
+but it is **not on PyPI yet**, so install it from the repository. It can share
+an environment with the native Python bindings because the MCP wheel ships
+only the `iccdev_mcp` namespace.
 
 ```bash
 python -m venv mcp-venv
@@ -572,9 +572,12 @@ report".
 | Convert colours or images | `apply_named_cmm`, `apply_profiles`, `create_link` |
 | Inspect an image's embedded profile | `tiff_dump`, `jpeg_dump`, `png_dump`, `heif_dump` |
 
-**For real colour conversion use `apply_named_cmm` or `apply_profiles`.** The
-`color_transform` and `roundtrip_delta` tools currently run a placeholder that
-passes values through unchanged; they do not apply the profiles.
+`color_transform` and `roundtrip_delta` require the compiled `iccdev` Python
+bindings in the same environment. Without them, health checks omit these two
+capabilities and calls return a clear error. `roundtrip_delta` reports Euclidean
+distance in device-channel units, not CIE Delta E. The CLI-backed
+`apply_named_cmm`, `apply_profiles`, and `round_trip_test` remain available
+without the binding when their binaries are installed.
 
 The server can also run as a local REST service with a browser dashboard
 (`iccdev-mcp-entrypoint rest` in the container). Transports, the full tool
@@ -589,8 +592,6 @@ These are the places where a prebuilt, install-and-go path does not exist yet.
 |------|------------|------------|
 | Python | `iccdev` is not on PyPI; no prebuilt wheels (<a href="https://github.com/InternationalColorConsortium/iccDEV/issues/2799">#2799</a>) | `pip` install from the repository (compiles), or use the tools through `subprocess` |
 | MCP | `iccdev-mcp` is not on PyPI (<a href="https://github.com/InternationalColorConsortium/iccDEV/issues/2800">#2800</a>) | `pip` install from the repository, or use Docker |
-| MCP | `color_transform` and `roundtrip_delta` do not apply profiles (<a href="https://github.com/InternationalColorConsortium/iccDEV/issues/2797">#2797</a>) | Use `apply_named_cmm`, `apply_profiles`, `round_trip_test` |
-| MCP and Python | Both packages install a module named `iccdev` (<a href="https://github.com/InternationalColorConsortium/iccDEV/issues/2798">#2798</a>) | Use separate virtual environments |
 | MATLAB | Prebuilt MEX is Windows-only and tied to one MATLAB release (<a href="https://github.com/InternationalColorConsortium/iccDEV/issues/2801">#2801</a>) | Build the MEX gateway once on other platforms |
 | WebAssembly | Node.js only; tool-style interface, no browser package | Wrap `callMain` as shown above |
 | Docker | One large image with sanitizer-instrumented tools | Use a release bundle for speed |

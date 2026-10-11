@@ -34,7 +34,7 @@ from iccdev_mcp.cli_tools import _find_tool, discover_tools, TOOL_BINARIES
 class TestValidationLibraryOverrides:
     @pytest.mark.parametrize("value", ["", "/missing/libIccProfLib2.so"])
     def test_invalid_explicit_override_fails_closed(self, monkeypatch, tmp_path, value):
-        import iccdev
+        from iccdev_mcp import _native as iccdev
         library = tmp_path / "IccProfLib" / "libIccProfLib2.so"
         library.parent.mkdir()
         library.write_bytes(b"not a library")
@@ -47,7 +47,7 @@ class TestValidationLibraryOverrides:
             iccdev.validate_profile(b"invalid profile")
 
     def test_explicit_library_precedes_build_dir(self, monkeypatch, tmp_path):
-        import iccdev
+        from iccdev_mcp import _native as iccdev
         library = tmp_path / "explicit.so"
         library.write_bytes(b"not a library")
         monkeypatch.setenv("ICCDEV_VALIDATION_LIBRARY", str(library))
@@ -58,7 +58,7 @@ class TestValidationLibraryOverrides:
             iccdev.validate_profile(b"profile")
 
     def test_build_dir_when_explicit_library_unset(self, monkeypatch, tmp_path):
-        import iccdev
+        from iccdev_mcp import _native as iccdev
         library = tmp_path / "IccProfLib" / "libIccProfLib2.so"
         library.parent.mkdir()
         library.write_bytes(b"not a library")
@@ -67,7 +67,7 @@ class TestValidationLibraryOverrides:
         assert iccdev._validation_library_path() == library
 
     def test_optional_without_native_configuration(self, monkeypatch):
-        import iccdev
+        from iccdev_mcp import _native as iccdev
         monkeypatch.delenv("ICCDEV_VALIDATION_LIBRARY", raising=False)
         monkeypatch.delenv("ICCDEV_BUILD_DIR", raising=False)
         assert not iccdev.native_validation_available()
@@ -310,15 +310,11 @@ async def test_server_discover_request_succeeds():
 
 
 # ---------------------------------------------------------------------------
-# Python-native tool tests (require iccdev)
+# Python-native tool tests (use bundled header helpers)
 # ---------------------------------------------------------------------------
 
-# Check if iccdev is available
-try:
-    import iccdev
-    HAS_ICCDEV = hasattr(iccdev, "IccProfile")
-except ImportError:
-    HAS_ICCDEV = False
+from iccdev_mcp import _native as iccdev
+HAS_ICCDEV = hasattr(iccdev, "IccProfile")
 
 # Find a test profile
 _test_profile = None
@@ -369,7 +365,7 @@ class TestNativeTools:
         assert all(0x20 <= ord(ch) <= 0x7E for ch in result["color_space_display"])
 
     def test_validate_profile(self):
-        import iccdev
+        from iccdev_mcp import _native as iccdev
         from iccdev_mcp.server import validate_profile
         if not iccdev.native_validation_available():
             pytest.skip("Native C validation ABI is not available")
@@ -585,6 +581,45 @@ class TestPixelValidation:
         from iccdev_mcp.server import roundtrip_delta
         with pytest.raises(ValueError, match="must be finite"):
             roundtrip_delta("profile.icc", [[0.5, math.nan, 0.1]])
+
+
+def test_transforms_fail_closed_without_compiled_bindings(monkeypatch):
+    from iccdev_mcp.server import color_transform, health_check, roundtrip_delta
+
+    monkeypatch.setitem(sys.modules, "iccdev", None)
+    with pytest.raises(RuntimeError, match="compiled iccdev Python bindings"):
+        color_transform("src.icc", "dst.icc", [[0.5, 0.4, 0.3]])
+    with pytest.raises(RuntimeError, match="compiled iccdev Python bindings"):
+        roundtrip_delta("profile.icc", [[0.5, 0.4, 0.3]])
+    available = health_check()["python_api"]["available_tools"]
+    assert "color_transform" not in available
+    assert "roundtrip_delta" not in available
+    assert "inspect_header" in available
+
+
+@pytest.mark.skipif(not _test_profile, reason="No test profiles found")
+def test_native_transforms_apply_profiles():
+    from iccdev_mcp.server import _transform_available, color_transform, roundtrip_delta
+
+    if not _transform_available():
+        pytest.skip("Compiled iccdev bindings are unavailable")
+    testing = _find_testing_dir()
+    profile = testing / "sRGB_v4_ICC_preference.icc"
+    if not profile.is_file():
+        pytest.skip("sRGB_v4_ICC_preference.icc is unavailable")
+
+    pixels = [[1.0, 0.0, 0.0], [0.4, 0.5, 0.6]]
+    transformed = color_transform(str(profile), str(profile), pixels)
+    assert transformed["src_channels"] == transformed["dst_channels"] == 3
+    assert transformed["pixel_count"] == 2
+    assert len(transformed["pixels"]) == 2
+    assert abs(transformed["pixels"][0][0] - pixels[0][0]) > 0.001
+
+    roundtrip = roundtrip_delta(str(profile), pixels)
+    assert len(roundtrip["roundtripped"]) == len(pixels)
+    assert all(len(row) == 3 for row in roundtrip["roundtripped"])
+    assert roundtrip["stats"]["pixel_count"] == len(pixels)
+    assert 0 < roundtrip["deltas"][0] < 0.05
 
 
 def test_dump_profile_passes_cli_options(monkeypatch, tmp_path):

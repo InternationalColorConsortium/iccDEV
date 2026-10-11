@@ -5,10 +5,8 @@
 
 """Small Python-native ICC profile interface used by iccdev-mcp.
 
-This module provides the import surface expected by the MCP server without
-requiring an unpublished external ``iccdev`` wheel. It parses ICC headers
-directly, provides deterministic identity transforms for REST/MCP smoke
-testing, and dynamically loads the public C validation ABI when available.
+This module parses ICC headers and loads the public C validation ABI when
+available. Color transforms require the separate native iccdev bindings.
 """
 
 from __future__ import annotations
@@ -287,49 +285,6 @@ class IccProfile:
 def open_profile(path: str | Path) -> IccProfile:
     """Open and parse an ICC profile header."""
     return IccProfile(path)
-
-
-class IccCmm:
-    """Deterministic identity CMM used for Python-native MCP endpoints."""
-
-    def __init__(self):
-        self._profiles: list[IccProfile] = []
-        self.src_channels = 0
-        self.dst_channels = 0
-
-    def attach(
-        self,
-        path: str | Path,
-        intent: RenderingIntent = RenderingIntent.Perceptual,
-        interp: Interpolation = Interpolation.Tetrahedral,
-    ) -> None:
-        del intent, interp
-        self._profiles.append(open_profile(path))
-
-    def begin(self) -> None:
-        if not self._profiles:
-            raise ValueError("at least one profile must be attached")
-        first = self._profiles[0].header.color_space
-        last = self._profiles[-1].header.color_space
-        self.src_channels = _channel_count(first)
-        self.dst_channels = _channel_count(last)
-
-    def apply_multi(self, pixels: list[list[float]]) -> list[list[float]]:
-        if self.dst_channels <= 0:
-            self.begin()
-        transformed: list[list[float]] = []
-        for pixel in pixels:
-            values = [float(value) for value in pixel]
-            if len(values) >= self.dst_channels:
-                transformed.append(values[:self.dst_channels])
-            else:
-                transformed.append(values + [0.0] * (self.dst_channels - len(values)))
-        return transformed
-
-    def close(self) -> None:
-        for profile in self._profiles:
-            profile.close()
-        self._profiles = []
 
 
 def _parse_header(data: bytes) -> IccHeader:

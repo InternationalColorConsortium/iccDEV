@@ -398,12 +398,14 @@ PCS, rendering intent, platform, and Profile ID.
 
 Applies multi-profile color transforms via the iccDEV CMM. Accepts pixel
 data as a list of float values, converts through a profile chain with
-specified rendering intent and interpolation method.
+specified rendering intent and interpolation method. Requires the compiled
+`iccdev` Python bindings installed alongside `iccdev-mcp`.
 
 ### roundtrip_delta
 
-Measures round-trip color fidelity by transforming sample data through
-AToB then BToA paths and computing delta-E between input and output.
+Measures round-trip device-channel fidelity by transforming sample data through
+AToB then BToA paths and computing Euclidean channel distance between input
+and output. This is not CIE Delta E. Requires the compiled `iccdev` bindings.
 
 ### icc_sig_to_str
 

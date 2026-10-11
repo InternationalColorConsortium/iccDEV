@@ -22,7 +22,7 @@ from typing import Optional
 
 from mcp.server.mcpserver import MCPServer
 
-from iccdev_mcp import __version__, cli_tools
+from iccdev_mcp import __version__, _native, cli_tools
 from iccdev_mcp.profiles import list_profiles, resolve_profile_path
 
 mcp = MCPServer(
@@ -48,12 +48,34 @@ _SERVICE_TOOL_NAMES = ("health_check", "list_available_profiles")
 
 
 def _check_iccdev():
-    """Verify iccdev is importable; raise clear error if not."""
+    """Check whether the bundled header and validation helpers are available."""
+    return _native is not None
+
+
+class NativeBindingsUnavailable(RuntimeError):
+    """The optional compiled transform backend cannot be loaded."""
+
+
+def _transform_bindings():
+    """Require the compiled IccProfLib binding for pixel transforms."""
     try:
-        import iccdev  # noqa: F401
-        return True
-    except ImportError:
+        import iccdev
+        import iccdev._iccdev  # noqa: F401
+    except ImportError as exc:
+        raise NativeBindingsUnavailable(
+            "Color transforms require the compiled iccdev Python bindings "
+            "and their runtime libraries; install the python/ package in "
+            "this environment"
+        ) from exc
+    return iccdev
+
+
+def _transform_available() -> bool:
+    try:
+        _transform_bindings()
+    except NativeBindingsUnavailable:
         return False
+    return True
 
 
 def _validate_pixels(pixels: list[list[float]]) -> None:
@@ -102,7 +124,7 @@ def inspect_header(path: str) -> dict:
     Args:
         path: ICC profile path (absolute, relative, or filename to search).
     """
-    import iccdev
+    iccdev = _native
 
     resolved = resolve_profile_path(path)
     profile = iccdev.open_profile(str(resolved))
@@ -139,7 +161,7 @@ def profile_summary(path: str) -> dict:
     Args:
         path: ICC profile path (absolute, relative, or filename to search).
     """
-    import iccdev
+    iccdev = _native
 
     resolved = resolve_profile_path(path)
     profile = iccdev.open_profile(str(resolved))
@@ -189,7 +211,7 @@ def validate_profile(path: str) -> dict:
         Dict with the resolved file path, numeric status, status name, and
         native validation report.
     """
-    import iccdev
+    iccdev = _native
 
     resolved = resolve_profile_path(path)
     result = iccdev.validate_profile_file(str(resolved))
@@ -233,7 +255,7 @@ def color_transform(
     """
     _validate_pixels(pixels)
 
-    import iccdev
+    iccdev = _transform_bindings()
 
     intent_map = {
         "perceptual": iccdev.RenderingIntent.Perceptual,
@@ -267,6 +289,8 @@ def color_transform(
         cmm.attach(str(src_path), intent=ri, interp=interp)
         cmm.attach(str(dst_path), intent=ri, interp=interp)
         cmm.begin()
+        if any(len(pixel) != cmm.src_channels for pixel in pixels):
+            raise ValueError(f"Each pixel must have {cmm.src_channels} source channels")
         transformed = cmm.apply_multi(pixels)
         return {
             "pixels": transformed,
@@ -288,10 +312,10 @@ def roundtrip_delta(
     pixels: list[list[float]],
     intent: str = "perceptual",
 ) -> dict:
-    """Compute round-trip delta-E for an ICC profile.
+    """Compute round-trip device-channel distance for an ICC profile.
 
-    Transforms pixels device -> PCS -> device and measures the difference
-    between original and round-tripped values (Euclidean distance).
+    Transforms pixels device -> PCS -> device and measures Euclidean distance
+    in device-channel units. This is not a CIE Delta E measurement.
 
     Args:
         profile: ICC profile path.
@@ -304,7 +328,7 @@ def roundtrip_delta(
     """
     _validate_pixels(pixels)
 
-    import iccdev
+    iccdev = _transform_bindings()
 
     intent_map = {
         "perceptual": iccdev.RenderingIntent.Perceptual,
@@ -324,16 +348,22 @@ def roundtrip_delta(
     try:
         fwd.attach(path_str, intent=ri)
         fwd.begin()
+        if any(len(pixel) != fwd.src_channels for pixel in pixels):
+            raise ValueError(f"Each pixel must have {fwd.src_channels} device channels")
         pcs_values = fwd.apply_multi(pixels)
     finally:
         fwd.close()
 
     # Reverse transform: PCS -> device
-    rev = iccdev.IccCmm()
+    rev = iccdev.IccCmm(first_is_input=False)
     try:
         rev.attach(path_str, intent=ri)
         rev.begin()
+        if any(len(pixel) != rev.src_channels for pixel in pcs_values):
+            raise RuntimeError("Forward PCS channels do not match reverse source channels")
         roundtripped = rev.apply_multi(pcs_values)
+        if rev.dst_channels != len(pixels[0]):
+            raise RuntimeError("Reverse device channels do not match input pixels")
     finally:
         rev.close()
 
@@ -385,7 +415,7 @@ def icc_sig_to_str(signature: int) -> dict:
     Returns:
         Dict with 'signature' (int), 'string' (4-char), and 'hex'.
     """
-    import iccdev
+    iccdev = _native
 
     s = iccdev.sig_to_str(signature)
     return {
@@ -409,7 +439,7 @@ def enum_spaces() -> dict:
     Returns:
         Dict with 'color_spaces' list of {name, value} entries and 'count'.
     """
-    import iccdev
+    iccdev = _native
 
     spaces = []
     for member in iccdev.ColorSpace:
@@ -464,12 +494,7 @@ def health_check() -> dict:
     python_ok = _check_iccdev()
     validation_ok = False
     if python_ok:
-        import iccdev
-        validation_ok = getattr(
-            iccdev,
-            "native_validation_available",
-            lambda: hasattr(iccdev, "validate_profile_file"),
-        )()
+        validation_ok = _native.native_validation_available()
     profiles = list_profiles()
 
     # Check CLI tools availability
@@ -480,6 +505,9 @@ def health_check() -> dict:
         cli_status = {"available": [], "missing": [], "tools_dir": None}
 
     native_tools = list(_NATIVE_TOOL_NAMES) if python_ok else []
+    if not _transform_available():
+        native_tools = [name for name in native_tools
+                        if name not in ("color_transform", "roundtrip_delta")]
     if validation_ok:
         native_tools.extend(_VALIDATION_TOOL_NAMES)
     available_cli_tools = cli_status.get("available", [])

@@ -42,6 +42,7 @@ except ImportError:
     HAS_UVICORN = False
 
 from iccdev_mcp import __version__, cli_tools, profiles
+from iccdev_mcp.server import NativeBindingsUnavailable
 
 # Maximum upload size: 20 MB
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
@@ -322,8 +323,8 @@ const TOOLS = {
   profile_summary: { label: 'Profile summary', method: 'GET', path: '/api/profile-summary', desc: 'Compact Python-native profile classification and routing metadata.', fields: [{ name: 'path', label: 'ICC profile', type: 'profile', required: true }] },
   validate_profile: { label: 'Validate profile', method: 'GET', path: '/api/validate-profile', desc: 'Validate an ICC profile in memory and return its native status and report.', fields: [{ name: 'path', label: 'ICC profile', type: 'profile', required: true }] },
   sig_to_str: { label: 'Signature to string', method: 'GET', path: '/api/sig-to-str', desc: 'Decode a 32-bit ICC signature integer.', fields: [{ name: 'sig', label: 'Signature integer', type: 'number', value: '1380401696', required: true }] },
-  color_transform: { label: 'Color transform', method: 'POST', path: '/api/color-transform', desc: 'Apply a Python-native CMM transform between compatible RGB display profiles. Overprint, high-channel, named-color, and calculator test profiles may reject the default 3-channel pixel input with BadXform.', fields: [{ name: 'src_profile', label: 'Source profile', type: 'profile', required: true, prefer: 'rgb_transform' }, { name: 'dst_profile', label: 'Destination profile', type: 'profile', required: true, prefer: 'rgb_transform' }, { name: 'pixels', label: 'Pixels JSON', type: 'json', value: '[[0.5,0.4,0.3]]', required: true }, { name: 'rendering_intent', label: 'Rendering intent', type: 'select', value: 'perceptual', options: ['perceptual', 'relative', 'saturation', 'absolute'] }, { name: 'interpolation', label: 'Interpolation', type: 'select', value: 'tetrahedral', options: ['tetrahedral', 'linear'] }] },
-  roundtrip_delta: { label: 'Roundtrip delta', method: 'POST', path: '/api/roundtrip-delta', desc: 'Measure Python-native round-trip delta for profile pixels.', fields: [{ name: 'profile', label: 'ICC profile', type: 'profile', required: true }, { name: 'pixels', label: 'Pixels JSON', type: 'json', value: '[[0.5,0.4,0.3]]', required: true }, { name: 'rendering_intent', label: 'Rendering intent', type: 'select', value: 'perceptual', options: ['perceptual', 'relative', 'saturation', 'absolute'] }] },
+  color_transform: { label: 'Color transform', method: 'POST', path: '/api/color-transform', desc: 'Apply the native IccProfLib CMM between compatible profiles. Requires the separate compiled iccdev Python bindings.', fields: [{ name: 'src_profile', label: 'Source profile', type: 'profile', required: true, prefer: 'rgb_transform' }, { name: 'dst_profile', label: 'Destination profile', type: 'profile', required: true, prefer: 'rgb_transform' }, { name: 'pixels', label: 'Pixels JSON', type: 'json', value: '[[0.5,0.4,0.3]]', required: true }, { name: 'rendering_intent', label: 'Rendering intent', type: 'select', value: 'perceptual', options: ['perceptual', 'relative', 'saturation', 'absolute'] }, { name: 'interpolation', label: 'Interpolation', type: 'select', value: 'tetrahedral', options: ['tetrahedral', 'linear'] }] },
+  roundtrip_delta: { label: 'Roundtrip channel distance', method: 'POST', path: '/api/roundtrip-delta', desc: 'Measure native device to PCS to device Euclidean channel distance (not CIE Delta E). Requires compiled iccdev Python bindings.', fields: [{ name: 'profile', label: 'ICC profile', type: 'profile', required: true }, { name: 'pixels', label: 'Pixels JSON', type: 'json', value: '[[0.5,0.4,0.3]]', required: true }, { name: 'rendering_intent', label: 'Rendering intent', type: 'select', value: 'perceptual', options: ['perceptual', 'relative', 'saturation', 'absolute'] }] },
   dump_profile: { label: 'Dump profile', method: 'GET', path: '/api/dump', desc: 'Run iccDumpProfile with documented validation, verbosity, and tag options.', fields: [{ name: 'path', label: 'ICC profile', type: 'profile', required: true }, { name: 'validate', label: 'Validate (-v)', type: 'select', value: 'true', options: ['true', 'false'] }, { name: 'verbosity', label: 'Verbosity', type: 'number', value: '100' }, { name: 'tag', label: 'Tag', type: 'text', value: 'ALL' }] },
   pawg_report: { label: 'PAWG report', method: 'GET', path: '/api/pawg-report', desc: 'Run iccPawgReport security, conformance, and quality checklist.', fields: [{ name: 'path', label: 'ICC profile', type: 'profile', required: true }] },
   to_xml: { label: 'ICC to XML', method: 'GET', path: '/api/to-xml', desc: 'Run iccToXml.', fields: [{ name: 'path', label: 'ICC profile', type: 'profile', required: true }] },
@@ -890,7 +891,7 @@ async def api_health(request: Request) -> JSONResponse:
     tools_info = cli_tools.discover_tools()
 
     try:
-        import iccdev
+        from iccdev_mcp import _native as iccdev
         python_api = True
         validation_api = getattr(
             iccdev,
@@ -901,12 +902,15 @@ async def api_health(request: Request) -> JSONResponse:
         python_api = False
         validation_api = False
 
+    from iccdev_mcp.server import _transform_available
+
     return _json({
         "ok": True,
         "server": "iccdev-mcp",
         "version": __version__,
         "python_api_available": python_api,
         "validation_api_available": validation_api,
+        "transform_api_available": _transform_available(),
         "cli_tools": {
             "available": tools_info["available"],
             "missing": tools_info["missing"],
@@ -1015,6 +1019,8 @@ async def api_color_transform(request: Request) -> JSONResponse:
         from iccdev_mcp.server import color_transform
         result = color_transform(src, dst, pixels, intent, interp)
         return _json(result)
+    except NativeBindingsUnavailable as e:
+        return _error(str(e), 503)
     except ImportError:
         return _error("iccdev Python package not installed", 503)
     except FileNotFoundError as e:
@@ -1046,6 +1052,8 @@ async def api_roundtrip_delta(request: Request) -> JSONResponse:
         from iccdev_mcp.server import roundtrip_delta
         result = roundtrip_delta(profile_path, pixels, intent)
         return _json(result)
+    except NativeBindingsUnavailable as e:
+        return _error(str(e), 503)
     except ImportError:
         return _error("iccdev Python package not installed", 503)
     except FileNotFoundError as e:
