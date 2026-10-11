@@ -157,8 +157,11 @@ namespace iccdev_heif
               : bytes[offset];
           offset += indexSize;
           const std::uint32_t index = value & (widePropertyIndex ? 0x7fff : 0x7f);
-          if (index == 0 || index > properties.size()) {
+          if (index == 0) {
             continue;
+          }
+          if (index > properties.size()) {
+            return false;
           }
           const Box& property = properties[index - 1];
           if (property.type != "colr" || property.end - property.payload < 4) {
