@@ -12,6 +12,7 @@ ICC color profile library, built as a MEX extension.
 - **Profile plots** - render data from the `iccProfilePlot` visualization model
 - **CIEDE2000** - compare one or more corresponding CIELAB colour pairs
 - **IccJSON conversion** - convert profiles to editable JSON and JSON back to ICC bytes
+- **HEIF ICC inspection** - report embedded ICC properties in HEIF, HEIC, and AVIF images
 - **PAWG Q1 audit** - independently calculate metrics over shared CMM transforms and compare structured native results
 - **NumPy-compatible** - handles column-major <-> row-major transpose automatically
 - **Compatible** - MATLAB R2015b+ and GNU Octave 6+
@@ -27,6 +28,7 @@ ICC color profile library, built as a MEX extension.
 The PAWG Q1 audit has the same runtime requirements and also requires the
 `iccPawgReport` executable. IccJSON conversion requires the same Java-enabled
 runtime plus `iccToJson` and `iccFromJson`.
+`iccdev.heif_dump` requires the same Java-enabled runtime plus `iccHeifDump`.
 
 ## Quick Start
 
@@ -145,6 +147,7 @@ cmm.close();
 | `iccdev.sig_to_str(sig)` | Convert 4-byte ICC signature to ASCII string |
 | `iccdev.to_json(profile, ...)` | Convert an ICC profile to IccJSON text with `iccToJson` |
 | `iccdev.from_json(json, ...)` | Convert IccJSON text or a JSON file to ICC bytes with `iccFromJson` |
+| `iccdev.heif_dump(image, ...)` | Report HEIF, HEIC, or AVIF ICC properties with `iccHeifDump` |
 | `iccdev.plot(profile, ...)` | Render all graph visualizations exposed by `iccProfilePlot` |
 | `iccdev.qa.delta_e_2000(lab1, lab2)` | Calculate CIEDE2000 for equal-sized `N`-by-3 CIELAB arrays |
 | `iccdev.qa.audit_pawg_q1(profile, ...)` | Calculate PAWG Q1 metrics and compare them with `iccPawgReport --json` |
@@ -188,6 +191,25 @@ version-specific reserved fields, creation date/time ranges, tag-table bounds,
 four-byte alignment, shared data, overlap and padding rules, and Profile ID
 MD5 when an ID is present. These are binary container checks, not a claim of
 complete class-specific or tag-type conformance.
+
+### HEIF ICC inspection
+
+`iccdev.heif_dump` invokes `iccHeifDump` through Java `ProcessBuilder`, never
+a shell. It returns the native carrier metadata and IccProfLib parse statuses.
+The MATLAB example opens a visible file chooser because the repository does not
+ship a generic HEIF input fixture:
+
+```matlab
+run(fullfile('matlab', 'examples', 'heif_dump.m'));
+```
+
+To select a configured build without changing the process environment:
+
+```matlab
+report = iccdev.heif_dump(image_path, ...
+  'BuildDir', fullfile(repo_root, 'build-matlab-full'));
+fprintf('%s\n', report);
+```
 
 ### CIEDE2000 colour difference
 

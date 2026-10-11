@@ -21,3 +21,9 @@ or update the focused regression before fixing demonstrated behavior, and use
 `--no-tests=error` for CTest discovery and execution.
 Keep hosted Nokia dependency validation isolated in
 `.github/workflows/ci-nokia-heif-icc-smoke.yml`.
+
+When MATLAB integration is in scope, update `iccdev.heif_dump`, its
+input-validation and bare-invocation tests, `matlab/examples/heif_dump.m`, and
+the MATLAB build and staged-artifact requirements. Use Java `ProcessBuilder`,
+not a shell command string, and keep the example interactive unless a checked-in
+HEIF fixture is available.

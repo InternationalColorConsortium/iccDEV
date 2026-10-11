@@ -25,8 +25,13 @@ function json_text = to_json(profile_path, varargin)
 
   output_path = [tempname '.json'];
   cleanup = onCleanup(@() delete_if_exists(output_path));
-  run_json_tool('iccToJson', char(p.Results.profile_path), ...
-    output_path, char(p.Results.BuildDir), char(p.Results.ToJsonTool));
+  run_cli_tool('iccToJson', char(p.Results.profile_path), ...
+    {output_path}, char(p.Results.BuildDir), char(p.Results.ToJsonTool), ...
+    'iccdev:json');
+  if exist(output_path, 'file') ~= 2
+    error('iccdev:jsonOutputMissing', ...
+      'iccToJson succeeded but did not create: %s', output_path);
+  end
   json_text = read_utf8(output_path);
   clear cleanup;
 end

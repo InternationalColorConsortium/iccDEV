@@ -47,6 +47,8 @@ function invoke_without_arguments(name)
       iccdev.to_json();
     case 'from_json'
       iccdev.from_json();
+    case 'heif_dump'
+      iccdev.heif_dump();
     case 'sig_to_str'
       iccdev.sig_to_str();
     case 'docker_validate'

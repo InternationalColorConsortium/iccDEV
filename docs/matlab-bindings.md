@@ -100,7 +100,7 @@ $BuildArgs = @(
   '--build', $Build
   '--config', 'Release'
   '--target', 'IccProfLib2-static', 'IccJSON2-static', 'iccToJson',
-    'iccFromJson', 'iccProfilePlot', 'iccPawgReport',
+    'iccFromJson', 'iccHeifDump', 'iccProfilePlot', 'iccPawgReport',
     'iccPawgQ1QualityContractTest'
   '--', '/m'
 )
@@ -111,7 +111,8 @@ if ($LASTEXITCODE -ne 0) {
 
 $PlotTool = Join-Path $Build 'bin\Release\iccProfilePlot.exe'
 $PawgTool = Join-Path $Build 'bin\Release\iccPawgReport.exe'
-foreach ($RequiredTool in @($PlotTool, $PawgTool)) {
+$HeifTool = Join-Path $Build 'bin\Release\iccHeifDump.exe'
+foreach ($RequiredTool in @($PlotTool, $PawgTool, $HeifTool)) {
   if (-not (Test-Path $RequiredTool -PathType Leaf)) {
     throw "Required MATLAB QA tool was not built: $RequiredTool"
   }
@@ -166,6 +167,7 @@ repository-relative support paths used by QA and examples:
   IccJSON structure coverage.
 - `iccToJson.exe` and `iccFromJson.exe` at the bundle root for IccJSON
   conversion.
+- `iccHeifDump.exe` at the bundle root for MATLAB HEIF ICC inspection.
 - `iccPawgReport.exe` at the bundle root for MATLAB/native Q1 comparison.
 - `matlab/+iccdev/+qa/audit_pawg_q1.m`, its calculation helpers, and
   `matlab/tests/test_pawg_q1.m`.
@@ -235,6 +237,8 @@ assert(exist(fullfile(build_dir, 'bin', 'Release', ...
   'iccToJson.exe'), 'file') == 2, 'Build iccToJson before MATLAB QA.');
 assert(exist(fullfile(build_dir, 'bin', 'Release', ...
   'iccFromJson.exe'), 'file') == 2, 'Build iccFromJson before MATLAB QA.');
+assert(exist(fullfile(build_dir, 'bin', 'Release', ...
+  'iccHeifDump.exe'), 'file') == 2, 'Build iccHeifDump before MATLAB QA.');
 
 test_usage_guidance();
 test_delta_e_2000();
@@ -373,6 +377,21 @@ test_delta_e_2000();
 test_plot();
 summary = test_iccdev();
 assert(summary.failed == 0 && summary.skipped == 0);
+```
+
+Inspect an HEIF, HEIC, or AVIF input through the shell-free MATLAB wrapper.
+The interactive example requests a real user-selected image because the
+repository does not ship a generic HEIF fixture:
+
+```matlab
+run(fullfile(repo_root, 'matlab', 'examples', 'heif_dump.m'));
+```
+
+For automation, pass an existing image path and an explicit build:
+
+```matlab
+report = iccdev.heif_dump(image_path, 'BuildDir', build_dir);
+disp(report);
 ```
 
 ## Profiles

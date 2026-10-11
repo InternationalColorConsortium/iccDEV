@@ -29,16 +29,17 @@ profiles, examples, and native handle lifecycle behavior.
      '--build', $Build
      '--config', 'Release'
      '--target', 'IccProfLib2-static', 'IccJSON2-static', 'iccToJson',
-     'iccFromJson', 'iccProfilePlot', 'iccPawgReport',
+     'iccFromJson', 'iccHeifDump', 'iccProfilePlot', 'iccPawgReport',
      'iccPawgQ1QualityContractTest'
      '--', '/m'
    )
    cmake @BuildArgs
    $ToJsonTool = Join-Path $Build 'bin\Release\iccToJson.exe'
    $FromJsonTool = Join-Path $Build 'bin\Release\iccFromJson.exe'
+   $HeifTool = Join-Path $Build 'bin\Release\iccHeifDump.exe'
    $PlotTool = Join-Path $Build 'bin\Release\iccProfilePlot.exe'
    $PawgTool = Join-Path $Build 'bin\Release\iccPawgReport.exe'
-   foreach ($RequiredTool in @($ToJsonTool, $FromJsonTool, $PlotTool, $PawgTool)) {
+   foreach ($RequiredTool in @($ToJsonTool, $FromJsonTool, $HeifTool, $PlotTool, $PawgTool)) {
      if (-not (Test-Path $RequiredTool -PathType Leaf)) {
        throw "Required MATLAB QA tool was not built: $RequiredTool"
      }
@@ -142,6 +143,7 @@ profiles, examples, and native handle lifecycle behavior.
    addpath(fullfile(repo_root, 'matlab'));
    addpath(fullfile(repo_root, 'matlab', 'tests'));
    test_usage_guidance();
+   test_heif_dump_input_validation();
    test_delta_e_2000();
    test_json_bindings();
    test_lut_type_range();
@@ -192,6 +194,8 @@ profiles, examples, and native handle lifecycle behavior.
     is the sole skip because the default published image is unavailable. Require the
     staged bundle to contain `iccToJson.exe`, `iccFromJson.exe`,
     `iccPawgReport.exe`, `matlab/tests/test_json_bindings.m`,
+    `iccHeifDump.exe`, `matlab/+iccdev/heif_dump.m`,
+    `matlab/tests/test_heif_dump_input_validation.m`,
     `matlab/tests/test_lut_type_range.m`,
     `matlab/+iccdev/+qa/audit_pawg_q1.m`, `bounded_grid.m`,
     `delta_e_2000.m`, `pcs_to_lab.m`, `matlab/tests/test_pawg_q1.m`,
@@ -234,6 +238,8 @@ profiles, examples, and native handle lifecycle behavior.
 - ICC.1/v4 and ICC.2/v5 byte-exact IccJSON round trips, version-aware binary
   structure and Profile ID checks, and malformed-input
   `iccdev:jsonCommandFailed` behavior.
+- HEIF wrapper missing-input `iccdev:heifInputNotFound` behavior and its
+  actionable bare-invocation example.
 - IccProfLib `icXformLutType` values 11 through 13 accepted by the gateway and
   value 14 rejected as `iccdev:badArgs`.
 - PAWG Q1 MATLAB/native metric and verdict agreement.

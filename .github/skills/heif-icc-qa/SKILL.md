@@ -33,6 +33,10 @@ fixtures, the pinned Nokia HEIF integration, or issue #2647 follow-up.
    carrier matrix result, A/B byte comparison, native parse statuses, known
    third-party warnings, and all local changes. New compiler warnings are
    failures in the dedicated smoke.
+8. When changing the MATLAB HEIF wrapper, require `iccHeifDump` in the
+   documented Release targets and staged bundle, run its focused MATLAB input
+   and usage tests, and keep the interactive `matlab/examples/heif_dump.m`
+   aligned. The wrapper must launch the tool through Java `ProcessBuilder`.
 
 When changing the upstream pin or patch stack, test both `git apply --check`
 and the complete sanitizer corpus. Do not silently regenerate or replace the

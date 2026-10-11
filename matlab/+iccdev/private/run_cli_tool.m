@@ -1,26 +1,28 @@
-function run_json_tool(tool_name, input_path, output_path, build_dir, explicit_tool)
-%RUN_JSON_TOOL Run an ICC JSON conversion tool without invoking a shell.
+function [standard_output, error_output] = run_cli_tool(tool_name, input_path, arguments, build_dir, explicit_tool, error_prefix)
+%RUN_CLI_TOOL Run an iccDEV CLI tool without invoking a shell.
 %
 % Copyright (c) International Color Consortium.
 % BSD 3-Clause License. See LICENSE.md for details.
 
-  tool_path = find_tool(tool_name, build_dir, explicit_tool);
-  input_path = canonical_file(input_path, 'iccdev:jsonInputNotFound', ...
-    'JSON conversion input');
+  input_path = canonical_file(input_path, [error_prefix 'InputNotFound'], ...
+    [tool_name ' input']);
+  tool_path = find_tool(tool_name, build_dir, explicit_tool, error_prefix);
 
   if exist('usejava', 'builtin') ~= 5 && exist('usejava', 'file') ~= 2
-    error('iccdev:jsonJvmUnavailable', ...
-      'ICC JSON conversion requires a Java-enabled MATLAB or Octave runtime.');
+    error([error_prefix 'JvmUnavailable'], ...
+      '%s requires a Java-enabled MATLAB or Octave runtime.', tool_name);
   end
   if ~usejava('jvm')
-    error('iccdev:jsonJvmUnavailable', ...
-      'ICC JSON conversion requires a Java-enabled MATLAB or Octave runtime.');
+    error([error_prefix 'JvmUnavailable'], ...
+      '%s requires a Java-enabled MATLAB or Octave runtime.', tool_name);
   end
 
   command = javaObject('java.util.ArrayList');
   command.add(javaObject('java.lang.String', tool_path));
   command.add(javaObject('java.lang.String', input_path));
-  command.add(javaObject('java.lang.String', output_path));
+  for i = 1:numel(arguments)
+    command.add(javaObject('java.lang.String', char(arguments{i})));
+  end
 
   error_path = [tempname '.txt'];
   cleanup = onCleanup(@() delete_if_exists(error_path));
@@ -29,7 +31,7 @@ function run_json_tool(tool_name, input_path, output_path, build_dir, explicit_t
     builder.redirectError(javaObject('java.io.File', error_path));
     process = builder.start();
   catch e
-    error('iccdev:jsonProcessStartFailed', ...
+    error([error_prefix 'ProcessStartFailed'], ...
       'Unable to start %s: %s', tool_name, e.message);
   end
 
@@ -44,18 +46,14 @@ function run_json_tool(tool_name, input_path, output_path, build_dir, explicit_t
 
   if status ~= 0
     diagnostics = strtrim(sprintf('%s\n%s', standard_output, error_output));
-    error('iccdev:jsonCommandFailed', '%s failed with status %d:\n%s', ...
+    error([error_prefix 'CommandFailed'], '%s failed with status %d:\n%s', ...
       tool_name, status, diagnostics);
-  end
-  if exist(output_path, 'file') ~= 2
-    error('iccdev:jsonOutputMissing', ...
-      '%s succeeded but did not create: %s', tool_name, output_path);
   end
 end
 
-function tool_path = find_tool(tool_name, build_dir, explicit_tool)
+function tool_path = find_tool(tool_name, build_dir, explicit_tool, error_prefix)
   if ~isempty(explicit_tool)
-    tool_path = canonical_file(explicit_tool, 'iccdev:jsonToolNotFound', ...
+    tool_path = canonical_file(explicit_tool, [error_prefix 'ToolNotFound'], ...
       [tool_name ' executable']);
     return;
   end
@@ -97,7 +95,7 @@ function tool_path = find_tool(tool_name, build_dir, explicit_tool)
     for j = 1:numel(names)
       candidate = fullfile(build_dirs{i}, names{j});
       if exist(candidate, 'file') == 2
-        tool_path = canonical_file(candidate, 'iccdev:jsonToolNotFound', ...
+        tool_path = canonical_file(candidate, [error_prefix 'ToolNotFound'], ...
           [tool_name ' executable']);
         return;
       end
@@ -108,13 +106,13 @@ function tool_path = find_tool(tool_name, build_dir, explicit_tool)
   for i = 1:numel(path_dirs)
     candidate = fullfile(path_dirs{i}, executable);
     if exist(candidate, 'file') == 2
-      tool_path = canonical_file(candidate, 'iccdev:jsonToolNotFound', ...
+      tool_path = canonical_file(candidate, [error_prefix 'ToolNotFound'], ...
         [tool_name ' executable']);
       return;
     end
   end
 
-  error('iccdev:jsonToolNotFound', ...
+  error([error_prefix 'ToolNotFound'], ...
     ['%s was not found. Build %s, set ICCDEV_BUILD_DIR, or pass the ' ...
      'corresponding Tool option.'], tool_name, tool_name);
 end
@@ -125,8 +123,10 @@ function target = tool_target(tool_name)
       target = 'IccToJson';
     case 'iccFromJson'
       target = 'IccFromJson';
+    case 'iccHeifDump'
+      target = 'IccHeifDump';
     otherwise
-      error('iccdev:jsonUnknownTool', 'Unsupported JSON tool: %s', tool_name);
+      error('iccdev:unsupportedTool', 'Unsupported CLI tool: %s', tool_name);
   end
 end
 

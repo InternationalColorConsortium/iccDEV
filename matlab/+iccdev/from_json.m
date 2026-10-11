@@ -38,8 +38,12 @@ function profile_bytes = from_json(json_input, varargin)
 
   output_path = [tempname '.icc'];
   cleanup = onCleanup(@() cleanup_files(input_path, temporary_input, output_path));
-  run_json_tool('iccFromJson', input_path, output_path, ...
-    char(p.Results.BuildDir), char(p.Results.FromJsonTool));
+  run_cli_tool('iccFromJson', input_path, {output_path}, ...
+    char(p.Results.BuildDir), char(p.Results.FromJsonTool), 'iccdev:json');
+  if exist(output_path, 'file') ~= 2
+    error('iccdev:jsonOutputMissing', ...
+      'iccFromJson succeeded but did not create: %s', output_path);
+  end
 
   file_id = fopen(output_path, 'rb');
   if file_id < 0
