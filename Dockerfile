@@ -17,8 +17,8 @@ ARG BUILD_JOBS=32
 ARG FLAMEGRAPH_COMMIT=41fee1f99f9276008b7cd112fca19dc3ea84ac32
 ARG LLVM_MSAN_LIBCXX_COMMIT=1ab49a973e210e97d61e5db6557180dcb92c3e98
 ARG LIBXML2_MSAN_COMMIT=3d840e17858de03a09fba8b202e3a89267d5795a
-ARG CODEQL_VERSION=2.27.1
-ARG CODEQL_SHA256=1d380f79896ededc654c7b21fafb3360136f1aeb678ad4df4df9af3910c6b815
+ARG CODEQL_VERSION=2.27.2
+ARG CODEQL_SHA256=f002864be6dd8d5d7bdb123aaf7291ec8e291012bd9f70b6d2362f730db52aeb
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -153,8 +153,8 @@ ENV CC=clang \
     ICCDEV_IMAGE_PULL="docker pull ghcr.io/internationalcolorconsortium/iccdev:latest" \
     PATH="/opt/iccdev-mcp/bin:${PATH}"
 
-RUN groupadd --system iccdev-ci \
- && useradd --system --gid iccdev-ci --home-dir /workspace --create-home --shell /bin/bash iccdev-ci
+RUN groupadd --gid 10001 iccdev-ci \
+ && useradd --uid 10001 --gid 10001 --home-dir /workspace --create-home --shell /bin/bash --no-log-init iccdev-ci
 
 COPY --chown=iccdev-ci:iccdev-ci .github/ci/requirements /workspace/iccDEV/.github/ci/requirements
 
@@ -251,7 +251,7 @@ RUN python3 -m venv /opt/iccdev-mcp \
       /opt/iccdev-mcp/lib/python*/site-packages/pip \
       /opt/iccdev-mcp/lib/python*/site-packages/pip-*.dist-info
 
-USER iccdev-ci
+USER 10001:10001
 WORKDIR /workspace/iccDEV
 
 RUN rm -rf .git \
@@ -295,15 +295,20 @@ RUN cmake --build /workspace/build --target build-test-binaries --parallel "$BUI
 # Regression helpers are EXCLUDE_FROM_ALL, so this has to follow
 # build-test-binaries: before it the executable does not exist and ctest
 # fails the image build with "Unable to find executable" (#2276).
-RUN ctest --test-dir /workspace/build -R '^iccdev\.c-validation-dlopen$' \
-    --output-on-failure --no-tests=error
+ARG ICCDEV_RUN_CTEST=ON
+RUN case "$ICCDEV_RUN_CTEST" in \
+      ON) ctest --test-dir /workspace/build -R '^iccdev\.c-validation-dlopen$' \
+            --output-on-failure --no-tests=error ;; \
+      OFF) echo "Skipping image-build CTest by request" ;; \
+      *) echo "ICCDEV_RUN_CTEST must be ON or OFF" >&2; exit 2 ;; \
+    esac
 
 WORKDIR /workspace/iccDEV/Testing
 RUN iccdev-generate-profiles /workspace/build/Tools
 RUN git checkout -- silence.txt \
  && test -z "$(git status --porcelain --untracked-files=all)"
 
-USER root
+USER 0
 RUN bash /workspace/iccDEV/.github/ci/docker/build-validation-library.sh \
       /workspace/iccDEV /opt/iccdev-validation/lib "$BUILD_JOBS" \
  && /opt/iccdev-mcp/bin/python -c "import iccdev; from pathlib import Path; assert iccdev.native_validation_available(); result = iccdev.validate_profile_file(Path(\"/workspace/iccDEV/Testing/sRGB_v4_ICC_preference.icc\")); assert result.status == iccdev.ValidationStatus.OK, result"
@@ -339,7 +344,7 @@ HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
 LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 ENV ICCDEV_SOURCE_REVISION="${GIT_COMMIT}"
 
-USER iccdev-ci
+USER 10001:10001
 WORKDIR /workspace/iccDEV
 
 EXPOSE 8080

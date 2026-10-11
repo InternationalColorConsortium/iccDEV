@@ -29,6 +29,10 @@ pushing. For a local unpublished change, omit `GIT_COMMIT` so the image tests
 the copied checkout rather than fetching an older remote revision. Record the
 reviewed versions, image identity, and local results with the handoff.
 
+The image build runs one focused CTest by default. For a local build where
+CTest must be skipped, pass `--build-arg ICCDEV_RUN_CTEST=OFF`. The CI build
+keeps the default `ON` behavior.
+
 ## Tags
 
 | Tag | Purpose |
