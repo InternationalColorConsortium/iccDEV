@@ -81,7 +81,7 @@ if(ICCDEV_HEIF_ENABLE_TESTS)
 endif()
 
 option(ICCDEV_HEIF_BUILD_NATIVE_TOOL
-  "Build the IccProfLib-backed iccHeifDump comparison tool" OFF)
+  "Build the release libheif and IccProfLib-backed iccHeifDump tool" OFF)
 set(ICCDEV_PROFLIB_LIBRARY "" CACHE FILEPATH
   "Path to a locally built IccProfLib2 static library")
 set(ICCDEV_PROFLIB_INCLUDE_DIR "" CACHE PATH
@@ -97,17 +97,20 @@ if(ICCDEV_HEIF_BUILD_NATIVE_TOOL)
 
   find_package(Threads REQUIRED)
   find_package(ZLIB REQUIRED)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(LIBHEIF REQUIRED IMPORTED_TARGET libheif)
 
   set(ICCDEV_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../..")
   add_executable(iccHeifDump
-    "${CMAKE_CURRENT_LIST_DIR}/NokiaIccHeifDump.cpp")
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccHeifDump/iccHeifDump.cpp")
   target_compile_features(iccHeifDump PRIVATE cxx_std_17)
   target_include_directories(iccHeifDump PRIVATE
     "${ICCDEV_REPO_ROOT}/IccProfLib"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccHeifDump"
     "${ICCDEV_PROFLIB_INCLUDE_DIR}")
   target_link_libraries(iccHeifDump PRIVATE
-    heif_static
     "${ICCDEV_PROFLIB_LIBRARY}"
+    PkgConfig::LIBHEIF
     Threads::Threads
     ZLIB::ZLIB)
 

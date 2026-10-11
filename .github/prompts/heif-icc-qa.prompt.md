@@ -1,7 +1,7 @@
 # HEIF ICC Carrier QA
 
-Build and quality-assure carrier-only `heifIccDump` and IccProfLib-backed
-`iccHeifDump` against the pinned Nokia HEIF reader and tracked HEIF/AVIF
+Build and quality-assure Nokia `heifIccDump` against the libheif and
+IccProfLib-backed release `iccHeifDump` on the tracked HEIF/AVIF
 carrier corpus for issue #2647.
 
 Use `.github/skills/heif-icc-qa/SKILL.md` and report:

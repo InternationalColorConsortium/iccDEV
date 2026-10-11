@@ -165,8 +165,9 @@ before running the suite.
 `iccdev.heif-carrier-qa` and `iccdev.heif-carrier-ab-qa` are registered by the standalone
 `.github/ci/tooling/heif/qa` wrapper, not by the main `Build/Cmake` project, so
 it does not change the standard iccDEV CTest count. The wrapper builds
-carrier-only `heifIccDump` and IccProfLib-backed `iccHeifDump` against the exact Nokia HEIF revision recorded in
-`.github/ci/tooling/heif/Readme.md`, and the test runs the 16-carrier corpus,
+Nokia `heifIccDump` and the libheif and IccProfLib-backed release `iccHeifDump`
+using the Nokia HEIF revision recorded in `.github/ci/tooling/heif/Readme.md`.
+The tests run the 16-carrier corpus,
 property/CLI controls, sanitizer checks, ICC extraction hash assertion, and
 byte-for-byte A/B extraction comparison.
 Hosted coverage is the manually dispatched `Nokia HEIF ICC carrier smoke`

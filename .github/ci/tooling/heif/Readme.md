@@ -2,10 +2,9 @@
 
 `heifIccDump` enumerates `colr` properties through the Nokia HEIF reader,
 reports embedded ICC sizes and SHA-256 digests, and optionally extracts the
-raw profiles. The standalone `iccHeifDump` comparison target builds
-`NokiaIccHeifDump.cpp` against the same pinned Nokia reader and reports whether
-IccProfLib can parse each raw blob. The native release tool uses libheif and
-extracts the same property associations; see
+raw profiles. The standalone `iccHeifDump` comparison target builds the release
+source against libheif and IccProfLib, so the A/B test exercises its HEIF
+property parser and reports whether IccProfLib can parse each raw blob. See
 <a href="../../../../Tools/CmdLine/IccHeifDump/Readme.md">its Readme</a>.
 The QA wrapper pins Nokia HEIF v3.7.1 commit
 `503194eb85e13434b54797bab9d82ad7f88fd35b`; Homebrew `libheif` exposes a
@@ -30,7 +29,7 @@ for patch_file in "$PWD"/.github/ci/tooling/heif/patchs/*.patch; do
   git -C "$HEIF_SOURCE" apply "$patch_file"
 done
 
-cmake -S Build/Cmake -B /tmp/iccdev-proflib \
+CC=clang CXX=clang++ cmake -S Build/Cmake -B /tmp/iccdev-proflib \
   -DCMAKE_BUILD_TYPE=Debug \
   -DENABLE_SHARED_LIBS=OFF \
   -DENABLE_STATIC_LIBS=ON \
@@ -59,9 +58,10 @@ UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 
 The carrier CTest runs all 16 tracked carriers, valid and invalid property
 probes, CLI error controls, and a byte-for-byte extraction check. The A/B
-CTest compares the raw blobs emitted by both tools across valid and malformed
-carrier fixtures and requires IccProfLib parse status from the native tool. It
-treats exit values 128 and above or any ASan/UBSan diagnostic as a failure.
+CTest compares the raw blobs emitted by Nokia and the release parser across
+valid and malformed carrier fixtures, requires IccProfLib parse status from
+the release tool, and rejects a sparse carrier over the 256 MiB parser limit.
+It treats exit values 128 and above or any ASan/UBSan diagnostic as a failure.
 
 The manually dispatched `Nokia HEIF ICC carrier smoke` workflow in
 `.github/workflows/ci-nokia-heif-icc-smoke.yml` runs this standalone build in
@@ -78,5 +78,6 @@ together when changing the upstream revision.
 
 The patch stack also provides Nokia headers with their direct `<cstdint>`
 dependency and checks that decoded unsigned durations fit the reader's signed
-timestamp type. The dedicated GCC smoke treats compiler warnings and sanitizer
-findings as blocking.
+timestamp type. The dedicated Clang smoke treats compiler warnings and sanitizer
+findings as blocking; the wrapper suppresses only Nokia's unqualified
+`std::move` warning.

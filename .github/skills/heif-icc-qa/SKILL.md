@@ -1,6 +1,6 @@
 ---
 name: heif-icc-qa
-description: Build and A/B test heifIccDump and IccProfLib-backed iccHeifDump against the pinned Nokia HEIF reader and tracked carrier corpus.
+description: Build and A/B test Nokia heifIccDump against the libheif and IccProfLib-backed release iccHeifDump on the tracked carrier corpus.
 ---
 
 # HEIF ICC Carrier QA
@@ -17,7 +17,7 @@ fixtures, the pinned Nokia HEIF integration, or issue #2647 follow-up.
 3. Apply every tracked patch under `.github/ci/tooling/heif/patchs/` with
    `git apply --check` before configuring the wrapper project.
 4. Build a matching sanitizer-enabled `IccProfLib2-static` archive, then build
-   `heifIccDump` and `iccHeifDump` through
+   Nokia `heifIccDump` and the libheif-based release `iccHeifDump` through
    `.github/ci/tooling/heif/qa/CMakeLists.txt`.
 5. Run `ctest -N --no-tests=error`, require the documented carrier and A/B
    tests, then run `iccdev.heif-carrier-qa` and
@@ -26,9 +26,9 @@ fixtures, the pinned Nokia HEIF integration, or issue #2647 follow-up.
    hosted validation; do not add this external build to the general iccDEV
    pull-request or tool-test workflows.
 6. Treat exit values 128 and above, sanitizer diagnostics, missing fixtures,
-   hash drift, raw extraction divergence, or a missing CTest registration as
-   failures. Exit 1-127 is a graceful tool failure only when the matrix expects
-   it.
+   hash drift, raw extraction divergence, a failed oversized-carrier rejection,
+   or a missing CTest registration as failures. Exit 1-127 is a graceful tool
+   failure only when the matrix expects it.
 7. Report the iccDEV revision, Nokia revision, compiler/sanitizer envelope,
    carrier matrix result, A/B byte comparison, native parse statuses, known
    third-party warnings, and all local changes. New compiler warnings are

@@ -83,7 +83,7 @@ jobs:
           printf 'revision=%s\n' "$(sanitize_line "$image_revision")" >> "$GITHUB_OUTPUT"
 
   smoke:
-    name: Nokia HEIF - GCC ASAN+UBSAN carrier QA
+    name: Nokia HEIF - Clang ASAN+UBSAN+integer carrier and release QA
     needs: resolve-image
     runs-on: ubuntu-24.04
     container:
@@ -101,6 +101,7 @@ jobs:
       HEIF_REVISION: 503194eb85e13434b54797bab9d82ad7f88fd35b
       HEIF_TAG: v3.7.1
       BUILD_DIR: build-nokia-heif-smoke
+      PROFLIB_BUILD_DIR: build-nokia-heif-proflib
       IMAGE_REF: ${{ needs.resolve-image.outputs.image }}
       IMAGE_REVISION: ${{ needs.resolve-image.outputs.revision }}
 
@@ -119,8 +120,9 @@ jobs:
           unset GITHUB_TOKEN || true
           source .github/scripts/sanitize-sed.sh
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          gcc --version | sed -n '1p'
-          g++ --version | sed -n '1p'
+          clang --version | sed -n '1p'
+          clang++ --version | sed -n '1p'
+          pkg-config --modversion libheif
           cmake --version | sed -n '1p'
 
       # preflight: allow-pr-script-execution reason=manual-nokia-heif-carrier-regression
@@ -153,15 +155,35 @@ jobs:
             git -C "$heif_source" apply "$heif_patch"
           done
 
+          cmake -S Build/Cmake -B "$PROFLIB_BUILD_DIR" \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DENABLE_SHARED_LIBS=OFF \
+            -DENABLE_STATIC_LIBS=ON \
+            -DENABLE_ASAN=ON \
+            -DENABLE_UBSAN=ON \
+            -DENABLE_INTEGER_SANITIZER=ON
+          cmake --build "$PROFLIB_BUILD_DIR" \
+            --target IccProfLib2-static \
+            --parallel "$(nproc)"
+          proflib_library="$PWD/$PROFLIB_BUILD_DIR/IccProfLib/libIccProfLib2-staticd.a"
+          proflib_include="$PWD/$PROFLIB_BUILD_DIR/IccProfLib"
+          test -s "$proflib_library"
+          test -s "$proflib_include/IccProfLibVer.h"
+
           cmake -S .github/ci/tooling/heif/qa -B "$BUILD_DIR" \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_COMPILER=gcc \
-            -DCMAKE_CXX_COMPILER=g++ \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
             -DHEIF_SOURCE_DIR="$heif_source" \
             -DICCDEV_HEIF_ENABLE_SANITIZERS=ON \
+            -DICCDEV_HEIF_BUILD_NATIVE_TOOL=ON \
+            -DICCDEV_PROFLIB_LIBRARY="$proflib_library" \
+            -DICCDEV_PROFLIB_INCLUDE_DIR="$proflib_include" \
             -Wno-deprecated
           cmake --build "$BUILD_DIR" \
-            --target iccHeifDump \
+            --target heifIccDump iccHeifDump \
             --parallel "$(nproc)" 2>&1 | tee "$BUILD_DIR/build.log"
           if grep -E '(^|: )[Ww]arning:' "$BUILD_DIR/build.log"; then
             echo "::error title=Nokia HEIF compiler warnings::The smoke build must be warning-free"
@@ -170,12 +192,12 @@ jobs:
 
           heif_ctest_list="$BUILD_DIR/ctest-list.txt"
           ctest --test-dir "$BUILD_DIR" -N --no-tests=error | tee "$heif_ctest_list"
-          grep -Eq '^Total Tests: 1$' "$heif_ctest_list"
+          grep -Eq '^Total Tests: 2$' "$heif_ctest_list"
           ASAN_OPTIONS=halt_on_error=1:detect_leaks=0 \
           UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
             ctest --test-dir "$BUILD_DIR" \
               -L '^(heif|issue-2647)$' \
-              -R '^iccdev\.heif-carrier-qa$' \
+              -R '^iccdev\.heif-carrier(-ab)?-qa$' \
               --output-on-failure \
               --no-tests=error
 
@@ -188,9 +210,9 @@ jobs:
           unset GITHUB_TOKEN || true
           source .github/scripts/sanitize-sed.sh
           {
-            printf '%s\n' "$(sanitize_line 'Nokia HEIF v3.7.1 carrier QA passed with GCC ASAN+UBSAN.')"
+            printf '%s\n' "$(sanitize_line 'Nokia HEIF v3.7.1 carrier and release parser QA passed with Clang ASAN+UBSAN+integer.')"
             printf '%s\n' "$(sanitize_line 'All tracked dependency patches applied and the build was warning-free.')"
-            printf '%s\n' "$(sanitize_line 'CTest labels: heif, icc, iccdev, issue-2647, regression.')"
+            printf '%s\n' "$(sanitize_line 'CTests: iccdev.heif-carrier-qa and iccdev.heif-carrier-ab-qa.')"
             printf '%s\n' "Image digest: $(sanitize_line "$IMAGE_REF")"
             printf '%s\n' "Image source revision: $(sanitize_line "$IMAGE_REVISION")"
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

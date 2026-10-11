@@ -42,6 +42,7 @@ if [[ ! -x "$carrier_tool" || ! -x "$native_tool" || ! -d "$corpus" || -z "$outd
   echo "[FAIL] missing HEIF A/B tool, corpus, or output directory"
   exit 1
 fi
+mkdir -p "$outdir"
 
 check_runtime_findings() {
   local logfile="$1"
@@ -54,6 +55,7 @@ run_tool() {
   local directory="$3"
   local logfile="$4"
 
+  rm -rf -- "$directory"
   mkdir -p "$directory"
   if ! "$tool" "$corpus/$fixture" "$directory" >"$logfile" 2>&1; then
     echo "[FAIL] $fixture: $(basename "$tool") exited nonzero"
@@ -96,5 +98,21 @@ for fixture in valid-prof.heic valid-rICC.heic duplicate-prof.heic conflicting-p
 
   echo "[PASS] $fixture: raw profiles match and IccProfLib parse status reported"
 done
+
+oversized="$outdir/oversized-valid-prof.heic"
+oversized_log="$outdir/oversized-valid-prof.log"
+cp "$corpus/valid-prof.heic" "$oversized"
+truncate -s 268435457 "$oversized"
+oversized_status=0
+"$native_tool" "$oversized" >"$oversized_log" 2>&1 || oversized_status=$?
+if (( oversized_status == 0 || oversized_status >= 128 )) ||
+   ! grep -Fq 'Error: unable to read HEIF colour properties' "$oversized_log" ||
+   ! check_runtime_findings "$oversized_log"; then
+  echo "[FAIL] oversized carrier was not rejected safely"
+  sed -n '1,80p' "$oversized_log"
+  exit 1
+fi
+rm -f -- "$oversized"
+echo "[PASS] oversized carrier rejected before buffering"
 
 echo "[PASS] HEIF carrier and IccProfLib A/B QA"

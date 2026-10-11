@@ -34,7 +34,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
-#include <iterator>
 #include <string>
 #include <vector>
 
@@ -113,12 +112,21 @@ namespace iccdev_heif
 
   inline bool collectIccProperties(const char* path, std::vector<IccProperty>& profiles)
   {
-    std::ifstream input(path, std::ios::binary);
+    // Cap the duplicate carrier buffer before allocating or parsing untrusted boxes.
+    constexpr std::streamoff maxCarrierBytes = 256 * 1024 * 1024;
+    std::ifstream input(path, std::ios::binary | std::ios::ate);
     if (!input) {
       return false;
     }
-    const std::vector<std::uint8_t> bytes{
-        std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    const std::streamoff length = input.tellg();
+    if (length <= 0 || length > maxCarrierBytes) {
+      return false;
+    }
+    input.seekg(0, std::ios::beg);
+    std::vector<std::uint8_t> bytes(static_cast<std::size_t>(length));
+    if (!input.read(reinterpret_cast<char*>(bytes.data()), length)) {
+      return false;
+    }
     Box meta;
     if (!findBox(bytes, 0, bytes.size(), "meta", meta) ||
         meta.end - meta.payload < 4) {

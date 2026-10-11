@@ -111,6 +111,12 @@ int main(int argc, char* argv[])
     return 3;
   }
 
+  std::vector<iccdev_heif::IccProperty> properties;
+  if (!iccdev_heif::collectIccProperties(argv[1], properties)) {
+    std::cerr << "Error: unable to read HEIF colour properties" << std::endl;
+    return 2;
+  }
+
   heif_context* context = heif_context_alloc();
   if (context == nullptr) {
     std::cerr << "Error: unable to create HEIF context" << std::endl;
@@ -124,12 +130,6 @@ int main(int argc, char* argv[])
     return 2;
   }
 
-  std::vector<iccdev_heif::IccProperty> properties;
-  if (!iccdev_heif::collectIccProperties(argv[1], properties)) {
-    std::cerr << "Error: unable to read HEIF colour properties" << std::endl;
-    heif_context_free(context);
-    return 2;
-  }
   std::size_t profileCount = 0;
   for (const auto& property : properties) {
     const std::vector<std::uint8_t>& profile = property.profile;

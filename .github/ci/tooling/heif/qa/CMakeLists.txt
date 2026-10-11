@@ -85,4 +85,8 @@ set(BUILD_ONLY_STATIC_LIB ON CACHE BOOL "Build only Nokia HEIF static libraries"
 set(ENABLE_TOOLS OFF CACHE BOOL "Do not build Nokia HEIF command-line tools" FORCE)
 set(ICCDEV_HEIF_ENABLE_TESTS ON CACHE BOOL "Register iccHeifDump carrier QA" FORCE)
 add_subdirectory("${HEIF_SOURCE_DIR}/srcs" nokia-heif)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  # Nokia v3.7.1 has unqualified std::move calls in avcdecoderconfigrecord.cpp.
+  target_compile_options(common PRIVATE -Wno-unqualified-std-cast-call)
+endif()
 add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/.." iccdev-heif-tool)
