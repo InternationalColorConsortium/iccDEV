@@ -16,7 +16,7 @@ listed below. Maintainer-level sanitizer, Docker, and CMake policy details live 
 
 | Platform | Packages |
 |----------|----------|
-| Ubuntu | `libpng-dev libjpeg-dev libtiff-dev libxml2-dev zlib1g-dev libwxgtk3.2-dev libwxgtk-media3.2-dev libwxgtk-webview3.2-dev wx-common wx3.2-headers nlohmann-json3-dev cmake make ninja-build` |
+| Ubuntu | `libheif-dev libpng-dev libjpeg-dev libtiff-dev libxml2-dev zlib1g-dev libwxgtk3.2-dev libwxgtk-media3.2-dev libwxgtk-webview3.2-dev wx-common wx3.2-headers nlohmann-json3-dev cmake make ninja-build` |
 | macOS | `libpng jpeg-turbo libtiff libxml2 zlib wxwidgets nlohmann-json` |
 | Windows | MSVC 2022 or 2026 with vcpkg-managed `libpng`, `libjpeg-turbo`, `libtiff`, `libxml2`, `zlib`, `wxwidgets`, `nlohmann-json` |
 
@@ -38,7 +38,7 @@ on the configure command line.
 ## Ubuntu
 
 ```bash
-sudo apt install -y libpng-dev libjpeg-dev libtiff-dev libxml2-dev zlib1g-dev \
+sudo apt install -y libheif-dev libpng-dev libjpeg-dev libtiff-dev libxml2-dev zlib1g-dev \
   libwxgtk3.2-dev libwxgtk-media3.2-dev libwxgtk-webview3.2-dev \
   wx-common wx3.2-headers nlohmann-json3-dev curl git make cmake \
   clang clang-tools build-essential ninja-build

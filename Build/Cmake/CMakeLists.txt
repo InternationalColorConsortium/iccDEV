@@ -2076,12 +2076,11 @@ IF(ENABLE_TOOLS)
   ADD_SUBDIRECTORY(Tools/IccApplyToLink)
   IF(TARGET_LIB_ICCCONNECT)
     ADD_SUBDIRECTORY(Tools/IccApplySearch)
-  ENDIF()
-  ADD_SUBDIRECTORY(Tools/IccProfileVisualize)
-  ADD_SUBDIRECTORY(Tools/IccProfilePlot)
-  ADD_SUBDIRECTORY(Tools/IccHeifDump)
+    ENDIF()
+    ADD_SUBDIRECTORY(Tools/IccProfileVisualize)
+    ADD_SUBDIRECTORY(Tools/IccProfilePlot)
 
-  # Ensure IccXML-dependent tools are built after IccXML library (safety net)
+    # Ensure IccXML-dependent tools are built after IccXML library (safety net)
   IF(ENABLE_ICCXML)
     IF(TARGET iccFromXml AND TARGET ${TARGET_LIB_ICCXML})
       ADD_DEPENDENCIES(iccFromXml ${TARGET_LIB_ICCXML})
@@ -2103,6 +2102,9 @@ IF(ENABLE_TOOLS)
 
 
   if(ENABLE_IMAGE_TOOLS)
+    message(STATUS "Adding Subdirectory IccHeifDump.")
+    ADD_SUBDIRECTORY(Tools/IccHeifDump)
+
     message(STATUS "Adding Subdirectory IccJpegDump.")
     ADD_SUBDIRECTORY(Tools/IccJpegDump)
 
@@ -2178,6 +2180,7 @@ IF(ENABLE_TOOLS)
       iccToXml
       iccFromJson
       iccToJson
+      iccHeifDump
       iccJpegDump
       iccApplyNamedCmm
       iccDescribeSinkTest

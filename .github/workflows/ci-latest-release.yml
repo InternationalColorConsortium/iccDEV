@@ -96,7 +96,7 @@ jobs:
             -o Dpkg::Use-Pty=0 \
             install -y --no-install-recommends \
             build-essential cmake gcc g++ clang clang-tools \
-            libpng-dev libxml2 libxml2-dev libtiff-dev \
+            libheif-dev libpng-dev libxml2 libxml2-dev libtiff-dev \
             nlohmann-json3-dev libwxgtk3.2-dev wx-common \
             python3 python3-pip curl git llvm
       - name: Set Compiler
@@ -304,7 +304,7 @@ jobs:
           unset GITHUB_TOKEN || true
           git config --add safe.directory "$PWD"
           echo "Installing Homebrew dependencies..."
-          packages=(libpng nlohmann-json libxml2 wxwidgets libtiff jpeg-turbo)
+          packages=(libheif libpng nlohmann-json libxml2 wxwidgets libtiff jpeg-turbo)
           missing=()
           for package in "${packages[@]}"; do
             if brew list --versions "$package" >/dev/null 2>&1; then
@@ -1518,6 +1518,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential \
             cmake \
+            libheif-dev \
             libjpeg-dev \
             libpng-dev \
             libtiff-dev \
@@ -1566,16 +1567,19 @@ jobs:
           unset GITHUB_TOKEN || true
 
           test -s build-cpack/SHA256SUMS
-          grep -Eq '  reficcmax-.*\.zip$' build-cpack/SHA256SUMS
-          grep -Eq '  reficcmax-.*\.deb$' build-cpack/SHA256SUMS
-          grep -Eq '  reficcmax-.*\.rpm$' build-cpack/SHA256SUMS
+          grep -Eq "  reficcmax-.*\\.zip\$" build-cpack/SHA256SUMS
+          grep -Eq "  reficcmax-.*\\.deb\$" build-cpack/SHA256SUMS
+          grep -Eq "  reficcmax-.*\\.rpm\$" build-cpack/SHA256SUMS
           zip_file="$(
-            awk '/  reficcmax-.*\.zip$/ {print "build-cpack/" $2; exit}' \
+            awk "/  reficcmax-.*\\.zip$/ {print \"build-cpack/\" \$2; exit}" \
               build-cpack/SHA256SUMS
           )"
           unzip -Z1 "${zip_file}" > build-cpack/ZIP-CONTENTS.txt
-          grep -q '/VERSION$' build-cpack/ZIP-CONTENTS.txt
-          grep -q '/TOOL-CATALOG.md$' build-cpack/ZIP-CONTENTS.txt
+          grep -q "/VERSION\$" build-cpack/ZIP-CONTENTS.txt
+          grep -q "/TOOL-CATALOG.md\$" build-cpack/ZIP-CONTENTS.txt
+          grep -q "/bin/iccHeifDump\$" build-cpack/ZIP-CONTENTS.txt
+          unzip -p "${zip_file}" '*/TOOL-CATALOG.md' |
+            grep -Fx -- "- \`iccHeifDump\`"
           if grep -q '/Testing/' build-cpack/ZIP-CONTENTS.txt; then
             echo "Runtime package unexpectedly contains Testing tree" >&2
             exit 1
@@ -1584,7 +1588,7 @@ jobs:
             build-cpack/reficcmax-*.zip \
             build-cpack/reficcmax-*.deb \
             build-cpack/reficcmax-*.rpm \
-            | awk '{name=$2; sub(".*/", "", name); print $1 "  " name}' \
+            | awk "{name=\$2; sub(\".*/\", \"\", name); print \$1 \"  \" name}" \
             | sort -k2 \
             > build-cpack/SHA256SUMS.verify
           diff -u build-cpack/SHA256SUMS build-cpack/SHA256SUMS.verify

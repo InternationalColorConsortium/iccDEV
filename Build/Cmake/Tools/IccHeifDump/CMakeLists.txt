@@ -10,8 +10,26 @@ set(SOURCES
 )
 set(TARGET_NAME iccHeifDump)
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(HEIF REQUIRED IMPORTED_TARGET libheif)
+if(WIN32)
+    find_package(libheif CONFIG QUIET)
+    if(NOT TARGET libheif::libheif)
+        message(STATUS "libheif not found - skipping iccHeifDump.")
+        return()
+    endif()
+    set(ICCDEV_HEIF_TARGET libheif::libheif)
+else()
+    find_package(PkgConfig QUIET)
+    if(NOT PkgConfig_FOUND)
+        message(STATUS "pkg-config not found - skipping iccHeifDump.")
+        return()
+    endif()
+    pkg_check_modules(HEIF QUIET IMPORTED_TARGET libheif)
+    if(NOT HEIF_FOUND)
+        message(STATUS "libheif not found - skipping iccHeifDump.")
+        return()
+    endif()
+    set(ICCDEV_HEIF_TARGET PkgConfig::HEIF)
+endif()
 
 add_executable(${TARGET_NAME} ${SOURCES})
 
@@ -21,7 +39,7 @@ target_include_directories(${TARGET_NAME} PRIVATE
 
 target_link_libraries(${TARGET_NAME} PRIVATE
     ${TARGET_LIB_ICCPROFLIB}
-    PkgConfig::HEIF
+    ${ICCDEV_HEIF_TARGET}
 )
 
 if(ENABLE_INSTALL_RIM)
