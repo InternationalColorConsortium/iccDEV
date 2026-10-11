@@ -100,7 +100,7 @@ if(ICCDEV_HEIF_BUILD_NATIVE_TOOL)
 
   set(ICCDEV_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../..")
   add_executable(iccHeifDump
-    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccHeifDump/iccHeifDump.cpp")
+    "${CMAKE_CURRENT_LIST_DIR}/NokiaIccHeifDump.cpp")
   target_compile_features(iccHeifDump PRIVATE cxx_std_17)
   target_include_directories(iccHeifDump PRIVATE
     "${ICCDEV_REPO_ROOT}/IccProfLib"

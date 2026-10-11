@@ -1,9 +1,10 @@
 # iccHeifDump
 
-`iccHeifDump` extracts ICC profiles from top-level HEIF, HEIC, and AVIF images
-through libheif, writes each raw blob unchanged, and reports whether
-IccProfLib can parse it. It is built with the default native tools when
-`ENABLE_TOOLS=ON`.
+`iccHeifDump` validates HEIF, HEIC, and AVIF files with libheif, extracts every
+ICC `colr` property association from the file's `iprp` boxes, writes each raw
+blob unchanged, and reports whether IccProfLib can parse it. This includes
+profiles on non-top-level items. It is built with the default native tools
+when `ENABLE_TOOLS=ON`.
 
 The Nokia reader A/B research tool remains under `.github/ci/tooling/heif/`.
 It uses a pinned, incompatible API and remains isolated in its standalone
@@ -18,7 +19,7 @@ iccHeifDump input.heic [existing-output-directory]
 When an output directory is supplied, the tool writes profiles as:
 
 ```text
-item-<item-id>-<prof-or-rICC>.icc
+item-<item-id>-property-<property-index>-<prof-or-rICC>.icc
 ```
 
 Each embedded ICC property reports its carrier metadata, byte count, output

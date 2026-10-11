@@ -74,6 +74,9 @@ if(NOT "${_clangcl_asan_runtime_dll}" STREQUAL "" AND EXISTS "${_clangcl_asan_ru
 endif()
 
 list(REMOVE_DUPLICATES _runtime_dependency_dirs)
+if(NOT (DEFINED ICCDEV_CONFIG AND ICCDEV_CONFIG MATCHES "^[Dd][Ee][Bb][Uu][Gg]$"))
+  list(FILTER _runtime_dependency_dirs EXCLUDE REGEX "/debug/bin$")
+endif()
 
 foreach(_runtime_dependency_dir IN LISTS _runtime_dependency_dirs)
   file(GLOB _runtime_dlls "${_runtime_dependency_dir}/*.dll")

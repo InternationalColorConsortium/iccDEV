@@ -2,11 +2,12 @@
 
 `heifIccDump` enumerates `colr` properties through the Nokia HEIF reader,
 reports embedded ICC sizes and SHA-256 digests, and optionally extracts the
-raw profiles. `iccHeifDump` is the separate IccProfLib-backed comparison tool:
-it uses the same pinned Nokia reader to extract identical raw blobs, then
-reports whether IccProfLib can parse each one. See
-<a href="../../../../Tools/CmdLine/IccHeifDump/Readme.md">the native tool Readme</a>
-for its output contract. The QA wrapper pins Nokia HEIF v3.7.1 commit
+raw profiles. The standalone `iccHeifDump` comparison target builds
+`NokiaIccHeifDump.cpp` against the same pinned Nokia reader and reports whether
+IccProfLib can parse each raw blob. The native release tool uses libheif and
+extracts the same property associations; see
+<a href="../../../../Tools/CmdLine/IccHeifDump/Readme.md">its Readme</a>.
+The QA wrapper pins Nokia HEIF v3.7.1 commit
 `503194eb85e13434b54797bab9d82ad7f88fd35b`; Homebrew `libheif` exposes a
 different API and is not a substitute for this dependency.
 

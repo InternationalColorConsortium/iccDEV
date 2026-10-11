@@ -67,7 +67,7 @@ run_tool() {
   fi
 }
 
-for fixture in valid-prof.heic valid-rICC.heic duplicate-prof.heic malformed-prof.heic short-prof.hif; do
+for fixture in valid-prof.heic valid-rICC.heic duplicate-prof.heic conflicting-prof.heic conflicting-nclx.heic malformed-prof.heic short-prof.hif; do
   carrier_dir="$outdir/carrier/$fixture"
   native_dir="$outdir/native/$fixture"
   carrier_log="$outdir/carrier-$fixture.log"
