@@ -1,4 +1,4 @@
-| Tools/CmdLine/case.h:26:15:26:21 | access to array | Access argv[1] in 'arraySpellingUnguarded' without a prior comparison against argc. Add `if (argc <= N) usage();` before this read. |
-| Tools/CmdLine/case.h:32:15:32:21 | access to array | Access argv[2] in 'constArraySpellingUnguarded' without a prior comparison against argc. Add `if (argc <= N) usage();` before this read. |
-| Tools/CmdLine/case.h:38:15:38:21 | access to array | Access argv[1] in 'pointerUnguarded' without a prior comparison against argc. Add `if (argc <= N) usage();` before this read. |
-| Tools/CmdLine/case.h:83:15:83:21 | access to array | Access argv[1] in 'readBeforeGuardSameLine' without a prior comparison against argc. Add `if (argc <= N) usage();` before this read. |
+| Tools/CmdLine/case.h:46:15:46:21 | access to array | Access argv[1] in 'arraySpellingUnguarded' without a prior comparison against argc. Add `if (argc <= N) usage();` before this read. |
+| Tools/CmdLine/case.h:52:15:52:21 | access to array | Access argv[2] in 'constArraySpellingUnguarded' without a prior comparison against argc. Add `if (argc <= N) usage();` before this read. |
+| Tools/CmdLine/case.h:58:15:58:21 | access to array | Access argv[1] in 'pointerUnguarded' without a prior comparison against argc. Add `if (argc <= N) usage();` before this read. |
+| Tools/CmdLine/case.h:103:15:103:21 | access to array | Access argv[1] in 'readBeforeGuardSameLine' without a prior comparison against argc. Add `if (argc <= N) usage();` before this read. |
