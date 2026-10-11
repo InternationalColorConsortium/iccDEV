@@ -202,7 +202,7 @@ jobs:
           python -m pip install `
             'build>=1.2,<1.4' `
             'cython>=3.0,<3.2' `
-            'setuptools>=64,<85' `
+            'setuptools>=77,<85' `
             'wheel>=0.46.2,<0.47'
 
           cd python
@@ -311,7 +311,6 @@ jobs:
           Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
           Get-ChildItem -Path iccdev\*.pyd,iccdev\*.so -ErrorAction SilentlyContinue |
             Remove-Item -Force
-          Copy-Item ..\LICENSE.md LICENSE.md
           python vendor_iccproflib.py
           try {
             python -m cibuildwheel --output-dir wheelhouse
@@ -320,7 +319,6 @@ jobs:
             }
           } finally {
             python vendor_iccproflib.py --clean
-            Remove-Item -Force LICENSE.md -ErrorAction SilentlyContinue
             Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
             Get-ChildItem -Path iccdev\*.pyd,iccdev\*.so -ErrorAction SilentlyContinue |
               Remove-Item -Force

@@ -93,10 +93,14 @@ def replace_legacy_notice(text: str, notice: str, path: Path) -> str:
     if "International Color Consortium" not in block:
         return text
 
-    return text[:block_start] + notice + text[block_end + 2 :].lstrip("\n")
+    return text[:block_start] + notice + text[block_end + 2 :].lstrip("\r\n")
 
 
 def normalized_text(text: str, notice: str, path: Path) -> str:
+    first_newline = text.find("\n")
+    if first_newline > 0 and text[first_newline - 1] == "\r":
+        notice = notice.replace("\n", "\r\n")
+
     if notice in text[:HEADER_SCAN_BYTES]:
         return text
 
