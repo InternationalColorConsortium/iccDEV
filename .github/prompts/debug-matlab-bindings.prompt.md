@@ -164,7 +164,7 @@ correct profile or transform results.
 10. Before interactive MATLAB Desktop validation, derive `repo_root` from either
    the repository root or its `matlab` subdirectory, then add the package and
    tests using absolute paths. Do not assume `pwd` is the repository root.
-11. Run `test_usage_guidance`, `test_heif_dump_input_validation`, `test_delta_e_2000`, `test_json_bindings`, `test_iccdev`,
+11. Run `test_usage_guidance`, `test_heif_dump_input_validation`, `test_heif_dump_native(getenv('ICCDEV_BUILD_DIR'))`, `test_delta_e_2000`, `test_json_bindings`, `test_iccdev`,
     `test_pawg_q1`,
     `test_colorimetry_issue_1475`,
     `run_local_qa`, `run_gamma_qa`,

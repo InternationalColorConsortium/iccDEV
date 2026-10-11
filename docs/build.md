@@ -17,8 +17,8 @@ listed below. Maintainer-level sanitizer, Docker, and CMake policy details live 
 | Platform | Packages |
 |----------|----------|
 | Ubuntu | `libheif-dev libpng-dev libjpeg-dev libtiff-dev libxml2-dev zlib1g-dev libwxgtk3.2-dev libwxgtk-media3.2-dev libwxgtk-webview3.2-dev wx-common wx3.2-headers nlohmann-json3-dev cmake make ninja-build` |
-| macOS | `libpng jpeg-turbo libtiff libxml2 zlib wxwidgets nlohmann-json` |
-| Windows | MSVC 2022 or 2026 with vcpkg-managed `libpng`, `libjpeg-turbo`, `libtiff`, `libxml2`, `zlib`, `wxwidgets`, `nlohmann-json` |
+| macOS | `libheif libpng jpeg-turbo libtiff libxml2 zlib wxwidgets nlohmann-json` |
+| Windows | MSVC 2022 or 2026 with vcpkg-managed `libheif`, `libpng`, `libjpeg-turbo`, `libtiff`, `libxml2`, `zlib`, `wxwidgets`, `nlohmann-json` |
 
 Thread support is provided by the platform C/C++ runtime and CMake's
 `Threads::Threads` imported target; no separate Ubuntu package is required.

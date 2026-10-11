@@ -11,7 +11,7 @@ ICC color profile library, built with [Cython](https://cython.org/).
 - **Thread-safe apply** - create per-thread apply handles for concurrent use
 - **NumPy zero-copy** - `apply_ndarray()` for high-performance bulk transforms
 - **CLI-backed conversion helpers** - XML/JSON/blob conversion, profile dump,
-  and round-trip diagnostics aligned with the native iccDEV tools
+  round-trip diagnostics, and HEIF ICC inspection aligned with the native iccDEV tools
 - **Pythonic API** - context managers, enums, exceptions, type hints (PEP 561)
 - **Exception hierarchy** - `IccError` -> `IccProfileError`, `IccCmmError`
 - **Immutable headers** - `IccProfileHeader` as hashable NamedTuple with computed properties
@@ -61,7 +61,7 @@ The core `IccProfile` and `IccCmm` APIs do not require iccDEV command-line
 tools at runtime. The XML, JSON, dump, and round-trip helper functions are
 CLI-backed; set `ICCDEV_TOOLS_DIR`, `ICCDEV_BUILD_DIR`, or `PATH` so Python can
 find `iccToXml`, `iccFromXml`, `iccToJson`, `iccFromJson`, `iccDumpProfile`,
-and `iccRoundTrip`.
+`iccRoundTrip`, and `iccHeifDump`.
 
 Source distributions require Cython at build time.  The project intentionally
 does not ship a generated `_iccdev.cpp`; reproducible builds regenerate the C++
@@ -125,6 +125,7 @@ json_text = iccdev.icc_to_json(xml_blob)
 json_blob = iccdev.icc_from_json(json_text)
 print(iccdev.dump_profile(json_blob))
 print(iccdev.round_trip("sRGB.icc"))
+print(iccdev.heif_dump("image.heic"))
 ```
 
 ## Exception Handling
@@ -196,6 +197,7 @@ except iccdev.IccCmmError as exc:
 | `icc_from_json(json)` | Convert JSON text/path/object to ICC profile bytes using `iccFromJson` |
 | `dump_profile(profile, mode="ALL")` | Run `iccDumpProfile` for an ICC path or bytes |
 | `round_trip(profile)` | Run `iccRoundTrip` for an ICC path or bytes |
+| `heif_dump(image, output_dir=None)` | Report HEIF ICC properties and optionally extract raw profiles |
 | `find_tool(tool)` | Resolve a supported iccDEV command-line tool |
 | `available_tools()` | Return discovered CLI-backed helper tools |
 

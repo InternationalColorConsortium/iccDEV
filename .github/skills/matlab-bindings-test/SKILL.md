@@ -144,6 +144,7 @@ profiles, examples, and native handle lifecycle behavior.
    addpath(fullfile(repo_root, 'matlab', 'tests'));
    test_usage_guidance();
    test_heif_dump_input_validation();
+   test_heif_dump_native(getenv('ICCDEV_BUILD_DIR'));
    test_delta_e_2000();
    test_json_bindings();
    test_lut_type_range();

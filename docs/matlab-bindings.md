@@ -394,6 +394,13 @@ report = iccdev.heif_dump(image_path, 'BuildDir', build_dir);
 disp(report);
 ```
 
+The checked-in HEIF carrier QA fixtures also cover a native MATLAB smoke:
+
+```matlab
+addpath(fullfile(repo_root, 'matlab', 'tests'));
+test_heif_dump_native(build_dir);
+```
+
 ## Profiles
 
 The regression suite can use profiles generated under `Testing/Display`.

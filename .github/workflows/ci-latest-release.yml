@@ -1567,17 +1567,17 @@ jobs:
           unset GITHUB_TOKEN || true
 
           test -s build-cpack/SHA256SUMS
-          grep -Eq "  reficcmax-.*\\.zip\$" build-cpack/SHA256SUMS
-          grep -Eq "  reficcmax-.*\\.deb\$" build-cpack/SHA256SUMS
-          grep -Eq "  reficcmax-.*\\.rpm\$" build-cpack/SHA256SUMS
+          grep -Eq '  reficcmax-.*\.zip$' build-cpack/SHA256SUMS
+          grep -Eq '  reficcmax-.*\.deb$' build-cpack/SHA256SUMS
+          grep -Eq '  reficcmax-.*\.rpm$' build-cpack/SHA256SUMS
           zip_file="$(
-            awk "/  reficcmax-.*\\.zip$/ {print \"build-cpack/\" \$2; exit}" \
+            awk '/  reficcmax-.*\.zip$/ {print "build-cpack/" $2; exit}' \
               build-cpack/SHA256SUMS
           )"
           unzip -Z1 "${zip_file}" > build-cpack/ZIP-CONTENTS.txt
-          grep -q "/VERSION\$" build-cpack/ZIP-CONTENTS.txt
-          grep -q "/TOOL-CATALOG.md\$" build-cpack/ZIP-CONTENTS.txt
-          grep -q "/bin/iccHeifDump\$" build-cpack/ZIP-CONTENTS.txt
+          grep -q '/VERSION$' build-cpack/ZIP-CONTENTS.txt
+          grep -q '/TOOL-CATALOG.md$' build-cpack/ZIP-CONTENTS.txt
+          grep -q '/bin/iccHeifDump$' build-cpack/ZIP-CONTENTS.txt
           unzip -p "${zip_file}" '*/TOOL-CATALOG.md' |
             grep -Fx -- "- \`iccHeifDump\`"
           if grep -q '/Testing/' build-cpack/ZIP-CONTENTS.txt; then
@@ -1588,7 +1588,7 @@ jobs:
             build-cpack/reficcmax-*.zip \
             build-cpack/reficcmax-*.deb \
             build-cpack/reficcmax-*.rpm \
-            | awk "{name=\$2; sub(\".*/\", \"\", name); print \$1 \"  \" name}" \
+            | awk '{name=$2; sub(".*/", "", name); print $1 "  " name}' \
             | sort -k2 \
             > build-cpack/SHA256SUMS.verify
           diff -u build-cpack/SHA256SUMS build-cpack/SHA256SUMS.verify

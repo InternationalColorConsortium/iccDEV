@@ -23,6 +23,7 @@ from typing import Any
 _CONFIGS = ("Release", "Debug", "RelWithDebInfo", "MinSizeRel")
 _LIB_DIRS = ("IccProfLib", "IccXML", "IccJSON", "IccConnect")
 _TOOLS: dict[str, tuple[str, str]] = {
+    "iccHeifDump": ("IccHeifDump", "iccHeifDump"),
     "iccDumpProfile": ("IccDumpProfile", "iccDumpProfile"),
     "iccRoundTrip": ("IccRoundTrip", "iccRoundTrip"),
     "iccToXml": ("IccToXml", "iccToXml"),
@@ -79,7 +80,9 @@ def _split_env_paths(value: str | None) -> list[Path]:
 def _tool_candidates_from_build_dir(build_dir: Path, target: str, executable: str) -> list[Path]:
     exe_name = _exe_name(executable)
     base = build_dir / "Tools" / target
-    candidates = [base / exe_name]
+    candidates = [build_dir / "bin" / exe_name]
+    candidates.extend(build_dir / "bin" / config / exe_name for config in _CONFIGS)
+    candidates.append(base / exe_name)
     candidates.extend(base / config / exe_name for config in _CONFIGS)
     return candidates
 
@@ -96,9 +99,10 @@ def _tool_candidates_from_tools_dir(tools_dir: Path, target: str, executable: st
 def _infer_build_dir(tool_path: Path) -> Path | None:
     parts = tool_path.resolve().parts
     lowered = [part.lower() for part in parts]
-    if "tools" not in lowered:
+    directory = "tools" if "tools" in lowered else "bin" if "bin" in lowered else None
+    if directory is None:
         return None
-    tools_index = lowered.index("tools")
+    tools_index = lowered.index(directory)
     if tools_index == 0:
         return None
     return Path(*parts[:tools_index])
@@ -331,3 +335,23 @@ def round_trip(profile: bytes | str | os.PathLike[str], *, timeout: int = 60) ->
         work_dir = Path(tmp)
         input_path = _input_path(work_dir, profile, ".icc")
         return _decode(_run_tool("iccRoundTrip", input_path, timeout=timeout))
+
+
+def heif_dump(
+    image: str | os.PathLike[str],
+    output_dir: str | os.PathLike[str] | None = None,
+    *,
+    timeout: int = 60,
+) -> str:
+    """Report HEIF ICC properties and optionally extract them to an existing directory."""
+
+    image_path = Path(image).expanduser()
+    if not image_path.is_file():
+        raise FileNotFoundError(f"HEIF image not found: {image_path}")
+    arguments: list[Path] = [image_path.resolve()]
+    if output_dir is not None:
+        directory = Path(output_dir).expanduser()
+        if not directory.is_dir():
+            raise NotADirectoryError(f"HEIF output directory not found: {directory}")
+        arguments.append(directory.resolve())
+    return _decode(_run_tool("iccHeifDump", *arguments, timeout=timeout))
