@@ -306,4 +306,4 @@ python -m iccdev_mcp.server
 
 ## License
 
-BSD 3-Clause. See [LICENSE.md](../LICENSE.md).
+BSD 3-Clause. See [LICENSE.md](LICENSE.md).

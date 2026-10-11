@@ -382,4 +382,4 @@ Works with mypy, pyright, and IDE autocompletion.
 
 ## License
 
-BSD 3-Clause - same as the parent RefIccMAX project. See [LICENSE.md](../LICENSE.md).
+BSD 3-Clause - same as the parent RefIccMAX project. See [LICENSE.md](LICENSE.md).

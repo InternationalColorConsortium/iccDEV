@@ -11,7 +11,9 @@ from pathlib import Path
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check-license-notices.py"
-normalized_text = runpy.run_path(str(SCRIPT))["normalized_text"]
+CHECKER = runpy.run_path(str(SCRIPT))
+normalized_text = CHECKER["normalized_text"]
+has_legacy_v02_marker = CHECKER["has_legacy_v02_marker"]
 NOTICE = "/*\n * Copyright (c) International Color Consortium.\n */\n"
 PATH = Path("example.mm")
 
@@ -38,6 +40,10 @@ class NoticeLineEndingTests(unittest.TestCase):
         result = normalized_text(source, NOTICE, PATH)
         self.assertEqual(result, NOTICE.replace("\n", "\r\n") + "int value;\r\n")
         self.assertEqual(normalized_text(result, NOTICE, PATH), result)
+
+    def test_legacy_v02_marker_after_canonical_notice_is_rejected(self):
+        source = NOTICE + "int value;\n/* ICC Software License, Version " + "0.2 */\n"
+        self.assertTrue(has_legacy_v02_marker(source))
 
 
 if __name__ == "__main__":

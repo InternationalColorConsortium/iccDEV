@@ -32,7 +32,7 @@
 
     Contains:   CTest helper pinning CIccCLUT's grid-coordinate clamp semantics
 
-    Copyright:  (c) see below -- ICC Software License, Version 0.2
+    Copyright:  (c) International Color Consortium
 */
 
 // The Interp* functions used to scale each source component through the
