@@ -11,5 +11,10 @@ unsigned-integer-overflow:*/include/c++/*/bits/stl_bvector.h
 unsigned-integer-overflow:*/include/c++/*/bits/stl_uninitialized.h
 unsigned-integer-overflow:*/include/c++/*/bits/vector.tcc
 unsigned-integer-overflow:*/include/c++/*/ext/string_conversions.h
+# Reading opaque ICC payload bytes through a char stream preserves the raw
+# byte pattern. GCC libstdc++ materializes that conversion in new_allocator.
+implicit-integer-sign-change:*/include/c++/*/bits/new_allocator.h
+# GCC 15 may report the non-canonical toolchain path before path normalization.
+implicit-integer-sign-change:/usr/lib/gcc/x86_64-linux-gnu/*/../../../../include/c++/*/bits/new_allocator.h
 # Apple libc++ hashes through intentional unsigned left-shift wrapping.
 shift-base:*/include/c++/v1/__functional/hash.h

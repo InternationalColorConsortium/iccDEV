@@ -26,6 +26,11 @@ src:*/include/c++/*/bits/stl_uninitialized.h
 src:*/include/c++/*/bits/vector.tcc
 src:*/include/c++/*/ext/string_conversions.h
 
+# Reading opaque ICC payload bytes through a char stream preserves the raw
+# byte pattern. GCC libstdc++ materializes that conversion in new_allocator.
+[implicit-integer-sign-change]
+src:*/include/c++/*/bits/new_allocator.h
+
 [unsigned-shift-base]
 fun:*MD5Transform*
 
