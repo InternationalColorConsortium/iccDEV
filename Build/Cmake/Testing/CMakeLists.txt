@@ -2229,11 +2229,9 @@ function(iccdev_add_tonemap_functions_json_test)
   target_include_directories(iccToneMapFunctionsJsonTest PRIVATE
     "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
     "${ICCDEV_REPO_ROOT}/IccProfLib"
-    ${LIBXML2_INCLUDE_DIR}
   )
   target_link_libraries(iccToneMapFunctionsJsonTest PRIVATE
-    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB}
-    ${LIBXML2_LIBRARIES})
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
   add_dependencies(check iccToneMapFunctionsJsonTest)
 
   if(WIN32)
@@ -2440,11 +2438,9 @@ function(iccdev_add_hex_data_malformed_json_test)
   target_include_directories(iccHexDataMalformedJsonTest PRIVATE
     "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
     "${ICCDEV_REPO_ROOT}/IccProfLib"
-    ${LIBXML2_INCLUDE_DIR}
   )
   target_link_libraries(iccHexDataMalformedJsonTest PRIVATE
-    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB}
-    ${LIBXML2_LIBRARIES})
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
   add_dependencies(check iccHexDataMalformedJsonTest)
 
   if(WIN32)
@@ -2742,11 +2738,9 @@ function(iccdev_add_json_reader_strictness_test)
   target_include_directories(iccJsonReaderStrictnessTest PRIVATE
     "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
     "${ICCDEV_REPO_ROOT}/IccProfLib"
-    ${LIBXML2_INCLUDE_DIR}
   )
   target_link_libraries(iccJsonReaderStrictnessTest PRIVATE
-    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB}
-    ${LIBXML2_LIBRARIES})
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
   add_dependencies(check iccJsonReaderStrictnessTest)
 
   if(WIN32)
@@ -6843,11 +6837,9 @@ function(iccdev_add_json_calculator_newcopy_test)
   target_include_directories(iccJsonCalculatorNewCopyTest PRIVATE
     "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
     "${ICCDEV_REPO_ROOT}/IccProfLib"
-    ${LIBXML2_INCLUDE_DIR}
   )
   target_link_libraries(iccJsonCalculatorNewCopyTest PRIVATE
-    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB}
-    ${LIBXML2_LIBRARIES})
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
   add_dependencies(check iccJsonCalculatorNewCopyTest)
 
   if(WIN32)
@@ -6900,11 +6892,9 @@ function(iccdev_add_json_mpe_reserved_roundtrip_test)
   target_include_directories(iccJsonMpeReservedRoundTripTest PRIVATE
     "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
     "${ICCDEV_REPO_ROOT}/IccProfLib"
-    ${LIBXML2_INCLUDE_DIR}
   )
   target_link_libraries(iccJsonMpeReservedRoundTripTest PRIVATE
-    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB}
-    ${LIBXML2_LIBRARIES})
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
   add_dependencies(check iccJsonMpeReservedRoundTripTest)
 
   if(WIN32)
@@ -6955,11 +6945,9 @@ function(iccdev_add_calculator_limits_json_test)
   target_include_directories(iccCalculatorLimitsJsonTest PRIVATE
     "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
     "${ICCDEV_REPO_ROOT}/IccProfLib"
-    ${LIBXML2_INCLUDE_DIR}
   )
   target_link_libraries(iccCalculatorLimitsJsonTest PRIVATE
-    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB}
-    ${LIBXML2_LIBRARIES})
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
   add_dependencies(check iccCalculatorLimitsJsonTest)
 
   if(WIN32)

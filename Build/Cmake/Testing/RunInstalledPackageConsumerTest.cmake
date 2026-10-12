@@ -294,8 +294,12 @@ _note("Resolved package dir: ${_package_dir}")
 # ---------------------------------------------------------------------------
 set(_common_args
   -G "${ICCDEV_GENERATOR}"
-  -Wno-dev
 )
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.4")
+  list(APPEND _common_args -Wno-author)
+else()
+  list(APPEND _common_args -Wno-dev)
+endif()
 if(DEFINED ICCDEV_GENERATOR_PLATFORM AND NOT "${ICCDEV_GENERATOR_PLATFORM}" STREQUAL "")
   list(APPEND _common_args -A "${ICCDEV_GENERATOR_PLATFORM}")
 endif()
