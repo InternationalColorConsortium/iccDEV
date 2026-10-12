@@ -190,6 +190,9 @@ requesting review, check the PR against this list:
   numeric strings with leading zeroes.
 - Keep bounded jobs actually bounded. Runtime maxima must fit the job timeout
   after multiplying by target count and build/setup time.
+- Keep checksum-pinned WASM dependency downloads bounded and diagnosable:
+  follow redirects, show transfer errors, retry transient failures, and retain
+  connect and total timeouts before verifying the pinned SHA-256.
 - End PowerShell expected-failure probes with `exit 0` after all assertions
   pass. A handled native failure leaves `$LASTEXITCODE` nonzero and otherwise
   makes the workflow step fail after printing a success message.
