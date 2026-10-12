@@ -111,8 +111,11 @@ endif()
 file(WRITE "${_exports_log}" "${_exports_stdout}")
 file(READ "${_exports_log}" _exports_text)
 
+# dumpbin and objdump may leave MinGW's Itanium ABI destructor names mangled.
+# D0/D1/D2 are deleting, complete-object, and base-object destructors, not ctors.
 if(NOT (
     _exports_text MATCHES "\\?\\?1CIccProfileJson" OR
+    _exports_text MATCHES "_ZN([0-9A-Za-z_]+)?15CIccProfileJsonD[012]Ev" OR
     _exports_text MATCHES "CIccProfileJson.*~CIccProfileJson" OR
     _exports_text MATCHES "~CIccProfileJson.*CIccProfileJson"))
   message(FATAL_ERROR "issue #1009 export missing from ${ICCDEV_ICCJSON_DLL}: CIccProfileJson destructor")

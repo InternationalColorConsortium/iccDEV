@@ -1178,32 +1178,40 @@ jobs:
           )
 
           # The static build cannot detect missing symbols in MinGW DLL import
-          # libraries. Link the shared core and its direct consumers as well.
+          # libraries. Exercise the reported #2809 preset with shared-only
+          # linkage, then test exports and a byte-exact JSON round trip.
           $sharedBuildDir = Join-Path $sourceDir 'build-mingw-pr-shared'
           Invoke-Native $cmake @(
+            '--preset', 'mingw-x64-qa-flags',
             '-S', $sourceDir,
             '-B', $sharedBuildDir,
-            '-G', 'Ninja',
-            '-DCMAKE_BUILD_TYPE=Release',
             "-DCMAKE_C_COMPILER=$gcc",
             "-DCMAKE_CXX_COMPILER=$gxx",
+            "-DCMAKE_MAKE_PROGRAM=$ninja",
             "-DCMAKE_PREFIX_PATH=$ucrtRoot",
-            '-DENABLE_TOOLS=ON',
-            '-DENABLE_ICCXML=ON',
-            '-DENABLE_ICCJSON=ON',
-            '-DENABLE_IMAGE_TOOLS=ON',
-            '-DENABLE_WXWIDGETS=OFF',
-            '-DENABLE_CMM_TOOLS=OFF',
-            '-DENABLE_IIS_TOOLS=OFF',
-            '-DENABLE_TESTS=OFF',
             '-DENABLE_SHARED_LIBS=ON',
             '-DENABLE_STATIC_LIBS=OFF'
           )
           Invoke-Native $cmake @(
             '--build', $sharedBuildDir,
-            '--target', 'iccApplyProfiles', 'iccFromJson', 'iccFromXml',
+            '--target', 'iccApplyProfiles', 'iccToJson', 'iccFromJson', 'iccFromXml',
             '--parallel'
           )
+          Invoke-Native $ctest @(
+            '--test-dir', $sharedBuildDir,
+            '-R', '^iccdev\.(issue-987-shared-mpe-export|issue-1009-iccjson-profilejson-export)$',
+            '--output-on-failure', '--no-tests=error'
+          )
+          $sharedBinDir = Join-Path $sharedBuildDir 'bin'
+          $jsonProfile = Join-Path $workspace 'Testing\sRGB_v4_ICC_preference.icc'
+          $jsonOutput = Join-Path $sharedBuildDir 'shared-smoke.json'
+          $iccOutput = Join-Path $sharedBuildDir 'shared-smoke.icc'
+          Invoke-Native (Join-Path $sharedBinDir 'iccToJson.exe') @($jsonProfile, $jsonOutput)
+          Invoke-Native (Join-Path $sharedBinDir 'iccFromJson.exe') @($jsonOutput, $iccOutput)
+          if ((Get-FileHash -LiteralPath $jsonProfile -Algorithm SHA256).Hash -ne
+              (Get-FileHash -LiteralPath $iccOutput -Algorithm SHA256).Hash) {
+            throw 'MinGW shared JSON round trip changed the ICC bytes'
+          }
 
           $compilerLine = (& $gxx --version)[0]
           $summaryLines = @(
@@ -1213,7 +1221,7 @@ jobs:
             "- Build scope: ``full static project and targeted shared consumers``",
             "- Build type: ``Release``",
             "- Linkage: ``static full test and shared link smoke``",
-            "- CTest: ``all registered MinGW suites``",
+            "- CTest: ``selected static regressions and shared export checks``",
             "- Result: ``passed``"
           )
           $summaryLines | ForEach-Object {
