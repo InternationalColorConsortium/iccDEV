@@ -19,6 +19,12 @@ operations. Native parity tests remain in `ci-json-python`. The universal2
 arm64 slice is tested on its build host; its x86_64 slice is not executed
 there, while the separate x86_64 lane tests native Intel wheels.
 
+NumPy is optional. Windows ARM64 CPython 3.9/3.10 test the core without it
+because NumPy publishes no compatible wheels for those targets; the existing
+NumPy test uses `pytest.importorskip`. Other targets retain NumPy coverage.
+The test dependency installer requires binary NumPy wheels to avoid an
+unrelated source build inside wheel validation.
+
 Each lane uploads an explicit `iccdev-python-<lane>` artifact with its wheels
 and cibuildwheel identifier inventory. The release job downloads all seven
 artifacts by name and validates version, ABI/platform coverage, native

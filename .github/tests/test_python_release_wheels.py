@@ -6,6 +6,7 @@ BSD 3-Clause License. See LICENSE.md for details.
 
 from pathlib import Path
 import runpy
+import shlex
 import zipfile
 
 import pytest
@@ -89,4 +90,37 @@ def test_release_workflow_connects_all_wheel_artifacts():
     assert "validate-python-release-wheels.py" in steps["Package release archives"]["run"]
     assert steps["Attest release archive provenance"]["with"]["subject-checksums"] == "release-assets/SHA256SUMS"
     assert '"pytest>=7,<9"' in build["env"]["CIBW_BEFORE_TEST"]
-    assert '"numpy>=1.23,<3"' in build["env"]["CIBW_BEFORE_TEST"]
+    assert "--only-binary=numpy" in build["env"]["CIBW_BEFORE_TEST"]
+
+
+@pytest.mark.parametrize("lane_id,version,expected", [
+    ("windows-arm64", "3.9", False),
+    ("windows-arm64", "3.10", False),
+    ("windows-arm64", "3.11", True),
+    ("windows-arm64", "3.13", True),
+    ("windows-amd64", "3.9", True),
+    ("linux-x86_64", "3.9", True),
+    ("linux-aarch64", "3.9", True),
+    ("macos-arm64", "3.9", True),
+    ("macos-universal2", "3.9", True),
+])
+def test_numpy_dependency_matches_available_wheel_targets(lane_id, version, expected):
+    yaml = pytest.importorskip("yaml")
+    from packaging.requirements import Requirement
+
+    workflow_path = SCRIPT.parents[1] / "workflows/ci-latest-release.yml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="ascii"))
+    build = workflow["jobs"]["python-wheels"]
+    step = next(step for step in build["steps"] if step["name"] == "Build and test standalone wheels")
+    assert step["env"]["CIBW_BEFORE_TEST"] == "${{ matrix.before_test || env.CIBW_BEFORE_TEST }}"
+    lane = next(lane for lane in build["strategy"]["matrix"]["include"] if lane["id"] == lane_id)
+    command = lane.get("before_test", build["env"]["CIBW_BEFORE_TEST"])
+    arguments = shlex.split(command)
+    numpy = Requirement(next(arg for arg in arguments if arg.startswith("numpy>=")))
+    # The matrix controls architecture, even if an emulated shell reports AMD64.
+    selected = numpy.marker is None or numpy.marker.evaluate({
+        "platform_system": "Windows",
+        "platform_machine": "AMD64",
+        "python_version": version,
+    })
+    assert selected is expected

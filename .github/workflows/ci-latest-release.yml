@@ -1786,7 +1786,14 @@ jobs:
           - {id: macos-arm64, os: macos-14, platform: macos, arch: arm64}
           - {id: macos-universal2, os: macos-14, platform: macos, arch: universal2}
           - {id: windows-amd64, os: windows-2022, platform: windows, arch: AMD64}
-          - {id: windows-arm64, os: windows-11-arm, platform: windows, arch: ARM64}
+          - id: windows-arm64
+            os: windows-11-arm
+            platform: windows
+            arch: ARM64
+            # NumPy has no wheels for these Python versions on Windows ARM64.
+            before_test: >-
+              python -m pip install --only-binary=numpy "pytest>=7,<9"
+              "numpy>=1.23,<3; python_version >= '3.11'"
     defaults:
       run:
         shell: bash --noprofile --norc {0}
@@ -1794,7 +1801,8 @@ jobs:
       BASH_ENV: /dev/null
       CIBW_ARCHS: ${{ matrix.arch }}
       # Explicit quotes also protect version bounds from Windows cmd redirection.
-      CIBW_BEFORE_TEST: 'python -m pip install "pytest>=7,<9" "numpy>=1.23,<3"'
+      CIBW_BEFORE_TEST: >-
+        python -m pip install --only-binary=numpy "pytest>=7,<9" "numpy>=1.23,<3"
       CIBW_TEST_COMMAND: >-
         python -m pytest --rootdir "{project}" --import-mode=importlib
         "{project}/python/tests" -v --tb=short -m "not parity"
@@ -1815,6 +1823,7 @@ jobs:
       - name: Build and test standalone wheels
         env:
           WHEEL_PLATFORM: ${{ matrix.platform }}
+          CIBW_BEFORE_TEST: ${{ matrix.before_test || env.CIBW_BEFORE_TEST }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
