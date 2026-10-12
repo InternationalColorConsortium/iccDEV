@@ -184,7 +184,7 @@ def validate_archive(archive, version, python_tag, abi, platforms):
     validate_record(archive, dist_info)
 
 
-def validate_wheels(wheel_dir, identifiers, version, lane=None):
+def validate_wheels(wheel_dir, identifiers, version, lane=None, allow_mcp=False):
     identifiers = list(identifiers)
     expected = set(identifiers)
     supported = set().union(*(lane_identifiers(name) for name in LANE_PLATFORMS))
@@ -194,7 +194,8 @@ def validate_wheels(wheel_dir, identifiers, version, lane=None):
         raise ValueError("Duplicate cibuildwheel identifiers")
     if lane is not None and (lane not in LANE_PLATFORMS or expected != lane_identifiers(lane)):
         raise ValueError(f"Identifier inventory disagrees with lane: {lane}")
-    wheels = sorted(wheel_dir.glob("*.whl"))
+    wheels = sorted(path for path in wheel_dir.glob("*.whl")
+                    if not (allow_mcp and path.name.startswith("iccdev_mcp-")))
     covered = set()
     for wheel in wheels:
         parts = wheel.name[:-4].split("-")
@@ -225,7 +226,7 @@ def main():
     inventory = parser.add_mutually_exclusive_group(required=True)
     inventory.add_argument("--identifiers", type=Path)
     inventory.add_argument("--release", action="store_true",
-                           help="Require all 45 published wheels without CI inventory files")
+                           help="Require all 45 iccdev binding wheels; validate MCP separately")
     parser.add_argument("--lane", choices=sorted(LANE_PLATFORMS),
                         help="Require the complete repository inventory for this CI lane")
     args = parser.parse_args()
@@ -239,6 +240,7 @@ def main():
              if args.release else args.identifiers.read_text(encoding="ascii").split()),
             package_version(repo_root),
             lane=args.lane,
+            allow_mcp=args.release,
         )
     except (ValueError, OSError, KeyError, zipfile.BadZipFile) as error:
         parser.exit(1, f"[FAIL] {error}\n")

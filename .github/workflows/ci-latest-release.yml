@@ -1790,9 +1790,75 @@ jobs:
     with:
       upload-wheels: true
 
+  mcp-package:
+    name: "MCP package (${{ matrix.os }})"
+    needs: cache-policy
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+    steps:
+      - name: Checkout MCP source
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          persist-credentials: false
+
+      - name: Set up MCP package driver
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+
+      # preflight: allow-package-install reason=mcp-release-package-validation
+      - name: Build and test MCP distributions
+        env:
+          ICCDEV_TESTING_DIR: ${{ github.workspace }}/Testing
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          unset ICCDEV_BUILD_DIR ICCDEV_VALIDATION_LIBRARY ICCDEV_TOOLS_DIR PYTHONPATH || true
+          python -m pip install "build>=1.2,<1.7" "twine>=5,<8" "PyYAML>=6,<7"
+          python -m pip install -e "./iccdev-mcp[dev,rest]"
+          python -m pytest --rootdir . --import-mode=importlib .github/tests/test_mcp_release_package.py -q
+          python -m pytest --rootdir . --import-mode=importlib iccdev-mcp/tests/test_server.py iccdev-mcp/tests/test_rest_api.py -q
+          python .github/scripts/iccdev-mcp-package-smoke.py --source-tree
+          python -m build iccdev-mcp --outdir mcp-dist
+          python .github/scripts/validate-mcp-release-package.py mcp-dist
+          python -m twine check mcp-dist/*
+          for package in mcp-dist/*.whl mcp-dist/*.tar.gz; do
+            environment="$(mktemp -d)/venv"
+            python -m venv "$environment"
+            if [ -f "$environment/Scripts/python.exe" ]; then
+              interpreter="$environment/Scripts/python.exe"
+            else
+              interpreter="$environment/bin/python"
+            fi
+            "$interpreter" -m pip install "${package}[rest]" "httpx2>=2,<3"
+            "$interpreter" -m pip check
+            "$interpreter" .github/scripts/iccdev-mcp-package-smoke.py
+          done
+
+      - name: Upload tested MCP distributions
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: iccdev-mcp-python
+          path: mcp-dist/
+          if-no-files-found: error
+          retention-days: 7
+
   release:
     name: "Publish Latest Release"
-    needs: [linux, macos, windows, wasm, cpack-linux, doxygen, python-wheels]
+    needs: [linux, macos, windows, wasm, cpack-linux, doxygen, python-wheels, mcp-package]
     if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-fix-windows-packaging-failure' || github.ref == 'refs/heads/ci-publish-colourbill-ctrl' }}
     runs-on: ubuntu-latest
     environment:
@@ -1894,6 +1960,12 @@ jobs:
           name: iccdev-python-windows-arm64
           path: artifacts/iccdev-python-windows-arm64
 
+      - name: Download tested MCP distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: iccdev-mcp-python
+          path: artifacts/iccdev-mcp-python
+
       - name: Restore release artifact metadata
         shell: bash --noprofile --norc {0}
         env:
@@ -1924,6 +1996,7 @@ jobs:
             iccdev-python-macos-universal2
             iccdev-python-windows-amd64
             iccdev-python-windows-arm64
+            iccdev-mcp-python
           )
           for artifact in "${expected[@]}"; do
             if [ ! -d "artifacts/$artifact" ]; then
@@ -2007,11 +2080,13 @@ jobs:
             cp "$wheel_dir"/*.whl release-assets/
           done
           python3 .github/scripts/validate-python-release-wheels.py release-assets --release
+          python3 .github/scripts/validate-mcp-release-package.py artifacts/iccdev-mcp-python
+          cp artifacts/iccdev-mcp-python/*.whl artifacts/iccdev-mcp-python/*.tar.gz release-assets/
 
           for dir in artifacts/iccdev-*; do
             [ -d "$dir" ] || continue
             name="$(basename "$dir")"
-            [[ "$name" == iccdev-python-* ]] && continue
+            [[ "$name" == iccdev-python-* || "$name" == iccdev-mcp-python ]] && continue
             echo "--- Packaging $name ---"
             (cd "$dir" && zip -r "../../release-assets/${name}.zip" . \
               -x './binary-hardening.md' \
@@ -2072,12 +2147,12 @@ jobs:
           (
             cd release-assets
             find . -maxdepth 1 -type f \
-              \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' -o -name '*.whl' \) \
+              \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' -o -name '*.whl' -o -name '*.tar.gz' \) \
               -printf '%P\0' \
               | sort -z \
               | xargs -0 sha256sum > SHA256SUMS
             find . -maxdepth 1 -type f \
-              \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' -o -name '*.whl' \) \
+              \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' -o -name '*.whl' -o -name '*.tar.gz' \) \
               -printf '%P\0' \
               | sort -z \
               | xargs -0 sha512sum > SHA512SUMS
@@ -2144,6 +2219,7 @@ jobs:
             echo "| Doxygen HTML Docs | \`iccdev-doxygen-html.zip\` |"
             echo "| Linux CPack Runtime | \`reficcmax-*.zip\`, \`reficcmax-*.deb\`, \`reficcmax-*.rpm\` |"
             echo "| Python (CPython 3.9-3.13) | \`iccdev-*.whl\` for Linux, macOS, and Windows |"
+            echo "| MCP server (Python 3.10+) | \`iccdev_mcp-*-py3-none-any.whl\` and \`iccdev_mcp-*.tar.gz\` |"
             echo "| Checksums | \`SHA256SUMS\`, \`SHA512SUMS\` |"
             echo ""
             echo "### Provenance"
@@ -2167,6 +2243,9 @@ jobs:
             echo "PyPI publication is separate; these wheels require no PyPI account."
             echo "Linux wheels cover manylinux and musllinux x86_64/aarch64; macOS covers x86_64/arm64/universal2; Windows covers AMD64/ARM64."
             echo "Core profile/CMM APIs are self-contained. CLI-backed helpers need the matching native tool bundle."
+            echo "MCP: install the universal wheel URL with pip, then run \`iccdev-mcp\`."
+            echo "The MCP wheel includes no CLI binaries or compiled transform bindings; install those separately when needed."
+            echo "For REST extras use \`python -m pip install \"iccdev-mcp[rest] @ <copied-MCP-wheel-asset-URL>\"\`."
             echo ""
             echo "---"
             echo "*Auto-published by ci-latest-release.*"
@@ -2177,6 +2256,7 @@ jobs:
             release-assets/*.deb \
             release-assets/*.rpm \
             release-assets/*.whl \
+            release-assets/*.tar.gz \
             release-assets/SHA256SUMS \
             release-assets/SHA512SUMS \
             --repo "$GH_REPOSITORY" \
@@ -2206,7 +2286,7 @@ jobs:
           fi
           release_tag="ci-latest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}"
           asset_count=0
-          for f in release-assets/*.zip release-assets/*.deb release-assets/*.rpm release-assets/*.whl; do
+          for f in release-assets/*.zip release-assets/*.deb release-assets/*.rpm release-assets/*.whl release-assets/*.tar.gz; do
             [ -f "$f" ] || continue
             asset_count=$((asset_count + 1))
           done
@@ -2219,7 +2299,7 @@ jobs:
             echo "- Artifact attestation: ${ATTESTATION_OUTCOME:-skipped}"
             echo "- Assets staged: ${asset_count} package files"
             echo ""
-            for f in release-assets/*.zip release-assets/*.deb release-assets/*.rpm release-assets/*.whl; do
+            for f in release-assets/*.zip release-assets/*.deb release-assets/*.rpm release-assets/*.whl release-assets/*.tar.gz; do
               [ -f "$f" ] || continue
               printf '  - %s\n' "$(sanitize_filename "$(basename "$f")")"
             done

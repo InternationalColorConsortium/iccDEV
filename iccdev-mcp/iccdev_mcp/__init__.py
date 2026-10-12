@@ -14,7 +14,8 @@ Provides profile tooling through:
 Quick start::
 
     # Install
-    pip install iccdev-mcp
+    pip install "git+https://github.com/InternationalColorConsortium/iccDEV.git#subdirectory=iccdev-mcp"
+    # Or install the universal wheel URL from a successful GitHub release.
 
     # Run MCP server (stdio transport for Claude Desktop / VS Code)
     iccdev-mcp

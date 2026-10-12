@@ -3,6 +3,17 @@
 Use this prompt when MCP tool calls return errors, empty output, or unexpected results
 from the iccdev-mcp server's subprocess-based tool execution.
 
+For rolling-release package failures, validate the universal wheel and sdist
+with `.github/scripts/validate-mcp-release-package.py <distribution-directory>`.
+Run `.github/scripts/iccdev-mcp-package-smoke.py --source-tree` in a source
+environment and omit the flag in separate installed wheel/sdist environments.
+The smoke proves parent/child imports, console startup, stdio discovery and
+profile inspection, REST health, and explicit missing-transform-backend errors.
+Keep Windows and Linux installation evidence separate; verify the immutable
+release tag, both checksum manifests, and provenance before consuming assets.
+See `docs/python-packaging-release.md` for the GitHub wheel/uvx route; a GitHub
+release or branch push does not establish PyPI publication.
+
 ## Diagnostic Steps
 
 1. **Check runtime inventory**

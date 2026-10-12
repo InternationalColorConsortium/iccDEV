@@ -53,6 +53,14 @@ shares one source of truth. Update rules here, not in the mirrors.
   Validate downloaded release wheels with `--release` to require all 45
   targets without CI identifier files. Require RECORD file coverage, secure
   hashes, and sizes before attestation; ZIP CRCs alone do not prove this contract.
+- Rolling-release MCP artifacts are a separate universal wheel and sdist,
+  validated by `.github/scripts/validate-mcp-release-package.py`. Keep the
+  Windows/Linux source, installed wheel, and installed sdist checks in the
+  `mcp-package` job. Prove parent/child imports and console stdio/REST behavior
+  with `iccdev-mcp-package-smoke.py`; do not infer installed behavior from
+  editable installs. Preserve the `iccdev_mcp` namespace and optional native
+  capability failures. MCP distributions participate in checksums/provenance;
+  PyPI publication remains a separate maintainer action.
 - MATLAB public entry points that require arguments must provide actionable
   bare-invocation errors pinned by `matlab/tests/test_usage_guidance.m`.
   Interactive examples must show visible UI defaults first; label hidden or

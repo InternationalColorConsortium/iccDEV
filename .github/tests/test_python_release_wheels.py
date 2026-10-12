@@ -255,6 +255,12 @@ def test_release_inventory_requires_every_lane(tmp_path):
     result = subprocess.run(command, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
     assert "Validated 45 release wheels" in result.stdout
+    # The separately validated MCP distribution coexists in published assets.
+    (tmp_path / "iccdev_mcp-0.1.0-py3-none-any.whl").write_bytes(b"separate MCP intake")
+    result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    with pytest.raises(ValueError, match="Unexpected wheel name"):
+        VALIDATE(tmp_path, identifiers, "0.1.0")
     next(tmp_path.glob("*win_arm64.whl")).unlink()
     result = subprocess.run(command, capture_output=True, text=True, timeout=30)
     assert result.returncode == 1

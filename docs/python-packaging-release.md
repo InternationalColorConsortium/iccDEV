@@ -153,7 +153,10 @@ python .github/scripts/validate-python-release-wheels.py release-assets --releas
 
 The `--release` mode requires all 45 targets across seven lanes, including both
 Linux libc families. It rejects incomplete downloads. Use the lane mode above
-for CI artifacts and subset checks. Verify each downloaded wheel against both
+for CI artifacts and subset checks. This validator ignores the separate
+`iccdev_mcp-*` distribution in combined release downloads; validate the MCP
+wheel and source distribution with the command below.
+Verify each downloaded wheel against both
 published checksum manifests and run `gh attestation verify <wheel-path> --repo
 InternationalColorConsortium/iccDEV` before installing a compatible wheel into
 an isolated environment. Checksum manifests may also list native packages that
@@ -162,6 +165,39 @@ Record metadata inspection separately from execution: a Windows AMD64 host
 cannot establish ARM64, macOS, or Linux runtime correctness. CLI-backed helpers
 also require the separately downloaded native tool bundle. CMake/CTest and
 CPack remain native package producers, not wheel producers.
+
+### MCP wheel and source distribution
+
+The manual rolling-release workflow also builds the pure Python `iccdev-mcp`
+package for Python 3.10+. Its `mcp-package` job tests Windows and Linux with a
+Python 3.13 driver, bounded Hatchling builds, source server/REST tests, and
+isolated installations of both the universal wheel and source distribution.
+The package smoke proves parent and child import paths, both console entry
+points, real stdio discovery/health/profile calls, REST health, and clear errors
+when compiled transform bindings are absent. It runs outside the source package
+directory so a source import cannot mask an incomplete installed distribution.
+
+Only the Linux lane uploads the explicitly named `iccdev-mcp-python` artifact;
+the release waits for both lanes. Its consumer requires exactly one matching
+`iccdev_mcp-*-py3-none-any.whl` and `iccdev_mcp-*.tar.gz`, validates metadata,
+namespace, pure-Python wheel contents, console entries, complete license,
+RECORD integrity, and safe source archive members, then publishes both raw
+files with SHA256/SHA512 checksums and the existing provenance attestation.
+The compiled `iccdev` wheels and MCP package retain separate intake validators:
+
+```bash
+python .github/scripts/validate-python-release-wheels.py release-assets --release
+python .github/scripts/validate-mcp-release-package.py release-assets
+```
+
+The MCP wheel does not include native CLI tools, compiled transforms, or the
+validation library. Install the matching tool bundle or compiled `iccdev`
+binding wheel separately for those capabilities. Namespace fixes for #2798
+and fail-closed transform behavior for #2797 must remain intact.
+For an isolated client use `uvx --from "<MCP-wheel-asset-URL>" iccdev-mcp`.
+Bare `pip install iccdev-mcp` and `uvx iccdev-mcp` require a future PyPI release.
+This workflow does not use PyPI credentials, create an account, or upload to
+PyPI. Publishing there remains a separate maintainer-selected release action.
 
 Run pytest from the repository root with `--import-mode=importlib`. Installed
 wheel validation must also set `ICCDEV_REQUIRE_INSTALLED_PACKAGE=1`; the test
