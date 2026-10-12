@@ -45,6 +45,8 @@
 // for it (#2692).
 
 #include <cstdio>
+#include <filesystem>
+#include <system_error>
 #include "IccFileUtil.h"
 
 #if defined(_WIN32)
@@ -111,6 +113,32 @@ inline bool icIsSameFile(const char* szA, const char* szB)
     return false;
 
   return stA.st_dev == stB.st_dev && stA.st_ino == stB.st_ino;
+#endif
+}
+
+// Compare output paths before either file exists.  File identity alone cannot
+// catch two spellings of the same future destination (for example, out.json
+// and ./out.json).  weakly_canonical also resolves an existing symlink parent.
+inline bool icOutputPathsAlias(const char* szA, const char* szB)
+{
+  if (!szA || !szA[0] || !szB || !szB[0])
+    return false;
+  if (icIsSameFile(szA, szB))
+    return true;
+
+  std::error_code errorA, errorB;
+  const std::filesystem::path pathA =
+    std::filesystem::weakly_canonical(std::filesystem::path(szA), errorA);
+  const std::filesystem::path pathB =
+    std::filesystem::weakly_canonical(std::filesystem::path(szB), errorB);
+  if (errorA || errorB)
+    return false; // The following open reports an unusable path.
+
+#if defined(_WIN32)
+  return CompareStringOrdinal(pathA.c_str(), -1, pathB.c_str(), -1, TRUE) ==
+         CSTR_EQUAL;
+#else
+  return pathA == pathB;
 #endif
 }
 

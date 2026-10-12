@@ -48,7 +48,7 @@ echo "This runs an inverse search per pixel; expect minutes, not seconds."
 # overrides it with four repeatable workers.  A search CMM gives every worker
 # its own CIccApplyCmmSearch with private sub-chain apply objects, so the
 # threaded result is identical to the scalar one -- only faster.
-iccApplyProfiles -threads 0 -cfg config/msCowsToCmyk.json
+iccApplyProfiles -threads 4 -cfg config/msCowsToCmyk.json
 iccTiffDump   Results/MS_smCowsCmyk.tif
 
 echo "Wrote Results/MS_smCowsCmyk.tif"

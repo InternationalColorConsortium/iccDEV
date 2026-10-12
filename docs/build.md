@@ -657,7 +657,10 @@ off, apply-tool JSONL/evidence code and library CLUT/threaded-CMM counters are
 excluded at compile time. The apply tools reject telemetry options in these
 builds. Set it to `ON` in a separate build tree to include both surfaces;
 `ICC_PERF_STATS_FILE` then selects a library counter report at runtime. The
-older `ICCDEV_ENABLE_PERF_MONITORING=ON` option remains a deprecated alias.
+older `ICCDEV_ENABLE_PERF_MONITORING=ON` option remains a deprecated alias,
+including when reconfiguring an existing build tree. An `ON` legacy value takes
+precedence over `ICCDEV_ENABLE_TELEMETRY=OFF`; set the legacy option to `OFF`
+before disabling telemetry in that build tree.
 
 The telemetry presets keep their outputs separate from ordinary builds:
 

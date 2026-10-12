@@ -56,8 +56,10 @@ Configure `ICCDEV_ENABLE_TELEMETRY=ON` to use
 telemetry uses UTC timestamps and is written to stderr. JSONL records
 `run_started`, `transform_ready`,
 and completion or failure; the evidence sidecar includes the link output, grid
-size/node count, elapsed time, and node throughput. Human telemetry replaces
-the legacy percentage display so a combined console log has one progress view.
+size/node count, elapsed time, and node throughput. Human telemetry reports
+timestamped LUT progress at the first and last node and about once per second
+during long runs. It replaces the legacy
+percentage display so a combined console log has one progress view.
 
 ## See Also
 

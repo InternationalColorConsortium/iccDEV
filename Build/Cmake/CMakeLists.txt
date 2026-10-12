@@ -699,16 +699,17 @@ option(ICCDEV_ENABLE_AVX512
 option(ICCDEV_ENABLE_PERF_MONITORING
   "Deprecated alias for ICCDEV_ENABLE_TELEMETRY"
   OFF)
-if(ICCDEV_ENABLE_PERF_MONITORING AND NOT DEFINED ICCDEV_ENABLE_TELEMETRY)
+if(ICCDEV_ENABLE_PERF_MONITORING AND NOT ICCDEV_ENABLE_TELEMETRY)
   set(ICCDEV_ENABLE_TELEMETRY ON CACHE BOOL
-    "Build apply-tool receipts and aggregate CLUT/threaded-CMM telemetry")
+    "Build apply-tool receipts and aggregate CLUT/threaded-CMM telemetry" FORCE)
 endif()
 option(ICCDEV_ENABLE_TELEMETRY
   "Build apply-tool receipts and aggregate CLUT/threaded-CMM telemetry"
   OFF)
 if(ICCDEV_ENABLE_PERF_MONITORING)
   message(DEPRECATION
-    "ICCDEV_ENABLE_PERF_MONITORING is deprecated; use ICCDEV_ENABLE_TELEMETRY")
+    "ICCDEV_ENABLE_PERF_MONITORING is deprecated and takes precedence when ON; "
+    "set it to OFF before disabling ICCDEV_ENABLE_TELEMETRY")
 endif()
 option(ICCDEV_ENABLE_APPLY_BATCH_TIMING
   "Build opt-in iccApplyProfiles per-batch debug timing"

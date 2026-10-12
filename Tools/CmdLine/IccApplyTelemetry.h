@@ -44,6 +44,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <ctime>
 #include <string>
 
@@ -104,10 +105,20 @@ enum icApplyTelemetryMode {
 
 class CIccApplyToolTelemetry {
 public:
-  CIccApplyToolTelemetry() : m_mode(icApplyTelemetryOff), m_file(nullptr), m_sequence(0) {}
+  CIccApplyToolTelemetry()
+    : m_mode(icApplyTelemetryOff), m_file(nullptr), m_sequence(0),
+      m_startedEvent(false), m_terminalEvent(false) {}
 
   ~CIccApplyToolTelemetry()
   {
+    if (m_file && m_startedEvent && !m_terminalEvent) {
+      try {
+        Emit("run_failed", "\"status\":\"tool_failure\",\"reason\":\"early_exit\"");
+      }
+      catch (...) {
+        // An allocation failure may also prevent writing the final receipt.
+      }
+    }
     if (m_file)
       fclose(m_file);
   }
@@ -134,6 +145,10 @@ public:
       fprintf(stderr, "Unable to write telemetry event '%s'\n", event);
       return false;
     }
+    if (!strcmp(event, "run_started"))
+      m_startedEvent = true;
+    else if (!strcmp(event, "run_completed") || !strcmp(event, "run_failed"))
+      m_terminalEvent = true;
     return true;
   }
 
@@ -208,6 +223,8 @@ private:
 
   FILE* m_file;
   unsigned long long m_sequence;
+  bool m_startedEvent;
+  bool m_terminalEvent;
   std::chrono::steady_clock::time_point m_started = std::chrono::steady_clock::now();
 };
 

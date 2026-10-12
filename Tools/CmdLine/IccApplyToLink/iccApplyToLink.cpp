@@ -68,6 +68,7 @@
 #include "IccCmdLineUtil.h"
 #ifdef ICCDEV_TELEMETRY
 #include "IccApplyTelemetry.h"
+#include "IccSameFile.h"
 #endif
 #if !defined(_WIN32)
 #include <fcntl.h>
@@ -993,7 +994,8 @@ int main(int argc, icChar* argv[])
     fprintf(stderr, "--telemetry-file requires --telemetry=jsonl\n");
     return EXIT_FAILURE;
   }
-  if (telemetryFile == evidenceFile && !telemetryFile.empty()) {
+  if (!telemetryFile.empty() && !evidenceFile.empty() &&
+      icOutputPathsAlias(telemetryFile.c_str(), evidenceFile.c_str())) {
     fprintf(stderr, "Telemetry and evidence files must be different\n");
     return EXIT_FAILURE;
   }
@@ -1011,8 +1013,10 @@ int main(int argc, icChar* argv[])
   }
 
 #ifdef ICCDEV_TELEMETRY
-  if ((!telemetryFile.empty() && telemetryFile == argv[1]) ||
-      (!evidenceFile.empty() && evidenceFile == argv[1])) {
+  if ((!telemetryFile.empty() &&
+       icOutputPathsAlias(telemetryFile.c_str(), argv[1])) ||
+      (!evidenceFile.empty() &&
+       icOutputPathsAlias(evidenceFile.c_str(), argv[1]))) {
     fprintf(stderr, "Telemetry and evidence files must not alias the link output\n");
     return EXIT_FAILURE;
   }
@@ -1431,6 +1435,9 @@ int main(int argc, icChar* argv[])
   // 2 <= nLutSize <= 255, so maxLUT cannot be zero
   icUInt32Number maxLut = nLutSize - 1;
   int lastPer = -1;
+#ifdef ICCDEV_TELEMETRY
+  long long lastHumanProgressMs = -1000;
+#endif
   
   int j = 0;
   // c indexes every grid point written to the device link and can reach
@@ -1459,21 +1466,28 @@ int main(int argc, icChar* argv[])
         break;
     }
  
-    //Display status of how much we have accomplished
+    // Display progress during long LUT generation runs.
 #ifdef ICCDEV_TELEMETRY
-    if (telemetryMode != icApplyTelemetryHuman && lutCount > 0) {
-#else
-    if (lutCount > 0) {
+    if (telemetryMode == icApplyTelemetryHuman && lutCount > 0) {
+      const long long elapsedMs = telemetry.ElapsedMs();
+      if (c == 0 || c + 1 == lutCount ||
+          elapsedMs - lastHumanProgressMs >= 1000) {
+        fprintf(stderr,
+                "[%s] iccApplyToLink: progress nodes=%zu/%zu percent=%d elapsed_ms=%lld\n",
+                CIccApplyToolTelemetry::TimestampUtc().c_str(), c + 1, lutCount,
+                GetProgressPercent(c + 1, lutCount), elapsedMs);
+        lastHumanProgressMs = elapsedMs;
+      }
+    }
+    else
 #endif
-      // Human telemetry is the progress view for an opted-in run. Keep the
-      // legacy percentage for the default and JSONL modes, but do not render
-      // both views into a combined console log.
-        int curPer = GetProgressPercent(c + 1, lutCount);
-        if (curPer != lastPer) {
-          printf("\r%d%%", curPer);
-          fflush(stdout);
-          lastPer = curPer;
-        }
+    if (lutCount > 0) {
+      const int curPer = GetProgressPercent(c + 1, lutCount);
+      if (curPer != lastPer) {
+        printf("\r%d%%", curPer);
+        fflush(stdout);
+        lastPer = curPer;
+      }
     }
   }
 
@@ -1513,8 +1527,11 @@ int main(int argc, icChar* argv[])
     ",\"grid_nodes\":" + std::to_string(nLutNodes) +
     ",\"elapsed_ms\":" + std::to_string(elapsedMs) +
     ",\"throughput_nodes_per_second\":" + std::to_string(throughputNodesPerSecond);
-  if (!evidenceFile.empty() && !telemetry.WriteEvidence(evidenceFile, completedFields))
+  if (!evidenceFile.empty() && !telemetry.WriteEvidence(evidenceFile, completedFields)) {
+    telemetry.Emit("run_failed",
+                   "\"status\":\"tool_failure\",\"reason\":\"evidence_write_failed\"");
     return EXIT_FAILURE;
+  }
   if (!telemetry.Emit("run_completed", completedFields))
     return EXIT_FAILURE;
   if (telemetryMode == icApplyTelemetryHuman) {

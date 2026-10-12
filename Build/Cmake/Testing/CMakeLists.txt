@@ -12244,6 +12244,33 @@ if(WIN32)
         ENVIRONMENT_MODIFICATION "${_applyprofiles_windows_env_mods}")
       add_dependencies(check iccApplyProfiles)
 
+      if(TARGET iccApplyNamedCmm AND TARGET iccApplySearch AND TARGET iccApplyToLink)
+        add_test(
+          NAME iccdev.apply-telemetry-failure-paths
+          COMMAND "${Python3_EXECUTABLE}"
+            "${ICCDEV_REPO_ROOT}/.github/ci/quality-assurance/scripts/test_apply_telemetry_failures.py"
+            --profiles-tool "$<TARGET_FILE:iccApplyProfiles>"
+            --named-tool "$<TARGET_FILE:iccApplyNamedCmm>"
+            --search-tool "$<TARGET_FILE:iccApplySearch>"
+            --link-tool "$<TARGET_FILE:iccApplyToLink>"
+            --source "${ICCDEV_TESTING_DIR}/ApplyDataFiles/seed-tiff-none-rgb-8x8.tif"
+            --data "${ICCDEV_TESTING_DIR}/ApplyDataFiles/rgb8bit.txt"
+            --profile "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+        )
+        set(_apply_failure_windows_env_mods ${_applyprofiles_windows_env_mods})
+        foreach(_apply_tool IN ITEMS iccApplyNamedCmm iccApplySearch iccApplyToLink)
+          list(APPEND _apply_failure_windows_env_mods
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:${_apply_tool}>")
+        endforeach()
+        set_tests_properties(iccdev.apply-telemetry-failure-paths PROPERTIES
+          WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+          TIMEOUT 120
+          LABELS "iccdev;cmm;image;qa;evidence;regression"
+          ENVIRONMENT_MODIFICATION "${_apply_failure_windows_env_mods}"
+        )
+        add_dependencies(check iccApplyNamedCmm iccApplySearch iccApplyToLink)
+      endif()
+
       if(TARGET iccTiffDump AND TARGET iccPawgReport)
         add_test(
           NAME iccdev.applyprofiles-evidence-matrix
@@ -14430,6 +14457,28 @@ if(TARGET iccApplyProfiles)
   )
 
   if(ICCDEV_ENABLE_TELEMETRY)
+    if(TARGET iccApplyNamedCmm AND TARGET iccApplySearch AND TARGET iccApplyToLink)
+      find_program(ICCDEV_APPLY_FAILURE_PYTHON3_EXECUTABLE python3)
+      if(ICCDEV_APPLY_FAILURE_PYTHON3_EXECUTABLE)
+        add_test(
+          NAME iccdev.apply-telemetry-failure-paths
+          COMMAND "${ICCDEV_APPLY_FAILURE_PYTHON3_EXECUTABLE}"
+            "${ICCDEV_REPO_ROOT}/.github/ci/quality-assurance/scripts/test_apply_telemetry_failures.py"
+            --profiles-tool "$<TARGET_FILE:iccApplyProfiles>"
+            --named-tool "$<TARGET_FILE:iccApplyNamedCmm>"
+            --search-tool "$<TARGET_FILE:iccApplySearch>"
+            --link-tool "$<TARGET_FILE:iccApplyToLink>"
+            --source "${ICCDEV_TESTING_DIR}/ApplyDataFiles/seed-tiff-none-rgb-8x8.tif"
+            --data "${ICCDEV_TESTING_DIR}/ApplyDataFiles/rgb8bit.txt"
+            --profile "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+        )
+        set_tests_properties(iccdev.apply-telemetry-failure-paths PROPERTIES
+          WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+          TIMEOUT 120
+          LABELS "iccdev;cmm;image;qa;evidence;regression"
+        )
+      endif()
+    endif()
     iccdev_add_script_test(
       iccdev.applyprofiles-headless-receipts
       120

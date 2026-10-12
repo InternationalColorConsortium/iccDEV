@@ -56,6 +56,8 @@ qa_assert_contains "$TELEMETRY" "\"event\":\"run_completed\"" "Link telemetry co
 qa_assert_contains "$EVIDENCE" "\"grid_nodes\":" "Link evidence records grid nodes"
 qa_run telemetry-human success "iccApplyToLink: completed" "$BIN" \
     -telemetry=human "$QA_OUTDIR/human.cube" 1 2 4 "QA human" 0 1 0 0 "$PROFILE" 1
+qa_assert_contains "$QA_LAST_LOG" "iccApplyToLink: progress nodes=" \
+    "ApplyToLink human telemetry reports LUT progress"
 if ! grep -Eq '^\[[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\] iccApplyToLink: completed ' "$QA_LAST_LOG"; then
     qa_fail "ApplyToLink human telemetry completion is missing its UTC timestamp"
 fi

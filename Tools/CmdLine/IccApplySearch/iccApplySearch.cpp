@@ -57,6 +57,7 @@
 #include "IccCmdLineUtil.h"
 #ifdef ICCDEV_TELEMETRY
 #include "IccApplyTelemetry.h"
+#include "IccSameFile.h"
 #endif
 #include <cerrno>
 #include <cstring>  // strcmp, used by the -h/--help contract guard in main()
@@ -349,7 +350,8 @@ int main(int argc, const char* argv[])
     fprintf(stderr, "--telemetry-file requires --telemetry=jsonl\n");
     return EXIT_FAILURE;
   }
-  if (telemetryFile == evidenceFile && !telemetryFile.empty()) {
+  if (!telemetryFile.empty() && !evidenceFile.empty() &&
+      icOutputPathsAlias(telemetryFile.c_str(), evidenceFile.c_str())) {
     fprintf(stderr, "Telemetry and evidence files must be different\n");
     return EXIT_FAILURE;
   }
@@ -556,9 +558,15 @@ int main(int argc, const char* argv[])
   const std::string outputName =
     cfgApply.m_dstFile.empty() ? "stdout" : cfgApply.m_dstFile;
   if ((!telemetryFile.empty() &&
-       (telemetryFile == inputName || telemetryFile == outputName)) ||
+       ((!cfgApply.m_srcFile.empty() &&
+         icOutputPathsAlias(telemetryFile.c_str(), cfgApply.m_srcFile.c_str())) ||
+        (!cfgApply.m_dstFile.empty() &&
+         icOutputPathsAlias(telemetryFile.c_str(), cfgApply.m_dstFile.c_str())))) ||
       (!evidenceFile.empty() &&
-       (evidenceFile == inputName || evidenceFile == outputName))) {
+       ((!cfgApply.m_srcFile.empty() &&
+         icOutputPathsAlias(evidenceFile.c_str(), cfgApply.m_srcFile.c_str())) ||
+        (!cfgApply.m_dstFile.empty() &&
+         icOutputPathsAlias(evidenceFile.c_str(), cfgApply.m_dstFile.c_str()))))) {
     fprintf(stderr, "Telemetry and evidence files must not alias transform input or output\n");
     return EXIT_FAILURE;
   }
@@ -777,8 +785,11 @@ int main(int argc, const char* argv[])
 //   cfgApply.m_dstPrecision = 2;
 //   cfgApply.m_debugCalc = false;
 
+  bool outputWritten = false;
   if (cfgApply.m_dstType == icCfgLegacy) {
-    outData.toLegacy(cfgApply.m_dstFile.c_str(), cfgSearchApply.m_profiles, cfgApply.m_dstDigits, cfgApply.m_dstPrecision, cfgApply.m_debugCalc);
+    outputWritten = outData.toLegacy(cfgApply.m_dstFile.c_str(), cfgSearchApply.m_profiles,
+                                     cfgApply.m_dstDigits, cfgApply.m_dstPrecision,
+                                     cfgApply.m_debugCalc);
   }
   else if (cfgApply.m_dstType == icCfgColorData) {
     json out;
@@ -793,10 +804,11 @@ int main(int argc, const char* argv[])
       out["colorData"] = data;
 
     if (out.is_object())
-      saveJsonAs(out, cfgApply.m_dstFile.c_str());
+      outputWritten = saveJsonAs(out, cfgApply.m_dstFile.c_str());
   }
   else if (cfgApply.m_dstType==icCfgIt8) {
-    outData.toIt8(cfgApply.m_dstFile.c_str(), cfgApply.m_dstDigits, cfgApply.m_dstPrecision);
+    outputWritten = outData.toIt8(cfgApply.m_dstFile.c_str(), cfgApply.m_dstDigits,
+                                  cfgApply.m_dstPrecision);
   }
   else {
     printf("Unsupported output format\n");
@@ -806,6 +818,16 @@ int main(int argc, const char* argv[])
   }
 
   delete pMruCmm;
+  if (!outputWritten) {
+    fprintf(stderr, "Unable to write transform output '%s'\n",
+            icSanitizeConsoleText(cfgApply.m_dstFile.empty() ? "stdout" :
+                                  cfgApply.m_dstFile.c_str()).c_str());
+#ifdef ICCDEV_TELEMETRY
+    telemetry.Emit("run_failed",
+                   "\"status\":\"tool_failure\",\"reason\":\"output_write_failed\"");
+#endif
+    return EXIT_FAILURE;
+  }
 
 #ifdef ICCDEV_TELEMETRY
   const long long elapsedMs = telemetry.ElapsedMs();

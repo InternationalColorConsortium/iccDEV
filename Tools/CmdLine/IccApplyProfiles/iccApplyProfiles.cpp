@@ -90,10 +90,25 @@ enum icTelemetryMode {
 };
 
 struct CIccApplyTelemetry {
-  CIccApplyTelemetry() : m_mode(icTelemetryOff), m_file(nullptr), m_sequence(0) {}
+  CIccApplyTelemetry()
+    : m_mode(icTelemetryOff), m_file(nullptr), m_sequence(0),
+      m_startedEvent(false), m_terminalEvent(false) {}
 
   ~CIccApplyTelemetry()
   {
+    if (m_file && m_startedEvent && !m_terminalEvent) {
+      try {
+        Emit("run_failed", {
+          {"status", "tool_failure"},
+          {"exit_code", -1},
+          {"reason", "early_exit"},
+          {"completed_pixels", 0}
+        });
+      }
+      catch (...) {
+        // An allocation failure may also prevent writing the final receipt.
+      }
+    }
     if (m_file)
       fclose(m_file);
   }
@@ -135,6 +150,10 @@ struct CIccApplyTelemetry {
       fprintf(stderr, "Unable to write telemetry event '%s'\n", event);
       return false;
     }
+    if (!strcmp(event, "run_started"))
+      m_startedEvent = true;
+    else if (!strcmp(event, "run_completed") || !strcmp(event, "run_failed"))
+      m_terminalEvent = true;
     return true;
   }
 
@@ -165,6 +184,8 @@ struct CIccApplyTelemetry {
   icTelemetryMode m_mode;
   FILE* m_file;
   unsigned long long m_sequence;
+  bool m_startedEvent;
+  bool m_terminalEvent;
   std::chrono::steady_clock::time_point m_started = std::chrono::steady_clock::now();
 };
 #endif
@@ -785,11 +806,11 @@ int main(int argc, const char** argv)
        OutputIsAnInput(evidenceFile.c_str(), cfgApply, cfgFile, reportProfiles,
                        cfgSearch.m_pccWeights)) ||
       (!telemetryFile.empty() &&
-       icOutputIsInput(telemetryFile.c_str(), cfgApply.m_dstImgFile.c_str())) ||
+       icOutputPathsAlias(telemetryFile.c_str(), cfgApply.m_dstImgFile.c_str())) ||
       (!evidenceFile.empty() &&
-       icOutputIsInput(evidenceFile.c_str(), cfgApply.m_dstImgFile.c_str())) ||
+       icOutputPathsAlias(evidenceFile.c_str(), cfgApply.m_dstImgFile.c_str())) ||
       (!telemetryFile.empty() && !evidenceFile.empty() &&
-       icOutputIsInput(telemetryFile.c_str(), evidenceFile.c_str()))) {
+       icOutputPathsAlias(telemetryFile.c_str(), evidenceFile.c_str()))) {
     fprintf(stderr, "Telemetry or evidence output aliases an input or another receipt\n");
     return EXIT_FAILURE;
   }
