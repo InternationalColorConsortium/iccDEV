@@ -49,7 +49,11 @@ shares one source of truth. Update rules here, not in the mirrors.
   CI enables explicitly named artifact intake validated by
   `.github/scripts/validate-python-release-wheels.py` with an independent
   `--lane` inventory, complete license checks, checksums, and provenance;
-  PyPI account setup and publication remain separate maintainer actions.
+  PyPI publication uses explicit `pypi_packages` selection on the manual
+  `ci-latest-release.yml` workflow. Keep `iccdev` and `iccdev-mcp` staging,
+  trusted-publisher identities, outcomes, and post-publication smoke tests
+  separate. Require complete package inventories, dual checksums, release
+  attestations, the protected `release` environment, and OIDC publishing.
   Validate downloaded release wheels with `--release` to require all 45
   targets without CI identifier files. Require RECORD file coverage, secure
   hashes, and sizes before attestation; ZIP CRCs alone do not prove this contract.
@@ -60,7 +64,8 @@ shares one source of truth. Update rules here, not in the mirrors.
   with `iccdev-mcp-package-smoke.py`; do not infer installed behavior from
   editable installs. Preserve the `iccdev_mcp` namespace and optional native
   capability failures. MCP distributions participate in checksums/provenance;
-  PyPI publication remains a separate maintainer action.
+  publish them through the same protected trusted-publishing workflow without
+  combining the MCP package contract with the compiled-wheel inventory.
 - MATLAB public entry points that require arguments must provide actionable
   bare-invocation errors pinned by `matlab/tests/test_usage_guidance.m`.
   Interactive examples must show visible UI defaults first; label hidden or

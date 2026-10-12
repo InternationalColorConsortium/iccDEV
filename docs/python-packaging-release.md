@@ -69,8 +69,8 @@ python -m pip install "<wheel-asset-URL>"
 Downloading the wheel and installing its local path also works. The wheel
 contains the core library; CLI-backed helpers need the native tools separately.
 Until the first successful release run with these changes, use the source
-install documented in the user guide. Production PyPI publication remains a
-separate maintainer action after account and trusted-publisher setup.
+install documented in the user guide. Production PyPI publication uses the
+manual `ci-latest-release.yml` workflow with explicit `pypi_packages` selection.
 
 ## Pull request validation
 
@@ -195,9 +195,38 @@ validation library. Install the matching tool bundle or compiled `iccdev`
 binding wheel separately for those capabilities. Namespace fixes for #2798
 and fail-closed transform behavior for #2797 must remain intact.
 For an isolated client use `uvx --from "<MCP-wheel-asset-URL>" iccdev-mcp`.
-Bare `pip install iccdev-mcp` and `uvx iccdev-mcp` require a future PyPI release.
-This workflow does not use PyPI credentials, create an account, or upload to
-PyPI. Publishing there remains a separate maintainer-selected release action.
+After trusted publication, `pip install iccdev-mcp` and `uvx iccdev-mcp` use
+PyPI directly. The rolling-release workflow does not use PyPI credentials or
+repository secrets; its opt-in publishing step uses OIDC trusted publishing.
+
+### Trusted PyPI publication
+
+Create pending trusted publishers for both `iccdev` and `iccdev-mcp` on PyPI
+with owner `InternationalColorConsortium`, repository `iccDEV`, workflow
+`ci-latest-release.yml`, and environment `release`. Configure that GitHub
+environment with required maintainer approval. The `iccdev` pending publisher
+already uses this identity; add `iccdev-mcp` with the same values before the
+first combined publication. No API token or repository secret is needed.
+
+Dispatch `ci-latest-release.yml` from `master` and select `iccdev`,
+`iccdev-mcp`, or `both` for `pypi_packages`.
+Feature-branch dispatches cannot reach the release or publishing steps. The
+release job requires all native and Python producers, validates the full
+45-wheel `iccdev` inventory and the exact MCP wheel/sdist pair, generates
+SHA-256 and SHA-512 manifests, and publishes GitHub attestations before staging
+45 `iccdev` wheels and the two MCP distributions in separate directories. Each
+PyPI action uses the release job's `id-token: write` permission and protected
+`release` environment; it receives no username, password, API token, repository
+secret, or mutable cache. Separate selection avoids requiring both pending
+publishers for a one-project release and reports each outcome independently.
+
+After upload, the workflow waits for PyPI availability, installs the exact
+published versions from the public index, runs the installed `iccdev`
+non-parity suite, and exercises MCP parent/child imports, both console entry
+points, stdio discovery and profile inspection, REST health, and optional
+native-capability behavior. A GitHub release asset URL remains replaceable;
+record the exact tag-specific URL, checksums, attestation identity, and source
+commit rather than describing the URL as immutable.
 
 Run pytest from the repository root with `--import-mode=importlib`. Installed
 wheel validation must also set `ICCDEV_REQUIRE_INSTALLED_PACKAGE=1`; the test
@@ -282,12 +311,15 @@ by maintainers, not from a PR branch or CI scratch artifact.
    deactivate
    ```
 
-4. Publish only from a maintainer-controlled release environment using the
-   repository's approved PyPI publishing method. Prefer PyPI trusted publishing
-   or a scoped release token. Never expose a PyPI token to PR workflows, forked
-   branches, logs, or reusable workflows that run untrusted code.
+4. Publish with the manual `ci-latest-release.yml` workflow from `master`.
+   Select the intended `pypi_packages` value and approve the protected
+   `release` environment.
+   The workflow uses OIDC trusted publishing; never add a PyPI token to PR
+   workflows, forked branches, logs, or reusable workflows that run untrusted
+   code.
 
-5. After PyPI publication, verify the public install in a fresh environment.
+5. Require the workflow's post-publication job to verify the public install.
+   For an additional manual check in a fresh environment:
 
    ```bash
    python -m venv /tmp/iccdev-pypi-smoke

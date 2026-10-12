@@ -9,8 +9,9 @@ Run `.github/scripts/iccdev-mcp-package-smoke.py --source-tree` in a source
 environment and omit the flag in separate installed wheel/sdist environments.
 The smoke proves parent/child imports, console startup, stdio discovery and
 profile inspection, REST health, and explicit missing-transform-backend errors.
-Keep Windows and Linux installation evidence separate; verify the immutable
-release tag, both checksum manifests, and provenance before consuming assets.
+Keep Windows and Linux installation evidence separate; verify the exact release
+tag, both checksum manifests, provenance, and source commit before consuming
+assets. Release asset URLs are replaceable and must not be called immutable.
 See `docs/python-packaging-release.md` for the GitHub wheel/uvx route; a GitHub
 release or branch push does not establish PyPI publication.
 

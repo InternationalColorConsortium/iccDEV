@@ -27,14 +27,16 @@ docker run --rm -i ghcr.io/internationalcolorconsortium/iccdev:latest \
 ```
 
 Use `pip install` when integrating with a local source checkout or a locally
-built iccDEV toolchain. `iccdev-mcp` is not published on PyPI yet, so install it
-from the repository, or use the universal wheel from a successful rolling
+built iccDEV toolchain. After the protected PyPI publishing workflow completes,
+install the public package directly. Until then, install it from the repository
+or use the universal wheel from a successful rolling
 <a href="https://github.com/InternationalColorConsortium/iccDEV/releases/latest">Latest Build</a>
 once its MCP assets are available:
 
 ```bash
+python -m pip install "iccdev-mcp[rest]"
 pip install "git+https://github.com/InternationalColorConsortium/iccDEV.git#subdirectory=iccdev-mcp"
-# Prebuilt GitHub release wheel; copy its immutable release-tag URL.
+# Prebuilt GitHub release wheel; copy its exact tag-specific asset URL.
 python -m pip install "<iccdev_mcp-wheel-asset-URL>"
 # Optional REST server dependencies:
 python -m pip install "iccdev-mcp[rest] @ <iccdev_mcp-wheel-asset-URL>"
@@ -49,8 +51,8 @@ compiled transform bindings. See the
 <a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/docs/python-packaging-release.md">package release guide</a>
 for maintainer validation and the separate PyPI publication boundary.
 
-For an isolated MCP client using uv, replace the placeholder with that same
-immutable wheel URL:
+For an isolated MCP client using uv, use the PyPI package after publication or
+replace the placeholder with that same exact tag-specific wheel URL:
 
 ```json
 {
@@ -63,8 +65,9 @@ immutable wheel URL:
 }
 ```
 
-The shorter `uvx iccdev-mcp` command requires a future PyPI publication; a
-successful GitHub release does not publish the package to PyPI.
+The shorter `uvx iccdev-mcp` command uses the public PyPI package. A successful
+GitHub release alone does not publish the package to PyPI; the separately
+approved trusted-publishing workflow performs that step.
 
 The wheel ships only the `iccdev_mcp` namespace, so it can share an environment
 with the separate Cython `iccdev` bindings. Header inspection and signature
