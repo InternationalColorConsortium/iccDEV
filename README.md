@@ -8,10 +8,12 @@
 | **NPM** | `npm install iccdev` |
 | **Docker Pull** | `docker pull ghcr.io/internationalcolorconsortium/iccdev:latest` |
 | **Docker Run** | `docker run -it ghcr.io/internationalcolorconsortium/iccdev:latest` |
-| **Python wheel** | `python -m pip install "<wheel-asset-URL>"` ([choose a wheel](docs/using-iccdev.md#python)) |
+| **Python** | `python -m pip install "iccdev[numpy]"` ([installation details](docs/using-iccdev.md#python)) |
 
-Prebuilt Python wheels and Windows, Linux, and macOS tool bundles are produced for the
-[latest release page](https://github.com/InternationalColorConsortium/iccDEV/releases/latest).
+The `iccdev` Python package is published on
+<a href="https://pypi.org/project/iccdev/">PyPI</a> for CPython 3.9-3.13.
+Prebuilt Python wheels and Windows, Linux, and macOS tool bundles also remain
+available from the [latest release page](https://github.com/InternationalColorConsortium/iccDEV/releases/latest).
 
 ## Using iccDEV
 

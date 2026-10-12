@@ -27,15 +27,18 @@ docker run --rm -i ghcr.io/internationalcolorconsortium/iccdev:latest \
 ```
 
 Use `pip install` when integrating with a local source checkout or a locally
-built iccDEV toolchain. After the protected PyPI publishing workflow completes,
-install the public package directly. Until then, install it from the repository
-or use the universal wheel from a successful rolling
-<a href="https://github.com/InternationalColorConsortium/iccDEV/releases/latest">Latest Build</a>
-once its MCP assets are available:
+built iccDEV toolchain. `iccdev-mcp` is published on PyPI:
 
 ```bash
 python -m pip install "iccdev-mcp[rest]"
-pip install "git+https://github.com/InternationalColorConsortium/iccDEV.git#subdirectory=iccdev-mcp"
+```
+
+The universal wheel from a successful rolling
+<a href="https://github.com/InternationalColorConsortium/iccDEV/releases/latest">Latest Build</a>
+remains available for exact-tag installation:
+
+```bash
+python -m pip install "git+https://github.com/InternationalColorConsortium/iccDEV.git#subdirectory=iccdev-mcp"
 # Prebuilt GitHub release wheel; copy its exact tag-specific asset URL.
 python -m pip install "<iccdev_mcp-wheel-asset-URL>"
 # Optional REST server dependencies:
@@ -49,25 +52,23 @@ isolated wheel and sdist installations, console entry points, stdio tool calls,
 and REST health on Windows and Linux. It includes no native binaries or
 compiled transform bindings. See the
 <a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/docs/python-packaging-release.md">package release guide</a>
-for maintainer validation and the separate PyPI publication boundary.
+for maintainer validation and the PyPI publication boundary.
 
-For an isolated MCP client using uv, use the PyPI package after publication or
-replace the placeholder with that same exact tag-specific wheel URL:
+For an isolated MCP client, use the public package directly:
 
 ```json
 {
   "mcpServers": {
     "iccdev": {
       "command": "uvx",
-      "args": ["--from", "<iccdev_mcp-wheel-asset-URL>", "iccdev-mcp"]
+      "args": ["iccdev-mcp"]
     }
   }
 }
 ```
 
-The shorter `uvx iccdev-mcp` command uses the public PyPI package. A successful
-GitHub release alone does not publish the package to PyPI; the separately
-approved trusted-publishing workflow performs that step.
+Use `uvx --from "<iccdev_mcp-wheel-asset-URL>" iccdev-mcp` when an exact
+GitHub release asset is required instead of the PyPI package.
 
 The wheel ships only the `iccdev_mcp` namespace, so it can share an environment
 with the separate Cython `iccdev` bindings. Header inspection and signature

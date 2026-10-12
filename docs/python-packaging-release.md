@@ -4,7 +4,7 @@ This guide applies to the `python/` package on the default `master` branch.
 It separates PR validation, branch merge criteria, and production release steps.
 Do not publish Python artifacts from a pull request branch.
 
-## Interim GitHub release wheels
+## Published PyPI wheels and GitHub release assets
 
 Both `ci-json-python.yml` and the manual `ci-latest-release.yml` call
 `.github/workflows/_build-python-wheels.yml` to build CPython 3.9-3.13 wheels
@@ -58,19 +58,20 @@ release; the existing release job branch allowlist stays in force. After
 merge, a maintainer can manually run the workflow on `master` to publish a
 new rolling Latest Build. Existing release assets are not modified.
 
-Users choose a compatible wheel on the
-[Latest Build page](https://github.com/InternationalColorConsortium/iccDEV/releases/latest),
-copy its exact release-tag download URL, and run:
+Users on CPython 3.9-3.13 install the published wheel from PyPI:
 
 ```bash
-python -m pip install "<wheel-asset-URL>"
+python -m pip install iccdev
 ```
 
-Downloading the wheel and installing its local path also works. The wheel
+PyPI currently provides binary wheels only. Users without a compatible wheel
+must install from the repository as documented in the user guide; pip cannot
+fall back to a PyPI source distribution. The
+[Latest Build page](https://github.com/InternationalColorConsortium/iccDEV/releases/latest)
+also provides exact-tag wheel URLs for reproducible installation. The wheel
 contains the core library; CLI-backed helpers need the native tools separately.
-Until the first successful release run with these changes, use the source
-install documented in the user guide. Production PyPI publication uses the
-manual `ci-latest-release.yml` workflow with explicit `pypi_packages` selection.
+Production PyPI publication uses the manual `ci-latest-release.yml` workflow
+with explicit `pypi_packages` selection.
 
 ## Pull request validation
 
@@ -194,19 +195,17 @@ The MCP wheel does not include native CLI tools, compiled transforms, or the
 validation library. Install the matching tool bundle or compiled `iccdev`
 binding wheel separately for those capabilities. Namespace fixes for #2798
 and fail-closed transform behavior for #2797 must remain intact.
-For an isolated client use `uvx --from "<MCP-wheel-asset-URL>" iccdev-mcp`.
-After trusted publication, `pip install iccdev-mcp` and `uvx iccdev-mcp` use
-PyPI directly. The rolling-release workflow does not use PyPI credentials or
-repository secrets; its opt-in publishing step uses OIDC trusted publishing.
+For an isolated client use `uvx iccdev-mcp`. The rolling-release workflow
+publishes the exact `iccdev-mcp` version through PyPI trusted publishing and
+does not use PyPI credentials or repository secrets.
 
 ### Trusted PyPI publication
 
-Create pending trusted publishers for both `iccdev` and `iccdev-mcp` on PyPI
-with owner `InternationalColorConsortium`, repository `iccDEV`, workflow
+The `iccdev` and `iccdev-mcp` trusted publishers use owner
+`InternationalColorConsortium`, repository `iccDEV`, workflow
 `ci-latest-release.yml`, and environment `release`. Configure that GitHub
-environment with required maintainer approval. The `iccdev` pending publisher
-already uses this identity; add `iccdev-mcp` with the same values before the
-first combined publication. No API token or repository secret is needed.
+environment with required maintainer approval. No API token or repository
+secret is needed.
 
 Dispatch `ci-latest-release.yml` from `master` and select `iccdev`,
 `iccdev-mcp`, or `both` for `pypi_packages`.
@@ -214,11 +213,10 @@ Feature-branch dispatches cannot reach the release or publishing steps. The
 release job requires all native and Python producers, validates the full
 45-wheel `iccdev` inventory and the exact MCP wheel/sdist pair, generates
 SHA-256 and SHA-512 manifests, and publishes GitHub attestations before staging
-45 `iccdev` wheels and the two MCP distributions in separate directories. Each
+the 45 `iccdev` wheels and two MCP distributions in separate directories. Each
 PyPI action uses the release job's `id-token: write` permission and protected
-`release` environment; it receives no username, password, API token, repository
-secret, or mutable cache. Separate selection avoids requiring both pending
-publishers for a one-project release and reports each outcome independently.
+`release` environment; it receives no username, password, API token,
+repository secret, or mutable cache.
 
 After upload, the workflow waits for PyPI availability, installs the exact
 published versions from the public index, runs the installed `iccdev`

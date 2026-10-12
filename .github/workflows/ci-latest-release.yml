@@ -37,13 +37,15 @@ permissions:
   workflow_dispatch:
     inputs:
       pypi_packages:
-        description: Validated iccdev distributions to publish to PyPI
+        description: Validated Python distributions to publish to PyPI
         required: true
         default: none
         type: choice
         options:
           - none
           - iccdev
+          - iccdev-mcp
+          - both
 
 concurrency:
   group: "latest-release-${{ github.workflow }}-${{ github.ref }}"
@@ -2254,17 +2256,18 @@ jobs:
             echo "| **NPM** | \`npm install iccdev\` |"
             echo "| **Docker Pull** | \`docker pull ghcr.io/internationalcolorconsortium/iccdev:latest\` |"
             echo "| **Docker Run** | \`docker run -it ghcr.io/internationalcolorconsortium/iccdev:latest\` |"
+            echo "| **Python (PyPI)** | \`python -m pip install iccdev\` |"
+            echo "| **MCP (PyPI)** | \`python -m pip install \"iccdev-mcp[rest]\"\` |"
             echo ""
             echo "### Install Python without a compiler"
             echo ""
-            echo "Choose the .whl asset matching your CPython version, OS, and architecture."
-            echo "Run \`python -m pip install \"<copied-wheel-asset-URL>\"\` or download the wheel and install its local path."
-            echo "PyPI publication is separate; these wheels require no PyPI account."
+            echo "Install \`iccdev\` from PyPI on CPython 3.9-3.13, or choose an exact-tag wheel asset matching your Python version, OS, and architecture."
+            echo "PyPI currently provides wheels only; install from the repository when no compatible wheel is available."
             echo "Linux wheels cover manylinux and musllinux x86_64/aarch64; macOS covers x86_64/arm64/universal2; Windows covers AMD64/ARM64."
             echo "Core profile/CMM APIs are self-contained. CLI-backed helpers need the matching native tool bundle."
-            echo "MCP: install the universal wheel URL with pip, then run \`iccdev-mcp\`."
+            echo "MCP: install \`iccdev-mcp[rest]\` from PyPI, or use the universal exact-tag GitHub release wheel URL."
             echo "The MCP wheel includes no CLI binaries or compiled transform bindings; install those separately when needed."
-            echo "For REST extras use \`python -m pip install \"iccdev-mcp[rest] @ <copied-MCP-wheel-asset-URL>\"\`."
+            echo "For REST extras from a GitHub release asset use \`python -m pip install \"iccdev-mcp[rest] @ <copied-MCP-wheel-asset-URL>\"\`."
             echo ""
             echo "---"
             echo "*Auto-published by ci-latest-release.*"
@@ -2285,30 +2288,44 @@ jobs:
             --latest
 
       - name: Stage validated PyPI distributions
-        if: ${{ inputs.pypi_packages == 'iccdev' && github.ref == 'refs/heads/master' }}
+        if: ${{ inputs.pypi_packages != 'none' && github.ref == 'refs/heads/master' }}
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          PYPI_PACKAGES: ${{ inputs.pypi_packages }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           source .github/scripts/sanitize-sed.sh
 
-          python3 .github/scripts/validate-python-release-wheels.py release-assets --release
-          mkdir -p pypi-iccdev
-          cp release-assets/iccdev-*.whl pypi-iccdev/
-          distribution_count="$(find pypi-iccdev -maxdepth 1 -type f | wc -l)"
-          if [[ "$distribution_count" -ne 45 ]]; then
-            echo "::error::Expected 45 iccdev wheels, found $(sanitize_line "$distribution_count")"
-            exit 1
+          if [[ "$PYPI_PACKAGES" == "iccdev" || "$PYPI_PACKAGES" == "both" ]]; then
+            python3 .github/scripts/validate-python-release-wheels.py release-assets --release
+            mkdir -p pypi-iccdev
+            cp release-assets/iccdev-*.whl pypi-iccdev/
+            distribution_count="$(find pypi-iccdev -maxdepth 1 -type f | wc -l)"
+            if [[ "$distribution_count" -ne 45 ]]; then
+              echo "::error::Expected 45 iccdev wheels, found $(sanitize_line "$distribution_count")"
+              exit 1
+            fi
+          fi
+          if [[ "$PYPI_PACKAGES" == "iccdev-mcp" || "$PYPI_PACKAGES" == "both" ]]; then
+            python3 .github/scripts/validate-mcp-release-package.py release-assets
+            mkdir -p pypi-iccdev-mcp
+            cp release-assets/iccdev_mcp-*.whl release-assets/iccdev_mcp-*.tar.gz \
+              pypi-iccdev-mcp/
+            distribution_count="$(find pypi-iccdev-mcp -maxdepth 1 -type f | wc -l)"
+            if [[ "$distribution_count" -ne 2 ]]; then
+              echo "::error::Expected 2 iccdev-mcp distributions, found $(sanitize_line "$distribution_count")"
+              exit 1
+            fi
           fi
 
       - name: Publish iccdev to PyPI
         id: pypi_iccdev
         if: >-
           ${{ github.ref == 'refs/heads/master' &&
-              inputs.pypi_packages == 'iccdev' }}
+              (inputs.pypi_packages == 'iccdev' || inputs.pypi_packages == 'both') }}
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
         with:
           packages-dir: pypi-iccdev/
@@ -2319,7 +2336,7 @@ jobs:
       - name: Verify public iccdev installation
         if: >-
           ${{ github.ref == 'refs/heads/master' &&
-              inputs.pypi_packages == 'iccdev' }}
+              (inputs.pypi_packages == 'iccdev' || inputs.pypi_packages == 'both') }}
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -2353,6 +2370,54 @@ jobs:
           ICCDEV_REQUIRE_INSTALLED_PACKAGE=1 "$iccdev_environment/bin/python" \
             -m pytest --rootdir . --import-mode=importlib python/tests -q -m "not parity"
 
+      - name: Publish iccdev-mcp to PyPI
+        id: pypi_mcp
+        if: >-
+          ${{ github.ref == 'refs/heads/master' &&
+              (inputs.pypi_packages == 'iccdev-mcp' || inputs.pypi_packages == 'both') }}
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
+        with:
+          packages-dir: pypi-iccdev-mcp/
+          attestations: true
+          verbose: true
+
+      # preflight: allow-package-install reason=post-publication-pypi-smoke
+      - name: Verify public iccdev-mcp installation
+        if: >-
+          ${{ github.ref == 'refs/heads/master' &&
+              (inputs.pypi_packages == 'iccdev-mcp' || inputs.pypi_packages == 'both') }}
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          unset ICCDEV_BUILD_DIR ICCDEV_VALIDATION_LIBRARY ICCDEV_TOOLS_DIR PYTHONPATH || true
+
+          mcp_version="$(python3 -c 'import re,pathlib; print(re.search(r"(?m)^__version__ = \"([^\"]+)\"", pathlib.Path("iccdev-mcp/iccdev_mcp/__init__.py").read_text()).group(1))')"
+          install_with_retry() {
+            local interpreter="$1"
+            shift
+            for attempt in {1..12}; do
+              if "$interpreter" -m pip install --no-cache-dir \
+                   --index-url https://pypi.org/simple "$@"; then
+                return 0
+              fi
+              if [[ "$attempt" -eq 12 ]]; then
+                return 1
+              fi
+              sleep 15
+            done
+          }
+
+          mcp_environment="$(mktemp -d)/iccdev-mcp"
+          python3 -m venv "$mcp_environment"
+          install_with_retry "$mcp_environment/bin/python" \
+            "iccdev-mcp[rest]==$mcp_version" "httpx2>=2,<3"
+          "$mcp_environment/bin/python" .github/scripts/iccdev-mcp-package-smoke.py
+
       - name: Summary Report
         if: always()
         shell: bash --noprofile --norc {0}
@@ -2361,6 +2426,7 @@ jobs:
           RELEASE_OUTCOME: ${{ steps.publish.outcome }}
           ATTESTATION_OUTCOME: ${{ steps.attest.outcome }}
           PYPI_ICCDEV_OUTCOME: ${{ steps.pypi_iccdev.outcome }}
+          PYPI_MCP_OUTCOME: ${{ steps.pypi_mcp.outcome }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -2387,6 +2453,7 @@ jobs:
             echo "- Release publication: ${RELEASE_OUTCOME:-skipped}"
             echo "- Artifact attestation: ${ATTESTATION_OUTCOME:-skipped}"
             echo "- PyPI iccdev publication: ${PYPI_ICCDEV_OUTCOME:-skipped}"
+            echo "- PyPI iccdev-mcp publication: ${PYPI_MCP_OUTCOME:-skipped}"
             echo "- Assets staged: ${asset_count} package files"
             echo ""
             for f in release-assets/*.zip release-assets/*.deb release-assets/*.rpm release-assets/*.whl release-assets/*.tar.gz; do

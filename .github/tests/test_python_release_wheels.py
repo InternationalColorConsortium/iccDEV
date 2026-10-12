@@ -49,6 +49,7 @@ VALIDATOR = runpy.run_path(str(SCRIPT))
 VALIDATE = VALIDATOR["validate_wheels"]
 LANE_IDENTIFIERS = VALIDATOR["lane_identifiers"]
 WORKFLOWS = SCRIPT.parents[1] / "workflows"
+ROOT = SCRIPT.parents[2]
 LICENSE = (SCRIPT.parents[2] / "LICENSE.md").read_text(encoding="ascii")
 
 
@@ -59,6 +60,16 @@ def load_workflow(name):
 
 def shared_wheel_job():
     return load_workflow("_build-python-wheels.yml")["jobs"]["wheels"]
+
+
+def test_live_pypi_installation_guidance():
+    python_readme = (ROOT / "python/README.md").read_text(encoding="ascii")
+    user_guide = (ROOT / "docs/using-iccdev.md").read_text(encoding="ascii")
+    for document in (python_readme, user_guide):
+        assert "PyPI publication is pending" not in document
+        assert "python -m pip install iccdev" in document
+        assert 'python -m pip install "iccdev[numpy]"' in document
+        assert "PyPI currently publishes binary wheels, not a source distribution" in document
 
 
 def make_wheel(directory, platform="manylinux_2_17_x86_64.manylinux2014_x86_64",

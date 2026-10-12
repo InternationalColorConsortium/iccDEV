@@ -18,44 +18,37 @@ ICC color profile library, built with [Cython](https://cython.org/).
 
 ## Installation
 
-## Current Status
+## Installation
 
-The `iccdev` package is in alpha development. PyPI publication is pending.
-The `ci-latest-release` workflow builds prebuilt wheels for rolling
-[Latest Build releases](https://github.com/InternationalColorConsortium/iccDEV/releases/latest).
-After a successful release run containing this workflow change, choose the
-`.whl` asset matching CPython 3.9-3.13, your OS, and architecture, copy its
-download URL, then install without a compiler:
+The alpha `iccdev` package is published on
+<a href="https://pypi.org/project/iccdev/">PyPI</a>. Install the core package
+on a supported CPython 3.9-3.13 platform:
 
 ```bash
-python -m pip install "<wheel-asset-URL>"
+python -m pip install iccdev
 ```
 
-You can also download the wheel and pass its local path to `pip`. `cp313`
-means CPython 3.13; `win_amd64` is Windows x64, `win_arm64` is Windows ARM64,
-and macOS wheels identify `x86_64`, `arm64`, or `universal2`. Linux provides
-`manylinux` for glibc and `musllinux` for musl on x86_64/aarch64. Copy an exact
-release-tag asset URL for reproducible installs. Wheels contain the core
-library and type stubs; CLI-backed helpers still need the native tool bundle.
-For optional array support, also install `"numpy>=1.23,<3"`.
-
-If no wheel matches, install from the repository or a local checkout. This
-compiles the extension, so a C++17 compiler is required:
+For the NumPy examples below, install the optional extra:
 
 ```bash
-pip install "git+https://github.com/InternationalColorConsortium/iccDEV.git#subdirectory=python"
+python -m pip install "iccdev[numpy]"
 ```
 
-### From PyPI (after production release)
+PyPI currently publishes binary wheels, not a source distribution. If no
+compatible wheel is available, install from the repository or a local checkout.
+This compiles the extension, so a C++17 compiler is required:
 
 ```bash
-pip install iccdev
+python -m pip install "iccdev[numpy] @ git+https://github.com/InternationalColorConsortium/iccDEV.git#subdirectory=python"
 ```
 
-After the first production package release, this installs a pre-built wheel (no
-compiler needed) or builds from source if no wheel matches your platform.
-IccProfLib is bundled in source distributions; no external ICC library install
-is required.
+Rolling [Latest Build releases](https://github.com/InternationalColorConsortium/iccDEV/releases/latest)
+also provide exact-tag wheel URLs for reproducible installation. `cp313` means
+CPython 3.13; `win_amd64` is Windows x64, `win_arm64` is Windows ARM64, and
+macOS wheels identify `x86_64`, `arm64`, or `universal2`. Linux provides
+`manylinux` for glibc and `musllinux` for musl on x86_64/aarch64. Wheels
+contain the core library and type stubs; CLI-backed helpers still need the
+native tool bundle.
 
 ### From source (development)
 

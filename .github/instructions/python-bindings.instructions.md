@@ -152,8 +152,8 @@ download authenticity checks.
 Keep wheel build jobs unprivileged and artifact downloads explicitly named.
 Publish only through the manual `ci-latest-release.yml` workflow from `master`,
 using the protected `release` environment, explicit `pypi_packages` selection,
-OIDC trusted publishing, and exact-version public-index smoke tests for both
-`iccdev` and `iccdev-mcp`.
+OIDC trusted publishing, and exact-version public-index smoke tests for
+both `iccdev` and `iccdev-mcp`.
 Keep the workflow/artifact regression suites in the shared wheel workflow;
 they do not require native CTest targets. Native sanitizer validation remains
 separate from portable release-wheel testing.
