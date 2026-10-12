@@ -114,7 +114,9 @@ def _tool_candidates(build_dir: Path, target: str, executable: str) -> list[Path
     suffix = ".exe" if os.name == "nt" else ""
     exe_name = executable if executable.endswith(suffix) else executable + suffix
     base = build_dir / "Tools" / target
-    candidates = [base / exe_name]
+    candidates = [build_dir / "bin" / exe_name]
+    candidates.extend(build_dir / "bin" / config / exe_name for config in _CONFIGS)
+    candidates.append(base / exe_name)
     candidates.extend(base / config / exe_name for config in _CONFIGS)
     return candidates
 
@@ -150,7 +152,8 @@ def tool_environment(tool: Tool) -> dict[str, str]:
     if tool.build_dir is None:
         return env
 
-    path_entries: list[str] = []
+    runtime_dir = str(tool.path.parent)
+    path_entries: list[str] = [runtime_dir]
     for target_dir in (tool.build_dir / "Tools").glob("*"):
         if target_dir.is_dir():
             path_entries.append(str(target_dir))
@@ -176,7 +179,9 @@ def tool_environment(tool: Tool) -> dict[str, str]:
     if path_entries:
         env["PATH"] = os.pathsep.join(path_entries + [env.get("PATH", "")])
 
-    shared_paths = [str(tool.build_dir / name) for name in _LIB_DIRS if (tool.build_dir / name).is_dir()]
+    shared_paths = [runtime_dir] + [
+        str(tool.build_dir / name) for name in _LIB_DIRS if (tool.build_dir / name).is_dir()
+    ]
     if shared_paths:
         for var in ("LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
             env[var] = os.pathsep.join(shared_paths + [env.get(var, "")])

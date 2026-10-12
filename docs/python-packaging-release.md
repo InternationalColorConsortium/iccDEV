@@ -31,11 +31,23 @@ unrelated source build inside wheel validation.
 For the release caller, each lane uploads an explicit `iccdev-python-<lane>`
 artifact with its wheels and cibuildwheel identifier inventory. The release
 job downloads all seven artifacts by name and validates version,
-ABI/platform coverage, native
-extension, type stubs, and license before copying raw `.whl` assets into the
-release. Missing, duplicate, or unexpected wheels stop publication. Wheels
+ABI/platform coverage, native extension, type stubs, and complete canonical
+BSD-3-Clause license contents before copying raw `.whl` assets into the release.
+Both producer and release consumer pass `--lane <lane-id>` to the validator,
+which independently requires that lane's full five- or ten-target inventory.
+Missing, duplicate, or foreign identifiers cannot narrow the expected targets.
+Inconsistent wheel metadata/tags, unsafe or duplicate archive members, and
+missing, duplicate, or unexpected wheels stop publication. Wheels
 participate in `SHA256SUMS`, `SHA512SUMS`, and artifact provenance alongside
 the native packages. No PR artifacts or mutable build caches are reused.
+
+Wheel jobs retain read-only repository permissions, clear Git credentials and
+`GITHUB_TOKEN` before running package code, and do not receive publishing
+secrets. Release write and attestation permissions belong to the release job;
+`GH_TOKEN` is supplied only to its publish step. Keep the governed Bash and
+PowerShell prologues in the reusable native jobs. The release summary
+sanitizes dynamic values and reports actual publication and attestation
+outcomes separately from locally staged assets.
 
 Dispatch on a work branch builds and tests artifacts without publishing a
 release; the existing release job branch allowlist stays in force. After
@@ -101,9 +113,28 @@ matrix replaces the former per-platform cibuildwheel import smoke builds:
 primary CI passes `run-wheel-smoke: false` to its native build jobs. Other
 callers retain their existing bounded 2.x smoke driver through the default
 `run-wheel-smoke: true`. Pytest exit code 5 (no tests collected) is a failure
-in primary CI. Local wiring and collection regressions live in
-`.github/tests/test_python_release_wheels.py` and
-`.github/tests/test_python_test_collection.py`.
+in primary CI. Windows native parity uses CMake's `bin/Release` runtime
+directory and requires all eight CLI tools before pytest, preventing a
+missing tool path from silently skipping the native comparisons. The test
+helper retains legacy `Tools/<target>/<config>` discovery for other builds.
+The shared wheel workflow runs the wiring and collection
+regressions in every lane. Run them locally from the repository root using
+Python 3.13 with cibuildwheel 3.4.0, pytest, PyYAML, and packaging installed so
+the wheel inventory test is collected:
+
+```bash
+python -m pytest --rootdir . --import-mode=importlib .github/tests/test_python_release_wheels.py .github/tests/test_python_test_collection.py -q
+python .github/scripts/validate-python-release-wheels.py <wheel-dir> --identifiers <wheel-dir>/build-identifiers.txt --lane <lane-id>
+```
+
+The lane IDs are `linux-x86_64`, `linux-aarch64`, `macos-x86_64`, `macos-arm64`,
+`macos-universal2`, `windows-amd64`, and `windows-arm64`. Omitting `--lane`
+permits ad-hoc subset checks; release producers and consumers must specify it.
+These tests cover workflow and artifact contracts and do not need native
+CTest registration. CMake/CTest and CPack retain their native build, test,
+and runtime-package responsibilities; setuptools and Cython produce wheels.
+Release-wheel testing does not establish native sanitizer coverage. Run
+separate instrumented native checks when fixing library behavior.
 
 Run pytest from the repository root with `--import-mode=importlib`. Installed
 wheel validation must also set `ICCDEV_REQUIRE_INSTALLED_PACKAGE=1`; the test

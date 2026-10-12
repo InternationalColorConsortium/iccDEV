@@ -1,8 +1,31 @@
-"""Exercise reusable workflow handling of pytest success, failure, and emptiness.
+# Copyright (c) International Color Consortium.
+#
+# Redistribution and use in source and binary forms, with or without modification,
+# are permitted provided that the following conditions are met:
+#
+#     1. Redistributions of source code must retain the above copyright notice,
+#        this list of conditions and the following disclaimer.
+#
+#     2. Redistributions in binary form must reproduce the above copyright
+#        notice, this list of conditions and the following disclaimer in the
+#        documentation and/or other materials provided with the distribution.
+#
+#     3. Neither the name of International Color Consortium (ICC) nor the names of
+#        its contributors may be used to endorse or promote products derived from
+#        this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+# ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-Copyright (c) International Color Consortium.
-BSD 3-Clause License. See LICENSE.md for details.
-"""
+"""Exercise reusable workflow handling of pytest success, failure, and emptiness."""
 
 import base64
 import os
@@ -126,3 +149,37 @@ def test_legacy_wheel_smoke_remains_enabled_by_default(workflow, step_name):
     assert "python -m cibuildwheel --output-dir " in smoke_step["run"]
     assert all("inputs.run-wheel-smoke" not in step.get("if", "")
                for step in steps if step is not smoke_step)
+
+
+@pytest.mark.parametrize("missing_tool", [
+    None, "iccDumpProfile", "iccRoundTrip", "iccPawgReport", "iccToXml",
+    "iccFromXml", "iccToJson", "iccFromJson", "iccApplyNamedCmm",
+])
+def test_windows_parity_requires_native_tools(tmp_path, missing_tool):
+    executable = shutil.which("pwsh")
+    if not executable:
+        pytest.skip("PowerShell 7 is unavailable")
+    _, snippet = workflow_test_block(
+        "_build-test-windows.yml", "Install and test Python bindings",
+        "$env:ICCDEV_REQUIRE_INSTALLED_PACKAGE =",
+    )
+    guard = snippet.partition("$result = python -m pytest")[0]
+    tool_dir = tmp_path / "out" / "vs2022-vcpkg" / "bin" / "Release"
+    tool_dir.mkdir(parents=True)
+    for tool in (
+        "iccDumpProfile", "iccRoundTrip", "iccPawgReport", "iccToXml",
+        "iccFromXml", "iccToJson", "iccFromJson", "iccApplyNamedCmm",
+    ):
+        if tool != missing_tool:
+            (tool_dir / (tool + ".exe")).touch()
+    script = "Set-StrictMode -Version Latest\n$ErrorActionPreference = 'Stop'\n" + guard + "\nexit 0\n"
+    encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+    result = subprocess.run(
+        [executable, "-NoProfile", "-NoLogo", "-NonInteractive", "-EncodedCommand", encoded],
+        cwd=tmp_path, capture_output=True, text=True, timeout=30,
+        env={**os.environ, "GITHUB_WORKSPACE": str(tmp_path)},
+    )
+    assert (result.returncode == 0) == (missing_tool is None), result.stdout + result.stderr
+    if missing_tool is not None:
+        assert "Required Python parity tool is missing:" in result.stderr
+        assert missing_tool + ".exe" in result.stderr

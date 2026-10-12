@@ -134,7 +134,7 @@ jobs:
 
           Write-Host ""
           Write-Host "=== Built tools ==="
-          Get-ChildItem -Recurse -File -Include "icc*.exe" -Path .\out\vs2022-vcpkg\Tools\ |
+          Get-ChildItem -File -Filter "icc*.exe" -Path .\out\vs2022-vcpkg\bin\Release\ |
             Where-Object { $_.FullName -notmatch 'CMakeFiles' } |
             ForEach-Object { Write-Host $_.FullName }
 
@@ -252,7 +252,17 @@ jobs:
 
           $env:ICCDEV_REQUIRE_INSTALLED_PACKAGE = '1'
           $env:ICCDEV_BUILD_DIR = "$env:GITHUB_WORKSPACE\out\vs2022-vcpkg"
-          $env:ICCDEV_TOOLS_DIR = "$env:GITHUB_WORKSPACE\out\vs2022-vcpkg\Tools"
+          $env:ICCDEV_TOOLS_DIR = "$env:GITHUB_WORKSPACE\out\vs2022-vcpkg\bin\Release"
+          $requiredParityTools = @(
+            'iccDumpProfile', 'iccRoundTrip', 'iccPawgReport',
+            'iccToXml', 'iccFromXml', 'iccToJson', 'iccFromJson', 'iccApplyNamedCmm'
+          )
+          foreach ($tool in $requiredParityTools) {
+            $toolPath = Join-Path $env:ICCDEV_TOOLS_DIR "$tool.exe"
+            if (-not (Test-Path -LiteralPath $toolPath -PathType Leaf)) {
+              throw "Required Python parity tool is missing: $toolPath"
+            }
+          }
           $result = python -m pytest --rootdir . --import-mode=importlib `
             .\python\tests -v --tb=short -m "not parity" 2>&1
           $testExitCode = $LASTEXITCODE

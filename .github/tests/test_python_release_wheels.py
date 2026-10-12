@@ -1,13 +1,38 @@
-"""Release wheel intake regression tests.
+# Copyright (c) International Color Consortium.
+#
+# Redistribution and use in source and binary forms, with or without modification,
+# are permitted provided that the following conditions are met:
+#
+#     1. Redistributions of source code must retain the above copyright notice,
+#        this list of conditions and the following disclaimer.
+#
+#     2. Redistributions in binary form must reproduce the above copyright
+#        notice, this list of conditions and the following disclaimer in the
+#        documentation and/or other materials provided with the distribution.
+#
+#     3. Neither the name of International Color Consortium (ICC) nor the names of
+#        its contributors may be used to endorse or promote products derived from
+#        this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+# ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-Copyright (c) International Color Consortium.
-BSD 3-Clause License. See LICENSE.md for details.
-"""
+"""Release wheel intake regression tests."""
 
 from pathlib import Path
 import os
 import runpy
 import shlex
+import shutil
+import stat
 import subprocess
 import sys
 import zipfile
@@ -16,8 +41,11 @@ import pytest
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/validate-python-release-wheels.py"
-VALIDATE = runpy.run_path(str(SCRIPT))["validate_wheels"]
+VALIDATOR = runpy.run_path(str(SCRIPT))
+VALIDATE = VALIDATOR["validate_wheels"]
+LANE_IDENTIFIERS = VALIDATOR["lane_identifiers"]
 WORKFLOWS = SCRIPT.parents[1] / "workflows"
+LICENSE = (SCRIPT.parents[2] / "LICENSE.md").read_text(encoding="ascii")
 
 
 def load_workflow(name):
@@ -30,16 +58,35 @@ def shared_wheel_job():
 
 
 def make_wheel(directory, platform="manylinux_2_17_x86_64.manylinux2014_x86_64",
-               version="0.1.0", native=True, metadata_version=None):
-    path = directory / f"iccdev-{version}-cp313-cp313-{platform}.whl"
+               version="0.1.0", native=True, metadata_version=None,
+               python_tag="cp313", overrides=None):
+    path = directory / f"iccdev-{version}-{python_tag}-{python_tag}-{platform}.whl"
+    dist_info = f"iccdev-{version}.dist-info/"
+    files = {
+        dist_info + "METADATA": (
+            f"Metadata-Version: 2.4\nName: iccdev\nVersion: {metadata_version or version}\n"
+            "License-Expression: BSD-3-Clause\nLicense-File: LICENSE.md\n"
+        ),
+        dist_info + "WHEEL": "Wheel-Version: 1.0\nRoot-Is-Purelib: false\n" + "".join(
+            f"Tag: {python_tag}-{python_tag}-{tag}\n" for tag in platform.split(".")
+        ),
+        dist_info + "RECORD": "",
+        dist_info + "licenses/LICENSE.md": LICENSE,
+        "iccdev/__init__.py": "",
+        "iccdev/py.typed": "",
+        "iccdev/_iccdev.pyi": "",
+    }
+    if native:
+        files[f"iccdev/_iccdev.{python_tag}.so"] = "native fixture"
+    files.update(overrides or {})
     with zipfile.ZipFile(path, "w") as archive:
-        archive.writestr(f"iccdev-{version}.dist-info/METADATA",
-                         f"Name: iccdev\nVersion: {metadata_version or version}\n")
-        for name in ("__init__.py", "py.typed", "_iccdev.pyi"):
-            archive.writestr("iccdev/" + name, "")
-        archive.writestr(f"iccdev-{version}.dist-info/licenses/LICENSE.md", "BSD-3-Clause")
-        if native:
-            archive.writestr("iccdev/_iccdev.cp313.so", "native fixture")
+        for name, content in files.items():
+            if content is not None:
+                member = zipfile.ZipInfo()
+                # Preserve malformed paths even on Windows, where ZipInfo's
+                # constructor otherwise normalizes backslashes automatically.
+                member.filename = name
+                archive.writestr(member, content)
     return path
 
 
@@ -79,6 +126,99 @@ def test_rejects_empty_identifier_inventory(tmp_path):
         VALIDATE(tmp_path, [], "0.1.0")
 
 
+@pytest.mark.parametrize("lane", VALIDATOR["LANE_PLATFORMS"])
+def test_accepts_complete_lane_inventory(tmp_path, lane):
+    identifiers = LANE_IDENTIFIERS(lane)
+    for identifier in identifiers:
+        python_tag, platform = identifier.split("-", 1)
+        if platform.startswith("manylinux_"):
+            platform = platform.replace("manylinux_", "manylinux_2_17_", 1)
+        elif platform.startswith("musllinux_"):
+            platform = platform.replace("musllinux_", "musllinux_1_2_", 1)
+        elif platform.startswith("macosx_"):
+            platform = platform.replace("macosx_", "macosx_11_0_", 1)
+        make_wheel(tmp_path, platform, python_tag=python_tag)
+    assert len(VALIDATE(tmp_path, sorted(identifiers), "0.1.0", lane=lane)) == len(identifiers)
+
+
+def test_rejects_truncated_or_foreign_lane_inventory(tmp_path):
+    make_wheel(tmp_path, "win_arm64")
+    with pytest.raises(ValueError, match="inventory disagrees"):
+        VALIDATE(tmp_path, ["cp313-win_arm64"], "0.1.0", lane="windows-arm64")
+    with pytest.raises(ValueError, match="inventory disagrees"):
+        VALIDATE(tmp_path, LANE_IDENTIFIERS("windows-amd64"), "0.1.0", lane="windows-arm64")
+
+
+def test_rejects_duplicate_inventory_entries(tmp_path):
+    make_wheel(tmp_path)
+    with pytest.raises(ValueError, match="Duplicate cibuildwheel"):
+        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"] * 2, "0.1.0")
+
+
+@pytest.mark.parametrize("platform", [
+    "manylinux_bad_x86_64", "manylinux_2_17_x86_64.win_arm64",
+    "manylinux_2_17_x86_64.any", "manylinux_2_17_x86_64.",
+])
+def test_rejects_malformed_or_mixed_platform_tags(tmp_path, platform):
+    make_wheel(tmp_path, platform)
+    with pytest.raises(ValueError, match="Unexpected or duplicate wheel target"):
+        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")
+
+
+@pytest.mark.parametrize("path,contents,error", [
+    ("METADATA", "Name: iccdev\nName: another\nVersion: 0.1.0\n", "metadata Name"),
+    ("METADATA", "Name: iccdev\nVersion: 0.1.0\nVersion: 2.0\n", "metadata Version"),
+    ("METADATA", "Name: iccdev\nVersion: 0.1.0\n", "metadata License-Expression"),
+    ("METADATA", "malformed metadata", "Malformed wheel metadata"),
+    ("WHEEL", None, "Missing wheel metadata"),
+    ("RECORD", None, "Missing wheel metadata"),
+    ("WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\n", "metadata Root-Is-Purelib"),
+    ("WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: false\nTag: cp39-cp39-win32\n", "tags disagree"),
+    ("licenses/LICENSE.md", "", "canonical LICENSE.md"),
+    ("licenses/LICENSE.md", "BSD-3-Clause", "canonical LICENSE.md"),
+])
+def test_rejects_inconsistent_metadata_and_license(tmp_path, path, contents, error):
+    make_wheel(tmp_path, overrides={"iccdev-0.1.0.dist-info/" + path: contents})
+    with pytest.raises(ValueError, match=error):
+        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")
+
+
+def test_accepts_canonical_license_with_checkout_line_endings(tmp_path):
+    make_wheel(tmp_path, overrides={
+        "iccdev-0.1.0.dist-info/licenses/LICENSE.md": LICENSE.replace("\n", "\r\n"),
+    })
+    assert len(VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")) == 1
+
+
+@pytest.mark.parametrize("path", [
+    "../outside", "/outside", "iccdev/../outside", "iccdev\\outside",
+    "C:/outside", "iccdev/./outside", "iccdev//outside", "iccdev/control\nfile",
+])
+def test_rejects_unsafe_archive_paths(tmp_path, path):
+    make_wheel(tmp_path, overrides={path: "payload"})
+    with pytest.raises(ValueError, match="Unsafe wheel archive member"):
+        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")
+
+
+def test_rejects_duplicate_archive_members(tmp_path):
+    wheel = make_wheel(tmp_path)
+    with zipfile.ZipFile(wheel, "a") as archive, pytest.warns(UserWarning, match="Duplicate name"):
+        archive.writestr("iccdev/__init__.py", "different contents")
+    with pytest.raises(ValueError, match="Duplicate wheel archive member"):
+        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")
+
+
+def test_rejects_archive_symlinks(tmp_path):
+    wheel = make_wheel(tmp_path)
+    with zipfile.ZipFile(wheel, "a") as archive:
+        link = zipfile.ZipInfo("iccdev/link")
+        link.create_system = 3
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        archive.writestr(link, "../../outside")
+    with pytest.raises(ValueError, match="Unsafe wheel archive member"):
+        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")
+
+
 def test_release_workflow_connects_all_wheel_artifacts():
     workflow = load_workflow("ci-latest-release.yml")
     jobs = workflow["jobs"]
@@ -103,9 +243,14 @@ def test_release_workflow_connects_all_wheel_artifacts():
     assert "release-assets/*.whl" in steps["Create latest release"]["run"]
     assert "-name '*.whl'" in steps["Generate release checksums"]["run"]
     assert "validate-python-release-wheels.py" in steps["Package release archives"]["run"]
+    assert '--lane "$id"' in steps["Package release archives"]["run"]
     assert steps["Attest release archive provenance"]["with"]["subject-checksums"] == "release-assets/SHA256SUMS"
     assert '"pytest>=7,<9"' in build["env"]["CIBW_BEFORE_TEST"]
     assert "--only-binary=numpy" in build["env"]["CIBW_BEFORE_TEST"]
+    wheel_step = next(step for step in build["steps"]
+                      if step.get("name") == "Build and test standalone wheels")
+    assert wheel_step["env"]["WHEEL_LANE"] == "${{ matrix.id }}"
+    assert '--lane "$WHEEL_LANE"' in wheel_step["run"]
 
 
 def test_primary_uses_identical_wheel_builder_without_uploads():
@@ -153,6 +298,7 @@ def test_shared_matrix_builds_every_declared_wheel_identifier():
         )
         identifiers = set(result.stdout.split())
         assert identifiers
+        assert identifiers == LANE_IDENTIFIERS(lane["id"])
         assert not selected & identifiers, lane["id"]
         selected.update(identifiers)
     assert selected == declared
@@ -187,3 +333,57 @@ def test_numpy_dependency_matches_available_wheel_targets(lane_id, version, expe
         "python_version": version,
     })
     assert selected is expected
+
+
+@pytest.mark.parametrize("release_outcome,attestation_outcome,with_assets,with_checkout", [
+    ("success", "success", True, True),
+    ("failure", "success", True, True),
+    ("skipped", "failure", True, True),
+    ("skipped", "skipped", False, True),
+    ("skipped", "skipped", False, False),
+])
+def test_release_summary_reports_outcomes_and_sanitizes_assets(
+    tmp_path, release_outcome, attestation_outcome, with_assets, with_checkout,
+):
+    if os.name == "nt":
+        bash = Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "Git/bin/bash.exe"
+        executable = str(bash) if bash.is_file() else None
+    else:
+        executable = shutil.which("bash")
+    if not executable:
+        pytest.skip("Bash is unavailable")
+    steps = load_workflow("ci-latest-release.yml")["jobs"]["release"]["steps"]
+    summary = next(step for step in steps if step.get("name") == "Summary Report")
+    assert summary["env"]["RELEASE_OUTCOME"] == "${{ steps.publish.outcome }}"
+    assert summary["env"]["ATTESTATION_OUTCOME"] == "${{ steps.attest.outcome }}"
+    if with_checkout:
+        scripts = tmp_path / ".github/scripts"
+        scripts.mkdir(parents=True)
+        shutil.copyfile(SCRIPT.parent / "sanitize-sed.sh", scripts / "sanitize-sed.sh")
+    if with_assets:
+        assets = tmp_path / "release-assets"
+        assets.mkdir()
+        name = "untrusted[link](payload).whl"
+        if os.name != "nt":
+            name = "untrusted[link](payload)<script>\x1b\n### forged.whl"
+        (assets / name).write_text("fixture", encoding="ascii")
+        (assets / "normal.zip").write_text("fixture", encoding="ascii")
+    output = tmp_path / "summary.md"
+    result = subprocess.run(
+        [executable, "--noprofile", "--norc", "-c", "git() { :; }\n" + summary["run"]],
+        cwd=tmp_path, capture_output=True, text=True, timeout=30,
+        env={**os.environ, "BASH_ENV": "/dev/null", "GITHUB_RUN_ID": "1234",
+             "GITHUB_RUN_ATTEMPT": "2", "GITHUB_SHA": "abcdef1234567890",
+             "GITHUB_STEP_SUMMARY": output.as_posix(), "RELEASE_OUTCOME": release_outcome,
+             "ATTESTATION_OUTCOME": attestation_outcome},
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    content = output.read_text(encoding="ascii")
+    assert f"Release publication: {release_outcome}" in content
+    assert f"Artifact attestation: {attestation_outcome}" in content
+    assert f"Assets staged: {2 if with_assets else 0} package files" in content
+    assert "[link]" not in content
+    assert "<script>" not in content
+    assert "\x1b" not in content
+    assert "\n### forged" not in content
+    assert "Assets published" not in content

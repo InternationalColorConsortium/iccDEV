@@ -1988,7 +1988,7 @@ jobs:
 
           for id in linux-x86_64 linux-aarch64 macos-x86_64 macos-arm64 macos-universal2 windows-amd64 windows-arm64; do
             wheel_dir="artifacts/iccdev-python-$id"
-            python3 .github/scripts/validate-python-release-wheels.py "$wheel_dir" --identifiers "$wheel_dir/build-identifiers.txt"
+            python3 .github/scripts/validate-python-release-wheels.py "$wheel_dir" --identifiers "$wheel_dir/build-identifiers.txt" --lane "$id"
             cp "$wheel_dir"/*.whl release-assets/
           done
 
@@ -2081,12 +2081,14 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: Attest release archive provenance
+        id: attest
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v3.2.0
         with:
           subject-checksums: release-assets/SHA256SUMS
 
       # preflight: allow-token-exposure reason=github-release-publish
       - name: Create latest release
+        id: publish
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -2172,24 +2174,40 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          RELEASE_OUTCOME: ${{ steps.publish.outcome }}
+          ATTESTATION_OUTCOME: ${{ steps.attest.outcome }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           git config --global --add safe.directory "$PWD"
+          if [[ -f .github/scripts/sanitize-sed.sh ]]; then
+            source .github/scripts/sanitize-sed.sh
+          else
+            # always() also runs after a failed checkout. Keep that summary safe.
+            sanitize_line() { printf '%s' "$1" | LC_ALL=C tr -cd 'A-Za-z0-9 ._:/#=-'; }
+            sanitize_filename() { printf '%s' "$1" | LC_ALL=C tr -cd 'A-Za-z0-9._-'; }
+          fi
           release_tag="ci-latest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}"
+          asset_count=0
+          if [[ -d release-assets ]]; then
+            asset_count=$(find release-assets -maxdepth 1 -type f \
+              \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' -o -name '*.whl' \) -printf '.' | wc -c)
+          fi
           {
             echo "### Release Summary"
             echo ""
             echo "- Tag: \`${release_tag}\`"
             echo "- Commit: \`${GITHUB_SHA:0:7}\`"
-            asset_count=$(find release-assets -maxdepth 1 -type f \
-              \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' -o -name '*.whl' \) | wc -l)
-            echo "- Assets uploaded: ${asset_count} package files"
-            echo "- Provenance: GitHub Artifact Attestations generated from \`SHA256SUMS\`"
+            echo "- Release publication: ${RELEASE_OUTCOME:-skipped}"
+            echo "- Artifact attestation: ${ATTESTATION_OUTCOME:-skipped}"
+            echo "- Assets staged: ${asset_count} package files"
             echo ""
             for f in release-assets/*.zip release-assets/*.deb release-assets/*.rpm release-assets/*.whl; do
               [ -f "$f" ] || continue
-              echo "  - \`$(basename "$f")\` ($(du -h "$f" | cut -f1))"
+              printf '  - %s\n' "$(sanitize_filename "$(basename "$f")")"
             done
-          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+          } | while IFS= read -r line; do
+            sanitize_line "$line"
+            printf '\n'
+          done >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

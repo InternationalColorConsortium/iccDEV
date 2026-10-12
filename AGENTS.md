@@ -47,7 +47,8 @@ shares one source of truth. Update rules here, not in the mirrors.
   and the Windows ARM64 Python 3.9/3.10 NumPy exception aligned. Primary CI
   disables shared wheel artifact upload and fails on empty test collection; release
   CI enables explicitly named artifact intake validated by
-  `.github/scripts/validate-python-release-wheels.py`, checksums, and provenance;
+  `.github/scripts/validate-python-release-wheels.py` with an independent
+  `--lane` inventory, complete license checks, checksums, and provenance;
   PyPI account setup and publication remain separate maintainer actions.
 - MATLAB public entry points that require arguments must provide actionable
   bare-invocation errors pinned by `matlab/tests/test_usage_guidance.m`.

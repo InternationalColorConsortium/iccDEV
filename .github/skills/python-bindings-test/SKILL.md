@@ -54,10 +54,16 @@ helpers, profile dump, and round-trip parity tests.
 
 7. **Validate shared wheel testing and release intake**
 
-   Run `.github/tests/test_python_release_wheels.py` and
-   `.github/tests/test_python_test_collection.py`, then validate each built
-   lane with `.github/scripts/validate-python-release-wheels.py <wheel-dir>
-   --identifiers <wheel-dir>/build-identifiers.txt`. Both `ci-json-python` and
+   From the repository root, use Python 3.13 with cibuildwheel 3.4.0, pytest,
+   PyYAML, and packaging installed so the wheel inventory test is collected:
+
+   ```bash
+   python -m pytest --rootdir . --import-mode=importlib .github/tests/test_python_release_wheels.py .github/tests/test_python_test_collection.py -q
+   python .github/scripts/validate-python-release-wheels.py <wheel-dir> --identifiers <wheel-dir>/build-identifiers.txt --lane <lane-id>
+   ```
+
+   Use the matrix lane ID so a truncated identifier file cannot reduce the
+   expected wheel inventory. Both `ci-json-python` and
    `ci-latest-release` call `_build-python-wheels.yml`: Python 3.13 drives
    cibuildwheel 3.4.0 across seven lanes and 45 CPython 3.9-3.13 wheels. Run
    the same installed-wheel `not parity` suite in both callers. Windows ARM64
@@ -67,6 +73,8 @@ helpers, profile dump, and round-trip parity tests.
    caller sets `upload-wheels: true`,
    downloads each `iccdev-python-*` artifact by name, and includes raw wheels
    in checksums and provenance. Do not reuse PR artifacts for publication.
+   Require consistent wheel metadata/tags, native extension and type stubs,
+   safe unique archive members, and the canonical BSD-3-Clause license.
    Follow `docs/python-packaging-release.md` for the interim GitHub route;
    do not infer PyPI publication from a branch push or successful local build.
 
@@ -87,9 +95,10 @@ helpers, profile dump, and round-trip parity tests.
 - [ ] Installed-package smoke does not require setuptools
 - [ ] Primary and release callers use the same full installed-wheel matrix
 - [ ] No tests collected (pytest exit code 5) fails primary CI
-- [ ] Release wheel intake rejects missing, duplicate, mismatched, or incomplete wheels
+- [ ] Release wheel intake rejects missing, duplicate, mismatched, or incomplete wheels and identifier inventories
+- [ ] Wheel metadata, archive paths, and complete license contents pass validation
 - [ ] Raw release wheels participate in SHA256/SHA512 checksums and provenance
 - [ ] Tests run from repository root with `--import-mode=importlib`
 - [ ] XML/JSON/blob helper parity tests pass
 - [ ] Profile dump and round-trip parity tests pass
-- [ ] No ASAN/UBSAN findings during test execution
+- [ ] For native bug fixes, report separate ASAN/UBSAN results; release-wheel tests alone do not establish sanitizer coverage
