@@ -6247,6 +6247,70 @@ function(iccdev_add_xml_curve_oversize_file_test)
   endif()
 endfunction()
 
+# #2806: a one-entry curveType is a gamma, and CIccTagXmlCurve::ToXml wrote one
+# of gamma 1.0 as <Curve IdentitySize="1"/> because IsIdentity() is true for it.
+# CIccTagXmlCurve::ParseXml refused that size in all three of its IdentitySize
+# branches, so iccFromXml could not read iccToXml's own output for the profile
+# Apple embeds in gray HEIF images. The reader now takes the form as gamma 1.0 and
+# the writer spells the gamma as a number under the 16-bit encodings. The helper
+# calls ParseXml under each encoding, since a curveType tag reaches only the
+# 16-bit branch.
+function(iccdev_add_xml_curve_identity_size_one_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlCurveIdentitySizeOneTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-curve-identity-size-one.cpp"
+  )
+  target_compile_features(iccXmlCurveIdentitySizeOneTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlCurveIdentitySizeOneTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlCurveIdentitySizeOneTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlCurveIdentitySizeOneTest)
+
+  # The helper writes the #2806 profile here and loads it by relative name, as
+  # iccFromXml would, so nothing is generated in the source tree.
+  set(_curve_identity_one_scratch "${CMAKE_CURRENT_BINARY_DIR}/ctest-output/xml-curve-identity-size-one")
+
+  if(NOT ICCDEV_HAS_LEAK_SANITIZER)
+    add_test(
+      NAME iccdev.xml-curve-identity-size-one
+      COMMAND "$<TARGET_FILE:iccXmlCurveIdentitySizeOneTest>" "${_curve_identity_one_scratch}"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-curve-identity-size-one
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlCurveIdentitySizeOneTest>" "${_curve_identity_one_scratch}"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-curve-identity-size-one PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;xml;curve;gamma;issue-2806;regression"
+  )
+  if(WIN32)
+    set(_curve_identity_one_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlCurveIdentitySizeOneTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _curve_identity_one_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-curve-identity-size-one PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_curve_identity_one_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2323: CIccMpeXmlCalculator::Flatten() scanned an in{}/out{} channel-reference
 # index for its closing bracket and then did "select = ptr + 1" unconditionally.
 # With no closing bracket the scan stops on the NUL terminator, so that assignment
@@ -11866,6 +11930,7 @@ if(WIN32)
   iccdev_add_xml_tag_reserved_roundtrip_test()
   iccdev_add_xml_mpe_reader_setters_test()
   iccdev_add_xml_curve_oversize_file_test()
+  iccdev_add_xml_curve_identity_size_one_test()
   iccdev_add_calc_channel_ref_unterminated_index_test()
   iccdev_add_calc_channel_ref_unterminated_index_json_test()
   iccdev_add_curve_setsize_contract_test()
@@ -12323,6 +12388,7 @@ iccdev_add_xml_struct_member_sameas_test()
 iccdev_add_xml_tag_reserved_roundtrip_test()
 iccdev_add_xml_mpe_reader_setters_test()
 iccdev_add_xml_curve_oversize_file_test()
+iccdev_add_xml_curve_identity_size_one_test()
 iccdev_add_calc_channel_ref_unterminated_index_test()
 iccdev_add_calc_channel_ref_unterminated_index_json_test()
 iccdev_add_curve_setsize_contract_test()

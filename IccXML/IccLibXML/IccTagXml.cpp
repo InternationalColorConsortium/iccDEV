@@ -3468,7 +3468,14 @@ bool CIccTagXmlCurve::ToXml(std::string &xml, icConvertType nType, std::string b
   if (!m_nSize) {
     xml += blanks + "<Curve/>\n";
   }
-  else if (IsIdentity()) {
+  // A one-entry curve is a gamma, and IsIdentity() is true for gamma 1.0.  Under
+  // the 16-bit encodings write it as its number, as every other gamma is
+  // written: an iccFromXml built before #2806 refuses IdentitySize="1", and one
+  // built before #1095 read it as 0/0.  The number is the u8Fixed8Number itself
+  // there.  The 8-bit and float encodings cannot hold it exactly, so they keep
+  // the shorthand.
+  else if (IsIdentity() &&
+           (m_nSize > 1 || (nType != icConvert16Bit && nType != icConvertVariable))) {
     xml += blanks + "<Curve IdentitySize=\"";
     snprintf(buf, bufSize, "%d", (unsigned int) m_nSize);
     xml += buf;
@@ -3900,9 +3907,19 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
 
           if (szSize && *szSize) {
             icUInt32Number nSize = 0;
-            if (!icXmlParseU32(szSize, nSize) || nSize <= 1)
+            if (!icXmlParseU32(szSize, nSize) || nSize < 1)
               return false;
-            
+
+            // A one-entry curveType is a gamma, not a table, and its identity is
+            // gamma 1.0: that is what IsIdentity() tests, so it is what ToXml()
+            // wrote as IdentitySize="1" until #2806, and still writes under the
+            // 8-bit and float encodings.  The ramp below is j/(nSize-1), which
+            // is 0/0 for one entry.  The size was refused here to stop that
+            // division, and that left iccFromXml unable to read what iccToXml
+            // wrote for every gamma 1.0 curve.
+            if (nSize == 1)
+              return SetGamma(1.0f);
+
             if (!SetSize(nSize))
               return false;
 
@@ -3951,9 +3968,13 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
 
           if (szSize && *szSize) {
             icUInt32Number nSize = 0;
-            if (!icXmlParseU32(szSize, nSize) || nSize <= 1)
+            if (!icXmlParseU32(szSize, nSize) || nSize < 1)
               return false;
-            
+
+            // See the 8-bit branch above: one entry is gamma 1.0 (#2806).
+            if (nSize == 1)
+              return SetGamma(1.0f);
+
             if (!SetSize(nSize))
               return false;
 
@@ -3995,8 +4016,12 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
 
           if (szSize && *szSize) {
             icUInt32Number nSize = 0;
-            if (!icXmlParseU32(szSize, nSize) || nSize <= 1)
+            if (!icXmlParseU32(szSize, nSize) || nSize < 1)
               return false;
+
+            // See the 8-bit branch above: one entry is gamma 1.0 (#2806).
+            if (nSize == 1)
+              return SetGamma(1.0f);
 
             if (!SetSize(nSize))
               return false;
