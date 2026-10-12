@@ -150,7 +150,7 @@ if(_iccdev_run_target STREQUAL "watch")
   target_sources(IccDevCoreSmoke PRIVATE "${_source}/WatchApp.swift")
   target_link_libraries(IccDevCoreSmoke PRIVATE "-framework SwiftUI")
   set_target_properties(IccDevCoreSmoke PROPERTIES
-    Swift_LANGUAGE_VERSION 5
+    XCODE_ATTRIBUTE_SWIFT_VERSION 5.0
     XCODE_ATTRIBUTE_SWIFT_OBJC_BRIDGING_HEADER "${_source}/SmokeTests.h"
     XCODE_ATTRIBUTE_LD_RUNPATH_SEARCH_PATHS "$(inherited) @executable_path/Frameworks")
 else()

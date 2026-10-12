@@ -209,9 +209,10 @@ run_case() {
 }
 
 run_case positive true
-mv "$installed_app/sRGB_D65_MAT.icc" "$installed_app/sRGB_D65_MAT.icc.disabled"
+fixture="$installed_app/sRGB_D65_MAT.icc"
+disabled_fixture="${fixture}.disabled"
+mv "$fixture" "$disabled_fixture"
 run_case missing-fixture false
-xcrun simctl install "$simulator" "$app"
-refresh_app_containers
+mv "$disabled_fixture" "$fixture"
 run_case restored true
 printf '%s simulator core smoke passed using %s\n' "$display_target" "$runtime"
