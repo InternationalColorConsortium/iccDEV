@@ -1064,7 +1064,7 @@ The canonical `ci-docker` workflow is manual-dispatch only.
 
 | File | Maintainer purpose | Publish/validation path |
 |------|--------------------|-------------------------|
-| `Dockerfile` | Pinned Ubuntu unified image for runtime, MCP, and maintainer checks, with Clang/LLVM 22 defaults, a Clang 21 pair for the packaged AFL++ LLVM plugin, GCC 15.2+, sanitizer, debugger, fuzzing, git, curl, and GitHub CLI tooling. | Follow the [container maintainer preflight](regression-container.md#maintainer-preflight-and-security-checks) before publishing; AFL wrapper changes also need the `docs/afl-fuzzing.md` container bootstrap probe. Consumer workflows select `latest`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`, an immutable SHA, or a release tag. |
+| `Dockerfile` | Pinned Ubuntu unified image for runtime, MCP, and maintainer checks, with Clang/LLVM 22 defaults, a Clang 21 pair for the packaged AFL++ LLVM plugin, GCC 15.2+, sanitizer, debugger, fuzzing, git, curl, and GitHub CLI tooling. Published tags are native `linux/amd64` and `linux/arm64` manifests; Docker Desktop on Apple Silicon selects `linux/arm64`. | Follow the [container maintainer preflight](regression-container.md#maintainer-preflight-and-security-checks) before publishing; AFL wrapper changes also need the `docs/afl-fuzzing.md` container bootstrap probe. Consumer workflows select `latest`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`, an immutable SHA, or a release tag. |
 
 Local development builds may use Docker's build cache to shorten edit and test
 cycles. Run the final pre-push container preflight with `--no-cache` so the

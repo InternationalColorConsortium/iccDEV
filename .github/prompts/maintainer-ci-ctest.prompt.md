@@ -138,6 +138,15 @@ docker build -t iccdev-container-check -f <Dockerfile> .
 docker run --rm iccdev-container-check <smoke-command>
 ```
 
+For unified-image platform changes, build and smoke both native image variants
+before publishing a manifest tag. Apple Silicon hosts must validate
+`linux/arm64` without amd64 emulation:
+
+```bash
+docker buildx build --platform linux/arm64 --load -t iccdev-container-arm64 -f Dockerfile .
+docker run --rm iccdev-container-arm64 bash -lc 'codeql version && hadolint --version'
+```
+
 For the unified `Dockerfile`, run the complete local development-environment
 preflight in `docs/regression-container.md#maintainer-preflight-and-security-checks`.
 Cached builds are permitted for development iterations. The final pre-push

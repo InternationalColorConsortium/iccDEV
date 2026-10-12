@@ -35,41 +35,45 @@ Use this skill for repeatable maintainer operations in
 1. Read `../../../docs/regression-container.md`.
 2. Pull the selected tag, resolve it to a digest, record the digest and source
    revision, and execute the digest rather than the mutable tag.
-3. Mount only an evidence directory and start a disposable container.
-4. Require a clean initial Git worktree.
-5. For a PR, fetch `pull/<number>/head` and check out the ref detached.
-6. For an issue, reproduce with existing project tools and saved inputs.
-7. Rebuild the affected target, then run the focused regression and registered
-   CTest wrapper.
-8. For local PR proof, pull the matching published integration image when
-   validating `ci-qa-pr-docker-testing` or `ci-publish-colourbill-ctrl`;
-   otherwise pull the selected published
-   image. Record its resolved digest, mount the reviewed worktree read-only,
-   and copy it to container-local scratch space. Run the local canonical-image
-   build, reject compiler warnings, and run CTest excluding only the `slow` and
-   `calculator` labels.
-9. When the PR-specific behavior is in an excluded suite, run its focused CTest
-   wrapper in addition to the local container envelope.
-10. For AFL/CFL work, run `iccdev-fuzz-env`, record the patch-stack counts, and
+3. Confirm that the selected published tag is a `linux/amd64` and `linux/arm64`
+    manifest with `docker buildx imagetools inspect --raw`. On Apple Silicon,
+    require the native `linux/arm64` image; do not accept an emulated amd64
+    result as ARM validation.
+4. Mount only an evidence directory and start a disposable container.
+5. Require a clean initial Git worktree.
+6. For a PR, fetch `pull/<number>/head` and check out the ref detached.
+7. For an issue, reproduce with existing project tools and saved inputs.
+8. Rebuild the affected target, then run the focused regression and registered
+    CTest wrapper.
+9. For local PR proof, pull the matching published integration image when
+    validating `ci-qa-pr-docker-testing` or `ci-publish-colourbill-ctrl`;
+    otherwise pull the selected published
+    image. Record its resolved digest, mount the reviewed worktree read-only,
+    and copy it to container-local scratch space. Run the local canonical-image
+    build, reject compiler warnings, and run CTest excluding only the `slow` and
+    `calculator` labels.
+10. When the PR-specific behavior is in an excluded suite, run its focused CTest
+    wrapper in addition to the local container envelope.
+11. For AFL/CFL work, run `iccdev-fuzz-env`, record the patch-stack counts, and
     run the smallest matching smoke (`iccdev-afl-smoke.sh --patches` or
     `.github/ci/cfl/build.sh --patches`) before broader validation.
-11. Run broader CTest or GCC 15.2 strict parity only after the focused check
+12. Run broader CTest or GCC 15.2 strict parity only after the focused check
     passes.
-12. For coverage or profiling work, use a separate build tree and inventory
+13. For coverage or profiling work, use a separate build tree and inventory
     `lcov`, `genhtml`, `gcovr`, `llvm-cov`, `llvm-profdata`, `gprof`, `perf`,
     `strace`, and the pinned `$ICCDEV_FLAMEGRAPH_DIR`. Run
     `iccdev.profiling-smoke` for `ENABLE_PROFILING=ON` builds. Treat unavailable
     hardware counters as environment evidence, not a correctness failure.
-13. Scan logs for compiler warnings, ASAN, UBSAN, and signal termination.
-14. Trigger `ci-pr-action.yml` explicitly for a pre-PR branch; a push alone does
+14. Scan logs for compiler warnings, ASAN, UBSAN, and signal termination.
+15. Trigger `ci-pr-action.yml` explicitly for a pre-PR branch; a push alone does
     not trigger that workflow.
-15. Use only `latest`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`,
+16. Use only `latest`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`,
     full-SHA, or release tags as selectors. Resolve the selector at run time; never hardcode one SHA tag as
     a long-lived workflow default. Existing legacy tags are continuity-only; do
     not introduce, recommend, or depend on other branch, run, or image-variant
     tags.
-16. Confirm the canonical image digest and hosted validation explicitly.
-17. Report exact image tag, digest, source revision, commands, results, evidence,
+17. Confirm the canonical image digest and hosted validation explicitly.
+18. Report exact image tag, digest, source revision, commands, results, evidence,
     and workflow URLs.
 
 For container/MCP runtime changes, run

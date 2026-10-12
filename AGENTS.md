@@ -41,6 +41,9 @@ shares one source of truth. Update rules here, not in the mirrors.
   and generated-file attribution as directed by their provenance.
 - For MCP runtime checks, validate every Docker image variant against its
   discovered capabilities. Do not hard-code a total tool count.
+- The published unified container is a native `linux/amd64` and `linux/arm64`
+  manifest. Build and smoke each platform before publishing a tag; Apple
+  Silicon Docker hosts must select `linux/arm64` without emulation.
 - Python CI and rolling-release wheels share `_build-python-wheels.yml`
   between `ci-json-python` and `ci-latest-release`, with Python 3.13 driving
   cibuildwheel 3.4.0 for all seven platform lanes. Keep installed-wheel tests

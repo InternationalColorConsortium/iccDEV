@@ -19,19 +19,20 @@ import sys
 PIN_SITES = {
     "Dockerfile": {
         "version": r"^ARG CODEQL_VERSION=([0-9]+(?:\.[0-9]+){2})$",
-        "sha256": r"^ARG CODEQL_SHA256=([0-9a-f]{64})$",
+        "amd64_sha256": r"^ARG CODEQL_AMD64_SHA256=([0-9a-f]{64})$",
+        "arm64_sha256": r"^ARG CODEQL_ARM64_SHA256=([0-9a-f]{64})$",
     },
     ".github/workflows/ci-codeql-query-tests.yml": {
         "version": r'^\s*CODEQL_VER="([0-9]+(?:\.[0-9]+){2})"$',
-        "sha256": r'^\s*CODEQL_SHA256="([0-9a-f]{64})"$',
+        "amd64_sha256": r'^\s*CODEQL_SHA256="([0-9a-f]{64})"$',
     },
     ".github/workflows/ci-codeql-security.yml": {
         "version": r'^\s*CODEQL_VER="([0-9]+(?:\.[0-9]+){2})"$',
-        "sha256": r'^\s*CODEQL_SHA256="([0-9a-f]{64})"$',
+        "amd64_sha256": r'^\s*CODEQL_SHA256="([0-9a-f]{64})"$',
     },
     ".github/workflows/ci-preflight-safety.yml": {
         "version": r'^\s*CODEQL_VER="([0-9]+(?:\.[0-9]+){2})"$',
-        "sha256": r'^\s*CODEQL_SHA256="([0-9a-f]{64})"$',
+        "amd64_sha256": r'^\s*CODEQL_SHA256="([0-9a-f]{64})"$',
     },
 }
 
@@ -62,11 +63,14 @@ def main():
         print(f"[FAIL] {error}", file=sys.stderr)
         return 1
 
-    expected = next(iter(pins.values()))
+    expected = pins["Dockerfile"]
     mismatches = [
-        f"{path}: version={pin['version']} sha256={pin['sha256']}"
+        f"{path}: version={pin['version']} amd64_sha256={pin['amd64_sha256']}"
         for path, pin in pins.items()
-        if pin != expected
+        if (
+            pin["version"] != expected["version"]
+            or pin["amd64_sha256"] != expected["amd64_sha256"]
+        )
     ]
     if mismatches:
         print("[FAIL] CodeQL bundle pins differ:", file=sys.stderr)
@@ -76,7 +80,9 @@ def main():
 
     print(
         "[OK] CodeQL bundle pins: "
-        f"version={expected['version']} sha256={expected['sha256']}"
+        f"version={expected['version']} "
+        f"amd64_sha256={expected['amd64_sha256']} "
+        f"arm64_sha256={expected['arm64_sha256']}"
     )
     return 0
 

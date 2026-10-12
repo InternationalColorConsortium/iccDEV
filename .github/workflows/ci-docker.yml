@@ -55,10 +55,20 @@ jobs:
           .github/scripts/check-workflow-cache-policy.sh .github/workflows/ci-docker.yml
 
   build:
-    name: Build and validate unified image
+    name: Build and validate unified image (${{ matrix.arch }})
     needs: cache-policy
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
     permissions:
       contents: read
       packages: write
@@ -139,6 +149,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           no-cache: true
           pull: true
+          platforms: ${{ matrix.platform }}
           build-args: |
             GIT_COMMIT=${{ github.sha }}
           load: true
@@ -157,6 +168,7 @@ jobs:
           EXPECTED_SHA: ${{ github.sha }}
           IMAGE_NAME: ${{ steps.image.outputs.name }}
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          IMAGE_ARCH: ${{ matrix.arch }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -168,11 +180,12 @@ jobs:
             echo "No image tag was generated for validation" >&2
             exit 1
           fi
-          staging_image="${IMAGE_NAME}:sha-${EXPECTED_SHA}"
-          if ! grep -Fqx "$staging_image" <<< "$IMAGE_TAGS"; then
+          immutable_image="${IMAGE_NAME}:sha-${EXPECTED_SHA}"
+          if ! grep -Fqx "$immutable_image" <<< "$IMAGE_TAGS"; then
             echo "Immutable SHA tag was not generated for staging" >&2
             exit 1
           fi
+          staging_image="${immutable_image}-${IMAGE_ARCH}"
           printf 'image=%s\n' "$(sanitize_line "$test_image")" >> "$GITHUB_OUTPUT"
           printf 'staging_image=%s\n' "$(sanitize_line "$staging_image")" >> "$GITHUB_OUTPUT"
 
@@ -180,6 +193,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           TEST_IMAGE: ${{ steps.test-image.outputs.image }}
+          IMAGE_ARCH: ${{ matrix.arch }}
           EXPECTED_SHA: ${{ github.sha }}
           EXPECTED_REF_NAME: ${{ github.ref_name }}
         run: |
@@ -193,6 +207,7 @@ jobs:
             --format '{{ index .Config.Labels "org.opencontainers.image.ref.name" }}')"
           test "$image_revision" = "$EXPECTED_SHA"
           test "$image_ref_name" = "$EXPECTED_REF_NAME"
+          test "$(docker image inspect "$TEST_IMAGE" --format '{{.Architecture}}')" = "$IMAGE_ARCH"
           docker run --rm "$TEST_IMAGE" bash -lc '
             set -euo pipefail
             command -v git gh clang clang++ gcc g++ cmake cppcheck clang-tidy scan-build
@@ -259,7 +274,7 @@ jobs:
         if: ${{ failure() && steps.runtime-smoke.outcome == 'failure' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: iccdev-container-smoke
+          name: iccdev-container-smoke-${{ matrix.arch }}
           path: out/container-smoke/
           retention-days: 7
           if-no-files-found: error
@@ -270,16 +285,16 @@ jobs:
         env:
           SYFT_FILE_METADATA_SELECTION: none
         with:
-          image: ${{ steps.test-image.outputs.staging_image }}
+          image: ${{ steps.test-image.outputs.image }}
           format: cyclonedx-json
-          output-file: sbom.cyclonedx.json
+          output-file: sbom.${{ matrix.arch }}.cyclonedx.json
 
       - name: Validate SBOM attestation size
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
         env:
           BASH_ENV: /dev/null
           MAX_ATTEST_BYTES: "16777216"
-          SBOM_PATH: sbom.cyclonedx.json
+          SBOM_PATH: sbom.${{ matrix.arch }}.cyclonedx.json
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -324,6 +339,7 @@ jobs:
         id: stage
         env:
           BASH_ENV: /dev/null
+          TEST_IMAGE: ${{ steps.test-image.outputs.image }}
           STAGING_IMAGE: ${{ steps.test-image.outputs.staging_image }}
         run: |
           set -euo pipefail
@@ -331,6 +347,7 @@ jobs:
           unset GITHUB_TOKEN || true
           source .github/scripts/sanitize-sed.sh
 
+          docker tag "$TEST_IMAGE" "$STAGING_IMAGE"
           docker push "$STAGING_IMAGE"
 
           image_digest_ref="$(docker image inspect "$STAGING_IMAGE" --format '{{index .RepoDigests 0}}')"
@@ -359,7 +376,7 @@ jobs:
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.stage.outputs.digest }}
-          sbom-path: sbom.cyclonedx.json
+          sbom-path: sbom.${{ matrix.arch }}.cyclonedx.json
           push-to-registry: true
 
       - name: Retry SBOM attestation
@@ -369,7 +386,7 @@ jobs:
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.stage.outputs.digest }}
-          sbom-path: sbom.cyclonedx.json
+          sbom-path: sbom.${{ matrix.arch }}.cyclonedx.json
           push-to-registry: true
 
       - name: Require SBOM attestation
@@ -387,10 +404,89 @@ jobs:
             exit 1
           fi
 
-      - name: Publish attested image tags
+      - name: Upload SBOM
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: iccdev-sbom-${{ matrix.arch }}
+          path: sbom.${{ matrix.arch }}.cyclonedx.json
+          retention-days: 90
+          if-no-files-found: error
+
+  publish:
+    name: Publish multi-architecture manifest
+    needs: build
+    if: >-
+      ${{
+        needs.build.result == 'success' &&
+        (github.ref == 'refs/heads/master' ||
+         github.ref == 'refs/heads/ci-qa-pr-docker-testing' ||
+         github.ref == 'refs/heads/ci-publish-colourbill-ctrl' ||
+         startsWith(github.ref, 'refs/tags/v'))
+      }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    environment:
+      name: >-
+        ${{ github.ref == 'refs/heads/ci-publish-colourbill-ctrl' &&
+            'ci-publishing-colourbill-ctrl' || 'ghcr-publish' }}
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Set canonical image name
+        id: image
         env:
           BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          if [[ ! "$owner" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+            echo "Invalid repository owner for image name" >&2
+            exit 1
+          fi
+          printf 'name=ghcr.io/%s/iccdev\n' "$(sanitize_line "$owner")" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+        with:
+          cache-binary: false
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+            type=ref,event=branch,enable=${{ github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+            type=ref,event=branch,enable=${{ github.ref == 'refs/heads/ci-publish-colourbill-ctrl' }}
+            type=ref,event=tag
+
+      # preflight: allow-token-exposure reason=publish-unified-iccdev-manifest
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish verified multi-architecture manifest
+        env:
+          BASH_ENV: /dev/null
+          EXPECTED_SHA: ${{ github.sha }}
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           set -euo pipefail
@@ -398,22 +494,30 @@ jobs:
           unset GITHUB_TOKEN || true
           source .github/scripts/sanitize-sed.sh
 
-          pushed=0
+          tag_args=()
           while IFS= read -r image_tag; do
             [ -n "$image_tag" ] || continue
-            docker push "$image_tag"
-            pushed=$((pushed + 1))
+            tag_args+=(--tag "$image_tag")
           done <<< "$IMAGE_TAGS"
-          if [ "$pushed" -eq 0 ]; then
-            echo "No image tags were available to publish" >&2
+          if [ "${#tag_args[@]}" -eq 0 ]; then
+            echo "No image tags were available for manifest publication" >&2
             exit 1
           fi
 
-      - name: Upload SBOM
-        if: ${{ env.PUBLISH_IMAGE == 'true' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: iccdev-sbom
-          path: sbom.cyclonedx.json
-          retention-days: 90
-          if-no-files-found: error
+          docker buildx imagetools create \
+            "${tag_args[@]}" \
+            "${IMAGE_NAME}:sha-${EXPECTED_SHA}-amd64" \
+            "${IMAGE_NAME}:sha-${EXPECTED_SHA}-arm64"
+
+          while IFS= read -r image_tag; do
+            [ -n "$image_tag" ] || continue
+            docker buildx imagetools inspect --raw "$image_tag" \
+              | jq -e '
+                  [.manifests[]
+                   | select(.platform.os == "linux")
+                   | .platform.architecture]
+                  | sort == ["amd64", "arm64"]
+                ' >/dev/null
+            printf 'Published verified multi-architecture image: %s\n' \
+              "$(sanitize_line "$image_tag")"
+          done <<< "$IMAGE_TAGS"

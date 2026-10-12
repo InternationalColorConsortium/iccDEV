@@ -57,6 +57,30 @@ integration tags. Do not create,
 recommend, or depend on new legacy tags. Re-evaluate their retention and
 removal through a separately announced tag-management change.
 
+## Platforms
+
+Published tags are OCI manifest lists containing native `linux/amd64` and
+`linux/arm64` images. Docker selects the matching image automatically; Docker
+Desktop on Apple Silicon therefore uses `linux/arm64` without x86 emulation.
+The build workflow builds, smoke-tests, generates an SBOM for, and attests each
+architecture before publishing the manifest tags.
+
+Confirm the published contract before shared use:
+
+```bash
+IMAGE_TAG=ghcr.io/internationalcolorconsortium/iccdev:latest
+docker buildx imagetools inspect "$IMAGE_TAG"
+docker buildx imagetools inspect --raw "$IMAGE_TAG" \
+  | jq -e '[.manifests[] | select(.platform.os == "linux") | .platform.architecture] | sort == ["amd64", "arm64"]'
+```
+
+For a local Apple Silicon Dockerfile proof, use the native platform explicitly:
+
+```bash
+docker buildx build --platform linux/arm64 --load -t iccdev:local-arm64 .
+docker run --rm iccdev:local-arm64 bash -lc 'codeql version && hadolint --version && ctest --test-dir /workspace/build -N --no-tests=error'
+```
+
 ```bash
 IMAGE_TAG=ghcr.io/internationalcolorconsortium/iccdev:latest
 docker pull "$IMAGE_TAG"

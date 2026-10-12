@@ -14,11 +14,13 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ARG GIT_COMMIT=unknown
 ARG BUILD_JOBS=32
+ARG TARGETARCH
 ARG FLAMEGRAPH_COMMIT=41fee1f99f9276008b7cd112fca19dc3ea84ac32
 ARG LLVM_MSAN_LIBCXX_COMMIT=1ab49a973e210e97d61e5db6557180dcb92c3e98
 ARG LIBXML2_MSAN_COMMIT=3d840e17858de03a09fba8b202e3a89267d5795a
 ARG CODEQL_VERSION=2.27.2
-ARG CODEQL_SHA256=f002864be6dd8d5d7bdb123aaf7291ec8e291012bd9f70b6d2362f730db52aeb
+ARG CODEQL_AMD64_SHA256=f002864be6dd8d5d7bdb123aaf7291ec8e291012bd9f70b6d2362f730db52aeb
+ARG CODEQL_ARM64_SHA256=c1779ce6335606ef86fce4aae0db2ac4d7da869527d6a67bf055d9135695473c
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -180,18 +182,27 @@ RUN python3 -m venv /opt/iccdev-spectral-preview \
       /opt/iccdev-spectral-preview/lib/python*/site-packages/pip-*.dist-info
 
 RUN hadolint_version="2.15.1" \
- && hadolint_sha256="c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507" \
+ && case "$TARGETARCH" in \
+      amd64) hadolint_arch="x86_64"; hadolint_sha256="c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507" ;; \
+      arm64) hadolint_arch="arm64"; hadolint_sha256="f6198ef8090f404dbb771abfee086eb8c48ac177f30da7fd3510aca35b344b5d" ;; \
+      *) echo "Unsupported Docker target architecture: $TARGETARCH" >&2; exit 2 ;; \
+    esac \
  && curl -fsSLo /tmp/hadolint \
-      "https://github.com/hadolint/hadolint/releases/download/v${hadolint_version}/hadolint-linux-x86_64" \
+      "https://github.com/hadolint/hadolint/releases/download/v${hadolint_version}/hadolint-linux-${hadolint_arch}" \
  && printf '%s  %s\n' "$hadolint_sha256" /tmp/hadolint | sha256sum -c - \
  && install -m 0755 /tmp/hadolint /usr/local/bin/hadolint \
  && rm -f /tmp/hadolint \
  && hadolint --version
 
-RUN codeql_archive="/tmp/codeql-bundle-linux64.tar.gz" \
+RUN case "$TARGETARCH" in \
+      amd64) codeql_platform="linux64"; codeql_sha256="$CODEQL_AMD64_SHA256" ;; \
+      arm64) codeql_platform="linux-arm64"; codeql_sha256="$CODEQL_ARM64_SHA256" ;; \
+      *) echo "Unsupported Docker target architecture: $TARGETARCH" >&2; exit 2 ;; \
+    esac \
+ && codeql_archive="/tmp/codeql-bundle-${codeql_platform}.tar.gz" \
  && curl -fsSLo "$codeql_archive" \
-      "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${CODEQL_VERSION}/codeql-bundle-linux64.tar.gz" \
- && printf '%s  %s\n' "$CODEQL_SHA256" "$codeql_archive" | sha256sum -c - \
+      "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${CODEQL_VERSION}/codeql-bundle-${codeql_platform}.tar.gz" \
+ && printf '%s  %s\n' "$codeql_sha256" "$codeql_archive" | sha256sum -c - \
  && tar -xzf "$codeql_archive" -C /opt \
  && test -x /opt/codeql/codeql \
  && ln -s /opt/codeql/codeql /usr/local/bin/codeql \
