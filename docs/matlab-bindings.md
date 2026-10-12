@@ -168,6 +168,9 @@ repository-relative support paths used by QA and examples:
 - `iccToJson.exe` and `iccFromJson.exe` at the bundle root for IccJSON
   conversion.
 - `iccHeifDump.exe` at the bundle root for MATLAB HEIF ICC inspection.
+- `matlab/tests/test_heif_dump_native.m` and its three fixtures under
+  `.github/ci/tooling/heif/img/`: `valid-prof.heic`, `nclx-only.heif`, and
+  `invalid-ipma-index.heic` for valid ICC, no-ICC, and malformed-input checks.
 - `iccPawgReport.exe` at the bundle root for MATLAB/native Q1 comparison.
 - `matlab/+iccdev/+qa/audit_pawg_q1.m`, its calculation helpers, and
   `matlab/tests/test_pawg_q1.m`.
@@ -187,6 +190,8 @@ repository-relative support paths used by QA and examples:
 Keep those paths intact when extracting or relocating the bundle. Release CI
 runs MATLAB from the staged archive tree before upload; testing only the source
 checkout does not prove that the published payload is self-contained.
+Run `test_heif_dump_native(bundle_root)` from the extracted MATLAB test tree
+with the bundle root on `PATH` to verify its HEIF tool and fixtures together.
 
 To make the checkout available to new MATLAB Desktop sessions without replacing
 existing entries:

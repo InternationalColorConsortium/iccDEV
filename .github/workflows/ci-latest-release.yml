@@ -734,7 +734,14 @@ jobs:
             -Destination "$stage/IccProfLib/IccColorimetry.cpp" -Force
           Copy-Item -Path ".github/ci/regression/gamma-2.20703125.icc" `
             -Destination "$stage/.github/ci/regression/gamma-2.20703125.icc" -Force
+          $heifFixtureDir = "$stage/.github/ci/tooling/heif/img"
+          New-Item -ItemType Directory -Force -Path $heifFixtureDir | Out-Null
+          foreach ($fixture in @('valid-prof.heic', 'nclx-only.heif', 'invalid-ipma-index.heic')) {
+            Copy-Item -LiteralPath ".github/ci/tooling/heif/img/$fixture" `
+              -Destination $heifFixtureDir -Force
+          }
           $matlabRequired = @(
+            'iccHeifDump.exe',
             'matlab\+iccdev\private\icc_mex.mexw64',
             'matlab\run_local_qa.m',
             'matlab\run_gamma_qa.m',
@@ -746,6 +753,7 @@ jobs:
             'matlab\tests\test_pawg_q1.m',
             'matlab\tests\test_json_bindings.m',
             'matlab\tests\test_lut_type_range.m',
+            'matlab\tests\test_heif_dump_native.m',
             'matlab\tests\test_usage_guidance.m',
             'matlab\tests\test_delta_e_2000.m',
             'matlab\tests\fixtures\default_usage_examples.txt',
@@ -765,7 +773,10 @@ jobs:
             'Testing\HDR\BT2100PQFullDisplay.xml',
             'IccProfLib\IccTagBasic.cpp',
             'IccProfLib\IccColorimetry.cpp',
-            '.github\ci\regression\gamma-2.20703125.icc'
+            '.github\ci\regression\gamma-2.20703125.icc',
+            '.github\ci\tooling\heif\img\valid-prof.heic',
+            '.github\ci\tooling\heif\img\nclx-only.heif',
+            '.github\ci\tooling\heif\img\invalid-ipma-index.heic'
           )
           foreach ($required in $matlabRequired) {
             if (-not (Test-Path (Join-Path $stage $required))) {
@@ -906,6 +917,7 @@ jobs:
             test_delta_e_2000();
             test_json_bindings();
             test_lut_type_range();
+            test_heif_dump_native(stage);
             test_luminance_normalization();
             test_colorimetry_issue_1475();
             qa_output = evalc('run_local_qa()');
@@ -1852,6 +1864,7 @@ jobs:
 
           windows_bundle_root="artifacts/iccdev-windows-msvc/iccDEV-Testing"
           matlab_required=(
+            "iccHeifDump.exe"
             "iccToJson.exe"
             "iccFromJson.exe"
             "iccPawgReport.exe"
@@ -1866,6 +1879,7 @@ jobs:
             "matlab/tests/test_pawg_q1.m"
             "matlab/tests/test_json_bindings.m"
             "matlab/tests/test_lut_type_range.m"
+            "matlab/tests/test_heif_dump_native.m"
             "matlab/tests/test_usage_guidance.m"
             "matlab/tests/test_delta_e_2000.m"
             "matlab/tests/fixtures/default_usage_examples.txt"
@@ -1886,6 +1900,9 @@ jobs:
             "IccProfLib/IccTagBasic.cpp"
             "IccProfLib/IccColorimetry.cpp"
             ".github/ci/regression/gamma-2.20703125.icc"
+            ".github/ci/tooling/heif/img/valid-prof.heic"
+            ".github/ci/tooling/heif/img/nclx-only.heif"
+            ".github/ci/tooling/heif/img/invalid-ipma-index.heic"
           )
           for required in "${matlab_required[@]}"; do
             if [ ! -s "${windows_bundle_root}/${required}" ]; then

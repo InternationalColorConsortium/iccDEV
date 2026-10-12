@@ -197,6 +197,10 @@ profiles, examples, and native handle lifecycle behavior.
     `iccPawgReport.exe`, `matlab/tests/test_json_bindings.m`,
     `iccHeifDump.exe`, `matlab/+iccdev/heif_dump.m`,
     `matlab/tests/test_heif_dump_input_validation.m`,
+    `matlab/tests/test_heif_dump_native.m`, and its three fixtures under
+    `.github/ci/tooling/heif/img/`: `valid-prof.heic`, `nclx-only.heif`, and
+    `invalid-ipma-index.heic`. Run `test_heif_dump_native(bundle_root)` with
+    the extracted bundle root on `PATH` before publishing. Also require
     `matlab/tests/test_lut_type_range.m`,
     `matlab/+iccdev/+qa/audit_pawg_q1.m`, `bounded_grid.m`,
     `delta_e_2000.m`, `pcs_to_lab.m`, `matlab/tests/test_pawg_q1.m`,
@@ -241,6 +245,8 @@ profiles, examples, and native handle lifecycle behavior.
   `iccdev:jsonCommandFailed` behavior.
 - HEIF wrapper missing-input `iccdev:heifInputNotFound` behavior and its
   actionable bare-invocation example.
+- Staged native HEIF smoke for a valid ICC carrier, no-ICC carrier, and
+  malformed property association, using only packaged fixtures and tools.
 - IccProfLib `icXformLutType` values 11 through 13 accepted by the gateway and
   value 14 rejected as `iccdev:badArgs`.
 - PAWG Q1 MATLAB/native metric and verdict agreement.
