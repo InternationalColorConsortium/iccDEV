@@ -41,9 +41,13 @@ shares one source of truth. Update rules here, not in the mirrors.
   and generated-file attribution as directed by their provenance.
 - For MCP runtime checks, validate every Docker image variant against its
   discovered capabilities. Do not hard-code a total tool count.
-- Python rolling-release wheels use `ci-latest-release` and
-  `.github/scripts/validate-python-release-wheels.py`. Keep installed-wheel
-  tests, explicitly named artifact intake, checksums, and provenance aligned;
+- Python CI and rolling-release wheels share `_build-python-wheels.yml`
+  between `ci-json-python` and `ci-latest-release`, with Python 3.13 driving
+  cibuildwheel 3.4.0 for all seven platform lanes. Keep installed-wheel tests
+  and the Windows ARM64 Python 3.9/3.10 NumPy exception aligned. Primary CI
+  disables shared wheel artifact upload and fails on empty test collection; release
+  CI enables explicitly named artifact intake validated by
+  `.github/scripts/validate-python-release-wheels.py`, checksums, and provenance;
   PyPI account setup and publication remain separate maintainer actions.
 - MATLAB public entry points that require arguments must provide actionable
   bare-invocation errors pinned by `matlab/tests/test_usage_guidance.m`.

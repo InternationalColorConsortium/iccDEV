@@ -33,6 +33,10 @@ on:
         description: "Run comprehensive tool parity tests"
         type: boolean
         default: false
+      run-wheel-smoke:
+        description: "Run legacy native wheel smoke when no shared wheel matrix is used"
+        type: boolean
+        default: true
 
 jobs:
   build-test:
@@ -734,15 +738,7 @@ jobs:
           echo "=== Running Python/Cython unit tests ==="
           python -m pytest --rootdir "${WORKSPACE_DIR}" \
             --import-mode=importlib python/tests -v --tb=short \
-            -m "not parity" 2>&1 | tee "$LOGDIR/python-tests.log" || {
-            rc=$?
-            if [[ $rc -eq 5 ]]; then
-              echo "No tests collected -- extension may not be loadable"
-            else
-              echo "WARN: pytest exited $rc"
-              exit $rc
-            fi
-          }
+            -m "not parity" 2>&1 | tee "$LOGDIR/python-tests.log"
 
           echo "=== Running Python native parity tests ==="
           python -m pytest --rootdir "${WORKSPACE_DIR}" \
@@ -828,6 +824,7 @@ jobs:
 
       # preflight: allow-package-install reason=python-wheel-ci
       - name: Validate native Python wheel with cibuildwheel
+        if: inputs.run-wheel-smoke
         env:
           BASH_ENV: /dev/null
           PYTHON_VERSION: ${{ inputs.python-version }}

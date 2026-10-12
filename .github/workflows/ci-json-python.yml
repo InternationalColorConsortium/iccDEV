@@ -49,6 +49,7 @@ jobs:
       os: ubuntu-latest
       python-version: ${{ matrix.python-version }}
       run-full-tests: false
+      run-wheel-smoke: false
 
   # ---------------------------------------------------------------
   # macOS: Build + light tests (CreateAllProfiles only)
@@ -63,6 +64,7 @@ jobs:
       os: macos-latest
       python-version: ${{ matrix.python-version }}
       run-full-tests: false
+      run-wheel-smoke: false
 
   # ---------------------------------------------------------------
   # Windows: Build + Python wheel + MCP
@@ -75,3 +77,9 @@ jobs:
     uses: ./.github/workflows/_build-test-windows.yml
     with:
       python-version: ${{ matrix.python-version }}
+      run-wheel-smoke: false
+
+  python-wheels:
+    uses: ./.github/workflows/_build-python-wheels.yml
+    with:
+      upload-wheels: false

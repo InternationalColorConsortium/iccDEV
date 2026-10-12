@@ -1770,80 +1770,10 @@ jobs:
           retention-days: 30
 
   python-wheels:
-    name: "Python wheels (${{ matrix.id }})"
     needs: cache-policy
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - {id: linux-x86_64, os: ubuntu-24.04, platform: linux, arch: x86_64}
-          - {id: linux-aarch64, os: ubuntu-24.04-arm, platform: linux, arch: aarch64}
-          - {id: macos-x86_64, os: macos-15-intel, platform: macos, arch: x86_64}
-          - {id: macos-arm64, os: macos-14, platform: macos, arch: arm64}
-          - {id: macos-universal2, os: macos-14, platform: macos, arch: universal2}
-          - {id: windows-amd64, os: windows-2022, platform: windows, arch: AMD64}
-          - id: windows-arm64
-            os: windows-11-arm
-            platform: windows
-            arch: ARM64
-            # NumPy has no wheels for these Python versions on Windows ARM64.
-            before_test: >-
-              python -m pip install --only-binary=numpy "pytest>=7,<9"
-              "numpy>=1.23,<3; python_version >= '3.11'"
-    defaults:
-      run:
-        shell: bash --noprofile --norc {0}
-    env:
-      BASH_ENV: /dev/null
-      CIBW_ARCHS: ${{ matrix.arch }}
-      # Explicit quotes also protect version bounds from Windows cmd redirection.
-      CIBW_BEFORE_TEST: >-
-        python -m pip install --only-binary=numpy "pytest>=7,<9" "numpy>=1.23,<3"
-      CIBW_TEST_COMMAND: >-
-        python -m pytest --rootdir "{project}" --import-mode=importlib
-        "{project}/python/tests" -v --tb=short -m "not parity"
-      # The arm64 host tests the arm64 slice; x86_64 wheels have a native job.
-      CIBW_TEST_SKIP: "*-macosx_universal2:x86_64"
-    steps:
-      - name: Checkout release source
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
-        with:
-          persist-credentials: false
-
-      - name: Set up wheel build driver
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
-        with:
-          python-version: "3.13"
-
-      # preflight: allow-package-install reason=unprivileged-release-wheel-build
-      - name: Build and test standalone wheels
-        env:
-          WHEEL_PLATFORM: ${{ matrix.platform }}
-          CIBW_BEFORE_TEST: ${{ matrix.before_test || env.CIBW_BEFORE_TEST }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          unset ICCDEV_BUILD_DIR ICCDEV_ALLOW_DEBUG_PYTHON_LIB || true
-          python -m pip install "cibuildwheel==3.4.0" "twine>=5,<8" "pytest>=7,<9" "PyYAML>=6,<7"
-          python -m pytest --rootdir . --import-mode=importlib .github/tests/test_python_release_wheels.py -q
-          mkdir -p wheelhouse
-          python -m cibuildwheel python --platform "$WHEEL_PLATFORM" --print-build-identifiers > wheelhouse/build-identifiers.txt
-          python -m cibuildwheel python --platform "$WHEEL_PLATFORM" --output-dir wheelhouse
-          python .github/scripts/validate-python-release-wheels.py wheelhouse --identifiers wheelhouse/build-identifiers.txt
-          python -m twine check wheelhouse/*.whl
-
-      - name: Upload tested Python wheels
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: iccdev-python-${{ matrix.id }}
-          path: wheelhouse/
-          if-no-files-found: error
-          retention-days: 7
+    uses: ./.github/workflows/_build-python-wheels.yml
+    with:
+      upload-wheels: true
 
   release:
     name: "Publish Latest Release"

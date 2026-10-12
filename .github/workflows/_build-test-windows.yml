@@ -28,6 +28,10 @@ on:
         description: "Enable strict compiler warnings for the full CTest lane"
         type: boolean
         default: false
+      run-wheel-smoke:
+        description: "Run legacy native wheel smoke when no shared wheel matrix is used"
+        type: boolean
+        default: true
 
 jobs:
   build-test:
@@ -251,19 +255,18 @@ jobs:
           $env:ICCDEV_TOOLS_DIR = "$env:GITHUB_WORKSPACE\out\vs2022-vcpkg\Tools"
           $result = python -m pytest --rootdir . --import-mode=importlib `
             .\python\tests -v --tb=short -m "not parity" 2>&1
+          $testExitCode = $LASTEXITCODE
           $result | ForEach-Object { Write-Host $_ }
 
-          if ($LASTEXITCODE -eq 5) {
-            Write-Host "No tests collected -- extension may not be loadable"
-          } elseif ($LASTEXITCODE -ne 0) {
-            Write-Host "WARN: pytest exited $LASTEXITCODE"
-            throw "pytest failed with exit code $LASTEXITCODE"
+          if ($testExitCode -ne 0) {
+            throw "pytest failed with exit code $testExitCode"
           }
 
           $parity = python -m pytest --rootdir . --import-mode=importlib .\python\tests -v --tb=short -m parity 2>&1
+          $parityExitCode = $LASTEXITCODE
           $parity | ForEach-Object { Write-Host $_ }
-          if ($LASTEXITCODE -ne 0) {
-            throw "Python parity tests failed with exit code $LASTEXITCODE"
+          if ($parityExitCode -ne 0) {
+            throw "Python parity tests failed with exit code $parityExitCode"
           }
 
       # ---------------------------------------------------------------
@@ -271,6 +274,7 @@ jobs:
       # ---------------------------------------------------------------
       # preflight: allow-package-install reason=python-wheel-ci
       - name: Validate Python wheel matrix
+        if: inputs.run-wheel-smoke
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
           POWERSHELL_UPDATECHECK: Off

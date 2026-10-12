@@ -11,6 +11,16 @@ run `.github/tests/test_python_release_wheels.py` and validate each lane with
 `.github/scripts/validate-python-release-wheels.py` plus its identifier inventory.
 See `docs/python-packaging-release.md` for the artifact and source-build paths.
 
+For wheel CI failures, inspect the shared `_build-python-wheels.yml` used by
+both `ci-json-python` and `ci-latest-release`. Python 3.13 drives cibuildwheel
+3.4.0 for the full seven-lane CPython 3.9-3.13 matrix. Windows ARM64 Python
+3.9/3.10 omit optional NumPy; other targets require binary NumPy wheels. Both
+callers run the installed-wheel `not parity` suite. Primary CI keeps its
+native parity and sdist checks, rejects empty test collection, and disables
+shared wheel artifact upload (`upload-wheels: false`); the release caller uploads
+explicitly named artifacts (`upload-wheels: true`). Use
+`.github/tests/test_python_test_collection.py` to check empty-test rejection.
+
 ## Build Diagnostics
 
 1. **Check Cython compilation**

@@ -124,10 +124,20 @@ cmm.begin()
 
 Use `docs/python-packaging-release.md` as the maintainer source for Python
 package PR validation, merge criteria, and production PyPI release steps.
-The interim `ci-latest-release` path builds the configured CPython 3.9-3.13
-matrix as raw GitHub release wheel assets. Validate every lane's identifier
-inventory with `.github/scripts/validate-python-release-wheels.py`, run
-installed-package tests, and include wheels in release checksums/provenance.
+Both `ci-json-python` and `ci-latest-release` call the shared
+`.github/workflows/_build-python-wheels.yml` using Python 3.13 and
+cibuildwheel 3.4.0. Keep its seven lanes, 45 CPython 3.9-3.13 wheels, and
+installed-wheel `not parity` tests aligned for both callers. Windows ARM64
+Python 3.9/3.10 omit optional NumPy; other wheel targets install binary NumPy.
+Primary CI retains native parity and isolated sdist tests, and treats pytest
+exit code 5 (no tests collected) as failure. It sets `upload-wheels: false`
+and disables duplicate native wheel smokes with `run-wheel-smoke: false`;
+other native workflow callers retain the default smoke check. The release
+caller sets `upload-wheels: true` for explicitly named `iccdev-python-*`
+artifacts.
+Validate every lane's identifier inventory with
+`.github/scripts/validate-python-release-wheels.py` and include release wheels
+in checksums/provenance. Do not publish PR artifacts.
 Keep wheel build jobs unprivileged, artifact downloads explicitly named, and
 PyPI publication separate until maintainers configure their account.
 Python packaging PRs must pass `ci-json-python`, keep

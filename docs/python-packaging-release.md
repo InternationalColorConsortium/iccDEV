@@ -6,11 +6,14 @@ Do not publish Python artifacts from a pull request branch.
 
 ## Interim GitHub release wheels
 
-The manual `ci-latest-release.yml` workflow builds CPython 3.9-3.13 wheels
-directly from its checked-out commit. Seven matrix lanes cover Linux
-x86_64/aarch64 (manylinux and musllinux), macOS x86_64/arm64/universal2,
-and Windows AMD64/ARM64. The release build driver pins cibuildwheel 3.4.0;
-the existing Python validation workflows retain their bounded 2.x driver.
+Both `ci-json-python.yml` and the manual `ci-latest-release.yml` call
+`.github/workflows/_build-python-wheels.yml` to build CPython 3.9-3.13 wheels
+directly from their checked-out commit. Seven matrix lanes produce 45 wheels
+covering Linux x86_64/aarch64 (manylinux and musllinux), macOS
+x86_64/arm64/universal2, and Windows AMD64/ARM64. The shared build driver uses
+Python 3.13 and pins cibuildwheel 3.4.0, including when building older Python
+wheels. Primary Python CI sets `upload-wheels: false`; the release caller sets
+`upload-wheels: true`.
 No PyPI account, publishing token, or PyPI upload is required for this route.
 
 Wheel jobs compile the portable bundled library without a prebuilt CMake
@@ -25,9 +28,10 @@ NumPy test uses `pytest.importorskip`. Other targets retain NumPy coverage.
 The test dependency installer requires binary NumPy wheels to avoid an
 unrelated source build inside wheel validation.
 
-Each lane uploads an explicit `iccdev-python-<lane>` artifact with its wheels
-and cibuildwheel identifier inventory. The release job downloads all seven
-artifacts by name and validates version, ABI/platform coverage, native
+For the release caller, each lane uploads an explicit `iccdev-python-<lane>`
+artifact with its wheels and cibuildwheel identifier inventory. The release
+job downloads all seven artifacts by name and validates version,
+ABI/platform coverage, native
 extension, type stubs, and license before copying raw `.whl` assets into the
 release. Missing, duplicate, or unexpected wheels stop publication. Wheels
 participate in `SHA256SUMS`, `SHA512SUMS`, and artifact provenance alongside
@@ -88,11 +92,18 @@ CRT libraries are only valid with a debug Python interpreter or explicit
 authoritative and must not be rescued by another Release library elsewhere in
 the checkout.
 
-The PR must also pass the `ci-json-python` workflow. That workflow validates
-Linux and Windows builds for Python 3.12 and 3.13 and macOS builds for Python
-3.9, 3.12, and 3.13, builds source and wheel artifacts, runs `twine check`,
-prints cibuildwheel identifiers for all target platforms, and runs a native
-wheel smoke build on each hosted platform.
+The PR must also pass the `ci-json-python` workflow. Its native binding and
+parity jobs cover Linux and Windows builds for Python 3.12 and 3.13 and macOS
+builds for Python 3.9, 3.12, and 3.13. It retains isolated sdist installation
+and `twine check`, and calls the same seven-lane installed-wheel matrix as the
+release workflow, including Windows ARM64 Python 3.9/3.10. The shared wheel
+matrix replaces the former per-platform cibuildwheel import smoke builds:
+primary CI passes `run-wheel-smoke: false` to its native build jobs. Other
+callers retain their existing bounded 2.x smoke driver through the default
+`run-wheel-smoke: true`. Pytest exit code 5 (no tests collected) is a failure
+in primary CI. Local wiring and collection regressions live in
+`.github/tests/test_python_release_wheels.py` and
+`.github/tests/test_python_test_collection.py`.
 
 Run pytest from the repository root with `--import-mode=importlib`. Installed
 wheel validation must also set `ICCDEV_REQUIRE_INSTALLED_PACKAGE=1`; the test
@@ -146,12 +157,14 @@ by maintainers, not from a PR branch or CI scratch artifact.
 
    ```bash
    cd python
-   python -m pip install --upgrade "build>=1.2,<1.4" "twine>=5.0,<7" "cibuildwheel>=2.23,<3"
+   python -m pip install --upgrade "build>=1.2,<1.4" "twine>=5.0,<7" "cibuildwheel==3.4.0"
    python -m build --sdist --wheel
    python -m twine check dist/*.whl dist/*.tar.gz
    python -m cibuildwheel --output-dir wheelhouse
    ```
 
+   Run the cibuildwheel driver with Python 3.13, as in the shared CI workflow;
+   it can still build the configured Python 3.9-3.13 wheels.
    The `sdist` build command vendors `IccProfLib` automatically so `pip install
    iccdev` can build without a repository checkout. `vendor_iccproflib.py`
    remains available for manual inspection or cleanup, but a release build must
