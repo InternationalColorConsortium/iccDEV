@@ -255,7 +255,8 @@ int main(int argc, const char* argv[])
 
   std::vector<const char*> commandArgs;
   commandArgs.push_back(argv[0]);
-  for (int arg = 1; arg < argc; arg++) {
+  int arg = 1;
+  while (arg < argc) {
     const char* value = argv[arg];
     if (!stricmp(value, "--threads") || !stricmp(value, "-threads")) {
       if (++arg >= argc) {
@@ -334,6 +335,7 @@ int main(int argc, const char* argv[])
     else {
       commandArgs.push_back(value);
     }
+    ++arg;
   }
   argc = (int)commandArgs.size();
   argv = commandArgs.data();
