@@ -41,7 +41,14 @@ def dot_alias(path):
     return str(path.parent) + os.sep + "." + os.sep + path.name
 
 
-def check_config_tool(tool, root, data, profile, search):
+def check_case_alias(path, result):
+    if "alias" not in result.stderr.lower():
+        raise RuntimeError("case alias was not rejected: %s" % result.stderr)
+    if path.exists() and path.stat().st_size != 0:
+        raise RuntimeError("case alias was overwritten: %s" % path)
+
+
+def check_config_tool(tool, root, data, profile, search, case_insensitive):
     label = "search" if search else "named"
     exported = root / (label + "-export.json")
     command = [str(tool), "-exportcfganddata", str(exported), str(data),
@@ -79,8 +86,30 @@ def check_config_tool(tool, root, data, profile, search):
     if alias_output.exists():
         raise RuntimeError("output/telemetry alias was opened: %s" % alias_output)
 
+    if case_insensitive:
+        case_output = root / (label + "-case-output.txt")
+        config["dataFiles"]["dstFile"] = str(case_output)
+        case_config = root / (label + "-case.json")
+        case_config.write_text(json.dumps(config), encoding="ascii")
+        result = run([str(tool), "--telemetry=jsonl", "--telemetry-file",
+                      str(case_output).upper(), "--cfg", str(case_config)],
+                     False)
+        check_case_alias(case_output, result)
 
-def check_link_tool(tool, root, profile):
+    if search:
+        evidence_output = root / "search-evidence-out.txt"
+        config["dataFiles"]["dstFile"] = str(evidence_output)
+        evidence_config = root / "search-evidence.json"
+        evidence_config.write_text(json.dumps(config), encoding="ascii")
+        evidence_telemetry = root / "search-evidence.jsonl"
+        run([str(tool), "--telemetry=jsonl", "--telemetry-file",
+             str(evidence_telemetry), "--evidence-file",
+             str(root / "missing-evidence" / "receipt.json"),
+             "--cfg", str(evidence_config)], False)
+        check_failure_stream(evidence_telemetry, "evidence_write_failed")
+
+
+def check_link_tool(tool, root, profile, case_insensitive):
     output = root / "link.cube"
     telemetry = root / "link.jsonl"
     missing_evidence = root / "link-missing" / "receipt.json"
@@ -104,16 +133,15 @@ def check_link_tool(tool, root, profile):
     if evidence_alias.exists():
         raise RuntimeError("link/evidence alias was opened")
 
-    if os.name == "nt":
+    if case_insensitive:
         case_alias = root / "link-case-alias.cube"
-        run([str(tool), str(case_alias)] + link_args +
-            ["--telemetry=jsonl", "--telemetry-file",
-             str(case_alias).upper()], False)
-        if case_alias.exists():
-            raise RuntimeError("case-insensitive link/telemetry alias was opened")
+        result = run([str(tool), str(case_alias)] + link_args +
+                     ["--telemetry=jsonl", "--telemetry-file",
+                      str(case_alias).upper()], False)
+        check_case_alias(case_alias, result)
 
 
-def check_profiles_tool(tool, root, source, profile):
+def check_profiles_tool(tool, root, source, profile, case_insensitive):
     tail = ["1", "0", "0", "1", "0", str(profile), "1"]
     missing_output = root / "profiles-missing" / "out.tif"
     telemetry = root / "profiles-failure.jsonl"
@@ -127,6 +155,13 @@ def check_profiles_tool(tool, root, source, profile):
     if alias_output.exists():
         raise RuntimeError("TIFF/telemetry alias was opened")
 
+    if case_insensitive:
+        case_output = root / "profiles-case-output.tif"
+        result = run([str(tool), "--quiet", "--telemetry=jsonl",
+                      "--telemetry-file", str(case_output).upper(),
+                      str(source), str(case_output)] + tail, False)
+        check_case_alias(case_output, result)
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -138,10 +173,17 @@ def main():
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="iccdev-apply-failures-") as directory:
         root = Path(directory)
-        check_profiles_tool(args.profiles_tool, root, args.source, args.profile)
-        check_config_tool(args.named_tool, root, args.data, args.profile, False)
-        check_config_tool(args.search_tool, root, args.data, args.profile, True)
-        check_link_tool(args.link_tool, root, args.profile)
+        probe = root / "CaseProbe"
+        probe.write_text("probe", encoding="ascii")
+        case_insensitive = (root / "caseprobe").exists()
+        probe.unlink()
+        check_profiles_tool(args.profiles_tool, root, args.source, args.profile,
+                            case_insensitive)
+        check_config_tool(args.named_tool, root, args.data, args.profile, False,
+                          case_insensitive)
+        check_config_tool(args.search_tool, root, args.data, args.profile, True,
+                          case_insensitive)
+        check_link_tool(args.link_tool, root, args.profile, case_insensitive)
     print("Apply telemetry failure and path-alias checks passed")
 
 

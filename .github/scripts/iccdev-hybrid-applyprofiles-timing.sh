@@ -239,6 +239,7 @@ run_case()
     cd "$case_dir/testing/hybrid"
     if [ "$INSTRUMENT" -eq 1 ]; then
       export ICC_PERF_STATS_FILE="$OUTDIR/$label-$command_name.perf.txt"
+      : > "$ICC_PERF_STATS_FILE"
       instrument_args=(--debug)
     fi
     if [ -n "$BAND_ROWS" ]; then

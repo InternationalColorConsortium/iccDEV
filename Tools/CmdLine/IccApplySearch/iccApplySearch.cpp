@@ -575,6 +575,11 @@ int main(int argc, const char* argv[])
   telemetry.m_mode = telemetryMode;
   if (telemetryMode == icApplyTelemetryJsonl && !telemetry.Open(telemetryFile))
     return EXIT_FAILURE;
+  if (telemetryMode == icApplyTelemetryJsonl && !cfgApply.m_dstFile.empty() &&
+      icOutputPathsAlias(telemetryFile.c_str(), cfgApply.m_dstFile.c_str())) {
+    fprintf(stderr, "Telemetry file aliases transform output\n");
+    return EXIT_FAILURE;
+  }
 #endif
 
   std::string sConnectError;
@@ -841,8 +846,11 @@ int main(int argc, const char* argv[])
     ",\"effective_threads\":" + std::to_string(effectiveThreads) +
     ",\"elapsed_ms\":" + std::to_string(elapsedMs) +
     ",\"throughput_records_per_second\":" + std::to_string(throughputRecordsPerSecond);
-  if (!evidenceFile.empty() && !telemetry.WriteEvidence(evidenceFile, completedFields))
+  if (!evidenceFile.empty() && !telemetry.WriteEvidence(evidenceFile, completedFields)) {
+    telemetry.Emit("run_failed",
+                   "\"status\":\"tool_failure\",\"reason\":\"evidence_write_failed\"");
     return EXIT_FAILURE;
+  }
   if (!telemetry.Emit("run_completed", completedFields))
     return EXIT_FAILURE;
   if (telemetryMode == icApplyTelemetryHuman) {

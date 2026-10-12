@@ -1370,6 +1370,11 @@ int main(int argc, icChar* argv[])
   telemetry.m_mode = telemetryMode;
   if (telemetryMode == icApplyTelemetryJsonl && !telemetry.Open(telemetryFile))
     return EXIT_FAILURE;
+  if (telemetryMode == icApplyTelemetryJsonl &&
+      icOutputPathsAlias(telemetryFile.c_str(), argv[1])) {
+    fprintf(stderr, "Telemetry file aliases link output\n");
+    return EXIT_FAILURE;
+  }
 
   const std::string linkOutput = argv[1];
   const std::string linkType = nLinkType == 0 ? "device_link" : "cube";

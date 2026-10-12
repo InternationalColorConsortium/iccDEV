@@ -634,6 +634,11 @@ int main(int argc, const char* argv[])
   telemetry.m_mode = telemetryMode;
   if (telemetryMode == icApplyTelemetryJsonl && !telemetry.Open(telemetryFile))
     return EXIT_FAILURE;
+  if (telemetryMode == icApplyTelemetryJsonl && !cfgApply.m_dstFile.empty() &&
+      icOutputPathsAlias(telemetryFile.c_str(), cfgApply.m_dstFile.c_str())) {
+    fprintf(stderr, "Telemetry file aliases transform output\n");
+    return EXIT_FAILURE;
+  }
   const unsigned long long inputRecords = cfgData.m_data.size();
   if (!telemetry.Emit("run_started",
                       "\"tool\":\"iccApplyNamedCmm\",\"input\":" +

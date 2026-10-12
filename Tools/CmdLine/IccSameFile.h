@@ -119,6 +119,8 @@ inline bool icIsSameFile(const char* szA, const char* szB)
 // Compare output paths before either file exists.  File identity alone cannot
 // catch two spellings of the same future destination (for example, out.json
 // and ./out.json).  weakly_canonical also resolves an existing symlink parent.
+// On a case-insensitive volume, call again after creating the first output:
+// icIsSameFile then detects case aliases before the second output is opened.
 inline bool icOutputPathsAlias(const char* szA, const char* szB)
 {
   if (!szA || !szA[0] || !szB || !szB[0])

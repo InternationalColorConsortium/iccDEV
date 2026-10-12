@@ -824,6 +824,11 @@ int main(int argc, const char** argv)
   telemetry.m_mode = telemetryMode;
   if (telemetryMode == icTelemetryJsonl && !telemetry.Open(telemetryFile))
     return EXIT_FAILURE;
+  if (telemetryMode == icTelemetryJsonl &&
+      icOutputPathsAlias(telemetryFile.c_str(), cfgApply.m_dstImgFile.c_str())) {
+    fprintf(stderr, "Telemetry file aliases transform output\n");
+    return EXIT_FAILURE;
+  }
 #endif
 
   int i, j, k;
