@@ -17,6 +17,7 @@ Provides:
 """
 
 from libc.stdlib cimport malloc, free
+from libc.stdint cimport uint64_t
 from libc.string cimport memset, memcpy
 from cpython.bytes cimport PyBytes_AsString, PyBytes_FromStringAndSize
 
@@ -27,6 +28,16 @@ import os
 from collections import namedtuple
 
 cimport cython
+
+# Cython's generated utility code uses (void)function_name to mark intentional
+# unused function references. MSVC diagnoses that idiom as C4551; scope the
+# exception to this generated translation unit, not the native library sources.
+cdef extern from *:
+    """
+    #if defined(_MSC_VER) && !defined(__clang__)
+    #pragma warning(disable: 4551)
+    #endif
+    """
 
 # Optional NumPy for zero-copy array transforms
 try:
@@ -709,16 +720,16 @@ cdef class IccApply:
         if self._alive is not None and not self._alive[0]:
             raise IccCmmError("Parent CMM has been closed")
 
-        cdef Py_ssize_t n_pixels_s = len(pixels)
-        if n_pixels_s > <Py_ssize_t>0xFFFFFFFF:
+        cdef Py_ssize_t n_pixels = len(pixels)
+        if <uint64_t>n_pixels > 0xFFFFFFFF:
             raise OverflowError("Too many pixels (max 4 billion)")
-        cdef int n_pixels = <int>n_pixels_s
         cdef int n_src = self._src_samples
         cdef int n_dst = self._dst_samples
         cdef cicc.icFloatNumber *src
         cdef cicc.icFloatNumber *dst
         cdef cicc.icStatusCMM stat
-        cdef int p_idx, c
+        cdef Py_ssize_t p_idx
+        cdef int c
         cdef size_t src_size, dst_size
 
         if n_pixels == 0:
@@ -793,8 +804,8 @@ cdef class IccApply:
         if _np is None:
             raise ImportError("NumPy is required for apply_ndarray()")
 
-        cdef int n_pixels = pixels.shape[0]
-        cdef int n_src = pixels.shape[1]
+        cdef Py_ssize_t n_pixels = pixels.shape[0]
+        cdef Py_ssize_t n_src = pixels.shape[1]
         cdef int n_dst = self._dst_samples
         cdef cicc.icStatusCMM stat
 
@@ -802,7 +813,7 @@ cdef class IccApply:
             raise ValueError(
                 f"Expected {self._src_samples} source channels, got {n_src}"
             )
-        if n_pixels < 0 or <unsigned int>n_pixels > 0xFFFFFFFF:
+        if <uint64_t>n_pixels > 0xFFFFFFFF:
             raise OverflowError("Too many pixels (max 4 billion)")
         if n_pixels == 0:
             return _np.empty((0, n_dst), dtype=_np.float32)
@@ -1115,17 +1126,17 @@ cdef class IccCmm:
         if not self._begun:
             raise IccCmmError("CMM not yet initialized (call begin())")
 
-        cdef Py_ssize_t n_pixels_s = len(pixels)
-        if n_pixels_s > <Py_ssize_t>0xFFFFFFFF:
+        cdef Py_ssize_t n_pixels = len(pixels)
+        if <uint64_t>n_pixels > 0xFFFFFFFF:
             raise OverflowError("Too many pixels (max 4 billion)")
-        cdef int n_pixels = <int>n_pixels_s
         cdef int n_src = self._src_samples
         cdef int n_dst = self._dst_samples
         cdef cicc.icFloatNumber *src
         cdef cicc.icFloatNumber *dst
         cdef cicc.CIccCmmHandle *h
         cdef cicc.icStatusCMM stat
-        cdef int p_idx, c
+        cdef Py_ssize_t p_idx
+        cdef int c
         cdef size_t src_size, dst_size
 
         if n_pixels == 0:
@@ -1196,8 +1207,8 @@ cdef class IccCmm:
         if _np is None:
             raise ImportError("NumPy is required for apply_ndarray()")
 
-        cdef int n_pixels = pixels.shape[0]
-        cdef int n_src = pixels.shape[1]
+        cdef Py_ssize_t n_pixels = pixels.shape[0]
+        cdef Py_ssize_t n_src = pixels.shape[1]
         cdef int n_dst = self._dst_samples
         cdef cicc.CIccCmmHandle *h
         cdef cicc.icStatusCMM stat
@@ -1206,6 +1217,8 @@ cdef class IccCmm:
             raise ValueError(
                 f"Expected {self._src_samples} source channels, got {n_src}"
             )
+        if <uint64_t>n_pixels > 0xFFFFFFFF:
+            raise OverflowError("Too many pixels (max 4 billion)")
         if n_pixels == 0:
             return _np.empty((0, n_dst), dtype=_np.float32)
 

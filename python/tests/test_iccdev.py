@@ -312,6 +312,59 @@ class TestIccProfile:
 # ---------------------------------------------------------------------------
 
 class TestIccCmm:
+    @pytest.mark.parametrize("use_handle", [False, True])
+    def test_batch_sizes_preserve_python_width(self, use_handle):
+        np = pytest.importorskip("numpy")
+        profile = find_test_profile("sRGB_v4_ICC_preference.icc")
+        assert profile is not None
+        with IccCmm() as cmm:
+            cmm.attach(profile)
+            cmm.attach(profile)
+            cmm.begin()
+            transform = cmm.get_apply() if use_handle else cmm
+            try:
+                source = [0.25] * cmm.src_channels
+                expected = transform.apply(source)
+                assert np.allclose(transform.apply_multi([source, source]),
+                                   [expected, expected])
+                pixels = np.array([source, source], dtype=np.float32)
+                assert np.allclose(transform.apply_ndarray(pixels),
+                                   [expected, expected])
+                assert transform.apply_multi([]) == []
+                empty = np.empty((0, cmm.src_channels), dtype=np.float32)
+                assert transform.apply_ndarray(empty).shape == (0, cmm.dst_channels)
+                with pytest.raises(ValueError, match="source channels"):
+                    transform.apply_ndarray(
+                        np.empty((0, cmm.src_channels + 1), dtype=np.float32))
+
+                if np.intp().itemsize < 8:
+                    return
+
+                class OversizedSequence:
+                    def __len__(self):
+                        return 0x100000001
+
+                    def __getitem__(self, index):
+                        raise AssertionError("Oversized batch must not be accessed")
+
+                with pytest.raises(OverflowError, match="Too many pixels"):
+                    transform.apply_multi(OversizedSequence())
+                # Only metadata is large: the guard must reject it before any
+                # allocation or access to the backing single-pixel buffer.
+                oversized = np.lib.stride_tricks.as_strided(
+                    pixels[:1], shape=(0x100000001, cmm.src_channels),
+                    strides=pixels.strides)
+                with pytest.raises(OverflowError, match="Too many pixels"):
+                    transform.apply_ndarray(oversized)
+                # Previously narrowing this dimension to int wrapped it back
+                # to the expected channel count and accepted the empty batch.
+                wide = np.empty((0, 0x100000000 + cmm.src_channels), dtype=np.float32)
+                with pytest.raises(ValueError, match="source channels"):
+                    transform.apply_ndarray(wide)
+            finally:
+                if use_handle:
+                    transform.close()
+
     def test_create_cmm(self):
         cmm = IccCmm()
         assert not cmm.is_ready
