@@ -368,9 +368,13 @@ def test_release_summary_reports_outcomes_and_sanitizes_assets(
             name = "untrusted[link](payload)<script>\x1b\n### forged.whl"
         (assets / name).write_text("fixture", encoding="ascii")
         (assets / "normal.zip").write_text("fixture", encoding="ascii")
+        (assets / "not-a-package.txt").write_text("fixture", encoding="ascii")
+        (assets / "directory.whl").mkdir()
     output = tmp_path / "summary.md"
+    # macOS ships BSD find; asset counting must not require GNU find.
+    prologue = "git() { :; }\nfind() { echo 'find is unavailable in this portability test' >&2; return 1; }\n"
     result = subprocess.run(
-        [executable, "--noprofile", "--norc", "-c", "git() { :; }\n" + summary["run"]],
+        [executable, "--noprofile", "--norc", "-c", prologue + summary["run"]],
         cwd=tmp_path, capture_output=True, text=True, timeout=30,
         env={**os.environ, "BASH_ENV": "/dev/null", "GITHUB_RUN_ID": "1234",
              "GITHUB_RUN_ATTEMPT": "2", "GITHUB_SHA": "abcdef1234567890",

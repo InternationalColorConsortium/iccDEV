@@ -2190,10 +2190,10 @@ jobs:
           fi
           release_tag="ci-latest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}"
           asset_count=0
-          if [[ -d release-assets ]]; then
-            asset_count=$(find release-assets -maxdepth 1 -type f \
-              \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' -o -name '*.whl' \) -printf '.' | wc -c)
-          fi
+          for f in release-assets/*.zip release-assets/*.deb release-assets/*.rpm release-assets/*.whl; do
+            [ -f "$f" ] || continue
+            asset_count=$((asset_count + 1))
+          done
           {
             echo "### Release Summary"
             echo ""
