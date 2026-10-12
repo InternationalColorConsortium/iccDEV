@@ -48,7 +48,29 @@ def test_wasm_archives_use_bounded_retries_and_checksums(workflow_name, job_name
         )
         assert command_start >= 0
         command = build[command_start:command_end]
-        assert "--retry 5 --retry-all-errors --retry-delay 5" in command
-        assert "--connect-timeout 30 --max-time 300" in command
+        assert "--retry 5 --retry-all-errors --retry-delay 5 --retry-max-time 180" in command
+        assert "--connect-timeout 30 --max-time 60" in command
         assert f"--output {archive}" in command
         assert f"{checksum}  {archive}" in build
+
+
+def test_release_publication_is_not_cancelled():
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/ci-latest-release.yml").read_text(encoding="ascii")
+    )
+
+    assert workflow["concurrency"]["cancel-in-progress"] is False
+
+
+def test_wasm_workflow_regression_runs_in_shared_wheel_gate():
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/_build-python-wheels.yml").read_text(
+            encoding="ascii"
+        )
+    )
+    steps = workflow["jobs"]["wheels"]["steps"]
+    test_step = next(
+        step for step in steps if step["name"] == "Build and test standalone wheels"
+    )
+
+    assert ".github/tests/test_wasm_workflow.py" in test_step["run"]

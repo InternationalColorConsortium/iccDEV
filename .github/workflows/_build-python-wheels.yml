@@ -105,7 +105,7 @@ jobs:
           unset ICCDEV_BUILD_DIR ICCDEV_ALLOW_DEBUG_PYTHON_LIB || true
           bash .github/scripts/check-workflow-cache-policy.sh .github/workflows/_build-python-wheels.yml
           python -m pip install "cibuildwheel==3.4.0" "twine>=5,<8" "pytest>=7,<9" "PyYAML>=6,<7"
-          python -m pytest --rootdir . --import-mode=importlib .github/tests/test_python_release_wheels.py .github/tests/test_python_test_collection.py -q
+          python -m pytest --rootdir . --import-mode=importlib .github/tests/test_python_release_wheels.py .github/tests/test_python_test_collection.py .github/tests/test_wasm_workflow.py -q
           mkdir -p wheelhouse
           python -m cibuildwheel python --platform "$WHEEL_PLATFORM" --print-build-identifiers > wheelhouse/build-identifiers.txt
           python -m cibuildwheel python --platform "$WHEEL_PLATFORM" --output-dir wheelhouse

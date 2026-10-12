@@ -49,7 +49,7 @@ permissions:
 
 concurrency:
   group: "latest-release-${{ github.workflow }}-${{ github.ref }}"
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   cache-policy:
@@ -1072,8 +1072,8 @@ jobs:
 
             # libpng (bounded download retries and checksum verification)
             curl --fail --location --silent --show-error \
-              --retry 5 --retry-all-errors --retry-delay 5 \
-              --connect-timeout 30 --max-time 300 \
+              --retry 5 --retry-all-errors --retry-delay 5 --retry-max-time 180 \
+              --connect-timeout 30 --max-time 60 \
               --output libpng-1.6.57.tar.gz \
               https://download.sourceforge.net/libpng/libpng-1.6.57.tar.gz
             echo "01fdab044cdc575c74a9ef62a4042fbe24fea8bedfe8aa5c89f4467b781bbb60  libpng-1.6.57.tar.gz" | sha256sum -c -
@@ -1086,8 +1086,8 @@ jobs:
 
             # libjpeg (bounded download retries and checksum verification)
             curl --fail --location --silent --show-error \
-              --retry 5 --retry-all-errors --retry-delay 5 \
-              --connect-timeout 30 --max-time 300 \
+              --retry 5 --retry-all-errors --retry-delay 5 --retry-max-time 180 \
+              --connect-timeout 30 --max-time 60 \
               --output jpegsrc.v9e.tar.gz \
               https://ijg.org/files/jpegsrc.v9e.tar.gz
             echo "4077d6a6a75aeb01884f708919d25934c93305e49f7e3f36db9129320e6f4f3d  jpegsrc.v9e.tar.gz" | sha256sum -c -
