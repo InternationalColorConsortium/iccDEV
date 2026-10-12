@@ -167,3 +167,11 @@ def test_release_uses_opt_in_trusted_pypi_publication_and_public_smoke():
 
     release_notes = steps["Create latest release"]["run"]
     assert 'python -m pip install \\"iccdev-mcp[rest]\\"' in release_notes
+
+
+def test_mcp_readme_pins_source_install_to_a_release_tag():
+    readme = (ROOT / "iccdev-mcp/README.md").read_text(encoding="ascii")
+    assert (
+        "git+https://github.com/InternationalColorConsortium/iccDEV.git"
+        "@<release-tag>#subdirectory=iccdev-mcp"
+    ) in readme

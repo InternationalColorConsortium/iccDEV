@@ -38,7 +38,8 @@ The universal wheel from a successful rolling
 remains available for exact-tag installation:
 
 ```bash
-python -m pip install "git+https://github.com/InternationalColorConsortium/iccDEV.git#subdirectory=iccdev-mcp"
+# Replace <release-tag> with the Git tag for the intended release.
+python -m pip install "git+https://github.com/InternationalColorConsortium/iccDEV.git@<release-tag>#subdirectory=iccdev-mcp"
 # Prebuilt GitHub release wheel; copy its exact tag-specific asset URL.
 python -m pip install "<iccdev_mcp-wheel-asset-URL>"
 # Optional REST server dependencies:

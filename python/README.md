@@ -18,8 +18,6 @@ ICC color profile library, built with [Cython](https://cython.org/).
 
 ## Installation
 
-## Installation
-
 The alpha `iccdev` package is published on
 <a href="https://pypi.org/project/iccdev/">PyPI</a>. Install the core package
 on a supported CPython 3.9-3.13 platform:
