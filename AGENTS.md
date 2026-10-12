@@ -41,6 +41,10 @@ shares one source of truth. Update rules here, not in the mirrors.
   and generated-file attribution as directed by their provenance.
 - For MCP runtime checks, validate every Docker image variant against its
   discovered capabilities. Do not hard-code a total tool count.
+- Python rolling-release wheels use `ci-latest-release` and
+  `.github/scripts/validate-python-release-wheels.py`. Keep installed-wheel
+  tests, explicitly named artifact intake, checksums, and provenance aligned;
+  PyPI account setup and publication remain separate maintainer actions.
 - MATLAB public entry points that require arguments must provide actionable
   bare-invocation errors pinned by `matlab/tests/test_usage_guidance.m`.
   Interactive examples must show visible UI defaults first; label hidden or

@@ -3,6 +3,14 @@
 Use this prompt when the iccdev Python/Cython package fails to build, import, or
 produces incorrect results from ICC profile operations.
 
+For the interim compiler-free install, use a compatible `.whl` asset from a
+successful rolling Latest Build, then `python -m pip install "<wheel-asset-URL>"`.
+Check CPython ABI, OS, and architecture before diagnosing a rejected wheel.
+PyPI publication is separate and pending account setup. For release failures,
+run `.github/tests/test_python_release_wheels.py` and validate each lane with
+`.github/scripts/validate-python-release-wheels.py` plus its identifier inventory.
+See `docs/python-packaging-release.md` for the artifact and source-build paths.
+
 ## Build Diagnostics
 
 1. **Check Cython compilation**

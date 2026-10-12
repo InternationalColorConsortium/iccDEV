@@ -1,8 +1,50 @@
 # Python packaging PR, merge, and production release
 
-This guide applies to the `python/` package on the `pip-install-iccdev` branch.
+This guide applies to the `python/` package on the default `master` branch.
 It separates PR validation, branch merge criteria, and production release steps.
 Do not publish Python artifacts from a pull request branch.
+
+## Interim GitHub release wheels
+
+The manual `ci-latest-release.yml` workflow builds CPython 3.9-3.13 wheels
+directly from its checked-out commit. Seven matrix lanes cover Linux
+x86_64/aarch64 (manylinux and musllinux), macOS x86_64/arm64/universal2,
+and Windows AMD64/ARM64. The release build driver pins cibuildwheel 3.4.0;
+the existing Python validation workflows retain their bounded 2.x driver.
+No PyPI account, publishing token, or PyPI upload is required for this route.
+
+Wheel jobs compile the portable bundled library without a prebuilt CMake
+tree and run installed-package unit tests, including core profile and CMM
+operations. Native parity tests remain in `ci-json-python`. The universal2
+arm64 slice is tested on its build host; its x86_64 slice is not executed
+there, while the separate x86_64 lane tests native Intel wheels.
+
+Each lane uploads an explicit `iccdev-python-<lane>` artifact with its wheels
+and cibuildwheel identifier inventory. The release job downloads all seven
+artifacts by name and validates version, ABI/platform coverage, native
+extension, type stubs, and license before copying raw `.whl` assets into the
+release. Missing, duplicate, or unexpected wheels stop publication. Wheels
+participate in `SHA256SUMS`, `SHA512SUMS`, and artifact provenance alongside
+the native packages. No PR artifacts or mutable build caches are reused.
+
+Dispatch on a work branch builds and tests artifacts without publishing a
+release; the existing release job branch allowlist stays in force. After
+merge, a maintainer can manually run the workflow on `master` to publish a
+new rolling Latest Build. Existing release assets are not modified.
+
+Users choose a compatible wheel on the
+[Latest Build page](https://github.com/InternationalColorConsortium/iccDEV/releases/latest),
+copy its exact release-tag download URL, and run:
+
+```bash
+python -m pip install "<wheel-asset-URL>"
+```
+
+Downloading the wheel and installing its local path also works. The wheel
+contains the core library; CLI-backed helpers need the native tools separately.
+Until the first successful release run with these changes, use the source
+install documented in the user guide. Production PyPI publication remains a
+separate maintainer action after account and trusted-publisher setup.
 
 ## Pull request validation
 
@@ -41,7 +83,7 @@ authoritative and must not be rescued by another Release library elsewhere in
 the checkout.
 
 The PR must also pass the `ci-json-python` workflow. That workflow validates
-Linux builds for Python 3.12 and 3.13 and macOS and Windows builds for Python
+Linux and Windows builds for Python 3.12 and 3.13 and macOS builds for Python
 3.9, 3.12, and 3.13, builds source and wheel artifacts, runs `twine check`,
 prints cibuildwheel identifiers for all target platforms, and runs a native
 wheel smoke build on each hosted platform.

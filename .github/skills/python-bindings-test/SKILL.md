@@ -52,7 +52,17 @@ helpers, profile dump, and round-trip parity tests.
    - Run installed-package tests without assuming setuptools is present at
      runtime.
 
-7. **Run CI workflow locally**
+7. **Validate rolling-release wheel intake**
+
+   Run `.github/tests/test_python_release_wheels.py` and validate each built
+   lane with `.github/scripts/validate-python-release-wheels.py <wheel-dir>
+   --identifiers <wheel-dir>/build-identifiers.txt`. Confirm the manual
+   `ci-latest-release` workflow builds all configured lanes, downloads each
+   artifact by name, and includes raw wheels in checksums and provenance.
+   Follow `docs/python-packaging-release.md` for the interim GitHub route;
+   do not infer PyPI publication from a branch push or successful local build.
+
+8. **Run CI manually when requested**
 
    ```bash
    gh workflow run ci-json-python.yml
@@ -67,6 +77,8 @@ helpers, profile dump, and round-trip parity tests.
 - [ ] Pre-built Unix extension resolves zlib symbols
 - [ ] Standalone sdist builds on non-x86 or universal targets without x86 SIMD sources
 - [ ] Installed-package smoke does not require setuptools
+- [ ] Release wheel intake rejects missing, duplicate, mismatched, or incomplete wheels
+- [ ] Raw release wheels participate in SHA256/SHA512 checksums and provenance
 - [ ] Tests run from repository root with `--import-mode=importlib`
 - [ ] XML/JSON/blob helper parity tests pass
 - [ ] Profile dump and round-trip parity tests pass

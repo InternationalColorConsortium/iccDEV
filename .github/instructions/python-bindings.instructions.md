@@ -66,7 +66,7 @@ locations.
 ## Dependencies and Build Constraints
 
 - Python 3.9+
-- Cython >= 3.0,<3.2 for all source builds
+- Cython >= 3.0,<3.4 for all source builds
 - NumPy >= 1.23,<3 for array operations
 - setuptools >= 77,<85 (PEP 639 license metadata)
 - Dev extras: pytest, numpy, build, wheel, twine, cibuildwheel
@@ -124,6 +124,12 @@ cmm.begin()
 
 Use `docs/python-packaging-release.md` as the maintainer source for Python
 package PR validation, merge criteria, and production PyPI release steps.
+The interim `ci-latest-release` path builds the configured CPython 3.9-3.13
+matrix as raw GitHub release wheel assets. Validate every lane's identifier
+inventory with `.github/scripts/validate-python-release-wheels.py`, run
+installed-package tests, and include wheels in release checksums/provenance.
+Keep wheel build jobs unprivileged, artifact downloads explicitly named, and
+PyPI publication separate until maintainers configure their account.
 Python packaging PRs must pass `ci-json-python`, keep
 `python/pyproject.toml` and `python/iccdev/__init__.py` versions synchronized,
 and avoid committing generated `dist/`, `wheelhouse/`, build tree, virtual

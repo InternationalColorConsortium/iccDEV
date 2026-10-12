@@ -8,8 +8,9 @@
 | **NPM** | `npm install iccdev` |
 | **Docker Pull** | `docker pull ghcr.io/internationalcolorconsortium/iccdev:latest` |
 | **Docker Run** | `docker run -it ghcr.io/internationalcolorconsortium/iccdev:latest` |
+| **Python wheel** | `python -m pip install "<wheel-asset-URL>"` ([choose a wheel](docs/using-iccdev.md#python)) |
 
-Prebuilt Windows, Linux, and macOS tool bundles are on the
+Prebuilt Python wheels and Windows, Linux, and macOS tool bundles are produced for the
 [latest release page](https://github.com/InternationalColorConsortium/iccDEV/releases/latest).
 
 ## Using iccDEV
@@ -30,12 +31,12 @@ from prebuilt downloads:
 To build from source, see: [Build documentation](docs/build.md)
 
 API docs:
-[API reference](Tools/Winnt/IccIisIsapi/api.md) ·
-[OpenAPI starter](Tools/Winnt/IccIisIsapi/iis-isapi.openapi.yaml) ·
-[C validation API](docs/c-api-validation.md) ·
-<a href="python/README.md">Python bindings</a> ·
-<a href="matlab/README.md">MATLAB bindings</a> ·
-[CLI tool reference](docs/tools-cli-reference.md) ·
+[API reference](Tools/Winnt/IccIisIsapi/api.md) |
+[OpenAPI starter](Tools/Winnt/IccIisIsapi/iis-isapi.openapi.yaml) |
+[C validation API](docs/c-api-validation.md) |
+<a href="python/README.md">Python bindings</a> |
+<a href="matlab/README.md">MATLAB bindings</a> |
+[CLI tool reference](docs/tools-cli-reference.md) |
 [iccApply visual lanes](docs/iccapply/README.md)
 
 ## Introduction

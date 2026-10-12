@@ -14,7 +14,7 @@ To build from source instead, see [Build](build.md).
 | Run the command-line tools | Release bundle, Homebrew, Linux package, or Docker | <a href="#install-the-tools">Install the tools</a> |
 | Learn what the tools do | Any of the above | <a href="#first-steps-with-the-tools">First steps with the tools</a> |
 | Browse a profile in a graphical viewer | Release bundle or Homebrew | <a href="#icc-dump-profile-gui">iccDumpProfileGui</a> |
-| Call iccDEV from Python | `pip` (compiles on install) or the tools through `subprocess` | <a href="#python">Python</a> |
+| Call iccDEV from Python | Install a release wheel with `pip`, build from source, or use `subprocess` | <a href="#python">Python</a> |
 | Call iccDEV from MATLAB | Windows release bundle (includes a built MEX file) | <a href="#matlab">MATLAB</a> |
 | Call iccDEV from Node.js | `npm install iccdev` | <a href="#webassembly-and-nodejs">WebAssembly and Node.js</a> |
 | Give an AI assistant ICC tools | Docker image or `pip` plus a tools bundle | <a href="#mcp-server">MCP server</a> |
@@ -229,9 +229,24 @@ tools.
 
 ### Install
 
-**There is no prebuilt wheel yet.** `iccdev` is not published on PyPI, so
-`pip install iccdev` fails. Until it is, `pip` builds the package from the
-repository. The build is automatic and compiles its own copy of IccProfLib, but
+PyPI publication is pending. The `ci-latest-release` workflow builds Python
+wheels for the <a href="https://github.com/InternationalColorConsortium/iccDEV/releases/latest">Latest Build release</a>.
+After a successful release run containing this change, download the `.whl`
+matching your CPython version (3.9-3.13), OS, and architecture, or copy its
+asset URL. A wheel installs without a compiler:
+
+```bash
+python -m pip install "<wheel-asset-URL>"
+```
+
+For example, `cp313-cp313-win_amd64` targets CPython 3.13 on Windows x64.
+Linux offers glibc `manylinux` and musl `musllinux` wheels for x86_64/aarch64;
+macOS offers x86_64/arm64/universal2, and Windows offers AMD64/ARM64.
+Use an exact release-tag URL to keep installs reproducible. For NumPy array
+operations, also run `python -m pip install "numpy>=1.23,<3"`.
+
+If no compatible wheel is available, `pip` can build from the repository.
+The build is automatic and compiles its own copy of IccProfLib, but
 it needs a C++17 compiler on the machine (Visual Studio Build Tools on Windows,
 Xcode Command Line Tools on macOS, `g++` or `clang++` on Linux) and takes a few
 minutes. Python 3.9 or newer is required.
@@ -590,7 +605,7 @@ These are the places where a prebuilt, install-and-go path does not exist yet.
 
 | Area | Limitation | Workaround |
 |------|------------|------------|
-| Python | `iccdev` is not on PyPI; no prebuilt wheels (<a href="https://github.com/InternationalColorConsortium/iccDEV/issues/2799">#2799</a>) | `pip` install from the repository (compiles), or use the tools through `subprocess` |
+| Python | PyPI publication is pending (<a href="https://github.com/InternationalColorConsortium/iccDEV/issues/2799">#2799</a>) | Install a Latest Build wheel by URL after the release workflow runs, build from the repository, or use `subprocess` |
 | MCP | `iccdev-mcp` is not on PyPI (<a href="https://github.com/InternationalColorConsortium/iccDEV/issues/2800">#2800</a>) | `pip` install from the repository, or use Docker |
 | MATLAB | Prebuilt MEX is Windows-only and tied to one MATLAB release (<a href="https://github.com/InternationalColorConsortium/iccDEV/issues/2801">#2801</a>) | Build the MEX gateway once on other platforms |
 | WebAssembly | Node.js only; tool-style interface, no browser package | Wrap `callMain` as shown above |

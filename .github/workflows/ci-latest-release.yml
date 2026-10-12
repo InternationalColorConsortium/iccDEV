@@ -1769,9 +1769,76 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  python-wheels:
+    name: "Python wheels (${{ matrix.id }})"
+    needs: cache-policy
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {id: linux-x86_64, os: ubuntu-24.04, platform: linux, arch: x86_64}
+          - {id: linux-aarch64, os: ubuntu-24.04-arm, platform: linux, arch: aarch64}
+          - {id: macos-x86_64, os: macos-15-intel, platform: macos, arch: x86_64}
+          - {id: macos-arm64, os: macos-14, platform: macos, arch: arm64}
+          - {id: macos-universal2, os: macos-14, platform: macos, arch: universal2}
+          - {id: windows-amd64, os: windows-2022, platform: windows, arch: AMD64}
+          - {id: windows-arm64, os: windows-11-arm, platform: windows, arch: ARM64}
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+      CIBW_ARCHS: ${{ matrix.arch }}
+      # Explicit quotes also protect version bounds from Windows cmd redirection.
+      CIBW_BEFORE_TEST: 'python -m pip install "pytest>=7,<9" "numpy>=1.23,<3"'
+      CIBW_TEST_COMMAND: >-
+        python -m pytest --rootdir "{project}" --import-mode=importlib
+        "{project}/python/tests" -v --tb=short -m "not parity"
+      # The arm64 host tests the arm64 slice; x86_64 wheels have a native job.
+      CIBW_TEST_SKIP: "*-macosx_universal2:x86_64"
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          persist-credentials: false
+
+      - name: Set up wheel build driver
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+
+      # preflight: allow-package-install reason=unprivileged-release-wheel-build
+      - name: Build and test standalone wheels
+        env:
+          WHEEL_PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          unset ICCDEV_BUILD_DIR ICCDEV_ALLOW_DEBUG_PYTHON_LIB || true
+          python -m pip install "cibuildwheel==3.4.0" "twine>=5,<8" "pytest>=7,<9" "PyYAML>=6,<7"
+          python -m pytest --rootdir . --import-mode=importlib .github/tests/test_python_release_wheels.py -q
+          mkdir -p wheelhouse
+          python -m cibuildwheel python --platform "$WHEEL_PLATFORM" --print-build-identifiers > wheelhouse/build-identifiers.txt
+          python -m cibuildwheel python --platform "$WHEEL_PLATFORM" --output-dir wheelhouse
+          python .github/scripts/validate-python-release-wheels.py wheelhouse --identifiers wheelhouse/build-identifiers.txt
+          python -m twine check wheelhouse/*.whl
+
+      - name: Upload tested Python wheels
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: iccdev-python-${{ matrix.id }}
+          path: wheelhouse/
+          if-no-files-found: error
+          retention-days: 7
+
   release:
     name: "Publish Latest Release"
-    needs: [linux, macos, windows, wasm, cpack-linux, doxygen]
+    needs: [linux, macos, windows, wasm, cpack-linux, doxygen, python-wheels]
     if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-fix-windows-packaging-failure' || github.ref == 'refs/heads/ci-publish-colourbill-ctrl' }}
     runs-on: ubuntu-latest
     environment:
@@ -1831,6 +1898,48 @@ jobs:
           name: reficcmax-runtime-packages-linux
           path: artifacts/reficcmax-runtime-packages-linux
 
+      - name: Download Linux x86_64 Python wheels
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: iccdev-python-linux-x86_64
+          path: artifacts/iccdev-python-linux-x86_64
+
+      - name: Download Linux aarch64 Python wheels
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: iccdev-python-linux-aarch64
+          path: artifacts/iccdev-python-linux-aarch64
+
+      - name: Download macOS x86_64 Python wheels
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: iccdev-python-macos-x86_64
+          path: artifacts/iccdev-python-macos-x86_64
+
+      - name: Download macOS arm64 Python wheels
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: iccdev-python-macos-arm64
+          path: artifacts/iccdev-python-macos-arm64
+
+      - name: Download macOS universal2 Python wheels
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: iccdev-python-macos-universal2
+          path: artifacts/iccdev-python-macos-universal2
+
+      - name: Download Windows AMD64 Python wheels
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: iccdev-python-windows-amd64
+          path: artifacts/iccdev-python-windows-amd64
+
+      - name: Download Windows ARM64 Python wheels
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: iccdev-python-windows-arm64
+          path: artifacts/iccdev-python-windows-arm64
+
       - name: Restore release artifact metadata
         shell: bash --noprofile --norc {0}
         env:
@@ -1854,6 +1963,13 @@ jobs:
             iccdev-wasm-release
             iccdev-doxygen-html
             reficcmax-runtime-packages-linux
+            iccdev-python-linux-x86_64
+            iccdev-python-linux-aarch64
+            iccdev-python-macos-x86_64
+            iccdev-python-macos-arm64
+            iccdev-python-macos-universal2
+            iccdev-python-windows-amd64
+            iccdev-python-windows-arm64
           )
           for artifact in "${expected[@]}"; do
             if [ ! -d "artifacts/$artifact" ]; then
@@ -1931,9 +2047,16 @@ jobs:
 
           mkdir -p release-assets
 
+          for id in linux-x86_64 linux-aarch64 macos-x86_64 macos-arm64 macos-universal2 windows-amd64 windows-arm64; do
+            wheel_dir="artifacts/iccdev-python-$id"
+            python3 .github/scripts/validate-python-release-wheels.py "$wheel_dir" --identifiers "$wheel_dir/build-identifiers.txt"
+            cp "$wheel_dir"/*.whl release-assets/
+          done
+
           for dir in artifacts/iccdev-*; do
             [ -d "$dir" ] || continue
             name="$(basename "$dir")"
+            [[ "$name" == iccdev-python-* ]] && continue
             echo "--- Packaging $name ---"
             (cd "$dir" && zip -r "../../release-assets/${name}.zip" . \
               -x './binary-hardening.md' \
@@ -1994,12 +2117,12 @@ jobs:
           (
             cd release-assets
             find . -maxdepth 1 -type f \
-              \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' \) \
+              \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' -o -name '*.whl' \) \
               -printf '%P\0' \
               | sort -z \
               | xargs -0 sha256sum > SHA256SUMS
             find . -maxdepth 1 -type f \
-              \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' \) \
+              \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' -o -name '*.whl' \) \
               -printf '%P\0' \
               | sort -z \
               | xargs -0 sha512sum > SHA512SUMS
@@ -2008,7 +2131,7 @@ jobs:
           {
             echo "### Release Checksums"
             echo ""
-            echo "Generated \`SHA256SUMS\` and \`SHA512SUMS\` for release zip assets."
+            echo "Generated \`SHA256SUMS\` and \`SHA512SUMS\` for release packages and Python wheels."
             echo ""
             echo '```'
             sed -n '1,20p' release-assets/SHA256SUMS | while IFS= read -r line; do
@@ -2063,6 +2186,7 @@ jobs:
             echo "| WASM (Emscripten) | \`iccdev-wasm-release.zip\` |"
             echo "| Doxygen HTML Docs | \`iccdev-doxygen-html.zip\` |"
             echo "| Linux CPack Runtime | \`reficcmax-*.zip\`, \`reficcmax-*.deb\`, \`reficcmax-*.rpm\` |"
+            echo "| Python (CPython 3.9-3.13) | \`iccdev-*.whl\` for Linux, macOS, and Windows |"
             echo "| Checksums | \`SHA256SUMS\`, \`SHA512SUMS\` |"
             echo ""
             echo "### Provenance"
@@ -2079,6 +2203,14 @@ jobs:
             echo "| **Docker Pull** | \`docker pull ghcr.io/internationalcolorconsortium/iccdev:latest\` |"
             echo "| **Docker Run** | \`docker run -it ghcr.io/internationalcolorconsortium/iccdev:latest\` |"
             echo ""
+            echo "### Install Python without a compiler"
+            echo ""
+            echo "Choose the .whl asset matching your CPython version, OS, and architecture."
+            echo "Run \`python -m pip install \"<copied-wheel-asset-URL>\"\` or download the wheel and install its local path."
+            echo "PyPI publication is separate; these wheels require no PyPI account."
+            echo "Linux wheels cover manylinux and musllinux x86_64/aarch64; macOS covers x86_64/arm64/universal2; Windows covers AMD64/ARM64."
+            echo "Core profile/CMM APIs are self-contained. CLI-backed helpers need the matching native tool bundle."
+            echo ""
             echo "---"
             echo "*Auto-published by ci-latest-release.*"
           } > "$body_file"
@@ -2087,6 +2219,7 @@ jobs:
             release-assets/*.zip \
             release-assets/*.deb \
             release-assets/*.rpm \
+            release-assets/*.whl \
             release-assets/SHA256SUMS \
             release-assets/SHA512SUMS \
             --repo "$GH_REPOSITORY" \
@@ -2112,11 +2245,11 @@ jobs:
             echo "- Tag: \`${release_tag}\`"
             echo "- Commit: \`${GITHUB_SHA:0:7}\`"
             asset_count=$(find release-assets -maxdepth 1 -type f \
-              \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' \) | wc -l)
+              \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' -o -name '*.whl' \) | wc -l)
             echo "- Assets uploaded: ${asset_count} package files"
             echo "- Provenance: GitHub Artifact Attestations generated from \`SHA256SUMS\`"
             echo ""
-            for f in release-assets/*.zip release-assets/*.deb release-assets/*.rpm; do
+            for f in release-assets/*.zip release-assets/*.deb release-assets/*.rpm release-assets/*.whl; do
               [ -f "$f" ] || continue
               echo "  - \`$(basename "$f")\` ($(du -h "$f" | cut -f1))"
             done
