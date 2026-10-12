@@ -171,7 +171,14 @@ scripts check for the inputs it produces.
   MultiProcessElements. `srgbCalcTest` exercises all specified calculator
   operations.
 - [`Display`](Display) demonstrates spectral display modeling with observers
-  selected at startup.
+  selected at startup. The four `sRGB_D65_*` profiles place the break-point
+  between the linear and power segments of the sRGB decoding curve at 0.0405,
+  where IEC 61966-2-1 gives 0.04045. Their XML once gave 0.04045 as the first
+  segment's `End` and 0.0405 as the second's `Start`; the binary encoding
+  keeps one break-point, the `Start`, so the built profiles have always
+  carried 0.0405. The two curves differ by about 4e-8, between the two
+  values only. The XML now states 0.0405 so that the profiles do not change
+  (#2804); moving to 0.04045 would change all four.
 - [`Encoding`](Encoding) contains three-channel encoding-class profiles,
   including name-only and fully specified variants.
 - [`Named`](Named) contains named-color profiles with tints, spectral

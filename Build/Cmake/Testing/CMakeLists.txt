@@ -2268,6 +2268,122 @@ function(iccdev_add_tonemap_functions_json_test)
   endif()
 endfunction()
 
+# #2804: the XML reader kept each curve segment's own bounds without
+# comparing them, while the binary encoding holds one break-point between
+# neighbouring segments and no outer bounds (ICC.2:2023 11.2.2.4). A curve whose
+# segments did not join, or whose outer bounds were finite, evaluated one way as
+# parsed and another once written and read back. The reader now refuses it; the
+# helper also pins that an accepted curve evaluates the same both ways.
+function(iccdev_add_segmented_curve_bounds_xml_test)
+  if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSegmentedCurveBoundsXmlTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/segmented-curve-bounds-xml.cpp"
+  )
+  target_compile_features(iccSegmentedCurveBoundsXmlTest PRIVATE cxx_std_17)
+  target_include_directories(iccSegmentedCurveBoundsXmlTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccSegmentedCurveBoundsXmlTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB}
+    ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccSegmentedCurveBoundsXmlTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.segmented-curve-bounds-xml
+      COMMAND "$<TARGET_FILE:iccSegmentedCurveBoundsXmlTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.segmented-curve-bounds-xml
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccSegmentedCurveBoundsXmlTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.segmented-curve-bounds-xml PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;mpe;curve;xml;issue-2804;regression"
+  )
+  if(WIN32)
+    set(_segmented_curve_bounds_xml_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSegmentedCurveBoundsXmlTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _segmented_curve_bounds_xml_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.segmented-curve-bounds-xml PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_segmented_curve_bounds_xml_env_mods}"
+    )
+  endif()
+endfunction()
+
+# #2804: the JSON reader kept each curve segment's own bounds without
+# comparing them, while the binary encoding holds one break-point between
+# neighbouring segments and no outer bounds (ICC.2:2023 11.2.2.4). A curve whose
+# segments did not join, or whose outer bounds were finite, evaluated one way as
+# parsed and another once written and read back. The reader now refuses it; the
+# helper also pins that an accepted curve evaluates the same both ways.
+function(iccdev_add_segmented_curve_bounds_json_test)
+  if(NOT TARGET "${TARGET_LIB_ICCJSON}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSegmentedCurveBoundsJsonTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/segmented-curve-bounds-json.cpp"
+  )
+  target_compile_features(iccSegmentedCurveBoundsJsonTest PRIVATE cxx_std_17)
+  target_include_directories(iccSegmentedCurveBoundsJsonTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccSegmentedCurveBoundsJsonTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccSegmentedCurveBoundsJsonTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.segmented-curve-bounds-json
+      COMMAND "$<TARGET_FILE:iccSegmentedCurveBoundsJsonTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.segmented-curve-bounds-json
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccSegmentedCurveBoundsJsonTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.segmented-curve-bounds-json PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;mpe;curve;json;issue-2804;regression"
+  )
+  if(WIN32)
+    set(_segmented_curve_bounds_json_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSegmentedCurveBoundsJsonTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _segmented_curve_bounds_json_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.segmented-curve-bounds-json PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_segmented_curve_bounds_json_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards #2608: CIccMpeToneMap::Write() kept its tone function positions in a
 # 16-entry stack array, while Read() and the XML and JSON readers accept any
 # uInt16Number output count, so writing a toneMapElement with 17 or more outputs
@@ -12130,6 +12246,8 @@ if(WIN32)
   iccdev_add_hex_data_malformed_json_test()
   iccdev_add_tonemap_functions_xml_test()
   iccdev_add_tonemap_functions_json_test()
+  iccdev_add_segmented_curve_bounds_xml_test()
+  iccdev_add_segmented_curve_bounds_json_test()
   iccdev_add_xml_float_significant_digits_test()
   iccdev_add_tonemap_write_many_outputs_test()
   iccdev_add_unsupported_profile_class_test()
@@ -12672,6 +12790,8 @@ iccdev_add_hex_data_malformed_xml_test()
 iccdev_add_hex_data_malformed_json_test()
 iccdev_add_tonemap_functions_xml_test()
 iccdev_add_tonemap_functions_json_test()
+iccdev_add_segmented_curve_bounds_xml_test()
+iccdev_add_segmented_curve_bounds_json_test()
 iccdev_add_xml_float_significant_digits_test()
 iccdev_add_tonemap_write_many_outputs_test()
 iccdev_add_unsupported_profile_class_test()

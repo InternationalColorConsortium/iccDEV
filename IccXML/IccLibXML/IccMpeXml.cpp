@@ -1288,6 +1288,57 @@ bool CIccSegmentedCurveXml::ToXml(std::string &xml, std::string blanks)
 }
 
 
+// The binary encoding of a segmented curve holds one break-point between
+// neighbouring segments and no outer bounds: the first segment "always starts
+// at -infinity" and the last "always ends at +infinity" (ICC.2:2023 11.2.2.4).
+// CIccSegmentedCurve::Write keeps each later segment's Start as the break-point
+// and drops every End, while Apply selects a segment by its End.  XML whose
+// segments do not join, or whose outer bounds are finite, therefore evaluated
+// one way as parsed and another once written and read back (#2804).  Such a
+// curve cannot be stored, so it is refused, as CIccSegmentedCurve::Insert
+// already refuses a segment that does not start where the last one ends.
+static bool icCheckSegmentBounds(const CIccCurveSegmentList &list, std::string &parseStr)
+{
+  if (list.empty())
+    return true;
+
+  const size_t bufSize = 256;
+  const size_t smallBufSize = 20;
+  char start[smallBufSize];
+  char end[smallBufSize];
+  char line[bufSize];
+
+  if (list.front()->StartPoint() != icMinFloat32Number) {
+    snprintf(line, bufSize, "SegmentedCurve segment 1 has Start=\"%s\", but the first segment starts at -infinity\n",
+             icSegPos(start, smallBufSize, list.front()->StartPoint()));
+    parseStr += line;
+    return false;
+  }
+
+  CIccCurveSegmentList::const_iterator prev = list.begin();
+  CIccCurveSegmentList::const_iterator next = prev;
+  int n = 2;
+  for (++next; next != list.end(); prev = next, ++next, n++) {
+    if ((*next)->StartPoint() != (*prev)->EndPoint()) {
+      snprintf(line, bufSize, "SegmentedCurve segment %d has Start=\"%s\", but segment %d has End=\"%s\"\n",
+               n, icSegPos(start, smallBufSize, (*next)->StartPoint()),
+               n - 1, icSegPos(end, smallBufSize, (*prev)->EndPoint()));
+      parseStr += line;
+      return false;
+    }
+  }
+
+  if (list.back()->EndPoint() != icMaxFloat32Number) {
+    snprintf(line, bufSize, "SegmentedCurve segment %d has End=\"%s\", but the last segment ends at +infinity\n",
+             n - 1, icSegPos(end, smallBufSize, list.back()->EndPoint()));
+    parseStr += line;
+    return false;
+  }
+
+  return true;
+}
+
+
 bool CIccSegmentedCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   m_list->clear();
@@ -1326,7 +1377,7 @@ bool CIccSegmentedCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
       }
     }
   }
-  return true;
+  return icCheckSegmentBounds(*m_list, parseStr);
 }
 
 

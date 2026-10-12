@@ -110,7 +110,7 @@
 		  <CurveSetElement InputChannels="3" OutputChannels="3">
 			  <SegmentedCurve>
 				  <FormulaSegment Start="-infinity" End="0.0" FunctionType="0">1 0 0 0</FormulaSegment>
-				  <FormulaSegment Start="0.08333333333333333" End="+infinity" FunctionType="7">78.84375 0.1593017578125 0.8359375 18.8515625 18.6875 1.0</FormulaSegment>
+				  <FormulaSegment Start="0" End="+infinity" FunctionType="7">78.84375 0.1593017578125 0.8359375 18.8515625 18.6875 1.0</FormulaSegment>
 				</SegmentedCurve>
 			  <DuplicateCurve Index="0"/>
 			  <DuplicateCurve Index="0"/>

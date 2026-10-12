@@ -28,28 +28,32 @@
     <multiProcessElementType>
       <TagSignature>A2B1</TagSignature>
       <MultiProcessElements InputChannels="3" OutputChannels="3">
+        <!-- The break-point between the linear and power segments below is 0.0405,
+             the value this profile has always been built with.  IEC 61966-2-1 gives
+             0.04045.  It is left as built so the profile does not change: see
+             Testing/README.md, "Profile Directory Reference". -->
         <CurveSetElement InputChannels="3" OutputChannels="3">
           <SegmentedCurve>
-            <FormulaSegment Start="0" End="0.04045" FunctionType="0">
+            <FormulaSegment Start="-inf" End="0.0405" FunctionType="0">
               1.0 0.077399380804954 0.0 0.0
             </FormulaSegment>
-            <FormulaSegment Start="0.0405" End="1" FunctionType="0">
+            <FormulaSegment Start="0.0405" End="+inf" FunctionType="0">
               2.4  0.947867298578199 0.0521327014218010 0.0
             </FormulaSegment>
           </SegmentedCurve>
           <SegmentedCurve>
-            <FormulaSegment Start="0" End="0.04045" FunctionType="0">
+            <FormulaSegment Start="-inf" End="0.0405" FunctionType="0">
               1.0 0.077399380804954 0.0 0.0
             </FormulaSegment>
-            <FormulaSegment Start="0.0405" End="1" FunctionType="0">
+            <FormulaSegment Start="0.0405" End="+inf" FunctionType="0">
               2.4  0.947867298578199 0.0521327014218010 0.0
             </FormulaSegment>
           </SegmentedCurve>
           <SegmentedCurve>
-            <FormulaSegment Start="0" End="0.04045" FunctionType="0">
+            <FormulaSegment Start="-inf" End="0.0405" FunctionType="0">
               1.0 0.077399380804954 0.0 0.0
             </FormulaSegment>
-            <FormulaSegment Start="0.0405" End="1" FunctionType="0">
+            <FormulaSegment Start="0.0405" End="+inf" FunctionType="0">
               2.4  0.947867298578199 0.0521327014218010 0.0
             </FormulaSegment>
           </SegmentedCurve>
@@ -75,26 +79,26 @@
         </MatrixElement>
        <CurveSetElement InputChannels="3" OutputChannels="3">
           <SegmentedCurve>
-            <FormulaSegment Start="0" End="0.0031308" FunctionType="0">
+            <FormulaSegment Start="-inf" End="0.0031308" FunctionType="0">
               1.0 12.92 0.00000000 0.00000000
             </FormulaSegment>
-            <FormulaSegment Start="0.0031308" End="1" FunctionType="3">
+            <FormulaSegment Start="0.0031308" End="+inf" FunctionType="3">
               0.416666666666667 1.055 1.0 0.0 -0.055
             </FormulaSegment>
           </SegmentedCurve>
           <SegmentedCurve>
-            <FormulaSegment Start="0" End="0.0031308" FunctionType="0">
+            <FormulaSegment Start="-inf" End="0.0031308" FunctionType="0">
               1.0 12.92 0.00000000 0.00000000
             </FormulaSegment>
-            <FormulaSegment Start="0.0031308" End="1" FunctionType="3">
+            <FormulaSegment Start="0.0031308" End="+inf" FunctionType="3">
               0.416666666666667 1.055 1.0 0.0 -0.055
             </FormulaSegment>
           </SegmentedCurve>
           <SegmentedCurve>
-            <FormulaSegment Start="0" End="0.0031308" FunctionType="0">
+            <FormulaSegment Start="-inf" End="0.0031308" FunctionType="0">
               1.0 12.92 0.00000000 0.00000000
             </FormulaSegment>
-            <FormulaSegment Start="0.0031308" End="1" FunctionType="3">
+            <FormulaSegment Start="0.0031308" End="+inf" FunctionType="3">
               0.416666666666667 1.055 1.0 0.0 -0.055
             </FormulaSegment>
           </SegmentedCurve>

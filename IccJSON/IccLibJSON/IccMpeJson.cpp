@@ -391,6 +391,66 @@ bool CIccSegmentedCurveJson::ToJson(IccJson &j)
   return true;
 }
 
+// Spell pos as icJsonSetSegPos() writes it, for a parse message.
+static const char *icJsonSegPosStr(char *buf, size_t bufSize, icFloatNumber pos)
+{
+  if (pos == icMinFloat32Number)
+    snprintf(buf, bufSize, "-infinity");
+  else if (pos == icMaxFloat32Number)
+    snprintf(buf, bufSize, "+infinity");
+  else
+    snprintf(buf, bufSize, "%.9g", pos);
+  return buf;
+}
+
+// The binary encoding of a segmented curve holds one break-point between
+// neighbouring segments and no outer bounds: the first segment "always starts
+// at -infinity" and the last "always ends at +infinity" (ICC.2:2023 11.2.2.4).
+// CIccSegmentedCurve::Write keeps each later segment's start as the break-point
+// and drops every end, while Apply selects a segment by its end.  JSON whose
+// segments do not join, or whose outer bounds are finite, therefore evaluated
+// one way as parsed and another once written and read back (#2804).  Such a
+// curve cannot be stored, so it is refused, as CIccSegmentedCurve::Insert
+// already refuses a segment that does not start where the last one ends.
+static bool icJsonCheckSegmentBounds(const CIccCurveSegmentList &list, std::string &parseStr)
+{
+  if (list.empty())
+    return true;
+
+  char start[20];
+  char end[20];
+  char line[256];
+
+  if (list.front()->StartPoint() != icMinFloat32Number) {
+    snprintf(line, sizeof(line), "SegmentedCurve segment 1 has start %s, but the first segment starts at -infinity\n",
+             icJsonSegPosStr(start, sizeof(start), list.front()->StartPoint()));
+    parseStr += line;
+    return false;
+  }
+
+  CIccCurveSegmentList::const_iterator prev = list.begin();
+  CIccCurveSegmentList::const_iterator next = prev;
+  int n = 2;
+  for (++next; next != list.end(); prev = next, ++next, n++) {
+    if ((*next)->StartPoint() != (*prev)->EndPoint()) {
+      snprintf(line, sizeof(line), "SegmentedCurve segment %d has start %s, but segment %d has end %s\n",
+               n, icJsonSegPosStr(start, sizeof(start), (*next)->StartPoint()),
+               n - 1, icJsonSegPosStr(end, sizeof(end), (*prev)->EndPoint()));
+      parseStr += line;
+      return false;
+    }
+  }
+
+  if (list.back()->EndPoint() != icMaxFloat32Number) {
+    snprintf(line, sizeof(line), "SegmentedCurve segment %d has end %s, but the last segment ends at +infinity\n",
+             n - 1, icJsonSegPosStr(end, sizeof(end), list.back()->EndPoint()));
+    parseStr += line;
+    return false;
+  }
+
+  return true;
+}
+
 bool CIccSegmentedCurveJson::ParseJson(const IccJson &j, std::string &parseStr)
 {
   m_list->clear();
@@ -398,12 +458,26 @@ bool CIccSegmentedCurveJson::ParseJson(const IccJson &j, std::string &parseStr)
   if (!jsonExistsField(j, "segments") || !j["segments"].is_array())
     return true;
 
+  int nSeg = 0;
   for (const IccJson &jSeg : j["segments"]) {
+    nSeg++;
     std::string type;
     jGetString(jSeg, "type",  type);
-    // start/end may be strings ("-infinity"/"+infinity") or numbers
-    icFloatNumber start = jSeg.contains("start") ? icJsonSegPosFromJson(jSeg["start"]) : 0.0f;
-    icFloatNumber end   = jSeg.contains("end")   ? icJsonSegPosFromJson(jSeg["end"])   : 0.0f;
+    // start/end may be strings ("-infinity"/"+infinity") or numbers.  A segment
+    // without one, or with one of another type, read as 0, and the bounds check
+    // below would compare that 0 as if the document had said it: a missing
+    // start joined a previous end of 0 (#2804).  The XML reader refuses a
+    // segment without either attribute.
+    if (!jSeg.contains("start") || !jSeg.contains("end") ||
+        !(jSeg["start"].is_string() || jSeg["start"].is_number()) ||
+        !(jSeg["end"].is_string() || jSeg["end"].is_number())) {
+      char line[128];
+      snprintf(line, sizeof(line), "SegmentedCurve segment %d needs a start and an end, each a number or an infinity string\n", nSeg);
+      parseStr += line;
+      return false;
+    }
+    icFloatNumber start = icJsonSegPosFromJson(jSeg["start"]);
+    icFloatNumber end   = icJsonSegPosFromJson(jSeg["end"]);
 
     if (type == "FormulaSegment") {
       CIccFormulaCurveSegmentJson *pSeg = new(std::nothrow) CIccFormulaCurveSegmentJson(start, end);
@@ -422,7 +496,7 @@ bool CIccSegmentedCurveJson::ParseJson(const IccJson &j, std::string &parseStr)
       return false;
     }
   }
-  return true;
+  return icJsonCheckSegmentBounds(*m_list, parseStr);
 }
 
 // ---------------------------------------------------------------------------

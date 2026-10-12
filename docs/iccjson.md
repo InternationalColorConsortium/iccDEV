@@ -323,6 +323,10 @@ Sampled table:
 #### `segmentedCurveType` -- piecewise segmented curve (iccMAX)
 
 Segments cover the real line with `"-infinity"` / `"+infinity"` at the outermost boundaries.
+Each later segment's `start` must equal the `end` of the segment before it. The
+binary encoding stores one break-point between neighbouring segments and no
+outer bounds (ICC.2-2023 11.2.2.4), so a curve with a gap, an overlap or a
+finite outer bound is refused rather than stored as a different curve.
 Segment types are `"FormulaSegment"` or `"SampledSegment"`.
 
 ```json

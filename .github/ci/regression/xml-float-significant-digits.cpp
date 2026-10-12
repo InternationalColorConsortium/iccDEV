@@ -101,10 +101,11 @@ bool has(const std::string &haystack, const char *needle)
   return haystack.find(needle) != std::string::npos;
 }
 
-// Write a formula segment carrying the given breakpoints, read the document
-// back, and write it a second time.  The breakpoints travel as attributes
+// Write two formula segments joined at the given breakpoint, read the document
+// back, and write it a second time.  The breakpoint travels as attributes
 // written by icSegPos(), the "%.8f" site, so this exercises that format rather
-// than icXmlFloatFmt.
+// than icXmlFloatFmt.  It sits between two segments, with the infinities as the
+// outer bounds, because the reader refuses any other bounds since #2804.
 //
 // The segment list has no public accessor, so the caller asserts on the two
 // documents instead.  Note what that comparison does and does not catch: it
@@ -114,14 +115,20 @@ bool has(const std::string &haystack, const char *needle)
 // MATCH while the value has moved.  Verified by mutating the format back: this
 // comparison stays green and only the spelling assertion in the caller fires.
 // Both checks are needed; neither is redundant.
-bool segmentReWrite(icFloatNumber start, icFloatNumber end,
+bool segmentReWrite(icFloatNumber breakpoint,
                     std::string &firstXml, std::string &secondXml)
 {
   CIccSegmentedCurveXml curve;
-  CIccFormulaCurveSegment *pSeg = new CIccFormulaCurveSegment(start, end);
   icFloatNumber params[4] = { 1.0f, 1.0f, 0.0f, 0.0f };
+  CIccFormulaCurveSegment *pSeg = new CIccFormulaCurveSegment(icMinFloat32Number, breakpoint);
   pSeg->SetFunction(0, 4, params);
   curve.Insert(pSeg);
+  pSeg = new CIccFormulaCurveSegment(breakpoint, icMaxFloat32Number);
+  pSeg->SetFunction(0, 4, params);
+  if (!curve.Insert(pSeg)) {
+    delete pSeg;
+    return false;
+  }
 
   if (!curve.ToXml(firstXml, ""))
     return false;
@@ -172,7 +179,7 @@ int main()
   {
     const icFloatNumber hlg = 0.0833333358f;
     std::string first, second;
-    check(segmentReWrite(hlg, 1.0f, first, second),
+    check(segmentReWrite(hlg, first, second),
           "a formula segment carrying the HLG breakpoint did not round trip");
     check(first == second,
           ("the HLG 1/12 breakpoint moved on a round trip.\n  wrote:   " + first +
@@ -192,7 +199,7 @@ int main()
   {
     const icFloatNumber big = -1.23456786e+38f;
     std::string first, second;
-    check(segmentReWrite(big, 1.0f, first, second),
+    check(segmentReWrite(big, first, second),
           "a formula segment with a large finite breakpoint did not round trip");
     check(!has(first, "-123456786051166514"),
           ("a large breakpoint was truncated into the document: " + first).c_str());

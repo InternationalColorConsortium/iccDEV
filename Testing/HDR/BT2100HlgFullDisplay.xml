@@ -112,7 +112,7 @@
 			  <LuminanceCurve>
 				  <SegmentedCurve>
 				  <FormulaSegment Start="-infinity" End="0.0" FunctionType="0">1 0 0 0</FormulaSegment>
-				  <FormulaSegment Start="0" End="+infinity" FunctionType="3">-0.166666666666667 1 1.006289308176101 -0.00628930817610062927 0</FormulaSegment>
+				  <FormulaSegment Start="0" End="1" FunctionType="3">-0.166666666666667 1 1.006289308176101 -0.00628930817610062927 0</FormulaSegment>
 				  <FormulaSegment Start="1" End="+infinity" FunctionType="0">1 0 0 1</FormulaSegment>
 					</SegmentedCurve>
 				</LuminanceCurve>

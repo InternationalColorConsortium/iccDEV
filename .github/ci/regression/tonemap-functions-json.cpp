@@ -103,6 +103,14 @@ void check(bool ok, const char *label, const char *what)
 
 bool has(const std::string &s, const char *what) { return s.find(what) != std::string::npos; }
 
+int occurrences(const std::string &s, const std::string &what)
+{
+  int n = 0;
+  for (size_t pos = s.find(what); pos != std::string::npos; pos = s.find(what, pos + what.size()))
+    n++;
+  return n;
+}
+
 /* A luminance curve that passes its input through, so Apply() shows the tone
    function's own third parameter on each channel. */
 const char *kLumCurve =
@@ -440,8 +448,13 @@ int main()
       { "-0.125", "-0.125" },
     };
     for (size_t i = 0; i < sizeof(kNegatives) / sizeof(kNegatives[0]); i++) {
-      std::string doc = std::string("{\"segments\":[{\"type\":\"FormulaSegment\",\"start\":\"") +
-                        kNegatives[i].text + "\",\"end\":0.75,"
+      /* The negative number is a break-point between two segments: since #2804
+         the reader refuses a curve whose outer bounds are not the infinities. */
+      std::string doc = std::string("{\"segments\":[{\"type\":\"FormulaSegment\",\"start\":\"-infinity\",\"end\":\"") +
+                        kNegatives[i].text + "\","
+                        "\"functionType\":0,\"parameters\":[1.0,0.0,0.0,0.0]},"
+                        "{\"type\":\"FormulaSegment\",\"start\":\"" +
+                        kNegatives[i].text + "\",\"end\":\"+infinity\","
                         "\"functionType\":0,\"parameters\":[1.0,0.0,0.0,0.0]}]}";
       std::string label = std::string("negative segment position ") + kNegatives[i].text;
 
@@ -452,9 +465,10 @@ int main()
       IccJson out;
       check(curve.ToJson(out), label.c_str(), "ToJson refused the curve");
       std::string text = out.dump();
-      check(!has(text, "infinity"), label.c_str(),
+      check(occurrences(text, "\"-infinity\"") == 1 && occurrences(text, "\"+infinity\"") == 1, label.c_str(),
             ("an ordinary negative number became a sentinel: " + text).c_str());
-      check(has(text, kNegatives[i].expect), label.c_str(),
+      check(has(text, (std::string("\"end\":") + kNegatives[i].expect).c_str()) &&
+            has(text, (std::string("\"start\":") + kNegatives[i].expect).c_str()), label.c_str(),
             ("the value was not preserved: " + text).c_str());
     }
   }
@@ -482,7 +496,13 @@ int main()
   /* Control: an ordinary finite endpoint is still written as a number, so the
      fix did not turn every position into a sentinel. */
   {
-    std::string doc = "{\"segments\":[{\"type\":\"FormulaSegment\",\"start\":0.25,\"end\":0.75,"
+    /* The finite positions are the break-points of a three-segment curve:
+       since #2804 the reader refuses finite outer bounds. */
+    std::string doc = "{\"segments\":[{\"type\":\"FormulaSegment\",\"start\":\"-infinity\",\"end\":0.25,"
+                      "\"functionType\":0,\"parameters\":[1.0,0.0,0.0,0.0]},"
+                      "{\"type\":\"FormulaSegment\",\"start\":0.25,\"end\":0.75,"
+                      "\"functionType\":0,\"parameters\":[1.0,0.0,0.0,0.0]},"
+                      "{\"type\":\"FormulaSegment\",\"start\":0.75,\"end\":\"+infinity\","
                       "\"functionType\":0,\"parameters\":[1.0,0.0,0.0,0.0]}]}";
     std::string parseStr;
     CIccSegmentedCurveJson curve;
@@ -491,9 +511,10 @@ int main()
     IccJson out;
     check(curve.ToJson(out), "finite segment position", "ToJson refused the curve");
     std::string text = out.dump();
-    check(!has(text, "infinity"), "finite segment position",
+    check(occurrences(text, "\"-infinity\"") == 1 && occurrences(text, "\"+infinity\"") == 1, "finite segment position",
           ("a finite position became a sentinel: " + text).c_str());
-    check(has(text, "0.25") && has(text, "0.75"), "finite segment position",
+    check(has(text, "\"end\":0.25") && has(text, "\"start\":0.25") &&
+          has(text, "\"end\":0.75") && has(text, "\"start\":0.75"), "finite segment position",
           ("the finite positions were lost: " + text).c_str());
   }
 
