@@ -32,7 +32,7 @@ for target in "${targets[@]}"; do
   fi
   grep -Fq 'LLVMFuzzerTestOneInput' "$source_file"
   grep -Fq 'Redistribution and use in source and binary forms' "$source_file"
-  grep -Fq 'THIS SOFTWARE IS PROVIDED ``AS IS' "$source_file"
+  grep -Fq 'THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"' "$source_file"
   grep -Fq "$target" "$adapter"
   grep -Fq "$target" "$builder"
 done
