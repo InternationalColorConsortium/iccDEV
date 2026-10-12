@@ -82,6 +82,24 @@ ENDIF(ENABLE_INSTALL_RIM)
 
 SET(SOURCES ${CFILES})
 
+# #2750: libxml2 retains its DllMain export for ABI compatibility. Newer lld
+# correctly skips that import but warns for every XML consumer. Suppress only
+# that named diagnostic on ClangCL links, including installed-package consumers.
+# Other linker diagnostics and the dependency's exports remain unchanged.
+if(MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  include(CheckLinkerFlag)
+  check_linker_flag(CXX "LINKER:/ignore:importeddllmain"
+    ICCDEV_LINKER_SUPPORTS_IGNORE_IMPORTED_DLLMAIN)
+endif()
+
+function(iccdev_configure_xml_link_diagnostics target)
+  if(MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
+      AND ICCDEV_LINKER_SUPPORTS_IGNORE_IMPORTED_DLLMAIN)
+    target_link_options(${target} PUBLIC
+      "$<$<AND:$<PLATFORM_ID:Windows>,$<CXX_COMPILER_ID:Clang>>:LINKER:/ignore:importeddllmain>")
+  endif()
+endfunction()
+
 IF(ICCDEV_IS_MACOS)
   FIND_LIBRARY(CARBON_LIBRARY Carbon)
   FIND_LIBRARY(IOKIT_LIBRARY IOKit)
@@ -137,6 +155,7 @@ IF(ENABLE_SHARED_LIBS)
 
   # PUBLIC linkage - consumers transitively get IccProfLib2 headers + libxml2
   TARGET_LINK_LIBRARIES(${TARGET_NAME} PUBLIC ${TARGET_LIB_ICCPROFLIB} ${EXTRA_LIBS} ${EXTRA_LIBS_CS})
+  iccdev_configure_xml_link_diagnostics(${TARGET_NAME})
 
   IF(ENABLE_INSTALL_RIM)
 #    message(STATUS "Installing SHARED library")
@@ -172,6 +191,7 @@ IF(ENABLE_STATIC_LIBS)
 
   # PUBLIC linkage - consumers transitively get IccProfLib2 headers + libxml2
   TARGET_LINK_LIBRARIES(${TARGET_NAME}-static PUBLIC ${TARGET_LIB_ICCPROFLIB} ${EXTRA_LIBS} ${EXTRA_LIBS_CS})
+  iccdev_configure_xml_link_diagnostics(${TARGET_NAME}-static)
 
   IF(ENABLE_INSTALL_RIM)
 #    message(STATUS "Installing STATIC library")
