@@ -145,6 +145,10 @@ missing or foreign identifiers independently of the downloaded inventory;
 validate wheel metadata/tags, safe unique archive members, and complete
 canonical BSD-3-Clause license contents. Include release wheels in
 checksums/provenance. Do not publish PR artifacts.
+For downloaded release assets, use `--release` instead of `--identifiers` and
+`--lane` to require the full 45-wheel inventory. Validate RECORD coverage,
+hashes, and sizes as well as ZIP CRCs; checksums and provenance are separate
+download authenticity checks.
 Keep wheel build jobs unprivileged, artifact downloads explicitly named, and
 PyPI publication separate until maintainers configure their account.
 Keep the workflow/artifact regression suites in the shared wheel workflow;

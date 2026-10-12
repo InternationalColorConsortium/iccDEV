@@ -14,5 +14,13 @@ unpack-and-run testing. Build a portable, self-contained archive from a static
 configuration (`ENABLE_SHARED_LIBS=OFF`, `ENABLE_STATIC_LIBS=ON`). Build native
 `.deb` and `.rpm` packages from a dynamic configuration.
 
+The rolling Linux release ZIP uses the dynamic configuration also used for
+DEB/RPM. Its tools locate bundled RefIccMAX libraries through relative install
+RPATHs (`$ORIGIN/../lib` and `$ORIGIN`). This ZIP still requires the system
+libraries listed in the DEB/RPM dependencies, including compatible libxml2;
+it does not bundle every third-party runtime. Release CI extracts the ZIP into
+a fresh directory and tests profile dump and XML round-trip without
+`LD_LIBRARY_PATH` or `LD_PRELOAD` overrides before upload.
+
 The `Testing/` source tree, man pages, shell completions, and development
 headers are intentionally excluded from v1 runtime packages.

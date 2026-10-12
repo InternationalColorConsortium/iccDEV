@@ -50,6 +50,9 @@ shares one source of truth. Update rules here, not in the mirrors.
   `.github/scripts/validate-python-release-wheels.py` with an independent
   `--lane` inventory, complete license checks, checksums, and provenance;
   PyPI account setup and publication remain separate maintainer actions.
+  Validate downloaded release wheels with `--release` to require all 45
+  targets without CI identifier files. Require RECORD file coverage, secure
+  hashes, and sizes before attestation; ZIP CRCs alone do not prove this contract.
 - MATLAB public entry points that require arguments must provide actionable
   bare-invocation errors pinned by `matlab/tests/test_usage_guidance.m`.
   Interactive examples must show visible UI defaults first; label hidden or

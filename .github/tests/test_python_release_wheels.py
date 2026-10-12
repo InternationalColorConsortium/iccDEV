@@ -28,6 +28,10 @@
 """Release wheel intake regression tests."""
 
 from pathlib import Path
+import base64
+import csv
+import hashlib
+import io
 import os
 import runpy
 import shlex
@@ -79,6 +83,16 @@ def make_wheel(directory, platform="manylinux_2_17_x86_64.manylinux2014_x86_64",
     if native:
         files[f"iccdev/_iccdev.{python_tag}.so"] = "native fixture"
     files.update(overrides or {})
+    if not overrides or dist_info + "RECORD" not in overrides:
+        output = io.StringIO(newline="")
+        writer = csv.writer(output)
+        for name, content in files.items():
+            if content is not None and name != dist_info + "RECORD" and not name.endswith("/"):
+                data = content.encode("utf-8")
+                checksum = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode("ascii")
+                writer.writerow([name, "sha256=" + checksum, len(data)])
+        writer.writerow([dist_info + "RECORD", "", ""])
+        files[dist_info + "RECORD"] = output.getvalue()
     with zipfile.ZipFile(path, "w") as archive:
         for name, content in files.items():
             if content is not None:
@@ -190,6 +204,66 @@ def test_accepts_canonical_license_with_checkout_line_endings(tmp_path):
     assert len(VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")) == 1
 
 
+@pytest.mark.parametrize("record", [
+    "", "iccdev/__init__.py,,\n", "iccdev/__init__.py,md5=invalid,0\n",
+    "iccdev/__init__.py,sha256=invalid,0\n",
+    "iccdev-0.1.0.dist-info/RECORD,sha256=invalid,1\n",
+    "unknown,sha256=invalid,0\n", "too,few\n", '"unterminated',
+])
+def test_rejects_invalid_record(tmp_path, record):
+    make_wheel(tmp_path, overrides={"iccdev-0.1.0.dist-info/RECORD": record})
+    with pytest.raises(ValueError, match="RECORD"):
+        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")
+
+
+@pytest.mark.parametrize("change", ["hash", "size", "missing", "duplicate"])
+def test_rejects_inconsistent_record(tmp_path, change):
+    wheel = make_wheel(tmp_path)
+    with zipfile.ZipFile(wheel) as archive:
+        files = {name: archive.read(name) for name in archive.namelist()}
+    record = "iccdev-0.1.0.dist-info/RECORD"
+    rows = list(csv.reader(io.StringIO(files[record].decode("utf-8"))))
+    if change == "hash":
+        # Repack a changed native extension with a valid ZIP CRC but stale RECORD.
+        files["iccdev/_iccdev.cp313.so"] = b"altered native fixture"
+    elif change == "size":
+        rows[0][2] = "999"
+    elif change == "missing":
+        rows.pop(0)
+    else:
+        rows.append(rows[0])
+    output = io.StringIO(newline="")
+    csv.writer(output).writerows(rows)
+    files[record] = output.getvalue().encode("utf-8")
+    with zipfile.ZipFile(wheel, "w") as archive:
+        for name, content in files.items():
+            archive.writestr(name, content)
+    with pytest.raises(ValueError, match="RECORD"):
+        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")
+
+
+def test_release_inventory_requires_every_lane(tmp_path):
+    identifiers = set().union(*(LANE_IDENTIFIERS(lane) for lane in VALIDATOR["LANE_PLATFORMS"]))
+    for identifier in identifiers:
+        python_tag, platform = identifier.split("-", 1)
+        for family, version in (("manylinux", "2_17"), ("musllinux", "1_2"), ("macosx", "11_0")):
+            if platform.startswith(family + "_"):
+                platform = platform.replace(family + "_", family + "_" + version + "_", 1)
+                break
+        make_wheel(tmp_path, platform, python_tag=python_tag)
+    command = [sys.executable, str(SCRIPT), str(tmp_path), "--release"]
+    result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    assert "Validated 45 release wheels" in result.stdout
+    next(tmp_path.glob("*win_arm64.whl")).unlink()
+    result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 1
+    assert "Missing wheel targets" in result.stderr
+    result = subprocess.run(command + ["--lane", "windows-arm64"], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 2
+    assert "--lane requires --identifiers" in result.stderr
+
+
 @pytest.mark.parametrize("path", [
     "../outside", "/outside", "iccdev/../outside", "iccdev\\outside",
     "C:/outside", "iccdev/./outside", "iccdev//outside", "iccdev/control\nfile",
@@ -244,6 +318,7 @@ def test_release_workflow_connects_all_wheel_artifacts():
     assert "-name '*.whl'" in steps["Generate release checksums"]["run"]
     assert "validate-python-release-wheels.py" in steps["Package release archives"]["run"]
     assert '--lane "$id"' in steps["Package release archives"]["run"]
+    assert "validate-python-release-wheels.py release-assets --release" in steps["Package release archives"]["run"]
     assert steps["Attest release archive provenance"]["with"]["subject-checksums"] == "release-assets/SHA256SUMS"
     assert '"pytest>=7,<9"' in build["env"]["CIBW_BEFORE_TEST"]
     assert "--only-binary=numpy" in build["env"]["CIBW_BEFORE_TEST"]
@@ -260,6 +335,18 @@ def test_primary_uses_identical_wheel_builder_without_uploads():
     assert call["with"]["upload-wheels"] is False
     for name in ("linux", "macos", "windows"):
         assert jobs[name]["with"]["run-wheel-smoke"] is False
+
+
+def test_release_cpack_zip_uses_relative_install_paths_and_runtime_smoke():
+    job = load_workflow("ci-latest-release.yml")["jobs"]["cpack-linux"]
+    steps = {step["name"]: step for step in job["steps"]}
+    configure = steps["Configure CPack build"]["run"]
+    assert "-DCMAKE_INSTALL_LIBDIR=lib" in configure
+    assert "'-DCMAKE_INSTALL_RPATH=$ORIGIN/../lib;$ORIGIN'" in configure
+    smoke = steps["Validate runtime package outputs"]["run"]
+    for tool in ("iccDumpProfile", "iccToXml", "iccFromXml"):
+        assert f'env -u LD_LIBRARY_PATH -u LD_PRELOAD "${{package_root}}/bin/{tool}"' in smoke
+    assert 'test -s "${runtime_smoke}/profile.icc"' in smoke
 
 
 def test_shared_uploads_are_opt_in_and_exclude_pr_events():

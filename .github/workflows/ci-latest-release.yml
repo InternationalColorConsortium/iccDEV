@@ -1547,12 +1547,16 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
+          # Keep $ORIGIN literal for the installed ELF loader, not the shell.
+          # shellcheck disable=SC2016
           cmake -S Build/Cmake -B build-cpack -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DENABLE_TOOLS=ON \
             -DENABLE_TESTS=OFF \
             -DENABLE_SHARED_LIBS=ON \
             -DENABLE_STATIC_LIBS=OFF \
+            -DCMAKE_INSTALL_LIBDIR=lib \
+            '-DCMAKE_INSTALL_RPATH=$ORIGIN/../lib;$ORIGIN' \
             -DENABLE_WXWIDGETS=OFF \
             -DENABLE_ICCJSON=ON
 
@@ -1596,6 +1600,17 @@ jobs:
             echo "Runtime package unexpectedly contains Testing tree" >&2
             exit 1
           fi
+          runtime_smoke="$(mktemp -d)"
+          unzip -q "${zip_file}" -d "${runtime_smoke}"
+          package_root="${runtime_smoke}/$(basename "${zip_file}" .zip)"
+          # Exercise installed paths, with no build-tree library overrides.
+          env -u LD_LIBRARY_PATH -u LD_PRELOAD "${package_root}/bin/iccDumpProfile" \
+            Testing/sRGB_v4_ICC_preference.icc > "${runtime_smoke}/profile-dump.txt"
+          env -u LD_LIBRARY_PATH -u LD_PRELOAD "${package_root}/bin/iccToXml" \
+            Testing/sRGB_v4_ICC_preference.icc "${runtime_smoke}/profile.xml"
+          env -u LD_LIBRARY_PATH -u LD_PRELOAD "${package_root}/bin/iccFromXml" \
+            "${runtime_smoke}/profile.xml" "${runtime_smoke}/profile.icc"
+          test -s "${runtime_smoke}/profile.icc"
           cmake -E sha256sum \
             build-cpack/reficcmax-*.zip \
             build-cpack/reficcmax-*.deb \
@@ -1991,6 +2006,7 @@ jobs:
             python3 .github/scripts/validate-python-release-wheels.py "$wheel_dir" --identifiers "$wheel_dir/build-identifiers.txt" --lane "$id"
             cp "$wheel_dir"/*.whl release-assets/
           done
+          python3 .github/scripts/validate-python-release-wheels.py release-assets --release
 
           for dir in artifacts/iccdev-*; do
             [ -d "$dir" ] || continue

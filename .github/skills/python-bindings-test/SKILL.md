@@ -75,6 +75,11 @@ helpers, profile dump, and round-trip parity tests.
    in checksums and provenance. Do not reuse PR artifacts for publication.
    Require consistent wheel metadata/tags, native extension and type stubs,
    safe unique archive members, and the canonical BSD-3-Clause license.
+   Require RECORD coverage, secure file hashes, and sizes. For raw downloaded
+   release assets without CI identifier files, run the validator with
+   `--release` to require all 45 wheels. Verify SHA256SUMS, SHA512SUMS, and
+   provenance separately before installation. Record the immutable release
+   tag and source SHA; branch artifacts are local QA evidence, not a release.
    Follow `docs/python-packaging-release.md` for the interim GitHub route;
    do not infer PyPI publication from a branch push or successful local build.
 

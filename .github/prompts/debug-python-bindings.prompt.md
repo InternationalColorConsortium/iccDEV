@@ -16,6 +16,11 @@ python -m pytest --rootdir . --import-mode=importlib .github/tests/test_python_r
 Validate each lane with `python .github/scripts/validate-python-release-wheels.py
 <wheel-dir> --identifiers <wheel-dir>/build-identifiers.txt --lane <lane-id>`.
 The lane selects the complete expected inventory independently of the artifact.
+For all downloaded release wheels, use `python
+.github/scripts/validate-python-release-wheels.py <release-assets> --release`.
+This needs no CI identifier files and rejects missing targets and inconsistent
+RECORD file coverage, hashes, or sizes. Verify both published checksum manifests
+and artifact provenance separately; record the release tag and source SHA.
 See `docs/python-packaging-release.md` for the artifact and source-build paths.
 
 For wheel CI failures, inspect the shared `_build-python-wheels.yml` used by

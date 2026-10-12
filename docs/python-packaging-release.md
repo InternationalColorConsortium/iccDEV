@@ -37,8 +37,12 @@ Both producer and release consumer pass `--lane <lane-id>` to the validator,
 which independently requires that lane's full five- or ten-target inventory.
 Missing, duplicate, or foreign identifiers cannot narrow the expected targets.
 Inconsistent wheel metadata/tags, unsafe or duplicate archive members, and
-missing, duplicate, or unexpected wheels stop publication. Wheels
-participate in `SHA256SUMS`, `SHA512SUMS`, and artifact provenance alongside
+missing, duplicate, or unexpected wheels stop publication. Wheels also require
+complete RECORD file coverage, SHA-256, SHA-384, or SHA-512 file hashes,
+and matching sizes. The release consumer validates the combined 45-wheel set
+again before checksum generation and attestation. ZIP CRC validation does not
+replace RECORD integrity checks.
+Wheels participate in `SHA256SUMS`, `SHA512SUMS`, and artifact provenance alongside
 the native packages. No PR artifacts or mutable build caches are reused.
 
 Wheel jobs retain read-only repository permissions, clear Git credentials and
@@ -135,6 +139,29 @@ CTest registration. CMake/CTest and CPack retain their native build, test,
 and runtime-package responsibilities; setuptools and Cython produce wheels.
 Release-wheel testing does not establish native sanitizer coverage. Run
 separate instrumented native checks when fixing library behavior.
+
+### Validate downloaded release assets
+
+Pin the exact release tag and source commit before downloading. The published
+raw wheel assets do not include the CI `build-identifiers.txt` files. Download
+all wheels to one directory and validate the full repository inventory:
+
+```bash
+gh release download <release-tag> --repo InternationalColorConsortium/iccDEV --pattern '*.whl' --pattern SHA256SUMS --pattern SHA512SUMS --dir release-assets
+python .github/scripts/validate-python-release-wheels.py release-assets --release
+```
+
+The `--release` mode requires all 45 targets across seven lanes, including both
+Linux libc families. It rejects incomplete downloads. Use the lane mode above
+for CI artifacts and subset checks. Verify each downloaded wheel against both
+published checksum manifests and run `gh attestation verify <wheel-path> --repo
+InternationalColorConsortium/iccDEV` before installing a compatible wheel into
+an isolated environment. Checksum manifests may also list native packages that
+were not selected for download; distinguish missing downloads from hash failures.
+Record metadata inspection separately from execution: a Windows AMD64 host
+cannot establish ARM64, macOS, or Linux runtime correctness. CLI-backed helpers
+also require the separately downloaded native tool bundle. CMake/CTest and
+CPack remain native package producers, not wheel producers.
 
 Run pytest from the repository root with `--import-mode=importlib`. Installed
 wheel validation must also set `ICCDEV_REQUIRE_INSTALLED_PACKAGE=1`; the test
