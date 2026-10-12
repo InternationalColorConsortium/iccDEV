@@ -792,7 +792,7 @@ icUInt8Number icABtoU8(icFloatNumber num)
   icFloatNumber v = num + 128.0f;
   
   if (std::isnan(num))
-    return 128.0f;
+    return 128;
   else if (v<0)
     return 0;
   else if (v>255)
@@ -2007,7 +2007,7 @@ const icChar *CIccInfo::GetProfileClassSigName(icProfileClassSignature sig)
   // These strings are display-only labels for the deviceClass signature; every
   // caller emits them as human-readable text (iccDumpProfile "Profile Class: %s",
   // the validation report in IccProfile.cpp, the wxWidgets GUI label) and nothing
-  // parses, compares, or serializes them — XML/JSON write the raw 4CC via
+  // parses, compares, or serializes them -- XML/JSON write the raw 4CC via
   // icGetSigStr(), independent of this helper. The glued "Class" suffix is dropped:
   // it is not an ICC.1/ICC.2 spec identifier (in the spec "class" is a separate word
   // tied to "profile"/"device"/"media"), it is redundant since each caller's

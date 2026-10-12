@@ -696,7 +696,7 @@ icFloatNumber CIccTagCurve::Apply(icFloatNumber v) const
   if (std::isnan(v))
     v = 0.0;
   else if (std::isinf(v))
-    v = v < 0.0 ? 0.0 : 1.0;
+    v = v < 0.0 ? 0.0f : 1.0f;
   else if(v<0.0) v = 0.0;
   else if(v>1.0) v = 1.0;
 
