@@ -3274,6 +3274,58 @@ function(iccdev_add_pawg_c5_btoa0_test)
   endif()
 endfunction()
 
+# #2080: C3 asks whether tags use only the tag types allowed for them, but took
+# its verdict and detail from CIccProfile::Validate(), so any validation finding
+# showed under it: a legal negative Z read as a tag-type warning (#2806). It now
+# calls CIccProfile::CheckTagTypes(). Same machinery as the #2787 test above: the
+# tracked sRGB v4 preference profile edited in memory, with C1 and C3 read back.
+# Needs IccProfLib only.
+function(iccdev_add_pawg_c3_tag_types_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPawgC3TagTypesTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pawg-c3-tag-types-only.cpp"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport/PawgReport.cpp"
+  )
+  target_compile_features(iccPawgC3TagTypesTest PRIVATE cxx_std_17)
+  target_include_directories(iccPawgC3TagTypesTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport"
+  )
+  target_link_libraries(iccPawgC3TagTypesTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  # Linked without LTO, for the reason given at iccPawgC5BToA0Test above.
+  set_target_properties(iccPawgC3TagTypesTest PROPERTIES INTERPROCEDURAL_OPTIMIZATION OFF)
+  add_dependencies(check iccPawgC3TagTypesTest)
+
+  add_test(
+    NAME iccdev.pawg-c3-tag-types-only
+    COMMAND "$<TARGET_FILE:iccPawgC3TagTypesTest>"
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+  )
+  # Runs in the ctest output dir because it writes its subject profiles and
+  # captured reports beside itself.
+  set_tests_properties(iccdev.pawg-c3-tag-types-only PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;pawg;issue-2080;regression"
+  )
+  if(WIN32)
+    set(_pawg_c3_tag_types_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPawgC3TagTypesTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pawg_c3_tag_types_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pawg-c3-tag-types-only PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pawg_c3_tag_types_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # DToB3Tag and BToD3Tag were missing from three PawgReport.cpp lists: C5's
 # optional tag tables, S1's channel-count checks, and C11's v5-only list.
 # ICC.1:2022 permits the 3 pair in LUT-based Input, Display and Output profiles
@@ -12224,6 +12276,7 @@ if(WIN32)
   iccdev_add_mpe_acs_zero_signature_test()
   iccdev_add_pawg_c5_cicp_test()
   iccdev_add_pawg_c5_btoa0_test()
+  iccdev_add_pawg_c3_tag_types_test()
   iccdev_add_pawg_dtob3_btod3_test()
   iccdev_add_gamut_xform_semantics_test()
   iccdev_add_rangemap_uninitialized_test()
@@ -12766,6 +12819,7 @@ iccdev_add_v5_required_tag_sets_test()
 iccdev_add_mpe_acs_zero_signature_test()
 iccdev_add_pawg_c5_cicp_test()
 iccdev_add_pawg_c5_btoa0_test()
+iccdev_add_pawg_c3_tag_types_test()
 iccdev_add_pawg_dtob3_btod3_test()
 iccdev_add_gamut_xform_semantics_test()
 iccdev_add_rangemap_uninitialized_test()

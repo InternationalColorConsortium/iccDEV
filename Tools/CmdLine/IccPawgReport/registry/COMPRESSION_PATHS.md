@@ -109,8 +109,9 @@ xsscx's note 2 was **substantiated** and, per the #1775 handoff ("add any needed
 compression-specific code paths then will add to overnight CI Fuzzing Harness"),
 is now closed with a dedicated measurement. Before it, `IccPawgReport` had no
 compression-specific logic: a compressed tag reached the report only indirectly -
-`TagTypeAllowedVerdict()`/`TagValueEncodingVerdict()` delegate to
-`CIccProfile::Validate()` (which already *accepts* `zut8`/`zxml`), and the
+`TagTypeAllowedVerdict()`/`TagValueEncodingVerdict()` delegated to
+`CIccProfile::Validate()` (which already *accepts* `zut8`/`zxml`; since #2080
+the first calls `CIccProfile::CheckTagTypes()`), and the
 known-vs-unknown classification (`IsSpecTag`, `AssessPrivateTags`) keys off tag
 **signature** names, never tag **type**, so a tag's compressed nature never
 entered PAWG's own classification.

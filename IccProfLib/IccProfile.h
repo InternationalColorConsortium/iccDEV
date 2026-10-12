@@ -170,6 +170,10 @@ public:
 
   void InitHeader();
   icValidateStatus Validate(std::string &sReport, std::string sSigPath="", const CIccProfile *pParentProfile=NULL) const;
+  // The step of Validate() that checks each tag's type against the types its
+  // signature allows.  Public so that a caller reporting on tag types alone,
+  // as PAWG check C3 does, need not take Validate()'s whole report (#2080).
+  icValidateStatus CheckTagTypes(std::string &sReport) const;
 
   icUInt16Number GetSpaceSamples() const;
   icUInt16Number GetParentSpaceSamples() const;
@@ -264,7 +268,6 @@ protected:
   // class that lists both needs both (#2562).
   bool HasDeviceToPcsTransform() const;
   bool HasPcsToDeviceTransform() const;
-  icValidateStatus CheckTagTypes(std::string &sReport) const;
   bool IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
                    icStructSignature structSig=icSigUndefinedStruct,
                    icArraySignature arraySig=icSigUndefinedArray) const;

@@ -579,6 +579,24 @@ std::string FirstCriticalReportLine(const std::string &report)
   return FirstReportLine(report);
 }
 
+// The first line of the report at the level of the status given, so that a
+// verdict is explained by a line of its own level and not by whichever line
+// the report happens to begin with.
+std::string FirstReportLineAt(const std::string &report, icValidateStatus status)
+{
+  const std::string prefix = status == icValidateWarning ? icMsgValidateWarning :
+                             status == icValidateNonCompliant ? icMsgValidateNonCompliant :
+                             icMsgValidateCriticalError;
+  std::istringstream in(report);
+  std::string line;
+  while (std::getline(in, line)) {
+    const size_t pos = line.find(prefix);
+    if (pos != std::string::npos)
+      return FirstReportLine(line.substr(pos));
+  }
+  return FirstReportLine(report);
+}
+
 typedef bool (*SigValidator)(const RawProfile &raw, size_t offset, size_t end);
 
 bool ValidatePe(const RawProfile &raw, size_t offset, size_t end)
@@ -1482,15 +1500,47 @@ PawgVerdict TagTypeAllowedVerdict(CIccProfile *pIcc, std::string &detail)
     return PawgVerdict::NotRun;
   }
 
+  // C3 asks about tag types alone.  Validate() also reports on the header, the
+  // required tags and every tag's contents, so its status and first line put
+  // any validation finding under C3: a negative colorant Z, which C1 already
+  // reports, showed here as a tag-type warning (#2806).  CheckTagTypes() is the
+  // step of Validate() that answers this question.
   std::string report;
-  const icValidateStatus status = pIcc->Validate(report);
+  const icValidateStatus status = pIcc->CheckTagTypes(report);
   if (status == icValidateOK) {
-    detail = "profile validation confirms tag signatures use allowed tag types";
+    detail = "tag signatures use allowed tag types";
   }
   else {
-    detail = FirstReportLine(report);
+    detail = FirstReportLineAt(report, status);
   }
   return ValidationStatusVerdict(status);
+}
+
+// What Validate() finds about the profile as a whole, when it is worse than
+// anything the tags (C1) or their types (C3) account for: a header field, a
+// tag the library requires, duplicate tags.  Such a finding belongs to no tag,
+// so the per-tag pass does not see it.  C3 showed it while it reported
+// Validate()'s whole verdict; C1, which already carries a critical finding of
+// this kind, carries the rest now, so narrowing C3 loses no verdict (#2080).
+bool WholeProfileFinding(CIccProfile *pIcc, PawgVerdict tagVerdict, PawgVerdict &verdict, std::string &detail)
+{
+  if (!pIcc)
+    return false;
+
+  std::string typeReport;
+  const PawgVerdict typeVerdict = ValidationStatusVerdict(pIcc->CheckTagTypes(typeReport));
+
+  std::string report;
+  const icValidateStatus status = pIcc->Validate(report);
+  const PawgVerdict whole = ValidationStatusVerdict(status);
+
+  // Ok < Warn < Fail in the enum; nothing here yields the other verdicts.
+  if (whole <= tagVerdict || whole <= typeVerdict)
+    return false;
+
+  verdict = whole;
+  detail = "IccProfLib validation: " + FirstReportLineAt(report, status);
+  return true;
 }
 
 // True for the three DEFLATE-backed tag TYPE signatures.  The compression
@@ -2192,6 +2242,8 @@ std::vector<PawgItem> EvaluatePawg(const RawProfile &raw, CIccProfile *pIcc,
   }
   else {
     tagValueVerdict = TagValueEncodingVerdict(pIcc, tagValueDetail);
+    if (tagValueVerdict == PawgVerdict::Ok || tagValueVerdict == PawgVerdict::Warn)
+      WholeProfileFinding(pIcc, tagValueVerdict, tagValueVerdict, tagValueDetail);
   }
   AddItem(items, "C1",
           "Are tag types correctly encoded (signature, structure, data types, ranges, encoded values)?",

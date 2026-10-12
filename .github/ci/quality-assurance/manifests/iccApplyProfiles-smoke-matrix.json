@@ -9,7 +9,7 @@
     "317a85b01c29550c5289e505079a549c12aaf92cfebc80d04b6626f717675fce": {
       "owner": "iccDEV QA maintainers",
       "expected_checklist_warn_ids": [
-        "S3", "S4", "C1", "C3", "C4", "C5", "C10", "C12"
+        "S3", "S4", "C1", "C4", "C5", "C10", "C12"
       ],
       "purpose": "transformation smoke only"
     }
