@@ -468,12 +468,11 @@ bool jsonToArray(const IccJson &j, T *vals, int n)
   icUInt32Number nSize = icJsonSafeU32(j.size(), &overflow);
   if (overflow) return false;
   icUInt32Number nExpected = (icUInt32Number)n;
-  icUInt32Number nLimit = std::min(nExpected, nSize);
-  icUInt32Number nValid = 0;
-  for (icUInt32Number i = 0; i < nLimit; i++) {
-    if (jsonToValue(j[i], vals[i])) nValid++;
+  if (nSize != nExpected) return false;
+  for (icUInt32Number i = 0; i < nExpected; i++) {
+    if (!jsonToValue(j[i], vals[i])) return false;
   }
-  return nValid == nExpected;
+  return true;
 }
 
 template <typename T>

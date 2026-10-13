@@ -2992,8 +2992,10 @@ endfunction()
 # different profile, while the XML reader refused them. The regression covers
 # spectral-range step counts, extra Tags entry members, missing or unknown MPE
 # element types, and numeric ranges in spectral viewing conditions and spectral
-# elements, plus the NamedColor2 device-coordinate count. Invalid cases fail
-# parsing; their controls still load.
+# elements. It also covers exact fixed-size numeric arrays, present
+# schema-required header field types and signatures, and NamedColor2
+# device-coordinate counts and values.
+# Invalid cases fail parsing; their controls still load.
 function(iccdev_add_json_reader_strictness_test)
   if(NOT TARGET "${TARGET_LIB_ICCJSON}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -3027,7 +3029,7 @@ function(iccdev_add_json_reader_strictness_test)
   endif()
   set_tests_properties(iccdev.json-reader-strictness PROPERTIES
     TIMEOUT 60
-    LABELS "iccdev;json;parser-symmetry;issue-2674;issue-2695;issue-2697;regression"
+    LABELS "iccdev;json;numeric-validation;parser-symmetry;issue-2674;issue-2695;issue-2697;regression"
   )
   if(WIN32)
     set(_iccjsonreaderstrictnesstest_env_mods
