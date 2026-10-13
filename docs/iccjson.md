@@ -73,6 +73,11 @@ or the supported `-infinity` and `+infinity` strings. Header `SpectralRange` and
 or `end` is an error. Calculator channel counts must be integers, and channel
 map sizes must fit the declared channel count. These checks prevent a saved ICC
 profile from silently encoding different values than the JSON document supplied.
+The `spectralViewingConditionsType` observer and illuminant ranges apply the
+same rule: wavelengths must be numeric, step counts must be integers, and
+optional Reserved values must fit their 16-bit fields.
+Spectral element wavelength ranges and NamedColor2 device-coordinate counts
+also reject wrong types instead of substituting zero.
 
 ## Typical Workflow
 

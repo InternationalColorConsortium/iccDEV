@@ -28,7 +28,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /*
- * json-reader-strictness.cpp -- three places where the JSON profile reader
+ * json-reader-strictness.cpp -- JSON parser fields that previously
  * accepted a malformed document and built a different profile from it, each
  * refused by the XML reader's twin.
  *
@@ -46,6 +46,13 @@
  *          the tag built without it, changing the transform; only an element
  *          whose own parser failed refused the profile.  The XML reader fails
  *          an unknown element type.
+ *   Spectral viewing conditions ignored failed numeric reads for ObserverFuncs
+ *          and IlluminantSPD ranges and narrowed Reserved to 16 bits. A bad
+ *          IlluminantSPD.start was saved as zero while XML refused it.
+ *   Spectral elements ignored failed numeric reads for wavelengths, saving a
+ *          bad EmissionMatrixElement start as zero while XML refused it.
+ *   NamedColor2 ignored a failed device-channel count read, saving a profile
+ *          with no device coordinates after a wrong-type count.
  *
  * Each case checks that the control document still loads and that the
  * mutated one is refused with the message the reader now gives.
@@ -54,6 +61,7 @@
 #include "IccProfileJson.h"
 #include "IccTagJson.h"
 #include "IccTagJsonFactory.h"
+#include "IccMpeJson.h"
 #include "IccMpeJsonFactory.h"
 #include "IccUtilJson.h"
 
@@ -183,6 +191,116 @@ void testSpectralSteps()
               "#2674: the largest storable step count still loads");
 }
 
+void testViewingConditionsNumbers()
+{
+  const IccJson control = IccJson::parse(
+    "{\"ObserverFuncs\":{\"start\":400,\"end\":500,\"steps\":3,"
+    "\"Reserved\":65535,\"data\":[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]},"
+    "\"IlluminantSPD\":{\"start\":400,\"end\":500,\"steps\":3,"
+    "\"Reserved\":65535,\"data\":[1.0,2.0,3.0]}}", nullptr, false);
+  check(!control.is_discarded(), "viewing conditions control is valid JSON");
+  if (control.is_discarded())
+    return;
+
+  CIccTagJsonSpectralViewingConditions tag;
+  std::string parseStr;
+  check(tag.ParseJson(control, parseStr),
+        "control: viewing conditions ranges and largest Reserved load");
+
+  auto expectBad = [&](const char *section, const char *field,
+                       const IccJson &value, const char *reason,
+                       const char *label) {
+    IccJson bad = control;
+    bad[section][field] = value;
+    CIccTagJsonSpectralViewingConditions parsed;
+    std::string error;
+    check(!parsed.ParseJson(bad, error), label);
+    std::string reasonLabel = std::string(label) + ": reason identifies field";
+    check(has(error, reason), reasonLabel.c_str());
+  };
+
+  expectBad("IlluminantSPD", "start", "wrong-type", "Invalid IlluminantSPD range",
+            "IlluminantSPD wrong-type start is refused");
+  expectBad("ObserverFuncs", "end", "wrong-type", "Invalid ObserverFuncs range",
+            "ObserverFuncs wrong-type end is refused");
+  expectBad("IlluminantSPD", "steps", 3.5, "Invalid IlluminantSPD range",
+            "IlluminantSPD fractional steps are refused");
+  expectBad("ObserverFuncs", "steps", 3.5, "Invalid ObserverFuncs range",
+            "ObserverFuncs fractional steps are refused");
+  expectBad("IlluminantSPD", "Reserved", 65536, "Invalid IlluminantSPD Reserved",
+            "IlluminantSPD over-wide Reserved is refused");
+  expectBad("ObserverFuncs", "Reserved", 65536, "Invalid ObserverFuncs Reserved",
+            "ObserverFuncs over-wide Reserved is refused");
+}
+
+void testSpectralElementNumbers()
+{
+  const IccJson control = IccJson::parse(
+    "{\"inputChannels\":3,\"outputChannels\":3,"
+    "\"wavelengths\":{\"start\":380,\"end\":780,\"steps\":2},"
+    "\"whiteData\":[1.0,1.0],"
+    "\"matrixData\":[1.0,0.0,0.0,0.0,1.0,0.0]}", nullptr, false);
+  check(!control.is_discarded(), "spectral matrix control is valid JSON");
+  if (control.is_discarded())
+    return;
+
+  CIccMpeJsonEmissionMatrix matrix;
+  std::string parseStr;
+  check(matrix.ParseJson(control, parseStr),
+        "control: a two-step spectral matrix loads");
+
+  auto expectBad = [&](const char *field, const IccJson &value,
+                       const char *label) {
+    IccJson bad = control;
+    bad["wavelengths"][field] = value;
+    CIccMpeJsonEmissionMatrix parsed;
+    std::string error;
+    check(!parsed.ParseJson(bad, error), label);
+    std::string reasonLabel = std::string(label) + ": reason names wavelengths";
+    check(has(error, "spectral range wavelengths"), reasonLabel.c_str());
+  };
+
+  expectBad("start", "wrong-type", "spectral matrix wrong-type start is refused");
+  expectBad("end", "wrong-type", "spectral matrix wrong-type end is refused");
+  expectBad("steps", 2.5, "spectral matrix fractional steps are refused");
+}
+
+void testNamedColorDeviceCount()
+{
+  const IccJson control = IccJson::parse(
+    "{\"countOfDeviceCoords\":4,\"vendorFlag\":0,\"colors\":["
+    "{\"name\":\"Example\",\"pcsCoords\":[0.1,0.2,0.3],"
+    "\"deviceCoords\":[1,2,3,4]}]}", nullptr, false);
+  check(!control.is_discarded(), "named color control is valid JSON");
+  if (control.is_discarded())
+    return;
+
+  CIccTagJsonNamedColor2 tag;
+  std::string parseStr;
+  check(tag.ParseJson(control, parseStr),
+        "control: four named color device coordinates load");
+
+  auto expectBad = [&](const IccJson &value, const char *label) {
+    IccJson bad = control;
+    bad["countOfDeviceCoords"] = value;
+    CIccTagJsonNamedColor2 parsed;
+    std::string error;
+    check(!parsed.ParseJson(bad, error), label);
+    std::string reasonLabel = std::string(label) + ": reason names count";
+    check(has(error, "Invalid countOfDeviceCoords"), reasonLabel.c_str());
+  };
+
+  expectBad("wrong-type", "named color wrong-type device count is refused");
+  expectBad(4.5, "named color fractional device count is refused");
+  IccJson missing = control;
+  missing.erase("countOfDeviceCoords");
+  CIccTagJsonNamedColor2 parsed;
+  std::string error;
+  check(!parsed.ParseJson(missing, error), "named color missing device count is refused");
+  check(has(error, "Invalid countOfDeviceCoords"),
+        "named color missing count reason names count");
+}
+
 /* #2695 */
 void testTagsEntry()
 {
@@ -226,6 +344,9 @@ int main()
   CIccMpeCreator::PushFactory(new CIccMpeJsonFactory());
 
   testSpectralSteps();
+  testViewingConditionsNumbers();
+  testSpectralElementNumbers();
+  testNamedColorDeviceCount();
   testTagsEntry();
   testMpeElements();
 

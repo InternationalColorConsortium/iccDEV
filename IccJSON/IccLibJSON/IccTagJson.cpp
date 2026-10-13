@@ -798,11 +798,20 @@ bool CIccTagJsonSpectralViewingConditions::ParseJson(const IccJson &j, std::stri
     const IccJson &obs = j["ObserverFuncs"];
     icFloat32Number start = 0.0f, end = 0.0f;
     int steps = 0;
-    jGetValue(obs, "start", start);
-    jGetValue(obs, "end",   end);
-    jGetValue(obs, "steps", steps);
+    if (!jGetValue(obs, "start", start) || !jGetValue(obs, "end", end) ||
+        !jsonExistsField(obs, "steps") ||
+        !(obs["steps"].is_number_integer() || obs["steps"].is_number_unsigned()) ||
+        !jGetValue(obs, "steps", steps)) {
+      parseStr += "Invalid ObserverFuncs range\n";
+      return false;
+    }
     unsigned int res2 = 0;
-    jGetValue(obs, "Reserved", res2);
+    if (jsonExistsField(obs, "Reserved") &&
+        (!(obs["Reserved"].is_number_integer() || obs["Reserved"].is_number_unsigned()) ||
+         !jGetValue(obs, "Reserved", res2) || res2 > 0xffff)) {
+      parseStr += "Invalid ObserverFuncs Reserved\n";
+      return false;
+    }
     if (steps <= 0 || steps > 0xffff) {
       parseStr += "ObserverFuncs steps out of range\n";
       return false;
@@ -849,11 +858,20 @@ bool CIccTagJsonSpectralViewingConditions::ParseJson(const IccJson &j, std::stri
     const IccJson &illum = j["IlluminantSPD"];
     icFloat32Number start = 0.0f, end = 0.0f;
     int steps = 0;
-    jGetValue(illum, "start", start);
-    jGetValue(illum, "end",   end);
-    jGetValue(illum, "steps", steps);
+    if (!jGetValue(illum, "start", start) || !jGetValue(illum, "end", end) ||
+        !jsonExistsField(illum, "steps") ||
+        !(illum["steps"].is_number_integer() || illum["steps"].is_number_unsigned()) ||
+        !jGetValue(illum, "steps", steps)) {
+      parseStr += "Invalid IlluminantSPD range\n";
+      return false;
+    }
     unsigned int res3 = 0;
-    jGetValue(illum, "Reserved", res3);
+    if (jsonExistsField(illum, "Reserved") &&
+        (!(illum["Reserved"].is_number_integer() || illum["Reserved"].is_number_unsigned()) ||
+         !jGetValue(illum, "Reserved", res3) || res3 > 0xffff)) {
+      parseStr += "Invalid IlluminantSPD Reserved\n";
+      return false;
+    }
     if (steps <= 0 || steps > 0xffff) {
       parseStr += "IlluminantSPD steps out of range\n";
       return false;
@@ -1062,10 +1080,16 @@ bool CIccTagJsonNamedColor2::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonNamedColor2::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonNamedColor2::ParseJson(const IccJson &j, std::string &parseStr)
 {
   icUInt32Number nDevCoords = 0;
-  jGetValue(j, "countOfDeviceCoords", nDevCoords);
+  if (!jsonExistsField(j, "countOfDeviceCoords") ||
+      !(j["countOfDeviceCoords"].is_number_integer() ||
+        j["countOfDeviceCoords"].is_number_unsigned()) ||
+      !jGetValue(j, "countOfDeviceCoords", nDevCoords)) {
+    parseStr += "Invalid countOfDeviceCoords in namedColor2Type\n";
+    return false;
+  }
   // ICC spec caps device colorants at 15. Reject pathologically large
   // counts before SetSize (which allocates nColors * (33 + nDevCoords*4)
   // bytes - an unbounded multiplication otherwise).
