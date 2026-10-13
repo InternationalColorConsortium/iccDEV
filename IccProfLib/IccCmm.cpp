@@ -3125,6 +3125,7 @@ CIccApplyXform *CIccPcsXform::GetNewApply(icStatusCMM &status)
     return NULL;
   }
 
+  status = icCmmStatOk;
   CIccPcsStepList::iterator i;
   CIccApplyPcsStep *pStep;
 

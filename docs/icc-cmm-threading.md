@@ -77,6 +77,10 @@ thread launches.
 - **Across apply objects**: to apply from several threads simultaneously,
   call `tcmm->GetNewApplyCmm(status)` once per caller. Each returned object
   owns its own pool of worker apply objects.
+- **Leading PCS adjustment**: an output-first CMM can begin with a PCS
+  conversion. Its `GetNewApplyCmm(status)` must report `icCmmStatOk` when it
+  returns a usable apply object. The public C ABI's `IccCmmGetApply()` relies
+  on this status even when the CMM's ordinary `Apply()` already works.
 - **No shared mutable xform state**: every worker allocates its own
   `CIccApplyCmm` from the wrapped CMM, so transforms that maintain
   per-apply scratch state (e.g. calculator stacks) stay isolated.
