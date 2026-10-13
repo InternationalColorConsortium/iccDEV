@@ -1725,12 +1725,12 @@ jobs:
           test -f docs/generated/html/dot_namedcmm-lane.svg
           test -f docs/generated/html/dot_search-lane.svg
           test -f docs/generated/html/dot_tolink-lane.svg
-          test -f docs/generated/html/icc__apply__qa__suite_8sh_source.html
+          test ! -f docs/generated/html/icc__apply__qa__suite_8sh_source.html
           grep -q 'iccDEV Documentation' docs/generated/html/index.html
           test -f docs/generated/html/curateddocumentation.html
           test -f docs/generated/html/curatedlibraries.html
           test -f docs/generated/html/curatedtools.html
-          test -f docs/generated/html/curatedtesting.html
+          test -f docs/generated/html/curatedmaintainerqa.html
           if grep -q 'superpowers' docs/generated/html/navtreedata.js; then
             echo "::error::Doxygen navigation contains excluded internal documentation"
             exit 1
