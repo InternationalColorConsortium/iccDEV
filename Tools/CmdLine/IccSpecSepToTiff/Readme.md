@@ -12,6 +12,14 @@ arguments, or with an incomplete or over-long command, names the problem and
 prints the syntax to standard error, then exits with status 255. A conversion is
 `argc=8` without a profile or `argc=9` with one:
 
+Optional `--tiles WIDTH HEIGHT` and `--bigtiff` switches are removed before
+the positional arguments below are parsed. Tile dimensions must be positive
+multiples of 16. Without these switches, output stays classic stripped TIFF.
+
+```sh
+iccSpecSepToTiff --tiles 256 256 --bigtiff out.tif 1 1 spectral/spec_ 1 10 1
+```
+
 | `argv` | Name | Meaning |
 | --- | --- | --- |
 | `argv[0]` | program | Path or name used to invoke `iccSpecSepToTiff` |
@@ -65,6 +73,18 @@ small in image viewers. For manual display review, use the larger
 single-channel TIFF inputs.
 
 ## Input and Output Notes
+
+- Stripped and tiled single-channel inputs may be combined. Tiled input/output
+  supports 8-bit unsigned, 16-bit unsigned, and 32-bit float samples. Interleaved
+  and separated output preserve every spectral sample; edge-tile padding is zero.
+  All concurrently open tiled inputs share a 256 MiB tile-band budget. The
+  next input is rejected before its tile band is allocated if it would exceed
+  the remaining budget. The output tile band has a separate 256 MiB cap; row
+  and stripped-input buffers are outside these tile-band limits. These are not
+  total-process memory guarantees.
+- Tiled output preserves the existing unspecified-extra-sample policy, profile
+  checks, resolution metadata, and partial-output cleanup. It does not generate
+  pyramids or vendor-specific SVS files.
 
 - Input TIFFs must have identical dimensions, resolution, resolution unit,
   sample format, photometric interpretation, and `BitsPerSample`. The unit is
@@ -130,12 +150,42 @@ single-channel TIFF inputs.
 - All input TIFFs remain open during conversion. The operating system's
   per-process open-file limit can therefore impose a lower practical channel
   cap than the TIFF field.
+- Concurrent tiled inputs share a 256 MiB decoded tile-band budget. A channel
+  set that exceeds it fails before output creation.
 
 There is no additional tool-specific cap on image dimensions, total pixels, or
 prefix length. Allocation failures and arithmetic overflow fail the conversion
 instead of producing a partial output.
 
 ## Maintainer QA
+
+### Diagnostic telemetry
+
+Telemetry is optional and off by default. It is compiled out unless CMake is
+configured with `ICCDEV_ENABLE_TELEMETRY=ON`; the QA presets are
+`linux-clang-tiff-telemetry-qa` and
+`vs2022-clangcl-x64-tiff-telemetry-qa`. Telemetry options are advertised by
+`--help` only in telemetry-enabled builds.
+
+Use `--telemetry=human` for phase and geometry events on standard error, or
+`--telemetry=jsonl --telemetry-file receipt.jsonl` for a new, exclusive-create
+JSONL receipt. The receipt path must not alias any input, profile, or output.
+Telemetry never changes the normal conversion summary on standard output.
+
+```sh
+iccSpecSepToTiff output.tif 0 0 spectral/spec_ 1 10 1 --telemetry=human
+iccSpecSepToTiff output.tif 0 0 spectral/spec_ 1 10 1 \
+  --telemetry=jsonl --telemetry-file receipt.jsonl
+```
+
+`logical_bytes_read` counts decoded row bytes from successful channel reads;
+`logical_bytes_written` counts packed output row bytes accepted by successful
+TIFF writes. They describe logical sample payload, not physical disk traffic,
+compressed size, TIFF metadata, or filesystem allocation. `channel_rows_read`
+counts successful source-row reads across all channels; `rows_written` counts
+completed output rows. Phase times aggregate open/profile, read, pack, write,
+and finalization work; there are no per-pixel timers. Throughput is null when
+the measured read/pack/write interval is zero.
 
 After building the tools, run the complete checked-in QA surface from any
 directory:
@@ -145,10 +195,11 @@ ICCDEV_TOOLS_DIR=/path/to/iccDEV/Build/Tools \
   /path/to/iccDEV/.github/scripts/iccdev-specsep-qa.sh
 ```
 
-The wrapper verifies the repository fixtures and runs the CLI argument, TIFF
-geometry, usage/metadata, and numbered-fixture matrix suites plus both
-optional-profile sweeps. Generated TIFFs and logs stay outside the source tree
-under `ICCDEV_TEST_OUTDIR`.
+The wrapper verifies the repository fixtures and runs the CLI argument,
+`--tiles`/`--bigtiff` output-layout, telemetry (when compiled), TIFF geometry,
+usage/metadata, and numbered-fixture matrix suites plus both optional-profile
+sweeps. Generated TIFFs and logs stay outside the source tree under
+`ICCDEV_TEST_OUTDIR`.
 
 To exercise the optional `profile` argument against an external or downloaded
 profile directory:

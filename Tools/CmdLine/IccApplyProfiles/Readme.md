@@ -14,6 +14,39 @@ iccApplyProfiles
 
 ## TIFF Pixel Encoding
 
+Stripped and tiled input use the same device-sample encoding. Tiled input
+supports 8-bit unsigned, 16-bit unsigned, and 32-bit float samples, interleaved
+or in separate planes, with top-left orientation. Partial edge tiles are clipped
+to the image dimensions. Subsampled YCbCr tiles are not converted to RGB.
+
+Output remains classic stripped TIFF by default. In the `imageFiles` JSON block,
+set `dstTileWidth` and `dstTileHeight` to positive multiples of 16 to request
+tiled output, and `dstBigTiff: true` to request BigTIFF. For example:
+
+```json
+{
+  "srcImageFile": "input.tif",
+  "dstImageFile": "output.tif",
+  "dstTileWidth": 256,
+  "dstTileHeight": 256,
+  "dstBigTiff": true
+}
+```
+
+This is the `imageFiles` block, not a complete profile-chain configuration.
+Both tile dimensions default to zero (stripped output); one nonzero dimension
+without the other, negative/fractional dimensions, and non-multiples of 16 are
+errors. Integral JSON numbers such as `16.0` and `1.6e1` are accepted as 16,
+consistent with the JSON Schema. Compression retains the existing NONE/LZW
+boolean contract; tiled output
+does not copy the source codec or pyramid. Tile-band buffers are limited to
+256 MiB per image and oversized bands fail before the destination is opened,
+preserving an existing destination. Padding outside the image
+is zeroed. Failed conversions discard partial output.
+
+Only the first main-chain IFD is transformed. ROI, SubIFD/pyramid rewriting,
+orientation normalization and SVS-specific decoding are not implemented.
+
 `iccApplyProfiles` treats TIFF pixel values as a *device encoding* regardless
 of color space or TIFF photometric tag. The rule applies symmetrically on
 read and write:
@@ -208,15 +241,14 @@ a partial sidecar and no terminal event; the outer QA runner remains
 authoritative for timeout, signal, and sanitizer classification.
 `--evidence-file FILE` writes the final JSON receipt after output flush, close,
 and successful reopen; the previous `--evidence-json FILE` spelling remains
-accepted.
-
-`--evidence-json FILE` writes a final JSON receipt only after the destination
-TIFF has finalized successfully. It includes the output SHA-256, requested thread
+accepted. It includes the output SHA-256, requested thread
 setting, selected execution mode, row-batch policy, and elapsed time. Like a
 telemetry sidecar, evidence must be a new non-aliasing path and uses owner-only
-POSIX permissions. Neither option
-writes machine-readable records to stdout or merges them into raw stderr, so
-image-producing pipelines and sanitizer diagnostics stay separable.
+POSIX permissions. Neither option writes machine-readable records to stdout or
+merges them into raw stderr, so image-producing pipelines and sanitizer
+diagnostics stay separable. If a sidecar fails after the TIFF has finalized,
+the command returns a failure while preserving the completed TIFF. Pixel or
+output-finalization failures still discard partial output.
 
 ## Output Destination Safety
 

@@ -68,6 +68,7 @@
 #include "IccCmdLineUtil.h"
 #include "IccSameFile.h"
 #include "IccProfLibVer.h"
+#include "IccTiffTelemetry.h"
 
 //===================================================
 
@@ -88,7 +89,7 @@ static void Usage(FILE *stream, const char *name)
   std::string safeName = icSanitizeConsoleText(strippedName);
 
   fprintf(stream, "Usage:\n");
-  fprintf(stream, "  %s output compress sep infile_prefix start end incr [profile]\n", safeName.c_str());
+  fprintf(stream, "  %s {--tiles WIDTH HEIGHT} {--bigtiff} output compress sep infile_prefix start end incr [profile]\n", safeName.c_str());
   fprintf(stream, "  %s -h | --help\n", safeName.c_str());
   fprintf(stream, "  %s --version\n\n", safeName.c_str());
   fprintf(stream, "Combine single-channel spectral TIFF files into one multi-sample TIFF.\n\n");
@@ -109,6 +110,9 @@ static void Usage(FILE *stream, const char *name)
   fprintf(stream, "  The range must land exactly on end and may descend with a negative incr.\n");
   fprintf(stream, "  infile_prefix is not a printf format string.\n");
   fprintf(stream, "  Every input must be a matching single-channel grayscale TIFF.\n");
+  fprintf(stream, "  Inputs may be stripped or tiled; tiled samples support 8, 16, or 32 bits.\n");
+  fprintf(stream, "  --tiles dimensions must be positive multiples of 16; default output is stripped.\n");
+  fprintf(stream, "  --bigtiff selects BigTIFF output; default output is classic TIFF.\n");
   fprintf(stream, "  An optional profile must be conformant and match SamplesPerPixel.\n\n");
 
   fprintf(stream, "Limits:\n");
@@ -117,6 +121,9 @@ static void Usage(FILE *stream, const char *name)
   fprintf(stream, "  TIFF width and height are limited to 32-bit unsigned values.\n");
   fprintf(stream, "  LZW output supports 8, 16, or 32 bits per sample.\n");
   fprintf(stream, "  Inputs stay open concurrently; the OS open-file limit may be lower.\n\n");
+#ifdef ICCDEV_TELEMETRY
+  CIccTiffTelemetry::Help(stream);
+#endif
   fprintf(stream, "Built with IccProfLib version " ICCPROFLIBVER "\n");
 }
 
@@ -180,6 +187,19 @@ static bool checkedSizeProduct(size_t a, size_t b, size_t &result)
   result = a * b;
   return true;
 }
+
+#ifdef ICCDEV_TELEMETRY
+template<typename T>
+static bool addTelemetryCount(unsigned long long &counter, T amount)
+{
+  const unsigned long long value = static_cast<unsigned long long>(amount);
+  if (value > std::numeric_limits<unsigned long long>::max() - counter)
+    return false;
+
+  counter += value;
+  return true;
+}
+#endif
 
 static const char *validateStatusName(icValidateStatus status)
 {
@@ -415,6 +435,14 @@ static void discardPartialOutput(CTiffImg &outfile, const char *path)
 
 int main(int argc, char* argv[]) {
   const int minargs = 8; // argc = 8 without profile, 9 with profile
+#ifdef ICCDEV_TELEMETRY
+  CIccTiffTelemetry telemetry;
+#else
+  for (int arg = 1; arg < argc; ++arg) {
+    if (icRejectTiffTelemetryOption(argv[arg]))
+      return -1;
+  }
+#endif
 
   // An explicit help/version request is the one invocation that is *not* an
   // error, so it prints on stdout and exits 0, matching iccRoundTrip and
@@ -430,6 +458,43 @@ int main(int argc, char* argv[]) {
     PrintVersion();
     return 0;
   }
+  unsigned int tileWidth = 0, tileHeight = 0;
+  bool bigTiff = false;
+  std::vector<char*> positional;
+  if (argc)
+    positional.push_back(argv[0]);
+  for (int arg = 1; arg < argc; arg++) {
+#ifdef ICCDEV_TELEMETRY
+    int telemetryResult = telemetry.ParseOption(arg, argc, argv);
+    if (telemetryResult < 0)
+      return -1;
+    if (telemetryResult > 0)
+      continue;
+#endif
+    if (!strcmp(argv[arg], "--tiles")) {
+      int w = 0, h = 0;
+      if (tileWidth || arg + 2 >= argc ||
+          !parseIntArg(argv[arg + 1], w) || !parseIntArg(argv[arg + 2], h) ||
+          w <= 0 || h <= 0 || w % 16 || h % 16) {
+        fprintf(stderr, "Invalid --tiles dimensions (expected positive multiples of 16)\n");
+        return -1;
+      }
+      tileWidth = static_cast<unsigned int>(w);
+      tileHeight = static_cast<unsigned int>(h);
+      arg += 2;
+    }
+    else if (!strcmp(argv[arg], "--bigtiff")) {
+      if (bigTiff) {
+        fprintf(stderr, "Duplicate --bigtiff option\n");
+        return -1;
+      }
+      bigTiff = true;
+    }
+    else
+      positional.push_back(argv[arg]);
+  }
+  argc = static_cast<int>(positional.size());
+  argv = positional.data();
 
   if (argc < minargs || argc > 9) {
     // Say which way the invocation is malformed before the syntax block: a bare
@@ -505,6 +570,80 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
+#ifdef ICCDEV_TELEMETRY
+  std::vector<std::string> protectedPaths;
+  if (telemetry.Active()) {
+    try {
+      protectedPaths.reserve(nSamples + (argc > 8 ? 2u : 1u));
+      for (size_t i = 0; i < nSamples; ++i) {
+        long long channelNum = (long long)start + (long long)i * (long long)step;
+        protectedPaths.push_back(std::string(argv[4]) + std::to_string(channelNum));
+      }
+      protectedPaths.push_back(argv[1]);
+      if (argc > 8)
+        protectedPaths.push_back(argv[8]);
+    }
+    catch (const std::bad_alloc &) {
+      fprintf(stderr, "Unable to allocate protected path list for telemetry.\n");
+      return -1;
+    }
+  }
+  if (!telemetry.Start("iccSpecSepToTiff", protectedPaths))
+    return -1;
+  if (telemetry.Active())
+    telemetry.SetStage("open_inputs");
+#endif
+
+#ifdef ICCDEV_TELEMETRY
+  const bool telemetryActive = telemetry.Active();
+  double openProfileStart = telemetryActive ? CIccTiffTelemetry::Now() : 0.0;
+  double readMilliseconds = 0.0;
+  double packMilliseconds = 0.0;
+  double writeMilliseconds = 0.0;
+  double finalizeMilliseconds = 0.0;
+  double openProfileMilliseconds = 0.0;
+  unsigned long long successfulChannelRows = 0;
+  unsigned long long logicalInputBytes = 0;
+  unsigned long long completedOutputRows = 0;
+  unsigned long long completedOutputPixels = 0;
+  unsigned long long logicalOutputBytes = 0;
+  unsigned long long tiledInputCount = 0;
+  unsigned long long bigTiffInputCount = 0;
+  bool telemetryCountersValid = true;
+  const auto failTelemetry = [&](const char *reason, const char *stage) {
+    if (!telemetryActive)
+      return;
+    telemetry.SetStage(stage);
+    const std::string fields =
+      "\"status\":\"tool_failure\",\"reason\":" +
+      CIccTiffTelemetry::JsonString(reason) +
+      ",\"stage\":" + CIccTiffTelemetry::JsonString(stage) +
+      ",\"channel_rows_read\":" +
+      (telemetryCountersValid ? std::to_string(successfulChannelRows) : "null") +
+      ",\"logical_bytes_read\":" +
+      (telemetryCountersValid ? std::to_string(logicalInputBytes) : "null") +
+      ",\"rows_written\":" +
+      (telemetryCountersValid ? std::to_string(completedOutputRows) : "null") +
+      ",\"pixels_written\":" +
+      (telemetryCountersValid ? std::to_string(completedOutputPixels) : "null") +
+      ",\"logical_bytes_written\":" +
+      (telemetryCountersValid ? std::to_string(logicalOutputBytes) : "null") +
+      ",\"counters_valid\":" + (telemetryCountersValid ? "true" : "false") +
+      ",\"open_profile_ms\":" + CIccTiffTelemetry::Number(openProfileMilliseconds) +
+      ",\"read_ms\":" + CIccTiffTelemetry::Number(readMilliseconds) +
+      ",\"pack_ms\":" + CIccTiffTelemetry::Number(packMilliseconds) +
+      ",\"write_ms\":" + CIccTiffTelemetry::Number(writeMilliseconds) +
+      ",\"finalize_ms\":" + CIccTiffTelemetry::Number(finalizeMilliseconds);
+    telemetry.Emit("run_failed", fields);
+  };
+#endif
+
+  // Each tiled input keeps one decoded tile band until the conversion ends.
+  // Give Open() the remaining budget so the aggregate cannot grow by 256 MiB
+  // for every channel, and reject before allocating the band that exceeds it.
+  const unsigned int maxInputTileBandBytes = 256u * 1024u * 1024u;
+  unsigned int remainingInputTileBandBytes = maxInputTileBandBytes;
+
   // open ALL input files
   std::vector<CTiffImg> infile;
   try {
@@ -524,11 +663,23 @@ int main(int argc, char* argv[]) {
     // built here.
     if (icOutputIsInput(argv[1], filename.c_str()))
       return -1;
-    if (!infile[i].Open(filename.c_str())) {
+    if (!infile[i].Open(filename.c_str(), false, 0,
+                        remainingInputTileBandBytes)) {
       fprintf(stderr, "Cannot open input %s\n",
               icSanitizeConsoleText(filename).c_str());
       return -1;
     }
+    remainingInputTileBandBytes -= infile[i].GetTileBandSize();
+#ifdef ICCDEV_TELEMETRY
+    if (telemetryActive) {
+      telemetryCountersValid =
+        addTelemetryCount(tiledInputCount, infile[i].IsTiled() ? 1u : 0u) &&
+        telemetryCountersValid;
+      telemetryCountersValid =
+        addTelemetryCount(bigTiffInputCount, infile[i].IsBigTiff() ? 1u : 0u) &&
+        telemetryCountersValid;
+    }
+#endif
 
     if (infile[i].GetSamples() != 1) {
       fprintf(stderr, "input %s does not have 1 sample per pixel\n",
@@ -624,6 +775,27 @@ int main(int argc, char* argv[]) {
   icUInt8Number *inbuf = inbufffer.get();
   icUInt8Number *outbuf = outbuffer.get();
 
+#ifdef ICCDEV_TELEMETRY
+  if (telemetryActive) {
+    std::string geometry =
+      "\"width\":" + std::to_string(f->GetWidth()) +
+      ",\"height\":" + std::to_string(f->GetHeight()) +
+      ",\"bits_per_sample\":" + std::to_string(f->GetBitsPerSample()) +
+      ",\"samples_per_pixel\":" + std::to_string(nSamples) +
+      ",\"directories_visited\":" + std::to_string(nSamples) +
+      ",\"planar\":\"" + (bSep ? "separate" : "interleaved") +
+      "\",\"compression\":\"" + (bCompress ? "lzw" : "none") +
+      "\",\"input_tiled_count\":" + std::to_string(tiledInputCount) +
+      ",\"input_bigtiff_count\":" + std::to_string(bigTiffInputCount) +
+      ",\"output_tiled\":" + (tileWidth ? "true" : "false") +
+      ",\"output_tile_width\":" + std::to_string(tileWidth) +
+      ",\"output_tile_height\":" + std::to_string(tileHeight) +
+      ",\"output_bigtiff\":" + (bigTiff ? "true" : "false");
+    if (!telemetry.Emit("geometry_ready", geometry))
+      return -1;
+  }
+#endif
+
   float xRes = f->GetXRes();
   float yRes = f->GetYRes();
 
@@ -640,11 +812,22 @@ int main(int argc, char* argv[]) {
   // failed run with output on stdout, so "stdout empty" could not be read as
   // "nothing was produced" -- the very distinction #1514 asked for.
   std::string acceptedProfileSummary;
+#ifdef ICCDEV_TELEMETRY
+  if (telemetryActive)
+    telemetry.SetStage("validate_profile");
+#endif
   if (argc>8) {
     if (!readValidateProfile(argv[8], nSamples, destProfile, destProfileLength,
                              acceptedProfileSummary))
       return -1;
   }
+
+#ifdef ICCDEV_TELEMETRY
+  if (telemetryActive)
+    openProfileMilliseconds = CIccTiffTelemetry::Since(openProfileStart);
+  if (telemetryActive)
+    telemetry.SetStage("create_output");
+#endif
 
   CTiffImg outfile;
   unsigned int nExtraSamples = nSamples > 1 ? (unsigned int)nSamples - 1 : 0;
@@ -685,37 +868,74 @@ int main(int argc, char* argv[]) {
     return -1;
   if (!outfile.Create(argv[1], f->GetWidth(), f->GetHeight(), f->GetBitsPerSample(), PHOTO_MINISBLACK,
                      (unsigned int)nSamples, nExtraSamples, xRes, yRes, bCompress, bSep,
-                     f->GetResolutionUnit())) {
+                     f->GetResolutionUnit(), tileWidth, tileHeight, bigTiff)) {
     fprintf(stderr, "Unable to create %s\n", icSanitizeConsoleText(argv[1]).c_str());
     if (!outputExisted && outfile.WasOutputOpened())
       remove(argv[1]);
+#ifdef ICCDEV_TELEMETRY
+    failTelemetry("output_create_failed", "create_output");
+#endif
     return -1;
   }
 
+#ifdef ICCDEV_TELEMETRY
+  if (telemetryActive)
+    telemetry.SetStage("embed_profile");
+#endif
   if (destProfile) {
     if (!outfile.SetIccProfile( destProfile.get(), (unsigned int)destProfileLength )) {
       fprintf(stderr, "Unable to embed ICC profile in %s\n",
               icSanitizeConsoleText(argv[1]).c_str());
       discardPartialOutput(outfile, argv[1]);
+#ifdef ICCDEV_TELEMETRY
+      failTelemetry("profile_embedding_failed", "embed_profile");
+#endif
       return -1;
     }
   }
 
+#ifdef ICCDEV_TELEMETRY
+  if (telemetryActive)
+    telemetry.SetStage("read_pack_write");
+#endif
   for (unsigned int i=0; i<f->GetHeight(); i++) {
     icUInt8Number *sptr, *tptr;
+#ifdef ICCDEV_TELEMETRY
+    double readStart = telemetryActive ? CIccTiffTelemetry::Now() : 0.0;
+#endif
     for (size_t j=0; j<nSamples; j++) {
       sptr = inbuf + j*bytePerLine;
       if (!infile[j].ReadLine(sptr)) {
         fprintf(stderr, "Error reading line %u of file %zu\n", i, j);
+#ifdef ICCDEV_TELEMETRY
+        if (telemetryActive) {
+          readMilliseconds += CIccTiffTelemetry::Since(readStart);
+          failTelemetry("input_read_failed", "read_channel_rows");
+        }
+#endif
         discardPartialOutput(outfile, argv[1]);
         return -1;
       }
+#ifdef ICCDEV_TELEMETRY
+      if (telemetryActive) {
+        const bool rowCountOk = addTelemetryCount(successfulChannelRows, 1u);
+        const bool byteCountOk = addTelemetryCount(logicalInputBytes, bytePerLine);
+        telemetryCountersValid = rowCountOk && byteCountOk && telemetryCountersValid;
+      }
+#endif
       if (invert) {     // float samples are rejected above, so this XOR only ever sees integer data
         for (size_t k=0; k<bytePerLine; k++) {
           sptr[k] ^= 0xff;
         }
       }
     }
+#ifdef ICCDEV_TELEMETRY
+    if (telemetryActive) {
+      readMilliseconds += CIccTiffTelemetry::Since(readStart);
+      telemetry.SetStage("pack_row");
+    }
+    double packStart = telemetryActive ? CIccTiffTelemetry::Now() : 0.0;
+#endif
     tptr = outbuf;
     for (unsigned int k=0; k<f->GetWidth(); k++) {
       for (size_t j=0; j<nSamples; j++) {
@@ -724,16 +944,94 @@ int main(int argc, char* argv[]) {
         tptr += bytesPerSample;
       }
     }
+#ifdef ICCDEV_TELEMETRY
+    if (telemetryActive) {
+      packMilliseconds += CIccTiffTelemetry::Since(packStart);
+      telemetry.SetStage("write_row");
+    }
+    double writeStart = telemetryActive ? CIccTiffTelemetry::Now() : 0.0;
+#endif
     if (!outfile.WriteLine(outbuf)) {
       fprintf(stderr, "Error writing line %u to %s\n", i,
               icSanitizeConsoleText(argv[1]).c_str());
+#ifdef ICCDEV_TELEMETRY
+      if (telemetryActive) {
+        writeMilliseconds += CIccTiffTelemetry::Since(writeStart);
+        failTelemetry("output_write_failed", "write_row");
+      }
+#endif
       discardPartialOutput(outfile, argv[1]);
       return -1;
     }
+#ifdef ICCDEV_TELEMETRY
+    if (telemetryActive) {
+      writeMilliseconds += CIccTiffTelemetry::Since(writeStart);
+      const bool rowsOk = addTelemetryCount(completedOutputRows, 1u);
+      const bool pixelsOk = addTelemetryCount(completedOutputPixels, f->GetWidth());
+      const bool bytesOk = addTelemetryCount(logicalOutputBytes, outSize);
+      telemetryCountersValid = rowsOk && pixelsOk && bytesOk && telemetryCountersValid;
+    }
+#endif
   }
   
+#ifdef ICCDEV_TELEMETRY
+  if (telemetryActive)
+    telemetry.SetStage("finalize_output");
+  double finalizeStart = telemetryActive ? CIccTiffTelemetry::Now() : 0.0;
+#endif
   // We need to close output first, to use all pointer data before buffers are destructed.
-  outfile.Close();
+  if (!outfile.Close()) {
+    fprintf(stderr, "Unable to finalize %s\n", icSanitizeConsoleText(argv[1]).c_str());
+#ifdef ICCDEV_TELEMETRY
+    if (telemetryActive) {
+      finalizeMilliseconds += CIccTiffTelemetry::Since(finalizeStart);
+      failTelemetry("output_finalize_failed", "finalize_output");
+    }
+#endif
+    remove(argv[1]);
+    return -1;
+  }
+#ifdef ICCDEV_TELEMETRY
+  if (telemetryActive) {
+    finalizeMilliseconds += CIccTiffTelemetry::Since(finalizeStart);
+    const double loopMilliseconds =
+      readMilliseconds + packMilliseconds + writeMilliseconds;
+    const std::string completedFields =
+      "\"width\":" + std::to_string(f->GetWidth()) +
+      ",\"height\":" + std::to_string(f->GetHeight()) +
+      ",\"bits_per_sample\":" + std::to_string(f->GetBitsPerSample()) +
+      ",\"samples_per_pixel\":" + std::to_string(nSamples) +
+      ",\"planar\":" + CIccTiffTelemetry::JsonString(bSep ? "separate" : "interleaved") +
+      ",\"compression\":" + CIccTiffTelemetry::JsonString(bCompress ? "lzw" : "none") +
+      ",\"output_tiled\":" + (tileWidth ? "true" : "false") +
+      ",\"output_bigtiff\":" + (bigTiff ? "true" : "false") +
+      ",\"directories_visited\":" + std::to_string(nSamples) +
+      ",\"rows_written\":" +
+      (telemetryCountersValid ? std::to_string(completedOutputRows) : "null") +
+      ",\"channel_rows_read\":" +
+      (telemetryCountersValid ? std::to_string(successfulChannelRows) : "null") +
+      ",\"logical_bytes_read\":" +
+      (telemetryCountersValid ? std::to_string(logicalInputBytes) : "null") +
+      ",\"logical_bytes_written\":" +
+      (telemetryCountersValid ? std::to_string(logicalOutputBytes) : "null") +
+      ",\"pixels_written\":" +
+      (telemetryCountersValid ? std::to_string(completedOutputPixels) : "null") +
+      ",\"counters_valid\":" + (telemetryCountersValid ? "true" : "false") +
+      ",\"open_profile_ms\":" + CIccTiffTelemetry::Number(openProfileMilliseconds) +
+      ",\"read_ms\":" + CIccTiffTelemetry::Number(readMilliseconds) +
+      ",\"pack_ms\":" + CIccTiffTelemetry::Number(packMilliseconds) +
+      ",\"write_ms\":" + CIccTiffTelemetry::Number(writeMilliseconds) +
+      ",\"finalize_ms\":" + CIccTiffTelemetry::Number(finalizeMilliseconds) +
+      ",\"loop_ms\":" + CIccTiffTelemetry::Number(loopMilliseconds) +
+      ",\"logical_write_bytes_per_second\":" +
+      (telemetryCountersValid && loopMilliseconds > 0.0
+        ? CIccTiffTelemetry::Number(
+            static_cast<double>(logicalOutputBytes) * 1000.0 / loopMilliseconds)
+        : "null");
+    if (!telemetry.Finish(completedFields))
+      return -1;
+  }
+#endif
 
   if (!acceptedProfileSummary.empty())
     printf("%s\n", acceptedProfileSummary.c_str());

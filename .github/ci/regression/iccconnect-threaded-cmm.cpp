@@ -318,8 +318,8 @@ int main(int argc, char** argv)
     std::unique_lock<std::mutex> lock(startMutex);
     startCondition.wait(lock, [&]() { return ready == 2; });
     start = true;
+    startCondition.notify_all();
   }
-  startCondition.notify_all();
   threadA.join();
   threadB.join();
 

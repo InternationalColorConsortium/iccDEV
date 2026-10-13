@@ -134,6 +134,22 @@ node throughput.
 | `iccFromCube` | Convert `.cube` 3D LUT to ICC.2 DeviceLink | `iccFromCube input.cube output.icc` |
 | `iccBenchApply` | Measure profile-chain apply throughput and checksums | `iccBenchApply -suite -csv -threads 1,2,8` |
 
+`iccTiffDump` inspects classic/BigTIFF metadata without decoding pixel data.
+Use `--ifd N` to select a zero-based main-chain directory for inspection or ICC
+extraction, and `--list-directories` to inventory directories and SubIFD offsets.
+Inventory JSON uses `--evidence-json --list-directories`; SubIFDs are not followed.
+
+`iccApplyProfiles` accepts tiled input and enables tiled output with paired
+`imageFiles.dstTileWidth`/`dstTileHeight` (positive multiples of 16); set
+`dstBigTiff: true` for BigTIFF output. `iccSpecSepToTiff` accepts tiled grayscale
+inputs and offers `--tiles WIDTH HEIGHT` and `--bigtiff` for output. Defaults
+remain classic stripped TIFF with the existing NONE/LZW compression controls.
+Tiles support 8/16-bit unsigned and 32-bit float samples; tile-band buffers are
+capped at 256 MiB per image. `iccSpecSepToTiff` also caps the combined decoded
+tile bands of its concurrently open inputs at 256 MiB and rejects an input
+before allocating a band that would exceed the remaining budget. These options
+do not imply SVS-specific decoding, ROI, SubIFD processing, or pyramid rewriting.
+
 `iccSpecSepToTiff` treats the input argument as a filename prefix and appends
 each channel number from `start` through `end`. For a single input named
 `spec_3`, pass prefix `spec_` with `start=3` and `end=3`. The prefix is literal,

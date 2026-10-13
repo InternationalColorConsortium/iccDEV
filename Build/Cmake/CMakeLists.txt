@@ -701,10 +701,10 @@ option(ICCDEV_ENABLE_PERF_MONITORING
   OFF)
 if(ICCDEV_ENABLE_PERF_MONITORING AND NOT ICCDEV_ENABLE_TELEMETRY)
   set(ICCDEV_ENABLE_TELEMETRY ON CACHE BOOL
-    "Build apply-tool receipts and aggregate CLUT/threaded-CMM telemetry" FORCE)
+    "Build tool receipts and aggregate CLUT/threaded-CMM telemetry" FORCE)
 endif()
 option(ICCDEV_ENABLE_TELEMETRY
-  "Build apply-tool receipts and aggregate CLUT/threaded-CMM telemetry"
+  "Build tool receipts and aggregate CLUT/threaded-CMM telemetry"
   OFF)
 if(ICCDEV_ENABLE_PERF_MONITORING)
   message(DEPRECATION

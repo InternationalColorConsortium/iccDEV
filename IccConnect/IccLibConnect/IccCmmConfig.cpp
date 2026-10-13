@@ -434,6 +434,8 @@ void CIccCfgImageApply::reset()
   m_dstCompression = icDstBoolTrue;
   m_dstPlanar = icDstBoolFalse;
   m_dstEmbedIcc = icDstBoolTrue;
+  m_dstTileWidth = m_dstTileHeight = 0;
+  m_dstBigTiff = false;
 }
 
 int CIccCfgImageApply::fromArgs(const char** args, int nArg, bool bReset)
@@ -543,6 +545,34 @@ bool CIccCfgImageApply::fromJson(json j, bool bReset)
     return false;
   if (j.contains("dstEmbedIcc") && !jsonToValue(j["dstEmbedIcc"], m_dstEmbedIcc))
     return false;
+  unsigned int width = m_dstTileWidth, height = m_dstTileHeight;
+  for (const char *key : {"dstTileWidth", "dstTileHeight"}) {
+    if (j.contains(key)) {
+      const json &value = j[key];
+      if (!value.is_number())
+        return false;
+      // JSON Schema integers include 16.0 and 1.6e1. Every uint32 value is
+      // exactly representable as double; validate before the narrowing cast.
+      const double dimension = value.get<double>();
+      if (!std::isfinite(dimension) || dimension < 0 || dimension > UINT32_MAX ||
+          std::floor(dimension) != dimension)
+        return false;
+      if (key == std::string("dstTileWidth"))
+        width = static_cast<unsigned int>(dimension);
+      else
+        height = static_cast<unsigned int>(dimension);
+    }
+  }
+  if ((width == 0) != (height == 0) ||
+      (width && (width % 16 || height % 16)))
+    return false;
+  if (j.contains("dstBigTiff")) {
+    if (!j["dstBigTiff"].is_boolean())
+      return false;
+    m_dstBigTiff = j["dstBigTiff"].get<bool>();
+  }
+  m_dstTileWidth = width;
+  m_dstTileHeight = height;
 
   return true;
 }
@@ -560,6 +590,12 @@ void CIccCfgImageApply::toJson(json& j) const
   setDstBool(j, "dstCompression", m_dstCompression);
   setDstBool(j, "dstPlanar", m_dstPlanar);
   setDstBool(j, "dstEmbedIcc", m_dstEmbedIcc);
+  if (m_dstTileWidth) {
+    j["dstTileWidth"] = m_dstTileWidth;
+    j["dstTileHeight"] = m_dstTileHeight;
+  }
+  if (m_dstBigTiff)
+    j["dstBigTiff"] = true;
 }
 
 CIccCfgConnectOptions::CIccCfgConnectOptions()

@@ -39,7 +39,8 @@ def type_matches(value, schema_type):
     if schema_type == "boolean":
         return isinstance(value, bool)
     if schema_type == "integer":
-        return isinstance(value, int) and not isinstance(value, bool)
+        return ((isinstance(value, int) and not isinstance(value, bool)) or
+                (isinstance(value, float) and value.is_integer()))
     if schema_type == "number":
         return isinstance(value, numbers.Real) and not isinstance(value, bool)
     if schema_type == "string":
@@ -64,6 +65,11 @@ def validate_fallback(root, schema, value, path="$"):
     if "$ref" in schema:
         validate_fallback(root, resolve_ref(root, schema["$ref"]), value, path)
         return
+    for branch in schema.get("allOf", []):
+        validate_fallback(root, branch, value, path)
+
+    if "if" in schema and validate_branch(root, schema["if"], value, path):
+        validate_fallback(root, schema.get("then", {}), value, path)
 
     if "anyOf" in schema:
         if not any(validate_branch(root, branch, value, path) for branch in schema["anyOf"]):
@@ -87,6 +93,8 @@ def validate_fallback(root, schema, value, path="$"):
 
     if "maximum" in schema and isinstance(value, numbers.Real) and value > schema["maximum"]:
         raise ValidationError(path + ": value above maximum")
+    if "multipleOf" in schema and isinstance(value, numbers.Real) and value % schema["multipleOf"]:
+        raise ValidationError(path + ": value is not a required multiple")
 
     if "exclusiveMinimum" in schema and isinstance(value, numbers.Real) and value <= schema["exclusiveMinimum"]:
         raise ValidationError(path + ": value below exclusive minimum")
@@ -179,6 +187,38 @@ for name, data in negative_cases.items():
         continue
     failures.append((Path(name), "negative case unexpectedly validated"))
 
+tile_positive = [
+    {}, {"dstTileWidth": 0}, {"dstTileWidth": 16, "dstTileHeight": 32},
+    {"dstTileWidth": 16.0, "dstTileHeight": 3.2e1},
+    {"dstTileWidth": 0.0, "dstTileHeight": 0.0},
+    {"dstTileWidth": 4294967280.0, "dstTileHeight": 16},
+    {"dstTileWidth": 16, "dstTileHeight": 32, "dstBigTiff": True},
+]
+tile_negative = [
+    {"dstTileWidth": 16}, {"dstTileHeight": 16},
+    {"dstTileWidth": 16, "dstTileHeight": 0},
+    {"dstTileWidth": -16, "dstTileHeight": 16},
+    {"dstTileWidth": 17, "dstTileHeight": 16},
+    {"dstTileWidth": 16.5, "dstTileHeight": 16},
+    {"dstTileWidth": 4294967296, "dstTileHeight": 16},
+    {"dstTileWidth": 4294967296.0, "dstTileHeight": 16},
+    {"dstTileWidth": True, "dstTileHeight": 16},
+    {"dstTileWidth": None, "dstTileHeight": 16},
+    {"dstTileWidth": "16", "dstTileHeight": 16},
+    {"dstBigTiff": "true"},
+]
+for tile_validator in [validator, None]:
+    for valid, cases in [(True, tile_positive), (False, tile_negative)]:
+        for image in cases:
+            data = {"imageFiles": image, "profileSequence": []}
+            try:
+                validate_document(schema, tile_validator, data)
+                if not valid:
+                    failures.append((Path("tile-contract"), "invalid tile config validated: " + str(image)))
+            except ValidationError as exc:
+                if valid:
+                    failures.append((Path("tile-contract"), str(exc)))
+
 if failures:
     print("[FAIL] connect-config schema validation failed")
     for path, reason in failures[:20]:
@@ -190,4 +230,5 @@ if failures:
 print("[OK] connect-config schema valid using " + engine)
 print("[OK] checked configs validated: " + str(len(config_paths)))
 print("[OK] negative schema shape checks rejected: " + str(len(negative_cases)))
+print("[OK] tile schema contracts checked with selected and fallback validators")
 PY

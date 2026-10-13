@@ -9093,6 +9093,83 @@ endfunction()
 # sized the strip buffer from the interleaved row width so the allocation grew with
 # the square of SamplesPerPixel. Like iccdev.tiff-create-overflow, this compiles
 # TiffImg.cpp directly because CTiffImg is tool code rather than part of IccProfLib.
+function(iccdev_add_tiff_tiles_test)
+  if(NOT TARGET iccTiffDump OR NOT TARGET iccApplyProfiles OR
+     NOT TARGET iccSpecSepToTiff OR NOT TARGET iccFromXml OR
+     NOT TARGET "${TARGET_LIB_ICCCONNECT}")
+    return()
+  endif()
+  iccdev_add_regression_executable(iccTiffTilesTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/tiff-tiles.cpp"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccApplyProfiles/TiffImg.cpp")
+  target_compile_features(iccTiffTilesTest PRIVATE cxx_std_17)
+  target_include_directories(iccTiffTilesTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccApplyProfiles")
+  target_link_libraries(iccTiffTilesTest PRIVATE
+    ${TARGET_LIB_ICCCONNECT} ${TARGET_LIB_ICCPROFLIB} TIFF::TIFF)
+  add_dependencies(check iccTiffTilesTest iccTiffDump iccApplyProfiles iccSpecSepToTiff iccFromXml)
+  add_test(NAME iccdev.tiff-tiles
+    COMMAND "${CMAKE_COMMAND}" -E env ${ICCDEV_TEST_ENV} "$<TARGET_FILE:iccTiffTilesTest>")
+  set_tests_properties(iccdev.tiff-tiles PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 120 LABELS "iccdev;tools;tiff;tiles;spectral;regression;issue-2381")
+  find_package(Python3 COMPONENTS Interpreter QUIET)
+  set(_tile_tests iccdev.tiff-tiles)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME iccdev.tiff-tiles-cli
+      COMMAND "${CMAKE_COMMAND}" -E env ${ICCDEV_TEST_ENV} "${Python3_EXECUTABLE}"
+        "${ICCDEV_REPO_ROOT}/.github/scripts/test_tiff_tiles.py"
+        --fixture "$<TARGET_FILE:iccTiffTilesTest>"
+        --dump "$<TARGET_FILE:iccTiffDump>"
+        --apply "$<TARGET_FILE:iccApplyProfiles>"
+        --specsep "$<TARGET_FILE:iccSpecSepToTiff>"
+        --fromxml "$<TARGET_FILE:iccFromXml>"
+        --source "${ICCDEV_REPO_ROOT}")
+    set_tests_properties(iccdev.tiff-tiles-cli PROPERTIES
+      TIMEOUT 120 LABELS "iccdev;tools;tiff;tiles;spectral;regression;issue-2381")
+    list(APPEND _tile_tests iccdev.tiff-tiles-cli)
+    add_test(NAME iccdev.tiff-tile-budget-cli
+      COMMAND "${CMAKE_COMMAND}" -E env ${ICCDEV_TEST_ENV} "${Python3_EXECUTABLE}"
+        "${ICCDEV_REPO_ROOT}/.github/scripts/test_tiff_tile_budget.py"
+        --fixture "$<TARGET_FILE:iccTiffTilesTest>"
+        --specsep "$<TARGET_FILE:iccSpecSepToTiff>")
+    set_tests_properties(iccdev.tiff-tile-budget-cli PROPERTIES
+      TIMEOUT 120 LABELS "iccdev;tools;tiff;tiles;spectral;regression;issue-2381")
+    list(APPEND _tile_tests iccdev.tiff-tile-budget-cli)
+    add_test(NAME iccdev.tiff-directory-listing-cli
+      COMMAND "${CMAKE_COMMAND}" -E env ${ICCDEV_TEST_ENV} "${Python3_EXECUTABLE}"
+        "${ICCDEV_REPO_ROOT}/.github/scripts/test_tiff_directory_listing.py"
+        --dump "$<TARGET_FILE:iccTiffDump>")
+    set_tests_properties(iccdev.tiff-directory-listing-cli PROPERTIES
+      TIMEOUT 120 LABELS "iccdev;tools;tiff;tiles;regression")
+    list(APPEND _tile_tests iccdev.tiff-directory-listing-cli)
+    add_test(NAME iccdev.tiff-telemetry-cli
+      COMMAND "${CMAKE_COMMAND}" -E env ${ICCDEV_TEST_ENV} "${Python3_EXECUTABLE}"
+        "${ICCDEV_REPO_ROOT}/.github/scripts/test_tiff_telemetry.py"
+        --fixture "$<TARGET_FILE:iccTiffTilesTest>"
+        --dump "$<TARGET_FILE:iccTiffDump>"
+        --specsep "$<TARGET_FILE:iccSpecSepToTiff>"
+        --source "${ICCDEV_REPO_ROOT}"
+        --enabled "${ICCDEV_ENABLE_TELEMETRY}")
+    set_tests_properties(iccdev.tiff-telemetry-cli PROPERTIES
+      TIMEOUT 120 LABELS "iccdev;tools;tiff;telemetry;regression")
+    list(APPEND _tile_tests iccdev.tiff-telemetry-cli)
+  else()
+    message(STATUS "Skipping TIFF tile, budget, and directory-listing CLI tests: Python3 interpreter not found")
+  endif()
+  if(WIN32)
+    set(_tile_env
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccTiffTilesTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccTiffDump>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCCONNECT}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>")
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _tile_env "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(${_tile_tests} PROPERTIES ENVIRONMENT_MODIFICATION "${_tile_env}")
+  endif()
+endfunction()
+
 function(iccdev_add_tiff_separated_strips_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -12251,6 +12328,7 @@ if(WIN32)
   iccdev_add_console_sanitize_codepoint_test()
   iccdev_add_tiff_create_overflow_test()
   iccdev_add_tiff_separated_strips_test()
+  iccdev_add_tiff_tiles_test()
   iccdev_add_embedded_profile_flags_test()
   iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_svcn_xml_reserved_roundtrip_test()
@@ -12796,6 +12874,7 @@ iccdev_add_utf8_converter_cursor_test()
 iccdev_add_console_sanitize_codepoint_test()
 iccdev_add_tiff_create_overflow_test()
 iccdev_add_tiff_separated_strips_test()
+iccdev_add_tiff_tiles_test()
 iccdev_add_embedded_profile_flags_test()
 iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_svcn_xml_reserved_roundtrip_test()

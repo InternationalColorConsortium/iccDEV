@@ -632,14 +632,20 @@ def json_to_profile(json_path: str) -> dict:
 
 
 @mcp.tool()
-def tiff_dump(path: str) -> dict:
+def tiff_dump(
+    path: str, ifd: Optional[int] = None,
+    list_directories: bool = False, evidence_json: bool = False,
+) -> dict:
     """Dump TIFF image metadata and embedded ICC profile (iccTiffDump).
 
     Args:
         path: TIFF image path.
+        ifd: Zero-based main-chain IFD index (0..4095); omitted selects IFD 0.
+        list_directories: Inventory main IFDs without parsing ICC or pixels.
+        evidence_json: Emit native JSON metadata/inventory evidence.
     """
     p = resolve_profile_path(path)
-    return cli_tools.run_tiff_dump(str(p))
+    return cli_tools.run_tiff_dump(str(p), ifd, list_directories, evidence_json)
 
 
 @mcp.tool()
@@ -816,35 +822,45 @@ def v5_to_v4(display_profile: str, observer_profile: str) -> dict:
 
 @mcp.tool()
 def spec_sep_to_tiff(
-    reflectance_tiff: str,
-    separation_profile: str,
-    illuminant_profiles: Optional[list[str]] = None,
+    input_prefix: str,
+    start: int,
+    end: int,
+    increment: int,
+    compress: int = 0,
+    planar: int = 0,
+    profile: Optional[str] = None,
+    tile_width: int = 0,
+    tile_height: int = 0,
+    bigtiff: bool = False,
 ) -> dict:
-    """Spectral separation to TIFF (iccSpecSepToTiff).
+    """Combine numbered grayscale TIFF channels (iccSpecSepToTiff).
 
-    Applies spectral separation using reflectance data and separation
-    profile to produce a color-separated TIFF.
+    The literal prefix plus each channel number names a single-channel TIFF.
+    This does not apply a separation/illuminant profile transform.
 
     Args:
-        reflectance_tiff: Input reflectance TIFF path.
-        separation_profile: Separation ICC profile path.
-        illuminant_profiles: Optional list of illuminant profile paths.
+        input_prefix: Literal channel filename prefix, e.g. spectral/spec_.
+        start: First channel number.
+        end: Last channel number, inclusive.
+        increment: Nonzero step landing exactly on end.
+        compress: 0=none, 1=LZW.
+        planar: 0=interleaved, 1=separate planes.
+        profile: Optional conformant ICC profile matching the channel count.
+        tile_width: Zero for strips, or a positive multiple of 16.
+        tile_height: Zero for strips, or a positive multiple of 16.
+        bigtiff: Write BigTIFF instead of classic TIFF.
 
     Returns:
         Dict with 'output_base64', 'stdout', 'stderr', 'returncode'.
     """
     import tempfile
-    ref = str(resolve_profile_path(reflectance_tiff))
-    sep = str(resolve_profile_path(separation_profile))
-    illum = (
-        [str(resolve_profile_path(p)) for p in illuminant_profiles]
-        if illuminant_profiles
-        else None
-    )
     fd, tmp_output = tempfile.mkstemp(suffix=".tif")
     os.close(fd)
     try:
-        result = cli_tools.run_spec_sep_to_tiff(ref, sep, tmp_output, illum)
+        result = cli_tools.run_spec_sep_to_tiff(
+            input_prefix, tmp_output, start, end, increment, compress, planar,
+            profile, tile_width, tile_height, bigtiff,
+        )
         if result["returncode"] == 0 and Path(tmp_output).exists():
             import base64
             result["output_base64"] = base64.b64encode(

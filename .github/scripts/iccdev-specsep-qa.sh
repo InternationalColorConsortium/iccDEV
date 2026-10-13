@@ -90,7 +90,7 @@ echo "repo: $REPO_ROOT"
 echo "tools: $TOOLS_DIR"
 echo "output: $OUTDIR"
 
-run_suite "CLI arguments" \
+run_suite "CLI arguments, TIFF layout options, and telemetry" \
   "iccdev-specsep-cli-args-regression-tests.sh" "cli-args"
 run_suite "TIFF geometry" \
   "iccdev-specsep-tiff-geometry-regression-tests.sh" "tiff-geometry"

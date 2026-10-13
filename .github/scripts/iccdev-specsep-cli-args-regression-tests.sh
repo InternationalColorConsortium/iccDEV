@@ -33,6 +33,7 @@ export ASAN_OPTIONS="${ASAN_OPTIONS:-halt_on_error=0,detect_leaks=0}"
 export UBSAN_OPTIONS="${UBSAN_OPTIONS:-halt_on_error=0,print_stacktrace=1}"
 
 SPECSEP="$TOOLS_DIR/IccSpecSepToTiff/iccSpecSepToTiff"
+TIFFDUMP="$TOOLS_DIR/IccTiffDump/iccTiffDump"
 SPECTRAL_PREFIX="$REPO_ROOT/.github/ci/test-data/spectral/spec_"
 HARVEST_PREFIX="$REPO_ROOT/.github/ci/test-data/specsep-harvest/gray300/spec_"
 PROFILE="$REPO_ROOT/Testing/sRGB_v4_ICC_preference.icc"
@@ -147,6 +148,99 @@ run_expect_reject() {
   fi
 
   pass_case "$name" "rejected malformed arguments"
+}
+
+run_argv_expect_success() {
+  local name="$1"
+  local out="$2"
+  shift 2
+  local log="$OUTDIR/$name.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$out" "$log"
+
+  timeout 60 "$SPECSEP" "$@" > "$log" 2>&1 || exit_code=$?
+
+  check_sanitizers "$name" "$log" || return
+
+  if [ "$exit_code" -ne 0 ]; then
+    fail_case "$name" "expected success, got exit=$exit_code"
+    sed -n '1,40p' "$log"
+    return
+  fi
+
+  if [ ! -s "$out" ] || ! grep -Fq "Image successfully written!" "$log"; then
+    fail_case "$name" "expected a completed TIFF and success summary"
+    sed -n '1,80p' "$log"
+    return
+  fi
+
+  pass_case "$name" "accepted option and positional argument shape"
+}
+
+run_argv_expect_reject() {
+  local name="$1"
+  local expected="$2"
+  local out="$3"
+  shift 3
+  local log="$OUTDIR/$name.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$out" "$log"
+
+  timeout 60 "$SPECSEP" "$@" > "$log" 2>&1 || exit_code=$?
+
+  check_sanitizers "$name" "$log" || return
+
+  if [ "$exit_code" -ne 255 ]; then
+    fail_case "$name" "expected graceful reject exit=255, got exit=$exit_code"
+    sed -n '1,40p' "$log"
+    return
+  fi
+
+  if ! grep -Fq "$expected" "$log"; then
+    fail_case "$name" "missing expected diagnostic: $expected"
+    sed -n '1,40p' "$log"
+    return
+  fi
+
+  if [ -e "$out" ]; then
+    fail_case "$name" "output TIFF created despite rejected options"
+    return
+  fi
+
+  pass_case "$name" "rejected malformed option shape"
+}
+
+check_tiff_evidence() {
+  local name="$1"
+  local out="$2"
+  local tiled="$3"
+  local bigtiff="$4"
+  local tile_width="$5"
+  local tile_height="$6"
+  local log="$OUTDIR/$name.tiffdump.json"
+
+  if [ ! -x "$TIFFDUMP" ]; then
+    fail_case "$name" "iccTiffDump is required to validate TIFF option output"
+    FAIL=$((FAIL + 1))
+    return 1
+  fi
+
+  if ! "$TIFFDUMP" --evidence-json "$out" > "$log" 2>&1 ||
+      ! grep -Eq "\"tiled\"[[:space:]]*:[[:space:]]*$tiled" "$log" ||
+      ! grep -Eq "\"bigTiff\"[[:space:]]*:[[:space:]]*$bigtiff" "$log" ||
+      ! grep -Eq "\"tileWidth\"[[:space:]]*:[[:space:]]*$tile_width" "$log" ||
+      ! grep -Eq "\"tileHeight\"[[:space:]]*:[[:space:]]*$tile_height" "$log"; then
+    fail_case "$name" "TIFF evidence does not match requested layout"
+    FAIL=$((FAIL + 1))
+    sed -n '1,80p' "$log"
+    return 1
+  fi
+
+  return 0
 }
 
 run_expect_version() {
@@ -361,6 +455,53 @@ run_expect_success \
   0 1 "$SPECTRAL_PREFIX" 1 10 1
 check_tiffinfo_contains "specsep-fast-separate-planes" "$OUTDIR/fast-separate.tif" "Planar Configuration: separate image planes"
 
+run_argv_expect_success \
+  "specsep-tiled-classic-leading-options" \
+  "$OUTDIR/tiled-classic-leading-options.tif" \
+  --tiles 16 32 "$OUTDIR/tiled-classic-leading-options.tif" \
+  1 1 "$SPECTRAL_PREFIX" 1 8 1
+check_tiff_evidence "specsep-tiled-classic-leading-options" \
+  "$OUTDIR/tiled-classic-leading-options.tif" true false 16 32
+
+run_argv_expect_success \
+  "specsep-tiled-bigtiff-trailing-options" \
+  "$OUTDIR/tiled-bigtiff-trailing-options.tif" \
+  "$OUTDIR/tiled-bigtiff-trailing-options.tif" 1 0 "$SPECTRAL_PREFIX" 1 8 1 \
+  --tiles 16 32 --bigtiff
+check_tiff_evidence "specsep-tiled-bigtiff-trailing-options" \
+  "$OUTDIR/tiled-bigtiff-trailing-options.tif" true true 16 32
+
+run_argv_expect_success \
+  "specsep-stripped-bigtiff" \
+  "$OUTDIR/stripped-bigtiff.tif" \
+  --bigtiff "$OUTDIR/stripped-bigtiff.tif" 0 0 "$SPECTRAL_PREFIX" 1 8 1
+check_tiff_evidence "specsep-stripped-bigtiff" \
+  "$OUTDIR/stripped-bigtiff.tif" false true 0 0
+
+run_argv_expect_reject \
+  "specsep-tiles-width-not-multiple" \
+  "Invalid --tiles dimensions" \
+  "$OUTDIR/tiles-width-not-multiple.tif" \
+  --tiles 15 32 "$OUTDIR/tiles-width-not-multiple.tif" 0 0 "$SPECTRAL_PREFIX" 1 8 1
+
+run_argv_expect_reject \
+  "specsep-tiles-zero-height" \
+  "Invalid --tiles dimensions" \
+  "$OUTDIR/tiles-zero-height.tif" \
+  --tiles 16 0 "$OUTDIR/tiles-zero-height.tif" 0 0 "$SPECTRAL_PREFIX" 1 8 1
+
+run_argv_expect_reject \
+  "specsep-duplicate-tiles" \
+  "Invalid --tiles dimensions" \
+  "$OUTDIR/duplicate-tiles.tif" \
+  --tiles 16 32 --tiles 16 32 "$OUTDIR/duplicate-tiles.tif" 0 0 "$SPECTRAL_PREFIX" 1 8 1
+
+run_argv_expect_reject \
+  "specsep-duplicate-bigtiff" \
+  "Duplicate --bigtiff option" \
+  "$OUTDIR/duplicate-bigtiff.tif" \
+  --bigtiff --bigtiff "$OUTDIR/duplicate-bigtiff.tif" 0 0 "$SPECTRAL_PREFIX" 1 8 1
+
 run_expect_success \
   "specsep-channel-order-ascending" \
   "$OUTDIR/channel-order-ascending.tif" \
@@ -484,6 +625,42 @@ run_expect_reject \
   "Cannot open input" \
   "$OUTDIR/printf-pattern-prefix.tif" \
   0 0 "$SPECTRAL_PREFIX%03d.tif" 1 3 1
+
+if "$SPECSEP" --help 2>&1 | grep -Fq -- "--telemetry=off|human|jsonl"; then
+  telemetry_human="$OUTDIR/telemetry-human.tif"
+  run_argv_expect_success \
+    "specsep-telemetry-human" \
+    "$telemetry_human" \
+    --telemetry=human "$telemetry_human" 1 1 "$SPECTRAL_PREFIX" 1 8 1
+  if [ -f "$OUTDIR/specsep-telemetry-human.log" ] &&
+     ! grep -Fq "run_started" "$OUTDIR/specsep-telemetry-human.log"; then
+    fail_case "specsep-telemetry-human" "human telemetry did not emit run_started"
+    FAIL=$((FAIL + 1))
+  fi
+
+  telemetry_jsonl="$OUTDIR/telemetry.jsonl"
+  telemetry_json="$OUTDIR/telemetry-jsonl.tif"
+  rm -f "$telemetry_jsonl"
+  run_argv_expect_success \
+    "specsep-telemetry-jsonl" \
+    "$telemetry_json" \
+    --telemetry=jsonl --telemetry-file "$telemetry_jsonl" \
+    "$telemetry_json" 0 0 "$SPECTRAL_PREFIX" 1 8 1
+  if [ ! -s "$telemetry_jsonl" ] ||
+     ! grep -Fq '"event":"run_started"' "$telemetry_jsonl" ||
+     ! grep -Fq '"event":"run_completed"' "$telemetry_jsonl"; then
+    fail_case "specsep-telemetry-jsonl" "JSONL receipt lacks terminal telemetry events"
+    FAIL=$((FAIL + 1))
+  fi
+
+  run_argv_expect_reject \
+    "specsep-telemetry-invalid-mode" \
+    "Invalid --telemetry mode" \
+    "$OUTDIR/telemetry-invalid-mode.tif" \
+    --telemetry=invalid "$OUTDIR/telemetry-invalid-mode.tif" 0 0 "$SPECTRAL_PREFIX" 1 8 1
+else
+  echo "  [SKIP] specsep telemetry options -- telemetry is not built"
+fi
 
 echo "iccSpecSepToTiff CLI argument regression: $PASS passed, $FAIL failed, $TOTAL total"
 

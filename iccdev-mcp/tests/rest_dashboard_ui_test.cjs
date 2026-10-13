@@ -278,6 +278,31 @@ async function runInUiContext(code) {
     'Selecting a new tool should reset run status',
   );
 
+  const inventoryRequest = await runInUiContext(`
+    currentTool = 'tiff_dump';
+    renderForm();
+    $('field-path').value = '/Testing/multi.tif';
+    $('field-list_directories').value = 'true';
+    $('field-evidence_json').value = 'true';
+    return buildRequest(TOOLS.tiff_dump)[0];
+  `);
+  assert(!inventoryRequest.includes('ifd='), 'blank optional IFD must stay absent');
+  assert(inventoryRequest.includes('list_directories=true'));
+
+  const combineRequest = await runInUiContext(`
+    currentTool = 'spec_sep';
+    renderForm();
+    $('field-input_prefix').value = '/Testing/spec_';
+    $('field-bigtiff').value = 'true';
+    return JSON.parse(buildRequest(TOOLS.spec_sep)[1].body);
+  `);
+  assert.equal(combineRequest.bigtiff, true, 'BigTIFF must be a JSON boolean');
+  assert.equal(combineRequest.start, 1);
+  assert.equal(combineRequest.end, 10);
+  assert.equal(combineRequest.increment, 1);
+  assert.equal(combineRequest.profile, '', 'optional profile must not auto-select');
+  assert(!('reflectance_profile' in combineRequest));
+
   console.log('REST dashboard UI regression tests passed');
 })().catch((error) => {
   console.error(error && error.stack ? error.stack : error);

@@ -364,8 +364,39 @@
           "$ref": "#/$defs/dstBool",
           "default": true,
           "description": "Embed the destination ICC profile in the output image, or inherit from source"
+        },
+        "dstTileWidth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "multipleOf": 16,
+          "default": 0,
+          "description": "Tile width; zero selects stripped output, otherwise requires positive dstTileHeight"
+        },
+        "dstTileHeight": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "multipleOf": 16,
+          "default": 0,
+          "description": "Tile height; zero selects stripped output, otherwise requires positive dstTileWidth"
+        },
+        "dstBigTiff": {
+          "type": "boolean",
+          "default": false,
+          "description": "Write BigTIFF instead of classic TIFF"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["dstTileWidth"], "properties": { "dstTileWidth": { "minimum": 16 } } },
+          "then": { "required": ["dstTileHeight"], "properties": { "dstTileHeight": { "minimum": 16 } } }
+        },
+        {
+          "if": { "required": ["dstTileHeight"], "properties": { "dstTileHeight": { "minimum": 16 } } },
+          "then": { "required": ["dstTileWidth"], "properties": { "dstTileWidth": { "minimum": 16 } } }
+        }
+      ]
     },
 
     "createLink": {

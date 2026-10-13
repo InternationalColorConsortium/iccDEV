@@ -209,6 +209,23 @@
       }
     },
     {
+      "name": "linux-clang-tiff-telemetry-qa",
+      "inherits": ["linux-clang-telemetry", "qa-flags-base"],
+      "displayName": "Linux Clang TIFF telemetry QA",
+      "cacheVariables": {
+        "ENABLE_WXWIDGETS": "OFF",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "vs2022-clangcl-x64-tiff-telemetry-qa",
+      "inherits": ["vs2022-clangcl-x64-telemetry", "qa-flags-base"],
+      "displayName": "Windows ClangCL TIFF telemetry QA",
+      "cacheVariables": {
+        "ENABLE_WXWIDGETS": "OFF"
+      }
+    },
+    {
       "name": "linux-clang-qa-flags",
       "inherits": ["linux-clang", "qa-flags-base"],
       "displayName": "Linux Clang QA flags"
@@ -667,6 +684,17 @@
   ],
   "buildPresets": [
     {
+      "name": "linux-clang-tiff-telemetry-qa",
+      "configurePreset": "linux-clang-tiff-telemetry-qa",
+      "targets": ["iccSpecSepToTiff", "iccTiffDump", "iccFromXml", "iccApplyProfiles", "iccTiffTilesTest"]
+    },
+    {
+      "name": "vs2022-clangcl-x64-tiff-telemetry-qa",
+      "configurePreset": "vs2022-clangcl-x64-tiff-telemetry-qa",
+      "configuration": "Release",
+      "targets": ["iccSpecSepToTiff", "iccTiffDump", "iccFromXml", "iccApplyProfiles", "iccTiffTilesTest"]
+    },
+    {
       "name": "vs2022-x64-telemetry",
       "configurePreset": "vs2022-x64-telemetry",
       "configuration": "Release"
@@ -793,6 +821,31 @@
     {
       "name": "apple-visionos-simulator-extended-core",
       "configurePreset": "apple-visionos-simulator-extended-core"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "linux-clang-tiff-telemetry-qa",
+      "configurePreset": "linux-clang-tiff-telemetry-qa",
+      "filter": {
+        "include": {
+          "name": "^iccdev\\.(specsep-|tiff-(tiles|tile-budget-cli|directory-listing-cli|telemetry-cli))"
+        }
+      },
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    },
+    {
+      "name": "vs2022-clangcl-x64-tiff-telemetry-qa",
+      "configurePreset": "vs2022-clangcl-x64-tiff-telemetry-qa",
+      "configuration": "Release",
+      "filter": {
+        "include": {
+          "name": "^iccdev\\.(specsep-|tiff-(tiles|tile-budget-cli|directory-listing-cli|telemetry-cli))"
+        }
+      },
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
     }
   ]
 }

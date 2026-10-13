@@ -26,6 +26,17 @@ repository-owned fixtures and scripts.
    findings, partial output, and unexplained exits.
 6. For registered-test changes, run
    `ctest --test-dir Build -R '^iccdev\.specsep-' --output-on-failure --no-tests=error`.
+   For tile or BigTIFF work, build `iccTiffTilesTest`, `iccApplyProfiles`,
+   `iccTiffDump`, `iccSpecSepToTiff`, and `iccFromXml`, then also run
+   `ctest --test-dir Build -C Release -R '^iccdev\.tiff-(tiles|tile-budget-cli|directory-listing-cli)' --output-on-failure --no-tests=error`
+   on Windows and Unix; use `-C Debug` instead when testing a Debug build with
+   a multi-configuration generator. This covers generated edge tiles, spectral formats and
+   planes, directory selection, and forensic extraction, not SVS/ROI/pyramids.
+   The `iccdev.tiff-tile-budget-cli` test checks 16 mixed tiled/stripped inputs
+   and rejection before output creation when aggregate input tile bands exceed
+   256 MiB. The `iccdev.tiff-directory-listing-cli` test checks plain and JSON
+   4096-IFD inventories and rejection of a 4097-IFD chain. Measure listing
+   performance separately without a timing assertion in CTest.
 7. Report the command, exit status, per-suite totals, sanitizer findings, and
    any missing fixture or tool identified by preflight.
 

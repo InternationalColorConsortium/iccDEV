@@ -102,6 +102,10 @@ mkdir -p "$HOME/qa/iccdev-valgrind-docker-corpus" && set -o pipefail && docker r
 the preferred concurrency lanes. Analyzer disagreement is evidence to retain,
 not a reason to suppress one result.
 
+The `benchapply` lane uses 1024 pixels so its 2- and 4-thread cases reach the
+worker pool. Smaller inputs can finish on the calling thread even when a larger
+thread count is requested; check the input size before claiming worker coverage.
+
 Issue #2592 records DRD's condition-variable notification check for the
 threaded row-application pool. To keep this maintained DRD lane clean,
 notifications for `m_jobReady` occur while holding the mutex associated with

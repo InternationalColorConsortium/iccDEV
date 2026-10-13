@@ -22,6 +22,9 @@ SET( SOURCES  ${SRC_PATH}/Tools/CmdLine/IccSpecSepToTiff/iccSpecSepToTiff.cpp
 SET( TARGET_NAME iccSpecSepToTiff )
 
 ADD_EXECUTABLE( ${TARGET_NAME} ${SOURCES} )
+if(ICCDEV_ENABLE_TELEMETRY)
+  target_compile_definitions(${TARGET_NAME} PRIVATE ICCDEV_TELEMETRY=1)
+endif()
 target_include_directories( ${TARGET_NAME} PRIVATE
   ${SRC_PATH}/Tools/CmdLine/IccApplyProfiles/
   ${TIFF_INCLUDE_DIR}

@@ -336,10 +336,10 @@ bool calcBytesPerLine(unsigned int width, unsigned int bitsPerSample,
 // of extra samples.  Opened separately from libtiff's handle so nothing here can
 // disturb the decoder's file position.
 //
-// Reporting only.  A false return means "could not determine" -- not "absent" -- and
-// the caller must keep the two apart: BigTIFF (magic 43) lays its IFD out differently
-// and is deliberately not parsed here rather than guessed at.
-bool readStoredExtraSamplesCount(const char *szFname, icUInt16Number &nStored)
+// Reporting only. Read the selected directory in classic TIFF or BigTIFF without
+// relying on libtiff's repaired ExtraSamples count.
+bool readStoredExtraSamplesCount(const char *szFname, icUInt16Number &nStored,
+                                uint64_t directoryOffset)
 {
   if (!szFname)
     return false;
@@ -376,43 +376,55 @@ bool readStoredExtraSamplesCount(const char *szFname, icUInt16Number &nStored)
                     : ((icUInt32Number)p[3] | ((icUInt32Number)p[2] << 8) |
                        ((icUInt32Number)p[1] << 16) | ((icUInt32Number)p[0] << 24));
     }
+    uint64_t u64(const unsigned char *p) const {
+      return little ? static_cast<uint64_t>(u32(p)) | (static_cast<uint64_t>(u32(p + 4)) << 32)
+                    : static_cast<uint64_t>(u32(p + 4)) | (static_cast<uint64_t>(u32(p)) << 32);
+    }
   } get{bLittle};
 
-  // 42 is classic TIFF. 43 is BigTIFF, whose IFD carries 8-byte counts and 20-byte
-  // entries; parsing it as classic would read garbage, so refuse instead.
-  if (get.u16(hdr + 2) != 42) {
+  const bool big = get.u16(hdr + 2) == 43;
+  if (get.u16(hdr + 2) != 42 && (!big || get.u16(hdr + 4) != 8 || get.u16(hdr + 6))) {
     fclose(f);
     return false;
   }
 
-  // The offset is a TIFF uint32, but fseek() takes a long, which is 32-bit on LLP64 --
-  // the MSVC lane.  A classic TIFF larger than 2 GiB may legally place its first IFD at
-  // or above 0x80000000, which would cast to a negative offset there and fail, so the
-  // same file would report its stored count on Linux and silently decline to on
-  // Windows.  Refuse the out-of-range offset explicitly instead, so "could not
-  // determine" means the same thing on every lane rather than depending on sizeof(long).
-  icUInt32Number nIfdOffset = get.u32(hdr + 4);
-  if (nIfdOffset < 8 || nIfdOffset > (icUInt32Number)LONG_MAX ||
-      fseek(f, (long)nIfdOffset, SEEK_SET) != 0) {
+  uint64_t nIfdOffset = directoryOffset;
+  if (nIfdOffset < (big ? 16u : 8u) || nIfdOffset > INT64_MAX) {
+    fclose(f);
+    return false;
+  }
+#if defined(_WIN32)
+  const int seekStatus = _fseeki64(f, static_cast<__int64>(nIfdOffset), SEEK_SET);
+#else
+  const int seekStatus = nIfdOffset > static_cast<uint64_t>(std::numeric_limits<off_t>::max())
+    ? -1 : fseeko(f, static_cast<off_t>(nIfdOffset), SEEK_SET);
+#endif
+  if (seekStatus != 0) {
     fclose(f);
     return false;
   }
 
-  unsigned char count[2];
-  if (fread(count, 1, sizeof(count), f) != sizeof(count)) {
+  unsigned char count[8];
+  const size_t countSize = big ? 8 : 2;
+  if (fread(count, 1, countSize, f) != countSize) {
     fclose(f);
     return false;
   }
 
-  icUInt32Number nEntries = get.u16(count);
-  for (icUInt32Number i = 0; i < nEntries; i++) {
-    unsigned char entry[12];
-    if (fread(entry, 1, sizeof(entry), f) != sizeof(entry)) {
+  const uint64_t nEntries = big ? get.u64(count) : get.u16(count);
+  if (nEntries > 65535) {
+    fclose(f);
+    return false;
+  }
+  for (uint64_t i = 0; i < nEntries; i++) {
+    unsigned char entry[20];
+    const size_t entrySize = big ? 20 : 12;
+    if (fread(entry, 1, entrySize, f) != entrySize) {
       fclose(f);
       return false;
     }
     if (get.u16(entry) == TIFFTAG_EXTRASAMPLES) {
-      icUInt32Number nCount = get.u32(entry + 4);
+      const uint64_t nCount = big ? get.u64(entry + 4) : get.u32(entry + 4);
       fclose(f);
       // The count is what is being reported, so it has to fit the field it is
       // compared against; a value this large is a malformed directory either way.
@@ -495,8 +507,10 @@ bool CTiffImg::Close()
   // route the ICC payload through libtiff's own TIFFTAG_ICCPROFILE storage and
   // never assign m_pProfile, so nulling it (below) frees nothing and cannot leak.
   if (m_hTif) {
-    if (!m_bRead)
-      outputFlushed = TIFFFlush(m_hTif) != 0;
+    if (!m_bRead) {
+      outputFlushed = (!m_bTiled || m_nCurLine == m_nHeight) &&
+                      TIFFFlush(m_hTif) != 0;
+    }
     TIFFClose(m_hTif);
     m_hTif = NULL;
   }
@@ -518,6 +532,10 @@ bool CTiffImg::Close()
   // the last Create()/Open() call rather than the state of the handle, so it is
   // reset by those two entry points instead (#2242).
   m_bRead = false;
+  m_bTiled = false;
+  m_bMetadataOnly = false;
+  m_nTileWidth = m_nTileHeight = m_nTileSize = m_nTileRowSize = 0;
+  m_nTilesAcross = m_nTileBandSize = 0;
   m_nWidth = 0;
   m_nHeight = 0;
   m_nBitsPerSample = 0;
@@ -552,11 +570,19 @@ bool CTiffImg::Close()
 bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHeight,
               unsigned int nBPS, unsigned int nPhoto, unsigned int nSamples, unsigned int nExtraSamples,
               float fXRes, float fYRes, bool bCompress, bool bSep,
-              unsigned int nResolutionUnit)
+              unsigned int nResolutionUnit, unsigned int nTileWidth,
+              unsigned int nTileHeight, bool bBigTiff)
 {
   Close();
   m_bRead = false;
   m_bOutputOpened = false;
+  if ((nTileWidth == 0) != (nTileHeight == 0) ||
+      (nTileWidth && (nTileWidth % 16 || nTileHeight % 16)) ||
+      !nWidth || !nHeight)
+    return false;
+  m_bTiled = nTileWidth != 0;
+  m_nTileWidth = nTileWidth;
+  m_nTileHeight = nTileHeight;
 
   // Zero is rejected explicitly: it passes "% 8" and libtiff accepts
   // TIFFSetField(BITSPERSAMPLE, 0) with rc=1, so neither the modulus nor the write
@@ -638,6 +664,13 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
     break;
   }
 
+  // Reject unsupported or oversized tile layouts before opening a destination
+  // that TIFFOpen would truncate, including a pre-existing regular file.
+  if (m_bTiled && !CalcTileLayout()) {
+    TIFFError(szFname, "Invalid or oversized TIFF tile band (maximum 256 MiB)");
+    return false;
+  }
+
   if (!canCreateRegularOutput(szFname)) {
     TIFFError(szFname,"Output image must be a regular non-symlink file");
     return false;
@@ -653,7 +686,7 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   // output" for exactly that stub and leak it past the caller's cleanup.
   m_bOutputOpened = true;
 
-  m_hTif = TIFFOpen(szFname, "w");
+  m_hTif = TIFFOpen(szFname, bBigTiff ? "w8" : "w");
   if (!m_hTif) {
     TIFFError(szFname,"Can not open output image");
     return false;
@@ -730,7 +763,12 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
     m_nSampleFormat = SAMPLEFORMAT_IEEEFP;
     bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_IEEEFP) == 1;
   }
-  bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_ROWSPERSTRIP, m_nRowsPerStrip) == 1;
+  if (m_bTiled) {
+    bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_TILEWIDTH, m_nTileWidth) == 1;
+    bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_TILELENGTH, m_nTileHeight) == 1;
+  }
+  else
+    bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_ROWSPERSTRIP, m_nRowsPerStrip) == 1;
   bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_COMPRESSION, m_nCompress) == 1;
   bFieldsSet &= TIFFSetField(m_hTif, TIFFTAG_ORIENTATION, m_nOrientation) == 1;
   // Written unconditionally, next to the values it qualifies.  libtiff omits the tag
@@ -770,6 +808,14 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   
   // we should always calculate this
   m_nBytesPerSample = m_nBitsPerSample / 8;
+  if (m_bTiled) {
+    if (!SetupTiles()) {
+      TIFFError(szFname, "Invalid or oversized TIFF tile band (maximum 256 MiB)");
+      Close();
+      return false;
+    }
+    return true;
+  }
 
   if (bSep && m_nSamples>1) {
     m_nStripSamples = m_nSamples;
@@ -849,15 +895,30 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   return true;
 }
 
-bool CTiffImg::Open(const char *szFname)
+bool CTiffImg::Open(const char *szFname, bool bMetadataOnly, unsigned int nDirectory,
+                    unsigned int nMaxTileBandBytes)
 {
   Close();
   m_bRead = true;
   m_bOutputOpened = false;
+  m_bMetadataOnly = bMetadataOnly;
 
   m_hTif = TIFFOpen(szFname, "r");
   if (!m_hTif) {
     TIFFError(szFname,"Can not open input image");
+    return false;
+  }
+  if (nDirectory > std::numeric_limits<tdir_t>::max() ||
+      (nDirectory && !TIFFSetDirectory(m_hTif, static_cast<tdir_t>(nDirectory)))) {
+    TIFFError(szFname, "Cannot select TIFF directory");
+    Close();
+    return false;
+  }
+  m_bTiled = TIFFIsTiled(m_hTif) != 0;
+  if (m_bTiled &&
+      (!TIFFGetField(m_hTif, TIFFTAG_TILEWIDTH, &m_nTileWidth) ||
+       !TIFFGetField(m_hTif, TIFFTAG_TILELENGTH, &m_nTileHeight))) {
+    Close();
     return false;
   }
   icUInt16Number *nSampleInfo=NULL;
@@ -865,7 +926,9 @@ bool CTiffImg::Open(const char *szFname)
   if (!TIFFGetField(m_hTif, TIFFTAG_IMAGEWIDTH, &m_nWidth) ||
       !TIFFGetField(m_hTif, TIFFTAG_IMAGELENGTH, &m_nHeight) ||
       !TIFFGetField(m_hTif, TIFFTAG_PHOTOMETRIC, &m_nPhoto) ||
-      !TIFFGetField(m_hTif, TIFFTAG_BITSPERSAMPLE, &m_nBitsPerSample)) {
+      !(bMetadataOnly ? TIFFGetFieldDefaulted(m_hTif, TIFFTAG_BITSPERSAMPLE, &m_nBitsPerSample) :
+                        TIFFGetField(m_hTif, TIFFTAG_BITSPERSAMPLE, &m_nBitsPerSample))) {
+    TIFFError(szFname, "Cannot read required TIFF image metadata");
     Close();
     return false;
   }
@@ -913,7 +976,8 @@ bool CTiffImg::Open(const char *szFname)
   // (#2386).  Failure here means "could not determine", so the flag is what gates
   // reporting -- a 0 count is a legitimate stored value, not a sentinel.
   m_bStoredExtraSamplesKnown =
-    readStoredExtraSamplesCount(szFname, m_nStoredExtraSamplesCount);
+    readStoredExtraSamplesCount(szFname, m_nStoredExtraSamplesCount,
+                               TIFFCurrentDirOffset(m_hTif));
   TIFFGetFieldDefaulted(m_hTif, TIFFTAG_SAMPLEFORMAT, &m_nSampleFormat);
   TIFFGetFieldDefaulted(m_hTif, TIFFTAG_ROWSPERSTRIP, &m_nRowsPerStrip);
   TIFFGetFieldDefaulted(m_hTif, TIFFTAG_ORIENTATION, &m_nOrientation);
@@ -923,6 +987,11 @@ bool CTiffImg::Open(const char *szFname)
   TIFFGetField(m_hTif, TIFFTAG_XRESOLUTION, &m_fXRes);
   TIFFGetField(m_hTif, TIFFTAG_YRESOLUTION, &m_fYRes);
   TIFFGetFieldDefaulted(m_hTif, TIFFTAG_COMPRESSION, &m_nCompress);
+  if (m_bMetadataOnly) {
+    // Reporting must not depend on codec support, orientation or pixel buffers.
+    calcBytesPerLine(m_nWidth, m_nBitsPerSample, m_nSamples, m_nBytesPerLine);
+    return true;
+  }
   
   if (m_nWidth == 0 || m_nHeight == 0 || m_nRowsPerStrip == 0 ||
       m_nSamples == 0 || m_nSamples > kMaxTiffSamples ||
@@ -956,6 +1025,14 @@ bool CTiffImg::Open(const char *szFname)
   
   m_nCurStrip=(unsigned int)-1;
   m_nCurLine = 0;
+  if (m_bTiled) {
+    if (!SetupTiles(nMaxTileBandBytes)) {
+      TIFFError(szFname, "Invalid or oversized TIFF tile band (maximum 256 MiB per image or caller memory limit)");
+      Close();
+      return false;
+    }
+    return true;
+  }
 
   tmsize_t stripSize = TIFFStripSize(m_hTif);
   if (stripSize <= 0 ||
@@ -1031,6 +1108,10 @@ bool CTiffImg::Open(const char *szFname)
 
 bool CTiffImg::ReadLine(unsigned char *pBuf)
 {
+  if (!m_hTif || !pBuf || m_bMetadataOnly)
+    return false;
+  if (m_bTiled)
+    return m_bRead && m_nCurLine < m_nHeight && ReadTileLine(pBuf);
   if (!m_bRead || m_nCurLine >= m_nHeight || m_nRowsPerStrip == 0 ||
       m_nSamples == 0 || m_nSamples > kMaxTiffSamples ||
       m_nStripSamples == 0 || m_nStripSamples > kMaxTiffSamples)
@@ -1088,6 +1169,10 @@ bool CTiffImg::ReadLine(unsigned char *pBuf)
 
 bool CTiffImg::WriteLine(unsigned char *pBuf)
 {
+  if (!m_hTif || !pBuf)
+    return false;
+  if (m_bTiled)
+    return !m_bRead && m_nCurLine < m_nHeight && WriteTileLine(pBuf);
   if (m_bRead ||
       m_nSamples == 0 || m_nSamples > kMaxTiffSamples ||
       m_nStripSamples == 0 || m_nStripSamples > kMaxTiffSamples)
@@ -1123,6 +1208,154 @@ bool CTiffImg::WriteLine(unsigned char *pBuf)
     m_nCurStrip++;
   }
 
+  return true;
+}
+
+unsigned int CTiffImg::GetDirectoryCount()
+{
+  if (!m_hTif || !m_bRead)
+    return 0;
+  const tdir_t selected = TIFFCurrentDirectory(m_hTif);
+  if (!TIFFSetDirectory(m_hTif, 0))
+    return 0;
+  unsigned int count = 1;
+  bool valid = true;
+  while (!TIFFLastDirectory(m_hTif)) {
+    if (count == 4096 || !TIFFReadDirectory(m_hTif)) {
+      valid = false;
+      break;
+    }
+    count++;
+  }
+  if (!TIFFSetDirectory(m_hTif, selected))
+    return 0;
+  return valid ? count : 0;
+}
+
+bool CTiffImg::CalcTileLayout(unsigned int nMaxTileBandBytes)
+{
+  if (!m_nTileWidth || !m_nTileHeight || !m_nWidth || !m_nHeight || !m_nSamples ||
+      (m_nBitsPerSample != 8 && m_nBitsPerSample != 16 && m_nBitsPerSample != 32) ||
+      (m_nPlanar != PLANARCONFIG_CONTIG && m_nPlanar != PLANARCONFIG_SEPARATE))
+    return false;
+  m_nBytesPerSample = m_nBitsPerSample / 8;
+  if (!calcBytesPerLine(m_nWidth, m_nBitsPerSample, m_nSamples, m_nBytesPerLine))
+    return false;
+  const uint64_t limit = std::min<uint64_t>(256u * 1024u * 1024u,
+                                             nMaxTileBandBytes);
+  const uint64_t expectedRow = static_cast<uint64_t>(m_nTileWidth) *
+    m_nBytesPerSample * (m_nPlanar == PLANARCONFIG_SEPARATE ? 1 : m_nSamples);
+  if (expectedRow > limit || m_nTileHeight > limit / expectedRow)
+    return false;
+  m_nTileRowSize = static_cast<unsigned int>(expectedRow);
+  m_nTileSize = m_nTileRowSize * m_nTileHeight;
+  m_nTilesAcross = m_nWidth / m_nTileWidth + (m_nWidth % m_nTileWidth != 0);
+  const unsigned int planes = m_nPlanar == PLANARCONFIG_SEPARATE ? m_nSamples : 1;
+  const unsigned int tilesDown = m_nHeight / m_nTileHeight + (m_nHeight % m_nTileHeight != 0);
+  if (!planes || static_cast<uint64_t>(m_nTilesAcross) * tilesDown >
+      std::numeric_limits<ttile_t>::max() / planes)
+    return false;
+  if (m_nTileSize > limit / planes ||
+      m_nTilesAcross > limit / planes / m_nTileSize)
+    return false;
+  const uint64_t bandSize = static_cast<uint64_t>(m_nTileSize) * m_nTilesAcross * planes;
+  if (bandSize > limit ||
+      !checkedUInt32(bandSize, m_nTileBandSize))
+    return false;
+  return true;
+}
+
+bool CTiffImg::SetupTiles(unsigned int nMaxTileBandBytes)
+{
+  if (!CalcTileLayout(nMaxTileBandBytes))
+    return false;
+  const tmsize_t tileSize = TIFFTileSize(m_hTif);
+  const tmsize_t rowSize = TIFFTileRowSize(m_hTif);
+  if (tileSize <= 0 || rowSize <= 0 ||
+      static_cast<uint64_t>(tileSize) != m_nTileSize ||
+      static_cast<uint64_t>(rowSize) != m_nTileRowSize)
+    return false; // Subsampled YCbCr is not an interleaved sample row.
+  m_pStripBuf = static_cast<unsigned char*>(calloc(1, m_nTileBandSize));
+  return m_pStripBuf != NULL;
+}
+
+bool CTiffImg::ReadTileLine(unsigned char *pBuf)
+{
+  const unsigned int tileY = m_nCurLine / m_nTileHeight * m_nTileHeight;
+  const unsigned int row = m_nCurLine % m_nTileHeight;
+  const unsigned int planes = m_nPlanar == PLANARCONFIG_SEPARATE ? m_nSamples : 1;
+  if (!row) {
+    for (unsigned int s = 0; s < planes; s++) {
+      for (unsigned int t = 0; t < m_nTilesAcross; t++) {
+        unsigned char *tile = m_pStripBuf +
+          (static_cast<size_t>(s) * m_nTilesAcross + t) * m_nTileSize;
+        const ttile_t index = TIFFComputeTile(m_hTif, t * m_nTileWidth, tileY, 0,
+                                             static_cast<uint16_t>(s));
+        if (TIFFReadEncodedTile(m_hTif, index, tile, m_nTileSize) != m_nTileSize) {
+          TIFFError("CTiffImg", "Incomplete decoded TIFF tile");
+          return false;
+        }
+      }
+    }
+  }
+  for (unsigned int t = 0; t < m_nTilesAcross; t++) {
+    const unsigned int x = t * m_nTileWidth;
+    const unsigned int pixels = std::min(m_nTileWidth, m_nWidth - x);
+    for (unsigned int s = 0; s < planes; s++) {
+      const unsigned char *src = m_pStripBuf +
+        (static_cast<size_t>(s) * m_nTilesAcross + t) * m_nTileSize +
+        static_cast<size_t>(row) * m_nTileRowSize;
+      unsigned char *dst = pBuf + static_cast<size_t>(x) * m_nSamples * m_nBytesPerSample;
+      if (planes == 1)
+        memcpy(dst, src, static_cast<size_t>(pixels) * m_nSamples * m_nBytesPerSample);
+      else {
+        for (unsigned int p = 0; p < pixels; p++)
+          memcpy(dst + (static_cast<size_t>(p) * m_nSamples + s) * m_nBytesPerSample,
+                 src + static_cast<size_t>(p) * m_nBytesPerSample, m_nBytesPerSample);
+      }
+    }
+  }
+  m_nCurLine++;
+  return true;
+}
+
+bool CTiffImg::WriteTileLine(const unsigned char *pBuf)
+{
+  const unsigned int row = m_nCurLine % m_nTileHeight;
+  const unsigned int planes = m_nPlanar == PLANARCONFIG_SEPARATE ? m_nSamples : 1;
+  if (!row)
+    memset(m_pStripBuf, 0, m_nTileBandSize);
+  for (unsigned int t = 0; t < m_nTilesAcross; t++) {
+    const unsigned int x = t * m_nTileWidth;
+    const unsigned int pixels = std::min(m_nTileWidth, m_nWidth - x);
+    for (unsigned int s = 0; s < planes; s++) {
+      unsigned char *dst = m_pStripBuf +
+        (static_cast<size_t>(s) * m_nTilesAcross + t) * m_nTileSize +
+        static_cast<size_t>(row) * m_nTileRowSize;
+      const unsigned char *src = pBuf + static_cast<size_t>(x) * m_nSamples * m_nBytesPerSample;
+      if (planes == 1)
+        memcpy(dst, src, static_cast<size_t>(pixels) * m_nSamples * m_nBytesPerSample);
+      else {
+        for (unsigned int p = 0; p < pixels; p++)
+          memcpy(dst + static_cast<size_t>(p) * m_nBytesPerSample,
+                 src + (static_cast<size_t>(p) * m_nSamples + s) * m_nBytesPerSample,
+                 m_nBytesPerSample);
+      }
+    }
+  }
+  if (row == m_nTileHeight - 1 || m_nCurLine == m_nHeight - 1) {
+    for (unsigned int s = 0; s < planes; s++) {
+      for (unsigned int t = 0; t < m_nTilesAcross; t++) {
+        unsigned char *tile = m_pStripBuf +
+          (static_cast<size_t>(s) * m_nTilesAcross + t) * m_nTileSize;
+        const ttile_t index = TIFFComputeTile(m_hTif, t * m_nTileWidth,
+          m_nCurLine / m_nTileHeight * m_nTileHeight, 0, static_cast<uint16_t>(s));
+        if (TIFFWriteEncodedTile(m_hTif, index, tile, m_nTileSize) != m_nTileSize)
+          return false;
+      }
+    }
+  }
+  m_nCurLine++;
   return true;
 }
 

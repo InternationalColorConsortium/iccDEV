@@ -317,9 +317,25 @@ def run_from_json(
         return _run_tool("iccFromJson", [input_path, output_path])
 
 
-def run_tiff_dump(path: str) -> dict:
-    """Run iccTiffDump on a TIFF image."""
-    return _run_tool("iccTiffDump", [path])
+def run_tiff_dump(
+    path: str, ifd: Optional[int] = None,
+    list_directories: bool = False, evidence_json: bool = False,
+) -> dict:
+    """Inspect a main-chain TIFF IFD or inventory metadata without decoding."""
+    if ifd is not None and (type(ifd) is not int or not 0 <= ifd <= 4095):
+        raise ValueError("ifd must be an integer in 0..4095")
+    if type(list_directories) is not bool or type(evidence_json) is not bool:
+        raise ValueError("list_directories and evidence_json must be booleans")
+    if list_directories and ifd is not None:
+        raise ValueError("list_directories cannot be combined with ifd")
+    args = []
+    if ifd is not None:
+        args.extend(["--ifd", str(ifd)])
+    if list_directories:
+        args.append("--list-directories")
+    if evidence_json:
+        args.append("--evidence-json")
+    return _run_tool("iccTiffDump", [*args, path])
 
 
 def run_jpeg_dump(path: str) -> dict:
@@ -430,15 +446,63 @@ def run_v5_to_v4(
 
 
 def run_spec_sep_to_tiff(
-    reflectance: str,
-    separation: str,
+    input_prefix: str,
     output: str,
-    illuminants: Optional[list[str]] = None,
+    start: int,
+    end: int,
+    increment: int,
+    compress: int = 0,
+    planar: int = 0,
+    profile: Optional[str] = None,
+    tile_width: int = 0,
+    tile_height: int = 0,
+    bigtiff: bool = False,
 ) -> dict:
-    """Run iccSpecSepToTiff for spectral separation."""
-    args = [reflectance, separation, output]
-    if illuminants:
-        args.extend(illuminants)
+    """Combine numbered single-channel TIFFs using the native CLI contract."""
+    from .profiles import resolve_profile_path
+
+    for name, value in (("start", start), ("end", end), ("increment", increment)):
+        if type(value) is not int or not -(2**31) <= value < 2**31:
+            raise ValueError(f"{name} must be a signed 32-bit integer")
+    span = end - start
+    if not increment or span * increment < 0 or span % increment:
+        raise ValueError("increment must be nonzero and land exactly on end")
+    count = span // increment + 1
+    if not 1 <= count <= 65535:
+        raise ValueError("channel count must be in 1..65535")
+    if type(compress) is not int or compress not in (0, 1):
+        raise ValueError("compress must be 0 or 1")
+    if type(planar) is not int or planar not in (0, 1):
+        raise ValueError("planar must be 0 or 1")
+    for name, value in (("tile_width", tile_width), ("tile_height", tile_height)):
+        if type(value) is not int or not 0 <= value < 2**31 or value % 16:
+            raise ValueError(f"{name} must be zero or a positive int32 multiple of 16")
+    if bool(tile_width) != bool(tile_height):
+        raise ValueError("tile_width and tile_height must both be zero or positive")
+    if type(bigtiff) is not bool:
+        raise ValueError("bigtiff must be a boolean")
+    if not isinstance(input_prefix, str) or not input_prefix:
+        raise ValueError("input_prefix must be a nonempty literal filename prefix")
+    if profile is not None and not isinstance(profile, str):
+        raise ValueError("profile must be a filename string or null")
+
+    # A prefix is not a file. Resolve every numbered input under the existing
+    # allowed-directory policy, then retain one literal prefix for native argv.
+    first = resolve_profile_path(input_prefix + str(start))
+    prefix = str(first)[:-len(str(start))]
+    for channel in range(start, end + (1 if increment > 0 else -1), increment):
+        resolved = resolve_profile_path(input_prefix + str(channel))
+        if resolved != Path(prefix + str(channel)).resolve():
+            raise ValueError("All numbered inputs must share one resolved prefix")
+    args = []
+    if tile_width:
+        args.extend(["--tiles", str(tile_width), str(tile_height)])
+    if bigtiff:
+        args.append("--bigtiff")
+    args.extend([output, str(compress), str(planar), prefix,
+                 str(start), str(end), str(increment)])
+    if profile:
+        args.append(str(resolve_profile_path(profile)))
     return _run_tool("iccSpecSepToTiff", args)
 
 

@@ -190,7 +190,7 @@ vg_configure_target()
     benchapply)
       VG_CMAKE_TARGET="iccBenchApply"
       VG_BINARY="$(vg_tool_binary IccBenchApply iccBenchApply)"
-      VG_ARGS=("-pixels" "4" "-repeats" "1" "-threads" "1,2,4" "1" "$profile" "140")
+      VG_ARGS=("-pixels" "1024" "-repeats" "1" "-threads" "1,2,4" "1" "$profile" "140")
       VG_REQUIRED_FILES=("$profile")
       VG_RECOMMENDED_TOOL="helgrind"
       VG_NOTE="Exercises the benchmark path across three thread counts."

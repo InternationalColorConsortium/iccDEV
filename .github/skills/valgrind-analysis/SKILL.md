@@ -32,6 +32,8 @@ heap-growth, or call-profile investigations against iccDEV tools.
    generated work files.
 8. For concurrency, compare Helgrind and DRD rather than treating either as a
    substitute for TSan.
+   Confirm that the selected input reaches the worker threshold before claiming
+   that a requested thread count exercised concurrent workers.
 9. For issue #2592 or `m_jobReady` notification changes, run
    `.github/ci/valgrind/issue-2592-regression.sh`; require both analyzers to be
    clean and their generated TIFFs to match.

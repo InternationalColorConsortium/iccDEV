@@ -92,8 +92,19 @@ public:
   bool Create(const char *szFname, unsigned int nWidth, unsigned int nHeight,
               unsigned int nBPS, unsigned int nPhoto, unsigned int nSamples, unsigned int nExtraSamples,
               float fXRes, float fYRes, bool bCompress=true, bool bSep=false,
-              unsigned int nResolutionUnit=RESUNIT_INCH);
-  bool Open(const char *szFname);
+              unsigned int nResolutionUnit=RESUNIT_INCH,
+              unsigned int nTileWidth=0, unsigned int nTileHeight=0,
+              bool bBigTiff=false);
+  bool Open(const char *szFname, bool bMetadataOnly=false, unsigned int nDirectory=0,
+            unsigned int nMaxTileBandBytes=256u * 1024u * 1024u);
+  bool IsTiled() const { return m_bTiled; }
+  unsigned int GetTileBandSize() const { return m_bTiled ? m_nTileBandSize : 0; }
+  bool IsBigTiff() const { return m_hTif && TIFFIsBigTIFF(m_hTif); }
+  unsigned int GetTileWidth() const { return m_nTileWidth; }
+  unsigned int GetTileHeight() const { return m_nTileHeight; }
+  unsigned int GetDirectory() const { return m_hTif ? TIFFCurrentDirectory(m_hTif) : 0; }
+  unsigned int GetDirectoryCount();
+  TIFF *GetTiffHandle() const { return m_hTif; }
   // True once this object's Create() got past TIFFOpen(..., "w") -- i.e. the
   // destination was actually created or truncated by this run.  A caller that
   // discards a failed output needs this to tell "Create() refused the path and
@@ -161,8 +172,8 @@ public:
   // the repaired figure through every getter it has.  On a 6-sample MinIsBlack image
   // storing ExtraSamples [0] this answers 1 while GetExtraSamples() answers 5.
   //
-  // False means "could not determine" -- an unreadable file, a non-TIFF, or BigTIFF,
-  // whose directory layout is deliberately not parsed -- and NOT "tag 338 absent",
+  // False means "could not determine" -- an unreadable or malformed directory --
+  // and NOT "tag 338 absent",
   // which is HasStoredExtraSamples(). Keep the two apart: a stored count of 0 is a
   // legitimate value, so the flag is what gates use of the number.
   //
@@ -187,6 +198,10 @@ public:
   bool SetIccProfile(unsigned char *pProfile, unsigned int  nLen);
 
 protected:
+  bool CalcTileLayout(unsigned int nMaxTileBandBytes=256u * 1024u * 1024u);
+  bool SetupTiles(unsigned int nMaxTileBandBytes=256u * 1024u * 1024u);
+  bool ReadTileLine(unsigned char *pBuf);
+  bool WriteTileLine(const unsigned char *pBuf);
   // Shared by GetWidthIn()/GetHeightIn(); see the comment on those.  Guards fRes as
   // well as the unit because it is genuinely observable as zero: a freshly constructed
   // object has it, and so does one whose Open() failed, since the failure path runs
@@ -206,6 +221,14 @@ protected:
   }
 
   TIFF *m_hTif;
+  bool m_bTiled = false;
+  bool m_bMetadataOnly = false;
+  unsigned int m_nTileWidth = 0;
+  unsigned int m_nTileHeight = 0;
+  unsigned int m_nTileSize = 0;
+  unsigned int m_nTileRowSize = 0;
+  unsigned int m_nTilesAcross = 0;
+  unsigned int m_nTileBandSize = 0;
   bool m_bRead;
   bool m_bOutputOpened;
 

@@ -106,6 +106,9 @@ public:
 	icDstBool m_dstCompression;
 	icDstBool m_dstPlanar;
 	icDstBool m_dstEmbedIcc;
+  unsigned int m_dstTileWidth;
+  unsigned int m_dstTileHeight;
+  bool m_dstBigTiff;
 };
 
 class CIccCfgConnectOptions

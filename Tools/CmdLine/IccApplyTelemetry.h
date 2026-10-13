@@ -105,9 +105,9 @@ enum icApplyTelemetryMode {
 
 class CIccApplyToolTelemetry {
 public:
-  CIccApplyToolTelemetry()
+  CIccApplyToolTelemetry(const char* schema = "iccdev-apply-telemetry/v1")
     : m_mode(icApplyTelemetryOff), m_file(nullptr), m_sequence(0),
-      m_startedEvent(false), m_terminalEvent(false) {}
+      m_startedEvent(false), m_terminalEvent(false), m_schema(schema) {}
 
   ~CIccApplyToolTelemetry()
   {
@@ -135,7 +135,7 @@ public:
       return true;
 
     const std::string text =
-      "{\"schema\":\"iccdev-apply-telemetry/v1\",\"event\":" + JsonString(event) +
+      "{\"schema\":" + JsonString(m_schema) + ",\"event\":" + JsonString(event) +
       ",\"sequence\":" + std::to_string(++m_sequence) +
       ",\"timestamp_utc\":" + JsonString(TimestampUtc()) +
       ",\"monotonic_elapsed_ms\":" + std::to_string(ElapsedMs()) +
@@ -225,6 +225,7 @@ private:
   unsigned long long m_sequence;
   bool m_startedEvent;
   bool m_terminalEvent;
+  const char* m_schema;
   std::chrono::steady_clock::time_point m_started = std::chrono::steady_clock::now();
 };
 

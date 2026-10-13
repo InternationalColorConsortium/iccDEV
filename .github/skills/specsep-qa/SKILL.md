@@ -21,6 +21,7 @@ alignment, output cleanup, or fixture work.
 1. Read `../../../Tools/CmdLine/IccSpecSepToTiff/Readme.md` for the command
    contract and limits.
 2. Build `iccSpecSepToTiff`, `iccTiffDump`, and `iccFromXml` in the same tree.
+   For tile coverage, also build `iccApplyProfiles` and `iccTiffTilesTest`.
 3. Run the repository wrapper from any directory:
 
 ```bash
@@ -77,6 +78,29 @@ scope:
 ```bash
 ctest --test-dir Build -R '^iccdev\.specsep-' --output-on-failure --no-tests=error
 ```
+
+For tiled input/output, BigTIFF, IFD inspection/extraction, spectral sample
+preservation, and scalar/threaded image parity, run on Unix or Windows:
+
+```bash
+ctest --test-dir Build -C Release -R '^iccdev\.tiff-(tiles|tile-budget-cli|directory-listing-cli)' --output-on-failure --no-tests=error
+```
+
+The `iccdev.tiff-tile-budget-cli` test checks 16 mixed tiled/stripped channels
+for pixel parity and verifies that the shared 256 MiB input tile-band limit
+rejects before creating output. The output tile band has its own cap; do not
+describe either as a process-wide memory limit.
+
+The `iccdev.tiff-directory-listing-cli` test checks plain and JSON inventory
+of 4096 main IFDs and clean rejection of 4097 main IFDs. Compare elapsed
+times separately when investigating listing performance; avoid a timing gate.
+
+For multi-configuration generators such as Visual Studio, set `-C` to the
+configuration that was built (`Release` above, or `Debug`).
+
+The native helper generates fixtures from libtiff independently of `CTiffImg`;
+the CLI runner needs only Python's standard library. Do not claim SVS decoding,
+ROI or pyramid rewriting from these generic TIFF tests.
 
 Verify changed text files are ASCII and run `git diff --check`.
 

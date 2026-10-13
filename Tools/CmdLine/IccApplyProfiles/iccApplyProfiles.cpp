@@ -1066,10 +1066,34 @@ int main(int argc, const char** argv)
   // with them; without it a centimetre-based source produced an inch-defaulted output
   // and the physical size shifted by 2.54x.  Same defect as iccSpecSepToTiff, because
   // both tools reach it through the same shared CTiffImg::Create() (#2220).
-  if (!DstImg.Create(cfgApply.m_dstImgFile.c_str(), SrcImg.GetWidth(), SrcImg.GetHeight(), dbps, photo, nDestSamples, nExtraSamples, SrcImg.GetXRes(), SrcImg.GetYRes(), bCompress, bSeparation, SrcImg.GetResolutionUnit())) {
+  CIccFileIO existingOutput;
+  const bool outputExisted = existingOutput.Open(cfgApply.m_dstImgFile.c_str(), "rb");
+  if (outputExisted)
+    existingOutput.Close();
+  if (!DstImg.Create(cfgApply.m_dstImgFile.c_str(), SrcImg.GetWidth(), SrcImg.GetHeight(), dbps, photo, nDestSamples, nExtraSamples, SrcImg.GetXRes(), SrcImg.GetYRes(), bCompress, bSeparation, SrcImg.GetResolutionUnit(),
+                     cfgApply.m_dstTileWidth, cfgApply.m_dstTileHeight, cfgApply.m_dstBigTiff)) {
     printf("Unable to create Tiff file - '%s'\n", icSanitizeConsoleText(cfgApply.m_dstImgFile.c_str()).c_str());
+    DstImg.Close();
+    if (!outputExisted && DstImg.WasOutputOpened() &&
+        remove(cfgApply.m_dstImgFile.c_str()) != 0 && errno != ENOENT)
+      fprintf(stderr, "Unable to discard failed TIFF output '%s'\n",
+              icSanitizeConsoleText(cfgApply.m_dstImgFile).c_str());
     return -1;
   }
+  struct OutputCleanup {
+    CTiffImg &image;
+    const std::string &path;
+    bool keep = false;
+    ~OutputCleanup()
+    {
+      if (!keep) {
+        image.Close();
+        if (remove(path.c_str()) != 0 && errno != ENOENT)
+          fprintf(stderr, "Unable to discard partial TIFF output '%s'\n",
+                  icSanitizeConsoleText(path).c_str());
+      }
+    }
+  } outputCleanup{DstImg, cfgApply.m_dstImgFile};
 
   //Embed the last profile into output image as needed
   if (bEmbed && last_path) {
@@ -1574,6 +1598,8 @@ int main(int argc, const char** argv)
             icSanitizeConsoleText(cfgApply.m_dstImgFile.c_str()).c_str());
     bApplySuccess = false;
   }
+  // A later telemetry or evidence sidecar error must not discard a complete TIFF.
+  const bool outputFinalized = bApplySuccess;
 
 #ifdef ICCDEV_TELEMETRY
   std::string outputDigest;
@@ -1672,5 +1698,6 @@ int main(int argc, const char** argv)
   }
 #endif
 
+  outputCleanup.keep = outputFinalized;
   return bApplySuccess ? 0 : -1;
 }

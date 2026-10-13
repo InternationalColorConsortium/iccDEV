@@ -47,7 +47,9 @@
 
 #include <cstdio>
 #include <cerrno>
+#include <cstdlib>
 #include <string>
+#include <vector>
 #include "IccCmm.h"
 #include "IccUtil.h"
 #include "IccDefs.h"
@@ -56,6 +58,7 @@
 #include "TiffImg.h"
 #include "IccCmdLineUtil.h"
 #include "IccSameFile.h"
+#include "../IccTiffTelemetry.h"
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -221,7 +224,12 @@ static bool WriteEmbeddedIccProfile(const char* szFname,
 void Usage()
 {
   printf("iccTiffDump built with IccProfLib version " ICCPROFLIBVER "\n\n");
-  printf("Usage: iccTiffDump {--evidence-json} tiff_file {exported_icc_file}\n\n");
+  printf("Usage: iccTiffDump {--evidence-json} {--ifd N} {--list-directories} tiff_file {exported_icc_file}\n\n");
+  printf("IFD indexes are zero-based main-chain directories. Listing does not extract or validate ICC data.\n");
+  printf("Inspection is metadata-only; it does not assert pixel decoding or SVS compatibility.\n\n");
+#ifdef ICCDEV_TELEMETRY
+  CIccTiffTelemetry::Help(stdout);
+#endif
 }
 
 static std::string GetProfileId(CIccProfile* pProfile)
@@ -252,7 +260,8 @@ static std::string GetProfileId(const char* profilePath)
 
 static void EmitWriteEvidenceJson(const char* tiffPath, const char* outputPath,
                                   const std::string& embeddedProfileId,
-                                  const std::string& extractedProfileId)
+                                  const std::string& extractedProfileId,
+                                  CTiffImg &image)
 {
   std::string outputDigest;
   bool hasOutputDigest = outputPath && outputPath[0] &&
@@ -262,6 +271,9 @@ static void EmitWriteEvidenceJson(const char* tiffPath, const char* outputPath,
   printf("\"schema\":\"iccdev-qa-evidence/v1\",");
   printf("\"tool\":\"iccTiffDump\",");
   printf("\"input\":\"%s\",", icJsonEscape(tiffPath).c_str());
+  printf("\"directory\":%u,\"bigTiff\":%s,\"tiled\":%s,\"tileWidth\":%u,\"tileHeight\":%u,",
+         image.GetDirectory(), image.IsBigTiff() ? "true" : "false",
+         image.IsTiled() ? "true" : "false", image.GetTileWidth(), image.GetTileHeight());
   printf("\"output\":\"%s\",", icJsonEscape(outputPath).c_str());
   // ICCDEV_FLAG_WRITE asserts that a profile was written out.  Emitting it
   // unconditionally also claimed it for `iccTiffDump --evidence-json in.tif`,
@@ -411,23 +423,335 @@ const char *GetSampleFormatDescription( unsigned int format )
 
 //===================================================
 
+#ifdef ICCDEV_TELEMETRY
+struct TiffDumpTelemetryStats {
+  explicit TiffDumpTelemetryStats(CIccTiffTelemetry &receipt) : telemetry(receipt) {}
+
+  ~TiffDumpTelemetryStats()
+  {
+    if (started && telemetry.Active() && !completed)
+      Record("run_failed", "\"status\":\"tool_failure\",\"exit_code\":1,\"stage\":" +
+             CIccTiffTelemetry::JsonString(stage));
+  }
+
+  void SetStage(const char *value)
+  {
+    stage = value;
+    telemetry.SetStage(value);
+  }
+
+  CIccTiffTelemetry &telemetry;
+  const char *stage = "initialization";
+  bool started = false;
+  bool completed = false;
+  bool writesOk = true;
+  unsigned int preflightIfds = 0;
+  unsigned int directoriesVisited = 0;
+  unsigned int profilesParsed = 0;
+  unsigned int profilesRead = 0;
+  unsigned int profilesValidated = 0;
+  unsigned long long profileBytes = 0;
+  unsigned long long extractedBytes = 0;
+  double metadataOpenMs = 0;
+  double preflightMs = 0;
+  double inventoryMs = 0;
+  double extractionMs = 0;
+  double profileParseMs = 0;
+  double profileReadMs = 0;
+  double profileValidateMs = 0;
+  std::string geometry;
+
+  std::string Fields() const
+  {
+    return "\"preflight_ifds\":" + std::to_string(preflightIfds) +
+      ",\"directories_visited\":" + std::to_string(directoriesVisited) +
+      ",\"profiles_parsed\":" + std::to_string(profilesParsed) +
+      ",\"profiles_read\":" + std::to_string(profilesRead) +
+      ",\"profiles_validated\":" + std::to_string(profilesValidated) +
+      ",\"profile_bytes\":" + std::to_string(profileBytes) +
+      ",\"extracted_bytes\":" + std::to_string(extractedBytes) +
+      ",\"decoded_pixels\":0,\"decoded_bytes\":0" +
+      ",\"metadata_open_ms\":" + CIccTiffTelemetry::Number(metadataOpenMs) +
+      ",\"preflight_ms\":" + CIccTiffTelemetry::Number(preflightMs) +
+      ",\"inventory_ms\":" + CIccTiffTelemetry::Number(inventoryMs) +
+      ",\"extraction_ms\":" + CIccTiffTelemetry::Number(extractionMs) +
+      ",\"profile_parse_ms\":" + CIccTiffTelemetry::Number(profileParseMs) +
+      ",\"profile_read_ms\":" + CIccTiffTelemetry::Number(profileReadMs) +
+      ",\"profile_validate_ms\":" + CIccTiffTelemetry::Number(profileValidateMs) +
+      (geometry.empty() ? "" : "," + geometry);
+  }
+
+  void Record(const char *event, const std::string &fields = "")
+  {
+    if (telemetry.Active() && !telemetry.Emit(event, Fields() +
+        (fields.empty() ? "" : "," + fields)))
+      writesOk = false;
+  }
+};
+
+static std::string TiffDumpGeometry(TIFF *tif, unsigned int directory)
+{
+  uint32_t width = 0, height = 0, tileWidth = 0, tileHeight = 0;
+  uint16_t bits = 0, samples = 0, planar = 0, orientation = 0;
+  uint16_t resolutionUnit = RESUNIT_INCH;
+  float xResolution = 0, yResolution = 0;
+  TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &width);
+  TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &height);
+  TIFFGetFieldDefaulted(tif, TIFFTAG_BITSPERSAMPLE, &bits);
+  TIFFGetFieldDefaulted(tif, TIFFTAG_SAMPLESPERPIXEL, &samples);
+  TIFFGetFieldDefaulted(tif, TIFFTAG_PLANARCONFIG, &planar);
+  TIFFGetFieldDefaulted(tif, TIFFTAG_ORIENTATION, &orientation);
+  TIFFGetFieldDefaulted(tif, TIFFTAG_RESOLUTIONUNIT, &resolutionUnit);
+  TIFFGetField(tif, TIFFTAG_XRESOLUTION, &xResolution);
+  TIFFGetField(tif, TIFFTAG_YRESOLUTION, &yResolution);
+  const bool tiled = TIFFIsTiled(tif) != 0;
+  if (tiled) {
+    TIFFGetField(tif, TIFFTAG_TILEWIDTH, &tileWidth);
+    TIFFGetField(tif, TIFFTAG_TILELENGTH, &tileHeight);
+  }
+  return "\"directory\":" + std::to_string(directory) +
+    ",\"width\":" + std::to_string(width) +
+    ",\"height\":" + std::to_string(height) +
+    ",\"bits_per_sample\":" + std::to_string(bits) +
+    ",\"samples_per_pixel\":" + std::to_string(samples) +
+    ",\"planar\":" + std::to_string(planar) +
+    ",\"layout\":" + CIccTiffTelemetry::JsonString(tiled ? "tiled" : "stripped") +
+    ",\"tiled\":" + (tiled ? "true" : "false") +
+    ",\"big_tiff\":" + (TIFFIsBigTIFF(tif) ? "true" : "false") +
+    ",\"tile_width\":" + std::to_string(tileWidth) +
+    ",\"tile_height\":" + std::to_string(tileHeight) +
+    ",\"orientation\":" + std::to_string(orientation) +
+    ",\"resolution_unit\":" + std::to_string(resolutionUnit) +
+    ",\"x_resolution\":" + CIccTiffTelemetry::Number(xResolution) +
+    ",\"y_resolution\":" + CIccTiffTelemetry::Number(yResolution);
+}
+#endif
+
+static bool ListDirectories(const char *path, bool evidence
+#ifdef ICCDEV_TELEMETRY
+                            , CIccTiffTelemetry *telemetry,
+                            TiffDumpTelemetryStats *stats
+#endif
+                            )
+{
+  CTiffImg image;
+#ifdef ICCDEV_TELEMETRY
+  if (telemetry)
+    stats->SetStage("metadata_open");
+  double phaseStart = telemetry ? CIccTiffTelemetry::Now() : 0;
+#endif
+  const bool opened = image.Open(path, true);
+#ifdef ICCDEV_TELEMETRY
+  if (telemetry) {
+    stats->metadataOpenMs = CIccTiffTelemetry::Since(phaseStart);
+    stats->Record("metadata_open", std::string("\"success\":") +
+                  (opened ? "true" : "false"));
+  }
+#endif
+  if (!opened)
+    return false;
+#ifdef ICCDEV_TELEMETRY
+  if (telemetry) {
+    stats->SetStage("inventory_preflight");
+    phaseStart = CIccTiffTelemetry::Now();
+  }
+#endif
+  const unsigned int count = image.GetDirectoryCount();
+#ifdef ICCDEV_TELEMETRY
+  if (telemetry) {
+    stats->preflightMs = CIccTiffTelemetry::Since(phaseStart);
+    stats->preflightIfds = count;
+    stats->Record("inventory_preflight",
+                  std::string("\"directory_cap\":4096,\"success\":") +
+                  (count && count <= 4096 ? "true" : "false"));
+  }
+#endif
+  if (!count || count > 4096) {
+    fprintf(stderr, "Cannot inventory TIFF directories (malformed chain or more than 4096 directories)\n");
+    return false;
+  }
+#ifdef ICCDEV_TELEMETRY
+  if (telemetry) {
+    stats->SetStage("inventory");
+    phaseStart = CIccTiffTelemetry::Now();
+  }
+#endif
+  if (evidence)
+    printf("{\"schema\":\"iccdev-tiff-inventory/v1\",\"directories\":[");
+  TIFF *tif = image.GetTiffHandle();
+  for (unsigned int i = 0; i < count; i++) {
+    // TIFFSetDirectory(i) traverses the main IFD chain from its start. Walk
+    // forward on the already open handle so listing many IFDs stays linear.
+    if (i && !TIFFReadDirectory(tif))
+      return false;
+    uint32_t width = 0, height = 0, tileWidth = 0, tileHeight = 0;
+    uint16_t photo = 0, bitsPerSample = 0, samplesPerPixel = 0;
+    uint16_t planar = 0, sampleFormat = 0, orientation = 0, compression = 0;
+    if (!TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &width) ||
+        !TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &height) ||
+        !TIFFGetField(tif, TIFFTAG_PHOTOMETRIC, &photo) ||
+        !TIFFGetFieldDefaulted(tif, TIFFTAG_BITSPERSAMPLE, &bitsPerSample))
+      return false;
+    const bool tiled = TIFFIsTiled(tif) != 0;
+    if (tiled && (!TIFFGetField(tif, TIFFTAG_TILEWIDTH, &tileWidth) ||
+                  !TIFFGetField(tif, TIFFTAG_TILELENGTH, &tileHeight)))
+      return false;
+    TIFFGetFieldDefaulted(tif, TIFFTAG_SAMPLESPERPIXEL, &samplesPerPixel);
+    TIFFGetFieldDefaulted(tif, TIFFTAG_PLANARCONFIG, &planar);
+    TIFFGetFieldDefaulted(tif, TIFFTAG_SAMPLEFORMAT, &sampleFormat);
+    TIFFGetFieldDefaulted(tif, TIFFTAG_ORIENTATION, &orientation);
+    TIFFGetFieldDefaulted(tif, TIFFTAG_COMPRESSION, &compression);
+    unsigned char *profile = NULL;
+    unsigned int length = 0;
+    TIFFGetField(tif, TIFFTAG_ICCPROFILE, &length, &profile);
+    if (!profile)
+      length = 0;
+#ifdef ICCDEV_TELEMETRY
+    if (telemetry) {
+      stats->directoriesVisited++;
+      stats->profileBytes += length;
+      stats->geometry = TiffDumpGeometry(tif, i);
+      stats->Record("directory_inspected",
+                    "\"directory_profile_bytes\":" + std::to_string(length));
+    }
+#endif
+    uint16_t subCount = 0;
+    uint64_t *subOffsets = NULL;
+    TIFFGetField(tif, TIFFTAG_SUBIFD, &subCount, &subOffsets);
+    if (evidence) {
+      printf("%s{\"directory\":%u,\"width\":%u,\"height\":%u,\"bigTiff\":%s,"
+             "\"tiled\":%s,\"tileWidth\":%u,\"tileHeight\":%u,\"compression\":%u,"
+             "\"codecAvailable\":%s,\"iccLength\":%u,\"bitsPerSample\":%u,"
+             "\"samplesPerPixel\":%u,\"planar\":%u,\"sampleFormat\":%u,"
+             "\"orientation\":%u,\"blockCount\":%u,\"subIfdOffsets\":[",
+             i ? "," : "", i, width, height,
+             TIFFIsBigTIFF(tif) ? "true" : "false", tiled ? "true" : "false",
+             tileWidth, tileHeight, compression,
+             TIFFIsCODECConfigured(compression) ? "true" : "false",
+             length, bitsPerSample, samplesPerPixel, planar,
+             sampleFormat, orientation,
+             tiled ? TIFFNumberOfTiles(tif) : TIFFNumberOfStrips(tif));
+      for (unsigned int s = 0; s < subCount; s++)
+        printf("%s%llu", s ? "," : "", static_cast<unsigned long long>(subOffsets[s]));
+      printf("]}");
+    }
+    else {
+      printf("IFD %u: %u x %u, %s, %s, tile %u x %u, compression %u, ICC %u bytes\n",
+             i, width, height, TIFFIsBigTIFF(tif) ? "BigTIFF" : "TIFF",
+             tiled ? "tiled" : "stripped", tileWidth,
+             tileHeight, compression, length);
+      for (unsigned int s = 0; s < subCount; s++)
+        printf("  SubIFD offset: %llu\n", static_cast<unsigned long long>(subOffsets[s]));
+    }
+  }
+  if (evidence)
+    printf("]}\n");
+#ifdef ICCDEV_TELEMETRY
+  if (telemetry) {
+    stats->inventoryMs = CIccTiffTelemetry::Since(phaseStart);
+    stats->Record("inventory_completed");
+  }
+#endif
+  return true;
+}
+
 int main(int argc, icChar* argv[])
 {
   int minargs = 1;
   bool bEvidenceJson = false;
-
-  if (argc > 1 && !stricmp(argv[1], "--evidence-json")) {
-    bEvidenceJson = true;
-    argv++;
-    argc--;
+  bool listDirectories = false;
+  unsigned int directory = 0;
+  bool hasDirectory = false;
+  std::vector<icChar*> positional;
+  const bool bareInvocation = argc <= 1;
+#ifdef ICCDEV_TELEMETRY
+  CIccTiffTelemetry telemetry;
+  TiffDumpTelemetryStats telemetryStats(telemetry);
+#endif
+  if (argc)
+    positional.push_back(argv[0]);
+  for (int arg = 1; arg < argc; arg++) {
+#ifdef ICCDEV_TELEMETRY
+    const int telemetryOption = telemetry.ParseOption(arg, argc, argv);
+    if (telemetryOption < 0)
+      return 1;
+    if (telemetryOption)
+      continue;
+#else
+    if (icRejectTiffTelemetryOption(argv[arg]))
+      return 1;
+#endif
+    if (!stricmp(argv[arg], "--help") || !stricmp(argv[arg], "-h")) {
+      Usage();
+      return 0;
+    }
+    if (!stricmp(argv[arg], "--evidence-json"))
+      bEvidenceJson = true;
+    else if (!stricmp(argv[arg], "--list-directories"))
+      listDirectories = true;
+    else if (!stricmp(argv[arg], "--ifd")) {
+      if (hasDirectory || arg + 1 >= argc) {
+        fprintf(stderr, "Invalid --ifd index\n");
+        return 1;
+      }
+      const char *text = argv[++arg];
+      char *end = NULL;
+      errno = 0;
+      const unsigned long value = strtoul(text, &end, 10);
+      if (text[0] < '0' || text[0] > '9' || !end || *end || errno || value > 4095) {
+        fprintf(stderr, "Invalid --ifd index (expected 0..4095)\n");
+        return 1;
+      }
+      directory = static_cast<unsigned int>(value);
+      hasDirectory = true;
+    }
+    else if (argv[arg][0] == '-' && argv[arg][1] == '-') {
+      fprintf(stderr, "Unknown option: %s\n", icSanitizeConsoleText(argv[arg]).c_str());
+      return 1;
+    }
+    else
+      positional.push_back(argv[arg]);
   }
+  argc = static_cast<int>(positional.size());
+  argv = positional.data();
   if (argc <= minargs) {
     Usage();
-    return 0;
+    return bareInvocation ? 0 : 1;
   }
   else if (argc > 3) {
     Usage();
     return 1;
+  }
+#ifdef ICCDEV_TELEMETRY
+  std::vector<std::string> protectedPaths;
+  protectedPaths.push_back(argv[1]);
+  if (argc > 2)
+    protectedPaths.push_back(argv[2]);
+  if (!telemetry.Start("iccTiffDump", protectedPaths,
+                       "\"metadata_only\":true,\"decoded_pixels\":0,\"decoded_bytes\":0"))
+    return 1;
+  telemetryStats.started = true;
+#endif
+  if (listDirectories) {
+    if (argc != 2 || hasDirectory) {
+      fprintf(stderr, "Directory listing cannot be combined with --ifd or extraction\n");
+      return 1;
+    }
+    const bool listed = ListDirectories(argv[1], bEvidenceJson
+#ifdef ICCDEV_TELEMETRY
+                                       , telemetry.Active() ? &telemetry : NULL,
+                                       &telemetryStats
+#endif
+                                       );
+#ifdef ICCDEV_TELEMETRY
+    if (!listed)
+      return 1;
+    if (telemetry.Active() &&
+        (!telemetryStats.writesOk || !telemetry.Finish(telemetryStats.Fields())))
+      return 1;
+    telemetryStats.completed = true;
+#endif
+    return listed ? 0 : 1;
   }
 
   // #2692: the extracted profile is written to argv[2].  Naming the input TIFF
@@ -438,7 +762,23 @@ int main(int argc, icChar* argv[])
   std::string srcName = icSanitizeConsoleText(argv[1]);
 
   CTiffImg SrcImg;
-  if (!SrcImg.Open(argv[1])) {
+#ifdef ICCDEV_TELEMETRY
+  telemetryStats.SetStage("metadata_open");
+  double phaseStart = telemetry.Active() ? CIccTiffTelemetry::Now() : 0;
+#endif
+  const bool opened = SrcImg.Open(argv[1], true, directory);
+#ifdef ICCDEV_TELEMETRY
+  if (telemetry.Active()) {
+    telemetryStats.metadataOpenMs = CIccTiffTelemetry::Since(phaseStart);
+    if (opened) {
+      telemetryStats.directoriesVisited = 1;
+      telemetryStats.geometry = TiffDumpGeometry(SrcImg.GetTiffHandle(), directory);
+    }
+    telemetryStats.Record("metadata_open",
+                          std::string("\"success\":") + (opened ? "true" : "false"));
+  }
+#endif
+  if (!opened) {
     fprintf(stderr, "\nFile [%s] cannot be opened.\n", srcName.c_str());
     return 1;
   }
@@ -446,6 +786,15 @@ int main(int argc, icChar* argv[])
   if (!bEvidenceJson) {
   printf("-------------------->Tiff Image Dump<---------------------------\n");
   printf("Filename:          %s\n", srcName.c_str());
+  printf("Directory:         %u\n", SrcImg.GetDirectory());
+  printf("Container:         %s\n", SrcImg.IsBigTiff() ? "BigTIFF" : "TIFF");
+  printf("Layout:            %s\n", SrcImg.IsTiled() ? "Tiled" : "Stripped");
+  if (SrcImg.IsTiled())
+    printf("Tile size:         %u x %u\n", SrcImg.GetTileWidth(), SrcImg.GetTileHeight());
+  printf("Block count:       %u\n", SrcImg.IsTiled() ? TIFFNumberOfTiles(SrcImg.GetTiffHandle()) :
+                                                    TIFFNumberOfStrips(SrcImg.GetTiffHandle()));
+  printf("Codec available:   %s (not a pixel decode check)\n",
+         TIFFIsCODECConfigured(static_cast<uint16_t>(SrcImg.GetCompress())) ? "yes" : "no");
   // A physical size only exists when RESOLUTIONUNIT names an absolute unit; under
   // RESUNIT_NONE the resolution values fix an aspect ratio and nothing else, so
   // GetWidthIn()/GetHeightIn() report 0 and printing inches would invent a measurement
@@ -454,10 +803,10 @@ int main(int argc, icChar* argv[])
   const double dWidthIn = SrcImg.GetWidthIn();
   const double dHeightIn = SrcImg.GetHeightIn();
   if (dWidthIn > 0.0 && dHeightIn > 0.0)
-    printf("Size:              (%d x %d) pixels, (%.2lf\" x %.2lf\")\n",
+    printf("Size:              (%u x %u) pixels, (%.2lf\" x %.2lf\")\n",
       SrcImg.GetWidth(), SrcImg.GetHeight(), dWidthIn, dHeightIn);
   else
-    printf("Size:              (%d x %d) pixels\n",
+    printf("Size:              (%u x %u) pixels\n",
       SrcImg.GetWidth(), SrcImg.GetHeight());
   printf("Planar:            %s\n", GetId(SrcImg.GetPlanar(), planar_types));
   printf("BitsPerSample:     %d (%s)\n", SrcImg.GetBitsPerSample(),
@@ -493,7 +842,7 @@ int main(int argc, icChar* argv[])
   unsigned int nEffectiveExtra = SrcImg.GetEffectiveExtraSamples();
   if (SrcImg.HasStoredExtraSamples()) {
     // Gated on the flag, not on a nonzero count: a stored 0 is a legitimate value, and
-    // a false flag means the count could not be determined (BigTIFF, or an unreadable
+    // a false flag means the count could not be determined (an unreadable
     // file) rather than that the tag was absent.
     if (SrcImg.HasStoredExtraSamplesCount() &&
         SrcImg.GetStoredExtraSamplesCount() != nExtra)
@@ -506,7 +855,10 @@ int main(int argc, icChar* argv[])
     printf("ExtraSamples:      not stored; libtiff treats %u of %u samples as non-color\n",
       nEffectiveExtra, SrcImg.GetSamples());
   printf("Photometric:       %s\n", GetId(SrcImg.GetPhoto(), photo_types));
-  printf("BytesPerLine:      %d\n", SrcImg.GetBytesPerLine());
+  if (SrcImg.GetBytesPerLine())
+    printf("BytesPerLine:      %u\n", SrcImg.GetBytesPerLine());
+  else
+    printf("BytesPerLine:      unavailable (unsupported pixel geometry)\n");
   printf("Resolution:        (%lf x %lf) %s\n", SrcImg.GetXRes(), SrcImg.GetYRes(),
     GetId(SrcImg.GetResolutionUnit(), resolution_units));
   printf("Compression:       %s\n", GetId(SrcImg.GetCompress(), compression_types));
@@ -516,7 +868,19 @@ int main(int argc, icChar* argv[])
   unsigned int nLen = 0;
   std::string embeddedProfileId;
   std::string extractedProfileId;
+#ifdef ICCDEV_TELEMETRY
+  telemetryStats.SetStage("profile_metadata");
+  phaseStart = telemetry.Active() ? CIccTiffTelemetry::Now() : 0;
+#endif
   if (SrcImg.GetIccProfile(pProfMem, nLen)) {
+#ifdef ICCDEV_TELEMETRY
+    if (telemetry.Active()) {
+      telemetryStats.profileBytes = nLen;
+      telemetryStats.Record("profile_metadata",
+                            "\"embedded_profile_present\":true,\"duration_ms\":" +
+                            CIccTiffTelemetry::Number(CIccTiffTelemetry::Since(phaseStart)));
+    }
+#endif
     if (!bEvidenceJson) {
       printf("Profile:           Embedded\n");
       fflush(stdout);
@@ -524,7 +888,21 @@ int main(int argc, icChar* argv[])
 
     if (argc > 2) {
       std::string dstName = icSanitizeConsoleText(argv[2]);
-      if (!WriteEmbeddedIccProfile(argv[2], pProfMem, nLen)) {
+#ifdef ICCDEV_TELEMETRY
+      telemetryStats.SetStage("profile_extraction");
+      phaseStart = telemetry.Active() ? CIccTiffTelemetry::Now() : 0;
+#endif
+      const bool extracted = WriteEmbeddedIccProfile(argv[2], pProfMem, nLen);
+#ifdef ICCDEV_TELEMETRY
+      if (telemetry.Active()) {
+        telemetryStats.extractionMs = CIccTiffTelemetry::Since(phaseStart);
+        if (extracted)
+          telemetryStats.extractedBytes = nLen;
+        telemetryStats.Record("profile_extraction",
+                              std::string("\"success\":") + (extracted ? "true" : "false"));
+      }
+#endif
+      if (!extracted) {
         fprintf(stderr, "\nUnable to extract profile to: %s\n", dstName.c_str());
         SrcImg.Close();
         return 1;
@@ -532,8 +910,19 @@ int main(int argc, icChar* argv[])
       // Only the evidence path consumes this, and it costs a second complete
       // CIccProfile parse of the file just written, so it stays inside the
       // guard rather than running on every ordinary extraction.
-      if (bEvidenceJson)
+      if (bEvidenceJson) {
+#ifdef ICCDEV_TELEMETRY
+        telemetryStats.SetStage("extracted_profile_parse");
+        phaseStart = telemetry.Active() ? CIccTiffTelemetry::Now() : 0;
+#endif
         extractedProfileId = GetProfileId(argv[2]);
+#ifdef ICCDEV_TELEMETRY
+        if (telemetry.Active())
+          telemetryStats.Record("extracted_profile_parse",
+                                "\"duration_ms\":" +
+                                CIccTiffTelemetry::Number(CIccTiffTelemetry::Since(phaseStart)));
+#endif
+      }
       if (!bEvidenceJson) {
         printf("\nProfile extracted byte-for-byte to: %s\n", dstName.c_str());
         fflush(stdout);
@@ -541,7 +930,20 @@ int main(int argc, icChar* argv[])
     }
 
     // Profile description and metadata
+#ifdef ICCDEV_TELEMETRY
+    telemetryStats.SetStage("profile_parse");
+    phaseStart = telemetry.Active() ? CIccTiffTelemetry::Now() : 0;
+#endif
     CIccProfile *pProfile = OpenIccProfile(pProfMem, nLen);
+#ifdef ICCDEV_TELEMETRY
+    if (telemetry.Active()) {
+      telemetryStats.profileParseMs = CIccTiffTelemetry::Since(phaseStart);
+      if (pProfile)
+        telemetryStats.profilesParsed++;
+      telemetryStats.Record("profile_parse",
+                            std::string("\"success\":") + (pProfile ? "true" : "false"));
+    }
+#endif
     if (!pProfile) {
       fprintf(stderr, "\nUnable to open embedded ICC profile\n");
       SrcImg.Close();
@@ -554,13 +956,42 @@ int main(int argc, icChar* argv[])
       DumpProfileInfo(pProfile, " ");
 
     std::string validateReport;
-    if (!pProfile->ReadTags(pProfile)) {
+#ifdef ICCDEV_TELEMETRY
+    telemetryStats.SetStage("profile_read");
+    phaseStart = telemetry.Active() ? CIccTiffTelemetry::Now() : 0;
+#endif
+    const bool tagsRead = pProfile->ReadTags(pProfile);
+#ifdef ICCDEV_TELEMETRY
+    if (telemetry.Active()) {
+      telemetryStats.profileReadMs = CIccTiffTelemetry::Since(phaseStart);
+      if (tagsRead)
+        telemetryStats.profilesRead++;
+      telemetryStats.Record("profile_read",
+                            std::string("\"success\":") + (tagsRead ? "true" : "false"));
+    }
+#endif
+    if (!tagsRead) {
       fprintf(stderr, "\nUnable to read embedded ICC profile\n");
       delete pProfile;
       SrcImg.Close();
       return 1;
     }
-    else if (pProfile->Validate(validateReport) > icValidateWarning) {
+#ifdef ICCDEV_TELEMETRY
+    telemetryStats.SetStage("profile_validate");
+    phaseStart = telemetry.Active() ? CIccTiffTelemetry::Now() : 0;
+#endif
+    const icValidateStatus validation = pProfile->Validate(validateReport);
+#ifdef ICCDEV_TELEMETRY
+    if (telemetry.Active()) {
+      telemetryStats.profileValidateMs = CIccTiffTelemetry::Since(phaseStart);
+      if (validation <= icValidateWarning)
+        telemetryStats.profilesValidated++;
+      telemetryStats.Record("profile_validate",
+                            "\"validation_status\":" + std::to_string(static_cast<int>(validation)) +
+                            ",\"success\":" + (validation <= icValidateWarning ? "true" : "false"));
+    }
+#endif
+    if (validation > icValidateWarning) {
       fprintf(stderr, "\nEmbedded ICC profile violates the ICC specification:\n%s",
               validateReport.c_str());
       delete pProfile;
@@ -569,6 +1000,12 @@ int main(int argc, icChar* argv[])
     }
     delete pProfile;
   } else {
+#ifdef ICCDEV_TELEMETRY
+    if (telemetry.Active())
+      telemetryStats.Record("profile_metadata",
+                            "\"embedded_profile_present\":false,\"duration_ms\":" +
+                            CIccTiffTelemetry::Number(CIccTiffTelemetry::Since(phaseStart)));
+#endif
     if (!bEvidenceJson)
       printf("Profile:           None\n");
     if (argc > 2) {
@@ -581,8 +1018,17 @@ int main(int argc, icChar* argv[])
 
   if (bEvidenceJson)
     EmitWriteEvidenceJson(argv[1], argc > 2 ? argv[2] : "",
-                          embeddedProfileId, extractedProfileId);
+                          embeddedProfileId, extractedProfileId, SrcImg);
 
+#ifdef ICCDEV_TELEMETRY
+  telemetryStats.SetStage("close");
+#endif
   SrcImg.Close();
+#ifdef ICCDEV_TELEMETRY
+  if (telemetry.Active() &&
+      (!telemetryStats.writesOk || !telemetry.Finish(telemetryStats.Fields())))
+    return 1;
+  telemetryStats.completed = true;
+#endif
   return 0;
 }

@@ -281,7 +281,7 @@ iccdev-mcp --transport sse --port 8080
 | `profile_to_json` | iccToJson | ICC to JSON conversion |
 | `json_to_profile` | iccFromJson | JSON to ICC conversion |
 | `round_trip_test` | iccRoundTrip | Round-trip transform fidelity |
-| `tiff_dump` | iccTiffDump | TIFF metadata + embedded ICC |
+| `tiff_dump` | iccTiffDump | Selected main-IFD metadata or bounded directory inventory |
 | `jpeg_dump` | iccJpegDump | JPEG metadata + embedded ICC |
 | `png_dump` | iccPngDump | PNG metadata + embedded ICC |
 | `heif_dump` | iccHeifDump | HEIF, HEIC, and AVIF metadata + embedded ICC |
@@ -290,8 +290,39 @@ iccdev-mcp --transport sse --port 8080
 | `apply_named_cmm` | iccApplyNamedCmm | Named color CMM |
 | `create_link` | iccApplyToLink | Device link creation |
 | `v5_to_v4` | iccV5DspObsToV4Dsp | v5 display to v4 conversion |
-| `spec_sep_to_tiff` | iccSpecSepToTiff | Spectral separation |
+| `spec_sep_to_tiff` | iccSpecSepToTiff | Combine numbered single-channel TIFFs, optionally tiled/BigTIFF |
 | `apply_search` | iccApplySearch | Search-based transform |
+
+TIFF inspection accepts `ifd` (0..4095), `list_directories`, and
+`evidence_json`. Listing and an explicit IFD are mutually exclusive; SubIFDs
+are reported as offsets, not followed. REST uses the same query names, with
+boolean query values `true` or `false`.
+
+`spec_sep_to_tiff` takes `input_prefix`, `start`, `end`, and `increment`,
+plus optional `compress`/`planar` (0 or 1), matching ICC `profile`,
+paired `tile_width`/`tile_height` (positive multiples of 16), and `bigtiff`.
+It returns successful TIFF output as `output_base64`. The REST
+`POST /api/spec-sep` body uses the same fields. The former separation/illuminant
+profile arguments did not match the native tool and are no longer accepted.
+For example, combine the tracked spectral channels using:
+
+```json
+{
+  "input_prefix": ".github/ci/test-data/spectral/spec_",
+  "start": 1,
+  "end": 10,
+  "increment": 1,
+  "tile_width": 16,
+  "tile_height": 32,
+  "bigtiff": true
+}
+```
+
+`apply_profiles` already accepts `config_args: ["-cfg", "config.json"]`;
+use the native `imageFiles.dstTileWidth`, `dstTileHeight`, and `dstBigTiff`
+configuration fields for tiled/BigTIFF destinations. Python's Cython and
+MATLAB's MEX APIs operate on profile/CMM sample arrays, not TIFF containers;
+these TIFF storage options do not change their in-process ABI.
 
 ### CLI-Only Tools (Not MCP-Exposed)
 
