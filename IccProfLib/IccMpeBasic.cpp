@@ -812,6 +812,12 @@ static double icFormulaCheckLog(double arg, icUInt32Number &flags)
   return icFormulaLogArg(arg);
 }
 
+static icFloatNumber icFormulaFloatMulAdd(icFloatNumber a, icFloatNumber v, icFloatNumber b)
+{
+  volatile icFloatNumber product = (icFloatNumber)(a * v);
+  return (icFloatNumber)(product + b);
+}
+
 /**
  ******************************************************************************
  * Name: icFormulaDomainAt
@@ -862,7 +868,7 @@ static icUInt32Number icFormulaDomainAt(icUInt16Number nType, const icFloatNumbe
 
   case 0x0004:
     if (icIsNear(p[0], 1.0))
-      icFormulaCheckLog(p[4] * v - p[2], flags);
+      icFormulaCheckLog(icFormulaFloatMulAdd(p[4], v, -p[2]), flags);
     else
       icFormulaCheckLog(p[4] * icFormulaCheckPow(v, p[0], flags) - p[2], flags);
     break;
@@ -878,8 +884,8 @@ static icUInt32Number icFormulaDomainAt(icUInt16Number nType, const icFloatNumbe
       // zero; Apply() gives 0 on both sides.
       icFloatNumber num, denom;
       if (icIsNear(p[1], 1.0)) {
-        num = icMax((icFloatNumber)(p[6] * v - p[2]), 0.0f);
-        denom = (icFloatNumber)(p[3] - p[4] * v);
+        num = icMax(icFormulaFloatMulAdd(p[6], v, -p[2]), 0.0f);
+        denom = icFormulaFloatMulAdd(-p[4], v, p[3]);
       }
       else {
         double x = icFormulaCheckPow(v, p[1], flags);
@@ -903,8 +909,8 @@ static icUInt32Number icFormulaDomainAt(icUInt16Number nType, const icFloatNumbe
       double num;
       icFloatNumber denom;
       if (icIsNear(p[1], 1.0)) {
-        num = p[2] + p[3] * v;
-        denom = (icFloatNumber)(1.0 + p[4] * v);
+        num = icFormulaFloatMulAdd(p[3], v, p[2]);
+        denom = icFormulaFloatMulAdd(p[4], v, 1.0f);
       }
       else {
         double x = icFormulaCheckPow(v, p[1], flags);
