@@ -244,6 +244,7 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.issue-2692-same-file-output-regression` | `.github/scripts/iccdev-issue-2692-same-file-output-regression.sh`; iccApplyProfiles, iccSpecSepToTiff, iccTiffDump, iccJpegDump and iccPngDump refuse an output that is one of their inputs, with the input left byte-identical (#2692) |
 | `iccdev.iccconnect-config-parser` | `.github/ci/regression/iccconnect-config-parser.cpp` |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
+| `iccdev.cmm-get-apply-pcs-status` | `.github/ci/regression/cmm-get-apply-pcs-status.cpp`; output-first C ABI CMMs with a leading PCS adjustment return a usable additional apply object after `Begin()` |
 | `iccdev.namedcmm-sample-guards` | `.github/ci/regression/namedcmm-sample-guards.cpp`; `CIccNamedColorCmm::Begin()` refuses a spectral source or destination that a colorimetric AToB3/BToA3 fallback cannot serve, as `CIccCmm::Begin()` does, for issue #2704 |
 | `iccdev.curve-apply-gamma` | `.github/ci/regression/curve-apply-gamma.cpp`; direct one-entry gamma API contract for issue #2686 |
 | `iccdev.curve-gamma-tool-labels` | `Build/Cmake/Testing/RunCurveGammaToolLabelsTest.cmake`; the `Y = X ^ g` label `iccProfilePlot` and `iccProfileVisualize` print for a one-entry curve carries the stored u8Fixed8 exponent (sample * 65535 / 256, not sample * 256), checked on the four `gamma-*.icc` fixtures, for issue #2717 |
@@ -462,6 +463,7 @@ Windows full tool builds register these tests when all targets are available:
 | `iccdev.fileio-reopen-nonregular` | `.github/ci/regression/fileio-reopen-nonregular.cpp` (skipped: POSIX-only check) |
 | `iccdev.fileio-seek-tell` | `.github/ci/regression/fileio-seek-tell.cpp` |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
+| `iccdev.cmm-get-apply-pcs-status` | `.github/ci/regression/cmm-get-apply-pcs-status.cpp`; BPC-off and BPC-on controls cover the leading PCS status contract through the public C ABI |
 | `iccdev.windows-iccdevcmm-smoke` | `Tools/Winnt/IccDEVCmm/tests/IccDEVCmmSmoke.cpp` |
 | `iccdev.parser-restore-calls` | `.github/ci/regression/parser-restore-calls.cpp` |
 | `iccdev.profile-write-failure` | `.github/ci/regression/profile-write-failure.cpp` |

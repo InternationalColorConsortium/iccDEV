@@ -418,6 +418,56 @@ function(iccdev_add_iccconnect_thread_test)
   endif()
 endfunction()
 
+function(iccdev_add_cmm_get_apply_pcs_status_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCmmGetApplyPcsStatusTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/cmm-get-apply-pcs-status.cpp"
+  )
+  target_compile_features(iccCmmGetApplyPcsStatusTest PRIVATE cxx_std_17)
+  target_include_directories(iccCmmGetApplyPcsStatusTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccCmmGetApplyPcsStatusTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccCmmGetApplyPcsStatusTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.cmm-get-apply-pcs-status
+      COMMAND "$<TARGET_FILE:iccCmmGetApplyPcsStatusTest>"
+        "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+    )
+  else()
+    add_test(
+      NAME iccdev.cmm-get-apply-pcs-status
+      COMMAND "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccCmmGetApplyPcsStatusTest>"
+        "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+    )
+  endif()
+  set_tests_properties(iccdev.cmm-get-apply-pcs-status PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;c-abi;pcs;regression"
+  )
+  if(WIN32)
+    set(_cmm_get_apply_pcs_status_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCmmGetApplyPcsStatusTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _cmm_get_apply_pcs_status_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.cmm-get-apply-pcs-status PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_cmm_get_apply_pcs_status_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Positive control for the ICC_TAINT_TRACE memory-state query. It is not a CTest:
 # its verdict needs Valgrind Memcheck or MemorySanitizer around it, so
 # iccdev-taint-trace-qa.sh and iccdev-msan-taint-qa.sh run it instead. It is
@@ -12311,6 +12361,7 @@ if(WIN32)
   endif()
 
   iccdev_add_iccconnect_thread_test()
+  iccdev_add_cmm_get_apply_pcs_status_test()
   iccdev_add_clut_avx512_sixteen_output_test()
   iccdev_add_iccconnect_config_parser_test()
   iccdev_add_createsearch_embedded_profile_test()
@@ -12858,6 +12909,7 @@ set(ICCDEV_TEST_ENV
 )
 
 iccdev_add_iccconnect_thread_test()
+iccdev_add_cmm_get_apply_pcs_status_test()
 iccdev_add_taint_trace_memory_state_probe()
 iccdev_add_clut_avx512_sixteen_output_test()
 iccdev_add_iccconnect_config_parser_test()

@@ -3129,13 +3129,15 @@ CIccApplyXform *CIccPcsXform::GetNewApply(icStatusCMM &status)
     return NULL;
   }
 
+  status = icCmmStatOk;
   CIccPcsStepList::iterator i;
   CIccApplyPcsStep *pStep;
 
   for (i=m_list->begin(); i!=m_list->end(); i++) {
     pStep = i->ptr->GetNewApply();
-    if (!pStep || status != icCmmStatOk) {
+    if (!pStep) {
       delete pNew;
+      status = icCmmStatAllocErr;
       return NULL;
     }
     pNew->AppendApplyStep(pStep);
