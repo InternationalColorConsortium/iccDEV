@@ -9,7 +9,7 @@ tabs.
 \subpage curateddocumentation "Documentation and Reports"
 \subpage curatedlibraries "Libraries"
 \subpage curatedtools "Tools"
-\subpage curatedtesting "Testing and CTest"
+\subpage curatedmaintainerqa "Maintainer QA and Reports"
 */
 
 /**
@@ -50,9 +50,8 @@ tabs.
 */
 
 /**
-\page curatedtesting Testing and CTest
+\page curatedmaintainerqa Maintainer QA and Reports
 
-\subpage md_docs_2ctest "CTest tool suites"
 \subpage md_docs_2afl-fuzzing "AFL++ smoke fuzzing"
 \subpage md_docs_2maintainer-qa-scans "Maintainer QA scans"
 \subpage md_docs_2matlab-bindings "MATLAB bindings and QA"

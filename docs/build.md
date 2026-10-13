@@ -146,7 +146,7 @@ Xcode places CLI executables in `Tools/<tool>/<configuration>/`. Use
 `ctest --test-dir out/macos-xcode -C Release` to select that configuration.
 CTest automatically prepares a configuration-specific compatibility directory
 for the shell-backed suites; no executable copies or manual path overrides
-are needed. See [CTest Tool Suites](ctest.md) for the build and test commands.
+are needed. See <a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/docs/ctest.md">CTest Tool Suites</a> for the build and test commands.
 
 For GuardMalloc/libgmalloc crash reproduction, use a non-sanitizer Debug build
 and verify that the built Mach-O tools contain `LC_UUID`. Apple's dynamic loader
@@ -344,7 +344,7 @@ The simulator helper uses `ICCDEV_APPLE_CORE_FLAVOR=extended` by default; set
 The Xcode command builds dependency-free Release and Debug test targets in
 `out/xcode-ctest-smoke`, exercises the configuration-specific CTest runtime
 layout, and requires freshly generated CLI output to catch skipped execution.
-See [CTest tool suites](ctest.md) for broader desktop coverage.
+See <a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/docs/ctest.md">CTest tool suites</a> for broader desktop coverage.
 
 ### Manual iOS example apps
 
@@ -589,7 +589,7 @@ ctest --test-dir out/vs2022-x64 -C Release --output-on-failure --no-tests=error
 cmake --build out/vs2022-x64 --config Release --target check
 ```
 
-See [CTest tool suites](ctest.md) for the registered tests, fixtures, logs, and
+See <a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/docs/ctest.md">CTest tool suites</a> for the registered tests, fixtures, logs, and
 add-test process.
 
 QA flag evidence builds are enabled by `ICCDEV_ENABLE_QA_FLAGS=ON`. Convenience

@@ -36,8 +36,12 @@ This repository uses all three GitHub custom-instruction types:
 Keep agent rules in `AGENTS.md`, not in the mirrors. See
 https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions
 
-For documentation edits, run `doxygen .github/ci/doxygen/Doxyfile` before
-handoff and require `docs/generated/doxygen-warnings.log` to be empty. Keep
+For documentation edits, run the bounded graph-light Doxygen check in
+`docs/documentation-maintenance.md` before handoff and require
+`docs/generated/doxygen-warnings.log` to be empty. Time is valuable: full
+graph generation belongs to release packaging or graph changes. Keep
+`HAVE_DOT=YES` for checked-in diagrams; exclude CTest implementation and
+fixtures from the generated package. Keep
 Markdown links inside the Doxygen INPUT tree; use explicit HTML anchors for
 outside-tree references. Never commit generated Doxygen output or warning logs.
 

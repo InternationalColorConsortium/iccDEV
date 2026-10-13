@@ -1,10 +1,11 @@
-# Doxyfile -- Full iccDEV project documentation
+# Doxyfile -- iccDEV API and maintainer documentation
 #
-# Generates HTML-only API documentation for the full iccDEV source tree,
+# Generates HTML-only API documentation for the libraries and tools,
 # including IccProfLib, IccXML, IccJSON/IccLibJSON, IccConnect/IccLibConnect,
 # command-line tools such as IccPawgReport and IccProfileVisualize, Winnt tools
 # such as IccIisIsapi and its OpenAPI contract, the hello-iccdev example app
-# source, and developer documentation.
+# source, and maintainer documentation. CTest, test harnesses, fixtures, and
+# build/test infrastructure are not part of this documentation package.
 # Visual aids include interactive SVG call/caller graphs, class hierarchy,
 # collaboration diagrams, include graphs, directory graphs, treeview navigation,
 # client-side search, and source browsing.
@@ -40,8 +41,7 @@ INPUT                  = IccProfLib \
                          examples/ios-benchapply/BenchApplyHost.mm \
                          examples/ios-benchapply/main.mm \
                          docs \
-                         .github/ci/doxygen/curated-navigation.dox \
-                         .github/ci/quality-assurance/scripts
+                         .github/ci/doxygen/curated-navigation.dox
 USE_MDFILE_AS_MAINPAGE =
 FILE_PATTERNS          = *.h *.h.in *.hpp *.c *.cc *.cpp *.cxx *.mm *.md *.dox *.dot *.sh *.yaml *.yml
 RECURSIVE              = YES
@@ -51,15 +51,24 @@ EXCLUDE                = docs/generated \
                          docs/libraries.md \
                          docs/tools.md \
                          docs/testing.md \
+                         docs/ctest.md \
+                         docs/Testing \
                          docs/superpowers \
                          docs/governance/incidents \
-                         docs/Testing/test-json-tools.sh \
+                         Tools/Winnt/IccIisIsapi/IccIsapiFuzzTest.cpp \
+                         Tools/Winnt/IccIisIsapi/iccIisIsapiSmoke.cpp \
                          IccProfLib/registry/README.md \
                          Build \
+                         Testing \
+                         .github/ci/quality-assurance \
                          .git
 EXCLUDE_PATTERNS       = */Build/* \
                          */build/* \
                          */CMakeFiles/* \
+                         */Testing/* \
+                         */tests/* \
+                         */CTest* \
+                         */CMakeLists.txt \
                          */.git/*
 # Hide duplicated iccPngDump file-local helper declarations from the public API
 # index. The definitions remain in source browsing, but these helpers are not

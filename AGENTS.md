@@ -16,9 +16,12 @@ shares one source of truth. Update rules here, not in the mirrors.
 - Keep documentation links Doxygen-safe: if a Markdown link points outside the
   Doxygen INPUT tree, use an explicit HTML anchor instead of a Markdown reference
   so generated docs stay warning-free. Before handing off documentation changes,
-  run `doxygen .github/ci/doxygen/Doxyfile` and require an empty
-  `docs/generated/doxygen-warnings.log`; do not add generated Doxygen output to
-  the repository.
+  run the bounded graph-light Doxygen check in
+  `docs/documentation-maintenance.md` and require an empty
+  `docs/generated/doxygen-warnings.log`. Time is valuable: reserve full graph
+  generation for release packaging or graph changes, not routine prose edits.
+  Keep `HAVE_DOT=YES` for checked-in diagrams; leave CTest implementation and
+  fixtures outside the generated package. Do not add generated output to Git.
 - Use 2-space C++ indentation, K&R braces, `m_` members, and return-value errors.
 - Exit 1-127 is graceful failure. Exit 128+ is signal termination.
 - Use sanitizer builds for bug hunting; see `.github/instructions/build-system.instructions.md`.

@@ -65,8 +65,31 @@ point to deeper references.
   `python/README.md` or an `examples/.../README.md` page), prefer an explicit
   HTML anchor like `<a href="../python/README.md">python/README.md</a>` to keep
   the generated docs warning-free without changing the rendered link target.
-- Run `doxygen .github/ci/doxygen/Doxyfile` for documentation changes and
-  require `docs/generated/doxygen-warnings.log` to be empty before handoff.
+- Keep the Doxygen package focused on libraries, tools, examples, and
+  maintainer guidance. CTest implementation, fixtures, QA script sources, and
+  `docs/ctest.md` stay outside the generated package. Link to the source CTest
+  guide with an HTML anchor rather than adding it back as a generated page.
+- Time is valuable: validate documentation with Doxygen parsing and warnings
+  first, without rendering call/caller/include graphs. The release package
+  retains graphs; a prose or input-scope change does not require regenerating
+  them locally. From the repository root on a Unix/WSL shell, run:
+
+  ```bash
+  {
+    cat .github/ci/doxygen/Doxyfile
+    printf '\nCLASS_GRAPH = NO\nCOLLABORATION_GRAPH = NO\nGROUP_GRAPHS = NO\n'
+    printf 'INCLUDE_GRAPH = NO\nINCLUDED_BY_GRAPH = NO\nCALL_GRAPH = NO\n'
+    printf 'CALLER_GRAPH = NO\nGRAPHICAL_HIERARCHY = NO\nDIRECTORY_GRAPH = NO\n'
+  } | doxygen -
+  test ! -s docs/generated/doxygen-warnings.log
+  ```
+
+  Bound the command with an external timeout when a wall-clock budget applies.
+  Use the unmodified Doxyfile for release HTML/graph generation. Neither
+  invocation builds project binaries or runs CTest.
+  Keep `HAVE_DOT=YES` so the small, checked-in `\dotfile` diagrams are still
+  validated. On WSL, use native Linux scratch without previous generated
+  output; scanning an NTFS tree containing old HTML can dominate runtime.
 - Do not add generated artifacts, logs, crash files, or local environment paths.
 - New or relocated ICC-owned C/C++ sources and headers must retain the complete
   BSD-3-Clause notice derived from `LICENSE.md`. Run
