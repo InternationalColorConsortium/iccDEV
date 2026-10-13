@@ -356,31 +356,61 @@ bool CIccProfileJson::ParseBasic(const IccJson &header, std::string &parseStr)
   m_Header.magic = icMagicNumber;
 
   std::string str;
+  auto getPresentString = [&](const char *field, std::string &value) -> bool {
+    if (!header.contains(field))
+      return true;
+    value.clear();
+    if (!jGetString(header, field, value)) {
+      parseStr += std::string("Invalid Header.") + field + "\n";
+      return false;
+    }
+    return true;
+  };
+
   if (jGetString(header, "PreferredCMMType", str))
     m_Header.cmmId = (icCmmSignature)icGetSigVal(str.c_str());
 
-  if (jGetString(header, "ProfileVersion", str))
+  if (!getPresentString("ProfileVersion", str))
+    return false;
+  if (header.contains("ProfileVersion"))
     m_Header.version = (m_Header.version & 0x0000ffff) | (icJsonParseBCDVersionStr(str.c_str()) << 16);
 
   if (jGetString(header, "ProfileSubClassVersion", str))
     m_Header.version = (m_Header.version & 0xffff0000) | icJsonParseBCDVersionStr(str.c_str());
 
-  if (jGetString(header, "ProfileDeviceClass", str))
+  if (!getPresentString("ProfileDeviceClass", str))
+    return false;
+  if (header.contains("ProfileDeviceClass"))
     m_Header.deviceClass = (icProfileClassSignature)icGetSigVal(str.c_str());
 
   if (jGetString(header, "ProfileDeviceSubClass", str))
     m_Header.deviceSubClass = (icSignature)icGetSigVal(str.c_str());
 
-  if (jGetString(header, "DataColourSpace", str))
+  if (!getPresentString("DataColourSpace", str))
+    return false;
+  if (header.contains("DataColourSpace"))
     m_Header.colorSpace = (icColorSpaceSignature)icGetSigVal(str.c_str());
 
-  if (jGetString(header, "PCS", str))
+  if (!getPresentString("PCS", str))
+    return false;
+  if (header.contains("PCS"))
     m_Header.pcs = (icColorSpaceSignature)icGetSigVal(str.c_str());
 
-  if (jGetString(header, "CreationDateTime", str))
+  if (!getPresentString("CreationDateTime", str))
+    return false;
+  if (header.contains("CreationDateTime"))
     m_Header.date = icGetDateTimeValue(str.c_str());
 
-  if (jGetString(header, "PrimaryPlatform", str))
+  if (header.contains("ProfileFileSignature")) {
+    if (!jGetString(header, "ProfileFileSignature", str) || str != "acsp") {
+      parseStr += "Invalid Header.ProfileFileSignature\n";
+      return false;
+    }
+  }
+
+  if (!getPresentString("PrimaryPlatform", str))
+    return false;
+  if (header.contains("PrimaryPlatform"))
     m_Header.platform = (icPlatformSignature)icGetSigVal(str.c_str());
 
   if (jGetString(header, "DeviceManufacturer", str))
@@ -398,11 +428,17 @@ bool CIccProfileJson::ParseBasic(const IccJson &header, std::string &parseStr)
   if (header.contains("DeviceAttributes") && header["DeviceAttributes"].is_object())
     m_Header.attributes = icJsonParseDeviceAttr(header["DeviceAttributes"]);
 
-  if (jGetString(header, "RenderingIntent", str))
+  if (!getPresentString("RenderingIntent", str))
+    return false;
+  if (header.contains("RenderingIntent"))
     m_Header.renderingIntent = icGetRenderingIntentValue(str.c_str());
 
-  double ill[3];
-  if (jGetArray(header, "PCSIlluminant", ill, 3)) {
+  if (header.contains("PCSIlluminant")) {
+    double ill[3] = {0.0, 0.0, 0.0};
+    if (!jGetArray(header, "PCSIlluminant", ill, 3)) {
+      parseStr += "Invalid Header.PCSIlluminant\n";
+      return false;
+    }
     m_Header.illuminant.X = icDtoF(ill[0]);
     m_Header.illuminant.Y = icDtoF(ill[1]);
     m_Header.illuminant.Z = icDtoF(ill[2]);

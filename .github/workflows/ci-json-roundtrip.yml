@@ -84,6 +84,7 @@ jobs:
             -DENABLE_TOOLS=ON \
             -DENABLE_TESTS=ON
           make -j"$(nproc)"
+          cmake --build . --parallel "$(nproc)" --target iccJsonReaderStrictnessTest
 
       - name: Verify tool binaries
         env:
@@ -96,6 +97,7 @@ jobs:
           test -x Build/build-json/Tools/IccFromJson/iccFromJson
           test -x Build/build-json/Tools/IccFromXml/iccFromXml
           test -x Build/build-json/Tools/IccDumpProfile/iccDumpProfile
+          test -x Build/build-json/Testing/iccJsonReaderStrictnessTest
           echo "[OK] JSON tool binaries built"
 
       - name: Generate test profiles
@@ -435,11 +437,11 @@ jobs:
             --output-on-failure \
             --no-tests=error \
             --output-junit Build/build-json/json-focused-ctest-results.xml \
-            -R 'iccdev\.(json-parser-regressions|stdobserver-regressions|mluc-iso-code-regressions)'
+            -R 'iccdev\.(json-reader-strictness|json-parser-regressions|stdobserver-regressions|mluc-iso-code-regressions)'
 
           {
             echo ""
             echo "### CTest JSON Focused Regressions"
             echo ""
-            echo "**Command**: $(sanitize_line "ctest -R iccdev.(json-parser-regressions|stdobserver-regressions|mluc-iso-code-regressions)")"
+            echo "**Command**: $(sanitize_line "ctest -R 'iccdev\.(json-reader-strictness|json-parser-regressions|stdobserver-regressions|mluc-iso-code-regressions)'")"
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
