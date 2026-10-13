@@ -152,8 +152,17 @@ jobs:
           platforms: ${{ matrix.platform }}
           build-args: |
             GIT_COMMIT=${{ github.sha }}
-          load: true
+          load: ${{ env.PUBLISH_IMAGE != 'true' }}
           push: false
+          outputs: >-
+            ${{
+              env.PUBLISH_IMAGE == 'true' &&
+              format(
+                'type=image,name={0},push-by-digest=true,name-canonical=true,push=true',
+                steps.image.outputs.name
+              ) ||
+              ''
+            }}
           provenance: false
           sbom: false
           labels: |
@@ -169,25 +178,34 @@ jobs:
           IMAGE_NAME: ${{ steps.image.outputs.name }}
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
           IMAGE_ARCH: ${{ matrix.arch }}
+          BUILD_DIGEST: ${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           source .github/scripts/sanitize-sed.sh
 
-          test_image="$(sed -n '1p' <<< "$IMAGE_TAGS")"
-          if [ -z "$test_image" ]; then
-            echo "No image tag was generated for validation" >&2
-            exit 1
-          fi
           immutable_image="${IMAGE_NAME}:sha-${EXPECTED_SHA}"
           if ! grep -Fqx "$immutable_image" <<< "$IMAGE_TAGS"; then
-            echo "Immutable SHA tag was not generated for staging" >&2
+            echo "Immutable SHA tag was not generated" >&2
             exit 1
           fi
-          staging_image="${immutable_image}-${IMAGE_ARCH}"
+
+          if [ "${PUBLISH_IMAGE:-false}" = "true" ]; then
+            if [[ ! "$BUILD_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "Unable to resolve pushed image digest for ${IMAGE_ARCH}" >&2
+              exit 1
+            fi
+            test_image="${IMAGE_NAME}@${BUILD_DIGEST}"
+          else
+            test_image="$(sed -n '1p' <<< "$IMAGE_TAGS")"
+            if [ -z "$test_image" ]; then
+              echo "No image tag was generated for validation" >&2
+              exit 1
+            fi
+          fi
+
           printf 'image=%s\n' "$(sanitize_line "$test_image")" >> "$GITHUB_OUTPUT"
-          printf 'staging_image=%s\n' "$(sanitize_line "$staging_image")" >> "$GITHUB_OUTPUT"
 
       - name: Verify unified image
         env:
@@ -201,6 +219,9 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
+          if [[ "$TEST_IMAGE" == *@sha256:* ]]; then
+            docker pull "$TEST_IMAGE"
+          fi
           image_revision="$(docker image inspect "$TEST_IMAGE" \
             --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
           image_ref_name="$(docker image inspect "$TEST_IMAGE" \
@@ -238,6 +259,37 @@ jobs:
             iccDumpProfile -v Testing/sRGB_v4_ICC_preference.icc >/dev/null
             ctest --test-dir "$ICCDEV_BUILD_DIR" -N --no-tests=error >/dev/null
           '
+
+      - name: Record validated image digest
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
+        env:
+          BASH_ENV: /dev/null
+          IMAGE_ARCH: ${{ matrix.arch }}
+          IMAGE_DIGEST: ${{ steps.build-push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          if [[ ! "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Unable to resolve pushed image digest for ${IMAGE_ARCH}" >&2
+            exit 1
+          fi
+          mkdir -p out/image-digests
+          printf '%s\n' "$IMAGE_DIGEST" > "out/image-digests/${IMAGE_ARCH}.digest"
+          printf 'Validated image digest for %s: %s\n' \
+            "$(sanitize_line "$IMAGE_ARCH")" \
+            "$(sanitize_line "$IMAGE_DIGEST")"
+
+      - name: Upload image digest
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: iccdev-image-digest-${{ matrix.arch }}
+          path: out/image-digests/${{ matrix.arch }}.digest
+          retention-days: 1
+          if-no-files-found: error
 
       - name: Verify real MCP and REST runtime
         id: runtime-smoke
@@ -334,36 +386,12 @@ jobs:
             echo "- Limit: $(sanitize_line "$MAX_ATTEST_BYTES")"
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
-      - name: Stage validated image by immutable SHA
-        if: ${{ env.PUBLISH_IMAGE == 'true' }}
-        id: stage
-        env:
-          BASH_ENV: /dev/null
-          TEST_IMAGE: ${{ steps.test-image.outputs.image }}
-          STAGING_IMAGE: ${{ steps.test-image.outputs.staging_image }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-
-          docker tag "$TEST_IMAGE" "$STAGING_IMAGE"
-          docker push "$STAGING_IMAGE"
-
-          image_digest_ref="$(docker image inspect "$STAGING_IMAGE" --format '{{index .RepoDigests 0}}')"
-          image_digest="${image_digest_ref##*@}"
-          if [[ ! "$image_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-            echo "Unable to resolve staged image digest" >&2
-            exit 1
-          fi
-          printf 'digest=%s\n' "$(sanitize_line "$image_digest")" >> "$GITHUB_OUTPUT"
-
       - name: Attest build provenance
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
         with:
           subject-name: ${{ steps.image.outputs.name }}
-          subject-digest: ${{ steps.stage.outputs.digest }}
+          subject-digest: ${{ steps.build-push.outputs.digest }}
           push-to-registry: true
 
       - name: Attest SBOM
@@ -375,7 +403,7 @@ jobs:
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
         with:
           subject-name: ${{ steps.image.outputs.name }}
-          subject-digest: ${{ steps.stage.outputs.digest }}
+          subject-digest: ${{ steps.build-push.outputs.digest }}
           sbom-path: sbom.${{ matrix.arch }}.cyclonedx.json
           push-to-registry: true
 
@@ -385,7 +413,7 @@ jobs:
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
         with:
           subject-name: ${{ steps.image.outputs.name }}
-          subject-digest: ${{ steps.stage.outputs.digest }}
+          subject-digest: ${{ steps.build-push.outputs.digest }}
           sbom-path: sbom.${{ matrix.arch }}.cyclonedx.json
           push-to-registry: true
 
@@ -482,10 +510,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Download image digests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v7.0.0
+        with:
+          pattern: iccdev-image-digest-*
+          path: out/image-digests
+          merge-multiple: true
+
       - name: Publish verified multi-architecture manifest
         env:
           BASH_ENV: /dev/null
-          EXPECTED_SHA: ${{ github.sha }}
           IMAGE_NAME: ${{ steps.image.outputs.name }}
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
@@ -504,10 +538,24 @@ jobs:
             exit 1
           fi
 
+          digest_refs=()
+          for image_arch in amd64 arm64; do
+            digest_file="out/image-digests/${image_arch}.digest"
+            if [ ! -f "$digest_file" ]; then
+              echo "Missing validated image digest for ${image_arch}" >&2
+              exit 1
+            fi
+            image_digest="$(tr -d '[:space:]' < "$digest_file")"
+            if [[ ! "$image_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "Invalid validated image digest for ${image_arch}" >&2
+              exit 1
+            fi
+            digest_refs+=("${IMAGE_NAME}@${image_digest}")
+          done
+
           docker buildx imagetools create \
             "${tag_args[@]}" \
-            "${IMAGE_NAME}:sha-${EXPECTED_SHA}-amd64" \
-            "${IMAGE_NAME}:sha-${EXPECTED_SHA}-arm64"
+            "${digest_refs[@]}"
 
           while IFS= read -r image_tag; do
             [ -n "$image_tag" ] || continue
