@@ -4,6 +4,12 @@ Systematic code review workflow for finding security bugs in iccDEV.
 Based on analysis of 80+ upstream issues and 19 findings from manual
 code review (April 2026).
 
+When the default AFL/CFL lanes have saturated, start from a recent fix and
+write a targeted input through the existing XML, JSON, ICC, or TIFF tools.
+Keep a valid control that differs by one field and compare parser diagnostics,
+saved bytes, and XML/JSON parity. A sanitizer-only failure and a Release parser
+that silently saves changed data are different evidence; report both when seen.
+
 ## Review Churn Controls
 
 Before reporting a finding, confirm that it is introduced by the reviewed diff
@@ -105,6 +111,12 @@ calls where the return value is discarded. For paired XML/JSON readers, compare
 failure propagation at every nested parse boundary. A spec-defined empty
 placeholder may need an explicit exception, but a present malformed child must
 not be silently converted into that placeholder.
+
+Check typed JSON getters such as `jGetValue()` too: a wrong-type `start`, `end`,
+or channel count can leave a zero-initialized local that is then serialized as
+if the document supplied zero. For status output parameters, check that every
+successful return writes success before callers inspect the status, especially
+when the first transform is a PCS adjustment.
 
 ```bash
 grep -rn 'Read(' IccProfLib/ | grep -v 'if.*Read\|!.*Read\|==.*Read'
