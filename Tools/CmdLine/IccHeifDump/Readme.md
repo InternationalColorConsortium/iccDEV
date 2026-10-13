@@ -25,6 +25,20 @@ When an output directory is supplied, the tool writes profiles as:
 item-<item-id>-property-<property-index>-<prof-or-rICC>.icc
 ```
 
+Extraction never overwrites an existing path. Choose an empty output directory;
+this prevents a carrier from being clobbered when its name matches an extraction
+filename.
+Existing regular files, hard links, symlinks (including dangling symlinks),
+and directories are rejected with exit status 2. Concurrent extractions to
+the same filename allow only one writer to create the output. If extraction
+fails partway through a multi-profile carrier, earlier outputs remain; use
+a fresh directory when retrying.
+
+The focused `iccdev.heif-output-safety` CTest checks this contract on Windows
+and Unix using the tracked carrier and its pinned ICC digest. It needs Python 3
+and the native tool, but does not need the Nokia reader. Windows symlink cases
+report a skip if the account lacks symlink creation privileges.
+
 Each embedded ICC property reports its carrier metadata, byte count, output
 path, and `proflib_parse` status:
 

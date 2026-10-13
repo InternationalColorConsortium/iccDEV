@@ -39,7 +39,13 @@
  */
 
 #include <cstdint>
-#include <fstream>
+#include <cstdio>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 #include <iostream>
 #include <limits>
 #include <new>
@@ -60,8 +66,16 @@ namespace
   {
     std::ostringstream path;
     path << directory;
-    if (!directory.empty() && directory.back() != '/') {
-      path << '/';
+    const char last = directory.empty() ? '\0' : directory.back();
+#ifdef _WIN32
+    const bool hasSeparator = last == '/' || last == '\\';
+    const char separator = '\\';
+#else
+    const bool hasSeparator = last == '/';
+    const char separator = '/';
+#endif
+    if (!directory.empty() && !hasSeparator) {
+      path << separator;
     }
     path << "item-" << itemId << "-property-" << propertyIndex << '-'
          << colourType << ".icc";
@@ -71,13 +85,35 @@ namespace
   bool writeProfile(const std::string& path, const std::uint8_t* profile,
                     std::size_t profileSize)
   {
-    std::ofstream output(path, std::ios::binary);
+#ifdef _WIN32
+    // The Windows CRT's "x" mode follows dangling symlinks. Open the reparse
+    // point itself so CREATE_NEW rejects every existing output path.
+    if (profileSize > std::numeric_limits<DWORD>::max()) {
+      return false;
+    }
+    HANDLE output = CreateFileA(path.c_str(), GENERIC_WRITE, 0, nullptr,
+                                CREATE_NEW,
+                                FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
+                                nullptr);
+    if (output == INVALID_HANDLE_VALUE) {
+      return false;
+    }
+    DWORD bytesWritten = 0;
+    const bool written =
+        WriteFile(output, profile, static_cast<DWORD>(profileSize),
+                  &bytesWritten, nullptr) && bytesWritten == profileSize;
+    return (CloseHandle(output) != 0) && written;
+#else
+    // POSIX exclusive creation also rejects dangling symlinks.
+    std::FILE* output = std::fopen(path.c_str(), "wbx");
     if (!output) {
       return false;
     }
-    output.write(reinterpret_cast<const char*>(profile),
-                 static_cast<std::streamsize>(profileSize));
-    return output.good();
+    const bool written =
+        profileSize == 0 ||
+        std::fwrite(profile, 1, profileSize, output) == profileSize;
+    return (std::fclose(output) == 0) && written;
+#endif
   }
 
   const char* parseProfile(const std::uint8_t* profile, std::size_t profileSize)
@@ -154,7 +190,7 @@ int main(int argc, char* argv[])
       const std::string path = outputPath(argv[2], property.itemId,
                                           property.propertyIndex, property.colourType);
       if (!writeProfile(path, profile, property.profileSize)) {
-        std::cerr << "Error: unable to write extracted ICC profile: " << path << std::endl;
+        std::cerr << "Error: unable to create extracted ICC profile: " << path << std::endl;
         heif_context_free(context);
         return 2;
       }

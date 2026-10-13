@@ -99,6 +99,10 @@ for fixture in valid-prof.heic valid-rICC.heic duplicate-prof.heic conflicting-p
   echo "[PASS] $fixture: raw profiles match and IccProfLib parse status reported"
 done
 
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+python3 "$script_dir/test_heif_output_safety.py" \
+  --tool "$native_tool" --corpus "$corpus"
+
 oversized="$outdir/oversized-valid-prof.heic"
 oversized_log="$outdir/oversized-valid-prof.log"
 cp "$corpus/valid-prof.heic" "$oversized"
@@ -117,7 +121,6 @@ echo "[PASS] oversized carrier rejected before buffering"
 
 amplified="$outdir/amplified-associations.heic"
 amplified_log="$outdir/amplified-associations.log"
-script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 generator="$script_dir/../ci/tooling/heif/qa/make-association-stress.py"
 python3 "$generator" "$amplified" 65
 amplified_status=0

@@ -14,6 +14,8 @@ Use `.github/skills/heif-icc-qa/SKILL.md` and report:
 - extracted ICC byte count and SHA-256;
 - byte-for-byte A/B extraction comparison and IccProfLib parse statuses;
 - bounded carrier and repeated-association rejection results;
+- native `iccdev.heif-output-safety` results on Windows and Unix, including
+  dangling symlinks, concurrent creation, and any symlink privilege skips;
 - every upstream patch applied, the warning-free dedicated smoke result, and
   any test skipped.
 

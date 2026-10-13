@@ -63,6 +63,23 @@ valid and malformed carrier fixtures, requires IccProfLib parse status from
 the release tool, rejects a sparse carrier over the 256 MiB parser limit, and
 rejects a generated carrier with repeated associations exceeding the 256 MiB
 cumulative extraction limit.
+The A/B test also runs the shared native output-safety regression: exact
+extracted bytes, repeated extraction, direct input collisions, hard links,
+symlinks, dangling symlinks, directory collisions, missing output directories,
+path separators, and concurrent exclusive creation. The regular iccDEV build
+registers this same Python 3 runner as `iccdev.heif-output-safety` when the
+native tool and Python interpreter are available. Run it without building Nokia:
+
+```bash
+ctest --test-dir /path/to/iccdev-build -C Release \
+  -R '^iccdev\.heif-output-safety$' --output-on-failure --no-tests=error
+```
+
+On Windows, test MSVC, ClangCL, and MinGW builds separately. Symlink cases
+report a skip when the account lacks symlink creation privileges; report those
+skips explicitly. The CRT `fopen` exclusive mode is insufficient on Windows
+because it follows dangling symlinks; the native writer must reject the link
+itself using exclusive creation with `FILE_FLAG_OPEN_REPARSE_POINT`.
 It treats exit values 128 and above or any ASan/UBSan diagnostic as a failure.
 
 The manually dispatched `Nokia HEIF ICC carrier smoke` workflow in

@@ -37,6 +37,12 @@ fixtures, the pinned Nokia HEIF integration, or issue #2647 follow-up.
    documented Release targets and staged bundle, run its focused MATLAB input
    and usage tests, and keep the interactive `matlab/examples/heif_dump.m`
    aligned. The wrapper must launch the tool through Java `ProcessBuilder`.
+9. For native extraction changes, run the focused `iccdev.heif-output-safety`
+   CTest on Windows (MSVC, ClangCL, and MinGW when installed) and Unix. The
+   A/B suite calls the same Python runner. Require exact bytes and rejection
+   of existing files, hard links, symlinks, dangling symlinks, and directories;
+   concurrent creation must have one winner. Report any Windows symlink
+   privilege skips. Do not infer Windows behavior from POSIX `fopen("wbx")`.
 
 When changing the upstream pin or patch stack, test both `git apply --check`
 and the complete sanitizer corpus. Do not silently regenerate or replace the
