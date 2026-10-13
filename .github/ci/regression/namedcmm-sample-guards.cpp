@@ -50,11 +50,16 @@
 //
 // Each case is checked against CIccCmm as well, which already refuses it, and
 // a colorimetric-only version of the profile is the positive control.
+// A v4 NamedColor2 tag can also declare more device coordinates than its
+// header's color space. namedDevice used to copy that tag count into a buffer
+// sized from the header. The XML PoC has CMYK (4) and 120 coordinates; the
+// legacy CLI's 100-float stack buffer was corrupted under Memcheck.
 //
 // Returns 0 on success; the number of failed assertions otherwise (each printed).
 
 #include "IccCmm.h"
 #include "IccProfile.h"
+#include "IccTagBasic.h"
 #include "IccTagMPE.h"
 #include "IccMpeBasic.h"
 #include "IccUtil.h"
@@ -210,6 +215,66 @@ void testColorimetricControl()
   check(dst[0] >= 0 && dst[1] >= 0 && dst[2] >= 0, "control: all three outputs are written");
 }
 
+CIccProfile *namedDeviceProfile(icUInt32Number nCoords)
+{
+  CIccProfile *pProfile = new CIccProfile();
+  pProfile->InitHeader();
+  pProfile->m_Header.version = icVersionNumberV4;
+  pProfile->m_Header.deviceClass = icSigNamedColorClass;
+  pProfile->m_Header.colorSpace = icSigCmykData;
+  pProfile->m_Header.pcs = icSigLabData;
+
+  CIccTagNamedColor2 *pTag = new CIccTagNamedColor2(1, nCoords);
+  SIccNamedColorEntry *pEntry = pTag->GetEntry(0);
+  std::snprintf(pEntry->rootName, sizeof(pEntry->rootName), "Red");
+  for (int i = 0; i < 3; i++)
+    pEntry->pcsCoords[i] = 0.25f;
+  for (icUInt32Number i = 0; i < nCoords; i++)
+    pEntry->deviceCoords[i] = 0.5f;
+  pProfile->AttachTag(icSigNamedColor2Tag, pTag);
+  return pProfile;
+}
+
+void testNamedDeviceCoordinateCount()
+{
+  // The caller is entitled to provide exactly GetDestSamples() floats (4).
+  // Begin must refuse the mismatched tag before name->device Apply writes 120.
+  CIccNamedColorCmm bad(icSigNamedData, icSigUnknownData, true);
+  icStatusCMM rv = bad.AddXform(namedDeviceProfile(120), icPerceptual,
+                                icInterpLinear, NULL, icXformLutNamedDevice);
+  check(rv == icCmmStatOk, "mismatched namedDevice profile attaches");
+  if (rv == icCmmStatOk)
+    check(bad.Begin() == icCmmStatBadSpaceLink,
+          "namedDevice refuses 120 tag coordinates for CMYK destination");
+
+  CIccNamedColorCmm good(icSigNamedData, icSigUnknownData, true);
+  rv = good.AddXform(namedDeviceProfile(4), icPerceptual,
+                     icInterpLinear, NULL, icXformLutNamedDevice);
+  check(rv == icCmmStatOk, "matching namedDevice profile attaches");
+  if (rv != icCmmStatOk)
+    return;
+  rv = good.Begin();
+  check(rv == icCmmStatOk && good.GetDestSamples() == 4,
+        "matching namedDevice profile begins with four destination samples");
+  if (rv != icCmmStatOk)
+    return;
+  icFloatNumber dst[4] = {-1, -1, -1, -1};
+  check(good.Apply(dst, "Red") == icCmmStatOk,
+        "matching namedDevice profile applies");
+  check(dst[0] == 0.5f && dst[1] == 0.5f &&
+        dst[2] == 0.5f && dst[3] == 0.5f,
+        "matching namedDevice writes all four destination samples");
+
+  // A PCS-only lookup never uses the tag's device coordinates; preserve it.
+  CIccNamedColorCmm pcs(icSigNamedData, icSigUnknownData, true);
+  rv = pcs.AddXform(namedDeviceProfile(120), icPerceptual,
+                    icInterpLinear, NULL, icXformLutNamedColorimetric);
+  check(rv == icCmmStatOk, "PCS-only named profile attaches");
+  if (rv == icCmmStatOk)
+    check(pcs.Begin() == icCmmStatOk,
+          "PCS-only named profile does not require device coordinate match");
+}
+
 } // namespace
 
 int main()
@@ -217,6 +282,7 @@ int main()
   testDestination();
   testSource();
   testColorimetricControl();
+  testNamedDeviceCoordinateCount();
 
   if (g_failures)
     std::fprintf(stderr, "namedcmm-sample-guards: %d failure(s)\n", g_failures);
