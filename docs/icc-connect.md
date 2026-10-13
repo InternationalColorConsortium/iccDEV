@@ -147,6 +147,12 @@ reads (and, equivalently, which space the xform exposes downstream):
 | `namedSpectral` | Spectral member (selected by the overprint axis below) | Profile's `spectralPCS` | Fail with `icCmmStatBadTintXform`. No silent fall-back to the over-white member or to `nmclPcsDataMbr`. |
 | `namedDevice` | `nmclDeviceDataMbr` (v5 array) or `deviceCoords` struct field (v4 `CIccTagNamedColor2`) | Profile's `colorSpace` | Fail with `icCmmStatBadTintXform`. No silent fall-back to PCS or spectral. |
 
+For a v4 `CIccTagNamedColor2` device-side transform, `Begin()` also requires
+the tag's device coordinate count to match the channel count of the profile
+header's `colorSpace`. A mismatch returns `icCmmStatBadSpaceLink` before
+`Apply()` can read or write beyond a caller's pixel buffer. A PCS-only named
+transform does not consume the tag's device coordinates.
+
 **Overprint axis** -- only meaningful on the spectral path. The suffix
 selects which spectral array member is read (neither `nmclPcsDataMbr`
 nor `nmclDeviceDataMbr` varies by substrate, so the suffix is a no-op

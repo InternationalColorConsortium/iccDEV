@@ -46,6 +46,11 @@ member is absent. The overprint suffix is a no-op on
 `namedColorimetric*` and not accepted on `namedDevice`, because neither
 the PCS nor the device member varies by substrate.
 
+For a v4 NamedColor2 profile, the tag's device coordinate count must match
+the channel count of the header's device color space when a device-side named
+transform is selected. `Begin()` rejects a mismatch with
+`icCmmStatBadSpaceLink` before applying any sample.
+
 Examples — three transforms that exercise the over-black variant of a
 named color, differing in PCS-side stem:
 
