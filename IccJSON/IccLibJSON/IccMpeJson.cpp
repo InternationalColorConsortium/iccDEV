@@ -2527,9 +2527,13 @@ static bool icSpectralRangeFromJson(const IccJson &j, icSpectralRange &range, st
   const IccJson &jw = j["wavelengths"];
   double dStart = 0.0, dEnd = 0.0;
   int nSteps = 0;
-  jGetValue(jw, "start", dStart);
-  jGetValue(jw, "end",   dEnd);
-  jGetValue(jw, "steps", nSteps);
+  if (!jGetValue(jw, "start", dStart) || !jGetValue(jw, "end", dEnd) ||
+      !jsonExistsField(jw, "steps") ||
+      !(jw["steps"].is_number_integer() || jw["steps"].is_number_unsigned()) ||
+      !jGetValue(jw, "steps", nSteps)) {
+    parseStr += "Invalid spectral range wavelengths\n";
+    return false;
+  }
   if (dStart >= dEnd || nSteps < 2 || nSteps > kIccJsonMaxSpectralSteps) {
     parseStr += "Invalid spectral range (steps out of range)\n";
     return false;
