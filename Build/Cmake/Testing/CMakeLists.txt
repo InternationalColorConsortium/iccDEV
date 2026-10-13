@@ -6486,7 +6486,9 @@ endfunction()
 # meant select[0], so a parenthesised index selected the wrong channel -- and
 # pins each of the five input families that correction moves, together with the
 # well-formed spellings the corpus uses, so that the guard cannot be satisfied by
-# refusing every indexed reference.
+# refusing every indexed reference. #2829: it also covers ParseChanMap(), which
+# bounded an InputNames/OutputNames group width with an int sum that overflowed
+# for a width near INT_MAX, so the document loaded with that width.
 function(iccdev_add_calc_channel_ref_unterminated_index_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
     return()
@@ -6528,7 +6530,7 @@ function(iccdev_add_calc_channel_ref_unterminated_index_test)
   endif()
   set_tests_properties(iccdev.calc-channel-ref-unterminated-index PROPERTIES
     TIMEOUT 120
-    LABELS "iccdev;xml;mpe;calculator;issue-2323;regression"
+    LABELS "iccdev;xml;mpe;calculator;issue-2323;issue-2829;regression"
   )
   if(WIN32)
     set(_calc_unterminated_windows_env_mods
@@ -6554,7 +6556,9 @@ endfunction()
 # parsers select the same channel for a parenthesised index -- is only measured
 # if both sides name the channel. Registered separately from the XML helper so
 # neither masks the other: this one is skipped where IccJSON is not built, and
-# the XML coverage does not disappear with it.
+# the XML coverage does not disappear with it. #2829: CIccMpeJsonCalculator::
+# ParseChanMap() carried the XML reader's overflowing group-width bound, and the
+# same cases are pinned here.
 function(iccdev_add_calc_channel_ref_unterminated_index_json_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
     return()
@@ -6593,7 +6597,7 @@ function(iccdev_add_calc_channel_ref_unterminated_index_json_test)
   endif()
   set_tests_properties(iccdev.calc-channel-ref-unterminated-index-json PROPERTIES
     TIMEOUT 120
-    LABELS "iccdev;json;mpe;calculator;issue-2323;regression"
+    LABELS "iccdev;json;mpe;calculator;issue-2323;issue-2829;regression"
   )
   if(WIN32)
     set(_calc_unterminated_json_windows_env_mods

@@ -87,6 +87,20 @@
     reference, so the well-formed forms the corpus actually uses are pinned
     alongside.
 
+    It also covers the channel NAME map those references resolve against
+    (#2829).  CIccMpeXmlCalculator::ParseChanMap() reads InputNames and
+    OutputNames, where "Lab[3]" declares a group three channels wide, and it
+    bounded the group with
+
+        if (size<0 || i + size>nChannels)
+
+    over an atoi() result, so a width near INT_MAX overflowed int before the
+    comparison.  UBSan reports the addition; without a sanitizer the sum wraps
+    negative, the test passes, and the document LOADS with a group 2147483647
+    channels wide.  That second behaviour is what red/greens on every lane.  The
+    cases use a function body that addresses channels by number, so the refusal
+    can only come from the name map.
+
     Args:
       argv[1] - scratch directory to generate fixtures in (created if absent)
 
@@ -118,9 +132,14 @@ static int check(bool condition, const char* label)
 
 // A calculator element with seven named input channels and three named outputs,
 // so that "Lab" resolves to a three-wide group at offset 4 and indexed forms
-// have somewhere real to point.  Only the function body and the optional macro
-// block vary.
-static std::string profileXml(const std::string& body, const std::string& macros = "")
+// have somewhere real to point.  The function body and the optional macro block
+// vary, and the #2829 cases replace the two name lists as well.
+static const char* const kInputNames = "C M Y K Lab[3]";
+static const char* const kOutputNames = "a b L";
+
+static std::string profileXml(const std::string& body, const std::string& macros = "",
+                              const std::string& inputNames = kInputNames,
+                              const std::string& outputNames = kOutputNames)
 {
   return
     "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
@@ -139,7 +158,7 @@ static std::string profileXml(const std::string& body, const std::string& macros
     "      <TagSignature>A2B1</TagSignature>\n"
     "      <MultiProcessElements InputChannels=\"7\" OutputChannels=\"3\">\n"
     "        <CalculatorElement InputChannels=\"7\" OutputChannels=\"3\"\n"
-    "            InputNames=\"C M Y K Lab[3]\" OutputNames=\"a b L\">\n"
+    "            InputNames=\"" + inputNames + "\" OutputNames=\"" + outputNames + "\">\n"
     + macros +
     "          <MainFunction>\n{\n" + body + "\n}\n          </MainFunction>\n"
     "        </CalculatorElement>\n"
@@ -192,14 +211,36 @@ static int expectRefused(const std::string& body, const char* file, const char* 
 }
 
 static int expectParsed(const std::string& body, const char* file, const char* label,
-                        const std::string& macros = "")
+                        const std::string& macros = "",
+                        const std::string& inputNames = kInputNames)
 {
-  if (!writeFile(file, profileXml(body, macros)))
+  if (!writeFile(file, profileXml(body, macros, inputNames)))
     return check(false, label);
 
   CIccProfileXml profile;
   std::string parseStr;
   return check(loadXml(profile, file, parseStr), label);
+}
+
+// A function body that addresses channels by number and names none of them, so a
+// document built from it is accepted or refused on its name lists alone.
+static const char* const kNumberedBody = "in[0] out[2]";
+
+// Write one case with the given name lists and require ParseChanMap()'s refusal,
+// which the caller reports against the attribute the list came from.  It used to
+// name InputChannels for both, so the needle is what tells the two calls apart.
+static int expectNamesRefused(const std::string& inputNames, const std::string& outputNames,
+                              const char* file, const char* needle, const char* label)
+{
+  if (!writeFile(file, profileXml(kNumberedBody, "", inputNames, outputNames)))
+    return check(false, label);
+
+  CIccProfileXml profile;
+  std::string parseStr;
+  bool loaded = loadXml(profile, file, parseStr);
+  bool named = parseStr.find(needle) != std::string::npos;
+
+  return check(!loaded && named, label);
 }
 
 // The flattened function the calculator element was built from, as Describe()
@@ -402,6 +443,51 @@ int main(int argc, char* argv[])
                            "          <Macros>\n"
                            "            <Macro Name=\"mm\">in{Lab[0]}</Macro>\n"
                            "          </Macros>\n");
+
+  // #2829, the channel name map.  The control comes first because the cases
+  // after it rest on it: with the stock name lists the numbered body loads, so a
+  // refusal below is the name list's and not the body's.  It is also the exact-fit
+  // case, "Lab[3]" with four channels before it out of seven, which a bound
+  // tightened by one would refuse.
+  failures += expectParsed(kNumberedBody,
+                           "names-wellformed.xml",
+                           "the numbered body loads with a group that reaches the last channel");
+
+  // The reported shape: the last group's width is INT_MAX, so "4 + 2147483647"
+  // overflowed before it was compared.  Before the fix this document loaded.
+  failures += expectNamesRefused("C M Y K Lab[2147483647]", kOutputNames,
+                                 "names-input-width-overflow.xml",
+                                 "Invalid name for InputChannels",
+                                 "an input group whose width overflows the bound is refused");
+
+  // The same width on a group that another name follows.  The wrapped comparison
+  // let it through, and "i += size" at the following space then overflowed a
+  // second time, leaving the next name at a negative channel index.
+  failures += expectNamesRefused("C M[2147483647] Y", kOutputNames,
+                                 "names-input-width-overflow-middle.xml",
+                                 "Invalid name for InputChannels",
+                                 "an overflowing width on a group in mid-list is refused");
+
+  // OutputNames goes through the same function with the output count.
+  failures += expectNamesRefused(kInputNames, "a b L[2147483647]",
+                                 "names-output-width-overflow.xml",
+                                 "Invalid name for OutputChannels",
+                                 "an output group whose width overflows the bound is refused");
+
+  // One channel past the end, where nothing overflows.  Refused before and after:
+  // it pins that the rewritten comparison kept the bound where it was.
+  failures += expectNamesRefused("C M Y K Lab[4]", kOutputNames,
+                                 "names-input-width-one-over.xml",
+                                 "Invalid name for InputChannels",
+                                 "a group one channel wider than the channels left is still refused");
+
+  // A group in mid-list that is accepted, so the next name starts past it: "B"
+  // begins at channel 3 and its four channels end exactly at the seventh.
+  failures += expectParsed(kNumberedBody,
+                           "names-two-groups.xml",
+                           "two groups that fill the channels load",
+                           "",
+                           "A[3] B[4]");
 
   return failures ? 1 : 0;
 }

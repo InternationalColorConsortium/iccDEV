@@ -1678,7 +1678,15 @@ bool CIccMpeJsonCalculator::ParseChanMap(ChanVarMap &chanMap, const char *szName
     }
     else if (*p == '[' || *p == '(') {
       size = atoi(p + 1);
-      if (size < 0 || i + size > nChannels) return false;
+      // Compared as a subtraction, which cannot wrap.  size is an atoi() result on
+      // attacker-supplied text, and the sum "i + size" was formed in int BEFORE it
+      // was tested, so a width near INT_MAX overflowed: with
+      // "inputNames": "a b[2147483647]", 1 + 2147483647 wraps negative, the test
+      // passes, and "b" is recorded as a group 2147483647 channels wide (#2829).
+      // UBSan reported the addition.  The loop condition holds i < nChannels
+      // here, so nChannels - i is positive and exact.  The bound is unchanged, and
+      // is the one CIccMpeXmlCalculator::ParseChanMap applies.
+      if (size < 0 || size > nChannels - i) return false;
       for (; *p && *p != ']' && *p != ')'; p++);
       if (!*p) p--;
     }

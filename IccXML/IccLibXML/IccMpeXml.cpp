@@ -3792,7 +3792,16 @@ bool CIccMpeXmlCalculator::ParseChanMap(ChanVarMap& chanMap, const char *szNames
     }
     else if (*ptr == '[' || *ptr == '(') {
       size = atoi(ptr + 1);
-      if (size<0 || i + size>nChannels)
+      // Compared as a subtraction, which cannot wrap.  size is an atoi() result on
+      // attacker-supplied text, and the sum "i + size" was formed in int BEFORE it
+      // was tested, so a width near INT_MAX overflowed: with
+      // InputNames="a b[2147483647]", 1 + 2147483647 wraps negative, the test
+      // passes, and "b" is recorded as a group 2147483647 channels wide (#2829).
+      // UBSan reported the addition.  The loop condition holds i < nChannels
+      // here, so nChannels - i is positive and exact.  The bound is unchanged: a
+      // group may reach the last channel and no further, as "Lab[3]" does when
+      // four channels precede it out of seven.
+      if (size<0 || size > nChannels - i)
         return 0;
 
       for (; *ptr && *ptr != ']' && *ptr != ')'; ptr++);
@@ -3852,12 +3861,14 @@ bool CIccMpeXmlCalculator::ParseXml(xmlNode *pNode, std::string &parseStr)
   clean();
 
   if (!ParseChanMap(m_inputMap, icXmlAttrValue(pNode, "InputNames"), m_nInputChannels)) {
-    parseStr += "Invalid name for InputChannels";
+    parseStr += "Invalid name for InputChannels\n";
     return false;
   }
 
+  // This refusal named InputChannels too, so a bad OutputNames sent the reader
+  // to the other attribute, and neither message ended its line (#2829).
   if (!ParseChanMap(m_outputMap, icXmlAttrValue(pNode, "OutputNames"), m_nOutputChannels)) {
-    parseStr += "Invalid name for InputChannels";
+    parseStr += "Invalid name for OutputChannels\n";
     return false;
   }
 

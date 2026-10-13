@@ -58,6 +58,20 @@
     neither can mask the other: this one is skipped where IccJSON is not built,
     and the XML coverage does not disappear with it.
 
+    It also covers the channel NAME map those references resolve against
+    (#2829).  CIccMpeJsonCalculator::ParseChanMap() reads inputNames and
+    outputNames, where "Lab[3]" declares a group three channels wide, and it
+    carried the XML reader's bound,
+
+        if (size < 0 || i + size > nChannels) return false;
+
+    over an atoi() result, so a width near INT_MAX overflowed int before the
+    comparison.  UBSan reports the addition; without a sanitizer the sum wraps
+    negative, the test passes, and the document LOADS with a group 2147483647
+    channels wide.  That second behaviour is what red/greens on every lane.  The
+    cases use a function that addresses channels by number, so the refusal can
+    only come from the name map.
+
     Args:
       argv[1] - scratch directory to generate fixtures in (created if absent)
 
@@ -88,8 +102,14 @@ static int check(bool condition, const char* label)
 }
 
 // The same seven-in / three-out named calculator the XML helper uses, so "Lab"
-// is a three-wide group at offset 4.  Only mainFunction varies.
-static std::string profileJson(const std::string& mainFunction)
+// is a three-wide group at offset 4.  mainFunction varies, and the #2829 cases
+// replace the two name lists as well.
+static const char* const kInputNames = "C M Y K Lab[3]";
+static const char* const kOutputNames = "a b L";
+
+static std::string profileJson(const std::string& mainFunction,
+                               const std::string& inputNames = kInputNames,
+                               const std::string& outputNames = kOutputNames)
 {
   return
     "{\n"
@@ -115,8 +135,8 @@ static std::string profileJson(const std::string& mainFunction)
     "                \"type\": \"CalculatorElement\",\n"
     "                \"inputChannels\": 7,\n"
     "                \"outputChannels\": 3,\n"
-    "                \"inputNames\": \"C M Y K Lab[3]\",\n"
-    "                \"outputNames\": \"a b L\",\n"
+    "                \"inputNames\": \"" + inputNames + "\",\n"
+    "                \"outputNames\": \"" + outputNames + "\",\n"
     "                \"mainFunction\": \"" + mainFunction + "\"\n"
     "              }\n"
     "            ]\n"
@@ -165,14 +185,35 @@ static int expectRefused(const std::string& mainFunction, const char* file, cons
   return check(!loaded && named, label);
 }
 
-static int expectParsed(const std::string& mainFunction, const char* file, const char* label)
+static int expectParsed(const std::string& mainFunction, const char* file, const char* label,
+                        const std::string& inputNames = kInputNames)
 {
-  if (!writeFile(file, profileJson(mainFunction)))
+  if (!writeFile(file, profileJson(mainFunction, inputNames)))
     return check(false, label);
 
   CIccProfileJson profile;
   std::string parseStr;
   return check(loadJson(profile, file, parseStr), label);
+}
+
+// A function that addresses channels by number and names none of them, so a
+// document built from it is accepted or refused on its name lists alone.
+static const char* const kNumberedFunction = "{\\nin[0]\\nout[2]\\n}\\n";
+
+// Write one case with the given name lists and require ParseChanMap()'s refusal,
+// which the caller reports against the key the list came from.
+static int expectNamesRefused(const std::string& inputNames, const std::string& outputNames,
+                              const char* file, const char* needle, const char* label)
+{
+  if (!writeFile(file, profileJson(kNumberedFunction, inputNames, outputNames)))
+    return check(false, label);
+
+  CIccProfileJson profile;
+  std::string parseStr;
+  bool loaded = loadJson(profile, file, parseStr);
+  bool named = parseStr.find(needle) != std::string::npos;
+
+  return check(!loaded && named, label);
 }
 
 // The flattened function, as Describe() prints it.  The XML helper's header
@@ -307,6 +348,50 @@ int main(int argc, char* argv[])
                             "json-wellformed-bracket.json",
                             "in[5]",
                             "in{Lab[1]} selects channel 5 here too");
+
+  // #2829, the channel name map.  The control comes first because the cases
+  // after it rest on it: with the stock name lists the numbered function loads,
+  // so a refusal below is the name list's and not the function's.  It is also the
+  // exact-fit case, "Lab[3]" with four channels before it out of seven, which a
+  // bound tightened by one would refuse.
+  failures += expectParsed(kNumberedFunction,
+                           "json-names-wellformed.json",
+                           "the numbered function loads with a group that reaches the last channel");
+
+  // The reported shape: the last group's width is INT_MAX, so "4 + 2147483647"
+  // overflowed before it was compared.  Before the fix this document loaded.
+  failures += expectNamesRefused("C M Y K Lab[2147483647]", kOutputNames,
+                                 "json-names-input-width-overflow.json",
+                                 "Invalid name for inputChannels",
+                                 "an input group whose width overflows the bound is refused");
+
+  // The same width on a group that another name follows.  The wrapped comparison
+  // let it through, and "i += size" at the following space then overflowed a
+  // second time, leaving the next name at a negative channel index.
+  failures += expectNamesRefused("C M[2147483647] Y", kOutputNames,
+                                 "json-names-input-width-overflow-middle.json",
+                                 "Invalid name for inputChannels",
+                                 "an overflowing width on a group in mid-list is refused");
+
+  // outputNames goes through the same function with the output count.
+  failures += expectNamesRefused(kInputNames, "a b L[2147483647]",
+                                 "json-names-output-width-overflow.json",
+                                 "Invalid name for outputChannels",
+                                 "an output group whose width overflows the bound is refused");
+
+  // One channel past the end, where nothing overflows.  Refused before and after:
+  // it pins that the rewritten comparison kept the bound where it was.
+  failures += expectNamesRefused("C M Y K Lab[4]", kOutputNames,
+                                 "json-names-input-width-one-over.json",
+                                 "Invalid name for inputChannels",
+                                 "a group one channel wider than the channels left is still refused");
+
+  // A group in mid-list that is accepted, so the next name starts past it: "B"
+  // begins at channel 3 and its four channels end exactly at the seventh.
+  failures += expectParsed(kNumberedFunction,
+                           "json-names-two-groups.json",
+                           "two groups that fill the channels load",
+                           "A[3] B[4]");
 
   return failures ? 1 : 0;
 }
