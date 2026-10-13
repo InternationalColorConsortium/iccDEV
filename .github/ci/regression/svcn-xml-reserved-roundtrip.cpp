@@ -69,6 +69,9 @@
     icUInt16Number field and must be reported, not wrapped to 0.  Without it a
     reader rewritten to use atoi() would pass every other case here.
 
+    Case 6 keeps the XML refusal of a wrong-type IlluminantSPD wavelength as
+    the parity control for the JSON reader's matching numeric regression.
+
     Case 2's reach control (steps="3" in the output) is what proves the fixture
     is being read at all.  If ParseXml() bailed before the attributes for an
     unrelated reason, case 3's absence assertions would still hold vacuously.
@@ -257,6 +260,24 @@ int main()
           "5: an over-wide IlluminantSPD Reserved was accepted");
     check(tag.m_reserved3 == 0,
           "5: an over-wide IlluminantSPD Reserved was wrapped into the field");
+  }
+
+  // A malformed wavelength is refused by the XML reader. Keep this control
+  // beside the JSON reader's matching wrong-type range regression.
+  {
+    std::string invalid = doc("", "");
+    const std::string validStart = "IlluminantSPD start=\"400\"";
+    const size_t pos = invalid.find(validStart);
+    check(pos != std::string::npos, "6: IlluminantSPD control start is present");
+    if (pos != std::string::npos) {
+      invalid.replace(pos, validStart.size(), "IlluminantSPD start=\"wrong-type\"");
+      CIccTagXmlSpectralViewingConditions tag;
+      std::string parseStr;
+      check(!parseFragment(tag, invalid, parseStr),
+            "6: XML accepted a wrong-type IlluminantSPD start");
+      check(has(parseStr, "IlluminantSPD start"),
+            "6: XML error does not identify IlluminantSPD start");
+    }
   }
 
   if (g_fail) {
