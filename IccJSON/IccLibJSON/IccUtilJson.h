@@ -99,7 +99,7 @@ bool jsonToValue<std::string>(const IccJson &j, std::string &value);
 bool jsonToString(const IccJson &j, std::string &value);
 
 // Extract a fixed-size C array from a JSON array node.
-// Returns true only when all n elements were found and numeric.
+// Returns true only when there are exactly n numeric elements.
 template <typename T>
 bool jsonToArray(const IccJson &j, T *vals, int n);
 

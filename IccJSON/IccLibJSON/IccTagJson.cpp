@@ -502,7 +502,7 @@ bool CIccTagJsonXYZ::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonXYZ::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonXYZ::ParseJson(const IccJson &j, std::string &parseStr)
 {
   if (!jsonExistsField(j, "XYZ") || !j["XYZ"].is_array()) return false;
   const IccJson &arr = j["XYZ"];
@@ -510,13 +510,14 @@ bool CIccTagJsonXYZ::ParseJson(const IccJson &j, std::string & /*parseStr*/)
   icUInt32Number nXYZ = icJsonSafeU32(arr.size(), &sizeOverflow);
   if (sizeOverflow || !SetSize(nXYZ)) return false;
   for (icUInt32Number i = 0; i < nXYZ; i++) {
-    if (arr[i].is_array() && arr[i].size() >= 3) {
-      double xyz[3] = {0, 0, 0};
-      jsonToArray(arr[i], xyz, 3);
-      m_XYZ[i].X = icDtoF(xyz[0]);
-      m_XYZ[i].Y = icDtoF(xyz[1]);
-      m_XYZ[i].Z = icDtoF(xyz[2]);
+    double xyz[3] = {0, 0, 0};
+    if (!jsonToArray(arr[i], xyz, 3)) {
+      parseStr += "Invalid XYZ array value\n";
+      return false;
     }
+    m_XYZ[i].X = icDtoF(xyz[0]);
+    m_XYZ[i].Y = icDtoF(xyz[1]);
+    m_XYZ[i].Z = icDtoF(xyz[2]);
   }
   return true;
 }
@@ -620,7 +621,10 @@ bool CIccTagJsonMeasurement::ParseJson(const IccJson &j, std::string &parseStr)
   std::string flare;
   double backing[3] = {0, 0, 0};
   jGetValue(j, "standardObserver", stdObserver);
-  jGetArray(j, "backing", backing, 3);
+  if (!jGetArray(j, "backing", backing, 3)) {
+    parseStr += "Invalid measurement backing\n";
+    return false;
+  }
   jGetValue(j, "geometry",  geometry);
   jGetString(j, "flare",    flare);
   jGetValue(j, "illuminant",illuminant);
@@ -657,13 +661,19 @@ bool CIccTagJsonViewingConditions::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonViewingConditions::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonViewingConditions::ParseJson(const IccJson &j, std::string &parseStr)
 {
   double illum[3] = {0, 0, 0};
   double surround[3] = {0, 0, 0};
   int illuminantType = 0;
-  jGetArray(j, "illuminant", illum, 3);
-  jGetArray(j, "surround", surround, 3);
+  if (!jGetArray(j, "illuminant", illum, 3)) {
+    parseStr += "Invalid viewing conditions illuminant\n";
+    return false;
+  }
+  if (!jGetArray(j, "surround", surround, 3)) {
+    parseStr += "Invalid viewing conditions surround\n";
+    return false;
+  }
   jGetValue(j, "illuminantType", illuminantType);
   m_XYZIllum.X   = icDtoF(illum[0]);
   m_XYZIllum.Y   = icDtoF(illum[1]);
@@ -687,35 +697,41 @@ bool CIccTagJsonSpectralDataInfo::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonSpectralDataInfo::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonSpectralDataInfo::ParseJson(const IccJson &j, std::string &parseStr)
 {
   std::string sig;
   jGetString(j, "spectralColorSig", sig);
   m_nSig = (icSignature)icGetSigVal(sig.c_str());
-  if (jsonExistsField(j, "spectralRange") && j["spectralRange"].is_array() && j["spectralRange"].size() >= 3) {
-    double r[3] = {0, 0, 0};
-    jsonToArray(j["spectralRange"], r, 3);
-    m_spectralRange.start = icFtoF16((icFloat32Number)r[0]);
-    m_spectralRange.end   = icFtoF16((icFloat32Number)r[1]);
-    double temp = r[2];
-    if (temp < 0.0)
-      temp = 0.0;
-    if (temp > 65535.0)
-      temp = 65535.0;
-    m_spectralRange.steps = (icUInt16Number)temp;
-  }
-  if (jsonExistsField(j, "biSpectralRange") && j["biSpectralRange"].is_array() && j["biSpectralRange"].size() >= 3) {
-    double r[3] = {0, 0, 0};
-    jsonToArray(j["biSpectralRange"], r, 3);
-    m_biSpectralRange.start = icFtoF16((icFloat32Number)r[0]);
-    m_biSpectralRange.end   = icFtoF16((icFloat32Number)r[1]);
-    double temp = r[2];
-    if (temp < 0.0)
-      temp = 0.0;
-    if (temp > 65535.0)
-      temp = 65535.0;
-    m_biSpectralRange.steps = (icUInt16Number)temp;
-  }
+  auto parseRange = [&](const char *field, icSpectralRange &range,
+                        bool required) -> bool {
+    if (!jsonExistsField(j, field)) {
+      if (required)
+        parseStr += std::string("Invalid spectralDataInfo ") + field + "\n";
+      return !required;
+    }
+
+    double values[3] = {0, 0, 0};
+    if (!jGetArray(j, field, values, 3)) {
+      parseStr += std::string("Invalid spectralDataInfo ") + field + "\n";
+      return false;
+    }
+    const IccJson &steps = j[field][2];
+    icUInt16Number nSteps = 0;
+    if (!(steps.is_number_integer() || steps.is_number_unsigned()) ||
+        !jsonToValue(steps, nSteps)) {
+      parseStr += std::string("Invalid spectralDataInfo ") + field + " steps\n";
+      return false;
+    }
+
+    range.start = icFtoF16((icFloat32Number)values[0]);
+    range.end   = icFtoF16((icFloat32Number)values[1]);
+    range.steps = nSteps;
+    return true;
+  };
+
+  if (!parseRange("spectralRange", m_spectralRange, true) ||
+      !parseRange("biSpectralRange", m_biSpectralRange, false))
+    return false;
   return true;
 }
 
@@ -788,7 +804,10 @@ bool CIccTagJsonSpectralViewingConditions::ParseJson(const IccJson &j, std::stri
                                  : icGetNamedStandardObserverValue(obsStr.c_str());
 
   icFloatNumber xyz[3] = { 0.0f, 0.0f, 0.0f };
-  jGetArray(j, "IlluminantXYZ", xyz, 3);
+  if (!jGetArray(j, "IlluminantXYZ", xyz, 3)) {
+    parseStr += "Invalid IlluminantXYZ\n";
+    return false;
+  }
   m_illuminantXYZ.X = xyz[0];
   m_illuminantXYZ.Y = xyz[1];
   m_illuminantXYZ.Z = xyz[2];
@@ -906,7 +925,10 @@ bool CIccTagJsonSpectralViewingConditions::ParseJson(const IccJson &j, std::stri
   }
 
   icFloatNumber sxyz[3] = { 0.0f, 0.0f, 0.0f };
-  jGetArray(j, "SurroundXYZ", sxyz, 3);
+  if (!jGetArray(j, "SurroundXYZ", sxyz, 3)) {
+    parseStr += "Invalid SurroundXYZ\n";
+    return false;
+  }
   m_surroundXYZ.X = sxyz[0];
   m_surroundXYZ.Y = sxyz[1];
   m_surroundXYZ.Z = sxyz[2];
@@ -1123,17 +1145,33 @@ bool CIccTagJsonNamedColor2::ParseJson(const IccJson &j, std::string &parseStr)
       if (jGetString(c, "name", name)) {
         icJsonCopyFixedAsciiString(pColor->rootName, sizeof(pColor->rootName), name);
       }
-      if (jsonExistsField(c, "pcsCoords") && c["pcsCoords"].is_array() && c["pcsCoords"].size() >= 3) {
-        jGetArray(c, "pcsCoords", pColor->pcsCoords, 3);
+      icFloatNumber pcsCoords[3] = {0.0f, 0.0f, 0.0f};
+      if (!jGetArray(c, "pcsCoords", pcsCoords, 3)) {
+        parseStr += "Invalid pcsCoords in namedColor2Type\n";
+        return false;
       }
-      if (jsonExistsField(c, "deviceCoords") && c["deviceCoords"].is_array()) {
+      pColor->pcsCoords[0] = pcsCoords[0];
+      pColor->pcsCoords[1] = pcsCoords[1];
+      pColor->pcsCoords[2] = pcsCoords[2];
+      if (jsonExistsField(c, "deviceCoords")) {
+        if (!c["deviceCoords"].is_array()) {
+          parseStr += "Invalid deviceCoords in namedColor2Type\n";
+          return false;
+        }
         bool coordOverflow = false;
         icUInt32Number nJsonCoords = icJsonSafeU32(c["deviceCoords"].size(), &coordOverflow);
-        if (coordOverflow) return false;
-        for (icUInt32Number d = 0; d < nDevCoords && d < nJsonCoords; d++) {
-          int deviceCoord = 0;
-          if (!jsonToValue(c["deviceCoords"][d], deviceCoord))
+        if (coordOverflow || nJsonCoords != nDevCoords) {
+          parseStr += "Invalid deviceCoords count in namedColor2Type\n";
+          return false;
+        }
+        for (icUInt32Number d = 0; d < nDevCoords; d++) {
+          const IccJson &value = c["deviceCoords"][d];
+          icUInt16Number deviceCoord = 0;
+          if (!(value.is_number_integer() || value.is_number_unsigned()) ||
+              !jsonToValue(value, deviceCoord)) {
+            parseStr += "Invalid deviceCoords value in namedColor2Type\n";
             return false;
+          }
           pColor->deviceCoords[d] = (icFloatNumber)deviceCoord / 65535.0f;
         }
       }
@@ -2078,8 +2116,7 @@ bool CIccTagJsonResponseCurveSet16::ParseJson(const IccJson &j, std::string &par
 
       icXYZNumber *pXYZ = curves.GetXYZ(i);
       pXYZ->X = pXYZ->Y = pXYZ->Z = 0;
-      if (jsonExistsField(jChan, "MaxColorantXYZ") && jChan["MaxColorantXYZ"].is_array()
-          && jChan["MaxColorantXYZ"].size() >= 3) {
+      if (jsonExistsField(jChan, "MaxColorantXYZ")) {
         icFloatNumber maxXYZ[3] = {};
         if (!jGetArray(jChan, "MaxColorantXYZ", maxXYZ, 3)) {
           parseStr += "Invalid MaxColorantXYZ in ResponseCurve entry\n";

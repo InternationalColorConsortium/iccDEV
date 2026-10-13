@@ -77,7 +77,20 @@ The `spectralViewingConditionsType` observer and illuminant ranges apply the
 same rule: wavelengths must be numeric, step counts must be integers, and
 optional Reserved values must fit their 16-bit fields.
 Spectral element wavelength ranges and NamedColor2 device-coordinate counts
-also reject wrong types instead of substituting zero.
+also reject wrong types instead of substituting zero. Fixed-size numeric arrays
+must contain exactly the declared number of finite numeric values; short,
+overlong, non-array, and mixed-type values are errors. This includes header
+`PCSIlluminant`, XYZ array tags, measurement backing, ordinary and spectral
+viewing conditions, spectral-data ranges, and NamedColor2 PCS coordinates.
+Response-curve maximum-colorant triplets follow the same rule.
+
+When a schema-required header string is present, it must be a JSON string, and
+`ProfileFileSignature` must be `acsp`. Historic behavior for omitted header
+fields is unchanged; the compatibility control specifically covers omitted
+`ProfileFileSignature` and `PrimaryPlatform`. A present value with the wrong
+JSON type is not treated as though it were absent. A present NamedColor2
+`deviceCoords` array must match `countOfDeviceCoords`, and every coordinate
+must be an integer from 0 through 65535.
 
 ## Typical Workflow
 

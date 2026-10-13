@@ -54,6 +54,19 @@
       }
     },
 
+    "SpectralDataInfoRange": {
+      "type": "array",
+      "description": "spectralDataInfoType range encoded as [start, end, steps]",
+      "prefixItems": [
+        { "type": "number", "description": "Start wavelength in nm" },
+        { "type": "number", "description": "End wavelength in nm" },
+        { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Number of wavelength steps" }
+      ],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3
+    },
+
     "Profile": {
       "type": "object",
       "description": "ICC profile object containing a header and a tag list",
@@ -463,8 +476,8 @@
       "required": ["spectralColorSig", "spectralRange"],
       "properties": {
         "spectralColorSig": { "$ref": "#/$defs/Signature" },
-        "spectralRange":    { "$ref": "#/$defs/SpectralRange" },
-        "biSpectralRange":  { "$ref": "#/$defs/SpectralRange" }
+        "spectralRange":    { "$ref": "#/$defs/SpectralDataInfoRange" },
+        "biSpectralRange":  { "$ref": "#/$defs/SpectralDataInfoRange" }
       }
     },
 
