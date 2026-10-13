@@ -64,6 +64,16 @@ After creating a profile, validate it with:
 iccDumpProfile dest_profile.icc
 ```
 
+## Numeric Input Validation
+
+`iccFromJson` rejects malformed segmented-curve bounds instead of treating an
+unrecognized string as zero. Bounds may be JSON numbers, finite numeric strings,
+or the supported `-infinity` and `+infinity` strings. Header `SpectralRange` and
+`BiSpectralRange` wavelengths must be numbers; a missing or wrong-type `start`
+or `end` is an error. Calculator channel counts must be integers, and channel
+map sizes must fit the declared channel count. These checks prevent a saved ICC
+profile from silently encoding different values than the JSON document supplied.
+
 ## Typical Workflow
 
 ```bash

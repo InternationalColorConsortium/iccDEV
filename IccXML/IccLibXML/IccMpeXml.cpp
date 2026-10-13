@@ -46,6 +46,8 @@
 #include "IccCAM.h"
 
 #include <algorithm>
+#include <cerrno>
+#include <cstdlib>
 #include <new>     /* std::nothrow */
 #include <cstring> /* C strings strcpy, memcpy ... */
 #include <cmath>
@@ -3791,22 +3793,16 @@ bool CIccMpeXmlCalculator::ParseChanMap(ChanVarMap& chanMap, const char *szNames
       }
     }
     else if (*ptr == '[' || *ptr == '(') {
-      size = atoi(ptr + 1);
-      // Compared as a subtraction, which cannot wrap.  size is an atoi() result on
-      // attacker-supplied text, and the sum "i + size" was formed in int BEFORE it
-      // was tested, so a width near INT_MAX overflowed: with
-      // InputNames="a b[2147483647]", 1 + 2147483647 wraps negative, the test
-      // passes, and "b" is recorded as a group 2147483647 channels wide (#2829).
-      // UBSan reported the addition.  The loop condition holds i < nChannels
-      // here, so nChannels - i is positive and exact.  The bound is unchanged: a
-      // group may reach the last channel and no further, as "Lab[3]" does when
-      // four channels precede it out of seven.
-      if (size<0 || size > nChannels - i)
-        return 0;
-
-      for (; *ptr && *ptr != ']' && *ptr != ')'; ptr++);
-      if (!*ptr)
-        ptr--;
+      // The bound is compared as a subtraction, which cannot wrap (#2829).
+      const char *digits = ptr + 1;
+      if (*digits < '0' || *digits > '9') return false;
+      char *end = nullptr;
+      errno = 0;
+      long count = std::strtol(digits, &end, 10);
+      if (errno == ERANGE || count > nChannels - i ||
+          *end != (*ptr == '[' ? ']' : ')')) return false;
+      size = (int)count;
+      ptr = end;
     }
     else if (validNameChar(*ptr, bFirst)) {
       name += *ptr;

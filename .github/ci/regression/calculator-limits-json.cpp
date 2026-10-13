@@ -115,6 +115,26 @@ int main()
     check(!parse(text, c), text, "malformed calculatorLimits accepted");
   }
 
+  CIccMpeJsonCalculator named;
+  check(parse("{\"inputNames\":\"a b[2]\"}", named), "channel names", "valid channel sizes refused");
+  CIccMpeJsonCalculator oversized;
+  check(!parse("{\"inputNames\":\"a b[2147483647]\"}", oversized),
+        "channel names", "oversized channel map accepted");
+  CIccMpeJsonCalculator outOfInt;
+  check(!parse("{\"inputNames\":\"a b[999999999999999999999]\"}", outOfInt),
+        "channel names", "out-of-int channel size accepted");
+  CIccMpeJsonCalculator trailing;
+  check(!parse("{\"inputNames\":\"a b[2junk]\"}", trailing),
+        "channel names", "trailing text in channel size accepted");
+
+  IccJson fractional = IccJson::parse("{\"inputChannels\":3.5,\"outputChannels\":3,"
+                                       "\"mainFunction\":\"{ in(0,3) out(0,3) }\"}");
+  CIccMpeJsonCalculator fractionalCalc;
+  std::string fractionalError;
+  check(!fractionalCalc.ParseJson(fractional, fractionalError) &&
+          fractionalError.find("Invalid inputChannels") != std::string::npos,
+        "channel count", "fractional inputChannels accepted as 3");
+
   if (g_fail) {
     std::fprintf(stderr, "[calculator-limits-json] %d check(s) failed\n", g_fail);
     return 1;

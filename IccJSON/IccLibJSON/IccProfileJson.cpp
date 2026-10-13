@@ -424,8 +424,10 @@ bool CIccProfileJson::ParseBasic(const IccJson &header, std::string &parseStr)
     if (header.contains(field) && header[field].is_object()) {
       const IccJson &sr = header[field];
       double start = 0, end = 0;
-      jGetValue(sr, "start", start);
-      jGetValue(sr, "end",   end);
+      if (!jGetValue(sr, "start", start) || !jGetValue(sr, "end", end)) {
+        parseStr += std::string("Invalid ") + field + " Wavelengths start or end\n";
+        return false;
+      }
       range.start = icFtoF16((icFloat32Number)start);
       range.end   = icFtoF16((icFloat32Number)end);
       if (sr.contains("steps")) {
