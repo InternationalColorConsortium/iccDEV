@@ -146,7 +146,7 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ${{ env.PUBLISH_IMAGE != 'true' && steps.meta.outputs.tags || '' }}
           no-cache: true
           pull: true
           platforms: ${{ matrix.platform }}
