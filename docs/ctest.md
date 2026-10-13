@@ -169,7 +169,9 @@ Nokia `heifIccDump` and the libheif and IccProfLib-backed release `iccHeifDump`
 using the Nokia HEIF revision recorded in `.github/ci/tooling/heif/Readme.md`.
 The tests run the 16-carrier corpus,
 property/CLI controls, sanitizer checks, ICC extraction hash assertion, and
-byte-for-byte A/B extraction comparison.
+byte-for-byte A/B extraction comparison. The native extractor also refuses
+generated output filenames that identify the HEIF input directly or through a
+hard link or symlink, while preserving the input bytes.
 Hosted coverage is the manually dispatched `Nokia HEIF ICC carrier smoke`
 workflow. It is deliberately isolated from `ci-pr-action` and the reusable
 iccDEV tool-test gate because it builds a separately pinned upstream project.
@@ -245,7 +247,7 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.iccconnect-config-parser` | `.github/ci/regression/iccconnect-config-parser.cpp` |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
 | `iccdev.cmm-get-apply-pcs-status` | `.github/ci/regression/cmm-get-apply-pcs-status.cpp`; output-first C ABI CMMs with a leading PCS adjustment return a usable additional apply object after `Begin()` |
-| `iccdev.namedcmm-sample-guards` | `.github/ci/regression/namedcmm-sample-guards.cpp`; `CIccNamedColorCmm::Begin()` refuses a spectral source or destination that a colorimetric AToB3/BToA3 fallback cannot serve, as `CIccCmm::Begin()` does, for issue #2704 |
+| `iccdev.namedcmm-sample-guards` | `.github/ci/regression/namedcmm-sample-guards.cpp`; `CIccNamedColorCmm::Begin()` refuses a spectral source or destination that a colorimetric AToB3/BToA3 fallback cannot serve, as `CIccCmm::Begin()` does, for issue #2704. It also rejects a v4 NamedColor2 device coordinate count that exceeds the header's channel count before `namedDevice` applies, with a matching CMYK control. |
 | `iccdev.curve-apply-gamma` | `.github/ci/regression/curve-apply-gamma.cpp`; direct one-entry gamma API contract for issue #2686 |
 | `iccdev.curve-gamma-tool-labels` | `Build/Cmake/Testing/RunCurveGammaToolLabelsTest.cmake`; the `Y = X ^ g` label `iccProfilePlot` and `iccProfileVisualize` print for a one-entry curve carries the stored u8Fixed8 exponent (sample * 65535 / 256, not sample * 256), checked on the four `gamma-*.icc` fixtures, for issue #2717 |
 | `iccdev.calc-temp-reset-if-no-else` | `.github/ci/regression/calc-temp-reset-if-no-else.cpp`; calculator temporaries read as zero at each invocation, after an `if` with no `else` and after a `select`, for issue #2707 |
