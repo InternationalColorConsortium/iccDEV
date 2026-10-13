@@ -111,6 +111,32 @@ if(TARGET iccHeifDump)
   endif()
 endif()
 
+if(TARGET iccJpegDump)
+  find_package(Python3 COMPONENTS Interpreter QUIET)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME iccdev.jpegdump-inspection
+      COMMAND "${Python3_EXECUTABLE}"
+        "${ICCDEV_REPO_ROOT}/.github/scripts/test_jpegdump_inspection.py"
+        --tool "$<TARGET_FILE:iccJpegDump>")
+    set_tests_properties(iccdev.jpegdump-inspection PROPERTIES
+      TIMEOUT 120
+      LABELS "iccdev;jpeg;image;regression;issue-2685")
+    if(WIN32)
+      set(_jpeg_windows_env_mods
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccJpegDump>")
+      foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+        list(APPEND _jpeg_windows_env_mods
+          "PATH=path_list_prepend:${_runtime_path}")
+      endforeach()
+      set_tests_properties(iccdev.jpegdump-inspection PROPERTIES
+        ENVIRONMENT_MODIFICATION "${_jpeg_windows_env_mods}")
+    endif()
+    add_dependencies(check iccJpegDump)
+  else()
+    message(STATUS "Skipping iccdev.jpegdump-inspection: Python3 interpreter not found")
+  endif()
+endif()
+
 # Regression executables link ${TARGET_LIB_ICCPROFLIB}, functions and exported
 # global data alike. There used to be a second link target here,
 # ${ICCDEV_TEST_LIB_ICCPROFLIB}, which resolved to IccProfLib2-static on Windows

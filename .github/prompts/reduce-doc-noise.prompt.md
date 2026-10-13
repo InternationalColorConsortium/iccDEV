@@ -23,8 +23,8 @@ maintainability.
 - Do not remove safety requirements, sanitizer flags, legal requirements, or
   regression gates unless an equivalent canonical reference remains.
 - Keep Markdown links within the Doxygen INPUT tree. Use explicit HTML anchors
-  for links outside that tree, then run
-  `doxygen .github/ci/doxygen/Doxyfile` and require an empty
+  for links outside that tree, then run the bounded graph-light check in
+  `docs/documentation-maintenance.md` and require an empty
   `docs/generated/doxygen-warnings.log`.
 - Do not add generated Doxygen HTML or warning logs to the change.
 - Preserve `.gitattributes` line endings: LF for documentation, MATLAB, and

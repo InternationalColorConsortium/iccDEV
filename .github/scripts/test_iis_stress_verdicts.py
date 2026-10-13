@@ -1,3 +1,7 @@
+#!/usr/bin/env python3
+# Copyright (c) International Color Consortium.
+# SPDX-License-Identifier: BSD-3-Clause
+
 """Prove IIS stress verdicts against a disposable loopback HTTP fixture."""
 
 import json

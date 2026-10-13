@@ -33,7 +33,8 @@ documentation for accuracy.
    triggers warning-only docs failures.
 7. Delete duplicate files only after moving unique content elsewhere.
 8. Run whitespace, local-link, ASCII, line-ending, and stale-reference checks.
-   Run `doxygen .github/ci/doxygen/Doxyfile` and require
+   Run the bounded graph-light Doxygen check in
+   `docs/documentation-maintenance.md` and require
    `docs/generated/doxygen-warnings.log` to be empty. Do not add generated
    Doxygen HTML or warning logs to the change.
    Require LF for documentation, prompts, skills, MATLAB, CMake, YAML/JSON,

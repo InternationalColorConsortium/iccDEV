@@ -1,3 +1,7 @@
+#!/usr/bin/env python3
+# Copyright (c) International Color Consortium.
+# SPDX-License-Identifier: BSD-3-Clause
+
 """Issue #2685: read-only JPEG inspection and unchanged raw extraction."""
 
 import argparse
