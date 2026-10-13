@@ -173,6 +173,12 @@ void testSpectralSteps()
   expectRefused(doc(",\n      \"BiSpectralRange\": { \"start\": 380.0, \"end\": 780.0, \"steps\": 70000 }", "", kMatrix),
                 "Invalid BiSpectralRange Wavelengths steps",
                 "#2674: BiSpectralRange takes the same check");
+  expectRefused(doc(",\n      \"SpectralRange\": { \"start\": \"bogus\", \"end\": 780.0, \"steps\": 31 }", "", kMatrix),
+                "Invalid SpectralRange Wavelengths start or end",
+                "a wrong-type SpectralRange start is refused rather than stored as zero");
+  expectRefused(doc(",\n      \"BiSpectralRange\": { \"start\": 380.0, \"end\": \"bogus\", \"steps\": 31 }", "", kMatrix),
+                "Invalid BiSpectralRange Wavelengths start or end",
+                "a wrong-type BiSpectralRange end is refused rather than stored as zero");
   expectLoads(doc(",\n      \"SpectralRange\": { \"start\": 380.0, \"end\": 780.0, \"steps\": 65535 }", "", kMatrix),
               "#2674: the largest storable step count still loads");
 }

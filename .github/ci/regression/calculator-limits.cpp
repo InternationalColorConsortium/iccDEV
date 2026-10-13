@@ -358,6 +358,24 @@ void caseXml()
   check(!parseXml(calcDoc("<CalculatorLimits MaxStackSize=\"6x\"/>"), bad, parseStr), "xml bad", "trailing text accepted");
   CIccMpeXmlCalculator neg;
   check(!parseXml(calcDoc("<CalculatorLimits MaxOperations=\"-1\"/>"), neg, parseStr), "xml negative", "a negative limit accepted");
+
+  std::string namedDoc = calcDoc("");
+  namedDoc.insert(namedDoc.find('>'), " InputNames=\"a b[2]\"");
+  CIccMpeXmlCalculator named;
+  parseStr.clear();
+  check(parseXml(namedDoc, named, parseStr), "xml channel names", "valid channel sizes refused");
+  namedDoc.replace(namedDoc.find("b[2]"), 4, "b[2147483647]");
+  CIccMpeXmlCalculator oversized;
+  parseStr.clear();
+  check(!parseXml(namedDoc, oversized, parseStr), "xml channel names", "oversized channel map accepted");
+  namedDoc.replace(namedDoc.find("b[2147483647]"), 13, "b[999999999999999999999]");
+  CIccMpeXmlCalculator outOfInt;
+  parseStr.clear();
+  check(!parseXml(namedDoc, outOfInt, parseStr), "xml channel names", "out-of-int channel size accepted");
+  namedDoc.replace(namedDoc.find("b[999999999999999999999]"), 24, "b[2junk]");
+  CIccMpeXmlCalculator trailing;
+  parseStr.clear();
+  check(!parseXml(namedDoc, trailing, parseStr), "xml channel names", "trailing text in channel size accepted");
 }
 
 } // namespace
