@@ -46,6 +46,7 @@
 #include "IccCAM.h"
 #include "IccMpeFactory.h"
 #include <algorithm>
+#include <cerrno>
 #include <cctype>
 #include <cmath>
 #include <cstring>
@@ -179,28 +180,26 @@ static void icJsonSetSegPos(IccJson &j, const char *field, icFloatNumber pos)
     j[field] = (double)pos;
 }
 
-static icFloatNumber icJsonSegPosFromStr(const std::string &s)
+static bool icJsonSegPosFromStr(const std::string &s, icFloatNumber &pos)
 {
   // Read the sign FIRST, then the magnitude.  The previous version tested for a
   // trailing "inf" before it looked at the sign, so "-inf" returned the positive
   // maximum; it also required at least four characters, which "inf" does not
   // have, and matched only the last three, which "+infinity" -- the spelling
-  // icJsonSetSegPos() above actually writes -- does not end with.  Every
-  // unmatched spelling fell through to atof(), which returns a real infinity
-  // that is not equal to either sentinel, so the writer then emitted null.
+  // icJsonSetSegPos() above actually writes -- does not end with.
   //
   // Worse, and the reason this is not only about infinities: the sign test was
   // `s[0] == '-' && s.size() >= 4` with no look at the rest, so EVERY
   // string-encoded negative number of four or more characters returned the
   // float32 minimum.  "-0.5", "-1.25" and "-123.5" all became -3.4028235e+38,
   // while "-1" and "-12" were short enough to survive.
-  // Trim first.  atof() skips leading whitespace on its own, so a padded
-  // " inf" used to reach the old trailing-"inf" test and match; matching on a
-  // trimmed copy keeps that working rather than quietly narrowing it.
+  // Trim first so padded infinity spellings and finite numbers still work.
+  // A malformed string must fail: atof() used to turn "bogus" into zero, which
+  // could pass the adjacent segment bounds check and silently change a curve.
   const char *kSpace = " \t\n\r\f\v";
   std::size_t nBegin = s.find_first_not_of(kSpace);
   if (nBegin == std::string::npos)
-    return (icFloatNumber)atof(s.c_str());
+    return false;
   std::string t = s.substr(nBegin, s.find_last_not_of(kSpace) - nBegin + 1);
 
   std::size_t i = 0;
@@ -215,19 +214,25 @@ static icFloatNumber icJsonSegPosFromStr(const std::string &s)
   for (std::size_t n = 0; n < mag.size(); n++)
     mag[n] = (char)tolower((unsigned char)mag[n]);
 
-  // atof() accepts both spellings in any case, so matching them here is what
-  // keeps a round trip on the sentinels rather than on a real infinity.
-  if (mag == "inf" || mag == "infinity")
-    return bNegative ? icMinFloat32Number : icMaxFloat32Number;
+  // Match the supported infinity spellings before parsing finite numbers.
+  if (mag == "inf" || mag == "infinity") {
+    pos = bNegative ? icMinFloat32Number : icMaxFloat32Number;
+    return true;
+  }
 
-  return (icFloatNumber)atof(s.c_str());
+  char *end = nullptr;
+  errno = 0;
+  float value = std::strtof(t.c_str(), &end);
+  if (end == t.c_str() || *end || errno == ERANGE || !std::isfinite(value))
+    return false;
+  pos = value;
+  return true;
 }
 
-static icFloatNumber icJsonSegPosFromJson(const IccJson &jv)
+static bool icJsonSegPosFromJson(const IccJson &jv, icFloatNumber &pos)
 {
-  if (jv.is_string()) return icJsonSegPosFromStr(jv.get<std::string>());
-  if (jv.is_number()) return (icFloatNumber)jv.get<double>();
-  return 0.0f;
+  if (jv.is_string()) return icJsonSegPosFromStr(jv.get<std::string>(), pos);
+  return jsonToValue(jv, pos);
 }
 
 static int icFormulaCurveSegParamCount(int funcType)
@@ -476,8 +481,14 @@ bool CIccSegmentedCurveJson::ParseJson(const IccJson &j, std::string &parseStr)
       parseStr += line;
       return false;
     }
-    icFloatNumber start = icJsonSegPosFromJson(jSeg["start"]);
-    icFloatNumber end   = icJsonSegPosFromJson(jSeg["end"]);
+    icFloatNumber start = 0, end = 0;
+    if (!icJsonSegPosFromJson(jSeg["start"], start) ||
+        !icJsonSegPosFromJson(jSeg["end"], end)) {
+      char line[128];
+      snprintf(line, sizeof(line), "SegmentedCurve segment %d has an invalid start or end\n", nSeg);
+      parseStr += line;
+      return false;
+    }
 
     if (type == "FormulaSegment") {
       CIccFormulaCurveSegmentJson *pSeg = new(std::nothrow) CIccFormulaCurveSegmentJson(start, end);
@@ -1677,18 +1688,16 @@ bool CIccMpeJsonCalculator::ParseChanMap(ChanVarMap &chanMap, const char *szName
       }
     }
     else if (*p == '[' || *p == '(') {
-      size = atoi(p + 1);
-      // Compared as a subtraction, which cannot wrap.  size is an atoi() result on
-      // attacker-supplied text, and the sum "i + size" was formed in int BEFORE it
-      // was tested, so a width near INT_MAX overflowed: with
-      // "inputNames": "a b[2147483647]", 1 + 2147483647 wraps negative, the test
-      // passes, and "b" is recorded as a group 2147483647 channels wide (#2829).
-      // UBSan reported the addition.  The loop condition holds i < nChannels
-      // here, so nChannels - i is positive and exact.  The bound is unchanged, and
-      // is the one CIccMpeXmlCalculator::ParseChanMap applies.
-      if (size < 0 || size > nChannels - i) return false;
-      for (; *p && *p != ']' && *p != ')'; p++);
-      if (!*p) p--;
+      // The bound is compared as a subtraction, which cannot wrap (#2829).
+      const char *digits = p + 1;
+      if (*digits < '0' || *digits > '9') return false;
+      char *end = nullptr;
+      errno = 0;
+      long count = std::strtol(digits, &end, 10);
+      if (errno == ERANGE || count > nChannels - i ||
+          *end != (*p == '[' ? ']' : ')')) return false;
+      size = (int)count;
+      p = end;
     }
     else if (validNameChar(*p, bFirst)) {
       name += *p;
@@ -2376,9 +2385,11 @@ bool CIccMpeJsonCalculator::ToJson(IccJson &j)
 bool CIccMpeJsonCalculator::ParseJson(const IccJson &j, std::string &parseStr)
 {
   int nIn = 0, nOut = 0;
-  jGetValue(j, "inputChannels",  nIn);
-  jGetValue(j, "outputChannels", nOut);
-  if (!icJsonValidChannels(nIn, nOut)) {
+  if (!j.contains("inputChannels") || !j["inputChannels"].is_number_integer() ||
+      !j.contains("outputChannels") || !j["outputChannels"].is_number_integer() ||
+      !jGetValue(j, "inputChannels", nIn) ||
+      !jGetValue(j, "outputChannels", nOut) ||
+      !icJsonValidChannels(nIn, nOut)) {
     parseStr += "Invalid inputChannels or outputChannels in CalculatorElement\n";
     return false;
   }

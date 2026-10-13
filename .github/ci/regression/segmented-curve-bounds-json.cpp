@@ -165,6 +165,12 @@ int main()
       { "start that is neither a number nor a string",
         seg(kNegInf, "0", kZero) + "," + seg("null", kPosInf, kPass),
         "segment 2 needs a start and an end" },
+      { "nonnumeric string at a joined breakpoint",
+        seg(kNegInf, "0", kZero) + "," + seg("\"bogus\"", kPosInf, kPass),
+        "segment 2 has an invalid start or end" },
+      { "numeric string with trailing text",
+        seg(kNegInf, "0", kZero) + "," + seg("\"0junk\"", kPosInf, kPass),
+        "segment 2 has an invalid start or end" },
     };
     for (size_t i = 0; i < sizeof(kRefused) / sizeof(kRefused[0]); i++) {
       std::string parseStr;
