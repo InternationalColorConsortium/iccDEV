@@ -8222,6 +8222,10 @@ icStatusCMM CIccXformNamedColor::SetSrcSpace(icColorSpaceSignature nSrcSpace)
       if (nSrcSpace!=pTag->GetDeviceSpace())
         if (nSrcSpace!=icSigNamedData)
           return icCmmStatBadSpaceLink;
+
+    if (nSrcSpace == pTag->GetDeviceSpace() &&
+        pTag->GetDeviceCoords() != (icUInt32Number)icGetSpaceSamples(nSrcSpace))
+      return icCmmStatBadSpaceLink;
   }
 
   m_nSrcSpace = nSrcSpace;
@@ -8265,6 +8269,10 @@ icStatusCMM CIccXformNamedColor::SetDestSpace(icColorSpaceSignature nDestSpace)
       if (nDestSpace!=pTag->GetDeviceSpace())
         if (nDestSpace!=icSigNamedData)
           return icCmmStatBadSpaceLink;
+
+    if (nDestSpace == pTag->GetDeviceSpace() &&
+        pTag->GetDeviceCoords() != (icUInt32Number)icGetSpaceSamples(nDestSpace))
+      return icCmmStatBadSpaceLink;
   }
 
   m_nDestSpace = nDestSpace;

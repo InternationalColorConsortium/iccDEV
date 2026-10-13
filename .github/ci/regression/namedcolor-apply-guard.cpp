@@ -76,6 +76,35 @@ static icStatusCMM run_pixel_to_name(CIccTagNamedColor2 &tag,
   return xform.Apply(NULL, name, src);
 }
 
+static icStatusCMM configure_pixel_to_name(CIccTagNamedColor2 &tag,
+                                           icColorSpaceSignature deviceSpace)
+{
+  CIccXformNamedColor xform(&tag, icSigLabData, deviceSpace);
+  icStatusCMM status = xform.SetSrcSpace(deviceSpace);
+  if (status != icCmmStatOk) {
+    return status;
+  }
+
+  return xform.SetDestSpace(icSigNamedData);
+}
+
+static icStatusCMM configure_name_to_pixel(CIccTagNamedColor2 &tag,
+                                           icColorSpaceSignature deviceSpace)
+{
+  CIccXformNamedColor xform(&tag, icSigLabData, deviceSpace);
+  icStatusCMM status = xform.SetSrcSpace(icSigNamedData);
+  if (status != icCmmStatOk) {
+    return status;
+  }
+
+  status = xform.SetDestSpace(deviceSpace);
+  if (status != icCmmStatOk) {
+    return status;
+  }
+
+  return xform.SetDestSpace(deviceSpace);
+}
+
 int main()
 {
   icFloatNumber src[17] = {};
@@ -96,13 +125,31 @@ int main()
   init_named_entry(noDeviceCoords, "no-device-coordinates");
   failures += expect_status("no-device-coordinates",
                             run_pixel_to_name(noDeviceCoords, icSigRgbData, name, src),
-                            icCmmStatColorNotFound);
+                            icCmmStatBadSpaceLink);
 
   CIccTagNamedColor2 tooManyDeviceCoords(1, 17);
   init_named_entry(tooManyDeviceCoords, "too-many-device-coordinates");
   failures += expect_status("too-many-device-coordinates",
                             run_pixel_to_name(tooManyDeviceCoords, icSigRgbData, name, src),
-                            icCmmStatTooManySamples);
+                            icCmmStatBadSpaceLink);
+
+  CIccTagNamedColor2 validCmyk(1, 4);
+  init_named_entry(validCmyk, "valid-cmyk-device-color");
+  failures += expect_status("valid-cmyk-pixel-to-name",
+                            configure_pixel_to_name(validCmyk, icSigCmykData),
+                            icCmmStatOk);
+  failures += expect_status("valid-cmyk-name-to-pixel",
+                            configure_name_to_pixel(validCmyk, icSigCmykData),
+                            icCmmStatOk);
+
+  CIccTagNamedColor2 mismatchedDeviceCoords(1, 120);
+  init_named_entry(mismatchedDeviceCoords, "mismatched-device-coordinates");
+  failures += expect_status("mismatched-cmyk-pixel-to-name",
+                            configure_pixel_to_name(mismatchedDeviceCoords, icSigCmykData),
+                            icCmmStatBadSpaceLink);
+  failures += expect_status("mismatched-cmyk-name-to-pixel",
+                            configure_name_to_pixel(mismatchedDeviceCoords, icSigCmykData),
+                            icCmmStatBadSpaceLink);
 
   return failures ? 1 : 0;
 }
