@@ -31,6 +31,10 @@ HTTP contract, deployment scripts, or browser console.
    before changing the destination. Repeat with stale destination tools.
 6. Run `iccIisIsapiSmoke.exe` against `iccIisIsapi.dll`.
 7. Install an isolated IIS site on a non-default port.
+   Use a dedicated `ApplicationPoolIdentity` pool and verify anonymous access
+   uses that identity. Require read/execute access to the runtime tree and
+   modify access only to `_tool-work`; do not grant shared `IUSR` access.
+   Record the deployed DLL hash separately from the source revision.
 8. Run `Test-IccIisIsapiEndpoints.ps1` with a tracked ICC profile.
 9. Open `endpoints.html` in a browser and verify:
    - summary, health, and XML buttons render successful responses;
@@ -46,6 +50,11 @@ HTTP contract, deployment scripts, or browser console.
    exact SHA-256 hashes for retained inline stylesheet blocks.
 11. Run `Stress-IccIisIsapi.ps1` with `pwsh`, then remove the temporary site
     and app pool.
+    Require every executed phase to contribute to the verdict. Client-invalid
+    MIME skips are not server evidence; transport failures are not passes.
+    `Duration` is per phase; use an external timeout for a total QA deadline.
+    Run `python .github/scripts/test_iis_stress_verdicts.py` for verdict changes.
+    Verify newly created IIS resources are removed after installer failure.
 
 ## Required behavior
 
@@ -77,6 +86,8 @@ HTTP contract, deployment scripts, or browser console.
 - Route every method through the ISAPI handler so unsupported verbs receive
   the controlled 405 response rather than an HTTP.sys diagnostic response.
 - Do not expose benchmark or arbitrary-argv tools through this endpoint.
+- Keep HEIF native-only until an explicit carrier API contract is implemented;
+  the presence of `iccHeifDump.exe` does not prove HTTP HEIF support.
 
 ## Validation
 

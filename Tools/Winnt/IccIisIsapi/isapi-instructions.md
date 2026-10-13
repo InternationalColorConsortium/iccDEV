@@ -15,8 +15,7 @@ After the handler is mapped, the extension responds to four request forms:
   - returns plain text `ok`
 - `GET /iccIisIsapi.dll`
   - returns plain text with:
-    - `IccProfLib` version
-    - `IccLibXML` version
+    - service identification without library versions or commit metadata
     - profile spec version
     - generated XML byte count
 - `GET /iccIisIsapi.dll?format=xml`
@@ -28,11 +27,11 @@ After the handler is mapped, the extension responds to four request forms:
 Example local URLs from the current IIS sample site:
 
 ```text
-http://localhost:18081/
-http://localhost:18081/endpoints.html
-http://localhost:18081/iccIisIsapi.dll
-http://localhost:18081/iccIisIsapi.dll?mode=health
-http://localhost:18081/iccIisIsapi.dll?format=xml
+http://127.0.0.1:18081/
+http://127.0.0.1:18081/endpoints.html
+http://127.0.0.1:18081/iccIisIsapi.dll
+http://127.0.0.1:18081/iccIisIsapi.dll?mode=health
+http://127.0.0.1:18081/iccIisIsapi.dll?format=xml
 ```
 
 ## Why `HTTP Error 403.14 - Forbidden` happens
@@ -66,7 +65,8 @@ The sample install directory should contain at least:
 - `iconv-2.dll`
 - `libxml2.dll`
 - `zlib1.dll` (or `zlibd1.dll` for Debug)
-- `index.html`, `index2.html`, `endpoints.html`, `integration.html`
+- `index.html`, `endpoints.html`, `error.html`
+- `index.js`
 - `site.css`, `site.js`, `sanitize.js`
 - `web.config`
 - `assets/` -- ICC branding images
@@ -141,24 +141,40 @@ The script defaults `-SiteRoot` to `<repo>\out\iis-shared-install\bin`. Use
 `-SiteRoot` to point IIS at a different install bundle, or `-Layout Build` with
 `-Configuration Release` for a build-tree proof.
 
+Use a dedicated `ApplicationPoolIdentity` pool. The installer rejects an
+existing pool with a different identity rather than changing its credentials.
+Anonymous requests run as the pool identity, which receives read/execute
+access to the site tree and modify access only to `_tool-work`. It does not
+grant write access to binaries or grant permissions to shared `IUSR`.
+Reparse-point site and workspace roots are rejected. If verification fails,
+newly created site, pool, and ISAPI restriction entries are removed; existing
+resources and filesystem ACL changes are not rolled back.
+
+Use the literal `127.0.0.1` address for the default IPv4 binding; `localhost`
+may resolve to IPv6 and reach a different HTTP.sys binding. Bypass proxies
+for loopback requests, for example with `curl.exe --noproxy "*"`.
+Non-loopback operators must configure IIS authentication and authorization
+separately; these permission settings are not an access-control substitute.
+
 ## Smoke and browser checks
 
 Direct endpoint checks:
 
 ```powershell
-curl.exe http://localhost:18081/iccIisIsapi.dll?mode=health
-curl.exe http://localhost:18081/iccIisIsapi.dll
-curl.exe http://localhost:18081/iccIisIsapi.dll?format=xml
+curl.exe --noproxy "*" http://127.0.0.1:18081/iccIisIsapi.dll?mode=health
+curl.exe --noproxy "*" http://127.0.0.1:18081/iccIisIsapi.dll
+curl.exe --noproxy "*" http://127.0.0.1:18081/iccIisIsapi.dll?format=xml
 curl.exe -H "Accept: application/json" -H "Content-Type: application/octet-stream" `
+  --noproxy "*" -H "X-ICCDEV-Request: 1" `
   --data-binary "@sample.icc" `
-  "http://localhost:18081/iccIisIsapi.dll?mode=tools&input=icc&filename=sample.icc"
+  "http://127.0.0.1:18081/iccIisIsapi.dll?mode=tools&input=icc&filename=sample.icc"
 ```
 
 Browser checks:
 
-1. Open `http://localhost:18081/`
+1. Open `http://127.0.0.1:18081/`
 2. Confirm the site landing page loads and `/_tool-work/` returns 403 or 404
-3. Open `http://localhost:18081/endpoints.html` and upload an ICC profile or XML file
+3. Open `http://127.0.0.1:18081/endpoints.html` and upload an ICC profile or XML file
 4. Open the returned `_tool-work/<job>/` workspace link to fetch the original upload, logs, and generated artifacts directly over HTTP
 
 ## Build-tree quick proof
@@ -205,7 +221,7 @@ After installing the site, run the repository-owned endpoint test:
 
 ```powershell
 .\Tools\Winnt\IccIisIsapi\Test-IccIisIsapiEndpoints.ps1 `
-  -BaseUrl http://localhost:18081 `
+  -BaseUrl http://127.0.0.1:18081 `
   -SampleIccPath .\Testing\sRGB_v4_ICC_preference.icc
 ```
 
@@ -226,7 +242,7 @@ Run the concurrent stress test with PowerShell 7 or later:
 
 ```powershell
 pwsh -File .\Tools\Winnt\IccIisIsapi\Stress-IccIisIsapi.ps1 `
-  -BaseUrl http://localhost:18081 `
+  -BaseUrl http://127.0.0.1:18081 `
   -Concurrency 20 `
   -Duration 10
 ```
@@ -235,3 +251,24 @@ Package imports are validated in a clean staging directory before deployment
 and fail closed when any documented runtime tool is absent, including
 `iccPawgReport.exe`; a partially functional tool endpoint deployment is not
 accepted.
+
+The importer uses the same installer for identity, permissions, handler
+configuration, and verification; deployment failures are terminating errors.
+Exported packages include `Test-IccIisIsapiEndpoints.ps1`.
+Before importing over a running deployment, stop its dedicated application pool
+and wait for the worker to exit so loaded DLLs are no longer locked. The importer
+does not stop an existing service implicitly; a file-copy failure is terminating.
+
+Stress verdicts include concurrent reads, method/header checks, query rejection,
+URI probes, raw oversized uploads (HTTP 400 or 413), media types, and sanitized
+filename/artifact URLs. Client-invalid MIME tokens are explicitly skipped,
+not counted as server passes. `-Duration` is per timed phase, not a global
+deadline; use an external process timeout when a total QA budget is required.
+Run the independent verdict regression with:
+
+```powershell
+python .github\scripts\test_iis_stress_verdicts.py
+```
+
+HEIF remains a native CLI capability, not an IIS input kind. Installing
+`iccHeifDump.exe` does not enable carrier uploads through this ICC/XML API.

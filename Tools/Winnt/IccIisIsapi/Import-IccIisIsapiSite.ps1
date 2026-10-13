@@ -169,82 +169,9 @@ if (-not $isAdmin) {
   throw "IIS configuration requires administrator privileges. Re-run as admin."
 }
 
-# -- Configure IIS -------------------------------------------------------------
-$appcmd = "$env:SystemRoot\system32\inetsrv\appcmd.exe"
-if (-not (Test-Path $appcmd)) {
-  throw "appcmd.exe not found. Is IIS installed?"
+$installer = Join-Path $PSScriptRoot 'Install-IccIisIsapiSite.ps1'
+if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
+  throw "Required IIS installer missing: $installer"
 }
-
-Write-Host "`nConfiguring IIS..." -ForegroundColor Cyan
-
-# App pool
-$poolExists = & $appcmd list apppool /name:"$PoolName" 2>$null
-if (-not $poolExists) {
-  & $appcmd add apppool /name:"$PoolName" /managedRuntimeVersion:"" /enable32BitAppOnWin64:false
-  Write-Host "  Created app pool: $PoolName"
-} else {
-  Write-Host "  App pool exists: $PoolName"
-}
-& $appcmd set apppool /apppool.name:"$PoolName" /processModel.identityType:ApplicationPoolIdentity 2>$null
-
-# Site
-$siteExists = & $appcmd list site /name:"$SiteName" 2>$null
-if (-not $siteExists) {
-  & $appcmd add site /name:"$SiteName" /physicalPath:"$DestinationRoot" `
-    /bindings:"http/${BindAddress}:${Port}:" 2>$null
-  Write-Host "  Created site: $SiteName on port $Port"
-} else {
-  & $appcmd set site /site.name:"$SiteName" /physicalPath:"$DestinationRoot" 2>$null
-  Write-Host "  Updated site root: $DestinationRoot"
-}
-& $appcmd set site /site.name:"$SiteName" /[path='/'].applicationPool:"$PoolName" 2>$null
-& $appcmd set config "$SiteName" -section:system.webServer/serverRuntime `
-  /appConcurrentRequestLimit:64 /commit:apphost 2>$null
-
-# Handler mapping
-& $appcmd set config "$SiteName" /section:handlers `
-  /+"[name='iccIisIsapi',path='iccIisIsapi.dll',verb='*',modules='IsapiModule',scriptProcessor='$dllPath',resourceType='File',requireAccess='Execute',allowPathInfo='True']" `
-  /commit:apphost 2>$null
-Write-Host "  Handler mapped: iccIisIsapi.dll"
-
-# ISAPI restriction
-& $appcmd set config /section:isapiCgiRestriction `
-  /+"[path='$dllPath',allowed='true',description='iccDEV ISAPI']" `
-  /commit:apphost 2>$null
-Write-Host "  ISAPI restriction: allowed"
-
-# Start
-& $appcmd start apppool /apppool.name:"$PoolName" 2>$null
-& $appcmd start site /site.name:"$SiteName" 2>$null
-Write-Host "  Site started" -ForegroundColor Green
-
-# -- Verify -------------------------------------------------------------------
-Write-Host "`nVerifying..." -ForegroundColor Cyan
-Start-Sleep -Seconds 2
-
-$endpoints = @(
-  @{ Path = "/iccIisIsapi.dll?mode=health"; Expect = 200; Label = "Health" },
-  @{ Path = "/";                             Expect = 200; Label = "Landing page" },
-  @{ Path = "/endpoints.html";               Expect = 200; Label = "Tool console" }
-)
-
-$allOk = $true
-foreach ($ep in $endpoints) {
-  try {
-    $r = Invoke-WebRequest -Uri "http://${BindAddress}:$Port$($ep.Path)" -UseBasicParsing -TimeoutSec 10
-    $mark = if ($r.StatusCode -eq $ep.Expect) { "PASS" } else { "FAIL"; $allOk = $false }
-    Write-Host "  [$mark] $($ep.Label): $($r.StatusCode)"
-  } catch {
-    Write-Host "  [FAIL] $($ep.Label): $($_.Exception.Message)" -ForegroundColor Red
-    $allOk = $false
-  }
-}
-
-if ($allOk) {
-  Write-Host "`nDeployment successful!" -ForegroundColor Green
-  Write-Host "  Site URL:      http://${BindAddress}:$Port/"
-  Write-Host "  Tool console:  http://${BindAddress}:$Port/endpoints.html"
-  Write-Host "  Health check:  http://${BindAddress}:$Port/iccIisIsapi.dll?mode=health"
-} else {
-  Write-Host "`nDeployment completed with warnings. Check IIS event logs." -ForegroundColor Yellow
-}
+& $installer -SiteName $SiteName -PoolName $PoolName -Port $Port `
+  -BindAddress $BindAddress -SiteRoot $DestinationRoot

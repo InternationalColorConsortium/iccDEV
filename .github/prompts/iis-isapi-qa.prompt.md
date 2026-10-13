@@ -25,6 +25,10 @@ browser assessment surface.
    tools to prove stale files cannot satisfy validation.
 7. Run `iccIisIsapiSmoke.exe`.
 8. Install an isolated IIS site with `Install-IccIisIsapiSite.ps1`.
+   Verify the dedicated pool identity has runtime read/execute and workspace
+   modify access, anonymous requests use that identity, and failed fresh
+   installs clean up their newly created IIS resources. Use `127.0.0.1` for
+   the default binding and bypass loopback proxies. Record deployed DLL hashes.
 9. Run `Test-IccIisIsapiEndpoints.ps1`.
 10. In a browser, exercise summary, health, XML, profile upload, PAWG report
    display, report download, and workspace navigation.
@@ -44,6 +48,11 @@ browser assessment surface.
     probes and reject reflection of attacker-controlled path text.
 14. Run `Stress-IccIisIsapi.ps1` with `pwsh`, then remove the temporary IIS
     site and app pool.
+    Require phase assertions in the final verdict, report client-invalid MIME
+    skips separately, and use an external timeout for a total QA budget.
+    Run `python .github/scripts/test_iis_stress_verdicts.py` after verdict edits.
+    Confirm exported packages include `Test-IccIisIsapiEndpoints.ps1` and use
+    the common installer during import.
 
 Report endpoint status codes, tool exit classifications, report and workspace
 URLs, browser errors, and any skipped checks. Do not call exit code 1 from

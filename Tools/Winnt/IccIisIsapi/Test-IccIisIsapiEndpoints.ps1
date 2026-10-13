@@ -9,7 +9,7 @@ Copyright:  (c) see Software License
 
 [CmdletBinding()]
 param(
-  [string]$BaseUrl = 'http://localhost:18081',
+  [string]$BaseUrl = 'http://127.0.0.1:18081',
   [Parameter(Mandatory = $true)]
   [string]$SampleIccPath
 )

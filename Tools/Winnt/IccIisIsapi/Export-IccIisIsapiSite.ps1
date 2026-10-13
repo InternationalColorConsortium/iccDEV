@@ -134,7 +134,8 @@ if ($IncludeToolWork -and (Test-Path $twSrc)) {
 # PowerShell lifecycle scripts (from source tree)
 $scriptDir = $PSScriptRoot
 foreach ($ps1 in @("Install-IccIisIsapiSite.ps1", "Uninstall-IccIisIsapiSite.ps1",
-                    "Import-IccIisIsapiSite.ps1", "Stress-IccIisIsapi.ps1")) {
+                    "Import-IccIisIsapiSite.ps1", "Stress-IccIisIsapi.ps1",
+                    "Test-IccIisIsapiEndpoints.ps1")) {
   $ps1Path = Join-Path $scriptDir $ps1
   if (Test-Path $ps1Path) {
     Copy-Item $ps1Path $staging -Force

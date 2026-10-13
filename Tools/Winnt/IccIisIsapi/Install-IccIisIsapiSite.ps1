@@ -106,6 +106,9 @@ if (-not $SiteRoot) {
   $SiteRoot = Get-DefaultSiteRoot -LayoutName $Layout -ConfigName $Configuration
 }
 $SiteRoot = (Resolve-Path $SiteRoot).Path
+if ((Get-Item -LiteralPath $SiteRoot).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+  throw 'The IIS site root must not be a reparse point.'
+}
 
 $dllPath = Join-Path $SiteRoot 'iccIisIsapi.dll'
 $smokePath = Join-Path $SiteRoot 'iccIisIsapiSmoke.exe'
@@ -175,14 +178,44 @@ else {
 }
 $baseUrl = "http://${baseUrlHost}:$Port/"
 
-if (-not (Test-AppCmdExists -Arguments @('list', 'apppool', "/name:$PoolName") -MatchText $PoolName)) {
+$createdPool = $false
+$createdSite = $false
+$createdRestriction = $false
+trap {
+  $failure = $_
+  if ($createdSite) {
+    & $appcmd delete site $SiteName | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Warning "Failed to remove temporary site '$SiteName'." }
+  }
+  if ($createdRestriction) {
+    & $appcmd set config /section:isapiCgiRestriction "/-[path='$dllPath']" /commit:apphost | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'Failed to remove the new ISAPI restriction.' }
+  }
+  if ($createdPool) {
+    & $appcmd delete apppool $PoolName | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Warning "Failed to remove temporary pool '$PoolName'." }
+  }
+  throw $failure
+}
+
+$poolExists = Test-AppCmdExists -Arguments @('list', 'apppool', "/name:$PoolName") -MatchText $PoolName
+if ($poolExists) {
+  $identity = Invoke-AppCmd -Arguments @('list', 'apppool', "/name:$PoolName", '/text:processModel.identityType')
+  if (($identity.Output | Out-String).Trim() -ne 'ApplicationPoolIdentity') {
+    throw "Pool '$PoolName' must use ApplicationPoolIdentity. Choose a dedicated pool instead of changing an existing identity."
+  }
+}
+else {
   Invoke-AppCmd -Arguments @('add', 'apppool', "/name:$PoolName") | Out-Null
+  $createdPool = $true
+  Invoke-AppCmd -Arguments @('set', 'apppool', $PoolName, '/processModel.identityType:ApplicationPoolIdentity') | Out-Null
 }
 Invoke-AppCmd -Arguments @('set', 'apppool', $PoolName, '/managedRuntimeVersion:', '/managedPipelineMode:Integrated') | Out-Null
 Invoke-AppCmd -Arguments @('set', 'apppool', $PoolName, '/enable32BitAppOnWin64:false') | Out-Null
 
 if (-not (Test-AppCmdExists -Arguments @('list', 'site', "/name:$SiteName") -MatchText $SiteName)) {
   Invoke-AppCmd -Arguments @('add', 'site', "/name:$SiteName", "/bindings:http/$bindingInfo", "/physicalPath:$SiteRoot") | Out-Null
+  $createdSite = $true
 }
 else {
   $siteInfo = Invoke-AppCmd -Arguments @('list', 'site', "/name:$SiteName", '/text:*')
@@ -195,6 +228,23 @@ else {
 }
 
 Invoke-AppCmd -Arguments @('set', 'app', "$SiteName/", "/applicationPool:$PoolName") | Out-Null
+$workspaceRoot = Join-Path $SiteRoot '_tool-work'
+if (Test-Path -LiteralPath $workspaceRoot) {
+  if ((Get-Item -LiteralPath $workspaceRoot).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+    throw 'The IIS workspace root must not be a reparse point.'
+  }
+}
+else {
+  New-Item -ItemType Directory -Path $workspaceRoot | Out-Null
+}
+& icacls.exe $SiteRoot /grant "IIS AppPool\${PoolName}:(OI)(CI)(RX)" /Q | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Cannot grant runtime read access to pool '$PoolName'." }
+& icacls.exe $workspaceRoot /grant "IIS AppPool\${PoolName}:(OI)(CI)(M)" /Q | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Cannot grant workspace write access to pool '$PoolName'." }
+Invoke-AppCmd -Arguments @(
+  'set', 'config', $SiteName, '-section:system.webServer/security/authentication/anonymousAuthentication',
+  '/userName:', '/commit:apphost'
+) | Out-Null
 Invoke-AppCmd -Arguments @('set', 'config', $SiteName, '-section:system.webServer/serverRuntime', '/appConcurrentRequestLimit:64', '/commit:apphost') | Out-Null
 Invoke-AppCmd -Arguments @('set', 'config', $SiteName, '-section:system.webServer/handlers', '/accessPolicy:Read,Script,Execute', '/commit:apphost') | Out-Null
 
@@ -214,6 +264,9 @@ $restrictionText = ($restrictionList.Output | Out-String)
 if ($restrictionText -match [Regex]::Escape("path=`"$dllPath`"") -or
     $restrictionText -match [Regex]::Escape("path='$dllPath'")) {
   Invoke-AppCmd -Arguments @('set', 'config', '/section:isapiCgiRestriction', "/-[path='$dllPath']", '/commit:apphost') | Out-Null
+}
+else {
+  $createdRestriction = $true
 }
 Invoke-AppCmd -Arguments @(
   'set', 'config', '/section:isapiCgiRestriction',
@@ -235,7 +288,7 @@ if ($healthResponse.StatusCode -ne 200 -or $healthResponse.Content.Trim() -ne 'o
 }
 
 $summaryResponse = Invoke-WebRequest -Uri ($baseUrl + 'iccIisIsapi.dll') -UseBasicParsing -TimeoutSec 30
-if ($summaryResponse.StatusCode -ne 200 -or $summaryResponse.Content -notmatch 'IccProfLib version:') {
+if ($summaryResponse.StatusCode -ne 200 -or $summaryResponse.Content -notmatch 'iccDEV IIS service') {
   throw "Summary verification failed for $baseUrl"
 }
 
