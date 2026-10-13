@@ -584,7 +584,7 @@
             "type": "object",
             "description": "Per-profile ID and description entry",
             "properties": {
-              "profileId":        { "type": "string", "description": "32-character uppercase hex string (16-byte profile ID)" },
+              "profileId":        { "$ref": "#/$defs/HexString", "minLength": 32, "maxLength": 32, "description": "16-byte profile ID as 32 hex chars; iccToJson writes uppercase. iccFromJson refuses a value that is not 16 bytes of hex, and reads an omitted key as an all-zero ID" },
               "localizedStrings": { "type": "array", "items": { "$ref": "#/$defs/LocalizedString" } }
             }
           }

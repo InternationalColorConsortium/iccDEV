@@ -1907,7 +1907,7 @@ bool CIccTagJsonProfileSequenceId::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonProfileSequenceId::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonProfileSequenceId::ParseJson(const IccJson &j, std::string &parseStr)
 {
   if (!m_list)
     return false;
@@ -1920,9 +1920,29 @@ bool CIccTagJsonProfileSequenceId::ParseJson(const IccJson &j, std::string & /*p
   for (const IccJson &entry : j["profileSequenceId"]) {
     CIccProfileIdDesc desc;
 
-    std::string idHex;
-    if (jGetString(entry, "profileId", idHex) && !idHex.empty())
+    // The 16-byte profile ID, which ToJson() writes as 32 hex digits.  A
+    // profileId that is present has to be exactly that.  It used to go straight
+    // to icJsonGetHexData(), which skips whatever it cannot read as a pair of
+    // digits and stops where the text does, so "0g11" was stored as 0x11 and
+    // fifteen zero bytes and the profile was written with an ID the document
+    // never stated (#2826).  CIccTagXmlProfileSequenceId::ParseXml() makes the
+    // same two checks on its id attribute.  An entry with no profileId, or with
+    // a null one, keeps the all-zero ID CIccProfileIdDesc starts with, as
+    // before: the schema does not require the key, and null is how the tools'
+    // own JSON reports spell an ID that was not calculated.  The three helpers
+    // read a C string, so a NUL inside the text is refused first; they would
+    // otherwise check and decode only what comes before it.
+    if (jsonExistsField(entry, "profileId") && !entry["profileId"].is_null()) {
+      std::string idHex;
+      if (!jGetString(entry, "profileId", idHex) ||
+          idHex.find('\0') != std::string::npos ||
+          !icJsonValidHexData(idHex.c_str()) ||
+          icJsonGetHexDataSize(idHex.c_str()) != sizeof(desc.m_profileID)) {
+        parseStr += "Invalid profileId in profileSequenceId\n";
+        return false;
+      }
       icJsonGetHexData(&desc.m_profileID, idHex.c_str(), sizeof(desc.m_profileID));
+    }
 
     if (jsonExistsField(entry, "localizedStrings") && entry["localizedStrings"].is_array()) {
       for (const IccJson &loc : entry["localizedStrings"]) {

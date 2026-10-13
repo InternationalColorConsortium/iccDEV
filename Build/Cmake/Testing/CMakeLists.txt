@@ -2541,7 +2541,9 @@ function(iccdev_add_hex_data_malformed_xml_test)
 endfunction()
 
 # Guards #2610 on the JSON side, in its own executable because IccMpeXml.h and
-# IccMpeJson.h cannot share a translation unit.
+# IccMpeJson.h cannot share a translation unit. #2826: it also drives a
+# profileSequenceIdentifierType profileId, which the JSON reader decoded without
+# checking, so "0g11" was stored as 0x11 and fifteen zero bytes.
 function(iccdev_add_hex_data_malformed_json_test)
   if(NOT TARGET "${TARGET_LIB_ICCJSON}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -2575,7 +2577,7 @@ function(iccdev_add_hex_data_malformed_json_test)
   endif()
   set_tests_properties(iccdev.hex-data-malformed-json PROPERTIES
     TIMEOUT 60
-    LABELS "iccdev;json;hex;parse;issue-2610;regression"
+    LABELS "iccdev;json;hex;parse;issue-2610;issue-2826;regression"
   )
   if(WIN32)
     set(_icchexdatamalformedjsontest_env_mods
