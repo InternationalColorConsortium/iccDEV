@@ -2988,13 +2988,12 @@ function(iccdev_add_islegalutf8_bound_test)
 
 endfunction()
 
-# #2674, #2695, #2697: three places where the JSON profile reader accepted a
-# malformed document and built a different profile from it, each refused by
-# the XML reader's twin: a spectral-range step count cast to uInt16Number
-# (65567 stored as 31), a Tags entry with a second member skipped with an
-# unprinted warning, and a multiProcessElementType element with no, an
-# unknown, or a non-JSON type dropped from the tag.  All three now fail the
-# parse with the XML reader's wording; the controls still load.
+# #2674, #2695, #2697: JSON fields that accepted malformed values and built a
+# different profile, while the XML reader refused them. The regression covers
+# spectral-range step counts, extra Tags entry members, missing or unknown MPE
+# element types, and numeric ranges in spectral viewing conditions and spectral
+# elements, plus the NamedColor2 device-coordinate count. Invalid cases fail
+# parsing; their controls still load.
 function(iccdev_add_json_reader_strictness_test)
   if(NOT TARGET "${TARGET_LIB_ICCJSON}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -3581,7 +3580,9 @@ endfunction()
 # only transform is a colorimetric AToBx made the named CMM advertise the
 # spectral channel count while Apply() wrote three, and iccApplyNamedCmm read the
 # rest (MemorySanitizer).  Pins both guards against CIccCmm's verdict, with a
-# colorimetric control.  Library only; called in both the Windows and the main
+# colorimetric control. The same test also covers a NamedColor2 tag whose
+# device coordinate count exceeds the profile header's color-space samples.
+# Library only; called in both the Windows and the main
 # list.
 function(iccdev_add_namedcmm_sample_guards_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
@@ -3615,7 +3616,7 @@ function(iccdev_add_namedcmm_sample_guards_test)
   endif()
   set_tests_properties(iccdev.namedcmm-sample-guards PROPERTIES
     TIMEOUT 60
-    LABELS "iccdev;cmm;namedcolor;msan;issue-2704;regression"
+    LABELS "iccdev;cmm;namedcolor;msan;memory-safety;issue-2704;regression"
   )
   if(WIN32)
     set(_namedcmm_sample_guards_windows_env_mods

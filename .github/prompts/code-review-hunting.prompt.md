@@ -117,6 +117,11 @@ or channel count can leave a zero-initialized local that is then serialized as
 if the document supplied zero. For status output parameters, check that every
 successful return writes success before callers inspect the status, especially
 when the first transform is a PCS adjustment.
+For spectral subobjects, follow each range reader through all JSON and XML
+callers. For named colors, compare the tag's device-coordinate count with the
+profile header and the caller's pixel buffer before `Apply()` copies values.
+For extractors that derive output filenames, check each destination against
+the input by file identity before any output is opened.
 
 ```bash
 grep -rn 'Read(' IccProfLib/ | grep -v 'if.*Read\|!.*Read\|==.*Read'
