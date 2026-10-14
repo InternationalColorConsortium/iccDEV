@@ -534,6 +534,7 @@ static bool ListDirectories(const char *path, bool evidence
 #endif
                             )
 {
+  // Open metadata only: inventory must not decode pixels or parse ICC payloads.
   CTiffImg image;
 #ifdef ICCDEV_TELEMETRY
   if (telemetry)
@@ -556,6 +557,7 @@ static bool ListDirectories(const char *path, bool evidence
     phaseStart = CIccTiffTelemetry::Now();
   }
 #endif
+  // Validate the capped main-chain walk before emitting any inventory JSON.
   const unsigned int count = image.GetDirectoryCount();
 #ifdef ICCDEV_TELEMETRY
   if (telemetry) {
@@ -615,6 +617,7 @@ static bool ListDirectories(const char *path, bool evidence
                     "\"directory_profile_bytes\":" + std::to_string(length));
     }
 #endif
+    // SubIFDs are reported as opaque offsets, never recursively traversed.
     uint16_t subCount = 0;
     uint64_t *subOffsets = NULL;
     TIFFGetField(tif, TIFFTAG_SUBIFD, &subCount, &subOffsets);
@@ -670,13 +673,16 @@ int main(int argc, icChar* argv[])
 #endif
   if (argc)
     positional.push_back(argv[0]);
-  for (int arg = 1; arg < argc; arg++) {
+  int arg = 1;
+  while (arg < argc) {
 #ifdef ICCDEV_TELEMETRY
     const int telemetryOption = telemetry.ParseOption(arg, argc, argv);
     if (telemetryOption < 0)
       return 1;
-    if (telemetryOption)
+    if (telemetryOption) {
+      arg++;
       continue;
+    }
 #else
     if (icRejectTiffTelemetryOption(argv[arg]))
       return 1;
@@ -711,6 +717,7 @@ int main(int argc, icChar* argv[])
     }
     else
       positional.push_back(argv[arg]);
+    arg++;
   }
   argc = static_cast<int>(positional.size());
   argv = positional.data();

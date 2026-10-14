@@ -463,13 +463,16 @@ int main(int argc, char* argv[]) {
   std::vector<char*> positional;
   if (argc)
     positional.push_back(argv[0]);
-  for (int arg = 1; arg < argc; arg++) {
+  int arg = 1;
+  while (arg < argc) {
 #ifdef ICCDEV_TELEMETRY
     int telemetryResult = telemetry.ParseOption(arg, argc, argv);
     if (telemetryResult < 0)
       return -1;
-    if (telemetryResult > 0)
+    if (telemetryResult > 0) {
+      arg++;
       continue;
+    }
 #endif
     if (!strcmp(argv[arg], "--tiles")) {
       int w = 0, h = 0;
@@ -492,6 +495,7 @@ int main(int argc, char* argv[]) {
     }
     else
       positional.push_back(argv[arg]);
+    arg++;
   }
   argc = static_cast<int>(positional.size());
   argv = positional.data();
