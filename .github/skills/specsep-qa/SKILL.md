@@ -72,10 +72,13 @@ finding; review both categories in `matrix-summary.txt`.
 
 ## Validation
 
-Run the wrapper, then the six registered CTests when CTest integration is in
-scope:
+Run the wrapper, then build the regression helpers before a direct filtered
+CTest run. Helpers such as `iccTiffTilesTest` are intentionally excluded from
+the default product build; `check` builds them automatically, but `ctest` does
+not:
 
 ```bash
+cmake --build Build --target build-test-binaries
 ctest --test-dir Build -R '^iccdev\.specsep-' --output-on-failure --no-tests=error
 ```
 
