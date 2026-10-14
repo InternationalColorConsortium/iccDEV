@@ -149,6 +149,13 @@ int main(int argc, char* argv[])
     return 3;
   }
 
+  std::FILE* input = std::fopen(argv[1], "rb");
+  if (!input) {
+    std::cerr << "Error: unable to open HEIF input file: " << argv[1] << std::endl;
+    return 2;
+  }
+  std::fclose(input);
+
   std::vector<iccdev_heif::IccProperty> properties;
   std::vector<std::uint8_t> bytes;
   bool collected = false;
