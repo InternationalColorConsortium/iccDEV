@@ -137,6 +137,51 @@ if(TARGET iccJpegDump)
   endif()
 endif()
 
+# Register Python QA before the Windows and no-bash return boundaries.
+find_package(Python3 3.9 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+  set(_roundtrip_test "${ICCDEV_REPO_ROOT}/.github/scripts/test_xml_json_roundtrip_qa.py")
+  add_test(NAME iccdev.xml-json-roundtrip-qa-contract
+    COMMAND "${Python3_EXECUTABLE}" "${_roundtrip_test}")
+  set_tests_properties(iccdev.xml-json-roundtrip-qa-contract PROPERTIES
+    TIMEOUT 60 LABELS "iccdev;xml;json;roundtrip;qa;regression")
+  if(TARGET iccFromXml AND TARGET iccToXml AND TARGET iccFromJson
+     AND TARGET iccToJson AND TARGET iccDumpProfile)
+    add_test(NAME iccdev.xml-json-roundtrip-qa
+      COMMAND "${CMAKE_COMMAND}" -E env
+        "ICC_TO_XML=$<TARGET_FILE:iccToXml>"
+        "ICC_FROM_XML=$<TARGET_FILE:iccFromXml>"
+        "ICC_TO_JSON=$<TARGET_FILE:iccToJson>"
+        "ICC_FROM_JSON=$<TARGET_FILE:iccFromJson>"
+        "ICC_DUMP_PROFILE=$<TARGET_FILE:iccDumpProfile>"
+        "ASAN_OPTIONS=detect_leaks=0"
+        "DEBUGINFOD_URLS="
+        "ICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/xml-json-roundtrip-qa"
+        "${Python3_EXECUTABLE}" "${_roundtrip_test}"
+        --native-control "${ICCDEV_REPO_ROOT}/.github/ci/test-data/v5dspobs-cat8lab.icc")
+    set_tests_properties(iccdev.xml-json-roundtrip-qa PROPERTIES
+      TIMEOUT 180 LABELS "iccdev;xml;json;roundtrip;qa;asan")
+    if(WIN32)
+      set(_roundtrip_windows_env_mods "")
+      foreach(_target iccFromXml iccToXml iccFromJson iccToJson iccDumpProfile
+          "${TARGET_LIB_ICCPROFLIB}" "${TARGET_LIB_ICCXML}" "${TARGET_LIB_ICCJSON}")
+        if(TARGET "${_target}")
+          list(APPEND _roundtrip_windows_env_mods
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:${_target}>")
+        endif()
+      endforeach()
+      foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+        list(APPEND _roundtrip_windows_env_mods
+          "PATH=path_list_prepend:${_runtime_path}")
+      endforeach()
+      set_tests_properties(iccdev.xml-json-roundtrip-qa PROPERTIES
+        ENVIRONMENT_MODIFICATION "${_roundtrip_windows_env_mods}")
+    endif()
+  endif()
+else()
+  message(STATUS "Skipping XML/JSON round-trip QA: Python 3.9+ interpreter not found")
+endif()
+
 # Regression executables link ${TARGET_LIB_ICCPROFLIB}, functions and exported
 # global data alike. There used to be a second link target here,
 # ${ICCDEV_TEST_LIB_ICCPROFLIB}, which resolved to IccProfLib2-static on Windows

@@ -443,6 +443,16 @@ XML fidelity, malformed-input rejection, PAWG JSON generation, and the current
 `iccRoundTrip` class boundary. It is a Unix-like bash-backed full-tool test;
 see `docs/xml-spec-qa.md` for the specification matrix and interpretation.
 
+`iccdev.xml-json-roundtrip-qa` runs the Python 3.9+ corpus runner against one
+tracked valid display profile. It asserts clean validation, byte identity,
+diagnostic fidelity, and serial/parallel baseline agreement.
+`iccdev.xml-json-roundtrip-qa-contract` independently injects rejection,
+timeout, signal, sanitizer, missing-output, collision, and baseline failures
+without native tools. Registration precedes the Windows/no-Bash boundaries;
+the native test also requires all five conversion/validation targets. See
+`docs/xml-json-roundtrip-qa.md` for broad corpus operation and evidence
+interpretation.
+
 Windows full tool builds register these tests when all targets are available:
 
 | Test | Source |

@@ -415,7 +415,7 @@ class Campaign:
             ("empty-profile", [self.outputs_dir / "empty-profile.tif", 0, 0, prefix, 1, 3, 1, self.inputs_dir / "empty-profile.icc"], "zero-length ICC data"),
             ("text-profile", [self.outputs_dir / "text-profile.tif", 0, 0, prefix, 1, 3, 1, self.text_profile], "Cannot parse profile"),
             ("profile-mismatch", [self.outputs_dir / "profile-mismatch.tif", 0, 0, prefix, 1, 5, 1, self.profile], "do not match TIFF SamplesPerPixel"),
-            ("directory-output", [reject_dir, 0, 0, prefix, 1, 3, 1], "Output image must be a regular file"),
+            ("directory-output", [reject_dir, 0, 0, prefix, 1, 3, 1], "Output image must be a regular non-symlink file"),
             ("missing-parent", [self.outputs_dir / "missing/child/out.tif", 0, 0, prefix, 1, 3, 1], "Unable to create"),
             ("mismatch-width", [self.outputs_dir / "mismatch-width.tif", 0, 0, self.inputs_dir / "mismatch-width/spec_", 1, 2, 1], "does not have same format"),
             ("mismatch-height", [self.outputs_dir / "mismatch-height.tif", 0, 0, self.inputs_dir / "mismatch-height/spec_", 1, 2, 1], "does not have same format"),

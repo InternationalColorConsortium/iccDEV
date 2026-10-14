@@ -19,6 +19,9 @@ dispatched workflow, where it is compared with this release implementation.
 iccHeifDump input.heic [existing-output-directory]
 ```
 
+An input path that cannot be opened is reported separately from a malformed
+HEIF colour-property structure, and both conditions return exit status 2.
+
 When an output directory is supplied, the tool writes profiles as:
 
 ```text

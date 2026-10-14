@@ -16,17 +16,20 @@ import tempfile
 PROFILE_NAME = "item-1-property-1-prof.icc"
 PROFILE_SHA256 = "de9b36ccc513fdc79860d5dff523aed9cf67411789e4c20ae866146cbaf75a4e"
 CREATE_ERROR = "Error: unable to create extracted ICC profile:"
+INPUT_ERROR = "Error: unable to open HEIF input file:"
 
 
-def check_result(result, expected):
+def check_result(result, expected, expected_error=None):
     output = result.stdout + result.stderr
     if result.returncode != expected:
         raise RuntimeError(f"expected exit {expected}, got {result.returncode}: {output}")
     for diagnostic in ("AddressSanitizer", "UndefinedBehaviorSanitizer", "runtime error:"):
         if diagnostic in output:
             raise RuntimeError(output)
-    if expected == 2 and CREATE_ERROR not in result.stderr:
-        raise RuntimeError(f"missing output creation error: {output}")
+    if expected == 2 and expected_error is None:
+        expected_error = CREATE_ERROR
+    if expected_error and expected_error not in result.stderr:
+        raise RuntimeError(f"missing expected error {expected_error!r}: {output}")
     return output
 
 
@@ -46,7 +49,8 @@ def main():
             [str(tool), str(image), str(directory)], capture_output=True,
             text=True, errors="replace", timeout=30,
         )
-        return check_result(result, expected)
+        expected_error = CREATE_ERROR if expected == 2 else None
+        return check_result(result, expected, expected_error)
 
     def passed_case(name):
         nonlocal passed
@@ -57,6 +61,25 @@ def main():
         root = Path(temporary)
         image = root / "input.heic"
         shutil.copyfile(source, image)
+
+        missing = root / "missing.heic"
+        result = subprocess.run(
+            [str(tool), str(missing)], capture_output=True,
+            text=True, errors="replace", timeout=30,
+        )
+        check_result(result, 2, INPUT_ERROR)
+        passed_case("missing input diagnostic")
+
+        malformed = root / "malformed.heic"
+        malformed.write_bytes(b"not a HEIF file")
+        result = subprocess.run(
+            [str(tool), str(malformed)], capture_output=True,
+            text=True, errors="replace", timeout=30,
+        )
+        check_result(result, 2, "Error: unable to read HEIF colour properties")
+        if INPUT_ERROR in result.stderr:
+            raise RuntimeError("malformed input was reported as unavailable")
+        passed_case("malformed input diagnostic remains distinct")
 
         # Exercise the platform separator, forward slashes, and spaces.
         for name, suffix in (("native path", ""), ("trailing native", os.sep),
