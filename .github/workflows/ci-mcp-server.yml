@@ -91,6 +91,8 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake libjpeg-dev libpng-dev libtiff-dev \
@@ -102,6 +104,8 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           cmake -S Build/Cmake -B build-mcp-tiff \
             -DCMAKE_BUILD_TYPE=Release \
             -DENABLE_TESTS=ON \
@@ -120,6 +124,8 @@ jobs:
           ICCDEV_TESTING_DIR: ${{ github.workspace }}/Testing
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           test -x "$ICCDEV_TIFF_FIXTURE"
           python -m pytest iccdev-mcp/tests/test_tiff_contracts.py -q \
             -k 'test_native_tiff_binding_alignment or test_native_stdio_tiff_contract'
