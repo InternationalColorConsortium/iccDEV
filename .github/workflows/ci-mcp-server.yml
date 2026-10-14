@@ -20,6 +20,12 @@ on:
     paths:
       - "Dockerfile"
       - "iccdev-mcp/**"
+      - ".github/ci/regression/tiff-tiles.cpp"
+      - "Build/Cmake/Testing/CMakeLists.txt"
+      - "IccConnect/IccLibConnect/IccCmmConfig.*"
+      - "Tools/CmdLine/IccApplyProfiles/**"
+      - "Tools/CmdLine/IccSpecSepToTiff/**"
+      - "Tools/CmdLine/IccTiffDump/**"
       - ".github/scripts/icc-*-qa-*"
       - ".github/scripts/iccdev-container-smoke.py"
       - ".github/ci/docker/build-validation-library.sh"
@@ -78,6 +84,45 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           python -m pytest iccdev-mcp/tests -q
+
+      - name: Install native TIFF test dependencies
+        if: matrix.python-version == '3.14'
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake libjpeg-dev libpng-dev libtiff-dev \
+            libxml2-dev nlohmann-json3-dev zlib1g-dev
+
+      - name: Build native TIFF test tools
+        if: matrix.python-version == '3.14'
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          cmake -S Build/Cmake -B build-mcp-tiff \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_TESTS=ON \
+            -DENABLE_IMAGE_TOOLS=ON \
+            -DENABLE_WXWIDGETS=OFF
+          cmake --build build-mcp-tiff --parallel 4 --target \
+            iccTiffTilesTest iccTiffDump iccSpecSepToTiff \
+            iccApplyProfiles iccFromXml
+
+      - name: Run native TIFF MCP and REST contracts
+        if: matrix.python-version == '3.14'
+        env:
+          BASH_ENV: /dev/null
+          ICCDEV_TOOLS_DIR: ${{ github.workspace }}/build-mcp-tiff/Tools
+          ICCDEV_TIFF_FIXTURE: ${{ github.workspace }}/build-mcp-tiff/Testing/iccTiffTilesTest
+          ICCDEV_TESTING_DIR: ${{ github.workspace }}/Testing
+        run: |
+          set -euo pipefail
+          test -x "$ICCDEV_TIFF_FIXTURE"
+          python -m pytest iccdev-mcp/tests/test_tiff_contracts.py -q \
+            -k 'test_native_tiff_binding_alignment or test_native_stdio_tiff_contract'
 
       - name: Build MCP wheel
         env:
