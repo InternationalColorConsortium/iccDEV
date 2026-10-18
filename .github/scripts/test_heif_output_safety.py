@@ -70,6 +70,18 @@ def main():
         check_result(result, 2, INPUT_ERROR)
         passed_case("missing input diagnostic")
 
+        if os.name != "nt":
+            unsafe_missing = root / "missing\n\x1b[31m.heic"
+            result = subprocess.run(
+                [str(tool), str(unsafe_missing)], capture_output=True,
+                text=True, errors="replace", timeout=30,
+            )
+            check_result(result, 2, INPUT_ERROR)
+            safe_name = str(unsafe_missing).replace("\n", "\\n").replace("\x1b", "\\x1B")
+            if result.stderr != f"{INPUT_ERROR} {safe_name}\n":
+                raise RuntimeError(f"unsafe input diagnostic was not sanitized: {result.stderr!r}")
+            passed_case("missing input diagnostic sanitizes console controls")
+
         malformed = root / "malformed.heic"
         malformed.write_bytes(b"not a HEIF file")
         result = subprocess.run(

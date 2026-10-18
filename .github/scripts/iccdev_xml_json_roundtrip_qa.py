@@ -19,7 +19,6 @@ from pathlib import Path
 import re
 import subprocess
 import sys
-import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -40,6 +39,7 @@ SANITIZER = re.compile(
     r"AddressSanitizer:DEADLYSIGNAL|MemorySanitizer:|runtime error:"
 )
 ABNORMAL = {"timeout", "signal", "sanitizer", "launch-error"}
+WINDOWS_TOOL_REJECTIONS = {0xFFFFFFFF, 0xFFFFFFFE, 0xFFFFFFFD}
 FIELDS = [
     "profile", "input_sha256", "input_bytes", "source_validation_status",
     "to_xml_status", "from_xml_status", "from_xml_bytes", "from_xml_size_delta",
@@ -95,7 +95,8 @@ def parser():
                         metavar="SECONDS", help="per-tool time limit; default 60")
     result.add_argument("--compare-baseline", type=Path, metavar="DIR")
     result.add_argument("icc_path", type=Path)
-    result.add_argument("output_directory", type=Path, nargs="?")
+    result.add_argument("output_directory", type=Path,
+                        help="unused evidence directory outside the input tree")
     return result
 
 
@@ -129,7 +130,28 @@ class Stage:
     timed_out: bool = False
 
 
-def run_stage(command, log, timeout, output=None):
+def is_signal_exit(code, platform_name=None):
+    if code is None:
+        return False
+    if code < 0:
+        return True
+    if (platform_name or os.name) != "nt":
+        return False
+    return code >= 0x80000000 and code not in WINDOWS_TOOL_REJECTIONS
+
+
+def normalized_diagnostic(line, artifact_root):
+    if re.match(r"^\s*Profile:\s+", line):
+        return None
+    message = " ".join(line.split())
+    if artifact_root is not None:
+        root = str(artifact_root)
+        for spelling in {root, root.replace("\\", "/")}:
+            message = message.replace(spelling, "<evidence>")
+    return message
+
+
+def run_stage(command, log, timeout, output=None, artifact_root=None):
     code = None
     timed_out = False
     launch_error = False
@@ -150,12 +172,13 @@ def run_stage(command, log, timeout, output=None):
     sanitizer = False
     with log.open(encoding="utf-8", errors="replace") as stream:
         for line in stream:
-            sanitizer |= bool(SANITIZER.search(line))
-            if DIAGNOSTIC.search(line):
-                diagnostics.add(" ".join(line.split()))
-    signal = code is not None and (
-        code < 0 or (os.name == "nt" and code >= 0x80000000)
-    )
+            message = normalized_diagnostic(line, artifact_root)
+            if message is None:
+                continue
+            sanitizer |= bool(SANITIZER.search(message))
+            if DIAGNOSTIC.search(message):
+                diagnostics.add(message)
+    signal = is_signal_exit(code)
     if timed_out:
         status = "timeout"
     elif signal:
@@ -210,7 +233,8 @@ def process_profile(profile, input_root, output_root, tools, timeout):
     # Retain the extension: same-stem .icc/.ICC inputs must not share artifacts.
     logs = output_root / "logs" / relative
     logs.mkdir(parents=True)
-    source = run_stage([tools["dump"], "-v", profile], logs / "source-validate.log", timeout)
+    source = run_stage([tools["dump"], "-v", profile], logs / "source-validate.log", timeout,
+                       artifact_root=output_root)
     stages = {"source-validate": source}
     row = {
         "profile": tsv_text(relative.as_posix()), "input_sha256": digest(profile),
@@ -225,17 +249,19 @@ def process_profile(profile, input_root, output_root, tools, timeout):
         command = [tools["to_" + side], profile, forward]
         if side == "json":
             command.append("-sort")
-        converted = run_stage(command, logs / ("icc-to-" + side + ".log"), timeout, forward)
+        converted = run_stage(command, logs / ("icc-to-" + side + ".log"), timeout, forward,
+                              output_root)
         stages["icc-to-" + side] = converted
         imported = Stage("not-run", None, (), logs / (side + "-to-icc.log"))
         validated = Stage("not-run", None, (), logs / ("from-" + side + "-validate.log"))
         if converted.status in {"success", "warning-output"}:
             imported = run_stage(
                 [tools["from_" + side], forward, reverse],
-                imported.log, timeout, reverse,
+                imported.log, timeout, reverse, output_root,
             )
         if imported.status in {"success", "warning-output"}:
-            validated = run_stage([tools["dump"], "-v", reverse], validated.log, timeout)
+            validated = run_stage([tools["dump"], "-v", reverse], validated.log, timeout,
+                                  artifact_root=output_root)
         stages[side + "-to-icc"] = imported
         stages["from-" + side + "-validate"] = validated
         usable = imported.status in {"success", "warning-output"}
@@ -325,18 +351,12 @@ def execute(args):
     if not profiles:
         raise ValueError(f"No ICC profiles below: {input_path}")
     baseline = load_baseline(args.compare_baseline) if args.compare_baseline else None
-    if args.output_directory:
-        output = args.output_directory.absolute()
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.mkdir()
-    elif "ICCDEV_TEST_OUTDIR" in os.environ:
-        parent = Path(os.environ["ICCDEV_TEST_OUTDIR"])
-        parent.mkdir(parents=True, exist_ok=True)
-        output = Path(tempfile.mkdtemp(prefix="xml-json-roundtrip-qa-", dir=parent)).absolute()
-    else:
-        output = input_root / ("xml-json-roundtrip-qa" if input_path.is_dir()
-                               else input_path.name + "-xml-json-roundtrip-qa")
-        output.mkdir()
+    output = args.output_directory.absolute()
+    resolved_output = output.resolve(strict=False)
+    if resolved_output.is_relative_to(input_root) or input_root.is_relative_to(resolved_output):
+        raise ValueError("Evidence directory must be outside the input tree")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.mkdir()
     for name in ("xml", "json", "from-xml", "from-json", "logs"):
         (output / name).mkdir()
     metadata = {

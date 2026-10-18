@@ -156,6 +156,16 @@ class RoundtripContracts(unittest.TestCase):
         self.assertEqual(self.rows(output)[0]["from_xml_source_fidelity"], "same")
         self.assertIn("Critical Error!", (output / "diagnostics.tsv").read_text())
 
+    def test_profile_headers_are_not_diagnostics_or_sanitizer_findings(self):
+        self.log_messages["dump"] = (
+            b"Profile: '/input/ERROR: AddressSanitizer:DEADLYSIGNAL failed.icc'\n")
+        self.log_messages["returned-dump"] = (
+            b"Profile: '/evidence/from-xml/ERROR: AddressSanitizer:DEADLYSIGNAL failed.icc'\n")
+        code, output = self.invoke()
+        self.assertEqual(code, 0)
+        self.assertEqual((output / "diagnostics.tsv").read_text().count("\n"), 1)
+        self.assertIn("sanitizer_findings=0", (output / "summary.txt").read_text())
+
     def test_ascii_reports_escape_filename_control_characters(self):
         if os.name == "nt":
             self.skipTest("Windows disallows control characters in filenames")
@@ -213,6 +223,18 @@ class RoundtripContracts(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertFalse(output.exists())
 
+    def test_explicit_external_output_is_required(self):
+        fallback = self.root / "fallback"
+        with patch.dict(os.environ, {"ICCDEV_TEST_OUTDIR": str(fallback)}), \
+                contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            qa.main([str(self.inputs)])
+        self.assertFalse(fallback.exists())
+        nested = self.inputs / "evidence"
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            code = qa.main([str(self.inputs), str(nested)])
+        self.assertEqual(code, 2)
+        self.assertFalse(nested.exists())
+
     def test_baseline_ignores_jobs_but_detects_input_content(self):
         self.assertEqual(self.invoke("baseline")[0], 0)
         options = ("--compare-baseline", str(self.root / "baseline"), "--jobs", "2")
@@ -223,6 +245,23 @@ class RoundtripContracts(unittest.TestCase):
         code, output = self.invoke("changed", options=options)
         self.assertEqual(code, 0)
         self.assertIn("profile-results:\nstatus=changed", (output / "baseline-comparison.txt").read_text())
+
+    def test_baseline_normalizes_evidence_paths_but_preserves_raw_logs(self):
+        first = self.root / "first"
+        self.log_messages["from_xml"] = (
+            f"Unable to Parse '{first}/xml/control.icc.xml'\n".encode("ascii"))
+        self.assertEqual(self.invoke("first")[0], 3)
+        diagnostic = (first / "diagnostics.tsv").read_text()
+        self.assertIn("<evidence>/xml/control.icc.xml", diagnostic)
+        raw_log = first / "logs/control.icc/xml-to-icc.log"
+        self.assertIn(str(first), raw_log.read_text())
+
+        repeat = self.root / "repeat"
+        self.log_messages["from_xml"] = (
+            f"Unable to Parse '{repeat}/xml/control.icc.xml'\n".encode("ascii"))
+        options = ("--compare-baseline", str(first))
+        self.assertEqual(self.invoke("repeat", options=options)[0], 3)
+        self.assertEqual((repeat / "baseline-comparison.txt").read_text(), BASELINE_MATCH)
 
     def test_invalid_baseline_fails_before_output_creation(self):
         baseline = self.root / "baseline"
@@ -257,6 +296,12 @@ class RoundtripContracts(unittest.TestCase):
                     [sys.executable, "-c", "import os, signal; os.kill(os.getpid(), signal.SIGTERM)"],
                     self.root / "signal.log", 10)
                 self.assertEqual(result.status, "signal")
+
+    def test_windows_native_rejections_are_not_exception_exits(self):
+        for code in (0xFFFFFFFF, 0xFFFFFFFE, 0xFFFFFFFD):
+            with self.subTest(code=code):
+                self.assertFalse(qa.is_signal_exit(code, "nt"))
+        self.assertTrue(qa.is_signal_exit(0xC0000005, "nt"))
 
     def test_numeric_limits_and_decimal_parsing(self):
         self.assertEqual(qa.number("08"), 8)
