@@ -135,6 +135,24 @@ class RoundtripContracts(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(self.rows(output)[0]["to_json_status"], "launch-error")
 
+    def test_loader_diagnostic_and_exit_127_is_a_launch_failure(self):
+        self.behavior["to_json"] = 127
+        self.log_messages["to_json"] = (
+            b"to_json: error while loading shared libraries: libmissing.so: "
+            b"cannot open shared object file: No such file or directory\n")
+        code, output = self.invoke("loader-failure")
+        self.assertEqual(code, 1)
+        self.assertEqual(self.rows(output)[0]["to_json_status"], "launch-error")
+        self.assertIn("launch_errors=1", (output / "summary.txt").read_text())
+        self.assertIn("error while loading shared libraries",
+                      (output / "diagnostics.tsv").read_text())
+
+        self.log_messages["to_json"] = b""
+        code, output = self.invoke("exit-127-only")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.rows(output)[0]["to_json_status"], "warning-output")
+        self.assertIn("launch_errors=0", (output / "summary.txt").read_text())
+
     def test_missing_conversion_output(self):
         self.behavior["to_xml"] = "missing"
         code, output = self.invoke()
@@ -164,6 +182,19 @@ class RoundtripContracts(unittest.TestCase):
         code, output = self.invoke()
         self.assertEqual(code, 0)
         self.assertEqual((output / "diagnostics.tsv").read_text().count("\n"), 1)
+        self.assertIn("sanitizer_findings=0", (output / "summary.txt").read_text())
+
+    def test_rejected_sanitizer_named_profile_is_not_a_sanitizer_finding(self):
+        if os.name == "nt":
+            self.skipTest("Windows disallows colons in filenames")
+        rejected = self.inputs / "AddressSanitizer:DEADLYSIGNAL.icc"
+        self.profile.rename(rejected)
+        self.behavior["dump"] = 255
+        self.log_messages["dump"] = (
+            f"Unable to parse '{rejected}' as ICC profile!\n".encode("ascii"))
+        code, output = self.invoke()
+        self.assertEqual(code, 1)
+        self.assertEqual(self.rows(output)[0]["source_validation_status"], "tool-rejection")
         self.assertIn("sanitizer_findings=0", (output / "summary.txt").read_text())
 
     def test_ascii_reports_escape_filename_control_characters(self):
@@ -201,6 +232,25 @@ class RoundtripContracts(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(len(self.rows(output)), 2)
         self.assertEqual((output / "from-json/control.ICC").read_bytes(), b"second-profile")
+
+    def test_nested_corpus_names_do_not_collide_with_serialized_outputs(self):
+        (self.inputs / "a.icc").write_bytes(b"top-level")
+        xml_nested = self.inputs / "a.icc.xml"
+        json_nested = self.inputs / "a.icc.json"
+        xml_nested.mkdir()
+        json_nested.mkdir()
+        (xml_nested / "b.icc").write_bytes(b"xml-nested")
+        (json_nested / "c.icc").write_bytes(b"json-nested")
+
+        code, output = self.invoke()
+        self.assertEqual(code, 0)
+        self.assertEqual(len(self.rows(output)), 4)
+        self.assertEqual((output / "xml/a.icc/profile.xml").read_bytes(), b"top-level")
+        self.assertEqual((output / "xml/a.icc.xml/b.icc/profile.xml").read_bytes(),
+                         b"xml-nested")
+        self.assertEqual((output / "json/a.icc/profile.json").read_bytes(), b"top-level")
+        self.assertEqual((output / "json/a.icc.json/c.icc/profile.json").read_bytes(),
+                         b"json-nested")
 
     def test_existing_output_and_dangling_symlink_are_rejected(self):
         existing = self.root / "existing"
@@ -249,16 +299,16 @@ class RoundtripContracts(unittest.TestCase):
     def test_baseline_normalizes_evidence_paths_but_preserves_raw_logs(self):
         first = self.root / "first"
         self.log_messages["from_xml"] = (
-            f"Unable to Parse '{first}/xml/control.icc.xml'\n".encode("ascii"))
+            f"Unable to Parse '{first}/xml/control.icc/profile.xml'\n".encode("ascii"))
         self.assertEqual(self.invoke("first")[0], 3)
         diagnostic = (first / "diagnostics.tsv").read_text()
-        self.assertIn("<evidence>/xml/control.icc.xml", diagnostic)
+        self.assertIn("<evidence>/xml/control.icc/profile.xml", diagnostic)
         raw_log = first / "logs/control.icc/xml-to-icc.log"
         self.assertIn(str(first), raw_log.read_text())
 
         repeat = self.root / "repeat"
         self.log_messages["from_xml"] = (
-            f"Unable to Parse '{repeat}/xml/control.icc.xml'\n".encode("ascii"))
+            f"Unable to Parse '{repeat}/xml/control.icc/profile.xml'\n".encode("ascii"))
         options = ("--compare-baseline", str(first))
         self.assertEqual(self.invoke("repeat", options=options)[0], 3)
         self.assertEqual((repeat / "baseline-comparison.txt").read_text(), BASELINE_MATCH)
@@ -287,6 +337,20 @@ class RoundtripContracts(unittest.TestCase):
                 [sys.executable, "-c", "raise SystemExit(255)"], self.root / "exit.log", 10)
             self.assertEqual(result.status, "tool-rejection")
             self.assertFalse(result.signal)
+            loader_code = (
+                "import sys; "
+                "sys.stderr.write('tool: error while loading shared libraries: libmissing.so: "
+                "cannot open shared object file: No such file or directory\\n'); "
+                "raise SystemExit(127)"
+            )
+            result = qa.run_stage(
+                [sys.executable, "-c", loader_code], self.root / "loader.log", 10)
+            self.assertEqual(result.status, "launch-error")
+            self.assertTrue(result.diagnostics)
+            result = qa.run_stage(
+                [sys.executable, "-c", "raise SystemExit(127)"],
+                self.root / "exit-127.log", 10)
+            self.assertEqual(result.status, "tool-rejection")
             result = qa.run_stage(
                 [sys.executable, "-c", "import time; time.sleep(10)"],
                 self.root / "timeout.log", 0.1)

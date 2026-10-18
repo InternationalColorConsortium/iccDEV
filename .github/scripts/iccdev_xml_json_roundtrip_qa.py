@@ -34,10 +34,14 @@ DIAGNOSTIC = re.compile(
     r"(^|[^A-Za-z])(ERROR|Error:|Unable to|[Ff]ailed)"
 )
 SANITIZER = re.compile(
-    r"(ERROR|SUMMARY|WARNING): (AddressSanitizer|UndefinedBehaviorSanitizer|"
-    r"LeakSanitizer|MemorySanitizer|ThreadSanitizer)|"
-    r"AddressSanitizer:DEADLYSIGNAL|MemorySanitizer:|runtime error:"
+    r"^(==[0-9]+==)?(ERROR|SUMMARY|WARNING): "
+    r"(AddressSanitizer|UndefinedBehaviorSanitizer|LeakSanitizer|"
+    r"MemorySanitizer|ThreadSanitizer)|"
+    r"^AddressSanitizer:DEADLYSIGNAL|^MemorySanitizer:|^runtime error:|"
+    r"^.+:[0-9]+(:[0-9]+)?: runtime error:"
 )
+LOADER_FAILURE = re.compile(r"error while loading shared libraries:")
+QUOTED_OPERAND = re.compile(r"'[^']*'|\"[^\"]*\"")
 ABNORMAL = {"timeout", "signal", "sanitizer", "launch-error"}
 WINDOWS_TOOL_REJECTIONS = {0xFFFFFFFF, 0xFFFFFFFE, 0xFFFFFFFD}
 FIELDS = [
@@ -170,14 +174,18 @@ def run_stage(command, log, timeout, output=None, artifact_root=None):
             stream.write(ascii_text(f"[FAIL] Unable to launch tool: {error}\n").encode("ascii"))
     diagnostics = set()
     sanitizer = False
+    loader_failure = False
     with log.open(encoding="utf-8", errors="replace") as stream:
         for line in stream:
             message = normalized_diagnostic(line, artifact_root)
             if message is None:
                 continue
-            sanitizer |= bool(SANITIZER.search(message))
-            if DIAGNOSTIC.search(message):
+            classification = QUOTED_OPERAND.sub("<operand>", message)
+            sanitizer |= bool(SANITIZER.search(classification))
+            loader_failure |= bool(LOADER_FAILURE.search(classification))
+            if DIAGNOSTIC.search(message) or LOADER_FAILURE.search(message):
                 diagnostics.add(message)
+    launch_error |= code is not None and code != 0 and loader_failure
     signal = is_signal_exit(code)
     if timed_out:
         status = "timeout"
@@ -242,7 +250,7 @@ def process_profile(profile, input_root, output_root, tools, timeout):
     }
     returned = {}
     for side in ("xml", "json"):
-        forward = output_root / side / relative.parent / (relative.name + "." + side)
+        forward = output_root / side / relative / ("profile." + side)
         reverse = output_root / ("from-" + side) / relative
         forward.parent.mkdir(parents=True, exist_ok=True)
         reverse.parent.mkdir(parents=True, exist_ok=True)
