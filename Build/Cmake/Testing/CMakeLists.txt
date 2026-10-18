@@ -14065,6 +14065,14 @@ iccdev_add_script_test(
 )
 
 iccdev_add_script_test(
+  iccdev.issue-2854-pngdump-regressions
+  120
+  "iccdev;tools;pngdump;issue-2854;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2854-pngdump-regressions.sh"
+)
+
+iccdev_add_script_test(
   iccdev.issue-1167-jpegdump-byte-regression
   120
   "iccdev;tools;jpegdump;asan;regression"

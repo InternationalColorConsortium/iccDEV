@@ -18,6 +18,7 @@ ARG TARGETARCH
 ARG FLAMEGRAPH_COMMIT=41fee1f99f9276008b7cd112fca19dc3ea84ac32
 ARG LLVM_MSAN_LIBCXX_COMMIT=1ab49a973e210e97d61e5db6557180dcb92c3e98
 ARG LIBXML2_MSAN_COMMIT=3d840e17858de03a09fba8b202e3a89267d5795a
+ARG CURL_VERSION=8.18.0-1ubuntu2.8
 ARG CODEQL_VERSION=2.27.2
 ARG CODEQL_AMD64_SHA256=f002864be6dd8d5d7bdb123aaf7291ec8e291012bd9f70b6d2362f730db52aeb
 ARG CODEQL_ARM64_SHA256=c1779ce6335606ef86fce4aae0db2ac4d7da869527d6a67bf055d9135695473c
@@ -48,7 +49,7 @@ RUN for attempt in 1 2 3; do \
     clang-tools-22=1:22.1.2-1ubuntu1 \
     cmake=4.2.3-2ubuntu2 \
     cppcheck=2.19.0-3 \
-    curl=8.18.0-1ubuntu2.7 \
+    curl=${CURL_VERSION} \
     diffutils=1:3.12-1ubuntu0.1 \
     file=1:5.46-5build2 \
     g++=4:15.2.0-5ubuntu1 \
@@ -68,7 +69,8 @@ RUN for attempt in 1 2 3; do \
     libtiff-tools=4.7.0-3ubuntu5 \
     liblzma-dev=5.8.3-1 \
     libpng-dev=1.6.57-1ubuntu0.1 \
-    libcurl4t64=8.18.0-1ubuntu2.7 \
+    libcurl3t64-gnutls=${CURL_VERSION} \
+    libcurl4t64=${CURL_VERSION} \
     libssl-dev=3.5.5-1ubuntu3.7 \
     libssl3t64=3.5.5-1ubuntu3.7 \
     libtiff-dev=4.7.0-3ubuntu5 \
