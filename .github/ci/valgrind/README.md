@@ -15,6 +15,10 @@ Use `build.sh` to configure the build, `run.sh` to execute named lanes,
 
 `issue-2592-regression.sh` builds `applyprofiles-row`, requires clean DRD and
 Helgrind runs, and verifies that both analyzers produce the same output TIFF.
+The registered `applysearch-row` input contains 257 records so the
+lane reaches the worker pool instead of only constructing its threaded wrapper.
+The `tiffdump` lane uses a valid embedded profile because parser-invalid TIFF
+behavior belongs in its focused regression suite, not the clean Memcheck lane.
 
 `corpus.sh` accepts paths containing spaces, applies a per-profile timeout, and
 stores a summary, analyzer log, stdout, stderr, and profiler output for every

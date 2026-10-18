@@ -45,6 +45,18 @@ for target in "${VG_TARGETS[@]}"; do
       errors=$((errors + 1))
     fi
   done
+  if [ "$VG_MIN_RECORDS" -gt 0 ]; then
+    if [ ! -f "$VG_RECORD_FILE" ]; then
+      echo "ERROR: missing record input for $target: $VG_RECORD_FILE" >&2
+      errors=$((errors + 1))
+    else
+      record_count="$(awk '/^[[:space:]]*[-+.0-9]/ { count++ } END { print count + 0 }' "$VG_RECORD_FILE")"
+      if [ "$record_count" -lt "$VG_MIN_RECORDS" ]; then
+        echo "ERROR: $target needs at least $VG_MIN_RECORDS records to start workers; found $record_count" >&2
+        errors=$((errors + 1))
+      fi
+    fi
+  fi
   case "$VG_RECOMMENDED_TOOL" in
     memcheck|helgrind|drd) ;;
     *) echo "ERROR: bad recommended tool for $target: $VG_RECOMMENDED_TOOL" >&2; errors=$((errors + 1)) ;;

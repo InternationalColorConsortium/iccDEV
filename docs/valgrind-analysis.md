@@ -105,6 +105,13 @@ not a reason to suppress one result.
 The `benchapply` lane uses 1024 pixels so its 2- and 4-thread cases reach the
 worker pool. Smaller inputs can finish on the calling thread even when a larger
 thread count is requested; check the input size before claiming worker coverage.
+The registered `applysearch-row` lane uses a dedicated 257-record fixture,
+which activates two threads under the current small-apply threshold while
+remaining within the analyzer timeout.
+Registry validation rejects a worker-backed lane whose configured record input
+falls below its declared minimum. The clean `tiffdump` lane uses the valid
+embedded profile in `seed-tiff-none-rgb-8x8.tif`; malformed embedded-profile
+behavior remains covered by focused TIFF regression tests.
 
 Issue #2592 records DRD's condition-variable notification check for the
 threaded row-application pool. To keep this maintained DRD lane clean,

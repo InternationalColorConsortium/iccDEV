@@ -61,7 +61,7 @@ vg_print_targets()
   echo "  tiffdump          - TIFF parser and embedded-profile extraction"
   echo "  applynamedcmm     - named CMM data application"
   echo "  applyprofiles-row - four-worker TIFF row application"
-  echo "  applysearch-row   - four-worker inverse-search application"
+  echo "  applysearch-row   - worker-backed inverse-search application"
   echo "  applytolink       - DeviceLink generation"
   echo "  benchapply        - threaded benchmark application path"
 }
@@ -79,7 +79,9 @@ vg_configure_target()
   local profile="$VG_SOURCE_DIR/Testing/sRGB_v4_ICC_preference.icc"
   local xml_profile="$VG_SOURCE_DIR/Testing/Display/sRGB_D65_MAT.xml"
   local rgb_data="$VG_SOURCE_DIR/.github/ci/test-data/test-data-rgb-16bit.txt"
-  local tiff_input="$VG_SOURCE_DIR/Testing/hybrid/Data/MS_smCowsIcon.tif"
+  local rgb_thread_data="$VG_SOURCE_DIR/.github/ci/test-data/valgrind-rgb-worker-257.txt"
+  local tiff_extract_input="$VG_SOURCE_DIR/Testing/ApplyDataFiles/seed-tiff-none-rgb-8x8.tif"
+  local tiff_apply_input="$VG_SOURCE_DIR/Testing/hybrid/Data/MS_smCowsIcon.tif"
 
   VG_BINARY=""
   VG_CMAKE_TARGET=""
@@ -89,6 +91,8 @@ vg_configure_target()
   VG_EXTRA_CMAKE_TARGETS=()
   VG_PREPARE=()
   VG_REQUIRED_FILES=()
+  VG_RECORD_FILE=""
+  VG_MIN_RECORDS=0
 
   case "$target" in
     connect-thread)
@@ -153,8 +157,8 @@ vg_configure_target()
     tiffdump)
       VG_CMAKE_TARGET="iccTiffDump"
       VG_BINARY="$(vg_tool_binary IccTiffDump iccTiffDump)"
-      VG_ARGS=("$tiff_input" "$VG_RUN_WORK/embedded.icc")
-      VG_REQUIRED_FILES=("$tiff_input")
+      VG_ARGS=("$tiff_extract_input" "$VG_RUN_WORK/embedded.icc")
+      VG_REQUIRED_FILES=("$tiff_extract_input")
       VG_NOTE="Exercises TIFF parsing and embedded-profile extraction."
       ;;
     applynamedcmm)
@@ -167,18 +171,20 @@ vg_configure_target()
     applyprofiles-row)
       VG_CMAKE_TARGET="iccApplyProfiles"
       VG_BINARY="$(vg_tool_binary IccApplyProfiles iccApplyProfiles)"
-      VG_ARGS=("-threads" "4" "$tiff_input" "$VG_RUN_WORK/applied.tif" "1" "0" "0" "1" "1" "$profile" "1")
-      VG_REQUIRED_FILES=("$tiff_input" "$profile")
+      VG_ARGS=("-threads" "4" "$tiff_apply_input" "$VG_RUN_WORK/applied.tif" "1" "0" "0" "1" "1" "$profile" "1")
+      VG_REQUIRED_FILES=("$tiff_apply_input" "$profile")
       VG_RECOMMENDED_TOOL="helgrind"
       VG_NOTE="Exercises threaded row application and TIFF output."
       ;;
     applysearch-row)
       VG_CMAKE_TARGET="iccApplySearch"
       VG_BINARY="$(vg_tool_binary IccApplySearch iccApplySearch)"
-      VG_ARGS=("-threads" "4" "$rgb_data" "5" "1" "$profile" "1" "$profile" "1" "-INIT" "1" "$profile" "1")
-      VG_REQUIRED_FILES=("$rgb_data" "$profile")
+      VG_ARGS=("-threads" "4" "$rgb_thread_data" "4" "1" "$profile" "1" "$profile" "1" "-INIT" "1" "$profile" "1")
+      VG_REQUIRED_FILES=("$rgb_thread_data" "$profile")
+      VG_RECORD_FILE="$rgb_thread_data"
+      VG_MIN_RECORDS=257
       VG_RECOMMENDED_TOOL="helgrind"
-      VG_NOTE="Exercises threaded inverse-search apply objects."
+      VG_NOTE="Exercises worker-backed inverse-search apply objects."
       ;;
     applytolink)
       VG_CMAKE_TARGET="iccApplyToLink"

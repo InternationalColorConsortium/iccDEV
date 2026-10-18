@@ -1265,7 +1265,9 @@ static bool applyPcs(CIccPcsXform &pcs, icFloatNumber *dst, const icFloatNumber 
   if (pcs.Begin() != icCmmStatOk)
     return false;
 
-  icStatusCMM st = icCmmStatOk;   // GetNewApply() reads this before it writes it
+  // A successful factory call must overwrite a caller-provided failure status.
+  // This also keeps callers from having to seed an output parameter before use.
+  icStatusCMM st = icCmmStatBad;
   CIccApplyXform *pApply = pcs.GetNewApply(st);
   if (!pApply || st != icCmmStatOk) {
     delete pApply;

@@ -308,7 +308,7 @@ bool CIccApplyThreadedCmm::Init(CIccCmm *pCmm, int nThreads)
 bool CIccApplyThreadedCmm::EnsureWorkers(int nWorkers)
 {
   while ((int)m_workers.size() < nWorkers) {
-    icStatusCMM status;
+    icStatusCMM status = icCmmStatOk;
     CIccApplyCmm *worker = m_baseCmm->GetNewApplyCmm(status);
     if (!worker || status != icCmmStatOk) {
       delete worker;
@@ -464,7 +464,7 @@ CIccThreadedCmm* CIccThreadedCmm::Attach(CIccCmm *pCmm, int nThreads, bool bDele
   rv->m_nLastIntent = pCmm->GetLastIntent();
 
   // Allocate the default apply object (used by CIccCmm::Apply() forwarders).
-  icStatusCMM status;
+  icStatusCMM status = icCmmStatOk;
   rv->m_pApply = rv->GetNewApplyCmm(status);
   if (!rv->m_pApply || status != icCmmStatOk) {
     delete rv;   // bDeleteCmm controls pCmm deletion inside ~CIccThreadedCmm

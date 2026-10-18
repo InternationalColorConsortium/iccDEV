@@ -3115,6 +3115,8 @@ icStatusCMM CIccPcsXform::Optimize()
  */
 CIccApplyXform *CIccPcsXform::GetNewApply(icStatusCMM &status)
 {
+  status = icCmmStatOk;
+
   CIccApplyPcsXform *pNew = new (std::nothrow) CIccApplyPcsXform(this);
 
   if (pNew) {
@@ -3134,8 +3136,9 @@ CIccApplyXform *CIccPcsXform::GetNewApply(icStatusCMM &status)
 
   for (i=m_list->begin(); i!=m_list->end(); i++) {
     pStep = i->ptr->GetNewApply();
-    if (!pStep || status != icCmmStatOk) {
+    if (!pStep) {
       delete pNew;
+      status = icCmmStatAllocErr;
       return NULL;
     }
     pNew->AppendApplyStep(pStep);

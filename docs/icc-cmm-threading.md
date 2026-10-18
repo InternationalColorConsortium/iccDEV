@@ -164,6 +164,10 @@ CMM if any of these are true:
   called or failed).
 - Worker allocation fails for the default apply object.
 
+Apply-object factories set their `icStatusCMM` output on success and failure.
+The threaded wrapper also initializes this status before each virtual factory
+call so third-party CMM implementations never receive an indeterminate enum.
+
 Strip workers preserve the first non-OK status across the parallel apply.
 Subsequent strips still run; partial output in `dst` for failing strips is
 undefined.
