@@ -185,11 +185,14 @@ int main(int argc, char* argv[]) {
     std::string outputPngPath;
     bool positionalOnly = false;
     bool invalidArguments = false;
+    bool skipNextArgument = false;
     int positionalCount = 0;
 
     for (int i = 1; i < argc; ++i) {
         const char *arg = argv[i];
-        if (!positionalOnly && strcmp(arg, "--") == 0) {
+        if (skipNextArgument) {
+            skipNextArgument = false;
+        } else if (!positionalOnly && strcmp(arg, "--") == 0) {
             positionalOnly = true;
         } else if (!positionalOnly && strcmp(arg, "--write-icc") == 0) {
             if (!injectIccPath.empty() || i + 1 >= argc ||
@@ -197,7 +200,8 @@ int main(int argc, char* argv[]) {
                 invalidArguments = true;
                 break;
             }
-            injectIccPath = argv[++i];
+            injectIccPath = argv[i + 1];
+            skipNextArgument = true;
             if (injectIccPath.empty()) {
                 invalidArguments = true;
                 break;
@@ -208,7 +212,8 @@ int main(int argc, char* argv[]) {
                 invalidArguments = true;
                 break;
             }
-            outputPngPath = argv[++i];
+            outputPngPath = argv[i + 1];
+            skipNextArgument = true;
             if (outputPngPath.empty()) {
                 invalidArguments = true;
                 break;
@@ -505,6 +510,13 @@ static bool ReadBinaryStream(std::istream& in, std::vector<unsigned char>& data)
     return in.eof() && !in.bad();
 }
 
+/**
+ * Copies ancillary PNG metadata that libpng exposes through the input info
+ * structures. The replacement iCCP chunk is attached by the caller after this
+ * function returns so the output cannot retain the input color profile.
+ * Metadata that occurs after image data is handled from the end-info
+ * structures before the output stream is finalized.
+ */
 static bool CopyPngAncillaryChunks(png_structp read_ptr,
                                    png_infop read_info,
                                    png_structp write_ptr,
@@ -523,6 +535,7 @@ static bool CopyPngAncillaryChunks(png_structp read_ptr,
         png_set_cHRM(write_ptr, write_info, white_x, white_y, red_x, red_y,
                      green_x, green_y, blue_x, blue_y);
 
+    // Preserve HDR color signaling when the linked libpng exposes it.
 #ifdef PNG_cICP_SUPPORTED
     png_byte primaries = 0, transfer = 0, matrix = 0, full_range = 0;
     if (png_get_cICP(read_ptr, read_info, &primaries, &transfer, &matrix,
@@ -565,6 +578,7 @@ static bool CopyPngAncillaryChunks(png_structp read_ptr,
     if (png_get_bKGD(read_ptr, read_info, &background))
         png_set_bKGD(write_ptr, write_info, background);
 
+    // Palette images require PLTE before libpng can encode tRNS data.
     if (png_get_color_type(read_ptr, read_info) == PNG_COLOR_TYPE_PALETTE) {
         png_colorp palette = NULL;
         int palette_entries = 0;
@@ -584,6 +598,7 @@ static bool CopyPngAncillaryChunks(png_structp read_ptr,
         png_set_tRNS(write_ptr, write_info, trans_alpha, trans_entries,
                      trans_color);
 
+    // Preserve image placement and physical resolution metadata.
     png_uint_32 res_x = 0, res_y = 0;
     int res_unit = 0;
     if (png_get_pHYs(read_ptr, read_info, &res_x, &res_y, &res_unit))
@@ -603,6 +618,7 @@ static bool CopyPngAncillaryChunks(png_structp read_ptr,
     if (png_get_eXIf_1(read_ptr, read_info, &exif_length, &exif_data))
         png_set_eXIf_1(write_ptr, write_info, exif_length, exif_data);
 
+    // Text chunks are owned by libpng for the lifetime of the input structures.
     png_textp text = NULL;
     int text_count = 0;
     if (png_get_text(read_ptr, read_info, &text, &text_count) > 0)
@@ -640,6 +656,7 @@ static bool CopyPngAncillaryChunks(png_structp read_ptr,
     int unknown_count = png_get_unknown_chunks(read_ptr, read_info,
                                                 &unknown_chunks);
     if (unknown_count > 0) {
+        // iCCP is replaced with the requested profile below.
         std::vector<png_unknown_chunk> preserved_chunks;
         preserved_chunks.reserve(static_cast<size_t>(unknown_count));
         for (int i = 0; i < unknown_count; ++i) {
@@ -744,8 +761,10 @@ static bool InjectIccProfileData(const char* inputPng,
     volatile png_uint_32 rowsAllocated = 0;
     if (setjmp(png_jmpbuf(write_ptr))) {
         png_destroy_read_struct(&png_ptr, &info_ptr, &read_end_info_ptr);
-        for (png_uint_32 y = 0; y < rowsAllocated; ++y)
-            free(row_pointers[y]);
+        while (rowsAllocated) {
+            --rowsAllocated;
+            free(row_pointers[rowsAllocated]);
+        }
         free(row_pointers);
         png_destroy_info_struct(write_ptr, &write_end_info_ptr);
         png_destroy_write_struct(&write_ptr, &write_info_ptr);
