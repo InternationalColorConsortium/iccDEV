@@ -26,6 +26,18 @@ refresh `ports/iccdev/portfile.cmake` `REF` plus `SHA512` together. CI should
 use local source mode (`VCPKG_ICCDEV_SOURCE` and `VCPKG_KEEP_ENV_VARS`) so it
 tests the checked-out branch, not the GitHub archive fallback.
 
+When refreshing the source pin, also test the non-local path with
+`VCPKG_ICCDEV_SOURCE` unset. Install `iccdev[tools,xml,json]` using the overlay
+and a full, bootstrapped vcpkg checkout, then build and run
+`examples/hello-iccdev` against the installed package. A local-source build
+does not verify the new archive hash or the pinned source's packaging.
+
+For Windows source/consumer smoke tests, the immutable
+<https://github.com/InternationalColorConsortium/iccDEV/releases/tag/vcpkg-win-2324-libheif-deps>
+export supplies prebuilt dependencies. Verify its published SHA256 before
+extraction and disable manifest mode when using its toolchain. The export is
+not a full vcpkg registry; it does not replace the overlay install above.
+
 ## Dependency Manifest Sync
 
 For direct build dependencies, compare and synchronize:

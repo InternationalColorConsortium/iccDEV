@@ -13,10 +13,8 @@ same commit. The overlay port manifest intentionally has no registry baseline.
 
 ### 1. Identify Which Platform Failed
 
-The workflow runs on 3 platforms. Check which job(s) failed:
-- `windows-latest` (x64-windows, MSVC + Ninja)
-- `ubuntu-24.04` (x64-linux, GCC + Ninja)
-- `macos-14` (arm64-osx, Apple Clang + Ninja)
+The required workflow runs on `windows-2022` (x64-windows, MSVC + Ninja).
+Linux and macOS lanes are manual diagnostics, not required PR checks.
 
 ### 2. Common Failure Categories
 
@@ -87,7 +85,7 @@ git clone --depth 1 https://github.com/microsoft/vcpkg.git /tmp/vcpkg
 /tmp/vcpkg/bootstrap-vcpkg.sh -disableMetrics
 
 # Install with verbose output
-/tmp/vcpkg/vcpkg install iccdev \
+/tmp/vcpkg/vcpkg install 'iccdev[tools,xml,json]' \
   --overlay-ports=/path/to/iccDEV/ports \
   --triplet x64-linux \
   --classic \
@@ -102,11 +100,17 @@ $env:VCPKG_KEEP_ENV_VARS = "VCPKG_ICCDEV_SOURCE"
 git clone --depth 1 https://github.com/microsoft/vcpkg.git "$env:TEMP\vcpkg"
 & "$env:TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
 
-& "$env:TEMP\vcpkg\vcpkg.exe" install iccdev `
+& "$env:TEMP\vcpkg\vcpkg.exe" install 'iccdev[tools,xml,json]' `
   --overlay-ports="C:\path\to\iccDEV\ports" `
   --triplet x64-windows `
   --classic
 ```
+
+For a source-pin refresh, repeat the install in a separate installed tree
+with `VCPKG_ICCDEV_SOURCE` unset so vcpkg downloads and verifies the pinned
+archive. Follow the Port Pin Check in
+<a href="../skills/vcpkg-export-consumer-debug/SKILL.md">vcpkg Export Consumer Debug</a>;
+local-source mode alone does not validate `REF` or `SHA512`.
 
 ### 4. Verify Installed Artifacts
 
