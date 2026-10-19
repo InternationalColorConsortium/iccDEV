@@ -28,7 +28,7 @@ function test_native_library_path()
     'A MATLAB-only inherited path must be removed completely.');
 
   try
-    iccdev.qa.native_library_path(["a" "b"], stage_dir, matlab_root);
+    iccdev.qa.native_library_path({'a', 'b'}, stage_dir, matlab_root);
     error('iccdev:test:expectedError', 'Expected invalid input to fail.');
   catch e
     assert(strcmp(e.identifier, 'iccdev:invalidLibraryPath'), ...
