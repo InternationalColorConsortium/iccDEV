@@ -1898,91 +1898,91 @@ jobs:
           persist-credentials: false
 
       - name: Download Linux GCC artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: iccdev-linux-gcc
           path: artifacts/iccdev-linux-gcc
 
       - name: Download Linux Clang artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: iccdev-linux-clang
           path: artifacts/iccdev-linux-clang
 
       - name: Download macOS artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: iccdev-macos-clang
           path: artifacts/iccdev-macos-clang
 
       - name: Download Windows artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: iccdev-windows-msvc
           path: artifacts/iccdev-windows-msvc
 
       - name: Download WASM artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: iccdev-wasm-release
           path: artifacts/iccdev-wasm-release
 
       - name: Download Doxygen HTML artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: iccdev-doxygen-html
           path: artifacts/iccdev-doxygen-html
 
       - name: Download CPack runtime packages
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: reficcmax-runtime-packages-linux
           path: artifacts/reficcmax-runtime-packages-linux
 
       - name: Download Linux x86_64 Python wheels
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: iccdev-python-linux-x86_64
           path: artifacts/iccdev-python-linux-x86_64
 
       - name: Download Linux aarch64 Python wheels
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: iccdev-python-linux-aarch64
           path: artifacts/iccdev-python-linux-aarch64
 
       - name: Download macOS x86_64 Python wheels
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: iccdev-python-macos-x86_64
           path: artifacts/iccdev-python-macos-x86_64
 
       - name: Download macOS arm64 Python wheels
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: iccdev-python-macos-arm64
           path: artifacts/iccdev-python-macos-arm64
 
       - name: Download macOS universal2 Python wheels
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: iccdev-python-macos-universal2
           path: artifacts/iccdev-python-macos-universal2
 
       - name: Download Windows AMD64 Python wheels
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: iccdev-python-windows-amd64
           path: artifacts/iccdev-python-windows-amd64
 
       - name: Download Windows ARM64 Python wheels
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: iccdev-python-windows-arm64
           path: artifacts/iccdev-python-windows-arm64
 
       - name: Download tested MCP distributions
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: iccdev-mcp-python
           path: artifacts/iccdev-mcp-python
