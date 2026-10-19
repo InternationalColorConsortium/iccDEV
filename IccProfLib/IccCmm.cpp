@@ -1798,18 +1798,12 @@ void CIccXform::ApplyN(CIccApplyXform *pXform, icFloatNumber *DstPixel, const ic
  *  which CIccPcsXform applies element-wise across the whole vector; see
  *  pushSpectralWhitePointConvert() below.
  *
- *  NOTE that spectral is the ONLY port kind excluded here, and it is not the
- *  only one the X/Y/Z reading is wrong for.  An MCS port (GetDstSpace() returns
- *  m_Header.mcs for an icToMCS xform, with no colorimetric test) reaches these
- *  predicates unexcluded, and m_bAdjustPCS can be set on such an xform through
- *  the IIccAdjustPCSXform hint path in Begin() above, which applies no port test
- *  whatsoever.  Nothing then performs the adjustment -- CheckPCSConnections()
- *  builds no CIccPcsXform at an MCS port either -- so today it is silently
- *  dropped rather than silently wrong.  Before the CheckSrcAbs()/CheckDstAbs()
- *  retirement it fired inside Apply() and mangled MCS channels 0..2.  See
- *  "Known gaps" in docs/pcs-adjustment-placement.md; pinned by
- *  pcsAdjustHintReachesANonPcsPort().  Awaiting the repository owner's ruling,
- *  so do not add an MCS term here without reading that section first.
+ *  An MCS port is also not X/Y/Z.  CIccApplyBPC, the in-tree adjuster, rejects
+ *  that port in CalcFactors() before probing the profile (#2868).  The base
+ *  predicate remains independent of the exported IIccAdjustPCSXform
+ *  implementation; an out-of-tree implementation is responsible for refusing
+ *  ports its own adjustment does not support.  See the non-colorimetric-port
+ *  discussion in docs/pcs-adjustment-placement.md.
  **************************************************************************
  */
 bool CIccXform::NeedsSrcPcsAdjust() const
@@ -1823,9 +1817,9 @@ bool CIccXform::NeedsSrcPcsAdjust() const
  *
  * Purpose:
  *  The destination-side mirror of NeedsSrcPcsAdjust() above, including its note
- *  about MCS ports -- which is a destination-side gap specifically, since an
- *  icToMCS xform is an input xform and it is this predicate that answers true
- *  for it.
+ *  about the adjuster validating MCS ports.  An icToMCS xform is an input xform,
+ *  so this is the predicate that would answer true if an implementation accepted
+ *  such a port.
  **************************************************************************
  */
 bool CIccXform::NeedsDstPcsAdjust() const

@@ -17,7 +17,7 @@ interior loop and both chain-edge blocks all test that same predicate.
 |---|---|
 | colorimetric PCS (XYZ, Lab) | `CIccPcsXform`, at the interior connection or at either chain edge |
 | spectral PCS | not the XYZ adjustment at all -- `NeedsSrcPcsAdjust()`/`NeedsDstPcsAdjust()` answer false, and `CIccPcsXform` pushes an element-wise spectral white point conversion instead. Interior connections and both chain edges via `Connect()`/`ConnectFirst()`/`ConnectLast()` |
-| MCS | nothing (see "Known gaps") |
+| MCS | no XYZ adjustment; the in-tree BPC adjuster rejects the port during `Begin()` |
 
 See `docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md`
 for the spectral conversion.
@@ -121,7 +121,7 @@ interior PCS connection; there is no such path any more, so the interior
 parameter is retained for source compatibility. No caller in this tree ever
 passed `true`.
 
-## Known gaps: ports that are not a colorimetric PCS
+## Ports that are not a colorimetric PCS
 
 **One root cause, several symptoms.** `m_bAdjustPCS` can be set on an xform with
 no guarantee that the port the adjustment would apply to is XYZ or Lab. Two of
@@ -131,9 +131,10 @@ the `IIccAdjustPCSXform` hint path at `IccProfLib/IccCmm.cpp:1708-1723`, applies
 no port test whatsoever: it sets the flag purely on `CalcFactors()` returning
 true. Meanwhile `AdjustPCS()` unconditionally treats `pixel[0..2]` as X, Y and Z.
 
-Every gap below was a consequence of that one mismatch. The spectral interior
-connection used to drop the adjustment and now takes the white point conversion;
-the spectral chain edge is now closed as well. The remaining open item is MCS.
+Every case below was a consequence of that one mismatch. The spectral interior
+connection takes the white point conversion, the spectral chain edge is closed,
+and the in-tree BPC implementation now rejects MCS ports before probing the
+profile.
 
 A reader who holds the root cause in mind will predict the next instance rather
 than discover it: look for any `GetSrcSpace()`/`GetDstSpace()` return that is
@@ -163,7 +164,7 @@ no longer fires, and the new edge-conversion tests (`spectralTrailingEdgeConvert
 `spectralEdgeMissingWhitePointConvertsNothing`, `spectralEdgeDegenerateWhitePointIsRejected`)
 pin the conversion behaviour end-to-end.
 
-### MCS ports, via an `IIccAdjustPCSXform` hint
+### MCS ports, via an `IIccAdjustPCSXform` hint (closed for BPC)
 
 `CIccXform::GetDstSpace()` returns `m_Header.mcs` for an `icToMCS` xform, with
 no colorimetric test. `NeedsDstPcsAdjust()` excludes only spectral ports, so an
@@ -178,31 +179,29 @@ xform except at absolute intent -- the v2-perceptual branch needs `IsVersion2()`
 or `!HasPerceptualHandling()`, and an MCS xform is a v5 `CIccXformMpe`, which is
 neither. The hint path can, and does.
 
-`CIccApplyBPC` is the only in-tree `IIccAdjustPCSXform`; its `CalcFactors()` rejects
-`icAbsoluteColorimetric` and the `icSigLinkClass` / `icSigAbstractClass` /
-`icSigNamedColorClass` device classes, but it constrains the *profile*, never
-the port. An `icSigInputClass` profile carrying both `AToB0` (which the BPC
-black-point probe needs) and `AToM0`, added with `icXformLutMCS` at
-`icPerceptual` with a `CIccApplyBPCHint`, satisfies every one of those checks
-and reaches `Apply()` with `NeedsDstPcsAdjust()` true on an MCS port.
+`CIccApplyBPC` is the only in-tree `IIccAdjustPCSXform`. Its `CalcFactors()` now
+requires the adjusted transform port to be Lab or XYZ. An `icToMCS` transform
+therefore returns false before the black-point probe, and `CIccXform::Begin()`
+reports `icCmmStatCantAdjustPcs`. The check uses `GetDstSpace()` for an input
+transform and `GetSrcSpace()` for an output transform; checking only the profile
+header would miss an input profile that has a valid Lab PCS but routes this
+particular transform through `AToM0`.
 
-Before the `CheckSrcAbs()`/`CheckDstAbs()` retirement the guard flag at that
-port was still set, so `CheckDstAbs()` ran and applied the BPC XYZ black-point
-affine to MCS channels 0..2, leaving the rest alone. Through an identity
-`AToM0` fed `0.20 0.40 0.60 0.80` that produced
-`0.213048 0.409379 0.587843 0.800000`. Today nothing performs it and the
-channels pass through unmodified -- so the retirement changed behaviour here.
+The rejection also closes #2868. A MultiplexIdentification profile has no
+colorimetric PCS; its empty four-channel `AToM0` is a valid identity. The BPC
+black-point probe previously passed a three-float `XYZbp` destination to that
+transform, whose four-float identity copy wrote one float beyond the stack
+buffer. The regression keeps the no-BPC identity as a positive control and
+requires the BPC case to fail during `Begin()` before the probe runs.
 
-It is the same defect as the spectral one, in the same direction as the ruling
-already made there: MCS channels are not X, Y and Z, so the affine had no
-meaning. Restoring it would restore the corruption. But it is a behaviour change
-under a refactor whose contract was "changes no behaviour", so the ruling for
-MCS is the repository owner's. The options are the spectral three: leave it
-(the current state), build a `CIccPcsXform` at MCS ports, or reject the
-configuration at `Begin()`.
+Before the `CheckSrcAbs()`/`CheckDstAbs()` retirement, accepting an MCS port also
+applied the BPC XYZ affine to MCS channels 0..2 and left the remaining channels
+alone. Rejecting the configuration is the safe contract: MCS channels are not
+X, Y and Z, so neither applying nor silently dropping that affine is meaningful.
+An out-of-tree `IIccAdjustPCSXform` implementation remains responsible for
+validating the ports its own adjustment supports.
 
-`pcsAdjustHintReachesANonPcsPort()` in
-`.github/ci/regression/pcs-adjust-placement.cpp` pins the current state and is
-falsifiable in both directions: excluding MCS in the predicates flips
-`CmmProbe::inertAdjustCount()`, and building a `CIccPcsXform` there flips
-`pcsXformCount()`.
+`bpcRejectsMcsPortWithColorimetricHeader()` and
+`bpcRejectsMidMcsIdentity()` in
+`.github/ci/regression/pcs-adjust-placement.cpp` pin both the port-based check
+and the exact four-channel MID case.

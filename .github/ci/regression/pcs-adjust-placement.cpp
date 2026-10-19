@@ -895,11 +895,11 @@ static void noXformPerformsItsOwnAdjustment(icColorSpaceSignature nSrc,
   // Structural, and on this fixture it cannot fail: the base predicates are
   // complementary in m_bInput, so a non-spectral port with NeedAdjustPCS() true
   // always answers yes to exactly one of them and can never be counted here.
-  // It is kept for symmetry with the two cases where the same call *can* fail
-  // -- spectralTrailingEdgeNoLongerAdjustsInsideApply() (expects 1, and would
-  // fail if S5's spectral exclusion regressed) and
-  // pcsAdjustHintReachesANonPcsPort() (expects 0, and would fail if an MCS port
-  // gained one) -- not as an independent check of this fixture.
+  // It is kept for symmetry with the spectral case where the same call *can*
+  // fail -- spectralTrailingEdgeNoLongerAdjustsInsideApply() expects 1 and
+  // would fail if S5's spectral exclusion regressed -- not as an independent
+  // check of this fixture. BPC now refuses MCS ports before an adjustment is
+  // installed, so that case is checked at Begin() instead.
   check(cmm.inertAdjustCount() == 0, label);
 }
 
@@ -2338,52 +2338,14 @@ static void setParamsRefreshesCacheAfterBegin()
   delete pXform;
 }
 
-// --- the IIccAdjustPCSXform hint path reaches a non-PCS port -------------
+// --- BPC rejects non-PCS ports -------------------------------------------
 //
-// WHY THIS EXISTS. Task 5's reachability argument for deleting the in-Apply()
-// adjustment ran: m_bAdjustPCS is only ever set behind IsSpacePCS(header.pcs),
-// so the adjusting port is always a colorimetric PCS, so CheckPCSConnections()
-// always had a CIccPcsXform there to hand the adjustment to. That premise is
-// false. There is a THIRD setter with no space test at all -- the
-// IIccAdjustPCSXform hint path in CIccXform::Begin(), which sets m_bAdjustPCS
-// purely on CalcFactors() returning true.
-//
-// CIccApplyBPC is the only in-tree implementer, and CalcFactors() does exclude
-// most of the trouble: it rejects icAbsoluteColorimetric outright and rejects
-// the icSigLinkClass / icSigAbstractClass / icSigNamedColorClass device classes
-// (IccProfLib/IccApplyBPC.cpp), returning false and so making Begin() fail with
-// icCmmStatCantAdjustPcs (icCmmStatIncorrectApply before #2176 renamed what that
-// site reports; the control flow is unchanged). icSigLinkClass is the case that
-// matters for the premise: a device link's header pcs is its *output device*
-// space, not a PCS.
-// With links rejected, every surviving class does have a colorimetric pcs.
-//
-// What CalcFactors() does NOT exclude is the *port*. An icToMCS xform is an
-// input xform whose destination is the MCS space, not header.pcs, and the BPC
-// hint reaches it: it needs only a non-absolute intent, an allowed device
-// class, and a working colorimetric transform on the same profile for the
-// black-point probe -- all of which an icSigInputClass profile carrying both
-// AToB0 and AToM0 has. This fixture is exactly that.
-//
-// The result, measured: NeedsDstPcsAdjust() is true on an MCS port and
-// pcsXformCount() is 0, so nothing in the chain performs the adjustment. Before
-// Task 5 the guard flag at that port was still set (the trailing-edge block
-// gates on IsSpaceColorimetricPCS(), which an MCS signature fails) and
-// CheckDstAbs() ran, applying the BPC XYZ black-point affine to MCS channels
-// 0..2 and leaving channel 3 alone -- measured 0.213048 0.409379 0.587843
-// 0.800000 for an identity AToM0 fed 0.20 0.40 0.60 0.80. After Task 5 nothing
-// applies it and the channels come through untouched.
-//
-// So Task 5 DID change behaviour here. It is the same defect the repository
-// owner already ruled on for spectral ports -- an XYZ affine applied to the
-// first three samples of a vector whose samples are not X, Y and Z -- and the
-// change is in the direction of that ruling, but it is a behaviour change under
-// a refactor and the ruling for MCS is the owner's to make, not the
-// implementer's. This test pins the post-deletion state so the question cannot
-// go quiet again. Either resolution trips it: making the base predicates answer
-// false at an MCS port flips the inert count to 1, and widening
-// CheckPCSConnections() to build a CIccPcsXform there flips pcsXformCount().
-static void pcsAdjustHintReachesANonPcsPort()
+// A BPC adjustment is a three-component XYZ affine.  An icToMCS xform has an
+// MCS destination even when the profile header has a valid Lab PCS, so the
+// port -- not merely header.pcs -- must be checked before CalcFactors() probes
+// the profile.  This fixture carries both the valid colorimetric AToB0 needed
+// by the black-point probe and a four-channel AToM0.
+static void bpcRejectsMcsPortWithColorimetricHeader()
 {
   CIccProfile *pICC = new CIccProfile;
 
@@ -2429,33 +2391,62 @@ static void pcsAdjustHintReachesANonPcsPort()
   check(cmm.AddXform(pICC, icPerceptual, icInterpLinear, NULL,
                      icXformLutMCS, false, &hints) == icCmmStatOk,
         "hint/MCS: AddXform");
-  check(cmm.Begin() == icCmmStatOk,
-        "hint/MCS: Begin -- CalcFactors() accepts this profile");
+  check(cmm.Begin() == icCmmStatCantAdjustPcs,
+        "hint/MCS: BPC rejects an MCS port even when header.pcs is Lab");
+}
 
-  check(cmm.adjustingXformCount() == 1,
-        "hint/MCS: the BPC hint set m_bAdjustPCS with no PCS-space test");
-  check(cmm.pcsXformCount() == 0,
-        "hint/MCS: no CIccPcsXform is inserted at an MCS port");
-  // NOT inert: the xform is an input xform, so NeedsSrcPcsAdjust() is false and
-  // this can only be NeedsDstPcsAdjust() answering true -- on an MCS port, with
-  // nothing in the chain to carry it.
-  check(cmm.inertAdjustCount() == 0,
-        "hint/MCS: NeedsDstPcsAdjust() is true on an MCS port");
+// Exact shape from #2868: a valid MultiplexIdentification profile has no
+// colorimetric PCS and an empty four-channel AToM0, whose identity Apply()
+// copies four floats.  BPC used to pass XYZbp[3] as that destination, causing
+// the fourth float to overwrite the stack.  The no-BPC case remains a valid
+// four-channel identity control; adding the hint must fail during Begin().
+static CIccProfile *makeMidMcsIdentityProfile()
+{
+  CIccProfile *pICC = new CIccProfile;
+  pICC->m_Header.version = icVersionNumberV5;
+  pICC->m_Header.deviceClass = icSigMultiplexIdentificationClass;
+  pICC->m_Header.colorSpace = icSigCmykData;
+  pICC->m_Header.pcs = icSigUnknownData;
+  pICC->m_Header.mcs =
+      (icMultiplexColorSignature)icNColorSpaceSig(icSigSrcMCSChannelData, 4);
 
-  icFloatNumber src[4] = { 0.20f, 0.40f, 0.60f, 0.80f };
-  icFloatNumber dst[4] = { -1.0f, -1.0f, -1.0f, -1.0f };
-  check(cmm.Apply(dst, src) == icCmmStatOk, "hint/MCS: Apply");
+  CIccTagMultiProcessElement *pTag = new CIccTagMultiProcessElement;
+  pTag->SetChannels(4, 4);
+  pICC->AttachTag(icSigAToM0Tag, pTag);
+  return pICC;
+}
 
-  std::printf("      hint/MCS: emitted %.6f %.6f %.6f %.6f (identity AToM0 of"
-              " %.2f %.2f %.2f %.2f)\n",
-              (double)dst[0], (double)dst[1], (double)dst[2], (double)dst[3],
-              (double)src[0], (double)src[1], (double)src[2], (double)src[3]);
+static void bpcRejectsMidMcsIdentity()
+{
+  const icColorSpaceSignature mcsSig =
+      (icColorSpaceSignature)icNColorSpaceSig(icSigSrcMCSChannelData, 4);
 
-  bool intact = true;
-  for (int i = 0; i < 4; i++)
-    intact = intact && closeRel(dst[i], src[i], kTol);
-  check(intact,
-        "hint/MCS: all four MCS channels pass through unmodified after Task 5");
+  CmmProbe control(icSigCmykData, mcsSig, true);
+  check(control.AddXform(makeMidMcsIdentityProfile(), icPerceptual,
+                         icInterpLinear, NULL, icXformLutMCS, false) == icCmmStatOk,
+        "MID/MCS control: AddXform without BPC");
+  const icStatusCMM controlStatus = control.Begin();
+  check(controlStatus == icCmmStatOk, "MID/MCS control: Begin without BPC");
+  if (controlStatus == icCmmStatOk) {
+    icFloatNumber src[4] = { 0.20f, 0.40f, 0.60f, 0.80f };
+    icFloatNumber dst[4] = { -1.0f, -1.0f, -1.0f, -1.0f };
+    check(control.Apply(dst, src) == icCmmStatOk,
+          "MID/MCS control: empty AToM0 applies as identity");
+    bool intact = true;
+    for (int i = 0; i < 4; i++)
+      intact = intact && closeRel(dst[i], src[i], kTol);
+    check(intact, "MID/MCS control: all four channels remain intact");
+  }
+
+  CIccCreateXformHintManager hints;
+  hints.AddHint(new CIccApplyBPCHint());
+  CmmProbe bpc(icSigCmykData, mcsSig, true);
+  check(bpc.AddXform(makeMidMcsIdentityProfile(), icPerceptual,
+                     icInterpLinear, NULL, icXformLutMCS, false,
+                     &hints) == icCmmStatOk,
+        "MID/MCS BPC: AddXform");
+  check(bpc.Begin() == icCmmStatCantAdjustPcs,
+        "MID/MCS BPC: reject four-channel adjustment before black-point probe");
 }
 
 int main(int /*argc*/, char ** /*argv*/)
@@ -2509,7 +2500,8 @@ int main(int /*argc*/, char ** /*argv*/)
   spectralTrailingEdgeNoLongerAdjustsInsideApply();
   spectralTrailingEdgeIsCleanAtRelativeIntent();
 
-  pcsAdjustHintReachesANonPcsPort();
+  bpcRejectsMcsPortWithColorimetricHeader();
+  bpcRejectsMidMcsIdentity();
 
   spectralDstPortConvertsTagSpaceToIntentSpace();
   spectralSrcPortConvertsIntentSpaceToTagSpace();
