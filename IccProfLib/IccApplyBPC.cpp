@@ -199,6 +199,16 @@ bool CIccApplyBPC::CalcFactors(const CIccProfile* pProfile, const CIccXform* pXf
 	if (!pProfile || !pXform)
 		return false;
 
+  // BPC calculates a three-component XYZ affine.  Require the transform port
+  // carrying that adjustment to be a colorimetric PCS before the black-point
+  // probe writes its result into XYZbp[3].  In particular, an icToMCS xform
+  // can otherwise run a four-channel AToM0 as the probe and overwrite XYZbp.
+  const icColorSpaceSignature pcsPort = pXform->IsInput()
+                                          ? pXform->GetDstSpace()
+                                          : pXform->GetSrcSpace();
+  if (!IsSpacePCS(pcsPort))
+    return false;
+
 	if (pXform->GetIntent()==icAbsoluteColorimetric) { // black point compensation not supported
 		return false;
 	}
