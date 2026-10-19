@@ -237,12 +237,12 @@ RUN case "$TARGETARCH" in \
  && codeql version \
  && codeql_languages="$(codeql resolve languages --format=json)" \
  && for language in actions cpp python; do \
-      jq -e --arg language "$language" 'has($language)' \
-        <<< "$codeql_languages" >/dev/null; \
+      printf '%s\n' "$codeql_languages" \
+        | jq -e --arg language "$language" 'has($language)' >/dev/null; \
     done \
  && for language in csharp go java ruby rust swift; do \
-      jq -e --arg language "$language" 'has($language) | not' \
-        <<< "$codeql_languages" >/dev/null; \
+      printf '%s\n' "$codeql_languages" \
+        | jq -e --arg language "$language" 'has($language) | not' >/dev/null; \
     done
 
 RUN python3 -m venv /opt/iccdev-workflow-qa \
