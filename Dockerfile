@@ -8,7 +8,7 @@
 #
 ###############################################################
 
-FROM ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7
+FROM ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -196,6 +196,8 @@ RUN hadolint_version="2.15.1" \
  && rm -f /tmp/hadolint \
  && hadolint --version
 
+# Keep only the CodeQL languages used by iccDEV. Removing the other extractors
+# in the extraction layer avoids shipping their unused runtimes and query packs.
 RUN case "$TARGETARCH" in \
       amd64) codeql_platform="linux64"; codeql_sha256="$CODEQL_AMD64_SHA256" ;; \
       arm64) codeql_platform="linux-arm64"; codeql_sha256="$CODEQL_ARM64_SHA256" ;; \
@@ -206,10 +208,42 @@ RUN case "$TARGETARCH" in \
       "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${CODEQL_VERSION}/codeql-bundle-${codeql_platform}.tar.gz" \
  && printf '%s  %s\n' "$codeql_sha256" "$codeql_archive" | sha256sum -c - \
  && tar -xzf "$codeql_archive" -C /opt \
+ && rm -rf \
+      /opt/codeql/csharp \
+      /opt/codeql/go \
+      /opt/codeql/java \
+      /opt/codeql/ruby \
+      /opt/codeql/rust \
+      /opt/codeql/swift \
+      /opt/codeql/qlpacks/codeql/csharp-all \
+      /opt/codeql/qlpacks/codeql/csharp-examples \
+      /opt/codeql/qlpacks/codeql/csharp-queries \
+      /opt/codeql/qlpacks/codeql/go-all \
+      /opt/codeql/qlpacks/codeql/go-examples \
+      /opt/codeql/qlpacks/codeql/go-queries \
+      /opt/codeql/qlpacks/codeql/java-all \
+      /opt/codeql/qlpacks/codeql/java-examples \
+      /opt/codeql/qlpacks/codeql/java-queries \
+      /opt/codeql/qlpacks/codeql/ruby-all \
+      /opt/codeql/qlpacks/codeql/ruby-examples \
+      /opt/codeql/qlpacks/codeql/ruby-queries \
+      /opt/codeql/qlpacks/codeql/rust-all \
+      /opt/codeql/qlpacks/codeql/rust-queries \
+      /opt/codeql/qlpacks/codeql/swift-all \
+      /opt/codeql/qlpacks/codeql/swift-queries \
  && test -x /opt/codeql/codeql \
  && ln -s /opt/codeql/codeql /usr/local/bin/codeql \
  && rm -f "$codeql_archive" \
- && codeql version
+ && codeql version \
+ && codeql_languages="$(codeql resolve languages --format=json)" \
+ && for language in actions cpp python; do \
+      jq -e --arg language "$language" 'has($language)' \
+        <<< "$codeql_languages" >/dev/null; \
+    done \
+ && for language in csharp go java ruby rust swift; do \
+      jq -e --arg language "$language" 'has($language) | not' \
+        <<< "$codeql_languages" >/dev/null; \
+    done
 
 RUN python3 -m venv /opt/iccdev-workflow-qa \
  && /opt/iccdev-workflow-qa/bin/python -m pip install \

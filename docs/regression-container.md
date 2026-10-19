@@ -103,8 +103,12 @@ ctest --test-dir /workspace/build -N --no-tests=error
 
 ## CodeQL, coverage, and profiling tools
 
-The image includes the pinned CodeQL CLI bundle, `lcov`, `genhtml`, `gcovr`, `llvm-cov`, `llvm-profdata`,
-`gprof`, `perf`, `strace`, and a pinned FlameGraph checkout at
+The image includes the pinned CodeQL CLI bundle with the Actions, C++, and
+Python analysis surfaces used by iccDEV. The Actions extractor retains its
+JavaScript support; unused C#, Go, Java, Ruby, Rust, and Swift extractors and
+query packs are removed in the archive extraction layer. The image also
+includes `lcov`, `genhtml`, `gcovr`, `llvm-cov`, `llvm-profdata`, `gprof`,
+`perf`, `strace`, and a pinned FlameGraph checkout at
 `$ICCDEV_FLAMEGRAPH_DIR` (`/opt/FlameGraph`). Its exact revision is exposed as
 `ICCDEV_FLAMEGRAPH_REVISION`. Build coverage, profiling, and sanitizer modes in
 separate directories so their instrumentation does not contaminate results.

@@ -235,6 +235,15 @@ jobs:
             command -v hadolint zizmor shellcheck afl-fuzz valgrind ms_print callgrind_annotate llvm-symbolizer
             command -v codeql lcov genhtml gcovr llvm-cov llvm-profdata perf gprof strace
             codeql version
+            codeql_languages="$(codeql resolve languages --format=json)"
+            for language in actions cpp python; do
+              jq -e --arg language "$language" "has(\$language)" \
+                <<< "$codeql_languages" >/dev/null
+            done
+            for language in csharp go java ruby rust swift; do
+              jq -e --arg language "$language" "has(\$language) | not" \
+                <<< "$codeql_languages" >/dev/null
+            done
             codeql resolve queries .github/codeql-queries/iccdev-security-suite.qls
             codeql resolve queries .github/codeql-queries/iccdev-mcp/iccdev-mcp-security-suite.qls
             perl -MJSON::XS -e 1

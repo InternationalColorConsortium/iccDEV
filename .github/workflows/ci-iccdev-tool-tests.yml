@@ -423,10 +423,10 @@ jobs:
           "$SPECTRAL_PREVIEW_VENV/bin/python" -m pip install --upgrade pip --quiet
           "$SPECTRAL_PREVIEW_VENV/bin/python" -m pip install \
             --only-binary=:all: \
-            'numpy==2.4.2' \
-            'tifffile==2026.2.24' \
-            'pillow==12.3.0' \
-            'imagecodecs==2026.6.6' \
+            'numpy==2.5.4' \
+            'tifffile==2026.10.15' \
+            'pillow==13.0.0' \
+            'imagecodecs==2026.10.10' \
             --quiet
           "$SPECTRAL_PREVIEW_VENV/bin/python" - <<'PY'
           import imagecodecs

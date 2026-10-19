@@ -102,7 +102,7 @@ jobs:
           /tmp/iccdev-preflight/bin/python -m pip install \
             'PyYAML>=6,<7' \
             'yamllint>=1.35,<2' \
-            'zizmor==1.30.0' \
+            'zizmor==1.31.1' \
             --quiet
           echo "/tmp/iccdev-preflight/bin" >> "$GITHUB_PATH"
 
