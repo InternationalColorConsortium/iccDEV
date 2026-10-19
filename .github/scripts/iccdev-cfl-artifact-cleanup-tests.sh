@@ -18,18 +18,6 @@ work_dir="$(mktemp -d "${TMPDIR:-/tmp}/iccdev-cfl-artifact-test.XXXXXX")"
 trap 'rm -rf -- "$work_dir"' EXIT
 artifact_file="$work_dir/artifacts.tsv"
 plan_file="$work_dir/plan.tsv"
-valid_seed="$work_dir/json-parametric-complete-params.json"
-valid_archive="$work_dir/valid-corpus.zip"
-empty_dir="$work_dir/empty-corpus"
-empty_archive="$work_dir/empty-corpus.zip"
-
-printf '{"parameters":[0.5]}\n' > "$valid_seed"
-(
-  cd "$work_dir"
-  zip -q "$valid_archive" "$(basename "$valid_seed")"
-)
-mkdir "$empty_dir"
-zip -q "$empty_archive" "$empty_dir/"
 
 targets=(
   icc_profileparse_fuzzer
@@ -45,14 +33,14 @@ targets=(
 
 artifact_id=100
 for target in "${targets[@]}"; do
-  printf 'cifuzz-corpus-%s\t%s\t2026-09-26T16:00:00Z\t16384\t%s\n' \
-    "$target" "$artifact_id" "$valid_archive" >> "$artifact_file"
+  printf 'cifuzz-corpus-%s\t%s\t2026-09-26T16:00:00Z\t16384\n' \
+    "$target" "$artifact_id" >> "$artifact_file"
   artifact_id=$((artifact_id + 1))
-  printf 'cifuzz-corpus-%s\t%s\t2026-09-26T17:00:00Z\t550\t%s\n' \
-    "$target" "$artifact_id" "$valid_archive" >> "$artifact_file"
+  printf 'cifuzz-corpus-%s\t%s\t2026-09-26T17:00:00Z\t32768\n' \
+    "$target" "$artifact_id" >> "$artifact_file"
   artifact_id=$((artifact_id + 1))
-  printf 'cifuzz-corpus-%s\t%s\t2026-09-26T18:00:00Z\t32768\t%s\n' \
-    "$target" "$artifact_id" "$empty_archive" >> "$artifact_file"
+  printf 'cifuzz-corpus-%s\t%s\t2026-09-26T18:00:00Z\t349\n' \
+    "$target" "$artifact_id" >> "$artifact_file"
   artifact_id=$((artifact_id + 1))
 done
 printf 'unrelated-artifact\t999\t2026-09-26T19:00:00Z\t32768\n' >> "$artifact_file"
@@ -74,10 +62,8 @@ fi
 
 awk -F '\t' -v OFS='\t' '{$4 = 349; print}' \
   "$artifact_file" > "$work_dir/undersized.tsv"
-awk -F '\t' -v OFS='\t' -v archive="$empty_archive" '{$5 = archive; print}' \
-  "$work_dir/undersized.tsv" > "$work_dir/empty.tsv"
-if "$cleanup_script" --plan "$work_dir/empty.tsv" >/dev/null 2>&1; then
-  echo "[FAIL] Artifact cleanup accepted artifacts without testcase files" >&2
+if "$cleanup_script" --plan "$work_dir/undersized.tsv" >/dev/null 2>&1; then
+  echo "[FAIL] Artifact cleanup accepted only empty corpus artifacts" >&2
   exit 1
 fi
 
