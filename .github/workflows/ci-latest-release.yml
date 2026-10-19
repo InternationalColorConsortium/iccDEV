@@ -80,7 +80,7 @@ jobs:
     name: "Linux ${{ matrix.compiler }}"
     needs: cache-policy
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -166,8 +166,25 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           git config --add safe.directory "$PWD"
+          if [ "$(uname -m)" != "x86_64" ]; then
+            echo "::error::The Linux MATLAB MEX bundle requires x86_64"
+            exit 1
+          fi
           cd Build
           make -j"$(nproc)"
+      - name: Set up MATLAB
+        # matlab-actions/setup-matlab v3
+        uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d
+        with:
+          release: R2023b
+      - name: Build MATLAB MEX gateway
+        # matlab-actions/run-command v3
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5
+        with:
+          command: >-
+            addpath('matlab');
+            build_mex('BuildDir', fullfile(pwd, 'Build'))
+          generate-summary: false
       - name: Verify CMake Cache
         shell: bash --noprofile --norc {0}
         env:
@@ -222,7 +239,33 @@ jobs:
           cp Testing/README.md  "$stage/"
           cp LICENSE.md "$stage/"
           cp -a docs    "$stage/docs"
-          # 4. Generate path.sh helper script (POSIX-compatible, resolves from script location)
+          # 4. Copy the MATLAB package, native table sources, and QA fixtures.
+          cp -a matlab "$stage/matlab"
+          mkdir -p "$stage/Testing/Display" "$stage/Testing/HDR" \
+            "$stage/Testing/ApplyDataFiles/test-profiles" "$stage/IccProfLib" \
+            "$stage/.github/ci/regression" \
+            "$stage/.github/ci/tooling/heif/img"
+          cp Testing/sRGB_v4_ICC_preference.icc "$stage/Testing/"
+          cp Testing/sRGB_v4_ICC_preference.icc "$stage/Testing/Display/"
+          cp Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc \
+            "$stage/Testing/ApplyDataFiles/test-profiles/"
+          cp Testing/Display/sRGB_D65_MAT.xml \
+            Testing/Display/sRGB_D65_MAT-300cdm2.xml \
+            Testing/Display/sRGB_D65_MAT-500cdm2.xml "$stage/Testing/Display/"
+          cp Testing/HDR/BT2100PQFullDisplay.xml "$stage/Testing/HDR/"
+          cp IccProfLib/IccTagBasic.cpp IccProfLib/IccColorimetry.cpp \
+            "$stage/IccProfLib/"
+          cp .github/ci/regression/gamma-2.20703125.icc \
+            "$stage/.github/ci/regression/"
+          cp .github/ci/tooling/heif/img/valid-prof.heic \
+            .github/ci/tooling/heif/img/nclx-only.heif \
+            .github/ci/tooling/heif/img/invalid-ipma-index.heic \
+            "$stage/.github/ci/tooling/heif/img/"
+          if [ ! -s "$stage/matlab/+iccdev/private/icc_mex.mexa64" ]; then
+            echo "::error::Required staged Linux MATLAB MEX gateway missing"
+            exit 1
+          fi
+          # 5. Generate path.sh helper script (POSIX-compatible, resolves from script location)
           printf '%s\n' \
             "#!/bin/sh" \
             "# Resolve the directory where this script lives" \
@@ -270,12 +313,49 @@ jobs:
           echo ""
           echo "Total: $total files staged into $stage"
           echo ""
+      - name: Run staged MATLAB release QA
+        # matlab-actions/run-command v3
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5
+        with:
+          command: >-
+            stage = fullfile(pwd, 'staging', 'iccDEV-Testing');
+            matlab_dir = fullfile(stage, 'matlab');
+            addpath(matlab_dir);
+            addpath(fullfile(matlab_dir, 'tests'));
+            setenv('PATH', [stage pathsep getenv('PATH')]);
+            setenv('LD_LIBRARY_PATH', [stage pathsep getenv('LD_LIBRARY_PATH')]);
+            assert(strcmp(mexext(), 'mexa64'), 'Expected Linux x86_64 MEX support.');
+            assert(exist(fullfile(matlab_dir, '+iccdev', 'private', ['icc_mex.' mexext()]), 'file') == 3, 'Staged Linux MEX gateway is missing.');
+            test_usage_guidance();
+            test_delta_e_2000();
+            test_json_bindings();
+            test_lut_type_range();
+            test_heif_dump_native(stage);
+            test_luminance_normalization();
+            test_colorimetry_issue_1475();
+            qa_output = evalc('run_local_qa()');
+            disp(qa_output);
+            result = regexp(qa_output, '=== Results: \d+ passed, 0 failed, (\d+) skipped ===', 'tokens', 'once');
+            assert(~isempty(result), 'Staged MATLAB QA must report zero failures.');
+            skip_count = str2double(result{1});
+            if skip_count ~= 0;
+              skipped = regexp(qa_output, '(?m)^  - (.+)$', 'tokens');
+              assert(skip_count == 1 && numel(skipped) == 1 && startsWith(skipped{1}{1}, 'Docker interoperability ('), 'Staged MATLAB QA may only skip Docker interoperability.');
+            end;
+            run(fullfile(matlab_dir, 'examples', 'read_profile.m'));
+            run(fullfile(matlab_dir, 'examples', 'color_transform.m'));
+            run(fullfile(matlab_dir, 'examples', 'gamma_curve.m'));
+            run(fullfile(matlab_dir, 'examples', 'ciede2000.m'));
+            run(fullfile(matlab_dir, 'examples', 'luminance_normalization.m'));
+            run(fullfile(matlab_dir, 'examples', 'colorimetry_issue_1475.m'))
+          generate-summary: false
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: iccdev-linux-${{ matrix.compiler }}
           path: staging
           if-no-files-found: error
+          include-hidden-files: true
 
       - name: Summary Report
         if: always()
@@ -295,10 +375,10 @@ jobs:
             echo "- Status: Success"
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
   macos:
-    name: "macOS Clang"
+    name: "macOS arm64 Clang"
     needs: cache-policy
-    runs-on: macos-latest
-    timeout-minutes: 20
+    runs-on: macos-15
+    timeout-minutes: 60
     steps:
       - name: Checkout master
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
@@ -364,11 +444,27 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           git config --add safe.directory "$PWD"
+          if [ "$(uname -m)" != "arm64" ]; then
+            echo "::error::The macOS MATLAB MEX bundle requires Apple Silicon"
+            exit 1
+          fi
           echo "Starting build process..."
           cd Build
           make -j"$(sysctl -n hw.ncpu)"
           echo "Build process completed."
-
+      - name: Set up MATLAB
+        # matlab-actions/setup-matlab v3
+        uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d
+        with:
+          release: R2023b
+      - name: Build MATLAB MEX gateway
+        # matlab-actions/run-command v3
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5
+        with:
+          command: >-
+            addpath('matlab');
+            build_mex('BuildDir', fullfile(pwd, 'Build'))
+          generate-summary: false
       - name: Stage bundle into Testing directory
         shell: bash --noprofile --norc {0}
         env:
@@ -408,7 +504,33 @@ jobs:
           cp Testing/README.md  "$stage/"
           cp LICENSE.md "$stage/"
           cp -a docs    "$stage/docs"
-          # 4. Generate path.sh helper script (POSIX-compatible, resolves from script location)
+          # 4. Copy the MATLAB package, native table sources, and QA fixtures.
+          cp -a matlab "$stage/matlab"
+          mkdir -p "$stage/Testing/Display" "$stage/Testing/HDR" \
+            "$stage/Testing/ApplyDataFiles/test-profiles" "$stage/IccProfLib" \
+            "$stage/.github/ci/regression" \
+            "$stage/.github/ci/tooling/heif/img"
+          cp Testing/sRGB_v4_ICC_preference.icc "$stage/Testing/"
+          cp Testing/sRGB_v4_ICC_preference.icc "$stage/Testing/Display/"
+          cp Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc \
+            "$stage/Testing/ApplyDataFiles/test-profiles/"
+          cp Testing/Display/sRGB_D65_MAT.xml \
+            Testing/Display/sRGB_D65_MAT-300cdm2.xml \
+            Testing/Display/sRGB_D65_MAT-500cdm2.xml "$stage/Testing/Display/"
+          cp Testing/HDR/BT2100PQFullDisplay.xml "$stage/Testing/HDR/"
+          cp IccProfLib/IccTagBasic.cpp IccProfLib/IccColorimetry.cpp \
+            "$stage/IccProfLib/"
+          cp .github/ci/regression/gamma-2.20703125.icc \
+            "$stage/.github/ci/regression/"
+          cp .github/ci/tooling/heif/img/valid-prof.heic \
+            .github/ci/tooling/heif/img/nclx-only.heif \
+            .github/ci/tooling/heif/img/invalid-ipma-index.heic \
+            "$stage/.github/ci/tooling/heif/img/"
+          if [ ! -s "$stage/matlab/+iccdev/private/icc_mex.mexmaca64" ]; then
+            echo "::error::Required staged Apple Silicon MATLAB MEX gateway missing"
+            exit 1
+          fi
+          # 5. Generate path.sh helper script (POSIX-compatible, resolves from script location)
           printf '%s\n' \
             "#!/bin/sh" \
             "# Resolve the directory where this script lives" \
@@ -494,12 +616,49 @@ jobs:
           echo ""
           echo "Total: $total files staged into $stage"
           echo ""
+      - name: Run staged MATLAB release QA
+        # matlab-actions/run-command v3
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5
+        with:
+          command: >-
+            stage = fullfile(pwd, 'staging', 'iccDEV-Testing');
+            matlab_dir = fullfile(stage, 'matlab');
+            addpath(matlab_dir);
+            addpath(fullfile(matlab_dir, 'tests'));
+            setenv('PATH', [stage pathsep getenv('PATH')]);
+            setenv('DYLD_LIBRARY_PATH', [stage pathsep getenv('DYLD_LIBRARY_PATH')]);
+            assert(strcmp(mexext(), 'mexmaca64'), 'Expected Apple Silicon macOS MEX support.');
+            assert(exist(fullfile(matlab_dir, '+iccdev', 'private', ['icc_mex.' mexext()]), 'file') == 3, 'Staged macOS MEX gateway is missing.');
+            test_usage_guidance();
+            test_delta_e_2000();
+            test_json_bindings();
+            test_lut_type_range();
+            test_heif_dump_native(stage);
+            test_luminance_normalization();
+            test_colorimetry_issue_1475();
+            qa_output = evalc('run_local_qa()');
+            disp(qa_output);
+            result = regexp(qa_output, '=== Results: \d+ passed, 0 failed, (\d+) skipped ===', 'tokens', 'once');
+            assert(~isempty(result), 'Staged MATLAB QA must report zero failures.');
+            skip_count = str2double(result{1});
+            if skip_count ~= 0;
+              skipped = regexp(qa_output, '(?m)^  - (.+)$', 'tokens');
+              assert(skip_count == 1 && numel(skipped) == 1 && startsWith(skipped{1}{1}, 'Docker interoperability ('), 'Staged MATLAB QA may only skip Docker interoperability.');
+            end;
+            run(fullfile(matlab_dir, 'examples', 'read_profile.m'));
+            run(fullfile(matlab_dir, 'examples', 'color_transform.m'));
+            run(fullfile(matlab_dir, 'examples', 'gamma_curve.m'));
+            run(fullfile(matlab_dir, 'examples', 'ciede2000.m'));
+            run(fullfile(matlab_dir, 'examples', 'luminance_normalization.m'));
+            run(fullfile(matlab_dir, 'examples', 'colorimetry_issue_1475.m'))
+          generate-summary: false
       - name: Upload macOS Artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: iccdev-macos-clang
           path: staging
           if-no-files-found: error
+          include-hidden-files: true
       - name: Summary Report
         if: always()
         shell: bash --noprofile --norc {0}
@@ -615,7 +774,7 @@ jobs:
         # matlab-actions/setup-matlab v3
         uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d
         with:
-          release: R2026a
+          release: R2023b
 
       - name: UCI Gate 2 for Windows Powershell - Verify Branch Context
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
@@ -2061,6 +2220,12 @@ jobs:
             "Testing/Display/sRGB_D65_MAT-300cdm2.xml"
             "Testing/Display/sRGB_D65_MAT-500cdm2.xml"
             "Testing/HDR/BT2100PQFullDisplay.xml"
+            "Testing/Display/sRGB_v4_ICC_preference.icc"
+            "Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc"
+            "Testing/Display/sRGB_D65_MAT.xml"
+            "Testing/Display/sRGB_D65_MAT-300cdm2.xml"
+            "Testing/Display/sRGB_D65_MAT-500cdm2.xml"
+            "Testing/HDR/BT2100PQFullDisplay.xml"
             "IccProfLib/IccTagBasic.cpp"
             "IccProfLib/IccColorimetry.cpp"
             ".github/ci/regression/gamma-2.20703125.icc"
@@ -2079,6 +2244,59 @@ jobs:
             echo "::error::Missing expected MATLAB zlib runtime"
             exit 1
           fi
+
+          matlab_unix_required=(
+            "iccHeifDump"
+            "iccToJson"
+            "iccFromJson"
+            "iccPawgReport"
+            "matlab/run_local_qa.m"
+            "matlab/run_gamma_qa.m"
+            "matlab/run_docker_qa.m"
+            "matlab/+iccdev/+qa/audit_pawg_q1.m"
+            "matlab/+iccdev/+qa/bounded_grid.m"
+            "matlab/+iccdev/+qa/delta_e_2000.m"
+            "matlab/+iccdev/+qa/pcs_to_lab.m"
+            "matlab/tests/test_pawg_q1.m"
+            "matlab/tests/test_json_bindings.m"
+            "matlab/tests/test_lut_type_range.m"
+            "matlab/tests/test_heif_dump_native.m"
+            "matlab/tests/test_usage_guidance.m"
+            "matlab/tests/test_delta_e_2000.m"
+            "matlab/tests/fixtures/default_usage_examples.txt"
+            "matlab/tests/test_luminance_normalization.m"
+            "matlab/tests/test_colorimetry_issue_1475.m"
+            "matlab/examples/gamma_curve.m"
+            "matlab/examples/ciede2000.m"
+            "matlab/examples/luminance_normalization.m"
+            "matlab/examples/colorimetry_issue_1475.m"
+            "matlab/examples/docker_interop.m"
+            "Testing/sRGB_v4_ICC_preference.icc"
+            "IccProfLib/IccTagBasic.cpp"
+            "IccProfLib/IccColorimetry.cpp"
+            ".github/ci/regression/gamma-2.20703125.icc"
+            ".github/ci/tooling/heif/img/valid-prof.heic"
+            ".github/ci/tooling/heif/img/nclx-only.heif"
+            ".github/ci/tooling/heif/img/invalid-ipma-index.heic"
+          )
+          for compiler in gcc clang; do
+            linux_bundle_root="artifacts/iccdev-linux-${compiler}/iccDEV-Testing"
+            for required in "${matlab_unix_required[@]}" \
+              "matlab/+iccdev/private/icc_mex.mexa64"; do
+              if [ ! -s "${linux_bundle_root}/${required}" ]; then
+                echo "::error::Missing expected Linux MATLAB release artifact: $(sanitize_line "$required")"
+                exit 1
+              fi
+            done
+          done
+          macos_bundle_root="artifacts/iccdev-macos-clang/iccDEV-Testing"
+          for required in "${matlab_unix_required[@]}" \
+            "matlab/+iccdev/private/icc_mex.mexmaca64"; do
+            if [ ! -s "${macos_bundle_root}/${required}" ]; then
+              echo "::error::Missing expected macOS MATLAB release artifact: $(sanitize_line "$required")"
+              exit 1
+            fi
+          done
 
           chmod +x .github/scripts/ci-restore-release-artifact-metadata.sh
           .github/scripts/ci-restore-release-artifact-metadata.sh artifacts
@@ -2232,10 +2450,10 @@ jobs:
             echo ""
             echo "| Platform | Archive |"
             echo "|----------|---------|"
-            echo "| Linux (GCC) | \`iccdev-linux-gcc.zip\` |"
-            echo "| Linux (Clang) | \`iccdev-linux-clang.zip\` |"
-            echo "| macOS (Clang) | \`iccdev-macos-clang.zip\` |"
-            echo "| Windows (MSVC + MATLAB R2026a MEX) | \`iccdev-windows-msvc.zip\` |"
+            echo "| Linux x86_64 (GCC + MATLAB R2023b MEX) | \`iccdev-linux-gcc.zip\` |"
+            echo "| Linux x86_64 (Clang + MATLAB R2023b MEX) | \`iccdev-linux-clang.zip\` |"
+            echo "| macOS arm64 (Clang + MATLAB R2023b MEX) | \`iccdev-macos-clang.zip\` |"
+            echo "| Windows x64 (MSVC + MATLAB R2023b MEX) | \`iccdev-windows-msvc.zip\` |"
             echo "| WASM (Emscripten) | \`iccdev-wasm-release.zip\` |"
             echo "| Doxygen HTML Docs | \`iccdev-doxygen-html.zip\` |"
             echo "| Linux CPack Runtime | \`reficcmax-*.zip\`, \`reficcmax-*.deb\`, \`reficcmax-*.rpm\` |"

@@ -68,39 +68,35 @@
 #include <cstdint>
 #include <cmath>
 #include <unordered_map>
-#include <mutex>
 #include <vector>
 
 /* -----------------------------------------------------------------------
  * Typed handle registry - prevents use-after-free, double-free, forgery,
  * and cross-type confusion (e.g., passing a profile handle to cmm_free).
- * Thread-safe via mutex for concurrent parfor/spmd usage.
+ * MATLAB serializes calls into a MEX module; parallel workers each load an
+ * independent module instance. Do not use C++ synchronization primitives in
+ * the gateway, because MATLAB owns the MEX entry-point synchronization.
  * ----------------------------------------------------------------------- */
 enum HandleType : uint8_t { kProfile = 0, kCmm = 1, kApply = 2 };
 
 static std::unordered_map<uint64_t, HandleType> g_liveHandles;
 static std::unordered_map<uint64_t, uint64_t> g_applyParents;
-static std::mutex g_handleMutex;
 
 static void register_handle(uint64_t h, HandleType t) {
-  std::lock_guard<std::mutex> lk(g_handleMutex);
   g_liveHandles[h] = t;
 }
 
 static bool is_valid_handle(uint64_t h, HandleType expected) {
-  std::lock_guard<std::mutex> lk(g_handleMutex);
   auto it = g_liveHandles.find(h);
   return it != g_liveHandles.end() && it->second == expected;
 }
 
 static void unregister_handle(uint64_t h) {
-  std::lock_guard<std::mutex> lk(g_handleMutex);
   g_liveHandles.erase(h);
   g_applyParents.erase(h);
 }
 
 static bool unregister_handle_if_live(uint64_t h, HandleType expected, HandleType *actual) {
-  std::lock_guard<std::mutex> lk(g_handleMutex);
   auto it = g_liveHandles.find(h);
   if (it == g_liveHandles.end())
     return false;
@@ -115,7 +111,6 @@ static bool unregister_handle_if_live(uint64_t h, HandleType expected, HandleTyp
 
 static std::vector<uint64_t> unregister_apply_children(uint64_t cmmHandle) {
   std::vector<uint64_t> applyHandles;
-  std::lock_guard<std::mutex> lk(g_handleMutex);
   for (auto it = g_applyParents.begin(); it != g_applyParents.end(); ) {
     if (it->second == cmmHandle) {
       uint64_t applyHandle = it->first;
@@ -137,18 +132,15 @@ static void cleanup_handles() {
   std::vector<uint64_t> applyHandles;
   std::vector<uint64_t> profileHandles;
   std::vector<uint64_t> cmmHandles;
-  {
-    std::lock_guard<std::mutex> lk(g_handleMutex);
-    for (auto &kv : g_liveHandles) {
-      switch (kv.second) {
-        case kProfile: profileHandles.push_back(kv.first); break;
-        case kCmm:     cmmHandles.push_back(kv.first); break;
-        case kApply:   applyHandles.push_back(kv.first); break;
-      }
+  for (auto &kv : g_liveHandles) {
+    switch (kv.second) {
+      case kProfile: profileHandles.push_back(kv.first); break;
+      case kCmm:     cmmHandles.push_back(kv.first); break;
+      case kApply:   applyHandles.push_back(kv.first); break;
     }
-    g_liveHandles.clear();
-    g_applyParents.clear();
   }
+  g_liveHandles.clear();
+  g_applyParents.clear();
   for (uint64_t h : applyHandles)
     IccApplyFree(reinterpret_cast<CIccApplyHandle*>(h));
   for (uint64_t h : cmmHandles)
@@ -178,13 +170,10 @@ static uint64_t get_typed_handle(const mxArray *arg, const char *name, HandleTyp
   }
   bool found = false;
   HandleType actual = expected;
-  {
-    std::lock_guard<std::mutex> lk(g_handleMutex);
-    auto it = g_liveHandles.find(h);
-    if (it != g_liveHandles.end()) {
-      found = true;
-      actual = it->second;
-    }
+  auto it = g_liveHandles.find(h);
+  if (it != g_liveHandles.end()) {
+    found = true;
+    actual = it->second;
   }
   if (!found)
     mexErrMsgIdAndTxt("iccdev:invalidHandle",
@@ -609,10 +598,7 @@ static void cmd_apply_create(int nlhs, mxArray *plhs[],
 
   uint64_t applyHandle = ptr_to_handle(ah);
   register_handle(applyHandle, kApply);
-  {
-    std::lock_guard<std::mutex> lk(g_handleMutex);
-    g_applyParents[applyHandle] = h;
-  }
+  g_applyParents[applyHandle] = h;
   plhs[0] = make_handle(applyHandle);
 }
 

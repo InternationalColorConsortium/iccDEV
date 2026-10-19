@@ -322,10 +322,15 @@ installed location, preserve those paths in the archive and assert the required
 files again after artifact download. MATLAB release payloads must include the
 MEX runtime dependencies, required `Testing/` fixtures, gamma regression
 profile, colorimetry table sources, `iccPawgReport`, the MATLAB PAWG Q1 audit
-and calculation helpers, and `test_pawg_q1`. Put the flat Windows bundle root
-on the staged MATLAB process `PATH` before running QA. The staged suite must
-report zero skipped groups unless Docker interoperability is the sole skip
-because the pinned image is unavailable.
+and calculation helpers, and `test_pawg_q1`. Verify native MEX extensions for
+Windows x64 (`mexw64`), Linux x86_64 (`mexa64`), and Apple Silicon macOS
+(`mexmaca64`), built and staged-tested with MATLAB R2023b. Add the flat bundle
+root to the staged MATLAB process `PATH` before running QA; on Linux/macOS,
+also expose staged native libraries through the platform loader path. The
+staged suite must report zero skipped groups unless Docker interoperability is
+the sole skip because the pinned image is unavailable.
+Preserve repository-relative `Testing/` paths even in flat tool bundles, and
+enable hidden-file artifact upload for the staged `.github/ci` QA fixtures.
 
 ## Optional Local Hooks
 

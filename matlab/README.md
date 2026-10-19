@@ -29,8 +29,16 @@ The PAWG Q1 audit has the same runtime requirements and also requires the
 `iccPawgReport` executable. IccJSON conversion requires the same Java-enabled
 runtime plus `iccToJson` and `iccFromJson`.
 `iccdev.heif_dump` requires the same Java-enabled runtime plus `iccHeifDump`.
+If `usejava('jvm')` is false because your MATLAB release does not include a
+Java runtime, install a supported JRE and select it with `jenv`.
 
 ## Quick Start
+
+Prebuilt release bundles include native MEX gateways for Windows x64, Linux
+x86_64, and Apple Silicon macOS, built and tested with MATLAB R2023b. GNU
+Octave and other architectures continue to use the source-build workflow below.
+See <a href="../docs/using-iccdev.md">docs/using-iccdev.md</a> for prebuilt
+installation and compatibility details.
 
 Windows MATLAB Desktop users should follow the portable MSVC/vcpkg setup,
 persistent `MATLABPATH` configuration, and Docker interoperability workflow in

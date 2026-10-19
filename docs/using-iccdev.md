@@ -15,7 +15,7 @@ To build from source instead, see [Build](build.md).
 | Learn what the tools do | Any of the above | <a href="#first-steps-with-the-tools">First steps with the tools</a> |
 | Browse a profile in a graphical viewer | Release bundle or Homebrew | <a href="#icc-dump-profile-gui">iccDumpProfileGui</a> |
 | Call iccDEV from Python | Install a release wheel with `pip`, build from source, or use `subprocess` | <a href="#python">Python</a> |
-| Call iccDEV from MATLAB | Windows release bundle (includes a built MEX file) | <a href="#matlab">MATLAB</a> |
+| Call iccDEV from MATLAB | Windows, Linux x86_64, or Apple Silicon macOS release bundle (includes a built MEX file) | <a href="#matlab">MATLAB</a> |
 | Call iccDEV from Node.js | `npm install iccdev` | <a href="#webassembly-and-nodejs">WebAssembly and Node.js</a> |
 | Give an AI assistant ICC tools | Docker image or `pip` plus a tools bundle | <a href="#mcp-server">MCP server</a> |
 
@@ -355,12 +355,32 @@ The complete API is in
 
 ## MATLAB
 
-### Install (Windows, prebuilt)
+### Install (prebuilt)
 
-The Windows release bundle includes the MATLAB package **and a compiled MEX
-gateway**, so no compiler is needed. Download and unzip
-`iccdev-windows-msvc.zip` as described in
-<a href="#install-the-tools">Install the tools</a>, then in MATLAB:
+The Windows, Linux x86_64, and Apple Silicon macOS release bundles include the
+MATLAB package and a native compiled MEX gateway, so no compiler is needed on
+those platforms. The gateways are built and tested with MATLAB R2023b; the
+prebuilt MEX files are expected to load in R2023b and later.
+
+Use the matching release bundle from
+<a href="#install-the-tools">Install the tools</a>. On Linux or macOS, source
+the bundle helper before launching MATLAB so its command-line tools and runtime
+libraries are available:
+
+```bash
+cd /path/to/iccDEV-Testing
+. ./path.sh
+matlab
+```
+
+Then add the package directory in MATLAB:
+
+```matlab
+bundle = '/path/to/iccDEV-Testing';          % where you unzipped it
+addpath(fullfile(bundle, 'matlab'));
+```
+
+On Windows, add the package and native tools this way:
 
 ```matlab
 bundle = 'C:\tools\iccDEV-Testing';          % where you unzipped it
@@ -373,10 +393,10 @@ functions that call command-line tools (`iccdev.to_json`, `iccdev.from_json`,
 `iccdev.plot`, `iccdev.qa.audit_pawg_q1`) find them. Add both lines to
 `startup.m` to make them permanent.
 
-The MEX file is built with the MATLAB release named on the release page
-(R2026a at the time of writing). If your MATLAB refuses to load
-`icc_mex.mexw64`, or you are on Linux, macOS, or GNU Octave, no prebuilt MEX is
-available and the gateway has to be built once; follow
+The bundle contains the MEX file for its platform: `icc_mex.mexw64` on Windows
+x64, `icc_mex.mexa64` on Linux x86_64, or `icc_mex.mexmaca64` on Apple Silicon
+macOS. Intel macOS, Linux ARM64, and GNU Octave do not have prebuilt MEX
+gateways; build from source by following
 [MATLAB bindings and QA](matlab-bindings.md).
 
 ### Use it in your own code
@@ -605,7 +625,7 @@ These are the places where a prebuilt, install-and-go path does not exist yet.
 |------|------------|------------|
 | Python | PyPI supplies CPython 3.9-3.13 wheels but no source distribution | Install from the repository when no compatible wheel is available |
 | MCP | The PyPI package needs native bindings or a tools bundle for optional capabilities | Install `iccdev-mcp[rest]`, then configure the required tool paths or use Docker |
-| MATLAB | Prebuilt MEX is Windows-only and tied to one MATLAB release (<a href="https://github.com/InternationalColorConsortium/iccDEV/issues/2801">#2801</a>) | Build the MEX gateway once on other platforms |
+| MATLAB | Prebuilt MEX is limited to Windows x64, Linux x86_64, and Apple Silicon macOS, built/tested with MATLAB R2023b (<a href="https://github.com/InternationalColorConsortium/iccDEV/issues/2801">#2801</a>) | Build from source for GNU Octave or unsupported architectures |
 | WebAssembly | Node.js only; tool-style interface, no browser package | Wrap `callMain` as shown above |
 | Docker | One large image with sanitizer-instrumented tools | Use a release bundle for speed |
 | Releases | Binaries are attached to the rolling latest build, not to version tags | Record the commit from the release notes if you need to pin a build |

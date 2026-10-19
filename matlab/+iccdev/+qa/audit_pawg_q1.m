@@ -310,6 +310,11 @@ function [status, output, error_output] = run_process(arguments)
   cleanup = onCleanup(@() delete_if_exists(error_path));
   try
     builder = javaObject('java.lang.ProcessBuilder', command);
+    if ~ispc() && ~ismac()
+      builder.environment().put('LD_LIBRARY_PATH', ...
+        iccdev.qa.native_library_path(getenv('LD_LIBRARY_PATH'), ...
+        fileparts(char(arguments{1}))));
+    end
     builder.redirectError(javaObject('java.io.File', error_path));
     process = builder.start();
   catch e

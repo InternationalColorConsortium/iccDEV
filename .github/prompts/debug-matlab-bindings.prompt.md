@@ -6,9 +6,12 @@ correct profile or transform results.
 1. Read `docs/matlab-bindings.md`,
    `.github/instructions/matlab-mex.instructions.md`, and
    `.github/skills/matlab-bindings-test/SKILL.md`.
-2. Report the MATLAB release, `mexext`, selected C++ compiler, current branch,
-   and dirty files before changing anything. Confirm the selected compiler is
-   Microsoft Visual C++ 2022 before using the documented VS 2022 generator.
+2. Report the MATLAB release, `mexext`, selected C++ compiler, OS/architecture,
+   current branch, and dirty files before changing anything. For prebuilt
+   release gateways, expect `mexw64` on Windows x64, `mexa64` on Linux x86_64,
+   and `mexmaca64` on Apple Silicon macOS; those bundles are built/tested with
+   MATLAB R2023b. Confirm the selected compiler is Microsoft Visual C++ 2022
+   before using the documented VS 2022 generator.
    Derive the repository root with `git rev-parse --show-toplevel` and discover
    MATLAB, Visual Studio, and vcpkg as documented in
    `docs/matlab-bindings.md`; use `repo\msvc` as the Windows build root and do
@@ -49,6 +52,7 @@ correct profile or transform results.
 5. Classify the failure:
 
    - compiler configuration
+   - prebuilt MEX platform/architecture mismatch or unsupported MEX extension
    - Release/Debug mismatch
    - missing static dependency or runtime DLL
    - package/private path misuse

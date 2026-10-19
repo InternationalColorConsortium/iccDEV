@@ -28,6 +28,7 @@ function [standard_output, error_output] = run_cli_tool(tool_name, input_path, a
   cleanup = onCleanup(@() delete_if_exists(error_path));
   try
     builder = javaObject('java.lang.ProcessBuilder', command);
+    configure_tool_environment(builder, tool_path);
     builder.redirectError(javaObject('java.io.File', error_path));
     process = builder.start();
   catch e
@@ -49,6 +50,16 @@ function [standard_output, error_output] = run_cli_tool(tool_name, input_path, a
     error([error_prefix 'CommandFailed'], '%s failed with status %d:\n%s', ...
       tool_name, status, diagnostics);
   end
+end
+
+function configure_tool_environment(builder, tool_path)
+  if ispc() || ismac()
+    return;
+  end
+
+  environment = builder.environment();
+  environment.put('LD_LIBRARY_PATH', iccdev.qa.native_library_path( ...
+    getenv('LD_LIBRARY_PATH'), fileparts(tool_path)));
 end
 
 function tool_path = find_tool(tool_name, build_dir, explicit_tool, error_prefix)

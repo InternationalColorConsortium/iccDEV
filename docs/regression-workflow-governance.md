@@ -26,6 +26,7 @@ new blocker returns the branch to branch-only grooming before another review.
 | Sanitizer PR gate | `.github/workflows/ci-sanitizer-regression.yml` | Standalone path-scoped ASAN/UBSAN caller for native source, build, and test changes. |
 | Risk-analysis gate | `.github/workflows/ci-risk-analysis-gate.yml` | Standalone PR caller for the required reusable Linux and Windows workflow-security audits. |
 | MATLAB Windows gate | `.github/workflows/ci-matlab.yml` | PowerShell-native MSVC build, MATLAB MEX QA, native focused regressions, and Docker interoperability. |
+| MATLAB release bundles | `.github/workflows/ci-latest-release.yml` | Linux x86_64, macOS arm64, and Windows x64 MEX builds with staged MATLAB QA and payload verification. |
 | Apple platform gates | `.github/workflows/ci-apple-platform-smoke.yml`, `.github/workflows/ci-apple-mobile-core.yml` | iOS/watchOS simulator hosts and Xcode Release/Debug CTest runtime layouts; [local commands](build.md). |
 | CTest registration | `Build/Cmake/Testing/CMakeLists.txt` | CTest names, labels, fixtures, timeouts, and check target. |
 | CTest process guide | `docs/ctest.md` | Local commands, registered suites, and add-test workflow. |

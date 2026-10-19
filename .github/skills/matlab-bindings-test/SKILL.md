@@ -211,6 +211,15 @@ profiles, examples, and native handle lifecycle behavior.
     `Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc`. Add the staged
     bundle root to the
     MATLAB process `PATH` before `run_local_qa()`.
+    Validate each shipped native gateway on its matching MATLAB platform:
+    `icc_mex.mexw64` on Windows x64, `icc_mex.mexa64` on Linux x86_64, and
+    `icc_mex.mexmaca64` on Apple Silicon macOS. The rolling release gateways
+    are built and staged-tested with MATLAB R2023b, the prebuilt compatibility
+    floor. Require the expected MEX extension, successful gateway loading, and
+    the same staged QA before artifact upload; after artifact download, verify
+    each platform archive still contains its gateway and required support
+    files. Do not claim prebuilt coverage for Intel macOS, Linux ARM64, or
+    GNU Octave.
 
 ## Failure Rules
 

@@ -116,9 +116,15 @@ function build_mex(varargin)
   if exist('OCTAVE_VERSION', 'builtin')
     cxxFlags = {'-std=c++17'};
   elseif ispc()
-    cxxFlags = {'COMPFLAGS=$COMPFLAGS /std:c++17 /EHsc'};
-  else
+    % MATLAB loads its bundled MSVCP140.dll, which can predate the
+    % MSVC 17.10 constexpr std::mutex layout used by newer compilers.
+    cxxFlags = {['COMPFLAGS=$COMPFLAGS /std:c++17 /EHsc ' ...
+      '/D_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR']};
+  elseif ismac()
     cxxFlags = {'CXXFLAGS=$CXXFLAGS -std=c++17'};
+  else
+    cxxFlags = {'CXXFLAGS=$CXXFLAGS -std=c++17', ...
+      'LDFLAGS=$LDFLAGS -static-libstdc++'};
   end
 
   if p.Results.Debug
@@ -136,12 +142,27 @@ function build_mex(varargin)
     mkdir(outDir);
   end
 
+  libraryArgs = [{['-L' libDir]}, {['-l' libName]}, dependencyArgs];
+  if ~exist('OCTAVE_VERSION', 'builtin') && ~ispc() && ~ismac()
+    % MATLAB preloads its bundled libstdc++, which can predate the host
+    % compiler's GLIBCXX symbol versions. The stock LINKLIBS names
+    % -lstdc++ explicitly, which overrides -static-libstdc++. Replace
+    % LINKLIBS with the iccDEV and MATLAB libraries only; mex appends -L/-l
+    % arguments to LINKLIBS, so they must be part of the override. The mex
+    % version script exports only mexFunction, keeping the static C++
+    % runtime private to the gateway.
+    matlabLibDir = fullfile(matlabroot(), 'bin', computer('arch'));
+    cxxFlags{end+1} = ['LINKLIBS=' strjoin(cellfun(@quote_link_arg, ...
+      libraryArgs, 'UniformOutput', false), ' ') ...
+      sprintf(' -Wl,--as-needed -Wl,-rpath-link,"%s" -L"%s" -lmx -lmex -lmat -lm', ...
+      matlabLibDir, matlabLibDir)];
+    libraryArgs = {};
+  end
+
   commonArgs = [
     cxxFlags, ...
     {['-I' inclDir]}, ...
-    {['-L' libDir]}, ...
-    {['-l' libName]}, ...
-    dependencyArgs
+    libraryArgs
   ];
 
   fprintf('  Output:  %s\n', outDir);
@@ -155,6 +176,9 @@ function build_mex(varargin)
     args = [commonArgs, {'-outdir', outDir}, {mexSrc}];
     fprintf('  mex %s\n', strjoin(args, ' '));
     mex(args{:});
+    if ~ispc() && ~ismac()
+      verify_private_cxx_runtime(fullfile(outDir, ['icc_mex.' mexext()]));
+    end
   end
 
   for i = 1:numel(runtimeFiles)
@@ -163,6 +187,26 @@ function build_mex(varargin)
   end
 
   fprintf('Build complete. Add %s to your MATLAB path.\n', thisDir);
+end
+
+function arg = quote_link_arg(arg)
+  if strncmp(arg, '-L', 2)
+    arg = ['-L"' arg(3:end) '"'];
+  end
+end
+
+function verify_private_cxx_runtime(mexFile)
+  [status, output] = system(sprintf('readelf -d "%s"', mexFile));
+  if status ~= 0
+    error('iccdev:mexRuntimeCheckFailed', ...
+      'Unable to inspect %s with readelf:\n%s', mexFile, output);
+  end
+  if contains(output, 'libstdc++')
+    error('iccdev:sharedLibstdcxx', ...
+      ['%s depends on the shared libstdc++, which MATLAB replaces with ' ...
+       'its bundled runtime. Link it with -static-libstdc++.'], mexFile);
+  end
+  fprintf('  Runtime: libstdc++ linked privately\n');
 end
 
 function [linkArgs, runtimeFiles] = find_optional_dependencies( ...
