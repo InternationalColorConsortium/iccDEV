@@ -49,7 +49,7 @@ export ASAN_OPTIONS="${ASAN_OPTIONS:-print_scariness=1:halt_on_error=0:detect_le
 export UBSAN_OPTIONS="${UBSAN_OPTIONS:-halt_on_error=0:print_stacktrace=1}"
 export LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE:-/dev/null}"
 
-python3 - "$INPUT_PNG" "$OUTDIR/oversized-dimension.png" "$OUTDIR/oversized-raster.png" <<'PY'
+python3 - "$INPUT_PNG" "$OUTDIR/oversized-dimension.png" "$OUTDIR/oversized-raster.png" "$OUTDIR/unknown-critical.png" <<'PY'
 import binascii
 import pathlib
 import struct
@@ -95,6 +95,9 @@ pathlib.Path(sys.argv[2]).write_bytes(
     png(100001, 1, chunk(b"IDAT", zlib.compress(b""))))
 pathlib.Path(sys.argv[3]).write_bytes(
     png(20000, 20000, chunk(b"IDAT", zlib.compress(b""))))
+pathlib.Path(sys.argv[4]).write_bytes(
+    png(width, height, chunk(b"ABCD", b"required image information") +
+        chunk(b"IDAT", zlib.compress(image_data))))
 
 PY
 
@@ -125,13 +128,16 @@ def chunks(path):
             break
     return found
 
+output_chunks = chunks(sys.argv[2])
+ignored_kinds = (b"IDAT", b"IEND", b"iCCP")
+if not any(kind == b"sRGB" for kind, _ in output_chunks):
+    ignored_kinds += (b"sRGB",)
 source = collections.Counter(
     (kind, payload) for kind, payload in chunks(sys.argv[1])
-    if kind not in (b"IDAT", b"IEND", b"iCCP"))
-output_chunks = chunks(sys.argv[2])
+    if kind not in ignored_kinds)
 output = collections.Counter(
     (kind, payload) for kind, payload in output_chunks
-    if kind not in (b"IDAT", b"IEND", b"iCCP"))
+    if kind not in ignored_kinds)
 if source != output:
     missing = source - output
     extra = output - source
@@ -157,12 +163,27 @@ fi
 check_sanitizers "$LOGFILE"
 
 for png_path in "$OUTDIR/oversized-dimension.png" "$OUTDIR/oversized-raster.png"; do
-  if timeout 30 "$PNGDUMP" "$png_path" --write-icc "$INPUT_ICC" \
-      --output "$OUTDIR/rejected.png" >"$LOGFILE" 2>&1; then
-    fail "resource-limit PNG was accepted: $png_path"
+  exit_code=0
+  timeout 30 "$PNGDUMP" "$png_path" --write-icc "$INPUT_ICC" \
+    --output "$OUTDIR/rejected.png" >"$LOGFILE" 2>&1 || exit_code=$?
+  if [ "$exit_code" -ne 1 ]; then
+    fail "resource-limit PNG did not fail gracefully (status $exit_code): $png_path"
   fi
   check_sanitizers "$LOGFILE"
+  if [ "$png_path" = "$OUTDIR/oversized-raster.png" ]; then
+    expected="PNG raster exceeds the 256 MiB processing limit."
+  else
+    expected="exceeds user limit in IHDR"
+  fi
+  grep -Fq "$expected" "$LOGFILE" || fail "missing resource-limit diagnostic: $png_path"
 done
+
+exit_code=0
+timeout 30 "$PNGDUMP" "$OUTDIR/unknown-critical.png" --write-icc "$INPUT_ICC" \
+  --output "$OUTDIR/rejected-critical.png" >"$LOGFILE" 2>&1 || exit_code=$?
+[ "$exit_code" -eq 1 ] || fail "unknown critical chunk did not fail gracefully (status $exit_code)"
+check_sanitizers "$LOGFILE"
+grep -Fq "ABCD: unhandled critical chunk" "$LOGFILE" || fail "missing unknown critical chunk diagnostic"
 
 if timeout 30 "$PNGDUMP" "$INPUT_PNG" "$OUTDIR/out.icc" unexpected \
     >"$LOGFILE" 2>&1; then
@@ -195,6 +216,98 @@ fi
 check_sanitizers "$LOGFILE"
 if ! cmp -s "$OUTDIR/preserved-output.expected" "$OUTDIR/preserved-output.png"; then
   fail "invalid PNG injection modified the existing output"
+fi
+
+python3 - "$PNGDUMP" "$INPUT_PNG" "$INPUT_ICC" "$OUTDIR" <<'PY'
+import binascii
+import os
+import pathlib
+import stat
+import struct
+import subprocess
+import sys
+import time
+import zlib
+
+if os.name == "posix":
+    tool, image, profile, outdir = sys.argv[1:]
+    for mask, existing_mode, expected_mode in (
+        (0o022, 0o600, 0o600),
+        (0o022, 0o640, 0o640),
+        (0o022, None, 0o644),
+        (0o077, None, 0o600),
+    ):
+        output = pathlib.Path(outdir) / "permissions.png"
+        output.unlink(missing_ok=True)
+        if existing_mode is not None:
+            output.write_bytes(b"private destination")
+            output.chmod(existing_mode)
+        previous_mask = os.umask(mask)
+        try:
+            result = subprocess.run(
+                [tool, image, "--write-icc", profile, "--output", str(output)],
+                capture_output=True, timeout=30)
+        finally:
+            os.umask(previous_mask)
+        diagnostics = result.stdout + result.stderr
+        if result.returncode != 0:
+            raise SystemExit(f"permission injection failed: {diagnostics!r}")
+        if any(marker in diagnostics for marker in (
+                b"AddressSanitizer", b"runtime error:", b"LeakSanitizer",
+                b"UndefinedBehaviorSanitizer", b"DEADLYSIGNAL")):
+            raise SystemExit(f"sanitizer diagnostic: {diagnostics!r}")
+        actual_mode = stat.S_IMODE(output.stat().st_mode)
+        if actual_mode != expected_mode:
+            raise SystemExit(
+                f"output permissions: expected {expected_mode:o}, got {actual_mode:o}")
+
+    def chunk(kind, payload):
+        return (struct.pack(">I", len(payload)) + kind + payload +
+                struct.pack(">I", binascii.crc32(kind + payload) & 0xffffffff))
+
+    staging_image = pathlib.Path(outdir) / "staging-input.png"
+    staging_image.write_bytes(
+        b"\x89PNG\r\n\x1a\n" +
+        chunk(b"IHDR", struct.pack(">IIBBBBB", 2048, 2048, 8, 2, 0, 0, 0)) +
+        chunk(b"IDAT", zlib.compress(b"\x00" * (2048 * (1 + 2048 * 3)))) +
+        chunk(b"IEND", b""))
+    output.chmod(0o600)
+    previous_mask = os.umask(0o022)
+    observed_private_staging = False
+    try:
+        with (pathlib.Path(outdir) / "staging-permissions.log").open("wb") as log:
+            child = subprocess.Popen(
+                [tool, str(staging_image), "--write-icc", profile, "--output", str(output)],
+                stdout=log, stderr=subprocess.STDOUT)
+            try:
+                deadline = time.monotonic() + 30
+                while child.poll() is None:
+                    for temporary in output.parent.glob(output.name + ".tmp-*"):
+                        try:
+                            mode = stat.S_IMODE(temporary.stat().st_mode)
+                        except FileNotFoundError:
+                            continue
+                        if mode != 0o600:
+                            raise SystemExit(f"temporary PNG is not private: {mode:o}")
+                        observed_private_staging = True
+                    if time.monotonic() > deadline:
+                        raise SystemExit("temporary permission test timed out")
+                    time.sleep(0.001)
+                if child.returncode != 0:
+                    raise SystemExit(f"temporary permission test exited {child.returncode}")
+            finally:
+                if child.poll() is None:
+                    child.kill()
+                    child.wait()
+    finally:
+        os.umask(previous_mask)
+    if not observed_private_staging:
+        raise SystemExit("temporary permission test did not observe a staged file")
+    if stat.S_IMODE(output.stat().st_mode) != 0o600:
+        raise SystemExit("private destination permissions changed")
+PY
+if [ -f "$OUTDIR/staging-permissions.log" ]; then
+  check_sanitizers "$OUTDIR/staging-permissions.log"
 fi
 
 echo "  [PASS] issue-2854-pngdump-regressions -- metadata, resource bounds, raw export, and CLI"

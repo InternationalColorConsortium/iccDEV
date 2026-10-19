@@ -428,7 +428,7 @@ static FILE* OpenPngTempOutputFile(const char* outputPng, std::string& tempName)
         snprintf(suffix, sizeof(suffix), ".tmp-%ld-%u", (long)getpid(), attempt);
         tempName = std::string(outputPng) + suffix;
         int fd = open(tempName.c_str(), O_WRONLY | O_CREAT | O_EXCL,
-                      S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+                      S_IRUSR | S_IWUSR);
         if (fd >= 0) {
             FILE* fp = fdopen(fd, "wb");
             if (fp)
@@ -443,6 +443,31 @@ static FILE* OpenPngTempOutputFile(const char* outputPng, std::string& tempName)
     }
 
     return NULL;
+}
+
+static bool SetPngOutputPermissions(FILE* output, const char* outputPng)
+{
+#if !defined(_WIN32)
+    struct stat st;
+    mode_t permissions;
+    if (lstat(outputPng, &st) == 0) {
+        if (!S_ISREG(st.st_mode))
+            return false;
+        permissions = st.st_mode & 0777;
+    } else {
+        if (errno != ENOENT)
+            return false;
+        // This single-threaded CLI retains the normal new-output umask policy.
+        mode_t mask = umask(077);
+        umask(mask);
+        permissions = (S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH) & ~mask;
+    }
+    return fchmod(fileno(output), permissions) == 0;
+#else
+    (void)output;
+    (void)outputPng;
+    return true;
+#endif
 }
 
 static bool CommitPngTempOutputFile(const std::string& tempName,
@@ -531,10 +556,6 @@ static bool CopyPngAncillaryChunks(png_structp read_ptr,
                            mastering_blue_x, mastering_blue_y, max_luminance,
                            min_luminance);
 #endif
-
-    int intent = 0;
-    if (png_get_sRGB(read_ptr, read_info, &intent))
-        png_set_sRGB(write_ptr, write_info, intent);
 
     png_color_8p significant_bits = NULL;
     if (png_get_sBIT(read_ptr, read_info, &significant_bits))
@@ -673,7 +694,7 @@ static bool InjectIccProfileData(const char* inputPng,
     png_set_user_limits(png_ptr, kMaxPngDimension, kMaxPngDimension);
     png_set_chunk_malloc_max(png_ptr, kMaxPngChunkBytes);
     png_set_chunk_cache_max(png_ptr, 1000);
-    png_set_keep_unknown_chunks(png_ptr, PNG_HANDLE_CHUNK_ALWAYS, NULL, 0);
+    png_set_keep_unknown_chunks(png_ptr, PNG_HANDLE_CHUNK_IF_SAFE, NULL, 0);
     png_init_io(png_ptr, fpIn);
     png_read_info(png_ptr, info_ptr);
 
@@ -863,6 +884,12 @@ static bool InjectIccProfileData(const char* inputPng,
     png_destroy_info_struct(write_ptr, &write_end_info_ptr);
     png_destroy_write_struct(&write_ptr, &write_info_ptr);
     fclose(fpIn);
+    if (!SetPngOutputPermissions(fpOut, outputPng)) {
+        fclose(fpOut);
+        remove(tempOutputPng.c_str());
+        LOG_ERROR("Failed to set output PNG permissions.");
+        return false;
+    }
     if (!icFlushAndClose(fpOut)) {
         remove(tempOutputPng.c_str());
         LOG_ERROR("Failed to close output PNG file.");
