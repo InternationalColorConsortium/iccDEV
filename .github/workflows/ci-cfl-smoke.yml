@@ -184,7 +184,7 @@ jobs:
           ICCDEV_CFL_TARGETS: ${{ inputs.cfl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize' }}
           ICCDEV_CFL_SECONDS: ${{ inputs.duration_seconds || '30' }}
           ICCDEV_CFL_APPLY_PATCHES: ${{ (inputs.patch_mode || 'all') == 'all' && '1' || '0' }}
-          ICCDEV_FUZZ_PATCH_APPLICATOR: ${{ github.workspace }}/workflow-scripts/.github/scripts/iccdev-apply-fuzz-patches.sh
+          ICCDEV_FUZZ_PATCH_APPLICATOR: .github/scripts/iccdev-apply-fuzz-patches.sh
           ICCDEV_CFL_BUILD_DIR: ${{ runner.temp }}/iccdev-build-cfl-smoke
           ICCDEV_CFL_WORK_DIR: ${{ runner.temp }}/iccdev-cfl-smoke
         run: |

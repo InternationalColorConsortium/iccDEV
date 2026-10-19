@@ -217,6 +217,10 @@ grep -Fq 'xmlSetStructuredErrorFunc(nullptr, discardXmlStructuredDiagnostic)' \
   "$repo_root/.github/ci/cfl/icc_xmlparse_fuzzer.cpp"
 grep -Fq 'ICCDEV_CFL_CXX_LINK_FLAGS' "$repo_root/.github/ci/cfl/build.sh"
 grep -Fq 'ICCDEV_CFL_LIBXML2_PREFIX' "$repo_root/.github/ci/cfl/build.sh"
+grep -Fq 'toxml|fromxml|xmlparse) needs_xml=1' \
+  "$repo_root/.github/ci/cfl/build.sh"
+grep -Fq 'tojson|fromjson|jsonparse|connectconfig) needs_json=1' \
+  "$repo_root/.github/ci/cfl/build.sh"
 grep -Fq -- '--skip-libxml2' < <("$msan_builder" --help)
 grep -Fq 'cmake_generator="Unix Makefiles"' "$msan_builder"
 grep -Fq 'extensions.partialClone origin' "$msan_builder"
@@ -249,6 +253,11 @@ afl_targets='dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube'
 test "$(grep -Fc "        default: $afl_targets" "$afl_workflow")" -eq 2
 cfl_targets='dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize'
 test "$(grep -Fc "        default: $cfl_targets" "$cfl_workflow")" -eq 2
+for smoke_workflow in "$afl_workflow" "$cfl_workflow"; do
+  grep -Fq \
+    'ICCDEV_FUZZ_PATCH_APPLICATOR: .github/scripts/iccdev-apply-fuzz-patches.sh' \
+    "$smoke_workflow"
+done
 
 afl_pin='2400206be6fe0d93681c8a5c1535209366602eb1'
 grep -Fq "      AFLPLUSPLUS_REF: $afl_pin" "$afl_workflow"

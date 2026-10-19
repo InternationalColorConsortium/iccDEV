@@ -17,10 +17,6 @@ usage()
   echo "Usage: $0 --plan TSV | --delete-current-run OWNER/REPO RUN_ID"
 }
 
-# An empty tar uploaded by the ClusterFuzzLite action is currently a roughly
-# 350-byte zip. All eight ICC seed corpora exceed this conservative floor.
-minimum_corpus_bytes=1024
-
 targets=(
   icc_profileparse_fuzzer
   icc_cmmapply_fuzzer
@@ -32,10 +28,33 @@ targets=(
   icc_pawgreport_fuzzer
 )
 
+archive_has_testcase()
+{
+  local archive_path="$1"
+
+  if [ ! -f "$archive_path" ]; then
+    echo "[FAIL] Missing downloaded corpus archive: $archive_path" >&2
+    return 1
+  fi
+
+  unzip -Z1 "$archive_path" | awk '
+    /\/$/ {
+      next
+    }
+    {
+      found = 1
+      exit
+    }
+    END {
+      exit !found
+    }
+  '
+}
+
 plan_artifacts()
 {
   local artifact_file="$1"
-  local artifact_id artifact_name artifact_size created_at row target
+  local artifact_id artifact_name artifact_size archive_path created_at row target
   local keep_artifact_id
   local -a rows
 
@@ -52,25 +71,24 @@ plan_artifacts()
 
     keep_artifact_id=""
     for row in "${rows[@]}"; do
-      IFS=$'\t' read -r _ artifact_id created_at artifact_size <<< "$row"
+      IFS=$'\t' read -r _ artifact_id created_at artifact_size archive_path <<< "$row"
       case "$artifact_size" in
         ''|*[!0-9]*)
           echo "[FAIL] Invalid artifact size for $artifact_name: $artifact_size" >&2
           return 1
           ;;
       esac
-      if [ -z "$keep_artifact_id" ] && \
-         [ "$artifact_size" -ge "$minimum_corpus_bytes" ]; then
+      if [ -z "$keep_artifact_id" ] && archive_has_testcase "$archive_path"; then
         keep_artifact_id="$artifact_id"
       fi
     done
     if [ -z "$keep_artifact_id" ]; then
-      echo "[FAIL] No non-empty current-run corpus artifact: $artifact_name" >&2
+      echo "[FAIL] No current-run corpus artifact contains testcase files: $artifact_name" >&2
       return 1
     fi
 
     for row in "${rows[@]}"; do
-      IFS=$'\t' read -r _ artifact_id created_at artifact_size <<< "$row"
+      IFS=$'\t' read -r _ artifact_id created_at artifact_size archive_path <<< "$row"
       if [ "$artifact_id" = "$keep_artifact_id" ]; then
         printf 'KEEP\t%s\t%s\t%s\n' \
           "$artifact_name" "$artifact_id" "$created_at"
@@ -111,7 +129,19 @@ case "${1:-}" in
       "repos/$repository/actions/runs/$run_id/artifacts?per_page=100" \
       --jq '.artifacts[] | select(.expired == false) | [.name, (.id | tostring), .created_at, (.size_in_bytes | tostring)] | @tsv' \
       > "$artifact_file"
-    plan_artifacts "$artifact_file" | tee "$plan_file"
+    while IFS=$'\t' read -r artifact_name artifact_id created_at artifact_size; do
+      case "$artifact_name" in
+        cifuzz-corpus-*)
+          archive_path="$work_dir/$artifact_id.zip"
+          gh api \
+            "repos/$repository/actions/artifacts/$artifact_id/zip" > "$archive_path"
+          printf '%s\t%s\t%s\t%s\t%s\n' \
+            "$artifact_name" "$artifact_id" "$created_at" "$artifact_size" \
+            "$archive_path"
+          ;;
+      esac
+    done < "$artifact_file" > "$work_dir/inspected-artifacts.tsv"
+    plan_artifacts "$work_dir/inspected-artifacts.tsv" | tee "$plan_file"
 
     while IFS=$'\t' read -r action artifact_name artifact_id _; do
       if [ "$action" != "DELETE" ]; then

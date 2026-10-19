@@ -155,8 +155,8 @@ needs_xml=0
 needs_json=0
 for target in "${selected_targets[@]}"; do
   case "$target" in
-    xmlparse) needs_xml=1 ;;
-    jsonparse|connectconfig) needs_json=1 ;;
+    toxml|fromxml|xmlparse) needs_xml=1 ;;
+    tojson|fromjson|jsonparse|connectconfig) needs_json=1 ;;
   esac
 done
 
