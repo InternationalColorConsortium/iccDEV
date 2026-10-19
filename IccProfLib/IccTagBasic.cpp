@@ -12477,6 +12477,9 @@ CIccTagSpectralViewingConditions::CIccTagSpectralViewingConditions()
   m_surroundXYZ.X = 0;
   m_surroundXYZ.Y = 0;
   m_surroundXYZ.Z = 0;
+
+  m_reserved2 = 0;
+  m_reserved3 = 0;
 }
 
 
@@ -12521,6 +12524,9 @@ CIccTagSpectralViewingConditions::CIccTagSpectralViewingConditions(const CIccTag
   m_illuminantXYZ = SVCT.m_illuminantXYZ;
   m_surroundXYZ = SVCT.m_surroundXYZ;
   m_illuminantRange = SVCT.m_illuminantRange;
+
+  m_reserved2 = SVCT.m_reserved2;
+  m_reserved3 = SVCT.m_reserved3;
 }
 
 
@@ -12565,6 +12571,9 @@ CIccTagSpectralViewingConditions &CIccTagSpectralViewingConditions::operator=(co
   m_illuminantXYZ = SVCT.m_illuminantXYZ;
   m_surroundXYZ = SVCT.m_surroundXYZ;
   m_illuminantRange = SVCT.m_illuminantRange;
+
+  m_reserved2 = SVCT.m_reserved2;
+  m_reserved3 = SVCT.m_reserved3;
 
   return *this;
 }
