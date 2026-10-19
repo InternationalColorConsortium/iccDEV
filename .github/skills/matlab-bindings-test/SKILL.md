@@ -34,6 +34,19 @@ profiles, examples, and native handle lifecycle behavior.
      '--', '/m'
    )
    cmake @BuildArgs
+   if ($LASTEXITCODE -ne 0) {
+     throw "Required MATLAB targets failed with exit code $LASTEXITCODE."
+   }
+   $StageArgs = @(
+     "-DICCDEV_BUILD_DIR=$Build"
+     "-DICCDEV_RUNTIME_DIR=$(Join-Path $Build 'bin\Release')"
+     '-DICCDEV_CONFIG=Release'
+     '-P', (Join-Path $Repo 'Build\Cmake\StageWindowsRuntime.cmake')
+   )
+   cmake @StageArgs
+   if ($LASTEXITCODE -ne 0) {
+     throw "Windows runtime staging failed with exit code $LASTEXITCODE."
+   }
    $ToJsonTool = Join-Path $Build 'bin\Release\iccToJson.exe'
    $FromJsonTool = Join-Path $Build 'bin\Release\iccFromJson.exe'
    $HeifTool = Join-Path $Build 'bin\Release\iccHeifDump.exe'
@@ -50,6 +63,10 @@ profiles, examples, and native handle lifecycle behavior.
    `ALL_BUILD` rather than stopping at the minimum MEX and QA targets. Keep
    `iccToJson`, `iccFromJson`, and `iccPawgReport` in the minimum target list:
    `test_json_bindings()` and `run_local_qa()` invoke them.
+   Individual targets do not trigger the default unified-runtime DLL staging.
+   Run the explicit staging step above before launching native tools; an
+   executable's presence alone does not prove it can start. `ALL_BUILD`
+   includes staging automatically.
 5. Build the MEX gateway:
 
    ```powershell

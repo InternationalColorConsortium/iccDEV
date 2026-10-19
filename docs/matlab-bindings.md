@@ -109,6 +109,17 @@ if ($LASTEXITCODE -ne 0) {
   throw "Required MATLAB targets failed with exit code $LASTEXITCODE."
 }
 
+$StageArgs = @(
+  "-DICCDEV_BUILD_DIR=$Build"
+  "-DICCDEV_RUNTIME_DIR=$(Join-Path $Build 'bin\Release')"
+  '-DICCDEV_CONFIG=Release'
+  '-P', (Join-Path $Repo 'Build\Cmake\StageWindowsRuntime.cmake')
+)
+cmake @StageArgs
+if ($LASTEXITCODE -ne 0) {
+  throw "Windows runtime staging failed with exit code $LASTEXITCODE."
+}
+
 $PlotTool = Join-Path $Build 'bin\Release\iccProfilePlot.exe'
 $PawgTool = Join-Path $Build 'bin\Release\iccPawgReport.exe'
 $HeifTool = Join-Path $Build 'bin\Release\iccHeifDump.exe'
@@ -123,6 +134,10 @@ The preceding target list is the minimum for MEX, IccJSON conversion, plotting,
 PAWG Q1 audit interoperability, and native Q1 contract evidence. Do not remove
 `iccPawgReport`: `run_local_qa()` invokes `test_pawg_q1()`, which requires that
 executable.
+The explicit runtime-staging step is required for this minimum-target build:
+the default unified Windows runtime disables per-target vcpkg DLL copying.
+Without staging, native tools can exist but fail to start with `0xC0000135`
+(missing DLL). The full `ALL_BUILD` target below includes runtime staging.
 To build every enabled Windows library, tool, and helper instead:
 
 ```powershell

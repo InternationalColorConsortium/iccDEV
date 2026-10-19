@@ -329,6 +329,16 @@ cmake @BuildArgs
 if ($LASTEXITCODE -ne 0) {
   throw "Required MATLAB targets failed with exit code $LASTEXITCODE."
 }
+$StageArgs = @(
+  "-DICCDEV_BUILD_DIR=$Build"
+  "-DICCDEV_RUNTIME_DIR=$(Join-Path $Build 'bin\Release')"
+  '-DICCDEV_CONFIG=Release'
+  '-P', (Join-Path $Repo 'Build\Cmake\StageWindowsRuntime.cmake')
+)
+cmake @StageArgs
+if ($LASTEXITCODE -ne 0) {
+  throw "Windows runtime staging failed with exit code $LASTEXITCODE."
+}
 $PlotTool = Join-Path $Build 'bin\Release\iccProfilePlot.exe'
 $PawgTool = Join-Path $Build 'bin\Release\iccPawgReport.exe'
 $ToJsonTool = Join-Path $Build 'bin\Release\iccToJson.exe'

@@ -264,6 +264,11 @@ MATLAB use `setenv('ICCDEV_BUILD_DIR', build_dir)`; in Windows PowerShell use
 - `build_mex.m` expects the iccDEV CMake build to be completed first. Use the
   platform-specific argument-array workflow in `docs/matlab-bindings.md`;
   avoid Bash operators such as `&&` and `$(nproc)` in PowerShell instructions.
+- A minimum-target Windows build must explicitly run
+  `Build/Cmake/StageWindowsRuntime.cmake` as documented before launching native
+  tools. The default unified runtime disables per-target vcpkg DLL copying;
+  only `ALL_BUILD` includes runtime staging automatically. Missing third-party
+  DLLs can produce `0xC0000135` even when the executable exists.
 - `iccdev.plot` also requires the `iccProfilePlot` executable. Build that CMake
   target and keep its build root in `ICCDEV_BUILD_DIR`, or pass `BuildDir` or
   `PlotTool` explicitly. Plotting requires MATLAB R2016b+ or GNU Octave 7.1+

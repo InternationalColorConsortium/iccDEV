@@ -33,6 +33,19 @@ correct profile or transform results.
      --target IccProfLib2-static IccJSON2-static iccToJson iccFromJson `
        iccHeifDump iccProfilePlot iccPawgReport `
        iccPawgQ1QualityContractTest -- /m
+   if ($LASTEXITCODE -ne 0) {
+     throw "Required MATLAB targets failed with exit code $LASTEXITCODE."
+   }
+   $StageArgs = @(
+     "-DICCDEV_BUILD_DIR=$Build"
+     "-DICCDEV_RUNTIME_DIR=$(Join-Path $Build 'bin\Release')"
+     '-DICCDEV_CONFIG=Release'
+     '-P', (Join-Path $Repo 'Build\Cmake\StageWindowsRuntime.cmake')
+   )
+   cmake @StageArgs
+   if ($LASTEXITCODE -ne 0) {
+     throw "Windows runtime staging failed with exit code $LASTEXITCODE."
+   }
    foreach ($RequiredTool in @(
      (Join-Path $Build 'bin\Release\iccToJson.exe'),
      (Join-Path $Build 'bin\Release\iccFromJson.exe'),
