@@ -1,13 +1,12 @@
 # AFL++ Smoke Fuzzing
 
-iccDEV the maintainer-owned AFL++ smoke workflow for short, manual checks of
-command-line tool fuzzability. It is being Refactored.
+iccDEV has maintainer-owned AFL++ and CFL smoke workflows for short, manual
+checks of command-line tool and library fuzzability.
 
 ## CI Status
 
-The automated AFL/CFL CI invocation has been removed. The retained
-`ci-afl-smoke` and `ci-cfl-smoke` workflow definitions are manual or reusable
-maintainer tools; they are not pull-request, push, or scheduled CI gates.
+The `ci-afl-smoke` and `ci-cfl-smoke` definitions are manual or reusable
+maintainer tools. They are not pull-request, push, or scheduled CI gates.
 
 ## Review Scope
 
@@ -28,15 +27,15 @@ Run it from GitHub Actions with `ci-afl-smoke`, normally with:
 
 ```bash
 gh workflow run ci-afl-smoke.yml \
-  -f afl_targets=dump,toxml,fromxml,tojson,fromjson,roundtrip \
+  -f afl_targets=dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube \
   -f duration_seconds=300 \
   -f exec_timeout_ms=30000 \
   -f cmake_build_type=Debug
 ```
 
 The workflow runs inside the trusted regression container, then builds AFL++
-from `https://github.com/AFLplusplus/AFLplusplus/tree/dev` against the
-container's Clang/LLVM 22 toolchain. The job installs the matching LLVM
+commit `2400206be6fe0d93681c8a5c1535209366602eb1` against the container's
+Clang/LLVM 22 toolchain. The job installs the matching LLVM
 development headers when the published image does not already contain them,
 puts the freshly built AFL++ checkout first in `PATH`, and builds iccDEV with
 `afl-clang-fast`.
@@ -225,7 +224,11 @@ set -euo pipefail
 apt-get -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 update -qq
 apt-get install -y -qq --no-install-recommends llvm-22-dev zlib1g-dev >/tmp/apt-install.log
 afl_src=$(mktemp -d)
-git clone --depth 1 --branch dev https://github.com/AFLplusplus/AFLplusplus.git "$afl_src"
+afl_ref=2400206be6fe0d93681c8a5c1535209366602eb1
+git clone --filter=blob:none --no-checkout https://github.com/AFLplusplus/AFLplusplus.git "$afl_src"
+git -C "$afl_src" fetch --depth=1 origin "$afl_ref"
+git -C "$afl_src" checkout --detach FETCH_HEAD
+test "$(git -C "$afl_src" rev-parse HEAD)" = "$afl_ref"
 make -C "$afl_src" -j"$(nproc)" CC=clang-22 CXX=clang++-22 afl-fuzz afl-showmap
 make -C "$afl_src" -j"$(nproc)" CC=clang-22 CXX=clang++-22 LLVM_CONFIG=llvm-config-22 -f GNUmakefile.llvm \
   ./afl-cc ./afl-compiler-rt.o ./SanitizerCoveragePCGUARD.so ./cmplog-routines-pass.so
@@ -295,7 +298,7 @@ with the engine sources compiled as separate translation units:
 which is where the byte-level layout and offset arithmetic live (#2116).
 
 Both need a CLUT-bearing seed to reach the raster path at all, and the seed
-caps remove the only one at their defaults — see #2120.
+caps remove the only one at their defaults -- see #2120.
 
 CFL smoke duration is wall-clock seconds per selected target, implemented with
 LibFuzzer `-max_total_time`. It is not an iteration or execution count.

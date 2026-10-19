@@ -15,6 +15,8 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
 workflow="$repo_root/.github/workflows/ci-clusterfuzzlite.yml"
+afl_workflow="$repo_root/.github/workflows/ci-afl-smoke.yml"
+cfl_workflow="$repo_root/.github/workflows/ci-cfl-smoke.yml"
 adapter="$repo_root/.clusterfuzzlite/build.sh"
 project="$repo_root/.clusterfuzzlite/project.yaml"
 dockerfile="$repo_root/.clusterfuzzlite/Dockerfile"
@@ -32,7 +34,8 @@ source_digest="$repo_root/.github/scripts/iccdev-cfl-source-digest.sh"
 readme="$repo_root/.github/ci/cfl/README.md"
 skill="$repo_root/.github/skills/clusterfuzzlite/SKILL.md"
 
-for required in "$workflow" "$adapter" "$project" "$dockerfile" \
+for required in "$workflow" "$afl_workflow" "$cfl_workflow" \
+  "$adapter" "$project" "$dockerfile" \
   "$msan_builder" "$issue_2687_fixture" "$patch_mode_file" \
   "$target_group_file" "$patch_readme" "$patch_test" "$target_test" \
   "$artifact_cleanup" "$artifact_cleanup_test" "$source_digest"; do
@@ -44,6 +47,7 @@ done
 
 bash -n "$adapter"
 bash -n "$repo_root/.github/ci/cfl/build.sh"
+bash -n "$repo_root/.github/ci/docker/iccdev-fuzz-env.sh"
 bash -n "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
 bash -n "$msan_builder"
 bash -n "$patch_test"
@@ -228,6 +232,34 @@ fuzzer_template='  fuzzer="icc_${target}_fuzzer"'
 grep -Fqx "$fuzzer_template" "$adapter"
 grep -Fq '21:21|22:22)' "$repo_root/.github/ci/cfl/build.sh"
 grep -Fq '21:21|22:22)' "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
+
+for smoke_workflow in "$afl_workflow" "$cfl_workflow"; do
+  grep -q '^  workflow_dispatch:$' "$smoke_workflow"
+  grep -q '^  workflow_call:$' "$smoke_workflow"
+  grep -q '^      target_ref:$' "$smoke_workflow"
+  grep -q '^      target_sha:$' "$smoke_workflow"
+  grep -q '^      patch_mode:$' "$smoke_workflow"
+  if grep -Eq '^  (push|pull_request|schedule):$' "$smoke_workflow"; then
+    echo "[FAIL] Fuzz smoke workflows must remain manual or reusable" >&2
+    exit 1
+  fi
+done
+
+afl_targets='dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube'
+test "$(grep -Fc "        default: $afl_targets" "$afl_workflow")" -eq 2
+cfl_targets='dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize'
+test "$(grep -Fc "        default: $cfl_targets" "$cfl_workflow")" -eq 2
+
+afl_pin='2400206be6fe0d93681c8a5c1535209366602eb1'
+grep -Fq "      AFLPLUSPLUS_REF: $afl_pin" "$afl_workflow"
+for pin_consumer in \
+  "$repo_root/docs/afl-fuzzing.md" \
+  "$repo_root/.github/skills/afl-smoke/SKILL.md" \
+  "$repo_root/.github/prompts/maintainer-afl-smoke.prompt.md"; do
+  grep -Fq "$afl_pin" "$pin_consumer"
+done
+grep -Fq 'rebuilds pinned AFL++ wrappers' \
+  "$repo_root/.github/ci/docker/iccdev-fuzz-env.sh"
 # shellcheck disable=SC2016 # Match the literal skip-build condition.
 skip_build_line="$(grep -n '^if \[ "$skip_build" -eq 0 \]; then$' "$repo_root/.github/scripts/iccdev-afl-smoke.sh" | cut -d: -f1)"
 # shellcheck disable=SC2016 # Match the literal compiler-gate condition.
@@ -250,17 +282,21 @@ validate_action_reference() {
   [[ "$action_ref" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/[^@[:space:]]+)?@[0-9a-f]{40}$ ]]
 }
 
-while IFS= read -r action_ref; do
-  if ! validate_action_reference "$action_ref"; then
-    echo "[FAIL] Mutable or invalid action reference: $action_ref" >&2
-    exit 1
-  fi
-done < <(sed -nE 's/^[[:space:]]*uses:[[:space:]]*([^[:space:]#]+).*$/\1/p' "$workflow")
+for action_workflow in "$workflow" "$afl_workflow" "$cfl_workflow"; do
+  while IFS= read -r action_ref; do
+    if ! validate_action_reference "$action_ref"; then
+      echo "[FAIL] Mutable or invalid action reference: $action_ref" >&2
+      exit 1
+    fi
+  done < <(sed -nE 's/^[[:space:]]*uses:[[:space:]]*([^[:space:]#]+).*$/\1/p' "$action_workflow")
+done
 
 for mutable_ref in \
   'actions/checkout@v5.0.0' \
+  'actions/checkout@v6' \
   'actions/checkout@main' \
   'actions/checkout@08c6903' \
+  'actions/upload-artifact@v7.0.2' \
   'docker://gcr.io/example/action:v1'; do
   if validate_action_reference "$mutable_ref"; then
     echo "[FAIL] Pin validator accepted mutable reference: $mutable_ref" >&2

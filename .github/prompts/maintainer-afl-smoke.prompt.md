@@ -7,7 +7,7 @@ command-line tools.
 
 - Workflow: `.github/workflows/ci-afl-smoke.yml`
 - Driver: `.github/scripts/iccdev-afl-smoke.sh`
-- AFL++ source: `https://github.com/AFLplusplus/AFLplusplus/tree/dev`
+- AFL++ commit: `2400206be6fe0d93681c8a5c1535209366602eb1`
 - Container: `ghcr.io/internationalcolorconsortium/iccdev`
 - Container workflow: `.github/workflows/ci-docker.yml`
 - Seeds: `.github/ci/test-data/` and `.github/ci/afl-seeds/`
@@ -31,7 +31,7 @@ turn these workflows into mandatory merge gates unless a maintainer explicitly
 asks for that policy change.
 
 Keep AFL++ bootstrap aligned with the regression container's LLVM major
-version. For Clang/LLVM 22, build AFL++ `dev` with `CC=clang-22`,
+version. For Clang/LLVM 22, build the pinned AFL++ commit with `CC=clang-22`,
 `CXX=clang++-22`, and `LLVM_CONFIG=llvm-config-22`, then probe both
 `afl-clang-fast` and `afl-clang-fast++` with `AFL_PATH`, `AFL_CC=clang-22`, and
 `AFL_CXX=clang++-22`. The current narrow CI target set is `afl-fuzz`,
@@ -44,7 +44,7 @@ do not silently fall back to an older system Clang.
 
 The target sets differ per lane, and are not interchangeable.
 
-- **AFL** accepts `dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube` — see
+- **AFL** accepts `dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube` -- see
   the allow-list in `.github/scripts/iccdev-afl-smoke.sh`.
 - **CFL** accepts
   `dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize`.

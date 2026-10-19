@@ -39,6 +39,6 @@ printf '%s\n' '  .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump
 printf '%s\n' '  .github/ci/cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip --seconds 30'
 printf '\n'
 
-printf '%s\n' 'Note: ci-afl-smoke rebuilds AFL++ dev wrappers against LLVM 22 before'
+printf '%s\n' 'Note: ci-afl-smoke rebuilds pinned AFL++ wrappers against LLVM 22 before'
 printf '%s\n' 'running AFL instrumentation. The packaged AFL++ tools in this image have'
 printf '%s\n' 'their matching LLVM 21 compiler runtime for lightweight local smoke checks.'
