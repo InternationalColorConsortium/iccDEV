@@ -271,7 +271,7 @@ jobs:
           echo "Total: $total files staged into $stage"
           echo ""
       - name: Upload Linux Artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: iccdev-linux-${{ matrix.compiler }}
           path: staging
@@ -495,7 +495,7 @@ jobs:
           echo "Total: $total files staged into $stage"
           echo ""
       - name: Upload macOS Artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: iccdev-macos-clang
           path: staging
@@ -949,7 +949,7 @@ jobs:
           generate-summary: false
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: iccdev-windows-msvc
           path: staging
@@ -1479,7 +1479,7 @@ jobs:
           fi
 
       - name: "Upload WASM Artifacts (npm-shaped, issue #830)"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: iccdev-wasm-release
           path: wasm-stage/**
@@ -1663,7 +1663,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: Upload runtime packages
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: reficcmax-runtime-packages-linux
           path: |
@@ -1796,7 +1796,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: Upload HTML documentation
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: iccdev-doxygen-html
           path: docs/generated/html/
@@ -1870,7 +1870,7 @@ jobs:
 
       - name: Upload tested MCP distributions
         if: runner.os == 'Linux'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: iccdev-mcp-python
           path: mcp-dist/
