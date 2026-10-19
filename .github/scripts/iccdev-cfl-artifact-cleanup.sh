@@ -7,7 +7,7 @@
 # This source file is licensed under the BSD 3-Clause "New" or "Revised"
 # License used by ICC software projects.
 #
-# Retain only the newest same-run ClusterFuzzLite corpus for each target.
+# Retain only the newest valid same-run ClusterFuzzLite corpus for each target.
 ###############################################################################
 
 set -euo pipefail
@@ -16,6 +16,10 @@ usage()
 {
   echo "Usage: $0 --plan TSV | --delete-current-run OWNER/REPO RUN_ID"
 }
+
+# An empty tar uploaded by the ClusterFuzzLite action is currently a roughly
+# 350-byte zip. All eight ICC seed corpora exceed this conservative floor.
+minimum_corpus_bytes=1024
 
 targets=(
   icc_profileparse_fuzzer
@@ -31,7 +35,8 @@ targets=(
 plan_artifacts()
 {
   local artifact_file="$1"
-  local artifact_name row target
+  local artifact_id artifact_name artifact_size created_at row target
+  local keep_artifact_id
   local -a rows
 
   for target in "${targets[@]}"; do
@@ -45,13 +50,34 @@ plan_artifacts()
       return 1
     fi
 
-    IFS=$'\t' read -r _ artifact_id created_at <<< "${rows[0]}"
-    printf 'KEEP\t%s\t%s\t%s\n' \
-      "$artifact_name" "$artifact_id" "$created_at"
-    for row in "${rows[@]:1}"; do
-      IFS=$'\t' read -r _ artifact_id created_at <<< "$row"
-      printf 'DELETE\t%s\t%s\t%s\n' \
-        "$artifact_name" "$artifact_id" "$created_at"
+    keep_artifact_id=""
+    for row in "${rows[@]}"; do
+      IFS=$'\t' read -r _ artifact_id created_at artifact_size <<< "$row"
+      case "$artifact_size" in
+        ''|*[!0-9]*)
+          echo "[FAIL] Invalid artifact size for $artifact_name: $artifact_size" >&2
+          return 1
+          ;;
+      esac
+      if [ -z "$keep_artifact_id" ] && \
+         [ "$artifact_size" -ge "$minimum_corpus_bytes" ]; then
+        keep_artifact_id="$artifact_id"
+      fi
+    done
+    if [ -z "$keep_artifact_id" ]; then
+      echo "[FAIL] No non-empty current-run corpus artifact: $artifact_name" >&2
+      return 1
+    fi
+
+    for row in "${rows[@]}"; do
+      IFS=$'\t' read -r _ artifact_id created_at artifact_size <<< "$row"
+      if [ "$artifact_id" = "$keep_artifact_id" ]; then
+        printf 'KEEP\t%s\t%s\t%s\n' \
+          "$artifact_name" "$artifact_id" "$created_at"
+      else
+        printf 'DELETE\t%s\t%s\t%s\n' \
+          "$artifact_name" "$artifact_id" "$created_at"
+      fi
     done
   done
 }
@@ -83,7 +109,7 @@ case "${1:-}" in
     plan_file="$work_dir/plan.tsv"
     gh api --paginate \
       "repos/$repository/actions/runs/$run_id/artifacts?per_page=100" \
-      --jq '.artifacts[] | select(.expired == false) | [.name, (.id | tostring), .created_at] | @tsv' \
+      --jq '.artifacts[] | select(.expired == false) | [.name, (.id | tostring), .created_at, (.size_in_bytes | tostring)] | @tsv' \
       > "$artifact_file"
     plan_artifacts "$artifact_file" | tee "$plan_file"
 
