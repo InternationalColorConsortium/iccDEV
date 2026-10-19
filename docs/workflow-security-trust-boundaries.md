@@ -24,7 +24,7 @@ flowchart LR
 | PR code | Build/test with read-only credentials and `persist-credentials: false`. |
 | Helpers | Source `.github/scripts` and sanitizers from `${{ github.event.pull_request.base.sha || github.sha }}`, not the PR checkout. |
 | Privileged automation | `pull_request_target`, releases, package pruning, and labelers must not execute PR-head content before mutation. |
-| Fork PRs | `ci-pr-action` and `ci-json-roundtrip` run only for same-repository heads. `ci-matlab` is intentionally manual-dispatch only, so it has no fork-PR execution path. Fork automation and agent-policy changes are handled by the trusted-base `Fork Automation Gate`. |
+| Fork PRs | `ci-pr-action`, `ci-json-roundtrip`, and every `ci-matlab` job run only for same-repository heads. Fork automation and agent-policy changes are handled by the trusted-base `Fork Automation Gate`. |
 | Exceptions | Mark reviewed exceptions with `preflight: allow-* reason=<short-reason>` so maintainers see them in logs and summaries. |
 
 ## Fork Automation Boundary
@@ -40,8 +40,8 @@ fail the gate and receive the existing `Governance` label. Agent-policy surfaces
 are `.github/copilot-instructions.md`, `.github/instructions/**`,
 `.github/skills/**`, `.github/prompts/**`, `.github/agents/**`, `.agents/**`,
 and every `AGENTS.md`, `CLAUDE.md`, or `GEMINI.md`. The guarded PR jobs above
-do not execute fork code. `ci-matlab` intentionally has no `pull_request`
-trigger, so its Windows MATLAB job is excluded from the fork-PR guard finding.
+do not execute fork code. `ci-matlab` has path-scoped pull-request and manual
+triggers; each native and Docker job enforces the same-repository head guard.
 Renames are checked at both paths, and PRs beyond GitHub's 3,000-file
 enumeration limit fail closed.
 

@@ -4,7 +4,7 @@
 #                 All rights reserved.
 #                 https://color.org
 #
-# Intent: Build and test the MATLAB MEX bindings on Windows.
+# Intent: Build and test native MATLAB MEX bindings on supported platforms.
 #
 ###############################################################
 
@@ -19,14 +19,27 @@ on:
       - master
     paths:
       - ".github/workflows/ci-matlab.yml"
+      - "matlab/**"
+      - "IccProfLib/**"
+      - "IccJSON/**"
+      - "Build/Cmake/**"
+      - "Tools/CmdLine/IccToJson/**"
+      - "Tools/CmdLine/IccFromJson/**"
+      - "Tools/CmdLine/IccHeifDump/**"
+      - "Tools/CmdLine/IccProfilePlot/**"
+      - "Tools/CmdLine/IccPawgReport/**"
+      - "Testing/**"
+      - ".github/ci/regression/gamma-2.20703125.icc"
+      - ".github/ci/tooling/heif/img/**"
   workflow_dispatch:
 
 concurrency:
-  group: "ci-matlab-${{ github.ref }}"
+  group: "ci-matlab-${{ github.event_name }}-${{ github.ref }}"
   cancel-in-progress: true
 
 jobs:
   windows:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Windows MATLAB MEX
     runs-on: windows-2022
     timeout-minutes: 45
@@ -225,23 +238,126 @@ jobs:
         with:
           command: >-
             addpath('matlab');
-            addpath(fullfile('matlab', 'tests'));
-            test_usage_guidance();
-            test_delta_e_2000();
-            test_json_bindings();
-            test_lut_type_range();
+            setenv('ICCDEV_BUILD_DIR', fullfile(pwd, 'out', 'matlab'));
             setenv('PATH', [fullfile(pwd, 'installed', 'x64-windows', 'bin') pathsep getenv('PATH')]);
-            test_heif_dump_native(fullfile(pwd, 'out', 'matlab'));
-            run_local_qa();
-            test_add_docker_path();
-            test_plot();
-            run(fullfile('matlab', 'examples', 'read_profile.m'));
-            run(fullfile('matlab', 'examples', 'color_transform.m'));
-            run(fullfile('matlab', 'examples', 'gamma_curve.m'));
-            run(fullfile('matlab', 'examples', 'ciede2000.m'))
+            assert(strcmp(mexext(), 'mexw64'), 'Expected Windows x64 MEX support.');
+            run_ci_qa()
+          generate-summary: false
+
+  unix:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    name: Native MATLAB (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Linux x86_64
+            runner: ubuntu-24.04
+            architecture: x86_64
+            mex-extension: mexa64
+          - platform: macOS Apple Silicon
+            runner: macos-15
+            architecture: arm64
+            mex-extension: mexmaca64
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+      EXPECTED_ARCH: ${{ matrix.architecture }}
+      EXPECTED_MEX: ${{ matrix.mex-extension }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          persist-credentials: false
+
+      - name: Checkout trusted workflow helpers
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          sparse-checkout: .github/scripts
+          path: .trusted-helpers
+          persist-credentials: false
+
+      # preflight: allow-package-install reason=unprivileged-native-matlab-build-dependencies
+      - name: Install native build dependencies
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .trusted-helpers/.github/scripts/sanitize-sed.sh
+          test "$(uname -m)" = "$EXPECTED_ARCH"
+          if [ "$RUNNER_OS" = Linux ]; then
+            bash .trusted-helpers/.github/scripts/ci-safe-apt-update.sh
+            sudo apt-get install -y --no-install-recommends \
+              build-essential cmake pkg-config libheif-dev libpng-dev libtiff-dev \
+              libjpeg-dev nlohmann-json3-dev zlib1g-dev
+          else
+            packages=(pkgconf libheif libpng libtiff jpeg-turbo nlohmann-json zlib)
+            missing=()
+            for package in "${packages[@]}"; do
+              if ! brew list --versions "$package" >/dev/null 2>&1; then
+                missing+=("$package")
+              fi
+            done
+            if [ "${#missing[@]}" -gt 0 ]; then
+              brew install "${missing[@]}"
+            fi
+          fi
+
+      - name: Build focused native tools
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .trusted-helpers/.github/scripts/sanitize-sed.sh
+          options=()
+          if [ "$RUNNER_OS" = macOS ]; then
+            jpeg_prefix="$(brew --prefix jpeg-turbo)"
+            options+=("-DCMAKE_PREFIX_PATH=$(brew --prefix)"
+              "-DJPEG_LIBRARY=$jpeg_prefix/lib/libjpeg.dylib"
+              "-DJPEG_INCLUDE_DIR=$jpeg_prefix/include")
+          fi
+          cmake -S Build/Cmake -B out/matlab \
+            -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=OFF \
+            -DENABLE_TOOLS=ON -DENABLE_WXWIDGETS=OFF \
+            -DENABLE_SHARED_LIBS=OFF -DENABLE_STATIC_LIBS=ON \
+            -DENABLE_ICCXML=OFF -DENABLE_ICCJSON=ON \
+            -DENABLE_IMAGE_TOOLS=ON -DENABLE_CMM_TOOLS=OFF \
+            -DENABLE_IIS_TOOLS=OFF -DICC_USE_ZLIB=ON "${options[@]}"
+          cmake --build out/matlab --parallel 4 --target \
+            IccProfLib2-static IccJSON2-static iccToJson iccFromJson \
+            iccHeifDump iccProfilePlot iccPawgReport
+
+      - name: Set up MATLAB compatibility floor
+        uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d
+        with:
+          release: R2023b
+
+      - name: Build platform-native MATLAB MEX gateway
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5
+        with:
+          command: >-
+            assert(strcmp(mexext(), getenv('EXPECTED_MEX')), 'Unexpected native MEX architecture.');
+            addpath('matlab');
+            build_mex('BuildDir', fullfile(pwd, 'out', 'matlab'))
+          generate-summary: false
+
+      - name: Run shared native MATLAB QA
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5
+        with:
+          command: >-
+            addpath('matlab');
+            setenv('ICCDEV_BUILD_DIR', fullfile(pwd, 'out', 'matlab'));
+            run_ci_qa()
           generate-summary: false
 
   docker-interop:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: MATLAB Docker interoperability
     runs-on: ubuntu-24.04
     timeout-minutes: 30

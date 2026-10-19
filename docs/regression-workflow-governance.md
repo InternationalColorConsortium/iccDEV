@@ -25,7 +25,7 @@ new blocker returns the branch to branch-only grooming before another review.
 | Tool test gate | `.github/workflows/ci-iccdev-tool-tests.yml` | Reusable/manual core or ASAN/UBSAN regression coverage. |
 | Sanitizer PR gate | `.github/workflows/ci-sanitizer-regression.yml` | Standalone path-scoped ASAN/UBSAN caller for native source, build, and test changes. |
 | Risk-analysis gate | `.github/workflows/ci-risk-analysis-gate.yml` | Standalone PR caller for the required reusable Linux and Windows workflow-security audits. |
-| MATLAB Windows gate | `.github/workflows/ci-matlab.yml` | PowerShell-native MSVC build, MATLAB MEX QA, native focused regressions, and Docker interoperability. |
+| MATLAB native gate | `.github/workflows/ci-matlab.yml` | Windows MSVC, Linux x86_64, and Apple Silicon macOS MEX QA; separate Docker interoperability. |
 | MATLAB release bundles | `.github/workflows/ci-latest-release.yml` | Linux x86_64, macOS arm64, and Windows x64 MEX builds with staged MATLAB QA and payload verification. |
 | Apple platform gates | `.github/workflows/ci-apple-platform-smoke.yml`, `.github/workflows/ci-apple-mobile-core.yml` | iOS/watchOS simulator hosts and Xcode Release/Debug CTest runtime layouts; [local commands](build.md). |
 | CTest registration | `Build/Cmake/Testing/CMakeLists.txt` | CTest names, labels, fixtures, timeouts, and check target. |
@@ -39,6 +39,17 @@ new blocker returns the branch to branch-only grooming before another review.
 | Unified Dockerfile | `Dockerfile` | Published runtime, MCP, and pinned CI dependency image. |
 
 ## PR Path Classification
+
+`ci-matlab` selects same-repository pull requests that change MATLAB sources,
+the core/JSON libraries, CMake, consumed native tools, or QA fixtures. Windows
+retains the R2026a compiler and native regression lane; Ubuntu x86_64 and
+Apple Silicon macOS build focused native tools and MEX gateways with R2023b,
+the prebuilt compatibility floor. All three call `matlab/run_ci_qa.m` for the
+shared wrapper, runtime, plotting, and example contract. Only unavailable
+Docker interoperability may skip there; a separate pinned-container job tests
+that contract. These jobs do not package or upload release artifacts.
+Manual dispatch remains available, with per-event concurrency so it cannot
+cancel a pull-request run. Fork heads do not execute these jobs.
 
 `ci-pr-action.yml` reports factual path classes separately from the
 `run_native_matrix` execution decision. Native source ownership is limited to
