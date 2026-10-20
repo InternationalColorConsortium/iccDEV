@@ -29,7 +29,9 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
 
    ```bash
    .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 30000
-   .github/ci/cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize --seconds 30
+   .github/ci/cfl/build.sh \
+     --targets dump,toxml,fromxml,tojson,fromjson,roundtrip,profileparse,cmmapply,cmmsearch,xmlparse,jsonparse,connectconfig,pawgreport,profilevisualize,writerserialize \
+     --seconds 30
    ```
 
 4. When changing AFL++ bootstrap behavior, validate the regression-container
@@ -84,11 +86,11 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
 - Keep the target allow-list inside `.github/scripts/iccdev-afl-smoke.sh`.
 - Keep the two lanes' target sets distinct. AFL onboarding stays
   `dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube` (the allow-list
-  above); CFL adds the two in-process targets,
-  `dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize`.
-  `profilevisualize` and `writerserialize` are CFL-only and are rejected by the
-  AFL runner. The first six CFL
-  targets remain CLI-fidelity wrappers. Build `profilevisualize` and
+  above); CFL adds nine in-process targets:
+  `profileparse,cmmapply,cmmsearch,xmlparse,jsonparse,connectconfig,pawgreport,`
+  `profilevisualize,writerserialize`. Those nine targets are CFL-only and are
+  rejected by the AFL runner. The first six CFL targets remain CLI-fidelity
+  wrappers. Build `profilevisualize` and
   `writerserialize` in-process through public headers, with the engine sources
   in separate translation units; never include a CLI implementation or call
   `processLuts()` from either harness. `writerserialize` also links

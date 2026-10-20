@@ -10,7 +10,8 @@ target groups, matching tracked seed families, target dictionaries,
 immutable action and image pins, manual plus nightly scheduled triggers,
 matching Clang 21 or 22 compilers, and repository workflow-governance rules.
 Keep CMM control bytes beyond the declared ICC payload so mutations do not
-corrupt the profile-size header. Keep a schema-shaped IccConnect seed, a
+corrupt the profile-size header. Keep `cmmsearch` as two complete payloads with
+bounded optimizer limits. Keep a schema-shaped IccConnect seed, a
 dedicated config dictionary, and top-level plus nested configuration round
 trips. Require the complete canonical BSD-3-Clause notice derived from
 `LICENSE.md` in every ICC-owned C/C++ harness source; verify it with
@@ -32,10 +33,11 @@ patch stack, and retire patches one issue at a time after normal fixes land.
 Require the builder snapshot's deterministic content digest to match the
 Actions checkout before accepting source SHA, target-group, or patch evidence.
 
-Strengthen existing targets before expanding the matrix. Prioritize a
-multi-profile CMM chain target, separate XML/JSON serializer targets, and V5
-display-observer conversion. Defer image/carrier targets until their external
-libraries have instrumented MSan boundaries.
+Strengthen existing targets before expanding the matrix. Keep the bounded
+multi-profile CMM search target separately attributable; prioritize separate
+XML/JSON serializer targets and V5 display-observer conversion next. Defer
+image/carrier targets until their external libraries have instrumented MSan
+boundaries.
 
 Before handoff, run the configuration CTest, workflow linters, preflight safety
 checks, and the OSS-Fuzz `build_fuzzers`, `check_build`, and bounded

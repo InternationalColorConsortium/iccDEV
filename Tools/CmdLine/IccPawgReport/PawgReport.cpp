@@ -1106,9 +1106,7 @@ PawgVerdict CalculatorCostVerdict(CIccProfile *pIcc, const RawProfile &raw, std:
         const uint64_t operations = calc->GetTotalOps();
         calculatorOperations = operations > UINT64_MAX - calculatorOperations ?
                                UINT64_MAX : calculatorOperations + operations;
-        const uint64_t elementCost =
-            (uint64_t)std::max<icUInt16Number>(calc->NumInputChannels(), 1) *
-            (uint64_t)std::max<icUInt16Number>(calc->NumOutputChannels(), 1) * 64ULL;
+        const uint64_t elementCost = calc->GetEstimatedCost();
         estimatedCost = elementCost > UINT64_MAX - estimatedCost ?
                         UINT64_MAX : estimatedCost + elementCost;
       }
@@ -1123,7 +1121,7 @@ PawgVerdict CalculatorCostVerdict(CIccProfile *pIcc, const RawProfile &raw, std:
   oss << scope << mpeTags << " MPE tag(s), " << elements << " process element(s), "
       << calculatorElements << " calculator element(s), "
       << calculatorOperations << " calculator operation(s), estimated relative cost="
-      << estimatedCost << "; local warning threshold=65536 operations";
+      << estimatedCost << "; local warning thresholds=65536 operations or work units";
   detail = oss.str();
   return (elements > 4096 || calculatorElements > 256 ||
           calculatorOperations > 65536 || estimatedCost > 65536) ?

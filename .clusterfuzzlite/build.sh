@@ -54,12 +54,12 @@ fi
 case "$target_group" in
   all)
     targets=(
-      profileparse cmmapply profilevisualize writerserialize
+      profileparse cmmapply cmmsearch profilevisualize writerserialize
       xmlparse jsonparse connectconfig pawgreport
     )
     ;;
   core)
-    targets=( profileparse cmmapply profilevisualize writerserialize )
+    targets=( profileparse cmmapply cmmsearch profilevisualize writerserialize )
     ;;
   formats)
     targets=( xmlparse jsonparse connectconfig )
@@ -140,12 +140,25 @@ for target in "${targets[@]}"; do
     "$repo_root/.github/ci/cfl/bin/$fuzzer.dict" \
     "$OUT/$fuzzer.dict"
   case "$target" in
-    xmlparse) corpus_glob='./*.xml' ;;
-    jsonparse|connectconfig) corpus_glob='./*.json' ;;
-    *) corpus_glob='./*.icc' ;;
+    xmlparse)
+      corpus_dir="$repo_root/.github/ci/test-data"
+      corpus_glob='./*.xml'
+      ;;
+    jsonparse|connectconfig)
+      corpus_dir="$repo_root/.github/ci/test-data"
+      corpus_glob='./*.json'
+      ;;
+    cmmsearch)
+      corpus_dir="$WORK/iccdev-cfl/seeds/search"
+      corpus_glob='./*.icc'
+      ;;
+    *)
+      corpus_dir="$repo_root/.github/ci/test-data"
+      corpus_glob='./*.icc'
+      ;;
   esac
   (
-    cd "$repo_root/.github/ci/test-data"
+    cd "$corpus_dir"
     # shellcheck disable=SC2086 # The validated extension glob must expand.
     zip -q "$OUT/${fuzzer}_seed_corpus.zip" $corpus_glob
   )
@@ -201,8 +214,14 @@ if [ "${SANITIZER:-}" = "memory" ]; then
         "$fuzzer" "$libxml2_path"
     fi
 
+    replay_profile="$issue_2687_profile"
+    if [ "$target" = "cmmsearch" ]; then
+      replay_profile="$WORK/issue-2687-cmmsearch-bundle.icc"
+      cat -- "$repo_root/.github/ci/test-data/v5dspobs-lcddisplay.icc" \
+        "$issue_2687_profile" > "$replay_profile"
+    fi
     MSAN_OPTIONS=halt_on_error=1:exit_code=86:origin_history_size=7 \
-      "$OUT/$fuzzer" -runs=1 "$issue_2687_profile"
+      "$OUT/$fuzzer" -runs=1 "$replay_profile"
     printf '[PASS] MSan replay fuzzer=%s fixture=issue-2687-profile-list-node.icc\n' \
       "$fuzzer"
   done

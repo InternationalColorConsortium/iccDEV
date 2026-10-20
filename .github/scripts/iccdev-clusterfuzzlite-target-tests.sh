@@ -19,8 +19,20 @@ cfl_dir="$repo_root/.github/ci/cfl"
 adapter="$repo_root/.clusterfuzzlite/build.sh"
 builder="$cfl_dir/build.sh"
 
+grep -Fq \
+  'cmake_c_flags="-g -O1 -fno-omit-frame-pointer -fsanitize=fuzzer-no-link,address,undefined"' \
+  "$builder"
+# shellcheck disable=SC2016 # Match literal builder expressions.
+grep -Fq 'local_symbolizer="$($cc --print-prog-name=llvm-symbolizer)"' \
+  "$builder"
+grep -Fq -- '-u DEBUGINFOD_URLS' "$builder"
+# shellcheck disable=SC2016 # Match literal builder expressions.
+grep -Fq '"ASAN_SYMBOLIZER_PATH=$local_symbolizer"' "$builder"
+# shellcheck disable=SC2016 # Match literal builder expressions.
+grep -Fq '"UBSAN_SYMBOLIZER_PATH=$local_symbolizer"' "$builder"
+
 targets=(
-  profileparse cmmapply profilevisualize writerserialize
+  profileparse cmmapply cmmsearch profilevisualize writerserialize
   xmlparse jsonparse connectconfig pawgreport
 )
 
@@ -73,6 +85,22 @@ if grep -Fq 'const bool first_is_input = (data[0]' "$cmmapply" ||
   echo "[FAIL] CMM controls must not alias the ICC profile-size field" >&2
   exit 1
 fi
+
+cmmsearch="$cfl_dir/icc_cmmsearch_fuzzer.cpp"
+grep -Fq 'const size_t source_size = readBigEndian32(data)' "$cmmsearch"
+grep -Fq 'const size_t destination_size = readBigEndian32(destination)' "$cmmsearch"
+grep -Fq 'destination + destination_size' "$cmmsearch"
+grep -Fq 'SetMaxIterations(kMaxSearchIterations)' "$cmmsearch"
+grep -Fq 'SetMaxFuncEvals(kMaxSearchEvaluations)' "$cmmsearch"
+grep -Fq 'v5dspobs-lcddisplay.icc' "$builder"
+# shellcheck disable=SC2016 # Match literal builder expressions.
+grep -Fq '"$seed_root/search/$(basename "$destination")"' "$builder"
+grep -Fq 'applysearch-calculator-width-slow.icc.base64' "$builder"
+grep -Fq 'e42adb68785ac3ffbf84a5b2ccebdc03cfdbc1f695bce44ebc85425cc3933db9' \
+  "$builder"
+# shellcheck disable=SC2016 # Match literal builder expressions.
+grep -Fq '[ "$(basename "$file")" = "applysearch-calculator-width-slow.icc" ]' \
+  "$builder"
 
 connectconfig="$cfl_dir/icc_connectconfig_fuzzer.cpp"
 for config_type in CIccCfgDataApply CIccCfgImageApply CIccCfgConnectOptions \

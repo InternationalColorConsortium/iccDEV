@@ -378,8 +378,9 @@ must reject invalid numeric fields before conversion without sanitizer findings.
 contract tests for
 the official ClusterFuzzLite lane. They check the pinned builder image,
 the manual and nightly scheduled triggers, the single-job manual smoke mode,
-the three full-mode sanitizer entries, three target groups, eight in-process harness sources, matching seed
-families, dictionaries and options, complete canonical BSD-3-Clause notices,
+the three full-mode sanitizer entries, three target groups, nine in-process
+harness sources, matching seed families, dictionaries and options, complete
+canonical BSD-3-Clause notices,
 the
 schema-shaped IccConnect seed and its dedicated dictionary, independent CMM
 control trailer, config round-trip paths, immutable action references, the pinned

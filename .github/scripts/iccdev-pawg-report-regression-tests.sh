@@ -56,6 +56,8 @@ VALID_HYBRID="$OUTDIR/valid-hybrid.icc"
 NESTED_SIZE_MISMATCH="$OUTDIR/nested-size-mismatch.icc"
 MALFORMED_MPE="$OUTDIR/malformed-mpe.icc"
 CALCULATOR_PROFILE="$TESTING_DIR/CalcTest/calcExercizeOps.icc"
+CALCULATOR_WIDTH_BASE64="$REPO_ROOT/.github/ci/regression/applysearch-calculator-width-slow.icc.base64"
+CALCULATOR_WIDTH_PROFILE="$OUTDIR/applysearch-calculator-width-slow.icc"
 
 PASS=0
 FAIL=0
@@ -737,7 +739,7 @@ run_calculator_operation_count() {
     return
   fi
   if ! grep -F -q "[WARN] S10" "$logfile" ||
-     ! grep -F -q "local warning threshold=65536 operations" "$logfile"; then
+     ! grep -F -q "local warning thresholds=65536 operations or work units" "$logfile"; then
     fail_case "$name" "S10 did not report the local operation-count warning"
     return
   fi
@@ -748,6 +750,49 @@ run_calculator_operation_count() {
   fi
 
   pass_case "$name" "S10 reported $operations calculator operations and applied the local warning threshold"
+}
+
+run_calculator_selector_width_cost() {
+  local name="pawg-s10-calculator-selector-width"
+  local logfile="$OUTDIR/calculator-selector-width.log"
+  local operations cost
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile" "$CALCULATOR_WIDTH_PROFILE"
+
+  if ! base64 --decode "$CALCULATOR_WIDTH_BASE64" > "$CALCULATOR_WIDTH_PROFILE"; then
+    fail_case "$name" "could not decode the tracked profile"
+    return
+  fi
+  if ! echo "e42adb68785ac3ffbf84a5b2ccebdc03cfdbc1f695bce44ebc85425cc3933db9  $CALCULATOR_WIDTH_PROFILE" |
+      sha256sum --check --status; then
+    fail_case "$name" "decoded profile hash mismatch"
+    return
+  fi
+
+  timeout 60 "$PAWG" "$CALCULATOR_WIDTH_PROFILE" > "$logfile" 2>&1 || exit_code=$?
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding"
+    return
+  fi
+  if [ "$exit_code" -ne 1 ]; then
+    fail_case "$name" "malformed profile returned unexpected status $exit_code"
+    return
+  fi
+  if ! grep -F -q "[WARN] S10" "$logfile"; then
+    fail_case "$name" "S10 did not warn about selector-width work"
+    return
+  fi
+
+  operations="$(sed -n 's/.* \([0-9][0-9]*\) calculator operation(s).*/\1/p' "$logfile" | head -n 1)"
+  cost="$(sed -n 's/.*estimated relative cost=\([0-9][0-9]*\).*/\1/p' "$logfile" | head -n 1)"
+  if [ "$operations" != "11" ] || [ -z "$cost" ] || [ "$cost" -le 65536 ]; then
+    fail_case "$name" "expected 11 opcodes but more than 65536 work units; got operations=$operations cost=$cost"
+    return
+  fi
+
+  pass_case "$name" "11 opcodes expand to $cost selector-width work units"
 }
 
 HYBRID_CALC_XML="$TESTING_DIR/hybrid/CMYK-W_Overprint_Profile.xml"
@@ -1953,6 +1998,7 @@ else
   echo "  [SKIP] pawg-nested-profile-size-mismatch -- iccFromXml is unavailable"
 fi
 run_calculator_operation_count
+run_calculator_selector_width_cost
 run_hybrid_embedded_calculator_cost
 run_private_malware_profile
 run_invalid_gzip_signature_profile

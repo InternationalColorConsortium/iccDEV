@@ -14,14 +14,14 @@ set -euo pipefail
 
 usage() {
   echo "Usage: $0 [--targets CSV] [--seconds N] [--build-dir DIR] [--work-dir DIR] [--patches [DIR]] [--skip-run]"
-  echo "Targets: dump, toxml, fromxml, tojson, fromjson, roundtrip, profileparse, cmmapply, xmlparse, jsonparse, connectconfig, pawgreport, profilevisualize, writerserialize"
+  echo "Targets: dump, toxml, fromxml, tojson, fromjson, roundtrip, profileparse, cmmapply, cmmsearch, xmlparse, jsonparse, connectconfig, pawgreport, profilevisualize, writerserialize"
 }
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 repo_root="$(cd "$script_dir/../../.." && pwd)"
 build_dir="${ICCDEV_CFL_BUILD_DIR:-$repo_root/build-cfl-smoke}"
 work_dir="${ICCDEV_CFL_WORK_DIR:-$repo_root/.cfl-smoke}"
-targets_csv="${ICCDEV_CFL_TARGETS:-dump,toxml,fromxml,tojson,fromjson,roundtrip,profileparse,cmmapply,xmlparse,jsonparse,connectconfig,pawgreport,profilevisualize,writerserialize}"
+targets_csv="${ICCDEV_CFL_TARGETS:-dump,toxml,fromxml,tojson,fromjson,roundtrip,profileparse,cmmapply,cmmsearch,xmlparse,jsonparse,connectconfig,pawgreport,profilevisualize,writerserialize}"
 seconds="${ICCDEV_CFL_SECONDS:-30}"
 # Raised from 49152 to admit the whole committed seed corpus (#2120). The old
 # default sat below exactly one file in .github/ci/test-data --
@@ -31,11 +31,12 @@ seconds="${ICCDEV_CFL_SECONDS:-30}"
 # was the one being pruned.
 #
 # IMPLICATION, deliberate: the icc seed corpus is shared, so this widens it for
-# ALL targets, not just the two in-process ones. The six fork/exec CLI targets
-# now also replay a 61 KB profile -- slower per execution, more coverage per
-# execution. Lower it per-run with ICCDEV_CFL_MAX_SEED_BYTES if that trade is
-# wrong for a given lane; dropping a committed seed is then a hard error rather
-# than a silent rm, so the choice stays visible (see prune_large_seeds).
+# all single-profile targets, not just visualization and serialization. The six
+# fork/exec CLI targets now also replay a 61 KB profile -- slower per execution,
+# more coverage per execution. Lower it per-run with ICCDEV_CFL_MAX_SEED_BYTES
+# if that trade is wrong for a given lane; dropping a committed seed is then a
+# hard error rather than a silent rm, so the choice stays visible (see
+# prune_large_seeds).
 max_seed_bytes="${ICCDEV_CFL_MAX_SEED_BYTES:-262144}"
 apply_patches="${ICCDEV_CFL_APPLY_PATCHES:-0}"
 patch_dir="${ICCDEV_CFL_PATCH_DIR:-$repo_root/.github/ci/fuzz-patches/cfl}"
@@ -135,7 +136,7 @@ for target in "${requested_targets[@]}"; do
     exit 2
   fi
   case "$target" in
-    dump|toxml|fromxml|tojson|fromjson|roundtrip|profileparse|cmmapply|xmlparse|jsonparse|connectconfig|pawgreport|profilevisualize|writerserialize)
+    dump|toxml|fromxml|tojson|fromjson|roundtrip|profileparse|cmmapply|cmmsearch|xmlparse|jsonparse|connectconfig|pawgreport|profilevisualize|writerserialize)
       ;;
     *)
       echo "ERROR: unsupported CFL target: $target" >&2
@@ -153,10 +154,12 @@ done
 
 needs_xml=0
 needs_json=0
+needs_search=0
 for target in "${selected_targets[@]}"; do
   case "$target" in
     toxml|fromxml|xmlparse) needs_xml=1 ;;
     tojson|fromjson|jsonparse|connectconfig) needs_json=1 ;;
+    cmmsearch) needs_search=1 ;;
   esac
 done
 
@@ -215,7 +218,10 @@ if [ "$clusterfuzzlite_build" -eq 1 ]; then
   fi
   link_libraries=()
 else
-  cmake_c_flags="-g -O1 -fno-omit-frame-pointer -fsanitize=address,undefined"
+  # Match ClusterFuzzLite's coverage-guided library instrumentation locally.
+  # fuzzer-no-link adds coverage callbacks without injecting a second fuzzer
+  # main into the CMake-built tools or static libraries.
+  cmake_c_flags="-g -O1 -fno-omit-frame-pointer -fsanitize=fuzzer-no-link,address,undefined"
   cmake_cxx_flags="$cmake_c_flags"
   fuzzer_compile_flags=(
     -g -O1 -fno-omit-frame-pointer
@@ -238,7 +244,11 @@ else
   cxx_dependency_link_flags=()
 fi
 
-for tool in cmake "$cc" "$cxx"; do
+required_tools=( cmake "$cc" "$cxx" )
+if [ "$needs_search" -eq 1 ]; then
+  required_tools+=( base64 sha256sum )
+fi
+for tool in "${required_tools[@]}"; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "ERROR: required tool not found: $tool" >&2
     exit 127
@@ -255,6 +265,25 @@ case "$cc_major:$cxx_major" in
     exit 2
     ;;
 esac
+
+fuzzer_env=( env )
+if [ "$clusterfuzzlite_build" -eq 0 ]; then
+  # Keep sanitizer diagnostics local and deterministic. Ubuntu exports a
+  # debuginfod endpoint by default; llvm-symbolizer can otherwise block a
+  # short smoke run on network I/O while libFuzzer reports NEW_FUNC. Also use
+  # the symbolizer shipped with the selected Clang major instead of whichever
+  # unversioned binary happens to lead PATH.
+  local_symbolizer="$($cc --print-prog-name=llvm-symbolizer)"
+  if [ ! -x "$local_symbolizer" ]; then
+    echo "ERROR: matching llvm-symbolizer not found: $local_symbolizer" >&2
+    exit 127
+  fi
+  fuzzer_env+=(
+    -u DEBUGINFOD_URLS
+    "ASAN_SYMBOLIZER_PATH=$local_symbolizer"
+    "UBSAN_SYMBOLIZER_PATH=$local_symbolizer"
+  )
+fi
 
 if [ "$apply_patches" != "0" ]; then
   patch_applicator="${ICCDEV_FUZZ_PATCH_APPLICATOR:-$repo_root/.github/scripts/iccdev-apply-fuzz-patches.sh}"
@@ -283,7 +312,7 @@ for target in "${selected_targets[@]}"; do
   # iccDEV objects directly rather than fork/exec'ing a built CLI, so they do
   # not come from icc_cli_fuzzer.cpp.
   case "$target" in
-    profileparse|cmmapply|xmlparse|jsonparse|connectconfig|pawgreport|profilevisualize|writerserialize) continue ;;
+    profileparse|cmmapply|cmmsearch|xmlparse|jsonparse|connectconfig|pawgreport|profilevisualize|writerserialize) continue ;;
   esac
   "$cxx" -std=c++17 "${fuzzer_link_flags[@]}" \
     -DICCDEV_CFL_TARGET="\"$target\"" \
@@ -312,7 +341,7 @@ find_static_library() {
 # libFuzzer receives useful edge coverage and sanitizer attribution.
 for target in "${selected_targets[@]}"; do
   case "$target" in
-    profileparse|cmmapply|xmlparse|jsonparse|connectconfig|pawgreport|profilevisualize|writerserialize) ;;
+    profileparse|cmmapply|cmmsearch|xmlparse|jsonparse|connectconfig|pawgreport|profilevisualize|writerserialize) ;;
     *) continue ;;
   esac
 
@@ -337,7 +366,7 @@ for target in "${selected_targets[@]}"; do
   # compile rather than silently fuzz the other tool.
   local_viz_dir="$repo_root/Tools/CmdLine/IccProfilePlot"
   case "$target" in
-    profileparse|cmmapply)
+    profileparse|cmmapply|cmmsearch)
       extra_sources=()
       ;;
     xmlparse)
@@ -458,6 +487,29 @@ cp "$repo_root"/.github/ci/test-data/*.icc "$seed_root/icc/"
 cp "$repo_root"/.github/ci/test-data/*.xml "$seed_root/xml/" 2>/dev/null || true
 cp "$repo_root"/.github/ci/test-data/*.json "$seed_root/json/" 2>/dev/null || true
 
+if [ "$needs_search" -eq 1 ]; then
+  mkdir -p "$seed_root/search"
+  # cmmsearch consumes two complete ICC payloads back to back. Start each seed
+  # with the same valid source so the initial corpus reaches the search path and
+  # mutations can preserve a stable split while exploring the destination.
+  search_source="$repo_root/.github/ci/test-data/v5dspobs-lcddisplay.icc"
+  for destination in "$seed_root"/icc/*.icc; do
+    cat -- "$search_source" "$destination" > "$seed_root/search/$(basename "$destination")"
+  done
+
+  # Keep the reported calculator-width timeout in this target-specific corpus.
+  # Its checksum protects the exact input while keeping binary crash artifacts
+  # out of source control.
+  search_regression_base64="$repo_root/.github/ci/regression/applysearch-calculator-width-slow.icc.base64"
+  search_regression_raw="$work_dir/applysearch-calculator-width-slow.icc"
+  base64 --decode "$search_regression_base64" > "$search_regression_raw"
+  printf '%s  %s\n' \
+    'e42adb68785ac3ffbf84a5b2ccebdc03cfdbc1f695bce44ebc85425cc3933db9' \
+    "$search_regression_raw" | sha256sum --check --status
+  cat -- "$search_source" "$search_regression_raw" > \
+    "$seed_root/search/applysearch-calculator-width-slow.icc"
+fi
+
 first_icc="$(find "$seed_root/icc" -maxdepth 1 -type f -name '*.icc' | sort | head -n 1)"
 if [ -n "$first_icc" ]; then
   "$build_dir/Tools/IccToXml/iccToXml" "$first_icc" "$seed_root/xml/generated-from-seed.xml" >/dev/null 2>&1 || true
@@ -494,8 +546,10 @@ prune_large_seeds() {
       # So committed seeds are never pruned, they are a hard error. Adding an
       # oversized regression seed now forces an explicit decision about the cap
       # instead of quietly costing coverage.
-      if [ -f "$repo_root/.github/ci/test-data/$(basename "$file")" ]; then
-        echo "ERROR: committed seed exceeds ICCDEV_CFL_MAX_SEED_BYTES and would be dropped:" >&2
+      if [ -f "$repo_root/.github/ci/test-data/$(basename "$file")" ] ||
+         { [ "$kind" = "search" ] &&
+           [ "$(basename "$file")" = "applysearch-calculator-width-slow.icc" ]; }; then
+        echo "ERROR: tracked regression seed exceeds ICCDEV_CFL_MAX_SEED_BYTES and would be dropped:" >&2
         echo "       $(basename "$file") is $size bytes, cap is $max_seed_bytes" >&2
         echo "       Raise ICCDEV_CFL_MAX_SEED_BYTES, or remove the seed deliberately (#2120)." >&2
         return 1
@@ -509,6 +563,7 @@ prune_large_seeds() {
 prune_large_seeds "icc" "$seed_root/icc"
 prune_large_seeds "xml" "$seed_root/xml"
 prune_large_seeds "json" "$seed_root/json"
+prune_large_seeds "search" "$seed_root/search"
 
 if [ "$(awk 'END { print NR }' "$skipped_seeds_tsv")" -gt 1 ]; then
   echo "Skipped CFL smoke seeds larger than $max_seed_bytes bytes:"
@@ -527,6 +582,7 @@ if [ "$skip_run" -eq 0 ]; then
     case "$target" in
       fromxml|xmlparse) corpus="$seed_root/xml" ;;
       fromjson|jsonparse|connectconfig) corpus="$seed_root/json" ;;
+      cmmsearch) corpus="$seed_root/search" ;;
         *) corpus="$seed_root/icc" ;;
     esac
     log_file="$logs_dir/$target.log"
@@ -536,8 +592,19 @@ if [ "$skip_run" -eq 0 ]; then
       -max_total_time="$seconds"
     )
     case "$target" in
+      cmmsearch)
+        # A search input contains two complete profiles plus optional controls.
+        # Match the hosted profile-family options instead of letting libFuzzer
+        # derive max_len from the largest initial seed.
+        fuzzer_args+=(
+          -max_len=1048576
+          -timeout=30
+          -rss_limit_mb=4096
+          -use_value_profile=1
+        )
+        ;;
       profileparse|cmmapply|pawgreport|profilevisualize|writerserialize)
-        # max_len is load-bearing for BOTH in-process targets, and it is a
+        # max_len is load-bearing for these in-process targets, and it is a
         # second, independent gate from the seed cap above: the cap decides
         # whether the file reaches the corpus, max_len decides how much of it
         # libFuzzer feeds to the target.
@@ -570,7 +637,8 @@ if [ "$skip_run" -eq 0 ]; then
         )
         ;;
     esac
-    ICCDEV_CFL_TOOL_DIR="$build_dir/Tools" \
+    "${fuzzer_env[@]}" \
+      ICCDEV_CFL_TOOL_DIR="$build_dir/Tools" \
       ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:abort_on_error=1:allocator_may_return_null=1 \
       UBSAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_stacktrace=1 \
       "$bin_dir/icc_${target}_fuzzer" \

@@ -20,6 +20,7 @@ usage()
 targets=(
   icc_profileparse_fuzzer
   icc_cmmapply_fuzzer
+  icc_cmmsearch_fuzzer
   icc_profilevisualize_fuzzer
   icc_writerserialize_fuzzer
   icc_xmlparse_fuzzer

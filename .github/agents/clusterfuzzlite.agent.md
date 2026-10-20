@@ -35,8 +35,9 @@ Use `.github/skills/clusterfuzzlite/SKILL.md` and
     and nested config round trips, and require the complete BSD-3-Clause
     notice derived from `LICENSE.md` in every owned C/C++ harness source.
     Verify it with `.github/scripts/check-license-notices.py`.
-12. Strengthen existing targets before adding multi-profile CMM, serializer,
-    or V5 display-observer targets. Require an instrumented MSan boundary before
-    adding image or carrier dependencies.
+12. Keep the bounded multi-profile `cmmsearch` target separately attributable.
+    Strengthen existing targets before adding serializer or V5 display-observer
+    targets. Require an instrumented MSan boundary before adding image or
+    carrier dependencies.
 13. Verify the builder snapshot's deterministic source-content digest against
     the Actions checkout and reject fallback source after a history rewrite.

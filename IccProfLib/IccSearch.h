@@ -209,6 +209,12 @@ namespace iccDEV {
       return false;
     }
 
+    // Keep the historical defaults for production callers while allowing
+    // bounded diagnostic and fuzzing clients to exercise the optimizer without
+    // turning one expensive cost function into an unbounded test iteration.
+    void SetMaxIterations(unsigned int value) { maxIterations = value ? value : 1; }
+    void SetMaxFuncEvals(unsigned int value) { maxFuncEvals = value ? value : 1; }
+
     icFloatVector findMin(icFloatVector& startingPoint, const std::vector<icFloatVector>& startingSimplex = {}) {
       unsigned int nFuncCallCount = 0;
       icFloatNumber cost;

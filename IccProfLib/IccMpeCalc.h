@@ -407,6 +407,7 @@ public:
   icUInt32Number GetMaxTemp() const;
   icUInt32Number GetNumTempChannels() const;
   icUInt32Number GetNumOps() const { return m_nOps; }
+  icUInt64Number GetEstimatedCost();
   int CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nOps, int nArgs, bool bCheckUnderflow, std::string &sReport,
                              icUInt32Number nMaxStack = icMaxDataStackSize) const;
   icFuncParseStatus DoesStackUnderflowOverflow(std::string &sReport, icUInt32Number nMaxStack = icMaxDataStackSize) const;
@@ -512,6 +513,9 @@ public:
 
   /** Operations in the main function plus those of every sub-calculator. */
   icUInt64Number GetTotalOps() const;
+
+  /** Selector-width-aware work estimate for the main function and sub-calculators. */
+  icUInt64Number GetEstimatedCost();
 
 protected:
 

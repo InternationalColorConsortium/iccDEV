@@ -14,7 +14,7 @@ Use this skill for `.clusterfuzzlite/**`,
 - Treat libFuzzer as the single fuzzing engine and `address`, `undefined`, and
   `memory` as three separate sanitizer builds.
 - Build all three in-process groups in ClusterFuzzLite: `core`
-  (`profileparse`, `cmmapply`, `profilevisualize`, `writerserialize`),
+  (`profileparse`, `cmmapply`, `cmmsearch`, `profilevisualize`, `writerserialize`),
   `formats` (`xmlparse`, `jsonparse`, `connectconfig`), and `assessment`
   (`pawgreport`).
 - Forward the GitHub matrix group and patch mode through `CFL_EXTRA_*`; the
@@ -43,6 +43,10 @@ Use this skill for `.clusterfuzzlite/**`,
   dictionaries aligned with explicit local CFL limits.
 - Keep `cmmapply` control bytes outside the ICC header so direction, intent,
   and interpolation can mutate without corrupting the profile-size field.
+- Keep `cmmsearch` inputs as two complete ICC payloads concatenated at the
+  first profile's declared size. Treat bytes after the second declared payload
+  as controls, and set bounded optimizer limits through `CIccMinSearch` rather
+  than weakening production search defaults.
 - Keep a schema-shaped IccConnect seed and dedicated config dictionary. Drive
   `fromJson()`/`toJson()` round trips for top-level and nested `CIccCfg*`
   objects before adding another configuration target.
@@ -85,7 +89,7 @@ python3 infra/helper.py build_fuzzers --external --clean \
   --engine libfuzzer --sanitizer SANITIZER "$iccdev_source"
 python3 infra/helper.py check_build --external \
   --engine libfuzzer --sanitizer SANITIZER "$iccdev_source"
-for target in profileparse cmmapply profilevisualize writerserialize \
+for target in profileparse cmmapply cmmsearch profilevisualize writerserialize \
   xmlparse jsonparse connectconfig pawgreport; do
   python3 infra/helper.py run_fuzzer --external \
     --engine libfuzzer --sanitizer SANITIZER \

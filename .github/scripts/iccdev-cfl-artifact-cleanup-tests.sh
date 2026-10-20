@@ -34,6 +34,7 @@ zip -q "$empty_archive" "$empty_dir/"
 targets=(
   icc_profileparse_fuzzer
   icc_cmmapply_fuzzer
+  icc_cmmsearch_fuzzer
   icc_profilevisualize_fuzzer
   icc_writerserialize_fuzzer
   icc_xmlparse_fuzzer
@@ -57,13 +58,13 @@ done
 printf 'unrelated-artifact\t999\t2026-09-26T19:00:00Z\t32768\n' >> "$artifact_file"
 
 "$cleanup_script" --plan "$artifact_file" > "$plan_file"
-test "$(grep -c '^KEEP' "$plan_file")" -eq 8
-test "$(grep -c '^DELETE' "$plan_file")" -eq 16
+test "$(grep -c '^KEEP' "$plan_file")" -eq 9
+test "$(grep -c '^DELETE' "$plan_file")" -eq 18
 if grep -Fq 'unrelated-artifact' "$plan_file"; then
   echo "[FAIL] Artifact cleanup selected an unrelated artifact" >&2
   exit 1
 fi
-test "$(awk -F '\t' '$1 == "KEEP" && $4 == "2026-09-26T17:00:00Z" { n++ } END { print n+0 }' "$plan_file")" -eq 8
+test "$(awk -F '\t' '$1 == "KEEP" && $4 == "2026-09-26T17:00:00Z" { n++ } END { print n+0 }' "$plan_file")" -eq 9
 
 head -n -4 "$artifact_file" > "$work_dir/incomplete.tsv"
 if "$cleanup_script" --plan "$work_dir/incomplete.tsv" >/dev/null 2>&1; then

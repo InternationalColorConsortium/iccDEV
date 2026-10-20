@@ -47,9 +47,10 @@ The target sets differ per lane, and are not interchangeable.
 - **AFL** accepts `dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube` -- see
   the allow-list in `.github/scripts/iccdev-afl-smoke.sh`.
 - **CFL** accepts
-  `dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize`.
+  `dump,toxml,fromxml,tojson,fromjson,roundtrip,profileparse,cmmapply,cmmsearch,`
+  `xmlparse,jsonparse,connectconfig,pawgreport,profilevisualize,writerserialize`.
 
-The two in-process targets are CFL-only; passing them to the AFL lane is an
+The nine in-process targets are CFL-only; passing them to the AFL lane is an
 error. The first six CFL
 targets are command-line wrappers. `profilevisualize` and `writerserialize` are
 in-process public-API harnesses: compile the engine sources separately, include
@@ -93,7 +94,9 @@ shellcheck .github/scripts/iccdev-afl-smoke.sh
 actionlint .github/workflows/ci-afl-smoke.yml
 yamllint -d '{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable}}' .github/workflows/ci-afl-smoke.yml
 .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 30000
-.github/ci/cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize --seconds 30
+.github/ci/cfl/build.sh \
+  --targets dump,toxml,fromxml,tojson,fromjson,roundtrip,profileparse,cmmapply,cmmsearch,xmlparse,jsonparse,connectconfig,pawgreport,profilevisualize,writerserialize \
+  --seconds 30
 ```
 
 Run `.github/scripts/preflight-safety-checks.sh --require-tools` before pushing

@@ -4231,6 +4231,35 @@ icUInt32Number CIccCalculatorFunc::GetNumTempChannels() const
 }
 
 /**
+ ******************************************************************************
+ * Name: CIccCalculatorFunc::GetEstimatedCost
+ *
+ * Purpose: Return a saturating, selector-width-aware estimate of the scalar
+ *  work performed by one function evaluation.  Counting opcodes alone misses
+ *  operations such as copy, transpose, and vector arithmetic whose selectors
+ *  can make one opcode process tens of thousands of stack values.
+ ******************************************************************************
+ */
+icUInt64Number CIccCalculatorFunc::GetEstimatedCost()
+{
+  const icUInt64Number maxCost = std::numeric_limits<icUInt64Number>::max();
+  icUInt64Number cost = 0;
+  icUInt32Number nOps = m_nOps < MAX_CALC_ELEMENTS ? m_nOps : MAX_CALC_ELEMENTS;
+
+  for (icUInt32Number i=0; m_Op && i<nOps; i++) {
+    icUInt64Number used = m_Op[i].ArgsUsed(m_pCalc);
+    icUInt64Number pushed = m_Op[i].ArgsPushed(m_pCalc);
+    icUInt64Number opCost = used > pushed ? used : pushed;
+    if (!opCost)
+      opCost = 1;
+    if (opCost > maxCost - cost)
+      return maxCost;
+    cost += opCost;
+  }
+  return cost;
+}
+
+/**
 ******************************************************************************
 * Name: CIccCalculatorFunc::NeedTempReset
 * 
@@ -5644,6 +5673,32 @@ icUInt64Number CIccMpeCalculator::GetTotalOps() const
       nOps += pSub->GetTotalOps();
   }
   return nOps;
+}
+
+/**
+ ******************************************************************************
+ * Name: CIccMpeCalculator::GetEstimatedCost
+ *
+ * Purpose: Selector-width-aware work estimate for the main calculator function
+ *  and every calculator sub-element.  The result saturates on overflow.
+ ******************************************************************************
+ */
+icUInt64Number CIccMpeCalculator::GetEstimatedCost()
+{
+  const icUInt64Number maxCost = std::numeric_limits<icUInt64Number>::max();
+  icUInt64Number cost = m_calcFunc ? m_calcFunc->GetEstimatedCost() : 0;
+  icUInt32Number nSub = (m_nSubElem > MAX_CALC_ELEMENTS) ? MAX_CALC_ELEMENTS : m_nSubElem;
+
+  for (icUInt32Number i=0; m_SubElem && i<nSub; i++) {
+    CIccMpeCalculator *pSub = dynamic_cast<CIccMpeCalculator*>(m_SubElem[i]);
+    if (pSub) {
+      icUInt64Number subCost = pSub->GetEstimatedCost();
+      if (subCost > maxCost - cost)
+        return maxCost;
+      cost += subCost;
+    }
+  }
+  return cost;
 }
 
 /**

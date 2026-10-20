@@ -102,6 +102,7 @@ const char *kF1 = "{ in(0,3) 1 1 1 add(3) out(0,3) }";
 const char *kF2 = "{ in(0,3) tsav(4,3) out(0,3) }";
 const char *kP  = "{ in(0,3) calc(0) out(0,3) }";
 const char *kF3 = "{ in(0,3) in(0) if { 1 1 1 1 add(3) pop } out(0,3) }";
+const char *kWide = "{ 0 copy(1,32767) copy(32767) }";
 
 CIccMpeCalculator *makeCalc(const char *szFunc)
 {
@@ -289,6 +290,27 @@ void caseValidate()
   delete pP;
 }
 
+void caseEstimatedCost()
+{
+  CIccMpeCalculator *pOrdinary = makeCalc(kF1);
+  CIccMpeCalculator *pWide = makeCalc(kWide);
+  if (!pOrdinary || !pWide) {
+    check(false, "estimated cost", "fixture did not build");
+    delete pOrdinary;
+    delete pWide;
+    return;
+  }
+
+  check(pOrdinary->GetTotalOps() == 6, "estimated cost ordinary", "unexpected opcode count");
+  check(pOrdinary->GetEstimatedCost() == 15, "estimated cost ordinary", "unexpected work estimate");
+  check(pWide->GetTotalOps() == 3, "estimated cost wide", "wide selectors changed opcode count");
+  check(pWide->GetEstimatedCost() > 65536, "estimated cost wide",
+        "selector width was not reflected in the work estimate");
+
+  delete pOrdinary;
+  delete pWide;
+}
+
 bool parseXml(const std::string &doc, CIccMpeXmlCalculator &calc, std::string &parseStr)
 {
   xmlDoc *pDoc = xmlReadMemory(doc.c_str(), (int)doc.size(), "calc.xml", NULL,
@@ -344,6 +366,7 @@ int main()
 {
   caseBinary();
   caseValidate();
+  caseEstimatedCost();
   caseXml();
 
   if (g_fail) {

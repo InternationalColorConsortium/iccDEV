@@ -24,6 +24,13 @@ input artifact.
   interpolation modes using the profile's declared rendering intent; when the
   input contains bytes beyond its declared ICC size, the first three trailing
   bytes independently select direction, intent, and interpolation
+- `cmmsearch`: consumes a structured pair of complete ICC payloads, builds a
+  `CIccCmmSearch`, and exercises bounded Nelder-Mead application with and
+  without a destination-profile PCC. Search iteration/evaluation limits keep
+  high-width calculators from becoming repeated timeout artifacts while the
+  production defaults remain unchanged. Its private structured corpus also
+  includes the checksum-verified calculator-width slow regression; malformed
+  search inputs do not enter the shared single-profile corpus
 - `xmlparse`: parses an XML buffer with network and file includes disabled,
   then drives `CIccProfileXml::ParseXml()` and validation
 - `jsonparse`: parses a JSON buffer and drives
@@ -48,9 +55,9 @@ Run the local smoke with:
 ## ClusterFuzzLite
 
 The official ClusterFuzzLite integration lives in `.clusterfuzzlite/` and
-builds eight in-process targets in three independently budgeted groups:
+builds nine in-process targets in three independently budgeted groups:
 
-- `core`: `profileparse`, `cmmapply`, `profilevisualize`, and
+- `core`: `profileparse`, `cmmapply`, `cmmsearch`, `profilevisualize`, and
   `writerserialize`
 - `formats`: `xmlparse`, `jsonparse`, and `connectconfig`
 - `assessment`: `pawgreport`
@@ -75,7 +82,7 @@ still stops cleanup. An optional manual input builds all targets with the covera
 sanitizer and uploads the ClusterFuzzLite coverage report artifact.
 The official GitHub artifact backend emits one identically named corpus per
 sanitizer. After pruning, only a separate cleanup job receives `actions: write`;
-it preserves the newest same-run corpus for each of the eight exact target
+it preserves the newest same-run corpus for each of the nine exact target
 names and deletes only the superseded duplicates from that run.
 
 Local validation uses an OSS-Fuzz checkout:
@@ -115,11 +122,17 @@ by default and skips pruning and coverage. The runner divides a full-mode group
 budget across only the sequential targets in that group, so adding a format
 target does not dilute core-profile fuzzing. Scheduled full runs use 2 minutes
 per group. Corpus pruning has a 2-minute minimum per sequential target, for a
-16-minute total budget across all eight targets.
+18-minute total budget across all nine targets.
 
 All CFL modes require a matching Clang C/C++ pair at major version 21 or 22.
 The local builder prefers 22, falls back to 21, and rejects older or mismatched
-compilers. The pinned ClusterFuzzLite builder currently supplies Clang 22.
+compilers. Local CMake-built libraries use `fuzzer-no-link` instrumentation so
+local coverage-guided runs exercise the same iccDEV edges as hosted runs. The
+pinned ClusterFuzzLite builder currently supplies Clang 22. Local smoke runs
+also use that compiler's matching `llvm-symbolizer` and disable remote
+debuginfod lookup for the fuzzer process. This keeps `NEW_FUNC` reporting from
+turning a bounded smoke run into a network-dependent wait while preserving
+local sanitizer symbolization.
 
 Apply the local CFL patch stack before configuring iccDEV with `--patches`.
 The
@@ -144,7 +157,7 @@ Build and run all in-process harnesses with:
 
 ```bash
 .github/ci/cfl/build.sh \
-  --targets profileparse,cmmapply,profilevisualize,writerserialize,xmlparse,jsonparse,connectconfig,pawgreport \
+  --targets profileparse,cmmapply,cmmsearch,profilevisualize,writerserialize,xmlparse,jsonparse,connectconfig,pawgreport \
   --seconds 30
 ```
 
@@ -212,8 +225,9 @@ coverage output, or profiler data.
 Improve an existing target before adding another target that reaches the same
 library surface. The next additions, in priority order, are:
 
-1. A separately attributable multi-profile CMM chain target covering hints,
-   NamedColor transforms, search weights, and boundary pixels.
+1. Extend the separately attributable `cmmsearch` target from its bounded
+   two-profile/PCC seam to cover transform hints and NamedColor chains when a
+   structured seed can exercise those paths without file-system dependencies.
 2. Separate XML and JSON serialization/round-trip targets so parser and writer
    failures remain distinguishable.
 3. An in-process V5 display-observer conversion target using a fixed observer

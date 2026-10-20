@@ -141,14 +141,14 @@ CLI implementation or call `processLuts()`.
 
 | group | targets | covers |
 | --- | --- | --- |
-| `core` | `profileparse`, `cmmapply`, `profilevisualize`, `writerserialize` | profile parsing, bounded CMM application, visualization, and serialization |
+| `core` | `profileparse`, `cmmapply`, `cmmsearch`, `profilevisualize`, `writerserialize` | profile parsing, bounded CMM application and search, visualization, and serialization |
 | `formats` | `xmlparse`, `jsonparse`, `connectconfig` | XML/JSON profile parsing and IccConnect configuration round trips |
 | `assessment` | `pawgreport` | in-memory PAWG assessment and compression verdicts |
 
 Keep them separate rather than folding serialization into the model target, so
 a crash stays attributable to one layer.
 
-The official ClusterFuzzLite lane builds all eight in-process targets above.
+The official ClusterFuzzLite lane builds all nine in-process targets above.
 Keep its `address`, `undefined`, and `memory` builds separate, pass all compiler
 and linker instrumentation through the OSS-Fuzz environment, require matching
 Clang 21 or 22 compilers across AFL, CFL, and ClusterFuzzLite, and keep the
@@ -160,7 +160,10 @@ runtime boundary is not attributable to iccDEV.
 
 Keep `cmmapply` controls outside the ICC header: an optional three-byte trailer
 selects direction, intent, and interpolation without corrupting the encoded
-profile size. Keep at least one schema-shaped IccConnect configuration seed in
+profile size. Keep `cmmsearch` structured as two complete ICC payloads joined
+at the first profile's declared size, with optional controls after the second
+payload. Bound its optimizer through `CIccMinSearch`; do not weaken production
+search defaults for fuzzing. Keep at least one schema-shaped IccConnect configuration seed in
 `.github/ci/test-data`, use the dedicated config dictionary, and preserve
 round-trip coverage for top-level and nested `CIccCfg*` objects.
 
