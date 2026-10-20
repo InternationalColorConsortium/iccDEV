@@ -1,10 +1,9 @@
 /**
  * @name Fixed buffer used as transform output
  * @description A fixed-size local buffer is passed as the output of a wrapper
- *              around CIccCmm::Apply(). The transform output width is profile
- *              defined, so the wrapper cannot establish that the buffer is
- *              large enough. This is the stack-buffer-overflow shape from
- *              issue #2868.
+ *              around CIccCmm::Apply() without a matching destination-width
+ *              guard. This is the stack-buffer-overflow shape from issue
+ *              #2868.
  * @kind problem
  * @problem.severity error
  * @security-severity 9.1
@@ -17,6 +16,7 @@
  */
 
 import cpp
+import semmle.code.cpp.controlflow.Guards
 
 private predicate isProductSource(File f) {
   (
@@ -32,12 +32,29 @@ private predicate isCmmApplyCall(FunctionCall call) {
   call.getTarget().getDeclaringType().getName() = "CIccCmm"
 }
 
-private predicate isTransformOutputWrapper(Function wrapper, Parameter output) {
+private predicate hasPriorCapacityGuard(FunctionCall apply, ArrayType array) {
+  exists(ComparisonOperation guard, FunctionCall destSamples |
+    guard.getEnclosingFunction() = apply.getEnclosingFunction() and
+    guard instanceof GuardCondition and
+    guard.getOperator() = ">" and
+    destSamples.getTarget().getName() = "GetDestSamples" and
+    destSamples.getTarget().getDeclaringType().getName() = "CIccCmm" and
+    destSamples.getQualifier().(VariableAccess).getTarget() =
+      apply.getQualifier().(VariableAccess).getTarget() and
+    guard.getLeftOperand().getAChild*() = destSamples and
+    guard.getRightOperand().getValue() = array.getArraySize().toString() and
+    guard.(GuardCondition).controls(apply.getBasicBlock(), false)
+  )
+}
+
+private predicate isTransformOutputWrapper(Function wrapper, Parameter output,
+    ArrayType array) {
   output = wrapper.getParameter(0) and
   exists(FunctionCall apply |
     apply.getEnclosingFunction() = wrapper and
     isCmmApplyCall(apply) and
-    apply.getArgument(0).getAChild*() = output.getAnAccess()
+    apply.getArgument(0).getAChild*() = output.getAnAccess() and
+    not hasPriorCapacityGuard(apply, array)
   )
 }
 
@@ -48,7 +65,7 @@ where
   size = array.getArraySize() and
   size > 0 and
   wrapperCall.getTarget() = wrapper and
-  isTransformOutputWrapper(wrapper, output) and
+  isTransformOutputWrapper(wrapper, output, array) and
   wrapperCall.getArgument(0).getAChild*() = buffer.getAnAccess() and
   isProductSource(wrapperCall.getFile())
 select wrapperCall.getArgument(0),

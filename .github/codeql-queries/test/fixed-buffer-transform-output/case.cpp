@@ -30,6 +30,7 @@
 class CIccCmm {
 public:
   int Apply(float *dst, const float *src);
+  int GetDestSamples() const;
 };
 
 class BlackPointEstimator {
@@ -47,6 +48,27 @@ public:
     clear(pixel);
   }
 
+  void guardedFixedBufferControl()
+  {
+    float pixel[16];
+    float pcs[3] = {};
+    guardedPixelXfm(pixel, pcs);
+  }
+
+  void mismatchedGuardControl()
+  {
+    float pixel[16];
+    float pcs[3] = {};
+    mismatchedGuardPixelXfm(pixel, pcs); // $ Alert
+  }
+
+  void differentTransformGuardControl()
+  {
+    float pixel[16];
+    float pcs[3] = {};
+    differentTransformGuardPixelXfm(pixel, pcs); // $ Alert
+  }
+
   void dynamicBufferControl(float *pixel)
   {
     float pcs[3] = {};
@@ -58,6 +80,31 @@ private:
   {
     CIccCmm cmm;
     return cmm.Apply(dst, src) == 0;
+  }
+
+  bool guardedPixelXfm(float *dst, const float *src)
+  {
+    CIccCmm cmm;
+    if (cmm.GetDestSamples() > 16)
+      return false;
+    return cmm.Apply(dst, src) == 0;
+  }
+
+  bool mismatchedGuardPixelXfm(float *dst, const float *src)
+  {
+    CIccCmm cmm;
+    if (cmm.GetDestSamples() > 17)
+      return false;
+    return cmm.Apply(dst, src) == 0;
+  }
+
+  bool differentTransformGuardPixelXfm(float *dst, const float *src)
+  {
+    CIccCmm guardedCmm;
+    if (guardedCmm.GetDestSamples() > 16)
+      return false;
+    CIccCmm appliedCmm;
+    return appliedCmm.Apply(dst, src) == 0;
   }
 
   void clear(float *pixel)
