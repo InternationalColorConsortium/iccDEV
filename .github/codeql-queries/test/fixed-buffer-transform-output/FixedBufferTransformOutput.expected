@@ -1,0 +1,1 @@
+| case.cpp:41:14:41:18 | pixel | Fixed buffer 'pixel' has 16 elements but receives output from a CIccCmm transform whose channel count is profile-defined. Allocate the output buffer from the transform's destination channel count or reject oversized output (CWE-121/CWE-787; see #2868). |
