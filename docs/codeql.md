@@ -105,7 +105,9 @@ fixed local buffer is passed as output to a helper that calls `CIccCmm::Apply()`
 without a matching `GetDestSamples()` capacity guard. Keep the test's guarded
 fixed-buffer, mismatched-capacity, different-transform, non-transform, and
 dynamically sized controls so the rule stays scoped to unsafe fixed-output
-wrappers.
+wrappers. Only a direct `GetDestSamples() > capacity` check counts as a guard;
+arithmetic expressions involving the destination count do not establish this
+capacity contract.
 
 `counted-buffer-off-by-one` covers the nearby counted-buffer family. Review the allocation count, loop count, and
 serialization count as one contract. In particular, `index > count` does not

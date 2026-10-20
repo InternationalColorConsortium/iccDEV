@@ -69,6 +69,13 @@ public:
     differentTransformGuardPixelXfm(pixel, pcs); // $ Alert
   }
 
+  void arithmeticGuardControl()
+  {
+    float pixel[16];
+    float pcs[3] = {};
+    arithmeticGuardPixelXfm(pixel, pcs); // $ Alert
+  }
+
   void dynamicBufferControl(float *pixel)
   {
     float pcs[3] = {};
@@ -86,6 +93,14 @@ private:
   {
     CIccCmm cmm;
     if (cmm.GetDestSamples() > 16)
+      return false;
+    return cmm.Apply(dst, src) == 0;
+  }
+
+  bool arithmeticGuardPixelXfm(float *dst, const float *src)
+  {
+    CIccCmm cmm;
+    if (cmm.GetDestSamples() - 1 > 16)
       return false;
     return cmm.Apply(dst, src) == 0;
   }

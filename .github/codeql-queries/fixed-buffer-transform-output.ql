@@ -41,7 +41,7 @@ private predicate hasPriorCapacityGuard(FunctionCall apply, ArrayType array) {
     destSamples.getTarget().getDeclaringType().getName() = "CIccCmm" and
     destSamples.getQualifier().(VariableAccess).getTarget() =
       apply.getQualifier().(VariableAccess).getTarget() and
-    guard.getLeftOperand().getAChild*() = destSamples and
+    guard.getLeftOperand() = destSamples and
     guard.getRightOperand().getValue() = array.getArraySize().toString() and
     guard.(GuardCondition).controls(apply.getBasicBlock(), false)
   )
