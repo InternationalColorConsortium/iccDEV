@@ -1518,7 +1518,7 @@ function(iccdev_add_mpecalc_rotate_operand_test)
   endif()
 endfunction()
 
-# Guards ownership of parsed select case bodies. ParseFuncDef() retained each
+# Guards ownership of parsed select case bodies (#2881). ParseFuncDef() retained each
 # successful case as a raw list pointer until the complete select was parsed,
 # then returned without freeing those lists when a later case or default body
 # was malformed. The parser result checks run everywhere; LeakSanitizer checks
@@ -1551,7 +1551,7 @@ function(iccdev_add_mpecalc_select_parse_leak_test)
   set_tests_properties(iccdev.mpecalc-select-parse-leak PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     TIMEOUT 60
-    LABELS "iccdev;mpe;calc;parser;leak;regression"
+    LABELS "iccdev;mpe;calc;parser;leak;issue-2881;regression"
   )
   if(WIN32)
     set(_mpecalc_select_leak_windows_env_mods

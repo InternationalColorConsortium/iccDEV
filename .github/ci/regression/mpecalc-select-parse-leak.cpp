@@ -33,6 +33,7 @@
  * returned before reaching its success-only cleanup loop when a later case or
  * default body failed to parse.  LeakSanitizer supplies the ownership check;
  * the return-value checks remain useful on platforms without LeakSanitizer.
+ * See issue #2881.
  */
 
 #include "IccMpeCalc.h"
