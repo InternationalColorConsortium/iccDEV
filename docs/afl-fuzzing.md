@@ -27,7 +27,7 @@ Run it from GitHub Actions with `ci-afl-smoke`, normally with:
 
 ```bash
 gh workflow run ci-afl-smoke.yml \
-  -f afl_targets=dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube \
+  -f afl_targets=dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube,pawgreport \
   -f duration_seconds=300 \
   -f exec_timeout_ms=30000 \
   -f cmake_build_type=Debug
@@ -55,9 +55,10 @@ AFL_PATH=/path/to/AFLplusplus AFL_CC=clang-22 AFL_CXX=clang++-22 \
 ```
 
 The smoke driver accepts only a matching Clang 21 or Clang 22 C/C++ pair. When
-the caller does not set `AFL_CC` and `AFL_CXX`, it prefers the packaged Clang
-21 pair and falls back to Clang 22. Older or mismatched compiler pairs fail
-before the iccDEV build starts.
+the caller does not set `AFL_CC` and `AFL_CXX`, it compiles C and C++ probes
+with each installed pair and selects the first one compatible with the AFL++
+plugins. Older, mismatched, or plugin-incompatible pairs fail before the iccDEV
+build starts; the retained probe log identifies local wrapper drift.
 
 The workflow intentionally builds only the AFL++ pieces needed by the smoke
 job: `afl-fuzz`, `afl-showmap`, `afl-cc`, `afl-compiler-rt.o`,
@@ -68,8 +69,11 @@ mark LLVM fast mode as available. Avoid broad `make source-only` or full
 plugin or Nyx paths that are not required for iccDEV smoke fuzzing.
 
 The selected allow-listed targets run in parallel for the requested duration.
-Each `afl-fuzz` child uses AFL++ affinity fallback so three-target smoke runs
+Each `afl-fuzz` child uses AFL++ affinity fallback so multi-target smoke runs
 can share smaller runners instead of aborting when no free CPU core remains.
+The driver defaults `AFL_TESTCACHE_SIZE=128`: the pinned 64 MiB local testcase
+ceiling requires at least 128 MiB of cache for every parallel target.
+Constrained hosts can explicitly set the optional cache to `0`.
 The job fails if AFL++ reports a saved crash, setup failure, missing
 instrumentation, or zero executed test cases for any selected target. Generated
 saved hangs are reported as `warn` rows only when Linux `core_pattern` is not
@@ -85,7 +89,7 @@ When findings are present, the smoke driver also runs
 The triage output records one-line reproducers, logs, classifications, and a
 Markdown report under the AFL work directory.
 
-The core onboarding target names are:
+The allow-listed target names are:
 
 - `dump`: `iccDumpProfile @@ ALL`
 - `toxml`: `iccToXml @@ generated.xml`
@@ -94,20 +98,23 @@ The core onboarding target names are:
 - `fromjson`: `iccFromJson @@ generated.icc`
 - `roundtrip`: `iccRoundTrip @@ 1 0`
 - `fromcube`: `iccFromCube @@ generated.icc`
+- `pawgreport`: `iccPawgReport @@`
 
-`fromcube` remains available as a non-core compatibility target. Stabilize the
-six core targets before adding more command-line tools.
+`fromcube` remains a format-compatibility target. The `pawgreport` CLI lane
+exercises filesystem-backed report generation and complements the in-process
+CFL assessment seam.
 
 Local maintainer smoke:
 
 ```bash
-.github/scripts/iccdev-afl-smoke.sh --seconds 60 --targets dump --exec-timeout-ms 30000
+.github/scripts/iccdev-afl-smoke.sh --seconds 60 --targets pawgreport --exec-timeout-ms 30000
 ```
 
-The AFL and CFL smoke workflows default to applying their maintainer-local
-patch stacks before building. This branch therefore tests local fuzzing fixes
-before a developer promotes them to normal source PRs. Apply maintainer-local
-AFL patches locally before configuring iccDEV with:
+The AFL and CFL smoke workflows default to `patch_mode=none`, so their results
+describe the selected source ref without hidden source changes. Select
+`patch_mode=all`, or pass `--patches` locally, only when deliberately testing
+the maintainer-local patch stacks before promoting fixes. Apply AFL patches
+locally with:
 
 ```bash
 .github/scripts/iccdev-afl-smoke.sh --patches --seconds 60 --targets dump
@@ -252,7 +259,9 @@ Manual options:
   runs.
 - `cmake_build_type`: `Debug`, `Release`, `RelWithDebInfo`, or `MinSizeRel`
 - `target_sha`: optional full 40-character exact commit to check out
-- `regression_image_tag`: trusted maintainer container tag
+- `regression_image_tag`: trusted maintainer container tag; the workflow
+  validates the supported tag forms and resolves the selected manifest to an
+  immutable digest before starting the fuzz job
 
 Use the local script for instrumentation health and seed sanity only. Long AFL
 campaigns, corpus minimization, crash triage, and coverage reports remain
@@ -267,8 +276,8 @@ The workflow follows the repository workflow-governance model:
 - SHA-pinned checkout actions
 - AFL++ sourced from the upstream `dev` branch and rebuilt against the
   container LLVM major version
-- 240-minute job timeout covering the accepted maximum of three 3600-second
-  target runs plus build overhead; selected targets run in parallel
+- 240-minute job timeout covering up to eight parallel 3600-second target runs
+  plus build and triage overhead
 - hardened bash steps
 - workflow inputs passed through environment variables
 - sanitized `GITHUB_STEP_SUMMARY` writes
@@ -299,7 +308,9 @@ with the engine sources compiled as separate translation units:
 which is where the byte-level layout and offset arithmetic live (#2116).
 
 Those two need a CLUT-bearing seed to reach the raster path at all, and the seed
-caps remove the only one at their defaults -- see #2120.
+caps now retain that seed after the #2120 correction.
 
 CFL smoke duration is wall-clock seconds per selected target, implemented with
 LibFuzzer `-max_total_time`. It is not an iteration or execution count.
+The workflow uploads crash artifacts separately from summaries, seed
+inventories, and logs; build objects and staged seeds are not uploaded.

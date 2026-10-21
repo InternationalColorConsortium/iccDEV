@@ -40,18 +40,22 @@ version. For Clang/LLVM 22, build the pinned AFL++ commit with `CC=clang-22`,
 
 Reject compiler pairs outside matching Clang 21 or Clang 22. The packaged
 AFL++ wrapper is paired with 21, while the workflow rebuild is paired with 22;
-do not silently fall back to an older system Clang.
+probe both C and C++ wrappers before configuration and do not silently fall
+back to an older or plugin-incompatible system Clang.
 
 The target sets differ per lane, and are not interchangeable.
 
-- **AFL** accepts `dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube` -- see
+- **AFL** accepts
+  `dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube,pawgreport` -- see
   the allow-list in `.github/scripts/iccdev-afl-smoke.sh`.
 - **CFL** accepts
   `dump,toxml,fromxml,tojson,fromjson,roundtrip,profileparse,cmmapply,cmmsearch,`
   `xmlparse,jsonparse,connectconfig,pawgreport,profilevisualize,writerserialize`.
 
-The nine in-process targets are CFL-only; passing them to the AFL lane is an
-error. The first six CFL
+The `pawgreport` name exists in both lanes but covers different boundaries:
+AFL launches the filesystem-backed CLI, while CFL calls the in-memory
+assessment seam. The other eight in-process target names are CFL-only; passing
+them to the AFL lane is an error. The first six CFL
 targets are command-line wrappers. `profilevisualize` and `writerserialize` are
 in-process public-API harnesses: compile the engine sources separately, include
 only public headers, and do not include a CLI implementation or call
@@ -60,9 +64,9 @@ whose serialization entries are not reachable through `IccVizModel` alone.
 
 Manual dispatches should expose the same operator controls on AFL and CFL:
 `target_ref` for a branch, tag, or ref, optional `target_sha` for a full
-40-character exact commit pin, and `patch_mode` with `all` or `none`. Use `all`
-when validating maintainer-local patch stacks before promoting them to source
-PRs, and `none` when comparing raw branch behavior.
+40-character exact commit pin, and `patch_mode` with `all` or `none`. Default
+to `none`; use `all` when validating maintainer-local patch stacks before
+promoting them to source PRs.
 Expose CFL runtime as seconds per target, not LibFuzzer iteration or execution
 counts, so the manual UI matches AFL's duration model.
 
@@ -72,7 +76,9 @@ rebuild and probe AFL++ wrappers against the selected LLVM major version. Avoid
 broad AFL++ `source-only` or full LLVM builds in the smoke workflow when they
 enter optional GCC plugin or Nyx paths. Selected AFL targets should run in
 parallel with AFL++ affinity fallback enabled and report deterministic
-per-target summaries.
+per-target summaries. Default the optional AFL testcase cache to 128 MiB per
+target for the pinned 64 MiB local testcase ceiling, while allowing constrained
+hosts to disable it explicitly with zero.
 
 Saved crashes should fail the smoke job. Generated saved hangs should be
 reported as `warn` summary rows only after the job verifies Linux
@@ -93,7 +99,7 @@ bash -n .github/scripts/iccdev-afl-smoke.sh
 shellcheck .github/scripts/iccdev-afl-smoke.sh
 actionlint .github/workflows/ci-afl-smoke.yml
 yamllint -d '{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable}}' .github/workflows/ci-afl-smoke.yml
-.github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 30000
+.github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets pawgreport --exec-timeout-ms 30000
 .github/ci/cfl/build.sh \
   --targets dump,toxml,fromxml,tojson,fromjson,roundtrip,profileparse,cmmapply,cmmsearch,xmlparse,jsonparse,connectconfig,pawgreport,profilevisualize,writerserialize \
   --seconds 30

@@ -17,7 +17,7 @@ usage() {
     echo ""
     echo "Usage: $0 [--seconds N] [--targets CSV] [--build-type TYPE] [--exec-timeout-ms N] [--build-dir DIR] [--work-dir DIR] [--patches [DIR]] [--skip-build]"
     echo ""
-    echo "Targets: dump, toxml, fromxml, tojson, fromjson, roundtrip, fromcube"
+    echo "Targets: dump, toxml, fromxml, tojson, fromjson, roundtrip, fromcube, pawgreport"
 }
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -27,12 +27,18 @@ build_dir="${AFL_BUILD_DIR:-$repo_root/build-afl-smoke}"
 work_dir="${AFL_WORK_DIR:-$repo_root/.afl-smoke}"
 build_type="${AFL_BUILD_TYPE:-Debug}"
 exec_timeout_ms="${AFL_EXEC_TIMEOUT_MS:-30000}"
+# The repository-pinned local AFL++ build raises MAX_FILE to 64 MiB. AFL++'s
+# compiled-in testcase cache can then fall below the required 2 * MAX_FILE and
+# abort before the first execution. Budget the minimum compatible 128 MiB per
+# target by default; a constrained host can explicitly disable the cache with
+# zero.
+testcache_size="${AFL_TESTCACHE_SIZE:-128}"
 # Raised from 49152 to admit the whole committed seed corpus, matching
 # .github/ci/cfl/build.sh after #2120. Exactly one committed seed exceeds the old default --
 # .github/ci/test-data/fuzz-clut-hbo-69197729.icc at 61,015 bytes -- so every AFL
 # smoke run staged that file and then deleted it again before fuzzing.
 #
-# What the loss costs the seven fork/exec CLI targets here is NOT measured. #2120
+# What the loss costs the eight fork/exec CLI targets here is NOT measured. #2120
 # measured it for the in-process CFL writer targets -- 1 of 11 seeds reaches
 # RenderRaster and it was the pruned one -- and deliberately did not extend the
 # claim to the CLI wrappers, which consume a profile differently. The reason to
@@ -135,6 +141,18 @@ if [ "$exec_timeout_ms" -lt 20 ] || [ "$exec_timeout_ms" -gt 30000 ]; then
     exit 2
 fi
 
+case "$testcache_size" in
+    ''|*[!0-9]*)
+        echo "ERROR: AFL_TESTCACHE_SIZE must be numeric" >&2
+        exit 2
+        ;;
+esac
+
+if [ "$testcache_size" -ne 0 ] && [ "$testcache_size" -lt 128 ]; then
+    echo "ERROR: AFL_TESTCACHE_SIZE must be 0 or at least 128 MiB" >&2
+    exit 2
+fi
+
 case "$max_seed_bytes" in
     ''|*[!0-9]*)
         echo "ERROR: AFL_MAX_SEED_BYTES must be numeric" >&2
@@ -161,8 +179,8 @@ if [ "${#targets[@]}" -eq 0 ]; then
     echo "ERROR: at least one target is required" >&2
     exit 2
 fi
-if [ "${#targets[@]}" -gt 7 ]; then
-    echo "ERROR: at most seven AFL target entries may be selected" >&2
+if [ "${#targets[@]}" -gt 8 ]; then
+    echo "ERROR: at most eight AFL target entries may be selected" >&2
     exit 2
 fi
 
@@ -186,7 +204,7 @@ for target in "${targets[@]}"; do
         exit 2
     fi
     case "$target" in
-        dump|toxml|fromxml|tojson|fromjson|roundtrip|fromcube)
+        dump|toxml|fromxml|tojson|fromjson|roundtrip|fromcube|pawgreport)
             ;;
         *)
             echo "ERROR: unsupported AFL target: $target" >&2
@@ -232,25 +250,68 @@ else
 fi
 
 if [ "$skip_build" -eq 0 ]; then
-    if [ -z "${AFL_CC:-}" ]; then
-        if command -v clang-21 >/dev/null 2>&1; then
-            AFL_CC=clang-21
-        elif command -v clang-22 >/dev/null 2>&1; then
-            AFL_CC=clang-22
-        else
-            echo "ERROR: AFL++ requires clang-21 or clang-22" >&2
+    probe_afl_compiler_pair() {
+        local candidate_cc="$1"
+        local candidate_cxx="$2"
+        local candidate_major="$3"
+        local probe_dir="$work_dir/compiler-probe-$candidate_major"
+        local probe_log="$work_dir/compiler-probe-$candidate_major.log"
+
+        mkdir -p "$probe_dir"
+        printf 'int main(void) { return 0; }\n' > "$probe_dir/test.c"
+        printf 'int main() { return 0; }\n' > "$probe_dir/test.cpp"
+        : > "$probe_log"
+        if ! AFL_CC="$candidate_cc" AFL_CXX="$candidate_cxx" \
+          afl-clang-fast -c "$probe_dir/test.c" -o "$probe_dir/test.o" \
+          >> "$probe_log" 2>&1; then
+            return 1
+        fi
+        if ! AFL_CC="$candidate_cc" AFL_CXX="$candidate_cxx" \
+          afl-clang-fast++ -c "$probe_dir/test.cpp" -o "$probe_dir/testxx.o" \
+          >> "$probe_log" 2>&1; then
+            return 1
+        fi
+    }
+
+    if [ -z "${AFL_CC:-}" ] && [ -z "${AFL_CXX:-}" ]; then
+        for candidate_major in 21 22; do
+            candidate_cc="clang-$candidate_major"
+            candidate_cxx="clang++-$candidate_major"
+            if command -v "$candidate_cc" >/dev/null 2>&1 &&
+               command -v "$candidate_cxx" >/dev/null 2>&1 &&
+               probe_afl_compiler_pair \
+                 "$candidate_cc" "$candidate_cxx" "$candidate_major"; then
+                AFL_CC="$candidate_cc"
+                AFL_CXX="$candidate_cxx"
+                break
+            fi
+        done
+        if [ -z "${AFL_CC:-}" ]; then
+            echo "ERROR: AFL++ wrappers are incompatible with installed Clang 21 and 22 plugins" >&2
+            echo "Rebuild the pinned AFL++ runtime against an installed LLVM version." >&2
             exit 127
         fi
-    fi
-    if [ -z "${AFL_CXX:-}" ]; then
-        case "$AFL_CC" in
-            *clang-21) AFL_CXX="${AFL_CC%clang-21}clang++-21" ;;
-            *clang-22) AFL_CXX="${AFL_CC%clang-22}clang++-22" ;;
-            *)
-                echo "ERROR: set AFL_CXX to the matching Clang 21 or 22 compiler" >&2
-                exit 2
-                ;;
-        esac
+    else
+        if [ -z "${AFL_CC:-}" ]; then
+            case "$AFL_CXX" in
+                *clang++-21) AFL_CC="${AFL_CXX%clang++-21}clang-21" ;;
+                *clang++-22) AFL_CC="${AFL_CXX%clang++-22}clang-22" ;;
+                *)
+                    echo "ERROR: set AFL_CC to the matching Clang 21 or 22 compiler" >&2
+                    exit 2
+                    ;;
+            esac
+        fi
+        if [ -z "${AFL_CXX:-}" ]; then
+            case "$AFL_CC" in
+                *clang-21) AFL_CXX="${AFL_CC%clang-21}clang++-21" ;;
+                *clang-22) AFL_CXX="${AFL_CC%clang-22}clang++-22" ;;
+                *)
+                    echo "ERROR: set AFL_CXX to the matching Clang 21 or 22 compiler" >&2
+                    exit 2
+                    ;;
+            esac
+        fi
     fi
     require_tool "$AFL_CC"
     require_tool "$AFL_CXX"
@@ -265,6 +326,12 @@ if [ "$skip_build" -eq 0 ]; then
             exit 2
             ;;
     esac
+    if ! probe_afl_compiler_pair "$AFL_CC" "$AFL_CXX" "$afl_cc_major"; then
+        cat "$work_dir/compiler-probe-$afl_cc_major.log" >&2
+        echo "ERROR: AFL++ wrappers cannot load their plugins with Clang $afl_cc_major" >&2
+        echo "Rebuild the pinned AFL++ runtime against Clang $afl_cc_major." >&2
+        exit 2
+    fi
     export AFL_CC AFL_CXX
 
     if [ "$apply_patches" != "0" ]; then
@@ -470,6 +537,8 @@ run_afl_target() {
     local crashes="0"
     local hangs="0"
 
+    export AFL_TESTCACHE_SIZE="$testcache_size"
+
     mkdir -p "$generated"
 
     case "$target" in
@@ -500,6 +569,10 @@ run_afl_target() {
         fromcube)
             binary="$build_dir/Tools/IccFromCube/iccFromCube"
             in_dir="$seed_root/cube"
+            ;;
+        pawgreport)
+            binary="$build_dir/Tools/IccPawgReport/iccPawgReport"
+            in_dir="$seed_root/icc"
             ;;
         *)
             echo "ERROR: unsupported AFL target: $target" >&2
@@ -564,6 +637,13 @@ run_afl_target() {
               ASAN_OPTIONS=abort_on_error=1:detect_leaks=0:allocator_may_return_null=1:symbolize=0 \
               UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
               afl-fuzz -i "$in_dir" -o "$out_dir" -V "$seconds" -t "$exec_timeout_ms" -- "$binary" @@ "$generated/out.icc"
+            afl_status="$?"
+            ;;
+        pawgreport)
+            AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_TRY_AFFINITY=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
+              ASAN_OPTIONS=abort_on_error=1:detect_leaks=0:allocator_may_return_null=1:symbolize=0 \
+              UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+              afl-fuzz -i "$in_dir" -o "$out_dir" -V "$seconds" -t "$exec_timeout_ms" -- "$binary" @@
             afl_status="$?"
             ;;
     esac

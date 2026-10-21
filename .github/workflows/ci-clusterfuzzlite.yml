@@ -25,13 +25,22 @@ concurrency:
   workflow_dispatch:
     inputs:
       run_mode:
-        description: "Run one address/core smoke lane or the full matrix"
+        description: "Run one address smoke lane or the full matrix"
         required: true
         default: smoke
         type: choice
         options:
           - smoke
           - full
+      smoke_target_group:
+        description: "Target group for a smoke run"
+        required: true
+        default: core
+        type: choice
+        options:
+          - core
+          - formats
+          - assessment
       fuzz_minutes:
         description: "Minutes per sequential target group (2-45)"
         required: true
@@ -73,6 +82,7 @@ jobs:
           REQUESTED_MINUTES: ${{ inputs.fuzz_minutes }}
           REQUESTED_PATCH_MODE: ${{ inputs.known_bug_patch_mode }}
           REQUESTED_RUN_MODE: ${{ inputs.run_mode }}
+          REQUESTED_SMOKE_TARGET_GROUP: ${{ inputs.smoke_target_group }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -102,13 +112,24 @@ jobs:
               exit 2
               ;;
           esac
+          smoke_target_group=core
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            smoke_target_group="$REQUESTED_SMOKE_TARGET_GROUP"
+          fi
+          case "$smoke_target_group" in
+            core|formats|assessment) ;;
+            *)
+              echo "smoke_target_group must be core, formats, or assessment" >&2
+              exit 2
+              ;;
+          esac
           run_mode=full
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
             run_mode="$REQUESTED_RUN_MODE"
           fi
           case "$run_mode" in
             smoke)
-              matrix='{"include":[{"group":"core","sanitizer":"address"}]}'
+              matrix="{\"include\":[{\"group\":\"$smoke_target_group\",\"sanitizer\":\"address\"}]}"
               ;;
             full)
               matrix='{"include":[{"group":"core","sanitizer":"address"},{"group":"core","sanitizer":"undefined"},{"group":"core","sanitizer":"memory"},{"group":"formats","sanitizer":"address"},{"group":"formats","sanitizer":"undefined"},{"group":"formats","sanitizer":"memory"},{"group":"assessment","sanitizer":"address"},{"group":"assessment","sanitizer":"undefined"},{"group":"assessment","sanitizer":"memory"}]}'

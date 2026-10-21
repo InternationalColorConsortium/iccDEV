@@ -19,7 +19,8 @@ trips. Require the complete canonical BSD-3-Clause notice derived from
 Preserve the validated manual duration input from 2 through 45 whole minutes,
 pass it as a separate budget for each target group, and retain a 2-minute
 per-group budget for scheduled runs. Default manual dispatch to one
-`address`/`core` smoke job; require full mode before pruning or coverage. Keep
+`address`/`core` smoke job, but allow `formats` or `assessment` as the one
+smoke target group. Require full mode before pruning or coverage. Keep
 pruning runnable after a full-matrix fuzz finding and retain the optional
 manual coverage-report artifact.
 For the memory build, require the pinned instrumented libc++/libc++abi and the

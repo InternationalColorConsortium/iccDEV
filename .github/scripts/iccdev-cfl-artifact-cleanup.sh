@@ -18,7 +18,7 @@ usage()
 }
 
 # An empty tar uploaded by the ClusterFuzzLite action is currently a roughly
-# 350-byte zip. All eight ICC seed corpora exceed this conservative floor.
+# 350-byte zip. All nine ICC seed corpora exceed this conservative floor.
 minimum_corpus_bytes=1024
 
 targets=(

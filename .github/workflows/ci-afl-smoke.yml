@@ -16,8 +16,8 @@ name: "ci-afl-smoke"
 # yamllint disable rule:line-length
 
 permissions:
-  contents: read
-  packages: read
+  contents: read  # Checkout trusted workflow helpers and the selected source.
+  packages: read  # Resolve and pull the trusted unified regression image.
 
 'on':
   workflow_dispatch:
@@ -33,9 +33,9 @@ permissions:
         default: ''
         type: string
       afl_targets:
-        description: 'AFL targets: dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube'
+        description: 'AFL targets: dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube,pawgreport'
         required: true
-        default: dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube
+        default: dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube,pawgreport
         type: string
       duration_seconds:
         description: 'AFL runtime per target in seconds, 1-3600'
@@ -85,7 +85,7 @@ permissions:
       afl_targets:
         description: 'Comma-separated AFL targets'
         required: false
-        default: dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube
+        default: dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube,pawgreport
         type: string
       duration_seconds:
         description: 'AFL runtime per target in seconds, 1-3600'
@@ -118,12 +118,55 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  resolve-image:
+    name: "Resolve AFL smoke image"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      image: ${{ steps.resolve.outputs.image }}
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+
+    steps:
+      - name: Resolve trusted unified regression image
+        id: resolve
+        env:
+          BASH_ENV: /dev/null
+          IMAGE_TAG: ${{ inputs.regression_image_tag || 'latest' }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          if [[ "$IMAGE_TAG" != "latest" &&
+                "$IMAGE_TAG" != "ci-qa-pr-docker-testing" &&
+                "$IMAGE_TAG" != "ci-publish-colourbill-ctrl" &&
+                ! "$IMAGE_TAG" =~ ^sha-[0-9a-f]{40}$ &&
+                ! "$IMAGE_TAG" =~ ^v[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "::error title=Unsupported regression image tag::The requested image tag is not supported"
+            exit 1
+          fi
+          image_tag="ghcr.io/internationalcolorconsortium/iccdev:${IMAGE_TAG}"
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io \
+            --username "$GITHUB_ACTOR" --password-stdin
+          docker pull "$image_tag"
+          image_ref="$(docker image inspect "$image_tag" --format '{{index .RepoDigests 0}}')"
+          if [[ ! "$image_ref" =~ ^ghcr\.io/internationalcolorconsortium/iccdev@sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error title=Invalid regression image digest::The resolved image is not immutable"
+            exit 1
+          fi
+          printf 'image=%s\n' "$image_ref" >> "$GITHUB_OUTPUT"  # elements-sanitized
+
   afl-smoke:
     name: "AFL++ smoke (${{ inputs.afl_targets || 'dump' }}, ${{ inputs.duration_seconds || '300' }}s)"
+    needs: resolve-image
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     container:
-      image: ghcr.io/internationalcolorconsortium/iccdev:${{ inputs.regression_image_tag || 'latest' }}
+      image: ${{ needs.resolve-image.outputs.image }}  # zizmor: ignore[unpinned-images] resolved immutable digest
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -133,11 +176,11 @@ jobs:
         shell: bash --noprofile --norc {0}
     env:
       BASH_ENV: /dev/null
-      ICCDEV_AFL_TARGETS_INPUT: ${{ inputs.afl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube' }}
+      ICCDEV_AFL_TARGETS_INPUT: ${{ inputs.afl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube,pawgreport' }}
       ICCDEV_AFL_SECONDS_INPUT: ${{ inputs.duration_seconds || '300' }}
       ICCDEV_AFL_EXEC_TIMEOUT_MS_INPUT: ${{ inputs.exec_timeout_ms || '30000' }}
       ICCDEV_AFL_BUILD_TYPE_INPUT: ${{ inputs.cmake_build_type || 'Debug' }}
-      ICCDEV_AFL_PATCH_MODE_INPUT: ${{ inputs.patch_mode || 'all' }}
+      ICCDEV_AFL_PATCH_MODE_INPUT: ${{ inputs.patch_mode || 'none' }}
       TARGET_REF_INPUT: ${{ inputs.target_ref || github.ref }}
       TARGET_SHA_INPUT: ${{ inputs.target_sha || '' }}
       TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
@@ -336,11 +379,11 @@ jobs:
         working-directory: target
         env:
           BASH_ENV: /dev/null
-          ICCDEV_AFL_TARGETS: ${{ inputs.afl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube' }}
+          ICCDEV_AFL_TARGETS: ${{ inputs.afl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube,pawgreport' }}
           ICCDEV_AFL_SECONDS: ${{ inputs.duration_seconds || '300' }}
           ICCDEV_AFL_EXEC_TIMEOUT_MS: ${{ inputs.exec_timeout_ms || '30000' }}
           ICCDEV_AFL_BUILD_TYPE: ${{ inputs.cmake_build_type || 'Debug' }}
-          ICCDEV_AFL_APPLY_PATCHES: ${{ (inputs.patch_mode || 'all') == 'all' && '1' || '0' }}
+          ICCDEV_AFL_APPLY_PATCHES: ${{ (inputs.patch_mode || 'none') == 'all' && '1' || '0' }}
           ICCDEV_FUZZ_PATCH_APPLICATOR: .github/scripts/iccdev-apply-fuzz-patches.sh
           ICCDEV_AFL_BUILD_DIR: ${{ runner.temp }}/iccdev-build-afl-smoke
           ICCDEV_AFL_WORK_DIR: ${{ runner.temp }}/iccdev-afl-smoke
@@ -391,7 +434,7 @@ jobs:
           AFL_LOGS_ARTIFACT: afl-smoke-logs-${{ github.run_id }}
           AFL_TARGET_REF: ${{ inputs.target_ref || github.ref }}
           AFL_TARGET_SHA: ${{ inputs.target_sha || '' }}
-          AFL_PATCH_MODE: ${{ inputs.patch_mode || 'all' }}
+          AFL_PATCH_MODE: ${{ inputs.patch_mode || 'none' }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""

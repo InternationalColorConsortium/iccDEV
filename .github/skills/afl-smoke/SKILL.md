@@ -28,7 +28,7 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
 3. Run a short local AFL smoke before pushing when AFL++ is installed:
 
    ```bash
-   .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 30000
+   .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets pawgreport --exec-timeout-ms 30000
    .github/ci/cfl/build.sh \
      --targets dump,toxml,fromxml,tojson,fromjson,roundtrip,profileparse,cmmapply,cmmsearch,xmlparse,jsonparse,connectconfig,pawgreport,profilevisualize,writerserialize \
      --seconds 30
@@ -77,20 +77,23 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
   `afl-clang-fast` for short local smoke checks. The AFL workflow must still
   rebuild and probe AFL++ wrappers against the selected LLVM version.
 - Require a matching Clang 21 or Clang 22 C/C++ pair. The packaged wrapper uses
-  21 and the rebuilt workflow wrapper uses 22; reject older or mismatched
-  `AFL_CC` and `AFL_CXX` values before configuring iccDEV.
+  21 and the rebuilt workflow wrapper uses 22; probe both wrapper languages and
+  reject older, mismatched, or plugin-incompatible `AFL_CC` and `AFL_CXX`
+  values before configuring iccDEV.
 - Keep the workflow bootstrap narrow: build `afl-fuzz`, `afl-showmap`,
   `afl-cc`, `afl-compiler-rt.o`, `SanitizerCoveragePCGUARD.so`, and
   `cmplog-routines-pass.so`. Avoid broad AFL++ targets that enter optional GCC
   plugin or Nyx paths.
 - Keep the target allow-list inside `.github/scripts/iccdev-afl-smoke.sh`.
 - Keep the two lanes' target sets distinct. AFL onboarding stays
-  `dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube` (the allow-list
-  above); CFL adds nine in-process targets:
+  `dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube,pawgreport` (the
+  allow-list above); CFL adds nine in-process implementations:
   `profileparse,cmmapply,cmmsearch,xmlparse,jsonparse,connectconfig,pawgreport,`
-  `profilevisualize,writerserialize`. Those nine targets are CFL-only and are
-  rejected by the AFL runner. The first six CFL targets remain CLI-fidelity
-  wrappers. Build `profilevisualize` and
+  `profilevisualize,writerserialize`. The shared `pawgreport` name represents
+  different boundaries: AFL launches the filesystem-backed `iccPawgReport`
+  CLI, while CFL calls the in-memory assessment seam. The other eight
+  in-process names are rejected by the AFL runner. The first six CFL targets
+  remain CLI-fidelity wrappers. Build `profilevisualize` and
   `writerserialize` in-process through public headers, with the engine sources
   in separate translation units; never include a CLI implementation or call
   `processLuts()` from either harness. `writerserialize` also links
@@ -106,11 +109,15 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
   so malformed hunks or stale context are caught before workflow dispatch.
 - Keep manual AFL and CFL workflow inputs aligned: `target_ref` selects the
   branch, tag, or ref to check out, optional `target_sha` pins a full
-  40-character exact commit, and `patch_mode` selects `all` or `none`. CFL
+  40-character exact commit, and `patch_mode` selects `all` or `none`. Default
+  patch mode to `none`; require an explicit `all` for local patch stacks. CFL
   duration must be expressed as seconds per target, not LibFuzzer iteration or
   execution counts.
 - Keep selected AFL targets running in parallel with AFL++ affinity fallback
   enabled, and merge per-target summaries in a deterministic order.
+- Default `AFL_TESTCACHE_SIZE` to `128` because the pinned 64 MiB local testcase
+  ceiling requires at least twice that cache size. Allow constrained hosts to
+  disable the optional cache explicitly with `0`.
 - Treat saved crashes as smoke failures. Report generated saved hangs as
   `warn` summary rows only after verifying Linux `core_pattern` is not piped;
   otherwise fail on saved hangs because AFL++ can misclassify crashes as

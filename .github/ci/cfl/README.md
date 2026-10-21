@@ -67,7 +67,8 @@ their child processes is not visible to the parent libFuzzer process.
 
 The dedicated `ci-clusterfuzzlite` workflow runs on manual dispatch and a
 nightly schedule. Manual dispatch defaults to one `address`/`core` smoke job;
-select `run_mode=full` for the complete matrix. Scheduled runs always use the
+select `formats` or `assessment` with `smoke_target_group`, or select
+`run_mode=full` for the complete matrix. Scheduled runs always use the
 full `address`, `undefined`, and `memory` matrix; libFuzzer is the engine for
 every matrix entry, not a fourth sanitizer. The nine full-mode group/sanitizer
 combinations run at most three at a time to stay within hosted-runner and
@@ -117,12 +118,12 @@ contract.
 
 Manual workflow dispatch accepts a whole-number `fuzz_minutes` input from 2
 through 45 as the budget for each selected target group and sanitizer pair.
-The smoke mode therefore consumes one two-minute `address`/`core` fuzz budget
-by default and skips pruning and coverage. The runner divides a full-mode group
-budget across only the sequential targets in that group, so adding a format
-target does not dilute core-profile fuzzing. Scheduled full runs use 2 minutes
-per group. Corpus pruning has a 2-minute minimum per sequential target, for a
-18-minute total budget across all nine targets.
+The smoke mode therefore consumes one two-minute `address` fuzz budget for the
+selected group and skips pruning and coverage. The runner divides a full-mode
+group budget across only the sequential targets in that group, so adding a
+format target does not dilute core-profile fuzzing. Scheduled full runs use 2
+minutes per group. Corpus pruning has a 2-minute minimum per sequential target,
+for an 18-minute total budget across all nine targets.
 
 All CFL modes require a matching Clang C/C++ pair at major version 21 or 22.
 The local builder prefers 22, falls back to 21, and rejects older or mismatched
@@ -135,9 +136,9 @@ turning a bounded smoke run into a network-dependent wait while preserving
 local sanitizer symbolization.
 
 Apply the local CFL patch stack before configuring iccDEV with `--patches`.
-The
-`ci-cfl-smoke` workflow applies `.github/ci/fuzz-patches/cfl` by default so
-patch branches test local fixes before they are promoted to source PRs:
+The `ci-cfl-smoke` workflow defaults to `patch_mode=none`; select
+`patch_mode=all` only when a run is meant to test local fixes before they are
+promoted to source PRs:
 
 ```bash
 .github/ci/cfl/build.sh --patches --seconds 30
@@ -219,6 +220,10 @@ explicitly, so changing a value means changing it in both places.
 
 Do not commit generated `.github/ci/cfl/bin`, `.cfl-smoke`, build trees, crash artifacts,
 coverage output, or profiler data.
+
+The `ci-cfl-smoke` workflow uploads crash artifacts separately from its logs,
+summary, and seed inventories. It does not upload build objects or staged seed
+copies, keeping successful-run artifacts small while preserving findings.
 
 ## Expansion Order
 

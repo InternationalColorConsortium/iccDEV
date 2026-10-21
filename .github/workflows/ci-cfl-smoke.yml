@@ -14,8 +14,8 @@ name: "ci-cfl-smoke"
 # yamllint disable rule:line-length
 
 permissions:
-  contents: read
-  packages: read
+  contents: read  # Checkout trusted workflow helpers and the selected source.
+  packages: read  # Resolve and pull the trusted unified regression image.
 
 'on':
   workflow_dispatch:
@@ -31,9 +31,9 @@ permissions:
         default: ''
         type: string
       cfl_targets:
-        description: 'CFL targets: dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize'
+        description: 'CFL targets: dump,toxml,fromxml,tojson,fromjson,roundtrip,pawgreport,profilevisualize,writerserialize'
         required: true
-        default: dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize
+        default: dump,toxml,fromxml,tojson,fromjson,roundtrip,pawgreport,profilevisualize,writerserialize
         type: string
       duration_seconds:
         description: 'LibFuzzer seconds per target, 1-3600; total selected runtime <= 5400'
@@ -68,7 +68,7 @@ permissions:
       cfl_targets:
         description: 'Comma-separated CFL targets'
         required: false
-        default: dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize
+        default: dump,toxml,fromxml,tojson,fromjson,roundtrip,pawgreport,profilevisualize,writerserialize
         type: string
       duration_seconds:
         description: 'LibFuzzer seconds per target, 1-3600; total selected runtime <= 5400'
@@ -91,12 +91,55 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  resolve-image:
+    name: "Resolve CFL smoke image"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      image: ${{ steps.resolve.outputs.image }}
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+
+    steps:
+      - name: Resolve trusted unified regression image
+        id: resolve
+        env:
+          BASH_ENV: /dev/null
+          IMAGE_TAG: ${{ inputs.regression_image_tag || 'latest' }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          if [[ "$IMAGE_TAG" != "latest" &&
+                "$IMAGE_TAG" != "ci-qa-pr-docker-testing" &&
+                "$IMAGE_TAG" != "ci-publish-colourbill-ctrl" &&
+                ! "$IMAGE_TAG" =~ ^sha-[0-9a-f]{40}$ &&
+                ! "$IMAGE_TAG" =~ ^v[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "::error title=Unsupported regression image tag::The requested image tag is not supported"
+            exit 1
+          fi
+          image_tag="ghcr.io/internationalcolorconsortium/iccdev:${IMAGE_TAG}"
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io \
+            --username "$GITHUB_ACTOR" --password-stdin
+          docker pull "$image_tag"
+          image_ref="$(docker image inspect "$image_tag" --format '{{index .RepoDigests 0}}')"
+          if [[ ! "$image_ref" =~ ^ghcr\.io/internationalcolorconsortium/iccdev@sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error title=Invalid regression image digest::The resolved image is not immutable"
+            exit 1
+          fi
+          printf 'image=%s\n' "$image_ref" >> "$GITHUB_OUTPUT"  # elements-sanitized
+
   cfl-smoke:
     name: "CFL smoke (${{ inputs.cfl_targets || 'core' }}, ${{ inputs.duration_seconds || '30' }}s)"
+    needs: resolve-image
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     container:
-      image: ghcr.io/internationalcolorconsortium/iccdev:${{ inputs.regression_image_tag || 'latest' }}
+      image: ${{ needs.resolve-image.outputs.image }}  # zizmor: ignore[unpinned-images] resolved immutable digest
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -106,9 +149,9 @@ jobs:
         shell: bash --noprofile --norc {0}
     env:
       BASH_ENV: /dev/null
-      ICCDEV_CFL_TARGETS_INPUT: ${{ inputs.cfl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize' }}
+      ICCDEV_CFL_TARGETS_INPUT: ${{ inputs.cfl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip,pawgreport,profilevisualize,writerserialize' }}
       ICCDEV_CFL_SECONDS_INPUT: ${{ inputs.duration_seconds || '30' }}
-      ICCDEV_CFL_PATCH_MODE_INPUT: ${{ inputs.patch_mode || 'all' }}
+      ICCDEV_CFL_PATCH_MODE_INPUT: ${{ inputs.patch_mode || 'none' }}
       TARGET_REF_INPUT: ${{ inputs.target_ref || github.ref }}
       TARGET_SHA_INPUT: ${{ inputs.target_sha || '' }}
       TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
@@ -181,9 +224,9 @@ jobs:
         working-directory: target
         env:
           BASH_ENV: /dev/null
-          ICCDEV_CFL_TARGETS: ${{ inputs.cfl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize' }}
+          ICCDEV_CFL_TARGETS: ${{ inputs.cfl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip,pawgreport,profilevisualize,writerserialize' }}
           ICCDEV_CFL_SECONDS: ${{ inputs.duration_seconds || '30' }}
-          ICCDEV_CFL_APPLY_PATCHES: ${{ (inputs.patch_mode || 'all') == 'all' && '1' || '0' }}
+          ICCDEV_CFL_APPLY_PATCHES: ${{ (inputs.patch_mode || 'none') == 'all' && '1' || '0' }}
           ICCDEV_FUZZ_PATCH_APPLICATOR: .github/scripts/iccdev-apply-fuzz-patches.sh
           ICCDEV_CFL_BUILD_DIR: ${{ runner.temp }}/iccdev-build-cfl-smoke
           ICCDEV_CFL_WORK_DIR: ${{ runner.temp }}/iccdev-cfl-smoke
@@ -235,13 +278,25 @@ jobs:
             --build-dir "$ICCDEV_CFL_BUILD_DIR" \
             --work-dir "$ICCDEV_CFL_WORK_DIR"
 
+      - name: Upload CFL findings
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: cfl-smoke-findings-${{ github.run_id }}
+          path: ${{ runner.temp }}/iccdev-cfl-smoke/artifacts
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Upload CFL smoke logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: cfl-smoke-logs-${{ github.run_id }}
           path: |
-            ${{ runner.temp }}/iccdev-cfl-smoke/
+            ${{ runner.temp }}/iccdev-cfl-smoke/summary.tsv
+            ${{ runner.temp }}/iccdev-cfl-smoke/seed-inventory.tsv
+            ${{ runner.temp }}/iccdev-cfl-smoke/skipped-seeds.tsv
+            ${{ runner.temp }}/iccdev-cfl-smoke/logs
           if-no-files-found: ignore
           retention-days: 14
 
@@ -251,10 +306,11 @@ jobs:
         env:
           BASH_ENV: /dev/null
           CFL_WORK_DIR: ${{ runner.temp }}/iccdev-cfl-smoke
+          CFL_FINDINGS_ARTIFACT: cfl-smoke-findings-${{ github.run_id }}
           CFL_LOGS_ARTIFACT: cfl-smoke-logs-${{ github.run_id }}
           CFL_TARGET_REF: ${{ inputs.target_ref || github.ref }}
           CFL_TARGET_SHA: ${{ inputs.target_sha || '' }}
-          CFL_PATCH_MODE: ${{ inputs.patch_mode || 'all' }}
+          CFL_PATCH_MODE: ${{ inputs.patch_mode || 'none' }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -292,5 +348,27 @@ jobs:
               done
             else
               echo "No oversized CFL smoke seeds were skipped."
+            fi
+            echo ""
+            echo "### CFL Findings"
+            echo ""
+            artifacts="$CFL_WORK_DIR/artifacts"
+            first_artifact=""
+            if [ -d "$artifacts" ]; then
+              first_artifact="$(find "$artifacts" -type f -print -quit)"
+            fi
+            if [ -n "$first_artifact" ]; then
+              echo "Artifact: \`$(sanitize_line "$CFL_FINDINGS_ARTIFACT")\`"
+              echo ""
+              echo "| File | Bytes |"
+              echo "|------|-------|"
+              while IFS= read -r artifact; do
+                artifact_name="$(basename "$artifact")"
+                artifact_size="$(wc -c < "$artifact")"
+                artifact_size="${artifact_size//[[:space:]]/}"
+                echo "| $(sanitize_line "$artifact_name") | $(sanitize_line "$artifact_size") |"
+              done < <(find "$artifacts" -type f -print | LC_ALL=C sort)
+            else
+              echo "No crash artifacts were saved."
             fi
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

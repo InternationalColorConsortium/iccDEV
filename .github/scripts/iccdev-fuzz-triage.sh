@@ -99,6 +99,7 @@ tool_for_target() {
     fromjson) printf '%s' "$tool_root/IccFromJson/iccFromJson" ;;
     roundtrip) printf '%s' "$tool_root/IccRoundTrip/iccRoundTrip" ;;
     fromcube) printf '%s' "$tool_root/IccFromCube/iccFromCube" ;;
+    pawgreport) printf '%s' "$tool_root/IccPawgReport/iccPawgReport" ;;
     *) return 1 ;;
   esac
 }
@@ -131,6 +132,9 @@ build_replay_command() {
     fromcube)
       printf 'timeout %ss %q %q %q' "$timeout_seconds" "$tool" "$input" "$out_base.icc"
       ;;
+    pawgreport)
+      printf 'timeout %ss %q %q' "$timeout_seconds" "$tool" "$input"
+      ;;
     *)
       return 1
       ;;
@@ -162,6 +166,9 @@ build_portable_replay_command() {
       ;;
     fromcube)
       printf 'timeout %ss "%s" "$ICCDEV_FINDING_INPUT" "$ICCDEV_REPRO_OUT.icc"' "$timeout_seconds" "$tool"
+      ;;
+    pawgreport)
+      printf 'timeout %ss "%s" "$ICCDEV_FINDING_INPUT"' "$timeout_seconds" "$tool"
       ;;
     *)
       return 1

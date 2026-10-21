@@ -51,8 +51,10 @@ Use this skill for `.clusterfuzzlite/**`,
   `fromJson()`/`toJson()` round trips for top-level and nested `CIccCfg*`
   objects before adding another configuration target.
 - Keep the workflow limited to manual dispatch and the nightly schedule. Manual
-  dispatch defaults to one `address`/`core` smoke job; `run_mode=full` and the
-  schedule use all nine group/sanitizer combinations.
+  dispatch defaults to one `address`/`core` smoke job, while
+  `smoke_target_group` can select `formats` or `assessment` without paying for
+  the full matrix. `run_mode=full` and the schedule use all nine
+  group/sanitizer combinations.
 - Keep the manual fuzz duration selectable as whole minutes from 2 through 45,
   validate it before the sanitizer matrix, pass it as the budget for each
   target group, and retain a 2-minute per-group budget for scheduled runs.

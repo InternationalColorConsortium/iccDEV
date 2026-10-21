@@ -18,7 +18,8 @@ Use `.github/skills/clusterfuzzlite/SKILL.md` and
    IccConnect seed and dedicated configuration dictionary.
 5. Keep actions and the builder image immutable, permissions read-only, and
    triggers limited to manual dispatch plus the nightly schedule. Keep manual
-   smoke to one `address`/`core` job and reserve all nine jobs for full mode.
+   smoke to one `address` job, default its target group to `core`, allow
+   `formats` or `assessment`, and reserve all nine jobs for full mode.
 6. Run configuration CTest, workflow governance checks, and local OSS-Fuzz
    build/check/run validation before reporting success.
 7. Build the pinned instrumented libc++/libc++abi for MSan and pinned

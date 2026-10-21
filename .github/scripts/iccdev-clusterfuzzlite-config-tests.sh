@@ -76,6 +76,12 @@ grep -q '^      run_mode:$' "$workflow"
 grep -q '^        default: smoke$' "$workflow"
 grep -q '^          - smoke$' "$workflow"
 grep -q '^          - full$' "$workflow"
+grep -q '^      smoke_target_group:$' "$workflow"
+grep -q '^        description: "Target group for a smoke run"$' "$workflow"
+grep -q '^        default: core$' "$workflow"
+grep -q '^          - core$' "$workflow"
+grep -q '^          - formats$' "$workflow"
+grep -q '^          - assessment$' "$workflow"
 grep -q '^      fuzz_minutes:$' "$workflow"
 grep -q '^        default: 2$' "$workflow"
 grep -q '^        type: number$' "$workflow"
@@ -126,7 +132,12 @@ grep -q '^          FUZZ_SECONDS: \${{ needs.configure.outputs.fuzz_seconds }}$'
 grep -Eq '^        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:[0-9a-f]{64}$' "$workflow"
 grep -Eq '^        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:[0-9a-f]{64}$' "$workflow"
 
-grep -Fq 'matrix='\''{"include":[{"group":"core","sanitizer":"address"}]}'\''' "$workflow"
+# shellcheck disable=SC2016 # Match the literal Actions expression.
+grep -Fq 'REQUESTED_SMOKE_TARGET_GROUP: ${{ inputs.smoke_target_group }}' "$workflow"
+grep -Fq 'smoke_target_group=core' "$workflow"
+grep -Fq 'core|formats|assessment) ;;' "$workflow"
+# shellcheck disable=SC2016 # Match the literal validated smoke matrix.
+grep -Fq 'matrix="{\"include\":[{\"group\":\"$smoke_target_group\",\"sanitizer\":\"address\"}]}"' "$workflow"
 test "$(grep -o '"group":"[^"]*","sanitizer":"[^"]*"' "$workflow" | sort -u | wc -l)" -eq 9
 # shellcheck disable=SC2016 # Match the literal Actions expression.
 grep -Fq 'include: ${{ fromJSON(needs.configure.outputs.matrix).include }}' "$workflow"
@@ -249,15 +260,36 @@ for smoke_workflow in "$afl_workflow" "$cfl_workflow"; do
   fi
 done
 
-afl_targets='dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube'
+afl_targets='dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube,pawgreport'
 test "$(grep -Fc "        default: $afl_targets" "$afl_workflow")" -eq 2
-cfl_targets='dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize'
+cfl_targets='dump,toxml,fromxml,tojson,fromjson,roundtrip,pawgreport,profilevisualize,writerserialize'
 test "$(grep -Fc "        default: $cfl_targets" "$cfl_workflow")" -eq 2
 for smoke_workflow in "$afl_workflow" "$cfl_workflow"; do
   grep -Fq \
     'ICCDEV_FUZZ_PATCH_APPLICATOR: .github/scripts/iccdev-apply-fuzz-patches.sh' \
     "$smoke_workflow"
+  test "$(grep -Fc "inputs.patch_mode || 'none'" "$smoke_workflow")" -eq 3
+  grep -q '^  resolve-image:$' "$smoke_workflow"
+  grep -q '^    needs: resolve-image$' "$smoke_workflow"
+  # shellcheck disable=SC2016 # Match the literal Actions expression.
+  grep -Fq 'image: ${{ needs.resolve-image.outputs.image }}' "$smoke_workflow"
+  grep -Fq 'Invalid regression image digest' "$smoke_workflow"
 done
+# shellcheck disable=SC2016 # Match the literal triage variable.
+grep -Fq 'pawgreport) printf '\''%s'\'' "$tool_root/IccPawgReport/iccPawgReport" ;;' \
+  "$repo_root/.github/scripts/iccdev-fuzz-triage.sh"
+# shellcheck disable=SC2016 # Match the literal AFL driver variable.
+grep -Fq 'binary="$build_dir/Tools/IccPawgReport/iccPawgReport"' \
+  "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
+# shellcheck disable=SC2016 # Match literal Actions expressions.
+grep -Fq 'name: cfl-smoke-findings-${{ github.run_id }}' "$cfl_workflow"
+# shellcheck disable=SC2016 # Match literal Actions expressions.
+grep -Fq 'path: ${{ runner.temp }}/iccdev-cfl-smoke/artifacts' "$cfl_workflow"
+# shellcheck disable=SC2016 # Match literal Actions expressions.
+if grep -Fqx '            ${{ runner.temp }}/iccdev-cfl-smoke/' "$cfl_workflow"; then
+  echo "[FAIL] CFL logs artifact must not upload the complete work directory" >&2
+  exit 1
+fi
 
 afl_pin='2400206be6fe0d93681c8a5c1535209366602eb1'
 grep -Fq "      AFLPLUSPLUS_REF: $afl_pin" "$afl_workflow"
@@ -272,8 +304,16 @@ grep -Fq 'rebuilds pinned AFL++ wrappers' \
 # shellcheck disable=SC2016 # Match the literal skip-build condition.
 skip_build_line="$(grep -n '^if \[ "$skip_build" -eq 0 \]; then$' "$repo_root/.github/scripts/iccdev-afl-smoke.sh" | cut -d: -f1)"
 # shellcheck disable=SC2016 # Match the literal compiler-gate condition.
-compiler_gate_line="$(grep -n '^    if \[ -z "${AFL_CC:-}" \]; then$' "$repo_root/.github/scripts/iccdev-afl-smoke.sh" | cut -d: -f1)"
+compiler_gate_line="$(grep -n '^    if \[ -z "${AFL_CC:-}" \] && \[ -z "${AFL_CXX:-}" \]; then$' "$repo_root/.github/scripts/iccdev-afl-smoke.sh" | cut -d: -f1)"
 test "$compiler_gate_line" -gt "$skip_build_line"
+grep -Fq 'probe_afl_compiler_pair' "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
+grep -Fq 'AFL++ wrappers are incompatible with installed Clang 21 and 22 plugins' \
+  "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
+# shellcheck disable=SC2016 # Match the literal AFL environment default.
+grep -Fq 'testcache_size="${AFL_TESTCACHE_SIZE:-128}"' \
+  "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
+grep -Fq 'AFL_TESTCACHE_SIZE must be 0 or at least 128 MiB' \
+  "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
 
 "$target_test"
 "$artifact_cleanup_test"
