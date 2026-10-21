@@ -1,0 +1,158 @@
+diff --git a/IccProfLib/IccProfile.cpp b/IccProfLib/IccProfile.cpp
+index acde8f29..84d357d1 100644
+--- a/IccProfLib/IccProfile.cpp
++++ b/IccProfLib/IccProfile.cpp
+@@ -52,6 +52,7 @@
+ #include <cmath>
+ #include <vector>
+ #include <unordered_map>
++#include <unordered_set>
+ #include <algorithm>
+ #include <new>
+ #include <limits>
+@@ -3706,6 +3707,12 @@ icValidateStatus CIccProfile::CheckTagLayout(CIccIO *pIO, std::string &sReport)
+   std::sort(ents.begin(), ents.end(),
+             [](const LayoutEntry &a, const LayoutEntry &b) { return a.offset < b.offset; });
+ 
++  // Track exact data regions as they are encountered.  Re-scanning every prior
++  // directory entry for each overlap made profiles with many shared entries
++  // quadratic even though the shared-region question has a constant-time key.
++  std::unordered_set<uint64_t> seenRegions;
++  seenRegions.reserve(ents.size());
++
+   // prevEnd tracks the furthest byte occupied so far (the "frontier"), not just
+   // the previous tag's end, so a tag fully contained within an earlier one does
+   // not move the reference boundary backwards and skew later gap/overlap checks.
+@@ -3720,6 +3727,8 @@ icValidateStatus CIccProfile::CheckTagLayout(CIccIO *pIO, std::string &sReport)
+     // mislead a report message, never index memory, but clamping keeps it sane.
+     icUInt32Number end = (sz > 0xFFFFFFFFu - off) ? 0xFFFFFFFFu : off + sz;
+     std::string name = Info.GetTagSigName(ents[k].sig);
++    uint64_t regionKey = (static_cast<uint64_t>(off) << 32) | sz;
++    bool bSharedData = !seenRegions.insert(regionKey).second;
+ 
+     if (off > prevEnd) {
+       icUInt32Number gap = off - prevEnd;
+@@ -3760,13 +3769,6 @@ icValidateStatus CIccProfile::CheckTagLayout(CIccIO *pIO, std::string &sReport)
+       // different one, so it is compliant. A partial overlap (same start but a
+       // different size, or a straddling offset) is not shared data and remains
+       // non-compliant.
+-      bool bSharedData = false;
+-      for (size_t j = 0; j < k; ++j) {
+-        if (ents[j].offset == off && ents[j].size == sz) {
+-          bSharedData = true;
+-          break;
+-        }
+-      }
+       if (!bSharedData) {
+         // Tag data overlaps the preceding element (or the tag directory).
+         sReport += icMsgValidateNonCompliant;
+diff --git a/Tools/CmdLine/IccPawgReport/PawgReport.cpp b/Tools/CmdLine/IccPawgReport/PawgReport.cpp
+index 9fe4b1a9..032511e9 100644
+--- a/Tools/CmdLine/IccPawgReport/PawgReport.cpp
++++ b/Tools/CmdLine/IccPawgReport/PawgReport.cpp
+@@ -76,6 +76,7 @@ const double kCharacterizationWarnAvg = 2.0;
+ const double kCharacterizationWarnMax = 10.0;
+ const double kCharacterizationFailAvg = 5.0;
+ const double kCharacterizationFailMax = 20.0;
++const size_t kMaxPawgDetailExamples = 16;
+ 
+ enum class PawgVerdict {
+   Ok,
+@@ -492,6 +493,8 @@ PrivateTagStatus AssessPrivateTags(const RawProfile &raw)
+   PrivateTagStatus status;
+   std::ostringstream registered;
+   std::ostringstream undocumented;
++  int registeredExamples = 0;
++  int undocumentedExamples = 0;
+ 
+   for (const RawTag &tag : raw.tags) {
+     if (IsSpecTag(tag.sig)) {
+@@ -501,17 +504,23 @@ PrivateTagStatus AssessPrivateTags(const RawProfile &raw)
+     ++status.total;
+     const IccTagSigRange *entry = FindRegisteredPrivateTag(tag.sig);
+     if (entry) {
+-      if (status.registered) {
+-        registered << ", ";
++      if ((size_t)registeredExamples < kMaxPawgDetailExamples) {
++        if (registeredExamples) {
++          registered << ", ";
++        }
++        registered << SigString(tag.sig) << "=" << entry->owner;
++        ++registeredExamples;
+       }
+-      registered << SigString(tag.sig) << "=" << entry->owner;
+       ++status.registered;
+     }
+     else {
+-      if (status.undocumented) {
+-        undocumented << ", ";
++      if ((size_t)undocumentedExamples < kMaxPawgDetailExamples) {
++        if (undocumentedExamples) {
++          undocumented << ", ";
++        }
++        undocumented << SigString(tag.sig);
++        ++undocumentedExamples;
+       }
+-      undocumented << SigString(tag.sig);
+       ++status.undocumented;
+     }
+   }
+@@ -525,10 +534,16 @@ PrivateTagStatus AssessPrivateTags(const RawProfile &raw)
+            << status.registered << " registered in " << kIccTagRegistryUrl
+            << ", " << status.undocumented << " undocumented";
+     if (status.registered) {
+-      detail << "; registered: " << registered.str();
++      detail << "; registered examples: " << registered.str();
++      if (status.registered > registeredExamples) {
++        detail << ", ... " << status.registered - registeredExamples << " more";
++      }
+     }
+     if (status.undocumented) {
+-      detail << "; undocumented: " << undocumented.str();
++      detail << "; undocumented examples: " << undocumented.str();
++      if (status.undocumented > undocumentedExamples) {
++        detail << ", ... " << status.undocumented - undocumentedExamples << " more";
++      }
+     }
+     status.detail = detail.str();
+   }
+@@ -1569,6 +1582,7 @@ PawgVerdict CompressionPathVerdict(const RawProfile &raw, CIccProfile *pIcc, std
+   (void)pIcc;  // detection is raw-bytes based; pIcc reserved for future content checks
+   const uint64_t fileSize = raw.data.size();
+   std::vector<std::string> compressed;
++  size_t compressedCount = 0;
+ 
+   for (const RawTag &tag : raw.tags) {
+     const uint64_t typeOff = tag.offset;
+@@ -1583,22 +1597,27 @@ PawgVerdict CompressionPathVerdict(const RawProfile &raw, CIccProfile *pIcc, std
+       if (flags & (uint32_t)icCompressedData)
+         isCompressed = true;
+     }
+-    if (isCompressed)
+-      compressed.push_back(SigString(tag.sig) + " (" + SigString(typeSig) + ")");
++    if (isCompressed) {
++      ++compressedCount;
++      if (compressed.size() < kMaxPawgDetailExamples)
++        compressed.push_back(SigString(tag.sig) + " (" + SigString(typeSig) + ")");
++    }
+   }
+ 
+-  if (compressed.empty()) {
++  if (!compressedCount) {
+     detail = "no DEFLATE-compressed tags (zut8/zxml/compressed data) present";
+     return PawgVerdict::Ok;
+   }
+ 
+   std::ostringstream oss;
+-  oss << compressed.size() << " compressed tag(s): ";
++  oss << compressedCount << " compressed tag(s), examples: ";
+   for (size_t i = 0; i < compressed.size(); ++i) {
+     if (i)
+       oss << ", ";
+     oss << compressed[i];
+   }
++  if (compressedCount > compressed.size())
++    oss << ", ... " << compressedCount - compressed.size() << " more";
+ #ifdef ICC_USE_ZLIB
+   // zlib linked: Describe()/GetText() can inflate and inspect the content, so the
+   // mere presence of compressed tags is not itself a finding.

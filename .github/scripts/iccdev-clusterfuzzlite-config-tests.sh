@@ -56,7 +56,11 @@ bash -n "$artifact_cleanup"
 bash -n "$artifact_cleanup_test"
 bash -n "$source_digest"
 
-test "$(find "$patch_dir" -maxdepth 1 -type f -name '*.patch' | wc -l)" -eq 1
+mapfile -t cfl_patches < <(find "$patch_dir" -maxdepth 1 -type f -name '*.patch' | sort)
+test "${#cfl_patches[@]}" -ge 1
+for cfl_patch in "${cfl_patches[@]}"; do
+  grep -Fq "| \`$(basename "$cfl_patch")\` |" "$patch_readme"
+done
 
 grep -qx 'language: c++' "$project"
 grep -q '^FROM gcr.io/oss-fuzz-base/base-builder@sha256:[0-9a-f]\{64\}$' "$dockerfile"
