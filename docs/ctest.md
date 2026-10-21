@@ -405,6 +405,11 @@ on sanitizer findings.
 `iccdev.pawg-q1-quality-contract` validates the PAWG Q1 sample budget,
 CIEDE2000 reference vectors, and Gray/RGB/CMYK round-trip model selection.
 
+`iccdev.pawg-q3-work-budget` validates the PAWG Q3 n-D LUT interpolation
+budget. It keeps 13-channel transforms in scope and reports higher-dimensional
+n-D LUT smoothness as not applicable before the `2^N` corner work can amplify
+runtime under sanitizer and coverage builds.
+
 `iccdev.cam-degenerate-regressions` compiles a small helper from
 `.github/ci/regression/cam-degenerate.cpp` and exercises degenerate CAM forward
 and inverse conversions. It guards against divide-by-zero and non-finite
