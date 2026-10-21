@@ -1,0 +1,223 @@
+diff --git a/IccProfLib/IccMpeCalc.h b/IccProfLib/IccMpeCalc.h
+index e212dd92..4ff948b8 100644
+--- a/IccProfLib/IccMpeCalc.h
++++ b/IccProfLib/IccMpeCalc.h
+@@ -407,6 +407,7 @@ public:
+   icUInt32Number GetMaxTemp() const;
+   icUInt32Number GetNumTempChannels() const;
+   icUInt32Number GetNumOps() const { return m_nOps; }
++  icUInt64Number GetEstimatedCost();
+   int CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nOps, int nArgs, bool bCheckUnderflow, std::string &sReport,
+                              icUInt32Number nMaxStack = icMaxDataStackSize) const;
+   icFuncParseStatus DoesStackUnderflowOverflow(std::string &sReport, icUInt32Number nMaxStack = icMaxDataStackSize) const;
+@@ -513,6 +514,9 @@ public:
+   /** Operations in the main function plus those of every sub-calculator. */
+   icUInt64Number GetTotalOps() const;
+ 
++  /** Selector-width-aware work estimate for the main function and sub-calculators. */
++  icUInt64Number GetEstimatedCost();
++
+ protected:
+ 
+   icValidateStatus ValidateLimits(const CIccMpeCalculator *pLimits, const std::string &sigPath, std::string &sReport) const;
+diff --git a/IccProfLib/IccMpeCalc.cpp b/IccProfLib/IccMpeCalc.cpp
+index 2a61f10b..fa667f12 100644
+--- a/IccProfLib/IccMpeCalc.cpp
++++ b/IccProfLib/IccMpeCalc.cpp
+@@ -4222,6 +4222,35 @@ icUInt32Number CIccCalculatorFunc::GetNumTempChannels() const
+   return nChannels;
+ }
+ 
++/**
++******************************************************************************
++* Name: CIccCalculatorFunc::GetEstimatedCost
++*
++* Purpose: Return a saturating, selector-width-aware estimate of the scalar
++*  work performed by one function evaluation.  Counting opcodes alone misses
++*  operations such as copy, transpose, and vector arithmetic whose selectors
++*  can make one opcode process tens of thousands of stack values.
++******************************************************************************
++*/
++icUInt64Number CIccCalculatorFunc::GetEstimatedCost()
++{
++  const icUInt64Number maxCost = std::numeric_limits<icUInt64Number>::max();
++  icUInt64Number cost = 0;
++  icUInt32Number nOps = m_nOps < MAX_CALC_ELEMENTS ? m_nOps : MAX_CALC_ELEMENTS;
++
++  for (icUInt32Number i=0; m_Op && i<nOps; i++) {
++    icUInt64Number used = m_Op[i].ArgsUsed(m_pCalc);
++    icUInt64Number pushed = m_Op[i].ArgsPushed(m_pCalc);
++    icUInt64Number opCost = used > pushed ? used : pushed;
++    if (!opCost)
++      opCost = 1;
++    if (opCost > maxCost - cost)
++      return maxCost;
++    cost += opCost;
++  }
++  return cost;
++}
++
+ /**
+ ******************************************************************************
+ * Name: CIccCalculatorFunc::NeedTempReset
+@@ -5638,6 +5667,32 @@ icUInt64Number CIccMpeCalculator::GetTotalOps() const
+   return nOps;
+ }
+ 
++/**
++ ******************************************************************************
++ * Name: CIccMpeCalculator::GetEstimatedCost
++ *
++ * Purpose: Selector-width-aware work estimate for the main calculator function
++ *  and every calculator sub-element.  The result saturates on overflow.
++ ******************************************************************************
++ */
++icUInt64Number CIccMpeCalculator::GetEstimatedCost()
++{
++  const icUInt64Number maxCost = std::numeric_limits<icUInt64Number>::max();
++  icUInt64Number cost = m_calcFunc ? m_calcFunc->GetEstimatedCost() : 0;
++  icUInt32Number nSub = (m_nSubElem > MAX_CALC_ELEMENTS) ? MAX_CALC_ELEMENTS : m_nSubElem;
++
++  for (icUInt32Number i=0; m_SubElem && i<nSub; i++) {
++    CIccMpeCalculator *pSub = dynamic_cast<CIccMpeCalculator*>(m_SubElem[i]);
++    if (pSub) {
++      icUInt64Number subCost = pSub->GetEstimatedCost();
++      if (subCost > maxCost - cost)
++        return maxCost;
++      cost += subCost;
++    }
++  }
++  return cost;
++}
++
+ /**
+  ******************************************************************************
+  * Name: CIccMpeCalculator::ValidateLimits
+diff --git a/Tools/CmdLine/IccPawgReport/IccQualityMetrics.h b/Tools/CmdLine/IccPawgReport/IccQualityMetrics.h
+index 50a70663..2862d719 100644
+--- a/Tools/CmdLine/IccPawgReport/IccQualityMetrics.h
++++ b/Tools/CmdLine/IccPawgReport/IccQualityMetrics.h
+@@ -40,6 +40,7 @@
+ 
+ #include "IccProfile.h"
+ #include "IccCmm.h"
++#include "IccMpeCalc.h"
+ #include "IccTag.h"
+ #include "IccTagBasic.h"
+ #include "IccTagLut.h"
+@@ -65,6 +66,7 @@ namespace iccquality {
+ constexpr int kMaxQualityChannels = 16;
+ constexpr size_t kMaxQualitySamples = 2000000;
+ constexpr int kSmoothnessSamples = 65;
++constexpr size_t kMaxCalculatorQualityWork = 8u * 1024u * 1024u;
+ 
+ // CIccXformNDLut uses multilinear interpolation, whose work grows as 2^N for
+ // N input channels.  Q3 evaluates the neutral diagonal plus every device axis,
+@@ -394,6 +396,38 @@ inline bool bounded_grid_sample_count(int channels, size_t &samples) {
+   return true;
+ }
+ 
++inline bool calculator_quality_work_within_budget(CIccProfile *pIcc,
++                                                  size_t evaluations) {
++  if (!pIcc || !evaluations) {
++    return false;
++  }
++
++  size_t remaining = kMaxCalculatorQualityWork / evaluations;
++  for (TagEntryList::iterator it = pIcc->m_Tags.begin();
++       it != pIcc->m_Tags.end(); ++it) {
++    CIccTagMultiProcessElement *mpe =
++        dynamic_cast<CIccTagMultiProcessElement *>(pIcc->FindTag(*it));
++    if (!mpe) {
++      continue;
++    }
++
++    const icUInt32Number count = mpe->NumElements();
++    for (icUInt32Number i = 0; i < count; ++i) {
++      CIccMpeCalculator *calc =
++          dynamic_cast<CIccMpeCalculator *>(mpe->GetElement((int)i));
++      if (!calc) {
++        continue;
++      }
++      const icUInt64Number cost = calc->GetEstimatedCost();
++      if (cost > remaining) {
++        return false;
++      }
++      remaining -= static_cast<size_t>(cost);
++    }
++  }
++  return true;
++}
++
+ template <typename Fn>
+ inline void visit_bounded_grid_points(int channels,
+                                       std::array<icFloatNumber, 16> &device,
+@@ -836,7 +870,10 @@ inline bool measure_cmm_round_trip(CIccProfile *pIcc,
+     reason = "CIccCmm round-trip sample grid exceeds quality metric budget";
+     return false;
+   }
+-  (void)sampleCount;
++  if (!calculator_quality_work_within_budget(pIcc, sampleCount * 5u)) {
++    reason = "CIccCmm round-trip calculator work exceeds quality metric budget";
++    return false;
++  }
+ 
+   CIccCmm forward(colorSpace, pcs, true);
+   CIccCmm reverse(pcs, colorSpace, false);
+@@ -924,6 +961,14 @@ inline bool measure_cmm_forward_smoothness(CIccProfile *pIcc,
+     return false;
+   }
+ 
++  const size_t paths = deviceChannels == 1 ? 1u :
++      static_cast<size_t>(deviceChannels + 1);
++  if (!calculator_quality_work_within_budget(
++          pIcc, paths * static_cast<size_t>(kSmoothnessSamples))) {
++    reason = "CIccCmm smoothness calculator work exceeds quality metric budget";
++    return false;
++  }
++
+   CIccCmm forward(colorSpace, pcs, true);
+   if (!begin_profile_cmm(pIcc, forward, "forward", reason)) {
+     return false;
+@@ -1623,8 +1668,7 @@ inline bool measure_transform_smoothness(CIccProfile *pIcc,
+   // A general AToB tag is first rejected by the classic-lut8/lut16 probe.  If
+   // its real CMM path then reaches the resource budget, preserve that terminal
+   // reason so the report classifies Q3 as not applicable instead of a gap.
+-  if (cmmReason.find("sample grid exceeds quality metric budget") !=
+-      std::string::npos) {
++  if (cmmReason.find("exceeds quality metric budget") != std::string::npos) {
+     reason = cmmReason;
+   } else if (reason.empty()) {
+     reason = !cmmReason.empty() ? cmmReason : matrixReason;
+diff --git a/Tools/CmdLine/IccPawgReport/PawgReport.cpp b/Tools/CmdLine/IccPawgReport/PawgReport.cpp
+index 9fe4b1a9..032511e9 100644
+--- a/Tools/CmdLine/IccPawgReport/PawgReport.cpp
++++ b/Tools/CmdLine/IccPawgReport/PawgReport.cpp
+@@ -1106,9 +1121,7 @@ PawgVerdict CalculatorCostVerdict(CIccProfile *pIcc, const RawProfile &raw, std:
+         const uint64_t operations = calc->GetTotalOps();
+         calculatorOperations = operations > UINT64_MAX - calculatorOperations ?
+                                UINT64_MAX : calculatorOperations + operations;
+-        const uint64_t elementCost =
+-            (uint64_t)std::max<icUInt16Number>(calc->NumInputChannels(), 1) *
+-            (uint64_t)std::max<icUInt16Number>(calc->NumOutputChannels(), 1) * 64ULL;
++        const uint64_t elementCost = calc->GetEstimatedCost();
+         estimatedCost = elementCost > UINT64_MAX - estimatedCost ?
+                         UINT64_MAX : estimatedCost + elementCost;
+       }
+@@ -1123,7 +1136,7 @@ PawgVerdict CalculatorCostVerdict(CIccProfile *pIcc, const RawProfile &raw, std:
+   oss << scope << mpeTags << " MPE tag(s), " << elements << " process element(s), "
+       << calculatorElements << " calculator element(s), "
+       << calculatorOperations << " calculator operation(s), estimated relative cost="
+-      << estimatedCost << "; local warning threshold=65536 operations";
++      << estimatedCost << "; local warning thresholds=65536 operations or work units";
+   detail = oss.str();
+   return (elements > 4096 || calculatorElements > 256 ||
+           calculatorOperations > 65536 || estimatedCost > 65536) ?
+@@ -1923,6 +1942,7 @@ bool QualityMetricNotApplicable(const std::string &reason)
+ {
+   return reason.find("requires bounded device channels and Lab/XYZ PCS") != std::string::npos ||
+          reason.find("sample grid exceeds quality metric budget") != std::string::npos ||
++         reason.find("calculator work exceeds quality metric budget") != std::string::npos ||
+          reason.find("requires Lab or XYZ PCS") != std::string::npos ||
+          reason.find("Invalid profile") != std::string::npos ||
+          reason.find("Invalid profile transform") != std::string::npos ||
