@@ -64,6 +64,14 @@ namespace iccquality {
 /// All std::array<icFloatNumber, 16> buffers depend on this bound.
 constexpr int kMaxQualityChannels = 16;
 constexpr size_t kMaxQualitySamples = 2000000;
+constexpr int kSmoothnessSamples = 65;
+
+// CIccXformNDLut uses multilinear interpolation, whose work grows as 2^N for
+// N input channels.  Q3 evaluates the neutral diagonal plus every device axis,
+// so 14- and 15-channel profiles otherwise require roughly 16 and 34 million
+// CLUT-corner visits.  Keep 13-channel profiles (about 7.5 million visits) in
+// scope while refusing the next exponential step (CWE-400).
+constexpr size_t kMaxSmoothnessInterpolationCorners = 8u * 1024u * 1024u;
 constexpr double kPi = 3.141592653589793238462643383279502884;
 constexpr double kDegToRad = kPi / 180.0;
 
@@ -583,6 +591,19 @@ inline bool is_lab_or_xyz_pcs(icColorSpaceSignature pcs) {
   return pcs == icSigLabData || pcs == icSigXYZData;
 }
 
+inline bool nd_lut_smoothness_within_work_budget(int deviceChannels,
+                                                 int samples = kSmoothnessSamples) {
+  if (deviceChannels < 1 || deviceChannels > kMaxQualityChannels || samples < 1) {
+    return false;
+  }
+
+  const size_t paths = deviceChannels == 1 ? 1u :
+      static_cast<size_t>(deviceChannels + 1);
+  const size_t cornersPerSample = size_t{1} << deviceChannels;
+  return cornersPerSample <=
+      kMaxSmoothnessInterpolationCorners / paths / static_cast<size_t>(samples);
+}
+
 inline bool status_ok(icStatusCMM status, const std::string &phase, std::string &reason) {
   if (status == icCmmStatOk) {
     return true;
@@ -908,7 +929,14 @@ inline bool measure_cmm_forward_smoothness(CIccProfile *pIcc,
     return false;
   }
 
-  constexpr int kSamples = 65;
+  const CIccXform *first = forward.GetFirstXform();
+  if (first && first->GetXformType() == icXformTypeNDLut &&
+      !nd_lut_smoothness_within_work_budget(deviceChannels)) {
+    reason = "CIccCmm smoothness sample grid exceeds quality metric budget "
+             "for n-D LUT interpolation";
+    return false;
+  }
+
   std::array<icFloatNumber, 16> device{};
   std::array<icFloatNumber, 16> pcsValue{};
   std::array<icFloatNumber, 3> prevLab{};
@@ -922,8 +950,8 @@ inline bool measure_cmm_forward_smoothness(CIccProfile *pIcc,
     bool havePrev = false;
     double prevStep = -1.0;
 
-    for (int i = 0; i < kSamples; ++i) {
-      const double v = i / static_cast<double>(kSamples - 1);
+    for (int i = 0; i < kSmoothnessSamples; ++i) {
+      const double v = i / static_cast<double>(kSmoothnessSamples - 1);
       device.fill(0.0f);
 
       if (deviceChannels == 1) {
@@ -1592,7 +1620,13 @@ inline bool measure_transform_smoothness(CIccProfile *pIcc,
     return true;
   }
 
-  if (reason.empty()) {
+  // A general AToB tag is first rejected by the classic-lut8/lut16 probe.  If
+  // its real CMM path then reaches the resource budget, preserve that terminal
+  // reason so the report classifies Q3 as not applicable instead of a gap.
+  if (cmmReason.find("sample grid exceeds quality metric budget") !=
+      std::string::npos) {
+    reason = cmmReason;
+  } else if (reason.empty()) {
     reason = !cmmReason.empty() ? cmmReason : matrixReason;
   }
   if (reason.empty()) {

@@ -1342,6 +1342,48 @@ function(iccdev_add_pawg_q3_steep_test)
   endif()
 endfunction()
 
+# Guards iccPawgReport's Q3 work budget for high-dimensional n-D LUTs.
+# CIccCLUT::InterpND visits 2^N corners per sample, while Q3 samples the neutral
+# diagonal and every device axis.  The test pins the 13/14-channel budget edge
+# and drives a real 14-channel CMM through the refusal path.
+function(iccdev_add_pawg_q3_work_budget_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPawgQ3WorkBudgetTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pawg-q3-work-budget.cpp"
+  )
+  target_include_directories(iccPawgQ3WorkBudgetTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport"
+  )
+  target_link_libraries(iccPawgQ3WorkBudgetTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPawgQ3WorkBudgetTest)
+
+  add_test(
+    NAME iccdev.pawg-q3-work-budget
+    COMMAND "$<TARGET_FILE:iccPawgQ3WorkBudgetTest>"
+  )
+  set_tests_properties(iccdev.pawg-q3-work-budget PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;pawg;quality;smoothness;security;regression"
+  )
+  if(WIN32)
+    set(_pawg_q3_budget_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPawgQ3WorkBudgetTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pawg_q3_budget_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pawg-q3-work-budget PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pawg_q3_budget_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards iccPawgReport's Q4 characterization round-trip
 # (iccquality::evaluate_characterization): it must (1) compare predicted output
 # against the embedded measurement data in ABSOLUTE colorimetric -- the only
@@ -13196,6 +13238,7 @@ if(WIN32)
   iccdev_add_tag_layout_shared_data_test()
   iccdev_add_pawg_q2_tonecurves_test()
   iccdev_add_pawg_q3_steep_test()
+  iccdev_add_pawg_q3_work_budget_test()
   iccdev_add_pawg_q4_characterization_test()
   iccdev_add_pawg_q4_xyz_pcs_decode_test()
   iccdev_add_tointernal_fixedint_roundtrip_test()
@@ -13741,6 +13784,7 @@ iccdev_add_parser_restore_calls_test()
 iccdev_add_tag_layout_shared_data_test()
 iccdev_add_pawg_q2_tonecurves_test()
 iccdev_add_pawg_q3_steep_test()
+iccdev_add_pawg_q3_work_budget_test()
 iccdev_add_pawg_q4_characterization_test()
 iccdev_add_pawg_q4_xyz_pcs_decode_test()
 # Same single-call-site omission as iccdev_add_applytolink_invalid_arg_test() above: this
