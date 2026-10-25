@@ -47,6 +47,7 @@
 #include "IccStructFactory.h"
 #include "IccArrayFactory.h"
 #include "IccConvertUTF.h"
+#include "IccFileUtil.h"
 #include <new>     /* std::nothrow */
 #include <cstring> /* C strings strcpy, memcpy ... */
 #include <set>
@@ -54,6 +55,7 @@
 #include <sstream>  // Make sure to include this header
 #include <iomanip>  // Include this header for setw and setfill
 #include <cmath>    // std::isfinite for NaN/Inf-safe float->int casts
+#include <cctype>   // isspace
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
@@ -1058,6 +1060,72 @@ bool CIccTagXmlNamedColor2::ToXml(std::string &xml, std::string blanks/* = ""*/)
 }
 
 
+// One named colour's device coordinates: exactly nCoords values, each within
+// its encoding's range -- 0..255 for int8, 0..65535 for int16, 0.0..1.0 for
+// float.  CIccUInt16Array::ParseArray() clamped what it read, so -1 65536 loaded
+// as 0 65535, turned a token it could not read into 0, and the loop that
+// copied the values padded a short list with zeros and dropped the end of a
+// long one -- all without a word (#2832).  The binary form is a uInt16Number
+// per coordinate (ICC.1:2022 10.17), so a value outside the range has no
+// encoding; refuse it rather than change it.
+static bool icXmlParseNamedDeviceCoords(const char *szCoords, icUInt32Number nCoords,
+                                        const char *szEncoding, icFloatNumber *pCoords,
+                                        std::string &parseStr)
+{
+  const bool bInt8 = !strcmp(szEncoding, "int8");
+  const bool bInt16 = !strcmp(szEncoding, "int16");
+  const bool bFloat = !strcmp(szEncoding, "float");
+  if (!bInt8 && !bInt16 && !bFloat)
+    return false;
+
+  icUInt32Number n = 0;
+  const char *p = szCoords;
+  for (;;) {
+    while (*p && isspace((unsigned char)*p))
+      p++;
+    if (!*p)
+      break;
+    const char *tokStart = p;
+    while (*p && !isspace((unsigned char)*p))
+      p++;
+    std::string tok(tokStart, p - tokStart);
+
+    if (n >= nCoords) {
+      parseStr += "More device coordinates than CountOfDeviceCoords in a named colour\n";
+      return false;
+    }
+
+    bool ok;
+    if (bInt8) {
+      icUInt8Number v = 0;
+      ok = icXmlParseU8(tok.c_str(), v);
+      pCoords[n] = (icFloatNumber)v / 255.0f;
+    }
+    else if (bInt16) {
+      icUInt16Number v = 0;
+      ok = icXmlParseU16(tok.c_str(), v);
+      pCoords[n] = (icFloatNumber)v / 65535.0f;
+    }
+    else {
+      icFloatNumber v = 0;
+      ok = icXmlParseFloat(tok.c_str(), v) && v >= 0.0f && v <= 1.0f;
+      pCoords[n] = v;
+    }
+    if (!ok) {
+      parseStr += "Invalid or out-of-range named colour device coordinate '" +
+                  icSanitizeConsoleText(tok) + "'\n";
+      return false;
+    }
+    n++;
+  }
+
+  if (n != nCoords) {
+    parseStr += "Fewer device coordinates than CountOfDeviceCoords in a named colour\n";
+    return false;
+  }
+  return true;
+}
+
 bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   pNode = icXmlFindNode(pNode, "NamedColors");
@@ -1203,66 +1271,25 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string &parseStr)
           if (szName) {
             icXmlCopyFixedString(pNamedColor->rootName, sizeof(pNamedColor->rootName), icUtf8ToAnsi(str, szName));
 
-            if (m_nDeviceCoords && pNode->children) {
-              if (!strcmp(szDeviceEncoding, "int8")) {
-                CIccUInt8Array coords;
-
-                coords.ParseArray(pNode->children);
-                icUInt8Number *pBuf = coords.GetBuf();
-
-                // CWE-400/CWE-834: clamp the field to the same load-time bound as
-                // the float branch below (deviceCoords[] is sized to it) so a
-                // corrupted count can't drive an out-of-range copy.  All three
-                // encoding branches share the single kMaxNamedColorDeviceCoords
-                // declared at the top of this parse block -- the same bound
-                // CountOfDeviceCoords was accepted against above -- rather than
-                // each redeclaring its own, which would shadow it (-Wshadow is
-                // -Werror in the strict build profiles).
-                icUInt32Number nDevCoords = (m_nDeviceCoords > kMaxNamedColorDeviceCoords)
-                                              ? kMaxNamedColorDeviceCoords : m_nDeviceCoords;
-                icUInt32Number j;
-                for (j = 0; j < nDevCoords && j < coords.GetSize(); j++) {
-                  pNamedColor->deviceCoords[j] = (icFloatNumber)pBuf[j] / 255.0f;
-                }
+            if (m_nDeviceCoords) {
+              // CWE-400/CWE-834: deviceCoords[] is sized to kMaxNamedColorDeviceCoords,
+              // the bound CountOfDeviceCoords was accepted against above.
+              icUInt32Number nDevCoords = (m_nDeviceCoords > kMaxNamedColorDeviceCoords)
+                                            ? kMaxNamedColorDeviceCoords : m_nDeviceCoords;
+              // The values may be split over several text or CDATA nodes with
+              // comments between them, as CIccXmlArrayType::ParseArray() allows;
+              // join them the same way.
+              std::string coords;
+              for (xmlNode *pText = pNode->children; pText; pText = pText->next) {
+                if (pText->type == XML_COMMENT_NODE)
+                  continue;
+                if ((pText->type != XML_TEXT_NODE && pText->type != XML_CDATA_SECTION_NODE) ||
+                    !pText->content)
+                  break;
+                coords += (const char*)pText->content;
               }
-              else if (!strcmp(szDeviceEncoding, "int16")) {
-                CIccUInt16Array coords;
-
-                coords.ParseArray(pNode->children);
-                icUInt16Number *pBuf = coords.GetBuf();
-
-                // CWE-400/CWE-834: clamp the field to the same load-time bound as
-                // the float branch below (deviceCoords[] is sized to it) so a
-                // corrupted count can't drive an out-of-range copy.  Shares the
-                // single kMaxNamedColorDeviceCoords declared at the top of this
-                // parse block, as the int8 branch above does.
-                icUInt32Number nDevCoords = (m_nDeviceCoords > kMaxNamedColorDeviceCoords)
-                                              ? kMaxNamedColorDeviceCoords : m_nDeviceCoords;
-                icUInt32Number j;
-                for (j = 0; j < nDevCoords && j < coords.GetSize(); j++) {
-                  pNamedColor->deviceCoords[j] = (icFloatNumber)pBuf[j] / 65535.0f;
-                }
-              }
-              else if (!strcmp(szDeviceEncoding, "float")) {
-                CIccFloatArray coords;
-
-                coords.ParseArray(pNode->children);
-                icFloatNumber *pBuf = coords.GetBuf();
-
-                // CWE-400/CWE-834: m_nDeviceCoords is capped at
-                // kMaxNamedColorDeviceCoords on load and sizes deviceCoords[];
-                // clamp to that bound so a corrupted count can't drive an
-                // unbounded or out-of-range copy.  Shares the single
-                // kMaxNamedColorDeviceCoords declared at the top of this parse
-                // block, as the int8/int16 branches above do.
-                icUInt32Number nDevCoords = (m_nDeviceCoords > kMaxNamedColorDeviceCoords)
-                                              ? kMaxNamedColorDeviceCoords : m_nDeviceCoords;
-                icUInt32Number j;
-                for (j = 0; j < nDevCoords && j < coords.GetSize(); j++) {
-                  pNamedColor->deviceCoords[j] = (icFloatNumber)pBuf[j];
-                }
-              }
-              else
+              if (!icXmlParseNamedDeviceCoords(coords.c_str(), nDevCoords, szDeviceEncoding,
+                                               pNamedColor->deviceCoords, parseStr))
                 return false;
             }
 

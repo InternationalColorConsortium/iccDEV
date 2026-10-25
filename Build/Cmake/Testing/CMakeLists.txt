@@ -2806,6 +2806,117 @@ endfunction()
 # their Absolute flag (ICC.2:2023 11.2.12 and 11.2.13), which was tested against
 # icRelativeSpectralData (0) and so never read, and the emission observer must not
 # scale Y and Z by m_xyzscale entries its Begin() never set.
+# #2832: the XML namedColor2 reader clamped out-of-range device coordinates,
+# read junk as 0, and padded or truncated a list that disagreed with
+# CountOfDeviceCoords.  It now refuses all of them.  Library only; called in
+# both the Windows and the main list.
+function(iccdev_add_named_device_coords_xml_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccNamedDeviceCoordsXmlTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/named-device-coords-xml.cpp"
+  )
+  target_compile_features(iccNamedDeviceCoordsXmlTest PRIVATE cxx_std_17)
+  target_include_directories(iccNamedDeviceCoordsXmlTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccNamedDeviceCoordsXmlTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccNamedDeviceCoordsXmlTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.named-device-coords-xml
+      COMMAND "$<TARGET_FILE:iccNamedDeviceCoordsXmlTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.named-device-coords-xml
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccNamedDeviceCoordsXmlTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.named-device-coords-xml PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;namedcolor;issue-2832;regression"
+  )
+  if(WIN32)
+    set(_named_device_coords_xml_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccNamedDeviceCoordsXmlTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _named_device_coords_xml_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.named-device-coords-xml PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_named_device_coords_xml_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# #2832: the JSON namedColor2 reader stored out-of-range device coordinates
+# that were clamped on write, and padded or truncated a list that disagreed
+# with countOfDeviceCoords.  It now refuses them, as XML does.  Library only;
+# called in both the Windows and the main list.
+function(iccdev_add_named_device_coords_json_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccNamedDeviceCoordsJsonTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/named-device-coords-json.cpp"
+  )
+  target_compile_features(iccNamedDeviceCoordsJsonTest PRIVATE cxx_std_17)
+  target_include_directories(iccNamedDeviceCoordsJsonTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccNamedDeviceCoordsJsonTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccNamedDeviceCoordsJsonTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.named-device-coords-json
+      COMMAND "$<TARGET_FILE:iccNamedDeviceCoordsJsonTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.named-device-coords-json
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccNamedDeviceCoordsJsonTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.named-device-coords-json PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;json;namedcolor;issue-2832;regression"
+  )
+  if(WIN32)
+    set(_named_device_coords_json_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccNamedDeviceCoordsJsonTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _named_device_coords_json_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.named-device-coords-json PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_named_device_coords_json_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_spectral_absolute_flag_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -12892,6 +13003,8 @@ if(WIN32)
   iccdev_add_bpc_d2b_tag_family_test()
   iccdev_add_reflectance_observer_illum_range_test()
   iccdev_add_spectral_absolute_flag_test()
+  iccdev_add_named_device_coords_json_test()
+  iccdev_add_named_device_coords_xml_test()
   iccdev_add_colorimetry_methods_test()
   iccdev_add_formula_segment_nonfinite_parameter_test()
   iccdev_add_getvalues_nstart_test()
@@ -13436,6 +13549,8 @@ iccdev_add_formula_segment_negative_domain_test()
 iccdev_add_bpc_d2b_tag_family_test()
 iccdev_add_reflectance_observer_illum_range_test()
 iccdev_add_spectral_absolute_flag_test()
+iccdev_add_named_device_coords_json_test()
+iccdev_add_named_device_coords_xml_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_calc_temp_reset_if_no_else_test()
 iccdev_add_calc_output_init_test()

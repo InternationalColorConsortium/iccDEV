@@ -1062,7 +1062,7 @@ bool CIccTagJsonNamedColor2::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonNamedColor2::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonNamedColor2::ParseJson(const IccJson &j, std::string &parseStr)
 {
   icUInt32Number nDevCoords = 0;
   jGetValue(j, "countOfDeviceCoords", nDevCoords);
@@ -1102,16 +1102,29 @@ bool CIccTagJsonNamedColor2::ParseJson(const IccJson &j, std::string & /*parseSt
       if (jsonExistsField(c, "pcsCoords") && c["pcsCoords"].is_array() && c["pcsCoords"].size() >= 3) {
         jGetArray(c, "pcsCoords", pColor->pcsCoords, 3);
       }
-      if (jsonExistsField(c, "deviceCoords") && c["deviceCoords"].is_array()) {
-        bool coordOverflow = false;
-        icUInt32Number nJsonCoords = icJsonSafeU32(c["deviceCoords"].size(), &coordOverflow);
-        if (coordOverflow) return false;
-        for (icUInt32Number d = 0; d < nDevCoords && d < nJsonCoords; d++) {
-          int deviceCoord = 0;
-          if (!jsonToValue(c["deviceCoords"][d], deviceCoord))
-            return false;
-          pColor->deviceCoords[d] = (icFloatNumber)deviceCoord / 65535.0f;
+      // Exactly countOfDeviceCoords integers, each a uInt16Number as the
+      // binary form stores them (ICC.1:2022 10.17).  The value was read into
+      // an int and clamped when the tag was written, so -1 and 65536 came out
+      // as 0 and 65535; a short list was zero-padded and a long one cut
+      // short, all without a word (#2832).  The XML reader refuses the same.
+      const bool bHasCoords = jsonExistsField(c, "deviceCoords");
+      if (bHasCoords && !c["deviceCoords"].is_array()) {
+        parseStr += "namedColor2 deviceCoords must be an array\n";
+        return false;
+      }
+      const icUInt32Number nJsonCoords = bHasCoords ? (icUInt32Number)c["deviceCoords"].size() : 0;
+      if ((nDevCoords || bHasCoords) && nJsonCoords != nDevCoords) {
+        parseStr += "namedColor2 deviceCoords count differs from countOfDeviceCoords\n";
+        return false;
+      }
+      for (icUInt32Number d = 0; d < nDevCoords; d++) {
+        const IccJson &jCoord = c["deviceCoords"][d];
+        icUInt16Number deviceCoord = 0;
+        if (!jCoord.is_number_integer() || !jsonToValue(jCoord, deviceCoord)) {
+          parseStr += "Invalid or out-of-range namedColor2 device coordinate\n";
+          return false;
         }
+        pColor->deviceCoords[d] = (icFloatNumber)deviceCoord / 65535.0f;
       }
     }
   }
