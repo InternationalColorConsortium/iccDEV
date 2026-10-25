@@ -2581,6 +2581,62 @@ endfunction()
 # charTargetTag's CGATS data came back as 256 bytes.  Pins byte-exact round
 # trips of a 35 KB charTargetTag and a 1 KB description, each direction on its
 # own, and that the bounded overloads read no further than a fixed-size field.
+# #2838: the XML LUT reader dropped curves beyond the channel count, non-curve
+# elements in a curve list, and a second curve/matrix/CLUT block, and the
+# profile still parsed.  Library only; called in both the Windows and the main
+# list.
+function(iccdev_add_xml_lut_curve_count_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlLutCurveCountTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-lut-curve-count.cpp"
+  )
+  target_compile_features(iccXmlLutCurveCountTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlLutCurveCountTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlLutCurveCountTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlLutCurveCountTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-lut-curve-count
+      COMMAND "$<TARGET_FILE:iccXmlLutCurveCountTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-lut-curve-count
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlLutCurveCountTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-lut-curve-count PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;lut;issue-2838;regression"
+  )
+  if(WIN32)
+    set(_xml_lut_curve_count_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlLutCurveCountTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _xml_lut_curve_count_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-lut-curve-count PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_xml_lut_curve_count_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_xml_text_long_roundtrip_test)
   if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -13151,6 +13207,7 @@ if(WIN32)
   iccdev_add_utf8_textarray_test()
   iccdev_add_extended_device_colorspace_test()
   iccdev_add_xml_text_long_roundtrip_test()
+  iccdev_add_xml_lut_curve_count_test()
   iccdev_add_hex_data_malformed_xml_test()
   iccdev_add_xml_strict_numeric_attrs_test()
   iccdev_add_hex_data_malformed_json_test()
@@ -13709,6 +13766,7 @@ iccdev_add_xyz_negative_z_test()
 iccdev_add_utf8_textarray_test()
 iccdev_add_extended_device_colorspace_test()
 iccdev_add_xml_text_long_roundtrip_test()
+iccdev_add_xml_lut_curve_count_test()
 iccdev_add_hex_data_malformed_xml_test()
 iccdev_add_xml_strict_numeric_attrs_test()
 iccdev_add_hex_data_malformed_json_test()

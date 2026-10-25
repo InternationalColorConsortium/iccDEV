@@ -4453,6 +4453,14 @@ bool icCurvesFromXml(LPIccCurve *pCurve, icUInt32Number nChannels, xmlNode *pNod
       else if (!icXmlStrCmp(pCurveNode->name, "ParametricCurve")) {
         pCurveTag = new (std::nothrow) CIccTagXmlParametricCurve();
       }
+      else {
+        // Anything else in a curve list was skipped without a word (#2838).
+        parseStr += std::string("Unexpected ") + (const char*)pCurveNode->name +
+                    " element in a curve list at line ";
+        snprintf(num, numSize, "%d\n", pCurveNode->line);
+        parseStr += num;
+        return false;
+      }
 
       if (pCurveTag) {
         IIccExtensionTag *pExt = pCurveTag->GetExtension();
@@ -4501,6 +4509,17 @@ bool icCurvesFromXml(LPIccCurve *pCurve, icUInt32Number nChannels, xmlNode *pNod
     }
   }
   
+  // The loop stops once nChannels curves are read; a curve beyond them was
+  // dropped and the profile still "parsed and saved correctly" (#2838).
+  for (; pCurveNode; pCurveNode = pCurveNode->next) {
+    if (pCurveNode->type == XML_ELEMENT_NODE) {
+      parseStr += "More curves than channels in a curve list at line ";
+      snprintf(num, numSize, "%d\n", pCurveNode->line);
+      parseStr += num;
+      return false;
+    }
+  }
+
   if (i != nChannels) {
     parseStr += "Channel number mismatch!\n";
   }
@@ -5111,6 +5130,17 @@ bool icMBBFromXml(CIccMBB *pMBB, xmlNode *pNode, icConvertType nType, std::strin
 
   for (; pNode; pNode = pNode->next) {
     if (pNode->type == XML_ELEMENT_NODE) {
+      // Each of these may appear once.  A second one was skipped by the
+      // !Get...() tests below and left out of the profile silently (#2838).
+      if ((!icXmlStrCmp(pNode->name, "ACurves") && pMBB->GetCurvesA()) ||
+          (!icXmlStrCmp(pNode->name, "BCurves") && pMBB->GetCurvesB()) ||
+          (!icXmlStrCmp(pNode->name, "MCurves") && pMBB->GetCurvesM()) ||
+          (!icXmlStrCmp(pNode->name, "Matrix") && pMBB->GetMatrix()) ||
+          (!icXmlStrCmp(pNode->name, "CLUT") && pMBB->GetCLUT())) {
+        parseStr += std::string("Error! - More than one ") + (const char*)pNode->name +
+                    " element in a LUT tag.\n";
+        return false;
+      }
       if (!icXmlStrCmp(pNode->name, "ACurves") && !pMBB->GetCurvesA()) {
         LPIccCurve *pCurves = pMBB->NewCurvesA();
         if (!icCurvesFromXml(pCurves, !pMBB->IsInputB() ? nIn : nOut, pNode->children, nType, parseStr)) {
