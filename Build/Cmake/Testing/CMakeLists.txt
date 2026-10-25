@@ -3004,6 +3004,62 @@ endfunction()
 # only the destination length, or m_Num[i+nStart] over-reads (CWE-125). Pins the
 # corrected bound on the FloatNum (the repro'd defect), FixedNum and Num variants; each
 # assertion is red-green against the matching guard. Header + IccProfLib only.
+# #2846: the XML dataType writer turned any flag but 0/1 into ASCII or binary,
+# so Apple's 0x01000000 came back as 0.  Other values are now written and read
+# as 0x-prefixed hex, and an unknown Flag is refused.  Library only; called in
+# both the Windows and the main list.
+function(iccdev_add_xml_data_flag_raw_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlDataFlagRawTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-data-flag-raw.cpp"
+  )
+  target_compile_features(iccXmlDataFlagRawTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlDataFlagRawTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlDataFlagRawTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlDataFlagRawTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-data-flag-raw
+      COMMAND "$<TARGET_FILE:iccXmlDataFlagRawTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-data-flag-raw
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlDataFlagRawTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-data-flag-raw PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;datatype;issue-2846;regression"
+  )
+  if(WIN32)
+    set(_xml_data_flag_raw_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlDataFlagRawTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _xml_data_flag_raw_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-data-flag-raw PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_xml_data_flag_raw_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_getvalues_nstart_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -13064,6 +13120,7 @@ if(WIN32)
   iccdev_add_colorimetry_methods_test()
   iccdev_add_formula_segment_nonfinite_parameter_test()
   iccdev_add_getvalues_nstart_test()
+  iccdev_add_xml_data_flag_raw_test()
   iccdev_add_chromaticity_validate_test()
   iccdev_add_xml_float_array_strict_test()
   iccdev_add_cicp_copy_ctor_test()
@@ -13614,6 +13671,7 @@ iccdev_add_calc_output_init_test()
 iccdev_add_calc_copy_owner_test()
 iccdev_add_formula_segment_nonfinite_parameter_test()
 iccdev_add_getvalues_nstart_test()
+iccdev_add_xml_data_flag_raw_test()
 iccdev_add_chromaticity_validate_test()
 iccdev_add_xml_float_array_strict_test()
 iccdev_add_cicp_copy_ctor_test()

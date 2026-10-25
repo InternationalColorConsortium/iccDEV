@@ -51,6 +51,8 @@
 #include <new>     /* std::nothrow */
 #include <cstring> /* C strings strcpy, memcpy ... */
 #include <set>
+#include <cerrno>   // errno, ERANGE for the dataType flag
+#include <cstdlib>  // strtoul
 #include <map>
 #include <sstream>  // Make sure to include this header
 #include <iomanip>  // Include this header for setw and setfill
@@ -2402,11 +2404,16 @@ bool CIccTagXmlTagData::ToXml(std::string &xml, std::string blanks/* = ""*/)
 {
   const size_t bufSize = 60;
   char buf[bufSize];
-  std::string szFlag("ASCII");
-
-  if ( m_nDataFlag & icBinaryData )
-    szFlag = "binary";
-  snprintf (buf, bufSize, "<Data Flag=\"%s\">\n", szFlag.c_str());
+  // 0 and 1 have names.  Any other value -- reserved in ICC.1, or a flag a
+  // vendor wrote anyway -- is written as its hex value: the "binary unless
+  // bit 0 is clear" test used to write Apple's 0x01000000 as "ASCII", so an
+  // unedited tag changed on the way through XML (#2846).
+  if (m_nDataFlag == icAsciiData)
+    snprintf(buf, bufSize, "<Data Flag=\"ASCII\">\n");
+  else if (m_nDataFlag == icBinaryData)
+    snprintf(buf, bufSize, "<Data Flag=\"binary\">\n");
+  else
+    snprintf(buf, bufSize, "<Data Flag=\"0x%08x\">\n", (unsigned int)m_nDataFlag);
   xml += blanks + buf;
   icXmlDumpHexData(xml, blanks+" ", m_pData, m_nSize);
   xml += blanks + "</Data>\n";
@@ -2419,10 +2426,30 @@ bool CIccTagXmlTagData::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   pNode = icXmlFindNode(pNode, "Data");
   if (pNode && pNode->children && pNode->children->content) {
-    const icChar *szFlag = icXmlAttrValue(pNode, "Flag");    
-    m_nDataFlag = icAsciiData;
-    if (!strcmp(szFlag,"binary"))
+    // "ASCII" (or no Flag), "binary", or the 0x-prefixed hex value ToXml()
+    // writes for any other flag word.  Anything else used to read as ASCII
+    // (#2846).
+    const icChar *szFlag = icXmlAttrValue(pNode, "Flag");
+    if (!*szFlag || !strcmp(szFlag, "ASCII"))
+      m_nDataFlag = icAsciiData;
+    else if (!strcmp(szFlag, "binary"))
       m_nDataFlag = icBinaryData;
+    else {
+      char *end = NULL;
+      unsigned long v = 0;
+      bool ok = (szFlag[0] == '0' && (szFlag[1] == 'x' || szFlag[1] == 'X') &&
+                 szFlag[2] && strchr("0123456789abcdefABCDEF", szFlag[2]));
+      if (ok) {
+        errno = 0;
+        v = strtoul(szFlag + 2, &end, 16);
+        ok = (*end == '\0' && errno != ERANGE && v <= 0xFFFFFFFFul);
+      }
+      if (!ok) {
+        parseStr += std::string("Invalid dataType Data Flag \"") + icSanitizeConsoleText(szFlag) + "\"\n";
+        return false;
+      }
+      m_nDataFlag = (icDataBlockType)v;
+    }
 
     if (!icXmlValidHexData((const char *)pNode->children->content)) {
       parseStr += "Malformed hex in dataType Data\n";
