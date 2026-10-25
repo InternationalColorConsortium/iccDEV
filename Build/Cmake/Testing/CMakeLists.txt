@@ -4244,6 +4244,61 @@ endfunction()
 # drives whole CMMs whose PCS edge space differs from the fixture's own PCS, checking that
 # the XYZ route agrees numerically with the Lab route. It uses a tracked fixture and no
 # LUT interpolation of any size, so it is fast.
+# #2868: CIccApplyBPC's black point estimation applied a transform whose width
+# the profile decides into fixed caller buffers; a MultiplexIdentification
+# profile with a CMYK data colour space wrote a four-channel MCS into the
+# three-float black point.  The probe now refuses a transform wider than its
+# buffers and Begin() reports icCmmStatCantAdjustPcs.  Library only; called in
+# both the Windows and the main list.
+function(iccdev_add_bpc_probe_buffer_bounds_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccBpcProbeBufferBoundsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/bpc-probe-buffer-bounds.cpp"
+  )
+  target_compile_features(iccBpcProbeBufferBoundsTest PRIVATE cxx_std_17)
+  target_include_directories(iccBpcProbeBufferBoundsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccBpcProbeBufferBoundsTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccBpcProbeBufferBoundsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.bpc-probe-buffer-bounds
+      COMMAND "$<TARGET_FILE:iccBpcProbeBufferBoundsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.bpc-probe-buffer-bounds
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccBpcProbeBufferBoundsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.bpc-probe-buffer-bounds PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;cmm;bpc;mcs;asan;issue-2868;regression"
+  )
+  if(WIN32)
+    set(_bpc_probe_buffer_bounds_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccBpcProbeBufferBoundsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _bpc_probe_buffer_bounds_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.bpc-probe-buffer-bounds PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_bpc_probe_buffer_bounds_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_pcs_edge_metadata_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -12476,6 +12531,7 @@ if(WIN32)
   iccdev_add_mpe_empty_identity_test()
   iccdev_add_pcc_reflectance_observer_range_test()
   iccdev_add_pcs_edge_metadata_test()
+  iccdev_add_bpc_probe_buffer_bounds_test()
   iccdev_add_xyz_negative_z_test()
   iccdev_add_utf8_textarray_test()
   iccdev_add_extended_device_colorspace_test()
@@ -13022,6 +13078,7 @@ iccdev_add_mpe_empty_identity_test()
 iccdev_add_pcc_reflectance_observer_range_test()
 iccdev_add_mid_mlnk_header_checks_test()
 iccdev_add_pcs_edge_metadata_test()
+iccdev_add_bpc_probe_buffer_bounds_test()
 iccdev_add_xyz_negative_z_test()
 iccdev_add_utf8_textarray_test()
 iccdev_add_extended_device_colorspace_test()

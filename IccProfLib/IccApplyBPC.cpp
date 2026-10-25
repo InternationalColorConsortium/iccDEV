@@ -50,6 +50,12 @@ Copyright:  (c) see ICC Software License
 
 #define IsSpacePCS(x) ((x)==icSigXYZData || (x)==icSigLabData)
 
+// Sizes of the pixel buffers the black point estimation passes to a transform:
+// a device pixel (the most samples icGetSpaceSamples() reports for a device
+// space is 15) and an XYZ or Lab PCS pixel.
+static const icUInt32Number kBpcDevicePixelSize = 16;
+static const icUInt32Number kBpcPcsPixelSize = 3;
+
 /**
 **************************************************************************
 * Name: CIccApplyBPCHint::GetNewAdjustPCSXform
@@ -199,6 +205,14 @@ bool CIccApplyBPC::CalcFactors(const CIccProfile* pProfile, const CIccXform* pXf
 	if (!pProfile || !pXform)
 		return false;
 
+	// The adjustment is an XYZ affine and the black point a three-sample XYZ
+	// or Lab value.  The CMM requires an AToB transform's width to match the
+	// header PCS, so a header PCS wider than three wrote past the black point
+	// (#2868, #2886) -- which pixelXfm() now refuses -- and a narrower one left
+	// part of it uninitialised.  Refuse any header PCS but XYZ or Lab.
+	if (!IsSpacePCS(pProfile->m_Header.pcs))
+		return false;
+
 	if (pXform->GetIntent()==icAbsoluteColorimetric) { // black point compensation not supported
 		return false;
 	}
@@ -273,7 +287,7 @@ bool CIccApplyBPC::calcBlackPoint(const CIccProfile* pProfile, const CIccXform* 
 */
 bool CIccApplyBPC::calcSrcBlackPoint(const CIccProfile* pProfile, const CIccXform* pXform, icFloatNumber* XYZb) const
 {
-	icFloatNumber Pixel[16];
+	icFloatNumber Pixel[kBpcDevicePixelSize];
 	if ((pProfile->m_Header.colorSpace == icSigCmykData) && (pProfile->m_Header.deviceClass == icSigOutputClass)) {
 
 		// calculate intermediate CMYK
@@ -283,7 +297,8 @@ bool CIccApplyBPC::calcSrcBlackPoint(const CIccProfile* pProfile, const CIccXfor
 		lab2pcs(XYZb, pProfile);
 
 		//convert the PCS value to CMYK
-		if (!pixelXfm(Pixel, XYZb, pProfile->m_Header.pcs, icPerceptual, pProfile, pXform->UseD2BTags())) {
+		if (!pixelXfm(Pixel, kBpcDevicePixelSize, XYZb, kBpcPcsPixelSize, pProfile->m_Header.pcs, icPerceptual,
+		              pProfile, pXform->UseD2BTags())) {
 			return false;
 		}
 	}
@@ -329,7 +344,8 @@ bool CIccApplyBPC::calcSrcBlackPoint(const CIccProfile* pProfile, const CIccXfor
 	}
 
 	// convert the device value to PCS
-	if (!pixelXfm(XYZb, Pixel, pProfile->m_Header.colorSpace, pXform->GetIntent(), pProfile, pXform->UseD2BTags())) {
+	if (!pixelXfm(XYZb, kBpcPcsPixelSize, Pixel, kBpcDevicePixelSize, pProfile->m_Header.colorSpace,
+	              pXform->GetIntent(), pProfile, pXform->UseD2BTags())) {
 		return false;
 	}
 
@@ -533,8 +549,10 @@ bool CIccApplyBPC::calcDstBlackPoint(const CIccProfile* pProfile, const CIccXfor
 * 
 **************************************************************************
 */
-bool CIccApplyBPC::pixelXfm(icFloatNumber *DstPixel, icFloatNumber *SrcPixel, icColorSpaceSignature SrcSpace, 
-														icRenderingIntent nIntent, const CIccProfile *pProfile, bool bUseD2BTags) const
+bool CIccApplyBPC::pixelXfm(icFloatNumber *DstPixel, icUInt32Number nDstSize,
+                            icFloatNumber *SrcPixel, icUInt32Number nSrcSize,
+                            icColorSpaceSignature SrcSpace, icRenderingIntent nIntent,
+                            const CIccProfile *pProfile, bool bUseD2BTags) const
 {
 	// create the cmm object
 	CIccCmm cmm(SrcSpace, icSigUnknownData, !IsSpacePCS(SrcSpace));
@@ -551,6 +569,17 @@ bool CIccApplyBPC::pixelXfm(icFloatNumber *DstPixel, icFloatNumber *SrcPixel, ic
 
 	// get the cmm ready to do transforms
 	if (cmm.Begin()!=icCmmStatOk) {
+		return false;
+	}
+
+	// The profile decides how many samples the transform reads and writes, not
+	// the caller.  A MultiplexIdentification profile whose data colour space is
+	// CMYK runs its AToM0 here, so the "PCS" side of the probe is a
+	// four-channel MCS and Apply() wrote four floats into the caller's
+	// three-float black point (#2868).  Refuse a transform wider than either
+	// buffer; CalcFactors() then fails and Begin() reports
+	// icCmmStatCantAdjustPcs.
+	if (cmm.GetSourceSamples() > nSrcSize || cmm.GetDestSamples() > nDstSize) {
 		return false;
 	}
 
@@ -607,6 +636,13 @@ CIccCmm* CIccApplyBPC::getBlackXfm(icRenderingIntent nIntent, const CIccProfile 
 
 	// get the cmm ready to do transforms
 	if (pCmm->Begin()!=icCmmStatOk) {
+		delete pCmm;
+		return NULL;
+	}
+
+	// calcDstBlackPoint() applies this transform between three-sample PCS
+	// buffers.  Refuse a chain whose ends are wider, as pixelXfm() does.
+	if (pCmm->GetSourceSamples() > kBpcPcsPixelSize || pCmm->GetDestSamples() > kBpcPcsPixelSize) {
 		delete pCmm;
 		return NULL;
 	}

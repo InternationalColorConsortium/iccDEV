@@ -99,8 +99,12 @@ private:
 	// bUseD2BTags selects the same tag family the xform being adjusted was built
 	// from (CIccXform::UseD2BTags()).  Estimating black through the other family
 	// yields a black point from a pipeline the transform never applies.
-	bool pixelXfm(icFloatNumber *DstPixel, icFloatNumber *SrcPixel, icColorSpaceSignature SrcSpace, 
-								icRenderingIntent nIntent, const CIccProfile *pProfile, bool bUseD2BTags) const;
+	// nDstSize and nSrcSize are the capacities, in samples, of DstPixel and
+	// SrcPixel.  A transform that would read or write more fails.
+	bool pixelXfm(icFloatNumber *DstPixel, icUInt32Number nDstSize,
+								icFloatNumber *SrcPixel, icUInt32Number nSrcSize,
+								icColorSpaceSignature SrcSpace, icRenderingIntent nIntent,
+								const CIccProfile *pProfile, bool bUseD2BTags) const;
 
 	// PCS -> PCS round trip transform, always uses relative intent on the device -> pcs transform
 	CIccCmm* getBlackXfm(icRenderingIntent nIntent, const CIccProfile *pProfile, bool bUseD2BTags) const;
