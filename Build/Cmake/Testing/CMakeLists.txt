@@ -4296,6 +4296,59 @@ endfunction()
 # 7.2.8 does not grant it.  No tracked profile exercises either, so this in-memory
 # test is the only evidence; its controls pin the ColorEncodingSpace guard and the
 # two multiplex classes that keep the zero data colour space.
+# #2871, #2878: CIccPcsXform::Connect()'s MCSNeedsSubset check searched the
+# other profile's channel names with the outer loop's index, so it refused legal
+# reordered chains and read past a shorter list.  Library only; called in both
+# the Windows and the main list.
+function(iccdev_add_mcs_subset_connect_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMcsSubsetConnectTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/mcs-subset-connect.cpp"
+  )
+  target_compile_features(iccMcsSubsetConnectTest PRIVATE cxx_std_17)
+  target_include_directories(iccMcsSubsetConnectTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccMcsSubsetConnectTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccMcsSubsetConnectTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.mcs-subset-connect
+      COMMAND "$<TARGET_FILE:iccMcsSubsetConnectTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.mcs-subset-connect
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccMcsSubsetConnectTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.mcs-subset-connect PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;cmm;mcs;asan;issue-2871;issue-2878;regression"
+  )
+  if(WIN32)
+    set(_mcs_subset_connect_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMcsSubsetConnectTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _mcs_subset_connect_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.mcs-subset-connect PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_mcs_subset_connect_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_mid_mlnk_header_checks_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -12561,6 +12614,7 @@ if(WIN32)
   iccdev_add_v5_required_tag_sets_test()
   iccdev_add_named_colour_signature_v5_test()
   iccdev_add_mid_mlnk_header_checks_test()
+  iccdev_add_mcs_subset_connect_test()
   iccdev_add_islegalutf8_bound_test()
   iccdev_add_json_reader_strictness_test()
   iccdev_add_json_escape_codepoint_test()
@@ -13191,6 +13245,7 @@ iccdev_add_gbd_zero_pcs_test()
 iccdev_add_mpe_empty_identity_test()
 iccdev_add_pcc_reflectance_observer_range_test()
 iccdev_add_mid_mlnk_header_checks_test()
+iccdev_add_mcs_subset_connect_test()
 iccdev_add_pcs_edge_metadata_test()
 iccdev_add_bpc_probe_buffer_bounds_test()
 iccdev_add_xyz_negative_z_test()

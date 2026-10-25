@@ -2255,8 +2255,12 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
     if (pFromProfile->m_Header.flags&icMCSNeedsSubsetTrue) {
       for (i=0; i<m_nSrcSamples; i++) {
         const icUChar *szSrcChan = ((CIccTagUtf8Text*)pFromChannels->GetIndex(i))->GetText();
+        // Every source channel must appear somewhere in the destination's list
+        // (ICC.2:2023 Annex I.2), so the search walks the destination with j.
+        // Indexing it with i compared position against position, refused
+        // legal reorderings, and read past a shorter destination list (#2878).
         for (j=0; j<m_nDstSamples; j++) {
-          const icUChar *szDstChan = ((CIccTagUtf8Text*)pToChannels->GetIndex(i))->GetText();
+          const icUChar *szDstChan = ((CIccTagUtf8Text*)pToChannels->GetIndex(j))->GetText();
           if (!icUtf8StrCmp(szSrcChan, szDstChan))
             break;
         }
@@ -2268,8 +2272,9 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
     if (pToProfile->m_Header.flags&icMCSNeedsSubsetTrue) {
       for (i=0; i<m_nDstSamples; i++) {
         const icUChar *szDstChan = ((CIccTagUtf8Text*)pToChannels->GetIndex(i))->GetText();
+        // The mirror of the search above: walk the source with j (#2871).
         for (j=0; j<m_nSrcSamples; j++) {
-          const icUChar *szSrcChan = ((CIccTagUtf8Text*)pFromChannels->GetIndex(i))->GetText();
+          const icUChar *szSrcChan = ((CIccTagUtf8Text*)pFromChannels->GetIndex(j))->GetText();
           if (!icUtf8StrCmp(szSrcChan, szDstChan))
             break;
         }
