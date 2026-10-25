@@ -8009,6 +8009,17 @@ icStatusCMM CIccXformNamedColor::Begin()
     }
   }
 
+  // NamedColor2 stores its own device coordinate count. The device side of
+  // Apply() reads or writes that many floats, while callers size their pixel
+  // buffers from the profile header's color space. Reject a disagreement
+  // before a namedDevice lookup can copy past the caller's destination
+  // (#2830, #2873).
+  if (m_pTag &&
+      ((m_nSrcSpace != icSigNamedData && !IsSrcPCS()) ||
+       (m_nDestSpace != icSigNamedData && !IsDestPCS())) &&
+      m_pTag->GetDeviceCoords() != icGetSpaceSamples(m_pTag->GetDeviceSpace()))
+    return icCmmStatBadSpaceLink;
+
   if (m_pTag && !m_pTag->InitFindCachedPCSColor())
     return icCmmStatAllocErr;
   else if (m_pArray && !m_pArray->Begin())
