@@ -8066,12 +8066,12 @@ icStatusCMM CIccXformNamedColor::Apply(CIccApplyXform*  /* pApply */, icChar *Ds
         icFloatNumber pix[3];
         memcpy(pix, SrcPixel, 3*sizeof(icFloatNumber));
 
+        // FindPcsColor() takes a value in the array's PCS and converts XYZ
+        // to Lab itself, so converting here as well applied it twice (#2879).
         if (m_nSrcSpace == icSigLabPcsData)
           icLabFromPcs(pix);
-        else {
+        else
           icXyzFromPcs(pix);
-          icXYZtoLab(pix, pix);
-        }
 
         pColor = pArray->FindPcsColor(pix);
         if (pColor) 

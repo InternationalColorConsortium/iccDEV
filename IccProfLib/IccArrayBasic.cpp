@@ -327,14 +327,17 @@ CIccStructNamedColor* CIccArrayNamedColor::FindDeviceColor(const icFloatNumber *
         CIccTagNumArray *v = (CIccTagNumArray*)pTag;
         if (!m_nDeviceSamples) continue;
         icUInt32Number sampleCount = v->GetNumValues()/m_nDeviceSamples;
-        if (sampleCount) {
-          v->GetValues(temp, (sampleCount-1)*m_nDeviceSamples, m_nDeviceSamples);
+        if (sampleCount &&
+            v->GetValues(temp, (sampleCount-1)*m_nDeviceSamples, m_nDeviceSamples)) {
 
           for (j=0; j<m_nDeviceSamples; j++) {
             if (temp[j]!=pDevColor[j])
               break;
           }
-          if (sampleCount==m_nDeviceSamples) {
+          // A match is every sample equal.  Testing sampleCount here instead
+          // returned the first colour whose tint ramp happened to have as many
+          // steps as the device has channels, whatever its values (#2879).
+          if (j==m_nDeviceSamples) {
             delete [] temp;
             return pNamedColor;
           }
@@ -359,17 +362,25 @@ CIccStructNamedColor* CIccArrayNamedColor::FindPcsColor(const icFloatNumber *pPC
     memcpy(pLabIn, pPCS, 3*sizeof(icFloatNumber));
   }
 
+  // The colours are compared by their PCS member, a three-sample XYZ or Lab
+  // value per tint step.  This read the device member with the device stride
+  // instead, and on a gray profile -- one device value per step -- the three
+  // value read failed and left pLab uninitialised for icDeltaE() (#2879).
+  if (m_nPcsSamples != 3)
+    return NULL;
+
   icUInt32Number tagSize = m_pTag->GetSize();
   for (icUInt32Number i=1; i<tagSize; i++) {
     CIccStructNamedColor *pNamedColor = (CIccStructNamedColor*)icGetTagStructHandlerOfType(m_pTag->GetIndex(i), icSigNamedColorStruct);
     if (pNamedColor) {
-      CIccTag *pTag = pNamedColor->GetElem(icSigNmclDeviceDataMbr);
+      CIccTag *pTag = pNamedColor->GetElem(icSigNmclPcsDataMbr);
       if (pTag && pTag->IsNumArrayType()) {
         CIccTagNumArray *v = (CIccTagNumArray*)pTag;
-        if (!m_nDeviceSamples) continue;
-        icUInt32Number sampleCount = v->GetNumValues()/m_nDeviceSamples;
-        if (sampleCount) {
-          v->GetValues(pLab, (sampleCount-1)*m_nDeviceSamples, 3);
+        icUInt32Number sampleCount = v->GetNumValues()/m_nPcsSamples;
+        if (sampleCount && v->GetValues(pLab, (sampleCount-1)*m_nPcsSamples, m_nPcsSamples)) {
+          // Stored in the array's PCS; compare in Lab, as pLabIn is.
+          if (m_csPcs != icSigLabData)
+            icXYZtoLab(pLab, pLab);
 
           dCalcDE = icDeltaE(pLabIn, pLab);
 
@@ -399,13 +410,14 @@ CIccStructNamedColor* CIccArrayNamedColor::FindSpectralColor(const icFloatNumber
   for (icUInt32Number i=1; i<tagSize; i++) {
     CIccStructNamedColor *pNamedColor = (CIccStructNamedColor*)icGetTagStructHandlerOfType(m_pTag->GetIndex(i), icSigNamedColorStruct);
     if (pNamedColor) {
-      CIccTag *pTag = pNamedColor->GetElem(icSigNmclDeviceDataMbr);
+      // The spectral member, not the device member (#2879).
+      CIccTag *pTag = pNamedColor->GetElem(icSigNmclSpectralDataMbr);
       if (pTag && pTag->IsNumArrayType()) {
         CIccTagNumArray *v = (CIccTagNumArray*)pTag;
         if (!m_nSpectralSamples) continue;
         icUInt32Number sampleCount = v->GetNumValues()/m_nSpectralSamples;
-        if (sampleCount) {
-          v->GetValues(temp, (sampleCount-1)*m_nSpectralSamples, m_nSpectralSamples);
+        if (sampleCount &&
+            v->GetValues(temp, (sampleCount-1)*m_nSpectralSamples, m_nSpectralSamples)) {
 
           dCalcRMS = icRmsDif(pSpec, temp, m_nSpectralSamples);
 

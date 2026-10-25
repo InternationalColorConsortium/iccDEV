@@ -3738,6 +3738,58 @@ endfunction()
 #
 # In-memory fixtures only, so a corpus change cannot disable it.  The real profile is
 # covered by iccdev_add_namedcolor_sparse_matrix_xml_test() below.
+# #2879: CIccArrayNamedColor's FindPcsColor() and FindSpectralColor() read the
+# device member, and FindDeviceColor() matched on the tint-ramp length instead
+# of the values.  Library only; called in both the Windows and the main list.
+function(iccdev_add_named_array_find_colors_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccNamedArrayFindColorsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/named-array-find-colors.cpp"
+  )
+  target_compile_features(iccNamedArrayFindColorsTest PRIVATE cxx_std_17)
+  target_include_directories(iccNamedArrayFindColorsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccNamedArrayFindColorsTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccNamedArrayFindColorsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.named-array-find-colors
+      COMMAND "$<TARGET_FILE:iccNamedArrayFindColorsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.named-array-find-colors
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccNamedArrayFindColorsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.named-array-find-colors PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;namedcolor;v5;issue-2879;regression"
+  )
+  if(WIN32)
+    set(_named_array_find_colors_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccNamedArrayFindColorsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _named_array_find_colors_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.named-array-find-colors PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_named_array_find_colors_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_namedcolor_sparse_matrix_apply_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -12686,6 +12738,7 @@ if(WIN32)
   iccdev_add_rangemap_uninitialized_test()
   iccdev_add_pcs_birefl_illuminant_range_test()
   iccdev_add_namedcolor_sparse_matrix_apply_test()
+  iccdev_add_named_array_find_colors_test()
   iccdev_add_namedcolor_sparse_matrix_xml_test()
   iccdev_add_sparse_row_count_json_test()
   iccdev_add_sparse_row_count_xml_test()
@@ -13233,6 +13286,7 @@ iccdev_add_gamut_xform_semantics_test()
 iccdev_add_rangemap_uninitialized_test()
 iccdev_add_pcs_birefl_illuminant_range_test()
 iccdev_add_namedcolor_sparse_matrix_apply_test()
+iccdev_add_named_array_find_colors_test()
 iccdev_add_named_colour_signature_v5_test()
 iccdev_add_namedcolor_sparse_matrix_xml_test()
 iccdev_add_sparse_row_count_json_test()
