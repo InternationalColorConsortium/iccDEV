@@ -175,7 +175,7 @@ int main()
     CIccMpeXmlToneMap elem;
     std::string funcs = "<ToneMapFunctions><ToneMapFunction FunctionType=\"0\"/></ToneMapFunctions>";
     check(!parseXml(elemDoc(1, funcs), elem, parseStr), "no parameters", "parsed with no parameters");
-    check(has(parseStr, "Missing parameters"), "no parameters",
+    check(has(parseStr, "Missing, non-finite or malformed parameter in Tone Map Function"), "no parameters",
           ("no diagnostic, parseStr was: " + parseStr).c_str());
   }
   {
@@ -184,7 +184,7 @@ int main()
     std::string funcs = "<ToneMapFunctions><ToneMapFunction FunctionType=\"0\"> </ToneMapFunction></ToneMapFunctions>";
     check(!parseXml(elemDoc(1, funcs), elem, parseStr), "whitespace parameters",
           "parsed with whitespace for parameters");
-    check(has(parseStr, "Missing parameters"), "whitespace parameters",
+    check(has(parseStr, "Missing, non-finite or malformed parameter in Tone Map Function"), "whitespace parameters",
           ("no diagnostic, parseStr was: " + parseStr).c_str());
   }
 
@@ -245,12 +245,12 @@ int main()
     check(has(parseStr, "Too many"), "too many", ("no diagnostic, parseStr was: " + parseStr).c_str());
   }
 
-  /* #2619: icParseArrayValue() returns a real NaN for the literal "nan", and
+  /* #2619: icParseArrayValue() returned a real NaN for the literal "nan", and
      Validate() only counts parameters, so the element used to load clean and
      iccToJson then wrote the parameter back as null -- which the JSON reader
-     refuses.  An out-of-range magnitude is NOT the vector here: that same
-     helper saturates "1e308" to the float32 limit, so it arrives finite and
-     must still be accepted. */
+     refuses.  Since #2884 the float array reader refuses a non-finite or
+     out-of-range value itself, so "1e308", which it used to saturate to the
+     float32 limit, is refused as well. */
   {
     std::string parseStr;
     CIccMpeXmlToneMap elem;
@@ -260,7 +260,7 @@ int main()
       + "</ToneMapFunctions>";
     check(!parseXml(elemDoc(1, funcs), elem, parseStr), "nan parameter",
           "parsed a function whose first parameter is NaN");
-    check(has(parseStr, "Non-finite parameter"), "nan parameter",
+    check(has(parseStr, "non-finite or malformed parameter in Tone Map Function"), "nan parameter",
           ("no diagnostic, parseStr was: " + parseStr).c_str());
   }
   {
@@ -270,8 +270,10 @@ int main()
       std::string("<ToneMapFunctions>")
       + "<ToneMapFunction FunctionType=\"0\">1e308 0 0</ToneMapFunction>"
       + "</ToneMapFunctions>";
-    check(parseXml(elemDoc(1, funcs), elem, parseStr), "saturating parameter",
-          ("refused a value the array parser saturates to a finite float: " + parseStr).c_str());
+    check(!parseXml(elemDoc(1, funcs), elem, parseStr), "out-of-range parameter",
+          "parsed a parameter beyond the float32 range");
+    check(has(parseStr, "non-finite or malformed parameter in Tone Map Function"), "out-of-range parameter",
+          ("no diagnostic, parseStr was: " + parseStr).c_str());
   }
 
   /* #2621: ToXml() wrote Reserved but ParseXml() never read it, so the value

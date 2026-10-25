@@ -111,23 +111,6 @@ sys.exit('tag %s not found' % want.decode())
 PYEOF
 }
 
-# Raw payload of one tag, as hex, for cases whose values are buried in a
-# structure (the MPE matrix below) rather than a flat array.
-read_tag_hex() {
-  python3 - "$1" "$2" <<'PYEOF2'
-import struct, sys
-data = open(sys.argv[1], 'rb').read()
-want = sys.argv[2].encode()
-ntags = struct.unpack('>I', data[128:132])[0]
-for i in range(ntags):
-    sig, off, size = struct.unpack('>4sII', data[132 + i * 12:144 + i * 12])
-    if sig == want:
-        print(data[off:off + size].hex())
-        sys.exit(0)
-sys.exit('tag %s not found' % want.decode())
-PYEOF2
-}
-
 emit_profile() {
   local out="$1" type="$2" container="$3" elem_body="$4" text_body="$5"
   cat > "$out" <<XMLEOF
@@ -213,6 +196,28 @@ run_case() {
   pass_case "$name" "both spellings gave '$elem'"
 }
 
+# name | xml type | container | bad element body | good element body | bad text body | good text body
+# #2884: a value the float arrays now refuse.  Each spelling is tried on its
+# own, with the other tag holding a valid value, so a refusal by one cannot
+# stand in for the other.
+run_refused_case() {
+  local name="$1" type="$2" container="$3" bad_elem="$4" good_elem="$5" bad_text="$6" good_text="$7"
+  local which elem_body text_body xml log rc
+  for which in element text; do
+    TOTAL=$((TOTAL + 1))
+    if [ "$which" = element ]; then elem_body="$bad_elem"; text_body="$good_text"
+    else elem_body="$good_elem"; text_body="$bad_text"; fi
+    xml="$OUTDIR/$name-$which.xml"; log="$OUTDIR/$name-$which.log"; rc=0
+    emit_profile "$xml" "$type" "$container" "$elem_body" "$text_body"
+    timeout 25 "$FROMXML" "$xml" "$OUTDIR/$name-$which.icc" > "$log" 2>&1 || rc=$?
+    if [ "$rc" -eq 0 ]; then
+      fail_case "$name-$which" "the $which spelling was accepted"
+    else
+      pass_case "$name-$which" "the $which spelling was refused (exit=$rc)"
+    fi
+  done
+}
+
 echo "=== XML array element-form parity regression (#2401) ==="
 
 # uInt8: above, at and below the 0..255 range.  Clipped, not wrapped.
@@ -225,10 +230,10 @@ run_case uint8-range uInt8NumberType Array B 4 "255 255 255 0" \
 run_case float32-fraction float32NumberType Data f 3 "0.5 -2.25 3.75" \
   "<n>0.5</n><n>-2.25</n><n>3.75</n>" "0.5 -2.25 3.75"
 
-# float32 NaN: the text form has always stored a real NaN for floating-point
-# types; the element form must too.
-run_case float32-nan float32NumberType Data f 2 "nan 1.5" \
-  "<n>nan</n><n>1.5</n>" "nan 1.5"
+# float32 NaN: both spellings stored a real NaN until #2884, which ICC.1:2022
+# 4.3 excludes from a float32Number; both are now refused.
+run_refused_case float32-nan float32NumberType Data \
+  "<n>nan</n><n>1.5</n>" "<n>0</n><n>1.5</n>" "nan 1.5" "0 1.5"
 
 # uInt64: the row where each spelling was exact where the other was not, so it
 # pins both directions at once.
@@ -241,10 +246,11 @@ run_case uint64-exact uInt64NumberType Array Q 3 \
 # NaN literal test must see past it -- when the whitespace skip lived inside the
 # integer branch, "<n>\n  nan\n</n>" in a float array flushed to 0 while the
 # unindented spelling gave a real NaN.
-run_case float32-nan-indented float32NumberType Data f 2 "nan 1.5" \
+run_refused_case float32-nan-indented float32NumberType Data \
   "<n>
       nan
-    </n><n>1.5</n>" "nan 1.5"
+    </n><n>1.5</n>" "<n>0</n><n>1.5</n>" "
+      nan 1.5" "0 1.5"
 
 # A float-shaped token in an integer array takes the atof() fallback.  It must
 # saturate rather than convert out of range -- (double)UINT64_MAX rounds up to
@@ -260,12 +266,11 @@ run_case uint64-float-token uInt64NumberType Array Q 2 \
 # output.  Only icSigFloatArrayType scans for "f" elements, and that type is not
 # a tag type -- it backs MPE matrices, curves and CLUTs -- so this case needs a
 # multiProcessElementType rather than the PrivateTag shape above.  The two tags
-# are identical apart from the spelling, so their payloads must be byte-equal.
-TOTAL=$((TOTAL + 1))
+# are identical apart from the spelling.  #2401 made both clip to FLT_MAX;
+# #2884 refuses the value in both, checked below one spelling at a time.
 MPE="$OUTDIR/mpe-f-element.xml"
 # A display profile needs a B-side as well as an A-side (ICC.2-2023 8.4, #2562), so
-# the fixture carries an identity BToA0Tag.  The test compares only A2B0 and A2B1,
-# which it reads back by signature.
+# the fixture carries an identity BToA0Tag.
 cat > "$MPE" <<'XMLEOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <IccProfile>
@@ -318,29 +323,25 @@ cat > "$MPE" <<'XMLEOF'
   </Tags>
 </IccProfile>
 XMLEOF
-mpe_rc=0
-timeout 25 "$FROMXML" "$MPE" "$OUTDIR/mpe-f-element.icc" > "$OUTDIR/mpe-f-element.log" 2>&1 || mpe_rc=$?
-if [ "$mpe_rc" -ne 0 ]; then
-  fail_case "floatarray-f-element" "iccFromXml refused the fixture (exit=$mpe_rc)"
-  sed -n '1,10p' "$OUTDIR/mpe-f-element.log"
-else
-  f_hex="$(read_tag_hex "$OUTDIR/mpe-f-element.icc" 'A2B0')" || f_hex=""
-  t_hex="$(read_tag_hex "$OUTDIR/mpe-f-element.icc" 'A2B1')" || t_hex=""
-  if [ -z "$f_hex" ] || [ -z "$t_hex" ]; then
-    fail_case "floatarray-f-element" "could not read both MPE tags back"
-  elif [ "$f_hex" != "$t_hex" ]; then
-    # 7f800000 is +inf, 7f7fffff is FLT_MAX -- name which one turned up so the
-    # failure says what happened rather than dumping two hex blobs.
-    case "$f_hex" in
-      *7f800000*) fail_case "floatarray-f-element" "<f> spelling stored +inf where the text spelling clipped" ;;
-      *)          fail_case "floatarray-f-element" "<f> and text spellings produced different MPE payloads" ;;
-    esac
-  elif [ "${f_hex#*7f7fffff}" = "$f_hex" ]; then
-    fail_case "floatarray-f-element" "neither spelling clipped 1e50 to FLT_MAX"
+# #2884: 1e50 is beyond float32 and is now refused in both spellings rather
+# than clipped to FLT_MAX.  Each spelling is tried on its own -- the other tag
+# gets a valid coefficient -- so neither refusal can stand in for the other.
+for which in element text; do
+  TOTAL=$((TOTAL + 1))
+  variant="$OUTDIR/mpe-f-element-$which.xml"
+  if [ "$which" = element ]; then
+    sed 's#<MatrixData>1e50 0 0#<MatrixData>1 0 0#' "$MPE" > "$variant"
   else
-    pass_case "floatarray-f-element" "<f> and text spellings both clipped 1e50 to FLT_MAX"
+    sed 's#<f>1e50</f>#<f>1</f>#' "$MPE" > "$variant"
   fi
-fi
+  mpe_rc=0
+  timeout 25 "$FROMXML" "$variant" "$OUTDIR/mpe-f-element-$which.icc" > "$OUTDIR/mpe-f-element-$which.log" 2>&1 || mpe_rc=$?
+  if [ "$mpe_rc" -eq 0 ]; then
+    fail_case "floatarray-f-element-$which" "1e50 in the $which spelling was accepted"
+  else
+    pass_case "floatarray-f-element-$which" "1e50 in the $which spelling was refused (exit=$mpe_rc)"
+  fi
+done
 
 ###############################################################################
 # Acceptance parity (#2401 follow-up)

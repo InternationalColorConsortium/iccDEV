@@ -364,8 +364,13 @@ bool CIccFormulaCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   CIccFloatArray args;
 
-  if (!args.ParseArray(pNode->children))
+  // The array reader refuses a missing, malformed, non-finite or out-of-range
+  // value (#2884), so a parameter that reaches the checks below is finite;
+  // this refusal used to give no diagnostic at all.
+  if (!args.ParseArray(pNode->children)) {
+    parseStr += "Missing, non-finite or malformed parameter in FormulaSegment\n";
     return false;
+  }
 
   // The binary encoding has no parameter count: the function type fixes it
   // (ICC.2-2023 Table 111).  Extra values used to be dropped silently, so the
@@ -373,13 +378,6 @@ bool CIccFormulaCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
   if (args.GetSize()!=m_nParameters) {
     parseStr += "FormulaSegment parameter count does not match its FunctionType\n";
     return false;
-  }
-
-  for (icUInt32Number i=0; i<m_nParameters; i++) {
-    if (!std::isfinite(args.GetBuf()[i])) {
-      parseStr += "Non-finite parameter in FormulaSegment\n";
-      return false;
-    }
   }
 
   free(m_params);
@@ -2134,27 +2132,17 @@ bool CIccXmlToneMapFunc::ParseXml(xmlNode* pNode, std::string& parseStr)
   // is what <ToneMapFunction FunctionType="0"/> gives: the most common
   // malformed spelling was the one left without a diagnostic when the short
   // list below was given one (#2609).
+  // The array reader also refuses a non-finite, malformed or out-of-range
+  // value (#2884), which is why no finiteness check follows: "nan" used to
+  // arrive here as a real NaN and needed one (#2619).
   if (!args.ParseArray(pNode->children)) {
-    parseStr += "Missing parameters in Tone Map Function\n";
+    parseStr += "Missing, non-finite or malformed parameter in Tone Map Function\n";
     return false;
   }
 
   if (args.GetSize() < m_nParameters) {
     parseStr += "Too few parameters in Tone Map Function\n";
     return false;
-  }
-
-  // icParseArrayValue() saturates an out-of-range magnitude to the float32
-  // limit, so "1e308" arrives finite here -- but it returns a real NaN for the
-  // literal "nan", which Validate() does not look at.  iccToJson then writes
-  // that parameter back as null, a document the JSON reader refuses.  The
-  // formula segment above has refused a non-finite parameter since #2547
-  // (#2619).
-  for (icUInt16Number i = 0; i < m_nParameters; i++) {
-    if (!std::isfinite(args.GetBuf()[i])) {
-      parseStr += "Non-finite parameter in Tone Map Function\n";
-      return false;
-    }
   }
 
   free(m_params);

@@ -3059,6 +3059,62 @@ endfunction()
 # anything that round-tripped the profile. CIccTagNamedColor2::Read resolves the
 # same two-source situation the other way, using its size-derived count only as
 # a capacity guard. Header + IccProfLib only.
+# #2884: the XML float arrays read NaN as NaN, inf and junk as 0, and clipped
+# an out-of-range value, where the JSON reader refuses them.  Every token must
+# now be a complete finite number in range.  Library only; called in both the
+# Windows and the main list.
+function(iccdev_add_xml_float_array_strict_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlFloatArrayStrictTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-float-array-strict.cpp"
+  )
+  target_compile_features(iccXmlFloatArrayStrictTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlFloatArrayStrictTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlFloatArrayStrictTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlFloatArrayStrictTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-float-array-strict
+      COMMAND "$<TARGET_FILE:iccXmlFloatArrayStrictTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-float-array-strict
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlFloatArrayStrictTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-float-array-strict PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;clut;issue-2884;regression"
+  )
+  if(WIN32)
+    set(_xml_float_array_strict_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlFloatArrayStrictTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _xml_float_array_strict_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-float-array-strict PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_xml_float_array_strict_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_chromaticity_validate_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -13009,6 +13065,7 @@ if(WIN32)
   iccdev_add_formula_segment_nonfinite_parameter_test()
   iccdev_add_getvalues_nstart_test()
   iccdev_add_chromaticity_validate_test()
+  iccdev_add_xml_float_array_strict_test()
   iccdev_add_cicp_copy_ctor_test()
   iccdev_add_pcc_standard_observer_and_illuminant_test()
   iccdev_add_mpe_acs_zero_signature_test()
@@ -13558,6 +13615,7 @@ iccdev_add_calc_copy_owner_test()
 iccdev_add_formula_segment_nonfinite_parameter_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_chromaticity_validate_test()
+iccdev_add_xml_float_array_strict_test()
 iccdev_add_cicp_copy_ctor_test()
 iccdev_add_pcc_standard_observer_and_illuminant_test()
 iccdev_add_islegalutf8_bound_test()

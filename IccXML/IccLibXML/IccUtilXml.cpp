@@ -1138,9 +1138,19 @@ icUInt32Number CIccXmlArrayType<T, Tsig>::ParseTextCount(const char *szText)
     else if (bInNum && !strncmp(szText, "#QNAN", 5)) { //Handle 1.#QNAN000 (non a number)
       szText+=4;
     }
-    else if (bInNum) {
-      n++;
-      bInNum = false;
+    else {
+      // A float array holds numbers and white space only.  This counter is
+      // where the whole body is seen -- ParseText() stops after the values it
+      // was asked for -- so trailing text such as "0.1 0.2 xyz" is caught
+      // here; a count of 0 refuses the array (#2884).
+      if constexpr (std::is_floating_point<T>::value) {
+        if (!isspace((unsigned char)*szText))
+          return 0;
+      }
+      if (bInNum) {
+        n++;
+        bInNum = false;
+      }
     }
     szText++;
   }
@@ -1278,9 +1288,69 @@ static T icParseArrayValue(const char *num)
   }
 }
 
+// True when every whitespace-separated token of szText is a complete, finite
+// number within T's range; always true for the integer arrays.
+//
+// ICC.1:2022 4.3 excludes infinities and NaN from a float32Number, and the
+// float arrays had no way to refuse a bad value (#2884): ParseText() splits on
+// any character that is not part of a number, so "abc" read as the token "a"
+// and "inf" as "n", both atof()'d to 0; a literal "nan" or "-nan" became a real
+// NaN; and a value beyond the type's range was clipped to its maximum.  Each
+// came out of iccFromXml as "parsed and saved correctly".  The JSON reader
+// refuses the same values.
+template <typename T>
+static bool icXmlFloatTokenValid(const char *szToken)
+{
+  if constexpr (!std::is_floating_point<T>::value) {
+    (void)szToken;
+    return true;
+  }
+  else if constexpr (sizeof(T) <= sizeof(icFloat32Number)) {
+    icFloatNumber v;
+    return icXmlParseFloat(szToken, v);
+  }
+  else {
+    char *end = nullptr;
+    double d = strtod(szToken, &end);
+    return end != szToken && !*end && std::isfinite(d);
+  }
+}
+
+// The same test over a NUL-terminated body of whitespace-separated tokens --
+// one <f>/<n> element's text.
+template <typename T>
+static bool icXmlFloatTextValid(const char *szText)
+{
+  if constexpr (!std::is_floating_point<T>::value) {
+    (void)szText;
+    return true;
+  }
+  else {
+    const char *p = szText;
+    for (;;) {
+      while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
+        p++;
+      if (!*p)
+        return true;
+      const char *tokStart = p;
+      while (*p && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r')
+        p++;
+      if (!icXmlFloatTokenValid<T>(std::string(tokStart, p - tokStart).c_str()))
+        return false;
+    }
+  }
+}
+
 template <class T, icTagTypeSignature Tsig>
 icUInt32Number CIccXmlArrayType<T, Tsig>::ParseText(T* pBuf, icUInt32Number nSize, const char *szText)
 {	
+  // For the float arrays every token must be a whole finite number in range,
+  // and nothing but white space may sit between tokens.  Checked as the loop
+  // reads, not by a scan ahead: some callers hand over a buffer that is not
+  // NUL-terminated and rely on the loop stopping after nSize values.  Every
+  // caller compares the count returned with the count it expected, so
+  // returning 0 refuses the array.
+
   icUInt32Number n = 0, b = 0;
   bool bInNum = false;
   char num[256] = {0};
@@ -1296,16 +1366,26 @@ icUInt32Number CIccXmlArrayType<T, Tsig>::ParseText(T* pBuf, icUInt32Number nSiz
       if (b+2<sizeof(num))
         b++;
     }
-    else if (bInNum) {
-      num[b] = 0;
-      pBuf[n] = icParseArrayValue<T>(num);
-      n++;
-      bInNum = false;
+    else {
+      if (bInNum) {
+        num[b] = 0;
+        if (!icXmlFloatTokenValid<T>(num))
+          return 0;
+        pBuf[n] = icParseArrayValue<T>(num);
+        n++;
+        bInNum = false;
+      }
+      if constexpr (std::is_floating_point<T>::value) {
+        if (*szText != ' ' && *szText != '\t' && *szText != '\n' && *szText != '\r')
+          return 0;
+      }
     }
     szText++;
   }
   if ( bInNum && (n < nSize) ) {
     num[b] = 0;
+    if (!icXmlFloatTokenValid<T>(num))
+      return 0;
     pBuf[n] = icParseArrayValue<T>(num);
     n++;
   } 
@@ -1362,7 +1442,8 @@ bool CIccXmlArrayType<T, Tsig>::ParseArray(T* pBuf, icUInt32Number nSize, xmlNod
       if (!n || n>nSize)
         return false;
 
-      ParseText(pBuf, n, (const char*)pNode->content);
+      if (ParseText(pBuf, n, (const char*)pNode->content) != n)
+        return false;
     }
     else {
       if (n>nSize)
@@ -1397,6 +1478,9 @@ bool CIccXmlArrayType<T, Tsig>::ParseArray(T* pBuf, icUInt32Number nSize, xmlNod
 
             // One element is one slot, so its body must be one value.
             if (!icXmlIsSingleToken(szValue))
+              return false;
+
+            if (!icXmlFloatTextValid<T>(szValue))
               return false;
 
             pBuf[i] = icParseArrayValue<T>(szValue);
@@ -1455,6 +1539,9 @@ bool CIccXmlArrayType<T, Tsig>::ParseArray(T* pBuf, icUInt32Number nSize, xmlNod
 
             // One element is one slot, so its body must be one value.
             if (!icXmlIsSingleToken(szValue))
+              return false;
+
+            if (!icXmlFloatTextValid<T>(szValue))
               return false;
 
             pBuf[i] = icParseArrayValue<T>(szValue);

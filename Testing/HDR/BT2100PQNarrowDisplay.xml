@@ -103,7 +103,7 @@
 
 		  <!-- To Narrow range mapping -->
 		  <CurveSetElement InputChannels="3" OutputChannels="3">
-			  <SingleSampledCurve FirstEntry="0" LastEntry="1" StorageType="0" ExtensionType="0">0.062515262515262515262515262515260.0 0.91819291819291819291819291819292</SingleSampledCurve>
+			  <SingleSampledCurve FirstEntry="0" LastEntry="1" StorageType="0" ExtensionType="0">0.06251526251526251526251526251526 0.91819291819291819291819291819292</SingleSampledCurve>
 			  <DuplicateCurve Index="0"/>
 			  <DuplicateCurve Index="0"/>
 			</CurveSetElement>

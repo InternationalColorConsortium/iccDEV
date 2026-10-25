@@ -1194,7 +1194,7 @@ run_reject_test "formula-nonnumeric-parameter" "$OUTDIR/formula-nonnumeric-param
 run_reject_test "formula-nonfinite-parameter" "$OUTDIR/formula-nonfinite-parameter.json" "parameters contains a non-numeric or non-finite value in FormulaSegment"
 run_xml_success_test "xml-formula-control" "$XML_FORMULA_SRC"
 run_xml_reject_test "xml-formula-extra-parameter" "$XML_FORMULA_EXTRA" "FormulaSegment parameter count does not match its FunctionType"
-run_xml_reject_test "xml-formula-nan-parameter" "$XML_FORMULA_NAN" "Non-finite parameter in FormulaSegment"
+run_xml_reject_test "xml-formula-nan-parameter" "$XML_FORMULA_NAN" "non-finite or malformed parameter in FormulaSegment"
 run_tojson_valid_json_test "text-invalid-ascii-tojson" "$TEXT_INVALID_ASCII"
 run_tojson_success_test "namedcolor-invalid-ascii-tojson" "$NAMED_INVALID_ASCII"
 run_large_indented_roundtrip_test "CMYK-W_Overprint_Profile.xml"
