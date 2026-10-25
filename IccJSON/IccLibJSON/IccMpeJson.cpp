@@ -2134,7 +2134,9 @@ bool CIccMpeJsonCalculator::ParseImport(const IccJson &j, std::string importPath
       std::string name;
       jGetString(jVar, "name", name);
       if (!validName(name.c_str())) {
-        parseStr += "Invalid variable name '" + name + "'\n";
+        // A name that fails validName() can hold anything, CR, LF and escape
+        // sequences included, and the report reaches a console or log (#2851, #2852).
+        parseStr += "Invalid variable name '" + icSanitizeConsoleText(name) + "'\n";
         return false;
       }
       if (m_declVarMap.find(name) != m_declVarMap.end()) {
@@ -2183,7 +2185,7 @@ bool CIccMpeJsonCalculator::ParseImport(const IccJson &j, std::string importPath
         while (parse.GetNext()) {
           std::string mname = parse.GetName();
           if (!validName(mname.c_str())) {
-            parseStr += "Invalid member name '" + mname + "' for variable '" + name + "'\n";
+            parseStr += "Invalid member name '" + icSanitizeConsoleText(mname) + "' for variable '" + name + "'\n";
             return false;
           }
           icUInt16Number msize = 0, extra = 0;
@@ -2215,7 +2217,7 @@ bool CIccMpeJsonCalculator::ParseImport(const IccJson &j, std::string importPath
       jGetString(jMacro, "body", body);
 
       if (!validName(name.c_str())) {
-        parseStr += "Invalid macro name '" + name + "'\n";
+        parseStr += "Invalid macro name '" + icSanitizeConsoleText(name) + "'\n";
         return false;
       }
       if (body.empty()) {
@@ -2241,7 +2243,7 @@ bool CIccMpeJsonCalculator::ParseImport(const IccJson &j, std::string importPath
         while (parse.GetNext()) {
           std::string lname = parse.GetName();
           if (!validName(lname.c_str())) {
-            parseStr += "Invalid local name '" + lname + "' for macro '" + name + "'\n";
+            parseStr += "Invalid local name '" + icSanitizeConsoleText(lname) + "' for macro '" + name + "'\n";
             return false;
           }
           icUInt16Number lsize = 0, extra = 0;
@@ -2273,7 +2275,7 @@ bool CIccMpeJsonCalculator::ParseImport(const IccJson &j, std::string importPath
 
       if (!name.empty()) {
         if (!validName(name.c_str())) {
-          parseStr += "Invalid SubElement name '" + name + "'\n";
+          parseStr += "Invalid SubElement name '" + icSanitizeConsoleText(name) + "'\n";
           return false;
         }
         if (m_mpeMap.find(name) != m_mpeMap.end()) {

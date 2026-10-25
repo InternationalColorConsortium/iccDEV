@@ -185,6 +185,29 @@ inline std::string icSanitizeConsoleText(const std::string& text)
   return icSanitizeConsoleText(text.c_str());
 }
 
+// icSanitizeConsoleText() for multi-line diagnostics: each line is escaped as
+// above, and the line feeds between them are kept.  A parser's error report or
+// a validation report is one message per line, built from document text --
+// a variable name, a macro name, a tag's text -- which can carry its own CR,
+// LF or escape sequences (#2851, #2852).
+inline std::string icSanitizeConsoleLines(const std::string& text)
+{
+  std::string result;
+  size_t start = 0;
+
+  for (;;) {
+    size_t end = text.find('\n', start);
+    result += icSanitizeConsoleText(text.substr(start, end == std::string::npos ? std::string::npos
+                                                                                 : end - start));
+    if (end == std::string::npos)
+      break;
+    result += '\n';
+    start = end + 1;
+  }
+
+  return result;
+}
+
 // True when szPath names a regular file a byte can actually be read from.
 //
 // fopen(dir, "r") SUCCEEDS on glibc, so "it opened" does not mean "it is a file":

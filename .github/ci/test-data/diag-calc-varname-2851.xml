@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <ProfileVersion>5.0</ProfileVersion>
+    <ProfileDeviceClass>scnr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-10-13T15:05:00</CreationDateTime>
+    <PCSIlluminant><XYZNumber X="0.9642" Y="1.0" Z="0.8249"/></PCSIlluminant>
+  </Header>
+  <Tags>
+    <profileDescriptionTag><multiLocalizedUnicodeType><LocalizedText LanguageCountry="enUS">Calculator variable name with CR and LF (issue 2851 regression fixture)</LocalizedText></multiLocalizedUnicodeType></profileDescriptionTag>
+    <multiProcessElementType>
+      <TagSignature>A2B0</TagSignature>
+      <MultiProcessElements InputChannels="3" OutputChannels="3">
+        <CalculatorElement InputChannels="3" OutputChannels="3">
+          <Variables>
+            <Declare Name="lhs&quot;&#13;&#10;X-Injected: yes"/>
+          </Variables>
+          <MainFunction>{ in(0,3) out(0,3) }</MainFunction>
+        </CalculatorElement>
+      </MultiProcessElements>
+    </multiProcessElementType>
+  </Tags>
+</IccProfile>

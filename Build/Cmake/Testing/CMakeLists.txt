@@ -13877,6 +13877,21 @@ function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   )
 endfunction()
 
+# #2851, #2852: iccFromXml and iccFromJson printed the library's reports raw,
+# so document text quoted in them -- a calculator variable name holding CR, LF
+# or ESC -- reached the console verbatim, and four XML calculator diagnostics
+# began their next line with a stray quote.  Fixtures are tracked under
+# .github/ci/test-data.
+if(TARGET iccFromXml OR TARGET iccFromJson)
+  iccdev_add_script_test(
+    iccdev.issue-2851-diagnostic-output
+    60
+    "iccdev;xml;json;calculator;console;issue-2851;issue-2852;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2851-diagnostic-output-regression.sh"
+  )
+endif()
+
 if(TARGET iccFromXml AND TARGET iccDumpProfile AND TARGET iccApplyNamedCmm)
   iccdev_add_script_test(
     iccdev.clut-eight-output-regression

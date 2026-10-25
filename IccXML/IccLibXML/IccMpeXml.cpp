@@ -50,6 +50,7 @@
 #include <cstring> /* C strings strcpy, memcpy ... */
 #include <cmath>
 #include <limits>
+#include "IccFileUtil.h"
 
 #ifdef WIN32
 #include <windows.h>
@@ -2969,7 +2970,9 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
           if ((attr = icXmlFindAttr(pNext, "Name"))) {
             std::string name = icXmlAttrValue(attr);
             if (!validName(name.c_str())) {
-              parseStr += "Invalid calc element variable name '" + name + "'\n'";
+              // A name that fails validName() can hold anything, CR, LF and escape
+              // sequences included, and the report reaches a console or log (#2851, #2852).
+              parseStr += "Invalid calc element variable name '" + icSanitizeConsoleText(name) + "'\n";
               return false;
             }
 
@@ -3017,7 +3020,7 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
                 icUInt16Number extra = 0;
                 std::string member = parse.GetName();
                 if (!validName(member.c_str())) {
-                  parseStr += "Invalid member name '" + member + "' for calc element variable '" + name + "'\n";
+                  parseStr += "Invalid member name '" + icSanitizeConsoleText(member) + "' for calc element variable '" + name + "'\n";
                   return false;
                 }
                 size = 0; extra = 0;
@@ -3063,11 +3066,11 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
           if ((attr = icXmlFindAttr(pNext, "Name"))) {
             std::string name = icXmlAttrValue(attr);
             if (!validName(name.c_str())) {
-              parseStr += "Invalid Macro name '" + name + "'\n'";
+              parseStr += "Invalid Macro name '" + icSanitizeConsoleText(name) + "'\n";
               return false;
             }
             if (!pNext->children || !pNext->children->content || !pNext->children->content[0]) {
-              parseStr += "Missing content for macro '" + name + "'\n'";
+              parseStr += "Missing content for macro '" + name + "'\n";
               return false;
             }
             MacroMap::iterator m = m_macroMap.find(name);
@@ -3090,7 +3093,7 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
                 icUInt16Number extra = 0;
                 std::string member = parse.GetName();
                 if (!validName(member.c_str())) {
-                  parseStr += "Invalid local name '" + member + "' for calc element macro '" + name + "'\n";
+                  parseStr += "Invalid local name '" + icSanitizeConsoleText(member) + "' for calc element macro '" + name + "'\n";
                   return false;
                 }
                 size = 0; extra = 0;
@@ -3138,7 +3141,7 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
         if ((attr = icXmlFindAttr(pNext, "Name"))) {
           name = icXmlAttrValue(attr);
           if (!validName(name.c_str())) {
-            parseStr += "Invalid SubElement name '" + name + "'\n'";
+            parseStr += "Invalid SubElement name '" + icSanitizeConsoleText(name) + "'\n";
             return false;
           }
         }

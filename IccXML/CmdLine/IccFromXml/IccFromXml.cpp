@@ -277,7 +277,7 @@ int main(int argc, char* argv[])
   // streams -- the discriminator this file's Usage() comment relies on -- saw a
   // silent stderr for a run that parsed nothing (#2384).
   if (!profile.LoadXml(argv[1], szRelaxNGDir.c_str(), &reason)) {
-    fprintf(stderr, "%s", reason.c_str());
+    fprintf(stderr, "%s", icSanitizeConsoleLines(reason).c_str());
 #ifndef WIN32
     fprintf(stderr, "\n");
 #endif
@@ -343,7 +343,7 @@ int main(int argc, char* argv[])
       fprintf(stderr, "Unable to save profile - profile is invalid!\n");
       return EXIT_FAILURE;
     }
-    fprintf(stderr, "%s", valid_report.c_str());
+    fprintf(stderr, "%s", icSanitizeConsoleLines(valid_report).c_str());
     fprintf(stderr, "\n");
     return EXIT_FAILURE;
   }

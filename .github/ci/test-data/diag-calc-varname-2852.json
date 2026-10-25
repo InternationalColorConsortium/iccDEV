@@ -1,0 +1,100 @@
+{
+ "IccProfile": {
+  "Tags": [
+   {
+    "profileDescriptionTag": {
+     "data": {
+      "type": "multiLocalizedUnicodeType",
+      "localizedStrings": [
+       {
+        "text": "Calculator variable name with CR, LF and ESC (issue 2852 regression fixture)",
+        "country": "US",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   },
+   {
+    "AToB0Tag": {
+     "data": {
+      "type": "multiProcessElementType",
+      "elements": [
+       {
+        "mainFunction": "{ in(0,3) out(0,3) }",
+        "outputChannels": 3,
+        "inputChannels": 3,
+        "type": "CalculatorElement",
+        "variables": [
+         {
+          "name": "lhs\"\r\nX-Injected: yes\u001b[31m",
+          "size": 1
+         }
+        ]
+       }
+      ],
+      "outputChannels": 3,
+      "inputChannels": 3
+     }
+    }
+   },
+   {
+    "copyrightTag": {
+     "data": {
+      "type": "multiLocalizedUnicodeType",
+      "localizedStrings": [
+       {
+        "text": "Research fixture",
+        "country": "US",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   },
+   {
+    "mediaWhitePointTag": {
+     "data": {
+      "type": "XYZArrayType",
+      "XYZ": [
+       [
+        0.964202880859375,
+        1.0,
+        0.8249053955078125
+       ]
+      ]
+     }
+    }
+   }
+  ],
+  "Header": {
+   "PCSIlluminant": [
+    0.964202880859375,
+    1.0,
+    0.8249053955078125
+   ],
+   "CMMFlags": {
+    "UseWithEmbeddedDataOnly": false,
+    "EmbeddedInFile": false
+   },
+   "ProfileCreator": "",
+   "PreferredCMMType": "",
+   "ProfileDeviceClass": "scnr",
+   "DataColourSpace": "RGB ",
+   "ProfileFileSignature": "acsp",
+   "CreationDateTime": "2026-10-13T15:08:00",
+   "RenderingIntent": "Perceptual",
+   "PCS": "XYZ ",
+   "PrimaryPlatform": "",
+   "DeviceManufacturer": "",
+   "ProfileVersion": "5.00",
+   "DeviceModel": "",
+   "DeviceAttributes": {
+    "MediaColour": "colour",
+    "MediaPolarity": "positive",
+    "GlossyOrMatte": "glossy",
+    "ReflectiveOrTransparency": "reflective"
+   }
+  }
+ }
+}

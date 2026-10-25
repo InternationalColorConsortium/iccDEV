@@ -114,7 +114,7 @@ int main(int argc, char* argv[])
   // On stderr, like the XML twin: this returned EXIT_FAILURE already but answered
   // on stdout, so a caller that separates the streams saw nothing (#2384).
   if (!profile.LoadJson(argv[1], &reason)) {
-    fprintf(stderr, "%s", reason.c_str());
+    fprintf(stderr, "%s", icSanitizeConsoleLines(reason).c_str());
     fprintf(stderr, "Unable to Parse '%s'\n", srcName.c_str());
     return EXIT_FAILURE;
   }
@@ -162,7 +162,7 @@ int main(int argc, char* argv[])
       fprintf(stderr, "Unable to save profile - profile is invalid!\n");
       return EXIT_FAILURE;
     }
-    fprintf(stderr, "%s", valid_report.c_str());
+    fprintf(stderr, "%s", icSanitizeConsoleLines(valid_report).c_str());
     fprintf(stderr, "\n");
     return EXIT_FAILURE;
   }
