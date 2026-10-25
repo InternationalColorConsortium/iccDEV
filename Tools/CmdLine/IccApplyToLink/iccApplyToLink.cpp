@@ -78,6 +78,33 @@
 
 // ============================================================================
 
+// A .cube file is line-oriented: TITLE, a comment and every keyword occupy one
+// line each.  The title and the profile descriptions written into the header
+// are free text and may hold line breaks -- an RGBW projector profile's
+// description runs over four lines, and a title is whatever the caller passed
+// -- and writing them as-is started a new line the reader took for a keyword
+// (#2837, #2847).  Write each line of the text as its own line, each with the
+// given prefix and suffix; iccFromCube joins consecutive TITLE lines, and
+// consecutive comment lines, with a newline, so the text survives.
+static void WriteCubeLines(FILE *f, const std::string &text, const char *szFirstPrefix,
+                           const char *szNextPrefix, const char *szSuffix)
+{
+  size_t start = 0;
+  bool bFirst = true;
+  for (;;) {
+    size_t end = text.find_first_of("\r\n", start);
+    std::string line = text.substr(start, end == std::string::npos ? std::string::npos : end - start);
+    fprintf(f, "%s%s%s\n", bFirst ? szFirstPrefix : szNextPrefix, line.c_str(), szSuffix);
+    bFirst = false;
+    if (end == std::string::npos)
+      break;
+    // A CR LF pair is one line break.
+    if (text[end] == '\r' && end + 1 < text.size() && text[end + 1] == '\n')
+      end++;
+    start = end + 1;
+  }
+}
+
 static bool IccApplyToLinkDiagnosticsEnabled()
 {
   const char *env = getenv("ICC_APPLYTOLINK_DIAGNOSTICS");
@@ -257,7 +284,8 @@ public:
       return false;
     }
 
-    fprintf(m_f, "TITLE \"%s\"\n\n", m_title.c_str());
+    WriteCubeLines(m_f, m_title, "TITLE \"", "TITLE \"", "\"");
+    fprintf(m_f, "\n");
 
     fprintf(m_f, "# cube file created by iccApplyToLink version " ICCPROFLIBVER "\n#\n");
     if (m_pCmm) {
@@ -289,7 +317,7 @@ public:
         std::string text;
         if (icGetTagText(pDesc, text)) {
           std::string cleanText = icSanitizeTagText( text );
-          fprintf(m_f, "# - %s\n", cleanText.c_str());
+          WriteCubeLines(m_f, cleanText, "# - ", "#   ", "");
         }
 
       }

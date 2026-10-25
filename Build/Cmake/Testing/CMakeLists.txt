@@ -15800,6 +15800,21 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1405-roundtrip-sample-cap.sh"
 )
 
+# #2837, #2847: iccApplyToLink wrote the cube TITLE and each profile description
+# comment with a single fprintf, so a line break in either started a new line
+# of the file -- a keyword when it came from the title, a line iccFromCube
+# refused when it came from a multi-line description.  Builds its own profile
+# from the tracked RGBWProjector.xml.  iccFromXml-gated.
+if(TARGET iccApplyToLink AND TARGET iccFromCube AND TARGET iccFromXml)
+  iccdev_add_script_test(
+    iccdev.issue-2837-cube-header-lines
+    120
+    "iccdev;tools;applytolink;fromcube;issue-2837;issue-2847;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2837-cube-header-lines-regression.sh"
+  )
+endif()
+
 # #1781 - the iccApplyToLink QA matrix, recalibrated to run in CI, plus the
 # three defects working through it exposed. CIccCLUT::Init limits both the node
 # count and the node count times the output channel count, but the tool's own
