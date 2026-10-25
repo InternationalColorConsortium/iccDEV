@@ -1494,7 +1494,13 @@ CIccApplyTagMpe *CIccTagMultiProcessElement::GetNewApply()
   CIccMultiProcessElementList::iterator i, last;
   last = GetLastElem();
   for (i=GetFirstElem(); i!=last;) {
-    pApply->AppendElem(i->ptr);
+    // A missing element would leave Apply() running the elements either side
+    // of it back to back, each feeding the next a buffer sized for the
+    // element that is not there (#2870).
+    if (!pApply->AppendElem(i->ptr)) {
+      delete pApply;
+      return NULL;
+    }
 
     GetNextElemIterator(i);
   }

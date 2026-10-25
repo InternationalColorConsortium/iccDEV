@@ -1301,11 +1301,17 @@ bool CIccMpeSpectralCLUT::Write(CIccIO *pIO)
 ******************************************************************************/
 CIccApplyMpe* CIccMpeSpectralCLUT::GetNewApply(CIccApplyTagMpe* /* pApplyTag */)
 {
-  if (!m_pCLUT) {
+  // Apply() interpolates m_pApplyCLUT, the colorimetric CLUT Begin() builds,
+  // so the interpolation scratch must come from it too.  m_pCLUT is the
+  // spectral CLUT as read and is never begun, so its node table is empty: the
+  // scratch built from it was zero bytes, and InterpND() -- used from seven
+  // inputs up -- wrote past it (#2870).  Without m_pApplyCLUT there is nothing
+  // Apply() could use.
+  if (!m_pApplyCLUT) {
     return NULL;
   }
 
-  CIccApplyCLUT* pApply = m_pCLUT->GetNewApply();
+  CIccApplyCLUT* pApply = m_pApplyCLUT->GetNewApply();
   if (!pApply)
     return NULL;
 

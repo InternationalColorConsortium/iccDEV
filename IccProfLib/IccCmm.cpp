@@ -5535,7 +5535,15 @@ CIccPcsStepMpe::~CIccPcsStepMpe()
 */
 CIccApplyPcsStep* CIccPcsStepMpe::GetNewApply()
 {
-  CIccApplyPcsStepMpe *rv = new (std::nothrow) CIccApplyPcsStepMpe(this, m_pMpe->GetNewApply());
+  // CIccTagMultiProcessElement::GetNewApply() returns NULL rather than a
+  // partial element chain (#2870); Apply() has no use for a NULL one.
+  CIccApplyTagMpe *pMpeApply = m_pMpe->GetNewApply();
+  if (!pMpeApply)
+    return NULL;
+
+  CIccApplyPcsStepMpe *rv = new (std::nothrow) CIccApplyPcsStepMpe(this, pMpeApply);
+  if (!rv)
+    delete pMpeApply;
 
   return rv;
 }

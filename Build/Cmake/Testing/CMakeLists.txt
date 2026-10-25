@@ -13258,6 +13258,21 @@ if(TARGET iccFromXml AND TARGET iccDumpProfile AND TARGET iccApplyNamedCmm)
   )
 endif()
 
+# #2870: a spectral CLUT element with seven or more inputs sized its
+# N-dimensional interpolation scratch from the spectral CLUT as read (never
+# begun, empty node table) instead of the colorimetric CLUT Apply() uses, and
+# InterpND() wrote past a zero-byte block.  Builds the fixture and the PCC from
+# tracked XML.
+if(TARGET iccFromXml AND TARGET iccApplyNamedCmm)
+  iccdev_add_script_test(
+    iccdev.issue-2870-spectral-clut-nd
+    120
+    "iccdev;spectral;clut;asan;issue-2870;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2870-spectral-clut-nd-regression.sh"
+  )
+endif()
+
 iccdev_add_script_test(
   iccdev.create-profiles
   300
