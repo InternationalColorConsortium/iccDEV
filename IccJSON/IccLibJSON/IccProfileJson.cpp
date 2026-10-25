@@ -408,8 +408,23 @@ bool CIccProfileJson::ParseBasic(const IccJson &header, std::string &parseStr)
     m_Header.illuminant.Z = icDtoF(ill[2]);
   }
 
-  if (jGetString(header, "ProfileID", str))
-    icJsonGetHexData(m_Header.profileID.ID8, str.c_str(), 16);
+  // Whole hex digit pairs, at most 16 bytes; malformed or over-long text used
+  // to be filtered and truncated into a different ID (#2828).  "", "0" and "1"
+  // mean no stored ID, as in the XML reader.
+  if (jGetString(header, "ProfileID", str)) {
+    memset(m_Header.profileID.ID8, 0, sizeof(m_Header.profileID.ID8));
+    size_t first = str.find_first_not_of(" \t\r\n");
+    size_t last = str.find_last_not_of(" \t\r\n");
+    std::string trimmed = first == std::string::npos ? std::string() : str.substr(first, last - first + 1);
+    if (!trimmed.empty() && trimmed != "0" && trimmed != "1") {
+      if (!icJsonValidHexData(str.c_str()) ||
+          icJsonGetHexDataSize(str.c_str()) > sizeof(m_Header.profileID.ID8)) {
+        parseStr += "Invalid ProfileID: expected up to 16 bytes of hex digit pairs\n";
+        return false;
+      }
+      icJsonGetHexData(m_Header.profileID.ID8, str.c_str(), sizeof(m_Header.profileID.ID8));
+    }
+  }
 
   if (jGetString(header, "SpectralPCS", str))
     m_Header.spectralPCS = (icColorSpaceSignature)icGetSigVal(str.c_str());

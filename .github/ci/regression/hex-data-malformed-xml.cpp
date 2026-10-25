@@ -50,12 +50,13 @@
 
     Part 1 is the rule itself, including what must stay legal.  Part 2 drives
     it through the tag parsers that call it, by loading a profile document.
-    Part 3 pins the deliberate exclusion: the profile header's ProfileID is
-    NOT checked, because 176 tracked Testing profiles carry
-    <ProfileID>1</ProfileID>, a single digit that decodes to no bytes at all.
-    Whether that spelling should stay legal is a question for the maintainers
-    (#2610), and this test freezes today's answer so a later change to it is
-    deliberate rather than accidental.
+    Part 3 is the profile header (#2827, #2828).  ProfileID and Reserved went
+    through the same filtering decoder: "0g11" loaded as the byte 0x11, and a
+    value longer than the field was cut short.  Both now need whole hex pairs
+    and no more bytes than the field holds.  The tracked Testing profiles
+    write <ProfileID>1</ProfileID> (and a few "0") for "no ID stored --
+    compute it on save"; a single digit decodes to no bytes, and that
+    shorthand stays legal for the profile ID by decision (#2610).
 */
 
 #include "IccProfileXml.h"
@@ -491,17 +492,43 @@ int main()
           "the nested LocalizedText was discarded");
   }
 
-  /* 3. The header's ProfileID is deliberately not checked: 176 tracked
-     Testing profiles carry a single digit there. */
+  /* 3. The header's ProfileID and Reserved: whole hex pairs, no longer than
+     the field; "", "0" and "1" stay legal for the ProfileID. */
   {
-    std::string parseStr;
-    check(loadDoc(profileDoc("0011", "1"), parseStr, "profileid-short"), "ProfileID single digit",
-          ("a corpus spelling was refused: " + parseStr).c_str());
+    const char *legal[] = { "1", "0", "", "34562ABF994CCD066D2C5721D0D68C5D", "34562ABF" };
+    for (const char *id : legal) {
+      std::string parseStr;
+      std::string label = std::string("ProfileID '") + id + "' loads";
+      check(loadDoc(profileDoc("0011", id), parseStr, "profileid-legal"), label.c_str(),
+            ("refused: " + parseStr).c_str());
+    }
+    const char *illegal[] = { "0g11", "0g112233445566778899aabbccddeeff", "001",
+                              "34562ABF994CCD066D2C5721D0D68C5D00" };
+    for (const char *id : illegal) {
+      std::string parseStr;
+      std::string label = std::string("ProfileID '") + id + "' refused";
+      check(!loadDoc(profileDoc("0011", id), parseStr, "profileid-illegal"), label.c_str(),
+            "the profile loaded");
+      check(has(parseStr, "Invalid ProfileID"), label.c_str(), "no diagnostic");
+    }
   }
   {
-    std::string parseStr;
-    check(loadDoc(profileDoc("0011", "34562ABF994CCD066D2C5721D0D68C5D"), parseStr, "profileid-full"),
-          "ProfileID full", ("a full profile ID was refused: " + parseStr).c_str());
+    // Reserved has no shorthand.  Insert it into the header of the same document.
+    struct { const char *text; bool ok; } cases[] = {
+      { "FFFFFF2F", true }, { "", true }, { "0g11", false }, { "1", false },
+      { "00000000000000000000000000000000000000000000000000000000FF", false },
+    };
+    for (const auto &c : cases) {
+      std::string doc = profileDoc("0011", NULL);
+      size_t at = doc.find("  </Header>");
+      doc.insert(at, std::string("    <Reserved>") + c.text + "</Reserved>\n");
+      std::string parseStr;
+      std::string label = std::string("Reserved '") + c.text + (c.ok ? "' loads" : "' refused");
+      bool loaded = loadDoc(doc, parseStr, "reserved");
+      check(loaded == c.ok, label.c_str(), (c.ok ? "refused: " + parseStr : std::string("the profile loaded")).c_str());
+      if (!c.ok)
+        check(has(parseStr, "Invalid header Reserved"), label.c_str(), "no diagnostic");
+    }
   }
 
   if (g_fail) {

@@ -469,6 +469,39 @@ static bool parseVersion(const std::string &sPart, unsigned long &rv,
 *  true - valid ICC header, false - failure
 ******************************************************************************
 */
+// Reads a fixed-size header byte field written as hex digit pairs: the profile
+// ID (16 bytes) or the reserved bytes (28).  icXmlGetHexData() skips whatever
+// it cannot read as a pair and stops at the buffer, so "0g11" loaded as the
+// byte 0x11 and an over-long value was cut short, silently (#2827, #2828).
+// Now the text must be whole hex pairs (white space between pairs allowed)
+// and no longer than the field; a shorter value fills the leading bytes.
+//
+// bIdShorthand: the tracked Testing profiles write <ProfileID>1</ProfileID>
+// (and a few "0") to mean "no ID stored -- compute it on save".  A single
+// digit decodes to no bytes, so they have always loaded as a zero ID; that
+// spelling stays accepted for the profile ID only.
+static bool icXmlParseHeaderHex(const char *szText, void *pBuf, icUInt32Number nBufSize,
+                                bool bIdShorthand)
+{
+  memset(pBuf, 0, nBufSize);
+  if (!szText)
+    return true;
+
+  std::string text(szText);
+  size_t first = text.find_first_not_of(" \t\r\n");
+  size_t last = text.find_last_not_of(" \t\r\n");
+  std::string trimmed = first == std::string::npos ? std::string() : text.substr(first, last - first + 1);
+
+  if (trimmed.empty() || (bIdShorthand && (trimmed == "0" || trimmed == "1")))
+    return true;
+
+  if (!icXmlValidHexData(szText) || icXmlGetHexDataSize(szText) > nBufSize)
+    return false;
+
+  icXmlGetHexData(pBuf, szText, nBufSize);
+  return true;
+}
+
 bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
 {  	  
   std::string temp;
@@ -714,10 +747,11 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
 		  m_Header.creator = icXmlGetChildSigVal(pNode);
 		}
 		else if (!icXmlStrCmp(pNode->name, "ProfileID")) {
-      if (pNode->children && pNode->children->content) 
-		    icXmlGetHexData(&m_Header.profileID.ID8, (const char*)pNode->children->content, sizeof(m_Header.profileID.ID8));
-      else
-        memset(&m_Header.profileID.ID8, 0, sizeof(m_Header.profileID.ID8));
+      const char *szText = (pNode->children ? (const char*)pNode->children->content : NULL);
+      if (!icXmlParseHeaderHex(szText, &m_Header.profileID.ID8, sizeof(m_Header.profileID.ID8), true)) {
+        parseStr += "Invalid ProfileID: expected up to 16 bytes of hex digit pairs\n";
+        return false;
+      }
 		}
     else if (!icXmlStrCmp(pNode->name, "SpectralPCS")) {
       m_Header.spectralPCS = (icColorSpaceSignature)icXmlGetChildSigVal(pNode);
@@ -788,10 +822,11 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
       m_Header.deviceSubClass = (icProfileClassSignature)icXmlGetChildSigVal(pNode);
     }
 		else if (!icXmlStrCmp(pNode->name, "Reserved")) {
-      if (pNode->children && pNode->children->content)
-        icXmlGetHexData(&m_Header.reserved, (const char*)pNode->children->content, sizeof(m_Header.reserved));
-      else
-        memset(&m_Header.reserved, 0, sizeof(m_Header.reserved));
+      const char *szText = (pNode->children ? (const char*)pNode->children->content : NULL);
+      if (!icXmlParseHeaderHex(szText, &m_Header.reserved, sizeof(m_Header.reserved), false)) {
+        parseStr += "Invalid header Reserved: expected up to 28 bytes of hex digit pairs\n";
+        return false;
+      }
 		}
 		else {
 		  parseStr += "Unknown Profile Header attribute: ";

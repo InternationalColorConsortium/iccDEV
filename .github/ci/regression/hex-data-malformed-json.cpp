@@ -41,9 +41,11 @@
     loads.
 
     Part 1 is the rule, part 2 drives it through the dataType parser that calls
-    it.  The header's profileID is deliberately left unchecked, for the reason
-    given in the XML twin, iccdev.hex-data-malformed-xml; the two cannot share
-    a translation unit.
+    it.  The two cannot share a translation unit with the XML twin,
+    iccdev.hex-data-malformed-xml.
+
+    Part 4 is the header's ProfileID (#2828): whole hex pairs, at most 16
+    bytes, with "", "0" and "1" kept legal as "no ID stored", as in XML.
 
     Part 3 is profileSequenceIdentifierType (#2826).  Each entry carries a fixed
     16-byte profile ID, written as 32 hex digits, and the reader handed whatever
@@ -54,6 +56,7 @@
     all-zero ID; that is unchanged and is pinned so it stays a decision.
 */
 
+#include "IccProfileJson.h"
 #include "IccTagJson.h"
 #include "IccUtilJson.h"
 
@@ -229,6 +232,30 @@ int main()
     std::string out = writtenPsid("\"profileId\": null", parseStr);
     check(has(out, "\"profileId\":\"00000000000000000000000000000000\""), "psid null id",
           ("an entry with a null profileId did not load with a zero id, parseStr: " + parseStr + " json: " + out).c_str());
+  }
+
+  /* 4. The header's ProfileID. */
+  {
+    struct { const char *id; bool ok; } cases[] = {
+      { "1", true }, { "0", true }, { "", true },
+      { "34562ABF994CCD066D2C5721D0D68C5D", true },
+      { "0g11", false }, { "0g112233445566778899aabbccddeeff", false }, { "001", false },
+      { "34562ABF994CCD066D2C5721D0D68C5D00", false },
+    };
+    for (const auto &c : cases) {
+      IccJson doc = { { "IccProfile", {
+        { "Header", { { "ProfileVersion", "4.30" }, { "ProfileDeviceClass", "mntr" },
+                      { "DataColourSpace", "RGB " }, { "PCS", "Lab " },
+                      { "ProfileID", c.id } } },
+        { "Tags", IccJson::array() } } } };
+      CIccProfileJson profile;
+      std::string parseStr;
+      bool ok = profile.ParseJson(doc, parseStr);
+      std::string label = std::string("header ProfileID '") + c.id + (c.ok ? "' loads" : "' refused");
+      check(ok == c.ok, label.c_str(), (c.ok ? "refused: " + parseStr : std::string("the profile loaded")).c_str());
+      if (!c.ok)
+        check(has(parseStr, "Invalid ProfileID"), label.c_str(), "no diagnostic");
+    }
   }
 
   if (g_fail) {
