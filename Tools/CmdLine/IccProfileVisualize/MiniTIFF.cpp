@@ -128,10 +128,15 @@ static bool bigEndian = isMachineBigEndian();
 
 // unsigned 0..128..255 -> signed -127..0..127
 static
-void shiftTIFFLAB( uint8_t *in, size_t count )
+void shiftTIFFLAB( uint8_t *in, size_t count, int channels )
 {
+  // A pixel is 'channels' samples, of which a* and b* are the second and third.
+  // Stepping by 3 regardless read and rewrote past the end of a raster with
+  // fewer samples per pixel (#2880); an L*-only raster has nothing to shift.
+  if (channels < 3)
+    return;
   for ( size_t i = 0; i < count; ++i ) {
-    size_t index = 3*i;
+    size_t index = (size_t)channels*i;
     uint8_t l = in[index+0];
     int a = in[index+1];
     int b = in[index+2];
@@ -145,10 +150,15 @@ void shiftTIFFLAB( uint8_t *in, size_t count )
 
 // unsigned 0..32768..65535 -> signed -32767..0..32767
 static
-void shiftTIFFLAB( uint16_t *in, size_t count )
+void shiftTIFFLAB( uint16_t *in, size_t count, int channels )
 {
+  // A pixel is 'channels' samples, of which a* and b* are the second and third.
+  // Stepping by 3 regardless read and rewrote past the end of a raster with
+  // fewer samples per pixel (#2880); an L*-only raster has nothing to shift.
+  if (channels < 3)
+    return;
   for ( size_t i = 0; i < count; ++i ) {
-    size_t index = 3*i;
+    size_t index = (size_t)channels*i;
     uint16_t l = in[index+0];
     int a = in[index+1];
     int b = in[index+2];
@@ -361,9 +371,9 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
 
     if (color_model == TIFF_MODE_CIELAB) {
       if (depth == 8)
-        shiftTIFFLAB( buffer + offset, width * rowCount );
+        shiftTIFFLAB( buffer + offset, width * rowCount, channels );
       else if (depth == 16)
-        shiftTIFFLAB( (uint16_t *)(buffer + offset), width * rowCount );
+        shiftTIFFLAB( (uint16_t *)(buffer + offset), width * rowCount, channels );
     }
 
     long stripStart = ftell( outfile );

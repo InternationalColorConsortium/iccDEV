@@ -4984,6 +4984,67 @@ endfunction()
 # is a second, diverged copy under Tools/CmdLine/IccProfileVisualize that also
 # ships, and this test says nothing about it (#2116 records that split).
 # IccVizEngine supplies IccVizModel.cpp plus the engine include directory (#1975).
+# #2880: WriteTIFF's CIELAB shift stepped 3 samples per pixel whatever the
+# raster's channel count, so iccProfileVisualizePlot read and rewrote past a
+# one-channel Lab CLUT raster.  The same test source is built against both
+# MiniTIFF.cpp copies.  Called in both the Windows and the main list.
+function(iccdev_add_tiff_lab_channel_stride_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  foreach(_copy IN ITEMS Plot Visualize)
+    if(_copy STREQUAL "Plot")
+      set(_dir "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccProfilePlot")
+      set(_target iccTiffLabStridePlotTest)
+      set(_test iccdev.tiff-lab-channel-stride-plot)
+    else()
+      set(_dir "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccProfileVisualize")
+      set(_target iccTiffLabStrideVisualizeTest)
+      set(_test iccdev.tiff-lab-channel-stride-visualize)
+    endif()
+
+    iccdev_add_regression_executable(${_target}
+      "${ICCDEV_REPO_ROOT}/.github/ci/regression/tiff-lab-channel-stride.cpp"
+      "${_dir}/MiniTIFF.cpp"
+    )
+    target_compile_features(${_target} PRIVATE cxx_std_17)
+    if(_copy STREQUAL "Visualize")
+      target_compile_definitions(${_target} PRIVATE ICCDEV_TIFF_LAB_VISUALIZE_COPY)
+    endif()
+    target_include_directories(${_target} PRIVATE
+      "${_dir}"
+      "${ICCDEV_REPO_ROOT}/Tools/CmdLine"
+      "${ICCDEV_REPO_ROOT}/IccProfLib"
+    )
+    target_link_libraries(${_target} PRIVATE ${TARGET_LIB_ICCPROFLIB})
+    add_dependencies(check ${_target})
+
+    add_test(
+      NAME ${_test}
+      COMMAND "$<TARGET_FILE:${_target}>" "${ICCDEV_TEST_OUTDIR}"
+    )
+    set_tests_properties(${_test} PROPERTIES
+      WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+      TIMEOUT 60
+      LABELS "iccdev;iccprofileplot;viz;tiff;asan;issue-2880;regression"
+    )
+    if(WIN32)
+      set(_tiff_lab_stride_windows_env_mods
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:${_target}>"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      )
+      foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+        list(APPEND _tiff_lab_stride_windows_env_mods
+          "PATH=path_list_prepend:${_runtime_path}")
+      endforeach()
+      set_tests_properties(${_test} PROPERTIES
+        ENVIRONMENT_MODIFICATION "${_tiff_lab_stride_windows_env_mods}"
+      )
+    endif()
+  endforeach()
+endfunction()
+
 function(iccdev_add_iccviz_writer_serialization_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -12771,6 +12832,7 @@ if(WIN32)
   iccdev_add_iccviz_degenerate_test()
   iccdev_add_iccviz_pdf_axis_test()
   iccdev_add_iccviz_writer_serialization_test()
+  iccdev_add_tiff_lab_channel_stride_test()
   iccdev_add_iccprofileplot_clut_oob_test()
   iccdev_add_iccprofileplot_pdf_leak_test()
   iccdev_add_iccprofileplot_exitcode_test()
@@ -13322,6 +13384,7 @@ iccdev_add_iccviz_metrics_test()
 iccdev_add_iccviz_degenerate_test()
 iccdev_add_iccviz_pdf_axis_test()
 iccdev_add_iccviz_writer_serialization_test()
+iccdev_add_tiff_lab_channel_stride_test()
 iccdev_add_iccprofileplot_clut_oob_test()
 iccdev_add_iccprofileplot_pdf_leak_test()
 iccdev_add_iccprofileplot_exitcode_test()
