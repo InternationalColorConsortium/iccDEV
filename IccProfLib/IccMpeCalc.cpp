@@ -3347,43 +3347,38 @@ const char *CIccCalculatorFunc::ParseFuncDef(const char *szFuncDef, CIccCalcOpLi
           scanList.push_back(op);
 
           int c;
-          CIccCalcOpListPtrList selList;
+          std::list<CIccCalcOpList> selList;
           for (c=0; ; c++) {
             szFuncDef = scan.GetPos();
             scan.GetNext();
             if (scan.GetSig()==icSigCaseOp) {
-              CIccCalcOpListPtr pCaseList = new CIccCalcOpList();
+              selList.push_back(CIccCalcOpList());
+              CIccCalcOpList &caseList = selList.back();
 
-              szFuncDef = ParseFuncDef(scan.GetPos(), *pCaseList, sReport);
+              szFuncDef = ParseFuncDef(scan.GetPos(), caseList, sReport);
 
-              if (!szFuncDef) {
-                delete pCaseList;
+              if (!szFuncDef)
                 return NULL;
-              }
 
               scan.SetPos(szFuncDef);
               op.sig = icSigCaseOp;
-              op.data.size = (icUInt32Number)pCaseList->size();
+              op.data.size = (icUInt32Number)caseList.size();
               scanList.push_back(op);
-
-              selList.push_back(pCaseList);
             }
             else if (c && scan.GetSig()==icSigDefaultOp) {
-              CIccCalcOpListPtr pDefaultList = new CIccCalcOpList();
+              selList.push_back(CIccCalcOpList());
+              CIccCalcOpList &defaultList = selList.back();
 
-              szFuncDef = ParseFuncDef(scan.GetPos(), *pDefaultList, sReport);
+              szFuncDef = ParseFuncDef(scan.GetPos(), defaultList, sReport);
 
-              if (!szFuncDef) {
-                delete pDefaultList;
+              if (!szFuncDef)
                 return NULL;
-              }
 
               scan.SetPos(szFuncDef);
               op.sig = icSigDefaultOp;
-              op.data.size = (icUInt32Number)pDefaultList->size();
+              op.data.size = (icUInt32Number)defaultList.size();
               scanList.push_back(op);
 
-              selList.push_back(pDefaultList);
               break;
             }
             else {
@@ -3391,12 +3386,9 @@ const char *CIccCalculatorFunc::ParseFuncDef(const char *szFuncDef, CIccCalcOpLi
               break;
             }
           }
-          CIccCalcOpListPtrList::iterator l;
+          std::list<CIccCalcOpList>::iterator l;
           for (l=selList.begin(); l!=selList.end(); l++) {
-            CIccCalcOpListPtr pCaseList = *l;
-
-            AppendOpList(scanList, *pCaseList);
-            delete pCaseList;
+            AppendOpList(scanList, *l);
           }
         }
         break;

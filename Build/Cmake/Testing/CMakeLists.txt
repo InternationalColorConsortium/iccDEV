@@ -1518,6 +1518,56 @@ function(iccdev_add_mpecalc_rotate_operand_test)
   endif()
 endfunction()
 
+# Guards ownership of parsed select case bodies (#2881). ParseFuncDef() retained each
+# successful case as a raw list pointer until the complete select was parsed,
+# then returned without freeing those lists when a later case or default body
+# was malformed. The parser result checks run everywhere; LeakSanitizer checks
+# the error-path ownership where it is available.
+function(iccdev_add_mpecalc_select_parse_leak_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMpeCalcSelectParseLeakTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/mpecalc-select-parse-leak.cpp"
+  )
+  target_link_libraries(iccMpeCalcSelectParseLeakTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccMpeCalcSelectParseLeakTest)
+
+  if(NOT ICCDEV_HAS_LEAK_SANITIZER)
+    add_test(
+      NAME iccdev.mpecalc-select-parse-leak
+      COMMAND "$<TARGET_FILE:iccMpeCalcSelectParseLeakTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.mpecalc-select-parse-leak
+      COMMAND "${CMAKE_COMMAND}" -E env
+        "ASAN_OPTIONS=detect_leaks=1"
+        "DEBUGINFOD_URLS="
+        "$<TARGET_FILE:iccMpeCalcSelectParseLeakTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.mpecalc-select-parse-leak PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;mpe;calc;parser;leak;issue-2881;regression"
+  )
+  if(WIN32)
+    set(_mpecalc_select_leak_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMpeCalcSelectParseLeakTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _mpecalc_select_leak_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.mpecalc-select-parse-leak PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_mpecalc_select_leak_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards the calc-element matrix-size integer overflow (#1447 Solve / #1448
 # Transpose): CIccOpDefTranspose/Solve::Exec computed `int nSize = r*c` with r,c
 # each up to 65536, overflowing int and slipping past the size guard into a bad
@@ -12762,6 +12812,7 @@ if(WIN32)
   iccdev_add_cmm_registry_allowlist_test()
   iccdev_add_mpecalc_matrix_overflow_test()
   iccdev_add_mpecalc_rotate_operand_test()
+  iccdev_add_mpecalc_select_parse_leak_test()
   iccdev_add_sparsematrix_set_roundtrip_test()
   iccdev_add_cmmsearch_namedcolor_ownership_test()
   iccdev_add_namedcolor_findcolor_suffix_underflow_test()
@@ -13304,6 +13355,7 @@ iccdev_add_pawg_q1_quality_contract_test()
 iccdev_add_cmm_registry_allowlist_test()
 iccdev_add_mpecalc_matrix_overflow_test()
 iccdev_add_mpecalc_rotate_operand_test()
+iccdev_add_mpecalc_select_parse_leak_test()
 iccdev_add_sparsematrix_set_roundtrip_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_namedcolor_findcolor_suffix_underflow_test()
