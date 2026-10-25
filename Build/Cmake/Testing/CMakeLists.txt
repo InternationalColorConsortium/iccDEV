@@ -3331,6 +3331,61 @@ endfunction()
 # unprinted warning, and a multiProcessElementType element with no, an
 # unknown, or a non-JSON type dropped from the tag.  All three now fail the
 # parse with the XML reader's wording; the controls still load.
+# #2852: the JSON calculator reader narrowed a variable's size to 16 bits and
+# ignored its parse result, and the tint array reader turned an unknown
+# arrayType into float32.  Both now refuse what the XML readers refuse.
+# Library only; called in both the Windows and the main list.
+function(iccdev_add_json_calc_var_size_tint_type_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccJsonCalcVarSizeTintTypeTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/json-calc-var-size-tint-type.cpp"
+  )
+  target_compile_features(iccJsonCalcVarSizeTintTypeTest PRIVATE cxx_std_17)
+  target_include_directories(iccJsonCalcVarSizeTintTypeTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccJsonCalcVarSizeTintTypeTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccJsonCalcVarSizeTintTypeTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.json-calc-var-size-tint-type
+      COMMAND "$<TARGET_FILE:iccJsonCalcVarSizeTintTypeTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.json-calc-var-size-tint-type
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccJsonCalcVarSizeTintTypeTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.json-calc-var-size-tint-type PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;json;calculator;mpe;issue-2852;regression"
+  )
+  if(WIN32)
+    set(_json_calc_var_size_tint_type_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccJsonCalcVarSizeTintTypeTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _json_calc_var_size_tint_type_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.json-calc-var-size-tint-type PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_json_calc_var_size_tint_type_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_json_reader_strictness_test)
   if(NOT TARGET "${TARGET_LIB_ICCJSON}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -13116,6 +13171,7 @@ if(WIN32)
   iccdev_add_mcs_subset_connect_test()
   iccdev_add_islegalutf8_bound_test()
   iccdev_add_json_reader_strictness_test()
+  iccdev_add_json_calc_var_size_tint_type_test()
   iccdev_add_json_escape_codepoint_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
@@ -13735,6 +13791,7 @@ iccdev_add_cicp_copy_ctor_test()
 iccdev_add_pcc_standard_observer_and_illuminant_test()
 iccdev_add_islegalutf8_bound_test()
 iccdev_add_json_reader_strictness_test()
+iccdev_add_json_calc_var_size_tint_type_test()
 iccdev_add_json_escape_codepoint_test()
 iccdev_add_v5_required_tag_sets_test()
 iccdev_add_mpe_acs_zero_signature_test()
