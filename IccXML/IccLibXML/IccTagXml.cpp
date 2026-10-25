@@ -1635,6 +1635,14 @@ bool CIccTagXmlSparseMatrixArray::ParseXml(xmlNode *pNode, std::string &parseStr
               icUInt32Number pos = 0;
               for (pRow=pChild->children; pRow; pRow=pRow->next) {
                 if (pRow->type == XML_ELEMENT_NODE && !icXmlStrCmp(pRow->name, "SparseRow")) {
+                  // Init() sized the row-start table for nRows+1 entries and the
+                  // column storage for nRows rows.  Each SparseRow writes
+                  // rowstart[iRow] and row iRow's columns, so one more SparseRow
+                  // than the matrix declares wrote past both (#2582).
+                  if (iRow >= nRows) {
+                    parseStr += "More SparseRow elements than SparseMatrix rows\n";
+                    return false;
+                  }
                   xmlNode *pIdx = icXmlFindNode(pRow->children, "ColIndices");
                   xmlNode *pData = icXmlFindNode(pRow->children, "ColData");
 

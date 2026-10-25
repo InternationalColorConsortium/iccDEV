@@ -1425,7 +1425,14 @@ bool CIccTagJsonSparseMatrixArray::ParseJson(const IccJson &j, std::string &pars
       parseStr += "Too many SparseMatrix rows\n";
       return false;
     }
-    icUInt32Number nActiveRows = nJsonRows < nRows ? nJsonRows : nRows;
+    // sparseRows beyond the declared rows were dropped without a word.  The
+    // XML reader refuses them (#2582); a document whose rows disagree with its
+    // own row count is malformed, so refuse it here too.
+    if (nJsonRows > nRows) {
+      parseStr += "More SparseMatrix sparseRows than rows\n";
+      return false;
+    }
+    icUInt32Number nActiveRows = nJsonRows;
 
     if (nActiveRows && !rowstart)
       return false;

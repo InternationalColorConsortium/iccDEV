@@ -3846,6 +3846,116 @@ endfunction()
 # iccdev.v2-xml-fixtures does.  The chain is the one Testing/RunTests.sh already runs for
 # the dense bi-spectral FluorescentNamedColor; building the whole chain is what makes the
 # sparse PCS step run at all, since a lone named profile has no PCS connection.
+# #2582: the XML sparse matrix reader wrote one row-start entry and one row of
+# columns per SparseRow with no bound against the declared rows, so an extra
+# SparseRow wrote past both.  It now refuses the document.  Library only; called
+# in both the Windows and the main list.
+function(iccdev_add_sparse_row_count_xml_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSparseRowCountXmlTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/sparse-row-count-xml.cpp"
+  )
+  target_compile_features(iccSparseRowCountXmlTest PRIVATE cxx_std_17)
+  target_include_directories(iccSparseRowCountXmlTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccSparseRowCountXmlTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccSparseRowCountXmlTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.sparse-row-count-xml
+      COMMAND "$<TARGET_FILE:iccSparseRowCountXmlTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.sparse-row-count-xml
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccSparseRowCountXmlTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.sparse-row-count-xml PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;sparsematrix;asan;issue-2582;regression"
+  )
+  if(WIN32)
+    set(_sparse_row_count_xml_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSparseRowCountXmlTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _sparse_row_count_xml_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.sparse-row-count-xml PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_sparse_row_count_xml_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# #2582: the JSON sparse matrix reader dropped sparseRows beyond the declared
+# rows without a word; it now refuses them, as the XML reader does.  Library
+# only; called in both the Windows and the main list.
+function(iccdev_add_sparse_row_count_json_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSparseRowCountJsonTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/sparse-row-count-json.cpp"
+  )
+  target_compile_features(iccSparseRowCountJsonTest PRIVATE cxx_std_17)
+  target_include_directories(iccSparseRowCountJsonTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccSparseRowCountJsonTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccSparseRowCountJsonTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.sparse-row-count-json
+      COMMAND "$<TARGET_FILE:iccSparseRowCountJsonTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.sparse-row-count-json
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccSparseRowCountJsonTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.sparse-row-count-json PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;json;sparsematrix;issue-2582;regression"
+  )
+  if(WIN32)
+    set(_sparse_row_count_json_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSparseRowCountJsonTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _sparse_row_count_json_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.sparse-row-count-json PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_sparse_row_count_json_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_namedcolor_sparse_matrix_xml_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
     return()
@@ -12523,6 +12633,8 @@ if(WIN32)
   iccdev_add_pcs_birefl_illuminant_range_test()
   iccdev_add_namedcolor_sparse_matrix_apply_test()
   iccdev_add_namedcolor_sparse_matrix_xml_test()
+  iccdev_add_sparse_row_count_json_test()
+  iccdev_add_sparse_row_count_xml_test()
   iccdev_add_sparsematrix_union_validate_test()
   iccdev_add_pcs_applyillum_chain_sizing_test()
   iccdev_add_spectral_pcs_range_consistency_test()
@@ -13069,6 +13181,8 @@ iccdev_add_pcs_birefl_illuminant_range_test()
 iccdev_add_namedcolor_sparse_matrix_apply_test()
 iccdev_add_named_colour_signature_v5_test()
 iccdev_add_namedcolor_sparse_matrix_xml_test()
+iccdev_add_sparse_row_count_json_test()
+iccdev_add_sparse_row_count_xml_test()
 iccdev_add_sparsematrix_union_validate_test()
 iccdev_add_pcs_applyillum_chain_sizing_test()
 iccdev_add_spectral_pcs_range_consistency_test()
