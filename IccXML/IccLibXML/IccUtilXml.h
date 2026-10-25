@@ -198,6 +198,14 @@ bool icXmlParseU16(const char *s, icUInt16Number &out,
 bool icXmlParseU32(const char *s, icUInt32Number &out,
                    icUInt32Number max_value = 0xFFFFFFFFu);
 
+// The hexadecimal counterpart of icXmlParseU32, for the attributes the writers
+// emit with "%08x" (profile flags VendorFlags, namedColor2 VendorFlag, a
+// profile-level tag's reserved).  sscanf("%x") read the leading hex digits and
+// ignored the rest, so "0g1" loaded as 0 and "7x" as 7 (#2836).  Same rules as
+// icXmlParseU32: false for NULL, empty, a sign, trailing characters or a value
+// above 0xFFFFFFFF.  An optional 0x prefix is still accepted, as sscanf did.
+bool icXmlParseHex32(const char *s, icUInt32Number &out);
+
 // Safe floating-point parser for XML attribute values and element text, the
 // replacement for atof() (#2548).  Returns false (leaving `out` unchanged) when:
 //   - the string is NULL, empty or only whitespace,

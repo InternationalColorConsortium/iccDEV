@@ -660,7 +660,10 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
       attr = icXmlFindAttr(pNode, "VendorFlags");
       if (attr) {
         icUInt32Number vendor = 0;
-        sscanf(icXmlAttrValue(attr), "%x", &vendor);
+        if (!icXmlParseHex32(icXmlAttrValue(attr), vendor)) {
+          parseStr += "Invalid ProfileFlags VendorFlags\n";
+          return false;
+        }
         m_Header.flags |= vendor;
       }
 		}
@@ -958,8 +961,12 @@ bool CIccProfileXml::ParseTag(xmlNode *pNode, std::string &parseStr)
         CIccTagXml* pXmlTag = (CIccTagXml*)pExt;
 
         if (pXmlTag && pXmlTag->ParseXml(pTypeNode->children, parseStr)) {
-          if ((attr = icXmlFindAttr(pTypeNode, "reserved"))) {
-            sscanf(icXmlAttrValue(attr), "%x", &pTag->m_nReserved);
+          if ((attr = icXmlFindAttr(pTypeNode, "reserved")) &&
+              !icXmlParseHex32(icXmlAttrValue(attr), pTag->m_nReserved)) {
+            parseStr += "Invalid tag type reserved on line ";
+            parseStr += std::to_string(pTypeNode->line) + "\n";
+            delete pTag;
+            return false;
           }
           //AttachTag refuses (and does not take ownership) when a tag with this
           //signature already exists; free pTag to avoid a leak on duplicates.
@@ -1027,8 +1034,12 @@ bool CIccProfileXml::ParseTag(xmlNode *pNode, std::string &parseStr)
       CIccTagXml* pXmlTag = (CIccTagXml*)pExt;
 
       if (pXmlTag && pXmlTag->ParseXml(pNode->children, parseStr)) {
-        if ((attr = icXmlFindAttr(pNode, "reserved"))) {
-          sscanf(icXmlAttrValue(attr), "%u", &pTag->m_nReserved);
+        if ((attr = icXmlFindAttr(pNode, "reserved")) &&
+            !icXmlParseU32(icXmlAttrValue(attr), pTag->m_nReserved)) {
+          parseStr += "Invalid tag type reserved on line ";
+          parseStr += std::to_string(pNode->line) + "\n";
+          delete pTag;
+          return false;
         }
 
         bool bAttached = false;

@@ -1817,6 +1817,18 @@ bool icXmlParseU32(const char *s, icUInt32Number &out, icUInt32Number max_value)
   return true;
 }
 
+bool icXmlParseHex32(const char *s, icUInt32Number &out)
+{
+  if (!s || !*s) return false;
+  if (*s == '-' || *s == '+') return false;
+  char *end = nullptr;
+  errno = 0;
+  unsigned long long v = std::strtoull(s, &end, 16);
+  if (end == s || *end != '\0' || errno == ERANGE || v > 0xFFFFFFFFull) return false;
+  out = static_cast<icUInt32Number>(v);
+  return true;
+}
+
 bool icXmlParseFloat(const char *s, icFloatNumber &out)
 {
   if (!s) return false;

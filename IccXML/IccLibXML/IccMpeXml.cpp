@@ -2005,8 +2005,12 @@ bool CIccMpeXmlTintArray::ParseXml(xmlNode *pNode, std::string &parseStr)
       xmlAttr *attr;
 
       if (pXmlTag->ParseXml(pNode->children, parseStr)) {
-        if ((attr=icXmlFindAttr(pNode, "reserved"))) {
-          sscanf(icXmlAttrValue(attr), "%u", &pTag->m_nReserved);
+        // sscanf("%u") kept the leading digits of "7x" (#2839).
+        if ((attr=icXmlFindAttr(pNode, "reserved")) &&
+            !icXmlParseU32(icXmlAttrValue(attr), pTag->m_nReserved)) {
+          parseStr += "Invalid tint array reserved\n";
+          delete pTag;
+          return false;
         }
         SetArray((CIccTagNumArray*)pTag);
       }
@@ -3186,8 +3190,13 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
               // The sub-element's own node, not the enclosing CalculatorElement:
               // reading pNode lost every sub-element's Reserved and copied the
               // calculator's onto each of them.
-              if ((attr = icXmlFindAttr(pNext, "Reserved"))) {
-                sscanf(icXmlAttrValue(attr), "%u", &pMpe->m_nReserved);
+              // sscanf("%u") kept the leading digits of "0x" (#2840).
+              if ((attr = icXmlFindAttr(pNext, "Reserved")) &&
+                  !icXmlParseU32(icXmlAttrValue(attr), pMpe->m_nReserved)) {
+                parseStr += std::string("Invalid Reserved on calculator sub-element of type ") +
+                            pMpe->GetClassName() + "\n";
+                delete pMpe;
+                return false;
               }
 
               if (name.empty()) {

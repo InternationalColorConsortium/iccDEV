@@ -2639,6 +2639,63 @@ endfunction()
 # profileSequenceDesc descriptions while preserving the empty mluc placeholder
 # ICC.1:2022 Table 70 permits, and pins the header ProfileID exclusion the
 # corpus depends on.
+# #2836, #2839, #2840: the XML reader read VendorFlags, tag-type reserved and
+# element Reserved attributes with sscanf(), which keeps the leading digits of a
+# malformed value ("0g1" -> 0, "7x" -> 7).  Every such site now uses
+# icXmlParseU32/icXmlParseHex32 and refuses the document.  Library only; called
+# in both the Windows and the main list.
+function(iccdev_add_xml_strict_numeric_attrs_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlStrictNumericAttrsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-strict-numeric-attrs.cpp"
+  )
+  target_compile_features(iccXmlStrictNumericAttrsTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlStrictNumericAttrsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlStrictNumericAttrsTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlStrictNumericAttrsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-strict-numeric-attrs
+      COMMAND "$<TARGET_FILE:iccXmlStrictNumericAttrsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-strict-numeric-attrs
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlStrictNumericAttrsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-strict-numeric-attrs PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;xml;mpe;calculator;issue-2836;issue-2839;issue-2840;regression"
+  )
+  if(WIN32)
+    set(_xml_strict_numeric_attrs_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlStrictNumericAttrsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _xml_strict_numeric_attrs_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-strict-numeric-attrs PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_xml_strict_numeric_attrs_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_hex_data_malformed_xml_test)
   if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -12868,6 +12925,7 @@ if(WIN32)
   iccdev_add_extended_device_colorspace_test()
   iccdev_add_xml_text_long_roundtrip_test()
   iccdev_add_hex_data_malformed_xml_test()
+  iccdev_add_xml_strict_numeric_attrs_test()
   iccdev_add_hex_data_malformed_json_test()
   iccdev_add_tonemap_functions_xml_test()
   iccdev_add_tonemap_functions_json_test()
@@ -13421,6 +13479,7 @@ iccdev_add_utf8_textarray_test()
 iccdev_add_extended_device_colorspace_test()
 iccdev_add_xml_text_long_roundtrip_test()
 iccdev_add_hex_data_malformed_xml_test()
+iccdev_add_xml_strict_numeric_attrs_test()
 iccdev_add_hex_data_malformed_json_test()
 iccdev_add_tonemap_functions_xml_test()
 iccdev_add_tonemap_functions_json_test()

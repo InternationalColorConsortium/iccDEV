@@ -1075,7 +1075,10 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string &parseStr)
       szPrefix && szSufix) {
         std::string str;
 
-        sscanf(szVendorFlags, "%x", &m_nVendorFlags);
+        if (!icXmlParseHex32(szVendorFlags, m_nVendorFlags)) {
+          parseStr += "Invalid NamedColors VendorFlag\n";
+          return false;
+        }
 
         icXmlCopyFixedString(m_szPrefix, sizeof(m_szPrefix), icUtf8ToAnsi(str, szPrefix));
 
@@ -5307,8 +5310,11 @@ bool CIccTagXmlMultiProcessElement::ParseElement(xmlNode *pNode, std::string &pa
       CIccMpeXml* pXmlMpe = (CIccMpeXml*)pExt;
 
       if (pXmlMpe->ParseXml(pNode, parseStr)) {
-        if ((attr=icXmlFindAttr(pNode, "Reserved"))) {
-          sscanf(icXmlAttrValue(attr), "%u", &pMpe->m_nReserved);
+        if ((attr=icXmlFindAttr(pNode, "Reserved")) &&
+            !icXmlParseU32(icXmlAttrValue(attr), pMpe->m_nReserved)) {
+          parseStr += std::string("Invalid Reserved on element of type ") + pMpe->GetClassName() + "\n";
+          delete pMpe;
+          return false;
         }
 
         ptr.ptr = pMpe;
@@ -5969,8 +5975,15 @@ bool CIccTagXmlStruct::ParseTag(xmlNode *pNode, std::string &parseStr)
         CIccTagXml* pXmlTag = (CIccTagXml*)pExt;
 
         if (pXmlTag->ParseXml(pTypeNode->children, parseStr)) {
-          if ((attr = icXmlFindAttr(pTypeNode, "reserved"))) {
-            sscanf(icXmlAttrValue(attr), "%u", &pTag->m_nReserved);
+          if ((attr = icXmlFindAttr(pTypeNode, "reserved")) &&
+              !icXmlParseU32(icXmlAttrValue(attr), pTag->m_nReserved)) {
+            parseStr += "Invalid reserved on \"";
+            parseStr += (const char*)pTypeNode->name;
+            parseStr += "\" (";
+            parseStr += nodeName;
+            parseStr += ") Tag\n";
+            delete pTag;
+            return false;
           }
           if (!AttachElem(sigTag, pTag)) {
             parseStr += "Unable to Attach \"";
@@ -6030,8 +6043,13 @@ bool CIccTagXmlStruct::ParseTag(xmlNode *pNode, std::string &parseStr)
       CIccTagXml* pXmlTag = (CIccTagXml*)pExt;
 
       if (pXmlTag->ParseXml(pNode->children, parseStr)) {
-        if ((attr = icXmlFindAttr(pNode, "reserved"))) {
-          sscanf(icXmlAttrValue(attr), "%u", &pTag->m_nReserved);
+        if ((attr = icXmlFindAttr(pNode, "reserved")) &&
+            !icXmlParseU32(icXmlAttrValue(attr), pTag->m_nReserved)) {
+          parseStr += "Invalid reserved on \"";
+          parseStr += info.GetTagTypeSigName(sigType);
+          parseStr += "\" Tag\n";
+          delete pTag;
+          return false;
         }
 
         bool bAttached = false;
@@ -6308,8 +6326,13 @@ bool CIccTagXmlArray::ParseXml(xmlNode *pNode, std::string &parseStr)
         CIccTagXml* pXmlTag = (CIccTagXml*)pExt;
 
         if (pXmlTag->ParseXml(tagNode->children, parseStr)) {
-          if ((attr=icXmlFindAttr(tagNode, "reserved"))) {
-            sscanf(icXmlAttrValue(attr), "%u", &pTag->m_nReserved);
+          if ((attr=icXmlFindAttr(tagNode, "reserved")) &&
+              !icXmlParseU32(icXmlAttrValue(attr), pTag->m_nReserved)) {
+            parseStr += "Invalid reserved on xml node named  \"";
+            parseStr += (icChar*)tagNode->name;
+            parseStr += "\"\n";
+            delete pTag;
+            return false;
           }
 
           if (!m_TagVals[n].ptr)
