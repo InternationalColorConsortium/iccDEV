@@ -1194,6 +1194,9 @@ jobs:
   finalize:
     name: PR Summary
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write  # Publish actual manual validation to branch protection.
     needs:
       - detect-src
       - setup
@@ -1417,3 +1420,27 @@ jobs:
           if [ "$job_res" != "success" ]; then
             exit 1
           fi
+
+      # preflight: allow-token-exposure reason=publish-validated-manual-commit-status
+      - name: Publish manual validation status
+        if: ${{ always() && github.event_name == 'workflow_dispatch' }}
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TARGET_SHA: ${{ needs.detect-src.outputs.target_sha || github.sha }}
+          VALIDATION_RESULT: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          state=failure
+          if [[ "$VALIDATION_RESULT" == "success" ]]; then
+            state=success
+          fi
+          gh api --method POST "repos/$GH_REPO/statuses/$TARGET_SHA" \
+            -f context="PR Summary" -f state="$state" \
+            -f description="Manual validation: $VALIDATION_RESULT" \
+            -f target_url="$RUN_URL"

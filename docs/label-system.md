@@ -177,6 +177,12 @@ and `warning_policy` on that dispatch. Fast lane defaults to the latest
 registered CTest and strict warning failure. Windows is opt-in. The PR
 orchestrator does not run a Docker verification job.
 
+Manual validation publishes a `PR Summary` commit status on the validated SHA
+using the actual final job result, so branch protection can consume it even
+when the dispatch check run is absent from the PR check rollup. Failed or
+cancelled validation never publishes success; API publication failures fail
+the job.
+
 Manual dispatches use an event-qualified concurrency group. A dispatch on an
 open PR therefore does not cancel that PR's `pull_request` run; inspect the
 dispatched run by its run ID rather than treating `gh pr checks` as its status.

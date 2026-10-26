@@ -28,6 +28,39 @@ def load_workflow(name):
 
 
 class RebasePolicyTests(unittest.TestCase):
+    def test_manual_validation_publishes_actual_commit_status(self):
+        workflow = load_workflow("ci-pr-action.yml")
+        job = workflow["jobs"]["finalize"]
+        self.assertEqual(job["permissions"]["statuses"], "write")
+        step = next(step for step in job["steps"]
+                    if step.get("name") == "Publish manual validation status")
+        self.assertIn("always()", step["if"])
+        self.assertIn("github.event_name == 'workflow_dispatch'", step["if"])
+        self.assertEqual(step["env"]["TARGET_SHA"],
+                         "${{ needs.detect-src.outputs.target_sha || github.sha }}")
+        mock = 'gh() { printf "%s\\n" "$@"; }; '
+        for result in ("success", "failure", "cancelled"):
+            with self.subTest(result=result), tempfile.TemporaryDirectory() as temp:
+                env = dict(os.environ, HOME=temp, BASH_ENV="/dev/null",
+                           GH_REPO="example/repo", TARGET_SHA="validated-head",
+                           VALIDATION_RESULT=result, RUN_URL="https://example.invalid/run")
+                output = subprocess.run(
+                    ["bash", "-eu", "-c", mock + step["run"]],
+                    env=env, capture_output=True, text=True, check=True,
+                ).stdout.splitlines()
+                self.assertIn("repos/example/repo/statuses/validated-head", output)
+                self.assertIn("context=PR Summary", output)
+                self.assertIn("state=" + ("success" if result == "success"
+                                         else "failure"), output)
+        with tempfile.TemporaryDirectory() as temp:
+            env = dict(os.environ, HOME=temp, GH_REPO="example/repo",
+                       TARGET_SHA="head", VALIDATION_RESULT="success", RUN_URL="url")
+            failed = subprocess.run(
+                ["bash", "-eu", "-c", "gh() { return 1; }; " + step["run"]],
+                env=env, capture_output=True, text=True,
+            )
+            self.assertNotEqual(failed.returncode, 0)
+
     def test_status_label_writes_are_bounded_and_fail_explicitly(self):
         workflow = load_workflow("update-labels.yml")
         step = next(
