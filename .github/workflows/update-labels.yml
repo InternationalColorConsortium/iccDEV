@@ -122,6 +122,7 @@ jobs:
           unset GITHUB_TOKEN || true
 
           RESULTS_FILE=$(mktemp)
+          trap 'rm -f "$RESULTS_FILE"' EXIT
           PROCESSED=0
           LABELED=0
 
@@ -148,16 +149,16 @@ jobs:
           evaluate_pr() {
             local pr="$1"
 
-            # Validate PR belongs to this repo (not a cross-repo fork PR)
-            local is_cross
-            is_cross=$(gh pr view "$pr" --repo "$GH_REPO" --json isCrossRepository -q .isCrossRepository 2>/dev/null || echo "true")
+            local pr_data is_cross head is_draft merge_state review_decision current_labels
+            pr_data=$(gh pr view "$pr" --repo "$GH_REPO" \
+              --json isCrossRepository,headRefOid,isDraft,mergeStateStatus,reviewDecision,labels)
+            is_cross=$(jq -r '.isCrossRepository' <<< "$pr_data")
             if [[ "$is_cross" == "true" ]]; then
               echo "$pr|skipped|Cross-repository PR" >> "$RESULTS_FILE"
               return
             fi
 
-            local head
-            head=$(gh pr view "$pr" --repo "$GH_REPO" --json headRefOid -q .headRefOid 2>/dev/null || echo "")
+            head=$(jq -r '.headRefOid' <<< "$pr_data")
             if [[ -z "$head" ]]; then
               echo "$pr|skipped|Could not determine HEAD SHA" >> "$RESULTS_FILE"
               return
@@ -173,23 +174,20 @@ jobs:
               status_count=0
             fi
 
-            local readiness_data is_draft merge_state review_decision
-            readiness_data=$(gh pr view "$pr" --repo "$GH_REPO" \
-              --json isDraft,mergeStateStatus,reviewDecision \
-              --jq '"\(.isDraft)|\(.mergeStateStatus // "UNKNOWN")|\(.reviewDecision // "UNKNOWN")"' 2>/dev/null || echo "true|UNKNOWN|UNKNOWN")
-            is_draft="${readiness_data%%|*}"
-            readiness_data="${readiness_data#*|}"
-            merge_state="${readiness_data%%|*}"
-            review_decision="${readiness_data##*|}"
+            is_draft=$(jq -r '.isDraft' <<< "$pr_data")
+            merge_state=$(jq -r '.mergeStateStatus // "UNKNOWN"' <<< "$pr_data")
+            review_decision=$(jq -r '.reviewDecision // "UNKNOWN"' <<< "$pr_data")
+            current_labels=$(jq -r '[.labels[].name | select(. == "passed" or . == "failed" or . == "pending" or . == "Merge Ready")] | sort | join(",")' <<< "$pr_data")
 
             # Query Check Runs API (Actions uses this, not statuses)
             local check_conclusion
             # shellcheck disable=SC2016
-            check_conclusion=$(gh api "repos/${GH_REPO}/commits/$head/check-runs" \
+            check_conclusion=$(gh api --paginate --slurp "repos/${GH_REPO}/commits/$head/check-runs?per_page=100&filter=latest" \
               --jq '
-                if (.total_count == 0) then "none"
+                [.[] | .check_runs[]] as $runs
+                | if ($runs | length == 0) then "none"
                 else
-                  [.check_runs[]
+                  [$runs[]
                     | select(.name as $name
                         | ["PR status labeler", "label-status", "apply-labels", "mark-codeql-ready"]
                         | index($name) | not)
@@ -198,25 +196,21 @@ jobs:
                   | if length == 0 then "none"
                     elif any(. == "failure" or . == "timed_out" or . == "cancelled" or . == "action_required") then "failure"
                     elif any(. == "pending" or . == "null" or . == null) then "pending"
+                    elif ($runs | any(.name == "PR Summary" and .status == "completed" and .conclusion == "success") | not) then "pending"
                     elif all(. == "success" or . == "skipped" or . == "neutral") then "success"
                     else "unknown" end
                 end' 2>/dev/null || echo "unknown")
 
             # Combine results
             local combined
-            if [[ "$state" == "failure" || "$check_conclusion" == "failure" ]]; then
+            if [[ "$state" == "failure" || "$state" == "error" || "$check_conclusion" == "failure" ]]; then
               combined="failure"
+            elif [[ "$state" == "unknown" || "$check_conclusion" == "pending" || "$check_conclusion" == "none" || "$check_conclusion" == "unknown" ]]; then
+              combined="pending"
             elif [[ "$check_conclusion" == "success" ]] &&
                  [[ "$state" == "success" || "$status_count" -eq 0 ]]; then
               combined="success"
-            elif [[ "$state" == "success" && "$check_conclusion" == "none" ]]; then
-              combined="success"
-            elif [[ "$state" == "pending" || "$check_conclusion" == "pending" ]]; then
-              combined="pending"
-            elif [[ "$check_conclusion" == "none" && "$state" == "pending" ]]; then
-              combined="pending"
-            elif [[ "$check_conclusion" == "none" && "$state" == "unknown" ]]; then
-              # No checks at all yet -- treat as pending
+            elif [[ "$state" == "pending" ]]; then
               combined="pending"
             else
               combined="$state"
@@ -235,39 +229,36 @@ jobs:
             case "$combined" in
               success)
                 if [[ "$merge_ready" == "true" ]]; then
-                  gh pr edit "$pr" --repo "$GH_REPO" \
-                    --add-label "passed,Merge Ready" \
-                    --remove-label "failed,pending" \
-                    2>/dev/null || true
                   added="passed,Merge Ready"; removed="failed,pending"
                 else
-                  gh pr edit "$pr" --repo "$GH_REPO" \
-                    --add-label "passed" \
-                    --remove-label "failed,pending,Merge Ready" \
-                    2>/dev/null || true
                   added="passed"; removed="failed,pending,Merge Ready"
                 fi
                 ;;
               failure|error)
-                gh pr edit "$pr" --repo "$GH_REPO" \
-                  --add-label "failed" \
-                  --remove-label "passed,pending,Merge Ready" \
-                  2>/dev/null || true
                 added="failed"; removed="passed,pending,Merge Ready"
                 ;;
               pending)
-                gh pr edit "$pr" --repo "$GH_REPO" \
-                  --add-label "pending" \
-                  --remove-label "passed,failed,Merge Ready" \
-                  2>/dev/null || true
                 added="pending"; removed="passed,failed,Merge Ready"
                 ;;
             esac
 
-            echo "$pr|$combined|status=$state status_count=$status_count checks=$check_conclusion merge=$merge_state review=$review_decision draft=$is_draft ready=$merge_ready -> added=$added removed=$removed" >> "$RESULTS_FILE"
             if [[ -n "$added" ]]; then
-              LABELED=$((LABELED + 1))
+              local desired_labels latest_head
+              desired_labels=$(jq -nr --arg labels "$added" '$labels | split(",") | sort | join(",")')
+              if [[ "$current_labels" == "$desired_labels" ]]; then
+                added=""; removed=""
+              else
+                latest_head=$(gh pr view "$pr" --repo "$GH_REPO" --json headRefOid -q .headRefOid)
+                if [[ "$latest_head" != "$head" ]]; then
+                  echo "$pr|pending|HEAD changed during evaluation; labels unchanged" >> "$RESULTS_FILE"
+                  return
+                fi
+                gh pr edit "$pr" --repo "$GH_REPO" \
+                  --add-label "$added" --remove-label "$removed"
+                LABELED=$((LABELED + 1))
+              fi
             fi
+            echo "$pr|$combined|status=$state status_count=$status_count checks=$check_conclusion merge=$merge_state review=$review_decision draft=$is_draft ready=$merge_ready -> added=$added removed=$removed" >> "$RESULTS_FILE"
           }
 
           for pr in ${PR_LIST}; do

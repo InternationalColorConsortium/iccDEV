@@ -44,7 +44,10 @@ Use this skill when adding, removing, or auditing labels and label automation.
 7. If issue triage logic changes, keep it conservative and make labels easy for
    maintainers to override.
 8. If PR status labels change, preserve mutual exclusion among `passed`,
-   `failed`, and `pending`.
+   `failed`, and `pending`. Require a completed successful `PR Summary` on the
+   current head before `passed`; lightweight checks are not validation.
+   Skip unchanged labels, recheck the head before writes, and expose write
+   failures. Run `python3 .github/tests/test_ci_rebase_policy.py`.
 9. If PR CI control labels change, keep them maintainer-only, one-shot, and
    restricted to same-repository pull requests.
 10. Update docs, prompts, agents, and the inventory artifact when policy or

@@ -8,7 +8,9 @@
 ###############################################################
 
 import os
+import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -26,6 +28,126 @@ def load_workflow(name):
 
 
 class RebasePolicyTests(unittest.TestCase):
+    def test_status_label_writes_are_bounded_and_fail_explicitly(self):
+        workflow = load_workflow("update-labels.yml")
+        step = next(
+            step for step in workflow["jobs"]["label-status"]["steps"]
+            if step.get("name") == "Evaluate and label PRs"
+        )
+        mock = """
+gh() {
+  case "$*" in
+    "pr view "*"--json isCrossRepository,"*) printf '%s\\n' "$PR_DATA" ;;
+    "pr view "*"--json headRefOid -q .headRefOid") printf '%s\\n' "$LATEST_HEAD" ;;
+    "api "*"check-runs"*) printf '%s\\n' "$CHECK_RESULT" ;;
+    "api "*"status"*) printf 'pending|0\\n' ;;
+    "pr edit "*) printf '%s\\n' "$*" >> "$WRITE_LOG"; return "$WRITE_STATUS" ;;
+    *) printf 'Unexpected gh call: %s\\n' "$*" >&2; return 2 ;;
+  esac
+}
+"""
+        for name, labels, latest_head, write_status, expected_writes in (
+            ("unchanged", ["pending"], "head", "0", 0),
+            ("update", ["passed", "Merge Ready"], "head", "0", 1),
+            ("moved-head", ["passed"], "new-head", "0", 0),
+            ("write-failure", ["passed"], "head", "1", 1),
+        ):
+            with self.subTest(case=name), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                env = dict(
+                    os.environ, HOME=temp, BASH_ENV="/dev/null",
+                    GH_REPO="example/repo", PR_LIST="1",
+                    GITHUB_OUTPUT=str(root / "output"),
+                    GITHUB_WORKSPACE=temp, WRITE_LOG=str(root / "writes"),
+                    WRITE_STATUS=write_status, LATEST_HEAD=latest_head,
+                    CHECK_RESULT="pending",
+                    PR_DATA=json.dumps({
+                        "isCrossRepository": False, "headRefOid": "head",
+                        "isDraft": False, "mergeStateStatus": "CLEAN",
+                        "reviewDecision": "APPROVED",
+                        "labels": [{"name": label} for label in labels],
+                    }),
+                )
+                result = subprocess.run(
+                    ["bash", "--noprofile", "--norc", "-c", mock + step["run"]],
+                    cwd=root, env=env, capture_output=True, text=True,
+                )
+                self.assertEqual(
+                    result.returncode, int(write_status),
+                    result.stdout + result.stderr,
+                )
+                writes = root / "writes"
+                actual = writes.read_text().splitlines() if writes.exists() else []
+                self.assertEqual(len(actual), expected_writes)
+                if name == "update":
+                    self.assertIn("--add-label pending", actual[0])
+                    self.assertIn("--remove-label passed,failed,Merge Ready", actual[0])
+
+    def test_status_labels_require_successful_current_head_summary(self):
+        workflow = load_workflow("update-labels.yml")
+        step = next(
+            step for step in workflow["jobs"]["label-status"]["steps"]
+            if step.get("name") == "Evaluate and label PRs"
+        )
+        run = step["run"]
+        query = re.search(
+            r"--jq '([\s\S]*?)' 2>/dev/null",
+            run.split("check_conclusion=$(gh api", 1)[1],
+        ).group(1)
+        combine = run.split("local combined", 1)[1].split(
+            'local merge_ready="false"', 1
+        )[0]
+        self.assertIn("--paginate --slurp", run)
+        self.assertIn("commits/$head/check-runs", run)
+        for conclusion, expected in (
+            (None, "pending"),
+            ("skipped", "pending"),
+            ("neutral", "pending"),
+            ("success", "success"),
+            ("failure", "failure"),
+            ("cancelled", "failure"),
+            ("pending", "pending"),
+        ):
+            with self.subTest(summary=conclusion):
+                checks = [{"name": "Rebase Safety", "status": "completed",
+                           "conclusion": "success"}]
+                summary = []
+                if conclusion is not None:
+                    summary = [{"name": "PR Summary",
+                                "status": "in_progress" if conclusion == "pending"
+                                else "completed", "conclusion": conclusion}]
+                result = subprocess.run(
+                    ["jq", "-r", query],
+                    input=json.dumps([{"check_runs": checks},
+                                      {"check_runs": summary}]),
+                    capture_output=True, text=True, check=True,
+                )
+                self.assertEqual(result.stdout.strip(), expected)
+                for state, count in (("pending", "0"), ("success", "1")):
+                    env = dict(os.environ, state=state, status_count=count,
+                               check_conclusion=result.stdout.strip())
+                    combined = subprocess.run(
+                        ["bash", "-eu", "-c", combine + '\nprintf "%s" "$combined"'],
+                        env=env, capture_output=True, text=True, check=True,
+                    )
+                    self.assertEqual(combined.stdout, expected)
+        for check_conclusion in ("none", "unknown"):
+            env = dict(os.environ, state="success", status_count="1",
+                       check_conclusion=check_conclusion)
+            combined = subprocess.run(
+                ["bash", "-eu", "-c", combine + '\nprintf "%s" "$combined"'],
+                env=env, capture_output=True, text=True, check=True,
+            )
+            self.assertEqual(combined.stdout, "pending")
+        for state, expected in (("unknown", "pending"), ("error", "failure")):
+            env = dict(os.environ, state=state, status_count="0",
+                       check_conclusion="success")
+            combined = subprocess.run(
+                ["bash", "-eu", "-c", combine + '\nprintf "%s" "$combined"'],
+                env=env, capture_output=True, text=True, check=True,
+            )
+            self.assertEqual(combined.stdout, expected)
+
     def test_ancestry_cannot_supply_protected_summary(self):
         workflow = load_workflow("ci-rebase-safety.yml")
         triggers = workflow.get("on", workflow.get(True))

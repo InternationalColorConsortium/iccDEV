@@ -133,8 +133,15 @@ process.
 ### PR CI Status Labels
 
 `update-labels.yml` evaluates open PRs on schedule, PR events, and manual
-dispatch. It keeps `passed`, `failed`, and `pending` mutually exclusive. It adds
-`Merge Ready` only when CI is successful, the PR is not draft, the merge state is
+dispatch. It keeps `passed`, `failed`, and `pending` mutually exclusive.
+Successful lightweight checks or legacy statuses cannot substitute for a
+completed successful `PR Summary` on the current head. Missing, skipped, or
+neutral validation remains `pending`; failed validation remains `failed`.
+The labeler reads all check-run pages without launching validation workflows,
+fetches PR metadata once per evaluation, skips unchanged status-label writes,
+and rechecks the head before mutation. Failed writes fail the run rather than
+being reported as successful updates.
+It adds `Merge Ready` only when CI is successful, the PR is not draft, the merge state is
 clean, and the review decision is approved. It does not synchronize the label
 manifest; the dedicated taxonomy-sync workflow provisions managed labels.
 

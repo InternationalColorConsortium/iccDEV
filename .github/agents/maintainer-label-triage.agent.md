@@ -15,7 +15,8 @@ labels using `docs/label-system.md` and
 4. Verify label synchronization reads the live inventory once and updates only
    missing or drifted managed labels.
 5. Report affected consumers, expected API writes, and any manual migration
-   required.
+   required. Status labels must require a successful current-head `PR Summary`,
+   skip unchanged writes, and never treat ancestry checks as validation.
 6. For issues labeled `CodeQL`, distinguish an alert-only report from completed
    technical triage. Keep `needs-triage` when there is no parser-to-tool
    reachability evidence or false-positive rationale. Accept a false-positive
