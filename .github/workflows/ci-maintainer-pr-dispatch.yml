@@ -78,7 +78,6 @@ jobs:
           state="$(jq -r '.state' <<< "$pr_json")"
           base_ref="$(jq -r '.base.ref' <<< "$pr_json")"
           head_repository="$(jq -r '.head.repo.full_name' <<< "$pr_json")"
-          head_ref="$(jq -r '.head.ref' <<< "$pr_json")"
           head_sha="$(jq -r '.head.sha' <<< "$pr_json")"
           if [[ "$state" != "open" || "$base_ref" != "master" ]]; then
             echo "PR must be open and target master" >&2
@@ -92,13 +91,8 @@ jobs:
             echo "PR head changed after the label event; reapply ci:run-auto" >&2
             exit 1
           fi
-          if ! git check-ref-format --branch "$head_ref" >/dev/null; then
-            echo "Invalid PR head branch" >&2
-            exit 1
-          fi
-
           gh workflow run ci-pr-action.yml --repo "$GH_REPOSITORY" \
-            --ref "$head_ref" \
+            --ref master \
             -f pr_number="$PR_NUMBER" \
             -f expected_head_sha="$EVENT_HEAD_SHA" \
             -f ci_scope=auto

@@ -52,8 +52,9 @@ Use this skill when adding, removing, or auditing labels and label automation.
    restricted to same-repository pull requests.
    `ci:run-auto` must verify the label actor's current repository permission,
    recheck and pass the event head as a downstream requirement, dispatch only
-   `ci_scope=auto`, remove itself only after a successful dispatch, and never
-   publish a status for an unresolved dispatch.
+   `ci_scope=auto` from the trusted `master` workflow definition, remove itself
+   only after a successful dispatch, and never publish a status for an
+   unresolved dispatch.
 10. Update docs, prompts, agents, and the inventory artifact when policy or
     maintainer workflow changes.
 11. For a new scope label, add its canonical `.github/labels.yml` entry before

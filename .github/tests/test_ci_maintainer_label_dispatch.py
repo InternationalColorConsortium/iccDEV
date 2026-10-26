@@ -40,6 +40,8 @@ def test_maintainer_label_dispatch_is_trusted_and_one_shot():
     assert 'head_repository" != "$GH_REPOSITORY"' in run
     assert 'head_sha" != "$EVENT_HEAD_SHA"' in run
     assert "gh workflow run ci-pr-action.yml" in run
+    assert "--ref master" in run
+    assert "head_ref=" not in run
     assert "-f pr_number=\"$PR_NUMBER\"" in run
     assert "-f expected_head_sha=\"$EVENT_HEAD_SHA\"" in run
     assert "-f ci_scope=auto" in run
