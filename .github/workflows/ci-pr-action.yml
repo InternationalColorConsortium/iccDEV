@@ -38,6 +38,11 @@ on:
         required: false
         default: ''
         type: string
+      expected_head_sha:
+        description: 'Optional exact PR head SHA required by a trusted dispatcher'
+        required: false
+        default: ''
+        type: string
       ci_scope:
         description: 'CI scope: auto path scope (default), full long cycle, or an explicit fast/specialized lane'
         required: false
@@ -138,6 +143,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
           GH_REPOSITORY: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -157,7 +163,11 @@ jobs:
           sanitize_line() { escape_html "$1"; }
 
           if [[ ! "$DISPATCH_PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
-            echo "workflow_dispatch fast lane requires numeric pr_number" >&2
+            echo "workflow_dispatch requires numeric pr_number" >&2
+            exit 1
+          fi
+          if [[ -n "$EXPECTED_HEAD_SHA" && ! "$EXPECTED_HEAD_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "workflow_dispatch expected_head_sha must be an exact commit SHA" >&2
             exit 1
           fi
 
@@ -181,7 +191,7 @@ jobs:
           head_sha="$(jq -r '.head.sha' <<< "$pr_json")"
           target_repository="$(jq -r '.head.repo.full_name' <<< "$pr_json")"
           if [ "$target_repository" != "$GH_REPOSITORY" ]; then
-            echo "workflow_dispatch fast lane requires a same-repository PR" >&2
+            echo "workflow_dispatch requires a same-repository PR" >&2
             exit 1
           fi
           for sha in "$base_sha" "$head_sha"; do
@@ -190,6 +200,10 @@ jobs:
               exit 1
             fi
           done
+          if [[ -n "$EXPECTED_HEAD_SHA" && "$head_sha" != "$EXPECTED_HEAD_SHA" ]]; then
+            echo "PR head changed after dispatch request" >&2
+            exit 1
+          fi
 
           {
             printf 'base_ref=%s\n' "$(sanitize_line "$base_ref")"

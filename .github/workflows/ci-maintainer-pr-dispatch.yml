@@ -100,5 +100,6 @@ jobs:
           gh workflow run ci-pr-action.yml --repo "$GH_REPOSITORY" \
             --ref "$head_ref" \
             -f pr_number="$PR_NUMBER" \
+            -f expected_head_sha="$EVENT_HEAD_SHA" \
             -f ci_scope=auto
           gh pr edit "$PR_NUMBER" --repo "$GH_REPOSITORY" --remove-label ci:run-auto

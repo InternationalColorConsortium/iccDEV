@@ -155,8 +155,9 @@ required checks remain authoritative.
 same-repository PR targeting `master`. Its trusted metadata-only dispatcher
 requires the label actor to have current write, maintain, or admin permission,
 rechecks the event head, dispatches `ci-pr-action.yml` with `ci_scope=auto`,
-and removes the label only after dispatch succeeds. Reapply the label after a
-head update. Path and status labels never dispatch CI.
+and passes the event SHA as an exact downstream requirement. It removes the
+label only after dispatch succeeds. Reapply the label after a head update. Path
+and status labels never dispatch CI.
 
 Pull requests and manual dispatches default to `ci_scope=auto`. In auto scope,
 the native matrix runs only for owned library/tool source and resources,

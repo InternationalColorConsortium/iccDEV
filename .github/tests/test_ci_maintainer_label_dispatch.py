@@ -41,6 +41,7 @@ def test_maintainer_label_dispatch_is_trusted_and_one_shot():
     assert 'head_sha" != "$EVENT_HEAD_SHA"' in run
     assert "gh workflow run ci-pr-action.yml" in run
     assert "-f pr_number=\"$PR_NUMBER\"" in run
+    assert "-f expected_head_sha=\"$EVENT_HEAD_SHA\"" in run
     assert "-f ci_scope=auto" in run
     assert "--remove-label ci:run-auto" in run
 
@@ -55,6 +56,13 @@ def test_dispatch_pr_number_resolves_the_exact_head_for_every_scope():
     assert resolve["if"] == (
         "github.event_name == 'workflow_dispatch' && inputs.pr_number != ''"
     )
+    triggers = workflow.get("on", workflow.get(True))
+    assert (
+        triggers["workflow_dispatch"]["inputs"]["expected_head_sha"]["type"]
+        == "string"
+    )
+    assert resolve["env"]["EXPECTED_HEAD_SHA"] == "${{ inputs.expected_head_sha }}"
+    assert 'PR head changed after dispatch request' in resolve["run"]
     diffcheck = next(step for step in steps if step.get("id") == "diffcheck")
     assert re.search(
         r'if \[ -n "\$DISPATCH_PR_NUMBER" \]; then\s+'
