@@ -2681,7 +2681,8 @@ jobs:
       - name: Set up Python for public iccdev verification
         id: setup_public_iccdev_python
         if: >-
-          ${{ github.ref == 'refs/heads/master' &&
+          ${{ !cancelled() && github.ref == 'refs/heads/master' &&
+              steps.pypi_iccdev.outcome == 'success' &&
               (inputs.pypi_packages == 'iccdev' || inputs.pypi_packages == 'both') }}
         continue-on-error: true
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
@@ -2692,7 +2693,8 @@ jobs:
       - name: Verify public iccdev installation
         id: verify_public_iccdev
         if: >-
-          ${{ github.ref == 'refs/heads/master' &&
+          ${{ !cancelled() && github.ref == 'refs/heads/master' &&
+              steps.pypi_iccdev.outcome == 'success' &&
               (inputs.pypi_packages == 'iccdev' || inputs.pypi_packages == 'both') }}
         continue-on-error: true
         shell: bash --noprofile --norc {0}
@@ -2732,7 +2734,8 @@ jobs:
       - name: Verify public iccdev-mcp installation
         id: verify_public_iccdev_mcp
         if: >-
-          ${{ github.ref == 'refs/heads/master' &&
+          ${{ !cancelled() && github.ref == 'refs/heads/master' &&
+              steps.pypi_mcp.outcome == 'success' &&
               (inputs.pypi_packages == 'iccdev-mcp' || inputs.pypi_packages == 'both') }}
         continue-on-error: true
         shell: bash --noprofile --norc {0}
@@ -2769,7 +2772,9 @@ jobs:
 
       - name: Verify public iccdev npm package
         id: verify_public_iccdev_npm
-        if: ${{ github.ref == 'refs/heads/master' && inputs.npm_packages == 'iccdev' }}
+        if: >-
+          ${{ !cancelled() && github.ref == 'refs/heads/master' &&
+              steps.npm_iccdev.outcome == 'success' && inputs.npm_packages == 'iccdev' }}
         continue-on-error: true
         shell: bash --noprofile --norc {0}
         env:
