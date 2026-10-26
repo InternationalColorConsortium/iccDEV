@@ -1438,7 +1438,9 @@ jobs:
 
       # preflight: allow-token-exposure reason=publish-validated-manual-commit-status
       - name: Publish manual validation status
-        if: ${{ always() && github.event_name == 'workflow_dispatch' }}
+        if: >-
+          ${{ always() && github.event_name == 'workflow_dispatch' &&
+              (inputs.pr_number == '' || needs.detect-src.outputs.target_sha != '') }}
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null

@@ -36,6 +36,8 @@ class RebasePolicyTests(unittest.TestCase):
                     if step.get("name") == "Publish manual validation status")
         self.assertIn("always()", step["if"])
         self.assertIn("github.event_name == 'workflow_dispatch'", step["if"])
+        self.assertIn("inputs.pr_number == ''", step["if"])
+        self.assertIn("needs.detect-src.outputs.target_sha != ''", step["if"])
         self.assertEqual(step["env"]["TARGET_SHA"],
                          "${{ needs.detect-src.outputs.target_sha || github.sha }}")
         mock = 'gh() { printf "%s\\n" "$@"; }; '
