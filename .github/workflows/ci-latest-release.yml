@@ -2749,7 +2749,7 @@ jobs:
             echo "::error::Validated npm package tarball is missing"
             exit 1
           fi
-          npm publish "$tarball" --provenance --tag "$NPM_DIST_TAG"
+          npm publish "./$tarball" --provenance --tag "$NPM_DIST_TAG"
 
       - name: Verify public iccdev npm package
         if: ${{ github.ref == 'refs/heads/master' && inputs.npm_packages == 'iccdev' }}
