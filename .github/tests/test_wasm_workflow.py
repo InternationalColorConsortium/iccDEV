@@ -74,3 +74,53 @@ def test_wasm_workflow_regression_runs_in_shared_wheel_gate():
     )
 
     assert ".github/tests/test_wasm_workflow.py" in test_step["run"]
+
+
+def test_release_uses_opt_in_npm_trusted_publishing():
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/ci-latest-release.yml").read_text(encoding="ascii")
+    )
+    dispatch = workflow["on"]["workflow_dispatch"]["inputs"]
+    assert dispatch["npm_packages"] == {
+        "description": "Validated npm distributions to publish with OIDC",
+        "required": True,
+        "default": "none",
+        "type": "choice",
+        "options": ["none", "iccdev"],
+    }
+    assert dispatch["npm_version"]["type"] == "string"
+
+    wasm_steps = {
+        step["name"]: step for step in workflow["jobs"]["wasm"]["steps"]
+    }
+    stage_wasm = wasm_steps["Stage npm-shaped WASM bundle (issue #830)"]
+    assert stage_wasm["env"]["NPM_PACKAGES"] == "${{ inputs.npm_packages }}"
+    assert stage_wasm["env"]["NPM_VERSION"] == "${{ inputs.npm_version }}"
+    assert 'VERSION="$NPM_VERSION"' in stage_wasm["run"]
+
+    release = workflow["jobs"]["release"]
+    assert release["permissions"]["id-token"] == "write"
+    steps = {step["name"]: step for step in release["steps"]}
+    setup_node = steps["Set up Node.js for npm publication"]
+    assert setup_node["uses"] == "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38"
+    assert setup_node["with"]["node-version"] == "24"
+    assert setup_node["with"]["package-manager-cache"] is False
+
+    stage = steps["Stage validated npm distribution"]
+    assert "artifacts/iccdev-wasm-release/package.json" in stage["run"]
+    assert 'npm pack --dry-run --json' in stage["run"]
+    assert 'npm pack --pack-destination "$GITHUB_WORKSPACE/npm-iccdev"' in stage["run"]
+
+    publish = steps["Publish iccdev to npm"]
+    assert publish["id"] == "npm_iccdev"
+    assert 'npm publish "$tarball" --provenance' in publish["run"]
+    assert "NODE_AUTH_TOKEN" not in publish["env"]
+
+    smoke = steps["Verify public iccdev npm package"]
+    assert 'npm view "iccdev@$NPM_VERSION" version' in smoke["run"]
+    assert 'npm pack --pack-destination "$npm_environment"' in smoke["run"]
+    assert 'tar -xzf "$tarball" --strip-components=1' in smoke["run"]
+    assert '"/package.json"' in smoke["run"]
+
+    summary = steps["Summary Report"]
+    assert summary["env"]["NPM_ICCDEV_OUTCOME"] == "${{ steps.npm_iccdev.outcome }}"

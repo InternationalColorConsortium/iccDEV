@@ -46,6 +46,19 @@ permissions:
           - iccdev
           - iccdev-mcp
           - both
+      npm_packages:
+        description: Validated npm distributions to publish with OIDC
+        required: true
+        default: none
+        type: choice
+        options:
+          - none
+          - iccdev
+      npm_version:
+        description: SemVer version for the selected npm distribution
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: "latest-release-${{ github.workflow }}-${{ github.ref }}"
@@ -1519,6 +1532,8 @@ jobs:
       - name: "Stage npm-shaped WASM bundle (issue #830)"
         env:
           BASH_ENV: /dev/null
+          NPM_PACKAGES: ${{ inputs.npm_packages }}
+          NPM_VERSION: ${{ inputs.npm_version }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -1538,12 +1553,18 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
-          # Resolve a version string for package.json:
-          #   - tag push   : strip leading 'v' from refs/tags/vX.Y.Z
-          #   - other      : 0.0.0-dev+<short-sha>
-          REF_NAME="${GITHUB_REF_NAME:-}"
-          if [[ "${GITHUB_REF:-}" == refs/tags/* ]]; then
-            VERSION="${REF_NAME#v}"
+          # A selected npm publication must use the dispatch version. Other
+          # staging remains an unpublished development bundle.
+          if [[ "$NPM_PACKAGES" == "iccdev" && "${GITHUB_REF:-}" == "refs/heads/master" ]]; then
+            VERSION="$NPM_VERSION"
+            if [[ -z "$VERSION" ]]; then
+              echo "::error::npm_version is required when publishing iccdev"
+              exit 1
+            fi
+            if [[ ! "$VERSION" =~ ^[0-9]+(\.[0-9]+){2}(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+              echo "::error::npm_version must be a SemVer version"
+              exit 1
+            fi
           else
             VERSION="0.0.0-dev+${GITHUB_SHA:0:7}"
           fi
@@ -2636,6 +2657,121 @@ jobs:
             "iccdev-mcp[rest]==$mcp_version" "httpx2>=2,<3"
           "$mcp_environment/bin/python" .github/scripts/iccdev-mcp-package-smoke.py
 
+      - name: Set up Node.js for npm publication
+        if: ${{ github.ref == 'refs/heads/master' && inputs.npm_packages == 'iccdev' }}
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      - name: Stage validated npm distribution
+        if: ${{ github.ref == 'refs/heads/master' && inputs.npm_packages == 'iccdev' }}
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          NPM_VERSION: ${{ inputs.npm_version }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          if [[ -z "$NPM_VERSION" ]]; then
+            echo "::error::npm_version is required when publishing iccdev"
+            exit 1
+          fi
+          if [[ ! -f artifacts/iccdev-wasm-release/package.json ]]; then
+            echo "::error::Missing staged npm package metadata"
+            exit 1
+          fi
+
+          cd artifacts/iccdev-wasm-release
+          if [[ "$(npm pkg get name)" != '"iccdev"' ]]; then
+            echo "::error::Unexpected npm package name"
+            exit 1
+          fi
+          if [[ "$(npm pkg get version)" != "\"$NPM_VERSION\"" ]]; then
+            echo "::error::Staged npm package version does not match npm_version"
+            exit 1
+          fi
+          npm pack --dry-run --json >/dev/null
+
+          mkdir -p "$GITHUB_WORKSPACE/npm-iccdev"
+          npm pack --pack-destination "$GITHUB_WORKSPACE/npm-iccdev" --json >/dev/null
+          tarball_count="$(find "$GITHUB_WORKSPACE/npm-iccdev" -maxdepth 1 -type f -name 'iccdev-*.tgz' | wc -l)"
+          if [[ "$tarball_count" -ne 1 ]]; then
+            echo "::error::Expected one npm package tarball, found $tarball_count"
+            exit 1
+          fi
+          tarball="$(find "$GITHUB_WORKSPACE/npm-iccdev" -maxdepth 1 -type f -name 'iccdev-*.tgz' -print -quit)"
+          archive_entries="$(tar -tzf "$tarball")"
+          if ! grep -Fqx "package/package.json" <<< "$archive_entries"; then
+            echo "::error::npm package tarball does not contain package.json"
+            exit 1
+          fi
+
+      # preflight: allow-token-exposure reason=npm-oidc-trusted-publishing
+      # preflight: allow-package-install reason=npm-oidc-validated-tarball-publish
+      - name: Publish iccdev to npm
+        id: npm_iccdev
+        if: ${{ github.ref == 'refs/heads/master' && inputs.npm_packages == 'iccdev' }}
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          NPM_VERSION: ${{ inputs.npm_version }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          tarball="$(find npm-iccdev -maxdepth 1 -type f -name 'iccdev-*.tgz' -print -quit)"
+          if [[ -z "$tarball" ]]; then
+            echo "::error::Validated npm package tarball is missing"
+            exit 1
+          fi
+          npm publish "$tarball" --provenance
+
+      - name: Verify public iccdev npm package
+        if: ${{ github.ref == 'refs/heads/master' && inputs.npm_packages == 'iccdev' }}
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          NPM_VERSION: ${{ inputs.npm_version }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          if [[ -z "$NPM_VERSION" ]]; then
+            echo "::error::npm_version is required when publishing iccdev"
+            exit 1
+          fi
+          for attempt in {1..12}; do
+            if npm view "iccdev@$NPM_VERSION" version --registry=https://registry.npmjs.org | grep -Fqx "$NPM_VERSION"; then
+              break
+            fi
+            if [[ "$attempt" -eq 12 ]]; then
+              echo "::error::Published npm package version was not available"
+              exit 1
+            fi
+            sleep 15
+          done
+
+          npm_environment="$(mktemp -d)/iccdev-npm"
+          mkdir -p "$npm_environment"
+          npm pack --pack-destination "$npm_environment" --json \
+            --registry=https://registry.npmjs.org "iccdev@$NPM_VERSION" >/dev/null
+          tarball="$(find "$npm_environment" -maxdepth 1 -type f -name 'iccdev-*.tgz' -print -quit)"
+          if [[ -z "$tarball" ]]; then
+            echo "::error::Public npm package tarball is missing"
+            exit 1
+          fi
+          mkdir "$npm_environment/package"
+          tar -xzf "$tarball" --strip-components=1 -C "$npm_environment/package"
+          PACKAGE_VERSION="$NPM_VERSION" node -e \
+            'const pkg = require(process.argv[1] + "/package.json"); if (pkg.version !== process.env.PACKAGE_VERSION) process.exit(1);' \
+            "$npm_environment/package"
+
       - name: Summary Report
         if: always()
         shell: bash --noprofile --norc {0}
@@ -2645,6 +2781,7 @@ jobs:
           ATTESTATION_OUTCOME: ${{ steps.attest.outcome }}
           PYPI_ICCDEV_OUTCOME: ${{ steps.pypi_iccdev.outcome }}
           PYPI_MCP_OUTCOME: ${{ steps.pypi_mcp.outcome }}
+          NPM_ICCDEV_OUTCOME: ${{ steps.npm_iccdev.outcome }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -2672,6 +2809,7 @@ jobs:
             echo "- Artifact attestation: ${ATTESTATION_OUTCOME:-skipped}"
             echo "- PyPI iccdev publication: ${PYPI_ICCDEV_OUTCOME:-skipped}"
             echo "- PyPI iccdev-mcp publication: ${PYPI_MCP_OUTCOME:-skipped}"
+            echo "- npm iccdev publication: ${NPM_ICCDEV_OUTCOME:-skipped}"
             echo "- Assets staged: ${asset_count} package files"
             echo ""
             for f in release-assets/*.zip release-assets/*.deb release-assets/*.rpm release-assets/*.whl release-assets/*.tar.gz; do

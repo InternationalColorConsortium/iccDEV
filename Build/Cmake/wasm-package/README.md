@@ -37,6 +37,21 @@ Tool reference: ../../../docs/tools-cli-reference.md
 node test_all.js
 ```
 
+## Maintainer release publishing
+
+The manual `ci-latest-release.yml` workflow can publish the staged package
+with npm OIDC trusted publishing. Select `iccdev` for `npm_packages` and enter
+an unpublished SemVer value for `npm_version`; dispatches outside `master` do
+not stage or publish an npm release.
+
+Before the first publication, an npm package administrator must configure
+Trusted Publisher with GitHub Actions, organization
+`InternationalColorConsortium`, repository `iccDEV`, workflow filename
+`ci-latest-release.yml`, and environment `release`. Allow direct `npm publish`.
+The workflow uses Node 24, npm's OIDC authentication, provenance, no npm token,
+and then retrieves and verifies the exact public package tarball as its
+post-publication smoke test.
+
 ## Data
 
 `Testing/` ships canonical ICC test profiles (`*.icc`, `*.json`, `*.xml`).
