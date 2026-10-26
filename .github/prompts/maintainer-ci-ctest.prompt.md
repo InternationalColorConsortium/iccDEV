@@ -54,6 +54,8 @@ Choose the smallest gate that proves the behavior:
 - Rebase safety: `synchronize` runs only `ci-rebase-safety`, which verifies the
   PR head contains its event base. Dispatch each applicable final lane manually
   against the rebased PR head; do not restore automatic full-matrix triggers.
+  Keep `Rebase Safety` separate from `PR Summary` so ancestry cannot approve
+  unvalidated source pushes. Manual security audits check all Bash prologues.
 - MATLAB compatibility: `ci-matlab` is manual-dispatch only because its
   multi-platform MEX and container lanes consume scarce runner capacity.
 - Risk analysis: `ci-risk-analysis-gate` is manual-dispatch only; use it for

@@ -192,13 +192,14 @@ fail-closed policy:
 
 | Required context | Purpose |
 |------------------|---------|
-| `PR Summary` | Aggregates selected lanes for initial PR validation; on a synchronize event, `ci-rebase-safety` publishes it after validating the PR ancestry. |
+| `PR Summary` | Aggregates selected validation lanes; after a synchronize event, obtain it through explicit validation of the current PR head. |
 
 Do not require individual Unix, GCC 15.2, tool-test, Windows, or Docker job
 names in branch rules. Those jobs are conditional by selected mode and are
-covered by `PR Summary` for initial PR validation. A synchronize event does not
-restart those lanes; a maintainer records the applicable manual final-run
-evidence for the rebased head before merge. The initial summary must treat
+covered by `PR Summary` for initial PR validation. A synchronize event publishes
+only the separate `Rebase Safety` context and does not restart those lanes or
+satisfy `PR Summary`. A maintainer dispatches the applicable final lanes and
+records their evidence for the rebased head before merge. The summary must treat
 failed or cancelled detection, setup, and input-validation prerequisites as
 failures; only intentionally skipped mode-specific jobs are acceptable.
 

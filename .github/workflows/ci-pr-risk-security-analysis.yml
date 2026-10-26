@@ -481,6 +481,7 @@ jobs:
         if: always()
         env:
           BASH_ENV: /dev/null
+          AUDIT_EVENT_NAME: ${{ github.event_name }}
         # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
         run: |
           set -euo pipefail
@@ -500,7 +501,7 @@ jobs:
           echo "" >> "$RISK_REPORT_PATH"
 
           checker="$TRUSTED_SCRIPTS/check-workflow-bash-prologue.py"
-          if [ ! -x "$checker" ]; then
+          if [ ! -f "$checker" ]; then
             echo "[WARN] Trusted base lacks the Bash prologue checker; enforcement begins after this bootstrap change merges." >> "$RISK_REPORT_PATH"
             exit 0
           fi
@@ -514,19 +515,24 @@ jobs:
             exit 1
           fi
 
-          mapfile -t changed_workflows < <(
-            git diff --name-only --diff-filter=ACMRT "$BASE_SHA"...HEAD -- .github/workflows |
-              awk '/\.ya?ml$/'
-          )
-          if [ "${#changed_workflows[@]}" -eq 0 ]; then
-            echo "[OK] No changed workflow files require Bash prologue validation" >> "$RISK_REPORT_PATH"
-            echo "" >> "$RISK_REPORT_PATH"
-            exit 0
+          policy_args=()
+          if [ "$AUDIT_EVENT_NAME" = "pull_request" ]; then
+            mapfile -t workflow_files < <(
+              git diff --name-only --diff-filter=ACMRT "$BASE_SHA"...HEAD -- .github/workflows |
+                awk '/\.ya?ml$/'
+            )
+            if [ "${#workflow_files[@]}" -eq 0 ]; then
+              echo "[OK] No changed workflow files require Bash prologue validation" >> "$RISK_REPORT_PATH"
+              echo "" >> "$RISK_REPORT_PATH"
+              exit 0
+            fi
+            policy_args=(--changed --base "$BASE_SHA")
           fi
 
           policy_log="$(mktemp)"
+          trap 'rm -f "$policy_log"' EXIT
           set +e
-          python3 "$checker" --changed --base "$BASE_SHA" "${changed_workflows[@]}" >"$policy_log" 2>&1
+          python3 "$checker" "${policy_args[@]}" "${workflow_files[@]}" >"$policy_log" 2>&1
           policy_status=$?
           set -e
 

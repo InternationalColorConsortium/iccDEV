@@ -140,8 +140,9 @@ fuzzer runtime boundary, and replay the pinned #2687 artifact before fuzzing.
   hosted validation, known skips or deferrals, and merge-readiness. Cite
   workflow URLs or run IDs rather than copying raw logs.
 - Do not call a PR ready or green while the required `PR Summary` check is
-  pending or failing. After a rebase, verify `ci-rebase-safety` supplied that
-  context and record applicable manual final-run evidence for the rebased head;
+  pending or failing. After a rebase, `ci-rebase-safety` supplies only the
+  separate `Rebase Safety` context. Dispatch final validation for the current
+  head to obtain `PR Summary` and record applicable manual final-run evidence;
   the expensive core, preflight, risk, sanitizer, JSON, MCP, and MATLAB lanes
   do not run automatically on `synchronize`.
 

@@ -100,9 +100,13 @@ gh workflow run ci-matlab.yml --ref <head-branch>
 gh workflow run ci-risk-analysis-gate.yml --ref <head-branch>
 ```
 
-The lightweight workflow publishes the existing protected `PR Summary` context,
-so branch protection remains satisfied without restarting the full matrix. A
-maintainer records the final manual-run evidence for the PR head before merge.
+The lightweight workflow publishes only `Rebase Safety`, not the protected
+`PR Summary` context: ancestry alone is not evidence of successful validation.
+The protected summary remains pending until explicit validation succeeds for
+the current PR head. A maintainer records that final-run evidence before merge.
+Rebases and ordinary pushes both emit `synchronize`; neither automatically
+restarts the full matrix. Manual risk analysis checks every workflow's Bash
+prologue, even when the target and audit base SHA coincide.
 
 ## When to Add a Script
 

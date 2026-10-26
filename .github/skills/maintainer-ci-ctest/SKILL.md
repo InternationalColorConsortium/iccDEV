@@ -92,9 +92,11 @@ when practical.
 - On `synchronize`, `ci-rebase-safety` is the only validation lane: it proves
   that the PR head contains the event base without fanning out core, sanitizer,
   JSON, MCP, MATLAB, preflight, or risk-analysis gates. Dispatch the final
-  applicable lanes explicitly against the rebased PR head.
+  applicable lanes explicitly against the rebased PR head. Ancestry publishes
+  only `Rebase Safety`; only completed validation may supply `PR Summary`.
 - `ci-risk-analysis-gate` is manual-dispatch only. It runs the Linux and
   Windows workflow-security audits for an explicit final security review.
+  Manual audits validate all workflow Bash prologues, not an empty self-diff.
 - `ci-matlab` is manual-dispatch only. Do not restore its pull-request trigger:
   its Windows, Linux, macOS, and container lanes are reserved for explicit
   compatibility validation.
