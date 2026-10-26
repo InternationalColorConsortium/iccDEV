@@ -130,7 +130,7 @@ jobs:
 
     steps:
       - name: "Checkout trusted scanner helpers"
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           # PR scans use trusted base-branch helpers, not PR-modified scanner code.
           ref: ${{ github.event.pull_request.base.sha || github.workflow_sha }}
@@ -141,7 +141,7 @@ jobs:
 
       - name: "Checkout target repository"
         if: inputs.analysis_target != 'Specific PR number' && github.event_name != 'pull_request'
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           # preflight: allow-codeql-actions reason=manual-readonly-target-checkout
           ref: ${{ github.event.pull_request.head.sha || inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.ref }}
@@ -151,7 +151,7 @@ jobs:
 
       - name: "Checkout PR head (if PR mode)"
         if: (inputs.analysis_target == 'Specific PR number' && inputs.pr_number != '') || github.event_name == 'pull_request'
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: refs/pull/${{ inputs.pr_number || github.event.pull_request.number }}/head
           path: target
@@ -2739,7 +2739,7 @@ jobs:
 
     steps:
       - name: "Checkout trusted scanner helpers"
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           # PR scans use trusted base-branch helpers, not PR-modified scanner code.
           ref: ${{ github.event.pull_request.base.sha || github.workflow_sha }}
@@ -2750,7 +2750,7 @@ jobs:
 
       - name: "Checkout target repository"
         if: inputs.analysis_target != 'Specific PR number' && github.event_name != 'pull_request'
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           # preflight: allow-codeql-actions reason=manual-readonly-target-checkout
           ref: ${{ github.event.pull_request.head.sha || inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.ref }}
@@ -2760,7 +2760,7 @@ jobs:
 
       - name: "Checkout PR head (if PR mode)"
         if: (inputs.analysis_target == 'Specific PR number' && inputs.pr_number != '') || github.event_name == 'pull_request'
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: refs/pull/${{ inputs.pr_number || github.event.pull_request.number }}/head
           path: target

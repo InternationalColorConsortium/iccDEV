@@ -65,7 +65,7 @@ jobs:
 
     steps:
       - name: Checkout trusted sanitizer helpers
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
           path: trusted
@@ -74,7 +74,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout iccDEV
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ inputs.target_ref || github.ref }}
           path: target

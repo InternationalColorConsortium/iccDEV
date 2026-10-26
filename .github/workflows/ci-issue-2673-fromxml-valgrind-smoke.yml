@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - name: Checkout trusted workflow helpers
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: master
           path: trusted-base
@@ -110,7 +110,7 @@ jobs:
 
     steps:
       - name: Checkout Issue 2673 test source
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 

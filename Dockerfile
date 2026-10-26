@@ -19,9 +19,9 @@ ARG FLAMEGRAPH_COMMIT=41fee1f99f9276008b7cd112fca19dc3ea84ac32
 ARG LLVM_MSAN_LIBCXX_COMMIT=1ab49a973e210e97d61e5db6557180dcb92c3e98
 ARG LIBXML2_MSAN_COMMIT=3d840e17858de03a09fba8b202e3a89267d5795a
 ARG CURL_VERSION=8.18.0-1ubuntu2.8
-ARG CODEQL_VERSION=2.27.2
-ARG CODEQL_AMD64_SHA256=f002864be6dd8d5d7bdb123aaf7291ec8e291012bd9f70b6d2362f730db52aeb
-ARG CODEQL_ARM64_SHA256=c1779ce6335606ef86fce4aae0db2ac4d7da869527d6a67bf055d9135695473c
+ARG CODEQL_VERSION=2.27.3
+ARG CODEQL_AMD64_SHA256=64518dc413c8e7b5733fee2489e830a899bb1e3f28c8873b5869d5cc90164c5c
+ARG CODEQL_ARM64_SHA256=0c9e32e9fcf65be4ab8df0cf0a7bb83e64aff4099fffc5f4930e84c12a454c8b
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -42,7 +42,7 @@ RUN for attempt in 1 2 3; do \
     bash=5.3-2ubuntu1 \
     binutils=2.46-3ubuntu2 \
     build-essential=12.12ubuntu2.26.04.2 \
-    ca-certificates=20260601~26.04.1 \
+    ca-certificates=20260816ubuntu0.26.04.1 \
     clang-21=1:21.1.8-6ubuntu1 \
     clang-22=1:22.1.2-1ubuntu1 \
     clang-tidy-22=1:22.1.2-1ubuntu1 \
@@ -57,7 +57,7 @@ RUN for attempt in 1 2 3; do \
     gdb=17.1-2ubuntu1 \
     gdbserver=17.1-2ubuntu1 \
     gh=2.46.0-4 \
-    git=1:2.53.0-1ubuntu1 \
+    git=1:2.53.0-1ubuntu1.1 \
     gcovr=7.2+really-2 \
     gpgv=2.4.8-4ubuntu3.1 \
     jq=1.8.1-4ubuntu2 \
@@ -67,7 +67,7 @@ RUN for attempt in 1 2 3; do \
     libjpeg-dev=8c-2ubuntu12 \
     libjson-xs-perl=4.040-1 \
     libtiff-tools=4.7.0-3ubuntu5 \
-    liblzma-dev=5.8.3-1 \
+    liblzma-dev=5.8.3-1ubuntu0.1 \
     libpng-dev=1.6.57-1ubuntu0.1 \
     libcurl3t64-gnutls=${CURL_VERSION} \
     libcurl4t64=${CURL_VERSION} \
@@ -75,7 +75,7 @@ RUN for attempt in 1 2 3; do \
     libssl3t64=3.5.5-1ubuntu3.7 \
     libtiff-dev=4.7.0-3ubuntu5 \
     libwxgtk3.2-dev=3.2.9+dfsg-1 \
-    zlib1g=1:1.3.dfsg+really1.3.1-1ubuntu3.1 \
+    zlib1g=1:1.3.dfsg+really1.3.1-1ubuntu3.2 \
     lld-22=1:22.1.2-1ubuntu1 \
     lldb-22=1:22.1.2-1ubuntu1 \
     libxml2-16=2.15.2+dfsg-0.1ubuntu0.3 \
@@ -102,7 +102,7 @@ RUN for attempt in 1 2 3; do \
     valgrind=1:3.26.0-0ubuntu1 \
     wx-common=3.2.9+dfsg-1 \
     yamllint=1.37.1-1 \
-    zlib1g-dev=1:1.3.dfsg+really1.3.1-1ubuntu3.1; then \
+    zlib1g-dev=1:1.3.dfsg+really1.3.1-1ubuntu3.2; then \
         break; \
       fi; \
       if [ "$attempt" -eq 3 ]; then \

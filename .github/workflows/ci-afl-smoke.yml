@@ -146,7 +146,7 @@ jobs:
 
     steps:
       - name: Checkout trusted sanitizer helpers
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.event.pull_request.base.sha || github.workflow_sha }}
           path: trusted
@@ -155,7 +155,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout workflow patch applicator
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
           path: workflow-scripts
@@ -164,7 +164,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout iccDEV
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ inputs.target_ref || github.ref }}
           path: target

@@ -64,14 +64,14 @@ jobs:
 
     steps:
       - name: Checkout PR source
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ inputs.target_sha || github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Checkout trusted sanitizer helpers
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.event.pull_request.base.sha || 'master' }}
           path: .trusted-workflow
@@ -647,14 +647,14 @@ jobs:
 
     steps:
       - name: Checkout PR source
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ inputs.target_sha || github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Checkout trusted sanitizer helpers
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.event.pull_request.base.sha || 'master' }}
           path: .trusted-workflow
@@ -909,14 +909,14 @@ jobs:
 
     steps:
       - name: Checkout PR source
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ inputs.target_sha || github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Checkout trusted sanitizer helpers
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.event.pull_request.base.sha || 'master' }}
           path: .trusted-workflow
@@ -1053,7 +1053,7 @@ jobs:
 
     steps:
       - name: Checkout PR source
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ inputs.target_sha || github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 1

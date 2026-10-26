@@ -125,7 +125,7 @@ jobs:
       pr_number: ${{ steps.diffcheck.outputs.pr_number }}
 
     steps:
-      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 50  # Increased from 2 to allow merge-base detection
           # Disable unsafe fetch options
@@ -214,7 +214,7 @@ jobs:
       # Checkout the trusted base commit into a separate path so we do not
       # source code from the PR workspace (untrusted).
       - name: Checkout base commit (trusted sanitizers)
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           # Use the base commit SHA to ensure we fetch the exact trusted version.
           ref: ${{ github.event.pull_request.base.sha || 'master' }}
@@ -774,13 +774,13 @@ jobs:
       pull-requests: read  # Required to render trusted PR summary details.
     steps:
       - name: Checkout repository (for shared sanitize helpers)
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
 
       - name: Checkout base commit (trusted sanitizers)
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.event.pull_request.base.sha || 'master' }}
           path: base
@@ -969,7 +969,7 @@ jobs:
 
     steps:
       - name: Check out trusted sanitizer helper
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           # preflight: allow-codeql-actions reason=trusted-base-sanitizer-checkout
           ref: ${{ github.event.pull_request.base.sha || github.sha }}
@@ -1106,14 +1106,14 @@ jobs:
     steps:
       - name: Checkout consumer source
         # preflight: allow-codeql-actions reason=readonly-build-target-checkout
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ needs.detect-src.outputs.target_sha }}
           fetch-depth: 1
           persist-credentials: false
 
       - name: Checkout trusted sanitizer helper
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.event.pull_request.base.sha || 'master' }}
           path: trusted-base
@@ -1212,13 +1212,13 @@ jobs:
       - example-project
     if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     steps:
-      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 2
           persist-credentials: false
 
       - name: Checkout base commit (trusted sanitizers)
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.event.pull_request.base.sha || 'master' }}
           path: base
