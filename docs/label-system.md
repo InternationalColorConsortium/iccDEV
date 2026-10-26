@@ -192,16 +192,15 @@ fail-closed policy:
 
 | Required context | Purpose |
 |------------------|---------|
-| `PR Summary` | Aggregates orchestration prerequisites and every selected build/test lane. |
-| `Risk Analysis Gate / Workflow Security Audit` | Standalone Linux workflow and container security canary. |
-| `Risk Analysis Gate / Windows Security Audit (PowerShell)` | Standalone PowerShell and Windows workflow security canary. |
-| `WASM Release Build + Parity` | Required separately on `master` because it is outside `ci-pr-action`. |
+| `PR Summary` | Aggregates selected lanes for initial PR validation; on a synchronize event, `ci-rebase-safety` publishes it after validating the PR ancestry. |
 
 Do not require individual Unix, GCC 15.2, tool-test, Windows, or Docker job
 names in branch rules. Those jobs are conditional by selected mode and are
-covered by `PR Summary`. The summary must treat failed or cancelled detection,
-setup, and input-validation prerequisites as failures; only intentionally
-skipped mode-specific jobs are acceptable.
+covered by `PR Summary` for initial PR validation. A synchronize event does not
+restart those lanes; a maintainer records the applicable manual final-run
+evidence for the rebased head before merge. The initial summary must treat
+failed or cancelled detection, setup, and input-validation prerequisites as
+failures; only intentionally skipped mode-specific jobs are acceptable.
 
 `ci-pr-action` runs automatically only for pull requests targeting `master`.
 Its PR-number workflow dispatch also accepts only open, same-repository pull

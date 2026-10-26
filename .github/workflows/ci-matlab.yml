@@ -14,23 +14,6 @@ permissions:
   contents: read
 
 on:
-  pull_request:
-    branches:
-      - master
-    paths:
-      - ".github/workflows/ci-matlab.yml"
-      - "matlab/**"
-      - "IccProfLib/**"
-      - "IccJSON/**"
-      - "Build/Cmake/**"
-      - "Tools/CmdLine/IccToJson/**"
-      - "Tools/CmdLine/IccFromJson/**"
-      - "Tools/CmdLine/IccHeifDump/**"
-      - "Tools/CmdLine/IccProfilePlot/**"
-      - "Tools/CmdLine/IccPawgReport/**"
-      - "Testing/**"
-      - ".github/ci/regression/gamma-2.20703125.icc"
-      - ".github/ci/tooling/heif/img/**"
   workflow_dispatch:
 
 concurrency:
@@ -39,7 +22,6 @@ concurrency:
 
 jobs:
   windows:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Windows MATLAB MEX
     runs-on: windows-2022
     timeout-minutes: 45
@@ -245,7 +227,6 @@ jobs:
           generate-summary: false
 
   unix:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Native MATLAB (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
@@ -357,7 +338,6 @@ jobs:
           generate-summary: false
 
   docker-interop:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: MATLAB Docker interoperability
     runs-on: ubuntu-24.04
     timeout-minutes: 30

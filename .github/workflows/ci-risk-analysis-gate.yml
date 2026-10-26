@@ -2,7 +2,7 @@
 ###############################################################
 # Copyright (c) 2026 International Color Consortium
 #
-# Intent: Standalone required PR risk-analysis gate.
+# Intent: Standalone manual risk-analysis gate.
 ###############################################################
 
 name: "ci-risk-analysis-gate"
@@ -14,14 +14,7 @@ permissions:
   contents: read
 
 'on':
-  pull_request:
-    branches:
-      - master
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - ready_for_review
+  workflow_dispatch:
 
 concurrency:
   group: "risk-gate-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}"
@@ -33,7 +26,7 @@ jobs:
     uses: ./.github/workflows/ci-pr-risk-security-analysis.yml
     with:
       analysis_target: 'Specific git ref'
-      git_ref: ${{ github.event.pull_request.head.sha }}
+      git_ref: ${{ github.sha }}
       severity_threshold: 'HIGH'
       fail_on_findings: true
       run_windows_audit: true

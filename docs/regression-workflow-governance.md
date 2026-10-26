@@ -23,9 +23,10 @@ new blocker returns the branch to branch-only grooming before another review.
 | Focused reusable regression scripts | `.github/scripts/` | Scripted checks shared by one or more workflows. |
 | Regression PoC inventory | `.github/ci/regression/README.md` | Maps regression inputs and scripts to issues. |
 | Tool test gate | `.github/workflows/ci-iccdev-tool-tests.yml` | Reusable/manual core or ASAN/UBSAN regression coverage. |
-| Sanitizer PR gate | `.github/workflows/ci-sanitizer-regression.yml` | Standalone path-scoped ASAN/UBSAN caller for native source, build, and test changes. |
-| Risk-analysis gate | `.github/workflows/ci-risk-analysis-gate.yml` | Standalone PR caller for the required reusable Linux and Windows workflow-security audits. |
-| MATLAB native gate | `.github/workflows/ci-matlab.yml` | Windows MSVC, Linux x86_64, and Apple Silicon macOS MEX QA; separate Docker interoperability. |
+| Sanitizer regression gate | `.github/workflows/ci-sanitizer-regression.yml` | Standalone path-scoped ASAN/UBSAN caller for initial PR validation and explicit final dispatches. |
+| Risk-analysis gate | `.github/workflows/ci-risk-analysis-gate.yml` | Standalone manual caller for the reusable Linux and Windows workflow-security audits. |
+| Rebase safety gate | `.github/workflows/ci-rebase-safety.yml` | Lightweight ancestry validation for same-repository PR synchronize events. |
+| MATLAB native gate | `.github/workflows/ci-matlab.yml` | Manual Windows MSVC, Linux x86_64, and Apple Silicon macOS MEX QA; separate Docker interoperability. |
 | MATLAB release bundles | `.github/workflows/ci-latest-release.yml` | Linux x86_64, macOS arm64, and Windows x64 MEX builds with staged MATLAB QA and payload verification. |
 | Apple platform gates | `.github/workflows/ci-apple-platform-smoke.yml`, `.github/workflows/ci-apple-mobile-core.yml` | iOS/watchOS simulator hosts and Xcode Release/Debug CTest runtime layouts; [local commands](build.md). |
 | CTest registration | `Build/Cmake/Testing/CMakeLists.txt` | CTest names, labels, fixtures, timeouts, and check target. |
@@ -40,16 +41,12 @@ new blocker returns the branch to branch-only grooming before another review.
 
 ## PR Path Classification
 
-`ci-matlab` selects same-repository pull requests that change MATLAB sources,
-the core/JSON libraries, CMake, consumed native tools, or QA fixtures. Windows
-retains the R2026a compiler and native regression lane; Ubuntu x86_64 and
-Apple Silicon macOS build focused native tools and MEX gateways with R2023b,
-the prebuilt compatibility floor. All three call `matlab/run_ci_qa.m` for the
+`ci-matlab` is manual-dispatch only. It retains the R2026a Windows native
+regression lane plus Ubuntu x86_64 and Apple Silicon macOS MEX gateways with
+the R2023b compatibility floor. All three call `matlab/run_ci_qa.m` for the
 shared wrapper, runtime, plotting, and example contract. Only unavailable
 Docker interoperability may skip there; a separate pinned-container job tests
 that contract. These jobs do not package or upload release artifacts.
-Manual dispatch remains available, with per-event concurrency so it cannot
-cancel a pull-request run. Fork heads do not execute these jobs.
 
 `ci-pr-action.yml` reports factual path classes separately from the
 `run_native_matrix` execution decision. Native source ownership is limited to
@@ -76,11 +73,36 @@ added destination path.
 suite passes `instrumentation=core` and excludes `ci-infrastructure` CTests.
 The standalone sanitizer caller runs the reusable tool workflow independently
 for native source, build, testing, or regression-fixture changes; the reusable
-workflow also remains manually dispatchable.
-Pre-flight and risk analysis are standalone PR workflows so scanner or
-infrastructure failures cannot be mistaken for core build failures. External
-compatibility, dynamic-analysis tooling, and ClusterFuzzLite remain manual or
-scheduled lanes.
+workflow also remains manually dispatchable. Pre-flight is a standalone
+path-scoped PR workflow, while risk analysis is an explicit final security
+workflow, so scanner or infrastructure failures cannot be mistaken for core
+build failures. External compatibility, dynamic-analysis tooling, and
+ClusterFuzzLite remain manual or scheduled lanes.
+
+## Rebase and Final Validation
+
+Opening, reopening, or marking a PR ready for review runs its path-scoped
+automatic gates once. A subsequent `synchronize` event runs
+`ci-rebase-safety` as its only validation lane; it verifies that the PR head
+contains the event base without rebuilding the full matrix.
+
+Before merging a rebased source PR, explicitly dispatch the applicable final
+lanes on the PR head. Use the full core matrix for source, build, or test
+changes; dispatch the sanitizer, JSON, MCP, and MATLAB workflows only when
+their documented paths or contracts apply.
+
+```bash
+gh workflow run ci-pr-action.yml --ref <head-branch> -f ci_scope=full
+gh workflow run ci-sanitizer-regression.yml --ref <head-branch>
+gh workflow run ci-json-roundtrip.yml --ref <head-branch>
+gh workflow run ci-mcp-server.yml --ref <head-branch>
+gh workflow run ci-matlab.yml --ref <head-branch>
+gh workflow run ci-risk-analysis-gate.yml --ref <head-branch>
+```
+
+The lightweight workflow publishes the existing protected `PR Summary` context,
+so branch protection remains satisfied without restarting the full matrix. A
+maintainer records the final manual-run evidence for the PR head before merge.
 
 ## When to Add a Script
 

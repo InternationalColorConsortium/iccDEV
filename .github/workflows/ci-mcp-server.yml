@@ -17,19 +17,13 @@ on:
   pull_request:
     branches:
       - master
+    types:
+      - opened
+      - reopened
+      - ready_for_review
     paths:
       - "Dockerfile"
       - "iccdev-mcp/**"
-      - ".github/ci/regression/tiff-tiles.cpp"
-      - "Build/Cmake/Testing/CMakeLists.txt"
-      - "IccConnect/IccLibConnect/IccCmmConfig.*"
-      - "Tools/CmdLine/IccApplyProfiles/**"
-      - "Tools/CmdLine/IccSpecSepToTiff/**"
-      - "Tools/CmdLine/IccTiffDump/**"
-      - ".github/scripts/icc-*-qa-*"
-      - ".github/scripts/iccdev-container-smoke.py"
-      - ".github/ci/docker/build-validation-library.sh"
-      - ".github/codeql-queries/iccdev-mcp/**"
       - ".github/workflows/ci-mcp-server.yml"
   workflow_dispatch:
 

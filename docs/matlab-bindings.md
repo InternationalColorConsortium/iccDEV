@@ -903,15 +903,16 @@ same image.
 
 ## Hosted Workflow
 
-`.github/workflows/ci-matlab.yml` runs for MATLAB-related pull requests to
-`master` and manual dispatch. It uses read-only
+`.github/workflows/ci-matlab.yml` runs only by manual dispatch. It uses read-only
 permissions, trusted-base sanitizer helpers, SHA-pinned actions, a focused
 dependency-free MATLAB calculation stage, the checksum-verified v2.3.1 vcpkg
 dependency export, current-source native luminance and colorimetry CTests, the
 native PAWG Q1 quality-contract CTest, the MATLAB/native structured Q1
 comparison over a checked-in profile, a
 digest-pinned container interoperability job, and no cache or artifact
-publication.
+publication. Dispatch it explicitly for MATLAB, MEX, or container
+interoperability validation; it does not consume runners for ordinary PR or
+rebase events.
 
 `.github/workflows/ci-latest-release.yml` builds the three shipped MEX
 variants with MATLAB R2023b. Linux release jobs use x86_64 MATLAB; the macOS

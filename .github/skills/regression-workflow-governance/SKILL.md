@@ -36,11 +36,14 @@ Use this skill when adding regression coverage or changing
 5. Keep `run:` blocks compliant with workflow governance: `set -euo pipefail`,
    credential cleanup, no direct `${{ }}` in shell, trusted-base helpers for PR
    workflows, and sanitized summary output.
-6. Update `.github/ci/regression/README.md` or the relevant docs so future
+6. Do not add a `synchronize` trigger to an expensive gate. Rebases run only
+   `ci-rebase-safety`; dispatch the applicable final gate explicitly on the
+   rebased PR head.
+7. Update `.github/ci/regression/README.md` or the relevant docs so future
    maintainers can find the gate.
-7. If a GitHub Actions run URL is involved, download the full run log archive
+8. If a GitHub Actions run URL is involved, download the full run log archive
    and audit all jobs, including green jobs, for hidden diagnostics.
-8. Run local script syntax checks and the focused regression before handoff.
+9. Run local script syntax checks and the focused regression before handoff.
    If the regression is added inside `iccdev-tool-coverage-baseline.sh`, run the
    direct script and the CTest wrapper because the CTest suite count should stay
    unchanged.

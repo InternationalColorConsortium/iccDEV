@@ -18,11 +18,13 @@ on:
     branches:
       - master
     paths:
-      - '.github/**'
+      - '.github/workflows/**'
+      - '.github/scripts/**'
+      - '.github/codeql-queries/**'
+      - '.github/codeql-config.yml'
+      - '.github/zizmor.yml'
       - '.githooks/**'
       - 'AGENTS.md'
-      - 'README.md'
-      - 'docs/**'
       - 'Dockerfile'
       - 'Dockerfile.*'
       - '.dockerignore'
@@ -30,12 +32,18 @@ on:
   pull_request:
     branches:
       - master
+    types:
+      - opened
+      - reopened
+      - ready_for_review
     paths:
-      - '.github/**'
+      - '.github/workflows/**'
+      - '.github/scripts/**'
+      - '.github/codeql-queries/**'
+      - '.github/codeql-config.yml'
+      - '.github/zizmor.yml'
       - '.githooks/**'
       - 'AGENTS.md'
-      - 'README.md'
-      - 'docs/**'
       - 'Dockerfile'
       - 'Dockerfile.*'
       - '.dockerignore'

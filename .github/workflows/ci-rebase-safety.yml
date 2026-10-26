@@ -1,0 +1,52 @@
+---
+###############################################################
+# Copyright (c) 2026 International Color Consortium
+#
+# Intent: Verify that a same-repository PR synchronize event includes its base.
+###############################################################
+
+name: "ci-rebase-safety"
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches:
+      - master
+    types:
+      - synchronize
+
+concurrency:
+  group: "rebase-safety-${{ github.event.pull_request.number }}"
+  cancel-in-progress: true
+
+jobs:
+  pr-summary:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    # Preserve the protected PR Summary context without restarting the full matrix.
+    name: PR Summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify the PR head includes its base
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git cat-file -e "${BASE_SHA}^{commit}"
+          git cat-file -e "${HEAD_SHA}^{commit}"
+          git merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"

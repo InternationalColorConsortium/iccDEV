@@ -49,9 +49,15 @@ Choose the smallest gate that proves the behavior:
 - `ci-pr-action` auto: default path-scoped selection. Source, build, and test
   changes select the full matrix; documentation-only changes use the constrained
   fast-lane settings. Workflow-only changes keep the core orchestrator at setup
-  and finalization while standalone preflight and risk-analysis checks remain
-  required. Container-only changes use those standalone security gates and local
-  container validation.
+  and finalization while the standalone preflight check remains path-scoped.
+  Container-only changes use that security check and local container validation.
+- Rebase safety: `synchronize` runs only `ci-rebase-safety`, which verifies the
+  PR head contains its event base. Dispatch each applicable final lane manually
+  against the rebased PR head; do not restore automatic full-matrix triggers.
+- MATLAB compatibility: `ci-matlab` is manual-dispatch only because its
+  multi-platform MEX and container lanes consume scarce runner capacity.
+- Risk analysis: `ci-risk-analysis-gate` is manual-dispatch only; use it for
+  the explicit final Linux and Windows workflow-security audit.
 - CTest suite: cross-platform tool/profile behavior that belongs in the normal
   local and CI test surface.
 - Focused `.github/scripts/*.sh` regression: reusable Linux regression logic or

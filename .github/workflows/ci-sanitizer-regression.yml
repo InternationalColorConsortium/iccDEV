@@ -19,7 +19,6 @@ permissions:
       - master
     types:
       - opened
-      - synchronize
       - reopened
       - ready_for_review
     paths:
@@ -35,6 +34,7 @@ permissions:
       - '.github/scripts/**'
       - '.github/workflows/ci-iccdev-tool-tests.yml'
       - '.github/workflows/ci-sanitizer-regression.yml'
+  workflow_dispatch:
 
 concurrency:
   group: "sanitizer-regression-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}"
@@ -45,7 +45,7 @@ jobs:
     name: Sanitizer Regression
     uses: ./.github/workflows/ci-iccdev-tool-tests.yml
     with:
-      target_sha: ${{ github.event.pull_request.head.sha }}
+      target_sha: ${{ github.event.pull_request.head.sha || github.sha }}
       tool_build_type: Debug
       ctest_mode: full
       ctest_recent_limit: '0'

@@ -139,9 +139,11 @@ fuzzer runtime boundary, and replay the pinned #2687 artifact before fuzzing.
 - PR handoffs must state the branch and commit, changed surface, local and
   hosted validation, known skips or deferrals, and merge-readiness. Cite
   workflow URLs or run IDs rather than copying raw logs.
-- Do not call a PR ready or green while required `ci-pr-action`,
-  `ci-preflight-safety`, or `ci-pr-risk-security-analysis` checks are pending,
-  skipped unexpectedly, or failing.
+- Do not call a PR ready or green while the required `PR Summary` check is
+  pending or failing. After a rebase, verify `ci-rebase-safety` supplied that
+  context and record applicable manual final-run evidence for the rebased head;
+  the expensive core, preflight, risk, sanitizer, JSON, MCP, and MATLAB lanes
+  do not run automatically on `synchronize`.
 
 ## Stacked PRs and Fast Lane
 

@@ -89,6 +89,15 @@ when practical.
   and finalization while the standalone preflight and risk-analysis workflows
   provide their required contexts. Container-only changes use those standalone
   security gates and local container validation.
+- On `synchronize`, `ci-rebase-safety` is the only validation lane: it proves
+  that the PR head contains the event base without fanning out core, sanitizer,
+  JSON, MCP, MATLAB, preflight, or risk-analysis gates. Dispatch the final
+  applicable lanes explicitly against the rebased PR head.
+- `ci-risk-analysis-gate` is manual-dispatch only. It runs the Linux and
+  Windows workflow-security audits for an explicit final security review.
+- `ci-matlab` is manual-dispatch only. Do not restore its pull-request trigger:
+  its Windows, Linux, macOS, and container lanes are reserved for explicit
+  compatibility validation.
 - Use `ci_scope=fast-lane` for the exact GCC 15.2 Release LTO and non-sanitized
   core tool lanes. Fast lane defaults to the latest CTest with Windows
   disabled; it does not run a Docker verification job.
@@ -197,6 +206,8 @@ After pushing, trigger only the workflows affected by the change:
 gh workflow run "ci-pr-action" --repo InternationalColorConsortium/iccDEV --ref <branch> -f ci_scope=full
 gh workflow run "ci-pr-action" --repo InternationalColorConsortium/iccDEV --ref <branch> \
   -f ci_scope=fast-lane -f pr_number=<open-pr-number>
+gh workflow run "ci-matlab" --repo InternationalColorConsortium/iccDEV --ref <branch>
+gh workflow run "ci-risk-analysis-gate" --repo InternationalColorConsortium/iccDEV --ref <branch>
 gh workflow run "ci-risk-analysis" --repo InternationalColorConsortium/iccDEV --ref <branch> \
   -f analysis_target="Specific git ref" -f git_ref=<full-sha> -f severity_threshold=HIGH -f fail_on_findings=true
 ```
