@@ -1567,8 +1567,8 @@ jobs:
               echo "::error::npm_version is required when publishing iccdev"
               exit 1
             fi
-            if [[ ! "$VERSION" =~ ^[0-9]+(\.[0-9]+){2}(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
-              echo "::error::npm_version must be a SemVer version"
+            if [[ ! "$VERSION" =~ ^[0-9]+(\.[0-9]+){2}(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+              echo "::error::npm_version must be a SemVer version without build metadata"
               exit 1
             fi
             if [[ ! "$NPM_DIST_TAG" =~ ^[A-Za-z][A-Za-z0-9._-]*$ ]]; then

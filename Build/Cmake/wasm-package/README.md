@@ -41,9 +41,10 @@ node test_all.js
 
 The manual `ci-latest-release.yml` workflow can publish the staged package
 with npm OIDC trusted publishing. Select `iccdev` for `npm_packages` and enter
-an unpublished SemVer value for `npm_version`. Use `npm_dist_tag=latest` for a
-stable release. Prerelease versions require a non-`latest` npm dist-tag such
-as `next`. Dispatches outside `master` do not stage or publish an npm release.
+an unpublished SemVer value without build metadata for `npm_version`. Use
+`npm_dist_tag=latest` for a stable release. Prerelease versions require a
+non-`latest` npm dist-tag such as `next`. Dispatches outside `master` do not
+stage or publish an npm release.
 
 Before the first publication, an npm package administrator must configure
 Trusted Publisher with GitHub Actions, organization

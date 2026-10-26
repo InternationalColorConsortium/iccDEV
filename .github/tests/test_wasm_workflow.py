@@ -104,6 +104,11 @@ def test_release_uses_opt_in_npm_trusted_publishing():
     assert stage_wasm["env"]["NPM_VERSION"] == "${{ inputs.npm_version }}"
     assert stage_wasm["env"]["NPM_DIST_TAG"] == "${{ inputs.npm_dist_tag }}"
     assert 'VERSION="$NPM_VERSION"' in stage_wasm["run"]
+    assert 'npm_version must be a SemVer version without build metadata' in stage_wasm["run"]
+    assert (
+        r"^[0-9]+(\.[0-9]+){2}(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$"
+        in stage_wasm["run"]
+    )
     assert 'Prerelease npm_version values require a non-latest npm_dist_tag' in stage_wasm["run"]
 
     release = workflow["jobs"]["release"]
