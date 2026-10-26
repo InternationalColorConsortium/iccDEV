@@ -808,7 +808,7 @@ jobs:
           Write-Host "Head branch:   $env:GITHUB_HEAD_REF"
           Write-Host "Commit SHA:    $env:PR_HEAD_SHA"
           Write-Host "OS:            $env:RUNNER_OS"
-      - name: Install dependencies and build
+      - name: Install manifest dependencies and build
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
           Set-StrictMode -Version Latest
@@ -823,24 +823,14 @@ jobs:
           Write-Host "Copyright (c) 2025 International Color Consortium. All rights reserved." -ForegroundColor Green
           git branch
           git status
-          Write-Host "========= Fetching Deps... ================`n"
-          Start-BitsTransfer -Source "https://github.com/InternationalColorConsortium/iccDEV/releases/download/vcpkg-win-2324-libheif-deps/iccdev-windows-vcpkg-classic-libheif-04a9d8e.zip" -Destination "deps.zip"
-          $actualDigest = (Get-FileHash -LiteralPath 'deps.zip' -Algorithm SHA256).Hash
-          if ($actualDigest -ne '89ba13a04b883bbe5f97b5baabe15a508ff431c081e73c72022532ccfed5cb7e') {
-            throw "vcpkg export digest mismatch: $actualDigest"
-          }
-          Write-Host "========= Extracting Deps... ================`n"
-          tar -xf deps.zip
-          cd Build/Cmake
+          Write-Host "========= Installing manifest dependencies... ================`n"
+          vcpkg integrate install
+          vcpkg install
           Write-Host "========= Building... ================`n"
-          cmake -B build -S . `
-            -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" `
-            -DVCPKG_MANIFEST_MODE=OFF `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DICCDEV_WINDOWS_UNIFIED_RUNTIME=ON `
-            -Wno-dev
-          cmake --build build --config Release -- /m /maxcpucount
-          $runtimeDir = Resolve-Path ".\build\bin\Release"
+          cmake --preset vs2022-x64 -B msvc -S Build/Cmake `
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          cmake --build msvc --config Release --parallel
+          $runtimeDir = Resolve-Path ".\msvc\bin\Release"
           Get-ChildItem -File -Path $runtimeDir |
             Where-Object { $_.Extension -in '.exe','.dll' } |
             Sort-Object Name |
@@ -852,7 +842,7 @@ jobs:
         with:
           command: >-
             addpath('matlab');
-            build_mex('BuildDir', fullfile(pwd, 'Build', 'Cmake', 'build'))
+            build_mex('BuildDir', fullfile(pwd, 'msvc'))
           generate-summary: false
 
       - name: Stage bundle into Testing directory
@@ -872,7 +862,7 @@ jobs:
           # 2. Copy the unified Windows runtime directory. CMake stages iccDEV
           #    tools, iccDEV DLLs, and vcpkg runtime DLLs together here so
           #    release binaries run directly from the bundle root.
-          $runtimeDir = "Build/Cmake/build/bin/Release"
+          $runtimeDir = "msvc/bin/Release"
           if (-not (Test-Path $runtimeDir)) {
             throw "Windows runtime directory not found: $runtimeDir"
           }

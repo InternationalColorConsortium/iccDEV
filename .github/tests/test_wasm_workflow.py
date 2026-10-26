@@ -62,6 +62,25 @@ def test_release_publication_is_not_cancelled():
     assert workflow["concurrency"]["cancel-in-progress"] is False
 
 
+def test_release_windows_build_uses_manifest_dependencies():
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/ci-latest-release.yml").read_text(encoding="ascii")
+    )
+    windows_steps = {
+        step["name"]: step for step in workflow["jobs"]["windows"]["steps"]
+    }
+    build = windows_steps["Install manifest dependencies and build"]["run"]
+    assert "vcpkg integrate install" in build
+    assert "vcpkg install" in build
+    assert "cmake --preset vs2022-x64 -B msvc -S Build/Cmake" in build
+    assert "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON" in build
+    assert "cmake --build msvc --config Release --parallel" in build
+    assert "vcpkg-win-2324-libheif-deps" not in build
+    assert "VCPKG_MANIFEST_MODE=OFF" not in build
+    assert 'fullfile(pwd, \'msvc\')' in windows_steps["Build MATLAB MEX gateway"]["with"]["command"]
+    assert '"msvc/bin/Release"' in windows_steps["Stage bundle into Testing directory"]["run"]
+
+
 def test_wasm_workflow_regression_runs_in_shared_wheel_gate():
     workflow = yaml.safe_load(
         (ROOT / ".github/workflows/_build-python-wheels.yml").read_text(
