@@ -2767,26 +2767,25 @@ jobs:
             echo "::error::npm_version is required when publishing iccdev"
             exit 1
           fi
-          for attempt in {1..12}; do
-            if npm view "iccdev@$NPM_VERSION" version --registry=https://registry.npmjs.org | grep -Fqx "$NPM_VERSION"; then
-              break
+          npm_environment="$(mktemp -d)/iccdev-npm"
+          npm_environment="$(mktemp -d)/iccdev-npm"
+          mkdir -p "$npm_environment"
+          tarball=""
+          for attempt in {1..30}; do
+            if npm pack --pack-destination "$npm_environment" --json \
+                --registry=https://registry.npmjs.org "iccdev@$NPM_VERSION" >/dev/null 2>&1; then
+              tarball="$(find "$npm_environment" -maxdepth 1 -type f -name 'iccdev-*.tgz' -print -quit)"
+              if [[ -n "$tarball" ]]; then
+                break
+              fi
             fi
-            if [[ "$attempt" -eq 12 ]]; then
-              echo "::error::Published npm package version was not available"
+            rm -f "$npm_environment"/iccdev-*.tgz
+            if [[ "$attempt" -eq 30 ]]; then
+              echo "::error::Published npm package tarball was not available after 450 seconds"
               exit 1
             fi
             sleep 15
           done
-
-          npm_environment="$(mktemp -d)/iccdev-npm"
-          mkdir -p "$npm_environment"
-          npm pack --pack-destination "$npm_environment" --json \
-            --registry=https://registry.npmjs.org "iccdev@$NPM_VERSION" >/dev/null
-          tarball="$(find "$npm_environment" -maxdepth 1 -type f -name 'iccdev-*.tgz' -print -quit)"
-          if [[ -z "$tarball" ]]; then
-            echo "::error::Public npm package tarball is missing"
-            exit 1
-          fi
           mkdir "$npm_environment/package"
           tar -xzf "$tarball" --strip-components=1 -C "$npm_environment/package"
           PACKAGE_VERSION="$NPM_VERSION" node -e \

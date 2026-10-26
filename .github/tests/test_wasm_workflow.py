@@ -131,8 +131,9 @@ def test_release_uses_opt_in_npm_trusted_publishing():
     assert "NODE_AUTH_TOKEN" not in publish["env"]
 
     smoke = steps["Verify public iccdev npm package"]
-    assert 'npm view "iccdev@$NPM_VERSION" version' in smoke["run"]
+    assert "for attempt in {1..30}" in smoke["run"]
     assert 'npm pack --pack-destination "$npm_environment"' in smoke["run"]
+    assert "Published npm package tarball was not available after 450 seconds" in smoke["run"]
     assert 'tar -xzf "$tarball" --strip-components=1' in smoke["run"]
     assert '"/package.json"' in smoke["run"]
 
