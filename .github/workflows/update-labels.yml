@@ -183,7 +183,7 @@ jobs:
             local check_conclusion
             # shellcheck disable=SC2016
             check_conclusion=$(gh api --paginate --slurp "repos/${GH_REPO}/commits/$head/check-runs?per_page=100&filter=latest" \
-              --jq '
+              | jq -r '
                 [.[] | .check_runs[]] as $runs
                 | if ($runs | length == 0) then "none"
                 else

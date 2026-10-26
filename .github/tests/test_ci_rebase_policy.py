@@ -39,18 +39,28 @@ gh() {
   case "$*" in
     "pr view "*"--json isCrossRepository,"*) printf '%s\\n' "$PR_DATA" ;;
     "pr view "*"--json headRefOid -q .headRefOid") printf '%s\\n' "$LATEST_HEAD" ;;
-    "api "*"check-runs"*) printf '%s\\n' "$CHECK_RESULT" ;;
+    "api "*"check-runs"*)
+      if [[ "$#" != 4 || "$2" != "--paginate" || "$3" != "--slurp" ]]; then
+        printf 'Invalid paginated gh api arguments: %s\\n' "$*" >&2
+        return 2
+      fi
+      printf '%s\\n' "$CHECK_PAGES"
+      return "$CHECK_STATUS"
+      ;;
     "api "*"status"*) printf 'pending|0\\n' ;;
     "pr edit "*) printf '%s\\n' "$*" >> "$WRITE_LOG"; return "$WRITE_STATUS" ;;
     *) printf 'Unexpected gh call: %s\\n' "$*" >&2; return 2 ;;
   esac
 }
 """
-        for name, labels, latest_head, write_status, expected_writes in (
-            ("unchanged", ["pending"], "head", "0", 0),
-            ("update", ["passed", "Merge Ready"], "head", "0", 1),
-            ("moved-head", ["passed"], "new-head", "0", 0),
-            ("write-failure", ["passed"], "head", "1", 1),
+        for name, labels, latest_head, write_status, summary, check_status, expected_writes in (
+            ("unchanged", ["pending"], "head", "0", False, "0", 0),
+            ("update", ["passed", "Merge Ready"], "head", "0", False, "0", 1),
+            ("moved-head", ["passed"], "new-head", "0", False, "0", 0),
+            ("write-failure", ["passed"], "head", "1", False, "0", 1),
+            ("validated", ["pending"], "head", "0", True, "0", 1),
+            ("validated-unchanged", ["passed", "Merge Ready"], "head", "0", True, "0", 0),
+            ("query-failure", ["passed"], "head", "0", True, "1", 1),
         ):
             with self.subTest(case=name), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
@@ -60,7 +70,15 @@ gh() {
                     GITHUB_OUTPUT=str(root / "output"),
                     GITHUB_WORKSPACE=temp, WRITE_LOG=str(root / "writes"),
                     WRITE_STATUS=write_status, LATEST_HEAD=latest_head,
-                    CHECK_RESULT="pending",
+                    CHECK_STATUS=check_status,
+                    CHECK_PAGES=json.dumps([
+                        {"check_runs": [{"name": "Rebase Safety",
+                                         "status": "completed",
+                                         "conclusion": "success"}]},
+                        {"check_runs": [{"name": "PR Summary",
+                                         "status": "completed",
+                                         "conclusion": "success"}] if summary else []},
+                    ]),
                     PR_DATA=json.dumps({
                         "isCrossRepository": False, "headRefOid": "head",
                         "isDraft": False, "mergeStateStatus": "CLEAN",
@@ -79,9 +97,11 @@ gh() {
                 writes = root / "writes"
                 actual = writes.read_text().splitlines() if writes.exists() else []
                 self.assertEqual(len(actual), expected_writes)
-                if name == "update":
+                if name in ("update", "query-failure"):
                     self.assertIn("--add-label pending", actual[0])
                     self.assertIn("--remove-label passed,failed,Merge Ready", actual[0])
+                if name == "validated":
+                    self.assertIn("--add-label passed,Merge Ready", actual[0])
 
     def test_status_labels_require_successful_current_head_summary(self):
         workflow = load_workflow("update-labels.yml")
@@ -91,7 +111,7 @@ gh() {
         )
         run = step["run"]
         query = re.search(
-            r"--jq '([\s\S]*?)' 2>/dev/null",
+            r"\| jq -r '([\s\S]*?)' 2>/dev/null",
             run.split("check_conclusion=$(gh api", 1)[1],
         ).group(1)
         combine = run.split("local combined", 1)[1].split(
