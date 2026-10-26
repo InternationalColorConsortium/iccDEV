@@ -24,6 +24,8 @@ Use this prompt when reviewing or changing the iccDEV label system.
   labels.
 - Preserve `Merge Ready` as a derived status, not a manual approval substitute.
 - Keep `codeql-ready` connected to the full CodeQL workflow.
+- Keep `ci:run-auto` one-shot and restricted to a write-authorized maintainer
+  on an open same-repository PR; it must dispatch only auto-scoped validation.
 - Do not checkout or execute PR-controlled content from `pull_request_target`.
 - Require an explicit `zizmor` rationale when retaining `pull_request_target`
   for metadata-only label automation.

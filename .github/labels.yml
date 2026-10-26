@@ -47,6 +47,9 @@
 - name: ci:skip
   color: b60205
   description: Maintainer one-shot request to skip PR build jobs
+- name: ci:run-auto
+  color: 1d76db
+  description: Maintainer one-shot request for auto-scoped PR validation
 - name: ci:full
   color: 0e8a16
   description: Run the default long-cycle Unix, GCC 15.2 LTO, tool, Windows, and Docker matrix

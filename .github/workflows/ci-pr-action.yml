@@ -34,7 +34,7 @@ on:
   workflow_dispatch:
     inputs:
       pr_number:
-        description: 'Optional open PR number for same-repository fast-lane validation'
+        description: 'Optional open same-repository PR number to validate its exact head'
         required: false
         default: ''
         type: string
@@ -133,7 +133,7 @@ jobs:
 
       - name: Resolve workflow-dispatch PR
         id: dispatch-pr
-        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        if: github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -199,7 +199,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"  # elements-sanitized
 
       - name: Checkout workflow-dispatch PR head
-        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        if: github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -224,7 +224,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout resolved workflow-dispatch base
-        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        if: github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -444,6 +444,10 @@ jobs:
             pr_number="$number"
           }
 
+          if [ -n "$DISPATCH_PR_NUMBER" ]; then
+            resolve_dispatch_pr "$DISPATCH_PR_NUMBER"
+          fi
+
           case "$ci_scope" in
             full|source)
               include_windows=true
@@ -454,9 +458,6 @@ jobs:
             fast-lane)
               if ! validate_fast_lane_actor "$GH_ACTOR"; then
                 exit 1
-              fi
-              if [ -n "$DISPATCH_PR_NUMBER" ]; then
-                resolve_dispatch_pr "$DISPATCH_PR_NUMBER"
               fi
               if ! require_same_repository_pr; then
                 exit 1
@@ -788,7 +789,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout resolved workflow-dispatch base
-        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        if: github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -979,7 +980,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout resolved workflow-dispatch base
-        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        if: github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -1122,7 +1123,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout resolved workflow-dispatch base
-        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        if: github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -1226,7 +1227,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout resolved workflow-dispatch base
-        if: github.event_name == 'workflow_dispatch' && inputs.ci_scope == 'fast-lane' && inputs.pr_number != ''
+        if: github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null

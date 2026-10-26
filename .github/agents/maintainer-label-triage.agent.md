@@ -17,6 +17,8 @@ labels using `docs/label-system.md` and
 5. Report affected consumers, expected API writes, and any manual migration
    required. Status labels must require a successful current-head `PR Summary`,
    skip unchanged writes, and never treat ancestry checks as validation.
+   Verify any PR CI control label is declared in the manifest, restricted to
+   same-repository PRs, and dispatched only by a write-authorized maintainer.
 6. For issues labeled `CodeQL`, distinguish an alert-only report from completed
    technical triage. Keep `needs-triage` when there is no parser-to-tool
    reachability evidence or false-positive rationale. Accept a false-positive
