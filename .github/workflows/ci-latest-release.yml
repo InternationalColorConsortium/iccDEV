@@ -59,6 +59,11 @@ permissions:
         required: false
         default: ""
         type: string
+      npm_dist_tag:
+        description: npm dist-tag for the selected distribution
+        required: true
+        default: latest
+        type: string
 
 concurrency:
   group: "latest-release-${{ github.workflow }}-${{ github.ref }}"
@@ -1534,6 +1539,7 @@ jobs:
           BASH_ENV: /dev/null
           NPM_PACKAGES: ${{ inputs.npm_packages }}
           NPM_VERSION: ${{ inputs.npm_version }}
+          NPM_DIST_TAG: ${{ inputs.npm_dist_tag }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -1563,6 +1569,14 @@ jobs:
             fi
             if [[ ! "$VERSION" =~ ^[0-9]+(\.[0-9]+){2}(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
               echo "::error::npm_version must be a SemVer version"
+              exit 1
+            fi
+            if [[ ! "$NPM_DIST_TAG" =~ ^[A-Za-z][A-Za-z0-9._-]*$ ]]; then
+              echo "::error::npm_dist_tag must begin with a letter and contain only letters, digits, periods, underscores, or hyphens"
+              exit 1
+            fi
+            if [[ "$VERSION" == *-* && "$NPM_DIST_TAG" == "latest" ]]; then
+              echo "::error::Prerelease npm_version values require a non-latest npm_dist_tag"
               exit 1
             fi
           else
@@ -2671,6 +2685,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           NPM_VERSION: ${{ inputs.npm_version }}
+          NPM_DIST_TAG: ${{ inputs.npm_dist_tag }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -2678,6 +2693,10 @@ jobs:
 
           if [[ -z "$NPM_VERSION" ]]; then
             echo "::error::npm_version is required when publishing iccdev"
+            exit 1
+          fi
+          if [[ -z "$NPM_DIST_TAG" ]]; then
+            echo "::error::npm_dist_tag is required when publishing iccdev"
             exit 1
           fi
           if [[ ! -f artifacts/iccdev-wasm-release/package.json ]]; then
@@ -2719,6 +2738,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           NPM_VERSION: ${{ inputs.npm_version }}
+          NPM_DIST_TAG: ${{ inputs.npm_dist_tag }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -2729,7 +2749,7 @@ jobs:
             echo "::error::Validated npm package tarball is missing"
             exit 1
           fi
-          npm publish "$tarball" --provenance
+          npm publish "$tarball" --provenance --tag "$NPM_DIST_TAG"
 
       - name: Verify public iccdev npm package
         if: ${{ github.ref == 'refs/heads/master' && inputs.npm_packages == 'iccdev' }}

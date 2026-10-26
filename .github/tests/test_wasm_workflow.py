@@ -89,6 +89,12 @@ def test_release_uses_opt_in_npm_trusted_publishing():
         "options": ["none", "iccdev"],
     }
     assert dispatch["npm_version"]["type"] == "string"
+    assert dispatch["npm_dist_tag"] == {
+        "description": "npm dist-tag for the selected distribution",
+        "required": True,
+        "default": "latest",
+        "type": "string",
+    }
 
     wasm_steps = {
         step["name"]: step for step in workflow["jobs"]["wasm"]["steps"]
@@ -96,7 +102,9 @@ def test_release_uses_opt_in_npm_trusted_publishing():
     stage_wasm = wasm_steps["Stage npm-shaped WASM bundle (issue #830)"]
     assert stage_wasm["env"]["NPM_PACKAGES"] == "${{ inputs.npm_packages }}"
     assert stage_wasm["env"]["NPM_VERSION"] == "${{ inputs.npm_version }}"
+    assert stage_wasm["env"]["NPM_DIST_TAG"] == "${{ inputs.npm_dist_tag }}"
     assert 'VERSION="$NPM_VERSION"' in stage_wasm["run"]
+    assert 'Prerelease npm_version values require a non-latest npm_dist_tag' in stage_wasm["run"]
 
     release = workflow["jobs"]["release"]
     assert release["permissions"]["id-token"] == "write"
@@ -113,7 +121,7 @@ def test_release_uses_opt_in_npm_trusted_publishing():
 
     publish = steps["Publish iccdev to npm"]
     assert publish["id"] == "npm_iccdev"
-    assert 'npm publish "$tarball" --provenance' in publish["run"]
+    assert 'npm publish "$tarball" --provenance --tag "$NPM_DIST_TAG"' in publish["run"]
     assert "NODE_AUTH_TOKEN" not in publish["env"]
 
     smoke = steps["Verify public iccdev npm package"]
