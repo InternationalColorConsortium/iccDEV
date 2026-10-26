@@ -427,11 +427,46 @@ extensions = [
 class build_ext(_build_ext):
     """Cythonize only for extension builds so sdists ship .pyx, not .cpp."""
 
+    def _check_prebuilt_macos_archs(self):
+        """Fail closed when a macOS link would drop slices of the prebuilt library.
+
+        Universal2 CPython builds request ``-arch arm64 -arch x86_64``. ld only
+        warns and ignores a static archive member for a missing slice, leaving
+        an extension whose other slice cannot resolve IccProfLib at import.
+        """
+        if sys.platform != "darwin" or not PREBUILT_LIBRARY:
+            return
+        lipo = shutil.which("lipo")
+        if not lipo:
+            return
+        import platform
+        import subprocess
+
+        library = os.path.join(PREBUILT_LIB_DIR, "lib" + PREBUILT_LIBRARY + ".a")
+        result = subprocess.run(
+            [lipo, "-archs", library], capture_output=True, text=True, check=False
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Cannot read architectures from {library}: {result.stderr.strip()}")
+        available = set(result.stdout.split())
+        args = list(getattr(self.compiler, "linker_so", None) or [])
+        requested = {args[i + 1] for i, arg in enumerate(args[:-1]) if arg == "-arch"}
+        requested = requested or {platform.machine()}
+        missing = sorted(requested - available)
+        if missing:
+            raise RuntimeError(
+                f"Pre-built {library} provides {sorted(available)} but this build "
+                f"requests {sorted(requested)}. Set ARCHFLAGS='-arch "
+                f"{' -arch '.join(sorted(available))}' for a local build, or build "
+                "the portable wheel from the sdist without a pre-built library."
+            )
+
     def build_extensions(self):
         global _AUTO_VENDORED_ICCPROFLIB
 
         if PREBUILT_ERROR:
             raise RuntimeError(PREBUILT_ERROR)
+        self._check_prebuilt_macos_archs()
 
         if not PREBUILT_LIBRARY:
             vendor_dir = os.path.join(SETUP_DIR, "vendor", "IccProfLib")
@@ -461,7 +496,7 @@ class build_ext(_build_ext):
             raise RuntimeError(
                 "Cython is required to build iccdev from source. "
                 "Install a pre-built wheel, or install build dependencies with: "
-                "pip install 'cython>=3.0,<3.2'"
+                "pip install 'cython>=3.0,<3.4'"
             ) from exc
 
         self.extensions = cythonize(
@@ -553,7 +588,7 @@ with open(os.path.join(os.path.dirname(__file__), "README.md"), encoding="utf-8"
 
 setup(
     name="iccdev",
-    version="0.1.0",
+    version="0.1.1",
     description="Python bindings for RefIccMAX (iccDEV) - ICC color profile library",
     long_description=long_description,
     long_description_content_type="text/markdown",

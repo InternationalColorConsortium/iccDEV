@@ -151,6 +151,25 @@ def test_legacy_wheel_smoke_remains_enabled_by_default(workflow, step_name):
                for step in steps if step is not smoke_step)
 
 
+def test_unix_python_packaging_stays_portable():
+    config = yaml.safe_load((WORKFLOWS / "_build-test-unix.yml").read_text(encoding="ascii"))
+    steps = {step.get("name"): step for step in config["jobs"]["build-test"]["steps"]}
+    bindings = steps["Build and test Python bindings"]["run"]
+    package = steps["Build Python sdist and wheel"]["run"]
+    smoke = steps["Validate native Python wheel with cibuildwheel"]["run"]
+    # macOS editable builds link the single-arch CMake archive.
+    assert 'ARCHFLAGS="-arch $(uname -m)"' in bindings
+    # The wheel must be built from the vendored sdist, never from REPO_ROOT/Build.
+    assert "python -m build --outdir ../dist/" in package
+    assert "--sdist --wheel" not in package
+    # i686 is outside the release matrix (#2923).
+    assert 'export CIBW_ARCHS="native"' in smoke
+    assert 'CIBW_ARCHS="auto"' not in smoke
+    # The sdist smoke must test the installed package, not the source tree.
+    assert "ICCDEV_REQUIRE_INSTALLED_PACKAGE=1" in package
+    assert "--import-mode=importlib" in package
+
+
 @pytest.mark.parametrize("missing_tool", [
     None, "iccDumpProfile", "iccRoundTrip", "iccPawgReport", "iccToXml",
     "iccFromXml", "iccToJson", "iccFromJson", "iccApplyNamedCmm",

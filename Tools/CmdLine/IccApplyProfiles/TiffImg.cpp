@@ -1284,6 +1284,9 @@ bool CTiffImg::ReadTileLine(unsigned char *pBuf)
   const unsigned int tileY = m_nCurLine / m_nTileHeight * m_nTileHeight;
   const unsigned int row = m_nCurLine % m_nTileHeight;
   const unsigned int planes = m_nPlanar == PLANARCONFIG_SEPARATE ? m_nSamples : 1;
+  // CalcTileLayout() caps m_nTileSize at 256 MiB, so it fits tmsize_t on
+  // 32-bit targets such as wasm32 where tmsize_t is int (#2919).
+  const tmsize_t tileBytes = static_cast<tmsize_t>(m_nTileSize);
   if (!row) {
     for (unsigned int s = 0; s < planes; s++) {
       for (unsigned int t = 0; t < m_nTilesAcross; t++) {
@@ -1291,7 +1294,7 @@ bool CTiffImg::ReadTileLine(unsigned char *pBuf)
           (static_cast<size_t>(s) * m_nTilesAcross + t) * m_nTileSize;
         const ttile_t index = TIFFComputeTile(m_hTif, t * m_nTileWidth, tileY, 0,
                                              static_cast<uint16_t>(s));
-        if (TIFFReadEncodedTile(m_hTif, index, tile, m_nTileSize) != m_nTileSize) {
+        if (TIFFReadEncodedTile(m_hTif, index, tile, tileBytes) != tileBytes) {
           TIFFError("CTiffImg", "Incomplete decoded TIFF tile");
           return false;
         }
@@ -1323,6 +1326,7 @@ bool CTiffImg::WriteTileLine(const unsigned char *pBuf)
 {
   const unsigned int row = m_nCurLine % m_nTileHeight;
   const unsigned int planes = m_nPlanar == PLANARCONFIG_SEPARATE ? m_nSamples : 1;
+  const tmsize_t tileBytes = static_cast<tmsize_t>(m_nTileSize);
   if (!row)
     memset(m_pStripBuf, 0, m_nTileBandSize);
   for (unsigned int t = 0; t < m_nTilesAcross; t++) {
@@ -1350,8 +1354,10 @@ bool CTiffImg::WriteTileLine(const unsigned char *pBuf)
           (static_cast<size_t>(s) * m_nTilesAcross + t) * m_nTileSize;
         const ttile_t index = TIFFComputeTile(m_hTif, t * m_nTileWidth,
           m_nCurLine / m_nTileHeight * m_nTileHeight, 0, static_cast<uint16_t>(s));
-        if (TIFFWriteEncodedTile(m_hTif, index, tile, m_nTileSize) != m_nTileSize)
+        if (TIFFWriteEncodedTile(m_hTif, index, tile, tileBytes) != tileBytes) {
+          TIFFError("CTiffImg", "Incomplete encoded TIFF tile");
           return false;
+        }
       }
     }
   }

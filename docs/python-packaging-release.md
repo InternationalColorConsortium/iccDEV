@@ -87,7 +87,7 @@ python -m pip install -e "./python[dev]"
 python -m pytest --rootdir . --import-mode=importlib python/tests -v --tb=short -m "not parity"
 ICCDEV_BUILD_DIR=$PWD/Build python -m pytest --rootdir . --import-mode=importlib python/tests -v --tb=short -m parity
 cd python
-python -m build --sdist --wheel
+python -m build
 python -m twine check dist/*.whl dist/*.tar.gz
 python -m cibuildwheel --print-build-identifiers --platform linux
 python -m cibuildwheel --print-build-identifiers --platform macos
@@ -279,15 +279,16 @@ by maintainers, not from a PR branch or CI scratch artifact.
    ```bash
    cd python
    python -m pip install --upgrade "build>=1.2,<1.4" "twine>=5.0,<7" "cibuildwheel==3.4.0"
-   python -m build --sdist --wheel
+   python -m build
    python -m twine check dist/*.whl dist/*.tar.gz
    python -m cibuildwheel --output-dir wheelhouse
    ```
 
    Run the cibuildwheel driver with Python 3.13, as in the shared CI workflow;
    it can still build the configured Python 3.9-3.13 wheels.
-   The `sdist` build command vendors `IccProfLib` automatically so `pip install
-   iccdev` can build without a repository checkout. `vendor_iccproflib.py`
+   `python -m build` builds the wheel from the sdist, which vendors `IccProfLib`,
+   so the wheel never links a single-arch `Build/` archive. The sdist also lets
+   `pip install iccdev` build without a repository checkout. `vendor_iccproflib.py`
    remains available for manual inspection or cleanup, but a release build must
    not rely on a separate pre-vendoring step. Do not commit the generated
    `vendor/IccProfLib/`, `dist/`, or `wheelhouse/` directories as part of the

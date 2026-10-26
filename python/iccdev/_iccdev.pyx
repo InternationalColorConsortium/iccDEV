@@ -32,10 +32,15 @@ cimport cython
 # Cython's generated utility code uses (void)function_name to mark intentional
 # unused function references. MSVC diagnoses that idiom as C4551; scope the
 # exception to this generated translation unit, not the native library sources.
+# CPython's macOS CFLAGS add -Wunreachable-code, which flags Cython's
+# __Pyx_PyUnicode_READY() < 0 guard once that macro is constant on 3.12+ (#2920).
 cdef extern from *:
     """
     #if defined(_MSC_VER) && !defined(__clang__)
     #pragma warning(disable: 4551)
+    #endif
+    #if defined(__clang__)
+    #pragma clang diagnostic ignored "-Wunreachable-code"
     #endif
     """
 

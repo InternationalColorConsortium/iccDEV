@@ -51,6 +51,7 @@ LANE_IDENTIFIERS = VALIDATOR["lane_identifiers"]
 WORKFLOWS = SCRIPT.parents[1] / "workflows"
 ROOT = SCRIPT.parents[2]
 LICENSE = (SCRIPT.parents[2] / "LICENSE.md").read_text(encoding="ascii")
+VERSION = VALIDATOR["package_version"](ROOT)
 
 
 def load_workflow(name):
@@ -73,7 +74,7 @@ def test_live_pypi_installation_guidance():
 
 
 def make_wheel(directory, platform="manylinux_2_17_x86_64.manylinux2014_x86_64",
-               version="0.1.0", native=True, metadata_version=None,
+               version=VERSION, native=True, metadata_version=None,
                python_tag="cp313", overrides=None):
     path = directory / f"iccdev-{version}-{python_tag}-{python_tag}-{platform}.whl"
     dist_info = f"iccdev-{version}.dist-info/"
@@ -124,7 +125,7 @@ def make_wheel(directory, platform="manylinux_2_17_x86_64.manylinux2014_x86_64",
 ])
 def test_accepts_repaired_platform_tags(tmp_path, platform, identifier):
     wheel = make_wheel(tmp_path, platform)
-    assert VALIDATE(tmp_path, [identifier], "0.1.0") == [wheel]
+    assert VALIDATE(tmp_path, [identifier], VERSION) == [wheel]
 
 
 @pytest.mark.parametrize("kwargs", [
@@ -134,21 +135,21 @@ def test_accepts_repaired_platform_tags(tmp_path, platform, identifier):
 def test_rejects_wrong_version_contents_or_target(tmp_path, kwargs):
     make_wheel(tmp_path, **kwargs)
     with pytest.raises(ValueError):
-        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")
+        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], VERSION)
 
 
 def test_rejects_missing_and_duplicate_wheels(tmp_path):
     with pytest.raises(ValueError, match="Missing wheel targets"):
-        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")
+        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], VERSION)
     make_wheel(tmp_path)
     make_wheel(tmp_path, "manylinux_2_28_x86_64")
     with pytest.raises(ValueError, match="duplicate wheel target"):
-        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")
+        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], VERSION)
 
 
 def test_rejects_empty_identifier_inventory(tmp_path):
     with pytest.raises(ValueError, match="Missing or unsupported"):
-        VALIDATE(tmp_path, [], "0.1.0")
+        VALIDATE(tmp_path, [], VERSION)
 
 
 @pytest.mark.parametrize("lane", VALIDATOR["LANE_PLATFORMS"])
@@ -163,21 +164,21 @@ def test_accepts_complete_lane_inventory(tmp_path, lane):
         elif platform.startswith("macosx_"):
             platform = platform.replace("macosx_", "macosx_11_0_", 1)
         make_wheel(tmp_path, platform, python_tag=python_tag)
-    assert len(VALIDATE(tmp_path, sorted(identifiers), "0.1.0", lane=lane)) == len(identifiers)
+    assert len(VALIDATE(tmp_path, sorted(identifiers), VERSION, lane=lane)) == len(identifiers)
 
 
 def test_rejects_truncated_or_foreign_lane_inventory(tmp_path):
     make_wheel(tmp_path, "win_arm64")
     with pytest.raises(ValueError, match="inventory disagrees"):
-        VALIDATE(tmp_path, ["cp313-win_arm64"], "0.1.0", lane="windows-arm64")
+        VALIDATE(tmp_path, ["cp313-win_arm64"], VERSION, lane="windows-arm64")
     with pytest.raises(ValueError, match="inventory disagrees"):
-        VALIDATE(tmp_path, LANE_IDENTIFIERS("windows-amd64"), "0.1.0", lane="windows-arm64")
+        VALIDATE(tmp_path, LANE_IDENTIFIERS("windows-amd64"), VERSION, lane="windows-arm64")
 
 
 def test_rejects_duplicate_inventory_entries(tmp_path):
     make_wheel(tmp_path)
     with pytest.raises(ValueError, match="Duplicate cibuildwheel"):
-        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"] * 2, "0.1.0")
+        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"] * 2, VERSION)
 
 
 @pytest.mark.parametrize("platform", [
@@ -187,13 +188,13 @@ def test_rejects_duplicate_inventory_entries(tmp_path):
 def test_rejects_malformed_or_mixed_platform_tags(tmp_path, platform):
     make_wheel(tmp_path, platform)
     with pytest.raises(ValueError, match="Unexpected or duplicate wheel target"):
-        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")
+        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], VERSION)
 
 
 @pytest.mark.parametrize("path,contents,error", [
-    ("METADATA", "Name: iccdev\nName: another\nVersion: 0.1.0\n", "metadata Name"),
-    ("METADATA", "Name: iccdev\nVersion: 0.1.0\nVersion: 2.0\n", "metadata Version"),
-    ("METADATA", "Name: iccdev\nVersion: 0.1.0\n", "metadata License-Expression"),
+    ("METADATA", f"Name: iccdev\nName: another\nVersion: {VERSION}\n", "metadata Name"),
+    ("METADATA", f"Name: iccdev\nVersion: {VERSION}\nVersion: 2.0\n", "metadata Version"),
+    ("METADATA", f"Name: iccdev\nVersion: {VERSION}\n", "metadata License-Expression"),
     ("METADATA", "malformed metadata", "Malformed wheel metadata"),
     ("WHEEL", None, "Missing wheel metadata"),
     ("RECORD", None, "Missing wheel metadata"),
@@ -203,28 +204,28 @@ def test_rejects_malformed_or_mixed_platform_tags(tmp_path, platform):
     ("licenses/LICENSE.md", "BSD-3-Clause", "canonical LICENSE.md"),
 ])
 def test_rejects_inconsistent_metadata_and_license(tmp_path, path, contents, error):
-    make_wheel(tmp_path, overrides={"iccdev-0.1.0.dist-info/" + path: contents})
+    make_wheel(tmp_path, overrides={f"iccdev-{VERSION}.dist-info/" + path: contents})
     with pytest.raises(ValueError, match=error):
-        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")
+        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], VERSION)
 
 
 def test_accepts_canonical_license_with_checkout_line_endings(tmp_path):
     make_wheel(tmp_path, overrides={
-        "iccdev-0.1.0.dist-info/licenses/LICENSE.md": LICENSE.replace("\n", "\r\n"),
+        f"iccdev-{VERSION}.dist-info/licenses/LICENSE.md": LICENSE.replace("\n", "\r\n"),
     })
-    assert len(VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")) == 1
+    assert len(VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], VERSION)) == 1
 
 
 @pytest.mark.parametrize("record", [
     "", "iccdev/__init__.py,,\n", "iccdev/__init__.py,md5=invalid,0\n",
     "iccdev/__init__.py,sha256=invalid,0\n",
-    "iccdev-0.1.0.dist-info/RECORD,sha256=invalid,1\n",
+    f"iccdev-{VERSION}.dist-info/RECORD,sha256=invalid,1\n",
     "unknown,sha256=invalid,0\n", "too,few\n", '"unterminated',
 ])
 def test_rejects_invalid_record(tmp_path, record):
-    make_wheel(tmp_path, overrides={"iccdev-0.1.0.dist-info/RECORD": record})
+    make_wheel(tmp_path, overrides={f"iccdev-{VERSION}.dist-info/RECORD": record})
     with pytest.raises(ValueError, match="RECORD"):
-        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")
+        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], VERSION)
 
 
 @pytest.mark.parametrize("change", ["hash", "size", "missing", "duplicate"])
@@ -232,7 +233,7 @@ def test_rejects_inconsistent_record(tmp_path, change):
     wheel = make_wheel(tmp_path)
     with zipfile.ZipFile(wheel) as archive:
         files = {name: archive.read(name) for name in archive.namelist()}
-    record = "iccdev-0.1.0.dist-info/RECORD"
+    record = f"iccdev-{VERSION}.dist-info/RECORD"
     rows = list(csv.reader(io.StringIO(files[record].decode("utf-8"))))
     if change == "hash":
         # Repack a changed native extension with a valid ZIP CRC but stale RECORD.
@@ -250,7 +251,7 @@ def test_rejects_inconsistent_record(tmp_path, change):
         for name, content in files.items():
             archive.writestr(name, content)
     with pytest.raises(ValueError, match="RECORD"):
-        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")
+        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], VERSION)
 
 
 def test_release_inventory_requires_every_lane(tmp_path):
@@ -267,11 +268,11 @@ def test_release_inventory_requires_every_lane(tmp_path):
     assert result.returncode == 0, result.stderr
     assert "Validated 45 release wheels" in result.stdout
     # The separately validated MCP distribution coexists in published assets.
-    (tmp_path / "iccdev_mcp-0.1.0-py3-none-any.whl").write_bytes(b"separate MCP intake")
+    (tmp_path / f"iccdev_mcp-{VERSION}-py3-none-any.whl").write_bytes(b"separate MCP intake")
     result = subprocess.run(command, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
     with pytest.raises(ValueError, match="Unexpected wheel name"):
-        VALIDATE(tmp_path, identifiers, "0.1.0")
+        VALIDATE(tmp_path, identifiers, VERSION)
     next(tmp_path.glob("*win_arm64.whl")).unlink()
     result = subprocess.run(command, capture_output=True, text=True, timeout=30)
     assert result.returncode == 1
@@ -288,7 +289,7 @@ def test_release_inventory_requires_every_lane(tmp_path):
 def test_rejects_unsafe_archive_paths(tmp_path, path):
     make_wheel(tmp_path, overrides={path: "payload"})
     with pytest.raises(ValueError, match="Unsafe wheel archive member"):
-        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")
+        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], VERSION)
 
 
 def test_rejects_duplicate_archive_members(tmp_path):
@@ -296,7 +297,7 @@ def test_rejects_duplicate_archive_members(tmp_path):
     with zipfile.ZipFile(wheel, "a") as archive, pytest.warns(UserWarning, match="Duplicate name"):
         archive.writestr("iccdev/__init__.py", "different contents")
     with pytest.raises(ValueError, match="Duplicate wheel archive member"):
-        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")
+        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], VERSION)
 
 
 def test_rejects_archive_symlinks(tmp_path):
@@ -307,7 +308,7 @@ def test_rejects_archive_symlinks(tmp_path):
         link.external_attr = (stat.S_IFLNK | 0o777) << 16
         archive.writestr(link, "../../outside")
     with pytest.raises(ValueError, match="Unsafe wheel archive member"):
-        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], "0.1.0")
+        VALIDATE(tmp_path, ["cp313-manylinux_x86_64"], VERSION)
 
 
 def test_release_workflow_connects_all_wheel_artifacts():

@@ -2080,7 +2080,8 @@ jobs:
       name: >-
         ${{ github.ref == 'refs/heads/ci-publish-colourbill-ctrl' &&
             'ci-publishing-colourbill-ctrl' || 'release' }}
-    timeout-minutes: 15
+    # Covers the 450 s npm registry visibility wait (#2916) plus publishing.
+    timeout-minutes: 25
     permissions:
       contents: write  # Required to publish the latest release.
       id-token: write  # Required for artifact attestation identity.
@@ -2767,7 +2768,6 @@ jobs:
             echo "::error::npm_version is required when publishing iccdev"
             exit 1
           fi
-          npm_environment="$(mktemp -d)/iccdev-npm"
           npm_environment="$(mktemp -d)/iccdev-npm"
           mkdir -p "$npm_environment"
           tarball=""

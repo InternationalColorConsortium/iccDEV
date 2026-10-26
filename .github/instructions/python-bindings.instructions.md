@@ -39,7 +39,9 @@ python -m pip install -e "./python[dev]"
 ```
 
 Links against `libIccProfLib2-static.a` (or `libIccProfLib2-staticd.a` for Debug builds)
-found in `$ICCDEV_BUILD_DIR/IccProfLib/`.
+found in `$ICCDEV_BUILD_DIR/IccProfLib/`. That archive is single-arch on macOS,
+so set `ARCHFLAGS="-arch $(uname -m)"` when CPython is universal2; `setup.py`
+fails closed if the link requests a slice that the archive lacks.
 
 ### 2. Inline compilation (portable, no pre-built library needed)
 
@@ -47,8 +49,11 @@ found in `$ICCDEV_BUILD_DIR/IccProfLib/`.
 python -m pip install -e "./python[dev]"
 ```
 
-If `ICCDEV_BUILD_DIR` is unset or the static library is not found, `setup.py`
+If no static library is found in `ICCDEV_BUILD_DIR` (default: the repository
+`Build/` directory), `setup.py`
 compiles the portable IccProfLib `.cpp` files inline into the extension module.
+Build distributable wheels with `python -m build`, which compiles from the
+vendored sdist rather than from a checkout `Build/` archive.
 The AVX2 and AVX-512 translation units remain CMake-managed because they need
 architecture-specific flags and cannot be compiled in universal or non-x86
 source builds.

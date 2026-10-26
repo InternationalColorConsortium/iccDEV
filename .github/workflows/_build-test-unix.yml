@@ -718,6 +718,10 @@ jobs:
             export LD_LIBRARY_PATH="${ICCDEV_LIB_PATHS}:${LD_LIBRARY_PATH:-}"
           else
             export DYLD_LIBRARY_PATH="${ICCDEV_LIB_PATHS}:${DYLD_LIBRARY_PATH:-}"
+            # The CMake IccProfLib archive is single-arch; keep the editable
+            # extension to that slice instead of CPython's universal2 default.
+            ARCHFLAGS="-arch $(uname -m)"
+            export ARCHFLAGS
           fi
 
           cd "${WORKSPACE_DIR}/python"
@@ -775,7 +779,10 @@ jobs:
             --quiet
           python vendor_iccproflib.py --clean
           unset ICCDEV_BUILD_DIR
-          python -m build --sdist --wheel --outdir ../dist/
+          # Build the wheel from the sdist so it compiles vendored IccProfLib
+          # for every requested slice instead of linking the single-arch
+          # REPO_ROOT/Build archive.
+          python -m build --outdir ../dist/
           dist_files=(../dist/*.whl ../dist/*.tar.gz)
           python -m twine check "${dist_files[@]}"
           sdist_files=(../dist/iccdev-*.tar.gz)
@@ -818,7 +825,11 @@ jobs:
             --quiet
           (
             cd /tmp
-            /tmp/iccdev-sdist-venv/bin/python -m pytest \
+            # importlib mode keeps python/ (with the editable build's
+            # extension) off sys.path; the guard rejects source imports.
+            ICCDEV_REQUIRE_INSTALLED_PACKAGE=1 \
+              /tmp/iccdev-sdist-venv/bin/python -m pytest \
+              --import-mode=importlib \
               "${WORKSPACE_DIR}/python/tests" -v --tb=short -m "not parity"
           )
 
@@ -849,7 +860,10 @@ jobs:
 
           PY_TAG="cp${PYTHON_VERSION//./}"
           export CIBW_BUILD="${PY_TAG}-*"
-          export CIBW_ARCHS="auto"
+          # Release wheels target x86_64/aarch64 only; auto adds i686 on
+          # x86_64 hosts, which is unsupported and needs network in a
+          # separate manylinux2014_i686 container.
+          export CIBW_ARCHS="native"
           rm -rf build iccdev/*.so iccdev/*.pyd
           python vendor_iccproflib.py
           trap 'python vendor_iccproflib.py --clean; rm -rf build iccdev/*.so iccdev/*.pyd' EXIT
