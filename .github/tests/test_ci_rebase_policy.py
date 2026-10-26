@@ -121,7 +121,7 @@ gh() {
                     PR_DATA=json.dumps({
                         "isCrossRepository": False, "headRefOid": "head",
                         "isDraft": False, "mergeStateStatus": "CLEAN",
-                        "reviewDecision": "APPROVED",
+                        "reviewDecision": "",
                         "labels": [{"name": label} for label in labels],
                     }),
                 )
@@ -160,6 +160,8 @@ gh() {
         )[0]
         self.assertIn("--paginate --slurp", run)
         self.assertIn("commits/$head/check-runs", run)
+        self.assertNotIn("reviewDecision", run)
+        self.assertNotIn("APPROVED", run)
         for conclusion, expected in (
             (None, "pending"),
             ("skipped", "pending"),

@@ -149,9 +149,9 @@ jobs:
           evaluate_pr() {
             local pr="$1"
 
-            local pr_data is_cross head is_draft merge_state review_decision current_labels
+            local pr_data is_cross head is_draft merge_state current_labels
             pr_data=$(gh pr view "$pr" --repo "$GH_REPO" \
-              --json isCrossRepository,headRefOid,isDraft,mergeStateStatus,reviewDecision,labels)
+              --json isCrossRepository,headRefOid,isDraft,mergeStateStatus,labels)
             is_cross=$(jq -r '.isCrossRepository' <<< "$pr_data")
             if [[ "$is_cross" == "true" ]]; then
               echo "$pr|skipped|Cross-repository PR" >> "$RESULTS_FILE"
@@ -176,7 +176,6 @@ jobs:
 
             is_draft=$(jq -r '.isDraft' <<< "$pr_data")
             merge_state=$(jq -r '.mergeStateStatus // "UNKNOWN"' <<< "$pr_data")
-            review_decision=$(jq -r '.reviewDecision // "UNKNOWN"' <<< "$pr_data")
             current_labels=$(jq -r '[.labels[].name | select(. == "passed" or . == "failed" or . == "pending" or . == "Merge Ready")] | sort | join(",")' <<< "$pr_data")
 
             # Query Check Runs API (Actions uses this, not statuses)
@@ -222,8 +221,7 @@ jobs:
             local merge_ready="false"
             if [[ "$combined" == "success" ]] &&
                [[ "$is_draft" == "false" ]] &&
-               [[ "$merge_state" == "CLEAN" ]] &&
-               [[ "$review_decision" == "APPROVED" ]]; then
+               [[ "$merge_state" == "CLEAN" ]]; then
               merge_ready="true"
             fi
 
@@ -261,7 +259,7 @@ jobs:
                 LABELED=$((LABELED + 1))
               fi
             fi
-            echo "$pr|$combined|status=$state status_count=$status_count checks=$check_conclusion merge=$merge_state review=$review_decision draft=$is_draft ready=$merge_ready -> added=$added removed=$removed" >> "$RESULTS_FILE"
+            echo "$pr|$combined|status=$state status_count=$status_count checks=$check_conclusion merge=$merge_state draft=$is_draft ready=$merge_ready -> added=$added removed=$removed" >> "$RESULTS_FILE"
           }
 
           for pr in ${PR_LIST}; do

@@ -142,9 +142,10 @@ The labeler reads all check-run pages without launching validation workflows,
 fetches PR metadata once per evaluation, skips unchanged status-label writes,
 and rechecks the head before mutation. Failed writes fail the run rather than
 being reported as successful updates.
-It adds `Merge Ready` only when CI is successful, the PR is not draft, the merge state is
-clean, and the review decision is approved. It does not synchronize the label
-manifest; the dedicated taxonomy-sync workflow provisions managed labels.
+It adds `Merge Ready` only when CI is successful, the PR is not draft, and the
+merge state is clean. A review or approval is not required. It does not
+synchronize the label manifest; the dedicated taxonomy-sync workflow
+provisions managed labels.
 
 Do not use these status labels as the only merge gate. Branch protection and
 required checks remain authoritative.
