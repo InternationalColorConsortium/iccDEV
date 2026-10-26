@@ -78,8 +78,21 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             cmake clang clang-tools build-essential \
             libpng-dev libjpeg-dev libtiff-dev libxml2-dev \
+            libbrotli-dev libfreetype-dev \
             nlohmann-json3-dev \
             libwxgtk3.2-dev wx-common wx3.2-headers
+
+          . /etc/os-release
+          case "$VERSION_ID" in
+            24.04) brotli_fixed=1.1.0-2ubuntu0.1 ;;
+            26.04) brotli_fixed=1.2.0-3ubuntu0.1 ;;
+            *) echo "Unsupported Ubuntu release for Brotli security check: $VERSION_ID" >&2; exit 1 ;;
+          esac
+          installed_brotli="$(dpkg-query -W -f='${Version}' libbrotli1)"
+          if ! dpkg --compare-versions "$installed_brotli" ge "$brotli_fixed"; then
+            echo "Brotli security update required: $installed_brotli < $brotli_fixed" >&2
+            exit 1
+          fi
 
       # preflight: allow-package-install reason=spectral-preview-ctest-dependencies
       - name: Install CTest Python dependencies (Linux)
@@ -91,20 +104,24 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          python -m pip install \
-            --only-binary=:all: \
+          IMAGECODECS_ONLY=imcd python -m pip install \
+            --no-binary=pillow,imagecodecs \
             "numpy>=2.0.0,<2.4" \
             "tifffile>=2024.8.30,<2025" \
-            "pillow>=11.0,<12" \
-            "imagecodecs>=2024.12.30,<2025.3" \
+            "pillow==13.0.0" \
+            "imagecodecs==2026.10.10" \
             --quiet
           python -m pip check
           python - <<'PY'
+          import importlib.util
           import imagecodecs
           import numpy
           import PIL
           import tifffile
 
+          data = b"iccdev-lzw-check"
+          assert imagecodecs.lzw_decode(imagecodecs.lzw_encode(data)) == data
+          assert importlib.util.find_spec("imagecodecs._brotli") is None
           print(f"imagecodecs {imagecodecs.__version__}")
           print(f"numpy {numpy.__version__}")
           print(f"pillow {PIL.__version__}")

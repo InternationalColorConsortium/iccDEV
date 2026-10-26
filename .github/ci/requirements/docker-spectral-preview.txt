@@ -1,4 +1,6 @@
 # Runtime-only dependencies for the Docker spectral-preview environment.
+# Build Pillow from source against the patched system Brotli library.
+# Build imagecodecs with IMAGECODECS_ONLY=imcd for LZW without Brotli.
 numpy==2.5.4
 tifffile==2026.10.15
 pillow==13.0.0
