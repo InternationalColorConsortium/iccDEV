@@ -199,7 +199,10 @@ jobs:
                     elif ($runs | any(.name == "PR Summary" and .status == "completed" and .conclusion == "success") | not) then "pending"
                     elif all(. == "success" or . == "skipped" or . == "neutral") then "success"
                     else "unknown" end
-                end' 2>/dev/null || echo "unknown")
+                end' 2>/dev/null) || {
+              echo "Check-run query failed for PR $pr; keeping validation pending" >&2
+              check_conclusion="unknown"
+            }
 
             # Combine results
             local combined

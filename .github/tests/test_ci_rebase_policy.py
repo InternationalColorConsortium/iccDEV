@@ -47,7 +47,7 @@ gh() {
       printf '%s\\n' "$CHECK_PAGES"
       return "$CHECK_STATUS"
       ;;
-    "api "*"status"*) printf 'pending|0\\n' ;;
+    "api "*"status"*) printf '%s\\n' "$LEGACY_STATUS" ;;
     "pr edit "*) printf '%s\\n' "$*" >> "$WRITE_LOG"; return "$WRITE_STATUS" ;;
     *) printf 'Unexpected gh call: %s\\n' "$*" >&2; return 2 ;;
   esac
@@ -61,6 +61,8 @@ gh() {
             ("validated", ["pending"], "head", "0", True, "0", 1),
             ("validated-unchanged", ["passed", "Merge Ready"], "head", "0", True, "0", 0),
             ("query-failure", ["passed"], "head", "0", True, "1", 1),
+            ("late-failure-no-summary", ["passed"], "head", "0", False, "1", 1),
+            ("late-failure-with-summary", ["passed"], "head", "0", True, "1", 1),
         ):
             with self.subTest(case=name), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
@@ -71,6 +73,8 @@ gh() {
                     GITHUB_WORKSPACE=temp, WRITE_LOG=str(root / "writes"),
                     WRITE_STATUS=write_status, LATEST_HEAD=latest_head,
                     CHECK_STATUS=check_status,
+                    LEGACY_STATUS="success|1" if name.startswith("late-failure")
+                    else "pending|0",
                     CHECK_PAGES=json.dumps([
                         {"check_runs": [{"name": "Rebase Safety",
                                          "status": "completed",
@@ -97,9 +101,11 @@ gh() {
                 writes = root / "writes"
                 actual = writes.read_text().splitlines() if writes.exists() else []
                 self.assertEqual(len(actual), expected_writes)
-                if name in ("update", "query-failure"):
+                if name in ("update", "query-failure") or name.startswith("late-failure"):
                     self.assertIn("--add-label pending", actual[0])
                     self.assertIn("--remove-label passed,failed,Merge Ready", actual[0])
+                if check_status != "0":
+                    self.assertIn("Check-run query failed", result.stderr)
                 if name == "validated":
                     self.assertIn("--add-label passed,Merge Ready", actual[0])
 
