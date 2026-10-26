@@ -73,6 +73,8 @@ helpers, profile dump, and round-trip parity tests.
    caller sets `upload-wheels: true`,
    downloads each `iccdev-python-*` artifact by name, and includes raw wheels
    in checksums and provenance. Do not reuse PR artifacts for publication.
+   Public-package verification runs after all selected publications and records
+   a diagnostic outcome so registry propagation does not block other releases.
    Require consistent wheel metadata/tags, native extension and type stubs,
    safe unique archive members, and the canonical BSD-3-Clause license.
    Require RECORD coverage, secure file hashes, and sizes. For raw downloaded

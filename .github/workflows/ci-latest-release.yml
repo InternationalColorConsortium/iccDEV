@@ -2586,44 +2586,6 @@ jobs:
           attestations: true
           verbose: true
 
-      # preflight: allow-package-install reason=post-publication-pypi-smoke
-      - name: Verify public iccdev installation
-        if: >-
-          ${{ github.ref == 'refs/heads/master' &&
-              (inputs.pypi_packages == 'iccdev' || inputs.pypi_packages == 'both') }}
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-          unset ICCDEV_BUILD_DIR ICCDEV_VALIDATION_LIBRARY ICCDEV_TOOLS_DIR PYTHONPATH || true
-
-          iccdev_version="$(python3 -c 'import re,pathlib; print(re.search(r"(?m)^version = \"([^\"]+)\"", pathlib.Path("python/pyproject.toml").read_text()).group(1))')"
-          install_with_retry() {
-            local interpreter="$1"
-            shift
-            for attempt in {1..12}; do
-              if "$interpreter" -m pip install --no-cache-dir \
-                   --index-url https://pypi.org/simple "$@"; then
-                return 0
-              fi
-              if [[ "$attempt" -eq 12 ]]; then
-                return 1
-              fi
-              sleep 15
-            done
-          }
-
-          iccdev_environment="$(mktemp -d)/iccdev"
-          python3 -m venv "$iccdev_environment"
-          install_with_retry "$iccdev_environment/bin/python" --only-binary=:all: \
-            "iccdev==$iccdev_version" "pytest>=9.0.3,<10" "numpy>=1.23,<3"
-          ICCDEV_REQUIRE_INSTALLED_PACKAGE=1 "$iccdev_environment/bin/python" \
-            -m pytest --rootdir . --import-mode=importlib python/tests -q -m "not parity"
-
       - name: Publish iccdev-mcp to PyPI
         id: pypi_mcp
         if: >-
@@ -2634,43 +2596,6 @@ jobs:
           packages-dir: pypi-iccdev-mcp/
           attestations: true
           verbose: true
-
-      # preflight: allow-package-install reason=post-publication-pypi-smoke
-      - name: Verify public iccdev-mcp installation
-        if: >-
-          ${{ github.ref == 'refs/heads/master' &&
-              (inputs.pypi_packages == 'iccdev-mcp' || inputs.pypi_packages == 'both') }}
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-          unset ICCDEV_BUILD_DIR ICCDEV_VALIDATION_LIBRARY ICCDEV_TOOLS_DIR PYTHONPATH || true
-
-          mcp_version="$(python3 -c 'import re,pathlib; print(re.search(r"(?m)^__version__ = \"([^\"]+)\"", pathlib.Path("iccdev-mcp/iccdev_mcp/__init__.py").read_text()).group(1))')"
-          install_with_retry() {
-            local interpreter="$1"
-            shift
-            for attempt in {1..12}; do
-              if "$interpreter" -m pip install --no-cache-dir \
-                   --index-url https://pypi.org/simple "$@"; then
-                return 0
-              fi
-              if [[ "$attempt" -eq 12 ]]; then
-                return 1
-              fi
-              sleep 15
-            done
-          }
-
-          mcp_environment="$(mktemp -d)/iccdev-mcp"
-          python3 -m venv "$mcp_environment"
-          install_with_retry "$mcp_environment/bin/python" \
-            "iccdev-mcp[rest]==$mcp_version" "httpx2>=2,<3"
-          "$mcp_environment/bin/python" .github/scripts/iccdev-mcp-package-smoke.py
 
       - name: Set up Node.js for npm publication
         if: ${{ github.ref == 'refs/heads/master' && inputs.npm_packages == 'iccdev' }}
@@ -2753,8 +2678,99 @@ jobs:
           fi
           npm publish "./$tarball" --provenance --tag "$NPM_DIST_TAG"
 
+      - name: Set up Python for public iccdev verification
+        id: setup_public_iccdev_python
+        if: >-
+          ${{ github.ref == 'refs/heads/master' &&
+              (inputs.pypi_packages == 'iccdev' || inputs.pypi_packages == 'both') }}
+        continue-on-error: true
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: "3.13"
+
+      # preflight: allow-package-install reason=post-publication-pypi-smoke
+      - name: Verify public iccdev installation
+        id: verify_public_iccdev
+        if: >-
+          ${{ github.ref == 'refs/heads/master' &&
+              (inputs.pypi_packages == 'iccdev' || inputs.pypi_packages == 'both') }}
+        continue-on-error: true
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          unset ICCDEV_BUILD_DIR ICCDEV_VALIDATION_LIBRARY ICCDEV_TOOLS_DIR PYTHONPATH || true
+
+          iccdev_version="$(python3 -c 'import re,pathlib; print(re.search(r"(?m)^version = \"([^\"]+)\"", pathlib.Path("python/pyproject.toml").read_text()).group(1))')"
+          install_with_retry() {
+            local interpreter="$1"
+            shift
+            for attempt in {1..12}; do
+              if "$interpreter" -m pip install --no-cache-dir \
+                   --index-url https://pypi.org/simple "$@"; then
+                return 0
+              fi
+              if [[ "$attempt" -eq 12 ]]; then
+                return 1
+              fi
+              sleep 15
+            done
+          }
+
+          iccdev_environment="$(mktemp -d)/iccdev"
+          python3 -m venv "$iccdev_environment"
+          install_with_retry "$iccdev_environment/bin/python" --only-binary=:all: \
+            "iccdev==$iccdev_version" "pytest>=9.0.3,<10" "numpy>=1.23,<3"
+          ICCDEV_REQUIRE_INSTALLED_PACKAGE=1 "$iccdev_environment/bin/python" \
+            -m pytest --rootdir . --import-mode=importlib python/tests -q -m "not parity"
+
+      # preflight: allow-package-install reason=post-publication-pypi-smoke
+      - name: Verify public iccdev-mcp installation
+        id: verify_public_iccdev_mcp
+        if: >-
+          ${{ github.ref == 'refs/heads/master' &&
+              (inputs.pypi_packages == 'iccdev-mcp' || inputs.pypi_packages == 'both') }}
+        continue-on-error: true
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          unset ICCDEV_BUILD_DIR ICCDEV_VALIDATION_LIBRARY ICCDEV_TOOLS_DIR PYTHONPATH || true
+
+          mcp_version="$(python3 -c 'import re,pathlib; print(re.search(r"(?m)^__version__ = \"([^\"]+)\"", pathlib.Path("iccdev-mcp/iccdev_mcp/__init__.py").read_text()).group(1))')"
+          install_with_retry() {
+            local interpreter="$1"
+            shift
+            for attempt in {1..12}; do
+              if "$interpreter" -m pip install --no-cache-dir \
+                   --index-url https://pypi.org/simple "$@"; then
+                return 0
+              fi
+              if [[ "$attempt" -eq 12 ]]; then
+                return 1
+              fi
+              sleep 15
+            done
+          }
+
+          mcp_environment="$(mktemp -d)/iccdev-mcp"
+          python3 -m venv "$mcp_environment"
+          install_with_retry "$mcp_environment/bin/python" \
+            "iccdev-mcp[rest]==$mcp_version" "httpx2>=2,<3"
+          "$mcp_environment/bin/python" .github/scripts/iccdev-mcp-package-smoke.py
+
       - name: Verify public iccdev npm package
+        id: verify_public_iccdev_npm
         if: ${{ github.ref == 'refs/heads/master' && inputs.npm_packages == 'iccdev' }}
+        continue-on-error: true
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -2802,6 +2818,10 @@ jobs:
           PYPI_ICCDEV_OUTCOME: ${{ steps.pypi_iccdev.outcome }}
           PYPI_MCP_OUTCOME: ${{ steps.pypi_mcp.outcome }}
           NPM_ICCDEV_OUTCOME: ${{ steps.npm_iccdev.outcome }}
+          PYTHON_SETUP_OUTCOME: ${{ steps.setup_public_iccdev_python.outcome }}
+          PYPI_ICCDEV_VERIFY_OUTCOME: ${{ steps.verify_public_iccdev.outcome }}
+          PYPI_MCP_VERIFY_OUTCOME: ${{ steps.verify_public_iccdev_mcp.outcome }}
+          NPM_ICCDEV_VERIFY_OUTCOME: ${{ steps.verify_public_iccdev_npm.outcome }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -2830,6 +2850,10 @@ jobs:
             echo "- PyPI iccdev publication: ${PYPI_ICCDEV_OUTCOME:-skipped}"
             echo "- PyPI iccdev-mcp publication: ${PYPI_MCP_OUTCOME:-skipped}"
             echo "- npm iccdev publication: ${NPM_ICCDEV_OUTCOME:-skipped}"
+            echo "- PyPI iccdev verification Python setup: ${PYTHON_SETUP_OUTCOME:-skipped}"
+            echo "- PyPI iccdev verification: ${PYPI_ICCDEV_VERIFY_OUTCOME:-skipped}"
+            echo "- PyPI iccdev-mcp verification: ${PYPI_MCP_VERIFY_OUTCOME:-skipped}"
+            echo "- npm iccdev verification: ${NPM_ICCDEV_VERIFY_OUTCOME:-skipped}"
             echo "- Assets staged: ${asset_count} package files"
             echo ""
             for f in release-assets/*.zip release-assets/*.deb release-assets/*.rpm release-assets/*.whl release-assets/*.tar.gz; do

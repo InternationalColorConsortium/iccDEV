@@ -51,8 +51,9 @@ Trusted Publisher with GitHub Actions, organization
 `InternationalColorConsortium`, repository `iccDEV`, workflow filename
 `ci-latest-release.yml`, and environment `release`. Allow direct `npm publish`.
 The workflow uses Node 24, npm's OIDC authentication, provenance, no npm token,
-and then retrieves and verifies the exact public package tarball as its
-post-publication smoke test.
+and then retrieves and verifies the exact public package tarball after all
+selected package publications. This diagnostic smoke test records its outcome
+without blocking other publication lanes during registry propagation.
 
 ## Data
 

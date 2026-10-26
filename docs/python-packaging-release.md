@@ -317,8 +317,10 @@ by maintainers, not from a PR branch or CI scratch artifact.
    workflows, forked branches, logs, or reusable workflows that run untrusted
    code.
 
-5. Require the workflow's post-publication job to verify the public install.
-   For an additional manual check in a fresh environment:
+5. Review the workflow's diagnostic post-publication verification outcome.
+   The workflow runs public-package checks after all selected publications, so
+   registry propagation delays do not block later package publications. For an
+   additional manual check in a fresh environment:
 
    ```bash
    python -m venv /tmp/iccdev-pypi-smoke

@@ -333,6 +333,12 @@ def test_release_workflow_connects_all_wheel_artifacts():
     assert downloads == expected
     steps = {step["name"]: step for step in release["steps"]}
     assert "release-assets/*.whl" in steps["Create latest release"]["run"]
+    python_setup = steps["Set up Python for public iccdev verification"]
+    assert python_setup["uses"] == \
+        "actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0"
+    assert python_setup["with"]["python-version"] == "3.13"
+    assert python_setup["continue-on-error"] is True
+    assert steps["Verify public iccdev installation"]["continue-on-error"] is True
     assert "-name '*.whl'" in steps["Generate release checksums"]["run"]
     assert "validate-python-release-wheels.py" in steps["Package release archives"]["run"]
     assert '--lane "$id"' in steps["Package release archives"]["run"]
@@ -461,6 +467,12 @@ def test_release_summary_reports_outcomes_and_sanitizes_assets(
     summary = next(step for step in steps if step.get("name") == "Summary Report")
     assert summary["env"]["RELEASE_OUTCOME"] == "${{ steps.publish.outcome }}"
     assert summary["env"]["ATTESTATION_OUTCOME"] == "${{ steps.attest.outcome }}"
+    assert summary["env"]["PYPI_ICCDEV_VERIFY_OUTCOME"] == \
+        "${{ steps.verify_public_iccdev.outcome }}"
+    assert summary["env"]["PYPI_MCP_VERIFY_OUTCOME"] == \
+        "${{ steps.verify_public_iccdev_mcp.outcome }}"
+    assert summary["env"]["NPM_ICCDEV_VERIFY_OUTCOME"] == \
+        "${{ steps.verify_public_iccdev_npm.outcome }}"
     if with_checkout:
         scripts = tmp_path / ".github/scripts"
         scripts.mkdir(parents=True)
