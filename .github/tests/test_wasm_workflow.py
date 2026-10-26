@@ -127,6 +127,7 @@ def test_release_uses_opt_in_npm_trusted_publishing():
     publish = steps["Publish iccdev to npm"]
     assert publish["id"] == "npm_iccdev"
     assert 'npm publish "./$tarball" --provenance --tag "$NPM_DIST_TAG"' in publish["run"]
+    assert "unset NODE_AUTH_TOKEN || true" in publish["run"]
     assert "NODE_AUTH_TOKEN" not in publish["env"]
 
     smoke = steps["Verify public iccdev npm package"]
