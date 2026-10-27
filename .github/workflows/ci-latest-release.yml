@@ -2672,8 +2672,8 @@ jobs:
         id: setup_public_iccdev_python
         if: >-
           ${{ !cancelled() && github.ref == 'refs/heads/master' &&
-              steps.pypi_iccdev.outcome == 'success' &&
-              (inputs.pypi_packages == 'iccdev' || inputs.pypi_packages == 'both') }}
+              (steps.pypi_iccdev.outcome == 'success' ||
+               steps.pypi_mcp.outcome == 'success') }}
         continue-on-error: true
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with:
@@ -2685,6 +2685,7 @@ jobs:
         if: >-
           ${{ !cancelled() && github.ref == 'refs/heads/master' &&
               steps.pypi_iccdev.outcome == 'success' &&
+              steps.setup_public_iccdev_python.outcome == 'success' &&
               (inputs.pypi_packages == 'iccdev' || inputs.pypi_packages == 'both') }}
         continue-on-error: true
         shell: bash --noprofile --norc {0}
@@ -2726,6 +2727,7 @@ jobs:
         if: >-
           ${{ !cancelled() && github.ref == 'refs/heads/master' &&
               steps.pypi_mcp.outcome == 'success' &&
+              steps.setup_public_iccdev_python.outcome == 'success' &&
               (inputs.pypi_packages == 'iccdev-mcp' || inputs.pypi_packages == 'both') }}
         continue-on-error: true
         shell: bash --noprofile --norc {0}

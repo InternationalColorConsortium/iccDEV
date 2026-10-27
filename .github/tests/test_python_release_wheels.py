@@ -340,10 +340,12 @@ def test_release_workflow_connects_all_wheel_artifacts():
     assert python_setup["continue-on-error"] is True
     assert "!cancelled()" in python_setup["if"]
     assert "steps.pypi_iccdev.outcome == 'success'" in python_setup["if"]
+    assert "steps.pypi_mcp.outcome == 'success'" in python_setup["if"]
     iccdev_verification = steps["Verify public iccdev installation"]
     assert iccdev_verification["continue-on-error"] is True
     assert "!cancelled()" in iccdev_verification["if"]
     assert "steps.pypi_iccdev.outcome == 'success'" in iccdev_verification["if"]
+    assert "steps.setup_public_iccdev_python.outcome == 'success'" in iccdev_verification["if"]
     assert "-name '*.whl'" in steps["Generate release checksums"]["run"]
     assert "validate-python-release-wheels.py" in steps["Package release archives"]["run"]
     assert '--lane "$id"' in steps["Package release archives"]["run"]

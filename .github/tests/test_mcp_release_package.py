@@ -168,6 +168,7 @@ def test_release_uses_opt_in_trusted_pypi_publication_and_public_smoke():
     assert mcp_smoke_step["continue-on-error"] is True
     assert "!cancelled()" in mcp_smoke_step["if"]
     assert "steps.pypi_mcp.outcome == 'success'" in mcp_smoke_step["if"]
+    assert "steps.setup_public_iccdev_python.outcome == 'success'" in mcp_smoke_step["if"]
     mcp_smoke = mcp_smoke_step["run"]
     assert "https://pypi.org/simple" in mcp_smoke
     assert "iccdev-mcp-package-smoke.py" in mcp_smoke
