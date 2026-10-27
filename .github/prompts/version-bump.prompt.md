@@ -10,8 +10,17 @@ Use this prompt when bumping the iccDEV version number (`OLD_VERSION` -> `NEW_VE
 |------|-------------------|------|
 | `Build/Cmake/CMakeLists.txt` | `REFICCMAX_*_VERSION` variables | CMake variables |
 | `IccProfLib/IccProfLibVer.h` | `ICCPROFLIBVER`, when intentionally maintained as a source header | Source header |
-| `.github/copilot-instructions.md` | Version string, if present | Documentation |
-| `.github/instructions/build-system.instructions.md` | Version string, if present | Documentation |
+| `vcpkg.json`, `Build/Cmake/vcpkg.json` | Package version | vcpkg manifests |
+| `ports/iccdev/vcpkg.json` | Package version; reset `port-version` | Overlay port manifest |
+| `examples/hello-iccdev/vcpkg.json` | `iccdev` override version | Example manifest |
+| `.github/workflows/ci-vcpkg-ports.yml` | Generated manifest override version | CI validation |
+| `.github/ci/doxygen/Doxyfile` | `PROJECT_NUMBER` | Documentation metadata |
+| `.github/instructions/build-system.instructions.md` | Project version | Agent documentation |
+| `examples/hello-iccdev/README.md` | Versioned sample output | User documentation |
+
+After committing these release references, update `REF` and `SHA512` in
+`ports/iccdev/portfile.cmake` together so non-local vcpkg consumers resolve the
+new version commit. Verify the downloaded archive checksum before recording it.
 
 ## Files That Do NOT Need Updating
 
@@ -30,6 +39,8 @@ version from `CMakeLists.txt` at configure time:
 ### 1. Update version strings
 
 Replace OLD_VERSION with NEW_VERSION in the active locations listed above.
+Review every tracked match instead of assuming this table is exhaustive. Leave
+clearly dated historical plans and captured command output unchanged.
 
 For CMakeLists.txt, update both the PATCH_VERSION number and the comment:
 ```
@@ -40,14 +51,11 @@ set(${PROJECT_UP_NAME}_PATCH_VERSION NEW)
 ### 2. Verify no stale references
 
 ```bash
-grep -rn 'OLD_VERSION' \
-  --include='*.cpp' --include='*.h' --include='*.txt' \
-  --include='*.cmake' --include='*.md' --include='*.xml' \
-  --include='*.json' --include='*.yml' --include='*.yaml' \
-  | grep -v '.git/'
+git grep -n -F 'OLD_VERSION'
 ```
 
-Must return 0 hits. If any remain, update them.
+Update active references. Any remaining hit must be reviewed and documented as
+historical evidence rather than silently ignored.
 
 ### 3. Verify .in templates use substitution (not hardcoded)
 
@@ -72,11 +80,27 @@ make -j$(nproc)
 strings IccProfLib/libIccProfLib2.so.* | grep 'NEW_VERSION'
 ```
 
-### 5. Commit
+### 5. Commit the version references
+
+Commit the version references before calculating the overlay source pin:
 
 ```bash
-git add -A
+git add <version-reference-files>
 git commit -m "Update to Version X.Y.Z.W"
+```
+
+### 6. Refresh the overlay source pin
+
+Calculate the SHA-512 of the version commit's GitHub source archive, verify the
+download succeeded, and update both `REF` and `SHA512` in
+`ports/iccdev/portfile.cmake`. The separate pin commit keeps the source archive
+immutable and prevents the pinned commit from referring to itself.
+
+### 7. Commit the source pin and push
+
+```bash
+git add ports/iccdev/portfile.cmake
+git commit -m "Sync vcpkg port for version X.Y.Z.W"
 git push origin BRANCH
 ```
 
@@ -86,7 +110,7 @@ iccDEV uses 4-part versioning: `MAJOR.MINOR.MICRO.PATCH`
 
 - **MAJOR** (2): ICC specification generation (v2 = ICC.2/iccMAX era)
 - **MINOR** (3): Significant feature additions
-- **MICRO** (1): Minor feature or structural changes
+- **MICRO** (2): Minor feature or structural changes
 - **PATCH** (N): Bug fixes, security patches, maintenance
 
 The PATCH number increments for each release containing bug fixes or

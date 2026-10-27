@@ -90,6 +90,7 @@ shares one source of truth. Update rules here, not in the mirrors.
 | iOS CLUT editor POC | `examples/ios-clut-editor/README.md`, `.github/skills/ios-clut-editor/SKILL.md` |
 | AVX2 CLUT diagnostics and optimization handoff | `docs/avx2-clut-diagnostics.md` |
 | Pull request preparation and handoff | `docs/pre-pr-security-cycle.md` |
+| Release version bump | `.github/skills/version-bump/SKILL.md`, `.github/prompts/version-bump.prompt.md` |
 | Maintainer local Git/devenv defaults | `docs/linear-stack-workflow.md` |
 | ClusterFuzzLite integration | `.github/ci/cfl/README.md`, `.github/skills/clusterfuzzlite/SKILL.md` |
 | Pre-PR security skill | `.github/skills/pre-pr-security-cycle/SKILL.md` |

@@ -8,7 +8,7 @@ applyTo: "Build/**"
 
 Primary build file: `Build/Cmake/CMakeLists.txt`
 
-- Project: RefIccMAX v2.3.2.3
+- Project: RefIccMAX v2.3.2.4
 - Direct configuration minimum CMake: 3.18
 - Preset minimum CMake: 3.23
 - C++ standard: C++17
