@@ -824,6 +824,12 @@ jobs:
           git branch
           git status
           Write-Host "========= Installing manifest dependencies... ================`n"
+          $vcpkgExecutable = (Get-Command vcpkg -CommandType Application -ErrorAction Stop).Source
+          $env:VCPKG_ROOT = Split-Path -Parent $vcpkgExecutable
+          $vcpkgToolchain = Join-Path $env:VCPKG_ROOT 'scripts\buildsystems\vcpkg.cmake'
+          if (-not (Test-Path -LiteralPath $vcpkgToolchain -PathType Leaf)) {
+            throw "vcpkg toolchain file not found: $vcpkgToolchain"
+          }
           vcpkg integrate install
           vcpkg install
           Write-Host "========= Building... ================`n"

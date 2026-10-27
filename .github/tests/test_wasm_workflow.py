@@ -72,6 +72,10 @@ def test_release_windows_build_uses_manifest_dependencies():
     build = windows_steps["Install manifest dependencies and build"]["run"]
     assert "vcpkg integrate install" in build
     assert "vcpkg install" in build
+    assert "(Get-Command vcpkg -CommandType Application -ErrorAction Stop).Source" in build
+    assert "$env:VCPKG_ROOT = Split-Path -Parent $vcpkgExecutable" in build
+    assert "Join-Path $env:VCPKG_ROOT 'scripts\\buildsystems\\vcpkg.cmake'" in build
+    assert "vcpkg toolchain file not found: $vcpkgToolchain" in build
     assert "cmake --preset vs2022-x64 -B msvc -S Build/Cmake" in build
     assert "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON" in build
     assert "cmake --build msvc --config Release --parallel" in build
