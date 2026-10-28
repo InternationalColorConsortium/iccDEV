@@ -160,72 +160,21 @@ product build. Build `build-test-binaries` before a direct filtered CTest run,
 or use `check`/`check-fast`; both targets build their tool and test dependencies
 before running the suite.
 
-## External HEIF carrier CTest
+## Native HEIF extraction safety
 
-`iccdev.heif-carrier-qa` and `iccdev.heif-carrier-ab-qa` are registered by the standalone
-`.github/ci/tooling/heif/qa` wrapper, not by the main `Build/Cmake` project, so
-it does not change the standard iccDEV CTest count. The wrapper builds
-Nokia `heifIccDump` and the libheif and IccProfLib-backed release `iccHeifDump`
-using the Nokia HEIF revision recorded in `.github/ci/tooling/heif/Readme.md`.
-The tests run the 16-carrier corpus,
-property/CLI controls, sanitizer checks, ICC extraction hash assertion, and
-byte-for-byte A/B extraction comparison.
-Hosted coverage is the manually dispatched `Nokia HEIF ICC carrier smoke`
-workflow. It is deliberately isolated from `ci-pr-action` and the reusable
-iccDEV tool-test gate because it builds a separately pinned upstream project.
-
-Always run discovery and the focused test:
+`iccdev.heif-output-safety` is registered by `Build/Cmake` when the native
+`iccHeifDump` target and Python 3 are available. It runs on Windows and Unix,
+using `.github/ci/test-data/heif/valid-prof.heic` and its pinned ICC digest.
+It checks exclusive output creation, path collisions, and concurrent writers;
+Windows symlink cases may skip when the account lacks symlink privileges.
 
 ```bash
-ctest --test-dir /tmp/iccdev-heif-qa -N --no-tests=error
-ctest --test-dir /tmp/iccdev-heif-qa \
-  -R '^iccdev\.heif-(carrier-qa|carrier-ab-qa)$' \
-  --output-on-failure \
-  --no-tests=error
+ctest --test-dir build -R '^iccdev\.heif-output-safety$' \
+  --output-on-failure --no-tests=error
 ```
 
-## External libpng iCCP CTest
-
-`iccdev.libpng-iccp-qa` is registered by the standalone
-`.github/ci/tooling/libpng/qa` wrapper, not by the main `Build/Cmake` project.
-The wrapper builds `pngtest` from the exact libpng revision in
-`.github/ci/tooling/libpng/Readme.md`. Its manually dispatched workflow first
-requires the unpatched pin to reproduce four invalid-profile retention faults,
-then applies the tracked patch and requires those profiles to be discarded.
-Valid and explicitly relaxed CRC-policy controls must remain byte-identical.
-
-Always run discovery and the focused patched test:
-
-```bash
-ctest --test-dir /tmp/iccdev-libpng-build -N --no-tests=error
-ctest --test-dir /tmp/iccdev-libpng-build \
-  -R '^iccdev\.libpng-iccp-qa$' \
-  --output-on-failure \
-  --no-tests=error
-```
-
-## External OpenImageIO ICC and EXIF CTest (#2657)
-
-`iccdev.openimageio-icc-qa` is registered by the standalone
-`.github/ci/tooling/openimageio/qa` wrapper, not by the main `Build/Cmake`
-project. The manually dispatched workflow pins OpenImageIO commit
-`8004015ace460bf7e9019514f6d8c6c677e6e7ae`, proves the unpatched fault
-contract, applies the tracked patch, and rebuilds with ASan+UBSan.
-
-The fixed CTest covers alignment-safe big-endian EXIF output, Canon MakerNote
-element sizing and endian propagation, strict JPEG ICC error propagation,
-declared `mluc` tag boundaries, JPEG2000 encoder failure propagation, all five
-progression orders, and a byte-identical JP2 ICC round-trip control.
-
-Always run discovery and the focused patched test:
-
-```bash
-ctest --test-dir /tmp/iccdev-openimageio-qa -N --no-tests=error
-ctest --test-dir /tmp/iccdev-openimageio-qa \
-  -R '^iccdev\.openimageio-icc-qa$' \
-  --output-on-failure \
-  --no-tests=error
-```
+For direct execution and the shared Python, MATLAB, and release fixtures, see
+the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 
 ## Registered Suites
 

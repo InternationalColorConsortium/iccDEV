@@ -33,7 +33,6 @@ new blocker returns the branch to branch-only grooming before another review.
 | CTest process guide | `docs/ctest.md` | Local commands, registered suites, and add-test workflow. |
 | Maintainer CI skill | `.github/skills/maintainer-ci-ctest/SKILL.md` | Repeatable maintainer workflow for CI, CTest, CPack, sanitizer, and release gates. |
 | Maintainer CI prompt | `.github/prompts/maintainer-ci-ctest.prompt.md` | Structured planning prompt for maintainer-owned infrastructure changes. |
-| External compatibility examples | `.github/workflows/ci-nokia-heif-icc-smoke.yml`, `.github/workflows/ci-libpng-iccp-smoke.yml` | Manual, pinned-dependency lanes with isolated wrapper CTests and immutable runtime resolution. |
 | Workflow rules | `.github/instructions/workflow-governance.instructions.md` | Shell hardening, output sanitization, and injection prevention. |
 | Workflow trust boundaries | `docs/workflow-security-trust-boundaries.md` | Trusted-base helper model, PR workflow canaries, and visual review aids. |
 | Testing rules | `.github/instructions/testing.instructions.md` | Test directories, script expectations, and regression flow. |
@@ -53,17 +52,15 @@ that contract. These jobs do not package or upload release artifacts.
 `IccProfLib/`, `IccXML/`, `IccJSON/`, `IccConnect/`, `Tools/`, and registered
 C/C++ sources under `.github/ci/regression/`. Generated header templates and
 native tool resources under the owned source directories are included. Native
-regression fixtures under `.github/ci/regression/` select the testing surface.
+regression fixtures under `.github/ci/regression/` and HEIF carriers under
+`.github/ci/test-data/heif/` select the testing surface.
 Native build configuration is
 limited to `Build/Cmake/`, `Build/AppleMobile/`, `Build/XCode/BuildAll.sh`, and
 the root `vcpkg.json`. `Testing/` changes also select the native matrix.
 
 Examples, ports, bindings, documentation, and unrelated CMake wrappers do not
 select the native matrix merely because of a file extension or basename.
-OpenImageIO, HEIF, and libpng paths under `.github/ci/tooling/` are reported as
-external research tooling and retain their separate manual workflows; the PR
-orchestrator does not call those research projects. Mixed external/native diffs
-still run the native matrix. Keep this contract table-driven in
+Keep this contract table-driven in
 `.github/tests/test-ci-pr-path-classifier.sh` and source the classifier from the
 trusted base checkout for pull requests. Path discovery disables Git rename
 detection so a move is classified against both its removed source path and its
@@ -76,8 +73,8 @@ for native source, build, testing, or regression-fixture changes; the reusable
 workflow also remains manually dispatchable. Pre-flight is a standalone
 path-scoped PR workflow, while risk analysis is an explicit final security
 workflow, so scanner or infrastructure failures cannot be mistaken for core
-build failures. External compatibility, dynamic-analysis tooling, and
-ClusterFuzzLite remain manual or scheduled lanes.
+build failures. Dynamic-analysis tooling and ClusterFuzzLite remain manual or
+scheduled lanes.
 
 ## Rebase and Final Validation
 

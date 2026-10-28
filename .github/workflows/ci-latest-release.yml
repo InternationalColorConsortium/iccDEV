@@ -262,7 +262,7 @@ jobs:
           mkdir -p "$stage/Testing/Display" "$stage/Testing/HDR" \
             "$stage/Testing/ApplyDataFiles/test-profiles" "$stage/IccProfLib" \
             "$stage/.github/ci/regression" \
-            "$stage/.github/ci/tooling/heif/img"
+            "$stage/.github/ci/test-data/heif"
           cp Testing/sRGB_v4_ICC_preference.icc "$stage/Testing/"
           cp Testing/sRGB_v4_ICC_preference.icc "$stage/Testing/Display/"
           cp Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc \
@@ -275,10 +275,10 @@ jobs:
             "$stage/IccProfLib/"
           cp .github/ci/regression/gamma-2.20703125.icc \
             "$stage/.github/ci/regression/"
-          cp .github/ci/tooling/heif/img/valid-prof.heic \
-            .github/ci/tooling/heif/img/nclx-only.heif \
-            .github/ci/tooling/heif/img/invalid-ipma-index.heic \
-            "$stage/.github/ci/tooling/heif/img/"
+          cp .github/ci/test-data/heif/valid-prof.heic \
+            .github/ci/test-data/heif/nclx-only.heif \
+            .github/ci/test-data/heif/invalid-ipma-index.heic \
+            "$stage/.github/ci/test-data/heif/"
           if [ ! -s "$stage/matlab/+iccdev/private/icc_mex.mexa64" ]; then
             echo "::error::Required staged Linux MATLAB MEX gateway missing"
             exit 1
@@ -527,7 +527,7 @@ jobs:
           mkdir -p "$stage/Testing/Display" "$stage/Testing/HDR" \
             "$stage/Testing/ApplyDataFiles/test-profiles" "$stage/IccProfLib" \
             "$stage/.github/ci/regression" \
-            "$stage/.github/ci/tooling/heif/img"
+            "$stage/.github/ci/test-data/heif"
           cp Testing/sRGB_v4_ICC_preference.icc "$stage/Testing/"
           cp Testing/sRGB_v4_ICC_preference.icc "$stage/Testing/Display/"
           cp Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc \
@@ -540,10 +540,10 @@ jobs:
             "$stage/IccProfLib/"
           cp .github/ci/regression/gamma-2.20703125.icc \
             "$stage/.github/ci/regression/"
-          cp .github/ci/tooling/heif/img/valid-prof.heic \
-            .github/ci/tooling/heif/img/nclx-only.heif \
-            .github/ci/tooling/heif/img/invalid-ipma-index.heic \
-            "$stage/.github/ci/tooling/heif/img/"
+          cp .github/ci/test-data/heif/valid-prof.heic \
+            .github/ci/test-data/heif/nclx-only.heif \
+            .github/ci/test-data/heif/invalid-ipma-index.heic \
+            "$stage/.github/ci/test-data/heif/"
           if [ ! -s "$stage/matlab/+iccdev/private/icc_mex.mexmaca64" ]; then
             echo "::error::Required staged Apple Silicon MATLAB MEX gateway missing"
             exit 1
@@ -918,10 +918,10 @@ jobs:
             -Destination "$stage/IccProfLib/IccColorimetry.cpp" -Force
           Copy-Item -Path ".github/ci/regression/gamma-2.20703125.icc" `
             -Destination "$stage/.github/ci/regression/gamma-2.20703125.icc" -Force
-          $heifFixtureDir = "$stage/.github/ci/tooling/heif/img"
+          $heifFixtureDir = "$stage/.github/ci/test-data/heif"
           New-Item -ItemType Directory -Force -Path $heifFixtureDir | Out-Null
           foreach ($fixture in @('valid-prof.heic', 'nclx-only.heif', 'invalid-ipma-index.heic')) {
-            Copy-Item -LiteralPath ".github/ci/tooling/heif/img/$fixture" `
+            Copy-Item -LiteralPath ".github/ci/test-data/heif/$fixture" `
               -Destination $heifFixtureDir -Force
           }
           $matlabRequired = @(
@@ -958,9 +958,9 @@ jobs:
             'IccProfLib\IccTagBasic.cpp',
             'IccProfLib\IccColorimetry.cpp',
             '.github\ci\regression\gamma-2.20703125.icc',
-            '.github\ci\tooling\heif\img\valid-prof.heic',
-            '.github\ci\tooling\heif\img\nclx-only.heif',
-            '.github\ci\tooling\heif\img\invalid-ipma-index.heic'
+            '.github\ci\test-data\heif\valid-prof.heic',
+            '.github\ci\test-data\heif\nclx-only.heif',
+            '.github\ci\test-data\heif\invalid-ipma-index.heic'
           )
           foreach ($required in $matlabRequired) {
             if (-not (Test-Path (Join-Path $stage $required))) {
@@ -2261,9 +2261,9 @@ jobs:
             "IccProfLib/IccTagBasic.cpp"
             "IccProfLib/IccColorimetry.cpp"
             ".github/ci/regression/gamma-2.20703125.icc"
-            ".github/ci/tooling/heif/img/valid-prof.heic"
-            ".github/ci/tooling/heif/img/nclx-only.heif"
-            ".github/ci/tooling/heif/img/invalid-ipma-index.heic"
+            ".github/ci/test-data/heif/valid-prof.heic"
+            ".github/ci/test-data/heif/nclx-only.heif"
+            ".github/ci/test-data/heif/invalid-ipma-index.heic"
           )
           for required in "${matlab_required[@]}"; do
             if [ ! -s "${windows_bundle_root}/${required}" ]; then
@@ -2307,9 +2307,9 @@ jobs:
             "IccProfLib/IccTagBasic.cpp"
             "IccProfLib/IccColorimetry.cpp"
             ".github/ci/regression/gamma-2.20703125.icc"
-            ".github/ci/tooling/heif/img/valid-prof.heic"
-            ".github/ci/tooling/heif/img/nclx-only.heif"
-            ".github/ci/tooling/heif/img/invalid-ipma-index.heic"
+            ".github/ci/test-data/heif/valid-prof.heic"
+            ".github/ci/test-data/heif/nclx-only.heif"
+            ".github/ci/test-data/heif/invalid-ipma-index.heic"
           )
           for compiler in gcc clang; do
             linux_bundle_root="artifacts/iccdev-linux-${compiler}/iccDEV-Testing"

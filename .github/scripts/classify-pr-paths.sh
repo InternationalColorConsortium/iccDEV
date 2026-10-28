@@ -52,16 +52,13 @@ has_changed_file() {
 source_changed=false
 build_config_changed=false
 testing_changed=false
-external_tooling_changed=false
-openimageio_tooling_changed=false
-heif_tooling_changed=false
-libpng_tooling_changed=false
 
 native_source_pattern='^(IccProfLib|IccXML|IccJSON|IccConnect|Tools)/'
 native_source_pattern+='.*\.(c|cc|cpp|cxx|h|hh|hpp|hxx|m|mm|rc|def|h\.in|xpm|ico|plist)$'
 native_regression_source_pattern='^\.github/ci/regression/'
 native_regression_source_pattern+='.*\.(c|cc|cpp|cxx|h|hh|hpp|hxx|m|mm|rc|def)$'
 native_regression_input_pattern='^\.github/ci/regression/.*\.(icc|xml|txt)$'
+native_heif_input_pattern='^\.github/ci/test-data/heif/.*\.(heic|heif|avif|hif)$'
 iis_runtime_input_pattern='^Tools/Winnt/IccIisIsapi/'
 iis_runtime_input_pattern+='(assets/.*|[^/]+\.(html|js|css|config|ps1))$'
 
@@ -73,32 +70,10 @@ if has_changed_file '^Build/Cmake/|^Build/AppleMobile/|^Build/XCode/BuildAll\.sh
   build_config_changed=true
 fi
 
-if has_changed_file "^Testing/|${native_regression_source_pattern}|${native_regression_input_pattern}"; then
+if has_changed_file "^Testing/|${native_regression_source_pattern}|${native_regression_input_pattern}|${native_heif_input_pattern}"; then
   testing_changed=true
-fi
-
-if has_changed_file '^\.github/ci/tooling/openimageio/|^\.github/workflows/ci-openimageio-icc-smoke\.yml$'; then
-  openimageio_tooling_changed=true
-fi
-
-if has_changed_file '^\.github/ci/tooling/heif/|^\.github/workflows/ci-nokia-heif-icc-smoke\.yml$'; then
-  heif_tooling_changed=true
-fi
-
-if has_changed_file '^\.github/ci/tooling/libpng/|^\.github/workflows/ci-libpng-iccp-smoke\.yml$'; then
-  libpng_tooling_changed=true
-fi
-
-if [[ "$openimageio_tooling_changed" == "true" ||
-      "$heif_tooling_changed" == "true" ||
-      "$libpng_tooling_changed" == "true" ]]; then
-  external_tooling_changed=true
 fi
 
 printf 'source_changed=%s\n' "$source_changed"
 printf 'build_config_changed=%s\n' "$build_config_changed"
 printf 'testing_changed=%s\n' "$testing_changed"
-printf 'external_tooling_changed=%s\n' "$external_tooling_changed"
-printf 'openimageio_tooling_changed=%s\n' "$openimageio_tooling_changed"
-printf 'heif_tooling_changed=%s\n' "$heif_tooling_changed"
-printf 'libpng_tooling_changed=%s\n' "$libpng_tooling_changed"

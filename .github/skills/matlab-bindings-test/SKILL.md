@@ -215,7 +215,7 @@ profiles, examples, and native handle lifecycle behavior.
     `iccHeifDump.exe`, `matlab/+iccdev/heif_dump.m`,
     `matlab/tests/test_heif_dump_input_validation.m`,
     `matlab/tests/test_heif_dump_native.m`, and its three fixtures under
-    `.github/ci/tooling/heif/img/`: `valid-prof.heic`, `nclx-only.heif`, and
+    `.github/ci/test-data/heif/`: `valid-prof.heic`, `nclx-only.heif`, and
     `invalid-ipma-index.heic`. Run `test_heif_dump_native(bundle_root)` with
     the extracted bundle root on `PATH` before publishing. Also require
     `matlab/tests/test_lut_type_range.m`,

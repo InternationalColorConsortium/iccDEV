@@ -84,9 +84,9 @@ jobs:
           }
 
           Write-Host "Fetching vcpkg dependencies from release..."
-          Start-BitsTransfer -Source https://github.com/InternationalColorConsortium/iccDEV/releases/download/vcpkg-win-2324-libheif-deps/iccdev-windows-vcpkg-classic-libheif-04a9d8e.zip -Destination "deps.zip"
+          Start-BitsTransfer -Source https://github.com/InternationalColorConsortium/iccDEV/releases/download/vcpkg-win-23241-libheif-deps/iccdev-windows-vcpkg-classic-libheif-3087493.zip -Destination "deps.zip"
           $actualDigest = (Get-FileHash -LiteralPath 'deps.zip' -Algorithm SHA256).Hash
-          if ($actualDigest -ne '89ba13a04b883bbe5f97b5baabe15a508ff431c081e73c72022532ccfed5cb7e') {
+          if ($actualDigest -ne '9b051a50f152f616986e735d618a2f5ade2cf5443c680216894f2897dbbf5eca') {
             throw "vcpkg export digest mismatch: $actualDigest"
           }
           Write-Host "Extracting dependencies..."

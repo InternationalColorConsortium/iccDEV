@@ -173,12 +173,8 @@ workflow-only changes receive the preflight and workflow-security gates.
 Container-only changes use workflow-security gates and local container
 validation.
 
-Maintainer research projects under `.github/ci/tooling/openimageio`,
-`.github/ci/tooling/heif`, and `.github/ci/tooling/libpng` are classified as
-external tooling. Their CMake wrappers and C/C++ helpers do not select the
-native iccDEV matrix. Their manual workflows remain separate research lanes and
-are not called by `ci-pr-action.yml`. Mixed diffs that also change an owned
-native path still select the native matrix. The table-driven contract is
+Shared HEIF carriers under `.github/ci/test-data/heif/` select the native
+testing surface. The table-driven contract is
 `.github/tests/test-ci-pr-path-classifier.sh`.
 Dispatch `ci_scope=full` explicitly for a long-cycle matrix. For the shortest
 same-repository PR lane, provide an open `pr_number`, choose

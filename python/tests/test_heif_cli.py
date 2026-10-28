@@ -8,7 +8,7 @@ import pytest
 import iccdev
 
 
-CORPUS = Path(__file__).resolve().parents[2] / ".github/ci/tooling/heif/img"
+CORPUS = Path(__file__).resolve().parents[2] / ".github/ci/test-data/heif"
 VALID_SHA256 = "de9b36ccc513fdc79860d5dff523aed9cf67411789e4c20ae866146cbaf75a4e"
 
 

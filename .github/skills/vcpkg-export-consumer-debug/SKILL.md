@@ -33,10 +33,29 @@ and a full, bootstrapped vcpkg checkout, then build and run
 does not verify the new archive hash or the pinned source's packaging.
 
 For Windows source/consumer smoke tests, the immutable
-<https://github.com/InternationalColorConsortium/iccDEV/releases/tag/vcpkg-win-2324-libheif-deps>
+<https://github.com/InternationalColorConsortium/iccDEV/releases/tag/vcpkg-win-23241-libheif-deps>
 export supplies prebuilt dependencies. Verify its published SHA256 before
 extraction and disable manifest mode when using its toolchain. The export is
 not a full vcpkg registry; it does not replace the overlay install above.
+
+## Prebuilt Export Refresh
+
+`_build-test-windows.yml`, `ci-pr-win.yml`, and `ci-matlab.yml` pin the same
+export asset by URL and SHA256. Change all three together: `ci-pr-win.yml` and
+`ci-matlab.yml` set `ICCDEV_VCPKG_EXPORT_URL` and
+`ICCDEV_VCPKG_EXPORT_SHA256`, while `_build-test-windows.yml` carries literal
+values. The release Windows job stays in manifest mode and must not reference
+the export. The asset suffix is only a label and does not identify the vcpkg
+registry baseline, and the export does not set the manifest
+`builtin-baseline`; refresh that separately as described in Dependency
+Manifest Sync.
+
+```bash
+gh release view <tag> --repo InternationalColorConsortium/iccDEV \
+  --json assets --jq '.assets[] | [.name, .digest, .size] | @tsv'
+git grep -n -E 'vcpkg-win-[0-9]+-libheif-deps|iccdev-windows-vcpkg-classic' -- .github docs
+python3 -m pytest --rootdir . --import-mode=importlib .github/tests/test_wasm_workflow.py -q
+```
 
 ## Dependency Manifest Sync
 
