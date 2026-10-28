@@ -95,24 +95,17 @@ Script-based gates live in `.github/scripts/`, including:
 - `iccdev-v5-namedcmm-regression-tests.sh`
 - `iccdev-version-bcd-regression-tests.sh`
 - `iccdev-profile-visualize-tests.sh`
-- `iccdev-heif-carrier-qa.sh`
+- `test_heif_output_safety.py` (native HEIF extraction safety)
 - `iccdev-xml-spec-qa.sh` (ICC.2 spectral, bi-spectral, and MCS XML header matrix)
 
 When adding a new regression input, add the matching script or workflow assertion
 in the same change.
 
-The HEIF carrier suite is an external-dependency CTest and is not part of the
-main `Build/Cmake` test count. Configure `.github/ci/tooling/heif/qa` against
-the pinned Nokia HEIF checkout, apply the tracked patch stack, build
-`iccHeifDump`, and run `iccdev.heif-carrier-qa` with `--no-tests=error`. See
-`.github/ci/tooling/heif/Readme.md` for the exact revision and commands.
-
-The libpng iCCP suite is also an external-dependency CTest and is not part of
-the main `Build/Cmake` test count. Configure `.github/ci/tooling/libpng/qa`
-against the exact libpng pin, prove the vulnerable contract before applying
-the tracked patch stack, then run `iccdev.libpng-iccp-qa` under ASan+UBSan with
-`--no-tests=error`. See `.github/ci/tooling/libpng/Readme.md` for the pin,
-fixture hash, fault matrix, and commands.
+The native `iccdev.heif-output-safety` CTest runs on Windows and Unix when
+`iccHeifDump` and Python 3 are available. Its shared fixtures live under
+`.github/ci/test-data/heif/`; Python and MATLAB CLI tests and release bundles
+use the same directory. See `Tools/CmdLine/IccHeifDump/Readme.md` for direct
+execution and extraction safety requirements.
 
 The SpecSep wrapper preflights the checked-in sequences under
 `.github/ci/test-data/spectral/`, `.github/ci/test-data/specsep-harvest/`, and

@@ -197,7 +197,7 @@ examples:
   conversion.
 - `iccHeifDump.exe` at the bundle root for MATLAB HEIF ICC inspection.
 - `matlab/tests/test_heif_dump_native.m` and its three fixtures under
-  `.github/ci/tooling/heif/img/`: `valid-prof.heic`, `nclx-only.heif`, and
+  `.github/ci/test-data/heif/`: `valid-prof.heic`, `nclx-only.heif`, and
   `invalid-ipma-index.heic` for valid ICC, no-ICC, and malformed-input checks.
 - `iccPawgReport.exe` at the bundle root for MATLAB/native Q1 comparison.
 - `matlab/+iccdev/+qa/audit_pawg_q1.m`, its calculation helpers, and

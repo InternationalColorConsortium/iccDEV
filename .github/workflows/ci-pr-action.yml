@@ -109,10 +109,6 @@ jobs:
       build_config_changed: ${{ steps.diffcheck.outputs.build_config_changed }}
       testing_changed: ${{ steps.diffcheck.outputs.testing_changed }}
       ci_changed: ${{ steps.diffcheck.outputs.ci_changed }}
-      external_tooling_changed: ${{ steps.diffcheck.outputs.external_tooling_changed }}
-      openimageio_tooling_changed: ${{ steps.diffcheck.outputs.openimageio_tooling_changed }}
-      heif_tooling_changed: ${{ steps.diffcheck.outputs.heif_tooling_changed }}
-      libpng_tooling_changed: ${{ steps.diffcheck.outputs.libpng_tooling_changed }}
       container_changed: ${{ steps.diffcheck.outputs.container_changed }}
       image_definition_changed: ${{ steps.diffcheck.outputs.image_definition_changed }}
       container_toolchain_required: ${{ steps.diffcheck.outputs.container_toolchain_required }}
@@ -304,10 +300,6 @@ jobs:
           image_definition_changed=false
           container_toolchain_required=false
           trusted_base_image_available=false
-          external_tooling_changed=false
-          openimageio_tooling_changed=false
-          heif_tooling_changed=false
-          libpng_tooling_changed=false
           # Default to the full PR CTest surface. The pr-extended tests
           # are deferred only by the PR caller and remain in regression runs.
           ctest_mode=full
@@ -349,10 +341,6 @@ jobs:
             write_github_output build_config_changed "$build_config_changed"
             write_github_output testing_changed "$testing_changed"
             write_github_output ci_changed "$ci_changed"
-            write_github_output external_tooling_changed "$external_tooling_changed"
-            write_github_output openimageio_tooling_changed "$openimageio_tooling_changed"
-            write_github_output heif_tooling_changed "$heif_tooling_changed"
-            write_github_output libpng_tooling_changed "$libpng_tooling_changed"
             write_github_output container_changed "$container_changed"
             write_github_output image_definition_changed "$image_definition_changed"
             write_github_output container_toolchain_required "$container_toolchain_required"
@@ -603,18 +591,26 @@ jobs:
             exit 1
           fi
           while IFS='=' read -r classifier_key classifier_value; do
+            if [[ ! "$classifier_key" =~ ^[a-z][a-z0-9_]*$ ]]; then
+              echo "Invalid classifier key" >&2
+              exit 1
+            fi
             if [[ "$classifier_value" != "true" && "$classifier_value" != "false" ]]; then
               echo "Invalid classifier value for $classifier_key" >&2
               exit 1
             fi
+            if [[ -v "classifier_keys_seen[$classifier_key]" ]]; then
+              echo "Duplicate classifier output: $classifier_key" >&2
+              exit 1
+            fi
+            classifier_keys_seen["$classifier_key"]=1
             case "$classifier_key" in
-              source_changed|build_config_changed|testing_changed|external_tooling_changed|openimageio_tooling_changed|heif_tooling_changed|libpng_tooling_changed)
-                if [[ -v "classifier_keys_seen[$classifier_key]" ]]; then
-                  echo "Duplicate classifier output: $classifier_key" >&2
-                  exit 1
-                fi
-                classifier_keys_seen["$classifier_key"]=1
+              source_changed|build_config_changed|testing_changed)
                 printf -v "$classifier_key" '%s' "$classifier_value"
+                ;;
+              *_tooling_changed)
+                # Older trusted bases still emit retired informational flags.
+                echo "Ignoring legacy classifier output: $classifier_key"
                 ;;
               *)
                 echo "Unexpected classifier output: $classifier_key" >&2
@@ -623,9 +619,7 @@ jobs:
             esac
           done <<< "$classifier_output"
           for classifier_key in \
-            source_changed build_config_changed testing_changed \
-            external_tooling_changed openimageio_tooling_changed \
-            heif_tooling_changed libpng_tooling_changed; do
+            source_changed build_config_changed testing_changed; do
             if [[ ! -v "classifier_keys_seen[$classifier_key]" ]]; then
               echo "Missing classifier output: $classifier_key" >&2
               exit 1
@@ -706,7 +700,6 @@ jobs:
           BUILD_CONFIG_CHANGED: ${{ steps.diffcheck.outputs.build_config_changed }}
           TESTING_CHANGED: ${{ steps.diffcheck.outputs.testing_changed }}
           CI_CHANGED: ${{ steps.diffcheck.outputs.ci_changed }}
-          EXTERNAL_TOOLING_CHANGED: ${{ steps.diffcheck.outputs.external_tooling_changed }}
           CONTAINER_CHANGED: ${{ steps.diffcheck.outputs.container_changed }}
           DOCS_ONLY: ${{ steps.diffcheck.outputs.docs_only }}
         run: |
@@ -759,7 +752,6 @@ jobs:
             echo "- **Build config changed:** \`$(sanitize_line "${BUILD_CONFIG_CHANGED:-false}")\`"
             echo "- **Testing/regression changed:** \`$(sanitize_line "${TESTING_CHANGED:-false}")\`"
             echo "- **CI/governance changed:** \`$(sanitize_line "${CI_CHANGED:-false}")\`"
-            echo "- **External research tooling changed:** \`$(sanitize_line "${EXTERNAL_TOOLING_CHANGED:-false}")\`"
             echo "- **Container surface changed:** \`$(sanitize_line "${CONTAINER_CHANGED:-false}")\`"
             echo "- **Docs only:** \`$(sanitize_line "${DOCS_ONLY:-false}")\`"
             echo ""
@@ -831,7 +823,6 @@ jobs:
           BUILD_CONFIG_CHANGED: ${{ needs.detect-src.outputs.build_config_changed }}
           TESTING_CHANGED: ${{ needs.detect-src.outputs.testing_changed }}
           CI_CHANGED: ${{ needs.detect-src.outputs.ci_changed }}
-          EXTERNAL_TOOLING_CHANGED: ${{ needs.detect-src.outputs.external_tooling_changed }}
           CONTAINER_CHANGED: ${{ needs.detect-src.outputs.container_changed }}
           DOCS_ONLY: ${{ needs.detect-src.outputs.docs_only }}
         run: |
@@ -878,7 +869,6 @@ jobs:
           echo "Build config changed: $(sanitize_print "$BUILD_CONFIG_CHANGED")"
           echo "Testing/regression changed: $(sanitize_print "$TESTING_CHANGED")"
           echo "CI/governance changed: $(sanitize_print "$CI_CHANGED")"
-          echo "External research tooling changed: $(sanitize_print "$EXTERNAL_TOOLING_CHANGED")"
           echo "Container surface changed: $(sanitize_print "$CONTAINER_CHANGED")"
           echo "Docs only: $(sanitize_print "$DOCS_ONLY")"
 
@@ -898,7 +888,6 @@ jobs:
           BUILD_CONFIG_CHANGED: ${{ needs.detect-src.outputs.build_config_changed || 'false' }}
           TESTING_CHANGED: ${{ needs.detect-src.outputs.testing_changed || 'false' }}
           CI_CHANGED: ${{ needs.detect-src.outputs.ci_changed || 'false' }}
-          EXTERNAL_TOOLING_CHANGED: ${{ needs.detect-src.outputs.external_tooling_changed || 'false' }}
           CONTAINER_CHANGED: ${{ needs.detect-src.outputs.container_changed || 'false' }}
           DOCS_ONLY: ${{ needs.detect-src.outputs.docs_only || 'false' }}
         run: |
@@ -939,7 +928,6 @@ jobs:
           : "${BUILD_CONFIG_CHANGED:=false}"
           : "${TESTING_CHANGED:=false}"
           : "${CI_CHANGED:=false}"
-          : "${EXTERNAL_TOOLING_CHANGED:=false}"
           : "${CONTAINER_CHANGED:=false}"
           : "${DOCS_ONLY:=false}"
 
@@ -960,7 +948,6 @@ jobs:
             echo "- **Build config changed:** \`$(sanitize_line "${BUILD_CONFIG_CHANGED}")\`"
             echo "- **Testing/regression changed:** \`$(sanitize_line "${TESTING_CHANGED}")\`"
             echo "- **CI/governance changed:** \`$(sanitize_line "${CI_CHANGED}")\`"
-            echo "- **External research tooling changed:** \`$(sanitize_line "${EXTERNAL_TOOLING_CHANGED}")\`"
             echo "- **Container surface changed:** \`$(sanitize_line "${CONTAINER_CHANGED}")\`"
             echo "- **Docs only:** \`$(sanitize_line "${DOCS_ONLY}")\`"
             echo ""

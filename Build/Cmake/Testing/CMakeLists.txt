@@ -82,8 +82,7 @@ function(iccdev_add_regression_executable TARGET_NAME)
   add_dependencies(build-test-binaries "${TARGET_NAME}")
 endfunction()
 
-# Native extraction safety must run on Windows as well as Unix, without the
-# optional Nokia reader or the bash-backed carrier suite.
+# Native extraction safety must run on Windows as well as Unix.
 if(TARGET iccHeifDump)
   find_package(Python3 COMPONENTS Interpreter QUIET)
   if(Python3_Interpreter_FOUND)
@@ -91,7 +90,7 @@ if(TARGET iccHeifDump)
       COMMAND "${Python3_EXECUTABLE}"
         "${ICCDEV_REPO_ROOT}/.github/scripts/test_heif_output_safety.py"
         --tool "$<TARGET_FILE:iccHeifDump>"
-        --corpus "${ICCDEV_REPO_ROOT}/.github/ci/tooling/heif/img")
+        --corpus "${ICCDEV_REPO_ROOT}/.github/ci/test-data/heif")
     set_tests_properties(iccdev.heif-output-safety PROPERTIES
       TIMEOUT 120
       LABELS "iccdev;heif;image;regression;issue-2831")

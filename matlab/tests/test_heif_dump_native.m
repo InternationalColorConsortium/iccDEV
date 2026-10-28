@@ -6,7 +6,7 @@ function test_heif_dump_native(build_dir)
 
   this_dir = fileparts(mfilename('fullpath'));
   repo_root = fileparts(fileparts(this_dir));
-  corpus = fullfile(repo_root, '.github', 'ci', 'tooling', 'heif', 'img');
+  corpus = fullfile(repo_root, '.github', 'ci', 'test-data', 'heif');
 
   report = iccdev.heif_dump(fullfile(corpus, 'valid-prof.heic'), ...
     'BuildDir', build_dir);

@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # See LICENSE.md for the complete license text.
 
-"""WASM dependency-download workflow regression tests."""
+"""WASM and shared workflow contract regression tests."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -79,10 +80,95 @@ def test_release_windows_build_uses_manifest_dependencies():
     assert "cmake --preset vs2022-x64 -B msvc -S Build/Cmake" in build
     assert "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON" in build
     assert "cmake --build msvc --config Release --parallel" in build
-    assert "vcpkg-win-2324-libheif-deps" not in build
+    assert "vcpkg-win-" not in build
+    assert "iccdev-windows-vcpkg-classic" not in build
     assert "VCPKG_MANIFEST_MODE=OFF" not in build
     assert 'fullfile(pwd, \'msvc\')' in windows_steps["Build MATLAB MEX gateway"]["with"]["command"]
     assert '"msvc/bin/Release"' in windows_steps["Stage bundle into Testing directory"]["run"]
+
+
+def test_windows_workflows_pin_one_vcpkg_export():
+    pin = re.compile(
+        r"(https://github\.com/InternationalColorConsortium/iccDEV/releases/download/"
+        r"vcpkg-win-[\w.-]+/iccdev-windows-vcpkg-[\w.-]+\.zip)"
+        r"[\s\S]{0,400}?\b([0-9a-fA-F]{64})\b"
+    )
+    pins = {}
+    for workflow in sorted((ROOT / ".github/workflows").glob("*.yml")):
+        text = workflow.read_text(encoding="utf-8")
+        found = {(url, digest.lower()) for url, digest in pin.findall(text)}
+        if found:
+            pins[workflow.name] = found
+
+    assert {"_build-test-windows.yml", "ci-matlab.yml", "ci-pr-win.yml"} <= set(pins)
+    assert len(set().union(*pins.values())) == 1, pins
+
+
+def test_docker_and_tool_tests_workflow_pin_fixed_brotli_version():
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="ascii")
+    docker_version = re.search(
+        r"^ARG BROTLI_VERSION=([^\s]+)$", dockerfile, re.MULTILINE
+    )
+    assert docker_version is not None
+    version = docker_version.group(1)
+    assert version == "1.2.0-3ubuntu0.1"
+    assert "libbrotli1=${BROTLI_VERSION}" in dockerfile
+    assert "libbrotli-dev=${BROTLI_VERSION}" in dockerfile
+
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/ci-iccdev-tool-tests.yml").read_text(
+            encoding="ascii"
+        )
+    )
+    steps = [
+        step
+        for job in workflow["jobs"].values()
+        for step in job.get("steps", [])
+        if step.get("name") == "Install spectral preview Python dependencies"
+    ]
+    assert len(steps) == 1
+    workflow_versions = dict(
+        re.findall(
+            r"^\s+(libbrotli1|libbrotli-dev)=([^\s\\]+)",
+            steps[0]["run"],
+            re.MULTILINE,
+        )
+    )
+    assert workflow_versions == {
+        "libbrotli1": version,
+        "libbrotli-dev": version,
+    }
+
+
+def test_ubuntu_latest_build_matrix_supports_26_04_migration():
+    matrix = yaml.safe_load(
+        (ROOT / ".github/workflows/_build-matrix.yml").read_text(
+            encoding="ascii"
+        )
+    )
+    standard_builds = matrix["jobs"]["standard-builds"]
+    assert "ubuntu-latest" in standard_builds["strategy"]["matrix"]["os"]
+    assert (
+        standard_builds["with"]["run-full-tests"]
+        == "${{ matrix.os == 'ubuntu-latest' }}"
+    )
+
+    unix_workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/_build-test-unix.yml").read_text(
+            encoding="ascii"
+        )
+    )
+    dependency_step = next(
+        step
+        for step in unix_workflow["jobs"]["build-test"]["steps"]
+        if step.get("name") == "Install system dependencies (Linux)"
+    )
+    assert "24.04) brotli_fixed=1.1.0-2ubuntu0.1 ;;" in dependency_step["run"]
+    assert "26.04) brotli_fixed=1.2.0-3ubuntu0.1 ;;" in dependency_step["run"]
+    assert (
+        "Unsupported Ubuntu release for Brotli security check"
+        in dependency_step["run"]
+    )
 
 
 def test_wasm_workflow_regression_runs_in_shared_wheel_gate():

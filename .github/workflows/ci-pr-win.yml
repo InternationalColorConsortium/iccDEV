@@ -46,8 +46,8 @@ env:
   GH_NO_UPDATE_NOTIFIER: 1
   GH_PROMPT_DISABLED: 1
   ICCDEV_VCPKG_EXPORT_URL: >-
-    https://github.com/InternationalColorConsortium/iccDEV/releases/download/vcpkg-win-2324-libheif-deps/iccdev-windows-vcpkg-classic-libheif-04a9d8e.zip
-  ICCDEV_VCPKG_EXPORT_SHA256: 89ba13a04b883bbe5f97b5baabe15a508ff431c081e73c72022532ccfed5cb7e
+    https://github.com/InternationalColorConsortium/iccDEV/releases/download/vcpkg-win-23241-libheif-deps/iccdev-windows-vcpkg-classic-libheif-3087493.zip
+  ICCDEV_VCPKG_EXPORT_SHA256: 9b051a50f152f616986e735d618a2f5ade2cf5443c680216894f2897dbbf5eca
   RUN_URL: ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}
   PR: ${{ github.event.number }}
 

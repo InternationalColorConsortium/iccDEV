@@ -9,10 +9,6 @@ property parser buffers the carrier. The parser also limits property
 associations to 4096 and cumulative extracted ICC bytes to 256 MiB; profile
 views share the carrier buffer rather than copying each association's payload.
 
-The Nokia reader A/B research tool remains under `.github/ci/tooling/heif/`.
-Its pinned reader is isolated in the standalone CTest wrapper and manually
-dispatched workflow, where it is compared with this release implementation.
-
 ## Usage
 
 ```sh
@@ -39,8 +35,8 @@ a fresh directory when retrying.
 
 The focused `iccdev.heif-output-safety` CTest checks this contract on Windows
 and Unix using the tracked carrier and its pinned ICC digest. It needs Python 3
-and the native tool, but does not need the Nokia reader. Windows symlink cases
-report a skip if the account lacks symlink creation privileges.
+and the native tool. Windows symlink cases report a skip if the account lacks
+symlink creation privileges.
 
 Each embedded ICC property reports its carrier metadata, byte count, output
 path, and `proflib_parse` status:
@@ -61,5 +57,14 @@ cmake --build build --target iccHeifDump --parallel
 build/Tools/IccHeifDump/iccHeifDump input.heic [existing-output-directory]
 ```
 
-For the separate Nokia reader carrier A/B research workflow, see
-<a href="../../../.github/ci/tooling/heif/Readme.md">HEIF ICC Carrier QA</a>.
+Run the extraction safety regression directly against the built tool:
+
+```sh
+python3 .github/scripts/test_heif_output_safety.py \
+  --tool build/Tools/IccHeifDump/iccHeifDump \
+  --corpus .github/ci/test-data/heif
+```
+
+The <a href="../../../.github/ci/test-data/heif/Readme.md">native HEIF fixtures</a>
+also cover no-ICC and malformed-input behavior in the Python and MATLAB CLI
+tests and staged release bundles.

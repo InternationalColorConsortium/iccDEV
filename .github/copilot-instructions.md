@@ -70,7 +70,6 @@ Canonical regression scripts:
 - `.github/scripts/iccdev-namedcolor-overprint-regression-tests.sh`
 - `.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh`
 - `.github/scripts/iccdev-applysearch-cli-args-regression.sh`
-- `.github/scripts/iccdev-heif-carrier-qa.sh`
 - `.github/scripts/iccdev-xml-spec-qa.sh`
 
 For regression workflow updates, use
@@ -99,12 +98,9 @@ fuzzer runtime boundary, and replay the pinned #2687 artifact before fuzzing.
 - iOS CLUT editor proof-of-concept: `examples/ios-clut-editor/README.md`,
   `.github/skills/ios-clut-editor/SKILL.md`, and
   `.github/prompts/ios-clut-editor.prompt.md`
-- HEIF ICC carrier research tooling: `.github/ci/tooling/heif/Readme.md`,
-  `.github/skills/heif-icc-qa/SKILL.md`, and
-  `.github/prompts/heif-icc-qa.prompt.md`
-- libpng iCCP fault research tooling: `.github/ci/tooling/libpng/Readme.md`,
-  `.github/skills/libpng-iccp-qa/SKILL.md`, and
-  `.github/prompts/libpng-iccp-qa.prompt.md`
+- Native HEIF inspection and extraction QA:
+  `Tools/CmdLine/IccHeifDump/Readme.md` and
+  `.github/ci/test-data/heif/Readme.md`
 - Windows session helper: dot-source `.\.github\scripts\icc-session.ps1`, then
   run `icc-session` to create the next `DD-mmm-YYYY-NNN` workspace directory.
 - AVX2 CLUT debugging and optimization handoff:
@@ -261,7 +257,6 @@ Key safety rules:
 | ClusterFuzzLite integration | `.github/prompts/clusterfuzzlite.prompt.md` |
 | Maintainer CTest selection | `.github/prompts/maintainer-ci-ctest.prompt.md` |
 | Maintainer regression container | `.github/prompts/regression-container-maintainer.prompt.md` |
-| libpng iCCP fault QA | `.github/prompts/libpng-iccp-qa.prompt.md` |
 | Valgrind-family analysis | `.github/prompts/valgrind-analysis.prompt.md` |
 | Workflow governance audit | `.github/prompts/audit-workflow-governance.prompt.md` |
 | Pre-PR security cycle | `.github/prompts/pre-pr-security-cycle.prompt.md` |
@@ -295,7 +290,6 @@ Key safety rules:
 | Regression workflow governance | `.github/skills/regression-workflow-governance/SKILL.md` |
 | Regression container maintainer | `.github/skills/regression-container-maintainer/SKILL.md` |
 | Maintainer CI and CTest | `.github/skills/maintainer-ci-ctest/SKILL.md` |
-| libpng iCCP fault QA | `.github/skills/libpng-iccp-qa/SKILL.md` |
 | Pre-PR security cycle | `.github/skills/pre-pr-security-cycle/SKILL.md` |
 | Focused pull request review | `.github/skills/code-review/SKILL.md` |
 | Stacked PR and fast-lane workflow | `.github/skills/stacked-pr-fast-lane/SKILL.md` |

@@ -5,7 +5,7 @@
 #                 All rights reserved.
 #                 https://color.org
 #
-# Intent: Pin ci-pr-action native and external-tooling path classification.
+# Intent: Pin native paths and trusted classifier output contracts.
 #
 ###############################################################################
 #
@@ -68,101 +68,49 @@ assert_case() {
 
 expected_all_false='source_changed=false
 build_config_changed=false
-testing_changed=false
-external_tooling_changed=false
-openimageio_tooling_changed=false
-heif_tooling_changed=false
-libpng_tooling_changed=false'
-
-assert_case "OpenImageIO wrapper CMake is external only" \
-  ".github/ci/tooling/openimageio/qa/CMakeLists.txt" \
-  'source_changed=false
-build_config_changed=false
-testing_changed=false
-external_tooling_changed=true
-openimageio_tooling_changed=true
-heif_tooling_changed=false
-libpng_tooling_changed=false'
-
-assert_case "HEIF helper source is external only" \
-  ".github/ci/tooling/heif/IccHeifDump.cpp" \
-  'source_changed=false
-build_config_changed=false
-testing_changed=false
-external_tooling_changed=true
-openimageio_tooling_changed=false
-heif_tooling_changed=true
-libpng_tooling_changed=false'
+testing_changed=false'
 
 assert_case "native CMake testing entry point" \
   "Build/Cmake/Testing/CMakeLists.txt" \
   'source_changed=false
 build_config_changed=true
-testing_changed=false
-external_tooling_changed=false
-openimageio_tooling_changed=false
-heif_tooling_changed=false
-libpng_tooling_changed=false'
+testing_changed=false'
 
 assert_case "native library source" \
   "IccProfLib/IccProfile.cpp" \
   'source_changed=true
 build_config_changed=false
-testing_changed=false
-external_tooling_changed=false
-openimageio_tooling_changed=false
-heif_tooling_changed=false
-libpng_tooling_changed=false'
+testing_changed=false'
 
 assert_case "native generated header template" \
   "IccProfLib/IccProfLibVer.h.in" \
   'source_changed=true
 build_config_changed=false
-testing_changed=false
-external_tooling_changed=false
-openimageio_tooling_changed=false
-heif_tooling_changed=false
-libpng_tooling_changed=false'
+testing_changed=false'
 
 assert_case "native tool resource" \
   "Tools/wxWidget/wxProfileDump/bitmaps/open.xpm" \
   'source_changed=true
 build_config_changed=false
-testing_changed=false
-external_tooling_changed=false
-openimageio_tooling_changed=false
-heif_tooling_changed=false
-libpng_tooling_changed=false'
+testing_changed=false'
 
 assert_case "IIS site runtime inputs are native" \
   $'Tools/Winnt/IccIisIsapi/index.html\nTools/Winnt/IccIisIsapi/site.js\nTools/Winnt/IccIisIsapi/site.css\nTools/Winnt/IccIisIsapi/web.config' \
   'source_changed=true
 build_config_changed=false
-testing_changed=false
-external_tooling_changed=false
-openimageio_tooling_changed=false
-heif_tooling_changed=false
-libpng_tooling_changed=false'
+testing_changed=false'
 
 assert_case "IIS PowerShell helper is native" \
   "Tools/Winnt/IccIisIsapi/Test-IccIisIsapiEndpoints.ps1" \
   'source_changed=true
 build_config_changed=false
-testing_changed=false
-external_tooling_changed=false
-openimageio_tooling_changed=false
-heif_tooling_changed=false
-libpng_tooling_changed=false'
+testing_changed=false'
 
 assert_case "IIS image asset is native" \
   "Tools/Winnt/IccIisIsapi/assets/logo.png" \
   'source_changed=true
 build_config_changed=false
-testing_changed=false
-external_tooling_changed=false
-openimageio_tooling_changed=false
-heif_tooling_changed=false
-libpng_tooling_changed=false'
+testing_changed=false'
 
 assert_case "IIS documentation remains non-native" \
   "Tools/Winnt/IccIisIsapi/Readme.md" "$expected_all_false"
@@ -179,6 +127,9 @@ assert_case "example source is non-native" \
 assert_case "port CMake is non-native" \
   "ports/example/CMakeLists.txt" "$expected_all_false"
 
+assert_case "unregistered maintainer helper is non-native" \
+  ".github/ci/quality-assurance/helper.cpp" "$expected_all_false"
+
 assert_case "Python binding source is non-native" \
   "python/iccdev/profile.pyx" "$expected_all_false"
 
@@ -189,71 +140,111 @@ assert_case "Apple CMake entry point is native" \
   "Build/AppleMobile/CMakeLists.txt" \
   'source_changed=false
 build_config_changed=true
-testing_changed=false
-external_tooling_changed=false
-openimageio_tooling_changed=false
-heif_tooling_changed=false
-libpng_tooling_changed=false'
+testing_changed=false'
 
 assert_case "root dependency manifest is native build configuration" \
   "vcpkg.json" \
   'source_changed=false
 build_config_changed=true
-testing_changed=false
-external_tooling_changed=false
-openimageio_tooling_changed=false
-heif_tooling_changed=false
-libpng_tooling_changed=false'
+testing_changed=false'
 
 assert_case "registered native regression source" \
   ".github/ci/regression/example.cpp" \
   'source_changed=true
 build_config_changed=false
-testing_changed=true
-external_tooling_changed=false
-openimageio_tooling_changed=false
-heif_tooling_changed=false
-libpng_tooling_changed=false'
+testing_changed=true'
 
 assert_case "registered native regression fixtures" \
   $'.github/ci/regression/issue-2086-noop-scnt-operators.xml\n.github/ci/regression/gamma-1.0000000000.icc\n.github/ci/regression/issue-2086-table102-operands.txt' \
   'source_changed=false
 build_config_changed=false
-testing_changed=true
-external_tooling_changed=false
-openimageio_tooling_changed=false
-heif_tooling_changed=false
-libpng_tooling_changed=false'
+testing_changed=true'
 
-assert_case "libpng maintainer QA" \
-  ".github/ci/tooling/libpng/qa/libpng_iccp_qa.py" \
-  'source_changed=false
+for extension in heic heif avif hif; do
+  assert_case "shared native HEIF fixture ($extension)" \
+    ".github/ci/test-data/heif/example.$extension" \
+    'source_changed=false
 build_config_changed=false
-testing_changed=false
-external_tooling_changed=true
-openimageio_tooling_changed=false
-heif_tooling_changed=false
-libpng_tooling_changed=true'
+testing_changed=true'
+done
 
-assert_case "external tooling plus native source" \
-  $'.github/ci/tooling/openimageio/qa/CMakeLists.txt\nIccProfLib/IccProfile.cpp' \
+assert_case "HEIF fixture documentation is non-native" \
+  ".github/ci/test-data/heif/Readme.md" "$expected_all_false"
+
+assert_case "shared fixture plus native source" \
+  $'.github/ci/test-data/heif/valid-prof.heic\nIccProfLib/IccProfile.cpp' \
   'source_changed=true
 build_config_changed=false
-testing_changed=false
-external_tooling_changed=true
-openimageio_tooling_changed=true
-heif_tooling_changed=false
-libpng_tooling_changed=false'
+testing_changed=true'
 
 assert_case "native-to-excluded rename retains source classification" \
   $'IccProfLib/IccProfile.cpp\nexamples/IccProfile.cpp' \
   'source_changed=true
 build_config_changed=false
-testing_changed=false
-external_tooling_changed=false
-openimageio_tooling_changed=false
-heif_tooling_changed=false
-libpng_tooling_changed=false'
+testing_changed=false'
+
+classifier_parser="$(awk '
+  /while IFS=.*read -r classifier_key classifier_value; do/ { copying=1 }
+  copying && /^[[:space:]]*if has_changed_file / { exit }
+  copying { print }
+' "$SCRIPT_DIR/../workflows/ci-pr-action.yml")"
+if [ -z "$classifier_parser" ]; then
+  echo "[FAIL] workflow classifier parser was not found" >&2
+  exit 1
+fi
+parser_script=$'set -euo pipefail\ndeclare -A classifier_keys_seen=()\n'
+parser_script+="$classifier_parser"
+parser_script+=$'\nprintf "native=%s,%s,%s\\n" "$source_changed" "$build_config_changed" "$testing_changed"\n'
+
+assert_parser_case() {
+  local name="$1" output="$2" expected_status="$3" expected="$4"
+  local actual status=0
+  cases=$((cases + 1))
+  actual="$(
+    classifier_output="$output" BASH_ENV=/dev/null \
+      bash --noprofile --norc -c "$parser_script" 2>&1
+  )" || status=$?
+  if [[ "$status" -ne "$expected_status" || "${actual##*$'\n'}" != "$expected" ]]; then
+    printf '[FAIL] %s: exit=%s, expected=%s\n%s\n' \
+      "$name" "$status" "$expected_status" "$actual" >&2
+    failures=$((failures + 1))
+  else
+    echo "[PASS] $name"
+  fi
+}
+
+assert_parser_case "current native output" "$expected_all_false" 0 \
+  "native=false,false,false"
+assert_parser_case "older trusted-base metadata is optional" \
+  "$expected_all_false"$'\nlegacy_tooling_changed=true\ncompat_tooling_changed=false' \
+  0 "native=false,false,false"
+assert_parser_case "legacy metadata does not change native decisions" \
+  $'source_changed=true\nbuild_config_changed=false\ntesting_changed=true\nlegacy_tooling_changed=false' \
+  0 "native=true,false,true"
+for key in source_changed build_config_changed testing_changed; do
+  assert_parser_case "missing required output ($key)" \
+    "$(grep -v "^${key}=" <<< "$expected_all_false")" \
+    1 "Missing classifier output: $key"
+done
+assert_parser_case "duplicate native output is rejected" \
+  "$expected_all_false"$'\nsource_changed=true' \
+  1 "Duplicate classifier output: source_changed"
+assert_parser_case "duplicate legacy output is rejected" \
+  "$expected_all_false"$'\nlegacy_tooling_changed=true\nlegacy_tooling_changed=false' \
+  1 "Duplicate classifier output: legacy_tooling_changed"
+assert_parser_case "invalid native value is rejected" \
+  $'source_changed=invalid\nbuild_config_changed=false\ntesting_changed=false' \
+  1 "Invalid classifier value for source_changed"
+assert_parser_case "invalid legacy value is rejected" \
+  "$expected_all_false"$'\nlegacy_tooling_changed=invalid' \
+  1 "Invalid classifier value for legacy_tooling_changed"
+assert_parser_case "unknown output is rejected" \
+  "$expected_all_false"$'\nunexpected_flag=true' \
+  1 "Unexpected classifier output: unexpected_flag"
+assert_parser_case "invalid key is rejected before array indexing" \
+  "$expected_all_false"$'\nbad[key]_tooling_changed=true' \
+  1 "Invalid classifier key"
+assert_parser_case "empty output is rejected" "" 1 "Invalid classifier key"
 
 if [ "$failures" -ne 0 ]; then
   echo "[FAIL] $failures of $cases classifier cases failed" >&2
