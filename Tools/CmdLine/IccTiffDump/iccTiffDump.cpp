@@ -48,6 +48,7 @@
 #include <cstdio>
 #include <cerrno>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 #include <vector>
 #include "IccCmm.h"
@@ -872,8 +873,12 @@ int main(int argc, icChar* argv[])
   else if (nEffectiveExtra)
     printf("ExtraSamples:      not stored; libtiff treats %u of %u samples as non-color\n",
       nEffectiveExtra, SrcImg.GetSamples());
-  printf("Photometric:       %s\n",
-    GetId(SrcImg.GetTiffPhotometric(), tiff_photo_types));
+  const unsigned int photometric = SrcImg.GetTiffPhotometric();
+  const char *photometricName = GetId(photometric, tiff_photo_types);
+  if (!strcmp(photometricName, "Unknown"))
+    printf("Photometric:       Unknown (%u)\n", photometric);
+  else
+    printf("Photometric:       %s\n", photometricName);
   if (SrcImg.GetBytesPerLine())
     printf("BytesPerLine:      %u\n", SrcImg.GetBytesPerLine());
   else

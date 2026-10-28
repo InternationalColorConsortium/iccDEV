@@ -30,6 +30,9 @@ count, the raw TIFF photometric interpretation, and codec availability; codec
 availability is not proof of successful pixel decoding. The photometric value
 is the file's `PHOTOMETRIC_*` tag, not `CTiffImg`'s normalized processing
 classification.
+For an unrecognized photometric code, the plain report prints `Unknown (N)`
+with the stored numeric value; inventory JSON exposes the same value in
+`photometric` and the name `Unknown` in `photometricName`.
 
 Select a zero-based main-chain IFD, or inventory all main-chain directories:
 

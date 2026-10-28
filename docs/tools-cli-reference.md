@@ -140,6 +140,8 @@ extraction, and `--list-directories` to inventory directories and SubIFD offsets
 The report and inventory expose the raw TIFF photometric interpretation rather
 than `CTiffImg`'s normalized processing value. Inventory JSON uses
 `--evidence-json --list-directories`; SubIFDs are not followed.
+An unrecognized photometric code appears as `Unknown (N)` in the plain report,
+while inventory JSON retains `N` in `photometric`.
 
 `iccApplyProfiles` accepts tiled input and enables tiled output with paired
 `imageFiles.dstTileWidth`/`dstTileHeight` (positive multiples of 16); set
