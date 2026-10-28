@@ -294,7 +294,7 @@ ctest --test-dir /tmp/iccdev-openimageio-qa \
 | `iccdev.tiff-tiles` | Native libtiff-authored fixtures; 8/16/float, grayscale/RGB/extra/spectral samples, both planes/codecs/byte orders/containers, edge padding, short tiles, memory bounds and config round trips; registered on Windows and Unix |
 | `iccdev.tiff-tiles-cli` | Python standard-library runner; dump IFD inventory/extraction, unavailable-codec metadata, apply scalar/thread parity and spectral separator strip/tile parity; registered on Windows and Unix when Python and all four tools are available |
 | `iccdev.tiff-tile-budget-cli` | Python standard-library runner; mixed tiled/stripped spectral inputs retain pixel parity and an aggregate tiled-input band over 256 MiB is rejected before output creation |
-| `iccdev.tiff-directory-listing-cli` | Python standard-library runner; plain and JSON inventory of 4,096 main IFDs and rejection of a 4,097-IFD chain |
+| `iccdev.tiff-directory-listing-cli` | Python standard-library runner; plain and JSON inventory, including raw photometric metadata, of 4,096 main IFDs and rejection of a 4,097-IFD chain |
 | `iccdev.tiff-telemetry-cli` | Python standard-library runner; default-off option rejection and enabled JSONL lifecycle, exact geometry/counters, tiled/stripped pixel parity, metadata-only reporting, sidecar refusal, late-read cleanup and forensic extraction. Run separate `ICCDEV_ENABLE_TELEMETRY=OFF` and `ON` builds; enabled coverage needs the durable spectral inputs and native TIFF fixture target. |
 | `iccdev.specsep-usage-exit-code-regression` | `.github/scripts/iccdev-issue-1514-specsep-usage-exit-code-regression-tests.sh` |
 | `iccdev.specsep-cli-args-regression` | `.github/scripts/iccdev-specsep-cli-args-regression-tests.sh` |

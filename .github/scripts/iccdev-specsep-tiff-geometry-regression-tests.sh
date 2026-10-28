@@ -40,6 +40,7 @@ PACKED_FILE="$PACKED_DIR/spec_1"
 VALID_DIR="$OUTDIR/specsep-valid"
 CENTIMETER_DIR="$OUTDIR/specsep-centimeter"
 PALETTE_DIR="$OUTDIR/specsep-palette"
+SEPARATED_DIR="$OUTDIR/specsep-separated"
 FLOAT_DIR="$OUTDIR/specsep-float-miniswhite"
 OVERSIZE_DIR="$OUTDIR/specsep-oversized-row"
 TRUNC_DIR="$OUTDIR/specsep-truncated"
@@ -663,12 +664,14 @@ entries = []
 def add(tag, tag_type, count, value):
     entries.append((tag, tag_type, count, value))
 
-n_entries = 13
+ink_names = b"Cyan\0" if photometric == 5 else b""
+n_entries = 16 if ink_names else 13
 ifd_offset = 8
 ifd_size = 2 + n_entries * 12 + 4
 xres_offset = ifd_offset + ifd_size
 yres_offset = xres_offset + 8
-data_offset = yres_offset + 8
+ink_names_offset = yres_offset + 8
+data_offset = ink_names_offset + len(ink_names)
 
 add(256, 4, 1, width)                                    # ImageWidth
 add(257, 4, 1, height)                                   # ImageLength
@@ -683,6 +686,10 @@ add(282, 5, 1, xres_offset)                              # XResolution
 add(283, 5, 1, yres_offset)                              # YResolution
 add(296, 3, 1, 2)                                        # ResolutionUnit: inch
 add(339, 3, 1, sampleformat)                             # SampleFormat
+if ink_names:
+    add(332, 3, 1, 2)                                    # InkSet: not CMYK
+    add(333, 2, len(ink_names), ink_names_offset)         # InkNames: Cyan
+    add(334, 3, 1, 1)                                    # NumberOfInks
 assert len(entries) == n_entries
 entries.sort()
 
@@ -697,6 +704,7 @@ for tag, tag_type, count, value in entries:
 data.extend(struct.pack("<I", 0))
 data.extend(struct.pack("<II", 72, 1))
 data.extend(struct.pack("<II", 72, 1))
+data.extend(ink_names)
 data.extend(pixel_data)
 path.write_bytes(data)
 PY
@@ -779,6 +787,50 @@ run_specsep_float_miniswhite_reject() {
   fi
 
   pass_case "$name" "float MinIsWhite input rejected instead of silently inverted"
+}
+
+run_specsep_separated_reject() {
+  local name="specsep-separated-photometric-reject"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$LOGFILE" "$OUTPUT_TIFF"
+
+  if [ ! -x "$SPECSEP" ]; then
+    fail_case "$name" "missing executable: $SPECSEP"
+    return
+  fi
+
+  if ! generate_tagged_tiff "$SEPARATED_DIR/spec_1" 2 2 8 5 1 "zero" 0; then
+    fail_case "$name" "python3 unavailable or separated TIFF generation failed"
+    return
+  fi
+
+  timeout 60 "$SPECSEP" "$OUTPUT_TIFF" 0 0 "$SEPARATED_DIR/spec_" 1 1 1 > "$LOGFILE" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$LOGFILE"; then
+    sed -n '1,40p' "$LOGFILE"
+    return
+  fi
+
+  if [ "$exit_code" -ne 255 ]; then
+    fail_case "$name" "expected graceful reject exit=255, got exit=$exit_code"
+    sed -n '1,40p' "$LOGFILE"
+    return
+  fi
+
+  if ! grep -Fq "Input photometric interpretation must be MinIsWhite or MinIsBlack" "$LOGFILE" 2>/dev/null; then
+    fail_case "$name" "missing separated-photometric rejection text"
+    sed -n '1,40p' "$LOGFILE"
+    return
+  fi
+
+  if [ -e "$OUTPUT_TIFF" ]; then
+    fail_case "$name" "output TIFF created despite separated-photometric rejection"
+    return
+  fi
+
+  pass_case "$name" "one-ink separated input rejected without sample inversion"
 }
 
 run_specsep_oversized_row_buffer_reject() {
@@ -953,6 +1005,7 @@ run_specsep_geometry_reject
 run_specsep_packed_bps_reject
 run_specsep_descending_range_accept
 run_specsep_palette_reject
+run_specsep_separated_reject
 run_specsep_float_miniswhite_reject
 run_specsep_oversized_row_buffer_reject
 run_specsep_partial_output_discarded

@@ -691,12 +691,20 @@ int main(int argc, char* argv[]) {
       return -1;
     }
 
-    // GetPhoto() returns CTiffImg's internal PHOTO_* enum, not a libtiff
-    // PHOTOMETRIC_* constant, so the palette check must compare against
-    // PHOTO_PALETTE.  Comparing against PHOTOMETRIC_PALETTE never matched, so
-    // palette input was wrongly accepted and converted (#1381).
-    if (infile[i].GetPhoto() == PHOTO_PALETTE) {
+    const unsigned int photometric = infile[i].GetTiffPhotometric();
+    if (photometric == PHOTOMETRIC_PALETTE) {
       fprintf(stderr, "input %s is a palette based file\n",
+              icSanitizeConsoleText(filename).c_str());
+      return -1;
+    }
+    // GetPhoto() normalizes PHOTOMETRIC_SEPARATED to PHOTO_MINISWHITE for
+    // legacy image processing.  That normalization is not an input-format
+    // contract: accepting a one-ink separated TIFF here silently inverted its
+    // samples and emitted MinIsBlack output.  Validate the raw TIFF value.
+    if (photometric != PHOTOMETRIC_MINISBLACK &&
+        photometric != PHOTOMETRIC_MINISWHITE) {
+      fprintf(stderr,
+              "Input photometric interpretation must be MinIsWhite or MinIsBlack: %s\n",
               icSanitizeConsoleText(filename).c_str());
       return -1;
     }
@@ -708,7 +716,7 @@ int main(int argc, char* argv[]) {
     if (i && (infile[i].GetWidth() != infile[0].GetWidth() ||
       infile[i].GetHeight() != infile[0].GetHeight() ||
       infile[i].GetBitsPerSample() != infile[0].GetBitsPerSample() ||
-      infile[i].GetPhoto() != infile[0].GetPhoto() ||
+      infile[i].GetTiffPhotometric() != infile[0].GetTiffPhotometric() ||
       infile[i].GetXRes() != infile[0].GetXRes() ||
       infile[i].GetYRes() != infile[0].GetYRes() ||
       infile[i].GetResolutionUnit() != infile[0].GetResolutionUnit())) {
@@ -727,9 +735,9 @@ int main(int argc, char* argv[]) {
   size_t bytePerLine = f->GetBytesPerLine();
   
   bool invert = false;
-  if (f->GetPhoto()==PHOTO_MINISWHITE)
+  if (f->GetTiffPhotometric() == PHOTOMETRIC_MINISWHITE)
     invert = true;
-  else if (f->GetPhoto()!=PHOTO_MINISBLACK) {
+  else if (f->GetTiffPhotometric() != PHOTOMETRIC_MINISBLACK) {
     fprintf(stderr, "Input photometric interpretation must be MinIsWhite or MinIsBlack\n");
     return -1;
   }

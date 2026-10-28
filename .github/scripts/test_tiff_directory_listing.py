@@ -43,6 +43,7 @@ def main():
             raise AssertionError(f"Plain listing failed: {plain.stderr!r}")
         lines = plain.stdout.decode("ascii").splitlines()
         if len(lines) != 4096 or not lines[0].startswith("IFD 0: 1 x 1,") or \
+                "photometric 1 (Min Is Black)" not in lines[0] or \
                 not lines[-1].startswith("IFD 4095: 1 x 1,"):
             raise AssertionError("Plain inventory missed a main IFD")
 
@@ -53,7 +54,9 @@ def main():
         if len(directories) != 4096 or directories[0]["directory"] != 0 or \
                 directories[-1]["directory"] != 4095 or \
                 any(item["width"] != 1 or item["height"] != 1 or
-                    item["blockCount"] != 1 for item in directories):
+                    item["blockCount"] != 1 or item["photometric"] != 1 or
+                    item["photometricName"] != "Min Is Black"
+                    for item in directories):
             raise AssertionError("JSON inventory lost main-IFD metadata")
 
         excessive = root / "chain-4097.tif"

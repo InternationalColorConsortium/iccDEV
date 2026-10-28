@@ -129,6 +129,10 @@ public:
   double GetWidthIn() { return InchesFromPixels(m_nWidth, m_fXRes); }
   double GetHeightIn() { return InchesFromPixels(m_nHeight, m_fYRes); }
   unsigned int GetBitsPerSample() { return m_nBitsPerSample;}
+  // The raw libtiff PHOTOMETRIC_* value read for the open image.  GetPhoto()
+  // returns CTiffImg's processing-oriented PHOTO_* classification instead and
+  // intentionally folds some TIFF values together.
+  icUInt16Number GetTiffPhotometric() const { return m_nPhoto; }
   unsigned int GetPhoto();
   unsigned int GetSamples() { return m_nSamples;}
   // libtiff's ExtraSamples count for the open image, and 0 when tag 338 is absent.
