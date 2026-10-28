@@ -137,9 +137,18 @@ node throughput.
 `iccTiffDump` inspects classic/BigTIFF metadata without decoding pixel data.
 Use `--ifd N` to select a zero-based main-chain directory for inspection or ICC
 extraction, and `--list-directories` to inventory directories and SubIFD offsets.
-The report and inventory expose the raw TIFF photometric interpretation rather
+The report and inventory expose libtiff's TIFF photometric interpretation rather
 than `CTiffImg`'s normalized processing value. Inventory JSON uses
 `--evidence-json --list-directories`; SubIFDs are not followed.
+An unrecognized photometric code appears as `Unknown (N)` in the plain report,
+while inventory JSON retains `N` in `photometric`.
+Values are libtiff's interpretation, including defaults and repairs, not a raw
+IFD dump. TIFF warnings/errors remain on stderr and are counted in plain and
+JSON reports (`tiffDiagnostics`). A `StripByteCounts` recovery warning means
+libtiff substituted estimates, not that the file is valid. Exit 0 means the
+requested inspection/extraction succeeded, not that TIFF structure or pixels
+were validated; JSON explicitly reports `tiffValidation: "not-performed"`.
+Only inventory walks the full main-directory chain.
 
 `iccApplyProfiles` accepts tiled input and enables tiled output with paired
 `imageFiles.dstTileWidth`/`dstTileHeight` (positive multiples of 16); set
