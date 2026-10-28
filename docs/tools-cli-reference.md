@@ -137,7 +137,9 @@ node throughput.
 `iccTiffDump` inspects classic/BigTIFF metadata without decoding pixel data.
 Use `--ifd N` to select a zero-based main-chain directory for inspection or ICC
 extraction, and `--list-directories` to inventory directories and SubIFD offsets.
-Inventory JSON uses `--evidence-json --list-directories`; SubIFDs are not followed.
+The report and inventory expose the raw TIFF photometric interpretation rather
+than `CTiffImg`'s normalized processing value. Inventory JSON uses
+`--evidence-json --list-directories`; SubIFDs are not followed.
 
 `iccApplyProfiles` accepts tiled input and enables tiled output with paired
 `imageFiles.dstTileWidth`/`dstTileHeight` (positive multiples of 16); set

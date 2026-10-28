@@ -31,7 +31,8 @@ repository-owned fixtures and scripts.
    `ctest --test-dir Build -C Release -R '^iccdev\.tiff-(tiles|tile-budget-cli|directory-listing-cli)' --output-on-failure --no-tests=error`
    on Windows and Unix; use `-C Debug` instead when testing a Debug build with
    a multi-configuration generator. This covers generated edge tiles, spectral formats and
-   planes, directory selection, and forensic extraction, not SVS/ROI/pyramids.
+   planes, directory selection, raw photometric inventory, and forensic extraction,
+   not SVS/ROI/pyramids.
    The `iccdev.tiff-tile-budget-cli` test checks 16 mixed tiled/stripped inputs
    and rejection before output creation when aggregate input tile bands exceed
    256 MiB. The `iccdev.tiff-directory-listing-cli` test checks plain and JSON

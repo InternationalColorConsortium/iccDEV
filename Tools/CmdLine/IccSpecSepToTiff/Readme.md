@@ -102,7 +102,8 @@ single-channel TIFF inputs.
   filename suffixes into wavelength metadata.
 - Each input TIFF must have exactly one sample per pixel.
 - Photometric interpretation must be `MINISBLACK` or `MINISWHITE`; palette,
-  RGB, CMYK, and unknown photometrics are rejected. Floating-point
+  RGB, separated/ink-set images (including CMYK), and unknown photometrics are
+  rejected. Floating-point
   `MINISWHITE` is rejected because the bytewise inversion it needs is not a
   valid numeric conversion for IEEE floating-point samples.
 - `BitsPerSample` must be byte-aligned. Uncompressed output supports any

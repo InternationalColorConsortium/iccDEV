@@ -105,6 +105,7 @@ def main():
         assert (plain_dump.stdout, plain_dump.stderr) == (observed_dump.stdout, observed_dump.stderr)
         dump_values = fields(receipt(dump_log))
         assert dump_values["width"] == width and dump_values["height"] == height
+        assert dump_values["photometric"] == 1
         assert dump_values["decoded_pixels"] == 0 and dump_values["decoded_bytes"] == 0
 
         for bits in (8, 16, 32):

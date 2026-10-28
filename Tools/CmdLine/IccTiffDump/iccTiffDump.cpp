@@ -84,14 +84,20 @@ IdList planar_types[] = {
   {UNKNOWNID, "Unknown"},
 };
 
-IdList photo_types[] = {
-  {PHOTO_MINISWHITE, "Min Is White"},
-  {PHOTO_MINISBLACK, "Min Is Black"},
-  {PHOTO_CIELAB,     "CIELab"},
-  {PHOTO_ICCLAB,     "IccLab"},
-  {PHOTO_RGB,        "RGB"},
-  {PHOTO_PALETTE,    "Palette"},
-  {UNKNOWNID,        "Unknown"},
+IdList tiff_photo_types[] = {
+  {PHOTOMETRIC_MINISWHITE, "Min Is White"},
+  {PHOTOMETRIC_MINISBLACK, "Min Is Black"},
+  {PHOTOMETRIC_RGB,        "RGB"},
+  {PHOTOMETRIC_PALETTE,    "Palette"},
+  {PHOTOMETRIC_MASK,       "Transparency Mask"},
+  {PHOTOMETRIC_SEPARATED,  "Separated"},
+  {PHOTOMETRIC_YCBCR,      "YCbCr"},
+  {PHOTOMETRIC_CIELAB,     "CIELab"},
+  {PHOTOMETRIC_ICCLAB,     "ICCLab"},
+  {PHOTOMETRIC_ITULAB,     "ITU Lab"},
+  {PHOTOMETRIC_LOGL,       "LogL"},
+  {PHOTOMETRIC_LOGLUV,     "LogLuv"},
+  {UNKNOWNID,              "Unknown"},
 };
 
 // TIFFTAG_RESOLUTIONUNIT was never reported, so every image was printed as though its
@@ -492,13 +498,14 @@ struct TiffDumpTelemetryStats {
 static std::string TiffDumpGeometry(TIFF *tif, unsigned int directory)
 {
   uint32_t width = 0, height = 0, tileWidth = 0, tileHeight = 0;
-  uint16_t bits = 0, samples = 0, planar = 0, orientation = 0;
+  uint16_t bits = 0, samples = 0, photometric = 0, planar = 0, orientation = 0;
   uint16_t resolutionUnit = RESUNIT_INCH;
   float xResolution = 0, yResolution = 0;
   TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &width);
   TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &height);
   TIFFGetFieldDefaulted(tif, TIFFTAG_BITSPERSAMPLE, &bits);
   TIFFGetFieldDefaulted(tif, TIFFTAG_SAMPLESPERPIXEL, &samples);
+  TIFFGetField(tif, TIFFTAG_PHOTOMETRIC, &photometric);
   TIFFGetFieldDefaulted(tif, TIFFTAG_PLANARCONFIG, &planar);
   TIFFGetFieldDefaulted(tif, TIFFTAG_ORIENTATION, &orientation);
   TIFFGetFieldDefaulted(tif, TIFFTAG_RESOLUTIONUNIT, &resolutionUnit);
@@ -514,6 +521,7 @@ static std::string TiffDumpGeometry(TIFF *tif, unsigned int directory)
     ",\"height\":" + std::to_string(height) +
     ",\"bits_per_sample\":" + std::to_string(bits) +
     ",\"samples_per_pixel\":" + std::to_string(samples) +
+    ",\"photometric\":" + std::to_string(photometric) +
     ",\"planar\":" + std::to_string(planar) +
     ",\"layout\":" + CIccTiffTelemetry::JsonString(tiled ? "tiled" : "stripped") +
     ",\"tiled\":" + (tiled ? "true" : "false") +
@@ -625,13 +633,15 @@ static bool ListDirectories(const char *path, bool evidence
       printf("%s{\"directory\":%u,\"width\":%u,\"height\":%u,\"bigTiff\":%s,"
              "\"tiled\":%s,\"tileWidth\":%u,\"tileHeight\":%u,\"compression\":%u,"
              "\"codecAvailable\":%s,\"iccLength\":%u,\"bitsPerSample\":%u,"
-             "\"samplesPerPixel\":%u,\"planar\":%u,\"sampleFormat\":%u,"
+             "\"samplesPerPixel\":%u,\"photometric\":%u,\"photometricName\":\"%s\","
+             "\"planar\":%u,\"sampleFormat\":%u,"
              "\"orientation\":%u,\"blockCount\":%u,\"subIfdOffsets\":[",
              i ? "," : "", i, width, height,
              TIFFIsBigTIFF(tif) ? "true" : "false", tiled ? "true" : "false",
              tileWidth, tileHeight, compression,
              TIFFIsCODECConfigured(compression) ? "true" : "false",
-             length, bitsPerSample, samplesPerPixel, planar,
+             length, bitsPerSample, samplesPerPixel, photo,
+             GetId(photo, tiff_photo_types), planar,
              sampleFormat, orientation,
              tiled ? TIFFNumberOfTiles(tif) : TIFFNumberOfStrips(tif));
       for (unsigned int s = 0; s < subCount; s++)
@@ -639,10 +649,11 @@ static bool ListDirectories(const char *path, bool evidence
       printf("]}");
     }
     else {
-      printf("IFD %u: %u x %u, %s, %s, tile %u x %u, compression %u, ICC %u bytes\n",
+      printf("IFD %u: %u x %u, %s, %s, tile %u x %u, compression %u, "
+             "photometric %u (%s), ICC %u bytes\n",
              i, width, height, TIFFIsBigTIFF(tif) ? "BigTIFF" : "TIFF",
              tiled ? "tiled" : "stripped", tileWidth,
-             tileHeight, compression, length);
+             tileHeight, compression, photo, GetId(photo, tiff_photo_types), length);
       for (unsigned int s = 0; s < subCount; s++)
         printf("  SubIFD offset: %llu\n", static_cast<unsigned long long>(subOffsets[s]));
     }
@@ -861,7 +872,8 @@ int main(int argc, icChar* argv[])
   else if (nEffectiveExtra)
     printf("ExtraSamples:      not stored; libtiff treats %u of %u samples as non-color\n",
       nEffectiveExtra, SrcImg.GetSamples());
-  printf("Photometric:       %s\n", GetId(SrcImg.GetPhoto(), photo_types));
+  printf("Photometric:       %s\n",
+    GetId(SrcImg.GetTiffPhotometric(), tiff_photo_types));
   if (SrcImg.GetBytesPerLine())
     printf("BytesPerLine:      %u\n", SrcImg.GetBytesPerLine());
   else

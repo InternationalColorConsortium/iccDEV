@@ -94,9 +94,10 @@ for pixel parity and verifies that the shared 256 MiB input tile-band limit
 rejects before creating output. The output tile band has its own cap; do not
 describe either as a process-wide memory limit.
 
-The `iccdev.tiff-directory-listing-cli` test checks plain and JSON inventory
-of 4096 main IFDs and clean rejection of 4097 main IFDs. Compare elapsed
-times separately when investigating listing performance; avoid a timing gate.
+The `iccdev.tiff-directory-listing-cli` test checks plain and JSON inventory,
+including raw photometric metadata, of 4096 main IFDs and clean rejection of
+4097 main IFDs. Compare elapsed times separately when investigating listing
+performance; avoid a timing gate.
 
 For multi-configuration generators such as Visual Studio, set `-C` to the
 configuration that was built (`Release` above, or `Debug`).
