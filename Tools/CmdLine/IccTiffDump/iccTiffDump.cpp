@@ -47,6 +47,7 @@
 
 #include <cstdio>
 #include <cerrno>
+#include <climits>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -126,6 +127,46 @@ const char* GetId(unsigned long nId, IdList* pIdList)
 {
   for (;pIdList->nId != nId && pIdList->nId != UNKNOWNID; pIdList++);
   return pIdList->szName;
+}
+
+// This single-threaded CLI counts diagnostics, forwarding through the shared
+// sanitized stderr handlers without relying on version-specific messages.
+static unsigned int g_tiffWarnings = 0;
+static unsigned int g_tiffErrors = 0;
+static TIFFErrorHandler g_previousTiffWarningHandler = NULL;
+static TIFFErrorHandler g_previousTiffErrorHandler = NULL;
+
+static void RecordTiffWarning(const char* module, const char* fmt, va_list ap)
+{
+  if (g_tiffWarnings < UINT_MAX)
+    g_tiffWarnings++;
+  if (g_previousTiffWarningHandler)
+    g_previousTiffWarningHandler(module, fmt, ap);
+}
+
+static void RecordTiffError(const char* module, const char* fmt, va_list ap)
+{
+  if (g_tiffErrors < UINT_MAX)
+    g_tiffErrors++;
+  if (g_previousTiffErrorHandler)
+    g_previousTiffErrorHandler(module, fmt, ap);
+}
+
+static void PrintTiffDiagnostics()
+{
+  if (g_tiffWarnings || g_tiffErrors) {
+    printf("TIFF diagnostics:  %u warning(s), %u error(s); see stderr\n",
+           g_tiffWarnings, g_tiffErrors);
+    printf("Metadata caveat:   libtiff may have ignored or repaired stored fields; "
+           "reported values are not a raw IFD dump\n");
+  }
+}
+
+static void EmitTiffDiagnosticsJson()
+{
+  printf("\"metadataSource\":\"libtiff\",\"tiffValidation\":\"not-performed\","
+         "\"tiffDiagnostics\":{\"warningCount\":%u,\"errorCount\":%u}",
+         g_tiffWarnings, g_tiffErrors);
 }
 
 static bool IsRegularOutputDestination(const char* szFname)
@@ -234,6 +275,8 @@ void Usage()
   printf("Usage: iccTiffDump {--evidence-json} {--ifd N} {--list-directories} tiff_file {exported_icc_file}\n\n");
   printf("IFD indexes are zero-based main-chain directories. Listing does not extract or validate ICC data.\n");
   printf("Inspection is metadata-only; it does not assert pixel decoding or SVS compatibility.\n\n");
+  printf("Values reflect libtiff's interpretation, including defaults and repairs, not a raw IFD dump.\n");
+  printf("TIFF warnings/errors remain on stderr and are counted in reports; exit 0 does not validate the TIFF.\n\n");
 #ifdef ICCDEV_TELEMETRY
   CIccTiffTelemetry::Help(stdout);
 #endif
@@ -277,6 +320,8 @@ static void EmitWriteEvidenceJson(const char* tiffPath, const char* outputPath,
   printf("{");
   printf("\"schema\":\"iccdev-qa-evidence/v1\",");
   printf("\"tool\":\"iccTiffDump\",");
+  EmitTiffDiagnosticsJson();
+  printf(",");
   printf("\"input\":\"%s\",", icJsonEscape(tiffPath).c_str());
   printf("\"directory\":%u,\"bigTiff\":%s,\"tiled\":%s,\"tileWidth\":%u,\"tileHeight\":%u,",
          image.GetDirectory(), image.IsBigTiff() ? "true" : "false",
@@ -651,7 +696,7 @@ static bool ListDirectories(const char *path, bool evidence
     }
     else {
       printf("IFD %u: %u x %u, %s, %s, tile %u x %u, compression %u, "
-             "photometric %u (%s), ICC %u bytes\n",
+             "photometric %u (%s), ICC %u bytes (libtiff interpretation)\n",
              i, width, height, TIFFIsBigTIFF(tif) ? "BigTIFF" : "TIFF",
              tiled ? "tiled" : "stripped", tileWidth,
              tileHeight, compression, photo, GetId(photo, tiff_photo_types), length);
@@ -659,8 +704,13 @@ static bool ListDirectories(const char *path, bool evidence
         printf("  SubIFD offset: %llu\n", static_cast<unsigned long long>(subOffsets[s]));
     }
   }
-  if (evidence)
-    printf("]}\n");
+  if (evidence) {
+    printf("],");
+    EmitTiffDiagnosticsJson();
+    printf("}\n");
+  }
+  else
+    PrintTiffDiagnostics();
 #ifdef ICCDEV_TELEMETRY
   if (telemetry) {
     stats->inventoryMs = CIccTiffTelemetry::Since(phaseStart);
@@ -741,6 +791,8 @@ int main(int argc, icChar* argv[])
     Usage();
     return 1;
   }
+  g_previousTiffWarningHandler = TIFFSetWarningHandler(RecordTiffWarning);
+  g_previousTiffErrorHandler = TIFFSetErrorHandler(RecordTiffError);
 #ifdef ICCDEV_TELEMETRY
   std::vector<std::string> protectedPaths;
   protectedPaths.push_back(argv[1]);
@@ -806,6 +858,7 @@ int main(int argc, icChar* argv[])
   printf("-------------------->Tiff Image Dump<---------------------------\n");
   printf("Filename:          %s\n", srcName.c_str());
   printf("Directory:         %u\n", SrcImg.GetDirectory());
+  printf("Metadata:          libtiff interpretation (not a TIFF validity check)\n");
   printf("Container:         %s\n", SrcImg.IsBigTiff() ? "BigTIFF" : "TIFF");
   printf("Layout:            %s\n", SrcImg.IsTiled() ? "Tiled" : "Stripped");
   if (SrcImg.IsTiled())
@@ -886,6 +939,7 @@ int main(int argc, icChar* argv[])
   printf("Resolution:        (%lf x %lf) %s\n", SrcImg.GetXRes(), SrcImg.GetYRes(),
     GetId(SrcImg.GetResolutionUnit(), resolution_units));
   printf("Compression:       %s\n", GetId(SrcImg.GetCompress(), compression_types));
+  PrintTiffDiagnostics();
   }
 
   unsigned char *pProfMem = nullptr;

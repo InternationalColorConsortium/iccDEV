@@ -26,13 +26,27 @@ Inspection is metadata-only: tiled or stripped storage, unsupported pixel
 orientation/sample formats, and an unavailable codec do not require image
 decoding or allocation of pixel buffers to inspect/extract ICC metadata.
 The tool reports classic TIFF/BigTIFF, storage layout, tile geometry, block
-count, the raw TIFF photometric interpretation, and codec availability; codec
-availability is not proof of successful pixel decoding. The photometric value
-is the file's `PHOTOMETRIC_*` tag, not `CTiffImg`'s normalized processing
-classification.
+count, the TIFF photometric interpretation returned by libtiff, and codec
+availability; codec availability is not proof of successful pixel decoding.
+The photometric value uses libtiff's `PHOTOMETRIC_*` codes, not `CTiffImg`'s
+normalized processing classification.
 For an unrecognized photometric code, the plain report prints `Unknown (N)`
-with the stored numeric value; inventory JSON exposes the same value in
+with the numeric value returned by libtiff; inventory JSON exposes the same value in
 `photometric` and the name `Unknown` in `photometricName`.
+
+Reports describe **libtiff's interpretation**, not a raw IFD dump or a TIFF
+validity verdict. libtiff can supply defaults, ignore invalid or duplicate
+tags, and replace malformed byte counts with estimates. For example,
+`Wrong "StripByteCounts" field, ignoring and calculating from imagelength`
+means the stored counts were not accepted; it does not mean the file was
+validated or repaired on disk. Such estimates can also affect tiled input.
+Warnings and errors remain on stderr, and the plain report adds their counts
+and a metadata caveat. Both JSON forms add `metadataSource: "libtiff"`,
+`tiffValidation: "not-performed"`, and `tiffDiagnostics` with `warningCount`
+and `errorCount`. These count diagnostic emissions for the invocation, including
+directory rereads during inventory, not distinct defects or per-IFD findings.
+Zero diagnostics does not establish validity. A successful metadata-only
+inspection can still exit 0 with diagnostics; it does not check pixel data.
 
 Select a zero-based main-chain IFD, or inventory all main-chain directories:
 
@@ -44,8 +58,11 @@ iccTiffDump --evidence-json --list-directories image.tif
 
 `--ifd` accepts indexes 0..4095 and defaults to 0. Inventory is limited to 4096
 directories, includes each directory's ICC byte count, sample/storage metadata,
-raw numeric and named photometric interpretation, and SubIFD offsets, and does
+numeric and named photometric interpretation, and SubIFD offsets, and does
 not parse/validate profiles or extract files.
+Single-directory inspection does not validate the remaining directory chain;
+inventory rejects an unreadable main-chain directory rather than emitting a
+successful inventory.
 SubIFD offsets are reported only, not recursively followed or selectable.
 Listing cannot be combined with `--ifd` or an extraction destination. Extract
 each desired main-chain directory with a separate invocation and destination.
