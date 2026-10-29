@@ -8,7 +8,7 @@
 #
 ###############################################################
 
-FROM ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
+FROM ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -85,7 +85,7 @@ RUN for attempt in 1 2 3; do \
     libxml2-16=2.15.2+dfsg-0.1ubuntu0.3 \
     libxml2-dev=2.15.2+dfsg-0.1ubuntu0.3 \
     lcov=2.4-3 \
-    linux-perf=7.0.0-38.38 \
+    linux-perf=7.0.0-42.42 \
     lsb-release=12.1-2build1 \
     llvm-22=1:22.1.2-1ubuntu1 \
     llvm-22-tools=1:22.1.2-1ubuntu1 \
