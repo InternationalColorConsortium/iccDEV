@@ -1998,6 +1998,43 @@ static void encodedD50DiffersFromTheLiteralWithinTheBand()
         "white tolerance: the difference is inside icPcsWhiteNearRange");
 }
 
+// ICC.1:2022 6.3.2.2 equations (4) to (6) use the mediaWhitePointTag
+// values and the PCS white values as the operands of the absolute-intent
+// scale. A media white stored as s15Fixed16 D50 therefore differs numerically
+// from the literal PCS D50 after decoding, even though re-encoding both values
+// produces the same s15Fixed16 numbers. The adjustment gate must compare the
+// operands used to calculate the scale, not those re-encoded numbers (#2885).
+static void encodedMediaWhiteStillSchedulesAbsoluteScale()
+{
+  CIccProfile *pProfile = new CIccProfile();
+  buildV4CmykOutputProfile(*pProfile);
+
+  CIccTagXYZ *pWtpt = (CIccTagXYZ*)pProfile->FindTag(icSigMediaWhitePointTag);
+  (*pWtpt)[0].X = icDtoF(kD50Literal[0]);
+  (*pWtpt)[0].Y = icDtoF(kD50Literal[1]);
+  (*pWtpt)[0].Z = icDtoF(kD50Literal[2]);
+
+  icFloatNumber media[3] = { 0 }, illuminant[3] = { 0 };
+  pProfile->getMediaWhiteXYZ(media);
+  pProfile->getNormIlluminantXYZ(illuminant);
+  check(media[0] != illuminant[0] || media[1] != illuminant[1] ||
+        media[2] != illuminant[2],
+        "issue 2885: decoded media white differs from literal PCS D50");
+
+  // CIccXform::Create takes ownership of the profile, including on failure.
+  CIccXform *pXform = CIccXform::Create(pProfile, true,
+                                        icAbsoluteColorimetric,
+                                        icInterpTetrahedral);
+  check(pXform != NULL, "issue 2885: absolute xform created");
+  if (!pXform)
+    return;
+
+  check(pXform->Begin() == icCmmStatOk, "issue 2885: Begin");
+  check(pXform->NeedAdjustPCS(),
+        "issue 2885: non-identity absolute scale is scheduled");
+  delete pXform;
+}
+
 // All six folds isSameWhite() gates, each driven with the literal white on one
 // side and the header-encoded white on the other. Four collapse an exact round
 // trip to an identity; two collapse a v2/v4 encoding change to the single
@@ -2529,6 +2566,7 @@ int main(int /*argc*/, char ** /*argv*/)
   spectralEdgeDegenerateWhitePointIsRejected();
 
   encodedD50DiffersFromTheLiteralWithinTheBand();
+  encodedMediaWhiteStillSchedulesAbsoluteScale();
   labStepsFoldAcrossAnEncodingDifferenceInTheWhite();
   labStepsRefuseToFoldAGenuinelyDifferentWhite();
   foldingAcrossTheBandIsNumericallyHarmless();

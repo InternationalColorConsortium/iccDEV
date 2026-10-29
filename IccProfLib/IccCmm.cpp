@@ -1634,10 +1634,12 @@ icStatusCMM CIccXform::Begin()
   }
 
 	// set up for any needed PCS adjustment
+  // Compare the values used below to calculate the scale. Re-encoding them
+  // as s15Fixed16 can collapse a non-identity scale (#2885).
   if (bNeedAbsAdjust &&
-        (m_MediaXYZ.X != illXYZ.X ||
-        m_MediaXYZ.Y != illXYZ.Y ||
-        m_MediaXYZ.Z != illXYZ.Z)) {
+        (mediaXYZ[0] != illumXYZ[0] ||
+        mediaXYZ[1] != illumXYZ[1] ||
+        mediaXYZ[2] != illumXYZ[2])) {
 
     icColorSpaceSignature Space = m_pProfile->m_Header.pcs;
 
