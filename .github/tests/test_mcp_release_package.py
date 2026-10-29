@@ -144,7 +144,14 @@ def test_release_uses_opt_in_trusted_pypi_publication_and_public_smoke():
     assert "inputs.pypi_packages != 'none'" in stage["if"]
     assert "validate-python-release-wheels.py release-assets --release" in stage["run"]
     assert "validate-mcp-release-package.py release-assets" in stage["run"]
-    assert '"$distribution_count" -ne 54' in stage["run"]
+    wheel_validator = runpy.run_path(
+        str(ROOT / ".github/scripts/validate-python-release-wheels.py")
+    )
+    wheel_targets = set().union(*(
+        wheel_validator["lane_identifiers"](lane)
+        for lane in wheel_validator["LANE_PLATFORMS"]
+    ))
+    assert f'"$distribution_count" -ne {len(wheel_targets)}' in stage["run"]
     assert '"$distribution_count" -ne 2' in stage["run"]
 
     publish_iccdev = steps["Publish iccdev to PyPI"]
