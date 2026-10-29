@@ -597,7 +597,7 @@ setup(
     packages=find_packages(),
     ext_modules=extensions,
     cmdclass={"build_ext": build_ext, "sdist": sdist},
-    python_requires=">=3.9",
+    python_requires=">=3.11",
     install_requires=[],
     keywords="icc color profile cmm color-management cython",
     package_data={

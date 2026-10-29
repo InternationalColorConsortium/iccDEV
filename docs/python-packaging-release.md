@@ -7,8 +7,8 @@ Do not publish Python artifacts from a pull request branch.
 ## Published PyPI wheels and GitHub release assets
 
 Both `ci-json-python.yml` and the manual `ci-latest-release.yml` call
-`.github/workflows/_build-python-wheels.yml` to build CPython 3.9-3.14 wheels
-directly from their checked-out commit. Seven matrix lanes produce 54 wheels
+`.github/workflows/_build-python-wheels.yml` to build CPython 3.11-3.14 wheels
+directly from their checked-out commit. Seven matrix lanes produce 36 wheels
 covering Linux x86_64/aarch64 (manylinux and musllinux), macOS
 x86_64/arm64/universal2, and Windows AMD64/ARM64. The shared build driver uses
 Python 3.13 and pins cibuildwheel 3.4.0, including when building older Python
@@ -22,9 +22,9 @@ operations. Native parity tests remain in `ci-json-python`. The universal2
 arm64 slice is tested on its build host; its x86_64 slice is not executed
 there, while the separate x86_64 lane tests native Intel wheels.
 
-NumPy is optional. Windows ARM64 CPython 3.9/3.10 test the core without it
-because NumPy publishes no compatible wheels for those targets; the existing
-NumPy test uses `pytest.importorskip`. Other targets retain NumPy coverage.
+NumPy is optional at runtime, but every wheel lane installs it for the
+installed-wheel tests: NumPy publishes binary wheels for all CPython 3.11+
+targets, including Windows ARM64.
 The test dependency installer requires binary NumPy wheels to avoid an
 unrelated source build inside wheel validation.
 
@@ -39,7 +39,7 @@ Missing, duplicate, or foreign identifiers cannot narrow the expected targets.
 Inconsistent wheel metadata/tags, unsafe or duplicate archive members, and
 missing, duplicate, or unexpected wheels stop publication. Wheels also require
 complete RECORD file coverage, SHA-256, SHA-384, or SHA-512 file hashes,
-and matching sizes. The release consumer validates the combined 54-wheel set
+and matching sizes. The release consumer validates the combined 36-wheel set
 again before checksum generation and attestation. ZIP CRC validation does not
 replace RECORD integrity checks.
 Wheels participate in `SHA256SUMS`, `SHA512SUMS`, and artifact provenance alongside
@@ -58,7 +58,7 @@ release; the existing release job branch allowlist stays in force. After
 merge, a maintainer can manually run the workflow on `master` to publish a
 new rolling Latest Build. Existing release assets are not modified.
 
-Users on CPython 3.9-3.14 install the published wheel from PyPI:
+Users on CPython 3.11-3.14 install the published wheel from PyPI:
 
 ```bash
 python -m pip install iccdev
@@ -111,12 +111,12 @@ the checkout.
 
 The PR must also pass the `ci-json-python` workflow. Its native binding and
 parity jobs cover Linux and Windows builds for Python 3.12, 3.13, and 3.14 and
-macOS builds for Python 3.9, 3.12, 3.13, and 3.14. It retains isolated sdist installation
+macOS builds for Python 3.11, 3.12, 3.13, and 3.14. It retains isolated sdist installation
 and `twine check`, and calls the same seven-lane installed-wheel matrix as the
-release workflow, including Windows ARM64 Python 3.9/3.10. The shared wheel
+release workflow. The shared wheel
 matrix replaces the former per-platform cibuildwheel import smoke builds:
 primary CI passes `run-wheel-smoke: false` to its native build jobs. Other
-callers retain a bounded cibuildwheel 3.4.0 smoke driver (Python 3.12-3.14)
+callers retain a bounded cibuildwheel 3.4.0 smoke driver (Python 3.11-3.14)
 through the default `run-wheel-smoke: true`. Pytest exit code 5 (no tests collected) is a failure
 in primary CI. Windows native parity uses CMake's `bin/Release` runtime
 directory and requires all eight CLI tools before pytest, preventing a
@@ -152,7 +152,7 @@ gh release download <release-tag> --repo InternationalColorConsortium/iccDEV --p
 python .github/scripts/validate-python-release-wheels.py release-assets --release
 ```
 
-The `--release` mode requires all 54 targets across seven lanes, including both
+The `--release` mode requires all 36 targets across seven lanes, including both
 Linux libc families. It rejects incomplete downloads. Use the lane mode above
 for CI artifacts and subset checks. This validator ignores the separate
 `iccdev_mcp-*` distribution in combined release downloads; validate the MCP
@@ -211,9 +211,9 @@ Dispatch `ci-latest-release.yml` from `master` and select `iccdev`,
 `iccdev-mcp`, or `both` for `pypi_packages`.
 Feature-branch dispatches cannot reach the release or publishing steps. The
 release job requires all native and Python producers, validates the full
-54-wheel `iccdev` inventory and the exact MCP wheel/sdist pair, generates
+36-wheel `iccdev` inventory and the exact MCP wheel/sdist pair, generates
 SHA-256 and SHA-512 manifests, and publishes GitHub attestations before staging
-the 54 `iccdev` wheels and two MCP distributions in separate directories. Each
+the 36 `iccdev` wheels and two MCP distributions in separate directories. Each
 PyPI action uses the release job's `id-token: write` permission and protected
 `release` environment; it receives no username, password, API token,
 repository secret, or mutable cache.
@@ -285,7 +285,7 @@ by maintainers, not from a PR branch or CI scratch artifact.
    ```
 
    Run the cibuildwheel driver with Python 3.13, as in the shared CI workflow;
-   it can still build the configured Python 3.9-3.14 wheels.
+   it can still build the configured Python 3.11-3.14 wheels.
    `python -m build` builds the wheel from the sdist, which vendors `IccProfLib`,
    so the wheel never links a single-arch `Build/` archive. The sdist also lets
    `pip install iccdev` build without a repository checkout. `vendor_iccproflib.py`

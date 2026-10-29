@@ -230,7 +230,7 @@ tools.
 ### Install
 
 Install the published package from <a href="https://pypi.org/project/iccdev/">PyPI</a>
-on a supported CPython 3.9-3.14 platform:
+on a supported CPython 3.11-3.14 platform:
 
 ```bash
 python -m pip install iccdev
@@ -260,7 +260,7 @@ python -m pip install "iccdev[numpy] @ git+https://github.com/InternationalColor
 
 The <a href="https://github.com/InternationalColorConsortium/iccDEV/releases/latest">Latest Build release</a>
 also provides exact-tag wheel URLs for reproducible installation. Choose a
-wheel matching CPython 3.9-3.14, OS, and architecture.
+wheel matching CPython 3.11-3.14, OS, and architecture.
 
 Check the install:
 
@@ -623,7 +623,7 @@ These are the places where a prebuilt, install-and-go path does not exist yet.
 
 | Area | Limitation | Workaround |
 |------|------------|------------|
-| Python | PyPI supplies CPython 3.9-3.14 wheels but no source distribution | Install from the repository when no compatible wheel is available |
+| Python | PyPI supplies CPython 3.11-3.14 wheels but no source distribution | Install from the repository when no compatible wheel is available |
 | MCP | The PyPI package needs native bindings or a tools bundle for optional capabilities | Install `iccdev-mcp[rest]`, then configure the required tool paths or use Docker |
 | MATLAB | Prebuilt MEX is limited to Windows x64, Linux x86_64, and Apple Silicon macOS, built/tested with MATLAB R2023b (<a href="https://github.com/InternationalColorConsortium/iccDEV/issues/2801">#2801</a>) | Build from source for GNU Octave or unsupported architectures |
 | WebAssembly | Node.js only; tool-style interface, no browser package | Wrap `callMain` as shown above |

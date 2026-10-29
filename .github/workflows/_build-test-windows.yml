@@ -239,8 +239,7 @@ jobs:
           }
 
           python -m pip install `
-            "pytest>=7.0,<9; python_version < '3.10'" `
-            "pytest>=9.0.3,<10; python_version >= '3.10'" `
+            "pytest>=9.0.3,<10" `
             'numpy>=1.23,<3'
 
           $wheel = (Get-ChildItem python\dist\*.whl | Select-Object -First 1).FullName
@@ -299,7 +298,7 @@ jobs:
             Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
           }
 
-          if ($env:PYTHON_VERSION -notmatch '^3\.(12|13|14)$') {
+          if ($env:PYTHON_VERSION -notmatch '^3\.(11|12|13|14)$') {
             throw "Unsupported Python version for cibuildwheel smoke: $env:PYTHON_VERSION"
           }
 
@@ -355,14 +354,6 @@ jobs:
           git config --global credential.helper ""
           if (Test-Path Env:GITHUB_TOKEN) {
             Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
-          }
-
-          if ($env:PYTHON_VERSION -eq '3.9') {
-            Write-Host (
-              "[SKIP] iccdev-mcp requires Python >=3.10; " +
-              "skipping MCP verification on Python $env:PYTHON_VERSION"
-            )
-            exit 0
           }
 
           pip install ".\iccdev-mcp\"

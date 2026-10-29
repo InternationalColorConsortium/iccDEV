@@ -70,7 +70,7 @@ locations.
 
 ## Dependencies and Build Constraints
 
-- Python 3.9+
+- Python 3.11+
 - Cython >= 3.0,<3.4 for all source builds
 - NumPy >= 1.23,<3 for array operations
 - setuptools >= 77,<85 (PEP 639 license metadata)
@@ -131,9 +131,9 @@ Use `docs/python-packaging-release.md` as the maintainer source for Python
 package PR validation, merge criteria, and production PyPI release steps.
 Both `ci-json-python` and `ci-latest-release` call the shared
 `.github/workflows/_build-python-wheels.yml` using Python 3.13 and
-cibuildwheel 3.4.0. Keep its seven lanes, 54 CPython 3.9-3.14 wheels, and
-installed-wheel `not parity` tests aligned for both callers. Windows ARM64
-Python 3.9/3.10 omit optional NumPy; other wheel targets install binary NumPy.
+cibuildwheel 3.4.0. Keep its seven lanes, 36 CPython 3.11-3.14 wheels, and
+installed-wheel `not parity` tests aligned for both callers. Every wheel target
+installs binary NumPy for those tests.
 Primary CI retains native parity and isolated sdist tests, and treats pytest
 exit code 5 (no tests collected) as failure. It sets `upload-wheels: false`
 and requires Windows parity tools in `out/vs2022-vcpkg/bin/Release` before
@@ -151,7 +151,7 @@ validate wheel metadata/tags, safe unique archive members, and complete
 canonical BSD-3-Clause license contents. Include release wheels in
 checksums/provenance. Do not publish PR artifacts.
 For downloaded release assets, use `--release` instead of `--identifiers` and
-`--lane` to require the full 54-wheel inventory. Validate RECORD coverage,
+`--lane` to require the full 36-wheel inventory. Validate RECORD coverage,
 hashes, and sizes as well as ZIP CRCs; checksums and provenance are separate
 download authenticity checks.
 Keep wheel build jobs unprivileged and artifact downloads explicitly named.

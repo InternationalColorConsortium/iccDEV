@@ -2492,7 +2492,7 @@ jobs:
             echo "| WASM (Emscripten) | \`iccdev-wasm-release.zip\` |"
             echo "| Doxygen HTML Docs | \`iccdev-doxygen-html.zip\` |"
             echo "| Linux CPack Runtime | \`reficcmax-*.zip\`, \`reficcmax-*.deb\`, \`reficcmax-*.rpm\` |"
-            echo "| Python (CPython 3.9-3.14) | \`iccdev-*.whl\` for Linux, macOS, and Windows |"
+            echo "| Python (CPython 3.11-3.14) | \`iccdev-*.whl\` for Linux, macOS, and Windows |"
             echo "| MCP server (Python 3.10+) | \`iccdev_mcp-*-py3-none-any.whl\` and \`iccdev_mcp-*.tar.gz\` |"
             echo "| Checksums | \`SHA256SUMS\`, \`SHA512SUMS\` |"
             echo ""
@@ -2514,7 +2514,7 @@ jobs:
             echo ""
             echo "### Install Python without a compiler"
             echo ""
-            echo "Install \`iccdev\` from PyPI on CPython 3.9-3.14, or choose an exact-tag wheel asset matching your Python version, OS, and architecture."
+            echo "Install \`iccdev\` from PyPI on CPython 3.11-3.14, or choose an exact-tag wheel asset matching your Python version, OS, and architecture."
             echo "PyPI currently provides wheels only; install from the repository when no compatible wheel is available."
             echo "Linux wheels cover manylinux and musllinux x86_64/aarch64; macOS covers x86_64/arm64/universal2; Windows covers AMD64/ARM64."
             echo "Core profile/CMM APIs are self-contained. CLI-backed helpers need the matching native tool bundle."
@@ -2557,8 +2557,8 @@ jobs:
             mkdir -p pypi-iccdev
             cp release-assets/iccdev-*.whl pypi-iccdev/
             distribution_count="$(find pypi-iccdev -maxdepth 1 -type f | wc -l)"
-            if [[ "$distribution_count" -ne 54 ]]; then
-              echo "::error::Expected 54 iccdev wheels, found $(sanitize_line "$distribution_count")"
+            if [[ "$distribution_count" -ne 36 ]]; then
+              echo "::error::Expected 36 iccdev wheels, found $(sanitize_line "$distribution_count")"
               exit 1
             fi
           fi

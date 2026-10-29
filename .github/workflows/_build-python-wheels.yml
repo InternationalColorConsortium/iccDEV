@@ -58,14 +58,7 @@ jobs:
           - {id: macos-arm64, os: macos-14, platform: macos, arch: arm64}
           - {id: macos-universal2, os: macos-14, platform: macos, arch: universal2}
           - {id: windows-amd64, os: windows-2022, platform: windows, arch: AMD64}
-          - id: windows-arm64
-            os: windows-11-arm
-            platform: windows
-            arch: ARM64
-            # NumPy has no wheels for these Python versions on Windows ARM64.
-            before_test: >-
-              python -m pip install --only-binary=numpy "pytest>=7,<9"
-              "numpy>=1.23,<3; python_version >= '3.11'"
+          - {id: windows-arm64, os: windows-11-arm, platform: windows, arch: ARM64}
     defaults:
       run:
         shell: bash --noprofile --norc {0}
@@ -74,7 +67,7 @@ jobs:
       CIBW_ARCHS: ${{ matrix.arch }}
       # Explicit quotes protect version bounds from Windows cmd redirection.
       CIBW_BEFORE_TEST: >-
-        python -m pip install --only-binary=numpy "pytest>=7,<9" "numpy>=1.23,<3"
+        python -m pip install --only-binary=numpy "pytest>=9.0.3,<10" "numpy>=1.23,<3"
       CIBW_TEST_COMMAND: >-
         python -m pytest --rootdir "{project}" --import-mode=importlib
         "{project}/python/tests" -v --tb=short -m "not parity"
@@ -97,14 +90,13 @@ jobs:
         env:
           WHEEL_PLATFORM: ${{ matrix.platform }}
           WHEEL_LANE: ${{ matrix.id }}
-          CIBW_BEFORE_TEST: ${{ matrix.before_test || env.CIBW_BEFORE_TEST }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           unset ICCDEV_BUILD_DIR ICCDEV_ALLOW_DEBUG_PYTHON_LIB || true
           bash .github/scripts/check-workflow-cache-policy.sh .github/workflows/_build-python-wheels.yml
-          python -m pip install "cibuildwheel==3.4.0" "twine>=5,<8" "pytest>=7,<9" "PyYAML>=6,<7"
+          python -m pip install "cibuildwheel==3.4.0" "twine>=5,<8" "pytest>=9.0.3,<10" "PyYAML>=6,<7"
           python -m pytest --rootdir . --import-mode=importlib .github/tests/test_python_release_wheels.py .github/tests/test_python_test_collection.py .github/tests/test_wasm_workflow.py -q
           mkdir -p wheelhouse
           python -m cibuildwheel python --platform "$WHEEL_PLATFORM" --print-build-identifiers > wheelhouse/build-identifiers.txt

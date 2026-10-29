@@ -65,9 +65,9 @@ helpers, profile dump, and round-trip parity tests.
    Use the matrix lane ID so a truncated identifier file cannot reduce the
    expected wheel inventory. Both `ci-json-python` and
    `ci-latest-release` call `_build-python-wheels.yml`: Python 3.13 drives
-   cibuildwheel 3.4.0 across seven lanes and 54 CPython 3.9-3.14 wheels. Run
-   the same installed-wheel `not parity` suite in both callers. Windows ARM64
-   Python 3.9/3.10 omit optional NumPy; all other targets require binary NumPy.
+   cibuildwheel 3.4.0 across seven lanes and 36 CPython 3.11-3.14 wheels. Run
+   the same installed-wheel `not parity` suite in both callers. Every target
+   requires binary NumPy.
    Primary CI sets `upload-wheels: false` and `run-wheel-smoke: false` for its
    native jobs; other native callers keep the default smoke check. The release
    caller sets `upload-wheels: true`,
@@ -79,7 +79,7 @@ helpers, profile dump, and round-trip parity tests.
    safe unique archive members, and the canonical BSD-3-Clause license.
    Require RECORD coverage, secure file hashes, and sizes. For raw downloaded
    release assets without CI identifier files, run the validator with
-   `--release` to require all 54 wheels. Verify SHA256SUMS, SHA512SUMS, and
+   `--release` to require all 36 wheels. Verify SHA256SUMS, SHA512SUMS, and
    provenance separately before installation. Record the exact release tag,
    source SHA, and tested wheel hashes; do not call release asset URLs
    immutable. Branch artifacts are local QA evidence, not a release.

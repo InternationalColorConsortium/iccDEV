@@ -9,7 +9,7 @@ description = "Python bindings for RefIccMAX (iccDEV) - ICC color profile librar
 readme = "README.md"
 license = "BSD-3-Clause"
 license-files = ["LICENSE.md"]
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 authors = [
     { name = "International Color Consortium" },
 ]
@@ -20,8 +20,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -35,11 +33,10 @@ classifiers = [
 numpy = ["numpy>=1.23,<3"]
 dev = [
     "build>=1.2,<1.7",
-    "cibuildwheel>=3.4,<4; python_version >= '3.11'",
+    "cibuildwheel>=3.4,<4",
     "cython>=3.0,<3.4",
     "numpy>=1.23,<3",
-    "pytest>=7.0,<9; python_version < '3.10'",
-    "pytest>=9.0.3,<10; python_version >= '3.10'",
+    "pytest>=9.0.3,<10",
     "twine>=5.0,<8",
     "wheel>=0.46.2,<0.49",
 ]
@@ -68,7 +65,7 @@ markers = [
 ]
 
 [tool.cibuildwheel]
-build = "cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
+build = "cp311-* cp312-* cp313-* cp314-*"
 skip = "*-musllinux_i686 *-win32"
 test-requires = []
 test-command = "python -c \"import iccdev, pathlib; p=pathlib.Path(iccdev.__file__).resolve(); print('iccdev cibuildwheel smoke:', iccdev.__version__, p); assert 'site-packages' in str(p), p\""
