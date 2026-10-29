@@ -266,7 +266,7 @@ def test_release_inventory_requires_every_lane(tmp_path):
     command = [sys.executable, str(SCRIPT), str(tmp_path), "--release"]
     result = subprocess.run(command, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
-    assert "Validated 45 release wheels" in result.stdout
+    assert "Validated 54 release wheels" in result.stdout
     # The separately validated MCP distribution coexists in published assets.
     (tmp_path / f"iccdev_mcp-{VERSION}-py3-none-any.whl").write_bytes(b"separate MCP intake")
     result = subprocess.run(command, capture_output=True, text=True, timeout=30)
@@ -420,7 +420,7 @@ def test_shared_matrix_builds_every_declared_wheel_identifier():
         assert not selected & identifiers, lane["id"]
         selected.update(identifiers)
     assert selected == declared
-    assert len(selected) == 45
+    assert len(selected) == 54
 
 
 @pytest.mark.parametrize("lane_id,version,expected", [
@@ -428,6 +428,7 @@ def test_shared_matrix_builds_every_declared_wheel_identifier():
     ("windows-arm64", "3.10", False),
     ("windows-arm64", "3.11", True),
     ("windows-arm64", "3.13", True),
+    ("windows-arm64", "3.14", True),
     ("windows-amd64", "3.9", True),
     ("linux-x86_64", "3.9", True),
     ("linux-aarch64", "3.9", True),

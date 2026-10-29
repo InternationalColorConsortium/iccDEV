@@ -48,7 +48,7 @@ LANE_PLATFORMS = {
     "windows-amd64": ("win_amd64",),
     "windows-arm64": ("win_arm64",),
 }
-PYTHON_TAGS = ("cp39", "cp310", "cp311", "cp312", "cp313")
+PYTHON_TAGS = ("cp39", "cp310", "cp311", "cp312", "cp313", "cp314")
 
 
 def lane_identifiers(lane):
@@ -226,7 +226,7 @@ def main():
     inventory = parser.add_mutually_exclusive_group(required=True)
     inventory.add_argument("--identifiers", type=Path)
     inventory.add_argument("--release", action="store_true",
-                           help="Require all 45 iccdev binding wheels; validate MCP separately")
+                           help="Require all 54 iccdev binding wheels; validate MCP separately")
     parser.add_argument("--lane", choices=sorted(LANE_PLATFORMS),
                         help="Require the complete repository inventory for this CI lane")
     args = parser.parse_args()

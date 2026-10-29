@@ -25,6 +25,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Cython",
     "Topic :: Multimedia :: Graphics",
     "Topic :: Scientific/Engineering",
@@ -34,7 +35,7 @@ classifiers = [
 numpy = ["numpy>=1.23,<3"]
 dev = [
     "build>=1.2,<1.7",
-    "cibuildwheel>=2.23,<3",
+    "cibuildwheel>=3.4,<4; python_version >= '3.11'",
     "cython>=3.0,<3.4",
     "numpy>=1.23,<3",
     "pytest>=7.0,<9; python_version < '3.10'",
@@ -67,7 +68,7 @@ markers = [
 ]
 
 [tool.cibuildwheel]
-build = "cp39-* cp310-* cp311-* cp312-* cp313-*"
+build = "cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
 skip = "*-musllinux_i686 *-win32"
 test-requires = []
 test-command = "python -c \"import iccdev, pathlib; p=pathlib.Path(iccdev.__file__).resolve(); print('iccdev cibuildwheel smoke:', iccdev.__version__, p); assert 'site-packages' in str(p), p\""
