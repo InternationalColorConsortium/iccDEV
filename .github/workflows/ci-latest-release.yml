@@ -2038,9 +2038,12 @@ jobs:
           python -m pip install "build>=1.2,<1.7" "twine>=5,<8" "PyYAML>=6,<7"
           python -m pip install -e "./iccdev-mcp[dev,rest]"
           python -m pytest --rootdir . --import-mode=importlib \
+            -o asyncio_default_fixture_loop_scope=function \
             .github/tests/test_mcp_release_package.py \
             .github/tests/test_wasm_workflow.py -q
-          python -m pytest --rootdir . --import-mode=importlib iccdev-mcp/tests/test_server.py iccdev-mcp/tests/test_rest_api.py -q
+          python -m pytest --rootdir . --import-mode=importlib \
+            -o asyncio_default_fixture_loop_scope=function \
+            iccdev-mcp/tests/test_server.py iccdev-mcp/tests/test_rest_api.py -q
           python .github/scripts/iccdev-mcp-package-smoke.py --source-tree
           python -m build iccdev-mcp --outdir mcp-dist
           python .github/scripts/validate-mcp-release-package.py mcp-dist

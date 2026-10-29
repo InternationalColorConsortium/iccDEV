@@ -110,6 +110,7 @@ def test_release_proves_both_installation_modes_and_collects_mcp_artifacts():
     assert set(producer["strategy"]["matrix"]["os"]) == {"ubuntu-24.04", "windows-2022"}
     build = next(step["run"] for step in producer["steps"] if step["name"] == "Build and test MCP distributions")
     assert "--source-tree" in build and "python -m venv" in build
+    assert build.count("-o asyncio_default_fixture_loop_scope=function") == 2
     assert "mcp-dist/*.whl mcp-dist/*.tar.gz" in build
     assert '"$interpreter" .github/scripts/iccdev-mcp-package-smoke.py' in build
     upload = next(step for step in producer["steps"] if step.get("uses", "").startswith("actions/upload-artifact@"))
@@ -143,7 +144,7 @@ def test_release_uses_opt_in_trusted_pypi_publication_and_public_smoke():
     assert "inputs.pypi_packages != 'none'" in stage["if"]
     assert "validate-python-release-wheels.py release-assets --release" in stage["run"]
     assert "validate-mcp-release-package.py release-assets" in stage["run"]
-    assert '"$distribution_count" -ne 45' in stage["run"]
+    assert '"$distribution_count" -ne 54' in stage["run"]
     assert '"$distribution_count" -ne 2' in stage["run"]
 
     publish_iccdev = steps["Publish iccdev to PyPI"]
