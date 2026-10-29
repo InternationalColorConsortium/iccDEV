@@ -20,7 +20,7 @@ ICC color profile library, built with [Cython](https://cython.org/).
 
 The alpha `iccdev` package is published on
 <a href="https://pypi.org/project/iccdev/">PyPI</a>. Install the core package
-on a supported CPython 3.9-3.13 platform:
+on a supported CPython 3.9-3.14 platform:
 
 ```bash
 python -m pip install iccdev
@@ -289,8 +289,8 @@ flags and are not valid in universal or non-x86 source builds.
 
 ## Wheel Compatibility Policy
 
-CI validates Linux, macOS, and Windows wheels with cibuildwheel for Python
-3.9, 3.12, and 3.13.  Linux wheels should follow the active manylinux policy
+CI builds and tests Linux, macOS, and Windows wheels with cibuildwheel for
+CPython 3.9-3.14.  Linux wheels should follow the active manylinux policy
 selected by cibuildwheel.  `musllinux_i686` and `win32` are intentionally
 skipped; Windows builds require an MSVC C++17 toolchain.
 

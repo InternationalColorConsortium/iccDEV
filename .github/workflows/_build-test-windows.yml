@@ -299,11 +299,11 @@ jobs:
             Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
           }
 
-          if ($env:PYTHON_VERSION -notmatch '^3\.(9|12|13)$') {
+          if ($env:PYTHON_VERSION -notmatch '^3\.(12|13|14)$') {
             throw "Unsupported Python version for cibuildwheel smoke: $env:PYTHON_VERSION"
           }
 
-          python -m pip install 'cibuildwheel>=2.23,<3' 'twine>=5.0,<7'
+          python -m pip install 'cibuildwheel==3.4.0' 'twine>=5.0,<7'
           cd python
           $distArtifacts = Get-ChildItem -Path dist\* -Include *.whl,*.tar.gz -File
           if (-not $distArtifacts) {

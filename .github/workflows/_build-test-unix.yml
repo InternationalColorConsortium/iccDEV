@@ -864,11 +864,11 @@ jobs:
           source .github/scripts/sanitize-sed.sh
 
           cd "${WORKSPACE_DIR}/python"
-          if [[ ! "$PYTHON_VERSION" =~ ^3\.(9|12|13)$ ]]; then
+          if [[ ! "$PYTHON_VERSION" =~ ^3\.(12|13|14)$ ]]; then
             echo "Unsupported Python version for cibuildwheel smoke: $PYTHON_VERSION" >&2
             exit 1
           fi
-          python -m pip install "cibuildwheel>=2.23,<3" "twine>=5.0,<7" --quiet
+          python -m pip install "cibuildwheel==3.4.0" "twine>=5.0,<7" --quiet
 
           echo "=== cibuildwheel configured identifiers ==="
           python -m cibuildwheel --print-build-identifiers --platform windows

@@ -11,7 +11,7 @@
 | **Python** | `python -m pip install "iccdev[numpy]"` ([installation details](docs/using-iccdev.md#python)) |
 
 The `iccdev` Python package is published on
-<a href="https://pypi.org/project/iccdev/">PyPI</a> for CPython 3.9-3.13.
+<a href="https://pypi.org/project/iccdev/">PyPI</a> for CPython 3.9-3.14.
 Prebuilt Python wheels and Windows, Linux, and macOS tool bundles also remain
 available from the [latest release page](https://github.com/InternationalColorConsortium/iccDEV/releases/latest).
 

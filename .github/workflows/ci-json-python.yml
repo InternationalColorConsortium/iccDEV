@@ -43,7 +43,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.12", "3.13", "3.14"]
     uses: ./.github/workflows/_build-test-unix.yml
     with:
       os: ubuntu-latest
@@ -58,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.12", "3.13"]
+        python-version: ["3.9", "3.12", "3.13", "3.14"]
     uses: ./.github/workflows/_build-test-unix.yml
     with:
       os: macos-latest
@@ -73,7 +73,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.12", "3.13", "3.14"]
     uses: ./.github/workflows/_build-test-windows.yml
     with:
       python-version: ${{ matrix.python-version }}

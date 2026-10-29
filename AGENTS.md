@@ -62,7 +62,7 @@ shares one source of truth. Update rules here, not in the mirrors.
   report their diagnostic outcomes without blocking later package publications.
   Require complete package inventories, dual checksums, release
   attestations, the protected `release` environment, and OIDC publishing.
-  Validate downloaded release wheels with `--release` to require all 45
+  Validate downloaded release wheels with `--release` to require all 54
   targets without CI identifier files. Require RECORD file coverage, secure
   hashes, and sizes before attestation; ZIP CRCs alone do not prove this contract.
 - Rolling-release MCP artifacts are a separate universal wheel and sdist,

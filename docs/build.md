@@ -1097,7 +1097,7 @@ launching another `vcvarsall.bat`, which avoids failures from very long
 developer `PATH` values. Native-backed parity tests use the built iccDEV tools
 for ProfileLib, XML, and JSON parity. `ci-json-python` and `ci-latest-release`
 share `_build-python-wheels.yml`, using Python 3.13 to drive cibuildwheel 3.4.0
-for seven platform lanes and 45 CPython 3.9-3.13 wheels. Both callers run the
+for seven platform lanes and 54 CPython 3.9-3.14 wheels. Both callers run the
 installed-wheel `not parity` unit suite without native build artifacts.
 Windows ARM64 Python 3.9/3.10 test without optional NumPy; other wheel targets
 require binary NumPy wheels. Primary CI retains native parity and isolated

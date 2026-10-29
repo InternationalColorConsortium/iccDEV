@@ -131,7 +131,7 @@ Use `docs/python-packaging-release.md` as the maintainer source for Python
 package PR validation, merge criteria, and production PyPI release steps.
 Both `ci-json-python` and `ci-latest-release` call the shared
 `.github/workflows/_build-python-wheels.yml` using Python 3.13 and
-cibuildwheel 3.4.0. Keep its seven lanes, 45 CPython 3.9-3.13 wheels, and
+cibuildwheel 3.4.0. Keep its seven lanes, 54 CPython 3.9-3.14 wheels, and
 installed-wheel `not parity` tests aligned for both callers. Windows ARM64
 Python 3.9/3.10 omit optional NumPy; other wheel targets install binary NumPy.
 Primary CI retains native parity and isolated sdist tests, and treats pytest
@@ -151,7 +151,7 @@ validate wheel metadata/tags, safe unique archive members, and complete
 canonical BSD-3-Clause license contents. Include release wheels in
 checksums/provenance. Do not publish PR artifacts.
 For downloaded release assets, use `--release` instead of `--identifiers` and
-`--lane` to require the full 45-wheel inventory. Validate RECORD coverage,
+`--lane` to require the full 54-wheel inventory. Validate RECORD coverage,
 hashes, and sizes as well as ZIP CRCs; checksums and provenance are separate
 download authenticity checks.
 Keep wheel build jobs unprivileged and artifact downloads explicitly named.
