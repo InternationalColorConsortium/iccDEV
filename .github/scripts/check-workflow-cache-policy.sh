@@ -20,9 +20,11 @@ workflow_files=()
 
 for item in "$@"; do
   if [ -d "$item" ]; then
+    directory_workflows=$(find "$item" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) | sort)
     while IFS= read -r workflow; do
+      [ -n "$workflow" ] || continue
       workflow_files+=("$workflow")
-    done < <(find "$item" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) | sort)
+    done <<< "$directory_workflows"
   else
     workflow_files+=("$item")
   fi
@@ -41,12 +43,9 @@ for workflow in "${workflow_files[@]}"; do
     continue
   fi
 
-  while IFS= read -r match; do
-    [ -n "$match" ] || continue
-    echo "[FAIL] Cache primitive found in $workflow: $match" >&2
-    workflow_failures=$((workflow_failures + 1))
-    failures=$((failures + 1))
-  done < <(python3 - "$workflow" <<'PY'
+  # Capture the scanner result before reading it. The process-substitution
+  # redirection fails on macOS Bash 3.2, allowing a false [OK] result.
+  matches=$(python3 - "$workflow" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -84,9 +83,9 @@ def step_window(lines, start_index):
 workflow = Path(sys.argv[1])
 for number, code, lines in code_lines(workflow):
     stripped = code.strip()
-    if re.match(r"uses:\s*actions/cache@", stripped, re.I):
+    if re.match(r"(?:-\s*)?uses:\s*actions/cache@", stripped, re.I):
         print(f"{number}: actions/cache")
-    if re.match(r"uses:\s*msys2/setup-msys2@", stripped, re.I):
+    if re.match(r"(?:-\s*)?uses:\s*msys2/setup-msys2@", stripped, re.I):
         window = step_window(lines, number - 1)
         if not re.search(r"(?m)^\s+cache:\s*(false|0|no|off)\s*$", window, re.I):
             print(f"{number}: msys2/setup-msys2 cache not disabled")
@@ -105,6 +104,12 @@ for number, code, lines in code_lines(workflow):
         print(f"{number}: {stripped}")
 PY
   )
+  while IFS= read -r match; do
+    [ -n "$match" ] || continue
+    echo "[FAIL] Cache primitive found in $workflow: $match" >&2
+    workflow_failures=$((workflow_failures + 1))
+    failures=$((failures + 1))
+  done <<< "$matches"
   if [ "$workflow_failures" -eq 0 ]; then
     echo "[OK] Cache policy: $workflow"
   fi

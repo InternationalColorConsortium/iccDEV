@@ -17,6 +17,7 @@ commands here.
 | `IccProfLib/icProfileHeader.h` | `instructions/icc-specification.instructions.md` | ICC header, tag, and color-space rules |
 | `ports/**` | `instructions/vcpkg-port.instructions.md` | vcpkg overlay port and CI |
 | `python/**` | `instructions/python-bindings.instructions.md` | Cython build, tests, and `ICCDEV_BUILD_DIR` |
+| `iccdev-mcp/**` | `instructions/iccdev-mcp.instructions.md` | MCP/REST review, capability tests, and pure Python package boundary |
 | `matlab/**` | `instructions/matlab-mex.instructions.md` | MEX gateway, OOP layer, and `build_mex.m` |
 | `matlab/**` | `instructions/matlab-code-review.instructions.md` | Focused MATLAB MEX review checks |
 | `Tools/Winnt/IccIisIsapi/**` | `Tools/Winnt/IccIisIsapi/isapi-instructions.md` | IIS ISAPI setup and hardening |

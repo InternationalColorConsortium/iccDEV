@@ -8,7 +8,7 @@
 #
 ###############################################################
 
-name: "CI Comprehensive Build and Test"
+name: "ci-qa-pr"
 
 permissions:
   contents: read

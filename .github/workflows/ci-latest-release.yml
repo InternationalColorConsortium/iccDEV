@@ -36,6 +36,14 @@ permissions:
 "on":
   workflow_dispatch:
     inputs:
+      windows_vcpkg_source:
+        description: Windows dependencies from vcpkg manifest or the pinned 3087493 release bundle
+        required: true
+        default: manifest
+        type: choice
+        options:
+          - manifest
+          - pinned-release-bundle
       pypi_packages:
         description: Validated Python distributions to publish to PyPI
         required: true
@@ -810,6 +818,8 @@ jobs:
           Write-Host "OS:            $env:RUNNER_OS"
       - name: Install manifest dependencies and build
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          WINDOWS_VCPKG_SOURCE: ${{ inputs.windows_vcpkg_source }}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
@@ -823,19 +833,71 @@ jobs:
           Write-Host "Copyright (c) 2025 International Color Consortium. All rights reserved." -ForegroundColor Green
           git branch
           git status
-          Write-Host "========= Installing manifest dependencies... ================`n"
-          $vcpkgExecutable = (Get-Command vcpkg -CommandType Application -ErrorAction Stop).Source
-          $env:VCPKG_ROOT = Split-Path -Parent $vcpkgExecutable
+          $cmakeDependencyArgs = @()
+          if ($env:WINDOWS_VCPKG_SOURCE -eq 'pinned-release-bundle') {
+            # Immutable GitHub release asset; reject changed bytes before extraction.
+            $assetName = 'iccdev-windows-vcpkg-classic-libheif-3087493.zip'
+            $assetUri = "https://github.com/InternationalColorConsortium/iccDEV/releases/download/vcpkg-win-23241-libheif-deps/$assetName"
+            $assetSha256 = '9b051a50f152f616986e735d618a2f5ade2cf5443c680216894f2897dbbf5eca'
+            $assetPath = Join-Path $env:RUNNER_TEMP $assetName
+            $bundleRoot = Join-Path $env:RUNNER_TEMP 'iccdev-vcpkg-3087493'
+            New-Item -ItemType Directory -Force -Path $bundleRoot | Out-Null
+            Invoke-WebRequest -Uri $assetUri -OutFile $assetPath
+            $actualSha256 = (Get-FileHash -LiteralPath $assetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actualSha256 -ne $assetSha256) {
+              throw "Pinned vcpkg release asset SHA256 mismatch: $actualSha256"
+            }
+            tar -xf $assetPath -C $bundleRoot
+            if ($LASTEXITCODE -ne 0) {
+              throw "Pinned vcpkg release asset extraction failed with exit code $LASTEXITCODE"
+            }
+            $env:VCPKG_ROOT = $bundleRoot
+            $env:VCPKG_INSTALLED_DIR = Join-Path $bundleRoot 'installed'
+            foreach ($required in @(
+              '.vcpkg-root',
+              'scripts/buildsystems/vcpkg.cmake',
+              'installed/x64-windows/include/libheif/heif.h',
+              'installed/x64-windows/bin'
+            )) {
+              if (-not (Test-Path -LiteralPath (Join-Path $bundleRoot $required))) {
+                throw "Pinned vcpkg release asset missing $required"
+              }
+            }
+            $cmakeDependencyArgs = @(
+              '-DVCPKG_MANIFEST_MODE=OFF',
+              '-DVCPKG_APPLOCAL_DEPS=OFF',
+              "-DVCPKG_INSTALLED_DIR=$env:VCPKG_INSTALLED_DIR",
+              '-DVCPKG_TARGET_TRIPLET=x64-windows'
+            )
+            Write-Host "Using verified pinned vcpkg release bundle (SHA256 $actualSha256)"
+          } elseif ($env:WINDOWS_VCPKG_SOURCE -eq 'manifest') {
+            Write-Host "========= Installing manifest dependencies... ================`n"
+            $vcpkgExecutable = (Get-Command vcpkg -CommandType Application -ErrorAction Stop).Source
+            $env:VCPKG_ROOT = Split-Path -Parent $vcpkgExecutable
+            vcpkg integrate install
+            if ($LASTEXITCODE -ne 0) { throw "vcpkg integrate install failed with exit code $LASTEXITCODE" }
+            vcpkg install
+            if ($LASTEXITCODE -ne 0) { throw "vcpkg install failed with exit code $LASTEXITCODE" }
+          } else {
+            throw "Unsupported Windows vcpkg source: $env:WINDOWS_VCPKG_SOURCE"
+          }
           $vcpkgToolchain = Join-Path $env:VCPKG_ROOT 'scripts\buildsystems\vcpkg.cmake'
           if (-not (Test-Path -LiteralPath $vcpkgToolchain -PathType Leaf)) {
             throw "vcpkg toolchain file not found: $vcpkgToolchain"
           }
-          vcpkg integrate install
-          vcpkg install
           Write-Host "========= Building... ================`n"
           cmake --preset vs2022-x64 -B msvc -S Build/Cmake `
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON `
+            "-DCMAKE_TOOLCHAIN_FILE=$vcpkgToolchain" `
+            @cmakeDependencyArgs
+          if ($LASTEXITCODE -ne 0) { throw "Windows CMake configure failed with exit code $LASTEXITCODE" }
           cmake --build msvc --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { throw "Windows Release build failed with exit code $LASTEXITCODE" }
+          cmake --build msvc --config Release --target iccDEVCmmSmokeTest --parallel
+          if ($LASTEXITCODE -ne 0) { throw "Windows CMM smoke target build failed with exit code $LASTEXITCODE" }
+          ctest --test-dir msvc -C Release -R '^iccdev\.windows-iccdevcmm-smoke$' `
+            --output-on-failure --no-tests=error
+          if ($LASTEXITCODE -ne 0) { throw "Windows CMM smoke failed with exit code $LASTEXITCODE" }
           $runtimeDir = Resolve-Path ".\msvc\bin\Release"
           Get-ChildItem -File -Path $runtimeDir |
             Where-Object { $_.Extension -in '.exe','.dll' } |
@@ -880,6 +942,7 @@ jobs:
             'iccToJson.exe',
             'iccFromJson.exe',
             'iccPawgReport.exe',
+            'IccDEVCmm.dll',
             'IccProfLib2.dll'
           )) {
             if (-not (Test-Path (Join-Path $stage $required))) {
@@ -1043,6 +1106,16 @@ jobs:
           )) {
             if (-not (Test-Path -LiteralPath (Join-Path $stage $requiredIisBinary))) {
               throw "Required staged IIS binary missing: $requiredIisBinary"
+            }
+          }
+          # The Windows ICM CMM is a separate consumer DLL, with its usage guide.
+          $cmmStage = Join-Path $stage 'IccDEVCmm'
+          New-Item -ItemType Directory -Force -Path $cmmStage | Out-Null
+          Copy-Item -LiteralPath (Join-Path $stage 'IccDEVCmm.dll') -Destination $cmmStage -Force
+          Copy-Item -LiteralPath 'Tools/Winnt/IccDEVCmm/README.md' -Destination $cmmStage -Force
+          foreach ($requiredCmmFile in @('IccDEVCmm.dll', 'README.md')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $cmmStage $requiredCmmFile))) {
+              throw "Required staged Windows CMM artifact missing: $requiredCmmFile"
             }
           }
           # 6. Generate path.bat helper script
@@ -2070,9 +2143,18 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  apple-mobile-core:
+    name: Build Apple mobile release cores
+    needs: cache-policy
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci-apple-mobile-core.yml
+    with:
+      release-artifact: true
+
   release:
     name: "Publish Latest Release"
-    needs: [linux, macos, windows, wasm, cpack-linux, doxygen, python-wheels, mcp-package]
+    needs: [linux, macos, windows, wasm, cpack-linux, doxygen, python-wheels, mcp-package, apple-mobile-core]
     if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-fix-windows-packaging-failure' || github.ref == 'refs/heads/ci-publish-colourbill-ctrl' }}
     runs-on: ubuntu-latest
     environment:
@@ -2108,6 +2190,12 @@ jobs:
         with:
           name: iccdev-macos-clang
           path: artifacts/iccdev-macos-clang
+
+      - name: Download Apple mobile core libraries
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: iccdev-apple-mobile-core
+          path: artifacts/iccdev-apple-mobile-core
 
       - name: Download Windows artifact
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
@@ -2200,6 +2288,7 @@ jobs:
             iccdev-linux-gcc
             iccdev-linux-clang
             iccdev-macos-clang
+            iccdev-apple-mobile-core
             iccdev-windows-msvc
             iccdev-wasm-release
             iccdev-doxygen-html
@@ -2219,8 +2308,19 @@ jobs:
               exit 1
             fi
           done
+          python3 .github/scripts/validate-apple-mobile-core-artifact.py \
+            artifacts/iccdev-apple-mobile-core
 
           windows_bundle_root="artifacts/iccdev-windows-msvc/iccDEV-Testing"
+          for required in \
+            "IccDEVCmm.dll" \
+            "IccDEVCmm/IccDEVCmm.dll" \
+            "IccDEVCmm/README.md"; do
+            if [ ! -s "${windows_bundle_root}/${required}" ]; then
+              echo "::error::Missing expected Windows CMM release artifact: $(sanitize_line "$required")"
+              exit 1
+            fi
+          done
           matlab_required=(
             "iccHeifDump.exe"
             "iccToJson.exe"
@@ -2488,7 +2588,8 @@ jobs:
             echo "| Linux x86_64 (GCC + MATLAB R2023b MEX) | \`iccdev-linux-gcc.zip\` |"
             echo "| Linux x86_64 (Clang + MATLAB R2023b MEX) | \`iccdev-linux-clang.zip\` |"
             echo "| macOS arm64 (Clang + MATLAB R2023b MEX) | \`iccdev-macos-clang.zip\` |"
-            echo "| Windows x64 (MSVC + MATLAB R2023b MEX) | \`iccdev-windows-msvc.zip\` |"
+            echo "| Apple mobile static cores (available SDKs) | \`iccdev-apple-mobile-core.zip\` |"
+            echo "| Windows x64 (MSVC + MATLAB R2023b MEX + IccDEVCmm) | \`iccdev-windows-msvc.zip\` |"
             echo "| WASM (Emscripten) | \`iccdev-wasm-release.zip\` |"
             echo "| Doxygen HTML Docs | \`iccdev-doxygen-html.zip\` |"
             echo "| Linux CPack Runtime | \`reficcmax-*.zip\`, \`reficcmax-*.deb\`, \`reficcmax-*.rpm\` |"

@@ -10,6 +10,7 @@ point to deeper references.
 |-------|------------------|
 | User install and packaging | `docs/install.md` |
 | Hands-on use of prebuilt tools, Python, MATLAB, WebAssembly, and MCP | `docs/using-iccdev.md` |
+| MCP server source, capability, and package QA | `iccdev-mcp/docs/build-and-test.md` and `.github/skills/mcp-server-qa/SKILL.md` |
 | User build instructions | `docs/build.md` |
 | Apple mobile static cores and smoke app | `docs/build.md`, `.github/instructions/build-system.instructions.md`, and `.github/skills/maintainer-ci-ctest/SKILL.md` |
 | Manual iOS example apps | `docs/build.md`, `examples/ios-*/README.md`, and app-specific skills or prompts |

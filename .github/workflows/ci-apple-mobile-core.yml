@@ -4,14 +4,20 @@ name: Apple mobile core libraries
 
 'on':
   workflow_call:
+    inputs:
+      release-artifact:
+        description: Upload the built libraries for the trusted latest-release workflow
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: apple-core-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: true
+  group: apple-core-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.workflow != 'ci-latest-release' }}
 
 jobs:
   build:
@@ -78,6 +84,7 @@ jobs:
 
           rm -rf artifacts
           mkdir -p artifacts
+          cp LICENSE.md artifacts/LICENSE.md
           artifact_manifest="artifacts/manifest.txt"
           : > "$artifact_manifest"
 
@@ -163,6 +170,7 @@ jobs:
 
       # preflight: allow-pr-script-execution reason=native-apple-host-test-only
       - name: Exercise Apple simulator hosts
+        if: ${{ !inputs.release-artifact }}
         env:
           BASH_ENV: /dev/null
           ICCDEV_APPLE_DOWNLOAD_RUNTIME: '1'
@@ -177,6 +185,7 @@ jobs:
 
       # preflight: allow-pr-script-execution reason=xcode-ctest-runtime-test-only
       - name: Exercise Xcode CTest runtime layouts
+        if: ${{ !inputs.release-artifact }}
         env:
           BASH_ENV: /dev/null
         run: |
@@ -186,6 +195,7 @@ jobs:
           bash .github/scripts/iccdev-xcode-ctest-smoke.sh
 
       - name: Summarize native Apple smoke results
+        if: ${{ !inputs.release-artifact }}
         env:
           BASH_ENV: /dev/null
         run: |
@@ -207,7 +217,10 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: Upload Apple mobile core libraries
-        if: github.event_name == 'workflow_dispatch'
+        if: >-
+          ${{ github.event_name == 'workflow_dispatch' &&
+              (github.workflow == 'Apple mobile core libraries' ||
+               (inputs.release-artifact && github.workflow == 'ci-latest-release')) }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: iccdev-apple-mobile-core

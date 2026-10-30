@@ -51,7 +51,13 @@
 #include "Icm.h"
 #include "IccDEVCmm.h"
 #include "resource.h"
+#include <cstdint>
+#include <memory>
+#include <mutex>
+#include <new>
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include "Winerror.h"
 
 static CIccProfile* OpenProfile(HPROFILE hProfile)
@@ -92,9 +98,69 @@ static CIccProfile* OpenProfile(HPROFILE hProfile)
   return pProfile;
 }
 
-#define AVAILABLE_TRANSFORMS 1024
+static const size_t AVAILABLE_TRANSFORMS = 1024;
+static const uintptr_t MIN_TRANSFORM_HANDLE = 256;
+static const uintptr_t MAX_TRANSFORM_HANDLE = 65535;
 
-CIccCmm *g_Transforms[AVAILABLE_TRANSFORMS];
+struct TransformState
+{
+  explicit TransformState(std::unique_ptr<CIccCmm> cmm) : m_Cmm(std::move(cmm)) {}
+
+  // CIccCmm::Apply uses mutable scratch and the MRU cache is mutable too.
+  // Serialize calls on one transform while letting independent handles run.
+  std::recursive_mutex m_Mutex;
+  std::unique_ptr<CIccCmm> m_Cmm;
+};
+
+static std::mutex g_TransformTableMutex;
+static std::unordered_map<uintptr_t, std::shared_ptr<TransformState>> g_Transforms;
+static uintptr_t g_NextTransformHandle = MIN_TRANSFORM_HANDLE;
+
+static std::shared_ptr<TransformState> FindTransform(HCMTRANSFORM handle)
+{
+  uintptr_t id = reinterpret_cast<uintptr_t>(handle);
+  if (id < MIN_TRANSFORM_HANDLE || id > MAX_TRANSFORM_HANDLE)
+    return {};
+
+  std::lock_guard<std::mutex> lock(g_TransformTableMutex);
+  auto it = g_Transforms.find(id);
+  return it == g_Transforms.end() ? std::shared_ptr<TransformState>() : it->second;
+}
+
+static HCMTRANSFORM StoreTransform(CIccCmm *cmm)
+{
+  std::unique_ptr<CIccCmm> owner(cmm);
+  if (!owner) {
+    SetLastError(ERROR_OUTOFMEMORY);
+    return NULL;
+  }
+
+  try {
+    std::shared_ptr<TransformState> state =
+      std::make_shared<TransformState>(std::move(owner));
+    std::lock_guard<std::mutex> lock(g_TransformTableMutex);
+    if (g_Transforms.size() >= AVAILABLE_TRANSFORMS) {
+      SetLastError(ERROR_OUT_OF_STRUCTURES);
+      return NULL;
+    }
+
+    // Windows ICM retains only the low WORD of a CMM handle. Rotate the valid
+    // range so a deleted handle cannot immediately name its replacement.
+    for (uintptr_t attempts = 0; attempts <= MAX_TRANSFORM_HANDLE - MIN_TRANSFORM_HANDLE; ++attempts) {
+      uintptr_t id = g_NextTransformHandle;
+      g_NextTransformHandle = id == MAX_TRANSFORM_HANDLE ? MIN_TRANSFORM_HANDLE : id + 1;
+      if (g_Transforms.emplace(id, state).second)
+        return reinterpret_cast<HCMTRANSFORM>(id);
+    }
+  }
+  catch (const std::bad_alloc &) {
+    SetLastError(ERROR_OUTOFMEMORY);
+    return NULL;
+  }
+
+  SetLastError(ERROR_OUT_OF_STRUCTURES);
+  return NULL;
+}
 
 BOOL APIENTRY DllMain( HANDLE hModule, 
                        DWORD  ul_reason_for_call, 
@@ -104,7 +170,6 @@ BOOL APIENTRY DllMain( HANDLE hModule,
 	switch (ul_reason_for_call)
 	{
 	case DLL_PROCESS_ATTACH:
-    memset(g_Transforms, 0, sizeof(g_Transforms));
     break;
 	case DLL_THREAD_ATTACH:
 	case DLL_THREAD_DETACH:
@@ -309,15 +374,17 @@ BOOL WINAPI CMCheckColors(
                           LPBYTE lpaResult            // buffer for results
                           )
 {
-  size_t i = (size_t)hcmTransform;
+  size_t i;
   icFloatNumber srcPixel[MAX_COLOR_CHANNELS], destPixel[MAX_COLOR_CHANNELS];
 
-  if (i<256 || i>=256+AVAILABLE_TRANSFORMS || !g_Transforms[i-256]) {
+  auto transform = FindTransform(hcmTransform);
+  if (!transform) {
     SetLastError(ERROR_INVALID_HANDLE);
     return FALSE;
   }
 
-  CIccCmm *pCmm = g_Transforms[i-256];
+  std::lock_guard<std::recursive_mutex> transform_lock(transform->m_Mutex);
+  CIccCmm *pCmm = transform->m_Cmm.get();
 
   //Check if color types matches transform color spaces
   if (!IsValidColorType(ctInput, pCmm->GetSourceSpace()) ||
@@ -419,15 +486,17 @@ BOOL WINAPI CMCheckColorsInGamut(
                                  UINT nCount                 // result buffer size
                                 )
 {
-  size_t i = (size_t)hcmTransform;
+  size_t i;
   icFloatNumber srcPixel[MAX_COLOR_CHANNELS], destPixel[MAX_COLOR_CHANNELS];
 
-  if (i<256 || i>=256+AVAILABLE_TRANSFORMS || !g_Transforms[i-256]) {
+  auto transform = FindTransform(hcmTransform);
+  if (!transform) {
     SetLastError(ERROR_INVALID_HANDLE);
     return FALSE;
   }
 
-  CIccCmm *pCmm = g_Transforms[i-256];
+  std::lock_guard<std::recursive_mutex> transform_lock(transform->m_Mutex);
+  CIccCmm *pCmm = transform->m_Cmm.get();
 
   //Check if color types matches transform color spaces
   if (pCmm->GetSourceSpace()!=icSigRgbData ||
@@ -437,9 +506,9 @@ BOOL WINAPI CMCheckColorsInGamut(
   }
 
   for (i=0; i<nCount; i++) {
-    srcPixel[0] = (icFloatNumber)(lpaRGBTriple->rgbtRed) / 65535.0f;
-    srcPixel[1] = (icFloatNumber)(lpaRGBTriple->rgbtGreen) / 65535.0f;
-    srcPixel[2] = (icFloatNumber)(lpaRGBTriple->rgbtBlue) / 65535.0f;
+    srcPixel[0] = (icFloatNumber)(lpaRGBTriple->rgbtRed) / 255.0f;
+    srcPixel[1] = (icFloatNumber)(lpaRGBTriple->rgbtGreen) / 255.0f;
+    srcPixel[2] = (icFloatNumber)(lpaRGBTriple->rgbtBlue) / 255.0f;
 
     lpaRGBTriple++;
 
@@ -468,16 +537,18 @@ BOOL WINAPI CMCheckRGBs(
                         LPARAM ulCallbackData
                         )
 {
-  size_t i = (size_t)hcmTransform;
+  size_t i;
   icFloatNumber srcPixel[MAX_COLOR_CHANNELS], destPixel[MAX_COLOR_CHANNELS];
   LPBYTE lpSrcBits = (LPBYTE)lpSrcBits_;
 
-  if (i<256 || i>=256+AVAILABLE_TRANSFORMS || !g_Transforms[i-256]) {
+  auto transform = FindTransform(hcmTransform);
+  if (!transform) {
     SetLastError(ERROR_INVALID_HANDLE);
     return FALSE;
   }
 
-  CIccCmm *pCmm = g_Transforms[i-256];
+  std::unique_lock<std::recursive_mutex> transform_lock(transform->m_Mutex);
+  CIccCmm *pCmm = transform->m_Cmm.get();
   LPBYTE lpSrcLine;
   DWORD j;
 
@@ -758,9 +829,16 @@ BOOL WINAPI CMCheckRGBs(
       lpaResult++;
     }
 
-    if (pfnCallback && !pfnCallback(j, dwHeight, ulCallbackData)) {
-      SetLastError(ERROR_CANCELLED);
-      return FALSE;
+    if (pfnCallback) {
+      // External callbacks may translate through another transform. Holding
+      // this lock would deadlock if two callbacks cross-call each other.
+      transform_lock.unlock();
+      BOOL keepGoing = pfnCallback(j, dwHeight, ulCallbackData);
+      transform_lock.lock();
+      if (!keepGoing) {
+        SetLastError(ERROR_CANCELLED);
+        return FALSE;
+      }
     }
 
     if (!dwStride) {
@@ -820,25 +898,19 @@ HCMTRANSFORM WINAPI CMCreateMultiProfileTransform(
                                                   DWORD dwFlags             // transform creation flags
                                                  )
 {
-  size_t rv;
-  DWORD i, n=0;
-  DWORD dwIntent;
+  DWORD i;
 
-  if (!nIntents) {
+  if (!lpahProfiles || !nProfiles || !padwIntents ||
+      (nIntents != 1 && nIntents != nProfiles)) {
     SetLastError(ERROR_BAD_ARGUMENTS);
     return 0;
   }
 
-  dwIntent = padwIntents[n];
-
-  for (rv=0; rv<AVAILABLE_TRANSFORMS; rv++) {
-    if (!g_Transforms[rv])
-      break;
-  }
-
-  if (rv==AVAILABLE_TRANSFORMS) {
-    SetLastError(ERROR_OUT_OF_STRUCTURES);
-    return 0;
+  for (i=0; i<nIntents; i++) {
+    if (GetRenderingIntent(padwIntents[i]) == icUnknownIntent) {
+      SetLastError(ERROR_BAD_ARGUMENTS);
+      return 0;
+    }
   }
 
   CIccCmm *pCmm = new CIccCmm();
@@ -852,24 +924,21 @@ HCMTRANSFORM WINAPI CMCreateMultiProfileTransform(
       return 0;
     }
     
-    if (pCmm->AddXform(pProfile, 
-                       GetRenderingIntent(dwIntent),
+    // A single supplied intent applies to the first profile; later profiles
+    // use Match intent (iccDEV's icUnknownIntent inherits the previous one).
+    icRenderingIntent intent = i < nIntents ?
+      GetRenderingIntent(padwIntents[i]) : icUnknownIntent;
+    if (pCmm->AddXform(pProfile,
+                       intent,
                        icInterpLinear,
                        NULL,
                        (i+1==nProfiles && (dwFlags & ENABLE_GAMUT_CHECKING)) ? icXformLutGamut : icXformLutColor
                       ) != icCmmStatOk) {
-      delete pProfile;
       delete pCmm;
       SetLastError(ERROR_BAD_ARGUMENTS);
       return 0;
     }
 
-    if (i) {
-      if (n+1<nIntents) {
-        n++;
-      }
-      dwIntent = padwIntents[n];
-    }
   }
 
   if (pCmm->Begin()!=icCmmStatOk) {
@@ -881,10 +950,7 @@ HCMTRANSFORM WINAPI CMCreateMultiProfileTransform(
   pCmm->RemoveAllIO();
 
   pCmm = CIccMruCmm::Attach(pCmm);
-
-  g_Transforms[rv] = pCmm;
-
-  return (HCMTRANSFORM)(rv+256);
+  return StoreTransform(pCmm);
 }
 
 
@@ -934,18 +1000,6 @@ HCMTRANSFORM WINAPI CMCreateTransformExt(
                                          DWORD dwFlags                         // creation flags
                                         )
 {
-  size_t rv;
-
-  for (rv=0; rv<AVAILABLE_TRANSFORMS; rv++) {
-    if (!g_Transforms[rv])
-      break;
-  }
-
-  if (rv==AVAILABLE_TRANSFORMS) {
-    SetLastError(ERROR_BAD_ARGUMENTS);
-    return 0;
-  }
-
   CIccCmm *pCmm = new CIccCmm();
   CIccProfile *pProfile;
 
@@ -953,6 +1007,7 @@ HCMTRANSFORM WINAPI CMCreateTransformExt(
 
   if (lpColorSpace) {
     if (!CreateProfileFromLogColorSpaceA(lpColorSpace, &lpSrcProfileBuf) || !lpSrcProfileBuf) {
+      delete pCmm;
       SetLastError(ERROR_INVALID_HANDLE);
       return 0;
     }
@@ -960,13 +1015,13 @@ HCMTRANSFORM WINAPI CMCreateTransformExt(
     pProfile = GetProfileFromBuf(lpSrcProfileBuf);
 
     if (!pProfile) {
+      delete pCmm;
       GlobalFree(lpSrcProfileBuf);
       SetLastError(ERROR_INVALID_HANDLE);
       return 0;
     }
 
     if (pCmm->AddXform(pProfile)!=icCmmStatOk) {
-      delete pProfile;
       delete pCmm;
       GlobalFree(lpSrcProfileBuf);
       return 0;
@@ -982,7 +1037,6 @@ HCMTRANSFORM WINAPI CMCreateTransformExt(
       return 0;
     }
     if (pCmm->AddXform(pProfile)!=icCmmStatOk) {
-      delete pProfile;
       delete pCmm;
       if (lpSrcProfileBuf)
         GlobalFree(lpSrcProfileBuf);
@@ -998,7 +1052,6 @@ HCMTRANSFORM WINAPI CMCreateTransformExt(
         return 0;
       }
       if (pCmm->AddXform(pProfile)!=icCmmStatOk) {
-        delete pProfile;
         delete pCmm;
         GlobalFree(lpSrcProfileBuf);
         return 0;
@@ -1015,7 +1068,6 @@ HCMTRANSFORM WINAPI CMCreateTransformExt(
       return 0;
     }
     if (pCmm->AddXform(pProfile)!=icCmmStatOk) {
-      delete pProfile;
       delete pCmm;
       if (lpSrcProfileBuf)
         GlobalFree(lpSrcProfileBuf);
@@ -1036,9 +1088,7 @@ HCMTRANSFORM WINAPI CMCreateTransformExt(
   if (lpSrcProfileBuf)
     GlobalFree(lpSrcProfileBuf);
 
-  g_Transforms[rv] = pCmm;
-
-  return (HCMTRANSFORM)(rv+256);
+  return StoreTransform(pCmm);
 }
 
 
@@ -1049,17 +1099,6 @@ HCMTRANSFORM WINAPI CMCreateTransformExtW(
                                           DWORD dwFlags                         // creation flags
                                          )
 {
-  size_t rv;
-
-  for (rv=0; rv<AVAILABLE_TRANSFORMS; rv++) {
-    if (!g_Transforms[rv])
-      break;
-  }
-
-  if (rv==AVAILABLE_TRANSFORMS) {
-    return 0;
-  }
-
   CIccCmm *pCmm = new CIccCmm();
   CIccProfile *pProfile;
 
@@ -1067,18 +1106,19 @@ HCMTRANSFORM WINAPI CMCreateTransformExtW(
 
   if (lpColorSpace) {
     if (!CreateProfileFromLogColorSpaceW(lpColorSpace, &lpSrcProfileBuf) || !lpSrcProfileBuf) {
+      delete pCmm;
       return 0;
     }
 
     pProfile = GetProfileFromBuf(lpSrcProfileBuf);
 
     if (!pProfile) {
+      delete pCmm;
       GlobalFree(lpSrcProfileBuf);
       return 0;
     }
 
     if (pCmm->AddXform(pProfile)!=icCmmStatOk) {
-      delete pProfile;
       delete pCmm;
       GlobalFree(lpSrcProfileBuf);
       return 0;
@@ -1094,7 +1134,6 @@ HCMTRANSFORM WINAPI CMCreateTransformExtW(
       return 0;
     }
     if (pCmm->AddXform(pProfile)!=icCmmStatOk) {
-      delete pProfile;
       delete pCmm;
       if (lpSrcProfileBuf)
         GlobalFree(lpSrcProfileBuf);
@@ -1110,7 +1149,6 @@ HCMTRANSFORM WINAPI CMCreateTransformExtW(
         return 0;
       }
       if (pCmm->AddXform(pProfile)!=icCmmStatOk) {
-        delete pProfile;
         delete pCmm;
         GlobalFree(lpSrcProfileBuf);
         return 0;
@@ -1126,8 +1164,7 @@ HCMTRANSFORM WINAPI CMCreateTransformExtW(
         GlobalFree(lpSrcProfileBuf);
       return 0;
     }
-    if (pCmm->AddXform(*pProfile)!=icCmmStatOk) {
-      delete pProfile;
+    if (pCmm->AddXform(pProfile)!=icCmmStatOk) {
       delete pCmm;
       if (lpSrcProfileBuf)
         GlobalFree(lpSrcProfileBuf);
@@ -1144,13 +1181,13 @@ HCMTRANSFORM WINAPI CMCreateTransformExtW(
     return 0;
   }
 
+  pCmm->RemoveAllIO();
+
   if (lpSrcProfileBuf) {
     GlobalFree(lpSrcProfileBuf);
   }
 
-  g_Transforms[rv] = pCmm;
-
-  return (HCMTRANSFORM)(rv+256);
+  return StoreTransform(pCmm);
 }
 
 
@@ -1180,14 +1217,19 @@ BOOL WINAPI CMDeleteTransform(
                               HCMTRANSFORM hcmTransform
                              )
 {
-  size_t i = (size_t)hcmTransform;
-
-  if (i>=256 && i<256+AVAILABLE_TRANSFORMS && g_Transforms[i-256]) {
-    delete g_Transforms[i-256];
-    g_Transforms[i-256] = NULL;
-
-    return TRUE;
+  uintptr_t id = reinterpret_cast<uintptr_t>(hcmTransform);
+  std::shared_ptr<TransformState> transform;
+  {
+    std::lock_guard<std::mutex> lock(g_TransformTableMutex);
+    auto it = g_Transforms.find(id);
+    if (it != g_Transforms.end()) {
+      transform = std::move(it->second);
+      g_Transforms.erase(it);
+    }
   }
+
+  if (transform)
+    return TRUE;
 
   SetLastError(ERROR_INVALID_HANDLE);
   return FALSE;
@@ -1266,15 +1308,17 @@ BOOL WINAPI CMTranslateColors(
                               COLORTYPE ctOutput 
                              )
 {
-  size_t i = (size_t)hcmTransform;
+  size_t i;
   icFloatNumber srcPixel[MAX_COLOR_CHANNELS], destPixel[MAX_COLOR_CHANNELS];
 
-  if (i<256 || i>=256+AVAILABLE_TRANSFORMS || !g_Transforms[i-256]) {
+  auto transform = FindTransform(hcmTransform);
+  if (!transform) {
     SetLastError(ERROR_INVALID_HANDLE);
     return FALSE;
   }
 
-  CIccCmm *pCmm = g_Transforms[i-256];
+  std::lock_guard<std::recursive_mutex> transform_lock(transform->m_Mutex);
+  CIccCmm *pCmm = transform->m_Cmm.get();
 
   //Check if color types matches transform color spaces
   if (!IsValidColorType(ctInput, pCmm->GetSourceSpace()) ||
@@ -1446,10 +1490,10 @@ BOOL WINAPI CMTranslateRGB(
                            DWORD dwFlags
                           )
 {
-  size_t i = (size_t)hcmTransform;
   icFloatNumber srcPixel[MAX_COLOR_CHANNELS], destPixel[MAX_COLOR_CHANNELS];
 
-  if (i<256 || i>=256+AVAILABLE_TRANSFORMS || !g_Transforms[i-256]) {
+  auto transform = FindTransform(hcmTransform);
+  if (!transform) {
     SetLastError(ERROR_INVALID_HANDLE);
     return FALSE;
   }
@@ -1459,7 +1503,8 @@ BOOL WINAPI CMTranslateRGB(
     return FALSE;
   }
 
-  CIccCmm *pCmm = g_Transforms[i-256];
+  std::lock_guard<std::recursive_mutex> transform_lock(transform->m_Mutex);
+  CIccCmm *pCmm = transform->m_Cmm.get();
 
   //Check if color types matches transform color spaces
   if (pCmm->GetSourceSpace()!=icSigRgbData ||
@@ -1503,17 +1548,19 @@ BOOL WINAPI CMTranslateRGBsExt(
                                LPARAM ulCallbackData
                               )
 {
-  size_t i = (size_t)hcmTransform;
+  size_t i;
   icFloatNumber srcPixel[MAX_COLOR_CHANNELS], destPixel[MAX_COLOR_CHANNELS];
   LPBYTE lpSrcBits = (LPBYTE)lpSrcBits_;
   LPBYTE lpDestBits = (LPBYTE)lpDestBits_;
 
-  if (i<256 || i>=256+AVAILABLE_TRANSFORMS || !g_Transforms[i-256]) {
+  auto transform = FindTransform(hcmTransform);
+  if (!transform) {
     SetLastError(ERROR_INVALID_HANDLE);
     return FALSE;
   }
 
-  CIccCmm *pCmm = g_Transforms[i-256];
+  std::unique_lock<std::recursive_mutex> transform_lock(transform->m_Mutex);
+  CIccCmm *pCmm = transform->m_Cmm.get();
   LPBYTE lpSrcLine;
   LPBYTE lpDestLine;
   DWORD j;
@@ -2127,9 +2174,16 @@ BOOL WINAPI CMTranslateRGBsExt(
       }
     }
     
-    if (lpfnCallback && !lpfnCallback(j, dwHeight, ulCallbackData)) {
-      SetLastError(ERROR_CANCELLED);
-      return FALSE;
+    if (lpfnCallback) {
+      // Keep the shared transform state alive, but do not hold its mutable
+      // CMM lock while invoking caller code on this thread.
+      transform_lock.unlock();
+      BOOL keepGoing = lpfnCallback(j, dwHeight, ulCallbackData);
+      transform_lock.lock();
+      if (!keepGoing) {
+        SetLastError(ERROR_CANCELLED);
+        return FALSE;
+      }
     }
 
     if (!dwInputStride) {
@@ -2236,7 +2290,6 @@ BOOL WINAPI CMConvertColorNameToIndex(
     }
 
     paColorName++;
-    paIndex++;
   }
 
   delete pProfile;
@@ -2271,7 +2324,8 @@ BOOL WINAPI CMConvertIndexToColorName(
 
   for (i=0; i<dwCount; i++) {
 
-    if (paIndex[i] > pTag->GetSize()) {
+    if (paIndex[i] >= pTag->GetSize()) {
+      delete pProfile;
       SetLastError(ERROR_BAD_ARGUMENTS);
       return FALSE;
     }
@@ -2281,7 +2335,6 @@ BOOL WINAPI CMConvertIndexToColorName(
     memcpy(*paColorName, pEntry->rootName, sizeof(pEntry->rootName));
 
     paColorName++;
-    paIndex++;
   }
 
   delete pProfile;

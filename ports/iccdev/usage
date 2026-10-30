@@ -16,3 +16,8 @@ explicit -static targets for installed libraries:
   RefIccMAX::IccXML2-static
   RefIccMAX::IccJSON2-static
   RefIccMAX::IccConnect2-static
+
+The tools feature installs command-line programs, not the Windows ICM CMM DLL.
+For IccDEVCmm.dll, use the separate Windows CMake runtime build and follow
+https://github.com/InternationalColorConsortium/iccDEV/blob/master/Tools/Winnt/IccDEVCmm/README.md
+for host dependency and registration steps.

@@ -23,6 +23,7 @@ long command references.
 | `maintainer-label-system` | Maintaining label taxonomy, path labeler rules, issue triage, PR status labels, and CodeQL label routing. |
 | `matlab-bindings-test` | Building and validating the MATLAB MEX gateway, IccJSON conversion, profiles, examples, dependencies, and lifecycle tests. |
 | `python-bindings-test` | Building and validating the Python/Cython bindings and package-facing tests. |
+| `mcp-server-qa` | Checking MCP/REST behavior, optional native backends, Docker capabilities, and installed release distributions. |
 | `regression-container-maintainer` | Using the published maintainer container for smoke tests, PR validation, issue reproduction, sanitizer review, and CI handoff. |
 | `regression-workflow-governance` | Adding regression gates or updating tool-test workflows. |
 | `vcpkg-export-consumer-debug` | Fixing vcpkg, install/export, uninstall, or packaged consumer CI failures. |

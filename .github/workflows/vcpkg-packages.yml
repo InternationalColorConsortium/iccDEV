@@ -8,18 +8,12 @@
 #
 ###############################################################
 
-name: vcpkg platform packages
+name: Windows vcpkg packages
 
 # yamllint disable rule:line-length
 
 on:
   workflow_dispatch:
-    inputs:
-      include-experimental-unix:
-        description: 'Also build Linux and macOS vcpkg bundles (diagnostic only)'
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -29,162 +23,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  package-unix:
-    if: ${{ inputs['include-experimental-unix'] }}
-    name: "${{ matrix.platform }} vcpkg packages"
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 180
-    permissions:
-      contents: read
-    defaults:
-      run:
-        shell: bash --noprofile --norc {0}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux-x64
-            os: ubuntu-24.04
-            triplet: x64-linux
-          - platform: macos-arm64
-            os: macos-14
-            triplet: arm64-osx
-    env:
-      BASH_ENV: /dev/null
-      VCPKG_BASELINE: 04a9d8e5212d01ee1dd9478eadd9caade4f8b0d4
-      VCPKG_TRIPLET: ${{ matrix.triplet }}
-      PLATFORM_ID: ${{ matrix.platform }}
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Bootstrap pinned vcpkg
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          source .github/scripts/sanitize-sed.sh
-
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            bash .github/scripts/ci-safe-apt-update.sh
-            # preflight: allow-package-install reason=vcpkg-libxcrypt-host-build-tools
-            sudo apt-get install -y --no-install-recommends \
-              autoconf \
-              autoconf-archive \
-              automake \
-              libtool \
-              libltdl-dev \
-              libx11-dev \
-              libxext-dev \
-              libxft-dev
-          fi
-
-          git clone https://github.com/microsoft/vcpkg.git "$RUNNER_TEMP/vcpkg"
-          git -C "$RUNNER_TEMP/vcpkg" checkout "$VCPKG_BASELINE"
-          "$RUNNER_TEMP/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
-          echo "VCPKG_ROOT=$RUNNER_TEMP/vcpkg" >> "$GITHUB_ENV"
-          echo "VCPKG_INSTALLED_DIR=$RUNNER_TEMP/vcpkg-installed" >> "$GITHUB_ENV"
-
-      - name: Build complete vcpkg dependency tree
-        env:
-          VCPKG_ICCDEV_SOURCE: ${{ github.workspace }}
-          VCPKG_KEEP_ENV_VARS: VCPKG_ICCDEV_SOURCE
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            export VCPKG_FORCE_SYSTEM_BINARIES=1
-          fi
-          # preflight: allow-package-install reason=build-pinned-vcpkg-dependency-bundle
-          "$VCPKG_ROOT/vcpkg" install \
-            --x-manifest-root="$GITHUB_WORKSPACE" \
-            --triplet "$VCPKG_TRIPLET" \
-            --x-install-root="$VCPKG_INSTALLED_DIR"
-          # preflight: allow-package-install reason=build-pinned-vcpkg-dependency-bundle
-          "$VCPKG_ROOT/vcpkg" install "iccdev[tools,xml,json]" \
-            --overlay-ports="$GITHUB_WORKSPACE/ports" \
-            --triplet "$VCPKG_TRIPLET" \
-            --x-install-root="$VCPKG_INSTALLED_DIR" \
-            --clean-after-build \
-            --classic
-          test -d "$VCPKG_INSTALLED_DIR/$VCPKG_TRIPLET/include"
-          test -d "$VCPKG_INSTALLED_DIR/$VCPKG_TRIPLET/lib"
-
-      - name: Build and package all CMake configurations
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-
-          bundle_dir="$RUNNER_TEMP/iccdev-vcpkg-package-$PLATFORM_ID"
-          mkdir -p "$bundle_dir/packages"
-          for build_type in Debug Release RelWithDebInfo MinSizeRel; do
-            build_dir="$RUNNER_TEMP/build-$PLATFORM_ID-$build_type"
-            package_dir="$bundle_dir/packages/$build_type"
-            cmake -S "$GITHUB_WORKSPACE/Build/Cmake" -B "$build_dir" -G Ninja \
-              -DCMAKE_BUILD_TYPE="$build_type" \
-              -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
-              -DVCPKG_MANIFEST_MODE=OFF \
-              -DVCPKG_INSTALLED_DIR="$VCPKG_INSTALLED_DIR" \
-              -DVCPKG_TARGET_TRIPLET="$VCPKG_TRIPLET" \
-              -DENABLE_WXWIDGETS=OFF \
-              -DENABLE_CPACK_PACKAGING=ON
-            cmake --build "$build_dir" --parallel "$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)"
-            (
-              cd "$build_dir"
-              cpack --config CPackConfig.cmake --verbose
-            )
-            mkdir -p "$package_dir"
-            find "$build_dir" -maxdepth 1 -type f \
-              \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' \) \
-              -exec cp {} "$package_dir/" \;
-            test -n "$(find "$package_dir" -maxdepth 1 -type f -print -quit)"
-          done
-          mkdir -p "$bundle_dir/vcpkg/installed"
-          cp -a "$VCPKG_ROOT/scripts" "$bundle_dir/vcpkg/scripts"
-          cp -a "$VCPKG_INSTALLED_DIR/$VCPKG_TRIPLET" \
-            "$bundle_dir/vcpkg/installed/$VCPKG_TRIPLET"
-          {
-            echo "iccDEV vcpkg package bundle"
-            echo "platform=$PLATFORM_ID"
-            echo "triplet=$VCPKG_TRIPLET"
-            echo "commit=$(git rev-parse HEAD)"
-            echo "build_types=Debug Release RelWithDebInfo MinSizeRel"
-          } > "$bundle_dir/MANIFEST.txt"
-
-      - name: Report package bundle
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-
-          {
-            echo "## vcpkg platform package bundle"
-            echo ""
-            echo "- Platform: $(sanitize_line "$PLATFORM_ID")"
-            echo "- Triplet: $(sanitize_line "$VCPKG_TRIPLET")"
-            echo "- Build types: Debug, Release, RelWithDebInfo, MinSizeRel"
-            echo "- Status: [OK] complete vcpkg dependency tree and CPack packages bundled"
-          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
-
-      - name: Upload platform package bundle
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
-        with:
-          name: iccdev-vcpkg-package-${{ matrix.platform }}
-          path: ${{ runner.temp }}/iccdev-vcpkg-package-${{ matrix.platform }}
-          if-no-files-found: error
-          retention-days: 14
-
   package-windows:
     name: "windows-x64 vcpkg packages"
     runs-on: windows-2022
@@ -348,10 +186,8 @@ jobs:
 
   package-summary:
     name: "Report vcpkg package success"
-    needs: [package-unix, package-windows]
-    if: >-
-      ${{ always() && needs.package-windows.result == 'success' &&
-      (needs.package-unix.result == 'success' || needs.package-unix.result == 'skipped') }}
+    needs: [package-windows]
+    if: ${{ always() && needs.package-windows.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -375,10 +211,10 @@ jobs:
           source .github/scripts/sanitize-sed.sh
 
           {
-            echo "## vcpkg platform packages complete"
+            echo "## Windows vcpkg packages complete"
             echo ""
-            echo "- Platforms: $(sanitize_line "windows-x64; Linux and macOS are optional diagnostics")"
+            echo "- Platform: $(sanitize_line "windows-x64")"
             echo "- Build types: $(sanitize_line "Debug, Release, RelWithDebInfo, MinSizeRel")"
-            echo "- Artifacts: $(sanitize_line "iccdev-vcpkg-package-<platform>")"
+            echo "- Artifact: $(sanitize_line "iccdev-vcpkg-package-windows-x64")"
             echo "- Status: [OK] requested dependency and CPack bundles uploaded"
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

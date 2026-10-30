@@ -11802,12 +11802,15 @@ function(iccdev_add_windows_iccdevcmm_smoke_test)
 
   add_dependencies(check iccDEVCmmSmokeTest RefIccMAX)
 
+  # Generated from Testing/Named/NamedColorV4.xml; a checked-in ICC keeps this
+  # DLL smoke independent of the XML converter and its optional dependencies.
   add_test(
     NAME iccdev.windows-iccdevcmm-smoke
     COMMAND
       "$<TARGET_FILE:iccDEVCmmSmokeTest>"
       "$<TARGET_FILE:RefIccMAX>"
       "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+      "${ICCDEV_REPO_ROOT}/.github/ci/test-data/cmm-namedcolor-v4.icc"
   )
   set_tests_properties(iccdev.windows-iccdevcmm-smoke PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
@@ -11827,6 +11830,59 @@ function(iccdev_add_windows_iccdevcmm_smoke_test)
   set_tests_properties(iccdev.windows-iccdevcmm-smoke PROPERTIES
     ENVIRONMENT_MODIFICATION "${_iccdevcmm_windows_env_mods}"
   )
+
+  # Install only the CMM and its core library into an isolated prefix. This
+  # catches a missing vcpkg zlib DLL even when the optional IIS target would
+  # otherwise copy every vcpkg DLL into a full runtime package.
+  if(ENABLE_INSTALL_RIM AND ENABLE_SHARED_LIBS AND ICC_USE_ZLIB
+     AND VCPKG_TARGET_TRIPLET AND ZLIB_LIBRARY_RELEASE
+     AND NOT IS_ABSOLUTE "${CMAKE_INSTALL_BINDIR}"
+     AND NOT IS_ABSOLUTE "${CMAKE_INSTALL_DOCDIR}")
+    set(_iccdevcmm_vcpkg_installed "${VCPKG_INSTALLED_DIR}")
+    if(NOT _iccdevcmm_vcpkg_installed)
+      set(_iccdevcmm_vcpkg_installed "${_VCPKG_INSTALLED_DIR}")
+    endif()
+    get_filename_component(_iccdevcmm_zlib_name
+      "${ZLIB_LIBRARY_RELEASE}" NAME_WE)
+    set(_iccdevcmm_zlib_dll
+      "${_iccdevcmm_vcpkg_installed}/${VCPKG_TARGET_TRIPLET}/bin/${_iccdevcmm_zlib_name}.dll")
+    if(_iccdevcmm_vcpkg_installed AND EXISTS "${_iccdevcmm_zlib_dll}")
+      add_test(
+        NAME iccdev.windows-iccdevcmm-runtime-install
+        CONFIGURATIONS Release
+        COMMAND "${CMAKE_COMMAND}"
+          "-DICCDEV_CMM_PACKAGE_BUILD_DIR=${CMAKE_BINARY_DIR}"
+          "-DICCDEV_CMM_PACKAGE_SMOKE=$<TARGET_FILE:iccDEVCmmSmokeTest>"
+          "-DICCDEV_CMM_PACKAGE_REPO_ROOT=${ICCDEV_REPO_ROOT}"
+          "-DICCDEV_CMM_PACKAGE_BINDIR=${CMAKE_INSTALL_BINDIR}"
+          "-DICCDEV_CMM_PACKAGE_DOCDIR=${CMAKE_INSTALL_DOCDIR}"
+          "-DICCDEV_CMM_PACKAGE_COMPONENT=${ICCDEV_RUNTIME_COMPONENT}"
+          "-DICCDEV_CMM_PACKAGE_ZLIB_DLL=${_iccdevcmm_zlib_name}.dll"
+          -P "${CMAKE_CURRENT_LIST_DIR}/RunWindowsCmmPackageInstallTest.cmake"
+      )
+      set_tests_properties(iccdev.windows-iccdevcmm-runtime-install PROPERTIES
+        WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+        TIMEOUT 60
+        LABELS "iccdev;windows;cmm;runtime-package;vcpkg;regression"
+      )
+      if(TARGET iccIisIsapi)
+        add_test(
+          NAME iccdev.windows-iccdevcmm-iis-runtime-manifest
+          CONFIGURATIONS Release
+          COMMAND "${CMAKE_COMMAND}"
+            "-DICCDEV_CMM_IIS_BUILD_DIR=${CMAKE_BINARY_DIR}"
+            "-DICCDEV_CMM_IIS_BINDIR=${CMAKE_INSTALL_BINDIR}"
+            "-DICCDEV_CMM_IIS_ZLIB_DLL=${_iccdevcmm_zlib_name}.dll"
+            -P "${CMAKE_CURRENT_LIST_DIR}/RunWindowsCmmIisRuntimeManifestTest.cmake"
+        )
+        set_tests_properties(iccdev.windows-iccdevcmm-iis-runtime-manifest PROPERTIES
+          WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+          TIMEOUT 60
+          LABELS "iccdev;windows;cmm;iis;runtime-package;vcpkg;regression"
+        )
+      endif()
+    endif()
+  endif()
 endfunction()
 
 
@@ -13904,6 +13960,14 @@ function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
     return()
   endif()
 
+  # Optional CONFIGURATIONS restricts a script at CTest registration time,
+  # including single-config Release trees and multi-config Release invocations.
+  cmake_parse_arguments(PARSE_ARGV 5 _script "" "" "CONFIGURATIONS")
+  set(_script_config_args)
+  if(_script_CONFIGURATIONS)
+    list(APPEND _script_config_args CONFIGURATIONS ${_script_CONFIGURATIONS})
+  endif()
+
   string(REPLACE "." "-" _out_name "${NAME}")
   add_test(
     NAME "${NAME}"
@@ -13911,7 +13975,8 @@ function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
       "${CMAKE_COMMAND}" -E env
       ${ICCDEV_TEST_ENV}
       "ICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/${_out_name}"
-      "${BASH_EXECUTABLE}" "${SCRIPT}" ${ARGN}
+      "${BASH_EXECUTABLE}" "${SCRIPT}" ${_script_UNPARSED_ARGUMENTS}
+    ${_script_config_args}
   )
   set_tests_properties("${NAME}" PROPERTIES
     WORKING_DIRECTORY "${WORKING_DIRECTORY}"
@@ -14653,13 +14718,23 @@ set_tests_properties(iccdev.issue-1982-dual-pcs-selection-regression PROPERTIES
 # CI debug helper for the NaN/SixChanInputRef iccApplyToLink PoC.  It preserves
 # the original master heap-buffer-overflow replay with extra signature/register
 # logging and now expects the NaN range to fail closed before CMM/LUT generation.
-iccdev_add_script_test(
-  iccdev.applytolink-nan-sixchan-debug
-  120
-  "iccdev;tools;cmm;applytolink;debug;asan;ubsan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applytolink-nan-sixchan-debug.sh"
-)
+# Keep it out of Release CTest discovery, including the comprehensive gate.
+# Single-config CTest does not pass -C, so configure it unconditionally only
+# in Debug trees; multi-config generators use add_test(CONFIGURATIONS Debug).
+if(ICCDEV_IS_MULTI_CONFIG OR CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(_iccdev_debug_script_config_args)
+  if(ICCDEV_IS_MULTI_CONFIG)
+    list(APPEND _iccdev_debug_script_config_args CONFIGURATIONS Debug)
+  endif()
+  iccdev_add_script_test(
+    iccdev.applytolink-nan-sixchan-debug
+    120
+    "iccdev;tools;cmm;applytolink;debug;asan;ubsan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applytolink-nan-sixchan-debug.sh"
+    ${_iccdev_debug_script_config_args}
+  )
+endif()
 
 if(ICC_USE_ZLIB)
   set(_hextext_compression_mode "ON")

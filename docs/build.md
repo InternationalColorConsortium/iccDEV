@@ -210,14 +210,22 @@ capabilities those tools depend on.
 
 The `Apple mobile core libraries` workflow discovers installed Apple SDKs,
 builds every matching minimal and extended mobile-core preset, and runs the
-simulator and Xcode CTest smoke gates below. Manual runs upload the static
-libraries, generated version headers, and build manifest as
+simulator and Xcode CTest smoke gates below on standalone manual dispatches.
+Manual runs upload the static libraries, generated version headers, and build manifest as
 `iccdev-apple-mobile-core`. The workflow also remains callable by trusted
-workflow orchestration without uploading PR-controlled artifacts. Apple mobile
-and Apple smoke workflows are not push or pull-request triggers; dispatch
+workflow orchestration without uploading PR-controlled artifacts. Normal PR CI
+calls `Apple platform smoke` for the bounded Xcode CTest runtime-layout gate;
+it does not run the long simulator gate. Dispatch
 `.github/workflows/ci-apple-mobile-core.yml` or
 `.github/workflows/ci-apple-platform-smoke.yml` when a change needs this Apple
-gate before review.
+simulator gate before review. The platform workflow also offers a focused
+`xcode` scope for a standalone runtime-layout check.
+
+The manual `ci-latest-release` workflow builds the Apple mobile-core artifact
+without rerunning simulator or Xcode smoke tests. For an approved release, it
+validates the SDK manifest and each built archive
+and version header before publishing `iccdev-apple-mobile-core.zip`. SDKs absent
+from the hosted runner are recorded as skips in the archive manifest.
 
 ### Run the core smoke app on an iPhone, iPad, or Apple Watch
 
@@ -811,6 +819,15 @@ installed by the `dev` component. Linux builds generate ZIP packages by default
 and add DEB or RPM packages when the corresponding local CPack backend is
 available. The `ci-latest-release` workflow runs the Linux CPack runtime-package
 smoke and uploads the `reficcmax-runtime-packages-linux` artifact.
+
+Its Windows release bundle includes the tested `IccDEVCmm.dll` and usage guide
+under `IccDEVCmm/` as well as the DLL at the bundle root for runtime loading.
+The Windows job runs `iccdev.windows-iccdevcmm-smoke` before upload. The manual
+`windows_vcpkg_source` input defaults to manifest installation; the
+`pinned-release-bundle` choice uses the immutable
+<a href="https://github.com/InternationalColorConsortium/iccDEV/releases/tag/vcpkg-win-23241-libheif-deps">vcpkg-win-23241-libheif-deps release</a>
+in classic mode after checking its fixed SHA-256 digest. This option changes
+only the Windows release build's dependency source.
 
 ## Shared library exports
 

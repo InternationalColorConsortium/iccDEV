@@ -225,9 +225,10 @@ The container entrypoint accepts `mcp`/`stdio`, `rest`/`api`, `sse`, and
 ### Validate Runtime Capabilities
 
 The static MCP inventory lists supported tools; `health_check` reports the
-tools available in a specific runtime. An image without the optional native
-validation ABI can correctly report fewer available tools. Validate discovered
-capabilities instead of a fixed total:
+tools available in a specific runtime. The full unified image should have all
+CLI tools and the Python binding, while an optional native validation ABI can
+differ. Check each required capability and derive the total from the reported
+inventories rather than hard-code a count:
 
 ```bash
 docker run --rm --entrypoint python iccdev:mcp-local -c '
@@ -237,9 +238,21 @@ health = health_check()
 assert set(health["cli_tools"]["available"]) == set(TOOL_BINARIES)
 assert not health["cli_tools"]["missing"]
 assert health["python_api"]["available"]
+assert health["total_tools"] == (
+    len(health["python_api"]["available_tools"])
+    + len(health["cli_tools"]["available"])
+    + len(health["service_tools"])
+)
+print("validation ABI available:", health["validation_api"]["available"])
 print(health)
 '
 ```
+
+For a package-only or reduced tool build, check the particular required CLI
+name in `cli_tools.available` and the corresponding native capability instead
+of requiring every tool. Run
+`python3 .github/scripts/iccdev-container-smoke.py iccdev:mcp-local` to exercise
+real MCP and REST requests in a locally built image.
 
 ### MCP Mode (stdio)
 

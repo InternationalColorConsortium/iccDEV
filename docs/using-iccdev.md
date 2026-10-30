@@ -564,8 +564,10 @@ mcp-venv/bin/pip install "iccdev-mcp[rest]"
 ```
 
 (On Windows the commands are under `mcp-venv\Scripts\`.) It can share an
-environment with the native Python bindings because the MCP wheel ships only
-the `iccdev_mcp` namespace. Then point the server at an unzipped release bundle:
+environment with the native Python bindings on CPython 3.11-3.14 because the
+MCP wheel ships only the `iccdev_mcp` namespace. Python 3.10 supports the MCP
+package and CLI-backed tools, but the current compiled `iccdev` wheels require
+CPython 3.11-3.14. Then point the server at an unzipped release bundle:
 
 ```json
 {

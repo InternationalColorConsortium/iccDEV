@@ -11,10 +11,11 @@ For a registry baseline update, keep `vcpkg.json`, `Build/Cmake/vcpkg.json`,
 `.github/workflows/ci-vcpkg-ports.yml`, and `.github/workflows/ci.yml` at the
 same commit. The overlay port manifest intentionally has no registry baseline.
 
-### 1. Identify Which Platform Failed
+### 1. Identify the Windows Failure
 
-The required workflow runs on `windows-2022` (x64-windows, MSVC + Ninja).
-Linux and macOS lanes are manual diagnostics, not required PR checks.
+The vcpkg workflows run on `windows-2022` with the `x64-windows` triplet.
+The overlay port uses MSVC and Ninja; the manifest consumer uses the Visual
+Studio generator. Do not route vcpkg installation through Linux or macOS.
 
 ### 2. Common Failure Categories
 
@@ -73,73 +74,60 @@ error: ... precompiled header ...
 **Cause**: IccDEVCmm uses PCH that fails under Ninja generator.
 **Fix**: Ensure `ENABLE_CMM_TOOLS=OFF` in the portfile configure options.
 
-### 3. Reproduce Locally
+### 3. Reproduce Locally on Windows
 
-```bash
-# Set local source mode
-export VCPKG_ICCDEV_SOURCE=/path/to/iccDEV
-export VCPKG_KEEP_ENV_VARS=VCPKG_ICCDEV_SOURCE
-
-# Bootstrap vcpkg
-git clone --depth 1 https://github.com/microsoft/vcpkg.git /tmp/vcpkg
-/tmp/vcpkg/bootstrap-vcpkg.sh -disableMetrics
-
-# Install with verbose output
-/tmp/vcpkg/vcpkg install 'iccdev[tools,xml,json]' \
-  --overlay-ports=/path/to/iccDEV/ports \
-  --triplet x64-linux \
-  --classic \
-  2>&1 | tee vcpkg-install.log
-```
-
-Windows equivalent:
 ```powershell
-$env:VCPKG_ICCDEV_SOURCE = "C:\path\to\iccDEV"
+$iccdevRoot = 'C:\path\to\iccDEV'
+$vcpkgRoot = Join-Path $env:TEMP 'iccdev-vcpkg-qa'
+$env:VCPKG_ICCDEV_SOURCE = $iccdevRoot
 $env:VCPKG_KEEP_ENV_VARS = "VCPKG_ICCDEV_SOURCE"
 
-git clone --depth 1 https://github.com/microsoft/vcpkg.git "$env:TEMP\vcpkg"
-& "$env:TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
+git clone https://github.com/microsoft/vcpkg.git $vcpkgRoot
+git -C $vcpkgRoot checkout 04a9d8e5212d01ee1dd9478eadd9caade4f8b0d4
+& "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
 
-& "$env:TEMP\vcpkg\vcpkg.exe" install 'iccdev[tools,xml,json]' `
-  --overlay-ports="C:\path\to\iccDEV\ports" `
+& "$vcpkgRoot\vcpkg.exe" install 'iccdev[tools,xml,json]' `
+  "--overlay-ports=$iccdevRoot\ports" `
   --triplet x64-windows `
   --classic
+if ($LASTEXITCODE -ne 0) { throw "vcpkg install failed: $LASTEXITCODE" }
 ```
 
 For a source-pin refresh, repeat the install in a separate installed tree
-with `VCPKG_ICCDEV_SOURCE` unset so vcpkg downloads and verifies the pinned
-archive. Follow the Port Pin Check in
+with `VCPKG_ICCDEV_SOURCE` unset and binary cache restoration disabled for
+`iccdev`, so vcpkg downloads and verifies the pinned archive. An already
+installed package is reused even after the source environment variable is
+unset; use a fresh tree or remove the installed `iccdev` package first.
+Follow the Port Pin Check in
 <a href="../skills/vcpkg-export-consumer-debug/SKILL.md">vcpkg Export Consumer Debug</a>;
 local-source mode alone does not validate `REF` or `SHA512`.
 
-### 4. Verify Installed Artifacts
+### 4. Verify Installed Artifacts and Usage
 
-After a successful install, check:
-```bash
-TRIPLET=x64-linux  # adjust for platform
-PREFIX=/tmp/vcpkg/installed/$TRIPLET
+After a successful install, check the static libraries, CMake package, CLI
+tools, and the installed `usage` text:
 
-# Headers
-ls $PREFIX/include/RefIccMAX/IccProfLib2/*.h | wc -l  # expect ~52
-
-# Libraries
-ls $PREFIX/lib/libIccProfLib2*   # expect libIccProfLib2-static.a
-ls $PREFIX/lib/libIccXML2*       # present only with the xml feature
-ls $PREFIX/lib/libIccJSON2*      # present only with the json feature
-ls $PREFIX/lib/libIccConnect2*   # present with json/tools features
-
-# CMake config
-cat $PREFIX/share/RefIccMAX/RefIccMAXConfig.cmake
-
-# Tools enabled by iccdev[tools,xml,json]
-$PREFIX/tools/iccdev/iccDumpProfile --help
-$PREFIX/tools/iccdev/iccRoundTrip --help
-$PREFIX/tools/iccdev/iccFromXml --help
-$PREFIX/tools/iccdev/iccToXml --help
-$PREFIX/tools/iccdev/iccFromJson --help
-$PREFIX/tools/iccdev/iccToJson --help
-$PREFIX/tools/iccdev/iccApplyNamedCmm --help
+```powershell
+$prefix = Join-Path $vcpkgRoot 'installed\x64-windows'
+Get-ChildItem "$prefix\include\RefIccMAX\IccProfLib2\*.h" | Measure-Object
+@('IccProfLib2-static.lib', 'IccXML2-static.lib',
+  'IccJSON2-static.lib', 'IccConnect2-static.lib') | ForEach-Object {
+  if (-not (Test-Path "$prefix\lib\$_")) { throw "Missing library: $_" }
+}
+if (-not (Test-Path "$prefix\share\reficcmax\RefIccMAXConfig.cmake")) {
+  throw 'Missing RefIccMAX CMake package'
+}
+Get-Content "$prefix\share\iccdev\usage"
+@('iccDumpProfile', 'iccRoundTrip', 'iccFromXml', 'iccToXml',
+  'iccFromJson', 'iccToJson', 'iccApplyNamedCmm', 'iccBenchApply') | ForEach-Object {
+  if (-not (Test-Path "$prefix\tools\iccdev\$_.exe")) { throw "Missing tool: $_" }
+}
 ```
+
+Build `examples/hello-iccdev` in manifest mode against the overlay and run
+the resulting executable. The overlay is static-only and does not install
+`IccDEVCmm.dll`; validate the CMM DLL through the Windows CMake runtime
+package and its separate host smoke test.
 
 ## Key Files
 
@@ -150,20 +138,16 @@ $PREFIX/tools/iccdev/iccApplyNamedCmm --help
 | `ports/iccdev/portfile.cmake` | Static-only vcpkg build script |
 | `ports/iccdev/vcpkg.json` | Port manifest (deps, features) |
 | `examples/hello-iccdev/vcpkg.json` | Consumer manifest; relies on `iccdev` transitive dependencies |
-| `.github/workflows/ci-vcpkg-ports.yml` | Windows required CI workflow; Linux/macOS are manual diagnostics |
+| `.github/workflows/ci-vcpkg-ports.yml` | Windows overlay and manifest consumer CI workflow |
+| `.github/workflows/vcpkg-packages.yml` | Manual Windows dependency and CPack bundle workflow |
 | `Build/Cmake/CMakeLists.txt` | Upstream CMake options used by the port |
 
 ## CI Policy
 
-The required vcpkg lane validates `x64-windows` only. Treat Linux and macOS
-vcpkg failures as diagnostics until those environments are stable; do not add
-them to pull-request fan-out.
-
-The manual `vcpkg platform packages` workflow defaults to Windows. Set its
-`include-experimental-unix` input only when investigating Linux or macOS. Its
-artifact bundles preserve the portable vcpkg layout:
+The vcpkg workflows validate `x64-windows` only. The manual `Windows vcpkg
+packages` workflow preserves the portable vcpkg layout in its artifact:
 `vcpkg/scripts/buildsystems/vcpkg.cmake` and
-`vcpkg/installed/<triplet>/`.
+`vcpkg/installed/x64-windows/`.
 
 ## Environment Variable Gotcha
 

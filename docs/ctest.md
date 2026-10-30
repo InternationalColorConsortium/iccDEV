@@ -9,6 +9,9 @@ CTest registers tests only for tools enabled by the selected CMake options.
 With `ENABLE_ICCJSON=OFF`, JSON conversion, `IccConnect`, and JSON
 runtime-configuration tool regressions are omitted; the legacy script test runs
 with JSON round-trip enforcement disabled.
+The `iccdev.applytolink-nan-sixchan-debug` sanitizer diagnostic registers only
+for Debug, including when CTest selects a configuration from a multi-config
+generator. Release discovery omits it.
 
 CTest registration is maintainer-owned infrastructure because it affects CI
 coverage, workflow pass/fail behavior, and cross-platform release confidence.
@@ -418,6 +421,8 @@ Windows full tool builds register these tests when all targets are available:
 | `iccdev.fileio-seek-tell` | `.github/ci/regression/fileio-seek-tell.cpp` |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
 | `iccdev.windows-iccdevcmm-smoke` | `Tools/Winnt/IccDEVCmm/tests/IccDEVCmmSmoke.cpp` |
+| `iccdev.windows-iccdevcmm-runtime-install` | `Build/Cmake/Testing/RunWindowsCmmPackageInstallTest.cmake` |
+| `iccdev.windows-iccdevcmm-iis-runtime-manifest` | `Build/Cmake/Testing/RunWindowsCmmIisRuntimeManifestTest.cmake` |
 | `iccdev.parser-restore-calls` | `.github/ci/regression/parser-restore-calls.cpp` |
 | `iccdev.profile-write-failure` | `.github/ci/regression/profile-write-failure.cpp` |
 | `iccdev.windows-create-profiles` | `Testing/CreateAllProfiles.bat` |
@@ -508,9 +513,13 @@ settings so the executable and instrumented DLL share one runtime contract.
 Windows ICM CMM DLL directly, verifies the required `CM*` exports and `ICCD`
 CMM identity, validates `sRGB_v4_ICC_preference.icc`, then creates, translates
 through, and deletes a two-profile RGB transform without registering the CMM
-globally. `iccdev.issue-1009-iccjson-profilejson-export` checks that
-`IccJSON2.dll` exports `CIccProfileJson::~CIccProfileJson` for MSVC ABI
-consumers.
+globally. The CMM runtime-install test loads the DLL from an isolated install
+with its vcpkg zlib dependency, even when IIS is enabled. The IIS manifest
+test checks that the combined installers record the zlib DLL once and uninstall
+without missing-file reports. Both package tests require a shared-zlib Windows
+vcpkg Release build; the combined test also requires IIS.
+`iccdev.issue-1009-iccjson-profilejson-export` checks that `IccJSON2.dll`
+exports `CIccProfileJson::~CIccProfileJson` for MSVC ABI consumers.
 
 `iccdev.installed-package-consumer` runs on every platform and covers the
 *installed* package rather than the build tree. It stages an install into a

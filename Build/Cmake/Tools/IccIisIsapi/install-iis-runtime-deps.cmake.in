@@ -1,4 +1,9 @@
-set(_icc_iis_bin_dest "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/@CMAKE_INSTALL_BINDIR@")
+if(IS_ABSOLUTE "@CMAKE_INSTALL_BINDIR@")
+  set(_icc_iis_bin_logical "@CMAKE_INSTALL_BINDIR@")
+else()
+  set(_icc_iis_bin_logical "${CMAKE_INSTALL_PREFIX}/@CMAKE_INSTALL_BINDIR@")
+endif()
+set(_icc_iis_bin_dest "$ENV{DESTDIR}${_icc_iis_bin_logical}")
 file(MAKE_DIRECTORY "${_icc_iis_bin_dest}")
 
 set(_icc_iis_vcpkg_root "@VCPKG_INSTALLED_DIR@/@VCPKG_TARGET_TRIPLET@")
@@ -16,6 +21,17 @@ endif()
 
 foreach(_icc_iis_runtime_file IN LISTS _icc_iis_runtime_files)
   if(EXISTS "${_icc_iis_runtime_file}")
+    get_filename_component(_icc_iis_runtime_name
+      "${_icc_iis_runtime_file}" NAME)
+    # Earlier install rules (notably the CMM's zlib DLL) own their manifest
+    # entry. Reinstalling the same path here records it twice, so uninstall
+    # tries to remove it a second time. Compare logical paths for DESTDIR.
+    list(FIND CMAKE_INSTALL_MANIFEST_FILES
+      "${_icc_iis_bin_logical}/${_icc_iis_runtime_name}"
+      _icc_iis_manifest_index)
+    if(NOT _icc_iis_manifest_index EQUAL -1)
+      continue()
+    endif()
     file(INSTALL
       DESTINATION "${_icc_iis_bin_dest}"
       TYPE SHARED_LIBRARY

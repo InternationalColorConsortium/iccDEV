@@ -5,6 +5,23 @@
 name: Apple platform smoke
 
 'on':
+  workflow_call:
+    inputs:
+      scope:
+        description: Apple smoke surface
+        required: false
+        type: string
+        default: core
+      target-sha:
+        description: Exact source commit for PR validation
+        required: false
+        type: string
+        default: ''
+      base-sha:
+        description: Trusted base commit for summary helpers
+        required: false
+        type: string
+        default: ''
   workflow_dispatch:
     inputs:
       scope:
@@ -14,6 +31,7 @@ name: Apple platform smoke
         type: choice
         options:
           - core
+          - xcode
           - examples
           - all
 
@@ -35,19 +53,20 @@ jobs:
       - name: Checkout test sources
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ inputs.target-sha || github.sha }}
           persist-credentials: false
 
       - name: Checkout trusted summary helpers
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ inputs.base-sha || github.event.pull_request.base.sha || github.sha }}
           path: base
           sparse-checkout: .github/scripts
           persist-credentials: false
 
       # preflight: allow-package-install reason=apple-mobile-extended-core-json-header-dependency
       - name: Install Apple extended-core dependency headers
-        if: inputs.scope != 'examples'
+        if: inputs.scope == 'core' || inputs.scope == 'all'
         env:
           BASH_ENV: /dev/null
         run: |
@@ -61,8 +80,8 @@ jobs:
           fi
 
       # preflight: allow-pr-script-execution reason=native-apple-host-test-only
-      - name: Exercise native simulator and Xcode CTest hosts
-        if: inputs.scope != 'examples'
+      - name: Exercise Apple simulator hosts
+        if: inputs.scope == 'core' || inputs.scope == 'all'
         env:
           BASH_ENV: /dev/null
           ICCDEV_APPLE_DOWNLOAD_RUNTIME: '1'
@@ -74,11 +93,21 @@ jobs:
           for target in "${targets[@]}"; do
             bash .github/scripts/iccdev-apple-simulator-smoke.sh "$target"
           done
+
+      # preflight: allow-pr-script-execution reason=xcode-ctest-runtime-test-only
+      - name: Exercise Xcode CTest runtime layouts
+        if: inputs.scope == 'core' || inputs.scope == 'all' || inputs.scope == 'xcode'
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           bash .github/scripts/iccdev-xcode-ctest-smoke.sh
 
       # preflight: allow-pr-script-execution reason=manual-ios-example-sanitizer-test-only
       - name: Exercise manual iOS examples with sanitizers
-        if: inputs.scope != 'core'
+        if: inputs.scope == 'examples' || inputs.scope == 'all'
         env:
           BASH_ENV: /dev/null
           ICCDEV_APPLE_DOWNLOAD_RUNTIME: '1'
@@ -92,6 +121,7 @@ jobs:
         if: inputs.scope != 'examples'
         env:
           BASH_ENV: /dev/null
+          APPLE_SCOPE: ${{ inputs.scope }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -99,19 +129,21 @@ jobs:
           # shellcheck source=.github/scripts/sanitize-sed.sh
           source "$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
           {
-            targets=(ios ipad tvos watchos)
-            for target in "${targets[@]}"; do
-              report="out/apple-${target}-simulator-smoke/restored.json"
-              count="$(jq -er '.tests | length' "$report")"
-              sanitize_line "${target}: ${count} core checks; missing-fixture failure control passed."
-              printf '\n'
-            done
+            if [[ "$APPLE_SCOPE" != "xcode" ]]; then
+              targets=(ios ipad tvos watchos)
+              for target in "${targets[@]}"; do
+                report="out/apple-${target}-simulator-smoke/restored.json"
+                count="$(jq -er '.tests | length' "$report")"
+                sanitize_line "${target}: ${count} core checks; missing-fixture failure control passed."
+                printf '\n'
+              done
+            fi
             sanitize_line "Xcode Release and Debug CTest runtime gates passed."
             printf '\n'
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: Summarize iOS example results
-        if: inputs.scope != 'core'
+        if: inputs.scope == 'examples' || inputs.scope == 'all'
         env:
           BASH_ENV: /dev/null
         run: |

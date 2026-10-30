@@ -47,11 +47,11 @@ the package switches used by vcpkg:
 
 ## Local Source Mode
 
-For CI and development, the portfile supports a local source mode:
+For Windows CI and development, the portfile supports a local source mode:
 
-```bash
-export VCPKG_ICCDEV_SOURCE=/path/to/iccDEV
-export VCPKG_KEEP_ENV_VARS=VCPKG_ICCDEV_SOURCE
+```powershell
+$env:VCPKG_ICCDEV_SOURCE = 'C:\path\to\iccDEV'
+$env:VCPKG_KEEP_ENV_VARS = 'VCPKG_ICCDEV_SOURCE'
 ```
 
 **Critical**: vcpkg sanitizes environment variables before running portfile
@@ -82,12 +82,14 @@ not duplicate its transitive dependencies.
 - **CMake config**: `share/RefIccMAX/RefIccMAXConfig.cmake`
 - **Tools**: installed only with the `tools` feature; XML/JSON conversion
   tools are copied only when their matching feature is enabled
+- **CMM DLL**: not supplied by this static-only overlay; use the separate
+  Windows CMake runtime package for `IccDEVCmm.dll`
 
 ## CI Workflow
 
 `ci-vcpkg-ports.yml` validates the port on Windows 2022 with the
-`x64-windows` triplet and MSVC. Linux and macOS vcpkg diagnostics remain
-manual until those lanes stabilize.
+`x64-windows` triplet and MSVC. vcpkg installation is Windows-only in this
+repository.
 
 Verification checks: headers present, static libs exist, CMake config
 resolves, and core/XML/JSON/connect tools execute: iccDumpProfile,
@@ -100,6 +102,9 @@ When updating the port:
 1. Update `"version"` in `ports/iccdev/vcpkg.json`
 2. For source-only refreshes without an upstream version bump, increment
    `"port-version"` instead of changing `"version"`.
+   When the overlay revision changes, pin `version#port-version` in
+   `examples/hello-iccdev/vcpkg.json` and the generated manifest in
+   `.github/workflows/ci-vcpkg-ports.yml`.
 3. For dependency changes, synchronize the root, `Build/Cmake`, and overlay
    port manifests, then increment `"port-version"`.
 4. Update `REF` and `SHA512` in `portfile.cmake` for non-local consumers when
