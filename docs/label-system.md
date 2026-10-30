@@ -194,7 +194,7 @@ A dispatch on an open PR therefore does not cancel that PR's `pull_request`
 run; inspect the dispatched run by its run ID rather than treating `gh pr
 checks` as its status.
 For an owner-visible long-cycle build inventory, dispatch either
-`CI Comprehensive Build and Test` (including Windows) or `CI Build Test (No
+`ci-qa-pr` (including Windows) or `CI Build Test (No
 Fuzzers)` (without Windows). Both callers use `_build-matrix.yml`, which
 centralizes the current reusable Unix and Windows gates plus focused sanitizer,
 option, version-header, and clean-rebuild lanes.
