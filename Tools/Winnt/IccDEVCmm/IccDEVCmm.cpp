@@ -437,9 +437,9 @@ BOOL WINAPI CMCheckColorsInGamut(
   }
 
   for (i=0; i<nCount; i++) {
-    srcPixel[0] = (icFloatNumber)(lpaRGBTriple->rgbtRed) / 65535.0f;
-    srcPixel[1] = (icFloatNumber)(lpaRGBTriple->rgbtGreen) / 65535.0f;
-    srcPixel[2] = (icFloatNumber)(lpaRGBTriple->rgbtBlue) / 65535.0f;
+    srcPixel[0] = (icFloatNumber)(lpaRGBTriple->rgbtRed) / 255.0f;
+    srcPixel[1] = (icFloatNumber)(lpaRGBTriple->rgbtGreen) / 255.0f;
+    srcPixel[2] = (icFloatNumber)(lpaRGBTriple->rgbtBlue) / 255.0f;
 
     lpaRGBTriple++;
 
@@ -824,7 +824,7 @@ HCMTRANSFORM WINAPI CMCreateMultiProfileTransform(
   DWORD i, n=0;
   DWORD dwIntent;
 
-  if (!nIntents) {
+  if (!lpahProfiles || !nProfiles || !padwIntents || !nIntents) {
     SetLastError(ERROR_BAD_ARGUMENTS);
     return 0;
   }
@@ -2236,7 +2236,6 @@ BOOL WINAPI CMConvertColorNameToIndex(
     }
 
     paColorName++;
-    paIndex++;
   }
 
   delete pProfile;
@@ -2271,7 +2270,8 @@ BOOL WINAPI CMConvertIndexToColorName(
 
   for (i=0; i<dwCount; i++) {
 
-    if (paIndex[i] > pTag->GetSize()) {
+    if (paIndex[i] >= pTag->GetSize()) {
+      delete pProfile;
       SetLastError(ERROR_BAD_ARGUMENTS);
       return FALSE;
     }
@@ -2281,7 +2281,6 @@ BOOL WINAPI CMConvertIndexToColorName(
     memcpy(*paColorName, pEntry->rootName, sizeof(pEntry->rootName));
 
     paColorName++;
-    paIndex++;
   }
 
   delete pProfile;

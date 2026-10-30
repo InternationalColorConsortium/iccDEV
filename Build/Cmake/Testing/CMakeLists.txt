@@ -11802,12 +11802,15 @@ function(iccdev_add_windows_iccdevcmm_smoke_test)
 
   add_dependencies(check iccDEVCmmSmokeTest RefIccMAX)
 
+  # Generated from Testing/Named/NamedColorV4.xml; a checked-in ICC keeps this
+  # DLL smoke independent of the XML converter and its optional dependencies.
   add_test(
     NAME iccdev.windows-iccdevcmm-smoke
     COMMAND
       "$<TARGET_FILE:iccDEVCmmSmokeTest>"
       "$<TARGET_FILE:RefIccMAX>"
       "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+      "${ICCDEV_REPO_ROOT}/.github/ci/test-data/cmm-namedcolor-v4.icc"
   )
   set_tests_properties(iccdev.windows-iccdevcmm-smoke PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"

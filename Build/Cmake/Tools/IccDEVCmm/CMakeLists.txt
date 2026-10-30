@@ -101,9 +101,25 @@ set_target_properties(${TARGET_NAME} PROPERTIES
     PDB_OUTPUT_DIRECTORY     "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
 )
 
-if(MSVC)
-    # Keep non-path MSVC link flags off MinGW, where ld treats them as files.
-    target_link_options(${TARGET_NAME} PRIVATE "/DYNAMICBASE:NO" "/NODEFAULTLIB:LIBCMT")
+if(MINGW)
+    # A registered CMM and the release package use the same DLL name on all
+    # Windows toolchains; MinGW otherwise adds a "lib" prefix to SHARED DLLs.
+    set_target_properties(${TARGET_NAME} PROPERTIES PREFIX "")
 endif()
 
-message(STATUS "RefIccMAX.dll build configuration complete.")
+if(MSVC)
+    # Keep non-path MSVC link flags off MinGW, where ld treats them as files.
+    target_link_options(${TARGET_NAME} PRIVATE "/DYNAMICBASE" "/NODEFAULTLIB:LIBCMT")
+endif()
+
+if(ENABLE_INSTALL_RIM)
+    install(TARGETS ${TARGET_NAME}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT ${ICCDEV_RUNTIME_COMPONENT}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT ${ICCDEV_RUNTIME_COMPONENT}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT ${ICCDEV_DEVELOPMENT_COMPONENT})
+    install(FILES "${OS_SPECIFIC_SOURCES}/README.md"
+        DESTINATION "${CMAKE_INSTALL_DOCDIR}/IccDEVCmm"
+        COMPONENT ${ICCDEV_RUNTIME_COMPONENT})
+endif()
+
+message(STATUS "IccDEVCmm.dll build configuration complete.")

@@ -28,3 +28,7 @@ if(EXISTS "${_bindir}")
     endif()
   endforeach()
 endif()
+
+# install(SCRIPT) creates this catalog outside file(INSTALL), so record it for
+# the matching full or runtime-component uninstall manifest.
+list(APPEND CMAKE_INSTALL_MANIFEST_FILES "${_catalog}")

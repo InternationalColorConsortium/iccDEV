@@ -21,17 +21,7 @@ on:
         required: false
         type: string
         default: ''
-  pull_request:
-    branches:
-      - master
-    types:
-      - opened
-      - reopened
-      - ready_for_review
-    paths:
-      - "Dockerfile"
-      - "iccdev-mcp/**"
-      - ".github/workflows/ci-mcp-server.yml"
+  # ci-pr-action owns PR routing; keep this workflow callable and rerunnable.
   workflow_dispatch:
 
 concurrency:

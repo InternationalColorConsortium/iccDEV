@@ -52,6 +52,8 @@ typedef BOOL(WINAPI *CMTranslateColorsFn)(HCMTRANSFORM, LPCOLOR, DWORD, COLORTYP
 typedef BOOL(WINAPI *CMTranslateRGBsExtFn)(HCMTRANSFORM, LPVOID, BMFORMAT, DWORD, DWORD, DWORD,
                                            LPVOID, BMFORMAT, DWORD, LPBMCALLBACKFN, LPARAM);
 typedef BOOL(WINAPI *CMDeleteTransformFn)(HCMTRANSFORM);
+typedef BOOL(WINAPI *CMConvertColorNameToIndexFn)(HPROFILE, PCOLOR_NAME, PDWORD, DWORD);
+typedef BOOL(WINAPI *CMConvertIndexToColorNameFn)(HPROFILE, PDWORD, PCOLOR_NAME, DWORD);
 
 struct CmmApi
 {
@@ -62,6 +64,8 @@ struct CmmApi
     CMTranslateColorsFn translate_colors;
     CMTranslateRGBsExtFn translate_rgbs_ext;
     CMDeleteTransformFn delete_transform;
+    CMConvertColorNameToIndexFn convert_color_name_to_index;
+    CMConvertIndexToColorNameFn convert_index_to_color_name;
 };
 
 static void print_last_error(const char *what)
@@ -116,13 +120,19 @@ static bool load_cmm(const wchar_t *dll_path, CmmApi &api)
     api.translate_rgbs_ext = reinterpret_cast<CMTranslateRGBsExtFn>(
         require_proc(api.module, "CMTranslateRGBsExt"));
     api.delete_transform = reinterpret_cast<CMDeleteTransformFn>(require_proc(api.module, "CMDeleteTransform"));
+    api.convert_color_name_to_index = reinterpret_cast<CMConvertColorNameToIndexFn>(
+        require_proc(api.module, "CMConvertColorNameToIndex"));
+    api.convert_index_to_color_name = reinterpret_cast<CMConvertIndexToColorNameFn>(
+        require_proc(api.module, "CMConvertIndexToColorName"));
 
     return api.get_info &&
            api.is_profile_valid &&
            api.create_multi_profile_transform &&
            api.translate_colors &&
            api.translate_rgbs_ext &&
-           api.delete_transform;
+           api.delete_transform &&
+           api.convert_color_name_to_index &&
+           api.convert_index_to_color_name;
 }
 
 static bool check_cmm_info(const CmmApi &api)
@@ -213,6 +223,69 @@ static bool check_rgb_roundtrip_transform(const CmmApi &api, HPROFILE profile)
                 output.rgb.red, output.rgb.green, output.rgb.blue);
     std::printf("[OK] CMCreateMultiProfileTransform/CMTranslateColors/CMDeleteTransform succeeded\n");
     return true;
+}
+
+static bool check_null_transform_intents(const CmmApi &api, HPROFILE profile)
+{
+    HPROFILE profiles[2] = { profile, profile };
+    SetLastError(ERROR_SUCCESS);
+    HCMTRANSFORM transform = api.create_multi_profile_transform(profiles, 2, NULL, 1, 0);
+    if (transform) {
+        api.delete_transform(transform);
+        std::printf("[FAIL] CMCreateMultiProfileTransform accepted a null intents array\n");
+        return false;
+    }
+    if (GetLastError() != ERROR_BAD_ARGUMENTS) {
+        print_last_error("CMCreateMultiProfileTransform (null intents)");
+        return false;
+    }
+    std::printf("[OK] CMCreateMultiProfileTransform rejected a null intents array\n");
+    return true;
+}
+
+static bool check_named_color_conversion(const CmmApi &api, const wchar_t *profile_path)
+{
+    HPROFILE profile = open_profile(profile_path);
+    if (!profile)
+        return false;
+
+    COLOR_NAME names[2] = {};
+    std::memcpy(names[0], "Red", sizeof("Red"));
+    std::memcpy(names[1], "Blue", sizeof("Blue"));
+    DWORD indices[3] = { 0xEEEEEEEEUL, 0xEEEEEEEEUL, 0xEEEEEEEEUL };
+    bool passed = true;
+
+    if (!api.convert_color_name_to_index(profile, names, indices, 2) ||
+        indices[0] != 1 || indices[1] != 9 || indices[2] != 0xEEEEEEEEUL) {
+        std::printf("[FAIL] CMConvertColorNameToIndex expected Red=1, Blue=9 in adjacent slots; "
+                    "got %lu,%lu,%lu\n", indices[0], indices[1], indices[2]);
+        passed = false;
+    }
+
+    DWORD requests[3] = { 0, 1, 2 };
+    COLOR_NAME results[2] = {};
+    if (!api.convert_index_to_color_name(profile, requests, results, 2) ||
+        std::strcmp(results[0], "Violet-Red") != 0 ||
+        std::strcmp(results[1], "Red") != 0) {
+        std::printf("[FAIL] CMConvertIndexToColorName expected indices 0,1 to yield "
+                    "Violet-Red,Red; got %s,%s\n", results[0], results[1]);
+        passed = false;
+    }
+
+    DWORD end_index = 20;  // NamedColorV4.xml contains 20 entries, indexed 0..19.
+    COLOR_NAME end_result[1] = {};
+    SetLastError(ERROR_SUCCESS);
+    BOOL accepted_end = api.convert_index_to_color_name(profile, &end_index, end_result, 1);
+    if (accepted_end || GetLastError() != ERROR_BAD_ARGUMENTS) {
+        std::printf("[FAIL] CMConvertIndexToColorName accepted index==size or returned "
+                    "unexpected error %lu\n", GetLastError());
+        passed = false;
+    }
+
+    CloseColorProfile(profile);
+    if (passed)
+        std::printf("[OK] Named-color index conversion and bounds checks passed\n");
+    return passed;
 }
 
 // Bitmap translation with an explicit destination stride (#1953).
@@ -324,8 +397,8 @@ static bool check_rgbs_ext_output_stride(const CmmApi &api, HPROFILE profile)
 
 int main(int argc, char **argv)
 {
-    if (argc != 3) {
-        std::printf("usage: IccDEVCmmSmoke.exe <IccDEVCmm.dll> <rgb-profile.icc>\n");
+    if (argc != 3 && argc != 4) {
+        std::printf("usage: IccDEVCmmSmoke.exe <IccDEVCmm.dll> <rgb-profile.icc> [named-profile.icc]\n");
         return 2;
     }
 
@@ -345,9 +418,15 @@ int main(int argc, char **argv)
 
     bool ok = check_profile_valid(api, profile) &&
               check_rgb_roundtrip_transform(api, profile) &&
-              check_rgbs_ext_output_stride(api, profile);
+              check_rgbs_ext_output_stride(api, profile) &&
+              check_null_transform_intents(api, profile);
 
     CloseColorProfile(profile);
+
+    if (ok && argc == 4) {
+        const std::wstring named_profile_path = normalize_windows_path(argv[3]);
+        ok = check_named_color_conversion(api, named_profile_path.c_str());
+    }
 
     if (!ok)
         return 1;
