@@ -9,6 +9,9 @@ CTest registers tests only for tools enabled by the selected CMake options.
 With `ENABLE_ICCJSON=OFF`, JSON conversion, `IccConnect`, and JSON
 runtime-configuration tool regressions are omitted; the legacy script test runs
 with JSON round-trip enforcement disabled.
+The `iccdev.applytolink-nan-sixchan-debug` sanitizer diagnostic registers only
+for Debug, including when CTest selects a configuration from a multi-config
+generator. Release discovery omits it.
 
 CTest registration is maintainer-owned infrastructure because it affects CI
 coverage, workflow pass/fail behavior, and cross-platform release confidence.

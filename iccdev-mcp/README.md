@@ -72,10 +72,13 @@ Use `uvx --from "<iccdev_mcp-wheel-asset-URL>" iccdev-mcp` when an exact
 GitHub release asset is required instead of the PyPI package.
 
 The wheel ships only the `iccdev_mcp` namespace, so it can share an environment
-with the separate Cython `iccdev` bindings. Header inspection and signature
-helpers are included. Pixel transforms require installing the native bindings
-from `python/` in the same environment. The `validate_profile` tool dynamically
-loads the public C validation ABI, so it also needs a shared IccProfLib build.
+with the separate Cython `iccdev` bindings on CPython 3.11-3.14, where the
+current compiled `iccdev` wheels are available. On Python 3.10, the MCP package
+and CLI-backed tools remain supported without those current binding wheels.
+Header inspection and signature helpers are included. Pixel transforms require
+the native bindings from `python/` in the same environment. The
+`validate_profile` tool dynamically loads the public C validation ABI, so it
+also needs a shared IccProfLib build.
 CLI-backed tools require iccDEV CLI binaries. Build iccDEV locally or
 set `ICCDEV_TOOLS_DIR` and `ICCDEV_BUILD_DIR` to an existing build. The REST
 health endpoint reports the bundled Python API and CLI discovery separately, so

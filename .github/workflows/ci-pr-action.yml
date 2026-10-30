@@ -110,6 +110,7 @@ jobs:
       testing_changed: ${{ steps.diffcheck.outputs.testing_changed }}
       ci_changed: ${{ steps.diffcheck.outputs.ci_changed }}
       container_changed: ${{ steps.diffcheck.outputs.container_changed }}
+      mcp_changed: ${{ steps.diffcheck.outputs.mcp_changed }}
       image_definition_changed: ${{ steps.diffcheck.outputs.image_definition_changed }}
       container_toolchain_required: ${{ steps.diffcheck.outputs.container_toolchain_required }}
       trusted_base_image_available: ${{ steps.diffcheck.outputs.trusted_base_image_available }}
@@ -298,6 +299,7 @@ jobs:
           ctest_recent_limit=0
           warning_policy=fail
           image_definition_changed=false
+          mcp_changed=false
           container_toolchain_required=false
           trusted_base_image_available=false
           # Default to the full PR CTest surface. The pr-extended tests
@@ -342,6 +344,7 @@ jobs:
             write_github_output testing_changed "$testing_changed"
             write_github_output ci_changed "$ci_changed"
             write_github_output container_changed "$container_changed"
+            write_github_output mcp_changed "$mcp_changed"
             write_github_output image_definition_changed "$image_definition_changed"
             write_github_output container_toolchain_required "$container_toolchain_required"
             write_github_output trusted_base_image_available "$trusted_base_image_available"
@@ -497,6 +500,7 @@ jobs:
           if ! validate_sha "$head_sha" || ! validate_sha "$base_sha"; then
             echo "Warning: invalid or missing PR commit SHA; assuming source changed for safety" >&2
             image_definition_changed=true
+            mcp_changed=true
             container_toolchain_required=true
             write_scope_outputs true true true true false true false true true true
             exit 0
@@ -528,6 +532,7 @@ jobs:
           if ! git merge-base "origin/${base_ref}" HEAD >/dev/null 2>&1; then
             echo "Warning: no merge base found; assuming source changed for safety" >&2
             image_definition_changed=true
+            mcp_changed=true
             container_toolchain_required=true
             write_scope_outputs true true true true false true false true true true
             exit 0
@@ -548,6 +553,7 @@ jobs:
           testing_changed=false
           ci_changed=false
           container_changed=false
+          mcp_changed=false
           docs_only=false
           example_consumer_changed=false
 
@@ -634,6 +640,10 @@ jobs:
             image_definition_changed=true
           fi
 
+          if has_changed_file '^(Dockerfile|\.dockerignore|iccdev-mcp/|\.github/ci/requirements/docker-|\.github/workflows/(ci-mcp-server|ci-pr-action)\.yml$|\.github/scripts/(iccdev-mcp-package-smoke|validate-mcp-release-package)\.py$)'; then
+            mcp_changed=true
+          fi
+
           if [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$testing_changed" == "true" ]]; then
             container_toolchain_required=true
           fi
@@ -701,6 +711,7 @@ jobs:
           TESTING_CHANGED: ${{ steps.diffcheck.outputs.testing_changed }}
           CI_CHANGED: ${{ steps.diffcheck.outputs.ci_changed }}
           CONTAINER_CHANGED: ${{ steps.diffcheck.outputs.container_changed }}
+          MCP_CHANGED: ${{ steps.diffcheck.outputs.mcp_changed }}
           DOCS_ONLY: ${{ steps.diffcheck.outputs.docs_only }}
         run: |
           set -euo pipefail
@@ -753,6 +764,7 @@ jobs:
             echo "- **Testing/regression changed:** \`$(sanitize_line "${TESTING_CHANGED:-false}")\`"
             echo "- **CI/governance changed:** \`$(sanitize_line "${CI_CHANGED:-false}")\`"
             echo "- **Container surface changed:** \`$(sanitize_line "${CONTAINER_CHANGED:-false}")\`"
+            echo "- **MCP surface changed:** \`$(sanitize_line "${MCP_CHANGED:-false}")\`"
             echo "- **Docs only:** \`$(sanitize_line "${DOCS_ONLY:-false}")\`"
             echo ""
             echo "If you have questions, contact a listed [Maintainer](https://github.com/InternationalColorConsortium/iccDEV/blob/master/.github/CODEOWNERS)."
@@ -1063,6 +1075,14 @@ jobs:
       warning_policy: ${{ needs.validate-inputs.outputs.warning-policy }}
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
 
+  mcp-server:
+    if: ${{ needs.detect-src.outputs.run_native_matrix == 'true' || needs.detect-src.outputs.mcp_changed == 'true' }}
+    name: MCP server package and Docker checks
+    needs: [detect-src]
+    uses: ./.github/workflows/ci-mcp-server.yml
+    with:
+      target_sha: ${{ needs.detect-src.outputs.target_sha }}
+
   win-ci:
     if: ${{ needs.detect-src.outputs.run_native_matrix == 'true' && needs.validate-inputs.outputs.include-windows == 'true' }}
     name: Windows Build & Test Profiles
@@ -1208,6 +1228,7 @@ jobs:
       # - lint
       # - scan-build
       - tool-tests
+      - mcp-server
       - win-ci
       - macos-release-lto
       - macos-debug
@@ -1265,6 +1286,7 @@ jobs:
           LINT_RESULT: skipped
           SCAN_RESULT: skipped
           TOOL_RESULT: ${{ needs['tool-tests'].result }}
+          MCP_RESULT: ${{ needs['mcp-server'].result }}
           WIN_RESULT: ${{ needs['win-ci'].result }}
           MACOS_RELEASE_LTO_RESULT: ${{ needs['macos-release-lto'].result }}
           MACOS_DEBUG_RESULT: ${{ needs['macos-debug'].result }}
@@ -1304,6 +1326,7 @@ jobs:
           LINT_RESULT="${LINT_RESULT:-success}"
           SCAN_RESULT="${SCAN_RESULT:-success}"
           TOOL_RESULT="${TOOL_RESULT:-success}"
+          MCP_RESULT="${MCP_RESULT:-success}"
           WIN_RESULT="${WIN_RESULT:-success}"
           MACOS_RELEASE_LTO_RESULT="${MACOS_RELEASE_LTO_RESULT:-success}"
           MACOS_DEBUG_RESULT="${MACOS_DEBUG_RESULT:-success}"
@@ -1331,6 +1354,7 @@ jobs:
           LINT_RESULT="$(trim_and_norm "$LINT_RESULT")"
           SCAN_RESULT="$(trim_and_norm "$SCAN_RESULT")"
           TOOL_RESULT="$(trim_and_norm "$TOOL_RESULT")"
+          MCP_RESULT="$(trim_and_norm "$MCP_RESULT")"
           WIN_RESULT="$(trim_and_norm "$WIN_RESULT")"
           MACOS_RELEASE_LTO_RESULT="$(trim_and_norm "$MACOS_RELEASE_LTO_RESULT")"
           MACOS_DEBUG_RESULT="$(trim_and_norm "$MACOS_DEBUG_RESULT")"
@@ -1339,7 +1363,7 @@ jobs:
 
           # --- compute overall result from upstream jobs ----------------------
           job_res=success
-          required_results=("$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$MACOS_RELEASE_LTO_RESULT" "$MACOS_DEBUG_RESULT" "$EXAMPLE_RESULT")
+          required_results=("$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$MCP_RESULT" "$WIN_RESULT" "$MACOS_RELEASE_LTO_RESULT" "$MACOS_DEBUG_RESULT" "$EXAMPLE_RESULT")
           for s in "${required_results[@]}"; do
             # 'skipped' is acceptable when run_native_matrix is false.
             # only 'failure' or 'cancelled' should cause overall failure
@@ -1410,6 +1434,7 @@ jobs:
             printf "| lint               | %s |\n" "$(sanitize_line "$LINT_RESULT")"
             printf "| scan-build         | %s |\n" "$(sanitize_line "$SCAN_RESULT")"
             printf "| tool-tests         | %s |\n" "$(sanitize_line "$TOOL_RESULT")"
+            printf "| mcp-server         | %s |\n" "$(sanitize_line "$MCP_RESULT")"
             printf "| win-ci             | %s |\n" "$(sanitize_line "$WIN_RESULT")"
             printf "| macos-release-lto  | %s |\n" "$(sanitize_line "$MACOS_RELEASE_LTO_RESULT")"
             printf "| macos-debug        | %s |\n" "$(sanitize_line "$MACOS_DEBUG_RESULT")"

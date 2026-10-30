@@ -19,8 +19,19 @@ release or branch push does not establish PyPI publication.
 
 1. **Check runtime inventory**
    ```bash
-   python3 -c 'from iccdev_mcp.cli_tools import TOOL_BINARIES; from iccdev_mcp.server import health_check; health = health_check(); assert set(health["cli_tools"]["available"]) == set(TOOL_BINARIES); assert not health["cli_tools"]["missing"]; print(health)'
+   python3 - <<'PY'
+   from iccdev_mcp.server import health_check
+   health = health_check()
+   assert health["status"] == "ok"
+   print(health)
+   # Check that the specific backend needed by the failing call is available.
+   assert "iccDumpProfile" in health["cli_tools"]["available"]
+   PY
    ```
+
+   Change `iccDumpProfile` to the tool under investigation. Missing optional
+   backends are expected in a package-only install; an advertised tool name or
+   fixed `total_tools` value is not an availability check.
 
 2. **Check binary availability**
    ```bash
@@ -30,14 +41,17 @@ release or branch push does not establish PyPI publication.
 3. **Test subprocess directly**
    ```bash
    # Run the same command the MCP server would execute
-   iccDumpProfile /path/to/profile.icc ALL 2>&1
+   iccDumpProfile /path/to/profile.icc ALL
    echo "Exit code: $?"
    ```
 
-4. **Check ASAN interference**
+4. **Inspect sanitizer failures**
    ```bash
-   ASAN_OPTIONS=detect_leaks=0,halt_on_error=0 iccDumpProfile profile.icc ALL
+   ASAN_OPTIONS=halt_on_error=1 iccDumpProfile /path/to/profile.icc ALL
    ```
+
+   Preserve the sanitizer report and exit status. A sanitizer abort is a
+   failure to investigate, not a successful MCP response.
 
 5. **Verify PATH includes tool directories**
    ```bash
@@ -48,20 +62,19 @@ release or branch push does not establish PyPI publication.
 
 6. **Test MCP tool in isolation**
    ```python
-   import asyncio
-   from iccdev_mcp.server import IccDevMcpServer
-   server = IccDevMcpServer()
-   result = asyncio.run(server.dump_profile("/path/to/profile.icc"))
-   print(result[:500])
+   from iccdev_mcp.server import dump_profile
+   result = dump_profile("/path/to/profile.icc")
+   print(result)
+   assert result["returncode"] == 0, result
    ```
 
 ## Common Issues
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| Empty output | Binary not found | Rebuild with ENABLE_TOOLS=ON |
-| Exit code 134 | ASAN abort | Set ASAN_OPTIONS=halt_on_error=0 |
-| Timeout | Malformed profile loops | Add -timeout flag or skip profile |
-| JSON parse error | stderr mixed in stdout | Check include_stderr parameter |
+| Tool unavailable | Required binary not found | Check `ICCDEV_TOOLS_DIR`, build target, and runtime library path |
+| Exit code 134 | Sanitizer or process abort | Save the report and reproduce the exact argv outside MCP |
+| Timeout | Tool exceeds the MCP subprocess bound | Save the input and exact argv; reproduce with an external timeout |
+| Unexpected response | CLI output differs from the MCP result | Inspect stdout, stderr, and structured MCP content separately |
 | Permission denied | Binary not executable | chmod +x on tool binaries |
 | Different health totals | Optional native ABI differs by image | Check capability flags, not a fixed count |

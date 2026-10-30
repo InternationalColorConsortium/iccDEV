@@ -44,6 +44,11 @@ shares one source of truth. Update rules here, not in the mirrors.
   and generated-file attribution as directed by their provenance.
 - For MCP runtime checks, validate every Docker image variant against its
   discovered capabilities. Do not hard-code a total tool count.
+- Keep the pure Python `iccdev-mcp` Python 3.10+ package contract separate from
+  the compiled `iccdev` CPython 3.11-3.14 wheel contract. For MCP behavior or
+  packaging changes, use `.github/skills/mcp-server-qa/SKILL.md` and require
+  source tests plus the relevant installed-package, native, or image smoke;
+  record skipped native tests as unverified coverage.
 - The published unified container is a native `linux/amd64` and `linux/arm64`
   manifest. Build and smoke each platform before publishing a tag; Apple
   Silicon Docker hosts must select `linux/arm64` without emulation.
@@ -128,6 +133,7 @@ shares one source of truth. Update rules here, not in the mirrors.
 | MATLAB binding and IccJSON tests | `.github/skills/matlab-bindings-test/SKILL.md` |
 | MATLAB binding debug | `.github/prompts/debug-matlab-bindings.prompt.md` |
 | Python binding tests | `.github/skills/python-bindings-test/SKILL.md` |
+| MCP server QA and package/runtime handoff | `.github/skills/mcp-server-qa/SKILL.md`, `iccdev-mcp/docs/build-and-test.md` |
 | WASM build tests | `.github/skills/wasm-build-test/SKILL.md` |
 | MCP subprocess debug | `.github/prompts/debug-mcp-subprocess.prompt.md` |
 | Python/Cython debug | `.github/prompts/debug-python-bindings.prompt.md` |

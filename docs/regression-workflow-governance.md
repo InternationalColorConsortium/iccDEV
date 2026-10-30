@@ -66,8 +66,14 @@ trusted base checkout for pull requests. Path discovery disables Git rename
 detection so a move is classified against both its removed source path and its
 added destination path.
 
-`ci-pr-action` owns deterministic core builds and tests only. Its reusable tool
-suite passes `instrumentation=core` and excludes `ci-infrastructure` CTests.
+`ci-pr-action` owns deterministic core builds and tests, plus a reusable MCP
+package and Dockerfile check. The MCP job runs when the native matrix is
+selected or when MCP package, Dockerfile, or MCP workflow files change. It
+checks out the exact PR head selected by the caller and contributes to the
+protected `PR Summary` result. Its `mcp-server-` concurrency group is distinct
+from the caller's `ci-pr-` group, so a called job cannot cancel its caller.
+The reusable tool suite passes `instrumentation=core` and excludes
+`ci-infrastructure` CTests.
 The standalone sanitizer caller runs the reusable tool workflow independently
 for native source, build, testing, or regression-fixture changes; the reusable
 workflow also remains manually dispatchable. Pre-flight is a standalone
@@ -85,8 +91,9 @@ contains the event base without rebuilding the full matrix.
 
 Before merging a rebased source PR, explicitly dispatch the applicable final
 lanes on the PR head. Use the full core matrix for source, build, or test
-changes; dispatch the sanitizer, JSON, MCP, and MATLAB workflows only when
-their documented paths or contracts apply.
+changes; dispatch the sanitizer, JSON, and MATLAB workflows only when their
+documented paths or contracts apply. `ci-pr-action` includes MCP validation
+for full core runs; `ci-mcp-server` remains available for an isolated rerun.
 
 ```bash
 gh workflow run ci-pr-action.yml --ref <head-branch> -f ci_scope=full

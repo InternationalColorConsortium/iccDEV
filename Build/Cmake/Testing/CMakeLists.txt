@@ -13904,6 +13904,14 @@ function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
     return()
   endif()
 
+  # Optional CONFIGURATIONS restricts a script at CTest registration time,
+  # including single-config Release trees and multi-config Release invocations.
+  cmake_parse_arguments(PARSE_ARGV 5 _script "" "" "CONFIGURATIONS")
+  set(_script_config_args)
+  if(_script_CONFIGURATIONS)
+    list(APPEND _script_config_args CONFIGURATIONS ${_script_CONFIGURATIONS})
+  endif()
+
   string(REPLACE "." "-" _out_name "${NAME}")
   add_test(
     NAME "${NAME}"
@@ -13911,7 +13919,8 @@ function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
       "${CMAKE_COMMAND}" -E env
       ${ICCDEV_TEST_ENV}
       "ICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/${_out_name}"
-      "${BASH_EXECUTABLE}" "${SCRIPT}" ${ARGN}
+      "${BASH_EXECUTABLE}" "${SCRIPT}" ${_script_UNPARSED_ARGUMENTS}
+    ${_script_config_args}
   )
   set_tests_properties("${NAME}" PROPERTIES
     WORKING_DIRECTORY "${WORKING_DIRECTORY}"
@@ -14653,13 +14662,23 @@ set_tests_properties(iccdev.issue-1982-dual-pcs-selection-regression PROPERTIES
 # CI debug helper for the NaN/SixChanInputRef iccApplyToLink PoC.  It preserves
 # the original master heap-buffer-overflow replay with extra signature/register
 # logging and now expects the NaN range to fail closed before CMM/LUT generation.
-iccdev_add_script_test(
-  iccdev.applytolink-nan-sixchan-debug
-  120
-  "iccdev;tools;cmm;applytolink;debug;asan;ubsan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applytolink-nan-sixchan-debug.sh"
-)
+# Keep it out of Release CTest discovery, including the comprehensive gate.
+# Single-config CTest does not pass -C, so configure it unconditionally only
+# in Debug trees; multi-config generators use add_test(CONFIGURATIONS Debug).
+if(ICCDEV_IS_MULTI_CONFIG OR CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(_iccdev_debug_script_config_args)
+  if(ICCDEV_IS_MULTI_CONFIG)
+    list(APPEND _iccdev_debug_script_config_args CONFIGURATIONS Debug)
+  endif()
+  iccdev_add_script_test(
+    iccdev.applytolink-nan-sixchan-debug
+    120
+    "iccdev;tools;cmm;applytolink;debug;asan;ubsan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applytolink-nan-sixchan-debug.sh"
+    ${_iccdev_debug_script_config_args}
+  )
+endif()
 
 if(ICC_USE_ZLIB)
   set(_hextext_compression_mode "ON")

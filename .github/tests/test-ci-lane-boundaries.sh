@@ -42,6 +42,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
 pr_workflow="$repo_root/.github/workflows/ci-pr-action.yml"
+mcp_workflow="$repo_root/.github/workflows/ci-mcp-server.yml"
 tool_workflow="$repo_root/.github/workflows/ci-iccdev-tool-tests.yml"
 sanitizer_workflow="$repo_root/.github/workflows/ci-sanitizer-regression.yml"
 risk_workflow="$repo_root/.github/workflows/ci-risk-analysis-gate.yml"
@@ -50,6 +51,13 @@ ctest_file="$repo_root/Build/Cmake/Testing/CMakeLists.txt"
 
 grep -Fq 'instrumentation: core' "$pr_workflow"
 grep -Fq 'include_infrastructure_tests: false' "$pr_workflow"
+grep -Fq 'uses: ./.github/workflows/ci-mcp-server.yml' "$pr_workflow"
+grep -Fq 'needs.detect-src.outputs.mcp_changed' "$pr_workflow"
+grep -Fq 'MCP_RESULT:' "$pr_workflow"
+grep -Fq "needs['mcp-server'].result" "$pr_workflow"
+grep -q '^  workflow_call:$' "$mcp_workflow"
+# shellcheck disable=SC2016 # GitHub expression is literal workflow syntax.
+test "$(grep -Fc 'ref: ${{ inputs.target_sha || github.event.pull_request.head.sha || github.sha }}' "$mcp_workflow")" -eq 2
 if grep -Fq 'ci-pr-risk-security-analysis.yml' "$pr_workflow"; then
   echo "[FAIL] ci-pr-action must not call risk analysis" >&2
   exit 1

@@ -219,6 +219,11 @@ and Apple smoke workflows are not push or pull-request triggers; dispatch
 `.github/workflows/ci-apple-platform-smoke.yml` when a change needs this Apple
 gate before review.
 
+The manual `ci-latest-release` workflow calls the same Apple mobile-core gate.
+For an approved release, it validates the SDK manifest and each built archive
+and version header before publishing `iccdev-apple-mobile-core.zip`. SDKs absent
+from the hosted runner are recorded as skips in the archive manifest.
+
 ### Run the core smoke app on an iPhone, iPad, or Apple Watch
 
 `Build/AppleMobile` is a standalone Xcode consumer of the core's exported
@@ -811,6 +816,15 @@ installed by the `dev` component. Linux builds generate ZIP packages by default
 and add DEB or RPM packages when the corresponding local CPack backend is
 available. The `ci-latest-release` workflow runs the Linux CPack runtime-package
 smoke and uploads the `reficcmax-runtime-packages-linux` artifact.
+
+Its Windows release bundle includes the tested `IccDEVCmm.dll` and usage guide
+under `IccDEVCmm/` as well as the DLL at the bundle root for runtime loading.
+The Windows job runs `iccdev.windows-iccdevcmm-smoke` before upload. The manual
+`windows_vcpkg_source` input defaults to manifest installation; the
+`pinned-release-bundle` choice uses the immutable
+<a href="https://github.com/InternationalColorConsortium/iccDEV/releases/tag/vcpkg-win-23241-libheif-deps">vcpkg-win-23241-libheif-deps release</a>
+in classic mode after checking its fixed SHA-256 digest. This option changes
+only the Windows release build's dependency source.
 
 ## Shared library exports
 

@@ -17,11 +17,16 @@ cmake -S Build\Cmake -B build -DENABLE_TOOLS=ON -DENABLE_TESTS=ON -Wno-dev
 cmake --build build --config Debug --target RefIccMAX
 ```
 
-The Debug DLL is written to:
+With the unified Windows runtime layout enabled by the `vs2022-x64` preset,
+the Debug DLL is written to:
 
 ```text
-build\Tools\IccDEVCmm\x64\Debug\IccDEVCmm.dll
+build\bin\Debug\IccDEVCmm.dll
 ```
+
+The manual `ci-latest-release` workflow builds and smoke-tests the Release DLL.
+Its Windows archive places `IccDEVCmm.dll` at the bundle root for runtime
+loading and under `IccDEVCmm/` with this README.
 
 ## Local smoke test
 

@@ -14,6 +14,13 @@ permissions:
   contents: read
 
 on:
+  workflow_call:
+    inputs:
+      target_sha:
+        description: Exact commit selected by the calling PR workflow
+        required: false
+        type: string
+        default: ''
   pull_request:
     branches:
       - master
@@ -50,6 +57,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          ref: ${{ inputs.target_sha || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Set up Python
@@ -148,6 +156,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          ref: ${{ inputs.target_sha || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Set up Docker Buildx
