@@ -210,17 +210,20 @@ capabilities those tools depend on.
 
 The `Apple mobile core libraries` workflow discovers installed Apple SDKs,
 builds every matching minimal and extended mobile-core preset, and runs the
-simulator and Xcode CTest smoke gates below. Manual runs upload the static
-libraries, generated version headers, and build manifest as
+simulator and Xcode CTest smoke gates below on standalone manual dispatches.
+Manual runs upload the static libraries, generated version headers, and build manifest as
 `iccdev-apple-mobile-core`. The workflow also remains callable by trusted
-workflow orchestration without uploading PR-controlled artifacts. Apple mobile
-and Apple smoke workflows are not push or pull-request triggers; dispatch
+workflow orchestration without uploading PR-controlled artifacts. Normal PR CI
+calls `Apple platform smoke` for the bounded Xcode CTest runtime-layout gate;
+it does not run the long simulator gate. Dispatch
 `.github/workflows/ci-apple-mobile-core.yml` or
 `.github/workflows/ci-apple-platform-smoke.yml` when a change needs this Apple
-gate before review.
+simulator gate before review. The platform workflow also offers a focused
+`xcode` scope for a standalone runtime-layout check.
 
-The manual `ci-latest-release` workflow calls the same Apple mobile-core gate.
-For an approved release, it validates the SDK manifest and each built archive
+The manual `ci-latest-release` workflow builds the Apple mobile-core artifact
+without rerunning simulator or Xcode smoke tests. For an approved release, it
+validates the SDK manifest and each built archive
 and version header before publishing `iccdev-apple-mobile-core.zip`. SDKs absent
 from the hosted runner are recorded as skips in the archive manifest.
 

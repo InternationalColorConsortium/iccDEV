@@ -170,6 +170,7 @@ jobs:
 
       # preflight: allow-pr-script-execution reason=native-apple-host-test-only
       - name: Exercise Apple simulator hosts
+        if: ${{ !inputs.release-artifact }}
         env:
           BASH_ENV: /dev/null
           ICCDEV_APPLE_DOWNLOAD_RUNTIME: '1'
@@ -184,6 +185,7 @@ jobs:
 
       # preflight: allow-pr-script-execution reason=xcode-ctest-runtime-test-only
       - name: Exercise Xcode CTest runtime layouts
+        if: ${{ !inputs.release-artifact }}
         env:
           BASH_ENV: /dev/null
         run: |
@@ -193,6 +195,7 @@ jobs:
           bash .github/scripts/iccdev-xcode-ctest-smoke.sh
 
       - name: Summarize native Apple smoke results
+        if: ${{ !inputs.release-artifact }}
         env:
           BASH_ENV: /dev/null
         run: |

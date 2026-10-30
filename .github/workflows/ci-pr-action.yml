@@ -111,6 +111,7 @@ jobs:
       ci_changed: ${{ steps.diffcheck.outputs.ci_changed }}
       container_changed: ${{ steps.diffcheck.outputs.container_changed }}
       mcp_changed: ${{ steps.diffcheck.outputs.mcp_changed }}
+      apple_xcode_changed: ${{ steps.diffcheck.outputs.apple_xcode_changed }}
       image_definition_changed: ${{ steps.diffcheck.outputs.image_definition_changed }}
       container_toolchain_required: ${{ steps.diffcheck.outputs.container_toolchain_required }}
       trusted_base_image_available: ${{ steps.diffcheck.outputs.trusted_base_image_available }}
@@ -300,6 +301,7 @@ jobs:
           warning_policy=fail
           image_definition_changed=false
           mcp_changed=false
+          apple_xcode_changed=false
           container_toolchain_required=false
           trusted_base_image_available=false
           # Default to the full PR CTest surface. The pr-extended tests
@@ -345,6 +347,7 @@ jobs:
             write_github_output ci_changed "$ci_changed"
             write_github_output container_changed "$container_changed"
             write_github_output mcp_changed "$mcp_changed"
+            write_github_output apple_xcode_changed "$apple_xcode_changed"
             write_github_output image_definition_changed "$image_definition_changed"
             write_github_output container_toolchain_required "$container_toolchain_required"
             write_github_output trusted_base_image_available "$trusted_base_image_available"
@@ -554,6 +557,7 @@ jobs:
           ci_changed=false
           container_changed=false
           mcp_changed=false
+          apple_xcode_changed=false
           docs_only=false
           example_consumer_changed=false
 
@@ -642,6 +646,10 @@ jobs:
 
           if has_changed_file '^(Dockerfile|\.dockerignore|iccdev-mcp/|\.github/ci/requirements/docker-|\.github/workflows/(ci-mcp-server|ci-pr-action)\.yml$|\.github/scripts/(iccdev-mcp-package-smoke|validate-mcp-release-package)\.py$)'; then
             mcp_changed=true
+          fi
+
+          if has_changed_file '^\.github/workflows/(ci-apple-platform-smoke|ci-apple-mobile-core|ci-pr-action)\.yml$|^\.github/scripts/iccdev-xcode-ctest-smoke\.sh$'; then
+            apple_xcode_changed=true
           fi
 
           if [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$testing_changed" == "true" ]]; then
@@ -1119,6 +1127,16 @@ jobs:
       profile-test-mode: smoke
       target-sha: ${{ needs.detect-src.outputs.target_sha }}
 
+  apple-xcode-ctest:
+    if: ${{ (needs.detect-src.outputs.run_native_matrix == 'true' || needs.detect-src.outputs.apple_xcode_changed == 'true') && needs.detect-src.outputs.ci_scope != 'fast-lane' }}
+    name: Apple Xcode CTest runtime layouts
+    needs: [detect-src, validate-inputs]
+    uses: ./.github/workflows/ci-apple-platform-smoke.yml
+    with:
+      scope: xcode
+      target-sha: ${{ needs.detect-src.outputs.target_sha }}
+      base-sha: ${{ needs.detect-src.outputs.base_sha }}
+
   example-project:
     if: ${{ needs.detect-src.outputs.example_consumer_changed == 'true' }}
     name: Example Consumer Project
@@ -1232,6 +1250,7 @@ jobs:
       - win-ci
       - macos-release-lto
       - macos-debug
+      - apple-xcode-ctest
       - example-project
     if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     steps:
@@ -1290,6 +1309,7 @@ jobs:
           WIN_RESULT: ${{ needs['win-ci'].result }}
           MACOS_RELEASE_LTO_RESULT: ${{ needs['macos-release-lto'].result }}
           MACOS_DEBUG_RESULT: ${{ needs['macos-debug'].result }}
+          APPLE_XCODE_RESULT: ${{ needs['apple-xcode-ctest'].result }}
           EXAMPLE_RESULT: ${{ needs['example-project'].result }}
         run: |
           set -euo pipefail
@@ -1330,6 +1350,7 @@ jobs:
           WIN_RESULT="${WIN_RESULT:-success}"
           MACOS_RELEASE_LTO_RESULT="${MACOS_RELEASE_LTO_RESULT:-success}"
           MACOS_DEBUG_RESULT="${MACOS_DEBUG_RESULT:-success}"
+          APPLE_XCODE_RESULT="${APPLE_XCODE_RESULT:-success}"
           EXAMPLE_RESULT="${EXAMPLE_RESULT:-success}"
           GCC15_LTO_RESULT="${GCC15_LTO_RESULT:-success}"
 
@@ -1358,12 +1379,13 @@ jobs:
           WIN_RESULT="$(trim_and_norm "$WIN_RESULT")"
           MACOS_RELEASE_LTO_RESULT="$(trim_and_norm "$MACOS_RELEASE_LTO_RESULT")"
           MACOS_DEBUG_RESULT="$(trim_and_norm "$MACOS_DEBUG_RESULT")"
+          APPLE_XCODE_RESULT="$(trim_and_norm "$APPLE_XCODE_RESULT")"
           EXAMPLE_RESULT="$(trim_and_norm "$EXAMPLE_RESULT")"
           GCC15_LTO_RESULT="$(trim_and_norm "$GCC15_LTO_RESULT")"
 
           # --- compute overall result from upstream jobs ----------------------
           job_res=success
-          required_results=("$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$MCP_RESULT" "$WIN_RESULT" "$MACOS_RELEASE_LTO_RESULT" "$MACOS_DEBUG_RESULT" "$EXAMPLE_RESULT")
+          required_results=("$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$MCP_RESULT" "$WIN_RESULT" "$MACOS_RELEASE_LTO_RESULT" "$MACOS_DEBUG_RESULT" "$APPLE_XCODE_RESULT" "$EXAMPLE_RESULT")
           for s in "${required_results[@]}"; do
             # 'skipped' is acceptable when run_native_matrix is false.
             # only 'failure' or 'cancelled' should cause overall failure
@@ -1438,6 +1460,7 @@ jobs:
             printf "| win-ci             | %s |\n" "$(sanitize_line "$WIN_RESULT")"
             printf "| macos-release-lto  | %s |\n" "$(sanitize_line "$MACOS_RELEASE_LTO_RESULT")"
             printf "| macos-debug        | %s |\n" "$(sanitize_line "$MACOS_DEBUG_RESULT")"
+            printf "| apple-xcode-ctest  | %s |\n" "$(sanitize_line "$APPLE_XCODE_RESULT")"
             printf "| example-project    | %s |\n" "$(sanitize_line "$EXAMPLE_RESULT")"
             echo ""
             echo "**Overall Result:** \`$(sanitize_line "$job_res")\`"

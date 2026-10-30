@@ -2144,7 +2144,7 @@ jobs:
           retention-days: 7
 
   apple-mobile-core:
-    name: Build and smoke Apple mobile cores
+    name: Build Apple mobile release cores
     needs: cache-policy
     permissions:
       contents: read
