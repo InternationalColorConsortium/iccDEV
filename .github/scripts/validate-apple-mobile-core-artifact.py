@@ -26,6 +26,7 @@ COMPONENTS = {
         ("IccConnect2-static", "IccLibConnectVer.h"),
     ),
 }
+LICENSE = Path(__file__).resolve().parents[2] / "LICENSE.md"
 
 
 def expected_presets() -> dict[str, str]:
@@ -38,6 +39,10 @@ def expected_presets() -> dict[str, str]:
 
 
 def validate_artifact(root: Path) -> int:
+    license_file = root / "LICENSE.md"
+    if not license_file.is_file() or license_file.read_bytes() != LICENSE.read_bytes():
+        raise ValueError("Missing or altered Apple mobile core LICENSE.md")
+
     manifest = root / "manifest.txt"
     if not manifest.is_file() or not manifest.stat().st_size:
         raise ValueError("Apple mobile core manifest.txt is missing or empty")

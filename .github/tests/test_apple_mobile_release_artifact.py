@@ -22,6 +22,7 @@ SPEC.loader.exec_module(VALIDATOR)
 
 
 def _artifact(root: Path, built: str = "apple-ios-device-core") -> Path:
+    (root / "LICENSE.md").write_bytes((ROOT / "LICENSE.md").read_bytes())
     lines = []
     for preset, sdk in VALIDATOR.expected_presets().items():
         result = "built" if preset == built else "skipped: SDK unavailable"
@@ -42,6 +43,17 @@ def test_apple_release_artifact_requires_built_archives_and_headers(tmp_path: Pa
     assert VALIDATOR.validate_artifact(artifact) == 1
     (artifact / "apple-ios-device-core/IccProfLibVer.h").unlink()
     with pytest.raises(ValueError, match="Missing Apple mobile core payload"):
+        VALIDATOR.validate_artifact(artifact)
+
+
+def test_apple_release_artifact_requires_complete_license(tmp_path: Path) -> None:
+    artifact = _artifact(tmp_path)
+    license_file = artifact / "LICENSE.md"
+    license_file.unlink()
+    with pytest.raises(ValueError, match="Missing or altered Apple mobile core LICENSE"):
+        VALIDATOR.validate_artifact(artifact)
+    license_file.write_text("Incomplete license", encoding="utf-8")
+    with pytest.raises(ValueError, match="Missing or altered Apple mobile core LICENSE"):
         VALIDATOR.validate_artifact(artifact)
 
 
@@ -77,3 +89,8 @@ def test_latest_release_consumes_validated_apple_artifact() -> None:
         for step in release["jobs"]["release"]["steps"]
     )
     assert "release-artifact" in apple["on"]["workflow_call"]["inputs"]
+    build_step = next(
+        step for step in apple["jobs"]["build"]["steps"]
+        if step.get("name") == "Build available Apple mobile core libraries"
+    )
+    assert "cp LICENSE.md artifacts/LICENSE.md" in build_step["run"]

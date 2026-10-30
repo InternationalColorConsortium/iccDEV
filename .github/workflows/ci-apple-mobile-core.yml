@@ -84,6 +84,7 @@ jobs:
 
           rm -rf artifacts
           mkdir -p artifacts
+          cp LICENSE.md artifacts/LICENSE.md
           artifact_manifest="artifacts/manifest.txt"
           : > "$artifact_manifest"
 

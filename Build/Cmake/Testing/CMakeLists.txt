@@ -11830,6 +11830,42 @@ function(iccdev_add_windows_iccdevcmm_smoke_test)
   set_tests_properties(iccdev.windows-iccdevcmm-smoke PROPERTIES
     ENVIRONMENT_MODIFICATION "${_iccdevcmm_windows_env_mods}"
   )
+
+  # Install only the CMM and its core library into an isolated prefix. This
+  # catches a missing vcpkg zlib DLL even when the optional IIS target would
+  # otherwise copy every vcpkg DLL into a full runtime package.
+  if(ENABLE_INSTALL_RIM AND ENABLE_SHARED_LIBS AND ICC_USE_ZLIB
+     AND VCPKG_TARGET_TRIPLET AND ZLIB_LIBRARY_RELEASE
+     AND NOT IS_ABSOLUTE "${CMAKE_INSTALL_BINDIR}"
+     AND NOT IS_ABSOLUTE "${CMAKE_INSTALL_DOCDIR}")
+    set(_iccdevcmm_vcpkg_installed "${VCPKG_INSTALLED_DIR}")
+    if(NOT _iccdevcmm_vcpkg_installed)
+      set(_iccdevcmm_vcpkg_installed "${_VCPKG_INSTALLED_DIR}")
+    endif()
+    get_filename_component(_iccdevcmm_zlib_name
+      "${ZLIB_LIBRARY_RELEASE}" NAME_WE)
+    set(_iccdevcmm_zlib_dll
+      "${_iccdevcmm_vcpkg_installed}/${VCPKG_TARGET_TRIPLET}/bin/${_iccdevcmm_zlib_name}.dll")
+    if(_iccdevcmm_vcpkg_installed AND EXISTS "${_iccdevcmm_zlib_dll}")
+      add_test(
+        NAME iccdev.windows-iccdevcmm-runtime-install
+        CONFIGURATIONS Release
+        COMMAND "${CMAKE_COMMAND}"
+          "-DICCDEV_CMM_PACKAGE_BUILD_DIR=${CMAKE_BINARY_DIR}"
+          "-DICCDEV_CMM_PACKAGE_SMOKE=$<TARGET_FILE:iccDEVCmmSmokeTest>"
+          "-DICCDEV_CMM_PACKAGE_REPO_ROOT=${ICCDEV_REPO_ROOT}"
+          "-DICCDEV_CMM_PACKAGE_DOCDIR=${CMAKE_INSTALL_DOCDIR}"
+          "-DICCDEV_CMM_PACKAGE_COMPONENT=${ICCDEV_RUNTIME_COMPONENT}"
+          "-DICCDEV_CMM_PACKAGE_ZLIB_DLL=${_iccdevcmm_zlib_name}.dll"
+          -P "${CMAKE_CURRENT_LIST_DIR}/RunWindowsCmmPackageInstallTest.cmake"
+      )
+      set_tests_properties(iccdev.windows-iccdevcmm-runtime-install PROPERTIES
+        WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+        TIMEOUT 60
+        LABELS "iccdev;windows;cmm;runtime-package;vcpkg;regression"
+      )
+    endif()
+  endif()
 endfunction()
 
 

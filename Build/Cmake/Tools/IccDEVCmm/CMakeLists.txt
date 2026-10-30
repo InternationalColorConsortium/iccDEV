@@ -120,6 +120,65 @@ if(ENABLE_INSTALL_RIM)
     install(FILES "${OS_SPECIFIC_SOURCES}/README.md"
         DESTINATION "${CMAKE_INSTALL_DOCDIR}/IccDEVCmm"
         COMPONENT ${ICCDEV_RUNTIME_COMPONENT})
+
+    # FindZLIB exposes the vcpkg import libraries as UNKNOWN_LIBRARY targets,
+    # so TARGET_FILE does not identify the DLL. Resolve the runtime DLL from
+    # the matched import-library name in each vcpkg configuration. Static
+    # triplets have no corresponding DLL and need no runtime copy.
+    if(ICC_USE_ZLIB AND VCPKG_TARGET_TRIPLET)
+        set(_iccdevcmm_vcpkg_installed "${VCPKG_INSTALLED_DIR}")
+        if(NOT _iccdevcmm_vcpkg_installed)
+            set(_iccdevcmm_vcpkg_installed "${_VCPKG_INSTALLED_DIR}")
+        endif()
+        if(_iccdevcmm_vcpkg_installed)
+            set(_iccdevcmm_vcpkg_prefix
+                "${_iccdevcmm_vcpkg_installed}/${VCPKG_TARGET_TRIPLET}")
+            foreach(_iccdevcmm_config IN ITEMS RELEASE DEBUG)
+                set(_iccdevcmm_zlib_import "${ZLIB_LIBRARY_${_iccdevcmm_config}}")
+                if(NOT _iccdevcmm_zlib_import)
+                    continue()
+                endif()
+                get_filename_component(_iccdevcmm_zlib_name
+                    "${_iccdevcmm_zlib_import}" NAME_WE)
+                if(_iccdevcmm_config STREQUAL "DEBUG")
+                    set(_iccdevcmm_runtime_dir "${_iccdevcmm_vcpkg_prefix}/debug/bin")
+                    set(_iccdevcmm_install_configs Debug)
+                else()
+                    set(_iccdevcmm_runtime_dir "${_iccdevcmm_vcpkg_prefix}/bin")
+                    set(_iccdevcmm_install_configs Release RelWithDebInfo MinSizeRel)
+                endif()
+                set(_iccdevcmm_zlib_dll
+                    "${_iccdevcmm_runtime_dir}/${_iccdevcmm_zlib_name}.dll")
+                if(EXISTS "${_iccdevcmm_zlib_dll}")
+                    install(FILES "${_iccdevcmm_zlib_dll}"
+                        DESTINATION ${CMAKE_INSTALL_BINDIR}
+                        CONFIGURATIONS ${_iccdevcmm_install_configs}
+                        COMPONENT ${ICCDEV_RUNTIME_COMPONENT})
+                    set(_iccdevcmm_installs_zlib_dll TRUE)
+                elseif(EXISTS "${_iccdevcmm_vcpkg_prefix}/share/zlib/ZLIB-shared.cmake")
+                    message(FATAL_ERROR
+                        "CMM shared zlib runtime DLL is missing: ${_iccdevcmm_zlib_dll}")
+                endif()
+            endforeach()
+            if(EXISTS "${_iccdevcmm_vcpkg_prefix}/share/zlib/ZLIB-shared.cmake"
+               AND NOT _iccdevcmm_installs_zlib_dll)
+                message(FATAL_ERROR
+                    "CMM shared zlib runtime DLLs were not resolved from the vcpkg import libraries")
+            endif()
+            if(_iccdevcmm_installs_zlib_dll)
+                set(_iccdevcmm_zlib_notice
+                    "${_iccdevcmm_vcpkg_prefix}/share/zlib/copyright")
+                if(NOT EXISTS "${_iccdevcmm_zlib_notice}")
+                    message(FATAL_ERROR
+                        "CMM zlib runtime license notice is missing: ${_iccdevcmm_zlib_notice}")
+                endif()
+                install(FILES "${_iccdevcmm_zlib_notice}"
+                    DESTINATION "${CMAKE_INSTALL_DOCDIR}/licenses"
+                    RENAME zlib.txt
+                    COMPONENT ${ICCDEV_RUNTIME_COMPONENT})
+            endif()
+        endif()
+    endif()
 endif()
 
 message(STATUS "IccDEVCmm.dll build configuration complete.")

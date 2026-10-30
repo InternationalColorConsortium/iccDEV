@@ -42,12 +42,19 @@
 #include <cstring>
 #include <cstdio>
 #include <cwchar>
+#include <atomic>
+#include <set>
 #include <string>
+#include <thread>
 #include <vector>
 
 typedef DWORD(WINAPI *CMGetInfoFn)(DWORD);
 typedef BOOL(WINAPI *CMIsProfileValidFn)(HPROFILE, LPBOOL);
 typedef HCMTRANSFORM(WINAPI *CMCreateMultiProfileTransformFn)(HPROFILE *, DWORD, PDWORD, DWORD, DWORD);
+typedef HCMTRANSFORM(WINAPI *CMCreateTransformExtFn)(LPLOGCOLORSPACEA, LPDEVCHARACTER,
+                                                     LPDEVCHARACTER, DWORD);
+typedef HCMTRANSFORM(WINAPI *CMCreateTransformExtWFn)(LPLOGCOLORSPACEW, LPDEVCHARACTER,
+                                                      LPDEVCHARACTER, DWORD);
 typedef BOOL(WINAPI *CMTranslateColorsFn)(HCMTRANSFORM, LPCOLOR, DWORD, COLORTYPE, LPCOLOR, COLORTYPE);
 typedef BOOL(WINAPI *CMTranslateRGBsExtFn)(HCMTRANSFORM, LPVOID, BMFORMAT, DWORD, DWORD, DWORD,
                                            LPVOID, BMFORMAT, DWORD, LPBMCALLBACKFN, LPARAM);
@@ -61,6 +68,8 @@ struct CmmApi
     CMGetInfoFn get_info;
     CMIsProfileValidFn is_profile_valid;
     CMCreateMultiProfileTransformFn create_multi_profile_transform;
+    CMCreateTransformExtFn create_transform_ext;
+    CMCreateTransformExtWFn create_transform_ext_w;
     CMTranslateColorsFn translate_colors;
     CMTranslateRGBsExtFn translate_rgbs_ext;
     CMDeleteTransformFn delete_transform;
@@ -116,6 +125,10 @@ static bool load_cmm(const wchar_t *dll_path, CmmApi &api)
     api.is_profile_valid = reinterpret_cast<CMIsProfileValidFn>(require_proc(api.module, "CMIsProfileValid"));
     api.create_multi_profile_transform = reinterpret_cast<CMCreateMultiProfileTransformFn>(
         require_proc(api.module, "CMCreateMultiProfileTransform"));
+    api.create_transform_ext = reinterpret_cast<CMCreateTransformExtFn>(
+        require_proc(api.module, "CMCreateTransformExt"));
+    api.create_transform_ext_w = reinterpret_cast<CMCreateTransformExtWFn>(
+        require_proc(api.module, "CMCreateTransformExtW"));
     api.translate_colors = reinterpret_cast<CMTranslateColorsFn>(require_proc(api.module, "CMTranslateColors"));
     api.translate_rgbs_ext = reinterpret_cast<CMTranslateRGBsExtFn>(
         require_proc(api.module, "CMTranslateRGBsExt"));
@@ -128,6 +141,8 @@ static bool load_cmm(const wchar_t *dll_path, CmmApi &api)
     return api.get_info &&
            api.is_profile_valid &&
            api.create_multi_profile_transform &&
+           api.create_transform_ext &&
+           api.create_transform_ext_w &&
            api.translate_colors &&
            api.translate_rgbs_ext &&
            api.delete_transform &&
@@ -225,6 +240,228 @@ static bool check_rgb_roundtrip_transform(const CmmApi &api, HPROFILE profile)
     return true;
 }
 
+static bool check_legacy_transform_creation(const CmmApi &api, HPROFILE profile)
+{
+    DWORD size = 0;
+    GetColorProfileFromHandle(profile, NULL, &size);
+    if (!size) {
+        print_last_error("GetColorProfileFromHandle size");
+        return false;
+    }
+    std::vector<BYTE> data(size);
+    if (!GetColorProfileFromHandle(profile, data.data(), &size)) {
+        print_last_error("GetColorProfileFromHandle data");
+        return false;
+    }
+
+    LPDEVCHARACTER profile_data = reinterpret_cast<LPDEVCHARACTER>(data.data());
+    HCMTRANSFORM ansi = api.create_transform_ext(NULL, profile_data, NULL, NORMAL_MODE);
+    HCMTRANSFORM wide = api.create_transform_ext_w(NULL, profile_data, NULL, NORMAL_MODE);
+    bool passed = ansi && wide;
+    if (!passed)
+        print_last_error("CMCreateTransformExt A/W");
+    if (ansi && !api.delete_transform(ansi))
+        passed = false;
+    if (wide && !api.delete_transform(wide))
+        passed = false;
+    if (passed)
+        std::printf("[OK] Legacy CMCreateTransformExt A/W created and deleted transforms\n");
+    return passed;
+}
+
+static bool check_transform_handle_lifecycle(const CmmApi &api, HPROFILE profile)
+{
+    HPROFILE profiles[2] = { profile, profile };
+    DWORD intents[2] = { INTENT_PERCEPTUAL, INTENT_PERCEPTUAL };
+    HCMTRANSFORM old_handle = api.create_multi_profile_transform(profiles, 2, intents, 2, 0);
+    if (!old_handle || !api.delete_transform(old_handle)) {
+        print_last_error("create/delete transform (handle lifecycle)");
+        return false;
+    }
+
+    HCMTRANSFORM new_handle = api.create_multi_profile_transform(profiles, 2, intents, 2, 0);
+    if (!new_handle) {
+        print_last_error("recreate transform (handle lifecycle)");
+        return false;
+    }
+
+    COLOR input = {};
+    input.rgb.red = 32768;
+    COLOR output = {};
+    SetLastError(ERROR_SUCCESS);
+    BOOL stale_accepted = api.translate_colors(old_handle, &input, 1, COLOR_RGB,
+                                                &output, COLOR_RGB);
+    DWORD stale_error = GetLastError();
+    bool passed = old_handle != new_handle && !stale_accepted &&
+                  stale_error == ERROR_INVALID_HANDLE;
+    if (!passed) {
+        std::printf("[FAIL] Deleted transform handle was reused or accepted: "
+                    "old=%zu new=%zu accepted=%d error=%lu\n",
+                    reinterpret_cast<size_t>(old_handle),
+                    reinterpret_cast<size_t>(new_handle), stale_accepted, stale_error);
+    }
+    if (!api.delete_transform(new_handle)) {
+        print_last_error("delete recreated transform");
+        passed = false;
+    }
+
+    if (passed)
+        std::printf("[OK] Deleted transform handle is rejected after a new creation\n");
+    return passed;
+}
+
+static bool check_concurrent_transform_creation(const CmmApi &api, HPROFILE profile)
+{
+    const unsigned thread_count = 12;
+    HPROFILE profiles[2] = { profile, profile };
+    DWORD intents[2] = { INTENT_PERCEPTUAL, INTENT_PERCEPTUAL };
+    std::vector<HCMTRANSFORM> handles(thread_count, NULL);
+    std::vector<std::thread> workers;
+    workers.reserve(thread_count);
+    std::atomic<unsigned> ready(0);
+    std::atomic<bool> start(false);
+
+    for (unsigned n = 0; n < thread_count; ++n) {
+        workers.emplace_back([&, n]() {
+            ready.fetch_add(1, std::memory_order_release);
+            while (!start.load(std::memory_order_acquire))
+                std::this_thread::yield();
+            handles[n] = api.create_multi_profile_transform(profiles, 2, intents, 2, 0);
+        });
+    }
+    while (ready.load(std::memory_order_acquire) != thread_count)
+        std::this_thread::yield();
+    start.store(true, std::memory_order_release);
+    for (std::thread &worker : workers)
+        worker.join();
+
+    std::set<HCMTRANSFORM> unique;
+    bool passed = true;
+    for (HCMTRANSFORM handle : handles) {
+        size_t id = reinterpret_cast<size_t>(handle);
+        if (id < 256 || id > 65535 || !unique.insert(handle).second)
+            passed = false;
+    }
+    for (HCMTRANSFORM handle : unique) {
+        if (!api.delete_transform(handle)) {
+            print_last_error("delete concurrently created transform");
+            passed = false;
+        }
+    }
+    if (!passed) {
+        std::printf("[FAIL] Concurrent creation returned %zu unique handles for %u requests\n",
+                    unique.size(), thread_count);
+    }
+    else {
+        std::printf("[OK] Concurrent creation returned %u distinct handles\n", thread_count);
+    }
+    return passed;
+}
+
+static bool check_concurrent_translation(const CmmApi &api, HPROFILE profile)
+{
+    HPROFILE profiles[2] = { profile, profile };
+    DWORD intents[2] = { INTENT_PERCEPTUAL, INTENT_PERCEPTUAL };
+    HCMTRANSFORM transform = api.create_multi_profile_transform(profiles, 2, intents, 2, 0);
+    if (!transform) {
+        print_last_error("create transform (concurrent translation)");
+        return false;
+    }
+
+    COLOR input = {};
+    input.rgb.red = 32768;
+    input.rgb.green = 16384;
+    input.rgb.blue = 49152;
+    COLOR expected = {};
+    if (!api.translate_colors(transform, &input, 1, COLOR_RGB, &expected, COLOR_RGB)) {
+        print_last_error("reference translation");
+        api.delete_transform(transform);
+        return false;
+    }
+
+    const unsigned thread_count = 8;
+    const unsigned repetitions = 100;
+    std::vector<std::thread> workers;
+    workers.reserve(thread_count);
+    std::atomic<unsigned> failures(0);
+    for (unsigned n = 0; n < thread_count; ++n) {
+        workers.emplace_back([&]() {
+            for (unsigned repeat = 0; repeat < repetitions; ++repeat) {
+                COLOR output = {};
+                if (!api.translate_colors(transform, &input, 1, COLOR_RGB,
+                                          &output, COLOR_RGB) ||
+                    std::memcmp(&output, &expected, sizeof(COLOR)) != 0)
+                    failures.fetch_add(1, std::memory_order_relaxed);
+            }
+        });
+    }
+    for (std::thread &worker : workers)
+        worker.join();
+    bool deleted = api.delete_transform(transform) != FALSE;
+    if (failures.load() || !deleted) {
+        std::printf("[FAIL] Concurrent translations disagreed with reference: %u failures, "
+                    "deleted=%d\n", failures.load(), deleted);
+        return false;
+    }
+    std::printf("[OK] %u concurrent translations matched the reference\n",
+                thread_count * repetitions);
+    return true;
+}
+
+struct ReentrantCallbackContext
+{
+    const CmmApi *api;
+    HCMTRANSFORM transform;
+    bool translated;
+    bool deleted;
+};
+
+static BOOL WINAPI reentrant_progress_callback(ULONG row, ULONG, LPARAM data)
+{
+    ReentrantCallbackContext &context =
+        *reinterpret_cast<ReentrantCallbackContext *>(data);
+    if (row == 0) {
+        COLOR input = {};
+        input.rgb.red = 32768;
+        COLOR output = {};
+        context.translated = context.api->translate_colors(
+            context.transform, &input, 1, COLOR_RGB, &output, COLOR_RGB) != FALSE;
+        context.deleted = context.api->delete_transform(context.transform) != FALSE;
+    }
+    return TRUE;
+}
+
+static bool check_callback_transform_lifetime(const CmmApi &api, HPROFILE profile)
+{
+    HPROFILE profiles[2] = { profile, profile };
+    DWORD intents[2] = { INTENT_PERCEPTUAL, INTENT_PERCEPTUAL };
+    HCMTRANSFORM transform = api.create_multi_profile_transform(profiles, 2, intents, 2, 0);
+    if (!transform) {
+        print_last_error("create transform (callback lifetime)");
+        return false;
+    }
+
+    unsigned char input[6] = { 128, 64, 192, 128, 64, 192 };
+    unsigned char output[6] = {};
+    ReentrantCallbackContext callback = { &api, transform, false, false };
+    BOOL translated = api.translate_rgbs_ext(transform, input, BM_RGBTRIPLETS,
+                                             1, 2, 3, output, BM_RGBTRIPLETS, 3,
+                                             reentrant_progress_callback,
+                                             reinterpret_cast<LPARAM>(&callback));
+    bool passed = translated && callback.translated && callback.deleted &&
+                  std::memcmp(output, output + 3, 3) == 0;
+    if (!callback.deleted)
+        api.delete_transform(transform);
+    if (!passed) {
+        std::printf("[FAIL] Reentrant callback translation/deletion: outer=%d "
+                    "inner=%d deleted=%d\n", translated,
+                    callback.translated, callback.deleted);
+        return false;
+    }
+    std::printf("[OK] Progress callback reentered and deleted an in-flight transform\n");
+    return true;
+}
+
 static bool check_null_transform_intents(const CmmApi &api, HPROFILE profile)
 {
     HPROFILE profiles[2] = { profile, profile };
@@ -240,6 +477,73 @@ static bool check_null_transform_intents(const CmmApi &api, HPROFILE profile)
         return false;
     }
     std::printf("[OK] CMCreateMultiProfileTransform rejected a null intents array\n");
+
+    DWORD too_many_intents[3] = { INTENT_PERCEPTUAL, INTENT_PERCEPTUAL,
+                                  INTENT_PERCEPTUAL };
+    SetLastError(ERROR_SUCCESS);
+    transform = api.create_multi_profile_transform(profiles, 2, too_many_intents, 3, 0);
+    if (transform || GetLastError() != ERROR_BAD_ARGUMENTS) {
+        if (transform) api.delete_transform(transform);
+        print_last_error("CMCreateMultiProfileTransform (invalid intent count)");
+        return false;
+    }
+
+    DWORD bad_intent = 99;
+    SetLastError(ERROR_SUCCESS);
+    transform = api.create_multi_profile_transform(profiles, 2, &bad_intent, 1, 0);
+    if (transform || GetLastError() != ERROR_BAD_ARGUMENTS) {
+        if (transform) api.delete_transform(transform);
+        print_last_error("CMCreateMultiProfileTransform (invalid intent value)");
+        return false;
+    }
+    std::printf("[OK] CMCreateMultiProfileTransform rejected invalid intent count/value\n");
+    return true;
+}
+
+static bool check_profile_intent_order(const CmmApi &api, HPROFILE profile)
+{
+    // The sRGB preference fixture has distinct perceptual and relative
+    // colorimetric B2A tags. Changing only the second profile's intent must
+    // change at least one translated color.
+    HPROFILE profiles[2] = { profile, profile };
+    DWORD perceptual[2] = { INTENT_PERCEPTUAL, INTENT_PERCEPTUAL };
+    DWORD mixed[2] = { INTENT_PERCEPTUAL, INTENT_RELATIVE_COLORIMETRIC };
+    HCMTRANSFORM same = api.create_multi_profile_transform(profiles, 2, perceptual, 2, 0);
+    HCMTRANSFORM different = api.create_multi_profile_transform(profiles, 2, mixed, 2, 0);
+    if (!same || !different) {
+        print_last_error("create transforms with distinct profile intents");
+        if (same) api.delete_transform(same);
+        if (different) api.delete_transform(different);
+        return false;
+    }
+
+    COLOR inputs[4] = {};
+    inputs[0].rgb = { 32768, 16384, 49152 };
+    inputs[1].rgb = { 10000, 40000, 5000 };
+    inputs[2].rgb = { 58000, 2000, 50000 };
+    inputs[3].rgb = { 6000, 1000, 62000 };
+    COLOR same_outputs[4] = {};
+    COLOR different_outputs[4] = {};
+    bool translated = api.translate_colors(same, inputs, 4, COLOR_RGB,
+                                           same_outputs, COLOR_RGB) &&
+                      api.translate_colors(different, inputs, 4, COLOR_RGB,
+                                           different_outputs, COLOR_RGB);
+    DWORD translate_error = translated ? ERROR_SUCCESS : GetLastError();
+    api.delete_transform(same);
+    api.delete_transform(different);
+    if (!translated) {
+        SetLastError(translate_error);
+        print_last_error("translate with distinct profile intents");
+        return false;
+    }
+
+    if (std::memcmp(same_outputs, different_outputs, sizeof(same_outputs)) == 0) {
+        std::printf("[FAIL] Second profile intent was ignored; perceptual/perceptual "
+                    "and perceptual/relative produced identical outputs\n");
+        return false;
+    }
+
+    std::printf("[OK] Changing the second profile intent changes RGB output\n");
     return true;
 }
 
@@ -418,8 +722,18 @@ int main(int argc, char **argv)
 
     bool ok = check_profile_valid(api, profile) &&
               check_rgb_roundtrip_transform(api, profile) &&
+              check_legacy_transform_creation(api, profile) &&
               check_rgbs_ext_output_stride(api, profile) &&
-              check_null_transform_intents(api, profile);
+              check_null_transform_intents(api, profile) &&
+              check_profile_intent_order(api, profile);
+
+    if (ok) {
+        bool lifecycle_ok = check_transform_handle_lifecycle(api, profile);
+        bool concurrent_ok = check_concurrent_transform_creation(api, profile);
+        bool translation_ok = check_concurrent_translation(api, profile);
+        bool callback_ok = check_callback_transform_lifetime(api, profile);
+        ok = lifecycle_ok && concurrent_ok && translation_ok && callback_ok;
+    }
 
     CloseColorProfile(profile);
 

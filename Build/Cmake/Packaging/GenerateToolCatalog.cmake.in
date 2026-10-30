@@ -5,10 +5,11 @@ else()
 endif()
 
 if(IS_ABSOLUTE "@CMAKE_INSTALL_DOCDIR@")
-  set(_docdir "$ENV{DESTDIR}@CMAKE_INSTALL_DOCDIR@")
+  set(_docdir_logical "@CMAKE_INSTALL_DOCDIR@")
 else()
-  set(_docdir "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/@CMAKE_INSTALL_DOCDIR@")
+  set(_docdir_logical "${CMAKE_INSTALL_PREFIX}/@CMAKE_INSTALL_DOCDIR@")
 endif()
+set(_docdir "$ENV{DESTDIR}${_docdir_logical}")
 
 file(MAKE_DIRECTORY "${_docdir}")
 set(_catalog "${_docdir}/TOOL-CATALOG.md")
@@ -29,6 +30,8 @@ if(EXISTS "${_bindir}")
   endforeach()
 endif()
 
-# install(SCRIPT) creates this catalog outside file(INSTALL), so record it for
-# the matching full or runtime-component uninstall manifest.
-list(APPEND CMAKE_INSTALL_MANIFEST_FILES "${_catalog}")
+# install(SCRIPT) creates this catalog outside file(INSTALL), so record its
+# logical install path. CMake applies DESTDIR when uninstalling; a staged path
+# in the manifest would cause DESTDIR to be prepended twice.
+list(APPEND CMAKE_INSTALL_MANIFEST_FILES
+  "${_docdir_logical}/TOOL-CATALOG.md")
