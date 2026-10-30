@@ -266,7 +266,7 @@ def test_release_inventory_requires_every_lane(tmp_path):
     command = [sys.executable, str(SCRIPT), str(tmp_path), "--release"]
     result = subprocess.run(command, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
-    assert "Validated 54 release wheels" in result.stdout
+    assert "Validated 36 release wheels" in result.stdout
     # The separately validated MCP distribution coexists in published assets.
     (tmp_path / f"iccdev_mcp-{VERSION}-py3-none-any.whl").write_bytes(b"separate MCP intake")
     result = subprocess.run(command, capture_output=True, text=True, timeout=30)
@@ -351,10 +351,11 @@ def test_release_workflow_connects_all_wheel_artifacts():
     assert '--lane "$id"' in steps["Package release archives"]["run"]
     assert "validate-python-release-wheels.py release-assets --release" in steps["Package release archives"]["run"]
     assert steps["Attest release archive provenance"]["with"]["subject-checksums"] == "release-assets/SHA256SUMS"
-    assert '"pytest>=7,<9"' in build["env"]["CIBW_BEFORE_TEST"]
+    assert '"pytest>=9.0.3,<10"' in build["env"]["CIBW_BEFORE_TEST"]
     assert "--only-binary=numpy" in build["env"]["CIBW_BEFORE_TEST"]
     wheel_step = next(step for step in build["steps"]
                       if step.get("name") == "Build and test standalone wheels")
+    assert '"pytest>=9.0.3,<10"' in wheel_step["run"]
     assert wheel_step["env"]["WHEEL_LANE"] == "${{ matrix.id }}"
     assert '--lane "$WHEEL_LANE"' in wheel_step["run"]
 
@@ -420,38 +421,26 @@ def test_shared_matrix_builds_every_declared_wheel_identifier():
         assert not selected & identifiers, lane["id"]
         selected.update(identifiers)
     assert selected == declared
-    assert len(selected) == 54
+    assert len(selected) == 36
 
 
-@pytest.mark.parametrize("lane_id,version,expected", [
-    ("windows-arm64", "3.9", False),
-    ("windows-arm64", "3.10", False),
-    ("windows-arm64", "3.11", True),
-    ("windows-arm64", "3.13", True),
-    ("windows-arm64", "3.14", True),
-    ("windows-amd64", "3.9", True),
-    ("linux-x86_64", "3.9", True),
-    ("linux-aarch64", "3.9", True),
-    ("macos-arm64", "3.9", True),
-    ("macos-universal2", "3.9", True),
+@pytest.mark.parametrize("lane_id", [
+    "windows-arm64", "windows-amd64", "linux-x86_64", "linux-aarch64",
+    "macos-x86_64", "macos-arm64", "macos-universal2",
 ])
-def test_numpy_dependency_matches_available_wheel_targets(lane_id, version, expected):
+def test_numpy_dependency_matches_available_wheel_targets(lane_id):
     from packaging.requirements import Requirement
 
     build = shared_wheel_job()
     step = next(step for step in build["steps"] if step["name"] == "Build and test standalone wheels")
-    assert step["env"]["CIBW_BEFORE_TEST"] == "${{ matrix.before_test || env.CIBW_BEFORE_TEST }}"
+    # NumPy publishes binary wheels for every CPython 3.11+ target, so no lane
+    # overrides the shared test dependency installer.
+    assert "CIBW_BEFORE_TEST" not in step["env"]
     lane = next(lane for lane in build["strategy"]["matrix"]["include"] if lane["id"] == lane_id)
-    command = lane.get("before_test", build["env"]["CIBW_BEFORE_TEST"])
-    arguments = shlex.split(command)
+    assert "before_test" not in lane
+    arguments = shlex.split(build["env"]["CIBW_BEFORE_TEST"])
     numpy = Requirement(next(arg for arg in arguments if arg.startswith("numpy>=")))
-    # The matrix controls architecture, even if an emulated shell reports AMD64.
-    selected = numpy.marker is None or numpy.marker.evaluate({
-        "platform_system": "Windows",
-        "platform_machine": "AMD64",
-        "python_version": version,
-    })
-    assert selected is expected
+    assert numpy.marker is None
 
 
 @pytest.mark.parametrize("release_outcome,attestation_outcome,with_assets,with_checkout", [

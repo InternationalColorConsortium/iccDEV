@@ -50,7 +50,7 @@ shares one source of truth. Update rules here, not in the mirrors.
 - Python CI and rolling-release wheels share `_build-python-wheels.yml`
   between `ci-json-python` and `ci-latest-release`, with Python 3.13 driving
   cibuildwheel 3.4.0 for all seven platform lanes. Keep installed-wheel tests
-  and the Windows ARM64 Python 3.9/3.10 NumPy exception aligned. Primary CI
+  and their binary NumPy dependency aligned across all lanes. Primary CI
   disables shared wheel artifact upload and fails on empty test collection; release
   CI enables explicitly named artifact intake validated by
   `.github/scripts/validate-python-release-wheels.py` with an independent
@@ -62,7 +62,7 @@ shares one source of truth. Update rules here, not in the mirrors.
   report their diagnostic outcomes without blocking later package publications.
   Require complete package inventories, dual checksums, release
   attestations, the protected `release` environment, and OIDC publishing.
-  Validate downloaded release wheels with `--release` to require all 54
+  Validate downloaded release wheels with `--release` to require all 36
   targets without CI identifier files. Require RECORD file coverage, secure
   hashes, and sizes before attestation; ZIP CRCs alone do not prove this contract.
 - Rolling-release MCP artifacts are a separate universal wheel and sdist,
