@@ -395,6 +395,19 @@ def test_shared_uploads_are_opt_in_and_exclude_pr_events():
     assert uploads[0]["with"]["name"] == "iccdev-python-${{ matrix.id }}"
 
 
+def test_shared_macos_wheel_lanes_use_supported_native_hosts():
+    lanes = {
+        lane["id"]: (lane["os"], lane["arch"])
+        for lane in shared_wheel_job()["strategy"]["matrix"]["include"]
+        if lane["platform"] == "macos"
+    }
+    assert lanes == {
+        "macos-x86_64": ("macos-15-intel", "x86_64"),
+        "macos-arm64": ("macos-15", "arm64"),
+        "macos-universal2": ("macos-15", "universal2"),
+    }
+
+
 def test_shared_matrix_builds_every_declared_wheel_identifier():
     pytest.importorskip("cibuildwheel")
     repo_root = SCRIPT.parents[2]
