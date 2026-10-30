@@ -19,4 +19,5 @@ explicit -static targets for installed libraries:
 
 The tools feature installs command-line programs, not the Windows ICM CMM DLL.
 For IccDEVCmm.dll, use the separate Windows CMake runtime build and follow
-Tools/Winnt/IccDEVCmm/README.md for host dependency and registration steps.
+https://github.com/InternationalColorConsortium/iccDEV/blob/master/Tools/Winnt/IccDEVCmm/README.md
+for host dependency and registration steps.

@@ -11865,6 +11865,22 @@ function(iccdev_add_windows_iccdevcmm_smoke_test)
         TIMEOUT 60
         LABELS "iccdev;windows;cmm;runtime-package;vcpkg;regression"
       )
+      if(TARGET iccIisIsapi)
+        add_test(
+          NAME iccdev.windows-iccdevcmm-iis-runtime-manifest
+          CONFIGURATIONS Release
+          COMMAND "${CMAKE_COMMAND}"
+            "-DICCDEV_CMM_IIS_BUILD_DIR=${CMAKE_BINARY_DIR}"
+            "-DICCDEV_CMM_IIS_BINDIR=${CMAKE_INSTALL_BINDIR}"
+            "-DICCDEV_CMM_IIS_ZLIB_DLL=${_iccdevcmm_zlib_name}.dll"
+            -P "${CMAKE_CURRENT_LIST_DIR}/RunWindowsCmmIisRuntimeManifestTest.cmake"
+        )
+        set_tests_properties(iccdev.windows-iccdevcmm-iis-runtime-manifest PROPERTIES
+          WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+          TIMEOUT 60
+          LABELS "iccdev;windows;cmm;iis;runtime-package;vcpkg;regression"
+        )
+      endif()
     endif()
   endif()
 endfunction()

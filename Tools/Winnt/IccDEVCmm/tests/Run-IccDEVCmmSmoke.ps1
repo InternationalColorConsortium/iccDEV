@@ -50,12 +50,13 @@ if (!(Test-Path -LiteralPath $profilePath -PathType Leaf)) {
     throw "Missing test profile: $profilePath"
 }
 
+# Reuse CMake-built or staged harnesses; the standalone fallback below must be
+# rebuilt from the current source even if its previous output still exists.
 $harnessCandidates = @(
     (Join-Path $cmmDir "iccDEVCmmSmokeTest.exe"),
     (Join-Path $cmmDir "IccDEVCmmSmoke.exe"),
     (Join-Path $buildRoot "bin\$Configuration\iccDEVCmmSmokeTest.exe"),
-    (Join-Path $buildRoot "bin\iccDEVCmmSmokeTest.exe"),
-    (Join-Path $buildRoot "Tools\IccDEVCmm\tests\$Configuration\IccDEVCmmSmoke.exe")
+    (Join-Path $buildRoot "bin\iccDEVCmmSmokeTest.exe")
 )
 $exePath = $harnessCandidates |
     Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
