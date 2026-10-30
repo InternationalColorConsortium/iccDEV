@@ -269,6 +269,72 @@ static bool check_legacy_transform_creation(const CmmApi &api, HPROFILE profile)
     return passed;
 }
 
+static bool check_rejected_device_link_profile(const CmmApi &api, HPROFILE profile)
+{
+  DWORD size = 0;
+  GetColorProfileFromHandle(profile, NULL, &size);
+  if (size < 40) {
+    print_last_error("GetColorProfileFromHandle size (device link)");
+    return false;
+  }
+
+  std::vector<BYTE> rgb_data(size);
+  if (!GetColorProfileFromHandle(profile, rgb_data.data(), &size)) {
+    print_last_error("GetColorProfileFromHandle data (device link)");
+    return false;
+  }
+  rgb_data.resize(size);
+  std::vector<BYTE> link_data = rgb_data;
+  std::memcpy(link_data.data() + 12, "link", 4);
+
+  LPDEVCHARACTER rgb = reinterpret_cast<LPDEVCHARACTER>(rgb_data.data());
+  LPDEVCHARACTER link = reinterpret_cast<LPDEVCHARACTER>(link_data.data());
+  HCMTRANSFORM ansi = api.create_transform_ext(NULL, link, rgb, NORMAL_MODE);
+  HCMTRANSFORM wide = api.create_transform_ext_w(NULL, link, rgb, NORMAL_MODE);
+  if (ansi || wide) {
+    if (ansi)
+      api.delete_transform(ansi);
+    if (wide)
+      api.delete_transform(wide);
+    std::printf("[FAIL] Legacy A/W transform accepted a device link after a target\n");
+    return false;
+  }
+
+  PROFILE link_profile = {};
+  link_profile.dwType = PROFILE_MEMBUFFER;
+  link_profile.pProfileData = link_data.data();
+  link_profile.cbDataSize = size;
+  HPROFILE link_handle = OpenColorProfileW(&link_profile, PROFILE_READ,
+                                          FILE_SHARE_READ, OPEN_EXISTING);
+  if (!link_handle) {
+    print_last_error("OpenColorProfileW (device link)");
+    return false;
+  }
+  HPROFILE profiles[2] = { profile, link_handle };
+  DWORD intents[2] = { INTENT_PERCEPTUAL, INTENT_PERCEPTUAL };
+  HCMTRANSFORM multi = api.create_multi_profile_transform(profiles, 2, intents, 2, 0);
+  CloseColorProfile(link_handle);
+  if (multi) {
+    api.delete_transform(multi);
+    std::printf("[FAIL] Multiprofile transform accepted an output device link\n");
+    return false;
+  }
+
+  // A rejected profile must not poison the CMM's subsequent allocations.
+  HPROFILE valid_profiles[2] = { profile, profile };
+  HCMTRANSFORM valid = api.create_multi_profile_transform(valid_profiles, 2, intents, 2, 0);
+  if (!valid) {
+    print_last_error("valid transform after rejected device link");
+    return false;
+  }
+  bool deleted = api.delete_transform(valid) != FALSE;
+  if (!deleted)
+    print_last_error("delete valid transform after rejected device link");
+  if (deleted)
+    std::printf("[OK] Device-link rejection left ownership with AddXform (A/W and multi)\n");
+  return deleted;
+}
+
 static bool check_transform_handle_lifecycle(const CmmApi &api, HPROFILE profile)
 {
     HPROFILE profiles[2] = { profile, profile };
@@ -460,6 +526,102 @@ static bool check_callback_transform_lifetime(const CmmApi &api, HPROFILE profil
     }
     std::printf("[OK] Progress callback reentered and deleted an in-flight transform\n");
     return true;
+}
+
+struct CrossCallbackContext
+{
+  const CmmApi *api;
+  HCMTRANSFORM peer;
+  std::atomic<unsigned> *ready;
+  bool translated;
+};
+
+static BOOL WINAPI cross_transform_progress_callback(ULONG row, ULONG, LPARAM data)
+{
+  CrossCallbackContext &context = *reinterpret_cast<CrossCallbackContext *>(data);
+  if (row != 0)
+    return TRUE;
+
+  context.ready->fetch_add(1, std::memory_order_release);
+  ULONGLONG started = GetTickCount64();
+  while (context.ready->load(std::memory_order_acquire) != 2) {
+    if (GetTickCount64() - started > 10000)
+      return FALSE;
+    Sleep(1);
+  }
+
+  COLOR input = {};
+  input.rgb.red = 32768;
+  COLOR output = {};
+  context.translated = context.api->translate_colors(context.peer, &input, 1,
+                                                     COLOR_RGB, &output, COLOR_RGB) != FALSE;
+  return context.translated ? TRUE : FALSE;
+}
+
+static bool check_cross_transform_callbacks(const CmmApi &api, HPROFILE profile)
+{
+  HPROFILE profiles[2] = { profile, profile };
+  DWORD intents[2] = { INTENT_PERCEPTUAL, INTENT_PERCEPTUAL };
+  HCMTRANSFORM first = api.create_multi_profile_transform(profiles, 2, intents, 2, 0);
+  HCMTRANSFORM second = api.create_multi_profile_transform(profiles, 2, intents, 2, 0);
+  if (!first || !second) {
+    if (first)
+      api.delete_transform(first);
+    if (second)
+      api.delete_transform(second);
+    print_last_error("create transforms (cross callbacks)");
+    return false;
+  }
+
+  std::atomic<unsigned> ready(0);
+  std::atomic<unsigned> finished(0);
+  CrossCallbackContext callbacks[2] = {
+    { &api, second, &ready, false },
+    { &api, first, &ready, false }
+  };
+  BOOL translated[2] = { FALSE, FALSE };
+  BYTE source[2][3] = { { 128, 64, 192 }, { 128, 64, 192 } };
+  BYTE destination[2][3] = {};
+  std::thread workers[2] = {
+    std::thread([&]() {
+      translated[0] = api.translate_rgbs_ext(first, source[0], BM_RGBTRIPLETS,
+                                              1, 1, 3, destination[0], BM_RGBTRIPLETS,
+                                              3, cross_transform_progress_callback,
+                                              reinterpret_cast<LPARAM>(&callbacks[0]));
+      finished.fetch_add(1, std::memory_order_release);
+    }),
+    std::thread([&]() {
+      translated[1] = api.translate_rgbs_ext(second, source[1], BM_RGBTRIPLETS,
+                                              1, 1, 3, destination[1], BM_RGBTRIPLETS,
+                                              3, cross_transform_progress_callback,
+                                              reinterpret_cast<LPARAM>(&callbacks[1]));
+      finished.fetch_add(1, std::memory_order_release);
+    })
+  };
+
+  ULONGLONG started = GetTickCount64();
+  while (finished.load(std::memory_order_acquire) != 2) {
+    if (GetTickCount64() - started > 15000) {
+      std::fprintf(stderr, "[FAIL] Cross-transform progress callbacks deadlocked\n");
+      std::fflush(stderr);
+      TerminateProcess(GetCurrentProcess(), 1);
+    }
+    Sleep(1);
+  }
+  workers[0].join();
+  workers[1].join();
+  bool first_deleted = api.delete_transform(first) != FALSE;
+  bool second_deleted = api.delete_transform(second) != FALSE;
+  bool deleted = first_deleted && second_deleted;
+  bool passed = translated[0] && translated[1] && callbacks[0].translated &&
+                callbacks[1].translated && deleted;
+  if (passed)
+    std::printf("[OK] Independent progress callbacks cross-translated without deadlock\n");
+  else
+    std::printf("[FAIL] Cross-transform callbacks: outer=(%d,%d), inner=(%d,%d), deleted=%d\n",
+                translated[0], translated[1], callbacks[0].translated,
+                callbacks[1].translated, deleted);
+  return passed;
 }
 
 static bool check_null_transform_intents(const CmmApi &api, HPROFILE profile)
@@ -723,6 +885,7 @@ int main(int argc, char **argv)
     bool ok = check_profile_valid(api, profile) &&
               check_rgb_roundtrip_transform(api, profile) &&
               check_legacy_transform_creation(api, profile) &&
+              check_rejected_device_link_profile(api, profile) &&
               check_rgbs_ext_output_stride(api, profile) &&
               check_null_transform_intents(api, profile) &&
               check_profile_intent_order(api, profile);
@@ -732,7 +895,9 @@ int main(int argc, char **argv)
         bool concurrent_ok = check_concurrent_transform_creation(api, profile);
         bool translation_ok = check_concurrent_translation(api, profile);
         bool callback_ok = check_callback_transform_lifetime(api, profile);
-        ok = lifecycle_ok && concurrent_ok && translation_ok && callback_ok;
+        bool cross_callback_ok = check_cross_transform_callbacks(api, profile);
+        ok = lifecycle_ok && concurrent_ok && translation_ok && callback_ok &&
+             cross_callback_ok;
     }
 
     CloseColorProfile(profile);

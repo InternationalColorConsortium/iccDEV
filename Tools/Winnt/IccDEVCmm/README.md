@@ -9,8 +9,10 @@ management module. It exports the legacy Windows CMM entry points from
 The CMM identifier is `ICCD` (`0x49434344`).
 
 The CMM supports up to 1,024 live transforms. It synchronizes handle creation,
-lookup, and deletion, and serializes translation on each transform. An in-flight
-translation keeps its transform alive if a progress callback deletes the handle.
+lookup, and deletion, and serializes CMM work on each transform. Progress
+callbacks run without that transform lock so callbacks on independent
+transforms can cross-call without deadlocking. An in-flight translation keeps
+its transform alive if a progress callback deletes the handle.
 Windows ICM retains only a 16-bit CMM handle, so identifiers rotate through
 256–65,535 and can eventually be reused after 65,280 allocations. Callers must
 not use a handle after deleting it.
@@ -58,8 +60,10 @@ checks explicit profile-intent order, invalid intent arguments, stale-handle
 rejection, distinct handles from simultaneous creation, and callback reentry
 with deletion during an in-flight bitmap translation. The legacy
 `CMCreateTransformExt` A/W exports are exercised with an ICC profile buffer.
-When the named-color
-fixture is present, it checks name/index conversion and bounds.
+The smoke also rejects a device-link profile after a valid transform profile
+and cross-translates two independent transforms from simultaneous progress
+callbacks. When the named-color fixture is present, it checks name/index
+conversion and bounds.
 
 The same coverage is registered with CTest as:
 
@@ -83,6 +87,9 @@ runtime DLLs, this README, and `share\doc\RefIccMAX\TOOL-CATALOG.md`. For a
 shared Windows vcpkg triplet, the CMM install selects the matching `z.dll`
 (`zd.dll` for Debug) and includes its license at
 `share\doc\RefIccMAX\licenses\zlib.txt`, even when IIS tools are disabled.
+The focused runtime-install CTest follows a relative `CMAKE_INSTALL_BINDIR`,
+including custom values such as `tools`; the commands here use the default
+`bin` directory.
 
 To smoke the installed DLLs without registering the CMM, temporarily put the
 built test executable beside them:

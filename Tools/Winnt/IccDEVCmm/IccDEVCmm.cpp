@@ -547,7 +547,7 @@ BOOL WINAPI CMCheckRGBs(
     return FALSE;
   }
 
-  std::lock_guard<std::recursive_mutex> transform_lock(transform->m_Mutex);
+  std::unique_lock<std::recursive_mutex> transform_lock(transform->m_Mutex);
   CIccCmm *pCmm = transform->m_Cmm.get();
   LPBYTE lpSrcLine;
   DWORD j;
@@ -829,9 +829,16 @@ BOOL WINAPI CMCheckRGBs(
       lpaResult++;
     }
 
-    if (pfnCallback && !pfnCallback(j, dwHeight, ulCallbackData)) {
-      SetLastError(ERROR_CANCELLED);
-      return FALSE;
+    if (pfnCallback) {
+      // External callbacks may translate through another transform. Holding
+      // this lock would deadlock if two callbacks cross-call each other.
+      transform_lock.unlock();
+      BOOL keepGoing = pfnCallback(j, dwHeight, ulCallbackData);
+      transform_lock.lock();
+      if (!keepGoing) {
+        SetLastError(ERROR_CANCELLED);
+        return FALSE;
+      }
     }
 
     if (!dwStride) {
@@ -927,7 +934,6 @@ HCMTRANSFORM WINAPI CMCreateMultiProfileTransform(
                        NULL,
                        (i+1==nProfiles && (dwFlags & ENABLE_GAMUT_CHECKING)) ? icXformLutGamut : icXformLutColor
                       ) != icCmmStatOk) {
-      delete pProfile;
       delete pCmm;
       SetLastError(ERROR_BAD_ARGUMENTS);
       return 0;
@@ -1016,7 +1022,6 @@ HCMTRANSFORM WINAPI CMCreateTransformExt(
     }
 
     if (pCmm->AddXform(pProfile)!=icCmmStatOk) {
-      delete pProfile;
       delete pCmm;
       GlobalFree(lpSrcProfileBuf);
       return 0;
@@ -1032,7 +1037,6 @@ HCMTRANSFORM WINAPI CMCreateTransformExt(
       return 0;
     }
     if (pCmm->AddXform(pProfile)!=icCmmStatOk) {
-      delete pProfile;
       delete pCmm;
       if (lpSrcProfileBuf)
         GlobalFree(lpSrcProfileBuf);
@@ -1048,7 +1052,6 @@ HCMTRANSFORM WINAPI CMCreateTransformExt(
         return 0;
       }
       if (pCmm->AddXform(pProfile)!=icCmmStatOk) {
-        delete pProfile;
         delete pCmm;
         GlobalFree(lpSrcProfileBuf);
         return 0;
@@ -1065,7 +1068,6 @@ HCMTRANSFORM WINAPI CMCreateTransformExt(
       return 0;
     }
     if (pCmm->AddXform(pProfile)!=icCmmStatOk) {
-      delete pProfile;
       delete pCmm;
       if (lpSrcProfileBuf)
         GlobalFree(lpSrcProfileBuf);
@@ -1117,7 +1119,6 @@ HCMTRANSFORM WINAPI CMCreateTransformExtW(
     }
 
     if (pCmm->AddXform(pProfile)!=icCmmStatOk) {
-      delete pProfile;
       delete pCmm;
       GlobalFree(lpSrcProfileBuf);
       return 0;
@@ -1133,7 +1134,6 @@ HCMTRANSFORM WINAPI CMCreateTransformExtW(
       return 0;
     }
     if (pCmm->AddXform(pProfile)!=icCmmStatOk) {
-      delete pProfile;
       delete pCmm;
       if (lpSrcProfileBuf)
         GlobalFree(lpSrcProfileBuf);
@@ -1149,7 +1149,6 @@ HCMTRANSFORM WINAPI CMCreateTransformExtW(
         return 0;
       }
       if (pCmm->AddXform(pProfile)!=icCmmStatOk) {
-        delete pProfile;
         delete pCmm;
         GlobalFree(lpSrcProfileBuf);
         return 0;
@@ -1166,7 +1165,6 @@ HCMTRANSFORM WINAPI CMCreateTransformExtW(
       return 0;
     }
     if (pCmm->AddXform(pProfile)!=icCmmStatOk) {
-      delete pProfile;
       delete pCmm;
       if (lpSrcProfileBuf)
         GlobalFree(lpSrcProfileBuf);
@@ -1561,7 +1559,7 @@ BOOL WINAPI CMTranslateRGBsExt(
     return FALSE;
   }
 
-  std::lock_guard<std::recursive_mutex> transform_lock(transform->m_Mutex);
+  std::unique_lock<std::recursive_mutex> transform_lock(transform->m_Mutex);
   CIccCmm *pCmm = transform->m_Cmm.get();
   LPBYTE lpSrcLine;
   LPBYTE lpDestLine;
@@ -2176,9 +2174,16 @@ BOOL WINAPI CMTranslateRGBsExt(
       }
     }
     
-    if (lpfnCallback && !lpfnCallback(j, dwHeight, ulCallbackData)) {
-      SetLastError(ERROR_CANCELLED);
-      return FALSE;
+    if (lpfnCallback) {
+      // Keep the shared transform state alive, but do not hold its mutable
+      // CMM lock while invoking caller code on this thread.
+      transform_lock.unlock();
+      BOOL keepGoing = lpfnCallback(j, dwHeight, ulCallbackData);
+      transform_lock.lock();
+      if (!keepGoing) {
+        SetLastError(ERROR_CANCELLED);
+        return FALSE;
+      }
     }
 
     if (!dwInputStride) {

@@ -3,6 +3,7 @@ foreach(_required IN ITEMS
     ICCDEV_CMM_PACKAGE_BUILD_DIR
     ICCDEV_CMM_PACKAGE_SMOKE
     ICCDEV_CMM_PACKAGE_REPO_ROOT
+    ICCDEV_CMM_PACKAGE_BINDIR
     ICCDEV_CMM_PACKAGE_DOCDIR
     ICCDEV_CMM_PACKAGE_COMPONENT
     ICCDEV_CMM_PACKAGE_ZLIB_DLL)
@@ -15,7 +16,7 @@ string(TIMESTAMP _stamp "%Y%m%d%H%M%S")
 string(RANDOM LENGTH 8 ALPHABET 0123456789abcdef _nonce)
 set(_prefix
   "${ICCDEV_CMM_PACKAGE_BUILD_DIR}/Testing/cmm-runtime-install-${_stamp}-${_nonce}")
-set(_bin "${_prefix}/bin")
+set(_bin "${_prefix}/${ICCDEV_CMM_PACKAGE_BINDIR}")
 
 foreach(_install_script IN ITEMS
     "${ICCDEV_CMM_PACKAGE_BUILD_DIR}/IccProfLib/cmake_install.cmake"
