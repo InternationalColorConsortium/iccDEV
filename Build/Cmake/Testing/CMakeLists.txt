@@ -12010,11 +12010,11 @@ endforeach()
 # registers the Windows test set and then return()s, so anything placed after it
 # never runs on Windows. This block handles WIN32 itself.
 #
-# Records; never asserts a timing threshold. Shared CI runners vary 20-30%
-# between runs on the same commit, so a threshold would flake without catching
-# anything a local run would not. The test fails on a real defect: a checksum
-# that moved between thread counts, a second Begin() that changed the output,
-# or -- since #2254 -- a run in which no case was measured at all.
+# Exercises every built-in chain with a small workload and checks every CSV row;
+# never asserts a timing threshold. Shared CI runners vary 20-30% between runs
+# on the same commit. The test fails on a real defect: a missing/skipped case,
+# a checksum that moved between thread counts, a second Begin() that changed
+# the output, or -- since #2254 -- a run in which no case was measured at all.
 #
 # That last clause is the anti-vacuity guard, and it is not theoretical. Before
 # #2254 the tool exited 0 after printing "0 case(s) measured, 9 skipped", so
@@ -12024,9 +12024,8 @@ endforeach()
 # failure, so a regression that restores the old exit status turns that test
 # red rather than quietly re-hollowing this one.
 #
-# The 'slow' label puts it on the existing opt-out path rather than inventing
-# one: check-fast excludes 'slow' while check excludes only 'known-red', so the
-# full suite runs it and the fast loop does not.
+# The 8192-pixel, one-repeat CTest is a correctness smoke. Longer throughput
+# measurements remain available through iccBenchApply -suite outside CTest.
 #
 # ENVIRONMENT hands the tool both profile roots. iccdev.create-profiles writes
 # generated profiles into the source tree while iccdev.windows-create-profiles
@@ -12100,7 +12099,10 @@ if(TARGET iccBenchApply)
     if(WIN32)
       add_test(
         NAME iccdev.apply-throughput
-        COMMAND "$<TARGET_FILE:iccBenchApply>" -suite -csv -pixels 65536 -repeats 3
+        COMMAND "${CMAKE_COMMAND}"
+          "-DICCDEV_BENCH_APPLY=$<TARGET_FILE:iccBenchApply>"
+          "-DICCDEV_REPO_ROOT=${ICCDEV_REPO_ROOT}"
+          -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplySuite.cmake"
       )
     else()
       add_test(
@@ -12108,14 +12110,17 @@ if(TARGET iccBenchApply)
         COMMAND
           "${CMAKE_COMMAND}" -E env
           ${ICCDEV_TEST_ENV}
-          "$<TARGET_FILE:iccBenchApply>" -suite -csv -pixels 65536 -repeats 3
+          "${CMAKE_COMMAND}"
+          "-DICCDEV_BENCH_APPLY=$<TARGET_FILE:iccBenchApply>"
+          "-DICCDEV_REPO_ROOT=${ICCDEV_REPO_ROOT}"
+          -P "${CMAKE_CURRENT_LIST_DIR}/RunBenchApplySuite.cmake"
       )
     endif()
 
     set_tests_properties(iccdev.apply-throughput PROPERTIES
       WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
-      TIMEOUT 300
-      LABELS "iccdev;iccprofLib;benchmark;throughput;slow"
+      TIMEOUT 120
+      LABELS "iccdev;iccprofLib;benchmark;throughput;regression"
       FIXTURES_REQUIRED iccdev_profiles
       ENVIRONMENT "ICCDEV_BENCH_SOURCE_ROOT=${ICCDEV_REPO_ROOT};ICCDEV_BENCH_BUILD_ROOT=${ICCDEV_TEST_OUTDIR}/windows-testing"
     )
@@ -15739,8 +15744,18 @@ if(TARGET iccApplySearch)
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applysearch-cli-args-regression.sh"
    )
   set_tests_properties(iccdev.applysearch-cli-args PROPERTIES
-    # The regression compares results from internal thread counts through 8.
-    # Keep that bounded workload from competing with another aggregate test.
+    # The routine regression activates at most two workers in one tool process.
+    PROCESSORS 2
+  )
+  iccdev_add_script_test(
+    iccdev.applysearch-cli-args-exhaustive
+    180
+    "iccdev;cmm;config;cli;security;issue-1674;issue-1853;issue-2190;regression;slow;pr-extended"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applysearch-cli-args-regression.sh"
+    --exhaustive-thread-matrix
+  )
+  set_tests_properties(iccdev.applysearch-cli-args-exhaustive PROPERTIES
     PROCESSORS "${_iccdev_aggregate_ctest_processors}"
   )
 endif()

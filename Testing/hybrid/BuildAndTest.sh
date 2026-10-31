@@ -9,12 +9,22 @@
 #         iccApplySearch, iccV5DspObsToV4Dsp, iccTiffDump, iccDumpProfile.
 #################################################################################
 set -eu
+# CTest exercises a representative selection of the expensive T-shirt cases.
+# The default still runs the complete example and its background matrix.
+if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && [ "$1" != "--ctest-smoke" ]; }; then
+  echo "usage: $0 [--ctest-smoke]" >&2
+  exit 2
+fi
+CTEST_SMOKE=0
+if [ "${1:-}" = "--ctest-smoke" ]; then
+  CTEST_SMOKE=1
+fi
 # Four hosts below embed an ICC.2 child of a different device space, which
 # Technical Note 04-2018 rules out, so iccFromXml validates them invalid and
 # exits 1 while still writing the profile (#2693).  They are kept until the
-# fixtures are reworked; the "|| echo" lets the pipeline continue.
+# fixtures are reworked; verify that exit code and fresh output explicitly.
 
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 SILENCE_FILE="$SCRIPT_DIR/../silence.txt"
 if [ -r "$SILENCE_FILE" ]; then
   export UBSAN_OPTIONS="${UBSAN_OPTIONS:+${UBSAN_OPTIONS}:}suppressions=$SILENCE_FILE"
@@ -22,13 +32,27 @@ fi
 
 mkdir -p ICC Results config
 
+create_expected_invalid_profile() {
+  _xml="$1"
+  _icc="$2"
+  _reason="$3"
+  rm -f "$_icc"
+  _result=0
+  iccFromXml "$_xml" "$_icc" || _result=$?
+  if [ "$_result" -ne 1 ] || [ ! -s "$_icc" ]; then
+    echo "expected invalid-but-saved profile: $_xml (exit=$_result, output=$_icc)" >&2
+    exit 1
+  fi
+  echo "WARN: $_reason; profile written"
+}
+
 echo "========== Phase 1: Build ICC profiles from XML sources =========="
-iccFromXml  MultSpectralRGB.xml ICC/MultSpectralRGB.icc || echo "WARN: MultSpectralRGB: embedded profile device space differs from the host (#2693); profile written"
+create_expected_invalid_profile MultSpectralRGB.xml ICC/MultSpectralRGB.icc "MultSpectralRGB: embedded profile device space differs from the host (#2693)"
 iccFromXml  LCDDisplay.xml ICC/LCDDisplay.icc
 iccFromXml  CMYK_Hybrid_Profile.xml ICC/CMYK_Hybrid_Profile.icc
-iccFromXml  CMYK-W_Overprint_Profile.xml ICC/CMYK-W_Overprint_Profile.icc || echo "WARN: CMYK-W_Overprint_Profile: embedded profile device space differs from the host (#2693); profile written"
-iccFromXml  CMYK-S_Overprint_Profile.xml ICC/CMYK-S_Overprint_Profile.icc || echo "WARN: CMYK-S_Overprint_Profile: embedded profile device space differs from the host (#2693); profile written"
-iccFromXml  CMYK-STop_Overprint_Profile.xml ICC/CMYK-STop_Overprint_Profile.icc || echo "WARN: CMYK-STop_Overprint_Profile: embedded profile device space differs from the host (#2693); profile written"
+create_expected_invalid_profile CMYK-W_Overprint_Profile.xml ICC/CMYK-W_Overprint_Profile.icc "CMYK-W_Overprint_Profile: embedded profile device space differs from the host (#2693)"
+create_expected_invalid_profile CMYK-S_Overprint_Profile.xml ICC/CMYK-S_Overprint_Profile.icc "CMYK-S_Overprint_Profile: embedded profile device space differs from the host (#2693)"
+create_expected_invalid_profile CMYK-STop_Overprint_Profile.xml ICC/CMYK-STop_Overprint_Profile.icc "CMYK-STop_Overprint_Profile: embedded profile device space differs from the host (#2693)"
 iccFromXml  MW-Mid_Overprint.xml ICC/MW-Mid_Overprint.icc
 iccFromXml  MS-Mid_Overprint.xml ICC/MS-Mid_Overprint.icc
 iccFromXml  SC-Mid_Overprint.xml ICC/SC-Mid_Overprint.icc
@@ -76,6 +100,26 @@ iccApplyProfiles -threads 0 -cfg config/msCowsIconToCmyk.json
 iccTiffDump   Results/MS_smCowsIconCmyk.tif || echo "WARN: MS_smCowsIconCmyk.tif embeds an Overprint host, which validates invalid under #2693; dump shown above"
 
 echo "========== Phase 6: T-shirt overprint simulation =========="
+if [ "$CTEST_SMOKE" -eq 1 ]; then
+  # Keep the embedded, explicit overprint, background, and mid-profile paths in
+  # the sanitizer CTest. The full colour/background matrix runs in the default
+  # script used by the comprehensive Unix profile workflow.
+  CTEST_OUTPUTS="TShirtDesignPrevUW-W TShirtDesignPrevUS-G TShirtDesignPrevOS-B TShirtDesignPrevUS-W-CS"
+  for output in $CTEST_OUTPUTS; do
+    rm -f "Results/$output.tif" "config/$output.json"
+  done
+  iccApplyProfiles -threads 0 -exportcfg config/TShirtDesignPrevUW-W.json Data/TShirtDesignCMYKW.tif Results/TShirtDesignPrevUW-W.tif 1 1 0 0 0 -embedded 10001 ../sRGB_v4_ICC_preference.icc 1
+  iccApplyProfiles -threads 0 -exportcfg config/TShirtDesignPrevUS-G.json Data/TShirtDesignCMYKW.tif Results/TShirtDesignPrevUS-G.tif 1 1 0 0 0 -ENV:bkgX 0.0985 -ENV:bkgY 0.159 -ENV:bkgZ 0.122 ICC/CMYK-S_Overprint_Profile.icc 10001 ../sRGB_v4_ICC_preference.icc 1
+  iccApplyProfiles -threads 0 -exportcfg config/TShirtDesignPrevOS-B.json Data/TShirtDesignCMYKW.tif Results/TShirtDesignPrevOS-B.tif 1 1 0 0 0 -ENV:bkgX 0.2099 -ENV:bkgY 0.182 -ENV:bkgZ 0.498 ICC/CMYK-STop_Overprint_Profile.icc 10001 ../sRGB_v4_ICC_preference.icc 1
+  iccApplyProfiles -threads 0 -exportcfg config/TShirtDesignPrevUS-W-CS.json Data/TShirtDesignKW.tif Results/TShirtDesignPrevUS-W-CS.tif 1 1 0 0 0 ICC/SC-Mid_Overprint.icc 80 -ENV:0ni? 1 ICC/CMYK-STop_Overprint_Profile.icc 10080 ../sRGB_v4_ICC_preference.icc 1
+  for output in $CTEST_OUTPUTS; do
+    if [ ! -s "Results/$output.tif" ] || [ ! -s "config/$output.json" ]; then
+      echo "missing or empty CTest hybrid output: $output" >&2
+      exit 1
+    fi
+  done
+  exit 0
+fi
 iccApplyProfiles -threads 0 -exportcfg config/TShirtDesignPrevUW-W.json Data/TShirtDesignCMYKW.tif Results/TShirtDesignPrevUW-W.tif 1 1 0 0 0 -embedded 10001 ../sRGB_v4_ICC_preference.icc 1
 iccApplyProfiles -threads 0 -exportcfg config/TShirtDesignPrevUW-R.json Data/TShirtDesignCMYKW.tif Results/TShirtDesignPrevUW-R.tif 1 1 0 0 0 -ENV:bkgX 0.264 -ENV:bkgY 0.168 -ENV:bkgZ 0.033 -embedded 10001 ../sRGB_v4_ICC_preference.icc 1
 iccApplyProfiles -threads 0 -exportcfg config/TShirtDesignPrevUW-G.json Data/TShirtDesignCMYKW.tif Results/TShirtDesignPrevUW-G.tif 1 1 0 0 0 -ENV:bkgX 0.0985 -ENV:bkgY 0.159 -ENV:bkgZ 0.122 -embedded 10001 ../sRGB_v4_ICC_preference.icc 1

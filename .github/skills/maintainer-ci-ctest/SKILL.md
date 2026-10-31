@@ -79,10 +79,19 @@ when practical.
 ## Workflow Rules
 
 - Follow `.github/instructions/workflow-governance.instructions.md`.
-- Treat `ci-pr-action` `full` as the deterministic core maintainer gate. It runs
+- Use `ci-qa-pr` with `ctest-mode=full` and `ctest-recent-limit=0` on the
+  pre-PR branch for the comprehensive build and CTest screening matrix. Pair
+  it with `ci-codeql-security` on the same head. Complete the applicable local
+  pre-commit and preflight checks first; the maintainer image supplies zizmor,
+  Trivy, CodeQL, fuzzers, Valgrind, and other focused tools. Open a PR only
+  after the pre-PR evidence passes and PR creation is authorized.
+- Treat `ci-pr-action` as the final PR-head sounding board for merge readiness.
+  Its full scope runs
   Unix GCC/Clang Release and Debug builds, exact GCC 15.2 strict Release LTO in
-  the regression container, non-sanitized GCC core tool tests, and Windows.
+  the regression container, non-sanitized GCC core tool tests, profile builds,
+  a representative CTest corpus, and Windows.
   Its tool-test caller excludes `pr-extended` and `ci-infrastructure` CTests.
+  It does not replace exhaustive pre-PR screening or local preflight.
 - `ci_scope=auto` is the default. It selects the full matrix for source, build,
   and test changes; documentation-only changes use the constrained fast-lane
   settings. Workflow-only changes keep the core orchestrator limited to setup
@@ -119,7 +128,8 @@ when practical.
   both PR and manual-dispatch events, so a manual lane cannot cancel its PR
   counterpart.
 - Trigger shared-concurrency workflows sequentially to avoid canceling your own
-  run. Use `ci-pr-action` for normal core validation and the standalone
+  run. Use `ci-qa-pr` for comprehensive pre-PR validation, `ci-pr-action` for
+  final PR-head validation, and the standalone
   path-scoped/manual `ci-regression-checks` workflow for ASAN/UBSAN coverage.
 
 ## Local Validation
@@ -202,10 +212,15 @@ branch or SHA tag to `ci-iccdev-tool-tests.yml`.
 
 ## GitHub Validation
 
-After pushing, trigger only the workflows affected by the change:
+After pushing a pre-PR branch, run the comprehensive screening and CodeQL on
+that exact head. After an authorized PR is opened, run the final PR-head gate
+and any additional workflow whose contract applies:
 
 ```bash
-gh workflow run "ci-pr-action" --repo InternationalColorConsortium/iccDEV --ref <branch> -f ci_scope=full
+gh workflow run "ci-qa-pr" --repo InternationalColorConsortium/iccDEV --ref <pre-pr-branch> \
+  -f ctest-mode=full -f ctest-recent-limit=0
+gh workflow run "ci-codeql-security" --repo InternationalColorConsortium/iccDEV --ref <pre-pr-branch>
+gh workflow run "ci-pr-action" --repo InternationalColorConsortium/iccDEV --ref <pr-head-branch> -f ci_scope=full
 gh workflow run "ci-pr-action" --repo InternationalColorConsortium/iccDEV --ref <branch> \
   -f ci_scope=fast-lane -f pr_number=<open-pr-number>
 gh workflow run "ci-matlab" --repo InternationalColorConsortium/iccDEV --ref <branch>

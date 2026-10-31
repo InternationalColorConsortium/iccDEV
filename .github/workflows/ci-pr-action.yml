@@ -5,7 +5,8 @@
 #                 https://color.org
 #
 #
-## Intent: iccDEV ci-pr-action
+## Intent: final PR-head cross-platform builds, profile generation, and
+##         representative CTest after local and comprehensive pre-PR screening.
 #
 # Main Entry Point for all PR. No Forks, Thank You
 #
@@ -56,7 +57,7 @@ on:
           - governance
           - docs
       ctest_recent_limit:
-        description: 'Fast lane: run only the last N registered CTests; 0 means all'
+        description: 'Fast lane: core smoke plus last N registered CTests; 0 means all'
         required: false
         default: '1'
         type: choice

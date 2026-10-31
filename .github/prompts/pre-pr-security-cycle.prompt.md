@@ -5,7 +5,8 @@ updating, or merging an iccDEV PR.
 
 ## Inputs
 
-- Branch:
+- Pre-PR branch and head SHA:
+- PR head SHA and explicit opening authorization, if applicable:
 - Issue or PR:
 - Changed surface:
 - Security-sensitive paths:
@@ -34,20 +35,30 @@ updating, or merging an iccDEV PR.
      discovered CLI tools against `TOOL_BINARIES` and inspect capability flags;
      never assert one fixed health-tool total across variants.
 5. Fix confirmed findings and repeat only affected checks.
-6. Freeze the head and record the readiness evidence and `base...HEAD` contract
+6. Use the current maintainer image and local tools for the applicable checks;
+   record the image digest and revision. On the pushed pre-PR branch, run
+   `ci-qa-pr` with `ctest-mode=full` and `ctest-recent-limit=0`, plus
+   `ci-codeql-security` on the same head. Wait for terminal results and
+   repeat affected checks after any head change.
+7. Freeze the head and record the readiness evidence and `base...HEAD` contract
    matrix required by `docs/governance/UPSTREAM_PR_READINESS.md` before
    requesting review. The matrix maps each changed cross-cutting surface to its
    producer, consumer, build/runtime behavior, toolchain or platform boundary,
    CI trigger, dependency owner, and evidence. If a re-review finds any new
    blocker, stop serial automated review and return to branch-only grooming.
-7. Prepare a golfed handoff with commands, run IDs, sentinels, and known skips.
+8. Open the PR only with explicit user authorization after readiness passes.
+   Run `ci-pr-action` with `ci_scope=full` on the PR head for final
+   cross-platform builds, profile checks, and representative CTest coverage.
+   This gate does not replace local or pre-PR screening.
+9. Prepare a golfed handoff with commands, run IDs, sentinels, and known skips.
 
 ## Handoff Format
 
 - Branch and commit:
 - Files or surfaces changed:
-- Local validation:
-- Hosted validation:
+- Local validation (image digest and revision where used):
+- Pre-PR `ci-qa-pr` and `ci-codeql-security` (same head SHA, run IDs, results):
+- PR-head `ci-pr-action` (run ID, result, applicable skips):
 - SAST/CodeQL status:
 - Dynamic/sanitizer status:
 - Known skips, suppressions, or deferred follow-ups:

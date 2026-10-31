@@ -254,7 +254,6 @@ jobs:
             if (Test-Path Env:GITHUB_TOKEN) {
               Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
             }
-          pwd
           cd Build/Cmake
           Write-Host "========= Configuring iccDEV ... ================`n"
           cmake -B build `
@@ -578,7 +577,7 @@ jobs:
             "from $($batchFiles.Count) Testing batch files"
           )
 
-      - name: Run Windows CTest check
+      - name: Build Windows CTest helper binaries
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
@@ -593,9 +592,27 @@ jobs:
             }
           pwd
           cd Build/Cmake
-          Write-Host "========= Running CTest check ... ================`n"
           # vcpkg z-applocal stages shared DLLs; parallel helper builds race.
           cmake --build build --config Debug --target build-test-binaries --parallel 1
+          if ($LASTEXITCODE -ne 0) {
+            throw "CTest helper build failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Run Windows CTest check
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+          cd Build/Cmake
           python ..\..\.github\scripts\run-recent-ctests.py `
             --test-dir build `
             --config Debug `
@@ -603,7 +620,11 @@ jobs:
             --require-test iccdev.applyprofiles-headless-receipts `
             --require-test iccdev.applyprofiles-matrix-contracts `
             --require-test iccdev.applyprofiles-evidence-matrix `
+            --output-junit build\ctest-results.xml `
             --selection-output build\recent-ctests.txt
+          if ($LASTEXITCODE -ne 0) {
+            throw "CTest failed with exit code $LASTEXITCODE"
+          }
 
       - name: GitHub Summary
         if: always()
@@ -636,6 +657,29 @@ jobs:
           "Runner OS: $(Sanitize-Line $env:GH_RUNNER_OS)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "Status: $(Sanitize-Line $env:GH_JOB_STATUS)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          $ctestJunit = 'Build\Cmake\build\ctest-results.xml'
+          if (Test-Path -LiteralPath $ctestJunit) {
+            [xml]$ctestXml = Get-Content -LiteralPath $ctestJunit -Raw
+            $cases = @($ctestXml.SelectNodes('//testcase'))
+            $failures = @($ctestXml.SelectNodes('//testcase[failure or error]')).Count
+            $skipped = @($ctestXml.SelectNodes('//testcase[skipped]')).Count
+            $ctestLines = @(
+              "### MSVC CTest results",
+              '',
+              "- Cases: $($cases.Count); failures: $failures; skipped: $skipped",
+              '- Slowest individual tests:'
+            )
+            $cases | Sort-Object {
+              [double]::Parse([string]$_.time, [CultureInfo]::InvariantCulture)
+            } -Descending | Select-Object -First 5 | ForEach-Object {
+              $ctestLines += "  - $($_.name): $($_.time)s"
+            }
+            $ctestLines | ForEach-Object { Sanitize-Print $_ } |
+              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          } else {
+            '### MSVC CTest results: JUnit unavailable' |
+              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
 
   clangcl-build:
     name: Windows ClangCL build and test
@@ -749,7 +793,7 @@ jobs:
           }
           Expand-Archive -LiteralPath 'deps.zip' -DestinationPath . -Force
 
-      - name: Run ClangCL build and CTest check
+      - name: Configure and build ClangCL tools
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
           POWERSHELL_UPDATECHECK: Off
@@ -784,8 +828,6 @@ jobs:
 
           $configureLog = Join-Path $buildDir 'clangcl-configure.log'
           $buildLog = Join-Path $buildDir 'clangcl-build.log'
-          $checkLog = Join-Path $buildDir 'clangcl-check.log'
-
           Invoke-NativeLogged cmake @(
             '-S', 'Build\Cmake',
             '-B', $buildDir,
@@ -807,14 +849,51 @@ jobs:
             '--config', 'Debug',
             '--parallel'
           ) $buildLog
+
+      - name: Build ClangCL CTest helper binaries
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+
+          $buildDir = 'Build\Cmake\build-clangcl-pr-smoke'
+          $checkLog = Join-Path $buildDir 'clangcl-check.log'
           # vcpkg z-applocal stages shared DLLs; parallel helper builds race.
-          Invoke-NativeLogged cmake @(
+          & cmake @(
             '--build', $buildDir,
             '--config', 'Debug',
             '--target', 'build-test-binaries',
             '--parallel', '1'
-          ) $checkLog
-          Invoke-NativeLogged python @(
+          ) 2>&1 | Tee-Object -FilePath $checkLog -Append
+          if ($LASTEXITCODE -ne 0) {
+            throw "ClangCL CTest helper build failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Run ClangCL CTest check
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+
+          $buildDir = 'Build\Cmake\build-clangcl-pr-smoke'
+          $checkLog = Join-Path $buildDir 'clangcl-check.log'
+          & python @(
             '.github\scripts\run-recent-ctests.py',
             '--test-dir', $buildDir,
             '--config', 'Debug',
@@ -822,8 +901,12 @@ jobs:
             '--require-test', 'iccdev.applyprofiles-headless-receipts',
             '--require-test', 'iccdev.applyprofiles-matrix-contracts',
             '--require-test', 'iccdev.applyprofiles-evidence-matrix',
+            '--output-junit', (Join-Path $buildDir 'ctest-results.xml'),
             '--selection-output', (Join-Path $buildDir 'recent-ctests.txt')
-          ) $checkLog
+          ) 2>&1 | Tee-Object -FilePath $checkLog -Append
+          if ($LASTEXITCODE -ne 0) {
+            throw "ClangCL CTest failed with exit code $LASTEXITCODE"
+          }
 
       - name: Summarize ClangCL compiler warning signal
         if: always()
@@ -898,6 +981,29 @@ jobs:
           $summaryLines | ForEach-Object {
             Sanitize-Print $_
           } | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          $ctestJunit = 'Build\Cmake\build-clangcl-pr-smoke\ctest-results.xml'
+          if (Test-Path -LiteralPath $ctestJunit) {
+            [xml]$ctestXml = Get-Content -LiteralPath $ctestJunit -Raw
+            $cases = @($ctestXml.SelectNodes('//testcase'))
+            $failures = @($ctestXml.SelectNodes('//testcase[failure or error]')).Count
+            $skipped = @($ctestXml.SelectNodes('//testcase[skipped]')).Count
+            $ctestLines = @(
+              '### ClangCL CTest results',
+              '',
+              "- Cases: $($cases.Count); failures: $failures; skipped: $skipped",
+              '- Slowest individual tests:'
+            )
+            $cases | Sort-Object {
+              [double]::Parse([string]$_.time, [CultureInfo]::InvariantCulture)
+            } -Descending | Select-Object -First 5 | ForEach-Object {
+              $ctestLines += "  - $($_.name): $($_.time)s"
+            }
+            $ctestLines | ForEach-Object { Sanitize-Print $_ } |
+              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          } else {
+            '### ClangCL CTest results: JUnit unavailable' |
+              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
 
   windows-release-performance:
     name: Windows Release performance report
@@ -1059,6 +1165,15 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
+          path: .trusted-workflow
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Setup MSYS2 UCRT64 MinGW
         id: setup-msys2
         uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e  # v2.33.0
@@ -1077,7 +1192,7 @@ jobs:
             mingw-w64-ucrt-x86_64-libjpeg-turbo
             mingw-w64-ucrt-x86_64-nlohmann-json
 
-      - name: Run MinGW build and CTest check
+      - name: Configure and build MinGW static tools
         env:
           POWERSHELL_TELEMETRY_OPTOUT: 1
           POWERSHELL_UPDATECHECK: Off
@@ -1098,7 +1213,7 @@ jobs:
           if (Test-Path env:ACTIONS_ID_TOKEN_REQUEST_TOKEN) {
             Remove-Item env:ACTIONS_ID_TOKEN_REQUEST_TOKEN
           }
-          . .github/scripts/sanitize.ps1
+          . .trusted-workflow\.github\scripts\sanitize.ps1
 
           $msysRoot = [System.IO.Path]::GetFullPath($env:MSYS2_LOCATION)
           $ucrtRoot = Join-Path $msysRoot 'ucrt64'
@@ -1161,21 +1276,101 @@ jobs:
             '--build', $buildDir,
             '--parallel'
           )
-          # vcpkg z-applocal stages shared DLLs; parallel helper builds race.
-          Invoke-Native $cmake @(
+
+      - name: Build MinGW CTest helper binaries
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: 1
+          POWERSHELL_UPDATECHECK: Off
+          MSYS2_LOCATION: ${{ steps.setup-msys2.outputs.msys2-location }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+
+          $msysRoot = [System.IO.Path]::GetFullPath($env:MSYS2_LOCATION)
+          $env:PATH = "$(Join-Path $msysRoot 'ucrt64\bin');$(Join-Path $msysRoot 'usr\bin');$env:PATH"
+          $buildDir = Join-Path $env:GITHUB_WORKSPACE 'Build\Cmake\build-mingw-pr-smoke'
+          $cmake = Join-Path $msysRoot 'ucrt64\bin\cmake.exe'
+          # This MSYS2 static build has no vcpkg z-applocal hook. Bound parallel
+          # compilation to two jobs to keep headroom on hosted Windows runners.
+          & $cmake @(
             '--build', $buildDir,
             '--target', 'build-test-binaries',
-            '--parallel', '1'
+            '--parallel', '2'
           )
-          Invoke-Native python @(
+          if ($LASTEXITCODE -ne 0) {
+            throw "MinGW CTest helper build failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Run MinGW static CTest check
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: 1
+          POWERSHELL_UPDATECHECK: Off
+          MSYS2_LOCATION: ${{ steps.setup-msys2.outputs.msys2-location }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+
+          $msysRoot = [System.IO.Path]::GetFullPath($env:MSYS2_LOCATION)
+          $env:PATH = "$(Join-Path $msysRoot 'ucrt64\bin');$(Join-Path $msysRoot 'usr\bin');$env:PATH"
+          $buildDir = Join-Path $env:GITHUB_WORKSPACE 'Build\Cmake\build-mingw-pr-smoke'
+          & python @(
             '.github\scripts\run-recent-ctests.py',
             '--test-dir', $buildDir,
             '--parallel', ([string][Environment]::ProcessorCount),
             '--require-test', 'iccdev.applyprofiles-headless-receipts',
             '--require-test', 'iccdev.applyprofiles-matrix-contracts',
             '--require-test', 'iccdev.applyprofiles-evidence-matrix',
+            '--output-junit', (Join-Path $buildDir 'ctest-results.xml'),
             '--selection-output', (Join-Path $buildDir 'recent-ctests.txt')
           )
+          if ($LASTEXITCODE -ne 0) {
+            throw "MinGW static CTest failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Build and verify MinGW shared exports
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: 1
+          POWERSHELL_UPDATECHECK: Off
+          MSYS2_LOCATION: ${{ steps.setup-msys2.outputs.msys2-location }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          . .trusted-workflow\.github\scripts\sanitize.ps1
+
+          $msysRoot = [System.IO.Path]::GetFullPath($env:MSYS2_LOCATION)
+          $ucrtRoot = Join-Path $msysRoot 'ucrt64'
+          $ucrtBin = Join-Path $msysRoot 'ucrt64\bin'
+          $env:PATH = "$ucrtBin;$(Join-Path $msysRoot 'usr\bin');$env:PATH"
+          $workspace = [System.IO.Path]::GetFullPath($env:GITHUB_WORKSPACE)
+          $sourceDir = Join-Path $workspace 'Build\Cmake'
+          $cmake = Join-Path $ucrtBin 'cmake.exe'
+          $ctest = Join-Path $ucrtBin 'ctest.exe'
+          $gcc = Join-Path $ucrtBin 'x86_64-w64-mingw32-gcc.exe'
+          $gxx = Join-Path $ucrtBin 'x86_64-w64-mingw32-g++.exe'
+          $ninja = Join-Path $ucrtBin 'ninja.exe'
+
+          function Invoke-Native {
+            param(
+              [Parameter(Mandatory = $true)][string] $FilePath,
+              [Parameter(Mandatory = $true)][string[]] $Arguments
+            )
+            & $FilePath @Arguments
+            if ($LASTEXITCODE -ne 0) {
+              throw "$(Sanitize-Line $FilePath) failed with exit code $LASTEXITCODE"
+            }
+          }
 
           # The static build cannot detect missing symbols in MinGW DLL import
           # libraries. Exercise the reported #2809 preset with shared-only
@@ -1200,7 +1395,8 @@ jobs:
           Invoke-Native $ctest @(
             '--test-dir', $sharedBuildDir,
             '-R', '^iccdev\.(issue-987-shared-mpe-export|issue-1009-iccjson-profilejson-export)$',
-            '--output-on-failure', '--no-tests=error'
+            '--output-on-failure', '--no-tests=error',
+            '--output-junit', (Join-Path $sharedBuildDir 'ctest-results.xml')
           )
           $sharedBinDir = Join-Path $sharedBuildDir 'bin'
           $jsonProfile = Join-Path $workspace 'Testing\sRGB_v4_ICC_preference.icc'
@@ -1213,17 +1409,59 @@ jobs:
             throw 'MinGW shared JSON round trip changed the ICC bytes'
           }
 
-          $compilerLine = (& $gxx --version)[0]
+      - name: MinGW CTest summary
+        if: always()
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: 1
+          POWERSHELL_UPDATECHECK: Off
+          GH_JOB_STATUS: ${{ job.status }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          . .trusted-workflow\.github\scripts\sanitize.ps1
+
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'Build\Cmake'
+          $sharedBuildDir = Join-Path $sourceDir 'build-mingw-pr-shared'
           $summaryLines = @(
             '### Windows MinGW UCRT64 smoke',
             '',
-            "- Compiler: ``$(Sanitize-Line $compilerLine)``",
             "- Build scope: ``full static project and targeted shared consumers``",
             "- Build type: ``Release``",
             "- Linkage: ``static full test and shared link smoke``",
             "- CTest: ``selected static regressions and shared export checks``",
-            "- Result: ``passed``"
+            "- Result: ``$(Sanitize-Line $env:GH_JOB_STATUS)``"
           )
           $summaryLines | ForEach-Object {
             Sanitize-Print $_
           } | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          foreach ($ctestSuite in @(
+            @{ Name = 'MinGW static'; Path = (Join-Path $sourceDir 'build-mingw-pr-smoke\ctest-results.xml') },
+            @{ Name = 'MinGW shared'; Path = (Join-Path $sharedBuildDir 'ctest-results.xml') }
+          )) {
+            if (-not (Test-Path -LiteralPath $ctestSuite.Path)) {
+              "### $($ctestSuite.Name) CTest results: JUnit unavailable" |
+                Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+              continue
+            }
+            [xml]$ctestXml = Get-Content -LiteralPath $ctestSuite.Path -Raw
+            $cases = @($ctestXml.SelectNodes('//testcase'))
+            $failures = @($ctestXml.SelectNodes('//testcase[failure or error]')).Count
+            $skipped = @($ctestXml.SelectNodes('//testcase[skipped]')).Count
+            $ctestLines = @(
+              "### $($ctestSuite.Name) CTest results",
+              '',
+              "- Cases: $($cases.Count); failures: $failures; skipped: $skipped",
+              '- Slowest individual tests:'
+            )
+            $cases | Sort-Object {
+              [double]::Parse([string]$_.time, [CultureInfo]::InvariantCulture)
+            } -Descending | Select-Object -First 5 | ForEach-Object {
+              $ctestLines += "  - $($_.name): $($_.time)s"
+            }
+            $ctestLines | ForEach-Object { Sanitize-Print $_ } |
+              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }

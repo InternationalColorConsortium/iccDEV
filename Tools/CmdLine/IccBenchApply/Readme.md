@@ -206,8 +206,10 @@ That is slow, not stuck. Each row's case name and thread count are printed and
 flushed before the measurement starts, so the case in progress is always the one
 named last. Under `-csv` that notice goes to stderr instead -- `running <case>
 t=<n>` -- because a record stream cannot carry a half-written row; stdout stays
-exactly the CSV a parser expects. Use `-pixels` to bound a run; the registered
-`iccdev.apply-throughput` test uses `-pixels 65536 -repeats 3`.
+exactly the CSV a parser expects. Use `-pixels` to bound a run. The registered
+`iccdev.apply-throughput` CTest checks every built-in case and CSV status at
+`-pixels 8192 -repeats 1`; it is a correctness smoke, not a performance gate.
+Use the larger `-pixels 65536 -repeats 3` example above for manual measurements.
 
 ## Exit status
 

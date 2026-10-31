@@ -701,9 +701,20 @@ static bool InjectIccProfileData(const char* inputPng,
         return false;
     }
 
-    if (setjmp(png_jmpbuf(png_ptr))) {
+    // Finish modifying the C++ temporary name before libpng can longjmp.
+    std::string tempOutputPng;
+    FILE* volatile fpOut = OpenPngTempOutputFile(outputPng, tempOutputPng);
+    if (!fpOut) {
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         fclose(fpIn);
+        LOG_ERROR("Failed to open temporary output PNG file.");
+        return false;
+    }
+
+    if (setjmp(png_jmpbuf(png_ptr))) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        fclose(fpIn); fclose(fpOut);
+        remove(tempOutputPng.c_str());
         LOG_ERROR("LibPNG header read error.");
         return false;
     }
@@ -714,15 +725,6 @@ static bool InjectIccProfileData(const char* inputPng,
     png_set_keep_unknown_chunks(png_ptr, PNG_HANDLE_CHUNK_IF_SAFE, NULL, 0);
     png_init_io(png_ptr, fpIn);
     png_read_info(png_ptr, info_ptr);
-
-    std::string tempOutputPng;
-    FILE* volatile fpOut = OpenPngTempOutputFile(outputPng, tempOutputPng);
-    if (!fpOut) {
-        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
-        fclose(fpIn);
-        LOG_ERROR("Failed to open temporary output PNG file.");
-        return false;
-    }
 
     png_structp write_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     if (!write_ptr) {

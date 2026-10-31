@@ -209,6 +209,7 @@ check_sanitizers "$LOGFILE"
 printf 'not a PNG\n' > "$OUTDIR/invalid-input.png"
 printf 'preserve existing output\n' > "$OUTDIR/preserved-output.png"
 cp "$OUTDIR/preserved-output.png" "$OUTDIR/preserved-output.expected"
+rm -f "$OUTDIR/preserved-output.png".tmp-*
 if timeout 30 "$PNGDUMP" "$OUTDIR/invalid-input.png" --write-icc "$INPUT_ICC" \
     --output "$OUTDIR/preserved-output.png" >"$LOGFILE" 2>&1; then
   fail "invalid PNG was accepted for injection"
@@ -217,6 +218,9 @@ check_sanitizers "$LOGFILE"
 if ! cmp -s "$OUTDIR/preserved-output.expected" "$OUTDIR/preserved-output.png"; then
   fail "invalid PNG injection modified the existing output"
 fi
+for staged in "$OUTDIR/preserved-output.png".tmp-*; do
+  [ ! -e "$staged" ] || fail "invalid PNG injection left a temporary output"
+done
 
 python3 - "$PNGDUMP" "$INPUT_PNG" "$INPUT_ICC" "$OUTDIR" <<'PY'
 import binascii

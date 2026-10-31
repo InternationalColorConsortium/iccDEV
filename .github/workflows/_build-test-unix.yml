@@ -251,10 +251,7 @@ jobs:
           echo ""
           echo "=== hybrid/BuildAndTest.sh ==="
           cd "${WORKSPACE_DIR}/Testing/hybrid"
-          sh BuildAndTest.sh 2>&1 | tee "$LOGDIR/hybrid-BuildAndTest.log" || {
-            rc=$?
-            echo "WARN: hybrid/BuildAndTest.sh exited $rc"
-          }
+          sh BuildAndTest.sh 2>&1 | tee "$LOGDIR/hybrid-BuildAndTest.log"
           HYBRID_COUNT=$(find . -name '*.icc' | wc -l)
           echo "Generated $HYBRID_COUNT hybrid profiles"
 

@@ -16,9 +16,20 @@
 #   ICCDEV_TOOLS_DIR   -- path to Build/Tools
 #   ICCDEV_TESTING_DIR -- path to Testing
 #   ICCDEV_TEST_OUTDIR -- output directory for generated logs/configs
+#   --exhaustive-thread-matrix: test 0/1/2/4/8 workers above the 1,024-pixel
+#                                bulk threshold (default: 0/1/2 above 256)
 ###############################################################################
 
 set -euo pipefail
+
+if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && [ "$1" != "--exhaustive-thread-matrix" ]; }; then
+  echo "usage: $0 [--exhaustive-thread-matrix]" >&2
+  exit 2
+fi
+THREAD_MATRIX_MODE=fast
+if [ "$#" -eq 1 ]; then
+  THREAD_MATRIX_MODE=exhaustive
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -71,6 +82,23 @@ require_file() {
 
   if [ ! -f "$path" ]; then
     fail "missing fixture: $path"
+  fi
+}
+
+assert_output_rows() {
+  local name="$1"
+  local expected="$2"
+  local actual
+
+  # Legacy output has two tab-semicolon header lines before this marker. Each
+  # transformed data row has one tab-semicolon separator after it.
+  actual="$(awk '
+    /^;Profiles applied$/ { in_data = 1; next }
+    in_data && index($0, "\t;") { count++ }
+    END { print count + 0 }
+  ' "$OUTDIR/$name.log")"
+  if [ "$actual" -ne "$expected" ]; then
+    fail "$name produced $actual/$expected transformed rows"
   fi
 }
 
@@ -141,29 +169,41 @@ echo "=== iccApplySearch CLI argument regression ==="
 # Let the tool write its own configuration rather than hand-authoring JSON here:
 # the schema then cannot drift out from under this test, and the export doubles as
 # a success case for the argument list that "cfg-extra" only extends by one token.
+rm -f "$CFG"
 run_expect_success export-cfg \
   "$APPLY" -exportcfganddata "$CFG" "$DATA" 3 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
-require_file "$CFG"
+if [ ! -s "$CFG" ]; then
+  fail "export-cfg did not write a nonempty configuration"
+fi
 
 run_expect_success valid-cfg "$APPLY" -cfg "$CFG"
 run_expect_success valid-legacy "$APPLY" "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
 
-# Repeat the tracked input until the batch is strictly larger than the
-# 1,024-pixel bulk threshold. This makes all eight requested workers useful and
-# keeps the fixture generated from an existing cross-platform input even if its
-# row count changes.
-sed -n '1,2p' "$DATA" > "$THREADED_DATA"
-source_rows="$(sed -n '3,$p' "$DATA" | awk 'NF { count++ } END { print count + 0 }')"
-if (( source_rows <= 0 )); then
-  fail "tracked input has no data rows"
+# Exactly 257 rows activate two workers in the small-batch path (256 pixels
+# per worker). The exhaustive mode uses 1,025 rows to activate all eight in the
+# bulk path (128 pixels per worker). Keep both inputs at the threshold boundary
+# even if the tracked input's row count changes.
+if [ "$THREAD_MATRIX_MODE" = exhaustive ]; then
+  target_rows=1025
+  thread_counts=(0 1 2 4 8)
+else
+  target_rows=257
+  thread_counts=(0 1 2)
 fi
-repeat_count=$((1024 / source_rows + 1))
-for ((i = 0; i < repeat_count; ++i)); do
-  sed -n '3,$p' "$DATA" >> "$THREADED_DATA"
-done
-threaded_rows="$(sed -n '3,$p' "$THREADED_DATA" | awk 'NF { count++ } END { print count + 0 }')"
-if (( threaded_rows <= 1024 )); then
-  fail "threaded fixture has only $threaded_rows data rows"
+awk -v target="$target_rows" '
+  { sub(/\r$/, "") }
+  NR <= 2 { header[NR] = $0; next }
+  NF { rows[++n] = $0 }
+  END {
+    if (NR < 3 || n < 1) exit 1
+    print header[1]
+    print header[2]
+    for (i = 0; i < target; i++) print rows[(i % n) + 1]
+  }
+' "$DATA" > "$THREADED_DATA" || fail "tracked input has no data rows"
+threaded_rows="$(awk 'NR > 2 && NF { count++ } END { print count + 0 }' "$THREADED_DATA")"
+if (( threaded_rows != target_rows )); then
+  fail "threaded fixture has $threaded_rows/$target_rows data rows"
 fi
 
 run_expect_success valid-threads-default \
@@ -171,16 +211,20 @@ run_expect_success valid-threads-default \
 if [ ! -s "$OUTDIR/valid-threads-default.log" ]; then
   fail "valid-threads-default produced no output"
 fi
-for nthreads in 0 1 2 4 8; do
+assert_output_rows valid-threads-default "$target_rows"
+for nthreads in "${thread_counts[@]}"; do
   run_expect_success "valid-threads-$nthreads" \
     "$APPLY" -threads "$nthreads" "$THREADED_DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
   if [ ! -s "$OUTDIR/valid-threads-$nthreads.log" ]; then
     fail "valid-threads-$nthreads produced no output"
   fi
+  assert_output_rows "valid-threads-$nthreads" "$target_rows"
   cmp "$OUTDIR/valid-threads-default.log" "$OUTDIR/valid-threads-$nthreads.log" ||
     fail "valid-threads-$nthreads output differs from the default output"
 done
 run_expect_success valid-threads-cfg "$APPLY" -threads 8 -cfg "$CFG"
+cmp "$OUTDIR/valid-cfg.log" "$OUTDIR/valid-threads-cfg.log" ||
+  fail "valid-threads-cfg output differs from valid-cfg"
 
 # The #1674 guard this script exists for: everything past argv[2] used to be read
 # and dropped, leaving a zero exit behind.

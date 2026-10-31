@@ -5,6 +5,24 @@ C/C++, CMake, CI, release packaging, sanitizer settings, or security automation.
 The goal is a short repeatable loop: code, validate, fix, and only then hand off
 the smallest useful evidence.
 
+## Validation Stages
+
+1. In a clean worktree, use the current maintainer image and applicable local
+   tools to build, run focused and full relevant tests, preflight, scanners,
+   and dynamic checks. Record the image digest and source revision when an
+   image supplies the tooling.
+2. Push the prepared pre-PR branch and screen its exact head with `ci-qa-pr`
+   (`ctest-mode=full`, `ctest-recent-limit=0`) and `ci-codeql-security`.
+   Wait for terminal results and record the run IDs, head SHA, failures, and
+   skips. Repair failures on the branch and repeat affected checks on its
+   new head before requesting review.
+3. Open the PR only after the readiness gate passes and the user explicitly
+   authorizes PR creation. A push or workflow dispatch does not authorize it.
+4. On the PR head, use `ci-pr-action` with `ci_scope=full` for final
+   cross-platform builds, profile checks, and representative CTest coverage.
+   This final PR gate does not replace the local checks or comprehensive
+   pre-PR screening.
+
 ## Loop
 
 1. Scope the smallest change and keep unrelated cleanups out of the branch.
@@ -36,7 +54,8 @@ the smallest useful evidence.
      packaging changes.
 5. Fix every confirmed issue and repeat the relevant checks until the same
    command set is clean.
-6. Freeze the head, record the readiness evidence in
+6. Complete the pre-PR hosted screening described above on the same pushed
+   head, then freeze it and record the readiness evidence in
    `docs/governance/UPSTREAM_PR_READINESS.md`, and request one complete review
    of the cumulative diff. Verify no merge commits exist in the final
    `base..HEAD` range. Resolve requested changes branch-only and renew the

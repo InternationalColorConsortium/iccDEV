@@ -238,7 +238,8 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.legacy-run-tests` | `Testing/RunTests.sh` |
 | `iccdev.profile-write-failure` | `.github/ci/regression/profile-write-failure.cpp` |
 | `iccdev.tool-coverage` | `.github/scripts/iccdev-tool-coverage-baseline.sh --asan --skip-hybrid` |
-| `iccdev.hybrid-pipeline` | `.github/scripts/iccdev-hybrid-pipeline-tests.sh` |
+| `iccdev.hybrid-pipeline` | `.github/scripts/iccdev-hybrid-pipeline-tests.sh`; all six phases with four representative overprint cases under sanitizers |
+| `iccdev.apply-throughput` | `Build/Cmake/Testing/RunBenchApplySuite.cmake`; all built-in transform cases with checked CSV results and a bounded pixel budget |
 | `iccdev.searchvec-uio-regression` | `.github/scripts/iccdev-searchvec-uio-regression.sh` |
 | `iccdev.specsep-tiff-geometry-regression` | `.github/scripts/iccdev-specsep-tiff-geometry-regression-tests.sh` |
 | `iccdev.tiff-resolution-unit-regression` | `.github/scripts/iccdev-tiff-resolution-unit-regression-tests.sh` |
@@ -271,6 +272,7 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.lut16-zero-curve-regressions` | `.github/scripts/iccdev-lut16-zero-curve-regression-tests.sh` |
 | `iccdev.applynamedcmm-cli-args` | `.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh` |
 | `iccdev.applysearch-cli-args` | `.github/scripts/iccdev-applysearch-cli-args-regression.sh` |
+| `iccdev.applysearch-cli-args-exhaustive` | Same script with `--exhaustive-thread-matrix`; comprehensive pre-PR thread matrix |
 | `iccdev.iccApply*-build-toggle` | Four apply-tool checks run with telemetry both enabled and disabled; help exposes telemetry only when built, and disabled builds reject telemetry options. Configure separate build trees with `ICCDEV_ENABLE_TELEMETRY=ON` and `OFF` to cover both cases. |
 | `iccdev.applyprofiles-headless-receipts` | Unix quick check and Windows Python smoke; verify JSONL lifecycle receipts, post-close JSON evidence, sidecar path rejection, and byte-identical TIFF output with telemetry enabled |
 | `iccdev.apply-telemetry-failure-paths` | `.github/ci/quality-assurance/scripts/test_apply_telemetry_failures.py`; `iccdev;cmm;image;qa;evidence;regression`; checks failed writes, terminal JSONL events, and equivalent output paths for all four Apply tools |
@@ -307,12 +309,15 @@ The JSON round-trip uses a temporary directory for generated `.json` and
 round-trip `.icc` files so a passing Unix run does not remove or modify tracked
 files in `Testing/`.
 
-`iccdev.applysearch-cli-args` derives a batch of more than 1,024 rows from the
-tracked RGB input and requires byte-identical output for the default path and
-`-threads 0`, `1`, `2`, `4`, and `8`. It also covers configuration mode,
-malformed thread counts, and the single-thread requirement for `-debugcalc`.
-Because those cases exercise up to eight internal threads, the aggregate
-reserves the runner's CTest budget, capped at four processor slots.
+`iccdev.applysearch-cli-args` derives exactly 257 rows from the tracked RGB
+input, enough to activate two workers, and requires byte-identical output for
+the default path and `-threads 0`, `1`, and `2`. It also covers configuration
+mode, malformed thread counts, and the single-thread requirement for
+`-debugcalc`. `iccdev.applysearch-cli-args-exhaustive` reruns that contract
+with exactly 1,025 rows and `-threads 0`, `1`, `2`, `4`, and `8`, activating the
+bulk path and all eight workers. It carries `slow;pr-extended` for the
+comprehensive pre-PR matrix; the routine PR CTest checks the smaller boundary.
+Both modes count transformed rows and compare output bytes across thread modes.
 
 `iccdev.tool-coverage` may add focused command-line regressions inside the
 existing script without changing the CTest suite count. When a bug is tied to an
@@ -367,9 +372,12 @@ runtime under sanitizer and coverage builds.
 and inverse conversions. It guards against divide-by-zero and non-finite
 appearance state regressions without committing generated profiles.
 
-`iccdev.hybrid-pipeline` preserves the full six-phase hybrid spectral/colorimetric
-integration test as a separate `slow` CTest label. The maintainer `check` target
-runs the full suite, including `slow`. Routine CI tool sweeps use the fast lane
+`iccdev.hybrid-pipeline` runs all six hybrid spectral/colorimetric phases, using
+four representative T-shirt overprint cases in CTest. The complete colour and
+background matrix remains in the default `Testing/hybrid/BuildAndTest.sh`, which
+the comprehensive Unix profile workflow runs separately and now treats a script
+failure as a failed job. The CTest remains a
+`slow` gate. The maintainer `check` target runs it; routine CI tool sweeps use the fast lane
 with `--label-exclude slow --label-exclude calculator`, and the `check-fast`
 target excludes `slow` and `known-red` with one label regular expression. Run
 full CTest or the hybrid gate explicitly when the slow and calculator suites
@@ -382,6 +390,37 @@ membership defines the deferred tests; all other slow tests remain in the PR
 lane. The separate sanitizer workflow also excludes infrastructure by default.
 Manual `ci-regression-checks` dispatch can include infrastructure tests
 explicitly. Run any deferred test directly when the change affects it.
+
+### Elapsed-time review (2026-10-30)
+
+The GCC strict ASAN+UBSAN Debug tool gate in
+<a href="https://github.com/InternationalColorConsortium/iccDEV/actions/runs/40980169467/job/123817966230">ci-qa-pr run 40980169467</a>
+spent 953 seconds in its CTest step. Individual durations below identify work
+to inspect, but CTest runs tests concurrently; adding durations does not
+predict job wall time. Keep the checks with unique parser, corpus, or security
+assertions even when they are slow.
+
+| CTest | Observed | Decision |
+| --- | ---: | --- |
+| `iccdev.applyprofiles-observer-hbo-regression` | 28.58 s | Keep its unique ASAN replay; non-ASAN builds report an explicit skip. |
+| `iccdev.qa-profile-manifest` | 26.32 s | Keep the generated-profile verdict inventory. |
+| `iccdev.json-cli-exercise` | 18.99 s | Keep broad CLI coverage; tighten permissive assertions before narrowing it. |
+| `iccdev.pawg-report-regressions` | 71.00 s | Keep PAWG structure and hostile-input checks; consider splitting independent subcases after critical-path measurement. |
+| `iccdev.apply-throughput` | 121.80 s | Replace the large measurement with a bounded all-case correctness smoke; run large throughput measurements manually. |
+| `iccdev.xml-parser-regressions` | 47.86 s | Keep XML depth, size, and large CLUT checks; split the large case only if the fast checks retain a current-head gate. |
+| `iccdev.json-parser-regressions` | 142.81 s | Keep the large round trip and parser guards under `pr-extended`. |
+| `iccdev.json-sort-regression` | 174.68 s | Keep sorting, determinism, and round-trip assertions under `pr-extended`. |
+| `iccdev.hybrid-pipeline` | 344.30 s | Keep a representative blocking sanitizer CTest; the direct script retains the complete overprint matrix in comprehensive Unix validation. |
+| `iccdev.applysearch-cli-args` | 105.02 s | Keep a fast two-worker boundary in the PR gate; put the eight-worker bulk matrix in `pr-extended`. |
+| `iccdev.issue-1781-applytolink-qa-matrix` | 96.80 s | Keep its grid-255 capacity control under `pr-extended`; review prerequisite skips before making it a universal gate. |
+
+On the same cached container image, the original throughput CTest took 66.29
+seconds and the bounded version took 4.06 seconds. The original hybrid CTest
+took 78.26 seconds and the four-case version took 39.94 seconds. These are
+local, isolated comparisons; hosted savings require a new run on the same
+runner class and a CTest timeline. The full direct hybrid script also passed
+locally through all six phases and now fails the comprehensive Unix job if it
+exits nonzero.
 
 Use a standalone CTest row for focused crash regressions that need clear
 maintainer visibility in CTest output. For example,
@@ -618,7 +657,11 @@ The `ci-json-python` orchestrator calls the reusable Unix and Windows build
 workflows. The Windows reusable workflow serially builds its CTest helper
 binaries, runs CTest discovery, and executes CTest with JUnit output. The Unix
 reusable workflow runs the Linux CTest gate for full-test jobs and verifies its
-discovered suite set before execution. `ci-pr-win` uses a non-cancelling, Windows-specific
+discovered suite set before execution. `ci-pr-win` reports helper compilation
+and CTest execution separately for MSVC, ClangCL, and MinGW, with JUnit results
+in each lane. MSVC and ClangCL helper builds remain serial because vcpkg stages
+shared runtime DLLs; MinGW's MSYS2 static lane uses bounded two-way compilation.
+`ci-pr-win` uses a non-cancelling, Windows-specific
 concurrency group so a direct Windows dispatch cannot interrupt an active
 reusable Windows gate. `ci-pr-unix` supports direct `workflow_dispatch` with
 the same safe matrix defaults as its reusable invocation. `CI Comprehensive
